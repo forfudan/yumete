@@ -1,0 +1,313 @@
+# yumete — 宇浩終端文字編輯器 · 開發規劃 (Development Plan)
+
+> **yumete** = **Yu**hao IME **t**ext **e**ditor — a lightweight, Helix-like,
+> CJK-aware terminal editor with a built-in Yume IME, aimed first at prose
+> writing (novels) rather than coding.
+
+This document describes the design, philosophy, and feature roadmap for yumete.
+It focuses on a small, writer-oriented first release while leaving a clean path
+to grow into a full editor.
+
+---
+
+## 1. Vision & scope
+
+yumete is a modal terminal editor (Normal / Insert / Command, like Helix and Vim).
+Its distinguishing features are:
+
+1. **First-class CJK.** Correct display width and a font-fallback approach
+   inherited from Yume (the terminal renders glyphs, but yumete never assumes one
+   character equals one cell), plus word-aware motions driven by a segmentation
+   dictionary — so `w`/`b`/`e` move by Chinese/Japanese words rather than by the
+   whitespace-delimited tokens that barely exist in CJK text.
+2. **Built-in Yume IME.** The `yume-core` engine from the sibling yume repository
+   is embedded directly. An in-terminal candidate panel lets users type CJK in
+   Insert mode, and a lone Shift tap toggles 中/英 (漢字 ⇄ ABC), mirroring the GUI
+   frontends. This also leaves room for user-supplied 碼表 (code tables) later.
+3. **Writer-focused.** Only the editing features a novelist needs now: navigation,
+   search, replace, save, quit, undo/redo, and basic selection. Coding features
+   (language LSPs, debugging, git, multiple windows) are deferred, but the
+   architecture leaves room for them.
+4. **Outline sidebar.** A foldable heading bar for fast document navigation,
+   powered by a Markdown/Typst LSP that recognizes headings.
+5. **Global + local settings.** A global configuration folder and a per-project
+   local override, following the XDG convention.
+
+Non-goals for the first release: programming-language syntax highlighting, code
+autocompletion, split windows, a plugin runtime, and collaborative editing. These
+are planned (see §7) but not built first.
+
+---
+
+## 2. Design philosophy
+
+These principles keep the first release small while making the eventual full
+editor inexpensive to reach.
+
+- **Mimic Helix's architecture, not its size.** Helix separates a pure rope +
+  selection + transaction core (`helix-core`) from the editor/state layer
+  (`helix-view`), the TUI (`helix-tui`/`helix-term`), and LSP (`helix-lsp`).
+  yumete copies this layering from day one, even while most crates stay thin.
+- **Do not reinvent the wheel.** Reuse Helix crates where it helps (rope and
+  transaction primitives, grapheme and width helpers), but keep them behind our
+  own trait boundaries so implementations can be swapped later. See §8.2 for the
+  licensing implications.
+- **Decouple aggressively.** Every subsystem sits behind a trait — `TextStore`,
+  `Motion`, `Segmenter` (word dictionary), `InputMethod` (Yume), `Renderer` (TUI),
+  `LanguageServer`, `ConfigProvider`, `Keymap`. The core depends on traits, not
+  concrete types, following the same discipline as `yume-core`.
+- **Advanced project structure early.** A Cargo workspace of small crates from the
+  start (see §4), so features land in the right layer and never entangle the core
+  with the TUI or the IME.
+- **Data-driven, not hard-coded.** Keymaps, themes, motions, and CJK behavior are
+  configured through data (TOML and tables) rather than scattered branches,
+  mirroring the yume repository's `ui_strings.toml`, `PUNCT_MAP`, and schema-flag
+  approach.
+- **CJK correctness is a cross-cutting invariant.** All motion, width, rendering,
+  and cursor math goes through grapheme-cluster and East-Asian-width helpers. No
+  code counts `char`s where it should count display cells or graphemes.
+- **Test the core, snapshot the TUI.** Pure logic (motions, segmentation, edits)
+  gets unit tests; the TUI gets snapshot tests; the IME reuses the existing
+  `yume-core` test suite.
+- **Reuse Yume's build practices.** Bundled CJK fonts, single-source configuration
+  codegen, and reproducible scripts where relevant.
+
+---
+
+## 3. Embedding the Yume IME
+
+`yume-core` is pure Rust with a C ABI (`include/yume.h`). Because yumete is itself
+a Rust program, it depends on `yume-core` directly, with no FFI layer:
+
+- One `Engine` per editor (per buffer is a possible refinement) drives Insert-mode
+  CJK input.
+- Insert-mode keystrokes are fed to `engine.input(codepoint)`; `space()`, `enter()`,
+  `escape()`, `backspace()`, and `select_in_page()` map to the candidate panel.
+- The candidate panel is drawn as a floating overlay near the cursor (a `Renderer`
+  responsibility), reusing the same display data as the GUI panels:
+  `page_candidates()`, `page_completions()`, `page_simp_codes()`,
+  `page_source_tags()`, `page_comments()`, `highlight()`, and `display_buffer()`.
+- A lone Shift tap toggles 中/英 via `toggle_language()`, matching the web frontend.
+- Number mode, special `/` commands, and reverse lookup (`z`) come directly from
+  the core.
+- Data tables (`ling.ytab`, `pinyin.*`, `chaifen*.yann`, charsets, and the bundled
+  `Yuniversus.ttf`) are loaded from yumete's data directory, reusing the compiled
+  artifacts produced by the yume build.
+- Custom 碼表 upload follows naturally: scheme tables are just files loaded at
+  runtime, so a user can drop a custom `.ytab` and `.yann` into the data directory
+  and register a new scheme.
+
+---
+
+## 4. Proposed workspace structure
+
+```
+yumete/                          (own git repo; may move out of yume later)
+├── Cargo.toml                   # workspace
+├── LICENSE                      # Apache-2.0 (yumete's own code)
+├── THIRD_PARTY.md               # MPL-2.0 (Helix) + other deps attribution
+├── crates/
+│   ├── yumete-core/             # rope, selection, transactions, motions (Helix-like)
+│   │   └── src/{rope,selection,transaction,motion,search,history}.rs
+│   ├── yumete-cjk/              # CJK width, grapheme, word segmentation (dictionary)
+│   │   └── src/{width,grapheme,segmenter}.rs
+│   ├── yumete-ime/              # thin adapter over yume-core (candidate session state)
+│   ├── yumete-view/             # editor state: buffers, cursors, viewport, modes
+│   ├── yumete-tui/              # terminal backend, layout, panels, outline sidebar
+│   ├── yumete-config/           # global + local config, keymaps, themes (TOML)
+│   ├── yumete-lsp/              # LSP client (Markdown/Typst first) → outline
+│   └── yumete/                  # binary: wires everything, main loop, CLI args
+├── runtime/                     # default keymaps, themes, help pages (data)
+└── docs/
+```
+
+Dependency direction (no cycles): `yumete` → {view, tui, lsp, config} →
+{core, cjk, ime} → {yume-core, helix crates (optional)}.
+
+---
+
+## 5. Feature table & phasing
+
+Phases are ordered by priority, most writer-critical first:
+
+- **P1 — MVP writer editor** (must-have now): open/edit/save/quit, modal editing,
+  basic motions, search/replace, undo, CJK width correctness.
+- **P2 — CJK words + Yume IME**: dictionary word motions, in-terminal IME panel,
+  Shift 中/英, config folder.
+- **P3 — Outline + Markdown/Typst**: foldable outline sidebar via LSP headings.
+- **P4 — Polish & QoL**: themes, help overlay, better search UX, sessions.
+- **P5+ — Future / advanced**: coding LSP, git, splits, plugins, debugging.
+
+| #   | Feature                                   | Area   | Phase | Notes                       |
+| --- | ----------------------------------------- | ------ | ----- | --------------------------- |
+| 1   | Open file / new buffer                    | core   | P1    | args + `:open`              |
+| 2   | Save / save-as (`:w`)                     | core   | P1    | atomic write                |
+| 3   | Quit / force-quit (`:q` / `:q!`)          | core   | P1    | dirty-check prompt          |
+| 4   | Rope-backed text store                    | core   | P1    | ropey / helix rope          |
+| 5   | Modal editing: Normal / Insert / Command  | view   | P1    | Helix/Vim-like              |
+| 6   | Cursor motions h/j/k/l                    | core   | P1    | grapheme-aware              |
+| 7   | Line motions 0/$/^/gg/G                   | core   | P1    | display-cell aware          |
+| 8   | Char search f/F/t/T                       | core   | P1    | CJK-aware                   |
+| 9   | Insert/append i/a/o/O                     | view   | P1    |                             |
+| 10  | Delete/change x/d/c + motions             | core   | P1    | grapheme-safe               |
+| 11  | Undo / redo                               | core   | P1    | transaction history         |
+| 12  | Visual/selection mode (basic)             | view   | P1    | Helix selection model       |
+| 13  | Yank / paste (registers, minimal)         | core   | P1    | system clipboard opt        |
+| 14  | Incremental search `/` `?` `n` `N`        | core   | P1    | CJK substring               |
+| 15  | Search & replace `:s///`                  | core   | P1    | CJK-aware regex             |
+| 16  | East-Asian width rendering                | cjk    | P1    | 2-cell wide glyphs          |
+| 17  | Grapheme-cluster cursor math              | cjk    | P1    | IVS / combining safe        |
+| 18  | CJK font-fallback guidance (docs)         | cjk    | P1    | terminal-dependent          |
+| 19  | Status line (mode / file / pos)           | tui    | P1    |                             |
+| 20  | Line numbers (abs/rel toggle)             | tui    | P1    |                             |
+| 21  | Config: global file + folder              | config | P1    | XDG `~/.config/yumete/`     |
+| 22  | Config: per-project local override        | config | P2    | `.yumete/` walk-up          |
+| 23  | Keymap from TOML (data-driven)            | config | P2    | rebindable                  |
+| 24  | **Dictionary word segmentation**          | cjk    | P2    | reuse Yume 分詞 data        |
+| 25  | **Word motions w/b/e (CJK words)**        | core   | P2    | via `Segmenter` trait       |
+| 26  | Word delete/change (`dw`/`cw`)            | core   | P2    | word boundaries             |
+| 27  | **Built-in Yume IME session**             | ime    | P2    | embeds yume-core            |
+| 28  | In-terminal candidate panel               | tui    | P2    | floating overlay near caret |
+| 29  | Shift toggles 中/英 in Insert             | ime    | P2    | lone-Shift tap              |
+| 30  | IME: number mode / `/`-cmds / `z` reverse | ime    | P2    | free from core              |
+| 31  | Scheme switch (靈明/星陳/卿雲/日月/拼音)  | ime    | P2    | load tables at runtime      |
+| 32  | IME data dir + bundled font guidance      | ime    | P2    | reuse compiled tables       |
+| 33  | **Outline sidebar (foldable)**            | tui    | P3    | right-hand panel, toggle    |
+| 34  | **Markdown LSP → headings**               | lsp    | P3    | outline source              |
+| 35  | **Typst LSP → headings**                  | lsp    | P3    | outline source              |
+| 36  | Jump to outline entry                     | view   | P3    | click/keys                  |
+| 37  | Fold/unfold outline                       | tui    | P3    |                             |
+| 38  | Space (Normal) → hotkey/help overlay      | tui    | P3    | which-key style             |
+| 39  | Command palette (`:` completions)         | tui    | P4    |                             |
+| 40  | Themes (TOML, CJK-friendly)               | config | P4    |                             |
+| 41  | Soft-wrap for prose                       | tui    | P4    | width-aware wrap            |
+| 42  | Auto-save / crash recovery                | core   | P4    | swap file                   |
+| 43  | Sessions (reopen last files)              | view   | P4    |                             |
+| 44  | Multiple buffers + `:bn`/`:bp`            | view   | P4    | no splits yet               |
+| 45  | Marks / jumplist                          | core   | P4    |                             |
+| 46  | Count prefixes (e.g. `3w`)                | core   | P4    |                             |
+| 47  | Macros (record/replay)                    | core   | P4    |                             |
+| 48  | Spell/grammar hooks (CJK-aware)           | lsp    | P4    | optional                    |
+| 49  | Word-count / reading-time (prose)         | view   | P4    | writer QoL                  |
+| 50  | Custom 碼表 upload / register             | ime    | P4    | user `.ytab`/`.yann`        |
+| 51  | Bracket/quote auto-pair (CJK-aware)       | core   | P4    | 「」『』（）                |
+| 52  | Syntax highlight (tree-sitter)            | tui    | P5    | Markdown/Typst first        |
+| 53  | Coding LSP (Rust/Python/…)                | lsp    | P5    | reuse helix-lsp             |
+| 54  | Diagnostics / code actions                | lsp    | P5    |                             |
+| 55  | Git gutter / blame                        | vcs    | P5    |                             |
+| 56  | Splits / multiple windows                 | tui    | P5    |                             |
+| 57  | Debugging (DAP)                           | dap    | P6    | far future                  |
+| 58  | Plugin runtime (scripting)                | plugin | P6    | Lua/WASM                    |
+| 59  | Remote / SSH editing                      | net    | P6    |                             |
+| 60  | Collaborative editing                     | net    | P6    |                             |
+
+---
+
+## 6. Phase-by-phase deliverables
+
+> **Current status.** The Cargo workspace is initialized (`crates/yumete-core`
+> and the `yumete` binary, with `ropey` behind the `TextStore` trait), and
+> Feature #1 (open file / new buffer) is complete: command-line arguments plus
+> `:open` and `:new`, a `Buffer` type (open an existing file, bind a new path, or
+> start a scratch buffer), and an `Editor` that owns the open buffers. The binary
+> currently prints a non-interactive preview of the active buffer; the modal TUI
+> loop (Feature #5) is next. The remaining Phase 1 crates (`yumete-cjk`,
+> `yumete-view`, `yumete-tui`) are added as the features that need them arrive,
+> rather than as empty stubs.
+
+### Phase 1 — MVP writer editor
+
+- Workspace scaffold (§4) with `yumete-core`, `yumete-cjk`, `yumete-view`,
+  `yumete-tui`, `yumete`.
+- Rope text store, modal loop, core motions, insert/delete/change, undo/redo,
+  search `/`, replace `:s`, save/quit.
+- **CJK width + grapheme correctness everywhere** (the invariant).
+- Global config file + folder.
+- Exit criteria: can write and edit a novel `.md`/`.txt` comfortably; wide glyphs
+  align; undo works; `:w`/`:q` safe.
+
+### Phase 2 — CJK words + Yume IME
+
+- `Segmenter` trait + dictionary-backed word segmentation (reuse Yume 分詞 assets).
+- Word motions `w`/`b`/`e`, `dw`/`cw` respect **Chinese/Japanese word boundaries**.
+- Embed `yume-core`; in-terminal candidate panel; Shift 中/英; scheme switching;
+  number/`/`/`z` modes; per-project local config.
+- Exit criteria: type CJK inside the editor via Yume; `w` moves by word, not
+  sentence; switch schemes; local config overrides global.
+
+### Phase 3 — Outline + Markdown/Typst
+
+- `yumete-lsp` client; Markdown + Typst servers; extract heading symbols.
+- Foldable right-hand **outline sidebar** with jump-to-heading.
+- Exit criteria: headings appear live in the sidebar; toggle + fold; jump works.
+
+### Phase 4 — Polish & QoL
+
+- Space→hotkey help overlay, command palette, themes, soft-wrap, sessions,
+  multiple buffers, word-count, custom 碼表 registration, CJK auto-pair.
+
+### Phase 5+ — Future / advanced
+
+- Tree-sitter highlight, coding LSP (reuse helix-lsp), git, splits, then DAP /
+  plugins / remote / collab.
+
+---
+
+## 7. Key design decisions
+
+- **Rope source.** Start with `ropey` for simplicity, kept behind the `TextStore`
+  trait so `helix-core`'s rope and transaction primitives can replace it later.
+- **IME scope.** One engine per editor, rather than per buffer.
+- **Segmentation dictionary.** Reuse Yume's word and annotation data first, with a
+  dedicated CJK word list (jieba-style) as a later option.
+- **Config format.** TOML, consistent with the yume repository.
+- **Terminal backend.** `crossterm` for portability, behind a `Renderer` trait.
+- **Helix reuse boundary.** Depend on Helix crates only through our own traits, so
+  the project is never locked in and can grow or replace pieces incrementally.
+
+---
+
+## 8. Relationship to the yume repository, location, and licensing
+
+- `yume-core` is the IME engine that yumete embeds; it needs no changes for Phase 1.
+- Phase 2 may add small `yume-core` conveniences (such as a compact session helper)
+  but should avoid coupling the engine to any editor concept.
+- The compiled data tables and the bundled `Yuniversus.ttf` are reused as-is.
+
+### 8.1 Project location
+
+- yumete lives inside the yume repository but keeps its own git repository
+  (`yumete/.git`). It is independent and can be moved out later without losing
+  history.
+- Because it is a nested repository, yume's `.gitignore` lists `yumete/` so that
+  yume does not track it as an embedded repository or accidental submodule. That
+  ignore line can be dropped once yumete moves out.
+- yumete depends on `yume-core` through a path or git dependency in its own
+  `Cargo.toml` — for example `yume-core = { path = "../crates/yume-core" }` while
+  nested, switching to a git or versioned dependency after it moves out.
+
+### 8.2 Licensing & Helix reuse
+
+- Both **yume** and **yumete** are licensed under the **Apache License 2.0**.
+  - **yume**: `Cargo.toml` declares `license = "Apache-2.0"` with a root `LICENSE`.
+  - **yumete**: workspace `Cargo.toml` declares `license = "Apache-2.0"` with a root
+    `LICENSE`.
+- **Helix is MPL-2.0** (Mozilla Public License 2.0) — a file-level (weak) copyleft.
+  Depending on Helix crates is license-compatible: MPL-2.0 permits combining MPL
+  code into a "Larger Work" under any license and does not relicense yumete's own
+  files, so yumete stays Apache-2.0 while depending on MPL Helix crates.
+- **Reuse.** Depend on Helix crates unmodified as normal Cargo dependencies, keep
+  Helix's `LICENSE` and attribution, and wrap its rope, transaction, and grapheme
+  helpers behind the `TextStore` and `Motion` traits (§2). yumete's own files stay
+  Apache-2.0 with no per-file MPL headers, and the MPL surface stays small.
+- **Files:** a single `LICENSE` (Apache-2.0) in each project (done for both). Add a
+  `THIRD_PARTY.md`/`NOTICE` listing MPL-2.0 (Helix) + other deps once they are
+  pulled in.
+- Note: not all Helix crates are published to crates.io yet; if a needed crate
+  isn't published, a git dependency pinned to a commit is fine (still MPL, same
+  rules).
+
+---
+
+*This is a living document. Update the feature table's Phase column as priorities
+shift, and keep the philosophy in §2 as the guardrail for every new module.*

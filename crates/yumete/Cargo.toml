@@ -1,0 +1,14 @@
+[package]
+name = "yumete"
+description = "yumete — a CJK-aware, Helix-like terminal text editor with a built-in Yume IME."
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+version.workspace = true
+
+[[bin]]
+name = "yumete"
+path = "src/main.rs"
+
+[dependencies]
+yumete-core = { path = "../yumete-core" }

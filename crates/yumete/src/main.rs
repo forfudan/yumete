@@ -1,0 +1,112 @@
+//! `yumete` — the binary entry point.
+//!
+//! At this stage yumete implements **Feature #1** (open file / new buffer): it
+//! parses command-line arguments, opens the given file(s) into the editor (or
+//! starts a new scratch buffer when none are given), and prints a preview of
+//! the active buffer.
+//!
+//! The interactive modal TUI (Normal / Insert / Command modes, cursor motions,
+//! the in-terminal Yume IME candidate panel, …) arrives with the later
+//! features in the roadmap; this preview is deliberately non-interactive so
+//! that Feature #1 can be exercised on its own.
+
+use std::process::ExitCode;
+
+use yumete_core::{Editor, TextStore};
+
+const VERSION: &str = env!("CARGO_PKG_VERSION");
+
+fn main() -> ExitCode {
+    let mut files: Vec<String> = Vec::new();
+
+    for arg in std::env::args().skip(1) {
+        match arg.as_str() {
+            "-h" | "--help" => {
+                print_help();
+                return ExitCode::SUCCESS;
+            }
+            "-v" | "--version" => {
+                println!("yumete {VERSION}");
+                return ExitCode::SUCCESS;
+            }
+            // Reject unknown flags, but treat a lone "-" as a filename.
+            s if s.starts_with('-') && s != "-" => {
+                eprintln!("yumete: unknown option '{s}'");
+                eprintln!("try 'yumete --help'");
+                return ExitCode::from(2);
+            }
+            s => files.push(s.to_string()),
+        }
+    }
+
+    let mut editor = Editor::new();
+    for file in &files {
+        if let Err(err) = editor.open_file(file) {
+            eprintln!("yumete: cannot open '{file}': {err}");
+            return ExitCode::FAILURE;
+        }
+    }
+
+    preview(&editor);
+    ExitCode::SUCCESS
+}
+
+fn print_help() {
+    println!(
+        "yumete {VERSION} — a CJK-aware, Helix-like terminal editor with a built-in Yume IME.
+
+USAGE:
+    yumete [FILE]...
+
+ARGS:
+    FILE    One or more files to open. Each is loaded into its own buffer;
+            a file that does not yet exist opens an empty buffer bound to it.
+            With no FILE, yumete starts with a new, empty scratch buffer.
+
+OPTIONS:
+    -h, --help       Print this help and exit.
+    -v, --version    Print the version and exit.
+
+Note: this build implements Feature #1 (open file / new buffer) and prints a
+non-interactive preview of the active buffer. The modal TUI editor is coming."
+    );
+}
+
+/// Print a status line and the contents of the active buffer, with line numbers.
+fn preview(editor: &Editor) {
+    let buf = editor.current_buffer();
+    let modified = if buf.is_modified() { " [+]" } else { "" };
+    let extra = if editor.buffer_count() > 1 {
+        format!("  ({} buffers open)", editor.buffer_count())
+    } else {
+        String::new()
+    };
+
+    // Status line.
+    println!(
+        "── {name}{modified} — {lines} line(s), {chars} char(s){extra} ──",
+        name = buf.display_name(),
+        lines = buf.line_count(),
+        chars = buf.char_count(),
+    );
+
+    if buf.char_count() == 0 {
+        println!("(empty buffer)");
+        return;
+    }
+
+    // ropey counts a trailing "\n" as starting an extra empty line; don't print
+    // that phantom final line in the preview.
+    let text = buf.text();
+    let mut count = buf.line_count();
+    if text.ends_with('\n') {
+        count -= 1;
+    }
+
+    let width = count.to_string().len().max(1);
+    for i in 0..count {
+        if let Some(line) = buf.line(i) {
+            println!("{:>width$} │ {line}", i + 1, width = width);
+        }
+    }
+}

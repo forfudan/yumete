@@ -1,0 +1,18 @@
+[workspace]
+members = [
+  "crates/yumete-core",
+  "crates/yumete",
+]
+resolver = "2"
+
+[workspace.package]
+edition = "2021"
+license = "Apache-2.0"
+repository = "https://github.com/forfudan/yumete"
+version = "0.1.0"
+
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = 3
+strip = true
