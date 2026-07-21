@@ -99,6 +99,54 @@ a Rust program, it depends on `yume-core` directly, with no FFI layer:
   runtime, so a user can drop a custom `.ytab` and `.yann` into the data directory
   and register a new scheme.
 
+Prototype input panel and candidate panel (lay over the text buffer) goes as follows.
+
+When annotation is disabled:
+
+```txt
+  ╔══════════════╗
+  ║ raw input    ║
+  ╟──────────────╢
+  ║ 1. 候選 =abc ║
+  ║ 2. 候選 b    ║
+  ║ 3. 候選 c臺  ║
+  ╚══════════════╝
+```
+
+When index numbers are disabled:
+
+```txt
+  ╔═══════════╗
+  ║ raw input ║
+  ╟───────────╢
+  ║ 候選 =abc ║
+  ║ 候選 b    ║
+  ║ 候選 c臺  ║
+  ╚═══════════╝
+```
+
+When annotation is enabled:
+
+```txt
+  ╔═══════════════════════════╗
+  ║ raw input text            ║
+  ╟──────────────┬────────────╢
+  ║ 1. 候選 =abc │ annotation ║
+  ║ 2. 候選 b    │ annotation ║
+  ║ 3. 候選 c臺  │ annotation ║
+  ╚══════════════╧════════════╝
+```
+
+The borders are not needed if we can use directly the terminal's background color to distinguish the panel from the text buffer.
+
+The panel is drawn at the cursor's current position, but it should not overlap the current line of the cursor. It usually appears at the right-below of the cursor. We can use the autocompletion panels's positioning logic of Helix.
+
+Another option is the horizontal layout where you just add a temporary line below the cursor line, and draw the panel there. The input and each candidate shall have different background colors to distinguish them.
+
+```txt
+inputtext  1. 候選 =abc  2. 候選 b  3. 候選 c臺
+```
+
 ---
 
 ## 4. Proposed workspace structure
@@ -165,9 +213,9 @@ Phases are ordered by priority, most writer-critical first:
 | 21  | Config: global file + folder              | config | P1    | XDG `~/.config/yumete/`      | Done   |
 | 22  | Config: per-project local override        | config | P2    | `.yumete/` walk-up           | Done   |
 | 23  | Keymap from TOML (data-driven)            | config | P2    | key aliases                  | Done   |
-| 24  | **Dictionary word segmentation**          | cjk    | P2    | reuse Yume 分詞 data         |        |
-| 25  | **Word motions w/b/e (CJK words)**        | core   | P2    | via `Segmenter` trait        |        |
-| 26  | Word delete/change (`dw`/`cw`)            | core   | P2    | word boundaries              |        |
+| 24  | **Dictionary word segmentation**          | cjk    | P2    | category seg now; dict later |        |
+| 25  | **Word motions w/b/e (CJK words)**        | core   | P2    | via `Segmenter`              | Done   |
+| 26  | Word delete/change (`dw`/`cw`)            | core   | P2    | `w`/`b`/`e` + `d`/`c`        | Done   |
 | 27  | **Built-in Yume IME session**             | ime    | P2    | embeds yume-core             |        |
 | 28  | In-terminal candidate panel               | tui    | P2    | floating overlay near caret  |        |
 | 29  | Shift toggles 中/英 in Insert             | ime    | P2    | lone-Shift tap               |        |
@@ -214,21 +262,21 @@ deferred.
 
 ### Movement
 
-| Keys                    | Action                                       | Status   |
-| ----------------------- | -------------------------------------------- | -------- |
-| `h` `j` `k` `l`, arrows | left / down / up / right (grapheme-aware)    | Done     |
-| `w` `b` `e`             | next / prev word start, word end (CJK words) | P2 (#25) |
-| `W` `B` `E`             | WORD variants (whitespace-delimited)         | P2       |
-| `f` `t` `F` `T` + char  | find / till a character, forward / backward  | Done     |
-| `Home` `End`            | line start / end                             | P4       |
-| `gg`                    | goto file start (or line N with a count)     | Done     |
-| `ge`                    | goto last line                               | Done     |
-| `gh` `gl`               | goto line start / end                        | Done     |
-| `gs`                    | goto first non-blank character               | Done     |
-| `gt` `gc` `gb`          | goto screen top / center / bottom            | P4       |
-| `Ctrl-u` `Ctrl-d`       | scroll half a page up / down                 | P4       |
-| `Ctrl-b` `Ctrl-f`       | page up / down                               | P4       |
-| `%`                     | match / select the bracket pair              | P4       |
+| Keys                    | Action                                       | Status |
+| ----------------------- | -------------------------------------------- | ------ |
+| `h` `j` `k` `l`, arrows | left / down / up / right (grapheme-aware)    | Done   |
+| `w` `b` `e`             | next / prev word start, word end (CJK words) | Done   |
+| `W` `B` `E`             | WORD variants (whitespace-delimited)         | Done   |
+| `f` `t` `F` `T` + char  | find / till a character, forward / backward  | Done   |
+| `Home` `End`            | line start / end                             | P4     |
+| `gg`                    | goto file start (or line N with a count)     | Done   |
+| `ge`                    | goto last line                               | Done   |
+| `gh` `gl`               | goto line start / end                        | Done   |
+| `gs`                    | goto first non-blank character               | Done   |
+| `gt` `gc` `gb`          | goto screen top / center / bottom            | P4     |
+| `Ctrl-u` `Ctrl-d`       | scroll half a page up / down                 | P4     |
+| `Ctrl-b` `Ctrl-f`       | page up / down                               | P4     |
+| `%`                     | match / select the bracket pair              | P4     |
 
 ### Selection
 

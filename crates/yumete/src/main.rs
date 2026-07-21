@@ -83,6 +83,7 @@ OPTIONS:
 
 KEYS (Normal mode, Helix-style):
     h j k l   move by grapheme / line (CJK-width aware)
+    w b e     next / prev word start, word end (W B E for WORDs)
     gg  ge    goto buffer start / last line
     gh gl gs  goto line start / end / first non-blank
     f t F T   find / till a character (forward / backward)

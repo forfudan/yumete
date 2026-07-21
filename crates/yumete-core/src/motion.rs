@@ -178,6 +178,47 @@ pub fn buffer_end(rope: &Rope, _pos: usize) -> usize {
     rope.line_to_char(last_line(rope))
 }
 
+/// The word ranges of the whole buffer, at the requested granularity.
+fn word_ranges_of(rope: &Rope, big: bool) -> Vec<(usize, usize)> {
+    let text = rope.to_string();
+    if big {
+        yumete_cjk::word_ranges_big(&text)
+    } else {
+        yumete_cjk::word_ranges(&text)
+    }
+}
+
+/// The start of the next word after `pos` (`w` / `W`).
+pub fn next_word_start(rope: &Rope, pos: usize, big: bool) -> usize {
+    word_ranges_of(rope, big)
+        .into_iter()
+        .map(|(start, _)| start)
+        .find(|&start| start > pos)
+        .unwrap_or_else(|| rope.len_chars())
+}
+
+/// The end (last character) of the next word after `pos` (`e` / `E`).
+pub fn next_word_end(rope: &Rope, pos: usize, big: bool) -> usize {
+    word_ranges_of(rope, big)
+        .into_iter()
+        .map(|(_, end)| end.saturating_sub(1))
+        .find(|&last| last > pos)
+        .unwrap_or(pos)
+}
+
+/// The start of the previous word before `pos` (`b` / `B`).
+pub fn prev_word_start(rope: &Rope, pos: usize, big: bool) -> usize {
+    let mut result = 0;
+    for (start, _) in word_ranges_of(rope, big) {
+        if start < pos {
+            result = start;
+        } else {
+            break;
+        }
+    }
+    result
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -241,5 +282,26 @@ mod tests {
         // Only one navigable line; down from it stays put.
         assert_eq!(last_line(&r), 0);
         assert_eq!(down(&r, 0, 0), 0);
+    }
+
+    #[test]
+    fn word_motions_step_by_word_and_cjk_character() {
+        let r = rope("foo bar 你好");
+        // Chars: f0 o1 o2 ' '3 b4 a5 r6 ' '7 你8 好9.
+        assert_eq!(next_word_start(&r, 0, false), 4); // → "bar"
+        assert_eq!(next_word_start(&r, 4, false), 8); // → "你"
+        assert_eq!(next_word_start(&r, 8, false), 9); // → "好" (each CJK is a word)
+        assert_eq!(next_word_end(&r, 0, false), 2); // end of "foo"
+        assert_eq!(next_word_end(&r, 2, false), 6); // end of "bar"
+        assert_eq!(prev_word_start(&r, 9, false), 8); // back to "你"
+        assert_eq!(prev_word_start(&r, 6, false), 4); // back to start of "bar"
+    }
+
+    #[test]
+    fn big_word_motions_ignore_punctuation_boundaries() {
+        let r = rope("a.b cd");
+        // Small `w` stops at the punctuation; big `W` skips to "cd".
+        assert_eq!(next_word_start(&r, 0, false), 1); // "." is its own word
+        assert_eq!(next_word_start(&r, 0, true), 4); // WORD → "cd"
     }
 }

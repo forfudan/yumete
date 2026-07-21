@@ -358,6 +358,31 @@ impl Editor {
             Key::Char('l') | Key::Right => self.move_horizontal(motion::right),
             Key::Char('k') | Key::Up => self.move_vertical(true),
             Key::Char('j') | Key::Down => self.move_vertical(false),
+            // Word motions (Helix `w`/`b`/`e`, and WORD `W`/`B`/`E`).
+            Key::Char('w') => {
+                let p = motion::next_word_start(self.current_buffer().rope(), self.cursor, false);
+                self.select_to(p);
+            }
+            Key::Char('e') => {
+                let p = motion::next_word_end(self.current_buffer().rope(), self.cursor, false);
+                self.select_to(p);
+            }
+            Key::Char('b') => {
+                let p = motion::prev_word_start(self.current_buffer().rope(), self.cursor, false);
+                self.select_to(p);
+            }
+            Key::Char('W') => {
+                let p = motion::next_word_start(self.current_buffer().rope(), self.cursor, true);
+                self.select_to(p);
+            }
+            Key::Char('E') => {
+                let p = motion::next_word_end(self.current_buffer().rope(), self.cursor, true);
+                self.select_to(p);
+            }
+            Key::Char('B') => {
+                let p = motion::prev_word_start(self.current_buffer().rope(), self.cursor, true);
+                self.select_to(p);
+            }
             Key::Char('g') => self.pending = Pending::Goto,
             // In-line character search (Helix `f`/`t`/`F`/`T`).
             Key::Char('f') => self.pending = Pending::Find(FindKind::ForwardTo),
@@ -713,6 +738,17 @@ impl Editor {
         self.cursor = pos;
         if !self.extend {
             self.anchor = pos;
+        }
+        self.goal_column = motion::visual_column(self.current_buffer().rope(), self.cursor);
+    }
+
+    /// Move the head to `pos`, selecting from the old position (unless already
+    /// extending). Used by word and find motions that select what they cross.
+    fn select_to(&mut self, pos: usize) {
+        let old = self.cursor;
+        self.cursor = pos;
+        if !self.extend {
+            self.anchor = old;
         }
         self.goal_column = motion::visual_column(self.current_buffer().rope(), self.cursor);
     }
@@ -1195,6 +1231,34 @@ mod tests {
         ed.on_key(Key::Char('g'));
         ed.on_key(Key::Char('q')); // aliased to `d` → deletes 'a'
         assert_eq!(ed.current_buffer().text(), "bc");
+    }
+
+    #[test]
+    fn word_motion_selects_the_word_and_delete_removes_it() {
+        let mut ed = Editor::new();
+        ed.on_key(Key::Char('i'));
+        type_keys(&mut ed, "foo bar baz");
+        ed.on_key(Key::Esc);
+        ed.on_key(Key::Char('g'));
+        ed.on_key(Key::Char('g')); // to the start
+
+        // w selects from the cursor to the next word start ("foo ").
+        ed.on_key(Key::Char('w'));
+        assert_eq!(ed.selection(), (0, 4));
+        // d deletes the selection → "bar baz" (word delete, Feature #26).
+        ed.on_key(Key::Char('d'));
+        assert_eq!(ed.current_buffer().text(), "bar baz");
+
+        // e moves to the end of the next word.
+        ed.on_key(Key::Char('g'));
+        ed.on_key(Key::Char('g'));
+        ed.on_key(Key::Char('e'));
+        assert_eq!(ed.cursor(), 2); // end of "bar"
+
+        // b moves back to the start of the word.
+        ed.on_key(Key::Char('l')); // into "baz"
+        ed.on_key(Key::Char('b'));
+        assert_eq!(ed.cursor(), 0);
     }
 
     #[test]
