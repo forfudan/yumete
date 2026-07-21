@@ -13,7 +13,7 @@ use std::io;
 
 use ratatui::crossterm::event::{self, Event, KeyCode, KeyEventKind, KeyModifiers};
 use ratatui::layout::{Constraint, Layout, Position};
-use ratatui::style::{Modifier, Style};
+use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::Paragraph;
 use ratatui::Frame;
@@ -90,17 +90,41 @@ fn draw(frame: &mut Frame, editor: &Editor, viewport_top: &mut usize) {
     }
 
     let gutter = gutter_width(total_lines);
+    let (sel_start, sel_end) = editor.selection();
+    let has_selection = sel_start != sel_end;
+    let rope = buffer.rope();
 
-    // Visible lines with a right-aligned line-number gutter.
+    // Visible lines with a right-aligned line-number gutter and selection.
     let mut lines: Vec<Line> = Vec::new();
     let last = (*viewport_top + height).min(total_lines);
     for i in *viewport_top..last {
         let number = format!("{:>width$} ", i + 1, width = gutter - 1);
         let text = buffer.line(i).unwrap_or_default();
-        lines.push(Line::from(vec![
-            Span::styled(number, Style::default().add_modifier(Modifier::DIM)),
-            Span::raw(text),
-        ]));
+        let mut spans = vec![Span::styled(
+            number,
+            Style::default().add_modifier(Modifier::DIM),
+        )];
+
+        // Highlight the portion of this line covered by the selection.
+        let line_start = rope.line_to_char(i);
+        let line_len = text.chars().count();
+        if has_selection && sel_end > line_start && sel_start < line_start + line_len {
+            let a = sel_start.saturating_sub(line_start).min(line_len);
+            let b = (sel_end - line_start).min(line_len);
+            let chars: Vec<char> = text.chars().collect();
+            let before: String = chars[..a].iter().collect();
+            let selected: String = chars[a..b].iter().collect();
+            let after: String = chars[b..].iter().collect();
+            let sel_style = Style::default()
+                .bg(Color::Rgb(60, 70, 100))
+                .fg(Color::White);
+            spans.push(Span::raw(before));
+            spans.push(Span::styled(selected, sel_style));
+            spans.push(Span::raw(after));
+        } else {
+            spans.push(Span::raw(text));
+        }
+        lines.push(Line::from(spans));
     }
     frame.render_widget(Paragraph::new(lines), text_area);
 
@@ -111,7 +135,7 @@ fn draw(frame: &mut Frame, editor: &Editor, viewport_top: &mut usize) {
         let dirty = if buffer.is_modified() { " [+]" } else { "" };
         let left = format!(
             "-- {} --  {}{}",
-            editor.mode().label(),
+            editor.mode_label(),
             buffer.display_name(),
             dirty
         );

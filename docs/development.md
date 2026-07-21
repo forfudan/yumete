@@ -140,68 +140,152 @@ Phases are ordered by priority, most writer-critical first:
 - **P4 — Polish & QoL**: themes, help overlay, better search UX, sessions.
 - **P5+ — Future / advanced**: coding LSP, git, splits, plugins, debugging.
 
-| #   | Feature                                   | Area   | Phase | Notes                       | Status |
-| --- | ----------------------------------------- | ------ | ----- | --------------------------- | ------ |
-| 1   | Open file / new buffer                    | core   | P1    | args + `:open`              | Done   |
-| 2   | Save / save-as (`:w`)                     | core   | P1    | atomic write                | Done   |
-| 3   | Quit / force-quit (`:q` / `:q!`)          | core   | P1    | dirty-check prompt          | Done   |
-| 4   | Rope-backed text store                    | core   | P1    | ropey / helix rope          | Done   |
-| 5   | Modal editing: Normal / Insert / Command  | view   | P1    | Helix/Vim-like              | Done   |
-| 6   | Cursor motions h/j/k/l                    | core   | P1    | grapheme-aware              | Done   |
-| 7   | Line motions 0/$/^/gg/G                   | core   | P1    | display-cell aware          | Done   |
-| 8   | Char search f/F/t/T                       | core   | P1    | CJK-aware                   |        |
-| 9   | Insert/append i/a/o/O                     | view   | P1    |                             | Done   |
-| 10  | Delete/change x/d/c + motions             | core   | P1    | grapheme-safe               | Done   |
-| 11  | Undo / redo                               | core   | P1    | snapshot-based              | Done   |
-| 12  | Visual/selection mode (basic)             | view   | P1    | Helix selection model       |        |
-| 13  | Yank / paste (registers, minimal)         | core   | P1    | system clipboard opt        |        |
-| 14  | Incremental search `/` `?` `n` `N`        | core   | P1    | CJK substring               | Done   |
-| 15  | Search & replace `:s///`                  | core   | P1    | substring `:s` / `:%s`      | Done   |
-| 16  | East-Asian width rendering                | cjk    | P1    | 2-cell wide glyphs          | Done   |
-| 17  | Grapheme-cluster cursor math              | cjk    | P1    | IVS / combining safe        | Done   |
-| 18  | CJK font-fallback guidance (docs)         | cjk    | P1    | terminal-dependent          | Done   |
-| 19  | Status line (mode / file / pos)           | tui    | P1    |                             | Done   |
-| 20  | Line numbers (abs/rel toggle)             | tui    | P1    |                             | Done   |
-| 21  | Config: global file + folder              | config | P1    | XDG `~/.config/yumete/`     |        |
-| 22  | Config: per-project local override        | config | P2    | `.yumete/` walk-up          |        |
-| 23  | Keymap from TOML (data-driven)            | config | P2    | rebindable                  |        |
-| 24  | **Dictionary word segmentation**          | cjk    | P2    | reuse Yume 分詞 data        |        |
-| 25  | **Word motions w/b/e (CJK words)**        | core   | P2    | via `Segmenter` trait       |        |
-| 26  | Word delete/change (`dw`/`cw`)            | core   | P2    | word boundaries             |        |
-| 27  | **Built-in Yume IME session**             | ime    | P2    | embeds yume-core            |        |
-| 28  | In-terminal candidate panel               | tui    | P2    | floating overlay near caret |        |
-| 29  | Shift toggles 中/英 in Insert             | ime    | P2    | lone-Shift tap              |        |
-| 30  | IME: number mode / `/`-cmds / `z` reverse | ime    | P2    | free from core              |        |
-| 31  | Scheme switch (靈明/星陳/卿雲/日月/拼音)  | ime    | P2    | load tables at runtime      |        |
-| 32  | IME data dir + bundled font guidance      | ime    | P2    | reuse compiled tables       |        |
-| 33  | **Outline sidebar (foldable)**            | tui    | P3    | right-hand panel, toggle    |        |
-| 34  | **Markdown LSP → headings**               | lsp    | P3    | outline source              |        |
-| 35  | **Typst LSP → headings**                  | lsp    | P3    | outline source              |        |
-| 36  | Jump to outline entry                     | view   | P3    | click/keys                  |        |
-| 37  | Fold/unfold outline                       | tui    | P3    |                             |        |
-| 38  | Space (Normal) → hotkey/help overlay      | tui    | P3    | which-key style             |        |
-| 39  | Command palette (`:` completions)         | tui    | P4    |                             |        |
-| 40  | Themes (TOML, CJK-friendly)               | config | P4    |                             |        |
-| 41  | Soft-wrap for prose                       | tui    | P4    | width-aware wrap            |        |
-| 42  | Auto-save / crash recovery                | core   | P4    | swap file                   |        |
-| 43  | Sessions (reopen last files)              | view   | P4    |                             |        |
-| 44  | Multiple buffers + `:bn`/`:bp`            | view   | P4    | no splits yet               |        |
-| 45  | Marks / jumplist                          | core   | P4    |                             |        |
-| 46  | Count prefixes (e.g. `3w`)                | core   | P4    |                             |        |
-| 47  | Macros (record/replay)                    | core   | P4    |                             |        |
-| 48  | Spell/grammar hooks (CJK-aware)           | lsp    | P4    | optional                    |        |
-| 49  | Word-count / reading-time (prose)         | view   | P4    | writer QoL                  |        |
-| 50  | Custom 碼表 upload / register             | ime    | P4    | user `.ytab`/`.yann`        |        |
-| 51  | Bracket/quote auto-pair (CJK-aware)       | core   | P4    | 「」『』（）                |        |
-| 52  | Syntax highlight (tree-sitter)            | tui    | P5    | Markdown/Typst first        |        |
-| 53  | Coding LSP (Rust/Python/…)                | lsp    | P5    | reuse helix-lsp             |        |
-| 54  | Diagnostics / code actions                | lsp    | P5    |                             |        |
-| 55  | Git gutter / blame                        | vcs    | P5    |                             |        |
-| 56  | Splits / multiple windows                 | tui    | P5    |                             |        |
-| 57  | Debugging (DAP)                           | dap    | P6    | far future                  |        |
-| 58  | Plugin runtime (scripting)                | plugin | P6    | Lua/WASM                    |        |
-| 59  | Remote / SSH editing                      | net    | P6    |                             |        |
-| 60  | Collaborative editing                     | net    | P6    |                             |        |
+| #   | Feature                                   | Area   | Phase | Notes                        | Status |
+| --- | ----------------------------------------- | ------ | ----- | ---------------------------- | ------ |
+| 1   | Open file / new buffer                    | core   | P1    | args + `:open`               | Done   |
+| 2   | Save / save-as (`:w`)                     | core   | P1    | atomic write                 | Done   |
+| 3   | Quit / force-quit (`:q` / `:q!`)          | core   | P1    | dirty-check prompt           | Done   |
+| 4   | Rope-backed text store                    | core   | P1    | ropey / helix rope           | Done   |
+| 5   | Modal editing: Normal / Insert / Command  | view   | P1    | Helix/Vim-like               | Done   |
+| 6   | Cursor motions h/j/k/l                    | core   | P1    | grapheme-aware               | Done   |
+| 7   | Line / goto motions gh/gl/gs/gg/ge        | core   | P1    | Helix goto mode              | Done   |
+| 8   | Char search f/F/t/T                       | core   | P1    | CJK-aware                    | Done   |
+| 9   | Insert i/a/I/A/o/O                        | view   | P1    | Helix insert                 | Done   |
+| 10  | Delete / change d / c (selection)         | core   | P1    | Helix d/c, grapheme-safe     | Done   |
+| 11  | Undo / redo                               | core   | P1    | snapshot-based               | Done   |
+| 12  | Visual/selection mode (basic)             | view   | P1    | Helix selection (x + anchor) | Done   |
+| 13  | Yank / paste (registers, minimal)         | core   | P1    | single register              | Done   |
+| 14  | Incremental search `/` `?` `n` `N`        | core   | P1    | CJK substring                | Done   |
+| 15  | Search & replace `:s///`                  | core   | P1    | substring `:s` / `:%s`       | Done   |
+| 16  | East-Asian width rendering                | cjk    | P1    | 2-cell wide glyphs           | Done   |
+| 17  | Grapheme-cluster cursor math              | cjk    | P1    | IVS / combining safe         | Done   |
+| 18  | CJK font-fallback guidance (docs)         | cjk    | P1    | terminal-dependent           | Done   |
+| 19  | Status line (mode / file / pos)           | tui    | P1    |                              | Done   |
+| 20  | Line numbers (abs/rel toggle)             | tui    | P1    |                              | Done   |
+| 21  | Config: global file + folder              | config | P1    | XDG `~/.config/yumete/`      |        |
+| 22  | Config: per-project local override        | config | P2    | `.yumete/` walk-up           |        |
+| 23  | Keymap from TOML (data-driven)            | config | P2    | rebindable                   |        |
+| 24  | **Dictionary word segmentation**          | cjk    | P2    | reuse Yume 分詞 data         |        |
+| 25  | **Word motions w/b/e (CJK words)**        | core   | P2    | via `Segmenter` trait        |        |
+| 26  | Word delete/change (`dw`/`cw`)            | core   | P2    | word boundaries              |        |
+| 27  | **Built-in Yume IME session**             | ime    | P2    | embeds yume-core             |        |
+| 28  | In-terminal candidate panel               | tui    | P2    | floating overlay near caret  |        |
+| 29  | Shift toggles 中/英 in Insert             | ime    | P2    | lone-Shift tap               |        |
+| 30  | IME: number mode / `/`-cmds / `z` reverse | ime    | P2    | free from core               |        |
+| 31  | Scheme switch (靈明/星陳/卿雲/日月/拼音)  | ime    | P2    | load tables at runtime       |        |
+| 32  | IME data dir + bundled font guidance      | ime    | P2    | reuse compiled tables        |        |
+| 33  | **Outline sidebar (foldable)**            | tui    | P3    | right-hand panel, toggle     |        |
+| 34  | **Markdown LSP → headings**               | lsp    | P3    | outline source               |        |
+| 35  | **Typst LSP → headings**                  | lsp    | P3    | outline source               |        |
+| 36  | Jump to outline entry                     | view   | P3    | click/keys                   |        |
+| 37  | Fold/unfold outline                       | tui    | P3    |                              |        |
+| 38  | Space (Normal) → hotkey/help overlay      | tui    | P3    | which-key style              |        |
+| 39  | Command palette (`:` completions)         | tui    | P4    |                              |        |
+| 40  | Themes (TOML, CJK-friendly)               | config | P4    |                              |        |
+| 41  | Soft-wrap for prose                       | tui    | P4    | width-aware wrap             |        |
+| 42  | Auto-save / crash recovery                | core   | P4    | swap file                    |        |
+| 43  | Sessions (reopen last files)              | view   | P4    |                              |        |
+| 44  | Multiple buffers + `:bn`/`:bp`            | view   | P4    | no splits yet                |        |
+| 45  | Marks / jumplist                          | core   | P4    |                              |        |
+| 46  | Count prefixes (e.g. `3w`)                | core   | P4    |                              |        |
+| 47  | Macros (record/replay)                    | core   | P4    |                              |        |
+| 48  | Spell/grammar hooks (CJK-aware)           | lsp    | P4    | optional                     |        |
+| 49  | Word-count / reading-time (prose)         | view   | P4    | writer QoL                   |        |
+| 50  | Custom 碼表 upload / register             | ime    | P4    | user `txt` (code table only) |        |
+| 51  | Bracket/quote auto-pair (CJK-aware)       | core   | P4    | 「」『』（）                 |        |
+| 52  | Syntax highlight (tree-sitter)            | tui    | P5    | Markdown/Typst first         |        |
+| 53  | Coding LSP (Rust/Python/…)                | lsp    | P5    | reuse helix-lsp              |        |
+| 54  | Diagnostics / code actions                | lsp    | P5    |                              |        |
+| 55  | Git gutter / blame                        | vcs    | P5    |                              |        |
+| 56  | Splits / multiple windows                 | tui    | P5    |                              |        |
+| 57  | Debugging (DAP)                           | dap    | P6    | far future                   |        |
+| 58  | Plugin runtime (scripting)                | plugin | P6    | Lua/WASM                     |        |
+| 59  | Remote / SSH editing                      | net    | P6    |                              |        |
+| 60  | Collaborative editing                     | net    | P6    |                              |        |
+
+---
+
+## 5.1 Helix keybindings & IME hotkeys
+
+A per-key view of the Helix Normal-mode keymap (plus yumete's own IME hotkeys)
+and how far each is implemented. Not everything is needed yet; this is the map
+for prioritizing. **Done** = implemented; **Pn** = planned in that phase; **—** =
+deferred.
+
+### Movement
+
+| Keys                    | Action                                       | Status   |
+| ----------------------- | -------------------------------------------- | -------- |
+| `h` `j` `k` `l`, arrows | left / down / up / right (grapheme-aware)    | Done     |
+| `w` `b` `e`             | next / prev word start, word end (CJK words) | P2 (#25) |
+| `W` `B` `E`             | WORD variants (whitespace-delimited)         | P2       |
+| `f` `t` `F` `T` + char  | find / till a character, forward / backward  | Done     |
+| `Home` `End`            | line start / end                             | P4       |
+| `gg`                    | goto file start (or line N with a count)     | Done     |
+| `ge`                    | goto last line                               | Done     |
+| `gh` `gl`               | goto line start / end                        | Done     |
+| `gs`                    | goto first non-blank character               | Done     |
+| `gt` `gc` `gb`          | goto screen top / center / bottom            | P4       |
+| `Ctrl-u` `Ctrl-d`       | scroll half a page up / down                 | P4       |
+| `Ctrl-b` `Ctrl-f`       | page up / down                               | P4       |
+| `%`                     | match / select the bracket pair              | P4       |
+
+### Selection
+
+| Keys    | Action                                     | Status |
+| ------- | ------------------------------------------ | ------ |
+| `x`     | select the current line (extend on repeat) | Done   |
+| `v`     | enter select (extend) mode                 | Done   |
+| `;`     | collapse the selection to the cursor       | Done   |
+| `,`     | keep only the primary selection            | P4     |
+| `Alt-;` | flip the selection's anchor and head       | P4     |
+| `%`     | select the whole file                      | P4     |
+| `s` `S` | select / split on a regex within selection | P4     |
+
+### Changes
+
+| Keys        | Action                                 | Status |
+| ----------- | -------------------------------------- | ------ |
+| `d`         | delete the selection                   | Done   |
+| `c`         | change the selection (delete + insert) | Done   |
+| `i` `a`     | insert before / after the selection    | Done   |
+| `I` `A`     | insert at line start / end             | Done   |
+| `o` `O`     | open a line below / above              | Done   |
+| `u` `U`     | undo / redo                            | Done   |
+| `y` `p` `P` | yank / paste after / before            | Done   |
+| `r` `R`     | replace a character / with the yank    | P4     |
+| `~`         | switch case                            | P4     |
+| `J`         | join lines                             | P4     |
+| `.`         | repeat the last change                 | P4     |
+| `>` `<` `=` | indent / unindent / format             | P4–P5  |
+
+### Search & command
+
+| Keys    | Action                           | Status   |
+| ------- | -------------------------------- | -------- |
+| `/` `?` | search forward / backward        | Done     |
+| `n` `N` | next / previous match            | Done     |
+| `*`     | search for the current selection | P4       |
+| `:`     | command line (`:w` `:q` `:s` …)  | Done     |
+| `Space` | which-key / help overlay         | P3 (#38) |
+
+### CJK IME hotkeys (yumete-specific — not in Helix)
+
+Active only in Insert mode while the built-in Yume IME is engaged; Normal-mode
+keys are unaffected.
+
+| Keys                          | Action                                                  | Status       |
+| ----------------------------- | ------------------------------------------------------- | ------------ |
+| `Shift` (tap)                 | toggle 中 / 英 (Chinese to ASCII) in insert/search mode | P2 (#29)     |
+| letters (composing)           | drive the Yume candidate panel in insert/search mode    | P2 (#27/#28) |
+| `Space` / `Enter` (composing) | commit the highlighted candidate / raw code             | P2           |
+| `1`–`9` (composing)           | select a candidate by index                             | P2           |
+| `-` `=` (composing)           | previous / next candidate page                          | P2           |
+| `Backspace` (composing)       | delete the last code letter                             | P2           |
+| `:`-led commands              | switch scheme (Ling / Xing / Qing / …)                  | P2 (#31)     |
+| `:`-led commands              | other Yume settings                                     |              |
+| `/`-led (composing)           | special commands (punctuation, symbols)                 | P2 (#30)     |
+| `z` (composing)               | reverse lookup                                          | P2 (#30)     |
 
 ---
 
@@ -218,10 +302,14 @@ Phases are ordered by priority, most writer-critical first:
 > - **#3 Quit / force-quit (`:q` / `:q!`)** — dirty-check with `:q!` override.
 > - **#5 Modal editing** — Normal / Insert / Command modes, driven by a
 >   backend-agnostic `Key` type so the state machine is unit-tested.
-> - **#6 / #7 Cursor motions** — `h`/`j`/`k`/`l`, `0`/`^`/`$`, `gg`/`G`,
->   grapheme-aware and preserving the visual column on vertical moves.
-> - **#9 / #10 Editing** — `i`/`a`/`A`/`o`/`O` insert, `x` delete, Backspace.
-> - **#11 Undo / redo** — snapshot-based, grouped per edit (`u`, `:undo`, `:redo`).
+> - **#6 / #7 Cursor motions** — `h`/`j`/`k`/`l` and Helix goto mode
+>   (`gg`/`ge`/`gh`/`gl`/`gs`), grapheme-aware and preserving the visual column.
+> - **#9 / #10 / #12 Editing & selection** — `x` selects a line, `d`/`c` delete
+>   and change the selection, `i`/`a`/`I`/`A` insert, `o`/`O` open lines; `v`
+>   toggles select (extend) mode, `;` collapses.
+> - **#8 Char search** — `f`/`t`/`F`/`T` find/till a character on the line.
+> - **#13 Yank / paste** — `y` yanks the selection, `p`/`P` paste after/before.
+> - **#11 Undo / redo** — snapshot-based, grouped per edit (`u` / `U`).
 > - **#14 Incremental search** — `/`, `?`, `n`, `N` over CJK substrings, with wrap.
 > - **#15 Search & replace** — `:s/pat/rep/[g]` and `:%s/...` (undoable).
 > - **#16 / #17 CJK metrics** — East-Asian width and grapheme clusters in
@@ -231,8 +319,8 @@ Phases are ordered by priority, most writer-critical first:
 >
 > The binary launches the interactive editor when stdout is a terminal, and falls
 > back to a non-interactive preview otherwise (or with `--preview`). Most of
-> Phase 1 is in place; remaining P1 items are `f`/`F`/`t`/`T` char search (#8),
-> selection (#12), yank/paste (#13), and global configuration (#21).
+> Phase 1 is in place; remaining P1 items are multiple selections and global
+> configuration (#21).
 
 ### Phase 1 — MVP writer editor
 

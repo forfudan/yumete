@@ -21,17 +21,21 @@ Early development, but already an interactive modal editor. Implemented so far:
 - **#2 Save / save-as** — `:w` and `:w <path>` write the buffer atomically.
 - **#3 Quit / force-quit** — `:q` refuses to quit with unsaved changes; `:q!`
   overrides.
-- **#5 Modal editing** — Normal / Insert / Command modes.
-- **#6 / #7 Cursor motions** — `h j k l`, `0 ^ $`, `gg` / `G`, grapheme-aware and
-  visual-column–preserving.
-- **#9 / #10 Editing** — `i a A o O` insert, `x` delete, Backspace.
-- **#11 Undo / redo** — `u`, `:undo`, `:redo` (snapshot-based, grouped per edit).
-- **#14 Incremental search** — `/`, `?`, `n`, `N` over CJK substrings.
+- **#5 Modal editing** — Normal / Insert / Command modes (Helix-style).
+- **#6 / #7 Cursor motions** — `h j k l` and goto mode (`gg` `ge` `gh` `gl`
+  `gs`), grapheme-aware and visual-column–preserving.
+- **#8 Char search** — `f` `t` `F` `T` find / till a character on the line.
+- **#9 / #10 / #12 Editing & selection** — `x` selects a line, `v` / `;` extend
+  / collapse, `d` / `c` delete / change, `i a I A` insert, `o O` open lines.
+- **#11 Undo / redo** — `u` / `U` (snapshot-based, grouped per edit).
+- **#13 Yank / paste** — `y` `p` `P` (single register).
+- **#14 Incremental search** — `/`, `n`, `N` over CJK substrings.
 - **#15 Search & replace** — `:s/pat/rep/[g]`, `:%s/...` (undoable).
 - **#16 / #17 CJK metrics** — East-Asian display width and grapheme clusters in
   [`yumete-cjk`](crates/yumete-cjk).
-- **#19 / #20 TUI** — buffer view with a line-number gutter and status line,
-  rendered by [`yumete-tui`](crates/yumete-tui) over `ratatui` + `crossterm`.
+- **#19 / #20 TUI** — buffer view with a line-number gutter, selection highlight,
+  and status line, rendered by [`yumete-tui`](crates/yumete-tui) over `ratatui` +
+  `crossterm`.
 
 Launch `yumete <file>` in a terminal for the editor, or `yumete --preview <file>`
 (or pipe the output) for a non-interactive preview.

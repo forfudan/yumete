@@ -77,17 +77,22 @@ OPTIONS:
     -h, --help       Print this help and exit.
     -v, --version    Print the version and exit.
 
-KEYS (Normal mode):
+KEYS (Normal mode, Helix-style):
     h j k l   move by grapheme / line (CJK-width aware)
-    0 ^ $     line start / first non-blank / line end
-    gg  G     buffer start / last line
-    i a A     insert before / after cursor / at line end
-    o O       open a line below / above
-    x         delete the character under the cursor
-    u         undo   (:redo to redo)
-    / ?       search forward / backward;  n / N  next / previous
+    gg  ge    goto buffer start / last line
+    gh gl gs  goto line start / end / first non-blank
+    f t F T   find / till a character (forward / backward)
+    x         select the current line (repeat to extend)
+    v  ;      select (extend) mode / collapse the selection
+    d  c      delete / change the selection
+    y  p  P   yank / paste after / before
+    i  a      insert before / after the selection
+    I  A      insert at line start / end
+    o  O      open a line below / above
+    u  U      undo / redo
+    / ? n N   search forward / backward; next / previous match
     :         command line (:w  :w <path>  :q  :q!  :o <path>  :new
-              :s/old/new/[g]  :%s/old/new/[g]  :undo  :redo)
+              :s/old/new/[g]  :%s/old/new/[g])
 
 In Insert mode, type to insert; Esc returns to Normal."
     );
