@@ -11,7 +11,7 @@
 //! Both return character-index ranges `(start, end)` with whitespace skipped.
 
 /// Whether `c` is a CJK ideograph or kana that should stand as its own word.
-fn is_cjk(c: char) -> bool {
+pub(crate) fn is_cjk(c: char) -> bool {
     matches!(
         c as u32,
         0x3400..=0x4DBF      // CJK Extension A
@@ -24,12 +24,12 @@ fn is_cjk(c: char) -> bool {
 
 /// Coarse character category for grouping non-CJK runs.
 #[derive(PartialEq, Eq, Clone, Copy)]
-enum Category {
+pub(crate) enum Category {
     Word,
     Punctuation,
 }
 
-fn category(c: char) -> Category {
+pub(crate) fn category(c: char) -> Category {
     if c.is_alphanumeric() || c == '_' {
         Category::Word
     } else {

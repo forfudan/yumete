@@ -724,11 +724,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "yume-core"
+version = "0.1.0"
+
+[[package]]
 name = "yumete"
 version = "0.1.0"
 dependencies = [
  "yumete-config",
  "yumete-core",
+ "yumete-ime",
  "yumete-tui",
 ]
 
@@ -757,10 +762,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "yumete-ime"
+version = "0.1.0"
+dependencies = [
+ "yume-core",
+ "yumete-config",
+]
+
+[[package]]
 name = "yumete-tui"
 version = "0.1.0"
 dependencies = [
  "ratatui",
+ "yumete-cjk",
  "yumete-config",
  "yumete-core",
+ "yumete-ime",
 ]

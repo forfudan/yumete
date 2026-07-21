@@ -12,7 +12,9 @@
 //! grapheme cursor over the rope's chunks; that optimization is deferred.
 
 use ropey::Rope;
-use yumete_cjk::{grapheme_width, graphemes, next_grapheme_boundary, prev_grapheme_boundary};
+use yumete_cjk::{
+    grapheme_width, graphemes, next_grapheme_boundary, prev_grapheme_boundary, Segmenter,
+};
 
 /// The line's text without its trailing line break.
 fn line_text(rope: &Rope, line: usize) -> String {
@@ -179,18 +181,22 @@ pub fn buffer_end(rope: &Rope, _pos: usize) -> usize {
 }
 
 /// The word ranges of the whole buffer, at the requested granularity.
-fn word_ranges_of(rope: &Rope, big: bool) -> Vec<(usize, usize)> {
+///
+/// "WORDS" (`big`) split on whitespace only and need no dictionary; "words"
+/// (small) are produced by `seg`, so a dictionary segmenter can group CJK
+/// characters into words while the default splits each into its own word.
+fn word_ranges_of(rope: &Rope, big: bool, seg: &dyn Segmenter) -> Vec<(usize, usize)> {
     let text = rope.to_string();
     if big {
         yumete_cjk::word_ranges_big(&text)
     } else {
-        yumete_cjk::word_ranges(&text)
+        seg.segment(&text)
     }
 }
 
 /// The start of the next word after `pos` (`w` / `W`).
-pub fn next_word_start(rope: &Rope, pos: usize, big: bool) -> usize {
-    word_ranges_of(rope, big)
+pub fn next_word_start(rope: &Rope, pos: usize, big: bool, seg: &dyn Segmenter) -> usize {
+    word_ranges_of(rope, big, seg)
         .into_iter()
         .map(|(start, _)| start)
         .find(|&start| start > pos)
@@ -198,8 +204,8 @@ pub fn next_word_start(rope: &Rope, pos: usize, big: bool) -> usize {
 }
 
 /// The end (last character) of the next word after `pos` (`e` / `E`).
-pub fn next_word_end(rope: &Rope, pos: usize, big: bool) -> usize {
-    word_ranges_of(rope, big)
+pub fn next_word_end(rope: &Rope, pos: usize, big: bool, seg: &dyn Segmenter) -> usize {
+    word_ranges_of(rope, big, seg)
         .into_iter()
         .map(|(_, end)| end.saturating_sub(1))
         .find(|&last| last > pos)
@@ -207,9 +213,9 @@ pub fn next_word_end(rope: &Rope, pos: usize, big: bool) -> usize {
 }
 
 /// The start of the previous word before `pos` (`b` / `B`).
-pub fn prev_word_start(rope: &Rope, pos: usize, big: bool) -> usize {
+pub fn prev_word_start(rope: &Rope, pos: usize, big: bool, seg: &dyn Segmenter) -> usize {
     let mut result = 0;
-    for (start, _) in word_ranges_of(rope, big) {
+    for (start, _) in word_ranges_of(rope, big, seg) {
         if start < pos {
             result = start;
         } else {
@@ -286,22 +292,36 @@ mod tests {
 
     #[test]
     fn word_motions_step_by_word_and_cjk_character() {
+        let seg = yumete_cjk::CategorySegmenter;
         let r = rope("foo bar 你好");
         // Chars: f0 o1 o2 ' '3 b4 a5 r6 ' '7 你8 好9.
-        assert_eq!(next_word_start(&r, 0, false), 4); // → "bar"
-        assert_eq!(next_word_start(&r, 4, false), 8); // → "你"
-        assert_eq!(next_word_start(&r, 8, false), 9); // → "好" (each CJK is a word)
-        assert_eq!(next_word_end(&r, 0, false), 2); // end of "foo"
-        assert_eq!(next_word_end(&r, 2, false), 6); // end of "bar"
-        assert_eq!(prev_word_start(&r, 9, false), 8); // back to "你"
-        assert_eq!(prev_word_start(&r, 6, false), 4); // back to start of "bar"
+        assert_eq!(next_word_start(&r, 0, false, &seg), 4); // → "bar"
+        assert_eq!(next_word_start(&r, 4, false, &seg), 8); // → "你"
+        assert_eq!(next_word_start(&r, 8, false, &seg), 9); // → "好" (each CJK is a word)
+        assert_eq!(next_word_end(&r, 0, false, &seg), 2); // end of "foo"
+        assert_eq!(next_word_end(&r, 2, false, &seg), 6); // end of "bar"
+        assert_eq!(prev_word_start(&r, 9, false, &seg), 8); // back to "你"
+        assert_eq!(prev_word_start(&r, 6, false, &seg), 4); // back to start of "bar"
     }
 
     #[test]
     fn big_word_motions_ignore_punctuation_boundaries() {
+        let seg = yumete_cjk::CategorySegmenter;
         let r = rope("a.b cd");
         // Small `w` stops at the punctuation; big `W` skips to "cd".
-        assert_eq!(next_word_start(&r, 0, false), 1); // "." is its own word
-        assert_eq!(next_word_start(&r, 0, true), 4); // WORD → "cd"
+        assert_eq!(next_word_start(&r, 0, false, &seg), 1); // "." is its own word
+        assert_eq!(next_word_start(&r, 0, true, &seg), 4); // WORD → "cd"
+    }
+
+    #[test]
+    fn word_motions_use_the_dictionary_when_supplied() {
+        // With 你好 in the dictionary, `w` steps over the whole word, not each
+        // character; the default category segmenter would stop after 你.
+        let seg = yumete_cjk::DictionarySegmenter::new([("你好".to_string(), 100)], 1);
+        let r = rope("foo 你好 bar");
+        // Chars: f0 o1 o2 ' '3 你4 好5 ' '6 b7 a8 r9.
+        assert_eq!(next_word_start(&r, 0, false, &seg), 4); // → 你好
+        assert_eq!(next_word_start(&r, 4, false, &seg), 7); // → "bar" (skips 好)
+        assert_eq!(next_word_end(&r, 3, false, &seg), 5); // end of 你好 is 好
     }
 }

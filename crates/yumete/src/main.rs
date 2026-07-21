@@ -9,7 +9,8 @@
 use std::io::IsTerminal;
 use std::process::ExitCode;
 
-use yumete_core::{Editor, TextStore};
+use yumete_core::{DictionarySegmenter, Editor, TextStore};
+use yumete_ime::{ImeSession, Scheme};
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
@@ -50,18 +51,47 @@ fn main() -> ExitCode {
     let config = yumete_config::Config::load();
     editor.set_key_aliases(config.keys.normal.clone());
 
+    // Word segmentation (Feature #24): drive `w`/`b`/`e` and the overlay with a
+    // dictionary. A user `segmentation.txt` in the data directory wins; else the
+    // compact dictionary bundled with yumete is used, so word motions work out
+    // of the box. Wiring Yume's full weight table here belongs to the IME
+    // milestone.
+    let threshold = config.editor.segmentation_threshold;
+    let dictionary = load_segmentation_dictionary(threshold)
+        .unwrap_or_else(|| DictionarySegmenter::builtin(threshold));
+    editor.set_segmenter(Box::new(dictionary));
+    editor.set_segmentation_visible(config.editor.show_segmentation);
+
     if force_preview || !std::io::stdout().is_terminal() {
         preview(&editor);
         return ExitCode::SUCCESS;
     }
 
-    match yumete_tui::run(&mut editor, &config) {
+    // The built-in Yume IME (Feature #27): load the default scheme's tables from
+    // the data directory. When the data is absent the session is unavailable and
+    // Insert mode simply types plain ASCII.
+    let mut ime = ImeSession::from_default_dirs(Scheme::Lingming);
+
+    match yumete_tui::run(&mut editor, &config, &mut ime) {
         Ok(()) => ExitCode::SUCCESS,
         Err(err) => {
             eprintln!("yumete: {err}");
             ExitCode::FAILURE
         }
     }
+}
+
+/// Load a `word<TAB>weight` segmentation dictionary from the first
+/// `segmentation.txt` found in the data search path, or `None` if none exists
+/// (in which case the caller falls back to the bundled dictionary).
+fn load_segmentation_dictionary(threshold: i64) -> Option<DictionarySegmenter> {
+    for dir in yumete_config::data_search_dirs() {
+        let path = dir.join("segmentation.txt");
+        if let Ok(text) = std::fs::read_to_string(&path) {
+            return Some(DictionarySegmenter::from_text(&text, threshold));
+        }
+    }
+    None
 }
 
 fn print_help() {
@@ -97,9 +127,12 @@ KEYS (Normal mode, Helix-style):
     u  U      undo / redo
     / ? n N   search forward / backward; next / previous match
     :         command line (:w  :w <path>  :q  :q!  :o <path>  :new
-              :s/old/new/[g]  :%s/old/new/[g])
+              :s/old/new/[g]  :%s/old/new/[g]  :segment)
 
-In Insert mode, type to insert; Esc returns to Normal."
+In Insert mode, type to insert; Esc returns to Normal. If the Yume IME data is
+installed, Insert mode composes CJK: type a code to see candidates, Space or
+1–9 to select, -/= to page, Backspace to edit, Esc to cancel; tap Shift to
+toggle 中/英 (needs a terminal with the Kitty keyboard protocol)."
     );
 }
 

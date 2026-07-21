@@ -1,0 +1,10 @@
+[package]
+name = "yumete-ime"
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+version.workspace = true
+
+[dependencies]
+yume-core = { path = "../../../crates/yume-core" }
+yumete-config = { path = "../yumete-config" }

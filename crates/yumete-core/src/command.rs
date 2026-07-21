@@ -33,6 +33,9 @@ pub enum Command {
     Undo,
     /// `:redo` (alias `:red`) — redo the last undone change.
     Redo,
+    /// `:segment` (alias `:seg`) — toggle the word-segmentation overlay
+    /// (Feature #24).
+    ToggleSegmentation,
 }
 
 /// An error produced while parsing a command line.
@@ -104,6 +107,7 @@ pub fn parse(input: &str) -> Result<Command, CommandError> {
         "quit!" | "q!" => Ok(Command::Quit { force: true }),
         "undo" | "u" => Ok(Command::Undo),
         "redo" | "red" => Ok(Command::Redo),
+        "segment" | "seg" => Ok(Command::ToggleSegmentation),
         other => Err(CommandError::Unknown(other.to_string())),
     }
 }
@@ -189,6 +193,12 @@ mod tests {
         assert_eq!(parse(":undo"), Ok(Command::Undo));
         assert_eq!(parse(":u"), Ok(Command::Undo));
         assert_eq!(parse(":redo"), Ok(Command::Redo));
+    }
+
+    #[test]
+    fn parses_segment_toggle() {
+        assert_eq!(parse(":segment"), Ok(Command::ToggleSegmentation));
+        assert_eq!(parse(":seg"), Ok(Command::ToggleSegmentation));
     }
 
     #[test]

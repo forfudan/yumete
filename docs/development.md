@@ -137,7 +137,7 @@ When annotation is enabled:
   ╚══════════════╧════════════╝
 ```
 
-The borders are not needed if we can use directly the terminal's background color to distinguish the panel from the text buffer.
+Besides the borders, we can also use directly the terminal's background color to distinguish the panel from the text buffer. It will be more compact and less intrusive. Maybe we can have two modes and use a command to switch between them.
 
 The panel is drawn at the cursor's current position, but it should not overlap the current line of the cursor. It usually appears at the right-below of the cursor. We can use the autocompletion panels's positioning logic of Helix.
 
@@ -188,68 +188,68 @@ Phases are ordered by priority, most writer-critical first:
 - **P4 — Polish & QoL**: themes, help overlay, better search UX, sessions.
 - **P5+ — Future / advanced**: coding LSP, git, splits, plugins, debugging.
 
-| #   | Feature                                   | Area   | Phase | Notes                        | Status |
-| --- | ----------------------------------------- | ------ | ----- | ---------------------------- | ------ |
-| 1   | Open file / new buffer                    | core   | P1    | args + `:open`               | Done   |
-| 2   | Save / save-as (`:w`)                     | core   | P1    | atomic write                 | Done   |
-| 3   | Quit / force-quit (`:q` / `:q!`)          | core   | P1    | dirty-check prompt           | Done   |
-| 4   | Rope-backed text store                    | core   | P1    | ropey / helix rope           | Done   |
-| 5   | Modal editing: Normal / Insert / Command  | view   | P1    | Helix/Vim-like               | Done   |
-| 6   | Cursor motions h/j/k/l                    | core   | P1    | grapheme-aware               | Done   |
-| 7   | Line / goto motions gh/gl/gs/gg/ge        | core   | P1    | Helix goto mode              | Done   |
-| 8   | Char search f/F/t/T                       | core   | P1    | CJK-aware                    | Done   |
-| 9   | Insert i/a/I/A/o/O                        | view   | P1    | Helix insert                 | Done   |
-| 10  | Delete / change d / c (selection)         | core   | P1    | Helix d/c, grapheme-safe     | Done   |
-| 11  | Undo / redo                               | core   | P1    | snapshot-based               | Done   |
-| 12  | Visual/selection mode (basic)             | view   | P1    | Helix selection (x + anchor) | Done   |
-| 13  | Yank / paste (registers, minimal)         | core   | P1    | single register              | Done   |
-| 14  | Incremental search `/` `?` `n` `N`        | core   | P1    | CJK substring                | Done   |
-| 15  | Search & replace `:s///`                  | core   | P1    | substring `:s` / `:%s`       | Done   |
-| 16  | East-Asian width rendering                | cjk    | P1    | 2-cell wide glyphs           | Done   |
-| 17  | Grapheme-cluster cursor math              | cjk    | P1    | IVS / combining safe         | Done   |
-| 18  | CJK font-fallback guidance (docs)         | cjk    | P1    | terminal-dependent           | Done   |
-| 19  | Status line (mode / file / pos)           | tui    | P1    |                              | Done   |
-| 20  | Line numbers (abs/rel toggle)             | tui    | P1    |                              | Done   |
-| 21  | Config: global file + folder              | config | P1    | XDG `~/.config/yumete/`      | Done   |
-| 22  | Config: per-project local override        | config | P2    | `.yumete/` walk-up           | Done   |
-| 23  | Keymap from TOML (data-driven)            | config | P2    | key aliases                  | Done   |
-| 24  | **Dictionary word segmentation**          | cjk    | P2    | category seg now; dict later |        |
-| 25  | **Word motions w/b/e (CJK words)**        | core   | P2    | via `Segmenter`              | Done   |
-| 26  | Word delete/change (`dw`/`cw`)            | core   | P2    | `w`/`b`/`e` + `d`/`c`        | Done   |
-| 27  | **Built-in Yume IME session**             | ime    | P2    | embeds yume-core             |        |
-| 28  | In-terminal candidate panel               | tui    | P2    | floating overlay near caret  |        |
-| 29  | Shift toggles 中/英 in Insert             | ime    | P2    | lone-Shift tap               |        |
-| 30  | IME: number mode / `/`-cmds / `z` reverse | ime    | P2    | free from core               |        |
-| 31  | Scheme switch (靈明/星陳/卿雲/日月/拼音)  | ime    | P2    | load tables at runtime       |        |
-| 32  | IME data dir + bundled font guidance      | ime    | P2    | reuse compiled tables        |        |
-| 33  | **Outline sidebar (foldable)**            | tui    | P3    | right-hand panel, toggle     |        |
-| 34  | **Markdown LSP → headings**               | lsp    | P3    | outline source               |        |
-| 35  | **Typst LSP → headings**                  | lsp    | P3    | outline source               |        |
-| 36  | Jump to outline entry                     | view   | P3    | click/keys                   |        |
-| 37  | Fold/unfold outline                       | tui    | P3    |                              |        |
-| 38  | Space (Normal) → hotkey/help overlay      | tui    | P3    | which-key style              |        |
-| 39  | Command palette (`:` completions)         | tui    | P4    |                              |        |
-| 40  | Themes (TOML, CJK-friendly)               | config | P4    |                              |        |
-| 41  | Soft-wrap for prose                       | tui    | P4    | width-aware wrap             |        |
-| 42  | Auto-save / crash recovery                | core   | P4    | swap file                    |        |
-| 43  | Sessions (reopen last files)              | view   | P4    |                              |        |
-| 44  | Multiple buffers + `:bn`/`:bp`            | view   | P4    | no splits yet                |        |
-| 45  | Marks / jumplist                          | core   | P4    |                              |        |
-| 46  | Count prefixes (e.g. `3w`)                | core   | P4    |                              |        |
-| 47  | Macros (record/replay)                    | core   | P4    |                              |        |
-| 48  | Spell/grammar hooks (CJK-aware)           | lsp    | P4    | optional                     |        |
-| 49  | Word-count / reading-time (prose)         | view   | P4    | writer QoL                   |        |
-| 50  | Custom 碼表 upload / register             | ime    | P4    | user `txt` (code table only) |        |
-| 51  | Bracket/quote auto-pair (CJK-aware)       | core   | P4    | 「」『』（）                 |        |
-| 52  | Syntax highlight (tree-sitter)            | tui    | P5    | Markdown/Typst first         |        |
-| 53  | Coding LSP (Rust/Python/…)                | lsp    | P5    | reuse helix-lsp              |        |
-| 54  | Diagnostics / code actions                | lsp    | P5    |                              |        |
-| 55  | Git gutter / blame                        | vcs    | P5    |                              |        |
-| 56  | Splits / multiple windows                 | tui    | P5    |                              |        |
-| 57  | Debugging (DAP)                           | dap    | P6    | far future                   |        |
-| 58  | Plugin runtime (scripting)                | plugin | P6    | Lua/WASM                     |        |
-| 59  | Remote / SSH editing                      | net    | P6    |                              |        |
-| 60  | Collaborative editing                     | net    | P6    |                              |        |
+| #   | Feature                                   | Area   | Phase | Notes                               | Status |
+| --- | ----------------------------------------- | ------ | ----- | ----------------------------------- | ------ |
+| 1   | Open file / new buffer                    | core   | P1    | args + `:open`                      | Done   |
+| 2   | Save / save-as (`:w`)                     | core   | P1    | atomic write                        | Done   |
+| 3   | Quit / force-quit (`:q` / `:q!`)          | core   | P1    | dirty-check prompt                  | Done   |
+| 4   | Rope-backed text store                    | core   | P1    | ropey / helix rope                  | Done   |
+| 5   | Modal editing: Normal / Insert / Command  | view   | P1    | Helix/Vim-like                      | Done   |
+| 6   | Cursor motions h/j/k/l                    | core   | P1    | grapheme-aware                      | Done   |
+| 7   | Line / goto motions gh/gl/gs/gg/ge        | core   | P1    | Helix goto mode                     | Done   |
+| 8   | Char search f/F/t/T                       | core   | P1    | CJK-aware                           | Done   |
+| 9   | Insert i/a/I/A/o/O                        | view   | P1    | Helix insert                        | Done   |
+| 10  | Delete / change d / c (selection)         | core   | P1    | Helix d/c, grapheme-safe            | Done   |
+| 11  | Undo / redo                               | core   | P1    | snapshot-based                      | Done   |
+| 12  | Visual/selection mode (basic)             | view   | P1    | Helix selection (x + anchor)        | Done   |
+| 13  | Yank / paste (registers, minimal)         | core   | P1    | single register                     | Done   |
+| 14  | Incremental search `/` `?` `n` `N`        | core   | P1    | CJK substring                       | Done   |
+| 15  | Search & replace `:s///`                  | core   | P1    | substring `:s` / `:%s`              | Done   |
+| 16  | East-Asian width rendering                | cjk    | P1    | 2-cell wide glyphs                  | Done   |
+| 17  | Grapheme-cluster cursor math              | cjk    | P1    | IVS / combining safe                | Done   |
+| 18  | CJK font-fallback guidance (docs)         | cjk    | P1    | terminal-dependent                  | Done   |
+| 19  | Status line (mode / file / pos)           | tui    | P1    |                                     | Done   |
+| 20  | Line numbers (abs/rel toggle)             | tui    | P1    |                                     | Done   |
+| 21  | Config: global file + folder              | config | P1    | XDG `~/.config/yumete/`             | Done   |
+| 22  | Config: per-project local override        | config | P2    | `.yumete/` walk-up                  | Done   |
+| 23  | Keymap from TOML (data-driven)            | config | P2    | key aliases                         | Done   |
+| 24  | **Dictionary word segmentation**          | cjk    | P2    | jieba-style DAG; weight table later | Done   |
+| 25  | **Word motions w/b/e (CJK words)**        | core   | P2    | via `Segmenter`                     | Done   |
+| 26  | Word delete/change (`dw`/`cw`)            | core   | P2    | `w`/`b`/`e` + `d`/`c`               | Done   |
+| 27  | **Built-in Yume IME session**             | ime    | P2    | embeds yume-core                    | Done   |
+| 28  | In-terminal candidate panel               | tui    | P2    | floating overlay near caret         | Done   |
+| 29  | Shift toggles 中/英 in Insert             | ime    | P2    | lone-Shift tap (Kitty kbd protocol) | Done   |
+| 30  | IME: number mode / `/`-cmds / `z` reverse | ime    | P2    | via engine input routing            | Done   |
+| 31  | Scheme switch (靈明/星陳/卿雲/日月/拼音)  | ime    | P2    | load tables at runtime              |        |
+| 32  | IME data dir + bundled font guidance      | ime    | P2    | reuse compiled tables               | Done   |
+| 33  | **Outline sidebar (foldable)**            | tui    | P3    | right-hand panel, toggle            |        |
+| 34  | **Markdown LSP → headings**               | lsp    | P3    | outline source                      |        |
+| 35  | **Typst LSP → headings**                  | lsp    | P3    | outline source                      |        |
+| 36  | Jump to outline entry                     | view   | P3    | click/keys                          |        |
+| 37  | Fold/unfold outline                       | tui    | P3    |                                     |        |
+| 38  | Space (Normal) → hotkey/help overlay      | tui    | P3    | which-key style                     |        |
+| 39  | Command palette (`:` completions)         | tui    | P4    |                                     |        |
+| 40  | Themes (TOML, CJK-friendly)               | config | P4    | incl. segmentation overlay polish   |        |
+| 41  | Soft-wrap for prose                       | tui    | P4    | width-aware wrap                    |        |
+| 42  | Auto-save / crash recovery                | core   | P4    | swap file                           |        |
+| 43  | Sessions (reopen last files)              | view   | P4    |                                     |        |
+| 44  | Multiple buffers + `:bn`/`:bp`            | view   | P4    | no splits yet                       |        |
+| 45  | Marks / jumplist                          | core   | P4    |                                     |        |
+| 46  | Count prefixes (e.g. `3w`)                | core   | P4    |                                     |        |
+| 47  | Macros (record/replay)                    | core   | P4    |                                     |        |
+| 48  | Spell/grammar hooks (CJK-aware)           | lsp    | P4    | optional                            |        |
+| 49  | Word-count / reading-time (prose)         | view   | P4    | writer QoL                          |        |
+| 50  | Custom 碼表 upload / register             | ime    | P4    | user `txt` (code table only)        |        |
+| 51  | Bracket/quote auto-pair (CJK-aware)       | core   | P4    | 「」『』（）                        |        |
+| 52  | Syntax highlight (tree-sitter)            | tui    | P5    | Markdown/Typst first                |        |
+| 53  | Coding LSP (Rust/Python/…)                | lsp    | P5    | reuse helix-lsp                     |        |
+| 54  | Diagnostics / code actions                | lsp    | P5    |                                     |        |
+| 55  | Git gutter / blame                        | vcs    | P5    |                                     |        |
+| 56  | Splits / multiple windows                 | tui    | P5    |                                     |        |
+| 57  | Debugging (DAP)                           | dap    | P6    | far future                          |        |
+| 58  | Plugin runtime (scripting)                | plugin | P6    | Lua/WASM                            |        |
+| 59  | Remote / SSH editing                      | net    | P6    |                                     |        |
+| 60  | Collaborative editing                     | net    | P6    |                                     |        |
 
 ---
 
@@ -367,10 +367,32 @@ keys are unaffected.
 > - **#21 / #22 / #23 Config** — `yumete-config` loads a global TOML config plus a
 >   per-project `.yumete/config.toml` override (line numbers, scrolloff, selection
 >   colour, and Normal-mode key aliases).
+> - **#25 / #26 Word motions** — `w`/`b`/`e` and `dw`/`cw` step by word, with each
+>   CJK character its own word by default.
+> - **#24 Dictionary word segmentation** — a `Segmenter` trait with a jieba-style
+>   `DictionarySegmenter` (DAG + maximum-probability over a `word → weight` graph,
+>   with a weight threshold). A compact common-word dictionary is bundled, so
+>   `w`/`b`/`e` step by CJK *word* out of the box, and a `:segment` overlay (on by
+>   default) tints each word.
+> - **#27 / #32 Built-in Yume IME session** — `yumete-ime` embeds `yume-core`
+>   directly (no FFI) as an `ImeSession`: per-keystroke input, candidate/preedit
+>   getters, scheme switching, and 中/英 toggle, loading a scheme's compiled data
+>   tables (`*.ytab`, `pinyin.yflb`/`ywtb`, `chaifen_*.yann`, `charsets/*.ycs`)
+>   from the data directory.
+> - **#28 / #29 / #30 IME in Insert mode** — while composing in Insert mode, the
+>   TUI routes keys to the IME and draws a floating candidate panel below the
+>   cursor (code to see candidates; Space/1–9 to select; `-`/`=` to page;
+>   Backspace/Esc to edit/cancel). A **lone-Shift tap** toggles 中/英 (via the
+>   Kitty keyboard protocol, so it needs a compatible terminal — kitty, WezTerm,
+>   foot, Ghostty, Alacritty, Konsole, recent iTerm2; not Apple Terminal). Number
+>   mode, `/`-commands, and `z` reverse lookup come through the engine's input
+>   routing. `scripts/build.sh` compiles and installs the IME tables into
+>   `~/.local/share/yumete`.
 >
 > The binary launches the interactive editor when stdout is a terminal, and falls
 > back to a non-interactive preview otherwise (or with `--preview`). Phase 1 is
-> essentially complete; the next milestone is the built-in Yume IME (P2).
+> complete; Phase 2 is nearly done — CJK typing works in Insert mode; the
+> remaining piece is a scheme-switch command (#31).
 
 ### Phase 1 — MVP writer editor
 
@@ -386,9 +408,35 @@ keys are unaffected.
 ### Phase 2 — CJK words + Yume IME
 
 - `Segmenter` trait + dictionary-backed word segmentation (reuse Yume 分詞 assets).
+  **Done:** the trait and a jieba-style `DictionarySegmenter` (DAG +
+  maximum-probability over a `word → weight` graph) ship in `yumete-cjk`; feeding
+  Yume's compiled weight table into it is deferred to the IME work below.
+- Word segmentation should be balanced: Only very common words in the weight table
+  are segmented by default (weight threshold); the algorithm should also respect
+  the weights, e.g, `ABC` -> `AB C` or `A BC` depending on the weights. **Done:**
+  the maximum-probability path respects weights, and a weight threshold keeps rare
+  words split into single characters.
+- Users may have a different opinion on what is a "word" in CJK, so the segmentation
+  of CJK words can be visualized by means of different background colors (not too
+  intrusive, two or three colors are enough) and users can toggle the segmentation
+  visualization on/off. **Done:** `:segment` (alias `:seg`) toggles an overlay that
+  tints each word with two alternating, subtle backgrounds (configurable under
+  `[theme] segmentation`; on by default via `[editor] show_segmentation`).
+- Jieba is a good reference for the segmentation algorithm. We evaluated the
+  `jieba-rs` crate directly: it is MIT-licensed and well maintained, but its value
+  (an embedded Simplified-Chinese dictionary and HMM model) is what we replace with
+  Yume's weight table, and depending on it would pull heavy transitive crates for a
+  DAG we can write ourselves — so we implemented the same algorithm directly and
+  kept `yumete-cjk` dependency-light. See §7.
 - Word motions `w`/`b`/`e`, `dw`/`cw` respect **Chinese/Japanese word boundaries**.
+  **Done** (via the segmenter above).
 - Embed `yume-core`; in-terminal candidate panel; Shift 中/英; scheme switching;
-  number/`/`/`z` modes; per-project local config.
+  number/`/`/`z` modes; per-project local config. **Mostly done:** `yumete-ime`
+  embeds `yume-core` as an `ImeSession`; Insert mode routes keys to the IME and
+  draws a floating candidate panel; a lone-Shift tap toggles 中/英 (via the Kitty
+  keyboard protocol); number/`/`/`z` modes come through the engine;
+  `scripts/build.sh` installs the compiled tables.
+  The remaining piece is a scheme-switch command/keybinding in the editor (#31).
 - Exit criteria: type CJK inside the editor via Yume; `w` moves by word, not
   sentence; switch schemes; local config overrides global.
 
@@ -402,6 +450,15 @@ keys are unaffected.
 
 - Space→hotkey help overlay, command palette, themes, soft-wrap, sessions,
   multiple buffers, word-count, custom 碼表 registration, CJK auto-pair.
+- **Segmentation overlay polish (with theming, #40).** The current overlay
+  (Feature #24) has two rough edges to fix once the theme system lands: (1) the
+  word background does not always fully cover wide (two-cell) CJK glyphs, so the
+  tint looks narrower than the word; this happens only in Warp but is fine in
+  Kitty and built-in terminal. So it is not a problem. (2) the two default tints are
+  too close to tell adjacent words apart. When theming arrives, give the overlay proper,
+  clearly distinct, theme-driven colours (Helix-style, e.g. a purple accent).
+  Maybe we can also use just one color to tint the words, and that is sufficiently
+  clear to distinguish the words.
 
 ### Phase 5+ — Future / advanced
 
@@ -430,8 +487,23 @@ keys are unaffected.
   which pairs its own `tui-rs` fork (`helix-tui`) with a terminal backend. Keeping
   it behind `Renderer` leaves the choice swappable.
 - **IME scope.** One engine per editor, rather than per buffer.
-- **Segmentation dictionary.** Reuse Yume's word and annotation data first, with a
-  dedicated CJK word list (jieba-style) as a later option.
+- **Segmentation dictionary.** A `Segmenter` trait in `yumete-cjk` drives `w`/`b`/`e`
+  and the segmentation overlay. The default `CategorySegmenter` needs no dictionary
+  (each CJK character is its own word); `DictionarySegmenter` groups CJK runs into
+  words along the maximum-probability path through a `word → weight` graph, with a
+  weight threshold so only sufficiently common words are joined. The `jieba-rs`
+  crate was evaluated as a dependency: it is MIT-licensed (compatible with our
+  Apache-2.0) and well maintained, but its value is an embedded Simplified-Chinese
+  dictionary plus an HMM model — exactly what we replace with Yume's own weight
+  table — so using it would mean disabling its dictionary yet still pulling heavy
+  transitive dependencies (`regex`, `cedarwood`, a proc-macro crate, `phf`) for a
+  DAG we can write in a few dozen lines. yumete therefore implements the same
+  jieba-style DAG + maximum-probability algorithm directly, keeping `yumete-cjk`
+  dependency-light. A compact common-word dictionary is bundled with `yumete-cjk`
+  (`DictionarySegmenter::builtin`) so word motions and the overlay work with no
+  setup; a user may override it with a richer `word<TAB>weight` `segmentation.txt`
+  in the data directory, and feeding Yume's compiled weight table into the
+  dictionary belongs to the IME milestone.
 - **Config format.** TOML, consistent with the yume repository.
 - **Helix reuse boundary.** Depend on Helix crates only through our own traits, so
   the project is never locked in and can grow or replace pieces incrementally.

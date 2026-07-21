@@ -12,6 +12,7 @@ use std::io;
 use std::path::Path;
 
 use ropey::Rope;
+use yumete_cjk::{CategorySegmenter, Segmenter};
 
 use crate::buffer::Buffer;
 use crate::command::{self, Command, CommandError};
@@ -75,6 +76,12 @@ pub struct Editor {
     search_forward: bool,
     /// Normal-mode single-key aliases from the config (Feature #23).
     key_aliases: HashMap<char, char>,
+    /// The word segmenter driving `w`/`b`/`e` and the segmentation overlay
+    /// (Feature #24). Defaults to [`CategorySegmenter`]; a dictionary segmenter
+    /// can be installed via [`Editor::set_segmenter`].
+    segmenter: Box<dyn Segmenter>,
+    /// Whether the segmentation overlay (word background tint) is shown.
+    show_segmentation: bool,
 }
 
 /// What should happen after a key press.
@@ -149,6 +156,8 @@ impl Editor {
             last_search: String::new(),
             search_forward: true,
             key_aliases: HashMap::new(),
+            segmenter: Box::new(CategorySegmenter),
+            show_segmentation: false,
         }
     }
 
@@ -219,6 +228,15 @@ impl Editor {
             }
             Command::Redo => {
                 self.redo();
+                Ok(CommandOutcome::Continue)
+            }
+            Command::ToggleSegmentation => {
+                let on = self.toggle_segmentation();
+                self.status = if on {
+                    "segmentation overlay on".to_string()
+                } else {
+                    "segmentation overlay off".to_string()
+                };
                 Ok(CommandOutcome::Continue)
             }
         }
@@ -312,6 +330,58 @@ impl Editor {
         self.key_aliases = aliases;
     }
 
+    // ---- Word segmentation (Feature #24) ----------------------------------
+
+    /// Install the word [`Segmenter`] used by `w`/`b`/`e` and the segmentation
+    /// overlay. A [`yumete_cjk::DictionarySegmenter`] groups CJK characters into
+    /// words; the default [`yumete_cjk::CategorySegmenter`] treats each as one.
+    pub fn set_segmenter(&mut self, segmenter: Box<dyn Segmenter>) {
+        self.segmenter = segmenter;
+    }
+
+    /// Whether the segmentation overlay (word background tint) is shown.
+    pub fn segmentation_visible(&self) -> bool {
+        self.show_segmentation
+    }
+
+    /// Turn the segmentation overlay on or off.
+    pub fn set_segmentation_visible(&mut self, on: bool) {
+        self.show_segmentation = on;
+    }
+
+    /// Toggle the segmentation overlay, returning the new state.
+    pub fn toggle_segmentation(&mut self) -> bool {
+        self.show_segmentation = !self.show_segmentation;
+        self.show_segmentation
+    }
+
+    /// The word ranges within line `line`, as character columns `(start, end)`
+    /// relative to the line start. Used by the TUI to tint word backgrounds.
+    pub fn segment_line(&self, line: usize) -> Vec<(usize, usize)> {
+        let rope = self.current_buffer().rope();
+        if line >= rope.len_lines() {
+            return Vec::new();
+        }
+        let mut text = rope.line(line).to_string();
+        if text.ends_with('\n') {
+            text.pop();
+            if text.ends_with('\r') {
+                text.pop();
+            }
+        }
+        self.segmenter.segment(&text)
+    }
+
+    /// Insert already-composed text (an IME commit) at the cursor, as if typed.
+    /// Meaningful in Insert mode; grouped as one undo step (Feature #27).
+    pub fn insert_committed(&mut self, text: &str) {
+        if text.is_empty() {
+            return;
+        }
+        self.snapshot();
+        self.insert_str(text);
+    }
+
     /// Handle a single key press according to the current mode.
     pub fn on_key(&mut self, key: Key) -> KeyOutcome {
         match self.mode {
@@ -360,27 +430,57 @@ impl Editor {
             Key::Char('j') | Key::Down => self.move_vertical(false),
             // Word motions (Helix `w`/`b`/`e`, and WORD `W`/`B`/`E`).
             Key::Char('w') => {
-                let p = motion::next_word_start(self.current_buffer().rope(), self.cursor, false);
+                let p = motion::next_word_start(
+                    self.current_buffer().rope(),
+                    self.cursor,
+                    false,
+                    self.segmenter.as_ref(),
+                );
                 self.select_to(p);
             }
             Key::Char('e') => {
-                let p = motion::next_word_end(self.current_buffer().rope(), self.cursor, false);
+                let p = motion::next_word_end(
+                    self.current_buffer().rope(),
+                    self.cursor,
+                    false,
+                    self.segmenter.as_ref(),
+                );
                 self.select_to(p);
             }
             Key::Char('b') => {
-                let p = motion::prev_word_start(self.current_buffer().rope(), self.cursor, false);
+                let p = motion::prev_word_start(
+                    self.current_buffer().rope(),
+                    self.cursor,
+                    false,
+                    self.segmenter.as_ref(),
+                );
                 self.select_to(p);
             }
             Key::Char('W') => {
-                let p = motion::next_word_start(self.current_buffer().rope(), self.cursor, true);
+                let p = motion::next_word_start(
+                    self.current_buffer().rope(),
+                    self.cursor,
+                    true,
+                    self.segmenter.as_ref(),
+                );
                 self.select_to(p);
             }
             Key::Char('E') => {
-                let p = motion::next_word_end(self.current_buffer().rope(), self.cursor, true);
+                let p = motion::next_word_end(
+                    self.current_buffer().rope(),
+                    self.cursor,
+                    true,
+                    self.segmenter.as_ref(),
+                );
                 self.select_to(p);
             }
             Key::Char('B') => {
-                let p = motion::prev_word_start(self.current_buffer().rope(), self.cursor, true);
+                let p = motion::prev_word_start(
+                    self.current_buffer().rope(),
+                    self.cursor,
+                    true,
+                    self.segmenter.as_ref(),
+                );
                 self.select_to(p);
             }
             Key::Char('g') => self.pending = Pending::Goto,
@@ -1259,6 +1359,41 @@ mod tests {
         ed.on_key(Key::Char('l')); // into "baz"
         ed.on_key(Key::Char('b'));
         assert_eq!(ed.cursor(), 0);
+    }
+
+    #[test]
+    fn dictionary_segmenter_makes_word_motions_skip_whole_cjk_words() {
+        let mut ed = Editor::new();
+        ed.on_key(Key::Char('i'));
+        type_keys(&mut ed, "你好世界");
+        ed.on_key(Key::Esc);
+        // Default: each CJK character is its own word, so `w` stops after 你.
+        ed.on_key(Key::Char('g'));
+        ed.on_key(Key::Char('g'));
+        ed.on_key(Key::Char('w'));
+        assert_eq!(ed.selection(), (0, 1));
+
+        // With a dictionary, `w` steps over the whole word 你好.
+        ed.set_segmenter(Box::new(yumete_cjk::DictionarySegmenter::new(
+            [("你好".to_string(), 100), ("世界".to_string(), 100)],
+            1,
+        )));
+        ed.on_key(Key::Char('g'));
+        ed.on_key(Key::Char('g'));
+        ed.on_key(Key::Char('w'));
+        assert_eq!(ed.selection(), (0, 2));
+        // segment_line reflects the same grouping.
+        assert_eq!(ed.segment_line(0), vec![(0, 2), (2, 4)]);
+    }
+
+    #[test]
+    fn segment_command_toggles_the_overlay() {
+        let mut ed = Editor::new();
+        assert!(!ed.segmentation_visible());
+        ed.execute(":segment").unwrap();
+        assert!(ed.segmentation_visible());
+        ed.execute(":seg").unwrap();
+        assert!(!ed.segmentation_visible());
     }
 
     #[test]

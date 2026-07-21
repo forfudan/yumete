@@ -28,3 +28,7 @@ pub use command::{Command, CommandError};
 pub use editor::{CommandOutcome, Editor, EditorError, KeyOutcome};
 pub use input::{Key, Mode};
 pub use text_store::TextStore;
+
+// Re-exported so binaries can install a segmenter without a direct dependency
+// on `yumete-cjk`.
+pub use yumete_cjk::{CategorySegmenter, DictionarySegmenter, Segmenter};

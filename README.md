@@ -39,6 +39,23 @@ Early development, but already an interactive modal editor. Implemented so far:
 - **#21 / #22 / #23 Config** — global `~/.config/yumete/config.toml` plus a
   per-project `.yumete/config.toml` override (line numbers, scrolloff, selection
   colour, Normal-mode key aliases), in [`yumete-config`](crates/yumete-config).
+- **#25 / #26 Word motions** — `w` `b` `e` (and `W` `B` `E`), with `dw` / `cw`;
+  each CJK character is its own word by default.
+- **#24 Dictionary word segmentation** — a `Segmenter` trait with a jieba-style
+  `DictionarySegmenter` (DAG + maximum-probability over a `word → weight` graph,
+  with a weight threshold). A compact common-word dictionary is bundled, so
+  `w`/`b`/`e` step by CJK *word* out of the box; `:segment` toggles a word-tint
+  overlay (on by default).
+- **#27 / #32 Built-in Yume IME session** — [`yumete-ime`](crates/yumete-ime)
+  embeds the `yume-core` engine directly (no FFI) as an `ImeSession`: per-keystroke
+  input, candidate/preedit getters, scheme switching, and 中/英 toggle, loading a
+  scheme's compiled data tables from the data directory.
+- **#28 / #29 / #30 IME in Insert mode** — while composing in Insert mode, keys are
+  routed to the IME and a floating candidate panel is drawn below the cursor
+  (Space / 1–9 select, `-`/`=` page, Backspace/Esc edit/cancel); a **lone-Shift
+  tap** toggles 中/英 (via the Kitty keyboard protocol — needs a compatible
+  terminal such as kitty, WezTerm, Ghostty, or recent iTerm2, not Apple Terminal);
+  number mode, `/`-commands, and `z` reverse come from the engine.
 
 Launch `yumete <file>` in a terminal for the editor, or `yumete --preview <file>`
 (or pipe the output) for a non-interactive preview.
@@ -53,6 +70,7 @@ yumete/
 │   ├── yumete-core/           # editor core: text store, buffers, motions, modes
 │   ├── yumete-cjk/            # CJK display width + grapheme clusters
 │   ├── yumete-config/         # global + per-project TOML config
+│   ├── yumete-ime/            # built-in Yume IME session (embeds yume-core)
 │   ├── yumete-tui/            # terminal UI (ratatui + crossterm)
 │   └── yumete/                # binary: CLI, launches the editor or preview
 ├── scripts/build.sh           # release build → ./yumete (gitignored)
@@ -65,25 +83,15 @@ yumete/
 # Run the tests:
 cargo test
 
-# Build the release binary to the repo root as ./yumete:
+# Build the release binary to the repo root as ./yumete, and compile + install
+# the Yume IME data into ~/.local/share/yumete (needs the sibling yume repo):
 scripts/build.sh
+
+# Build only the binary, skipping the IME data step:
+scripts/build.sh --no-data
 
 # Try it:
 ./yumete --help
 ./yumete docs/development.md          # interactive editor (in a terminal)
 ./yumete --preview docs/development.md # non-interactive preview
-```
-
-## Build & test
-
-```bash
-# Run the core tests:
-cargo test
-
-# Build the release binary to the repo root as ./yumete:
-scripts/build.sh
-
-# Try it:
-./yumete --help
-./yumete docs/development.md
 ```

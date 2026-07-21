@@ -3,6 +3,7 @@ members = [
   "crates/yumete-core",
   "crates/yumete-cjk",
   "crates/yumete-config",
+  "crates/yumete-ime",
   "crates/yumete-tui",
   "crates/yumete",
 ]

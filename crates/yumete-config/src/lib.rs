@@ -39,6 +39,13 @@ pub struct EditorConfig {
     pub line_numbers: LineNumbers,
     /// Minimum number of lines to keep above/below the cursor when scrolling.
     pub scrolloff: usize,
+    /// Whether the word-segmentation overlay is shown at start-up (Feature #24).
+    /// On by default so the CJK word grouping is visible; toggle with `:segment`
+    /// or set `show_segmentation = false`.
+    pub show_segmentation: bool,
+    /// Minimum weight for a multi-character word to be joined by the dictionary
+    /// segmenter (Feature #24). Zero joins every dictionary word.
+    pub segmentation_threshold: i64,
 }
 
 impl Default for EditorConfig {
@@ -47,6 +54,8 @@ impl Default for EditorConfig {
             tab_width: 4,
             line_numbers: LineNumbers::Absolute,
             scrolloff: 3,
+            show_segmentation: true,
+            segmentation_threshold: 0,
         }
     }
 }
@@ -56,12 +65,16 @@ impl Default for EditorConfig {
 pub struct ThemeConfig {
     /// The selection background, as an RGB triple.
     pub selection: (u8, u8, u8),
+    /// The two alternating word-background tints for the segmentation overlay
+    /// (Feature #24). Kept subtle so the overlay is not intrusive.
+    pub segmentation: [(u8, u8, u8); 2],
 }
 
 impl Default for ThemeConfig {
     fn default() -> Self {
         ThemeConfig {
             selection: (60, 70, 100),
+            segmentation: [(40, 44, 52), (52, 44, 40)],
         }
     }
 }
@@ -218,11 +231,14 @@ struct RawEditor {
     tab_width: Option<usize>,
     line_numbers: Option<String>,
     scrolloff: Option<usize>,
+    show_segmentation: Option<bool>,
+    segmentation_threshold: Option<i64>,
 }
 
 #[derive(Deserialize, Default)]
 struct RawTheme {
     selection: Option<String>,
+    segmentation: Option<Vec<String>>,
 }
 
 #[derive(Deserialize, Default)]
@@ -243,8 +259,17 @@ impl RawConfig {
         if other.editor.scrolloff.is_some() {
             self.editor.scrolloff = other.editor.scrolloff;
         }
+        if other.editor.show_segmentation.is_some() {
+            self.editor.show_segmentation = other.editor.show_segmentation;
+        }
+        if other.editor.segmentation_threshold.is_some() {
+            self.editor.segmentation_threshold = other.editor.segmentation_threshold;
+        }
         if other.theme.selection.is_some() {
             self.theme.selection = other.theme.selection;
+        }
+        if other.theme.segmentation.is_some() {
+            self.theme.segmentation = other.theme.segmentation;
         }
         for (k, v) in other.keys.normal {
             self.keys.normal.insert(k, v);
@@ -262,9 +287,22 @@ impl RawConfig {
         if let Some(off) = self.editor.scrolloff {
             config.editor.scrolloff = off;
         }
+        if let Some(on) = self.editor.show_segmentation {
+            config.editor.show_segmentation = on;
+        }
+        if let Some(threshold) = self.editor.segmentation_threshold {
+            config.editor.segmentation_threshold = threshold.max(0);
+        }
         if let Some(hex) = self.theme.selection {
             if let Some(rgb) = parse_hex(&hex) {
                 config.theme.selection = rgb;
+            }
+        }
+        if let Some(colors) = self.theme.segmentation {
+            for (slot, hex) in config.theme.segmentation.iter_mut().zip(colors.iter()) {
+                if let Some(rgb) = parse_hex(hex) {
+                    *slot = rgb;
+                }
             }
         }
         for (k, v) in self.keys.normal {
@@ -345,6 +383,26 @@ mod tests {
         assert_eq!(c.keys.normal.get(&'j'), Some(&'h'));
         // Multi-character keys are ignored.
         assert!(!c.keys.normal.contains_key(&'t'));
+    }
+
+    #[test]
+    fn parses_segmentation_settings() {
+        let c = Config::from_toml(
+            r##"
+            [editor]
+            show_segmentation = true
+            segmentation_threshold = 50
+
+            [theme]
+            segmentation = ["#101010", "#202020"]
+            "##,
+        );
+        assert!(c.editor.show_segmentation);
+        assert_eq!(c.editor.segmentation_threshold, 50);
+        assert_eq!(
+            c.theme.segmentation,
+            [(0x10, 0x10, 0x10), (0x20, 0x20, 0x20)]
+        );
     }
 
     #[test]

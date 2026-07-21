@@ -13,4 +13,5 @@ path = "src/main.rs"
 [dependencies]
 yumete-config = {path = "../yumete-config"}
 yumete-core = {path = "../yumete-core"}
+yumete-ime = {path = "../yumete-ime"}
 yumete-tui = {path = "../yumete-tui"}
