@@ -1,10 +1,10 @@
-//! The [`Editor`]: top-level state owning the open buffers and the active one.
+//! The [`Editor`]: top-level state owning the open buffers, the active one, and
+//! the modal editing state (mode, cursor, command line).
 //!
-//! For Feature #1 this exposes the two ways to bring a document into the
-//! editor — opening a file and creating a new scratch buffer — plus the
-//! [`Editor::execute`] entry point that runs a parsed `:` command. Later
-//! features (cursors, modes, viewport) will grow around this without changing
-//! how buffers are opened.
+//! [`Editor::execute`] runs a parsed `:` command, and [`Editor::on_key`] drives
+//! the modal state machine (Normal / Insert / Command) from backend-agnostic
+//! [`Key`] presses, so the whole interaction can be unit-tested without a
+//! terminal.
 
 use std::fmt;
 use std::io;
@@ -12,12 +12,34 @@ use std::path::Path;
 
 use crate::buffer::Buffer;
 use crate::command::{self, Command, CommandError};
+use crate::input::{Key, Mode};
+use crate::motion;
 use crate::text_store::TextStore;
 
 /// The editor: a non-empty list of open buffers and the index of the active one.
 pub struct Editor {
     buffers: Vec<Buffer>,
     current: usize,
+    mode: Mode,
+    /// Cursor position in the active buffer, as a character index.
+    cursor: usize,
+    /// Preserved visual column for vertical motion (`j` / `k`).
+    goal_column: usize,
+    /// The text being typed after `:` in Command mode (without the leading `:`).
+    command_line: String,
+    /// A transient message for the status line (errors, confirmations).
+    status: String,
+    /// Whether the previous Normal-mode key was `g` (for the `gg` motion).
+    pending_g: bool,
+}
+
+/// What should happen after a key press.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum KeyOutcome {
+    /// Stay in the editor.
+    Continue,
+    /// Leave the editor.
+    Quit,
 }
 
 /// What should happen after a command runs.
@@ -69,6 +91,12 @@ impl Editor {
         Editor {
             buffers: vec![Buffer::scratch()],
             current: 0,
+            mode: Mode::Normal,
+            cursor: 0,
+            goal_column: 0,
+            command_line: String::new(),
+            status: String::new(),
+            pending_g: false,
         }
     }
 
@@ -143,6 +171,228 @@ impl Editor {
         }
     }
 
+    // ---- Modal editing (Feature #5) ---------------------------------------
+
+    /// The current editing mode.
+    pub fn mode(&self) -> Mode {
+        self.mode
+    }
+
+    /// The cursor position in the active buffer, as a character index.
+    pub fn cursor(&self) -> usize {
+        self.cursor
+    }
+
+    /// The text typed so far in Command mode (without the leading `:`).
+    pub fn command_line(&self) -> &str {
+        &self.command_line
+    }
+
+    /// The current transient status message (may be empty).
+    pub fn status(&self) -> &str {
+        &self.status
+    }
+
+    /// The 0-based line the cursor is on.
+    pub fn cursor_line(&self) -> usize {
+        self.current_buffer().rope().char_to_line(self.cursor)
+    }
+
+    /// The cursor's visual column (summed display width within its line).
+    pub fn cursor_visual_column(&self) -> usize {
+        motion::visual_column(self.current_buffer().rope(), self.cursor)
+    }
+
+    /// Handle a single key press according to the current mode.
+    pub fn on_key(&mut self, key: Key) -> KeyOutcome {
+        match self.mode {
+            Mode::Normal => self.on_normal_key(key),
+            Mode::Insert => self.on_insert_key(key),
+            Mode::Command => return self.on_command_key(key),
+        }
+        KeyOutcome::Continue
+    }
+
+    fn on_normal_key(&mut self, key: Key) {
+        // The `gg` motion needs to remember a pending `g`; any other key clears it.
+        let was_pending_g = self.pending_g;
+        self.pending_g = false;
+        self.status.clear();
+
+        match key {
+            Key::Char('h') | Key::Left => self.move_horizontal(motion::left),
+            Key::Char('l') | Key::Right => self.move_horizontal(motion::right),
+            Key::Char('k') | Key::Up => self.move_vertical(true),
+            Key::Char('j') | Key::Down => self.move_vertical(false),
+            Key::Char('0') => self.move_horizontal(motion::line_start),
+            Key::Char('^') => self.move_horizontal(motion::line_first_non_blank),
+            Key::Char('$') => self.move_horizontal(motion::line_end),
+            Key::Char('G') => self.move_horizontal(motion::buffer_end),
+            Key::Char('g') => {
+                if was_pending_g {
+                    let pos = motion::buffer_start(self.current_buffer().rope(), self.cursor);
+                    self.set_cursor(pos);
+                } else {
+                    self.pending_g = true;
+                }
+            }
+            Key::Char('i') => self.mode = Mode::Insert,
+            Key::Char('a') => {
+                let pos = motion::right(self.current_buffer().rope(), self.cursor);
+                self.set_cursor(pos);
+                self.mode = Mode::Insert;
+            }
+            Key::Char('A') => {
+                let pos = motion::line_end(self.current_buffer().rope(), self.cursor);
+                self.set_cursor(pos);
+                self.mode = Mode::Insert;
+            }
+            Key::Char('o') => self.open_line_below(),
+            Key::Char('O') => self.open_line_above(),
+            Key::Char('x') => self.delete_under_cursor(),
+            Key::Char(':') => {
+                self.mode = Mode::Command;
+                self.command_line.clear();
+            }
+            _ => {}
+        }
+    }
+
+    fn on_insert_key(&mut self, key: Key) {
+        match key {
+            Key::Esc => self.mode = Mode::Normal,
+            Key::Enter => self.insert_str("\n"),
+            Key::Backspace => self.delete_before_cursor(),
+            Key::Left => self.move_horizontal(motion::left),
+            Key::Right => self.move_horizontal(motion::right),
+            Key::Up => self.move_vertical(true),
+            Key::Down => self.move_vertical(false),
+            Key::Char(c) => {
+                let mut buf = [0u8; 4];
+                self.insert_str(c.encode_utf8(&mut buf));
+            }
+        }
+    }
+
+    fn on_command_key(&mut self, key: Key) -> KeyOutcome {
+        match key {
+            Key::Esc => {
+                self.command_line.clear();
+                self.mode = Mode::Normal;
+            }
+            Key::Backspace => {
+                if self.command_line.pop().is_none() {
+                    self.mode = Mode::Normal;
+                }
+            }
+            Key::Char(c) => self.command_line.push(c),
+            Key::Enter => {
+                let line = std::mem::take(&mut self.command_line);
+                self.mode = Mode::Normal;
+                match self.execute(&line) {
+                    Ok(CommandOutcome::Quit) => return KeyOutcome::Quit,
+                    Ok(CommandOutcome::Continue) => {}
+                    Err(err) => self.status = err.to_string(),
+                }
+            }
+            _ => {}
+        }
+        KeyOutcome::Continue
+    }
+
+    // ---- Motion helpers ---------------------------------------------------
+
+    /// Apply a horizontal motion and reset the goal column to the new position.
+    fn move_horizontal(&mut self, motion: fn(&ropey::Rope, usize) -> usize) {
+        let pos = motion(self.current_buffer().rope(), self.cursor);
+        self.set_cursor(pos);
+    }
+
+    /// Apply a vertical motion, preserving the goal column.
+    fn move_vertical(&mut self, up: bool) {
+        let rope = self.current_buffer().rope();
+        self.cursor = if up {
+            motion::up(rope, self.cursor, self.goal_column)
+        } else {
+            motion::down(rope, self.cursor, self.goal_column)
+        };
+    }
+
+    /// Set the cursor and refresh the goal column.
+    fn set_cursor(&mut self, pos: usize) {
+        self.cursor = pos;
+        self.goal_column = motion::visual_column(self.current_buffer().rope(), self.cursor);
+    }
+
+    /// Clamp the cursor into the valid range of the active buffer.
+    fn clamp_cursor(&mut self) {
+        let len = self.current_buffer().char_count();
+        if self.cursor > len {
+            self.cursor = len;
+        }
+    }
+
+    // ---- Editing (Features #9 / #10) --------------------------------------
+
+    /// Insert `text` at the cursor and advance past it.
+    fn insert_str(&mut self, text: &str) {
+        let at = self.cursor;
+        self.current_buffer_mut().insert(at, text);
+        self.cursor = at + text.chars().count();
+        self.goal_column = motion::visual_column(self.current_buffer().rope(), self.cursor);
+    }
+
+    /// Open a new line below the cursor and enter Insert mode (`o`).
+    fn open_line_below(&mut self) {
+        let end = motion::line_end(self.current_buffer().rope(), self.cursor);
+        self.current_buffer_mut().insert(end, "\n");
+        self.cursor = end + 1;
+        self.mode = Mode::Insert;
+    }
+
+    /// Open a new line above the cursor and enter Insert mode (`O`).
+    fn open_line_above(&mut self) {
+        let start = motion::line_start(self.current_buffer().rope(), self.cursor);
+        self.current_buffer_mut().insert(start, "\n");
+        self.cursor = start;
+        self.mode = Mode::Insert;
+    }
+
+    /// Delete the grapheme under the cursor (`x`).
+    fn delete_under_cursor(&mut self) {
+        let rope = self.current_buffer().rope();
+        let end = motion::right(rope, self.cursor);
+        if end > self.cursor {
+            let range = self.cursor..end;
+            self.current_buffer_mut().remove(range);
+            self.clamp_cursor();
+            let line_end = motion::line_end(self.current_buffer().rope(), self.cursor);
+            if self.cursor > line_end {
+                self.cursor = line_end;
+            }
+        }
+    }
+
+    /// Delete the grapheme before the cursor (Insert-mode Backspace).
+    fn delete_before_cursor(&mut self) {
+        if self.cursor == 0 {
+            return;
+        }
+        let rope = self.current_buffer().rope();
+        let line = rope.char_to_line(self.cursor);
+        let line_start = rope.line_to_char(line);
+        let start = if self.cursor == line_start {
+            // At the start of a line: delete the preceding newline (join lines).
+            self.cursor - 1
+        } else {
+            motion::left(rope, self.cursor)
+        };
+        let range = start..self.cursor;
+        self.current_buffer_mut().remove(range);
+        self.cursor = start;
+        self.goal_column = motion::visual_column(self.current_buffer().rope(), self.cursor);
+    }
+
     /// Add a buffer and make it active.
     ///
     /// If the only open buffer is the pristine, empty scratch buffer that
@@ -159,6 +409,10 @@ impl Editor {
             self.buffers.push(buffer);
             self.current = self.buffers.len() - 1;
         }
+        // A freshly focused buffer starts at the top in Normal mode.
+        self.cursor = 0;
+        self.goal_column = 0;
+        self.mode = Mode::Normal;
     }
 }
 
@@ -171,6 +425,7 @@ impl Default for Editor {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::input::{Key, Mode};
 
     #[test]
     fn starts_with_one_scratch_buffer() {
@@ -250,5 +505,117 @@ mod tests {
     fn quit_on_a_clean_buffer_proceeds() {
         let mut ed = Editor::new();
         assert_eq!(ed.execute(":q").unwrap(), CommandOutcome::Quit);
+    }
+
+    // ---- Modal editing ----------------------------------------------------
+
+    /// Feed a string of `Key::Char` presses (plus Enter for '\n').
+    fn type_keys(ed: &mut Editor, s: &str) {
+        for ch in s.chars() {
+            let key = if ch == '\n' {
+                Key::Enter
+            } else {
+                Key::Char(ch)
+            };
+            ed.on_key(key);
+        }
+    }
+
+    #[test]
+    fn insert_mode_types_text_and_esc_returns_to_normal() {
+        let mut ed = Editor::new();
+        ed.on_key(Key::Char('i'));
+        assert_eq!(ed.mode(), Mode::Insert);
+        type_keys(&mut ed, "你好");
+        ed.on_key(Key::Esc);
+        assert_eq!(ed.mode(), Mode::Normal);
+        assert_eq!(ed.current_buffer().text(), "你好");
+        assert_eq!(ed.cursor(), 2);
+    }
+
+    #[test]
+    fn normal_motions_move_the_cursor() {
+        let mut ed = Editor::new();
+        // Set up two lines via insert mode.
+        ed.on_key(Key::Char('i'));
+        type_keys(&mut ed, "中x\nabc");
+        ed.on_key(Key::Esc);
+
+        // gg to the top.
+        ed.on_key(Key::Char('g'));
+        ed.on_key(Key::Char('g'));
+        assert_eq!(ed.cursor(), 0);
+
+        // l moves over the wide "中" (one grapheme, one char, width 2).
+        ed.on_key(Key::Char('l'));
+        assert_eq!(ed.cursor(), 1);
+        assert_eq!(ed.cursor_visual_column(), 2);
+
+        // j keeps the visual column: column 2 on "abc" is after "ab" (char 5).
+        ed.on_key(Key::Char('j'));
+        assert_eq!(ed.cursor_line(), 1);
+        assert_eq!(ed.cursor_visual_column(), 2);
+
+        // 0 and $ on the second line.
+        ed.on_key(Key::Char('0'));
+        assert_eq!(ed.cursor(), 3);
+        ed.on_key(Key::Char('$'));
+        assert_eq!(ed.cursor(), 6); // end of "abc"
+    }
+
+    #[test]
+    fn x_deletes_grapheme_and_backspace_joins_lines() {
+        let mut ed = Editor::new();
+        ed.on_key(Key::Char('i'));
+        type_keys(&mut ed, "ab\ncd");
+        ed.on_key(Key::Esc);
+
+        // Cursor at end after Esc; go to start of line 2 and backspace to join.
+        ed.on_key(Key::Char('0')); // start of "cd"
+        assert_eq!(ed.cursor(), 3);
+        ed.on_key(Key::Char('i'));
+        ed.on_key(Key::Backspace); // deletes the newline, joining "ab" + "cd"
+        assert_eq!(ed.current_buffer().text(), "abcd");
+
+        // Back to normal, gg, then x deletes the first char.
+        ed.on_key(Key::Esc);
+        ed.on_key(Key::Char('g'));
+        ed.on_key(Key::Char('g'));
+        ed.on_key(Key::Char('x'));
+        assert_eq!(ed.current_buffer().text(), "bcd");
+    }
+
+    #[test]
+    fn o_opens_a_line_below_in_insert_mode() {
+        let mut ed = Editor::new();
+        ed.on_key(Key::Char('i'));
+        type_keys(&mut ed, "first");
+        ed.on_key(Key::Esc);
+        ed.on_key(Key::Char('o'));
+        assert_eq!(ed.mode(), Mode::Insert);
+        type_keys(&mut ed, "second");
+        ed.on_key(Key::Esc);
+        assert_eq!(ed.current_buffer().text(), "first\nsecond");
+    }
+
+    #[test]
+    fn command_mode_runs_the_colon_line_and_quit_signals() {
+        let mut ed = Editor::new();
+        // Type some text so the buffer is modified.
+        ed.on_key(Key::Char('i'));
+        type_keys(&mut ed, "hi");
+        ed.on_key(Key::Esc);
+
+        // :q on a modified buffer is refused and reported in the status line.
+        ed.on_key(Key::Char(':'));
+        assert_eq!(ed.mode(), Mode::Command);
+        type_keys(&mut ed, "q");
+        assert_eq!(ed.on_key(Key::Enter), KeyOutcome::Continue);
+        assert!(!ed.status().is_empty());
+
+        // :q! quits.
+        ed.on_key(Key::Char(':'));
+        type_keys(&mut ed, "q!");
+        assert_eq!(ed.on_key(Key::Enter), KeyOutcome::Quit);
     }
 }

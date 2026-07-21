@@ -1,15 +1,12 @@
 //! `yumete` — the binary entry point.
 //!
-//! At this stage yumete implements **Feature #1** (open file / new buffer): it
-//! parses command-line arguments, opens the given file(s) into the editor (or
-//! starts a new scratch buffer when none are given), and prints a preview of
-//! the active buffer.
-//!
-//! The interactive modal TUI (Normal / Insert / Command modes, cursor motions,
-//! the in-terminal Yume IME candidate panel, …) arrives with the later
-//! features in the roadmap; this preview is deliberately non-interactive so
-//! that Feature #1 can be exercised on its own.
+//! yumete parses command-line arguments, opens the given file(s) into the
+//! editor (or starts a new scratch buffer when none are given), and launches the
+//! interactive terminal editor. When standard output is not a terminal, or with
+//! `--preview`, it instead prints a non-interactive preview of the active
+//! buffer (useful for piping and for quick inspection).
 
+use std::io::IsTerminal;
 use std::process::ExitCode;
 
 use yumete_core::{Editor, TextStore};
@@ -18,6 +15,7 @@ const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 fn main() -> ExitCode {
     let mut files: Vec<String> = Vec::new();
+    let mut force_preview = false;
 
     for arg in std::env::args().skip(1) {
         match arg.as_str() {
@@ -29,6 +27,7 @@ fn main() -> ExitCode {
                 println!("yumete {VERSION}");
                 return ExitCode::SUCCESS;
             }
+            "-p" | "--preview" => force_preview = true,
             // Reject unknown flags, but treat a lone "-" as a filename.
             s if s.starts_with('-') && s != "-" => {
                 eprintln!("yumete: unknown option '{s}'");
@@ -47,8 +46,18 @@ fn main() -> ExitCode {
         }
     }
 
-    preview(&editor);
-    ExitCode::SUCCESS
+    if force_preview || !std::io::stdout().is_terminal() {
+        preview(&editor);
+        return ExitCode::SUCCESS;
+    }
+
+    match yumete_tui::run(&mut editor) {
+        Ok(()) => ExitCode::SUCCESS,
+        Err(err) => {
+            eprintln!("yumete: {err}");
+            ExitCode::FAILURE
+        }
+    }
 }
 
 fn print_help() {
@@ -64,11 +73,20 @@ ARGS:
             With no FILE, yumete starts with a new, empty scratch buffer.
 
 OPTIONS:
+    -p, --preview    Print a non-interactive preview instead of the editor.
     -h, --help       Print this help and exit.
     -v, --version    Print the version and exit.
 
-Note: this build implements Feature #1 (open file / new buffer) and prints a
-non-interactive preview of the active buffer. The modal TUI editor is coming."
+KEYS (Normal mode):
+    h j k l   move by grapheme / line (CJK-width aware)
+    0 ^ $     line start / first non-blank / line end
+    gg  G     buffer start / last line
+    i a A     insert before / after cursor / at line end
+    o O       open a line below / above
+    x         delete the character under the cursor
+    :         command line (:w  :w <path>  :q  :q!  :o <path>  :new)
+
+In Insert mode, type to insert; Esc returns to Normal."
     );
 }
 

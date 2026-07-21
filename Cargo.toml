@@ -2,6 +2,7 @@
 members = [
   "crates/yumete-core",
   "crates/yumete-cjk",
+  "crates/yumete-tui",
   "crates/yumete",
 ]
 resolver = "2"

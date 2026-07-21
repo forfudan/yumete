@@ -4,11 +4,14 @@
 //! separation of a rope/selection/transaction core from the TUI. It has no
 //! terminal or IME dependencies.
 //!
-//! Feature #1 (open file / new buffer) lives here:
+//! Feature #1 (open file / new buffer) lives here, alongside the modal editing
+//! core (Feature #5):
 //!
 //! - [`Buffer`] wraps the text store for a single document.
-//! - [`Editor`] owns the list of open buffers and the active one.
-//! - [`command`] parses the `:open` / `:new` command line.
+//! - [`Editor`] owns the open buffers, the cursor, the mode, and the command
+//!   line; [`Editor::on_key`] drives the Normal / Insert / Command state machine.
+//! - [`command`] parses the `:` command line; [`motion`] holds the grapheme- and
+//!   width-aware cursor motions.
 //!
 //! All text access goes through the [`TextStore`] trait so the storage backend
 //! (currently a [`ropey`] rope) can be swapped later without touching call sites.
@@ -16,9 +19,12 @@
 pub mod buffer;
 pub mod command;
 pub mod editor;
+pub mod input;
+pub mod motion;
 pub mod text_store;
 
 pub use buffer::Buffer;
 pub use command::{Command, CommandError};
-pub use editor::{CommandOutcome, Editor, EditorError};
+pub use editor::{CommandOutcome, Editor, EditorError, KeyOutcome};
+pub use input::{Key, Mode};
 pub use text_store::TextStore;

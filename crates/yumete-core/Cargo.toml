@@ -1,10 +1,11 @@
 [package]
-name = "yumete-core"
 description = "Editor core (text store, buffers, command parsing) for yumete."
 edition.workspace = true
 license.workspace = true
+name = "yumete-core"
 repository.workspace = true
 version.workspace = true
 
 [dependencies]
 ropey = "1.6"
+yumete-cjk = {path = "../yumete-cjk"}

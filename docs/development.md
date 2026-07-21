@@ -146,12 +146,12 @@ Phases are ordered by priority, most writer-critical first:
 | 2   | Save / save-as (`:w`)                     | core   | P1    | atomic write                | Done   |
 | 3   | Quit / force-quit (`:q` / `:q!`)          | core   | P1    | dirty-check prompt          | Done   |
 | 4   | Rope-backed text store                    | core   | P1    | ropey / helix rope          |        |
-| 5   | Modal editing: Normal / Insert / Command  | view   | P1    | Helix/Vim-like              |        |
-| 6   | Cursor motions h/j/k/l                    | core   | P1    | grapheme-aware              |        |
-| 7   | Line motions 0/$/^/gg/G                   | core   | P1    | display-cell aware          |        |
+| 5   | Modal editing: Normal / Insert / Command  | view   | P1    | Helix/Vim-like              | Done   |
+| 6   | Cursor motions h/j/k/l                    | core   | P1    | grapheme-aware              | Done   |
+| 7   | Line motions 0/$/^/gg/G                   | core   | P1    | display-cell aware          | Done   |
 | 8   | Char search f/F/t/T                       | core   | P1    | CJK-aware                   |        |
-| 9   | Insert/append i/a/o/O                     | view   | P1    |                             |        |
-| 10  | Delete/change x/d/c + motions             | core   | P1    | grapheme-safe               |        |
+| 9   | Insert/append i/a/o/O                     | view   | P1    |                             | Done   |
+| 10  | Delete/change x/d/c + motions             | core   | P1    | grapheme-safe               | Done   |
 | 11  | Undo / redo                               | core   | P1    | transaction history         |        |
 | 12  | Visual/selection mode (basic)             | view   | P1    | Helix selection model       |        |
 | 13  | Yank / paste (registers, minimal)         | core   | P1    | system clipboard opt        |        |
@@ -160,8 +160,8 @@ Phases are ordered by priority, most writer-critical first:
 | 16  | East-Asian width rendering                | cjk    | P1    | 2-cell wide glyphs          | Done   |
 | 17  | Grapheme-cluster cursor math              | cjk    | P1    | IVS / combining safe        | Done   |
 | 18  | CJK font-fallback guidance (docs)         | cjk    | P1    | terminal-dependent          |        |
-| 19  | Status line (mode / file / pos)           | tui    | P1    |                             |        |
-| 20  | Line numbers (abs/rel toggle)             | tui    | P1    |                             |        |
+| 19  | Status line (mode / file / pos)           | tui    | P1    |                             | Done   |
+| 20  | Line numbers (abs/rel toggle)             | tui    | P1    |                             | Done   |
 | 21  | Config: global file + folder              | config | P1    | XDG `~/.config/yumete/`     |        |
 | 22  | Config: per-project local override        | config | P2    | `.yumete/` walk-up          |        |
 | 23  | Keymap from TOML (data-driven)            | config | P2    | rebindable                  |        |
@@ -208,22 +208,28 @@ Phases are ordered by priority, most writer-critical first:
 ## 6. Phase-by-phase deliverables
 
 > **Current status.** The Cargo workspace is initialized with `crates/yumete-core`,
-> `crates/yumete-cjk`, and the `yumete` binary (with `ropey` behind the
-> `TextStore` trait). Done so far:
+> `crates/yumete-cjk`, `crates/yumete-tui`, and the `yumete` binary (with `ropey`
+> behind the `TextStore` trait). yumete is now an interactive modal editor. Done
+> so far:
 >
 > - **#1 Open file / new buffer** — command-line arguments plus `:open` / `:new`;
->   a `Buffer` type (open an existing file, bind a new path, or start a scratch
->   buffer) and an `Editor` that owns the open buffers.
-> - **#2 Save / save-as (`:w`)** — atomic write (temp file + rename); `:w` and
->   `:w <path>` clear the modified flag.
-> - **#3 Quit / force-quit (`:q` / `:q!`)** — dirty-check that blocks `:q` on
->   unsaved changes and lets `:q!` override.
-> - **#16 East-Asian width** and **#17 grapheme clusters** — in `yumete-cjk`, so
->   width and cursor math never assume one character equals one cell.
+>   a `Buffer` type and an `Editor` that owns the open buffers.
+> - **#2 Save / save-as (`:w`)** — atomic write (temp file + rename).
+> - **#3 Quit / force-quit (`:q` / `:q!`)** — dirty-check with `:q!` override.
+> - **#5 Modal editing** — Normal / Insert / Command modes, driven by a
+>   backend-agnostic `Key` type so the state machine is unit-tested.
+> - **#6 / #7 Cursor motions** — `h`/`j`/`k`/`l`, `0`/`^`/`$`, `gg`/`G`,
+>   grapheme-aware and preserving the visual column on vertical moves.
+> - **#9 / #10 Editing** — `i`/`a`/`A`/`o`/`O` insert, `x` delete, Backspace.
+> - **#16 / #17 CJK metrics** — East-Asian width and grapheme clusters in
+>   `yumete-cjk` (with `grapheme_width` / `tab_width_at`).
+> - **#19 / #20 TUI** — `yumete-tui` renders the buffer with a line-number gutter
+>   and a status line over `ratatui` + `crossterm`.
 >
-> The binary currently prints a non-interactive preview of the active buffer; the
-> modal TUI loop (Feature #5) is next. The remaining Phase 1 view/TUI crates are
-> added as the features that need them arrive, rather than as empty stubs.
+> The binary launches the interactive editor when stdout is a terminal, and falls
+> back to a non-interactive preview otherwise (or with `--preview`). Next up:
+> selection (#12), yank/paste (#13), undo/redo (#11), search and replace
+> (#14/#15), and configuration (#21).
 
 ### Phase 1 — MVP writer editor
 
@@ -330,8 +336,3 @@ Phases are ordered by priority, most writer-critical first:
 - Note: not all Helix crates are published to crates.io yet; if a needed crate
   isn't published, a git dependency pinned to a commit is fine (still MPL, same
   rules).
-
----
-
-*This is a living document. Update the feature table's Phase column as priorities
-shift, and keep the philosophy in §2 as the guardrail for every new module.*

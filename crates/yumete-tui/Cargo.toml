@@ -1,0 +1,11 @@
+[package]
+description = "Terminal UI (crossterm + ratatui) for yumete."
+edition.workspace = true
+license.workspace = true
+name = "yumete-tui"
+repository.workspace = true
+version.workspace = true
+
+[dependencies]
+ratatui = "0.29"
+yumete-core = {path = "../yumete-core"}
