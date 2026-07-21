@@ -25,6 +25,9 @@ Early development, but already an interactive modal editor. Implemented so far:
 - **#6 / #7 Cursor motions** — `h j k l`, `0 ^ $`, `gg` / `G`, grapheme-aware and
   visual-column–preserving.
 - **#9 / #10 Editing** — `i a A o O` insert, `x` delete, Backspace.
+- **#11 Undo / redo** — `u`, `:undo`, `:redo` (snapshot-based, grouped per edit).
+- **#14 Incremental search** — `/`, `?`, `n`, `N` over CJK substrings.
+- **#15 Search & replace** — `:s/pat/rep/[g]`, `:%s/...` (undoable).
 - **#16 / #17 CJK metrics** — East-Asian display width and grapheme clusters in
   [`yumete-cjk`](crates/yumete-cjk).
 - **#19 / #20 TUI** — buffer view with a line-number gutter and status line,

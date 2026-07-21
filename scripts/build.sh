@@ -13,4 +13,10 @@ cd "$(dirname "$0")/.."
 cargo build --release
 cp target/release/yumete ./yumete
 
+# On macOS, `strip = true` invalidates the linker's ad-hoc code signature, and
+# AMFI then kills the binary on launch (SIGKILL). Re-sign it ad-hoc.
+if [[ "$(uname)" == "Darwin" ]]; then
+  codesign --sign - --force ./yumete
+fi
+
 echo "Built ./yumete ($(./yumete --version))"

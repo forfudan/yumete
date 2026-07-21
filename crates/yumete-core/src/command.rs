@@ -20,6 +20,19 @@ pub enum Command {
     /// `:quit` (alias `:q`) or `:quit!` / `:q!` — leave the editor. `force`
     /// skips the unsaved-changes check.
     Quit { force: bool },
+    /// `:s/pattern/replacement/[g]` (optionally `:%s/...` for the whole file) —
+    /// substitute text. `global` replaces every match on a line; `whole_file`
+    /// applies to every line rather than just the cursor's line.
+    Substitute {
+        pattern: String,
+        replacement: String,
+        global: bool,
+        whole_file: bool,
+    },
+    /// `:undo` (alias `:u`) — undo the last change.
+    Undo,
+    /// `:redo` (alias `:red`) — redo the last undone change.
+    Redo,
 }
 
 /// An error produced while parsing a command line.
@@ -63,6 +76,12 @@ pub fn parse(input: &str) -> Result<Command, CommandError> {
         return Err(CommandError::Empty);
     }
 
+    // Substitution (`s/.../.../` or `%s/.../.../`) is recognised before the
+    // whitespace split, since its argument contains no spaces to split on.
+    if let Some(cmd) = parse_substitution(trimmed) {
+        return cmd;
+    }
+
     let mut parts = trimmed.splitn(2, char::is_whitespace);
     let word = parts.next().unwrap();
     let rest = parts.next().unwrap_or("").trim();
@@ -83,8 +102,43 @@ pub fn parse(input: &str) -> Result<Command, CommandError> {
         })),
         "quit" | "q" => Ok(Command::Quit { force: false }),
         "quit!" | "q!" => Ok(Command::Quit { force: true }),
+        "undo" | "u" => Ok(Command::Undo),
+        "redo" | "red" => Ok(Command::Redo),
         other => Err(CommandError::Unknown(other.to_string())),
     }
+}
+
+/// Try to parse a substitution command (`s/pat/rep/flags`, `%s/pat/rep/flags`).
+///
+/// Returns `None` when the input is not a substitution, or `Some(Err(..))` when
+/// it looks like one but is malformed. Only `/` is supported as the delimiter.
+fn parse_substitution(input: &str) -> Option<Result<Command, CommandError>> {
+    let (whole_file, rest) = match input.strip_prefix('%') {
+        Some(r) => (true, r),
+        None => (false, input),
+    };
+    let rest = rest.strip_prefix('s')?;
+    // The character right after `s` must be the `/` delimiter.
+    let body = rest.strip_prefix('/')?;
+
+    let fields: Vec<&str> = body.split('/').collect();
+    // Expect at least "pattern/replacement" (flags optional): 2 or 3 fields.
+    if fields.len() < 2 || fields.len() > 3 {
+        return Some(Err(CommandError::MissingArgument("substitute")));
+    }
+    let pattern = fields[0];
+    if pattern.is_empty() {
+        return Some(Err(CommandError::MissingArgument("substitute")));
+    }
+    let replacement = fields[1];
+    let flags = fields.get(2).copied().unwrap_or("");
+
+    Some(Ok(Command::Substitute {
+        pattern: pattern.to_string(),
+        replacement: replacement.to_string(),
+        global: flags.contains('g'),
+        whole_file,
+    }))
 }
 
 #[cfg(test)]
@@ -128,6 +182,47 @@ mod tests {
         assert_eq!(parse("quit"), Ok(Command::Quit { force: false }));
         assert_eq!(parse(":q!"), Ok(Command::Quit { force: true }));
         assert_eq!(parse(":quit!"), Ok(Command::Quit { force: true }));
+    }
+
+    #[test]
+    fn parses_undo_and_redo() {
+        assert_eq!(parse(":undo"), Ok(Command::Undo));
+        assert_eq!(parse(":u"), Ok(Command::Undo));
+        assert_eq!(parse(":redo"), Ok(Command::Redo));
+    }
+
+    #[test]
+    fn parses_substitution() {
+        assert_eq!(
+            parse(":s/foo/bar/"),
+            Ok(Command::Substitute {
+                pattern: "foo".into(),
+                replacement: "bar".into(),
+                global: false,
+                whole_file: false,
+            })
+        );
+        assert_eq!(
+            parse(":%s/foo/bar/g"),
+            Ok(Command::Substitute {
+                pattern: "foo".into(),
+                replacement: "bar".into(),
+                global: true,
+                whole_file: true,
+            })
+        );
+        // Empty replacement (a deletion) is allowed.
+        assert_eq!(
+            parse(":s/foo//"),
+            Ok(Command::Substitute {
+                pattern: "foo".into(),
+                replacement: "".into(),
+                global: false,
+                whole_file: false,
+            })
+        );
+        // Empty pattern is rejected.
+        assert!(parse(":s//bar/").is_err());
     }
 
     #[test]

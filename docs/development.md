@@ -145,21 +145,21 @@ Phases are ordered by priority, most writer-critical first:
 | 1   | Open file / new buffer                    | core   | P1    | args + `:open`              | Done   |
 | 2   | Save / save-as (`:w`)                     | core   | P1    | atomic write                | Done   |
 | 3   | Quit / force-quit (`:q` / `:q!`)          | core   | P1    | dirty-check prompt          | Done   |
-| 4   | Rope-backed text store                    | core   | P1    | ropey / helix rope          |        |
+| 4   | Rope-backed text store                    | core   | P1    | ropey / helix rope          | Done   |
 | 5   | Modal editing: Normal / Insert / Command  | view   | P1    | Helix/Vim-like              | Done   |
 | 6   | Cursor motions h/j/k/l                    | core   | P1    | grapheme-aware              | Done   |
 | 7   | Line motions 0/$/^/gg/G                   | core   | P1    | display-cell aware          | Done   |
 | 8   | Char search f/F/t/T                       | core   | P1    | CJK-aware                   |        |
 | 9   | Insert/append i/a/o/O                     | view   | P1    |                             | Done   |
 | 10  | Delete/change x/d/c + motions             | core   | P1    | grapheme-safe               | Done   |
-| 11  | Undo / redo                               | core   | P1    | transaction history         |        |
+| 11  | Undo / redo                               | core   | P1    | snapshot-based              | Done   |
 | 12  | Visual/selection mode (basic)             | view   | P1    | Helix selection model       |        |
 | 13  | Yank / paste (registers, minimal)         | core   | P1    | system clipboard opt        |        |
-| 14  | Incremental search `/` `?` `n` `N`        | core   | P1    | CJK substring               |        |
-| 15  | Search & replace `:s///`                  | core   | P1    | CJK-aware regex             |        |
+| 14  | Incremental search `/` `?` `n` `N`        | core   | P1    | CJK substring               | Done   |
+| 15  | Search & replace `:s///`                  | core   | P1    | substring `:s` / `:%s`      | Done   |
 | 16  | East-Asian width rendering                | cjk    | P1    | 2-cell wide glyphs          | Done   |
 | 17  | Grapheme-cluster cursor math              | cjk    | P1    | IVS / combining safe        | Done   |
-| 18  | CJK font-fallback guidance (docs)         | cjk    | P1    | terminal-dependent          |        |
+| 18  | CJK font-fallback guidance (docs)         | cjk    | P1    | terminal-dependent          | Done   |
 | 19  | Status line (mode / file / pos)           | tui    | P1    |                             | Done   |
 | 20  | Line numbers (abs/rel toggle)             | tui    | P1    |                             | Done   |
 | 21  | Config: global file + folder              | config | P1    | XDG `~/.config/yumete/`     |        |
@@ -221,15 +221,18 @@ Phases are ordered by priority, most writer-critical first:
 > - **#6 / #7 Cursor motions** — `h`/`j`/`k`/`l`, `0`/`^`/`$`, `gg`/`G`,
 >   grapheme-aware and preserving the visual column on vertical moves.
 > - **#9 / #10 Editing** — `i`/`a`/`A`/`o`/`O` insert, `x` delete, Backspace.
+> - **#11 Undo / redo** — snapshot-based, grouped per edit (`u`, `:undo`, `:redo`).
+> - **#14 Incremental search** — `/`, `?`, `n`, `N` over CJK substrings, with wrap.
+> - **#15 Search & replace** — `:s/pat/rep/[g]` and `:%s/...` (undoable).
 > - **#16 / #17 CJK metrics** — East-Asian width and grapheme clusters in
 >   `yumete-cjk` (with `grapheme_width` / `tab_width_at`).
 > - **#19 / #20 TUI** — `yumete-tui` renders the buffer with a line-number gutter
 >   and a status line over `ratatui` + `crossterm`.
 >
 > The binary launches the interactive editor when stdout is a terminal, and falls
-> back to a non-interactive preview otherwise (or with `--preview`). Next up:
-> selection (#12), yank/paste (#13), undo/redo (#11), search and replace
-> (#14/#15), and configuration (#21).
+> back to a non-interactive preview otherwise (or with `--preview`). Most of
+> Phase 1 is in place; remaining P1 items are `f`/`F`/`t`/`T` char search (#8),
+> selection (#12), yank/paste (#13), and global configuration (#21).
 
 ### Phase 1 — MVP writer editor
 

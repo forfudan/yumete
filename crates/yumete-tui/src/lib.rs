@@ -18,7 +18,7 @@ use ratatui::text::{Line, Span};
 use ratatui::widgets::Paragraph;
 use ratatui::Frame;
 
-use yumete_core::{Editor, Key, KeyOutcome, Mode, TextStore};
+use yumete_core::{Editor, Key, KeyOutcome, TextStore};
 
 /// Run the interactive editor until the user quits.
 ///
@@ -105,8 +105,8 @@ fn draw(frame: &mut Frame, editor: &Editor, viewport_top: &mut usize) {
     frame.render_widget(Paragraph::new(lines), text_area);
 
     // Status line, or the command line while in Command mode.
-    let status = if editor.mode() == Mode::Command {
-        format!(":{}", editor.command_line())
+    let status = if let Some((prefix, text)) = editor.prompt() {
+        format!("{prefix}{text}")
     } else {
         let dirty = if buffer.is_modified() { " [+]" } else { "" };
         let left = format!(
@@ -131,8 +131,8 @@ fn draw(frame: &mut Frame, editor: &Editor, viewport_top: &mut usize) {
     );
 
     // Place the terminal cursor.
-    if editor.mode() == Mode::Command {
-        let col = 1 + editor.command_line().chars().count();
+    if let Some((_, text)) = editor.prompt() {
+        let col = 1 + text.chars().count();
         frame.set_cursor_position(Position::new(status_area.x + col as u16, status_area.y));
     } else {
         let x = text_area.x + gutter as u16 + editor.cursor_visual_column() as u16;

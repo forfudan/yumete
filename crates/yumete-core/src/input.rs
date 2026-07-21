@@ -13,6 +13,8 @@ pub enum Mode {
     Insert,
     /// Editing a `:` command line.
     Command,
+    /// Editing a `/` or `?` search pattern.
+    Search,
 }
 
 impl Mode {
@@ -22,6 +24,7 @@ impl Mode {
             Mode::Normal => "NORMAL",
             Mode::Insert => "INSERT",
             Mode::Command => "COMMAND",
+            Mode::Search => "SEARCH",
         }
     }
 }

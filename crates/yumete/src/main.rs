@@ -84,7 +84,10 @@ KEYS (Normal mode):
     i a A     insert before / after cursor / at line end
     o O       open a line below / above
     x         delete the character under the cursor
-    :         command line (:w  :w <path>  :q  :q!  :o <path>  :new)
+    u         undo   (:redo to redo)
+    / ?       search forward / backward;  n / N  next / previous
+    :         command line (:w  :w <path>  :q  :q!  :o <path>  :new
+              :s/old/new/[g]  :%s/old/new/[g]  :undo  :redo)
 
 In Insert mode, type to insert; Esc returns to Normal."
     );

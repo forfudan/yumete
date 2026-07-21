@@ -10,11 +10,20 @@ use std::fmt;
 use std::io;
 use std::path::Path;
 
+use ropey::Rope;
+
 use crate::buffer::Buffer;
 use crate::command::{self, Command, CommandError};
 use crate::input::{Key, Mode};
 use crate::motion;
 use crate::text_store::TextStore;
+
+/// A snapshot of a buffer's content for undo/redo.
+struct EditSnapshot {
+    rope: Rope,
+    cursor: usize,
+    modified: bool,
+}
 
 /// The editor: a non-empty list of open buffers and the index of the active one.
 pub struct Editor {
@@ -25,12 +34,18 @@ pub struct Editor {
     cursor: usize,
     /// Preserved visual column for vertical motion (`j` / `k`).
     goal_column: usize,
-    /// The text being typed after `:` in Command mode (without the leading `:`).
+    /// The text being typed after `:` / `/` (without the leading punctuation).
     command_line: String,
     /// A transient message for the status line (errors, confirmations).
     status: String,
     /// Whether the previous Normal-mode key was `g` (for the `gg` motion).
     pending_g: bool,
+    /// Undo and redo stacks of buffer snapshots (Feature #11).
+    undo_stack: Vec<EditSnapshot>,
+    redo_stack: Vec<EditSnapshot>,
+    /// The last search pattern and direction (Feature #14).
+    last_search: String,
+    search_forward: bool,
 }
 
 /// What should happen after a key press.
@@ -97,6 +112,10 @@ impl Editor {
             command_line: String::new(),
             status: String::new(),
             pending_g: false,
+            undo_stack: Vec::new(),
+            redo_stack: Vec::new(),
+            last_search: String::new(),
+            search_forward: true,
         }
     }
 
@@ -152,6 +171,23 @@ impl Editor {
                     Err(EditorError::UnsavedChanges)
                 }
             }
+            Command::Substitute {
+                pattern,
+                replacement,
+                global,
+                whole_file,
+            } => {
+                self.substitute(&pattern, &replacement, global, whole_file);
+                Ok(CommandOutcome::Continue)
+            }
+            Command::Undo => {
+                self.undo();
+                Ok(CommandOutcome::Continue)
+            }
+            Command::Redo => {
+                self.redo();
+                Ok(CommandOutcome::Continue)
+            }
         }
     }
 
@@ -188,6 +224,19 @@ impl Editor {
         &self.command_line
     }
 
+    /// The active prompt (Command or Search mode): its leading character and the
+    /// text typed so far, or `None` when no prompt is open.
+    pub fn prompt(&self) -> Option<(char, &str)> {
+        match self.mode {
+            Mode::Command => Some((':', &self.command_line)),
+            Mode::Search => Some((
+                if self.search_forward { '/' } else { '?' },
+                &self.command_line,
+            )),
+            _ => None,
+        }
+    }
+
     /// The current transient status message (may be empty).
     pub fn status(&self) -> &str {
         &self.status
@@ -209,6 +258,7 @@ impl Editor {
             Mode::Normal => self.on_normal_key(key),
             Mode::Insert => self.on_insert_key(key),
             Mode::Command => return self.on_command_key(key),
+            Mode::Search => self.on_search_key(key),
         }
         KeyOutcome::Continue
     }
@@ -236,20 +286,47 @@ impl Editor {
                     self.pending_g = true;
                 }
             }
-            Key::Char('i') => self.mode = Mode::Insert,
+            Key::Char('i') => {
+                self.snapshot();
+                self.mode = Mode::Insert;
+            }
             Key::Char('a') => {
+                self.snapshot();
                 let pos = motion::right(self.current_buffer().rope(), self.cursor);
                 self.set_cursor(pos);
                 self.mode = Mode::Insert;
             }
             Key::Char('A') => {
+                self.snapshot();
                 let pos = motion::line_end(self.current_buffer().rope(), self.cursor);
                 self.set_cursor(pos);
                 self.mode = Mode::Insert;
             }
-            Key::Char('o') => self.open_line_below(),
-            Key::Char('O') => self.open_line_above(),
-            Key::Char('x') => self.delete_under_cursor(),
+            Key::Char('o') => {
+                self.snapshot();
+                self.open_line_below();
+            }
+            Key::Char('O') => {
+                self.snapshot();
+                self.open_line_above();
+            }
+            Key::Char('x') => {
+                self.snapshot();
+                self.delete_under_cursor();
+            }
+            Key::Char('u') => self.undo(),
+            Key::Char('/') => {
+                self.mode = Mode::Search;
+                self.search_forward = true;
+                self.command_line.clear();
+            }
+            Key::Char('?') => {
+                self.mode = Mode::Search;
+                self.search_forward = false;
+                self.command_line.clear();
+            }
+            Key::Char('n') => self.repeat_search(self.search_forward),
+            Key::Char('N') => self.repeat_search(!self.search_forward),
             Key::Char(':') => {
                 self.mode = Mode::Command;
                 self.command_line.clear();
@@ -300,7 +377,149 @@ impl Editor {
         KeyOutcome::Continue
     }
 
-    // ---- Motion helpers ---------------------------------------------------
+    fn on_search_key(&mut self, key: Key) {
+        match key {
+            Key::Esc => {
+                self.command_line.clear();
+                self.mode = Mode::Normal;
+            }
+            Key::Backspace => {
+                if self.command_line.pop().is_none() {
+                    self.mode = Mode::Normal;
+                }
+            }
+            Key::Char(c) => self.command_line.push(c),
+            Key::Enter => {
+                let pattern = std::mem::take(&mut self.command_line);
+                self.mode = Mode::Normal;
+                if !pattern.is_empty() {
+                    self.last_search = pattern;
+                }
+                let forward = self.search_forward;
+                self.repeat_search(forward);
+            }
+            _ => {}
+        }
+    }
+
+    // ---- Undo / redo (Feature #11) ----------------------------------------
+
+    /// Record the current buffer state as an undo point and clear the redo stack.
+    fn snapshot(&mut self) {
+        let buffer = self.current_buffer();
+        self.undo_stack.push(EditSnapshot {
+            rope: buffer.snapshot_rope(),
+            cursor: self.cursor,
+            modified: buffer.is_modified(),
+        });
+        self.redo_stack.clear();
+    }
+
+    /// Undo the last change (`u` / `:undo`).
+    fn undo(&mut self) {
+        if let Some(prev) = self.undo_stack.pop() {
+            let current = EditSnapshot {
+                rope: self.current_buffer().snapshot_rope(),
+                cursor: self.cursor,
+                modified: self.current_buffer().is_modified(),
+            };
+            self.redo_stack.push(current);
+            self.current_buffer_mut().restore(prev.rope, prev.modified);
+            self.cursor = prev.cursor;
+            self.clamp_cursor();
+        } else {
+            self.status = "already at oldest change".to_string();
+        }
+    }
+
+    /// Redo the last undone change (`:redo`).
+    fn redo(&mut self) {
+        if let Some(next) = self.redo_stack.pop() {
+            let current = EditSnapshot {
+                rope: self.current_buffer().snapshot_rope(),
+                cursor: self.cursor,
+                modified: self.current_buffer().is_modified(),
+            };
+            self.undo_stack.push(current);
+            self.current_buffer_mut().restore(next.rope, next.modified);
+            self.cursor = next.cursor;
+            self.clamp_cursor();
+        } else {
+            self.status = "already at newest change".to_string();
+        }
+    }
+
+    // ---- Search (Feature #14) ---------------------------------------------
+
+    /// Search for [`Self::last_search`] in `forward` direction and move there.
+    fn repeat_search(&mut self, forward: bool) {
+        if self.last_search.is_empty() {
+            return;
+        }
+        let pattern = self.last_search.clone();
+        let rope = self.current_buffer().rope();
+        let text = rope.to_string();
+        let len = rope.len_chars();
+
+        let found = if forward {
+            // Start just after the cursor, then wrap to the top.
+            let start_byte = rope.char_to_byte((self.cursor + 1).min(len));
+            text[start_byte..]
+                .find(&pattern)
+                .map(|b| start_byte + b)
+                .or_else(|| text.find(&pattern))
+        } else {
+            // Search before the cursor, then wrap to the bottom.
+            let end_byte = rope.char_to_byte(self.cursor);
+            text[..end_byte]
+                .rfind(&pattern)
+                .or_else(|| text.rfind(&pattern))
+        };
+
+        match found {
+            Some(byte) => {
+                let pos = rope.byte_to_char(byte);
+                self.set_cursor(pos);
+            }
+            None => self.status = format!("pattern not found: {pattern}"),
+        }
+    }
+
+    // ---- Substitute (Feature #15) -----------------------------------------
+
+    /// Replace `pattern` with `replacement` on the cursor's line, or on every
+    /// line when `whole_file`; `global` replaces every match on a line.
+    fn substitute(&mut self, pattern: &str, replacement: &str, global: bool, whole_file: bool) {
+        if pattern.is_empty() {
+            self.status = "empty pattern".to_string();
+            return;
+        }
+
+        let text = self.current_buffer().text();
+        let cursor_line = self.cursor_line();
+        let mut count = 0usize;
+        let mut rebuilt = String::with_capacity(text.len());
+
+        for (idx, line) in text.split_inclusive('\n').enumerate() {
+            if whole_file || idx == cursor_line {
+                let (new_line, n) = replace_in_line(line, pattern, replacement, global);
+                count += n;
+                rebuilt.push_str(&new_line);
+            } else {
+                rebuilt.push_str(line);
+            }
+        }
+
+        if count > 0 {
+            self.snapshot();
+            let len = self.current_buffer().char_count();
+            self.current_buffer_mut().remove(0..len);
+            self.current_buffer_mut().insert(0, &rebuilt);
+            self.clamp_cursor();
+            self.goal_column = motion::visual_column(self.current_buffer().rope(), self.cursor);
+        }
+        self.status = format!("{count} substitution(s)");
+    }
 
     /// Apply a horizontal motion and reset the goal column to the new position.
     fn move_horizontal(&mut self, motion: fn(&ropey::Rope, usize) -> usize) {
@@ -419,6 +638,20 @@ impl Editor {
 impl Default for Editor {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+/// Replace occurrences of `pattern` in a single line (which may include a
+/// trailing newline). Returns the new line text and the number of replacements.
+/// With `global`, every match is replaced; otherwise only the first.
+fn replace_in_line(line: &str, pattern: &str, replacement: &str, global: bool) -> (String, usize) {
+    if global {
+        let count = line.matches(pattern).count();
+        (line.replace(pattern, replacement), count)
+    } else if line.contains(pattern) {
+        (line.replacen(pattern, replacement, 1), 1)
+    } else {
+        (line.to_string(), 0)
     }
 }
 
@@ -617,5 +850,91 @@ mod tests {
         ed.on_key(Key::Char(':'));
         type_keys(&mut ed, "q!");
         assert_eq!(ed.on_key(Key::Enter), KeyOutcome::Quit);
+    }
+
+    #[test]
+    fn undo_reverts_an_insert_and_redo_reapplies_it() {
+        let mut ed = Editor::new();
+        ed.on_key(Key::Char('i'));
+        type_keys(&mut ed, "hello");
+        ed.on_key(Key::Esc);
+        assert_eq!(ed.current_buffer().text(), "hello");
+
+        // u undoes the whole insert session back to empty.
+        ed.on_key(Key::Char('u'));
+        assert_eq!(ed.current_buffer().text(), "");
+
+        // :redo reapplies it.
+        ed.on_key(Key::Char(':'));
+        type_keys(&mut ed, "redo");
+        ed.on_key(Key::Enter);
+        assert_eq!(ed.current_buffer().text(), "hello");
+    }
+
+    #[test]
+    fn undo_groups_each_normal_edit_separately() {
+        let mut ed = Editor::new();
+        ed.on_key(Key::Char('i'));
+        type_keys(&mut ed, "abc");
+        ed.on_key(Key::Esc);
+        ed.on_key(Key::Char('g'));
+        ed.on_key(Key::Char('g')); // to the start
+        ed.on_key(Key::Char('x')); // delete 'a' → "bc"
+        assert_eq!(ed.current_buffer().text(), "bc");
+
+        ed.on_key(Key::Char('u')); // undo the x
+        assert_eq!(ed.current_buffer().text(), "abc");
+        ed.on_key(Key::Char('u')); // undo the insert
+        assert_eq!(ed.current_buffer().text(), "");
+    }
+
+    #[test]
+    fn search_moves_the_cursor_to_the_match_and_wraps() {
+        let mut ed = Editor::new();
+        ed.on_key(Key::Char('i'));
+        type_keys(&mut ed, "one two one");
+        ed.on_key(Key::Esc);
+        ed.on_key(Key::Char('g'));
+        ed.on_key(Key::Char('g')); // cursor at 0
+
+        // /two → cursor lands on the "t" of "two" (char index 4).
+        ed.on_key(Key::Char('/'));
+        type_keys(&mut ed, "two");
+        ed.on_key(Key::Enter);
+        assert_eq!(ed.cursor(), 4);
+
+        // /one from here finds the second "one" (index 8).
+        ed.on_key(Key::Char('/'));
+        type_keys(&mut ed, "one");
+        ed.on_key(Key::Enter);
+        assert_eq!(ed.cursor(), 8);
+
+        // n wraps around to the first "one" (index 0).
+        ed.on_key(Key::Char('n'));
+        assert_eq!(ed.cursor(), 0);
+    }
+
+    #[test]
+    fn substitute_replaces_on_the_current_line_and_whole_file() {
+        let mut ed = Editor::new();
+        ed.on_key(Key::Char('i'));
+        type_keys(&mut ed, "aaa\naaa");
+        ed.on_key(Key::Esc);
+
+        // :s/a/b/ replaces the first "a" on the cursor's (last) line only.
+        ed.on_key(Key::Char(':'));
+        type_keys(&mut ed, "s/a/b/");
+        ed.on_key(Key::Enter);
+        assert_eq!(ed.current_buffer().text(), "aaa\nbaa");
+
+        // :%s/a/b/g replaces every "a" across all lines.
+        ed.on_key(Key::Char(':'));
+        type_keys(&mut ed, "%s/a/b/g");
+        ed.on_key(Key::Enter);
+        assert_eq!(ed.current_buffer().text(), "bbb\nbbb");
+
+        // The substitution is undoable.
+        ed.on_key(Key::Char('u'));
+        assert_eq!(ed.current_buffer().text(), "aaa\nbaa");
     }
 }

@@ -161,6 +161,20 @@ impl Buffer {
     pub fn rope(&self) -> &Rope {
         &self.rope
     }
+
+    /// A cheap clone of the underlying rope, for undo snapshots.
+    ///
+    /// `ropey` clones are shallow (reference-counted nodes), so snapshotting the
+    /// whole document per undo group is inexpensive.
+    pub fn snapshot_rope(&self) -> Rope {
+        self.rope.clone()
+    }
+
+    /// Restore the buffer's contents (and modified flag) from a snapshot.
+    pub fn restore(&mut self, rope: Rope, modified: bool) {
+        self.rope = rope;
+        self.modified = modified;
+    }
 }
 
 impl TextStore for Buffer {
