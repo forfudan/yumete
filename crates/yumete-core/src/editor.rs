@@ -6,6 +6,7 @@
 //! [`Key`] presses, so the whole interaction can be unit-tested without a
 //! terminal.
 
+use std::collections::HashMap;
 use std::fmt;
 use std::io;
 use std::path::Path;
@@ -72,6 +73,8 @@ pub struct Editor {
     /// The last search pattern and direction (Feature #14).
     last_search: String,
     search_forward: bool,
+    /// Normal-mode single-key aliases from the config (Feature #23).
+    key_aliases: HashMap<char, char>,
 }
 
 /// What should happen after a key press.
@@ -145,6 +148,7 @@ impl Editor {
             redo_stack: Vec::new(),
             last_search: String::new(),
             search_forward: true,
+            key_aliases: HashMap::new(),
         }
     }
 
@@ -303,6 +307,11 @@ impl Editor {
         motion::visual_column(self.current_buffer().rope(), self.cursor)
     }
 
+    /// Install Normal-mode single-key aliases (from the config keymap).
+    pub fn set_key_aliases(&mut self, aliases: HashMap<char, char>) {
+        self.key_aliases = aliases;
+    }
+
     /// Handle a single key press according to the current mode.
     pub fn on_key(&mut self, key: Key) -> KeyOutcome {
         match self.mode {
@@ -333,6 +342,16 @@ impl Editor {
             }
             Pending::None => {}
         }
+
+        // Apply user key aliases (config `[keys.normal]`) to command keys only;
+        // pending operator targets above are taken literally.
+        let key = match key {
+            Key::Char(c) => match self.key_aliases.get(&c) {
+                Some(&mapped) => Key::Char(mapped),
+                None => key,
+            },
+            other => other,
+        };
 
         match key {
             Key::Char('h') | Key::Left => self.move_horizontal(motion::left),
@@ -1158,6 +1177,24 @@ mod tests {
         ed.on_key(Key::Char('y'));
         ed.on_key(Key::Char('p'));
         assert_eq!(ed.current_buffer().text(), "ababc");
+    }
+
+    #[test]
+    fn key_aliases_remap_normal_mode_keys() {
+        let mut ed = Editor::new();
+        ed.on_key(Key::Char('i'));
+        type_keys(&mut ed, "abc");
+        ed.on_key(Key::Esc);
+
+        // Remap `q` to behave as `d` (delete).
+        let mut aliases = std::collections::HashMap::new();
+        aliases.insert('q', 'd');
+        ed.set_key_aliases(aliases);
+
+        ed.on_key(Key::Char('g'));
+        ed.on_key(Key::Char('g'));
+        ed.on_key(Key::Char('q')); // aliased to `d` → deletes 'a'
+        assert_eq!(ed.current_buffer().text(), "bc");
     }
 
     #[test]

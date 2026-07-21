@@ -162,9 +162,9 @@ Phases are ordered by priority, most writer-critical first:
 | 18  | CJK font-fallback guidance (docs)         | cjk    | P1    | terminal-dependent           | Done   |
 | 19  | Status line (mode / file / pos)           | tui    | P1    |                              | Done   |
 | 20  | Line numbers (abs/rel toggle)             | tui    | P1    |                              | Done   |
-| 21  | Config: global file + folder              | config | P1    | XDG `~/.config/yumete/`      |        |
-| 22  | Config: per-project local override        | config | P2    | `.yumete/` walk-up           |        |
-| 23  | Keymap from TOML (data-driven)            | config | P2    | rebindable                   |        |
+| 21  | Config: global file + folder              | config | P1    | XDG `~/.config/yumete/`      | Done   |
+| 22  | Config: per-project local override        | config | P2    | `.yumete/` walk-up           | Done   |
+| 23  | Keymap from TOML (data-driven)            | config | P2    | key aliases                  | Done   |
 | 24  | **Dictionary word segmentation**          | cjk    | P2    | reuse Yume 分詞 data         |        |
 | 25  | **Word motions w/b/e (CJK words)**        | core   | P2    | via `Segmenter` trait        |        |
 | 26  | Word delete/change (`dw`/`cw`)            | core   | P2    | word boundaries              |        |
@@ -316,11 +316,13 @@ keys are unaffected.
 >   `yumete-cjk` (with `grapheme_width` / `tab_width_at`).
 > - **#19 / #20 TUI** — `yumete-tui` renders the buffer with a line-number gutter
 >   and a status line over `ratatui` + `crossterm`.
+> - **#21 / #22 / #23 Config** — `yumete-config` loads a global TOML config plus a
+>   per-project `.yumete/config.toml` override (line numbers, scrolloff, selection
+>   colour, and Normal-mode key aliases).
 >
 > The binary launches the interactive editor when stdout is a terminal, and falls
-> back to a non-interactive preview otherwise (or with `--preview`). Most of
-> Phase 1 is in place; remaining P1 items are multiple selections and global
-> configuration (#21).
+> back to a non-interactive preview otherwise (or with `--preview`). Phase 1 is
+> essentially complete; the next milestone is the built-in Yume IME (P2).
 
 ### Phase 1 — MVP writer editor
 
@@ -427,3 +429,101 @@ keys are unaffected.
 - Note: not all Helix crates are published to crates.io yet; if a needed crate
   isn't published, a git dependency pinned to a commit is fine (still MPL, same
   rules).
+
+---
+
+## 9. Data & configuration management
+
+yumete ships as a **single binary**, but it needs two kinds of external data:
+small **configuration** (text settings) and, once the IME lands, large
+**dictionary data** (scheme tables and fonts). They live in separate places.
+
+### 9.1 Configuration vs. data
+
+- **Configuration** — small TOML, edited by the user. Global at
+  `$XDG_CONFIG_HOME/yumete/config.toml` (or `~/.config/yumete/config.toml`), with
+  an optional per-project `.yumete/config.toml` override (§5.1). Implemented in
+  `yumete-config` (`config_dir()`).
+- **Dictionary data** — the compiled IME artifacts reused from the yume build
+  (`.ytab`, `.yflb`, `.ywtb`, `.yann`, `.ycs`) plus the bundled `Yuniversus.ttf`.
+  These are **not embedded in the binary** — they are large (the Lingming table
+  alone is hundreds of thousands of entries), and baking them in would bloat the
+  executable and force a rebuild for every data update.
+
+### 9.2 Where the data lives, and the resolution order
+
+Data is looked up in this order, first match wins (`yumete-config`'s
+`data_search_dirs()`):
+
+1. **User data dir** — `$XDG_DATA_HOME/yumete/` (or `~/.local/share/yumete/`).
+   Holds user-added schemes and custom 碼表 (#50); never touched by upgrades.
+2. **Install-prefix data dir** — `<prefix>/share/yumete/`, resolved from the
+   executable (`<prefix>/bin/yumete` → `<prefix>/share/yumete`). Holds the schemes
+   that ship with a release.
+
+So the shipped data sits **in the same install tree as the binary**, under
+`share/`, with per-scheme subfolders:
+
+```
+<prefix>/
+├── bin/
+│   └── yumete
+└── share/yumete/
+    ├── schemes/
+    │   ├── lingming/   { ling.ytab, chaifen_lingming.yann, … }
+    │   ├── xingchen/   …
+    │   ├── qingyun/    …
+    │   ├── riyue/      …
+    │   └── pinyin/     { pinyin.yflb, pinyin.ywtb }
+    ├── charsets/       { common.ycs, tonggui.ycs, harmonic.ycs }
+    └── fonts/          { Yuniversus.ttf }
+```
+
+A user who adds their own scheme mirrors this layout under
+`~/.local/share/yumete/`, and it takes precedence over the shipped copy.
+
+### 9.3 Installing and updating with a Homebrew tap
+
+A single `brew install` places the binary and its data under the **same prefix**,
+so subfolders under `share/yumete/` are exactly what the resolver expects. With a
+tap (e.g. `forfudan/tap`):
+
+```bash
+brew install forfudan/tap/yumete   # installs bin/yumete + share/yumete/…
+brew upgrade yumete                 # replaces both atomically (new Cellar version)
+```
+
+`brew upgrade` swaps in a new versioned directory in the Cellar and re-links it,
+so the binary and its shipped data always move together — there is no separate
+data-update step. User-added schemes in `~/.local/share/yumete/` are untouched.
+
+A formula sketch (informational):
+
+```ruby
+class Yumete < Formula
+  desc "CJK-aware, Helix-like terminal editor with a built-in Yume IME"
+  homepage "https://github.com/forfudan/yumete"
+  # url / sha256 of the release tarball …
+  def install
+    bin.install "yumete"
+    (share/"yumete").install Dir["data/*"]  # schemes, charsets, fonts
+  end
+end
+```
+
+### 9.4 Building and versioning the data
+
+- The release build reuses yume's pipeline (`gen_data.py` → `yume-compile` →
+  `.ytab`/`.yflb`/…), then stages the compiled artifacts and fonts into
+  `share/yumete/` (or a `data/` tarball the formula installs). A future
+  `scripts/build_data.sh` will automate this.
+- Ship a `share/yumete/VERSION` (or reuse the yume build timestamp) so the binary
+  can warn on a format mismatch. yumete reads the same on-disk formats
+  (`YTB1`/`YFL1`/`YWT1`/`YANN`/…) that `yume-compile` writes.
+- Optional non-brew path: a `yumete --update-data` command could download a
+  versioned data archive from the yume release repository into the user data dir,
+  mirroring Yume's in-app updater. This is deferred; `brew upgrade` covers the
+  common case.
+
+Until the IME is integrated (P2, #27), no dictionary data is required — the editor
+runs on the binary alone. This section is the plan for when it is.

@@ -36,6 +36,9 @@ Early development, but already an interactive modal editor. Implemented so far:
 - **#19 / #20 TUI** — buffer view with a line-number gutter, selection highlight,
   and status line, rendered by [`yumete-tui`](crates/yumete-tui) over `ratatui` +
   `crossterm`.
+- **#21 / #22 / #23 Config** — global `~/.config/yumete/config.toml` plus a
+  per-project `.yumete/config.toml` override (line numbers, scrolloff, selection
+  colour, Normal-mode key aliases), in [`yumete-config`](crates/yumete-config).
 
 Launch `yumete <file>` in a terminal for the editor, or `yumete --preview <file>`
 (or pipe the output) for a non-interactive preview.
@@ -49,6 +52,7 @@ yumete/
 ├── crates/
 │   ├── yumete-core/           # editor core: text store, buffers, motions, modes
 │   ├── yumete-cjk/            # CJK display width + grapheme clusters
+│   ├── yumete-config/         # global + per-project TOML config
 │   ├── yumete-tui/            # terminal UI (ratatui + crossterm)
 │   └── yumete/                # binary: CLI, launches the editor or preview
 ├── scripts/build.sh           # release build → ./yumete (gitignored)

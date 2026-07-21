@@ -46,12 +46,16 @@ fn main() -> ExitCode {
         }
     }
 
+    // Load global + per-project config and apply the keymap.
+    let config = yumete_config::Config::load();
+    editor.set_key_aliases(config.keys.normal.clone());
+
     if force_preview || !std::io::stdout().is_terminal() {
         preview(&editor);
         return ExitCode::SUCCESS;
     }
 
-    match yumete_tui::run(&mut editor) {
+    match yumete_tui::run(&mut editor, &config) {
         Ok(()) => ExitCode::SUCCESS,
         Err(err) => {
             eprintln!("yumete: {err}");

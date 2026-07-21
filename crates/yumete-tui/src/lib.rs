@@ -18,18 +18,19 @@ use ratatui::text::{Line, Span};
 use ratatui::widgets::Paragraph;
 use ratatui::Frame;
 
+use yumete_config::{Config, LineNumbers};
 use yumete_core::{Editor, Key, KeyOutcome, TextStore};
 
 /// Run the interactive editor until the user quits.
 ///
 /// Sets up the alternate screen and raw mode (via `ratatui::init`), runs the
 /// draw/read loop, and always restores the terminal on the way out.
-pub fn run(editor: &mut Editor) -> io::Result<()> {
+pub fn run(editor: &mut Editor, config: &Config) -> io::Result<()> {
     let mut terminal = ratatui::init();
     let mut viewport_top = 0usize;
 
     let result = loop {
-        if let Err(err) = terminal.draw(|frame| draw(frame, editor, &mut viewport_top)) {
+        if let Err(err) = terminal.draw(|frame| draw(frame, editor, config, &mut viewport_top)) {
             break Err(err);
         }
         match event::read() {
@@ -66,12 +67,32 @@ fn map_key(code: KeyCode, modifiers: KeyModifiers) -> Option<Key> {
     }
 }
 
-/// The width of the line-number gutter (digits + one trailing space).
-fn gutter_width(total_lines: usize) -> usize {
-    total_lines.max(1).to_string().len() + 1
+/// The width of the line-number gutter for a given mode (digits + one space).
+fn gutter_width(total_lines: usize, mode: LineNumbers) -> usize {
+    match mode {
+        LineNumbers::None => 0,
+        _ => total_lines.max(1).to_string().len() + 1,
+    }
 }
 
-fn draw(frame: &mut Frame, editor: &Editor, viewport_top: &mut usize) {
+/// The gutter text for line `i` (0-based) given the cursor line and mode.
+fn gutter_text(i: usize, cursor_line: usize, width: usize, mode: LineNumbers) -> String {
+    match mode {
+        LineNumbers::None => String::new(),
+        LineNumbers::Absolute => format!("{:>w$} ", i + 1, w = width - 1),
+        LineNumbers::Relative => {
+            if i == cursor_line {
+                // Show the absolute number on the cursor line, left-aligned.
+                format!("{:<w$} ", i + 1, w = width - 1)
+            } else {
+                let delta = i.abs_diff(cursor_line);
+                format!("{:>w$} ", delta, w = width - 1)
+            }
+        }
+    }
+}
+
+fn draw(frame: &mut Frame, editor: &Editor, config: &Config, viewport_top: &mut usize) {
     let area = frame.area();
     let regions = Layout::vertical([Constraint::Min(1), Constraint::Length(1)]).split(area);
     let text_area = regions[0];
@@ -81,29 +102,35 @@ fn draw(frame: &mut Frame, editor: &Editor, viewport_top: &mut usize) {
     let total_lines = buffer.line_count();
     let height = text_area.height as usize;
 
-    // Scroll so the cursor line stays within the viewport.
+    // Scroll so the cursor line stays within the viewport, honouring scrolloff.
     let cursor_line = editor.cursor_line();
-    if cursor_line < *viewport_top {
-        *viewport_top = cursor_line;
-    } else if height > 0 && cursor_line >= *viewport_top + height {
-        *viewport_top = cursor_line + 1 - height;
+    let scrolloff = config.editor.scrolloff.min(height.saturating_sub(1) / 2);
+    if cursor_line < *viewport_top + scrolloff {
+        *viewport_top = cursor_line.saturating_sub(scrolloff);
+    } else if height > 0 && cursor_line + scrolloff >= *viewport_top + height {
+        *viewport_top = (cursor_line + scrolloff + 1).saturating_sub(height);
     }
 
-    let gutter = gutter_width(total_lines);
+    let mode = config.editor.line_numbers;
+    let gutter = gutter_width(total_lines, mode);
     let (sel_start, sel_end) = editor.selection();
     let has_selection = sel_start != sel_end;
+    let (sr, sg, sb) = config.theme.selection;
+    let sel_style = Style::default().bg(Color::Rgb(sr, sg, sb)).fg(Color::White);
     let rope = buffer.rope();
 
-    // Visible lines with a right-aligned line-number gutter and selection.
+    // Visible lines with a line-number gutter and selection highlight.
     let mut lines: Vec<Line> = Vec::new();
     let last = (*viewport_top + height).min(total_lines);
     for i in *viewport_top..last {
-        let number = format!("{:>width$} ", i + 1, width = gutter - 1);
         let text = buffer.line(i).unwrap_or_default();
-        let mut spans = vec![Span::styled(
-            number,
-            Style::default().add_modifier(Modifier::DIM),
-        )];
+        let mut spans = Vec::new();
+        if gutter > 0 {
+            spans.push(Span::styled(
+                gutter_text(i, cursor_line, gutter, mode),
+                Style::default().add_modifier(Modifier::DIM),
+            ));
+        }
 
         // Highlight the portion of this line covered by the selection.
         let line_start = rope.line_to_char(i);
@@ -115,9 +142,6 @@ fn draw(frame: &mut Frame, editor: &Editor, viewport_top: &mut usize) {
             let before: String = chars[..a].iter().collect();
             let selected: String = chars[a..b].iter().collect();
             let after: String = chars[b..].iter().collect();
-            let sel_style = Style::default()
-                .bg(Color::Rgb(60, 70, 100))
-                .fg(Color::White);
             spans.push(Span::raw(before));
             spans.push(Span::styled(selected, sel_style));
             spans.push(Span::raw(after));

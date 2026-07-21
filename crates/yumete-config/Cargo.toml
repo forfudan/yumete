@@ -1,0 +1,11 @@
+[package]
+description = "Global + per-project configuration (settings, theme, keymap) for yumete."
+edition.workspace = true
+license.workspace = true
+name = "yumete-config"
+repository.workspace = true
+version.workspace = true
+
+[dependencies]
+serde = {version = "1", features = ["derive"]}
+toml = "0.8"

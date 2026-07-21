@@ -8,4 +8,5 @@ version.workspace = true
 
 [dependencies]
 ratatui = "0.29"
+yumete-config = {path = "../yumete-config"}
 yumete-core = {path = "../yumete-core"}
