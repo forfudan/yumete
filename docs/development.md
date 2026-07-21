@@ -48,10 +48,12 @@ editor inexpensive to reach.
   selection + transaction core (`helix-core`) from the editor/state layer
   (`helix-view`), the TUI (`helix-tui`/`helix-term`), and LSP (`helix-lsp`).
   yumete copies this layering from day one, even while most crates stay thin.
-- **Do not reinvent the wheel.** Reuse Helix crates where it helps (rope and
-  transaction primitives, grapheme and width helpers), but keep them behind our
-  own trait boundaries so implementations can be swapped later. See §8.2 for the
-  licensing implications.
+- **Do not reinvent the wheel.** Text width, grapheme segmentation, and terminal
+  handling come from mature crates — `unicode-width`, `unicode-segmentation`, and
+  `ratatui`/`crossterm` — the same building blocks Helix uses. Where Helix's own
+  crates help (rope and transaction primitives), reuse them too. Everything stays
+  behind our trait boundaries so implementations can be swapped later; see §8.2 for
+  the licensing implications.
 - **Decouple aggressively.** Every subsystem sits behind a trait — `TextStore`,
   `Motion`, `Segmenter` (word dictionary), `InputMethod` (Yume), `Renderer` (TUI),
   `LanguageServer`, `ConfigProvider`, `Keymap`. The core depends on traits, not
@@ -138,82 +140,90 @@ Phases are ordered by priority, most writer-critical first:
 - **P4 — Polish & QoL**: themes, help overlay, better search UX, sessions.
 - **P5+ — Future / advanced**: coding LSP, git, splits, plugins, debugging.
 
-| #   | Feature                                   | Area   | Phase | Notes                       |
-| --- | ----------------------------------------- | ------ | ----- | --------------------------- |
-| 1   | Open file / new buffer                    | core   | P1    | args + `:open`              |
-| 2   | Save / save-as (`:w`)                     | core   | P1    | atomic write                |
-| 3   | Quit / force-quit (`:q` / `:q!`)          | core   | P1    | dirty-check prompt          |
-| 4   | Rope-backed text store                    | core   | P1    | ropey / helix rope          |
-| 5   | Modal editing: Normal / Insert / Command  | view   | P1    | Helix/Vim-like              |
-| 6   | Cursor motions h/j/k/l                    | core   | P1    | grapheme-aware              |
-| 7   | Line motions 0/$/^/gg/G                   | core   | P1    | display-cell aware          |
-| 8   | Char search f/F/t/T                       | core   | P1    | CJK-aware                   |
-| 9   | Insert/append i/a/o/O                     | view   | P1    |                             |
-| 10  | Delete/change x/d/c + motions             | core   | P1    | grapheme-safe               |
-| 11  | Undo / redo                               | core   | P1    | transaction history         |
-| 12  | Visual/selection mode (basic)             | view   | P1    | Helix selection model       |
-| 13  | Yank / paste (registers, minimal)         | core   | P1    | system clipboard opt        |
-| 14  | Incremental search `/` `?` `n` `N`        | core   | P1    | CJK substring               |
-| 15  | Search & replace `:s///`                  | core   | P1    | CJK-aware regex             |
-| 16  | East-Asian width rendering                | cjk    | P1    | 2-cell wide glyphs          |
-| 17  | Grapheme-cluster cursor math              | cjk    | P1    | IVS / combining safe        |
-| 18  | CJK font-fallback guidance (docs)         | cjk    | P1    | terminal-dependent          |
-| 19  | Status line (mode / file / pos)           | tui    | P1    |                             |
-| 20  | Line numbers (abs/rel toggle)             | tui    | P1    |                             |
-| 21  | Config: global file + folder              | config | P1    | XDG `~/.config/yumete/`     |
-| 22  | Config: per-project local override        | config | P2    | `.yumete/` walk-up          |
-| 23  | Keymap from TOML (data-driven)            | config | P2    | rebindable                  |
-| 24  | **Dictionary word segmentation**          | cjk    | P2    | reuse Yume 分詞 data        |
-| 25  | **Word motions w/b/e (CJK words)**        | core   | P2    | via `Segmenter` trait       |
-| 26  | Word delete/change (`dw`/`cw`)            | core   | P2    | word boundaries             |
-| 27  | **Built-in Yume IME session**             | ime    | P2    | embeds yume-core            |
-| 28  | In-terminal candidate panel               | tui    | P2    | floating overlay near caret |
-| 29  | Shift toggles 中/英 in Insert             | ime    | P2    | lone-Shift tap              |
-| 30  | IME: number mode / `/`-cmds / `z` reverse | ime    | P2    | free from core              |
-| 31  | Scheme switch (靈明/星陳/卿雲/日月/拼音)  | ime    | P2    | load tables at runtime      |
-| 32  | IME data dir + bundled font guidance      | ime    | P2    | reuse compiled tables       |
-| 33  | **Outline sidebar (foldable)**            | tui    | P3    | right-hand panel, toggle    |
-| 34  | **Markdown LSP → headings**               | lsp    | P3    | outline source              |
-| 35  | **Typst LSP → headings**                  | lsp    | P3    | outline source              |
-| 36  | Jump to outline entry                     | view   | P3    | click/keys                  |
-| 37  | Fold/unfold outline                       | tui    | P3    |                             |
-| 38  | Space (Normal) → hotkey/help overlay      | tui    | P3    | which-key style             |
-| 39  | Command palette (`:` completions)         | tui    | P4    |                             |
-| 40  | Themes (TOML, CJK-friendly)               | config | P4    |                             |
-| 41  | Soft-wrap for prose                       | tui    | P4    | width-aware wrap            |
-| 42  | Auto-save / crash recovery                | core   | P4    | swap file                   |
-| 43  | Sessions (reopen last files)              | view   | P4    |                             |
-| 44  | Multiple buffers + `:bn`/`:bp`            | view   | P4    | no splits yet               |
-| 45  | Marks / jumplist                          | core   | P4    |                             |
-| 46  | Count prefixes (e.g. `3w`)                | core   | P4    |                             |
-| 47  | Macros (record/replay)                    | core   | P4    |                             |
-| 48  | Spell/grammar hooks (CJK-aware)           | lsp    | P4    | optional                    |
-| 49  | Word-count / reading-time (prose)         | view   | P4    | writer QoL                  |
-| 50  | Custom 碼表 upload / register             | ime    | P4    | user `.ytab`/`.yann`        |
-| 51  | Bracket/quote auto-pair (CJK-aware)       | core   | P4    | 「」『』（）                |
-| 52  | Syntax highlight (tree-sitter)            | tui    | P5    | Markdown/Typst first        |
-| 53  | Coding LSP (Rust/Python/…)                | lsp    | P5    | reuse helix-lsp             |
-| 54  | Diagnostics / code actions                | lsp    | P5    |                             |
-| 55  | Git gutter / blame                        | vcs    | P5    |                             |
-| 56  | Splits / multiple windows                 | tui    | P5    |                             |
-| 57  | Debugging (DAP)                           | dap    | P6    | far future                  |
-| 58  | Plugin runtime (scripting)                | plugin | P6    | Lua/WASM                    |
-| 59  | Remote / SSH editing                      | net    | P6    |                             |
-| 60  | Collaborative editing                     | net    | P6    |                             |
+| #   | Feature                                   | Area   | Phase | Notes                       | Status |
+| --- | ----------------------------------------- | ------ | ----- | --------------------------- | ------ |
+| 1   | Open file / new buffer                    | core   | P1    | args + `:open`              | Done   |
+| 2   | Save / save-as (`:w`)                     | core   | P1    | atomic write                | Done   |
+| 3   | Quit / force-quit (`:q` / `:q!`)          | core   | P1    | dirty-check prompt          | Done   |
+| 4   | Rope-backed text store                    | core   | P1    | ropey / helix rope          |        |
+| 5   | Modal editing: Normal / Insert / Command  | view   | P1    | Helix/Vim-like              |        |
+| 6   | Cursor motions h/j/k/l                    | core   | P1    | grapheme-aware              |        |
+| 7   | Line motions 0/$/^/gg/G                   | core   | P1    | display-cell aware          |        |
+| 8   | Char search f/F/t/T                       | core   | P1    | CJK-aware                   |        |
+| 9   | Insert/append i/a/o/O                     | view   | P1    |                             |        |
+| 10  | Delete/change x/d/c + motions             | core   | P1    | grapheme-safe               |        |
+| 11  | Undo / redo                               | core   | P1    | transaction history         |        |
+| 12  | Visual/selection mode (basic)             | view   | P1    | Helix selection model       |        |
+| 13  | Yank / paste (registers, minimal)         | core   | P1    | system clipboard opt        |        |
+| 14  | Incremental search `/` `?` `n` `N`        | core   | P1    | CJK substring               |        |
+| 15  | Search & replace `:s///`                  | core   | P1    | CJK-aware regex             |        |
+| 16  | East-Asian width rendering                | cjk    | P1    | 2-cell wide glyphs          | Done   |
+| 17  | Grapheme-cluster cursor math              | cjk    | P1    | IVS / combining safe        | Done   |
+| 18  | CJK font-fallback guidance (docs)         | cjk    | P1    | terminal-dependent          |        |
+| 19  | Status line (mode / file / pos)           | tui    | P1    |                             |        |
+| 20  | Line numbers (abs/rel toggle)             | tui    | P1    |                             |        |
+| 21  | Config: global file + folder              | config | P1    | XDG `~/.config/yumete/`     |        |
+| 22  | Config: per-project local override        | config | P2    | `.yumete/` walk-up          |        |
+| 23  | Keymap from TOML (data-driven)            | config | P2    | rebindable                  |        |
+| 24  | **Dictionary word segmentation**          | cjk    | P2    | reuse Yume 分詞 data        |        |
+| 25  | **Word motions w/b/e (CJK words)**        | core   | P2    | via `Segmenter` trait       |        |
+| 26  | Word delete/change (`dw`/`cw`)            | core   | P2    | word boundaries             |        |
+| 27  | **Built-in Yume IME session**             | ime    | P2    | embeds yume-core            |        |
+| 28  | In-terminal candidate panel               | tui    | P2    | floating overlay near caret |        |
+| 29  | Shift toggles 中/英 in Insert             | ime    | P2    | lone-Shift tap              |        |
+| 30  | IME: number mode / `/`-cmds / `z` reverse | ime    | P2    | free from core              |        |
+| 31  | Scheme switch (靈明/星陳/卿雲/日月/拼音)  | ime    | P2    | load tables at runtime      |        |
+| 32  | IME data dir + bundled font guidance      | ime    | P2    | reuse compiled tables       |        |
+| 33  | **Outline sidebar (foldable)**            | tui    | P3    | right-hand panel, toggle    |        |
+| 34  | **Markdown LSP → headings**               | lsp    | P3    | outline source              |        |
+| 35  | **Typst LSP → headings**                  | lsp    | P3    | outline source              |        |
+| 36  | Jump to outline entry                     | view   | P3    | click/keys                  |        |
+| 37  | Fold/unfold outline                       | tui    | P3    |                             |        |
+| 38  | Space (Normal) → hotkey/help overlay      | tui    | P3    | which-key style             |        |
+| 39  | Command palette (`:` completions)         | tui    | P4    |                             |        |
+| 40  | Themes (TOML, CJK-friendly)               | config | P4    |                             |        |
+| 41  | Soft-wrap for prose                       | tui    | P4    | width-aware wrap            |        |
+| 42  | Auto-save / crash recovery                | core   | P4    | swap file                   |        |
+| 43  | Sessions (reopen last files)              | view   | P4    |                             |        |
+| 44  | Multiple buffers + `:bn`/`:bp`            | view   | P4    | no splits yet               |        |
+| 45  | Marks / jumplist                          | core   | P4    |                             |        |
+| 46  | Count prefixes (e.g. `3w`)                | core   | P4    |                             |        |
+| 47  | Macros (record/replay)                    | core   | P4    |                             |        |
+| 48  | Spell/grammar hooks (CJK-aware)           | lsp    | P4    | optional                    |        |
+| 49  | Word-count / reading-time (prose)         | view   | P4    | writer QoL                  |        |
+| 50  | Custom 碼表 upload / register             | ime    | P4    | user `.ytab`/`.yann`        |        |
+| 51  | Bracket/quote auto-pair (CJK-aware)       | core   | P4    | 「」『』（）                |        |
+| 52  | Syntax highlight (tree-sitter)            | tui    | P5    | Markdown/Typst first        |        |
+| 53  | Coding LSP (Rust/Python/…)                | lsp    | P5    | reuse helix-lsp             |        |
+| 54  | Diagnostics / code actions                | lsp    | P5    |                             |        |
+| 55  | Git gutter / blame                        | vcs    | P5    |                             |        |
+| 56  | Splits / multiple windows                 | tui    | P5    |                             |        |
+| 57  | Debugging (DAP)                           | dap    | P6    | far future                  |        |
+| 58  | Plugin runtime (scripting)                | plugin | P6    | Lua/WASM                    |        |
+| 59  | Remote / SSH editing                      | net    | P6    |                             |        |
+| 60  | Collaborative editing                     | net    | P6    |                             |        |
 
 ---
 
 ## 6. Phase-by-phase deliverables
 
-> **Current status.** The Cargo workspace is initialized (`crates/yumete-core`
-> and the `yumete` binary, with `ropey` behind the `TextStore` trait), and
-> Feature #1 (open file / new buffer) is complete: command-line arguments plus
-> `:open` and `:new`, a `Buffer` type (open an existing file, bind a new path, or
-> start a scratch buffer), and an `Editor` that owns the open buffers. The binary
-> currently prints a non-interactive preview of the active buffer; the modal TUI
-> loop (Feature #5) is next. The remaining Phase 1 crates (`yumete-cjk`,
-> `yumete-view`, `yumete-tui`) are added as the features that need them arrive,
-> rather than as empty stubs.
+> **Current status.** The Cargo workspace is initialized with `crates/yumete-core`,
+> `crates/yumete-cjk`, and the `yumete` binary (with `ropey` behind the
+> `TextStore` trait). Done so far:
+>
+> - **#1 Open file / new buffer** — command-line arguments plus `:open` / `:new`;
+>   a `Buffer` type (open an existing file, bind a new path, or start a scratch
+>   buffer) and an `Editor` that owns the open buffers.
+> - **#2 Save / save-as (`:w`)** — atomic write (temp file + rename); `:w` and
+>   `:w <path>` clear the modified flag.
+> - **#3 Quit / force-quit (`:q` / `:q!`)** — dirty-check that blocks `:q` on
+>   unsaved changes and lets `:q!` override.
+> - **#16 East-Asian width** and **#17 grapheme clusters** — in `yumete-cjk`, so
+>   width and cursor math never assume one character equals one cell.
+>
+> The binary currently prints a non-interactive preview of the active buffer; the
+> modal TUI loop (Feature #5) is next. The remaining Phase 1 view/TUI crates are
+> added as the features that need them arrive, rather than as empty stubs.
 
 ### Phase 1 — MVP writer editor
 
@@ -255,13 +265,27 @@ Phases are ordered by priority, most writer-critical first:
 
 ## 7. Key design decisions
 
-- **Rope source.** Start with `ropey` for simplicity, kept behind the `TextStore`
-  trait so `helix-core`'s rope and transaction primitives can replace it later.
+- **Rope source.** Start with `ropey` (as Helix does, with its `simd` feature)
+  behind the `TextStore` trait, so a Helix-style rope and transaction layer can
+  replace it later.
+- **Text width & graphemes.** Do not reimplement Unicode. Character and string
+  display width come from `unicode-width` (Unicode Annex #11), and grapheme-cluster
+  boundaries from `unicode-segmentation` (Annex #29) — the same crates Helix uses.
+  yumete adds only thin, editor-specific helpers in `yumete-cjk`: `grapheme_width`
+  (ASCII and ill-formed clusters floor at one cell, so everything stays editable)
+  and `tab_width_at` (tab stops). Rope-aware cursor navigation will use
+  `unicode-segmentation`'s incremental `GraphemeCursor` directly over `RopeSlice`
+  chunks, as Helix does, rather than materializing whole lines. `unicode-width` is
+  still imperfect for some emoji ZWJ sequences — a known upstream limitation.
+- **Terminal backend.** Do not hand-roll ANSI escapes. Use `crossterm` for the
+  cross-platform terminal backend and `ratatui` (the maintained fork of `tui-rs`)
+  for the buffer and widget layer, behind the `Renderer` trait. This mirrors Helix,
+  which pairs its own `tui-rs` fork (`helix-tui`) with a terminal backend. Keeping
+  it behind `Renderer` leaves the choice swappable.
 - **IME scope.** One engine per editor, rather than per buffer.
 - **Segmentation dictionary.** Reuse Yume's word and annotation data first, with a
   dedicated CJK word list (jieba-style) as a later option.
 - **Config format.** TOML, consistent with the yume repository.
-- **Terminal backend.** `crossterm` for portability, behind a `Renderer` trait.
 - **Helix reuse boundary.** Depend on Helix crates only through our own traits, so
   the project is never locked in and can grow or replace pieces incrementally.
 

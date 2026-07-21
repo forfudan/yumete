@@ -14,6 +14,12 @@ pub enum Command {
     Open(String),
     /// `:new` (alias `:enew`) — create a new, empty scratch buffer.
     NewBuffer,
+    /// `:write [path]` (alias `:w`) — save the current buffer, optionally to a
+    /// new path (save-as). `None` saves to the buffer's bound file.
+    Write(Option<String>),
+    /// `:quit` (alias `:q`) or `:quit!` / `:q!` — leave the editor. `force`
+    /// skips the unsaved-changes check.
+    Quit { force: bool },
 }
 
 /// An error produced while parsing a command line.
@@ -70,6 +76,13 @@ pub fn parse(input: &str) -> Result<Command, CommandError> {
             }
         }
         "new" | "enew" => Ok(Command::NewBuffer),
+        "write" | "w" => Ok(Command::Write(if rest.is_empty() {
+            None
+        } else {
+            Some(rest.to_string())
+        })),
+        "quit" | "q" => Ok(Command::Quit { force: false }),
+        "quit!" | "q!" => Ok(Command::Quit { force: true }),
         other => Err(CommandError::Unknown(other.to_string())),
     }
 }
@@ -97,6 +110,24 @@ mod tests {
     fn parses_new_buffer() {
         assert_eq!(parse(":new"), Ok(Command::NewBuffer));
         assert_eq!(parse("enew"), Ok(Command::NewBuffer));
+    }
+
+    #[test]
+    fn parses_write_with_optional_path() {
+        assert_eq!(parse(":w"), Ok(Command::Write(None)));
+        assert_eq!(parse(":write"), Ok(Command::Write(None)));
+        assert_eq!(
+            parse(":w draft.md"),
+            Ok(Command::Write(Some("draft.md".into())))
+        );
+    }
+
+    #[test]
+    fn parses_quit_and_force_quit() {
+        assert_eq!(parse(":q"), Ok(Command::Quit { force: false }));
+        assert_eq!(parse("quit"), Ok(Command::Quit { force: false }));
+        assert_eq!(parse(":q!"), Ok(Command::Quit { force: true }));
+        assert_eq!(parse(":quit!"), Ok(Command::Quit { force: true }));
     }
 
     #[test]

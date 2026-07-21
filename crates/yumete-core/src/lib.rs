@@ -20,5 +20,5 @@ pub mod text_store;
 
 pub use buffer::Buffer;
 pub use command::{Command, CommandError};
-pub use editor::{Editor, EditorError};
+pub use editor::{CommandOutcome, Editor, EditorError};
 pub use text_store::TextStore;

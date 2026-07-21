@@ -3,7 +3,10 @@
 
 use std::fs;
 use std::io;
+use std::io::Write as _;
+use std::ops::Range;
 use std::path::{Path, PathBuf};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use ropey::Rope;
 
@@ -72,6 +75,74 @@ impl Buffer {
     /// Whether the buffer has unsaved modifications.
     pub fn is_modified(&self) -> bool {
         self.modified
+    }
+
+    /// Insert `text` at character index `char_idx`, marking the buffer modified.
+    ///
+    /// Indices are counted in `char`s (Unicode scalar values), consistent with
+    /// [`TextStore::char_count`]. Panics if `char_idx` is out of bounds.
+    pub fn insert(&mut self, char_idx: usize, text: &str) {
+        self.rope.insert(char_idx, text);
+        self.modified = true;
+    }
+
+    /// Remove the characters in `range` (a half-open range of `char` indices),
+    /// marking the buffer modified. Panics if the range is out of bounds.
+    pub fn remove(&mut self, range: Range<usize>) {
+        self.rope.remove(range);
+        self.modified = true;
+    }
+
+    /// Save the buffer to its bound file.
+    ///
+    /// The write is atomic: the contents are written to a temporary file in the
+    /// same directory and then renamed over the target, so a crash mid-write
+    /// cannot leave a half-written document. Clears the modified flag on success.
+    /// Returns [`io::ErrorKind::NotFound`] if the buffer has no bound path.
+    pub fn save(&mut self) -> io::Result<()> {
+        let path = self
+            .path
+            .clone()
+            .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "buffer has no file name"))?;
+        self.write_atomically(&path)?;
+        self.modified = false;
+        Ok(())
+    }
+
+    /// Bind the buffer to `path` and save it (the `:w <path>` / save-as case).
+    pub fn save_as<P: Into<PathBuf>>(&mut self, path: P) -> io::Result<()> {
+        self.path = Some(path.into());
+        self.save()
+    }
+
+    /// Write the rope to `path` atomically via a temporary file + rename.
+    fn write_atomically(&self, path: &Path) -> io::Result<()> {
+        let dir = match path.parent() {
+            Some(p) if !p.as_os_str().is_empty() => p.to_path_buf(),
+            _ => PathBuf::from("."),
+        };
+
+        let nanos = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|d| d.as_nanos())
+            .unwrap_or(0);
+        let tmp = dir.join(format!(".yumete-tmp-{}-{}", std::process::id(), nanos));
+
+        // Write the rope's chunks, then flush, before the rename.
+        {
+            let mut file = fs::File::create(&tmp)?;
+            for chunk in self.rope.chunks() {
+                file.write_all(chunk.as_bytes())?;
+            }
+            file.flush()?;
+        }
+
+        // Rename over the destination; clean up the temp file on failure.
+        if let Err(err) = fs::rename(&tmp, path) {
+            let _ = fs::remove_file(&tmp);
+            return Err(err);
+        }
+        Ok(())
     }
 
     /// A short, human-readable name for status lines: the file name, or
@@ -143,5 +214,43 @@ mod tests {
         assert_eq!(b.line(0).as_deref(), Some("第一行"));
         assert_eq!(b.line(1).as_deref(), Some("第二行"));
         assert_eq!(b.text(), "第一行\n第二行\n");
+    }
+
+    #[test]
+    fn insert_and_remove_mark_modified_and_edit_by_char_index() {
+        let mut b = Buffer::from_text("你好世界");
+        assert!(!b.is_modified());
+
+        // Insert "，" (a char) after "你好" (index 2, in chars).
+        b.insert(2, "，");
+        assert_eq!(b.text(), "你好，世界");
+        assert!(b.is_modified());
+
+        // Remove the inserted comma again.
+        b.remove(2..3);
+        assert_eq!(b.text(), "你好世界");
+    }
+
+    #[test]
+    fn save_writes_atomically_and_clears_modified() {
+        let mut path = std::env::temp_dir();
+        path.push(format!("yumete-buf-save-{}.txt", std::process::id()));
+
+        let mut b = Buffer::open(&path).expect("open (creates empty buffer)");
+        b.insert(0, "草稿\n");
+        assert!(b.is_modified());
+
+        b.save().expect("save");
+        assert!(!b.is_modified());
+        assert_eq!(fs::read_to_string(&path).unwrap(), "草稿\n");
+
+        fs::remove_file(&path).ok();
+    }
+
+    #[test]
+    fn save_without_path_errors() {
+        let mut b = Buffer::scratch();
+        let err = b.save().unwrap_err();
+        assert_eq!(err.kind(), io::ErrorKind::NotFound);
     }
 }

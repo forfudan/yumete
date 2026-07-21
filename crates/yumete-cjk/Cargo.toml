@@ -1,0 +1,11 @@
+[package]
+description = "CJK display-width (East-Asian width) and grapheme-cluster helpers for yumete."
+edition.workspace = true
+license.workspace = true
+name = "yumete-cjk"
+repository.workspace = true
+version.workspace = true
+
+[dependencies]
+unicode-segmentation = "1"
+unicode-width = "0.2"

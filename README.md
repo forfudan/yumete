@@ -13,14 +13,17 @@ and feature roadmap.
 
 ## Status
 
-Early development. The current build implements **Feature #1 — open file / new
-buffer**:
+Early development. Implemented so far:
 
-- `yumete <file>` opens a file into a buffer (a non-existent path opens an empty
-  buffer bound to it, ready to be saved later).
-- `yumete` with no argument starts a new, empty scratch buffer.
-- The editor core also understands the `:open` / `:new` command line
-  ([`yumete-core`](crates/yumete-core)).
+- **#1 Open file / new buffer** — `yumete <file>` opens a file (a non-existent
+  path opens an empty buffer bound to it); `yumete` with no argument starts a new
+  scratch buffer. The core also understands `:open` / `:new`.
+- **#2 Save / save-as** — `:w` and `:w <path>` write the buffer atomically.
+- **#3 Quit / force-quit** — `:q` refuses to quit with unsaved changes; `:q!`
+  overrides.
+- **#16 / #17 CJK metrics** — East-Asian display width and grapheme-cluster
+  helpers in [`yumete-cjk`](crates/yumete-cjk), so width and cursor math never
+  assume one character equals one cell.
 
 The interactive modal TUI (Normal / Insert / Command modes, cursor motions, the
 in-terminal Yume IME candidate panel, the outline sidebar, …) arrives with the
@@ -35,6 +38,7 @@ yumete/
 ├── LICENSE                    # Apache-2.0
 ├── crates/
 │   ├── yumete-core/           # editor core: text store, buffers, commands
+│   ├── yumete-cjk/            # CJK display width + grapheme clusters
 │   └── yumete/                # binary: CLI + preview
 ├── scripts/build.sh           # release build → ./yumete (gitignored)
 └── docs/development.md        # design & roadmap
