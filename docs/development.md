@@ -8,6 +8,11 @@ This document describes the design, philosophy, and feature roadmap for yumete.
 It focuses on a small, writer-oriented first release while leaving a clean path
 to grow into a full editor.
 
+> **Read §10 first.** The terminal target is on hold: the editor moved to a web
+> frontend plus a Tauri desktop shell, and the work now lives in the yume
+> repository (`frontends/web/`). §1–§9 remain the record of the TUI design —
+> accurate, but not what is currently being built.
+
 ---
 
 ## 1. Vision & scope
@@ -647,3 +652,141 @@ end
 
 Until the IME is integrated (P2, #27), no dictionary data is required — the editor
 runs on the binary alone. This section is the plan for when it is.
+
+---
+
+## 10. Direction change: from a terminal editor to web / Tauri
+
+**Status of §1–§9: on hold.** The Rust editing core (`yumete-core`: rope,
+selection, motions, history) is written and passes its tests, but the *terminal*
+turned out to be the wrong medium for a CJK editor with a built-in IME. The work
+moved to a **web frontend + WASM engine**, with a **Tauri desktop shell** as the
+primary shipping form. The earlier sections stay as the record of the TUI design
+and remain valid if the terminal target is ever revived; this section is what is
+actually being built.
+
+The code lives in the yume repository (`yume/frontends/web/`), because it shares
+the engine, the candidate panel, and the settings drawer with the Web IME — see
+`yume/docs/development.md` §4.7. Only the editor-specific design is recorded here.
+
+### 10.1 Why the terminal was abandoned
+
+Every blocker is at the terminal boundary; none of them is about the engine.
+
+- **Modifier keys.** A lone Shift tap to toggle 中/英 needs the Kitty keyboard
+  protocol; Apple Terminal and most others do not support it. Terminals do not
+  deliver bare modifier events.
+- **CJK drawing is not ours to control.** Widths and graphemes can be computed
+  correctly, but whether a glyph renders at all — and which fallback font serves
+  a rare character, an IVS, or a 字根 PUA codepoint — is up to the terminal
+  emulator and its font settings.
+- **The candidate panel stays crude.** A terminal overlay is box-drawing
+  characters and cell-aligned text; positioning, layering, and styling (rounded
+  corners, subscripts, an annotation column) all fight the character grid.
+- **One key stream, three consumers.** Modal editing, IME composition, and the
+  candidate panel compete for the same byte stream, and a terminal gives far less
+  structure than a GUI event model.
+
+### 10.2 What the browser gives back
+
+The Web IME (`crates/yume-wasm` + `frontends/web`) already proved each of these:
+
+- **Drawing, fonts, and the candidate panel are the browser's problem** — web
+  fonts, a rounded DOM panel, cursor-following placement.
+- **Segmentation is free**: `Intl.Segmenter` does dictionary-grade CJK word
+  segmentation, so `w`/`b`/`e` need no segmenter of our own (a weight-table-driven
+  variant stays possible later).
+- **A mature editor core exists**: CodeMirror 6 — light, modular, handles IME
+  composition natively, virtualizes large files, soft-wraps, and has a Vim mode
+  that can be bent into Helix.
+- **Cross-platform for free**, and themes plus an outline sidebar are ordinary DOM.
+
+### 10.3 Architecture options
+
+| Option                  | File access                                | Distribution                | Verdict                                                                                        |
+| ----------------------- | ------------------------------------------ | --------------------------- | ---------------------------------------------------------------------------------------------- |
+| Static web page         | File System Access API (Chromium only)     | Zero install, a URL         | Best for "try it / write on a tablet"; not every browser can edit locally                      |
+| **Tauri desktop (rec.)**| **Native filesystem**                      | Small native package        | **Links `yume-core` directly (pure Rust, no FFI/WASM)**; same path on mac/win/linux             |
+| Electron                | Native                                     | Bundles Chromium, heavy     | Not worth it unless the Node ecosystem is needed                                                |
+| VS Code extension       | Provided by VS Code                        | Extension                   | VS Code is Electron; real composition hits the same host-key problems as the macOS IME          |
+
+**The shape**: one `frontends/web` frontend, published twice — (a) as the
+`yume.shurufa.app` web demo, and (b) loaded by a Tauri shell as a desktop app with
+native file access and a direct `yume-core` link.
+
+### 10.4 Reuse vs rewrite
+
+- **Reuse**: `yume-core` (a Rust crate under Tauri, `yume-wasm` on the web); the
+  candidate-panel markup/CSS, scheme switching and settings drawer from the Web
+  IME; `Intl.Segmenter` for word motions; the font cascade.
+- **Adopt**: CodeMirror 6 takes over the buffer, selection, transactions,
+  rendering, soft wrap, search, and undo — which **replaces most of
+  `yumete-core`'s rope / selection / motion / history**, leaving a CJK-IME glue
+  layer and the Helix keymap.
+- **Rewrite in the web layer**: modal editing (a Helix-flavoured CodeMirror keymap,
+  or `@replit/codemirror-vim` bent into shape), the outline sidebar (parse
+  Markdown/Typst headings in JS or WASM), and settings (Tauri config directory,
+  mirroring the web build's `localStorage`).
+- **Now optional**: CJK width/grapheme arithmetic (the browser lays out) and a
+  jieba-style segmenter (only if weight-table boundaries are wanted).
+
+### 10.5 What is lost
+
+- **The "terminal editor" niche.** The web/Tauri build cannot be used over bare
+  SSH, in tmux, or on a headless server. If that is ever needed, the TUI stays as
+  a secondary target (§1–§9).
+- **Distribution changes** from a single static binary plus Homebrew to a Tauri
+  package (still small) or a hosted page.
+
+### 10.6 Phases
+
+**P1** web editor MVP (CodeMirror + IME + open/save) → **P2** CJK words + Helix
+keymap → **P3** outline + Tauri packaging → **P4** polish.
+
+| #   | Feature                                            | Layer      | Phase | Notes                                                       | Status  |
+| --- | -------------------------------------------------- | ---------- | ----- | ----------------------------------------------------------- | ------- |
+| 11  | CodeMirror 6 skeleton (buffer/selection/undo/find) | web        | P1    | Needs a bundler; `<textarea>` stands in for now              | Deferred |
+| 12  | Open / save local files                            | web/tauri  | P1    | Web: File System Access API; Tauri: native fs                | Web ✓   |
+| 13  | Embedded Yume IME (engine + candidate panel)       | web/ime    | P1    | Web: `yume-wasm`; Tauri: direct `yume-core`                  | Web ✓   |
+| 14  | Lone Shift toggles 中/英                           | web/ime    | P1    | The browser reports Shift reliably; the terminal cannot      | Web ✓   |
+| 15  | Selection / paging / subscripts / annotations      | web/ime    | P1    | Lifted from the Web IME panel                                | Web ✓   |
+| 16  | Scheme switching + settings drawer                 | web/ime    | P1    | Reuses the Web IME drawer                                    | Web ✓   |
+| 21  | CJK word motions `w`/`b`/`e`                       | web/cjk    | P2    | `Intl.Segmenter`                                             | Web ✓   |
+| 22  | Modal editing (Normal/Insert/…)                    | web        | P2    | Overlay on the textarea, toggleable; IME only in Insert      | Web ✓   |
+| 23  | Word delete/change, selection operators            | web        | P2    | `v` selection + `d`/`c`/`y`, `dw`/`dd`, `p`                  | Web ✓   |
+| 24  | Search / replace, char search `f`/`t`              | web        | P2    | `/` bar + `n`/`N`; `f`/`t`/`F`/`T` + `;`/`,`                 | Web ✓   |
+| 25  | Number mode, `/` commands, `z` reverse lookup      | web/ime    | P2    | Engine has it; frontend wiring only                          | —       |
+| 31  | Adaptive type for Markdown / Typst                 | web/lsp    | P3    | Bold/italic/colour under the relevant syntax                 | Web ✓   |
+| 32  | Outline sidebar (Markdown/Typst headings)          | web/lsp    | P3    | Parse headings in JS or WASM                                 | —       |
+| 33  | Theme + font cascade (single Helix-purple theme)   | web/config | P3    | One theme, no dark toggle; purple word-boundary marks        | Web ✓   |
+| 34  | Tauri packaging (mac/win/linux)                    | tauri      | P3    | `frontends/desktop`, links `yume-core` directly              | —       |
+| 35  | Deploy `yume.shurufa.app`                          | web        | P3    | Reuses `build_website.sh` → the website repo                 | Web ✓   |
+| 41  | Global/project settings, custom 碼表 upload        | web/config | P4    | Mirrors §9 and the Web IME                                   | —       |
+| 42  | Word count, writing QoL, autosave                  | web        | P4    | Prose-writing oriented                                       | —       |
+
+> **#11 is deferred deliberately.** CodeMirror 6 means introducing a JS bundler
+> (turning a zero-build static page into a build project) and re-attaching IME
+> composition to CodeMirror's composition API. That is a substrate upgrade, not a
+> missing feature — `<textarea>` carries the current build fine.
+
+### 10.7 Web vs PWA vs Tauri: does the user install anything?
+
+| Form                     | How it is obtained                              | File access                                          | Offline           | Feels like                          |
+| ------------------------ | ----------------------------------------------- | ---------------------------------------------------- | ----------------- | ----------------------------------- |
+| **Web** (`yume.shurufa.app`) | **Open the URL, zero install**              | Browser sandbox; File System Access API (Chromium)   | Needs caching     | A browser tab                       |
+| **PWA**                  | "Install to desktop" from the browser           | Same as web; File System Access is enough day to day | Yes (service worker) | Own window, no browser chrome, an icon |
+| **Tauri desktop**        | **Download and install** (`.dmg`/`.msi`/`.deb`) | **Native filesystem**                                | Yes               | A real native app                   |
+
+To settle the recurring question — **opening `yume.shurufa.app` does not launch a
+desktop app.** A URL cannot start a native program; the Tauri build must be
+installed once first (after which a custom URL scheme could hand off to it, but
+only if installed). Inside, a Tauri app is a system WebView plus a thin Rust shell
+loading **the same `frontends/web` bundle**, either packaged locally or pointed at
+the live site. What Tauri adds is the native filesystem, a system menu, offline
+use, no browser chrome, and a **direct `yume-core` link (no WASM marshalling)**.
+It does not bundle Chromium — it uses the OS WebView (WebKit / WebView2 /
+WebKitGTK), which is why the installer is a few MB rather than Electron-sized.
+
+**Shipping plan**: `yume.shurufa.app` offers both the web/PWA build (zero install,
+tablets included) and a desktop download (Tauri, native files and offline), from
+one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
