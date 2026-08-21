@@ -1,0 +1,12 @@
+# Normalise line endings so a macOS/Windows switch never shows a whole-file
+# diff on a machine with core.autocrlf=true.
+* text=auto eol=lf
+
+# Windows-native scripts keep CRLF
+*.ps1  text eol=crlf
+*.bat  text eol=crlf
+*.cmd  text eol=crlf
+
+# Never touch binaries
+*.png binary
+*.zip binary
