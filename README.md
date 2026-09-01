@@ -4,8 +4,10 @@
 **CJK-aware** terminal text editor with a **built-in Yume IME**, tailored first
 for **writing (novels), not coding**.
 
-See [docs/development.md](docs/development.md) for the full design, philosophy,
-and feature roadmap.
+**[docs/manual.md](docs/manual.md)** is the user manual — what the keys and
+commands do, how vertical layout works, and how to configure it.
+[docs/development.md](docs/development.md) has the design, the reasoning, and the
+feature roadmap.
 
 > Licensed under the **Apache License 2.0** — see [LICENSE](LICENSE).
 
