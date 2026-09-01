@@ -767,6 +767,7 @@ name = "yumete-ime"
 version = "0.1.0"
 dependencies = [
  "yume-core",
+ "yumete-cjk",
  "yumete-config",
 ]
 

@@ -57,6 +57,14 @@ Early development, but already an interactive modal editor. Implemented so far:
   terminal such as kitty, WezTerm, Ghostty, or recent iTerm2, not Apple Terminal);
   number mode, `/`-commands, and `z` reverse come from the engine.
 
+- **#63 Word segmentation from Yume's language model** — `w`/`b`/`e` and the
+  segmentation overlay are driven by Yume's 詞頻表 (1.25M weighted entries) and
+  詞彙表, shared by reference with the running IME rather than loaded twice. The
+  bundled 214-word list covered almost no real prose, so `w` used to walk one
+  漢字 at a time; it now steps `那年冬天 ／ 雪 ／ 下 ／ 得 ／ 比 ／ 往常 ／ 都 ／
+  早`. Falls back to `segmentation.txt` or the bundled list when the IME data is
+  absent.
+
 - **#62 Helix alignment** — a digit prefix is a count (`3w`, `10j`); `.` repeats
   the last insert and `A-.` the last `f`/`t`; `%` selects the file, `X` extends to
   whole lines, `J` joins (with no space between two 全角 characters), `~`/`` ` ``

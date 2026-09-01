@@ -60,26 +60,32 @@ fn main() -> ExitCode {
     editor.set_zong_length(config.editor.zong_length);
     editor.set_indent_width(config.editor.tab_width);
 
-    // Word segmentation (Feature #24): drive `w`/`b`/`e` and the overlay with a
-    // dictionary. A user `segmentation.txt` in the data directory wins; else the
-    // compact dictionary bundled with yumete is used, so word motions work out
-    // of the box. Wiring Yume's full weight table here belongs to the IME
-    // milestone.
+    // The built-in Yume IME (Feature #27): load the default scheme's tables from
+    // the data directory. When the data is absent the session is unavailable and
+    // Insert mode simply types plain ASCII.
+    let mut ime = ImeSession::from_default_dirs(Scheme::Lingming);
+
+    // Word segmentation, driving `w`/`b`/`e` and the overlay. Best first:
+    //
+    // 1. Yume's own language model (Feature #63) — 1.25M weighted entries plus
+    //    the 詞彙表, already loaded above and shared by reference.
+    // 2. A user `segmentation.txt` in the data directory.
+    // 3. The compact list bundled with yumete, which covers common prose only.
     let threshold = config.editor.segmentation_threshold;
-    let dictionary = load_segmentation_dictionary(threshold)
-        .unwrap_or_else(|| DictionarySegmenter::builtin(threshold));
-    editor.set_segmenter(Box::new(dictionary));
+    let yume = ime.segmenter();
+    if yume.is_available() {
+        editor.set_segmenter(Box::new(yume));
+    } else if let Some(dictionary) = load_segmentation_dictionary(threshold) {
+        editor.set_segmenter(Box::new(dictionary));
+    } else {
+        editor.set_segmenter(Box::new(DictionarySegmenter::builtin(threshold)));
+    }
     editor.set_segmentation_visible(config.editor.show_segmentation);
 
     if force_preview || !std::io::stdout().is_terminal() {
         preview(&editor, &config);
         return ExitCode::SUCCESS;
     }
-
-    // The built-in Yume IME (Feature #27): load the default scheme's tables from
-    // the data directory. When the data is absent the session is unavailable and
-    // Insert mode simply types plain ASCII.
-    let mut ime = ImeSession::from_default_dirs(Scheme::Lingming);
 
     match yumete_tui::run(&mut editor, &config, &mut ime) {
         Ok(()) => ExitCode::SUCCESS,

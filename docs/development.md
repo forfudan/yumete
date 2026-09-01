@@ -258,6 +258,7 @@ Phases are ordered by priority, most writer-critical first:
 | 60  | Collaborative editing                     | net    | P6    |                                     |        |
 | 61  | **Vertical layout (縱書)**                | tui    | P2    | 縱 model + rotated punctuation      | Done   |
 | 62  | **Helix alignment (counts, match mode)**  | core   | P2    | tutorial verbs; no multi-cursor yet | Done   |
+| 63  | **Segmentation from Yume's language model** | ime  | P2    | 詞頻表 + 詞彙表 drive `w`/`b`/`e`   | Done   |
 
 ---
 
@@ -505,6 +506,34 @@ show tofu).
 rotate a glyph, so true 縦中横 for two-digit numbers, ruby, and 圏点 are open.
 The candidate panel drops the 拆分 comment vertically, where it would double the
 panel's height per candidate.
+
+### Segmentation from Yume's language model (#63)
+
+Feature #24 shipped a `Segmenter` trait with a 214-entry bundled dictionary and
+a note that "wiring Yume's full weight table here belongs to the IME milestone".
+This is that wiring. The bundled list covers almost no real prose, so every
+unmatched 漢字 became its own word and `w` walked one character at a time.
+
+The tables are already in memory: `lang.ywtb` (1.25M weighted entries) and
+`lang.ywl` (words known but never counted) are the language layer the IME's 整句
+composition ranks with, and `ImeSession::segmenter` hands out an `Arc` clone of
+each rather than a second copy. The method is the same maximum-probability path
+the jieba-style segmenter already used — only the dictionary changed.
+
+Two things are deliberate:
+
+- **The floor is derived, not chosen.** Text neither table counted scores `ln P`
+  as if seen once (`−ln Σw`), jieba's rule. A fixed constant would be right for
+  one corpus and nonsense for the next, and it gives an uncounted *word* a large
+  edge over the same span of uncounted characters for free.
+- **A flat bonus per word** (3 nats) biases toward more, shorter words. The 詞頻表
+  counts phrases as well as words, so an unbiased split swallows 「我們的」 and
+  「正在改變」 whole and `w` jumps further than a writer means. At 3 those come
+  apart while 那年冬天, 人工智能 and 生活方式 stay whole; below 2 the particles
+  stay glued on, above 4 real words start splitting.
+
+Cost is 0.042 ms for a 43-character line, and the renderer segments each
+paragraph once per frame, so the overlay is free at prose sizes.
 
 ### Helix alignment (#62)
 

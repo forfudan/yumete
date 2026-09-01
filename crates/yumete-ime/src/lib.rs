@@ -20,6 +20,8 @@
 //! dictionary is missing the session still constructs but reports
 //! [`ImeSession::available`] as `false`, so the editor falls back to plain input.
 
+pub mod segment;
+
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -31,6 +33,7 @@ use yume_core::{
     AnnotationTable, Charset, CodeTable, Engine, FluencyTable, UnigramTable, NAMED_CHARSETS,
 };
 
+pub use segment::YumeSegmenter;
 pub use yume_core::DisplayMode;
 
 /// One of yumete's five input schemes (方案).
@@ -325,6 +328,14 @@ impl ImeSession {
                 simp_code: simps.get(i).cloned().unwrap_or_default(),
             })
             .collect()
+    }
+
+    /// A word segmenter over this session's language model (Feature #63).
+    ///
+    /// The 詞頻表 and 詞彙表 are already loaded and reference-counted, so the
+    /// segmenter shares them rather than holding a second copy of 1.25M entries.
+    pub fn segmenter(&self) -> YumeSegmenter {
+        YumeSegmenter::new(self.engine.unigram.clone(), self.engine.lexicon.clone())
     }
 
     /// The candidate page size (每頁候選數).
