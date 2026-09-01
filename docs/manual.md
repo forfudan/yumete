@@ -265,8 +265,13 @@ rather than loaded twice. Without the IME data installed it falls back to a
 
 ## 7. Commands
 
-Type `:` and the list appears above the command line, narrowing as you type;
-**Tab** cycles the matches and writes each onto the line, **Shift-Tab** goes back.
+Type `:` and the list appears above the command line, narrowing as you type. What
+the line is about to complete to is shown after the caret in a lighter ink;
+**Tab** takes it, and takes the next match each time after, **Shift-Tab** going
+back.
+
+A search prompt guesses too: it offers the rest of the **last pattern**, so
+searching for the same thing again is `/` then Tab.
 
 | | |
 | --- | --- |
@@ -299,7 +304,8 @@ segmentation_threshold = 0
 
 layout = "horizontal"        # "horizontal" | "vertical"
 zong_length = 32             # characters per 縱, 4–64
-zong_gap = 1                 # half-width cells between 縱, 0–4
+zong_gap = 1                 # half-width cells between 縱, 0–4. At 0 the 縱 sit
+                             # flush and only one carrying a reading takes a cell
 tatechuyoko = false          # set half-width pairs sideways in one slot
 
 show_ruby = true             # lay readings out

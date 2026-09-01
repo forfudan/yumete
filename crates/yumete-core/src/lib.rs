@@ -31,6 +31,10 @@ pub use editor::{CommandOutcome, Editor, EditorError, KeyOutcome};
 pub use input::{Key, Mode};
 pub use text_store::TextStore;
 
+// `Buffer::rope` already hands one out, so the type belongs in the public API
+// rather than making every caller depend on `ropey` directly.
+pub use ropey::Rope;
+
 // Re-exported so binaries can install a segmenter without a direct dependency
 // on `yumete-cjk`.
 pub use yumete_cjk::{CategorySegmenter, DictionarySegmenter, Segmenter};

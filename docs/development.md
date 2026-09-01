@@ -262,8 +262,12 @@ Phases are ordered by priority, most writer-critical first:
 | 64  | **縦中横 in the vertical page**            | core   | P2    | half-width pairs share one slot     | Done   |
 | 65  | **振假名 (ruby)**                          | tui    | P3    | HTML + Typst dialects, Ruby mode    | Done   |
 | 67  | **Command hints + Tab completion**         | tui    | P4    | `:` lists, narrows, Tab cycles       | Done   |
-| 69  | **Novel-scale performance**                | core   | P2    | word motion + overlay were O(buffer) | Done   |
+| 69  | **Novel-scale performance**                | core   | P2    | word motion, overlay, search        | Done   |
+| 72  | **The prompt's guess**                     | tui    | P4    | ghost text in `:` and `/`, Tab takes | Done   |
+| 73  | **Gap and reading column separated**       | tui    | P3    | `zong_gap = 0` still allows ruby    | Done   |
 | 68  | 圏点 (emphasis dots)                       | tui    | P3    | same column as ruby                 |        |
+| 70  | 標點旁置 (punctuation in the margin)       | tui    | P3    | 古文 style; competes with ruby      |        |
+| 71  | Mouse wheel scrolls by 縱                  | tui    | P4    | needs mouse capture; see below      |        |
 | 66  | **IME in the `/` and `:` lines**           | tui    | P2    | + `:chaifen` annotation toggle      | Done   |
 
 ---
@@ -595,6 +599,33 @@ that job, because a space is a legitimate part of a reading.
 
 **Horizontal layout always shows the markup**, because there is nowhere sensible
 to put a reading in it.
+
+### The prompt's guess (#72)
+
+Both prompts show what they are about to complete to, after the caret, in a
+lighter ink — and **Tab** takes it. On the command line the guess is the rest of
+the best-matching name; in a search it is the rest of the last pattern, so
+repeating a search is one keystroke rather than retyping it.
+
+The guess disappears once it would be a lie: after Tab has picked something (the
+line *is* the completion then), once arguments have started (a file name is not a
+command name), and when what has been typed is not a prefix of anything.
+
+### The 縱 gap, and what pays for it (#73)
+
+A reading sits in the cell to the **right** of its own 縱; the gap sits
+**between** two of them. Those are the same cell, which is why a gap of one gives
+readings a home for free — and why a gap of zero used to mean no readings at all.
+
+They are now separate questions. One column to the next costs
+`max(gap, reading ? 1 : 0)`, so with `zong_gap = 0` a 縱 carrying a reading takes
+its cell and every other 縱 sits flush against its neighbour. The rightmost 縱
+pays for its own reading, having no neighbour to borrow the cell from.
+
+The consequence, which is the price of asking for it: column positions now depend
+on *which* 縱 are annotated, so they are walked rather than computed, and the page
+is measured, scrolled, and measured again — twice, because the second measurement
+is of the page actually being drawn.
 
 ### Command hints (#67)
 

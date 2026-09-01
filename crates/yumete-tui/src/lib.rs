@@ -663,10 +663,24 @@ fn draw_status(frame: &mut Frame, editor: &Editor, ime: &ImeSession, status_area
         // 中/英 tag is pushed to the right edge, where it cannot be mistaken for
         // part of the pattern.
         let line = format!("{prefix}{text}{}", prompt_preedit(editor, ime));
+        let ghost = editor.prompt_ghost();
         let tag = language_tag(editor, ime);
-        let used = yumete_cjk::str_width(&line) + yumete_cjk::str_width(&tag);
+        let used = yumete_cjk::str_width(&line)
+            + yumete_cjk::str_width(&ghost)
+            + yumete_cjk::str_width(&tag);
         let gap = (status_area.width as usize).saturating_sub(used);
-        format!("{line}{}{tag}", " ".repeat(gap))
+        // Rendered as three spans so the guess can be a lighter ink than what
+        // was actually typed — it has to be visibly *not yet* part of the line.
+        let reversed = Style::default().add_modifier(Modifier::REVERSED);
+        frame.render_widget(
+            Paragraph::new(Line::from(vec![
+                Span::styled(line, reversed),
+                Span::styled(ghost, reversed.add_modifier(Modifier::DIM)),
+                Span::styled(format!("{}{tag}", " ".repeat(gap)), reversed),
+            ])),
+            status_area,
+        );
+        return;
     } else {
         let dirty = if buffer.is_modified() { " [+]" } else { "" };
         // In Insert mode with the IME available, show the 中/英 state + scheme.
@@ -1001,6 +1015,41 @@ mod tests {
             !buffer_text(&buffer).contains("<rt>"),
             "markup must not show"
         );
+    }
+
+    /// With the gap set to zero, only a 縱 that carries a reading pays for the
+    /// column beside it; the rest sit flush.
+    #[test]
+    fn a_zero_gap_reserves_a_column_only_where_a_reading_needs_one() {
+        let mut editor = editor_with("甲乙\n<ruby>丙<rt>bǐng</rt></ruby>\n丁戊");
+        let mut config = vertical_config();
+        config.editor.zong_gap = 0;
+        let buffer = render_vertical_ruby(&mut editor, &config, 20, 12);
+
+        // 甲 has no reading, so it sits flush against the right edge.
+        assert_eq!(at(&buffer, 18, 0), "甲");
+        // 丙 does, so it takes the cell to its right — three cells on, not two.
+        // It is centred against its four-character reading, so it sits a row in.
+        assert_eq!(at(&buffer, 15, 1), "丙");
+        let reading: String = (0..4).map(|y| at(&buffer, 17, y)).collect();
+        assert_eq!(reading, "bǐng");
+        // 丁 has none, so it follows flush: two cells on from 丙, not three.
+        assert_eq!(at(&buffer, 13, 0), "丁");
+    }
+
+    #[test]
+    fn a_one_cell_gap_is_shared_with_the_reading() {
+        // With a gap of one, a reading costs nothing extra: it uses the gap.
+        let mut editor = editor_with("甲乙\n<ruby>丙<rt>bǐng</rt></ruby>\n丁戊");
+        let config = vertical_config(); // zong_gap = 1
+        let buffer = render_vertical_ruby(&mut editor, &config, 20, 12);
+        assert_eq!(at(&buffer, 18, 0), "甲");
+        // 丙 is centred against its four-character reading, so it sits a row in.
+        assert_eq!(at(&buffer, 15, 1), "丙");
+        let reading: String = (0..4).map(|y| at(&buffer, 17, y)).collect();
+        assert_eq!(reading, "bǐng", "the reading uses the gap, costing nothing");
+        // Evenly spaced three cells apart, annotated or not.
+        assert_eq!(at(&buffer, 12, 0), "丁");
     }
 
     #[test]
@@ -1486,6 +1535,34 @@ mod tests {
         assert!(status.contains("縱 1"), "which run of it: {status:?}");
         assert!(status.contains("字 2"), "how far down it: {status:?}");
         assert!(!status.contains("Ln"), "no ambiguous line number");
+    }
+
+    /// The guess has to be visibly *not yet* part of the line, or it reads as
+    /// text that has been typed.
+    #[test]
+    fn the_prompt_guess_is_a_lighter_ink() {
+        let mut editor = editor_with("那年冬天");
+        editor.on_key(Key::Char(':'));
+        for c in "seg".chars() {
+            editor.on_key(Key::Char(c));
+        }
+        let config = Config::default();
+        let buffer = render_with(&editor, &config, &no_ime(), 90, 24);
+
+        let row = buffer.area.height - 1;
+        let line: String = (0..buffer.area.width)
+            .map(|x| buffer[(x, row)].symbol())
+            .collect();
+        assert!(line.starts_with(":segment"), "guess shown: {line:?}");
+
+        let dim = |x: u16| {
+            buffer[(x, row)]
+                .style()
+                .add_modifier
+                .contains(Modifier::DIM)
+        };
+        assert!(!dim(3), "`seg` was typed");
+        assert!(dim(4), "`ment` is only a guess");
     }
 
     #[test]
