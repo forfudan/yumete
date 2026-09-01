@@ -103,6 +103,13 @@ pub fn run(editor: &mut Editor, config: &Config, ime: &mut ImeSession) -> io::Re
                 editor.set_zong_length(vertical::zong_length_for(config, size.height, lines, ruby));
             }
         }
+        // Tell the editor how much is on screen, so `C-d` means half of what
+        // can actually be seen.
+        if let Ok(size) = terminal.size() {
+            let lines = size.height.saturating_sub(1) as usize;
+            let columns = (size.width / 3).max(1) as usize;
+            editor.set_page(lines, columns);
+        }
         if let Err(err) = terminal.draw(|frame| draw(frame, editor, config, ime, &mut viewport)) {
             break Err(err);
         }
