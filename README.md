@@ -57,8 +57,34 @@ Early development, but already an interactive modal editor. Implemented so far:
   terminal such as kitty, WezTerm, Ghostty, or recent iTerm2, not Apple Terminal);
   number mode, `/`-commands, and `z` reverse come from the engine.
 
+- **#61 Vertical layout (縱書)** — text can be set the way a Chinese novel is:
+  running top to bottom in **縱** (*zong*) that stack from the right edge
+  leftward, one paragraph soft-wrapping into as many 縱 as it needs at 32
+  characters each. `h j k l` keep their screen meaning — `j`/`k` read down and up
+  a 縱, `h`/`l` step to the 縱 on the left and on the right. CJK punctuation is
+  drawn in its vertical form (`。`→`︒`, `「」`→`﹁﹂`) on screen only, so the file
+  on disk is unchanged. The candidate panel turns with it: the preedit on the
+  right, candidates running leftward. Turn it on with `layout = "vertical"`,
+  `--vertical`, or `:layout`.
+
 Launch `yumete <file>` in a terminal for the editor, or `yumete --preview <file>`
-(or pipe the output) for a non-interactive preview.
+(or pipe the output) for a non-interactive preview — with `--vertical`, the
+preview prints the vertical page itself:
+
+```
+$ yumete --preview --vertical 記.txt
+   　 其 　 雪 　 然 　
+   第 實 那 ︐ 母 想 那
+   二 只 本 一 親 起 年
+   天 有 書 片 從 父 冬
+   早 我 我 一 廚 親 天
+   上 一 讀 片 房 說 ︐
+```
+
+A 縱書 page needs a **tall** terminal (the 縱 is as long as the window allows, up
+to `zong_length`) and a font with the Unicode vertical punctuation forms
+(U+FE10–FE48) — Source Han / Noto CJK, Sarasa Gothic, or LXGW WenKai Mono all
+have them; a Latin-only programming font will show tofu.
 
 ## Layout
 

@@ -97,11 +97,12 @@ a Rust program, it depends on `yume-core` directly, with no FFI layer:
 - A lone Shift tap toggles 中/英 via `toggle_language()`, matching the web frontend.
 - Number mode, special `/` commands, and reverse lookup (`z`) come directly from
   the core.
-- Data tables (`ling.ytab`, `pinyin.*`, `chaifen*.yann`, charsets, and the bundled
+- Data tables (`ling.ytab`, `symbols.ytab`, `pinyin.yflb`, `lang.ywtb`/`.ywl`,
+  `chaifen.ydiv` + `zigen_*.yzg`, charsets, and the bundled
   `Yuniversus.ttf`) are loaded from yumete's data directory, reusing the compiled
   artifacts produced by the yume build.
 - Custom 碼表 upload follows naturally: scheme tables are just files loaded at
-  runtime, so a user can drop a custom `.ytab` and `.yann` into the data directory
+  runtime, so a user can drop a custom `.ytab` and `.ydiv` into the data directory
   and register a new scheme.
 
 Prototype input panel and candidate panel (lay over the text buffer) goes as follows.
@@ -255,6 +256,7 @@ Phases are ordered by priority, most writer-critical first:
 | 58  | Plugin runtime (scripting)                | plugin | P6    | Lua/WASM                            |        |
 | 59  | Remote / SSH editing                      | net    | P6    |                                     |        |
 | 60  | Collaborative editing                     | net    | P6    |                                     |        |
+| 61  | **Vertical layout (縱書)**                | tui    | P2    | 縱 model + rotated punctuation      | Done   |
 
 ---
 
@@ -382,7 +384,7 @@ keys are unaffected.
 > - **#27 / #32 Built-in Yume IME session** — `yumete-ime` embeds `yume-core`
 >   directly (no FFI) as an `ImeSession`: per-keystroke input, candidate/preedit
 >   getters, scheme switching, and 中/英 toggle, loading a scheme's compiled data
->   tables (`*.ytab`, `pinyin.yflb`/`ywtb`, `chaifen_*.yann`, `charsets/*.ycs`)
+>   tables enumerated by `yume_core::data_manifest`
 >   from the data directory.
 > - **#28 / #29 / #30 IME in Insert mode** — while composing in Insert mode, the
 >   TUI routes keys to the IME and draws a floating candidate panel below the
@@ -450,6 +452,58 @@ keys are unaffected.
 - `yumete-lsp` client; Markdown + Typst servers; extract heading symbols.
 - Foldable right-hand **outline sidebar** with jump-to-heading.
 - Exit criteria: headings appear live in the sidebar; toggle + fold; jump works.
+
+### Vertical layout (縱書, #61)
+
+```toml
+[editor]
+layout = "vertical"   # "horizontal" (default) | "vertical"
+zong_length = 32      # graphemes per 縱; clamped to 4–64
+zong_gap = 1          # half-width cells between two 縱; 0–4
+```
+
+
+A novel written in Chinese is set vertically, and the terminal grid turns out to
+suit that almost exactly: a cell is about 1:2, so a full-width character — two
+cells wide, one row tall — is square. Stack those downward, put the next run to
+the *left*, and the page reads the way a book does. `layout = "vertical"` in the
+config, `--vertical` for one run, or `:layout` to flip live.
+
+**縱 (zong).** Vertically, "line" and "column" each mean two things, so one
+borrowed term settles it: a **縱** is one run of text read top to bottom, and
+successive 縱 stack from the right edge leftward. It is what a line is in
+horizontal layout, and it is deliberately the *only* such term — the layouts
+themselves stay `horizontal` and `vertical`.
+
+A 縱 is visual, not a buffer line: a paragraph soft-wraps into as many 縱 as it
+needs, `zong_length` graphemes at a time (default 32, the upper end of the
+comfortable 24–32 range for prose — past that the eye loses the return sweep to
+the top of the next 縱). The wrap length is a typographic choice, so a tall
+terminal never *raises* it; only a terminal too short to hold it lowers it. One
+row beyond the 縱 is kept spare for the end-of-paragraph caret. Adjacent 縱 are
+one half-width cell apart (`zong_gap`), giving a half-em 縱距.
+
+**Motion keeps its screen meaning.** `j` and `k` read down and up a 縱 — which
+is *forward and backward in the text*, so they are the ordinary grapheme motions
+underneath, and a long paragraph wraps from the foot of one 縱 to the head of
+the next for free. `h` and `l` step to the 縱 on the left and on the right, the
+counterpart of changing line, with a preserved goal slot exactly as vertical
+motion preserves a goal column. `gh`/`gl` still mean paragraph start and end.
+
+**Punctuation is substituted, not rotated.** A terminal applies no OpenType
+`vert` feature, so `。` and `「` would otherwise sit in their horizontal
+positions. Unicode encodes the rotated shapes (U+FE10–FE19, U+FE30–FE48), so
+`yumete_cjk::vertical_form` maps them on the way to the screen only — the
+buffer, the file, and anything yanked or searched keep the ordinary characters.
+Every mapped form is East-Asian Wide, so the grid does not break; a test asserts
+it. Font coverage is the one thing yumete cannot control (Source Han / Noto CJK
+and Sarasa or LXGW WenKai Mono cover them; a Latin-only programming font will
+show tofu).
+
+**What is not done.** Latin runs stack letter by letter — a terminal cannot
+rotate a glyph, so true 縦中横 for two-digit numbers, ruby, and 圏点 are open.
+The candidate panel drops the 拆分 comment vertically, where it would double the
+panel's height per candidate.
 
 ### Phase 4 — Polish & QoL
 
@@ -570,7 +624,9 @@ small **configuration** (text settings) and, once the IME lands, large
   an optional per-project `.yumete/config.toml` override (§5.1). Implemented in
   `yumete-config` (`config_dir()`).
 - **Dictionary data** — the compiled IME artifacts reused from the yume build
-  (`.ytab`, `.yflb`, `.ywtb`, `.yann`, `.ycs`) plus the bundled `Yuniversus.ttf`.
+  (`.ytab`, `.yflb`, `.ywtb`, `.ywl`, `.ydiv`, `.yzg`, `.ycs`, `.ywrd`, `.ygram`)
+  plus the bundled `Yuniversus.ttf`. The list itself comes from
+  `yume_core::data_manifest`, never from a copy kept here.
   These are **not embedded in the binary** — they are large (the Lingming table
   alone is hundreds of thousands of entries), and baking them in would bloat the
   executable and force a rebuild for every data update.
@@ -595,11 +651,11 @@ So the shipped data sits **in the same install tree as the binary**, under
 │   └── yumete
 └── share/yumete/
     ├── schemes/
-    │   ├── lingming/   { ling.ytab, chaifen_lingming.yann, … }
+    │   ├── lingming/   { ling.ytab, zigen_ling.yzg, … }
     │   ├── xingchen/   …
     │   ├── qingyun/    …
     │   ├── riyue/      …
-    │   └── pinyin/     { pinyin.yflb, pinyin.ywtb }
+    │   └── pinyin/     { pinyin.yflb }  (shared: lang.ywtb, lang.ywl, chaifen.ydiv)
     ├── charsets/       { common.ycs, tonggui.ycs, harmonic.ycs }
     └── fonts/          { Yuniversus.ttf }
 ```
