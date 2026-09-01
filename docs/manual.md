@@ -174,6 +174,10 @@ end of the comfortable range for prose.
 ### 5.1 Moving
 
 The **mouse wheel** turns the page: one notch moves three 縱. yumete captures the
+mouse to do that, so the terminal's own click-and-drag selection needs its
+modifier held (Option, on macOS) — the same trade Helix makes.
+
+The **mouse wheel** turns the page: one notch moves three 縱. yumete captures the
 mouse to do that, which means the terminal's own click-and-drag selection needs
 its modifier held (Option, on macOS) — the same trade Helix makes.
 
@@ -199,7 +203,34 @@ far down it.
   Sarasa Gothic and LXGW WenKai Mono all carry them, a Latin-only programming
   font does not.
 
-### 5.3 Ruby (振假名 / 注音)
+### 5.3 標點旁置 — punctuation in the margin
+
+`:hanging`, or `[editor] hanging_punctuation = true`.
+
+Set in the classical manner, 。，、？！：；「」 do not take a square of their own.
+They hang in the margin beside the character they belong to, so the text column
+carries nothing but text — which is how a 古籍 is punctuated, and what stops a
+page of dialogue looking half empty.
+
+```
+   off        on
+   子         子
+   曰         曰︓
+   ︓         學﹁
+   ﹁         而
+   學         時
+   而         之︐
+```
+
+An **opening** bracket hangs beside the character it introduces; everything else
+beside the one it follows. Dashes and ellipses keep their square: 「——」 is a
+full-width rule carrying the line onward, and a half-width margin would break it.
+
+Marks share the margin with readings and **win it** — a mark belongs on its own
+character's row — so where both appear the reading gives way upward, taking the
+rows above the character.
+
+### 5.4 Ruby (振假名 / 注音)
 
 Readings are written into the file as markup and *laid out* on the page: the base
 is spaced against its reading, so two adjacent readings never collide, and the
@@ -224,7 +255,7 @@ starts from the file's extension:
 Horizontal layout always shows the markup, because there is nowhere sensible to
 put a reading in it.
 
-### 5.4 Ruby mode
+### 5.5 Ruby mode
 
 With readings laid out, the `<rt>` is not on screen at all, so the cursor cannot
 be moved into it. `:ruby` opens a prompt in the status bar to edit it instead:
@@ -296,7 +327,8 @@ searching for the same thing again is `/` then Tab.
 | `:layout` `:lay` | flip horizontal / vertical |
 | `:vertical` `:horizontal` | set it outright |
 | `:chaifen` `:cf` | 拆分 beside candidates |
-| `:ruby` and friends | §5.3–5.4 |
+| `:hanging` | 句讀 in the margin (標點旁置) |
+| `:ruby` and friends | §5.4–5.5 |
 
 ---
 
@@ -318,6 +350,7 @@ zong_length = 32             # characters per 縱, 4–64
 zong_gap = 1                 # half-width cells between 縱, 0–4. At 0 the 縱 sit
                              # flush and only one carrying a reading takes a cell
 tatechuyoko = false          # set half-width pairs sideways in one slot
+hanging_punctuation = false  # 。，、？！：；「」 in the margin (標點旁置)
 
 show_ruby = true             # lay readings out
 ruby_dialects = []           # extra dialects beyond the file's own

@@ -267,7 +267,7 @@ Phases are ordered by priority, most writer-critical first:
 | 73  | **Gap and reading column separated**       | tui    | P3    | `zong_gap = 0` still allows ruby    | Done   |
 | 74  | **Helix tutorial, second pass**            | core   | P2    | `r`, `A-;`, registers, macros, pages | Done   |
 | 68  | 圏点 (emphasis dots)                       | tui    | P5    | mid-term; markup still open         |        |
-| 70  | 標點旁置 (punctuation in the margin)       | tui    | P3    | 古文 style; competes with ruby      |        |
+| 70  | **標點旁置 (punctuation in the margin)**   | tui    | P3    | 古文 style; `:hanging`              | Done   |
 | 71  | **Mouse wheel scrolls by 縱**              | tui    | P4    | captures the mouse, as Helix does   | Done   |
 | 66  | **IME in the `/` and `:` lines**           | tui    | P2    | + `:chaifen` annotation toggle      | Done   |
 
@@ -600,6 +600,61 @@ that job, because a space is a legitimate part of a reading.
 
 **Horizontal layout always shows the markup**, because there is nowhere sensible
 to put a reading in it.
+
+### 標點旁置 — punctuation beside the character (#70)
+
+Set in the classical manner, 。，、？！：；「」 do not take a square of their own:
+they hang in the margin beside the character they belong to, and the text column
+carries nothing but text. `:hanging`, or `[editor] hanging_punctuation`.
+
+**A mark stops being a slot** and joins a character's, so the wrap length, the
+cursor and every motion agree that 「文。」 is one row — the same change of shape
+ruby made, in the same function.
+
+**Which character it joins depends on which way the mark faces.** An opening
+bracket introduces what follows it, so 「 hangs beside 學, not beside the 曰 that
+ended the sentence before it. Everything else — stops, commas, closing brackets —
+belongs to what came before. Getting this backwards is not a rounding error: it
+attaches the quotation mark to the wrong sentence.
+
+**A second mark running keeps the text column clean.** 「？」」 ends a quoted
+question and is common; the closer takes a row of its own, but in the *margin*,
+leaving the text column empty there rather than putting punctuation back into it.
+
+**Against a reading the mark wins the cell, and the reading gives way upward.**
+Both want the one column right of the 縱, and the mark belongs on its character's
+own row. So where marks hang, a reading no longer brackets its base — it takes
+the rows *above* outright, opening a gap between that character and the one
+before:
+
+```
+   z
+   h
+   ī
+  之︐
+```
+
+Dashes and ellipses are deliberately not hung: 「——」 and 「⋯⋯」 are full-width
+rules carrying the line onward, and a half-width margin would break the very
+stroke that makes them read.
+
+### Mouse wheel by 縱 (#71)
+
+The wheel used to move by *character*, which nobody decided: the event loop
+ignored mouse events, so in the alternate screen the terminal translated the
+wheel into Up/Down arrows — and vertically those are the screen-direction keys,
+one character each. A page took as many notches as it had characters on it.
+
+The mouse is now captured and a notch moves three 縱 — the three lines a terminal
+scrolls, counted in the unit the page is set in. **The cost, paid knowingly:**
+capture takes click-and-drag selection away from the terminal, so copying with
+the mouse needs whatever modifier that terminal reserves for it (Option, on
+macOS). Helix makes the same trade.
+
+It moves the **cursor**, not only the view. A view scrolled on its own would be
+pulled straight back the moment the cursor had to stay on screen — the two would
+fight every frame — so the cursor travels with the page, which in a modal editor
+is where you were heading anyway.
 
 ### The prompt's guess (#72)
 

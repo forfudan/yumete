@@ -97,6 +97,15 @@ Early development, but already an interactive modal editor. Implemented so far:
   早`. Falls back to `segmentation.txt` or the bundled list when the IME data is
   absent.
 
+- **#70 標點旁置** — `:hanging` puts 。，、？！：；「」 in the margin beside the
+  character they belong to, the way a 古籍 is punctuated, so the text column
+  carries nothing but text. An opening bracket hangs beside the character it
+  *introduces*; everything else beside the one it follows. Where a mark and a
+  reading want the same cell, the mark wins and the reading gives way upward.
+
+- **#71 Mouse wheel** — a notch turns three 縱. yumete captures the mouse for it,
+  so drag-selection needs the terminal's modifier — the trade Helix makes.
+
 - **#74 Helix tutorial, second pass** — `r` writes a character over the whole
   selection, `A-;` flips which end the cursor is on, `"a` names a register,
   `q`/`Q` record and replay a macro, and `C-d`/`C-u`/`C-f`/`C-b` move by page
