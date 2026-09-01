@@ -261,6 +261,7 @@ Phases are ordered by priority, most writer-critical first:
 | 63  | **Segmentation from Yume's language model** | ime  | P2    | 詞頻表 + 詞彙表 drive `w`/`b`/`e`   | Done   |
 | 64  | **縦中横 in the vertical page**            | core   | P2    | half-width pairs share one slot     | Done   |
 | 65  | 振假名 (ruby) and 圏点                     | tui    | P3    | needs a markup convention first     |        |
+| 66  | **IME in the `/` and `:` lines**           | tui    | P2    | + `:chaifen` annotation toggle      | Done   |
 
 ---
 
@@ -508,6 +509,25 @@ show tofu).
 rotate a glyph, so true 縦中横 for two-digit numbers, ruby, and 圏点 are open.
 The candidate panel drops the 拆分 comment vertically, where it would double the
 panel's height per candidate.
+
+### The IME in the prompt lines (#66)
+
+`/` could only search for what could be typed as ASCII, which in a Chinese novel
+is close to nothing — the IME was gated on Insert mode in all three places it
+appears (the composition route, the lone-Shift toggle, and the candidate panel).
+Committed text also had one destination, the buffer, so it had to learn that a
+mode collecting a *pattern* wants the characters in the pattern.
+
+`:` composes too, since `:s/中文/中文/` is the substitution a writer actually
+runs. It is the one place with an automatic switch: command names are ASCII, so
+entering `:` drops to 英 and leaving hands 中 back. A Shift tap made inside the
+command line is the user's own choice and is left alone on the way out. `/` has
+no such switch — a search pattern is usually Chinese, so carrying the state over
+is the right default.
+
+The prompt caret is measured in **cells**, not characters. It was counting
+characters, which was invisible while patterns were ASCII and would have put the
+caret at half its true position the moment one contained 漢字.
 
 ### 縦中横 (#64)
 

@@ -26,13 +26,13 @@ fn main() -> ExitCode {
                 print_help();
                 return ExitCode::SUCCESS;
             }
-            "-v" | "--version" => {
+            "-V" | "--version" => {
                 println!("yumete {VERSION}");
                 return ExitCode::SUCCESS;
             }
             "-p" | "--preview" => force_preview = true,
-            "--vertical" => force_layout = Some(Layout::Vertical),
-            "--horizontal" => force_layout = Some(Layout::Horizontal),
+            "-v" | "--vertical" => force_layout = Some(Layout::Vertical),
+            "-H" | "--horizontal" => force_layout = Some(Layout::Horizontal),
             // Reject unknown flags, but treat a lone "-" as a filename.
             s if s.starts_with('-') && s != "-" => {
                 eprintln!("yumete: unknown option '{s}'");
@@ -64,6 +64,7 @@ fn main() -> ExitCode {
     // the data directory. When the data is absent the session is unavailable and
     // Insert mode simply types plain ASCII.
     let mut ime = ImeSession::from_default_dirs(Scheme::Lingming);
+    editor.set_chaifen(ime.set_annotations(config.editor.show_chaifen));
 
     // Word segmentation, driving `w`/`b`/`e` and the overlay. Best first:
     //
@@ -122,11 +123,11 @@ ARGS:
             With no FILE, yumete starts with a new, empty scratch buffer.
 
 OPTIONS:
-    --vertical       Lay the text out vertically for this run (縱書), overriding
-                     the config. --horizontal forces the ordinary layout.
+    -v, --vertical   Lay the text out vertically for this run (縱書), overriding
+                     the config. -H / --horizontal forces the ordinary layout.
     -p, --preview    Print a non-interactive preview instead of the editor.
     -h, --help       Print this help and exit.
-    -v, --version    Print the version and exit.
+    -V, --version    Print the version and exit.
 
 KEYS (Normal mode, Helix-style):
     3w 10j    a digit prefix repeats the motion or edit that follows
@@ -154,7 +155,8 @@ KEYS (Normal mode, Helix-style):
     *         search for whatever is selected
     :         command line (:w  :w <path>  :q  :q!  :o <path>  :new
               :s/old/new/[g]  :%s/old/new/[g]  :segment
-              :layout [horizontal|vertical]  :vertical  :horizontal)
+              :layout [horizontal|vertical]  :vertical  :horizontal
+              :chaifen  toggle the 拆分 annotation beside candidates)
 
 Laid out vertically, text runs top to bottom in 縱 that stack from the right
 edge leftward, wrapping every 32 characters (`zong_length`). h j k l keep their

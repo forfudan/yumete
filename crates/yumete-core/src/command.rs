@@ -41,6 +41,9 @@ pub enum Command {
     /// `:layout [horizontal|vertical]` (aliases `:horizontal`, `:vertical`) —
     /// choose the layout (Feature #61). `None` toggles between the two.
     SetLayout(Option<Layout>),
+    /// `:chaifen` (alias `:cf`) — toggle the 拆分 annotation beside candidates
+    /// (Feature #66).
+    ToggleChaifen,
 }
 
 /// An error produced while parsing a command line.
@@ -135,6 +138,7 @@ pub fn parse(input: &str) -> Result<Command, CommandError> {
                     })
             }
         }
+        "chaifen" | "cf" => Ok(Command::ToggleChaifen),
         "vertical" => Ok(Command::SetLayout(Some(Layout::Vertical))),
         "horizontal" => Ok(Command::SetLayout(Some(Layout::Horizontal))),
         other => Err(CommandError::Unknown(other.to_string())),
@@ -256,6 +260,12 @@ mod tests {
                 value: "sideways".into()
             })
         );
+    }
+
+    #[test]
+    fn parses_chaifen_toggle() {
+        assert_eq!(parse(":chaifen"), Ok(Command::ToggleChaifen));
+        assert_eq!(parse(":cf"), Ok(Command::ToggleChaifen));
     }
 
     #[test]

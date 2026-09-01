@@ -105,6 +105,12 @@ pub struct Editor {
     last_find: Option<(FindKind, char)>,
     /// Columns of indentation added by `>` and removed by `<`.
     indent_width: usize,
+    /// Set by `:chaifen`, cleared once the TUI has passed it to the IME. The
+    /// core owns no IME, so a command that configures one leaves a request here
+    /// rather than reaching across the layers.
+    chaifen_request: Option<bool>,
+    /// The last known 拆分 state, so `:chaifen` can toggle it.
+    chaifen: bool,
     /// Whether text is laid out horizontally or vertically (Feature #61).
     layout: Layout,
     /// How many graphemes fit in one 縱. The renderer lowers this when the
@@ -197,6 +203,8 @@ impl Editor {
             insert_recording: String::new(),
             last_find: None,
             indent_width: 4,
+            chaifen_request: None,
+            chaifen: false,
             layout: Layout::default(),
             zong_length: DEFAULT_ZONG_LENGTH,
             goal_slot: 0,
@@ -284,6 +292,11 @@ impl Editor {
                 self.status = format!("{} layout", layout.label());
                 Ok(CommandOutcome::Continue)
             }
+            Command::ToggleChaifen => {
+                self.chaifen = !self.chaifen;
+                self.chaifen_request = Some(self.chaifen);
+                Ok(CommandOutcome::Continue)
+            }
             Command::ToggleSegmentation => {
                 let on = self.toggle_segmentation();
                 self.status = if on {
@@ -369,6 +382,12 @@ impl Editor {
         &self.status
     }
 
+    /// Put a message on the status line (used by the shell for things the core
+    /// cannot see, such as the IME's answer to `:chaifen`).
+    pub fn set_status(&mut self, message: String) {
+        self.status = message;
+    }
+
     /// The 0-based line the cursor is on.
     pub fn cursor_line(&self) -> usize {
         self.current_buffer().rope().char_to_line(self.cursor)
@@ -417,6 +436,17 @@ impl Editor {
     /// Install Normal-mode single-key aliases (from the config keymap).
     pub fn set_key_aliases(&mut self, aliases: HashMap<char, char>) {
         self.key_aliases = aliases;
+    }
+
+    /// Take a pending `:chaifen` request, if one is waiting for the IME.
+    pub fn take_chaifen_request(&mut self) -> Option<bool> {
+        self.chaifen_request.take()
+    }
+
+    /// Tell the editor what the IME actually settled on, so `:chaifen` toggles
+    /// from the truth rather than from what was asked for.
+    pub fn set_chaifen(&mut self, on: bool) {
+        self.chaifen = on;
     }
 
     /// Set how many columns `>` adds and `<` removes.
@@ -475,6 +505,13 @@ impl Editor {
     /// Meaningful in Insert mode; grouped as one undo step (Feature #27).
     pub fn insert_committed(&mut self, text: &str) {
         if text.is_empty() {
+            return;
+        }
+        // A `/` search or a `:` substitution is text too, and in a Chinese
+        // document it is usually Chinese text. Committed characters go wherever
+        // the mode is collecting them, not always into the buffer.
+        if matches!(self.mode, Mode::Command | Mode::Search) {
+            self.command_line.push_str(text);
             return;
         }
         self.snapshot();
@@ -1827,6 +1864,43 @@ mod tests {
         for c in keys.chars() {
             ed.on_key(Key::Char(c));
         }
+    }
+
+    #[test]
+    fn chaifen_command_leaves_a_request_for_the_ime() {
+        let mut ed = Editor::new();
+        assert_eq!(ed.take_chaifen_request(), None);
+        ed.execute(":chaifen").unwrap();
+        assert_eq!(ed.take_chaifen_request(), Some(true));
+        assert_eq!(ed.take_chaifen_request(), None, "taken once only");
+        // The toggle follows what the IME actually settled on, not the request:
+        // a scheme with no 拆分 layer refuses, and the next `:chaifen` still
+        // asks for "on" rather than flipping to "off".
+        ed.set_chaifen(false);
+        ed.execute(":cf").unwrap();
+        assert_eq!(ed.take_chaifen_request(), Some(true));
+    }
+
+    #[test]
+    fn committed_text_goes_to_the_prompt_while_searching() {
+        let mut ed = typed("春江潮水連海平");
+        ed.on_key(Key::Char('/'));
+        // What the IME commits belongs in the search pattern, not the buffer.
+        ed.insert_committed("潮水");
+        assert_eq!(ed.prompt(), Some(('/', "潮水")));
+        assert_eq!(ed.current_buffer().text(), "春江潮水連海平");
+        ed.on_key(Key::Enter);
+        assert_eq!(ed.cursor(), 2, "search jumped to 潮水");
+    }
+
+    #[test]
+    fn committed_text_goes_to_the_command_line_too() {
+        let mut ed = typed("春江潮水");
+        ed.on_key(Key::Char(':'));
+        ed.insert_committed("s/潮水/明月/");
+        assert_eq!(ed.prompt(), Some((':', "s/潮水/明月/")));
+        ed.on_key(Key::Enter);
+        assert_eq!(ed.current_buffer().text(), "春江明月");
     }
 
     #[test]

@@ -113,6 +113,9 @@ pub struct ImeSession {
     scheme: Scheme,
     data_dirs: Vec<PathBuf>,
     available: bool,
+    /// Whether the 拆分 annotation is on (Feature #66). Off by default: it is
+    /// a study aid, and it widens every candidate.
+    annotations: bool,
 }
 
 impl ImeSession {
@@ -129,6 +132,7 @@ impl ImeSession {
             scheme,
             data_dirs,
             available,
+            annotations: false,
         }
     }
 
@@ -145,6 +149,7 @@ impl ImeSession {
             scheme,
             data_dirs: Vec::new(),
             available: true,
+            annotations: false,
         }
     }
 
@@ -161,6 +166,7 @@ impl ImeSession {
             scheme,
             data_dirs: Vec::new(),
             available: true,
+            annotations: false,
         }
     }
 
@@ -328,6 +334,29 @@ impl ImeSession {
                 simp_code: simps.get(i).cloned().unwrap_or_default(),
             })
             .collect()
+    }
+
+    /// Whether this scheme can annotate at all — 拼音 has no 拆分 layer.
+    pub fn annotations_available(&self) -> bool {
+        self.engine.comments_available()
+    }
+
+    /// Whether the 拆分 annotation is switched on.
+    pub fn annotations_enabled(&self) -> bool {
+        self.annotations
+    }
+
+    /// Switch the 拆分 annotation on or off, returning whether it is now on.
+    ///
+    /// The engine keeps a *table* of annotation profiles and an index into it;
+    /// yumete only wants the first one on or nothing at all, so this maps that
+    /// choice onto `set_comment_mode`. A scheme that cannot render annotations
+    /// stays off whatever is asked.
+    pub fn set_annotations(&mut self, on: bool) -> bool {
+        self.annotations = on && self.engine.comments_available();
+        self.engine
+            .set_comment_mode(if self.annotations { Some(0) } else { None });
+        self.annotations
     }
 
     /// A word segmenter over this session's language model (Feature #63).

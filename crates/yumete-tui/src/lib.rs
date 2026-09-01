@@ -63,19 +63,46 @@ pub fn run(editor: &mut Editor, config: &Config, ime: &mut ImeSession) -> io::Re
 
     let mut viewport = Viewport::default();
     let mut shift = ShiftTap::default();
-    let mut shape = None;
+    let mut last_mode = None;
+    // Whether the `:` line borrowed the IME's 中 state and owes it back.
+    let mut restore_chinese = false;
 
     let result = loop {
-        // A block in Normal, a bar in Insert — the shape a modal editor is read
-        // by. Only sent when it changes, so the terminal is not asked to reset
-        // its cursor on every keystroke.
-        let wanted = match editor.mode() {
-            Mode::Insert => SetCursorStyle::SteadyBar,
-            _ => SetCursorStyle::SteadyBlock,
-        };
-        if shape != Some(editor.mode()) {
-            let _ = execute!(stdout(), wanted);
-            shape = Some(editor.mode());
+        let mode = editor.mode();
+        if last_mode != Some(mode) {
+            // A block in Normal, a bar in Insert — the shape a modal editor is
+            // read by. Only sent on a change, so the terminal is not asked to
+            // reset its cursor on every keystroke.
+            let _ = execute!(
+                stdout(),
+                match mode {
+                    Mode::Insert => SetCursorStyle::SteadyBar,
+                    _ => SetCursorStyle::SteadyBlock,
+                }
+            );
+
+            // Command *names* are ASCII, so `:` drops to 英 on the way in and
+            // hands 中 back on the way out — `:w` types straight through, and a
+            // Shift tap still gets Chinese for `:s/中文/中文/`. A tap made
+            // inside the command line is the user's own choice and is left
+            // alone. `/` is untouched: a search pattern is usually Chinese.
+            if ime.available() {
+                if mode == Mode::Command {
+                    if ime.is_composing() {
+                        ime.escape();
+                    }
+                    if ime.is_chinese() {
+                        ime.toggle_language();
+                        restore_chinese = true;
+                    }
+                } else if last_mode == Some(Mode::Command) {
+                    if restore_chinese && !ime.is_chinese() {
+                        ime.toggle_language();
+                    }
+                    restore_chinese = false;
+                }
+            }
+            last_mode = Some(mode);
         }
         // The 縱 wrap length depends on the terminal height, and the motions
         // that cross 縱 run before the next draw, so settle it up front.
@@ -94,7 +121,7 @@ pub fn run(editor: &mut Editor, config: &Config, ime: &mut ImeSession) -> io::Re
                 // activity is swallowed so it never reaches the editor.
                 match shift.update(&key) {
                     ShiftResult::Toggle => {
-                        if editor.mode() == Mode::Insert && ime.available() {
+                        if composes(editor.mode()) && ime.available() {
                             ime.toggle_language();
                         }
                         continue;
@@ -106,7 +133,7 @@ pub fn run(editor: &mut Editor, config: &Config, ime: &mut ImeSession) -> io::Re
                     continue;
                 }
                 let (code, mods) = normalize_shift(key.code, key.modifiers);
-                let consumed = editor.mode() == Mode::Insert
+                let consumed = composes(editor.mode())
                     && ime.available()
                     && ime_handle(ime, editor, code, mods);
                 if !consumed {
@@ -115,6 +142,20 @@ pub fn run(editor: &mut Editor, config: &Config, ime: &mut ImeSession) -> io::Re
                             break Ok(());
                         }
                     }
+                }
+                // `:chaifen` configures the IME, which the core cannot reach;
+                // it leaves the request here and the answer goes back, so the
+                // next toggle starts from what the engine actually did.
+                if let Some(on) = editor.take_chaifen_request() {
+                    let settled = ime.set_annotations(on);
+                    editor.set_chaifen(settled);
+                    editor.set_status(if settled {
+                        "拆分 on".to_string()
+                    } else if ime.annotations_available() {
+                        "拆分 off".to_string()
+                    } else {
+                        "拆分 unavailable for this scheme".to_string()
+                    });
                 }
             }
             Ok(_) => {}
@@ -128,6 +169,16 @@ pub fn run(editor: &mut Editor, config: &Config, ime: &mut ImeSession) -> io::Re
     }
     ratatui::restore();
     result
+}
+
+/// Whether a mode collects text the IME should compose into.
+///
+/// Insert is the obvious one, but a `/` search and a `:` substitution are text
+/// too — and in a Chinese document they are usually Chinese text. Without this,
+/// `/` could only search for what could be typed as ASCII, which in a novel is
+/// almost nothing.
+fn composes(mode: Mode) -> bool {
+    matches!(mode, Mode::Insert | Mode::Search | Mode::Command)
 }
 
 /// Whether a key event should drive the editor.
@@ -372,21 +423,60 @@ fn draw(
     // In vertical layout the cursor is a block drawn into the page: a hardware
     // cursor is one cell wide and would sit lopsided inside a two-cell 縱.
     if let Some((_, text)) = editor.prompt() {
-        let col = 1 + text.chars().count();
+        // Measured in cells, not characters: a Chinese search pattern is twice
+        // as wide as it is long.
+        let col =
+            1 + yumete_cjk::str_width(text) + yumete_cjk::str_width(&prompt_preedit(editor, ime));
         frame.set_cursor_position(Position::new(status_area.x + col as u16, status_area.y));
     } else if editor.layout() == WritingLayout::Horizontal {
         frame.set_cursor_position(Position::new(cursor_x, cursor_y));
     }
 
-    if editor.mode() == Mode::Insert && ime.available() && ime.is_composing() {
-        match editor.layout() {
-            WritingLayout::Horizontal => {
-                draw_candidate_panel(frame, ime, text_area, cursor_x, cursor_y)
+    if composes(editor.mode()) && ime.available() && ime.is_composing() {
+        match editor.prompt() {
+            // A prompt is a horizontal line of text whichever way the page is
+            // set, so its panel is the horizontal one, floating above the
+            // command line.
+            Some((_, text)) => {
+                let col = 1
+                    + yumete_cjk::str_width(text)
+                    + yumete_cjk::str_width(&prompt_preedit(editor, ime));
+                draw_candidate_panel(frame, ime, area, status_area.x + col as u16, status_area.y);
             }
-            WritingLayout::Vertical => {
-                vertical::draw_candidate_panel(frame, ime, text_area, cursor_x, cursor_y)
-            }
+            None => match editor.layout() {
+                WritingLayout::Horizontal => {
+                    draw_candidate_panel(frame, ime, text_area, cursor_x, cursor_y)
+                }
+                WritingLayout::Vertical => {
+                    vertical::draw_candidate_panel(frame, ime, text_area, cursor_x, cursor_y)
+                }
+            },
         }
+    }
+}
+
+/// The 中/英 indicator, or empty when the IME is not engaged in this mode.
+///
+/// It has to show in a `/` prompt as much as in Insert: the whole point of
+/// composing there is that the pattern is Chinese, and without the tag there is
+/// no way to tell why letters are or are not turning into 漢字.
+fn language_tag(editor: &Editor, ime: &ImeSession) -> String {
+    if !composes(editor.mode()) || !ime.available() {
+        return String::new();
+    }
+    if ime.is_chinese() {
+        format!("[中 {}]", ime.scheme_name())
+    } else {
+        "[ABC]".to_string()
+    }
+}
+
+/// The composition in progress, when a `/` or `:` prompt is open.
+fn prompt_preedit(editor: &Editor, ime: &ImeSession) -> String {
+    if editor.prompt().is_some() && ime.available() && ime.is_composing() {
+        ime.display_buffer()
+    } else {
+        String::new()
     }
 }
 
@@ -470,18 +560,21 @@ fn draw_horizontal(
 fn draw_status(frame: &mut Frame, editor: &Editor, ime: &ImeSession, status_area: Rect) {
     let buffer = editor.current_buffer();
     let status = if let Some((prefix, text)) = editor.prompt() {
-        format!("{prefix}{text}")
+        // The composition in progress belongs at the caret, so a search reads as
+        // the pattern being typed rather than jumping into place on commit. The
+        // 中/英 tag is pushed to the right edge, where it cannot be mistaken for
+        // part of the pattern.
+        let line = format!("{prefix}{text}{}", prompt_preedit(editor, ime));
+        let tag = language_tag(editor, ime);
+        let used = yumete_cjk::str_width(&line) + yumete_cjk::str_width(&tag);
+        let gap = (status_area.width as usize).saturating_sub(used);
+        format!("{line}{}{tag}", " ".repeat(gap))
     } else {
         let dirty = if buffer.is_modified() { " [+]" } else { "" };
         // In Insert mode with the IME available, show the 中/英 state + scheme.
-        let ime_tag = if editor.mode() == Mode::Insert && ime.available() {
-            if ime.is_chinese() {
-                format!("[中 {}] ", ime.scheme_name())
-            } else {
-                "[ABC] ".to_string()
-            }
-        } else {
-            String::new()
+        let ime_tag = match language_tag(editor, ime).as_str() {
+            "" => String::new(),
+            tag => format!("{tag} "),
         };
         let left = format!(
             "-- {} --  {}{}{}",
@@ -1056,6 +1149,59 @@ mod tests {
         let text = buffer_text(&buffer);
         assert!(text.contains('吧'), "candidate 吧 not shown in panel");
         assert!(text.contains('八'), "candidate 八 not shown in panel");
+    }
+
+    #[test]
+    fn the_ime_composes_into_a_search_prompt() {
+        let mut editor = editor_with("春江潮水連海平");
+        editor.on_key(Key::Char('/'));
+        let mut ime = ImeSession::from_table_text(Scheme::Lingming, "b 吧 八\n");
+
+        // Letters typed at a `/` prompt compose instead of landing literally.
+        assert!(ime_handle(
+            &mut ime,
+            &mut editor,
+            KeyCode::Char('b'),
+            KeyModifiers::NONE
+        ));
+        assert!(ime.is_composing());
+        assert_eq!(editor.prompt(), Some(('/', "")), "nothing committed yet");
+
+        // …and the committed candidate lands in the pattern, not the buffer.
+        assert!(ime_handle(
+            &mut ime,
+            &mut editor,
+            KeyCode::Char(' '),
+            KeyModifiers::NONE
+        ));
+        assert_eq!(editor.prompt(), Some(('/', "吧")));
+        assert_eq!(editor.current_buffer().text(), "春江潮水連海平");
+    }
+
+    #[test]
+    fn the_prompt_shows_the_preedit_and_the_language_tag() {
+        let mut editor = editor_with("春江潮水");
+        editor.on_key(Key::Char('/'));
+        let mut ime = ImeSession::from_table_text(Scheme::Lingming, "b 吧\n");
+        ime.input('b');
+        let config = Config::default();
+        let buffer = render_with(&editor, &config, &ime, 60, 8);
+
+        let status: String = (0..buffer.area.width)
+            .map(|x| buffer[(x, buffer.area.height - 1)].symbol())
+            .collect();
+        assert!(status.starts_with("/b"), "preedit missing: {status:?}");
+        assert!(status.contains("[中"), "language tag missing: {status:?}");
+    }
+
+    /// Every text-collecting mode composes; Normal must not, or `/` itself
+    /// would be swallowed by the IME.
+    #[test]
+    fn only_text_modes_compose() {
+        assert!(composes(Mode::Insert));
+        assert!(composes(Mode::Search));
+        assert!(composes(Mode::Command));
+        assert!(!composes(Mode::Normal));
     }
 
     #[test]

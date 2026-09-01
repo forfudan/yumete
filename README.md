@@ -57,6 +57,14 @@ Early development, but already an interactive modal editor. Implemented so far:
   terminal such as kitty, WezTerm, Ghostty, or recent iTerm2, not Apple Terminal);
   number mode, `/`-commands, and `z` reverse come from the engine.
 
+- **#66 IME in the search and command lines** — `/` composes Chinese, so a
+  Chinese document can actually be searched; a lone-Shift tap toggles 中/英 there
+  too, the preedit shows inline and the candidate panel floats above the prompt.
+  `:` gets the same, so `:s/中文/中文/` works — but drops to 英 on the way in and
+  hands 中 back on the way out, because command *names* are ASCII. `:chaifen`
+  toggles the 拆分 annotation beside candidates (off by default,
+  `[editor] show_chaifen`).
+
 - **#64 縦中横** — a short run of half-width alphanumerics is turned sideways
   into a single slot, so `第12章` reads as three rows and `1985年` as `19`/`85`/`年`
   rather than a stack of loose digits. A slot is two cells, so two characters is

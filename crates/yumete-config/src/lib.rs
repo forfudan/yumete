@@ -55,6 +55,9 @@ pub struct EditorConfig {
     pub zong_length: usize,
     /// The gap between two 縱, in half-width cells (0–4).
     pub zong_gap: usize,
+    /// Whether the 拆分 annotation is shown beside candidates (Feature #66).
+    /// Off by default: it is a study aid, and it widens every candidate.
+    pub show_chaifen: bool,
 }
 
 impl Default for EditorConfig {
@@ -68,6 +71,7 @@ impl Default for EditorConfig {
             layout: Layout::Horizontal,
             zong_length: DEFAULT_ZONG_LENGTH,
             zong_gap: DEFAULT_ZONG_GAP,
+            show_chaifen: false,
         }
     }
 }
@@ -248,6 +252,7 @@ struct RawEditor {
     layout: Option<String>,
     zong_length: Option<usize>,
     zong_gap: Option<usize>,
+    show_chaifen: Option<bool>,
 }
 
 #[derive(Deserialize, Default)]
@@ -288,6 +293,9 @@ impl RawConfig {
         }
         if other.editor.zong_gap.is_some() {
             self.editor.zong_gap = other.editor.zong_gap;
+        }
+        if other.editor.show_chaifen.is_some() {
+            self.editor.show_chaifen = other.editor.show_chaifen;
         }
         if other.theme.selection.is_some() {
             self.theme.selection = other.theme.selection;
@@ -331,6 +339,9 @@ impl RawConfig {
         }
         if let Some(gap) = self.editor.zong_gap {
             config.editor.zong_gap = gap.min(4);
+        }
+        if let Some(on) = self.editor.show_chaifen {
+            config.editor.show_chaifen = on;
         }
         if let Some(hex) = self.theme.selection {
             if let Some(rgb) = parse_hex(&hex) {
