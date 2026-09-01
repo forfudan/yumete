@@ -23,12 +23,47 @@
 
 use ropey::Rope;
 
+use crate::ruby::Dialects;
 use yumete_cjk::{grapheme_width, graphemes};
 
 // The layout choice and the typographic defaults are CJK typesetting facts, not
 // editor state, so they live in `yumete-cjk` and are re-exported here where the
 // rest of the core reaches for them.
 pub use yumete_cjk::vertical::{Layout, DEFAULT_ZONG_GAP, DEFAULT_ZONG_LENGTH};
+
+/// How a buffer is gridded into 縱.
+///
+/// Two settings travel together everywhere, so they travel as one value: the
+/// wrap length, and whether `<ruby>` markup is *laid out* or left as the text it
+/// is. Both change where a slot boundary falls, so any function that answers a
+/// question about slots needs both — a cursor positioned under one and drawn
+/// under the other would sit in the wrong row.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Grid {
+    /// Graphemes per 縱.
+    pub zong_len: usize,
+    /// Which ruby dialects are laid out as readings. Empty shows the markup as
+    /// the text it is.
+    pub ruby: Dialects,
+}
+
+impl Grid {
+    pub fn new(zong_len: usize, ruby: Dialects) -> Grid {
+        Grid {
+            zong_len: zong_len.max(1),
+            ruby,
+        }
+    }
+}
+
+impl Default for Grid {
+    fn default() -> Grid {
+        Grid::new(
+            DEFAULT_ZONG_LENGTH,
+            Dialects::only(crate::ruby::Dialect::Html),
+        )
+    }
+}
 
 /// One 縱: a single vertical run of text on screen.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -79,6 +114,12 @@ fn line_count(rope: &Rope) -> usize {
     rope.len_lines()
 }
 
+/// The characters of `line`, line break stripped — what the ruby parser and the
+/// slot layout both work over.
+pub fn line_chars(rope: &Rope, line: usize) -> Vec<char> {
+    line_text(rope, line).chars().collect()
+}
+
 /// The text of `line` with its line break stripped.
 fn line_text(rope: &Rope, line: usize) -> String {
     let mut text = rope.line(line).to_string();
@@ -98,6 +139,113 @@ fn line_text(rope: &Rope, line: usize) -> String {
 /// This is what makes 「第<b>12</b>章」 read as a number rather than a stack of
 /// loose digits, and it is why the vertical layout can show a year at all.
 const TATECHUYOKO: usize = 2;
+
+/// One row of a 縱: what it draws, and which characters it stands for.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct Slot {
+    /// Char offset within the line where this row's text begins.
+    pub start: usize,
+    /// One past its last character. Equal to `start` for a padding row opened to
+    /// make space for a long reading.
+    pub end: usize,
+    /// The two-cell body, punctuation already rotated. Empty for a padding row.
+    pub text: String,
+    /// The reading character drawn in the column to the right, if any.
+    pub ruby: Option<char>,
+}
+
+/// Split a line into the rows a 縱 draws it as.
+///
+/// With `ruby` off this is just the slot run: one grapheme per row, half-width
+/// alphanumerics paired 縦中横. With it on, a `<ruby>` group is *laid out*: the
+/// markup disappears, the reading is dealt out down the ruby column, and the
+/// base is centred over however many rows the reading needs. That spacing is
+/// what real typesetting does and is why two adjacent readings never collide.
+pub fn line_slots(text: &str, ruby: Dialects) -> Vec<Slot> {
+    let chars: Vec<char> = text.chars().collect();
+    let groups = crate::ruby::groups(&chars, ruby);
+    let mut slots = Vec::new();
+    let mut at = 0usize;
+    for group in &groups {
+        push_plain(&mut slots, &chars, at, group.start);
+        push_ruby(&mut slots, &chars, group);
+        at = group.end;
+    }
+    push_plain(&mut slots, &chars, at, chars.len());
+    slots
+}
+
+/// Lay out `chars[from..to]` as ordinary rows.
+fn push_plain(slots: &mut Vec<Slot>, chars: &[char], from: usize, to: usize) {
+    if from >= to {
+        return;
+    }
+    let text: String = chars[from..to].iter().collect();
+    let offsets = slot_offsets(&text);
+    for w in offsets.windows(2) {
+        let body: String = chars[from + w[0]..from + w[1]].iter().collect();
+        slots.push(Slot {
+            start: from + w[0],
+            end: from + w[1],
+            text: rotate(&body),
+            ruby: None,
+        });
+    }
+}
+
+/// Lay out one ruby group: the base centred against its reading.
+fn push_ruby(slots: &mut Vec<Slot>, chars: &[char], group: &crate::ruby::Ruby) {
+    let base = group.base_text(chars);
+    let reading: Vec<char> = group.reading_text(chars).to_vec();
+    // The base's own rows, then as many more as the reading needs.
+    let base_rows: Vec<(usize, usize)> = {
+        let text: String = base.iter().collect();
+        slot_offsets(&text)
+            .windows(2)
+            .map(|w| (group.base.0 + w[0], group.base.0 + w[1]))
+            .collect()
+    };
+    let rows = base_rows.len().max(reading.len()).max(1);
+    // Centre the base in the span, so the reading brackets it rather than
+    // hanging off one end.
+    let top = (rows - base_rows.len()) / 2;
+
+    let base_end = base_rows.last().map_or(group.base.0, |&(_, b)| b);
+    for row in 0..rows {
+        let (start, end, body) = match row.checked_sub(top).and_then(|i| base_rows.get(i)) {
+            Some(&(a, b)) => (a, b, chars[a..b].iter().collect::<String>()),
+            // A padding row stands for no characters of its own. It still has to
+            // sit in document order — above the base it reports the group's
+            // start, below it the base's end — or the rows stop being sorted and
+            // nothing can look the cursor up in them.
+            None if row < top => (group.start, group.start, String::new()),
+            None => (base_end, base_end, String::new()),
+        };
+        slots.push(Slot {
+            start,
+            end,
+            text: rotate(&body),
+            ruby: reading.get(row).copied(),
+        });
+    }
+    // The very first row owns the whole group's markup, so a cursor stepping
+    // over it steps over the tags too rather than into them.
+    if let Some(first) = slots.len().checked_sub(rows).and_then(|i| slots.get_mut(i)) {
+        first.start = group.start;
+    }
+    if let Some(last) = slots.last_mut() {
+        last.end = group.end;
+    }
+}
+
+/// Substitute the vertical presentation form, if the body is a lone character
+/// that has one.
+fn rotate(body: &str) -> String {
+    match yumete_cjk::vertical_grapheme(body) {
+        Some(c) => c.to_string(),
+        None => body.to_string(),
+    }
+}
 
 /// The char offset of every **slot** boundary in `text`, including the end.
 ///
@@ -133,28 +281,34 @@ fn slot_offsets(text: &str) -> Vec<usize> {
 
 /// How many 縱 the logical `line` wraps into (always at least one, so an empty
 /// paragraph still occupies a column).
-pub fn zong_count_in_line(rope: &Rope, line: usize, zong_len: usize) -> usize {
-    let zong_len = zong_len.max(1);
-    let total = slot_offsets(&line_text(rope, line)).len() - 1;
-    total.div_ceil(zong_len).max(1)
+pub fn zong_count_in_line(rope: &Rope, line: usize, grid: Grid) -> usize {
+    let total = line_grid(rope, line, grid).len();
+    total.div_ceil(grid.zong_len.max(1)).max(1)
+}
+
+/// The rows `line` draws as, under `grid`.
+fn line_grid(rope: &Rope, line: usize, grid: Grid) -> Vec<Slot> {
+    line_slots(&line_text(rope, line), grid.ruby)
 }
 
 /// Locate the char index `pos` in the 縱 grid.
-pub fn position(rope: &Rope, pos: usize, zong_len: usize) -> Position {
-    let zong_len = zong_len.max(1);
+pub fn position(rope: &Rope, pos: usize, grid: Grid) -> Position {
+    let zong_len = grid.zong_len.max(1);
     let line = rope.char_to_line(pos.min(rope.len_chars()));
     let start = rope.line_to_char(line);
-    let offsets = slot_offsets(&line_text(rope, line));
-    let total = offsets.len() - 1;
+    let slots = line_grid(rope, line, grid);
+    let total = slots.len();
 
-    // Which slot the cursor sits in (or `total`, past the last one). A slot can
-    // span two characters, so this is the last one that *starts* at or before
-    // the cursor, not the first one that reaches it.
+    // Which slot the cursor sits in (or `total`, past the last one). A slot may
+    // span several characters — a 縦中横 pair, or a whole ruby group's markup —
+    // so this is the last one that *starts* at or before the cursor, not the
+    // first one that reaches it.
     let col = pos.saturating_sub(start);
-    let g = offsets
-        .partition_point(|&o| o <= col)
-        .saturating_sub(1)
-        .min(total);
+    let g = if slots.last().is_some_and(|s| col >= s.end) {
+        total
+    } else {
+        slots.partition_point(|s| s.start <= col).saturating_sub(1)
+    };
 
     let mut index_in_line = g / zong_len;
     let mut slot = g % zong_len;
@@ -174,15 +328,15 @@ pub fn position(rope: &Rope, pos: usize, zong_len: usize) -> Position {
 
 /// The slot the cursor occupies within its 縱 — the "goal slot" preserved when
 /// moving between 縱, the way a goal column is preserved between lines.
-pub fn slot_of(rope: &Rope, pos: usize, zong_len: usize) -> usize {
-    position(rope, pos, zong_len).slot
+pub fn slot_of(rope: &Rope, pos: usize, grid: Grid) -> usize {
+    position(rope, pos, grid).slot
 }
 
 /// The largest slot the caret may occupy in a given 縱. The last 縱 of a
 /// paragraph has one extra slot for the end-of-paragraph caret.
-fn max_slot(rope: &Rope, line: usize, index_in_line: usize, zong_len: usize) -> usize {
-    let zong_len = zong_len.max(1);
-    let total = slot_offsets(&line_text(rope, line)).len() - 1;
+fn max_slot(rope: &Rope, line: usize, index_in_line: usize, grid: Grid) -> usize {
+    let zong_len = grid.zong_len.max(1);
+    let total = line_grid(rope, line, grid).len();
     let count = total.div_ceil(zong_len).max(1);
     if index_in_line + 1 >= count {
         total - index_in_line * zong_len
@@ -192,45 +346,48 @@ fn max_slot(rope: &Rope, line: usize, index_in_line: usize, zong_len: usize) -> 
 }
 
 /// The char index of `slot` in the `index_in_line`-th 縱 of `line`.
-fn char_at(rope: &Rope, line: usize, index_in_line: usize, slot: usize, zong_len: usize) -> usize {
-    let zong_len = zong_len.max(1);
+fn char_at(rope: &Rope, line: usize, index_in_line: usize, slot: usize, grid: Grid) -> usize {
+    let zong_len = grid.zong_len.max(1);
     let start = rope.line_to_char(line);
-    let offsets = slot_offsets(&line_text(rope, line));
-    let total = offsets.len() - 1;
-    let g = (index_in_line * zong_len + slot).min(total);
-    start + offsets[g]
+    let slots = line_grid(rope, line, grid);
+    let g = index_in_line * zong_len + slot;
+    match slots.get(g) {
+        Some(slot) => start + slot.start,
+        // Past the last slot: the end-of-paragraph caret.
+        None => start + slots.last().map_or(0, |s| s.end),
+    }
 }
 
 /// Move to the **next** 縱 — the one drawn to the *left*, since 縱 run right to
 /// left — keeping `goal_slot` where the new 縱 is long enough. Stays put at the
 /// end of the buffer.
-pub fn next_zong(rope: &Rope, pos: usize, zong_len: usize, goal_slot: usize) -> usize {
-    let p = position(rope, pos, zong_len);
-    let (line, index) = if p.index_in_line + 1 < zong_count_in_line(rope, p.line, zong_len) {
+pub fn next_zong(rope: &Rope, pos: usize, grid: Grid, goal_slot: usize) -> usize {
+    let p = position(rope, pos, grid);
+    let (line, index) = if p.index_in_line + 1 < zong_count_in_line(rope, p.line, grid) {
         (p.line, p.index_in_line + 1)
     } else if p.line + 1 < line_count(rope) {
         (p.line + 1, 0)
     } else {
         return pos;
     };
-    let slot = goal_slot.min(max_slot(rope, line, index, zong_len));
-    char_at(rope, line, index, slot, zong_len)
+    let slot = goal_slot.min(max_slot(rope, line, index, grid));
+    char_at(rope, line, index, slot, grid)
 }
 
 /// Move to the **previous** 縱 — the one drawn to the *right* — keeping
 /// `goal_slot`. Stays put at the start of the buffer.
-pub fn prev_zong(rope: &Rope, pos: usize, zong_len: usize, goal_slot: usize) -> usize {
-    let p = position(rope, pos, zong_len);
+pub fn prev_zong(rope: &Rope, pos: usize, grid: Grid, goal_slot: usize) -> usize {
+    let p = position(rope, pos, grid);
     let (line, index) = if p.index_in_line > 0 {
         (p.line, p.index_in_line - 1)
     } else if p.line > 0 {
         let line = p.line - 1;
-        (line, zong_count_in_line(rope, line, zong_len) - 1)
+        (line, zong_count_in_line(rope, line, grid) - 1)
     } else {
         return pos;
     };
-    let slot = goal_slot.min(max_slot(rope, line, index, zong_len));
-    char_at(rope, line, index, slot, zong_len)
+    let slot = goal_slot.min(max_slot(rope, line, index, grid));
+    char_at(rope, line, index, slot, grid)
 }
 
 /// Which 縱 a page is anchored at: a paragraph, and which piece of it.
@@ -259,16 +416,16 @@ impl From<Position> for Anchor {
 /// Costs one pass over each *paragraph the page touches*, not over the
 /// document: a 縱 that continues the previous one reuses the segmentation
 /// already done for its paragraph.
-pub fn zongs_from(rope: &Rope, anchor: Anchor, zong_len: usize, n: usize) -> Vec<Zong> {
-    let zong_len = zong_len.max(1);
+pub fn zongs_from(rope: &Rope, anchor: Anchor, grid: Grid, n: usize) -> Vec<Zong> {
+    let zong_len = grid.zong_len.max(1);
     let lines = line_count(rope);
     let mut zongs = Vec::with_capacity(n);
     let mut line = anchor.line;
     let mut index = anchor.index_in_line;
     while zongs.len() < n && line < lines {
         let start = rope.line_to_char(line);
-        let offsets = slot_offsets(&line_text(rope, line));
-        let total = offsets.len() - 1;
+        let slots = line_grid(rope, line, grid);
+        let total = slots.len();
         let count = total.div_ceil(zong_len).max(1);
         while index < count && zongs.len() < n {
             let first = index * zong_len;
@@ -276,8 +433,12 @@ pub fn zongs_from(rope: &Rope, anchor: Anchor, zong_len: usize, n: usize) -> Vec
             zongs.push(Zong {
                 line,
                 index_in_line: index,
-                start: start + offsets[first],
-                end: start + offsets[last],
+                start: start + slots.get(first).map_or(0, |s| s.start),
+                end: start
+                    + last
+                        .checked_sub(1)
+                        .and_then(|i| slots.get(i))
+                        .map_or(0, |s| s.end),
                 slots: last - first,
             });
             index += 1;
@@ -290,7 +451,7 @@ pub fn zongs_from(rope: &Rope, anchor: Anchor, zong_len: usize, n: usize) -> Vec
 
 /// The anchor `n` 縱 *before* `anchor` — that is, `n` to the right — clamped to
 /// the first 縱 of the buffer.
-pub fn retreat(rope: &Rope, anchor: Anchor, zong_len: usize, mut n: usize) -> Anchor {
+pub fn retreat(rope: &Rope, anchor: Anchor, grid: Grid, mut n: usize) -> Anchor {
     let mut line = anchor.line;
     let mut index = anchor.index_in_line;
     loop {
@@ -307,7 +468,7 @@ pub fn retreat(rope: &Rope, anchor: Anchor, zong_len: usize, mut n: usize) -> An
         // of the one before it.
         n -= index + 1;
         line -= 1;
-        index = zong_count_in_line(rope, line, zong_len) - 1;
+        index = zong_count_in_line(rope, line, grid) - 1;
     }
 }
 
@@ -317,20 +478,14 @@ pub fn retreat(rope: &Rope, anchor: Anchor, zong_len: usize, mut n: usize) -> An
 /// Bounded on purpose: the renderer only ever needs to know where the cursor
 /// sits *within the page*, and giving up past the page keeps this proportional
 /// to the screen rather than to the document.
-pub fn distance(
-    rope: &Rope,
-    from: Anchor,
-    to: Anchor,
-    zong_len: usize,
-    limit: usize,
-) -> Option<usize> {
+pub fn distance(rope: &Rope, from: Anchor, to: Anchor, grid: Grid, limit: usize) -> Option<usize> {
     let lines = line_count(rope);
     if from.line >= lines || to < from {
         return None;
     }
     let mut line = from.line;
     let mut index = from.index_in_line;
-    let mut count = zong_count_in_line(rope, line, zong_len);
+    let mut count = zong_count_in_line(rope, line, grid);
     for step in 0..=limit {
         if line == to.line && index == to.index_in_line {
             return Some(step);
@@ -342,7 +497,7 @@ pub fn distance(
                 return None;
             }
             index = 0;
-            count = zong_count_in_line(rope, line, zong_len);
+            count = zong_count_in_line(rope, line, grid);
         }
     }
     None
@@ -353,13 +508,13 @@ pub fn distance(
 /// Only the renderer needs this; motion answers its questions from the cursor's
 /// own line. It walks the whole document, which is why the renderer calls it
 /// once per frame rather than per query.
-pub fn layout(rope: &Rope, zong_len: usize) -> Vec<Zong> {
-    let zong_len = zong_len.max(1);
+pub fn layout(rope: &Rope, grid: Grid) -> Vec<Zong> {
+    let zong_len = grid.zong_len.max(1);
     let mut zongs = Vec::new();
     for line in 0..line_count(rope) {
         let start = rope.line_to_char(line);
-        let offsets = slot_offsets(&line_text(rope, line));
-        let total = offsets.len() - 1;
+        let slots = line_grid(rope, line, grid);
+        let total = slots.len();
         let count = total.div_ceil(zong_len).max(1);
         for index_in_line in 0..count {
             let first = index_in_line * zong_len;
@@ -367,13 +522,35 @@ pub fn layout(rope: &Rope, zong_len: usize) -> Vec<Zong> {
             zongs.push(Zong {
                 line,
                 index_in_line,
-                start: start + offsets[first],
-                end: start + offsets[last],
+                start: start + slots.get(first).map_or(0, |s| s.start),
+                end: start
+                    + last
+                        .checked_sub(1)
+                        .and_then(|i| slots.get(i))
+                        .map_or(0, |s| s.end),
                 slots: last - first,
             });
         }
     }
     zongs
+}
+
+/// The rows one 縱 draws, ready to paint.
+///
+/// Taken from the whole paragraph's layout rather than from the 縱's own text,
+/// because a ruby group must not be re-parsed from a slice that might cut it in
+/// half at a 縱 boundary.
+pub fn zong_slots(rope: &Rope, zong: &Zong, grid: Grid) -> Vec<Slot> {
+    let zong_len = grid.zong_len.max(1);
+    let mut slots = line_grid(rope, zong.line, grid);
+    let first = zong.index_in_line * zong_len;
+    let last = (first + zong_len).min(slots.len());
+    if first >= last {
+        return Vec::new();
+    }
+    slots.drain(..first);
+    slots.truncate(last - first);
+    slots
 }
 
 /// The index into [`layout`] of the 縱 holding char index `pos`.
@@ -413,8 +590,8 @@ pub fn slot_text(text: &str) -> Vec<String> {
 /// This is what the terminal draws, minus colour and the cursor — it exists so
 /// `yumete --preview --vertical` can show the layout on stdout, and so the
 /// vertical page can be diffed in a test without a terminal backend.
-pub fn render_page(rope: &Rope, zong_len: usize, gap: usize) -> Vec<String> {
-    let mut zongs = layout(rope, zong_len);
+pub fn render_page(rope: &Rope, grid: Grid, gap: usize) -> Vec<String> {
+    let mut zongs = layout(rope, grid);
     // A file's trailing newline opens an empty line that the editor needs (the
     // caret has to have somewhere to go) but a printed page does not, exactly as
     // the horizontal preview drops the same phantom line.
@@ -422,10 +599,19 @@ pub fn render_page(rope: &Rope, zong_len: usize, gap: usize) -> Vec<String> {
         zongs.pop();
     }
     let rows = zongs.iter().map(|z| z.slots).max().unwrap_or(0);
+    let annotated = !grid.ruby.is_empty();
     // Every 縱's slots, top to bottom; the page is then read across.
-    let columns: Vec<Vec<String>> = zongs
+    // Each 縱 contributes its bodies and, beside them, its readings — the same
+    // two columns the terminal draws.
+    let columns: Vec<(Vec<String>, Vec<Option<char>>)> = zongs
         .iter()
-        .map(|z| slot_text(&rope.slice(z.start..z.end).to_string()))
+        .map(|z| {
+            let rows = zong_slots(rope, z, grid);
+            (
+                rows.iter().map(|s| s.text.clone()).collect(),
+                rows.iter().map(|s| s.ruby).collect(),
+            )
+        })
         .collect();
 
     let spacer = " ".repeat(gap);
@@ -433,11 +619,11 @@ pub fn render_page(rope: &Rope, zong_len: usize, gap: usize) -> Vec<String> {
         .map(|row| {
             let mut line = String::new();
             // 縱 0 is the rightmost, so the page is written in reverse order.
-            for (i, column) in columns.iter().enumerate().rev() {
+            for (i, (bodies, readings)) in columns.iter().enumerate().rev() {
                 if i + 1 != columns.len() {
                     line.push_str(&spacer);
                 }
-                match column.get(row) {
+                match bodies.get(row) {
                     // Pad a half-width grapheme out to the full slot so the
                     // columns stay aligned.
                     Some(g) => {
@@ -447,6 +633,11 @@ pub fn render_page(rope: &Rope, zong_len: usize, gap: usize) -> Vec<String> {
                         }
                     }
                     None => line.push_str("  "),
+                }
+                // The reading sits to the *right* of its base, which in a
+                // right-to-left page means after it in the written line.
+                if annotated {
+                    line.push(readings.get(row).copied().flatten().unwrap_or(' '));
                 }
             }
             // Only the padding is trimmed, never the text: an ideographic
@@ -461,6 +652,17 @@ pub fn render_page(rope: &Rope, zong_len: usize, gap: usize) -> Vec<String> {
 mod tests {
     use super::*;
 
+    /// The grid these tests read against: the default wrap length, ruby layout
+    /// off, so they exercise the slot model alone. The ruby tests build their
+    /// own grid.
+    /// Readings written in HTML, the dialect the Yuhao documents use.
+    const HTML_ONLY: Dialects = Dialects(1 << (crate::ruby::Dialect::Html as u8));
+
+    const G: Grid = Grid {
+        zong_len: 32,
+        ruby: Dialects::NONE,
+    };
+
     fn rope(text: &str) -> Rope {
         Rope::from_str(text)
     }
@@ -468,7 +670,7 @@ mod tests {
     #[test]
     fn a_short_paragraph_is_one_zong() {
         let r = rope("春江潮水連海平");
-        let zongs = layout(&r, 32);
+        let zongs = layout(&r, G);
         assert_eq!(zongs.len(), 1);
         assert_eq!(zongs[0].slots, 7);
         assert!(zongs[0].starts_line());
@@ -477,7 +679,7 @@ mod tests {
     #[test]
     fn a_long_paragraph_wraps_into_several_zong() {
         let r = rope(&"字".repeat(70));
-        let zongs = layout(&r, 32);
+        let zongs = layout(&r, G);
         assert_eq!(zongs.len(), 3);
         assert_eq!(zongs[0].slots, 32);
         assert_eq!(zongs[1].slots, 32);
@@ -490,7 +692,7 @@ mod tests {
     #[test]
     fn an_empty_paragraph_still_takes_a_zong() {
         let r = rope("上\n\n下");
-        let zongs = layout(&r, 32);
+        let zongs = layout(&r, G);
         assert_eq!(zongs.len(), 3);
         assert_eq!(zongs[1].slots, 0);
         assert_eq!(zongs[1].line, 1);
@@ -499,13 +701,13 @@ mod tests {
     #[test]
     fn position_reports_the_piece_and_slot() {
         let r = rope(&"字".repeat(70));
-        assert_eq!(position(&r, 0, 32).slot, 0);
-        assert_eq!(position(&r, 31, 32).index_in_line, 0);
-        assert_eq!(position(&r, 31, 32).slot, 31);
-        assert_eq!(position(&r, 32, 32).index_in_line, 1);
-        assert_eq!(position(&r, 32, 32).slot, 0);
-        assert_eq!(position(&r, 70, 32).index_in_line, 2);
-        assert_eq!(position(&r, 70, 32).slot, 6);
+        assert_eq!(position(&r, 0, G).slot, 0);
+        assert_eq!(position(&r, 31, G).index_in_line, 0);
+        assert_eq!(position(&r, 31, G).slot, 31);
+        assert_eq!(position(&r, 32, G).index_in_line, 1);
+        assert_eq!(position(&r, 32, G).slot, 0);
+        assert_eq!(position(&r, 70, G).index_in_line, 2);
+        assert_eq!(position(&r, 70, G).slot, 6);
     }
 
     /// A paragraph that fills its last 縱 exactly parks the caret on the spare
@@ -513,8 +715,8 @@ mod tests {
     #[test]
     fn end_of_an_exactly_full_paragraph_uses_the_spare_slot() {
         let r = rope(&"字".repeat(32));
-        assert_eq!(layout(&r, 32).len(), 1);
-        let p = position(&r, 32, 32);
+        assert_eq!(layout(&r, G).len(), 1);
+        let p = position(&r, 32, G);
         assert_eq!(p.index_in_line, 0);
         assert_eq!(p.slot, 32);
     }
@@ -523,33 +725,33 @@ mod tests {
     fn next_zong_walks_left_within_and_across_paragraphs() {
         let r = rope(&format!("{}\n{}", "字".repeat(70), "文".repeat(5)));
         // Slot 3 of the first 縱 → slot 3 of the second.
-        let pos = next_zong(&r, 3, 32, 3);
-        assert_eq!(position(&r, pos, 32).index_in_line, 1);
-        assert_eq!(position(&r, pos, 32).slot, 3);
+        let pos = next_zong(&r, 3, G, 3);
+        assert_eq!(position(&r, pos, G).index_in_line, 1);
+        assert_eq!(position(&r, pos, G).slot, 3);
         // From the paragraph's last 縱 into the next paragraph, whose 縱 is
         // shorter — the slot is clamped to its end.
-        let pos = next_zong(&r, 64 + 3, 32, 3);
-        assert_eq!(position(&r, pos, 32).line, 1);
-        assert_eq!(position(&r, pos, 32).slot, 3);
-        let pos = next_zong(&r, 64 + 30, 32, 30);
-        assert_eq!(position(&r, pos, 32).line, 1);
-        assert_eq!(position(&r, pos, 32).slot, 5);
+        let pos = next_zong(&r, 64 + 3, G, 3);
+        assert_eq!(position(&r, pos, G).line, 1);
+        assert_eq!(position(&r, pos, G).slot, 3);
+        let pos = next_zong(&r, 64 + 30, G, 30);
+        assert_eq!(position(&r, pos, G).line, 1);
+        assert_eq!(position(&r, pos, G).slot, 5);
     }
 
     #[test]
     fn prev_zong_walks_right_and_stops_at_the_start() {
         let r = rope(&"字".repeat(70));
-        let pos = prev_zong(&r, 40, 32, 8);
-        assert_eq!(position(&r, pos, 32).index_in_line, 0);
-        assert_eq!(position(&r, pos, 32).slot, 8);
+        let pos = prev_zong(&r, 40, G, 8);
+        assert_eq!(position(&r, pos, G).index_in_line, 0);
+        assert_eq!(position(&r, pos, G).slot, 8);
         // Already in the first 縱 of the first paragraph: stay put.
-        assert_eq!(prev_zong(&r, 5, 32, 5), 5);
+        assert_eq!(prev_zong(&r, 5, G, 5), 5);
     }
 
     #[test]
     fn next_zong_stops_at_the_end_of_the_buffer() {
         let r = rope("終");
-        assert_eq!(next_zong(&r, 0, 32, 0), 0);
+        assert_eq!(next_zong(&r, 0, G, 0), 0);
     }
 
     /// A file's trailing newline opens one more 縱, and the caret must land on
@@ -558,20 +760,20 @@ mod tests {
     #[test]
     fn a_trailing_newline_opens_a_zong_for_the_caret() {
         let r = rope("上下\n");
-        let zongs = layout(&r, 32);
+        let zongs = layout(&r, G);
         assert_eq!(zongs.len(), 2);
         assert_eq!(zongs[1].line, 1);
         assert_eq!(zongs[1].slots, 0);
 
         let end = r.len_chars();
         assert_eq!(zong_index(&zongs, end), 1);
-        let p = position(&r, end, 32);
+        let p = position(&r, end, G);
         assert_eq!((p.line, p.index_in_line, p.slot), (1, 0, 0));
 
         // …and `h` can still walk onto it, rather than being dead there.
-        let onto = next_zong(&r, 0, 32, 0);
-        assert_eq!(position(&r, onto, 32).line, 1);
-        assert_eq!(next_zong(&r, end, 32, 0), end, "nothing past the last 縱");
+        let onto = next_zong(&r, 0, G, 0);
+        assert_eq!(position(&r, onto, G).line, 1);
+        assert_eq!(next_zong(&r, end, G, 0), end, "nothing past the last 縱");
     }
 
     #[test]
@@ -588,7 +790,7 @@ mod tests {
                 line: 0,
                 index_in_line: 1,
             },
-            32,
+            G,
             4,
         );
         assert_eq!(page.len(), 4);
@@ -606,7 +808,7 @@ mod tests {
                     line: 2,
                     index_in_line: 1
                 },
-                32,
+                G,
                 5
             )
             .len(),
@@ -627,29 +829,25 @@ mod tests {
             index_in_line: 1,
         };
         // 0,0 · 0,1 · 0,2 · 1,0 · 2,0 · 2,1 — six 縱 in all.
-        assert_eq!(retreat(&r, last, 32, 5), Anchor::default());
+        assert_eq!(retreat(&r, last, G, 5), Anchor::default());
         assert_eq!(
-            retreat(&r, last, 32, 2),
+            retreat(&r, last, G, 2),
             Anchor {
                 line: 1,
                 index_in_line: 0
             }
         );
         // Clamps rather than wrapping.
-        assert_eq!(retreat(&r, last, 32, 99), Anchor::default());
+        assert_eq!(retreat(&r, last, G, 99), Anchor::default());
 
-        assert_eq!(distance(&r, Anchor::default(), last, 32, 10), Some(5));
+        assert_eq!(distance(&r, Anchor::default(), last, G, 10), Some(5));
         assert_eq!(
-            distance(&r, Anchor::default(), last, 32, 4),
+            distance(&r, Anchor::default(), last, G, 4),
             None,
             "past the limit"
         );
-        assert_eq!(
-            distance(&r, last, Anchor::default(), 32, 10),
-            None,
-            "behind"
-        );
-        assert_eq!(distance(&r, last, last, 32, 10), Some(0));
+        assert_eq!(distance(&r, last, Anchor::default(), G, 10), None, "behind");
+        assert_eq!(distance(&r, last, last, G, 10), Some(0));
     }
 
     /// The windowed walk and the whole-document layout must agree, or the page
@@ -662,29 +860,29 @@ mod tests {
             "文",
             "句".repeat(33)
         ));
-        let all = layout(&r, 32);
+        let all = layout(&r, G);
         for skip in 0..all.len() {
             let anchor = Anchor {
                 line: all[skip].line,
                 index_in_line: all[skip].index_in_line,
             };
             assert_eq!(
-                zongs_from(&r, anchor, 32, all.len()),
+                zongs_from(&r, anchor, G, all.len()),
                 all[skip..],
                 "from {skip}"
             );
             assert_eq!(
-                distance(&r, Anchor::default(), anchor, 32, all.len()),
+                distance(&r, Anchor::default(), anchor, G, all.len()),
                 Some(skip)
             );
-            assert_eq!(retreat(&r, anchor, 32, skip), Anchor::default());
+            assert_eq!(retreat(&r, anchor, G, skip), Anchor::default());
         }
     }
 
     #[test]
     fn zong_index_finds_the_column_holding_a_position() {
         let r = rope(&format!("{}\n{}", "字".repeat(70), "文".repeat(5)));
-        let zongs = layout(&r, 32);
+        let zongs = layout(&r, G);
         assert_eq!(zong_index(&zongs, 0), 0);
         assert_eq!(zong_index(&zongs, 35), 1);
         assert_eq!(zong_index(&zongs, 65), 2);
@@ -696,7 +894,7 @@ mod tests {
     #[test]
     fn render_page_lays_columns_out_right_to_left() {
         let r = rope("上下\n左右");
-        let page = render_page(&r, 32, 1);
+        let page = render_page(&r, G, 1);
         // Two 縱, the first paragraph on the right.
         assert_eq!(page, vec!["左 上".to_string(), "右 下".to_string()]);
     }
@@ -705,14 +903,89 @@ mod tests {
     fn render_page_drops_the_phantom_trailing_zong() {
         // The editor shows a column for the trailing newline; a printed page
         // must not open with a blank one.
-        assert_eq!(render_page(&rope("上下\n"), 32, 1), vec!["上", "下"]);
+        assert_eq!(render_page(&rope("上下\n"), G, 1), vec!["上", "下"]);
     }
 
     #[test]
     fn render_page_rotates_punctuation() {
         let r = rope("「甲」。");
-        let page = render_page(&r, 32, 1);
+        let page = render_page(&r, G, 1);
         assert_eq!(page, vec!["﹁", "甲", "﹂", "︒"]);
+    }
+
+    /// The reading is longer than the base, so the base is spaced out to make
+    /// room — mono-ruby with spacing, which is what keeps two adjacent readings
+    /// from colliding.
+    #[test]
+    fn a_ruby_group_spaces_its_base_against_the_reading() {
+        let ruby = Grid::new(32, Dialects::only(crate::ruby::Dialect::Html));
+        let slots = line_slots("他<ruby>口<rt>kǒu</rt></ruby>很", HTML_ONLY);
+        let bodies: Vec<&str> = slots.iter().map(|s| s.text.as_str()).collect();
+        assert_eq!(
+            bodies,
+            ["他", "", "口", "", "很"],
+            "口 centred in three rows"
+        );
+        let readings: Vec<Option<char>> = slots.iter().map(|s| s.ruby).collect();
+        assert_eq!(
+            readings,
+            [None, Some('k'), Some('ǒ'), Some('u'), None],
+            "the reading runs beside the space it opened"
+        );
+
+        // The markup itself never takes a row of its own.
+        let r = rope("他<ruby>口<rt>kǒu</rt></ruby>很");
+        assert_eq!(layout(&r, ruby)[0].slots, 5);
+    }
+
+    #[test]
+    fn two_adjacent_readings_do_not_collide() {
+        let slots = line_slots(
+            "<ruby>口<rt>kǒu</rt></ruby><ruby>囗<rt>wéi</rt></ruby>",
+            HTML_ONLY,
+        );
+        assert_eq!(slots.len(), 6, "three rows each");
+        let readings: String = slots.iter().filter_map(|s| s.ruby).collect();
+        assert_eq!(readings, "kǒuwéi");
+    }
+
+    #[test]
+    fn a_reading_shorter_than_its_base_does_not_shrink_it() {
+        let slots = line_slots("<ruby>漢字<rt>hz</rt></ruby>", HTML_ONLY);
+        let bodies: Vec<&str> = slots.iter().map(|s| s.text.as_str()).collect();
+        assert_eq!(bodies, ["漢", "字"]);
+        assert_eq!(
+            slots.iter().map(|s| s.ruby).collect::<Vec<_>>(),
+            [Some('h'), Some('z')]
+        );
+    }
+
+    /// With ruby layout off the markup is exactly the text it is, so it can be
+    /// read and edited.
+    #[test]
+    fn ruby_off_shows_the_markup() {
+        let slots = line_slots("<ruby>口<rt>kǒu</rt></ruby>", Dialects::NONE);
+        let bodies: String = slots.iter().map(|s| s.text.as_str()).collect();
+        assert_eq!(bodies, "<ruby>口<rt>kǒu</rt></ruby>");
+        assert!(slots.iter().all(|s| s.ruby.is_none()));
+    }
+
+    /// The cursor has to land inside the group, and stepping over it must not
+    /// walk through the tags one character at a time.
+    #[test]
+    fn the_cursor_steps_over_a_ruby_group_by_row() {
+        let ruby = Grid::new(32, Dialects::only(crate::ruby::Dialect::Html));
+        let r = rope("他<ruby>口<rt>kǒu</rt></ruby>很");
+        assert_eq!(position(&r, 0, ruby).slot, 0, "他");
+        // Anywhere inside the group maps to one of its three rows.
+        for pos in 1..r.len_chars() - 1 {
+            let slot = position(&r, pos, ruby).slot;
+            assert!(
+                (1..=3).contains(&slot) || slot == 4,
+                "pos {pos} → slot {slot}"
+            );
+        }
+        assert_eq!(position(&r, r.len_chars() - 1, ruby).slot, 4, "很");
     }
 
     /// Slots are grapheme clusters, so an ideographic variation sequence takes
@@ -722,14 +995,14 @@ mod tests {
     #[test]
     fn digits_pack_sideways_into_one_slot() {
         let r = rope("第12章");
-        let zongs = layout(&r, 32);
+        let zongs = layout(&r, G);
         assert_eq!(zongs[0].slots, 3, "第 / 12 / 章");
         assert_eq!(slot_text("第12章"), ["第", "12", "章"]);
 
         // The cursor agrees: the character after the pair is slot 2, not 3.
-        assert_eq!(position(&r, 1, 32).slot, 1, "on the 1");
-        assert_eq!(position(&r, 2, 32).slot, 1, "still inside the pair");
-        assert_eq!(position(&r, 3, 32).slot, 2, "on 章");
+        assert_eq!(position(&r, 1, G).slot, 1, "on the 1");
+        assert_eq!(position(&r, 2, G).slot, 1, "still inside the pair");
+        assert_eq!(position(&r, 3, G).slot, 2, "on 章");
     }
 
     #[test]
@@ -743,8 +1016,8 @@ mod tests {
     #[test]
     fn a_variation_sequence_fills_one_slot() {
         let r = rope("葛\u{E0100}城");
-        let zongs = layout(&r, 32);
+        let zongs = layout(&r, G);
         assert_eq!(zongs[0].slots, 2);
-        assert_eq!(position(&r, 2, 32).slot, 1);
+        assert_eq!(position(&r, 2, G).slot, 1);
     }
 }

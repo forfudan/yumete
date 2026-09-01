@@ -59,6 +59,18 @@ fn main() -> ExitCode {
     editor.set_layout(force_layout.unwrap_or(config.editor.layout));
     editor.set_zong_length(config.editor.zong_length);
     editor.set_indent_width(config.editor.tab_width);
+    // Which ruby dialect to lay out: whatever the config names, else the one
+    // the file's extension implies.
+    editor
+        .execute(if config.editor.show_ruby {
+            ":ruby-on"
+        } else {
+            ":ruby-off"
+        })
+        .ok();
+    for name in &config.editor.ruby_dialects {
+        let _ = editor.execute(&format!(":render-ruby-{name}"));
+    }
 
     // The built-in Yume IME (Feature #27): load the default scheme's tables from
     // the data directory. When the data is absent the session is unavailable and
@@ -156,7 +168,17 @@ KEYS (Normal mode, Helix-style):
     :         command line (:w  :w <path>  :q  :q!  :o <path>  :new
               :s/old/new/[g]  :%s/old/new/[g]  :segment
               :layout [horizontal|vertical]  :vertical  :horizontal
-              :chaifen  toggle the 拆分 annotation beside candidates)
+              :chaifen  toggle the 拆分 annotation beside candidates
+              :ruby       edit the reading at the cursor, or annotate the
+                          selection — opens Ruby mode in the status line
+              :ruby-on / :ruby-off   lay readings out, or show the markup)
+
+Ruby mode (`:ruby`) edits the *reading*, which with readings laid out is not on
+screen to move the cursor into. It opens on the group under the cursor with its
+current reading loaded, or on the selection with an empty one; Enter writes it,
+an empty reading takes the annotation off, Esc leaves it alone. A reading split
+by `|` into as many parts as the base has characters annotates each character
+separately — `hàn|zì` over 漢字 — while `hàn zì` stays one reading over the word.
 
 Laid out vertically, text runs top to bottom in 縱 that stack from the right
 edge leftward, wrapping every 32 characters (`zong_length`). h j k l keep their
@@ -198,11 +220,9 @@ fn preview(editor: &Editor, config: &yumete_config::Config) {
     // Vertical layout (Feature #61): print the page itself. Line numbers would
     // mean nothing here — the reading order is what there is to look at.
     if editor.layout() == Layout::Vertical {
-        for line in yumete_core::zong::render_page(
-            buf.rope(),
-            config.editor.zong_length,
-            config.editor.zong_gap,
-        ) {
+        for line in
+            yumete_core::zong::render_page(buf.rope(), editor.grid(), config.editor.zong_gap)
+        {
             println!("{line}");
         }
         return;

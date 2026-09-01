@@ -15,6 +15,13 @@ pub enum Mode {
     Command,
     /// Editing a `/` or `?` search pattern.
     Search,
+    /// Editing the *reading* of a ruby group (Feature #65).
+    ///
+    /// A reading is a second layer of text: with ruby laid out, the `<rt>` is
+    /// not on screen at all, so the cursor cannot be moved into it. This mode is
+    /// where it is edited instead — one line in the status bar, the IME
+    /// available, exactly like a search pattern.
+    Ruby,
 }
 
 impl Mode {
@@ -25,6 +32,7 @@ impl Mode {
             Mode::Insert => "INSERT",
             Mode::Command => "COMMAND",
             Mode::Search => "SEARCH",
+            Mode::Ruby => "RUBY",
         }
     }
 }

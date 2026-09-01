@@ -28,7 +28,7 @@ use ratatui::Frame;
 
 use yumete_config::{Config, LineNumbers};
 use yumete_core::zong::{Anchor, Layout as WritingLayout};
-use yumete_core::{Editor, Key, KeyOutcome, Mode, TextStore};
+use yumete_core::{command, Editor, Key, KeyOutcome, Mode, TextStore};
 use yumete_ime::ImeSession;
 
 /// Run the interactive editor until the user quits.
@@ -73,10 +73,16 @@ pub fn run(editor: &mut Editor, config: &Config, ime: &mut ImeSession) -> io::Re
             // A block in Normal, a bar in Insert — the shape a modal editor is
             // read by. Only sent on a change, so the terminal is not asked to
             // reset its cursor on every keystroke.
+            // A bar in Insert — but laid out vertically the bar turns with the
+            // text, and an underscore is the only thin *horizontal* cursor a
+            // terminal offers. Elsewhere a block, which vertically is drawn into
+            // the page instead and the terminal's own cursor stays hidden.
+            let vertical = editor.layout() == WritingLayout::Vertical;
             let _ = execute!(
                 stdout(),
-                match mode {
-                    Mode::Insert => SetCursorStyle::SteadyBar,
+                match (mode, vertical) {
+                    (Mode::Insert, false) => SetCursorStyle::SteadyBar,
+                    (Mode::Insert, true) => SetCursorStyle::SteadyUnderScore,
                     _ => SetCursorStyle::SteadyBlock,
                 }
             );
@@ -109,7 +115,8 @@ pub fn run(editor: &mut Editor, config: &Config, ime: &mut ImeSession) -> io::Re
         if editor.layout() == WritingLayout::Vertical {
             if let Ok(size) = terminal.size() {
                 let lines = editor.current_buffer().line_count();
-                editor.set_zong_length(vertical::zong_length_for(config, size.height, lines));
+                let ruby = !editor.ruby().is_empty();
+                editor.set_zong_length(vertical::zong_length_for(config, size.height, lines, ruby));
             }
         }
         if let Err(err) = terminal.draw(|frame| draw(frame, editor, config, ime, &mut viewport)) {
@@ -178,7 +185,12 @@ pub fn run(editor: &mut Editor, config: &Config, ime: &mut ImeSession) -> io::Re
 /// `/` could only search for what could be typed as ASCII, which in a novel is
 /// almost nothing.
 fn composes(mode: Mode) -> bool {
-    matches!(mode, Mode::Insert | Mode::Search | Mode::Command)
+    // Ruby included: a reading is kana or 拼音, and kana needs the IME as much
+    // as the body text does.
+    matches!(
+        mode,
+        Mode::Insert | Mode::Search | Mode::Command | Mode::Ruby
+    )
 }
 
 /// Whether a key event should drive the editor.
@@ -419,6 +431,7 @@ fn draw(
     };
 
     draw_status(frame, editor, ime, status_area);
+    draw_command_menu(frame, editor, area, status_area);
 
     // In vertical layout the cursor is a block drawn into the page: a hardware
     // cursor is one cell wide and would sit lopsided inside a two-cell 縱.
@@ -428,7 +441,10 @@ fn draw(
         let col =
             1 + yumete_cjk::str_width(text) + yumete_cjk::str_width(&prompt_preedit(editor, ime));
         frame.set_cursor_position(Position::new(status_area.x + col as u16, status_area.y));
-    } else if editor.layout() == WritingLayout::Horizontal {
+    } else if editor.layout() == WritingLayout::Horizontal || editor.mode() == Mode::Insert {
+        // Vertically the terminal's cursor is shown only in Insert, where it is
+        // the caret; in Normal the block is painted into the page and a second,
+        // half-width cursor on top of it would only confuse.
         frame.set_cursor_position(Position::new(cursor_x, cursor_y));
     }
 
@@ -468,6 +484,85 @@ fn language_tag(editor: &Editor, ime: &ImeSession) -> String {
         format!("[中 {}]", ime.scheme_name())
     } else {
         "[ABC]".to_string()
+    }
+}
+
+/// Draw the command menu above the command line.
+///
+/// Twenty-odd commands is past the point where they can be remembered, so `:`
+/// on its own lists them and every keystroke narrows the list. It is laid out in
+/// as many aligned columns as fit, tallest-first down each column, because a
+/// single column of twenty would cover the page it is being run against.
+fn draw_command_menu(frame: &mut Frame, editor: &Editor, area: Rect, status: Rect) {
+    let Some((':', typed)) = editor.prompt() else {
+        return;
+    };
+    let matches = command::complete(typed);
+    if matches.is_empty() {
+        return;
+    }
+
+    // A column is the widest name plus its help, and they all share one width so
+    // the help lines up down the menu.
+    let name_w = matches
+        .iter()
+        .map(|e| e.name.chars().count() + e.alias.map_or(0, |a| a.chars().count() + 3))
+        .max()
+        .unwrap_or(0);
+    let help_w = matches
+        .iter()
+        .map(|e| e.help.chars().count())
+        .max()
+        .unwrap_or(0);
+    let col_w = (name_w + help_w + 4) as u16;
+    let columns = ((area.width / col_w.max(1)) as usize).clamp(1, 4);
+    let rows = matches.len().div_ceil(columns);
+    let height = (rows as u16).min(area.height.saturating_sub(1));
+    if height == 0 {
+        return;
+    }
+
+    let width = (col_w * columns as u16).min(area.width);
+    let menu = Rect::new(area.x, status.y.saturating_sub(height), width, height);
+    frame.render_widget(Clear, menu);
+
+    let ground = Style::default().bg(Color::Rgb(0x26, 0x2a, 0x27));
+    let name_style = ground.fg(Color::Rgb(0xcf, 0xc6, 0xa9));
+    let help_style = ground.fg(Color::Rgb(0x9c, 0x97, 0x82));
+    let buf = frame.buffer_mut();
+    for y in 0..height {
+        for x in 0..width {
+            if let Some(cell) = buf.cell_mut((menu.x + x, menu.y + y)) {
+                cell.set_symbol(" ").set_style(ground);
+            }
+        }
+    }
+    for (i, entry) in matches.iter().enumerate() {
+        // Down each column, then across — so an alphabetical list still reads
+        // alphabetically.
+        let (col, row) = (i / rows, i % rows);
+        let x = menu.x + col as u16 * col_w + 1;
+        let y = menu.y + row as u16;
+        if row as u16 >= height || x >= menu.x + width {
+            continue;
+        }
+        let name = match entry.alias {
+            Some(alias) => format!("{} ({alias})", entry.name),
+            None => entry.name.to_string(),
+        };
+        let mut put = |text: &str, at: u16, style: Style| {
+            for (n, ch) in text.chars().enumerate() {
+                let cx = at + n as u16;
+                if cx >= menu.x + width {
+                    break;
+                }
+                if let Some(cell) = buf.cell_mut((cx, y)) {
+                    cell.set_symbol(&ch.to_string()).set_style(style);
+                }
+            }
+        };
+        put(&name, x, name_style);
+        put(entry.help, x + name_w as u16 + 2, help_style);
     }
 }
 
@@ -728,6 +823,23 @@ mod tests {
         w: u16,
         h: u16,
     ) -> ratatui::buffer::Buffer {
+        // Ruby off: these read the slot grid itself, and the reading column
+        // would step every coordinate in by a cell. `render_vertical_ruby`
+        // covers the other side.
+        editor.set_ruby(yumete_core::ruby::Dialects::NONE);
+        render_vertical_with(editor, config, &no_ime(), w, h)
+    }
+
+    /// Render vertically with ruby layout on.
+    fn render_vertical_ruby(
+        editor: &mut Editor,
+        config: &Config,
+        w: u16,
+        h: u16,
+    ) -> ratatui::buffer::Buffer {
+        editor.set_ruby(yumete_core::ruby::Dialects::only(
+            yumete_core::ruby::Dialect::Html,
+        ));
         render_vertical_with(editor, config, &no_ime(), w, h)
     }
 
@@ -741,7 +853,8 @@ mod tests {
     ) -> ratatui::buffer::Buffer {
         editor.set_layout(WritingLayout::Vertical);
         let lines = editor.current_buffer().line_count();
-        editor.set_zong_length(vertical::zong_length_for(config, h, lines));
+        let ruby = !editor.ruby().is_empty();
+        editor.set_zong_length(vertical::zong_length_for(config, h, lines, ruby));
         render_with(editor, config, ime, w, h)
     }
 
@@ -815,6 +928,39 @@ mod tests {
     }
 
     #[test]
+    fn a_reading_runs_beside_the_base_it_annotates() {
+        let mut editor = editor_with("他<ruby>口<rt>kǒu</rt></ruby>很");
+        let config = vertical_config();
+        let buffer = render_vertical_ruby(&mut editor, &config, 20, 12);
+
+        // The page steps in one cell so the rightmost 縱 has a reading column.
+        assert_eq!(at(&buffer, 17, 0), "他");
+        // 口 is centred against its three-character reading, and the markup
+        // itself is gone from the page.
+        assert_eq!(at(&buffer, 17, 1), " ", "spacing above the base");
+        assert_eq!(at(&buffer, 17, 2), "口");
+        assert_eq!(at(&buffer, 17, 4), "很");
+        // …and the reading runs down the cell to its right.
+        let reading: String = (1..4).map(|y| at(&buffer, 19, y)).collect();
+        assert_eq!(reading, "kǒu");
+        assert!(
+            !buffer_text(&buffer).contains("<rt>"),
+            "markup must not show"
+        );
+    }
+
+    #[test]
+    fn ruby_off_shows_the_markup_in_the_page() {
+        let mut editor = editor_with("<ruby>口<rt>kǒu</rt></ruby>");
+        let config = vertical_config();
+        let buffer = render_vertical(&mut editor, &config, 20, 24);
+        // The tags take rows of their own — packed 縦中横, so `<ruby>` reads down
+        // the 縱 as `<` `ru` `by` `>` rather than as one string.
+        let column: Vec<String> = (0..8).map(|y| at(&buffer, 18, y)).collect();
+        assert_eq!(column, ["<", "ru", "by", ">", "口", "<", "rt", ">"]);
+    }
+
+    #[test]
     fn digits_are_set_tatechuyoko_in_the_page() {
         let mut editor = editor_with("第12章");
         let config = vertical_config();
@@ -875,6 +1021,26 @@ mod tests {
         assert_eq!(at(&buffer, 18, 1), "甲");
         assert_eq!(at(&buffer, 16, 0), "2");
         assert_eq!(at(&buffer, 15, 1), "丁");
+    }
+
+    #[test]
+    fn the_insert_caret_is_the_terminals_own_cursor() {
+        let mut editor = editor_with("甲乙丙");
+        editor.set_layout(WritingLayout::Vertical);
+        editor.on_key(Key::Char('i')); // Insert
+        let config = vertical_config();
+        let buffer = render_vertical(&mut editor, &config, 20, 12);
+
+        // Nothing in the page is repainted for the caret: the character keeps
+        // its own colour and is not underlined.
+        let style = buffer[(18, 0)].style();
+        assert!(!style.add_modifier.contains(Modifier::REVERSED));
+        assert!(!style.add_modifier.contains(Modifier::UNDERLINED));
+        assert!(
+            matches!(style.fg, None | Some(Color::Reset)),
+            "the character must not be recoloured, got {:?}",
+            style.fg
+        );
     }
 
     #[test]
@@ -947,36 +1113,55 @@ mod tests {
     }
 
     #[test]
-    fn a_code_hint_packs_two_letters_to_a_slot() {
+    fn candidates_are_numbered_with_circled_chinese_numerals() {
         let mut editor = Editor::new();
         editor.on_key(Key::Char('i'));
-        // A candidate whose code needs three more letters: `jvy` must read as
-        // `jv` over `y`, not as three rows.
-        let mut ime = ImeSession::from_table_text(Scheme::Lingming, "a 啊\najvy 奧\n");
-        ime.input('a');
+        let mut ime = ImeSession::from_table_text(Scheme::Lingming, "b 吧 八\n");
+        ime.input('b');
         let config = vertical_config();
-        let buffer = render_vertical_with(&mut editor, &config, &ime, 40, 14);
+        let buffer = render_vertical_with(&mut editor, &config, &ime, 40, 16);
 
-        let text = buffer_text(&buffer);
-        assert!(text.contains("jv"), "code hint not packed 縦中横: {text:?}");
-        // The panel stays shallow: border, digit, candidate, two hint rows,
-        // border — six rows, where one letter per row would need seven.
-        let border_rows: Vec<u16> = (0..buffer.area.height)
-            .filter(|&y| (0..buffer.area.width).any(|x| buffer[(x, y)].symbol() == "\u{256d}"))
-            .collect();
-        let top = border_rows[0];
-        let bottom = (top..buffer.area.height)
-            .find(|&y| (0..buffer.area.width).any(|x| buffer[(x, y)].symbol() == "\u{2570}"))
-            .expect("panel has a bottom border");
-        assert!(
-            bottom - top <= 5,
-            "panel too deep: {} rows",
-            bottom - top + 1
-        );
+        let find = |needle: &str| {
+            (0..buffer.area.height)
+                .flat_map(|y| (0..buffer.area.width).map(move |x| (x, y)))
+                .find(|&(x, y)| buffer[(x, y)].symbol() == needle)
+        };
+        let (x1, y1) = find("㊀").expect("first candidate numbered ㊀");
+        assert_eq!(find("㊁").map(|(_, y)| y), Some(y1), "㊁ on the same row");
+        // A blank row separates the number from the candidate it labels.
+        assert_eq!(at(&buffer, x1, y1 + 1), " ", "gap under the number");
+        assert_eq!(at(&buffer, x1, y1 + 2), "吧");
     }
 
     #[test]
-    fn the_chaifen_hangs_below_the_preedit_when_the_engine_annotates() {
+    fn the_code_reads_down_the_header_and_across_under_its_column() {
+        let mut editor = Editor::new();
+        editor.on_key(Key::Char('i'));
+        // The only match needs three more letters, so it is the highlighted one
+        // and the header carries its code.
+        let mut ime = ImeSession::from_table_text(Scheme::Lingming, "ajvy 奧\n");
+        ime.input('a');
+        let config = vertical_config();
+        let buffer = render_vertical_with(&mut editor, &config, &ime, 40, 16);
+
+        // The typed code runs down the rightmost column of the panel, one
+        // character to a row like everything else in it.
+        let find = |needle: &str| {
+            (0..buffer.area.height)
+                .flat_map(|y| (0..buffer.area.width).map(move |x| (x, y)))
+                .find(|&(x, y)| buffer[(x, y)].symbol() == needle)
+        };
+        let (hx, hy) = find("a").expect("the typed code, in the header column");
+        let (cx, _) = find("奧").expect("the annotated candidate");
+        assert!(hx > cx, "the header sits to the right of the candidates");
+
+        // The 下標 is a row of its own under the candidate, not stacked into it.
+        let subscript: String = (0..3).map(|d| at(&buffer, cx + d, hy + 3)).collect();
+        assert_eq!(subscript, "jvy", "下標 written across, under its column");
+    }
+
+    #[test]
+    fn the_chaifen_joins_the_header_when_the_engine_annotates() {
         let mut editor = Editor::new();
         editor.on_key(Key::Char('i'));
         // `code text completion comment` — the fourth field is the 拆分.
@@ -1003,6 +1188,33 @@ mod tests {
         match (find("\u{256d}"), find("\u{2570}")) {
             (Some(top), Some(bottom)) => bottom - top + 1,
             _ => 0,
+        }
+    }
+
+    /// An empty symbol is a wide glyph's *continuation* to the renderer, so it
+    /// emits nothing and slides the rest of the row a column left — which is how
+    /// the panel came to paint its ground over its own border.
+    #[test]
+    fn no_cell_is_ever_left_with_an_empty_symbol() {
+        let mut editor = editor_with("那年冬天");
+        editor.on_key(Key::Char('a'));
+        let mut ime = ImeSession::from_table_text(Scheme::Lingming, "b 吧 八\n");
+        ime.input('b');
+        let config = Config::default();
+        for (w, h) in [(40, 16), (24, 12), (60, 24)] {
+            let buffer = render_vertical_with(&mut editor, &config, &ime, w, h);
+            for y in 0..buffer.area.height {
+                for x in 0..buffer.area.width {
+                    let cell = &buffer[(x, y)];
+                    // Ratatui itself leaves continuation cells empty; what must
+                    // not happen is an empty cell carrying a *style*, which is
+                    // what a slot written with no text produced.
+                    assert!(
+                        !cell.symbol().is_empty() || cell.style().bg.is_none(),
+                        "styled empty cell at {x},{y}"
+                    );
+                }
+            }
         }
     }
 
@@ -1067,8 +1279,9 @@ mod tests {
         let second = find("八");
         assert!(first.0 > second.0, "candidates must run right to left");
         assert_eq!(first.1, second.1, "candidates must share a row");
-        assert_eq!(at(&buffer, first.0, first.1 - 1), "1");
-        assert_eq!(at(&buffer, second.0, second.1 - 1), "2");
+        // Two rows up, past the gap, is the 帶圈中文數字 numbering it.
+        assert_eq!(at(&buffer, first.0, first.1 - 2), "㊀");
+        assert_eq!(at(&buffer, second.0, second.1 - 2), "㊁");
     }
 
     #[test]
@@ -1149,6 +1362,61 @@ mod tests {
         let text = buffer_text(&buffer);
         assert!(text.contains('吧'), "candidate 吧 not shown in panel");
         assert!(text.contains('八'), "candidate 八 not shown in panel");
+    }
+
+    #[test]
+    fn the_command_menu_lists_and_narrows() {
+        let mut editor = editor_with("那年冬天");
+        let config = Config::default();
+
+        // `:` on its own offers everything.
+        editor.on_key(Key::Char(':'));
+        let buffer = render_with(&editor, &config, &no_ime(), 90, 24);
+        let text = buffer_text(&buffer);
+        assert!(text.contains("write"), "menu should list commands: absent");
+        assert!(text.contains("save"), "…with what they do");
+
+        // Typing narrows it, and the commands that no longer match go away.
+        for c in "ruby".chars() {
+            editor.on_key(Key::Char(c));
+        }
+        let buffer = render_with(&editor, &config, &no_ime(), 90, 24);
+        let text = buffer_text(&buffer);
+        assert!(text.contains("ruby-off"), "still matching");
+        assert!(!text.contains("write"), "no longer matching");
+    }
+
+    #[test]
+    fn the_command_menu_sits_above_the_command_line() {
+        let mut editor = editor_with("那年冬天");
+        editor.on_key(Key::Char(':'));
+        editor.on_key(Key::Char('r'));
+        let config = Config::default();
+        let buffer = render_with(&editor, &config, &no_ime(), 90, 24);
+
+        // The command line is the last row; the menu is directly above it and
+        // never covers it.
+        let last: String = (0..buffer.area.width)
+            .map(|x| buffer[(x, buffer.area.height - 1)].symbol())
+            .collect();
+        assert!(last.starts_with(":r"), "command line intact: {last:?}");
+        let above: String = (0..buffer.area.width)
+            .map(|x| buffer[(x, buffer.area.height - 2)].symbol())
+            .collect();
+        assert!(
+            above.contains("ruby") || above.contains("redo"),
+            "{above:?}"
+        );
+    }
+
+    /// A search prompt is not a command line and gets no menu.
+    #[test]
+    fn only_the_command_line_gets_a_menu() {
+        let mut editor = editor_with("那年冬天");
+        editor.on_key(Key::Char('/'));
+        let config = Config::default();
+        let buffer = render_with(&editor, &config, &no_ime(), 90, 24);
+        assert!(!buffer_text(&buffer).contains("redo"));
     }
 
     #[test]

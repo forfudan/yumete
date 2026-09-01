@@ -18,14 +18,27 @@ use crate::buffer::Buffer;
 use crate::command::{self, Command, CommandError};
 use crate::input::{Key, Mode};
 use crate::motion;
+use crate::ruby::{Dialect, Dialects};
 use crate::text_store::TextStore;
-use crate::zong::{self, Layout, DEFAULT_ZONG_LENGTH};
+use crate::zong::{self, Grid, Layout, DEFAULT_ZONG_LENGTH};
 
 /// A snapshot of a buffer's content for undo/redo.
 struct EditSnapshot {
     rope: Rope,
     cursor: usize,
     modified: bool,
+}
+
+/// What Ruby mode will write when the reading is submitted.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum RubyTarget {
+    /// A group already in the text: its whole span, and the base inside it.
+    Existing {
+        span: (usize, usize),
+        base: (usize, usize),
+    },
+    /// A stretch of plain text to wrap in new markup.
+    New { span: (usize, usize) },
 }
 
 /// A pending multi-key operator awaiting its next key.
@@ -111,6 +124,12 @@ pub struct Editor {
     chaifen_request: Option<bool>,
     /// The last known 拆分 state, so `:chaifen` can toggle it.
     chaifen: bool,
+    /// What Ruby mode is editing the reading of.
+    ruby_target: Option<RubyTarget>,
+    /// Which ruby dialects are laid out as readings (Feature #65). Vertical
+    /// layout only — horizontal always shows the markup, since there is nowhere
+    /// sensible to put a reading in it.
+    ruby: Dialects,
     /// Whether text is laid out horizontally or vertically (Feature #61).
     layout: Layout,
     /// How many graphemes fit in one 縱. The renderer lowers this when the
@@ -205,6 +224,8 @@ impl Editor {
             indent_width: 4,
             chaifen_request: None,
             chaifen: false,
+            ruby_target: None,
+            ruby: Dialects::only(crate::ruby::Dialect::Html),
             layout: Layout::default(),
             zong_length: DEFAULT_ZONG_LENGTH,
             goal_slot: 0,
@@ -292,6 +313,30 @@ impl Editor {
                 self.status = format!("{} layout", layout.label());
                 Ok(CommandOutcome::Continue)
             }
+            Command::Ruby => {
+                self.enter_ruby_mode();
+                Ok(CommandOutcome::Continue)
+            }
+            Command::RenderRuby { dialect, on } => {
+                match dialect {
+                    Some(d) => self.render_ruby(d, on),
+                    // Bare `:ruby-on` means the dialect this file is written in;
+                    // bare `:ruby-off` means all of them.
+                    None if on => self.ruby = Dialects::only(self.file_dialect()),
+                    None => self.ruby = Dialects::NONE,
+                }
+                let listed: Vec<&str> = self.ruby.iter().map(|d| d.name()).collect();
+                self.status = if listed.is_empty() {
+                    "ruby markup shown".to_string()
+                } else {
+                    format!("ruby rendered: {}", listed.join(", "))
+                };
+                Ok(CommandOutcome::Continue)
+            }
+            Command::FormatRuby(dialect) => {
+                self.format_ruby(dialect);
+                Ok(CommandOutcome::Continue)
+            }
             Command::ToggleChaifen => {
                 self.chaifen = !self.chaifen;
                 self.chaifen_request = Some(self.chaifen);
@@ -373,6 +418,7 @@ impl Editor {
                 if self.search_forward { '/' } else { '?' },
                 &self.command_line,
             )),
+            Mode::Ruby => Some(('注', &self.command_line)),
             _ => None,
         }
     }
@@ -428,9 +474,35 @@ impl Editor {
         self.zong_length = length.max(1);
     }
 
+    /// How this buffer is gridded into 縱 — the wrap length plus whether ruby is
+    /// laid out. Every 縱 question takes this, so the cursor and the page can
+    /// never disagree about where a row begins.
+    pub fn grid(&self) -> Grid {
+        Grid::new(self.zong_length, self.ruby)
+    }
+
+    /// Which ruby dialects are being laid out.
+    pub fn ruby(&self) -> Dialects {
+        self.ruby
+    }
+
+    /// Replace the set of dialects being laid out.
+    pub fn set_ruby(&mut self, dialects: Dialects) {
+        self.ruby = dialects;
+    }
+
+    /// Start laying out one more dialect, keeping the others.
+    pub fn render_ruby(&mut self, dialect: crate::ruby::Dialect, on: bool) {
+        if on {
+            self.ruby.insert(dialect);
+        } else {
+            self.ruby.remove(dialect);
+        }
+    }
+
     /// Where the cursor sits in the 縱 grid (for the status line).
     pub fn zong_position(&self) -> zong::Position {
-        zong::position(self.current_buffer().rope(), self.cursor, self.zong_length)
+        zong::position(self.current_buffer().rope(), self.cursor, self.grid())
     }
 
     /// Install Normal-mode single-key aliases (from the config keymap).
@@ -510,7 +582,7 @@ impl Editor {
         // A `/` search or a `:` substitution is text too, and in a Chinese
         // document it is usually Chinese text. Committed characters go wherever
         // the mode is collecting them, not always into the buffer.
-        if matches!(self.mode, Mode::Command | Mode::Search) {
+        if matches!(self.mode, Mode::Command | Mode::Search | Mode::Ruby) {
             self.command_line.push_str(text);
             return;
         }
@@ -526,6 +598,7 @@ impl Editor {
             Mode::Insert => self.on_insert_key(key),
             Mode::Command => return self.on_command_key(key),
             Mode::Search => self.on_search_key(key),
+            Mode::Ruby => self.on_ruby_key(key),
         }
         KeyOutcome::Continue
     }
@@ -1322,6 +1395,126 @@ impl Editor {
         self.clamp_cursor();
     }
 
+    // ---- Ruby mode (Feature #65) ------------------------------------------
+
+    /// The dialect this buffer is written in, from its file extension.
+    fn file_dialect(&self) -> Dialect {
+        self.current_buffer()
+            .path()
+            .and_then(|p| p.extension())
+            .and_then(|e| e.to_str())
+            .and_then(Dialect::for_extension)
+            .unwrap_or(Dialect::Html)
+    }
+
+    /// Rewrite every reading in the buffer into one dialect (`:format-ruby-…`).
+    fn format_ruby(&mut self, dialect: Dialect) {
+        let text = self.current_buffer().text();
+        let Some(formatted) = crate::ruby::reformat(&text, dialect) else {
+            self.status = format!("already {} ruby", dialect.name());
+            return;
+        };
+        self.snapshot();
+        let len = self.current_buffer().char_count();
+        let buffer = self.current_buffer_mut();
+        buffer.remove(0..len);
+        buffer.insert(0, &formatted);
+        self.clamp_cursor();
+        self.status = format!("ruby rewritten as {}", dialect.name());
+    }
+
+    /// Open Ruby mode on whatever the cursor is pointing at.
+    ///
+    /// Inside an existing group, the current reading is loaded so it can be
+    /// corrected rather than retyped — and cleared and submitted to take the
+    /// annotation off again. Over a selection, the reading typed here wraps it.
+    fn enter_ruby_mode(&mut self) {
+        let rope = self.current_buffer().rope();
+        let line = rope.char_to_line(self.cursor);
+        let line_start = rope.line_to_char(line);
+        let chars: Vec<char> = crate::zong::line_chars(rope, line);
+        let col = self.cursor - line_start;
+
+        if let Some(group) = crate::ruby::group_at(&chars, col) {
+            self.command_line = group.reading_text(&chars).iter().collect();
+            self.ruby_target = Some(RubyTarget::Existing {
+                span: (line_start + group.start, line_start + group.end),
+                base: (line_start + group.base.0, line_start + group.base.1),
+            });
+            self.mode = Mode::Ruby;
+            return;
+        }
+
+        let (start, end) = self.selection();
+        if end <= start {
+            self.status = "put the cursor in a reading, or select what to annotate".to_string();
+            return;
+        }
+        self.command_line.clear();
+        self.ruby_target = Some(RubyTarget::New { span: (start, end) });
+        self.mode = Mode::Ruby;
+    }
+
+    fn on_ruby_key(&mut self, key: Key) {
+        match key {
+            Key::Esc => {
+                self.command_line.clear();
+                self.ruby_target = None;
+                self.mode = Mode::Normal;
+            }
+            Key::Backspace => {
+                // Unlike a search prompt, backspacing to empty does *not* leave:
+                // an empty reading is a meaningful thing to submit here — it is
+                // how an annotation is taken off — so it has to be reachable.
+                // Esc is the way out.
+                self.command_line.pop();
+            }
+            Key::Char(c) => self.command_line.push(c),
+            Key::Enter => {
+                let reading = std::mem::take(&mut self.command_line);
+                let target = self.ruby_target.take();
+                self.mode = Mode::Normal;
+                if let Some(target) = target {
+                    self.apply_reading(target, &reading);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    /// Write `reading` onto `target`, or strip the markup when it is empty.
+    fn apply_reading(&mut self, target: RubyTarget, reading: &str) {
+        let (span, base) = match target {
+            RubyTarget::Existing { span, base } => (span, base),
+            RubyTarget::New { span } => (span, span),
+        };
+        let rope = self.current_buffer().rope();
+        if base.1 > rope.len_chars() || span.1 > rope.len_chars() {
+            return;
+        }
+        let base_chars: Vec<char> = rope.slice(base.0..base.1).chars().collect();
+        // An empty reading is how an annotation is removed: what is left is the
+        // base, with the markup gone.
+        let text = if reading.is_empty() {
+            base_chars.iter().collect()
+        } else {
+            crate::ruby::markup(&base_chars, reading, self.ruby.writer())
+        };
+
+        self.snapshot();
+        let buffer = self.current_buffer_mut();
+        buffer.remove(span.0..span.1);
+        buffer.insert(span.0, &text);
+        self.anchor = span.0;
+        self.cursor = span.0;
+        self.clamp_cursor();
+        self.status = if reading.is_empty() {
+            "reading removed".to_string()
+        } else {
+            format!("reading: {reading}")
+        };
+    }
+
     /// Replay the text typed during the last Insert session (Helix `.`).
     fn repeat_insert(&mut self) {
         if self.last_insert.is_empty() {
@@ -1459,17 +1652,17 @@ impl Editor {
     /// in which case the goal slot is kept, so crossing a short paragraph does
     /// not drag the cursor permanently upwards.
     fn move_zong_from(&mut self, left: bool, continuing: bool) {
-        let zong_len = self.zong_length;
+        let grid = self.grid();
         let rope = self.current_buffer().rope();
         let goal = if continuing {
             self.goal_slot
         } else {
-            zong::slot_of(rope, self.cursor, zong_len)
+            zong::slot_of(rope, self.cursor, grid)
         };
         let pos = if left {
-            zong::next_zong(rope, self.cursor, zong_len, goal)
+            zong::next_zong(rope, self.cursor, grid, goal)
         } else {
-            zong::prev_zong(rope, self.cursor, zong_len, goal)
+            zong::prev_zong(rope, self.cursor, grid, goal)
         };
         self.cursor = pos;
         if !self.extend {
@@ -1864,6 +2057,150 @@ mod tests {
         for c in keys.chars() {
             ed.on_key(Key::Char(c));
         }
+    }
+
+    /// Type `reading` into an open Ruby prompt and submit it.
+    fn submit_reading(ed: &mut Editor, reading: &str) {
+        for c in reading.chars() {
+            ed.on_key(Key::Char(c));
+        }
+        ed.on_key(Key::Enter);
+    }
+
+    #[test]
+    fn ruby_rendering_is_set_per_dialect() {
+        let mut ed = Editor::new();
+        assert!(
+            ed.ruby().contains(Dialect::Html),
+            "HTML readings are laid out by default"
+        );
+        ed.execute(":ruby-off").unwrap();
+        assert!(ed.ruby().is_empty());
+        ed.execute(":ruby-on").unwrap();
+        assert!(ed.ruby().contains(Dialect::Html));
+
+        // Dialects add up rather than replacing one another: a document may mix
+        // them, so `:render-ruby-typst` does not turn HTML off.
+        ed.execute(":render-ruby-typst").unwrap();
+        assert!(ed.ruby().contains(Dialect::Typst));
+        assert!(ed.ruby().contains(Dialect::Html));
+        ed.execute(":render-ruby-html-off").unwrap();
+        assert!(!ed.ruby().contains(Dialect::Html));
+        assert!(ed.ruby().contains(Dialect::Typst));
+    }
+
+    #[test]
+    fn format_ruby_rewrites_every_reading_into_one_dialect() {
+        let mut ed = typed("讀<ruby>漢<rt>hàn</rt></ruby>和#ruby(\"字\", \"zì\")");
+        ed.execute(":format-ruby-typst").unwrap();
+        assert_eq!(
+            ed.current_buffer().text(),
+            "讀#ruby(\"漢\", \"hàn\")和#ruby(\"字\", \"zì\")"
+        );
+        // Already uniform: nothing to do, and no undo step spent on it.
+        ed.execute(":format-ruby-typst").unwrap();
+        assert!(ed.status().starts_with("already"));
+
+        ed.execute(":format-ruby-html").unwrap();
+        assert_eq!(
+            ed.current_buffer().text(),
+            "讀<ruby>漢<rt>hàn</rt></ruby>和<ruby>字<rt>zì</rt></ruby>"
+        );
+    }
+
+    #[test]
+    fn a_typst_reading_is_read_too() {
+        let mut ed = typed("讀#ruby(\"漢字\", \"hàn zì\")");
+        ed.execute(":render-ruby-typst").unwrap();
+        press(&mut ed, "gg3l");
+        ed.execute(":ruby").unwrap();
+        assert_eq!(ed.prompt(), Some(('注', "hàn zì")));
+    }
+
+    #[test]
+    fn ruby_mode_annotates_a_selection() {
+        let mut ed = typed("他說口很難");
+        press(&mut ed, "gg2lvl"); // select 口
+        ed.execute(":ruby").unwrap();
+        assert_eq!(ed.mode(), Mode::Ruby);
+        assert_eq!(ed.prompt(), Some(('注', "")), "a fresh reading");
+        submit_reading(&mut ed, "kǒu");
+        assert_eq!(
+            ed.current_buffer().text(),
+            "他說<ruby>口<rt>kǒu</rt></ruby>很難"
+        );
+        assert_eq!(ed.mode(), Mode::Normal);
+    }
+
+    #[test]
+    fn ruby_mode_loads_an_existing_reading_to_correct_it() {
+        let mut ed = typed("他說<ruby>口<rt>kou</rt></ruby>很難");
+        // Anywhere in the group opens it, markup included.
+        press(&mut ed, "gg5l");
+        ed.execute(":ruby").unwrap();
+        assert_eq!(ed.prompt(), Some(('注', "kou")), "prefilled, not blank");
+        // Correct it: backspace the tone-less vowel and retype.
+        ed.on_key(Key::Backspace);
+        ed.on_key(Key::Backspace);
+        submit_reading(&mut ed, "ǒu");
+        assert_eq!(
+            ed.current_buffer().text(),
+            "他說<ruby>口<rt>kǒu</rt></ruby>很難"
+        );
+    }
+
+    #[test]
+    fn an_empty_reading_takes_the_annotation_off() {
+        let mut ed = typed("他說<ruby>口<rt>kǒu</rt></ruby>很難");
+        press(&mut ed, "gg5l");
+        ed.execute(":ruby").unwrap();
+        for _ in 0..8 {
+            ed.on_key(Key::Backspace);
+        }
+        assert_eq!(
+            ed.mode(),
+            Mode::Ruby,
+            "backspacing the reading, not leaving"
+        );
+        ed.on_key(Key::Enter);
+        assert_eq!(ed.current_buffer().text(), "他說口很難", "markup gone too");
+    }
+
+    #[test]
+    fn a_bar_annotates_each_character_separately() {
+        let mut ed = typed("讀漢字");
+        press(&mut ed, "gglvll"); // select 漢字
+        ed.execute(":ruby").unwrap();
+        submit_reading(&mut ed, "hàn|zì");
+        assert_eq!(
+            ed.current_buffer().text(),
+            "讀<ruby>漢<rt>hàn</rt></ruby><ruby>字<rt>zì</rt></ruby>"
+        );
+    }
+
+    #[test]
+    fn ruby_mode_needs_something_to_annotate() {
+        let mut ed = typed("他說口很難");
+        ed.execute(":ruby").unwrap();
+        assert_eq!(ed.mode(), Mode::Normal, "no selection, no group");
+        assert!(!ed.status().is_empty(), "and it says so");
+    }
+
+    #[test]
+    fn escape_leaves_ruby_mode_without_writing() {
+        let mut ed = typed("他說口很難");
+        press(&mut ed, "gg2lvl");
+        ed.execute(":ruby").unwrap();
+        submit_reading_cancelled(&mut ed, "kǒu");
+        assert_eq!(ed.current_buffer().text(), "他說口很難");
+        assert_eq!(ed.mode(), Mode::Normal);
+    }
+
+    fn submit_reading_cancelled(ed: &mut Editor, reading: &str) {
+        for c in reading.chars() {
+            ed.on_key(Key::Char(c));
+        }
+        ed.on_key(Key::Esc);
     }
 
     #[test]

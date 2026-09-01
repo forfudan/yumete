@@ -44,6 +44,12 @@ pub struct Metrics {
     pub pitch: u16,
     /// Rows reserved above the text for paragraph numbers.
     pub head_rows: u16,
+    /// One cell held back at the right edge when readings are being drawn.
+    ///
+    /// A reading sits in the gap to the *right* of its 縱, and every 縱 has one
+    /// except the rightmost, which is against the edge — so the page steps in by
+    /// a cell to give it one too.
+    pub ruby_column: u16,
 }
 
 impl Metrics {
@@ -54,7 +60,7 @@ impl Metrics {
     /// fill a tall terminal, only lowered when the terminal cannot hold it. One
     /// row beyond the 縱 is kept spare so the end-of-paragraph caret has
     /// somewhere to sit below a full 縱.
-    pub fn new(config: &Config, height: u16, total_lines: usize) -> Metrics {
+    pub fn new(config: &Config, height: u16, total_lines: usize, ruby: bool) -> Metrics {
         let head_rows = number_rows(config.editor.line_numbers, total_lines);
         let rows = height.saturating_sub(head_rows) as usize;
         let zong_len = config.editor.zong_length.min(rows.saturating_sub(1)).max(1);
@@ -62,16 +68,19 @@ impl Metrics {
             zong_len,
             pitch: SLOT_WIDTH + config.editor.zong_gap as u16,
             head_rows,
+            // A reading needs a column, and a zero gap leaves nowhere to put it.
+            ruby_column: u16::from(ruby && config.editor.zong_gap > 0),
         }
     }
 
     /// How many 縱 fit across an area `width` cells wide. Only the gaps
     /// *between* 縱 count, so the leftmost one may sit flush against the edge.
     pub fn visible(&self, width: u16) -> usize {
-        if width < SLOT_WIDTH {
+        let usable = width.saturating_sub(self.ruby_column);
+        if usable < SLOT_WIDTH {
             0
         } else {
-            1 + ((width - SLOT_WIDTH) / self.pitch) as usize
+            1 + ((usable - SLOT_WIDTH) / self.pitch) as usize
         }
     }
 
@@ -85,7 +94,7 @@ impl Metrics {
     /// [`visible`]: Metrics::visible
     pub fn x_of(&self, area: Rect, k: usize) -> u16 {
         (area.x + area.width)
-            .saturating_sub(SLOT_WIDTH + k as u16 * self.pitch)
+            .saturating_sub(SLOT_WIDTH + self.ruby_column + k as u16 * self.pitch)
             .max(area.x)
     }
 }
@@ -102,13 +111,18 @@ fn number_rows(mode: LineNumbers, total_lines: usize) -> u16 {
 /// The 縱 length in force for a terminal `height` rows tall (including the
 /// status line), so the event loop can tell the editor where 縱 break before the
 /// motions that depend on it run.
-pub fn zong_length_for(config: &Config, height: u16, total_lines: usize) -> usize {
-    Metrics::new(config, height.saturating_sub(1), total_lines).zong_len
+pub fn zong_length_for(config: &Config, height: u16, total_lines: usize, ruby: bool) -> usize {
+    Metrics::new(config, height.saturating_sub(1), total_lines, ruby).zong_len
 }
 
 /// Paint one 縱 slot: the grapheme in the left cell, the style across both, so
 /// a selection or the cursor covers the whole square.
 fn put_slot(buf: &mut Buffer, x: u16, y: u16, symbol: &str, style: Style) {
+    // Never write an empty symbol. To the renderer an empty cell is the
+    // *continuation* of a wide glyph, so it emits nothing and everything after
+    // it on the row slides a column left — which paints the panel's ground
+    // across its own border.
+    let symbol = if symbol.is_empty() { " " } else { symbol };
     // The trailing cell first: a wide symbol makes the renderer skip it, and a
     // half-width one leaves it as the styled other half of the slot.
     if let Some(cell) = buf.cell_mut((x + 1, y)) {
@@ -119,27 +133,38 @@ fn put_slot(buf: &mut Buffer, x: u16, y: u16, symbol: &str, style: Style) {
     }
 }
 
-/// Stack `text` into slots, pairing consecutive half-width characters into one
-/// slot — 縦中横, the treatment vertical typesetting gives a short Latin run.
+/// Paint a slot with a half-width symbol pushed against its **right** edge.
 ///
-/// A slot is two cells wide, so two ASCII characters fit side by side exactly.
-/// Without this a three-letter code hint would be three rows tall and the whole
-/// panel would grow with it; with it, `jvy` reads as `jv` over `y`.
-fn pack_slots(text: &str) -> Vec<String> {
-    let mut slots: Vec<String> = Vec::new();
-    for g in graphemes(text) {
-        // Pair up only with a half-width neighbour that is not already paired.
-        let pairable = str_width(g) == 1
-            && slots
-                .last()
-                .is_some_and(|last| str_width(last) == 1 && !last.chars().any(|c| c == ' '));
-        if pairable {
-            slots.last_mut().expect("checked above").push_str(g);
-        } else {
-            slots.push(g.to_string());
-        }
+/// A column of single letters set flush left drifts away from the 漢字 beside
+/// it; hung on the right they line up as one edge running down the panel. A
+/// full-width symbol fills the slot either way, so this only moves the narrow
+/// ones.
+fn put_slot_right(buf: &mut Buffer, x: u16, y: u16, symbol: &str, style: Style) {
+    if str_width(symbol) >= 2 {
+        return put_slot(buf, x, y, symbol, style);
     }
-    slots
+    let symbol = if symbol.is_empty() { " " } else { symbol };
+    if let Some(cell) = buf.cell_mut((x, y)) {
+        cell.set_symbol(" ").set_style(style);
+    }
+    if let Some(cell) = buf.cell_mut((x + 1, y)) {
+        cell.set_symbol(symbol).set_style(style);
+    }
+}
+
+/// The 帶圈中文數字 used to number candidates: ㊀ ㊁ ㊂ …
+///
+/// Circled *Chinese* numerals, not the circled Arabic ①②③ — those are
+/// East-Asian *ambiguous* width, so a terminal may draw them one cell or two and
+/// the column would come apart. ㊀ is unambiguously wide and fills the slot.
+///
+/// Beyond nine a plain digit stands in; no scheme pages that far.
+fn index_mark(i: usize) -> String {
+    const CIRCLED: [char; 9] = ['㊀', '㊁', '㊂', '㊃', '㊄', '㊅', '㊆', '㊇', '㊈'];
+    match CIRCLED.get(i) {
+        Some(&c) => c.to_string(),
+        None => (i + 1).to_string(),
+    }
 }
 
 /// Draw a paragraph number above its 縱, two digits to a row (縦中横), so it
@@ -179,10 +204,13 @@ pub fn draw(
 ) -> (u16, u16) {
     let buffer = editor.current_buffer();
     let total_lines = buffer.line_count();
-    let metrics = Metrics::new(config, area.height, total_lines);
+    let metrics = Metrics::new(config, area.height, total_lines, !editor.ruby().is_empty());
     let rope = buffer.rope();
 
-    let cursor_pos = zong::position(rope, editor.cursor(), metrics.zong_len);
+    // The grid the editor navigates by, with the wrap length this page settled
+    // on — the two must agree or the cursor is drawn a row out.
+    let grid = zong::Grid::new(metrics.zong_len, editor.ruby());
+    let cursor_pos = zong::position(rope, editor.cursor(), grid);
     let cursor_anchor = Anchor::from(cursor_pos);
 
     // Scroll leftward/rightward so the cursor's 縱 stays on the page, keeping
@@ -196,13 +224,7 @@ pub fn draw(
     let visible = metrics.visible(area.width);
     let scrolloff = config.editor.scrolloff.min(visible.saturating_sub(1) / 2);
     let last_column = visible.saturating_sub(1);
-    let cursor_column = match zong::distance(
-        rope,
-        *viewport,
-        cursor_anchor,
-        metrics.zong_len,
-        last_column,
-    ) {
+    let cursor_column = match zong::distance(rope, *viewport, cursor_anchor, grid, last_column) {
         Some(d) if d >= scrolloff && d + scrolloff <= last_column => d,
         // Off the page, or too close to an edge: re-anchor so the cursor sits
         // `scrolloff` in from whichever side it left by.
@@ -217,18 +239,11 @@ pub fn draw(
             } else {
                 inset
             };
-            *viewport = zong::retreat(rope, cursor_anchor, metrics.zong_len, inset);
-            zong::distance(
-                rope,
-                *viewport,
-                cursor_anchor,
-                metrics.zong_len,
-                last_column,
-            )
-            .unwrap_or(0)
+            *viewport = zong::retreat(rope, cursor_anchor, grid, inset);
+            zong::distance(rope, *viewport, cursor_anchor, grid, last_column).unwrap_or(0)
         }
     };
-    let zongs = zong::zongs_from(rope, *viewport, metrics.zong_len, visible);
+    let zongs = zong::zongs_from(rope, *viewport, grid, visible);
 
     let text_top = area.y + metrics.head_rows;
     let (sel_start, sel_end) = editor.selection();
@@ -266,14 +281,25 @@ pub fn draw(
         }
 
         let line_start = rope.line_to_char(zong.line);
-        let text = rope.slice(zong.start..zong.end).to_string();
-        let mut offset = 0usize;
-        // Slots, not graphemes: a 縦中横 pair is one row holding two characters,
-        // and the punctuation is already rotated.
-        for (slot, symbol) in zong::slot_text(&text).into_iter().enumerate() {
-            let at = zong.start + offset;
-            let len = symbol.chars().count();
-            offset += len;
+        // Rows, not graphemes: a 縦中横 pair is one row holding two characters, a
+        // ruby group is however many rows its reading needs, and the punctuation
+        // is already rotated.
+        for (slot, row) in zong::zong_slots(rope, zong, grid).into_iter().enumerate() {
+            let y = text_top + slot as u16;
+            // The reading goes in the cell to the right of the 縱, which is the
+            // gap this page stepped in to provide.
+            if let Some(mark) = row.ruby {
+                if let Some(cell) = buf.cell_mut((x + SLOT_WIDTH, y)) {
+                    cell.set_symbol(&mark.to_string())
+                        .set_style(Style::default().add_modifier(Modifier::DIM));
+                }
+            }
+            let symbol = row.text;
+            if symbol.is_empty() {
+                continue;
+            }
+            let at = line_start + row.start;
+            let len = row.end - row.start;
 
             let style = if has_selection && at < sel_end && at + len > sel_start {
                 sel_style
@@ -297,7 +323,7 @@ pub fn draw(
                 Style::default()
             };
 
-            put_slot(buf, x, text_top + slot as u16, &symbol, style);
+            put_slot(buf, x, y, &symbol, style);
         }
     }
 
@@ -305,48 +331,24 @@ pub fn draw(
     let cursor_x = metrics.x_of(area, cursor_column.min(last_column));
     let cursor_y =
         (text_top + cursor_pos.slot as u16).min((area.y + area.height).saturating_sub(1));
-    if cursor_column < visible {
-        if editor.mode() == Mode::Insert {
-            // Insert: a caret at the boundary text will be pushed into. Turned a
-            // quarter turn with the text, the bar of a horizontal editor becomes
-            // a rule lying *across* the 縱 — drawn as an underline on the slot
-            // above, so the character it sits between stays readable.
-            let rule = Style::default()
-                .add_modifier(Modifier::UNDERLINED)
-                .fg(Color::Rgb(0, 89, 209));
-            let above = cursor_y.saturating_sub(1);
-            if cursor_y > area.y {
-                for dx in 0..SLOT_WIDTH {
-                    if let Some(cell) = buf.cell_mut((cursor_x + dx, above)) {
-                        let style = cell.style().patch(rule);
-                        cell.set_style(style);
-                    }
-                }
-            } else {
-                // Nothing above to underline at the head of a 縱: mark the slot
-                // itself instead, still distinct from the Normal-mode block.
-                for dx in 0..SLOT_WIDTH {
-                    if let Some(cell) = buf.cell_mut((cursor_x + dx, cursor_y)) {
-                        let style = cell.style().patch(rule);
-                        cell.set_style(style);
-                    }
-                }
-            }
-        } else {
-            // Normal: a solid block over the whole two-cell slot.
-            let under = buf
-                .cell((cursor_x, cursor_y))
-                .map(|c| c.symbol().to_string())
-                .unwrap_or_else(|| " ".to_string());
-            let symbol = if under.trim().is_empty() { " " } else { &under };
-            put_slot(
-                buf,
-                cursor_x,
-                cursor_y,
-                symbol,
-                Style::default().add_modifier(Modifier::REVERSED),
-            );
-        }
+    // Insert leaves the page alone: the caret is the terminal's own cursor, set
+    // to an underscore — a thin horizontal rule, which is the bar of a
+    // horizontal editor turned the quarter turn the text turned. Drawing it into
+    // the page instead would have to recolour a character to show it.
+    if cursor_column < visible && editor.mode() != Mode::Insert {
+        // Normal: a solid block over the whole two-cell slot.
+        let under = buf
+            .cell((cursor_x, cursor_y))
+            .map(|c| c.symbol().to_string())
+            .unwrap_or_else(|| " ".to_string());
+        let symbol = if under.trim().is_empty() { " " } else { &under };
+        put_slot(
+            buf,
+            cursor_x,
+            cursor_y,
+            symbol,
+            Style::default().add_modifier(Modifier::REVERSED),
+        );
     }
     (cursor_x, cursor_y)
 }
@@ -405,10 +407,6 @@ mod ink {
     pub fn helper() -> Color {
         step(300)
     }
-    /// The remaining-code hint, a shade back again.
-    pub fn footer() -> Color {
-        step(400)
-    }
     /// The ground of the highlighted candidate, and the text on it.
     pub fn highlight() -> Color {
         step(0)
@@ -436,51 +434,52 @@ pub fn draw_candidate_panel(
         return;
     }
     let highlight = ime.highlight();
-    // The panel packs its columns edge to edge. The text gets a gap between 縱
-    // because the eye has to track down a long column and back up the next one;
-    // a candidate is one or two characters, and the gap would only make an
-    // already wide panel wider.
-    let pitch = SLOT_WIDTH;
 
-    // Each column is a stack of slots: the selection digit, the candidate, then
-    // its remaining-code hint packed 縦中横 — one letter to a row would make the
-    // panel as deep as the longest code. The 拆分 comment is left to the
-    // horizontal panel, where it costs a line rather than a whole column.
-    // The rightmost column is "what you typed, and what you would get": the
-    // preedit, then — after a blank slot — the 拆分 of the highlighted
-    // candidate, when the engine is annotating. Keeping it here rather than
-    // beside each candidate is what lets the panel stay one row per character
-    // instead of one column per decomposition.
-    let mut preedit = pack_slots(&ime.display_buffer());
-    if let Some(chaifen) = candidates
+    // The 下標 — the keys still owed for each candidate. It is not stacked into
+    // the candidate's column (a column of letters beside 漢字 reads as part of
+    // the word) but written across its own row, under the column it belongs to.
+    // The columns only widen when there is a 下標 to make room for, so a page of
+    // exact matches stays as narrow as it was.
+    let subscripts: Vec<&str> = candidates.iter().map(|c| c.completion.as_str()).collect();
+    let code_w = subscripts.iter().map(|c| str_width(c)).max().unwrap_or(0) as u16;
+    let pitch = if code_w > 0 {
+        SLOT_WIDTH.max(code_w + 1)
+    } else {
+        SLOT_WIDTH
+    };
+
+    // The header is a 縱 like everything else in the panel: the code as typed
+    // runs down the rightmost column, one character to a row and hung right, and
+    // the 拆分 of the highlighted candidate follows it after a blank.
+    let mut header: Vec<String> = graphemes(&ime.display_buffer()).map(String::from).collect();
+    if let Some(comment) = candidates
         .get(highlight)
         .map(|c| c.comment.as_str())
         .filter(|c| !c.is_empty())
     {
-        preedit.push(String::new());
-        preedit.extend(pack_slots(chaifen));
+        header.push(String::new());
+        header.extend(graphemes(comment).map(String::from));
     }
-    let columns: Vec<Vec<String>> = candidates
-        .iter()
-        .enumerate()
-        .map(|(i, cand)| {
-            let mut column = vec![(i + 1).to_string()];
-            column.extend(graphemes(&cand.text).map(String::from));
-            column.extend(pack_slots(&cand.completion));
-            column
-        })
-        .collect();
 
-    let depth = columns
-        .iter()
-        .map(|c| c.len())
-        .chain(std::iter::once(preedit.len()))
-        .max()
-        .unwrap_or(1);
-    let count = columns.len() + 1; // the candidates plus the preedit column
-    let inner_w = count as u16 * SLOT_WIDTH + (count as u16 - 1) * (pitch - SLOT_WIDTH);
+    // Each column is the number, a blank row, then the candidate. The gap is
+    // what stops the number reading as the first character of the word.
+    // Column 0 is the header; the candidates run leftward from column 1, the
+    // direction the text they are joining runs.
+    let mut columns: Vec<Vec<String>> = vec![header];
+    columns.extend(candidates.iter().enumerate().map(|(i, cand)| {
+        let mut column = vec![index_mark(i), String::new()];
+        column.extend(graphemes(&cand.text).map(String::from));
+        column
+    }));
+
+    let depth = columns.iter().map(|c| c.len()).max().unwrap_or(1);
+    let count = columns.len();
+    // The header column is only ever a slot wide, whatever the candidates need.
+    let inner_w = SLOT_WIDTH + (count as u16).saturating_sub(1) * pitch;
     let panel_w = (inner_w + 2).min(area.width.max(1));
-    let panel_h = (depth as u16 + 2).min(area.height.max(1));
+    // The columns, then the 下標 row when there is one.
+    let subscript_row = u16::from(code_w > 0);
+    let panel_h = (depth as u16 + 2 + subscript_row).min(area.height.max(1));
 
     // The text reads leftward, so the panel opens to the left of the cursor's
     // 縱 — the direction the text is going — and flips right only when there is
@@ -505,46 +504,65 @@ pub fn draw_candidate_panel(
 
     let buf = frame.buffer_mut();
     let dim = ground.fg(ink::helper());
-    let hint = ground.fg(ink::footer());
     let chosen = Style::default()
         .bg(ink::highlight())
         .fg(ink::on_highlight());
 
-    // Column 0 (rightmost) is the preedit; the candidates follow leftward.
-    // `None` means the column would run past the panel's left border, which is
-    // what a pane too narrow for the whole page produces.
+    let top = inner.y;
+
+    // Candidate ㊀ is rightmost and they run leftward, the direction the text
+    // they are joining runs. `None` means the column would fall past the panel's
+    // left border, which is what a pane too narrow for them all produces.
+    // Column 0 (the header) sits flush at the right in a plain slot; the
+    // candidate columns step leftward by `pitch`, which widens only to fit a
+    // 下標.
     let column_x = |k: usize| -> Option<u16> {
-        let offset = (k as u16).checked_mul(pitch)?.checked_add(SLOT_WIDTH)?;
+        let offset = match k {
+            0 => SLOT_WIDTH,
+            _ => SLOT_WIDTH.checked_add((k as u16).checked_mul(pitch)?)?,
+        };
         let x = (inner.x + inner.width).checked_sub(offset)?;
         (x >= inner.x).then_some(x)
     };
-    if let Some(x) = column_x(0) {
-        for (slot, ch) in preedit.iter().enumerate() {
-            if (slot as u16) < inner.height {
-                put_slot(buf, x, inner.y + slot as u16, ch, dim);
-            }
-        }
-    }
     for (i, column) in columns.iter().enumerate() {
-        let Some(x) = column_x(i + 1) else {
+        let Some(x) = column_x(i) else {
             break;
         };
         for (slot, symbol) in column.iter().enumerate() {
-            if slot as u16 >= inner.height {
+            let cy = top + slot as u16;
+            if cy >= inner.y + inner.height {
                 break;
             }
-            // Digit on top, then the candidate, then the code still owed —
-            // three rungs of the same ink so they separate by weight alone.
-            let style = if i == highlight {
+            // Column 0 is the header, which is never highlighted; the
+            // candidates start at 1, so their number is `i - 1`.
+            let style = if i == 0 {
+                dim
+            } else if i - 1 == highlight {
                 chosen
             } else if slot == 0 {
                 dim
-            } else if slot <= graphemes(&candidates[i].text).count() {
-                ground
             } else {
-                hint
+                ground
             };
-            put_slot(buf, x, inner.y + slot as u16, symbol, style);
+            put_slot_right(buf, x, cy, symbol, style);
+        }
+
+        // The 下標 under the column it belongs to, written across as the letters
+        // they are — not stacked into the candidate, where they would read as
+        // part of the word.
+        if code_w > 0 && i > 0 {
+            let cy = top + depth as u16;
+            if cy < inner.y + inner.height {
+                for (n, ch) in subscripts[i - 1].chars().enumerate() {
+                    let cx = x + n as u16;
+                    if cx >= inner.x + inner.width {
+                        break;
+                    }
+                    if let Some(cell) = buf.cell_mut((cx, cy)) {
+                        cell.set_symbol(&ch.to_string()).set_style(dim);
+                    }
+                }
+            }
         }
     }
 }

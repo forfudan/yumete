@@ -58,6 +58,12 @@ pub struct EditorConfig {
     /// Whether the 拆分 annotation is shown beside candidates (Feature #66).
     /// Off by default: it is a study aid, and it widens every candidate.
     pub show_chaifen: bool,
+    /// Whether readings are laid out at all (Feature #65). On by default;
+    /// `:ruby-off` turns it off.
+    pub show_ruby: bool,
+    /// Extra ruby dialects to lay out beyond the one the file's extension
+    /// implies — a document that mixes them names them all here.
+    pub ruby_dialects: Vec<String>,
 }
 
 impl Default for EditorConfig {
@@ -72,6 +78,8 @@ impl Default for EditorConfig {
             zong_length: DEFAULT_ZONG_LENGTH,
             zong_gap: DEFAULT_ZONG_GAP,
             show_chaifen: false,
+            show_ruby: true,
+            ruby_dialects: Vec::new(),
         }
     }
 }
@@ -253,6 +261,8 @@ struct RawEditor {
     zong_length: Option<usize>,
     zong_gap: Option<usize>,
     show_chaifen: Option<bool>,
+    show_ruby: Option<bool>,
+    ruby_dialects: Option<Vec<String>>,
 }
 
 #[derive(Deserialize, Default)]
@@ -296,6 +306,12 @@ impl RawConfig {
         }
         if other.editor.show_chaifen.is_some() {
             self.editor.show_chaifen = other.editor.show_chaifen;
+        }
+        if other.editor.show_ruby.is_some() {
+            self.editor.show_ruby = other.editor.show_ruby;
+        }
+        if other.editor.ruby_dialects.is_some() {
+            self.editor.ruby_dialects = other.editor.ruby_dialects.clone();
         }
         if other.theme.selection.is_some() {
             self.theme.selection = other.theme.selection;
@@ -342,6 +358,12 @@ impl RawConfig {
         }
         if let Some(on) = self.editor.show_chaifen {
             config.editor.show_chaifen = on;
+        }
+        if let Some(on) = self.editor.show_ruby {
+            config.editor.show_ruby = on;
+        }
+        if let Some(dialects) = self.editor.ruby_dialects {
+            config.editor.ruby_dialects = dialects;
         }
         if let Some(hex) = self.theme.selection {
             if let Some(rgb) = parse_hex(&hex) {

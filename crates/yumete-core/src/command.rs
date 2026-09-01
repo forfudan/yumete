@@ -7,6 +7,7 @@
 
 use std::fmt;
 
+use crate::ruby::Dialect;
 use crate::zong::Layout;
 
 /// A parsed command-line command.
@@ -44,6 +45,16 @@ pub enum Command {
     /// `:chaifen` (alias `:cf`) — toggle the 拆分 annotation beside candidates
     /// (Feature #66).
     ToggleChaifen,
+    /// `:ruby` — open Ruby mode on the group or selection at the cursor
+    /// (Feature #65).
+    Ruby,
+    /// `:ruby-on` / `:ruby-off`, and `:render-ruby-<dialect>[-off]` — which
+    /// ruby dialects are laid out as readings. A `None` dialect means "the one
+    /// this file is written in" for `on`, and "all of them" for `off`.
+    RenderRuby { dialect: Option<Dialect>, on: bool },
+    /// `:format-ruby-<dialect>` — rewrite every reading in the buffer into one
+    /// dialect, whatever it was written in.
+    FormatRuby(Dialect),
 }
 
 /// An error produced while parsing a command line.
@@ -139,10 +150,172 @@ pub fn parse(input: &str) -> Result<Command, CommandError> {
             }
         }
         "chaifen" | "cf" => Ok(Command::ToggleChaifen),
+        "ruby" => Ok(Command::Ruby),
+        "ruby-on" => Ok(Command::RenderRuby {
+            dialect: None,
+            on: true,
+        }),
+        "ruby-off" => Ok(Command::RenderRuby {
+            dialect: None,
+            on: false,
+        }),
+        // `:render-ruby-html`, `:render-ruby-typst-off`, `:format-ruby-typst`.
+        other if other.starts_with("render-ruby-") || other.starts_with("format-ruby-") => {
+            let (verb, rest) = other.split_at("render-ruby-".len());
+            let (name, on) = match rest.strip_suffix("-off") {
+                Some(name) => (name, false),
+                None => (rest, true),
+            };
+            let dialect =
+                Dialect::parse_name(name).ok_or_else(|| CommandError::InvalidArgument {
+                    command: "ruby",
+                    value: name.to_string(),
+                })?;
+            Ok(if verb.starts_with("format") {
+                Command::FormatRuby(dialect)
+            } else {
+                Command::RenderRuby {
+                    dialect: Some(dialect),
+                    on,
+                }
+            })
+        }
         "vertical" => Ok(Command::SetLayout(Some(Layout::Vertical))),
         "horizontal" => Ok(Command::SetLayout(Some(Layout::Horizontal))),
         other => Err(CommandError::Unknown(other.to_string())),
     }
+}
+
+/// One entry of the command list: what to type, and what it does.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Entry {
+    /// The command word, as typed after the `:`.
+    pub name: &'static str,
+    /// Its shorter form, if it has one.
+    pub alias: Option<&'static str>,
+    /// One line saying what it does — short enough to sit beside the name.
+    pub help: &'static str,
+}
+
+/// Every command, for the completion list.
+///
+/// This is a second copy of the names in [`parse`], and deliberately so: the
+/// parser is a `match` on string literals, which cannot be enumerated. Keeping
+/// the list here rather than deriving it means adding a command is two edits —
+/// the price of the table being the one place that says what each one is *for*,
+/// which is what the user is reading when they cannot remember the name.
+pub const COMMANDS: &[Entry] = &[
+    Entry {
+        name: "open",
+        alias: Some("o"),
+        help: "open a file",
+    },
+    Entry {
+        name: "new",
+        alias: None,
+        help: "start an empty buffer",
+    },
+    Entry {
+        name: "write",
+        alias: Some("w"),
+        help: "save, optionally to a new path",
+    },
+    Entry {
+        name: "quit",
+        alias: Some("q"),
+        help: "leave; ! discards changes",
+    },
+    Entry {
+        name: "undo",
+        alias: Some("u"),
+        help: "undo the last change",
+    },
+    Entry {
+        name: "redo",
+        alias: Some("red"),
+        help: "redo it",
+    },
+    Entry {
+        name: "segment",
+        alias: Some("seg"),
+        help: "word-segmentation tint",
+    },
+    Entry {
+        name: "layout",
+        alias: Some("lay"),
+        help: "flip horizontal / vertical",
+    },
+    Entry {
+        name: "vertical",
+        alias: None,
+        help: "lay the text out in 縱",
+    },
+    Entry {
+        name: "horizontal",
+        alias: None,
+        help: "lay the text out in lines",
+    },
+    Entry {
+        name: "chaifen",
+        alias: Some("cf"),
+        help: "拆分 beside candidates",
+    },
+    Entry {
+        name: "ruby",
+        alias: None,
+        help: "edit the reading at the cursor",
+    },
+    Entry {
+        name: "ruby-on",
+        alias: None,
+        help: "lay readings out",
+    },
+    Entry {
+        name: "ruby-off",
+        alias: None,
+        help: "show the ruby markup",
+    },
+    Entry {
+        name: "render-ruby-html",
+        alias: None,
+        help: "read <ruby> markup",
+    },
+    Entry {
+        name: "render-ruby-typst",
+        alias: None,
+        help: "read #ruby() markup",
+    },
+    Entry {
+        name: "format-ruby-html",
+        alias: None,
+        help: "rewrite readings as HTML",
+    },
+    Entry {
+        name: "format-ruby-typst",
+        alias: None,
+        help: "rewrite readings as Typst",
+    },
+    Entry {
+        name: "s/pat/rep/",
+        alias: None,
+        help: "substitute on this line (%s: all)",
+    },
+];
+
+/// The commands whose name or alias starts with what has been typed.
+///
+/// An empty prefix lists everything, which is what makes `:` on its own a menu
+/// rather than a guess. A prefix that is already a whole command still lists it,
+/// so the help stays visible while the arguments are typed.
+pub fn complete(prefix: &str) -> Vec<&'static Entry> {
+    let prefix = prefix.trim_start_matches(':');
+    // Only the command word matters; once there is a space the user has moved
+    // on to arguments and the list should stop narrowing.
+    let word = prefix.split_whitespace().next().unwrap_or("");
+    COMMANDS
+        .iter()
+        .filter(|e| e.name.starts_with(word) || e.alias.is_some_and(|a| a.starts_with(word)))
+        .collect()
 }
 
 /// Try to parse a substitution command (`s/pat/rep/flags`, `%s/pat/rep/flags`).
@@ -300,6 +473,48 @@ mod tests {
         );
         // Empty pattern is rejected.
         assert!(parse(":s//bar/").is_err());
+    }
+
+    #[test]
+    fn completion_narrows_as_the_command_is_typed() {
+        assert_eq!(
+            complete("").len(),
+            COMMANDS.len(),
+            "`:` alone lists them all"
+        );
+        let ruby: Vec<&str> = complete("ruby").iter().map(|e| e.name).collect();
+        assert_eq!(ruby, ["ruby", "ruby-on", "ruby-off"]);
+        // Aliases match too, so `:cf` finds the command it is short for.
+        assert_eq!(
+            complete("cf").iter().map(|e| e.name).collect::<Vec<_>>(),
+            ["chaifen"]
+        );
+        // Once arguments start, the list stops narrowing.
+        assert_eq!(complete("write draft.md").len(), 1);
+        assert!(complete("zzz").is_empty());
+    }
+
+    /// Every name in the list must actually parse, or the menu would offer
+    /// commands that do not exist.
+    #[test]
+    fn every_listed_command_parses() {
+        for entry in COMMANDS {
+            let line = match entry.name {
+                // These two need an argument to be well-formed.
+                "open" => ":open a.md".to_string(),
+                "s/pat/rep/" => ":s/a/b/".to_string(),
+                name => format!(":{name}"),
+            };
+            assert!(parse(&line).is_ok(), "{} does not parse", entry.name);
+            if let Some(alias) = entry.alias {
+                let line = if alias == "o" {
+                    ":o a.md".to_string()
+                } else {
+                    format!(":{alias}")
+                };
+                assert!(parse(&line).is_ok(), "alias {alias} does not parse");
+            }
+        }
     }
 
     #[test]
