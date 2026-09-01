@@ -57,6 +57,21 @@ Early development, but already an interactive modal editor. Implemented so far:
   terminal such as kitty, WezTerm, Ghostty, or recent iTerm2, not Apple Terminal);
   number mode, `/`-commands, and `z` reverse come from the engine.
 
+- **#67 Command hints** — `:` on its own lists every command above the command
+  line, in as many aligned columns as fit, each with a line saying what it does;
+  every keystroke narrows the list. Twenty-odd commands is past the point where
+  they can be guessed.
+
+- **#65 Ruby (振假名 / 注音)** — readings are written into the file as markup and
+  *laid out* on the page: the base is spaced against its reading (so two adjacent
+  readings never collide) and the reading runs in the half-width column to the
+  right of its 縱. The markup is not yumete's own — HTML `<ruby>漢<rt>hàn</rt></ruby>`
+  and Typst `#ruby("漢", "hàn")` are both read, several at once, chosen by the
+  file's extension. **Ruby mode** (`:ruby`) edits the reading, which with
+  readings laid out is not on screen to move a cursor into; `:ruby-on` /
+  `:ruby-off` control rendering, `:render-ruby-<dialect>` picks which markups to
+  read, and `:format-ruby-<dialect>` rewrites the whole buffer into one.
+
 - **#66 IME in the search and command lines** — `/` composes Chinese, so a
   Chinese document can actually be searched; a lone-Shift tap toggles 中/英 there
   too, the preedit shows inline and the candidate panel floats above the prompt.

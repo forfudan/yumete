@@ -260,7 +260,9 @@ Phases are ordered by priority, most writer-critical first:
 | 62  | **Helix alignment (counts, match mode)**  | core   | P2    | tutorial verbs; no multi-cursor yet | Done   |
 | 63  | **Segmentation from Yume's language model** | ime  | P2    | 詞頻表 + 詞彙表 drive `w`/`b`/`e`   | Done   |
 | 64  | **縦中横 in the vertical page**            | core   | P2    | half-width pairs share one slot     | Done   |
-| 65  | 振假名 (ruby) and 圏点                     | tui    | P3    | needs a markup convention first     |        |
+| 65  | **振假名 (ruby)**                          | tui    | P3    | HTML + Typst dialects, Ruby mode    | Done   |
+| 67  | **Command hints**                          | tui    | P4    | `:` lists and narrows                | Done   |
+| 68  | 圏点 (emphasis dots)                       | tui    | P3    | same column as ruby                 |        |
 | 66  | **IME in the `/` and `:` lines**           | tui    | P2    | + `:chaifen` annotation toggle      | Done   |
 
 ---
@@ -543,16 +545,52 @@ is one. `1985` therefore sets as `19` over `85`, which is as close as a cell gri
 gets. Packing is restricted to alphanumerics — a comma packed beside a letter
 reads as a mistake, not as typesetting.
 
-### What ruby and 圏点 still need (#65)
+### Ruby (#65)
 
-Both are *renderable*: with `zong_gap = 1` there is a half-width cell beside
-every 縱, which is exactly where vertical typesetting puts emphasis dots, and
-where half-width kana or pinyin ruby would go. Neither is *specified*, though —
-the buffer is a plain text file, so the open question is what marks a run as
-ruby-bearing or emphasised. Aozora's `｜漢字《かんじ》`, a Markdown-ish syntax,
-and a sidecar are all defensible and they are not interchangeable. Deciding that
-is a design call, not an implementation detail, so it is left open rather than
-invented.
+**The markup is not yumete's.** A reading has to be written into the file, and
+how is a property of the document: a Markdown file wants HTML ruby, which is what
+the Yuhao documentation already uses and what a browser renders unchanged; a
+Typst file wants Typst's own call, which its compiler will typeset. So it is a
+`Dialect`, several can be read at once (a document may mix them), and the set
+starts from the file's extension. `:format-ruby-<dialect>` rewrites a whole
+buffer from one into another.
+
+**The base is spaced against the reading.** `口` is one row and `kǒu` is three,
+so the group occupies three and the base is centred in them — mono-ruby with
+spacing, which is what print does and the only arrangement in which two adjacent
+readings do not collide. The reading itself runs in the half-width cell to the
+right of its 縱, which is where vertical typesetting puts it; the page steps in
+one cell at the right edge so the first 縱 has one too.
+
+**Ruby mode, because a reading is a second layer of text.** With readings laid
+out the `<rt>` is not on screen at all, so a cursor cannot be moved into it.
+`:ruby` opens a prompt in the status bar — the IME available, since readings are
+kana or 拼音 — loaded with the current reading where there is one and empty over
+a selection. Submitting an empty reading is how an annotation comes off, which is
+why backspacing to empty does *not* leave the mode the way it does in a search
+prompt: the empty state has to be reachable.
+
+**Granularity is the author's.** HTML ruby already expresses both — one group
+over a word, or one per character side by side — so only the *command* had to
+choose. A reading split by `|` into as many parts as the base has characters
+writes one group per character; anything else stays one group. A space cannot do
+that job, because a space is a legitimate part of a reading.
+
+**Horizontal layout always shows the markup**, because there is nowhere sensible
+to put a reading in it.
+
+### Command hints (#67)
+
+`:` on its own lists every command; each keystroke narrows it. The list sits
+above the command line in as many aligned columns as fit, filled down each
+column so an alphabetical list still reads alphabetically.
+
+The table of names is a second copy of the ones in `parse`, which is a `match` on
+string literals and cannot be enumerated. That is the trade: adding a command is
+two edits, and in exchange the table is the one place that says what each command
+is *for* — which is what is being read when the name cannot be remembered. A test
+parses every listed name, so the menu can never offer a command that does not
+exist.
 
 ### Segmentation from Yume's language model (#63)
 
