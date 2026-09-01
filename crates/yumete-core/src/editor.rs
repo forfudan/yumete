@@ -1176,29 +1176,20 @@ impl Editor {
         }
         let pattern = self.last_search.clone();
         let rope = self.current_buffer().rope();
-        let text = rope.to_string();
         let len = rope.len_chars();
 
+        // Line by line, not over the whole buffer: a pattern cannot contain a
+        // newline (Enter submits the prompt), so a match never straddles a line
+        // break, and materialising the document for every `n` costs an 800 KB
+        // copy on a novel.
         let found = if forward {
-            // Start just after the cursor, then wrap to the top.
-            let start_byte = rope.char_to_byte((self.cursor + 1).min(len));
-            text[start_byte..]
-                .find(&pattern)
-                .map(|b| start_byte + b)
-                .or_else(|| text.find(&pattern))
+            search_forward(rope, &pattern, (self.cursor + 1).min(len))
         } else {
-            // Search before the cursor, then wrap to the bottom.
-            let end_byte = rope.char_to_byte(self.cursor);
-            text[..end_byte]
-                .rfind(&pattern)
-                .or_else(|| text.rfind(&pattern))
+            search_backward(rope, &pattern, self.cursor)
         };
 
         match found {
-            Some(byte) => {
-                let pos = rope.byte_to_char(byte);
-                self.set_cursor(pos);
-            }
+            Some(pos) => self.set_cursor(pos),
             None => self.status = format!("pattern not found: {pattern}"),
         }
     }
@@ -1997,6 +1988,88 @@ fn replace_in_line(line: &str, pattern: &str, replacement: &str, global: bool) -
     } else {
         (line.to_string(), 0)
     }
+}
+
+/// The first occurrence of `pattern` at or after char index `from`, wrapping
+/// past the end of the buffer back to its start.
+///
+/// Line by line, and **sequentially**: a pattern cannot contain a newline (Enter
+/// submits the prompt), so a match never straddles a line break, and walking the
+/// rope's own line iterator costs one step per line instead of a fresh descent
+/// of the tree. Materialising the whole document instead — which is what this
+/// used to do — copies 800 KB for every press of `n`.
+fn search_forward(rope: &Rope, pattern: &str, from: usize) -> Option<usize> {
+    let start_line = rope.char_to_line(from.min(rope.len_chars()));
+    // From the cursor to the end, then from the top back to the cursor's line,
+    // so the wrap covers the part of that line before the cursor too.
+    scan(rope, pattern, start_line, rope.len_lines(), from)
+        .or_else(|| scan(rope, pattern, 0, start_line + 1, 0))
+}
+
+/// The first match at or after `from` within `lines`, searching forward.
+fn scan(
+    rope: &Rope,
+    pattern: &str,
+    from_line: usize,
+    to_line: usize,
+    from: usize,
+) -> Option<usize> {
+    let mut at = rope.line_to_char(from_line);
+    for slice in rope
+        .lines_at(from_line)
+        .take(to_line.saturating_sub(from_line))
+    {
+        let owned;
+        let text: &str = match slice.as_str() {
+            Some(text) => text,
+            None => {
+                owned = slice.to_string();
+                &owned
+            }
+        };
+        let begin = byte_of_char(text, from.saturating_sub(at));
+        if let Some(offset) = text.get(begin..).and_then(|rest| rest.find(pattern)) {
+            return Some(at + text[..begin + offset].chars().count());
+        }
+        at += slice.len_chars();
+    }
+    None
+}
+
+/// The byte offset of character `n` in `text`, or its length.
+fn byte_of_char(text: &str, n: usize) -> usize {
+    text.char_indices().nth(n).map_or(text.len(), |(b, _)| b)
+}
+
+/// The last occurrence of `pattern` before char index `from`, wrapping past the
+/// start of the buffer back to its end.
+///
+/// One forward pass, keeping the best answer: the last match before `from`, or —
+/// when there is none — the last match anywhere, which is where a wrap lands.
+fn search_backward(rope: &Rope, pattern: &str, from: usize) -> Option<usize> {
+    let (mut before, mut last) = (None, None);
+    let mut at = 0usize;
+    for slice in rope.lines() {
+        let owned;
+        let text: &str = match slice.as_str() {
+            Some(text) => text,
+            None => {
+                owned = slice.to_string();
+                &owned
+            }
+        };
+        let mut byte = 0usize;
+        while let Some(offset) = text.get(byte..).and_then(|rest| rest.find(pattern)) {
+            let found = at + text[..byte + offset].chars().count();
+            if found < from {
+                before = Some(found);
+            }
+            last = Some(found);
+            byte += offset + pattern.len().max(1);
+        }
+        at += slice.len_chars();
+    }
+    before.or(last)
 }
 
 /// The bracket and quote pairs match mode understands, CJK included — a novel's
