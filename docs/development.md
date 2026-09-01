@@ -261,7 +261,7 @@ Phases are ordered by priority, most writer-critical first:
 | 63  | **Segmentation from Yume's language model** | ime  | P2    | 詞頻表 + 詞彙表 drive `w`/`b`/`e`   | Done   |
 | 64  | **縦中横 in the vertical page**            | core   | P2    | half-width pairs share one slot     | Done   |
 | 65  | **振假名 (ruby)**                          | tui    | P3    | HTML + Typst dialects, Ruby mode    | Done   |
-| 67  | **Command hints**                          | tui    | P4    | `:` lists and narrows                | Done   |
+| 67  | **Command hints + Tab completion**         | tui    | P4    | `:` lists, narrows, Tab cycles       | Done   |
 | 68  | 圏点 (emphasis dots)                       | tui    | P3    | same column as ruby                 |        |
 | 66  | **IME in the `/` and `:` lines**           | tui    | P2    | + `:chaifen` annotation toggle      | Done   |
 
@@ -581,9 +581,17 @@ to put a reading in it.
 
 ### Command hints (#67)
 
-`:` on its own lists every command; each keystroke narrows it. The list sits
-above the command line in as many aligned columns as fit, filled down each
-column so an alphabetical list still reads alphabetically.
+`:` on its own lists every command; each keystroke narrows it, and **Tab** walks
+the matches, writing each onto the line. The prefix Tab started from is kept
+rather than re-read from the line — after the first Tab the line says `ruby`, and
+re-reading it would narrow the list under the user's feet. The list sits above
+the command line in as many aligned columns as fit, filled down each column so an
+alphabetical list still reads alphabetically, with Tab's pick inked.
+
+The `:` line does **not** run the IME. Its whole vocabulary is ASCII command
+names, so composing there would only mean toggling out of it before every
+command; `/` keeps the IME, because a search pattern in a Chinese document is
+Chinese.
 
 The table of names is a second copy of the ones in `parse`, which is a `match` on
 string literals and cannot be enumerated. That is the trade: adding a command is

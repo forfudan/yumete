@@ -165,7 +165,9 @@ KEYS (Normal mode, Helix-style):
               「」『』（）《》【】〔〕 and the ASCII pairs
     / ? n N   search forward / backward; next / previous match
     *         search for whatever is selected
-    :         command line (:w  :w <path>  :q  :q!  :o <path>  :new
+    :         command line — Tab cycles the completion, and the list of
+              commands appears above it and narrows as you type
+              (:w  :w <path>  :q  :q!  :o <path>  :new
               :s/old/new/[g]  :%s/old/new/[g]  :segment
               :layout [horizontal|vertical]  :vertical  :horizontal
               :chaifen  toggle the 拆分 annotation beside candidates

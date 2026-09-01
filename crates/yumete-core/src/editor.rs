@@ -126,6 +126,11 @@ pub struct Editor {
     chaifen: bool,
     /// What Ruby mode is editing the reading of.
     ruby_target: Option<RubyTarget>,
+    /// The command-line completion in progress: the prefix Tab started from, and
+    /// which match is selected. The prefix is kept because the typed text is
+    /// replaced by each candidate in turn, so the line itself can no longer say
+    /// what was being completed.
+    completion: Option<(String, usize)>,
     /// Which ruby dialects are laid out as readings (Feature #65). Vertical
     /// layout only — horizontal always shows the markup, since there is nowhere
     /// sensible to put a reading in it.
@@ -225,6 +230,7 @@ impl Editor {
             chaifen_request: None,
             chaifen: false,
             ruby_target: None,
+            completion: None,
             ruby: Dialects::only(crate::ruby::Dialect::Html),
             layout: Layout::default(),
             zong_length: DEFAULT_ZONG_LENGTH,
@@ -420,6 +426,15 @@ impl Editor {
             )),
             Mode::Ruby => Some(('注', &self.command_line)),
             _ => None,
+        }
+    }
+
+    /// The commands to offer for the open command line, and which one Tab has
+    /// selected.
+    pub fn command_menu(&self) -> (Vec<&'static command::Entry>, Option<usize>) {
+        match &self.completion {
+            Some((prefix, i)) => (command::complete(prefix), Some(*i)),
+            None => (command::complete(&self.command_line), None),
         }
     }
 
@@ -985,13 +1000,26 @@ impl Editor {
                 let mut buf = [0u8; 4];
                 self.insert_str(c.encode_utf8(&mut buf));
             }
-            // Chords are not text; ignore them rather than inserting a literal.
-            Key::Ctrl(_) | Key::Alt(_) => {}
+            // A literal tab, so indentation can still be typed.
+            Key::Tab => {
+                self.insert_recording.push('\t');
+                self.insert_str("\t");
+            }
+            // Chords and Shift-Tab are not text; ignore them rather than
+            // inserting a literal.
+            Key::BackTab | Key::Ctrl(_) | Key::Alt(_) => {}
         }
     }
 
     fn on_command_key(&mut self, key: Key) -> KeyOutcome {
+        // Anything but Tab abandons the completion in progress, so the next Tab
+        // starts from what is actually on the line.
+        if !matches!(key, Key::Tab | Key::BackTab) {
+            self.completion = None;
+        }
         match key {
+            Key::Tab => self.cycle_completion(1),
+            Key::BackTab => self.cycle_completion(-1),
             Key::Esc => {
                 self.command_line.clear();
                 self.mode = Mode::Normal;
@@ -1421,6 +1449,35 @@ impl Editor {
         buffer.insert(0, &formatted);
         self.clamp_cursor();
         self.status = format!("ruby rewritten as {}", dialect.name());
+    }
+
+    /// Step Tab's completion through the matching commands, writing each onto
+    /// the command line in turn.
+    ///
+    /// Only the command *word* completes: once there is a space the rest is an
+    /// argument, and a file name is not something this list knows about.
+    fn cycle_completion(&mut self, step: isize) {
+        if self.command_line.contains(char::is_whitespace) {
+            return;
+        }
+        let prefix = match &self.completion {
+            Some((prefix, _)) => prefix.clone(),
+            None => self.command_line.clone(),
+        };
+        let matches = command::complete(&prefix);
+        if matches.is_empty() {
+            return;
+        }
+        let n = matches.len() as isize;
+        let next = match &self.completion {
+            Some((_, i)) => (*i as isize + step).rem_euclid(n),
+            // The first Tab lands on the first match going forward, and on the
+            // last going back.
+            None if step > 0 => 0,
+            None => n - 1,
+        } as usize;
+        self.command_line = matches[next].name.to_string();
+        self.completion = Some((prefix, next));
     }
 
     /// Open Ruby mode on whatever the cursor is pointing at.
@@ -2231,13 +2288,54 @@ mod tests {
     }
 
     #[test]
-    fn committed_text_goes_to_the_command_line_too() {
+    fn tab_cycles_the_command_completion() {
+        let mut ed = Editor::new();
+        ed.on_key(Key::Char(':'));
+        for c in "ru".chars() {
+            ed.on_key(Key::Char(c));
+        }
+        // Tab walks the matches, writing each onto the line.
+        ed.on_key(Key::Tab);
+        assert_eq!(ed.prompt(), Some((':', "ruby")));
+        ed.on_key(Key::Tab);
+        assert_eq!(ed.prompt(), Some((':', "ruby-on")));
+        // …and wraps, since the prefix is remembered rather than re-read from
+        // the line, which now says `ruby-on`.
+        ed.on_key(Key::BackTab);
+        assert_eq!(ed.prompt(), Some((':', "ruby")));
+        ed.on_key(Key::BackTab);
+        assert_eq!(ed.prompt(), Some((':', "ruby-off")), "wrapped backwards");
+
+        // Typing abandons the completion, so the next Tab starts from the line.
+        ed.on_key(Key::Char('x'));
+        assert_eq!(ed.command_menu().1, None);
+    }
+
+    #[test]
+    fn tab_leaves_arguments_alone() {
+        let mut ed = Editor::new();
+        ed.on_key(Key::Char(':'));
+        for c in "w draft".chars() {
+            ed.on_key(Key::Char(c));
+        }
+        ed.on_key(Key::Tab);
+        assert_eq!(
+            ed.prompt(),
+            Some((':', "w draft")),
+            "a file name is not a command name"
+        );
+    }
+
+    #[test]
+    fn the_completed_command_runs() {
         let mut ed = typed("春江潮水");
         ed.on_key(Key::Char(':'));
-        ed.insert_committed("s/潮水/明月/");
-        assert_eq!(ed.prompt(), Some((':', "s/潮水/明月/")));
+        ed.on_key(Key::Char('s'));
+        ed.on_key(Key::Char('e'));
+        ed.on_key(Key::Tab);
+        assert_eq!(ed.prompt(), Some((':', "segment")));
         ed.on_key(Key::Enter);
-        assert_eq!(ed.current_buffer().text(), "春江明月");
+        assert!(ed.status().starts_with("segmentation"));
     }
 
     #[test]

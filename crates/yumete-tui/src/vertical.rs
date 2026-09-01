@@ -167,6 +167,18 @@ fn index_mark(i: usize) -> String {
     }
 }
 
+/// The full-width form of a single ASCII digit, which occupies both cells of a
+/// slot and so reads as centred. `None` for anything else.
+fn lone_digit(text: &str) -> Option<char> {
+    let mut chars = text.chars();
+    let c = chars.next()?;
+    if chars.next().is_some() || !c.is_ascii_digit() {
+        return None;
+    }
+    // U+FF10 FULLWIDTH DIGIT ZERO onwards.
+    char::from_u32('\u{FF10}' as u32 + (c as u32 - '0' as u32))
+}
+
 /// Draw a paragraph number above its 縱, two digits to a row (縦中横), so it
 /// reads as a number rather than a stack of loose digits.
 fn put_number(buf: &mut Buffer, x: u16, top: u16, rows: u16, n: usize, style: Style) {
@@ -182,6 +194,14 @@ fn put_number(buf: &mut Buffer, x: u16, top: u16, rows: u16, n: usize, style: St
         at += take;
         // Bottom-align the number against the text it labels.
         let y = top + rows - pairs.min(rows as usize) as u16 + row as u16;
+        // A terminal cannot place a glyph at a half-cell offset, so a lone
+        // half-width digit can only sit in one half of the slot or the other.
+        // Its **full-width** form is two cells wide and therefore fills the slot
+        // — which is the only way a single digit is centred over its 縱.
+        if let Some(one) = lone_digit(text) {
+            put_slot(buf, x, y, &one.to_string(), style);
+            continue;
+        }
         for (i, ch) in format!("{text:>2}").chars().enumerate() {
             if let Some(cell) = buf.cell_mut((x + i as u16, y)) {
                 cell.set_symbol(&ch.to_string()).set_style(style);
@@ -435,18 +455,11 @@ pub fn draw_candidate_panel(
     }
     let highlight = ime.highlight();
 
-    // The 下標 — the keys still owed for each candidate. It is not stacked into
-    // the candidate's column (a column of letters beside 漢字 reads as part of
-    // the word) but written across its own row, under the column it belongs to.
-    // The columns only widen when there is a 下標 to make room for, so a page of
-    // exact matches stays as narrow as it was.
-    let subscripts: Vec<&str> = candidates.iter().map(|c| c.completion.as_str()).collect();
-    let code_w = subscripts.iter().map(|c| str_width(c)).max().unwrap_or(0) as u16;
-    let pitch = if code_w > 0 {
-        SLOT_WIDTH.max(code_w + 1)
-    } else {
-        SLOT_WIDTH
-    };
+    // Everything in the panel is a 縱, the 下標 included: one character to a
+    // row, hung against the slot's right edge so the letters line up as a single
+    // edge running down beside the 漢字. Two letters side by side read as a
+    // syllable that is not there.
+    let pitch = SLOT_WIDTH;
 
     // The header is a 縱 like everything else in the panel: the code as typed
     // runs down the rightmost column, one character to a row and hung right, and
@@ -467,8 +480,10 @@ pub fn draw_candidate_panel(
     // direction the text they are joining runs.
     let mut columns: Vec<Vec<String>> = vec![header];
     columns.extend(candidates.iter().enumerate().map(|(i, cand)| {
+        // Number, a blank row, the candidate, then the keys still owed.
         let mut column = vec![index_mark(i), String::new()];
         column.extend(graphemes(&cand.text).map(String::from));
+        column.extend(graphemes(&cand.completion).map(String::from));
         column
     }));
 
@@ -477,9 +492,7 @@ pub fn draw_candidate_panel(
     // The header column is only ever a slot wide, whatever the candidates need.
     let inner_w = SLOT_WIDTH + (count as u16).saturating_sub(1) * pitch;
     let panel_w = (inner_w + 2).min(area.width.max(1));
-    // The columns, then the 下標 row when there is one.
-    let subscript_row = u16::from(code_w > 0);
-    let panel_h = (depth as u16 + 2 + subscript_row).min(area.height.max(1));
+    let panel_h = (depth as u16 + 2).min(area.height.max(1));
 
     // The text reads leftward, so the panel opens to the left of the cursor's
     // 縱 — the direction the text is going — and flips right only when there is
@@ -534,35 +547,20 @@ pub fn draw_candidate_panel(
                 break;
             }
             // Column 0 is the header, which is never highlighted; the
-            // candidates start at 1, so their number is `i - 1`.
+            // candidates start at 1, so their number is `i - 1`. Within a
+            // column the number and the 下標 sit a shade back from the
+            // candidate itself, so the three separate by weight alone.
+            let text_rows = 2 + graphemes(&candidates[i.max(1) - 1].text).count();
             let style = if i == 0 {
                 dim
             } else if i - 1 == highlight {
                 chosen
-            } else if slot == 0 {
+            } else if slot == 0 || slot >= text_rows {
                 dim
             } else {
                 ground
             };
             put_slot_right(buf, x, cy, symbol, style);
-        }
-
-        // The 下標 under the column it belongs to, written across as the letters
-        // they are — not stacked into the candidate, where they would read as
-        // part of the word.
-        if code_w > 0 && i > 0 {
-            let cy = top + depth as u16;
-            if cy < inner.y + inner.height {
-                for (n, ch) in subscripts[i - 1].chars().enumerate() {
-                    let cx = x + n as u16;
-                    if cx >= inner.x + inner.width {
-                        break;
-                    }
-                    if let Some(cell) = buf.cell_mut((cx, cy)) {
-                        cell.set_symbol(&ch.to_string()).set_style(dim);
-                    }
-                }
-            }
         }
     }
 }

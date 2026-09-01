@@ -55,4 +55,8 @@ pub enum Key {
     Down,
     Home,
     End,
+    /// Tab — cycles the command-line completion forward.
+    Tab,
+    /// Shift-Tab, cycling it back.
+    BackTab,
 }

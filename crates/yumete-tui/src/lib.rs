@@ -28,7 +28,7 @@ use ratatui::Frame;
 
 use yumete_config::{Config, LineNumbers};
 use yumete_core::zong::{Anchor, Layout as WritingLayout};
-use yumete_core::{command, Editor, Key, KeyOutcome, Mode, TextStore};
+use yumete_core::{Editor, Key, KeyOutcome, Mode, TextStore};
 use yumete_ime::ImeSession;
 
 /// Run the interactive editor until the user quits.
@@ -64,8 +64,6 @@ pub fn run(editor: &mut Editor, config: &Config, ime: &mut ImeSession) -> io::Re
     let mut viewport = Viewport::default();
     let mut shift = ShiftTap::default();
     let mut last_mode = None;
-    // Whether the `:` line borrowed the IME's 中 state and owes it back.
-    let mut restore_chinese = false;
 
     let result = loop {
         let mode = editor.mode();
@@ -87,26 +85,12 @@ pub fn run(editor: &mut Editor, config: &Config, ime: &mut ImeSession) -> io::Re
                 }
             );
 
-            // Command *names* are ASCII, so `:` drops to 英 on the way in and
-            // hands 中 back on the way out — `:w` types straight through, and a
-            // Shift tap still gets Chinese for `:s/中文/中文/`. A tap made
-            // inside the command line is the user's own choice and is left
-            // alone. `/` is untouched: a search pattern is usually Chinese.
-            if ime.available() {
-                if mode == Mode::Command {
-                    if ime.is_composing() {
-                        ime.escape();
-                    }
-                    if ime.is_chinese() {
-                        ime.toggle_language();
-                        restore_chinese = true;
-                    }
-                } else if last_mode == Some(Mode::Command) {
-                    if restore_chinese && !ime.is_chinese() {
-                        ime.toggle_language();
-                    }
-                    restore_chinese = false;
-                }
+            // Opening the command line cancels a composition rather than leaving
+            // it hanging: `:` does not compose, so there is nothing to finish it
+            // with. The 中/英 state itself is left alone — it belongs to Insert,
+            // and a command is over in a keystroke or two.
+            if mode == Mode::Command && ime.available() && ime.is_composing() {
+                ime.escape();
             }
             last_mode = Some(mode);
         }
@@ -180,17 +164,15 @@ pub fn run(editor: &mut Editor, config: &Config, ime: &mut ImeSession) -> io::Re
 
 /// Whether a mode collects text the IME should compose into.
 ///
-/// Insert is the obvious one, but a `/` search and a `:` substitution are text
-/// too — and in a Chinese document they are usually Chinese text. Without this,
-/// `/` could only search for what could be typed as ASCII, which in a novel is
-/// almost nothing.
+/// Insert is the obvious one, but a `/` search is text too — and in a Chinese
+/// document it is usually Chinese text. Without this, `/` could only search for
+/// what could be typed as ASCII, which in a novel is almost nothing.
 fn composes(mode: Mode) -> bool {
     // Ruby included: a reading is kana or 拼音, and kana needs the IME as much
-    // as the body text does.
-    matches!(
-        mode,
-        Mode::Insert | Mode::Search | Mode::Command | Mode::Ruby
-    )
+    // as the body text does. The `:` command line is **not** — its vocabulary is
+    // ASCII command names, so running the IME there would only mean toggling out
+    // of it before every command.
+    matches!(mode, Mode::Insert | Mode::Search | Mode::Ruby)
 }
 
 /// Whether a key event should drive the editor.
@@ -345,6 +327,8 @@ fn map_key(code: KeyCode, modifiers: KeyModifiers) -> Option<Key> {
         KeyCode::Down => Some(Key::Down),
         KeyCode::Home => Some(Key::Home),
         KeyCode::End => Some(Key::End),
+        KeyCode::Tab => Some(Key::Tab),
+        KeyCode::BackTab => Some(Key::BackTab),
         _ => None,
     }
 }
@@ -494,10 +478,10 @@ fn language_tag(editor: &Editor, ime: &ImeSession) -> String {
 /// as many aligned columns as fit, tallest-first down each column, because a
 /// single column of twenty would cover the page it is being run against.
 fn draw_command_menu(frame: &mut Frame, editor: &Editor, area: Rect, status: Rect) {
-    let Some((':', typed)) = editor.prompt() else {
+    let Some((':', _)) = editor.prompt() else {
         return;
     };
-    let matches = command::complete(typed);
+    let (matches, selected) = editor.command_menu();
     if matches.is_empty() {
         return;
     }
@@ -546,11 +530,34 @@ fn draw_command_menu(frame: &mut Frame, editor: &Editor, area: Rect, status: Rec
         if row as u16 >= height || x >= menu.x + width {
             continue;
         }
+        // Tab's current pick is inked, the way the highlighted candidate is.
+        let picked = selected == Some(i);
+        let (name_style, help_style) = if picked {
+            let on = Style::default()
+                .bg(Color::Rgb(0xcf, 0xc6, 0xa9))
+                .fg(Color::Rgb(0x26, 0x2a, 0x27));
+            (on, on)
+        } else {
+            (name_style, help_style)
+        };
+        if picked {
+            for n in 0..col_w {
+                let cx = x.saturating_sub(1) + n;
+                if cx < menu.x + width {
+                    if let Some(cell) = buf.cell_mut((cx, y)) {
+                        cell.set_symbol(" ").set_style(name_style);
+                    }
+                }
+            }
+        }
         let name = match entry.alias {
             Some(alias) => format!("{} ({alias})", entry.name),
             None => entry.name.to_string(),
         };
-        let mut put = |text: &str, at: u16, style: Style| {
+        for (text, at, style) in [
+            (name.as_str(), x, name_style),
+            (entry.help, x + name_w as u16 + 2, help_style),
+        ] {
             for (n, ch) in text.chars().enumerate() {
                 let cx = at + n as u16;
                 if cx >= menu.x + width {
@@ -560,9 +567,7 @@ fn draw_command_menu(frame: &mut Frame, editor: &Editor, area: Rect, status: Rec
                     cell.set_symbol(&ch.to_string()).set_style(style);
                 }
             }
-        };
-        put(&name, x, name_style);
-        put(entry.help, x + name_w as u16 + 2, help_style);
+        }
     }
 }
 
@@ -1017,9 +1022,9 @@ mod tests {
 
         // One header row for a two-paragraph buffer, the number right-aligned
         // in its 縱 and the text starting on the row below.
-        assert_eq!(at(&buffer, 19, 0), "1");
+        assert_eq!(at(&buffer, 18, 0), "１", "full-width, so it is centred");
         assert_eq!(at(&buffer, 18, 1), "甲");
-        assert_eq!(at(&buffer, 16, 0), "2");
+        assert_eq!(at(&buffer, 15, 0), "２");
         assert_eq!(at(&buffer, 15, 1), "丁");
     }
 
@@ -1151,13 +1156,29 @@ mod tests {
                 .flat_map(|y| (0..buffer.area.width).map(move |x| (x, y)))
                 .find(|&(x, y)| buffer[(x, y)].symbol() == needle)
         };
-        let (hx, hy) = find("a").expect("the typed code, in the header column");
-        let (cx, _) = find("奧").expect("the annotated candidate");
+        let (hx, _) = find("a").expect("the typed code, in the header column");
+        let (cx, cy) = find("奧").expect("the annotated candidate");
         assert!(hx > cx, "the header sits to the right of the candidates");
 
-        // The 下標 is a row of its own under the candidate, not stacked into it.
-        let subscript: String = (0..3).map(|d| at(&buffer, cx + d, hy + 3)).collect();
-        assert_eq!(subscript, "jvy", "下標 written across, under its column");
+        // The 下標 runs *down* the same column, one letter to a row and hung
+        // right — nothing in the panel sets two letters side by side.
+        let subscript: String = (1..4).map(|d| at(&buffer, cx + 1, cy + d)).collect();
+        assert_eq!(subscript, "jvy", "下標 reads down the column");
+        for d in 1..4 {
+            assert_eq!(at(&buffer, cx, cy + d), " ", "letters hang right");
+        }
+    }
+
+    #[test]
+    fn a_lone_paragraph_number_is_centred_over_its_zong() {
+        let mut editor = editor_with("甲乙丙");
+        let mut config = vertical_config();
+        config.editor.line_numbers = LineNumbers::Absolute;
+        let buffer = render_vertical(&mut editor, &config, 20, 12);
+
+        // A half-width `1` can only sit in one half of the slot; its full-width
+        // form fills both, which is the only way to centre it.
+        assert_eq!(at(&buffer, 18, 0), "１");
     }
 
     #[test]
@@ -1387,6 +1408,27 @@ mod tests {
     }
 
     #[test]
+    fn tab_inks_its_pick_in_the_menu() {
+        let mut editor = editor_with("那年冬天");
+        editor.on_key(Key::Char(':'));
+        editor.on_key(Key::Char('r'));
+        let config = Config::default();
+
+        let plain = render_with(&editor, &config, &no_ime(), 90, 24);
+        let inked = |b: &ratatui::buffer::Buffer| {
+            (0..b.area.height).any(|y| {
+                (0..b.area.width)
+                    .any(|x| b[(x, y)].style().bg == Some(Color::Rgb(0xcf, 0xc6, 0xa9)))
+            })
+        };
+        assert!(!inked(&plain), "nothing picked until Tab is pressed");
+
+        editor.on_key(Key::Tab);
+        let picked = render_with(&editor, &config, &no_ime(), 90, 24);
+        assert!(inked(&picked), "Tab's pick should be inked");
+    }
+
+    #[test]
     fn the_command_menu_sits_above_the_command_line() {
         let mut editor = editor_with("那年冬天");
         editor.on_key(Key::Char(':'));
@@ -1462,14 +1504,16 @@ mod tests {
         assert!(status.contains("[中"), "language tag missing: {status:?}");
     }
 
-    /// Every text-collecting mode composes; Normal must not, or `/` itself
-    /// would be swallowed by the IME.
+    /// Modes that collect *prose* compose; Normal must not, or `/` itself would
+    /// be swallowed by the IME, and the command line must not, because its
+    /// whole vocabulary is ASCII.
     #[test]
-    fn only_text_modes_compose() {
+    fn only_prose_modes_compose() {
         assert!(composes(Mode::Insert));
         assert!(composes(Mode::Search));
-        assert!(composes(Mode::Command));
+        assert!(composes(Mode::Ruby));
         assert!(!composes(Mode::Normal));
+        assert!(!composes(Mode::Command));
     }
 
     #[test]
