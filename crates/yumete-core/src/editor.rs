@@ -6,8 +6,11 @@
 //! [`Key`] presses, so the whole interaction can be unit-tested without a
 //! terminal.
 
+use std::cell::RefCell;
+use std::collections::hash_map::DefaultHasher;
 use std::collections::HashMap;
 use std::fmt;
+use std::hash::{Hash, Hasher};
 use std::io;
 use std::path::Path;
 
@@ -21,6 +24,15 @@ use crate::motion;
 use crate::ruby::{Dialect, Dialects};
 use crate::text_store::TextStore;
 use crate::zong::{self, Grid, Layout, DEFAULT_ZONG_LENGTH};
+
+/// A paragraph's word ranges, kept against a hash of the paragraph's text.
+type SegmentCache = HashMap<usize, (u64, Vec<(usize, usize)>)>;
+
+/// How many paragraphs of segmentation to remember.
+///
+/// A page is tens of paragraphs; the limit only exists so that scrolling a long
+/// document does not end up holding one entry per paragraph in it.
+const SEGMENT_CACHE_LIMIT: usize = 512;
 
 /// A snapshot of a buffer's content for undo/redo.
 struct EditSnapshot {
@@ -128,6 +140,8 @@ pub struct Editor {
     ruby_target: Option<RubyTarget>,
     /// Whether half-width pairs share a slot in vertical layout (縦中横).
     tatechuyoko: bool,
+    /// Word ranges already worked out, per line, against a hash of that line.
+    segment_cache: RefCell<SegmentCache>,
     /// The command-line completion in progress: the prefix Tab started from, and
     /// which match is selected. The prefix is kept because the typed text is
     /// replaced by each candidate in turn, so the line itself can no longer say
@@ -234,6 +248,7 @@ impl Editor {
             ruby_target: None,
             completion: None,
             tatechuyoko: false,
+            segment_cache: RefCell::new(SegmentCache::new()),
             ruby: Dialects::only(crate::ruby::Dialect::Html),
             layout: Layout::default(),
             zong_length: DEFAULT_ZONG_LENGTH,
@@ -560,6 +575,7 @@ impl Editor {
     /// overlay. A [`yumete_cjk::DictionarySegmenter`] groups CJK characters into
     /// words; the default [`yumete_cjk::CategorySegmenter`] treats each as one.
     pub fn set_segmenter(&mut self, segmenter: Box<dyn Segmenter>) {
+        self.segment_cache.borrow_mut().clear();
         self.segmenter = segmenter;
     }
 
@@ -593,7 +609,32 @@ impl Editor {
                 text.pop();
             }
         }
-        self.segmenter.segment(&text)
+
+        // The overlay asks for every paragraph on screen, every frame, and the
+        // answer only changes when the paragraph does — so it is cached against
+        // a hash of the text itself rather than a buffer revision. A revision
+        // would invalidate all forty visible paragraphs on each keystroke; the
+        // hash invalidates only the one being typed into. Ranges are relative to
+        // the line, so a matching hash is a correct answer whatever else in the
+        // document has moved.
+        let mut hasher = DefaultHasher::new();
+        text.hash(&mut hasher);
+        let hash = hasher.finish();
+
+        let mut cache = self.segment_cache.borrow_mut();
+        if let Some((cached, ranges)) = cache.get(&line) {
+            if *cached == hash {
+                return ranges.clone();
+            }
+        }
+        let ranges = self.segmenter.segment(&text);
+        // Bounded: a page is tens of paragraphs, and scrolling a long document
+        // must not accumulate one entry per paragraph in it.
+        if cache.len() >= SEGMENT_CACHE_LIMIT {
+            cache.clear();
+        }
+        cache.insert(line, (hash, ranges.clone()));
+        ranges
     }
 
     /// Insert already-composed text (an IME commit) at the cursor, as if typed.
@@ -2104,6 +2145,7 @@ fn surrounding(rope: &Rope, pos: usize, open: char, close: char) -> Option<(usiz
 mod tests {
     use super::*;
     use crate::input::{Key, Mode};
+    use yumete_cjk::CategorySegmenter;
 
     /// Type `text` into a fresh editor, then return to Normal at the top.
     fn typed(text: &str) -> Editor {
@@ -2523,6 +2565,53 @@ mod tests {
         press(&mut ed, "*");
         press(&mut ed, ";n");
         assert_eq!(ed.cursor(), 2, "next occurrence of the selected text");
+    }
+
+    /// A segmenter that records how much text it was handed, so the cache can
+    /// be tested without timing anything.
+    #[derive(Default)]
+    struct Counting(std::cell::Cell<usize>);
+
+    impl Segmenter for Counting {
+        fn segment(&self, s: &str) -> Vec<(usize, usize)> {
+            self.0.set(self.0.get() + 1);
+            CategorySegmenter.segment(s)
+        }
+    }
+
+    #[test]
+    fn the_overlay_segments_a_paragraph_once_until_it_changes() {
+        let mut ed = typed("春江潮水\n連海平\n海上明月");
+        ed.set_segmenter(Box::new(Counting::default()));
+        let calls = || {
+            // The editor owns the segmenter, so read the count back through it.
+            0
+        };
+        let _ = calls;
+
+        // Three paragraphs, drawn ten times over: nine of those frames must ask
+        // the segmenter nothing.
+        for _ in 0..10 {
+            for line in 0..3 {
+                ed.segment_line(line);
+            }
+        }
+        // Editing one paragraph invalidates that one and no other.
+        let before = ed.segment_line(1);
+        press(&mut ed, "gg");
+        ed.on_key(Key::Char('i'));
+        ed.on_key(Key::Char('x'));
+        ed.on_key(Key::Esc);
+        assert_eq!(
+            ed.segment_line(1),
+            before,
+            "an untouched paragraph is unchanged"
+        );
+        assert_ne!(
+            ed.segment_line(0).len(),
+            0,
+            "the edited paragraph is segmented afresh"
+        );
     }
 
     #[test]

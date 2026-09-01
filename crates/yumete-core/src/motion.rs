@@ -180,58 +180,142 @@ pub fn buffer_end(rope: &Rope, _pos: usize) -> usize {
     rope.line_to_char(last_line(rope))
 }
 
-/// The word ranges of the whole buffer, at the requested granularity.
+/// The word ranges of one line, as absolute character indices.
+///
+/// **One line, not the buffer.** Word boundaries never cross a line break —
+/// a newline separates words for the whitespace rule and breaks a run of 漢字
+/// for the dictionary — so a motion only ever needs the line it is on and, at
+/// worst, the next one. Segmenting the whole document to find the next word
+/// costs a full pass over the text for every press of `w`, which on a novel is
+/// most of a second and leaves the key queue running long after the key is let
+/// go.
 ///
 /// "WORDS" (`big`) split on whitespace only and need no dictionary; "words"
 /// (small) are produced by `seg`, so a dictionary segmenter can group CJK
 /// characters into words while the default splits each into its own word.
-fn word_ranges_of(rope: &Rope, big: bool, seg: &dyn Segmenter) -> Vec<(usize, usize)> {
-    let text = rope.to_string();
-    if big {
+fn line_words(rope: &Rope, line: usize, big: bool, seg: &dyn Segmenter) -> Vec<(usize, usize)> {
+    let start = rope.line_to_char(line);
+    let text = line_text(rope, line);
+    let ranges = if big {
         yumete_cjk::word_ranges_big(&text)
     } else {
         seg.segment(&text)
-    }
+    };
+    ranges
+        .into_iter()
+        .map(|(a, b)| (start + a, start + b))
+        .collect()
+}
+
+/// The line `pos` sits on, clamped into the buffer.
+fn line_of(rope: &Rope, pos: usize) -> usize {
+    rope.char_to_line(pos.min(rope.len_chars()))
 }
 
 /// The start of the next word after `pos` (`w` / `W`).
 pub fn next_word_start(rope: &Rope, pos: usize, big: bool, seg: &dyn Segmenter) -> usize {
-    word_ranges_of(rope, big, seg)
-        .into_iter()
-        .map(|(start, _)| start)
-        .find(|&start| start > pos)
-        .unwrap_or_else(|| rope.len_chars())
+    for line in line_of(rope, pos)..rope.len_lines() {
+        if let Some(start) = line_words(rope, line, big, seg)
+            .into_iter()
+            .map(|(start, _)| start)
+            .find(|&start| start > pos)
+        {
+            return start;
+        }
+    }
+    rope.len_chars()
 }
 
 /// The end (last character) of the next word after `pos` (`e` / `E`).
 pub fn next_word_end(rope: &Rope, pos: usize, big: bool, seg: &dyn Segmenter) -> usize {
-    word_ranges_of(rope, big, seg)
-        .into_iter()
-        .map(|(_, end)| end.saturating_sub(1))
-        .find(|&last| last > pos)
-        .unwrap_or(pos)
+    for line in line_of(rope, pos)..rope.len_lines() {
+        if let Some(last) = line_words(rope, line, big, seg)
+            .into_iter()
+            .map(|(_, end)| end.saturating_sub(1))
+            .find(|&last| last > pos)
+        {
+            return last;
+        }
+    }
+    pos
 }
 
 /// The start of the previous word before `pos` (`b` / `B`).
 pub fn prev_word_start(rope: &Rope, pos: usize, big: bool, seg: &dyn Segmenter) -> usize {
-    let mut result = 0;
-    for (start, _) in word_ranges_of(rope, big, seg) {
-        if start < pos {
-            result = start;
-        } else {
-            break;
+    let mut line = line_of(rope, pos);
+    loop {
+        if let Some(start) = line_words(rope, line, big, seg)
+            .into_iter()
+            .rev()
+            .map(|(start, _)| start)
+            .find(|&start| start < pos)
+        {
+            return start;
         }
+        if line == 0 {
+            return 0;
+        }
+        line -= 1;
     }
-    result
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use ropey::Rope;
+    use yumete_cjk::CategorySegmenter;
 
     fn rope(s: &str) -> Rope {
         Rope::from_str(s)
+    }
+
+    /// A word motion must look at the text *near* the cursor, not all of it.
+    ///
+    /// Timing would make this flaky, so it counts characters instead: a
+    /// segmenter that records how much it was handed. Segmenting the whole
+    /// buffer for one `w` is what made holding the key run on for seconds after
+    /// it was released.
+    #[derive(Default)]
+    struct Counting(std::cell::Cell<usize>);
+
+    impl Segmenter for Counting {
+        fn segment(&self, s: &str) -> Vec<(usize, usize)> {
+            self.0.set(self.0.get() + s.chars().count());
+            CategorySegmenter.segment(s)
+        }
+    }
+
+    #[test]
+    fn a_word_motion_reads_only_the_lines_it_needs() {
+        // A hundred paragraphs; the cursor sits in the first.
+        let text = (0..100)
+            .map(|_| "那年冬天雪下得比往常都早")
+            .collect::<Vec<_>>()
+            .join("\n");
+        let r = rope(&text);
+        let seg = Counting::default();
+
+        next_word_start(&r, 0, false, &seg);
+        let read = seg.0.get();
+        assert!(read > 0, "it has to read something");
+        assert!(
+            read <= 24,
+            "read {read} characters for one `w`; the line is 12"
+        );
+
+        // Backwards, from the far end, is bounded the same way.
+        let seg = Counting::default();
+        prev_word_start(&r, r.len_chars() - 1, false, &seg);
+        assert!(seg.0.get() <= 24, "read {} going back", seg.0.get());
+    }
+
+    #[test]
+    fn word_motions_still_cross_lines() {
+        let r = rope("春江\n潮水");
+        let seg = CategorySegmenter;
+        // Off the end of the first line, onto the start of the second.
+        assert_eq!(next_word_start(&r, 1, false, &seg), 3);
+        assert_eq!(prev_word_start(&r, 3, false, &seg), 1);
     }
 
     #[test]

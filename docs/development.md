@@ -262,6 +262,7 @@ Phases are ordered by priority, most writer-critical first:
 | 64  | **縦中横 in the vertical page**            | core   | P2    | half-width pairs share one slot     | Done   |
 | 65  | **振假名 (ruby)**                          | tui    | P3    | HTML + Typst dialects, Ruby mode    | Done   |
 | 67  | **Command hints + Tab completion**         | tui    | P4    | `:` lists, narrows, Tab cycles       | Done   |
+| 69  | **Novel-scale performance**                | core   | P2    | word motion + overlay were O(buffer) | Done   |
 | 68  | 圏点 (emphasis dots)                       | tui    | P3    | same column as ruby                 |        |
 | 66  | **IME in the `/` and `:` lines**           | tui    | P2    | + `:chaifen` annotation toggle      | Done   |
 
@@ -615,6 +616,32 @@ two edits, and in exchange the table is the one place that says what each comman
 is *for* — which is what is being read when the name cannot be remembered. A test
 parses every listed name, so the menu can never offer a command that does not
 exist.
+
+### Two things that were reading the whole document (#69)
+
+Both had the same shape — work proportional to the *buffer* on an event that
+only concerns the *screen* — and neither showed up until there was a novel to
+open.
+
+**`w` segmented the entire buffer, per press.** `word_ranges_of` called
+`rope.to_string()` and handed the lot to the segmenter to find one boundary. On
+800k characters with Yume's 1.25M-entry model that is **1130 ms a press**, so
+holding `w` filled the key queue and kept walking for seconds after the key was
+released — which is exactly what it looked like. Word boundaries never cross a
+line break (a newline separates words for the whitespace rule and breaks a run of
+漢字 for the dictionary), so a motion only ever needs the line it is on and, at
+worst, the next. **1130 ms → 0.05 ms.**
+
+**The overlay re-segmented every visible paragraph, per frame** — 2.4 ms for
+forty of them, recomputed even when nothing had changed. It is now cached per
+paragraph against a **hash of that paragraph's text** rather than a buffer
+revision: a revision would invalidate all forty on every keystroke, while the
+hash invalidates only the paragraph being typed into. Ranges are relative to
+their line, so a matching hash is a correct answer however far the line has moved
+in the document. **2.4 ms → 0.03 ms.**
+
+Both are guarded by tests that count calls rather than measure time, so they
+cannot rot back without failing.
 
 ### Segmentation from Yume's language model (#63)
 
