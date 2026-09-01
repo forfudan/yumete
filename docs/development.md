@@ -259,6 +259,8 @@ Phases are ordered by priority, most writer-critical first:
 | 61  | **Vertical layout (縱書)**                | tui    | P2    | 縱 model + rotated punctuation      | Done   |
 | 62  | **Helix alignment (counts, match mode)**  | core   | P2    | tutorial verbs; no multi-cursor yet | Done   |
 | 63  | **Segmentation from Yume's language model** | ime  | P2    | 詞頻表 + 詞彙表 drive `w`/`b`/`e`   | Done   |
+| 64  | **縦中横 in the vertical page**            | core   | P2    | half-width pairs share one slot     | Done   |
+| 65  | 振假名 (ruby) and 圏点                     | tui    | P3    | needs a markup convention first     |        |
 
 ---
 
@@ -506,6 +508,31 @@ show tofu).
 rotate a glyph, so true 縦中横 for two-digit numbers, ruby, and 圏点 are open.
 The candidate panel drops the 拆分 comment vertically, where it would double the
 panel's height per candidate.
+
+### 縦中横 (#64)
+
+The 縱 model was "one grapheme, one slot". Making it "one **slot**, which is
+usually one grapheme but may be a pair of half-width alphanumerics" was a change
+in exactly one function — `slot_offsets` — because every other question the
+module answers (how long is a 縱, which slot is the cursor in, where does a 縱
+wrap, what does the renderer draw) is already expressed in those offsets. The
+cursor, the wrap length, motion and the page all learned 縦中横 together.
+
+Two characters is the hard limit: a slot is two cells and a half-width character
+is one. `1985` therefore sets as `19` over `85`, which is as close as a cell grid
+gets. Packing is restricted to alphanumerics — a comma packed beside a letter
+reads as a mistake, not as typesetting.
+
+### What ruby and 圏点 still need (#65)
+
+Both are *renderable*: with `zong_gap = 1` there is a half-width cell beside
+every 縱, which is exactly where vertical typesetting puts emphasis dots, and
+where half-width kana or pinyin ruby would go. Neither is *specified*, though —
+the buffer is a plain text file, so the open question is what marks a run as
+ruby-bearing or emphasised. Aozora's `｜漢字《かんじ》`, a Markdown-ish syntax,
+and a sidecar are all defensible and they are not interchangeable. Deciding that
+is a design call, not an implementation detail, so it is left open rather than
+invented.
 
 ### Segmentation from Yume's language model (#63)
 

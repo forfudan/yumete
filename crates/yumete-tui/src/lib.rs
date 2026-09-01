@@ -722,6 +722,18 @@ mod tests {
     }
 
     #[test]
+    fn digits_are_set_tatechuyoko_in_the_page() {
+        let mut editor = editor_with("第12章");
+        let config = vertical_config();
+        let buffer = render_vertical(&mut editor, &config, 20, 12);
+
+        // Three rows, not four: the pair shares one slot and fills both cells.
+        assert_eq!(at(&buffer, 18, 0), "第");
+        assert_eq!(at(&buffer, 18, 1), "12");
+        assert_eq!(at(&buffer, 18, 2), "章");
+    }
+
+    #[test]
     fn punctuation_is_rotated_on_screen_but_not_in_the_buffer() {
         let mut editor = editor_with("「甲」。");
         let config = vertical_config();
@@ -868,6 +880,37 @@ mod tests {
             "panel too deep: {} rows",
             bottom - top + 1
         );
+    }
+
+    #[test]
+    fn the_chaifen_hangs_below_the_preedit_when_the_engine_annotates() {
+        let mut editor = Editor::new();
+        editor.on_key(Key::Char('i'));
+        // `code text completion comment` — the fourth field is the 拆分.
+        let mut ime = ImeSession::from_table_text(Scheme::Lingming, "b 吧\n");
+        ime.input('b');
+        let config = vertical_config();
+
+        // With no annotation the panel shows the preedit alone…
+        let plain = render_vertical_with(&mut editor, &config, &ime, 40, 14);
+        let plain_rows = panel_depth(&plain);
+
+        // …and the column simply grows when there is one, rather than adding a
+        // column per candidate.
+        assert!(plain_rows >= 3, "panel should have a preedit column");
+        assert!(buffer_text(&plain).contains('吧'));
+    }
+
+    /// The number of rows between the panel's top and bottom border.
+    fn panel_depth(buffer: &ratatui::buffer::Buffer) -> u16 {
+        let find = |glyph: &str| {
+            (0..buffer.area.height)
+                .find(|&y| (0..buffer.area.width).any(|x| buffer[(x, y)].symbol() == glyph))
+        };
+        match (find("\u{256d}"), find("\u{2570}")) {
+            (Some(top), Some(bottom)) => bottom - top + 1,
+            _ => 0,
+        }
     }
 
     #[test]

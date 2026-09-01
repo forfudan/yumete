@@ -24,7 +24,7 @@ use ratatui::style::{Color, Modifier, Style};
 use ratatui::widgets::{Block, BorderType, Borders, Clear, Widget};
 use ratatui::Frame;
 
-use yumete_cjk::{graphemes, str_width, vertical_grapheme};
+use yumete_cjk::{graphemes, str_width};
 use yumete_config::{Config, LineNumbers};
 use yumete_core::zong::{self, Anchor};
 use yumete_core::{Editor, Mode, TextStore};
@@ -268,9 +268,11 @@ pub fn draw(
         let line_start = rope.line_to_char(zong.line);
         let text = rope.slice(zong.start..zong.end).to_string();
         let mut offset = 0usize;
-        for (slot, grapheme) in graphemes(&text).enumerate() {
+        // Slots, not graphemes: a 縦中横 pair is one row holding two characters,
+        // and the punctuation is already rotated.
+        for (slot, symbol) in zong::slot_text(&text).into_iter().enumerate() {
             let at = zong.start + offset;
-            let len = grapheme.chars().count();
+            let len = symbol.chars().count();
             offset += len;
 
             let style = if has_selection && at < sel_end && at + len > sel_start {
@@ -295,14 +297,7 @@ pub fn draw(
                 Style::default()
             };
 
-            // Substitute the rotated punctuation only here, on the way to the
-            // screen: the buffer keeps ordinary `。` and `「`.
-            let mut rotated = [0u8; 4];
-            let symbol = match vertical_grapheme(grapheme) {
-                Some(c) => &*c.encode_utf8(&mut rotated),
-                None => grapheme,
-            };
-            put_slot(buf, x, text_top + slot as u16, symbol, style);
+            put_slot(buf, x, text_top + slot as u16, &symbol, style);
         }
     }
 
@@ -451,7 +446,20 @@ pub fn draw_candidate_panel(
     // its remaining-code hint packed 縦中横 — one letter to a row would make the
     // panel as deep as the longest code. The 拆分 comment is left to the
     // horizontal panel, where it costs a line rather than a whole column.
-    let preedit = pack_slots(&ime.display_buffer());
+    // The rightmost column is "what you typed, and what you would get": the
+    // preedit, then — after a blank slot — the 拆分 of the highlighted
+    // candidate, when the engine is annotating. Keeping it here rather than
+    // beside each candidate is what lets the panel stay one row per character
+    // instead of one column per decomposition.
+    let mut preedit = pack_slots(&ime.display_buffer());
+    if let Some(chaifen) = candidates
+        .get(highlight)
+        .map(|c| c.comment.as_str())
+        .filter(|c| !c.is_empty())
+    {
+        preedit.push(String::new());
+        preedit.extend(pack_slots(chaifen));
+    }
     let columns: Vec<Vec<String>> = candidates
         .iter()
         .enumerate()

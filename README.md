@@ -57,6 +57,12 @@ Early development, but already an interactive modal editor. Implemented so far:
   terminal such as kitty, WezTerm, Ghostty, or recent iTerm2, not Apple Terminal);
   number mode, `/`-commands, and `z` reverse come from the engine.
 
+- **#64 縦中横** — a short run of half-width alphanumerics is turned sideways
+  into a single slot, so `第12章` reads as three rows and `1985年` as `19`/`85`/`年`
+  rather than a stack of loose digits. A slot is two cells, so two characters is
+  the limit; longer Latin still stacks, which is the one thing a terminal cannot
+  set properly.
+
 - **#63 Word segmentation from Yume's language model** — `w`/`b`/`e` and the
   segmentation overlay are driven by Yume's 詞頻表 (1.25M weighted entries) and
   詞彙表, shared by reference with the running IME rather than loaded twice. The

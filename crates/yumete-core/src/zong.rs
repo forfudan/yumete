@@ -23,7 +23,7 @@
 
 use ropey::Rope;
 
-use yumete_cjk::graphemes;
+use yumete_cjk::{grapheme_width, graphemes};
 
 // The layout choice and the typographic defaults are CJK typesetting facts, not
 // editor state, so they live in `yumete-cjk` and are re-exported here where the
@@ -91,15 +91,40 @@ fn line_text(rope: &Rope, line: usize) -> String {
     text
 }
 
-/// The char offset of every grapheme boundary in `text`, including the end.
+/// The longest run of half-width characters that will be set 縦中横 — turned a
+/// quarter turn and packed sideways into a single slot.
+///
+/// Two, because a slot is two cells and each half-width character takes one.
+/// This is what makes 「第<b>12</b>章」 read as a number rather than a stack of
+/// loose digits, and it is why the vertical layout can show a year at all.
+const TATECHUYOKO: usize = 2;
+
+/// The char offset of every **slot** boundary in `text`, including the end.
+///
+/// A slot is one row of a 縱. Usually it holds one grapheme, but a short run of
+/// half-width characters is packed into one slot 縦中横-style — see
+/// [`TATECHUYOKO`]. Everything else in this module is defined in terms of these
+/// offsets, so packing here is what makes the cursor, the wrap length, motion
+/// and the renderer all agree that `12` is one row.
 ///
 /// The result always has at least one element, so `offsets.len() - 1` is the
-/// grapheme count and `offsets[g]` is where grapheme `g` begins.
+/// slot count and `offsets[i]` is where slot `i` begins.
 fn slot_offsets(text: &str) -> Vec<usize> {
     let mut offsets = Vec::with_capacity(text.len() / 3 + 1);
     let mut chars = 0usize;
+    let mut run = 0usize;
     for g in graphemes(text) {
-        offsets.push(chars);
+        // A run of half-width *alphanumerics* fills the slot it started, up to
+        // the limit; anything else — full-width, punctuation, a space — opens a
+        // new one. 縦中横 is for numbers and short Latin, and packing a comma in
+        // beside a letter would only look like a mistake.
+        let narrow = grapheme_width(g) == 1 && g.chars().all(char::is_alphanumeric);
+        if narrow && run > 0 && run < TATECHUYOKO {
+            run += 1;
+        } else {
+            offsets.push(chars);
+            run = if narrow { 1 } else { 0 };
+        }
         chars += g.chars().count();
     }
     offsets.push(chars);
@@ -122,12 +147,13 @@ pub fn position(rope: &Rope, pos: usize, zong_len: usize) -> Position {
     let offsets = slot_offsets(&line_text(rope, line));
     let total = offsets.len() - 1;
 
-    // Which grapheme the cursor sits on (or `total`, past the last one).
+    // Which slot the cursor sits in (or `total`, past the last one). A slot can
+    // span two characters, so this is the last one that *starts* at or before
+    // the cursor, not the first one that reaches it.
     let col = pos.saturating_sub(start);
     let g = offsets
-        .iter()
-        .position(|&o| o >= col)
-        .unwrap_or(total)
+        .partition_point(|&o| o <= col)
+        .saturating_sub(1)
         .min(total);
 
     let mut index_in_line = g / zong_len;
@@ -362,6 +388,25 @@ pub fn zong_index(zongs: &[Zong], pos: usize) -> usize {
     }
 }
 
+/// Split `text` into what each slot draws, punctuation already rotated.
+///
+/// The renderer walks this rather than the graphemes, so a 縦中横 pair arrives
+/// as one two-cell string and lands in one row.
+pub fn slot_text(text: &str) -> Vec<String> {
+    let offsets = slot_offsets(text);
+    let chars: Vec<char> = text.chars().collect();
+    offsets
+        .windows(2)
+        .map(|w| {
+            let slice: String = chars[w[0]..w[1]].iter().collect();
+            match yumete_cjk::vertical_grapheme(&slice) {
+                Some(c) => c.to_string(),
+                None => slice,
+            }
+        })
+        .collect()
+}
+
 /// Render the whole buffer as a plain-text vertical page: a grid of lines,
 /// each holding one slot from every 縱, with the 縱 running right to left.
 ///
@@ -380,14 +425,7 @@ pub fn render_page(rope: &Rope, zong_len: usize, gap: usize) -> Vec<String> {
     // Every 縱's slots, top to bottom; the page is then read across.
     let columns: Vec<Vec<String>> = zongs
         .iter()
-        .map(|z| {
-            graphemes(&rope.slice(z.start..z.end).to_string())
-                .map(|g| match yumete_cjk::vertical_grapheme(g) {
-                    Some(c) => c.to_string(),
-                    None => g.to_string(),
-                })
-                .collect()
-        })
+        .map(|z| slot_text(&rope.slice(z.start..z.end).to_string()))
         .collect();
 
     let spacer = " ".repeat(gap);
@@ -679,6 +717,29 @@ mod tests {
 
     /// Slots are grapheme clusters, so an ideographic variation sequence takes
     /// one row, not two.
+    /// 縦中横: a short run of half-width characters is turned sideways into one
+    /// slot, so a year or a chapter number reads as a number.
+    #[test]
+    fn digits_pack_sideways_into_one_slot() {
+        let r = rope("第12章");
+        let zongs = layout(&r, 32);
+        assert_eq!(zongs[0].slots, 3, "第 / 12 / 章");
+        assert_eq!(slot_text("第12章"), ["第", "12", "章"]);
+
+        // The cursor agrees: the character after the pair is slot 2, not 3.
+        assert_eq!(position(&r, 1, 32).slot, 1, "on the 1");
+        assert_eq!(position(&r, 2, 32).slot, 1, "still inside the pair");
+        assert_eq!(position(&r, 3, 32).slot, 2, "on 章");
+    }
+
+    #[test]
+    fn a_longer_latin_run_packs_two_at_a_time() {
+        // Beyond a pair there is nothing to rotate into, so it stacks — legibly,
+        // but it is the one thing a terminal cannot set properly.
+        assert_eq!(slot_text("abcde"), ["ab", "cd", "e"]);
+        assert_eq!(slot_text("2026年"), ["20", "26", "年"]);
+    }
+
     #[test]
     fn a_variation_sequence_fills_one_slot() {
         let r = rope("葛\u{E0100}城");
