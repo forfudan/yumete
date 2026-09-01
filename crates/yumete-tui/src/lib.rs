@@ -15,8 +15,9 @@ use std::io::{self, stdout};
 
 use ratatui::crossterm::cursor::SetCursorStyle;
 use ratatui::crossterm::event::{
-    self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers, KeyboardEnhancementFlags,
-    ModifierKeyCode, PopKeyboardEnhancementFlags, PushKeyboardEnhancementFlags,
+    self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode, KeyEvent, KeyEventKind,
+    KeyModifiers, KeyboardEnhancementFlags, ModifierKeyCode, MouseEventKind,
+    PopKeyboardEnhancementFlags, PushKeyboardEnhancementFlags,
 };
 use ratatui::crossterm::execute;
 use ratatui::crossterm::terminal::supports_keyboard_enhancement;
@@ -60,6 +61,11 @@ pub fn run(editor: &mut Editor, config: &Config, ime: &mut ImeSession) -> io::Re
             )
         );
     }
+
+    // Take the mouse, so the wheel can turn the page. The cost, which Helix
+    // pays too: the terminal's own click-and-drag selection stops working and
+    // needs whatever modifier that terminal reserves for it (Option, on macOS).
+    let _ = execute!(stdout(), EnableMouseCapture);
 
     let mut viewport = Viewport::default();
     let mut shift = ShiftTap::default();
@@ -156,18 +162,33 @@ pub fn run(editor: &mut Editor, config: &Config, ime: &mut ImeSession) -> io::Re
                     });
                 }
             }
+            Ok(Event::Mouse(mouse)) => match mouse.kind {
+                // A notch moves three 縱 — the same three lines a terminal
+                // scrolls by, counted in the unit the page is set in.
+                MouseEventKind::ScrollDown => editor.scroll(WHEEL_STEP, false),
+                MouseEventKind::ScrollUp => editor.scroll(WHEEL_STEP, true),
+                _ => {}
+            },
             Ok(_) => {}
             Err(err) => break Err(err),
         }
     };
 
-    let _ = execute!(stdout(), SetCursorStyle::DefaultUserShape);
+    let _ = execute!(
+        stdout(),
+        DisableMouseCapture,
+        SetCursorStyle::DefaultUserShape
+    );
     if enhanced {
         let _ = execute!(stdout(), PopKeyboardEnhancementFlags);
     }
     ratatui::restore();
     result
 }
+
+/// How far one notch of the wheel moves — three, as a terminal scrolls three
+/// lines, counted in whichever unit the page is set in.
+const WHEEL_STEP: usize = 3;
 
 /// Whether a mode collects text the IME should compose into.
 ///
