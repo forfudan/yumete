@@ -6,18 +6,30 @@
 //! scheme's compiled data tables from the data directory (Feature #32). It stays
 //! UI-agnostic: it returns candidate and preedit data for the TUI to render.
 //!
-//! Data tables are the compiled artifacts produced by the yume build
-//! (`*.ytab`, `pinyin.yflb`, `pinyin.ywtb`, `chaifen_*.yann`, and optional
-//! `charsets/*.ycs`). Point yumete's data directory at them (see
-//! [`yumete_config::data_search_dirs`]) — for example by copying a Yume install's
-//! `Resources` into `~/.local/share/yumete`. When the tables are absent the
-//! session still constructs but reports [`ImeSession::available`] as `false`, so
-//! the editor can fall back to plain input.
+//! **Which files make up a data set is not decided here.** `yume_core::data_manifest`
+//! is the one place that says so, precisely so every frontend stops keeping a
+//! copy that quietly rots — see yume's `docs/development.md` §4.1.1. This crate
+//! walks that manifest, so when yume adds a table yumete picks it up with no
+//! change beyond `scripts/build.sh`, which compiles the same list.
+//!
+//! Point yumete's data directory at the compiled artifacts (see
+//! [`yumete_config::data_search_dirs`]); `scripts/build.sh` fills
+//! `~/.local/share/yumete` from the sibling yume checkout. A data set built by an
+//! older Yume will not load — the binary formats move with `yume-core` — so
+//! recompile rather than copying an old `Resources` across. When the scheme's own
+//! dictionary is missing the session still constructs but reports
+//! [`ImeSession::available`] as `false`, so the editor falls back to plain input.
 
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use yume_core::{AnnotationTable, Charset, CodeTable, Engine, FluencyTable, WeightTable};
+use yume_core::data_manifest::{self, DataFile, DataKind};
+use yume_core::division::DivisionTable;
+use yume_core::lexicon::Lexicon;
+use yume_core::zigen::ZigenTable;
+use yume_core::{
+    AnnotationTable, Charset, CodeTable, Engine, FluencyTable, UnigramTable, NAMED_CHARSETS,
+};
 
 pub use yume_core::DisplayMode;
 
@@ -73,31 +85,6 @@ impl Scheme {
     pub fn next(self) -> Scheme {
         let idx = Scheme::ALL.iter().position(|&s| s == self).unwrap_or(0);
         Scheme::ALL[(idx + 1) % Scheme::ALL.len()]
-    }
-
-    /// The compiled code-table file for a shape scheme, or `None` for the
-    /// fluency-only pinyin scheme (which has no shape code table).
-    fn table_file(self) -> Option<&'static str> {
-        match self {
-            Scheme::Lingming => Some("ling.ytab"),
-            Scheme::Xingchen => Some("xing.ytab"),
-            Scheme::Qingyun => Some("qing.ytab"),
-            Scheme::Riyue => Some("riyue.ytab"),
-            Scheme::Pinyin => None,
-        }
-    }
-
-    /// The compiled 拆分 (chaifen) annotation file for a shape scheme.
-    fn annotation_file(self) -> Option<&'static str> {
-        match self {
-            // Lingming's annotation binary is named `chaifen.yann` (no suffix);
-            // the sibling schemes carry a scheme suffix.
-            Scheme::Lingming => Some("chaifen.yann"),
-            Scheme::Xingchen => Some("chaifen_xing.yann"),
-            Scheme::Qingyun => Some("chaifen_qing.yann"),
-            Scheme::Riyue => Some("chaifen_riyue.yann"),
-            Scheme::Pinyin => None,
-        }
     }
 }
 
@@ -351,105 +338,158 @@ impl ImeSession {
     }
 }
 
-/// The first directory in `dirs` that contains `name`, either directly or under
-/// a `subdir` (used for `charsets/`). Returns the full path.
-fn find_file(dirs: &[PathBuf], name: &str, subdir: Option<&str>) -> Option<PathBuf> {
+/// Resolve one manifest entry's relative path (`charsets/common.ycs`) against
+/// the search path, first directory wins.
+fn find_file(dirs: &[PathBuf], relative: &str) -> Option<PathBuf> {
     for dir in dirs {
-        let direct = dir.join(name);
-        if direct.is_file() {
-            return Some(direct);
+        let mut path = dir.clone();
+        // Manifest paths always use forward slashes, whatever the host.
+        for part in relative.split('/') {
+            path.push(part);
         }
-        if let Some(sub) = subdir {
-            let nested = dir.join(sub).join(name);
-            if nested.is_file() {
-                return Some(nested);
-            }
+        if path.is_file() {
+            return Some(path);
         }
     }
     None
 }
 
-/// Assemble an engine for `scheme` from the compiled tables in `dirs`, mirroring
-/// the load order the macOS frontend uses. Returns the engine and whether its
-/// essential table loaded.
-fn build_engine(scheme: Scheme, dirs: &[PathBuf]) -> (Engine, bool) {
-    // 1. Shape code table (empty for the fluency-only pinyin scheme).
-    let mut table = CodeTable::new();
-    let mut shape_ok = false;
-    if let Some(file) = scheme.table_file() {
-        if let Some(path) = find_file(dirs, file, None) {
-            if let Some(p) = path.to_str() {
-                shape_ok = table.load_binary(p).is_ok();
-            }
-        }
-    }
-    let mut engine = Engine::new(table);
-
-    // 2. Reverse/fluency table + 3. word weights (shared pinyin.* — used by the
-    // pinyin scheme and by `z` reverse lookup in the shape schemes).
-    let mut fluency_ok = false;
-    if let Some(path) = find_file(dirs, "pinyin.yflb", None) {
-        if let Some(p) = path.to_str() {
-            let mut fluency = FluencyTable::new();
-            if fluency.load_binary(p).is_ok() {
-                engine.reverse_lookup = Arc::new(fluency);
-                fluency_ok = true;
-            }
-        }
-    }
-    if let Some(path) = find_file(dirs, "pinyin.ywtb", None) {
-        if let Some(p) = path.to_str() {
-            let mut weights = WeightTable::new();
-            if weights.load_binary(p).is_ok() {
-                engine.word_weights = Arc::new(weights);
-            }
-        }
-    }
-
-    // 4. Annotations (拆分), for the shape schemes.
-    if let Some(file) = scheme.annotation_file() {
-        if let Some(path) = find_file(dirs, file, None) {
-            if let Some(p) = path.to_str() {
-                let mut annotations = AnnotationTable::new();
-                if annotations.load_binary(p).is_ok() {
-                    engine.attach_annotations(annotations);
-                }
-            }
-        }
-    }
-
-    // 5. Charsets (字集), optional. Looked up flat or under `charsets/`.
-    if let Some(common) = load_charset(dirs, "common.ycs") {
-        engine.set_common_charset(common);
-    }
-    if let Some(tonggui) = load_charset(dirs, "tonggui.ycs") {
-        engine.set_tonggui_charset(tonggui);
-    }
-    if let Some(harmonic) = load_charset(dirs, "harmonic.ycs") {
-        engine.set_harmonic_charset(harmonic);
-    }
-
-    // 6. Select the scheme (sets fluency-only / commit strategy for pinyin, etc.).
-    engine.set_scheme_by_tag(scheme.tag());
-
-    // The scheme is usable when its essential data loaded: a shape table for the
-    // shape schemes, or the fluency table for pinyin.
-    let available = match scheme {
-        Scheme::Pinyin => fluency_ok,
-        _ => shape_ok,
+/// Load one entry of the factory data set into `engine`.
+///
+/// This is yumete's copy of the one dispatch every Yume frontend has — the
+/// `kind` of a [`DataFile`] says which door of the engine it goes through. An
+/// unrecognised `kind` is skipped rather than treated as an error, so a yumete
+/// built against an older `yume-core` still starts against newer data.
+fn load_data_file(engine: &mut Engine, dirs: &[PathBuf], file: &DataFile) -> bool {
+    let Some(path) = find_file(dirs, &file.file) else {
+        return false;
     };
-    (engine, available)
+    let Some(p) = path.to_str() else {
+        return false;
+    };
+    match file.kind {
+        DataKind::Table => {
+            let mut table = CodeTable::new();
+            if table.load_binary(p).is_err() {
+                return false;
+            }
+            engine.set_table(Arc::new(table));
+        }
+        DataKind::Symbols => {
+            let mut table = CodeTable::new();
+            if table.load_binary(p).is_err() {
+                return false;
+            }
+            engine.set_symbol_table(table);
+        }
+        DataKind::PinyinTable => {
+            let mut fluency = FluencyTable::new();
+            if fluency.load_binary(p).is_err() {
+                return false;
+            }
+            engine.set_pinyin_table(Arc::new(fluency));
+        }
+        DataKind::Weights => {
+            let mut unigram = UnigramTable::new();
+            if unigram.load_binary(p).is_err() {
+                return false;
+            }
+            engine.unigram = Arc::new(unigram);
+        }
+        DataKind::Lexicon => {
+            let mut lexicon = Lexicon::new();
+            if lexicon.load_binary(p).is_err() {
+                return false;
+            }
+            engine.lexicon = Arc::new(lexicon);
+        }
+        DataKind::Annotations => {
+            // 全息拆分表 plus this scheme's 字根表; the divisions are shared by
+            // every scheme, and pinyin takes them with no 字根表 at all.
+            let Ok(divisions) = std::fs::read(&path)
+                .map_err(drop)
+                .and_then(|b| DivisionTable::from_binary(&b).map_err(drop))
+            else {
+                return false;
+            };
+            let zigen = match find_file(dirs, &file.aux) {
+                Some(aux) => match std::fs::read(&aux)
+                    .map_err(drop)
+                    .and_then(|b| ZigenTable::from_binary(&b).map_err(drop))
+                {
+                    Ok(z) => z,
+                    Err(()) => return false,
+                },
+                None => ZigenTable::default(),
+            };
+            engine.set_annotations(AnnotationTable::with_tables(Arc::new(divisions), zigen));
+        }
+        DataKind::Charset => {
+            let Some(&id) = usize::try_from(file.slot)
+                .ok()
+                .and_then(|i| NAMED_CHARSETS.get(i))
+            else {
+                return false;
+            };
+            let mut charset = Charset::new(id);
+            if charset.load_binary(p).is_err() {
+                return false;
+            }
+            return engine.set_named_charset(id, charset);
+        }
+        DataKind::Words => match yume_core::word_whitelist::load_binary(p) {
+            Ok(words) => engine.set_word_whitelist(words),
+            Err(_) => return false,
+        },
+        DataKind::Grammar => {
+            if engine.load_grammar_binary(p).is_err() {
+                return false;
+            }
+        }
+        DataKind::SimpTrad => match std::fs::read_to_string(&path) {
+            Ok(text) => engine.load_simp_trad_text(&text),
+            Err(_) => return false,
+        },
+    }
+    true
 }
 
-/// Load a compiled charset by file name (flat or under `charsets/`).
-fn load_charset(dirs: &[PathBuf], name: &str) -> Option<Charset> {
-    let path = find_file(dirs, name, Some("charsets"))?;
-    let mut charset = Charset::new("");
-    if charset.load_binary(path.to_str()?).is_ok() {
-        Some(charset)
-    } else {
-        None
+/// Assemble an engine for `scheme` from the compiled tables in `dirs`. Returns
+/// the engine and whether the scheme can actually be typed with.
+///
+/// The list of files *is* `yume_core::data_manifest` — deliberately, because
+/// that module exists to stop every frontend keeping its own copy that silently
+/// rots, which is exactly what happened to the hand-written list this replaced.
+///
+/// Availability is yumete's own, lower bar, not the manifest's `required` flag:
+/// composing needs the scheme's own dictionary and nothing else. Missing word
+/// weights or charsets cost ranking and filtering, but an editor that can still
+/// type 漢字 should not fall back to ASCII over them.
+fn build_engine(scheme: Scheme, dirs: &[PathBuf]) -> (Engine, bool) {
+    let mut engine = Engine::new(CodeTable::new());
+    let mut dictionary = false;
+
+    for file in data_manifest::shared()
+        .into_iter()
+        .chain(data_manifest::for_scheme(scheme.tag()))
+    {
+        let loaded = load_data_file(&mut engine, dirs, &file);
+        // 拼音 decodes through the shared 音節表; the shape schemes need their
+        // own 碼表.
+        let essential = match scheme {
+            Scheme::Pinyin => DataKind::PinyinTable,
+            _ => DataKind::Table,
+        };
+        if loaded && file.kind == essential {
+            dictionary = true;
+        }
     }
+
+    // Selecting the scheme sets fluency-only input and the commit strategy for
+    // pinyin, so it comes after its tables are in place.
+    engine.set_scheme_by_tag(scheme.tag());
+
+    (engine, dictionary)
 }
 
 #[cfg(test)]

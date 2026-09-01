@@ -6,5 +6,5 @@ repository.workspace = true
 version.workspace = true
 
 [dependencies]
-yume-core = { path = "../../../crates/yume-core" }
+yume-core = { path = "../../../yume/crates/yume-core" }
 yumete-config = { path = "../yumete-config" }

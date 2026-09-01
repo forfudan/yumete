@@ -41,69 +41,122 @@ echo "Built ./yumete ($(./yumete --version))"
 #
 # yumete embeds yume-core and loads compiled tables at runtime from
 # ~/.local/share/yumete. This reuses the sibling yume repository's data and its
-# `yume-compile` tool. Only runs when yumete lives inside the yume workspace.
+# `yume-compile` tool.
+#
+# **The file list here must match `yume_core::data_manifest`**, which is the one
+# place that says what a complete Yume data set is (see yume's
+# docs/development.md §4.1.1). `yumete-ime` loads by walking that manifest, so
+# anything this script fails to produce is silently skipped at run time and only
+# shows up as worse candidates — which is exactly the failure the manifest was
+# introduced to stop. When yume adds a data file, add it here too.
+#
+# This script never writes into the yume tree: it only reads `yume/data` and
+# builds `yume-compile`. Refreshing `yume/data` itself (yume's `gen_data.py`) is
+# yume's own business and is deliberately not run from here.
 install_ime_data() {
-  local yume_root
-  yume_root="$(cd .. && pwd)"
+  local yume_root="${YUME_ROOT:-$YUMETE_ROOT/../yume}"
   if [[ ! -f "$yume_root/crates/yume-core/Cargo.toml" ]]; then
-    echo "==> IME data: skipped (yume workspace not found at $yume_root)"
+    echo "==> IME data: skipped (yume workspace not found at $yume_root — set YUME_ROOT)"
     return 0
   fi
+  yume_root="$(cd "$yume_root" && pwd)"
   if [[ ! -f "$yume_root/data/ling.txt" ]]; then
     echo "==> IME data: skipped (no source tables in $yume_root/data — run the yume data pipeline first)"
     return 0
   fi
 
   local dest="${XDG_DATA_HOME:-$HOME/.local/share}/yumete"
-  echo "==> IME data: compiling and installing into $dest"
+  echo "==> IME data: compiling from $yume_root/data into $dest"
 
-  # Refresh the yume source data (non-fatal if the upstream source is offline).
-  if command -v python3 >/dev/null 2>&1; then
-    (cd "$yume_root" && python3 scripts/gen_data.py) || \
-      echo "   (gen_data.py unavailable; using existing $yume_root/data)"
-  fi
-
-  # Build the data compiler in the yume workspace.
   local compiler="$yume_root/target/release/yume-compile"
   (cd "$yume_root" && cargo build --release -p yume-compile)
 
-  # Clear the tables we manage (preserving any user files such as segmentation.txt).
-  rm -f "$dest"/{ling,xing,qing,riyue}.ytab \
-        "$dest"/pinyin.yflb "$dest"/pinyin.ywtb \
-        "$dest"/chaifen.yann "$dest"/chaifen_{xing,qing,riyue}.yann
+  # Clear the tables we manage — including the names from older layouts, so a
+  # data directory built by a previous yumete is not left with files the current
+  # yume-core can no longer parse. User files (segmentation.txt) are preserved.
+  rm -f "$dest"/{ling,xing,qing,riyue,symbols}.ytab \
+        "$dest"/pinyin.yflb "$dest"/lang.{ywtb,ywl,ygram} \
+        "$dest"/chaifen.ydiv "$dest"/zigen_{ling,xing,qing,riyue}.yzg \
+        "$dest"/words_yuling.ywrd "$dest"/simptrad.txt \
+        "$dest"/pinyin.ywtb "$dest"/chaifen{,_xing,_qing,_riyue}.yann
   rm -rf "$dest/charsets" "$dest/fonts"
   mkdir -p "$dest/charsets"
 
-  # Compile the Lingming + shared tables.
-  "$compiler" "$yume_root/data/ling.txt" "$dest/ling.ytab"
-  "$compiler" --pinyin "$yume_root/data/pinyin.txt" "$dest/pinyin.yflb"
-  "$compiler" --weights "$yume_root/data/pinyin.txt" "$dest/pinyin.ywtb"
-  if [[ -f "$yume_root/data/chaifen_ling.txt" ]]; then
-    "$compiler" --chaifen "$yume_root/data/chaifen_ling.txt" "$dest/chaifen.yann"
-  fi
-  for cs in common tonggui harmonic; do
-    if [[ -f "$yume_root/data/charsets/$cs.txt" ]]; then
-      "$compiler" --charset "$yume_root/data/charsets/$cs.txt" "$dest/charsets/$cs.ycs"
+  local d="$yume_root/data"
+  for f in ling.txt pinyin.txt lang.txt words_yuling.txt chaifen.txt zigen_ling.txt \
+           charsets/common.txt charsets/tonggui.txt charsets/harmonic.txt; do
+    if [[ ! -f "$d/$f" ]]; then
+      echo "!! required data file missing: $d/$f" >&2
+      return 1
     fi
   done
+
+  # 碼表 and the shared 符號表 extracted from it.
+  "$compiler" "$d/ling.txt" "$dest/ling.ytab"
+  "$compiler" --symbols "$dest/ling.ytab" "$dest/symbols.ytab"
+
+  # Multi-character words come from every code table on hand: a word is a fact
+  # about the language, not about one 方案.
+  local word_sources=()
+  for f in "$d/ling.txt" "$d/xing.txt" "$d/qing.txt" "$d/riyue.txt"; do
+    [[ -f "$f" ]] && word_sources+=("$f")
+  done
+
+  # 音節表, plus synthesised readings for the words only the code tables carry.
+  # 詞頻表 and 詞彙表 come from lang.txt, share one cut-off, and must use the same
+  # one or the words above the cut fall out of both. These three numbers are
+  # yume's tuning (its docs/LANGUAGE-MODEL.md §4.6); yumete follows them.
+  "$compiler" --pinyin "$d/pinyin.txt" "$dest/pinyin.yflb" \
+    "${word_sources[@]}" --lang "$d/lang.txt" --lang-words 300000
+  "$compiler" --weights "$d/lang.txt" "$dest/lang.ywtb" --max-entries 1250000
+  "$compiler" --lexicon "$d/lang.txt" "$dest/lang.ywl" \
+    "${word_sources[@]}" --max-entries 1250000
+
+  # 全息拆分表 (shared by every scheme) with its 字集 tags, and the 單字白名單.
+  local division_tags=("$d/charsets/tonggui.txt:簡")
+  for spec in "charsets/tongfan.txt:繁" "charsets/guji.txt:古" \
+              "charsets/tai.txt:臺" "charsets/gang.txt:港"; do
+    [[ -f "$d/${spec%%:*}" ]] && division_tags+=("$d/${spec%%:*}:${spec##*:}")
+  done
+  "$compiler" --division "$d/chaifen.txt" "$dest/chaifen.ydiv" "${division_tags[@]}"
+  "$compiler" --words "$d/words_yuling.txt" "$dest/words_yuling.ywrd"
+
+  # 字集: slots 0–2 drive the input filters, the rest only list rows in a UI.
+  for cs in common tonggui harmonic tongfan guji tai gang; do
+    if [[ -f "$d/charsets/$cs.txt" ]]; then
+      "$compiler" --charset "$d/charsets/$cs.txt" "$dest/charsets/$cs.ycs"
+    fi
+  done
+
+  # Optional, copied not compiled: the language model (without it 整句 falls back
+  # to plain word frequency) and the 簡繁 table (one annotation column).
+  [[ -f "$d/lang.ygram" ]] && cp "$d/lang.ygram" "$dest/lang.ygram"
+  [[ -f "$d/simptrad.txt" ]] && cp "$d/simptrad.txt" "$dest/simptrad.txt"
+
+  # 字根表: one per scheme, ~1KB each, and each must be compiled against the very
+  # .ydiv above — it indexes into that file's root order.
+  "$compiler" --zigen lingming "$d/zigen_ling.txt" "$dest/chaifen.ydiv" "$dest/zigen_ling.yzg"
 
   # Optional sibling schemes (星陳 / 卿雲 / 日月).
-  for id in xing qing riyue; do
-    if [[ -f "$yume_root/data/$id.txt" ]]; then
-      "$compiler" "$yume_root/data/$id.txt" "$dest/$id.ytab"
-    fi
-    if [[ -f "$yume_root/data/chaifen_$id.txt" ]]; then
-      "$compiler" --chaifen "$yume_root/data/chaifen_$id.txt" "$dest/chaifen_$id.yann"
-    fi
-  done
+  compile_scheme() {
+    local id="$1" scheme="$2"
+    [[ -f "$d/$id.txt" ]] && "$compiler" "$d/$id.txt" "$dest/$id.ytab"
+    [[ -f "$d/zigen_$id.txt" ]] && "$compiler" --zigen "$scheme" "$d/zigen_$id.txt" \
+      "$dest/chaifen.ydiv" "$dest/zigen_$id.yzg"
+    return 0
+  }
+  compile_scheme xing xingchen
+  compile_scheme qing qingyun
+  compile_scheme riyue riyue
 
-  # Bundle the CJK root font, if present.
-  if compgen -G "$yume_root/data/fonts/*.ttf" >/dev/null 2>&1; then
+  # The bundled CJK root font, for terminals whose fallback chain lacks 宇浩's
+  # PUA roots.
+  if compgen -G "$d/fonts/*.ttf" >/dev/null 2>&1; then
     mkdir -p "$dest/fonts"
-    cp "$yume_root"/data/fonts/*.ttf "$dest/fonts/" 2>/dev/null || true
+    cp "$d"/fonts/*.ttf "$dest/fonts/" 2>/dev/null || true
   fi
 
-  echo "==> IME data installed ($(ls -1 "$dest"/*.ytab 2>/dev/null | wc -l | tr -d ' ') scheme table(s))"
+  echo "==> IME data installed ($(ls -1 "$dest"/*.ytab 2>/dev/null | wc -l | tr -d ' ') table(s) in $dest)"
 }
 
 if [[ "$install_data" == "1" ]]; then
@@ -111,4 +164,3 @@ if [[ "$install_data" == "1" ]]; then
 else
   echo "==> IME data: skipped (--no-data)"
 fi
-
