@@ -34,6 +34,10 @@ impl Mode {
 pub enum Key {
     /// A printable character.
     Char(char),
+    /// A character held with Control (`C-a`), for the chords Helix binds.
+    Ctrl(char),
+    /// A character held with Alt/Option (`A-.`).
+    Alt(char),
     Enter,
     Backspace,
     Esc,
@@ -41,4 +45,6 @@ pub enum Key {
     Right,
     Up,
     Down,
+    Home,
+    End,
 }

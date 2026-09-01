@@ -257,6 +257,7 @@ Phases are ordered by priority, most writer-critical first:
 | 59  | Remote / SSH editing                      | net    | P6    |                                     |        |
 | 60  | Collaborative editing                     | net    | P6    |                                     |        |
 | 61  | **Vertical layout (縱書)**                | tui    | P2    | 縱 model + rotated punctuation      | Done   |
+| 62  | **Helix alignment (counts, match mode)**  | core   | P2    | tutorial verbs; no multi-cursor yet | Done   |
 
 ---
 
@@ -504,6 +505,40 @@ show tofu).
 rotate a glyph, so true 縦中横 for two-digit numbers, ruby, and 圏点 are open.
 The candidate panel drops the 拆分 comment vertically, where it would double the
 panel's height per candidate.
+
+### Helix alignment (#62)
+
+The tutorial's vocabulary, minus the parts that need a second cursor.
+
+**Counts.** A digit prefix builds a count, `0` only extending one already under
+way so it stays free. Counts stop early once the action stops changing anything,
+so `999j` at the end of a buffer costs one step rather than a thousand.
+
+**Match mode** (`m`) is the piece that earns the most here, because a Chinese
+novel's structure *is* its brackets: `mm` jumps between a pair, `mi`/`ma` select
+inside or around one, and `ms`/`md`/`mr` add, delete and replace a surround —
+over 「」『』（）《》【】〔〕 as well as the ASCII pairs. Either half names the
+pair, so `mi「` and `mi」` mean the same thing.
+
+**`J` does not always insert a space.** Helix always does; yumete omits it
+between two full-width characters, because a line break in CJK prose carries no
+space and joining two 漢字 with one inserts text the author never typed. Latin
+words still get theirs.
+
+**Key repeat.** Under the Kitty keyboard protocol a held key arrives as one
+`Press` and then a stream of `Repeat`s. Those were being dropped, so holding `j`
+moved once — the reason `ffff` was needed where `f` held down should have done.
+Terminals without the protocol send plain presses and were never affected.
+
+**Cursor shape.** A block in Normal and a bar in Insert, via `DECSCUSR`. Laid out
+vertically the editor draws its own: the block covers the whole two-cell slot,
+and the Insert bar — turned a quarter turn with the text — becomes a rule lying
+across the 縱 at the boundary the next character will be pushed into.
+
+**Not done: multiple cursors.** `C`, `s`, `S` and the rest of Helix's multi-
+selection model need the core to carry a *set* of ranges rather than one
+anchor/cursor pair. That is a real change to `Editor`, not an addition to it, so
+it is deliberately left out rather than half-built.
 
 ### Phase 4 — Polish & QoL
 

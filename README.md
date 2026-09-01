@@ -57,6 +57,15 @@ Early development, but already an interactive modal editor. Implemented so far:
   terminal such as kitty, WezTerm, Ghostty, or recent iTerm2, not Apple Terminal);
   number mode, `/`-commands, and `z` reverse come from the engine.
 
+- **#62 Helix alignment** — a digit prefix is a count (`3w`, `10j`); `.` repeats
+  the last insert and `A-.` the last `f`/`t`; `%` selects the file, `X` extends to
+  whole lines, `J` joins (with no space between two 全角 characters), `~`/`` ` ``
+  change case, `R` replaces the selection with the register, `>`/`<` indent,
+  `C-a`/`C-x` step a number, `*` searches the selection. **Match mode** (`m`)
+  covers `mm` jump-to-pair, `mi`/`ma` textobjects, and `ms`/`md`/`mr` surround —
+  over 「」『』（）《》【】〔〕 as well as the ASCII pairs. Holding a key now
+  auto-repeats, and the cursor is a block in Normal, a bar in Insert.
+
 - **#61 Vertical layout (縱書)** — text can be set the way a Chinese novel is:
   running top to bottom in **縱** (*zong*) that stack from the right edge
   leftward, one paragraph soft-wrapping into as many 縱 as it needs at 32

@@ -21,13 +21,13 @@
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 use ratatui::style::{Color, Modifier, Style};
-use ratatui::widgets::{Block, Borders, Clear, Widget};
+use ratatui::widgets::{Block, BorderType, Borders, Clear, Widget};
 use ratatui::Frame;
 
 use yumete_cjk::{graphemes, str_width, vertical_grapheme};
 use yumete_config::{Config, LineNumbers};
 use yumete_core::zong::{self, Anchor};
-use yumete_core::{Editor, TextStore};
+use yumete_core::{Editor, Mode, TextStore};
 use yumete_ime::ImeSession;
 
 /// The width of one 縱 in cells. A full-width character is two cells, and the
@@ -306,25 +306,121 @@ pub fn draw(
         }
     }
 
-    // The cursor block, drawn last so it wins over a selection or a word tint.
+    // The cursor, drawn last so it wins over a selection or a word tint.
     let cursor_x = metrics.x_of(area, cursor_column.min(last_column));
     let cursor_y =
         (text_top + cursor_pos.slot as u16).min((area.y + area.height).saturating_sub(1));
     if cursor_column < visible {
-        let under = buf
-            .cell((cursor_x, cursor_y))
-            .map(|c| c.symbol().to_string())
-            .unwrap_or_else(|| " ".to_string());
-        let symbol = if under.trim().is_empty() { " " } else { &under };
-        put_slot(
-            buf,
-            cursor_x,
-            cursor_y,
-            symbol,
-            Style::default().add_modifier(Modifier::REVERSED),
-        );
+        if editor.mode() == Mode::Insert {
+            // Insert: a caret at the boundary text will be pushed into. Turned a
+            // quarter turn with the text, the bar of a horizontal editor becomes
+            // a rule lying *across* the 縱 — drawn as an underline on the slot
+            // above, so the character it sits between stays readable.
+            let rule = Style::default()
+                .add_modifier(Modifier::UNDERLINED)
+                .fg(Color::Rgb(0, 89, 209));
+            let above = cursor_y.saturating_sub(1);
+            if cursor_y > area.y {
+                for dx in 0..SLOT_WIDTH {
+                    if let Some(cell) = buf.cell_mut((cursor_x + dx, above)) {
+                        let style = cell.style().patch(rule);
+                        cell.set_style(style);
+                    }
+                }
+            } else {
+                // Nothing above to underline at the head of a 縱: mark the slot
+                // itself instead, still distinct from the Normal-mode block.
+                for dx in 0..SLOT_WIDTH {
+                    if let Some(cell) = buf.cell_mut((cursor_x + dx, cursor_y)) {
+                        let style = cell.style().patch(rule);
+                        cell.set_style(style);
+                    }
+                }
+            }
+        } else {
+            // Normal: a solid block over the whole two-cell slot.
+            let under = buf
+                .cell((cursor_x, cursor_y))
+                .map(|c| c.symbol().to_string())
+                .unwrap_or_else(|| " ".to_string());
+            let symbol = if under.trim().is_empty() { " " } else { &under };
+            put_slot(
+                buf,
+                cursor_x,
+                cursor_y,
+                symbol,
+                Style::default().add_modifier(Modifier::REVERSED),
+            );
+        }
     }
     (cursor_x, cursor_y)
+}
+
+/// The candidate panel's skin: Yume's 墨香 (Ink) theme, dark.
+///
+/// 墨香 is defined by **four numbers** — an ink and a paper colour for each
+/// mode — with the other slots interpolated along a ladder between them
+/// (`yume_core::themes::ink_ladder`). Reproducing the ladder rather than
+/// pasting the resulting hexes keeps yumete's panel the same skin as the GUI
+/// frontends' if either endpoint is ever retuned.
+///
+/// The green in the ink is deliberate and slight: R and G differ by about 5, so
+/// it reads as ink with a hint of pine rather than grey-green. The paper is warm
+/// rather than white. Dark mode is not the light pair swapped — the ground goes
+/// deeper and the ink dimmer, or the panel glows at night.
+mod ink {
+    use ratatui::style::Color;
+
+    /// 墨 — the dark theme's text colour.
+    const STICK: (u8, u8, u8) = (0xCF, 0xC6, 0xA9);
+    /// 紙 — the dark theme's ground.
+    const PAPER: (u8, u8, u8) = (0x26, 0x2A, 0x27);
+
+    /// One rung of the ladder: `0.0` is pure ink, `1.0` pure paper. Mixed in
+    /// sRGB, not linear light, because the hand-tuned original was picked by eye
+    /// in sRGB and mixing linearly comes out far lighter.
+    const fn mix(a: u8, b: u8, t: u32) -> u8 {
+        // Fixed point in thousandths, rounded — no floats, so the whole ladder
+        // is a compile-time constant.
+        let (a, b) = (a as i64, b as i64);
+        ((a * 1000 + (b - a) * t as i64 + 500) / 1000) as u8
+    }
+
+    const fn step(t: u32) -> Color {
+        Color::Rgb(
+            mix(STICK.0, PAPER.0, t),
+            mix(STICK.1, PAPER.1, t),
+            mix(STICK.2, PAPER.2, t),
+        )
+    }
+
+    /// The panel's ground.
+    pub fn paper() -> Color {
+        step(1000)
+    }
+    /// The ring around the panel.
+    pub fn border() -> Color {
+        step(750)
+    }
+    /// A candidate.
+    pub fn text() -> Color {
+        step(0)
+    }
+    /// Selection digits and the preedit — one shade back from the candidates.
+    pub fn helper() -> Color {
+        step(300)
+    }
+    /// The remaining-code hint, a shade back again.
+    pub fn footer() -> Color {
+        step(400)
+    }
+    /// The ground of the highlighted candidate, and the text on it.
+    pub fn highlight() -> Color {
+        step(0)
+    }
+    pub fn on_highlight() -> Color {
+        step(1000)
+    }
 }
 
 /// Draw the candidate panel for vertical layout (Feature #61).
@@ -336,7 +432,6 @@ pub fn draw(
 pub fn draw_candidate_panel(
     frame: &mut Frame,
     ime: &ImeSession,
-    config: &Config,
     area: Rect,
     cursor_x: u16,
     cursor_y: u16,
@@ -346,7 +441,11 @@ pub fn draw_candidate_panel(
         return;
     }
     let highlight = ime.highlight();
-    let pitch = SLOT_WIDTH + config.editor.zong_gap as u16;
+    // The panel packs its columns edge to edge. The text gets a gap between 縱
+    // because the eye has to track down a long column and back up the next one;
+    // a candidate is one or two characters, and the gap would only make an
+    // already wide panel wider.
+    let pitch = SLOT_WIDTH;
 
     // Each column is a stack of slots: the selection digit, the candidate, then
     // its remaining-code hint packed 縦中横 — one letter to a row would make the
@@ -387,13 +486,21 @@ pub fn draw_candidate_panel(
     let panel = Rect::new(x, y, panel_w, panel_h);
 
     frame.render_widget(Clear, panel);
-    let block = Block::default().borders(Borders::ALL);
+    let ground = Style::default().bg(ink::paper()).fg(ink::text());
+    let block = Block::default()
+        .borders(Borders::ALL)
+        .border_type(BorderType::Rounded)
+        .border_style(Style::default().fg(ink::border()).bg(ink::paper()))
+        .style(ground);
     let inner = block.inner(panel);
     block.render(panel, frame.buffer_mut());
 
     let buf = frame.buffer_mut();
-    let dim = Style::default().add_modifier(Modifier::DIM);
-    let chosen = Style::default().bg(Color::Rgb(0, 89, 209)).fg(Color::White);
+    let dim = ground.fg(ink::helper());
+    let hint = ground.fg(ink::footer());
+    let chosen = Style::default()
+        .bg(ink::highlight())
+        .fg(ink::on_highlight());
 
     // Column 0 (rightmost) is the preedit; the candidates follow leftward.
     // `None` means the column would run past the panel's left border, which is
@@ -418,12 +525,16 @@ pub fn draw_candidate_panel(
             if slot as u16 >= inner.height {
                 break;
             }
+            // Digit on top, then the candidate, then the code still owed —
+            // three rungs of the same ink so they separate by weight alone.
             let style = if i == highlight {
                 chosen
             } else if slot == 0 {
                 dim
+            } else if slot <= graphemes(&candidates[i].text).count() {
+                ground
             } else {
-                Style::default()
+                hint
             };
             put_slot(buf, x, inner.y + slot as u16, symbol, style);
         }

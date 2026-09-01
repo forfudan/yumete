@@ -13,6 +13,7 @@ pub mod vertical;
 
 use std::io::{self, stdout};
 
+use ratatui::crossterm::cursor::SetCursorStyle;
 use ratatui::crossterm::event::{
     self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers, KeyboardEnhancementFlags,
     ModifierKeyCode, PopKeyboardEnhancementFlags, PushKeyboardEnhancementFlags,
@@ -62,8 +63,20 @@ pub fn run(editor: &mut Editor, config: &Config, ime: &mut ImeSession) -> io::Re
 
     let mut viewport = Viewport::default();
     let mut shift = ShiftTap::default();
+    let mut shape = None;
 
     let result = loop {
+        // A block in Normal, a bar in Insert — the shape a modal editor is read
+        // by. Only sent when it changes, so the terminal is not asked to reset
+        // its cursor on every keystroke.
+        let wanted = match editor.mode() {
+            Mode::Insert => SetCursorStyle::SteadyBar,
+            _ => SetCursorStyle::SteadyBlock,
+        };
+        if shape != Some(editor.mode()) {
+            let _ = execute!(stdout(), wanted);
+            shape = Some(editor.mode());
+        }
         // The 縱 wrap length depends on the terminal height, and the motions
         // that cross 縱 run before the next draw, so settle it up front.
         if editor.layout() == WritingLayout::Vertical {
@@ -89,8 +102,7 @@ pub fn run(editor: &mut Editor, config: &Config, ime: &mut ImeSession) -> io::Re
                     ShiftResult::Consumed => continue,
                     ShiftResult::Pass => {}
                 }
-                // Only act on key presses (releases are tracked above only).
-                if key.kind != KeyEventKind::Press {
+                if !is_actionable(key.kind) {
                     continue;
                 }
                 let (code, mods) = normalize_shift(key.code, key.modifiers);
@@ -110,11 +122,24 @@ pub fn run(editor: &mut Editor, config: &Config, ime: &mut ImeSession) -> io::Re
         }
     };
 
+    let _ = execute!(stdout(), SetCursorStyle::DefaultUserShape);
     if enhanced {
         let _ = execute!(stdout(), PopKeyboardEnhancementFlags);
     }
     ratatui::restore();
     result
+}
+
+/// Whether a key event should drive the editor.
+///
+/// Presses and **auto-repeat** both do; releases only feed the lone-Shift
+/// tracker. The repeat case is the one that matters: under the Kitty keyboard
+/// protocol a held key arrives as one `Press` followed by a stream of
+/// `Repeat`s, so ignoring `Repeat` makes holding `j` move the cursor exactly
+/// once. Terminals without the protocol send plain `Press` events for repeats
+/// and were never affected.
+fn is_actionable(kind: KeyEventKind) -> bool {
+    matches!(kind, KeyEventKind::Press | KeyEventKind::Repeat)
 }
 
 /// How far the page is scrolled, in the unit each layout scrolls by.
@@ -241,8 +266,12 @@ fn ime_handle(
 /// Translate a terminal key event into a core [`Key`], or `None` to ignore it.
 fn map_key(code: KeyCode, modifiers: KeyModifiers) -> Option<Key> {
     match code {
-        // Drop control-modified characters so control codes aren't inserted.
-        KeyCode::Char(_) if modifiers.contains(KeyModifiers::CONTROL) => None,
+        // Chords first: Helix binds `C-a`/`C-x` and `A-.`, and a bare control
+        // character must never reach the buffer as a literal control code.
+        KeyCode::Char(c) if modifiers.contains(KeyModifiers::CONTROL) => {
+            Some(Key::Ctrl(c.to_ascii_lowercase()))
+        }
+        KeyCode::Char(c) if modifiers.contains(KeyModifiers::ALT) => Some(Key::Alt(c)),
         KeyCode::Char(c) => Some(Key::Char(c)),
         KeyCode::Enter => Some(Key::Enter),
         KeyCode::Backspace => Some(Key::Backspace),
@@ -251,6 +280,8 @@ fn map_key(code: KeyCode, modifiers: KeyModifiers) -> Option<Key> {
         KeyCode::Right => Some(Key::Right),
         KeyCode::Up => Some(Key::Up),
         KeyCode::Down => Some(Key::Down),
+        KeyCode::Home => Some(Key::Home),
+        KeyCode::End => Some(Key::End),
         _ => None,
     }
 }
@@ -353,7 +384,7 @@ fn draw(
                 draw_candidate_panel(frame, ime, text_area, cursor_x, cursor_y)
             }
             WritingLayout::Vertical => {
-                vertical::draw_candidate_panel(frame, ime, config, text_area, cursor_x, cursor_y)
+                vertical::draw_candidate_panel(frame, ime, text_area, cursor_x, cursor_y)
             }
         }
     }
@@ -826,16 +857,52 @@ mod tests {
         // The panel stays shallow: border, digit, candidate, two hint rows,
         // border — six rows, where one letter per row would need seven.
         let border_rows: Vec<u16> = (0..buffer.area.height)
-            .filter(|&y| (0..buffer.area.width).any(|x| buffer[(x, y)].symbol() == "\u{250c}"))
+            .filter(|&y| (0..buffer.area.width).any(|x| buffer[(x, y)].symbol() == "\u{256d}"))
             .collect();
         let top = border_rows[0];
         let bottom = (top..buffer.area.height)
-            .find(|&y| (0..buffer.area.width).any(|x| buffer[(x, y)].symbol() == "\u{2514}"))
+            .find(|&y| (0..buffer.area.width).any(|x| buffer[(x, y)].symbol() == "\u{2570}"))
             .expect("panel has a bottom border");
         assert!(
             bottom - top <= 5,
             "panel too deep: {} rows",
             bottom - top + 1
+        );
+    }
+
+    #[test]
+    fn the_candidate_panel_wears_the_ink_skin() {
+        let mut editor = Editor::new();
+        editor.on_key(Key::Char('i'));
+        let mut ime = ImeSession::from_table_text(Scheme::Lingming, "b 吧 八\n");
+        ime.input('b');
+        let config = vertical_config();
+        let buffer = render_vertical_with(&mut editor, &config, &ime, 40, 14);
+
+        // 墨香 dark: warm ink on a deep ground, ringed in a mid rung of the same
+        // ladder. Nothing in the panel falls back to the terminal default.
+        let paper = Color::Rgb(0x26, 0x2A, 0x27);
+        let ring = Color::Rgb(0x50, 0x51, 0x48);
+        let corner = (0..buffer.area.height)
+            .flat_map(|y| (0..buffer.area.width).map(move |x| (x, y)))
+            .find(|&(x, y)| buffer[(x, y)].symbol() == "\u{256d}")
+            .expect("rounded top-left corner");
+        assert_eq!(buffer[corner].style().fg, Some(ring), "border not inked");
+        assert_eq!(
+            buffer[corner].style().bg,
+            Some(paper),
+            "panel ground missing"
+        );
+
+        let cand = (0..buffer.area.height)
+            .flat_map(|y| (0..buffer.area.width).map(move |x| (x, y)))
+            .find(|&(x, y)| buffer[(x, y)].symbol() == "吧")
+            .expect("first candidate");
+        // The highlighted candidate is ink-on-paper inverted.
+        assert_eq!(
+            buffer[cand].style().bg,
+            Some(Color::Rgb(0xCF, 0xC6, 0xA9)),
+            "highlight not inked"
         );
     }
 
@@ -1039,6 +1106,16 @@ mod tests {
             tap.update(&key(shift(), KeyEventKind::Release)),
             ShiftResult::Consumed
         ));
+    }
+
+    #[test]
+    fn a_held_key_repeats() {
+        // Holding a key under the Kitty protocol sends one Press and then
+        // Repeats; both must reach the editor, or the cursor moves once and
+        // stops.
+        assert!(is_actionable(KeyEventKind::Press));
+        assert!(is_actionable(KeyEventKind::Repeat));
+        assert!(!is_actionable(KeyEventKind::Release));
     }
 
     #[test]

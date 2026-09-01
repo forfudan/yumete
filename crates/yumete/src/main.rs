@@ -58,6 +58,7 @@ fn main() -> ExitCode {
     // and `:layout` switches it live.
     editor.set_layout(force_layout.unwrap_or(config.editor.layout));
     editor.set_zong_length(config.editor.zong_length);
+    editor.set_indent_width(config.editor.tab_width);
 
     // Word segmentation (Feature #24): drive `w`/`b`/`e` and the overlay with a
     // dictionary. A user `segmentation.txt` in the data directory wins; else the
@@ -122,20 +123,29 @@ OPTIONS:
     -v, --version    Print the version and exit.
 
 KEYS (Normal mode, Helix-style):
+    3w 10j    a digit prefix repeats the motion or edit that follows
     h j k l   move by grapheme / line (CJK-width aware)
     w b e     next / prev word start, word end (W B E for WORDs)
     gg  ge    goto buffer start / last line
     gh gl gs  goto line start / end / first non-blank
-    f t F T   find / till a character (forward / backward)
-    x         select the current line (repeat to extend)
-    v  ;      select (extend) mode / collapse the selection
-    d  c      delete / change the selection
+    f t F T   find / till a character (forward / backward); A-. repeats it
+    x  X      select the current line / extend to whole lines
+    v  ;  %   select (extend) mode / collapse / select the whole file
+    d  c  R   delete / change / replace the selection with the register
     y  p  P   yank / paste after / before
     i  a      insert before / after the selection
     I  A      insert at line start / end
     o  O      open a line below / above
-    u  U      undo / redo
+    u  U  .   undo / redo / repeat the last insert
+    J         join with the line below (no space between two 全角 characters)
+    ~  `      switch case / lowercase the selection (A-` uppercases)
+    >  <      indent / unindent the selected lines
+    C-a C-x   increment / decrement the number at the cursor
+    m         match mode: mm jump to the matching bracket; mi/ma select
+              inside/around a pair; ms surround, md delete, mr replace —
+              「」『』（）《》【】〔〕 and the ASCII pairs
     / ? n N   search forward / backward; next / previous match
+    *         search for whatever is selected
     :         command line (:w  :w <path>  :q  :q!  :o <path>  :new
               :s/old/new/[g]  :%s/old/new/[g]  :segment
               :layout [horizontal|vertical]  :vertical  :horizontal)

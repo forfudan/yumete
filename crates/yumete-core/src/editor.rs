@@ -36,6 +36,18 @@ enum Pending {
     Goto,
     /// A find/till sequence (`f`, `t`, `F`, `T`) awaiting the target character.
     Find(FindKind),
+    /// An `m` match sequence awaiting its verb (`m`, `i`, `a`, `s`, `d`, `r`).
+    Match,
+    /// `mi` / `ma` awaiting the delimiter naming the pair.
+    MatchPair {
+        around: bool,
+    },
+    /// `ms` awaiting the delimiter to wrap the selection in.
+    Surround,
+    /// `mr` awaiting the delimiter to replace…
+    SurroundFrom,
+    /// …and then the one to replace it with.
+    SurroundTo(char),
 }
 
 /// The four flavours of in-line character search (`f`/`t`/`F`/`T`).
@@ -83,6 +95,16 @@ pub struct Editor {
     segmenter: Box<dyn Segmenter>,
     /// Whether the segmentation overlay (word background tint) is shown.
     show_segmentation: bool,
+    /// A pending count prefix, so `3w` moves three words (Helix counts).
+    count: Option<usize>,
+    /// The text typed during the last Insert session, replayed by `.`.
+    last_insert: String,
+    /// The Insert session being recorded, moved into `last_insert` on Esc.
+    insert_recording: String,
+    /// The last `f`/`t`/`F`/`T`, replayed by `A-.`.
+    last_find: Option<(FindKind, char)>,
+    /// Columns of indentation added by `>` and removed by `<`.
+    indent_width: usize,
     /// Whether text is laid out horizontally or vertically (Feature #61).
     layout: Layout,
     /// How many graphemes fit in one 縱. The renderer lowers this when the
@@ -170,6 +192,11 @@ impl Editor {
             key_aliases: HashMap::new(),
             segmenter: Box::new(CategorySegmenter),
             show_segmentation: false,
+            count: None,
+            last_insert: String::new(),
+            insert_recording: String::new(),
+            last_find: None,
+            indent_width: 4,
             layout: Layout::default(),
             zong_length: DEFAULT_ZONG_LENGTH,
             goal_slot: 0,
@@ -392,6 +419,16 @@ impl Editor {
         self.key_aliases = aliases;
     }
 
+    /// Set how many columns `>` adds and `<` removes.
+    pub fn set_indent_width(&mut self, width: usize) {
+        self.indent_width = width.max(1);
+    }
+
+    /// The count typed so far (`3` of a pending `3w`), for the status line.
+    pub fn pending_count(&self) -> Option<usize> {
+        self.count
+    }
+
     // ---- Word segmentation (Feature #24) ----------------------------------
 
     /// Install the word [`Segmenter`] used by `w`/`b`/`e` and the segmentation
@@ -441,6 +478,7 @@ impl Editor {
             return;
         }
         self.snapshot();
+        self.insert_recording.push_str(text);
         self.insert_str(text);
     }
 
@@ -469,7 +507,52 @@ impl Editor {
             Pending::Find(kind) => {
                 self.pending = Pending::None;
                 if let Key::Char(c) = key {
-                    self.find_char(kind, c);
+                    self.last_find = Some((kind, c));
+                    let count = self.take_count();
+                    for _ in 0..count {
+                        self.find_char(kind, c);
+                    }
+                }
+                return;
+            }
+            Pending::Match => {
+                self.pending = Pending::None;
+                match key {
+                    Key::Char('m') => self.goto_matching_bracket(),
+                    Key::Char('i') => self.pending = Pending::MatchPair { around: false },
+                    Key::Char('a') => self.pending = Pending::MatchPair { around: true },
+                    Key::Char('s') => self.pending = Pending::Surround,
+                    Key::Char('d') => self.surround_delete(),
+                    Key::Char('r') => self.pending = Pending::SurroundFrom,
+                    _ => {}
+                }
+                return;
+            }
+            Pending::MatchPair { around } => {
+                self.pending = Pending::None;
+                if let Key::Char(c) = key {
+                    self.select_pair(c, around);
+                }
+                return;
+            }
+            Pending::Surround => {
+                self.pending = Pending::None;
+                if let Key::Char(c) = key {
+                    self.surround_add(c);
+                }
+                return;
+            }
+            Pending::SurroundFrom => {
+                self.pending = Pending::None;
+                if let Key::Char(c) = key {
+                    self.pending = Pending::SurroundTo(c);
+                }
+                return;
+            }
+            Pending::SurroundTo(from) => {
+                self.pending = Pending::None;
+                if let Key::Char(to) = key {
+                    self.surround_replace(from, to);
                 }
                 return;
             }
@@ -486,6 +569,23 @@ impl Editor {
             other => other,
         };
 
+        // A digit prefix builds a count (`3w`), Helix-style. `0` only extends a
+        // count already under way, so it stays free for other bindings.
+        if let Key::Char(c) = key {
+            if let Some(digit) = c.to_digit(10) {
+                if digit > 0 || self.count.is_some() {
+                    let n = self.count.unwrap_or(0);
+                    self.count = Some(
+                        n.saturating_mul(10)
+                            .saturating_add(digit as usize)
+                            .min(1_000_000),
+                    );
+                    return;
+                }
+            }
+        }
+        let count = self.take_count();
+
         // Laid out vertically, the arrow keys and `hjkl` keep their *screen*
         // meaning: `j` still reads onward down the 縱, and `h` still steps left,
         // which is now the next 縱 rather than the next line.
@@ -500,65 +600,73 @@ impl Editor {
         }
 
         match key {
-            Key::Char('h') | Key::Left => self.move_horizontal(motion::left),
-            Key::Char('l') | Key::Right => self.move_horizontal(motion::right),
-            Key::Char('k') | Key::Up => self.move_vertical(true),
-            Key::Char('j') | Key::Down => self.move_vertical(false),
+            Key::Char('h') | Key::Left => self.repeat(count, |e| e.move_horizontal(motion::left)),
+            Key::Char('l') | Key::Right => self.repeat(count, |e| e.move_horizontal(motion::right)),
+            Key::Char('k') | Key::Up => self.repeat(count, |e| e.move_vertical(true)),
+            Key::Char('j') | Key::Down => self.repeat(count, |e| e.move_vertical(false)),
+            Key::Home => {
+                let pos = motion::line_start(self.current_buffer().rope(), self.cursor);
+                self.move_head(pos);
+            }
+            Key::End => {
+                let pos = motion::line_end(self.current_buffer().rope(), self.cursor);
+                self.move_head(pos);
+            }
             // Word motions (Helix `w`/`b`/`e`, and WORD `W`/`B`/`E`).
-            Key::Char('w') => {
+            Key::Char('w') => self.repeat(count, |e| {
                 let p = motion::next_word_start(
-                    self.current_buffer().rope(),
-                    self.cursor,
+                    e.current_buffer().rope(),
+                    e.cursor,
                     false,
-                    self.segmenter.as_ref(),
+                    e.segmenter.as_ref(),
                 );
-                self.select_to(p);
-            }
-            Key::Char('e') => {
+                e.select_to(p);
+            }),
+            Key::Char('e') => self.repeat(count, |e| {
                 let p = motion::next_word_end(
-                    self.current_buffer().rope(),
-                    self.cursor,
+                    e.current_buffer().rope(),
+                    e.cursor,
                     false,
-                    self.segmenter.as_ref(),
+                    e.segmenter.as_ref(),
                 );
-                self.select_to(p);
-            }
-            Key::Char('b') => {
+                e.select_to(p);
+            }),
+            Key::Char('b') => self.repeat(count, |e| {
                 let p = motion::prev_word_start(
-                    self.current_buffer().rope(),
-                    self.cursor,
+                    e.current_buffer().rope(),
+                    e.cursor,
                     false,
-                    self.segmenter.as_ref(),
+                    e.segmenter.as_ref(),
                 );
-                self.select_to(p);
-            }
-            Key::Char('W') => {
+                e.select_to(p);
+            }),
+            Key::Char('W') => self.repeat(count, |e| {
                 let p = motion::next_word_start(
-                    self.current_buffer().rope(),
-                    self.cursor,
+                    e.current_buffer().rope(),
+                    e.cursor,
                     true,
-                    self.segmenter.as_ref(),
+                    e.segmenter.as_ref(),
                 );
-                self.select_to(p);
-            }
-            Key::Char('E') => {
+                e.select_to(p);
+            }),
+            Key::Char('E') => self.repeat(count, |e| {
                 let p = motion::next_word_end(
-                    self.current_buffer().rope(),
-                    self.cursor,
+                    e.current_buffer().rope(),
+                    e.cursor,
                     true,
-                    self.segmenter.as_ref(),
+                    e.segmenter.as_ref(),
                 );
-                self.select_to(p);
-            }
-            Key::Char('B') => {
+                e.select_to(p);
+            }),
+            Key::Char('B') => self.repeat(count, |e| {
                 let p = motion::prev_word_start(
-                    self.current_buffer().rope(),
-                    self.cursor,
+                    e.current_buffer().rope(),
+                    e.cursor,
                     true,
-                    self.segmenter.as_ref(),
+                    e.segmenter.as_ref(),
                 );
-                self.select_to(p);
-            }
+                e.select_to(p);
+            }),
             Key::Char('g') => self.pending = Pending::Goto,
             // In-line character search (Helix `f`/`t`/`F`/`T`).
             Key::Char('f') => self.pending = Pending::Find(FindKind::ForwardTo),
@@ -570,7 +678,7 @@ impl Editor {
             Key::Char(';') => self.anchor = self.cursor,
             // Selection + changes (Helix: `x` selects the line, `d` deletes the
             // selection, `c` changes it).
-            Key::Char('x') => self.select_line(),
+            Key::Char('x') => self.repeat(count, |e| e.select_line()),
             Key::Char('d') => {
                 self.snapshot();
                 self.delete_selection();
@@ -578,36 +686,36 @@ impl Editor {
             Key::Char('c') => {
                 self.snapshot();
                 self.delete_selection();
-                self.mode = Mode::Insert;
+                self.enter_insert();
             }
             // Yank / paste (Helix `y` / `p` / `P`).
             Key::Char('y') => self.yank(),
-            Key::Char('p') => self.paste(true),
-            Key::Char('P') => self.paste(false),
+            Key::Char('p') => self.repeat(count, |e| e.paste(true)),
+            Key::Char('P') => self.repeat(count, |e| e.paste(false)),
             // Insert (`i` before the selection, `a` after it, `I`/`A` line ends).
             Key::Char('i') => {
                 self.snapshot();
                 let pos = self.selection().0;
                 self.set_cursor(pos);
-                self.mode = Mode::Insert;
+                self.enter_insert();
             }
             Key::Char('a') => {
                 self.snapshot();
                 let pos = self.append_position();
                 self.set_cursor(pos);
-                self.mode = Mode::Insert;
+                self.enter_insert();
             }
             Key::Char('I') => {
                 self.snapshot();
                 let pos = motion::line_start(self.current_buffer().rope(), self.cursor);
                 self.set_cursor(pos);
-                self.mode = Mode::Insert;
+                self.enter_insert();
             }
             Key::Char('A') => {
                 self.snapshot();
                 let pos = motion::line_end(self.current_buffer().rope(), self.cursor);
                 self.set_cursor(pos);
-                self.mode = Mode::Insert;
+                self.enter_insert();
             }
             Key::Char('o') => {
                 self.snapshot();
@@ -618,8 +726,8 @@ impl Editor {
                 self.open_line_above();
             }
             // Undo/redo (Helix: `u` / `U`).
-            Key::Char('u') => self.undo(),
-            Key::Char('U') => self.redo(),
+            Key::Char('u') => self.repeat(count, |e| e.undo()),
+            Key::Char('U') => self.repeat(count, |e| e.redo()),
             // Search (`/` forward, `?` backward, `n`/`N` repeat).
             Key::Char('/') => {
                 self.mode = Mode::Search;
@@ -631,11 +739,37 @@ impl Editor {
                 self.search_forward = false;
                 self.command_line.clear();
             }
-            Key::Char('n') => self.repeat_search(self.search_forward),
-            Key::Char('N') => self.repeat_search(!self.search_forward),
+            Key::Char('n') => self.repeat(count, |e| e.repeat_search(e.search_forward)),
+            Key::Char('N') => self.repeat(count, |e| e.repeat_search(!e.search_forward)),
             Key::Char(':') => {
                 self.mode = Mode::Command;
                 self.command_line.clear();
+            }
+            // Match mode (Helix `m`): matching bracket, textobjects, surround.
+            Key::Char('m') => self.pending = Pending::Match,
+            // Whole file, and extending the selection to whole lines.
+            Key::Char('%') => self.select_all(),
+            Key::Char('X') => self.extend_to_line_bounds(),
+            // Joining, case, and replacing the selection with the register.
+            Key::Char('J') => self.repeat(count, |e| e.join_lines()),
+            Key::Char('~') => self.map_selection(switch_case),
+            Key::Char('`') => self.map_selection(|c| c.to_lowercase().next().unwrap_or(c)),
+            Key::Alt('`') => self.map_selection(|c| c.to_uppercase().next().unwrap_or(c)),
+            Key::Char('R') => self.replace_with_register(),
+            // Search for whatever is selected (Helix `*`).
+            Key::Char('*') => self.search_selection(),
+            // Indent / unindent the selected lines.
+            Key::Char('>') => self.repeat(count, |e| e.indent(true)),
+            Key::Char('<') => self.repeat(count, |e| e.indent(false)),
+            // Increment / decrement the number at the cursor.
+            Key::Ctrl('a') => self.repeat(count, |e| e.bump_number(1)),
+            Key::Ctrl('x') => self.repeat(count, |e| e.bump_number(-1)),
+            // Repeat the last insert, and the last `f`/`t`.
+            Key::Char('.') => self.repeat(count, |e| e.repeat_insert()),
+            Key::Alt('.') => {
+                if let Some((kind, c)) = self.last_find {
+                    self.repeat(count, |e| e.find_char(kind, c));
+                }
             }
             _ => {}
         }
@@ -711,17 +845,38 @@ impl Editor {
             }
         }
         match key {
-            Key::Esc => self.mode = Mode::Normal,
-            Key::Enter => self.insert_str("\n"),
-            Key::Backspace => self.delete_before_cursor(),
+            Key::Esc => {
+                // The session just ended is what `.` replays.
+                self.last_insert = std::mem::take(&mut self.insert_recording);
+                self.mode = Mode::Normal;
+            }
+            Key::Enter => {
+                self.insert_recording.push('\n');
+                self.insert_str("\n");
+            }
+            Key::Backspace => {
+                self.insert_recording.pop();
+                self.delete_before_cursor();
+            }
             Key::Left => self.move_horizontal(motion::left),
             Key::Right => self.move_horizontal(motion::right),
             Key::Up => self.move_vertical(true),
             Key::Down => self.move_vertical(false),
+            Key::Home => {
+                let pos = motion::line_start(self.current_buffer().rope(), self.cursor);
+                self.set_cursor(pos);
+            }
+            Key::End => {
+                let pos = motion::line_end(self.current_buffer().rope(), self.cursor);
+                self.set_cursor(pos);
+            }
             Key::Char(c) => {
+                self.insert_recording.push(c);
                 let mut buf = [0u8; 4];
                 self.insert_str(c.encode_utf8(&mut buf));
             }
+            // Chords are not text; ignore them rather than inserting a literal.
+            Key::Ctrl(_) | Key::Alt(_) => {}
         }
     }
 
@@ -898,6 +1053,349 @@ impl Editor {
         self.status = format!("{count} substitution(s)");
     }
 
+    // ---- Counts, repetition, and the Helix tutorial verbs -----------------
+
+    /// Enter Insert mode, starting a fresh recording for `.` to replay.
+    fn enter_insert(&mut self) {
+        self.insert_recording.clear();
+        self.mode = Mode::Insert;
+    }
+
+    /// Take the pending count prefix, defaulting to one.
+    fn take_count(&mut self) -> usize {
+        self.count.take().unwrap_or(1).max(1)
+    }
+
+    /// Run `action` `n` times — how a count prefix is applied to a motion or an
+    /// edit. Stops early once the action stops moving the cursor, so `999j` at
+    /// the end of the buffer costs one step rather than a thousand.
+    fn repeat(&mut self, n: usize, mut action: impl FnMut(&mut Self)) {
+        for _ in 0..n {
+            let (before, anchor) = (self.cursor, self.anchor);
+            let revision = self.current_buffer().char_count();
+            action(self);
+            if self.cursor == before
+                && self.anchor == anchor
+                && self.current_buffer().char_count() == revision
+            {
+                break;
+            }
+        }
+    }
+
+    /// Select the whole buffer (Helix `%`).
+    fn select_all(&mut self) {
+        self.anchor = 0;
+        self.cursor = self.current_buffer().char_count();
+        self.goal_column = 0;
+    }
+
+    /// Grow the selection outward to whole lines (Helix `X`).
+    fn extend_to_line_bounds(&mut self) {
+        let (start, end) = self.selection();
+        let rope = self.current_buffer().rope();
+        let first = rope.char_to_line(start);
+        let last = rope.char_to_line(end.saturating_sub(1).max(start));
+        let head = rope.line_to_char(first);
+        let tail = if last + 1 < rope.len_lines() {
+            rope.line_to_char(last + 1)
+        } else {
+            rope.len_chars()
+        };
+        self.anchor = head;
+        self.cursor = tail;
+    }
+
+    /// Join the line below onto this one (Helix `J`).
+    ///
+    /// Helix always inserts a space; yumete does not put one between two
+    /// full-width characters, because in CJK prose a line break carries no
+    /// space and joining two 漢字 with one would insert text the author never
+    /// typed. Between Latin words the space is kept.
+    fn join_lines(&mut self) {
+        let rope = self.current_buffer().rope();
+        let line = rope.char_to_line(self.cursor);
+        if line >= motion::last_line(rope) {
+            return;
+        }
+        let end = motion::line_end(rope, self.cursor);
+        // Swallow the break and any indentation that follows it.
+        let mut next = end + 1;
+        let len = rope.len_chars();
+        while next < len && matches!(rope.char(next), ' ' | '\t' | '\u{3000}') {
+            next += 1;
+        }
+        let before = (end > 0).then(|| rope.char(end - 1));
+        let after = (next < len).then(|| rope.char(next));
+        let glue = match (before, after) {
+            (Some(a), Some(b)) if is_wide(a) && is_wide(b) => "",
+            (None, _) | (_, None) => "",
+            _ => " ",
+        };
+        self.snapshot();
+        let buffer = self.current_buffer_mut();
+        buffer.remove(end..next);
+        if !glue.is_empty() {
+            buffer.insert(end, glue);
+        }
+        self.cursor = end;
+        self.anchor = end;
+        self.clamp_cursor();
+    }
+
+    /// Rewrite every character of the selection through `f` (`~`, `` ` ``).
+    fn map_selection(&mut self, f: impl Fn(char) -> char) {
+        let (start, end) = self.selection();
+        let end = if end > start {
+            end
+        } else {
+            motion::right(self.current_buffer().rope(), start).max(start + 1)
+        };
+        let end = end.min(self.current_buffer().char_count());
+        if start >= end {
+            return;
+        }
+        let text: String = self
+            .current_buffer()
+            .rope()
+            .slice(start..end)
+            .chars()
+            .map(f)
+            .collect();
+        self.snapshot();
+        let buffer = self.current_buffer_mut();
+        buffer.remove(start..end);
+        buffer.insert(start, &text);
+        self.anchor = start;
+        self.cursor = end;
+    }
+
+    /// Replace the selection with the yank register (Helix `R`).
+    fn replace_with_register(&mut self) {
+        if self.register.is_empty() {
+            return;
+        }
+        let (start, end) = self.selection();
+        let text = self.register.clone();
+        self.snapshot();
+        let buffer = self.current_buffer_mut();
+        if end > start {
+            buffer.remove(start..end);
+        }
+        buffer.insert(start, &text);
+        self.anchor = start;
+        self.cursor = start + text.chars().count();
+        self.clamp_cursor();
+    }
+
+    /// Search for whatever is selected (Helix `*`).
+    fn search_selection(&mut self) {
+        let (start, end) = self.selection();
+        if end <= start {
+            self.status = "nothing selected".to_string();
+            return;
+        }
+        self.last_search = self.current_buffer().rope().slice(start..end).to_string();
+        self.status = format!("search: {}", self.last_search);
+    }
+
+    /// Indent (`>`) or unindent (`<`) every line the selection touches.
+    fn indent(&mut self, add: bool) {
+        let rope = self.current_buffer().rope();
+        let (start, end) = self.selection();
+        let first = rope.char_to_line(start);
+        let last = rope.char_to_line(end.saturating_sub(1).max(start));
+        let pad = " ".repeat(self.indent_width);
+        self.snapshot();
+        // Bottom-up, so earlier edits do not shift the lines still to come.
+        for line in (first..=last).rev() {
+            let at = self.current_buffer().rope().line_to_char(line);
+            if add {
+                self.current_buffer_mut().insert(at, &pad);
+            } else {
+                let rope = self.current_buffer().rope();
+                let len = rope.len_chars();
+                let mut n = 0;
+                while n < self.indent_width && at + n < len && rope.char(at + n) == ' ' {
+                    n += 1;
+                }
+                if n > 0 {
+                    self.current_buffer_mut().remove(at..at + n);
+                }
+            }
+        }
+        self.clamp_cursor();
+    }
+
+    /// Add `delta` to the number at or after the cursor on its line
+    /// (Helix `C-a` / `C-x`).
+    fn bump_number(&mut self, delta: i64) {
+        let rope = self.current_buffer().rope();
+        let line = rope.char_to_line(self.cursor);
+        let line_start = rope.line_to_char(line);
+        let text = rope.line(line).to_string();
+        let chars: Vec<char> = text.chars().collect();
+        let col = self.cursor - line_start;
+
+        // The number under the cursor, else the next one along the line.
+        let Some(mut start) = (col..chars.len())
+            .find(|&i| chars[i].is_ascii_digit())
+            .map(|i| {
+                let mut s = i;
+                while s > 0 && chars[s - 1].is_ascii_digit() {
+                    s -= 1;
+                }
+                s
+            })
+        else {
+            return;
+        };
+        let mut end = start;
+        while end < chars.len() && chars[end].is_ascii_digit() {
+            end += 1;
+        }
+        let negative = start > 0 && chars[start - 1] == '-';
+        if negative {
+            start -= 1;
+        }
+        let digits: String = chars[start..end].iter().collect();
+        let Ok(value) = digits.parse::<i64>() else {
+            return;
+        };
+        // Keep zero padding: `007` steps to `008`, not `8`.
+        let width = digits.trim_start_matches('-').len();
+        let next = value.saturating_add(delta);
+        let text = if digits.trim_start_matches('-').starts_with('0') && width > 1 {
+            format!(
+                "{}{:0width$}",
+                if next < 0 { "-" } else { "" },
+                next.abs(),
+                width = width
+            )
+        } else {
+            next.to_string()
+        };
+
+        self.snapshot();
+        let buffer = self.current_buffer_mut();
+        buffer.remove(line_start + start..line_start + end);
+        buffer.insert(line_start + start, &text);
+        self.cursor = line_start + start;
+        self.anchor = self.cursor;
+        self.clamp_cursor();
+    }
+
+    /// Replay the text typed during the last Insert session (Helix `.`).
+    fn repeat_insert(&mut self) {
+        if self.last_insert.is_empty() {
+            return;
+        }
+        let text = self.last_insert.clone();
+        self.snapshot();
+        self.insert_str(&text);
+    }
+
+    // ---- Match mode (Helix `m`) -------------------------------------------
+
+    /// Jump to the bracket matching the one under the cursor (`mm`).
+    fn goto_matching_bracket(&mut self) {
+        let rope = self.current_buffer().rope();
+        if self.cursor >= rope.len_chars() {
+            return;
+        }
+        let here = rope.char(self.cursor);
+        let target = if let Some(close) = closing_of(here) {
+            find_forward(rope, self.cursor, here, close)
+        } else if let Some(open) = opening_of(here) {
+            find_backward(rope, self.cursor, open, here)
+        } else {
+            None
+        };
+        if let Some(pos) = target {
+            self.move_head(pos);
+        }
+    }
+
+    /// Select inside (`mi`) or around (`ma`) the pair named by `c`.
+    fn select_pair(&mut self, c: char, around: bool) {
+        let rope = self.current_buffer().rope();
+        let Some((open, close)) = pair_of(c) else {
+            return;
+        };
+        let Some((start, end)) = surrounding(rope, self.cursor, open, close) else {
+            self.status = format!("no surrounding {open}{close}");
+            return;
+        };
+        let (a, b) = if around {
+            (start, end + 1)
+        } else {
+            (start + 1, end)
+        };
+        self.anchor = a;
+        self.cursor = b.max(a);
+    }
+
+    /// Wrap the selection in the pair named by `c` (`ms`).
+    fn surround_add(&mut self, c: char) {
+        let Some((open, close)) = pair_of(c) else {
+            return;
+        };
+        let (start, end) = self.selection();
+        let end = end.max(start);
+        self.snapshot();
+        let buffer = self.current_buffer_mut();
+        buffer.insert(end, &close.to_string());
+        buffer.insert(start, &open.to_string());
+        self.anchor = start;
+        self.cursor = end + 2;
+        self.clamp_cursor();
+    }
+
+    /// Remove the innermost pair around the cursor (`md`).
+    fn surround_delete(&mut self) {
+        let Some((start, end)) = self.innermost_pair() else {
+            self.status = "no surrounding pair".to_string();
+            return;
+        };
+        self.snapshot();
+        let buffer = self.current_buffer_mut();
+        // The closer first, so removing it cannot shift the opener.
+        buffer.remove(end..end + 1);
+        buffer.remove(start..start + 1);
+        self.cursor = self.cursor.saturating_sub(1);
+        self.anchor = self.cursor;
+        self.clamp_cursor();
+    }
+
+    /// Swap the innermost pair around the cursor for another (`mr`).
+    fn surround_replace(&mut self, from: char, to: char) {
+        let (Some((open, close)), Some((new_open, new_close))) = (pair_of(from), pair_of(to))
+        else {
+            return;
+        };
+        let rope = self.current_buffer().rope();
+        let Some((start, end)) = surrounding(rope, self.cursor, open, close) else {
+            self.status = format!("no surrounding {open}{close}");
+            return;
+        };
+        self.snapshot();
+        let buffer = self.current_buffer_mut();
+        buffer.remove(end..end + 1);
+        buffer.insert(end, &new_close.to_string());
+        buffer.remove(start..start + 1);
+        buffer.insert(start, &new_open.to_string());
+        self.clamp_cursor();
+    }
+
+    /// The nearest pair of delimiters enclosing the cursor, whichever kind.
+    fn innermost_pair(&self) -> Option<(usize, usize)> {
+        let rope = self.current_buffer().rope();
+        PAIRS
+            .iter()
+            .filter_map(|&(open, close)| surrounding(rope, self.cursor, open, close))
+            .max_by_key(|&(start, _)| start)
+    }
+
     /// Apply a horizontal motion, moving the head (extending if in select mode).
     fn move_horizontal(&mut self, motion: fn(&ropey::Rope, usize) -> usize) {
         let pos = motion(self.current_buffer().rope(), self.cursor);
@@ -1001,7 +1499,7 @@ impl Editor {
         self.current_buffer_mut().insert(end, "\n");
         self.cursor = end + 1;
         self.anchor = self.cursor;
-        self.mode = Mode::Insert;
+        self.enter_insert();
     }
 
     /// Open a new line above the cursor and enter Insert mode (`O`).
@@ -1010,7 +1508,7 @@ impl Editor {
         self.current_buffer_mut().insert(start, "\n");
         self.cursor = start;
         self.anchor = self.cursor;
-        self.mode = Mode::Insert;
+        self.enter_insert();
     }
 
     /// Where `a` (append) places the cursor: after the selection, or one grapheme
@@ -1165,10 +1663,350 @@ fn replace_in_line(line: &str, pattern: &str, replacement: &str, global: bool) -
     }
 }
 
+/// The bracket and quote pairs match mode understands, CJK included — a novel's
+/// dialogue lives in 「」 and 『』, and its titles in 《》.
+const PAIRS: &[(char, char)] = &[
+    ('(', ')'),
+    ('[', ']'),
+    ('{', '}'),
+    ('<', '>'),
+    ('（', '）'),
+    ('［', '］'),
+    ('｛', '｝'),
+    ('〈', '〉'),
+    ('《', '》'),
+    ('「', '」'),
+    ('『', '』'),
+    ('【', '】'),
+    ('〔', '〕'),
+    ('〖', '〗'),
+    ('“', '”'),
+    ('‘', '’'),
+    ('"', '"'),
+    ('\'', '\''),
+    ('`', '`'),
+];
+
+/// The pair a delimiter names — either half selects the whole pair, so `mi「`
+/// and `mi」` mean the same thing.
+fn pair_of(c: char) -> Option<(char, char)> {
+    PAIRS
+        .iter()
+        .find(|&&(open, close)| open == c || close == c)
+        .copied()
+}
+
+/// The closing half of `c`, if `c` opens a pair (and is not its own closer).
+fn closing_of(c: char) -> Option<char> {
+    PAIRS
+        .iter()
+        .find(|&&(open, close)| open == c && open != close)
+        .map(|&(_, close)| close)
+}
+
+/// The opening half of `c`, if `c` closes a pair.
+fn opening_of(c: char) -> Option<char> {
+    PAIRS
+        .iter()
+        .find(|&&(open, close)| close == c && open != close)
+        .map(|&(open, _)| open)
+}
+
+/// Swap the case of `c`, leaving anything caseless (every 漢字) alone.
+fn switch_case(c: char) -> char {
+    if c.is_lowercase() {
+        c.to_uppercase().next().unwrap_or(c)
+    } else if c.is_uppercase() {
+        c.to_lowercase().next().unwrap_or(c)
+    } else {
+        c
+    }
+}
+
+/// Whether `c` is a full-width character, so joining lines across it needs no
+/// space.
+fn is_wide(c: char) -> bool {
+    yumete_cjk::char_width(c) == 2
+}
+
+/// The matching `close` for the `open` at `from`, counting nesting.
+fn find_forward(rope: &Rope, from: usize, open: char, close: char) -> Option<usize> {
+    let mut depth = 0usize;
+    for i in from..rope.len_chars() {
+        let c = rope.char(i);
+        if c == open {
+            depth += 1;
+        } else if c == close {
+            depth -= 1;
+            if depth == 0 {
+                return Some(i);
+            }
+        }
+    }
+    None
+}
+
+/// The matching `open` for the `close` at `from`, counting nesting.
+fn find_backward(rope: &Rope, from: usize, open: char, close: char) -> Option<usize> {
+    let mut depth = 0usize;
+    for i in (0..=from).rev() {
+        let c = rope.char(i);
+        if c == close {
+            depth += 1;
+        } else if c == open {
+            depth -= 1;
+            if depth == 0 {
+                return Some(i);
+            }
+        }
+    }
+    None
+}
+
+/// The innermost `open`…`close` enclosing `pos`, as (opener index, closer index).
+///
+/// A pair whose halves are identical (`"`, `'`) cannot be nested, so those are
+/// matched by scanning outward for the nearest delimiter on each side.
+fn surrounding(rope: &Rope, pos: usize, open: char, close: char) -> Option<(usize, usize)> {
+    let len = rope.len_chars();
+    let pos = pos.min(len.saturating_sub(1));
+    if len == 0 {
+        return None;
+    }
+    if open == close {
+        let start = (0..=pos).rev().find(|&i| rope.char(i) == open)?;
+        let end = (pos.max(start) + 1..len).find(|&i| rope.char(i) == close)?;
+        return Some((start, end));
+    }
+    // Sitting on a delimiter counts as being inside its own pair.
+    if rope.char(pos) == open {
+        return find_forward(rope, pos, open, close).map(|end| (pos, end));
+    }
+    if rope.char(pos) == close {
+        return find_backward(rope, pos, open, close).map(|start| (start, pos));
+    }
+    let mut depth = 0usize;
+    let start = (0..pos).rev().find(|&i| {
+        let c = rope.char(i);
+        if c == close {
+            depth += 1;
+            false
+        } else if c == open {
+            if depth == 0 {
+                true
+            } else {
+                depth -= 1;
+                false
+            }
+        } else {
+            false
+        }
+    })?;
+    find_forward(rope, start, open, close).map(|end| (start, end))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::input::{Key, Mode};
+
+    /// Type `text` into a fresh editor, then return to Normal at the top.
+    fn typed(text: &str) -> Editor {
+        let mut ed = Editor::new();
+        ed.on_key(Key::Char('i'));
+        for c in text.chars() {
+            ed.on_key(if c == '\n' { Key::Enter } else { Key::Char(c) });
+        }
+        ed.on_key(Key::Esc);
+        ed.on_key(Key::Char('g'));
+        ed.on_key(Key::Char('g'));
+        ed
+    }
+
+    fn press(ed: &mut Editor, keys: &str) {
+        for c in keys.chars() {
+            ed.on_key(Key::Char(c));
+        }
+    }
+
+    #[test]
+    fn a_count_prefix_repeats_a_motion() {
+        let mut ed = typed("一二三四五六七八");
+        press(&mut ed, "3l");
+        assert_eq!(ed.cursor(), 3);
+        // Digits accumulate, and the count is spent by the motion.
+        press(&mut ed, "2h");
+        assert_eq!(ed.cursor(), 1);
+        assert_eq!(ed.pending_count(), None);
+        // A count that runs off the end stops rather than spinning.
+        press(&mut ed, "999l");
+        assert_eq!(ed.cursor(), 8);
+    }
+
+    #[test]
+    fn a_leading_zero_is_not_a_count() {
+        let mut ed = typed("一二三");
+        press(&mut ed, "0");
+        assert_eq!(ed.pending_count(), None, "0 alone must not start a count");
+        // …but it extends one already under way.
+        press(&mut ed, "1");
+        press(&mut ed, "0");
+        assert_eq!(ed.pending_count(), Some(10));
+    }
+
+    #[test]
+    fn dot_repeats_the_last_insert() {
+        let mut ed = typed("");
+        ed.on_key(Key::Char('i'));
+        for c in "春".chars() {
+            ed.on_key(Key::Char(c));
+        }
+        ed.on_key(Key::Esc);
+        press(&mut ed, "..");
+        assert_eq!(ed.current_buffer().text(), "春春春");
+        // With a count, too.
+        press(&mut ed, "2.");
+        assert_eq!(ed.current_buffer().text(), "春春春春春");
+    }
+
+    #[test]
+    fn percent_selects_the_whole_buffer() {
+        let mut ed = typed("上\n中\n下");
+        press(&mut ed, "%");
+        assert_eq!(ed.selection(), (0, ed.current_buffer().char_count()));
+    }
+
+    #[test]
+    fn join_omits_the_space_between_two_wide_characters() {
+        // CJK prose carries no space across a line break…
+        let mut ed = typed("上山\n下海");
+        press(&mut ed, "J");
+        assert_eq!(ed.current_buffer().text(), "上山下海");
+        // …but Latin words still need one.
+        let mut ed = typed("up hill\ndown dale");
+        press(&mut ed, "J");
+        assert_eq!(ed.current_buffer().text(), "up hill down dale");
+        // Indentation on the joined line is swallowed, not doubled.
+        let mut ed = typed("one\n    two");
+        press(&mut ed, "J");
+        assert_eq!(ed.current_buffer().text(), "one two");
+    }
+
+    #[test]
+    fn tilde_switches_case_and_leaves_han_alone() {
+        let mut ed = typed("aB漢c");
+        press(&mut ed, "%~");
+        assert_eq!(ed.current_buffer().text(), "Ab漢C");
+        press(&mut ed, "%`");
+        assert_eq!(ed.current_buffer().text(), "ab漢c");
+    }
+
+    #[test]
+    fn replace_swaps_the_selection_for_the_register() {
+        let mut ed = typed("甲乙丙");
+        press(&mut ed, "vl"); // select 甲
+        press(&mut ed, "y"); // yank it
+        press(&mut ed, "%R"); // replace the whole buffer with the register
+        assert_eq!(ed.current_buffer().text(), "甲");
+    }
+
+    #[test]
+    fn indent_adds_and_removes_a_level() {
+        let mut ed = typed("一\n二");
+        ed.set_indent_width(2);
+        press(&mut ed, "%>");
+        assert_eq!(ed.current_buffer().text(), "  一\n  二");
+        press(&mut ed, "%<");
+        assert_eq!(ed.current_buffer().text(), "一\n二");
+    }
+
+    #[test]
+    fn control_a_and_x_step_the_number_under_the_cursor() {
+        let mut ed = typed("第 9 章");
+        ed.on_key(Key::Ctrl('a'));
+        assert_eq!(ed.current_buffer().text(), "第 10 章");
+        ed.on_key(Key::Ctrl('x'));
+        assert_eq!(ed.current_buffer().text(), "第 9 章");
+        // Zero padding survives.
+        let mut ed = typed("v007");
+        ed.on_key(Key::Ctrl('a'));
+        assert_eq!(ed.current_buffer().text(), "v008");
+    }
+
+    #[test]
+    fn match_mode_jumps_between_cjk_brackets() {
+        let mut ed = typed("他說「你好」。");
+        press(&mut ed, "2l"); // onto 「
+        assert_eq!(ed.cursor(), 2);
+        press(&mut ed, "mm");
+        assert_eq!(ed.cursor(), 5, "should land on 」");
+        press(&mut ed, "mm");
+        assert_eq!(ed.cursor(), 2, "and back again");
+    }
+
+    #[test]
+    fn match_mode_selects_inside_and_around_a_pair() {
+        let mut ed = typed("他說「你好」。");
+        press(&mut ed, "3l"); // inside the quotes
+        press(&mut ed, "mi「");
+        assert_eq!(ed.selection(), (3, 5));
+        press(&mut ed, "ma「");
+        assert_eq!(ed.selection(), (2, 6));
+        // Either half of the pair names it — from back inside the quotes, since
+        // `ma` left the cursor past the closer.
+        press(&mut ed, "gg3l");
+        press(&mut ed, "mi」");
+        assert_eq!(ed.selection(), (3, 5));
+    }
+
+    #[test]
+    fn surround_adds_deletes_and_replaces() {
+        let mut ed = typed("你好");
+        press(&mut ed, "%ms「");
+        assert_eq!(ed.current_buffer().text(), "「你好」");
+        press(&mut ed, "gg2l");
+        press(&mut ed, "mr「《");
+        assert_eq!(ed.current_buffer().text(), "《你好》");
+        press(&mut ed, "md");
+        assert_eq!(ed.current_buffer().text(), "你好");
+    }
+
+    #[test]
+    fn nested_pairs_match_the_innermost() {
+        let mut ed = typed("（甲（乙）丙）");
+        press(&mut ed, "3l"); // onto 乙, inside both pairs
+        press(&mut ed, "mi（");
+        assert_eq!(ed.selection(), (3, 4), "the inner pair, not the outer");
+    }
+
+    #[test]
+    fn alt_dot_repeats_the_last_find() {
+        let mut ed = typed("a,b,c,d");
+        press(&mut ed, "f,");
+        assert_eq!(ed.cursor(), 1);
+        ed.on_key(Key::Alt('.'));
+        assert_eq!(ed.cursor(), 3);
+        ed.on_key(Key::Alt('.'));
+        assert_eq!(ed.cursor(), 5);
+    }
+
+    #[test]
+    fn extend_to_line_bounds_covers_whole_lines() {
+        let mut ed = typed("一二三\n四五六");
+        press(&mut ed, "lv");
+        press(&mut ed, "j");
+        press(&mut ed, "X");
+        assert_eq!(ed.selection(), (0, 7));
+    }
+
+    #[test]
+    fn star_searches_for_the_selection() {
+        let mut ed = typed("春江春江");
+        press(&mut ed, "vl"); // select 春江
+        press(&mut ed, "*");
+        press(&mut ed, ";n");
+        assert_eq!(ed.cursor(), 2, "next occurrence of the selected text");
+    }
 
     #[test]
     fn starts_with_one_scratch_buffer() {
