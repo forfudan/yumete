@@ -48,6 +48,8 @@ pub struct Metrics {
     pub gap: u16,
     /// Whether readings are being laid out at all.
     pub ruby: bool,
+    /// Whether 句讀 hang in the margin, which needs the same column.
+    pub hanging: bool,
 }
 
 impl Metrics {
@@ -58,7 +60,13 @@ impl Metrics {
     /// fill a tall terminal, only lowered when the terminal cannot hold it. One
     /// row beyond the 縱 is kept spare so the end-of-paragraph caret has
     /// somewhere to sit below a full 縱.
-    pub fn new(config: &Config, height: u16, total_lines: usize, ruby: bool) -> Metrics {
+    pub fn new(
+        config: &Config,
+        height: u16,
+        total_lines: usize,
+        ruby: bool,
+        hanging: bool,
+    ) -> Metrics {
         let head_rows = number_rows(config.editor.line_numbers, total_lines);
         let rows = height.saturating_sub(head_rows) as usize;
         let zong_len = config.editor.zong_length.min(rows.saturating_sub(1)).max(1);
@@ -68,12 +76,13 @@ impl Metrics {
             head_rows,
             gap: config.editor.zong_gap as u16,
             ruby,
+            hanging,
         }
     }
 
     /// Whether a 縱 needs a cell of its own on the right for a reading.
     fn ruby_cell(&self, annotated: bool) -> u16 {
-        u16::from(annotated && self.ruby)
+        u16::from(annotated && (self.ruby || self.hanging))
     }
 
     /// How many 縱 fit across an area `width` cells wide. Only the gaps
@@ -108,7 +117,7 @@ fn layout_page(
         .collect();
     let annotated: Vec<bool> = slots
         .iter()
-        .map(|rows| rows.iter().any(|r| r.ruby.is_some()))
+        .map(|rows| rows.iter().any(|r| r.ruby.is_some() || r.mark.is_some()))
         .collect();
     let xs = place(metrics, area, &annotated);
     zongs
@@ -126,7 +135,7 @@ fn layout_page(
 /// takes a cell more than one that does not.
 fn place(metrics: &Metrics, area: Rect, annotated: &[bool]) -> Vec<u16> {
     let mut xs: Vec<u16> = Vec::with_capacity(annotated.len());
-    for (k, &annotated) in annotated.iter().enumerate() {
+    for &annotated in annotated {
         // A reading sits in the cell to the *right* of its own 縱, while the gap
         // sits *between* two — and they are the same cell. So one column apart
         // costs whichever is larger, and the rightmost 縱 pays for a reading
@@ -156,8 +165,14 @@ fn number_rows(mode: LineNumbers, total_lines: usize) -> u16 {
 /// The 縱 length in force for a terminal `height` rows tall (including the
 /// status line), so the event loop can tell the editor where 縱 break before the
 /// motions that depend on it run.
-pub fn zong_length_for(config: &Config, height: u16, total_lines: usize, ruby: bool) -> usize {
-    Metrics::new(config, height.saturating_sub(1), total_lines, ruby).zong_len
+pub fn zong_length_for(
+    config: &Config,
+    height: u16,
+    total_lines: usize,
+    ruby: bool,
+    hanging: bool,
+) -> usize {
+    Metrics::new(config, height.saturating_sub(1), total_lines, ruby, hanging).zong_len
 }
 
 /// Blank any wide glyph that reaches *into* `rect` from the column on its left.
@@ -275,7 +290,16 @@ pub fn draw(
 ) -> (u16, u16) {
     let buffer = editor.current_buffer();
     let total_lines = buffer.line_count();
-    let metrics = Metrics::new(config, area.height, total_lines, !editor.ruby().is_empty());
+    // Both flags come from the **editor**, not the config: `:ruby-off` and
+    // `:hanging` change them at runtime, and a page laid out from the config
+    // would disagree with the grid the cursor moves on.
+    let metrics = Metrics::new(
+        config,
+        area.height,
+        total_lines,
+        !editor.ruby().is_empty(),
+        editor.hanging_punctuation(),
+    );
     let rope = buffer.rope();
 
     // The grid the editor navigates by, at the wrap length this page settled on.
@@ -335,6 +359,11 @@ pub fn draw(
     let cursor_line = editor.cursor_line();
     let numbers = config.editor.line_numbers;
 
+    // A reading is set back; a hung mark is punctuation and reads as the text's
+    // own, so it keeps the text colour and is told apart by weight instead.
+    let reading_style = Style::default().add_modifier(Modifier::DIM);
+    let mark_style = Style::default().fg(Color::Rgb(0xb0, 0x8a, 0x6a));
+
     // Word ranges are per paragraph, and consecutive 縱 usually share one, so
     // segment each paragraph once as the page is walked.
     let mut segmented: Option<(usize, Vec<(usize, usize)>)> = None;
@@ -366,12 +395,18 @@ pub fn draw(
         // is already rotated.
         for (slot, row) in slots.iter().cloned().enumerate() {
             let y = text_top + slot as u16;
-            // The reading goes in the cell to the right of the 縱, which is the
-            // gap this page stepped in to provide.
-            if let Some(mark) = row.ruby {
+            // The margin to the right of the 縱 carries both a reading and a
+            // hung 句讀 mark. The mark wins the cell — it belongs against the
+            // character it follows, and the reading has already given way
+            // upward to leave that row free — and it is tinted apart from a
+            // reading so the two are never mistaken for one another.
+            let margin = row
+                .mark
+                .map(|m| (m, mark_style))
+                .or_else(|| row.ruby.map(|r| (r, reading_style)));
+            if let Some((glyph, style)) = margin {
                 if let Some(cell) = buf.cell_mut((x + SLOT_WIDTH, y)) {
-                    cell.set_symbol(&mark.to_string())
-                        .set_style(Style::default().add_modifier(Modifier::DIM));
+                    cell.set_symbol(&glyph.to_string()).set_style(style);
                 }
             }
             let symbol = row.text;

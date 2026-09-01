@@ -44,7 +44,8 @@ pub use grapheme::{
 };
 pub use segment::{CategorySegmenter, DictionarySegmenter, Segmenter};
 pub use vertical::{
-    vertical_form, vertical_grapheme, Layout, DEFAULT_ZONG_GAP, DEFAULT_ZONG_LENGTH,
+    hangs_in_the_margin, opens_a_pair, vertical_form, vertical_grapheme, Layout, DEFAULT_ZONG_GAP,
+    DEFAULT_ZONG_LENGTH,
 };
 pub use width::{char_width, grapheme_width, str_width, tab_width_at};
 pub use word::{word_ranges, word_ranges_big};
