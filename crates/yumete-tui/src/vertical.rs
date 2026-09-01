@@ -366,17 +366,23 @@ pub fn draw(
     // horizontal editor turned the quarter turn the text turned. Drawing it into
     // the page instead would have to recolour a character to show it.
     //
-    // A terminal sizes its cursor to the grapheme it sits on, so on a blank slot
-    // the rule would be one cell — half the 縱 — and read as lopsided. Filling
-    // the slot with an ideographic space, which is two cells and shows nothing,
-    // makes it span the whole square. (Over a *half-width* character it is still
-    // one cell, because that is genuinely how wide that character is.)
+    // It goes on the slot **above** the cursor's. Typing inserts *before* the
+    // character the cursor is on, pushing it down, so the boundary the text
+    // arrives at is that character's top edge — and an underscore is drawn at
+    // the bottom of the cell it is in. Put it on the cursor's own slot and it
+    // sits one boundary too low, which reads as "insert after this character"
+    // and is not where the text appears.
+    let mut caret_y = cursor_y;
     if cursor_column < visible && editor.mode() == Mode::Insert {
+        caret_y = cursor_y.saturating_sub(1).max(area.y);
+        // A terminal sizes its cursor to the grapheme it sits on, so on a blank
+        // slot the rule would be one cell — half the 縱 — and read as lopsided.
+        // An ideographic space is two cells and shows nothing.
         let blank = buf
-            .cell((cursor_x, cursor_y))
+            .cell((cursor_x, caret_y))
             .is_none_or(|c| c.symbol().trim().is_empty());
         if blank {
-            put_slot(buf, cursor_x, cursor_y, "\u{3000}", Style::default());
+            put_slot(buf, cursor_x, caret_y, "\u{3000}", Style::default());
         }
     }
     if cursor_column < visible && editor.mode() != Mode::Insert {
@@ -396,7 +402,7 @@ pub fn draw(
             (None, None) => put_slot(buf, cursor_x, cursor_y, " ", block),
         }
     }
-    (cursor_x, cursor_y)
+    (cursor_x, caret_y)
 }
 
 /// The candidate panel's skin: Yume's 墨香 (Ink) theme, dark.

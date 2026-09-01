@@ -862,6 +862,28 @@ mod tests {
         render_vertical_with(editor, config, &no_ime(), w, h)
     }
 
+    /// Render vertically, returning where the terminal's cursor was left — the
+    /// caret, in Insert mode.
+    fn render_vertical_caret(
+        editor: &mut Editor,
+        config: &Config,
+        w: u16,
+        h: u16,
+    ) -> (ratatui::buffer::Buffer, Option<Position>) {
+        editor.set_layout(WritingLayout::Vertical);
+        editor.set_ruby(yumete_core::ruby::Dialects::NONE);
+        let lines = editor.current_buffer().line_count();
+        let ruby = !editor.ruby().is_empty();
+        editor.set_zong_length(vertical::zong_length_for(config, h, lines, ruby));
+        let mut terminal = Terminal::new(TestBackend::new(w, h)).unwrap();
+        let mut viewport = Viewport::default();
+        terminal
+            .draw(|frame| draw(frame, editor, config, &no_ime(), &mut viewport))
+            .unwrap();
+        let at = terminal.get_cursor_position().ok();
+        (terminal.backend().buffer().clone(), at)
+    }
+
     /// Render vertically with ruby layout on.
     fn render_vertical_ruby(
         editor: &mut Editor,
@@ -1080,21 +1102,41 @@ mod tests {
         );
     }
 
+    /// Typing inserts *before* the character the cursor is on, so the boundary
+    /// the text arrives at is that character's top edge — and an underscore is
+    /// drawn at the bottom of the cell it is in. The caret therefore belongs on
+    /// the slot above; on the cursor's own it reads as "insert after this
+    /// character", which is not where the text appears.
+    #[test]
+    fn the_insert_caret_marks_the_boundary_text_arrives_at() {
+        let mut editor = editor_with("甲乙丙");
+        editor.set_layout(WritingLayout::Vertical);
+        editor.on_key(Key::Char('j')); // onto 乙
+        editor.on_key(Key::Char('i')); // insert before it
+        let config = vertical_config();
+        let (buffer, caret) = render_vertical_caret(&mut editor, &config, 20, 12);
+
+        // 乙 is row 1; the rule sits under 甲, at the boundary between them.
+        assert_eq!(at(&buffer, 18, 1), "乙");
+        assert_eq!(caret.map(|p| p.y), Some(0), "one row up from the cursor");
+        assert_eq!(caret.map(|p| p.x), Some(18));
+    }
+
     /// The terminal sizes its cursor to the grapheme under it, so a blank slot
     /// would give a caret half the width of the 縱.
     #[test]
-    fn the_insert_caret_slot_is_two_cells_wide() {
-        // Cursor past the last character: the slot it lands on is empty.
-        let mut editor = editor_with("甲乙丙");
+    fn a_blank_caret_slot_is_filled_so_the_rule_spans_it() {
+        let mut editor = Editor::new();
         editor.set_layout(WritingLayout::Vertical);
-        editor.on_key(Key::Char('A')); // Insert at the end of the line
+        editor.on_key(Key::Char('i')); // Insert on an empty buffer
         let config = vertical_config();
-        let buffer = render_vertical(&mut editor, &config, 20, 12);
+        let (buffer, caret) = render_vertical_caret(&mut editor, &config, 20, 12);
 
+        let at_caret = caret.expect("a caret in Insert mode");
         assert_eq!(
-            at(&buffer, 18, 3),
+            at(&buffer, at_caret.x, at_caret.y),
             "\u{3000}",
-            "an ideographic space fills the slot so the caret spans it"
+            "an ideographic space fills the slot so the rule spans it"
         );
     }
 
