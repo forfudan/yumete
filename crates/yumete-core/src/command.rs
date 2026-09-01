@@ -45,6 +45,8 @@ pub enum Command {
     /// `:chaifen` (alias `:cf`) — toggle the 拆分 annotation beside candidates
     /// (Feature #66).
     ToggleChaifen,
+    /// `:hanging` — 句讀 in the margin rather than a square each (Feature #70).
+    ToggleHanging,
     /// `:ruby` — open Ruby mode on the group or selection at the cursor
     /// (Feature #65).
     Ruby,
@@ -150,6 +152,7 @@ pub fn parse(input: &str) -> Result<Command, CommandError> {
             }
         }
         "chaifen" | "cf" => Ok(Command::ToggleChaifen),
+        "hanging" => Ok(Command::ToggleHanging),
         "ruby" => Ok(Command::Ruby),
         "ruby-on" => Ok(Command::RenderRuby {
             dialect: None,

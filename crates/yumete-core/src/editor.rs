@@ -163,6 +163,8 @@ pub struct Editor {
     ruby_target: Option<RubyTarget>,
     /// Whether half-width pairs share a slot in vertical layout (縦中横).
     tatechuyoko: bool,
+    /// Whether 句讀 hang in the margin (標點旁置).
+    hanging: bool,
     /// Word ranges already worked out, per line, against a hash of that line.
     segment_cache: RefCell<SegmentCache>,
     /// The command-line completion in progress: the prefix Tab started from, and
@@ -278,6 +280,7 @@ impl Editor {
             ruby_target: None,
             completion: None,
             tatechuyoko: false,
+            hanging: false,
             segment_cache: RefCell::new(SegmentCache::new()),
             ruby: Dialects::only(crate::ruby::Dialect::Html),
             layout: Layout::default(),
@@ -389,6 +392,16 @@ impl Editor {
             }
             Command::FormatRuby(dialect) => {
                 self.format_ruby(dialect);
+                Ok(CommandOutcome::Continue)
+            }
+            Command::ToggleHanging => {
+                let on = !self.hanging;
+                self.set_hanging_punctuation(on);
+                self.status = if on {
+                    "句讀 hang in the margin".to_string()
+                } else {
+                    "句讀 take a square each".to_string()
+                };
                 Ok(CommandOutcome::Continue)
             }
             Command::ToggleChaifen => {
@@ -574,7 +587,20 @@ impl Editor {
     /// laid out. Every 縱 question takes this, so the cursor and the page can
     /// never disagree about where a row begins.
     pub fn grid(&self) -> Grid {
-        Grid::new(self.zong_length, self.ruby).with_tatechuyoko(self.tatechuyoko)
+        Grid::new(self.zong_length, self.ruby)
+            .with_tatechuyoko(self.tatechuyoko)
+            .with_hanging(self.hanging)
+    }
+
+    /// Whether 句讀 hang in the margin beside the character they follow.
+    pub fn hanging_punctuation(&self) -> bool {
+        self.hanging
+    }
+
+    /// Set whether 句讀 hang in the margin, returning the new state.
+    pub fn set_hanging_punctuation(&mut self, on: bool) -> bool {
+        self.hanging = on;
+        self.hanging
     }
 
     /// Whether half-width pairs share a slot (縦中横).

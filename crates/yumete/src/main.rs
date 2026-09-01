@@ -60,6 +60,7 @@ fn main() -> ExitCode {
     editor.set_zong_length(config.editor.zong_length);
     editor.set_indent_width(config.editor.tab_width);
     editor.set_tatechuyoko(config.editor.tatechuyoko);
+    editor.set_hanging_punctuation(config.editor.hanging_punctuation);
     // Which ruby dialect to lay out: whatever the config names, else the one
     // the file's extension implies.
     editor

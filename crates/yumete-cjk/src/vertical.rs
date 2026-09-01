@@ -72,6 +72,57 @@ impl Layout {
     }
 }
 
+/// Whether `c` is a mark that classical typesetting hangs beside the character
+/// it follows, rather than giving it a square of its own.
+///
+/// 。，、？！：；and the quotation brackets. Set this way the text runs
+/// unbroken down the 縱 and the 句讀 sit in the margin, which is how a 古籍 is
+/// punctuated — and how a page of dialogue stops looking like it is half
+/// whitespace.
+///
+/// Dashes and ellipses are deliberately **not** here: 「——」 and 「⋯⋯」 are
+/// full-width rules that carry the line onward, and hanging them in a
+/// half-width margin would break the very stroke that makes them read.
+pub fn hangs_in_the_margin(c: char) -> bool {
+    matches!(
+        c,
+        '。' | '，'
+            | '、'
+            | '？'
+            | '！'
+            | '：'
+            | '；'
+            | '「'
+            | '」'
+            | '『'
+            | '』'
+            | '（'
+            | '）'
+            | '《'
+            | '》'
+            | '【'
+            | '】'
+            | '〈'
+            | '〉'
+            | '〔'
+            | '〕'
+    )
+}
+
+/// Whether a hanging mark belongs beside the character *after* it rather than
+/// the one before.
+///
+/// An opening bracket introduces what follows it, so that is the character it
+/// hangs against; everything else — the stops, the commas, the closing brackets
+/// — belongs to what came before. Getting this backwards puts 「 beside the word
+/// that ends the sentence before the speech.
+pub fn opens_a_pair(c: char) -> bool {
+    matches!(
+        c,
+        '「' | '『' | '（' | '《' | '【' | '〈' | '〔' | '〖' | '［' | '｛'
+    )
+}
+
 /// The vertical presentation form of `c`, or `None` when `c` is drawn the same
 /// way in both writing directions (which is the case for every 漢字, kana, and
 /// Latin letter).
@@ -160,6 +211,34 @@ mod tests {
         assert_eq!(Layout::parse("sideways"), None);
         assert_eq!(Layout::default(), Layout::Horizontal);
         assert_eq!(Layout::Horizontal.toggled(), Layout::Vertical);
+    }
+
+    #[test]
+    fn the_marks_that_hang_are_the_句讀_ones() {
+        for c in [
+            '。', '，', '、', '？', '！', '：', '；', '「', '」', '《', '》',
+        ] {
+            assert!(hangs_in_the_margin(c), "{c} should hang");
+        }
+        // A dash or an ellipsis is a full-width rule carrying the line onward;
+        // hung in a half-width margin it would break the stroke that reads.
+        for c in ['—', '…', '⋯', '－'] {
+            assert!(!hangs_in_the_margin(c), "{c} must keep its square");
+        }
+        // And nothing that is not punctuation.
+        for c in ['字', 'a', '1', '　'] {
+            assert!(!hangs_in_the_margin(c));
+        }
+    }
+
+    #[test]
+    fn openers_hang_forward_and_everything_else_back() {
+        for c in ['「', '『', '（', '《', '【'] {
+            assert!(opens_a_pair(c), "{c} introduces what follows it");
+        }
+        for c in ['」', '』', '）', '》', '】', '。', '，', '？'] {
+            assert!(!opens_a_pair(c), "{c} belongs to what came before");
+        }
     }
 
     #[test]

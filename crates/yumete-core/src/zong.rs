@@ -45,6 +45,9 @@ pub struct Grid {
     /// Which ruby dialects are laid out as readings. Empty shows the markup as
     /// the text it is.
     pub ruby: Dialects,
+    /// Whether 句讀 hang in the margin rather than taking a square each
+    /// (標點旁置).
+    pub hanging: bool,
     /// Whether a pair of half-width characters shares one slot (縦中横).
     ///
     /// Off by default. Turned sideways a pair reads as a syllable — `yume` set
@@ -59,7 +62,16 @@ impl Grid {
         Grid {
             zong_len: zong_len.max(1),
             ruby,
+            hanging: false,
             tatechuyoko: false,
+        }
+    }
+
+    /// The same grid, hanging 句讀 in the margin.
+    pub fn with_hanging(self, on: bool) -> Grid {
+        Grid {
+            hanging: on,
+            ..self
         }
     }
 
@@ -177,6 +189,12 @@ pub struct Slot {
     pub text: String,
     /// The reading character drawn in the column to the right, if any.
     pub ruby: Option<char>,
+    /// A 句讀 mark hung in the margin beside this character, if any.
+    ///
+    /// It shares the column with a reading, and wins it: the mark belongs
+    /// against the character it follows, so the reading is the one that gives
+    /// way (see [`line_slots`]).
+    pub mark: Option<char>,
 }
 
 /// Split a line into the rows a 縱 draws it as.
@@ -207,13 +225,75 @@ fn push_plain(slots: &mut Vec<Slot>, chars: &[char], from: usize, to: usize, gri
     }
     let text: String = chars[from..to].iter().collect();
     let offsets = slot_offsets(&text, grid.tatechuyoko);
+    // An opening bracket introduces what comes *after* it, so it waits for that
+    // character's row rather than hanging on the one before.
+    let mut opening: Option<(usize, char)> = None;
     for w in offsets.windows(2) {
         let body: String = chars[from + w[0]..from + w[1]].iter().collect();
+        let at = from + w[0];
+
+        // 標點旁置: a 句讀 mark stops being a row of its own and hangs beside the
+        // character it follows. It joins that character's slot, so the wrap
+        // length, the cursor and every motion agree that 「文。」 is one row.
+        if grid.hanging && body.chars().count() == 1 {
+            let mark = body.chars().next().expect("one character");
+            if yumete_cjk::hangs_in_the_margin(mark) {
+                let hung = rotate(&body).chars().next().unwrap_or(mark);
+                if yumete_cjk::opens_a_pair(mark) && opening.is_none() {
+                    opening = Some((at, hung));
+                    continue;
+                }
+                match slots.last_mut() {
+                    // The usual case: it joins the character it follows.
+                    Some(previous) if previous.mark.is_none() && !previous.text.is_empty() => {
+                        previous.end = from + w[1];
+                        previous.mark = Some(hung);
+                        continue;
+                    }
+                    // A second mark running — 「？」」 ends a quoted question,
+                    // and it is common. It takes a row of its own, but stays in
+                    // the *margin*: the text column keeps only text, which is
+                    // the whole point of hanging them.
+                    Some(_) => {
+                        slots.push(Slot {
+                            start: at,
+                            end: from + w[1],
+                            text: String::new(),
+                            ruby: None,
+                            mark: Some(hung),
+                        });
+                        continue;
+                    }
+                    // Nothing before it — an opening bracket at the head of a
+                    // paragraph has nothing to hang on, so it keeps its square.
+                    None => {}
+                }
+            }
+        }
+
+        // A waiting opener takes this character's margin, and its own start, so
+        // the cursor steps over the pair as one row.
+        let (start, mark) = match opening.take() {
+            Some((opened_at, mark)) => (opened_at, Some(mark)),
+            None => (at, None),
+        };
         slots.push(Slot {
-            start: from + w[0],
+            start,
             end: from + w[1],
             text: rotate(&body),
             ruby: None,
+            mark,
+        });
+    }
+
+    // An opener with nothing after it in this run still has to be drawn.
+    if let Some((at, mark)) = opening {
+        slots.push(Slot {
+            start: at,
+            end: to,
+            text: String::new(),
+            ruby: None,
+            mark: Some(mark),
         });
     }
 }
@@ -230,10 +310,24 @@ fn push_ruby(slots: &mut Vec<Slot>, chars: &[char], group: &crate::ruby::Ruby, g
             .map(|w| (group.base.0 + w[0], group.base.0 + w[1]))
             .collect()
     };
-    let rows = base_rows.len().max(reading.len()).max(1);
-    // Centre the base in the span, so the reading brackets it rather than
-    // hanging off one end.
-    let top = (rows - base_rows.len()) / 2;
+    // Where the reading goes relative to its base.
+    //
+    // Normally it brackets the base, which is centred in the span — mono-ruby
+    // with spacing, and the tightest arrangement in which two adjacent readings
+    // do not collide.
+    //
+    // With 句讀 hanging in the margin, they cannot share: a mark belongs against
+    // the character it follows, on that character's own row, and the margin is
+    // one cell wide. So the reading **gives way upward** — it takes the rows
+    // above the base outright, opening a gap between this character and the one
+    // before it, and leaving every row of the base free for a mark.
+    let (rows, top) = if grid.hanging {
+        (base_rows.len() + reading.len(), reading.len())
+    } else {
+        let rows = base_rows.len().max(reading.len()).max(1);
+        (rows, (rows - base_rows.len()) / 2)
+    };
+    let rows = rows.max(1);
 
     let base_end = base_rows.last().map_or(group.base.0, |&(_, b)| b);
     for row in 0..rows {
@@ -251,6 +345,7 @@ fn push_ruby(slots: &mut Vec<Slot>, chars: &[char], group: &crate::ruby::Ruby, g
             end,
             text: rotate(&body),
             ruby: reading.get(row).copied(),
+            mark: None,
         });
     }
     // The very first row owns the whole group's markup, so a cursor stepping
@@ -629,7 +724,7 @@ pub fn render_page(rope: &Rope, grid: Grid, gap: usize) -> Vec<String> {
         zongs.pop();
     }
     let rows = zongs.iter().map(|z| z.slots).max().unwrap_or(0);
-    let annotated = !grid.ruby.is_empty();
+    let annotated = !grid.ruby.is_empty() || grid.hanging;
     // Every 縱's slots, top to bottom; the page is then read across.
     // Each 縱 contributes its bodies and, beside them, its readings — the same
     // two columns the terminal draws.
@@ -639,7 +734,8 @@ pub fn render_page(rope: &Rope, grid: Grid, gap: usize) -> Vec<String> {
             let rows = zong_slots(rope, z, grid);
             (
                 rows.iter().map(|s| s.text.clone()).collect(),
-                rows.iter().map(|s| s.ruby).collect(),
+                // A hung mark shares the margin with a reading and wins it.
+                rows.iter().map(|s| s.mark.or(s.ruby)).collect(),
             )
         })
         .collect();
@@ -691,6 +787,7 @@ mod tests {
     const G: Grid = Grid {
         zong_len: 32,
         ruby: Dialects::NONE,
+        hanging: false,
         tatechuyoko: false,
     };
 
@@ -1062,6 +1159,68 @@ mod tests {
         // but it is the one thing a terminal cannot set properly.
         assert_eq!(slot_text("abcde", PACKED), ["ab", "cd", "e"]);
         assert_eq!(slot_text("2026年", PACKED), ["20", "26", "年"]);
+    }
+
+    /// A 句讀 mark stops being a row of its own and hangs beside the character
+    /// it follows, so the text runs unbroken down the 縱.
+    #[test]
+    fn a_mark_hangs_beside_the_character_it_follows() {
+        let hanging = G.with_hanging(true);
+        let slots = line_slots("春江。潮水，", hanging);
+        let bodies: Vec<&str> = slots.iter().map(|s| s.text.as_str()).collect();
+        assert_eq!(bodies, ["春", "江", "潮", "水"], "four rows, not six");
+        assert_eq!(
+            slots.iter().map(|s| s.mark).collect::<Vec<_>>(),
+            [None, Some('︒'), None, Some('︐')],
+            "and the marks are rotated, in the margin"
+        );
+
+        // Off, they take a square each, as they did.
+        assert_eq!(line_slots("春江。", G).len(), 3);
+    }
+
+    /// An opening bracket introduces what follows it, so it hangs beside *that*
+    /// character — which is also what keeps the text column unbroken.
+    #[test]
+    fn an_opener_hangs_on_the_character_it_introduces() {
+        let slots = line_slots("曰「春江", G.with_hanging(true));
+        assert_eq!(
+            slots.iter().map(|s| s.text.as_str()).collect::<Vec<_>>(),
+            ["曰", "春", "江"],
+            "three rows: the bracket costs none"
+        );
+        assert_eq!(
+            slots.iter().map(|s| s.mark).collect::<Vec<_>>(),
+            [None, Some('﹁'), None],
+            "and it sits beside 春, not 曰"
+        );
+    }
+
+    /// 「。」 ends a line of speech, and is common enough that the second mark
+    /// must not fall back into the text column.
+    #[test]
+    fn a_second_mark_running_stays_in_the_margin() {
+        let slots = line_slots("春。」", G.with_hanging(true));
+        assert_eq!(slots.len(), 2, "a row for the pair, not one each");
+        assert_eq!(slots[0].text, "春");
+        assert_eq!(slots[0].mark, Some('︒'));
+        // The second takes a row, but in the margin: the text column stays text.
+        assert_eq!(slots[1].text, "", "nothing in the text column");
+        assert_eq!(slots[1].mark, Some('﹂'));
+    }
+
+    /// The reading gives way upward, leaving the base's own row for a mark.
+    #[test]
+    fn a_reading_moves_above_its_base_when_marks_hang() {
+        let slots = line_slots("<ruby>漢<rt>hàn</rt></ruby>。", RUBY.with_hanging(true));
+        let bodies: Vec<&str> = slots.iter().map(|s| s.text.as_str()).collect();
+        assert_eq!(bodies, ["", "", "", "漢"], "three rows of space, then 漢");
+        assert_eq!(
+            slots.iter().map(|s| s.ruby).collect::<Vec<_>>(),
+            [Some('h'), Some('à'), Some('n'), None],
+            "the reading is wholly above"
+        );
+        assert_eq!(slots[3].mark, Some('︒'), "and the mark has the base's row");
     }
 
     #[test]

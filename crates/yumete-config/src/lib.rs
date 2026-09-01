@@ -67,6 +67,9 @@ pub struct EditorConfig {
     /// Whether a pair of half-width characters shares one slot in vertical
     /// layout (縦中横). Off by default: one letter to a row, hung right.
     pub tatechuyoko: bool,
+    /// Whether 句讀 hang in the margin beside the character they follow rather
+    /// than taking a square each (標點旁置). Off by default; `:hanging` toggles.
+    pub hanging_punctuation: bool,
 }
 
 impl Default for EditorConfig {
@@ -84,6 +87,7 @@ impl Default for EditorConfig {
             show_ruby: true,
             ruby_dialects: Vec::new(),
             tatechuyoko: false,
+            hanging_punctuation: false,
         }
     }
 }
@@ -268,6 +272,7 @@ struct RawEditor {
     show_ruby: Option<bool>,
     ruby_dialects: Option<Vec<String>>,
     tatechuyoko: Option<bool>,
+    hanging_punctuation: Option<bool>,
 }
 
 #[derive(Deserialize, Default)]
@@ -320,6 +325,9 @@ impl RawConfig {
         }
         if other.editor.tatechuyoko.is_some() {
             self.editor.tatechuyoko = other.editor.tatechuyoko;
+        }
+        if other.editor.hanging_punctuation.is_some() {
+            self.editor.hanging_punctuation = other.editor.hanging_punctuation;
         }
         if other.theme.selection.is_some() {
             self.theme.selection = other.theme.selection;
@@ -375,6 +383,9 @@ impl RawConfig {
         }
         if let Some(on) = self.editor.tatechuyoko {
             config.editor.tatechuyoko = on;
+        }
+        if let Some(on) = self.editor.hanging_punctuation {
+            config.editor.hanging_punctuation = on;
         }
         if let Some(hex) = self.theme.selection {
             if let Some(rgb) = parse_hex(&hex) {

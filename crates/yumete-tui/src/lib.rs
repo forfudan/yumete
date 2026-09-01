@@ -106,7 +106,14 @@ pub fn run(editor: &mut Editor, config: &Config, ime: &mut ImeSession) -> io::Re
             if let Ok(size) = terminal.size() {
                 let lines = editor.current_buffer().line_count();
                 let ruby = !editor.ruby().is_empty();
-                editor.set_zong_length(vertical::zong_length_for(config, size.height, lines, ruby));
+                let hanging = editor.hanging_punctuation();
+                editor.set_zong_length(vertical::zong_length_for(
+                    config,
+                    size.height,
+                    lines,
+                    ruby,
+                    hanging,
+                ));
             }
         }
         // Tell the editor how much is on screen, so `C-d` means half of what
@@ -916,7 +923,8 @@ mod tests {
         editor.set_ruby(yumete_core::ruby::Dialects::NONE);
         let lines = editor.current_buffer().line_count();
         let ruby = !editor.ruby().is_empty();
-        editor.set_zong_length(vertical::zong_length_for(config, h, lines, ruby));
+        let hanging = editor.hanging_punctuation();
+        editor.set_zong_length(vertical::zong_length_for(config, h, lines, ruby, hanging));
         let mut terminal = Terminal::new(TestBackend::new(w, h)).unwrap();
         let mut viewport = Viewport::default();
         terminal
@@ -950,7 +958,8 @@ mod tests {
         editor.set_layout(WritingLayout::Vertical);
         let lines = editor.current_buffer().line_count();
         let ruby = !editor.ruby().is_empty();
-        editor.set_zong_length(vertical::zong_length_for(config, h, lines, ruby));
+        let hanging = editor.hanging_punctuation();
+        editor.set_zong_length(vertical::zong_length_for(config, h, lines, ruby, hanging));
         render_with(editor, config, ime, w, h)
     }
 
@@ -1021,6 +1030,28 @@ mod tests {
         assert_eq!(at(&buffer, 15, 0), "字");
         assert_eq!(at(&buffer, 15, 1), "字");
         assert_eq!(at(&buffer, 15, 2), " ");
+    }
+
+    #[test]
+    fn hung_marks_sit_in_the_margin_tinted_apart_from_a_reading() {
+        let mut editor = editor_with("曰：「學");
+        editor.set_hanging_punctuation(true);
+        let config = vertical_config();
+        let buffer = render_vertical_ruby(&mut editor, &config, 20, 12);
+
+        // The text column carries only text; the marks are beside it.
+        assert_eq!(at(&buffer, 17, 0), "曰");
+        assert_eq!(at(&buffer, 17, 1), "學", "the bracket costs no row");
+        assert_eq!(at(&buffer, 19, 0), "︓");
+        assert_eq!(at(&buffer, 19, 1), "﹁", "beside 學, which it introduces");
+
+        // A mark is tinted apart from a reading, which is set back instead.
+        let mark = buffer[(19, 0)].style();
+        assert!(mark.fg.is_some(), "a hung mark has a colour of its own");
+        assert!(
+            !mark.add_modifier.contains(Modifier::DIM),
+            "it is punctuation, not an annotation"
+        );
     }
 
     #[test]
