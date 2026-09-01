@@ -45,6 +45,13 @@ pub struct Grid {
     /// Which ruby dialects are laid out as readings. Empty shows the markup as
     /// the text it is.
     pub ruby: Dialects,
+    /// Whether a pair of half-width characters shares one slot (縦中横).
+    ///
+    /// Off by default. Turned sideways a pair reads as a syllable — `yume` set
+    /// as `yu` over `me` invites the eye to read two of them — and one character
+    /// to a row, hung right, is what a reader of vertical text expects. It stays
+    /// available because a two-digit year genuinely does read better packed.
+    pub tatechuyoko: bool,
 }
 
 impl Grid {
@@ -52,6 +59,24 @@ impl Grid {
         Grid {
             zong_len: zong_len.max(1),
             ruby,
+            tatechuyoko: false,
+        }
+    }
+
+    /// The same grid, packing half-width pairs into one slot.
+    pub fn with_tatechuyoko(self, on: bool) -> Grid {
+        Grid {
+            tatechuyoko: on,
+            ..self
+        }
+    }
+
+    /// The same grid at a different wrap length — what the renderer does once
+    /// the terminal's height is known.
+    pub fn with_zong_len(self, zong_len: usize) -> Grid {
+        Grid {
+            zong_len: zong_len.max(1),
+            ..self
         }
     }
 }
@@ -161,27 +186,27 @@ pub struct Slot {
 /// markup disappears, the reading is dealt out down the ruby column, and the
 /// base is centred over however many rows the reading needs. That spacing is
 /// what real typesetting does and is why two adjacent readings never collide.
-pub fn line_slots(text: &str, ruby: Dialects) -> Vec<Slot> {
+pub fn line_slots(text: &str, grid: Grid) -> Vec<Slot> {
     let chars: Vec<char> = text.chars().collect();
-    let groups = crate::ruby::groups(&chars, ruby);
+    let groups = crate::ruby::groups(&chars, grid.ruby);
     let mut slots = Vec::new();
     let mut at = 0usize;
     for group in &groups {
-        push_plain(&mut slots, &chars, at, group.start);
-        push_ruby(&mut slots, &chars, group);
+        push_plain(&mut slots, &chars, at, group.start, grid);
+        push_ruby(&mut slots, &chars, group, grid);
         at = group.end;
     }
-    push_plain(&mut slots, &chars, at, chars.len());
+    push_plain(&mut slots, &chars, at, chars.len(), grid);
     slots
 }
 
 /// Lay out `chars[from..to]` as ordinary rows.
-fn push_plain(slots: &mut Vec<Slot>, chars: &[char], from: usize, to: usize) {
+fn push_plain(slots: &mut Vec<Slot>, chars: &[char], from: usize, to: usize, grid: Grid) {
     if from >= to {
         return;
     }
     let text: String = chars[from..to].iter().collect();
-    let offsets = slot_offsets(&text);
+    let offsets = slot_offsets(&text, grid.tatechuyoko);
     for w in offsets.windows(2) {
         let body: String = chars[from + w[0]..from + w[1]].iter().collect();
         slots.push(Slot {
@@ -194,13 +219,13 @@ fn push_plain(slots: &mut Vec<Slot>, chars: &[char], from: usize, to: usize) {
 }
 
 /// Lay out one ruby group: the base centred against its reading.
-fn push_ruby(slots: &mut Vec<Slot>, chars: &[char], group: &crate::ruby::Ruby) {
+fn push_ruby(slots: &mut Vec<Slot>, chars: &[char], group: &crate::ruby::Ruby, grid: Grid) {
     let base = group.base_text(chars);
     let reading: Vec<char> = group.reading_text(chars).to_vec();
     // The base's own rows, then as many more as the reading needs.
     let base_rows: Vec<(usize, usize)> = {
         let text: String = base.iter().collect();
-        slot_offsets(&text)
+        slot_offsets(&text, grid.tatechuyoko)
             .windows(2)
             .map(|w| (group.base.0 + w[0], group.base.0 + w[1]))
             .collect()
@@ -257,11 +282,16 @@ fn rotate(body: &str) -> String {
 ///
 /// The result always has at least one element, so `offsets.len() - 1` is the
 /// slot count and `offsets[i]` is where slot `i` begins.
-fn slot_offsets(text: &str) -> Vec<usize> {
+fn slot_offsets(text: &str, tatechuyoko: bool) -> Vec<usize> {
     let mut offsets = Vec::with_capacity(text.len() / 3 + 1);
     let mut chars = 0usize;
     let mut run = 0usize;
     for g in graphemes(text) {
+        if !tatechuyoko {
+            offsets.push(chars);
+            chars += g.chars().count();
+            continue;
+        }
         // A run of half-width *alphanumerics* fills the slot it started, up to
         // the limit; anything else — full-width, punctuation, a space — opens a
         // new one. 縦中横 is for numbers and short Latin, and packing a comma in
@@ -288,7 +318,7 @@ pub fn zong_count_in_line(rope: &Rope, line: usize, grid: Grid) -> usize {
 
 /// The rows `line` draws as, under `grid`.
 fn line_grid(rope: &Rope, line: usize, grid: Grid) -> Vec<Slot> {
-    line_slots(&line_text(rope, line), grid.ruby)
+    line_slots(&line_text(rope, line), grid)
 }
 
 /// Locate the char index `pos` in the 縱 grid.
@@ -569,8 +599,8 @@ pub fn zong_index(zongs: &[Zong], pos: usize) -> usize {
 ///
 /// The renderer walks this rather than the graphemes, so a 縦中横 pair arrives
 /// as one two-cell string and lands in one row.
-pub fn slot_text(text: &str) -> Vec<String> {
-    let offsets = slot_offsets(text);
+pub fn slot_text(text: &str, grid: Grid) -> Vec<String> {
+    let offsets = slot_offsets(text, grid.tatechuyoko);
     let chars: Vec<char> = text.chars().collect();
     offsets
         .windows(2)
@@ -661,6 +691,19 @@ mod tests {
     const G: Grid = Grid {
         zong_len: 32,
         ruby: Dialects::NONE,
+        tatechuyoko: false,
+    };
+
+    /// Readings laid out, so the ruby tests exercise the layout.
+    const RUBY: Grid = Grid {
+        ruby: HTML_ONLY,
+        ..G
+    };
+
+    /// Half-width pairs packed, for the 縦中横 tests.
+    const PACKED: Grid = Grid {
+        tatechuyoko: true,
+        ..G
     };
 
     fn rope(text: &str) -> Rope {
@@ -918,8 +961,8 @@ mod tests {
     /// from colliding.
     #[test]
     fn a_ruby_group_spaces_its_base_against_the_reading() {
-        let ruby = Grid::new(32, Dialects::only(crate::ruby::Dialect::Html));
-        let slots = line_slots("他<ruby>口<rt>kǒu</rt></ruby>很", HTML_ONLY);
+        let ruby = RUBY;
+        let slots = line_slots("他<ruby>口<rt>kǒu</rt></ruby>很", RUBY);
         let bodies: Vec<&str> = slots.iter().map(|s| s.text.as_str()).collect();
         assert_eq!(
             bodies,
@@ -942,7 +985,7 @@ mod tests {
     fn two_adjacent_readings_do_not_collide() {
         let slots = line_slots(
             "<ruby>口<rt>kǒu</rt></ruby><ruby>囗<rt>wéi</rt></ruby>",
-            HTML_ONLY,
+            RUBY,
         );
         assert_eq!(slots.len(), 6, "three rows each");
         let readings: String = slots.iter().filter_map(|s| s.ruby).collect();
@@ -951,7 +994,7 @@ mod tests {
 
     #[test]
     fn a_reading_shorter_than_its_base_does_not_shrink_it() {
-        let slots = line_slots("<ruby>漢字<rt>hz</rt></ruby>", HTML_ONLY);
+        let slots = line_slots("<ruby>漢字<rt>hz</rt></ruby>", RUBY);
         let bodies: Vec<&str> = slots.iter().map(|s| s.text.as_str()).collect();
         assert_eq!(bodies, ["漢", "字"]);
         assert_eq!(
@@ -964,7 +1007,7 @@ mod tests {
     /// read and edited.
     #[test]
     fn ruby_off_shows_the_markup() {
-        let slots = line_slots("<ruby>口<rt>kǒu</rt></ruby>", Dialects::NONE);
+        let slots = line_slots("<ruby>口<rt>kǒu</rt></ruby>", G);
         let bodies: String = slots.iter().map(|s| s.text.as_str()).collect();
         assert_eq!(bodies, "<ruby>口<rt>kǒu</rt></ruby>");
         assert!(slots.iter().all(|s| s.ruby.is_none()));
@@ -974,7 +1017,7 @@ mod tests {
     /// walk through the tags one character at a time.
     #[test]
     fn the_cursor_steps_over_a_ruby_group_by_row() {
-        let ruby = Grid::new(32, Dialects::only(crate::ruby::Dialect::Html));
+        let ruby = RUBY;
         let r = rope("他<ruby>口<rt>kǒu</rt></ruby>很");
         assert_eq!(position(&r, 0, ruby).slot, 0, "他");
         // Anywhere inside the group maps to one of its three rows.
@@ -993,24 +1036,32 @@ mod tests {
     /// 縦中横: a short run of half-width characters is turned sideways into one
     /// slot, so a year or a chapter number reads as a number.
     #[test]
-    fn digits_pack_sideways_into_one_slot() {
+    fn digits_pack_sideways_into_one_slot_when_asked() {
         let r = rope("第12章");
-        let zongs = layout(&r, G);
+        let zongs = layout(&r, PACKED);
         assert_eq!(zongs[0].slots, 3, "第 / 12 / 章");
-        assert_eq!(slot_text("第12章"), ["第", "12", "章"]);
+        assert_eq!(slot_text("第12章", PACKED), ["第", "12", "章"]);
 
         // The cursor agrees: the character after the pair is slot 2, not 3.
-        assert_eq!(position(&r, 1, G).slot, 1, "on the 1");
-        assert_eq!(position(&r, 2, G).slot, 1, "still inside the pair");
-        assert_eq!(position(&r, 3, G).slot, 2, "on 章");
+        assert_eq!(position(&r, 1, PACKED).slot, 1, "on the 1");
+        assert_eq!(position(&r, 2, PACKED).slot, 1, "still inside the pair");
+        assert_eq!(position(&r, 3, PACKED).slot, 2, "on 章");
+    }
+
+    #[test]
+    fn packing_is_off_by_default() {
+        // One letter to a row: turned sideways a pair reads as a syllable that
+        // is not there.
+        assert_eq!(slot_text("yume", G), ["y", "u", "m", "e"]);
+        assert_eq!(slot_text("第12章", G), ["第", "1", "2", "章"]);
     }
 
     #[test]
     fn a_longer_latin_run_packs_two_at_a_time() {
         // Beyond a pair there is nothing to rotate into, so it stacks — legibly,
         // but it is the one thing a terminal cannot set properly.
-        assert_eq!(slot_text("abcde"), ["ab", "cd", "e"]);
-        assert_eq!(slot_text("2026年"), ["20", "26", "年"]);
+        assert_eq!(slot_text("abcde", PACKED), ["ab", "cd", "e"]);
+        assert_eq!(slot_text("2026年", PACKED), ["20", "26", "年"]);
     }
 
     #[test]

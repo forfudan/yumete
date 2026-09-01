@@ -64,6 +64,9 @@ pub struct EditorConfig {
     /// Extra ruby dialects to lay out beyond the one the file's extension
     /// implies — a document that mixes them names them all here.
     pub ruby_dialects: Vec<String>,
+    /// Whether a pair of half-width characters shares one slot in vertical
+    /// layout (縦中横). Off by default: one letter to a row, hung right.
+    pub tatechuyoko: bool,
 }
 
 impl Default for EditorConfig {
@@ -80,6 +83,7 @@ impl Default for EditorConfig {
             show_chaifen: false,
             show_ruby: true,
             ruby_dialects: Vec::new(),
+            tatechuyoko: false,
         }
     }
 }
@@ -263,6 +267,7 @@ struct RawEditor {
     show_chaifen: Option<bool>,
     show_ruby: Option<bool>,
     ruby_dialects: Option<Vec<String>>,
+    tatechuyoko: Option<bool>,
 }
 
 #[derive(Deserialize, Default)]
@@ -312,6 +317,9 @@ impl RawConfig {
         }
         if other.editor.ruby_dialects.is_some() {
             self.editor.ruby_dialects = other.editor.ruby_dialects.clone();
+        }
+        if other.editor.tatechuyoko.is_some() {
+            self.editor.tatechuyoko = other.editor.tatechuyoko;
         }
         if other.theme.selection.is_some() {
             self.theme.selection = other.theme.selection;
@@ -364,6 +372,9 @@ impl RawConfig {
         }
         if let Some(dialects) = self.editor.ruby_dialects {
             config.editor.ruby_dialects = dialects;
+        }
+        if let Some(on) = self.editor.tatechuyoko {
+            config.editor.tatechuyoko = on;
         }
         if let Some(hex) = self.theme.selection {
             if let Some(rgb) = parse_hex(&hex) {

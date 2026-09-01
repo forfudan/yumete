@@ -227,9 +227,11 @@ pub fn draw(
     let metrics = Metrics::new(config, area.height, total_lines, !editor.ruby().is_empty());
     let rope = buffer.rope();
 
-    // The grid the editor navigates by, with the wrap length this page settled
-    // on — the two must agree or the cursor is drawn a row out.
-    let grid = zong::Grid::new(metrics.zong_len, editor.ruby());
+    // The grid the editor navigates by, at the wrap length this page settled on.
+    // It must be *the editor's* grid and not a fresh one, or a setting the
+    // editor holds — 縦中横, say — would apply to motion and not to drawing, and
+    // the cursor would sit a row out from the character it is on.
+    let grid = editor.grid().with_zong_len(metrics.zong_len);
     let cursor_pos = zong::position(rope, editor.cursor(), grid);
     let cursor_anchor = Anchor::from(cursor_pos);
 
@@ -343,7 +345,9 @@ pub fn draw(
                 Style::default()
             };
 
-            put_slot(buf, x, y, &symbol, style);
+            // Hung right, so half-width characters line up as one edge running
+            // down the 縱 beside the 漢字 rather than drifting to its left.
+            put_slot_right(buf, x, y, &symbol, style);
         }
     }
 
@@ -355,20 +359,36 @@ pub fn draw(
     // to an underscore — a thin horizontal rule, which is the bar of a
     // horizontal editor turned the quarter turn the text turned. Drawing it into
     // the page instead would have to recolour a character to show it.
-    if cursor_column < visible && editor.mode() != Mode::Insert {
-        // Normal: a solid block over the whole two-cell slot.
-        let under = buf
+    //
+    // A terminal sizes its cursor to the grapheme it sits on, so on a blank slot
+    // the rule would be one cell — half the 縱 — and read as lopsided. Filling
+    // the slot with an ideographic space, which is two cells and shows nothing,
+    // makes it span the whole square. (Over a *half-width* character it is still
+    // one cell, because that is genuinely how wide that character is.)
+    if cursor_column < visible && editor.mode() == Mode::Insert {
+        let blank = buf
             .cell((cursor_x, cursor_y))
-            .map(|c| c.symbol().to_string())
-            .unwrap_or_else(|| " ".to_string());
-        let symbol = if under.trim().is_empty() { " " } else { &under };
-        put_slot(
-            buf,
-            cursor_x,
-            cursor_y,
-            symbol,
-            Style::default().add_modifier(Modifier::REVERSED),
-        );
+            .is_none_or(|c| c.symbol().trim().is_empty());
+        if blank {
+            put_slot(buf, cursor_x, cursor_y, "\u{3000}", Style::default());
+        }
+    }
+    if cursor_column < visible && editor.mode() != Mode::Insert {
+        // Normal: a solid block over the whole two-cell slot, keeping whatever
+        // is under it — and keeping *where* it is. A half-width character hangs
+        // against the slot's right edge, so reading only the left cell would
+        // paint the block over a space and lose the character.
+        let read = |x: u16| {
+            buf.cell((x, cursor_y))
+                .map(|c| c.symbol().to_string())
+                .filter(|sym| !sym.trim().is_empty())
+        };
+        let block = Style::default().add_modifier(Modifier::REVERSED);
+        match (read(cursor_x), read(cursor_x + 1)) {
+            (Some(left), _) => put_slot(buf, cursor_x, cursor_y, &left, block),
+            (None, Some(right)) => put_slot_right(buf, cursor_x, cursor_y, &right, block),
+            (None, None) => put_slot(buf, cursor_x, cursor_y, " ", block),
+        }
     }
     (cursor_x, cursor_y)
 }

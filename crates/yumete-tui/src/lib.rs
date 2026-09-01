@@ -959,15 +959,18 @@ mod tests {
         let mut editor = editor_with("<ruby>口<rt>kǒu</rt></ruby>");
         let config = vertical_config();
         let buffer = render_vertical(&mut editor, &config, 20, 24);
-        // The tags take rows of their own — packed 縦中横, so `<ruby>` reads down
-        // the 縱 as `<` `ru` `by` `>` rather than as one string.
-        let column: Vec<String> = (0..8).map(|y| at(&buffer, 18, y)).collect();
-        assert_eq!(column, ["<", "ru", "by", ">", "口", "<", "rt", ">"]);
+        // The tags take rows of their own, one character each and hung right, so
+        // `<ruby>` reads down the 縱 rather than across it.
+        let tags: Vec<String> = (0..6).map(|y| at(&buffer, 19, y)).collect();
+        assert_eq!(tags, ["<", "r", "u", "b", "y", ">"]);
+        // The base is full-width and fills the slot, so it starts at the left.
+        assert_eq!(at(&buffer, 18, 6), "口");
     }
 
     #[test]
-    fn digits_are_set_tatechuyoko_in_the_page() {
+    fn digits_are_set_tatechuyoko_when_asked() {
         let mut editor = editor_with("第12章");
+        editor.set_tatechuyoko(true);
         let config = vertical_config();
         let buffer = render_vertical(&mut editor, &config, 20, 12);
 
@@ -1048,6 +1051,24 @@ mod tests {
         );
     }
 
+    /// The terminal sizes its cursor to the grapheme under it, so a blank slot
+    /// would give a caret half the width of the 縱.
+    #[test]
+    fn the_insert_caret_slot_is_two_cells_wide() {
+        // Cursor past the last character: the slot it lands on is empty.
+        let mut editor = editor_with("甲乙丙");
+        editor.set_layout(WritingLayout::Vertical);
+        editor.on_key(Key::Char('A')); // Insert at the end of the line
+        let config = vertical_config();
+        let buffer = render_vertical(&mut editor, &config, 20, 12);
+
+        assert_eq!(
+            at(&buffer, 18, 3),
+            "\u{3000}",
+            "an ideographic space fills the slot so the caret spans it"
+        );
+    }
+
     #[test]
     fn the_cursor_is_drawn_as_a_block_over_its_slot() {
         // A half-width character, so both cells of the slot are real cells in
@@ -1065,7 +1086,8 @@ mod tests {
                 .add_modifier
                 .contains(Modifier::REVERSED)
         };
-        assert_eq!(at(&buffer, 18, 1), "a");
+        // Half-width characters hang against the slot's right edge.
+        assert_eq!(at(&buffer, 19, 1), "a");
         assert!(reversed(18, 1), "cursor cell not highlighted");
         assert!(reversed(19, 1), "cursor must cover both cells of the slot");
         assert!(!reversed(18, 0), "the character above must stay plain");

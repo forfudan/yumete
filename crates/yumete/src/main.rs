@@ -59,6 +59,7 @@ fn main() -> ExitCode {
     editor.set_layout(force_layout.unwrap_or(config.editor.layout));
     editor.set_zong_length(config.editor.zong_length);
     editor.set_indent_width(config.editor.tab_width);
+    editor.set_tatechuyoko(config.editor.tatechuyoko);
     // Which ruby dialect to lay out: whatever the config names, else the one
     // the file's extension implies.
     editor

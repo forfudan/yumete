@@ -80,11 +80,12 @@ Early development, but already an interactive modal editor. Implemented so far:
   toggles the 拆分 annotation beside candidates (off by default,
   `[editor] show_chaifen`).
 
-- **#64 縦中横** — a short run of half-width alphanumerics is turned sideways
-  into a single slot, so `第12章` reads as three rows and `1985年` as `19`/`85`/`年`
-  rather than a stack of loose digits. A slot is two cells, so two characters is
-  the limit; longer Latin still stacks, which is the one thing a terminal cannot
-  set properly.
+- **#64 Half-width characters** — one to a row, hung against the slot's right
+  edge, so Latin and digits line up as a single edge running down beside the
+  漢字. Setting a pair sideways in one slot (縦中横) is available behind
+  `[editor] tatechuyoko`, off by default: turned sideways `yume` reads as `yu`
+  over `me`, two syllables that are not there — though a two-digit year does read
+  better packed.
 
 - **#63 Word segmentation from Yume's language model** — `w`/`b`/`e` and the
   segmentation overlay are driven by Yume's 詞頻表 (1.25M weighted entries) and

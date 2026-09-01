@@ -126,6 +126,8 @@ pub struct Editor {
     chaifen: bool,
     /// What Ruby mode is editing the reading of.
     ruby_target: Option<RubyTarget>,
+    /// Whether half-width pairs share a slot in vertical layout (縦中横).
+    tatechuyoko: bool,
     /// The command-line completion in progress: the prefix Tab started from, and
     /// which match is selected. The prefix is kept because the typed text is
     /// replaced by each candidate in turn, so the line itself can no longer say
@@ -231,6 +233,7 @@ impl Editor {
             chaifen: false,
             ruby_target: None,
             completion: None,
+            tatechuyoko: false,
             ruby: Dialects::only(crate::ruby::Dialect::Html),
             layout: Layout::default(),
             zong_length: DEFAULT_ZONG_LENGTH,
@@ -493,7 +496,12 @@ impl Editor {
     /// laid out. Every 縱 question takes this, so the cursor and the page can
     /// never disagree about where a row begins.
     pub fn grid(&self) -> Grid {
-        Grid::new(self.zong_length, self.ruby)
+        Grid::new(self.zong_length, self.ruby).with_tatechuyoko(self.tatechuyoko)
+    }
+
+    /// Whether half-width pairs share a slot (縦中横).
+    pub fn set_tatechuyoko(&mut self, on: bool) {
+        self.tatechuyoko = on;
     }
 
     /// Which ruby dialects are being laid out.

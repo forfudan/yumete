@@ -531,19 +531,35 @@ The prompt caret is measured in **cells**, not characters. It was counting
 characters, which was invisible while patterns were ASCII and would have put the
 caret at half its true position the moment one contained 漢字.
 
-### 縦中横 (#64)
+### Half-width characters (#64)
 
-The 縱 model was "one grapheme, one slot". Making it "one **slot**, which is
-usually one grapheme but may be a pair of half-width alphanumerics" was a change
-in exactly one function — `slot_offsets` — because every other question the
-module answers (how long is a 縱, which slot is the cursor in, where does a 縱
-wrap, what does the renderer draw) is already expressed in those offsets. The
-cursor, the wrap length, motion and the page all learned 縦中横 together.
+**One to a row, hung right.** A Latin letter or a digit takes half a slot, and
+which half it takes is a typographic choice: hung against the right edge they
+line up as a single edge running down beside the 漢字, rather than drifting to
+the left of the column.
 
-Two characters is the hard limit: a slot is two cells and a half-width character
-is one. `1985` therefore sets as `19` over `85`, which is as close as a cell grid
-gets. Packing is restricted to alphanumerics — a comma packed beside a letter
-reads as a mistake, not as typesetting.
+**縦中横 is available and off.** The 縱 model was "one grapheme, one slot";
+making it "one **slot**, which is usually one grapheme but may be a pair of
+half-width alphanumerics" was a change in exactly one function, `slot_offsets`,
+because every other question the module answers — how long is a 縱, which slot is
+the cursor in, where does a 縱 wrap, what does the renderer draw — is already
+expressed in those offsets. It is `[editor] tatechuyoko`, default off: turned
+sideways, `yume` reads as `yu` over `me`, two syllables that are not in the word.
+A two-digit year is the case that earns it, which is why the machinery stayed.
+
+Two characters is the hard limit either way: a slot is two cells and a half-width
+character is one, so `1985` packs as `19` over `85` and no further.
+
+Two bugs this uncovered, both of the same shape — a setting known to one half of
+the system and not the other:
+
+- The renderer built its own `Grid` rather than taking the editor's, so 縦中横
+  applied to *motion* and not to *drawing* and the cursor sat a row out. It now
+  takes `editor.grid()` and overrides only the wrap length, which is the one
+  thing the page genuinely knows better.
+- The Normal-mode cursor block read only the left cell of its slot. With
+  half-width characters hung right that cell is a space, so the block painted
+  over the letter and lost it.
 
 ### Ruby (#65)
 
