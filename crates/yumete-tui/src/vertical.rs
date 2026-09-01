@@ -27,7 +27,7 @@ use ratatui::Frame;
 use yumete_cjk::{graphemes, str_width};
 use yumete_config::{Config, LineNumbers};
 use yumete_core::zong::{self, Anchor};
-use yumete_core::{Editor, Mode, TextStore};
+use yumete_core::{Editor, Mode, Rope, TextStore};
 use yumete_ime::ImeSession;
 
 /// The width of one 縱 in cells. A full-width character is two cells, and the
@@ -44,12 +44,10 @@ pub struct Metrics {
     pub pitch: u16,
     /// Rows reserved above the text for paragraph numbers.
     pub head_rows: u16,
-    /// One cell held back at the right edge when readings are being drawn.
-    ///
-    /// A reading sits in the gap to the *right* of its 縱, and every 縱 has one
-    /// except the rightmost, which is against the edge — so the page steps in by
-    /// a cell to give it one too.
-    pub ruby_column: u16,
+    /// Cells between one 縱 and the next, from the config.
+    pub gap: u16,
+    /// Whether readings are being laid out at all.
+    pub ruby: bool,
 }
 
 impl Metrics {
@@ -68,35 +66,82 @@ impl Metrics {
             zong_len,
             pitch: SLOT_WIDTH + config.editor.zong_gap as u16,
             head_rows,
-            // A reading needs a column, and a zero gap leaves nowhere to put it.
-            ruby_column: u16::from(ruby && config.editor.zong_gap > 0),
+            gap: config.editor.zong_gap as u16,
+            ruby,
         }
+    }
+
+    /// Whether a 縱 needs a cell of its own on the right for a reading.
+    fn ruby_cell(&self, annotated: bool) -> u16 {
+        u16::from(annotated && self.ruby)
     }
 
     /// How many 縱 fit across an area `width` cells wide. Only the gaps
     /// *between* 縱 count, so the leftmost one may sit flush against the edge.
-    pub fn visible(&self, width: u16) -> usize {
-        let usable = width.saturating_sub(self.ruby_column);
-        if usable < SLOT_WIDTH {
-            0
-        } else {
-            1 + ((usable - SLOT_WIDTH) / self.pitch) as usize
-        }
+    /// The most 縱 that could fit, were every one of them flush.
+    ///
+    /// An upper bound, used to decide how many to lay out before measuring; the
+    /// real count comes out of [`place`], which knows which of them carry a
+    /// reading.
+    pub fn capacity(&self, width: u16) -> usize {
+        (width / SLOT_WIDTH.max(1)) as usize
     }
+}
 
-    /// The left cell of the `k`-th visible 縱, counting from the right edge —
-    /// `k = 0` is the rightmost, which is where reading starts.
-    ///
-    /// Saturating, so a pane too narrow to hold a single 縱 clamps to its left
-    /// edge instead of wrapping around; callers still check [`visible`] before
-    /// drawing there.
-    ///
-    /// [`visible`]: Metrics::visible
-    pub fn x_of(&self, area: Rect, k: usize) -> u16 {
-        (area.x + area.width)
-            .saturating_sub(SLOT_WIDTH + self.ruby_column + k as u16 * self.pitch)
-            .max(area.x)
+/// The 縱 of one page: each with the rows it draws and where it starts.
+type Page = Vec<(zong::Zong, Vec<zong::Slot>, u16)>;
+
+/// Lay out a page from `anchor`: fetch the 縱, work out their rows, and place
+/// them right to left until the width runs out.
+fn layout_page(
+    rope: &Rope,
+    anchor: Anchor,
+    grid: zong::Grid,
+    metrics: &Metrics,
+    area: Rect,
+    capacity: usize,
+) -> Page {
+    let zongs = zong::zongs_from(rope, anchor, grid, capacity);
+    let slots: Vec<Vec<zong::Slot>> = zongs
+        .iter()
+        .map(|z| zong::zong_slots(rope, z, grid))
+        .collect();
+    let annotated: Vec<bool> = slots
+        .iter()
+        .map(|rows| rows.iter().any(|r| r.ruby.is_some()))
+        .collect();
+    let xs = place(metrics, area, &annotated);
+    zongs
+        .into_iter()
+        .zip(slots)
+        .zip(xs)
+        .map(|((zong, rows), x)| (zong, rows, x))
+        .collect()
+}
+
+/// Where each 縱 of a page starts, right to left, and how many of them fit.
+///
+/// Positions are walked rather than computed, because a 縱's width is no longer
+/// the same for all of them: with the gap set to zero, one carrying a reading
+/// takes a cell more than one that does not.
+fn place(metrics: &Metrics, area: Rect, annotated: &[bool]) -> Vec<u16> {
+    let mut xs: Vec<u16> = Vec::with_capacity(annotated.len());
+    for (k, &annotated) in annotated.iter().enumerate() {
+        // A reading sits in the cell to the *right* of its own 縱, while the gap
+        // sits *between* two — and they are the same cell. So one column apart
+        // costs whichever is larger, and the rightmost 縱 pays for a reading
+        // alone, since it has no neighbour to borrow the cell from.
+        let ruby = metrics.ruby_cell(annotated);
+        let x = match xs.last() {
+            None => (area.x + area.width).checked_sub(SLOT_WIDTH + ruby),
+            Some(&previous) => previous.checked_sub(SLOT_WIDTH + metrics.gap.max(ruby)),
+        };
+        let Some(x) = x.filter(|&x| x >= area.x) else {
+            break;
+        };
+        xs.push(x);
     }
+    xs
 }
 
 /// How many rows the paragraph-number header needs: two digits stack into one
@@ -249,7 +294,13 @@ pub fn draw(
     // the cursor's 縱 would mean walking the document from the top on every
     // keystroke, which on a novel-length buffer is the whole novel. Everything
     // here is bounded by the width of the page instead.
-    let visible = metrics.visible(area.width);
+    // How many 縱 fit depends on which of them carry a reading, and which fit
+    // depends on where the page is scrolled to — so it is measured, scrolled,
+    // and measured again. Twice is enough: the second measurement is of the
+    // page actually being drawn.
+    let capacity = metrics.capacity(area.width);
+    let mut page = layout_page(rope, *viewport, grid, &metrics, area, capacity);
+    let visible = page.len().max(1);
     let scrolloff = config.editor.scrolloff.min(visible.saturating_sub(1) / 2);
     let last_column = visible.saturating_sub(1);
     let cursor_column = match zong::distance(rope, *viewport, cursor_anchor, grid, last_column) {
@@ -268,10 +319,11 @@ pub fn draw(
                 inset
             };
             *viewport = zong::retreat(rope, cursor_anchor, grid, inset);
-            zong::distance(rope, *viewport, cursor_anchor, grid, last_column).unwrap_or(0)
+            page = layout_page(rope, *viewport, grid, &metrics, area, capacity);
+            zong::distance(rope, *viewport, cursor_anchor, grid, page.len()).unwrap_or(0)
         }
     };
-    let zongs = zong::zongs_from(rope, *viewport, grid, visible);
+    let visible = page.len();
 
     let text_top = area.y + metrics.head_rows;
     let (sel_start, sel_end) = editor.selection();
@@ -288,8 +340,8 @@ pub fn draw(
     let mut segmented: Option<(usize, Vec<(usize, usize)>)> = None;
 
     let buf = frame.buffer_mut();
-    for (k, zong) in zongs.iter().enumerate() {
-        let x = metrics.x_of(area, k);
+    for (zong, slots, x) in page.iter() {
+        let x = *x;
 
         if numbers != LineNumbers::None && zong.starts_line() {
             let n = match numbers {
@@ -312,7 +364,7 @@ pub fn draw(
         // Rows, not graphemes: a 縦中横 pair is one row holding two characters, a
         // ruby group is however many rows its reading needs, and the punctuation
         // is already rotated.
-        for (slot, row) in zong::zong_slots(rope, zong, grid).into_iter().enumerate() {
+        for (slot, row) in slots.iter().cloned().enumerate() {
             let y = text_top + slot as u16;
             // The reading goes in the cell to the right of the 縱, which is the
             // gap this page stepped in to provide.
@@ -358,7 +410,11 @@ pub fn draw(
     }
 
     // The cursor, drawn last so it wins over a selection or a word tint.
-    let cursor_x = metrics.x_of(area, cursor_column.min(last_column));
+    let cursor_x = page
+        .get(cursor_column)
+        .map(|(_, _, x)| *x)
+        .or_else(|| page.last().map(|(_, _, x)| *x))
+        .unwrap_or(area.x);
     let cursor_y =
         (text_top + cursor_pos.slot as u16).min((area.y + area.height).saturating_sub(1));
     // Insert leaves the page alone: the caret is the terminal's own cursor, set

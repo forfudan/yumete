@@ -447,6 +447,39 @@ impl Editor {
         }
     }
 
+    /// What the open prompt is about to complete to — the part not yet typed,
+    /// shown after the caret in a lighter ink and adopted with Tab.
+    ///
+    /// On the command line it is the rest of the best-matching command name; in
+    /// a search it is the rest of the last pattern, so repeating a search is a
+    /// keystroke rather than retyping it. Empty when there is nothing to guess,
+    /// once arguments have started, or once Tab has already picked something —
+    /// at that point the line *is* the completion.
+    pub fn prompt_ghost(&self) -> String {
+        if self.completion.is_some() || self.command_line.contains(char::is_whitespace) {
+            return String::new();
+        }
+        let typed = &self.command_line;
+        if typed.is_empty() {
+            return String::new();
+        }
+        let whole = match self.mode {
+            Mode::Command => command::complete(typed).first().map(|e| e.name.to_string()),
+            Mode::Search => Some(self.last_search.clone()),
+            _ => None,
+        };
+        whole
+            .filter(|whole| whole.len() > typed.len() && whole.starts_with(typed))
+            .map(|whole| whole[typed.len()..].to_string())
+            .unwrap_or_default()
+    }
+
+    /// Take the prompt's guess, if there is one.
+    fn adopt_ghost(&mut self) {
+        let ghost = self.prompt_ghost();
+        self.command_line.push_str(&ghost);
+    }
+
     /// The commands to offer for the open command line, and which one Tab has
     /// selected.
     pub fn command_menu(&self) -> (Vec<&'static command::Entry>, Option<usize>) {
@@ -1104,6 +1137,9 @@ impl Editor {
                     self.mode = Mode::Normal;
                 }
             }
+            // Tab takes the rest of the last pattern, so searching for the same
+            // thing again is a keystroke rather than retyping it.
+            Key::Tab => self.adopt_ghost(),
             Key::Char(c) => self.command_line.push(c),
             Key::Enter => {
                 let pattern = std::mem::take(&mut self.command_line);
@@ -2432,6 +2468,55 @@ mod tests {
         // Typing abandons the completion, so the next Tab starts from the line.
         ed.on_key(Key::Char('x'));
         assert_eq!(ed.command_menu().1, None);
+    }
+
+    #[test]
+    fn the_command_line_guesses_the_rest_of_the_name() {
+        let mut ed = Editor::new();
+        ed.on_key(Key::Char(':'));
+        for c in "seg".chars() {
+            ed.on_key(Key::Char(c));
+        }
+        assert_eq!(ed.prompt_ghost(), "ment", "the rest of `segment`");
+
+        // Tab takes the guess, and then there is nothing left to guess.
+        ed.on_key(Key::Tab);
+        assert_eq!(ed.prompt(), Some((':', "segment")));
+        assert_eq!(ed.prompt_ghost(), "", "the line is the completion now");
+
+        // Nothing is guessed before anything is typed, or once arguments start.
+        let mut ed = Editor::new();
+        ed.on_key(Key::Char(':'));
+        assert_eq!(ed.prompt_ghost(), "");
+        for c in "w draf".chars() {
+            ed.on_key(Key::Char(c));
+        }
+        assert_eq!(ed.prompt_ghost(), "", "a file name is not a command name");
+    }
+
+    #[test]
+    fn a_search_guesses_the_last_pattern() {
+        let mut ed = typed("春江潮水連海平，海上明月共潮生");
+        // Search once…
+        ed.on_key(Key::Char('/'));
+        for c in "潮水".chars() {
+            ed.on_key(Key::Char(c));
+        }
+        ed.on_key(Key::Enter);
+
+        // …and the next search offers the rest of it back.
+        ed.on_key(Key::Char('/'));
+        ed.on_key(Key::Char('潮'));
+        assert_eq!(ed.prompt_ghost(), "水");
+        ed.on_key(Key::Tab);
+        assert_eq!(ed.prompt(), Some(('/', "潮水")));
+        ed.on_key(Key::Enter);
+        assert_eq!(ed.cursor(), 2, "and it runs");
+
+        // A pattern that is not a prefix of the last one is not guessed at.
+        ed.on_key(Key::Char('/'));
+        ed.on_key(Key::Char('海'));
+        assert_eq!(ed.prompt_ghost(), "");
     }
 
     #[test]
