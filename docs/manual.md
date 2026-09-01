@@ -99,6 +99,8 @@ a count, so it stays free for other bindings.
 | `W` `B` `E` | the same by WORD (whitespace-delimited) |
 | `f` `t` `F` `T` *c* | find / till character *c*, forward or back |
 | `A-.` | repeat the last `f`/`t` |
+| `C-d` `C-u` | half a page onward / back |
+| `C-f` `C-b` | a whole page — down the lines, or across the 縱 |
 | `gg` `ge` | start of buffer / last line |
 | `gh` `gl` `gs` | line start / line end / first non-blank |
 | `Home` `End` | line start / line end |
@@ -112,6 +114,7 @@ a count, so it stays free for other bindings.
 | `x` | select the current line (repeat to extend) |
 | `X` | grow the selection out to whole lines |
 | `%` | select the whole file |
+| `A-;` | flip which end of the selection the cursor is on |
 
 ### Changing
 
@@ -123,6 +126,9 @@ a count, so it stays free for other bindings.
 | `o` `O` | open a line below / above |
 | `y` `p` `P` | yank / paste after / paste before |
 | `R` | replace the selection with the yank register |
+| `r` *c* | write *c* over every character of the selection |
+| `"` *a* | use register *a* for the next yank, delete or paste |
+| `q` `Q` | record a macro / play the last one back |
 | `J` | join with the line below |
 | `~` | switch case; `` ` `` lowercases, ``A-` `` uppercases |
 | `>` `<` | indent / unindent the selected lines |
@@ -329,7 +335,9 @@ Named honestly, so you know what you are not looking for:
 
 - **Multiple cursors.** Helix's `C`, `s` and `S` need the core to hold a *set* of
   selections rather than one anchor and cursor. That is a change to the editor,
-  not an addition, so it is left undone rather than half-built.
+  not an addition, so it is left undone rather than half-built. `gt`/`gc`/`gb`
+  (screen top / centre / bottom) are missing for a smaller version of the same
+  reason: the scroll position lives in the renderer, not the editor.
 - **圏点** (emphasis dots) — renderable in the same column ruby uses; the markup
   is still to be decided.
 - **Rotated Latin.** A terminal cannot turn a glyph, so a long Latin run stacks

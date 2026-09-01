@@ -61,6 +61,10 @@ enum Pending {
     Goto,
     /// A find/till sequence (`f`, `t`, `F`, `T`) awaiting the target character.
     Find(FindKind),
+    /// `r` awaiting the character to write over the selection.
+    Replace,
+    /// `"` awaiting the letter naming a register.
+    Register,
     /// An `m` match sequence awaiting its verb (`m`, `i`, `a`, `s`, `d`, `r`).
     Match,
     /// `mi` / `ma` awaiting the delimiter naming the pair.
@@ -104,8 +108,27 @@ pub struct Editor {
     pending: Pending,
     /// Whether motions extend the selection (Helix select mode, toggled by `v`).
     extend: bool,
-    /// The yank register (Feature #13).
+    /// The unnamed register, and the named ones (Helix `"a`).
+    ///
+    /// Named registers are what let a second yank happen without losing the
+    /// first — copy a paragraph to `a`, go and fetch something else, and it is
+    /// still there.
     register: String,
+    registers: HashMap<char, String>,
+    /// The register the *next* yank, delete or paste will use, set by `"`.
+    /// Cleared as soon as it is used, so it never leaks into the command after.
+    pending_register: Option<char>,
+    /// Keys recorded since `q` was pressed, if a macro is being recorded.
+    recording: Option<Vec<Key>>,
+    /// The last macro recorded, replayed by `Q`.
+    macro_keys: Vec<Key>,
+    /// Whether a macro is being replayed, so it cannot record or replay itself.
+    replaying: bool,
+    /// How much of the buffer is on screen: lines, and 縱 across. Set by the
+    /// renderer, which is the only part that knows, so `C-d` can mean "half of
+    /// what you can see" rather than a fixed number.
+    page_lines: usize,
+    page_columns: usize,
     /// Undo and redo stacks of buffer snapshots (Feature #11).
     undo_stack: Vec<EditSnapshot>,
     redo_stack: Vec<EditSnapshot>,
@@ -231,6 +254,13 @@ impl Editor {
             pending: Pending::None,
             extend: false,
             register: String::new(),
+            registers: HashMap::new(),
+            pending_register: None,
+            recording: None,
+            macro_keys: Vec::new(),
+            replaying: false,
+            page_lines: 20,
+            page_columns: 10,
             undo_stack: Vec::new(),
             redo_stack: Vec::new(),
             last_search: String::new(),
@@ -592,6 +622,12 @@ impl Editor {
         self.chaifen = on;
     }
 
+    /// Tell the editor how much fits on screen, for the page motions.
+    pub fn set_page(&mut self, lines: usize, columns: usize) {
+        self.page_lines = lines.max(1);
+        self.page_columns = columns.max(1);
+    }
+
     /// Set how many columns `>` adds and `<` removes.
     pub fn set_indent_width(&mut self, width: usize) {
         self.indent_width = width.max(1);
@@ -690,6 +726,14 @@ impl Editor {
 
     /// Handle a single key press according to the current mode.
     pub fn on_key(&mut self, key: Key) -> KeyOutcome {
+        // Recording happens here rather than in Normal mode's handler, so a
+        // macro captures the text typed in Insert and the pattern typed at a
+        // prompt too — a macro that can only move is not much of one.
+        if let Some(keys) = self.recording.as_mut() {
+            if !matches!(key, Key::Char('q')) || self.mode != Mode::Normal {
+                keys.push(key);
+            }
+        }
         match self.mode {
             Mode::Normal => self.on_normal_key(key),
             Mode::Insert => self.on_insert_key(key),
@@ -719,6 +763,20 @@ impl Editor {
                     for _ in 0..count {
                         self.find_char(kind, c);
                     }
+                }
+                return;
+            }
+            Pending::Register => {
+                self.pending = Pending::None;
+                if let Key::Char(c) = key {
+                    self.pending_register = Some(c);
+                }
+                return;
+            }
+            Pending::Replace => {
+                self.pending = Pending::None;
+                if let Key::Char(c) = key {
+                    self.replace_chars(c);
                 }
                 return;
             }
@@ -954,6 +1012,20 @@ impl Editor {
             }
             // Match mode (Helix `m`): matching bracket, textobjects, surround.
             Key::Char('m') => self.pending = Pending::Match,
+            // Overwrite every character of the selection with the next key.
+            Key::Char('r') => self.pending = Pending::Replace,
+            // Name the register the next yank, delete or paste will use.
+            Key::Char('"') => self.pending = Pending::Register,
+            // Record a macro, and play the last one back.
+            Key::Char('q') => self.toggle_recording(),
+            Key::Char('Q') => self.replay_macro(count),
+            // A page, and half of one, in the direction the text is read.
+            Key::Ctrl('f') => self.move_page(count, false, 1.0),
+            Key::Ctrl('b') => self.move_page(count, true, 1.0),
+            Key::Ctrl('d') => self.move_page(count, false, 0.5),
+            Key::Ctrl('u') => self.move_page(count, true, 0.5),
+            // Swap which end of the selection the cursor is on.
+            Key::Alt(';') => self.flip_selection(),
             // Whole file, and extending the selection to whole lines.
             Key::Char('%') => self.select_all(),
             Key::Char('X') => self.extend_to_line_bounds(),
@@ -1359,11 +1431,12 @@ impl Editor {
 
     /// Rewrite every character of the selection through `f` (`~`, `` ` ``).
     fn map_selection(&mut self, f: impl Fn(char) -> char) {
-        let (start, end) = self.selection();
-        let end = if end > start {
-            end
-        } else {
+        let (start, selected) = self.selection();
+        let collapsed = selected == start;
+        let end = if collapsed {
             motion::right(self.current_buffer().rope(), start).max(start + 1)
+        } else {
+            selected
         };
         let end = end.min(self.current_buffer().char_count());
         if start >= end {
@@ -1384,13 +1457,52 @@ impl Editor {
         self.cursor = end;
     }
 
+    /// Overwrite every character of the selection with `c` (Helix `r`).
+    ///
+    /// The selection keeps its length — this writes over the text rather than
+    /// replacing it with one character — so `r` on a selected word turns the
+    /// whole word into that character, one for one.
+    fn replace_chars(&mut self, c: char) {
+        let (start, selected) = self.selection();
+        // A collapsed cursor stands for the character it is on.
+        let collapsed = selected == start;
+        let end = if collapsed {
+            motion::right(self.current_buffer().rope(), start).max(start + 1)
+        } else {
+            selected
+        };
+        let end = end.min(self.current_buffer().char_count());
+        if start >= end {
+            return;
+        }
+        let text: String = std::iter::repeat_n(c, end - start).collect();
+        self.snapshot();
+        let buffer = self.current_buffer_mut();
+        buffer.remove(start..end);
+        buffer.insert(start, &text);
+        // The selection is what it was: `r` writes over the text without moving
+        // through it, so `r` then `l` steps one character, not two.
+        self.anchor = start;
+        self.cursor = if collapsed { start } else { end };
+        self.clamp_cursor();
+    }
+
+    /// Swap which end of the selection the cursor sits on (Helix `A-;`).
+    ///
+    /// Only the cursor moves; the selection is the same range. It is how you
+    /// extend a selection from the other end without starting it again.
+    fn flip_selection(&mut self) {
+        std::mem::swap(&mut self.anchor, &mut self.cursor);
+        self.goal_column = motion::visual_column(self.current_buffer().rope(), self.cursor);
+    }
+
     /// Replace the selection with the yank register (Helix `R`).
     fn replace_with_register(&mut self) {
-        if self.register.is_empty() {
+        let text = self.recall();
+        if text.is_empty() {
             return;
         }
         let (start, end) = self.selection();
-        let text = self.register.clone();
         self.snapshot();
         let buffer = self.current_buffer_mut();
         if end > start {
@@ -1913,6 +2025,9 @@ impl Editor {
             start = self.cursor;
         }
         if end > start {
+            // Deleting yanks, as it does in Helix: `d` then `p` moves text.
+            let text = self.current_buffer().rope().slice(start..end).to_string();
+            self.store(text);
             self.current_buffer_mut().remove(start..end);
         }
         self.cursor = start;
@@ -1924,20 +2039,106 @@ impl Editor {
 
     /// Copy the current selection into the yank register (Helix `y`). A collapsed
     /// selection yanks the grapheme under the cursor.
+    /// Move by whole pages, or half of one.
+    ///
+    /// A page means what is on screen, and *which way* it runs depends on the
+    /// layout: down the lines when set horizontally, across the 縱 when set
+    /// vertically. Both are "onward through the text", which is what the key
+    /// means.
+    fn move_page(&mut self, count: usize, back: bool, fraction: f64) {
+        let vertical = self.layout == Layout::Vertical;
+        let page = if vertical {
+            self.page_columns
+        } else {
+            self.page_lines
+        };
+        let steps = ((page as f64 * fraction).round() as usize).max(1) * count;
+        for _ in 0..steps {
+            let before = self.cursor;
+            if vertical {
+                self.move_zong_from(!back, true);
+            } else {
+                self.move_vertical(back);
+            }
+            if self.cursor == before {
+                break;
+            }
+        }
+    }
+
+    /// Start recording keys, or stop and keep what was recorded (Helix `q`).
+    fn toggle_recording(&mut self) {
+        match self.recording.take() {
+            Some(keys) => {
+                let n = keys.len();
+                self.macro_keys = keys;
+                self.status = format!("recorded {n} key(s)");
+            }
+            None => {
+                self.recording = Some(Vec::new());
+                self.status = "recording…".to_string();
+            }
+        }
+    }
+
+    /// Play the last recorded macro back (Helix `Q`).
+    ///
+    /// A macro cannot start while one is playing, and cannot play inside
+    /// itself: `Q` recorded into a macro would otherwise recurse until the
+    /// stack ran out.
+    fn replay_macro(&mut self, count: usize) {
+        if self.replaying || self.macro_keys.is_empty() {
+            return;
+        }
+        let keys = self.macro_keys.clone();
+        self.replaying = true;
+        for _ in 0..count {
+            for &key in &keys {
+                self.on_key(key);
+            }
+        }
+        self.replaying = false;
+    }
+
+    /// Read the register the next command should use, and forget the request.
+    fn take_register(&mut self) -> Option<char> {
+        self.pending_register.take()
+    }
+
+    /// Put `text` in the register named by a pending `"`, or the unnamed one.
+    fn store(&mut self, text: String) {
+        match self.take_register() {
+            Some(name) => {
+                self.registers.insert(name, text);
+            }
+            None => self.register = text,
+        }
+    }
+
+    /// The contents of the register a command should read from.
+    fn recall(&mut self) -> String {
+        match self.take_register() {
+            Some(name) => self.registers.get(&name).cloned().unwrap_or_default(),
+            None => self.register.clone(),
+        }
+    }
+
     fn yank(&mut self) {
         let (start, mut end) = self.selection();
         if start == end {
             end = motion::right(self.current_buffer().rope(), self.cursor);
         }
-        self.register = self.current_buffer().rope().slice(start..end).to_string();
+        let text = self.current_buffer().rope().slice(start..end).to_string();
         let n = end - start;
+        self.store(text);
         self.status = format!("yanked {n} char(s)");
     }
 
     /// Paste the register after (`p`) or before (`P`) the selection, and select
     /// the pasted text. Does nothing when the register is empty.
     fn paste(&mut self, after: bool) {
-        if self.register.is_empty() {
+        let text = self.recall();
+        if text.is_empty() {
             return;
         }
         self.snapshot();
@@ -1951,7 +2152,6 @@ impl Editor {
         } else {
             start
         };
-        let text = self.register.clone();
         let len = text.chars().count();
         self.current_buffer_mut().insert(at, &text);
         self.anchor = at;
@@ -2544,6 +2744,98 @@ mod tests {
         assert_eq!(ed.prompt(), Some((':', "segment")));
         ed.on_key(Key::Enter);
         assert!(ed.status().starts_with("segmentation"));
+    }
+
+    #[test]
+    fn r_writes_one_character_over_the_whole_selection() {
+        let mut ed = typed("甲乙丙");
+        press(&mut ed, "%"); // select all
+        press(&mut ed, "r");
+        ed.on_key(Key::Char('〇'));
+        assert_eq!(
+            ed.current_buffer().text(),
+            "〇〇〇",
+            "one for one, not one character replacing the lot"
+        );
+
+        // With nothing selected it overwrites the character under the cursor.
+        let mut ed = typed("甲乙丙");
+        press(&mut ed, "gglr");
+        ed.on_key(Key::Char('〇'));
+        assert_eq!(ed.current_buffer().text(), "甲〇丙");
+    }
+
+    #[test]
+    fn alt_semicolon_flips_which_end_the_cursor_is_on() {
+        let mut ed = typed("一二三四五");
+        press(&mut ed, "gglvll"); // select 二三四, cursor at the far end
+        let (start, end) = ed.selection();
+        assert_eq!(ed.cursor(), end);
+        ed.on_key(Key::Alt(';'));
+        assert_eq!(ed.selection(), (start, end), "the range is unchanged");
+        assert_eq!(ed.cursor(), start, "but the cursor is at the other end");
+        // …so extending now grows it the other way.
+        press(&mut ed, "h");
+        assert_eq!(ed.selection().0, start - 1);
+    }
+
+    #[test]
+    fn named_registers_keep_more_than_one_thing() {
+        let mut ed = typed("甲乙丙");
+        press(&mut ed, "gg");
+        press(&mut ed, "\"a"); // into register a…
+        press(&mut ed, "vly");
+        press(&mut ed, "gg2l");
+        press(&mut ed, "vy"); // …and 丙 into the unnamed one
+        press(&mut ed, "%");
+        press(&mut ed, "\"aR"); // put register a over the lot
+        assert_eq!(ed.current_buffer().text(), "甲");
+    }
+
+    #[test]
+    fn deleting_yanks_so_text_can_be_moved() {
+        let mut ed = typed("甲乙丙");
+        press(&mut ed, "ggvld"); // cut 甲
+        assert_eq!(ed.current_buffer().text(), "乙丙");
+        press(&mut ed, "glp"); // and put it at the end
+        assert_eq!(ed.current_buffer().text(), "乙丙甲");
+    }
+
+    #[test]
+    fn a_macro_records_and_replays() {
+        let mut ed = typed("一二三四五六");
+        press(&mut ed, "gg");
+        press(&mut ed, "q"); // record: replace one character, step on
+        press(&mut ed, "r");
+        ed.on_key(Key::Char('〇'));
+        press(&mut ed, "l");
+        press(&mut ed, "q"); // stop
+        assert_eq!(ed.current_buffer().text(), "〇二三四五六");
+
+        press(&mut ed, "Q");
+        assert_eq!(ed.current_buffer().text(), "〇〇三四五六");
+        press(&mut ed, "3Q"); // a count replays it that many times
+        assert_eq!(ed.current_buffer().text(), "〇〇〇〇〇六");
+    }
+
+    #[test]
+    fn a_page_motion_moves_by_what_is_on_screen() {
+        let text = (0..100).map(|_| "字").collect::<Vec<_>>().join("\n");
+        let mut ed = typed(&text);
+        ed.set_page(20, 10);
+        press(&mut ed, "gg");
+        ed.on_key(Key::Ctrl('d'));
+        assert_eq!(ed.cursor_line(), 10, "half of twenty lines");
+        ed.on_key(Key::Ctrl('f'));
+        assert_eq!(ed.cursor_line(), 30, "a whole page");
+        ed.on_key(Key::Ctrl('u'));
+        assert_eq!(ed.cursor_line(), 20);
+        // It stops at the end rather than running on.
+        ed.on_key(Key::Ctrl('f'));
+        ed.on_key(Key::Ctrl('f'));
+        ed.on_key(Key::Ctrl('f'));
+        ed.on_key(Key::Ctrl('f'));
+        assert_eq!(ed.cursor_line(), 99);
     }
 
     #[test]

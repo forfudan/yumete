@@ -97,6 +97,11 @@ Early development, but already an interactive modal editor. Implemented so far:
   早`. Falls back to `segmentation.txt` or the bundled list when the IME data is
   absent.
 
+- **#74 Helix tutorial, second pass** — `r` writes a character over the whole
+  selection, `A-;` flips which end the cursor is on, `"a` names a register,
+  `q`/`Q` record and replay a macro, and `C-d`/`C-u`/`C-f`/`C-b` move by page
+  (down the lines, or across the 縱). Deleting yanks, so `d` then `p` moves text.
+
 - **#62 Helix alignment** — a digit prefix is a count (`3w`, `10j`); `.` repeats
   the last insert and `A-.` the last `f`/`t`; `%` selects the file, `X` extends to
   whole lines, `J` joins (with no space between two 全角 characters), `~`/`` ` ``

@@ -157,6 +157,12 @@ KEYS (Normal mode, Helix-style):
     I  A      insert at line start / end
     o  O      open a line below / above
     u  U  .   undo / redo / repeat the last insert
+    r         write the next key over every character of the selection
+    \"a        use register a for the next yank / delete / paste
+    q  Q      record a macro / play the last one back
+    A-;       flip which end of the selection the cursor is on
+    C-d C-u   half a page onward / back (down the lines, or across the 縱)
+    C-f C-b   a whole page
     J         join with the line below (no space between two 全角 characters)
     ~  `      switch case / lowercase the selection (A-` uppercases)
     >  <      indent / unindent the selected lines

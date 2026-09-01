@@ -265,6 +265,7 @@ Phases are ordered by priority, most writer-critical first:
 | 69  | **Novel-scale performance**                | core   | P2    | word motion, overlay, search        | Done   |
 | 72  | **The prompt's guess**                     | tui    | P4    | ghost text in `:` and `/`, Tab takes | Done   |
 | 73  | **Gap and reading column separated**       | tui    | P3    | `zong_gap = 0` still allows ruby    | Done   |
+| 74  | **Helix tutorial, second pass**            | core   | P2    | `r`, `A-;`, registers, macros, pages | Done   |
 | 68  | 圏点 (emphasis dots)                       | tui    | P3    | same column as ruby                 |        |
 | 70  | 標點旁置 (punctuation in the margin)       | tui    | P3    | 古文 style; competes with ruby      |        |
 | 71  | Mouse wheel scrolls by 縱                  | tui    | P4    | needs mouse capture; see below      |        |
@@ -731,10 +732,30 @@ vertically the editor draws its own: the block covers the whole two-cell slot,
 and the Insert bar — turned a quarter turn with the text — becomes a rule lying
 across the 縱 at the boundary the next character will be pushed into.
 
-**Not done: multiple cursors.** `C`, `s`, `S` and the rest of Helix's multi-
-selection model need the core to carry a *set* of ranges rather than one
+**A second pass (#74)** added the rest of the tutorial that one selection can
+carry: `r` writes a character over the whole selection, `A-;` flips which end the
+cursor is on, `"a` names a register, `q`/`Q` record and replay a macro, and
+`C-d`/`C-u`/`C-f`/`C-b` move by page.
+
+Three details worth keeping:
+
+- **`r` does not move.** Writing over the character under the cursor leaves the
+  cursor on it, so `r` then `l` steps one character rather than two. The first
+  version moved to the end of what it had written, which only showed up as a
+  macro that skipped every other character.
+- **Deleting yanks**, as in Helix, so `d` then `p` moves text rather than losing
+  it.
+- **A macro records in `on_key`**, not in the Normal-mode handler, so it captures
+  the text typed in Insert and the pattern typed at a prompt. A macro that can
+  only move is not much of one. `Q` inside a macro is a no-op rather than a
+  recursion.
+
+**Still not done: multiple cursors.** `C`, `s`, `S` and the rest of Helix's
+multi-selection model need the core to carry a *set* of ranges rather than one
 anchor/cursor pair. That is a real change to `Editor`, not an addition to it, so
-it is deliberately left out rather than half-built.
+it is deliberately left out rather than half-built. `gt`/`gc`/`gb` are missing for
+a smaller version of the same reason: the scroll position lives in the renderer,
+not the editor.
 
 ### Phase 4 — Polish & QoL
 
