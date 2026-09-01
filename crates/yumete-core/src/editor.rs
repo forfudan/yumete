@@ -622,6 +622,31 @@ impl Editor {
         self.chaifen = on;
     }
 
+    /// Move `amount` steps onward (or `back`) the way the text is read.
+    ///
+    /// What the mouse wheel does. Set vertically that is across the 縱, which is
+    /// what makes a wheel useful on a page of them; set horizontally it is down
+    /// the lines.
+    ///
+    /// It moves the **cursor**, not just the view. A view scrolled on its own
+    /// would be pulled straight back the moment the cursor had to stay on
+    /// screen, so the cursor travels with the page — which in a modal editor is
+    /// where you wanted to be anyway.
+    pub fn scroll(&mut self, amount: usize, back: bool) {
+        let vertical = self.layout == Layout::Vertical;
+        for _ in 0..amount.max(1) {
+            let before = self.cursor;
+            if vertical {
+                self.move_zong_from(!back, true);
+            } else {
+                self.move_vertical(back);
+            }
+            if self.cursor == before {
+                break;
+            }
+        }
+    }
+
     /// Tell the editor how much fits on screen, for the page motions.
     pub fn set_page(&mut self, lines: usize, columns: usize) {
         self.page_lines = lines.max(1);
@@ -2816,6 +2841,33 @@ mod tests {
         assert_eq!(ed.current_buffer().text(), "〇〇三四五六");
         press(&mut ed, "3Q"); // a count replays it that many times
         assert_eq!(ed.current_buffer().text(), "〇〇〇〇〇六");
+    }
+
+    #[test]
+    fn the_wheel_turns_pages_the_way_the_text_runs() {
+        // Horizontally a notch goes down the lines…
+        let text = (0..40).map(|_| "字").collect::<Vec<_>>().join("\n");
+        let mut ed = typed(&text);
+        press(&mut ed, "gg");
+        ed.scroll(3, false);
+        assert_eq!(ed.cursor_line(), 3);
+        ed.scroll(3, true);
+        assert_eq!(ed.cursor_line(), 0);
+        ed.scroll(3, true);
+        assert_eq!(ed.cursor_line(), 0, "and stops at the top");
+
+        // …vertically it goes across the 縱, which is what makes it useful on a
+        // page of them.
+        let mut ed = typed(&text);
+        ed.set_layout(crate::zong::Layout::Vertical);
+        ed.set_zong_length(32);
+        press(&mut ed, "gg");
+        ed.scroll(3, false);
+        assert_eq!(
+            ed.zong_position().line,
+            3,
+            "three paragraphs across, not three characters down"
+        );
     }
 
     #[test]

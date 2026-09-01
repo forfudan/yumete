@@ -173,6 +173,11 @@ end of the comfortable range for prose.
 
 ### 5.1 Moving
 
+The **mouse wheel** turns the page: one notch moves three 縱. yumete captures the
+mouse to do that, which means the terminal's own click-and-drag selection needs
+its modifier held (Option, on macOS) — the same trade Helix makes.
+
+
 `h j k l` keep their **screen** meaning. `j` and `k` read down and up a 縱, which
 is forward and backward in the text; `h` and `l` step to the 縱 on the left and
 on the right. A long paragraph wraps from the foot of one 縱 to the head of the

@@ -266,9 +266,9 @@ Phases are ordered by priority, most writer-critical first:
 | 72  | **The prompt's guess**                     | tui    | P4    | ghost text in `:` and `/`, Tab takes | Done   |
 | 73  | **Gap and reading column separated**       | tui    | P3    | `zong_gap = 0` still allows ruby    | Done   |
 | 74  | **Helix tutorial, second pass**            | core   | P2    | `r`, `A-;`, registers, macros, pages | Done   |
-| 68  | 圏点 (emphasis dots)                       | tui    | P3    | same column as ruby                 |        |
+| 68  | 圏点 (emphasis dots)                       | tui    | P5    | mid-term; markup still open         |        |
 | 70  | 標點旁置 (punctuation in the margin)       | tui    | P3    | 古文 style; competes with ruby      |        |
-| 71  | Mouse wheel scrolls by 縱                  | tui    | P4    | needs mouse capture; see below      |        |
+| 71  | **Mouse wheel scrolls by 縱**              | tui    | P4    | captures the mouse, as Helix does   | Done   |
 | 66  | **IME in the `/` and `:` lines**           | tui    | P2    | + `:chaifen` annotation toggle      | Done   |
 
 ---
