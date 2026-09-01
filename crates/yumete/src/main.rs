@@ -9,6 +9,7 @@
 use std::io::IsTerminal;
 use std::process::ExitCode;
 
+use yumete_config::Layout;
 use yumete_core::{DictionarySegmenter, Editor, TextStore};
 use yumete_ime::{ImeSession, Scheme};
 
@@ -17,6 +18,7 @@ const VERSION: &str = env!("CARGO_PKG_VERSION");
 fn main() -> ExitCode {
     let mut files: Vec<String> = Vec::new();
     let mut force_preview = false;
+    let mut force_layout: Option<Layout> = None;
 
     for arg in std::env::args().skip(1) {
         match arg.as_str() {
@@ -29,6 +31,8 @@ fn main() -> ExitCode {
                 return ExitCode::SUCCESS;
             }
             "-p" | "--preview" => force_preview = true,
+            "--vertical" => force_layout = Some(Layout::Vertical),
+            "--horizontal" => force_layout = Some(Layout::Horizontal),
             // Reject unknown flags, but treat a lone "-" as a filename.
             s if s.starts_with('-') && s != "-" => {
                 eprintln!("yumete: unknown option '{s}'");
@@ -50,6 +54,10 @@ fn main() -> ExitCode {
     // Load global + per-project config and apply the keymap.
     let config = yumete_config::Config::load();
     editor.set_key_aliases(config.keys.normal.clone());
+    // Layout (Feature #61): the config sets it, a flag overrides for one run,
+    // and `:layout` switches it live.
+    editor.set_layout(force_layout.unwrap_or(config.editor.layout));
+    editor.set_zong_length(config.editor.zong_length);
 
     // Word segmentation (Feature #24): drive `w`/`b`/`e` and the overlay with a
     // dictionary. A user `segmentation.txt` in the data directory wins; else the
@@ -63,7 +71,7 @@ fn main() -> ExitCode {
     editor.set_segmentation_visible(config.editor.show_segmentation);
 
     if force_preview || !std::io::stdout().is_terminal() {
-        preview(&editor);
+        preview(&editor, &config);
         return ExitCode::SUCCESS;
     }
 
@@ -107,6 +115,8 @@ ARGS:
             With no FILE, yumete starts with a new, empty scratch buffer.
 
 OPTIONS:
+    --vertical       Lay the text out vertically for this run (縱書), overriding
+                     the config. --horizontal forces the ordinary layout.
     -p, --preview    Print a non-interactive preview instead of the editor.
     -h, --help       Print this help and exit.
     -v, --version    Print the version and exit.
@@ -127,7 +137,14 @@ KEYS (Normal mode, Helix-style):
     u  U      undo / redo
     / ? n N   search forward / backward; next / previous match
     :         command line (:w  :w <path>  :q  :q!  :o <path>  :new
-              :s/old/new/[g]  :%s/old/new/[g]  :segment)
+              :s/old/new/[g]  :%s/old/new/[g]  :segment
+              :layout [horizontal|vertical]  :vertical  :horizontal)
+
+Laid out vertically, text runs top to bottom in 縱 that stack from the right
+edge leftward, wrapping every 32 characters (`zong_length`). h j k l keep their
+screen meaning: j and k read down and up a 縱, h and l step to the 縱 on the
+left and on the right. CJK punctuation is drawn in its vertical form; the file
+on disk is unchanged.
 
 In Insert mode, type to insert; Esc returns to Normal. If the Yume IME data is
 installed, Insert mode composes CJK: type a code to see candidates, Space or
@@ -136,8 +153,9 @@ toggle 中/英 (needs a terminal with the Kitty keyboard protocol)."
     );
 }
 
-/// Print a status line and the contents of the active buffer, with line numbers.
-fn preview(editor: &Editor) {
+/// Print a status line and the contents of the active buffer, with line numbers
+/// — or, in vertical layout, the page as it would be drawn.
+fn preview(editor: &Editor, config: &yumete_config::Config) {
     let buf = editor.current_buffer();
     let modified = if buf.is_modified() { " [+]" } else { "" };
     let extra = if editor.buffer_count() > 1 {
@@ -156,6 +174,19 @@ fn preview(editor: &Editor) {
 
     if buf.char_count() == 0 {
         println!("(empty buffer)");
+        return;
+    }
+
+    // Vertical layout (Feature #61): print the page itself. Line numbers would
+    // mean nothing here — the reading order is what there is to look at.
+    if editor.layout() == Layout::Vertical {
+        for line in yumete_core::zong::render_page(
+            buf.rope(),
+            config.editor.zong_length,
+            config.editor.zong_gap,
+        ) {
+            println!("{line}");
+        }
         return;
     }
 

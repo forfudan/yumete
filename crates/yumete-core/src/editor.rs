@@ -19,6 +19,7 @@ use crate::command::{self, Command, CommandError};
 use crate::input::{Key, Mode};
 use crate::motion;
 use crate::text_store::TextStore;
+use crate::zong::{self, Layout, DEFAULT_ZONG_LENGTH};
 
 /// A snapshot of a buffer's content for undo/redo.
 struct EditSnapshot {
@@ -82,6 +83,17 @@ pub struct Editor {
     segmenter: Box<dyn Segmenter>,
     /// Whether the segmentation overlay (word background tint) is shown.
     show_segmentation: bool,
+    /// Whether text is laid out horizontally or vertically (Feature #61).
+    layout: Layout,
+    /// How many graphemes fit in one 縱. The renderer lowers this when the
+    /// terminal is too short to draw a full 縱.
+    zong_length: usize,
+    /// Preserved slot for 縱-crossing motion (`h`/`l` in vertical layout), the
+    /// counterpart of `goal_column`.
+    goal_slot: usize,
+    /// Whether the previous key was a 縱-crossing motion, so a run of them
+    /// keeps one goal slot instead of resetting it at every short 縱.
+    zong_motion: bool,
 }
 
 /// What should happen after a key press.
@@ -158,6 +170,10 @@ impl Editor {
             key_aliases: HashMap::new(),
             segmenter: Box::new(CategorySegmenter),
             show_segmentation: false,
+            layout: Layout::default(),
+            zong_length: DEFAULT_ZONG_LENGTH,
+            goal_slot: 0,
+            zong_motion: false,
         }
     }
 
@@ -228,6 +244,17 @@ impl Editor {
             }
             Command::Redo => {
                 self.redo();
+                Ok(CommandOutcome::Continue)
+            }
+            Command::SetLayout(direction) => {
+                let layout = match direction {
+                    Some(l) => {
+                        self.set_layout(l);
+                        l
+                    }
+                    None => self.toggle_layout(),
+                };
+                self.status = format!("{} layout", layout.label());
                 Ok(CommandOutcome::Continue)
             }
             Command::ToggleSegmentation => {
@@ -325,6 +352,41 @@ impl Editor {
         motion::visual_column(self.current_buffer().rope(), self.cursor)
     }
 
+    // ---- Layout (Feature #61) ---------------------------------------------
+
+    /// The current layout.
+    pub fn layout(&self) -> Layout {
+        self.layout
+    }
+
+    /// Switch the layout.
+    pub fn set_layout(&mut self, layout: Layout) {
+        self.layout = layout;
+        self.zong_motion = false;
+    }
+
+    /// Switch to the other layout, returning the new one.
+    pub fn toggle_layout(&mut self) -> Layout {
+        self.set_layout(self.layout.toggled());
+        self.layout
+    }
+
+    /// How many graphemes fit in one 縱.
+    pub fn zong_length(&self) -> usize {
+        self.zong_length
+    }
+
+    /// Set the 縱 wrap length. The renderer calls this once the terminal size is
+    /// known, so motion and drawing agree on where the 縱 break.
+    pub fn set_zong_length(&mut self, length: usize) {
+        self.zong_length = length.max(1);
+    }
+
+    /// Where the cursor sits in the 縱 grid (for the status line).
+    pub fn zong_position(&self) -> zong::Position {
+        zong::position(self.current_buffer().rope(), self.cursor, self.zong_length)
+    }
+
     /// Install Normal-mode single-key aliases (from the config keymap).
     pub fn set_key_aliases(&mut self, aliases: HashMap<char, char>) {
         self.key_aliases = aliases;
@@ -395,6 +457,7 @@ impl Editor {
 
     fn on_normal_key(&mut self, key: Key) {
         self.status.clear();
+        let continuing_zong = std::mem::take(&mut self.zong_motion);
 
         // A pending multi-key operator consumes this key.
         match self.pending {
@@ -422,6 +485,19 @@ impl Editor {
             },
             other => other,
         };
+
+        // Laid out vertically, the arrow keys and `hjkl` keep their *screen*
+        // meaning: `j` still reads onward down the 縱, and `h` still steps left,
+        // which is now the next 縱 rather than the next line.
+        if self.layout == Layout::Vertical {
+            match key {
+                Key::Char('h') | Key::Left => return self.move_zong_from(true, continuing_zong),
+                Key::Char('l') | Key::Right => return self.move_zong_from(false, continuing_zong),
+                Key::Char('j') | Key::Down => return self.move_horizontal(motion::right),
+                Key::Char('k') | Key::Up => return self.move_horizontal(motion::left),
+                _ => {}
+            }
+        }
 
         match key {
             Key::Char('h') | Key::Left => self.move_horizontal(motion::left),
@@ -624,6 +700,16 @@ impl Editor {
     }
 
     fn on_insert_key(&mut self, key: Key) {
+        let continuing_zong = std::mem::take(&mut self.zong_motion);
+        if self.layout == Layout::Vertical {
+            match key {
+                Key::Left => return self.move_zong_from(true, continuing_zong),
+                Key::Right => return self.move_zong_from(false, continuing_zong),
+                Key::Up => return self.move_horizontal(motion::left),
+                Key::Down => return self.move_horizontal(motion::right),
+                _ => {}
+            }
+        }
         match key {
             Key::Esc => self.mode = Mode::Normal,
             Key::Enter => self.insert_str("\n"),
@@ -830,6 +916,32 @@ impl Editor {
         if !self.extend {
             self.anchor = pos;
         }
+    }
+
+    /// Move to the neighbouring 縱 in vertical layout: `left` steps to the next
+    /// 縱 (drawn to the left, since 縱 stack leftward), otherwise to the
+    /// previous one. `continuing` says the previous key was also a 縱 motion,
+    /// in which case the goal slot is kept, so crossing a short paragraph does
+    /// not drag the cursor permanently upwards.
+    fn move_zong_from(&mut self, left: bool, continuing: bool) {
+        let zong_len = self.zong_length;
+        let rope = self.current_buffer().rope();
+        let goal = if continuing {
+            self.goal_slot
+        } else {
+            zong::slot_of(rope, self.cursor, zong_len)
+        };
+        let pos = if left {
+            zong::next_zong(rope, self.cursor, zong_len, goal)
+        } else {
+            zong::prev_zong(rope, self.cursor, zong_len, goal)
+        };
+        self.cursor = pos;
+        if !self.extend {
+            self.anchor = pos;
+        }
+        self.goal_slot = goal;
+        self.zong_motion = true;
     }
 
     /// Move the selection head to `pos`; collapse the selection unless select

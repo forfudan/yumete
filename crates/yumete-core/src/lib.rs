@@ -22,6 +22,7 @@ pub mod editor;
 pub mod input;
 pub mod motion;
 pub mod text_store;
+pub mod zong;
 
 pub use buffer::Buffer;
 pub use command::{Command, CommandError};

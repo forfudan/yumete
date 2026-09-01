@@ -19,6 +19,8 @@ use std::path::{Path, PathBuf};
 
 use serde::Deserialize;
 
+pub use yumete_cjk::{Layout, DEFAULT_ZONG_GAP, DEFAULT_ZONG_LENGTH};
+
 /// How line numbers are displayed in the gutter.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum LineNumbers {
@@ -46,6 +48,13 @@ pub struct EditorConfig {
     /// Minimum weight for a multi-character word to be joined by the dictionary
     /// segmenter (Feature #24). Zero joins every dictionary word.
     pub segmentation_threshold: i64,
+    /// Horizontal (default) or vertical layout (Feature #61).
+    pub layout: Layout,
+    /// How many characters fit in one 縱 in vertical layout. Clamped to 4–64;
+    /// the renderer lowers it further when the terminal is too short.
+    pub zong_length: usize,
+    /// The gap between two 縱, in half-width cells (0–4).
+    pub zong_gap: usize,
 }
 
 impl Default for EditorConfig {
@@ -56,6 +65,9 @@ impl Default for EditorConfig {
             scrolloff: 3,
             show_segmentation: true,
             segmentation_threshold: 0,
+            layout: Layout::Horizontal,
+            zong_length: DEFAULT_ZONG_LENGTH,
+            zong_gap: DEFAULT_ZONG_GAP,
         }
     }
 }
@@ -233,6 +245,9 @@ struct RawEditor {
     scrolloff: Option<usize>,
     show_segmentation: Option<bool>,
     segmentation_threshold: Option<i64>,
+    layout: Option<String>,
+    zong_length: Option<usize>,
+    zong_gap: Option<usize>,
 }
 
 #[derive(Deserialize, Default)]
@@ -265,6 +280,15 @@ impl RawConfig {
         if other.editor.segmentation_threshold.is_some() {
             self.editor.segmentation_threshold = other.editor.segmentation_threshold;
         }
+        if other.editor.layout.is_some() {
+            self.editor.layout = other.editor.layout;
+        }
+        if other.editor.zong_length.is_some() {
+            self.editor.zong_length = other.editor.zong_length;
+        }
+        if other.editor.zong_gap.is_some() {
+            self.editor.zong_gap = other.editor.zong_gap;
+        }
         if other.theme.selection.is_some() {
             self.theme.selection = other.theme.selection;
         }
@@ -292,6 +316,21 @@ impl RawConfig {
         }
         if let Some(threshold) = self.editor.segmentation_threshold {
             config.editor.segmentation_threshold = threshold.max(0);
+        }
+        if let Some(layout) = self.editor.layout {
+            // An unrecognised value keeps the default rather than refusing to
+            // start, like every other setting here.
+            if let Some(parsed) = Layout::parse(&layout) {
+                config.editor.layout = parsed;
+            }
+        }
+        if let Some(length) = self.editor.zong_length {
+            // Below ~4 a 縱 stops being a column of text; above 64 no terminal
+            // is tall enough and the eye loses the sweep anyway.
+            config.editor.zong_length = length.clamp(4, 64);
+        }
+        if let Some(gap) = self.editor.zong_gap {
+            config.editor.zong_gap = gap.min(4);
         }
         if let Some(hex) = self.theme.selection {
             if let Some(rgb) = parse_hex(&hex) {
@@ -403,6 +442,36 @@ mod tests {
             c.theme.segmentation,
             [(0x10, 0x10, 0x10), (0x20, 0x20, 0x20)]
         );
+    }
+
+    #[test]
+    fn parses_vertical_layout_settings() {
+        let c = Config::from_toml(
+            r#"
+            [editor]
+            layout = "vertical"
+            zong_length = 24
+            zong_gap = 2
+            "#,
+        );
+        assert_eq!(c.editor.layout, Layout::Vertical);
+        assert_eq!(c.editor.zong_length, 24);
+        assert_eq!(c.editor.zong_gap, 2);
+    }
+
+    #[test]
+    fn clamps_zong_settings_and_ignores_an_unknown_layout() {
+        let c = Config::from_toml(
+            r#"
+            [editor]
+            layout = "sideways"
+            zong_length = 500
+            zong_gap = 99
+            "#,
+        );
+        assert_eq!(c.editor.layout, Layout::Horizontal);
+        assert_eq!(c.editor.zong_length, 64);
+        assert_eq!(c.editor.zong_gap, 4);
     }
 
     #[test]

@@ -9,6 +9,8 @@
 //! The terminal stack is `ratatui` (the maintained `tui-rs` fork) over its
 //! bundled `crossterm` backend, so no ANSI escapes are hand-written here.
 
+pub mod vertical;
+
 use std::io::{self, stdout};
 
 use ratatui::crossterm::event::{
@@ -24,6 +26,7 @@ use ratatui::widgets::{Block, Borders, Clear, Paragraph};
 use ratatui::Frame;
 
 use yumete_config::{Config, LineNumbers};
+use yumete_core::zong::{Anchor, Layout as WritingLayout};
 use yumete_core::{Editor, Key, KeyOutcome, Mode, TextStore};
 use yumete_ime::ImeSession;
 
@@ -57,12 +60,19 @@ pub fn run(editor: &mut Editor, config: &Config, ime: &mut ImeSession) -> io::Re
         );
     }
 
-    let mut viewport_top = 0usize;
+    let mut viewport = Viewport::default();
     let mut shift = ShiftTap::default();
 
     let result = loop {
-        if let Err(err) = terminal.draw(|frame| draw(frame, editor, config, ime, &mut viewport_top))
-        {
+        // The 縱 wrap length depends on the terminal height, and the motions
+        // that cross 縱 run before the next draw, so settle it up front.
+        if editor.layout() == WritingLayout::Vertical {
+            if let Ok(size) = terminal.size() {
+                let lines = editor.current_buffer().line_count();
+                editor.set_zong_length(vertical::zong_length_for(config, size.height, lines));
+            }
+        }
+        if let Err(err) = terminal.draw(|frame| draw(frame, editor, config, ime, &mut viewport)) {
             break Err(err);
         }
         match event::read() {
@@ -105,6 +115,19 @@ pub fn run(editor: &mut Editor, config: &Config, ime: &mut ImeSession) -> io::Re
     }
     ratatui::restore();
     result
+}
+
+/// How far the page is scrolled, in the unit each layout scrolls by.
+///
+/// Both are kept across a `:layout` switch so flipping back and forth does not
+/// lose the reader's place; each is clamped to the buffer when it is used.
+#[derive(Default)]
+struct Viewport {
+    /// The first visible line, in horizontal layout.
+    top: usize,
+    /// The paragraph and piece the rightmost visible 縱 sits at, in vertical
+    /// layout. An anchor rather than a 縱 number: see `vertical::draw`.
+    zong: Anchor,
 }
 
 /// The result of feeding a key event to the lone-Shift-tap tracker.
@@ -294,13 +317,57 @@ fn draw(
     editor: &Editor,
     config: &Config,
     ime: &ImeSession,
-    viewport_top: &mut usize,
+    viewport: &mut Viewport,
 ) {
     let area = frame.area();
     let regions = Layout::vertical([Constraint::Min(1), Constraint::Length(1)]).split(area);
     let text_area = regions[0];
     let status_area = regions[1];
 
+    // The text body is the one part that differs between the layouts; both
+    // report back the cell the cursor landed on, which the status line and the
+    // candidate panel are positioned from.
+    let (cursor_x, cursor_y) = match editor.layout() {
+        WritingLayout::Horizontal => {
+            draw_horizontal(frame, editor, config, text_area, &mut viewport.top)
+        }
+        WritingLayout::Vertical => {
+            vertical::draw(frame, editor, config, text_area, &mut viewport.zong)
+        }
+    };
+
+    draw_status(frame, editor, ime, status_area);
+
+    // In vertical layout the cursor is a block drawn into the page: a hardware
+    // cursor is one cell wide and would sit lopsided inside a two-cell 縱.
+    if let Some((_, text)) = editor.prompt() {
+        let col = 1 + text.chars().count();
+        frame.set_cursor_position(Position::new(status_area.x + col as u16, status_area.y));
+    } else if editor.layout() == WritingLayout::Horizontal {
+        frame.set_cursor_position(Position::new(cursor_x, cursor_y));
+    }
+
+    if editor.mode() == Mode::Insert && ime.available() && ime.is_composing() {
+        match editor.layout() {
+            WritingLayout::Horizontal => {
+                draw_candidate_panel(frame, ime, text_area, cursor_x, cursor_y)
+            }
+            WritingLayout::Vertical => {
+                vertical::draw_candidate_panel(frame, ime, config, text_area, cursor_x, cursor_y)
+            }
+        }
+    }
+}
+
+/// Draw the buffer as ordinary horizontal lines with a line-number gutter,
+/// returning the cell the cursor sits on.
+fn draw_horizontal(
+    frame: &mut Frame,
+    editor: &Editor,
+    config: &Config,
+    text_area: Rect,
+    viewport_top: &mut usize,
+) -> (u16, u16) {
     let buffer = editor.current_buffer();
     let total_lines = buffer.line_count();
     let height = text_area.height as usize;
@@ -362,7 +429,15 @@ fn draw(
     }
     frame.render_widget(Paragraph::new(lines), text_area);
 
-    // Status line, or the command line while in Command mode.
+    (
+        text_area.x + gutter as u16 + editor.cursor_visual_column() as u16,
+        text_area.y + (cursor_line - *viewport_top) as u16,
+    )
+}
+
+/// Draw the status line, or the command line while a `:` or `/` prompt is open.
+fn draw_status(frame: &mut Frame, editor: &Editor, ime: &ImeSession, status_area: Rect) {
+    let buffer = editor.current_buffer();
     let status = if let Some((prefix, text)) = editor.prompt() {
         format!("{prefix}{text}")
     } else {
@@ -384,36 +459,30 @@ fn draw(
             buffer.display_name(),
             dirty
         );
-        if editor.status().is_empty() {
+        if !editor.status().is_empty() {
+            format!("{left}   {}", editor.status())
+        } else if editor.layout() == WritingLayout::Vertical {
+            // Vertically, the useful coordinates are which paragraph, which 縱
+            // of it, and how far down that 縱 — "column" would be ambiguous.
+            let at = editor.zong_position();
+            format!(
+                "{left}   Ln {}, 縱 {}, 字 {}",
+                at.line + 1,
+                at.index_in_line + 1,
+                at.slot + 1,
+            )
+        } else {
             format!(
                 "{left}   Ln {}, Col {}",
                 editor.cursor_line() + 1,
                 editor.cursor_visual_column() + 1,
             )
-        } else {
-            format!("{left}   {}", editor.status())
         }
     };
     frame.render_widget(
         Paragraph::new(status).style(Style::default().add_modifier(Modifier::REVERSED)),
         status_area,
     );
-
-    // Place the terminal cursor.
-    let (cursor_x, cursor_y) = if let Some((_, text)) = editor.prompt() {
-        let col = 1 + text.chars().count();
-        (status_area.x + col as u16, status_area.y)
-    } else {
-        let x = text_area.x + gutter as u16 + editor.cursor_visual_column() as u16;
-        let y = text_area.y + (cursor_line - *viewport_top) as u16;
-        (x, y)
-    };
-    frame.set_cursor_position(Position::new(cursor_x, cursor_y));
-
-    // The IME candidate panel floats just below the cursor while composing.
-    if editor.mode() == Mode::Insert && ime.available() && ime.is_composing() {
-        draw_candidate_panel(frame, ime, text_area, cursor_x, cursor_y);
-    }
 }
 
 /// Draw the floating candidate panel below the cursor (Feature #28).
@@ -515,9 +584,9 @@ mod tests {
         h: u16,
     ) -> ratatui::buffer::Buffer {
         let mut terminal = Terminal::new(TestBackend::new(w, h)).unwrap();
-        let mut top = 0usize;
+        let mut viewport = Viewport::default();
         terminal
-            .draw(|frame| draw(frame, editor, config, ime, &mut top))
+            .draw(|frame| draw(frame, editor, config, ime, &mut viewport))
             .unwrap();
         terminal.backend().buffer().clone()
     }
@@ -525,6 +594,278 @@ mod tests {
     /// Render with an unavailable IME (the common case for non-IME tests).
     fn render(editor: &Editor, config: &Config, w: u16, h: u16) -> ratatui::buffer::Buffer {
         render_with(editor, config, &no_ime(), w, h)
+    }
+
+    /// Render vertically, settling the 縱 length from the terminal height first
+    /// exactly as the event loop does, so motion and drawing agree.
+    fn render_vertical(
+        editor: &mut Editor,
+        config: &Config,
+        w: u16,
+        h: u16,
+    ) -> ratatui::buffer::Buffer {
+        render_vertical_with(editor, config, &no_ime(), w, h)
+    }
+
+    /// As [`render_vertical`], with a live IME session for the panel tests.
+    fn render_vertical_with(
+        editor: &mut Editor,
+        config: &Config,
+        ime: &ImeSession,
+        w: u16,
+        h: u16,
+    ) -> ratatui::buffer::Buffer {
+        editor.set_layout(WritingLayout::Vertical);
+        let lines = editor.current_buffer().line_count();
+        editor.set_zong_length(vertical::zong_length_for(config, h, lines));
+        render_with(editor, config, ime, w, h)
+    }
+
+    /// A vertical-layout config with the decorations off, so tests read the
+    /// text grid itself.
+    fn vertical_config() -> Config {
+        let mut config = Config::default();
+        config.editor.layout = WritingLayout::Vertical;
+        config.editor.line_numbers = LineNumbers::None;
+        config.editor.show_segmentation = false;
+        config
+    }
+
+    /// Type `text` into a fresh editor and return to Normal mode.
+    fn editor_with(text: &str) -> Editor {
+        let mut editor = Editor::new();
+        editor.on_key(Key::Char('i'));
+        for c in text.chars() {
+            editor.on_key(if c == '\n' { Key::Enter } else { Key::Char(c) });
+        }
+        editor.on_key(Key::Esc);
+        editor.on_key(Key::Char('g'));
+        editor.on_key(Key::Char('g'));
+        editor
+    }
+
+    /// The symbol at a cell, for grid assertions.
+    fn at(buffer: &ratatui::buffer::Buffer, x: u16, y: u16) -> String {
+        buffer[(x, y)].symbol().to_string()
+    }
+
+    #[test]
+    fn vertical_layout_stacks_characters_down_from_the_right_edge() {
+        let mut editor = editor_with("春江潮水");
+        let config = vertical_config();
+        let buffer = render_vertical(&mut editor, &config, 30, 12);
+
+        // The first 縱 occupies the two rightmost cells, reading downward.
+        for (row, expected) in ["春", "江", "潮", "水"].iter().enumerate() {
+            assert_eq!(at(&buffer, 28, row as u16), *expected, "row {row}");
+        }
+    }
+
+    #[test]
+    fn paragraphs_stack_leftward_one_gap_apart() {
+        let mut editor = editor_with("上\n中\n下");
+        let config = vertical_config();
+        let buffer = render_vertical(&mut editor, &config, 30, 12);
+
+        // Two cells per 縱 plus a one-cell gap: 28, 25, 22, right to left.
+        assert_eq!(at(&buffer, 28, 0), "上");
+        assert_eq!(at(&buffer, 25, 0), "中");
+        assert_eq!(at(&buffer, 22, 0), "下");
+    }
+
+    #[test]
+    fn a_long_paragraph_wraps_into_the_next_zong() {
+        // Six rows of text area (8 minus the status line and the spare caret
+        // row) means the 縱 wraps every six characters, however long the
+        // configured 縱 is.
+        let mut editor = editor_with(&"字".repeat(8));
+        let config = vertical_config();
+        let buffer = render_vertical(&mut editor, &config, 20, 8);
+
+        assert_eq!(at(&buffer, 18, 0), "字");
+        assert_eq!(at(&buffer, 18, 5), "字");
+        // The seventh character starts the next 縱, to the left.
+        assert_eq!(at(&buffer, 15, 0), "字");
+        assert_eq!(at(&buffer, 15, 1), "字");
+        assert_eq!(at(&buffer, 15, 2), " ");
+    }
+
+    #[test]
+    fn punctuation_is_rotated_on_screen_but_not_in_the_buffer() {
+        let mut editor = editor_with("「甲」。");
+        let config = vertical_config();
+        let buffer = render_vertical(&mut editor, &config, 20, 12);
+
+        assert_eq!(at(&buffer, 18, 0), "﹁");
+        assert_eq!(at(&buffer, 18, 1), "甲");
+        assert_eq!(at(&buffer, 18, 2), "﹂");
+        assert_eq!(at(&buffer, 18, 3), "︒");
+        // What is saved to disk keeps the ordinary characters.
+        assert_eq!(editor.current_buffer().text(), "「甲」。");
+    }
+
+    #[test]
+    fn hjkl_keep_their_screen_meaning_when_vertical() {
+        let mut editor = editor_with("一二三\n四五六");
+        editor.set_layout(WritingLayout::Vertical);
+        editor.set_zong_length(32);
+
+        // `j` reads onward down the 縱...
+        editor.on_key(Key::Char('j'));
+        assert_eq!(editor.cursor(), 1);
+        editor.on_key(Key::Char('k'));
+        assert_eq!(editor.cursor(), 0);
+        // ...and `h` steps left, which is the next 縱 at the same depth.
+        editor.on_key(Key::Char('j'));
+        editor.on_key(Key::Char('h'));
+        assert_eq!(editor.cursor_line(), 1);
+        assert_eq!(editor.zong_position().slot, 1);
+        // `l` steps back to the right.
+        editor.on_key(Key::Char('l'));
+        assert_eq!(editor.cursor_line(), 0);
+        assert_eq!(editor.zong_position().slot, 1);
+    }
+
+    #[test]
+    fn paragraph_numbers_label_only_the_zong_that_starts_a_paragraph() {
+        let mut editor = editor_with("甲乙丙\n丁戊己");
+        let mut config = vertical_config();
+        config.editor.line_numbers = LineNumbers::Absolute;
+        let buffer = render_vertical(&mut editor, &config, 20, 12);
+
+        // One header row for a two-paragraph buffer, the number right-aligned
+        // in its 縱 and the text starting on the row below.
+        assert_eq!(at(&buffer, 19, 0), "1");
+        assert_eq!(at(&buffer, 18, 1), "甲");
+        assert_eq!(at(&buffer, 16, 0), "2");
+        assert_eq!(at(&buffer, 15, 1), "丁");
+    }
+
+    #[test]
+    fn the_cursor_is_drawn_as_a_block_over_its_slot() {
+        // A half-width character, so both cells of the slot are real cells in
+        // the rendered buffer — behind a full-width glyph the second column is
+        // the first one's continuation and never drawn separately.
+        let mut editor = editor_with("甲a丙");
+        editor.set_layout(WritingLayout::Vertical);
+        editor.on_key(Key::Char('j')); // down the 縱, onto the `a`
+        let config = vertical_config();
+        let buffer = render_vertical(&mut editor, &config, 20, 12);
+
+        let reversed = |x: u16, y: u16| {
+            buffer[(x, y)]
+                .style()
+                .add_modifier
+                .contains(Modifier::REVERSED)
+        };
+        assert_eq!(at(&buffer, 18, 1), "a");
+        assert!(reversed(18, 1), "cursor cell not highlighted");
+        assert!(reversed(19, 1), "cursor must cover both cells of the slot");
+        assert!(!reversed(18, 0), "the character above must stay plain");
+        assert!(!reversed(18, 2), "the character below must stay plain");
+    }
+
+    #[test]
+    fn the_segmentation_overlay_tints_words_down_the_zong() {
+        let mut editor = editor_with("你好世界");
+        editor.set_segmenter(Box::new(DictionarySegmenter::builtin(0)));
+        editor.set_segmentation_visible(true);
+        let mut config = vertical_config();
+        config.editor.show_segmentation = true;
+        let buffer = render_vertical(&mut editor, &config, 20, 12);
+
+        // Successive words alternate tint down the 縱. Only the leading cell of
+        // each slot is asserted: a full-width glyph's second column is its
+        // continuation, which the renderer skips rather than drawing, so the
+        // terminal paints both columns from the style set here.
+        let (a, b) = (config.theme.segmentation[0], config.theme.segmentation[1]);
+        let bg = |x: u16, y: u16| buffer[(x, y)].style().bg;
+        assert_eq!(
+            bg(18, 1),
+            Some(Color::Rgb(a.0, a.1, a.2)),
+            "第一詞 untinted"
+        );
+        assert_eq!(
+            bg(18, 2),
+            Some(Color::Rgb(b.0, b.1, b.2)),
+            "第二詞 untinted"
+        );
+    }
+
+    /// A pane too small to hold even one 縱 must not panic — ratatui hands out
+    /// tiny areas while a window is being resized.
+    #[test]
+    fn a_tiny_pane_renders_without_panicking() {
+        let mut editor = editor_with("甲乙丙\n丁戊");
+        let mut ime = ImeSession::from_table_text(Scheme::Lingming, "b 吧 八\n");
+        ime.input('b');
+        let config = vertical_config();
+        for (w, h) in [(1, 1), (2, 2), (3, 1), (1, 8), (4, 3), (2, 40)] {
+            let _ = render_vertical(&mut editor, &config, w, h);
+        }
+        // …including with the candidate panel open.
+        editor.on_key(Key::Char('i'));
+        for (w, h) in [(1, 1), (2, 2), (6, 4), (12, 6)] {
+            let _ = render_vertical_with(&mut editor, &config, &ime, w, h);
+        }
+    }
+
+    #[test]
+    fn a_code_hint_packs_two_letters_to_a_slot() {
+        let mut editor = Editor::new();
+        editor.on_key(Key::Char('i'));
+        // A candidate whose code needs three more letters: `jvy` must read as
+        // `jv` over `y`, not as three rows.
+        let mut ime = ImeSession::from_table_text(Scheme::Lingming, "a 啊\najvy 奧\n");
+        ime.input('a');
+        let config = vertical_config();
+        let buffer = render_vertical_with(&mut editor, &config, &ime, 40, 14);
+
+        let text = buffer_text(&buffer);
+        assert!(text.contains("jv"), "code hint not packed 縦中横: {text:?}");
+        // The panel stays shallow: border, digit, candidate, two hint rows,
+        // border — six rows, where one letter per row would need seven.
+        let border_rows: Vec<u16> = (0..buffer.area.height)
+            .filter(|&y| (0..buffer.area.width).any(|x| buffer[(x, y)].symbol() == "\u{250c}"))
+            .collect();
+        let top = border_rows[0];
+        let bottom = (top..buffer.area.height)
+            .find(|&y| (0..buffer.area.width).any(|x| buffer[(x, y)].symbol() == "\u{2514}"))
+            .expect("panel has a bottom border");
+        assert!(
+            bottom - top <= 5,
+            "panel too deep: {} rows",
+            bottom - top + 1
+        );
+    }
+
+    #[test]
+    fn vertical_candidate_panel_runs_right_to_left() {
+        let mut editor = Editor::new();
+        editor.on_key(Key::Char('i')); // Insert mode
+        let mut ime = ImeSession::from_table_text(Scheme::Lingming, "b 吧 八\n");
+        ime.input('b');
+
+        let config = vertical_config();
+        let buffer = render_vertical_with(&mut editor, &config, &ime, 40, 14);
+        let text = buffer_text(&buffer);
+        assert!(text.contains('吧'), "first candidate missing");
+        assert!(text.contains('八'), "second candidate missing");
+
+        // Candidate 1 must sit to the *right* of candidate 2, and its digit
+        // directly above it.
+        let find = |needle: &str| {
+            (0..buffer.area.height)
+                .flat_map(|y| (0..buffer.area.width).map(move |x| (x, y)))
+                .find(|&(x, y)| buffer[(x, y)].symbol() == needle)
+                .unwrap_or_else(|| panic!("{needle} not drawn"))
+        };
+        let first = find("吧");
+        let second = find("八");
+        assert!(first.0 > second.0, "candidates must run right to left");
+        assert_eq!(first.1, second.1, "candidates must share a row");
+        assert_eq!(at(&buffer, first.0, first.1 - 1), "1");
+        assert_eq!(at(&buffer, second.0, second.1 - 1), "2");
     }
 
     #[test]

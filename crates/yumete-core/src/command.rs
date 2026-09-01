@@ -7,6 +7,8 @@
 
 use std::fmt;
 
+use crate::zong::Layout;
+
 /// A parsed command-line command.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Command {
@@ -36,6 +38,9 @@ pub enum Command {
     /// `:segment` (alias `:seg`) — toggle the word-segmentation overlay
     /// (Feature #24).
     ToggleSegmentation,
+    /// `:layout [horizontal|vertical]` (aliases `:horizontal`, `:vertical`) —
+    /// choose the layout (Feature #61). `None` toggles between the two.
+    SetLayout(Option<Layout>),
 }
 
 /// An error produced while parsing a command line.
@@ -47,6 +52,11 @@ pub enum CommandError {
     Unknown(String),
     /// The command requires an argument that was not supplied.
     MissingArgument(&'static str),
+    /// The command's argument was not one of the values it accepts.
+    InvalidArgument {
+        command: &'static str,
+        value: String,
+    },
 }
 
 impl fmt::Display for CommandError {
@@ -56,6 +66,9 @@ impl fmt::Display for CommandError {
             CommandError::Unknown(word) => write!(f, "unknown command: {word}"),
             CommandError::MissingArgument(what) => {
                 write!(f, "{what} requires an argument")
+            }
+            CommandError::InvalidArgument { command, value } => {
+                write!(f, "{command}: unknown value '{value}'")
             }
         }
     }
@@ -108,6 +121,22 @@ pub fn parse(input: &str) -> Result<Command, CommandError> {
         "undo" | "u" => Ok(Command::Undo),
         "redo" | "red" => Ok(Command::Redo),
         "segment" | "seg" => Ok(Command::ToggleSegmentation),
+        // Layout (Feature #61): `:layout` alone flips it, the two long forms
+        // name the layout outright.
+        "layout" | "lay" => {
+            if rest.is_empty() {
+                Ok(Command::SetLayout(None))
+            } else {
+                Layout::parse(rest)
+                    .map(|l| Command::SetLayout(Some(l)))
+                    .ok_or_else(|| CommandError::InvalidArgument {
+                        command: "layout",
+                        value: rest.to_string(),
+                    })
+            }
+        }
+        "vertical" => Ok(Command::SetLayout(Some(Layout::Vertical))),
+        "horizontal" => Ok(Command::SetLayout(Some(Layout::Horizontal))),
         other => Err(CommandError::Unknown(other.to_string())),
     }
 }
@@ -199,6 +228,34 @@ mod tests {
     fn parses_segment_toggle() {
         assert_eq!(parse(":segment"), Ok(Command::ToggleSegmentation));
         assert_eq!(parse(":seg"), Ok(Command::ToggleSegmentation));
+    }
+
+    #[test]
+    fn parses_layout_commands() {
+        assert_eq!(parse(":layout"), Ok(Command::SetLayout(None)));
+        assert_eq!(
+            parse(":layout vertical"),
+            Ok(Command::SetLayout(Some(Layout::Vertical)))
+        );
+        assert_eq!(
+            parse(":layout h"),
+            Ok(Command::SetLayout(Some(Layout::Horizontal)))
+        );
+        assert_eq!(
+            parse(":vertical"),
+            Ok(Command::SetLayout(Some(Layout::Vertical)))
+        );
+        assert_eq!(
+            parse(":horizontal"),
+            Ok(Command::SetLayout(Some(Layout::Horizontal)))
+        );
+        assert_eq!(
+            parse(":layout sideways"),
+            Err(CommandError::InvalidArgument {
+                command: "layout",
+                value: "sideways".into()
+            })
+        );
     }
 
     #[test]
