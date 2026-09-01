@@ -115,6 +115,28 @@ pub fn zong_length_for(config: &Config, height: u16, total_lines: usize, ruby: b
     Metrics::new(config, height.saturating_sub(1), total_lines, ruby).zong_len
 }
 
+/// Blank any wide glyph that reaches *into* `rect` from the column on its left.
+///
+/// A two-cell character at `rect.x - 1` covers `rect.x` as well, and the
+/// renderer skips the cell a wide glyph covers — so the overlay's own left
+/// border is computed, stored, and then never emitted. Cutting the glyph back to
+/// a space is what lets the border be drawn at all.
+pub fn clear_wide_left_edge(buf: &mut Buffer, rect: Rect) {
+    if rect.x == 0 {
+        return;
+    }
+    for y in rect.y..rect.y + rect.height {
+        let wide = buf
+            .cell((rect.x - 1, y))
+            .is_some_and(|c| str_width(c.symbol()) > 1);
+        if wide {
+            if let Some(cell) = buf.cell_mut((rect.x - 1, y)) {
+                cell.set_symbol(" ");
+            }
+        }
+    }
+}
+
 /// Paint one 縱 slot: the grapheme in the left cell, the style across both, so
 /// a selection or the cursor covers the whole square.
 fn put_slot(buf: &mut Buffer, x: u16, y: u16, symbol: &str, style: Style) {
@@ -167,18 +189,6 @@ fn index_mark(i: usize) -> String {
     }
 }
 
-/// The full-width form of a single ASCII digit, which occupies both cells of a
-/// slot and so reads as centred. `None` for anything else.
-fn lone_digit(text: &str) -> Option<char> {
-    let mut chars = text.chars();
-    let c = chars.next()?;
-    if chars.next().is_some() || !c.is_ascii_digit() {
-        return None;
-    }
-    // U+FF10 FULLWIDTH DIGIT ZERO onwards.
-    char::from_u32('\u{FF10}' as u32 + (c as u32 - '0' as u32))
-}
-
 /// Draw a paragraph number above its 縱, two digits to a row (縦中横), so it
 /// reads as a number rather than a stack of loose digits.
 fn put_number(buf: &mut Buffer, x: u16, top: u16, rows: u16, n: usize, style: Style) {
@@ -194,14 +204,10 @@ fn put_number(buf: &mut Buffer, x: u16, top: u16, rows: u16, n: usize, style: St
         at += take;
         // Bottom-align the number against the text it labels.
         let y = top + rows - pairs.min(rows as usize) as u16 + row as u16;
-        // A terminal cannot place a glyph at a half-cell offset, so a lone
-        // half-width digit can only sit in one half of the slot or the other.
-        // Its **full-width** form is two cells wide and therefore fills the slot
-        // — which is the only way a single digit is centred over its 縱.
-        if let Some(one) = lone_digit(text) {
-            put_slot(buf, x, y, &one.to_string(), style);
-            continue;
-        }
+        // Half-width throughout, right-aligned. A lone digit could be centred by
+        // using its full-width form — that is two cells and fills the slot — but
+        // then a gutter of 1–9 and 10–99 would mix the two widths, and the
+        // mixture reads worse than the offset it fixes.
         for (i, ch) in format!("{text:>2}").chars().enumerate() {
             if let Some(cell) = buf.cell_mut((x + i as u16, y)) {
                 cell.set_symbol(&ch.to_string()).set_style(style);
@@ -405,7 +411,7 @@ pub fn draw(
 /// it reads as ink with a hint of pine rather than grey-green. The paper is warm
 /// rather than white. Dark mode is not the light pair swapped — the ground goes
 /// deeper and the ink dimmer, or the panel glows at night.
-mod ink {
+pub mod ink {
     use ratatui::style::Color;
 
     /// 墨 — the dark theme's text colour.
@@ -526,6 +532,7 @@ pub fn draw_candidate_panel(
     let panel = Rect::new(x, y, panel_w, panel_h);
 
     frame.render_widget(Clear, panel);
+    clear_wide_left_edge(frame.buffer_mut(), panel);
     let ground = Style::default().bg(ink::paper()).fg(ink::text());
     let block = Block::default()
         .borders(Borders::ALL)

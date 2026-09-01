@@ -23,7 +23,7 @@ use ratatui::crossterm::terminal::supports_keyboard_enhancement;
 use ratatui::layout::{Constraint, Layout, Position, Rect};
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
-use ratatui::widgets::{Block, Borders, Clear, Paragraph};
+use ratatui::widgets::{Block, BorderType, Borders, Clear, Paragraph};
 use ratatui::Frame;
 
 use yumete_config::{Config, LineNumbers};
@@ -433,24 +433,22 @@ fn draw(
     }
 
     if composes(editor.mode()) && ime.available() && ime.is_composing() {
-        match editor.prompt() {
-            // A prompt is a horizontal line of text whichever way the page is
-            // set, so its panel is the horizontal one, floating above the
-            // command line.
+        // The panel follows the page, not the prompt: a `/` search in a
+        // vertically set document still picks its candidates out of a vertical
+        // list, and one panel wearing a different skin from the other reads as a
+        // different program.
+        let (at_x, at_y) = match editor.prompt() {
             Some((_, text)) => {
                 let col = 1
                     + yumete_cjk::str_width(text)
                     + yumete_cjk::str_width(&prompt_preedit(editor, ime));
-                draw_candidate_panel(frame, ime, area, status_area.x + col as u16, status_area.y);
+                (status_area.x + col as u16, status_area.y)
             }
-            None => match editor.layout() {
-                WritingLayout::Horizontal => {
-                    draw_candidate_panel(frame, ime, text_area, cursor_x, cursor_y)
-                }
-                WritingLayout::Vertical => {
-                    vertical::draw_candidate_panel(frame, ime, text_area, cursor_x, cursor_y)
-                }
-            },
+            None => (cursor_x, cursor_y),
+        };
+        match editor.layout() {
+            WritingLayout::Horizontal => draw_candidate_panel(frame, ime, area, at_x, at_y),
+            WritingLayout::Vertical => vertical::draw_candidate_panel(frame, ime, area, at_x, at_y),
         }
     }
 }
@@ -686,11 +684,13 @@ fn draw_status(frame: &mut Frame, editor: &Editor, ime: &ImeSession, status_area
         if !editor.status().is_empty() {
             format!("{left}   {}", editor.status())
         } else if editor.layout() == WritingLayout::Vertical {
-            // Vertically, the useful coordinates are which paragraph, which 縱
-            // of it, and how far down that 縱 — "column" would be ambiguous.
+            // Vertically the coordinates are named for the directions they run
+            // in: paragraphs stack across the page, so a paragraph number is a
+            // 橫 position; the 縱 is which run of it; 字 is how far down that
+            // run. "Ln" and "Col" would each mean two things here.
             let at = editor.zong_position();
             format!(
-                "{left}   Ln {}, 縱 {}, 字 {}",
+                "{left}   橫 {}, 縱 {}, 字 {}",
                 at.line + 1,
                 at.index_in_line + 1,
                 at.slot + 1,
@@ -764,24 +764,51 @@ fn draw_candidate_panel(
     let mut lines: Vec<Line> = Vec::with_capacity(rows.len());
     for (i, row) in rows.into_iter().enumerate() {
         if i == 0 {
-            // Preedit header, dimmed.
+            // The code as typed, a shade back from the candidates.
             lines.push(Line::from(Span::styled(
                 row,
-                Style::default().add_modifier(Modifier::DIM),
+                Style::default()
+                    .bg(vertical::ink::paper())
+                    .fg(vertical::ink::helper()),
             )));
         } else if i - 1 == highlight {
             lines.push(Line::from(Span::styled(
                 row,
-                Style::default().bg(Color::Rgb(0, 89, 209)).fg(Color::White),
+                Style::default()
+                    .bg(vertical::ink::highlight())
+                    .fg(vertical::ink::on_highlight()),
             )));
         } else {
-            lines.push(Line::from(Span::raw(row)));
+            lines.push(Line::from(Span::styled(
+                row,
+                Style::default()
+                    .bg(vertical::ink::paper())
+                    .fg(vertical::ink::text()),
+            )));
         }
     }
 
     frame.render_widget(Clear, panel);
+    // A wide glyph in the column left of the panel covers the panel's own border
+    // cell, and the renderer skips what a wide glyph covers — so without this
+    // the left border is never emitted.
+    vertical::clear_wide_left_edge(frame.buffer_mut(), panel);
     frame.render_widget(
-        Paragraph::new(lines).block(Block::default().borders(Borders::ALL)),
+        Paragraph::new(lines).block(
+            Block::default()
+                .borders(Borders::ALL)
+                .border_type(BorderType::Rounded)
+                .border_style(
+                    Style::default()
+                        .fg(vertical::ink::border())
+                        .bg(vertical::ink::paper()),
+                )
+                .style(
+                    Style::default()
+                        .bg(vertical::ink::paper())
+                        .fg(vertical::ink::text()),
+                ),
+        ),
         panel,
     );
 }
@@ -1025,9 +1052,11 @@ mod tests {
 
         // One header row for a two-paragraph buffer, the number right-aligned
         // in its 縱 and the text starting on the row below.
-        assert_eq!(at(&buffer, 18, 0), "１", "full-width, so it is centred");
+        // Half-width throughout, right-aligned, so a two-digit number lines up
+        // with a one-digit one rather than mixing the two widths.
+        assert_eq!(at(&buffer, 19, 0), "1");
         assert_eq!(at(&buffer, 18, 1), "甲");
-        assert_eq!(at(&buffer, 15, 0), "２");
+        assert_eq!(at(&buffer, 16, 0), "2");
         assert_eq!(at(&buffer, 15, 1), "丁");
     }
 
@@ -1189,18 +1218,6 @@ mod tests {
         for d in 1..4 {
             assert_eq!(at(&buffer, cx, cy + d), " ", "letters hang right");
         }
-    }
-
-    #[test]
-    fn a_lone_paragraph_number_is_centred_over_its_zong() {
-        let mut editor = editor_with("甲乙丙");
-        let mut config = vertical_config();
-        config.editor.line_numbers = LineNumbers::Absolute;
-        let buffer = render_vertical(&mut editor, &config, 20, 12);
-
-        // A half-width `1` can only sit in one half of the slot; its full-width
-        // form fills both, which is the only way to centre it.
-        assert_eq!(at(&buffer, 18, 0), "１");
     }
 
     #[test]
@@ -1407,6 +1424,28 @@ mod tests {
         assert!(text.contains('八'), "candidate 八 not shown in panel");
     }
 
+    /// Laid out vertically the coordinates are named for the directions they
+    /// run in — "Ln" and "Col" would each mean two things.
+    #[test]
+    fn the_vertical_status_line_names_its_directions() {
+        let mut editor = editor_with("上山\n下海");
+        let config = vertical_config();
+        editor.set_layout(WritingLayout::Vertical);
+        editor.on_key(Key::Char('j')); // down the 縱
+        let buffer = render_vertical(&mut editor, &config, 60, 12);
+
+        // A wide glyph leaves its continuation cell blank in the test backend,
+        // so the run of spaces after 橫 is an artefact of reading the grid.
+        let raw: String = (0..buffer.area.width)
+            .map(|x| buffer[(x, buffer.area.height - 1)].symbol())
+            .collect();
+        let status = raw.split_whitespace().collect::<Vec<_>>().join(" ");
+        assert!(status.contains("橫 1"), "paragraph, across: {status:?}");
+        assert!(status.contains("縱 1"), "which run of it: {status:?}");
+        assert!(status.contains("字 2"), "how far down it: {status:?}");
+        assert!(!status.contains("Ln"), "no ambiguous line number");
+    }
+
     #[test]
     fn the_command_menu_lists_and_narrows() {
         let mut editor = editor_with("那年冬天");
@@ -1481,6 +1520,46 @@ mod tests {
         let config = Config::default();
         let buffer = render_with(&editor, &config, &no_ime(), 90, 24);
         assert!(!buffer_text(&buffer).contains("redo"));
+    }
+
+    /// The panel follows the page, not the prompt: a `/` search in a vertically
+    /// set document still picks from a vertical list, in the same skin.
+    #[test]
+    fn a_search_prompt_gets_the_panel_the_page_uses() {
+        let mut editor = editor_with("那年冬天");
+        editor.set_layout(WritingLayout::Vertical);
+        editor.on_key(Key::Char('/'));
+        let mut ime = ImeSession::from_table_text(Scheme::Lingming, "b 吧 八\n");
+        ime.input('b');
+        let config = vertical_config();
+        let buffer = render_vertical_with(&mut editor, &config, &ime, 40, 20);
+
+        // Numbered with 帶圈中文數字 — the vertical panel — and wearing 墨香.
+        let text = buffer_text(&buffer);
+        assert!(text.contains('㊀'), "vertical panel expected: {text:?}");
+        let paper = Color::Rgb(0x26, 0x2a, 0x27);
+        assert!(
+            (0..buffer.area.height).any(|y| {
+                (0..buffer.area.width).any(|x| buffer[(x, y)].style().bg == Some(paper))
+            }),
+            "panel should wear the ink ground"
+        );
+    }
+
+    /// A two-cell glyph in the column left of a panel covers the panel's border
+    /// cell, and the renderer skips what a wide glyph covers — so the border
+    /// would never be drawn.
+    #[test]
+    fn a_panel_cuts_back_the_wide_glyph_on_its_left_edge() {
+        use ratatui::layout::Rect;
+        let mut buffer = ratatui::buffer::Buffer::empty(Rect::new(0, 0, 10, 3));
+        buffer[(2, 1)].set_symbol("漢");
+        vertical::clear_wide_left_edge(&mut buffer, Rect::new(3, 0, 5, 3));
+        assert_eq!(
+            buffer[(2, 1)].symbol(),
+            " ",
+            "the intruding half is cut back"
+        );
     }
 
     #[test]
