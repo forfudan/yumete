@@ -120,6 +120,27 @@ Early development, but already an interactive modal editor. Implemented so far:
   over 「」『』（）《》【】〔〕 as well as the ASCII pairs. Holding a key now
   auto-repeats, and the cursor is a block in Normal, a bar in Insert.
 
+- **#77 Soft wrap** — set horizontally, a paragraph too wide for the terminal
+  continues on the next screen row instead of running off the right edge, which
+  matters here more than in a code editor: a Chinese paragraph is one line of
+  several hundred characters. Latin words are kept whole and 禁則處理 is applied
+  (no 。、」）at the head of a row, no 「（ at the end of one). `j` and `k` walk
+  the rows the reader sees. `:nowrap` turns it off; `[editor] soft_wrap`.
+
+- **#79 Crash recovery** — while a document has unsaved changes, a copy is kept
+  beside it (`chapter.md` → `.chapter.md.yumete`), rewritten every few seconds
+  and removed on save and on quit. If a session ends badly, the next open says
+  so; `:recover` loads the draft (undoably), `:recover!` throws it away. Nothing
+  is loaded on its own — silently showing text that is not what is on disk is
+  how a writer loses track of which version they are reading.
+
+- **#76 / #78 / #80 Getting around, and getting told** — `gn`/`gp` and
+  `:bn`/`:bp` switch between the open files, each keeping its own cursor and its
+  own undo history; `10gg`, `:42` and `:goto` go to a line; `:count` reports 字,
+  字符 and 段 (a selection counts the selection); `:wq` saves and quits, checking
+  *every* open file for unsaved changes. A config file that does not parse now
+  says which key is wrong instead of being dropped in silence.
+
 - **#61 Vertical layout (縱書)** — text can be set the way a Chinese novel is:
   running top to bottom in **縱** (*zong*) that stack from the right edge
   leftward, one paragraph soft-wrapping into as many 縱 as it needs at 32
