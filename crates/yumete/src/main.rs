@@ -63,12 +63,6 @@ fn main() -> ExitCode {
     // and `:layout` switches it live.
     editor.set_layout(force_layout.unwrap_or(config.editor.layout));
     editor.set_zong_length(config.editor.zong_length);
-    // `-t` is the writer saying "this is a table" about a file no schema names.
-    // Last, because entering table mode turns the page horizontal, and it must
-    // win over `-v` rather than the other way round.
-    if force_table {
-        editor.enter_table();
-    }
     // The measure a project writes to, if it has said one; `:wrap n` is the
     // same setting for one session.
     if config.editor.measure > 0 {
@@ -91,6 +85,23 @@ fn main() -> ExitCode {
             .collect(),
     );
     editor.set_autosave(config.editor.autosave);
+
+    // The files, *after* the session's settings. Opening one may turn the page
+    // horizontal — a file a schema calls a table is read across — and a setting
+    // applied afterwards would be silently refused, so which layout you got
+    // would depend on the order you named your files in.
+    for file in &files {
+        if let Err(err) = editor.open_file(file) {
+            eprintln!("yumete: cannot open '{file}': {err}");
+            return ExitCode::FAILURE;
+        }
+    }
+    // `-t` is the writer saying "this is a table" about a file no schema names.
+    // After the files, because it is about the file that is open.
+    if force_table {
+        editor.enter_table();
+    }
+
     // Which ruby dialect to lay out: whatever the config names, else the one
     // the file's extension implies.
     editor
