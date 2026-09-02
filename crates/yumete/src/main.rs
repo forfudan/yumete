@@ -181,6 +181,7 @@ KEYS (Normal mode, Helix-style):
               (:w  :w <path>  :q  :q!  :o <path>  :new
               :s/old/new/[g]  :%s/old/new/[g]  :segment  :wq  :count
               :wrap  :nowrap   soft-wrap long paragraphs (on by default)
+              :wq [path]       save (optionally save-as) and quit
               :bn  :bp  switch between the open files (also gn / gp)
               :layout [horizontal|vertical]  :vertical  :horizontal
               :chaifen  toggle the 拆分 annotation beside candidates

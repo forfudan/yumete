@@ -28,6 +28,28 @@ pub struct Buffer {
     /// chapter you were halfway through is the whole difference between two
     /// files being usable together and not.
     cursor: usize,
+    /// This buffer's own edit history.
+    ///
+    /// Per buffer, not per editor: a single shared stack means `u` in one file
+    /// pops a snapshot taken in another and writes that file's text — and its
+    /// clean flag — into this one. Undo belongs to the document, the way the
+    /// cursor does.
+    history: History,
+}
+
+/// One point in a buffer's edit history.
+#[derive(Clone)]
+struct EditSnapshot {
+    rope: Rope,
+    cursor: usize,
+    modified: bool,
+}
+
+/// A buffer's undo and redo stacks.
+#[derive(Default)]
+struct History {
+    undo: Vec<EditSnapshot>,
+    redo: Vec<EditSnapshot>,
 }
 
 impl Buffer {
@@ -48,6 +70,7 @@ impl Buffer {
             path: None,
             modified: false,
             cursor: 0,
+            history: History::default(),
         }
     }
 
@@ -58,6 +81,7 @@ impl Buffer {
             path: None,
             modified: false,
             cursor: 0,
+            history: History::default(),
         }
     }
 
@@ -79,6 +103,7 @@ impl Buffer {
             path: Some(path.to_path_buf()),
             modified: false,
             cursor: 0,
+            history: History::default(),
         })
     }
 
@@ -182,18 +207,48 @@ impl Buffer {
         &self.rope
     }
 
-    /// A cheap clone of the underlying rope, for undo snapshots.
+    // ---- Undo / redo (Feature #11) ----------------------------------------
+
+    /// Record the current contents as an undo point, with the cursor to return
+    /// to, and drop anything that was undone.
     ///
     /// `ropey` clones are shallow (reference-counted nodes), so snapshotting the
     /// whole document per undo group is inexpensive.
-    pub fn snapshot_rope(&self) -> Rope {
-        self.rope.clone()
+    pub fn snapshot(&mut self, cursor: usize) {
+        self.history.undo.push(EditSnapshot {
+            rope: self.rope.clone(),
+            cursor,
+            modified: self.modified,
+        });
+        self.history.redo.clear();
     }
 
-    /// Restore the buffer's contents (and modified flag) from a snapshot.
-    pub fn restore(&mut self, rope: Rope, modified: bool) {
-        self.rope = rope;
-        self.modified = modified;
+    /// Step back one undo point, returning the cursor position it was taken at,
+    /// or `None` when there is nothing left to undo.
+    pub fn undo(&mut self, cursor: usize) -> Option<usize> {
+        let prev = self.history.undo.pop()?;
+        self.history.redo.push(self.here(cursor));
+        self.rope = prev.rope;
+        self.modified = prev.modified;
+        Some(prev.cursor.min(self.rope.len_chars()))
+    }
+
+    /// Step forward one undo point, returning the cursor position to restore.
+    pub fn redo(&mut self, cursor: usize) -> Option<usize> {
+        let next = self.history.redo.pop()?;
+        self.history.undo.push(self.here(cursor));
+        self.rope = next.rope;
+        self.modified = next.modified;
+        Some(next.cursor.min(self.rope.len_chars()))
+    }
+
+    /// The buffer as it stands, as a snapshot.
+    fn here(&self, cursor: usize) -> EditSnapshot {
+        EditSnapshot {
+            rope: self.rope.clone(),
+            cursor,
+            modified: self.modified,
+        }
     }
 }
 

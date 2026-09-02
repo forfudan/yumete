@@ -507,7 +507,7 @@ mod tests {
         assert_eq!(rows.len(), 4); // two rows, "abc", and the trailing empty line
         assert_eq!(rows[0].start, 0);
         assert_eq!(rows[1].start, 4);
-        assert!(rows[1].starts_line() == false);
+        assert!(!rows[1].starts_line());
         assert_eq!(rows[2].line, 1);
         assert!(rows[2].starts_line());
     }
