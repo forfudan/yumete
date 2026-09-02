@@ -1742,15 +1742,20 @@ impl Editor {
     /// once arguments have started, or once Tab has already picked something —
     /// at that point the line *is* the completion.
     pub fn prompt_ghost(&self) -> String {
-        if self.completion.is_some() || self.command_line.contains(char::is_whitespace) {
+        if self.completion.is_some() {
             return String::new();
         }
-        let typed = &self.command_line;
+        // The guess completes the *word* being typed, so a line with arguments
+        // on it can still be guessed at: `:yume sch` guesses `eme`.
+        let (start, _) = command::complete_at(&self.command_line);
+        let typed = &self.command_line[start.min(self.command_line.len())..];
         if typed.is_empty() {
             return String::new();
         }
         let whole = match self.mode {
-            Mode::Command => command::complete(typed).first().map(|e| e.name.to_string()),
+            Mode::Command => command::complete(&self.command_line)
+                .first()
+                .map(|e| e.name.to_string()),
             Mode::Search => Some(self.last_search.clone()),
             _ => None,
         };
@@ -1768,7 +1773,7 @@ impl Editor {
 
     /// The commands to offer for the open command line, and which one Tab has
     /// selected.
-    pub fn command_menu(&self) -> (Vec<&'static command::Entry>, Option<usize>) {
+    pub fn command_menu(&self) -> (Vec<command::Choice>, Option<usize>) {
         match &self.completion {
             Some((prefix, i)) => (command::complete(prefix), Some(*i)),
             None => (command::complete(&self.command_line), None),
@@ -5165,9 +5170,6 @@ impl Editor {
     /// Only the command *word* completes: once there is a space the rest is an
     /// argument, and a file name is not something this list knows about.
     fn cycle_completion(&mut self, step: isize) {
-        if self.command_line.contains(char::is_whitespace) {
-            return;
-        }
         let prefix = match &self.completion {
             Some((prefix, _)) => prefix.clone(),
             None => self.command_line.clone(),
@@ -5184,7 +5186,14 @@ impl Editor {
             None if step > 0 => 0,
             None => n - 1,
         } as usize;
-        self.command_line = matches[next].name.to_string();
+        // Replace the word being completed, not the whole line: `:yume sch`
+        // has to become `:yume scheme`, not `scheme`.
+        let (start, _) = command::complete_at(&prefix);
+        let chosen = matches[next].name;
+        if chosen.is_empty() {
+            return;
+        }
+        self.command_line = format!("{}{chosen}", &prefix[..start.min(prefix.len())]);
         self.completion = Some((prefix, next));
     }
 

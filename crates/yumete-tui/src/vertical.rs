@@ -78,10 +78,15 @@ impl Metrics {
         } = look;
         let head_rows = number_rows(config.editor.line_numbers, total_lines);
         let rows = height.saturating_sub(head_rows) as usize;
-        // A 縱 is as long as the writer said, or as long as the window allows —
-        // `:wrap 40` is a measure in both layouts, and vertically the measure
+        // A 縱 is as long as the writer said, or — by default — as long as the
+        // window allows. The window is the default in both directions and for
+        // the same reason: a fixed count is a decision about the *book*, and
+        // the editor has no business making one on the writer's behalf. `:wrap
+        // 40` is that decision, in either layout, and vertically the measure
         // *is* the length of a column.
-        let want = measure.unwrap_or(config.editor.zong_length);
+        let want = measure
+            .or((config.editor.zong_length > 0).then_some(config.editor.zong_length))
+            .unwrap_or(usize::MAX);
         let zong_len = want.min(rows.saturating_sub(1)).max(1);
         // The writer's own gap wins over the config's, the way the measure does.
         let gap = gap.unwrap_or(config.editor.zong_gap) as u16;
