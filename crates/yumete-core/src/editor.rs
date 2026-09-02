@@ -3924,8 +3924,25 @@ impl Editor {
         self.tatechuyoko = on;
     }
 
-    /// Which ruby dialects are being laid out.
+    /// Which ruby dialects are being laid out **on the page as it is drawn**.
+    ///
+    /// Masked by `:dense`, the same way [`Self::hanging_punctuation`] is and
+    /// for the same reason: packing the page *suppresses* the reading column,
+    /// it does not turn readings off. `:dense` said it dropped the column in
+    /// its own doc comment and in the manual's table, and did not — so a
+    /// packed page kept paying two cells a 縱 for readings it was not drawing.
+    ///
+    /// The configured set — what `:ruby` reports and what `:dense off` gives
+    /// back — is [`Self::ruby_configured`].
     pub fn ruby(&self) -> Dialects {
+        match self.dense {
+            true => Dialects::NONE,
+            false => self.ruby,
+        }
+    }
+
+    /// The dialects the writer asked for, whatever the page is doing with them.
+    pub fn ruby_configured(&self) -> Dialects {
         self.ruby
     }
 
@@ -7396,6 +7413,24 @@ mod tests {
             ed.on_key(Key::Char(c));
         }
         ed.on_key(Key::Enter);
+    }
+
+    #[test]
+    fn a_packed_page_does_not_pay_for_a_reading_column() {
+        // `:dense` says in its own doc comment, and in the manual's table,
+        // that it drops the reading column. It did not: the mask was on the
+        // hung 句讀 and not on the readings, so a packed page still reserved
+        // two cells a 縱 for a column it was not drawing.
+        let mut ed = Editor::new();
+        assert!(!ed.ruby().is_empty(), "readings are laid out by default");
+        ed.set_dense(true);
+        assert!(ed.ruby().is_empty(), "a packed page lays out none");
+        assert!(
+            !ed.ruby_configured().is_empty(),
+            "but nothing was turned off — `:dense off` gives them back"
+        );
+        ed.set_dense(false);
+        assert!(!ed.ruby().is_empty());
     }
 
     #[test]

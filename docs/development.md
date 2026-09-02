@@ -572,20 +572,24 @@ Today exactly one person can install this editor, and the manual's 上手 sectio
 opens by telling a novelist to run a build script. Turn the path dep into a git
 dep and ship the tarballs §5.3 already designs. **high**
 
-### 3 · The vertical page — the reason to choose this editor
+### 3 · The vertical page — the reason to choose this editor — **done**
 
-- **There is no 禁則處理 down the 縱** (×2). `zong::layout` chunks by
-  `div_ceil(zong_len)` with no adjustment, so a 縱 opens with 。 or ends with 「
-  — both of which the *horizontal* wrap already gets right. **high**
-- **Latin words are split mid-word after a 漢字**, against the manual's own
-  example: `一二三四五六Helix七八` at width 16 breaks `Heli|x`. `adjusted_break`
-  only retreats to a space, and in Chinese prose a Latin word follows a 漢字.
-  **high**
-- **A ruby group can be cut in half by a 縱 boundary** — the reading runs down
-  the next column and the base is no longer centred against it. **medium**
-- **`:dense` does not drop the reading column**, though its own doc comment and
-  the manual's table say it does: `hanging_punctuation()` masks with `!dense`,
-  `ruby()` does not. **medium**
+- ~~**There is no 禁則處理 down the 縱** (×2).~~ Done. The fix was not the
+  adjustment but finding somewhere to put it: a 縱 boundary was decided in
+  **five** places, every one of them `index * zong_len`, so any adjustment made
+  in one would have disagreed with the other four about which character the
+  cursor was standing on. `zong_breaks` is now the one place, and the layout,
+  the slot walk, `max_slot`, `char_at` and `position` all read it.
+- ~~**Latin words are split mid-word after a 漢字.**~~ Done: `adjusted_break`
+  retreats to the start of the Latin run when there is no space to retreat to,
+  while at least half the row survives — so a 40-letter token cannot empty the
+  row it is on.
+- ~~**A ruby group can be cut in half by a 縱 boundary.**~~ Done, in the same
+  place: a group moves whole or not at all, and only while the 縱 keeps most of
+  its length.
+- ~~**`:dense` does not drop the reading column.**~~ Done. `ruby()` is now
+  masked by `dense` exactly as `hanging_punctuation()` is, and
+  `ruby_configured()` is what `:ruby` reports and `:dense off` gives back.
 
 ### 4 · Motions — the same gap from three directions (×3)
 
