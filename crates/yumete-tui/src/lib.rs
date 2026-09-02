@@ -640,20 +640,17 @@ fn draw(
 
     // The text body is the one part that differs between the layouts; both
     // report back the cell the cursor landed on, which the status line and the
+    // The detail panel takes its share of the text area first, so everything
+    // below — wrapping, the 縱 that fit, scrolling — follows from the smaller
+    // rectangle without knowing the panel exists.
+    let (text_area, detail) = table::split_detail(editor, text_area);
+
     // candidate panel are positioned from.
     let (cursor_x, cursor_y) = match editor.layout() {
         // A grid is not prose and is not drawn as prose: no wrapping, no
         // markup, one row per line, columns that line up.
         _ if editor.table().is_some() => {
-            // The panel takes the right of the text area, so the grid's own
-            // scrolling follows from the smaller rectangle without knowing
-            // anything about it.
-            let (grid, panel) = table::split_detail(editor, text_area);
-            let caret = table::draw(frame, editor, config, grid, &mut viewport.table);
-            if let Some(panel) = panel {
-                table::draw_detail(frame, editor, config, panel);
-            }
-            caret
+            table::draw(frame, editor, config, text_area, &mut viewport.table)
         }
         WritingLayout::Horizontal => {
             draw_horizontal(frame, editor, config, text_area, &mut viewport.top)
@@ -662,6 +659,10 @@ fn draw(
             vertical::draw(frame, editor, config, text_area, &mut viewport.zong)
         }
     };
+
+    if let Some(panel) = detail {
+        table::draw_detail(frame, editor, config, panel);
+    }
 
     draw_status(frame, editor, config, ime, status_area);
     draw_command_menu(frame, editor, area, status_area);

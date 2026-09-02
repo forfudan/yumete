@@ -314,6 +314,10 @@ pub struct Editor {
     /// Whether the detail panel is wanted. It only appears where there is
     /// something to say, so this is "show it when there is", not "show it".
     show_detail: bool,
+    /// Where Enter came from when it followed a footnote, and the line it
+    /// landed on — so the same key comes back, and only from there.
+    note_return: Option<usize>,
+    note_return_from: Option<usize>,
     /// Which line holds the row with each key, and what the document looked
     /// like when that was worked out.
     ///
@@ -498,6 +502,8 @@ impl Editor {
             clipboard_read: None,
             table: None,
             show_detail: true,
+            note_return: None,
+            note_return_from: None,
             key_index: RefCell::new(None),
             chaifen: false,
             ruby_target: None,
@@ -1979,6 +1985,137 @@ impl Editor {
     /// answer with theirs. The editor works out *what* to say; the front end
     /// decides where to put it.
     pub fn detail(&self) -> Option<Detail> {
+        match self.table.is_some() {
+            true => self.row_detail(),
+            false => self.note_detail(),
+        }
+    }
+
+    /// The note the cursor is standing on — Feature #119.
+    ///
+    /// The panel that answers "what is this?" already exists for a table row;
+    /// a footnote reference is the same question about a different thing. In
+    /// 所見即所得 a `[^3]` is one small mark and the note itself is a hundred
+    /// lines away, so reading it means losing your place — which for a
+    /// footnote, whose whole purpose is to be read *beside* the sentence, is
+    /// the wrong way round.
+    ///
+    /// A comment is the other case: `%%…%%` is dimmed but still on the page,
+    /// and what the panel adds is room to read a long one without it pushing
+    /// the paragraph about.
+    fn note_detail(&self) -> Option<Detail> {
+        if self.current_buffer().syntax() != crate::syntax::Syntax::Markdown {
+            return None;
+        }
+        let rope = self.current_buffer().rope();
+        let line = self.cursor_line();
+        let within = self.cursor - rope.line_to_char(line);
+        // Which block the line is in decides whether its `[^1]` is a footnote
+        // at all — inside a fence it is four characters of code.
+        let block = self
+            .blocks_through(line)
+            .get(line)
+            .copied()
+            .unwrap_or_default();
+        // The construct under the cursor, not the run: standing on the `%%` of
+        // a comment is standing on the comment, and a reader who has just
+        // moved onto its opening mark expects the panel then, not one step
+        // later.
+        let runs = self.markup_line_in(line, block);
+        let construct = runs
+            .iter()
+            .find(|s| within >= s.start && within < s.end)?
+            .construct;
+        let span = runs.iter().find(|s| {
+            s.construct == construct
+                && matches!(
+                    s.kind,
+                    crate::markdown::Kind::Footnote | crate::markdown::Kind::Comment
+                )
+        })?;
+        let text: String = rope
+            .line(line)
+            .chars()
+            .skip(span.start)
+            .take(span.end - span.start)
+            .collect();
+        match span.kind {
+            crate::markdown::Kind::Comment => Some(Detail {
+                title: "批注".to_string(),
+                here: String::new(),
+                rows: vec![(String::new(), text.trim_matches('%').trim().to_string())],
+                links: Vec::new(),
+            }),
+            _ => {
+                let tag = text.trim_end_matches(':');
+                let (at, body) = self.footnote_body(tag)?;
+                Some(Detail {
+                    // A definition names itself; standing on one, the panel is
+                    // showing you where it is *used* is not yet a thing it can
+                    // do, so it simply reads the note back.
+                    title: tag.to_string(),
+                    here: String::new(),
+                    rows: vec![(String::new(), body)],
+                    links: vec![('↩', Some(at))],
+                })
+            }
+        }
+    }
+
+    /// Follow a footnote to where it is written, or come back from it.
+    ///
+    /// One key, both directions: from a reference it goes to the note, and
+    /// from the note it goes back to the sentence you left. A note read at the
+    /// foot of a hundred-page file is no use if finding your place again is a
+    /// search.
+    fn follow_note(&mut self) {
+        // Coming back takes priority: standing on the note you were just sent
+        // to, Enter can only sensibly mean "back".
+        if let Some(back) = self.note_return.take() {
+            let line = self.cursor_line();
+            if Some(line) == self.note_return_from {
+                self.set_cursor(back.min(self.current_buffer().rope().len_chars()));
+                self.note_return_from = None;
+                self.status = "回到正文".to_string();
+                return;
+            }
+            // Somewhere else entirely — the way back has gone stale.
+            self.note_return_from = None;
+        }
+        let Some(detail) = self.note_detail() else {
+            self.status = "這裏沒有註".to_string();
+            return;
+        };
+        let Some(&(_, Some(at))) = detail.links.first() else {
+            self.status = "這條註沒有寫在別處".to_string();
+            return;
+        };
+        if at == self.cursor_line() {
+            self.status = "註就在這一行".to_string();
+            return;
+        }
+        self.note_return = Some(self.cursor);
+        self.note_return_from = Some(at);
+        self.goto_line(at + 1);
+        self.status = "Enter 回到正文".to_string();
+    }
+
+    /// Where a footnote is defined and what it says.
+    fn footnote_body(&self, tag: &str) -> Option<(usize, String)> {
+        let rope = self.current_buffer().rope();
+        let opener = format!("{tag}:");
+        for line in 0..rope.len_lines() {
+            let text = rope.line(line).to_string();
+            let trimmed = text.trim_start();
+            if let Some(rest) = trimmed.strip_prefix(&opener) {
+                return Some((line, rest.trim().to_string()));
+            }
+        }
+        None
+    }
+
+    /// What a table row is, field by field.
+    fn row_detail(&self) -> Option<Detail> {
         let view = self.table.as_ref()?;
         let (line, cell) = self.cell_position()?;
         // The header names the columns; it is not a row and has no fields.
@@ -2736,6 +2873,15 @@ impl Editor {
         }
         let operator_count = self.count;
         let count = self.take_count();
+
+        // A footnote reference is a link, and Enter follows a link — the same
+        // key that follows a table cell to the row it names. Enter again comes
+        // back, because a note read at the foot of the file is no use if
+        // finding your sentence again is a search.
+        if self.table.is_none() && key == Key::Enter {
+            self.follow_note();
+            return;
+        }
 
         // Read as a grid, `hjkl` walk cells. Before the vertical branch because
         // a table is read across, whatever the file's writing layout is.
@@ -6129,6 +6275,77 @@ mod tests {
         assert_eq!(ed.current_buffer().text(), before, "and undoes itself");
 
         std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn a_footnote_reads_beside_the_sentence_it_belongs_to() {
+        let mut ed = typed(
+            "那年冬天[^1]，山下起了大雪。\n\n[^1]: 據縣志，那是丁丑年。\n",
+        );
+        ed.set_markup_visible(true);
+        // On the reference: the panel is the note itself, which is the whole
+        // point of a footnote — it is meant to be read beside the sentence.
+        ed.goto_line(1);
+        for _ in 0..4 {
+            ed.on_key(Key::Char('l'));
+        }
+        let d = ed.detail().expect("standing on the reference");
+        assert_eq!(d.title, "[^1]");
+        assert_eq!(d.rows[0].1, "據縣志，那是丁丑年。");
+        assert_eq!(d.links, vec![('↩', Some(2))], "and where it is written");
+
+        // A step off it and the panel is gone: it answers about *here*.
+        ed.on_key(Key::Char('h'));
+        ed.on_key(Key::Char('h'));
+        ed.on_key(Key::Char('h'));
+        ed.on_key(Key::Char('h'));
+        ed.on_key(Key::Char('h'));
+        assert!(ed.detail().is_none());
+
+        // A comment is the other kind of note: still on the page, but a long
+        // one is easier read in a panel than in the middle of a paragraph.
+        let mut ed = typed("那年冬天%%這裏要改，冬天太早了%%。\n");
+        ed.set_markup_visible(true);
+        ed.goto_line(1);
+        for _ in 0..5 {
+            ed.on_key(Key::Char('l'));
+        }
+        let d = ed.detail().expect("standing on the comment");
+        assert_eq!(d.title, "批注");
+        assert_eq!(d.rows[0].1, "這裏要改，冬天太早了");
+
+        // Enter goes to the note and Enter comes back — one key, because from
+        // the note there is only one place you can mean.
+        let mut ed = typed(
+            "那年冬天[^1]，山下起了大雪。\n\n[^1]: 據縣志，那是丁丑年。\n",
+        );
+        ed.set_markup_visible(true);
+        ed.goto_line(1);
+        for _ in 0..4 {
+            ed.on_key(Key::Char('l'));
+        }
+        let was = ed.cursor();
+        ed.on_key(Key::Enter);
+        assert_eq!(ed.cursor_line(), 2, "at the note");
+        ed.on_key(Key::Enter);
+        assert_eq!(ed.cursor(), was, "and back to the exact character");
+
+        // The way back goes stale rather than firing from somewhere else.
+        ed.on_key(Key::Enter);
+        assert_eq!(ed.cursor_line(), 2);
+        ed.goto_line(1);
+        ed.on_key(Key::Enter);
+        assert_eq!(ed.cursor_line(), 0, "no note under the cursor, so nothing moves");
+        assert!(ed.status().contains("沒有註"), "{}", ed.status());
+
+        // A footnote nobody defined has nothing to show, and does not pretend.
+        let mut ed = typed("那年冬天[^9]。\n");
+        ed.set_markup_visible(true);
+        ed.goto_line(1);
+        for _ in 0..4 {
+            ed.on_key(Key::Char('l'));
+        }
+        assert!(ed.detail().is_none());
     }
 
     #[test]
