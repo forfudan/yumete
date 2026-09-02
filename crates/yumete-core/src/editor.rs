@@ -81,6 +81,13 @@ enum FindKind {
     BackwardTill,
 }
 
+/// How often a recovery copy is written while typing (Feature #79).
+///
+/// Five seconds is the most work a crash can cost, and short enough that the
+/// writer never thinks about it; the write is atomic and off the rope's own
+/// chunks, so it costs nothing at prose speed.
+const SWAP_INTERVAL: std::time::Duration = std::time::Duration::from_secs(5);
+
 /// The editor: a non-empty list of open buffers and the index of the active one.
 pub struct Editor {
     buffers: Vec<Buffer>,
@@ -102,7 +109,7 @@ pub struct Editor {
     /// The count typed before a pending operator, kept because the count is
     /// consumed by the key that *opens* the operator — `10g` has already spent
     /// the 10 by the time the second `g` arrives.
-    pending_count: Option<usize>,
+    operator_count: Option<usize>,
     /// Whether motions extend the selection (Helix select mode, toggled by `v`).
     extend: bool,
     /// The unnamed register, and the named ones (Helix `"a`).
@@ -184,6 +191,11 @@ pub struct Editor {
     zong_motion: bool,
     /// Whether long paragraphs soft-wrap in horizontal layout (Feature #77).
     soft_wrap: bool,
+    /// Whether a recovery copy is kept beside each document (Feature #79).
+    autosave: bool,
+    /// When the recovery copies were last written, so typing does not write a
+    /// file on every keystroke.
+    last_swap: Option<std::time::Instant>,
     /// The text width the renderer is wrapping at, in cells. `None` until the
     /// terminal size is known; motion falls back to logical lines then.
     wrap_width: Option<usize>,
@@ -254,7 +266,7 @@ impl Editor {
             status: String::new(),
             anchor: 0,
             pending: Pending::None,
-            pending_count: None,
+            operator_count: None,
             extend: false,
             register: String::new(),
             registers: HashMap::new(),
@@ -288,6 +300,8 @@ impl Editor {
             zong_motion: false,
             soft_wrap: true,
             wrap_width: None,
+            autosave: true,
+            last_swap: None,
         }
     }
 
@@ -472,6 +486,7 @@ impl Editor {
                 // safe now", so it is held to the same check `:q` is.
                 self.quit(false)
             }
+            Command::Recover { discard } => self.recover(discard),
             Command::GotoLine(n) => {
                 self.goto_line(n);
                 Ok(CommandOutcome::Continue)
@@ -777,6 +792,86 @@ impl Editor {
         }
     }
 
+    // ---- Crash recovery (Feature #79) --------------------------------------
+
+    /// Whether a recovery copy is kept beside each document.
+    pub fn autosave(&self) -> bool {
+        self.autosave
+    }
+
+    /// Set whether recovery copies are kept.
+    pub fn set_autosave(&mut self, on: bool) {
+        self.autosave = on;
+    }
+
+    /// Write a recovery copy of every modified buffer, at most once every
+    /// [`SWAP_INTERVAL`].
+    ///
+    /// Called by the front end after each key. Tied to keystrokes rather than
+    /// to a clock on purpose: nothing is being written while nothing is being
+    /// typed, so there is nothing to insure.
+    pub fn autosave_tick(&mut self) {
+        if !self.autosave {
+            return;
+        }
+        let now = std::time::Instant::now();
+        if let Some(last) = self.last_swap {
+            if now.duration_since(last) < SWAP_INTERVAL {
+                return;
+            }
+        }
+        self.last_swap = Some(now);
+        for buffer in &self.buffers {
+            if buffer.is_modified() {
+                let _ = buffer.write_swap();
+            }
+        }
+    }
+
+    /// Say so, on opening a file, when a newer draft is waiting.
+    ///
+    /// The draft is *not* loaded on its own: silently showing text that is not
+    /// what is on disk is how a writer ends up unsure which version they are
+    /// reading. `:recover` loads it; `:recover!` throws it away.
+    pub fn announce_recovery(&mut self) {
+        let waiting: Vec<String> = self
+            .buffers
+            .iter()
+            .filter(|b| b.recovered_draft().is_some())
+            .map(|b| b.display_name())
+            .collect();
+        if waiting.is_empty() {
+            return;
+        }
+        self.status = format!(
+            "a newer draft was recovered for {} — :recover to load it, :recover! to drop it",
+            waiting.join(", ")
+        );
+    }
+
+    /// Load this buffer's recovery draft, or throw it away (`:recover[!]`).
+    fn recover(&mut self, discard: bool) -> Result<CommandOutcome, EditorError> {
+        let Some(draft) = self.current_buffer().recovered_draft() else {
+            self.status = "no recovered draft for this file".to_string();
+            return Ok(CommandOutcome::Continue);
+        };
+        if discard {
+            self.current_buffer().clear_swap();
+            self.status = "recovered draft thrown away".to_string();
+            return Ok(CommandOutcome::Continue);
+        }
+        // An ordinary, undoable edit: `u` puts the file on disk back, so
+        // recovering is a decision the writer can take back.
+        self.snapshot();
+        let len = self.current_buffer().char_count();
+        let buffer = self.current_buffer_mut();
+        buffer.remove(0..len);
+        buffer.insert(0, &draft);
+        self.clamp_cursor();
+        self.status = "recovered draft loaded — :w to keep it, u to go back".to_string();
+        Ok(CommandOutcome::Continue)
+    }
+
     // ---- Soft wrap (Feature #77) ------------------------------------------
 
     /// Whether long paragraphs wrap onto further screen rows.
@@ -941,7 +1036,7 @@ impl Editor {
             Pending::Goto => {
                 self.pending = Pending::None;
                 self.handle_goto(key);
-                self.pending_count = None;
+                self.operator_count = None;
                 return;
             }
             Pending::Find(kind) => {
@@ -1038,7 +1133,7 @@ impl Editor {
                 }
             }
         }
-        let pending_count = self.count;
+        let operator_count = self.count;
         let count = self.take_count();
 
         // Laid out vertically, the arrow keys and `hjkl` keep their *screen*
@@ -1124,7 +1219,7 @@ impl Editor {
             }),
             Key::Char('g') => {
                 self.pending = Pending::Goto;
-                self.pending_count = pending_count;
+                self.operator_count = operator_count;
             }
             // In-line character search (Helix `f`/`t`/`F`/`T`).
             Key::Char('f') => self.pending = Pending::Find(FindKind::ForwardTo),
@@ -1254,7 +1349,7 @@ impl Editor {
         // `10gg` is "goto line 10", the way Helix reads a count before `gg`;
         // a bare `gg` is the same thing with the count 1.
         if key == Key::Char('g') {
-            if let Some(n) = self.pending_count.take() {
+            if let Some(n) = self.operator_count.take() {
                 return self.goto_line(n);
             }
         }
@@ -1449,6 +1544,7 @@ impl Editor {
     /// would throw away work the editor never warned about.
     fn quit(&mut self, force: bool) -> Result<CommandOutcome, EditorError> {
         if force {
+            self.drop_recovery_copies();
             return Ok(CommandOutcome::Quit);
         }
         match self.buffers.iter().position(|b| b.is_modified()) {
@@ -1458,7 +1554,21 @@ impl Editor {
                 self.show_buffer(i);
                 Err(EditorError::UnsavedChanges)
             }
-            None => Ok(CommandOutcome::Quit),
+            None => {
+                self.drop_recovery_copies();
+                Ok(CommandOutcome::Quit)
+            }
+        }
+    }
+
+    /// Remove every recovery copy on the way out.
+    ///
+    /// A clean quit has nothing to recover, and `:q!` is the writer saying they
+    /// do not want these changes — offering them back on the next open would
+    /// undo that decision for them.
+    fn drop_recovery_copies(&self) {
+        for buffer in &self.buffers {
+            buffer.clear_swap();
         }
     }
 
@@ -3837,6 +3947,64 @@ mod tests {
         // U redoes it (Helix redo).
         ed.on_key(Key::Char('U'));
         assert_eq!(ed.current_buffer().text(), "hello");
+    }
+
+    #[test]
+    fn recover_loads_the_draft_and_undo_takes_it_back() {
+        let dir = std::env::temp_dir().join(format!("yumete-rec-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("chapter.md");
+        std::fs::write(&path, "第一稿\n").unwrap();
+        std::fs::write(dir.join(".chapter.md.yumete"), "第一稿，寫了更多\n").unwrap();
+
+        let mut ed = Editor::new();
+        ed.execute(&format!(":open {}", path.display())).unwrap();
+        // The draft is not loaded on its own — the writer is told about it.
+        assert_eq!(ed.current_buffer().text(), "第一稿\n");
+        ed.announce_recovery();
+        assert!(ed.status().contains(":recover"), "{}", ed.status());
+
+        ed.execute(":recover").unwrap();
+        assert_eq!(ed.current_buffer().text(), "第一稿，寫了更多\n");
+        // Recovering is an ordinary edit, so it can be taken back.
+        ed.on_key(Key::Char('u'));
+        assert_eq!(ed.current_buffer().text(), "第一稿\n");
+
+        // `:recover!` throws the copy away, and then there is nothing to load.
+        ed.execute(":recover!").unwrap();
+        assert!(!dir.join(".chapter.md.yumete").exists());
+        ed.execute(":recover").unwrap();
+        assert!(
+            ed.status().contains("no recovered draft"),
+            "{}",
+            ed.status()
+        );
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn quitting_takes_the_recovery_copies_with_it() {
+        let dir = std::env::temp_dir().join(format!("yumete-recq-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("draft.md");
+        std::fs::write(&path, "初稿\n").unwrap();
+
+        let mut ed = Editor::new();
+        ed.execute(&format!(":open {}", path.display())).unwrap();
+        ed.on_key(Key::Char('i'));
+        type_keys(&mut ed, "改");
+        ed.on_key(Key::Esc);
+        ed.current_buffer().write_swap().unwrap();
+        let swap = dir.join(".draft.md.yumete");
+        assert!(swap.exists());
+
+        // `:q!` is the writer discarding these changes; offering them back on
+        // the next open would undo that decision for them.
+        assert_eq!(ed.execute(":q!").unwrap(), CommandOutcome::Quit);
+        assert!(!swap.exists());
+
+        std::fs::remove_dir_all(&dir).ok();
     }
 
     #[test]

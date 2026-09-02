@@ -138,6 +138,66 @@ impl Buffer {
         self.modified = true;
     }
 
+    // ---- Crash recovery (Feature #79) -------------------------------------
+
+    /// Where this buffer's recovery copy lives: a dotfile beside the document,
+    /// `chapter.md` → `.chapter.md.yumete`.
+    ///
+    /// Beside the document on purpose. A novel is written over weeks on one
+    /// directory; a recovery copy filed away under `~/.local/state` is one the
+    /// writer will never find, and one that goes stale when the document moves.
+    /// An unnamed scratch buffer has nowhere to put one, and gets none.
+    pub fn swap_path(&self) -> Option<PathBuf> {
+        let path = self.path.as_ref()?;
+        let name = path.file_name()?.to_string_lossy();
+        let dir = match path.parent() {
+            Some(p) if !p.as_os_str().is_empty() => p.to_path_buf(),
+            _ => PathBuf::from("."),
+        };
+        Some(dir.join(format!(".{name}.yumete")))
+    }
+
+    /// Write the recovery copy, if this buffer can have one.
+    ///
+    /// Written atomically like a save, so a crash *during* the recovery write
+    /// cannot destroy the recovery copy the last one left.
+    pub fn write_swap(&self) -> io::Result<()> {
+        match self.swap_path() {
+            Some(swap) => self.write_atomically(&swap),
+            None => Ok(()),
+        }
+    }
+
+    /// Remove the recovery copy — the work it was insuring against is on disk.
+    pub fn clear_swap(&self) {
+        if let Some(swap) = self.swap_path() {
+            let _ = fs::remove_file(swap);
+        }
+    }
+
+    /// The recovered draft waiting for this buffer, if there is one worth
+    /// offering.
+    ///
+    /// Only when the recovery copy is *newer* than the document and differs
+    /// from it: a copy older than the file is the residue of a session that
+    /// ended properly, and one identical to the file has nothing to recover.
+    pub fn recovered_draft(&self) -> Option<String> {
+        let swap = self.swap_path()?;
+        let draft = fs::read_to_string(&swap).ok()?;
+        if self.rope == draft {
+            return None;
+        }
+        let newer = match (&self.path, fs::metadata(&swap).and_then(|m| m.modified())) {
+            (Some(path), Ok(swapped)) => match fs::metadata(path).and_then(|m| m.modified()) {
+                Ok(saved) => swapped > saved,
+                // No file on disk at all: everything in the copy is unrecovered.
+                Err(_) => true,
+            },
+            _ => false,
+        };
+        newer.then_some(draft)
+    }
+
     /// Save the buffer to its bound file.
     ///
     /// The write is atomic: the contents are written to a temporary file in the
@@ -151,11 +211,16 @@ impl Buffer {
             .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "buffer has no file name"))?;
         self.write_atomically(&path)?;
         self.modified = false;
+        // The document *is* the recovery copy now.
+        self.clear_swap();
         Ok(())
     }
 
     /// Bind the buffer to `path` and save it (the `:w <path>` / save-as case).
     pub fn save_as<P: Into<PathBuf>>(&mut self, path: P) -> io::Result<()> {
+        // The recovery copy belongs to the old name; leaving it behind would
+        // offer this text back the next time that file is opened.
+        self.clear_swap();
         self.path = Some(path.into());
         self.save()
     }
@@ -334,6 +399,55 @@ mod tests {
         assert_eq!(fs::read_to_string(&path).unwrap(), "草稿\n");
 
         fs::remove_file(&path).ok();
+    }
+
+    #[test]
+    fn a_recovery_copy_survives_a_crash_and_is_cleared_by_a_save() {
+        let dir = std::env::temp_dir().join(format!("yumete-swap-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("chapter.md");
+        fs::write(&path, "第一稿\n").unwrap();
+
+        let mut b = Buffer::open(&path).unwrap();
+        b.insert(0, "改了：");
+        b.write_swap().unwrap();
+        let swap = b.swap_path().unwrap();
+        assert_eq!(swap.file_name().unwrap(), ".chapter.md.yumete");
+        assert!(swap.exists());
+
+        // A fresh session over the same file finds the newer draft waiting.
+        let reopened = Buffer::open(&path).unwrap();
+        assert_eq!(
+            reopened.recovered_draft().as_deref(),
+            Some("改了：第一稿\n")
+        );
+
+        // Saving makes the document the draft, so nothing is left to recover.
+        b.save().unwrap();
+        assert!(!swap.exists());
+        assert!(Buffer::open(&path).unwrap().recovered_draft().is_none());
+
+        fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn a_stale_recovery_copy_is_not_offered() {
+        let dir = std::env::temp_dir().join(format!("yumete-stale-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("note.txt");
+
+        // A copy written *before* the document is the residue of a session that
+        // ended properly; the file on disk is the newer text.
+        fs::write(dir.join(".note.txt.yumete"), "舊的\n").unwrap();
+        std::thread::sleep(std::time::Duration::from_millis(20));
+        fs::write(&path, "新的\n").unwrap();
+        assert!(Buffer::open(&path).unwrap().recovered_draft().is_none());
+
+        // An unnamed buffer has nowhere to keep one, and asks for nothing.
+        assert!(Buffer::scratch().swap_path().is_none());
+        assert!(Buffer::scratch().write_swap().is_ok());
+
+        fs::remove_dir_all(&dir).ok();
     }
 
     #[test]

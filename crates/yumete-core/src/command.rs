@@ -31,6 +31,11 @@ pub enum Command {
     Count,
     /// `:<n>` or `:goto <n>` (alias `:g`) — put the cursor on line `n`.
     GotoLine(usize),
+    /// `:recover` — load the crash-recovery draft into the buffer;
+    /// `:recover!` — throw it away instead (Feature #79).
+    Recover {
+        discard: bool,
+    },
     /// `:s/pattern/replacement/[g]` (optionally `:%s/...` for the whole file) —
     /// substitute text. `global` replaces every match on a line; `whole_file`
     /// applies to every line rather than just the cursor's line.
@@ -166,6 +171,8 @@ pub fn parse(input: &str) -> Result<Command, CommandError> {
             .parse::<usize>()
             .map(Command::GotoLine)
             .map_err(|_| CommandError::MissingArgument("goto")),
+        "recover" => Ok(Command::Recover { discard: false }),
+        "recover!" => Ok(Command::Recover { discard: true }),
         "quit" | "q" => Ok(Command::Quit { force: false }),
         "quit!" | "q!" => Ok(Command::Quit { force: true }),
         "undo" | "u" => Ok(Command::Undo),
@@ -265,6 +272,11 @@ pub const COMMANDS: &[Entry] = &[
         name: "wq",
         alias: Some("x"),
         help: "save, then leave",
+    },
+    Entry {
+        name: "recover",
+        alias: None,
+        help: "load the recovery draft (`!` throws it away)",
     },
     Entry {
         name: "goto",
@@ -596,6 +608,7 @@ mod tests {
             "wq",
             "count",
             "goto",
+            "recover",
             "chaifen",
             "hanging",
             "wrap",

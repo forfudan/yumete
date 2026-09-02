@@ -74,6 +74,10 @@ pub struct EditorConfig {
     /// screen row (Feature #77). On by default: a Chinese paragraph is one long
     /// line, and unwrapped most of it cannot be seen at all.
     pub soft_wrap: bool,
+    /// Whether a recovery copy is kept beside each document while it has
+    /// unsaved changes (Feature #79). On by default, and removed on save and on
+    /// quit, so in an ordinary session it is never seen.
+    pub autosave: bool,
 }
 
 impl Default for EditorConfig {
@@ -93,6 +97,7 @@ impl Default for EditorConfig {
             tatechuyoko: false,
             hanging_punctuation: false,
             soft_wrap: true,
+            autosave: true,
         }
     }
 }
@@ -331,6 +336,7 @@ struct RawEditor {
     tatechuyoko: Option<bool>,
     hanging_punctuation: Option<bool>,
     soft_wrap: Option<bool>,
+    autosave: Option<bool>,
 }
 
 #[derive(Deserialize, Default)]
@@ -389,6 +395,9 @@ impl RawConfig {
         }
         if other.editor.soft_wrap.is_some() {
             self.editor.soft_wrap = other.editor.soft_wrap;
+        }
+        if other.editor.autosave.is_some() {
+            self.editor.autosave = other.editor.autosave;
         }
         if other.theme.selection.is_some() {
             self.theme.selection = other.theme.selection;
@@ -465,6 +474,9 @@ impl RawConfig {
         }
         if let Some(on) = self.editor.soft_wrap {
             config.editor.soft_wrap = on;
+        }
+        if let Some(on) = self.editor.autosave {
+            config.editor.autosave = on;
         }
         if let Some(hex) = self.theme.selection {
             if let Some(rgb) = parse_hex(&hex) {
