@@ -14,6 +14,7 @@ use std::hash::{Hash, Hasher};
 use std::io;
 use std::path::Path;
 
+use regex::Regex;
 use ropey::Rope;
 use yumete_cjk::{CategorySegmenter, Segmenter};
 
@@ -202,6 +203,9 @@ pub struct Editor {
     /// Whether the writer has already been told that recovery copies cannot be
     /// written, so the status line says it once rather than every few seconds.
     swap_warned: bool,
+    /// The last pattern, compiled. `n` and `N` ask for the same one over and
+    /// over, and compiling a regex costs more than running it once.
+    compiled: RefCell<Option<(String, Regex)>>,
     /// The text width the renderer is wrapping at, in cells. `None` until the
     /// terminal size is known; motion falls back to logical lines then.
     wrap_width: Option<usize>,
@@ -310,6 +314,7 @@ impl Editor {
             autosave: true,
             last_swap: None,
             swap_warned: false,
+            compiled: RefCell::new(None),
         }
     }
 
@@ -1748,12 +1753,49 @@ impl Editor {
 
     // ---- Search (Feature #14) ---------------------------------------------
 
+    /// Compile a search or substitution pattern, remembering the last one.
+    ///
+    /// Patterns are **regular expressions**, as they are in vi and Helix: half
+    /// the work of revising a manuscript is a pattern rather than a string —
+    /// 「行首的『他說』」, 「連續兩個以上的驚嘆號」, 「每個。後面斷行」. The
+    /// cost is that `.` `*` `(` mean something; `\.` is a full stop.
+    ///
+    /// `n` and `N` ask for the same pattern over and over, so the compiled form
+    /// is kept until the pattern changes.
+    fn compile(&self, pattern: &str) -> Result<Regex, String> {
+        if let Some((cached, re)) = self.compiled.borrow().as_ref() {
+            if cached == pattern {
+                return Ok(re.clone());
+            }
+        }
+        match Regex::new(pattern) {
+            Ok(re) => {
+                *self.compiled.borrow_mut() = Some((pattern.to_string(), re.clone()));
+                Ok(re)
+            }
+            // The writer needs to know *which* part of their pattern is wrong,
+            // and regex's own message says so; its multi-line form does not fit
+            // a status line.
+            Err(err) => Err(format!(
+                "bad pattern: {}",
+                err.to_string().lines().last().unwrap_or("").trim()
+            )),
+        }
+    }
+
     /// Search for [`Self::last_search`] in `forward` direction and move there.
     fn repeat_search(&mut self, forward: bool) {
         if self.last_search.is_empty() {
             return;
         }
         let pattern = self.last_search.clone();
+        let re = match self.compile(&pattern) {
+            Ok(re) => re,
+            Err(message) => {
+                self.status = message;
+                return;
+            }
+        };
         let rope = self.current_buffer().rope();
         let len = rope.len_chars();
 
@@ -1762,9 +1804,9 @@ impl Editor {
         // break, and materialising the document for every `n` costs an 800 KB
         // copy on a novel.
         let found = if forward {
-            search_forward(rope, &pattern, (self.cursor + 1).min(len))
+            search_forward(rope, &re, (self.cursor + 1).min(len))
         } else {
-            search_backward(rope, &pattern, self.cursor)
+            search_backward(rope, &re, self.cursor)
         };
 
         match found {
@@ -1772,10 +1814,10 @@ impl Editor {
             // that is the first thing the manual says about this editor — and a
             // search that only moved the cursor made `/` the one motion after
             // which `d` did something other than what the screen showed.
-            Some(pos) => {
+            Some((pos, end)) => {
                 // On the match's last grapheme, not one past it — the selection
                 // covers the cursor's own grapheme.
-                let end = (pos + pattern.chars().count()).min(len);
+                let end = end.min(len);
                 let head = motion::prev_grapheme(rope, end).max(pos);
                 self.anchor = pos;
                 self.cursor = head;
@@ -1795,6 +1837,14 @@ impl Editor {
             self.status = "empty pattern".to_string();
             return;
         }
+        let re = match self.compile(pattern) {
+            Ok(re) => re,
+            Err(message) => {
+                self.status = message;
+                return;
+            }
+        };
+        let replacement = unescape_replacement(replacement);
 
         let text = self.current_buffer().text();
         // Which lines `:s` touches: the whole file, or the ones the *selection*
@@ -1814,7 +1864,7 @@ impl Editor {
 
         for (idx, line) in text.split_inclusive('\n').enumerate() {
             if whole_file || (idx >= first && idx <= last) {
-                let (new_line, n) = replace_in_line(line, pattern, replacement, global);
+                let (new_line, n) = replace_in_line(line, &re, &replacement, global);
                 count += n;
                 rebuilt.push_str(&new_line);
             } else {
@@ -2019,8 +2069,11 @@ impl Editor {
             self.status = "nothing selected".to_string();
             return;
         }
-        self.last_search = self.current_buffer().rope().slice(start..end).to_string();
-        self.status = format!("search: {}", self.last_search);
+        // Escaped: `*` searches for the text that is selected, and a selection
+        // is text, not a pattern — 「（」 must not open a group.
+        let text = self.current_buffer().rope().slice(start..end).to_string();
+        self.last_search = regex::escape(&text);
+        self.status = format!("search: {text}");
     }
 
     /// Indent (`>`) or unindent (`<`) every line the selection touches.
@@ -2801,15 +2854,56 @@ impl Default for Editor {
 /// Replace occurrences of `pattern` in a single line (which may include a
 /// trailing newline). Returns the new line text and the number of replacements.
 /// With `global`, every match is replaced; otherwise only the first.
-fn replace_in_line(line: &str, pattern: &str, replacement: &str, global: bool) -> (String, usize) {
-    if global {
-        let count = line.matches(pattern).count();
-        (line.replace(pattern, replacement), count)
-    } else if line.contains(pattern) {
-        (line.replacen(pattern, replacement, 1), 1)
+fn replace_in_line(
+    line: &str,
+    pattern: &Regex,
+    replacement: &str,
+    global: bool,
+) -> (String, usize) {
+    let count = if global {
+        pattern.find_iter(line).count()
     } else {
-        (line.to_string(), 0)
+        usize::from(pattern.is_match(line))
+    };
+    if count == 0 {
+        return (line.to_string(), 0);
     }
+    let limit = if global { 0 } else { 1 };
+    (
+        pattern.replacen(line, limit, replacement).into_owned(),
+        count,
+    )
+}
+
+/// A replacement string with its backslash escapes resolved.
+///
+/// `\n` and `\t` are what a writer reaches for — 「每個。後面斷行」 is
+/// `:%s/。/。\n/g` — and the regex crate leaves them alone, because to it a
+/// replacement is a template of `$1` references, not a pattern. `$1` still
+/// means the first capture; `$$` is a literal dollar.
+fn unescape_replacement(replacement: &str) -> String {
+    let mut out = String::with_capacity(replacement.len());
+    let mut chars = replacement.chars();
+    while let Some(c) = chars.next() {
+        if c != '\\' {
+            out.push(c);
+            continue;
+        }
+        match chars.next() {
+            Some('n') => out.push('\n'),
+            Some('t') => out.push('\t'),
+            Some('r') => out.push('\r'),
+            Some('\\') => out.push('\\'),
+            // An unknown escape keeps both characters, so a stray backslash in
+            // the text being written survives rather than vanishing.
+            Some(other) => {
+                out.push('\\');
+                out.push(other);
+            }
+            None => out.push('\\'),
+        }
+    }
+    out
 }
 
 /// The first occurrence of `pattern` at or after char index `from`, wrapping
@@ -2820,7 +2914,7 @@ fn replace_in_line(line: &str, pattern: &str, replacement: &str, global: bool) -
 /// rope's own line iterator costs one step per line instead of a fresh descent
 /// of the tree. Materialising the whole document instead — which is what this
 /// used to do — copies 800 KB for every press of `n`.
-fn search_forward(rope: &Rope, pattern: &str, from: usize) -> Option<usize> {
+fn search_forward(rope: &Rope, pattern: &Regex, from: usize) -> Option<(usize, usize)> {
     let start_line = rope.char_to_line(from.min(rope.len_chars()));
     // From the cursor to the end, then from the top back to the cursor's line,
     // so the wrap covers the part of that line before the cursor too.
@@ -2828,14 +2922,15 @@ fn search_forward(rope: &Rope, pattern: &str, from: usize) -> Option<usize> {
         .or_else(|| scan(rope, pattern, 0, start_line + 1, 0))
 }
 
-/// The first match at or after `from` within `lines`, searching forward.
+/// The first match at or after `from` within `lines`, searching forward, as a
+/// half-open range of char indices.
 fn scan(
     rope: &Rope,
-    pattern: &str,
+    pattern: &Regex,
     from_line: usize,
     to_line: usize,
     from: usize,
-) -> Option<usize> {
+) -> Option<(usize, usize)> {
     let mut at = rope.line_to_char(from_line);
     for slice in rope
         .lines_at(from_line)
@@ -2850,8 +2945,9 @@ fn scan(
             }
         };
         let begin = byte_of_char(text, from.saturating_sub(at));
-        if let Some(offset) = text.get(begin..).and_then(|rest| rest.find(pattern)) {
-            return Some(at + text[..begin + offset].chars().count());
+        if let Some(found) = text.get(begin..).and_then(|rest| pattern.find(rest)) {
+            let start = at + text[..begin + found.start()].chars().count();
+            return Some((start, start + found.as_str().chars().count()));
         }
         at += slice.len_chars();
     }
@@ -2868,7 +2964,7 @@ fn byte_of_char(text: &str, n: usize) -> usize {
 ///
 /// One forward pass, keeping the best answer: the last match before `from`, or —
 /// when there is none — the last match anywhere, which is where a wrap lands.
-fn search_backward(rope: &Rope, pattern: &str, from: usize) -> Option<usize> {
+fn search_backward(rope: &Rope, pattern: &Regex, from: usize) -> Option<(usize, usize)> {
     let (mut before, mut last) = (None, None);
     let mut at = 0usize;
     for slice in rope.lines() {
@@ -2881,13 +2977,15 @@ fn search_backward(rope: &Rope, pattern: &str, from: usize) -> Option<usize> {
             }
         };
         let mut byte = 0usize;
-        while let Some(offset) = text.get(byte..).and_then(|rest| rest.find(pattern)) {
-            let found = at + text[..byte + offset].chars().count();
-            if found < from {
-                before = Some(found);
+        while let Some(m) = text.get(byte..).and_then(|rest| pattern.find(rest)) {
+            let start = at + text[..byte + m.start()].chars().count();
+            let range = (start, start + m.as_str().chars().count());
+            if start < from {
+                before = Some(range);
             }
-            last = Some(found);
-            byte += offset + pattern.len().max(1);
+            last = Some(range);
+            // An empty match would otherwise stand still forever.
+            byte += m.end().max(m.start() + 1);
         }
         at += slice.len_chars();
     }
@@ -4600,6 +4698,56 @@ mod tests {
         // And what is selected is what an edit takes.
         ed.on_key(Key::Char('d'));
         assert_eq!(ed.current_buffer().text(), " two one");
+    }
+
+    #[test]
+    fn patterns_are_regular_expressions() {
+        // Half of revising a manuscript is a pattern, not a string.
+        let mut ed = typed("他說。她說。他問。");
+        ed.execute(":%s/[他她]說/X/g").unwrap();
+        assert_eq!(ed.current_buffer().text(), "X。X。他問。");
+
+        // 「每個。後面斷行」 — the batch edit a Chinese draft needs most.
+        let mut ed = typed("甲。乙。丙。");
+        ed.execute(r":%s/。/。\n/g").unwrap();
+        assert_eq!(ed.current_buffer().text(), "甲。\n乙。\n丙。\n");
+
+        // Capture groups.
+        let mut ed = typed("阿寧說道：好。");
+        ed.execute(r":%s/(.+)說道/$1說/").unwrap();
+        assert_eq!(ed.current_buffer().text(), "阿寧說：好。");
+
+        // A pattern that does not compile says which part is wrong.
+        let mut ed = typed("甲乙丙");
+        ed.execute(":%s/[未閉合/X/").unwrap();
+        assert!(ed.status().starts_with("bad pattern"), "{}", ed.status());
+        assert_eq!(ed.current_buffer().text(), "甲乙丙");
+    }
+
+    #[test]
+    fn search_takes_a_pattern_and_star_takes_text() {
+        let mut ed = typed("第一章\n第十二章\n尾聲");
+        press(&mut ed, "gg");
+        ed.on_key(Key::Char('/'));
+        type_keys(&mut ed, "第.+章");
+        ed.on_key(Key::Enter);
+        // The whole match is the selection, however long it turned out to be.
+        // `/` looks *past* the cursor, as it does in vi, so the second heading
+        // is found first and `n` wraps around to the first.
+        assert_eq!(ed.selection(), (4, 8));
+        ed.on_key(Key::Char('n'));
+        assert_eq!(ed.selection(), (0, 3));
+
+        // `*` searches for the *text* selected, so its punctuation is literal.
+        let mut ed = typed("（甲）乙（甲）");
+        press(&mut ed, "ggvll");
+        press(&mut ed, "*");
+        press(&mut ed, "n");
+        assert_eq!(
+            ed.selection(),
+            (4, 7),
+            "（甲） found as text, not as a group"
+        );
     }
 
     #[test]

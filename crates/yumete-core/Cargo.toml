@@ -7,5 +7,6 @@ repository.workspace = true
 version.workspace = true
 
 [dependencies]
+regex = "1"
 ropey = "1.6"
 yumete-cjk = {path = "../yumete-cjk"}
