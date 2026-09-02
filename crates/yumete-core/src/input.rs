@@ -22,6 +22,8 @@ pub enum Mode {
     /// where it is edited instead — one line in the status bar, the IME
     /// available, exactly like a search pattern.
     Ruby,
+    /// Choosing from a list — a file, or one of the open buffers (Feature #90).
+    Picker,
 }
 
 impl Mode {
@@ -33,6 +35,7 @@ impl Mode {
             Mode::Command => "COMMAND",
             Mode::Search => "SEARCH",
             Mode::Ruby => "RUBY",
+            Mode::Picker => "PICK",
         }
     }
 }

@@ -11,7 +11,7 @@
 
 pub mod vertical;
 
-use std::io::{self, stdout};
+use std::io::{self, stdout, Write as _};
 
 use ratatui::crossterm::cursor::SetCursorStyle;
 use ratatui::crossterm::event::{
@@ -182,6 +182,14 @@ pub fn run(editor: &mut Editor, config: &Config, ime: &mut ImeSession) -> io::Re
                 // `:scheme` and `:chaifen` configure the IME, which the core
                 // cannot reach; each leaves a request here and the answer goes
                 // back, so the next toggle starts from what the engine did.
+                // `Space y` reaches the system clipboard through the terminal
+                // itself (OSC 52) — no library, and the only route that
+                // survives ssh and tmux, which is where this editor is often
+                // run. A terminal may refuse it; nothing here can tell.
+                if let Some(text) = editor.take_clipboard_request() {
+                    let _ = write!(io::stdout(), "\x1b]52;c;{}\x07", base64(text.as_bytes()));
+                    let _ = io::stdout().flush();
+                }
                 if let Some(tag) = editor.take_scheme_request() {
                     editor.set_status(switch_scheme(ime, &tag));
                 }
@@ -338,6 +346,29 @@ fn normalize_shift(code: KeyCode, mods: KeyModifiers) -> (KeyCode, KeyModifiers)
         }
     }
     (code, mods)
+}
+
+/// Base64, for OSC 52. Twenty lines against a dependency for one escape
+/// sequence, and the alphabet has not changed since 1987.
+fn base64(bytes: &[u8]) -> String {
+    const ALPHABET: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    let mut out = String::with_capacity(bytes.len().div_ceil(3) * 4);
+    for chunk in bytes.chunks(3) {
+        let b = [
+            chunk[0],
+            *chunk.get(1).unwrap_or(&0),
+            *chunk.get(2).unwrap_or(&0),
+        ];
+        let n = (b[0] as u32) << 16 | (b[1] as u32) << 8 | b[2] as u32;
+        for i in 0..4 {
+            if i <= chunk.len() {
+                out.push(ALPHABET[(n >> (18 - i * 6)) as usize & 63] as char);
+            } else {
+                out.push('=');
+            }
+        }
+    }
+    out
 }
 
 /// Switch the IME to the named scheme, and say what happened.
@@ -548,6 +579,8 @@ fn draw(
 
     draw_status(frame, editor, ime, status_area);
     draw_command_menu(frame, editor, area, status_area);
+    draw_picker(frame, editor, area, status_area);
+    draw_space_menu(frame, editor, area, status_area);
 
     // In vertical layout the cursor is a block drawn into the page: a hardware
     // cursor is one cell wide and would sit lopsided inside a two-cell 縱.
@@ -603,48 +636,63 @@ fn language_tag(editor: &Editor, ime: &ImeSession) -> String {
     }
 }
 
-/// Draw the command menu above the command line.
+/// How many rows a menu or a picker may take.
 ///
-/// Twenty-odd commands is past the point where they can be remembered, so `:`
-/// on its own lists them and every keystroke narrows the list. It is laid out in
-/// as many aligned columns as fit, tallest-first down each column, because a
-/// single column of twenty would cover the page it is being run against.
-fn draw_command_menu(frame: &mut Frame, editor: &Editor, area: Rect, status: Rect) {
-    let Some((':', _)) = editor.prompt() else {
-        return;
-    };
-    let (matches, selected) = editor.command_menu();
-    if matches.is_empty() {
+/// Helix caps its completion popup and scrolls it, and the reason is not screen
+/// real estate but reading: a list you have to search is not a list you can
+/// glance at. Twenty-odd commands laid out across the whole page hid the very
+/// document the command was about to act on.
+const MENU_ROWS: usize = 8;
+
+/// The widest a menu gets. Past this the eye stops reading a row as one thing.
+const MENU_WIDTH: u16 = 56;
+
+/// Draw a compact list just above `bottom`, scrolled so `selected` is on it.
+///
+/// One column, capped, with a footer naming where you are in the list and what
+/// the highlighted row means. Both the `:` menu and the pickers use it, so they
+/// look like one idea rather than two.
+fn draw_list(
+    frame: &mut Frame,
+    area: Rect,
+    bottom: u16,
+    items: &[String],
+    focus: usize,
+    highlight: Option<usize>,
+    footer: &str,
+) {
+    if items.is_empty() && footer.is_empty() {
         return;
     }
-
-    // A column is the widest name plus its help, and they all share one width so
-    // the help lines up down the menu.
-    let name_w = matches
-        .iter()
-        .map(|e| e.name.chars().count() + e.alias.map_or(0, |a| a.chars().count() + 3))
-        .max()
-        .unwrap_or(0);
-    let help_w = matches
-        .iter()
-        .map(|e| e.help.chars().count())
-        .max()
-        .unwrap_or(0);
-    let col_w = (name_w + help_w + 4) as u16;
-    let columns = ((area.width / col_w.max(1)) as usize).clamp(1, 4);
-    let rows = matches.len().div_ceil(columns);
-    let height = (rows as u16).min(area.height.saturating_sub(1));
-    if height == 0 {
+    let visible = items.len().min(MENU_ROWS);
+    let height = (visible + 1) as u16;
+    if height > area.height || bottom < height {
         return;
     }
+    // Scrolled just enough: the selection stays on the list, and a short list
+    // never scrolls at all.
+    let first = focus
+        .saturating_sub(visible.saturating_sub(1))
+        .min(items.len().saturating_sub(visible));
 
-    let width = (col_w * columns as u16).min(area.width);
-    let menu = Rect::new(area.x, status.y.saturating_sub(height), width, height);
+    let width = items
+        .iter()
+        .map(|i| yumete_cjk::str_width(i))
+        .chain(std::iter::once(yumete_cjk::str_width(footer)))
+        .max()
+        .unwrap_or(0)
+        .saturating_add(2) as u16;
+    let width = width.min(MENU_WIDTH).min(area.width);
+    let menu = Rect::new(area.x, bottom - height, width, height);
     frame.render_widget(Clear, menu);
 
     let ground = Style::default().bg(Color::Rgb(0x26, 0x2a, 0x27));
-    let name_style = ground.fg(Color::Rgb(0xcf, 0xc6, 0xa9));
-    let help_style = ground.fg(Color::Rgb(0x9c, 0x97, 0x82));
+    let text = ground.fg(Color::Rgb(0xcf, 0xc6, 0xa9));
+    let quiet = ground.fg(Color::Rgb(0x9c, 0x97, 0x82));
+    let on = Style::default()
+        .bg(Color::Rgb(0xcf, 0xc6, 0xa9))
+        .fg(Color::Rgb(0x26, 0x2a, 0x27));
+
     let buf = frame.buffer_mut();
     for y in 0..height {
         for x in 0..width {
@@ -653,54 +701,115 @@ fn draw_command_menu(frame: &mut Frame, editor: &Editor, area: Rect, status: Rec
             }
         }
     }
-    for (i, entry) in matches.iter().enumerate() {
-        // Down each column, then across — so an alphabetical list still reads
-        // alphabetically.
-        let (col, row) = (i / rows, i % rows);
-        let x = menu.x + col as u16 * col_w + 1;
+    for row in 0..visible {
+        let i = first + row;
+        let picked = highlight == Some(i);
+        let style = if picked { on } else { text };
         let y = menu.y + row as u16;
-        if row as u16 >= height || x >= menu.x + width {
-            continue;
-        }
-        // Tab's current pick is inked, the way the highlighted candidate is.
-        let picked = selected == Some(i);
-        let (name_style, help_style) = if picked {
-            let on = Style::default()
-                .bg(Color::Rgb(0xcf, 0xc6, 0xa9))
-                .fg(Color::Rgb(0x26, 0x2a, 0x27));
-            (on, on)
-        } else {
-            (name_style, help_style)
-        };
         if picked {
-            for n in 0..col_w {
-                let cx = x.saturating_sub(1) + n;
-                if cx < menu.x + width {
-                    if let Some(cell) = buf.cell_mut((cx, y)) {
-                        cell.set_symbol(" ").set_style(name_style);
-                    }
+            for x in 0..width {
+                if let Some(cell) = buf.cell_mut((menu.x + x, y)) {
+                    cell.set_symbol(" ").set_style(style);
                 }
             }
         }
-        let name = match entry.alias {
-            Some(alias) => format!("{} ({alias})", entry.name),
-            None => entry.name.to_string(),
-        };
-        for (text, at, style) in [
-            (name.as_str(), x, name_style),
-            (entry.help, x + name_w as u16 + 2, help_style),
-        ] {
-            for (n, ch) in text.chars().enumerate() {
-                let cx = at + n as u16;
-                if cx >= menu.x + width {
-                    break;
-                }
-                if let Some(cell) = buf.cell_mut((cx, y)) {
-                    cell.set_symbol(&ch.to_string()).set_style(style);
-                }
-            }
-        }
+        put_text(buf, menu.x + 1, y, menu.x + width, &items[i], style);
     }
+    put_text(
+        buf,
+        menu.x + 1,
+        menu.y + visible as u16,
+        menu.x + width,
+        footer,
+        quiet,
+    );
+}
+
+/// Write `text` from `x`, stopping at `limit`, one cell per column.
+fn put_text(
+    buf: &mut ratatui::buffer::Buffer,
+    x: u16,
+    y: u16,
+    limit: u16,
+    text: &str,
+    style: Style,
+) {
+    let mut at = x;
+    for g in yumete_cjk::graphemes(text) {
+        let w = yumete_cjk::grapheme_width(g).max(1) as u16;
+        if at + w > limit {
+            break;
+        }
+        // The trailing cell first, so a wide glyph's other half is styled and
+        // never left holding whatever was drawn there before.
+        for n in 1..w {
+            if let Some(cell) = buf.cell_mut((at + n, y)) {
+                cell.set_symbol(" ").set_style(style);
+            }
+        }
+        if let Some(cell) = buf.cell_mut((at, y)) {
+            cell.set_symbol(g).set_style(style);
+        }
+        at += w;
+    }
+}
+
+/// The `:` command menu — Helix's completion popup, not a wall.
+fn draw_command_menu(frame: &mut Frame, editor: &Editor, area: Rect, status: Rect) {
+    let Some((':', _)) = editor.prompt() else {
+        return;
+    };
+    let (matches, selected) = editor.command_menu();
+    if matches.is_empty() {
+        return;
+    }
+    // Tab's pick is inked; without one nothing is, because the ghost text on
+    // the command line is already saying what the guess is.
+    let highlight = selected.map(|i| i.min(matches.len() - 1));
+    let focus = highlight.unwrap_or(0);
+    let items: Vec<String> = matches
+        .iter()
+        .map(|e| match e.alias {
+            Some(alias) => format!(":{}  ({alias})", e.name),
+            None => format!(":{}", e.name),
+        })
+        .collect();
+    // Only the highlighted command's help, on one line. Every command's help at
+    // once is what covered the page.
+    let footer = format!("{}/{}  {}", focus + 1, matches.len(), matches[focus].help);
+    draw_list(frame, area, status.y, &items, focus, highlight, &footer);
+}
+
+/// The `Space f` / `Space b` picker.
+fn draw_picker(frame: &mut Frame, editor: &Editor, area: Rect, status: Rect) {
+    let Some(picker) = editor.picker() else {
+        return;
+    };
+    let matches = picker.matches();
+    let items: Vec<String> = matches.iter().map(|i| i.label().to_string()).collect();
+    let footer = format!(
+        "{}  {}/{}  {}",
+        picker.title,
+        (!items.is_empty())
+            .then(|| picker.selected() + 1)
+            .unwrap_or(0),
+        picker.total(),
+        picker.query()
+    );
+    let at = picker.selected();
+    draw_list(frame, area, status.y, &items, at, Some(at), &footer);
+}
+
+/// The `Space` menu, listed while the key is waiting for its second half.
+fn draw_space_menu(frame: &mut Frame, editor: &Editor, area: Rect, status: Rect) {
+    if !editor.space_pending() {
+        return;
+    }
+    let items: Vec<String> = Editor::SPACE_KEYS
+        .iter()
+        .map(|(key, what)| format!("{key}   {what}"))
+        .collect();
+    draw_list(frame, area, status.y, &items, 0, None, "空格");
 }
 
 /// The composition in progress, when a `/` or `:` prompt is open.
@@ -1956,6 +2065,14 @@ mod tests {
         assert!(!any_tint, "overlay should be hidden when disabled");
     }
 
+    /// The whole page as the reader sees it, wide glyphs counted once.
+    fn page_text(buffer: &ratatui::buffer::Buffer) -> String {
+        (0..buffer.area.height)
+            .map(|y| row_text(buffer, y))
+            .collect::<Vec<_>>()
+            .join("\n")
+    }
+
     /// Concatenate all cell symbols of a rendered buffer (for content checks).
     fn buffer_text(buffer: &ratatui::buffer::Buffer) -> String {
         let mut s = String::new();
@@ -2049,16 +2166,59 @@ mod tests {
     }
 
     #[test]
+    fn space_lists_what_it_offers_and_the_picker_replaces_it() {
+        let mut editor = editor_with("那年冬天");
+        let config = Config::default();
+
+        // Space alone says what its second half can be — which-key, so the set
+        // is discoverable without leaving the page.
+        editor.on_key(Key::Char(' '));
+        let text = page_text(&render_with(&editor, &config, &no_ime(), 60, 24));
+        assert!(text.contains("開啟檔案"), "{text:?}");
+        assert!(text.contains("切換緩衝區"), "{text:?}");
+
+        // `b` replaces it with the picker, which names where you are in a list
+        // it does not have to show all of.
+        editor.on_key(Key::Char('b'));
+        let buffer = render_with(&editor, &config, &no_ime(), 60, 24);
+        let text = page_text(&buffer);
+        assert!(text.contains("緩衝區"), "{text:?}");
+        assert!(!text.contains("開啟檔案"), "the menu is gone: {text:?}");
+        // And it is a small box, not the page.
+        let drawn = (0..buffer.area.height)
+            .filter(|&y| {
+                (0..buffer.area.width)
+                    .any(|x| buffer[(x, y)].style().bg == Some(Color::Rgb(0x26, 0x2a, 0x27)))
+            })
+            .count();
+        assert!(drawn <= 9, "the picker took {drawn} rows");
+    }
+
+    #[test]
     fn the_command_menu_lists_and_narrows() {
         let mut editor = editor_with("那年冬天");
         let config = Config::default();
 
-        // `:` on its own offers everything.
+        // `:` on its own offers a *window* onto the list — capped, the way
+        // Helix caps its completion popup — with a count saying how much more
+        // there is. Every command with its help at once covered the page.
         editor.on_key(Key::Char(':'));
         let buffer = render_with(&editor, &config, &no_ime(), 90, 24);
         let text = buffer_text(&buffer);
-        assert!(text.contains("write"), "menu should list commands: absent");
-        assert!(text.contains("save"), "…with what they do");
+        assert!(text.contains(":open"), "menu should list commands: absent");
+        let total = yumete_core::command::COMMANDS.len();
+        assert!(
+            text.contains(&format!("1/{total}")),
+            "how much more there is"
+        );
+        // The menu is a handful of rows, not the screen.
+        let drawn = (0..buffer.area.height)
+            .filter(|&y| {
+                (0..buffer.area.width)
+                    .any(|x| buffer[(x, y)].style().bg == Some(Color::Rgb(0x26, 0x2a, 0x27)))
+            })
+            .count();
+        assert!(drawn <= 9, "the menu took {drawn} rows");
 
         // Typing narrows it, and the commands that no longer match go away.
         for c in "ruby".chars() {
@@ -2067,7 +2227,7 @@ mod tests {
         let buffer = render_with(&editor, &config, &no_ime(), 90, 24);
         let text = buffer_text(&buffer);
         assert!(text.contains("ruby-off"), "still matching");
-        assert!(!text.contains("write"), "no longer matching");
+        assert!(!text.contains(":write"), "no longer matching");
     }
 
     #[test]
@@ -2105,13 +2265,14 @@ mod tests {
             .map(|x| buffer[(x, buffer.area.height - 1)].symbol())
             .collect();
         assert!(last.starts_with(":r"), "command line intact: {last:?}");
-        let above: String = (0..buffer.area.width)
+        // Just above it is the footer — the count and what the highlighted row
+        // means — and the rows themselves are above that.
+        let footer: String = (0..buffer.area.width)
             .map(|x| buffer[(x, buffer.area.height - 2)].symbol())
             .collect();
-        assert!(
-            above.contains("ruby") || above.contains("redo"),
-            "{above:?}"
-        );
+        assert!(footer.contains('/'), "a count of the matches: {footer:?}");
+        let text = buffer_text(&buffer);
+        assert!(text.contains("ruby") || text.contains("redo"), "{text:?}");
     }
 
     /// A search prompt is not a command line and gets no menu.
