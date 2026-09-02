@@ -258,16 +258,23 @@ pub fn parse(input: &str) -> Result<Command, CommandError> {
         // and it lists what it takes.
         "yume" => {
             let mut parts = rest.split_whitespace();
-            match parts.next() {
-                None => Err(CommandError::MissingArgument("yume")),
-                Some("scheme") => match parts.next() {
-                    Some(tag) => Ok(Command::SetScheme(tag.to_string())),
-                    None => Err(CommandError::MissingArgument("scheme")),
-                },
+            let Some(word) = parts.next() else {
+                return Err(CommandError::MissingArgument("yume"));
+            };
+            match pick(word, YUME).map(|w| w.name) {
+                // No name is "the one the config asked for" — `:yume s` is the
+                // whole of starting to type.
+                Some("scheme") => Ok(Command::SetScheme(
+                    parts
+                        .next()
+                        .and_then(|tag| pick(tag, SCHEMES).map(|w| w.name))
+                        .unwrap_or("")
+                        .to_string(),
+                )),
                 Some("chaifen") => Ok(Command::ToggleChaifen),
-                Some(other) => Err(CommandError::InvalidArgument {
+                _ => Err(CommandError::InvalidArgument {
                     command: "yume",
-                    value: other.to_string(),
+                    value: word.to_string(),
                 }),
             }
         }
@@ -481,6 +488,24 @@ pub struct Word {
     pub then: Args,
 }
 
+/// The one word of `from` that `typed` names, exactly or by prefix.
+///
+/// `:yume s l` is `:yume scheme lingming` — because `s` is the only word there
+/// starting with `s`, and `l` the only scheme starting with `l`. An ambiguous
+/// prefix names nothing rather than guessing: `:ruby t` could be `typst` and
+/// nothing else, but if a second `t` word were ever added it would stop
+/// working, loudly, instead of quietly meaning the older one.
+pub fn pick<'a>(typed: &str, from: &'a [Word]) -> Option<&'a Word> {
+    if let Some(exact) = from.iter().find(|w| w.name == typed) {
+        return Some(exact);
+    }
+    let mut starting = from.iter().filter(|w| w.name.starts_with(typed));
+    match (starting.next(), starting.next()) {
+        (Some(only), None) => Some(only),
+        _ => None,
+    }
+}
+
 /// A word offered by completion, whether a command or an argument.
 #[derive(Clone, Copy)]
 pub struct Choice {
@@ -499,8 +524,8 @@ pub struct Choice {
 const YUME: &[Word] = &[
     Word {
         name: "scheme",
-        help: "換方案（靈明、日月…）",
-        then: Args::Free("<方案名>"),
+        help: "開始打字：載入一個方案（不寫名字就用配置裏那個）",
+        then: Args::Words(SCHEMES),
     },
     Word {
         name: "chaifen",
@@ -581,6 +606,35 @@ const WRAP: &[Word] = &[
     Word {
         name: "0",
         help: "尺度用窗口寬（`:wrap 50` 是固定五十欄）",
+        then: Args::None,
+    },
+];
+
+/// The input schemes yume ships with.
+const SCHEMES: &[Word] = &[
+    Word {
+        name: "lingming",
+        help: "靈明",
+        then: Args::None,
+    },
+    Word {
+        name: "xingchen",
+        help: "星陳",
+        then: Args::None,
+    },
+    Word {
+        name: "qingyun",
+        help: "卿雲",
+        then: Args::None,
+    },
+    Word {
+        name: "riyue",
+        help: "日月",
+        then: Args::None,
+    },
+    Word {
+        name: "pinyin",
+        help: "拼音",
         then: Args::None,
     },
 ];
@@ -1123,6 +1177,26 @@ mod tests {
             ["wq"]
         );
         assert!(complete("zzz").is_empty());
+    }
+
+    #[test]
+    fn an_unambiguous_prefix_is_the_word_it_starts() {
+        // `:yume s l` is the whole of starting to type — `s` is the only word
+        // `:yume` takes that starts with `s`, and `l` the only scheme.
+        assert_eq!(
+            parse(":yume s l"),
+            Ok(Command::SetScheme("lingming".into()))
+        );
+        assert_eq!(parse(":yume scheme ling"), Ok(Command::SetScheme("lingming".into())));
+        assert_eq!(parse(":yume c"), Ok(Command::ToggleChaifen));
+        // No name at all means the one the config asked for.
+        assert_eq!(parse(":yume s"), Ok(Command::SetScheme(String::new())));
+        // A prefix that names two words names neither, loudly, rather than
+        // quietly meaning whichever was written first.
+        assert!(matches!(
+            parse(":yume x"),
+            Err(CommandError::InvalidArgument { .. })
+        ));
     }
 
     #[test]

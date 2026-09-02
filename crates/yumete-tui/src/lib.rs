@@ -64,7 +64,6 @@ pub fn run(
     editor: &mut Editor,
     config: &Config,
     ime: &mut ImeSession,
-    load_ime: Box<dyn FnOnce() -> ImeSession>,
 ) -> io::Result<()> {
     let mut terminal = ratatui::init();
 
@@ -94,9 +93,6 @@ pub fn run(
     // character of the pasted paragraph runs as a command, which is not a
     // paste going wrong so much as an editor running a macro nobody wrote.
     let _ = execute!(stdout(), EnableBracketedPaste);
-
-    // The input method, not read yet — see `main.rs` for why not.
-    let mut waiting = Some(load_ime);
 
     let mut viewport = Viewport::default();
     let mut shift = ShiftTap::default();
@@ -165,21 +161,6 @@ pub fn run(
             let lines = size.height.saturating_sub(1) as usize;
             let columns = (size.width / 3).max(1) as usize;
             editor.set_page(lines, columns);
-        }
-        // Entering a mode that composes is what pays for reading the input
-        // method — not the first key typed *in* it, so the pause falls between
-        // pressing `i` and typing, where a writer is already changing gear,
-        // rather than swallowing the first 字. With it come the best word
-        // ranges yumete has, so `w` and `b` get better at the same moment.
-        if composes(editor.mode()) {
-            if let Some(load) = waiting.take() {
-                *ime = load();
-                let words = ime.segmenter();
-                if words.is_available() {
-                    editor.set_segmenter(Box::new(words));
-                }
-                editor.set_chaifen(ime.annotations_enabled());
-            }
         }
         if let Err(err) = terminal.draw(|frame| draw(frame, editor, config, ime, &mut viewport)) {
             break Err(err);
@@ -306,7 +287,13 @@ pub fn run(
                     }
                 }
                 if let Some(tag) = editor.take_scheme_request() {
-                    editor.set_status(switch_scheme(ime, &tag));
+                    editor.set_status(switch_scheme(ime, &tag, config));
+                    // The scheme's own language data may be better than what
+                    // was loaded before it.
+                    let words = ime.segmenter();
+                    if words.is_available() {
+                        editor.set_segmenter(Box::new(words));
+                    }
                 }
                 // `:chaifen` configures the IME, which the core cannot reach;
                 // it leaves the request here and the answer goes back, so the
@@ -721,7 +708,14 @@ fn base64(bytes: &[u8]) -> String {
 /// yuhao-assess-data into the data directory — and a 碼表 of one's own goes in
 /// `.yumete/` beside the manuscript. So the failure worth naming is not "no
 /// such scheme" but "that scheme's tables are not on this machine".
-fn switch_scheme(ime: &mut ImeSession, tag: &str) -> String {
+fn switch_scheme(ime: &mut ImeSession, tag: &str, config: &Config) -> String {
+    // No name means "the one this project writes in" — `:yume s` is the whole
+    // of starting to type, and the config already said which.
+    let tag = if tag.is_empty() {
+        config.ime.scheme.as_str()
+    } else {
+        tag
+    };
     let Some(scheme) = Scheme::from_tag(tag) else {
         let names = Scheme::ALL
             .iter()
@@ -730,6 +724,24 @@ fn switch_scheme(ime: &mut ImeSession, tag: &str) -> String {
             .join(" ");
         return format!("no scheme '{tag}' — one of: {names}");
     };
+    // The session may be the language-only one that starts every launch, in
+    // which case there is no 碼表 in it to switch *from* — so this is the
+    // hundred milliseconds nobody paid at startup, paid now, once, by the
+    // person who asked to type.
+    if !ime.available() {
+        let mut full = ImeSession::from_default_dirs(scheme);
+        if full.available() {
+            full.set_page_size(config.panel.page_size);
+            full.set_annotations(ime.annotations_enabled());
+            let name = full.scheme_name().to_string();
+            *ime = full;
+            return format!("方案：{name}");
+        }
+        return format!(
+            "{tag} 的碼表沒有裝——放進資料目錄（yume 的 scripts/build.sh 會裝），\
+             或者把自己的碼表放進 .yumete/"
+        );
+    }
     let was = ime.scheme();
     if ime.set_scheme(scheme) {
         return format!("方案：{}", ime.scheme_name());
