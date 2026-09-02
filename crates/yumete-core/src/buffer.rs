@@ -12,6 +12,16 @@ use ropey::Rope;
 
 use crate::text_store::TextStore;
 
+/// A file's size and modification time, for noticing that it changed.
+///
+/// `None` when it cannot be read — which for `changed_underneath` means a file
+/// that has been deleted, and that counts as changed: writing it back would
+/// resurrect something somebody removed.
+fn stamp_of(path: &Path) -> Option<(u64, std::time::SystemTime)> {
+    let meta = fs::metadata(path).ok()?;
+    Some((meta.len(), meta.modified().ok()?))
+}
+
 /// A single editable document.
 ///
 /// The text is held in a [`ropey`] rope (behind [`TextStore`]); `path` records
@@ -63,7 +73,10 @@ pub struct Buffer {
     /// pops a snapshot taken in another and writes that file's text — and its
     /// clean flag — into this one. Undo belongs to the document, the way the
     /// cursor does.
-    history: History,
+    history: History,    /// What the file looked like when it was last read or written: its size
+    /// and modification time. `None` for a buffer with no file.
+    seen: Option<(u64, std::time::SystemTime)>,
+
 }
 
 /// One point in a buffer's edit history.
@@ -106,6 +119,7 @@ impl Buffer {
             syntax_guessed: true,
             pending_draft: None,
             owns_swap: false,
+            seen: None,
         }
     }
 
@@ -123,6 +137,7 @@ impl Buffer {
             syntax_guessed: true,
             pending_draft: None,
             owns_swap: false,
+            seen: None,
         }
     }
 
@@ -159,7 +174,40 @@ impl Buffer {
             owns_swap: false,
             syntax,
             syntax_guessed: named.is_none(),
+            seen: stamp_of(path),
         })
+    }
+
+    /// Whether the file has changed since this buffer last read or wrote it.
+    ///
+    /// Size *and* modification time: a sync folder can restore a file with the
+    /// same length, and an editor can write one with the same second on it, but
+    /// the two together are wrong far less often than either alone. A file that
+    /// has been deleted counts as changed — writing it back would resurrect
+    /// something somebody removed.
+    pub fn changed_underneath(&self) -> bool {
+        match (&self.path, &self.seen) {
+            (Some(path), Some(seen)) => stamp_of(path).as_ref() != Some(seen),
+            _ => false,
+        }
+    }
+
+    /// Read the file again, throwing away what is in the buffer (`:e!`).
+    pub fn reread(&mut self) -> io::Result<()> {
+        let path = self
+            .path
+            .clone()
+            .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "buffer has no file name"))?;
+        let bytes = fs::read(&path)?;
+        self.rope = Rope::from_str(decode(&bytes, &path)?.as_ref());
+        self.seen = stamp_of(&path);
+        self.modified = false;
+        self.revision = self.revision.wrapping_add(1);
+        self.cursor = self.cursor.min(self.rope.len_chars());
+        // A fresh read is a fresh start: the undo stack described a document
+        // that is no longer here.
+        self.history = History::default();
+        Ok(())
     }
 
     /// The file this buffer is bound to, if any.
@@ -291,11 +339,31 @@ impl Buffer {
     /// cannot leave a half-written document. Clears the modified flag on success.
     /// Returns [`io::ErrorKind::NotFound`] if the buffer has no bound path.
     pub fn save(&mut self) -> io::Result<()> {
+        self.save_forcing(false)
+    }
+
+    /// The same, and `force` writes over a file that has changed since it was
+    /// read (`:w!`).
+    ///
+    /// **The one silent way to lose a day's work.** A file open in yumete and
+    /// changed underneath it — by git, by a sync folder, by `:!sed -i`, by the
+    /// same file open in another editor — used to be written over without a
+    /// word, and the other version was simply gone. So the file is stamped when
+    /// it is read and when it is written, and a stamp that no longer matches
+    /// stops the save and says so. `:e!` is how you take the other version;
+    /// `:w!` is how you keep yours.
+    pub fn save_forcing(&mut self, force: bool) -> io::Result<()> {
         let path = self
             .path
             .clone()
             .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "buffer has no file name"))?;
+        if !force && self.changed_underneath() {
+            return Err(io::Error::other(
+                "這個檔案在外面被改過了——`:e!` 讀它的，`:w!` 用你的",
+            ));
+        }
         self.write_atomically(&path)?;
+        self.seen = stamp_of(&path);
         self.modified = false;
         // The document *is* the recovery copy now — but only ours goes; a draft
         // the writer has not looked at yet still holds text this file does not.

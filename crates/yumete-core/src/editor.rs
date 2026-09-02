@@ -1476,6 +1476,22 @@ impl Editor {
                 self.write_current(path.as_deref())?;
                 Ok(CommandOutcome::Continue)
             }
+            Command::WriteForce(path) => {
+                self.write_forcing(path.as_deref(), true)?;
+                Ok(CommandOutcome::Continue)
+            }
+            Command::Reread => {
+                if self.current_buffer().path().is_none() {
+                    return Err(EditorError::NoFileName);
+                }
+                self.current_buffer_mut().reread().map_err(EditorError::Io)?;
+                self.clamp_cursor();
+                self.markup_cache.borrow_mut().clear();
+                *self.block_cache.borrow_mut() = None;
+                self.segment_cache.borrow_mut().clear();
+                self.status = format!("重讀了 {}", self.current_buffer().display_name());
+                Ok(CommandOutcome::Continue)
+            }
             Command::Quit { force } => self.quit(force),
             Command::Substitute {
                 pattern,
@@ -1752,7 +1768,12 @@ impl Editor {
 
     /// Save the active buffer, optionally to a new `path` (save-as).
     fn write_current(&mut self, path: Option<&str>) -> Result<(), EditorError> {
-        match path {
+        self.write_forcing(path, false)
+    }
+
+    /// The same, and `force` writes over a file that changed on disk (`:w!`).
+    fn write_forcing(&mut self, path: Option<&str>, force: bool) -> Result<(), EditorError> {
+        let saved = match path {
             Some(p) => self
                 .current_buffer_mut()
                 .save_as(p)
@@ -1761,9 +1782,18 @@ impl Editor {
                 if self.current_buffer().path().is_none() {
                     return Err(EditorError::NoFileName);
                 }
-                self.current_buffer_mut().save().map_err(EditorError::Io)
+                self.current_buffer_mut()
+                    .save_forcing(force)
+                    .map_err(EditorError::Io)
             }
+        };
+        // A save that said nothing was a save you could not tell from a save
+        // that did not happen — and the manual has been quoting this line as
+        // its example of the hint row all along.
+        if saved.is_ok() {
+            self.status = format!("存了 {}", self.current_buffer().display_name());
         }
+        saved
     }
 
     // ---- Modal editing (Feature #5) ---------------------------------------
@@ -1896,7 +1926,18 @@ impl Editor {
         }
     }
 
-    /// The current transient status message (may be empty).
+    #[cfg(test)]
+    fn recorded_keys_for_test(&self) -> String {
+        self.macro_keys
+            .iter()
+            .map(|k| match k {
+                Key::Char(c) => *c,
+                _ => '?',
+            })
+            .collect()
+    }
+
+        /// The current transient status message (may be empty).
     pub fn status(&self) -> &str {
         &self.status
     }
@@ -3603,9 +3644,19 @@ impl Editor {
         // Recording happens here rather than in Normal mode's handler, so a
         // macro captures the text typed in Insert and the pattern typed at a
         // prompt too — a macro that can only move is not much of one.
-        if let Some(keys) = self.recording.as_mut() {
-            if !matches!(key, Key::Char('q')) || self.mode != Mode::Normal {
-                keys.push(key);
+        if self.recording.is_some() {
+            // `q` ends the recording — but only the `q` that is a *command*.
+            // A `q` that some half-finished sequence is waiting for is an
+            // operand: `fq` is "find q", and dropping its second half left the
+            // macro as a bare `f`, which on replay swallowed whatever came
+            // next. One reviewer's macro deleted their buffer that way.
+            let ends_it = matches!(key, Key::Char('q'))
+                && self.mode == Mode::Normal
+                && self.pending == Pending::None;
+            if !ends_it {
+                if let Some(keys) = self.recording.as_mut() {
+                    keys.push(key);
+                }
             }
         }
         // The sidebar takes Normal-mode keys while it has the focus; every
@@ -7855,6 +7906,82 @@ mod tests {
         assert!(ed.status().contains("1/2"), "目 is used twice: {}", ed.status());
 
         std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn a_file_changed_underneath_is_not_written_over() {
+        // The one silent way to lose a day's work: a file open here and changed
+        // out there — by git, a sync folder, `:!sed -i`, or the same file open
+        // in another editor — used to be overwritten without a word.
+        let dir = std::env::temp_dir().join(format!("yumete-stamp-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let file = dir.join("ch01.md");
+        std::fs::write(&file, "原稿一行\n").unwrap();
+
+        let mut ed = Editor::new();
+        ed.open_file(&file).unwrap();
+        // An ordinary save says so — the manual has been quoting this line as
+        // its example of the hint row all along, and it did not exist.
+        press(&mut ed, "i");
+        ed.on_key(Key::Char('甲'));
+        ed.on_key(Key::Esc);
+        assert!(ed.execute("w").is_ok());
+        assert!(ed.status().contains("存了"), "{}", ed.status());
+
+        // Now somebody else writes it. A stamp is size *and* mtime, and a test
+        // is fast enough to land in the same second, so the length differs too.
+        std::fs::write(&file, "別的程序寫進來的內容\n第二行\n").unwrap();
+        assert!(ed.current_buffer().changed_underneath());
+        press(&mut ed, "i");
+        ed.on_key(Key::Char('乙'));
+        ed.on_key(Key::Esc);
+        assert!(ed.execute("w").is_err(), "the save is refused");
+        assert_eq!(
+            std::fs::read_to_string(&file).unwrap(),
+            "別的程序寫進來的內容\n第二行\n",
+            "and the other version is still there"
+        );
+
+        // `:w!` is "I know, and mine wins".
+        assert!(ed.execute("w!").is_ok());
+        assert!(std::fs::read_to_string(&file).unwrap().contains('乙'));
+
+        // …and after it, the stamp is ours again, so the next save is quiet.
+        assert!(!ed.current_buffer().changed_underneath());
+        assert!(ed.execute("w").is_ok());
+
+        // `:e!` is the other half: take what is on disk and lose what is here.
+        std::fs::write(&file, "外面的版本\n").unwrap();
+        assert!(ed.execute("e!").is_ok());
+        assert_eq!(ed.current_buffer().text(), "外面的版本\n");
+        assert!(!ed.current_buffer().is_modified());
+        assert!(ed.execute("w").is_ok(), "and saving is fine again");
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn a_macro_keeps_the_key_a_sequence_was_waiting_for() {
+        // `q` ends a recording — but a `q` that `f` is waiting for is an
+        // operand. Dropping it left the macro as a bare `f`, which on replay
+        // swallowed whatever came next; one reviewer's macro deleted their
+        // buffer that way.
+        let mut ed = typed("aqb\ncqd\n");
+        ed.goto_line(1);
+        press(&mut ed, "q");
+        press(&mut ed, "fq");
+        press(&mut ed, "x");
+        press(&mut ed, "q");
+        assert_eq!(ed.recorded_keys_for_test(), "fqx", "the `q` of `fq` is kept");
+
+        ed.goto_line(2);
+        press(&mut ed, "Q");
+        assert_eq!(
+            ed.current_buffer().text(),
+            "aqb\ncqd\n",
+            "replay finds q and selects the line, changing nothing"
+        );
     }
 
     #[test]
