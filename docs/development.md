@@ -296,6 +296,8 @@ Phases are ordered by priority, most writer-critical first:
 | 98  | **One rule for opening the sidebar**       | core   | P3    | open / switch / focus / close       | Done   |
 | 99  | **The Insert caret over a half-width 字**  | tui    | P1    | it painted a typed digit out        | Done   |
 | 100 | **`C-w` between the panes**                | both   | P2    | and the status line says so         | Done   |
+| 101 | **A measure to write to**                  | tui    | P3    | tint past it; the line only unwrapped | Done |
+| 102 | **稿紙 ticks down the 縱**                 | tui    | P3    | the vertical page is already a grid | Done   |
 
 ---
 

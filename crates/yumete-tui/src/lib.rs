@@ -1084,6 +1084,10 @@ fn draw_horizontal(
     let show_segmentation = editor.segmentation_visible();
     let seg_colors = config.theme.segmentation;
     let show_markup = editor.markup_visible();
+    // The measure, counted from the left edge of the page — the gutter is part
+    // of the page, so a ruler at 80 is at cell 80 whatever the gutter costs.
+    let ruler = config.editor.ruler;
+    let (rr, rg, rb) = config.theme.ruler;
 
     // Word ranges are per paragraph and consecutive rows usually share one, so
     // each paragraph the page touches is segmented once. Its Markdown runs are
@@ -1165,6 +1169,19 @@ fn draw_horizontal(
             }
         }
 
+        // Past the measure, tinted. Information even with soft wrap on: it
+        // says this row has run past the length the writer wants a sentence to
+        // be, which is what somebody breaking long ones by hand is looking for.
+        if ruler > 0 {
+            let mut column = gutter;
+            for (i, ch) in chars.iter().enumerate() {
+                if column >= ruler {
+                    styles[i] = styles[i].bg(Color::Rgb(rr, rg, rb));
+                }
+                column += yumete_cjk::char_width(*ch);
+            }
+        }
+
         // The selection's ground goes over everything, because it is the answer
         // to "what would an edit take" and nothing may obscure that.
         let reach = row.start + row_len + usize::from(row.ends_line);
@@ -1200,6 +1217,26 @@ fn draw_horizontal(
         lines.push(Line::from(spans));
     }
     frame.render_widget(Paragraph::new(lines), text_area);
+
+    // The line itself, only with wrap off. With it on, the edge of the tint is
+    // already the line, and drawing one would be saying the same thing twice.
+    if ruler > 0 && editor.wrap_width().is_none() {
+        let x = text_area.x + ruler as u16;
+        if x < text_area.x + text_area.width {
+            let buf = frame.buffer_mut();
+            for y in text_area.y..text_area.y + text_area.height {
+                if let Some(cell) = buf.cell_mut((x, y)) {
+                    if cell.symbol().trim().is_empty() {
+                        cell.set_symbol("│").set_style(
+                            Style::default()
+                                .fg(Color::Rgb(rr, rg, rb))
+                                .add_modifier(Modifier::DIM),
+                        );
+                    }
+                }
+            }
+        }
+    }
 
     // Clamped to the page: a caret resting past a row that exactly fills the
     // width would otherwise be drawn in the column after the last one.
@@ -2413,6 +2450,51 @@ mod tests {
         };
         assert!(!dim(3), "`seg` was typed");
         assert!(dim(4), "`ment` is only a guess");
+    }
+
+    #[test]
+    fn the_measure_is_tinted_and_only_ruled_when_nothing_wraps() {
+        let mut editor = editor_with(&"字".repeat(30));
+        let mut config = Config::default();
+        config.editor.line_numbers = LineNumbers::None;
+        config.editor.show_segmentation = false;
+        config.editor.ruler = 20;
+        config.theme.ruler = (0x2e, 0x30, 0x38);
+        let tint = Some(Color::Rgb(0x2e, 0x30, 0x38));
+
+        // Soft wrap on: the text past the measure is tinted — which is what
+        // somebody breaking long sentences by hand is looking for — and there
+        // is no line, because the edge of the tint already is one.
+        let buffer = render_wrapped(&mut editor, &config, 40, 8);
+        assert_ne!(buffer[(18, 0)].style().bg, tint, "before the measure");
+        assert_eq!(buffer[(20, 0)].style().bg, tint, "past it");
+        assert_ne!(at(&buffer, 20, 0), "│", "no line while it wraps");
+
+        // Wrap off: the line is drawn, in the cells the text does not fill.
+        editor.set_soft_wrap(false);
+        let buffer = render_wrapped(&mut editor, &config, 40, 8);
+        assert_eq!(at(&buffer, 20, 4), "│", "a measure to write to");
+    }
+
+    #[test]
+    fn a_vertical_page_is_ruled_like_稿紙() {
+        let mut editor = editor_with(&"字".repeat(24));
+        let mut config = vertical_config();
+        config.editor.paper_ticks = 10;
+        config.theme.ruler = (0x2e, 0x30, 0x38);
+        let buffer = render_vertical(&mut editor, &config, 20, 14);
+
+        // Ruling the page gives every 縱 a margin — the rightmost included, which
+        // otherwise sits flush against the edge — so the page steps in a column.
+        // The first 縱 is the rightmost, so look from the right edge inward.
+        let x = (0..20)
+            .rev()
+            .find(|&x| at(&buffer, x, 0) == "字")
+            .expect("the 縱");
+        assert_eq!(x, 17, "the page made room for the rule");
+        // A tick at the tenth character down, and nowhere in between.
+        assert_eq!(at(&buffer, x + 2, 9), ".", "the tenth 字");
+        assert_eq!(at(&buffer, x + 2, 4).trim(), "", "and not the fifth");
     }
 
     #[test]

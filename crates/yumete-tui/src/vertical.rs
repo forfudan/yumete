@@ -54,6 +54,10 @@ pub struct Metrics {
     /// reading on the page is full-width. Uniform across the page, because a
     /// margin that changed width from 縱 to 縱 would not be a margin.
     pub ruby_width: u16,
+    /// Whether the page is ruled like 稿紙, which needs a margin of its own on
+    /// every 縱 — including the rightmost, which otherwise sits flush against
+    /// the edge and would have nowhere to put a tick.
+    pub ticks: bool,
 }
 
 impl Metrics {
@@ -82,6 +86,7 @@ impl Metrics {
             ruby,
             hanging,
             ruby_width: 1,
+            ticks: config.editor.paper_ticks > 0,
         }
     }
 
@@ -92,11 +97,12 @@ impl Metrics {
     /// column to the left — the page comes apart into a staircase. Pinyin is
     /// half-width and keeps the one cell it always had.
     fn ruby_cell(&self, annotated: bool) -> u16 {
-        if annotated && (self.ruby || self.hanging) {
+        let reading = if annotated && (self.ruby || self.hanging) {
             self.ruby_width
         } else {
             0
-        }
+        };
+        reading.max(u16::from(self.ticks))
     }
 
     /// How many 縱 fit across an area `width` cells wide. Only the gaps
@@ -418,6 +424,11 @@ pub fn draw(
     // A reading is set back; a hung mark is punctuation and reads as the text's
     // own, so it keeps the text colour and is told apart by weight instead.
     let reading_style = Style::default().add_modifier(Modifier::DIM);
+    let ticks = config.editor.paper_ticks;
+    let (tr, tg, tb) = config.theme.ruler;
+    let tick_style = Style::default()
+        .fg(Color::Rgb(tr, tg, tb))
+        .add_modifier(Modifier::DIM);
     let mark_style = Style::default().fg(Color::Rgb(0xb0, 0x8a, 0x6a));
 
     // Word ranges are per paragraph, and consecutive 縱 usually share one, so
@@ -427,6 +438,12 @@ pub fn draw(
     let buf = frame.buffer_mut();
     for (zong, slots, x) in page.iter() {
         let x = *x;
+        // Room for a tick: a 縱 that carries a reading or a hung mark has a
+        // margin of its own, and with a gap between 縱 the cell to the right is
+        // blank anyway. With neither, the next 縱 begins there.
+        // Every 縱 has a margin when the page is ruled, so the tick has a cell
+        // even on the rightmost one.
+        let has_margin = x + SLOT_WIDTH < area.x + area.width;
 
         if numbers != LineNumbers::None && zong.starts_line() {
             let n = match numbers {
@@ -464,6 +481,19 @@ pub fn draw(
                 .mark
                 .map(|m| (m, mark_style))
                 .or_else(|| row.ruby.map(|r| (r, reading_style)));
+            // 稿紙 is ruled, and a writer estimates length by it. A tick every
+            // `paper_ticks` characters down the 縱 is the vertical page's own
+            // version of that, and it costs one dim cell in a margin that is
+            // otherwise blank. It yields to a reading and to a hung mark, both
+            // of which carry meaning where this only guides the eye — and it is
+            // skipped where there is no margin to put it in.
+            if ticks > 0 && margin.is_none() && (slot + 1) % ticks == 0 && has_margin {
+                if let Some(cell) = buf.cell_mut((x + SLOT_WIDTH, y)) {
+                    if cell.symbol().trim().is_empty() {
+                        cell.set_symbol(".").set_style(tick_style);
+                    }
+                }
+            }
             if let Some((glyph, style)) = margin {
                 let mx = x + SLOT_WIDTH;
                 // A full-width reading covers the cell after it, and that cell

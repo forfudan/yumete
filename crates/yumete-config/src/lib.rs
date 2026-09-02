@@ -83,6 +83,28 @@ pub struct EditorConfig {
     /// 漢字 prose, and those characters are drawn wide by the CJK fonts such
     /// prose is read in. `"narrow"` for a Latin font.
     pub ambiguous_wide: bool,
+    /// The measure a horizontal page is written to, in cells; `0` for none
+    /// (Feature #101).
+    ///
+    /// Everything past it is tinted, which is information even with soft wrap
+    /// on: it says this row has run past the length you want your sentences to
+    /// be, which is what somebody breaking long sentences by hand is looking
+    /// for. The *line* is only drawn with wrap off — with it on, the edge of
+    /// the tint is already the line.
+    pub ruler: usize,
+    /// A tick every `paper_ticks` characters down a 縱; `0` for none
+    /// (Feature #102).
+    ///
+    /// 稿紙 is ruled, and a writer estimates length by it. The vertical page is
+    /// already a grid of squares, so this costs one dim cell in a margin that
+    /// is otherwise blank — and it is the one thing a horizontal editor has no
+    /// equivalent of.
+    ///
+    /// Off by default, because switching it on gives *every* 縱 a margin —
+    /// including the rightmost, which otherwise sits flush against the edge —
+    /// and so moves the whole page a column. That is a change to what somebody
+    /// is already looking at, and it should be asked for.
+    pub paper_ticks: usize,
     /// When the tab bar is drawn (Feature #95).
     pub tabs: Tabs,
     /// How many columns the file sidebar takes when it is open (Feature #94).
@@ -112,6 +134,8 @@ impl Default for EditorConfig {
             soft_wrap: true,
             autosave: true,
             ambiguous_wide: true,
+            ruler: 0,
+            paper_ticks: 0,
             tabs: Tabs::default(),
             sidebar_width: 24,
         }
@@ -217,6 +241,9 @@ pub struct ThemeConfig {
     /// The two alternating word-background tints for the segmentation overlay
     /// (Feature #24). Kept subtle so the overlay is not intrusive.
     pub segmentation: [(u8, u8, u8); 2],
+    /// The ruler: the tint over what runs past the measure, and the line
+    /// itself when there is one (Feature #101).
+    pub ruler: (u8, u8, u8),
     /// The background of the paragraph-number band (Feature #89).
     ///
     /// Every other editor separates line numbers from the text by *position* —
@@ -233,6 +260,7 @@ impl Default for ThemeConfig {
             selection: (60, 70, 100),
             segmentation: [(40, 44, 52), (52, 44, 40)],
             gutter: (36, 38, 44),
+            ruler: (46, 48, 56),
         }
     }
 }
@@ -450,6 +478,8 @@ struct RawEditor {
     ambiguous_width: Option<String>,
     sidebar_width: Option<usize>,
     tabs: Option<String>,
+    ruler: Option<usize>,
+    paper_ticks: Option<usize>,
 }
 
 #[derive(Deserialize, Default)]
@@ -458,6 +488,7 @@ struct RawTheme {
     selection: Option<String>,
     segmentation: Option<Vec<String>>,
     gutter: Option<String>,
+    ruler: Option<String>,
 }
 
 #[derive(Deserialize, Default)]
@@ -524,6 +555,12 @@ impl RawConfig {
         if other.editor.tabs.is_some() {
             self.editor.tabs = other.editor.tabs.clone();
         }
+        if other.editor.ruler.is_some() {
+            self.editor.ruler = other.editor.ruler;
+        }
+        if other.editor.paper_ticks.is_some() {
+            self.editor.paper_ticks = other.editor.paper_ticks;
+        }
         if other.theme.selection.is_some() {
             self.theme.selection = other.theme.selection;
         }
@@ -532,6 +569,9 @@ impl RawConfig {
         }
         if other.theme.gutter.is_some() {
             self.theme.gutter = other.theme.gutter;
+        }
+        if other.theme.ruler.is_some() {
+            self.theme.ruler = other.theme.ruler;
         }
         if other.ime.scheme.is_some() {
             self.ime.scheme = other.ime.scheme.clone();
@@ -609,6 +649,12 @@ impl RawConfig {
         if let Some(on) = self.editor.autosave {
             config.editor.autosave = on;
         }
+        if let Some(ruler) = self.editor.ruler {
+            config.editor.ruler = ruler.min(400);
+        }
+        if let Some(ticks) = self.editor.paper_ticks {
+            config.editor.paper_ticks = ticks.min(64);
+        }
         if let Some(tabs) = self.editor.tabs {
             if let Some(parsed) = Tabs::parse(&tabs) {
                 config.editor.tabs = parsed;
@@ -644,6 +690,11 @@ impl RawConfig {
         if let Some(hex) = self.theme.gutter {
             if let Some(rgb) = parse_hex(&hex) {
                 config.theme.gutter = rgb;
+            }
+        }
+        if let Some(hex) = self.theme.ruler {
+            if let Some(rgb) = parse_hex(&hex) {
+                config.theme.ruler = rgb;
             }
         }
         if let Some(markers) = self.panel.markers {
