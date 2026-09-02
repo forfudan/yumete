@@ -149,7 +149,7 @@ KEYS (Normal mode, Helix-style):
     3w 10j    a digit prefix repeats the motion or edit that follows
     h j k l   move by grapheme / line (CJK-width aware)
     w b e     next / prev word start, word end (W B E for WORDs)
-    gg  ge    goto buffer start / last line
+    gg  ge    goto buffer start / last line (10gg goes to line 10)
     gn  gp    show the next / previous open file
     gh gl gs  goto line start / end / first non-blank
     f t F T   find / till a character (forward / backward); A-. repeats it
@@ -182,6 +182,7 @@ KEYS (Normal mode, Helix-style):
               :s/old/new/[g]  :%s/old/new/[g]  :segment  :wq  :count
               :wrap  :nowrap   soft-wrap long paragraphs (on by default)
               :wq [path]       save (optionally save-as) and quit
+              :42  :goto n    put the cursor on a line
               :bn  :bp  switch between the open files (also gn / gp)
               :layout [horizontal|vertical]  :vertical  :horizontal
               :chaifen  toggle the 拆分 annotation beside candidates
