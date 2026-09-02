@@ -188,6 +188,23 @@ pub enum Hint {
     Keys(&'static str, Vec<(&'static str, &'static str)>),
 }
 
+/// How much of the result the page shows.
+///
+/// One axis, not two switches: each step shows more of what the file *means*
+/// and less of how it is written.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Render {
+    /// The file exactly as it is, in one colour.
+    Off,
+    /// Coloured, with every marker still on the page. The default: this is a
+    /// manuscript, and you have to be able to see what is in the file.
+    #[default]
+    On,
+    /// The markers come off the page — except the ones the cursor is inside,
+    /// so the cursor is never in text that is not on the screen (所見即所得).
+    Full,
+}
+
 /// How many places the jump list remembers.
 ///
 /// Bounded because a session of a thousand jumps does not need a thousandth of
@@ -366,6 +383,9 @@ pub struct Editor {
     /// out through the terminal itself (OSC 52), but almost every terminal
     /// refuses to *read* that way, so this one really does need the front end.
     clipboard_read: Option<bool>,
+    /// How much of the result is shown: the source, the source coloured, or
+    /// the page with the markup taken off it.
+    render: Render,
     /// The grid this file is being read as, when a schema says it is a table.
     ///
     /// A view, never a copy: the text stays the truth, and this only says how
@@ -425,10 +445,8 @@ pub struct Editor {
     /// that buffer's revision.
     block_cache: RefCell<Option<BlockCache>>,
     /// Whether Markdown is coloured at all (Feature #96).
-    show_markup: bool,
     /// 所見即所得 (Feature #104): the markup comes off the page, except on the
     /// construct the cursor is in.
-    wysiwyg: bool,
     /// Which ruby dialects were being laid out before 所見即所得 turned them
     /// all on, so leaving it gives back what the writer had rather than
     /// nothing.
@@ -581,6 +599,7 @@ impl Editor {
             scheme_request: None,
             clipboard_request: None,
             clipboard_read: None,
+            render: Render::On,
             table: None,
             show_detail: true,
             table_bypass: std::cell::Cell::new(false),
@@ -603,8 +622,6 @@ impl Editor {
             segment_cache: RefCell::new(SegmentCache::new()),
             markup_cache: RefCell::new(HashMap::new()),
             block_cache: RefCell::new(None),
-            show_markup: true,
-            wysiwyg: false,
             ruby_before: None,
             ruby: Dialects::only(crate::ruby::Dialect::Html),
             layout: Layout::default(),
@@ -1005,17 +1022,34 @@ impl Editor {
         Ok(CommandOutcome::Continue)
     }
 
-    // ---- Markdown colouring (Feature #96) ----------------------------------
+    // ---- How much of the result is shown (Features #96 / #104) -------------
 
-    /// Whether Markdown is coloured.
-    pub fn markup_visible(&self) -> bool {
-        self.show_markup
+    /// How the markup is being shown.
+    pub fn render(&self) -> Render {
+        self.render
     }
 
-    /// Set whether Markdown is coloured, returning the new state.
-    pub fn set_markup_visible(&mut self, on: bool) -> bool {
-        self.show_markup = on;
-        self.show_markup
+    /// Show more or less of the result, returning what it settled on.
+    ///
+    /// One setting with three values rather than two switches, because the
+    /// fourth combination does not exist: markers taken off the page *without*
+    /// colouring would leave 「年」 with nothing to say it was ever bold —
+    /// information thrown away rather than markup put aside. The code always
+    /// knew this (`wysiwyg && show_markup`); this is the knowledge moved into
+    /// the type, where it cannot be got wrong.
+    pub fn set_render(&mut self, how: Render) -> Render {
+        let was_full = self.render == Render::Full;
+        self.render = how;
+        if was_full != (how == Render::Full) {
+            self.on_wysiwyg_change(how == Render::Full);
+        }
+        self.markup_cache.borrow_mut().clear();
+        self.render
+    }
+
+    /// Whether Markdown is coloured at all.
+    pub fn markup_visible(&self) -> bool {
+        self.render != Render::Off
     }
 
     /// Which block the line at `line` belongs to.
@@ -1043,7 +1077,7 @@ impl Editor {
         let rope = buffer.rope();
         let lines = rope.len_lines();
         let last = last.min(lines.saturating_sub(1));
-        if !self.show_markup {
+        if !self.markup_visible() {
             return vec![crate::markdown::Block::Prose; last + 1];
         }
         // Worked out once per edit, not once per frame. Blocks depend on the
@@ -1085,23 +1119,18 @@ impl Editor {
 
     /// Whether the markup is taken off the page (所見即所得).
     pub fn wysiwyg(&self) -> bool {
-        self.wysiwyg
+        self.render == Render::Full
     }
 
-    /// Turn 所見即所得 on or off, returning the new state.
+    /// Lay readings out with the rest of the markup, or put them back.
     ///
-    /// It also lays readings out, because a reading is markup like any other —
-    /// though only the vertical page can show one, since that is the only
-    /// layout with a column to put it in.
-    pub fn set_wysiwyg(&mut self, on: bool) -> bool {
-        if on == self.wysiwyg {
-            return self.wysiwyg;
-        }
-        self.wysiwyg = on;
+    /// A reading is markup like any other — though only the vertical page can
+    /// show one, since that is the only layout with a column to put it in.
+    fn on_wysiwyg_change(&mut self, on: bool) {
         if on {
             // Every dialect: 所見即所得 means whatever the file is written in.
             // What was set before is put aside, not thrown away — a writer who
-            // had `:ruby-on` and glances at 所見即所得 should get it back.
+            // had `:ruby on` and glances at 所見即所得 should get it back.
             self.ruby_before = Some(self.ruby);
             let mut all = Dialects::NONE;
             for dialect in crate::ruby::Dialect::ALL {
@@ -1111,7 +1140,6 @@ impl Editor {
         } else {
             self.ruby = self.ruby_before.take().unwrap_or(Dialects::NONE);
         }
-        self.wysiwyg
     }
 
     /// The markup to take off `line`, as char ranges within it.
@@ -1120,7 +1148,7 @@ impl Editor {
     /// hidden, so the cursor is never inside text that is not on the screen —
     /// which is what makes every motion and every edit act on what can be seen.
     pub fn hidden_on_line(&self, line: usize) -> Vec<(usize, usize)> {
-        if !self.wysiwyg {
+        if !self.wysiwyg() {
             return Vec::new();
         }
         // Inside a fence nothing is markup, so nothing comes off.
@@ -1232,7 +1260,7 @@ impl Editor {
 
     /// The Markdown runs of `line`, cached against the paragraph's own text.
     pub fn markup_line(&self, line: usize) -> Vec<crate::markdown::Span> {
-        if !self.show_markup {
+        if !self.markup_visible() {
             return Vec::new();
         }
         let rope = self.current_buffer().rope();
@@ -1562,21 +1590,12 @@ impl Editor {
                 }
                 Ok(CommandOutcome::Continue)
             }
-            Command::ToggleMarkup => {
-                let on = self.set_markup_visible(!self.show_markup);
-                self.status = if on {
-                    "Markdown 著色".to_string()
-                } else {
-                    "不著色".to_string()
-                };
-                Ok(CommandOutcome::Continue)
-            }
-            Command::SetWysiwyg(on) => {
-                self.set_wysiwyg(on);
-                self.status = if on {
-                    "所見即所得：標記只在光標那一處展開".to_string()
-                } else {
-                    "源碼：檔案裏是什麼，畫面上就是什麼".to_string()
+            Command::SetRender(how) => {
+                self.set_render(how);
+                self.status = match how {
+                    Render::Off => "原文：不著色".to_string(),
+                    Render::On => "著色：標記留在畫面上".to_string(),
+                    Render::Full => "所見即所得：標記只在光標那一處展開".to_string(),
                 };
                 Ok(CommandOutcome::Continue)
             }
@@ -3032,7 +3051,7 @@ impl Editor {
         Grid::new(self.zong_length, self.ruby())
             .with_tatechuyoko(self.tatechuyoko)
             .with_hanging(self.hanging_punctuation())
-            .with_markup_hidden(self.wysiwyg && self.show_markup, Some(self.selection()))
+            .with_markup_hidden(self.render == Render::Full, Some(self.selection()))
     }
 
     /// Whether 句讀 hang in the margin beside the character they follow.
@@ -7199,7 +7218,7 @@ mod tests {
         let mut ed = typed(
             "那年冬天[^1]，山下起了大雪。\n\n[^1]: 據縣志，那是丁丑年。\n",
         );
-        ed.set_markup_visible(true);
+        ed.set_render(Render::On);
         // On the reference: the panel is the note itself, which is the whole
         // point of a footnote — it is meant to be read beside the sentence.
         ed.goto_line(1);
@@ -7222,7 +7241,7 @@ mod tests {
         // A comment is the other kind of note: still on the page, but a long
         // one is easier read in a panel than in the middle of a paragraph.
         let mut ed = typed("那年冬天%%這裏要改，冬天太早了%%。\n");
-        ed.set_markup_visible(true);
+        ed.set_render(Render::On);
         ed.goto_line(1);
         for _ in 0..5 {
             ed.on_key(Key::Char('l'));
@@ -7236,7 +7255,7 @@ mod tests {
         let mut ed = typed(
             "那年冬天[^1]，山下起了大雪。\n\n[^1]: 據縣志，那是丁丑年。\n",
         );
-        ed.set_markup_visible(true);
+        ed.set_render(Render::On);
         ed.goto_line(1);
         for _ in 0..4 {
             ed.on_key(Key::Char('l'));
@@ -7257,7 +7276,7 @@ mod tests {
 
         // A footnote nobody defined has nothing to show, and does not pretend.
         let mut ed = typed("那年冬天[^9]。\n");
-        ed.set_markup_visible(true);
+        ed.set_render(Render::On);
         ed.goto_line(1);
         for _ in 0..4 {
             ed.on_key(Key::Char('l'));
