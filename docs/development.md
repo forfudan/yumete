@@ -291,6 +291,8 @@ Phases are ordered by priority, most writer-critical first:
 | 93  | **Turning the page without a chord**       | core   | P2    | `J`/`K` half, `L`/`H` whole; join → `gJ` | Done |
 | 94  | **The file sidebar**                       | both   | P2    | `Space e`; the tree is the book's shape | Done |
 | 95  | **A tab bar for the open files**           | tui    | P3    | like a terminal's; clickable        | Done   |
+| 96  | **Markdown colouring, markup kept**        | core   | P2    | per paragraph and cached; not CommonMark | Done |
+| 97  | **Three views in the sidebar**             | both   | P2    | `Tab`: tree / buffers / outline; `Space o` | Done |
 
 ---
 

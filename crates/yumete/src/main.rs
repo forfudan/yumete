@@ -178,7 +178,7 @@ KEYS (Normal mode, Helix-style):
     gg  ge    goto buffer start / last line (10gg goes to line 10)
     gn  gp    show the next / previous open file
     gf        open the file:line named on this line (`:grep` results)
-    Space     menu: e sidebar, f files, b buffers, / search, ? commands, y copy
+    Space     menu: e sidebar, o outline, f files, b buffers, / search, y copy
     gh gl gs  goto line start / end / first non-blank
     f t F T   find / till a character (forward / backward); A-. repeats it
     J  K      forward / back half a page   (L / H for a whole one)

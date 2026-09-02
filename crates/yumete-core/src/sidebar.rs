@@ -14,6 +14,53 @@
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 
+/// What the sidebar is showing.
+///
+/// Three views of the same question — "what is there, and where am I in it" —
+/// at three scales: the project, the files open in it, and the chapter on
+/// screen. `Tab` walks between them, because they answer each other.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum View {
+    /// The files on disk, as a tree.
+    #[default]
+    Explorer,
+    /// The files already open.
+    Buffers,
+    /// The headings of the file being written.
+    Outline,
+}
+
+impl View {
+    /// The next view, cycling.
+    pub fn next(self) -> View {
+        match self {
+            View::Explorer => View::Buffers,
+            View::Buffers => View::Outline,
+            View::Outline => View::Explorer,
+        }
+    }
+
+    /// Its name, for the sidebar's header.
+    pub fn title(self) -> &'static str {
+        match self {
+            View::Explorer => "檔案",
+            View::Buffers => "緩衝區",
+            View::Outline => "大綱",
+        }
+    }
+}
+
+/// What choosing a row does.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Chosen {
+    /// Open this file.
+    File(PathBuf),
+    /// Show the buffer with this index.
+    Buffer(usize),
+    /// Put the cursor on this line of the file being written.
+    Line(usize),
+}
+
 /// One line of the tree.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Row {
@@ -37,6 +84,10 @@ pub struct Sidebar {
     open: BTreeSet<PathBuf>,
     rows: Vec<Row>,
     selected: usize,
+    /// Which view is showing, and where the highlight was in each of the other
+    /// two — so `Tab` back and forth returns to where you were, not to the top.
+    view: View,
+    kept: [usize; 3],
 }
 
 /// How many entries one directory contributes before the tree gives up on it.
@@ -53,9 +104,34 @@ impl Sidebar {
             open: BTreeSet::from([root.to_path_buf()]),
             rows: Vec::new(),
             selected: 0,
+            view: View::Explorer,
+            kept: [0; 3],
         };
         sidebar.rebuild();
         sidebar
+    }
+
+    /// Which view is showing.
+    pub fn view(&self) -> View {
+        self.view
+    }
+
+    /// Walk to the next view (`Tab`), keeping each one's place.
+    ///
+    /// The rows of the other two are not this module's to build — buffers and
+    /// headings belong to the editor — so it says which view it wants and is
+    /// handed the rows for it.
+    pub fn cycle(&mut self) -> View {
+        self.kept[self.view as usize] = self.selected;
+        self.view = self.view.next();
+        self.selected = self.kept[self.view as usize];
+        self.view
+    }
+
+    /// Fill the sidebar with rows the editor built (buffers, or headings).
+    pub fn set_rows(&mut self, rows: Vec<Row>) {
+        self.rows = rows;
+        self.selected = self.selected.min(self.rows.len().saturating_sub(1));
     }
 
     /// The rows to draw, top to bottom.
@@ -68,12 +144,20 @@ impl Sidebar {
         self.selected.min(self.rows.len().saturating_sub(1))
     }
 
-    /// The name of the directory the tree is rooted at, for the header.
+    /// The sidebar's header: the view's name, and for the tree the directory it
+    /// is rooted at.
     pub fn title(&self) -> String {
-        self.root
-            .file_name()
-            .map(|n| n.to_string_lossy().into_owned())
-            .unwrap_or_else(|| self.root.display().to_string())
+        match self.view {
+            View::Explorer => {
+                let root = self
+                    .root
+                    .file_name()
+                    .map(|n| n.to_string_lossy().into_owned())
+                    .unwrap_or_else(|| self.root.display().to_string());
+                format!("{}  {root}", self.view.title())
+            }
+            view => view.title().to_string(),
+        }
     }
 
     /// Move the highlight, stopping at the ends rather than wrapping: a tree is
@@ -87,12 +171,19 @@ impl Sidebar {
         };
     }
 
-    /// Enter the highlighted row: a file is returned to be opened, a directory
-    /// opens or closes.
-    pub fn activate(&mut self) -> Option<PathBuf> {
+    /// Enter the highlighted row.
+    ///
+    /// In the tree a directory opens or closes and a file is handed back to be
+    /// opened; in the other two views every row is a destination.
+    pub fn activate(&mut self) -> Option<Chosen> {
         let row = self.rows.get(self.selected())?.clone();
+        match self.view {
+            View::Buffers => return Some(Chosen::Buffer(row.depth)),
+            View::Outline => return Some(Chosen::Line(row.depth)),
+            View::Explorer => {}
+        }
         if !row.is_dir {
-            return Some(row.path);
+            return Some(Chosen::File(row.path));
         }
         if row.expanded {
             self.open.remove(&row.path);
@@ -108,6 +199,9 @@ impl Sidebar {
     /// One key for both, because "less of this" is one intention: pressing it
     /// repeatedly walks back up the tree, which is how a reader leaves a branch.
     pub fn collapse(&mut self) {
+        if self.view != View::Explorer {
+            return;
+        }
         let Some(row) = self.rows.get(self.selected()).cloned() else {
             return;
         };
@@ -132,6 +226,9 @@ impl Sidebar {
     /// Put the highlight on `path`, if it is on the tree — so opening a file by
     /// any other means still shows where it lives.
     pub fn reveal(&mut self, path: &Path) {
+        if self.view != View::Explorer {
+            return;
+        }
         // Expand every directory between the root and the file first.
         let mut at = path.parent();
         let mut opened = false;
@@ -154,7 +251,10 @@ impl Sidebar {
     }
 
     /// Walk the tree again, descending only into the directories that are open.
-    fn rebuild(&mut self) {
+    pub(crate) fn rebuild(&mut self) {
+        if self.view != View::Explorer {
+            return;
+        }
         let keep = self.rows.get(self.selected()).map(|r| r.path.clone());
         self.rows.clear();
         let root = self.root.clone();
@@ -261,12 +361,63 @@ mod tests {
 
         // Down onto the chapter, and entering it hands back the path to open.
         sidebar.step(true);
-        assert_eq!(sidebar.activate(), Some(dir.join("卷一/ch01.md")));
+        assert_eq!(
+            sidebar.activate(),
+            Some(Chosen::File(dir.join("卷一/ch01.md")))
+        );
 
         // Collapsing from inside walks back out to the directory.
         sidebar.collapse();
         assert_eq!(sidebar.rows()[sidebar.selected()].name, "卷一");
         assert_eq!(sidebar.rows().len(), 3, "and it is closed again");
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn tab_walks_the_views_and_keeps_each_ones_place() {
+        let dir = novel();
+        let mut sidebar = Sidebar::new(&dir);
+        sidebar.step(true);
+        assert_eq!(sidebar.selected(), 1);
+
+        assert_eq!(sidebar.cycle(), View::Buffers);
+        // The other views' rows come from the editor; empty until it fills them.
+        assert_eq!(sidebar.selected(), 0);
+        assert_eq!(sidebar.cycle(), View::Outline);
+        assert_eq!(sidebar.cycle(), View::Explorer);
+        assert_eq!(sidebar.selected(), 1, "the tree is where it was left");
+        assert!(sidebar.title().contains("檔案"));
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn a_flat_view_carries_its_index_and_is_not_a_tree() {
+        let dir = novel();
+        let mut sidebar = Sidebar::new(&dir);
+        sidebar.cycle();
+        sidebar.set_rows(vec![
+            Row {
+                path: PathBuf::new(),
+                name: "ch01.md".to_string(),
+                depth: 0,
+                is_dir: false,
+                expanded: true,
+            },
+            Row {
+                path: PathBuf::new(),
+                name: "ch02.md +".to_string(),
+                depth: 1,
+                is_dir: false,
+                expanded: false,
+            },
+        ]);
+        sidebar.step(true);
+        assert_eq!(sidebar.activate(), Some(Chosen::Buffer(1)));
+        // Collapsing means nothing in a flat list, and does nothing.
+        sidebar.collapse();
+        assert_eq!(sidebar.rows().len(), 2);
+
         std::fs::remove_dir_all(&dir).ok();
     }
 
