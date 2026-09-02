@@ -40,6 +40,19 @@ pub use yumete_cjk::vertical::{Layout, DEFAULT_ZONG_GAP, DEFAULT_ZONG_LENGTH};
 /// under the other would sit in the wrong row.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Grid {
+    /// Whether Markdown's markup comes off the page (所見即所得, Feature #104).
+    ///
+    /// A hidden run joins the slot beside it rather than taking one of its own,
+    /// so the cursor steps over `**` in one press and the wrap length counts
+    /// writing rather than asterisks — the same thing a ruby group's tags have
+    /// always done.
+    pub hide_markup: bool,
+    /// Where the cursor is, as `(line, column)`.
+    ///
+    /// The construct the cursor is in is never hidden, so this is part of the
+    /// grid: it changes which characters occupy a slot, and everything that
+    /// asks the grid a question has to be asking about the same page.
+    pub cursor: Option<(usize, usize)>,
     /// Graphemes per 縱.
     pub zong_len: usize,
     /// Which ruby dialects are laid out as readings. Empty shows the markup as
@@ -58,12 +71,23 @@ pub struct Grid {
 }
 
 impl Grid {
+    /// Take the markup off the page, with the cursor at `(line, column)`.
+    pub fn with_markup_hidden(self, on: bool, cursor: Option<(usize, usize)>) -> Grid {
+        Grid {
+            hide_markup: on,
+            cursor,
+            ..self
+        }
+    }
+
     pub fn new(zong_len: usize, ruby: Dialects) -> Grid {
         Grid {
             zong_len: zong_len.max(1),
             ruby,
             hanging: false,
             tatechuyoko: false,
+            hide_markup: false,
+            cursor: None,
         }
     }
 
@@ -205,6 +229,12 @@ pub struct Slot {
 /// base is centred over however many rows the reading needs. That spacing is
 /// what real typesetting does and is why two adjacent readings never collide.
 pub fn line_slots(text: &str, grid: Grid) -> Vec<Slot> {
+    line_slots_at(text, grid, None)
+}
+
+/// [`line_slots`] for the line at `line`, which is what decides whether the
+/// cursor is on it — and so which construct is shown whole.
+pub fn line_slots_at(text: &str, grid: Grid, line: Option<usize>) -> Vec<Slot> {
     let chars: Vec<char> = text.chars().collect();
     let groups = crate::ruby::groups(&chars, grid.ruby);
     let mut slots = Vec::new();
@@ -214,12 +244,51 @@ pub fn line_slots(text: &str, grid: Grid) -> Vec<Slot> {
     // outlive the plain run, or the bracket is left behind as a row of its own
     // and the reader loses the very square hanging it was meant to save.
     let mut opening = None;
+    // Which characters are markup rather than writing. A hidden run takes no
+    // slot of its own; it joins the slot beside it, so the cursor steps over
+    // `**` in one press and the wrap length counts writing.
+    let hidden = if grid.hide_markup {
+        let cursor = grid
+            .cursor
+            .filter(|(l, _)| Some(*l) == line)
+            .map(|(_, column)| column);
+        crate::markdown::hidden(&crate::markdown::spans(text), cursor)
+    } else {
+        Vec::new()
+    };
     for group in &groups {
-        push_plain(&mut slots, &chars, at, group.start, grid, &mut opening);
+        push_plain(
+            &mut slots,
+            &chars,
+            at,
+            group.start,
+            grid,
+            &mut opening,
+            &hidden,
+        );
         push_ruby(&mut slots, &chars, group, grid, &mut opening);
         at = group.end;
     }
-    push_plain(&mut slots, &chars, at, chars.len(), grid, &mut opening);
+    push_plain(
+        &mut slots,
+        &chars,
+        at,
+        chars.len(),
+        grid,
+        &mut opening,
+        &hidden,
+    );
+    // Markup at the very end of the line has no slot after it to join, so it
+    // joins the one before — the line's last slot then covers it, and the
+    // end-of-line caret still sits past the whole thing rather than inside it.
+    let from = slots.last().map_or(0, |s| s.end);
+    if from < chars.len()
+        && (from..chars.len()).all(|i| hidden.iter().any(|&(a, b)| i >= a && i < b))
+    {
+        if let Some(last) = slots.last_mut() {
+            last.end = chars.len();
+        }
+    }
     // Whatever is still waiting had nothing to hang on; it is drawn on its own.
     if let Some((at, mark)) = opening {
         slots.push(Slot {
@@ -241,20 +310,32 @@ fn push_plain(
     to: usize,
     grid: Grid,
     opening: &mut Option<(usize, char)>,
+    hidden: &[(usize, usize)],
 ) {
     if from >= to {
         return;
     }
+    // Markup that comes off the page joins the slot after it — or, at the end
+    // of a run, the slot before it. Either way it is *inside* a slot, so a
+    // motion crosses it in one step and the cursor never lands in text that is
+    // not on the screen.
+    let is_hidden = |at: usize| hidden.iter().any(|&(a, b)| at >= a && at < b);
+    let mut swallowed: Option<usize> = None;
     let text: String = chars[from..to].iter().collect();
     let offsets = slot_offsets(&text, grid.tatechuyoko);
     for w in offsets.windows(2) {
         let body: String = chars[from + w[0]..from + w[1]].iter().collect();
         let at = from + w[0];
 
+        if is_hidden(at) {
+            swallowed = Some(swallowed.unwrap_or(at));
+            continue;
+        }
+
         // 標點旁置: a 句讀 mark stops being a row of its own and hangs beside the
         // character it follows. It joins that character's slot, so the wrap
         // length, the cursor and every motion agree that 「文。」 is one row.
-        if grid.hanging && body.chars().count() == 1 {
+        if grid.hanging && body.chars().count() == 1 && swallowed.is_none() {
             let mark = body.chars().next().expect("one character");
             // The half-width form is what hangs, and a mark that has none does
             // not hang at all — it keeps its square. So this is one question,
@@ -314,6 +395,7 @@ fn push_plain(
             Some((opened_at, mark)) => (opened_at, Some(mark)),
             None => (at, None),
         };
+        let start = swallowed.take().unwrap_or(start).min(start);
         slots.push(Slot {
             start,
             end: from + w[1],
@@ -851,6 +933,8 @@ mod tests {
         ruby: Dialects::NONE,
         hanging: false,
         tatechuyoko: false,
+        hide_markup: false,
+        cursor: None,
     };
 
     /// Readings laid out, so the ruby tests exercise the layout.
@@ -1260,6 +1344,43 @@ mod tests {
 
     /// 「。」 ends a line of speech, and is common enough that the second mark
     /// must not fall back into the text column.
+    #[test]
+    fn markup_taken_off_the_page_joins_the_slot_beside_it() {
+        // 所見即所得: the `**` is not a row of its own. It belongs to the slot
+        // beside it, so `l` steps over it in one press and a 縱 holds writing
+        // rather than asterisks.
+        let grid = G.with_markup_hidden(true, None);
+        let slots = line_slots_at("那**年**冬", grid, Some(0));
+        let texts: Vec<&str> = slots.iter().map(|s| s.text.as_str()).collect();
+        assert_eq!(texts, ["那", "年", "冬"]);
+        // …and the ranges cover every character of the line between them, so
+        // there is nowhere to step that is not on the screen. Hidden markup
+        // joins the slot *after* it, which is why 年 carries the opening `**`
+        // and 冬 carries the closing one.
+        assert_eq!((slots[0].start, slots[0].end), (0, 1), "那");
+        assert_eq!((slots[1].start, slots[1].end), (1, 4), "**年");
+        assert_eq!((slots[2].start, slots[2].end), (4, 7), "**冬");
+
+        // The construct the cursor is in is shown whole.
+        let open = G.with_markup_hidden(true, Some((0, 4)));
+        let texts: Vec<String> = line_slots_at("那**年**冬", open, Some(0))
+            .into_iter()
+            .map(|s| s.text)
+            .collect();
+        assert_eq!(texts, ["那", "*", "*", "年", "*", "*", "冬"]);
+    }
+
+    #[test]
+    fn markup_at_the_end_of_a_line_joins_the_slot_before_it() {
+        let grid = G.with_markup_hidden(true, None);
+        let slots = line_slots_at("那年**冬**", grid, Some(0));
+        let texts: Vec<&str> = slots.iter().map(|s| s.text.as_str()).collect();
+        assert_eq!(texts, ["那", "年", "冬"]);
+        // The last slot reaches the end of the line, so the caret past it sits
+        // past the whole thing rather than between two asterisks.
+        assert_eq!(slots.last().unwrap().end, 7);
+    }
+
     #[test]
     fn a_bracket_waiting_for_a_ruby_group_hangs_on_its_base() {
         // The bracket introduces the character the group annotates, and that

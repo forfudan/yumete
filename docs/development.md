@@ -299,6 +299,7 @@ Phases are ordered by priority, most writer-critical first:
 | 101 | **A measure to write to**                  | tui    | P3    | tint past it; the line only unwrapped | Done |
 | 102 | **稿紙 ticks down the 縱**                 | tui    | P3    | the vertical page is already a grid | Done   |
 | 103 | **Extended Markdown**                      | core   | P2    | `==`, `[^1]`, `[[…]]`, `%%…%%`, `:::`, blocks | Done |
+| 104 | **所見即所得**                             | both   | P1    | markup off the page but the cursor's construct | Done |
 
 ---
 

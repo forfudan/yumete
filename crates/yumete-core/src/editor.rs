@@ -241,6 +241,9 @@ pub struct Editor {
     markup_cache: RefCell<HashMap<usize, (u64, Vec<crate::markdown::Span>)>>,
     /// Whether Markdown is coloured at all (Feature #96).
     show_markup: bool,
+    /// 所見即所得 (Feature #104): the markup comes off the page, except on the
+    /// construct the cursor is in.
+    wysiwyg: bool,
     /// The command-line completion in progress: the prefix Tab started from, and
     /// which match is selected. The prefix is kept because the typed text is
     /// replaced by each candidate in turn, so the line itself can no longer say
@@ -385,6 +388,7 @@ impl Editor {
             segment_cache: RefCell::new(SegmentCache::new()),
             markup_cache: RefCell::new(HashMap::new()),
             show_markup: true,
+            wysiwyg: false,
             ruby: Dialects::only(crate::ruby::Dialect::Html),
             layout: Layout::default(),
             zong_length: DEFAULT_ZONG_LENGTH,
@@ -770,6 +774,47 @@ impl Editor {
         out
     }
 
+    /// Whether the markup is taken off the page (所見即所得).
+    pub fn wysiwyg(&self) -> bool {
+        self.wysiwyg
+    }
+
+    /// Turn 所見即所得 on or off, returning the new state.
+    ///
+    /// It also lays readings out, because a reading is markup like any other —
+    /// though only the vertical page can show one, since that is the only
+    /// layout with a column to put it in.
+    pub fn set_wysiwyg(&mut self, on: bool) -> bool {
+        self.wysiwyg = on;
+        self.ruby = if on {
+            // Every dialect: 所見即所得 means whatever the file is written in.
+            let mut all = Dialects::NONE;
+            for dialect in crate::ruby::Dialect::ALL {
+                all.insert(dialect);
+            }
+            all
+        } else {
+            Dialects::NONE
+        };
+        self.wysiwyg
+    }
+
+    /// The markup to take off `line`, as char ranges within it.
+    ///
+    /// Empty unless 所見即所得 is on. The construct the cursor is in is never
+    /// hidden, so the cursor is never inside text that is not on the screen —
+    /// which is what makes every motion and every edit act on what can be seen.
+    pub fn hidden_on_line(&self, line: usize) -> Vec<(usize, usize)> {
+        if !self.wysiwyg {
+            return Vec::new();
+        }
+        let spans = self.markup_line(line);
+        let rope = self.current_buffer().rope();
+        let cursor = (self.cursor_line() == line)
+            .then(|| self.cursor.saturating_sub(rope.line_to_char(line)));
+        crate::markdown::hidden(&spans, cursor)
+    }
+
     /// The Markdown runs of `line`, cached against the paragraph's own text.
     pub fn markup_line(&self, line: usize) -> Vec<crate::markdown::Span> {
         if !self.show_markup {
@@ -985,6 +1030,15 @@ impl Editor {
                     "句讀 hang in the margin".to_string()
                 } else {
                     "句讀 take a square each".to_string()
+                };
+                Ok(CommandOutcome::Continue)
+            }
+            Command::SetWysiwyg(on) => {
+                self.set_wysiwyg(on);
+                self.status = if on {
+                    "所見即所得：標記只在光標那一處展開".to_string()
+                } else {
+                    "源碼：檔案裏是什麼，畫面上就是什麼".to_string()
                 };
                 Ok(CommandOutcome::Continue)
             }
@@ -1215,9 +1269,13 @@ impl Editor {
     /// laid out. Every 縱 question takes this, so the cursor and the page can
     /// never disagree about where a row begins.
     pub fn grid(&self) -> Grid {
+        let rope = self.current_buffer().rope();
+        let line = self.cursor_line();
+        let column = self.cursor.saturating_sub(rope.line_to_char(line));
         Grid::new(self.zong_length, self.ruby)
             .with_tatechuyoko(self.tatechuyoko)
             .with_hanging(self.hanging)
+            .with_markup_hidden(self.wysiwyg && self.show_markup, Some((line, column)))
     }
 
     /// Whether 句讀 hang in the margin beside the character they follow.
