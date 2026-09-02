@@ -25,8 +25,8 @@ pub enum Command {
     Quit {
         force: bool,
     },
-    /// `:wq` / `:x` — save, then leave.
-    WriteQuit,
+    /// `:wq [path]` / `:x` — save (optionally to a new path), then leave.
+    WriteQuit(Option<String>),
     /// `:count` (alias `:wc`) — how much has been written.
     Count,
     /// `:s/pattern/replacement/[g]` (optionally `:%s/...` for the whole file) —
@@ -148,7 +148,11 @@ pub fn parse(input: &str) -> Result<Command, CommandError> {
         } else {
             Some(rest.to_string())
         })),
-        "wq" | "x" => Ok(Command::WriteQuit),
+        "wq" | "x" => Ok(Command::WriteQuit(if rest.is_empty() {
+            None
+        } else {
+            Some(rest.to_string())
+        })),
         "count" | "wc" => Ok(Command::Count),
         "quit" | "q" => Ok(Command::Quit { force: false }),
         "quit!" | "q!" => Ok(Command::Quit { force: true }),

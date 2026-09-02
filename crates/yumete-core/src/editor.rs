@@ -34,13 +34,6 @@ type SegmentCache = HashMap<usize, (u64, Vec<(usize, usize)>)>;
 /// document does not end up holding one entry per paragraph in it.
 const SEGMENT_CACHE_LIMIT: usize = 512;
 
-/// A snapshot of a buffer's content for undo/redo.
-struct EditSnapshot {
-    rope: Rope,
-    cursor: usize,
-    modified: bool,
-}
-
 /// What Ruby mode will write when the reading is submitted.
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum RubyTarget {
@@ -130,8 +123,6 @@ pub struct Editor {
     page_lines: usize,
     page_columns: usize,
     /// Undo and redo stacks of buffer snapshots (Feature #11).
-    undo_stack: Vec<EditSnapshot>,
-    redo_stack: Vec<EditSnapshot>,
     /// The last search pattern and direction (Feature #14).
     last_search: String,
     search_forward: bool,
@@ -268,8 +259,6 @@ impl Editor {
             replaying: false,
             page_lines: 20,
             page_columns: 10,
-            undo_stack: Vec::new(),
-            redo_stack: Vec::new(),
             last_search: String::new(),
             search_forward: true,
             key_aliases: HashMap::new(),
@@ -327,12 +316,28 @@ impl Editor {
 
     /// Show the next buffer, wrapping (Helix `gn`, `:buffer-next`).
     pub fn next_buffer(&mut self) {
+        if self.only_one_buffer() {
+            return;
+        }
         let next = (self.current + 1) % self.buffers.len();
         self.show_buffer(next);
     }
 
+    /// Say so when there is nowhere to switch to, rather than swallowing the
+    /// key: a `gn` that does nothing silently reads as a broken keymap.
+    fn only_one_buffer(&mut self) -> bool {
+        if self.buffers.len() == 1 {
+            self.status = "only one file open".to_string();
+            return true;
+        }
+        false
+    }
+
     /// Show the previous buffer, wrapping (Helix `gp`, `:buffer-previous`).
     pub fn prev_buffer(&mut self) {
+        if self.only_one_buffer() {
+            return;
+        }
         let count = self.buffers.len();
         let previous = (self.current + count - 1) % count;
         self.show_buffer(previous);
@@ -352,8 +357,9 @@ impl Editor {
         // Segmentation is cached per line number, and the lines are a different
         // document now.
         self.segment_cache.borrow_mut().clear();
-        let (n, total) = self.buffer_position();
-        self.status = format!("{} [{n}/{total}]", self.current_buffer().display_name());
+        // The `[n/total]` indicator is already on the status line; repeating it
+        // here would print it twice on every switch.
+        self.status = self.current_buffer().display_name().to_string();
     }
 
     /// The active buffer.
@@ -401,13 +407,7 @@ impl Editor {
                 self.write_current(path.as_deref())?;
                 Ok(CommandOutcome::Continue)
             }
-            Command::Quit { force } => {
-                if force || !self.current_buffer().is_modified() {
-                    Ok(CommandOutcome::Quit)
-                } else {
-                    Err(EditorError::UnsavedChanges)
-                }
-            }
+            Command::Quit { force } => self.quit(force),
             Command::Substitute {
                 pattern,
                 replacement,
@@ -460,9 +460,12 @@ impl Editor {
                 self.format_ruby(dialect);
                 Ok(CommandOutcome::Continue)
             }
-            Command::WriteQuit => {
-                self.write_current(None)?;
-                Ok(CommandOutcome::Quit)
+            Command::WriteQuit(path) => {
+                self.write_current(path.as_deref())?;
+                // Saving *this* buffer is not saving the session: another open
+                // file may still be dirty, and `:wq` reads as "everything is
+                // safe now", so it is held to the same check `:q` is.
+                self.quit(false)
             }
             Command::Count => {
                 self.status = self.count_report();
@@ -1407,50 +1410,58 @@ impl Editor {
 
     // ---- Undo / redo (Feature #11) ----------------------------------------
 
-    /// Record the current buffer state as an undo point and clear the redo stack.
-    fn snapshot(&mut self) {
-        let buffer = self.current_buffer();
-        self.undo_stack.push(EditSnapshot {
-            rope: buffer.snapshot_rope(),
-            cursor: self.cursor,
-            modified: buffer.is_modified(),
-        });
-        self.redo_stack.clear();
-    }
-
-    /// Undo the last change (`u` / `:undo`).
-    fn undo(&mut self) {
-        if let Some(prev) = self.undo_stack.pop() {
-            let current = EditSnapshot {
-                rope: self.current_buffer().snapshot_rope(),
-                cursor: self.cursor,
-                modified: self.current_buffer().is_modified(),
-            };
-            self.redo_stack.push(current);
-            self.current_buffer_mut().restore(prev.rope, prev.modified);
-            self.cursor = prev.cursor;
-            self.anchor = self.cursor;
-            self.clamp_cursor();
-        } else {
-            self.status = "already at oldest change".to_string();
+    /// Leave the editor, unless some open buffer has unsaved changes.
+    ///
+    /// *Some* buffer, not the current one: with `gn` and `gp` able to reach
+    /// every open file, quitting from a clean buffer while another one is dirty
+    /// would throw away work the editor never warned about.
+    fn quit(&mut self, force: bool) -> Result<CommandOutcome, EditorError> {
+        if force {
+            return Ok(CommandOutcome::Quit);
+        }
+        match self.buffers.iter().position(|b| b.is_modified()) {
+            Some(i) => {
+                // Show the file that is holding the exit up, so `!` is a
+                // decision about a named document rather than a guess.
+                self.show_buffer(i);
+                Err(EditorError::UnsavedChanges)
+            }
+            None => Ok(CommandOutcome::Quit),
         }
     }
 
-    /// Redo the last undone change (`:redo`).
+    /// Record the current buffer state as an undo point and clear the redo stack.
+    ///
+    /// The history lives on the [`Buffer`], not here: `u` must undo *this*
+    /// file's last change, whatever was edited in between.
+    fn snapshot(&mut self) {
+        let at = self.cursor;
+        self.current_buffer_mut().snapshot(at);
+    }
+
+    /// Undo the last change to this buffer (`u` / `:undo`).
+    fn undo(&mut self) {
+        let at = self.cursor;
+        match self.current_buffer_mut().undo(at) {
+            Some(cursor) => {
+                self.cursor = cursor;
+                self.anchor = cursor;
+                self.clamp_cursor();
+            }
+            None => self.status = "already at oldest change".to_string(),
+        }
+    }
+
+    /// Redo the last undone change to this buffer (`:redo`).
     fn redo(&mut self) {
-        if let Some(next) = self.redo_stack.pop() {
-            let current = EditSnapshot {
-                rope: self.current_buffer().snapshot_rope(),
-                cursor: self.cursor,
-                modified: self.current_buffer().is_modified(),
-            };
-            self.undo_stack.push(current);
-            self.current_buffer_mut().restore(next.rope, next.modified);
-            self.cursor = next.cursor;
-            self.anchor = self.cursor;
-            self.clamp_cursor();
-        } else {
-            self.status = "already at newest change".to_string();
+        let at = self.cursor;
+        match self.current_buffer_mut().redo(at) {
+            Some(cursor) => {
+                self.cursor = cursor;
+                self.anchor = cursor;
+                self.clamp_cursor();
+            }
+            None => self.status = "already at newest change".to_string(),
         }
     }
 
@@ -3790,6 +3801,63 @@ mod tests {
         // U redoes it (Helix redo).
         ed.on_key(Key::Char('U'));
         assert_eq!(ed.current_buffer().text(), "hello");
+    }
+
+    #[test]
+    fn undo_belongs_to_the_buffer_it_was_taken_in() {
+        let mut ed = Editor::new();
+        ed.current_buffer_mut().insert(0, "甲");
+        ed.execute(":new").unwrap();
+        ed.on_key(Key::Char('i'));
+        type_keys(&mut ed, "乙");
+        ed.on_key(Key::Esc);
+        assert_eq!(ed.current_buffer().text(), "乙");
+
+        // Back in the first file, `u` must find nothing to undo — not pop the
+        // snapshot taken in the second and write 乙's text over 甲's.
+        ed.prev_buffer();
+        assert_eq!(ed.current_buffer().text(), "甲");
+        ed.on_key(Key::Char('u'));
+        assert_eq!(ed.current_buffer().text(), "甲");
+
+        // And the second file's own history is still its own.
+        ed.next_buffer();
+        ed.on_key(Key::Char('u'));
+        assert_eq!(ed.current_buffer().text(), "");
+    }
+
+    #[test]
+    fn quitting_checks_every_open_file_not_just_this_one() {
+        let mut ed = Editor::new();
+        ed.on_key(Key::Char('i'));
+        type_keys(&mut ed, "unsaved");
+        ed.on_key(Key::Esc);
+        // A fresh, clean buffer is current — but the first one is still dirty.
+        ed.execute(":new").unwrap();
+        assert!(matches!(ed.execute(":q"), Err(EditorError::UnsavedChanges)));
+        // …and the editor moves to the file that is holding the exit up.
+        assert_eq!(ed.current_buffer().text(), "unsaved");
+        assert_eq!(ed.execute(":q!").unwrap(), CommandOutcome::Quit);
+    }
+
+    #[test]
+    fn write_quit_saves_where_it_is_told_and_refuses_a_nameless_buffer() {
+        let dir = std::env::temp_dir().join(format!("yumete-wq-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("saved.txt");
+
+        let mut ed = Editor::new();
+        ed.on_key(Key::Char('i'));
+        type_keys(&mut ed, "文");
+        ed.on_key(Key::Esc);
+        // With no path, `:wq` neither writes nor quits.
+        assert!(matches!(ed.execute(":wq"), Err(EditorError::NoFileName)));
+
+        // `:wq <path>` is a save-as, like `:w <path>`.
+        let out = ed.execute(&format!(":wq {}", path.display())).unwrap();
+        assert_eq!(out, CommandOutcome::Quit);
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), "文");
+        std::fs::remove_dir_all(&dir).ok();
     }
 
     #[test]
