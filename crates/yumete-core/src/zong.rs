@@ -561,7 +561,7 @@ fn slot_offsets(text: &str, tatechuyoko: bool) -> Vec<usize> {
 /// that opens something (「（), so the offending character is pulled down with
 /// its neighbour. The horizontal page has always done this; the vertical page —
 /// the reason to choose this editor — did not.
-fn zong_breaks(chars: &[char], slots: &[Slot], zong_len: usize) -> Vec<usize> {
+fn zong_breaks(chars: &[char], slots: &[Slot], zong_len: usize, groups: &[crate::ruby::Ruby]) -> Vec<usize> {
     let total = slots.len();
     let char_of = |i: usize| {
         slots
@@ -570,10 +570,30 @@ fn zong_breaks(chars: &[char], slots: &[Slot], zong_len: usize) -> Vec<usize> {
             .copied()
             .unwrap_or(' ')
     };
+    // Which slot each ruby group opens on. A group is laid out across several
+    // slots — the reading dealt down the ruby column, the base centred against
+    // it — so a break inside one leaves the base in this 縱 and the rest of its
+    // reading in the next, where it is centred against nothing.
+    let group_start = |i: usize| -> Option<usize> {
+        let at = slots.get(i)?.start;
+        groups
+            .iter()
+            .find(|g| at > g.start && at < g.end)
+            .map(|g| slots.partition_point(|s| s.start < g.start))
+    };
     let mut breaks = vec![0usize];
     let mut at = 0;
     while at + zong_len < total {
         let mut cut = at + zong_len;
+        // A reading group is not two characters and cannot be pulled down two
+        // at a time; it moves whole or not at all. Moving it whole is right
+        // while the 縱 keeps most of its length — beyond that the group is
+        // simply longer than a column has room to postpone, and it breaks.
+        if let Some(opens) = group_start(cut) {
+            if opens > at && (opens - at) * 2 >= zong_len {
+                cut = opens;
+            }
+        }
         for _ in 0..crate::wrap::MAX_KINSOKU_RETREAT {
             if cut <= at + 1 {
                 break;
@@ -596,7 +616,8 @@ fn zong_breaks(chars: &[char], slots: &[Slot], zong_len: usize) -> Vec<usize> {
 fn line_zongs(rope: &Rope, line: usize, grid: Grid) -> (Vec<Slot>, Vec<usize>) {
     let slots = line_grid(rope, line, grid);
     let chars: Vec<char> = line_text(rope, line).chars().collect();
-    let breaks = zong_breaks(&chars, &slots, grid.zong_len.max(1));
+    let groups = crate::ruby::groups(&chars, grid.ruby);
+    let breaks = zong_breaks(&chars, &slots, grid.zong_len.max(1), &groups);
     (slots, breaks)
 }
 
@@ -1400,6 +1421,37 @@ mod tests {
         assert_eq!(slots.len(), 6, "three rows each");
         let readings: String = slots.iter().filter_map(|s| s.ruby).collect();
         assert_eq!(readings, "kǒuwéi");
+    }
+
+    #[test]
+    fn a_reading_group_is_not_cut_in_half_by_a_zong_boundary() {
+        // A group is laid out across several slots — the reading dealt down
+        // the ruby column, the base centred against it. Cut it, and the base
+        // stays in this 縱 while the rest of its reading runs down the next
+        // one, centred against nothing.
+        let text = "一二三四五六<ruby>漢字<rt>kanji</rt></ruby>七八九十\n";
+        let rope = Rope::from_str(text);
+        let grid = Grid {
+            zong_len: 8,
+            ruby: HTML_ONLY,
+            hanging: false,
+            ..Grid::default()
+        };
+        let chars: Vec<char> = text.trim_end().chars().collect();
+        let groups = crate::ruby::groups(&chars, HTML_ONLY);
+        assert_eq!(groups.len(), 1);
+        let zongs = layout(&rope, grid);
+        // Every 縱 boundary falls outside the group, or on its very first slot.
+        for zong in &zongs {
+            let at = zong.start;
+            assert!(
+                !(at > groups[0].start && at < groups[0].end),
+                "a 縱 begins inside the group at char {at}",
+            );
+        }
+        // And the adjustment really fired: the group straddles slot 8, so the
+        // first 縱 gave up its last slots rather than cut it.
+        assert!(zongs[0].slots < 8, "{} slots", zongs[0].slots);
     }
 
     #[test]
