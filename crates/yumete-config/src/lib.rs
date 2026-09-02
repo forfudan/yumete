@@ -173,6 +173,14 @@ pub struct ThemeConfig {
     /// The two alternating word-background tints for the segmentation overlay
     /// (Feature #24). Kept subtle so the overlay is not intrusive.
     pub segmentation: [(u8, u8, u8); 2],
+    /// The background of the paragraph-number band (Feature #89).
+    ///
+    /// Every other editor separates line numbers from the text by *position* —
+    /// a gutter column the text can never enter — so a dim colour is enough.
+    /// Set vertically the numbers sit above the 縱, in the same columns as the
+    /// text, so position separates nothing and they read as digits somebody
+    /// typed. Colour has to do the whole job.
+    pub gutter: (u8, u8, u8),
 }
 
 impl Default for ThemeConfig {
@@ -180,6 +188,7 @@ impl Default for ThemeConfig {
         ThemeConfig {
             selection: (60, 70, 100),
             segmentation: [(40, 44, 52), (52, 44, 40)],
+            gutter: (36, 38, 44),
         }
     }
 }
@@ -402,6 +411,7 @@ struct RawEditor {
 struct RawTheme {
     selection: Option<String>,
     segmentation: Option<Vec<String>>,
+    gutter: Option<String>,
 }
 
 #[derive(Deserialize, Default)]
@@ -467,6 +477,9 @@ impl RawConfig {
         }
         if other.theme.segmentation.is_some() {
             self.theme.segmentation = other.theme.segmentation;
+        }
+        if other.theme.gutter.is_some() {
+            self.theme.gutter = other.theme.gutter;
         }
         if other.ime.scheme.is_some() {
             self.ime.scheme = other.ime.scheme.clone();
@@ -566,6 +579,11 @@ impl RawConfig {
                 if let Some(rgb) = parse_hex(hex) {
                     *slot = rgb;
                 }
+            }
+        }
+        if let Some(hex) = self.theme.gutter {
+            if let Some(rgb) = parse_hex(&hex) {
+                config.theme.gutter = rgb;
             }
         }
         if let Some(markers) = self.panel.markers {
