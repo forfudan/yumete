@@ -295,6 +295,7 @@ Phases are ordered by priority, most writer-critical first:
 | 97  | **Three views in the sidebar**             | both   | P2    | `Tab`: tree / buffers / outline; `Space o` | Done |
 | 98  | **One rule for opening the sidebar**       | core   | P3    | open / switch / focus / close       | Done   |
 | 99  | **The Insert caret over a half-width 字**  | tui    | P1    | it painted a typed digit out        | Done   |
+| 100 | **`C-w` between the panes**                | both   | P2    | and the status line says so         | Done   |
 
 ---
 

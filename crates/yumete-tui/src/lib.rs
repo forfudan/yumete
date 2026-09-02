@@ -1219,7 +1219,11 @@ fn draw_status(
     status_area: Rect,
 ) {
     let buffer = editor.current_buffer();
-    let status = if let Some((prefix, text)) = editor.prompt() {
+    let status = if editor.sidebar_focused() {
+        // The pane holding the keys says what they do — and how to give them
+        // back — where the reader already looks to find out what is going on.
+        format!("-- 側欄 --  {}", Editor::SIDEBAR_KEYS)
+    } else if let Some((prefix, text)) = editor.prompt() {
         // The composition in progress belongs at the caret, so a search reads as
         // the pattern being typed rather than jumping into place on commit. The
         // 中/英 tag is pushed to the right edge, where it cannot be mistaken for
@@ -2503,6 +2507,30 @@ mod tests {
         alone.current_buffer_mut().insert(0, "第一篇");
         let buffer = render_with(&alone, &config, &no_ime(), 40, 8);
         assert_eq!(at(&buffer, 0, 0), "第", "no bar for a single file");
+    }
+
+    #[test]
+    fn the_pane_holding_the_keys_says_how_to_give_them_back() {
+        let dir = std::env::temp_dir().join(format!("yumete-hint-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("ch01.md"), "").unwrap();
+
+        let mut editor = editor_with("那年冬天");
+        let config = Config::default();
+        editor.open_sidebar_at(&dir);
+        let buffer = render(&editor, &config, 80, 12);
+        let status = row_text(&buffer, 11);
+        assert!(status.contains("側欄"), "{status:?}");
+        assert!(status.contains("C-w"), "how to get back: {status:?}");
+
+        // With the keys back in the text it says what it always said.
+        editor.on_key(Key::Ctrl('w'));
+        let buffer = render(&editor, &config, 80, 12);
+        let status = row_text(&buffer, 11);
+        assert!(status.contains("NORMAL"), "{status:?}");
+
+        std::fs::remove_dir_all(&dir).ok();
     }
 
     #[test]
