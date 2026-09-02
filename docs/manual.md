@@ -1,219 +1,193 @@
-# yumete — user manual
+# yumete 使用手冊
 
-**yumete** (宇浩終端文字編輯器) is a terminal text editor for writing Chinese
-prose, with the Yume IME built in. This manual describes what it does today; it
-is updated as features land. For why things are built the way they are, see
-[development.md](development.md).
-
----
-
-## 1. Design philosophy
-
-**yumete follows Helix's model: you select first, then act.**
-
-In a Vim-lineage editor you say the verb and then the object — `dw`, "delete
-word" — and nothing happens until both are typed. In Helix, and in yumete, a
-motion *is* a selection: pressing `w` moves the cursor **and selects what it
-crossed**, so you can see exactly what you are about to operate on. `d` then
-deletes that selection. The order is reversed and the result is visible before
-you commit to it.
-
-Two things follow from that, and they are worth knowing on day one:
-
-- **Every motion leaves a selection.** `w`, `f`, `x` and the rest all mark a
-  range. `d`, `c`, `y`, `R`, `>` and `~` operate on whatever is marked.
-- **`;` collapses the selection** back to a bare cursor, and `v` toggles *extend
-  mode*, in which motions grow the selection instead of replacing it.
-
-**Where yumete departs from Helix, it departs toward the 漢字 cultural sphere.**
-Helix is an excellent editor for code written in a language with spaces between
-its words and lines that run left to right. Chinese prose is neither. So:
-
-- **Words come from a dictionary, not from spaces.** `w`/`b`/`e` step by real
-  Chinese words, using Yume's own language model (§6).
-- **`J` does not always insert a space.** Joining two lines that meet at two
-  full-width characters joins them directly, because a line break in Chinese
-  prose carries no space.
-- **Match mode knows CJK brackets.** `mi「`, `ms《`, `md` and the rest work over
-  「」『』（）《》【】〔〕 as well as the ASCII pairs — a novel's structure *is*
-  its brackets.
-- **The page can be set vertically** (§4), the way a novel is typeset, with
-  rotated punctuation, ruby, and a cursor that turns with the text.
-- **The IME is part of the editor**, not something in front of it — it composes
-  in the search line too, because searching a Chinese document for Chinese is
-  not an edge case.
+**yumete**（宇浩終端文字編輯器）是一個寫中文散文用的終端編輯器，內置宇夢輸入法。
+本手冊記錄目前能用的功能，隨開發持續更新。想知道某個設計為什麼這麼做，見
+[development.md](development.md)。
 
 ---
 
-## 2. Getting started
+## 一、設計哲學
+
+**yumete 採用 Helix 的哲學：先選擇，後動作。**
+
+Vim 一脈的編輯器是「動詞 + 賓語」——`dw` 是「刪一個詞」，兩個鍵都敲完之前什麼都不
+會發生。Helix 和 yumete 反過來：**一個移動就是一次選擇**。按 `w` 光標往前走，同時
+把走過的那一段選中，所以你**先看見**將要操作的範圍，再決定動不動它。`d` 刪的就是這
+段選區。
+
+由此有兩件事第一天就該知道：
+
+- **每個移動都會留下選區。** `w`、`f`、`x` 都會標出一段範圍，`d`、`c`、`y`、`R`、
+  `>`、`~` 作用在這段範圍上。
+- **`;` 把選區收成一個光標**，`v` 切換「延伸模式」——延伸模式下移動是把選區撐大，
+  而不是換一段。
+
+**凡是與 Helix 不同的地方，都是為了漢字文化圈。** Helix 是給「詞之間有空格、行從左
+往右」的語言寫的代碼編輯器，中文散文兩樣都不是。所以：
+
+- **詞由詞典決定，不由空格決定。** `w`／`b`／`e` 按真正的中文詞走，用的是宇夢自己
+  的語言模型（見第六節）。
+- **`J` 不一定補空格。** 兩個全角字之間合併時直接接上——中文換行本來就不帶空格，硬
+  插一個等於替作者寫了他沒寫的字。拉丁詞之間照補。
+- **match mode 認得中文括號。** `mi「`、`ms《`、`md` 這些對
+  「」『』（）《》【】〔〕 和 ASCII 括號一樣有效——小說的結構本來就是括號。
+- **版面可以竪排**（第五節），像小說排版那樣，標點會轉向，可以注音，光標也跟著轉。
+- **輸入法是編輯器的一部分**，不是擋在前面的東西——搜索行裡也能打中文，因為在中文
+  文檔裡搜中文不是什麼特殊情況。
+
+---
+
+## 二、上手
 
 ```sh
-scripts/build.sh          # builds ./yumete and installs the IME data
-scripts/build.sh --no-data   # just the binary
+scripts/build.sh             # 編譯出 ./yumete，並安裝輸入法數據
+scripts/build.sh --no-data   # 只編譯二進制
 ```
 
 ```
-yumete <file>...       open one or more files
-yumete                 start on an empty scratch buffer
+yumete <檔案>...       打開一個或多個檔案
+yumete                 從空白緩衝區開始
 
-  -v, --vertical       set this run vertically (縱書)
-  -H, --horizontal     force the ordinary layout
-  -p, --preview        print the buffer instead of opening the editor
-  -h, --help           the key and command summary
+  -v, --vertical       這次以竪排（縱書）開啟
+  -H, --horizontal     強制橫排
+  -p, --preview        只打印內容，不進編輯器
+  -h, --help           按鍵與命令一覽
   -V, --version
 ```
 
-`--preview` prints the page rather than opening the editor, and honours
-`--vertical` — useful for checking how something will be set without leaving the
-shell.
+`--preview` 不進編輯器，直接把內容打印出來，也認 `--vertical`——不離開命令行就能看
+排版效果。
 
 ---
 
-## 3. Modes
+## 三、模式
 
-| Mode | Entered by | For |
+| 模式 | 怎麼進 | 做什麼 |
 | --- | --- | --- |
-| **Normal** | `Esc` | Moving, selecting, and running commands |
-| **Insert** | `i` `a` `I` `A` `o` `O` `c` | Typing text; the IME composes here |
-| **Command** | `:` | Running a command; **ASCII only**, no IME |
-| **Search** | `/` `?` | Typing a pattern; the IME composes here |
-| **Ruby** | `:ruby` | Editing a reading; the IME composes here (§5.4) |
+| **Normal** | `Esc` | 移動、選擇、發命令 |
+| **Insert** | `i` `a` `I` `A` `o` `O` `c` | 打字；輸入法在這裡工作 |
+| **Command** | `:` | 發命令；**純 ASCII**，不走輸入法 |
+| **Search** | `/` `?` | 打搜索詞；輸入法在這裡工作 |
+| **Ruby** | `:ruby` | 改注音；輸入法在這裡工作（見 5.5） |
 
-The cursor tells you which mode you are in: a **block** in Normal, a **bar** in
-Insert. Set vertically the bar turns with the text and becomes a thin horizontal
-rule.
-
----
-
-## 4. Keys (Normal mode)
-
-A **count prefix** repeats what follows: `3w`, `10j`, `5>`. `0` on its own is not
-a count, so it stays free for other bindings.
-
-### Moving
-
-| | |
-| --- | --- |
-| `h` `j` `k` `l` | left / down / up / right, by grapheme and line |
-| `w` `b` `e` | next word start, previous word start, word end |
-| `W` `B` `E` | the same by WORD (whitespace-delimited) |
-| `f` `t` `F` `T` *c* | find / till character *c*, forward or back |
-| `A-.` | repeat the last `f`/`t` |
-| `C-d` `C-u` | half a page onward / back |
-| `C-f` `C-b` | a whole page — down the lines, or across the 縱 |
-| `gg` `ge` | start of buffer / last line |
-| `gh` `gl` `gs` | line start / line end / first non-blank |
-| `Home` `End` | line start / line end |
-
-### Selecting
-
-| | |
-| --- | --- |
-| `v` | extend mode — motions grow the selection |
-| `;` | collapse the selection to the cursor |
-| `x` | select the current line (repeat to extend) |
-| `X` | grow the selection out to whole lines |
-| `%` | select the whole file |
-| `A-;` | flip which end of the selection the cursor is on |
-
-### Changing
-
-| | |
-| --- | --- |
-| `d` `c` | delete / change the selection |
-| `i` `a` | insert before / after the selection |
-| `I` `A` | insert at line start / line end |
-| `o` `O` | open a line below / above |
-| `y` `p` `P` | yank / paste after / paste before |
-| `R` | replace the selection with the yank register |
-| `r` *c* | write *c* over every character of the selection |
-| `"` *a* | use register *a* for the next yank, delete or paste |
-| `q` `Q` | record a macro / play the last one back |
-| `J` | join with the line below |
-| `~` | switch case; `` ` `` lowercases, ``A-` `` uppercases |
-| `>` `<` | indent / unindent the selected lines |
-| `C-a` `C-x` | increment / decrement the number at the cursor |
-| `u` `U` | undo / redo |
-| `.` | repeat the last insert |
-
-### Searching
-
-| | |
-| --- | --- |
-| `/` `?` | search forward / backward — **the IME works here** |
-| `n` `N` | next / previous match |
-| `*` | search for whatever is selected |
-
-### Match mode (`m`)
-
-| | |
-| --- | --- |
-| `mm` | jump to the matching bracket |
-| `mi` *c* | select **inside** the pair named by *c* |
-| `ma` *c* | select **around** it |
-| `ms` *c* | surround the selection with *c* |
-| `md` | delete the surrounding pair |
-| `mr` *c* *d* | replace pair *c* with pair *d* |
-
-Either half of a pair names it, so `mi「` and `mi」` mean the same thing. The
-pairs are the ASCII brackets `()` `[]` `{}` `<>`, the quote characters `"` `'`
-and `` ` ``, and （）［］｛｝〈〉《》「」『』【】〔〕〖〗“”‘’.
+光標形狀告訴你在哪個模式：Normal 是**方塊**，Insert 是**竪線**。竪排時那根線跟著文
+字轉了九十度，變成一條橫線。
 
 ---
 
-## 5. Vertical layout (縱書)
+## 四、按鍵（Normal 模式）
 
-`:vertical`, or `yumete -v`, or `layout = "vertical"` in the config.
+前面加**數字**表示重複：`3w`、`10j`、`5>`。單獨的 `0` 不算數字前綴，留給別的用途。
 
-Text runs top to bottom in **縱** (*zong*) that stack from the right edge
-leftward. A 縱 is what a line is in horizontal layout; the word is borrowed
-because "line" and "column" would each mean two things here. A paragraph
-soft-wraps into as many 縱 as it needs — 32 characters each by default, the upper
-end of the comfortable range for prose.
+### 移動
 
-### 5.1 Moving
+| | |
+| --- | --- |
+| `h` `j` `k` `l` | 左／下／上／右，按字素和行走 |
+| `w` `b` `e` | 下一詞首、上一詞首、詞尾 |
+| `W` `B` `E` | 同上，但按空格分的「大詞」 |
+| `f` `t` `F` `T` *c* | 找／找到字符 *c* 之前，向前或向後 |
+| `A-.` | 重複上一次 `f`／`t` |
+| `C-d` `C-u` | 前進／後退半頁 |
+| `C-f` `C-b` | 整頁——橫排順著行走，竪排順著縱走 |
+| `gg` `ge` | 檔首／最後一行 |
+| `gh` `gl` `gs` | 行首／行尾／第一個非空白字符 |
+| `Home` `End` | 行首／行尾 |
 
-The **mouse wheel** turns the page: one notch moves three 縱. yumete captures the
-mouse to do that, so the terminal's own click-and-drag selection needs its
-modifier held (Option, on macOS) — the same trade Helix makes.
+### 選擇
 
-The **mouse wheel** turns the page: one notch moves three 縱. yumete captures the
-mouse to do that, which means the terminal's own click-and-drag selection needs
-its modifier held (Option, on macOS) — the same trade Helix makes.
+| | |
+| --- | --- |
+| `v` | 延伸模式——移動把選區撐大 |
+| `;` | 把選區收成光標 |
+| `x` | 選中當前行（再按繼續往下選） |
+| `X` | 把選區撐到整行邊界 |
+| `%` | 選中整個檔案 |
+| `A-;` | 光標換到選區的另一頭 |
 
+### 修改
 
-`h j k l` keep their **screen** meaning. `j` and `k` read down and up a 縱, which
-is forward and backward in the text; `h` and `l` step to the 縱 on the left and
-on the right. A long paragraph wraps from the foot of one 縱 to the head of the
-next without you doing anything.
+| | |
+| --- | --- |
+| `d` `c` | 刪除／改寫選區 |
+| `i` `a` | 在選區前／後插入 |
+| `I` `A` | 在行首／行尾插入 |
+| `o` `O` | 在下方／上方開新行 |
+| `y` `p` `P` | 複製／向後粘貼／向前粘貼 |
+| `R` | 用寄存器內容替換選區 |
+| `r` *c* | 把選區每個字都寫成 *c* |
+| `"` *a* | 下一次複製／刪除／粘貼使用寄存器 *a* |
+| `q` `Q` | 錄製宏／回放上一個宏 |
+| `J` | 與下一行合併 |
+| `~` | 切換大小寫；`` ` `` 轉小寫，``A-` `` 轉大寫 |
+| `>` `<` | 選中的行增加／減少縮進 |
+| `C-a` `C-x` | 光標處的數字加一／減一 |
+| `u` `U` | 撤銷／重做 |
+| `.` | 重複上一次插入 |
 
-The status line reads `橫 55, 縱 1, 字 20`: paragraphs stack across the page, so
-a paragraph number is a 橫 position; 縱 is which run of that paragraph; 字 is how
-far down it.
+### 搜索
 
-### 5.2 What the page does for you
+| | |
+| --- | --- |
+| `/` `?` | 向前／向後搜索——**這裡能打中文** |
+| `n` `N` | 下一個／上一個匹配 |
+| `*` | 搜索當前選中的內容 |
 
-- **Punctuation is rotated.** `。`→`︒`, `「」`→`﹁﹂`, `《》`→`︽︾`, `——`→`︱︱`.
-  On screen only — the file keeps the ordinary characters.
-- **Half-width characters sit one to a row**, hung against the slot's right
-  edge, so Latin and digits line up as one edge beside the 漢字. Setting a pair
-  sideways in a single slot (**縦中横**) is available with
-  `[editor] tatechuyoko = true`.
-- **A font matters.** The rotated forms are U+FE10–FE48; Source Han / Noto CJK,
-  Sarasa Gothic and LXGW WenKai Mono all carry them, a Latin-only programming
-  font does not.
+### match mode（`m`）
 
-### 5.3 標點旁置 — punctuation in the margin
+| | |
+| --- | --- |
+| `mm` | 跳到配對的括號 |
+| `mi` *c* | 選中 *c* 這對括號**裡面** |
+| `ma` *c* | 連括號一起選 |
+| `ms` *c* | 用 *c* 把選區包起來 |
+| `md` | 去掉外面那對括號 |
+| `mr` *c* *d* | 把 *c* 這對換成 *d* 這對 |
 
-`:hanging`, or `[editor] hanging_punctuation = true`.
+一對括號的任一半都能指代整對，`mi「` 和 `mi」` 一樣。認得的有 ASCII 括號
+`()` `[]` `{}` `<>`、引號 `"` `'` 和 `` ` ``，以及
+（）［］｛｝〈〉《》「」『』【】〔〕〖〗“”‘’。
 
-Set in the classical manner, 。，、？！：；「」 do not take a square of their own.
-They hang in the margin beside the character they belong to, so the text column
-carries nothing but text — which is how a 古籍 is punctuated, and what stops a
-page of dialogue looking half empty.
+---
+
+## 五、竪排（縱書）
+
+`:vertical`，或 `yumete -v`，或配置裡 `layout = "vertical"`。
+
+文字從上往下走，一條一條的**縱**從右往左排。「縱」就是竪排裡的「行」——之所以另起
+一個名字，是因為在這裡「行」和「列」各有兩個意思。一個段落會軟折成若干縱，默認每縱
+32 字，這是散文舒服的上限。
+
+### 5.1 移動
+
+`h j k l` 保持**屏幕方向**的意思。`j`、`k` 順著縱往下讀、往上讀，也就是文本的前進和
+後退；`h`、`l` 換到左邊、右邊那一縱。長段落從一縱的底部自動接到下一縱的頂部，不用你
+管。
+
+**鼠標滾輪**翻頁：一格滾三縱。為此 yumete 接管了鼠標，所以終端自帶的拖選複製需要按
+住修飾鍵（macOS 上是 Option）——Helix 也是這麼取捨的。
+
+狀態欄寫的是 `橫 55, 縱 1, 字 20`：段落是橫著往左排的，所以段號是個**橫**向位置；
+**縱**是這段的第幾縱；**字**是在這一縱裡往下第幾個。
+
+### 5.2 版面自動做的事
+
+- **標點會轉向**：`。`→`︒`、`「」`→`﹁﹂`、`《》`→`︽︾`、`——`→`︱︱`。只在屏幕上
+  轉，檔案裡還是原來的字符。
+- **半角字符一行一個**，靠格子右邊，這樣拉丁字母和數字會沿著漢字右側排成一條線。想
+  讓一對半角字擠進一格（**縦中横**），開 `[editor] tatechuyoko = true`。
+- **字體很要緊。** 轉向後的標點是 U+FE10–FE48，思源／Noto CJK、更紗黑體、霞鶩文楷
+  等寬都有，純拉丁的編程字體沒有。
+
+### 5.3 標點旁置
+
+`:hanging`，或配置裡 `hanging_punctuation = true`。
+
+古籍的排法裡，。，、？！：；「」 不佔一格，而是掛在它所屬的字旁邊，正文一路連下去
+不斷——這樣一頁對話才不會看起來有一半是空的。
 
 ```
-   off        on
+   關閉       開啟
    子         子
    曰         曰︓
    ︓         學﹁
@@ -222,163 +196,149 @@ page of dialogue looking half empty.
    而         之︐
 ```
 
-An **opening** bracket hangs beside the character it introduces; everything else
-beside the one it follows. Dashes and ellipses keep their square: 「——」 is a
-full-width rule carrying the line onward, and a half-width margin would break it.
+**開括號**掛在它引出的那個字旁邊，其餘的掛在它跟隨的那個字旁邊。破折號和省略號仍然
+佔格：「——」是一條貫穿的全角橫線，塞進半角邊欄就斷了。
 
-Marks share the margin with readings and **win it** — a mark belongs on its own
-character's row — so where both appear the reading gives way upward, taking the
-rows above the character.
+標點和注音搶同一個邊欄，**標點優先**——標點本來就該在它那個字的那一行——所以兩者同
+時出現時，注音往上讓，佔據這個字上方的幾行。
 
-### 5.4 Ruby (振假名 / 注音)
+### 5.4 注音（振假名／ruby）
 
-Readings are written into the file as markup and *laid out* on the page: the base
-is spaced against its reading, so two adjacent readings never collide, and the
-reading runs in the half-width column to the right of its 縱.
+注音以標記形式寫在檔案裡，由 yumete **排出來**：基字被撐開對著它的注音（所以相鄰兩
+個注音不會撞在一起），注音走在該縱右側那個半角格子裡。
 
-The markup is not yumete's own. Both are read, several at once, and the set
-starts from the file's extension:
+標記不是 yumete 自創的。兩種都認，可以同時開，默認按檔案後綴決定：
 
-| Dialect | Written as |
+| 方言 | 寫法 |
 | --- | --- |
-| `html` | `<ruby>口<rt>kǒu</rt></ruby>` — Markdown, HTML |
-| `typst` | `#ruby("口", "kǒu")` — Typst |
+| `html` | `<ruby>口<rt>kǒu</rt></ruby>` —— Markdown、HTML |
+| `typst` | `#ruby("口", "kǒu")` —— Typst |
 
 | | |
 | --- | --- |
-| `:ruby-on` / `:ruby-off` | lay readings out, or show the markup as text |
-| `:render-ruby-html` | also read HTML ruby (`-off` to stop) |
-| `:render-ruby-typst` | also read Typst ruby (`-off` to stop) |
-| `:format-ruby-html` | rewrite every reading in the buffer as HTML |
-| `:format-ruby-typst` | …as Typst |
+| `:ruby-on` / `:ruby-off` | 排出注音／顯示原始標記 |
+| `:render-ruby-html` | 也讀 HTML 注音（加 `-off` 停止） |
+| `:render-ruby-typst` | 也讀 Typst 注音（加 `-off` 停止） |
+| `:format-ruby-html` | 把全篇注音改寫成 HTML |
+| `:format-ruby-typst` | 改寫成 Typst |
 
-Horizontal layout always shows the markup, because there is nowhere sensible to
-put a reading in it.
+橫排永遠顯示原始標記，因為橫排沒有合適的地方放注音。
 
-### 5.5 Ruby mode
+### 5.5 Ruby 模式
 
-With readings laid out, the `<rt>` is not on screen at all, so the cursor cannot
-be moved into it. `:ruby` opens a prompt in the status bar to edit it instead:
+注音排出來以後，`<rt>` 根本不在屏幕上，光標走不進去。`:ruby` 在狀態欄開一行專門改
+它：
 
-- **On an existing reading** — the current text is loaded, ready to correct.
-- **Over a selection** — the prompt starts empty, and what you type annotates it.
-- **Submitting nothing removes the annotation**, markup and all. Backspacing to
-  empty therefore does *not* leave the mode; `Esc` does.
-- **The IME works here**, since readings are kana or 拼音.
+- **光標在已有注音上**——載入現有讀音，直接改。
+- **有選區**——空著，你打什麼就給它注什麼。
+- **提交空的讀音就是取消注音**，連標記一起去掉。所以在這個模式裡退格退到空**不會**
+  離開（跟搜索行不同），空的狀態必須能到達；退出用 `Esc`。
+- **輸入法在這裡能用**，因為讀音可能是假名或拼音。
 
-A reading split by `|` into as many parts as the base has characters annotates
-each character separately: `hàn|zì` over 漢字 gives two groups, while `hàn zì`
-stays one reading over the word.
+讀音裡用 `|` 分成和基字數目相同的幾段，就是逐字注音：`hàn|zì` 給 漢字 注出兩組；
+`hàn zì` 則是整個詞一個注音。
 
 ---
 
-## 6. The IME
+## 六、輸入法
 
-The Yume engine is embedded — no FFI, no separate process. In Insert mode, type a
-code and a candidate panel appears; **tap Shift alone** to toggle 中/英.
+宇夢引擎是嵌進來的——沒有 FFI，沒有另一個進程。Insert 模式下打編碼就出候選框；
+**單獨輕點 Shift** 切換中／英。
 
 | | |
 | --- | --- |
-| Space / `1`–`9` | select a candidate |
-| `-` / `=` | previous / next page |
-| Backspace | edit the code |
-| Esc | cancel the composition |
+| 空格 / `1`–`9` | 選中候選 |
+| `-` / `=` | 上一頁／下一頁 |
+| 退格 | 修改編碼 |
+| Esc | 取消這次輸入 |
 
-The lone-Shift toggle needs a terminal with the Kitty keyboard protocol —
-Ghostty, kitty, WezTerm, foot, Alacritty, Konsole. Apple Terminal cannot report a
-bare Shift.
+單點 Shift 需要支持 Kitty 鍵盤協議的終端——Ghostty、kitty、WezTerm、foot、
+Alacritty、Konsole。Apple Terminal 報不出單獨的 Shift。
 
-**Where it composes:** Insert, Search (`/`), and Ruby. **Not** the `:` command
-line, whose whole vocabulary is ASCII command names.
+**哪些地方能打中文：** Insert、搜索（`/`）、Ruby 模式。**不包括** `:` 命令行——命令
+名全是 ASCII。
 
-**The panel**, set vertically, wears Yume's 墨香 skin in dark. Candidates are
-numbered ㊀㊁㊂ and run right to left, the direction of the text they are about
-to join; the code as typed reads down the rightmost column, and each candidate's
-remaining keys (下標) read down its own.
+**候選框**在竪排下用宇夢的**墨香**深色皮膚。候選用 ㊀㊁㊂ 編號，從右往左排，方向和
+它即將加入的文字一致；已打的編碼順著最右一列往下讀，每個候選還差的鍵（下標）順著它
+自己那一列往下讀。
 
-`:chaifen` shows the 拆分 decomposition beside the highlighted candidate.
+`:chaifen` 打開高亮候選的拆分注解。
 
-**Word segmentation** — what drives `w`/`b`/`e` and the word tint — comes from
-the same engine's 詞頻表 (1.25M weighted entries) and 詞彙表, shared by reference
-rather than loaded twice. Without the IME data installed it falls back to a
-`segmentation.txt` in the data directory, then to a small bundled list.
+**分詞**——`w`／`b`／`e` 和詞語著色靠的東西——來自同一個引擎的詞頻表（125 萬條帶權）
+和詞彙表，以引用共享，不會佔第二份內存。沒裝輸入法數據時，退回數據目錄裡的
+`segmentation.txt`，再退回內置的小詞表。
 
 ---
 
-## 7. Commands
+## 七、命令
 
-Type `:` and the list appears above the command line, narrowing as you type. What
-the line is about to complete to is shown after the caret in a lighter ink;
-**Tab** takes it, and takes the next match each time after, **Shift-Tab** going
-back.
+打 `:` 就在命令行上方列出命令，邊打邊篩。**即將補全的部分**用淺色顯示在光標後，
+**Tab** 採納它，再按 Tab 換下一個匹配，**Shift-Tab** 往回。
 
-A search prompt guesses too: it offers the rest of the **last pattern**, so
-searching for the same thing again is `/` then Tab.
+搜索行也會猜：它給出**上一次搜索詞**的剩餘部分，所以再搜一次同樣的東西就是 `/` 加
+一個 Tab。
 
 | | |
 | --- | --- |
-| `:open` `:o` *path* | open a file |
-| `:new` | empty buffer |
-| `:write` `:w` [*path*] | save, optionally to a new path |
-| `:quit` `:q` (`:q!`) | leave; `!` discards changes |
-| `:undo` `:u` / `:redo` | undo / redo |
-| `:s/pat/rep/[g]` | substitute on this line; `:%s/…` for the whole file |
-| `:segment` `:seg` | word-segmentation tint |
-| `:layout` `:lay` | flip horizontal / vertical |
-| `:vertical` `:horizontal` | set it outright |
-| `:chaifen` `:cf` | 拆分 beside candidates |
-| `:hanging` | 句讀 in the margin (標點旁置) |
-| `:ruby` and friends | §5.4–5.5 |
+| `:open` `:o` *路徑* | 打開檔案 |
+| `:new` | 新建空緩衝區 |
+| `:write` `:w` [*路徑*] | 保存，可另存 |
+| `:quit` `:q`（`:q!`） | 退出；`!` 丟棄改動 |
+| `:undo` `:u` / `:redo` | 撤銷／重做 |
+| `:s/舊/新/[g]` | 替換本行；`:%s/…` 替換全篇 |
+| `:segment` `:seg` | 分詞著色開關 |
+| `:layout` `:lay` | 橫排／竪排互換 |
+| `:vertical` `:horizontal` | 直接指定 |
+| `:hanging` | 標點旁置開關 |
+| `:chaifen` `:cf` | 候選旁的拆分注解 |
+| `:ruby` 及相關 | 見 5.4–5.5 |
 
 ---
 
-## 8. Configuration
+## 八、配置
 
-`~/.config/yumete/config.toml`, overridden key by key from the nearest
-`.yumete/config.toml` walking up from the working directory.
+`~/.config/yumete/config.toml`，再由工作目錄往上找到的第一個 `.yumete/config.toml`
+逐項覆蓋。
 
 ```toml
 [editor]
-tab_width = 4                # columns added by `>` and removed by `<`
+tab_width = 4                # `>` 加、`<` 減的列數
 line_numbers = "absolute"    # "absolute" | "relative" | "none"
-scrolloff = 3                # lines (or 縱) of context kept around the cursor
-show_segmentation = true     # the word tint
+scrolloff = 3                # 光標周圍保留的行（或縱）數
+show_segmentation = true     # 詞語著色
 segmentation_threshold = 0
 
 layout = "horizontal"        # "horizontal" | "vertical"
-zong_length = 32             # characters per 縱, 4–64
-zong_gap = 1                 # half-width cells between 縱, 0–4. At 0 the 縱 sit
-                             # flush and only one carrying a reading takes a cell
-tatechuyoko = false          # set half-width pairs sideways in one slot
-hanging_punctuation = false  # 。，、？！：；「」 in the margin (標點旁置)
+zong_length = 32             # 每縱字數，4–64
+zong_gap = 1                 # 縱之間的半角格數，0–4。設 0 則縱與縱相貼，
+                             # 只有帶注音的那一縱佔一格
+tatechuyoko = false          # 半角字兩個擠進一格（縦中横）
+hanging_punctuation = false  # 。，、？！：；「」 掛在邊欄（標點旁置）
 
-show_ruby = true             # lay readings out
-ruby_dialects = []           # extra dialects beyond the file's own
-show_chaifen = false         # 拆分 beside candidates
+show_ruby = true             # 排出注音
+ruby_dialects = []           # 除檔案後綴推出的那種以外，還要讀的注音方言
+show_chaifen = false         # 候選旁的拆分注解
 
 [theme]
 selection = "#3c4664"
 segmentation = ["#282c34", "#342c28"]
 
 [keys.normal]
-# single-key aliases: pressing the left key behaves as the right one
+# 單鍵別名：按左邊的鍵等於按右邊的
 "，" = ","
 ```
 
 ---
 
-## 9. Not there yet
+## 九、還沒有的
 
-Named honestly, so you know what you are not looking for:
+明說出來，免得你去找：
 
-- **Multiple cursors.** Helix's `C`, `s` and `S` need the core to hold a *set* of
-  selections rather than one anchor and cursor. That is a change to the editor,
-  not an addition, so it is left undone rather than half-built. `gt`/`gc`/`gb`
-  (screen top / centre / bottom) are missing for a smaller version of the same
-  reason: the scroll position lives in the renderer, not the editor.
-- **圏点** (emphasis dots) — renderable in the same column ruby uses; the markup
-  is still to be decided.
-- **Rotated Latin.** A terminal cannot turn a glyph, so a long Latin run stacks
-  letter by letter. 縦中横 covers pairs; nothing covers a whole word.
-- **Syntax highlighting, LSP, an outline sidebar, splits.** See the feature table
-  in [development.md](development.md).
+- **多光標。** Helix 的 `C`、`s`、`S` 需要內核持有**一組**選區而不是一對錨點／光
+  標。那是改造編輯器而不是給它加東西，所以寧可不做也不半做。`gt`／`gc`／`gb`（跳到
+  屏幕頂／中／底）缺席是同一個原因的小號版本：滾動位置在渲染層，不在編輯器裡。
+- **圈點**（着重號）——能畫，用注音那一列；標記語法還沒定。
+- **拉丁串真旋轉。** 終端轉不了字形，所以長的拉丁串只能逐字母往下堆。縦中横 能處理
+  兩個字符，整個詞沒辦法。
+- **語法高亮、LSP、大綱側欄、分屏。** 見 [development.md](development.md) 裡的功能
+  表。

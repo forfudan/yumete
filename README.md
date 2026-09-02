@@ -4,8 +4,8 @@
 **CJK-aware** terminal text editor with a **built-in Yume IME**, tailored first
 for **writing (novels), not coding**.
 
-**[docs/manual.md](docs/manual.md)** is the user manual — what the keys and
-commands do, how vertical layout works, and how to configure it.
+**[docs/manual.md](docs/manual.md)**（中文）is the user manual — what the keys
+and commands do, how vertical layout works, and how to configure it.
 [docs/development.md](docs/development.md) has the design, the reasoning, and the
 feature roadmap.
 

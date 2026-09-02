@@ -264,6 +264,11 @@ pub const COMMANDS: &[Entry] = &[
         help: "拆分 beside candidates",
     },
     Entry {
+        name: "hanging",
+        alias: None,
+        help: "句讀 in the margin (標點旁置)",
+    },
+    Entry {
         name: "ruby",
         alias: None,
         help: "edit the reading at the cursor",
@@ -495,6 +500,41 @@ mod tests {
         // Once arguments start, the list stops narrowing.
         assert_eq!(complete("write draft.md").len(), 1);
         assert!(complete("zzz").is_empty());
+    }
+
+    /// The other direction of `every_listed_command_parses`: a command that
+    /// works but is not in the table is invisible, and the menu is the only way
+    /// most of these are ever found. The table cannot be derived from `parse`,
+    /// which is a `match` on literals — so this is the thing that notices when
+    /// the two drift apart.
+    #[test]
+    fn every_command_worth_finding_is_listed() {
+        for name in [
+            "open",
+            "new",
+            "write",
+            "quit",
+            "undo",
+            "redo",
+            "segment",
+            "layout",
+            "vertical",
+            "horizontal",
+            "chaifen",
+            "hanging",
+            "ruby",
+            "ruby-on",
+            "ruby-off",
+            "render-ruby-html",
+            "render-ruby-typst",
+            "format-ruby-html",
+            "format-ruby-typst",
+        ] {
+            assert!(
+                COMMANDS.iter().any(|e| e.name == name),
+                "`:{name}` works but is not in the command list, so nothing shows it"
+            );
+        }
     }
 
     /// Every name in the list must actually parse, or the menu would offer
