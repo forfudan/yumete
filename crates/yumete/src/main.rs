@@ -253,9 +253,36 @@ fn preview(editor: &Editor, config: &yumete_config::Config) {
     }
 
     let width = count.to_string().len().max(1);
+    // The preview wraps where the editor would (Feature #77), so `-p` shows the
+    // page rather than a set of lines that run off the terminal.
+    let gutter = width + 3;
+    let wrap = if config.editor.soft_wrap {
+        terminal_width().saturating_sub(gutter)
+    } else {
+        usize::MAX / 2
+    }
+    .max(yumete_core::wrap::MIN_WRAP_WIDTH);
     for i in 0..count {
-        if let Some(line) = buf.line(i) {
-            println!("{:>width$} │ {line}", i + 1, width = width);
+        let Some(line) = buf.line(i) else { continue };
+        let chars: Vec<char> = line.chars().collect();
+        for (row, (start, end)) in yumete_core::wrap::line_rows(&line, wrap)
+            .into_iter()
+            .enumerate()
+        {
+            let text: String = chars[start..end].iter().collect();
+            // The number labels the paragraph, so only its first row carries one.
+            if row == 0 {
+                println!("{:>width$} │ {text}", i + 1, width = width);
+            } else {
+                println!("{:>width$} │ {text}", "", width = width);
+            }
         }
     }
+}
+
+/// How wide the preview wraps at: the terminal, or the 80 columns a terminal
+/// has had since the punched card when there is none to ask — a pipe into
+/// `less`, or output redirected to a file.
+fn terminal_width() -> usize {
+    yumete_tui::terminal_width().unwrap_or(80)
 }

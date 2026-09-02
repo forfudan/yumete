@@ -45,6 +45,18 @@ use yumete_ime::ImeSession;
 /// that support (e.g. Apple Terminal) cannot report a bare Shift, so the toggle
 /// is unavailable there — use a Kitty-protocol terminal (kitty, WezTerm, foot,
 /// Ghostty, Alacritty, Konsole, …).
+/// How wide the terminal is, or `None` when there is no terminal to ask — a
+/// pipe into `less`, or output redirected to a file.
+///
+/// Lives here because this is the crate that owns the terminal; the preview
+/// wraps at the same width the editor would.
+pub fn terminal_width() -> Option<usize> {
+    ratatui::crossterm::terminal::size()
+        .ok()
+        .map(|(w, _)| w as usize)
+        .filter(|&w| w > 0)
+}
+
 pub fn run(editor: &mut Editor, config: &Config, ime: &mut ImeSession) -> io::Result<()> {
     let mut terminal = ratatui::init();
 
