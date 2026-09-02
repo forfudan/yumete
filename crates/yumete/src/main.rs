@@ -178,6 +178,7 @@ KEYS (Normal mode, Helix-style):
     gg  ge    goto buffer start / last line (10gg goes to line 10)
     gn  gp    show the next / previous open file
     gf        open the file:line named on this line (`:grep` results)
+    Space     menu: f files, b buffers, / project search, ? commands, y copy
     gh gl gs  goto line start / end / first non-blank
     f t F T   find / till a character (forward / backward); A-. repeats it
     x  X      select the current line / extend to whole lines

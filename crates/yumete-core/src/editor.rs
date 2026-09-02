@@ -53,6 +53,8 @@ enum Pending {
     None,
     /// A `g` goto sequence (`gg`, `ge`, `gh`, `gl`, `gs`).
     Goto,
+    /// A `Space` sequence — Helix's menu of the things that are not motions.
+    Space,
     /// A find/till sequence (`f`, `t`, `F`, `T`) awaiting the target character.
     Find(FindKind),
     /// `r` awaiting the character to write over the selection.
@@ -91,6 +93,12 @@ const GREP_LIMIT: usize = 500;
 /// The largest file `:grep` will read. A manuscript chapter is kilobytes;
 /// anything above this is data that happens to live in the same directory.
 const GREP_MAX_BYTES: u64 = 4 * 1024 * 1024;
+
+/// How many files the picker offers.
+///
+/// A project with more than this is not one a writer is choosing a chapter
+/// from, and gathering all of it would make `Space f` pause before it drew.
+const PICKER_LIMIT: usize = 4000;
 
 /// Call `f` for every readable file under `root`, depth first.
 ///
@@ -214,6 +222,9 @@ pub struct Editor {
     chaifen_request: Option<bool>,
     /// A pending `:scheme` request, waiting for the front end to reach the IME.
     scheme_request: Option<String>,
+    /// Text waiting to be put on the system clipboard, which only the front end
+    /// can reach (it owns the terminal).
+    clipboard_request: Option<String>,
     /// The last known 拆分 state, so `:chaifen` can toggle it.
     chaifen: bool,
     /// What Ruby mode is editing the reading of.
@@ -254,6 +265,8 @@ pub struct Editor {
     /// Whether the writer has already been told that recovery copies cannot be
     /// written, so the status line says it once rather than every few seconds.
     swap_warned: bool,
+    /// The open picker, if `Space f` or `Space b` is up (Feature #90).
+    picker: Option<crate::picker::Picker>,
     /// The directory the last `:grep` listing was gathered from, so `gf` on one
     /// of its lines resolves the same relative path it printed.
     grep_root: Option<PathBuf>,
@@ -353,6 +366,7 @@ impl Editor {
             indent_width: 4,
             chaifen_request: None,
             scheme_request: None,
+            clipboard_request: None,
             chaifen: false,
             ruby_target: None,
             completion: None,
@@ -370,6 +384,7 @@ impl Editor {
             last_swap: None,
             swap_warned: false,
             compiled: RefCell::new(None),
+            picker: None,
             grep_root: None,
         }
     }
@@ -1442,6 +1457,7 @@ impl Editor {
             Mode::Command => return self.on_command_key(key),
             Mode::Search => self.on_search_key(key),
             Mode::Ruby => self.on_ruby_key(key),
+            Mode::Picker => self.on_picker_key(key),
         }
         KeyOutcome::Continue
     }
@@ -1456,6 +1472,11 @@ impl Editor {
                 self.pending = Pending::None;
                 self.handle_goto(key);
                 self.operator_count = None;
+                return;
+            }
+            Pending::Space => {
+                self.pending = Pending::None;
+                self.handle_space(key);
                 return;
             }
             Pending::Find(kind) => {
@@ -1648,6 +1669,8 @@ impl Editor {
                 self.pending = Pending::Goto;
                 self.operator_count = operator_count;
             }
+            // Helix's Space menu: the things that are not motions.
+            Key::Char(' ') => self.pending = Pending::Space,
             // In-line character search (Helix `f`/`t`/`F`/`T`).
             Key::Char('f') | Key::Char('t') | Key::Char('F') | Key::Char('T') => {
                 self.pending = Pending::Find(match key {
@@ -1816,6 +1839,149 @@ impl Editor {
             _ => return,
         };
         self.move_head(pos);
+    }
+
+    /// The keys `Space` opens, and what each of them is for — the list the
+    /// which-key overlay draws, so what is offered and what happens cannot
+    /// drift apart.
+    pub const SPACE_KEYS: &'static [(char, &'static str)] = &[
+        ('f', "開啟檔案"),
+        ('b', "切換緩衝區"),
+        ('/', "全項目搜索"),
+        ('?', "命令一覽"),
+        ('y', "複製到系統剪貼簿"),
+    ];
+
+    /// Run one key of a `Space` sequence.
+    fn handle_space(&mut self, key: Key) {
+        match key {
+            Key::Char('f') => self.open_file_picker(),
+            Key::Char('b') => self.open_buffer_picker(),
+            // The two prompts, opened rather than run: a search wants a pattern
+            // and the command list wants narrowing, and both are already good
+            // at asking for those.
+            Key::Char('/') => {
+                self.mode = Mode::Command;
+                self.command_line = "grep ".to_string();
+                self.completion = None;
+            }
+            Key::Char('?') => {
+                self.mode = Mode::Command;
+                self.command_line.clear();
+                self.completion = None;
+            }
+            Key::Char('y') => self.copy_to_clipboard(),
+            _ => {}
+        }
+    }
+
+    /// Open a picker over the files of the project (`Space f`).
+    fn open_file_picker(&mut self) {
+        let root = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+        let mut items = Vec::new();
+        walk(&root, &mut |path| {
+            if items.len() < PICKER_LIMIT {
+                let shown = path.strip_prefix(&root).unwrap_or(path);
+                items.push(crate::picker::Item::File(shown.display().to_string()));
+            }
+        });
+        if items.is_empty() {
+            self.status = "no files here".to_string();
+            return;
+        }
+        self.grep_root = Some(root);
+        self.picker = Some(crate::picker::Picker::new("檔案", items));
+        self.mode = Mode::Picker;
+    }
+
+    /// Open a picker over the buffers already open (`Space b`).
+    fn open_buffer_picker(&mut self) {
+        let items = self
+            .buffers
+            .iter()
+            .enumerate()
+            .map(|(i, b)| crate::picker::Item::Buffer(i, b.display_name()))
+            .collect();
+        self.picker = Some(crate::picker::Picker::new("緩衝區", items));
+        self.mode = Mode::Picker;
+    }
+
+    /// Whether `Space` is waiting for the key that says what to do — which is
+    /// when the which-key menu is drawn.
+    pub fn space_pending(&self) -> bool {
+        matches!(self.pending, Pending::Space)
+    }
+
+    /// The open picker, for the front end to draw.
+    pub fn picker(&self) -> Option<&crate::picker::Picker> {
+        self.picker.as_ref()
+    }
+
+    /// Run one key while a picker is open.
+    fn on_picker_key(&mut self, key: Key) {
+        let Some(picker) = self.picker.as_mut() else {
+            self.mode = Mode::Normal;
+            return;
+        };
+        match key {
+            Key::Esc => self.close_picker(),
+            // Backspace past the start of the query closes it, the way it
+            // leaves the `:` line: the query is the only thing to go back over.
+            Key::Backspace => {
+                if !picker.backspace() {
+                    self.close_picker();
+                }
+            }
+            Key::Down | Key::Tab | Key::Ctrl('n') => picker.step(true),
+            Key::Up | Key::BackTab | Key::Ctrl('p') => picker.step(false),
+            Key::Enter => {
+                let chosen = picker.chosen();
+                self.close_picker();
+                match chosen {
+                    Some(crate::picker::Item::File(path)) => {
+                        let full = match &self.grep_root {
+                            Some(root) => root.join(&path),
+                            None => PathBuf::from(&path),
+                        };
+                        if let Err(err) = self.open_file(&full) {
+                            self.status = format!("cannot open '{path}': {err}");
+                        }
+                    }
+                    Some(crate::picker::Item::Buffer(i, _)) => self.show_buffer(i),
+                    None => self.status = "nothing matched".to_string(),
+                }
+            }
+            Key::Char(c) => picker.push(c),
+            _ => {}
+        }
+    }
+
+    /// Shut the picker and go back to Normal.
+    fn close_picker(&mut self) {
+        self.picker = None;
+        self.mode = Mode::Normal;
+    }
+
+    /// Put the selection on the system clipboard (`Space y`).
+    ///
+    /// Through OSC 52, the terminal's own copy escape: it needs no library, and
+    /// it is the only way that works over ssh and inside tmux, which is where a
+    /// terminal editor is often run from. The terminal may refuse — many do by
+    /// default — so this says what it asked for rather than claiming success.
+    fn copy_to_clipboard(&mut self) {
+        let (start, end) = self.selection();
+        let text = self.current_buffer().rope().slice(start..end).to_string();
+        if text.is_empty() {
+            self.status = "nothing selected".to_string();
+            return;
+        }
+        self.clipboard_request = Some(text);
+        self.status = "copied to the system clipboard".to_string();
+    }
+
+    /// Take a pending clipboard copy, for the front end to send to the terminal.
+    pub fn take_clipboard_request(&mut self) -> Option<String> {
+        self.clipboard_request.take()
     }
 
     /// Move to the first non-blank character of line `n`, counting from 1 and
@@ -4239,6 +4405,59 @@ mod tests {
 
         ed.execute(":toc").unwrap();
         assert!(ed.status().contains("第一章"), "{}", ed.status());
+    }
+
+    #[test]
+    fn space_b_picks_a_buffer_by_name() {
+        let mut ed = Editor::new();
+        ed.current_buffer_mut().insert(0, "第一篇");
+        ed.execute(":new").unwrap();
+        ed.current_buffer_mut().insert(0, "第二篇");
+        ed.execute(":new").unwrap();
+        ed.current_buffer_mut().insert(0, "第三篇");
+
+        // Space opens the menu; `b` opens the picker over the open files.
+        type_keys(&mut ed, " b");
+        assert_eq!(ed.mode(), Mode::Picker);
+        assert_eq!(ed.picker().map(|p| p.total()), Some(3));
+
+        // Down one and Enter shows that buffer.
+        ed.on_key(Key::Down);
+        ed.on_key(Key::Enter);
+        assert_eq!(ed.mode(), Mode::Normal);
+        assert_eq!(ed.current_buffer().text(), "第二篇");
+    }
+
+    #[test]
+    fn a_picker_closes_on_esc_and_on_backspacing_past_the_start() {
+        let mut ed = Editor::new();
+        type_keys(&mut ed, " b");
+        ed.on_key(Key::Esc);
+        assert_eq!(ed.mode(), Mode::Normal);
+        assert!(ed.picker().is_none());
+
+        type_keys(&mut ed, " b");
+        ed.on_key(Key::Char('x'));
+        ed.on_key(Key::Backspace); // back over the `x`
+        assert_eq!(ed.mode(), Mode::Picker);
+        ed.on_key(Key::Backspace); // nothing left to go back over
+        assert_eq!(ed.mode(), Mode::Normal);
+    }
+
+    #[test]
+    fn space_slash_opens_a_project_search_ready_to_be_typed_into() {
+        let mut ed = Editor::new();
+        type_keys(&mut ed, " /");
+        assert_eq!(ed.prompt(), Some((':', "grep ")));
+    }
+
+    #[test]
+    fn space_y_hands_the_selection_to_the_front_end() {
+        let mut ed = typed("春江潮水");
+        press(&mut ed, "ggvl");
+        type_keys(&mut ed, " y");
+        assert_eq!(ed.take_clipboard_request().as_deref(), Some("春江"));
+        assert_eq!(ed.take_clipboard_request(), None, "taken once only");
     }
 
     #[test]

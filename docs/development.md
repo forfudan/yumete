@@ -286,6 +286,8 @@ Phases are ordered by priority, most writer-critical first:
 | 88  | **Export**                                 | core   | P2    | `:export html` keeps 縱書; typst is honest about not | Done |
 | 89  | **The number band is a gutter**            | tui    | P3    | colour, since position cannot separate it | Done |
 | 90  | **Hanging marks in their narrow forms**    | cjk    | P1    | a full-width mark hid the 縱 beside it | Done |
+| 91  | **Space menu and pickers**                 | both   | P1    | `Space f`/`b`/`/`/`?`/`y`; which-key | Done   |
+| 92  | **The `:` menu is a popup, not a wall**    | tui    | P2    | capped and scrolled, as Helix caps its | Done  |
 
 ---
 
