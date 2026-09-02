@@ -1084,8 +1084,10 @@ fn draw_horizontal(
     let show_segmentation = editor.segmentation_visible();
     let seg_colors = config.theme.segmentation;
     let show_markup = editor.markup_visible();
-    // The measure, counted from the left edge of the page — the gutter is part
-    // of the page, so a ruler at 80 is at cell 80 whatever the gutter costs.
+    // The measure is counted in *text*: `ruler = 80` means eighty columns of
+    // writing, which is what a writer means by it. The line-number gutter is
+    // furniture, not text, so it does not eat into the measure — and the ruler
+    // moves with the gutter rather than the writing moving under it.
     let ruler = config.editor.ruler;
     let (rr, rg, rb) = config.theme.ruler;
 
@@ -1173,7 +1175,7 @@ fn draw_horizontal(
         // says this row has run past the length the writer wants a sentence to
         // be, which is what somebody breaking long ones by hand is looking for.
         if ruler > 0 {
-            let mut column = gutter;
+            let mut column = 0;
             for (i, ch) in chars.iter().enumerate() {
                 if column >= ruler {
                     styles[i] = styles[i].bg(Color::Rgb(rr, rg, rb));
@@ -1221,7 +1223,7 @@ fn draw_horizontal(
     // The line itself, only with wrap off. With it on, the edge of the tint is
     // already the line, and drawing one would be saying the same thing twice.
     if ruler > 0 && editor.wrap_width().is_none() {
-        let x = text_area.x + ruler as u16;
+        let x = text_area.x + (gutter + ruler) as u16;
         if x < text_area.x + text_area.width {
             let buf = frame.buffer_mut();
             for y in text_area.y..text_area.y + text_area.height {
@@ -2461,6 +2463,9 @@ mod tests {
         config.editor.ruler = 20;
         config.theme.ruler = (0x2e, 0x30, 0x38);
         let tint = Some(Color::Rgb(0x2e, 0x30, 0x38));
+        // The measure is twenty columns of *writing*; with the gutter off it is
+        // also cell twenty, which is what makes the coordinates below readable.
+        assert_eq!(config.editor.line_numbers, LineNumbers::None);
 
         // Soft wrap on: the text past the measure is tinted — which is what
         // somebody breaking long sentences by hand is looking for — and there
@@ -2474,6 +2479,13 @@ mod tests {
         editor.set_soft_wrap(false);
         let buffer = render_wrapped(&mut editor, &config, 40, 8);
         assert_eq!(at(&buffer, 20, 4), "│", "a measure to write to");
+
+        // The measure is counted in writing, not in cells: turning the gutter
+        // on moves the ruler over rather than eating twenty columns of text.
+        config.editor.line_numbers = LineNumbers::Absolute;
+        let buffer = render_wrapped(&mut editor, &config, 40, 8);
+        let gutter = gutter_width(editor.current_buffer().line_count(), LineNumbers::Absolute);
+        assert_eq!(at(&buffer, 20 + gutter as u16, 4), "│");
     }
 
     #[test]

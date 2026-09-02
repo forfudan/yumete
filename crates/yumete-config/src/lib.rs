@@ -58,8 +58,11 @@ pub struct EditorConfig {
     /// Whether the 拆分 annotation is shown beside candidates (Feature #66).
     /// Off by default: it is a study aid, and it widens every candidate.
     pub show_chaifen: bool,
-    /// Whether readings are laid out at all (Feature #65). On by default;
-    /// `:ruby-off` turns it off.
+    /// Whether readings are laid out at all (Feature #65).
+    ///
+    /// **Off** by default, like every other kind of markup: what is in the file
+    /// is what is on the page, until you ask otherwise. `:ruby-on` lays them
+    /// out, and 所見即所得 mode lays them out along with everything else.
     pub show_ruby: bool,
     /// Extra ruby dialects to lay out beyond the one the file's extension
     /// implies — a document that mixes them names them all here.
@@ -127,7 +130,7 @@ impl Default for EditorConfig {
             zong_length: DEFAULT_ZONG_LENGTH,
             zong_gap: DEFAULT_ZONG_GAP,
             show_chaifen: false,
-            show_ruby: true,
+            show_ruby: false,
             ruby_dialects: Vec::new(),
             tatechuyoko: false,
             hanging_punctuation: false,
