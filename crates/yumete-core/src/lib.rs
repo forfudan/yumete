@@ -22,6 +22,7 @@ pub mod editor;
 pub mod export;
 pub mod input;
 pub mod motion;
+pub mod picker;
 pub mod ruby;
 pub mod text_store;
 pub mod wrap;

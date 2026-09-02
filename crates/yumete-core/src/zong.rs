@@ -209,25 +209,44 @@ pub fn line_slots(text: &str, grid: Grid) -> Vec<Slot> {
     let groups = crate::ruby::groups(&chars, grid.ruby);
     let mut slots = Vec::new();
     let mut at = 0usize;
+    // An opening bracket waits for the character it introduces, and that
+    // character may be inside the next ruby group — 「<ruby>漢…. The wait has to
+    // outlive the plain run, or the bracket is left behind as a row of its own
+    // and the reader loses the very square hanging it was meant to save.
+    let mut opening = None;
     for group in &groups {
-        push_plain(&mut slots, &chars, at, group.start, grid);
-        push_ruby(&mut slots, &chars, group, grid);
+        push_plain(&mut slots, &chars, at, group.start, grid, &mut opening);
+        push_ruby(&mut slots, &chars, group, grid, &mut opening);
         at = group.end;
     }
-    push_plain(&mut slots, &chars, at, chars.len(), grid);
+    push_plain(&mut slots, &chars, at, chars.len(), grid, &mut opening);
+    // Whatever is still waiting had nothing to hang on; it is drawn on its own.
+    if let Some((at, mark)) = opening {
+        slots.push(Slot {
+            start: at,
+            end: chars.len(),
+            text: String::new(),
+            ruby: None,
+            mark: Some(mark),
+        });
+    }
     slots
 }
 
 /// Lay out `chars[from..to]` as ordinary rows.
-fn push_plain(slots: &mut Vec<Slot>, chars: &[char], from: usize, to: usize, grid: Grid) {
+fn push_plain(
+    slots: &mut Vec<Slot>,
+    chars: &[char],
+    from: usize,
+    to: usize,
+    grid: Grid,
+    opening: &mut Option<(usize, char)>,
+) {
     if from >= to {
         return;
     }
     let text: String = chars[from..to].iter().collect();
     let offsets = slot_offsets(&text, grid.tatechuyoko);
-    // An opening bracket introduces what comes *after* it, so it waits for that
-    // character's row rather than hanging on the one before.
-    let mut opening: Option<(usize, char)> = None;
     for w in offsets.windows(2) {
         let body: String = chars[from + w[0]..from + w[1]].iter().collect();
         let at = from + w[0];
@@ -237,10 +256,28 @@ fn push_plain(slots: &mut Vec<Slot>, chars: &[char], from: usize, to: usize, gri
         // length, the cursor and every motion agree that 「文。」 is one row.
         if grid.hanging && body.chars().count() == 1 {
             let mark = body.chars().next().expect("one character");
-            if yumete_cjk::hangs_in_the_margin(mark) {
-                let hung = rotate(&body).chars().next().unwrap_or(mark);
-                if yumete_cjk::opens_a_pair(mark) && opening.is_none() {
-                    opening = Some((at, hung));
+            // The half-width form is what hangs, and a mark that has none does
+            // not hang at all — it keeps its square. So this is one question,
+            // not two, and the two can no longer disagree.
+            if let Some(hung) = yumete_cjk::margin_form(mark) {
+                if yumete_cjk::opens_a_pair(mark) {
+                    // A second opener while one is already waiting — `（「` —
+                    // must not fall through to the branch below, which hangs a
+                    // mark on the character *before* it: the one side an opener
+                    // never belongs on. The one already waiting takes a margin
+                    // row of its own, above the character, and the new one waits
+                    // in its place, so they read down the margin in the order
+                    // they were written.
+                    if let Some((opened_at, earlier)) = opening.take() {
+                        slots.push(Slot {
+                            start: opened_at,
+                            end: at,
+                            text: String::new(),
+                            ruby: None,
+                            mark: Some(earlier),
+                        });
+                    }
+                    *opening = Some((at, hung));
                     continue;
                 }
                 match slots.last_mut() {
@@ -264,8 +301,8 @@ fn push_plain(slots: &mut Vec<Slot>, chars: &[char], from: usize, to: usize, gri
                         });
                         continue;
                     }
-                    // Nothing before it — an opening bracket at the head of a
-                    // paragraph has nothing to hang on, so it keeps its square.
+                    // Nothing before it — a mark at the head of a paragraph
+                    // has nothing to hang on, so it keeps its square.
                     None => {}
                 }
             }
@@ -285,21 +322,16 @@ fn push_plain(slots: &mut Vec<Slot>, chars: &[char], from: usize, to: usize, gri
             mark,
         });
     }
-
-    // An opener with nothing after it in this run still has to be drawn.
-    if let Some((at, mark)) = opening {
-        slots.push(Slot {
-            start: at,
-            end: to,
-            text: String::new(),
-            ruby: None,
-            mark: Some(mark),
-        });
-    }
 }
 
 /// Lay out one ruby group: the base centred against its reading.
-fn push_ruby(slots: &mut Vec<Slot>, chars: &[char], group: &crate::ruby::Ruby, grid: Grid) {
+fn push_ruby(
+    slots: &mut Vec<Slot>,
+    chars: &[char],
+    group: &crate::ruby::Ruby,
+    grid: Grid,
+    opening: &mut Option<(usize, char)>,
+) {
     let base = group.base_text(chars);
     let reading: Vec<char> = group.reading_text(chars).to_vec();
     // The base's own rows, then as many more as the reading needs.
@@ -352,6 +384,21 @@ fn push_ruby(slots: &mut Vec<Slot>, chars: &[char], group: &crate::ruby::Ruby, g
     // over it steps over the tags too rather than into them.
     if let Some(first) = slots.len().checked_sub(rows).and_then(|i| slots.get_mut(i)) {
         first.start = group.start;
+    }
+    // A bracket that was waiting for the character this group annotates hangs
+    // against the base's *first* row — the row the reader sees the base on —
+    // rather than being left behind as a row of its own before the group.
+    if let Some((opened_at, mark)) = opening.take() {
+        let base_row = slots.len().checked_sub(rows.saturating_sub(top));
+        match base_row.and_then(|i| slots.get_mut(i)) {
+            Some(slot) if slot.mark.is_none() => {
+                slot.start = opened_at.min(slot.start);
+                slot.mark = Some(mark);
+            }
+            // Its row is already spoken for; put the bracket back to be drawn
+            // on its own rather than dropping it.
+            _ => *opening = Some((opened_at, mark)),
+        }
     }
     if let Some(last) = slots.last_mut() {
         last.end = group.end;
@@ -709,6 +756,9 @@ pub fn slot_text(text: &str, grid: Grid) -> Vec<String> {
         .collect()
 }
 
+/// How many cells one slot of a 縱 occupies.
+const SLOT_CELLS: usize = 2;
+
 /// Render the whole buffer as a plain-text vertical page: a grid of lines,
 /// each holding one slot from every 縱, with the 縱 running right to left.
 ///
@@ -724,7 +774,6 @@ pub fn render_page(rope: &Rope, grid: Grid, gap: usize) -> Vec<String> {
         zongs.pop();
     }
     let rows = zongs.iter().map(|z| z.slots).max().unwrap_or(0);
-    let annotated = !grid.ruby.is_empty() || grid.hanging;
     // Every 縱's slots, top to bottom; the page is then read across.
     // Each 縱 contributes its bodies and, beside them, its readings — the same
     // two columns the terminal draws.
@@ -740,30 +789,43 @@ pub fn render_page(rope: &Rope, grid: Grid, gap: usize) -> Vec<String> {
         })
         .collect();
 
-    let spacer = " ".repeat(gap);
+    // Which 縱 carry anything in their margin, decided one 縱 at a time exactly
+    // as the terminal decides it: a 縱 with no reading and no hung mark needs no
+    // margin, and with the gap set to zero it sits flush against its neighbour.
+    let margins: Vec<usize> = columns
+        .iter()
+        .map(|(_, margin)| usize::from(margin.iter().any(Option::is_some)))
+        .collect();
+
     (0..rows)
         .map(|row| {
             let mut line = String::new();
             // 縱 0 is the rightmost, so the page is written in reverse order.
-            for (i, (bodies, readings)) in columns.iter().enumerate().rev() {
-                if i + 1 != columns.len() {
-                    line.push_str(&spacer);
-                }
+            for (i, (bodies, margin)) in columns.iter().enumerate().rev() {
                 match bodies.get(row) {
-                    // Pad a half-width grapheme out to the full slot so the
-                    // columns stay aligned.
+                    // Pad a short grapheme out to the full slot so the columns
+                    // stay aligned. An *empty* body — a mark-only row, or a row
+                    // of a ruby group's padding — is two cells of nothing, not
+                    // one; padding it to one walked the rest of the row left.
                     Some(g) => {
                         line.push_str(g);
-                        if yumete_cjk::str_width(g) < 2 {
+                        for _ in yumete_cjk::str_width(g)..SLOT_CELLS {
                             line.push(' ');
                         }
                     }
                     None => line.push_str("  "),
                 }
-                // The reading sits to the *right* of its base, which in a
-                // right-to-left page means after it in the written line.
-                if annotated {
-                    line.push(readings.get(row).copied().flatten().unwrap_or(' '));
+                // The margin sits to the *right* of its base — after it in the
+                // written line — and it *is* the gap rather than sitting beside
+                // one: two 縱 are `max(gap, margin)` apart, which is how the
+                // terminal places them.
+                let region = gap.max(margins[i]);
+                for cell in 0..region {
+                    let glyph = margin.get(row).copied().flatten();
+                    match (cell, glyph) {
+                        (0, Some(c)) if margins[i] == 1 => line.push(c),
+                        _ => line.push(' '),
+                    }
                 }
             }
             // Only the padding is trimmed, never the text: an ideographic
@@ -1171,7 +1233,7 @@ mod tests {
         assert_eq!(bodies, ["春", "江", "潮", "水"], "four rows, not six");
         assert_eq!(
             slots.iter().map(|s| s.mark).collect::<Vec<_>>(),
-            [None, Some('︒'), None, Some('︐')],
+            [None, Some('｡'), None, Some(',')],
             "and the marks are rotated, in the margin"
         );
 
@@ -1191,7 +1253,7 @@ mod tests {
         );
         assert_eq!(
             slots.iter().map(|s| s.mark).collect::<Vec<_>>(),
-            [None, Some('﹁'), None],
+            [None, Some('｢'), None],
             "and it sits beside 春, not 曰"
         );
     }
@@ -1199,14 +1261,57 @@ mod tests {
     /// 「。」 ends a line of speech, and is common enough that the second mark
     /// must not fall back into the text column.
     #[test]
+    fn a_bracket_waiting_for_a_ruby_group_hangs_on_its_base() {
+        // The bracket introduces the character the group annotates, and that
+        // character is inside the group. Losing the wait at the group's edge
+        // left the bracket as a row of its own — the square hanging exists to
+        // save.
+        let grid = Grid::new(8, Dialects::only(crate::ruby::Dialect::Html)).with_hanging(true);
+        let slots = line_slots("曰「<ruby>漢<rt>hàn</rt></ruby>字", grid);
+        let texts: Vec<&str> = slots.iter().map(|s| s.text.as_str()).collect();
+        let marks: Vec<Option<char>> = slots.iter().map(|s| s.mark).collect();
+        // Three rows of reading above, then 漢 carrying the bracket, then 字.
+        assert_eq!(texts, ["曰", "", "", "", "漢", "字"]);
+        assert_eq!(marks[4], Some('｢'), "「 hangs on the base it introduces");
+        assert!(marks[1..4].iter().all(Option::is_none));
+        assert!(
+            !texts[1..4].iter().any(|t| !t.is_empty()),
+            "and it costs no text row"
+        );
+    }
+
+    #[test]
+    fn marks_hang_in_their_narrow_forms() {
+        // The margin is one cell. A full-width mark in it spills onto the 縱 to
+        // the right; a narrow one is what the margin was sized for.
+        let grid = Grid::new(8, Dialects::NONE).with_hanging(true);
+        let slots = line_slots("春。夏、秋「冬」", grid);
+        let marks: Vec<Option<char>> = slots.iter().map(|s| s.mark).collect();
+        // 秋 carries nothing: the 「 after it waits for 冬, which it introduces.
+        // The closing 」 finds 冬's margin already taken and gets a margin row
+        // of its own — one cell holds one mark.
+        assert_eq!(marks, [Some('｡'), Some('､'), None, Some('｢'), Some('｣')]);
+        for mark in marks.into_iter().flatten() {
+            assert_eq!(yumete_cjk::char_width(mark), 1, "{mark} must be one cell");
+        }
+
+        // A mark with no narrow form keeps its square rather than making the
+        // margin two cells wide for every 縱 on the page.
+        let slots = line_slots("讀《詩》", grid);
+        let texts: Vec<&str> = slots.iter().map(|s| s.text.as_str()).collect();
+        assert_eq!(texts, ["讀", "︽", "詩", "︾"]);
+        assert!(slots.iter().all(|s| s.mark.is_none()));
+    }
+
+    #[test]
     fn a_second_mark_running_stays_in_the_margin() {
         let slots = line_slots("春。」", G.with_hanging(true));
         assert_eq!(slots.len(), 2, "a row for the pair, not one each");
         assert_eq!(slots[0].text, "春");
-        assert_eq!(slots[0].mark, Some('︒'));
+        assert_eq!(slots[0].mark, Some('｡'));
         // The second takes a row, but in the margin: the text column stays text.
         assert_eq!(slots[1].text, "", "nothing in the text column");
-        assert_eq!(slots[1].mark, Some('﹂'));
+        assert_eq!(slots[1].mark, Some('｣'));
     }
 
     /// The reading gives way upward, leaving the base's own row for a mark.
@@ -1220,7 +1325,7 @@ mod tests {
             [Some('h'), Some('à'), Some('n'), None],
             "the reading is wholly above"
         );
-        assert_eq!(slots[3].mark, Some('︒'), "and the mark has the base's row");
+        assert_eq!(slots[3].mark, Some('｡'), "and the mark has the base's row");
     }
 
     #[test]
