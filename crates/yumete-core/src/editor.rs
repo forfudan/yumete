@@ -188,6 +188,21 @@ pub enum Hint {
     Keys(&'static str, Vec<(&'static str, &'static str)>),
 }
 
+/// A file to hand to the typesetter, or a typesetter to stop.
+///
+/// `:render full` is how much of the result *this* page shows; this is the
+/// other kind of preview — the real one, made by the tool that makes the book,
+/// shown where a book can be shown. They are different questions and they get
+/// different words.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Preview {
+    Start {
+        path: PathBuf,
+        syntax: crate::syntax::Syntax,
+    },
+    Stop,
+}
+
 /// How much of the result the page shows.
 ///
 /// One axis, not two switches: each step shows more of what the file *means*
@@ -386,6 +401,9 @@ pub struct Editor {
     /// How much of the result is shown: the source, the source coloured, or
     /// the page with the markup taken off it.
     render: Render,
+    /// A pending `:preview`, waiting for the front end — starting a typesetter
+    /// is running a program, which only the front end can do.
+    preview_request: Option<Preview>,
     /// The grid this file is being read as, when a schema says it is a table.
     ///
     /// A view, never a copy: the text stays the truth, and this only says how
@@ -600,6 +618,7 @@ impl Editor {
             clipboard_request: None,
             clipboard_read: None,
             render: Render::On,
+            preview_request: None,
             table: None,
             show_detail: true,
             table_bypass: std::cell::Cell::new(false),
@@ -1590,6 +1609,23 @@ impl Editor {
                 }
                 Ok(CommandOutcome::Continue)
             }
+            Command::SetPreview(on) => {
+                self.preview_request = Some(if on {
+                    match self.current_buffer().path() {
+                        Some(path) => Preview::Start {
+                            path: path.to_path_buf(),
+                            syntax: self.current_buffer().syntax(),
+                        },
+                        None => {
+                            self.status = "先存檔——排版器讀的是檔案".to_string();
+                            return Ok(CommandOutcome::Continue);
+                        }
+                    }
+                } else {
+                    Preview::Stop
+                });
+                Ok(CommandOutcome::Continue)
+            }
             Command::SetRender(how) => {
                 self.set_render(how);
                 self.status = match how {
@@ -2180,6 +2216,11 @@ impl Editor {
     }
 
     // ---- The hint row (Feature #122) --------------------------------------
+
+    /// A typesetter the front end should start or stop.
+    pub fn take_preview_request(&mut self) -> Option<Preview> {
+        self.preview_request.take()
+    }
 
     /// What the row above the status line should say.
     ///

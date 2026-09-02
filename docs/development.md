@@ -323,6 +323,7 @@ Phases are ordered by priority, most writer-critical first:
 | 125 | **The window is the default measure**      | both   | P2    | `zong_length = 0`; a fixed count is `:wrap n` | Done |
 | 126 | **A value is not a command name**          | core   | P2    | 42 commands → 26; the flat spellings deleted | Done |
 | 127 | **`:render off/on/full`**                  | core   | P2    | one axis; `:wysiwyg`+`:markup` were two switches | Done |
+| 128 | **`:preview` — the real typesetter**       | both   | P2    | tinymist for Typst, HTML for Markdown; a job, not a pane | Done |
 
 ---
 

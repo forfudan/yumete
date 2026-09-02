@@ -76,6 +76,9 @@ pub enum Command {
     /// `:render off|on|full` — how much of the result the page shows
     /// (Features #96 / #104).
     SetRender(crate::editor::Render),
+    /// `:preview` / `:preview off` — hand the file to the real typesetter and
+    /// show what it makes (Feature #128).
+    SetPreview(bool),
     /// `:clipboard-yank` / `:clipboard-paste` — the system clipboard, which
     /// Helix spells the same way (Feature #109).
     Clipboard {
@@ -263,6 +266,14 @@ pub fn parse(input: &str) -> Result<Command, CommandError> {
         } else {
             Some(rest.to_string())
         })),
+        "preview" => match rest {
+            "" | "on" => Ok(Command::SetPreview(true)),
+            "off" => Ok(Command::SetPreview(false)),
+            other => Err(CommandError::InvalidArgument {
+                command: "preview",
+                value: other.to_string(),
+            }),
+        },
         "render" => match rest {
             "" | "on" => Ok(Command::SetRender(crate::editor::Render::On)),
             "off" => Ok(Command::SetRender(crate::editor::Render::Off)),
@@ -715,6 +726,12 @@ pub const COMMANDS: &[Entry] = &[
         alias: Some("syn"),
         help: "markdown 還是 typst（不給參數就說現在是哪個）",
         args: Args::Words(SYNTAXES),
+    },
+    Entry {
+        name: "preview",
+        alias: None,
+        help: "交給真正的排版器去排，在瀏覽器裏看",
+        args: Args::Words(ON_OFF),
     },
     Entry {
         name: "render",
