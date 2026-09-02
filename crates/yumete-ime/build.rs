@@ -64,18 +64,35 @@ fn stamp(table: &Path) -> Option<String> {
                 .find_map(|l| l.trim().strip_prefix(key))
                 .map(str::to_string)
         };
-        if let Some(version) = field("version=") {
-            return Some(match field("build=") {
-                Some(build) => format!("{version} ({build})"),
-                None => version,
-            });
+        // The build stamp alone. A version number says which release this
+        // came from; what a reader actually wants to know is *how old is it*,
+        // and the date answers that without them having to remember what
+        // 3.12.0 was.
+        if let Some(build) = field("build=") {
+            return Some(readable(&build));
         }
     }
     // No VERSION: say when the table was made. A date, not a count of seconds
     // — the question is "how old is this", and 1788384005 does not answer it.
     let when = std::fs::metadata(table).ok()?.modified().ok()?;
     let secs = when.duration_since(std::time::UNIX_EPOCH).ok()?.as_secs();
-    Some(format!("自建 {}", date(secs)))
+    Some(date(secs))
+}
+
+/// Yume's own `20260828130838` as `2026-08-28 13:08`.
+fn readable(stamp: &str) -> String {
+    let digits: String = stamp.chars().filter(char::is_ascii_digit).collect();
+    if digits.len() < 12 {
+        return stamp.to_string();
+    }
+    format!(
+        "{}-{}-{} {}:{}",
+        &digits[0..4],
+        &digits[4..6],
+        &digits[6..8],
+        &digits[8..10],
+        &digits[10..12]
+    )
 }
 
 /// A Unix timestamp as `2026-09-02`.
