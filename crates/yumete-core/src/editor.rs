@@ -29,6 +29,10 @@ use crate::zong::{self, Grid, Layout, DEFAULT_ZONG_LENGTH};
 /// A paragraph's word ranges, kept against a hash of the paragraph's text.
 type SegmentCache = HashMap<usize, (u64, Vec<(usize, usize)>)>;
 
+/// Every line's block, against the buffer it was worked out for and that
+/// buffer's revision — the two things that decide whether it is still true.
+type BlockCache = ((usize, u64), Vec<crate::markdown::Block>);
+
 /// How many paragraphs of segmentation to remember.
 ///
 /// A page is tens of paragraphs; the limit only exists so that scrolling a long
@@ -241,7 +245,7 @@ pub struct Editor {
     markup_cache: RefCell<HashMap<usize, (u64, Vec<crate::markdown::Span>)>>,
     /// The block of every line, against the buffer it was worked out for and
     /// that buffer's revision.
-    block_cache: RefCell<Option<((usize, u64), Vec<crate::markdown::Block>)>>,
+    block_cache: RefCell<Option<BlockCache>>,
     /// Whether Markdown is coloured at all (Feature #96).
     show_markup: bool,
     /// 所見即所得 (Feature #104): the markup comes off the page, except on the
