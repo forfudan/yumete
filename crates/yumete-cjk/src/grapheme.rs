@@ -32,7 +32,7 @@ pub fn next_grapheme_boundary(s: &str, byte: usize) -> usize {
     s.grapheme_indices(true)
         .map(|(i, _)| i)
         .find(|&i| i > byte)
-        .unwrap_or_else(|| s.len())
+        .unwrap_or(s.len())
 }
 
 /// The byte offset of the grapheme boundary strictly before `byte`.
@@ -40,10 +40,13 @@ pub fn next_grapheme_boundary(s: &str, byte: usize) -> usize {
 /// If there is no earlier boundary, returns `0`. Useful for moving a cursor one
 /// grapheme to the left.
 pub fn prev_grapheme_boundary(s: &str, byte: usize) -> usize {
+    // Walked from the right: the boundary before `byte` is usually the last
+    // one, and on a long line scanning from the left to find it is the whole
+    // line for one step of `h`.
     s.grapheme_indices(true)
+        .rev()
         .map(|(i, _)| i)
-        .filter(|&i| i < byte)
-        .last()
+        .find(|&i| i < byte)
         .unwrap_or(0)
 }
 
