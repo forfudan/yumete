@@ -34,10 +34,191 @@ pub enum Kind {
     Heading,
     /// The visible text of a `[link](target)`.
     Link,
+    /// `==marked==` — set on a ground, the way a highlighter pen leaves it.
+    Highlight,
+    /// A footnote's number, `[^1]`, and the `[^1]:` that opens its text.
+    Footnote,
+    /// The page named by a `[[wiki]]` reference.
+    WikiLink,
+    /// `%%a note to myself%%` or `<!-- one -->` — in the manuscript, not in the
+    /// book. Set well back, and dropped by `:export`.
+    Comment,
     /// The markup itself — the asterisks, the hashes, the brackets and the
     /// target. Shown, but set back, so it reads as scaffolding rather than as
     /// something the reader wrote.
     Marker,
+}
+
+/// What kind of block a line belongs to.
+///
+/// Blocks are the part of Markdown that is *not* line-local: a fence opened
+/// three paragraphs ago decides whether this line is code, and `:::` runs until
+/// it is closed. So they are not parsed per line but scanned in order, by
+/// [`BlockScanner`], which is cheap enough to run from the top of the document
+/// to the bottom of the page on every frame — it looks at the first few
+/// characters of each line and nothing else.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Block {
+    /// Ordinary writing.
+    #[default]
+    Prose,
+    /// `# 第一章`, at that depth.
+    Heading(usize),
+    /// `> 引文`.
+    Quote,
+    /// A `-`, `*` or `1.` item, and whether it is a task and done.
+    Item { task: Option<bool> },
+    /// `---` or `***` on its own.
+    Rule,
+    /// Inside a ``` fence, or the fence line itself.
+    Code,
+    /// The `---`-delimited metadata a file may open with.
+    FrontMatter,
+    /// Inside a `::: tip` container, or its fence.
+    Container(Callout),
+    /// A `|`-delimited table row.
+    Table,
+    /// `[^1]: the note itself`.
+    FootnoteDef,
+}
+
+/// Which kind of aside a `:::` container is.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Callout {
+    Note,
+    Tip,
+    Warning,
+    Danger,
+}
+
+impl Callout {
+    /// Parse the word after `:::`.
+    fn parse(word: &str) -> Option<Callout> {
+        match word.trim().to_ascii_lowercase().as_str() {
+            "note" | "info" | "details" => Some(Callout::Note),
+            "tip" => Some(Callout::Tip),
+            "warning" | "caution" => Some(Callout::Warning),
+            "danger" | "error" => Some(Callout::Danger),
+            _ => None,
+        }
+    }
+}
+
+/// Walks a document in order, saying which block each line belongs to.
+///
+/// Fed from the top: a fence, a container or a front-matter block opened
+/// earlier changes what a later line means, and there is no way to know that
+/// from the line itself.
+#[derive(Debug, Default)]
+pub struct BlockScanner {
+    line: usize,
+    in_code: bool,
+    in_front: bool,
+    container: Option<Callout>,
+}
+
+impl BlockScanner {
+    /// A scanner at the top of a document.
+    pub fn new() -> BlockScanner {
+        BlockScanner::default()
+    }
+
+    /// Take the next line and say what it is.
+    pub fn feed(&mut self, line: &str) -> Block {
+        let at = self.line;
+        self.line += 1;
+        let text = line.trim_end_matches(['\n', '\r']);
+        let trimmed = text.trim_start();
+
+        // Front matter only counts at the very top, which is what keeps a `---`
+        // between two paragraphs a rule rather than the start of metadata.
+        if self.in_front {
+            if trimmed == "---" {
+                self.in_front = false;
+            }
+            return Block::FrontMatter;
+        }
+        if at == 0 && trimmed == "---" {
+            self.in_front = true;
+            return Block::FrontMatter;
+        }
+
+        // A code fence swallows everything, markup included.
+        if trimmed.starts_with("```") || trimmed.starts_with("~~~") {
+            self.in_code = !self.in_code;
+            return Block::Code;
+        }
+        if self.in_code {
+            return Block::Code;
+        }
+
+        // `:::` opens a container and `:::` alone closes it.
+        if let Some(rest) = trimmed.strip_prefix(":::") {
+            return match self.container {
+                Some(kind) => {
+                    self.container = None;
+                    Block::Container(kind)
+                }
+                None => {
+                    let kind = Callout::parse(rest.split_whitespace().next().unwrap_or(""))
+                        .unwrap_or(Callout::Note);
+                    self.container = Some(kind);
+                    Block::Container(kind)
+                }
+            };
+        }
+        if let Some(kind) = self.container {
+            return Block::Container(kind);
+        }
+
+        let hashes = trimmed.chars().take_while(|&c| c == '#').count();
+        if hashes > 0 && hashes <= 6 && matches!(trimmed.chars().nth(hashes), Some(' ') | None) {
+            return Block::Heading(hashes);
+        }
+        if trimmed.starts_with('>') {
+            return Block::Quote;
+        }
+        if is_rule(trimmed) {
+            return Block::Rule;
+        }
+        if trimmed.starts_with("[^") && trimmed.contains("]:") {
+            return Block::FootnoteDef;
+        }
+        if let Some(rest) = item_body(trimmed) {
+            let task = rest
+                .strip_prefix('[')
+                .and_then(|r| r.get(..1).zip(r.get(1..2)))
+                .and_then(|(mark, close)| (close == "]").then_some(mark != " "));
+            return Block::Item { task };
+        }
+        if trimmed.starts_with('|') && trimmed.ends_with('|') && trimmed.len() > 1 {
+            return Block::Table;
+        }
+        Block::Prose
+    }
+}
+
+/// Whether the line is `---`, `***` or `___` on its own — a scene break.
+fn is_rule(text: &str) -> bool {
+    let mut chars = text.chars().filter(|c| !c.is_whitespace()).peekable();
+    let Some(&first) = chars.peek() else {
+        return false;
+    };
+    matches!(first, '-' | '*' | '_') && text.chars().filter(|&c| c == first).count() >= 3 && {
+        text.chars().all(|c| c == first || c.is_whitespace())
+    }
+}
+
+/// The text after a list marker, if the line opens a list item.
+fn item_body(text: &str) -> Option<&str> {
+    if let Some(rest) = text.strip_prefix("- ").or_else(|| text.strip_prefix("* ")) {
+        return Some(rest);
+    }
+    let digits = text.chars().take_while(char::is_ascii_digit).count();
+    if digits > 0 && text[digits..].starts_with(". ") {
+        return Some(&text[digits + 2..]);
+    }
+    None
 }
 
 /// A run of one line, in char indices.
@@ -78,7 +259,16 @@ pub fn spans(line: &str) -> Vec<Span> {
 
     let mut at = from;
     while at < chars.len() {
-        // Code first: inside a code span nothing else is markup.
+        // A comment is the writer talking to themselves — everything in it is
+        // theirs, markup included — so it is taken before anything else.
+        if let Some((open, close, end)) = comment(&chars, at) {
+            mark(&mut out, at, at + open, Kind::Marker);
+            mark(&mut out, at + open, end - close, Kind::Comment);
+            mark(&mut out, end - close, end, Kind::Marker);
+            at = end;
+            continue;
+        }
+        // Code next: inside a code span nothing else is markup.
         if chars[at] == '`' {
             if let Some(close) = find(&chars, at + 1, |c| c == '`') {
                 mark(&mut out, at, at + 1, Kind::Marker);
@@ -92,6 +282,7 @@ pub fn spans(line: &str) -> Vec<Span> {
             let kind = match (chars[at], len) {
                 ('*', 2) | ('_', 2) => Kind::Strong,
                 ('~', 2) => Kind::Strike,
+                ('=', 2) => Kind::Highlight,
                 _ => Kind::Emphasis,
             };
             if let Some(close) = closing(&chars, at + len, chars[at], len) {
@@ -99,6 +290,33 @@ pub fn spans(line: &str) -> Vec<Span> {
                 mark(&mut out, at + len, close, kind);
                 mark(&mut out, close, close + len, Kind::Marker);
                 at = close + len;
+                continue;
+            }
+        }
+        // `[[第三章]]`, `[[第三章|那一夜]]`, `[[第三章#雪]]` — a reference to
+        // somewhere else in the same manuscript.
+        if chars[at] == '[' && chars.get(at + 1) == Some(&'[') {
+            if let Some(close) = run(&chars, at + 2, "]]") {
+                // What is shown is the alias if there is one, else the target.
+                let body = at + 2..close;
+                let shown = chars[body.clone()]
+                    .iter()
+                    .position(|&c| c == '|')
+                    .map(|i| at + 2 + i + 1..close)
+                    .unwrap_or(body);
+                mark(&mut out, at, shown.start, Kind::Marker);
+                mark(&mut out, shown.start, shown.end, Kind::WikiLink);
+                mark(&mut out, shown.end, close + 2, Kind::Marker);
+                at = close + 2;
+                continue;
+            }
+        }
+        // `[^1]`, and the `[^1]:` that opens the note itself.
+        if chars[at] == '[' && chars.get(at + 1) == Some(&'^') {
+            if let Some(close) = find(&chars, at + 2, |c| c == ']') {
+                let end = close + 1 + usize::from(chars.get(close + 1) == Some(&':'));
+                mark(&mut out, at, end, Kind::Footnote);
+                at = end;
                 continue;
             }
         }
@@ -128,11 +346,12 @@ pub fn spans(line: &str) -> Vec<Span> {
 /// being able to italicise with `_`.
 fn fence(chars: &[char], at: usize) -> Option<usize> {
     let c = chars[at];
-    if !matches!(c, '*' | '_' | '~') {
+    if !matches!(c, '*' | '_' | '~' | '=') {
         return None;
     }
     let len = chars[at..].iter().take_while(|&&x| x == c).count().min(2);
-    if c == '~' && len < 2 {
+    // `~` and `=` only ever come in pairs: a lone one is a dash or an equals.
+    if matches!(c, '~' | '=') && len < 2 {
         return None;
     }
     if c == '_' {
@@ -166,6 +385,35 @@ fn closing(chars: &[char], from: usize, delimiter: char, len: usize) -> Option<u
     None
 }
 
+/// A comment opening at `at`: the lengths of its two markers and where it ends.
+///
+/// `%%…%%` is Obsidian's, `<!-- … -->` is HTML's, and a manuscript uses both
+/// for the same thing — a note that is not part of the book. An unclosed one
+/// runs to the end of the line, because a half-typed note is still a note.
+fn comment(chars: &[char], at: usize) -> Option<(usize, usize, usize)> {
+    for (open, close) in [("%%", "%%"), ("<!--", "-->")] {
+        let open: Vec<char> = open.chars().collect();
+        if chars[at..].starts_with(&open) {
+            let end = run(chars, at + open.len(), close)
+                .map(|i| i + close.chars().count())
+                .unwrap_or(chars.len());
+            let closed = end < chars.len() || run(chars, at + open.len(), close).is_some();
+            return Some((
+                open.len(),
+                if closed { close.chars().count() } else { 0 },
+                end,
+            ));
+        }
+    }
+    None
+}
+
+/// Where `text` next occurs at or after `from`.
+fn run(chars: &[char], from: usize, text: &str) -> Option<usize> {
+    let want: Vec<char> = text.chars().collect();
+    (from..chars.len().saturating_sub(want.len() - 1)).find(|&i| chars[i..].starts_with(&want))
+}
+
 /// The first index at or after `from` whose character satisfies `f`.
 fn find(chars: &[char], from: usize, f: impl Fn(char) -> bool) -> Option<usize> {
     (from..chars.len()).find(|&i| f(chars[i]))
@@ -195,6 +443,10 @@ mod tests {
                 Kind::Strike => 'S',
                 Kind::Heading => 'H',
                 Kind::Link => 'L',
+                Kind::Highlight => 'M',
+                Kind::Footnote => 'F',
+                Kind::WikiLink => 'W',
+                Kind::Comment => '%',
                 Kind::Marker => '.',
             };
             for slot in out.iter_mut().take(span.end.min(n)).skip(span.start) {
@@ -253,6 +505,73 @@ mod tests {
     #[test]
     fn a_link_shows_its_text_and_sets_its_target_back() {
         assert_eq!(shape("見[附錄](a.md)"), " .LL.......");
+    }
+
+    #[test]
+    fn the_extended_syntax_a_manuscript_actually_uses() {
+        // A highlighter pen.
+        assert_eq!(shape("那==年==天"), " ..M.. ");
+        // A footnote's number, and the line that answers it.
+        assert_eq!(shape("見[^1]。"), " FFFF ");
+        assert_eq!(shape("[^1]: 出自《詩》"), "FFFFF      ");
+        // A reference to somewhere else in the same manuscript, and the alias
+        // that says what to call it here.
+        assert_eq!(shape("見[[第三章]]"), " ..WWW..");
+        assert_eq!(shape("見[[第三章|那一夜]]"), " ......WWW..");
+        // A note to oneself: not part of the book, and not part of the markup
+        // inside it either.
+        assert_eq!(shape("寫到這裏 %%**這句再想想**%%"), "     ..%%%%%%%%%..");
+        assert_eq!(shape("甲<!-- 待查 -->乙"), " ....%%%%... ");
+    }
+
+    #[test]
+    fn an_unclosed_comment_still_reads_as_one() {
+        // A half-typed note is still a note; treating it as prose would set the
+        // rest of the line back to ordinary weight mid-word.
+        assert_eq!(shape("寫到這裏 %%再想想"), "     ..%%%");
+    }
+
+    /// The blocks of a whole document, as one letter each.
+    fn walk(text: &str) -> String {
+        let mut scanner = BlockScanner::new();
+        text.lines()
+            .map(|line| match scanner.feed(line) {
+                Block::Prose => '.',
+                Block::Heading(n) => char::from_digit(n as u32, 10).unwrap_or('#'),
+                Block::Quote => '>',
+                Block::Item { task: None } => '-',
+                Block::Item { task: Some(false) } => 'o',
+                Block::Item { task: Some(true) } => 'x',
+                Block::Rule => '_',
+                Block::Code => '`',
+                Block::FrontMatter => 'y',
+                Block::Container(_) => ':',
+                Block::Table => '|',
+                Block::FootnoteDef => 'F',
+            })
+            .collect()
+    }
+
+    #[test]
+    fn blocks_are_read_in_order_because_they_are_not_line_local() {
+        // A fence three paragraphs up decides what this line is.
+        assert_eq!(walk("那年\n```\n**not bold**\n```\n冬天"), ".```.");
+        // `:::` runs until it is closed.
+        assert_eq!(walk("::: warning 小心\n這一段\n:::\n之後"), ":::.");
+        // Front matter only at the very top; a `---` between paragraphs is a
+        // scene break, not the start of metadata.
+        assert_eq!(walk("---\ntitle: 甲\n---\n那年\n---\n冬天"), "yyy._.");
+    }
+
+    #[test]
+    fn the_blocks_prose_is_made_of() {
+        assert_eq!(walk("# 第一章\n### 三"), "13");
+        assert_eq!(walk("> 昨夜星辰\n> 昨夜風"), ">>");
+        assert_eq!(walk("- 阿寧\n1. 第一場\n- [ ] 待寫\n- [x] 寫完"), "--ox");
+        assert_eq!(walk("| 甲 | 乙 |\n| -- | -- |"), "||");
+        assert_eq!(walk("[^1]: 出自《詩》"), "F");
+        // A rule is a scene break; three of anything on its own line.
+        assert_eq!(walk("***\n___\n- - -"), "___");
     }
 
     #[test]

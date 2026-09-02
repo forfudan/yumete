@@ -738,6 +738,38 @@ impl Editor {
         self.show_markup
     }
 
+    /// Which block each line from the top of the buffer through `last` belongs
+    /// to (Feature #103).
+    ///
+    /// From the top, because blocks are the part of Markdown that is *not*
+    /// line-local: a fence opened three paragraphs ago decides whether this
+    /// line is code. The scan looks at the first few characters of each line
+    /// and nothing else, so walking down to the page costs a few microseconds
+    /// on a novel — unlike the inline runs, which are per character and are
+    /// cached per paragraph.
+    pub fn blocks_through(&self, last: usize) -> Vec<crate::markdown::Block> {
+        let rope = self.current_buffer().rope();
+        let last = last.min(rope.len_lines().saturating_sub(1));
+        let mut scanner = crate::markdown::BlockScanner::new();
+        let mut out = Vec::with_capacity(last + 1);
+        if !self.show_markup {
+            out.resize(last + 1, crate::markdown::Block::Prose);
+            return out;
+        }
+        for line in rope.lines_at(0).take(last + 1) {
+            let owned;
+            let text: &str = match line.as_str() {
+                Some(text) => text,
+                None => {
+                    owned = line.to_string();
+                    &owned
+                }
+            };
+            out.push(scanner.feed(text));
+        }
+        out
+    }
+
     /// The Markdown runs of `line`, cached against the paragraph's own text.
     pub fn markup_line(&self, line: usize) -> Vec<crate::markdown::Span> {
         if !self.show_markup {
