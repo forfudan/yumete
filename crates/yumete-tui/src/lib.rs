@@ -821,6 +821,43 @@ fn markup_style(kind: yumete_core::markdown::Kind) -> Style {
         Kind::Link => Style::default()
             .fg(Color::Rgb(0x9c, 0xb0, 0xc2))
             .add_modifier(Modifier::UNDERLINED),
+        // A highlighter pen leaves a ground, so this is a ground.
+        Kind::Highlight => Style::default()
+            .bg(Color::Rgb(0x54, 0x4c, 0x2c))
+            .fg(Color::Rgb(0xe4, 0xd8, 0xb0)),
+        Kind::Footnote => Style::default().fg(Color::Rgb(0xc2, 0xa0, 0x9c)),
+        Kind::WikiLink => Style::default()
+            .fg(Color::Rgb(0xa8, 0xb8, 0x9c))
+            .add_modifier(Modifier::UNDERLINED),
+        // Not part of the book: set well back, but never hidden — a note you
+        // cannot see is a note you will not act on.
+        Kind::Comment => Style::default()
+            .fg(Color::Rgb(0x6a, 0x66, 0x5c))
+            .add_modifier(Modifier::ITALIC),
+    }
+}
+
+/// How a whole row is set, given the block its line belongs to.
+///
+/// Blocks colour the *row*, inline runs colour the characters, and the two
+/// compose — a bold word inside a `::: warning` keeps its bold and gains the
+/// container's ground.
+fn block_style(block: yumete_core::markdown::Block) -> Option<Style> {
+    use yumete_core::markdown::{Block, Callout};
+    let ground = |r, g, b| Some(Style::default().bg(Color::Rgb(r, g, b)));
+    match block {
+        Block::Prose | Block::Heading(_) | Block::Item { .. } | Block::Table => None,
+        // An aside is a block on the page because it is a block on paper.
+        Block::Container(Callout::Note) => ground(0x2a, 0x30, 0x38),
+        Block::Container(Callout::Tip) => ground(0x28, 0x36, 0x30),
+        Block::Container(Callout::Warning) => ground(0x38, 0x33, 0x26),
+        Block::Container(Callout::Danger) => ground(0x3a, 0x2a, 0x2c),
+        Block::Quote => ground(0x2c, 0x2e, 0x34),
+        Block::Code => ground(0x26, 0x2a, 0x2c),
+        // Metadata and scene breaks are furniture, not writing.
+        Block::FrontMatter | Block::Rule | Block::FootnoteDef => {
+            Some(Style::default().add_modifier(Modifier::DIM))
+        }
     }
 }
 
@@ -1096,6 +1133,17 @@ fn draw_horizontal(
     // held the same way, for the same reason.
     let mut segmented: Option<(usize, Vec<(usize, usize)>)> = None;
     let mut marked: Option<(usize, Vec<yumete_core::markdown::Span>)> = None;
+    // Which block each line belongs to, walked from the top of the document
+    // down to the bottom of this page — a fence opened above decides what the
+    // lines below it mean, and there is no way to know that from a line alone.
+    let blocks = if show_markup {
+        let last = wrap::rows_from(rope, *viewport, width, height)
+            .last()
+            .map_or(0, |row| row.line);
+        editor.blocks_through(last)
+    } else {
+        Vec::new()
+    };
 
     let mut lines: Vec<Line> = Vec::new();
     for row in wrap::rows_from(rope, *viewport, width, height) {
@@ -1123,7 +1171,13 @@ fn draw_horizontal(
         // overlay came on.
         let row_len = row.end - row.start;
         let chars: Vec<char> = text.chars().collect();
-        let mut styles = vec![Style::default(); chars.len()];
+        // The block grounds the whole row; the inline runs are patched onto it.
+        let ground = blocks
+            .get(row.line)
+            .copied()
+            .and_then(block_style)
+            .unwrap_or_default();
+        let mut styles = vec![ground; chars.len()];
 
         if show_markup {
             let start_in_line = row.start - rope.line_to_char(row.line);
@@ -1137,8 +1191,10 @@ fn draw_horizontal(
             for run in runs {
                 let a = run.start.saturating_sub(start_in_line);
                 let b = run.end.saturating_sub(start_in_line).min(chars.len());
+                // Patched onto the block's ground rather than replacing it, so
+                // a bold word inside a `::: warning` keeps both.
                 for style in styles.iter_mut().take(b).skip(a.min(b)) {
-                    *style = markup_style(run.kind);
+                    *style = style.patch(markup_style(run.kind));
                 }
             }
         }
@@ -1215,6 +1271,20 @@ fn draw_horizontal(
         }
         if !break_cell.is_empty() {
             spans.push(Span::styled(break_cell, sel_style));
+        }
+        // A block's ground runs the width of the row, not just under its words:
+        // an aside is a block on the page because it is a block on paper.
+        if ground.bg.is_some() {
+            let used: usize = gutter
+                + chars
+                    .iter()
+                    .map(|&c| yumete_cjk::char_width(c))
+                    .sum::<usize>()
+                + break_cell.len();
+            let rest = (text_area.width as usize).saturating_sub(used);
+            if rest > 0 {
+                spans.push(Span::styled(" ".repeat(rest), ground));
+            }
         }
         lines.push(Line::from(spans));
     }
@@ -2552,6 +2622,62 @@ mod tests {
         editor.set_markup_visible(false);
         let buffer = render(&editor, &config, 40, 8);
         assert!(!buffer[(0, 0)].style().add_modifier.contains(Modifier::DIM));
+    }
+
+    #[test]
+    fn a_block_grounds_the_whole_row_and_the_runs_keep_their_weight() {
+        let mut editor = editor_with("那年\n::: warning 小心\n這裏有**伏筆**\n:::\n冬天");
+        let mut config = Config::default();
+        config.editor.line_numbers = LineNumbers::None;
+        config.editor.show_segmentation = false;
+        let buffer = render(&editor, &config, 40, 8);
+
+        // Prose is on the page's own ground; the container is on its own, and
+        // that ground runs the width of the row, not just under the words.
+        let prose = buffer[(0, 0)].style().bg;
+        let aside = buffer[(0, 2)].style().bg;
+        assert_ne!(aside, prose, "the container has a ground of its own");
+        assert_eq!(buffer[(38, 2)].style().bg, aside, "all the way across");
+        assert_eq!(
+            buffer[(0, 4)].style().bg,
+            prose,
+            "and it ends where it says"
+        );
+
+        // A bold word inside it keeps its bold *and* takes the ground.
+        let bold = (0..40)
+            .map(|x| buffer[(x, 2)].style())
+            .find(|s| s.add_modifier.contains(Modifier::BOLD));
+        assert_eq!(
+            bold.map(|s| s.bg),
+            Some(aside),
+            "both, not one or the other"
+        );
+
+        // And with the colouring off, none of it applies.
+        editor.set_markup_visible(false);
+        let buffer = render(&editor, &config, 40, 8);
+        assert_eq!(buffer[(0, 2)].style().bg, prose);
+    }
+
+    #[test]
+    fn a_note_to_oneself_is_set_back_but_never_hidden() {
+        let editor = editor_with("寫到這裏 %%這句再想想%%");
+        let mut config = Config::default();
+        config.editor.line_numbers = LineNumbers::None;
+        config.editor.show_segmentation = false;
+        let buffer = render(&editor, &config, 40, 8);
+        // Still on the page — a note you cannot see is a note you will not act
+        // on — and set apart from the writing around it.
+        assert!(row_text(&buffer, 0).contains("這句再想想"));
+        let prose = buffer[(0, 0)].style().fg;
+        let aside = (0..40)
+            .map(|x| buffer[(x, 0)].style().fg)
+            .find(|fg| *fg != prose);
+        assert!(
+            aside.is_some(),
+            "a note reads as a note, not as the writing"
+        );
     }
 
     #[test]
