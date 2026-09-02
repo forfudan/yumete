@@ -62,7 +62,7 @@ pub enum Chosen {
     /// Open this file and put the cursor on this line of it.
     ///
     /// The outline of a book reaches past the file being written: a chapter
-    /// pulled in with `#include` is a heading here and a file there.
+    /// pulled in with `#include` is one row here and a whole file there.
     FileLine(PathBuf, usize),
 }
 
@@ -204,18 +204,11 @@ impl Sidebar {
         match self.view {
             View::Buffers => return Some(Chosen::Buffer(row.depth)),
             View::Outline => {
-                // A heading typst found but this editor cannot place stays on
-                // the list and stays put: it is there to show the shape of the
-                // book, and moving the cursor somewhere arbitrary is worse
-                // than not moving it.
-                if row.depth == crate::editor::NOWHERE {
-                    return None;
-                }
                 return Some(if row.path.as_os_str().is_empty() {
                     Chosen::Line(row.depth)
                 } else {
                     Chosen::FileLine(row.path, row.depth)
-                });
+                })
             }
             View::Explorer => {}
         }

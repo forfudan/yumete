@@ -307,7 +307,7 @@ Phases are ordered by priority, most writer-critical first:
 | 109 | **The system clipboard, and the mouse**    | both   | P1    | `Space y`/`p`, drag to select       | Done   |
 | 110 | **⌘ chords are the terminal's**            | tui    | P0    | ⌘C read as `c` deleted the selection | Done  |
 | 111 | **Syntax by extension or name**            | config | P2    | a project's word on its own files   | Done   |
-| 112 | **The evaluated outline of a book**        | both   | P2    | `typst eval`; chapters, not includes | Done  |
+| 112 | The evaluated outline of a book            | both   | —     | `typst eval`; dropped for #114, which needs no compiler | Dropped |
 | 113 | **A measure to write to**                  | both   | P2    | `:wrap 50`; folds the rows, tints the margin | Done |
 | 114 | **The outline follows `#include`**         | core   | P2    | read the chapters; no compiler      | Done   |
 | 115 | **`w` opens the sidebar out**              | both   | P3    | as wide as its longest name         | Done   |
