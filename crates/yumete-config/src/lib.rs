@@ -108,6 +108,23 @@ impl Default for EditorConfig {
     }
 }
 
+/// The input method.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ImeConfig {
+    /// Which scheme to start in (方案): `lingming`, `xingchen`, `qingyun`,
+    /// `riyue`, `pinyin`. Only 靈明 ships with yumete; the others need their
+    /// tables installed in the data directory.
+    pub scheme: String,
+}
+
+impl Default for ImeConfig {
+    fn default() -> Self {
+        ImeConfig {
+            scheme: "lingming".to_string(),
+        }
+    }
+}
+
 /// The candidate panel's appearance.
 ///
 /// The colours are **two** values, not thirteen: an ink and a ground, with the
@@ -181,6 +198,7 @@ pub struct Config {
     pub editor: EditorConfig,
     pub theme: ThemeConfig,
     pub panel: PanelConfig,
+    pub ime: ImeConfig,
     pub keys: KeyConfig,
 }
 
@@ -337,7 +355,15 @@ struct RawConfig {
     #[serde(default)]
     panel: RawPanel,
     #[serde(default)]
+    ime: RawIme,
+    #[serde(default)]
     keys: RawKeys,
+}
+
+#[derive(Deserialize, Default)]
+#[serde(deny_unknown_fields)]
+struct RawIme {
+    scheme: Option<String>,
 }
 
 #[derive(Deserialize, Default)]
@@ -442,6 +468,9 @@ impl RawConfig {
         if other.theme.segmentation.is_some() {
             self.theme.segmentation = other.theme.segmentation;
         }
+        if other.ime.scheme.is_some() {
+            self.ime.scheme = other.ime.scheme.clone();
+        }
         if other.panel.markers.is_some() {
             self.panel.markers = other.panel.markers;
         }
@@ -523,6 +552,9 @@ impl RawConfig {
                 "narrow" | "single" | "half" => config.editor.ambiguous_wide = false,
                 _ => {}
             }
+        }
+        if let Some(scheme) = self.ime.scheme {
+            config.ime.scheme = scheme;
         }
         if let Some(hex) = self.theme.selection {
             if let Some(rgb) = parse_hex(&hex) {

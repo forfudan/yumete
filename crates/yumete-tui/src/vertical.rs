@@ -598,7 +598,11 @@ pub fn draw_candidate_panel(
 ) {
     let skin = Skin::from(config);
     let candidates = ime.page_candidates();
-    if candidates.is_empty() {
+    // A code with no candidates still gets a panel — with nothing but the code
+    // in it. In 形碼 a dead code is the ordinary way to mistype, the code lives
+    // only in this panel (there is no inline preedit), and a panel that vanishes
+    // leaves the writer nothing to see and nothing to know to backspace.
+    if candidates.is_empty() && ime.display_buffer().is_empty() {
         return;
     }
     let highlight = ime.highlight();
@@ -703,7 +707,9 @@ pub fn draw_candidate_panel(
             // candidates start at 1, so their number is `i - 1`. Within a
             // column the number and the 下標 sit a shade back from the
             // candidate itself, so the three separate by weight alone.
-            let text_rows = 2 + graphemes(&candidates[i.max(1) - 1].text).count();
+            let text_rows = candidates
+                .get(i.wrapping_sub(1))
+                .map_or(0, |c| 2 + graphemes(&c.text).count());
             let style = if i == 0 {
                 dim
             } else if i - 1 == highlight {
