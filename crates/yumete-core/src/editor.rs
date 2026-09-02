@@ -122,8 +122,8 @@ fn quoted_path(line: &str) -> Option<String> {
 /// found in a file this one does not reach directly.
 pub(crate) const NOWHERE: usize = usize::MAX;
 
-/// The `=` headings of a Typst source, as `(line, title)`.
-fn typst_headings(text: &str) -> Vec<(usize, String)> {
+/// The `=` headings of a Typst source, as `(line, level, title)`.
+fn typst_headings(text: &str) -> Vec<(usize, usize, String)> {
     text.lines()
         .enumerate()
         .filter_map(|(line, raw)| {
@@ -131,8 +131,9 @@ fn typst_headings(text: &str) -> Vec<(usize, String)> {
             if !raw.starts_with('=') {
                 return None;
             }
+            let level = raw.chars().take_while(|&c| c == '=').count();
             let title = raw.trim_start_matches('=').trim();
-            (!title.is_empty()).then(|| (line, title.to_string()))
+            (!title.is_empty()).then(|| (line, level, title.to_string()))
         })
         .collect()
 }
@@ -278,6 +279,13 @@ pub struct Editor {
     typst_outline: Option<(PathBuf, Vec<crate::sidebar::Row>)>,
     /// A pending `typst eval` request — only the front end can run a program.
     typst_outline_request: Option<PathBuf>,
+    /// Whether the outline of a Typst file is asked of `typst eval` at all.
+    ///
+    /// Off by default, because reading the included files answers the same
+    /// question without compiling anything. On, it also catches headings a
+    /// book *generates* — `#chapter[初雪]` is a call, not a `=` line, and no
+    /// amount of reading the source will turn it into a chapter name.
+    ask_typst: bool,
     /// The last known 拆分 state, so `:chaifen` can toggle it.
     chaifen: bool,
     /// What Ruby mode is editing the reading of.
@@ -454,6 +462,7 @@ impl Editor {
             clipboard_read: None,
             typst_outline: None,
             typst_outline_request: None,
+            ask_typst: false,
             chaifen: false,
             ruby_target: None,
             completion: None,
@@ -1152,12 +1161,68 @@ impl Editor {
         out
     }
 
+    /// The outline of a file, with the chapters it includes opened out.
+    ///
+    /// A main file is a table of contents: thirty `#include`s and nothing else
+    /// to look at. Reading those files is enough to turn the file names into
+    /// chapter names — the titles are written in them, in plain `= 標題`, and
+    /// no compiler is needed to see that. Cheaper than asking typst by a whole
+    /// compile, and it comes back with the line each title is written on, so
+    /// every row jumps.
+    ///
+    /// A chapter with no heading of its own keeps its file name, since that is
+    /// the only name it has.
+    fn included_outline(&self) -> Vec<crate::sidebar::Row> {
+        let row = |path: PathBuf, level: usize, name: &str, line: usize| crate::sidebar::Row {
+            path,
+            name: format!("{}{name}", "  ".repeat(level.saturating_sub(1))),
+            depth: line,
+            is_dir: false,
+            expanded: false,
+        };
+        let here = self.current_buffer().rope().to_string();
+        let root = self
+            .current_buffer()
+            .path()
+            .and_then(Path::parent)
+            .map(Path::to_path_buf)
+            .unwrap_or_default();
+        let mut rows = Vec::new();
+        for (line, raw) in here.lines().enumerate() {
+            if raw.trim_start().starts_with("#include") {
+                let Some(name) = quoted_path(raw) else { continue };
+                let path = root.join(&name);
+                let chapters = std::fs::read_to_string(&path)
+                    .map(|text| typst_headings(&text))
+                    .unwrap_or_default();
+                if chapters.is_empty() {
+                    // Nothing to read inside; the file name stands, and it
+                    // opens the file rather than sitting on the `#include`.
+                    rows.push(row(path, 2, &name, 0));
+                    continue;
+                }
+                for (at, level, title) in chapters {
+                    rows.push(row(path.clone(), level, &title, at));
+                }
+                continue;
+            }
+            if raw.starts_with('=') {
+                let level = raw.chars().take_while(|&c| c == '=').count();
+                let title = raw.trim_end_matches(['\n', '\r']).trim_start_matches('=').trim();
+                if !title.is_empty() {
+                    rows.push(row(PathBuf::new(), level, title, line));
+                }
+            }
+        }
+        rows
+    }
+
     /// The rows of the evaluated outline, if typst has answered for this file.
     ///
     /// Leaves a request behind when it has not. The source-read outline stands
     /// in meanwhile, so the sidebar is never empty and never waits.
     fn evaluated_outline(&mut self) -> Option<Vec<crate::sidebar::Row>> {
-        if self.current_buffer().syntax() != crate::syntax::Syntax::Typst {
+        if !self.ask_typst || self.current_buffer().syntax() != crate::syntax::Syntax::Typst {
             return None;
         }
         let path = self.current_buffer().path()?.to_path_buf();
@@ -1172,6 +1237,11 @@ impl Editor {
                 None
             }
         }
+    }
+
+    /// Whether to ask `typst eval` for the outline of a Typst file.
+    pub fn set_ask_typst(&mut self, on: bool) {
+        self.ask_typst = on;
     }
 
     /// A file whose evaluated outline the front end should go and fetch.
@@ -1220,7 +1290,7 @@ impl Editor {
     fn anchor(&self, headings: &[crate::book::Heading]) -> Vec<crate::sidebar::Row> {
         let mut written: HashMap<String, (PathBuf, usize)> = HashMap::new();
         let here = self.current_buffer().rope().to_string();
-        for (line, title) in typst_headings(&here) {
+        for (line, _, title) in typst_headings(&here) {
             written.entry(title).or_insert((PathBuf::new(), line));
         }
         let root = self
@@ -1238,7 +1308,7 @@ impl Editor {
             let Ok(text) = std::fs::read_to_string(&path) else {
                 continue;
             };
-            for (at, title) in typst_headings(&text) {
+            for (at, _, title) in typst_headings(&text) {
                 written.entry(title).or_insert((path.clone(), at));
             }
         }
@@ -2633,6 +2703,12 @@ impl Editor {
                     expanded: i == self.current,
                 })
                 .collect(),
+            View::Outline if self.current_buffer().syntax() == crate::syntax::Syntax::Typst => {
+                match self.evaluated_outline() {
+                    Some(rows) => rows,
+                    None => self.included_outline(),
+                }
+            }
             View::Outline => match self.evaluated_outline() {
                 Some(rows) => rows,
                 None => self
@@ -2669,7 +2745,7 @@ impl Editor {
     /// A pane that takes the keys has to say how to give them back, in the
     /// place a reader already looks for what is going on.
     pub const SIDEBAR_KEYS: &'static str =
-        "j k 移動 · l 進入 · h 收起 · Tab 換視圖 · R 重讀 · C-w/Esc 回正文 · q 關";
+        "j k 移動 · l 進入 · h 收起 · Tab 換視圖 · w 寬窄 · R 重讀 · C-w/Esc 回正文 · q 關";
 
     /// Run one key while the sidebar has the keys.
     ///
@@ -2688,6 +2764,17 @@ impl Editor {
             // compiles the book; `R` is how a writer who has just added a
             // chapter asks again.
             Key::Char('R') => self.refresh_evaluated_outline(),
+            // A chapter's whole name does not fit in a column narrow enough to
+            // be worth keeping open, so `w` trades the columns for the name
+            // and back.
+            Key::Char('w') => {
+                let wide = sidebar.toggle_width();
+                self.status = if wide {
+                    "側欄：讀得下整條標題".to_string()
+                } else {
+                    "側欄：窄".to_string()
+                };
+            }
             Key::Char('h') | Key::Left => sidebar.collapse(),
             Key::Char('l') | Key::Right | Key::Enter => {
                 let chosen = sidebar.activate();
@@ -5453,6 +5540,7 @@ mod tests {
         .unwrap();
 
         let mut ed = Editor::new();
+        ed.set_ask_typst(true);
         ed.open_file(dir.join("book.typ")).unwrap();
         ed.open_sidebar_showing(&dir, crate::sidebar::View::Outline);
 
@@ -5462,7 +5550,8 @@ mod tests {
             Some(dir.join("book.typ")),
             "the file being written is what typst is asked about"
         );
-        // …and until it answers, the source read stands, includes and all.
+        // …and until it answers, the source read stands — which already opens
+        // the includes out into chapter names.
         let names: Vec<String> = ed
             .sidebar()
             .unwrap()
@@ -5470,7 +5559,7 @@ mod tests {
             .iter()
             .map(|r| r.name.trim().to_string())
             .collect();
-        assert_eq!(names, vec!["天門真境", "ch01.txt"]);
+        assert_eq!(names, vec!["天門真境", "傳家寶扇"]);
 
         // The answer names the chapter, with the number the page will print.
         ed.provide_typst_outline(
@@ -5501,6 +5590,50 @@ mod tests {
     }
 
     #[test]
+    fn the_chapters_a_book_includes_are_read_out_of_the_files_themselves() {
+        let dir = std::env::temp_dir().join(format!("yumete-inc-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("ch01.txt"), "== 傳家寶扇\n那年冬天。\n").unwrap();
+        std::fs::write(dir.join("ch02.txt"), "== 天門攬勝\n又一年。\n").unwrap();
+        // A chapter with no heading of its own has only its file name.
+        std::fs::write(dir.join("ch03.txt"), "雪一直下到開春。\n").unwrap();
+        std::fs::write(
+            dir.join("book.typ"),
+            "#import \"template.typ\": ruby\n= 天門真境\n#include \"ch01.txt\"\n\
+             #include \"ch02.txt\"\n#include \"ch03.txt\"\n",
+        )
+        .unwrap();
+
+        let mut ed = Editor::new();
+        ed.open_file(dir.join("book.typ")).unwrap();
+        ed.open_sidebar_showing(&dir, crate::sidebar::View::Outline);
+
+        // Nothing was compiled and nothing was asked: the titles are written in
+        // the files, in plain `= 標題`, and reading them is enough.
+        assert_eq!(ed.take_typst_outline_request(), None, "no compiler needed");
+        let rows = ed.sidebar().unwrap().rows().to_vec();
+        assert_eq!(
+            rows.iter().map(|r| r.name.as_str()).collect::<Vec<_>>(),
+            vec!["天門真境", "  傳家寶扇", "  天門攬勝", "  ch03.txt"],
+            "chapter names, indented by their own level; `#import` is not one"
+        );
+        // Each one knows the file and the line it is written on.
+        assert_eq!(rows[0].path, PathBuf::new());
+        assert_eq!(rows[1].path, dir.join("ch01.txt"));
+        assert_eq!(rows[1].depth, 0);
+
+        ed.on_key(Key::Char('j'));
+        ed.on_key(Key::Enter);
+        assert_eq!(
+            ed.current_buffer().path(),
+            Some(dir.join("ch01.txt").as_path())
+        );
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
     fn typst_is_asked_once_and_asked_again_only_when_told() {
         let dir = std::env::temp_dir().join(format!("yumete-book-once-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
@@ -5509,6 +5642,7 @@ mod tests {
 ").unwrap();
 
         let mut ed = Editor::new();
+        ed.set_ask_typst(true);
         ed.open_file(dir.join("book.typ")).unwrap();
         ed.open_sidebar_showing(&dir, crate::sidebar::View::Outline);
         assert!(ed.take_typst_outline_request().is_some());

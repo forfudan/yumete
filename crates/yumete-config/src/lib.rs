@@ -103,9 +103,11 @@ pub struct EditorConfig {
     pub measure: usize,
     /// Whether the outline of a Typst file is asked of `typst eval`.
     ///
-    /// It runs a program over your file, which is worth being able to say no
-    /// to — and a book that pulls a package off the network can keep it
-    /// waiting. Off, the outline is read from the source like Markdown's.
+    /// Off by default: reading the files a book `#include`s answers the same
+    /// question without compiling anything, and compiling a book takes seconds
+    /// — longer if it pulls a package off the network. Worth turning on for a
+    /// book whose chapters are *generated* by code, which no amount of reading
+    /// the source will reveal.
     pub typst_outline: bool,
     /// A tick every `paper_ticks` characters down a 縱; `0` for none
     /// (Feature #102).
@@ -161,7 +163,7 @@ impl Default for EditorConfig {
             syntax: String::new(),
             ruler: 0,
             measure: 0,
-            typst_outline: true,
+            typst_outline: false,
             paper_ticks: 0,
             tabs: Tabs::default(),
             sidebar_width: 24,

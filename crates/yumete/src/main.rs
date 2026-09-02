@@ -66,6 +66,7 @@ fn main() -> ExitCode {
     if config.editor.measure > 0 {
         editor.set_measure(Some(config.editor.measure));
     }
+    editor.set_ask_typst(config.editor.typst_outline);
     editor.set_indent_width(config.editor.tab_width);
     editor.set_tatechuyoko(config.editor.tatechuyoko);
     editor.set_hanging_punctuation(config.editor.hanging_punctuation);

@@ -740,7 +740,7 @@ fn draw(
     // edge, so the page simply ends sooner.
     let body = match editor.sidebar() {
         Some(_) => {
-            let want = (config.editor.sidebar_width as u16).min(body.width.saturating_sub(8));
+            let want = sidebar_columns(editor, config, body.width);
             let split =
                 Layout::horizontal([Constraint::Length(want), Constraint::Min(1)]).split(body);
             draw_sidebar(frame, editor, config, split[0]);
@@ -990,7 +990,7 @@ fn text_at(
     let body = Rect::new(0, 0, size.width, size.height.saturating_sub(1));
     let mut area = body;
     if editor.sidebar().is_some() {
-        let want = (config.editor.sidebar_width as u16).min(area.width.saturating_sub(8));
+        let want = sidebar_columns(editor, config, area.width);
         area.x += want;
         area.width = area.width.saturating_sub(want);
     }
@@ -1061,7 +1061,7 @@ fn tab_at(
     }
     let mut x = 0u16;
     if editor.sidebar().is_some() {
-        x = (config.editor.sidebar_width as u16).min(size.width.saturating_sub(8));
+        x = sidebar_columns(editor, config, size.width);
     }
     let area = Rect::new(x, 0, size.width.saturating_sub(x), 1);
     tab_spans(editor, area)
@@ -1192,6 +1192,37 @@ fn draw_tabs(frame: &mut Frame, editor: &Editor, config: &Config, area: Rect) {
         let (name, dirty) = &tabs[i];
         put_text(buf, x, area.y, x + w, &tab_label(name, *dirty), style);
     }
+}
+
+/// How many columns the sidebar takes.
+///
+/// One rule, asked three times — by the drawing, by the mouse looking for what
+/// it landed on, and by the tab bar working out where it starts. A remembered
+/// number would be a frame out of date, and a click would open the wrong file.
+///
+/// Wide, it is as wide as its longest row, so the point of opening it out —
+/// reading a whole chapter name — actually happens; but never past half the
+/// window, because the writing is what the window is for.
+fn sidebar_columns(editor: &Editor, config: &Config, total: u16) -> u16 {
+    let Some(sidebar) = editor.sidebar() else {
+        return 0;
+    };
+    let want = if sidebar.wide() {
+        // One column of padding on the left, the rule on the right, and the
+        // two the outline indents its rows by.
+        let longest = sidebar
+            .rows()
+            .iter()
+            .map(|row| yumete_cjk::str_width(&row.name) + 4)
+            .max()
+            .unwrap_or(0);
+        longest
+            .max(config.editor.sidebar_width)
+            .min(total as usize / 2)
+    } else {
+        config.editor.sidebar_width
+    };
+    (want as u16).min(total.saturating_sub(8))
 }
 
 /// The file sidebar, in the columns taken off the left of the page.
@@ -2919,6 +2950,47 @@ mod tests {
         let buffer = render_wrapped(&mut editor, &config, 40, 8);
         let gutter = gutter_width(editor.current_buffer().line_count(), LineNumbers::Absolute);
         assert_eq!(at(&buffer, 20 + gutter as u16, 4), "│");
+    }
+
+    #[test]
+    fn the_sidebar_opens_out_to_the_length_of_its_longest_name() {
+        let mut editor = editor_with("那年冬天");
+        let mut config = Config::default();
+        config.editor.sidebar_width = 20;
+        let dir = std::env::temp_dir().join(format!("yumete-wide-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("天門真境之傳家寶扇.md"), "# 一\n").unwrap();
+        editor.open_sidebar_at(&dir);
+
+        // Narrow, the name is cut where the rule is.
+        let buffer = render_with(&editor, &config, &no_ime(), 80, 12);
+        assert_eq!(at(&buffer, 19, 0), "│", "the rule at the set width");
+
+        // `w` opens it out far enough to read the whole name, rule included.
+        editor.on_key(Key::Char('w'));
+        let buffer = render_with(&editor, &config, &no_ime(), 80, 12);
+        let rule = (0..80u16)
+            .find(|&x| at(&buffer, x, 0) == "│")
+            .expect("a rule somewhere");
+        assert!(rule > 19, "wider than the setting: {rule}");
+        // A wide glyph covers two cells and only the first carries it, so the
+        // row reads back with a gap after every 字.
+        let name: String = (1..rule)
+            .map(|x| at(&buffer, x, 1))
+            .collect::<String>()
+            .replace(' ', "");
+        assert!(
+            name.contains("天門真境之傳家寶扇"),
+            "the whole name is readable: {name:?}"
+        );
+
+        // …and back.
+        editor.on_key(Key::Char('w'));
+        let buffer = render_with(&editor, &config, &no_ime(), 80, 12);
+        assert_eq!(at(&buffer, 19, 0), "│");
+
+        std::fs::remove_dir_all(&dir).ok();
     }
 
     #[test]
