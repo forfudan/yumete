@@ -2575,12 +2575,16 @@ fn opening_of(c: char) -> Option<char> {
 
 /// Whether `c` is a 漢字 — what a Chinese word count actually counts.
 ///
-/// The unified blocks and their extensions, plus the compatibility ideographs.
+/// The unified blocks and their extensions, plus the compatibility ideographs
+/// and the two ideographs that live outside them: 〇 (U+3007), which is how a
+/// year is written — 二〇二五年 is five 字, not four — and 々 (U+3005), the
+/// repetition mark, which stands for a 漢字 and is counted as one.
+///
 /// Kana and punctuation are deliberately out: a 字數 is not a character count,
 /// which is why `:count` reports both.
 fn is_han(c: char) -> bool {
     matches!(c as u32,
-        0x3400..=0x4DBF | 0x4E00..=0x9FFF | 0xF900..=0xFAFF | 0x20000..=0x3FFFF)
+        0x3005 | 0x3007 | 0x3400..=0x4DBF | 0x4E00..=0x9FFF | 0xF900..=0xFAFF | 0x20000..=0x3FFFF)
 }
 
 /// Swap the case of `c`, leaving anything caseless (every 漢字) alone.
@@ -3858,6 +3862,15 @@ mod tests {
         assert_eq!(out, CommandOutcome::Quit);
         assert_eq!(std::fs::read_to_string(&path).unwrap(), "文");
         std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn the_two_ideographs_outside_the_unified_blocks_count_as_字() {
+        let mut ed = Editor::new();
+        ed.current_buffer_mut().insert(0, "二〇二五年");
+        ed.execute(":count").unwrap();
+        let report = ed.status().to_string();
+        assert!(report.contains("5 字"), "{report}");
     }
 
     #[test]
