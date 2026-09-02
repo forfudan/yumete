@@ -73,11 +73,9 @@ pub enum Command {
     /// `:dense` / `:dense off` — pack the 縱書 page as tight as a terminal can
     /// (Feature #120).
     SetDense(bool),
-    /// `:wysiwyg` / `:source` — whether the markup comes off the page
-    /// (Feature #104).
-    SetWysiwyg(bool),
-    /// `:markup` — whether Markdown is coloured at all (Feature #96).
-    ToggleMarkup,
+    /// `:render off|on|full` — how much of the result the page shows
+    /// (Features #96 / #104).
+    SetRender(crate::editor::Render),
     /// `:clipboard-yank` / `:clipboard-paste` — the system clipboard, which
     /// Helix spells the same way (Feature #109).
     Clipboard {
@@ -251,7 +249,6 @@ pub fn parse(input: &str) -> Result<Command, CommandError> {
         }
 
         "hanging" => Ok(Command::ToggleHanging),
-        "markup" | "md" => Ok(Command::ToggleMarkup),
         "clipboard" => match rest {
             "yank" => Ok(Command::Clipboard { yank: true }),
             "paste" => Ok(Command::Clipboard { yank: false }),
@@ -266,11 +263,12 @@ pub fn parse(input: &str) -> Result<Command, CommandError> {
         } else {
             Some(rest.to_string())
         })),
-        "wysiwyg" => match rest {
-            "" | "on" => Ok(Command::SetWysiwyg(true)),
-            "off" => Ok(Command::SetWysiwyg(false)),
+        "render" => match rest {
+            "" | "on" => Ok(Command::SetRender(crate::editor::Render::On)),
+            "off" => Ok(Command::SetRender(crate::editor::Render::Off)),
+            "full" => Ok(Command::SetRender(crate::editor::Render::Full)),
             other => Err(CommandError::InvalidArgument {
-                command: "wysiwyg",
+                command: "render",
                 value: other.to_string(),
             }),
         },
@@ -459,6 +457,25 @@ const YUME: &[Word] = &[
         name: "chaifen",
         help: "候選旁的拆分注解",
         then: Args::Words(ON_OFF),
+    },
+];
+
+/// How much of the result the page shows.
+const RENDER: &[Word] = &[
+    Word {
+        name: "off",
+        help: "原文，不著色",
+        then: Args::None,
+    },
+    Word {
+        name: "on",
+        help: "著色，標記留在畫面上（默認）",
+        then: Args::None,
+    },
+    Word {
+        name: "full",
+        help: "標記拿掉，只在光標那一處展開",
+        then: Args::None,
     },
 ];
 
@@ -700,16 +717,10 @@ pub const COMMANDS: &[Entry] = &[
         args: Args::Words(SYNTAXES),
     },
     Entry {
-        name: "markup",
-        alias: Some("md"),
-        help: "Markdown 著色開關",
-        args: Args::Words(ON_OFF),
-    },
-    Entry {
-        name: "wysiwyg",
+        name: "render",
         alias: None,
-        help: "所見即所得：標記只在光標那一處展開",
-        args: Args::Words(ON_OFF),
+        help: "畫面上顯示多少「結果」：原文、著色、所見即所得",
+        args: Args::Words(RENDER),
     },
     Entry {
         name: "dense",
@@ -1033,10 +1044,10 @@ mod tests {
         // wearing the verb's name, and they are now words `:ruby` takes.
         let ruby: Vec<&str> = complete("ruby").iter().map(|e| e.name).collect();
         assert_eq!(ruby, ["ruby"]);
-        // Aliases match too, so `:md` finds the command it is short for.
+        // Aliases match too, so `:w` finds the command it is short for.
         assert_eq!(
-            complete("md").iter().map(|e| e.name).collect::<Vec<_>>(),
-            ["markup"]
+            complete("wq").iter().map(|e| e.name).collect::<Vec<_>>(),
+            ["wq"]
         );
         assert!(complete("zzz").is_empty());
     }

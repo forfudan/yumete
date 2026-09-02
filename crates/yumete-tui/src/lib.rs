@@ -3337,8 +3337,7 @@ mod tests {
         // `**那**` — a bold word between markers, and a heading above it.
         let mut editor = editor_with("# 卷一\n那年**冬天**，山下起了大雪。");
         let config = vertical_config();
-        editor.set_markup_visible(true);
-        editor.set_wysiwyg(false);
+        editor.set_render(yumete_core::editor::Render::On);
         let buffer = render_vertical(&mut editor, &config, 30, 16);
 
         // Find the 縱 the sentence is set in — the second, since the heading
@@ -3517,7 +3516,7 @@ mod tests {
         assert!(buffer[(4, 1)].style().add_modifier.contains(Modifier::BOLD));
 
         // Turning it off leaves the text alone.
-        editor.set_markup_visible(false);
+        editor.set_render(yumete_core::editor::Render::Off);
         let buffer = render(&editor, &config, 40, 8);
         assert!(!buffer[(0, 0)].style().add_modifier.contains(Modifier::DIM));
     }
@@ -3534,7 +3533,7 @@ mod tests {
         assert_eq!(row_text(&buffer, 0).trim_end(), "那**年**冬**天**");
 
         // 所見即所得 with the cursor at the start: all of it comes off.
-        editor.execute(":wysiwyg").unwrap();
+        editor.execute(":render full").unwrap();
         for c in "gg".chars() {
             editor.on_key(Key::Char(c));
         }
@@ -3549,7 +3548,7 @@ mod tests {
         assert_eq!(row_text(&buffer, 0).trim_end(), "那**年**冬天");
 
         // …and back to source on demand.
-        editor.execute(":wysiwyg off").unwrap();
+        editor.execute(":render on").unwrap();
         let buffer = render(&editor, &config, 40, 6);
         assert_eq!(row_text(&buffer, 0).trim_end(), "那**年**冬**天**");
     }
@@ -3564,7 +3563,7 @@ mod tests {
         let mut config = Config::default();
         config.editor.line_numbers = LineNumbers::None;
         config.editor.show_segmentation = false;
-        editor.execute(":wysiwyg").unwrap();
+        editor.execute(":render full").unwrap();
         for c in "gg".chars() {
             editor.on_key(Key::Char(c));
         }
@@ -3585,7 +3584,7 @@ mod tests {
         let mut config = Config::default();
         config.editor.line_numbers = LineNumbers::None;
         config.editor.show_segmentation = false;
-        editor.execute(":wysiwyg").unwrap();
+        editor.execute(":render full").unwrap();
         // Onto 天, clear of the construct whose markup has come off. (Standing
         // *on* the construct's own boundary keeps it open, which is what stops
         // the line flickering as the cursor leaves it.)
@@ -3622,7 +3621,7 @@ mod tests {
         assert!(!bold, "code is not emphasis");
 
         // …and 所見即所得 leaves it alone too.
-        editor.execute(":wysiwyg").unwrap();
+        editor.execute(":render full").unwrap();
         let buffer = render(&editor, &config, 40, 8);
         assert_eq!(row_text(&buffer, 2).trim_end(), "let a = **b**;");
     }
@@ -3675,7 +3674,7 @@ mod tests {
         );
 
         // And with the colouring off, none of it applies.
-        editor.set_markup_visible(false);
+        editor.set_render(yumete_core::editor::Render::Off);
         let buffer = render(&editor, &config, 40, 8);
         assert_eq!(buffer[(0, 2)].style().bg, prose);
     }

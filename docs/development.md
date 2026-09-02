@@ -321,7 +321,8 @@ Phases are ordered by priority, most writer-critical first:
 | 123 | **`Enter` asks "who uses this?"**          | core   | P2    | a column-scoped search, walked with `n`/`N` | Done |
 | 124 | **Argument completion, and grouping**      | core   | P2    | a parent is an argument whose values are verbs | Done |
 | 125 | **The window is the default measure**      | both   | P2    | `zong_length = 0`; a fixed count is `:wrap n` | Done |
-| 126 | **A value is not a command name**          | core   | P2    | 42 commands → 27; the flat spellings deleted | Done |
+| 126 | **A value is not a command name**          | core   | P2    | 42 commands → 26; the flat spellings deleted | Done |
+| 127 | **`:render off/on/full`**                  | core   | P2    | one axis; `:wysiwyg`+`:markup` were two switches | Done |
 
 ---
 
