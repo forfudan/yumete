@@ -19,6 +19,10 @@ pub enum Item {
     /// A line of the file being written, by index — what a table's jump offers
     /// when a cell names several rows and only a person can say which.
     Row(usize, String),
+    /// Something to paste: which row of the editor's paste menu, and the line
+    /// shown for it. `None` is the system clipboard, which only the front end
+    /// can read.
+    Paste(Option<usize>, String),
 }
 
 impl Item {
@@ -26,7 +30,7 @@ impl Item {
     pub fn label(&self) -> &str {
         match self {
             Item::File(path) => path,
-            Item::Buffer(_, name) | Item::Row(_, name) => name,
+            Item::Buffer(_, name) | Item::Row(_, name) | Item::Paste(_, name) => name,
         }
     }
 }

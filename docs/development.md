@@ -334,6 +334,7 @@ Phases are ordered by priority, most writer-critical first:
 | 136 | **`:yume table` — any code table**         | ime    | P2    | Rime `.dict.yaml` as it comes; 五筆/倉頡/粵拼 | Done |
 | 137 | **A file changed on disk is not written over** | core | P0 | `:w!`/`:e!`; a hash so it never cries wolf | Done |
 | 138 | **A macro keeps its operands**             | core   | P1    | `fq` recorded as `f` and ate the next key | Done |
+| 139 | **A ring of what was yanked**              | core   | P2    | `Space \"`; the last 16, plus the named ones | Done |
 
 ---
 
