@@ -8,5 +8,7 @@ version.workspace = true
 
 [dependencies]
 regex = "1"
+serde = {version = "1", features = ["derive"]}
+toml = "0.8"
 ropey = "1.6"
 yumete-cjk = {path = "../yumete-cjk"}
