@@ -277,6 +277,7 @@ Phases are ordered by priority, most writer-critical first:
 | 79  | **Crash recovery**                         | both   | P1    | A dotfile beside the document; `:recover` | Done   |
 | 80  | **Report a broken config**                 | config | P2    | A typo was silently dropped before  | Done   |
 | 81  | **East-Asian ambiguous width**             | cjk    | P1    | `—` `…` `“”` shifted every line     | Done   |
+| 82  | **Files a writer actually has**            | core   | P2    | BOM, non-UTF-8, a closed pipe       | Done   |
 
 ---
 

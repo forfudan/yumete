@@ -109,8 +109,8 @@ impl Buffer {
     /// Any other I/O error (permissions, a directory, invalid UTF-8) is returned.
     pub fn open<P: AsRef<Path>>(path: P) -> io::Result<Self> {
         let path = path.as_ref();
-        let rope = match fs::read_to_string(path) {
-            Ok(text) => Rope::from_str(&text),
+        let rope = match fs::read(path) {
+            Ok(bytes) => Rope::from_str(decode(&bytes, path)?.as_ref()),
             Err(err) if err.kind() == io::ErrorKind::NotFound => Rope::new(),
             Err(err) => return Err(err),
         };
@@ -361,6 +361,35 @@ impl Buffer {
     }
 }
 
+/// The byte-order mark some Windows editors write at the head of a UTF-8 file.
+///
+/// Stripped on open and not written back. Kept, it becomes an invisible first
+/// character of the first paragraph — `gg` parks the cursor on a character that
+/// is not there, and it takes a 縱 slot of its own on the vertical page.
+const BOM: &str = "\u{feff}";
+
+/// Read `bytes` as the text of `path`, or say — in words a writer can act on —
+/// why it could not be read.
+fn decode<'a>(bytes: &'a [u8], path: &Path) -> io::Result<std::borrow::Cow<'a, str>> {
+    let text = std::str::from_utf8(bytes).map_err(|_| {
+        // Manuscripts in this part of the world are often Big5 or GB18030, and
+        // "stream did not contain valid UTF-8" tells their author nothing about
+        // what to do next.
+        io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!(
+                "{} is not UTF-8 — an older Chinese manuscript is usually Big5 or GB18030; \
+                 convert it first, e.g. `iconv -f big5 -t utf-8`",
+                path.display()
+            ),
+        )
+    })?;
+    Ok(match text.strip_prefix(BOM) {
+        Some(stripped) => std::borrow::Cow::Borrowed(stripped),
+        None => std::borrow::Cow::Borrowed(text),
+    })
+}
+
 /// Where a document's recovery copy lives: a dotfile beside it,
 /// `chapter.md` → `.chapter.md.yumete`.
 fn swap_path_for(path: &Path) -> Option<PathBuf> {
@@ -521,6 +550,43 @@ mod tests {
         // An unnamed buffer has nowhere to keep one, and asks for nothing.
         assert!(Buffer::scratch().swap_path().is_none());
         assert!(Buffer::scratch().write_swap().is_ok());
+
+        fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn a_byte_order_mark_is_not_the_first_character_of_the_book() {
+        let dir = std::env::temp_dir().join(format!("yumete-bom-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("bom.txt");
+        fs::write(
+            &path,
+            b"\xef\xbb\xbf\xe7\xac\xac\xe4\xb8\x80\xe6\xae\xb5\xe3\x80\x82",
+        )
+        .unwrap();
+
+        // Kept, the mark is an invisible first character: `gg` parks the cursor
+        // on something that is not there, and it takes a slot on the page.
+        let b = Buffer::open(&path).unwrap();
+        assert_eq!(b.text(), "第一段。");
+
+        fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn a_big5_manuscript_is_refused_in_words_its_author_can_act_on() {
+        let dir = std::env::temp_dir().join(format!("yumete-big5-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("old.txt");
+        // 「第一段」 in Big5.
+        fs::write(&path, b"\xb2\xc4\xa4\x40\xacq").unwrap();
+
+        let Err(err) = Buffer::open(&path) else {
+            panic!("a Big5 manuscript was read as if it were UTF-8");
+        };
+        let err = err.to_string();
+        assert!(err.contains("Big5"), "{err}");
+        assert!(err.contains("iconv"), "{err}");
 
         fs::remove_dir_all(&dir).ok();
     }
