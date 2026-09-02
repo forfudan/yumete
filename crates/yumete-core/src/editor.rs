@@ -8094,6 +8094,53 @@ mod tests {
     }
 
     #[test]
+    fn an_edit_that_did_nothing_leaves_nothing_to_undo() {
+        // An undo point used to be pushed when a command *announced* an edit,
+        // not when it made one. Three keys that did nothing left three undo
+        // steps that did nothing, and `u` became "sometimes works".
+        let mut ed = typed("那年冬天");
+        press(&mut ed, "x");
+        press(&mut ed, "d");
+        assert_eq!(ed.current_buffer().text(), "");
+
+        // Nothing left to delete. These change nothing, so they are not places
+        // to come back to.
+        press(&mut ed, "d");
+        press(&mut ed, "d");
+        press(&mut ed, "d");
+        // Nor is an Insert session that typed nothing.
+        press(&mut ed, "i");
+        ed.on_key(Key::Esc);
+        press(&mut ed, "a");
+        ed.on_key(Key::Esc);
+
+        ed.on_key(Key::Char('u'));
+        assert_eq!(
+            ed.current_buffer().text(),
+            "那年冬天",
+            "one `u` goes back to the last edit that happened"
+        );
+
+        // A refused edit is the same case: the guard stopped it, so there is
+        // nothing to undo — and the text before it is still one `u` away.
+        let (dir, csv) = a_table("undo");
+        let mut ed = Editor::new();
+        ed.open_file(&csv).unwrap();
+        ed.goto_line(2);
+        press(&mut ed, "l");
+        press(&mut ed, "i");
+        ed.on_key(Key::Char('土'));
+        ed.on_key(Key::Char(','));
+        ed.on_key(Key::Char(','));
+        ed.on_key(Key::Esc);
+        assert_eq!(ed.cell_text(1, 1), "土⿰木目");
+        ed.on_key(Key::Char('u'));
+        assert_eq!(ed.cell_text(1, 1), "⿰木目", "the refusals cost nothing");
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
     fn what_was_cut_three_edits_ago_is_still_reachable() {
         // Every yank and every delete overwrote one register, so "where did
         // that paragraph go" had no answer.
