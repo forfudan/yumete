@@ -273,6 +273,14 @@ const YANKS: usize = 16;
 /// them, and the oldest is the one nobody comes back to.
 const JUMPS: usize = 100;
 
+/// The last answer [`Editor::md_region`] gave, and what it was an answer to.
+#[derive(Debug, Clone)]
+struct MdCache {
+    /// Which buffer, which revision of it, and which line the cursor was on.
+    asked: (usize, u64, usize),
+    region: Option<crate::mdtable::Region>,
+}
+
 /// A file being read as a grid.
 #[derive(Debug, Clone)]
 pub struct TableView {
@@ -550,6 +558,15 @@ pub struct Editor {
     /// The block of every line, against the buffer it was worked out for and
     /// that buffer's revision.
     block_cache: RefCell<Option<BlockCache>>,
+    /// Which `|` table the cursor is in, against the buffer, its revision and
+    /// the line the answer was worked out for.
+    ///
+    /// The region is asked for several times a frame — the hint row, the
+    /// status line, and every key that has to know whether the grid's rules
+    /// apply here. Walking out from the cursor is cheap for a table of ten
+    /// rows and is not cheap for a table of ten thousand, and the answer is
+    /// the same all three times.
+    md_cache: RefCell<Option<MdCache>>,
     /// Whether Markdown is coloured at all (Feature #96).
     /// 所見即所得 (Feature #104): the markup comes off the page, except on the
     /// construct the cursor is in.
@@ -732,6 +749,7 @@ impl Editor {
             segment_cache: RefCell::new(SegmentCache::new()),
             markup_cache: RefCell::new(HashMap::new()),
             block_cache: RefCell::new(None),
+            md_cache: RefCell::new(None),
             ruby_before: None,
             ruby: Dialects::only(crate::ruby::Dialect::Html),
             layout: Layout::default(),
@@ -2252,7 +2270,18 @@ impl Editor {
         }
         let rope = self.current_buffer().rope();
         let line = rope.char_to_line(self.cursor.min(rope.len_chars()));
-        crate::mdtable::region(|i| self.line_text(i), line)
+        let asked = (self.current, self.current_buffer().revision(), line);
+        if let Some(cache) = self.md_cache.borrow().as_ref() {
+            if cache.asked == asked {
+                return cache.region.clone();
+            }
+        }
+        let region = crate::mdtable::region(|i| self.line_text(i), line);
+        *self.md_cache.borrow_mut() = Some(MdCache {
+            asked,
+            region: region.clone(),
+        });
+        region
     }
 
     /// Read the `|` table under the cursor as a grid.
