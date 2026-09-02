@@ -28,6 +28,7 @@ use ratatui::widgets::{Block, BorderType, Borders, Clear, Paragraph};
 use ratatui::Frame;
 
 use yumete_config::{Config, LineNumbers};
+use yumete_core::sidebar::View;
 use yumete_core::wrap::{self, Anchor as WrapAnchor};
 use yumete_core::zong::{Anchor, Layout as WritingLayout};
 use yumete_core::{Editor, Key, KeyOutcome, Mode, TextStore};
@@ -522,44 +523,6 @@ fn gutter_text(i: usize, cursor_line: usize, width: usize, mode: LineNumbers) ->
     }
 }
 
-/// Append a line's spans with each word tinted by an alternating background
-/// (the segmentation overlay, Feature #24). `ranges` are character columns
-/// within `text`; gaps between them (whitespace) stay untinted.
-///
-/// `first_word` is the index the first range has *in its paragraph*, so that a
-/// word split by a soft wrap keeps one colour across the break and the
-/// alternation does not restart on every screen row.
-fn push_segmented_spans<'a>(
-    spans: &mut Vec<Span<'a>>,
-    text: &str,
-    ranges: &[(usize, usize)],
-    colors: [(u8, u8, u8); 2],
-    first_word: usize,
-) {
-    let chars: Vec<char> = text.chars().collect();
-    let mut col = 0usize;
-    for (offset, &(start, end)) in ranges.iter().enumerate() {
-        let word_index = first_word + offset;
-        let start = start.min(chars.len());
-        let end = end.min(chars.len());
-        if start >= end {
-            continue;
-        }
-        if start > col {
-            spans.push(Span::raw(chars[col..start].iter().collect::<String>()));
-        }
-        let (r, g, b) = colors[word_index % colors.len()];
-        spans.push(Span::styled(
-            chars[start..end].iter().collect::<String>(),
-            Style::default().bg(Color::Rgb(r, g, b)),
-        ));
-        col = end;
-    }
-    if col < chars.len() {
-        spans.push(Span::raw(chars[col..].iter().collect::<String>()));
-    }
-}
-
 fn draw(
     frame: &mut Frame,
     editor: &Editor,
@@ -839,6 +802,28 @@ fn tab_at(
         .map(|(_, _, i)| i)
 }
 
+/// How a Markdown run is set.
+///
+/// The markup itself is *shown* and set back; what it marks is set forward.
+/// Nothing is hidden, because the file is the manuscript — the page says what
+/// is in it, and says which part of that is scaffolding.
+fn markup_style(kind: yumete_core::markdown::Kind) -> Style {
+    use yumete_core::markdown::Kind;
+    match kind {
+        Kind::Marker => Style::default().add_modifier(Modifier::DIM),
+        Kind::Heading => Style::default()
+            .fg(Color::Rgb(0xd8, 0xc9, 0x9a))
+            .add_modifier(Modifier::BOLD),
+        Kind::Strong => Style::default().add_modifier(Modifier::BOLD),
+        Kind::Emphasis => Style::default().add_modifier(Modifier::ITALIC),
+        Kind::Code => Style::default().fg(Color::Rgb(0x9c, 0xc2, 0xa8)),
+        Kind::Strike => Style::default().add_modifier(Modifier::CROSSED_OUT),
+        Kind::Link => Style::default()
+            .fg(Color::Rgb(0x9c, 0xb0, 0xc2))
+            .add_modifier(Modifier::UNDERLINED),
+    }
+}
+
 /// Where each tab sits on the bar, so a click can find the one it landed on.
 ///
 /// Recomputed from the same rule the drawing uses rather than remembered from
@@ -974,14 +959,22 @@ fn draw_sidebar(frame: &mut Frame, editor: &Editor, config: &Config, area: Rect)
                 }
             }
         }
-        // A directory says which way it is facing; a file is indented past
-        // where that mark would be, so the names line up in one column.
-        let mark = match (row.is_dir, row.expanded) {
-            (true, true) => "▾ ",
-            (true, false) => "▸ ",
-            (false, _) => "  ",
+        // In the tree a directory says which way it is facing, and a file is
+        // indented past where that mark would be so the names line up. The flat
+        // views spend `depth` on an index instead, so they get no indent — and
+        // in the buffer list `expanded` marks the one being written.
+        let line = match sidebar.view() {
+            View::Explorer => {
+                let mark = match (row.is_dir, row.expanded) {
+                    (true, true) => "▾ ",
+                    (true, false) => "▸ ",
+                    (false, _) => "  ",
+                };
+                format!("{}{mark}{}", "  ".repeat(row.depth), row.name)
+            }
+            View::Buffers => format!("{} {}", if row.expanded { "▸" } else { " " }, row.name),
+            View::Outline => format!("  {}", row.name),
         };
-        let line = format!("{}{mark}{}", "  ".repeat(row.depth), row.name);
         put_text(buf, area.x + 1, y, rule, &line, style);
     }
 }
@@ -1090,10 +1083,13 @@ fn draw_horizontal(
     let sel_style = Style::default().bg(Color::Rgb(sr, sg, sb)).fg(Color::White);
     let show_segmentation = editor.segmentation_visible();
     let seg_colors = config.theme.segmentation;
+    let show_markup = editor.markup_visible();
 
     // Word ranges are per paragraph and consecutive rows usually share one, so
-    // each paragraph the page touches is segmented once.
+    // each paragraph the page touches is segmented once. Its Markdown runs are
+    // held the same way, for the same reason.
     let mut segmented: Option<(usize, Vec<(usize, usize)>)> = None;
+    let mut marked: Option<(usize, Vec<yumete_core::markdown::Span>)> = None;
 
     let mut lines: Vec<Line> = Vec::new();
     for row in wrap::rows_from(rope, *viewport, width, height) {
@@ -1114,27 +1110,34 @@ fn draw_horizontal(
             ));
         }
 
-        // Highlight the portion of this row covered by the selection. The row's
-        // line break counts as one cell at its end, the way vim and Helix show
-        // it, so a blank line inside a selection is visibly inside it.
+        // Three layers, composed rather than fighting: Markdown sets the ink
+        // and the weight, the word overlay and the selection set the ground.
+        // Whichever one wins used to be an if/else, so a bold word inside a
+        // selection lost its bold and a heading lost its colour the moment the
+        // overlay came on.
         let row_len = row.end - row.start;
-        let reach = row.start + row_len + usize::from(row.ends_line);
-        if has_selection && sel_end > row.start && sel_start < reach {
-            let a = sel_start.saturating_sub(row.start).min(row_len);
-            let b = (sel_end - row.start).min(row_len);
-            let chars: Vec<char> = text.chars().collect();
-            let break_cell = if row.ends_line && sel_end > row.start + row_len {
-                " "
-            } else {
-                ""
+        let chars: Vec<char> = text.chars().collect();
+        let mut styles = vec![Style::default(); chars.len()];
+
+        if show_markup {
+            let start_in_line = row.start - rope.line_to_char(row.line);
+            let runs = match &marked {
+                Some((line, runs)) if *line == row.line => runs,
+                _ => {
+                    marked = Some((row.line, editor.markup_line(row.line)));
+                    &marked.as_ref().unwrap().1
+                }
             };
-            spans.push(Span::raw(chars[..a].iter().collect::<String>()));
-            spans.push(Span::styled(
-                format!("{}{break_cell}", chars[a..b].iter().collect::<String>()),
-                sel_style,
-            ));
-            spans.push(Span::raw(chars[b..].iter().collect::<String>()));
-        } else if show_segmentation {
+            for run in runs {
+                let a = run.start.saturating_sub(start_in_line);
+                let b = run.end.saturating_sub(start_in_line).min(chars.len());
+                for style in styles.iter_mut().take(b).skip(a.min(b)) {
+                    *style = markup_style(run.kind);
+                }
+            }
+        }
+
+        if show_segmentation && !has_selection {
             // Tint each word with an alternating background (Feature #24). The
             // words are the paragraph's, sliced to this row, so a word split by
             // a wrap keeps one colour across the break.
@@ -1150,20 +1153,49 @@ fn draw_horizontal(
                 |&&(a, b): &&(usize, usize)| b > start_in_line && a < start_in_line + row_len;
             // Which word of the paragraph the row opens on, so the two colours
             // keep alternating across the break instead of restarting.
-            let first_word = words.iter().position(|w| visible(&w)).unwrap_or(0);
-            let sliced: Vec<(usize, usize)> = words
-                .iter()
-                .filter(visible)
-                .map(|&(a, b)| {
-                    (
-                        a.saturating_sub(start_in_line),
-                        (b - start_in_line).min(row_len),
-                    )
-                })
-                .collect();
-            push_segmented_spans(&mut spans, &text, &sliced, seg_colors, first_word);
-        } else {
-            spans.push(Span::raw(text));
+            // The word's index *in the paragraph* picks its colour, so the two
+            // keep alternating across a wrap instead of restarting each row.
+            for (n, &(a, b)) in words.iter().enumerate().filter(|(_, w)| visible(&w)) {
+                let a = a.saturating_sub(start_in_line);
+                let b = (b - start_in_line).min(chars.len());
+                let (r, g, bl) = seg_colors[n % seg_colors.len()];
+                for style in styles.iter_mut().take(b).skip(a.min(b)) {
+                    *style = style.bg(Color::Rgb(r, g, bl));
+                }
+            }
+        }
+
+        // The selection's ground goes over everything, because it is the answer
+        // to "what would an edit take" and nothing may obscure that.
+        let reach = row.start + row_len + usize::from(row.ends_line);
+        let mut break_cell = "";
+        if has_selection && sel_end > row.start && sel_start < reach {
+            let a = sel_start.saturating_sub(row.start).min(row_len);
+            let b = (sel_end - row.start).min(row_len);
+            for style in styles.iter_mut().take(b).skip(a) {
+                *style = style.patch(sel_style);
+            }
+            if row.ends_line && sel_end > row.start + row_len {
+                break_cell = " ";
+            }
+        }
+
+        // Coalesce the per-character styles into as few spans as the row needs.
+        let mut at = 0;
+        while at < chars.len() {
+            let style = styles[at];
+            let mut to = at + 1;
+            while to < chars.len() && styles[to] == style {
+                to += 1;
+            }
+            spans.push(Span::styled(
+                chars[at..to].iter().collect::<String>(),
+                style,
+            ));
+            at = to;
+        }
+        if !break_cell.is_empty() {
+            spans.push(Span::styled(break_cell, sel_style));
         }
         lines.push(Line::from(spans));
     }
@@ -2377,6 +2409,50 @@ mod tests {
         };
         assert!(!dim(3), "`seg` was typed");
         assert!(dim(4), "`ment` is only a guess");
+    }
+
+    #[test]
+    fn markdown_is_coloured_without_being_hidden() {
+        let mut editor = editor_with("# 第一章\n那**年**冬天");
+        let mut config = Config::default();
+        config.editor.line_numbers = LineNumbers::None;
+        config.editor.show_segmentation = false;
+        let buffer = render(&editor, &config, 40, 8);
+
+        // The markup is still on the page — this is a manuscript, not a preview.
+        assert_eq!(row_text(&buffer, 0).trim_end(), "# 第一章");
+        assert_eq!(row_text(&buffer, 1).trim_end(), "那**年**冬天");
+
+        // The hashes are set back and the title is set forward.
+        assert!(buffer[(0, 0)].style().add_modifier.contains(Modifier::DIM));
+        assert!(buffer[(2, 0)].style().add_modifier.contains(Modifier::BOLD));
+        // 那 is prose, 年 is bold, and the asterisks are dim but present.
+        assert!(!buffer[(0, 1)].style().add_modifier.contains(Modifier::BOLD));
+        assert!(buffer[(2, 1)].style().add_modifier.contains(Modifier::DIM));
+        assert!(buffer[(4, 1)].style().add_modifier.contains(Modifier::BOLD));
+
+        // Turning it off leaves the text alone.
+        editor.set_markup_visible(false);
+        let buffer = render(&editor, &config, 40, 8);
+        assert!(!buffer[(0, 0)].style().add_modifier.contains(Modifier::DIM));
+    }
+
+    #[test]
+    fn a_selection_keeps_the_weight_of_what_it_covers() {
+        // Three layers that compose: Markdown sets the ink and the weight, the
+        // selection sets the ground. Whichever won used to be an if/else, so a
+        // bold word inside a selection lost its bold.
+        let mut editor = editor_with("那**年**冬天");
+        let mut config = Config::default();
+        config.editor.line_numbers = LineNumbers::None;
+        config.editor.show_segmentation = false;
+        editor.on_key(Key::Char('%'));
+        let buffer = render(&editor, &config, 40, 8);
+
+        let (r, g, b) = config.theme.selection;
+        let cell = buffer[(4, 0)].style();
+        assert_eq!(cell.bg, Some(Color::Rgb(r, g, b)), "selected");
+        assert!(cell.add_modifier.contains(Modifier::BOLD), "and still bold");
     }
 
     #[test]

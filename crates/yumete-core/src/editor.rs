@@ -235,6 +235,12 @@ pub struct Editor {
     hanging: bool,
     /// Word ranges already worked out, per line, against a hash of that line.
     segment_cache: RefCell<SegmentCache>,
+    /// The Markdown runs of each paragraph, cached the same way and for the
+    /// same reason: the renderer asks for every paragraph on screen, every
+    /// frame, and the answer only changes when the paragraph does.
+    markup_cache: RefCell<HashMap<usize, (u64, Vec<crate::markdown::Span>)>>,
+    /// Whether Markdown is coloured at all (Feature #96).
+    show_markup: bool,
     /// The command-line completion in progress: the prefix Tab started from, and
     /// which match is selected. The prefix is kept because the typed text is
     /// replaced by each candidate in turn, so the line itself can no longer say
@@ -377,6 +383,8 @@ impl Editor {
             tatechuyoko: false,
             hanging: false,
             segment_cache: RefCell::new(SegmentCache::new()),
+            markup_cache: RefCell::new(HashMap::new()),
+            show_markup: true,
             ruby: Dialects::only(crate::ruby::Dialect::Html),
             layout: Layout::default(),
             zong_length: DEFAULT_ZONG_LENGTH,
@@ -713,6 +721,47 @@ impl Editor {
         std::fs::write(&target, written).map_err(EditorError::Io)?;
         self.status = format!("wrote {}", target.display());
         Ok(CommandOutcome::Continue)
+    }
+
+    // ---- Markdown colouring (Feature #96) ----------------------------------
+
+    /// Whether Markdown is coloured.
+    pub fn markup_visible(&self) -> bool {
+        self.show_markup
+    }
+
+    /// Set whether Markdown is coloured, returning the new state.
+    pub fn set_markup_visible(&mut self, on: bool) -> bool {
+        self.show_markup = on;
+        self.show_markup
+    }
+
+    /// The Markdown runs of `line`, cached against the paragraph's own text.
+    pub fn markup_line(&self, line: usize) -> Vec<crate::markdown::Span> {
+        if !self.show_markup {
+            return Vec::new();
+        }
+        let rope = self.current_buffer().rope();
+        if line >= rope.len_lines() {
+            return Vec::new();
+        }
+        let mut text = rope.line(line).to_string();
+        while text.ends_with('\n') || text.ends_with('\r') {
+            text.pop();
+        }
+        let mut hasher = DefaultHasher::new();
+        text.hash(&mut hasher);
+        let hash = hasher.finish();
+
+        let mut cache = self.markup_cache.borrow_mut();
+        if let Some((cached, spans)) = cache.get(&line) {
+            if *cached == hash {
+                return spans.clone();
+            }
+        }
+        let spans = crate::markdown::spans(&text);
+        cache.insert(line, (hash, spans.clone()));
+        spans
     }
 
     /// The headings of the active buffer, as `(line, depth, title)`.
@@ -1887,6 +1936,7 @@ impl Editor {
     /// drift apart.
     pub const SPACE_KEYS: &'static [(char, &'static str)] = &[
         ('e', "檔案側欄"),
+        ('o', "大綱"),
         ('f', "開啟檔案"),
         ('b', "切換緩衝區"),
         ('/', "全項目搜索"),
@@ -1898,6 +1948,11 @@ impl Editor {
     fn handle_space(&mut self, key: Key) {
         match key {
             Key::Char('e') => self.toggle_sidebar(),
+            // The outline is the sidebar opened on the view that shows it.
+            Key::Char('o') => {
+                let root = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+                self.open_sidebar_showing(&root, crate::sidebar::View::Outline);
+            }
             Key::Char('f') => self.open_file_picker(),
             Key::Char('b') => self.open_buffer_picker(),
             // The two prompts, opened rather than run: a search wants a pattern
@@ -1933,7 +1988,15 @@ impl Editor {
 
     /// Show the sidebar rooted at `root` and give it the keys.
     pub fn open_sidebar_at(&mut self, root: &Path) {
+        self.open_sidebar_showing(root, crate::sidebar::View::Explorer);
+    }
+
+    /// Show the sidebar rooted at `root`, opened on `view`.
+    pub fn open_sidebar_showing(&mut self, root: &Path, view: crate::sidebar::View) {
         let mut sidebar = crate::sidebar::Sidebar::new(root);
+        while sidebar.view() != view {
+            sidebar.cycle();
+        }
         // Open on the file being written, so the tree says where you are rather
         // than making you find yourself in it.
         if let Some(path) = self.current_buffer().path() {
@@ -1943,6 +2006,58 @@ impl Editor {
         }
         self.sidebar = Some(sidebar);
         self.sidebar_focus = true;
+        self.refresh_sidebar();
+    }
+
+    /// Fill the sidebar with whatever its current view shows.
+    ///
+    /// The tree builds its own rows from the file system; the other two are the
+    /// editor's own knowledge, so they are pushed in from here.
+    fn refresh_sidebar(&mut self) {
+        use crate::sidebar::{Row, View};
+        let Some(view) = self.sidebar.as_ref().map(|s| s.view()) else {
+            return;
+        };
+        let rows = match view {
+            View::Explorer => {
+                if let Some(sidebar) = self.sidebar.as_mut() {
+                    sidebar.rebuild();
+                }
+                return;
+            }
+            // `depth` carries the index the row stands for — the buffer's, or
+            // the line's — since a flat list has no depth to spend.
+            View::Buffers => self
+                .buffers
+                .iter()
+                .enumerate()
+                .map(|(i, b)| Row {
+                    path: b.path().map(Path::to_path_buf).unwrap_or_default(),
+                    name: format!(
+                        "{}{}",
+                        b.display_name(),
+                        if b.is_modified() { " +" } else { "" }
+                    ),
+                    depth: i,
+                    is_dir: false,
+                    expanded: i == self.current,
+                })
+                .collect(),
+            View::Outline => self
+                .outline()
+                .into_iter()
+                .map(|(line, level, title)| Row {
+                    path: PathBuf::new(),
+                    name: format!("{}{title}", "  ".repeat(level.saturating_sub(1))),
+                    depth: line,
+                    is_dir: false,
+                    expanded: false,
+                })
+                .collect(),
+        };
+        if let Some(sidebar) = self.sidebar.as_mut() {
+            sidebar.set_rows(rows);
+        }
     }
 
     /// The sidebar, for the front end to draw.
@@ -1970,13 +2085,38 @@ impl Editor {
             Key::Char('k') | Key::Up => sidebar.step(false),
             Key::Char('h') | Key::Left => sidebar.collapse(),
             Key::Char('l') | Key::Right | Key::Enter => {
-                if let Some(path) = sidebar.activate() {
-                    if let Err(err) = self.open_file(&path) {
-                        self.status = format!("cannot open '{}': {err}", path.display());
+                let chosen = sidebar.activate();
+                match chosen {
+                    Some(crate::sidebar::Chosen::File(path)) => {
+                        if let Err(err) = self.open_file(&path) {
+                            self.status = format!("cannot open '{}': {err}", path.display());
+                        }
+                        // Entering a file means going to write in it.
+                        self.sidebar_focus = false;
+                        self.refresh_sidebar();
                     }
-                    // Entering a file means going to write in it.
-                    self.sidebar_focus = false;
+                    Some(crate::sidebar::Chosen::Buffer(i)) => {
+                        self.show_buffer(i);
+                        self.sidebar_focus = false;
+                        self.refresh_sidebar();
+                    }
+                    Some(crate::sidebar::Chosen::Line(line)) => {
+                        self.goto_line(line + 1);
+                        self.sidebar_focus = false;
+                    }
+                    None => {}
                 }
+            }
+            // Tab walks the three views: the project, what is open in it, and
+            // the chapter on screen.
+            Key::Tab => {
+                sidebar.cycle();
+                self.refresh_sidebar();
+            }
+            Key::BackTab => {
+                sidebar.cycle();
+                sidebar.cycle();
+                self.refresh_sidebar();
             }
             // Esc hands the keys back but leaves the tree up; `q` puts it away.
             Key::Esc => self.sidebar_focus = false,
@@ -4546,6 +4686,60 @@ mod tests {
         let mut ed = typed("上山\n下海");
         press(&mut ed, "gJ");
         assert_eq!(ed.current_buffer().text(), "上山下海");
+    }
+
+    #[test]
+    fn the_sidebar_shows_three_views_of_the_same_question() {
+        let dir = std::env::temp_dir().join(format!("yumete-views-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("ch01.md"), "# 第一章\n那年\n## 一\n雪\n").unwrap();
+
+        let mut ed = Editor::new();
+        ed.execute(&format!(":open {}", dir.join("ch01.md").display()))
+            .unwrap();
+        ed.execute(":new").unwrap();
+
+        // `Space o` opens straight onto the outline of the file being written…
+        ed.open_sidebar_showing(&dir, crate::sidebar::View::Outline);
+        assert!(
+            ed.sidebar().unwrap().rows().is_empty(),
+            "a scratch has none"
+        );
+
+        // …and on a chapter it is the hashes the writer already types.
+        ed.prev_buffer();
+        ed.open_sidebar_showing(&dir, crate::sidebar::View::Outline);
+        let names: Vec<&str> = ed
+            .sidebar()
+            .unwrap()
+            .rows()
+            .iter()
+            .map(|r| r.name.trim())
+            .collect();
+        assert_eq!(names, ["第一章", "一"]);
+
+        // Entering a heading puts the cursor on it and hands the keys back.
+        ed.on_key(Key::Char('j'));
+        ed.on_key(Key::Enter);
+        assert_eq!(ed.cursor_line(), 2);
+        assert!(!ed.sidebar_focused());
+
+        // Tab walks from the tree on to the buffers, which name what is open.
+        ed.open_sidebar_at(&dir);
+        ed.on_key(Key::Tab);
+        assert_eq!(ed.sidebar().unwrap().view(), crate::sidebar::View::Buffers);
+        let names: Vec<String> = ed
+            .sidebar()
+            .unwrap()
+            .rows()
+            .iter()
+            .map(|r| r.name.clone())
+            .collect();
+        assert_eq!(names.len(), 2);
+        assert!(names[0].starts_with("ch01.md"), "{names:?}");
+
+        std::fs::remove_dir_all(&dir).ok();
     }
 
     #[test]
