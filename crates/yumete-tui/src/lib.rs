@@ -813,6 +813,14 @@ fn draw_status(frame: &mut Frame, editor: &Editor, ime: &ImeSession, status_area
         return;
     } else {
         let dirty = if buffer.is_modified() { " [+]" } else { "" };
+        // A recovered draft is worth a standing tag, not just the one-off notice
+        // at open: the status line is cleared by the next keystroke, and the
+        // writer must still be able to see that `:recover` has something to do.
+        let draft = if buffer.recovered_draft().is_some() {
+            " [draft]"
+        } else {
+            ""
+        };
         // In Insert mode with the IME available, show the 中/英 state + scheme.
         let ime_tag = match language_tag(editor, ime).as_str() {
             "" => String::new(),
