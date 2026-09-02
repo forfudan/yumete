@@ -172,6 +172,12 @@ pub struct Detail {
     pub links: Vec<(char, Option<usize>)>,
 }
 
+/// How many places the jump list remembers.
+///
+/// Bounded because a session of a thousand jumps does not need a thousandth of
+/// them, and the oldest is the one nobody comes back to.
+const JUMPS: usize = 100;
+
 /// A file being read as a grid.
 #[derive(Debug, Clone)]
 pub struct TableView {
@@ -356,6 +362,10 @@ pub struct Editor {
     table_bypass: std::cell::Cell<bool>,
     /// The layout a grid turned the page away from, so leaving gives it back.
     turned_for_table: Option<Layout>,
+    /// Where the cursor was before each far jump, and how far back we have
+    /// walked through them.
+    jumps: Vec<(usize, usize)>,
+    jump_at: usize,
     /// Where Enter came from when it followed a footnote, and the line it
     /// landed on — so the same key comes back, and only from there.
     note_return: Option<usize>,
@@ -546,6 +556,8 @@ impl Editor {
             show_detail: true,
             table_bypass: std::cell::Cell::new(false),
             turned_for_table: None,
+            jumps: Vec::new(),
+            jump_at: 0,
             note_return: None,
             note_return_from: None,
             key_index: RefCell::new(None),
@@ -3456,6 +3468,12 @@ impl Editor {
             }
             Key::Ctrl('f') => self.move_page(count, false, 1.0),
             Key::Ctrl('b') => self.move_page(count, true, 1.0),
+            // Back and forward through the places jumps came from, as in vi
+            // and in Helix. Under the Kitty protocol `C-i` and Tab are told
+            // apart; without it a terminal sends the same byte for both, and
+            // `C-i` simply does whatever Tab does.
+            Key::Ctrl('o') => self.walk_jumps(true),
+            Key::Ctrl('i') => self.walk_jumps(false),
             Key::Ctrl('d') => self.move_page(count, false, 0.5),
             Key::Ctrl('u') => self.move_page(count, true, 0.5),
             // …and on the capitals of the keys that move, which is a reader's
@@ -4001,12 +4019,75 @@ impl Editor {
     /// Move to the first non-blank character of line `n`, counting from 1 and
     /// clamped to the end of the buffer (`10gg`, `:10`, `:goto 10`).
     fn goto_line(&mut self, n: usize) {
+        self.remember_jump();
         let rope = self.current_buffer().rope();
         let last = motion::last_line(rope);
         let line = n.saturating_sub(1).min(last);
         let at = rope.line_to_char(line);
         let pos = motion::line_first_non_blank(rope, at);
         self.move_head(pos);
+    }
+
+    // ---- The jump list (Feature #45) ---------------------------------------
+
+    /// Note where the cursor is, before a jump takes it somewhere far.
+    ///
+    /// Every far motion in this editor goes through `goto_line` — `gg`, `G`,
+    /// `:1200`, `:toc`, a heading in the outline, a `#include` followed with
+    /// `gf`, a component followed with `Enter` in a table — so one call here
+    /// gives all of them a way back. `C-o` walks back through them, `C-i`
+    /// forward again, as they do in vi and in Helix.
+    ///
+    /// Before this, a table's `Enter` was a one-way door: following 螭 → 虫
+    /// and coming back meant remembering 螭 and searching for it. The footnote
+    /// panel had its own private way back; this is that idea, generalised.
+    fn remember_jump(&mut self) {
+        let here = (self.current, self.cursor);
+        // Walking away from a place already noted adds nothing.
+        if self.jumps.last() == Some(&here) {
+            return;
+        }
+        // A new jump ends the forward history, as it does everywhere else.
+        self.jumps.truncate(self.jump_at);
+        self.jumps.push(here);
+        // Bounded: a session of a thousand jumps does not need a thousandth of
+        // them, and the oldest is the one nobody comes back to.
+        if self.jumps.len() > JUMPS {
+            self.jumps.remove(0);
+        }
+        self.jump_at = self.jumps.len();
+    }
+
+    /// Go back to where a jump came from (`C-o`), or forward again (`C-i`).
+    fn walk_jumps(&mut self, back: bool) {
+        if back {
+            if self.jump_at == 0 {
+                self.status = "沒有更早的位置了".to_string();
+                return;
+            }
+            // Stepping back for the first time has to note where we are, or
+            // `C-i` would have nowhere to return to.
+            if self.jump_at == self.jumps.len() {
+                let here = (self.current, self.cursor);
+                if self.jumps.last() != Some(&here) {
+                    self.jumps.push(here);
+                }
+            }
+            self.jump_at -= 1;
+        } else {
+            if self.jump_at + 1 >= self.jumps.len() {
+                self.status = "沒有更晚的位置了".to_string();
+                return;
+            }
+            self.jump_at += 1;
+        }
+        let (buffer, cursor) = self.jumps[self.jump_at];
+        if buffer != self.current && buffer < self.buffers.len() {
+            self.show_buffer(buffer);
+        }
+        let len = self.current_buffer().rope().len_chars();
+        self.move_head(cursor.min(len));
+        self.status = format!("跳轉表 {}/{}", self.jump_at + 1, self.jumps.len());
     }
 
     /// Find `target` on the current line (`f`/`t`/`F`/`T`), moving the head and
@@ -7155,6 +7236,57 @@ mod tests {
         assert!(ed.status().is_empty(), "{}", ed.status());
         assert!(ed.enter_table());
         assert!(ed.status().contains("照首行"), "{}", ed.status());
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn every_far_jump_leaves_a_way_back() {
+        // A table's `Enter` used to be a one-way door: following 相 → 木 and
+        // coming back meant remembering 相 and searching for it again.
+        let dir = std::env::temp_dir().join(format!("yumete-jumps-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(dir.join(".yumete").join("tables")).unwrap();
+        std::fs::write(
+            dir.join(".yumete").join("tables").join("t.toml"),
+            "[table]\nfile = ['d.csv']\nkey = 'char'\n\
+             [[table.column]]\nname = 'char'\n[[table.column]]\nname = 'ids_y'\n\
+             [table.jump]\nfrom = ['ids_y']\nto = 'char'\n",
+        )
+        .unwrap();
+        let csv = dir.join("d.csv");
+        std::fs::write(&csv, "char,ids_y\n相,⿰木目\n木,木\n目,目\n").unwrap();
+
+        let mut ed = Editor::new();
+        ed.open_file(&csv).unwrap();
+        ed.execute("2").unwrap();
+        press(&mut ed, "l");
+
+        // Follow a component, then come back to the exact character.
+        ed.on_key(Key::Tab);
+        press(&mut ed, "l");
+        let was = ed.cursor();
+        ed.on_key(Key::Enter);
+        assert_eq!(ed.cursor_line(), 2, "木's own row");
+        ed.on_key(Key::Ctrl('o'));
+        assert_eq!(ed.cursor(), was, "and back where the jump started");
+        ed.on_key(Key::Ctrl('i'));
+        assert_eq!(ed.cursor_line(), 2, "…and forward again");
+
+        // The same list holds every far motion, not only the table's.
+        let mut ed = typed("一\n二\n三\n四\n五\n六\n七\n八\n");
+        ed.execute("7").unwrap();
+        assert_eq!(ed.cursor_line(), 6);
+        ed.execute("2").unwrap();
+        assert_eq!(ed.cursor_line(), 1);
+        ed.on_key(Key::Ctrl('o'));
+        assert_eq!(ed.cursor_line(), 6, "back to where `:2` was typed");
+        ed.on_key(Key::Ctrl('o'));
+        assert_eq!(ed.cursor_line(), 0, "and to where `:7` was typed");
+        ed.on_key(Key::Ctrl('o'));
+        assert!(ed.status().contains("沒有更早"), "{}", ed.status());
+        ed.on_key(Key::Ctrl('i'));
+        assert_eq!(ed.cursor_line(), 6);
 
         std::fs::remove_dir_all(&dir).ok();
     }
