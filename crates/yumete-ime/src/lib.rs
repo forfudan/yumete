@@ -117,6 +117,10 @@ pub struct ImeSession {
     /// Whether the 拆分 annotation is on (Feature #66). Off by default: it is
     /// a study aid, and it widens every candidate.
     annotations: bool,
+    /// Whether the 碼表 in use is this binary's rather than one found on disk.
+    /// Worth knowing: a writer who has just installed a newer 靈明 and is still
+    /// seeing the old candidates deserves to be told which one is answering.
+    builtin: bool,
 }
 
 impl ImeSession {
@@ -127,14 +131,74 @@ impl ImeSession {
     ///
     /// [`available`]: ImeSession::available
     pub fn new(scheme: Scheme, data_dirs: Vec<PathBuf>) -> Self {
-        let (engine, available) = build_engine(scheme, &data_dirs);
+        let (mut engine, mut available) = build_engine(scheme, &data_dirs);
+        // Nothing installed. Rather than an editor that cannot type 漢字 until
+        // somebody clones the 宇浩 source tree, 靈明's own 碼表 stands in when
+        // this binary was built on a machine that had it.
+        let mut builtin = false;
+        if !available && scheme == Scheme::Lingming {
+            available = load_builtin(&mut engine);
+            builtin = available;
+        }
         ImeSession {
             engine,
             scheme,
             data_dirs,
             available,
             annotations: false,
+            builtin,
         }
+    }
+
+    /// A session using the 碼表 in the binary, whatever is installed.
+    ///
+    /// The escape hatch the fallback creates a need for: an installed table
+    /// that is broken, or older than this binary's, or simply not the one you
+    /// meant. Without it the only way back to a known 靈明 would be moving
+    /// files about outside the editor.
+    pub fn builtin_lingming() -> Self {
+        let dirs = yumete_config::data_search_dirs();
+        let mut engine = Engine::new(CodeTable::new());
+        // The language layer still comes from disk where it is: it is not what
+        // was being overridden, and it is what makes the candidates sensible.
+        for file in data_manifest::shared() {
+            if !matches!(file.kind, DataKind::Table | DataKind::Symbols) {
+                load_data_file(&mut engine, &dirs, &file);
+            }
+        }
+        let available = load_builtin(&mut engine);
+        engine.set_scheme_by_tag(Scheme::Lingming.tag());
+        ImeSession {
+            engine,
+            scheme: Scheme::Lingming,
+            data_dirs: dirs,
+            available,
+            annotations: false,
+            builtin: true,
+        }
+    }
+
+    /// Whether the 碼表 answering is the one in the binary.
+    pub fn is_builtin(&self) -> bool {
+        self.builtin
+    }
+
+    /// Where the 碼表 in use came from, for `:yume` to say.
+    pub fn table_source(&self) -> String {
+        if !self.available {
+            return "沒有碼表".to_string();
+        }
+        if self.builtin {
+            return "出廠自帶".to_string();
+        }
+        // The manifest knows which file this scheme's 碼表 is; asking it beats
+        // guessing at the name.
+        data_manifest::for_scheme(self.scheme.tag())
+            .into_iter()
+            .find(|f| f.kind == DataKind::Table)
+            .and_then(|f| find_file(&self.data_dirs, &f.file))
+            .map(|path| path.display().to_string())
+            .unwrap_or_else(|| "已安裝".to_string())
     }
 
     /// Build a session using [`yumete_config::data_search_dirs`].
@@ -164,6 +228,7 @@ impl ImeSession {
             data_dirs: dirs,
             available: false,
             annotations: false,
+            builtin: false,
         }
     }
 
@@ -180,6 +245,7 @@ impl ImeSession {
             data_dirs: Vec::new(),
             available: false,
             annotations: false,
+            builtin: false,
         }
     }
 
@@ -192,6 +258,7 @@ impl ImeSession {
             data_dirs: Vec::new(),
             available: true,
             annotations: false,
+            builtin: false,
         }
     }
 
@@ -209,6 +276,7 @@ impl ImeSession {
             data_dirs: Vec::new(),
             available: true,
             annotations: false,
+            builtin: false,
         }
     }
 
@@ -496,6 +564,41 @@ fn find_file(dirs: &[PathBuf], relative: &str) -> Option<PathBuf> {
     None
 }
 
+/// 靈明's 碼表, put here at build time by `build.rs` when the machine that
+/// built this binary had it installed — `None` when it did not.
+///
+/// Everything else yume needs is data a writer installs; this one file is the
+/// difference between "an editor that types Chinese" and "an editor that will
+/// type Chinese once you have cloned another repository and run a script". It
+/// is never committed: see `build.rs` for why, and for where it is found.
+mod builtin {
+    include!(concat!(env!("OUT_DIR"), "/builtin.rs"));
+}
+
+/// Put the built-in 靈明 tables into `engine`, reporting whether it can type.
+fn load_builtin(engine: &mut Engine) -> bool {
+    let Some(bytes) = builtin::BUILTIN_TABLE else {
+        return false;
+    };
+    let mut table = CodeTable::new();
+    if table.load_binary_bytes(bytes).is_err() {
+        return false;
+    }
+    engine.set_table(Arc::new(table));
+    if let Some(bytes) = builtin::BUILTIN_SYMBOLS {
+        let mut symbols = CodeTable::new();
+        if symbols.load_binary_bytes(bytes).is_ok() {
+            engine.set_symbol_table(symbols);
+        }
+    }
+    true
+}
+
+/// Whether this binary carries a 碼表 at all.
+pub fn has_builtin_table() -> bool {
+    builtin::BUILTIN_TABLE.is_some()
+}
+
 /// Load one entry of the factory data set into `engine`.
 ///
 /// This is yumete's copy of the one dispatch every Yume frontend has — the
@@ -709,10 +812,24 @@ mod tests {
     }
 
     #[test]
-    fn missing_data_dir_is_unavailable_but_usable() {
-        let s = ImeSession::new(Scheme::Lingming, vec![PathBuf::from("/no/such/dir")]);
-        assert!(!s.available());
-        // The scheme name still resolves from the engine.
+    fn a_machine_with_nothing_installed_can_still_type() {
+        let mut s = ImeSession::new(Scheme::Lingming, vec![PathBuf::from("/no/such/dir")]);
+        // Whether it can depends on the machine that *built* this binary, and
+        // both answers are correct — so the test is that the two facts agree,
+        // not that either one holds.
+        assert_eq!(s.available(), has_builtin_table());
+        assert_eq!(s.is_builtin(), has_builtin_table());
         assert_eq!(s.scheme(), Scheme::Lingming);
+        if has_builtin_table() {
+            s.input('a');
+            assert!(!s.page_candidates().is_empty(), "and it really answers");
+            assert_eq!(s.table_source(), "出廠自帶");
+        }
+
+        // Only 靈明 — the others are installed, and without their tables the
+        // session is honestly unavailable rather than silently 靈明.
+        let other = ImeSession::new(Scheme::Riyue, vec![PathBuf::from("/no/such/dir")]);
+        assert!(!other.available());
+        assert_eq!(other.scheme(), Scheme::Riyue);
     }
 }

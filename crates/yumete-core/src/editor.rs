@@ -1637,6 +1637,16 @@ impl Editor {
                 }
                 Ok(CommandOutcome::Continue)
             }
+            // Both are questions only the front end can answer — it is the one
+            // holding the IME — so they go out as requests, like `:yume scheme`.
+            Command::YumeStatus => {
+                self.scheme_request = Some(String::from("?"));
+                Ok(CommandOutcome::Continue)
+            }
+            Command::BuiltinScheme => {
+                self.scheme_request = Some(String::from("!"));
+                Ok(CommandOutcome::Continue)
+            }
             Command::Shell { line, interactive } => {
                 self.shell_request = Some(Shell {
                     line,

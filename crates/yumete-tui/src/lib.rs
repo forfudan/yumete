@@ -709,6 +709,32 @@ fn base64(bytes: &[u8]) -> String {
 /// `.yumete/` beside the manuscript. So the failure worth naming is not "no
 /// such scheme" but "that scheme's tables are not on this machine".
 fn switch_scheme(ime: &mut ImeSession, tag: &str, config: &Config) -> String {
+    // Two questions ride the same request, because both are about the session
+    // the front end holds and neither is worth a second channel.
+    if tag == "?" {
+        return if ime.available() {
+            format!(
+                "{} · 碼表 {} · 拆分 {}",
+                ime.scheme_name(),
+                ime.table_source(),
+                if ime.annotations_enabled() { "開" } else { "關" }
+            )
+        } else if yumete_ime::has_builtin_table() {
+            "還沒開始打字——`:yume scheme` 載入碼表".to_string()
+        } else {
+            "還沒開始打字，而且這個二進制不帶碼表——先裝資料".to_string()
+        };
+    }
+    if tag == "!" {
+        if !yumete_ime::has_builtin_table() {
+            return "這個二進制不帶碼表".to_string();
+        }
+        let mut full = ImeSession::builtin_lingming();
+        full.set_page_size(config.panel.page_size);
+        full.set_annotations(ime.annotations_enabled());
+        *ime = full;
+        return "方案：靈明（出廠自帶的碼表）".to_string();
+    }
     // No name means "the one this project writes in" — `:yume s` is the whole
     // of starting to type, and the config already said which.
     let tag = if tag.is_empty() {

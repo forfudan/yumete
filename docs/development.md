@@ -329,6 +329,7 @@ Phases are ordered by priority, most writer-critical first:
 | 131 | **A failed filter leaves the text alone**  | tui    | P1    | an error message is not an edit     | Done   |
 | 132 | **The menu spreads across the window**     | tui    | P3    | 26 commands at a glance, column-major | Done |
 | 133 | **The language model yes, the 碼表 no**    | both   | P2    | 27 ms for everyone; `:yume scheme` for the rest | Done |
+| 134 | **靈明 embedded at build time**            | ime    | P2    | never committed; `:yume` says which one answers | Done |
 
 ---
 
