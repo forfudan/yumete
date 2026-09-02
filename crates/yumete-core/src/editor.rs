@@ -182,6 +182,33 @@ pub struct TableView {
     /// Which cell `j` and `k` aim for, so walking down a column stays in it
     /// even across a row whose cells are shorter.
     goal: usize,
+    /// What one step of `hjkl` moves by.
+    pub grain: Grain,
+}
+
+/// What a motion moves by, in a grid.
+///
+/// A grid has two units and they are both wanted. Walking a table is walking
+/// cells — that is what makes it a grid rather than a long line. But a 拆分 is
+/// a *sequence*: `⿰木目` is three components, and reaching the middle one to
+/// see what it is, or to jump to its own row, means the unit has to be the
+/// character. `Tab` says which.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Grain {
+    /// `hjkl` walk cells and rows. The default: it is what a grid is for.
+    Cell,
+    /// `hjkl` walk characters and lines, as they do in any other file.
+    Char,
+}
+
+impl Grain {
+    /// Its name, for the status line.
+    pub fn label(self) -> &'static str {
+        match self {
+            Grain::Cell => "格",
+            Grain::Char => "字",
+        }
+    }
 }
 
 /// Call `f` for every readable file under `root`, depth first.
@@ -325,6 +352,8 @@ pub struct Editor {
     /// Whether the detail panel is wanted. It only appears where there is
     /// something to say, so this is "show it when there is", not "show it".
     show_detail: bool,
+    /// Whether the grid's edit guard is lifted for the operation in hand.
+    table_bypass: std::cell::Cell<bool>,
     /// Where Enter came from when it followed a footnote, and the line it
     /// landed on — so the same key comes back, and only from there.
     note_return: Option<usize>,
@@ -513,6 +542,7 @@ impl Editor {
             clipboard_read: None,
             table: None,
             show_detail: true,
+            table_bypass: std::cell::Cell::new(false),
             note_return: None,
             note_return_from: None,
             key_index: RefCell::new(None),
@@ -1770,6 +1800,7 @@ impl Editor {
             schema,
             from,
             goal: 0,
+            grain: Grain::Cell,
         });
         // A grid is read across: rows run left to right and columns stack down
         // the page, which is the one thing a 縱書 layout cannot do. Rather than
@@ -1805,6 +1836,7 @@ impl Editor {
                 schema,
                 from,
                 goal: 0,
+                grain: Grain::Cell,
             });
         }
     }
@@ -1935,6 +1967,32 @@ impl Editor {
     /// paging, `gg`, search, the operators — is about lines and text, and a
     /// grid does not change what those mean.
     fn table_motion(&mut self, key: Key, count: usize) -> bool {
+        // Tab is what says which unit a step is. It is the one key here that
+        // works in both, because it is the way out of either.
+        if key == Key::Tab {
+            let grain = match self.table.as_ref().map(|v| v.grain) {
+                Some(Grain::Cell) => Grain::Char,
+                _ => Grain::Cell,
+            };
+            if let Some(view) = self.table.as_mut() {
+                view.grain = grain;
+            }
+            self.status = match grain {
+                Grain::Cell => "按格移動".to_string(),
+                Grain::Char => "按字移動（Tab 回到按格）".to_string(),
+            };
+            return true;
+        }
+        // Reading by character, this is an ordinary file that happens to be
+        // drawn as a grid: `hjkl`, the operators and the selection all mean
+        // what they mean everywhere else. Only Enter still knows about cells.
+        if self.table.as_ref().map(|v| v.grain) == Some(Grain::Char) {
+            if key == Key::Enter {
+                self.follow_cell();
+                return true;
+            }
+            return false;
+        }
         match key {
             Key::Char('h') | Key::Left => self.repeat(count, |e| e.move_cell(false)),
             Key::Char('l') | Key::Right => self.repeat(count, |e| e.move_cell(true)),
@@ -1978,12 +2036,29 @@ impl Editor {
                 if end > start {
                     let text = self.current_buffer().rope().slice(start..end).to_string();
                     self.store(text);
-                    self.current_buffer_mut().remove(start..end);
+                    self.edit_remove(start..end);
                 }
                 self.set_cursor(start);
             }
         }
         self.enter_insert();
+    }
+
+    /// What the status line says about where the cursor is in a grid.
+    ///
+    /// Which column, and what a step moves by — the second matters because
+    /// `Tab` changes what every arrow key does, and a mode you cannot see is a
+    /// mode you will be surprised by.
+    pub fn table_status(&self) -> Option<String> {
+        let view = self.table.as_ref()?;
+        let (_, cell) = self.cell_position()?;
+        let name = view
+            .schema
+            .columns
+            .get(cell)
+            .map(|c| c.heading().to_string())
+            .unwrap_or_else(|| format!("+{}", cell + 1 - view.schema.columns.len()));
+        Some(format!("{name} · {}", view.grain.label()))
     }
 
     /// The bounds of the cell the cursor is in, for clamping Insert to it.
@@ -2013,7 +2088,66 @@ impl Editor {
                 "'{c}' separates cells — it cannot be written inside one"
             ));
         }
+        // A line break would cut the row in two; a tab is not a thing a cell of
+        // this kind holds, and it is the one other character that a paste from
+        // a spreadsheet brings along.
+        if c == '\n' || c == '\r' {
+            return Some("a line break would cut this row in two".to_string());
+        }
+        if c == '\t' {
+            return Some("a tab cannot be written into a cell".to_string());
+        }
         None
+    }
+
+    /// The first reason this text may not go into a cell, if there is one.
+    fn cell_refuses_text(&self, text: &str) -> Option<String> {
+        if self.table.is_none() || self.table_bypass.get() {
+            return None;
+        }
+        text.chars().find_map(|c| self.cell_refuses(c))
+    }
+
+    /// The reason this range may not be cut out, if there is one.
+    fn cell_refuses_cut(&self, range: std::ops::Range<usize>) -> Option<String> {
+        if self.table.is_none() || self.table_bypass.get() {
+            return None;
+        }
+        let rope = self.current_buffer().rope();
+        let range = range.start.min(rope.len_chars())..range.end.min(rope.len_chars());
+        if range.is_empty() {
+            return None;
+        }
+        rope.slice(range)
+            .chars()
+            .find_map(|c| self.cell_refuses(c))
+            .map(|_| "格與格之間的分隔不能刪掉".to_string())
+    }
+
+    /// An empty row of this table: every delimiter, and nothing between them.
+    ///
+    /// `o` in a grid means "a new row", and a bare newline is not one — it is a
+    /// row with one cell where the schema says twenty-eight, which the editor
+    /// would then have to mark as damaged the moment it appeared. Opening a
+    /// line therefore opens a *row*.
+    fn blank_row(&self) -> String {
+        match &self.table {
+            Some(view) => view
+                .schema
+                .delimiter
+                .to_string()
+                .repeat(view.schema.columns.len().saturating_sub(1)),
+            None => String::new(),
+        }
+    }
+
+    /// Run `f` with the grid's guard lifted — for the one operation that is
+    /// *about* the structure: opening a whole new row.
+    fn without_cell_guard<T>(&mut self, f: impl FnOnce(&mut Self) -> T) -> T {
+        self.table_bypass.set(true);
+        let out = f(self);
+        self.table_bypass.set(false);
+        out
     }
 
     /// Whether the detail panel is showing.
@@ -2355,6 +2489,23 @@ impl Editor {
     /// of its own is said out loud rather than silently skipped — for a 拆分表
     /// that absence is itself the finding.
     fn follow_cell(&mut self) {
+        // Standing on one character of the sequence, that character is what
+        // was meant — there is nothing to ask about.
+        if self.table.as_ref().map(|v| v.grain) == Some(Grain::Char) {
+            if let Some(c) = self.char_at_cursor() {
+                match self.row_named(c) {
+                    Some(line) => {
+                        self.goto_line(line + 1);
+                        return;
+                    }
+                    None if self.cell_links().iter().any(|&(k, _)| k == c) => {
+                        self.status = format!("表裏沒有「{c}」");
+                        return;
+                    }
+                    None => {}
+                }
+            }
+        }
         let links = self.cell_links();
         if links.is_empty() {
             self.status = "這一格不指向任何一行".to_string();
@@ -3603,7 +3754,9 @@ impl Editor {
             Mode::Normal => {
                 self.delete_selection();
                 let at = self.cursor;
-                self.current_buffer_mut().insert(at, text);
+                if !self.edit_insert(at, text) {
+                    return;
+                }
                 let rope = self.current_buffer().rope();
                 let end = at + text.chars().count();
                 let head = motion::prev_grapheme(rope, end).max(at);
@@ -4111,11 +4264,22 @@ impl Editor {
             }
         }
 
+        // A substitution rewrites whole lines, so the cell guard cannot judge it
+        // character by character. What it can check is the thing the guard
+        // exists to protect: that no row gained or lost a cell.
+        if count > 0 {
+            if let Some(why) = self.substitution_breaks_the_grid(&rebuilt) {
+                self.status = why;
+                return;
+            }
+        }
         if count > 0 {
             self.snapshot();
             let len = self.current_buffer().char_count();
-            self.current_buffer_mut().remove(0..len);
-            self.current_buffer_mut().insert(0, &rebuilt);
+            self.without_cell_guard(|e| {
+                e.current_buffer_mut().remove(0..len);
+                e.current_buffer_mut().insert(0, &rebuilt);
+            });
             self.clamp_cursor();
             self.anchor = self.cursor;
             self.refresh_goal_column();
@@ -4243,9 +4407,9 @@ impl Editor {
             .map(f)
             .collect();
         self.snapshot();
-        let buffer = self.current_buffer_mut();
-        buffer.remove(start..end);
-        buffer.insert(start, &text);
+        if !self.overwrite(start, end, &text) {
+            return;
+        }
         self.anchor = start;
         self.cursor = end;
     }
@@ -4263,9 +4427,9 @@ impl Editor {
         }
         let text: String = std::iter::repeat_n(c, end - start).collect();
         self.snapshot();
-        let buffer = self.current_buffer_mut();
-        buffer.remove(start..end);
-        buffer.insert(start, &text);
+        if !self.overwrite(start, end, &text) {
+            return;
+        }
         // The selection is what it was: `r` writes over the text without moving
         // through it, so `r` then `l` steps one character, not two.
         let head = motion::prev_grapheme(self.current_buffer().rope(), end).max(start);
@@ -4291,11 +4455,9 @@ impl Editor {
         }
         let (start, end) = self.selection();
         self.snapshot();
-        let buffer = self.current_buffer_mut();
-        if end > start {
-            buffer.remove(start..end);
+        if !self.overwrite(start, end.max(start), &text) {
+            return;
         }
-        buffer.insert(start, &text);
         self.anchor = start;
         self.cursor = start + text.chars().count();
         self.clamp_cursor();
@@ -4327,7 +4489,7 @@ impl Editor {
         for line in (first..=last).rev() {
             let at = self.current_buffer().rope().line_to_char(line);
             if add {
-                self.current_buffer_mut().insert(at, &pad);
+                self.edit_insert(at, &pad);
             } else {
                 let rope = self.current_buffer().rope();
                 let len = rope.len_chars();
@@ -4336,7 +4498,7 @@ impl Editor {
                     n += 1;
                 }
                 if n > 0 {
-                    self.current_buffer_mut().remove(at..at + n);
+                    self.edit_remove(at..at + n);
                 }
             }
         }
@@ -4829,10 +4991,97 @@ impl Editor {
 
     // ---- Editing (Features #9 / #10) --------------------------------------
 
+    /// Put `text` into the buffer, unless a grid says it must not go in.
+    ///
+    /// **One gate, not ten.** The first version of this checked the delimiter
+    /// where a character is typed, and a review found seven other ways in — a
+    /// paste, the clipboard, an IME commit, `:s`, `r`, `R` — every one of which
+    /// wrote a comma into a cell and then wrote the file out, silently shifting
+    /// every column after it. Text reaches the buffer through exactly two
+    /// calls; this is one of them, and the check lives here so that adding an
+    /// eighth way in cannot reopen the hole.
+    fn edit_insert(&mut self, at: usize, text: &str) -> bool {
+        if let Some(why) = self.cell_refuses_text(text) {
+            self.status = why;
+            return false;
+        }
+        self.current_buffer_mut().insert(at, text);
+        true
+    }
+
+    /// Whether a rewritten document would change any row's shape.
+    ///
+    /// `:s` is the one edit that rewrites whole lines at once, so it is checked
+    /// as a whole: same number of rows, and each row with the same number of
+    /// cells it had. A substitution that only changes what is *inside* cells
+    /// passes, which is the useful kind — `:%s/⿰木/⿰禾/g` over a 拆分表.
+    fn substitution_breaks_the_grid(&self, rebuilt: &str) -> Option<String> {
+        let view = self.table.as_ref()?;
+        let d = view.schema.delimiter;
+        let before = self.current_buffer().rope().to_string();
+        let count = |text: &str| -> Vec<usize> {
+            text.lines()
+                .map(|l| l.chars().filter(|&c| c == d).count())
+                .collect()
+        };
+        let (was, now) = (count(&before), count(rebuilt));
+        if was.len() != now.len() {
+            return Some(format!(
+                "這次替換會把 {} 行變成 {} 行——表格模式下不改行",
+                was.len(),
+                now.len()
+            ));
+        }
+        let at = was.iter().zip(&now).position(|(a, b)| a != b)?;
+        Some(format!(
+            "第 {} 行會從 {} 格變成 {} 格——先 `:table off`",
+            at + 1,
+            was[at] + 1,
+            now[at] + 1
+        ))
+    }
+
+    /// Write `text` over `start..end`, unless a grid says either half must not
+    /// happen.
+    ///
+    /// Both halves are checked *before* either runs, so a refusal leaves the
+    /// buffer exactly as it was rather than half-edited.
+    fn overwrite(&mut self, start: usize, end: usize, text: &str) -> bool {
+        if let Some(why) = self
+            .cell_refuses_cut(start..end)
+            .or_else(|| self.cell_refuses_text(text))
+        {
+            self.status = why;
+            return false;
+        }
+        let buffer = self.current_buffer_mut();
+        buffer.remove(start..end);
+        buffer.insert(start, text);
+        true
+    }
+
+    /// Take a range out of the buffer, unless it would take a cell boundary
+    /// with it.
+    ///
+    /// The other half of the invariant: **a row's delimiter count never
+    /// changes while it is being read as a grid.** Deleting is how it was most
+    /// easily broken — `d` on an empty cell sits exactly on the delimiter, so
+    /// the collapsed selection covered it and two cells became one.
+    fn edit_remove(&mut self, range: std::ops::Range<usize>) -> bool {
+        if let Some(why) = self.cell_refuses_cut(range.clone()) {
+            self.status = why;
+            return false;
+        }
+        self.current_buffer_mut().remove(range);
+        true
+    }
+
     /// Insert `text` at the cursor and advance past it.
     fn insert_str(&mut self, text: &str) {
         let at = self.cursor;
-        self.current_buffer_mut().insert(at, text);
+        if !self.edit_insert(at, text) {
+            return;
+        }
         self.cursor = at + text.chars().count();
         self.anchor = self.cursor;
         self.refresh_goal_column();
@@ -4841,7 +5090,8 @@ impl Editor {
     /// Open a new line below the cursor and enter Insert mode (`o`).
     fn open_line_below(&mut self) {
         let end = motion::line_end(self.current_buffer().rope(), self.cursor);
-        self.current_buffer_mut().insert(end, "\n");
+        let row = self.blank_row();
+        self.without_cell_guard(|e| e.current_buffer_mut().insert(end, &format!("\n{row}")));
         self.cursor = end + 1;
         self.anchor = self.cursor;
         self.enter_insert();
@@ -4850,7 +5100,8 @@ impl Editor {
     /// Open a new line above the cursor and enter Insert mode (`O`).
     fn open_line_above(&mut self) {
         let start = motion::line_start(self.current_buffer().rope(), self.cursor);
-        self.current_buffer_mut().insert(start, "\n");
+        let row = self.blank_row();
+        self.without_cell_guard(|e| e.current_buffer_mut().insert(start, &format!("{row}\n")));
         self.cursor = start;
         self.anchor = self.cursor;
         self.enter_insert();
@@ -4906,6 +5157,10 @@ impl Editor {
         let (start, end) = self.selection();
         if end > start {
             // Deleting yanks, as it does in Helix: `d` then `p` moves text.
+            if self.cell_refuses_cut(start..end).is_some() {
+                self.status = "格與格之間的分隔不能刪掉".to_string();
+                return;
+            }
             let text = self.current_buffer().rope().slice(start..end).to_string();
             self.store(text);
             self.current_buffer_mut().remove(start..end);
@@ -5049,7 +5304,9 @@ impl Editor {
             start
         };
         let len = text.chars().count();
-        self.current_buffer_mut().insert(at, &text);
+        if !self.edit_insert(at, &text) {
+            return;
+        }
         // The pasted text becomes the selection, ending on its last grapheme.
         let rope = self.current_buffer().rope();
         let head = motion::prev_grapheme(rope, at + len).max(at);
@@ -5073,7 +5330,9 @@ impl Editor {
             motion::left(rope, self.cursor)
         };
         let range = start..self.cursor;
-        self.current_buffer_mut().remove(range);
+        if !self.edit_remove(range) {
+            return;
+        }
         self.cursor = start;
         self.anchor = self.cursor;
         self.refresh_goal_column();
@@ -6618,6 +6877,146 @@ mod tests {
         ed.on_key(Key::Esc);
         ed.on_key(Key::Char('u'));
         assert_eq!(ed.cell_text(1, 1), "⿰木目", "and it all undoes in one step");
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn tab_says_whether_a_step_is_a_cell_or_a_character() {
+        let dir = std::env::temp_dir().join(format!("yumete-grain-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(dir.join(".yumete").join("tables")).unwrap();
+        std::fs::write(
+            dir.join(".yumete").join("tables").join("t.toml"),
+            "[table]\nfile = ['d.csv']\nkey = 'char'\n\
+             [[table.column]]\nname = 'char'\n[[table.column]]\nname = 'ids_y'\n\
+             [table.jump]\nfrom = ['ids_y']\nto = 'char'\n",
+        )
+        .unwrap();
+        let csv = dir.join("d.csv");
+        std::fs::write(&csv, "char,ids_y\n相,⿰木目\n木,木\n目,目\n").unwrap();
+
+        let mut ed = Editor::new();
+        ed.open_file(&csv).unwrap();
+        ed.goto_line(2);
+        assert_eq!(ed.table().unwrap().grain, crate::editor::Grain::Cell);
+        assert!(ed.table_status().unwrap().ends_with("格"));
+
+        // By the cell: one `l` crosses the whole of 「相」 and the delimiter.
+        press(&mut ed, "l");
+        assert_eq!(ed.cell_position(), Some((1, 1)));
+        assert_eq!(ed.char_at_cursor(), Some('⿰'), "at the cell's first 字");
+
+        // Tab, and the same key steps one character.
+        ed.on_key(Key::Tab);
+        assert_eq!(ed.table().unwrap().grain, crate::editor::Grain::Char);
+        assert!(ed.table_status().unwrap().ends_with("字"), "and it says so");
+        press(&mut ed, "l");
+        assert_eq!(ed.char_at_cursor(), Some('木'), "one 字, not one cell");
+        press(&mut ed, "l");
+        assert_eq!(ed.char_at_cursor(), Some('目'));
+
+        // Standing on one component, Enter goes straight to *that* row —
+        // nothing to ask about, because the cursor already said which.
+        ed.on_key(Key::Enter);
+        assert_eq!(ed.cursor_line(), 3, "目's own row");
+        assert_eq!(ed.mode(), Mode::Normal, "no picker");
+
+        // A component with no row of its own says so by name.
+        ed.goto_line(2);
+        press(&mut ed, "ll");
+        assert_eq!(ed.char_at_cursor(), Some('⿰'));
+        ed.on_key(Key::Enter);
+        assert!(ed.status().contains("沒有「⿰」"), "{}", ed.status());
+
+        // Tab back, and the cursor snaps to cells again.
+        ed.on_key(Key::Tab);
+        assert_eq!(ed.table().unwrap().grain, crate::editor::Grain::Cell);
+        press(&mut ed, "h");
+        assert_eq!(ed.cell_position(), Some((1, 0)));
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn no_route_at_all_gets_a_delimiter_into_a_cell() {
+        // A review found seven ways past the first version of this guard, each
+        // of which shifted every column of a row and then wrote the file out
+        // without a word. Every one of them is here.
+        let (dir, csv) = a_table("guardall");
+        let commas = |ed: &Editor| ed.current_buffer().text().matches(',').count();
+
+        let mut ed = Editor::new();
+        ed.open_file(&csv).unwrap();
+        let clean = ed.current_buffer().text();
+        let n = commas(&ed);
+        ed.goto_line(2);
+        press(&mut ed, "l");
+
+        // 1. Typed.
+        press(&mut ed, "i");
+        ed.on_key(Key::Char(','));
+        assert_eq!(commas(&ed), n, "typed");
+        // 2. A tab and a line break are not text a cell may hold either.
+        ed.on_key(Key::Char('\t'));
+        ed.on_key(Key::Char('\n'));
+        assert_eq!(ed.current_buffer().text(), clean, "tab and newline");
+        // 3. Bracketed paste — ⌘V, which the manual says still works.
+        ed.paste_text("⿰木,目");
+        assert_eq!(commas(&ed), n, "pasted");
+        ed.paste_text("⿰木\n目");
+        assert_eq!(commas(&ed), n, "pasted over two lines");
+        assert_eq!(ed.current_buffer().text(), clean);
+        // 4. An IME commit.
+        ed.insert_committed("木,目");
+        assert_eq!(commas(&ed), n, "committed by the IME");
+        ed.on_key(Key::Esc);
+
+        // 5. The system clipboard (`Space p`).
+        ed.provide_clipboard("木,目", true);
+        assert_eq!(commas(&ed), n, "from the system clipboard");
+        // 6. `r` — two keystrokes in Normal mode, and the easiest of the lot.
+        press(&mut ed, "r");
+        ed.on_key(Key::Char(','));
+        assert_eq!(commas(&ed), n, "overwritten with r");
+        // 7. `R`, from a register holding a whole row.
+        press(&mut ed, "0");
+        press(&mut ed, "xy");
+        press(&mut ed, "l");
+        press(&mut ed, "R");
+        assert_eq!(commas(&ed), n, "replaced from a register");
+        // 8. `:s`, which rewrites whole lines at once.
+        assert!(ed.execute("s/⿰/a,b/").is_ok());
+        assert_eq!(commas(&ed), n, "substituted");
+        assert!(ed.status().contains("格"), "and it says why: {}", ed.status());
+        assert!(ed.execute("s/⿰/a\\nb/").is_ok());
+        assert_eq!(commas(&ed), n, "substituted with a line break");
+
+        // 9. Deleting the delimiter itself. An empty cell sits exactly on one,
+        // so `d` there used to join its two neighbours — and on this table most
+        // columns are empty on most rows, which made it the likeliest accident
+        // of all.
+        std::fs::write(&csv, "char,ids_y,ids_g\n一,,⿰木目\n").unwrap();
+        let mut ed = Editor::new();
+        ed.open_file(&csv).unwrap();
+        let clean = ed.current_buffer().text();
+        ed.goto_line(2);
+        press(&mut ed, "l");
+        assert_eq!(ed.cell_text(1, 1), "", "an empty cell");
+        press(&mut ed, "d");
+        assert_eq!(ed.current_buffer().text(), clean, "deleted an empty cell");
+        press(&mut ed, "c");
+        ed.on_key(Key::Esc);
+        assert_eq!(ed.current_buffer().text(), clean, "changed an empty cell");
+        press(&mut ed, "x");
+        press(&mut ed, "d");
+        assert_eq!(ed.current_buffer().text(), clean, "selected the line and cut");
+
+        // And a substitution that only changes what is *inside* cells is the
+        // useful kind, so it still runs.
+        assert!(ed.execute("s/⿰木目/⿰禾布/").is_ok());
+        assert_eq!(commas(&ed), 4);
+        assert!(ed.current_buffer().text().contains("⿰禾布"));
 
         std::fs::remove_dir_all(&dir).ok();
     }
