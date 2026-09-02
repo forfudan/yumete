@@ -267,6 +267,10 @@ pub struct Editor {
     swap_warned: bool,
     /// The open picker, if `Space f` or `Space b` is up (Feature #90).
     picker: Option<crate::picker::Picker>,
+    /// The file sidebar, when it is showing (Feature #94).
+    sidebar: Option<crate::sidebar::Sidebar>,
+    /// Whether keys are going to the sidebar rather than to the text.
+    sidebar_focus: bool,
     /// The directory the last `:grep` listing was gathered from, so `gf` on one
     /// of its lines resolves the same relative path it printed.
     grep_root: Option<PathBuf>,
@@ -385,6 +389,8 @@ impl Editor {
             swap_warned: false,
             compiled: RefCell::new(None),
             picker: None,
+            sidebar: None,
+            sidebar_focus: false,
             grep_root: None,
         }
     }
@@ -1451,6 +1457,12 @@ impl Editor {
                 keys.push(key);
             }
         }
+        // The sidebar takes Normal-mode keys while it has the focus; every
+        // other mode is about the text and goes to the text.
+        if self.sidebar_focused() && self.mode == Mode::Normal && self.pending == Pending::None {
+            self.on_sidebar_key(key);
+            return KeyOutcome::Continue;
+        }
         match self.mode {
             Mode::Normal => self.on_normal_key(key),
             Mode::Insert => self.on_insert_key(key),
@@ -1860,6 +1872,7 @@ impl Editor {
     /// which-key overlay draws, so what is offered and what happens cannot
     /// drift apart.
     pub const SPACE_KEYS: &'static [(char, &'static str)] = &[
+        ('e', "檔案側欄"),
         ('f', "開啟檔案"),
         ('b', "切換緩衝區"),
         ('/', "全項目搜索"),
@@ -1870,6 +1883,7 @@ impl Editor {
     /// Run one key of a `Space` sequence.
     fn handle_space(&mut self, key: Key) {
         match key {
+            Key::Char('e') => self.toggle_sidebar(),
             Key::Char('f') => self.open_file_picker(),
             Key::Char('b') => self.open_buffer_picker(),
             // The two prompts, opened rather than run: a search wants a pattern
@@ -1886,6 +1900,79 @@ impl Editor {
                 self.completion = None;
             }
             Key::Char('y') => self.copy_to_clipboard(),
+            _ => {}
+        }
+    }
+
+    // ---- The file sidebar (Feature #94) ------------------------------------
+
+    /// Show the sidebar and give it the keys, or put it away (`Space e`).
+    fn toggle_sidebar(&mut self) {
+        if self.sidebar.is_some() {
+            self.sidebar = None;
+            self.sidebar_focus = false;
+            return;
+        }
+        let root = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+        self.open_sidebar_at(&root);
+    }
+
+    /// Show the sidebar rooted at `root` and give it the keys.
+    pub fn open_sidebar_at(&mut self, root: &Path) {
+        let mut sidebar = crate::sidebar::Sidebar::new(root);
+        // Open on the file being written, so the tree says where you are rather
+        // than making you find yourself in it.
+        if let Some(path) = self.current_buffer().path() {
+            if let Ok(full) = std::fs::canonicalize(path) {
+                sidebar.reveal(&full);
+            }
+        }
+        self.sidebar = Some(sidebar);
+        self.sidebar_focus = true;
+    }
+
+    /// The sidebar, for the front end to draw.
+    pub fn sidebar(&self) -> Option<&crate::sidebar::Sidebar> {
+        self.sidebar.as_ref()
+    }
+
+    /// Whether the keys are going to the sidebar.
+    pub fn sidebar_focused(&self) -> bool {
+        self.sidebar_focus && self.sidebar.is_some()
+    }
+
+    /// Run one key while the sidebar has the keys.
+    ///
+    /// The same letters that move in the text move here — `j`/`k` down and up,
+    /// `l` into, `h` out of — so there is nothing new to learn; only what they
+    /// move through is different.
+    fn on_sidebar_key(&mut self, key: Key) {
+        let Some(sidebar) = self.sidebar.as_mut() else {
+            self.sidebar_focus = false;
+            return;
+        };
+        match key {
+            Key::Char('j') | Key::Down => sidebar.step(true),
+            Key::Char('k') | Key::Up => sidebar.step(false),
+            Key::Char('h') | Key::Left => sidebar.collapse(),
+            Key::Char('l') | Key::Right | Key::Enter => {
+                if let Some(path) = sidebar.activate() {
+                    if let Err(err) = self.open_file(&path) {
+                        self.status = format!("cannot open '{}': {err}", path.display());
+                    }
+                    // Entering a file means going to write in it.
+                    self.sidebar_focus = false;
+                }
+            }
+            // Esc hands the keys back but leaves the tree up; `q` puts it away.
+            Key::Esc => self.sidebar_focus = false,
+            Key::Char('q') => {
+                self.sidebar = None;
+                self.sidebar_focus = false;
+            }
+            // Space still opens the menu, so `Space e` closes the sidebar from
+            // inside it exactly as it opened it.
+            Key::Char(' ') => self.pending = Pending::Space,
             _ => {}
         }
     }
@@ -4445,6 +4532,36 @@ mod tests {
         let mut ed = typed("上山\n下海");
         press(&mut ed, "gJ");
         assert_eq!(ed.current_buffer().text(), "上山下海");
+    }
+
+    #[test]
+    fn the_sidebar_walks_the_tree_with_the_same_keys_the_text_uses() {
+        let dir = std::env::temp_dir().join(format!("yumete-sidekeys-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(dir.join("卷一")).unwrap();
+        std::fs::write(dir.join("卷一/ch01.md"), "第一章\n").unwrap();
+        std::fs::write(dir.join("notes.md"), "").unwrap();
+
+        let mut ed = Editor::new();
+        ed.open_sidebar_at(&dir);
+        assert!(ed.sidebar_focused());
+
+        // `l` opens the directory, `j` steps onto the chapter, `l` opens it —
+        // and opening a file means going to write in it, so the keys go back.
+        ed.on_key(Key::Char('l'));
+        ed.on_key(Key::Char('j'));
+        ed.on_key(Key::Char('l'));
+        assert_eq!(ed.current_buffer().text(), "第一章\n");
+        assert!(!ed.sidebar_focused(), "the keys went back to the text");
+        assert!(ed.sidebar().is_some(), "but the tree stays up");
+
+        // Esc hands the keys back without putting the tree away; `q` puts it
+        // away.
+        ed.on_key(Key::Char(' '));
+        ed.on_key(Key::Char('e'));
+        assert!(ed.sidebar().is_none(), "Space e closes it again");
+
+        std::fs::remove_dir_all(&dir).ok();
     }
 
     #[test]

@@ -83,6 +83,12 @@ pub struct EditorConfig {
     /// 漢字 prose, and those characters are drawn wide by the CJK fonts such
     /// prose is read in. `"narrow"` for a Latin font.
     pub ambiguous_wide: bool,
+    /// How many columns the file sidebar takes when it is open (Feature #94).
+    ///
+    /// It costs columns, and set vertically it costs them by threes — a 縱 is
+    /// two cells and a gap — so twenty-four is eight 縱 of page. Narrow enough
+    /// to be worth the trade, wide enough for `卷二/驚蟄.md`.
+    pub sidebar_width: usize,
 }
 
 impl Default for EditorConfig {
@@ -104,6 +110,7 @@ impl Default for EditorConfig {
             soft_wrap: true,
             autosave: true,
             ambiguous_wide: true,
+            sidebar_width: 24,
         }
     }
 }
@@ -404,6 +411,7 @@ struct RawEditor {
     soft_wrap: Option<bool>,
     autosave: Option<bool>,
     ambiguous_width: Option<String>,
+    sidebar_width: Option<usize>,
 }
 
 #[derive(Deserialize, Default)]
@@ -471,6 +479,9 @@ impl RawConfig {
         }
         if other.editor.ambiguous_width.is_some() {
             self.editor.ambiguous_width = other.editor.ambiguous_width.clone();
+        }
+        if other.editor.sidebar_width.is_some() {
+            self.editor.sidebar_width = other.editor.sidebar_width;
         }
         if other.theme.selection.is_some() {
             self.theme.selection = other.theme.selection;
@@ -556,6 +567,9 @@ impl RawConfig {
         }
         if let Some(on) = self.editor.autosave {
             config.editor.autosave = on;
+        }
+        if let Some(width) = self.editor.sidebar_width {
+            config.editor.sidebar_width = width.clamp(12, 60);
         }
         if let Some(width) = self.editor.ambiguous_width {
             // An unknown value keeps the default rather than picking one: a
