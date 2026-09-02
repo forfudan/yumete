@@ -482,8 +482,10 @@ fn draw(
             None => (cursor_x, cursor_y),
         };
         match editor.layout() {
-            WritingLayout::Horizontal => draw_candidate_panel(frame, ime, area, at_x, at_y),
-            WritingLayout::Vertical => vertical::draw_candidate_panel(frame, ime, area, at_x, at_y),
+            WritingLayout::Horizontal => draw_candidate_panel(frame, ime, config, area, at_x, at_y),
+            WritingLayout::Vertical => {
+                vertical::draw_candidate_panel(frame, ime, config, area, at_x, at_y)
+            }
         }
     }
 }
@@ -766,10 +768,12 @@ fn draw_status(frame: &mut Frame, editor: &Editor, ime: &ImeSession, status_area
 fn draw_candidate_panel(
     frame: &mut Frame,
     ime: &ImeSession,
+    config: &Config,
     area: Rect,
     cursor_x: u16,
     cursor_y: u16,
 ) {
+    let skin = vertical::Skin::from(config);
     let candidates = ime.page_candidates();
     let highlight = ime.highlight();
 
@@ -816,23 +820,19 @@ fn draw_candidate_panel(
             // The code as typed, a shade back from the candidates.
             lines.push(Line::from(Span::styled(
                 row,
-                Style::default()
-                    .bg(vertical::ink::paper())
-                    .fg(vertical::ink::helper()),
+                Style::default().bg(skin.paper()).fg(skin.helper()),
             )));
         } else if i - 1 == highlight {
             lines.push(Line::from(Span::styled(
                 row,
                 Style::default()
-                    .bg(vertical::ink::highlight())
-                    .fg(vertical::ink::on_highlight()),
+                    .bg(skin.highlight())
+                    .fg(skin.on_highlight()),
             )));
         } else {
             lines.push(Line::from(Span::styled(
                 row,
-                Style::default()
-                    .bg(vertical::ink::paper())
-                    .fg(vertical::ink::text()),
+                Style::default().bg(skin.paper()).fg(skin.text()),
             )));
         }
     }
@@ -847,16 +847,8 @@ fn draw_candidate_panel(
             Block::default()
                 .borders(Borders::ALL)
                 .border_type(BorderType::Rounded)
-                .border_style(
-                    Style::default()
-                        .fg(vertical::ink::border())
-                        .bg(vertical::ink::paper()),
-                )
-                .style(
-                    Style::default()
-                        .bg(vertical::ink::paper())
-                        .fg(vertical::ink::text()),
-                ),
+                .border_style(Style::default().fg(skin.border()).bg(skin.paper()))
+                .style(Style::default().bg(skin.paper()).fg(skin.text())),
         ),
         panel,
     );
@@ -1426,6 +1418,31 @@ mod tests {
                 }
             }
         }
+    }
+
+    #[test]
+    fn the_panel_takes_its_markers_and_skin_from_the_config() {
+        let mut editor = Editor::new();
+        editor.on_key(Key::Char('i'));
+        let mut ime = ImeSession::from_table_text(Scheme::Lingming, "b 吧 八\n");
+        ime.input('b');
+        let mut config = vertical_config();
+        config.panel.markers = "壹貳參".to_string();
+        config.panel.ink = (0x10, 0x20, 0x30);
+        config.panel.paper = (0x90, 0xa0, 0xb0);
+        let buffer = render_vertical_with(&mut editor, &config, &ime, 40, 16);
+
+        let text = buffer_text(&buffer);
+        assert!(text.contains('壹'), "配置的編號字符沒用上: {text:?}");
+        assert!(!text.contains('㊀'), "還在用默認編號");
+        // The ground is the configured paper, and the ladder runs from it.
+        assert!(
+            (0..buffer.area.height).any(|y| {
+                (0..buffer.area.width)
+                    .any(|x| buffer[(x, y)].style().bg == Some(Color::Rgb(0x90, 0xa0, 0xb0)))
+            }),
+            "配置的紙色沒用上"
+        );
     }
 
     #[test]

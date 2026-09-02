@@ -234,17 +234,15 @@ fn put_slot_right(buf: &mut Buffer, x: u16, y: u16, symbol: &str, style: Style) 
     }
 }
 
-/// The 帶圈中文數字 used to number candidates: ㊀ ㊁ ㊂ …
+/// The character candidate `i` is numbered with.
 ///
-/// Circled *Chinese* numerals, not the circled Arabic ①②③ — those are
-/// East-Asian *ambiguous* width, so a terminal may draw them one cell or two and
-/// the column would come apart. ㊀ is unambiguously wide and fills the slot.
-///
-/// Beyond nine a plain digit stands in; no scheme pages that far.
-fn index_mark(i: usize) -> String {
-    const CIRCLED: [char; 9] = ['㊀', '㊁', '㊂', '㊃', '㊄', '㊅', '㊆', '㊇', '㊈'];
-    match CIRCLED.get(i) {
-        Some(&c) => c.to_string(),
+/// Taken from the configured list — 帶圈中文數字 ㊀㊁㊂ by default. Circled
+/// *Chinese* numerals, not the circled Arabic ①②③: those are East-Asian
+/// *ambiguous* width, so a terminal may draw them one cell or two and the column
+/// would come apart. Past the end of the list a plain digit stands in.
+fn index_mark(markers: &str, i: usize) -> String {
+    match markers.chars().nth(i) {
+        Some(c) => c.to_string(),
         None => (i + 1).to_string(),
     }
 }
@@ -508,54 +506,76 @@ pub fn draw(
 /// it reads as ink with a hint of pine rather than grey-green. The paper is warm
 /// rather than white. Dark mode is not the light pair swapped — the ground goes
 /// deeper and the ink dimmer, or the panel glows at night.
-pub mod ink {
-    use ratatui::style::Color;
+/// The candidate panel's skin, derived from two colours.
+///
+/// Yume's own themes are defined by **four numbers** — an ink and a paper for
+/// each mode — with every other shade interpolated along a ladder between them
+/// (`yume_core::themes::ink_ladder`). Reproducing the ladder rather than storing
+/// the resulting shades is what lets a skin be changed by editing a pair of
+/// values: the relationships between the shades stay right by construction, and
+/// yumete's panel is the same skin as the GUI frontends' when the endpoints
+/// match.
+///
+/// The default is 墨香 dark. Its green is deliberate and slight — R and G differ
+/// by about 5, so it reads as ink with a hint of pine rather than grey-green —
+/// and the paper is warm rather than white. Dark mode is not the light pair
+/// swapped: the ground goes deeper and the ink dimmer, or the panel glows at
+/// night.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Skin {
+    ink: (u8, u8, u8),
+    paper: (u8, u8, u8),
+}
 
-    /// 墨 — the dark theme's text colour.
-    const STICK: (u8, u8, u8) = (0xCF, 0xC6, 0xA9);
-    /// 紙 — the dark theme's ground.
-    const PAPER: (u8, u8, u8) = (0x26, 0x2A, 0x27);
-
-    /// One rung of the ladder: `0.0` is pure ink, `1.0` pure paper. Mixed in
-    /// sRGB, not linear light, because the hand-tuned original was picked by eye
-    /// in sRGB and mixing linearly comes out far lighter.
-    const fn mix(a: u8, b: u8, t: u32) -> u8 {
-        // Fixed point in thousandths, rounded — no floats, so the whole ladder
-        // is a compile-time constant.
-        let (a, b) = (a as i64, b as i64);
-        ((a * 1000 + (b - a) * t as i64 + 500) / 1000) as u8
+impl Skin {
+    pub fn new(ink: (u8, u8, u8), paper: (u8, u8, u8)) -> Skin {
+        Skin { ink, paper }
     }
 
-    const fn step(t: u32) -> Color {
+    /// One rung of the ladder: `0` is pure ink, `1000` pure paper.
+    ///
+    /// Mixed in sRGB, not linear light, because the hand-tuned original was
+    /// picked by eye in sRGB and mixing linearly comes out far lighter.
+    fn step(self, t: u32) -> Color {
+        let mix = |a: u8, b: u8| -> u8 {
+            let (a, b) = (a as i64, b as i64);
+            ((a * 1000 + (b - a) * t as i64 + 500) / 1000) as u8
+        };
         Color::Rgb(
-            mix(STICK.0, PAPER.0, t),
-            mix(STICK.1, PAPER.1, t),
-            mix(STICK.2, PAPER.2, t),
+            mix(self.ink.0, self.paper.0),
+            mix(self.ink.1, self.paper.1),
+            mix(self.ink.2, self.paper.2),
         )
     }
 
     /// The panel's ground.
-    pub fn paper() -> Color {
-        step(1000)
+    pub fn paper(self) -> Color {
+        self.step(1000)
     }
     /// The ring around the panel.
-    pub fn border() -> Color {
-        step(750)
+    pub fn border(self) -> Color {
+        self.step(750)
     }
     /// A candidate.
-    pub fn text() -> Color {
-        step(0)
+    pub fn text(self) -> Color {
+        self.step(0)
     }
-    /// Selection digits and the preedit — one shade back from the candidates.
-    pub fn helper() -> Color {
-        step(300)
+    /// Numbers and the code — one shade back from the candidates.
+    pub fn helper(self) -> Color {
+        self.step(300)
     }
     /// The ground of the highlighted candidate, and the text on it.
-    pub fn highlight() -> Color {
-        step(0)
+    pub fn highlight(self) -> Color {
+        self.step(0)
     }
-    pub fn on_highlight() -> Color {
-        step(1000)
+    pub fn on_highlight(self) -> Color {
+        self.step(1000)
+    }
+}
+
+impl From<&Config> for Skin {
+    fn from(config: &Config) -> Skin {
+        Skin::new(config.panel.ink, config.panel.paper)
     }
 }
 
@@ -568,10 +588,12 @@ pub mod ink {
 pub fn draw_candidate_panel(
     frame: &mut Frame,
     ime: &ImeSession,
+    config: &Config,
     area: Rect,
     cursor_x: u16,
     cursor_y: u16,
 ) {
+    let skin = Skin::from(config);
     let candidates = ime.page_candidates();
     if candidates.is_empty() {
         return;
@@ -604,7 +626,7 @@ pub fn draw_candidate_panel(
     let mut columns: Vec<Vec<String>> = vec![header];
     columns.extend(candidates.iter().enumerate().map(|(i, cand)| {
         // Number, a blank row, the candidate, then the keys still owed.
-        let mut column = vec![index_mark(i), String::new()];
+        let mut column = vec![index_mark(&config.panel.markers, i), String::new()];
         column.extend(graphemes(&cand.text).map(String::from));
         column.extend(graphemes(&cand.completion).map(String::from));
         column
@@ -630,20 +652,24 @@ pub fn draw_candidate_panel(
 
     frame.render_widget(Clear, panel);
     clear_wide_left_edge(frame.buffer_mut(), panel);
-    let ground = Style::default().bg(ink::paper()).fg(ink::text());
+    let ground = Style::default().bg(skin.paper()).fg(skin.text());
     let block = Block::default()
         .borders(Borders::ALL)
-        .border_type(BorderType::Rounded)
-        .border_style(Style::default().fg(ink::border()).bg(ink::paper()))
+        .border_type(if config.panel.rounded {
+            BorderType::Rounded
+        } else {
+            BorderType::Plain
+        })
+        .border_style(Style::default().fg(skin.border()).bg(skin.paper()))
         .style(ground);
     let inner = block.inner(panel);
     block.render(panel, frame.buffer_mut());
 
     let buf = frame.buffer_mut();
-    let dim = ground.fg(ink::helper());
+    let dim = ground.fg(skin.helper());
     let chosen = Style::default()
-        .bg(ink::highlight())
-        .fg(ink::on_highlight());
+        .bg(skin.highlight())
+        .fg(skin.on_highlight());
 
     let top = inner.y;
 

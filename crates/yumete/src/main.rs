@@ -78,6 +78,7 @@ fn main() -> ExitCode {
     // the data directory. When the data is absent the session is unavailable and
     // Insert mode simply types plain ASCII.
     let mut ime = ImeSession::from_default_dirs(Scheme::Lingming);
+    ime.set_page_size(config.panel.page_size);
     editor.set_chaifen(ime.set_annotations(config.editor.show_chaifen));
 
     // Word segmentation, driving `w`/`b`/`e` and the overlay. Best first:
