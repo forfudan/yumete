@@ -101,6 +101,14 @@ pub struct EditorConfig {
     /// line is, this folds the rows there and leaves the rest of the window as
     /// margin. `:wrap 50` sets it for one session (Feature #113).
     pub measure: usize,
+    /// Whether the status line names the character under the cursor
+    /// (Feature #117).
+    ///
+    /// `冬 U+51AC · CJK Unified Ideographs`, at the right edge. For a writer
+    /// setting rare 漢字 this is the difference between "my font is missing
+    /// this" and "this is the wrong character"; for a 拆分表 it is the whole
+    /// question. Given way to, right end first, when the line is crowded.
+    pub char_info: bool,
     /// A tick every `paper_ticks` characters down a 縱; `0` for none
     /// (Feature #102).
     ///
@@ -155,6 +163,7 @@ impl Default for EditorConfig {
             syntax: String::new(),
             ruler: 0,
             measure: 0,
+            char_info: true,
             paper_ticks: 0,
             tabs: Tabs::default(),
             sidebar_width: 24,
@@ -536,6 +545,7 @@ struct RawEditor {
     syntax: Option<String>,
     ruler: Option<usize>,
     measure: Option<usize>,
+    char_info: Option<bool>,
     paper_ticks: Option<usize>,
 }
 
@@ -620,6 +630,9 @@ impl RawConfig {
         }
         if other.editor.measure.is_some() {
             self.editor.measure = other.editor.measure;
+        }
+        if other.editor.char_info.is_some() {
+            self.editor.char_info = other.editor.char_info;
         }
         if other.editor.paper_ticks.is_some() {
             self.editor.paper_ticks = other.editor.paper_ticks;
@@ -722,6 +735,9 @@ impl RawConfig {
         }
         if let Some(measure) = self.editor.measure {
             config.editor.measure = measure.min(400);
+        }
+        if let Some(on) = self.editor.char_info {
+            config.editor.char_info = on;
         }
         if let Some(ticks) = self.editor.paper_ticks {
             config.editor.paper_ticks = ticks.min(64);

@@ -1607,6 +1607,23 @@ impl Editor {
         motion::visual_column(self.current_buffer().rope(), self.cursor)
     }
 
+    /// The character under the cursor, for the status line to name.
+    ///
+    /// At the end of a line — where Insert mode spends most of its time —
+    /// there is nothing under the cursor, so the character *before* it is the
+    /// answer instead: what a writer wants named is the 字 they are looking at,
+    /// and having just typed it counts as looking at it.
+    pub fn char_at_cursor(&self) -> Option<char> {
+        let rope = self.current_buffer().rope();
+        let here = (self.cursor < rope.len_chars()).then(|| rope.char(self.cursor));
+        match here {
+            Some(c) if c != '\n' && c != '\r' => Some(c),
+            _ => (self.cursor > 0)
+                .then(|| rope.char(self.cursor - 1))
+                .filter(|&c| c != '\n' && c != '\r'),
+        }
+    }
+
     // ---- Layout (Feature #61) ---------------------------------------------
 
     /// The current layout.

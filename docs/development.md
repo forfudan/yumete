@@ -312,6 +312,7 @@ Phases are ordered by priority, most writer-critical first:
 | 114 | **The outline follows `#include`**         | core   | P2    | read the chapters; no compiler      | Done   |
 | 115 | **`w` opens the sidebar out**              | both   | P3    | as wide as its longest name         | Done   |
 | 116 | **Markdown colouring set vertically**      | tui    | P1    | 所見即所得 was half-done down the 縱 | Done   |
+| 117 | **The 字 under the cursor, named**         | both   | P2    | code point + Unicode block; feeds the table mode | Done |
 
 ---
 

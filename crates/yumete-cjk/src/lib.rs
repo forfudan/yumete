@@ -33,6 +33,7 @@
 //! Yuhao schemes, configure the terminal's font (or its fallback chain) to
 //! include a wide-coverage CJK font such as the bundled `Yuniversus.ttf`.
 
+pub mod blocks;
 pub mod grapheme;
 pub mod segment;
 pub mod vertical;
