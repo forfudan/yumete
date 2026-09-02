@@ -114,6 +114,15 @@ struct EditSnapshot {
 struct History {
     undo: Vec<EditSnapshot>,
     redo: Vec<EditSnapshot>,
+    /// An undo point that has been *announced* and not yet earned.
+    ///
+    /// A command says "I am about to edit" before it knows whether it will:
+    /// `d` with nothing to delete, `i` followed straight by `Esc`, a filter
+    /// whose command failed. Pushing then means `u` sometimes does nothing,
+    /// and an undo that sometimes does nothing is the fastest way to stop
+    /// trusting an editor. So the point waits here until the text actually
+    /// moves, which is exactly when it becomes worth going back to.
+    pending: Option<EditSnapshot>,
 }
 
 impl Buffer {
@@ -305,6 +314,7 @@ impl Buffer {
     /// Indices are counted in `char`s (Unicode scalar values), consistent with
     /// [`TextStore::char_count`]. Panics if `char_idx` is out of bounds.
     pub fn insert(&mut self, char_idx: usize, text: &str) {
+        self.earn_snapshot();
         self.rope.insert(char_idx, text);
         self.modified = true;
         self.revision += 1;
@@ -313,6 +323,7 @@ impl Buffer {
     /// Remove the characters in `range` (a half-open range of `char` indices),
     /// marking the buffer modified. Panics if the range is out of bounds.
     pub fn remove(&mut self, range: Range<usize>) {
+        self.earn_snapshot();
         self.rope.remove(range);
         self.modified = true;
         self.revision += 1;
@@ -512,17 +523,29 @@ impl Buffer {
     /// `ropey` clones are shallow (reference-counted nodes), so snapshotting the
     /// whole document per undo group is inexpensive.
     pub fn snapshot(&mut self, cursor: usize) {
-        self.history.undo.push(EditSnapshot {
+        // Cheap to hold: a ropey clone shares its structure, so an announced
+        // point that is never earned costs a pointer.
+        self.history.pending = Some(EditSnapshot {
             rope: self.rope.clone(),
             cursor,
             modified: self.modified,
         });
-        self.history.redo.clear();
+    }
+
+    /// Turn an announced undo point into a real one, now that the text has
+    /// moved. Called from the two places that move it.
+    fn earn_snapshot(&mut self) {
+        if let Some(point) = self.history.pending.take() {
+            self.history.undo.push(point);
+            self.history.redo.clear();
+        }
     }
 
     /// Step back one undo point, returning the cursor position it was taken at,
     /// or `None` when there is nothing left to undo.
     pub fn undo(&mut self, cursor: usize) -> Option<usize> {
+        // A point nobody earned is not a place to go back to.
+        self.history.pending = None;
         let prev = self.history.undo.pop()?;
         self.history.redo.push(self.here(cursor));
         self.revision += 1;
