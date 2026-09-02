@@ -67,6 +67,16 @@ pub enum Command {
     /// another of the open buffers.
     NextBuffer,
     PreviousBuffer,
+    /// `:buffer-close` (alias `:bd`), `:bd!` — close the active buffer.
+    CloseBuffer {
+        force: bool,
+    },
+    /// `:buffers` (alias `:ls`) — name every open buffer.
+    ListBuffers,
+    /// `:toc [n]` — list the headings, or go to the nth.
+    Outline(Option<usize>),
+    /// `:grep <pattern>` — search every file in the project.
+    Grep(String),
     /// `:ruby` — open Ruby mode on the group or selection at the cursor
     /// (Feature #65).
     Ruby,
@@ -198,6 +208,24 @@ pub fn parse(input: &str) -> Result<Command, CommandError> {
         "nowrap" => Ok(Command::SetSoftWrap(false)),
         "buffer-next" | "bn" => Ok(Command::NextBuffer),
         "buffer-previous" | "bp" => Ok(Command::PreviousBuffer),
+        "buffer-close" | "bd" => Ok(Command::CloseBuffer { force: false }),
+        "buffer-close!" | "bd!" => Ok(Command::CloseBuffer { force: true }),
+        "buffers" | "ls" => Ok(Command::ListBuffers),
+        "grep" | "gr" => {
+            if rest.is_empty() {
+                Err(CommandError::MissingArgument("grep"))
+            } else {
+                Ok(Command::Grep(rest.to_string()))
+            }
+        }
+        "toc" | "outline" => Ok(Command::Outline(if rest.is_empty() {
+            None
+        } else {
+            match rest.parse::<usize>() {
+                Ok(n) => Some(n),
+                Err(_) => return Err(CommandError::MissingArgument("toc")),
+            }
+        })),
         "ruby" => Ok(Command::Ruby),
         "ruby-on" => Ok(Command::RenderRuby {
             dialect: None,
@@ -347,6 +375,26 @@ pub const COMMANDS: &[Entry] = &[
         name: "buffer-next",
         alias: Some("bn"),
         help: "show the next open file (gn)",
+    },
+    Entry {
+        name: "buffer-close",
+        alias: Some("bd"),
+        help: "close this file (`!` discards changes)",
+    },
+    Entry {
+        name: "grep",
+        alias: Some("gr"),
+        help: "search every file in the project",
+    },
+    Entry {
+        name: "toc",
+        alias: None,
+        help: "list the headings, or `:toc 3` to go to one",
+    },
+    Entry {
+        name: "buffers",
+        alias: Some("ls"),
+        help: "name every open file",
     },
     Entry {
         name: "buffer-previous",
@@ -615,6 +663,10 @@ mod tests {
             "nowrap",
             "buffer-next",
             "buffer-previous",
+            "buffer-close",
+            "buffers",
+            "toc",
+            "grep",
             "ruby",
             "ruby-on",
             "ruby-off",
@@ -639,6 +691,7 @@ mod tests {
                 // These need an argument to be well-formed.
                 "open" => ":open a.md".to_string(),
                 "goto" => ":goto 1".to_string(),
+                "grep" => ":grep x".to_string(),
                 "s/pat/rep/" => ":s/a/b/".to_string(),
                 name => format!(":{name}"),
             };
@@ -647,6 +700,7 @@ mod tests {
                 let line = match alias {
                     "o" => ":o a.md".to_string(),
                     "g" => ":g 1".to_string(),
+                    "gr" => ":gr x".to_string(),
                     alias => format!(":{alias}"),
                 };
                 assert!(parse(&line).is_ok(), "alias {alias} does not parse");

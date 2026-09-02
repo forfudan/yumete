@@ -280,6 +280,7 @@ Phases are ordered by priority, most writer-critical first:
 | 82  | **Files a writer actually has**            | core   | P2    | BOM, non-UTF-8, a closed pipe       | Done   |
 | 83  | **The selection covers the cursor's 字**   | core   | P1    | Helix's model; `f。d` took no 。    | Done   |
 | 84  | **Regular expressions**                    | core   | P1    | `/` and `:s`; half of revising     | Done   |
+| 85  | **A novel is many files**                  | core   | P1    | `:grep`, `gf`, `:toc`, `:bd`, `:ls` | Done   |
 
 ---
 

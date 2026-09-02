@@ -12,7 +12,7 @@ use std::collections::HashMap;
 use std::fmt;
 use std::hash::{Hash, Hasher};
 use std::io;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use regex::Regex;
 use ropey::Rope;
@@ -80,6 +80,55 @@ enum FindKind {
     ForwardTill,
     BackwardTo,
     BackwardTill,
+}
+
+/// How many hits `:grep` gathers before it stops looking.
+///
+/// A listing longer than this is not an answer, it is the manuscript again;
+/// the writer wants a narrower pattern, and being told so beats waiting.
+const GREP_LIMIT: usize = 500;
+
+/// The largest file `:grep` will read. A manuscript chapter is kilobytes;
+/// anything above this is data that happens to live in the same directory.
+const GREP_MAX_BYTES: u64 = 4 * 1024 * 1024;
+
+/// Call `f` for every readable file under `root`, depth first.
+///
+/// Skips what a manuscript directory holds but a writer never searches: hidden
+/// directories (`.git`, `.yumete`), build output, and files too big to be prose.
+/// Symlinked directories are not followed, so a loop cannot hang the editor.
+fn walk(root: &Path, f: &mut impl FnMut(&Path)) {
+    let Ok(entries) = std::fs::read_dir(root) else {
+        return;
+    };
+    let mut dirs = Vec::new();
+    let mut files = Vec::new();
+    for entry in entries.flatten() {
+        let path = entry.path();
+        let name = entry.file_name();
+        let name = name.to_string_lossy();
+        if name.starts_with('.') || name == "target" || name == "node_modules" {
+            continue;
+        }
+        match entry.file_type() {
+            Ok(t) if t.is_dir() => dirs.push(path),
+            Ok(t) if t.is_file() => files.push(path),
+            _ => {}
+        }
+    }
+    // Sorted, so a listing of a novel's chapters comes back in chapter order
+    // rather than in whatever order the file system happens to hold them.
+    files.sort();
+    dirs.sort();
+    for path in files {
+        let small = std::fs::metadata(&path).map_or(false, |m| m.len() <= GREP_MAX_BYTES);
+        if small {
+            f(&path);
+        }
+    }
+    for dir in dirs {
+        walk(&dir, f);
+    }
 }
 
 /// How often a recovery copy is written while typing (Feature #79).
@@ -203,6 +252,9 @@ pub struct Editor {
     /// Whether the writer has already been told that recovery copies cannot be
     /// written, so the status line says it once rather than every few seconds.
     swap_warned: bool,
+    /// The directory the last `:grep` listing was gathered from, so `gf` on one
+    /// of its lines resolves the same relative path it printed.
+    grep_root: Option<PathBuf>,
     /// The last pattern, compiled. `n` and `N` ask for the same one over and
     /// over, and compiling a regex costs more than running it once.
     compiled: RefCell<Option<(String, Regex)>>,
@@ -315,6 +367,7 @@ impl Editor {
             last_swap: None,
             swap_warned: false,
             compiled: RefCell::new(None),
+            grep_root: None,
         }
     }
 
@@ -440,9 +493,198 @@ impl Editor {
 
     /// Open `path` as a new buffer and make it active.
     pub fn open_file<P: AsRef<Path>>(&mut self, path: P) -> io::Result<()> {
+        // A file already open is *shown*, not opened again. Two buffers over
+        // one file means two undo histories, two dirty flags, and two claims on
+        // one recovery copy — a way to lose work, not a way to open a file.
+        let path = path.as_ref();
+        let same = std::fs::canonicalize(path).ok();
+        if let Some(i) = self.buffers.iter().position(|b| match (b.path(), &same) {
+            (Some(open), Some(want)) => std::fs::canonicalize(open).ok().as_ref() == Some(want),
+            (Some(open), None) => open == path,
+            _ => false,
+        }) {
+            self.show_buffer(i);
+            return Ok(());
+        }
         let buffer = Buffer::open(path)?;
         self.add_buffer(buffer);
         Ok(())
+    }
+
+    /// Close the active buffer (`:bd`), refusing while it has unsaved changes.
+    ///
+    /// The last buffer is not closed but emptied: an editor with no buffer has
+    /// nowhere to put the cursor.
+    fn close_buffer(&mut self, force: bool) -> Result<CommandOutcome, EditorError> {
+        if !force && self.current_buffer().is_modified() {
+            return Err(EditorError::UnsavedChanges);
+        }
+        self.current_buffer_mut().clear_swap();
+        if self.buffers.len() == 1 {
+            self.buffers[0] = Buffer::scratch();
+            self.set_cursor(0);
+            self.status = "closed".to_string();
+            return Ok(CommandOutcome::Continue);
+        }
+        let closed = self.buffers.remove(self.current).display_name();
+        self.current = self.current.min(self.buffers.len() - 1);
+        let restored = self.current_buffer().saved_cursor();
+        self.set_cursor(restored);
+        self.segment_cache.borrow_mut().clear();
+        let (n, total) = self.buffer_position();
+        self.status = format!("closed {closed} — now {} [{n}/{total}]", self.buffer_name());
+        Ok(CommandOutcome::Continue)
+    }
+
+    /// The active buffer's short name.
+    fn buffer_name(&self) -> String {
+        self.current_buffer().display_name()
+    }
+
+    /// Search every file under `root` for `pattern`, and show the hits as a
+    /// buffer (`:grep`).
+    ///
+    /// A buffer, not a pane: the results are text, and this editor already has
+    /// good tools for text — `/` narrows them, `j`/`k` walk them, `gf` opens the
+    /// one under the cursor. A quickfix window would be a second set of keys
+    /// for a job the first set already does.
+    fn grep(&mut self, pattern: &str, root: &Path) -> Result<CommandOutcome, EditorError> {
+        let re = match self.compile(pattern) {
+            Ok(re) => re,
+            Err(message) => {
+                self.status = message;
+                return Ok(CommandOutcome::Continue);
+            }
+        };
+        let mut hits = Vec::new();
+        let mut files = 0usize;
+        walk(root, &mut |path| {
+            if hits.len() >= GREP_LIMIT {
+                return;
+            }
+            // Unsaved work counts: a buffer open in this session is searched as
+            // it stands, not as it was last written.
+            let open = self
+                .buffers
+                .iter()
+                .find(|b| b.path() == Some(path))
+                .map(|b| b.text());
+            let text = match open {
+                Some(text) => text,
+                None => match std::fs::read_to_string(path) {
+                    Ok(text) => text,
+                    // Not text, or not readable: not this writer's manuscript.
+                    Err(_) => return,
+                },
+            };
+            files += 1;
+            let shown = path
+                .strip_prefix(root)
+                .unwrap_or(path)
+                .display()
+                .to_string();
+            for (n, line) in text.lines().enumerate() {
+                if hits.len() >= GREP_LIMIT {
+                    return;
+                }
+                if re.is_match(line) {
+                    hits.push(format!("{shown}:{}: {}", n + 1, line.trim()));
+                }
+            }
+        });
+
+        if hits.is_empty() {
+            self.status = format!("no match for {pattern} in {files} file(s)");
+            return Ok(CommandOutcome::Continue);
+        }
+        let found = hits.len();
+        let mut listing = String::new();
+        for hit in hits {
+            listing.push_str(&hit);
+            listing.push('\n');
+        }
+        let mut buffer = Buffer::from_text(&listing);
+        buffer.name_as(&format!("[grep {pattern}]"));
+        self.grep_root = Some(root.to_path_buf());
+        self.add_buffer(buffer);
+        self.set_cursor(0);
+        self.status = if found >= GREP_LIMIT {
+            format!("{found}+ hits (stopped counting) — gf opens the one under the cursor")
+        } else {
+            format!("{found} hit(s) in {files} file(s) — gf opens the one under the cursor")
+        };
+        Ok(CommandOutcome::Continue)
+    }
+
+    /// Open the `path:line:` named on the cursor's line (`gf`).
+    ///
+    /// The shape a grep result has, and the shape every compiler and every
+    /// other grep prints — so it also works on a line pasted in from a shell.
+    fn goto_file_under_cursor(&mut self) {
+        let rope = self.current_buffer().rope();
+        let line = rope.line(rope.char_to_line(self.cursor)).to_string();
+        let text = line.trim();
+        let Some((path, rest)) = text.split_once(':') else {
+            self.status = "no file named on this line".to_string();
+            return;
+        };
+        let at = rest
+            .split_once(':')
+            .and_then(|(n, _)| n.trim().parse::<usize>().ok());
+        // Relative to the directory the results were gathered from, which is
+        // the one yumete was started in.
+        let path = Path::new(path.trim());
+        let full = match (&self.grep_root, path.is_absolute()) {
+            (Some(root), false) => root.join(path),
+            _ => path.to_path_buf(),
+        };
+        if let Err(err) = self.open_file(&full) {
+            self.status = format!("cannot open '{}': {err}", path.display());
+            return;
+        }
+        if let Some(n) = at {
+            self.goto_line(n);
+        }
+    }
+
+    /// The headings of the active buffer, as `(line, depth, title)`.
+    ///
+    /// Markdown's `#` — no parser, no LSP, no tree-sitter: a heading in a
+    /// manuscript is a line that starts with hashes, and that is the whole
+    /// rule. A 縱書 draft in Typst uses `=` the same way, so both are read.
+    pub fn outline(&self) -> Vec<(usize, usize, String)> {
+        let rope = self.current_buffer().rope();
+        let mut out = Vec::new();
+        for line in 0..rope.len_lines() {
+            let text = rope.line(line).to_string();
+            let trimmed = text.trim_end_matches(['\n', '\r']);
+            let mark = trimmed.chars().next().filter(|&c| c == '#' || c == '=');
+            let Some(mark) = mark else { continue };
+            let depth = trimmed.chars().take_while(|&c| c == mark).count();
+            let title = trimmed[depth..].trim();
+            // `##` with nothing after it is a rule, not a heading; and a `=`
+            // run on its own is Typst's own heading marker only when titled.
+            if title.is_empty() {
+                continue;
+            }
+            out.push((line, depth, title.to_string()));
+        }
+        out
+    }
+
+    /// One line naming every open buffer (`:ls`), the active one marked.
+    fn list_buffers(&mut self) {
+        let listing: Vec<String> = self
+            .buffers
+            .iter()
+            .enumerate()
+            .map(|(i, b)| {
+                let mark = if i == self.current { "*" } else { " " };
+                let dirty = if b.is_modified() { "+" } else { "" };
+                format!("{mark}{} {}{dirty}", i + 1, b.display_name())
+            })
+            .collect();
+        self.status = listing.join("   ");
     }
 
     /// Create a new, empty scratch buffer and make it active.
@@ -546,6 +788,42 @@ impl Editor {
             }
             Command::PreviousBuffer => {
                 self.prev_buffer();
+                Ok(CommandOutcome::Continue)
+            }
+            Command::CloseBuffer { force } => self.close_buffer(force),
+            Command::Grep(pattern) => {
+                let root = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+                self.grep(&pattern, &root)
+            }
+            Command::Outline(nth) => {
+                let headings = self.outline();
+                if headings.is_empty() {
+                    self.status = "no headings in this file".to_string();
+                    return Ok(CommandOutcome::Continue);
+                }
+                match nth {
+                    // `:toc <n>` goes to the nth heading…
+                    Some(n) => match headings.get(n.saturating_sub(1)) {
+                        Some(&(line, _, _)) => self.goto_line(line + 1),
+                        None => self.status = format!("only {} headings", headings.len()),
+                    },
+                    // …and a bare `:toc` lists them, numbered so it can.
+                    None => {
+                        self.status = headings
+                            .iter()
+                            .enumerate()
+                            .map(|(i, (_, depth, title))| {
+                                let indent = "·".repeat(depth.saturating_sub(1));
+                                format!("{}{indent}{title}", i + 1)
+                            })
+                            .collect::<Vec<_>>()
+                            .join("   ");
+                    }
+                }
+                Ok(CommandOutcome::Continue)
+            }
+            Command::ListBuffers => {
+                self.list_buffers();
                 Ok(CommandOutcome::Continue)
             }
             Command::ToggleHanging => {
@@ -1501,6 +1779,9 @@ impl Editor {
             // Goto the next / previous buffer, as Helix binds them.
             Key::Char('n') => return self.next_buffer(),
             Key::Char('p') => return self.prev_buffer(),
+            // Open the file named on this line — a `:grep` hit, or a line
+            // pasted in from any other tool that prints `path:line:`.
+            Key::Char('f') => return self.goto_file_under_cursor(),
             _ => return,
         };
         self.move_head(pos);
@@ -3839,6 +4120,98 @@ mod tests {
         let report = ed.status().to_string();
         assert!(report.starts_with("選區"), "{report}");
         assert!(report.contains("2 字"), "{report}");
+    }
+
+    #[test]
+    fn grep_finds_a_name_across_the_chapters_and_gf_opens_one() {
+        let dir = std::env::temp_dir().join(format!("yumete-grep-{}", std::process::id()));
+        std::fs::create_dir_all(dir.join("卷一")).unwrap();
+        std::fs::write(dir.join("ch01.md"), "那年冬天。\n阿寧來了。\n").unwrap();
+        std::fs::write(dir.join("卷一/ch02.md"), "沒有人。\n").unwrap();
+        std::fs::write(dir.join("卷一/ch03.md"), "阿寧又來了。\n").unwrap();
+        // Skipped: hidden directories are not somebody's manuscript.
+        std::fs::create_dir_all(dir.join(".yumete")).unwrap();
+        std::fs::write(dir.join(".yumete/notes.md"), "阿寧\n").unwrap();
+
+        let mut ed = Editor::new();
+        ed.grep("阿寧", &dir).unwrap();
+        let listing = ed.current_buffer().text();
+        assert!(listing.contains("ch01.md:2:"), "{listing}");
+        assert!(listing.contains("ch03.md:1:"), "{listing}");
+        assert!(
+            !listing.contains("notes.md"),
+            "hidden dirs are not searched"
+        );
+        assert_eq!(listing.lines().count(), 2);
+
+        // `gf` opens the hit the cursor is on, at its line.
+        press(&mut ed, "gg");
+        press(&mut ed, "gf");
+        assert_eq!(ed.current_buffer().display_name(), "ch01.md");
+        assert_eq!(ed.cursor_line(), 1);
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn the_outline_is_the_hashes_a_writer_already_types() {
+        let mut ed = typed("# 第一章\n那年冬天。\n## 一\n雪下得早。\n## 二\n### 附記\n");
+        let headings = ed.outline();
+        assert_eq!(headings.len(), 4);
+        assert_eq!(headings[0], (0, 1, "第一章".to_string()));
+        assert_eq!(headings[2], (4, 2, "二".to_string()));
+
+        ed.execute(":toc 3").unwrap();
+        assert_eq!(ed.cursor_line(), 4);
+
+        ed.execute(":toc").unwrap();
+        assert!(ed.status().contains("第一章"), "{}", ed.status());
+    }
+
+    #[test]
+    fn a_file_already_open_is_shown_rather_than_opened_twice() {
+        let dir = std::env::temp_dir().join(format!("yumete-dup-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("chapter.md");
+        std::fs::write(&path, "第一稿\n").unwrap();
+
+        let mut ed = Editor::new();
+        ed.execute(&format!(":open {}", path.display())).unwrap();
+        ed.execute(":new").unwrap();
+        // Two buffers over one file means two undo histories, two dirty flags,
+        // and two claims on one recovery copy.
+        ed.execute(&format!(":open {}", path.display())).unwrap();
+        assert_eq!(ed.buffer_count(), 2);
+        assert_eq!(ed.current_buffer().text(), "第一稿\n");
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn a_buffer_can_be_closed_and_the_last_one_is_emptied() {
+        let mut ed = Editor::new();
+        ed.current_buffer_mut().insert(0, "甲");
+        ed.execute(":new").unwrap();
+        ed.current_buffer_mut().insert(0, "乙");
+        assert_eq!(ed.buffer_count(), 2);
+
+        // Unsaved work is not closed away silently.
+        assert!(matches!(
+            ed.execute(":bd"),
+            Err(EditorError::UnsavedChanges)
+        ));
+        ed.execute(":bd!").unwrap();
+        assert_eq!(ed.buffer_count(), 1);
+        assert_eq!(ed.current_buffer().text(), "甲");
+
+        // The last buffer is emptied rather than closed: the editor always has
+        // somewhere to put the cursor.
+        ed.execute(":bd!").unwrap();
+        assert_eq!(ed.buffer_count(), 1);
+        assert_eq!(ed.current_buffer().text(), "");
+
+        ed.execute(":ls").unwrap();
+        assert!(ed.status().contains("*1"), "{}", ed.status());
     }
 
     #[test]
