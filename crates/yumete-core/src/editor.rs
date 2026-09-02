@@ -468,6 +468,8 @@ pub struct Editor {
     show_detail: bool,
     /// Whether the grid's edit guard is lifted for the operation in hand.
     table_bypass: std::cell::Cell<bool>,
+    /// Where buffers with no file keep their recovery copies.
+    drafts_dir: Option<PathBuf>,
     /// The layout a grid turned the page away from, so leaving gives it back.
     turned_for_table: Option<Layout>,
     /// Where the cursor was before each far jump, and how far back we have
@@ -678,6 +680,7 @@ impl Editor {
             table: None,
             show_detail: true,
             table_bypass: std::cell::Cell::new(false),
+            drafts_dir: None,
             turned_for_table: None,
             zong_gap: None,
             dense: false,
@@ -3392,6 +3395,7 @@ impl Editor {
         if !self.autosave {
             return;
         }
+        self.name_scratch_drafts();
         let now = std::time::Instant::now();
         if let Some(last) = self.last_swap {
             if now.duration_since(last) < SWAP_INTERVAL {
@@ -3426,7 +3430,93 @@ impl Editor {
     /// The draft is *not* loaded on its own: silently showing text that is not
     /// what is on disk is how a writer ends up unsure which version they are
     /// reading. `:recover` loads it; `:recover!` throws it away.
+    /// Where buffers with no file keep their recovery copies.
+    ///
+    /// Set by the front end, which is the only part that knows where the data
+    /// directory is. Without it a file-less buffer keeps no copy at all, which
+    /// is what it did before.
+    pub fn keep_drafts_in(&mut self, dir: PathBuf) {
+        self.drafts_dir = Some(dir);
+    }
+
+    /// Give every unsaved file-less buffer a name to keep its draft under.
+    ///
+    /// Named late, and only once there is something to lose: an empty scratch
+    /// buffer that is never typed into should leave nothing behind.
+    fn name_scratch_drafts(&mut self) {
+        let Some(dir) = self.drafts_dir.clone() else {
+            return;
+        };
+        let session = std::process::id();
+        for (i, buffer) in self.buffers.iter_mut().enumerate() {
+            if buffer.path().is_none() && buffer.is_modified() {
+                buffer.keep_drafts_at(dir.join(format!("scratch-{session}-{i}.yumete")));
+            }
+        }
+    }
+
+    /// The drafts left behind by a session that did not end properly.
+    ///
+    /// Anything in the drafts directory that is not this session's. A draft
+    /// belonging to a *live* other session will be listed too — offering it is
+    /// harmless, since taking it copies the text into a new buffer and leaves
+    /// the file alone.
+    pub fn orphan_drafts(&self) -> Vec<PathBuf> {
+        let Some(dir) = &self.drafts_dir else {
+            return Vec::new();
+        };
+        let mine = format!("scratch-{}-", std::process::id());
+        let Ok(entries) = std::fs::read_dir(dir) else {
+            return Vec::new();
+        };
+        let mut found: Vec<PathBuf> = entries
+            .flatten()
+            .map(|e| e.path())
+            .filter(|p| {
+                p.file_name()
+                    .and_then(|n| n.to_str())
+                    .is_some_and(|n| n.starts_with("scratch-") && !n.starts_with(&mine))
+            })
+            .collect();
+        found.sort();
+        found
+    }
+
+    /// Open every orphaned draft as a buffer of its own.
+    fn take_orphan_drafts(&mut self) -> usize {
+        let orphans = self.orphan_drafts();
+        let mut taken = 0;
+        for path in &orphans {
+            let Ok(text) = std::fs::read_to_string(path) else {
+                continue;
+            };
+            if text.trim().is_empty() {
+                let _ = std::fs::remove_file(path);
+                continue;
+            }
+            let mut buffer = crate::Buffer::from_text(&text);
+            let name = path
+                .file_name()
+                .map(|n| n.to_string_lossy().into_owned())
+                .unwrap_or_default();
+            buffer.name_as(&format!("草稿 {name}"));
+            self.add_buffer(buffer);
+            // The copy is now in a buffer the writer can see and save; leaving
+            // the file behind would offer it again on the next launch.
+            let _ = std::fs::remove_file(path);
+            taken += 1;
+        }
+        taken
+    }
+
     pub fn announce_recovery(&mut self) {
+        // A session that crashed with an unnamed buffer left its work under a
+        // name nobody would think to open. Nothing else will ever mention it,
+        // so this does.
+        let orphans = self.orphan_drafts().len();
+        if orphans > 0 {
+            self.status = format!("有 {orphans} 份沒存的草稿——`:recover` 打開");
+        }
         let waiting: Vec<String> = self
             .buffers
             .iter()
@@ -3448,7 +3538,25 @@ impl Editor {
     /// Load this buffer's recovery draft, or throw it away (`:recover[!]`).
     fn recover(&mut self, discard: bool) -> Result<CommandOutcome, EditorError> {
         let Some(draft) = self.current_buffer().recovered_draft().map(str::to_string) else {
-            self.status = "no recovered draft for this file".to_string();
+            // No draft for *this file* — but a session that crashed with an
+            // unnamed buffer left its work somewhere with no file to open it
+            // by, and this is the only command that would ever go looking.
+            if discard {
+                let orphans = self.orphan_drafts();
+                for path in &orphans {
+                    let _ = std::fs::remove_file(path);
+                }
+                self.status = match orphans.len() {
+                    0 => "沒有草稿".to_string(),
+                    n => format!("丟掉了 {n} 份草稿"),
+                };
+                return Ok(CommandOutcome::Continue);
+            }
+            let taken = self.take_orphan_drafts();
+            self.status = match taken {
+                0 => "這個檔案沒有草稿".to_string(),
+                n => format!("打開了 {n} 份沒存的草稿——`:w <名字>` 留下它們"),
+            };
             return Ok(CommandOutcome::Continue);
         };
         if discard {
@@ -8094,6 +8202,58 @@ mod tests {
     }
 
     #[test]
+    fn an_unnamed_buffer_leaves_a_crash_copy_too() {
+        // `yumete` with no argument and an hour of typing is an ordinary way to
+        // start a scene, and it used to be the one buffer with no safety net:
+        // recovery copies live beside the file, and there is no file.
+        let dir = std::env::temp_dir().join(format!("yumete-drafts-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+
+        let mut ed = Editor::new();
+        ed.keep_drafts_in(dir.clone());
+        ed.set_autosave(true);
+        press(&mut ed, "i");
+        for c in "那年冬天，山下起了大雪。".chars() {
+            ed.on_key(Key::Char(c));
+        }
+        ed.on_key(Key::Esc);
+        ed.autosave_tick();
+        let draft = ed.current_buffer().scratch_draft().map(|p| p.to_path_buf());
+        let draft = draft.expect("an unnamed buffer gets somewhere to keep a copy");
+        assert!(draft.exists(), "and the copy is really there");
+        assert!(std::fs::read_to_string(&draft).unwrap().contains("大雪"));
+
+        // The session that wrote it does not offer it back to itself.
+        assert!(ed.orphan_drafts().is_empty());
+
+        // The next session finds it — nothing else ever would, since there is
+        // no file whose name would lead you to it.
+        let mut next = Editor::new();
+        next.keep_drafts_in(dir.clone());
+        // Pretend it was another session's.
+        let orphan = dir.join("scratch-1-0.yumete");
+        std::fs::rename(&draft, &orphan).unwrap();
+        assert_eq!(next.orphan_drafts(), vec![orphan.clone()]);
+        next.announce_recovery();
+        assert!(next.status().contains("沒存的草稿"), "{}", next.status());
+
+        // `:recover` opens it as a buffer of its own, and takes the file away
+        // so the next launch does not offer it again.
+        next.execute("recover").unwrap();
+        assert!(next.status().contains("1 份"), "{}", next.status());
+        // An empty scratch buffer is replaced rather than added to, which is
+        // what makes the very first launch of a recovering session land
+        // straight on the draft.
+        assert!(next.current_buffer().text().contains("大雪"));
+        assert!(next.current_buffer().display_name().starts_with("草稿"));
+        assert!(!orphan.exists());
+        assert!(next.orphan_drafts().is_empty());
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
     fn an_edit_that_did_nothing_leaves_nothing_to_undo() {
         // An undo point used to be pushed when a command *announced* an edit,
         // not when it made one. Three keys that did nothing left three undo
@@ -9398,13 +9558,10 @@ mod tests {
         ed.on_key(Key::Char('u'));
         assert_eq!(ed.current_buffer().text(), "第一稿\n");
 
-        // Loading it takes it over: there is nothing left waiting.
+        // Loading it takes it over: there is nothing left waiting — and with
+        // no drafts from a crashed session either, it says so about this file.
         ed.execute(":recover").unwrap();
-        assert!(
-            ed.status().contains("no recovered draft"),
-            "{}",
-            ed.status()
-        );
+        assert!(ed.status().contains("沒有草稿"), "{}", ed.status());
 
         // In a fresh session, `:recover!` throws the copy away instead.
         let mut ed = Editor::new();
