@@ -208,7 +208,7 @@ pub fn parse(input: &str) -> Result<Command, CommandError> {
     }
 
     let mut parts = trimmed.splitn(2, char::is_whitespace);
-    let word = parts.next().unwrap();
+    let word = resolve(parts.next().unwrap());
     let rest = parts.next().unwrap_or("").trim();
 
     match word {
@@ -462,8 +462,12 @@ pub fn parse(input: &str) -> Result<Command, CommandError> {
 pub struct Entry {
     /// The command word, as typed after the `:`.
     pub name: &'static str,
-    /// Its shorter form, if it has one.
-    pub alias: Option<&'static str>,
+    /// Every other spelling that names it — the short form first, since that
+    /// is the one shown. A list rather than one slot because the parser really
+    /// does accept several (`:open` is also `:o`, `:edit`, `:e`), and a table
+    /// that could only declare one of them was a table that drifted from the
+    /// parser without anybody noticing.
+    pub aliases: &'static [&'static str],
     /// One line saying what it does — short enough to sit beside the name.
     pub help: &'static str,
     /// What may follow it.
@@ -496,6 +500,31 @@ pub struct Word {
     pub then: Args,
 }
 
+/// The command a typed word names, by prefix when it is not a whole name.
+///
+/// **One rule, at every level**: an unambiguous prefix names the thing. It is
+/// already how subcommands work — `:yume s l` — and a command line where the
+/// rule held for the second word but not the first would be a rule nobody
+/// could state.
+///
+/// Exact names and declared aliases win over it, in that order, so `:w` stays
+/// `write` even though `w` begins three commands. A prefix that names two
+/// commands names neither: the word passes through unchanged and comes back as
+/// "unknown", which is the truth.
+fn resolve(word: &str) -> &str {
+    if COMMANDS
+        .iter()
+        .any(|e| e.name == word || e.aliases.contains(&word))
+    {
+        return word;
+    }
+    let mut hits = COMMANDS.iter().filter(|e| e.name.starts_with(word));
+    match (hits.next(), hits.next()) {
+        (Some(only), None) => only.name,
+        _ => word,
+    }
+}
+
 /// The one word of `from` that `typed` names, exactly or by prefix.
 ///
 /// `:yume s l` is `:yume scheme lingming` — because `s` is the only word there
@@ -503,6 +532,27 @@ pub struct Word {
 /// prefix names nothing rather than guessing: `:ruby t` could be `typst` and
 /// nothing else, but if a second `t` word were ever added it would stop
 /// working, loudly, instead of quietly meaning the older one.
+/// The shortest unambiguous way to write `name`, among `others`.
+///
+/// What the menu shows in parentheses, and it is *true* — the same prefix rule
+/// resolves it when typed, at every level. Worked out rather than declared, so
+/// it cannot promise a spelling that a later word made ambiguous.
+pub fn shortest(
+    name: &'static str,
+    among: impl Iterator<Item = &'static str>,
+) -> Option<&'static str> {
+    let others: Vec<&str> = among.filter(|&o| o != name).collect();
+    let mut end = 0;
+    for (at, _) in name.char_indices().skip(1) {
+        end = at;
+        if !others.iter().any(|o| o.starts_with(&name[..at])) {
+            return Some(&name[..at]);
+        }
+    }
+    let _ = end;
+    None
+}
+
 pub fn pick<'a>(typed: &str, from: &'a [Word]) -> Option<&'a Word> {
     if let Some(exact) = from.iter().find(|w| w.name == typed) {
         return Some(exact);
@@ -519,6 +569,13 @@ pub fn pick<'a>(typed: &str, from: &'a [Word]) -> Option<&'a Word> {
 pub struct Choice {
     pub name: &'static str,
     pub alias: Option<&'static str>,
+    /// The shortest prefix that names this and nothing else beside it, when
+    /// that is shorter than the whole word.
+    ///
+    /// Worked out rather than declared, so it cannot go stale: adding a second
+    /// word starting with `s` lengthens what `scheme` shows, in the same edit
+    /// that made it true.
+    pub short: Option<&'static str>,
     pub help: &'static str,
     /// What is written before it when it is shown: `:` for a command, nothing
     /// for a word it takes. A colon on `on` would be a lie about how to type
@@ -744,181 +801,181 @@ const ON_OFF: &[Word] = &[
 pub const COMMANDS: &[Entry] = &[
     Entry {
         name: "open",
-        alias: Some("o"),
+        aliases: &["o", "e", "edit"],
         help: "open a file",
         args: Args::Path,
     },
     Entry {
         name: "new",
-        alias: None,
+        aliases: &["enew"],
         help: "start an empty buffer",
         args: Args::Path,
     },
     Entry {
         name: "write",
-        alias: Some("w"),
+        aliases: &["w"],
         help: "save, optionally to a new path",
         args: Args::Path,
     },
     Entry {
         name: "wq",
-        alias: Some("x"),
+        aliases: &["x"],
         help: "save, then leave",
         args: Args::Path,
     },
     Entry {
         name: "recover",
-        alias: None,
+        aliases: &[],
         help: "load the recovery draft (`!` throws it away)",
         args: Args::None,
     },
     Entry {
         name: "goto",
-        alias: Some("g"),
+        aliases: &["g"],
         help: "put the cursor on a line (or just `:42`)",
         args: Args::Free("<行號>"),
     },
     Entry {
         name: "count",
-        alias: Some("wc"),
+        aliases: &["wc"],
         help: "how much has been written",
         args: Args::None,
     },
     Entry {
         name: "quit",
-        alias: Some("q"),
+        aliases: &["q"],
         help: "leave; ! discards changes",
         args: Args::None,
     },
     Entry {
         name: "undo",
-        alias: Some("u"),
+        aliases: &["u"],
         help: "undo the last change",
         args: Args::None,
     },
     Entry {
         name: "redo",
-        alias: Some("red"),
+        aliases: &["red"],
         help: "redo it",
         args: Args::None,
     },
     Entry {
         name: "segment",
-        alias: Some("seg"),
+        aliases: &["seg"],
         help: "word-segmentation tint",
         args: Args::Words(ON_OFF),
     },
     Entry {
         name: "layout",
-        alias: Some("lay"),
+        aliases: &["lay"],
         help: "flip horizontal / vertical",
         args: Args::Words(LAYOUTS),
     },
     Entry {
         name: "yume",
-        alias: None,
+        aliases: &[],
         help: "輸入法：現在用的是哪一個；換方案、拆分注解",
         args: Args::Words(YUME),
     },
     Entry {
         name: "hanging",
-        alias: None,
+        aliases: &[],
         help: "句讀 in the margin (標點旁置)",
         args: Args::Words(ON_OFF),
     },
     Entry {
         name: "syntax",
-        alias: Some("syn"),
+        aliases: &["syn"],
         help: "markdown 還是 typst（不給參數就說現在是哪個）",
         args: Args::Words(SYNTAXES),
     },
     Entry {
         name: "pipe",
-        alias: None,
+        aliases: &[],
         help: "把選區送給一條命令，用它的輸出換掉（`!`）",
         args: Args::Free("<命令>"),
     },
     Entry {
         name: "sh",
-        alias: None,
+        aliases: &[],
         help: "跑一條命令，輸出收進一個緩衝區",
         args: Args::Free("<命令>"),
     },
     Entry {
         name: "!command",
-        alias: None,
+        aliases: &[],
         help: "讓出終端跑一條命令，直接看它跑（vi 的寫法）",
         args: Args::None,
     },
     Entry {
         name: "preview",
-        alias: None,
+        aliases: &[],
         help: "交給真正的排版器去排，在瀏覽器裏看",
         args: Args::Words(ON_OFF),
     },
     Entry {
         name: "render",
-        alias: None,
+        aliases: &[],
         help: "畫面上顯示多少「結果」：原文、著色、所見即所得",
         args: Args::Words(RENDER),
     },
     Entry {
         name: "dense",
-        alias: None,
+        aliases: &[],
         help: "密排：一縱兩格，無注音、無旁置、無刻度",
         args: Args::Words(ON_OFF),
     },
     Entry {
         name: "table",
-        alias: None,
+        aliases: &[],
         help: "read the file as a grid; `:table off` as text",
         args: Args::Words(ON_OFF),
     },
     Entry {
         name: "wrap",
-        alias: None,
+        aliases: &[],
         help: "wrap long paragraphs to the next row; `:wrap 50` sets a measure",
         args: Args::Words(WRAP),
     },
     Entry {
         name: "clipboard",
-        alias: None,
+        aliases: &[],
         help: "系統剪貼簿：送出去、貼進來",
         args: Args::Words(CLIPBOARD),
     },
     Entry {
         name: "buffer",
-        alias: None,
+        aliases: &[],
         help: "開着的檔案：列出、切換、關掉",
         args: Args::Words(BUFFERS),
     },
     Entry {
         name: "export",
-        alias: Some("ex"),
+        aliases: &["ex"],
         help: "write out as html or typst, with the layout",
         args: Args::Free("<檔名>"),
     },
     Entry {
         name: "grep",
-        alias: Some("gr"),
+        aliases: &["gr"],
         help: "search every file in the project",
         args: Args::Free("<正則>"),
     },
     Entry {
         name: "toc",
-        alias: None,
+        aliases: &["outline"],
         help: "list the headings, or `:toc 3` to go to one",
         args: Args::Free("<第幾條，不寫就列出來>"),
     },
     Entry {
         name: "ruby",
-        alias: None,
+        aliases: &[],
         help: "改這裏的注音；`:ruby on|off` 是排不排",
         args: Args::Words(RUBY),
     },
     Entry {
         name: "s/pat/rep/",
-        alias: None,
+        aliases: &[],
         help: "substitute on this line (%s: all)",
         args: Args::None,
     },
@@ -962,10 +1019,13 @@ pub fn complete_at(line: &str) -> (usize, Vec<Choice>) {
     let choices: Vec<Choice> = match words.first() {
         None => COMMANDS
             .iter()
-            .filter(|e| e.name.starts_with(typed) || e.alias.is_some_and(|a| a.starts_with(typed)))
+            .filter(|e| {
+                e.name.starts_with(typed) || e.aliases.iter().any(|a| a.starts_with(typed))
+            })
             .map(|e| Choice {
                 name: e.name,
-                alias: e.alias,
+                alias: e.aliases.first().copied(),
+                short: shortest(e.name, COMMANDS.iter().map(|c| c.name)),
                 help: e.help,
                 leading: ":",
             })
@@ -973,7 +1033,7 @@ pub fn complete_at(line: &str) -> (usize, Vec<Choice>) {
         Some(&(_, head)) => {
             let Some(entry) = COMMANDS
                 .iter()
-                .find(|e| e.name == head || e.alias == Some(head))
+                .find(|e| e.name == head || e.aliases.contains(&head))
             else {
                 return (start, Vec::new());
             };
@@ -994,6 +1054,7 @@ pub fn complete_at(line: &str) -> (usize, Vec<Choice>) {
                     .map(|w| Choice {
                         name: w.name,
                         alias: None,
+                        short: shortest(w.name, list.iter().map(|o| o.name)),
                         help: w.help,
                         leading: "",
                     })
@@ -1004,6 +1065,7 @@ pub fn complete_at(line: &str) -> (usize, Vec<Choice>) {
                 Args::Free(what) => vec![Choice {
                     name: "",
                     alias: None,
+                    short: None,
                     help: what,
                     leading: "",
                 }],
@@ -1196,6 +1258,46 @@ mod tests {
     }
 
     #[test]
+    fn the_short_form_the_menu_shows_is_one_that_works() {
+        // The menu prints `:yume (y)`. That has to be true, or it is teaching
+        // a spelling that fails — so the same prefix rule resolves the first
+        // word of a command line, not only the words after it.
+        assert_eq!(parse(":y"), Ok(Command::YumeStatus));
+        assert_eq!(parse(":yu"), Ok(Command::YumeStatus));
+        assert_eq!(parse(":ta"), Ok(Command::SetTable(true)));
+
+        // A declared alias beats the prefix rule, so the short spellings
+        // people already know keep their meanings: `w` begins `write`, `wq`
+        // and `wrap`, and it is still `write`.
+        assert_eq!(parse(":w"), Ok(Command::Write(None)));
+        assert_eq!(parse(":e a.md"), Ok(Command::Open("a.md".into())));
+
+        // An ambiguous prefix names nothing rather than guessing.
+        assert_eq!(parse(":re"), Err(CommandError::Unknown("re".into())));
+        assert_eq!(parse(":s"), Err(CommandError::Unknown("s".into())));
+
+        // And what the menu shows is worked out from the table it is showing,
+        // so a new command that collides lengthens it in the same edit.
+        let short = |name: &'static str| shortest(name, COMMANDS.iter().map(|c| c.name));
+        assert_eq!(short("yume"), Some("y"));
+        assert_eq!(short("render"), Some("ren"), "recover and redo are in the way");
+        assert_eq!(short("sh"), None, "nothing shorter than the whole word");
+        for entry in COMMANDS {
+            if let Some(short) = short(entry.name) {
+                assert!(
+                    parse(&format!(":{short}")).is_ok()
+                        || matches!(
+                            parse(&format!(":{short}")),
+                            Err(CommandError::MissingArgument(_))
+                        ),
+                    "the menu offers `:{short}` for `:{}`, which does not resolve",
+                    entry.name
+                );
+            }
+        }
+    }
+
+    #[test]
     fn an_unambiguous_prefix_is_the_word_it_starts() {
         // `:yume s l` is the whole of starting to type — `s` is the only word
         // `:yume` takes that starts with `s`, and `l` the only scheme.
@@ -1327,13 +1429,15 @@ mod tests {
                     assert!(parse(&line).is_ok(), "{line} does not parse");
                 }
             }
-            if let Some(alias) = entry.alias {
-                let line = match alias {
-                    "o" => ":o a.md".to_string(),
+            // Every spelling the table declares, not just the first: a table
+            // that says `:e` opens a file and a parser that exports one is
+            // exactly the drift this test exists to catch.
+            for alias in entry.aliases {
+                let line = match *alias {
+                    "o" | "e" | "edit" => format!(":{alias} a.md"),
                     "g" => ":g 1".to_string(),
                     "gr" => ":gr x".to_string(),
                     "ex" => ":ex html".to_string(),
-                    "sch" => ":sch lingming".to_string(),
                     alias => format!(":{alias}"),
                 };
                 assert!(parse(&line).is_ok(), "alias {alias} does not parse");
