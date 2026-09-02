@@ -172,6 +172,22 @@ pub struct Detail {
     pub links: Vec<(char, Option<usize>)>,
 }
 
+/// What the row above the status line has to say.
+///
+/// Structured rather than one string, so a key can be set apart from what it
+/// does. A run of 「hjkl 走格 · c 換格 · y Y 取格/行」 all in one colour is a
+/// wall to read; the same keys lit and their meanings quiet is a thing to
+/// glance at, which is the only way a hint row earns its row.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Hint {
+    /// Nothing has happened and nothing is half-pressed.
+    Quiet,
+    /// Something just happened.
+    Says(String),
+    /// A named set of keys: what this is, then each key and what it does.
+    Keys(&'static str, Vec<(&'static str, &'static str)>),
+}
+
 /// How many places the jump list remembers.
 ///
 /// Bounded because a session of a thousand jumps does not need a thousandth of
@@ -372,8 +388,6 @@ pub struct Editor {
     zong_gap: Option<usize>,
     /// Whether the dense arrangement is on, so the ticks know to stay away.
     dense: bool,
-    /// What the page looked like before it was packed.
-    dense_was: Option<(crate::ruby::Dialects, bool, Option<usize>)>,
     jumps: Vec<(usize, usize)>,
     jump_at: usize,
     /// Where Enter came from when it followed a footnote, and the line it
@@ -568,7 +582,6 @@ impl Editor {
             turned_for_table: None,
             zong_gap: None,
             dense: false,
-            dense_was: None,
             jumps: Vec::new(),
             jump_at: 0,
             note_return: None,
@@ -2150,36 +2163,57 @@ impl Editor {
     /// keyboard. A key sequence a reader has begun and cannot finish is the
     /// worst of the three to be left alone with, but a message about what just
     /// happened is rarer and more urgent, so it wins.
-    pub fn hint(&self) -> String {
+    pub fn hint(&self) -> Hint {
         if !self.status.is_empty() {
-            return self.status.clone();
+            return Hint::Says(self.status.clone());
         }
-        if let Some(keys) = self.pending_hint() {
-            return keys.to_string();
+        if let Some(keys) = self.pending_keys() {
+            return keys;
         }
         if self.sidebar_focus && self.sidebar.is_some() {
-            return format!("側欄 · {}", Self::SIDEBAR_KEYS);
+            return Hint::Keys(
+                "側欄",
+                vec![
+                    ("j k", "移動"),
+                    ("l", "進入"),
+                    ("h", "收起"),
+                    ("Tab", "換視圖"),
+                    ("w", "寬窄"),
+                    ("R", "重讀"),
+                    ("C-w", "回正文"),
+                    ("q", "關"),
+                ],
+            );
         }
         match self.mode {
             Mode::Ruby if self.ruby_target.is_some() => {
-                "注音 · Enter 收下 · Esc 取消".to_string()
+                Hint::Keys("注音", vec![("Enter", "收下"), ("Esc", "取消")])
             }
-            // The picker draws its own list with its own footer.
-            Mode::Picker => String::new(),
             Mode::Normal if self.table.is_some() => {
-                let grain = self
-                    .table
-                    .as_ref()
-                    .map(|v| v.grain)
-                    .unwrap_or(Grain::Cell);
+                let grain = self.table.as_ref().map(|v| v.grain).unwrap_or(Grain::Cell);
                 match grain {
-                    Grain::Cell => "表格 · hjkl 走格 · c 換格 · y Y 取格/行 · p 貼 ·                                     Enter 跟過去 · Tab 改按字"
-                        .to_string(),
-                    Grain::Char => "表格（按字）· hjkl 走字 · Enter 跟這個字 · Tab 改按格"
-                        .to_string(),
+                    Grain::Cell => Hint::Keys(
+                        "表格",
+                        vec![
+                            ("hjkl", "走格"),
+                            ("c", "換格"),
+                            ("y Y", "取格/行"),
+                            ("p", "貼"),
+                            ("Enter", "找相關的行"),
+                            ("Tab", "改按字"),
+                        ],
+                    ),
+                    Grain::Char => Hint::Keys(
+                        "表格·字",
+                        vec![
+                            ("hjkl", "走字"),
+                            ("Enter", "找這個字"),
+                            ("Tab", "改按格"),
+                        ],
+                    ),
                 }
             }
-            _ => String::new(),
+            _ => Hint::Quiet,
         }
     }
 
@@ -2188,33 +2222,49 @@ impl Editor {
     /// This is the row's most valuable use: a reader who has pressed `m` and
     /// does not remember what follows it currently has nowhere to look but the
     /// manual, and the editor is sitting there knowing the answer.
-    fn pending_hint(&self) -> Option<&'static str> {
-        Some(match self.pending {
+    fn pending_keys(&self) -> Option<Hint> {
+        let keys = match self.pending {
             Pending::None => {
                 // A count on its own is a sequence too — `3` is waiting for the
                 // motion it multiplies.
                 return self
                     .operator_count
-                    .map(|_| "重複幾次 · 接一個動作或編輯")
-                    .or_else(|| self.register.is_empty().then_some(""))
-                    .filter(|h| !h.is_empty());
+                    .map(|n| Hint::Says(format!("{n} 次 · 接一個動作或編輯")));
             }
-            Pending::Goto => {
-                "g 檔首 · e 檔尾 · h l 行首行尾 · s 首個非空白 · f 開這個檔 · J 併行"
-            }
-            // `Space` already opens a menu that lists its own keys, and
-            // saying the same thing twice on two surfaces is worse than saying
-            // it once.
+            // `Space` opens a menu that already lists its own keys, and saying
+            // the same thing twice on two surfaces is worse than saying it once.
             Pending::Space => return None,
-            Pending::Find(_) => "找哪個字",
-            Pending::Replace => "用哪個字蓋掉選區",
-            Pending::Register => "哪個暫存器（a–z）",
-            Pending::Match => "m 配對 · i 之內 · a 連同 · s 包起來 · d 去掉 · r 換掉",
-            Pending::MatchPair { .. } => "哪一種括號或引號",
-            Pending::Surround => "用哪一種括號包起來",
-            Pending::SurroundFrom => "去掉哪一種",
-            Pending::SurroundTo(_) => "換成哪一種",
-        })
+            Pending::Goto => (
+                "g",
+                vec![
+                    ("g", "檔首"),
+                    ("e", "檔尾"),
+                    ("h l", "行首行尾"),
+                    ("s", "首個非空白"),
+                    ("f", "開這個檔"),
+                    ("J", "併行"),
+                ],
+            ),
+            Pending::Find(_) => ("找", vec![("", "打一個字")]),
+            Pending::Replace => ("蓋掉", vec![("", "打一個字蓋掉選區")]),
+            Pending::Register => ("暫存器", vec![("a–z", "哪一個")]),
+            Pending::Match => (
+                "m",
+                vec![
+                    ("m", "配對"),
+                    ("i", "之內"),
+                    ("a", "連同"),
+                    ("s", "包起來"),
+                    ("d", "去掉"),
+                    ("r", "換掉"),
+                ],
+            ),
+            Pending::MatchPair { .. } => ("括號", vec![("", "打一種括號或引號")]),
+            Pending::Surround => ("包起來", vec![("", "打一種括號")]),
+            Pending::SurroundFrom => ("去掉", vec![("", "打要去掉的那一種")]),
+            Pending::SurroundTo(_) => ("換成", vec![("", "打要換成的那一種")]),
+        };
+        Some(Hint::Keys(keys.0, keys.1))
     }
 
     /// What the status line says about where the cursor is in a grid.
@@ -2843,15 +2893,18 @@ impl Editor {
     /// laid out. Every 縱 question takes this, so the cursor and the page can
     /// never disagree about where a row begins.
     pub fn grid(&self) -> Grid {
-        Grid::new(self.zong_length, self.ruby)
+        // Through `ruby()` and `hanging_punctuation()`, not the fields: a page
+        // packed tight lays out neither, and a grid that disagreed with what is
+        // drawn would put the cursor somewhere the writer cannot see.
+        Grid::new(self.zong_length, self.ruby())
             .with_tatechuyoko(self.tatechuyoko)
-            .with_hanging(self.hanging)
+            .with_hanging(self.hanging_punctuation())
             .with_markup_hidden(self.wysiwyg && self.show_markup, Some(self.selection()))
     }
 
     /// Whether 句讀 hang in the margin beside the character they follow.
     pub fn hanging_punctuation(&self) -> bool {
-        self.hanging
+        self.hanging && !self.dense
     }
 
     /// Set whether 句讀 hang in the margin, returning the new state.
@@ -3068,7 +3121,8 @@ impl Editor {
 
     /// The gap between 縱, if the writer has set one for this session.
     pub fn zong_gap(&self) -> Option<usize> {
-        self.zong_gap
+        // Packed, there is none; otherwise whatever was asked for.
+        self.dense.then_some(0).or(self.zong_gap)
     }
 
     /// Pack the page as tight as a terminal can, or let it breathe again.
@@ -3083,27 +3137,17 @@ impl Editor {
     /// fixed size that the terminal decides, and 90%-wide cells are a setting
     /// in the terminal, not here.
     pub fn set_dense(&mut self, on: bool) {
-        if on {
-            // What it was, so that turning it off gives *that* back rather
-            // than a guess at the defaults — a writer who had readings off
-            // already should not find them on again.
-            if self.dense_was.is_none() {
-                self.dense_was = Some((self.ruby, self.hanging, self.zong_gap));
-            }
-            self.zong_gap = Some(0);
-            self.ruby = crate::ruby::Dialects::NONE;
-            self.hanging = false;
-            self.dense = true;
-            self.status = "密排：一縱兩格，無注音、無旁置、無刻度".to_string();
+        // A view, not a change of settings. Packing the page *suppresses* the
+        // readings, the hung 句讀 and the ticks; it does not turn them off,
+        // because they are choices about the book and this is a choice about
+        // the window. So `:dense off` needs nothing remembered — what was
+        // configured was never touched, and simply applies again.
+        self.dense = on;
+        self.status = if on {
+            "密排：一縱兩格，無注音、無旁置、無刻度".to_string()
         } else {
-            if let Some((ruby, hanging, gap)) = self.dense_was.take() {
-                self.ruby = ruby;
-                self.hanging = hanging;
-                self.zong_gap = gap;
-            }
-            self.dense = false;
-            self.status = "密排：關".to_string();
-        }
+            "密排：關".to_string()
+        };
     }
 
     /// Whether the page is packed tight.

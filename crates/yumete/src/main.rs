@@ -85,6 +85,7 @@ fn main() -> ExitCode {
             .collect(),
     );
     editor.set_autosave(config.editor.autosave);
+    editor.set_dense(config.editor.dense);
 
     // The files, *after* the session's settings. Opening one may turn the page
     // horizontal — a file a schema calls a table is read across — and a setting
