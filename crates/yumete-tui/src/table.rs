@@ -283,7 +283,7 @@ pub fn split_detail(editor: &Editor, area: Rect) -> (Rect, Option<Rect>) {
     if !editor.detail_visible() {
         return (area, None);
     }
-    if editor.table().is_some() {
+    if editor.table().is_some_and(|t| t.is_grid()) {
         if area.width < DETAIL_WIDTH * 2 {
             return (area, None);
         }
@@ -341,7 +341,7 @@ pub fn draw_detail(frame: &mut Frame, editor: &Editor, config: &Config, area: Re
     // A rule down the edge where a side panel meets the grid. Along the bottom
     // the panel's own ground is already the boundary, and a rule there would
     // cost a row of a four-row panel.
-    if editor.table().is_some() {
+    if editor.table().is_some_and(|t| t.is_grid()) {
         for y in area.y..area.y + area.height {
             if let Some(cell) = buf.cell_mut((area.x, y)) {
                 cell.set_symbol("│").set_style(name);
