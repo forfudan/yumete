@@ -109,6 +109,17 @@ impl Callout {
     }
 }
 
+impl Block {
+    /// Whether the line's *characters* are markup at all.
+    ///
+    /// Inside a fence or a page's metadata they are not: what is written there
+    /// is written verbatim, and colouring `**` in a code block — or worse,
+    /// taking it off the page — changes what the reader believes the file says.
+    pub fn is_literal(self) -> bool {
+        matches!(self, Block::Code | Block::FrontMatter)
+    }
+}
+
 /// Walks a document in order, saying which block each line belongs to.
 ///
 /// Fed from the top: a fence, a container or a front-matter block opened
@@ -118,8 +129,15 @@ impl Callout {
 pub struct BlockScanner {
     line: usize,
     in_code: bool,
+    /// Which fence opened the code block, so `~~~` does not close a ``` one.
+    fence: Option<char>,
     in_front: bool,
-    container: Option<Callout>,
+    /// Whether the opening `---` is still only a guess at metadata.
+    front_unproven: bool,
+
+    /// The containers open, innermost last — `:::` nests, and an inner one must
+    /// not close the outer.
+    containers: Vec<Callout>,
 }
 
 impl BlockScanner {
@@ -129,50 +147,82 @@ impl BlockScanner {
     }
 
     /// Take the next line and say what it is.
-    pub fn feed(&mut self, line: &str) -> Block {
+    ///
+    /// `prefix` is the line's opening — the first [`PREFIX`] characters is
+    /// enough for every decision here — and `len` is how long the whole line
+    /// is, which only the rule needs. Taking a prefix rather than the line is
+    /// what keeps this from copying every long paragraph of a novel on every
+    /// frame.
+    pub fn feed(&mut self, prefix: &str, len: usize) -> Block {
         let at = self.line;
         self.line += 1;
-        let text = line.trim_end_matches(['\n', '\r']);
+        let text = prefix.trim_end_matches(['\n', '\r']);
         let trimmed = text.trim_start();
+        let whole = len <= PREFIX;
 
         // Front matter only counts at the very top, which is what keeps a `---`
         // between two paragraphs a rule rather than the start of metadata.
+        // Front matter is metadata, and metadata is `key: value`. The line
+        // after the opening `---` is what settles it: a manuscript that opens
+        // with a scene break would otherwise have its whole first paragraph
+        // swallowed and set back as furniture. (Line 0 keeps the label either
+        // way — a rule is drawn the same as metadata, so nothing is lost.)
         if self.in_front {
-            if trimmed == "---" {
+            let unproven = std::mem::take(&mut self.front_unproven);
+            if whole && trimmed == "---" {
                 self.in_front = false;
+                return Block::FrontMatter;
             }
-            return Block::FrontMatter;
+            if unproven && !trimmed.is_empty() && !is_metadata(trimmed) {
+                self.in_front = false;
+                // …and fall through: this line is writing like any other.
+            } else {
+                return Block::FrontMatter;
+            }
         }
-        if at == 0 && trimmed == "---" {
+        // Front matter is metadata, and metadata has `key: value` in it. A
+        // manuscript that opens with a `---` scene break would otherwise have
+        // its whole first paragraph swallowed and set back as furniture.
+        if at == 0 && whole && trimmed == "---" {
             self.in_front = true;
+            self.front_unproven = true;
             return Block::FrontMatter;
         }
 
-        // A code fence swallows everything, markup included.
-        if trimmed.starts_with("```") || trimmed.starts_with("~~~") {
-            self.in_code = !self.in_code;
-            return Block::Code;
-        }
-        if self.in_code {
-            return Block::Code;
+        // A code fence swallows everything, markup included — and only the
+        // fence that opened it can close it, so ``` inside a ~~~ block is code
+        // like everything else in there.
+        let fence = trimmed
+            .starts_with("```")
+            .then_some('`')
+            .or_else(|| trimmed.starts_with("~~~").then_some('~'));
+        match (self.fence, fence) {
+            (None, Some(opened)) => {
+                self.fence = Some(opened);
+                return Block::Code;
+            }
+            (Some(open), Some(closing)) if open == closing => {
+                self.fence = None;
+                return Block::Code;
+            }
+            (Some(_), _) => return Block::Code,
+            (None, None) => {}
         }
 
-        // `:::` opens a container and `:::` alone closes it.
+        // `:::` with a name opens a container; `:::` alone closes the
+        // innermost one. They nest, so an inner `::: tip` must not end the
+        // `::: warning` it sits in.
         if let Some(rest) = trimmed.strip_prefix(":::") {
-            return match self.container {
-                Some(kind) => {
-                    self.container = None;
-                    Block::Container(kind)
-                }
-                None => {
-                    let kind = Callout::parse(rest.split_whitespace().next().unwrap_or(""))
-                        .unwrap_or(Callout::Note);
-                    self.container = Some(kind);
-                    Block::Container(kind)
-                }
-            };
+            let named = rest.split_whitespace().next().unwrap_or("");
+            if named.is_empty() {
+                let kind = self.containers.pop();
+                return Block::Container(kind.unwrap_or(Callout::Note));
+            }
+            let kind = Callout::parse(named).unwrap_or(Callout::Note);
+            self.containers.push(kind);
+            return Block::Container(kind);
         }
-        if let Some(kind) = self.container {
+        if let Some(&kind) = self.containers.last() {
             return Block::Container(kind);
         }
 
@@ -183,7 +233,7 @@ impl BlockScanner {
         if trimmed.starts_with('>') {
             return Block::Quote;
         }
-        if is_rule(trimmed) {
+        if whole && is_rule(trimmed) {
             return Block::Rule;
         }
         if trimmed.starts_with("[^") && trimmed.contains("]:") {
@@ -196,22 +246,54 @@ impl BlockScanner {
                 .and_then(|(mark, close)| (close == "]").then_some(mark != " "));
             return Block::Item { task };
         }
-        if trimmed.starts_with('|') && trimmed.ends_with('|') && trimmed.len() > 1 {
+        if trimmed.starts_with('|') && trimmed.len() > 1 {
             return Block::Table;
         }
         Block::Prose
     }
 }
 
+/// How much of a line the block scan looks at.
+///
+/// Every decision here is about a line's opening. Reading the whole line meant
+/// copying every paragraph of a novel on every frame, which on a 600 KB
+/// manuscript cost nine milliseconds a keystroke.
+pub const PREFIX: usize = 64;
+
+/// Whether a line looks like `key: value`, which is what metadata is made of.
+fn is_metadata(text: &str) -> bool {
+    match text.split_once(':') {
+        Some((key, _)) => {
+            !key.is_empty()
+                && key
+                    .chars()
+                    .all(|c| c.is_alphanumeric() || c == '_' || c == '-')
+        }
+        None => false,
+    }
+}
+
 /// Whether the line is `---`, `***` or `___` on its own — a scene break.
+///
+/// One pass that stops at the first character that settles it, rather than two
+/// passes over the line: a paragraph opening with `- ` used to be counted twice
+/// from end to end before being ruled out.
 fn is_rule(text: &str) -> bool {
-    let mut chars = text.chars().filter(|c| !c.is_whitespace()).peekable();
-    let Some(&first) = chars.peek() else {
+    let mut chars = text.chars().filter(|c| !c.is_whitespace());
+    let Some(first) = chars.next() else {
         return false;
     };
-    matches!(first, '-' | '*' | '_') && text.chars().filter(|&c| c == first).count() >= 3 && {
-        text.chars().all(|c| c == first || c.is_whitespace())
+    if !matches!(first, '-' | '*' | '_') {
+        return false;
     }
+    let mut seen = 1;
+    for c in chars {
+        if c != first {
+            return false;
+        }
+        seen += 1;
+    }
+    seen >= 3
 }
 
 /// The text after a list marker, if the line opens a list item.
@@ -237,19 +319,30 @@ fn item_body(text: &str) -> Option<&str> {
 /// A heading's hashes are never hidden. A terminal cannot make a heading
 /// bigger, so they are the only thing that says whether this is a chapter or a
 /// scene, and that is the writer's own structure.
-pub fn hidden(spans: &[Span], cursor: Option<usize>) -> Vec<(usize, usize)> {
-    // Which construct the cursor is in, taking a construct's whole extent —
-    // approaching its markup from either side opens it.
-    let open = cursor.and_then(|at| {
-        spans
-            .iter()
-            .filter(|s| at >= s.start && at <= s.end)
-            .map(|s| s.construct)
-            .next_back()
-    });
+pub fn hidden(spans: &[Span], selected: Option<(usize, usize)>) -> Vec<(usize, usize)> {
+    // Every construct the selection touches is shown whole — not only the one
+    // the cursor is in. The anchor is a place in the text too, and a highlight
+    // that covered fewer characters than `d` would take is the screen lying
+    // about what an edit does.
+    let open: Vec<usize> = match selected {
+        Some((from, to)) => {
+            // A selection covers `from..to`; a bare cursor covers the one
+            // grapheme it stands on. Its far edge is *exclusive* — a selection
+            // ending where a construct begins has not reached it — while its
+            // near edge is inclusive, so standing just past a construct keeps
+            // it open and the line does not flicker as the cursor leaves.
+            let reach = to.max(from + 1);
+            spans
+                .iter()
+                .filter(|s| reach > s.start && from <= s.end)
+                .map(|s| s.construct)
+                .collect()
+        }
+        None => Vec::new(),
+    };
     spans
         .iter()
-        .filter(|s| s.kind == Kind::Marker && Some(s.construct) != open)
+        .filter(|s| s.kind == Kind::Marker && !open.contains(&s.construct))
         .map(|s| (s.start, s.end))
         .collect()
 }
@@ -586,7 +679,7 @@ mod tests {
     fn walk(text: &str) -> String {
         let mut scanner = BlockScanner::new();
         text.lines()
-            .map(|line| match scanner.feed(line) {
+            .map(|line| match scanner.feed(line, line.chars().count()) {
                 Block::Prose => '.',
                 Block::Heading(n) => char::from_digit(n as u32, 10).unwrap_or('#'),
                 Block::Quote => '>',
@@ -612,6 +705,21 @@ mod tests {
         // Front matter only at the very top; a `---` between paragraphs is a
         // scene break, not the start of metadata.
         assert_eq!(walk("---\ntitle: 甲\n---\n那年\n---\n冬天"), "yyy._.");
+        // …and a manuscript that *opens* with a scene break keeps its first
+        // paragraph, rather than having it swallowed as metadata.
+        assert_eq!(walk("---\n那年冬天\n---\n又一年"), "y._.");
+    }
+
+    #[test]
+    fn containers_nest_and_only_the_fence_that_opened_a_block_closes_it() {
+        // An inner `::: tip` must not end the `::: warning` it sits in, or the
+        // text inside both loses its ground and the text after both gains one.
+        assert_eq!(
+            walk("::: warning 小心\n甲\n::: tip\n乙\n:::\n丙\n:::\n丁"),
+            ":::::::."
+        );
+        // `~~~` does not close a ``` block: everything in it is code.
+        assert_eq!(walk("```\n甲\n~~~\n乙\n```\n丙"), "`````.");
     }
 
     #[test]
@@ -627,7 +735,7 @@ mod tests {
 
     /// What a line looks like with its markup taken off, the cursor at `at`.
     fn rendered(line: &str, at: Option<usize>) -> String {
-        let hide = hidden(&spans(line), at);
+        let hide = hidden(&spans(line), at.map(|i| (i, i)));
         line.chars()
             .enumerate()
             .filter(|(i, _)| !hide.iter().any(|&(a, b)| *i >= a && *i < b))
@@ -648,6 +756,28 @@ mod tests {
         assert_eq!(rendered(line, Some(6)), "那**年**冬天");
         // And the second construct opens on its own.
         assert_eq!(rendered(line, Some(9)), "那年冬**天**");
+    }
+
+    #[test]
+    fn everything_a_selection_touches_is_shown_whole() {
+        let line = "那**年**冬**天**";
+        let hide = |from, to| {
+            let h = hidden(&spans(line), Some((from, to)));
+            line.chars()
+                .enumerate()
+                .filter(|(i, _)| !h.iter().any(|&(a, b)| *i >= a && *i < b))
+                .map(|(_, c)| c)
+                .collect::<String>()
+        };
+        // A selection running across both constructs shows both — a highlight
+        // that covered fewer characters than `d` takes would be the screen
+        // lying about what an edit does.
+        assert_eq!(hide(3, 10), "那**年**冬**天**");
+        // One that reaches only the first shows only the first.
+        assert_eq!(hide(0, 4), "那**年**冬天");
+        // And one that stops exactly where a construct begins has not reached
+        // it: `to` is the far edge, and it is exclusive.
+        assert_eq!(hide(0, 1), "那年冬天");
     }
 
     #[test]

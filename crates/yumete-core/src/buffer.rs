@@ -43,6 +43,11 @@ pub struct Buffer {
     /// that touches the copy asks this first; it is the whole reason the
     /// feature cannot eat the work it exists to save.
     owns_swap: bool,
+    /// How many times the text has changed.
+    ///
+    /// What lets an answer *about the whole document* — which line is inside a
+    /// code fence, say — be worked out once per edit instead of once per frame.
+    revision: u64,
     /// This buffer's own edit history.
     ///
     /// Per buffer, not per editor: a single shared stack means `u` in one file
@@ -87,6 +92,7 @@ impl Buffer {
             cursor: 0,
             label: None,
             history: History::default(),
+            revision: 0,
             pending_draft: None,
             owns_swap: false,
         }
@@ -101,6 +107,7 @@ impl Buffer {
             cursor: 0,
             label: None,
             history: History::default(),
+            revision: 0,
             pending_draft: None,
             owns_swap: false,
         }
@@ -129,6 +136,7 @@ impl Buffer {
             cursor: 0,
             label: None,
             history: History::default(),
+            revision: 0,
             pending_draft,
             owns_swap: false,
         })
@@ -147,6 +155,12 @@ impl Buffer {
         self.label = Some(label.to_string());
     }
 
+    /// How many times the text has changed — a cache key for anything derived
+    /// from the whole document.
+    pub fn revision(&self) -> u64 {
+        self.revision
+    }
+
     /// Whether the buffer has unsaved modifications.
     pub fn is_modified(&self) -> bool {
         self.modified
@@ -159,6 +173,7 @@ impl Buffer {
     pub fn insert(&mut self, char_idx: usize, text: &str) {
         self.rope.insert(char_idx, text);
         self.modified = true;
+        self.revision += 1;
     }
 
     /// Remove the characters in `range` (a half-open range of `char` indices),
@@ -166,6 +181,7 @@ impl Buffer {
     pub fn remove(&mut self, range: Range<usize>) {
         self.rope.remove(range);
         self.modified = true;
+        self.revision += 1;
     }
 
     // ---- Crash recovery (Feature #79) -------------------------------------
@@ -354,6 +370,7 @@ impl Buffer {
     pub fn undo(&mut self, cursor: usize) -> Option<usize> {
         let prev = self.history.undo.pop()?;
         self.history.redo.push(self.here(cursor));
+        self.revision += 1;
         self.rope = prev.rope;
         self.modified = prev.modified;
         Some(prev.cursor.min(self.rope.len_chars()))
@@ -363,6 +380,7 @@ impl Buffer {
     pub fn redo(&mut self, cursor: usize) -> Option<usize> {
         let next = self.history.redo.pop()?;
         self.history.undo.push(self.here(cursor));
+        self.revision += 1;
         self.rope = next.rope;
         self.modified = next.modified;
         Some(next.cursor.min(self.rope.len_chars()))
