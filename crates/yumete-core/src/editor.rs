@@ -327,7 +327,10 @@ impl Editor {
     fn count_report(&self) -> String {
         let rope = self.current_buffer().rope();
         let (start, end) = self.selection();
-        let (text, what) = if end > start {
+        // Whether the writer *made* a selection is a question about the span
+        // they dragged, not about the range an edit would take — that one is
+        // never empty, since it always holds the cursor's own grapheme.
+        let (text, what) = if self.span().0 != self.span().1 {
             (rope.slice(start..end).to_string(), "選區")
         } else {
             (rope.to_string(), "全篇")
@@ -624,7 +627,37 @@ impl Editor {
     /// cursor). Helix treats the cursor as a one-wide selection, so `d` still
     /// deletes the grapheme under a collapsed cursor.
     pub fn selection(&self) -> (usize, usize) {
+        let (start, end) = (self.anchor.min(self.cursor), self.anchor.max(self.cursor));
+        // The grapheme the cursor sits on is *inside* the selection, as it is
+        // in Helix. Without this the block cursor covers a character that an
+        // edit would not touch — `f。d` left the 。 behind, `e` never reached
+        // the end of its word, and what the screen showed was not what `d` took.
+        //
+        // Insert mode is the exception: there the cursor is a bar between two
+        // graphemes and covers nothing.
+        if self.mode == Mode::Insert {
+            return (start, end);
+        }
+        (
+            start,
+            motion::next_grapheme(self.current_buffer().rope(), end),
+        )
+    }
+
+    /// The half-open range the cursor and anchor literally span, before the
+    /// cursor's own grapheme is added. What motions and the caret work in.
+    fn span(&self) -> (usize, usize) {
         (self.anchor.min(self.cursor), self.anchor.max(self.cursor))
+    }
+
+    /// Whether the writer has actually selected a range, rather than merely
+    /// standing on a character.
+    ///
+    /// [`Self::selection`] is never empty — the cursor's own grapheme is always
+    /// in it — so it cannot answer this. The renderer needs the difference: a
+    /// bare cursor is drawn as a cursor, not as a one-character highlight.
+    pub fn has_selection(&self) -> bool {
+        self.anchor != self.cursor
     }
 
     /// The text typed so far in Command mode (without the leading `:`).
@@ -1250,7 +1283,7 @@ impl Editor {
                     false,
                     e.segmenter.as_ref(),
                 );
-                e.select_to(p);
+                e.select_up_to(p);
             }),
             Key::Char('e') => self.repeat(count, |e| {
                 let p = motion::next_word_end(
@@ -1277,7 +1310,7 @@ impl Editor {
                     true,
                     e.segmenter.as_ref(),
                 );
-                e.select_to(p);
+                e.select_up_to(p);
             }),
             Key::Char('E') => self.repeat(count, |e| {
                 let p = motion::next_word_end(
@@ -1328,16 +1361,14 @@ impl Editor {
                 // A count deletes that many graphemes when there is nothing
                 // selected, the way `3x` does in vim; with a selection it is
                 // the selection that goes, once.
-                let (start, end) = self.selection();
-                if start == end && count > 1 {
+                if self.span().0 == self.span().1 && count > 1 {
                     self.extend_by_graphemes(count);
                 }
                 self.delete_selection();
             }
             Key::Char('c') => {
                 self.snapshot();
-                let (start, end) = self.selection();
-                if start == end && count > 1 {
+                if self.span().0 == self.span().1 && count > 1 {
                     self.extend_by_graphemes(count);
                 }
                 self.delete_selection();
@@ -1742,9 +1773,12 @@ impl Editor {
             // search that only moved the cursor made `/` the one motion after
             // which `d` did something other than what the screen showed.
             Some(pos) => {
+                // On the match's last grapheme, not one past it — the selection
+                // covers the cursor's own grapheme.
                 let end = (pos + pattern.chars().count()).min(len);
+                let head = motion::prev_grapheme(rope, end).max(pos);
                 self.anchor = pos;
-                self.cursor = end;
+                self.cursor = head;
                 self.extend = false;
                 self.refresh_goal_column();
             }
@@ -1832,8 +1866,12 @@ impl Editor {
 
     /// Select the whole buffer (Helix `%`).
     fn select_all(&mut self) {
+        let rope = self.current_buffer().rope();
+        // On the last grapheme, not one past it: the selection now covers the
+        // grapheme the cursor is on.
+        let last = motion::prev_grapheme(rope, rope.len_chars());
         self.anchor = 0;
-        self.cursor = self.current_buffer().char_count();
+        self.cursor = last;
         self.goal_column = 0;
     }
 
@@ -1849,6 +1887,7 @@ impl Editor {
         } else {
             rope.len_chars()
         };
+        let tail = motion::prev_grapheme(rope, tail).max(head);
         self.anchor = head;
         self.cursor = tail;
     }
@@ -1928,14 +1967,7 @@ impl Editor {
     /// replacing it with one character — so `r` on a selected word turns the
     /// whole word into that character, one for one.
     fn replace_chars(&mut self, c: char) {
-        let (start, selected) = self.selection();
-        // A collapsed cursor stands for the character it is on.
-        let collapsed = selected == start;
-        let end = if collapsed {
-            motion::right(self.current_buffer().rope(), start).max(start + 1)
-        } else {
-            selected
-        };
+        let (start, end) = self.selection();
         let end = end.min(self.current_buffer().char_count());
         if start >= end {
             return;
@@ -1947,8 +1979,9 @@ impl Editor {
         buffer.insert(start, &text);
         // The selection is what it was: `r` writes over the text without moving
         // through it, so `r` then `l` steps one character, not two.
+        let head = motion::prev_grapheme(self.current_buffer().rope(), end).max(start);
         self.anchor = start;
-        self.cursor = if collapsed { start } else { end };
+        self.cursor = head;
         self.clamp_cursor();
     }
 
@@ -2155,6 +2188,9 @@ impl Editor {
             return;
         }
 
+        // With no selection this annotates the character under the cursor,
+        // which is in the selection like any other; only an empty buffer has
+        // nothing to annotate.
         let (start, end) = self.selection();
         if end <= start {
             self.status = "put the cursor in a reading, or select what to annotate".to_string();
@@ -2273,10 +2309,13 @@ impl Editor {
             self.status = format!("no surrounding {open}{close}");
             return;
         };
+        // `end` is the closing bracket's own index. The head goes on the last
+        // character the selection covers, not one past it — the cursor's
+        // grapheme is inside the selection.
         let (a, b) = if around {
-            (start, end + 1)
+            (start, end)
         } else {
-            (start + 1, end)
+            (start + 1, end.saturating_sub(1))
         };
         self.anchor = a;
         self.cursor = b.max(a);
@@ -2431,6 +2470,23 @@ impl Editor {
         self.refresh_goal_column();
     }
 
+    /// Select forward to *just before* `pos` — for `w`, which names where the
+    /// next word begins rather than where this selection ends. The character
+    /// that begins the next word belongs to the next `w`, not this one.
+    fn select_up_to(&mut self, pos: usize) {
+        let old = self.cursor;
+        let rope = self.current_buffer().rope();
+        self.cursor = if pos > old {
+            motion::prev_grapheme(rope, pos).max(old)
+        } else {
+            pos
+        };
+        if !self.extend {
+            self.anchor = old;
+        }
+        self.refresh_goal_column();
+    }
+
     /// Set the cursor, always collapsing the selection, and refresh the goal
     /// column. Used when entering Insert mode and after a search jump.
     fn set_cursor(&mut self, pos: usize) {
@@ -2482,12 +2538,7 @@ impl Editor {
     /// Where `a` (append) places the cursor: after the selection, or one grapheme
     /// past the cursor when the selection is collapsed.
     fn append_position(&self) -> usize {
-        let (start, end) = self.selection();
-        if start == end {
-            motion::right(self.current_buffer().rope(), self.cursor)
-        } else {
-            end
-        }
+        self.selection().1
     }
 
     /// Select the current line, extending line-wise on repeated presses (`x`).
@@ -2504,6 +2555,7 @@ impl Editor {
         } else {
             rope.line_to_char(next_line)
         };
+        let sel_end = motion::prev_grapheme(rope, sel_end).max(sel_start);
         self.anchor = sel_start;
         self.cursor = sel_end;
         self.refresh_goal_column();
@@ -2514,7 +2566,9 @@ impl Editor {
     fn extend_by_graphemes(&mut self, n: usize) {
         let rope = self.current_buffer().rope();
         let mut end = self.cursor;
-        for _ in 0..n {
+        // `n` graphemes counted from the cursor's own, which is already in the
+        // selection, so the head moves `n - 1` further.
+        for _ in 1..n {
             let next = motion::right(rope, end);
             if next == end {
                 break;
@@ -2528,11 +2582,7 @@ impl Editor {
     /// Delete the current selection (Helix `d`). A collapsed selection deletes
     /// the grapheme under the cursor. The caller takes the undo snapshot.
     fn delete_selection(&mut self) {
-        let (mut start, mut end) = self.selection();
-        if start == end {
-            end = motion::right(self.current_buffer().rope(), self.cursor);
-            start = self.cursor;
-        }
+        let (start, end) = self.selection();
         if end > start {
             // Deleting yanks, as it does in Helix: `d` then `p` moves text.
             let text = self.current_buffer().rope().slice(start..end).to_string();
@@ -2631,10 +2681,9 @@ impl Editor {
     }
 
     fn yank(&mut self) {
-        let (start, mut end) = self.selection();
-        if start == end {
-            end = motion::right(self.current_buffer().rope(), self.cursor);
-        }
+        // No special case for a collapsed selection any more: there is no such
+        // thing — the cursor's own grapheme is always in it.
+        let (start, end) = self.selection();
         let text = self.current_buffer().rope().slice(start..end).to_string();
         let n = end - start;
         self.store(text);
@@ -2655,6 +2704,7 @@ impl Editor {
         // two — which is exactly what the standard way of moving a paragraph
         // (`xy`, move, `p`) does most.
         let line_wise = text.ends_with('\n');
+        let (start, end) = (start, end.max(start));
         let at = if line_wise {
             let rope = self.current_buffer().rope();
             let line = rope.char_to_line(if after { end.max(start) } else { start });
@@ -2679,8 +2729,11 @@ impl Editor {
         };
         let len = text.chars().count();
         self.current_buffer_mut().insert(at, &text);
+        // The pasted text becomes the selection, ending on its last grapheme.
+        let rope = self.current_buffer().rope();
+        let head = motion::prev_grapheme(rope, at + len).max(at);
         self.anchor = at;
-        self.cursor = at + len;
+        self.cursor = head;
         self.refresh_goal_column();
     }
 
@@ -3083,7 +3136,7 @@ mod tests {
     #[test]
     fn ruby_mode_annotates_a_selection() {
         let mut ed = typed("他說口很難");
-        press(&mut ed, "gg2lvl"); // select 口
+        press(&mut ed, "gg2lv"); // select 口
         ed.execute(":ruby").unwrap();
         assert_eq!(ed.mode(), Mode::Ruby);
         assert_eq!(ed.prompt(), Some(('注', "")), "a fresh reading");
@@ -3142,10 +3195,26 @@ mod tests {
     }
 
     #[test]
-    fn ruby_mode_needs_something_to_annotate() {
+    fn ruby_mode_annotates_the_character_under_the_cursor() {
+        // There is no such thing as "nothing selected" any more: the cursor's
+        // own 字 is in the selection, and annotating one 字 is the common case.
         let mut ed = typed("他說口很難");
+        press(&mut ed, "gg2l");
         ed.execute(":ruby").unwrap();
-        assert_eq!(ed.mode(), Mode::Normal, "no selection, no group");
+        assert_eq!(ed.mode(), Mode::Ruby);
+        submit_reading(&mut ed, "kǒu");
+        assert_eq!(
+            ed.current_buffer().text(),
+            "他說<ruby>口<rt>kǒu</rt></ruby>很難"
+        );
+    }
+
+    #[test]
+    fn ruby_mode_needs_something_to_annotate() {
+        // An empty buffer really does have nothing.
+        let mut ed = Editor::new();
+        ed.execute(":ruby").unwrap();
+        assert_eq!(ed.mode(), Mode::Normal, "nothing to annotate");
         assert!(!ed.status().is_empty(), "and it says so");
     }
 
@@ -3317,9 +3386,10 @@ mod tests {
     #[test]
     fn alt_semicolon_flips_which_end_the_cursor_is_on() {
         let mut ed = typed("一二三四五");
-        press(&mut ed, "gglvll"); // select 二三四, cursor at the far end
+        press(&mut ed, "gglvll"); // select 二三四, cursor on the last of them
         let (start, end) = ed.selection();
-        assert_eq!(ed.cursor(), end);
+        assert_eq!((start, end), (1, 4));
+        assert_eq!(ed.cursor(), 3, "the cursor is on the selection's last 字");
         ed.on_key(Key::Alt(';'));
         assert_eq!(ed.selection(), (start, end), "the range is unchanged");
         assert_eq!(ed.cursor(), start, "but the cursor is at the other end");
@@ -3333,7 +3403,7 @@ mod tests {
         let mut ed = typed("甲乙丙");
         press(&mut ed, "gg");
         press(&mut ed, "\"a"); // into register a…
-        press(&mut ed, "vly");
+        press(&mut ed, "vy");
         press(&mut ed, "gg2l");
         press(&mut ed, "vy"); // …and 丙 into the unnamed one
         press(&mut ed, "%");
@@ -3344,7 +3414,7 @@ mod tests {
     #[test]
     fn deleting_yanks_so_text_can_be_moved() {
         let mut ed = typed("甲乙丙");
-        press(&mut ed, "ggvld"); // cut 甲
+        press(&mut ed, "ggvd"); // cut 甲
         assert_eq!(ed.current_buffer().text(), "乙丙");
         press(&mut ed, "glp"); // and put it at the end
         assert_eq!(ed.current_buffer().text(), "乙丙甲");
@@ -3489,7 +3559,7 @@ mod tests {
     #[test]
     fn replace_swaps_the_selection_for_the_register() {
         let mut ed = typed("甲乙丙");
-        press(&mut ed, "vl"); // select 甲
+        press(&mut ed, "v"); // select 甲
         press(&mut ed, "y"); // yank it
         press(&mut ed, "%R"); // replace the whole buffer with the register
         assert_eq!(ed.current_buffer().text(), "甲");
@@ -3590,7 +3660,7 @@ mod tests {
         // Two `l` for two characters: a selection here is half-open, so `v`
         // starts one of width zero rather than one covering the cursor's own
         // grapheme the way Helix does.
-        press(&mut ed, "vll"); // select 春江
+        press(&mut ed, "vl"); // select 春江
         press(&mut ed, "*");
         // Back to the top, then `n`: the pattern `*` stored is the selection,
         // and the next occurrence of it is the second 春江.
@@ -3666,7 +3736,7 @@ mod tests {
     fn counting_a_selection_measures_the_scene_not_the_book() {
         let mut ed = typed("春江潮水連海平");
         press(&mut ed, "gg");
-        press(&mut ed, "vll"); // 春江 selected
+        press(&mut ed, "vl"); // 春江 selected
         ed.execute(":wc").unwrap();
         let report = ed.status().to_string();
         assert!(report.starts_with("選區"), "{report}");
@@ -3944,11 +4014,12 @@ mod tests {
         ed.on_key(Key::Char('g'));
         ed.on_key(Key::Char('g')); // cursor at 0
 
-        // f + 'w' jumps to the 'w' of "world" (char index 6) and selects to it.
+        // f + 'w' jumps to the 'w' of "world" (char index 6) and selects
+        // through it — `f` is inclusive, so `f。d` takes the 。 with it.
         ed.on_key(Key::Char('f'));
         ed.on_key(Key::Char('w'));
         assert_eq!(ed.cursor(), 6);
-        assert_eq!(ed.selection(), (0, 6));
+        assert_eq!(ed.selection(), (0, 7));
 
         // t + 'd' from there stops one before the 'd' (index 9).
         ed.on_key(Key::Char('t'));
@@ -3971,10 +4042,10 @@ mod tests {
         ed.on_key(Key::Char('g'));
         ed.on_key(Key::Char('g')); // cursor at 0
 
-        // v enters select mode; three l's extend the selection to cover "abc".
+        // v enters select mode; two l's extend the selection to cover "abc" —
+        // the cursor's own grapheme is already in it.
         ed.on_key(Key::Char('v'));
         assert!(ed.is_extending());
-        ed.on_key(Key::Char('l'));
         ed.on_key(Key::Char('l'));
         ed.on_key(Key::Char('l'));
         assert_eq!(ed.selection(), (0, 3));
@@ -3994,9 +4065,8 @@ mod tests {
         ed.on_key(Key::Char('g'));
         ed.on_key(Key::Char('g')); // cursor at 0
 
-        // Select "ab" (v + l l), yank it, then paste after → "ababc".
+        // Select "ab" (v + l), yank it, then paste after → "ababc".
         ed.on_key(Key::Char('v'));
-        ed.on_key(Key::Char('l'));
         ed.on_key(Key::Char('l'));
         assert_eq!(ed.selection(), (0, 2));
         ed.on_key(Key::Char('y'));
@@ -4263,6 +4333,37 @@ mod tests {
         assert!(!swap.exists());
 
         std::fs::remove_dir_all(&dir).ok();
+    }
+
+    /// The selection covers the grapheme the cursor is on, as it does in Helix.
+    /// Without that, the block cursor sits on a character an edit would not
+    /// touch — what the screen shows is not what `d` takes.
+    #[test]
+    fn what_the_cursor_covers_is_what_an_edit_takes() {
+        // `f` and `t` reach through their target.
+        let mut ed = typed("那年冬天，雪下得早。");
+        press(&mut ed, "gg");
+        press(&mut ed, "f，");
+        ed.on_key(Key::Char('d'));
+        assert_eq!(ed.current_buffer().text(), "雪下得早。");
+
+        // `e` reaches the end of its word.
+        let mut ed = typed("hello world");
+        press(&mut ed, "gge");
+        ed.on_key(Key::Char('d'));
+        assert_eq!(ed.current_buffer().text(), " world");
+
+        // One `l` in select mode covers two characters, not one.
+        let mut ed = typed("春江潮水");
+        press(&mut ed, "ggvl");
+        assert_eq!(ed.selection(), (0, 2));
+
+        // And a bare cursor is a selection of one, so `d` takes that one.
+        let mut ed = typed("春江潮水");
+        press(&mut ed, "gg");
+        assert!(!ed.has_selection(), "standing on a 字 is not selecting it");
+        ed.on_key(Key::Char('d'));
+        assert_eq!(ed.current_buffer().text(), "江潮水");
     }
 
     #[test]

@@ -278,6 +278,7 @@ Phases are ordered by priority, most writer-critical first:
 | 80  | **Report a broken config**                 | config | P2    | A typo was silently dropped before  | Done   |
 | 81  | **East-Asian ambiguous width**             | cjk    | P1    | `—` `…` `“”` shifted every line     | Done   |
 | 82  | **Files a writer actually has**            | core   | P2    | BOM, non-UTF-8, a closed pipe       | Done   |
+| 83  | **The selection covers the cursor's 字**   | core   | P1    | Helix's model; `f。d` took no 。    | Done   |
 
 ---
 
