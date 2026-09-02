@@ -134,6 +134,17 @@ fn typst_headings(text: &str) -> Vec<(usize, usize, String)> {
         .collect()
 }
 
+/// How `i`, `a` and `c` enter a cell.
+#[derive(Debug, Clone, Copy)]
+enum CellEdit {
+    /// Before its first character.
+    Start,
+    /// After its last.
+    End,
+    /// Take the whole thing out and start again.
+    Replace,
+}
+
 /// Which line holds the row with each key, and what it was built from.
 struct KeyIndex {
     /// The buffer, its revision, and how many lines it had.
@@ -1934,9 +1945,51 @@ impl Editor {
             // A cell whose column is a foreign key is a link, and Enter is what
             // follows a link.
             Key::Enter => self.follow_cell(),
+            // The three ways into a cell. `i` is at its first character, `a`
+            // after its last, and `c` replaces the whole thing — which for a
+            // grid is the common case: you land on a cell to give it a new
+            // value, not to amend the value it has.
+            Key::Char('i') => self.edit_cell(CellEdit::Start),
+            Key::Char('a') | Key::Char('A') => self.edit_cell(CellEdit::End),
+            Key::Char('I') => self.edit_cell(CellEdit::Start),
+            Key::Char('c') => self.edit_cell(CellEdit::Replace),
             _ => return false,
         }
         true
+    }
+
+    /// Enter a cell to type in it.
+    fn edit_cell(&mut self, how: CellEdit) {
+        let Some((line, cell)) = self.cell_position() else {
+            return;
+        };
+        let Some((start, end)) = self.cell_span(line, cell) else {
+            return;
+        };
+        self.snapshot();
+        match how {
+            CellEdit::Start => self.set_cursor(start),
+            CellEdit::End => self.set_cursor(end),
+            CellEdit::Replace => {
+                // The cell exactly, and not one character more: a selection
+                // here would cover the head's own grapheme — Helix's model —
+                // and the character after a cell's last is the delimiter, so
+                // the two neighbours would be joined into one.
+                if end > start {
+                    let text = self.current_buffer().rope().slice(start..end).to_string();
+                    self.store(text);
+                    self.current_buffer_mut().remove(start..end);
+                }
+                self.set_cursor(start);
+            }
+        }
+        self.enter_insert();
+    }
+
+    /// The bounds of the cell the cursor is in, for clamping Insert to it.
+    fn insert_bounds(&self) -> Option<(usize, usize)> {
+        let (line, cell) = self.cell_position()?;
+        self.cell_span(line, cell)
     }
 
     /// Whether the cursor sits at the first character of its cell.
@@ -3702,9 +3755,38 @@ impl Editor {
                 _ => {}
             }
         }
-        // Inside a grid, Insert mode is scoped to one cell: the two keys that
-        // could reach out of it are the two that would join two cells into one
-        // or split a row in half, and neither is ever what was meant.
+        // Inside a grid, Insert mode is scoped to one cell — that is what "edit
+        // this cell" means. The keys that could reach out of it are the two
+        // that would join two cells into one or split a row in half, and the
+        // ones that simply walk out the side.
+        if let Some((start, end)) = self.insert_bounds() {
+            match key {
+                // Within the cell these move by character, which is how you
+                // reach the middle of a 拆分 sequence; at its edge they stop
+                // rather than stepping into the cell next door.
+                Key::Left => {
+                    if self.cursor > start {
+                        self.move_horizontal(motion::left);
+                    }
+                    return;
+                }
+                Key::Right => {
+                    if self.cursor < end {
+                        self.move_horizontal(motion::right);
+                    }
+                    return;
+                }
+                Key::Home => return self.set_cursor(start),
+                Key::End => return self.set_cursor(end),
+                // A row is not a paragraph: stepping up or down mid-word would
+                // leave half a value in one cell and half in another.
+                Key::Up | Key::Down => {
+                    self.status = "一格之內：先 Esc 再換行".to_string();
+                    return;
+                }
+                _ => {}
+            }
+        }
         if self.table.is_some() {
             match key {
                 Key::Char(c) => {
@@ -6478,6 +6560,64 @@ mod tests {
             links.iter().any(|&(c, line)| c == '木' && line.is_none()),
             "木 has no row any more, and the panel says so: {links:?}"
         );
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn a_cell_is_entered_three_ways_and_typing_stays_inside_it() {
+        let (dir, csv) = a_table("inside");
+        let mut ed = Editor::new();
+        ed.open_file(&csv).unwrap();
+        ed.goto_line(2);
+        press(&mut ed, "l");
+        assert_eq!(ed.cell_text(1, 1), "⿰木目");
+
+        // `i` is the cell's first character…
+        ed.on_key(Key::Char('i'));
+        assert_eq!(ed.mode(), Mode::Insert);
+        assert_eq!(ed.cursor(), ed.cell_span(1, 1).unwrap().0);
+        // …and inside, the arrows move by character, which is how the middle
+        // of a 拆分 sequence is reached at all.
+        ed.on_key(Key::Right);
+        ed.on_key(Key::Right);
+        ed.on_key(Key::Char('金'));
+        assert_eq!(ed.cell_text(1, 1), "⿰木金目");
+        // At the cell's edge they stop rather than stepping next door.
+        ed.on_key(Key::End);
+        ed.on_key(Key::Right);
+        ed.on_key(Key::Right);
+        assert_eq!(ed.cursor(), ed.cell_span(1, 1).unwrap().1, "held at the edge");
+        ed.on_key(Key::Home);
+        ed.on_key(Key::Left);
+        assert_eq!(ed.cursor(), ed.cell_span(1, 1).unwrap().0);
+        // Up and down would leave half a value in one cell and half in another.
+        ed.on_key(Key::Down);
+        assert_eq!(ed.cursor_line(), 1, "{}", ed.status());
+        ed.on_key(Key::Esc);
+        ed.on_key(Key::Char('u'));
+
+        // `a` is after its last character.
+        press(&mut ed, "a");
+        assert_eq!(ed.cursor(), ed.cell_span(1, 1).unwrap().1);
+        ed.on_key(Key::Char('金'));
+        assert_eq!(ed.cell_text(1, 1), "⿰木目金");
+        ed.on_key(Key::Esc);
+        ed.on_key(Key::Char('u'));
+
+        // `c` takes the whole cell out and starts again — the common case in a
+        // grid, where you land on a cell to give it a new value.
+        press(&mut ed, "c");
+        assert_eq!(ed.mode(), Mode::Insert);
+        assert_eq!(ed.cell_text(1, 1), "", "emptied");
+        ed.on_key(Key::Char('土'));
+        assert_eq!(ed.cell_text(1, 1), "土");
+        // The neighbours are untouched — the delimiters are still there.
+        assert_eq!(ed.cell_text(1, 0), "一");
+        assert_eq!(ed.cell_text(1, 2), "⿰木目");
+        ed.on_key(Key::Esc);
+        ed.on_key(Key::Char('u'));
+        assert_eq!(ed.cell_text(1, 1), "⿰木目", "and it all undoes in one step");
 
         std::fs::remove_dir_all(&dir).ok();
     }
