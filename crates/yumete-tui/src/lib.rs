@@ -1727,23 +1727,46 @@ fn draw_status(
 /// the page's own ground rather than reversed, so a blank one reads as part of
 /// the margin instead of as an empty bar.
 fn draw_hints(frame: &mut Frame, editor: &Editor, config: &Config, area: Rect) {
-    let text = editor.hint();
-    if text.is_empty() {
-        return;
-    }
-    // A message about what just happened is the loud kind; a list of keys is
-    // the quiet kind, and reads as furniture rather than as news.
-    let news = !editor.status().is_empty();
-    let (gr, gg, gb) = config.theme.gutter;
-    let style = if news {
-        Style::default().fg(Color::Rgb(0xd8, 0xc9, 0x9a))
-    } else {
-        Style::default()
-            .fg(Color::Rgb(gr.max(0x88), gg.max(0x86), gb.max(0x78)))
-            .add_modifier(Modifier::DIM)
-    };
+    use yumete_core::editor::Hint;
+    let _ = config;
+    // News is the loud kind; keys are the quiet kind and read as furniture.
+    let news = Style::default().fg(Color::Rgb(0xd8, 0xc9, 0x9a));
+    // The key is what the eye is hunting for, so it is the lit half; what it
+    // does is the half you only read once.
+    let key = Style::default().fg(Color::Rgb(0xcf, 0xc6, 0xa9));
+    let what = Style::default().fg(Color::Rgb(0x8a, 0x86, 0x76));
+    let label = Style::default()
+        .fg(Color::Rgb(0x9c, 0xb0, 0xc2))
+        .add_modifier(Modifier::BOLD);
+    let right = area.x + area.width;
     let buf = frame.buffer_mut();
-    put_text(buf, area.x + 1, area.y, area.x + area.width, &text, style);
+    let mut x = area.x + 1;
+    let mut put = |text: &str, style: Style, x: &mut u16| {
+        if *x >= right {
+            return;
+        }
+        put_text(buf, *x, area.y, right, text, style);
+        *x += yumete_cjk::str_width(text) as u16;
+    };
+    match editor.hint() {
+        Hint::Quiet => {}
+        Hint::Says(text) => put(&text, news, &mut x),
+        Hint::Keys(name, keys) => {
+            put(name, label, &mut x);
+            put("  ", what, &mut x);
+            for (k, doing) in keys {
+                if !k.is_empty() {
+                    put(k, key, &mut x);
+                    put(" ", what, &mut x);
+                }
+                put(doing, what, &mut x);
+                // Two spaces between pairs rather than a bullet: the gap is
+                // what groups a key with its meaning, and a separator between
+                // groups only competes with it.
+                put("  ", what, &mut x);
+            }
+        }
+    }
 }
 
 /// Where the cursor is, in the terms the layout is read in.

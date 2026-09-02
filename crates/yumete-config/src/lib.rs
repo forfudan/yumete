@@ -115,6 +115,14 @@ pub struct EditorConfig {
     /// off every 縱 — and buys the keys that finish a sequence you have begun,
     /// which is otherwise only in the manual.
     pub hints: bool,
+    /// Whether the 縱書 page is packed as tight as a terminal allows.
+    ///
+    /// On by default: a terminal has few enough columns as it is, and the gap,
+    /// the reading column, the hung margin and the ticks together cost about a
+    /// third of them. `:dense off` gives them back for as long as you want
+    /// them — it suppresses those things, it does not turn them off, so what
+    /// the config says about readings and 句讀 is still what it says.
+    pub dense: bool,
     /// A tick every `paper_ticks` characters down a 縱; `0` for none
     /// (Feature #102).
     ///
@@ -171,6 +179,7 @@ impl Default for EditorConfig {
             measure: 0,
             char_info: true,
             hints: true,
+            dense: true,
             paper_ticks: 0,
             tabs: Tabs::default(),
             sidebar_width: 24,
@@ -554,6 +563,7 @@ struct RawEditor {
     measure: Option<usize>,
     char_info: Option<bool>,
     hints: Option<bool>,
+    dense: Option<bool>,
     paper_ticks: Option<usize>,
 }
 
@@ -644,6 +654,9 @@ impl RawConfig {
         }
         if other.editor.hints.is_some() {
             self.editor.hints = other.editor.hints;
+        }
+        if other.editor.dense.is_some() {
+            self.editor.dense = other.editor.dense;
         }
         if other.editor.paper_ticks.is_some() {
             self.editor.paper_ticks = other.editor.paper_ticks;
@@ -752,6 +765,9 @@ impl RawConfig {
         }
         if let Some(on) = self.editor.hints {
             config.editor.hints = on;
+        }
+        if let Some(on) = self.editor.dense {
+            config.editor.dense = on;
         }
         if let Some(ticks) = self.editor.paper_ticks {
             config.editor.paper_ticks = ticks.min(64);
