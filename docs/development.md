@@ -301,6 +301,8 @@ Phases are ordered by priority, most writer-critical first:
 | 103 | **Extended Markdown**                      | core   | P2    | `==`, `[^1]`, `[[…]]`, `%%…%%`, `:::`, blocks | Done |
 | 104 | **所見即所得**                             | both   | P1    | markup off the page but the cursor's construct | Done |
 | 105 | **What a review found in #103/#104**       | both   | P1    | the invariant did not hold vertically at all | Done |
+| 106 | **Markdown or Typst, and which**           | core   | P2    | sniffed for `.txt`; Typst's own syntax | Done |
+| 107 | **A row measured in what is drawn**        | core   | P1    | wysiwyg wrapped in source and left blank rows | Done |
 
 ---
 
