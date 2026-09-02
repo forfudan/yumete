@@ -22,7 +22,7 @@
 
 pub mod segment;
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use yume_core::data_manifest::{self, DataFile, DataKind};
@@ -121,6 +121,8 @@ pub struct ImeSession {
     /// Worth knowing: a writer who has just installed a newer 靈明 and is still
     /// seeing the old candidates deserves to be told which one is answering.
     builtin: bool,
+    /// The file a table of your own was read from, if it was.
+    table_file: Option<PathBuf>,
 }
 
 impl ImeSession {
@@ -147,7 +149,47 @@ impl ImeSession {
             available,
             annotations: false,
             builtin,
+            table_file: None,
         }
+    }
+
+    /// A session over a code table read from a file of your own.
+    ///
+    /// **Any table yume-core can read**, which is more than yumete's own four:
+    /// `load_text` auto-detects `text<TAB>code`, `code<SPACE>text` and their
+    /// reverses, and strips a leading RIME YAML header — so a Rime
+    /// `.dict.yaml` for 五筆, 倉頡, 粵拼 or 朙月拼音 works as it comes, and so
+    /// does a table somebody typed by hand.
+    ///
+    /// The language layer still comes from the installed data where it is:
+    /// this replaces the *spelling*, not the language.
+    pub fn from_table_file(path: &Path) -> Result<Self, String> {
+        let text = std::fs::read_to_string(path).map_err(|e| format!("{}: {e}", path.display()))?;
+        let mut table = CodeTable::new();
+        table.load_text(&text);
+        if table.count() == 0 {
+            return Err(format!("{}：讀不出碼表", path.display()));
+        }
+        let dirs = yumete_config::data_search_dirs();
+        let mut engine = Engine::new(CodeTable::new());
+        for file in data_manifest::shared() {
+            if !matches!(file.kind, DataKind::Table) {
+                load_data_file(&mut engine, &dirs, &file);
+            }
+        }
+        engine.set_table(Arc::new(table));
+        // 靈明's rules are the ones yumete knows; a foreign table is driven by
+        // them until it says otherwise, which for a shape scheme is right.
+        engine.set_scheme_by_tag(Scheme::Lingming.tag());
+        Ok(ImeSession {
+            engine,
+            scheme: Scheme::Lingming,
+            data_dirs: dirs,
+            available: true,
+            annotations: false,
+            builtin: false,
+            table_file: Some(path.to_path_buf()),
+        })
     }
 
     /// A session using the 碼表 in the binary, whatever is installed.
@@ -175,6 +217,7 @@ impl ImeSession {
             available,
             annotations: false,
             builtin: true,
+            table_file: None,
         }
     }
 
@@ -187,6 +230,9 @@ impl ImeSession {
     pub fn table_source(&self) -> String {
         if !self.available {
             return "沒有碼表".to_string();
+        }
+        if let Some(path) = &self.table_file {
+            return path.display().to_string();
         }
         if self.builtin {
             return match builtin_version() {
@@ -232,6 +278,7 @@ impl ImeSession {
             available: false,
             annotations: false,
             builtin: false,
+            table_file: None,
         }
     }
 
@@ -249,6 +296,7 @@ impl ImeSession {
             available: false,
             annotations: false,
             builtin: false,
+            table_file: None,
         }
     }
 
@@ -262,6 +310,7 @@ impl ImeSession {
             available: true,
             annotations: false,
             builtin: false,
+            table_file: None,
         }
     }
 
@@ -280,6 +329,7 @@ impl ImeSession {
             available: true,
             annotations: false,
             builtin: false,
+            table_file: None,
         }
     }
 

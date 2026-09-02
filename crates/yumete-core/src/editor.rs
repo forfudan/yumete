@@ -1647,6 +1647,13 @@ impl Editor {
                 self.scheme_request = Some(String::from("!"));
                 Ok(CommandOutcome::Continue)
             }
+            Command::UserTable(path) => {
+                // The `=` marks it as a path rather than a scheme tag: the
+                // front end holds the IME, and this is the third thing to ask
+                // it about the same session.
+                self.scheme_request = Some(format!("={path}"));
+                Ok(CommandOutcome::Continue)
+            }
             Command::Shell { line, interactive } => {
                 self.shell_request = Some(Shell {
                     line,

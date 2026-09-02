@@ -590,6 +590,17 @@ fn shell() -> String {
     std::env::var("SHELL").unwrap_or_else(|_| "/bin/sh".to_string())
 }
 
+/// `~` at the front of a path, the way a shell would read it.
+fn shellexpand(path: &str) -> String {
+    match path.strip_prefix("~/") {
+        Some(rest) => match std::env::var("HOME") {
+            Ok(home) => format!("{home}/{rest}"),
+            Err(_) => path.to_string(),
+        },
+        None => path.to_string(),
+    }
+}
+
 /// A typesetter running in the background, and where its output is to be seen.
 ///
 /// **Not a terminal panel.** What a preview server has to say is one line — the
@@ -723,6 +734,17 @@ fn switch_scheme(ime: &mut ImeSession, tag: &str, config: &Config) -> String {
             "還沒開始打字——`:yume scheme` 載入碼表".to_string()
         } else {
             "還沒開始打字，而且這個二進制不帶碼表——先裝資料".to_string()
+        };
+    }
+    if let Some(path) = tag.strip_prefix('=') {
+        let path = std::path::PathBuf::from(shellexpand(path));
+        return match ImeSession::from_table_file(&path) {
+            Ok(mut table) => {
+                table.set_page_size(config.panel.page_size);
+                *ime = table;
+                format!("碼表：{}", path.display())
+            }
+            Err(why) => why,
         };
     }
     if tag == "!" {
