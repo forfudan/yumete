@@ -47,12 +47,12 @@ pub struct Grid {
     /// writing rather than asterisks — the same thing a ruby group's tags have
     /// always done.
     pub hide_markup: bool,
-    /// Where the cursor is, as `(line, column)`.
+    /// What the selection covers, as char indices in the buffer.
     ///
-    /// The construct the cursor is in is never hidden, so this is part of the
-    /// grid: it changes which characters occupy a slot, and everything that
-    /// asks the grid a question has to be asking about the same page.
-    pub cursor: Option<(usize, usize)>,
+    /// Every construct it touches is shown whole, so this is part of the grid:
+    /// it changes which characters occupy a slot, and everything that asks the
+    /// grid a question has to be asking about the same page.
+    pub selection: Option<(usize, usize)>,
     /// Graphemes per 縱.
     pub zong_len: usize,
     /// Which ruby dialects are laid out as readings. Empty shows the markup as
@@ -71,11 +71,12 @@ pub struct Grid {
 }
 
 impl Grid {
-    /// Take the markup off the page, with the cursor at `(line, column)`.
-    pub fn with_markup_hidden(self, on: bool, cursor: Option<(usize, usize)>) -> Grid {
+    /// Take the markup off the page, showing whole whatever `selection` (char
+    /// indices in the buffer) touches.
+    pub fn with_markup_hidden(self, on: bool, selection: Option<(usize, usize)>) -> Grid {
         Grid {
             hide_markup: on,
-            cursor,
+            selection,
             ..self
         }
     }
@@ -87,7 +88,7 @@ impl Grid {
             hanging: false,
             tatechuyoko: false,
             hide_markup: false,
-            cursor: None,
+            selection: None,
         }
     }
 
@@ -229,12 +230,12 @@ pub struct Slot {
 /// base is centred over however many rows the reading needs. That spacing is
 /// what real typesetting does and is why two adjacent readings never collide.
 pub fn line_slots(text: &str, grid: Grid) -> Vec<Slot> {
-    line_slots_at(text, grid, None)
+    line_slots_in(text, grid, None)
 }
 
-/// [`line_slots`] for the line at `line`, which is what decides whether the
-/// cursor is on it — and so which construct is shown whole.
-pub fn line_slots_at(text: &str, grid: Grid, line: Option<usize>) -> Vec<Slot> {
+/// [`line_slots`] with the part of this line the selection covers, as columns —
+/// which is what decides which constructs are shown whole.
+pub fn line_slots_in(text: &str, grid: Grid, selected: Option<(usize, usize)>) -> Vec<Slot> {
     let chars: Vec<char> = text.chars().collect();
     let groups = crate::ruby::groups(&chars, grid.ruby);
     let mut slots = Vec::new();
@@ -248,11 +249,7 @@ pub fn line_slots_at(text: &str, grid: Grid, line: Option<usize>) -> Vec<Slot> {
     // slot of its own; it joins the slot beside it, so the cursor steps over
     // `**` in one press and the wrap length counts writing.
     let hidden = if grid.hide_markup {
-        let cursor = grid
-            .cursor
-            .filter(|(l, _)| Some(*l) == line)
-            .map(|(_, column)| column);
-        crate::markdown::hidden(&crate::markdown::spans(text), cursor)
+        crate::markdown::hidden(&crate::markdown::spans(text), selected)
     } else {
         Vec::new()
     };
@@ -404,6 +401,25 @@ fn push_plain(
             mark,
         });
     }
+
+    // A hidden run still pending when the run ends — the markup before a ruby
+    // group, say — has no slot after it to join, so it joins the one before.
+    // Left dropped, its characters would belong to no slot at all, and the
+    // cursor could be put on one of them.
+    if let Some(at) = swallowed {
+        match slots.last_mut() {
+            Some(last) => last.end = last.end.max(to),
+            // Nothing before it either: the whole run is markup, and it still
+            // needs somewhere for the cursor to stand.
+            None => slots.push(Slot {
+                start: at,
+                end: to,
+                text: String::new(),
+                ruby: None,
+                mark: None,
+            }),
+        }
+    }
 }
 
 /// Lay out one ruby group: the base centred against its reading.
@@ -542,7 +558,15 @@ pub fn zong_count_in_line(rope: &Rope, line: usize, grid: Grid) -> usize {
 
 /// The rows `line` draws as, under `grid`.
 fn line_grid(rope: &Rope, line: usize, grid: Grid) -> Vec<Slot> {
-    line_slots(&line_text(rope, line), grid)
+    // Where the selection falls on *this* line is what decides which constructs
+    // are shown whole, so it is worked out here, where the rope is.
+    let text = line_text(rope, line);
+    let selected = grid.selection.and_then(|(from, to)| {
+        let start = rope.line_to_char(line);
+        let end = start + text.chars().count();
+        (to >= start && from <= end).then(|| (from.max(start) - start, to.min(end) - start))
+    });
+    line_slots_in(&text, grid, selected)
 }
 
 /// Locate the char index `pos` in the 縱 grid.
@@ -934,7 +958,7 @@ mod tests {
         hanging: false,
         tatechuyoko: false,
         hide_markup: false,
-        cursor: None,
+        selection: None,
     };
 
     /// Readings laid out, so the ruby tests exercise the layout.
@@ -1350,7 +1374,7 @@ mod tests {
         // beside it, so `l` steps over it in one press and a 縱 holds writing
         // rather than asterisks.
         let grid = G.with_markup_hidden(true, None);
-        let slots = line_slots_at("那**年**冬", grid, Some(0));
+        let slots = line_slots_in("那**年**冬", grid, None);
         let texts: Vec<&str> = slots.iter().map(|s| s.text.as_str()).collect();
         assert_eq!(texts, ["那", "年", "冬"]);
         // …and the ranges cover every character of the line between them, so
@@ -1362,8 +1386,8 @@ mod tests {
         assert_eq!((slots[2].start, slots[2].end), (4, 7), "**冬");
 
         // The construct the cursor is in is shown whole.
-        let open = G.with_markup_hidden(true, Some((0, 4)));
-        let texts: Vec<String> = line_slots_at("那**年**冬", open, Some(0))
+        let open = G.with_markup_hidden(true, Some((4, 4)));
+        let texts: Vec<String> = line_slots_in("那**年**冬", open, Some((4, 4)))
             .into_iter()
             .map(|s| s.text)
             .collect();
@@ -1371,9 +1395,65 @@ mod tests {
     }
 
     #[test]
+    fn the_cursors_own_construct_is_shown_in_the_vertical_page_too() {
+        // The whole invariant depends on where the selection is: without it the
+        // construct under the cursor is hidden like any other, and `j` steps
+        // onto an asterisk that is not on the screen.
+        let rope = Rope::from_str("那**年**冬\n");
+        let grid = G.with_markup_hidden(true, Some((4, 4)));
+        let texts: Vec<String> = zong_slots(
+            &rope,
+            &zongs_from(&rope, Anchor::default(), grid, 1)[0],
+            grid,
+        )
+        .into_iter()
+        .map(|s| s.text)
+        .collect();
+        assert_eq!(texts, ["那", "*", "*", "年", "*", "*", "冬"]);
+
+        // With the cursor elsewhere on the line it comes off again.
+        let grid = G.with_markup_hidden(true, Some((0, 0)));
+        let texts: Vec<String> = zong_slots(
+            &rope,
+            &zongs_from(&rope, Anchor::default(), grid, 1)[0],
+            grid,
+        )
+        .into_iter()
+        .map(|s| s.text)
+        .collect();
+        assert_eq!(texts, ["那", "年", "冬"]);
+    }
+
+    #[test]
+    fn every_character_of_a_line_belongs_to_some_slot() {
+        // Nothing may be steppable-onto that is not on the screen — so the
+        // slots have to tile the line, whatever is hidden and wherever the
+        // markup sits next to a ruby group.
+        let grid = RUBY.with_markup_hidden(true, None);
+        for line in [
+            "那**年**<ruby>漢<rt>h</rt></ruby>冬",
+            "**年**<ruby>漢<rt>h</rt></ruby>",
+            "%%整行都是批注%%",
+            "`碼`",
+            "[](x)",
+            "那**年",
+        ] {
+            let slots = line_slots_in(line, grid, None);
+            let n = line.chars().count();
+            for at in 0..n {
+                assert!(
+                    slots.iter().any(|s| at >= s.start && at < s.end),
+                    "char {at} of {line:?} is in no slot"
+                );
+            }
+            assert!(!slots.is_empty(), "{line:?} has nowhere to put the cursor");
+        }
+    }
+
+    #[test]
     fn markup_at_the_end_of_a_line_joins_the_slot_before_it() {
         let grid = G.with_markup_hidden(true, None);
-        let slots = line_slots_at("那年**冬**", grid, Some(0));
+        let slots = line_slots_in("那年**冬**", grid, None);
         let texts: Vec<&str> = slots.iter().map(|s| s.text.as_str()).collect();
         assert_eq!(texts, ["那", "年", "冬"]);
         // The last slot reaches the end of the line, so the caret past it sits

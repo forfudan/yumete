@@ -1195,7 +1195,10 @@ fn draw_horizontal(
             let runs = match &marked {
                 Some((line, runs)) if *line == row.line => runs,
                 _ => {
-                    marked = Some((row.line, editor.markup_line(row.line)));
+                    // Inside a fence or a page's metadata nothing is markup;
+                    // colouring `**` there misreports what the file says.
+                    let block = blocks.get(row.line).copied().unwrap_or_default();
+                    marked = Some((row.line, editor.markup_line_in(row.line, block)));
                     &marked.as_ref().unwrap().1
                 }
             };
@@ -1233,7 +1236,13 @@ fn draw_horizontal(
                 let b = (b - start_in_line).min(chars.len());
                 let (r, g, bl) = seg_colors[n % seg_colors.len()];
                 for style in styles.iter_mut().take(b).skip(a.min(b)) {
-                    *style = style.bg(Color::Rgb(r, g, bl));
+                    // Only where nothing has already claimed the ground. A word
+                    // tint is the quietest of the three layers — it must not
+                    // rub out a `==highlight==`, which exists *to be* a ground,
+                    // nor a container's own colour.
+                    if style.bg.is_none() {
+                        *style = style.bg(Color::Rgb(r, g, bl));
+                    }
                 }
             }
         }
@@ -1289,10 +1298,15 @@ fn draw_horizontal(
         // A block's ground runs the width of the row, not just under its words:
         // an aside is a block on the page because it is a block on paper.
         if ground.bg.is_some() {
+            // What is *drawn*, not what the source is: markup taken off the
+            // page took its columns with it, so the ground would otherwise stop
+            // short of the right edge by exactly the hidden width.
             let used: usize = gutter
                 + chars
                     .iter()
-                    .map(|&c| yumete_cjk::char_width(c))
+                    .zip(&shown)
+                    .filter(|(_, &on)| on)
+                    .map(|(&c, _)| yumete_cjk::char_width(c))
                     .sum::<usize>()
                 + break_cell.len();
             let rest = (text_area.width as usize).saturating_sub(used);
@@ -2725,6 +2739,43 @@ mod tests {
         let at = terminal.get_cursor_position().unwrap();
         // 那年冬 is six cells; the four asterisks took their columns with them.
         assert_eq!(at.x, 6, "the caret followed the markup off the page");
+    }
+
+    #[test]
+    fn nothing_is_markup_inside_a_fence() {
+        // What is written in a code block is written verbatim. Colouring `**`
+        // there — let alone taking it off the page — misreports the file.
+        let mut editor = editor_with("那年\n```\nlet a = **b**;\n```\n冬天");
+        let mut config = Config::default();
+        config.editor.line_numbers = LineNumbers::None;
+        config.editor.show_segmentation = false;
+
+        let buffer = render(&editor, &config, 40, 8);
+        assert_eq!(row_text(&buffer, 2).trim_end(), "let a = **b**;");
+        let bold = (0..40).any(|x| buffer[(x, 2)].style().add_modifier.contains(Modifier::BOLD));
+        assert!(!bold, "code is not emphasis");
+
+        // …and 所見即所得 leaves it alone too.
+        editor.execute(":wysiwyg").unwrap();
+        let buffer = render(&editor, &config, 40, 8);
+        assert_eq!(row_text(&buffer, 2).trim_end(), "let a = **b**;");
+    }
+
+    #[test]
+    fn the_word_overlay_is_the_quietest_layer() {
+        // A `==highlight==` exists *to be* a ground; the word tint must not rub
+        // it out, nor a container's colour.
+        let editor = editor_with("那==年==冬");
+        let mut config = Config::default();
+        config.editor.line_numbers = LineNumbers::None;
+        config.editor.show_segmentation = true;
+        let buffer = render(&editor, &config, 40, 6);
+
+        // 年 is at cell 6 (那 + the two `=`), and keeps the highlight's ground.
+        let highlight = (0..40)
+            .map(|x| buffer[(x, 0)].style().bg)
+            .find(|bg| *bg == Some(Color::Rgb(0x54, 0x4c, 0x2c)));
+        assert!(highlight.is_some(), "the word tint erased the highlight");
     }
 
     #[test]

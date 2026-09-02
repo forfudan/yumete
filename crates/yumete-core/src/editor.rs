@@ -239,11 +239,18 @@ pub struct Editor {
     /// same reason: the renderer asks for every paragraph on screen, every
     /// frame, and the answer only changes when the paragraph does.
     markup_cache: RefCell<HashMap<usize, (u64, Vec<crate::markdown::Span>)>>,
+    /// The block of every line, against the buffer it was worked out for and
+    /// that buffer's revision.
+    block_cache: RefCell<Option<((usize, u64), Vec<crate::markdown::Block>)>>,
     /// Whether Markdown is coloured at all (Feature #96).
     show_markup: bool,
     /// 所見即所得 (Feature #104): the markup comes off the page, except on the
     /// construct the cursor is in.
     wysiwyg: bool,
+    /// Which ruby dialects were being laid out before 所見即所得 turned them
+    /// all on, so leaving it gives back what the writer had rather than
+    /// nothing.
+    ruby_before: Option<Dialects>,
     /// The command-line completion in progress: the prefix Tab started from, and
     /// which match is selected. The prefix is kept because the typed text is
     /// replaced by each candidate in turn, so the line itself can no longer say
@@ -387,8 +394,10 @@ impl Editor {
             hanging: false,
             segment_cache: RefCell::new(SegmentCache::new()),
             markup_cache: RefCell::new(HashMap::new()),
+            block_cache: RefCell::new(None),
             show_markup: true,
             wysiwyg: false,
+            ruby_before: None,
             ruby: Dialects::only(crate::ruby::Dialect::Html),
             layout: Layout::default(),
             zong_length: DEFAULT_ZONG_LENGTH,
@@ -742,6 +751,17 @@ impl Editor {
         self.show_markup
     }
 
+    /// Which block the line at `line` belongs to.
+    ///
+    /// Walks from the top, because a fence opened above decides what this line
+    /// means. Cached, because everything on a page asks.
+    pub fn block_of(&self, line: usize) -> crate::markdown::Block {
+        self.blocks_through(line)
+            .get(line)
+            .copied()
+            .unwrap_or_default()
+    }
+
     /// Which block each line from the top of the buffer through `last` belongs
     /// to (Feature #103).
     ///
@@ -752,26 +772,42 @@ impl Editor {
     /// on a novel — unlike the inline runs, which are per character and are
     /// cached per paragraph.
     pub fn blocks_through(&self, last: usize) -> Vec<crate::markdown::Block> {
-        let rope = self.current_buffer().rope();
-        let last = last.min(rope.len_lines().saturating_sub(1));
-        let mut scanner = crate::markdown::BlockScanner::new();
-        let mut out = Vec::with_capacity(last + 1);
+        let buffer = self.current_buffer();
+        let rope = buffer.rope();
+        let lines = rope.len_lines();
+        let last = last.min(lines.saturating_sub(1));
         if !self.show_markup {
-            out.resize(last + 1, crate::markdown::Block::Prose);
-            return out;
+            return vec![crate::markdown::Block::Prose; last + 1];
         }
-        for line in rope.lines_at(0).take(last + 1) {
-            let owned;
-            let text: &str = match line.as_str() {
-                Some(text) => text,
-                None => {
-                    owned = line.to_string();
-                    &owned
-                }
+        // Worked out once per edit, not once per frame. Blocks depend on the
+        // whole document above a line, so asking per row was quadratic — and
+        // the answer only changes when the text does.
+        let key = (self.current, buffer.revision());
+        if let Some((cached, blocks)) = self.block_cache.borrow().as_ref() {
+            if *cached == key {
+                return blocks[..=last.min(blocks.len() - 1)].to_vec();
+            }
+        }
+        let mut scanner = crate::markdown::BlockScanner::new();
+        let mut blocks = Vec::with_capacity(lines);
+        for line in 0..lines {
+            // Only the line's opening is read: every decision is about that,
+            // and materialising each paragraph copied the whole novel.
+            let start = rope.line_to_char(line);
+            let end = if line + 1 < lines {
+                rope.line_to_char(line + 1)
+            } else {
+                rope.len_chars()
             };
-            out.push(scanner.feed(text));
+            let prefix: String = rope
+                .chars_at(start)
+                .take((end - start).min(crate::markdown::PREFIX))
+                .collect();
+            blocks.push(scanner.feed(&prefix, end - start));
         }
-        out
+        let through = blocks[..=last.min(blocks.len() - 1)].to_vec();
+        *self.block_cache.borrow_mut() = Some((key, blocks));
+        through
     }
 
     /// Whether the markup is taken off the page (所見即所得).
@@ -785,17 +821,23 @@ impl Editor {
     /// though only the vertical page can show one, since that is the only
     /// layout with a column to put it in.
     pub fn set_wysiwyg(&mut self, on: bool) -> bool {
+        if on == self.wysiwyg {
+            return self.wysiwyg;
+        }
         self.wysiwyg = on;
-        self.ruby = if on {
+        if on {
             // Every dialect: 所見即所得 means whatever the file is written in.
+            // What was set before is put aside, not thrown away — a writer who
+            // had `:ruby-on` and glances at 所見即所得 should get it back.
+            self.ruby_before = Some(self.ruby);
             let mut all = Dialects::NONE;
             for dialect in crate::ruby::Dialect::ALL {
                 all.insert(dialect);
             }
-            all
+            self.ruby = all;
         } else {
-            Dialects::NONE
-        };
+            self.ruby = self.ruby_before.take().unwrap_or(Dialects::NONE);
+        }
         self.wysiwyg
     }
 
@@ -808,11 +850,46 @@ impl Editor {
         if !self.wysiwyg {
             return Vec::new();
         }
-        let spans = self.markup_line(line);
+        // Inside a fence nothing is markup, so nothing comes off.
+        let spans = self.markup_line_in(line, self.block_of(line));
+        crate::markdown::hidden(&spans, self.selected_columns(line))
+    }
+
+    /// The part of `line` the selection covers, as columns within it, or `None`
+    /// when the selection is elsewhere.
+    ///
+    /// The selection, not the cursor: the anchor is a place in the text too,
+    /// and every construct between the two ends has to be shown or the
+    /// highlight would cover fewer characters than `d` takes.
+    fn selected_columns(&self, line: usize) -> Option<(usize, usize)> {
         let rope = self.current_buffer().rope();
-        let cursor = (self.cursor_line() == line)
-            .then(|| self.cursor.saturating_sub(rope.line_to_char(line)));
-        crate::markdown::hidden(&spans, cursor)
+        if line >= rope.len_lines() {
+            return None;
+        }
+        let start = rope.line_to_char(line);
+        let mut text = rope.line(line).to_string();
+        while text.ends_with('\n') || text.ends_with('\r') {
+            text.pop();
+        }
+        let end = start + text.chars().count();
+        let (from, to) = self.selection();
+        (to >= start && from <= end).then(|| (from.max(start) - start, to.min(end) - start))
+    }
+
+    /// The Markdown runs of `line`, cached against the paragraph's own text.
+    ///
+    /// `block` says what kind of line it is: inside a fence or a page's
+    /// metadata there is no markup at all, and colouring `**` there — let alone
+    /// taking it off the page — would misreport what the file says.
+    pub fn markup_line_in(
+        &self,
+        line: usize,
+        block: crate::markdown::Block,
+    ) -> Vec<crate::markdown::Span> {
+        if block.is_literal() {
+            return Vec::new();
+        }
+        self.markup_line(line)
     }
 
     /// The Markdown runs of `line`, cached against the paragraph's own text.
@@ -1030,6 +1107,15 @@ impl Editor {
                     "句讀 hang in the margin".to_string()
                 } else {
                     "句讀 take a square each".to_string()
+                };
+                Ok(CommandOutcome::Continue)
+            }
+            Command::ToggleMarkup => {
+                let on = self.set_markup_visible(!self.show_markup);
+                self.status = if on {
+                    "Markdown 著色".to_string()
+                } else {
+                    "不著色".to_string()
                 };
                 Ok(CommandOutcome::Continue)
             }
@@ -1269,13 +1355,10 @@ impl Editor {
     /// laid out. Every 縱 question takes this, so the cursor and the page can
     /// never disagree about where a row begins.
     pub fn grid(&self) -> Grid {
-        let rope = self.current_buffer().rope();
-        let line = self.cursor_line();
-        let column = self.cursor.saturating_sub(rope.line_to_char(line));
         Grid::new(self.zong_length, self.ruby)
             .with_tatechuyoko(self.tatechuyoko)
             .with_hanging(self.hanging)
-            .with_markup_hidden(self.wysiwyg && self.show_markup, Some((line, column)))
+            .with_markup_hidden(self.wysiwyg && self.show_markup, Some(self.selection()))
     }
 
     /// Whether 句讀 hang in the margin beside the character they follow.
