@@ -290,6 +290,43 @@ impl Editor {
         }
     }
 
+    /// How many buffers are open, and which one is showing (both 1-based, for
+    /// the status line).
+    pub fn buffer_position(&self) -> (usize, usize) {
+        (self.current + 1, self.buffers.len())
+    }
+
+    /// Show the next buffer, wrapping (Helix `gn`, `:buffer-next`).
+    pub fn next_buffer(&mut self) {
+        let next = (self.current + 1) % self.buffers.len();
+        self.show_buffer(next);
+    }
+
+    /// Show the previous buffer, wrapping (Helix `gp`, `:buffer-previous`).
+    pub fn prev_buffer(&mut self) {
+        let count = self.buffers.len();
+        let previous = (self.current + count - 1) % count;
+        self.show_buffer(previous);
+    }
+
+    /// Switch to buffer `index`, putting the cursor back where it was left.
+    fn show_buffer(&mut self, index: usize) {
+        if index == self.current || index >= self.buffers.len() {
+            return;
+        }
+        let at = self.cursor;
+        self.buffers[self.current].save_cursor(at);
+        self.current = index;
+        let restored = self.current_buffer().saved_cursor();
+        self.set_cursor(restored);
+        self.extend = false;
+        // Segmentation is cached per line number, and the lines are a different
+        // document now.
+        self.segment_cache.borrow_mut().clear();
+        let (n, total) = self.buffer_position();
+        self.status = format!("{} [{n}/{total}]", self.current_buffer().display_name());
+    }
+
     /// The active buffer.
     pub fn current_buffer(&self) -> &Buffer {
         &self.buffers[self.current]
@@ -392,6 +429,14 @@ impl Editor {
             }
             Command::FormatRuby(dialect) => {
                 self.format_ruby(dialect);
+                Ok(CommandOutcome::Continue)
+            }
+            Command::NextBuffer => {
+                self.next_buffer();
+                Ok(CommandOutcome::Continue)
+            }
+            Command::PreviousBuffer => {
+                self.prev_buffer();
                 Ok(CommandOutcome::Continue)
             }
             Command::ToggleHanging => {
@@ -1116,6 +1161,9 @@ impl Editor {
             Key::Char('h') => motion::line_start(rope, self.cursor),
             Key::Char('l') => motion::line_end(rope, self.cursor),
             Key::Char('s') => motion::line_first_non_blank(rope, self.cursor),
+            // Goto the next / previous buffer, as Helix binds them.
+            Key::Char('n') => return self.next_buffer(),
+            Key::Char('p') => return self.prev_buffer(),
             _ => return,
         };
         self.move_head(pos);
@@ -2237,6 +2285,10 @@ impl Editor {
     /// [`Editor::new`] starts with, it is *replaced* rather than stacked on top
     /// of, so `yumete file` results in exactly one buffer.
     fn add_buffer(&mut self, buffer: Buffer) {
+        // Remember where the buffer being left had its cursor, so coming back
+        // to it returns to the same place.
+        let at = self.cursor;
+        self.buffers[self.current].save_cursor(at);
         if self.buffers.len() == 1
             && self.buffers[0].path().is_none()
             && self.buffers[0].char_count() == 0
@@ -2247,7 +2299,10 @@ impl Editor {
             self.buffers.push(buffer);
             self.current = self.buffers.len() - 1;
         }
-        // A freshly focused buffer starts at the top in Normal mode.
+        // A freshly focused buffer starts at the top in Normal mode. The
+        // segmentation cache is keyed by line number, and these are the lines
+        // of a different document now.
+        self.segment_cache.borrow_mut().clear();
         self.cursor = 0;
         self.anchor = 0;
         self.goal_column = 0;
@@ -3139,6 +3194,80 @@ mod tests {
             ed.segment_line(0).len(),
             0,
             "the edited paragraph is segmented afresh"
+        );
+    }
+
+    #[test]
+    fn buffers_can_be_switched_and_keep_their_place() {
+        let mut ed = Editor::new();
+        ed.execute(":new").unwrap();
+        // Two files, each with a cursor of its own.
+        ed.on_key(Key::Char('i'));
+        for c in "第一篇的內容".chars() {
+            ed.on_key(Key::Char(c));
+        }
+        ed.on_key(Key::Esc);
+        let left_at = ed.cursor();
+        ed.execute(":new").unwrap();
+        ed.on_key(Key::Char('i'));
+        for c in "第二篇".chars() {
+            ed.on_key(Key::Char(c));
+        }
+        ed.on_key(Key::Esc);
+        assert_eq!(ed.buffer_count(), 2);
+        assert_eq!(ed.buffer_position(), (2, 2));
+
+        // Back to the first, and the cursor is where it was left.
+        press(&mut ed, "gg");
+        ed.execute(":bp").unwrap();
+        assert_eq!(ed.buffer_position(), (1, 2));
+        assert_eq!(ed.current_buffer().text(), "第一篇的內容");
+        assert_eq!(ed.cursor(), left_at, "back where it was left");
+
+        // …and forward again, to where *that* one was left.
+        ed.execute(":bn").unwrap();
+        assert_eq!(ed.current_buffer().text(), "第二篇");
+        assert_eq!(ed.cursor(), 0, "gg had moved it to the top");
+    }
+
+    #[test]
+    fn gn_and_gp_switch_buffers_too() {
+        // `:new` on an untouched scratch buffer replaces it rather than adding
+        // one, so each needs content before the next.
+        let mut ed = typed("甲");
+        ed.execute(":new").unwrap();
+        press(&mut ed, "i");
+        ed.on_key(Key::Char('乙'));
+        ed.on_key(Key::Esc);
+        ed.execute(":new").unwrap();
+        press(&mut ed, "i");
+        ed.on_key(Key::Char('丙'));
+        ed.on_key(Key::Esc);
+        assert_eq!(ed.buffer_count(), 3);
+        press(&mut ed, "gn");
+        assert_eq!(ed.buffer_position(), (1, 3), "wraps past the end");
+        press(&mut ed, "gp");
+        assert_eq!(ed.buffer_position(), (3, 3), "and back the other way");
+    }
+
+    #[test]
+    fn switching_clamps_a_cursor_past_the_end() {
+        let mut ed = typed("一二三四五六七八九十");
+        press(&mut ed, "gl"); // to the end of a long buffer
+        let far = ed.cursor();
+        ed.execute(":new").unwrap(); // a short one
+        ed.on_key(Key::Char('i'));
+        ed.on_key(Key::Char('短'));
+        ed.on_key(Key::Esc);
+        ed.execute(":bp").unwrap();
+        ed.execute(":bn").unwrap();
+        assert!(
+            ed.cursor() <= ed.current_buffer().char_count(),
+            "a cursor from a longer buffer must not point past this one"
+        );
+        assert!(
+            far > ed.current_buffer().char_count(),
+            "the test is meaningful"
         );
     }
 
