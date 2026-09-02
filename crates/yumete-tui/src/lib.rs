@@ -1220,8 +1220,11 @@ fn draw_command_menu(frame: &mut Frame, editor: &Editor, area: Rect, status: Rec
     let focus = highlight.unwrap_or(0);
     let items: Vec<String> = matches
         .iter()
-        .map(|e| match e.alias {
-            Some(alias) => format!("{}{}  ({alias})", e.leading, e.name),
+        // The short way to write it, when there is one. An explicit alias wins
+        // over the derived prefix: `:w` is `write` because it was declared so,
+        // even though `w` is a prefix of three commands.
+        .map(|e| match e.alias.or(e.short) {
+            Some(short) => format!("{}{}  ({short})", e.leading, e.name),
             None => format!("{}{}", e.leading, e.name),
         })
         .collect();
