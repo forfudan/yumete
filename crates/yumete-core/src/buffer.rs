@@ -28,6 +28,18 @@ pub struct Buffer {
     /// chapter you were halfway through is the whole difference between two
     /// files being usable together and not.
     cursor: usize,
+    /// The draft found on disk when this buffer was opened, waiting for
+    /// `:recover` — read once, because the status line asks about it every
+    /// frame and the answer cannot change under us.
+    pending_draft: Option<String>,
+    /// Whether the recovery copy on disk is *this session's*.
+    ///
+    /// Until this session writes one, the copy beside the document belongs to
+    /// whoever wrote it — a session that crashed, or another yumete running
+    /// right now — and must be neither written over nor deleted. Everything
+    /// that touches the copy asks this first; it is the whole reason the
+    /// feature cannot eat the work it exists to save.
+    owns_swap: bool,
     /// This buffer's own edit history.
     ///
     /// Per buffer, not per editor: a single shared stack means `u` in one file
@@ -71,6 +83,8 @@ impl Buffer {
             modified: false,
             cursor: 0,
             history: History::default(),
+            pending_draft: None,
+            owns_swap: false,
         }
     }
 
@@ -82,6 +96,8 @@ impl Buffer {
             modified: false,
             cursor: 0,
             history: History::default(),
+            pending_draft: None,
+            owns_swap: false,
         }
     }
 
@@ -98,23 +114,23 @@ impl Buffer {
             Err(err) if err.kind() == io::ErrorKind::NotFound => Rope::new(),
             Err(err) => return Err(err),
         };
+        // Whether a crash left a draft here is decided once, now: the status
+        // line asks every frame, and the answer cannot change under us.
+        let pending_draft = read_draft(path, &rope);
         Ok(Buffer {
             rope,
             path: Some(path.to_path_buf()),
             modified: false,
             cursor: 0,
             history: History::default(),
+            pending_draft,
+            owns_swap: false,
         })
     }
 
     /// The file this buffer is bound to, if any.
     pub fn path(&self) -> Option<&Path> {
         self.path.as_deref()
-    }
-
-    /// Bind this buffer to `path` (used by save-as, Feature #2).
-    pub fn set_path<P: Into<PathBuf>>(&mut self, path: P) {
-        self.path = Some(path.into());
     }
 
     /// Whether the buffer has unsaved modifications.
@@ -148,54 +164,59 @@ impl Buffer {
     /// writer will never find, and one that goes stale when the document moves.
     /// An unnamed scratch buffer has nowhere to put one, and gets none.
     pub fn swap_path(&self) -> Option<PathBuf> {
-        let path = self.path.as_ref()?;
-        let name = path.file_name()?.to_string_lossy();
-        let dir = match path.parent() {
-            Some(p) if !p.as_os_str().is_empty() => p.to_path_buf(),
-            _ => PathBuf::from("."),
-        };
-        Some(dir.join(format!(".{name}.yumete")))
+        swap_path_for(self.path.as_deref()?)
     }
 
-    /// Write the recovery copy, if this buffer can have one.
+    /// Write the recovery copy, unless a draft this session has not taken over
+    /// is sitting there.
     ///
     /// Written atomically like a save, so a crash *during* the recovery write
-    /// cannot destroy the recovery copy the last one left.
-    pub fn write_swap(&self) -> io::Result<()> {
-        match self.swap_path() {
-            Some(swap) => self.write_atomically(&swap),
-            None => Ok(()),
+    /// cannot destroy the copy the last one left. Refusing to write over an
+    /// un-taken draft is what keeps one keystroke in a reopened file from
+    /// erasing the hour of work the crash left behind.
+    pub fn write_swap(&mut self) -> io::Result<()> {
+        if self.pending_draft.is_some() && !self.owns_swap {
+            return Ok(());
+        }
+        let Some(swap) = self.swap_path() else {
+            return Ok(());
+        };
+        self.write_atomically(&swap)?;
+        self.owns_swap = true;
+        Ok(())
+    }
+
+    /// Remove the recovery copy, if it is this session's to remove.
+    ///
+    /// A copy this session never wrote is somebody's unrecovered work — a
+    /// crashed session's, or a second yumete's — and quitting is not a reason
+    /// to throw it away. `:recover!` is the one thing that says so on purpose.
+    pub fn clear_swap(&mut self) {
+        if self.owns_swap {
+            self.discard_swap();
         }
     }
 
-    /// Remove the recovery copy — the work it was insuring against is on disk.
-    pub fn clear_swap(&self) {
+    /// Remove the recovery copy whoever wrote it — the writer said to.
+    pub fn discard_swap(&mut self) {
         if let Some(swap) = self.swap_path() {
             let _ = fs::remove_file(swap);
         }
+        self.pending_draft = None;
+        // Nothing is out there now, so this session writes the next one.
+        self.owns_swap = true;
     }
 
-    /// The recovered draft waiting for this buffer, if there is one worth
-    /// offering.
-    ///
-    /// Only when the recovery copy is *newer* than the document and differs
-    /// from it: a copy older than the file is the residue of a session that
-    /// ended properly, and one identical to the file has nothing to recover.
-    pub fn recovered_draft(&self) -> Option<String> {
-        let swap = self.swap_path()?;
-        let draft = fs::read_to_string(&swap).ok()?;
-        if self.rope == draft {
-            return None;
-        }
-        let newer = match (&self.path, fs::metadata(&swap).and_then(|m| m.modified())) {
-            (Some(path), Ok(swapped)) => match fs::metadata(path).and_then(|m| m.modified()) {
-                Ok(saved) => swapped > saved,
-                // No file on disk at all: everything in the copy is unrecovered.
-                Err(_) => true,
-            },
-            _ => false,
-        };
-        newer.then_some(draft)
+    /// The recovered draft waiting for this buffer, read when it was opened.
+    pub fn recovered_draft(&self) -> Option<&str> {
+        self.pending_draft.as_deref()
+    }
+
+    /// Take the draft over: this session's text is what the copy should hold
+    /// from now on. Called once the writer has loaded it.
+    pub fn adopt_draft(&mut self) {
+        self.pending_draft = None;
+        self.owns_swap = true;
     }
 
     /// Save the buffer to its bound file.
@@ -211,18 +232,41 @@ impl Buffer {
             .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "buffer has no file name"))?;
         self.write_atomically(&path)?;
         self.modified = false;
-        // The document *is* the recovery copy now.
+        // The document *is* the recovery copy now — but only ours goes; a draft
+        // the writer has not looked at yet still holds text this file does not.
         self.clear_swap();
         Ok(())
     }
 
     /// Bind the buffer to `path` and save it (the `:w <path>` / save-as case).
+    ///
+    /// The rebinding is undone if the save fails: a buffer pointing at a path
+    /// that could not be written is one whose every later save and every later
+    /// recovery write fails too, silently, while the only copy of the text is
+    /// in memory.
     pub fn save_as<P: Into<PathBuf>>(&mut self, path: P) -> io::Result<()> {
-        // The recovery copy belongs to the old name; leaving it behind would
-        // offer this text back the next time that file is opened.
-        self.clear_swap();
+        let old_path = self.path.clone();
+        let old_owns = self.owns_swap;
         self.path = Some(path.into());
-        self.save()
+        // A new name, so no copy of ours is out there under it yet.
+        self.owns_swap = false;
+        match self.save() {
+            Ok(()) => {
+                // Only now is the old name's copy stale; leaving it behind
+                // would offer this text back the next time that file is opened.
+                if old_owns {
+                    if let Some(swap) = old_path.as_deref().and_then(swap_path_for) {
+                        let _ = fs::remove_file(swap);
+                    }
+                }
+                Ok(())
+            }
+            Err(err) => {
+                self.path = old_path;
+                self.owns_swap = old_owns;
+                Err(err)
+            }
+        }
     }
 
     /// Write the rope to `path` atomically via a temporary file + rename.
@@ -314,6 +358,40 @@ impl Buffer {
             cursor,
             modified: self.modified,
         }
+    }
+}
+
+/// Where a document's recovery copy lives: a dotfile beside it,
+/// `chapter.md` → `.chapter.md.yumete`.
+fn swap_path_for(path: &Path) -> Option<PathBuf> {
+    let name = path.file_name()?.to_string_lossy();
+    let dir = match path.parent() {
+        Some(p) if !p.as_os_str().is_empty() => p.to_path_buf(),
+        _ => PathBuf::from("."),
+    };
+    Some(dir.join(format!(".{name}.yumete")))
+}
+
+/// The draft waiting beside `path`, if there is one worth offering.
+///
+/// Only when the recovery copy differs from the document *and* is not older
+/// than it. A copy older than the file is the residue of a session that ended
+/// properly, and one identical to the file has nothing to recover. "Not older"
+/// rather than "newer" on purpose: a file system that stamps whole seconds can
+/// give a copy and the save that followed it the same time, and being offered a
+/// draft one does not need costs nothing, while not being offered one costs the
+/// work.
+fn read_draft(path: &Path, rope: &Rope) -> Option<String> {
+    let swap = swap_path_for(path)?;
+    let draft = fs::read_to_string(&swap).ok()?;
+    if rope == &draft[..] {
+        return None;
+    }
+    let stamped = fs::metadata(&swap).and_then(|m| m.modified()).ok()?;
+    match fs::metadata(path).and_then(|m| m.modified()) {
+        Ok(saved) => (stamped >= saved).then_some(draft),
+        // No document on disk at all: everything in the copy is unrecovered.
+        Err(_) => Some(draft),
     }
 }
 
@@ -417,10 +495,7 @@ mod tests {
 
         // A fresh session over the same file finds the newer draft waiting.
         let reopened = Buffer::open(&path).unwrap();
-        assert_eq!(
-            reopened.recovered_draft().as_deref(),
-            Some("改了：第一稿\n")
-        );
+        assert_eq!(reopened.recovered_draft(), Some("改了：第一稿\n"));
 
         // Saving makes the document the draft, so nothing is left to recover.
         b.save().unwrap();

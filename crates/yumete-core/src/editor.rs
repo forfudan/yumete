@@ -196,6 +196,9 @@ pub struct Editor {
     /// When the recovery copies were last written, so typing does not write a
     /// file on every keystroke.
     last_swap: Option<std::time::Instant>,
+    /// Whether the writer has already been told that recovery copies cannot be
+    /// written, so the status line says it once rather than every few seconds.
+    swap_warned: bool,
     /// The text width the renderer is wrapping at, in cells. `None` until the
     /// terminal size is known; motion falls back to logical lines then.
     wrap_width: Option<usize>,
@@ -302,6 +305,7 @@ impl Editor {
             wrap_width: None,
             autosave: true,
             last_swap: None,
+            swap_warned: false,
         }
     }
 
@@ -416,6 +420,9 @@ impl Editor {
         match command::parse(line)? {
             Command::Open(path) => {
                 self.open_file(path).map_err(EditorError::Io)?;
+                // A file opened mid-session can carry a draft just as one named
+                // on the command line can.
+                self.announce_recovery();
                 Ok(CommandOutcome::Continue)
             }
             Command::NewBuffer => {
@@ -821,10 +828,25 @@ impl Editor {
             }
         }
         self.last_swap = Some(now);
-        for buffer in &self.buffers {
+        let mut failed = None;
+        for buffer in &mut self.buffers {
             if buffer.is_modified() {
-                let _ = buffer.write_swap();
+                if let Err(err) = buffer.write_swap() {
+                    failed = Some(format!("{}: {err}", buffer.display_name()));
+                }
             }
+        }
+        // Said once, not on every tick: a directory that cannot be written to
+        // will not start being writable, and a status line repeating itself is
+        // one the writer stops reading. Silence would be worse — the manual
+        // promises a copy is being kept.
+        if let Some(what) = failed {
+            if !self.swap_warned {
+                self.swap_warned = true;
+                self.status = format!("no recovery copy kept — {what}");
+            }
+        } else {
+            self.swap_warned = false;
         }
     }
 
@@ -843,6 +865,9 @@ impl Editor {
         if waiting.is_empty() {
             return;
         }
+        // The status line is cleared by the next keystroke, so the buffer also
+        // wears a `[draft]` tag until the draft is taken or thrown away — the
+        // notice has to still be there when the writer looks up.
         self.status = format!(
             "a newer draft was recovered for {} — :recover to load it, :recover! to drop it",
             waiting.join(", ")
@@ -851,12 +876,12 @@ impl Editor {
 
     /// Load this buffer's recovery draft, or throw it away (`:recover[!]`).
     fn recover(&mut self, discard: bool) -> Result<CommandOutcome, EditorError> {
-        let Some(draft) = self.current_buffer().recovered_draft() else {
+        let Some(draft) = self.current_buffer().recovered_draft().map(str::to_string) else {
             self.status = "no recovered draft for this file".to_string();
             return Ok(CommandOutcome::Continue);
         };
         if discard {
-            self.current_buffer().clear_swap();
+            self.current_buffer_mut().discard_swap();
             self.status = "recovered draft thrown away".to_string();
             return Ok(CommandOutcome::Continue);
         }
@@ -867,6 +892,7 @@ impl Editor {
         let buffer = self.current_buffer_mut();
         buffer.remove(0..len);
         buffer.insert(0, &draft);
+        self.current_buffer_mut().adopt_draft();
         self.clamp_cursor();
         self.status = "recovered draft loaded — :w to keep it, u to go back".to_string();
         Ok(CommandOutcome::Continue)
@@ -1561,13 +1587,15 @@ impl Editor {
         }
     }
 
-    /// Remove every recovery copy on the way out.
+    /// Remove this session's recovery copies on the way out.
     ///
     /// A clean quit has nothing to recover, and `:q!` is the writer saying they
     /// do not want these changes — offering them back on the next open would
-    /// undo that decision for them.
-    fn drop_recovery_copies(&self) {
-        for buffer in &self.buffers {
+    /// undo that decision for them. A draft this session never took over is
+    /// somebody else's unrecovered work and stays where it is; `:recover!` is
+    /// the way to say otherwise.
+    fn drop_recovery_copies(&mut self) {
+        for buffer in &mut self.buffers {
             buffer.clear_swap();
         }
     }
@@ -3970,14 +3998,85 @@ mod tests {
         ed.on_key(Key::Char('u'));
         assert_eq!(ed.current_buffer().text(), "第一稿\n");
 
-        // `:recover!` throws the copy away, and then there is nothing to load.
-        ed.execute(":recover!").unwrap();
-        assert!(!dir.join(".chapter.md.yumete").exists());
+        // Loading it takes it over: there is nothing left waiting.
         ed.execute(":recover").unwrap();
         assert!(
             ed.status().contains("no recovered draft"),
             "{}",
             ed.status()
+        );
+
+        // In a fresh session, `:recover!` throws the copy away instead.
+        let mut ed = Editor::new();
+        ed.execute(&format!(":open {}", path.display())).unwrap();
+        ed.execute(":recover!").unwrap();
+        assert!(!dir.join(".chapter.md.yumete").exists());
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    /// A draft this session did not write is somebody's unrecovered work. Three
+    /// things must not touch it: quitting, `:q!`, and the next keystroke.
+    #[test]
+    fn an_untaken_draft_survives_quitting_and_typing() {
+        let dir = std::env::temp_dir().join(format!("yumete-keep-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("chapter.md");
+        let swap = dir.join(".chapter.md.yumete");
+        std::fs::write(&path, "第一稿\n").unwrap();
+        std::fs::write(&swap, "第一稿加上三千字沒存的\n").unwrap();
+
+        // Typing does not write over it.
+        let mut ed = Editor::new();
+        ed.execute(&format!(":open {}", path.display())).unwrap();
+        ed.on_key(Key::Char('i'));
+        type_keys(&mut ed, "X");
+        ed.on_key(Key::Esc);
+        ed.autosave_tick();
+        assert_eq!(
+            std::fs::read_to_string(&swap).unwrap(),
+            "第一稿加上三千字沒存的\n",
+            "one keystroke erased the draft the crash left behind"
+        );
+
+        // Neither does going to look at the file somewhere else.
+        assert_eq!(ed.execute(":q!").unwrap(), CommandOutcome::Quit);
+        assert!(swap.exists(), "quitting deleted an unrecovered draft");
+
+        // Only saying so does.
+        let mut ed = Editor::new();
+        ed.execute(&format!(":open {}", path.display())).unwrap();
+        ed.execute(":recover!").unwrap();
+        assert!(!swap.exists());
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn a_failed_save_as_leaves_the_buffer_where_it_was() {
+        let dir = std::env::temp_dir().join(format!("yumete-badsave-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("chapter.md");
+        std::fs::write(&path, "第一稿\n").unwrap();
+
+        let mut ed = Editor::new();
+        ed.execute(&format!(":open {}", path.display())).unwrap();
+        ed.on_key(Key::Char('i'));
+        type_keys(&mut ed, "改");
+        ed.on_key(Key::Esc);
+        ed.autosave_tick();
+        let swap = dir.join(".chapter.md.yumete");
+        assert!(swap.exists());
+
+        // A save-as into a directory that does not exist must change nothing:
+        // rebinding to an unwritable path would make every later save and every
+        // later recovery write fail, silently.
+        let nowhere = dir.join("no-such-dir").join("chapter.md");
+        assert!(ed.execute(&format!(":w {}", nowhere.display())).is_err());
+        assert_eq!(ed.current_buffer().path(), Some(path.as_path()));
+        assert!(
+            swap.exists(),
+            "a failed save-as took the recovery copy with it"
         );
 
         std::fs::remove_dir_all(&dir).ok();
@@ -3995,7 +4094,7 @@ mod tests {
         ed.on_key(Key::Char('i'));
         type_keys(&mut ed, "改");
         ed.on_key(Key::Esc);
-        ed.current_buffer().write_swap().unwrap();
+        ed.current_buffer_mut().write_swap().unwrap();
         let swap = dir.join(".draft.md.yumete");
         assert!(swap.exists());
 
