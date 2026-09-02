@@ -353,6 +353,34 @@ fn put_slot_right(buf: &mut Buffer, x: u16, y: u16, symbol: &str, style: Style) 
     }
 }
 
+/// One column of a vertical panel, with half-width runs set 縦中横.
+///
+/// A 漢字 is a row to itself, as it is anywhere in 縱書. Latin letters and
+/// digits are not: set one to a row they read as a column of nothing and cost
+/// a row each, so consecutive ones are paired into a single slot — which is
+/// what 縦中横 is for, and what the page's own text already does with a year.
+fn packed(text: &str) -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+    let mut half = String::new();
+    for g in graphemes(text) {
+        if str_width(g) == 1 {
+            half.push_str(g);
+            if str_width(&half) == 2 {
+                out.push(std::mem::take(&mut half));
+            }
+            continue;
+        }
+        if !half.is_empty() {
+            out.push(std::mem::take(&mut half));
+        }
+        out.push(g.to_string());
+    }
+    if !half.is_empty() {
+        out.push(half);
+    }
+    out
+}
+
 /// The character candidate `i` is numbered with.
 ///
 /// Taken from the configured list — 帶圈中文數字 ㊀㊁㊂ by default. Circled
@@ -842,24 +870,29 @@ pub fn draw_candidate_panel(
     // syllable that is not there.
     let pitch = SLOT_WIDTH;
 
-    // The header is a 縱 like everything else in the panel: the code as typed
-    // runs down the rightmost column, one character to a row and hung right, and
-    // the 拆分 of the highlighted candidate follows it after a blank.
-    let mut header: Vec<String> = graphemes(&ime.display_buffer()).map(String::from).collect();
-    if let Some(comment) = candidates
+    // The code as typed runs down the rightmost column — but **packed**: a run
+    // of half-width letters goes two to a row (縦中横), the way a year does in
+    // 縱書. `Dyu_Do_Ne` set one letter to a row is nine rows of nothing, and
+    // with 拆分 on it made the panel taller than the page it was covering.
+    let header = packed(&ime.display_buffer());
+    // The 拆分 of the highlighted candidate is a *different* thing from the
+    // code, so it gets a column of its own rather than being stacked under it.
+    // Down one column the two together decided the panel's height by their
+    // sum; side by side they decide it by the longer of the two.
+    let comment = candidates
         .get(highlight)
         .map(|c| c.comment.as_str())
         .filter(|c| !c.is_empty())
-    {
-        header.push(String::new());
-        header.extend(graphemes(comment).map(String::from));
-    }
+        .map(packed);
 
     // Each column is the number, a blank row, then the candidate. The gap is
     // what stops the number reading as the first character of the word.
     // Column 0 is the header; the candidates run leftward from column 1, the
     // direction the text they are joining runs.
     let mut columns: Vec<Vec<String>> = vec![header];
+    if let Some(comment) = comment {
+        columns.push(comment);
+    }
     columns.extend(candidates.iter().enumerate().map(|(i, cand)| {
         // Number, a blank row, the candidate, then the keys still owed.
         let mut column = vec![index_mark(&config.panel.markers, i), String::new()];
