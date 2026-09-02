@@ -230,6 +230,25 @@ pub fn parse(input: &str) -> Result<Command, CommandError> {
                     })
             }
         }
+        // Everything about the input method under one word. `:scheme` and
+        // `:chaifen` still work — a spelling somebody has learned is not worth
+        // taking away — but there is now one word to remember instead of two,
+        // and it lists what it takes.
+        "yume" => {
+            let mut parts = rest.split_whitespace();
+            match parts.next() {
+                None => Err(CommandError::MissingArgument("yume")),
+                Some("scheme") => match parts.next() {
+                    Some(tag) => Ok(Command::SetScheme(tag.to_string())),
+                    None => Err(CommandError::MissingArgument("scheme")),
+                },
+                Some("chaifen") => Ok(Command::ToggleChaifen),
+                Some(other) => Err(CommandError::InvalidArgument {
+                    command: "yume",
+                    value: other.to_string(),
+                }),
+            }
+        }
         "chaifen" | "cf" => Ok(Command::ToggleChaifen),
         "scheme" | "sch" => {
             if rest.is_empty() {
@@ -312,7 +331,49 @@ pub fn parse(input: &str) -> Result<Command, CommandError> {
                 Err(_) => return Err(CommandError::MissingArgument("toc")),
             }
         })),
-        "ruby" => Ok(Command::Ruby),
+        // `:ruby` on its own is the verb — edit the reading here. With a word
+        // after it, it is the setting: whether readings are laid out at all,
+        // and which spellings of them count.
+        "ruby" if rest.is_empty() => Ok(Command::Ruby),
+        "ruby" => {
+            let mut parts = rest.split_whitespace();
+            let first = parts.next().unwrap_or("");
+            let second = parts.next();
+            let on = |word: Option<&str>| match word {
+                None | Some("on") => Ok(true),
+                Some("off") => Ok(false),
+                Some(other) => Err(CommandError::InvalidArgument {
+                    command: "ruby",
+                    value: other.to_string(),
+                }),
+            };
+            match first {
+                "on" | "off" => Ok(Command::RenderRuby {
+                    dialect: None,
+                    on: first == "on",
+                }),
+                "format" => {
+                    let name = second.ok_or(CommandError::MissingArgument("ruby format"))?;
+                    let dialect =
+                        Dialect::parse_name(name).ok_or_else(|| CommandError::InvalidArgument {
+                            command: "ruby",
+                            value: name.to_string(),
+                        })?;
+                    Ok(Command::FormatRuby(dialect))
+                }
+                name => {
+                    let dialect =
+                        Dialect::parse_name(name).ok_or_else(|| CommandError::InvalidArgument {
+                            command: "ruby",
+                            value: name.to_string(),
+                        })?;
+                    Ok(Command::RenderRuby {
+                        dialect: Some(dialect),
+                        on: on(second)?,
+                    })
+                }
+            }
+        }
         "ruby-on" => Ok(Command::RenderRuby {
             dialect: None,
             on: true,
@@ -349,7 +410,6 @@ pub fn parse(input: &str) -> Result<Command, CommandError> {
 }
 
 /// One entry of the command list: what to type, and what it does.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Entry {
     /// The command word, as typed after the `:`.
     pub name: &'static str,
@@ -357,7 +417,141 @@ pub struct Entry {
     pub alias: Option<&'static str>,
     /// One line saying what it does — short enough to sit beside the name.
     pub help: &'static str,
+    /// What may follow it.
+    pub args: Args,
 }
+
+/// What may follow a command, or one of its words.
+///
+/// **A parent command is not a mechanism of its own.** `:yume scheme` is a
+/// command whose argument happens to be a verb, and that is the whole of it:
+/// implement completing an *argument* and grouping falls out for nothing, with
+/// no second code path to keep honest and no second thing for a reader to
+/// learn. It also means a group can be one level deep or three without the
+/// completion knowing the difference.
+pub enum Args {
+    /// Nothing follows.
+    None,
+    /// One of these words — subcommands are exactly this.
+    Words(&'static [Word]),
+    /// A path, completed from the file system by the caller.
+    Path,
+    /// Anything at all; the string is the placeholder to show while typing.
+    Free(&'static str),
+}
+
+/// One word a command accepts, and what may follow *it*.
+pub struct Word {
+    pub name: &'static str,
+    pub help: &'static str,
+    pub then: Args,
+}
+
+/// A word offered by completion, whether a command or an argument.
+#[derive(Clone, Copy)]
+pub struct Choice {
+    pub name: &'static str,
+    pub alias: Option<&'static str>,
+    pub help: &'static str,
+}
+
+/// The two words every switch takes.
+/// `:yume` and what may follow it — the input method's own commands, under
+/// the one word a reader would think of when looking for them.
+const YUME: &[Word] = &[
+    Word {
+        name: "scheme",
+        help: "換方案（靈明、日月…）",
+        then: Args::Free("<方案名>"),
+    },
+    Word {
+        name: "chaifen",
+        help: "候選旁的拆分注解",
+        then: Args::Words(ON_OFF),
+    },
+];
+
+/// The languages a file may be read as.
+const SYNTAXES: &[Word] = &[
+    Word {
+        name: "markdown",
+        help: "`#` 標題、`**粗**`",
+        then: Args::None,
+    },
+    Word {
+        name: "typst",
+        help: "`=` 標題、`#import`",
+        then: Args::None,
+    },
+];
+
+/// Which way the page runs.
+const LAYOUTS: &[Word] = &[
+    Word {
+        name: "vertical",
+        help: "竪排，縱從右往左",
+        then: Args::None,
+    },
+    Word {
+        name: "horizontal",
+        help: "橫排",
+        then: Args::None,
+    },
+];
+
+/// `:ruby` and what may follow it — the four `render-ruby-*` and
+/// `format-ruby-*` commands, folded into the one word a reader remembers.
+const RUBY: &[Word] = &[
+    Word {
+        name: "on",
+        help: "排出注音",
+        then: Args::None,
+    },
+    Word {
+        name: "off",
+        help: "顯示源碼",
+        then: Args::None,
+    },
+    Word {
+        name: "html",
+        help: "認 `<ruby>` 這一種",
+        then: Args::Words(ON_OFF),
+    },
+    Word {
+        name: "typst",
+        help: "認 `#ruby(…)` 這一種",
+        then: Args::Words(ON_OFF),
+    },
+    Word {
+        name: "format",
+        help: "把注音改寫成另一種寫法",
+        then: Args::Words(&[
+            Word {
+                name: "html",
+                help: "改寫成 `<ruby>`",
+                then: Args::None,
+            },
+            Word {
+                name: "typst",
+                help: "改寫成 `#ruby(…)`",
+                then: Args::None,
+            },
+        ]),
+    },
+];
+
+const ON_OFF: &[Word] = &[
+    Word {
+        name: "on",
+        help: "開",
+        then: Args::None,
+    },
+    Word {
+        name: "off",
+        help: "關",
+        then: Args::None,
+    },
+];
 
 /// Every command, for the completion list.
 ///
@@ -371,211 +565,259 @@ pub const COMMANDS: &[Entry] = &[
         name: "open",
         alias: Some("o"),
         help: "open a file",
+        args: Args::Path,
     },
     Entry {
         name: "new",
         alias: None,
         help: "start an empty buffer",
+        args: Args::Path,
     },
     Entry {
         name: "write",
         alias: Some("w"),
         help: "save, optionally to a new path",
+        args: Args::Path,
     },
     Entry {
         name: "wq",
         alias: Some("x"),
         help: "save, then leave",
+        args: Args::Path,
     },
     Entry {
         name: "recover",
         alias: None,
         help: "load the recovery draft (`!` throws it away)",
+        args: Args::None,
     },
     Entry {
         name: "goto",
         alias: Some("g"),
         help: "put the cursor on a line (or just `:42`)",
+        args: Args::Free("<行號>"),
     },
     Entry {
         name: "count",
         alias: Some("wc"),
         help: "how much has been written",
+        args: Args::None,
     },
     Entry {
         name: "quit",
         alias: Some("q"),
         help: "leave; ! discards changes",
+        args: Args::None,
     },
     Entry {
         name: "undo",
         alias: Some("u"),
         help: "undo the last change",
+        args: Args::None,
     },
     Entry {
         name: "redo",
         alias: Some("red"),
         help: "redo it",
+        args: Args::None,
     },
     Entry {
         name: "segment",
         alias: Some("seg"),
         help: "word-segmentation tint",
+        args: Args::Words(ON_OFF),
     },
     Entry {
         name: "layout",
         alias: Some("lay"),
         help: "flip horizontal / vertical",
+        args: Args::Words(LAYOUTS),
     },
     Entry {
         name: "vertical",
         alias: None,
         help: "lay the text out in 縱",
+        args: Args::None,
     },
     Entry {
         name: "horizontal",
         alias: None,
         help: "lay the text out in lines",
+        args: Args::None,
+    },
+    Entry {
+        name: "yume",
+        alias: None,
+        help: "輸入法：方案、拆分注解",
+        args: Args::Words(YUME),
     },
     Entry {
         name: "scheme",
         alias: Some("sch"),
         help: "switch the input scheme (靈明 星陳 卿雲 日月 拼音)",
+        args: Args::Free("<方案名>"),
     },
     Entry {
         name: "chaifen",
         alias: Some("cf"),
         help: "拆分 beside candidates",
+        args: Args::Words(ON_OFF),
     },
     Entry {
         name: "hanging",
         alias: None,
         help: "句讀 in the margin (標點旁置)",
+        args: Args::Words(ON_OFF),
     },
     Entry {
         name: "clipboard-yank",
         alias: Some("cy"),
         help: "選區複製到系統剪貼簿（空格 y）",
+        args: Args::None,
     },
     Entry {
         name: "clipboard-paste",
         alias: Some("cp"),
         help: "從系統剪貼簿貼上（空格 p）",
+        args: Args::None,
     },
     Entry {
         name: "syntax",
         alias: Some("syn"),
         help: "markdown 還是 typst（不給參數就說現在是哪個）",
+        args: Args::Words(SYNTAXES),
     },
     Entry {
         name: "markup",
         alias: Some("md"),
         help: "Markdown 著色開關",
+        args: Args::Words(ON_OFF),
     },
     Entry {
         name: "wysiwyg",
         alias: Some("wys"),
         help: "所見即所得：標記只在光標那一處展開",
+        args: Args::None,
     },
     Entry {
         name: "source",
         alias: Some("src"),
         help: "回到源碼",
+        args: Args::None,
     },
     Entry {
         name: "dense",
         alias: None,
         help: "密排：一縱兩格，無注音、無旁置、無刻度",
+        args: Args::Words(ON_OFF),
     },
     Entry {
         name: "table",
         alias: None,
         help: "read the file as a grid; `:table off` as text",
+        args: Args::Words(ON_OFF),
     },
     Entry {
         name: "wrap",
         alias: None,
         help: "wrap long paragraphs to the next row; `:wrap 50` sets a measure",
+        args: Args::Free("<欄寬，0 = 用窗口寬>"),
     },
     Entry {
         name: "nowrap",
         alias: None,
         help: "let long paragraphs run off the edge",
+        args: Args::None,
     },
     Entry {
         name: "buffer-next",
         alias: Some("bn"),
         help: "show the next open file (gn)",
+        args: Args::None,
     },
     Entry {
         name: "buffer-close",
         alias: Some("bd"),
         help: "close this file (`!` discards changes)",
+        args: Args::None,
     },
     Entry {
         name: "export",
         alias: Some("ex"),
         help: "write out as html or typst, with the layout",
+        args: Args::Free("<檔名>"),
     },
     Entry {
         name: "grep",
         alias: Some("gr"),
         help: "search every file in the project",
+        args: Args::Free("<正則>"),
     },
     Entry {
         name: "toc",
         alias: None,
         help: "list the headings, or `:toc 3` to go to one",
+        args: Args::Free("<第幾條，不寫就列出來>"),
     },
     Entry {
         name: "buffers",
         alias: Some("ls"),
         help: "name every open file",
+        args: Args::None,
     },
     Entry {
         name: "buffer-previous",
         alias: Some("bp"),
         help: "show the previous one (gp)",
+        args: Args::None,
     },
     Entry {
         name: "ruby",
         alias: None,
-        help: "edit the reading at the cursor",
+        help: "改這裏的注音；`:ruby on|off` 是排不排",
+        args: Args::Words(RUBY),
     },
     Entry {
         name: "ruby-on",
         alias: None,
         help: "lay readings out",
+        args: Args::None,
     },
     Entry {
         name: "ruby-off",
         alias: None,
         help: "show the ruby markup",
+        args: Args::None,
     },
     Entry {
         name: "render-ruby-html",
         alias: None,
         help: "read <ruby> markup",
+        args: Args::None,
     },
     Entry {
         name: "render-ruby-typst",
         alias: None,
         help: "read #ruby() markup",
+        args: Args::None,
     },
     Entry {
         name: "format-ruby-html",
         alias: None,
         help: "rewrite readings as HTML",
+        args: Args::None,
     },
     Entry {
         name: "format-ruby-typst",
         alias: None,
         help: "rewrite readings as Typst",
+        args: Args::None,
     },
     Entry {
         name: "s/pat/rep/",
         alias: None,
         help: "substitute on this line (%s: all)",
+        args: Args::None,
     },
 ];
 
@@ -584,15 +826,86 @@ pub const COMMANDS: &[Entry] = &[
 /// An empty prefix lists everything, which is what makes `:` on its own a menu
 /// rather than a guess. A prefix that is already a whole command still lists it,
 /// so the help stays visible while the arguments are typed.
-pub fn complete(prefix: &str) -> Vec<&'static Entry> {
-    let prefix = prefix.trim_start_matches(':');
-    // Only the command word matters; once there is a space the user has moved
-    // on to arguments and the list should stop narrowing.
-    let word = prefix.split_whitespace().next().unwrap_or("");
-    COMMANDS
-        .iter()
-        .filter(|e| e.name.starts_with(word) || e.alias.is_some_and(|a| a.starts_with(word)))
-        .collect()
+pub fn complete(prefix: &str) -> Vec<Choice> {
+    complete_at(prefix).1
+}
+
+/// The same, and where in the line the offered word would go.
+///
+/// The offset is what lets a completion replace **the word being typed** rather
+/// than the whole line: `:yume sch` has to become `:yume scheme`, not `scheme`.
+pub fn complete_at(line: &str) -> (usize, Vec<Choice>) {
+    let line = line.strip_prefix(':').unwrap_or(line);
+    // Where each word starts, and the word itself. A line ending in a space is
+    // asking about a *new* word, not still about the last one.
+    let mut words: Vec<(usize, &str)> = Vec::new();
+    let mut at = 0;
+    for part in line.split(' ') {
+        if !part.is_empty() {
+            words.push((at, part));
+        }
+        at += part.len() + 1;
+    }
+    let starting_new = line.is_empty() || line.ends_with(' ');
+    let (start, typed) = if starting_new {
+        (line.len(), "")
+    } else {
+        words.pop().unwrap_or((0, ""))
+    };
+
+    // The first word names a command; every word after it walks down what that
+    // command says may follow — which is the same walk whether those words are
+    // arguments or subcommands, because they are the same thing.
+    let choices: Vec<Choice> = match words.first() {
+        None => COMMANDS
+            .iter()
+            .filter(|e| e.name.starts_with(typed) || e.alias.is_some_and(|a| a.starts_with(typed)))
+            .map(|e| Choice {
+                name: e.name,
+                alias: e.alias,
+                help: e.help,
+            })
+            .collect(),
+        Some(&(_, head)) => {
+            let Some(entry) = COMMANDS
+                .iter()
+                .find(|e| e.name == head || e.alias == Some(head))
+            else {
+                return (start, Vec::new());
+            };
+            let mut args = &entry.args;
+            for &(_, word) in &words[1..] {
+                match args {
+                    Args::Words(list) => match list.iter().find(|w| w.name == word) {
+                        Some(found) => args = &found.then,
+                        None => return (start, Vec::new()),
+                    },
+                    _ => return (start, Vec::new()),
+                }
+            }
+            match args {
+                Args::Words(list) => list
+                    .iter()
+                    .filter(|w| w.name.starts_with(typed))
+                    .map(|w| Choice {
+                        name: w.name,
+                        alias: None,
+                        help: w.help,
+                    })
+                    .collect(),
+                // A path or free text is the caller's business; there is
+                // nothing here to offer but the placeholder, which is help
+                // rather than a completion.
+                Args::Free(what) => vec![Choice {
+                    name: "",
+                    alias: None,
+                    help: what,
+                }],
+                Args::None | Args::Path => Vec::new(),
+            }
+        }
+    };
+    (start, choices)
 }
 
 /// Try to parse a substitution command (`s/pat/rep/flags`, `%s/pat/rep/flags`).
@@ -766,9 +1079,42 @@ mod tests {
             complete("cf").iter().map(|e| e.name).collect::<Vec<_>>(),
             ["chaifen"]
         );
-        // Once arguments start, the list stops narrowing.
-        assert_eq!(complete("write draft.md").len(), 1);
         assert!(complete("zzz").is_empty());
+    }
+
+    #[test]
+    fn a_space_offers_what_may_follow_the_command() {
+        // The point of the whole arrangement: nobody has to remember an
+        // argument, only a verb. `:dense ` says what may come next.
+        let words = |line: &str| -> Vec<&str> { complete(line).iter().map(|c| c.name).collect() };
+        assert_eq!(words("dense "), ["on", "off"]);
+        assert_eq!(words("dense o"), ["on", "off"]);
+        assert_eq!(words("dense of"), ["off"]);
+        assert_eq!(words("syntax "), ["markdown", "typst"]);
+        assert_eq!(words("layout v"), ["vertical"]);
+
+        // A parent command is not a mechanism of its own — its subcommands are
+        // simply the words it takes, and they go as deep as they like.
+        assert_eq!(words("ruby "), ["on", "off", "html", "typst", "format"]);
+        assert_eq!(words("ruby html "), ["on", "off"]);
+
+        // Where the word being completed starts, so a completion replaces it
+        // and not the whole line.
+        assert_eq!(complete_at("ruby ht").0, 5);
+        assert_eq!(complete_at("ruby html o").0, 10);
+        assert_eq!(complete_at("dense").0, 0);
+
+        // A command that takes free text says what it wants rather than
+        // offering a list it does not have.
+        let free = complete("goto ");
+        assert_eq!(free.len(), 1);
+        assert_eq!(free[0].name, "", "nothing to complete");
+        assert!(free[0].help.contains("行號"), "but it says what to type");
+
+        // A path is the caller's business, and a word nothing accepts is
+        // nothing rather than the whole list again.
+        assert!(complete("write draft.md ").is_empty());
+        assert!(complete("quit ").is_empty());
     }
 
     /// The other direction of `every_listed_command_parses`: a command that
@@ -804,6 +1150,7 @@ mod tests {
             "source",
             "dense",
             "table",
+            "yume",
             "wrap",
             "nowrap",
             "buffer-next",
@@ -832,18 +1179,45 @@ mod tests {
     /// commands that do not exist.
     #[test]
     fn every_listed_command_parses() {
+        /// Build a well-formed line by walking what the command says it takes.
+        ///
+        /// Derived rather than listed, so a command added to the table is
+        /// checked without anybody remembering to add it here too — and so a
+        /// subcommand that the parser does not actually accept is caught the
+        /// moment it is offered by completion.
+        fn sample(path: &str, args: &Args) -> String {
+            match args {
+                Args::None => path.to_string(),
+                Args::Path => format!("{path} a.md"),
+                Args::Words(list) => sample(&format!("{path} {}", list[0].name), &list[0].then),
+                // A word only this command knows the shape of.
+                Args::Free(_) => {
+                    let word = match path {
+                        p if p.ends_with("scheme") => "lingming",
+                        ":export" => "html",
+                        ":grep" => "x",
+                        _ => "1",
+                    };
+                    format!("{path} {word}")
+                }
+            }
+        }
+
         for entry in COMMANDS {
             let line = match entry.name {
-                // These need an argument to be well-formed.
-                "open" => ":open a.md".to_string(),
-                "goto" => ":goto 1".to_string(),
-                "grep" => ":grep x".to_string(),
-                "export" => ":export html".to_string(),
-                "scheme" => ":scheme lingming".to_string(),
                 "s/pat/rep/" => ":s/a/b/".to_string(),
-                name => format!(":{name}"),
+                name => sample(&format!(":{name}"), &entry.args),
             };
-            assert!(parse(&line).is_ok(), "{} does not parse", entry.name);
+            assert!(parse(&line).is_ok(), "{line} does not parse");
+            // Every *word* a command offers has to parse too, not only the
+            // first — completion offering a word the parser rejects is the
+            // exact drift this table exists to catch.
+            if let Args::Words(list) = &entry.args {
+                for word in *list {
+                    let line = sample(&format!(":{} {}", entry.name, word.name), &word.then);
+                    assert!(parse(&line).is_ok(), "{line} does not parse");
+                }
+            }
             if let Some(alias) = entry.alias {
                 let line = match alias {
                     "o" => ":o a.md".to_string(),

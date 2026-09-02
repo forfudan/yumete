@@ -50,8 +50,13 @@ pub struct EditorConfig {
     pub segmentation_threshold: i64,
     /// Horizontal (default) or vertical layout (Feature #61).
     pub layout: Layout,
-    /// How many characters fit in one 縱 in vertical layout. Clamped to 4–64;
-    /// the renderer lowers it further when the terminal is too short.
+    /// How many characters fit in one 縱 in vertical layout.
+    ///
+    /// `0` — the default — means **as many as the window allows**, which is the
+    /// same rule the horizontal `measure` follows: how long a column should be
+    /// is a decision about the book, and the editor has no business making one
+    /// for you. A number here (or `:wrap n`) is that decision; it is clamped to
+    /// 4–64, and the renderer lowers it further when the terminal is short.
     pub zong_length: usize,
     /// The gap between two 縱, in half-width cells (0–4).
     pub zong_gap: usize,
@@ -164,7 +169,7 @@ impl Default for EditorConfig {
             show_segmentation: true,
             segmentation_threshold: 0,
             layout: Layout::Horizontal,
-            zong_length: DEFAULT_ZONG_LENGTH,
+            zong_length: 0,
             zong_gap: DEFAULT_ZONG_GAP,
             show_chaifen: false,
             show_ruby: false,
@@ -728,7 +733,9 @@ impl RawConfig {
         if let Some(length) = self.editor.zong_length {
             // Below ~4 a 縱 stops being a column of text; above 64 no terminal
             // is tall enough and the eye loses the sweep anyway.
-            config.editor.zong_length = length.clamp(4, 64);
+            // `0` is not a length, it is "as long as the window allows", so it
+            // passes through rather than being clamped up to four.
+            config.editor.zong_length = if length == 0 { 0 } else { length.clamp(4, 64) };
         }
         if let Some(gap) = self.editor.zong_gap {
             config.editor.zong_gap = gap.min(4);

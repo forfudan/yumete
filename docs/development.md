@@ -319,6 +319,8 @@ Phases are ordered by priority, most writer-critical first:
 | 121 | **`:dense` — the packed 縱書 page**        | both   | P3    | one 縱 is two cells; restores what it took | Done |
 | 122 | **A hint row above the status line**       | both   | P2    | what happened, and what finishes a sequence | Done |
 | 123 | **`Enter` asks "who uses this?"**          | core   | P2    | a column-scoped search, walked with `n`/`N` | Done |
+| 124 | **Argument completion, and grouping**      | core   | P2    | a parent is an argument whose values are verbs | Done |
+| 125 | **The window is the default measure**      | both   | P2    | `zong_length = 0`; a fixed count is `:wrap n` | Done |
 
 ---
 
