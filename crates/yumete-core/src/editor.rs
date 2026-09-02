@@ -7925,17 +7925,17 @@ mod tests {
         assert_eq!(ed.prompt(), Some((':', "pipe ")));
 
         // Running it asks the front end, with the selection as the input.
-        for c in "sort".chars() {
+        for c in "tr -d ' '".chars() {
             ed.on_key(Key::Char(c));
         }
         ed.on_key(Key::Enter);
         let asked = ed.take_shell_request().expect("a command to run");
-        assert_eq!(asked.line, "sort");
+        assert_eq!(asked.line, "tr -d ' '");
         assert_eq!(asked.how, How::Pipe("丙\n甲\n乙\n".to_string()));
 
         // What it says goes back in place of what it was given, as one edit.
-        ed.provide_pipe_output("甲\n乙\n丙\n");
-        assert_eq!(ed.current_buffer().text(), "甲\n乙\n丙\n");
+        ed.provide_pipe_output("丙甲乙\n");
+        assert_eq!(ed.current_buffer().text(), "丙甲乙\n");
         ed.on_key(Key::Char('u'));
         assert_eq!(ed.current_buffer().text(), "丙\n甲\n乙\n", "one `u` takes it back");
 
