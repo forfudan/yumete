@@ -1155,7 +1155,7 @@ fn draw_horizontal(
             // keep alternating across the break instead of restarting.
             // The word's index *in the paragraph* picks its colour, so the two
             // keep alternating across a wrap instead of restarting each row.
-            for (n, &(a, b)) in words.iter().enumerate().filter(|(_, w)| visible(&w)) {
+            for (n, &(a, b)) in words.iter().enumerate().filter(|(_, w)| visible(w)) {
                 let a = a.saturating_sub(start_in_line);
                 let b = (b - start_in_line).min(chars.len());
                 let (r, g, bl) = seg_colors[n % seg_colors.len()];
