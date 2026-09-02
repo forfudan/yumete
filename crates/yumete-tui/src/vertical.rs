@@ -492,8 +492,22 @@ pub fn draw(
     let mark_style = Style::default().fg(Color::Rgb(0xb0, 0x8a, 0x6a));
 
     // Word ranges are per paragraph, and consecutive 縱 usually share one, so
-    // segment each paragraph once as the page is walked.
+    // segment each paragraph once as the page is walked. Its Markdown runs are
+    // held the same way, for the same reason.
     let mut segmented: Option<(usize, Vec<(usize, usize)>)> = None;
+    let mut marked: Option<(usize, Vec<yumete_core::markdown::Span>)> = None;
+
+    // Which block each line belongs to. A fence opened above decides what the
+    // lines under it mean, and there is no way to know that from a line alone —
+    // so this is walked from the top of the document down to the last line the
+    // page shows, exactly as the horizontal side does it.
+    let show_markup = editor.markup_visible();
+    let blocks = if show_markup {
+        let last = page.iter().map(|(zong, _, _)| zong.line).max().unwrap_or(0);
+        editor.blocks_through(last)
+    } else {
+        Vec::new()
+    };
 
     let buf = frame.buffer_mut();
     for (zong, slots, x) in page.iter() {
@@ -577,10 +591,38 @@ pub fn draw(
             let at = line_start + row.start;
             let len = row.end - row.start;
 
-            let style = if has_selection && at < sel_end && at + len > sel_start {
-                sel_style
-            } else if show_segmentation {
-                let column = at - line_start;
+            // The same three layers the horizontal page composes, in the same
+            // order: the block's ground, the inline runs patched onto it, then
+            // the selection over everything. Vertical had only the last of the
+            // three, so a 縱書 draft got the markup taken off the page but
+            // never coloured — half of 所見即所得.
+            let column = at - line_start;
+            let mut style = blocks
+                .get(zong.line)
+                .copied()
+                .and_then(crate::block_style)
+                .unwrap_or_default();
+
+            if show_markup {
+                let runs = match &marked {
+                    Some((line, runs)) if *line == zong.line => runs,
+                    _ => {
+                        // Inside a fence or a page's metadata nothing is
+                        // markup; colouring `**` there misreports the file.
+                        let block = blocks.get(zong.line).copied().unwrap_or_default();
+                        marked = Some((zong.line, editor.markup_line_in(zong.line, block)));
+                        &marked.as_ref().unwrap().1
+                    }
+                };
+                // A slot is one display unit and may hold several characters —
+                // a ruby group, or a 縦中横 pair — so it takes the style of any
+                // run it overlaps.
+                for run in runs.iter().filter(|r| r.end > column && r.start < column + len) {
+                    style = style.patch(crate::markup_style(run.kind));
+                }
+            }
+
+            if show_segmentation && !has_selection && style.bg.is_none() {
                 let ranges = match &segmented {
                     Some((line, ranges)) if *line == zong.line => ranges,
                     _ => {
@@ -588,16 +630,17 @@ pub fn draw(
                         &segmented.as_ref().unwrap().1
                     }
                 };
-                match ranges.iter().position(|&(a, b)| column >= a && column < b) {
-                    Some(word) => {
-                        let (r, g, b) = seg_colors[word % seg_colors.len()];
-                        Style::default().bg(Color::Rgb(r, g, b))
-                    }
-                    None => Style::default(),
+                // The quietest layer of the three: only where nothing else has
+                // claimed the ground, so it never rubs out a `==highlight==`.
+                if let Some(word) = ranges.iter().position(|&(a, b)| column >= a && column < b) {
+                    let (r, g, b) = seg_colors[word % seg_colors.len()];
+                    style = style.bg(Color::Rgb(r, g, b));
                 }
-            } else {
-                Style::default()
-            };
+            }
+
+            if has_selection && at < sel_end && at + len > sel_start {
+                style = style.patch(sel_style);
+            }
 
             // Hung right, so half-width characters line up as one edge running
             // down the 縱 beside the 漢字 rather than drifting to its left.

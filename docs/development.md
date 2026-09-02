@@ -311,6 +311,7 @@ Phases are ordered by priority, most writer-critical first:
 | 113 | **A measure to write to**                  | both   | P2    | `:wrap 50`; folds the rows, tints the margin | Done |
 | 114 | **The outline follows `#include`**         | core   | P2    | read the chapters; no compiler      | Done   |
 | 115 | **`w` opens the sidebar out**              | both   | P3    | as wide as its longest name         | Done   |
+| 116 | **Markdown colouring set vertically**      | tui    | P1    | 所見即所得 was half-done down the 縱 | Done   |
 
 ---
 
