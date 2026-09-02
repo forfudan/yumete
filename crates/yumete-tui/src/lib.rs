@@ -645,7 +645,15 @@ fn draw(
         // A grid is not prose and is not drawn as prose: no wrapping, no
         // markup, one row per line, columns that line up.
         _ if editor.table().is_some() => {
-            table::draw(frame, editor, config, text_area, &mut viewport.table)
+            // The panel takes the right of the text area, so the grid's own
+            // scrolling follows from the smaller rectangle without knowing
+            // anything about it.
+            let (grid, panel) = table::split_detail(editor, text_area);
+            let caret = table::draw(frame, editor, config, grid, &mut viewport.table);
+            if let Some(panel) = panel {
+                table::draw_detail(frame, editor, config, panel);
+            }
+            caret
         }
         WritingLayout::Horizontal => {
             draw_horizontal(frame, editor, config, text_area, &mut viewport.top)

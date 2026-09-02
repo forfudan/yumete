@@ -254,3 +254,114 @@ pub fn draw(
     }
     caret
 }
+
+/// How wide the detail panel is drawn.
+///
+/// Wide enough for a heading and a 拆分 sequence side by side, and no wider:
+/// the grid is what the window is for.
+const DETAIL_WIDTH: u16 = 30;
+
+/// Split the panel off the right of an area, if there is one and it fits.
+pub fn split_detail(editor: &Editor, area: Rect) -> (Rect, Option<Rect>) {
+    if !editor.detail_visible() || area.width < DETAIL_WIDTH * 2 {
+        return (area, None);
+    }
+    let w = DETAIL_WIDTH;
+    let grid = Rect::new(area.x, area.y, area.width - w, area.height);
+    let panel = Rect::new(area.x + area.width - w, area.y, w, area.height);
+    (grid, Some(panel))
+}
+
+/// The panel down the right: every field of the row the cursor is in.
+///
+/// The grid can only show what fits across the window; this is where the rest
+/// of a twenty-eight-column row goes, along with the fields that are worked
+/// out rather than stored. It is a *reading* surface — nothing here is edited,
+/// and nothing here scrolls out from under you as you move along the row.
+pub fn draw_detail(frame: &mut Frame, editor: &Editor, config: &Config, area: Rect) {
+    let Some(detail) = editor.detail() else {
+        return;
+    };
+    let (gr, gg, gb) = config.theme.gutter;
+    let ground = Style::default().bg(Color::Rgb(gr, gg, gb));
+    let title = ground
+        .fg(Color::Rgb(0xd8, 0xc9, 0x9a))
+        .add_modifier(Modifier::BOLD);
+    let name = ground.fg(Color::Rgb(0x9c, 0x97, 0x82));
+    let value = ground.fg(Color::Rgb(0xcf, 0xc6, 0xa9));
+    let here = ground
+        .fg(Color::Rgb(0xcf, 0xc6, 0xa9))
+        .add_modifier(Modifier::BOLD);
+    // A component with no row of its own — for a 拆分表 that is a finding, not
+    // a blank.
+    let missing = ground.fg(Color::Rgb(0xd8, 0x9a, 0x9a));
+
+    frame.render_widget(Clear, area);
+    let right = area.x + area.width;
+    let buf = frame.buffer_mut();
+    for y in area.y..area.y + area.height {
+        for x in area.x..right {
+            if let Some(cell) = buf.cell_mut((x, y)) {
+                cell.set_symbol(" ").set_style(ground);
+            }
+        }
+    }
+    // A rule down the left edge, so the panel reads as a different surface
+    // rather than as more columns of the grid.
+    for y in area.y..area.y + area.height {
+        if let Some(cell) = buf.cell_mut((area.x, y)) {
+            cell.set_symbol("│").set_style(name);
+        }
+    }
+
+    let left = area.x + 2;
+    put_text(buf, left, area.y, right, &detail.title, title);
+    let mut y = area.y + 2;
+    for (field, text) in &detail.rows {
+        if y >= area.y + area.height {
+            return;
+        }
+        let style = if *field == detail.here { here } else { name };
+        put_text(buf, left, y, right, field, style);
+        // The value on its own line when the name is long, which for a table
+        // of 拆分 it usually is not.
+        let indent = left + 10;
+        if indent < right {
+            put_text(buf, indent, y, right, text, if *field == detail.here { here } else { value });
+        }
+        y += 1;
+    }
+    if detail.links.is_empty() {
+        return;
+    }
+    y += 1;
+    if y >= area.y + area.height {
+        return;
+    }
+    put_text(buf, left, y, right, "部件（Enter 跟過去）", name);
+    y += 1;
+    let mut x = left;
+    for (c, line) in &detail.links {
+        let label = match line {
+            Some(n) => format!("{c} {}", n + 1),
+            None => format!("{c} —"),
+        };
+        let w = yumete_cjk::str_width(&label) as u16 + 2;
+        if x + w > right {
+            x = left;
+            y += 1;
+            if y >= area.y + area.height {
+                return;
+            }
+        }
+        put_text(
+            buf,
+            x,
+            y,
+            right,
+            &label,
+            if line.is_some() { value } else { missing },
+        );
+        x += w;
+    }
+}

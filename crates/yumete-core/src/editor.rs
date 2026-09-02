@@ -134,6 +134,20 @@ fn typst_headings(text: &str) -> Vec<(usize, usize, String)> {
         .collect()
 }
 
+/// What the detail panel shows about wherever the cursor is.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Detail {
+    /// What this row is called.
+    pub title: String,
+    /// The field the cursor is in, so the panel can mark it.
+    pub here: String,
+    /// Every field, as `(name, value)`. A name ending in `*` is worked out
+    /// rather than stored.
+    pub rows: Vec<(String, String)>,
+    /// The rows this cell points at, and whether each one exists.
+    pub links: Vec<(char, Option<usize>)>,
+}
+
 /// A file being read as a grid.
 #[derive(Debug, Clone)]
 pub struct TableView {
@@ -284,6 +298,9 @@ pub struct Editor {
     /// A view, never a copy: the text stays the truth, and this only says how
     /// to find the cells in it.
     table: Option<TableView>,
+    /// Whether the detail panel is wanted. It only appears where there is
+    /// something to say, so this is "show it when there is", not "show it".
+    show_detail: bool,
     /// The last known 拆分 state, so `:chaifen` can toggle it.
     chaifen: bool,
     /// What Ruby mode is editing the reading of.
@@ -459,6 +476,7 @@ impl Editor {
             clipboard_request: None,
             clipboard_read: None,
             table: None,
+            show_detail: true,
             chaifen: false,
             ruby_target: None,
             completion: None,
@@ -1885,6 +1903,9 @@ impl Editor {
             Key::Char('k') | Key::Up => self.repeat(count, |e| e.move_cell_row(false)),
             Key::Char('0') | Key::Home => self.move_cell_end(false),
             Key::Char('$') | Key::End => self.move_cell_end(true),
+            // A cell whose column is a foreign key is a link, and Enter is what
+            // follows a link.
+            Key::Enter => self.follow_cell(),
             _ => return false,
         }
         true
@@ -1912,6 +1933,177 @@ impl Editor {
             ));
         }
         None
+    }
+
+    /// Whether the detail panel is showing.
+    pub fn detail_visible(&self) -> bool {
+        self.show_detail && self.detail().is_some()
+    }
+
+    /// Show or hide the detail panel.
+    pub fn toggle_detail(&mut self) {
+        self.show_detail = !self.show_detail;
+        self.status = if self.show_detail {
+            "詳情欄：開".to_string()
+        } else {
+            "詳情欄：關".to_string()
+        };
+    }
+
+    /// What the detail panel should show, if anything.
+    ///
+    /// One panel, one question — "what is here?" — asked of whatever the
+    /// cursor is in. A table row answers with its fields; other things will
+    /// answer with theirs. The editor works out *what* to say; the front end
+    /// decides where to put it.
+    pub fn detail(&self) -> Option<Detail> {
+        let view = self.table.as_ref()?;
+        let (line, cell) = self.cell_position()?;
+        // The header names the columns; it is not a row and has no fields.
+        if view.schema.header && line == 0 {
+            return None;
+        }
+        let text = self.current_buffer().rope().line(line).to_string();
+        let spans = crate::table::cells(&text, view.schema.delimiter);
+        let value = |name: &str| -> String {
+            view.schema
+                .index_of(name)
+                .and_then(|i| spans.get(i))
+                .map(|&s| crate::table::cell_text(&text, s))
+                .unwrap_or_default()
+        };
+        // Titled by the row's key, since that is what a person calls the row.
+        let title = match &view.schema.key {
+            Some(key) => value(key),
+            None => format!("{}", line + 1),
+        };
+        let mut rows: Vec<(String, String)> = view
+            .schema
+            .columns
+            .iter()
+            .enumerate()
+            .map(|(i, column)| {
+                let text = spans
+                    .get(i)
+                    .map(|&s| crate::table::cell_text(&text, s))
+                    .unwrap_or_default();
+                (column.heading().to_string(), text)
+            })
+            .collect();
+        // Worked out, not stored — and marked as such, so nobody goes looking
+        // for a column that is not in the file.
+        for detail in &view.schema.details {
+            let from = value(detail.compute.column());
+            rows.push((
+                format!("{}*", detail.name),
+                detail.compute.apply(&from, &view.schema.ranges),
+            ));
+        }
+        Some(Detail {
+            title,
+            here: view
+                .schema
+                .columns
+                .get(cell)
+                .map(|c| c.heading().to_string())
+                .unwrap_or_default(),
+            rows,
+            links: self.cell_links(),
+        })
+    }
+
+    /// The rows this cell's contents name, when its column is a foreign key.
+    ///
+    /// A 拆分 cell is a *sequence* of components, each of which is a character
+    /// with a row of its own — so one cell points at several rows, and which
+    /// one is a question only a person can answer.
+    fn cell_links(&self) -> Vec<(char, Option<usize>)> {
+        let Some(view) = &self.table else {
+            return Vec::new();
+        };
+        let Some(jump) = &view.schema.jump else {
+            return Vec::new();
+        };
+        let Some((line, cell)) = self.cell_position() else {
+            return Vec::new();
+        };
+        let Some(column) = view.schema.columns.get(cell) else {
+            return Vec::new();
+        };
+        if !jump.from.contains(&column.name) {
+            return Vec::new();
+        }
+        let text = self.cell_text(line, cell);
+        let mut seen: Vec<char> = Vec::new();
+        for c in text.chars() {
+            if !seen.contains(&c) {
+                seen.push(c);
+            }
+        }
+        seen.into_iter().map(|c| (c, self.row_named(c))).collect()
+    }
+
+    /// Which line holds the row whose key is this character.
+    ///
+    /// A scan, not an index. A hundred thousand rows take a few milliseconds to
+    /// walk, which nobody notices on a keystroke they asked for — and an index
+    /// would have to be kept true through every edit, which is a much better
+    /// way to send somebody to the wrong row.
+    fn row_named(&self, key: char) -> Option<usize> {
+        let view = self.table.as_ref()?;
+        let jump = view.schema.jump.as_ref()?;
+        let at = view.schema.index_of(&jump.to)?;
+        let rope = self.current_buffer().rope();
+        let first = usize::from(view.schema.header);
+        for line in first..rope.len_lines() {
+            let text = rope.line(line).to_string();
+            let spans = crate::table::cells(&text, view.schema.delimiter);
+            let Some(&span) = spans.get(at) else { continue };
+            let cell = crate::table::cell_text(&text, span);
+            let mut chars = cell.chars();
+            if chars.next() == Some(key) && chars.next().is_none() {
+                return Some(line);
+            }
+        }
+        None
+    }
+
+    /// Follow this cell to the row it names.
+    ///
+    /// One component jumps; several offer a choice, because guessing which of
+    /// 「⿰木目」's parts you meant is worse than asking. A component with no row
+    /// of its own is said out loud rather than silently skipped — for a 拆分表
+    /// that absence is itself the finding.
+    fn follow_cell(&mut self) {
+        let links = self.cell_links();
+        if links.is_empty() {
+            self.status = "這一格不指向任何一行".to_string();
+            return;
+        }
+        let found: Vec<(char, usize)> = links
+            .iter()
+            .filter_map(|&(c, line)| line.map(|l| (c, l)))
+            .collect();
+        match found.as_slice() {
+            [] => {
+                let missing: String = links.iter().map(|&(c, _)| c).collect();
+                self.status = format!("表裏沒有這些字：{missing}");
+            }
+            [(_, line)] => {
+                let line = *line;
+                self.goto_line(line + 1);
+            }
+            many => {
+                let items = many
+                    .iter()
+                    .map(|&(c, line)| {
+                        crate::picker::Item::Row(line, format!("{c}  第 {} 行", line + 1))
+                    })
+                    .collect();
+                self.picker = Some(crate::picker::Picker::new("部件", items));
+                self.mode = Mode::Picker;
+            }
+        }
     }
 
     // ---- Layout (Feature #61) ---------------------------------------------
@@ -2758,6 +2950,7 @@ impl Editor {
         ('?', "命令一覽"),
         ('y', "複製到系統剪貼簿"),
         ('p', "從系統剪貼簿貼上"),
+        ('d', "詳情欄"),
     ];
 
     /// Run one key of a `Space` sequence.
@@ -2766,6 +2959,7 @@ impl Editor {
             Key::Char('e') => self.show_sidebar(crate::sidebar::View::Explorer),
             // The outline is the sidebar showing the view that has it.
             Key::Char('o') => self.show_sidebar(crate::sidebar::View::Outline),
+            Key::Char('d') => self.toggle_detail(),
             Key::Char('f') => self.open_file_picker(),
             Key::Char('b') => self.open_buffer_picker(),
             // The two prompts, opened rather than run: a search wants a pattern
@@ -3084,6 +3278,7 @@ impl Editor {
                         }
                     }
                     Some(crate::picker::Item::Buffer(i, _)) => self.show_buffer(i),
+                    Some(crate::picker::Item::Row(line, _)) => self.goto_line(line + 1),
                     None => self.status = "nothing matched".to_string(),
                 }
             }
@@ -5842,6 +6037,85 @@ mod tests {
         assert!(ed.current_buffer().text().contains("三一,"), "{}", ed.current_buffer().text());
         ed.on_key(Key::Backspace);
         assert_eq!(ed.current_buffer().text(), before, "and undoes itself");
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn the_detail_panel_says_what_the_whole_row_is() {
+        let (dir, csv) = a_table("detail");
+        let mut ed = Editor::new();
+        ed.open_file(&csv).unwrap();
+        ed.goto_line(2);
+
+        let d = ed.detail().expect("a row has fields");
+        assert_eq!(d.title, "一", "titled by its key");
+        assert_eq!(d.here, "字", "and it says which field you are in");
+        assert_eq!(
+            d.rows,
+            vec![
+                ("字".to_string(), "一".to_string()),
+                ("ids_y".to_string(), "⿰木目".to_string()),
+                ("ids_g".to_string(), "⿰木目".to_string()),
+                // Worked out, not stored, and marked so nobody looks for a
+                // column that is not in the file.
+                ("unicode*".to_string(), "U+4E00".to_string()),
+            ]
+        );
+
+        // The header is not a row and has nothing to say about itself.
+        ed.goto_line(1);
+        assert!(ed.detail().is_none());
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn a_component_leads_to_its_own_row() {
+        let dir = std::env::temp_dir().join(format!("yumete-jump-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(dir.join(".yumete").join("tables")).unwrap();
+        std::fs::write(
+            dir.join(".yumete").join("tables").join("t.toml"),
+            "[table]\nfile = ['d.csv']\nkey = 'char'\n\
+             [[table.column]]\nname = 'char'\n[[table.column]]\nname = 'ids_y'\n\
+             [table.jump]\nfrom = ['ids_y']\nto = 'char'\n",
+        )
+        .unwrap();
+        let csv = dir.join("d.csv");
+        // 木 and 目 have rows of their own; ⿰ is a descriptor and does not.
+        std::fs::write(&csv, "char,ids_y\n相,⿰木目\n木,木\n目,目\n").unwrap();
+
+        let mut ed = Editor::new();
+        ed.open_file(&csv).unwrap();
+        ed.goto_line(2);
+        press(&mut ed, "l");
+
+        // The panel lists what the cell points at, and what it cannot.
+        let d = ed.detail().unwrap();
+        assert_eq!(
+            d.links,
+            vec![('⿰', None), ('木', Some(2)), ('目', Some(3))],
+            "a descriptor has no row, and saying so is the point"
+        );
+
+        // Two of them do, so Enter asks which rather than guessing.
+        ed.on_key(Key::Enter);
+        assert_eq!(ed.mode(), Mode::Picker);
+        ed.on_key(Key::Enter);
+        assert_eq!(ed.cursor_line(), 2, "木's own row");
+        assert_eq!(ed.mode(), Mode::Normal);
+
+        // A cell with one component jumps straight there.
+        ed.goto_line(4);
+        press(&mut ed, "l");
+        ed.on_key(Key::Enter);
+        assert_eq!(ed.cursor_line(), 3, "目 is already its own row");
+
+        // A column that is not a key does not pretend to be one.
+        press(&mut ed, "0");
+        ed.on_key(Key::Enter);
+        assert!(ed.status().contains("不指向"), "{}", ed.status());
 
         std::fs::remove_dir_all(&dir).ok();
     }
