@@ -290,6 +290,7 @@ Phases are ordered by priority, most writer-critical first:
 | 92  | **The `:` menu is a popup, not a wall**    | tui    | P2    | capped and scrolled, as Helix caps its | Done  |
 | 93  | **Turning the page without a chord**       | core   | P2    | `J`/`K` half, `L`/`H` whole; join → `gJ` | Done |
 | 94  | **The file sidebar**                       | both   | P2    | `Space e`; the tree is the book's shape | Done |
+| 95  | **A tab bar for the open files**           | tui    | P3    | like a terminal's; clickable        | Done   |
 
 ---
 
