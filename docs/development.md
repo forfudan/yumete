@@ -234,17 +234,17 @@ Phases are ordered by priority, most writer-critical first:
 | 36  | Jump to outline entry                     | view   | P3    | click/keys                          |        |
 | 37  | Fold/unfold outline                       | tui    | P3    |                                     |        |
 | 38  | Space (Normal) → hotkey/help overlay      | tui    | P3    | which-key style                     |        |
-| 39  | Command palette (`:` completions)         | tui    | P4    |                                     |        |
+| 39  | Command palette (`:` completions)         | tui    | P4    | `:` menu, Tab completion            | Done   |
 | 40  | Themes (TOML, CJK-friendly)               | config | P4    | incl. segmentation overlay polish   |        |
-| 41  | Soft-wrap for prose                       | tui    | P4    | width-aware wrap                    |        |
-| 42  | Auto-save / crash recovery                | core   | P4    | swap file                           |        |
+| 41  | Soft-wrap for prose                       | tui    | P4    | width-aware wrap; see #77           | Done   |
+| 42  | Auto-save / crash recovery                | core   | P4    | swap file; see #79                  | Done   |
 | 43  | Sessions (reopen last files)              | view   | P4    |                                     |        |
-| 44  | Multiple buffers + `:bn`/`:bp`            | view   | P4    | no splits yet                       |        |
+| 44  | Multiple buffers + `:bn`/`:bp`            | view   | P4    | no splits yet; see #76              | Done   |
 | 45  | Marks / jumplist                          | core   | P4    |                                     |        |
-| 46  | Count prefixes (e.g. `3w`)                | core   | P4    |                                     |        |
-| 47  | Macros (record/replay)                    | core   | P4    |                                     |        |
+| 46  | Count prefixes (e.g. `3w`)                | core   | P4    | `3w`, `10j`, `10gg`                 | Done   |
+| 47  | Macros (record/replay)                    | core   | P4    | `q` / `Q`                           | Done   |
 | 48  | Spell/grammar hooks (CJK-aware)           | lsp    | P4    | optional                            |        |
-| 49  | Word-count / reading-time (prose)         | view   | P4    | writer QoL                          |        |
+| 49  | Word-count / reading-time (prose)         | view   | P4    | `:count`; 字 and 字符 differ        | Done   |
 | 50  | Custom 碼表 upload / register             | ime    | P4    | user `txt` (code table only)        |        |
 | 51  | Bracket/quote auto-pair (CJK-aware)       | core   | P4    | 「」『』（）                        |        |
 | 52  | Syntax highlight (tree-sitter)            | tui    | P5    | Markdown/Typst first                |        |
@@ -261,22 +261,21 @@ Phases are ordered by priority, most writer-critical first:
 | 63  | **Segmentation from Yume's language model** | ime  | P2    | 詞頻表 + 詞彙表 drive `w`/`b`/`e`   | Done   |
 | 64  | **縦中横 in the vertical page**            | core   | P2    | half-width pairs share one slot     | Done   |
 | 65  | **振假名 (ruby)**                          | tui    | P3    | HTML + Typst dialects, Ruby mode    | Done   |
+| 66  | **IME in the `/` and `:` lines**           | tui    | P2    | + `:chaifen` annotation toggle      | Done   |
 | 67  | **Command hints + Tab completion**         | tui    | P4    | `:` lists, narrows, Tab cycles       | Done   |
+| 68  | 圏点 (emphasis dots)                       | tui    | P5    | mid-term; markup still open         |        |
 | 69  | **Novel-scale performance**                | core   | P2    | word motion, overlay, search        | Done   |
+| 70  | **標點旁置 (punctuation in the margin)**   | tui    | P3    | 古文 style; `:hanging`              | Done   |
+| 71  | **Mouse wheel scrolls by 縱**              | tui    | P4    | captures the mouse, as Helix does   | Done   |
 | 72  | **The prompt's guess**                     | tui    | P4    | ghost text in `:` and `/`, Tab takes | Done   |
 | 73  | **Gap and reading column separated**       | tui    | P3    | `zong_gap = 0` still allows ruby    | Done   |
 | 74  | **Helix tutorial, second pass**            | core   | P2    | `r`, `A-;`, registers, macros, pages | Done   |
 | 75  | **Panel skin in TOML**                     | config | P4    | two colours, not a table of shades  | Done   |
 | 76  | **Switching between open buffers**         | core   | P2    | `gn`/`gp`, `:bn`/`:bp`; was a hole  | Done   |
-| 49  | **Word count**                             | core   | P4    | `:count` — 字 and 字符 differ       | Done   |
 | 77  | **Soft wrap in horizontal layout**         | both   | P1    | A paragraph is one line; it must not run off the edge | Done   |
 | 78  | **Goto line**                              | core   | P3    | `10gg`, `:42`, `:goto` — a reader's page reference | Done   |
 | 79  | **Crash recovery**                         | both   | P1    | A dotfile beside the document; `:recover` | Done   |
 | 80  | **Report a broken config**                 | config | P2    | A typo was silently dropped before  | Done   |
-| 68  | 圏点 (emphasis dots)                       | tui    | P5    | mid-term; markup still open         |        |
-| 70  | **標點旁置 (punctuation in the margin)**   | tui    | P3    | 古文 style; `:hanging`              | Done   |
-| 71  | **Mouse wheel scrolls by 縱**              | tui    | P4    | captures the mouse, as Helix does   | Done   |
-| 66  | **IME in the `/` and `:` lines**           | tui    | P2    | + `:chaifen` annotation toggle      | Done   |
 
 ---
 
