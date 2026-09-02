@@ -7951,6 +7951,19 @@ mod tests {
         assert!(!ed.current_buffer().changed_underneath());
         assert!(ed.execute("w").is_ok());
 
+        // A file that was *touched* but not changed is not a conflict. Rewriting
+        // the same bytes moves the mtime, and refusing a save for that is worse
+        // than not checking at all: three false alarms and `:w!` becomes a
+        // reflex, including at the one that matters.
+        let same = std::fs::read_to_string(&file).unwrap();
+        std::thread::sleep(std::time::Duration::from_millis(20));
+        std::fs::write(&file, &same).unwrap();
+        assert!(
+            !ed.current_buffer().changed_underneath(),
+            "same bytes, so nothing changed"
+        );
+        assert!(ed.execute("w").is_ok(), "and the save goes through quietly");
+
         // `:e!` is the other half: take what is on disk and lose what is here.
         std::fs::write(&file, "外面的版本\n").unwrap();
         assert!(ed.execute("e!").is_ok());

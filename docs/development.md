@@ -332,7 +332,7 @@ Phases are ordered by priority, most writer-critical first:
 | 134 | **靈明 embedded at build time**            | ime    | P2    | never committed; `:yume` says which one answers | Done |
 | 135 | **Release pipeline + Homebrew tap**        | ci     | P2    | see §5.3; deferred until ready to release | Planned |
 | 136 | **`:yume table` — any code table**         | ime    | P2    | Rime `.dict.yaml` as it comes; 五筆/倉頡/粵拼 | Done |
-| 137 | **A file changed on disk is not written over** | core | P0 | §5.2 group 1; `:w!` and `:e!`   | Done   |
+| 137 | **A file changed on disk is not written over** | core | P0 | `:w!`/`:e!`; a hash so it never cries wolf | Done |
 | 138 | **A macro keeps its operands**             | core   | P1    | `fq` recorded as `f` and ate the next key | Done |
 
 ---
