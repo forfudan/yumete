@@ -150,7 +150,7 @@ fn layout_page(
         .collect();
     // Measured from the page itself: one full-width reading anywhere on it
     // widens the margin for all of them.
-    let mut metrics = metrics.clone();
+    let mut metrics = *metrics;
     metrics.ruby_width = ruby_width_of(&slots);
     let xs = place(&metrics, area, &annotated);
     zongs

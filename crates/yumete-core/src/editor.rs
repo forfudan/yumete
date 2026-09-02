@@ -121,7 +121,7 @@ fn walk(root: &Path, f: &mut impl FnMut(&Path)) {
     files.sort();
     dirs.sort();
     for path in files {
-        let small = std::fs::metadata(&path).map_or(false, |m| m.len() <= GREP_MAX_BYTES);
+        let small = std::fs::metadata(&path).is_ok_and(|m| m.len() <= GREP_MAX_BYTES);
         if small {
             f(&path);
         }
