@@ -354,6 +354,8 @@ pub struct Editor {
     show_detail: bool,
     /// Whether the grid's edit guard is lifted for the operation in hand.
     table_bypass: std::cell::Cell<bool>,
+    /// The layout a grid turned the page away from, so leaving gives it back.
+    turned_for_table: Option<Layout>,
     /// Where Enter came from when it followed a footnote, and the line it
     /// landed on — so the same key comes back, and only from there.
     note_return: Option<usize>,
@@ -543,6 +545,7 @@ impl Editor {
             table: None,
             show_detail: true,
             table_bypass: std::cell::Cell::new(false),
+            turned_for_table: None,
             note_return: None,
             note_return_from: None,
             key_index: RefCell::new(None),
@@ -680,8 +683,14 @@ impl Editor {
         self.segment_cache.borrow_mut().clear();
         // Whether this file is a grid is a fact about *this* file, so it is
         // asked again — otherwise a chapter opened next to a table would
-        // inherit the table's columns.
+        // inherit the table's columns. How you were reading it, though, is a
+        // fact about you: coming back to a table you were walking by character
+        // should not silently put you back on cells.
+        let grain = self.table.as_ref().map(|v| v.grain);
         self.table_on_open();
+        if let (Some(grain), Some(view)) = (grain, self.table.as_mut()) {
+            view.grain = grain;
+        }
         // The `[n/total]` indicator is already on the status line; repeating it
         // here would print it twice on every switch.
         self.status = self.current_buffer().display_name().to_string();
@@ -1812,10 +1821,7 @@ impl Editor {
         // A grid is read across: rows run left to right and columns stack down
         // the page, which is the one thing a 縱書 layout cannot do. Rather than
         // draw something incoherent, table mode is horizontal.
-        let turned = self.layout == Layout::Vertical;
-        if turned {
-            self.set_layout(Layout::Horizontal);
-        }
+        let turned = self.turn_for_table();
         self.status = format!(
             "表格：{columns} 欄，{how}{}",
             if turned { "（已轉橫排）" } else { "" }
@@ -1825,8 +1831,26 @@ impl Editor {
 
     /// Go back to reading the file as plain text.
     pub fn leave_table(&mut self) {
+        let turned = self.turned_for_table.is_some();
+        self.leave_table_quietly();
+        self.status = if turned {
+            "表格：關（已轉回竪排）".to_string()
+        } else {
+            "表格：關".to_string()
+        };
+    }
+
+    /// Stop reading it as a grid, giving back the layout the grid took.
+    ///
+    /// A toggle that does not return you to where you were is not a toggle —
+    /// the sidebar's own rule, and the same rule here: whatever `:table` turned
+    /// the page away from, `:table off` turns it back to.
+    fn leave_table_quietly(&mut self) {
         self.table = None;
-        self.status = "表格：關".to_string();
+        if let Some(back) = self.turned_for_table.take() {
+            self.layout = back;
+            self.zong_motion = false;
+        }
     }
 
     /// Read a newly opened file as a grid if a schema claims it.
@@ -1834,7 +1858,7 @@ impl Editor {
     /// Silently, unlike `:table` — a file that is a table was always a table,
     /// and being told so on every open is noise.
     fn table_on_open(&mut self) {
-        self.table = None;
+        self.leave_table_quietly();
         let Some(path) = self.current_buffer().path().map(Path::to_path_buf) else {
             return;
         };
@@ -1846,11 +1870,28 @@ impl Editor {
                 goal: 0,
                 grain: Grain::Cell,
             });
+            // The same door as `:table`, and the same rule: a grid is read
+            // across. This is the door the manual calls the ordinary one —
+            // 「放一份 schema 在資料旁邊，它就自動是表格」 — and it was the
+            // one door that did not check, so opening a table in a 縱書
+            // session left the invariant behind.
+            self.turn_for_table();
         } else if !problems.is_empty() {
             // Opening a file says nothing about tables, ordinarily. A schema
             // that does not parse is the exception: it was meant to apply here.
             self.status = format!("schema: {}", problems.join("; "));
         }
+    }
+
+    /// Turn the page horizontal for a grid, remembering what it was.
+    fn turn_for_table(&mut self) -> bool {
+        if self.layout != Layout::Vertical {
+            return false;
+        }
+        self.turned_for_table = Some(self.layout);
+        self.layout = Layout::Horizontal;
+        self.zong_motion = false;
+        true
     }
 
     /// Where every cell of a line begins and ends, in characters from its start.
@@ -7121,23 +7162,40 @@ mod tests {
         let (dir, csv) = a_table("layout");
         let mut ed = Editor::new();
         ed.set_layout(Layout::Vertical);
-        ed.open_file(&csv).unwrap();
-        assert_eq!(ed.layout(), Layout::Vertical, "still a 縱書 session");
 
-        // Reading it as a grid turns the page, and says so.
-        ed.execute("table").unwrap();
-        assert_eq!(ed.layout(), Layout::Horizontal);
-        assert!(ed.status().contains("已轉橫排"), "{}", ed.status());
+        // Opening it is the ordinary door — the manual's own 「放一份 schema
+        // 在資料旁邊，它就自動是表格」 — so it is the door that must hold the
+        // rule, not only `:table`.
+        ed.open_file(&csv).unwrap();
+        assert!(ed.table().is_some());
+        assert_eq!(ed.layout(), Layout::Horizontal, "a grid is read across");
 
         // …and it stays turned: the command is refused, not silently ignored.
         ed.execute("vertical").unwrap();
         assert_eq!(ed.layout(), Layout::Horizontal);
         assert!(ed.status().contains(":table off"), "{}", ed.status());
 
-        // Leaving the grid gives the layout back.
+        // Leaving the grid gives the layout back. A toggle that does not
+        // return you to where you were is not a toggle.
         ed.execute("table off").unwrap();
-        ed.execute("vertical").unwrap();
+        assert_eq!(ed.layout(), Layout::Vertical, "back to 縱書");
+        assert!(ed.status().contains("轉回竪排"), "{}", ed.status());
+
+        // `:table` on again turns it again, and off again gives it back.
+        ed.execute("table").unwrap();
+        assert_eq!(ed.layout(), Layout::Horizontal);
+        assert!(ed.status().contains("已轉橫排"), "{}", ed.status());
+        ed.execute("table off").unwrap();
         assert_eq!(ed.layout(), Layout::Vertical);
+
+        // A grid opened in a horizontal session leaves the layout alone, both
+        // ways round — nothing was taken, so nothing is given back.
+        let mut ed = Editor::new();
+        ed.open_file(&csv).unwrap();
+        assert_eq!(ed.layout(), Layout::Horizontal);
+        ed.execute("table off").unwrap();
+        assert_eq!(ed.layout(), Layout::Horizontal);
+        assert!(!ed.status().contains("轉回"), "{}", ed.status());
 
         std::fs::remove_dir_all(&dir).ok();
     }
