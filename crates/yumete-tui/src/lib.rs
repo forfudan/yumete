@@ -216,6 +216,13 @@ pub fn run(editor: &mut Editor, config: &Config, ime: &mut ImeSession) -> io::Re
                 // scrolls by, counted in the unit the page is set in.
                 MouseEventKind::ScrollDown => editor.scroll(WHEEL_STEP, false),
                 MouseEventKind::ScrollUp => editor.scroll(WHEEL_STEP, true),
+                // A tab is a thing you point at; the mouse is already captured
+                // for the wheel, so this costs nothing but the arithmetic.
+                MouseEventKind::Down(_) => {
+                    if let Some(i) = tab_at(editor, config, terminal.size().ok(), mouse) {
+                        editor.show_buffer_at(i);
+                    }
+                }
                 _ => {}
             },
             Ok(_) => {}
@@ -570,7 +577,7 @@ fn draw(
     // scroll — follows from the smaller rectangle without knowing about it.
     // Set vertically that is the right side to lose: the 縱 fill from the right
     // edge, so the page simply ends sooner.
-    let text_area = match editor.sidebar() {
+    let body = match editor.sidebar() {
         Some(_) => {
             let want = (config.editor.sidebar_width as u16).min(body.width.saturating_sub(8));
             let split =
@@ -579,6 +586,16 @@ fn draw(
             split[1]
         }
         None => body,
+    };
+
+    // The tab bar takes the row off the top of what is left, so the page below
+    // it is drawn into a rectangle that already knows about it.
+    let text_area = if config.editor.tabs.showing(editor.buffer_count()) && body.height > 1 {
+        let split = Layout::vertical([Constraint::Length(1), Constraint::Min(1)]).split(body);
+        draw_tabs(frame, editor, config, split[0]);
+        split[1]
+    } else {
+        body
     };
 
     // The text body is the one part that differs between the layouts; both
@@ -593,7 +610,7 @@ fn draw(
         }
     };
 
-    draw_status(frame, editor, ime, status_area);
+    draw_status(frame, editor, config, ime, status_area);
     draw_command_menu(frame, editor, area, status_area);
     draw_picker(frame, editor, area, status_area);
     draw_space_menu(frame, editor, area, status_area);
@@ -794,6 +811,94 @@ fn draw_command_menu(frame: &mut Frame, editor: &Editor, area: Rect, status: Rec
     // once is what covered the page.
     let footer = format!("{}/{}  {}", focus + 1, matches.len(), matches[focus].help);
     draw_list(frame, area, status.y, &items, focus, highlight, &footer);
+}
+
+/// Which tab a click landed on, if it landed on the bar at all.
+///
+/// The bar's rectangle is worked out the same way `draw` works it out — below
+/// nothing, to the right of the sidebar — rather than remembered, so a click
+/// cannot be answered from a layout that is a frame out of date.
+fn tab_at(
+    editor: &Editor,
+    config: &Config,
+    size: Option<ratatui::layout::Size>,
+    mouse: ratatui::crossterm::event::MouseEvent,
+) -> Option<usize> {
+    let size = size?;
+    if mouse.row != 0 || !config.editor.tabs.showing(editor.buffer_count()) {
+        return None;
+    }
+    let mut x = 0u16;
+    if editor.sidebar().is_some() {
+        x = (config.editor.sidebar_width as u16).min(size.width.saturating_sub(8));
+    }
+    let area = Rect::new(x, 0, size.width.saturating_sub(x), 1);
+    tab_spans(editor, area)
+        .into_iter()
+        .find(|&(at, w, _)| mouse.column >= at && mouse.column < at + w)
+        .map(|(_, _, i)| i)
+}
+
+/// Where each tab sits on the bar, so a click can find the one it landed on.
+///
+/// Recomputed from the same rule the drawing uses rather than remembered from
+/// the last frame: a remembered layout is one that can be a frame out of date,
+/// and a click that opens the wrong file is worse than no click at all.
+fn tab_spans(editor: &Editor, area: Rect) -> Vec<(u16, u16, usize)> {
+    let mut spans = Vec::new();
+    let mut x = area.x;
+    for (i, (name, dirty)) in editor.buffer_tabs().into_iter().enumerate() {
+        let label = tab_label(&name, dirty);
+        let w = yumete_cjk::str_width(&label) as u16;
+        if x + w > area.x + area.width {
+            break;
+        }
+        spans.push((x, w, i));
+        x += w;
+    }
+    spans
+}
+
+/// One tab's text, padded so the lit one reads as a tab rather than as a word.
+fn tab_label(name: &str, dirty: bool) -> String {
+    format!(" {name}{} ", if dirty { " +" } else { "" })
+}
+
+/// The tab bar: one row naming every open file, the one being written lit.
+///
+/// A terminal has tabs across the top and so does this, for the same reason —
+/// how many things are open, and which one you are in, are questions that
+/// should be answered by looking rather than by pressing a key.
+fn draw_tabs(frame: &mut Frame, editor: &Editor, config: &Config, area: Rect) {
+    let (gr, gg, gb) = config.theme.gutter;
+    let ground = Style::default().bg(Color::Rgb(gr, gg, gb));
+    // The lit tab carries the page's own background, so it reads as the front
+    // of the stack — the sheet the others are behind.
+    let lit = Style::default()
+        .bg(Color::Reset)
+        .fg(Color::Rgb(0xcf, 0xc6, 0xa9))
+        .add_modifier(Modifier::BOLD);
+    let unlit = ground.fg(Color::Rgb(0x8a, 0x86, 0x76));
+
+    let current = editor.buffer_position().0.saturating_sub(1);
+    let tabs = editor.buffer_tabs();
+    let spans = tab_spans(editor, area);
+    let buf = frame.buffer_mut();
+    for x in area.x..area.x + area.width {
+        if let Some(cell) = buf.cell_mut((x, area.y)) {
+            cell.set_symbol(" ").set_style(ground);
+        }
+    }
+    for (x, w, i) in spans {
+        let style = if i == current { lit } else { unlit };
+        for n in 0..w {
+            if let Some(cell) = buf.cell_mut((x + n, area.y)) {
+                cell.set_symbol(" ").set_style(style);
+            }
+        }
+        let (name, dirty) = &tabs[i];
+        put_text(buf, x, area.y, x + w, &tab_label(name, *dirty), style);
+    }
 }
 
 /// The file sidebar, in the columns taken off the left of the page.
@@ -1074,7 +1179,13 @@ fn draw_horizontal(
 }
 
 /// Draw the status line, or the command line while a `:` or `/` prompt is open.
-fn draw_status(frame: &mut Frame, editor: &Editor, ime: &ImeSession, status_area: Rect) {
+fn draw_status(
+    frame: &mut Frame,
+    editor: &Editor,
+    config: &Config,
+    ime: &ImeSession,
+    status_area: Rect,
+) {
     let buffer = editor.current_buffer();
     let status = if let Some((prefix, text)) = editor.prompt() {
         // The composition in progress belongs at the caret, so a search reads as
@@ -1115,10 +1226,10 @@ fn draw_status(frame: &mut Frame, editor: &Editor, ime: &ImeSession, status_area
             "" => String::new(),
             tag => format!("{tag} "),
         };
-        // With more than one file open, say which — otherwise `gn` moves you
-        // somewhere with no sign that it did.
+        // With more than one file open, say which — unless the tab bar is up,
+        // which says it better and already says it.
         let (n, total) = editor.buffer_position();
-        let which = if total > 1 {
+        let which = if total > 1 && !config.editor.tabs.showing(total) {
             format!(" [{n}/{total}]")
         } else {
             String::new()
@@ -2266,6 +2377,37 @@ mod tests {
         };
         assert!(!dim(3), "`seg` was typed");
         assert!(dim(4), "`ment` is only a guess");
+    }
+
+    #[test]
+    fn the_tabs_name_the_open_files_and_light_the_one_being_written() {
+        let mut editor = Editor::new();
+        editor.current_buffer_mut().insert(0, "第一篇");
+        editor.execute(":new").unwrap();
+        editor.current_buffer_mut().insert(0, "第二篇");
+        assert_eq!(editor.buffer_count(), 2);
+        let mut config = Config::default();
+        config.editor.line_numbers = LineNumbers::None;
+
+        let buffer = render_with(&editor, &config, &no_ime(), 40, 8);
+        let bar = row_text(&buffer, 0);
+        assert!(bar.contains("[scratch]"), "both files named: {bar:?}");
+        // The one being written is dirty and says so.
+        assert!(bar.contains('+'), "{bar:?}");
+        // It is lit against the bar's own ground, so which one you are in is a
+        // thing you can see rather than a key you have to press.
+        let lit = (0..40).any(|x| buffer[(x, 0)].style().bg == Some(Color::Reset));
+        let unlit = (0..40).any(|x| buffer[(x, 0)].style().bg != Some(Color::Reset));
+        assert!(lit && unlit, "the current tab is not told apart");
+
+        // The page starts below the bar, not under it.
+        assert_eq!(at(&buffer, 0, 1), "第");
+
+        // …and with one file open the bar costs nothing.
+        let mut alone = Editor::new();
+        alone.current_buffer_mut().insert(0, "第一篇");
+        let buffer = render_with(&alone, &config, &no_ime(), 40, 8);
+        assert_eq!(at(&buffer, 0, 0), "第", "no bar for a single file");
     }
 
     #[test]

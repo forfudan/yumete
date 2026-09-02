@@ -83,6 +83,8 @@ pub struct EditorConfig {
     /// 漢字 prose, and those characters are drawn wide by the CJK fonts such
     /// prose is read in. `"narrow"` for a Latin font.
     pub ambiguous_wide: bool,
+    /// When the tab bar is drawn (Feature #95).
+    pub tabs: Tabs,
     /// How many columns the file sidebar takes when it is open (Feature #94).
     ///
     /// It costs columns, and set vertically it costs them by threes — a 縱 is
@@ -110,7 +112,42 @@ impl Default for EditorConfig {
             soft_wrap: true,
             autosave: true,
             ambiguous_wide: true,
+            tabs: Tabs::default(),
             sidebar_width: 24,
+        }
+    }
+}
+
+/// When the tab bar showing the open files is drawn (Feature #95).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Tabs {
+    /// Only when more than one file is open. A row is a row, and a single tab
+    /// says nothing that the status line does not already say.
+    #[default]
+    Auto,
+    /// Always, even for one file.
+    Always,
+    /// Never; the status line says which file this is.
+    Never,
+}
+
+impl Tabs {
+    /// Parse a config value.
+    pub fn parse(value: &str) -> Option<Tabs> {
+        match value.trim().to_ascii_lowercase().as_str() {
+            "auto" => Some(Tabs::Auto),
+            "always" | "true" | "on" => Some(Tabs::Always),
+            "never" | "false" | "off" => Some(Tabs::Never),
+            _ => None,
+        }
+    }
+
+    /// Whether to draw the bar with `open` files open.
+    pub fn showing(self, open: usize) -> bool {
+        match self {
+            Tabs::Auto => open > 1,
+            Tabs::Always => true,
+            Tabs::Never => false,
         }
     }
 }
@@ -412,6 +449,7 @@ struct RawEditor {
     autosave: Option<bool>,
     ambiguous_width: Option<String>,
     sidebar_width: Option<usize>,
+    tabs: Option<String>,
 }
 
 #[derive(Deserialize, Default)]
@@ -482,6 +520,9 @@ impl RawConfig {
         }
         if other.editor.sidebar_width.is_some() {
             self.editor.sidebar_width = other.editor.sidebar_width;
+        }
+        if other.editor.tabs.is_some() {
+            self.editor.tabs = other.editor.tabs.clone();
         }
         if other.theme.selection.is_some() {
             self.theme.selection = other.theme.selection;
@@ -567,6 +608,11 @@ impl RawConfig {
         }
         if let Some(on) = self.editor.autosave {
             config.editor.autosave = on;
+        }
+        if let Some(tabs) = self.editor.tabs {
+            if let Some(parsed) = Tabs::parse(&tabs) {
+                config.editor.tabs = parsed;
+            }
         }
         if let Some(width) = self.editor.sidebar_width {
             config.editor.sidebar_width = width.clamp(12, 60);

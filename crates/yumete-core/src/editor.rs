@@ -515,6 +515,20 @@ impl Editor {
         self.buffers.len()
     }
 
+    /// Every open buffer's name and whether it has unsaved changes — what the
+    /// tab bar draws (Feature #95).
+    pub fn buffer_tabs(&self) -> Vec<(String, bool)> {
+        self.buffers
+            .iter()
+            .map(|b| (b.display_name(), b.is_modified()))
+            .collect()
+    }
+
+    /// Show the `index`th buffer, for a front end that can point at one.
+    pub fn show_buffer_at(&mut self, index: usize) {
+        self.show_buffer(index);
+    }
+
     /// Open `path` as a new buffer and make it active.
     pub fn open_file<P: AsRef<Path>>(&mut self, path: P) -> io::Result<()> {
         // A file already open is *shown*, not opened again. Two buffers over
