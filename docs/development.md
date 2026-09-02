@@ -317,6 +317,7 @@ Phases are ordered by priority, most writer-critical first:
 | 119 | **A note read beside its sentence**        | both   | P2    | the same panel; Enter there and back | Done  |
 | 120 | **A jump list**                            | core   | P2    | `C-o`/`C-i`; every far motion leaves a way back | Done |
 | 121 | **`:dense` — the packed 縱書 page**        | both   | P3    | one 縱 is two cells; restores what it took | Done |
+| 122 | **A hint row above the status line**       | both   | P2    | what happened, and what finishes a sequence | Done |
 
 ---
 
