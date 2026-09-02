@@ -353,6 +353,13 @@ pub struct Editor {
     /// The text width the renderer is wrapping at, in cells. `None` until the
     /// terminal size is known; motion falls back to logical lines then.
     wrap_width: Option<usize>,
+    /// The width the *writer* wants to write to, if they have said one.
+    ///
+    /// A measure, in the typesetter's sense: not how wide the terminal is, but
+    /// how wide a line of this book should be. Horizontally it is where the
+    /// text wraps and where the margin begins; vertically it is how long a 縱
+    /// runs. `None` means the page is as wide as the window.
+    measure: Option<usize>,
 }
 
 /// What should happen after a key press.
@@ -465,6 +472,7 @@ impl Editor {
             zong_motion: false,
             soft_wrap: true,
             wrap_width: None,
+            measure: None,
             autosave: true,
             last_swap: None,
             swap_warned: false,
@@ -1460,6 +1468,17 @@ impl Editor {
                 };
                 Ok(CommandOutcome::Continue)
             }
+            // A measure is only a measure if the rows honour it, so setting
+            // one turns wrapping on: `:wrap 50` says "write to fifty", and
+            // fifty columns of text running off the edge is not that.
+            Command::SetMeasure(measure) => {
+                if measure.is_some() {
+                    self.set_soft_wrap(true);
+                }
+                self.set_measure(measure);
+                self.refresh_goal_column();
+                Ok(CommandOutcome::Continue)
+            }
             Command::SetSoftWrap(on) => {
                 self.set_soft_wrap(on);
                 self.refresh_goal_column();
@@ -1899,10 +1918,37 @@ impl Editor {
         self.soft_wrap
     }
 
-    /// Tell the editor the width the renderer wraps at, so `j` and `k` walk the
+    /// Tell the editor how much room the renderer has, so `j` and `k` walk the
     /// same rows the reader sees. The renderer calls this once per frame.
-    pub fn set_wrap_width(&mut self, width: usize) {
+    ///
+    /// A measure the writer has set wins, but only downwards: `:wrap 50` on a
+    /// 40-column terminal still has to wrap at 40, because rows that do not fit
+    /// cannot be read.
+    pub fn set_wrap_width(&mut self, available: usize) {
+        let width = self.measure.map_or(available, |m| m.min(available));
         self.wrap_width = Some(width.max(crate::wrap::MIN_WRAP_WIDTH));
+    }
+
+    /// The measure the writer set, if any.
+    pub fn measure(&self) -> Option<usize> {
+        self.measure
+    }
+
+    /// Set the measure — `None` for "as wide as the window".
+    ///
+    /// Bounded below by the width a row can wrap at, since a measure narrower
+    /// than that would fold a single wide character onto its own row forever.
+    pub fn set_measure(&mut self, measure: Option<usize>) {
+        self.measure = measure.map(|m| m.max(crate::wrap::MIN_WRAP_WIDTH).min(400));
+        if let Some(m) = self.measure {
+            if self.layout == Layout::Vertical {
+                self.set_zong_length(m);
+            }
+        }
+        self.status = match self.measure {
+            Some(m) => format!("measure {m}"),
+            None => "measure: the window".to_string(),
+        };
     }
 
     /// The width horizontal motion should wrap at, or `None` when the buffer is
@@ -5485,6 +5531,46 @@ mod tests {
         assert_eq!(ed.take_typst_outline_request(), Some(dir.join("book.typ")));
 
         std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn a_measure_is_a_width_to_write_to_in_either_layout() {
+        let mut ed = typed("那年冬天，山下起了大雪。");
+        ed.set_wrap_width(120);
+        assert_eq!(ed.wrap_width(), Some(120), "the window, to begin with");
+
+        // `:wrap 50` is a measure: rows fold at fifty however wide the window.
+        ed.execute("wrap 50").unwrap();
+        assert_eq!(ed.measure(), Some(50));
+        ed.set_wrap_width(120);
+        assert_eq!(ed.wrap_width(), Some(50));
+
+        // …but only downwards. A row that does not fit cannot be read, so a
+        // narrow window still wins.
+        ed.set_wrap_width(30);
+        assert_eq!(ed.wrap_width(), Some(30));
+
+        // Setting one turns wrapping on, because fifty columns of text running
+        // off the edge is not writing to a measure of fifty.
+        ed.set_soft_wrap(false);
+        ed.execute("wrap 40").unwrap();
+        assert!(ed.soft_wrap());
+
+        // Vertically the measure is the length of a 縱.
+        ed.execute("vertical").unwrap();
+        ed.execute("wrap 12").unwrap();
+        assert_eq!(ed.zong_length(), 12);
+
+        // `:wrap 0` gives the window back; plain `:wrap` still just turns
+        // wrapping on, and leaves the measure where it was.
+        ed.execute("wrap").unwrap();
+        assert_eq!(ed.measure(), Some(12), "`:wrap` is not `:wrap 0`");
+        ed.execute("wrap 0").unwrap();
+        assert_eq!(ed.measure(), None);
+        ed.set_wrap_width(120);
+        assert_eq!(ed.wrap_width(), None, "vertical does not wrap");
+
+        assert!(ed.execute("wrap wide").is_err(), "not a width");
     }
 
     #[test]

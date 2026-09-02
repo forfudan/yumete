@@ -65,6 +65,9 @@ pub enum Command {
     /// `:wrap` / `:nowrap` — whether a paragraph too wide for the terminal
     /// continues on the next screen row (Feature #77).
     SetSoftWrap(bool),
+    /// `:wrap <n>` — write to a measure of `n` columns rather than to the
+    /// window; `:wrap 0` gives the window back (Feature #113).
+    SetMeasure(Option<usize>),
     /// `:wysiwyg` / `:source` — whether the markup comes off the page
     /// (Feature #104).
     SetWysiwyg(bool),
@@ -241,7 +244,17 @@ pub fn parse(input: &str) -> Result<Command, CommandError> {
         })),
         "wysiwyg" | "wys" => Ok(Command::SetWysiwyg(true)),
         "source" | "src" => Ok(Command::SetWysiwyg(false)),
-        "wrap" => Ok(Command::SetSoftWrap(true)),
+        // `:wrap` on its own still means what it always meant — turn wrapping
+        // on — and leaves the measure alone; a number sets the measure.
+        "wrap" if rest.is_empty() => Ok(Command::SetSoftWrap(true)),
+        "wrap" => match rest.parse::<usize>() {
+            Ok(0) => Ok(Command::SetMeasure(None)),
+            Ok(n) => Ok(Command::SetMeasure(Some(n))),
+            Err(_) => Err(CommandError::InvalidArgument {
+                command: "wrap",
+                value: rest.to_string(),
+            }),
+        },
         "nowrap" => Ok(Command::SetSoftWrap(false)),
         "buffer-next" | "bn" => Ok(Command::NextBuffer),
         "buffer-previous" | "bp" => Ok(Command::PreviousBuffer),
@@ -451,7 +464,7 @@ pub const COMMANDS: &[Entry] = &[
     Entry {
         name: "wrap",
         alias: None,
-        help: "wrap long paragraphs to the next row",
+        help: "wrap long paragraphs to the next row; `:wrap 50` sets a measure",
     },
     Entry {
         name: "nowrap",

@@ -308,6 +308,7 @@ Phases are ordered by priority, most writer-critical first:
 | 110 | **⌘ chords are the terminal's**            | tui    | P0    | ⌘C read as `c` deleted the selection | Done  |
 | 111 | **Syntax by extension or name**            | config | P2    | a project's word on its own files   | Done   |
 | 112 | **The evaluated outline of a book**        | both   | P2    | `typst eval`; chapters, not includes | Done  |
+| 113 | **A measure to write to**                  | both   | P2    | `:wrap 50`; folds the rows, tints the margin | Done |
 
 ---
 

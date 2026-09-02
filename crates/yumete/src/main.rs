@@ -61,6 +61,11 @@ fn main() -> ExitCode {
     // and `:layout` switches it live.
     editor.set_layout(force_layout.unwrap_or(config.editor.layout));
     editor.set_zong_length(config.editor.zong_length);
+    // The measure a project writes to, if it has said one; `:wrap n` is the
+    // same setting for one session.
+    if config.editor.measure > 0 {
+        editor.set_measure(Some(config.editor.measure));
+    }
     editor.set_indent_width(config.editor.tab_width);
     editor.set_tatechuyoko(config.editor.tatechuyoko);
     editor.set_hanging_punctuation(config.editor.hanging_punctuation);
