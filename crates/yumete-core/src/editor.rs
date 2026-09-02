@@ -1939,7 +1939,7 @@ impl Editor {
     /// Bounded below by the width a row can wrap at, since a measure narrower
     /// than that would fold a single wide character onto its own row forever.
     pub fn set_measure(&mut self, measure: Option<usize>) {
-        self.measure = measure.map(|m| m.max(crate::wrap::MIN_WRAP_WIDTH).min(400));
+        self.measure = measure.map(|m| m.clamp(crate::wrap::MIN_WRAP_WIDTH, 400));
         if let Some(m) = self.measure {
             if self.layout == Layout::Vertical {
                 self.set_zong_length(m);
@@ -2687,10 +2687,7 @@ impl Editor {
             // The outline of a book is asked of typst once, because asking
             // compiles the book; `R` is how a writer who has just added a
             // chapter asks again.
-            Key::Char('R') => {
-                self.refresh_evaluated_outline();
-                return;
-            }
+            Key::Char('R') => self.refresh_evaluated_outline(),
             Key::Char('h') | Key::Left => sidebar.collapse(),
             Key::Char('l') | Key::Right | Key::Enter => {
                 let chosen = sidebar.activate();
@@ -5456,7 +5453,7 @@ mod tests {
         .unwrap();
 
         let mut ed = Editor::new();
-        ed.open_file(&dir.join("book.typ")).unwrap();
+        ed.open_file(dir.join("book.typ")).unwrap();
         ed.open_sidebar_showing(&dir, crate::sidebar::View::Outline);
 
         // Opening the outline of a Typst file asks typst about it…
@@ -5512,7 +5509,7 @@ mod tests {
 ").unwrap();
 
         let mut ed = Editor::new();
-        ed.open_file(&dir.join("book.typ")).unwrap();
+        ed.open_file(dir.join("book.typ")).unwrap();
         ed.open_sidebar_showing(&dir, crate::sidebar::View::Outline);
         assert!(ed.take_typst_outline_request().is_some());
 

@@ -92,6 +92,8 @@ pub fn run(editor: &mut Editor, config: &Config, ime: &mut ImeSession) -> io::Re
     let mut viewport = Viewport::default();
     let mut shift = ShiftTap::default();
     let mut last_mode = None;
+    // A `typst eval` that has been asked for and has not answered yet.
+    let mut asking: Option<Asking> = None;
 
     let result = loop {
         let mode = editor.mode();
@@ -159,8 +161,45 @@ pub fn run(editor: &mut Editor, config: &Config, ime: &mut ImeSession) -> io::Re
             let columns = (size.width / 3).max(1) as usize;
             editor.set_page(lines, columns);
         }
+        // The outline of a Typst book is a question only typst can answer,
+        // because answering it means evaluating the document — and evaluating
+        // a book takes seconds, or longer when it imports a package and typst
+        // goes to the network for it. So it is asked on another thread and the
+        // answer is collected here, on some later turn of the loop: the editor
+        // stays under the writer's hands the whole time it is thinking.
+        if let Some(path) = editor.take_typst_outline_request() {
+            if asking.is_none() && config.editor.typst_outline {
+                asking = Some(Asking::start(path));
+                editor.set_status("大綱：問 typst 中……".to_string());
+            }
+        }
+        if let Some(pending) = asking.as_ref() {
+            match pending.poll() {
+                Answer::Waiting => {}
+                Answer::Ok(out) => {
+                    editor.provide_typst_outline(&pending.path, &out);
+                    editor.set_status(String::new());
+                    asking = None;
+                }
+                Answer::Failed(why) => {
+                    editor.typst_outline_failed(&pending.path);
+                    editor.set_status(why.unwrap_or_default());
+                    asking = None;
+                }
+            }
+        }
         if let Err(err) = terminal.draw(|frame| draw(frame, editor, config, ime, &mut viewport)) {
             break Err(err);
+        }
+        // Waiting on a key is what this loop does; while typst is thinking it
+        // has to come up for air often enough to notice the answer, and no
+        // more often than that.
+        if asking.is_some() {
+            match event::poll(std::time::Duration::from_millis(40)) {
+                Ok(false) => continue,
+                Ok(true) => {}
+                Err(err) => break Err(err),
+            }
         }
         match event::read() {
             Ok(Event::Key(key)) => {
@@ -210,18 +249,6 @@ pub fn run(editor: &mut Editor, config: &Config, ime: &mut ImeSession) -> io::Re
                             "cannot read the system clipboard here — ⌘V pastes into the terminal"
                                 .to_string(),
                         ),
-                    }
-                }
-                // The outline of a Typst book is a question only typst can
-                // answer, because answering it means evaluating the document.
-                if let Some(path) = editor.take_typst_outline_request() {
-                    match typst_outline(&path) {
-                        Ok(out) => editor.provide_typst_outline(&path, &out),
-                        Err(None) => editor.typst_outline_failed(&path),
-                        Err(Some(err)) => {
-                            editor.typst_outline_failed(&path);
-                            editor.set_status(format!("typst: {err}"));
-                        }
                     }
                 }
                 if let Some(tag) = editor.take_scheme_request() {
@@ -407,6 +434,64 @@ fn normalize_shift(code: KeyCode, mods: KeyModifiers) -> (KeyCode, KeyModifiers)
         }
     }
     (code, mods)
+}
+
+/// A `typst eval` that is running, and how long it has been.
+struct Asking {
+    /// The file it was asked about.
+    path: std::path::PathBuf,
+    /// Where its answer will arrive.
+    answer: std::sync::mpsc::Receiver<Result<String, Option<String>>>,
+    /// When it was asked, so a book that never compiles is given up on.
+    since: std::time::Instant,
+}
+
+/// What came back, if anything has yet.
+enum Answer {
+    Waiting,
+    Ok(String),
+    Failed(Option<String>),
+}
+
+/// How long a book gets to compile before the question is dropped.
+///
+/// Generous, because a long book legitimately takes a while; bounded, because
+/// a typst that has gone to the network for a package may never come back, and
+/// an editor that says "asking…" forever is lying.
+const PATIENCE: std::time::Duration = std::time::Duration::from_secs(45);
+
+impl Asking {
+    /// Ask, on a thread of its own.
+    fn start(path: std::path::PathBuf) -> Asking {
+        let (send, answer) = std::sync::mpsc::channel();
+        let file = path.clone();
+        std::thread::spawn(move || {
+            // The receiver may be gone by now — nobody is waiting any more,
+            // and that is not an error.
+            let _ = send.send(typst_outline(&file));
+        });
+        Asking {
+            path,
+            answer,
+            since: std::time::Instant::now(),
+        }
+    }
+
+    /// Whether the answer has come, without waiting for it.
+    fn poll(&self) -> Answer {
+        match self.answer.try_recv() {
+            Ok(Ok(out)) => Answer::Ok(out),
+            Ok(Err(why)) => Answer::Failed(why.map(|w| format!("typst: {w}"))),
+            Err(std::sync::mpsc::TryRecvError::Disconnected) => Answer::Failed(None),
+            Err(std::sync::mpsc::TryRecvError::Empty) => {
+                if self.since.elapsed() > PATIENCE {
+                    Answer::Failed(Some("大綱：typst 太久沒有回答，用源碼標題".to_string()))
+                } else {
+                    Answer::Waiting
+                }
+            }
+        }
+    }
 }
 
 /// Ask typst for the evaluated headings of a book.

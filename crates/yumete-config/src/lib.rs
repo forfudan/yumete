@@ -101,6 +101,12 @@ pub struct EditorConfig {
     /// line is, this folds the rows there and leaves the rest of the window as
     /// margin. `:wrap 50` sets it for one session (Feature #113).
     pub measure: usize,
+    /// Whether the outline of a Typst file is asked of `typst eval`.
+    ///
+    /// It runs a program over your file, which is worth being able to say no
+    /// to — and a book that pulls a package off the network can keep it
+    /// waiting. Off, the outline is read from the source like Markdown's.
+    pub typst_outline: bool,
     /// A tick every `paper_ticks` characters down a 縱; `0` for none
     /// (Feature #102).
     ///
@@ -155,6 +161,7 @@ impl Default for EditorConfig {
             syntax: String::new(),
             ruler: 0,
             measure: 0,
+            typst_outline: true,
             paper_ticks: 0,
             tabs: Tabs::default(),
             sidebar_width: 24,
@@ -536,6 +543,7 @@ struct RawEditor {
     syntax: Option<String>,
     ruler: Option<usize>,
     measure: Option<usize>,
+    typst_outline: Option<bool>,
     paper_ticks: Option<usize>,
 }
 
@@ -620,6 +628,9 @@ impl RawConfig {
         }
         if other.editor.measure.is_some() {
             self.editor.measure = other.editor.measure;
+        }
+        if other.editor.typst_outline.is_some() {
+            self.editor.typst_outline = other.editor.typst_outline;
         }
         if other.editor.paper_ticks.is_some() {
             self.editor.paper_ticks = other.editor.paper_ticks;
@@ -722,6 +733,9 @@ impl RawConfig {
         }
         if let Some(measure) = self.editor.measure {
             config.editor.measure = measure.min(400);
+        }
+        if let Some(on) = self.editor.typst_outline {
+            config.editor.typst_outline = on;
         }
         if let Some(ticks) = self.editor.paper_ticks {
             config.editor.paper_ticks = ticks.min(64);
