@@ -104,6 +104,20 @@ const GREP_MAX_BYTES: u64 = 4 * 1024 * 1024;
 /// from, and gathering all of it would make `Space f` pause before it drew.
 const PICKER_LIMIT: usize = 4000;
 
+/// The path a Typst `#import` or `#include` names, if the line is one.
+///
+/// Relative to the file that names it, the way Typst resolves it — a chapter
+/// sits beside the main file, not beside wherever the editor was started.
+fn quoted_path(line: &str) -> Option<String> {
+    let rest = line
+        .trim_start()
+        .strip_prefix("#import")
+        .or_else(|| line.trim_start().strip_prefix("#include"))?;
+    let (_, after) = rest.split_once('"')?;
+    let (path, _) = after.split_once('"')?;
+    (!path.is_empty()).then(|| path.to_string())
+}
+
 /// Call `f` for every readable file under `root`, depth first.
 ///
 /// Skips what a manuscript directory holds but a writer never searches: hidden
@@ -689,6 +703,25 @@ impl Editor {
         let rope = self.current_buffer().rope();
         let line = rope.line(rope.char_to_line(self.cursor)).to_string();
         let text = line.trim();
+
+        // `#import "ch01.typ": chapter` / `#include "ch01.typ"` — a main file
+        // that pulls its chapters in *is* the table of contents, so `gf` on one
+        // of those lines opens the chapter.
+        if let Some(quoted) = quoted_path(text) {
+            let here = self
+                .current_buffer()
+                .path()
+                .and_then(|p| p.parent().map(Path::to_path_buf));
+            let full = match here {
+                Some(dir) => dir.join(&quoted),
+                None => PathBuf::from(&quoted),
+            };
+            if let Err(err) = self.open_file(&full) {
+                self.status = format!("cannot open '{quoted}': {err}");
+            }
+            return;
+        }
+
         let Some((path, rest)) = text.split_once(':') else {
             self.status = "no file named on this line".to_string();
             return;
@@ -792,7 +825,9 @@ impl Editor {
                 return blocks[..=last.min(blocks.len() - 1)].to_vec();
             }
         }
-        let mut scanner = crate::markdown::BlockScanner::new();
+        let typst = buffer.syntax() == crate::syntax::Syntax::Typst;
+        let mut markdown = crate::markdown::BlockScanner::new();
+        let mut typst_scanner = crate::markdown::typst::BlockScanner::new();
         let mut blocks = Vec::with_capacity(lines);
         for line in 0..lines {
             // Only the line's opening is read: every decision is about that,
@@ -807,7 +842,11 @@ impl Editor {
                 .chars_at(start)
                 .take((end - start).min(crate::markdown::PREFIX))
                 .collect();
-            blocks.push(scanner.feed(&prefix, end - start));
+            blocks.push(if typst {
+                typst_scanner.feed(&prefix, end - start)
+            } else {
+                markdown.feed(&prefix, end - start)
+            });
         }
         let through = blocks[..=last.min(blocks.len() - 1)].to_vec();
         *self.block_cache.borrow_mut() = Some((key, blocks));
@@ -880,6 +919,18 @@ impl Editor {
         (to >= start && from <= end).then(|| (from.max(start) - start, to.min(end) - start))
     }
 
+    /// Which markup the file being written is in.
+    pub fn syntax(&self) -> crate::syntax::Syntax {
+        self.current_buffer().syntax()
+    }
+
+    /// Say which markup it is in, overriding what was guessed on opening.
+    pub fn set_syntax(&mut self, syntax: crate::syntax::Syntax) {
+        self.current_buffer_mut().set_syntax(syntax);
+        self.markup_cache.borrow_mut().clear();
+        *self.block_cache.borrow_mut() = None;
+    }
+
     /// The Markdown runs of `line`, cached against the paragraph's own text.
     ///
     /// `block` says what kind of line it is: inside a fence or a page's
@@ -919,7 +970,10 @@ impl Editor {
                 return spans.clone();
             }
         }
-        let spans = crate::markdown::spans(&text);
+        let spans = match self.current_buffer().syntax() {
+            crate::syntax::Syntax::Markdown => crate::markdown::spans(&text),
+            crate::syntax::Syntax::Typst => crate::markdown::typst::spans(&text),
+        };
         cache.insert(line, (hash, spans.clone()));
         spans
     }
@@ -935,6 +989,12 @@ impl Editor {
         for line in 0..rope.len_lines() {
             let text = rope.line(line).to_string();
             let trimmed = text.trim_end_matches(['\n', '\r']);
+            // A file that imports its chapters is a table of contents, and the
+            // chapters are what a reader wants to jump to.
+            if let Some(path) = quoted_path(trimmed) {
+                out.push((line, 1, path));
+                continue;
+            }
             let mark = trimmed.chars().next().filter(|&c| c == '#' || c == '=');
             let Some(mark) = mark else { continue };
             let depth = trimmed.chars().take_while(|&c| c == mark).count();
@@ -1112,6 +1172,23 @@ impl Editor {
                 } else {
                     "句讀 take a square each".to_string()
                 };
+                Ok(CommandOutcome::Continue)
+            }
+            Command::SetSyntax(name) => {
+                match name {
+                    Some(name) => match crate::syntax::Syntax::parse(&name) {
+                        Some(syntax) => {
+                            self.set_syntax(syntax);
+                            self.status = format!("語法：{}", syntax.name());
+                        }
+                        None => {
+                            self.status = format!("no such syntax '{name}' — markdown or typst")
+                        }
+                    },
+                    None => {
+                        self.status = format!("語法：{}", self.syntax().name());
+                    }
+                }
                 Ok(CommandOutcome::Continue)
             }
             Command::ToggleMarkup => {
@@ -4886,6 +4963,35 @@ mod tests {
     }
 
     #[test]
+    fn a_main_file_that_imports_its_chapters_is_a_table_of_contents() {
+        let dir = std::env::temp_dir().join(format!("yumete-imp-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("ch01.typ"), "= 初雪\n那年冬天。\n").unwrap();
+        std::fs::write(
+            dir.join("book.typ"),
+            "#import \"lib.typ\": chapter\n\n#include \"ch01.typ\"\n#include \"ch02.typ\"\n",
+        )
+        .unwrap();
+
+        let mut ed = Editor::new();
+        ed.execute(&format!(":open {}", dir.join("book.typ").display()))
+            .unwrap();
+        // The outline is what the file pulls in.
+        let names: Vec<String> = ed.outline().into_iter().map(|(_, _, n)| n).collect();
+        assert_eq!(names, ["lib.typ", "ch01.typ", "ch02.typ"]);
+
+        // …and `gf` opens one, resolved beside the file that names it rather
+        // than beside wherever the editor was started.
+        ed.execute(":3").unwrap();
+        press(&mut ed, "gf");
+        assert_eq!(ed.current_buffer().display_name(), "ch01.typ");
+        assert_eq!(ed.current_buffer().text(), "= 初雪\n那年冬天。\n");
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
     fn the_outline_is_the_hashes_a_writer_already_types() {
         let mut ed = typed("# 第一章\n那年冬天。\n## 一\n雪下得早。\n## 二\n### 附記\n");
         let headings = ed.outline();
@@ -6005,6 +6111,47 @@ mod tests {
         let out = ed.execute(&format!(":wq {}", path.display())).unwrap();
         assert_eq!(out, CommandOutcome::Quit);
         assert_eq!(std::fs::read_to_string(&path).unwrap(), "文");
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn a_txt_that_is_typst_is_read_as_typst() {
+        let dir = std::env::temp_dir().join(format!("yumete-syn-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        // A novel written in Typst but filed as `.txt` is an ordinary thing to
+        // have, and read as Markdown its `#import` looks like a heading.
+        std::fs::write(
+            dir.join("ch01.txt"),
+            "#import \"lib.typ\": chapter\n\n= 第一章\n\n那年冬天，雪下得*很早*。\n",
+        )
+        .unwrap();
+        std::fs::write(
+            dir.join("ch02.txt"),
+            "# 第二章\n\n那年冬天，雪下得**很早**。\n",
+        )
+        .unwrap();
+
+        let mut ed = Editor::new();
+        ed.execute(&format!(":open {}", dir.join("ch01.txt").display()))
+            .unwrap();
+        assert_eq!(ed.syntax(), crate::syntax::Syntax::Typst);
+        // `*很早*` is bold in Typst; in Markdown it would be emphasis.
+        let kinds: Vec<crate::markdown::Kind> =
+            ed.markup_line(4).into_iter().map(|s| s.kind).collect();
+        assert!(kinds.contains(&crate::markdown::Kind::Strong), "{kinds:?}");
+
+        // The plain Markdown one is still read as Markdown.
+        ed.execute(&format!(":open {}", dir.join("ch02.txt").display()))
+            .unwrap();
+        assert_eq!(ed.syntax(), crate::syntax::Syntax::Markdown);
+
+        // …and a guess can be overruled.
+        ed.execute(":syntax typst").unwrap();
+        assert_eq!(ed.syntax(), crate::syntax::Syntax::Typst);
+        ed.execute(":syntax").unwrap();
+        assert!(ed.status().contains("typst"), "{}", ed.status());
+
         std::fs::remove_dir_all(&dir).ok();
     }
 

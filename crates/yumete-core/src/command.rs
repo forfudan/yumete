@@ -70,6 +70,9 @@ pub enum Command {
     SetWysiwyg(bool),
     /// `:markup` — whether Markdown is coloured at all (Feature #96).
     ToggleMarkup,
+    /// `:syntax [markdown|typst]` — which markup this file is in
+    /// (Feature #106). No argument says what it was guessed to be.
+    SetSyntax(Option<String>),
     /// `:buffer-next` / `:buffer-previous` (aliases `:bn` / `:bp`) — show
     /// another of the open buffers.
     NextBuffer,
@@ -224,6 +227,11 @@ pub fn parse(input: &str) -> Result<Command, CommandError> {
         }
         "hanging" => Ok(Command::ToggleHanging),
         "markup" | "md" => Ok(Command::ToggleMarkup),
+        "syntax" | "syn" => Ok(Command::SetSyntax(if rest.is_empty() {
+            None
+        } else {
+            Some(rest.to_string())
+        })),
         "wysiwyg" | "wys" => Ok(Command::SetWysiwyg(true)),
         "source" | "src" => Ok(Command::SetWysiwyg(false)),
         "wrap" => Ok(Command::SetSoftWrap(true)),
@@ -402,6 +410,11 @@ pub const COMMANDS: &[Entry] = &[
         name: "hanging",
         alias: None,
         help: "句讀 in the margin (標點旁置)",
+    },
+    Entry {
+        name: "syntax",
+        alias: Some("syn"),
+        help: "markdown 還是 typst（不給參數就說現在是哪個）",
     },
     Entry {
         name: "markup",
@@ -722,6 +735,7 @@ mod tests {
             "chaifen",
             "scheme",
             "hanging",
+            "syntax",
             "markup",
             "wysiwyg",
             "source",
