@@ -2733,6 +2733,32 @@ mod tests {
     }
 
     #[test]
+    fn a_vertical_panel_does_not_grow_a_row_for_every_letter() {
+        // With 拆分 on, the code and the decomposition were stacked down one
+        // column, a character to a row: `Dyu_Do_Ne` alone was nine rows, and
+        // the panel came out taller than the page it was covering.
+        let mut editor = Editor::new();
+        editor.on_key(Key::Char('i'));
+        let mut ime = ImeSession::from_table_text(Scheme::Lingming, "dydn 靈 聯絡員
+");
+        for c in "dydn".chars() {
+            ime.input(c);
+        }
+        let config = vertical_config();
+        let buffer = render_vertical_with(&mut editor, &config, &ime, 40, 30);
+
+        // The panel is as deep as its deepest column and no deeper. Four
+        // letters of code are two rows, not four.
+        let depth = panel_depth(&buffer);
+        assert!(depth <= 8, "the panel is {depth} rows deep");
+
+        // The code is still all there, two letters to a slot.
+        let text = buffer_text(&buffer);
+        assert!(text.contains("dy") && text.contains("dn"), "{text:?}");
+        assert!(text.contains('靈') && text.contains('聯'), "candidates: {text:?}");
+    }
+
+    #[test]
     fn vertical_candidate_panel_runs_right_to_left() {
         let mut editor = Editor::new();
         editor.on_key(Key::Char('i')); // Insert mode
