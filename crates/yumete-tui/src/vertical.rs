@@ -540,10 +540,17 @@ pub fn draw(
         // A terminal sizes its cursor to the grapheme it sits on, so on a blank
         // slot the rule would be one cell — half the 縱 — and read as lopsided.
         // An ideographic space is two cells and shows nothing.
-        let blank = buf
-            .cell((cursor_x, caret_y))
-            .is_none_or(|c| c.symbol().trim().is_empty());
-        if blank {
+        //
+        // *Both* cells decide whether the slot is blank. A half-width character
+        // hangs against the slot's right edge, so asking only the left one says
+        // "blank" over a digit — and the ideographic space then paints it out.
+        // The character comes back the moment the caret moves on, which is what
+        // "I typed 1 and got a space" looks like.
+        let occupied = |x: u16| {
+            buf.cell((x, caret_y))
+                .is_some_and(|c| !c.symbol().trim().is_empty())
+        };
+        if !occupied(cursor_x) && !occupied(cursor_x + 1) {
             put_slot(buf, cursor_x, caret_y, "\u{3000}", Style::default());
         }
     }
