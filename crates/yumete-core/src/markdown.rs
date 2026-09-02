@@ -128,7 +128,6 @@ impl Block {
 #[derive(Debug, Default)]
 pub struct BlockScanner {
     line: usize,
-    in_code: bool,
     /// Which fence opened the code block, so `~~~` does not close a ``` one.
     fence: Option<char>,
     in_front: bool,
