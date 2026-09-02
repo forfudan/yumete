@@ -989,7 +989,10 @@ fn draw(
     let (cursor_x, cursor_y) = match editor.layout() {
         // A grid is not prose and is not drawn as prose: no wrapping, no
         // markup, one row per line, columns that line up.
-        _ if editor.table().is_some() => {
+        // A `|` table lives inside a page of prose and is drawn by whatever
+        // draws that page — the paragraph above it must not vanish because the
+        // cursor landed in a cell.
+        _ if editor.table().is_some_and(|t| t.is_grid()) => {
             table::draw(frame, editor, config, text_area, &mut viewport.table)
         }
         WritingLayout::Horizontal => {

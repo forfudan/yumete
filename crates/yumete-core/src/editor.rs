@@ -77,6 +77,8 @@ enum Pending {
     SurroundFrom,
     /// …and then the one to replace it with.
     SurroundTo(char),
+    /// `t` in a table, awaiting the structural edit it opens.
+    Table,
 }
 
 /// The four flavours of in-line character search (`f`/`t`/`F`/`T`).
@@ -283,6 +285,36 @@ pub struct TableView {
     goal: usize,
     /// What one step of `hjkl` moves by.
     pub grain: Grain,
+    /// Whether the grid is the file or a table inside a document.
+    pub shape: Shape,
+}
+
+/// What kind of table is being read.
+///
+/// The cell model is the same for both — land on a cell, walk to the next one,
+/// add a row — and everything else differs, which is why this is one enum and
+/// not two modes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Shape {
+    /// The whole file, split on a delimiter, and **drawn as a grid**: the
+    /// columns line up on the terminal because the renderer puts them there,
+    /// and the file on disk is untouched.
+    Delimited,
+    /// A `|` table inside a document, **drawn as the document it is in**. The
+    /// columns line up because the text itself is padded — which is what a
+    /// Markdown table is supposed to look like anyway.
+    Markdown,
+}
+
+impl TableView {
+    /// Whether this is the grid the table renderer draws.
+    ///
+    /// A Markdown table is part of a page of prose: it is drawn by whatever
+    /// draws the page, so that the paragraph above it does not vanish the
+    /// moment the cursor lands in a cell.
+    pub fn is_grid(&self) -> bool {
+        self.shape == Shape::Delimited
+    }
 }
 
 /// What a motion moves by, in a grid.
@@ -2018,6 +2050,16 @@ impl Editor {
     /// Reports what it did, because a mode that changes what every key means
     /// must never turn itself on quietly.
     pub fn enter_table(&mut self) -> bool {
+        // A `|` table under the cursor is a table, whatever the file is called
+        // and whether or not it has been saved — it says what it is on every
+        // one of its own lines.
+        // …unless a schema already claims the file. A schema is a person
+        // saying what this data is, and a row of it that happens to open with
+        // a pipe does not get to overrule them.
+        if self.md_row_at_cursor() && self.table.as_ref().map(|v| v.shape) != Some(Shape::Delimited)
+        {
+            return self.enter_md_table();
+        }
         let Some(path) = self.current_buffer().path().map(Path::to_path_buf) else {
             self.status = "no file, so no schema to read it by".to_string();
             return false;
@@ -2044,9 +2086,9 @@ impl Editor {
             None => {
                 let head = self.current_buffer().rope().line(0).to_string();
                 let schema = crate::table::Schema::from_header(&head, ',');
-                if schema.columns.len() < 2 {
+                if schema.columns.len() < 2 || !self.looks_delimited(schema.columns.len()) {
                     self.status = format!(
-                        "'{}' has no columns to read — one field per line",
+                        "'{}' 不像表格 — 表格是每行同樣多的欄，或者游標放在 | 表格上",
                         path.file_name().unwrap_or_default().to_string_lossy()
                     );
                     return false;
@@ -2060,6 +2102,7 @@ impl Editor {
             from,
             goal: 0,
             grain: Grain::Cell,
+            shape: Shape::Delimited,
         });
         // A grid is read across: rows run left to right and columns stack down
         // the page, which is the one thing a 縱書 layout cannot do. Rather than
@@ -2070,6 +2113,29 @@ impl Editor {
             if turned { "（已轉橫排）" } else { "" }
         );
         true
+    }
+
+    /// Whether the file's own first lines agree that it is a table.
+    ///
+    /// The header-row fallback used to take any first line with a comma in it,
+    /// which meant `:table` on a page of prose whose first sentence held one
+    /// turned the manuscript into a two-column grid. A delimited file has the
+    /// property prose never has: **every line has the same number of fields**.
+    /// Twenty lines is enough to tell, and is what a person would look at.
+    fn looks_delimited(&self, columns: usize) -> bool {
+        let rope = self.current_buffer().rope();
+        let mut seen = 0;
+        for line in 0..rope.len_lines().min(20) {
+            let text = rope.line(line).to_string();
+            if text.trim().is_empty() {
+                continue;
+            }
+            if crate::table::cells(&text, ',').len() != columns {
+                return false;
+            }
+            seen += 1;
+        }
+        seen >= 2
     }
 
     /// Go back to reading the file as plain text.
@@ -2112,6 +2178,7 @@ impl Editor {
                 from,
                 goal: 0,
                 grain: Grain::Cell,
+                shape: Shape::Delimited,
             });
             // The same door as `:table`, and the same rule: a grid is read
             // across. This is the door the manual calls the ordinary one —
@@ -2128,6 +2195,12 @@ impl Editor {
 
     /// Turn the page horizontal for a grid, remembering what it was.
     fn turn_for_table(&mut self) -> bool {
+        // Only a whole-file grid is drawn as a grid. A `|` table is part of a
+        // page, and turning the page sideways to edit three lines of it would
+        // throw away everything around them.
+        if self.table.as_ref().map(|v| v.shape) == Some(Shape::Markdown) {
+            return false;
+        }
         if self.layout != Layout::Vertical {
             return false;
         }
@@ -2135,6 +2208,405 @@ impl Editor {
         self.layout = Layout::Horizontal;
         self.zong_motion = false;
         true
+    }
+
+    // ---- Markdown tables (Feature #142) -----------------------------------
+
+    /// Whether the grid's rules apply where the cursor is standing.
+    ///
+    /// A delimited file is a grid everywhere. A Markdown table is a grid for
+    /// the lines it occupies and nowhere else — which is what makes the mode
+    /// safe to leave on: walk out of the table into the paragraph below it and
+    /// `hjkl` are letters again, `|` may be typed, and walking back in brings
+    /// the grid back. A mode scoped to the thing it is about never has to be
+    /// turned off.
+    fn table_here(&self) -> bool {
+        match self.table.as_ref().map(|v| v.shape) {
+            Some(Shape::Delimited) => true,
+            Some(Shape::Markdown) => self.md_region().is_some(),
+            None => false,
+        }
+    }
+
+    /// Whether the cursor's own line is a row of a `|` table.
+    fn md_row_at_cursor(&self) -> bool {
+        let rope = self.current_buffer().rope();
+        let line = rope.char_to_line(self.cursor.min(rope.len_chars()));
+        crate::mdtable::is_row(&rope.line(line).to_string())
+    }
+
+    /// The text of one line, or `None` past the end of the file.
+    fn line_text(&self, line: usize) -> Option<String> {
+        let rope = self.current_buffer().rope();
+        (line < rope.len_lines()).then(|| rope.line(line).to_string())
+    }
+
+    /// The Markdown table the cursor is in — worked out afresh, never stored.
+    ///
+    /// A remembered `first` is wrong the moment a row is opened above it, and
+    /// the walk costs a few lines around the cursor. So the region is a
+    /// question the editor asks, not a fact it keeps.
+    pub fn md_region(&self) -> Option<crate::mdtable::Region> {
+        if self.table.as_ref().map(|v| v.shape) != Some(Shape::Markdown) {
+            return None;
+        }
+        let rope = self.current_buffer().rope();
+        let line = rope.char_to_line(self.cursor.min(rope.len_chars()));
+        crate::mdtable::region(|i| self.line_text(i), line)
+    }
+
+    /// Read the `|` table under the cursor as a grid.
+    fn enter_md_table(&mut self) -> bool {
+        let rope = self.current_buffer().rope();
+        let at = rope.char_to_line(self.cursor.min(rope.len_chars()));
+        let Some(region) = crate::mdtable::region(|i| self.line_text(i), at) else {
+            self.status = "游標不在表格裏".to_string();
+            return false;
+        };
+        let header = self.line_text(region.first).unwrap_or_default();
+        let schema = crate::mdtable::schema(&header);
+        self.table = Some(TableView {
+            schema,
+            from: PathBuf::new(),
+            goal: 0,
+            grain: Grain::Cell,
+            shape: Shape::Markdown,
+        });
+        self.snapshot();
+        // A header with no rule under it is a table nobody can render yet —
+        // and the person is standing in it, so they meant to write one. Adding
+        // it is the difference between a mode that works and a mode that says
+        // no to the very first table you try it on.
+        let added = region.rule.is_none();
+        if added {
+            let start = self.current_buffer().rope().line_to_char(region.first + 1);
+            let columns = crate::mdtable::cells(&header).len();
+            let row = crate::mdtable::rule_row(columns);
+            self.without_cell_guard(|e| e.current_buffer_mut().insert(start, &format!("{row}\n")));
+        }
+        let columns = self
+            .table
+            .as_ref()
+            .map(|v| v.schema.columns.len())
+            .unwrap_or(0);
+        self.format_md_table();
+        self.snap_to_cell();
+        self.status = format!(
+            "表格：{columns} 欄{}",
+            if added { "（補上了分隔行）" } else { "" }
+        );
+        true
+    }
+
+    /// The region's lines, rule row and all.
+    fn md_lines(&self, region: &crate::mdtable::Region) -> Vec<String> {
+        (region.first..=region.last)
+            .filter_map(|i| self.line_text(i))
+            .map(|l| l.trim_end_matches(['\n', '\r']).to_string())
+            .collect()
+    }
+
+    /// Put `lines` in place of the region, keeping the file's own last-line
+    /// rule about trailing newlines.
+    fn replace_md_region(&mut self, region: &crate::mdtable::Region, lines: &[String]) {
+        let rope = self.current_buffer().rope();
+        let start = rope.line_to_char(region.first);
+        let ends_file = region.last + 1 >= rope.len_lines();
+        let end = if ends_file {
+            rope.len_chars()
+        } else {
+            rope.line_to_char(region.last + 1)
+        };
+        let was = rope.slice(start..end).to_string();
+        let mut text = lines.join("\n");
+        if was.ends_with('\n') || !ends_file {
+            text.push('\n');
+        }
+        // An edit that changes nothing is not an edit: it would earn an undo
+        // point, and `u` would then take back a keystroke that did nothing.
+        if was == text {
+            return;
+        }
+        self.without_cell_guard(|e| {
+            e.current_buffer_mut().remove(start..end);
+            e.current_buffer_mut().insert(start, &text);
+        });
+    }
+
+    /// Lay the table under the cursor out again. Returns whether it changed.
+    ///
+    /// Run after every edit that could have changed a column's width, which is
+    /// every edit: the alignment *is* the text here, so keeping it right means
+    /// rewriting it, and the rewrite is idempotent so doing it often is free.
+    fn format_md_table(&mut self) -> bool {
+        let Some(region) = self.md_region() else {
+            return false;
+        };
+        let before = self.md_lines(&region);
+        let after = crate::mdtable::format(&before);
+        if after == before || after.is_empty() {
+            return false;
+        }
+        // Where the cursor is, in the terms that survive a reflow: which row,
+        // which cell, and how far into that cell's text.
+        let rope = self.current_buffer().rope();
+        let line = rope.char_to_line(self.cursor.min(rope.len_chars()));
+        let within = self.cursor - rope.line_to_char(line);
+        let cell = self.cell_position().map(|(_, c)| c).unwrap_or(0);
+        let into = self
+            .row_cells(line)
+            .get(cell)
+            .map(|&(a, _)| within.saturating_sub(a))
+            .unwrap_or(0);
+        self.replace_md_region(&region, &after);
+        self.go_to_cell(line, cell);
+        let span = self.row_cells(line).get(cell).copied();
+        if let Some((a, b)) = span {
+            let start = self.current_buffer().rope().line_to_char(line);
+            self.move_head(start + (a + into).min(b));
+        }
+        true
+    }
+
+    /// Take the table apart, so a structural edit can work on rows and columns
+    /// rather than on characters.
+    fn md_parts(&self) -> Option<(crate::mdtable::Region, crate::mdtable::Parts)> {
+        let region = self.md_region()?;
+        let parts = crate::mdtable::parse(&self.md_lines(&region));
+        Some((region, parts))
+    }
+
+    /// Which row of `parts` and which column the cursor is on.
+    ///
+    /// `parts` has no rule row in it, so the line the cursor is on is one
+    /// further down than its index whenever the cursor is past the rule.
+    fn md_at(&self, region: &crate::mdtable::Region) -> (usize, usize) {
+        let rope = self.current_buffer().rope();
+        let line = rope.char_to_line(self.cursor.min(rope.len_chars()));
+        let mut row = line.saturating_sub(region.first);
+        if region.rule.is_some_and(|r| line > r) {
+            row -= 1;
+        }
+        let cell = self.cell_position().map(|(_, c)| c).unwrap_or(0);
+        (row, cell)
+    }
+
+    /// The line a row of `parts` is written on.
+    fn md_line_of(&self, region: &crate::mdtable::Region, row: usize) -> usize {
+        region.first + row + usize::from(region.rule.is_some() && row > 0)
+    }
+
+    /// Write the parts back and put the cursor on one cell of them.
+    fn md_write(
+        &mut self,
+        region: &crate::mdtable::Region,
+        parts: &crate::mdtable::Parts,
+        row: usize,
+        cell: usize,
+    ) {
+        self.snapshot();
+        let lines = crate::mdtable::compose(parts);
+        self.replace_md_region(region, &lines);
+        // The region moved if the edit added or removed a row, so it is found
+        // again rather than reused.
+        let line = self.md_line_of(region, row.min(parts.rows.len().saturating_sub(1)));
+        self.go_to_cell(line, cell);
+        if let Some(view) = self.table.as_mut() {
+            view.goal = cell;
+        }
+    }
+
+    /// Put a new row in below the cursor's (or above it).
+    fn md_new_row(&mut self, below: bool) {
+        let Some((region, mut parts)) = self.md_parts() else {
+            return;
+        };
+        let (row, cell) = self.md_at(&region);
+        let at = parts.insert_row(if below { row + 1 } else { row });
+        self.md_write(&region, &parts, at, cell);
+        self.status = "加了一行".to_string();
+    }
+
+    /// Take the cursor's row out.
+    fn md_drop_row(&mut self) {
+        let Some((region, mut parts)) = self.md_parts() else {
+            return;
+        };
+        let (row, cell) = self.md_at(&region);
+        match parts.remove_row(row) {
+            Ok(at) => {
+                self.md_write(&region, &parts, at, cell);
+                self.status = "刪了一行".to_string();
+            }
+            Err(why) => self.status = why.to_string(),
+        }
+    }
+
+    /// Move the cursor's row down (or up), taking the cursor with it.
+    fn md_move_row(&mut self, down: bool) {
+        let Some((region, mut parts)) = self.md_parts() else {
+            return;
+        };
+        let (row, cell) = self.md_at(&region);
+        match parts.move_row(row, down) {
+            Ok(at) => {
+                self.md_write(&region, &parts, at, cell);
+                self.status = if down { "下移一行" } else { "上移一行" }.to_string();
+            }
+            Err(why) => self.status = why.to_string(),
+        }
+    }
+
+    /// Put a new column in after the cursor's (or before it).
+    fn md_new_column(&mut self, after: bool) {
+        let Some((region, mut parts)) = self.md_parts() else {
+            return;
+        };
+        let (row, cell) = self.md_at(&region);
+        let at = parts.insert_column(if after { cell + 1 } else { cell });
+        self.md_reschema(&parts);
+        self.md_write(&region, &parts, row, at);
+        self.status = "加了一欄".to_string();
+    }
+
+    /// Take the cursor's column out of every row.
+    fn md_drop_column(&mut self) {
+        let Some((region, mut parts)) = self.md_parts() else {
+            return;
+        };
+        let (row, cell) = self.md_at(&region);
+        match parts.remove_column(cell) {
+            Ok(at) => {
+                self.md_reschema(&parts);
+                self.md_write(&region, &parts, row, at);
+                self.status = "刪了一欄".to_string();
+            }
+            Err(why) => self.status = why.to_string(),
+        }
+    }
+
+    /// Move the cursor's column right (or left), taking the cursor with it.
+    fn md_move_column(&mut self, right: bool) {
+        let Some((region, mut parts)) = self.md_parts() else {
+            return;
+        };
+        let (row, cell) = self.md_at(&region);
+        match parts.move_column(cell, right) {
+            Ok(at) => {
+                self.md_reschema(&parts);
+                self.md_write(&region, &parts, row, at);
+                self.status = if right { "右移一欄" } else { "左移一欄" }.to_string();
+            }
+            Err(why) => self.status = why.to_string(),
+        }
+    }
+
+    /// Change which way this column's cells are set.
+    fn md_align(&mut self, align: crate::mdtable::Align) {
+        let Some((region, mut parts)) = self.md_parts() else {
+            return;
+        };
+        let (row, cell) = self.md_at(&region);
+        if !parts.ruled {
+            self.status = "沒有分隔行，無從對齊".to_string();
+            return;
+        }
+        let columns = parts.columns();
+        parts.aligns.resize(columns, crate::mdtable::Align::default());
+        if cell >= columns {
+            return;
+        }
+        parts.aligns[cell] = align;
+        self.md_write(&region, &parts, row, cell);
+        self.status = format!(
+            "這一欄：{}",
+            match align {
+                crate::mdtable::Align::Left | crate::mdtable::Align::Plain => "靠左",
+                crate::mdtable::Align::Center => "居中",
+                crate::mdtable::Align::Right => "靠右",
+            }
+        );
+    }
+
+    /// Re-read the column names after their number has changed.
+    ///
+    /// The schema is what the status line names a column by; a table that has
+    /// just gained a column would otherwise keep naming the old ones.
+    fn md_reschema(&mut self, parts: &crate::mdtable::Parts) {
+        let header = parts.rows.first().cloned().unwrap_or_default();
+        let line = format!("| {} |", header.join(" | "));
+        let schema = crate::mdtable::schema(&line);
+        if let Some(view) = self.table.as_mut() {
+            view.schema = schema;
+        }
+    }
+
+    /// Put the cursor on the nearest cell, out of the padding.
+    fn snap_to_cell(&mut self) {
+        if let Some((line, cell)) = self.cell_position() {
+            self.go_to_cell(line, cell);
+        }
+    }
+
+    /// Step to the next cell, wrapping to the next row at the end of one.
+    ///
+    /// What `Tab` does in every table anyone has ever used, and the reason a
+    /// table is quick to type: you never reach for a pipe. At the last cell of
+    /// the last row it opens a new row, which is org-mode's rule and the right
+    /// one — the table you are filling in is not finished.
+    fn md_step_cell(&mut self, forward: bool) -> bool {
+        let Some(region) = self.md_region() else {
+            return false;
+        };
+        let Some((line, cell)) = self.cell_position() else {
+            return false;
+        };
+        let width = self.row_cells(line).len();
+        if forward && cell + 1 < width {
+            self.go_to_cell(line, cell + 1);
+        } else if !forward && cell > 0 {
+            self.go_to_cell(line, cell - 1);
+        } else if forward {
+            let next = self.md_next_row(&region, line, true);
+            match next {
+                Some(l) => self.go_to_cell(l, 0),
+                None => {
+                    self.md_new_row(true);
+                    // The new row is empty, so the cell to be typing in is its
+                    // first — not the one Tab happened to be leaving.
+                    if let Some((l, _)) = self.cell_position() {
+                        self.go_to_cell(l, 0);
+                    }
+                    self.status = "加了一行".to_string();
+                }
+            }
+        } else {
+            let Some(l) = self.md_next_row(&region, line, false) else {
+                return true;
+            };
+            let last = self.row_cells(l).len().saturating_sub(1);
+            self.go_to_cell(l, last);
+        }
+        if let Some((_, c)) = self.cell_position() {
+            if let Some(view) = self.table.as_mut() {
+                view.goal = c;
+            }
+        }
+        true
+    }
+
+    /// The next line of the table that holds data — the rule row is skipped.
+    fn md_next_row(
+        &self,
+        region: &crate::mdtable::Region,
+        line: usize,
+        down: bool,
+    ) -> Option<usize> {
+        let mut want = if down { line + 1 } else { line.checked_sub(1)? };
+        if region.is_rule(want) {
+            want = if down { want + 1 } else { want.checked_sub(1)? };
+        }
+        region.holds(want).then_some(want)
     }
 
     /// Where every cell of a line begins and ends, in characters from its start.
@@ -2146,7 +2618,14 @@ impl Editor {
         if line >= rope.len_lines() {
             return Vec::new();
         }
-        crate::table::cells(&rope.line(line).to_string(), view.schema.delimiter)
+        let text = rope.line(line).to_string();
+        match view.shape {
+            // A Markdown cell's padding is layout, not content: it is not in
+            // the span, so landing on a cell lands on its first real
+            // character rather than on the space before it.
+            Shape::Markdown => crate::mdtable::cells(&text),
+            Shape::Delimited => crate::table::cells(&text, view.schema.delimiter),
+        }
     }
 
     /// Which cell of which row the cursor is in.
@@ -2156,10 +2635,14 @@ impl Editor {
         let line = rope.char_to_line(self.cursor.min(rope.len_chars()));
         let within = self.cursor - rope.line_to_char(line);
         let cells = self.row_cells(line);
+        // Delimited cells are contiguous, so one of them always holds the
+        // cursor. A Markdown row has padding between its cells and around its
+        // pipes, and the cursor sitting in it belongs to the cell it is past.
         let at = cells
             .iter()
             .position(|&(a, b)| within >= a && within <= b)
-            .unwrap_or(cells.len().saturating_sub(1));
+            .or_else(|| cells.iter().rposition(|&(_, b)| within > b))
+            .unwrap_or(0);
         Some((line, at))
     }
 
@@ -2218,6 +2701,16 @@ impl Editor {
         let Some((line, _)) = self.cell_position() else {
             return;
         };
+        // A Markdown table is a few lines of a document, so `j` at its last
+        // row stops rather than walking out into the prose — and the rule row
+        // is drawn, not written, so nothing ever lands on it.
+        if let Some(region) = self.md_region() {
+            let goal = self.table.as_ref().map(|v| v.goal).unwrap_or(0);
+            if let Some(want) = self.md_next_row(&region, line, down) {
+                self.go_to_cell(want, goal);
+            }
+            return;
+        }
         let last = self.current_buffer().rope().len_lines().saturating_sub(1);
         let want = if down {
             (line + 1).min(last)
@@ -2310,14 +2803,61 @@ impl Editor {
             Key::Char('y') => self.yank_cell(),
             // The whole row, spelled the way vi spells "the whole line".
             Key::Char('Y') => self.yank_row(),
-            Key::Char('p') | Key::Char('P') => self.put_cell(),
+            Key::Char('p') | Key::Char('P') => {
+                self.put_cell();
+                // What was pasted in may be wider than the column was.
+                self.format_md_table();
+            }
             Key::Char('i') => self.edit_cell(CellEdit::Start),
             Key::Char('a') | Key::Char('A') => self.edit_cell(CellEdit::End),
             Key::Char('I') => self.edit_cell(CellEdit::Start),
             Key::Char('c') => self.edit_cell(CellEdit::Replace),
+            // Everything below is about the table's *shape* rather than its
+            // contents, and a Markdown table is the only one whose shape the
+            // editor may change: a delimited file's columns are the schema's,
+            // and 123,380 rows do not want a column inserted by a keystroke.
+            Key::Char('t') if self.md_region().is_some() => self.pending = Pending::Table,
+            // `o` in a grid means a new row, and on the header row the new row
+            // has to go under the rule rather than between it and its names.
+            Key::Char('o') if self.md_region().is_some() => self.md_new_row(true),
+            Key::Char('O') if self.md_region().is_some() => self.md_new_row(false),
             _ => return false,
         }
         true
+    }
+
+    /// One key of the `t` structural menu.
+    ///
+    /// Directions mean what they mean in a grid: `j`/`k` are the row, `h`/`l`
+    /// are the column, and which one an edit is about never has to be said
+    /// twice. The rest is vi's own spelling — `o`/`O` open, `d` deletes.
+    fn table_structure(&mut self, key: Key) {
+        use crate::mdtable::Align;
+        match key {
+            Key::Char('o') => self.md_new_row(true),
+            Key::Char('O') => self.md_new_row(false),
+            Key::Char('n') => self.md_new_column(true),
+            Key::Char('N') => self.md_new_column(false),
+            Key::Char('d') => self.md_drop_row(),
+            Key::Char('D') => self.md_drop_column(),
+            Key::Char('j') | Key::Down => self.md_move_row(true),
+            Key::Char('k') | Key::Up => self.md_move_row(false),
+            Key::Char('h') | Key::Left => self.md_move_column(false),
+            Key::Char('l') | Key::Right => self.md_move_column(true),
+            Key::Char('<') => self.md_align(Align::Left),
+            Key::Char('=') => self.md_align(Align::Center),
+            Key::Char('>') => self.md_align(Align::Right),
+            Key::Char('t') => {
+                self.snapshot();
+                self.status = if self.format_md_table() {
+                    "重排好了".to_string()
+                } else {
+                    "已經是對齊的".to_string()
+                };
+            }
+            Key::Esc => {}
+            _ => self.status = "t 後面：o O n N d D j k h l < = > t".to_string(),
+        }
     }
 
     /// Enter a cell to type in it.
@@ -2450,9 +2990,27 @@ impl Editor {
             Mode::Ruby if self.ruby_target.is_some() => {
                 Hint::Keys("注音", vec![("Enter", "收下"), ("Esc", "取消")])
             }
-            Mode::Normal if self.table.is_some() => {
+            // The one key worth saying inside a cell — without it a person
+            // types a value, presses Esc, walks right and types the next.
+            Mode::Insert if self.md_region().is_some() && self.insert_bounds().is_some() => Hint::Keys(
+                "格內",
+                vec![("Tab", "下一格"), ("S-Tab", "上一格"), ("Esc", "回正常")],
+            ),
+            Mode::Normal if self.table_here() => {
                 let grain = self.table.as_ref().map(|v| v.grain).unwrap_or(Grain::Cell);
+                let markdown = self.md_region().is_some();
                 match grain {
+                    Grain::Cell if markdown => Hint::Keys(
+                        "表格",
+                        vec![
+                            ("hjkl", "走格"),
+                            ("c", "換格"),
+                            ("y Y", "取格/行"),
+                            ("p", "貼"),
+                            ("t", "增刪行列"),
+                            ("Tab", "改按字"),
+                        ],
+                    ),
                     Grain::Cell => Hint::Keys(
                         "表格",
                         vec![
@@ -2524,6 +3082,18 @@ impl Editor {
             Pending::Surround => ("包起來", vec![("", "打一種括號")]),
             Pending::SurroundFrom => ("去掉", vec![("", "打要去掉的那一種")]),
             Pending::SurroundTo(_) => ("換成", vec![("", "打要換成的那一種")]),
+            Pending::Table => (
+                "t 表格",
+                vec![
+                    ("o O", "加一行（下／上）"),
+                    ("n N", "加一欄（右／左）"),
+                    ("d D", "刪這行／這欄"),
+                    ("j k", "這行下移／上移"),
+                    ("h l", "這欄左移／右移"),
+                    ("< = >", "這欄靠左／居中／靠右"),
+                    ("t", "重排對齊"),
+                ],
+            ),
         };
         Some(Hint::Keys(keys.0, keys.1))
     }
@@ -2535,6 +3105,9 @@ impl Editor {
     /// mode you will be surprised by.
     pub fn table_status(&self) -> Option<String> {
         let view = self.table.as_ref()?;
+        if !self.table_here() {
+            return None;
+        }
         let (_, cell) = self.cell_position()?;
         let name = view
             .schema
@@ -2590,12 +3163,21 @@ impl Editor {
             return;
         };
         let Some(view) = &self.table else { return };
-        let (d, columns) = (view.schema.delimiter, view.schema.columns.len());
+        let (d, columns, markdown) = (
+            view.schema.delimiter,
+            view.schema.columns.len(),
+            view.shape == Shape::Markdown,
+        );
         let body = text.trim_end_matches(['\n', '\r']);
         // A row: the right number of cells, and no line break left inside it.
+        // A Markdown row says what it is by its own pipes, so it is recognised
+        // by the same test that finds a table in the first place.
         let is_row = !body.contains(['\n', '\r'])
-            && body.chars().filter(|&c| c == d).count() + 1 == columns
-            && columns > 1;
+            && if markdown {
+                crate::mdtable::is_row(body)
+            } else {
+                body.chars().filter(|&c| c == d).count() + 1 == columns && columns > 1
+            };
         if is_row {
             let body = body.to_string();
             self.snapshot();
@@ -2605,6 +3187,7 @@ impl Editor {
                 e.current_buffer_mut().insert(at, &format!("\n{body}"));
             });
             self.set_cursor(at + 1);
+            self.format_md_table();
             self.status = "貼成新的一行".to_string();
             return;
         }
@@ -2624,6 +3207,9 @@ impl Editor {
 
     /// The bounds of the cell the cursor is in, for clamping Insert to it.
     fn insert_bounds(&self) -> Option<(usize, usize)> {
+        if !self.table_here() {
+            return None;
+        }
         let (line, cell) = self.cell_position()?;
         self.cell_span(line, cell)
     }
@@ -2750,6 +3336,9 @@ impl Editor {
     /// the key is refused here, where it can still be explained.
     fn cell_refuses(&self, c: char) -> Option<String> {
         let view = self.table.as_ref()?;
+        if !self.table_here() {
+            return None;
+        }
         if c == view.schema.delimiter {
             return Some(format!(
                 "'{c}' separates cells — it cannot be written inside one"
@@ -2799,6 +3388,9 @@ impl Editor {
     /// line therefore opens a *row*.
     fn blank_row(&self) -> String {
         match &self.table {
+            Some(view) if view.shape == Shape::Markdown => {
+                crate::mdtable::blank_row(view.schema.columns.len())
+            }
             Some(view) => view
                 .schema
                 .delimiter
@@ -2839,7 +3431,11 @@ impl Editor {
     /// answer with theirs. The editor works out *what* to say; the front end
     /// decides where to put it.
     pub fn detail(&self) -> Option<Detail> {
-        match self.table.is_some() {
+        // A Markdown table is a page of a document: the question the panel
+        // answers there is the document's question — what is this footnote,
+        // what does this comment say — not "what are this row's twenty-eight
+        // fields", which a two-column table does not have.
+        match self.table.as_ref().is_some_and(|v| v.is_grid()) {
             true => self.row_detail(),
             false => self.note_detail(),
         }
@@ -3818,6 +4414,11 @@ impl Editor {
 
         // A pending multi-key operator consumes this key.
         match self.pending {
+            Pending::Table => {
+                self.pending = Pending::None;
+                self.table_structure(key);
+                return;
+            }
             Pending::Goto => {
                 self.pending = Pending::None;
                 self.handle_goto(key);
@@ -3933,14 +4534,16 @@ impl Editor {
         // key that follows a table cell to the row it names. Enter again comes
         // back, because a note read at the foot of the file is no use if
         // finding your sentence again is a search.
-        if self.table.is_none() && key == Key::Enter {
+        // A Markdown table is part of a document, so a link in a cell is a
+        // link: the key that follows one everywhere else follows it here too.
+        if (self.table.is_none() || self.md_region().is_some()) && key == Key::Enter {
             self.follow_note();
             return;
         }
 
         // Read as a grid, `hjkl` walk cells. Before the vertical branch because
         // a table is read across, whatever the file's writing layout is.
-        if self.table.is_some() && self.table_motion(key, count) {
+        if self.table_here() && self.table_motion(key, count) {
             return;
         }
 
@@ -4901,13 +5504,22 @@ impl Editor {
                 _ => {}
             }
         }
-        if self.table.is_some() {
+        if self.table_here() {
             match key {
                 Key::Char(c) => {
                     if let Some(why) = self.cell_refuses(c) {
                         self.status = why;
                         return;
                     }
+                }
+                // Tab is what walks a table in every tool that has one, and
+                // it is why a table is quick to fill in: you never reach for a
+                // pipe. It reflows the row on the way, so the columns stay
+                // lined up while you type rather than after you stop.
+                Key::Tab | Key::BackTab if self.md_region().is_some() => {
+                    self.format_md_table();
+                    self.md_step_cell(key == Key::Tab);
+                    return;
                 }
                 Key::Enter | Key::Tab => {
                     self.status = "一格之內：Enter 與 Tab 不進格子".to_string();
@@ -4929,6 +5541,11 @@ impl Editor {
                 self.last_insert = std::mem::take(&mut self.insert_recording);
                 self.last_edit_was_insert = !self.last_insert.is_empty();
                 self.mode = Mode::Normal;
+                // A cell that grew while it was being typed in made its column
+                // too narrow for it. Laying the table out again on the way out
+                // is what keeps "aligned" a property of the file rather than a
+                // command somebody has to remember.
+                self.format_md_table();
             }
             Key::Enter => {
                 self.insert_recording.push('\n');
@@ -8176,6 +8793,289 @@ mod tests {
         assert!(ed.execute("w").is_ok(), "and saving is fine again");
 
         std::fs::remove_dir_all(&dir).ok();
+    }
+
+    // ---- Markdown tables (Feature #142) -----------------------------------
+
+    /// A document with a `|` table in the middle of it, cursor on line 3.
+    fn with_md_table() -> Editor {
+        let mut ed = typed("前文\n| 字 | 讀音 |\n| --- | --- |\n| 木 | mu |\n| 目 | mu |\n後文\n");
+        ed.goto_line(4);
+        ed
+    }
+
+    #[test]
+    fn a_pipe_table_is_a_grid_wherever_it_is() {
+        let mut ed = with_md_table();
+        assert!(ed.enter_table(), "{}", ed.status());
+        // Entering lays it out: the columns line up on the terminal, which is
+        // what a Markdown table is supposed to look like and never does.
+        assert_eq!(
+            ed.current_buffer().text(),
+            "前文\n| 字 | 讀音 |\n| -- | ---- |\n| 木 | mu   |\n| 目 | mu   |\n後文\n"
+        );
+        // And `l` walks to the next cell rather than the next character.
+        assert_eq!(ed.cell_position().map(|(_, c)| c), Some(0));
+        press(&mut ed, "l");
+        assert_eq!(ed.cell_position().map(|(_, c)| c), Some(1));
+        assert_eq!(ed.cell_text(3, 1), "mu");
+    }
+
+    #[test]
+    fn the_grid_is_only_where_the_table_is() {
+        // The point of scoping the mode to the region: walking out of the
+        // table into the prose under it gives every key back. A mode that is
+        // on everywhere would make `l` in a paragraph jump to the line's end.
+        let mut ed = with_md_table();
+        assert!(ed.enter_table());
+        assert!(ed.table_status().is_some(), "standing in it");
+        ed.goto_line(6);
+        assert!(ed.table_status().is_none(), "standing in the prose below");
+        assert!(ed.md_region().is_none());
+        // And `|` may be typed in prose, where it is just a character.
+        press(&mut ed, "i|");
+        assert!(ed.current_buffer().text().contains("|後文"), "{}", ed.status());
+        ed.on_key(Key::Esc);
+        ed.goto_line(4);
+        assert!(ed.table_status().is_some(), "and walking back in brings it back");
+    }
+
+    #[test]
+    fn moving_down_a_column_steps_over_the_rule_and_stops_at_the_edge() {
+        let mut ed = with_md_table();
+        assert!(ed.enter_table());
+        ed.goto_line(2);
+        ed.enter_table();
+        press(&mut ed, "j");
+        // Line 3 is the `|---|` rule, which is drawn rather than written.
+        assert_eq!(ed.cell_position().map(|(l, _)| l), Some(3));
+        press(&mut ed, "jjjj");
+        assert_eq!(
+            ed.cell_position().map(|(l, _)| l),
+            Some(4),
+            "the last row is the last row, not the prose after it"
+        );
+        press(&mut ed, "kkkk");
+        assert_eq!(ed.cell_position().map(|(l, _)| l), Some(1), "and the header is the top");
+    }
+
+    #[test]
+    fn a_column_of_han_lines_up_by_width_not_by_character_count() {
+        // The reason this module exists. Every other formatter pads to a
+        // character count, so a column mixing 漢字 with Latin comes out
+        // ragged on the very terminal it is being written on.
+        let mut ed = typed("| a | 甲 |\n| --- | --- |\n| bbbb | 乙丙 |\n");
+        ed.goto_line(1);
+        assert!(ed.enter_table());
+        let widths: Vec<usize> = ed
+            .current_buffer()
+            .text()
+            .lines()
+            .map(yumete_cjk::str_width)
+            .collect();
+        assert!(widths.windows(2).all(|w| w[0] == w[1]), "{widths:?}");
+    }
+
+    #[test]
+    fn a_header_with_no_rule_gets_one() {
+        // The first table anyone tries this on is one they are in the middle
+        // of writing, and it has no `|---|` yet. Refusing it would be refusing
+        // the whole feature at the moment it is most wanted.
+        let mut ed = typed("| 字 | 讀音 |\n");
+        ed.goto_line(1);
+        assert!(ed.enter_table(), "{}", ed.status());
+        assert_eq!(ed.current_buffer().text(), "| 字 | 讀音 |\n| -- | ---- |\n");
+        assert!(ed.status().contains("分隔行"), "and it says so: {}", ed.status());
+    }
+
+    #[test]
+    fn t_adds_and_drops_rows_and_columns() {
+        let mut ed = with_md_table();
+        assert!(ed.enter_table());
+        // A new row below this one, and the cursor goes to it.
+        press(&mut ed, "to");
+        assert_eq!(ed.current_buffer().line_count(), 8);
+        assert_eq!(ed.cell_position().map(|(l, _)| l), Some(4));
+        press(&mut ed, "td");
+        assert_eq!(
+            ed.current_buffer().text(),
+            "前文\n| 字 | 讀音 |\n| -- | ---- |\n| 木 | mu   |\n| 目 | mu   |\n後文\n"
+        );
+        // A new column to the right — of every row, and of the rule.
+        press(&mut ed, "tn");
+        assert_eq!(
+            ed.current_buffer().text(),
+            "前文\n| 字 |   | 讀音 |\n| -- | - | ---- |\n| 木 |   | mu   |\n| 目 |   | mu   |\n後文\n"
+        );
+        assert_eq!(ed.cell_position().map(|(_, c)| c), Some(1), "the cursor lands in it");
+        press(&mut ed, "tD");
+        assert_eq!(
+            ed.current_buffer().text(),
+            "前文\n| 字 | 讀音 |\n| -- | ---- |\n| 木 | mu   |\n| 目 | mu   |\n後文\n"
+        );
+    }
+
+    #[test]
+    fn the_header_is_not_a_row_anyone_may_delete() {
+        let mut ed = with_md_table();
+        assert!(ed.enter_table());
+        ed.goto_line(2);
+        ed.enter_table();
+        let before = ed.current_buffer().text();
+        press(&mut ed, "td");
+        assert_eq!(ed.current_buffer().text(), before);
+        assert!(ed.status().contains("標題行"), "{}", ed.status());
+    }
+
+    #[test]
+    fn t_moves_a_row_and_a_column_with_the_cursor_on_it() {
+        let mut ed = with_md_table();
+        assert!(ed.enter_table());
+        press(&mut ed, "tj");
+        assert_eq!(
+            ed.current_buffer().text(),
+            "前文\n| 字 | 讀音 |\n| -- | ---- |\n| 目 | mu   |\n| 木 | mu   |\n後文\n"
+        );
+        assert_eq!(ed.cell_position().map(|(l, _)| l), Some(4), "the cursor went with it");
+        press(&mut ed, "tl");
+        assert_eq!(
+            ed.current_buffer().text(),
+            "前文\n| 讀音 | 字 |\n| ---- | -- |\n| mu   | 目 |\n| mu   | 木 |\n後文\n"
+        );
+        assert_eq!(ed.cell_position().map(|(_, c)| c), Some(1));
+    }
+
+    #[test]
+    fn alignment_is_a_keystroke_and_shows_in_the_source() {
+        let mut ed = with_md_table();
+        assert!(ed.enter_table());
+        press(&mut ed, "lt>");
+        assert!(
+            ed.current_buffer().text().contains("| ---: |"),
+            "{}",
+            ed.current_buffer().text()
+        );
+        assert!(
+            ed.current_buffer().text().contains("|   mu |"),
+            "and the padding moves to the left: {}",
+            ed.current_buffer().text()
+        );
+    }
+
+    #[test]
+    fn tab_walks_the_cells_while_typing() {
+        // What makes a table quick to fill in: you never reach for a pipe.
+        let mut ed = typed("| a | b |\n| --- | --- |\n|  |  |\n");
+        ed.goto_line(3);
+        assert!(ed.enter_table());
+        press(&mut ed, "i");
+        press(&mut ed, "木");
+        ed.on_key(Key::Tab);
+        press(&mut ed, "mu");
+        ed.on_key(Key::Esc);
+        assert_eq!(
+            ed.current_buffer().text(),
+            "| a  | b  |\n| -- | -- |\n| 木 | mu |\n"
+        );
+        // And back the other way.
+        ed.on_key(Key::Char('i'));
+        ed.on_key(Key::BackTab);
+        assert_eq!(ed.cell_position().map(|(_, c)| c), Some(0));
+    }
+
+    #[test]
+    fn tab_at_the_end_of_the_last_row_opens_another() {
+        let mut ed = typed("| a | b |\n| --- | --- |\n| x | y |\n");
+        ed.goto_line(3);
+        assert!(ed.enter_table());
+        press(&mut ed, "l");
+        press(&mut ed, "i");
+        ed.on_key(Key::Tab);
+        assert_eq!(ed.current_buffer().line_count(), 5);
+        assert_eq!(ed.cell_position(), Some((3, 0)), "at the start of the new row");
+    }
+
+    #[test]
+    fn typing_keeps_the_columns_lined_up() {
+        let mut ed = with_md_table();
+        assert!(ed.enter_table());
+        press(&mut ed, "c");
+        press(&mut ed, "薔薇");
+        ed.on_key(Key::Esc);
+        assert_eq!(
+            ed.current_buffer().text(),
+            "前文\n| 字   | 讀音 |\n| ---- | ---- |\n| 薔薇 | mu   |\n| 目   | mu   |\n後文\n",
+            "the column widened around what was typed into it"
+        );
+    }
+
+    #[test]
+    fn one_undo_takes_back_one_edit_and_its_reflow() {
+        // The reflow is part of the edit, not a second one: a person who adds
+        // a column and presses `u` wants the table they had.
+        let mut ed = with_md_table();
+        assert!(ed.enter_table());
+        let before = ed.current_buffer().text();
+        press(&mut ed, "tn");
+        assert_ne!(ed.current_buffer().text(), before);
+        press(&mut ed, "u");
+        assert_eq!(ed.current_buffer().text(), before);
+    }
+
+    #[test]
+    fn a_pipe_cannot_be_typed_into_a_cell() {
+        // The same invariant the CSV grid keeps: a row's cell count never
+        // changes while it is being read as one.
+        let mut ed = with_md_table();
+        assert!(ed.enter_table());
+        press(&mut ed, "i|");
+        assert!(!ed.current_buffer().text().contains("||"), "{}", ed.status());
+        // `\|` is the escape a Markdown table does have, and it survives.
+        let mut ed = with_md_table();
+        assert!(ed.enter_table());
+        press(&mut ed, "c");
+        press(&mut ed, r"a\");
+        ed.on_key(Key::Esc);
+        assert!(ed.current_buffer().text().contains(r"a\"), "{}", ed.current_buffer().text());
+    }
+
+    #[test]
+    fn an_indented_table_stays_in_its_list_item() {
+        let mut ed = typed("- 一項\n  | a | b |\n  | --- | --- |\n  | x | y |\n");
+        ed.goto_line(4);
+        assert!(ed.enter_table(), "{}", ed.status());
+        let text = ed.current_buffer().text();
+        assert!(
+            text.lines().skip(1).all(|l| l.starts_with("  |")),
+            "{text}"
+        );
+    }
+
+    #[test]
+    fn prose_with_a_comma_in_it_is_not_a_table() {
+        // The header-row fallback used to take any first line with a comma,
+        // so `:table` on a manuscript turned the chapter into a grid.
+        let dir = std::env::temp_dir().join(format!("yumete-prose-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let file = dir.join("章.md");
+        std::fs::write(&file, "他說，這不是表格。\n下一段沒有逗號\n又一段，有兩個，逗號\n").unwrap();
+        let mut ed = Editor::new();
+        ed.open_file(&file).unwrap();
+        assert!(!ed.enter_table(), "{}", ed.status());
+        assert!(ed.table().is_none());
+        assert!(ed.status().contains("不像表格"), "{}", ed.status());
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn a_pipe_table_is_never_drawn_as_a_grid() {
+        // The renderer switch: a document keeps its layout and its page. A
+        // vertical manuscript with a table in it does not turn sideways.
+        let mut ed = with_md_table();
+        ed.set_layout(Layout::Vertical);
+        assert!(ed.enter_table());
+        assert_eq!(ed.layout(), Layout::Vertical);
+        assert!(!ed.table().unwrap().is_grid());
     }
 
     #[test]

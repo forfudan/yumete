@@ -951,7 +951,7 @@ pub const COMMANDS: &[Entry] = &[
     Entry {
         name: "table",
         aliases: &[],
-        help: "read the file as a grid; `:table off` as text",
+        help: "按格子編輯：CSV 整個檔案，或游標所在的 | 表格；`:table off` 收工",
         args: Args::Words(ON_OFF),
     },
     Entry {

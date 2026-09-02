@@ -10,7 +10,7 @@ to grow into a full editor.
 
 > **The terminal is the product.** This header used to say the terminal target
 > was on hold and the work had moved to a web frontend; §10 still argues that
-> case. It is out of date — features #96–#141 shipped in the TUI, and a reviewer
+> case. It is out of date — features #96–#142 shipped in the TUI, and a reviewer
 > reading that header reasonably concluded the project was dead. §10 is kept as
 > the record of an option that was considered and not taken.
 
@@ -338,6 +338,7 @@ Phases are ordered by priority, most writer-critical first:
 | 139 | **A ring of what was yanked**              | core   | P2    | `Space \"`; the last 16, plus the named ones | Done |
 | 140 | **An undo point has to be earned**         | core   | P1    | announced on `snapshot`, kept on the first edit | Done |
 | 141 | **A crash copy for a buffer with no file**  | both   | P2    | in the data dir; `:recover` is what finds them | Done |
+| 142 | **Markdown `|` tables as a grid**           | both   | P1    | the cell model over a *region*; aligned by East-Asian width, in the file | Done |
 
 ---
 
