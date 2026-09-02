@@ -790,9 +790,11 @@ fn draw_picker(frame: &mut Frame, editor: &Editor, area: Rect, status: Rect) {
     let footer = format!(
         "{}  {}/{}  {}",
         picker.title,
-        (!items.is_empty())
-            .then(|| picker.selected() + 1)
-            .unwrap_or(0),
+        if items.is_empty() {
+            0
+        } else {
+            picker.selected() + 1
+        },
         picker.total(),
         picker.query()
     );
