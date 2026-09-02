@@ -131,6 +131,8 @@ pub fn run(editor: &mut Editor, config: &Config, ime: &mut ImeSession) -> io::Re
                 let ruby = !editor.ruby().is_empty();
                 let hanging = editor.hanging_punctuation();
                 let measure = editor.measure();
+                let gap = editor.zong_gap();
+                let dense = editor.dense();
                 editor.set_zong_length(vertical::zong_length_for(
                     config,
                     size.height,
@@ -138,6 +140,8 @@ pub fn run(editor: &mut Editor, config: &Config, ime: &mut ImeSession) -> io::Re
                     ruby,
                     hanging,
                     measure,
+                    gap,
+                    dense,
                 ));
             }
         }
@@ -1942,8 +1946,10 @@ mod tests {
         let ruby = !editor.ruby().is_empty();
         let hanging = editor.hanging_punctuation();
         let measure = editor.measure();
+        let gap = editor.zong_gap();
+        let dense = editor.dense();
         editor.set_zong_length(vertical::zong_length_for(
-            config, h, lines, ruby, hanging, measure,
+            config, h, lines, ruby, hanging, measure, gap, dense,
         ));
         let mut terminal = Terminal::new(TestBackend::new(w, h)).unwrap();
         let mut viewport = Viewport::default();
@@ -1980,8 +1986,10 @@ mod tests {
         let ruby = !editor.ruby().is_empty();
         let hanging = editor.hanging_punctuation();
         let measure = editor.measure();
+        let gap = editor.zong_gap();
+        let dense = editor.dense();
         editor.set_zong_length(vertical::zong_length_for(
-            config, h, lines, ruby, hanging, measure,
+            config, h, lines, ruby, hanging, measure, gap, dense,
         ));
         render_with(editor, config, ime, w, h)
     }
@@ -3197,6 +3205,49 @@ mod tests {
             buffer[heading].style().add_modifier.contains(Modifier::BOLD),
             "a heading is set bold vertically too"
         );
+    }
+
+    #[test]
+    fn a_dense_page_spends_every_column_on_writing() {
+        // More text than the page can hold, so what is measured is how much of
+        // it fits — which is the only thing 密排 is for.
+        let mut editor = editor_with(&"字".repeat(600));
+        let mut config = vertical_config();
+        config.editor.zong_gap = 1;
+        config.editor.paper_ticks = 10;
+
+        // Ordinarily a 縱 costs three cells: two for the 字 and one for the gap
+        // it is read across, plus a column wherever a reading or a tick goes.
+        let loose = render_vertical(&mut editor, &config, 40, 14);
+        let fits = |b: &ratatui::buffer::Buffer| {
+            // The text area only: the status line is inside the window and is
+            // not writing, and its message differs between the two renders.
+            (0..40u16)
+                .flat_map(|x| (0..13u16).map(move |y| (x, y)))
+                .filter(|&(x, y)| at(b, x, y) == "字")
+                .count()
+        };
+        let before = fits(&loose);
+
+        // Packed, a 縱 is two cells — one 漢字 — and nothing else is spent.
+        editor.execute("dense").unwrap();
+        let tight = render_vertical(&mut editor, &config, 40, 14);
+        assert!(
+            fits(&tight) > before,
+            "more of the writing is on the page: {} then {}",
+            before,
+            fits(&tight)
+        );
+        // The 稿紙 ticks are gone: that column is the whole point.
+        assert!(
+            (0..40u16).all(|x| (0..14u16).all(|y| at(&tight, x, y) != ".")),
+            "no ticks on a packed page"
+        );
+
+        // …and it comes back, because a toggle that does not is not one.
+        editor.execute("dense off").unwrap();
+        let loose = render_vertical(&mut editor, &config, 40, 14);
+        assert_eq!(fits(&loose), before, "back to where it was");
     }
 
     #[test]

@@ -70,6 +70,9 @@ pub enum Command {
     SetMeasure(Option<usize>),
     /// `:table` / `:table off` — read the file as a grid (Feature #118).
     SetTable(bool),
+    /// `:dense` / `:dense off` — pack the 縱書 page as tight as a terminal can
+    /// (Feature #120).
+    SetDense(bool),
     /// `:wysiwyg` / `:source` — whether the markup comes off the page
     /// (Feature #104).
     SetWysiwyg(bool),
@@ -248,6 +251,14 @@ pub fn parse(input: &str) -> Result<Command, CommandError> {
         "source" | "src" => Ok(Command::SetWysiwyg(false)),
         // `:wrap` on its own still means what it always meant — turn wrapping
         // on — and leaves the measure alone; a number sets the measure.
+        "dense" => match rest {
+            "" | "on" => Ok(Command::SetDense(true)),
+            "off" => Ok(Command::SetDense(false)),
+            other => Err(CommandError::InvalidArgument {
+                command: "dense",
+                value: other.to_string(),
+            }),
+        },
         "table" => match rest {
             "" | "on" => Ok(Command::SetTable(true)),
             "off" => Ok(Command::SetTable(false)),
@@ -470,6 +481,11 @@ pub const COMMANDS: &[Entry] = &[
         name: "source",
         alias: Some("src"),
         help: "回到源碼",
+    },
+    Entry {
+        name: "dense",
+        alias: None,
+        help: "密排：一縱兩格，無注音、無旁置、無刻度",
     },
     Entry {
         name: "table",
@@ -786,6 +802,7 @@ mod tests {
             "markup",
             "wysiwyg",
             "source",
+            "dense",
             "table",
             "wrap",
             "nowrap",

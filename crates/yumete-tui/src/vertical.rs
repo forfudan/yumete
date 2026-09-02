@@ -75,6 +75,8 @@ impl Metrics {
         ruby: bool,
         hanging: bool,
         measure: Option<usize>,
+        gap: Option<usize>,
+        dense: bool,
     ) -> Metrics {
         let head_rows = number_rows(config.editor.line_numbers, total_lines);
         let rows = height.saturating_sub(head_rows) as usize;
@@ -83,15 +85,19 @@ impl Metrics {
         // *is* the length of a column.
         let want = measure.unwrap_or(config.editor.zong_length);
         let zong_len = want.min(rows.saturating_sub(1)).max(1);
+        // The writer's own gap wins over the config's, the way the measure does.
+        let gap = gap.unwrap_or(config.editor.zong_gap) as u16;
         Metrics {
             zong_len,
-            pitch: SLOT_WIDTH + config.editor.zong_gap as u16,
+            pitch: SLOT_WIDTH + gap,
             head_rows,
-            gap: config.editor.zong_gap as u16,
+            gap,
             ruby,
             hanging,
             ruby_width: 1,
-            ticks: config.editor.paper_ticks > 0,
+            // Ticks cost the column a 縱's reading would have used, so a page
+            // packed tight has none: that column is the whole point.
+            ticks: config.editor.paper_ticks > 0 && !dense,
         }
     }
 
@@ -143,6 +149,8 @@ pub fn char_at(
         !editor.ruby().is_empty(),
         editor.hanging_punctuation(),
         editor.measure(),
+        editor.zong_gap(),
+        editor.dense(),
     );
     let grid = editor.grid().with_zong_len(metrics.zong_len);
     let capacity = metrics.capacity(area.width);
@@ -261,6 +269,8 @@ pub fn zong_length_for(
     ruby: bool,
     hanging: bool,
     measure: Option<usize>,
+    gap: Option<usize>,
+    dense: bool,
 ) -> usize {
     Metrics::new(
         config,
@@ -269,6 +279,8 @@ pub fn zong_length_for(
         ruby,
         hanging,
         measure,
+        gap,
+        dense,
     )
     .zong_len
 }
@@ -396,6 +408,8 @@ pub fn draw(
         !editor.ruby().is_empty(),
         editor.hanging_punctuation(),
         editor.measure(),
+        editor.zong_gap(),
+        editor.dense(),
     );
     let rope = buffer.rope();
 
