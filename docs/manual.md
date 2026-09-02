@@ -1128,6 +1128,8 @@ txt = "typst"                # 這個項目裏的 .txt 都是 Typst
 
 [ime]
 scheme = "lingming"          # 只有靈明自帶，其餘要先裝碼表
+start = false                # 啟動就載入碼表。默認不載入——語言模型照常載入（分詞要它），
+                             # 但打字用的碼表等你 `:yume scheme`
 
 [theme]
 selection = "#3c4664"
