@@ -2134,6 +2134,89 @@ impl Editor {
         self.enter_insert();
     }
 
+    // ---- The hint row (Feature #122) --------------------------------------
+
+    /// What the row above the status line should say.
+    ///
+    /// The two rows answer two different questions and that is the whole
+    /// design: the bottom one is **where am I** — mode, file, position — and
+    /// never changes shape, so the eye always finds the same thing in the same
+    /// place; this one is **what just happened, and what can I press**, and is
+    /// blank when there is neither.
+    ///
+    /// In priority order, because only one of them can be the answer: a message
+    /// about the thing that just happened, then the keys that would finish a
+    /// sequence already begun, then the keys of the pane or mode holding the
+    /// keyboard. A key sequence a reader has begun and cannot finish is the
+    /// worst of the three to be left alone with, but a message about what just
+    /// happened is rarer and more urgent, so it wins.
+    pub fn hint(&self) -> String {
+        if !self.status.is_empty() {
+            return self.status.clone();
+        }
+        if let Some(keys) = self.pending_hint() {
+            return keys.to_string();
+        }
+        if self.sidebar_focus && self.sidebar.is_some() {
+            return format!("側欄 · {}", Self::SIDEBAR_KEYS);
+        }
+        match self.mode {
+            Mode::Ruby if self.ruby_target.is_some() => {
+                "注音 · Enter 收下 · Esc 取消".to_string()
+            }
+            // The picker draws its own list with its own footer.
+            Mode::Picker => String::new(),
+            Mode::Normal if self.table.is_some() => {
+                let grain = self
+                    .table
+                    .as_ref()
+                    .map(|v| v.grain)
+                    .unwrap_or(Grain::Cell);
+                match grain {
+                    Grain::Cell => "表格 · hjkl 走格 · c 換格 · y Y 取格/行 · p 貼 ·                                     Enter 跟過去 · Tab 改按字"
+                        .to_string(),
+                    Grain::Char => "表格（按字）· hjkl 走字 · Enter 跟這個字 · Tab 改按格"
+                        .to_string(),
+                }
+            }
+            _ => String::new(),
+        }
+    }
+
+    /// The keys that would finish the sequence already begun.
+    ///
+    /// This is the row's most valuable use: a reader who has pressed `m` and
+    /// does not remember what follows it currently has nowhere to look but the
+    /// manual, and the editor is sitting there knowing the answer.
+    fn pending_hint(&self) -> Option<&'static str> {
+        Some(match self.pending {
+            Pending::None => {
+                // A count on its own is a sequence too — `3` is waiting for the
+                // motion it multiplies.
+                return self
+                    .operator_count
+                    .map(|_| "重複幾次 · 接一個動作或編輯")
+                    .or_else(|| self.register.is_empty().then_some(""))
+                    .filter(|h| !h.is_empty());
+            }
+            Pending::Goto => {
+                "g 檔首 · e 檔尾 · h l 行首行尾 · s 首個非空白 · f 開這個檔 · J 併行"
+            }
+            // `Space` already opens a menu that lists its own keys, and
+            // saying the same thing twice on two surfaces is worse than saying
+            // it once.
+            Pending::Space => return None,
+            Pending::Find(_) => "找哪個字",
+            Pending::Replace => "用哪個字蓋掉選區",
+            Pending::Register => "哪個暫存器（a–z）",
+            Pending::Match => "m 配對 · i 之內 · a 連同 · s 包起來 · d 去掉 · r 換掉",
+            Pending::MatchPair { .. } => "哪一種括號或引號",
+            Pending::Surround => "用哪一種括號包起來",
+            Pending::SurroundFrom => "去掉哪一種",
+            Pending::SurroundTo(_) => "換成哪一種",
+        })
+    }
+
     /// What the status line says about where the cursor is in a grid.
     ///
     /// Which column, and what a step moves by — the second matters because

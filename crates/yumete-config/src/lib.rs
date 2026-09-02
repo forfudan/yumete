@@ -109,6 +109,12 @@ pub struct EditorConfig {
     /// this" and "this is the wrong character"; for a 拆分表 it is the whole
     /// question. Given way to, right end first, when the line is crowded.
     pub char_info: bool,
+    /// Whether a hint row sits above the status line (Feature #122).
+    ///
+    /// It costs one row of the window always — set vertically that is one 字
+    /// off every 縱 — and buys the keys that finish a sequence you have begun,
+    /// which is otherwise only in the manual.
+    pub hints: bool,
     /// A tick every `paper_ticks` characters down a 縱; `0` for none
     /// (Feature #102).
     ///
@@ -164,6 +170,7 @@ impl Default for EditorConfig {
             ruler: 0,
             measure: 0,
             char_info: true,
+            hints: true,
             paper_ticks: 0,
             tabs: Tabs::default(),
             sidebar_width: 24,
@@ -546,6 +553,7 @@ struct RawEditor {
     ruler: Option<usize>,
     measure: Option<usize>,
     char_info: Option<bool>,
+    hints: Option<bool>,
     paper_ticks: Option<usize>,
 }
 
@@ -633,6 +641,9 @@ impl RawConfig {
         }
         if other.editor.char_info.is_some() {
             self.editor.char_info = other.editor.char_info;
+        }
+        if other.editor.hints.is_some() {
+            self.editor.hints = other.editor.hints;
         }
         if other.editor.paper_ticks.is_some() {
             self.editor.paper_ticks = other.editor.paper_ticks;
@@ -738,6 +749,9 @@ impl RawConfig {
         }
         if let Some(on) = self.editor.char_info {
             config.editor.char_info = on;
+        }
+        if let Some(on) = self.editor.hints {
+            config.editor.hints = on;
         }
         if let Some(ticks) = self.editor.paper_ticks {
             config.editor.paper_ticks = ticks.min(64);

@@ -604,9 +604,21 @@ fn draw(
     viewport: &mut Viewport,
 ) {
     let area = frame.area();
-    let regions = Layout::vertical([Constraint::Min(1), Constraint::Length(1)]).split(area);
+    // Two rows at the foot, answering two questions. The bottom one is *where
+    // am I* and never changes shape; the one above it is *what just happened,
+    // and what can I press*, and is blank when there is neither. Splitting them
+    // is what lets the bottom row stay still: a message used to push the
+    // position along the line, or take it away outright.
+    let hint_rows = u16::from(config.editor.hints && area.height > 4);
+    let regions = Layout::vertical([
+        Constraint::Min(1),
+        Constraint::Length(hint_rows),
+        Constraint::Length(1),
+    ])
+    .split(area);
     let body = regions[0];
-    let status_area = regions[1];
+    let hint_area = regions[1];
+    let status_area = regions[2];
 
     // The sidebar takes its columns off the left of the body, and everything
     // downstream — the wrap width, where the 縱 are placed, the cursor, the
@@ -660,10 +672,17 @@ fn draw(
         table::draw_detail(frame, editor, config, panel);
     }
 
+    if hint_rows == 1 {
+        draw_hints(frame, editor, config, hint_area);
+    }
     draw_status(frame, editor, config, ime, status_area);
-    draw_command_menu(frame, editor, area, status_area);
-    draw_picker(frame, editor, area, status_area);
-    draw_space_menu(frame, editor, area, status_area);
+    // The floating panels stack upward from the footer, and the footer is now
+    // two rows deep — anchored to the status line alone they would be drawn
+    // over the hint row.
+    let footer = if hint_rows == 1 { hint_area } else { status_area };
+    draw_command_menu(frame, editor, area, footer);
+    draw_picker(frame, editor, area, footer);
+    draw_space_menu(frame, editor, area, footer);
 
     // In vertical layout the cursor is a block drawn into the page: a hardware
     // cursor is one cell wide and would sit lopsided inside a two-cell 縱.
@@ -1605,9 +1624,10 @@ fn draw_status(
     status_area: Rect,
 ) {
     let buffer = editor.current_buffer();
-    let status = if editor.sidebar_focused() {
-        // The pane holding the keys says what they do — and how to give them
-        // back — where the reader already looks to find out what is going on.
+    // The sidebar used to take the whole status line to list its keys. It has
+    // the row above for that now, and taking this one as well would mean losing
+    // the file name and the position for as long as the sidebar has focus.
+    let status = if editor.sidebar_focused() && !config.editor.hints {
         format!("-- 側欄 --  {}", Editor::SIDEBAR_KEYS)
     } else if let Some((prefix, text)) = editor.prompt() {
         // The composition in progress belongs at the caret, so a search reads as
@@ -1665,15 +1685,14 @@ fn draw_status(
             draft,
             which
         );
-        // Where you are and what just happened are two different questions, and
-        // a message answering the second must not take away the answer to the
-        // first: a buffer switch, a yank, a refused key all set a message, and
-        // the position used to vanish under every one of them.
+        // Where you are, and nothing else. What just happened is the row
+        // above's question — and with no hint row it comes back here, because
+        // a message nobody can see is not a message.
         let where_ = position_of(editor);
-        if !editor.status().is_empty() {
-            format!("{left}   {}   {where_}", editor.status())
-        } else {
+        if config.editor.hints || editor.status().is_empty() {
             format!("{left}   {where_}")
+        } else {
+            format!("{left}   {}   {where_}", editor.status())
         }
     };
 
@@ -1699,6 +1718,32 @@ fn draw_status(
         ])),
         status_area,
     );
+}
+
+/// The row above the status line: what just happened, and what you can press.
+///
+/// Quieter than the status line, and deliberately: the status line is the
+/// page's own footing and is always there, while this comes and goes. Set on
+/// the page's own ground rather than reversed, so a blank one reads as part of
+/// the margin instead of as an empty bar.
+fn draw_hints(frame: &mut Frame, editor: &Editor, config: &Config, area: Rect) {
+    let text = editor.hint();
+    if text.is_empty() {
+        return;
+    }
+    // A message about what just happened is the loud kind; a list of keys is
+    // the quiet kind, and reads as furniture rather than as news.
+    let news = !editor.status().is_empty();
+    let (gr, gg, gb) = config.theme.gutter;
+    let style = if news {
+        Style::default().fg(Color::Rgb(0xd8, 0xc9, 0x9a))
+    } else {
+        Style::default()
+            .fg(Color::Rgb(gr.max(0x88), gg.max(0x86), gb.max(0x78)))
+            .add_modifier(Modifier::DIM)
+    };
+    let buf = frame.buffer_mut();
+    put_text(buf, area.x + 1, area.y, area.x + area.width, &text, style);
 }
 
 /// Where the cursor is, in the terms the layout is read in.
@@ -2061,9 +2106,11 @@ mod tests {
     fn a_long_paragraph_wraps_into_the_next_zong() {
         // Six rows of text area (8 minus the status line and the spare caret
         // row) means the 縱 wraps every six characters, however long the
-        // configured 縱 is.
+        // configured 縱 is. The hint row is off: this is about the 縱, and a
+        // row spent on the footer would only move every coordinate below.
         let mut editor = editor_with(&"字".repeat(8));
-        let config = vertical_config();
+        let mut config = vertical_config();
+        config.editor.hints = false;
         let buffer = render_vertical(&mut editor, &config, 20, 8);
 
         assert_eq!(at(&buffer, 18, 0), "字");
@@ -3134,6 +3181,41 @@ mod tests {
     }
 
     #[test]
+    fn the_row_above_says_what_would_finish_what_you_started() {
+        let mut editor = editor_with("那年冬天");
+        let config = Config::default();
+        // A wide glyph covers two cells and only the first carries it, so the
+        // row reads back with a gap after every 字.
+        let hint = |e: &Editor| -> String {
+            let b = render(e, &config, 100, 10);
+            (0..100u16).map(|x| at(&b, x, 8)).collect::<String>().replace(' ', "")
+        };
+
+        // Nothing begun, nothing to say: the row is blank rather than filled
+        // with something to read.
+        assert_eq!(hint(&editor).trim(), "");
+
+        // A sequence begun and not finished is the case this row exists for —
+        // `m` is otherwise only in the manual.
+        editor.on_key(Key::Char('m'));
+        let h = hint(&editor);
+        assert!(h.contains("配對") && h.contains("包起來"), "{h:?}");
+        editor.on_key(Key::Esc);
+
+        // `g` likewise.
+        editor.on_key(Key::Char('g'));
+        assert!(hint(&editor).contains("檔首"), "{:?}", hint(&editor));
+        editor.on_key(Key::Esc);
+
+        // `Space` says nothing here, because it opens a menu that already
+        // lists its own keys — the same thing twice on two surfaces is worse
+        // than once.
+        editor.on_key(Key::Char(' '));
+        assert_eq!(hint(&editor).trim(), "");
+        editor.on_key(Key::Esc);
+    }
+
+    #[test]
     fn a_message_never_takes_away_where_you_are() {
         let mut editor = editor_with("那年冬天");
         let config = Config::default();
@@ -3146,11 +3228,22 @@ mod tests {
         let quiet = row(&render(&editor, &config, 100, 10), 100);
         assert!(quiet.contains("Ln 1, Col 3"), "{quiet:?}");
 
-        // A yank says something — and the position stays put beside it.
+        // A yank says something, and it says it on the row above — the status
+        // line goes on answering "where am I" while it does.
         editor.on_key(Key::Char('y'));
-        let busy = row(&render(&editor, &config, 100, 10), 100);
-        assert!(busy.contains("yanked"), "the message is there: {busy:?}");
-        assert!(busy.contains("Ln 1, Col 3"), "and so is the position: {busy:?}");
+        let buffer = render(&editor, &config, 100, 10);
+        let hint: String = (0..100u16).map(|x| at(&buffer, x, 8)).collect();
+        assert!(hint.contains("yanked"), "the message is above: {hint:?}");
+        let status = row(&buffer, 100);
+        assert!(status.contains("Ln 1, Col 3"), "position kept: {status:?}");
+        assert!(!status.contains("yanked"), "and not repeated: {status:?}");
+
+        // With the hint row off the message comes back to the status line —
+        // a message nobody can see is not a message.
+        let mut plain = config.clone();
+        plain.editor.hints = false;
+        let status = row(&render(&editor, &plain, 100, 10), 100);
+        assert!(status.contains("yanked") && status.contains("Ln 1, Col 3"), "{status:?}");
     }
 
     #[test]
@@ -3584,9 +3677,13 @@ mod tests {
         let config = Config::default();
         editor.open_sidebar_at(&dir);
         let buffer = render(&editor, &config, 80, 12);
+        // The keys go on the row above, so the status line can go on saying
+        // which file you are in and where in it you are.
+        let hint = row_text(&buffer, 10);
+        assert!(hint.contains("側欄"), "{hint:?}");
+        assert!(hint.contains("C-w"), "how to get back: {hint:?}");
         let status = row_text(&buffer, 11);
-        assert!(status.contains("側欄"), "{status:?}");
-        assert!(status.contains("C-w"), "how to get back: {status:?}");
+        assert!(status.contains("[scratch]"), "still says the file: {status:?}");
 
         // With the keys back in the text it says what it always said.
         editor.on_key(Key::Ctrl('w'));
@@ -3726,10 +3823,12 @@ mod tests {
             .map(|x| buffer[(x, buffer.area.height - 1)].symbol())
             .collect();
         assert!(last.starts_with(":r"), "command line intact: {last:?}");
-        // Just above it is the footer — the count and what the highlighted row
-        // means — and the rows themselves are above that.
+        // Above it is the hint row, and above *that* the menu's own footer —
+        // the count and what the highlighted row means — with the rows above
+        // that again. The menu stacks upward from the whole footer, not from
+        // the command line alone, so it never covers either.
         let footer: String = (0..buffer.area.width)
-            .map(|x| buffer[(x, buffer.area.height - 2)].symbol())
+            .map(|x| buffer[(x, buffer.area.height - 3)].symbol())
             .collect();
         assert!(footer.contains('/'), "a count of the matches: {footer:?}");
         let text = buffer_text(&buffer);
