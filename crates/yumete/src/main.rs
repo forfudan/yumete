@@ -178,7 +178,8 @@ KEYS (Normal mode, Helix-style):
     :         command line — Tab cycles the completion, and the list of
               commands appears above it and narrows as you type
               (:w  :w <path>  :q  :q!  :o <path>  :new
-              :s/old/new/[g]  :%s/old/new/[g]  :segment
+              :s/old/new/[g]  :%s/old/new/[g]  :segment  :wq  :count
+              :bn  :bp  switch between the open files (also gn / gp)
               :layout [horizontal|vertical]  :vertical  :horizontal
               :chaifen  toggle the 拆分 annotation beside candidates
               :ruby       edit the reading at the cursor, or annotate the

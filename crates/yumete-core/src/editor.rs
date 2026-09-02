@@ -290,6 +290,28 @@ impl Editor {
         }
     }
 
+    /// A count of what has been written, for `:count`.
+    ///
+    /// Reported three ways, because "how long is it" has three answers in
+    /// Chinese: a publisher counts **字** — the 漢字 themselves — while a word
+    /// processor counts every character including punctuation, and in dialogue the
+    /// two differ by ten per cent or more. With a selection it counts that
+    /// instead of the whole file, which is how a scene gets measured rather
+    /// than a book.
+    fn count_report(&self) -> String {
+        let rope = self.current_buffer().rope();
+        let (start, end) = self.selection();
+        let (text, what) = if end > start {
+            (rope.slice(start..end).to_string(), "選區")
+        } else {
+            (rope.to_string(), "全篇")
+        };
+        let chars = text.chars().filter(|c| !c.is_whitespace()).count();
+        let han = text.chars().filter(|&c| is_han(c)).count();
+        let paragraphs = text.lines().filter(|l| !l.trim().is_empty()).count();
+        format!("{what}  {han} 字  {chars} 字符  {paragraphs} 段")
+    }
+
     /// How many buffers are open, and which one is showing (both 1-based, for
     /// the status line).
     pub fn buffer_position(&self) -> (usize, usize) {
@@ -429,6 +451,14 @@ impl Editor {
             }
             Command::FormatRuby(dialect) => {
                 self.format_ruby(dialect);
+                Ok(CommandOutcome::Continue)
+            }
+            Command::WriteQuit => {
+                self.write_current(None)?;
+                Ok(CommandOutcome::Quit)
+            }
+            Command::Count => {
+                self.status = self.count_report();
                 Ok(CommandOutcome::Continue)
             }
             Command::NextBuffer => {
@@ -2463,6 +2493,16 @@ fn opening_of(c: char) -> Option<char> {
         .map(|&(open, _)| open)
 }
 
+/// Whether `c` is a 漢字 — what a Chinese word count actually counts.
+///
+/// The unified blocks and their extensions, plus the compatibility ideographs.
+/// Kana and punctuation are deliberately out: a 字數 is not a character count,
+/// which is why `:count` reports both.
+fn is_han(c: char) -> bool {
+    matches!(c as u32,
+        0x3400..=0x4DBF | 0x4E00..=0x9FFF | 0xF900..=0xFAFF | 0x20000..=0x3FFFF)
+}
+
 /// Swap the case of `c`, leaving anything caseless (every 漢字) alone.
 fn switch_case(c: char) -> char {
     if c.is_lowercase() {
@@ -3195,6 +3235,29 @@ mod tests {
             0,
             "the edited paragraph is segmented afresh"
         );
+    }
+
+    #[test]
+    fn counting_separates_han_from_characters() {
+        let mut ed = typed("春江潮水連海平，海上明月共潮生。\n\n江流宛轉繞芳甸。");
+        ed.execute(":count").unwrap();
+        let report = ed.status().to_string();
+        // 21 漢字, plus three marks; two paragraphs, the blank line not counted.
+        assert!(report.contains("21 字"), "{report}");
+        assert!(report.contains("24 字符"), "{report}");
+        assert!(report.contains("2 段"), "{report}");
+        assert!(report.starts_with("全篇"), "{report}");
+    }
+
+    #[test]
+    fn counting_a_selection_measures_the_scene_not_the_book() {
+        let mut ed = typed("春江潮水連海平");
+        press(&mut ed, "gg");
+        press(&mut ed, "vll"); // 春江 selected
+        ed.execute(":wc").unwrap();
+        let report = ed.status().to_string();
+        assert!(report.starts_with("選區"), "{report}");
+        assert!(report.contains("2 字"), "{report}");
     }
 
     #[test]
