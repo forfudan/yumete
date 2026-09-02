@@ -307,6 +307,7 @@ Phases are ordered by priority, most writer-critical first:
 | 109 | **The system clipboard, and the mouse**    | both   | P1    | `Space y`/`p`, drag to select       | Done   |
 | 110 | **⌘ chords are the terminal's**            | tui    | P0    | ⌘C read as `c` deleted the selection | Done  |
 | 111 | **Syntax by extension or name**            | config | P2    | a project's word on its own files   | Done   |
+| 112 | **The evaluated outline of a book**        | both   | P2    | `typst eval`; chapters, not includes | Done  |
 
 ---
 

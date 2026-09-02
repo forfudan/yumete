@@ -210,6 +210,18 @@ pub fn run(editor: &mut Editor, config: &Config, ime: &mut ImeSession) -> io::Re
                         ),
                     }
                 }
+                // The outline of a Typst book is a question only typst can
+                // answer, because answering it means evaluating the document.
+                if let Some(path) = editor.take_typst_outline_request() {
+                    match typst_outline(&path) {
+                        Ok(out) => editor.provide_typst_outline(&path, &out),
+                        Err(None) => editor.typst_outline_failed(&path),
+                        Err(Some(err)) => {
+                            editor.typst_outline_failed(&path);
+                            editor.set_status(format!("typst: {err}"));
+                        }
+                    }
+                }
                 if let Some(tag) = editor.take_scheme_request() {
                     editor.set_status(switch_scheme(ime, &tag));
                 }
@@ -393,6 +405,33 @@ fn normalize_shift(code: KeyCode, mods: KeyModifiers) -> (KeyCode, KeyModifiers)
         }
     }
     (code, mods)
+}
+
+/// Ask typst for the evaluated headings of a book.
+///
+/// `Err(None)` means typst is not installed, which is the ordinary case and
+/// says nothing worth saying; `Err(Some(..))` means it ran and the document did
+/// not compile, which a writer wants to know about.
+fn typst_outline(path: &std::path::Path) -> Result<String, Option<String>> {
+    let out = std::process::Command::new("typst")
+        .arg("eval")
+        .arg(yumete_core::book::QUERY)
+        .arg("--in")
+        .arg(path)
+        .output()
+        .map_err(|_| None)?;
+    if out.status.success() {
+        return Ok(String::from_utf8_lossy(&out.stdout).into_owned());
+    }
+    // Typst's diagnostics run to many lines with a source excerpt under them;
+    // the status line has room for the first, which is the one that names what
+    // went wrong.
+    let why = String::from_utf8_lossy(&out.stderr);
+    let first = why
+        .lines()
+        .find(|l| l.starts_with("error"))
+        .unwrap_or("could not evaluate this file");
+    Err(Some(first.trim().to_string()))
 }
 
 /// What the system clipboard holds, asked of the platform.
