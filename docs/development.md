@@ -314,6 +314,7 @@ Phases are ordered by priority, most writer-critical first:
 | 116 | **Markdown colouring set vertically**      | tui    | P1    | 所見即所得 was half-done down the 縱 | Done   |
 | 117 | **The 字 under the cursor, named**         | both   | P2    | code point + Unicode block; feeds the table mode | Done |
 | 118 | **Table editing mode**                     | both   | P1    | declarative schema; cells, detail panel, jump | Done |
+| 119 | **A note read beside its sentence**        | both   | P2    | the same panel; Enter there and back | Done  |
 
 ---
 

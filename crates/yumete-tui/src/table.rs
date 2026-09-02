@@ -262,15 +262,35 @@ pub fn draw(
 const DETAIL_WIDTH: u16 = 30;
 
 /// Split the panel off the right of an area, if there is one and it fits.
+///
+/// A table's panel goes down the *right*, because a row has twenty-eight
+/// fields and that is a tall thing. Prose gets the same panel along the
+/// **bottom** instead: a footnote is one short paragraph, and taking thirty
+/// columns off a page of writing to show it would be paying the wrong price.
 pub fn split_detail(editor: &Editor, area: Rect) -> (Rect, Option<Rect>) {
-    if !editor.detail_visible() || area.width < DETAIL_WIDTH * 2 {
+    if !editor.detail_visible() {
         return (area, None);
     }
-    let w = DETAIL_WIDTH;
-    let grid = Rect::new(area.x, area.y, area.width - w, area.height);
-    let panel = Rect::new(area.x + area.width - w, area.y, w, area.height);
-    (grid, Some(panel))
+    if editor.table().is_some() {
+        if area.width < DETAIL_WIDTH * 2 {
+            return (area, None);
+        }
+        let w = DETAIL_WIDTH;
+        let grid = Rect::new(area.x, area.y, area.width - w, area.height);
+        let panel = Rect::new(area.x + area.width - w, area.y, w, area.height);
+        return (grid, Some(panel));
+    }
+    let h = NOTE_HEIGHT;
+    if area.height < h * 3 {
+        return (area, None);
+    }
+    let page = Rect::new(area.x, area.y, area.width, area.height - h);
+    let panel = Rect::new(area.x, area.y + area.height - h, area.width, h);
+    (page, Some(panel))
 }
+
+/// How many rows a note's panel takes along the bottom.
+const NOTE_HEIGHT: u16 = 4;
 
 /// The panel down the right: every field of the row the cursor is in.
 ///
@@ -306,15 +326,47 @@ pub fn draw_detail(frame: &mut Frame, editor: &Editor, config: &Config, area: Re
             }
         }
     }
-    // A rule down the left edge, so the panel reads as a different surface
-    // rather than as more columns of the grid.
-    for y in area.y..area.y + area.height {
-        if let Some(cell) = buf.cell_mut((area.x, y)) {
-            cell.set_symbol("│").set_style(name);
+    // A rule down the edge where a side panel meets the grid. Along the bottom
+    // the panel's own ground is already the boundary, and a rule there would
+    // cost a row of a four-row panel.
+    if editor.table().is_some() {
+        for y in area.y..area.y + area.height {
+            if let Some(cell) = buf.cell_mut((area.x, y)) {
+                cell.set_symbol("│").set_style(name);
+            }
         }
     }
 
     let left = area.x + 2;
+    // A note's panel is short and wide: its title sits on the same row as its
+    // text, because there is no room to spend a row on a heading.
+    if editor.table().is_none() {
+        put_text(buf, left, area.y, right, &detail.title, title);
+        let body = detail.rows.first().map(|(_, v)| v.as_str()).unwrap_or("");
+        let indent = left + yumete_cjk::str_width(&detail.title) as u16 + 2;
+        // Wrapped by hand across the panel's rows — a long note is the case
+        // this exists for, so cutting it off would defeat the point.
+        let mut x = indent;
+        let mut y = area.y;
+        for word in yumete_cjk::graphemes(body) {
+            let w = yumete_cjk::grapheme_width(word).max(1) as u16;
+            if x + w > right {
+                x = left;
+                y += 1;
+                if y >= area.y + area.height {
+                    break;
+                }
+            }
+            put_text(buf, x, y, right, word, value);
+            x += w;
+        }
+        if let Some((_, Some(at))) = detail.links.first() {
+            let label = format!("第 {} 行", at + 1);
+            let x = right.saturating_sub(yumete_cjk::str_width(&label) as u16 + 2);
+            put_text(buf, x, area.y, right, &label, name);
+        }
+        return;
+    }
     put_text(buf, left, area.y, right, &detail.title, title);
     let mut y = area.y + 2;
     for (field, text) in &detail.rows {
