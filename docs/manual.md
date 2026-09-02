@@ -183,7 +183,7 @@ yumete                 從空白緩衝區開始
 ### 所見即所得
 
 `:wysiwyg` 之後，`**` `` ` `` `[]()` `[[]]` `%%` 這些標記從畫面上消失，只留它們框住
-的字；`:source` 回到源碼（默認就是源碼——**檔案裏是什麼，畫面上就是什麼**）。
+的字；`:wysiwyg off` 回到源碼（默認就是源碼——**檔案裏是什麼，畫面上就是什麼**）。
 
 **選區碰到的每一個結構都是展開的**（不只是光標那一個——錨點也是文本裏的一個位置，
 高亮如果比 `d` 實際刪的少，就是畫面在謊報一次編輯會做什麼）。 這一條是整件事的地基，不是修飾：因為它成立，所
@@ -287,7 +287,7 @@ Typst 那邊認得 `= 標題`、`*粗*`、`_斜_`、`` `碼` ``、`$數學$`、`
 它說的不是「這裏斷行」，而是「這一行已經超過你想要的長度了」——有些人開着折行，但仍然
 想手工把長句斷開，這個視覺就是給那件事的。
 
-**關掉折行時**（`:nowrap`，比如手工折行寫 Markdown）除了變色還多一條豎線，因為那時
+**關掉折行時**（`:wrap off`，比如手工折行寫 Markdown）除了變色還多一條豎線，因為那時
 行長真的是你決定的。開着折行不畫線——變色的邊界本身就是那條線，再畫一條是把同一件事
 說兩遍。
 
@@ -351,19 +351,29 @@ kitty 是 `modify_font cell_width 90%`，WezTerm 是 `cell_width = 0.9`。改了
 實現一次參數補全，命令歸類就白撿了：沒有第二條代碼路徑要維護，也沒有第二樣東西要你
 學。想多深就多深（`:ruby format html` 是三層），補全並不知道有什麼區別。
 
-歸類只在**真的存在一組**的地方做，而且**舊名字全部保留**：
+歸類只在**真的存在一組**的地方做，而且**舊名字直接刪掉**——留着兩套拼法，等於這條哲學
+只是嘴上說說：
 
-| 一組 | 舊寫法仍然有效 |
+| 現在 | 沒有了 |
 |---|---|
-| `:yume scheme` `:yume chaifen` | `:scheme` `:chaifen` `:cf` |
+| `:yume scheme 靈明` `:yume chaifen` | `:scheme` `:chaifen` `:cf` |
 | `:ruby on/off` `:ruby html on` `:ruby format typst` | `:ruby-on` `:ruby-off` `:render-ruby-html` … |
+| `:layout vertical` | `:vertical` `:horizontal` |
+| `:wrap off` | `:nowrap` |
+| `:wysiwyg off` | `:source` `:src` |
+| `:buffer list/next/previous/close` | `:buffers` `:ls` `:bn` `:bp` `:bd` |
+| `:clipboard yank/paste` | `:clipboard-yank` `:cy` `:cp` |
 
-`:w` `:q` `:e` `:s` 這些沒有被塞進父命令——它們是單獨的一件事，名字又短，硬歸類只會更糟。
+判斷的標準是一句話：**這個名字是「一件事」，還是「某件事的一個取值」？** `vertical` 是
+`layout` 的取值，`ruby-on` 是 `ruby` 的取值，`nowrap` 是 `wrap` 的取值——取值不配有自己
+的命令名。而 `:w` `:q` `:e` `:s` `:toc` `:grep` 各自就是一件事，名字又短，硬歸類只會更糟。
+
+命令從 42 個減到 27 個。
 
 ### 折行
 
 橫排時一段太寬會**折到下一行**接着排。中文一個自然段常常就是一整行幾百字，不折的話
-右邊那幾百字根本看不見，所以默認是開的；`:nowrap` 關掉，`:wrap` 開回來。
+右邊那幾百字根本看不見，所以默認是開的；`:wrap off` 關掉，`:wrap` 開回來。
 
 折行處遵兩條規矩：拉丁詞不從中間斷開（`Helix` 不會拆成 `Hel` 和 `ix`），行首不出現
 。、」）這類收句的標點，行尾不出現「（這類開頭的括號——也就是**禁則處理**。
@@ -377,7 +387,7 @@ kitty 是 `modify_font cell_width 90%`，WezTerm 是 `cell_width = 0.9`。改了
 
 ## 五、竪排（縱書）
 
-`:vertical`，或 `yumete -v`，或配置裡 `layout = "vertical"`。
+`:layout vertical`，或 `yumete -v`，或配置裡 `layout = "vertical"`。
 
 文字從上往下走，一條一條的**縱**從右往左排。「縱」就是竪排裡的「行」——之所以另起
 一個名字，是因為在這裡「行」和「列」各有兩個意思。一個段落會軟折成若干縱，默認每縱
@@ -463,11 +473,11 @@ kitty 是 `modify_font cell_width 90%`，WezTerm 是 `cell_width = 0.9`。改了
 
 | | |
 | --- | --- |
-| `:ruby-on` / `:ruby-off` | 排出注音／顯示原始標記 |
-| `:render-ruby-html` | 也讀 HTML 注音（加 `-off` 停止） |
-| `:render-ruby-typst` | 也讀 Typst 注音（加 `-off` 停止） |
-| `:format-ruby-html` | 把全篇注音改寫成 HTML |
-| `:format-ruby-typst` | 改寫成 Typst |
+| `:ruby on` / `:ruby off` | 排出注音／顯示原始標記 |
+| `:ruby html` | 也讀 HTML 注音（`:ruby html off` 停止） |
+| `:ruby typst` | 也讀 Typst 注音（`:ruby typst off` 停止） |
+| `:ruby format html` | 把全篇注音改寫成 HTML |
+| `:ruby format typst` | 改寫成 Typst |
 
 橫排永遠顯示原始標記，因為橫排沒有合適的地方放注音。
 
@@ -520,7 +530,7 @@ Alacritty、Konsole。Apple Terminal 報不出單獨的 Shift。
 漏給編輯器（漏了的話光標會被移走而編碼還在，之後上屏的字就落在別處）。打了一串死碼
 時候選框**不會消失**，裏面就剩你打的那幾個字母——不然你不知道要退幾格。
 
-`:chaifen` 打開高亮候選的**二重注解**（拆分＋編碼）。
+`:yume chaifen` 打開高亮候選的**二重注解**（拆分＋編碼）。
 
 **換方案**用 `:scheme lingming|xingchen|qingyun|riyue|pinyin`，或者配置檔的
 `[ime] scheme`。yumete 只自帶靈明；其餘四個方案的碼表跟 yume 一樣，從
@@ -549,8 +559,8 @@ yuhao-assess-data 下載後裝進資料目錄（yume 的 `scripts/build.sh` 會�
 | `空格 b` | 切換緩衝區 |
 | `空格 /` | 全項目搜索（開好 `:grep `，等你打） |
 | `空格 ?` | 命令一覽 |
-| `空格 y` | 把選區複製到系統剪貼簿（`:clipboard-yank`） |
-| `空格 p` | 從系統剪貼簿貼上（`:clipboard-paste`） |
+| `空格 y` | 把選區複製到系統剪貼簿（`:clipboard yank`） |
+| `空格 p` | 從系統剪貼簿貼上（`:clipboard paste`） |
 
 **側欄和挑選器不是同一件事。** 挑選器回答「帶我去我心裏那個檔案」，開一下就走；側欄
 回答「讓我看見這本書的形狀」，一直開着。一百章分在卷一卷二裏，那棵樹本身就是目錄。
@@ -782,7 +792,7 @@ to = "char"
 **欄數不對的行標出來，但照樣能編輯。** 表格模式正是拿來修這種行的工具，一行壞掉就打不開
 它，等於工具在最需要的時候缺席。多出來的欄位照畫——藏起來就是把問題藏起來。
 
-**竪排和表格模式互斥。** 格子是橫着讀的，`:vertical` 會被拒絕（而不是畫出一個說不通的
+**竪排和表格模式互斥。** 格子是橫着讀的，`:layout vertical` 會被拒絕（而不是畫出一個說不通的
 東西），`-t` 也蓋過 `-v`。
 
 ### 詳情欄
@@ -835,7 +845,7 @@ Option 拖（Ghostty／iTerm2）就是它，用來複製狀態欄之類不在緩
 `:toc` 列出本檔的標題（Markdown 的 `#`，Typst 的 `=`——沒有 parser，標題就是行首的那
 幾個井號），`:toc 3` 跳到第三個。
 
-`:ls` 看開了哪些，`:bd` 關掉一個。同一個檔案不會被打開兩次——第二次 `:open` 是切過
+`:buffer list` 看開了哪些，`:buffer close` 關掉一個。同一個檔案不會被打開兩次——第二次 `:open` 是切過
 去，因為兩個緩衝區共用一個檔案意味着兩份撤銷歷史、兩個修改標記、兩個搶救稿在搶同一
 個位置，那是丟稿的方式而不是開檔的方式。
 
@@ -901,10 +911,10 @@ GB18030 的舊稿會被擋下並告訴你用 `iconv` 轉，而不是丟一句 Ru
 | --- | --- |
 | `:open` `:o` *路徑* | 打開檔案 |
 | `:new` | 新建空緩衝區 |
-| `:buffer-next` `:bn` | 切到下一個打開的檔案（`gn`） |
-| `:buffer-previous` `:bp` | 切到上一個（`gp`） |
-| `:buffer-close` `:bd`（`:bd!`） | 關掉這個檔案 |
-| `:buffers` `:ls` | 列出打開的檔案 |
+| `:buffer next` | 切到下一個打開的檔案（`gn`） |
+| `:buffer previous` | 切到上一個（`gp`） |
+| `:buffer close`（`close!`） | 關掉這個檔案 |
+| `:buffer list` | 列出打開的檔案 |
 | `:toc`（`:toc 3`） | 列出標題／跳到第三個 |
 | `:grep` `:gr` *模式* | 全項目搜索 |
 | `:export` `:ex` `html`｜`typst` [*路徑*] | 導出 |
@@ -918,20 +928,19 @@ GB18030 的舊稿會被擋下並告訴你用 `iconv` 轉，而不是丟一句 Ru
 | `:s/舊/新/[g]` | 替換本行；`:%s/…` 替換全篇 |
 | `:segment` `:seg` | 分詞著色開關 |
 | `:layout` `:lay` | 橫排／竪排互換 |
-| `:vertical` `:horizontal` | 直接指定 |
+| `:layout vertical`／`horizontal` | 直接指定 |
 | `:hanging` | 標點旁置開關 |
 | `:markup` `:md` | 標記著色開關 |
 | `:syntax` `:syn` [`markdown`｜`typst`] | 這個檔案是哪種標記 |
-| `:wysiwyg` `:wys` | 所見即所得：標記只在光標那一處展開 |
-| `:source` `:src` | 回到源碼 |
-| `:wrap` `:nowrap` | 長段落是否折到下一行 |
+| `:wysiwyg`（`off` 回源碼） | 所見即所得：標記只在光標那一處展開 |
+| `:wrap`（`off`、或一個數字） | 長段落是否折到下一行 |
 | `:wrap 50` | 寫到五十欄寬（竪排：一縱五十字）；`:wrap 0` 還原 |
 | `:yume scheme 靈明` | 換輸入方案 |
 | `:yume chaifen` | 候選旁的拆分注解 |
 | `:ruby on` `:ruby off` | 排不排注音（`:ruby` 單獨用是改這裏的注音） |
 | `:dense` `:dense off` | 竪排密排：一縱兩格，無注音、無旁置、無刻度 |
-| `:chaifen` `:cf` | 候選旁的拆分注解（二重：拆分＋編碼） |
-| `:scheme` `:sch` *方案* | 換輸入方案 |
+| `:yume chaifen` | 候選旁的拆分注解（二重：拆分＋編碼） |
+| `:yume scheme` *方案* | 換輸入方案 |
 | `:ruby` 及相關 | 見 5.4–5.5 |
 
 ---

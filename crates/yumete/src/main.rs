@@ -109,13 +109,13 @@ fn main() -> ExitCode {
     // the file's extension implies.
     editor
         .execute(if config.editor.show_ruby {
-            ":ruby-on"
+            ":ruby on"
         } else {
-            ":ruby-off"
+            ":ruby off"
         })
         .ok();
     for name in &config.editor.ruby_dialects {
-        let _ = editor.execute(&format!(":render-ruby-{name}"));
+        let _ = editor.execute(&format!(":ruby {name}"));
     }
 
     // The built-in Yume IME (Feature #27): load the configured scheme's tables
@@ -253,19 +253,19 @@ KEYS (Normal mode, Helix-style):
               (:w  :w <path>  :q  :q!  :o <path>  :new
               :s/re/new/[g]   :%s/re/new/[g]   regex; $1 captures, \n newline
               :segment  :wq  :count
-              :scheme <tag>    lingming xingchen qingyun riyue pinyin
-              :wrap  :nowrap   soft-wrap long paragraphs (on by default)
+              :yume scheme <tag>   lingming xingchen qingyun riyue pinyin
+              :wrap [on|off|<n>]   soft-wrap; a number is a fixed measure
               :wq [path]       save (optionally save-as) and quit
               :42  :goto n    put the cursor on a line
               :recover[!]      load (or drop) a crash-recovery draft
               :bn  :bp  :bd  :ls   the open files (also gn / gp)
               :grep <re>  :toc      across the project / this file's headings
               :export html|typst    write it out for a typesetter
-              :layout [horizontal|vertical]  :vertical  :horizontal
-              :chaifen  toggle the 拆分 annotation beside candidates
+              :layout [horizontal|vertical]      :dense [on|off]
+              :yume chaifen   the 拆分 annotation beside candidates
               :ruby       edit the reading at the cursor, or annotate the
                           selection — opens Ruby mode in the status line
-              :ruby-on / :ruby-off   lay readings out, or show the markup)
+              :ruby [on|off|<dialect>]  lay readings out, or show the markup)
 
 Ruby mode (`:ruby`) edits the *reading*, which with readings laid out is not on
 screen to move the cursor into. It opens on the group under the cursor with its

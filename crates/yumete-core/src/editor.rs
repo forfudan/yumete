@@ -6292,17 +6292,17 @@ mod tests {
             ed.ruby().contains(Dialect::Html),
             "HTML readings are laid out by default"
         );
-        ed.execute(":ruby-off").unwrap();
+        ed.execute(":ruby off").unwrap();
         assert!(ed.ruby().is_empty());
-        ed.execute(":ruby-on").unwrap();
+        ed.execute(":ruby on").unwrap();
         assert!(ed.ruby().contains(Dialect::Html));
 
         // Dialects add up rather than replacing one another: a document may mix
         // them, so `:render-ruby-typst` does not turn HTML off.
-        ed.execute(":render-ruby-typst").unwrap();
+        ed.execute(":ruby typst").unwrap();
         assert!(ed.ruby().contains(Dialect::Typst));
         assert!(ed.ruby().contains(Dialect::Html));
-        ed.execute(":render-ruby-html-off").unwrap();
+        ed.execute(":ruby html off").unwrap();
         assert!(!ed.ruby().contains(Dialect::Html));
         assert!(ed.ruby().contains(Dialect::Typst));
     }
@@ -6310,16 +6310,16 @@ mod tests {
     #[test]
     fn format_ruby_rewrites_every_reading_into_one_dialect() {
         let mut ed = typed("讀<ruby>漢<rt>hàn</rt></ruby>和#ruby(\"字\", \"zì\")");
-        ed.execute(":format-ruby-typst").unwrap();
+        ed.execute(":ruby format typst").unwrap();
         assert_eq!(
             ed.current_buffer().text(),
             "讀#ruby(\"漢\", \"hàn\")和#ruby(\"字\", \"zì\")"
         );
         // Already uniform: nothing to do, and no undo step spent on it.
-        ed.execute(":format-ruby-typst").unwrap();
+        ed.execute(":ruby format typst").unwrap();
         assert!(ed.status().starts_with("already"));
 
-        ed.execute(":format-ruby-html").unwrap();
+        ed.execute(":ruby format html").unwrap();
         assert_eq!(
             ed.current_buffer().text(),
             "讀<ruby>漢<rt>hàn</rt></ruby>和<ruby>字<rt>zì</rt></ruby>"
@@ -6329,7 +6329,7 @@ mod tests {
     #[test]
     fn a_typst_reading_is_read_too() {
         let mut ed = typed("讀#ruby(\"漢字\", \"hàn zì\")");
-        ed.execute(":render-ruby-typst").unwrap();
+        ed.execute(":ruby typst").unwrap();
         press(&mut ed, "gg3l");
         ed.execute(":ruby").unwrap();
         assert_eq!(ed.prompt(), Some(('注', "hàn zì")));
@@ -6441,14 +6441,14 @@ mod tests {
     fn chaifen_command_leaves_a_request_for_the_ime() {
         let mut ed = Editor::new();
         assert_eq!(ed.take_chaifen_request(), None);
-        ed.execute(":chaifen").unwrap();
+        ed.execute(":yume chaifen").unwrap();
         assert_eq!(ed.take_chaifen_request(), Some(true));
         assert_eq!(ed.take_chaifen_request(), None, "taken once only");
         // The toggle follows what the IME actually settled on, not the request:
         // a scheme with no 拆分 layer refuses, and the next `:chaifen` still
         // asks for "on" rather than flipping to "off".
         ed.set_chaifen(false);
-        ed.execute(":cf").unwrap();
+        ed.execute(":yume chaifen").unwrap();
         assert_eq!(ed.take_chaifen_request(), Some(true));
     }
 
@@ -6477,13 +6477,12 @@ mod tests {
         ed.on_key(Key::Tab);
         assert_eq!(ed.prompt(), Some((':', "ruby")));
         ed.on_key(Key::Tab);
-        assert_eq!(ed.prompt(), Some((':', "ruby-on")));
-        // …and wraps, since the prefix is remembered rather than re-read from
-        // the line, which now says `ruby-on`.
+        assert_eq!(ed.prompt(), Some((':', "ruby")), "one `ruby` now, not three");
+        // …and the prefix is remembered rather than re-read from the line, so
+        // walking back returns to the same one instead of starting over from
+        // what Tab just wrote.
         ed.on_key(Key::BackTab);
         assert_eq!(ed.prompt(), Some((':', "ruby")));
-        ed.on_key(Key::BackTab);
-        assert_eq!(ed.prompt(), Some((':', "ruby-off")), "wrapped backwards");
 
         // Typing abandons the completion, so the next Tab starts from the line.
         ed.on_key(Key::Char('x'));
@@ -7118,7 +7117,7 @@ mod tests {
         ed.open_file(&other).unwrap();
         assert!(ed.table().is_none(), "a chapter is not a table");
         // …and coming back to the table reads it as one again.
-        ed.execute("buffer-previous").unwrap();
+        ed.execute("buffer previous").unwrap();
         assert!(ed.table().is_some());
 
         std::fs::remove_dir_all(&dir).ok();
@@ -7838,7 +7837,7 @@ mod tests {
         assert_eq!(ed.layout(), Layout::Horizontal, "a grid is read across");
 
         // …and it stays turned: the command is refused, not silently ignored.
-        ed.execute("vertical").unwrap();
+        ed.execute("layout vertical").unwrap();
         assert_eq!(ed.layout(), Layout::Horizontal);
         assert!(ed.status().contains(":table off"), "{}", ed.status());
 
@@ -7963,7 +7962,7 @@ mod tests {
         assert!(ed.soft_wrap());
 
         // Vertically the measure is the length of a 縱.
-        ed.execute("vertical").unwrap();
+        ed.execute("layout vertical").unwrap();
         ed.execute("wrap 12").unwrap();
         assert_eq!(ed.zong_length(), 12);
 
@@ -8189,10 +8188,10 @@ mod tests {
     fn the_system_clipboard_goes_both_ways() {
         let mut ed = typed("那年冬天");
         press(&mut ed, "ggvl");
-        // `Space y`, or `:clipboard-yank` — Helix spells it both ways.
+        // `Space y`, or `:clipboard yank`.
         type_keys(&mut ed, " y");
         assert_eq!(ed.take_clipboard_request().as_deref(), Some("那年"));
-        ed.execute(":clipboard-yank").unwrap();
+        ed.execute(":clipboard yank").unwrap();
         assert_eq!(ed.take_clipboard_request().as_deref(), Some("那年"));
 
         // Reading needs the platform, so the core asks and the front end
@@ -8287,20 +8286,20 @@ mod tests {
 
         // Unsaved work is not closed away silently.
         assert!(matches!(
-            ed.execute(":bd"),
+            ed.execute(":buffer close"),
             Err(EditorError::UnsavedChanges)
         ));
-        ed.execute(":bd!").unwrap();
+        ed.execute(":buffer close!").unwrap();
         assert_eq!(ed.buffer_count(), 1);
         assert_eq!(ed.current_buffer().text(), "甲");
 
         // The last buffer is emptied rather than closed: the editor always has
         // somewhere to put the cursor.
-        ed.execute(":bd!").unwrap();
+        ed.execute(":buffer close!").unwrap();
         assert_eq!(ed.buffer_count(), 1);
         assert_eq!(ed.current_buffer().text(), "");
 
-        ed.execute(":ls").unwrap();
+        ed.execute(":buffer list").unwrap();
         assert!(ed.status().contains("*1"), "{}", ed.status());
     }
 
@@ -8326,13 +8325,13 @@ mod tests {
 
         // Back to the first, and the cursor is where it was left.
         press(&mut ed, "gg");
-        ed.execute(":bp").unwrap();
+        ed.execute(":buffer previous").unwrap();
         assert_eq!(ed.buffer_position(), (1, 2));
         assert_eq!(ed.current_buffer().text(), "第一篇的內容");
         assert_eq!(ed.cursor(), left_at, "back where it was left");
 
         // …and forward again, to where *that* one was left.
-        ed.execute(":bn").unwrap();
+        ed.execute(":buffer next").unwrap();
         assert_eq!(ed.current_buffer().text(), "第二篇");
         assert_eq!(ed.cursor(), 0, "gg had moved it to the top");
     }
@@ -8366,8 +8365,8 @@ mod tests {
         ed.on_key(Key::Char('i'));
         ed.on_key(Key::Char('短'));
         ed.on_key(Key::Esc);
-        ed.execute(":bp").unwrap();
-        ed.execute(":bn").unwrap();
+        ed.execute(":buffer previous").unwrap();
+        ed.execute(":buffer next").unwrap();
         assert!(
             ed.cursor() <= ed.current_buffer().char_count(),
             "a cursor from a longer buffer must not point past this one"
