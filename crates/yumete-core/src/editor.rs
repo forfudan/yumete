@@ -99,6 +99,10 @@ pub struct Editor {
     anchor: usize,
     /// A pending multi-key operator (goto `g…` or find `f`/`t`/`F`/`T`).
     pending: Pending,
+    /// The count typed before a pending operator, kept because the count is
+    /// consumed by the key that *opens* the operator — `10g` has already spent
+    /// the 10 by the time the second `g` arrives.
+    pending_count: Option<usize>,
     /// Whether motions extend the selection (Helix select mode, toggled by `v`).
     extend: bool,
     /// The unnamed register, and the named ones (Helix `"a`).
@@ -250,6 +254,7 @@ impl Editor {
             status: String::new(),
             anchor: 0,
             pending: Pending::None,
+            pending_count: None,
             extend: false,
             register: String::new(),
             registers: HashMap::new(),
@@ -466,6 +471,10 @@ impl Editor {
                 // file may still be dirty, and `:wq` reads as "everything is
                 // safe now", so it is held to the same check `:q` is.
                 self.quit(false)
+            }
+            Command::GotoLine(n) => {
+                self.goto_line(n);
+                Ok(CommandOutcome::Continue)
             }
             Command::Count => {
                 self.status = self.count_report();
@@ -932,6 +941,7 @@ impl Editor {
             Pending::Goto => {
                 self.pending = Pending::None;
                 self.handle_goto(key);
+                self.pending_count = None;
                 return;
             }
             Pending::Find(kind) => {
@@ -1028,6 +1038,7 @@ impl Editor {
                 }
             }
         }
+        let pending_count = self.count;
         let count = self.take_count();
 
         // Laid out vertically, the arrow keys and `hjkl` keep their *screen*
@@ -1111,7 +1122,10 @@ impl Editor {
                 );
                 e.select_to(p);
             }),
-            Key::Char('g') => self.pending = Pending::Goto,
+            Key::Char('g') => {
+                self.pending = Pending::Goto;
+                self.pending_count = pending_count;
+            }
             // In-line character search (Helix `f`/`t`/`F`/`T`).
             Key::Char('f') => self.pending = Pending::Find(FindKind::ForwardTo),
             Key::Char('t') => self.pending = Pending::Find(FindKind::ForwardTill),
@@ -1237,6 +1251,13 @@ impl Editor {
     /// buffer start, `ge` to the last line, `gh`/`gl` to line start/end, `gs` to
     /// the first non-blank character.
     fn handle_goto(&mut self, key: Key) {
+        // `10gg` is "goto line 10", the way Helix reads a count before `gg`;
+        // a bare `gg` is the same thing with the count 1.
+        if key == Key::Char('g') {
+            if let Some(n) = self.pending_count.take() {
+                return self.goto_line(n);
+            }
+        }
         let rope = self.current_buffer().rope();
         let pos = match key {
             Key::Char('g') => motion::buffer_start(rope, self.cursor),
@@ -1249,6 +1270,17 @@ impl Editor {
             Key::Char('p') => return self.prev_buffer(),
             _ => return,
         };
+        self.move_head(pos);
+    }
+
+    /// Move to the first non-blank character of line `n`, counting from 1 and
+    /// clamped to the end of the buffer (`10gg`, `:10`, `:goto 10`).
+    fn goto_line(&mut self, n: usize) {
+        let rope = self.current_buffer().rope();
+        let last = motion::last_line(rope);
+        let line = n.saturating_sub(1).min(last);
+        let at = rope.line_to_char(line);
+        let pos = motion::line_first_non_blank(rope, at);
         self.move_head(pos);
     }
 
@@ -3805,6 +3837,32 @@ mod tests {
         // U redoes it (Helix redo).
         ed.on_key(Key::Char('U'));
         assert_eq!(ed.current_buffer().text(), "hello");
+    }
+
+    #[test]
+    fn a_count_before_gg_is_a_line_number() {
+        let mut ed = Editor::new();
+        ed.current_buffer_mut().insert(0, "一\n二\n  三\n四\n");
+        // `3gg` lands on the first non-blank of line 3, past its indent.
+        type_keys(&mut ed, "3gg");
+        assert_eq!(ed.cursor_line(), 2);
+        assert_eq!(ed.cursor(), 6);
+        // A bare `gg` is still the top of the file.
+        type_keys(&mut ed, "gg");
+        assert_eq!(ed.cursor(), 0);
+        // Past the end clamps rather than doing nothing.
+        type_keys(&mut ed, "99gg");
+        assert_eq!(ed.cursor_line(), 3);
+    }
+
+    #[test]
+    fn a_bare_number_on_the_command_line_is_a_line_number() {
+        let mut ed = Editor::new();
+        ed.current_buffer_mut().insert(0, "一\n二\n三\n");
+        ed.execute(":2").unwrap();
+        assert_eq!(ed.cursor_line(), 1);
+        ed.execute(":goto 3").unwrap();
+        assert_eq!(ed.cursor_line(), 2);
     }
 
     #[test]

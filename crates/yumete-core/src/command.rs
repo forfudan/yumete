@@ -29,6 +29,8 @@ pub enum Command {
     WriteQuit(Option<String>),
     /// `:count` (alias `:wc`) — how much has been written.
     Count,
+    /// `:<n>` or `:goto <n>` (alias `:g`) — put the cursor on line `n`.
+    GotoLine(usize),
     /// `:s/pattern/replacement/[g]` (optionally `:%s/...` for the whole file) —
     /// substitute text. `global` replaces every match on a line; `whole_file`
     /// applies to every line rather than just the cursor's line.
@@ -130,6 +132,12 @@ pub fn parse(input: &str) -> Result<Command, CommandError> {
         return cmd;
     }
 
+    // `:42` is a line number, as it is in vi and in Helix. Recognised before
+    // the name split so no command can ever be named a number.
+    if let Ok(n) = trimmed.parse::<usize>() {
+        return Ok(Command::GotoLine(n));
+    }
+
     let mut parts = trimmed.splitn(2, char::is_whitespace);
     let word = parts.next().unwrap();
     let rest = parts.next().unwrap_or("").trim();
@@ -154,6 +162,10 @@ pub fn parse(input: &str) -> Result<Command, CommandError> {
             Some(rest.to_string())
         })),
         "count" | "wc" => Ok(Command::Count),
+        "goto" | "g" => rest
+            .parse::<usize>()
+            .map(Command::GotoLine)
+            .map_err(|_| CommandError::MissingArgument("goto")),
         "quit" | "q" => Ok(Command::Quit { force: false }),
         "quit!" | "q!" => Ok(Command::Quit { force: true }),
         "undo" | "u" => Ok(Command::Undo),
@@ -253,6 +265,11 @@ pub const COMMANDS: &[Entry] = &[
         name: "wq",
         alias: Some("x"),
         help: "save, then leave",
+    },
+    Entry {
+        name: "goto",
+        alias: Some("g"),
+        help: "put the cursor on a line (or just `:42`)",
     },
     Entry {
         name: "count",
@@ -578,6 +595,7 @@ mod tests {
             "horizontal",
             "wq",
             "count",
+            "goto",
             "chaifen",
             "hanging",
             "wrap",
@@ -605,17 +623,18 @@ mod tests {
     fn every_listed_command_parses() {
         for entry in COMMANDS {
             let line = match entry.name {
-                // These two need an argument to be well-formed.
+                // These need an argument to be well-formed.
                 "open" => ":open a.md".to_string(),
+                "goto" => ":goto 1".to_string(),
                 "s/pat/rep/" => ":s/a/b/".to_string(),
                 name => format!(":{name}"),
             };
             assert!(parse(&line).is_ok(), "{} does not parse", entry.name);
             if let Some(alias) = entry.alias {
-                let line = if alias == "o" {
-                    ":o a.md".to_string()
-                } else {
-                    format!(":{alias}")
+                let line = match alias {
+                    "o" => ":o a.md".to_string(),
+                    "g" => ":g 1".to_string(),
+                    alias => format!(":{alias}"),
                 };
                 assert!(parse(&line).is_ok(), "alias {alias} does not parse");
             }
