@@ -3396,12 +3396,20 @@ impl Editor {
     /// the paragraph — otherwise `j` from the middle of a wrapped line would
     /// aim at a column hundreds of cells wide and always land at a row's end.
     fn refresh_goal_column(&mut self) {
-        let width = self.wrap_width();
-        let rope = self.current_buffer().rope();
-        self.goal_column = match width {
-            Some(w) => crate::wrap::column_of(rope, self.cursor, w),
-            None => motion::visual_column(rope, self.cursor),
+        // The measure borrows the editor — a row's width depends on what is on
+        // the page — so it is built here and dropped before anything is set.
+        let column = {
+            let hide = |line: usize| self.hidden_on_line(line);
+            let rope = self.current_buffer().rope();
+            match self.wrap_width() {
+                Some(width) => {
+                    let m = crate::wrap::Measure::new(width, &hide);
+                    crate::wrap::column_of(rope, self.cursor, m)
+                }
+                None => motion::visual_column(rope, self.cursor),
+            }
         };
+        self.goal_column = column;
     }
 
     /// Apply a horizontal motion, moving the head (extending if in select mode).
@@ -3417,13 +3425,21 @@ impl Editor {
     /// where a paragraph is one line of several hundred characters, a logical
     /// `j` would jump a whole screen at a time.
     fn move_vertical(&mut self, up: bool) {
-        let width = self.wrap_width();
-        let rope = self.current_buffer().rope();
-        let pos = match width {
-            Some(w) if up => crate::wrap::prev_row(rope, self.cursor, w, self.goal_column),
-            Some(w) => crate::wrap::next_row(rope, self.cursor, w, self.goal_column),
-            None if up => motion::up(rope, self.cursor, self.goal_column),
-            None => motion::down(rope, self.cursor, self.goal_column),
+        let pos = {
+            let hide = |line: usize| self.hidden_on_line(line);
+            let rope = self.current_buffer().rope();
+            match self.wrap_width() {
+                Some(width) => {
+                    let m = crate::wrap::Measure::new(width, &hide);
+                    if up {
+                        crate::wrap::prev_row(rope, self.cursor, m, self.goal_column)
+                    } else {
+                        crate::wrap::next_row(rope, self.cursor, m, self.goal_column)
+                    }
+                }
+                None if up => motion::up(rope, self.cursor, self.goal_column),
+                None => motion::down(rope, self.cursor, self.goal_column),
+            }
         };
         self.cursor = pos;
         if !self.extend {
