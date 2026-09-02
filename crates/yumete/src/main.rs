@@ -195,7 +195,8 @@ KEYS (Normal mode, Helix-style):
     :         command line — Tab cycles the completion, and the list of
               commands appears above it and narrows as you type
               (:w  :w <path>  :q  :q!  :o <path>  :new
-              :s/old/new/[g]  :%s/old/new/[g]  :segment  :wq  :count
+              :s/re/new/[g]   :%s/re/new/[g]   regex; $1 captures, \n newline
+              :segment  :wq  :count
               :wrap  :nowrap   soft-wrap long paragraphs (on by default)
               :wq [path]       save (optionally save-as) and quit
               :42  :goto n    put the cursor on a line
