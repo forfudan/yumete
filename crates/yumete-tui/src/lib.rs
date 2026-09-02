@@ -28,6 +28,7 @@ use ratatui::widgets::{Block, BorderType, Borders, Clear, Paragraph};
 use ratatui::Frame;
 
 use yumete_config::{Config, LineNumbers};
+use yumete_core::wrap::{self, Anchor as WrapAnchor};
 use yumete_core::zong::{Anchor, Layout as WritingLayout};
 use yumete_core::{Editor, Key, KeyOutcome, Mode, TextStore};
 use yumete_ime::ImeSession;
@@ -114,6 +115,18 @@ pub fn run(editor: &mut Editor, config: &Config, ime: &mut ImeSession) -> io::Re
                     ruby,
                     hanging,
                 ));
+            }
+        }
+        // The width paragraphs soft-wrap at depends on the terminal width and
+        // on how wide the line-number gutter is; `j` and `k` walk those rows, so
+        // this too has to be settled before the keys that use it.
+        if editor.layout() == WritingLayout::Horizontal {
+            if let Ok(size) = terminal.size() {
+                let gutter = gutter_width(
+                    editor.current_buffer().line_count(),
+                    config.editor.line_numbers,
+                );
+                editor.set_wrap_width((size.width as usize).saturating_sub(gutter));
             }
         }
         // Tell the editor how much is on screen, so `C-d` means half of what
@@ -228,8 +241,10 @@ fn is_actionable(kind: KeyEventKind) -> bool {
 /// lose the reader's place; each is clamped to the buffer when it is used.
 #[derive(Default)]
 struct Viewport {
-    /// The first visible line, in horizontal layout.
-    top: usize,
+    /// The paragraph and wrapped piece the top visible row sits at, in
+    /// horizontal layout. An anchor rather than a row number: see
+    /// [`yumete_core::wrap`].
+    top: WrapAnchor,
     /// The paragraph and piece the rightmost visible 縱 sits at, in vertical
     /// layout. An anchor rather than a 縱 number: see `vertical::draw`.
     zong: Anchor,
@@ -615,69 +630,127 @@ fn prompt_preedit(editor: &Editor, ime: &ImeSession) -> String {
     }
 }
 
-/// Draw the buffer as ordinary horizontal lines with a line-number gutter,
-/// returning the cell the cursor sits on.
+/// Draw the buffer as horizontal rows with a line-number gutter, returning the
+/// cell the cursor sits on.
+///
+/// A row is a *wrapped piece* of a paragraph, not a paragraph (Feature #77).
+/// The two coincide when soft wrap is off, and then a long paragraph runs off
+/// the right edge as it always did — which is why wrapping is on by default for
+/// prose, where a paragraph is routinely one line of several hundred
+/// characters.
 fn draw_horizontal(
     frame: &mut Frame,
     editor: &Editor,
     config: &Config,
     text_area: Rect,
-    viewport_top: &mut usize,
+    viewport: &mut WrapAnchor,
 ) -> (u16, u16) {
     let buffer = editor.current_buffer();
     let total_lines = buffer.line_count();
     let height = text_area.height as usize;
-
-    // Scroll so the cursor line stays within the viewport, honouring scrolloff.
-    let cursor_line = editor.cursor_line();
-    let scrolloff = config.editor.scrolloff.min(height.saturating_sub(1) / 2);
-    if cursor_line < *viewport_top + scrolloff {
-        *viewport_top = cursor_line.saturating_sub(scrolloff);
-    } else if height > 0 && cursor_line + scrolloff >= *viewport_top + height {
-        *viewport_top = (cursor_line + scrolloff + 1).saturating_sub(height);
-    }
-
     let mode = config.editor.line_numbers;
     let gutter = gutter_width(total_lines, mode);
+    let rope = buffer.rope();
+
+    // Unwrapped, every paragraph is one row and anything past the right edge is
+    // simply clipped, which is what the row model produces at an unreachable
+    // width.
+    let width = editor
+        .wrap_width()
+        .unwrap_or(usize::MAX / 2)
+        .min(usize::MAX / 2)
+        .max(1);
+
+    let cursor_line = editor.cursor_line();
+    let cursor_pos = wrap::position(rope, editor.cursor(), width);
+    let cursor_anchor = WrapAnchor::from(cursor_pos);
+
+    // Scroll so the cursor's row stays on the page with `scrolloff` rows of
+    // context above and below. Counted from the page's own anchor rather than
+    // from a global row number, which cannot be found without walking the
+    // document from the top on every keystroke.
+    let scrolloff = config.editor.scrolloff.min(height.saturating_sub(1) / 2);
+    let last_row = height.saturating_sub(1);
+    let cursor_row = match wrap::distance(rope, *viewport, cursor_anchor, width, last_row) {
+        Some(d) if d >= scrolloff && d + scrolloff <= last_row => d,
+        found => {
+            // Off the page, or too close to an edge: re-anchor so the cursor
+            // sits `scrolloff` in from whichever side it left by.
+            let inset = if found.is_some_and(|d| d < scrolloff) || cursor_anchor < *viewport {
+                scrolloff
+            } else {
+                last_row.saturating_sub(scrolloff)
+            };
+            *viewport = wrap::retreat(rope, cursor_anchor, width, inset);
+            wrap::distance(rope, *viewport, cursor_anchor, width, height).unwrap_or(0)
+        }
+    };
+
     let (sel_start, sel_end) = editor.selection();
     let has_selection = sel_start != sel_end;
     let (sr, sg, sb) = config.theme.selection;
     let sel_style = Style::default().bg(Color::Rgb(sr, sg, sb)).fg(Color::White);
     let show_segmentation = editor.segmentation_visible();
     let seg_colors = config.theme.segmentation;
-    let rope = buffer.rope();
 
-    // Visible lines with a line-number gutter and selection highlight.
+    // Word ranges are per paragraph and consecutive rows usually share one, so
+    // each paragraph the page touches is segmented once.
+    let mut segmented: Option<(usize, Vec<(usize, usize)>)> = None;
+
     let mut lines: Vec<Line> = Vec::new();
-    let last = (*viewport_top + height).min(total_lines);
-    for i in *viewport_top..last {
-        let text = buffer.line(i).unwrap_or_default();
+    for row in wrap::rows_from(rope, *viewport, width, height) {
+        let text: String = rope.slice(row.start..row.end).to_string();
         let mut spans = Vec::new();
         if gutter > 0 {
+            // A continuation row carries no number: the number belongs to the
+            // paragraph, and repeating it down a wrapped paragraph would read as
+            // several paragraphs of the same number.
+            let label = if row.starts_line() {
+                gutter_text(row.line, cursor_line, gutter, mode)
+            } else {
+                " ".repeat(gutter)
+            };
             spans.push(Span::styled(
-                gutter_text(i, cursor_line, gutter, mode),
+                label,
                 Style::default().add_modifier(Modifier::DIM),
             ));
         }
 
-        // Highlight the portion of this line covered by the selection.
-        let line_start = rope.line_to_char(i);
-        let line_len = text.chars().count();
-        if has_selection && sel_end > line_start && sel_start < line_start + line_len {
-            let a = sel_start.saturating_sub(line_start).min(line_len);
-            let b = (sel_end - line_start).min(line_len);
+        // Highlight the portion of this row covered by the selection.
+        let row_len = row.end - row.start;
+        if has_selection && sel_end > row.start && sel_start < row.start + row_len.max(1) {
+            let a = sel_start.saturating_sub(row.start).min(row_len);
+            let b = (sel_end - row.start).min(row_len);
             let chars: Vec<char> = text.chars().collect();
-            let before: String = chars[..a].iter().collect();
-            let selected: String = chars[a..b].iter().collect();
-            let after: String = chars[b..].iter().collect();
-            spans.push(Span::raw(before));
-            spans.push(Span::styled(selected, sel_style));
-            spans.push(Span::raw(after));
+            spans.push(Span::raw(chars[..a].iter().collect::<String>()));
+            spans.push(Span::styled(
+                chars[a..b].iter().collect::<String>(),
+                sel_style,
+            ));
+            spans.push(Span::raw(chars[b..].iter().collect::<String>()));
         } else if show_segmentation {
             // Tint each word with an alternating background (Feature #24). The
-            // selection takes precedence, so lines under the selection above
-            // keep the plain highlight instead.
-            push_segmented_spans(&mut spans, &text, &editor.segment_line(i), seg_colors);
+            // words are the paragraph's, sliced to this row, so a word split by
+            // a wrap keeps one colour across the break.
+            let words = match &segmented {
+                Some((line, words)) if *line == row.line => words,
+                _ => {
+                    segmented = Some((row.line, editor.segment_line(row.line)));
+                    &segmented.as_ref().unwrap().1
+                }
+            };
+            let start_in_line = row.start - rope.line_to_char(row.line);
+            let sliced: Vec<(usize, usize)> = words
+                .iter()
+                .filter(|&&(a, b)| b > start_in_line && a < start_in_line + row_len)
+                .map(|&(a, b)| {
+                    (
+                        a.saturating_sub(start_in_line),
+                        (b - start_in_line).min(row_len),
+                    )
+                })
+                .collect();
+            push_segmented_spans(&mut spans, &text, &sliced, seg_colors);
         } else {
             spans.push(Span::raw(text));
         }
@@ -685,9 +758,12 @@ fn draw_horizontal(
     }
     frame.render_widget(Paragraph::new(lines), text_area);
 
+    // Clamped to the page: a caret resting past a row that exactly fills the
+    // width would otherwise be drawn in the column after the last one.
+    let x = (gutter + cursor_pos.column).min(text_area.width.saturating_sub(1) as usize);
     (
-        text_area.x + gutter as u16 + editor.cursor_visual_column() as u16,
-        text_area.y + (cursor_line - *viewport_top) as u16,
+        text_area.x + x as u16,
+        text_area.y + cursor_row.min(last_row) as u16,
     )
 }
 
@@ -868,6 +944,7 @@ mod tests {
     use super::*;
     use ratatui::backend::TestBackend;
     use ratatui::Terminal;
+    use yumete_cjk::grapheme_width;
     use yumete_core::{DictionarySegmenter, Key};
     use yumete_ime::Scheme;
 
@@ -895,6 +972,23 @@ mod tests {
     /// Render with an unavailable IME (the common case for non-IME tests).
     fn render(editor: &Editor, config: &Config, w: u16, h: u16) -> ratatui::buffer::Buffer {
         render_with(editor, config, &no_ime(), w, h)
+    }
+
+    /// Render horizontally, settling the wrap width from the terminal width
+    /// first exactly as the event loop does, so `j` and the page agree on where
+    /// a row begins.
+    fn render_wrapped(
+        editor: &mut Editor,
+        config: &Config,
+        w: u16,
+        h: u16,
+    ) -> ratatui::buffer::Buffer {
+        let gutter = gutter_width(
+            editor.current_buffer().line_count(),
+            config.editor.line_numbers,
+        );
+        editor.set_wrap_width((w as usize).saturating_sub(gutter));
+        render(editor, config, w, h)
     }
 
     /// Render vertically, settling the 縱 length from the terminal height first
@@ -990,6 +1084,21 @@ mod tests {
     /// The symbol at a cell, for grid assertions.
     fn at(buffer: &ratatui::buffer::Buffer, x: u16, y: u16) -> String {
         buffer[(x, y)].symbol().to_string()
+    }
+
+    /// One rendered row, as the reader sees it.
+    ///
+    /// A wide glyph occupies two cells and ratatui blanks the second, so the
+    /// row is walked by display width rather than by cell.
+    fn row_text(buffer: &ratatui::buffer::Buffer, y: u16) -> String {
+        let mut out = String::new();
+        let mut x = 0;
+        while x < buffer.area.width {
+            let symbol = buffer[(x, y)].symbol();
+            out.push_str(symbol);
+            x += grapheme_width(symbol).max(1) as u16;
+        }
+        out
     }
 
     #[test]
@@ -1931,5 +2040,112 @@ mod tests {
         // Without Shift, unchanged.
         let (code, _) = normalize_shift(KeyCode::Char('d'), KeyModifiers::NONE);
         assert_eq!(code, KeyCode::Char('d'));
+    }
+
+    // ---- Soft wrap (Feature #77) ------------------------------------------
+
+    /// A config for the wrap tests: no gutter, no overlay, so the rows read as
+    /// the text grid itself.
+    fn wrap_config() -> Config {
+        let mut config = Config::default();
+        config.editor.line_numbers = LineNumbers::None;
+        config.editor.show_segmentation = false;
+        config
+    }
+
+    #[test]
+    fn a_long_paragraph_continues_on_the_next_row() {
+        let mut editor = Editor::new();
+        editor
+            .current_buffer_mut()
+            .insert(0, "春夏秋冬春夏秋冬春夏");
+        let buf = render_wrapped(&mut editor, &wrap_config(), 8, 5);
+        assert_eq!(row_text(&buf, 0), "春夏秋冬");
+        assert_eq!(row_text(&buf, 1), "春夏秋冬");
+        assert_eq!(row_text(&buf, 2).trim_end(), "春夏");
+    }
+
+    #[test]
+    fn without_wrapping_the_tail_of_a_paragraph_is_clipped() {
+        let mut editor = Editor::new();
+        editor
+            .current_buffer_mut()
+            .insert(0, "春夏秋冬春夏秋冬春夏");
+        editor.set_soft_wrap(false);
+        let buf = render_wrapped(&mut editor, &wrap_config(), 8, 5);
+        assert_eq!(row_text(&buf, 0), "春夏秋冬");
+        assert_eq!(row_text(&buf, 1).trim(), "");
+    }
+
+    #[test]
+    fn a_continuation_row_carries_no_line_number() {
+        let mut editor = Editor::new();
+        editor.current_buffer_mut().insert(0, "春夏秋冬春夏");
+        let mut config = wrap_config();
+        config.editor.line_numbers = LineNumbers::Absolute;
+        let buf = render_wrapped(&mut editor, &config, 12, 5);
+        let gutter = gutter_width(1, LineNumbers::Absolute);
+        let first = row_text(&buf, 0);
+        assert!(first.starts_with(&gutter_text(0, 0, gutter, LineNumbers::Absolute)));
+        // The second row of the same paragraph is numberless: the number names
+        // the paragraph, not the screen row.
+        let second = row_text(&buf, 1);
+        assert!(second.starts_with(&" ".repeat(gutter)), "{second:?}");
+        assert_eq!(second.trim(), "夏", "{first:?} / {second:?}");
+    }
+
+    #[test]
+    fn j_walks_the_rows_the_reader_sees() {
+        let mut editor = Editor::new();
+        editor.current_buffer_mut().insert(0, "春夏秋冬春夏秋冬");
+        let config = wrap_config();
+        render_wrapped(&mut editor, &config, 8, 5);
+        // One paragraph, two rows: `j` from the first character lands under it
+        // rather than at the end of the buffer.
+        editor.on_key(Key::Char('j'));
+        assert_eq!(editor.cursor(), 4);
+        editor.on_key(Key::Char('k'));
+        assert_eq!(editor.cursor(), 0);
+    }
+
+    #[test]
+    fn the_caret_follows_the_cursor_onto_the_second_row() {
+        let mut editor = Editor::new();
+        editor.current_buffer_mut().insert(0, "春夏秋冬春夏秋冬");
+        let config = wrap_config();
+        render_wrapped(&mut editor, &config, 8, 5);
+        editor.on_key(Key::Char('j'));
+        let mut terminal = Terminal::new(TestBackend::new(8, 5)).unwrap();
+        let mut viewport = Viewport::default();
+        terminal
+            .draw(|frame| draw(frame, &editor, &config, &no_ime(), &mut viewport))
+            .unwrap();
+        let at = terminal.get_cursor_position().unwrap();
+        assert_eq!((at.x, at.y), (0, 1));
+    }
+
+    #[test]
+    fn a_wrapped_paragraph_scrolls_by_row_not_by_paragraph() {
+        let mut editor = Editor::new();
+        // One paragraph of forty 漢字: five rows at width sixteen, in a
+        // terminal that can show three of them.
+        let text: String = "春夏秋冬".repeat(10);
+        editor.current_buffer_mut().insert(0, &text);
+        let config = wrap_config();
+        for _ in 0..8 {
+            editor.on_key(Key::Char('j'));
+        }
+        let buf = render_wrapped(&mut editor, &config, 16, 4);
+        // The cursor left the first row behind, so the page did too — which is
+        // impossible when a page is anchored at a paragraph.
+        assert_eq!(editor.cursor_line(), 0);
+        assert!(row_text(&buf, 0).contains('春'));
+        let mut terminal = Terminal::new(TestBackend::new(16, 4)).unwrap();
+        let mut viewport = Viewport::default();
+        terminal
+            .draw(|frame| draw(frame, &editor, &config, &no_ime(), &mut viewport))
+            .unwrap();
+        let at = terminal.get_cursor_position().unwrap();
+        assert!(at.y < 3, "the caret stays on the page, was at row {}", at.y);
     }
 }
