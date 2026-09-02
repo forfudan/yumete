@@ -321,6 +321,9 @@ impl Editor {
     /// two differ by ten per cent or more. With a selection it counts that
     /// instead of the whole file, which is how a scene gets measured rather
     /// than a book.
+    ///
+    /// Ruby markup is not writing: `<ruby>永和<rt>えいわ</rt></ruby>` is two 字
+    /// and two 字符, not the twenty-odd characters the tags take on disk.
     fn count_report(&self) -> String {
         let rope = self.current_buffer().rope();
         let (start, end) = self.selection();
@@ -329,10 +332,33 @@ impl Editor {
         } else {
             (rope.to_string(), "全篇")
         };
-        let chars = text.chars().filter(|c| !c.is_whitespace()).count();
-        let han = text.chars().filter(|&c| is_han(c)).count();
         let paragraphs = text.lines().filter(|l| !l.trim().is_empty()).count();
+        let prose = self.without_markup(&text);
+        let chars = prose.iter().filter(|c| !c.is_whitespace()).count();
+        let han = prose.iter().filter(|&&c| is_han(c)).count();
         format!("{what}  {han} 字  {chars} 字符  {paragraphs} 段")
+    }
+
+    /// `text` with every ruby group reduced to the base it annotates — what a
+    /// reader would see on the page, which is what a word count is of.
+    fn without_markup(&self, text: &str) -> Vec<char> {
+        let dialects = self.ruby;
+        if dialects.is_empty() {
+            return text.chars().collect();
+        }
+        let mut out = Vec::with_capacity(text.len());
+        for line in text.split_inclusive('\n') {
+            let chars: Vec<char> = line.chars().collect();
+            let groups = crate::ruby::groups(&chars, dialects);
+            let mut at = 0;
+            for group in groups {
+                out.extend_from_slice(&chars[at..group.start]);
+                out.extend_from_slice(group.base_text(&chars));
+                at = group.end;
+            }
+            out.extend_from_slice(&chars[at..]);
+        }
+        out
     }
 
     /// How many buffers are open, and which one is showing (both 1-based, for
@@ -4405,6 +4431,18 @@ mod tests {
         assert_eq!(out, CommandOutcome::Quit);
         assert_eq!(std::fs::read_to_string(&path).unwrap(), "文");
         std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn ruby_markup_is_not_counted_as_writing() {
+        let mut ed = Editor::new();
+        ed.current_buffer_mut()
+            .insert(0, "<ruby>永和<rt>えいわ</rt></ruby>九年，歲在癸丑。");
+        ed.execute(":count").unwrap();
+        let report = ed.status().to_string();
+        // 永和九年歲在癸丑 is eight 字; the tags are not writing.
+        assert!(report.contains("8 字"), "{report}");
+        assert!(report.contains("10 字符"), "{report}");
     }
 
     #[test]

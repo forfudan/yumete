@@ -6,7 +6,7 @@
 //! `--preview`, it instead prints a non-interactive preview of the active
 //! buffer (useful for piping and for quick inspection).
 
-use std::io::IsTerminal;
+use std::io::{self, IsTerminal, Write};
 use std::process::ExitCode;
 
 use yumete_config::Layout;
@@ -238,36 +238,57 @@ fn preview(editor: &Editor, config: &yumete_config::Config) {
         String::new()
     };
 
+    // Written through a locked handle rather than `println!`, which *panics*
+    // when the reader goes away: `yumete -p 稿.md | less`, then `q`, used to
+    // print a Rust backtrace. `?` here means "the pipe closed", and the only
+    // right answer to that is to stop.
+    let mut out = io::stdout().lock();
+
     // Status line.
-    println!(
-        "── {name}{modified} — {lines} line(s), {chars} char(s){extra} ──",
-        name = buf.display_name(),
-        lines = buf.line_count(),
-        chars = buf.char_count(),
-    );
+    let _ = (|| -> io::Result<()> {
+        writeln!(
+            out,
+            "── {name}{modified} — {lines} line(s), {chars} char(s){extra} ──",
+            name = buf.display_name(),
+            lines = buf.line_count(),
+            chars = buf.char_count(),
+        )?;
 
-    // A recovery draft is the one thing a reader must be told about before they
-    // trust what follows (Feature #79).
-    if buf.recovered_draft().is_some() {
-        println!("!! a newer draft was recovered — :recover to load it in the editor");
-    }
-
-    if buf.char_count() == 0 {
-        println!("(empty buffer)");
-        return;
-    }
-
-    // Vertical layout (Feature #61): print the page itself. Line numbers would
-    // mean nothing here — the reading order is what there is to look at.
-    if editor.layout() == Layout::Vertical {
-        for line in
-            yumete_core::zong::render_page(buf.rope(), editor.grid(), config.editor.zong_gap)
-        {
-            println!("{line}");
+        // A recovery draft is the one thing a reader must be told about before
+        // they trust what follows (Feature #79).
+        if buf.recovered_draft().is_some() {
+            writeln!(
+                out,
+                "!! a newer draft was recovered — :recover to load it in the editor"
+            )?;
         }
-        return;
-    }
 
+        if buf.char_count() == 0 {
+            writeln!(out, "(empty buffer)")?;
+            return Ok(());
+        }
+
+        // Vertical layout (Feature #61): print the page itself. Line numbers
+        // would mean nothing here — the reading order is what there is to look
+        // at.
+        if editor.layout() == Layout::Vertical {
+            for line in
+                yumete_core::zong::render_page(buf.rope(), editor.grid(), config.editor.zong_gap)
+            {
+                writeln!(out, "{line}")?;
+            }
+            return Ok(());
+        }
+        write_wrapped(&mut out, buf, config)
+    })();
+}
+
+/// Print the buffer as numbered, soft-wrapped rows.
+fn write_wrapped(
+    out: &mut impl Write,
+    buf: &yumete_core::Buffer,
+    config: &yumete_config::Config,
+) -> io::Result<()> {
     // ropey counts a trailing "\n" as starting an extra empty line; don't print
     // that phantom final line in the preview.
     let text = buf.text();
@@ -297,12 +318,13 @@ fn preview(editor: &Editor, config: &yumete_config::Config) {
             let text: String = chars[start..end].iter().collect();
             // The number labels the paragraph, so only its first row carries one.
             if row == 0 {
-                println!("{:>width$} │ {text}", i + 1, width = width);
+                writeln!(out, "{:>width$} │ {text}", i + 1, width = width)?;
             } else {
-                println!("{:>width$} │ {text}", "", width = width);
+                writeln!(out, "{:>width$} │ {text}", "", width = width)?;
             }
         }
     }
+    Ok(())
 }
 
 /// How wide the preview wraps at: the terminal, or the 80 columns a terminal
