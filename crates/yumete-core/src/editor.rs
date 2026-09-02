@@ -134,6 +134,18 @@ fn typst_headings(text: &str) -> Vec<(usize, usize, String)> {
         .collect()
 }
 
+/// A file being read as a grid.
+#[derive(Debug, Clone)]
+pub struct TableView {
+    /// What the columns are.
+    pub schema: crate::table::Schema,
+    /// The schema file it came from, so `:table` can say what it is obeying.
+    pub from: PathBuf,
+    /// Which cell `j` and `k` aim for, so walking down a column stays in it
+    /// even across a row whose cells are shorter.
+    goal: usize,
+}
+
 /// Call `f` for every readable file under `root`, depth first.
 ///
 /// Skips what a manuscript directory holds but a writer never searches: hidden
@@ -267,6 +279,11 @@ pub struct Editor {
     /// out through the terminal itself (OSC 52), but almost every terminal
     /// refuses to *read* that way, so this one really does need the front end.
     clipboard_read: Option<bool>,
+    /// The grid this file is being read as, when a schema says it is a table.
+    ///
+    /// A view, never a copy: the text stays the truth, and this only says how
+    /// to find the cells in it.
+    table: Option<TableView>,
     /// The last known 拆分 state, so `:chaifen` can toggle it.
     chaifen: bool,
     /// What Ruby mode is editing the reading of.
@@ -441,6 +458,7 @@ impl Editor {
             scheme_request: None,
             clipboard_request: None,
             clipboard_read: None,
+            table: None,
             chaifen: false,
             ruby_target: None,
             completion: None,
@@ -573,6 +591,10 @@ impl Editor {
         // Segmentation is cached per line number, and the lines are a different
         // document now.
         self.segment_cache.borrow_mut().clear();
+        // Whether this file is a grid is a fact about *this* file, so it is
+        // asked again — otherwise a chapter opened next to a table would
+        // inherit the table's columns.
+        self.table_on_open();
         // The `[n/total]` indicator is already on the status line; repeating it
         // here would print it twice on every switch.
         self.status = self.current_buffer().display_name().to_string();
@@ -634,6 +656,7 @@ impl Editor {
             }
         }
         self.add_buffer(buffer);
+        self.table_on_open();
         Ok(())
     }
 
@@ -1255,6 +1278,18 @@ impl Editor {
                 Ok(CommandOutcome::Continue)
             }
             Command::SetLayout(direction) => {
+                // A grid runs across and down; a 縱書 page runs down and to the
+                // left. There is no honest way to draw one as the other, so the
+                // command is refused rather than quietly doing something else —
+                // and it says which key gets you out.
+                let wants_vertical = match direction {
+                    Some(l) => l == Layout::Vertical,
+                    None => self.layout == Layout::Horizontal,
+                };
+                if self.table.is_some() && wants_vertical {
+                    self.status = "表格是橫排的；先 `:table off`".to_string();
+                    return Ok(CommandOutcome::Continue);
+                }
                 let layout = match direction {
                     Some(l) => {
                         self.set_layout(l);
@@ -1406,6 +1441,14 @@ impl Editor {
             // A measure is only a measure if the rows honour it, so setting
             // one turns wrapping on: `:wrap 50` says "write to fifty", and
             // fifty columns of text running off the edge is not that.
+            Command::SetTable(on) => {
+                if on {
+                    self.enter_table();
+                } else {
+                    self.leave_table();
+                }
+                Ok(CommandOutcome::Continue)
+            }
             Command::SetMeasure(measure) => {
                 if measure.is_some() {
                     self.set_soft_wrap(true);
@@ -1624,6 +1667,253 @@ impl Editor {
         }
     }
 
+    // ---- Table mode (Feature #118) ----------------------------------------
+
+    /// The grid this file is being read as, if it is being read as one.
+    pub fn table(&self) -> Option<&TableView> {
+        self.table.as_ref()
+    }
+
+    /// Read this file as a grid, by the schema found next to it.
+    ///
+    /// Reports what it did, because a mode that changes what every key means
+    /// must never turn itself on quietly.
+    pub fn enter_table(&mut self) -> bool {
+        let Some(path) = self.current_buffer().path().map(Path::to_path_buf) else {
+            self.status = "no file, so no schema to read it by".to_string();
+            return false;
+        };
+        let found = crate::table::schema_for(&path);
+        let (from, schema, how) = match found {
+            Some((from, schema)) => {
+                let name = from
+                    .file_name()
+                    .map(|n| n.to_string_lossy().into_owned())
+                    .unwrap_or_default();
+                (from, schema, format!("照 {name}"))
+            }
+            // No schema names this file, so its own header row is the schema.
+            // Column names and nothing else — but that is enough to line the
+            // file up and walk it by cell, which is most of what a grid is for.
+            None => {
+                let head = self.current_buffer().rope().line(0).to_string();
+                let schema = crate::table::Schema::from_header(&head, ',');
+                if schema.columns.len() < 2 {
+                    self.status = format!(
+                        "'{}' has no columns to read — one field per line",
+                        path.file_name().unwrap_or_default().to_string_lossy()
+                    );
+                    return false;
+                }
+                (PathBuf::new(), schema, "照首行".to_string())
+            }
+        };
+        let columns = schema.columns.len();
+        self.table = Some(TableView {
+            schema,
+            from,
+            goal: 0,
+        });
+        // A grid is read across: rows run left to right and columns stack down
+        // the page, which is the one thing a 縱書 layout cannot do. Rather than
+        // draw something incoherent, table mode is horizontal.
+        let turned = self.layout == Layout::Vertical;
+        if turned {
+            self.set_layout(Layout::Horizontal);
+        }
+        self.status = format!(
+            "表格：{columns} 欄，{how}{}",
+            if turned { "（已轉橫排）" } else { "" }
+        );
+        true
+    }
+
+    /// Go back to reading the file as plain text.
+    pub fn leave_table(&mut self) {
+        self.table = None;
+        self.status = "表格：關".to_string();
+    }
+
+    /// Read a newly opened file as a grid if a schema claims it.
+    ///
+    /// Silently, unlike `:table` — a file that is a table was always a table,
+    /// and being told so on every open is noise.
+    fn table_on_open(&mut self) {
+        self.table = None;
+        let Some(path) = self.current_buffer().path().map(Path::to_path_buf) else {
+            return;
+        };
+        if let Some((from, schema)) = crate::table::schema_for(&path) {
+            self.table = Some(TableView {
+                schema,
+                from,
+                goal: 0,
+            });
+        }
+    }
+
+    /// Where every cell of a line begins and ends, in characters from its start.
+    pub fn row_cells(&self, line: usize) -> Vec<(usize, usize)> {
+        let Some(view) = &self.table else {
+            return Vec::new();
+        };
+        let rope = self.current_buffer().rope();
+        if line >= rope.len_lines() {
+            return Vec::new();
+        }
+        crate::table::cells(&rope.line(line).to_string(), view.schema.delimiter)
+    }
+
+    /// Which cell of which row the cursor is in.
+    pub fn cell_position(&self) -> Option<(usize, usize)> {
+        self.table.as_ref()?;
+        let rope = self.current_buffer().rope();
+        let line = rope.char_to_line(self.cursor.min(rope.len_chars()));
+        let within = self.cursor - rope.line_to_char(line);
+        let cells = self.row_cells(line);
+        let at = cells
+            .iter()
+            .position(|&(a, b)| within >= a && within <= b)
+            .unwrap_or(cells.len().saturating_sub(1));
+        Some((line, at))
+    }
+
+    /// The buffer range one cell covers.
+    pub fn cell_span(&self, line: usize, cell: usize) -> Option<(usize, usize)> {
+        let cells = self.row_cells(line);
+        let &(a, b) = cells.get(cell)?;
+        let start = self.current_buffer().rope().line_to_char(line);
+        Some((start + a, start + b))
+    }
+
+    /// The text of one cell.
+    pub fn cell_text(&self, line: usize, cell: usize) -> String {
+        match self.cell_span(line, cell) {
+            Some((a, b)) => self.current_buffer().rope().slice(a..b).to_string(),
+            None => String::new(),
+        }
+    }
+
+    /// Whether a row has a different number of cells than the header says.
+    ///
+    /// Not an error to be refused: a table editor is the tool for *fixing*
+    /// such a row, and one bad line must not lock the file.
+    pub fn row_is_ragged(&self, line: usize) -> bool {
+        let Some(view) = &self.table else {
+            return false;
+        };
+        let rope = self.current_buffer().rope();
+        // The last line of a file that ends in a newline is empty, and an empty
+        // last line is the end of the file, not a row with one blank cell.
+        if line + 1 == rope.len_lines() && rope.line(line).len_chars() == 0 {
+            return false;
+        }
+        self.row_cells(line).len() != view.schema.columns.len()
+    }
+
+    /// Step one cell left or right, staying on this row.
+    fn move_cell(&mut self, right: bool) {
+        let Some((line, at)) = self.cell_position() else {
+            return;
+        };
+        let cells = self.row_cells(line);
+        let want = if right {
+            (at + 1).min(cells.len().saturating_sub(1))
+        } else {
+            at.saturating_sub(1)
+        };
+        if let Some(view) = self.table.as_mut() {
+            view.goal = want;
+        }
+        self.go_to_cell(line, want);
+    }
+
+    /// Step one row up or down, keeping to the same column.
+    fn move_cell_row(&mut self, down: bool) {
+        let Some((line, _)) = self.cell_position() else {
+            return;
+        };
+        let last = self.current_buffer().rope().len_lines().saturating_sub(1);
+        let want = if down {
+            (line + 1).min(last)
+        } else {
+            line.saturating_sub(1)
+        };
+        let goal = self.table.as_ref().map(|v| v.goal).unwrap_or(0);
+        self.go_to_cell(want, goal);
+    }
+
+    /// Put the cursor at the start of a cell.
+    ///
+    /// Clamped to the row: a ragged row with fewer cells than the goal takes
+    /// its last one, and the goal is kept, so walking on down the column
+    /// returns to it — the same rule `j` already follows for a short line.
+    fn go_to_cell(&mut self, line: usize, cell: usize) {
+        let cells = self.row_cells(line);
+        if cells.is_empty() {
+            return;
+        }
+        let at = cell.min(cells.len() - 1);
+        let start = self.current_buffer().rope().line_to_char(line);
+        self.move_head(start + cells[at].0);
+    }
+
+    /// The first or last cell of the row.
+    fn move_cell_end(&mut self, last: bool) {
+        let Some((line, _)) = self.cell_position() else {
+            return;
+        };
+        let cells = self.row_cells(line);
+        let want = if last { cells.len().saturating_sub(1) } else { 0 };
+        if let Some(view) = self.table.as_mut() {
+            view.goal = want;
+        }
+        self.go_to_cell(line, want);
+    }
+
+    /// Run one key while the file is being read as a grid.
+    ///
+    /// Only the keys whose meaning actually changes: `hjkl` walk cells rather
+    /// than characters, and `0`/`$` are the row's ends. Everything else —
+    /// paging, `gg`, search, the operators — is about lines and text, and a
+    /// grid does not change what those mean.
+    fn table_motion(&mut self, key: Key, count: usize) -> bool {
+        match key {
+            Key::Char('h') | Key::Left => self.repeat(count, |e| e.move_cell(false)),
+            Key::Char('l') | Key::Right => self.repeat(count, |e| e.move_cell(true)),
+            Key::Char('j') | Key::Down => self.repeat(count, |e| e.move_cell_row(true)),
+            Key::Char('k') | Key::Up => self.repeat(count, |e| e.move_cell_row(false)),
+            Key::Char('0') | Key::Home => self.move_cell_end(false),
+            Key::Char('$') | Key::End => self.move_cell_end(true),
+            _ => return false,
+        }
+        true
+    }
+
+    /// Whether the cursor sits at the first character of its cell.
+    fn at_cell_start(&self) -> bool {
+        match self.cell_position() {
+            Some((line, cell)) => self.cell_span(line, cell).map(|(a, _)| a) == Some(self.cursor),
+            None => false,
+        }
+    }
+
+    /// Whether typing `c` into a cell would break the file.
+    ///
+    /// With no quoting, a delimiter inside a cell is not a delimiter inside a
+    /// cell — it is one more column, and every column right of it shifts. The
+    /// generator that reads this file back would take the damage silently, so
+    /// the key is refused here, where it can still be explained.
+    fn cell_refuses(&self, c: char) -> Option<String> {
+        let view = self.table.as_ref()?;
+        if c == view.schema.delimiter {
+            return Some(format!(
+                "'{c}' separates cells — it cannot be written inside one"
+            ));
+        }
+        None
+    }
+
     // ---- Layout (Feature #61) ---------------------------------------------
 
     /// The current layout.
@@ -1633,6 +1923,12 @@ impl Editor {
 
     /// Switch the layout.
     pub fn set_layout(&mut self, layout: Layout) {
+        // One choke point for a rule with three ways in — the config, `-v`, and
+        // `:vertical`: a grid is read across, so table mode is horizontal. The
+        // command explains the refusal; this is what makes it true.
+        if layout == Layout::Vertical && self.table.is_some() {
+            return;
+        }
         self.layout = layout;
         self.zong_motion = false;
     }
@@ -2158,6 +2454,12 @@ impl Editor {
         }
         let operator_count = self.count;
         let count = self.take_count();
+
+        // Read as a grid, `hjkl` walk cells. Before the vertical branch because
+        // a table is read across, whatever the file's writing layout is.
+        if self.table.is_some() && self.table_motion(key, count) {
+            return;
+        }
 
         // Laid out vertically, the arrow keys and `hjkl` keep their *screen*
         // meaning: `j` still reads onward down the 縱, and `h` still steps left,
@@ -2969,6 +3271,33 @@ impl Editor {
                 _ => {}
             }
         }
+        // Inside a grid, Insert mode is scoped to one cell: the two keys that
+        // could reach out of it are the two that would join two cells into one
+        // or split a row in half, and neither is ever what was meant.
+        if self.table.is_some() {
+            match key {
+                Key::Char(c) => {
+                    if let Some(why) = self.cell_refuses(c) {
+                        self.status = why;
+                        return;
+                    }
+                }
+                Key::Enter | Key::Tab => {
+                    self.status = "一格之內：Enter 與 Tab 不進格子".to_string();
+                    return;
+                }
+                Key::Backspace => {
+                    // At the cell's own start there is nothing of this cell to
+                    // delete, and the character before it is the delimiter.
+                    if self.at_cell_start() {
+                        self.status = "格首：再刪就把兩格併成一格了".to_string();
+                        return;
+                    }
+                }
+                _ => {}
+            }
+        }
+
         match key {
             Key::Esc => {
                 // The session just ended is what `.` replays.
@@ -5397,6 +5726,181 @@ mod tests {
         let mut ed = typed("上山\n下海");
         press(&mut ed, "gJ");
         assert_eq!(ed.current_buffer().text(), "上山下海");
+    }
+
+    /// A directory holding a small division table and the schema for it.
+    fn a_table(tag: &str) -> (PathBuf, PathBuf) {
+        let dir = std::env::temp_dir().join(format!("yumete-table-{tag}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(dir.join(".yumete").join("tables")).unwrap();
+        std::fs::write(
+            dir.join(".yumete").join("tables").join("division.toml"),
+            "[table]\nfile = ['division.csv']\nkey = 'char'\n\
+             [[table.column]]\nname = 'char'\nlabel = '字'\n\
+             [[table.column]]\nname = 'ids_y'\n\
+             [[table.column]]\nname = 'ids_g'\n\
+             [[table.detail]]\nname = 'unicode'\ncompute = 'codepoint(char)'\n\
+             [table.jump]\nfrom = ['ids_y']\nto = 'char'\n",
+        )
+        .unwrap();
+        let csv = dir.join("division.csv");
+        std::fs::write(&csv, "char,ids_y,ids_g\n一,⿰木目,⿰木目\n二,土,土\n").unwrap();
+        (dir, csv)
+    }
+
+    #[test]
+    fn a_file_a_schema_names_is_read_as_a_grid() {
+        let (dir, csv) = a_table("open");
+        let mut ed = Editor::new();
+        ed.open_file(&csv).unwrap();
+
+        // No command needed: a schema next to the file is the file saying so.
+        let view = ed.table().expect("read as a grid");
+        assert_eq!(view.schema.columns.len(), 3);
+        assert_eq!(view.schema.columns[0].heading(), "字");
+
+        // Cells are ranges into the line, not a copy of it.
+        ed.goto_line(2);
+        assert_eq!(ed.cell_position(), Some((1, 0)));
+        assert_eq!(ed.cell_text(1, 1), "⿰木目");
+        assert_eq!(ed.cell_span(1, 1), Some((19, 22)), "the header is 17 characters");
+
+        // A file the schema does not name is ordinary text again.
+        let other = dir.join("notes.md");
+        std::fs::write(&other, "那年冬天\n").unwrap();
+        ed.open_file(&other).unwrap();
+        assert!(ed.table().is_none(), "a chapter is not a table");
+        // …and coming back to the table reads it as one again.
+        ed.execute("buffer-previous").unwrap();
+        assert!(ed.table().is_some());
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn hjkl_walk_cells_when_the_file_is_a_grid() {
+        let (dir, csv) = a_table("move");
+        let mut ed = Editor::new();
+        ed.open_file(&csv).unwrap();
+        ed.goto_line(2);
+        assert_eq!(ed.cell_position(), Some((1, 0)), "row 2, first cell");
+
+        press(&mut ed, "l");
+        assert_eq!(ed.cell_position(), Some((1, 1)), "one cell right");
+        press(&mut ed, "l");
+        assert_eq!(ed.cell_position(), Some((1, 2)));
+        press(&mut ed, "l");
+        assert_eq!(ed.cell_position(), Some((1, 2)), "the row ends");
+        press(&mut ed, "h");
+        assert_eq!(ed.cell_position(), Some((1, 1)));
+
+        // Down a row keeps the column, and the cursor lands on the cell's start
+        // rather than wherever the character count happened to fall.
+        press(&mut ed, "j");
+        assert_eq!(ed.cell_position(), Some((2, 1)));
+        assert_eq!(ed.cell_text(2, 1), "土");
+        press(&mut ed, "k");
+        assert_eq!(ed.cell_position(), Some((1, 1)));
+
+        // `0` and `$` are the row's ends, as they are a line's.
+        press(&mut ed, "$");
+        assert_eq!(ed.cell_position(), Some((1, 2)));
+        press(&mut ed, "0");
+        assert_eq!(ed.cell_position(), Some((1, 0)));
+
+        // A count applies, as it does to every other motion.
+        press(&mut ed, "2l");
+        assert_eq!(ed.cell_position(), Some((1, 2)));
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn a_cell_cannot_be_typed_out_of() {
+        let (dir, csv) = a_table("guard");
+        let mut ed = Editor::new();
+        ed.open_file(&csv).unwrap();
+        ed.goto_line(2);
+        let before = ed.current_buffer().text();
+
+        // The delimiter is the one character that cannot go in a cell: with no
+        // quoting it is not a comma, it is one more column.
+        press(&mut ed, "i");
+        ed.on_key(Key::Char(','));
+        assert_eq!(ed.current_buffer().text(), before, "refused");
+        assert!(ed.status().contains("separates cells"), "{}", ed.status());
+
+        // Nor a line break, which would cut the row in half.
+        ed.on_key(Key::Enter);
+        assert_eq!(ed.current_buffer().text(), before);
+
+        // Backspace at the cell's start would join it to the one before.
+        ed.on_key(Key::Backspace);
+        assert_eq!(ed.current_buffer().text(), before, "the delimiter survives");
+        assert!(ed.status().contains("格首"), "{}", ed.status());
+
+        // Ordinary typing works exactly as it always did.
+        ed.on_key(Key::Char('三'));
+        assert!(ed.current_buffer().text().contains("三一,"), "{}", ed.current_buffer().text());
+        ed.on_key(Key::Backspace);
+        assert_eq!(ed.current_buffer().text(), before, "and undoes itself");
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn a_grid_is_read_across_so_it_is_never_set_vertically() {
+        let (dir, csv) = a_table("layout");
+        let mut ed = Editor::new();
+        ed.set_layout(Layout::Vertical);
+        ed.open_file(&csv).unwrap();
+        assert_eq!(ed.layout(), Layout::Vertical, "still a 縱書 session");
+
+        // Reading it as a grid turns the page, and says so.
+        ed.execute("table").unwrap();
+        assert_eq!(ed.layout(), Layout::Horizontal);
+        assert!(ed.status().contains("已轉橫排"), "{}", ed.status());
+
+        // …and it stays turned: the command is refused, not silently ignored.
+        ed.execute("vertical").unwrap();
+        assert_eq!(ed.layout(), Layout::Horizontal);
+        assert!(ed.status().contains(":table off"), "{}", ed.status());
+
+        // Leaving the grid gives the layout back.
+        ed.execute("table off").unwrap();
+        ed.execute("vertical").unwrap();
+        assert_eq!(ed.layout(), Layout::Vertical);
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn a_file_with_no_schema_is_read_by_its_own_header() {
+        // What `yumete -t` falls back on.
+        let dir = std::env::temp_dir().join(format!("yumete-bare-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let csv = dir.join("anything.csv");
+        std::fs::write(&csv, "name,reading,note\n雪,ゆき,\n").unwrap();
+
+        let mut ed = Editor::new();
+        ed.open_file(&csv).unwrap();
+        assert!(ed.table().is_none(), "not until asked");
+
+        assert!(ed.enter_table(), "the header row is enough");
+        let view = ed.table().unwrap();
+        assert_eq!(view.schema.columns.len(), 3);
+        assert_eq!(view.schema.columns[1].heading(), "reading");
+        assert!(ed.status().contains("照首行"), "{}", ed.status());
+
+        // A file with nothing to split is not a table, and says so.
+        let prose = dir.join("prose.txt");
+        std::fs::write(&prose, "那年冬天\n").unwrap();
+        ed.open_file(&prose).unwrap();
+        assert!(!ed.enter_table());
+        assert!(ed.table().is_none());
+
+        std::fs::remove_dir_all(&dir).ok();
     }
 
     #[test]

@@ -258,6 +258,44 @@ impl Schema {
         })
     }
 
+    /// Make a bare schema out of a file's own header row.
+    ///
+    /// What `yumete -t` falls back on: every CSV already says what its columns
+    /// are on its first line, so a file nobody has written a schema for can
+    /// still be read as a grid. It gets the names and nothing else — no
+    /// labels, no computed fields, no jumps, because those are knowledge about
+    /// the data that only a person has.
+    pub fn from_header(line: &str, delimiter: char) -> Schema {
+        let columns: Vec<Column> = cells(line, delimiter)
+            .into_iter()
+            .enumerate()
+            .map(|(i, span)| {
+                let name = cell_text(line, span);
+                Column {
+                    // A header cell that is blank still needs a name, or two of
+                    // them would be the same column.
+                    name: if name.trim().is_empty() {
+                        format!("{}", i + 1)
+                    } else {
+                        name
+                    },
+                    label: None,
+                    kind: Kind::String,
+                }
+            })
+            .collect();
+        Schema {
+            files: Vec::new(),
+            key: None,
+            delimiter,
+            header: true,
+            columns,
+            details: Vec::new(),
+            jump: None,
+            ranges: HashMap::new(),
+        }
+    }
+
     /// Whether this schema is for a file with this name.
     pub fn covers(&self, path: &Path) -> bool {
         let Some(name) = path.file_name().and_then(|n| n.to_str()) else {
@@ -532,6 +570,17 @@ to = "char"
         .contains("missing"));
         assert!(bad("[table]\nfile = 'a.csv'\nkey = 'nope'\n[[table.column]]\nname = 'c'")
             .contains("not a column"));
+    }
+
+    #[test]
+    fn a_file_with_no_schema_still_has_a_header_to_read() {
+        let s = Schema::from_header("char,ids_y,,block\n", ',');
+        assert_eq!(
+            s.columns.iter().map(|c| c.heading()).collect::<Vec<_>>(),
+            vec!["char", "ids_y", "3", "block"],
+            "a blank header cell is named by its position, not left nameless"
+        );
+        assert!(s.details.is_empty() && s.jump.is_none(), "names only");
     }
 
     #[test]
