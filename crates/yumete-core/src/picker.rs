@@ -16,6 +16,9 @@ pub enum Item {
     File(String),
     /// One of the open buffers, by index.
     Buffer(usize, String),
+    /// A line of the file being written, by index — what a table's jump offers
+    /// when a cell names several rows and only a person can say which.
+    Row(usize, String),
 }
 
 impl Item {
@@ -23,7 +26,7 @@ impl Item {
     pub fn label(&self) -> &str {
         match self {
             Item::File(path) => path,
-            Item::Buffer(_, name) => name,
+            Item::Buffer(_, name) | Item::Row(_, name) => name,
         }
     }
 }
