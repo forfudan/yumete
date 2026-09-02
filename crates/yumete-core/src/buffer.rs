@@ -43,6 +43,12 @@ pub struct Buffer {
     /// that touches the copy asks this first; it is the whole reason the
     /// feature cannot eat the work it exists to save.
     owns_swap: bool,
+    /// Which markup this file is written in (Feature #106).
+    ///
+    /// Decided once, when the file is opened: from its name if the name says,
+    /// and otherwise by reading it. A guess that changed as the writer typed
+    /// would change what comes off the page under them.
+    syntax: crate::syntax::Syntax,
     /// How many times the text has changed.
     ///
     /// What lets an answer *about the whole document* — which line is inside a
@@ -93,6 +99,7 @@ impl Buffer {
             label: None,
             history: History::default(),
             revision: 0,
+            syntax: crate::syntax::Syntax::default(),
             pending_draft: None,
             owns_swap: false,
         }
@@ -108,6 +115,7 @@ impl Buffer {
             label: None,
             history: History::default(),
             revision: 0,
+            syntax: crate::syntax::Syntax::default(),
             pending_draft: None,
             owns_swap: false,
         }
@@ -129,6 +137,13 @@ impl Buffer {
         // Whether a crash left a draft here is decided once, now: the status
         // line asks every frame, and the answer cannot change under us.
         let pending_draft = read_draft(path, &rope);
+        // …and so is which markup it is written in. The name says, when it
+        // says; otherwise the file itself does.
+        let name = path.file_name().map(|n| n.to_string_lossy().into_owned());
+        let syntax = name
+            .as_deref()
+            .and_then(crate::syntax::from_extension)
+            .unwrap_or_else(|| crate::syntax::sniff(&rope.to_string()));
         Ok(Buffer {
             rope,
             path: Some(path.to_path_buf()),
@@ -139,6 +154,7 @@ impl Buffer {
             revision: 0,
             pending_draft,
             owns_swap: false,
+            syntax,
         })
     }
 
@@ -153,6 +169,16 @@ impl Buffer {
     /// than writing a listing over something.
     pub fn name_as(&mut self, label: &str) {
         self.label = Some(label.to_string());
+    }
+
+    /// Which markup this file is written in.
+    pub fn syntax(&self) -> crate::syntax::Syntax {
+        self.syntax
+    }
+
+    /// Say which markup it is written in, overriding what was guessed.
+    pub fn set_syntax(&mut self, syntax: crate::syntax::Syntax) {
+        self.syntax = syntax;
     }
 
     /// How many times the text has changed — a cache key for anything derived

@@ -43,6 +43,10 @@ pub enum Kind {
     /// `%%a note to myself%%` or `<!-- one -->` — in the manuscript, not in the
     /// book. Set well back, and dropped by `:export`.
     Comment,
+    /// Typst code: `#import`, `#let`, a call. Scaffolding, set back — and never
+    /// hidden, because unlike `**` it is not *decorating* writing, it is the
+    /// instructions that produce it, and a writer needs to see them.
+    Code2,
     /// The markup itself — the asterisks, the brackets and the target. Shown
     /// and set back in source mode; hidden in 所見即所得.
     Marker,
@@ -590,6 +594,7 @@ mod tests {
                 Kind::Footnote => 'F',
                 Kind::WikiLink => 'W',
                 Kind::Comment => '%',
+                Kind::Code2 => '#',
                 Kind::Marker | Kind::HeadingMark => '.',
             };
             for slot in out.iter_mut().take(span.end.min(n)).skip(span.start) {
@@ -804,5 +809,282 @@ mod tests {
     fn ordinary_prose_carries_no_spans() {
         assert!(spans("那年冬天，雪下得早。").is_empty());
         assert!(spans("").is_empty());
+    }
+}
+
+/// Typst's inline markup, in the shape the rest of this module works in.
+///
+/// A separate scan rather than a flag on the Markdown one, because the two
+/// languages disagree about the same characters: `*粗*` is bold in Typst and
+/// nothing in Markdown, `#` opens code in Typst and a heading in Markdown, and
+/// `_斜_` is emphasis in Typst wherever it appears. Sharing one scanner would
+/// mean a flag at every branch, which is two parsers wearing one coat.
+pub mod typst {
+    use super::{Block, Kind, Span};
+
+    /// The marked-up runs of one line of Typst.
+    pub fn spans(line: &str) -> Vec<Span> {
+        let chars: Vec<char> = line.chars().collect();
+        let mut out = Vec::new();
+        let mut construct = 1usize;
+        let mut at = 0usize;
+
+        // A heading is `=` through `======`, and the rest of the line is it.
+        let equals = chars.iter().take_while(|&&c| c == '=').count();
+        if equals > 0 && equals <= 6 && matches!(chars.get(equals), Some(' ') | None) {
+            push(&mut out, 0, equals, Kind::HeadingMark, 0);
+            push(&mut out, equals, chars.len(), Kind::Heading, 0);
+            at = equals;
+        }
+
+        while at < chars.len() {
+            // `// to the end of the line` is a note to oneself.
+            if chars[at] == '/' && chars.get(at + 1) == Some(&'/') {
+                push(&mut out, at, chars.len(), Kind::Comment, construct);
+                break;
+            }
+            // `#import`, `#let`, `#show`, `#set` and every call: the
+            // instructions, not the writing. Shown, always — a writer needs to
+            // see what produces the page.
+            if chars[at] == '#' && chars.get(at + 1).is_some_and(|c| c.is_alphabetic()) {
+                let end = code_end(&chars, at + 1);
+                push(&mut out, at, end, Kind::Code2, construct);
+                at = end;
+                construct += 1;
+                continue;
+            }
+            // `$maths$`.
+            if chars[at] == '$' {
+                if let Some(close) = (at + 1..chars.len()).find(|&i| chars[i] == '$') {
+                    push(&mut out, at, at + 1, Kind::Marker, construct);
+                    push(&mut out, at + 1, close, Kind::Code, construct);
+                    push(&mut out, close, close + 1, Kind::Marker, construct);
+                    at = close + 1;
+                    construct += 1;
+                    continue;
+                }
+            }
+            // `*粗*` and `_斜_` — one delimiter, not two.
+            if matches!(chars[at], '*' | '_') {
+                let kind = if chars[at] == '*' {
+                    Kind::Strong
+                } else {
+                    Kind::Emphasis
+                };
+                if let Some(close) = closing(&chars, at + 1, chars[at]) {
+                    push(&mut out, at, at + 1, Kind::Marker, construct);
+                    push(&mut out, at + 1, close, kind, construct);
+                    push(&mut out, close, close + 1, Kind::Marker, construct);
+                    at = close + 1;
+                    construct += 1;
+                    continue;
+                }
+            }
+            // `` `code` ``.
+            if chars[at] == '`' {
+                if let Some(close) = (at + 1..chars.len()).find(|&i| chars[i] == '`') {
+                    push(&mut out, at, at + 1, Kind::Marker, construct);
+                    push(&mut out, at + 1, close, Kind::Code, construct);
+                    push(&mut out, close, close + 1, Kind::Marker, construct);
+                    at = close + 1;
+                    construct += 1;
+                    continue;
+                }
+            }
+            at += 1;
+        }
+        out
+    }
+
+    /// Which block a line of Typst belongs to.
+    ///
+    /// Far less state than Markdown's: Typst has no `:::` and its raw blocks
+    /// use the same ``` fence, so this is a small scanner of its own.
+    #[derive(Debug, Default)]
+    pub struct BlockScanner {
+        in_raw: bool,
+    }
+
+    impl BlockScanner {
+        pub fn new() -> BlockScanner {
+            BlockScanner::default()
+        }
+
+        pub fn feed(&mut self, prefix: &str, _len: usize) -> Block {
+            let trimmed = prefix.trim_end_matches(['\n', '\r']).trim_start();
+            if trimmed.starts_with("```") {
+                self.in_raw = !self.in_raw;
+                return Block::Code;
+            }
+            if self.in_raw {
+                return Block::Code;
+            }
+            let equals = trimmed.chars().take_while(|&c| c == '=').count();
+            if equals > 0 && equals <= 6 && matches!(trimmed.chars().nth(equals), Some(' ') | None)
+            {
+                return Block::Heading(equals);
+            }
+            if trimmed.starts_with("- ") || trimmed.starts_with("+ ") {
+                return Block::Item { task: None };
+            }
+            Block::Prose
+        }
+    }
+
+    /// Where a `#…` run of code ends.
+    ///
+    /// Typst code runs to the end of its expression, which needs a parser. This
+    /// takes the identifier and whatever brackets follow it, balanced — enough
+    /// to set `#chapter[初雪]` and `#import "lib.typ": chapter` apart from the
+    /// prose around them, which is all a page of writing asks of it.
+    fn code_end(chars: &[char], from: usize) -> usize {
+        let mut at = from;
+        while at < chars.len()
+            && (chars[at].is_alphanumeric() || chars[at] == '.' || chars[at] == '_')
+        {
+            at += 1;
+        }
+        // A statement — `#import "lib.typ": chapter`, `#let x = 1` — runs to
+        // the end of its line. Only a *call* stops at its brackets.
+        let word: String = chars[from..at].iter().collect();
+        if matches!(word.as_str(), "import" | "include" | "let" | "set" | "show") {
+            return chars.len();
+        }
+        // A trailing bracket group, and the string or arguments in it.
+        while let Some(&open) = chars.get(at) {
+            let close = match open {
+                '(' => ')',
+                '[' => ']',
+                '{' => '}',
+                // `#import "x": a, b` — the rest of the line belongs to it.
+                ':' | '"' => return chars.len(),
+                _ => break,
+            };
+            let mut depth = 0usize;
+            let mut scan = at;
+            while scan < chars.len() {
+                if chars[scan] == open {
+                    depth += 1;
+                } else if chars[scan] == close {
+                    depth -= 1;
+                    if depth == 0 {
+                        break;
+                    }
+                }
+                scan += 1;
+            }
+            at = (scan + 1).min(chars.len());
+        }
+        at.max(from)
+    }
+
+    /// Where the run closing the delimiter opened at `from` is.
+    fn closing(chars: &[char], from: usize, delimiter: char) -> Option<usize> {
+        if chars.get(from).is_none_or(|&c| c == ' ') {
+            return None;
+        }
+        (from + 1..chars.len()).find(|&i| chars[i] == delimiter && chars.get(i - 1) != Some(&' '))
+    }
+
+    fn push(out: &mut Vec<Span>, start: usize, end: usize, kind: Kind, construct: usize) {
+        if end > start {
+            out.push(Span {
+                start,
+                end,
+                kind,
+                construct,
+            });
+        }
+    }
+}
+
+#[cfg(test)]
+mod typst_tests {
+    use super::typst::*;
+    use super::{hidden, Block, Kind};
+
+    fn shape(line: &str) -> String {
+        let n = line.chars().count();
+        let mut out = vec![' '; n];
+        for span in spans(line) {
+            let mark = match span.kind {
+                Kind::Strong => 'B',
+                Kind::Emphasis => 'I',
+                Kind::Code => 'C',
+                Kind::Code2 => '#',
+                Kind::Heading => 'H',
+                Kind::Comment => '%',
+                Kind::Marker | Kind::HeadingMark => '.',
+                _ => '?',
+            };
+            for slot in out.iter_mut().take(span.end.min(n)).skip(span.start) {
+                *slot = mark;
+            }
+        }
+        out.into_iter().collect()
+    }
+
+    #[test]
+    fn typst_spells_its_emphasis_with_one_delimiter() {
+        // The whole reason this is a scanner of its own: `**` is Markdown's
+        // bold and Typst's is `*`.
+        assert_eq!(shape("那*年*天"), " .B. ");
+        assert_eq!(shape("那_年_天"), " .I. ");
+        assert_eq!(shape("那`碼`天"), " .C. ");
+    }
+
+    #[test]
+    fn a_typst_heading_is_an_equals_sign() {
+        assert_eq!(shape("== 第一章"), "..HHHH");
+        assert_eq!(
+            shape("# 第一章"),
+            "     ",
+            "that is Markdown's, not Typst's"
+        );
+    }
+
+    #[test]
+    fn code_is_shown_because_it_is_what_produces_the_page() {
+        // Not decoration around writing — the instructions that make it. A
+        // writer has to see them, so they are never hidden, only set back.
+        assert_eq!(shape("#chapter[初雪]"), "############");
+        assert_eq!(shape("那年#emph[冬天]。"), "  ######### ");
+        // An import takes the rest of its line.
+        assert_eq!(
+            shape("#import \"lib.typ\": chapter"),
+            "##########################"
+        );
+        // …and a comment takes the rest of its line too.
+        assert_eq!(shape("那年 // 待查"), "   %%%%%");
+    }
+
+    #[test]
+    fn typst_code_never_comes_off_the_page() {
+        // `**` is decoration and can go; `#chapter[…]` is the instruction that
+        // makes the chapter, and a page that hid it would be lying.
+        let line = "#chapter[初雪]那年*冬*天";
+        let hide = hidden(&spans(line), None);
+        let shown: String = line
+            .chars()
+            .enumerate()
+            .filter(|(i, _)| !hide.iter().any(|&(a, b)| *i >= a && *i < b))
+            .map(|(_, c)| c)
+            .collect();
+        assert_eq!(shown, "#chapter[初雪]那年冬天");
+    }
+
+    #[test]
+    fn the_blocks_of_a_typst_manuscript() {
+        let mut scanner = BlockScanner::new();
+        let walk: String = "= 第一章\n那年\n```\n#let x = 1\n```\n- 阿寧"
+            .lines()
+            .map(|l| match scanner.feed(l, l.chars().count()) {
+                Block::Heading(n) => char::from_digit(n as u32, 10).unwrap_or('#'),
+                Block::Code => '`',
+                Block::Item { .. } => '-',
+                _ => '.',
+            })
+            .collect();
+        assert_eq!(walk, "1.```-");
     }
 }

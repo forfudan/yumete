@@ -834,6 +834,9 @@ fn markup_style(kind: yumete_core::markdown::Kind) -> Style {
         Kind::Comment => Style::default()
             .fg(Color::Rgb(0x6a, 0x66, 0x5c))
             .add_modifier(Modifier::ITALIC),
+        // Typst's own code: the instructions that make the page, not decoration
+        // around writing. Set back, never taken away.
+        Kind::Code2 => Style::default().fg(Color::Rgb(0x8c, 0x9c, 0xb4)),
     }
 }
 
