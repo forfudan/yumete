@@ -92,6 +92,8 @@ pub fn run(editor: &mut Editor, config: &Config, ime: &mut ImeSession) -> io::Re
 
     let mut viewport = Viewport::default();
     let mut shift = ShiftTap::default();
+    // A typesetter started with `:preview`, if one is running.
+    let mut job: Option<Job> = None;
     let mut last_mode = None;
 
     let result = loop {
@@ -209,6 +211,43 @@ pub fn run(editor: &mut Editor, config: &Config, ime: &mut ImeSession) -> io::Re
                         ),
                     }
                 }
+                // `:preview` — the real typesetter, in the background. Its
+                // address arrives on a later turn of the loop.
+                if let Some(want) = editor.take_preview_request() {
+                    if let Some(mut running) = job.take() {
+                        let _ = running.child.kill();
+                        editor.set_status(format!("預覽：{} 已停", running.what));
+                    }
+                    if let yumete_core::editor::Preview::Start { path, syntax } = want {
+                        match syntax {
+                            yumete_core::syntax::Syntax::Typst => match Job::typst(&path) {
+                                Ok(started) => {
+                                    editor.set_status("預覽：tinymist 起來中……".to_string());
+                                    job = Some(started);
+                                }
+                                Err(why) => editor.set_status(why),
+                            },
+                            // Markdown has no server to run: the export *is*
+                            // the preview, made once and handed to the browser.
+                            yumete_core::syntax::Syntax::Markdown => {
+                                let out = std::env::temp_dir().join("yumete-preview.html");
+                                match editor.execute(&format!("export html {}", out.display())) {
+                                    Ok(_) => {
+                                        show(&out.to_string_lossy());
+                                        editor.set_status(format!("預覽：{}", out.display()));
+                                    }
+                                    Err(err) => editor.set_status(format!("預覽：{err}")),
+                                }
+                            }
+                        }
+                    }
+                }
+                if let Some(running) = job.as_ref() {
+                    if let Ok(url) = running.said.try_recv() {
+                        show(&url);
+                        editor.set_status(format!("預覽：{url}（`:preview off` 停）"));
+                    }
+                }
                 if let Some(tag) = editor.take_scheme_request() {
                     editor.set_status(switch_scheme(ime, &tag));
                 }
@@ -267,6 +306,12 @@ pub fn run(editor: &mut Editor, config: &Config, ime: &mut ImeSession) -> io::Re
             Err(err) => break Err(err),
         }
     };
+
+    // A preview server outlives nothing: it was started for this session and
+    // has no reason to go on holding a port after it.
+    if let Some(mut running) = job.take() {
+        let _ = running.child.kill();
+    }
 
     let _ = execute!(
         stdout(),
@@ -394,6 +439,71 @@ fn normalize_shift(code: KeyCode, mods: KeyModifiers) -> (KeyCode, KeyModifiers)
         }
     }
     (code, mods)
+}
+
+/// A typesetter running in the background, and where its output is to be seen.
+///
+/// **Not a terminal panel.** What a preview server has to say is one line — the
+/// address — and after that it is a process that should be left alone. Giving
+/// it a pane would mean watching a log scroll where the writing used to be, and
+/// would cost this editor a terminal emulator it is already sitting inside one
+/// of. A job is a handle, an address, and a way to stop it.
+struct Job {
+    what: &'static str,
+    child: std::process::Child,
+    /// The address it printed, once it has printed one.
+    said: std::sync::mpsc::Receiver<String>,
+}
+
+impl Job {
+    /// Start `tinymist preview`, watching its log for the address it opens on.
+    fn typst(path: &std::path::Path) -> Result<Job, String> {
+        let mut child = std::process::Command::new("tinymist")
+            .arg("preview")
+            .arg("--no-open")
+            .arg(path)
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::piped())
+            .spawn()
+            .map_err(|e| format!("tinymist: {e}（`cargo install tinymist`）"))?;
+        let (send, said) = std::sync::mpsc::channel();
+        if let Some(log) = child.stderr.take() {
+            std::thread::spawn(move || {
+                use std::io::BufRead;
+                for line in std::io::BufReader::new(log).lines().map_while(Result::ok) {
+                    // It says a good deal; one line of it is the address, and
+                    // that is the whole of what a writer wants back.
+                    if let Some(at) = line.find("http://") {
+                        let url: String =
+                            line[at..].chars().take_while(|c| !c.is_whitespace()).collect();
+                        let _ = send.send(url);
+                        return;
+                    }
+                }
+            });
+        }
+        Ok(Job {
+            what: "tinymist",
+            child,
+            said,
+        })
+    }
+}
+
+/// Open a URL or a file the way the platform opens things.
+fn show(target: &str) {
+    let opener = if cfg!(target_os = "macos") {
+        "open"
+    } else if cfg!(target_os = "windows") {
+        "explorer"
+    } else {
+        "xdg-open"
+    };
+    let _ = std::process::Command::new(opener)
+        .arg(target)
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .spawn();
 }
 
 /// What the system clipboard holds, asked of the platform.
