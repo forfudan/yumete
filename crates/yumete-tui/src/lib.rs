@@ -221,12 +221,28 @@ pub fn run(editor: &mut Editor, config: &Config, ime: &mut ImeSession) -> io::Re
                             Ok(()) => editor.set_status(format!("跑完了：{}", want.line)),
                             Err(err) => editor.set_status(format!("跑不動：{err}")),
                         },
+                        // Showing you the run: the complaints belong with the
+                        // answer, since between them they are what happened.
                         How::Capture => match run_capturing(&want.line, None) {
-                            Ok(out) => editor.provide_shell_output(&want.line, &out),
+                            Ok(ran) => {
+                                let mut text = ran.said;
+                                text.push_str(&ran.complained);
+                                editor.provide_shell_output(&want.line, &text);
+                            }
                             Err(err) => editor.set_status(format!("跑不動：{err}")),
                         },
+                        // Editing your text: a command that failed does not get
+                        // to touch it. `tr -D ' '` is a typo, and its answer is
+                        // an error message — replacing a paragraph with that is
+                        // an edit nobody asked for, undoable or not.
                         How::Pipe(input) => match run_capturing(&want.line, Some(&input)) {
-                            Ok(out) => editor.provide_pipe_output(&out),
+                            Ok(ran) if ran.ok => {
+                                editor.provide_pipe_output(&ran.said);
+                                if !ran.complained.trim().is_empty() {
+                                    editor.set_status(format!("換好了，但它說：{}", ran.why()));
+                                }
+                            }
+                            Ok(ran) => editor.set_status(format!("沒有動你的字：{}", ran.why())),
                             Err(err) => editor.set_status(format!("跑不動：{err}")),
                         },
                     }
@@ -464,7 +480,7 @@ fn normalize_shift(code: KeyCode, mods: KeyModifiers) -> (KeyCode, KeyModifiers)
 /// Through the shell, not split by hand: a writer typing `:sh wc -w *.md | sort`
 /// means the pipe and the glob, and a command line that quietly did not is
 /// worse than one that says it cannot.
-fn run_capturing(line: &str, input: Option<&str>) -> io::Result<String> {
+fn run_capturing(line: &str, input: Option<&str>) -> io::Result<Ran> {
     let mut child = std::process::Command::new(shell())
         .arg("-c")
         .arg(line)
@@ -482,14 +498,34 @@ fn run_capturing(line: &str, input: Option<&str>) -> io::Result<String> {
         io::Write::write_all(&mut pipe, text.as_bytes())?;
     }
     let out = child.wait_with_output()?;
-    let mut text = String::from_utf8_lossy(&out.stdout).into_owned();
-    let errors = String::from_utf8_lossy(&out.stderr);
-    if !errors.trim().is_empty() {
-        // Kept, and marked: a command that failed said why on stderr, and
-        // dropping it is how a writer ends up staring at an empty buffer.
-        text.push_str(&errors);
+    Ok(Ran {
+        ok: out.status.success(),
+        said: String::from_utf8_lossy(&out.stdout).into_owned(),
+        complained: String::from_utf8_lossy(&out.stderr).into_owned(),
+    })
+}
+
+/// What a command said, and whether it thinks it worked.
+///
+/// The two streams are kept apart because the two callers want different
+/// things: `:sh` is *showing* you the run and wants the complaints in with the
+/// answer, while `!` is *editing your text* and must never put either a
+/// complaint or a half-answer into it.
+struct Ran {
+    ok: bool,
+    said: String,
+    complained: String,
+}
+
+impl Ran {
+    /// The one line worth putting on the status bar.
+    fn why(&self) -> String {
+        self.complained
+            .lines()
+            .find(|l| !l.trim().is_empty())
+            .unwrap_or("命令失敗了")
+            .to_string()
     }
-    Ok(text)
 }
 
 /// Give the terminal back, run the command in it, and take it again.
@@ -962,42 +998,75 @@ const MENU_ROWS: usize = 8;
 /// The widest a menu gets. Past this the eye stops reading a row as one thing.
 const MENU_WIDTH: u16 = 56;
 
+/// The most columns a menu spreads across.
+///
+/// Bounded because a menu is glanced at, not read: past three or four columns
+/// the eye has to hunt, and the thing it is covering is the page.
+const MENU_COLUMNS: usize = 4;
+
 /// Draw a compact list just above `bottom`, scrolled so `selected` is on it.
 ///
 /// One column, capped, with a footer naming where you are in the list and what
 /// the highlighted row means. Both the `:` menu and the pickers use it, so they
 /// look like one idea rather than two.
-fn draw_list(
-    frame: &mut Frame,
-    area: Rect,
-    bottom: u16,
-    items: &[String],
+struct List<'a> {
+    items: &'a [String],
+    /// Which entry has to stay on screen.
     focus: usize,
+    /// Which entry is inked, if any.
     highlight: Option<usize>,
-    footer: &str,
-) {
+    /// The line under it: a count, and what the inked entry means.
+    footer: &'a str,
+    /// Whether it may spread across the window.
+    columns: bool,
+}
+
+fn draw_list(frame: &mut Frame, area: Rect, bottom: u16, list: List) {
+    let List {
+        items,
+        focus,
+        highlight,
+        footer,
+        columns,
+    } = list;
     if items.is_empty() && footer.is_empty() {
         return;
     }
-    let visible = items.len().min(MENU_ROWS);
-    let height = (visible + 1) as u16;
+    // As wide as its widest entry, and as many entries across as the window
+    // will take. Twenty-six commands down one column is three screenfuls with
+    // the rest of the page standing empty beside it; in three columns it is one
+    // glance. Column-major, so reading runs *down* and then across — the way a
+    // list of files does, and the way the numbers on it stay in order.
+    let one = items
+        .iter()
+        .map(|i| yumete_cjk::str_width(i))
+        .max()
+        .unwrap_or(0)
+        .saturating_add(2)
+        .min(MENU_WIDTH as usize);
+    let across = if columns {
+        let room = (area.width as usize).saturating_sub(2).max(1);
+        (room / one.max(1))
+            .clamp(1, items.len().div_ceil(MENU_ROWS).max(1))
+            .min(MENU_COLUMNS)
+    } else {
+        1
+    };
+    let deep = items.len().div_ceil(across).clamp(1, MENU_ROWS);
+    let visible = (deep * across).min(items.len());
+    let height = (deep + 1) as u16;
     if height > area.height || bottom < height {
         return;
     }
-    // Scrolled just enough: the selection stays on the list, and a short list
-    // never scrolls at all.
+    // Scrolled just enough: the selection stays on the list, and a list that
+    // fits never scrolls at all.
     let first = focus
         .saturating_sub(visible.saturating_sub(1))
         .min(items.len().saturating_sub(visible));
 
-    let width = items
-        .iter()
-        .map(|i| yumete_cjk::str_width(i))
-        .chain(std::iter::once(yumete_cjk::str_width(footer)))
-        .max()
-        .unwrap_or(0)
-        .saturating_add(2) as u16;
-    let width = width.min(MENU_WIDTH).min(area.width);
+    let width = (one * across)
+        .max(yumete_cjk::str_width(footer) + 2)
+        .min(area.width as usize) as u16;
     let menu = Rect::new(area.x, bottom - height, width, height);
     frame.render_widget(Clear, menu);
 
@@ -1016,24 +1085,30 @@ fn draw_list(
             }
         }
     }
-    for row in 0..visible {
-        let i = first + row;
+    for slot in 0..visible {
+        let i = first + slot;
+        if i >= items.len() {
+            break;
+        }
+        let (column, row) = (slot / deep, slot % deep);
+        let x = menu.x + (column * one) as u16;
+        let end = (x + one as u16).min(menu.x + width);
+        let y = menu.y + row as u16;
         let picked = highlight == Some(i);
         let style = if picked { on } else { text };
-        let y = menu.y + row as u16;
         if picked {
-            for x in 0..width {
-                if let Some(cell) = buf.cell_mut((menu.x + x, y)) {
+            for cx in x..end {
+                if let Some(cell) = buf.cell_mut((cx, y)) {
                     cell.set_symbol(" ").set_style(style);
                 }
             }
         }
-        put_text(buf, menu.x + 1, y, menu.x + width, &items[i], style);
+        put_text(buf, x + 1, y, end, &items[i], style);
     }
     put_text(
         buf,
         menu.x + 1,
-        menu.y + visible as u16,
+        menu.y + deep as u16,
         menu.x + width,
         footer,
         quiet,
@@ -1092,7 +1167,21 @@ fn draw_command_menu(frame: &mut Frame, editor: &Editor, area: Rect, status: Rec
     // Only the highlighted command's help, on one line. Every command's help at
     // once is what covered the page.
     let footer = format!("{}/{}  {}", focus + 1, matches.len(), matches[focus].help);
-    draw_list(frame, area, status.y, &items, focus, highlight, &footer);
+    // Spread across the window: the command list is short entries and there
+    // are a couple of dozen of them, which is exactly the shape that wants
+    // columns.
+    draw_list(
+        frame,
+        area,
+        status.y,
+        List {
+            items: &items,
+            focus,
+            highlight,
+            footer: &footer,
+            columns: true,
+        },
+    );
 }
 
 /// Which character of the buffer a click landed on, if it landed on the page.
@@ -1458,7 +1547,20 @@ fn draw_picker(frame: &mut Frame, editor: &Editor, area: Rect, status: Rect) {
         picker.query()
     );
     let at = picker.selected();
-    draw_list(frame, area, status.y, &items, at, Some(at), &footer);
+    // One column: these are paths, long and of every length, and columns of
+    // ragged paths are harder to read down than a single list.
+    draw_list(
+        frame,
+        area,
+        status.y,
+        List {
+            items: &items,
+            focus: at,
+            highlight: Some(at),
+            footer: &footer,
+            columns: false,
+        },
+    );
 }
 
 /// The `Space` menu, listed while the key is waiting for its second half.
@@ -1470,7 +1572,18 @@ fn draw_space_menu(frame: &mut Frame, editor: &Editor, area: Rect, status: Rect)
         .iter()
         .map(|(key, what)| format!("{key}   {what}"))
         .collect();
-    draw_list(frame, area, status.y, &items, 0, None, "空格");
+    draw_list(
+        frame,
+        area,
+        status.y,
+        List {
+            items: &items,
+            focus: 0,
+            highlight: None,
+            footer: "空格",
+            columns: true,
+        },
+    );
 }
 
 /// The composition in progress, when a `/` or `:` prompt is open.
@@ -4092,6 +4205,46 @@ mod tests {
         // A wide glyph covers two cells and only the first carries it.
         let squashed = text.replace(' ', "");
         assert!(squashed.contains("排出注音"), "and what each one does");
+    }
+
+    #[test]
+    fn the_command_menu_spreads_across_a_wide_window() {
+        let config = Config::default();
+        let total = yumete_core::command::COMMANDS.len();
+
+        // Wide: every command at once, in columns, rather than a third of them
+        // with the rest of the page standing empty beside it.
+        let mut wide = editor_with("那年冬天");
+        wide.on_key(Key::Char(':'));
+        let buffer = render_with(&wide, &config, &no_ime(), 140, 24);
+        let text = buffer_text(&buffer);
+        assert!(text.contains(":open"), "{text:?}");
+        assert!(text.contains(":render"), "a command from the far end of the list");
+        assert!(text.contains(&format!("1/{total}")), "the count is still there");
+
+        // The list runs *down* first and then across, like a list of files:
+        // more than one column, and no taller than a menu is allowed to be.
+        let lit = |y: u16| {
+            (0..buffer.area.width)
+                .any(|x| buffer[(x, y)].style().bg == Some(Color::Rgb(0x26, 0x2a, 0x27)))
+        };
+        let rows = (0..buffer.area.height).filter(|&y| lit(y)).count();
+        assert!(rows <= 9, "a menu is glanced at, not read: {rows} rows");
+        let starts: Vec<u16> = (0..buffer.area.height)
+            .flat_map(|y| (0..buffer.area.width).map(move |x| (x, y)))
+            .filter(|&(x, y)| buffer[(x, y)].symbol() == ":")
+            .map(|(x, _)| x)
+            .collect();
+        let columns: std::collections::BTreeSet<u16> = starts.into_iter().collect();
+        assert!(columns.len() >= 3, "several columns: {columns:?}");
+
+        // Narrow: one column, and the count says how much did not fit.
+        let mut narrow = editor_with("那年冬天");
+        narrow.on_key(Key::Char(':'));
+        let buffer = render_with(&narrow, &config, &no_ime(), 30, 24);
+        let text = buffer_text(&buffer);
+        assert!(text.contains(":open"));
+        assert!(!text.contains(":render"), "no room for the far end: {text:?}");
     }
 
     #[test]
