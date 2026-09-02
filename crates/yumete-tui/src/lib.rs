@@ -60,7 +60,12 @@ pub fn terminal_width() -> Option<usize> {
         .filter(|&w| w > 0)
 }
 
-pub fn run(editor: &mut Editor, config: &Config, ime: &mut ImeSession) -> io::Result<()> {
+pub fn run(
+    editor: &mut Editor,
+    config: &Config,
+    ime: &mut ImeSession,
+    load_ime: Box<dyn FnOnce() -> ImeSession>,
+) -> io::Result<()> {
     let mut terminal = ratatui::init();
 
     // Enable the Kitty keyboard protocol (report modifier presses/releases) so a
@@ -89,6 +94,9 @@ pub fn run(editor: &mut Editor, config: &Config, ime: &mut ImeSession) -> io::Re
     // character of the pasted paragraph runs as a command, which is not a
     // paste going wrong so much as an editor running a macro nobody wrote.
     let _ = execute!(stdout(), EnableBracketedPaste);
+
+    // The input method, not read yet — see `main.rs` for why not.
+    let mut waiting = Some(load_ime);
 
     let mut viewport = Viewport::default();
     let mut shift = ShiftTap::default();
@@ -158,6 +166,21 @@ pub fn run(editor: &mut Editor, config: &Config, ime: &mut ImeSession) -> io::Re
             let columns = (size.width / 3).max(1) as usize;
             editor.set_page(lines, columns);
         }
+        // Entering a mode that composes is what pays for reading the input
+        // method — not the first key typed *in* it, so the pause falls between
+        // pressing `i` and typing, where a writer is already changing gear,
+        // rather than swallowing the first 字. With it come the best word
+        // ranges yumete has, so `w` and `b` get better at the same moment.
+        if composes(editor.mode()) {
+            if let Some(load) = waiting.take() {
+                *ime = load();
+                let words = ime.segmenter();
+                if words.is_available() {
+                    editor.set_segmenter(Box::new(words));
+                }
+                editor.set_chaifen(ime.annotations_enabled());
+            }
+        }
         if let Err(err) = terminal.draw(|frame| draw(frame, editor, config, ime, &mut viewport)) {
             break Err(err);
         }
@@ -211,7 +234,7 @@ pub fn run(editor: &mut Editor, config: &Config, ime: &mut ImeSession) -> io::Re
                         ),
                     }
                 }
-                // `:preview` — the real typesetter, in the background. Its
+                        // `:preview` — the real typesetter, in the background. Its
                 // address arrives on a later turn of the loop.
                 // `:sh` brings the answer back; `:!` hands over the screen.
                 if let Some(want) = editor.take_shell_request() {

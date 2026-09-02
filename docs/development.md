@@ -328,6 +328,7 @@ Phases are ordered by priority, most writer-critical first:
 | 130 | **`!` filters the selection**              | both   | P2    | vi's `!`, on a selection; one undo | Done   |
 | 131 | **A failed filter leaves the text alone**  | tui    | P1    | an error message is not an edit     | Done   |
 | 132 | **The menu spreads across the window**     | tui    | P3    | 26 commands at a glance, column-major | Done |
+| 133 | **The IME is read when first used**        | both   | P2    | 150 ms off every launch; not `Send`, so not a thread | Done |
 
 ---
 
