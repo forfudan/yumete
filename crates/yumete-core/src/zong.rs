@@ -549,11 +549,68 @@ fn slot_offsets(text: &str, tatechuyoko: bool) -> Vec<usize> {
     offsets
 }
 
+/// Where each 縱 of a line begins, counted in slots.
+///
+/// **The one place a 縱 boundary is decided.** It used to be decided in five —
+/// every one of them `index * zong_len` — which is why 禁則處理 could not be
+/// added: any adjustment made in one of them would have disagreed with the
+/// other four about which character the cursor was standing on.
+///
+/// The rule is [`wrap::adjusted_break`]'s, turned ninety degrees: a 縱 may not
+/// open with a mark that closes something (。、」）) and may not close with one
+/// that opens something (「（), so the offending character is pulled down with
+/// its neighbour. The horizontal page has always done this; the vertical page —
+/// the reason to choose this editor — did not.
+fn zong_breaks(chars: &[char], slots: &[Slot], zong_len: usize) -> Vec<usize> {
+    let total = slots.len();
+    let char_of = |i: usize| {
+        slots
+            .get(i)
+            .and_then(|s: &Slot| chars.get(s.start))
+            .copied()
+            .unwrap_or(' ')
+    };
+    let mut breaks = vec![0usize];
+    let mut at = 0;
+    while at + zong_len < total {
+        let mut cut = at + zong_len;
+        for _ in 0..crate::wrap::MAX_KINSOKU_RETREAT {
+            if cut <= at + 1 {
+                break;
+            }
+            if crate::wrap::forbidden_at_row_start(char_of(cut))
+                || crate::wrap::forbidden_at_row_end(char_of(cut - 1))
+            {
+                cut -= 1;
+            } else {
+                break;
+            }
+        }
+        breaks.push(cut);
+        at = cut;
+    }
+    breaks
+}
+
+/// One line's slots and where its 縱 begin — always asked for together.
+fn line_zongs(rope: &Rope, line: usize, grid: Grid) -> (Vec<Slot>, Vec<usize>) {
+    let slots = line_grid(rope, line, grid);
+    let chars: Vec<char> = line_text(rope, line).chars().collect();
+    let breaks = zong_breaks(&chars, &slots, grid.zong_len.max(1));
+    (slots, breaks)
+}
+
+/// Where the `index`-th 縱 of a line begins and ends, in slots.
+fn zong_span(breaks: &[usize], total: usize, index: usize) -> (usize, usize) {
+    let first = breaks.get(index).copied().unwrap_or(total);
+    let last = breaks.get(index + 1).copied().unwrap_or(total);
+    (first, last.max(first))
+}
+
 /// How many 縱 the logical `line` wraps into (always at least one, so an empty
 /// paragraph still occupies a column).
 pub fn zong_count_in_line(rope: &Rope, line: usize, grid: Grid) -> usize {
-    let total = line_grid(rope, line, grid).len();
-    total.div_ceil(grid.zong_len.max(1)).max(1)
+    line_zongs(rope, line, grid).1.len()
 }
 
 /// The rows `line` draws as, under `grid`.
@@ -571,10 +628,9 @@ fn line_grid(rope: &Rope, line: usize, grid: Grid) -> Vec<Slot> {
 
 /// Locate the char index `pos` in the 縱 grid.
 pub fn position(rope: &Rope, pos: usize, grid: Grid) -> Position {
-    let zong_len = grid.zong_len.max(1);
     let line = rope.char_to_line(pos.min(rope.len_chars()));
     let start = rope.line_to_char(line);
-    let slots = line_grid(rope, line, grid);
+    let (slots, breaks) = line_zongs(rope, line, grid);
     let total = slots.len();
 
     // Which slot the cursor sits in (or `total`, past the last one). A slot may
@@ -588,15 +644,12 @@ pub fn position(rope: &Rope, pos: usize, grid: Grid) -> Position {
         slots.partition_point(|s| s.start <= col).saturating_sub(1)
     };
 
-    let mut index_in_line = g / zong_len;
-    let mut slot = g % zong_len;
-    // A paragraph whose length is an exact multiple of the wrap length has no
-    // further 縱 to hold the end-of-paragraph caret; park it on the spare row
-    // under the last full 縱 instead of opening a phantom column.
-    if slot == 0 && index_in_line > 0 && g == total {
-        index_in_line -= 1;
-        slot = zong_len;
-    }
+    // Which 縱 holds it: the last one that starts at or before this slot. A
+    // paragraph whose length is an exact multiple of the wrap length has no
+    // further 縱 to hold the end-of-paragraph caret, and this puts it on the
+    // spare row under the last full one rather than opening a phantom column.
+    let index_in_line = breaks.partition_point(|&b| b <= g).saturating_sub(1);
+    let slot = g - breaks.get(index_in_line).copied().unwrap_or(0);
     Position {
         line,
         index_in_line,
@@ -613,22 +666,21 @@ pub fn slot_of(rope: &Rope, pos: usize, grid: Grid) -> usize {
 /// The largest slot the caret may occupy in a given 縱. The last 縱 of a
 /// paragraph has one extra slot for the end-of-paragraph caret.
 fn max_slot(rope: &Rope, line: usize, index_in_line: usize, grid: Grid) -> usize {
-    let zong_len = grid.zong_len.max(1);
-    let total = line_grid(rope, line, grid).len();
-    let count = total.div_ceil(zong_len).max(1);
-    if index_in_line + 1 >= count {
-        total - index_in_line * zong_len
+    let (slots, breaks) = line_zongs(rope, line, grid);
+    let total = slots.len();
+    let (first, last) = zong_span(&breaks, total, index_in_line);
+    if index_in_line + 1 >= breaks.len() {
+        total.saturating_sub(first)
     } else {
-        zong_len - 1
+        (last - first).saturating_sub(1)
     }
 }
 
 /// The char index of `slot` in the `index_in_line`-th 縱 of `line`.
 fn char_at(rope: &Rope, line: usize, index_in_line: usize, slot: usize, grid: Grid) -> usize {
-    let zong_len = grid.zong_len.max(1);
     let start = rope.line_to_char(line);
-    let slots = line_grid(rope, line, grid);
-    let g = index_in_line * zong_len + slot;
+    let (slots, breaks) = line_zongs(rope, line, grid);
+    let g = breaks.get(index_in_line).copied().unwrap_or(slots.len()) + slot;
     match slots.get(g) {
         Some(slot) => start + slot.start,
         // Past the last slot: the end-of-paragraph caret.
@@ -695,19 +747,16 @@ impl From<Position> for Anchor {
 /// document: a 縱 that continues the previous one reuses the segmentation
 /// already done for its paragraph.
 pub fn zongs_from(rope: &Rope, anchor: Anchor, grid: Grid, n: usize) -> Vec<Zong> {
-    let zong_len = grid.zong_len.max(1);
     let lines = line_count(rope);
     let mut zongs = Vec::with_capacity(n);
     let mut line = anchor.line;
     let mut index = anchor.index_in_line;
     while zongs.len() < n && line < lines {
         let start = rope.line_to_char(line);
-        let slots = line_grid(rope, line, grid);
+        let (slots, breaks) = line_zongs(rope, line, grid);
         let total = slots.len();
-        let count = total.div_ceil(zong_len).max(1);
-        while index < count && zongs.len() < n {
-            let first = index * zong_len;
-            let last = (first + zong_len).min(total);
+        while index < breaks.len() && zongs.len() < n {
+            let (first, last) = zong_span(&breaks, total, index);
             zongs.push(Zong {
                 line,
                 index_in_line: index,
@@ -787,16 +836,13 @@ pub fn distance(rope: &Rope, from: Anchor, to: Anchor, grid: Grid, limit: usize)
 /// own line. It walks the whole document, which is why the renderer calls it
 /// once per frame rather than per query.
 pub fn layout(rope: &Rope, grid: Grid) -> Vec<Zong> {
-    let zong_len = grid.zong_len.max(1);
     let mut zongs = Vec::new();
     for line in 0..line_count(rope) {
         let start = rope.line_to_char(line);
-        let slots = line_grid(rope, line, grid);
+        let (slots, breaks) = line_zongs(rope, line, grid);
         let total = slots.len();
-        let count = total.div_ceil(zong_len).max(1);
-        for index_in_line in 0..count {
-            let first = index_in_line * zong_len;
-            let last = (first + zong_len).min(total);
+        for index_in_line in 0..breaks.len() {
+            let (first, last) = zong_span(&breaks, total, index_in_line);
             zongs.push(Zong {
                 line,
                 index_in_line,
@@ -819,10 +865,8 @@ pub fn layout(rope: &Rope, grid: Grid) -> Vec<Zong> {
 /// because a ruby group must not be re-parsed from a slice that might cut it in
 /// half at a 縱 boundary.
 pub fn zong_slots(rope: &Rope, zong: &Zong, grid: Grid) -> Vec<Slot> {
-    let zong_len = grid.zong_len.max(1);
-    let mut slots = line_grid(rope, zong.line, grid);
-    let first = zong.index_in_line * zong_len;
-    let last = (first + zong_len).min(slots.len());
+    let (mut slots, breaks) = line_zongs(rope, zong.line, grid);
+    let (first, last) = zong_span(&breaks, slots.len(), zong.index_in_line);
     if first >= last {
         return Vec::new();
     }
@@ -984,6 +1028,105 @@ mod tests {
         assert_eq!(zongs.len(), 1);
         assert_eq!(zongs[0].slots, 7);
         assert!(zongs[0].starts_line());
+    }
+
+    #[test]
+    fn a_zong_does_not_open_with_a_full_stop() {
+        // 行頭禁則, down the column. The horizontal page has always done this;
+        // the vertical page — the reason to choose this editor — did not, and
+        // a 縱 opening with 。 is the one typographic error a Chinese reader
+        // cannot fail to see.
+        //
+        // Ten slots to a 縱, and the eleventh character is the stop, so the
+        // unadjusted break puts it at the head of the second column.
+        let rope = Rope::from_str("一二三四五六七八九十。十一十二\n");
+        let grid = Grid {
+            zong_len: 10,
+            hanging: false,
+            ..Grid::default()
+        };
+        let zongs = layout(&rope, grid);
+        assert!(zongs.len() >= 2);
+        let second: String = zong_slots(&rope, &zongs[1], grid)
+            .iter()
+            .map(|s| s.text.as_str())
+            .collect();
+        assert!(
+            !second.starts_with('。') && !second.starts_with('︒'),
+            "a 縱 opened with a full stop: {second:?}"
+        );
+        // The stop went down with the character it belongs to — 追い出し, the
+        // same strategy the horizontal wrap uses, so the two pages never
+        // disagree about where a paragraph breaks.
+        assert!(second.starts_with('十'), "{second:?}");
+        let first: String = zong_slots(&rope, &zongs[0], grid)
+            .iter()
+            .map(|s| s.text.as_str())
+            .collect();
+        assert_eq!(first.chars().count(), 9, "{first:?}");
+    }
+
+    #[test]
+    fn a_zong_does_not_close_with_an_opening_bracket() {
+        // 行末禁則: 「 introduces what follows it, so it goes down with it.
+        let rope = Rope::from_str("一二三四五六七八九「十」十一\n");
+        let grid = Grid {
+            zong_len: 10,
+            hanging: false,
+            ..Grid::default()
+        };
+        let zongs = layout(&rope, grid);
+        assert!(zongs.len() >= 2);
+        let first: String = zong_slots(&rope, &zongs[0], grid)
+            .iter()
+            .map(|s| s.text.as_str())
+            .collect();
+        assert!(
+            !first.ends_with('「') && !first.ends_with('﹁'),
+            "a 縱 closed with an opening bracket: {first:?}"
+        );
+    }
+
+    #[test]
+    fn every_slot_of_a_line_is_in_exactly_one_zong() {
+        // The invariant a break table has to keep, and the reason there is now
+        // one of them rather than five: the cursor's 縱 and the drawn 縱 must
+        // agree about which character it is standing on.
+        let rope = Rope::from_str("一二三。四五六「七八」九十。十一十二十三、十四\n");
+        for zong_len in 2..12 {
+            let grid = Grid {
+                zong_len,
+                hanging: false,
+                ..Grid::default()
+            };
+            let zongs = layout(&rope, grid);
+            let mut seen = 0;
+            for (i, zong) in zongs.iter().enumerate() {
+                let drawn = zong_slots(&rope, zong, grid).len();
+                assert_eq!(drawn, zong.slots, "縱 {i} at width {zong_len}");
+                seen += drawn;
+            }
+            let total = line_slots(rope.line(0).to_string().trim_end(), grid).len();
+            assert_eq!(seen, total, "width {zong_len}: {} 縱", zongs.len());
+            // And every character's own position agrees with the layout.
+            for pos in 0..rope.len_chars() {
+                let p = position(&rope, pos, grid);
+                if p.line != 0 {
+                    continue;
+                }
+                assert!(
+                    p.index_in_line < zongs.len(),
+                    "char {pos} at width {zong_len} claims 縱 {}",
+                    p.index_in_line
+                );
+                assert!(
+                    p.slot <= zongs[p.index_in_line].slots,
+                    "char {pos} at width {zong_len}: slot {} of a {}-slot 縱",
+                    p.slot,
+                    zongs[p.index_in_line].slots
+                );
+            }
+        }
     }
 
     #[test]
