@@ -269,6 +269,7 @@ Phases are ordered by priority, most writer-critical first:
 | 75  | **Panel skin in TOML**                     | config | P4    | two colours, not a table of shades  | Done   |
 | 76  | **Switching between open buffers**         | core   | P2    | `gn`/`gp`, `:bn`/`:bp`; was a hole  | Done   |
 | 49  | **Word count**                             | core   | P4    | `:count` — 字 and 字符 differ       | Done   |
+| 77  | **Soft wrap in horizontal layout**         | both   | P1    | A paragraph is one line; it must not run off the edge | Done   |
 | 68  | 圏点 (emphasis dots)                       | tui    | P5    | mid-term; markup still open         |        |
 | 70  | **標點旁置 (punctuation in the margin)**   | tui    | P3    | 古文 style; `:hanging`              | Done   |
 | 71  | **Mouse wheel scrolls by 縱**              | tui    | P4    | captures the mouse, as Helix does   | Done   |

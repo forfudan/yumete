@@ -187,6 +187,11 @@ pub struct Editor {
     /// Whether the previous key was a 縱-crossing motion, so a run of them
     /// keeps one goal slot instead of resetting it at every short 縱.
     zong_motion: bool,
+    /// Whether long paragraphs soft-wrap in horizontal layout (Feature #77).
+    soft_wrap: bool,
+    /// The text width the renderer is wrapping at, in cells. `None` until the
+    /// terminal size is known; motion falls back to logical lines then.
+    wrap_width: Option<usize>,
 }
 
 /// What should happen after a key press.
@@ -287,6 +292,8 @@ impl Editor {
             zong_length: DEFAULT_ZONG_LENGTH,
             goal_slot: 0,
             zong_motion: false,
+            soft_wrap: true,
+            wrap_width: None,
         }
     }
 
@@ -476,6 +483,16 @@ impl Editor {
                     "句讀 hang in the margin".to_string()
                 } else {
                     "句讀 take a square each".to_string()
+                };
+                Ok(CommandOutcome::Continue)
+            }
+            Command::SetSoftWrap(on) => {
+                self.set_soft_wrap(on);
+                self.refresh_goal_column();
+                self.status = if on {
+                    "long paragraphs wrap".to_string()
+                } else {
+                    "long paragraphs run off the edge".to_string()
                 };
                 Ok(CommandOutcome::Continue)
             }
@@ -745,6 +762,39 @@ impl Editor {
             if self.cursor == before {
                 break;
             }
+        }
+    }
+
+    // ---- Soft wrap (Feature #77) ------------------------------------------
+
+    /// Whether long paragraphs wrap onto further screen rows.
+    pub fn soft_wrap(&self) -> bool {
+        self.soft_wrap
+    }
+
+    /// Set whether long paragraphs wrap, returning the new state.
+    ///
+    /// With it off a paragraph wider than the terminal runs off the right edge
+    /// and the rest cannot be reached with the eye — which is why it is on by
+    /// default in an editor for prose.
+    pub fn set_soft_wrap(&mut self, on: bool) -> bool {
+        self.soft_wrap = on;
+        self.soft_wrap
+    }
+
+    /// Tell the editor the width the renderer wraps at, so `j` and `k` walk the
+    /// same rows the reader sees. The renderer calls this once per frame.
+    pub fn set_wrap_width(&mut self, width: usize) {
+        self.wrap_width = Some(width.max(crate::wrap::MIN_WRAP_WIDTH));
+    }
+
+    /// The width horizontal motion should wrap at, or `None` when the buffer is
+    /// drawn as unwrapped logical lines.
+    pub fn wrap_width(&self) -> Option<usize> {
+        if self.soft_wrap && self.layout == Layout::Horizontal {
+            self.wrap_width
+        } else {
+            None
         }
     }
 
@@ -1238,7 +1288,7 @@ impl Editor {
         if !self.extend {
             self.anchor = old;
         }
-        self.goal_column = motion::visual_column(self.current_buffer().rope(), self.cursor);
+        self.refresh_goal_column();
     }
 
     fn on_insert_key(&mut self, key: Key) {
@@ -1463,7 +1513,7 @@ impl Editor {
             self.current_buffer_mut().insert(0, &rebuilt);
             self.clamp_cursor();
             self.anchor = self.cursor;
-            self.goal_column = motion::visual_column(self.current_buffer().rope(), self.cursor);
+            self.refresh_goal_column();
         }
         self.status = format!("{count} substitution(s)");
     }
@@ -1622,7 +1672,7 @@ impl Editor {
     /// extend a selection from the other end without starting it again.
     fn flip_selection(&mut self) {
         std::mem::swap(&mut self.anchor, &mut self.cursor);
-        self.goal_column = motion::visual_column(self.current_buffer().rope(), self.cursor);
+        self.refresh_goal_column();
     }
 
     /// Replace the selection with the yank register (Helix `R`).
@@ -2000,6 +2050,20 @@ impl Editor {
             .max_by_key(|&(start, _)| start)
     }
 
+    /// Recompute the goal column `j` and `k` aim at.
+    ///
+    /// With soft wrap on it is the column within the *visual row*, not within
+    /// the paragraph — otherwise `j` from the middle of a wrapped line would
+    /// aim at a column hundreds of cells wide and always land at a row's end.
+    fn refresh_goal_column(&mut self) {
+        let width = self.wrap_width();
+        let rope = self.current_buffer().rope();
+        self.goal_column = match width {
+            Some(w) => crate::wrap::column_of(rope, self.cursor, w),
+            None => motion::visual_column(rope, self.cursor),
+        };
+    }
+
     /// Apply a horizontal motion, moving the head (extending if in select mode).
     fn move_horizontal(&mut self, motion: fn(&ropey::Rope, usize) -> usize) {
         let pos = motion(self.current_buffer().rope(), self.cursor);
@@ -2007,12 +2071,19 @@ impl Editor {
     }
 
     /// Apply a vertical motion, preserving the goal column and moving the head.
+    ///
+    /// With soft wrap on, `j` and `k` step one *screen* row rather than one
+    /// paragraph, because that is the row the reader is looking at: on a novel,
+    /// where a paragraph is one line of several hundred characters, a logical
+    /// `j` would jump a whole screen at a time.
     fn move_vertical(&mut self, up: bool) {
+        let width = self.wrap_width();
         let rope = self.current_buffer().rope();
-        let pos = if up {
-            motion::up(rope, self.cursor, self.goal_column)
-        } else {
-            motion::down(rope, self.cursor, self.goal_column)
+        let pos = match width {
+            Some(w) if up => crate::wrap::prev_row(rope, self.cursor, w, self.goal_column),
+            Some(w) => crate::wrap::next_row(rope, self.cursor, w, self.goal_column),
+            None if up => motion::up(rope, self.cursor, self.goal_column),
+            None => motion::down(rope, self.cursor, self.goal_column),
         };
         self.cursor = pos;
         if !self.extend {
@@ -2053,7 +2124,7 @@ impl Editor {
         if !self.extend {
             self.anchor = pos;
         }
-        self.goal_column = motion::visual_column(self.current_buffer().rope(), self.cursor);
+        self.refresh_goal_column();
     }
 
     /// Move the head to `pos`, selecting from the old position (unless already
@@ -2064,7 +2135,7 @@ impl Editor {
         if !self.extend {
             self.anchor = old;
         }
-        self.goal_column = motion::visual_column(self.current_buffer().rope(), self.cursor);
+        self.refresh_goal_column();
     }
 
     /// Set the cursor, always collapsing the selection, and refresh the goal
@@ -2072,7 +2143,7 @@ impl Editor {
     fn set_cursor(&mut self, pos: usize) {
         self.cursor = pos;
         self.anchor = pos;
-        self.goal_column = motion::visual_column(self.current_buffer().rope(), self.cursor);
+        self.refresh_goal_column();
     }
 
     /// Clamp the cursor and anchor into the valid range of the active buffer.
@@ -2094,7 +2165,7 @@ impl Editor {
         self.current_buffer_mut().insert(at, text);
         self.cursor = at + text.chars().count();
         self.anchor = self.cursor;
-        self.goal_column = motion::visual_column(self.current_buffer().rope(), self.cursor);
+        self.refresh_goal_column();
     }
 
     /// Open a new line below the cursor and enter Insert mode (`o`).
@@ -2142,7 +2213,7 @@ impl Editor {
         };
         self.anchor = sel_start;
         self.cursor = sel_end;
-        self.goal_column = motion::visual_column(self.current_buffer().rope(), self.cursor);
+        self.refresh_goal_column();
     }
 
     /// Delete the current selection (Helix `d`). A collapsed selection deletes
@@ -2163,11 +2234,9 @@ impl Editor {
         self.anchor = start;
         self.extend = false;
         self.clamp_cursor();
-        self.goal_column = motion::visual_column(self.current_buffer().rope(), self.cursor);
+        self.refresh_goal_column();
     }
 
-    /// Copy the current selection into the yank register (Helix `y`). A collapsed
-    /// selection yanks the grapheme under the cursor.
     /// Move by whole pages, or half of one.
     ///
     /// A page means what is on screen, and *which way* it runs depends on the
@@ -2285,7 +2354,7 @@ impl Editor {
         self.current_buffer_mut().insert(at, &text);
         self.anchor = at;
         self.cursor = at + len;
-        self.goal_column = motion::visual_column(self.current_buffer().rope(), self.cursor);
+        self.refresh_goal_column();
     }
 
     /// Delete the grapheme before the cursor (Insert-mode Backspace).
@@ -2306,7 +2375,7 @@ impl Editor {
         self.current_buffer_mut().remove(range);
         self.cursor = start;
         self.anchor = self.cursor;
-        self.goal_column = motion::visual_column(self.current_buffer().rope(), self.cursor);
+        self.refresh_goal_column();
     }
 
     /// Add a buffer and make it active.

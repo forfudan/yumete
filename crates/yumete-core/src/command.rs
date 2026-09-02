@@ -53,6 +53,9 @@ pub enum Command {
     ToggleChaifen,
     /// `:hanging` — 句讀 in the margin rather than a square each (Feature #70).
     ToggleHanging,
+    /// `:wrap` / `:nowrap` — whether a paragraph too wide for the terminal
+    /// continues on the next screen row (Feature #77).
+    SetSoftWrap(bool),
     /// `:buffer-next` / `:buffer-previous` (aliases `:bn` / `:bp`) — show
     /// another of the open buffers.
     NextBuffer,
@@ -168,6 +171,8 @@ pub fn parse(input: &str) -> Result<Command, CommandError> {
         }
         "chaifen" | "cf" => Ok(Command::ToggleChaifen),
         "hanging" => Ok(Command::ToggleHanging),
+        "wrap" => Ok(Command::SetSoftWrap(true)),
+        "nowrap" => Ok(Command::SetSoftWrap(false)),
         "buffer-next" | "bn" => Ok(Command::NextBuffer),
         "buffer-previous" | "bp" => Ok(Command::PreviousBuffer),
         "ruby" => Ok(Command::Ruby),
@@ -294,6 +299,16 @@ pub const COMMANDS: &[Entry] = &[
         name: "hanging",
         alias: None,
         help: "句讀 in the margin (標點旁置)",
+    },
+    Entry {
+        name: "wrap",
+        alias: None,
+        help: "wrap long paragraphs to the next row",
+    },
+    Entry {
+        name: "nowrap",
+        alias: None,
+        help: "let long paragraphs run off the edge",
     },
     Entry {
         name: "buffer-next",
@@ -561,6 +576,8 @@ mod tests {
             "count",
             "chaifen",
             "hanging",
+            "wrap",
+            "nowrap",
             "buffer-next",
             "buffer-previous",
             "ruby",

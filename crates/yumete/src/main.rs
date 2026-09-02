@@ -61,6 +61,7 @@ fn main() -> ExitCode {
     editor.set_indent_width(config.editor.tab_width);
     editor.set_tatechuyoko(config.editor.tatechuyoko);
     editor.set_hanging_punctuation(config.editor.hanging_punctuation);
+    editor.set_soft_wrap(config.editor.soft_wrap);
     // Which ruby dialect to lay out: whatever the config names, else the one
     // the file's extension implies.
     editor
@@ -179,6 +180,7 @@ KEYS (Normal mode, Helix-style):
               commands appears above it and narrows as you type
               (:w  :w <path>  :q  :q!  :o <path>  :new
               :s/old/new/[g]  :%s/old/new/[g]  :segment  :wq  :count
+              :wrap  :nowrap   soft-wrap long paragraphs (on by default)
               :bn  :bp  switch between the open files (also gn / gp)
               :layout [horizontal|vertical]  :vertical  :horizontal
               :chaifen  toggle the 拆分 annotation beside candidates

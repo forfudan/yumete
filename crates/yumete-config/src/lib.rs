@@ -70,6 +70,10 @@ pub struct EditorConfig {
     /// Whether 句讀 hang in the margin beside the character they follow rather
     /// than taking a square each (標點旁置). Off by default; `:hanging` toggles.
     pub hanging_punctuation: bool,
+    /// Whether a paragraph too wide for the terminal continues on the next
+    /// screen row (Feature #77). On by default: a Chinese paragraph is one long
+    /// line, and unwrapped most of it cannot be seen at all.
+    pub soft_wrap: bool,
 }
 
 impl Default for EditorConfig {
@@ -88,6 +92,7 @@ impl Default for EditorConfig {
             ruby_dialects: Vec::new(),
             tatechuyoko: false,
             hanging_punctuation: false,
+            soft_wrap: true,
         }
     }
 }
@@ -325,6 +330,7 @@ struct RawEditor {
     ruby_dialects: Option<Vec<String>>,
     tatechuyoko: Option<bool>,
     hanging_punctuation: Option<bool>,
+    soft_wrap: Option<bool>,
 }
 
 #[derive(Deserialize, Default)]
@@ -380,6 +386,9 @@ impl RawConfig {
         }
         if other.editor.hanging_punctuation.is_some() {
             self.editor.hanging_punctuation = other.editor.hanging_punctuation;
+        }
+        if other.editor.soft_wrap.is_some() {
+            self.editor.soft_wrap = other.editor.soft_wrap;
         }
         if other.theme.selection.is_some() {
             self.theme.selection = other.theme.selection;
@@ -453,6 +462,9 @@ impl RawConfig {
         }
         if let Some(on) = self.editor.hanging_punctuation {
             config.editor.hanging_punctuation = on;
+        }
+        if let Some(on) = self.editor.soft_wrap {
+            config.editor.soft_wrap = on;
         }
         if let Some(hex) = self.theme.selection {
             if let Some(rgb) = parse_hex(&hex) {
