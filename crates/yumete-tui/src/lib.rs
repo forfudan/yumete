@@ -2903,6 +2903,53 @@ mod tests {
     }
 
     #[test]
+    fn a_vertical_page_colours_its_markup_the_way_a_horizontal_one_does() {
+        // `**那**` — a bold word between markers, and a heading above it.
+        let mut editor = editor_with("# 卷一\n那年**冬天**，山下起了大雪。");
+        let config = vertical_config();
+        editor.set_markup_visible(true);
+        editor.set_wysiwyg(false);
+        let buffer = render_vertical(&mut editor, &config, 30, 16);
+
+        // Find the 縱 the sentence is set in — the second, since the heading
+        // takes the first, and 縱 fill from the right edge.
+        let bold = (0..30u16)
+            .flat_map(|x| (0..16u16).map(move |y| (x, y)))
+            .find(|&(x, y)| at(&buffer, x, y) == "冬")
+            .expect("冬 is on the page");
+        assert!(
+            buffer[bold].style().add_modifier.contains(Modifier::BOLD),
+            "the word between the markers is set bold"
+        );
+        let marker = (0..30u16)
+            .flat_map(|x| (0..16u16).map(move |y| (x, y)))
+            .find(|&(x, y)| at(&buffer, x, y) == "*")
+            .expect("the markers stay on the page");
+        assert!(
+            buffer[marker].style().add_modifier.contains(Modifier::DIM),
+            "and the markers themselves are set back"
+        );
+        let plain = (0..30u16)
+            .flat_map(|x| (0..16u16).map(move |y| (x, y)))
+            .find(|&(x, y)| at(&buffer, x, y) == "那")
+            .expect("那 is on the page");
+        assert!(
+            !buffer[plain].style().add_modifier.contains(Modifier::BOLD),
+            "the prose around it is not"
+        );
+
+        // The heading is a block, and a block colours the whole 縱 it runs in.
+        let heading = (0..30u16)
+            .flat_map(|x| (0..16u16).map(move |y| (x, y)))
+            .find(|&(x, y)| at(&buffer, x, y) == "卷")
+            .expect("the heading is on the page");
+        assert!(
+            buffer[heading].style().add_modifier.contains(Modifier::BOLD),
+            "a heading is set bold vertically too"
+        );
+    }
+
+    #[test]
     fn a_vertical_page_is_ruled_like_稿紙() {
         let mut editor = editor_with(&"字".repeat(24));
         let mut config = vertical_config();
