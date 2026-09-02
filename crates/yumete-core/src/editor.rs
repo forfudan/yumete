@@ -3286,13 +3286,11 @@ impl Editor {
                     self.status = "一格之內：Enter 與 Tab 不進格子".to_string();
                     return;
                 }
-                Key::Backspace => {
-                    // At the cell's own start there is nothing of this cell to
-                    // delete, and the character before it is the delimiter.
-                    if self.at_cell_start() {
-                        self.status = "格首：再刪就把兩格併成一格了".to_string();
-                        return;
-                    }
+                // At the cell's own start there is nothing of this cell to
+                // delete, and the character before it is the delimiter.
+                Key::Backspace if self.at_cell_start() => {
+                    self.status = "格首：再刪就把兩格併成一格了".to_string();
+                    return;
                 }
                 _ => {}
             }
