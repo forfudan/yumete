@@ -117,6 +117,50 @@ impl Metrics {
     }
 }
 
+/// Which character of the buffer a click landed on, in the vertical page.
+///
+/// The page is laid out again rather than remembered: the layout depends on
+/// which 縱 carry a reading, which depends on where the cursor is, and a
+/// remembered one could be a frame out of date — a click that put the cursor
+/// somewhere else than where it was pointed.
+pub fn char_at(
+    editor: &Editor,
+    config: &Config,
+    area: Rect,
+    viewport: Anchor,
+    mouse: ratatui::crossterm::event::MouseEvent,
+) -> Option<usize> {
+    let buffer = editor.current_buffer();
+    let metrics = Metrics::new(
+        config,
+        area.height,
+        buffer.line_count(),
+        !editor.ruby().is_empty(),
+        editor.hanging_punctuation(),
+    );
+    let grid = editor.grid().with_zong_len(metrics.zong_len);
+    let capacity = metrics.capacity(area.width);
+    let page = layout_page(buffer.rope(), viewport, grid, &metrics, area, capacity);
+
+    let text_top = area.y + metrics.head_rows;
+    if mouse.row < text_top {
+        return None;
+    }
+    let slot = (mouse.row - text_top) as usize;
+    // The 縱 whose two cells the column fell in — or, failing that, the nearest
+    // one to its right, since a click in a gap means the 縱 beside it.
+    let (zong, slots, _) = page
+        .iter()
+        .filter(|(_, _, x)| mouse.column >= *x)
+        .min_by_key(|(_, _, x)| mouse.column - *x)?;
+    let start = buffer.rope().line_to_char(zong.line);
+    match slots.get(slot) {
+        Some(row) => Some(start + row.start),
+        // Past the end of that 縱: the caret sits after its last character.
+        None => Some(start + slots.last().map_or(0, |row| row.end)),
+    }
+}
+
 /// The 縱 of one page: each with the rows it draws and where it starts.
 type Page = Vec<(zong::Zong, Vec<zong::Slot>, u16)>;
 

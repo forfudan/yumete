@@ -15,9 +15,10 @@ use std::io::{self, stdout, Write as _};
 
 use ratatui::crossterm::cursor::SetCursorStyle;
 use ratatui::crossterm::event::{
-    self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode, KeyEvent, KeyEventKind,
-    KeyModifiers, KeyboardEnhancementFlags, ModifierKeyCode, MouseEventKind,
-    PopKeyboardEnhancementFlags, PushKeyboardEnhancementFlags,
+    self, DisableBracketedPaste, DisableMouseCapture, EnableBracketedPaste, EnableMouseCapture,
+    Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers, KeyboardEnhancementFlags,
+    ModifierKeyCode, MouseButton, MouseEventKind, PopKeyboardEnhancementFlags,
+    PushKeyboardEnhancementFlags,
 };
 use ratatui::crossterm::execute;
 use ratatui::crossterm::terminal::supports_keyboard_enhancement;
@@ -76,10 +77,17 @@ pub fn run(editor: &mut Editor, config: &Config, ime: &mut ImeSession) -> io::Re
         );
     }
 
-    // Take the mouse, so the wheel can turn the page. The cost, which Helix
-    // pays too: the terminal's own click-and-drag selection stops working and
-    // needs whatever modifier that terminal reserves for it (Option, on macOS).
+    // Take the mouse, so the wheel can turn the page and text can be selected
+    // by dragging. The cost, which Helix pays too: the terminal's *own*
+    // click-and-drag selection stops working and needs whatever modifier that
+    // terminal reserves for it (Option, on macOS) — which is still the way to
+    // copy something that is not in the buffer, such as the status line.
     let _ = execute!(stdout(), EnableMouseCapture);
+    // Bracketed paste, so text arriving from the system clipboard is *text*.
+    // Without it a paste is a stream of keystrokes: in Normal mode every
+    // character of the pasted paragraph runs as a command, which is not a
+    // paste going wrong so much as an editor running a macro nobody wrote.
+    let _ = execute!(stdout(), EnableBracketedPaste);
 
     let mut viewport = Viewport::default();
     let mut shift = ShiftTap::default();
@@ -191,6 +199,17 @@ pub fn run(editor: &mut Editor, config: &Config, ime: &mut ImeSession) -> io::Re
                     let _ = write!(io::stdout(), "\x1b]52;c;{}\x07", base64(text.as_bytes()));
                     let _ = io::stdout().flush();
                 }
+                // …and reading it needs the platform, because almost every
+                // terminal refuses an OSC 52 read.
+                if let Some(after) = editor.take_clipboard_read() {
+                    match read_clipboard() {
+                        Some(text) => editor.provide_clipboard(&text, after),
+                        None => editor.set_status(
+                            "cannot read the system clipboard here — ⌘V pastes into the terminal"
+                                .to_string(),
+                        ),
+                    }
+                }
                 if let Some(tag) = editor.take_scheme_request() {
                     editor.set_status(switch_scheme(ime, &tag));
                 }
@@ -212,6 +231,11 @@ pub fn run(editor: &mut Editor, config: &Config, ime: &mut ImeSession) -> io::Re
                     });
                 }
             }
+            // Text arriving whole, from the system clipboard by way of the
+            // terminal. It is inserted as writing, never run as keys.
+            Ok(Event::Paste(text)) => {
+                editor.paste_text(&text);
+            }
             Ok(Event::Mouse(mouse)) => match mouse.kind {
                 // A notch moves three 縱 — the same three lines a terminal
                 // scrolls by, counted in the unit the page is set in.
@@ -219,9 +243,23 @@ pub fn run(editor: &mut Editor, config: &Config, ime: &mut ImeSession) -> io::Re
                 MouseEventKind::ScrollUp => editor.scroll(WHEEL_STEP, true),
                 // A tab is a thing you point at; the mouse is already captured
                 // for the wheel, so this costs nothing but the arithmetic.
-                MouseEventKind::Down(_) => {
+                MouseEventKind::Down(MouseButton::Left) => {
                     if let Some(i) = tab_at(editor, config, terminal.size().ok(), mouse) {
                         editor.show_buffer_at(i);
+                    } else if let Some(at) =
+                        text_at(editor, config, terminal.size().ok(), &viewport, mouse)
+                    {
+                        editor.point_at(at);
+                    }
+                }
+                // Dragging picks out a range — the thing the terminal's own
+                // selection used to do, given back inside the editor, where it
+                // can become a yank, an edit, or the system clipboard.
+                MouseEventKind::Drag(MouseButton::Left) => {
+                    if let Some(at) =
+                        text_at(editor, config, terminal.size().ok(), &viewport, mouse)
+                    {
+                        editor.drag_to(at);
                     }
                 }
                 _ => {}
@@ -233,6 +271,7 @@ pub fn run(editor: &mut Editor, config: &Config, ime: &mut ImeSession) -> io::Re
 
     let _ = execute!(
         stdout(),
+        DisableBracketedPaste,
         DisableMouseCapture,
         SetCursorStyle::DefaultUserShape
     );
@@ -354,6 +393,29 @@ fn normalize_shift(code: KeyCode, mods: KeyModifiers) -> (KeyCode, KeyModifiers)
         }
     }
     (code, mods)
+}
+
+/// What the system clipboard holds, asked of the platform.
+///
+/// Writing goes out through the terminal itself (OSC 52), which works over ssh
+/// and inside tmux. Reading cannot: almost every terminal refuses an OSC 52
+/// read, and rightly — it would let any program on the far end of a pipe empty
+/// your clipboard into a file. So this asks the machine the editor is running
+/// on, and says so plainly when there is nothing to ask.
+fn read_clipboard() -> Option<String> {
+    for (program, args) in [
+        ("pbpaste", &[][..]),
+        ("wl-paste", &["--no-newline"][..]),
+        ("xclip", &["-selection", "clipboard", "-o"][..]),
+        ("xsel", &["--clipboard", "--output"][..]),
+    ] {
+        if let Ok(out) = std::process::Command::new(program).args(args).output() {
+            if out.status.success() {
+                return String::from_utf8(out.stdout).ok();
+            }
+        }
+    }
+    None
 }
 
 /// Base64, for OSC 52. Twenty lines against a dependency for one escape
@@ -774,6 +836,76 @@ fn draw_command_menu(frame: &mut Frame, editor: &Editor, area: Rect, status: Rec
     // once is what covered the page.
     let footer = format!("{}/{}  {}", focus + 1, matches.len(), matches[focus].help);
     draw_list(frame, area, status.y, &items, focus, highlight, &footer);
+}
+
+/// Which character of the buffer a click landed on, if it landed on the page.
+///
+/// Worked out the same way the page was drawn — the sidebar's columns, the tab
+/// bar's row, the gutter, and then the row model itself — rather than
+/// remembered from the last frame, which could be a frame out of date.
+fn text_at(
+    editor: &Editor,
+    config: &Config,
+    size: Option<ratatui::layout::Size>,
+    viewport: &Viewport,
+    mouse: ratatui::crossterm::event::MouseEvent,
+) -> Option<usize> {
+    let size = size?;
+    let body = Rect::new(0, 0, size.width, size.height.saturating_sub(1));
+    let mut area = body;
+    if editor.sidebar().is_some() {
+        let want = (config.editor.sidebar_width as u16).min(area.width.saturating_sub(8));
+        area.x += want;
+        area.width = area.width.saturating_sub(want);
+    }
+    if config.editor.tabs.showing(editor.buffer_count()) && area.height > 1 {
+        area.y += 1;
+        area.height -= 1;
+    }
+    if mouse.column < area.x || mouse.row < area.y || mouse.row >= area.y + area.height {
+        return None;
+    }
+    match editor.layout() {
+        WritingLayout::Horizontal => {
+            let buffer = editor.current_buffer();
+            let gutter = gutter_width(buffer.line_count(), config.editor.line_numbers);
+            let width = editor.wrap_width().unwrap_or(usize::MAX / 2).max(1);
+            let hide = |line: usize| editor.hidden_on_line(line);
+            let measure = wrap::Measure::new(width, &hide);
+            let row = wrap::rows_from(
+                buffer.rope(),
+                viewport.top,
+                measure,
+                (mouse.row - area.y) as usize + 1,
+            )
+            .pop()?;
+            // Which character of that row the column landed on, counting only
+            // what is drawn — hidden markup takes no columns.
+            let want = (mouse.column - area.x) as usize;
+            let goal = want.saturating_sub(gutter);
+            let hidden = editor.hidden_on_line(row.line);
+            let line_start = buffer.rope().line_to_char(row.line);
+            let mut column = 0;
+            for at in row.start..row.end {
+                let c = buffer.rope().char(at);
+                let off = hidden
+                    .iter()
+                    .any(|&(a, b)| at - line_start >= a && at - line_start < b);
+                if off {
+                    continue;
+                }
+                let w = yumete_cjk::char_width(c);
+                if goal < column + w {
+                    return Some(at);
+                }
+                column += w;
+            }
+            Some(row.end.saturating_sub(1).max(row.start))
+        }
+        // Vertical: the page is laid out by the vertical renderer, which knows
+        // where every 縱 was put.
+        WritingLayout::Vertical => vertical::char_at(editor, config, area, viewport.zong, mouse),
+    }
 }
 
 /// Which tab a click landed on, if it landed on the bar at all.

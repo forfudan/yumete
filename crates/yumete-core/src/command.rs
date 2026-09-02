@@ -70,6 +70,11 @@ pub enum Command {
     SetWysiwyg(bool),
     /// `:markup` — whether Markdown is coloured at all (Feature #96).
     ToggleMarkup,
+    /// `:clipboard-yank` / `:clipboard-paste` — the system clipboard, which
+    /// Helix spells the same way (Feature #109).
+    Clipboard {
+        yank: bool,
+    },
     /// `:syntax [markdown|typst]` — which markup this file is in
     /// (Feature #106). No argument says what it was guessed to be.
     SetSyntax(Option<String>),
@@ -227,6 +232,8 @@ pub fn parse(input: &str) -> Result<Command, CommandError> {
         }
         "hanging" => Ok(Command::ToggleHanging),
         "markup" | "md" => Ok(Command::ToggleMarkup),
+        "clipboard-yank" | "cy" => Ok(Command::Clipboard { yank: true }),
+        "clipboard-paste" | "cp" => Ok(Command::Clipboard { yank: false }),
         "syntax" | "syn" => Ok(Command::SetSyntax(if rest.is_empty() {
             None
         } else {
@@ -410,6 +417,16 @@ pub const COMMANDS: &[Entry] = &[
         name: "hanging",
         alias: None,
         help: "句讀 in the margin (標點旁置)",
+    },
+    Entry {
+        name: "clipboard-yank",
+        alias: Some("cy"),
+        help: "選區複製到系統剪貼簿（空格 y）",
+    },
+    Entry {
+        name: "clipboard-paste",
+        alias: Some("cp"),
+        help: "從系統剪貼簿貼上（空格 p）",
     },
     Entry {
         name: "syntax",
@@ -735,6 +752,8 @@ mod tests {
             "chaifen",
             "scheme",
             "hanging",
+            "clipboard-yank",
+            "clipboard-paste",
             "syntax",
             "markup",
             "wysiwyg",

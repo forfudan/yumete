@@ -243,6 +243,14 @@ pub struct Editor {
     /// Text waiting to be put on the system clipboard, which only the front end
     /// can reach (it owns the terminal).
     clipboard_request: Option<String>,
+    /// A pending read *from* the system clipboard, and whether the text goes
+    /// after the selection or before it.
+    ///
+    /// A request rather than a call, like the IME's: reading the clipboard
+    /// means asking the platform, and the core has no platform. Writing goes
+    /// out through the terminal itself (OSC 52), but almost every terminal
+    /// refuses to *read* that way, so this one really does need the front end.
+    clipboard_read: Option<bool>,
     /// The last known 拆分 state, so `:chaifen` can toggle it.
     chaifen: bool,
     /// What Ruby mode is editing the reading of.
@@ -405,6 +413,7 @@ impl Editor {
             chaifen_request: None,
             scheme_request: None,
             clipboard_request: None,
+            clipboard_read: None,
             chaifen: false,
             ruby_target: None,
             completion: None,
@@ -1172,6 +1181,14 @@ impl Editor {
                 } else {
                     "句讀 take a square each".to_string()
                 };
+                Ok(CommandOutcome::Continue)
+            }
+            Command::Clipboard { yank } => {
+                if yank {
+                    self.copy_to_clipboard();
+                } else {
+                    self.clipboard_paste(true);
+                }
                 Ok(CommandOutcome::Continue)
             }
             Command::SetSyntax(name) => {
@@ -2117,6 +2134,10 @@ impl Editor {
                     self.refresh_sidebar();
                 }
             }
+            // Copy out of the editor. `C-c` because `Cmd-C` never arrives —
+            // the terminal keeps it for its own selection — and this is the
+            // key every other application spells "copy" with.
+            Key::Ctrl('c') => self.copy_to_clipboard(),
             Key::Ctrl('f') => self.move_page(count, false, 1.0),
             Key::Ctrl('b') => self.move_page(count, true, 1.0),
             Key::Ctrl('d') => self.move_page(count, false, 0.5),
@@ -2206,6 +2227,7 @@ impl Editor {
         ('/', "全項目搜索"),
         ('?', "命令一覽"),
         ('y', "複製到系統剪貼簿"),
+        ('p', "從系統剪貼簿貼上"),
     ];
 
     /// Run one key of a `Space` sequence.
@@ -2230,6 +2252,8 @@ impl Editor {
                 self.completion = None;
             }
             Key::Char('y') => self.copy_to_clipboard(),
+            Key::Char('p') => self.clipboard_paste(true),
+            Key::Char('P') => self.clipboard_paste(false),
             _ => {}
         }
     }
@@ -2516,6 +2540,48 @@ impl Editor {
         self.mode = Mode::Normal;
     }
 
+    /// Insert text that arrived from outside — the system clipboard, by way of
+    /// the terminal's bracketed paste (Feature #108).
+    ///
+    /// It is *writing*, whatever mode the editor is in. Without this a paste is
+    /// a stream of keystrokes, and in Normal mode every character of the pasted
+    /// paragraph runs as a command: that is not a paste going wrong so much as
+    /// the editor running a macro nobody wrote.
+    pub fn paste_text(&mut self, text: &str) {
+        if text.is_empty() {
+            return;
+        }
+        self.snapshot();
+        match self.mode {
+            // In Insert it lands where the caret is, like anything typed.
+            Mode::Insert => self.insert_str(text),
+            // In Normal it replaces the selection, which is what `p` over a
+            // selection does — and what a writer means by pasting over
+            // something they have just picked out.
+            Mode::Normal => {
+                self.delete_selection();
+                let at = self.cursor;
+                self.current_buffer_mut().insert(at, text);
+                let rope = self.current_buffer().rope();
+                let end = at + text.chars().count();
+                let head = motion::prev_grapheme(rope, end).max(at);
+                self.anchor = at;
+                self.cursor = head;
+                self.refresh_goal_column();
+            }
+            // A prompt takes it as typing, minus the line breaks that would
+            // submit it.
+            Mode::Command | Mode::Search | Mode::Ruby => {
+                for c in text.chars().filter(|c| !c.is_control()) {
+                    self.command_line.push(c);
+                }
+                self.completion = None;
+            }
+            Mode::Picker => {}
+        }
+        self.status = format!("pasted {} char(s)", text.chars().count());
+    }
+
     /// Put the selection on the system clipboard (`Space y`).
     ///
     /// Through OSC 52, the terminal's own copy escape: it needs no library, and
@@ -2529,13 +2595,58 @@ impl Editor {
             self.status = "nothing selected".to_string();
             return;
         }
+        // Into the editor's own register too: having copied something, `p` is
+        // the next thing a hand reaches for.
+        self.store(text.clone());
+        let n = text.chars().count();
         self.clipboard_request = Some(text);
-        self.status = "copied to the system clipboard".to_string();
+        self.status = format!("copied {n} char(s) — asked the terminal for the clipboard");
+    }
+
+    /// Put the cursor at char index `pos`, starting a selection there
+    /// (Feature #109).
+    pub fn point_at(&mut self, pos: usize) {
+        let pos = pos.min(self.current_buffer().char_count());
+        self.extend = false;
+        self.anchor = pos;
+        self.cursor = pos;
+        self.refresh_goal_column();
+    }
+
+    /// Drag the selection's head to char index `pos`, keeping its anchor.
+    pub fn drag_to(&mut self, pos: usize) {
+        self.cursor = pos.min(self.current_buffer().char_count());
+        self.refresh_goal_column();
     }
 
     /// Take a pending clipboard copy, for the front end to send to the terminal.
     pub fn take_clipboard_request(&mut self) -> Option<String> {
         self.clipboard_request.take()
+    }
+
+    /// Ask for the system clipboard, to be pasted after (or before) the
+    /// selection once the front end has fetched it.
+    fn clipboard_paste(&mut self, after: bool) {
+        self.clipboard_read = Some(after);
+    }
+
+    /// Take a pending clipboard read; `true` means paste after.
+    pub fn take_clipboard_read(&mut self) -> Option<bool> {
+        self.clipboard_read.take()
+    }
+
+    /// Hand over what the system clipboard held, and paste it.
+    pub fn provide_clipboard(&mut self, text: &str, after: bool) {
+        if text.is_empty() {
+            self.status = "the clipboard is empty".to_string();
+            return;
+        }
+        self.snapshot();
+        // Whole lines go back as whole lines, and the selection is replaced
+        // when there is one — the same rules `p` follows, because this is `p`
+        // with the text coming from somewhere else.
+        self.store(text.to_string());
+        self.paste(after);
     }
 
     /// Move to the first non-blank character of line `n`, counting from 1 and
@@ -5235,6 +5346,70 @@ mod tests {
         let mut ed = Editor::new();
         type_keys(&mut ed, " /");
         assert_eq!(ed.prompt(), Some((':', "grep ")));
+    }
+
+    #[test]
+    fn the_system_clipboard_goes_both_ways() {
+        let mut ed = typed("那年冬天");
+        press(&mut ed, "ggvl");
+        // `Space y`, or `:clipboard-yank` — Helix spells it both ways.
+        type_keys(&mut ed, " y");
+        assert_eq!(ed.take_clipboard_request().as_deref(), Some("那年"));
+        ed.execute(":clipboard-yank").unwrap();
+        assert_eq!(ed.take_clipboard_request().as_deref(), Some("那年"));
+
+        // Reading needs the platform, so the core asks and the front end
+        // answers — the same shape the IME's requests use.
+        type_keys(&mut ed, " p");
+        assert_eq!(ed.take_clipboard_read(), Some(true));
+        assert_eq!(ed.take_clipboard_read(), None, "asked once");
+        press(&mut ed, "gg");
+        ed.provide_clipboard("外面的字", true);
+        assert!(ed.current_buffer().text().contains("外面的字"));
+    }
+
+    #[test]
+    fn a_paste_from_outside_is_writing_not_keystrokes() {
+        // Without bracketed paste a paste is a stream of keys, and in Normal
+        // mode every character of the pasted paragraph runs as a command.
+        let mut ed = typed("甲乙丙");
+        press(&mut ed, "gg");
+        ed.paste_text("那年冬天");
+        assert_eq!(ed.current_buffer().text(), "那年冬天乙丙");
+        // It replaces the selection, which is what pasting over something a
+        // writer has just picked out means.
+        ed.on_key(Key::Char('u'));
+        assert_eq!(ed.current_buffer().text(), "甲乙丙");
+
+        // In Insert it lands at the caret like anything typed.
+        let mut ed = typed("甲乙丙");
+        press(&mut ed, "gg");
+        ed.on_key(Key::Char('i'));
+        ed.paste_text("那年");
+        assert_eq!(ed.current_buffer().text(), "那年甲乙丙");
+
+        // …and into a prompt it is text, minus the newline that would submit
+        // it half-typed.
+        let mut ed = typed("甲乙丙");
+        ed.on_key(Key::Char('/'));
+        ed.paste_text("那年\n冬天");
+        assert_eq!(ed.prompt(), Some(('/', "那年冬天")));
+    }
+
+    #[test]
+    fn the_mouse_points_at_a_character_and_drags_a_selection() {
+        let mut ed = typed("那年冬天");
+        ed.point_at(1);
+        assert_eq!(ed.selection(), (1, 2), "one 字, the one pointed at");
+        ed.drag_to(3);
+        assert_eq!(ed.selection(), (1, 4), "年冬天");
+        // Copying hands it to the front end *and* fills the register, because
+        // having copied something the next thing a hand reaches for is `p`.
+        ed.on_key(Key::Ctrl('c'));
+        assert_eq!(ed.take_clipboard_request().as_deref(), Some("年冬天"));
+        press(&mut ed, "gg");
+        ed.on_key(Key::Char('p'));
+        assert_eq!(ed.current_buffer().text(), "那年冬天年冬天");
     }
 
     #[test]

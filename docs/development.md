@@ -303,6 +303,8 @@ Phases are ordered by priority, most writer-critical first:
 | 105 | **What a review found in #103/#104**       | both   | P1    | the invariant did not hold vertically at all | Done |
 | 106 | **Markdown or Typst, and which**           | core   | P2    | sniffed for `.txt`; Typst's own syntax | Done |
 | 107 | **A row measured in what is drawn**        | core   | P1    | wysiwyg wrapped in source and left blank rows | Done |
+| 108 | **Bracketed paste**                        | both   | P1    | a paste in Normal used to run as commands | Done |
+| 109 | **The system clipboard, and the mouse**    | both   | P1    | `C-c`, `Space y`/`p`, drag to select | Done |
 
 ---
 
