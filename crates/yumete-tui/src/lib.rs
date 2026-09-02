@@ -129,12 +129,14 @@ pub fn run(editor: &mut Editor, config: &Config, ime: &mut ImeSession) -> io::Re
                 let lines = editor.current_buffer().line_count();
                 let ruby = !editor.ruby().is_empty();
                 let hanging = editor.hanging_punctuation();
+                let measure = editor.measure();
                 editor.set_zong_length(vertical::zong_length_for(
                     config,
                     size.height,
                     lines,
                     ruby,
                     hanging,
+                    measure,
                 ));
             }
         }
@@ -1314,7 +1316,9 @@ fn draw_horizontal(
     // writing, which is what a writer means by it. The line-number gutter is
     // furniture, not text, so it does not eat into the measure — and the ruler
     // moves with the gutter rather than the writing moving under it.
-    let ruler = config.editor.ruler;
+    // A measure set with `:wrap 50` is a ruler by definition — it is the width
+    // the writer asked to write to — so it stands in for the configured one.
+    let ruler = editor.measure().unwrap_or(config.editor.ruler);
     let (rr, rg, rb) = config.theme.ruler;
 
     // Word ranges are per paragraph and consecutive rows usually share one, so
@@ -1506,6 +1510,28 @@ fn draw_horizontal(
         lines.push(Line::from(spans));
     }
     frame.render_widget(Paragraph::new(lines), text_area);
+
+    // The margin: everything past the measure, whether or not there is writing
+    // in it. Tinting only the characters that run past says nothing at all
+    // when nothing does — which is exactly the case under `:wrap 50`, where
+    // the rows are folded before they can reach it. A region is what a writer
+    // means by a measure: this is the paper, that is the edge of it.
+    //
+    // Only cells nothing else has coloured, so a selection reaching into the
+    // margin still reads as selected.
+    if ruler > 0 {
+        let left = text_area.x + (gutter + ruler) as u16;
+        let buf = frame.buffer_mut();
+        for y in text_area.y..text_area.y + text_area.height {
+            for x in left..text_area.x + text_area.width {
+                if let Some(cell) = buf.cell_mut((x, y)) {
+                    if cell.bg == Color::Reset {
+                        cell.set_bg(Color::Rgb(rr, rg, rb));
+                    }
+                }
+            }
+        }
+    }
 
     // The line itself, only with wrap off. With it on, the edge of the tint is
     // already the line, and drawing one would be saying the same thing twice.
@@ -1852,7 +1878,10 @@ mod tests {
         let lines = editor.current_buffer().line_count();
         let ruby = !editor.ruby().is_empty();
         let hanging = editor.hanging_punctuation();
-        editor.set_zong_length(vertical::zong_length_for(config, h, lines, ruby, hanging));
+        let measure = editor.measure();
+        editor.set_zong_length(vertical::zong_length_for(
+            config, h, lines, ruby, hanging, measure,
+        ));
         let mut terminal = Terminal::new(TestBackend::new(w, h)).unwrap();
         let mut viewport = Viewport::default();
         terminal
@@ -1887,7 +1916,10 @@ mod tests {
         let lines = editor.current_buffer().line_count();
         let ruby = !editor.ruby().is_empty();
         let hanging = editor.hanging_punctuation();
-        editor.set_zong_length(vertical::zong_length_for(config, h, lines, ruby, hanging));
+        let measure = editor.measure();
+        editor.set_zong_length(vertical::zong_length_for(
+            config, h, lines, ruby, hanging, measure,
+        ));
         render_with(editor, config, ime, w, h)
     }
 
@@ -2802,6 +2834,39 @@ mod tests {
         let buffer = render_wrapped(&mut editor, &config, 40, 8);
         let gutter = gutter_width(editor.current_buffer().line_count(), LineNumbers::Absolute);
         assert_eq!(at(&buffer, 20 + gutter as u16, 4), "│");
+    }
+
+    #[test]
+    fn a_measure_set_by_hand_folds_the_rows_and_leaves_a_margin() {
+        let mut editor = editor_with(&"字".repeat(30));
+        let mut config = Config::default();
+        config.editor.line_numbers = LineNumbers::None;
+        config.editor.show_segmentation = false;
+        config.theme.ruler = (0x2e, 0x30, 0x38);
+        let tint = Some(Color::Rgb(0x2e, 0x30, 0x38));
+        // No configured ruler: the measure is the only thing saying where the
+        // page ends.
+        assert_eq!(config.editor.ruler, 0);
+
+        editor.execute("wrap 20").unwrap();
+        let buffer = render_wrapped(&mut editor, &config, 40, 8);
+
+        // Twenty columns is ten 字, so the eleventh is on the second row.
+        assert_eq!(at(&buffer, 0, 1), "字", "folded at the measure");
+        assert_eq!(at(&buffer, 20, 0), " ", "and nothing written past it");
+
+        // The margin is a region, not a scattering: every cell past the
+        // measure is tinted, on rows that reach it and rows that do not.
+        assert_ne!(buffer[(19, 0)].style().bg, tint, "inside the measure");
+        assert_eq!(buffer[(20, 0)].style().bg, tint, "the first cell past it");
+        assert_eq!(buffer[(39, 0)].style().bg, tint, "out to the edge");
+        assert_eq!(buffer[(20, 5)].style().bg, tint, "and down the empty rows");
+
+        // Giving the window back takes the margin with it.
+        editor.execute("wrap 0").unwrap();
+        let buffer = render_wrapped(&mut editor, &config, 40, 8);
+        assert_ne!(buffer[(20, 0)].style().bg, tint);
+        assert_eq!(at(&buffer, 20, 0), "字", "the row runs the full width");
     }
 
     #[test]

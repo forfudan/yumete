@@ -95,6 +95,12 @@ pub struct EditorConfig {
     /// for. The *line* is only drawn with wrap off — with it on, the edge of
     /// the tint is already the line.
     pub ruler: usize,
+    /// The width to write to, in columns; `0` for the width of the window.
+    ///
+    /// A measure rather than a mark: unlike `ruler`, which only says where the
+    /// line is, this folds the rows there and leaves the rest of the window as
+    /// margin. `:wrap 50` sets it for one session (Feature #113).
+    pub measure: usize,
     /// A tick every `paper_ticks` characters down a 縱; `0` for none
     /// (Feature #102).
     ///
@@ -148,6 +154,7 @@ impl Default for EditorConfig {
             ambiguous_wide: true,
             syntax: String::new(),
             ruler: 0,
+            measure: 0,
             paper_ticks: 0,
             tabs: Tabs::default(),
             sidebar_width: 24,
@@ -528,6 +535,7 @@ struct RawEditor {
     tabs: Option<String>,
     syntax: Option<String>,
     ruler: Option<usize>,
+    measure: Option<usize>,
     paper_ticks: Option<usize>,
 }
 
@@ -609,6 +617,9 @@ impl RawConfig {
         }
         if other.editor.ruler.is_some() {
             self.editor.ruler = other.editor.ruler;
+        }
+        if other.editor.measure.is_some() {
+            self.editor.measure = other.editor.measure;
         }
         if other.editor.paper_ticks.is_some() {
             self.editor.paper_ticks = other.editor.paper_ticks;
@@ -708,6 +719,9 @@ impl RawConfig {
         }
         if let Some(ruler) = self.editor.ruler {
             config.editor.ruler = ruler.min(400);
+        }
+        if let Some(measure) = self.editor.measure {
+            config.editor.measure = measure.min(400);
         }
         if let Some(ticks) = self.editor.paper_ticks {
             config.editor.paper_ticks = ticks.min(64);

@@ -74,10 +74,15 @@ impl Metrics {
         total_lines: usize,
         ruby: bool,
         hanging: bool,
+        measure: Option<usize>,
     ) -> Metrics {
         let head_rows = number_rows(config.editor.line_numbers, total_lines);
         let rows = height.saturating_sub(head_rows) as usize;
-        let zong_len = config.editor.zong_length.min(rows.saturating_sub(1)).max(1);
+        // A 縱 is as long as the writer said, or as long as the window allows —
+        // `:wrap 40` is a measure in both layouts, and vertically the measure
+        // *is* the length of a column.
+        let want = measure.unwrap_or(config.editor.zong_length);
+        let zong_len = want.min(rows.saturating_sub(1)).max(1);
         Metrics {
             zong_len,
             pitch: SLOT_WIDTH + config.editor.zong_gap as u16,
@@ -137,6 +142,7 @@ pub fn char_at(
         buffer.line_count(),
         !editor.ruby().is_empty(),
         editor.hanging_punctuation(),
+        editor.measure(),
     );
     let grid = editor.grid().with_zong_len(metrics.zong_len);
     let capacity = metrics.capacity(area.width);
@@ -254,8 +260,17 @@ pub fn zong_length_for(
     total_lines: usize,
     ruby: bool,
     hanging: bool,
+    measure: Option<usize>,
 ) -> usize {
-    Metrics::new(config, height.saturating_sub(1), total_lines, ruby, hanging).zong_len
+    Metrics::new(
+        config,
+        height.saturating_sub(1),
+        total_lines,
+        ruby,
+        hanging,
+        measure,
+    )
+    .zong_len
 }
 
 /// Blank any wide glyph that reaches *into* `rect` from the column on its left.
@@ -380,6 +395,7 @@ pub fn draw(
         total_lines,
         !editor.ruby().is_empty(),
         editor.hanging_punctuation(),
+        editor.measure(),
     );
     let rope = buffer.rope();
 
