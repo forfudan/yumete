@@ -84,29 +84,53 @@ impl Layout {
 /// full-width rules that carry the line onward, and hanging them in a
 /// half-width margin would break the very stroke that makes them read.
 pub fn hangs_in_the_margin(c: char) -> bool {
-    matches!(
-        c,
-        '。' | '，'
-            | '、'
-            | '？'
-            | '！'
-            | '：'
-            | '；'
-            | '「'
-            | '」'
-            | '『'
-            | '』'
-            | '（'
-            | '）'
-            | '《'
-            | '》'
-            | '【'
-            | '】'
-            | '〈'
-            | '〉'
-            | '〔'
-            | '〕'
-    )
+    margin_form(c).is_some()
+}
+
+/// The **half-width** glyph a mark takes when it hangs in the margin.
+///
+/// A hung 句讀 is not a character in the text column any more — it is a small
+/// mark written beside one, the way a 古籍 is punctuated. Unicode has narrow
+/// forms for exactly this purpose (`｡` `､` `｢` `｣`), and the marks that have no
+/// CJK narrow form have an ASCII twin that *is* the same mark: `，` and `,` are
+/// both a low comma, `？` and `?` the same question.
+///
+/// Half-width is not a compromise here, it is the point. The margin is one cell
+/// wide; a full-width `︒` in it spills onto the 縱 to the right and hides the
+/// character there, and widening the margin to two cells would cost every 縱 a
+/// column — undoing the very thing 標點旁置 is for.
+///
+/// `None` means the mark has no narrow form and so does not hang: it keeps its
+/// square in the text column. 《》【】『』〔〕 are that set. They are rarer than
+/// 。、「」 in prose, and a page whose margin changed width from 縱 to 縱 would
+/// not be a margin.
+///
+/// # Examples
+///
+/// ```
+/// use yumete_cjk::margin_form;
+/// assert_eq!(margin_form('。'), Some('｡'));
+/// assert_eq!(margin_form('「'), Some('｢'));
+/// assert_eq!(margin_form('，'), Some(','));
+/// assert_eq!(margin_form('《'), None);
+/// ```
+pub fn margin_form(c: char) -> Option<char> {
+    Some(match c {
+        // The four CJK marks Unicode gives a true narrow form.
+        '。' => '｡',
+        '、' => '､',
+        '「' => '｢',
+        '」' => '｣',
+        // The rest borrow their ASCII twin, which is the same mark drawn narrow.
+        '，' => ',',
+        '？' => '?',
+        '！' => '!',
+        '：' => ':',
+        '；' => ';',
+        '（' => '(',
+        '）' => ')',
+        _ => return None,
+    })
 }
 
 /// Whether a hanging mark belongs beside the character *after* it rather than
@@ -117,10 +141,7 @@ pub fn hangs_in_the_margin(c: char) -> bool {
 /// — belongs to what came before. Getting this backwards puts 「 beside the word
 /// that ends the sentence before the speech.
 pub fn opens_a_pair(c: char) -> bool {
-    matches!(
-        c,
-        '「' | '『' | '（' | '《' | '【' | '〈' | '〔' | '〖' | '［' | '｛'
-    )
+    matches!(c, '「' | '（')
 }
 
 /// The vertical presentation form of `c`, or `None` when `c` is drawn the same
@@ -214,11 +235,18 @@ mod tests {
     }
 
     #[test]
-    fn the_marks_that_hang_are_the_句讀_ones() {
+    fn the_marks_that_hang_are_the_ones_with_a_narrow_form() {
         for c in [
-            '。', '，', '、', '？', '！', '：', '；', '「', '」', '《', '》',
+            '。', '，', '、', '？', '！', '：', '；', '「', '」', '（', '）',
         ] {
             assert!(hangs_in_the_margin(c), "{c} should hang");
+            let narrow = margin_form(c).expect("a hanging mark has a narrow form");
+            assert_eq!(char_width(narrow), 1, "{c} → {narrow} must be one cell");
+        }
+        // No narrow form, so no hanging: they keep their square rather than
+        // making the margin two cells wide for every 縱 on the page.
+        for c in ['《', '》', '【', '】', '『', '』', '〔', '〕'] {
+            assert!(!hangs_in_the_margin(c), "{c} has no narrow form");
         }
         // A dash or an ellipsis is a full-width rule carrying the line onward;
         // hung in a half-width margin it would break the stroke that reads.
@@ -233,11 +261,17 @@ mod tests {
 
     #[test]
     fn openers_hang_forward_and_everything_else_back() {
-        for c in ['「', '『', '（', '《', '【'] {
+        // Only the openers that hang at all: this set and the hanging set are
+        // now the same question asked twice, so they cannot drift apart.
+        for c in ['「', '（'] {
             assert!(opens_a_pair(c), "{c} introduces what follows it");
+            assert!(hangs_in_the_margin(c));
         }
-        for c in ['」', '』', '）', '》', '】', '。', '，', '？'] {
+        for c in ['」', '）', '。', '，', '？'] {
             assert!(!opens_a_pair(c), "{c} belongs to what came before");
+        }
+        for c in ['『', '《', '【', '〔'] {
+            assert!(!opens_a_pair(c), "{c} does not hang, so it opens nothing");
         }
     }
 

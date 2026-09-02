@@ -285,6 +285,7 @@ Phases are ordered by priority, most writer-critical first:
 | 87  | **Full-width readings**                    | tui    | P1    | 注音符號 and kana; the page was a staircase | Done |
 | 88  | **Export**                                 | core   | P2    | `:export html` keeps 縱書; typst is honest about not | Done |
 | 89  | **The number band is a gutter**            | tui    | P3    | colour, since position cannot separate it | Done |
+| 90  | **Hanging marks in their narrow forms**    | cjk    | P1    | a full-width mark hid the 縱 beside it | Done |
 
 ---
 

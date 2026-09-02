@@ -1268,11 +1268,12 @@ mod tests {
         let config = vertical_config();
         let buffer = render_vertical_ruby(&mut editor, &config, 20, 12);
 
-        // The text column carries only text; the marks are beside it.
+        // The text column carries only text; the marks are beside it, in the
+        // one-cell margin — half-width, which is what lets them fit in it.
         assert_eq!(at(&buffer, 17, 0), "曰");
         assert_eq!(at(&buffer, 17, 1), "學", "the bracket costs no row");
-        assert_eq!(at(&buffer, 19, 0), "︓");
-        assert_eq!(at(&buffer, 19, 1), "﹁", "beside 學, which it introduces");
+        assert_eq!(at(&buffer, 19, 0), ":");
+        assert_eq!(at(&buffer, 19, 1), "｢", "beside 學, which it introduces");
 
         // A mark is tinted apart from a reading, which is set back instead.
         let mark = buffer[(19, 0)].style();
@@ -1281,6 +1282,29 @@ mod tests {
             !mark.add_modifier.contains(Modifier::DIM),
             "it is punctuation, not an annotation"
         );
+    }
+
+    #[test]
+    fn a_hung_mark_does_not_paint_over_the_zong_beside_it() {
+        // The margin is one cell. A full-width mark in it spills onto the 縱 to
+        // the right and the character there is never drawn at all — which is
+        // what a reader sees as "hanging hides my text".
+        let mut editor = editor_with("一二三。四五\n甲乙丙丁戊己");
+        editor.set_hanging_punctuation(true);
+        editor.set_zong_length(6);
+        let config = vertical_config();
+        let buffer = render_vertical(&mut editor, &config, 20, 12);
+
+        // Two 縱: the first paragraph on the right, the second to its left.
+        let first = (0..20).find(|&x| at(&buffer, x, 0) == "一").unwrap();
+        let second = (0..20).find(|&x| at(&buffer, x, 0) == "甲").unwrap();
+        assert!(second < first);
+        // The mark hangs beside 三…
+        assert_eq!(at(&buffer, first + 2, 2), "｡");
+        // …and every character of the 縱 to its left is still on the page.
+        for (row, ch) in ["甲", "乙", "丙", "丁", "戊", "己"].iter().enumerate() {
+            assert_eq!(at(&buffer, second, row as u16), *ch, "row {row}");
+        }
     }
 
     #[test]
