@@ -1669,38 +1669,18 @@ fn draw_status(
             draft,
             which
         );
+        // Where you are and what just happened are two different questions, and
+        // a message answering the second must not take away the answer to the
+        // first: a buffer switch, a yank, a refused key all set a message, and
+        // the position used to vanish under every one of them.
+        let where_ = position_of(editor);
         if !editor.status().is_empty() {
-            format!("{left}   {}", editor.status())
-        } else if editor.layout() == WritingLayout::Vertical {
-            // Vertically the coordinates are named for the directions they run
-            // in: paragraphs stack across the page, so a paragraph number is a
-            // 橫 position; the 縱 is which run of it; 字 is how far down that
-            // run. "Ln" and "Col" would each mean two things here.
-            let at = editor.zong_position();
-            // Two coordinates, not three: which 縱 the cursor is in, and how far
-            // down it. A paragraph long enough to wrap runs over several 縱, so
-            // the 縱 is named by the paragraph and which piece of it — `56-2` is
-            // the second 縱 of paragraph 56 — and the piece is dropped when
-            // there is only one, which is most paragraphs.
-            let which = if at.index_in_line == 0 {
-                format!("{}", at.line + 1)
-            } else {
-                format!("{}-{}", at.line + 1, at.index_in_line + 1)
-            };
-            format!("{left}   橫 {which}, 字 {}", at.slot + 1)
-        } else if let Some(where_) = editor.table_status() {
-            // In a grid the useful coordinates are the row and *which column* —
-            // "column 143" of a line of 拆分 means nothing to anybody — plus
-            // what one step of `hjkl` currently moves by.
-            format!("{left}   第 {} 行 · {where_}", editor.cursor_line() + 1)
+            format!("{left}   {}   {where_}", editor.status())
         } else {
-            format!(
-                "{left}   Ln {}, Col {}",
-                editor.cursor_line() + 1,
-                editor.cursor_visual_column() + 1,
-            )
+            format!("{left}   {where_}")
         }
     };
+
     // What the 字 under the cursor *is*, pushed to the right edge so it never
     // moves the position readout around. A rare 漢字 that came out as a box is
     // the case this answers: `U+2B740 · CJK Unified Ideographs Extension D`
@@ -1723,6 +1703,38 @@ fn draw_status(
         ])),
         status_area,
     );
+}
+
+/// Where the cursor is, in the terms the layout is read in.
+///
+/// Vertically the coordinates are named for the directions they run in:
+/// paragraphs stack across the page, so a paragraph number is a 橫 position;
+/// the 縱 is which run of it; 字 is how far down that run. "Ln" and "Col"
+/// would each mean two things here. In a grid the useful pair is the row and
+/// *which column* — "column 143" of a line of 拆分 means nothing to anybody.
+fn position_of(editor: &Editor) -> String {
+    if let Some(where_) = editor.table_status() {
+        return format!("第 {} 行 · {where_}", editor.cursor_line() + 1);
+    }
+    if editor.layout() == WritingLayout::Vertical {
+        let at = editor.zong_position();
+        // Two coordinates, not three: which 縱 the cursor is in, and how far
+        // down it. A paragraph long enough to wrap runs over several 縱, so the
+        // 縱 is named by the paragraph and which piece of it — `56-2` is the
+        // second 縱 of paragraph 56 — and the piece is dropped when there is
+        // only one, which is most paragraphs.
+        let which = if at.index_in_line == 0 {
+            format!("{}", at.line + 1)
+        } else {
+            format!("{}-{}", at.line + 1, at.index_in_line + 1)
+        };
+        return format!("橫 {which}, 字 {}", at.slot + 1);
+    }
+    format!(
+        "Ln {}, Col {}",
+        editor.cursor_line() + 1,
+        editor.cursor_visual_column() + 1,
+    )
 }
 
 /// What to say about the character under the cursor, long form and short.
@@ -3081,6 +3093,26 @@ mod tests {
         assert_ne!(buffer[(0, 1)].style().fg, torn, "not the good one's");
 
         std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn a_message_never_takes_away_where_you_are() {
+        let mut editor = editor_with("那年冬天");
+        let config = Config::default();
+        let row = |b: &ratatui::buffer::Buffer, w: u16| -> String {
+            let y = b.area.height - 1;
+            (0..w).map(|x| at(b, x, y)).collect::<String>()
+        };
+
+        editor.on_key(Key::Char('l'));
+        let quiet = row(&render(&editor, &config, 100, 10), 100);
+        assert!(quiet.contains("Ln 1, Col 3"), "{quiet:?}");
+
+        // A yank says something — and the position stays put beside it.
+        editor.on_key(Key::Char('y'));
+        let busy = row(&render(&editor, &config, 100, 10), 100);
+        assert!(busy.contains("yanked"), "the message is there: {busy:?}");
+        assert!(busy.contains("Ln 1, Col 3"), "and so is the position: {busy:?}");
     }
 
     #[test]
