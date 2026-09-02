@@ -19,6 +19,7 @@ fn main() -> ExitCode {
     let mut files: Vec<String> = Vec::new();
     let mut force_preview = false;
     let mut force_layout: Option<Layout> = None;
+    let mut force_table = false;
 
     for arg in std::env::args().skip(1) {
         match arg.as_str() {
@@ -31,6 +32,7 @@ fn main() -> ExitCode {
                 return ExitCode::SUCCESS;
             }
             "-p" | "--preview" => force_preview = true,
+            "-t" | "--table" => force_table = true,
             "-v" | "--vertical" => force_layout = Some(Layout::Vertical),
             "-H" | "--horizontal" => force_layout = Some(Layout::Horizontal),
             // Reject unknown flags, but treat a lone "-" as a filename.
@@ -61,6 +63,12 @@ fn main() -> ExitCode {
     // and `:layout` switches it live.
     editor.set_layout(force_layout.unwrap_or(config.editor.layout));
     editor.set_zong_length(config.editor.zong_length);
+    // `-t` is the writer saying "this is a table" about a file no schema names.
+    // Last, because entering table mode turns the page horizontal, and it must
+    // win over `-v` rather than the other way round.
+    if force_table {
+        editor.enter_table();
+    }
     // The measure a project writes to, if it has said one; `:wrap n` is the
     // same setting for one session.
     if config.editor.measure > 0 {
@@ -182,6 +190,9 @@ ARGS:
             With no FILE, yumete starts with a new, empty scratch buffer.
 
 OPTIONS:
+    -t, --table      Read the file as a grid. A schema in .yumete/tables/ names
+                     the columns; without one, the file's own header row does.
+                     A grid is always horizontal, so this overrides -v.
     -v, --vertical   Lay the text out vertically for this run (縱書), overriding
                      the config. -H / --horizontal forces the ordinary layout.
     -p, --preview    Print a non-interactive preview instead of the editor.

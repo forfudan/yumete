@@ -68,6 +68,8 @@ pub enum Command {
     /// `:wrap <n>` — write to a measure of `n` columns rather than to the
     /// window; `:wrap 0` gives the window back (Feature #113).
     SetMeasure(Option<usize>),
+    /// `:table` / `:table off` — read the file as a grid (Feature #118).
+    SetTable(bool),
     /// `:wysiwyg` / `:source` — whether the markup comes off the page
     /// (Feature #104).
     SetWysiwyg(bool),
@@ -246,6 +248,14 @@ pub fn parse(input: &str) -> Result<Command, CommandError> {
         "source" | "src" => Ok(Command::SetWysiwyg(false)),
         // `:wrap` on its own still means what it always meant — turn wrapping
         // on — and leaves the measure alone; a number sets the measure.
+        "table" => match rest {
+            "" | "on" => Ok(Command::SetTable(true)),
+            "off" => Ok(Command::SetTable(false)),
+            other => Err(CommandError::InvalidArgument {
+                command: "table",
+                value: other.to_string(),
+            }),
+        },
         "wrap" if rest.is_empty() => Ok(Command::SetSoftWrap(true)),
         "wrap" => match rest.parse::<usize>() {
             Ok(0) => Ok(Command::SetMeasure(None)),
@@ -460,6 +470,11 @@ pub const COMMANDS: &[Entry] = &[
         name: "source",
         alias: Some("src"),
         help: "回到源碼",
+    },
+    Entry {
+        name: "table",
+        alias: None,
+        help: "read the file as a grid; `:table off` as text",
     },
     Entry {
         name: "wrap",
@@ -771,6 +786,7 @@ mod tests {
             "markup",
             "wysiwyg",
             "source",
+            "table",
             "wrap",
             "nowrap",
             "buffer-next",
