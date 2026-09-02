@@ -215,6 +215,7 @@ KEYS (Normal mode, Helix-style):
               :recover[!]      load (or drop) a crash-recovery draft
               :bn  :bp  :bd  :ls   the open files (also gn / gp)
               :grep <re>  :toc      across the project / this file's headings
+              :export html|typst    write it out for a typesetter
               :layout [horizontal|vertical]  :vertical  :horizontal
               :chaifen  toggle the 拆分 annotation beside candidates
               :ruby       edit the reading at the cursor, or annotate the
