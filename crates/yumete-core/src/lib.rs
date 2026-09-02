@@ -16,6 +16,7 @@
 //! All text access goes through the [`TextStore`] trait so the storage backend
 //! (currently a [`ropey`] rope) can be swapped later without touching call sites.
 
+pub mod book;
 pub mod buffer;
 pub mod command;
 pub mod editor;
