@@ -1782,13 +1782,22 @@ impl Editor {
             Key::Ctrl('b') => self.move_page(count, true, 1.0),
             Key::Ctrl('d') => self.move_page(count, false, 0.5),
             Key::Ctrl('u') => self.move_page(count, true, 0.5),
+            // …and on the capitals of the keys that move, which is a reader's
+            // most-used pair and does not deserve a chord. `C-d` and its family
+            // still work; these are the same four motions under the fingers
+            // already on `hjkl`.
+            Key::Char('J') => self.move_page(count, false, 0.5),
+            Key::Char('K') => self.move_page(count, true, 0.5),
+            Key::Char('L') => self.move_page(count, false, 1.0),
+            Key::Char('H') => self.move_page(count, true, 1.0),
             // Swap which end of the selection the cursor is on.
             Key::Alt(';') => self.flip_selection(),
             // Whole file, and extending the selection to whole lines.
             Key::Char('%') => self.select_all(),
             Key::Char('X') => self.extend_to_line_bounds(),
-            // Joining, case, and replacing the selection with the register.
-            Key::Char('J') => self.repeat(count, |e| e.join_lines()),
+            // Case, and replacing the selection with the register. Joining is
+            // on `gJ`: `J` turns the page, which a reader presses a hundred
+            // times for every once they join two lines.
             Key::Char('~') => self.map_selection(switch_case),
             Key::Char('`') => self.map_selection(|c| c.to_lowercase().next().unwrap_or(c)),
             Key::Alt('`') => self.map_selection(|c| c.to_uppercase().next().unwrap_or(c)),
@@ -1830,6 +1839,12 @@ impl Editor {
             Key::Char('h') => motion::line_start(rope, self.cursor),
             Key::Char('l') => motion::line_end(rope, self.cursor),
             Key::Char('s') => motion::line_first_non_blank(rope, self.cursor),
+            // Joining lines, which vi also spells `gJ`.
+            Key::Char('J') => {
+                // The count belongs to the `g`, which has already spent it.
+                let count = self.operator_count.take().unwrap_or(1).max(1);
+                return self.repeat(count, |e| e.join_lines());
+            }
             // Goto the next / previous buffer, as Helix binds them.
             Key::Char('n') => return self.next_buffer(),
             Key::Char('p') => return self.prev_buffer(),
@@ -4124,15 +4139,15 @@ mod tests {
     fn join_omits_the_space_between_two_wide_characters() {
         // CJK prose carries no space across a line break…
         let mut ed = typed("上山\n下海");
-        press(&mut ed, "J");
+        press(&mut ed, "gJ");
         assert_eq!(ed.current_buffer().text(), "上山下海");
         // …but Latin words still need one.
         let mut ed = typed("up hill\ndown dale");
-        press(&mut ed, "J");
+        press(&mut ed, "gJ");
         assert_eq!(ed.current_buffer().text(), "up hill down dale");
         // Indentation on the joined line is swallowed, not doubled.
         let mut ed = typed("one\n    two");
-        press(&mut ed, "J");
+        press(&mut ed, "gJ");
         assert_eq!(ed.current_buffer().text(), "one two");
     }
 
@@ -4405,6 +4420,31 @@ mod tests {
 
         ed.execute(":toc").unwrap();
         assert!(ed.status().contains("第一章"), "{}", ed.status());
+    }
+
+    #[test]
+    fn the_capitals_turn_the_page() {
+        let text = (1..=60)
+            .map(|n| n.to_string())
+            .collect::<Vec<_>>()
+            .join("\n");
+        let mut ed = typed(&text);
+        ed.set_page(20, 10);
+        press(&mut ed, "gg");
+
+        press(&mut ed, "J");
+        assert_eq!(ed.cursor_line(), 10, "half of twenty lines");
+        press(&mut ed, "L");
+        assert_eq!(ed.cursor_line(), 30, "a whole page");
+        press(&mut ed, "K");
+        assert_eq!(ed.cursor_line(), 20);
+        press(&mut ed, "H");
+        assert_eq!(ed.cursor_line(), 0);
+
+        // Joining moved to `gJ`, which is also how vi spells it.
+        let mut ed = typed("上山\n下海");
+        press(&mut ed, "gJ");
+        assert_eq!(ed.current_buffer().text(), "上山下海");
     }
 
     #[test]
@@ -5213,7 +5253,7 @@ mod tests {
         // anything reading the cursor's line acted on a line the writer had
         // not selected and could not see was selected.
         let mut ed = typed("一\n二\n三\n四\n");
-        type_keys(&mut ed, "ggxxxJ");
+        type_keys(&mut ed, "ggxxxgJ");
         assert_eq!(ed.current_buffer().text(), "一二\n三\n四\n");
 
         let mut ed = typed("甲甲\n甲甲\n");
