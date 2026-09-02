@@ -68,16 +68,14 @@ impl Metrics {
     /// fill a tall terminal, only lowered when the terminal cannot hold it. One
     /// row beyond the 縱 is kept spare so the end-of-paragraph caret has
     /// somewhere to sit below a full 縱.
-    pub fn new(
-        config: &Config,
-        height: u16,
-        total_lines: usize,
-        ruby: bool,
-        hanging: bool,
-        measure: Option<usize>,
-        gap: Option<usize>,
-        dense: bool,
-    ) -> Metrics {
+    pub fn new(config: &Config, height: u16, total_lines: usize, look: Look) -> Metrics {
+        let Look {
+            ruby,
+            hanging,
+            measure,
+            gap,
+            dense,
+        } = look;
         let head_rows = number_rows(config.editor.line_numbers, total_lines);
         let rows = height.saturating_sub(head_rows) as usize;
         // A 縱 is as long as the writer said, or as long as the window allows —
@@ -146,11 +144,7 @@ pub fn char_at(
         config,
         area.height,
         buffer.line_count(),
-        !editor.ruby().is_empty(),
-        editor.hanging_punctuation(),
-        editor.measure(),
-        editor.zong_gap(),
-        editor.dense(),
+        Look::of(editor),
     );
     let grid = editor.grid().with_zong_len(metrics.zong_len);
     let capacity = metrics.capacity(area.width);
@@ -262,27 +256,42 @@ pub(crate) fn number_rows(mode: LineNumbers, total_lines: usize) -> u16 {
 /// The 縱 length in force for a terminal `height` rows tall (including the
 /// status line), so the event loop can tell the editor where 縱 break before the
 /// motions that depend on it run.
-pub fn zong_length_for(
-    config: &Config,
-    height: u16,
-    total_lines: usize,
-    ruby: bool,
-    hanging: bool,
-    measure: Option<usize>,
-    gap: Option<usize>,
-    dense: bool,
-) -> usize {
-    Metrics::new(
-        config,
-        height.saturating_sub(1),
-        total_lines,
-        ruby,
-        hanging,
-        measure,
-        gap,
-        dense,
-    )
-    .zong_len
+pub fn zong_length_for(config: &Config, height: u16, total_lines: usize, look: Look) -> usize {
+    Metrics::new(config, height.saturating_sub(1), total_lines, look).zong_len
+}
+
+/// What the editor says about how this page is to be set.
+///
+/// Five answers to one question — how much of the window is writing — and they
+/// travel together everywhere: the 縱 length, the pitch, the reading column and
+/// the tick column are all worked out from them at once.
+#[derive(Debug, Clone, Copy)]
+pub struct Look {
+    /// Whether readings are laid out beside the 縱.
+    pub ruby: bool,
+    /// Whether 句讀 hang in the margin.
+    pub hanging: bool,
+    /// The 縱 length the writer asked for, if any.
+    pub measure: Option<usize>,
+    /// The gap between 縱 the writer asked for, if any.
+    pub gap: Option<usize>,
+    /// Whether the page is packed as tight as a terminal allows.
+    pub dense: bool,
+}
+
+impl Look {
+    /// Ask the editor. The flags come from *it*, not from the config: `:ruby-off`,
+    /// `:hanging` and `:dense` change them at runtime, and a page laid out from
+    /// the config would disagree with the grid the cursor moves on.
+    pub fn of(editor: &Editor) -> Look {
+        Look {
+            ruby: !editor.ruby().is_empty(),
+            hanging: editor.hanging_punctuation(),
+            measure: editor.measure(),
+            gap: editor.zong_gap(),
+            dense: editor.dense(),
+        }
+    }
 }
 
 /// Blank any wide glyph that reaches *into* `rect` from the column on its left.
@@ -405,11 +414,7 @@ pub fn draw(
         config,
         area.height,
         total_lines,
-        !editor.ruby().is_empty(),
-        editor.hanging_punctuation(),
-        editor.measure(),
-        editor.zong_gap(),
-        editor.dense(),
+        Look::of(editor),
     );
     let rope = buffer.rope();
 
