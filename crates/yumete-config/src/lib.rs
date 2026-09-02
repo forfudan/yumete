@@ -233,12 +233,20 @@ pub struct ImeConfig {
     /// `riyue`, `pinyin`. Only 靈明 ships with yumete; the others need their
     /// tables installed in the data directory.
     pub scheme: String,
+    /// Whether that scheme's 碼表 is loaded at startup.
+    ///
+    /// Off by default. The 碼表 is a hundred milliseconds and is of use only to
+    /// somebody who came to type 宇浩; the *language model* behind `w` and `b`
+    /// is loaded either way, because that is about the words and not about how
+    /// they are typed. `:yume scheme` starts typing whenever you want it.
+    pub start: bool,
 }
 
 impl Default for ImeConfig {
     fn default() -> Self {
         ImeConfig {
             scheme: "lingming".to_string(),
+            start: false,
         }
     }
 }
@@ -530,6 +538,7 @@ struct RawConfig {
 #[serde(deny_unknown_fields)]
 struct RawIme {
     scheme: Option<String>,
+    start: Option<bool>,
 }
 
 #[derive(Deserialize, Default)]
@@ -681,6 +690,9 @@ impl RawConfig {
         if other.ime.scheme.is_some() {
             self.ime.scheme = other.ime.scheme.clone();
         }
+        if other.ime.start.is_some() {
+            self.ime.start = other.ime.start;
+        }
         // Merged entry by entry, so a project can add to what the global config
         // says rather than having to restate it.
         for (name, language) in &other.syntax {
@@ -801,6 +813,9 @@ impl RawConfig {
         }
         if let Some(scheme) = self.ime.scheme {
             config.ime.scheme = scheme;
+        }
+        if let Some(start) = self.ime.start {
+            config.ime.start = start;
         }
         config.syntax.by_name = self.syntax;
         if let Some(hex) = self.theme.selection {

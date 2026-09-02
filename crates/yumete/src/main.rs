@@ -123,33 +123,27 @@ fn main() -> ExitCode {
     // unavailable and Insert mode simply types plain ASCII — which is also what
     // happens for a scheme whose tables are not installed, since only 靈明 ships
     // with yumete.
-    // Loading 靈明 reads about four megabytes of compiled tables and takes
-    // ~150 ms. Paid at startup that is a *wait* before the first frame, on
-    // every launch — including the ones that only wanted to look at a file, or
-    // to fix a line of a CSV, and will never type a 漢字 at all. So it is read
-    // the first time something would actually use it, which for a writer is
-    // the first `i` and for everybody else is never.
+    // Two different things live in yume's data, and they deserve different
+    // answers.
     //
-    // On a thread would be better still — no hitch at all — but a session
-    // holds `Rc`s and is not `Send`, and that is yume's business, not this
-    // editor's.
+    // The **language model** — word frequencies and the 詞彙表, both of them
+    // scheme-independent — is what `w`, `b` and `e` walk by, and it is what
+    // makes this editor's word motion better than an editor's has any right to
+    // be. Twenty-seven milliseconds, and everybody gets it.
+    //
+    // The **碼表** is another hundred and nine, and it is only of use to
+    // somebody who came here to type 宇浩. Loading it for everyone means every
+    // launch pays for an input method most of them did not ask for. So it
+    // waits for `:yume scheme`.
     let wanted = Scheme::from_tag(&config.ime.scheme).unwrap_or(Scheme::Lingming);
-    let page_size = config.panel.page_size;
-    let annotations = config.editor.show_chaifen;
-    let load = move || {
-        let mut ime = ImeSession::from_default_dirs(wanted);
-        if !ime.available() && wanted != Scheme::Lingming {
-            ime = ImeSession::from_default_dirs(Scheme::Lingming);
-        }
-        ime.set_page_size(page_size);
-        ime.set_annotations(annotations);
-        ime
-    };
-    // Until then it is *unavailable*, which is exactly what an uninstalled
-    // scheme looks like — so nothing downstream needs a third state to think
-    // about: Insert mode types plain ASCII, and that is all.
-    let mut ime = ImeSession::empty(wanted);
-    editor.set_chaifen(annotations);
+    let mut ime = ImeSession::language_only(wanted);
+    ime.set_page_size(config.panel.page_size);
+    editor.set_chaifen(config.editor.show_chaifen);
+    if config.ime.start {
+        // …unless the config says this is a session for writing 漢字, which
+        // for the author of an input method it usually is.
+        editor.set_status(switch_scheme_at_startup(&mut ime, wanted, &config));
+    }
 
     // Word segmentation, driving `w`/`b`/`e` and the overlay. Best first:
     //
@@ -157,11 +151,13 @@ fn main() -> ExitCode {
     //    the 詞彙表, already loaded above and shared by reference.
     // 2. A user `segmentation.txt` in the data directory.
     // 3. The compact list bundled with yumete, which covers common prose only.
-    // Yume's own model is the best of the three, and it arrives with the tables
-    // on the other thread; until then the next best one is in place, so `w`
-    // works from the first keystroke rather than from the first frame after.
+    // Yume's own model is the best of the three and is already loaded above,
+    // whether or not the 碼表 is.
     let threshold = config.editor.segmentation_threshold;
-    if let Some(dictionary) = load_segmentation_dictionary(threshold) {
+    let yume = ime.segmenter();
+    if yume.is_available() {
+        editor.set_segmenter(Box::new(yume));
+    } else if let Some(dictionary) = load_segmentation_dictionary(threshold) {
         editor.set_segmenter(Box::new(dictionary));
     } else {
         editor.set_segmenter(Box::new(DictionarySegmenter::builtin(threshold)));
@@ -185,7 +181,7 @@ fn main() -> ExitCode {
     // Only the editor has one; the preview prints its own notice instead.
     editor.announce_recovery();
 
-    match yumete_tui::run(&mut editor, &config, &mut ime, Box::new(load)) {
+    match yumete_tui::run(&mut editor, &config, &mut ime) {
         Ok(()) => ExitCode::SUCCESS,
         Err(err) => {
             eprintln!("yumete: {err}");
@@ -205,6 +201,28 @@ fn load_segmentation_dictionary(threshold: i64) -> Option<DictionarySegmenter> {
         }
     }
     None
+}
+
+/// Load a scheme's 碼表 at startup, for a config that asked for one.
+fn switch_scheme_at_startup(
+    ime: &mut ImeSession,
+    wanted: Scheme,
+    config: &yumete_config::Config,
+) -> String {
+    let mut full = ImeSession::from_default_dirs(wanted);
+    if !full.available() && wanted != Scheme::Lingming {
+        full = ImeSession::from_default_dirs(Scheme::Lingming);
+    }
+    full.set_page_size(config.panel.page_size);
+    full.set_annotations(config.editor.show_chaifen);
+    let name = full.scheme_name().to_string();
+    let ok = full.available();
+    *ime = full;
+    if ok {
+        format!("方案：{name}")
+    } else {
+        format!("{name} 的碼表沒有裝——`:yume scheme` 換一個")
+    }
 }
 
 fn print_help() {

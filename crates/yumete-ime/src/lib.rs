@@ -142,6 +142,31 @@ impl ImeSession {
         ImeSession::new(scheme, yumete_config::data_search_dirs())
     }
 
+    /// Just the language model: the word frequencies and the 詞彙表.
+    ///
+    /// These two files are **scheme-independent** — they are the language, not
+    /// the input method — and they are what `w`, `b` and `e` walk by. So they
+    /// are worth having from the first keystroke even in a session that never
+    /// types a 漢字, while the 碼表 that would let you *type* one is not.
+    ///
+    /// The session is not `available`: no code table, so Insert types ASCII.
+    pub fn language_only(scheme: Scheme) -> Self {
+        let dirs = yumete_config::data_search_dirs();
+        let mut engine = Engine::new(CodeTable::new());
+        for file in data_manifest::shared() {
+            if matches!(file.kind, DataKind::Weights | DataKind::Lexicon) {
+                load_data_file(&mut engine, &dirs, &file);
+            }
+        }
+        ImeSession {
+            engine,
+            scheme,
+            data_dirs: dirs,
+            available: false,
+            annotations: false,
+        }
+    }
+
     /// A session with no tables in it, and no intention of loading any here.
     ///
     /// What stands in while the real one is read on another thread. It is
