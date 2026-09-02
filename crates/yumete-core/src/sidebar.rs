@@ -93,6 +93,13 @@ pub struct Sidebar {
     /// two — so `Tab` back and forth returns to where you were, not to the top.
     view: View,
     kept: [usize; 3],
+    /// Whether it is opened out wide enough to read a whole title.
+    ///
+    /// The ordinary width is a setting, and it is narrow on purpose — columns
+    /// are what a terminal has least of. But a chapter called 「天門真境之傳家
+    /// 寶扇」 does not fit in it, and cutting the name off is exactly what an
+    /// outline must not do. So the width is a toggle, not a compromise.
+    wide: bool,
 }
 
 /// How many entries one directory contributes before the tree gives up on it.
@@ -111,9 +118,21 @@ impl Sidebar {
             selected: 0,
             view: View::Explorer,
             kept: [0; 3],
+            wide: false,
         };
         sidebar.rebuild();
         sidebar
+    }
+
+    /// Whether it is opened out to read whole titles.
+    pub fn wide(&self) -> bool {
+        self.wide
+    }
+
+    /// Open it out, or fold it back.
+    pub fn toggle_width(&mut self) -> bool {
+        self.wide = !self.wide;
+        self.wide
     }
 
     /// Which view is showing.
