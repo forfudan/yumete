@@ -240,7 +240,7 @@ fn put_slot_right(buf: &mut Buffer, x: u16, y: u16, symbol: &str, style: Style) 
 /// *Chinese* numerals, not the circled Arabic ①②③: those are East-Asian
 /// *ambiguous* width, so a terminal may draw them one cell or two and the column
 /// would come apart. Past the end of the list a plain digit stands in.
-fn index_mark(markers: &str, i: usize) -> String {
+pub(crate) fn index_mark(markers: &str, i: usize) -> String {
     match markers.chars().nth(i) {
         Some(c) => c.to_string(),
         None => (i + 1).to_string(),

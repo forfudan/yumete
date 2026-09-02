@@ -340,7 +340,13 @@ fn ime_handle(
         }
         KeyCode::Esc if composing => ime.escape(),
         KeyCode::Char(' ') if composing => ime.space(),
-        KeyCode::Char(c) if composing && ('1'..='9').contains(&c) => {
+        // A digit only selects when a candidate is actually under it: with a
+        // five-candidate page, `7` must not commit the second candidate of the
+        // page the reader cannot see. Anything else falls through to the engine
+        // as an ordinary keystroke.
+        KeyCode::Char(c)
+            if composing && ('1'..='9').contains(&c) && ime.page_has((c as u8 - b'0') as usize) =>
+        {
             ime.select_in_page((c as u8 - b'1') as usize);
         }
         KeyCode::Char('-') if composing => ime.page_up(),
@@ -655,11 +661,7 @@ fn draw_horizontal(
     // Unwrapped, every paragraph is one row and anything past the right edge is
     // simply clipped, which is what the row model produces at an unreachable
     // width.
-    let width = editor
-        .wrap_width()
-        .unwrap_or(usize::MAX / 2)
-        .min(usize::MAX / 2)
-        .max(1);
+    let width = editor.wrap_width().unwrap_or(usize::MAX / 2).max(1);
 
     let cursor_line = editor.cursor_line();
     let cursor_pos = wrap::position(rope, editor.cursor(), width);
@@ -867,7 +869,14 @@ fn draw_candidate_panel(
     let mut rows: Vec<String> = Vec::with_capacity(candidates.len() + 1);
     rows.push(preedit);
     for (i, cand) in candidates.iter().enumerate() {
-        let mut row = format!("{}. {}", i + 1, cand.text);
+        // The same markers the vertical panel uses: `[panel] markers` is one
+        // setting, and a reader who set 圈碼 does not want ASCII digits back
+        // the moment they switch to horizontal.
+        let mut row = format!(
+            "{} {}",
+            vertical::index_mark(&config.panel.markers, i),
+            cand.text
+        );
         if !cand.completion.is_empty() {
             row.push(' ');
             row.push_str(&cand.completion);
@@ -931,7 +940,11 @@ fn draw_candidate_panel(
         Paragraph::new(lines).block(
             Block::default()
                 .borders(Borders::ALL)
-                .border_type(BorderType::Rounded)
+                .border_type(if config.panel.rounded {
+                    BorderType::Rounded
+                } else {
+                    BorderType::Plain
+                })
                 .border_style(Style::default().fg(skin.border()).bg(skin.paper()))
                 .style(Style::default().bg(skin.paper()).fg(skin.text())),
         ),
@@ -1561,6 +1574,65 @@ mod tests {
             }),
             "配置的紙色沒用上"
         );
+    }
+
+    #[test]
+    fn the_horizontal_panel_takes_the_same_markers_and_border() {
+        let mut editor = Editor::new();
+        editor.on_key(Key::Char('i'));
+        let mut ime = ImeSession::from_table_text(Scheme::Lingming, "b 吧 八\n");
+        ime.input('b');
+        let mut config = Config::default();
+        config.editor.line_numbers = LineNumbers::None;
+        config.panel.markers = "壹貳參".to_string();
+        config.panel.rounded = false;
+        let buffer = render_with(&editor, &config, &ime, 40, 16);
+
+        let text = buffer_text(&buffer);
+        // `[panel]` is one setting: it must not stop applying the moment the
+        // reader switches to the default, horizontal layout.
+        assert!(text.contains('壹'), "配置的編號字符沒用上: {text:?}");
+        assert!(!text.contains("1. "), "還在用 ASCII 編號");
+        assert!(text.contains('┌'), "rounded = false 沒用上: {text:?}");
+    }
+
+    #[test]
+    fn a_digit_past_the_page_never_picks_a_candidate_off_it() {
+        let mut editor = Editor::new();
+        editor.on_key(Key::Char('i'));
+        let mut ime = ImeSession::from_table_text(Scheme::Lingming, "b 吧 八 巴 芭 疤\n");
+        // A short page: the reader sees three candidates, not five.
+        ime.set_page_size(3);
+        ime.input('b');
+        assert_eq!(ime.page_candidates().len(), 3);
+
+        // `5` names nothing the reader can see. It must not commit 疤 — the
+        // fifth of the *whole* list, which is on the next page.
+        ime_handle(
+            &mut ime,
+            &mut editor,
+            KeyCode::Char('5'),
+            KeyModifiers::NONE,
+        );
+        assert!(
+            !editor.current_buffer().text().contains('疤'),
+            "committed a candidate from a page the reader cannot see: {:?}",
+            editor.current_buffer().text()
+        );
+
+        // A digit that *is* on the page still selects.
+        let mut editor = Editor::new();
+        editor.on_key(Key::Char('i'));
+        let mut ime = ImeSession::from_table_text(Scheme::Lingming, "b 吧 八 巴 芭 疤\n");
+        ime.set_page_size(3);
+        ime.input('b');
+        ime_handle(
+            &mut ime,
+            &mut editor,
+            KeyCode::Char('3'),
+            KeyModifiers::NONE,
+        );
+        assert_eq!(editor.current_buffer().text(), "巴");
     }
 
     #[test]
