@@ -289,6 +289,7 @@ Phases are ordered by priority, most writer-critical first:
 | 91  | **Space menu and pickers**                 | both   | P1    | `Space f`/`b`/`/`/`?`/`y`; which-key | Done   |
 | 92  | **The `:` menu is a popup, not a wall**    | tui    | P2    | capped and scrolled, as Helix caps its | Done  |
 | 93  | **Turning the page without a chord**       | core   | P2    | `J`/`K` half, `L`/`H` whole; join → `gJ` | Done |
+| 94  | **The file sidebar**                       | both   | P2    | `Space e`; the tree is the book's shape | Done |
 
 ---
 

@@ -24,6 +24,7 @@ pub mod input;
 pub mod motion;
 pub mod picker;
 pub mod ruby;
+pub mod sidebar;
 pub mod text_store;
 pub mod wrap;
 pub mod zong;

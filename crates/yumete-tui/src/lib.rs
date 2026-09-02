@@ -562,8 +562,24 @@ fn draw(
 ) {
     let area = frame.area();
     let regions = Layout::vertical([Constraint::Min(1), Constraint::Length(1)]).split(area);
-    let text_area = regions[0];
+    let body = regions[0];
     let status_area = regions[1];
+
+    // The sidebar takes its columns off the left of the body, and everything
+    // downstream — the wrap width, where the 縱 are placed, the cursor, the
+    // scroll — follows from the smaller rectangle without knowing about it.
+    // Set vertically that is the right side to lose: the 縱 fill from the right
+    // edge, so the page simply ends sooner.
+    let text_area = match editor.sidebar() {
+        Some(_) => {
+            let want = (config.editor.sidebar_width as u16).min(body.width.saturating_sub(8));
+            let split =
+                Layout::horizontal([Constraint::Length(want), Constraint::Min(1)]).split(body);
+            draw_sidebar(frame, editor, config, split[0]);
+            split[1]
+        }
+        None => body,
+    };
 
     // The text body is the one part that differs between the layouts; both
     // report back the cell the cursor landed on, which the status line and the
@@ -778,6 +794,91 @@ fn draw_command_menu(frame: &mut Frame, editor: &Editor, area: Rect, status: Rec
     // once is what covered the page.
     let footer = format!("{}/{}  {}", focus + 1, matches.len(), matches[focus].help);
     draw_list(frame, area, status.y, &items, focus, highlight, &footer);
+}
+
+/// The file sidebar, in the columns taken off the left of the page.
+///
+/// A rule rather than a border: one column of `│` says "this is a different
+/// thing" and costs one cell, where a box costs four and a corner.
+fn draw_sidebar(frame: &mut Frame, editor: &Editor, config: &Config, area: Rect) {
+    let Some(sidebar) = editor.sidebar() else {
+        return;
+    };
+    if area.width < 3 {
+        return;
+    }
+    let (gr, gg, gb) = config.theme.gutter;
+    let ground = Style::default().bg(Color::Rgb(gr, gg, gb));
+    let text = ground.fg(Color::Rgb(0xcf, 0xc6, 0xa9));
+    let dir = ground.fg(Color::Rgb(0x9c, 0xb0, 0xc2));
+    let quiet = ground.fg(Color::Rgb(0x9c, 0x97, 0x82));
+    // Unfocused, the highlight is a quiet band; focused, it is inked — so which
+    // half of the screen the keys are going to is never in doubt.
+    let on = if editor.sidebar_focused() {
+        Style::default()
+            .bg(Color::Rgb(0xcf, 0xc6, 0xa9))
+            .fg(Color::Rgb(0x26, 0x2a, 0x27))
+    } else {
+        Style::default()
+            .bg(Color::Rgb(0x3a, 0x3d, 0x46))
+            .fg(Color::Rgb(0xcf, 0xc6, 0xa9))
+    };
+
+    frame.render_widget(Clear, area);
+    let rule = area.x + area.width - 1;
+    let buf = frame.buffer_mut();
+    for y in area.y..area.y + area.height {
+        for x in area.x..rule {
+            if let Some(cell) = buf.cell_mut((x, y)) {
+                cell.set_symbol(" ").set_style(ground);
+            }
+        }
+        if let Some(cell) = buf.cell_mut((rule, y)) {
+            cell.set_symbol("│").set_style(quiet);
+        }
+    }
+
+    // The directory the tree is rooted at, then the tree, scrolled to keep the
+    // highlight on screen.
+    put_text(buf, area.x + 1, area.y, rule, &sidebar.title(), quiet);
+    let rows = sidebar.rows();
+    let visible = (area.height as usize).saturating_sub(1);
+    if visible == 0 {
+        return;
+    }
+    let first = sidebar
+        .selected()
+        .saturating_sub(visible.saturating_sub(1))
+        .min(rows.len().saturating_sub(visible));
+    for slot in 0..visible.min(rows.len()) {
+        let i = first + slot;
+        let row = &rows[i];
+        let y = area.y + 1 + slot as u16;
+        let picked = i == sidebar.selected();
+        let style = if picked {
+            on
+        } else if row.is_dir {
+            dir
+        } else {
+            text
+        };
+        if picked {
+            for x in area.x..rule {
+                if let Some(cell) = buf.cell_mut((x, y)) {
+                    cell.set_symbol(" ").set_style(style);
+                }
+            }
+        }
+        // A directory says which way it is facing; a file is indented past
+        // where that mark would be, so the names line up in one column.
+        let mark = match (row.is_dir, row.expanded) {
+            (true, true) => "▾ ",
+            (true, false) => "▸ ",
+            (false, _) => "  ",
+        };
+        let line = format!("{}{mark}{}", "  ".repeat(row.depth), row.name);
+        put_text(buf, area.x + 1, y, rule, &line, style);
+    }
 }
 
 /// The `Space f` / `Space b` picker.
@@ -2165,6 +2266,35 @@ mod tests {
         };
         assert!(!dim(3), "`seg` was typed");
         assert!(dim(4), "`ment` is only a guess");
+    }
+
+    #[test]
+    fn the_sidebar_takes_its_columns_off_the_page() {
+        let dir = std::env::temp_dir().join(format!("yumete-side-tui-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(dir.join("卷一")).unwrap();
+        std::fs::write(dir.join("notes.md"), "").unwrap();
+        let mut editor = editor_with("那年冬天");
+        let mut config = Config::default();
+        config.editor.line_numbers = LineNumbers::None;
+        config.editor.sidebar_width = 20;
+
+        // Without it, the text starts at the left edge.
+        let plain = render_with(&editor, &config, &no_ime(), 60, 12);
+        assert_eq!(at(&plain, 0, 0), "那");
+
+        // Rooted explicitly rather than at the process's directory, which the
+        // other tests share.
+        editor.open_sidebar_at(&dir);
+        let buffer = render_with(&editor, &config, &no_ime(), 60, 12);
+        let text = page_text(&buffer);
+        assert!(text.contains("卷一"), "the tree: {text:?}");
+        assert!(text.contains("notes.md"), "{text:?}");
+        // A rule at its right edge, and the page begins after it — not under it.
+        assert_eq!(at(&buffer, 19, 3), "│");
+        assert_eq!(at(&buffer, 20, 0), "那", "the text moved over, not under");
+
+        std::fs::remove_dir_all(&dir).ok();
     }
 
     #[test]
