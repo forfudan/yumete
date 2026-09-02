@@ -215,16 +215,20 @@ pub fn run(editor: &mut Editor, config: &Config, ime: &mut ImeSession) -> io::Re
                 // address arrives on a later turn of the loop.
                 // `:sh` brings the answer back; `:!` hands over the screen.
                 if let Some(want) = editor.take_shell_request() {
-                    if want.interactive {
-                        match hand_over(&mut terminal, &want.line) {
+                    use yumete_core::editor::How;
+                    match want.how {
+                        How::Terminal => match hand_over(&mut terminal, &want.line) {
                             Ok(()) => editor.set_status(format!("跑完了：{}", want.line)),
                             Err(err) => editor.set_status(format!("跑不動：{err}")),
-                        }
-                    } else {
-                        match run_capturing(&want.line) {
+                        },
+                        How::Capture => match run_capturing(&want.line, None) {
                             Ok(out) => editor.provide_shell_output(&want.line, &out),
                             Err(err) => editor.set_status(format!("跑不動：{err}")),
-                        }
+                        },
+                        How::Pipe(input) => match run_capturing(&want.line, Some(&input)) {
+                            Ok(out) => editor.provide_pipe_output(&out),
+                            Err(err) => editor.set_status(format!("跑不動：{err}")),
+                        },
                     }
                 }
                 if let Some(want) = editor.take_preview_request() {
@@ -460,8 +464,24 @@ fn normalize_shift(code: KeyCode, mods: KeyModifiers) -> (KeyCode, KeyModifiers)
 /// Through the shell, not split by hand: a writer typing `:sh wc -w *.md | sort`
 /// means the pipe and the glob, and a command line that quietly did not is
 /// worse than one that says it cannot.
-fn run_capturing(line: &str) -> io::Result<String> {
-    let out = std::process::Command::new(shell()).arg("-c").arg(line).output()?;
+fn run_capturing(line: &str, input: Option<&str>) -> io::Result<String> {
+    let mut child = std::process::Command::new(shell())
+        .arg("-c")
+        .arg(line)
+        .stdin(if input.is_some() {
+            std::process::Stdio::piped()
+        } else {
+            std::process::Stdio::null()
+        })
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()?;
+    if let (Some(text), Some(mut pipe)) = (input, child.stdin.take()) {
+        // Written and *closed* — a filter that is still waiting for more input
+        // never gets round to answering.
+        io::Write::write_all(&mut pipe, text.as_bytes())?;
+    }
+    let out = child.wait_with_output()?;
     let mut text = String::from_utf8_lossy(&out.stdout).into_owned();
     let errors = String::from_utf8_lossy(&out.stderr);
     if !errors.trim().is_empty() {

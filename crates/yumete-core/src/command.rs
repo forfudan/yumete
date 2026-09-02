@@ -83,6 +83,9 @@ pub enum Command {
     /// `:!<cmd>` — step out of the way and let it use the terminal
     /// (Feature #129).
     Shell { line: String, interactive: bool },
+    /// `:pipe <cmd>` (or `!`) — send the selection to a command and put what
+    /// it says back in its place.
+    Pipe(String),
     /// `:clipboard-yank` / `:clipboard-paste` — the system clipboard, which
     /// Helix spells the same way (Feature #109).
     Clipboard {
@@ -284,6 +287,13 @@ pub fn parse(input: &str) -> Result<Command, CommandError> {
         } else {
             Some(rest.to_string())
         })),
+        "pipe" => {
+            if rest.is_empty() {
+                Err(CommandError::MissingArgument("pipe"))
+            } else {
+                Ok(Command::Pipe(rest.to_string()))
+            }
+        }
         "sh" => {
             if rest.is_empty() {
                 Err(CommandError::MissingArgument("sh"))
@@ -754,6 +764,12 @@ pub const COMMANDS: &[Entry] = &[
         alias: Some("syn"),
         help: "markdown 還是 typst（不給參數就說現在是哪個）",
         args: Args::Words(SYNTAXES),
+    },
+    Entry {
+        name: "pipe",
+        alias: None,
+        help: "把選區送給一條命令，用它的輸出換掉（`!`）",
+        args: Args::Free("<命令>"),
     },
     Entry {
         name: "sh",
