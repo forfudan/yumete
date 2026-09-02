@@ -330,8 +330,65 @@ Phases are ordered by priority, most writer-critical first:
 | 132 | **The menu spreads across the window**     | tui    | P3    | 26 commands at a glance, column-major | Done |
 | 133 | **The language model yes, the 碼表 no**    | both   | P2    | 27 ms for everyone; `:yume scheme` for the rest | Done |
 | 134 | **靈明 embedded at build time**            | ime    | P2    | never committed; `:yume` says which one answers | Done |
+| 135 | **Release pipeline + Homebrew tap**        | ci     | P2    | see §5.3; deferred until ready to release | Planned |
 
 ---
+
+## 5.3 Releasing, and the Homebrew tap (#135, planned)
+
+Deferred until there is something to release. The investigation is written down
+here so it does not have to be done twice.
+
+**The shape**, copied from `forfudan/decimo`, which already does this well: the
+formula in `forfudan/homebrew-tap` ships **prebuilt tarballs** and Homebrew
+never compiles anything. A GitHub Release on this repo triggers the workflow;
+`workflow_dispatch` runs it by hand.
+
+**Why prebuilt is not merely convenient.** `yumete-ime` depends on `yume-core`
+by *relative path* (`../../../yume/crates/yume-core`), so a source-build formula
+would fail: the sibling repository is not in the tarball. Shipping binaries
+sidesteps it. A `--HEAD` install, or a formula that builds from source, would
+first need that path turned into a git dependency.
+
+**Where the 宇浩 data comes from.** Not from this repository (a compiled 碼表 is
+3.7 MB and does not delta) and not from `yume/data/`, which is gitignored — 102
+MB generated from the assets repository and present only on the author's
+machine. It comes from **`forfudan/yume-release`**, whose releases carry the
+compiled tables for every platform. The Linux asset is the one to use:
+
+```
+Yume-v3.12.0-<build>-linux-x86_64.tar.gz      ~30 MB, plain tar.gz
+  └── share/yume/
+        ling.ytab  symbols.ytab  lang.ywtb  lang.ywl  chaifen.ydiv
+        qing.ytab  xing.ytab  riyue.ytab  pinyin.yflb  lang.ygram
+        charsets/*.ycs  zigen_*.yzg  words_yuling.ywrd
+        VERSION            ← version=, build=, and a SHA-256 per file
+```
+
+Plain `tar.gz`, so any runner can open it — no `hdiutil`, no `dmg2img`. Verified
+against v3.12.0 on 2026-09-02: every file yumete loads is there, and `VERSION`
+is what `crates/yumete-ime/build.rs` reads to date the built-in table.
+
+**The pipeline.**
+
+1. One job downloads that tarball, extracts `share/yume/*`, uploads it as a
+   workflow artifact. One download for the whole run, so the four builds cannot
+   disagree about which 靈明 they embedded.
+2. Four build jobs — macOS arm64, macOS x86_64, Linux x86_64, Linux aarch64 —
+   download it, set `YUMETE_BUILTIN_DIR` to it, `cargo build --release`, then
+   tar the binary **together with the runtime data**, so a Homebrew install has
+   the language model and the 拆分 annotations too, not only the embedded 碼表.
+3. Attach the tarballs and their `.sha256` files to the release.
+4. **Open a pull request against `homebrew-tap`** with the new version and the
+   four checksums. decimo does this last step by hand, and its own workflow
+   comment records what that cost: three releases went out with the tarballs
+   missing, and Homebrew sat four versions behind for four months. The same
+   trap is one manual step away here.
+
+**Release-triggered, not commit-triggered.** A formula pins a versioned URL and
+a checksum, so a commit-triggered build would mean a new formula edit and a new
+`brew upgrade` prompt for every push. Homebrew's own convention is that a
+formula follows releases.
 
 ## 5.1 Helix keybindings & IME hotkeys
 
