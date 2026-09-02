@@ -2412,6 +2412,25 @@ mod tests {
     }
 
     #[test]
+    fn the_insert_caret_does_not_paint_out_a_half_width_character() {
+        // A digit hangs against the slot's right edge. Asking only the left
+        // cell whether the slot is blank says yes, and the caret's ideographic
+        // space then covers the digit — which is what "I typed 1 and got a
+        // space, and the 1 appeared only when I typed the next character"
+        // looks like from the writing end.
+        let mut editor = editor_with("輸入法");
+        editor.on_key(Key::Char('A')); // insert at the end of the line
+        editor.on_key(Key::Char('1'));
+        let config = vertical_config();
+        let buffer = render_vertical(&mut editor, &config, 30, 12);
+
+        let found = (0..30)
+            .flat_map(|x| (0..12).map(move |y| (x, y)))
+            .any(|(x, y)| at(&buffer, x, y) == "1");
+        assert!(found, "the digit was painted over by the caret");
+    }
+
+    #[test]
     fn markdown_is_coloured_without_being_hidden() {
         let mut editor = editor_with("# 第一章\n那**年**冬天");
         let mut config = Config::default();

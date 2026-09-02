@@ -506,6 +506,8 @@ impl Editor {
         // The `[n/total]` indicator is already on the status line; repeating it
         // here would print it twice on every switch.
         self.status = self.current_buffer().display_name().to_string();
+        // The buffer list and the outline are both about *this* file.
+        self.refresh_sidebar();
     }
 
     /// The active buffer.
@@ -1947,12 +1949,9 @@ impl Editor {
     /// Run one key of a `Space` sequence.
     fn handle_space(&mut self, key: Key) {
         match key {
-            Key::Char('e') => self.toggle_sidebar(),
-            // The outline is the sidebar opened on the view that shows it.
-            Key::Char('o') => {
-                let root = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
-                self.open_sidebar_showing(&root, crate::sidebar::View::Outline);
-            }
+            Key::Char('e') => self.show_sidebar(crate::sidebar::View::Explorer),
+            // The outline is the sidebar showing the view that has it.
+            Key::Char('o') => self.show_sidebar(crate::sidebar::View::Outline),
             Key::Char('f') => self.open_file_picker(),
             Key::Char('b') => self.open_buffer_picker(),
             // The two prompts, opened rather than run: a search wants a pattern
@@ -1975,15 +1974,37 @@ impl Editor {
 
     // ---- The file sidebar (Feature #94) ------------------------------------
 
-    /// Show the sidebar and give it the keys, or put it away (`Space e`).
-    fn toggle_sidebar(&mut self) {
-        if self.sidebar.is_some() {
-            self.sidebar = None;
-            self.sidebar_focus = false;
-            return;
+    /// What `Space e` and `Space o` do — one rule for both, so neither is the
+    /// odd one out.
+    ///
+    /// A key that names a view answers three different intentions depending on
+    /// what is already showing, and all three are what a reader means by
+    /// pressing it:
+    ///
+    /// - closed → open it on that view, with the keys.
+    /// - open on **another** view → switch to that view and take the keys. The
+    ///   key means "show me the outline", not "toggle the sidebar".
+    /// - open on **that** view, unfocused → take the keys back.
+    /// - open on that view, focused → put it away. Pressing the same key twice
+    ///   undoes it, which is the one thing every toggle must do.
+    fn show_sidebar(&mut self, view: crate::sidebar::View) {
+        match self.sidebar.as_mut() {
+            Some(sidebar) if sidebar.view() == view && self.sidebar_focus => {
+                self.sidebar = None;
+                self.sidebar_focus = false;
+            }
+            Some(sidebar) => {
+                while sidebar.view() != view {
+                    sidebar.cycle();
+                }
+                self.sidebar_focus = true;
+                self.refresh_sidebar();
+            }
+            None => {
+                let root = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+                self.open_sidebar_showing(&root, view);
+            }
         }
-        let root = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
-        self.open_sidebar_at(&root);
     }
 
     /// Show the sidebar rooted at `root` and give it the keys.
@@ -2013,6 +2034,13 @@ impl Editor {
     ///
     /// The tree builds its own rows from the file system; the other two are the
     /// editor's own knowledge, so they are pushed in from here.
+    /// Refreshed when it is asked for, not on every keystroke.
+    ///
+    /// Building the outline walks the document, and doing that per key is the
+    /// trap this editor has fallen into three times. Headings do not change
+    /// while a sentence is being typed, so the views are rebuilt when the
+    /// sidebar is opened, focused, switched, or the file under it changes —
+    /// every moment a reader is about to look at it.
     fn refresh_sidebar(&mut self) {
         use crate::sidebar::{Row, View};
         let Some(view) = self.sidebar.as_ref().map(|s| s.view()) else {
@@ -4689,6 +4717,44 @@ mod tests {
     }
 
     #[test]
+    fn a_key_that_names_a_view_opens_it_switches_to_it_and_closes_it() {
+        let dir = std::env::temp_dir().join(format!("yumete-toggle-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("ch01.md"), "# 第一章\n").unwrap();
+
+        let mut ed = Editor::new();
+        ed.execute(&format!(":open {}", dir.join("ch01.md").display()))
+            .unwrap();
+        ed.open_sidebar_showing(&dir, crate::sidebar::View::Explorer);
+        assert!(ed.sidebar_focused());
+
+        // The same key again closes it: a toggle that cannot undo itself is not
+        // a toggle.
+        type_keys(&mut ed, " e");
+        assert!(ed.sidebar().is_none());
+
+        // A *different* view's key opens on that view…
+        type_keys(&mut ed, " o");
+        assert_eq!(ed.sidebar().unwrap().view(), crate::sidebar::View::Outline);
+        // …and from there `Space e` means "show me the files", not "close".
+        type_keys(&mut ed, " e");
+        assert_eq!(ed.sidebar().unwrap().view(), crate::sidebar::View::Explorer);
+        assert!(ed.sidebar_focused());
+
+        // Esc hands the keys back without putting it away, and the key takes
+        // them again rather than closing something the writer is not in.
+        ed.on_key(Key::Esc);
+        assert!(ed.sidebar().is_some() && !ed.sidebar_focused());
+        type_keys(&mut ed, " e");
+        assert!(ed.sidebar_focused(), "the keys came back");
+        type_keys(&mut ed, " e");
+        assert!(ed.sidebar().is_none(), "and now it closes");
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
     fn the_sidebar_shows_three_views_of_the_same_question() {
         let dir = std::env::temp_dir().join(format!("yumete-views-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
@@ -4763,10 +4829,12 @@ mod tests {
         assert!(!ed.sidebar_focused(), "the keys went back to the text");
         assert!(ed.sidebar().is_some(), "but the tree stays up");
 
-        // Esc hands the keys back without putting the tree away; `q` puts it
-        // away.
-        ed.on_key(Key::Char(' '));
-        ed.on_key(Key::Char('e'));
+        // The keys are with the text now, so `Space e` takes them back rather
+        // than closing something the writer is not in; the press after that
+        // closes it.
+        type_keys(&mut ed, " e");
+        assert!(ed.sidebar_focused());
+        type_keys(&mut ed, " e");
         assert!(ed.sidebar().is_none(), "Space e closes it again");
 
         std::fs::remove_dir_all(&dir).ok();
