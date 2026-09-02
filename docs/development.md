@@ -272,6 +272,7 @@ Phases are ordered by priority, most writer-critical first:
 | 77  | **Soft wrap in horizontal layout**         | both   | P1    | A paragraph is one line; it must not run off the edge | Done   |
 | 78  | **Goto line**                              | core   | P3    | `10gg`, `:42`, `:goto` — a reader's page reference | Done   |
 | 79  | **Crash recovery**                         | both   | P1    | A dotfile beside the document; `:recover` | Done   |
+| 80  | **Report a broken config**                 | config | P2    | A typo was silently dropped before  | Done   |
 | 68  | 圏点 (emphasis dots)                       | tui    | P5    | mid-term; markup still open         |        |
 | 70  | **標點旁置 (punctuation in the margin)**   | tui    | P3    | 古文 style; `:hanging`              | Done   |
 | 71  | **Mouse wheel scrolls by 縱**              | tui    | P4    | captures the mouse, as Helix does   | Done   |

@@ -341,6 +341,10 @@ Alacritty、Konsole。Apple Terminal 報不出單獨的 Shift。
 `~/.config/yumete/config.toml`，再由工作目錄往上找到的第一個 `.yumete/config.toml`
 逐項覆蓋。
 
+配置檔案讀不通——鍵名打錯、引號沒收——會在啟動時說出來，並且指出是哪個鍵、可用的鍵有
+哪些。認不得的鍵當錯誤處理：`zong_lenght = 24` 應該報錯，而不是看起來像個不管用的設
+定。
+
 ```toml
 [editor]
 tab_width = 4                # `>` 加、`<` 減的列數

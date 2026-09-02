@@ -52,7 +52,7 @@ fn main() -> ExitCode {
     }
 
     // Load global + per-project config and apply the keymap.
-    let config = yumete_config::Config::load();
+    let (config, config_problems) = yumete_config::Config::load_reporting();
     editor.set_key_aliases(config.keys.normal.clone());
     // Layout (Feature #61): the config sets it, a flag overrides for one run,
     // and `:layout` switches it live.
@@ -100,7 +100,15 @@ fn main() -> ExitCode {
     }
     editor.set_segmentation_visible(config.editor.show_segmentation);
 
-    // Say so if a session ended badly and left work behind (Feature #79).
+    // A config file that does not parse is worth one line: silence is how a
+    // typo comes to look like a setting that does not work.
+    if !config_problems.is_empty() {
+        for problem in &config_problems {
+            eprintln!("yumete: {problem}");
+        }
+        editor.set_status(config_problems.join("; "));
+    }
+    // Recovered work outranks a config typo for the one status line there is.
     editor.announce_recovery();
 
     if force_preview || !std::io::stdout().is_terminal() {
