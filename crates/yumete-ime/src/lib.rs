@@ -142,6 +142,22 @@ impl ImeSession {
         ImeSession::new(scheme, yumete_config::data_search_dirs())
     }
 
+    /// A session with no tables in it, and no intention of loading any here.
+    ///
+    /// What stands in while the real one is read on another thread. It is
+    /// deliberately the *same* thing an uninstalled scheme produces — not
+    /// available — so nothing downstream needs a third state to think about:
+    /// Insert mode types plain ASCII, and that is all.
+    pub fn empty(scheme: Scheme) -> Self {
+        ImeSession {
+            engine: Engine::new(CodeTable::new()),
+            scheme,
+            data_dirs: Vec::new(),
+            available: false,
+            annotations: false,
+        }
+    }
+
     /// Wrap a pre-built engine (used in tests and by callers assembling their own
     /// tables). The session is marked available.
     pub fn from_engine(engine: Engine, scheme: Scheme) -> Self {
