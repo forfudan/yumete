@@ -108,13 +108,14 @@ fn main() -> ExitCode {
         }
         editor.set_status(config_problems.join("; "));
     }
-    // Recovered work outranks a config typo for the one status line there is.
-    editor.announce_recovery();
-
     if force_preview || !std::io::stdout().is_terminal() {
         preview(&editor, &config);
         return ExitCode::SUCCESS;
     }
+
+    // Recovered work outranks a config typo for the one status line there is.
+    // Only the editor has one; the preview prints its own notice instead.
+    editor.announce_recovery();
 
     match yumete_tui::run(&mut editor, &config, &mut ime) {
         Ok(()) => ExitCode::SUCCESS,
