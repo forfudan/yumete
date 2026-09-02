@@ -432,15 +432,21 @@ fn gutter_text(i: usize, cursor_line: usize, width: usize, mode: LineNumbers) ->
 /// Append a line's spans with each word tinted by an alternating background
 /// (the segmentation overlay, Feature #24). `ranges` are character columns
 /// within `text`; gaps between them (whitespace) stay untinted.
+///
+/// `first_word` is the index the first range has *in its paragraph*, so that a
+/// word split by a soft wrap keeps one colour across the break and the
+/// alternation does not restart on every screen row.
 fn push_segmented_spans<'a>(
     spans: &mut Vec<Span<'a>>,
     text: &str,
     ranges: &[(usize, usize)],
     colors: [(u8, u8, u8); 2],
+    first_word: usize,
 ) {
     let chars: Vec<char> = text.chars().collect();
     let mut col = 0usize;
-    for (word_index, &(start, end)) in ranges.iter().enumerate() {
+    for (offset, &(start, end)) in ranges.iter().enumerate() {
+        let word_index = first_word + offset;
         let start = start.min(chars.len());
         let end = end.min(chars.len());
         if start >= end {
@@ -733,15 +739,23 @@ fn draw_horizontal(
             ));
         }
 
-        // Highlight the portion of this row covered by the selection.
+        // Highlight the portion of this row covered by the selection. The row's
+        // line break counts as one cell at its end, the way vim and Helix show
+        // it, so a blank line inside a selection is visibly inside it.
         let row_len = row.end - row.start;
-        if has_selection && sel_end > row.start && sel_start < row.start + row_len.max(1) {
+        let reach = row.start + row_len + usize::from(row.ends_line);
+        if has_selection && sel_end > row.start && sel_start < reach {
             let a = sel_start.saturating_sub(row.start).min(row_len);
             let b = (sel_end - row.start).min(row_len);
             let chars: Vec<char> = text.chars().collect();
+            let break_cell = if row.ends_line && sel_end > row.start + row_len {
+                " "
+            } else {
+                ""
+            };
             spans.push(Span::raw(chars[..a].iter().collect::<String>()));
             spans.push(Span::styled(
-                chars[a..b].iter().collect::<String>(),
+                format!("{}{break_cell}", chars[a..b].iter().collect::<String>()),
                 sel_style,
             ));
             spans.push(Span::raw(chars[b..].iter().collect::<String>()));
@@ -757,9 +771,14 @@ fn draw_horizontal(
                 }
             };
             let start_in_line = row.start - rope.line_to_char(row.line);
+            let visible =
+                |&&(a, b): &&(usize, usize)| b > start_in_line && a < start_in_line + row_len;
+            // Which word of the paragraph the row opens on, so the two colours
+            // keep alternating across the break instead of restarting.
+            let first_word = words.iter().position(|w| visible(&w)).unwrap_or(0);
             let sliced: Vec<(usize, usize)> = words
                 .iter()
-                .filter(|&&(a, b)| b > start_in_line && a < start_in_line + row_len)
+                .filter(visible)
                 .map(|&(a, b)| {
                     (
                         a.saturating_sub(start_in_line),
@@ -767,7 +786,7 @@ fn draw_horizontal(
                     )
                 })
                 .collect();
-            push_segmented_spans(&mut spans, &text, &sliced, seg_colors);
+            push_segmented_spans(&mut spans, &text, &sliced, seg_colors, first_word);
         } else {
             spans.push(Span::raw(text));
         }
@@ -835,11 +854,12 @@ fn draw_status(frame: &mut Frame, editor: &Editor, ime: &ImeSession, status_area
             String::new()
         };
         let left = format!(
-            "-- {} --  {}{}{}{}",
+            "-- {} --  {}{}{}{}{}",
             editor.mode_label(),
             ime_tag,
             buffer.display_name(),
             dirty,
+            draft,
             which
         );
         if !editor.status().is_empty() {
@@ -2217,6 +2237,44 @@ mod tests {
             .unwrap();
         let at = terminal.get_cursor_position().unwrap();
         assert_eq!((at.x, at.y), (0, 1));
+    }
+
+    #[test]
+    fn a_word_split_by_a_wrap_keeps_one_colour() {
+        let mut editor = Editor::new();
+        editor.set_segmenter(Box::new(DictionarySegmenter::from_text(
+            "那年 10\n冬天 10\n下雪 10\n以後 10\n",
+            0,
+        )));
+        editor.current_buffer_mut().insert(0, "那年冬天下雪以後");
+        editor.set_segmentation_visible(true);
+        let mut config = wrap_config();
+        config.editor.show_segmentation = true;
+        // Width 8 puts the wrap inside 冬天 — er, between 年 and 冬.
+        let buf = render_wrapped(&mut editor, &config, 8, 5);
+
+        // Whatever the words are, the alternation must not restart on the
+        // second row: the first word of row two carries on from row one.
+        let colour_at = |x: u16, y: u16| buf[(x, y)].style().bg;
+        assert_ne!(colour_at(0, 0), colour_at(4, 0), "两个相邻的词应当颜色不同");
+        assert_eq!(colour_at(4, 0), colour_at(4, 1), "颜色在折行处重新开始了");
+    }
+
+    #[test]
+    fn a_selection_shows_the_line_break_it_covers() {
+        let mut editor = Editor::new();
+        editor.current_buffer_mut().insert(0, "甲\n\n乙\n");
+        let config = wrap_config();
+        // Select the whole file: the blank paragraph in the middle is inside
+        // the selection and must look like it.
+        editor.on_key(Key::Char('%'));
+        let buf = render_wrapped(&mut editor, &config, 8, 5);
+        let (r, g, b) = config.theme.selection;
+        assert_eq!(
+            buf[(0, 1)].style().bg,
+            Some(Color::Rgb(r, g, b)),
+            "空行落在選區裏卻看不出來"
+        );
     }
 
     #[test]
