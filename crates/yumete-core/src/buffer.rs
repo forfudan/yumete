@@ -49,6 +49,9 @@ pub struct Buffer {
     /// and otherwise by reading it. A guess that changed as the writer typed
     /// would change what comes off the page under them.
     syntax: crate::syntax::Syntax,
+    /// Whether that was read out of the file rather than out of its name — a
+    /// guess a project's own setting is entitled to overrule.
+    syntax_guessed: bool,
     /// How many times the text has changed.
     ///
     /// What lets an answer *about the whole document* — which line is inside a
@@ -100,6 +103,7 @@ impl Buffer {
             history: History::default(),
             revision: 0,
             syntax: crate::syntax::Syntax::default(),
+            syntax_guessed: true,
             pending_draft: None,
             owns_swap: false,
         }
@@ -116,6 +120,7 @@ impl Buffer {
             history: History::default(),
             revision: 0,
             syntax: crate::syntax::Syntax::default(),
+            syntax_guessed: true,
             pending_draft: None,
             owns_swap: false,
         }
@@ -140,10 +145,8 @@ impl Buffer {
         // …and so is which markup it is written in. The name says, when it
         // says; otherwise the file itself does.
         let name = path.file_name().map(|n| n.to_string_lossy().into_owned());
-        let syntax = name
-            .as_deref()
-            .and_then(crate::syntax::from_extension)
-            .unwrap_or_else(|| crate::syntax::sniff(&rope.to_string()));
+        let named = name.as_deref().and_then(crate::syntax::from_extension);
+        let syntax = named.unwrap_or_else(|| crate::syntax::sniff(&rope.to_string()));
         Ok(Buffer {
             rope,
             path: Some(path.to_path_buf()),
@@ -155,6 +158,7 @@ impl Buffer {
             pending_draft,
             owns_swap: false,
             syntax,
+            syntax_guessed: named.is_none(),
         })
     }
 
@@ -174,6 +178,11 @@ impl Buffer {
     /// Which markup this file is written in.
     pub fn syntax(&self) -> crate::syntax::Syntax {
         self.syntax
+    }
+
+    /// Whether the markup was read out of the file rather than out of its name.
+    pub fn syntax_was_guessed(&self) -> bool {
+        self.syntax_guessed
     }
 
     /// Say which markup it is written in, overriding what was guessed.

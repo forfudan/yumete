@@ -304,7 +304,9 @@ Phases are ordered by priority, most writer-critical first:
 | 106 | **Markdown or Typst, and which**           | core   | P2    | sniffed for `.txt`; Typst's own syntax | Done |
 | 107 | **A row measured in what is drawn**        | core   | P1    | wysiwyg wrapped in source and left blank rows | Done |
 | 108 | **Bracketed paste**                        | both   | P1    | a paste in Normal used to run as commands | Done |
-| 109 | **The system clipboard, and the mouse**    | both   | P1    | `C-c`, `Space y`/`p`, drag to select | Done |
+| 109 | **The system clipboard, and the mouse**    | both   | P1    | `Space y`/`p`, drag to select       | Done   |
+| 110 | **⌘ chords are the terminal's**            | tui    | P0    | ⌘C read as `c` deleted the selection | Done  |
+| 111 | **Syntax by extension or name**            | config | P2    | a project's word on its own files   | Done   |
 
 ---
 

@@ -65,6 +65,18 @@ fn main() -> ExitCode {
     editor.set_tatechuyoko(config.editor.tatechuyoko);
     editor.set_hanging_punctuation(config.editor.hanging_punctuation);
     editor.set_soft_wrap(config.editor.soft_wrap);
+    editor.set_default_syntax(yumete_core::syntax::Syntax::parse(&config.editor.syntax));
+    // …and what it says about particular extensions or names.
+    editor.set_syntax_by_name(
+        config
+            .syntax
+            .by_name
+            .iter()
+            .filter_map(|(name, language)| {
+                yumete_core::syntax::Syntax::parse(language).map(|s| (name.clone(), s))
+            })
+            .collect(),
+    );
     editor.set_autosave(config.editor.autosave);
     // Which ruby dialect to lay out: whatever the config names, else the one
     // the file's extension implies.
@@ -180,7 +192,6 @@ KEYS (Normal mode, Helix-style):
     gf        open the file:line named on this line (`:grep` results)
     Space     menu: e sidebar, o outline, f files, b buffers, / search, y copy
     C-w       move between the sidebar and the text
-    C-c       copy the selection to the system clipboard (Space p pastes)
     gh gl gs  goto line start / end / first non-blank
     f t F T   find / till a character (forward / backward); A-. repeats it
     J  K      forward / back half a page   (L / H for a whole one)

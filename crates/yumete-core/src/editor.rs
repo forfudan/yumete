@@ -313,6 +313,10 @@ pub struct Editor {
     sidebar: Option<crate::sidebar::Sidebar>,
     /// Whether keys are going to the sidebar rather than to the text.
     sidebar_focus: bool,
+    /// What an unnamed file's markup is taken to be, from the project's config.
+    default_syntax: Option<crate::syntax::Syntax>,
+    /// Which markup a file is in, by extension or by exact name.
+    syntax_by_name: HashMap<String, crate::syntax::Syntax>,
     /// The directory the last `:grep` listing was gathered from, so `gf` on one
     /// of its lines resolves the same relative path it printed.
     grep_root: Option<PathBuf>,
@@ -439,6 +443,8 @@ impl Editor {
             picker: None,
             sidebar: None,
             sidebar_focus: false,
+            default_syntax: None,
+            syntax_by_name: HashMap::new(),
             grep_root: None,
         }
     }
@@ -594,8 +600,34 @@ impl Editor {
             self.show_buffer(i);
             return Ok(());
         }
-        let buffer = Buffer::open(path)?;
+        let mut buffer = Buffer::open(path)?;
+        // A file whose name does not say what it is takes the project's word
+        // for it — by extension, or by that exact name.
+        if buffer.syntax_was_guessed() {
+            let name = buffer.display_name();
+            if let Some(syntax) = self.configured_syntax(&name) {
+                buffer.set_syntax(syntax);
+            }
+        }
         self.add_buffer(buffer);
+        Ok(())
+    }
+
+    /// Open a file this one *pulls in* — a `#include`d chapter.
+    ///
+    /// It inherits the syntax, because a chapter included into a Typst book is
+    /// Typst whatever its name says and whatever is in it: a chapter that is
+    /// nothing but writing has no Typst in it to find, and reading it as
+    /// Markdown would make `*很早*` mean nothing. Only files reached *through*
+    /// an include inherit — opening an unrelated file is not a claim about it.
+    fn open_included_file(&mut self, path: &Path) -> io::Result<()> {
+        let from = self.current_buffer().syntax();
+        self.open_file(path)?;
+        if self.current_buffer().syntax_was_guessed() && from == crate::syntax::Syntax::Typst {
+            self.current_buffer_mut().set_syntax(from);
+            self.markup_cache.borrow_mut().clear();
+            *self.block_cache.borrow_mut() = None;
+        }
         Ok(())
     }
 
@@ -725,7 +757,7 @@ impl Editor {
                 Some(dir) => dir.join(&quoted),
                 None => PathBuf::from(&quoted),
             };
-            if let Err(err) = self.open_file(&full) {
+            if let Err(err) = self.open_included_file(&full) {
                 self.status = format!("cannot open '{quoted}': {err}");
             }
             return;
@@ -928,6 +960,59 @@ impl Editor {
         (to >= start && from <= end).then(|| (from.max(start) - start, to.min(end) - start))
     }
 
+    /// Say what an unnamed file's markup is, for every file opened from now on.
+    ///
+    /// A per-project setting: a manuscript written in Typst but filed as `.txt`
+    /// cannot always be told from prose by reading it — a chapter that is
+    /// nothing but writing has no Typst in it to find.
+    pub fn set_default_syntax(&mut self, syntax: Option<crate::syntax::Syntax>) {
+        self.default_syntax = syntax;
+        self.resettle_syntax();
+    }
+
+    /// Take the project's word for which markup a file is in, by extension or
+    /// by name (Feature #110).
+    ///
+    /// The reliable answer for a manuscript whose files do not say: a novel in
+    /// Typst with its chapters filed as `.txt` is one line of config, and then
+    /// every chapter is read right — including one that is nothing but writing
+    /// and has no Typst in it to find.
+    pub fn set_syntax_by_name(&mut self, by_name: HashMap<String, crate::syntax::Syntax>) {
+        self.syntax_by_name = by_name;
+        self.resettle_syntax();
+    }
+
+    /// Apply what the project says to every file already open that was guessed.
+    fn resettle_syntax(&mut self) {
+        for i in 0..self.buffers.len() {
+            if !self.buffers[i].syntax_was_guessed() {
+                continue;
+            }
+            let name = self.buffers[i].display_name();
+            if let Some(syntax) = self.configured_syntax(&name) {
+                self.buffers[i].set_syntax(syntax);
+            }
+        }
+        self.markup_cache.borrow_mut().clear();
+        *self.block_cache.borrow_mut() = None;
+    }
+
+    /// What the project's config says about a file called `name`.
+    ///
+    /// The exact name wins over the extension, so a project can say "all my
+    /// `.txt` are Typst, except that one".
+    fn configured_syntax(&self, name: &str) -> Option<crate::syntax::Syntax> {
+        if let Some(&syntax) = self.syntax_by_name.get(name) {
+            return Some(syntax);
+        }
+        if let Some(extension) = name.rsplit_once('.').map(|(_, e)| e) {
+            if let Some(&syntax) = self.syntax_by_name.get(extension) {
+                return Some(syntax);
+            }
+        }
+        self.default_syntax
+    }
+
     /// Which markup the file being written is in.
     pub fn syntax(&self) -> crate::syntax::Syntax {
         self.current_buffer().syntax()
@@ -998,13 +1083,25 @@ impl Editor {
         for line in 0..rope.len_lines() {
             let text = rope.line(line).to_string();
             let trimmed = text.trim_end_matches(['\n', '\r']);
-            // A file that imports its chapters is a table of contents, and the
-            // chapters are what a reader wants to jump to.
-            if let Some(path) = quoted_path(trimmed) {
-                out.push((line, 1, path));
-                continue;
+            // A file that pulls its chapters in is a table of contents, and
+            // the chapters are what a reader wants to jump to. `#import` is
+            // not one of them — that borrows a template, it does not add a
+            // chapter — so only `#include` is listed.
+            if trimmed.trim_start().starts_with("#include") {
+                if let Some(path) = quoted_path(trimmed) {
+                    out.push((line, 2, path));
+                    continue;
+                }
             }
-            let mark = trimmed.chars().next().filter(|&c| c == '#' || c == '=');
+            // A heading is spelled `#` in Markdown and `=` in Typst, and only
+            // one of those is a heading in any given file: in Typst `#import`
+            // opens code, and reading it as a heading turns every library the
+            // book borrows into a chapter.
+            let want = match self.current_buffer().syntax() {
+                crate::syntax::Syntax::Markdown => '#',
+                crate::syntax::Syntax::Typst => '=',
+            };
+            let mark = trimmed.chars().next().filter(|&c| c == want);
             let Some(mark) = mark else { continue };
             let depth = trimmed.chars().take_while(|&c| c == mark).count();
             let title = trimmed[depth..].trim();
@@ -2134,10 +2231,6 @@ impl Editor {
                     self.refresh_sidebar();
                 }
             }
-            // Copy out of the editor. `C-c` because `Cmd-C` never arrives —
-            // the terminal keeps it for its own selection — and this is the
-            // key every other application spells "copy" with.
-            Key::Ctrl('c') => self.copy_to_clipboard(),
             Key::Ctrl('f') => self.move_page(count, false, 1.0),
             Key::Ctrl('b') => self.move_page(count, true, 1.0),
             Key::Ctrl('d') => self.move_page(count, false, 0.5),
@@ -5090,7 +5183,8 @@ mod tests {
             .unwrap();
         // The outline is what the file pulls in.
         let names: Vec<String> = ed.outline().into_iter().map(|(_, _, n)| n).collect();
-        assert_eq!(names, ["lib.typ", "ch01.typ", "ch02.typ"]);
+        // `#import` borrows a template; it does not add a chapter.
+        assert_eq!(names, ["ch01.typ", "ch02.typ"]);
 
         // …and `gf` opens one, resolved beside the file that names it rather
         // than beside wherever the editor was started.
@@ -5405,7 +5499,7 @@ mod tests {
         assert_eq!(ed.selection(), (1, 4), "年冬天");
         // Copying hands it to the front end *and* fills the register, because
         // having copied something the next thing a hand reaches for is `p`.
-        ed.on_key(Key::Ctrl('c'));
+        type_keys(&mut ed, " y");
         assert_eq!(ed.take_clipboard_request().as_deref(), Some("年冬天"));
         press(&mut ed, "gg");
         ed.on_key(Key::Char('p'));
@@ -6286,6 +6380,32 @@ mod tests {
         let out = ed.execute(&format!(":wq {}", path.display())).unwrap();
         assert_eq!(out, CommandOutcome::Quit);
         assert_eq!(std::fs::read_to_string(&path).unwrap(), "文");
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn the_project_says_which_markup_its_files_are_in() {
+        let dir = std::env::temp_dir().join(format!("yumete-synconf-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        // A chapter that is nothing but writing: there is no Typst in it to
+        // find, so reading the file cannot settle it. The project can.
+        std::fs::write(dir.join("ch01.txt"), "那年冬天，雪下得比往常都早。\n").unwrap();
+        std::fs::write(dir.join("筆記.txt"), "那年冬天。\n").unwrap();
+
+        let mut ed = Editor::new();
+        ed.set_syntax_by_name(HashMap::from([
+            ("txt".to_string(), crate::syntax::Syntax::Typst),
+            ("筆記.txt".to_string(), crate::syntax::Syntax::Markdown),
+        ]));
+        ed.execute(&format!(":open {}", dir.join("ch01.txt").display()))
+            .unwrap();
+        assert_eq!(ed.syntax(), crate::syntax::Syntax::Typst, "by extension");
+        // The exact name wins: "all my .txt are Typst, except that one".
+        ed.execute(&format!(":open {}", dir.join("筆記.txt").display()))
+            .unwrap();
+        assert_eq!(ed.syntax(), crate::syntax::Syntax::Markdown, "by name");
+
         std::fs::remove_dir_all(&dir).ok();
     }
 

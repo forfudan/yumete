@@ -903,6 +903,13 @@ pub mod typst {
     #[derive(Debug, Default)]
     pub struct BlockScanner {
         in_raw: bool,
+        /// How deep inside a `{`, `(` or `[` the scan is.
+        ///
+        /// Typst code runs across lines — `#show heading: it => block({` opens
+        /// a body that closes several lines later — and every one of those
+        /// lines is code, not writing. Counting brackets is not parsing Typst,
+        /// but it is enough to tell a template apart from a manuscript.
+        depth: i32,
     }
 
     impl BlockScanner {
@@ -911,12 +918,28 @@ pub mod typst {
         }
 
         pub fn feed(&mut self, prefix: &str, _len: usize) -> Block {
-            let trimmed = prefix.trim_end_matches(['\n', '\r']).trim_start();
+            let line = prefix.trim_end_matches(['\n', '\r']);
+            let trimmed = line.trim_start();
             if trimmed.starts_with("```") {
                 self.in_raw = !self.in_raw;
+                self.depth = 0;
                 return Block::Code;
             }
             if self.in_raw {
+                return Block::Code;
+            }
+            // Inside a code body that opened on an earlier line.
+            let was_open = self.depth > 0;
+            if was_open || trimmed.starts_with('#') {
+                for c in line.chars() {
+                    match c {
+                        '{' | '(' | '[' => self.depth += 1,
+                        '}' | ')' | ']' => self.depth = (self.depth - 1).max(0),
+                        _ => {}
+                    }
+                }
+            }
+            if was_open {
                 return Block::Code;
             }
             let equals = trimmed.chars().take_while(|&c| c == '=').count();

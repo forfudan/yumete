@@ -525,6 +525,9 @@ fn ime_handle(
         // Any other printable character (letters start/continue a composition;
         // punctuation and digits are handled by the engine). A literal space
         // with no composition falls through to the editor.
+        // ⌘ is the terminal's; read as a bare letter it would be typed.
+        KeyCode::Char(_)
+            if mods.intersects(KeyModifiers::SUPER | KeyModifiers::HYPER | KeyModifiers::META) => {}
         KeyCode::Char(c) if !mods.contains(KeyModifiers::CONTROL) && c != ' ' => ime.input(c),
         _ => return false,
     }
@@ -537,6 +540,13 @@ fn ime_handle(
 
 /// Translate a terminal key event into a core [`Key`], or `None` to ignore it.
 fn map_key(code: KeyCode, modifiers: KeyModifiers) -> Option<Key> {
+    // ⌘ belongs to the terminal, and with the Kitty protocol on, the terminal
+    // hands us the keypress anyway. Read as a bare letter, `⌘C` is `c` — which
+    // in Normal mode is *change*, so asking for a copy deleted the selection.
+    // Nothing modified by ⌘ is ours.
+    if modifiers.intersects(KeyModifiers::SUPER | KeyModifiers::HYPER | KeyModifiers::META) {
+        return None;
+    }
     match code {
         // Chords first: Helix binds `C-a`/`C-x` and `A-.`, and a bare control
         // character must never reach the buffer as a literal control code.
@@ -3417,6 +3427,39 @@ mod tests {
         assert!(is_actionable(KeyEventKind::Press));
         assert!(is_actionable(KeyEventKind::Repeat));
         assert!(!is_actionable(KeyEventKind::Release));
+    }
+
+    #[test]
+    fn command_key_chords_are_the_terminals_not_ours() {
+        // With the Kitty protocol on, ⌘C really does arrive. Read as a bare
+        // letter it is `c` — *change* — so asking for a copy deleted the
+        // selection. Nothing modified by ⌘ is ours.
+        for c in ['c', 'v', 'a', 'z', 'q'] {
+            assert_eq!(map_key(KeyCode::Char(c), KeyModifiers::SUPER), None, "⌘{c}");
+        }
+        // …and the modifiers that *are* ours still work.
+        assert_eq!(
+            map_key(KeyCode::Char('c'), KeyModifiers::CONTROL),
+            Some(Key::Ctrl('c'))
+        );
+        assert_eq!(
+            map_key(KeyCode::Char('c'), KeyModifiers::NONE),
+            Some(Key::Char('c'))
+        );
+
+        // The IME does not take them either: in Insert, ⌘C would have typed a
+        // `c` into the manuscript.
+        let mut editor = Editor::new();
+        editor.on_key(Key::Char('i'));
+        let mut ime = ImeSession::from_table_text(Scheme::Lingming, "b 吧 八\n");
+        ime_handle(
+            &mut ime,
+            &mut editor,
+            KeyCode::Char('c'),
+            KeyModifiers::SUPER,
+        );
+        assert_eq!(editor.current_buffer().text(), "");
+        assert!(!ime.is_composing());
     }
 
     #[test]
