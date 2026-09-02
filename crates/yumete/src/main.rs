@@ -87,6 +87,12 @@ fn main() -> ExitCode {
             .collect(),
     );
     editor.set_autosave(config.editor.autosave);
+    // Somewhere for a buffer with no file to keep its recovery copy. Only the
+    // front end knows where the data directory is.
+    let drafts = yumete_config::data_dir().join("drafts");
+    if std::fs::create_dir_all(&drafts).is_ok() {
+        editor.keep_drafts_in(drafts);
+    }
     editor.set_dense(config.editor.dense);
 
     // The files, *after* the session's settings. Opening one may turn the page

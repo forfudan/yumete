@@ -336,6 +336,7 @@ Phases are ordered by priority, most writer-critical first:
 | 138 | **A macro keeps its operands**             | core   | P1    | `fq` recorded as `f` and ate the next key | Done |
 | 139 | **A ring of what was yanked**              | core   | P2    | `Space \"`; the last 16, plus the named ones | Done |
 | 140 | **An undo point has to be earned**         | core   | P1    | announced on `snapshot`, kept on the first edit | Done |
+| 141 | **A crash copy for a buffer with no file**  | both   | P2    | in the data dir; `:recover` is what finds them | Done |
 
 ---
 

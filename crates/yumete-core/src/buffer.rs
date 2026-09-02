@@ -88,6 +88,8 @@ pub struct Buffer {
     history: History,    /// What the file looked like when it was last read or written: its size
     /// and modification time. `None` for a buffer with no file.
     seen: Option<(u64, std::time::SystemTime)>,
+    /// Where a buffer with no file keeps its recovery copy.
+    scratch_swap: Option<PathBuf>,
     /// …and a hash of the text that was there.
     ///
     /// The stamp above is the fast question — "might this have changed?" — and
@@ -152,6 +154,7 @@ impl Buffer {
             owns_swap: false,
             seen: None,
             read_as: None,
+            scratch_swap: None,
         }
     }
 
@@ -171,6 +174,7 @@ impl Buffer {
             owns_swap: false,
             seen: None,
             read_as: None,
+            scratch_swap: None,
         }
     }
 
@@ -214,6 +218,7 @@ impl Buffer {
             syntax_guessed: named.is_none(),
             seen: stamp_of(path),
             read_as,
+            scratch_swap: None,
         })
     }
 
@@ -339,7 +344,27 @@ impl Buffer {
     /// writer will never find, and one that goes stale when the document moves.
     /// An unnamed scratch buffer has nowhere to put one, and gets none.
     pub fn swap_path(&self) -> Option<PathBuf> {
-        swap_path_for(self.path.as_deref()?)
+        match &self.path {
+            Some(path) => swap_path_for(path),
+            // A buffer with no file has nowhere of its own to put a copy, which
+            // is why it used to get none — and `yumete` with no argument and an
+            // hour of typing is an ordinary way to start a scene. So it is
+            // given a place in the data directory instead; the editor hands it
+            // one, because only the front end knows where that is.
+            None => self.scratch_swap.clone(),
+        }
+    }
+
+    /// Give this file-less buffer somewhere to keep a recovery copy.
+    pub fn keep_drafts_at(&mut self, path: PathBuf) {
+        if self.path.is_none() && self.scratch_swap.is_none() {
+            self.scratch_swap = Some(path);
+        }
+    }
+
+    /// Whether this buffer is keeping a draft under a name of its own.
+    pub fn scratch_draft(&self) -> Option<&Path> {
+        self.scratch_swap.as_deref()
     }
 
     /// Write the recovery copy, unless a draft this session has not taken over
