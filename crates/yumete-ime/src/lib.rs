@@ -189,7 +189,10 @@ impl ImeSession {
             return "沒有碼表".to_string();
         }
         if self.builtin {
-            return "出廠自帶".to_string();
+            return match builtin_version() {
+                Some(version) => format!("出廠自帶 {version}"),
+                None => "出廠自帶".to_string(),
+            };
         }
         // The manifest knows which file this scheme's 碼表 is; asking it beats
         // guessing at the name.
@@ -599,6 +602,15 @@ pub fn has_builtin_table() -> bool {
     builtin::BUILTIN_TABLE.is_some()
 }
 
+/// Which build of yume the built-in 碼表 came from.
+///
+/// A table compiled into a binary is a *snapshot*, and a writer looking at a
+/// candidate they do not recognise deserves to know how old the snapshot is
+/// before they go looking for a bug in 宇浩.
+pub fn builtin_version() -> Option<&'static str> {
+    builtin::BUILTIN_VERSION
+}
+
 /// Load one entry of the factory data set into `engine`.
 ///
 /// This is yumete's copy of the one dispatch every Yume frontend has — the
@@ -823,7 +835,11 @@ mod tests {
         if has_builtin_table() {
             s.input('a');
             assert!(!s.page_candidates().is_empty(), "and it really answers");
-            assert_eq!(s.table_source(), "出廠自帶");
+            assert!(
+                s.table_source().starts_with("出廠自帶"),
+                "and says which one: {}",
+                s.table_source()
+            );
         }
 
         // Only 靈明 — the others are installed, and without their tables the

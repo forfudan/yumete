@@ -26,6 +26,10 @@ fn main() {
     let mut body = String::new();
     body.push_str(&declare("BUILTIN_TABLE", table.as_deref()));
     body.push_str(&declare("BUILTIN_SYMBOLS", symbols.as_deref()));
+    body.push_str(&format!(
+        "pub const BUILTIN_VERSION: Option<&str> = {:?};\n",
+        table.as_deref().and_then(stamp)
+    ));
     std::fs::write(out.join("builtin.rs"), body).expect("write builtin.rs");
 }
 
@@ -41,6 +45,54 @@ fn declare(name: &str, path: Option<&Path>) -> String {
         }
         None => format!("pub const {name}: Option<&[u8]> = None;\n"),
     }
+}
+
+/// Which build of yume these tables came from.
+///
+/// Yume's own release packages carry a `VERSION` file beside the tables —
+/// `version=3.12.0`, `build=20260828130838` — so the answer is authoritative
+/// rather than guessed from a file name. A data directory assembled by
+/// `scripts/build.sh` has no such file, and there the table's own timestamp is
+/// the honest answer: it says *when*, which is what the question is really
+/// asking.
+fn stamp(table: &Path) -> Option<String> {
+    let dir = table.parent()?;
+    if let Ok(text) = std::fs::read_to_string(dir.join("VERSION")) {
+        println!("cargo:rerun-if-changed={}", dir.join("VERSION").display());
+        let field = |key: &str| {
+            text.lines()
+                .find_map(|l| l.trim().strip_prefix(key))
+                .map(str::to_string)
+        };
+        if let Some(version) = field("version=") {
+            return Some(match field("build=") {
+                Some(build) => format!("{version} ({build})"),
+                None => version,
+            });
+        }
+    }
+    // No VERSION: say when the table was made. A date, not a count of seconds
+    // — the question is "how old is this", and 1788384005 does not answer it.
+    let when = std::fs::metadata(table).ok()?.modified().ok()?;
+    let secs = when.duration_since(std::time::UNIX_EPOCH).ok()?.as_secs();
+    Some(format!("自建 {}", date(secs)))
+}
+
+/// A Unix timestamp as `2026-09-02`.
+///
+/// Hinnant's civil-from-days, which is the whole of the calendar in a dozen
+/// lines and saves a dependency for one string a year.
+fn date(secs: u64) -> String {
+    let days = (secs / 86_400) as i64 + 719_468;
+    let era = days.div_euclid(146_097);
+    let doe = days.rem_euclid(146_097);
+    let yoe = (doe - doe / 1_460 + doe / 36_524 - doe / 146_096) / 365;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let d = doy - (153 * mp + 2) / 5 + 1;
+    let m = if mp < 10 { mp + 3 } else { mp - 9 };
+    let y = yoe + era * 400 + i64::from(m <= 2);
+    format!("{y:04}-{m:02}-{d:02}")
 }
 
 /// Where the installed Yume data lives, in the order the editor itself looks.
