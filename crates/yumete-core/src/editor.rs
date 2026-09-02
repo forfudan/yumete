@@ -650,6 +650,36 @@ impl Editor {
         }
     }
 
+    /// Write the manuscript out for somebody else to typeset (`:export`).
+    ///
+    /// The default name is the document's own with the extension swapped, which
+    /// is what a writer means by "export this chapter"; a path given explicitly
+    /// wins. A scratch buffer has no name to derive one from and must be told.
+    fn export(&mut self, format: &str, path: Option<&str>) -> Result<CommandOutcome, EditorError> {
+        let Some(format) = crate::export::Format::parse(format) else {
+            self.status = format!("no such format '{format}' — html or typst");
+            return Ok(CommandOutcome::Continue);
+        };
+        let target = match path {
+            Some(path) => PathBuf::from(path),
+            None => match self.current_buffer().path() {
+                Some(source) => source.with_extension(format.extension()),
+                None => return Err(EditorError::NoFileName),
+            },
+        };
+        let style = crate::export::Style {
+            vertical: self.layout == Layout::Vertical,
+            hanging: self.hanging,
+            zong_len: self.zong_length,
+            dialects: self.ruby,
+            title: self.current_buffer().display_name(),
+        };
+        let written = crate::export::export(&self.current_buffer().text(), format, &style);
+        std::fs::write(&target, written).map_err(EditorError::Io)?;
+        self.status = format!("wrote {}", target.display());
+        Ok(CommandOutcome::Continue)
+    }
+
     /// The headings of the active buffer, as `(line, depth, title)`.
     ///
     /// Markdown's `#` — no parser, no LSP, no tree-sitter: a heading in a
@@ -794,6 +824,7 @@ impl Editor {
                 Ok(CommandOutcome::Continue)
             }
             Command::CloseBuffer { force } => self.close_buffer(force),
+            Command::Export { format, path } => self.export(&format, path.as_deref()),
             Command::Grep(pattern) => {
                 let root = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
                 self.grep(&pattern, &root)
@@ -4165,6 +4196,35 @@ mod tests {
         press(&mut ed, "gf");
         assert_eq!(ed.current_buffer().display_name(), "ch01.md");
         assert_eq!(ed.cursor_line(), 1);
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn export_names_the_file_after_the_chapter_and_carries_the_layout() {
+        let dir = std::env::temp_dir().join(format!("yumete-ex-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("chapter.md");
+        std::fs::write(&path, "# 第一章\n\n<ruby>永<rt>ㄩㄥˇ</rt></ruby>和九年。\n").unwrap();
+
+        let mut ed = Editor::new();
+        ed.execute(&format!(":open {}", path.display())).unwrap();
+        ed.set_layout(crate::zong::Layout::Vertical);
+        ed.set_hanging_punctuation(true);
+        ed.execute(":export html").unwrap();
+
+        // Named after the chapter, not after the format.
+        let out = std::fs::read_to_string(dir.join("chapter.html")).unwrap();
+        assert!(out.contains("writing-mode: vertical-rl"), "{out}");
+        assert!(out.contains("hanging-punctuation"), "{out}");
+        assert!(out.contains("<h1>第一章</h1>"), "{out}");
+
+        // A scratch buffer has no name to derive one from.
+        let mut ed = Editor::new();
+        assert!(matches!(
+            ed.execute(":export html"),
+            Err(EditorError::NoFileName)
+        ));
 
         std::fs::remove_dir_all(&dir).ok();
     }

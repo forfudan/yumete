@@ -79,6 +79,11 @@ pub enum Command {
     Outline(Option<usize>),
     /// `:grep <pattern>` — search every file in the project.
     Grep(String),
+    /// `:export html|typst [path]` — write the manuscript out for a typesetter.
+    Export {
+        format: String,
+        path: Option<String>,
+    },
     /// `:ruby` — open Ruby mode on the group or selection at the cursor
     /// (Feature #65).
     Ruby,
@@ -220,6 +225,21 @@ pub fn parse(input: &str) -> Result<Command, CommandError> {
         "buffer-close" | "bd" => Ok(Command::CloseBuffer { force: false }),
         "buffer-close!" | "bd!" => Ok(Command::CloseBuffer { force: true }),
         "buffers" | "ls" => Ok(Command::ListBuffers),
+        "export" | "ex" => {
+            let mut parts = rest.splitn(2, char::is_whitespace);
+            let format = parts.next().unwrap_or("").trim();
+            if format.is_empty() {
+                return Err(CommandError::MissingArgument("export"));
+            }
+            let path = parts
+                .next()
+                .map(|p| p.trim().to_string())
+                .filter(|p| !p.is_empty());
+            Ok(Command::Export {
+                format: format.to_string(),
+                path,
+            })
+        }
         "grep" | "gr" => {
             if rest.is_empty() {
                 Err(CommandError::MissingArgument("grep"))
@@ -394,6 +414,11 @@ pub const COMMANDS: &[Entry] = &[
         name: "buffer-close",
         alias: Some("bd"),
         help: "close this file (`!` discards changes)",
+    },
+    Entry {
+        name: "export",
+        alias: Some("ex"),
+        help: "write out as html or typst, with the layout",
     },
     Entry {
         name: "grep",
@@ -682,6 +707,7 @@ mod tests {
             "buffers",
             "toc",
             "grep",
+            "export",
             "ruby",
             "ruby-on",
             "ruby-off",
@@ -707,6 +733,7 @@ mod tests {
                 "open" => ":open a.md".to_string(),
                 "goto" => ":goto 1".to_string(),
                 "grep" => ":grep x".to_string(),
+                "export" => ":export html".to_string(),
                 "scheme" => ":scheme lingming".to_string(),
                 "s/pat/rep/" => ":s/a/b/".to_string(),
                 name => format!(":{name}"),
@@ -717,6 +744,7 @@ mod tests {
                     "o" => ":o a.md".to_string(),
                     "g" => ":g 1".to_string(),
                     "gr" => ":gr x".to_string(),
+                    "ex" => ":ex html".to_string(),
                     "sch" => ":sch lingming".to_string(),
                     alias => format!(":{alias}"),
                 };

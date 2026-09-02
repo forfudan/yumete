@@ -19,6 +19,7 @@
 pub mod buffer;
 pub mod command;
 pub mod editor;
+pub mod export;
 pub mod input;
 pub mod motion;
 pub mod ruby;
