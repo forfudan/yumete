@@ -212,6 +212,8 @@ pub struct Editor {
     /// core owns no IME, so a command that configures one leaves a request here
     /// rather than reaching across the layers.
     chaifen_request: Option<bool>,
+    /// A pending `:scheme` request, waiting for the front end to reach the IME.
+    scheme_request: Option<String>,
     /// The last known 拆分 state, so `:chaifen` can toggle it.
     chaifen: bool,
     /// What Ruby mode is editing the reading of.
@@ -350,6 +352,7 @@ impl Editor {
             last_find: None,
             indent_width: 4,
             chaifen_request: None,
+            scheme_request: None,
             chaifen: false,
             ruby_target: None,
             completion: None,
@@ -846,6 +849,10 @@ impl Editor {
                 };
                 Ok(CommandOutcome::Continue)
             }
+            Command::SetScheme(tag) => {
+                self.scheme_request = Some(tag);
+                Ok(CommandOutcome::Continue)
+            }
             Command::ToggleChaifen => {
                 self.chaifen = !self.chaifen;
                 self.chaifen_request = Some(self.chaifen);
@@ -1107,6 +1114,15 @@ impl Editor {
     /// Install Normal-mode single-key aliases (from the config keymap).
     pub fn set_key_aliases(&mut self, aliases: HashMap<char, char>) {
         self.key_aliases = aliases;
+    }
+
+    /// Take a pending `:scheme` request, if one is waiting for the IME.
+    ///
+    /// The core cannot reach the IME — it does not know one exists — so a
+    /// scheme change is left here and the front end answers with
+    /// [`Self::set_status`].
+    pub fn take_scheme_request(&mut self) -> Option<String> {
+        self.scheme_request.take()
     }
 
     /// Take a pending `:chaifen` request, if one is waiting for the IME.

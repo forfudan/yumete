@@ -79,10 +79,20 @@ fn main() -> ExitCode {
         let _ = editor.execute(&format!(":render-ruby-{name}"));
     }
 
-    // The built-in Yume IME (Feature #27): load the default scheme's tables from
-    // the data directory. When the data is absent the session is unavailable and
-    // Insert mode simply types plain ASCII.
-    let mut ime = ImeSession::from_default_dirs(Scheme::Lingming);
+    // The built-in Yume IME (Feature #27): load the configured scheme's tables
+    // from the data directory. When the data is absent the session is
+    // unavailable and Insert mode simply types plain ASCII — which is also what
+    // happens for a scheme whose tables are not installed, since only 靈明 ships
+    // with yumete.
+    let wanted = Scheme::from_tag(&config.ime.scheme).unwrap_or(Scheme::Lingming);
+    let mut ime = ImeSession::from_default_dirs(wanted);
+    if !ime.available() && wanted != Scheme::Lingming {
+        eprintln!(
+            "yumete: {} is not installed; falling back to 靈明",
+            config.ime.scheme
+        );
+        ime = ImeSession::from_default_dirs(Scheme::Lingming);
+    }
     ime.set_page_size(config.panel.page_size);
     editor.set_chaifen(ime.set_annotations(config.editor.show_chaifen));
 
@@ -198,6 +208,7 @@ KEYS (Normal mode, Helix-style):
               (:w  :w <path>  :q  :q!  :o <path>  :new
               :s/re/new/[g]   :%s/re/new/[g]   regex; $1 captures, \n newline
               :segment  :wq  :count
+              :scheme <tag>    lingming xingchen qingyun riyue pinyin
               :wrap  :nowrap   soft-wrap long paragraphs (on by default)
               :wq [path]       save (optionally save-as) and quit
               :42  :goto n    put the cursor on a line

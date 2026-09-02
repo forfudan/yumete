@@ -31,7 +31,7 @@ use yumete_config::{Config, LineNumbers};
 use yumete_core::wrap::{self, Anchor as WrapAnchor};
 use yumete_core::zong::{Anchor, Layout as WritingLayout};
 use yumete_core::{Editor, Key, KeyOutcome, Mode, TextStore};
-use yumete_ime::ImeSession;
+use yumete_ime::{ImeSession, Scheme};
 
 /// Run the interactive editor until the user quits.
 ///
@@ -178,6 +178,12 @@ pub fn run(editor: &mut Editor, config: &Config, ime: &mut ImeSession) -> io::Re
                             break Ok(());
                         }
                     }
+                }
+                // `:scheme` and `:chaifen` configure the IME, which the core
+                // cannot reach; each leaves a request here and the answer goes
+                // back, so the next toggle starts from what the engine did.
+                if let Some(tag) = editor.take_scheme_request() {
+                    editor.set_status(switch_scheme(ime, &tag));
                 }
                 // `:chaifen` configures the IME, which the core cannot reach;
                 // it leaves the request here and the answer goes back, so the
@@ -334,6 +340,34 @@ fn normalize_shift(code: KeyCode, mods: KeyModifiers) -> (KeyCode, KeyModifiers)
     (code, mods)
 }
 
+/// Switch the IME to the named scheme, and say what happened.
+///
+/// Only 靈明 ships with yumete. The others are yume's own data, installed the
+/// way yume installs it — `scripts/build.sh`, or a download from
+/// yuhao-assess-data into the data directory — and a 碼表 of one's own goes in
+/// `.yumete/` beside the manuscript. So the failure worth naming is not "no
+/// such scheme" but "that scheme's tables are not on this machine".
+fn switch_scheme(ime: &mut ImeSession, tag: &str) -> String {
+    let Some(scheme) = Scheme::from_tag(tag) else {
+        let names = Scheme::ALL
+            .iter()
+            .map(|s| s.tag())
+            .collect::<Vec<_>>()
+            .join(" ");
+        return format!("no scheme '{tag}' — one of: {names}");
+    };
+    let was = ime.scheme();
+    if ime.set_scheme(scheme) {
+        return format!("方案：{}", ime.scheme_name());
+    }
+    // Put back what was working rather than leaving the writer unable to type.
+    ime.set_scheme(was);
+    format!(
+        "{tag} is not installed — put its tables in the data directory \
+         (yume's scripts/build.sh installs them) or a 碼表 of your own in .yumete/"
+    )
+}
+
 /// Route one Insert-mode key press to the IME. Returns `true` when the IME
 /// consumed it (so the editor must not also see it). Committed text is inserted
 /// into the editor at the cursor.
@@ -357,15 +391,36 @@ fn ime_handle(
         KeyCode::Char(' ') if composing => ime.space(),
         // A digit only selects when a candidate is actually under it: with a
         // five-candidate page, `7` must not commit the second candidate of the
-        // page the reader cannot see. Anything else falls through to the engine
-        // as an ordinary keystroke.
+        // page the reader cannot see.
         KeyCode::Char(c)
             if composing && ('1'..='9').contains(&c) && ime.page_has((c as u8 - b'0') as usize) =>
         {
             ime.select_in_page((c as u8 - b'1') as usize);
         }
-        KeyCode::Char('-') if composing => ime.page_up(),
-        KeyCode::Char('=') if composing => ime.page_down(),
+        // …and one that names nothing is *swallowed*, which is the engine's own
+        // factory rule: a digit brushed while typing a code should not push the
+        // candidate list out into the manuscript.
+        KeyCode::Char(c) if composing && ('1'..='9').contains(&c) => {}
+        // The keys the scheme binds to a function. 靈明 puts 選二 on `;` and 選三
+        // on `'`; the engine owns that table, and asking it is also what lets a
+        // custom 碼表 keep a key it uses as a code.
+        KeyCode::Char(c @ (';' | '\'' | '-' | '=')) if composing => {
+            if !ime.press_func(c) {
+                return false;
+            }
+        }
+        // Nothing else reaches the editor mid-composition. An arrow key used to
+        // fall through and move the cursor while the code stayed in the engine,
+        // so the characters committed afterwards landed somewhere else.
+        KeyCode::Left
+        | KeyCode::Right
+        | KeyCode::Up
+        | KeyCode::Down
+        | KeyCode::Home
+        | KeyCode::End
+        | KeyCode::Tab
+        | KeyCode::BackTab
+            if composing => {}
         // Any other printable character (letters start/continue a composition;
         // punctuation and digits are handled by the engine). A literal space
         // with no composition falls through to the editor.
@@ -1640,6 +1695,25 @@ mod tests {
         assert!(text.contains('壹'), "配置的編號字符沒用上: {text:?}");
         assert!(!text.contains("1. "), "還在用 ASCII 編號");
         assert!(text.contains('┌'), "rounded = false 沒用上: {text:?}");
+    }
+
+    #[test]
+    fn a_dead_code_still_shows_what_was_typed() {
+        // In 形碼 a code that matches nothing is the ordinary way to mistype,
+        // and the code lives only in the panel — there is no inline preedit.
+        let mut editor = Editor::new();
+        editor.on_key(Key::Char('i'));
+        let mut ime = ImeSession::from_table_text(Scheme::Lingming, "b 吧 八\n");
+        for c in "qxqx".chars() {
+            ime.input(c);
+        }
+        assert!(ime.page_candidates().is_empty());
+        assert_eq!(ime.display_buffer(), "qxqx");
+
+        let config = vertical_config();
+        let buffer = render_vertical_with(&mut editor, &config, &ime, 40, 16);
+        let text = buffer_text(&buffer);
+        assert!(text.contains('q') && text.contains('x'), "打了什麼看不見");
     }
 
     #[test]

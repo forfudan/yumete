@@ -281,6 +281,7 @@ Phases are ordered by priority, most writer-critical first:
 | 83  | **The selection covers the cursor's 字**   | core   | P1    | Helix's model; `f。d` took no 。    | Done   |
 | 84  | **Regular expressions**                    | core   | P1    | `/` and `:s`; half of revising     | Done   |
 | 85  | **A novel is many files**                  | core   | P1    | `:grep`, `gf`, `:toc`, `:bd`, `:ls` | Done   |
+| 86  | **The scheme's own key bindings**          | ime    | P1    | `;`/`'` 選二三, `:scheme`, 二重注解 | Done   |
 
 ---
 

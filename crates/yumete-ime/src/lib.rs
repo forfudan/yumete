@@ -27,6 +27,7 @@ use std::sync::Arc;
 
 use yume_core::data_manifest::{self, DataFile, DataKind};
 use yume_core::division::DivisionTable;
+use yume_core::key_bindings::{FuncKey, KeyAction};
 use yume_core::lexicon::Lexicon;
 use yume_core::zigen::ZigenTable;
 use yume_core::{
@@ -228,6 +229,53 @@ impl ImeSession {
         self.engine.select_in_page(i);
     }
 
+    /// Press one of the keys the scheme binds to a function — `;` `'` `-` `=`
+    /// — and say whether the engine took it.
+    ///
+    /// The binding table is yume's, not yumete's: 靈明 puts 選二 on `;` and 選三
+    /// on `'`, which a 形碼 writer presses hundreds of times a day, and yumete
+    /// used to send them straight to the engine's punctuation path — committing
+    /// the first candidate and dropping a `；` into the manuscript. Asking
+    /// `key_action` also hands us the scheme-deference rule for free: a custom
+    /// 碼表 that uses `-` as a code key gets its `-` back.
+    ///
+    /// `false` means the key is the host's — pass it on untouched.
+    pub fn press_func(&mut self, ch: char) -> bool {
+        let key = match ch {
+            ';' => FuncKey::Semicolon,
+            '\'' => FuncKey::Quote,
+            '-' => FuncKey::Minus,
+            '=' => FuncKey::Equal,
+            _ => return false,
+        };
+        match self.engine.key_action(key) {
+            KeyAction::Native => false,
+            KeyAction::Noop => true,
+            KeyAction::SelectSecond => {
+                self.engine.select_second();
+                true
+            }
+            KeyAction::SelectThird => {
+                self.engine.select_third();
+                true
+            }
+            KeyAction::PageUp => {
+                self.engine.page_up();
+                true
+            }
+            KeyAction::PageDown => {
+                self.engine.page_down();
+                true
+            }
+            // Everything else this key can mean — punctuation, number mode, a
+            // manual split — the engine already implements on the key itself.
+            _ => {
+                self.engine.input(ch);
+                true
+            }
+        }
+    }
+
     /// Whether the *nth* candidate (1-based) is actually on the page shown.
     ///
     /// The page holds `page_size` candidates, which is configurable, and the
@@ -359,14 +407,16 @@ impl ImeSession {
 
     /// Switch the 拆分 annotation on or off, returning whether it is now on.
     ///
-    /// The engine keeps a *table* of annotation profiles and an index into it;
-    /// yumete only wants the first one on or nothing at all, so this maps that
-    /// choice onto `set_comment_mode`. A scheme that cannot render annotations
-    /// stays off whatever is asked.
+    /// The engine keeps a *table* of annotation profiles and an index into it.
+    /// Profile 1 is 二重注解 — the 拆分 and its code, which is what `:chaifen`
+    /// means. Profile 0 is 多重注解: 拆分 plus 分節碼 plus every reading plus the
+    /// character sets plus the code point, some fifty cells wide, which in a
+    /// terminal panel is not an annotation but a wall. A scheme that cannot
+    /// render annotations stays off whatever is asked.
     pub fn set_annotations(&mut self, on: bool) -> bool {
         self.annotations = on && self.engine.comments_available();
         self.engine
-            .set_comment_mode(if self.annotations { Some(0) } else { None });
+            .set_comment_mode(if self.annotations { Some(1) } else { None });
         self.annotations
     }
 

@@ -305,7 +305,18 @@ Alacritty、Konsole。Apple Terminal 報不出單獨的 Shift。
 它即將加入的文字一致；已打的編碼順著最右一列往下讀，每個候選還差的鍵（下標）順著它
 自己那一列往下讀。
 
-`:chaifen` 打開高亮候選的拆分注解。
+`;` 和 `'` 是**選二、選三**——這是方案的綁定表決定的，不是 yumete 自己定的，所以自
+定義碼表把 `-` 拿去當編碼鍵時，`-` 就還給碼表。組字中的方向鍵、Tab、Home/End 一律不
+漏給編輯器（漏了的話光標會被移走而編碼還在，之後上屏的字就落在別處）。打了一串死碼
+時候選框**不會消失**，裏面就剩你打的那幾個字母——不然你不知道要退幾格。
+
+`:chaifen` 打開高亮候選的**二重注解**（拆分＋編碼）。
+
+**換方案**用 `:scheme lingming|xingchen|qingyun|riyue|pinyin`，或者配置檔的
+`[ime] scheme`。yumete 只自帶靈明；其餘四個方案的碼表跟 yume 一樣，從
+yuhao-assess-data 下載後裝進資料目錄（yume 的 `scripts/build.sh` 會裝）。自己的碼表
+放在 `.yumete/` 裏。碼表不在機器上時 `:scheme` 會說清楚是「沒裝」而不是「沒這個方
+案」，並且留在原來能用的方案上。
 
 ### 一本長篇
 
@@ -392,7 +403,8 @@ GB18030 的舊稿會被擋下並告訴你用 `iconv` 轉，而不是丟一句 Ru
 | `:vertical` `:horizontal` | 直接指定 |
 | `:hanging` | 標點旁置開關 |
 | `:wrap` `:nowrap` | 長段落是否折到下一行 |
-| `:chaifen` `:cf` | 候選旁的拆分注解 |
+| `:chaifen` `:cf` | 候選旁的拆分注解（二重：拆分＋編碼） |
+| `:scheme` `:sch` *方案* | 換輸入方案 |
 | `:ruby` 及相關 | 見 5.4–5.5 |
 
 ---
@@ -430,6 +442,9 @@ ambiguous_width = "wide"     # 「東亞歧義寬度」字符佔幾格："wide" 
 show_ruby = true             # 排出注音
 ruby_dialects = []           # 除檔案後綴推出的那種以外，還要讀的注音方言
 show_chaifen = false         # 候選旁的拆分注解
+
+[ime]
+scheme = "lingming"          # 只有靈明自帶，其餘要先裝碼表
 
 [theme]
 selection = "#3c4664"

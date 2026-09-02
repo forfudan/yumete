@@ -58,6 +58,8 @@ pub enum Command {
     /// `:chaifen` (alias `:cf`) — toggle the 拆分 annotation beside candidates
     /// (Feature #66).
     ToggleChaifen,
+    /// `:scheme <tag>` — switch the input scheme (Feature #86).
+    SetScheme(String),
     /// `:hanging` — 句讀 in the margin rather than a square each (Feature #70).
     ToggleHanging,
     /// `:wrap` / `:nowrap` — whether a paragraph too wide for the terminal
@@ -203,6 +205,13 @@ pub fn parse(input: &str) -> Result<Command, CommandError> {
             }
         }
         "chaifen" | "cf" => Ok(Command::ToggleChaifen),
+        "scheme" | "sch" => {
+            if rest.is_empty() {
+                Err(CommandError::MissingArgument("scheme"))
+            } else {
+                Ok(Command::SetScheme(rest.to_string()))
+            }
+        }
         "hanging" => Ok(Command::ToggleHanging),
         "wrap" => Ok(Command::SetSoftWrap(true)),
         "nowrap" => Ok(Command::SetSoftWrap(false)),
@@ -350,6 +359,11 @@ pub const COMMANDS: &[Entry] = &[
         name: "horizontal",
         alias: None,
         help: "lay the text out in lines",
+    },
+    Entry {
+        name: "scheme",
+        alias: Some("sch"),
+        help: "switch the input scheme (靈明 星陳 卿雲 日月 拼音)",
     },
     Entry {
         name: "chaifen",
@@ -658,6 +672,7 @@ mod tests {
             "goto",
             "recover",
             "chaifen",
+            "scheme",
             "hanging",
             "wrap",
             "nowrap",
@@ -692,6 +707,7 @@ mod tests {
                 "open" => ":open a.md".to_string(),
                 "goto" => ":goto 1".to_string(),
                 "grep" => ":grep x".to_string(),
+                "scheme" => ":scheme lingming".to_string(),
                 "s/pat/rep/" => ":s/a/b/".to_string(),
                 name => format!(":{name}"),
             };
@@ -701,6 +717,7 @@ mod tests {
                     "o" => ":o a.md".to_string(),
                     "g" => ":g 1".to_string(),
                     "gr" => ":gr x".to_string(),
+                    "sch" => ":sch lingming".to_string(),
                     alias => format!(":{alias}"),
                 };
                 assert!(parse(&line).is_ok(), "alias {alias} does not parse");
