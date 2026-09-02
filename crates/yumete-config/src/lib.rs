@@ -181,26 +181,48 @@ pub struct Config {
 impl Config {
     /// Load the global config, then apply the nearest per-project override.
     pub fn load() -> Config {
+        Config::load_reporting().0
+    }
+
+    /// Load the config, and say what went wrong while loading it.
+    ///
+    /// A config file that does not parse — a typo in a key name, a missing
+    /// quote — used to be dropped in silence, and the only sign was that a
+    /// setting did not take. Unknown keys are errors for the same reason:
+    /// `zong_lenght = 24` must say so rather than look like a setting that does
+    /// not work. Each problem is one line, ready for the status bar.
+    pub fn load_reporting() -> (Config, Vec<String>) {
         let mut raw = RawConfig::default();
+        let mut problems = Vec::new();
 
         let global = config_dir().join("config.toml");
         if let Ok(text) = fs::read_to_string(&global) {
-            if let Ok(parsed) = toml::from_str::<RawConfig>(&text) {
-                raw.merge(parsed);
+            match toml::from_str::<RawConfig>(&text) {
+                Ok(parsed) => raw.merge(parsed),
+                Err(err) => problems.push(Self::describe(&global, &err)),
             }
         }
 
         if let Ok(cwd) = env::current_dir() {
             if let Some(local) = local_config_path(&cwd) {
                 if let Ok(text) = fs::read_to_string(&local) {
-                    if let Ok(parsed) = toml::from_str::<RawConfig>(&text) {
-                        raw.merge(parsed);
+                    match toml::from_str::<RawConfig>(&text) {
+                        Ok(parsed) => raw.merge(parsed),
+                        Err(err) => problems.push(Self::describe(&local, &err)),
                     }
                 }
             }
         }
 
-        raw.into_config()
+        (raw.into_config(), problems)
+    }
+
+    /// One line naming a config file and what is wrong with it.
+    fn describe(path: &Path, err: &toml::de::Error) -> String {
+        // toml's message names the offending key and what was expected instead;
+        // its first line is the part a status bar has room for.
+        let detail = err.message().lines().next().unwrap_or("could not be read");
+        format!("{}: {detail}", path.display())
     }
 
     /// Parse a single TOML source (used for a one-file config or in tests).
@@ -300,6 +322,7 @@ pub fn local_config_path(start: &Path) -> Option<PathBuf> {
 // ---- Raw (as-parsed) config with per-field merge -------------------------
 
 #[derive(Deserialize, Default)]
+#[serde(deny_unknown_fields)]
 struct RawConfig {
     #[serde(default)]
     editor: RawEditor,
@@ -312,6 +335,7 @@ struct RawConfig {
 }
 
 #[derive(Deserialize, Default)]
+#[serde(deny_unknown_fields)]
 struct RawPanel {
     markers: Option<String>,
     ink: Option<String>,
@@ -321,6 +345,7 @@ struct RawPanel {
 }
 
 #[derive(Deserialize, Default)]
+#[serde(deny_unknown_fields)]
 struct RawEditor {
     tab_width: Option<usize>,
     line_numbers: Option<String>,
@@ -340,12 +365,14 @@ struct RawEditor {
 }
 
 #[derive(Deserialize, Default)]
+#[serde(deny_unknown_fields)]
 struct RawTheme {
     selection: Option<String>,
     segmentation: Option<Vec<String>>,
 }
 
 #[derive(Deserialize, Default)]
+#[serde(deny_unknown_fields)]
 struct RawKeys {
     #[serde(default)]
     normal: HashMap<String, String>,
@@ -624,6 +651,18 @@ mod tests {
         assert_eq!(c.editor.layout, Layout::Vertical);
         assert_eq!(c.editor.zong_length, 24);
         assert_eq!(c.editor.zong_gap, 2);
+    }
+
+    #[test]
+    fn a_misspelled_key_is_reported_rather_than_dropped() {
+        // The whole file is refused, and the message names the key — the shape
+        // of a typo that used to look like a setting that simply did not work.
+        let Err(err) = toml::from_str::<RawConfig>("[editor]\nzong_lenght = 24\n") else {
+            panic!("a misspelled key parsed as if it were valid");
+        };
+        let line = Config::describe(Path::new("config.toml"), &err);
+        assert!(line.contains("zong_lenght"), "{line}");
+        assert!(line.starts_with("config.toml: "), "{line}");
     }
 
     #[test]
