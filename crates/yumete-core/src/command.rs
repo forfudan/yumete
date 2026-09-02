@@ -79,6 +79,10 @@ pub enum Command {
     /// `:preview` / `:preview off` — hand the file to the real typesetter and
     /// show what it makes (Feature #128).
     SetPreview(bool),
+    /// `:sh <cmd>` — run it and bring the output back into a buffer, or
+    /// `:!<cmd>` — step out of the way and let it use the terminal
+    /// (Feature #129).
+    Shell { line: String, interactive: bool },
     /// `:clipboard-yank` / `:clipboard-paste` — the system clipboard, which
     /// Helix spells the same way (Feature #109).
     Clipboard {
@@ -182,6 +186,20 @@ pub fn parse(input: &str) -> Result<Command, CommandError> {
         return Ok(Command::GotoLine(n));
     }
 
+    // `:!make` is vi's, and it takes the whole rest of the line — including
+    // spaces, and including a `!` of its own — so it is read before the name
+    // split, like a substitution.
+    if let Some(line) = trimmed.strip_prefix('!') {
+        return if line.trim().is_empty() {
+            Err(CommandError::MissingArgument("!"))
+        } else {
+            Ok(Command::Shell {
+                line: line.to_string(),
+                interactive: true,
+            })
+        };
+    }
+
     let mut parts = trimmed.splitn(2, char::is_whitespace);
     let word = parts.next().unwrap();
     let rest = parts.next().unwrap_or("").trim();
@@ -266,6 +284,16 @@ pub fn parse(input: &str) -> Result<Command, CommandError> {
         } else {
             Some(rest.to_string())
         })),
+        "sh" => {
+            if rest.is_empty() {
+                Err(CommandError::MissingArgument("sh"))
+            } else {
+                Ok(Command::Shell {
+                    line: rest.to_string(),
+                    interactive: false,
+                })
+            }
+        }
         "preview" => match rest {
             "" | "on" => Ok(Command::SetPreview(true)),
             "off" => Ok(Command::SetPreview(false)),
@@ -728,6 +756,18 @@ pub const COMMANDS: &[Entry] = &[
         args: Args::Words(SYNTAXES),
     },
     Entry {
+        name: "sh",
+        alias: None,
+        help: "跑一條命令，輸出收進一個緩衝區",
+        args: Args::Free("<命令>"),
+    },
+    Entry {
+        name: "!command",
+        alias: None,
+        help: "讓出終端跑一條命令，直接看它跑（vi 的寫法）",
+        args: Args::None,
+    },
+    Entry {
         name: "preview",
         alias: None,
         help: "交給真正的排版器去排，在瀏覽器裏看",
@@ -1167,6 +1207,8 @@ mod tests {
         for entry in COMMANDS {
             let line = match entry.name {
                 "s/pat/rep/" => ":s/a/b/".to_string(),
+                // Listed under the shape it is typed in, not as a word.
+                "!command" => ":!echo hi".to_string(),
                 name => sample(&format!(":{name}"), &entry.args),
             };
             assert!(parse(&line).is_ok(), "{line} does not parse");

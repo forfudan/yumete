@@ -188,6 +188,21 @@ pub enum Hint {
     Keys(&'static str, Vec<(&'static str, &'static str)>),
 }
 
+/// A command line to run, and how the writer expects to watch it.
+///
+/// Two verbs because there are two situations, and each has a right answer.
+/// `:sh wc -w ch01.md` wants a **number**, and wants it where the text is —
+/// captured, brought back, kept. `:!make` wants to **watch it run**, in colour,
+/// with its own prompts — so the editor steps off the screen and lets it have
+/// the terminal, which is exactly what vi's `:!` has always done and what a
+/// captured pipe cannot reproduce.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Shell {
+    pub line: String,
+    /// Whether it takes over the terminal rather than being captured.
+    pub interactive: bool,
+}
+
 /// A file to hand to the typesetter, or a typesetter to stop.
 ///
 /// `:render full` is how much of the result *this* page shows; this is the
@@ -404,6 +419,8 @@ pub struct Editor {
     /// A pending `:preview`, waiting for the front end — starting a typesetter
     /// is running a program, which only the front end can do.
     preview_request: Option<Preview>,
+    /// A pending `:sh` or `:!`, waiting for the front end.
+    shell_request: Option<Shell>,
     /// The grid this file is being read as, when a schema says it is a table.
     ///
     /// A view, never a copy: the text stays the truth, and this only says how
@@ -619,6 +636,7 @@ impl Editor {
             clipboard_read: None,
             render: Render::On,
             preview_request: None,
+            shell_request: None,
             table: None,
             show_detail: true,
             table_bypass: std::cell::Cell::new(false),
@@ -1609,6 +1627,10 @@ impl Editor {
                 }
                 Ok(CommandOutcome::Continue)
             }
+            Command::Shell { line, interactive } => {
+                self.shell_request = Some(Shell { line, interactive });
+                Ok(CommandOutcome::Continue)
+            }
             Command::SetPreview(on) => {
                 self.preview_request = Some(if on {
                     match self.current_buffer().path() {
@@ -2216,6 +2238,29 @@ impl Editor {
     }
 
     // ---- The hint row (Feature #122) --------------------------------------
+
+    /// A command line the front end should run.
+    pub fn take_shell_request(&mut self) -> Option<Shell> {
+        self.shell_request.take()
+    }
+
+    /// Put what a command said into a buffer of its own.
+    ///
+    /// A buffer rather than a message: the answer to `wc -w` is a number and
+    /// would fit anywhere, but the answer to `git log` is two hundred lines,
+    /// and a writer wants to search it, yank from it and keep it while they go
+    /// on writing. It is the same place `:grep` puts its answers.
+    pub fn provide_shell_output(&mut self, line: &str, output: &str) {
+        let text = if output.trim().is_empty() {
+            format!("$ {line}\n（沒有輸出）\n")
+        } else {
+            format!("$ {line}\n{output}")
+        };
+        let mut buffer = crate::Buffer::from_text(&text);
+        buffer.name_as(&format!("!{line}"));
+        self.add_buffer(buffer);
+        self.status = format!("跑完了：{line}");
+    }
 
     /// A typesetter the front end should start or stop.
     pub fn take_preview_request(&mut self) -> Option<Preview> {

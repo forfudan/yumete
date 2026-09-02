@@ -213,6 +213,20 @@ pub fn run(editor: &mut Editor, config: &Config, ime: &mut ImeSession) -> io::Re
                 }
                 // `:preview` — the real typesetter, in the background. Its
                 // address arrives on a later turn of the loop.
+                // `:sh` brings the answer back; `:!` hands over the screen.
+                if let Some(want) = editor.take_shell_request() {
+                    if want.interactive {
+                        match hand_over(&mut terminal, &want.line) {
+                            Ok(()) => editor.set_status(format!("跑完了：{}", want.line)),
+                            Err(err) => editor.set_status(format!("跑不動：{err}")),
+                        }
+                    } else {
+                        match run_capturing(&want.line) {
+                            Ok(out) => editor.provide_shell_output(&want.line, &out),
+                            Err(err) => editor.set_status(format!("跑不動：{err}")),
+                        }
+                    }
+                }
                 if let Some(want) = editor.take_preview_request() {
                     if let Some(mut running) = job.take() {
                         let _ = running.child.kill();
@@ -439,6 +453,75 @@ fn normalize_shift(code: KeyCode, mods: KeyModifiers) -> (KeyCode, KeyModifiers)
         }
     }
     (code, mods)
+}
+
+/// Run a command line through the shell and bring back what it said.
+///
+/// Through the shell, not split by hand: a writer typing `:sh wc -w *.md | sort`
+/// means the pipe and the glob, and a command line that quietly did not is
+/// worse than one that says it cannot.
+fn run_capturing(line: &str) -> io::Result<String> {
+    let out = std::process::Command::new(shell()).arg("-c").arg(line).output()?;
+    let mut text = String::from_utf8_lossy(&out.stdout).into_owned();
+    let errors = String::from_utf8_lossy(&out.stderr);
+    if !errors.trim().is_empty() {
+        // Kept, and marked: a command that failed said why on stderr, and
+        // dropping it is how a writer ends up staring at an empty buffer.
+        text.push_str(&errors);
+    }
+    Ok(text)
+}
+
+/// Give the terminal back, run the command in it, and take it again.
+///
+/// This is what `:!` has meant since vi, and it is the only honest answer to
+/// "where do I see it run": **in the terminal you started the editor in**. A
+/// captured pipe cannot show a progress bar, cannot colour anything, and cannot
+/// ask you a question. So the editor gets off the screen for the duration and
+/// waits for a key before taking it back, so what was printed can be read.
+fn hand_over<B: ratatui::backend::Backend + io::Write>(
+    terminal: &mut ratatui::Terminal<B>,
+    line: &str,
+) -> io::Result<()> {
+    let _ = execute!(stdout(), DisableMouseCapture, DisableBracketedPaste);
+    ratatui::crossterm::terminal::disable_raw_mode()?;
+    execute!(
+        terminal.backend_mut(),
+        ratatui::crossterm::terminal::LeaveAlternateScreen
+    )?;
+    let status = std::process::Command::new(shell())
+        .arg("-c")
+        .arg(line)
+        .status();
+    println!();
+    match &status {
+        Ok(code) if code.success() => println!("[{line}]"),
+        Ok(code) => println!("[{line} — {code}]"),
+        Err(err) => println!("[{line} — {err}]"),
+    }
+    println!("按任意鍵回到 yumete…");
+    let _ = io::Write::flush(&mut stdout());
+    ratatui::crossterm::terminal::enable_raw_mode()?;
+    // Anything at all: this is "I have read it", not a command.
+    loop {
+        if let Ok(Event::Key(key)) = event::read() {
+            if is_actionable(key.kind) {
+                break;
+            }
+        }
+    }
+    execute!(
+        terminal.backend_mut(),
+        ratatui::crossterm::terminal::EnterAlternateScreen
+    )?;
+    let _ = execute!(stdout(), EnableMouseCapture, EnableBracketedPaste);
+    terminal.clear()?;
+    status.map(|_| ())
+}
+
+/// The shell to run a command line through.
+fn shell() -> String {
+    std::env::var("SHELL").unwrap_or_else(|_| "/bin/sh".to_string())
 }
 
 /// A typesetter running in the background, and where its output is to be seen.
