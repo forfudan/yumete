@@ -134,6 +134,19 @@ fn typst_headings(text: &str) -> Vec<(usize, usize, String)> {
         .collect()
 }
 
+/// Which line holds the row with each key, and what it was built from.
+struct KeyIndex {
+    /// The buffer, its revision, and how many lines it had.
+    of: (usize, u64, usize),
+    keys: HashMap<char, usize>,
+}
+
+impl std::fmt::Debug for KeyIndex {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "KeyIndex({} keys)", self.keys.len())
+    }
+}
+
 /// What the detail panel shows about wherever the cursor is.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Detail {
@@ -301,6 +314,14 @@ pub struct Editor {
     /// Whether the detail panel is wanted. It only appears where there is
     /// something to say, so this is "show it when there is", not "show it".
     show_detail: bool,
+    /// Which line holds the row with each key, and what the document looked
+    /// like when that was worked out.
+    ///
+    /// Without it, drawing the detail panel would scan the whole file once per
+    /// component of the cell under the cursor — three passes over eight
+    /// megabytes, every frame. Keyed by revision, so an edit rebuilds it and a
+    /// stale index can never send anybody to the wrong row.
+    key_index: RefCell<Option<KeyIndex>>,
     /// The last known 拆分 state, so `:chaifen` can toggle it.
     chaifen: bool,
     /// What Ruby mode is editing the reading of.
@@ -477,6 +498,7 @@ impl Editor {
             clipboard_read: None,
             table: None,
             show_detail: true,
+            key_index: RefCell::new(None),
             chaifen: false,
             ruby_target: None,
             completion: None,
@@ -2044,28 +2066,96 @@ impl Editor {
     }
 
     /// Which line holds the row whose key is this character.
+    pub fn row_named(&self, key: char) -> Option<usize> {
+        self.with_key_index(|index| index.get(&key).copied()).flatten()
+    }
+
+    /// Run `f` over the key index, building it first if the document has moved.
     ///
-    /// A scan, not an index. A hundred thousand rows take a few milliseconds to
-    /// walk, which nobody notices on a keystroke they asked for — and an index
-    /// would have to be kept true through every edit, which is a much better
-    /// way to send somebody to the wrong row.
-    fn row_named(&self, key: char) -> Option<usize> {
+    /// Every key is one character — a row of a 拆分表 is *about* a character —
+    /// so the index is a map from that character to its line, and reading it
+    /// needs no allocation at all.
+    fn with_key_index<T>(&self, f: impl FnOnce(&HashMap<char, usize>) -> T) -> Option<T> {
         let view = self.table.as_ref()?;
         let jump = view.schema.jump.as_ref()?;
         let at = view.schema.index_of(&jump.to)?;
-        let rope = self.current_buffer().rope();
-        let first = usize::from(view.schema.header);
-        for line in first..rope.len_lines() {
-            let text = rope.line(line).to_string();
-            let spans = crate::table::cells(&text, view.schema.delimiter);
-            let Some(&span) = spans.get(at) else { continue };
-            let cell = crate::table::cell_text(&text, span);
-            let mut chars = cell.chars();
-            if chars.next() == Some(key) && chars.next().is_none() {
-                return Some(line);
+        let rope_lines = self.current_buffer().line_count();
+        let want = (self.current, self.current_buffer().revision(), rope_lines);
+        // Typing inside a cell cannot move a row or rename another one: table
+        // mode refuses Enter, so the line count is fixed, and the only key that
+        // could change is this row's own — which is only in play when the
+        // cursor is *in* the key column. Everywhere else the index built a
+        // keystroke ago is still exactly true, and rebuilding it would cost ten
+        // milliseconds on every character typed.
+        let typing_elsewhere = self.mode == Mode::Insert && !self.cursor_in_key_column();
+        let fresh = matches!(
+            self.key_index.borrow().as_ref(),
+            Some(index)
+                if index.of == want
+                    || (typing_elsewhere && index.of.0 == want.0 && index.of.2 == want.2)
+        );
+        if !fresh {
+            let rope = self.current_buffer().rope();
+            let first = usize::from(view.schema.header);
+            let mut index = HashMap::with_capacity(rope.len_lines());
+            // `lines()`, not `line(i)`: the iterator walks the rope once, while
+            // asking for each line by number seeks from the root every time —
+            // over a hundred thousand rows that is the whole cost.
+            for (line, row) in rope.lines().enumerate().skip(first) {
+                // Only as far along the row as the key column, and only as far
+                // into that cell as the second character — a key is one
+                // character, so anything longer is not one and the rest of the
+                // line need never be read.
+                let mut field = 0;
+                let mut key = None;
+                let mut count = 0;
+                for c in row.chars() {
+                    if c == view.schema.delimiter {
+                        if field == at {
+                            break;
+                        }
+                        field += 1;
+                        continue;
+                    }
+                    if c == '\n' || c == '\r' {
+                        break;
+                    }
+                    if field == at {
+                        count += 1;
+                        if count > 1 {
+                            key = None;
+                            break;
+                        }
+                        key = Some(c);
+                    }
+                }
+                if let Some(key) = key {
+                    // The first row wins: a table with the same key twice is a
+                    // fault to be found, not a reason to jump to the later one.
+                    index.entry(key).or_insert(line);
+                }
             }
+            *self.key_index.borrow_mut() = Some(KeyIndex {
+                of: want,
+                keys: index,
+            });
         }
-        None
+        let held = self.key_index.borrow();
+        held.as_ref().map(|index| f(&index.keys))
+    }
+
+    /// Whether the cursor is in the column whose values are the row keys.
+    fn cursor_in_key_column(&self) -> bool {
+        let Some(view) = &self.table else {
+            return false;
+        };
+        let Some(jump) = &view.schema.jump else {
+            return false;
+        };
+        match (self.cell_position(), view.schema.index_of(&jump.to)) {
+            (Some((_, cell)), Some(key)) => cell == key,
+            _ => false,
+        }
     }
 
     /// Follow this cell to the row it names.
@@ -6116,6 +6206,61 @@ mod tests {
         press(&mut ed, "0");
         ed.on_key(Key::Enter);
         assert!(ed.status().contains("不指向"), "{}", ed.status());
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn the_key_index_is_not_rebuilt_while_a_cell_is_being_typed_in() {
+        // The panel resolves the cell's components on every frame, so the
+        // index behind it must not be rebuilt on every keystroke — over a
+        // hundred thousand rows that was ten milliseconds a character.
+        let dir = std::env::temp_dir().join(format!("yumete-index-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(dir.join(".yumete").join("tables")).unwrap();
+        std::fs::write(
+            dir.join(".yumete").join("tables").join("t.toml"),
+            "[table]\nfile = ['d.csv']\nkey = 'char'\n\
+             [[table.column]]\nname = 'char'\n[[table.column]]\nname = 'ids_y'\n\
+             [table.jump]\nfrom = ['ids_y']\nto = 'char'\n",
+        )
+        .unwrap();
+        let csv = dir.join("d.csv");
+        std::fs::write(&csv, "char,ids_y\n相,⿰木目\n木,木\n目,目\n").unwrap();
+
+        let mut ed = Editor::new();
+        ed.open_file(&csv).unwrap();
+        ed.goto_line(2);
+        press(&mut ed, "l");
+        assert_eq!(ed.detail().unwrap().links[1], ('木', Some(2)));
+
+        // Typing in a cell that is not the key column cannot move a row or
+        // rename one — table mode refuses Enter — so the index stands.
+        ed.on_key(Key::Char('i'));
+        for _ in 0..5 {
+            ed.on_key(Key::Char('土'));
+            assert_eq!(
+                ed.detail().unwrap().links.last(),
+                Some(&('目', Some(3))),
+                "still resolving, without a rebuild"
+            );
+        }
+        ed.on_key(Key::Esc);
+
+        // But a row that really is renamed is seen, because leaving Insert
+        // makes the index stale again.
+        ed.goto_line(3);
+        press(&mut ed, "c");
+        ed.on_key(Key::Char('水'));
+        ed.on_key(Key::Esc);
+        assert_eq!(ed.cell_text(2, 0), "水", "木's row is now 水's");
+        ed.goto_line(2);
+        press(&mut ed, "l");
+        let links = ed.detail().unwrap().links;
+        assert!(
+            links.iter().any(|&(c, line)| c == '木' && line.is_none()),
+            "木 has no row any more, and the panel says so: {links:?}"
+        );
 
         std::fs::remove_dir_all(&dir).ok();
     }
