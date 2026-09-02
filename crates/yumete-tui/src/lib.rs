@@ -872,8 +872,8 @@ fn draw_command_menu(frame: &mut Frame, editor: &Editor, area: Rect, status: Rec
     let items: Vec<String> = matches
         .iter()
         .map(|e| match e.alias {
-            Some(alias) => format!(":{}  ({alias})", e.name),
-            None => format!(":{}", e.name),
+            Some(alias) => format!("{}{}  ({alias})", e.leading, e.name),
+            None => format!("{}{}", e.leading, e.name),
         })
         .collect();
     // Only the highlighted command's help, on one line. Every command's help at
@@ -3549,7 +3549,7 @@ mod tests {
         assert_eq!(row_text(&buffer, 0).trim_end(), "那**年**冬天");
 
         // …and back to source on demand.
-        editor.execute(":source").unwrap();
+        editor.execute(":wysiwyg off").unwrap();
         let buffer = render(&editor, &config, 40, 6);
         assert_eq!(row_text(&buffer, 0).trim_end(), "那**年**冬**天**");
     }
@@ -3867,8 +3867,19 @@ mod tests {
         }
         let buffer = render_with(&editor, &config, &no_ime(), 90, 24);
         let text = buffer_text(&buffer);
-        assert!(text.contains("ruby-off"), "still matching");
-        assert!(!text.contains(":write"), "no longer matching");
+        assert!(text.contains("ruby"), "still matching");
+        assert!(!text.contains("write"), "no longer matching");
+
+        // A space asks the other question — not "which command" but "what may
+        // follow it" — and the menu answers with the words and their help.
+        editor.on_key(Key::Char(' '));
+        let buffer = render_with(&editor, &config, &no_ime(), 90, 24);
+        let text = buffer_text(&buffer);
+        assert!(text.contains("html"), "the words `:ruby` takes: {text:?}");
+        assert!(!text.contains(":html"), "a word is not a command, so no colon");
+        // A wide glyph covers two cells and only the first carries it.
+        let squashed = text.replace(' ', "");
+        assert!(squashed.contains("排出注音"), "and what each one does");
     }
 
     #[test]

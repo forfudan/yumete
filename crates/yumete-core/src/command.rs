@@ -249,25 +249,31 @@ pub fn parse(input: &str) -> Result<Command, CommandError> {
                 }),
             }
         }
-        "chaifen" | "cf" => Ok(Command::ToggleChaifen),
-        "scheme" | "sch" => {
-            if rest.is_empty() {
-                Err(CommandError::MissingArgument("scheme"))
-            } else {
-                Ok(Command::SetScheme(rest.to_string()))
-            }
-        }
+
         "hanging" => Ok(Command::ToggleHanging),
         "markup" | "md" => Ok(Command::ToggleMarkup),
-        "clipboard-yank" | "cy" => Ok(Command::Clipboard { yank: true }),
-        "clipboard-paste" | "cp" => Ok(Command::Clipboard { yank: false }),
+        "clipboard" => match rest {
+            "yank" => Ok(Command::Clipboard { yank: true }),
+            "paste" => Ok(Command::Clipboard { yank: false }),
+            "" => Err(CommandError::MissingArgument("clipboard")),
+            other => Err(CommandError::InvalidArgument {
+                command: "clipboard",
+                value: other.to_string(),
+            }),
+        },
         "syntax" | "syn" => Ok(Command::SetSyntax(if rest.is_empty() {
             None
         } else {
             Some(rest.to_string())
         })),
-        "wysiwyg" | "wys" => Ok(Command::SetWysiwyg(true)),
-        "source" | "src" => Ok(Command::SetWysiwyg(false)),
+        "wysiwyg" => match rest {
+            "" | "on" => Ok(Command::SetWysiwyg(true)),
+            "off" => Ok(Command::SetWysiwyg(false)),
+            other => Err(CommandError::InvalidArgument {
+                command: "wysiwyg",
+                value: other.to_string(),
+            }),
+        },
         // `:wrap` on its own still means what it always meant — turn wrapping
         // on — and leaves the measure alone; a number sets the measure.
         "dense" => match rest {
@@ -286,21 +292,32 @@ pub fn parse(input: &str) -> Result<Command, CommandError> {
                 value: other.to_string(),
             }),
         },
-        "wrap" if rest.is_empty() => Ok(Command::SetSoftWrap(true)),
-        "wrap" => match rest.parse::<usize>() {
-            Ok(0) => Ok(Command::SetMeasure(None)),
-            Ok(n) => Ok(Command::SetMeasure(Some(n))),
-            Err(_) => Err(CommandError::InvalidArgument {
-                command: "wrap",
-                value: rest.to_string(),
+        // On its own it turns wrapping on and leaves the measure alone; a
+        // number sets the measure; `0` gives the window back; `off` stops
+        // wrapping altogether.
+        "wrap" => match rest {
+            "" | "on" => Ok(Command::SetSoftWrap(true)),
+            "off" => Ok(Command::SetSoftWrap(false)),
+            "0" => Ok(Command::SetMeasure(None)),
+            n => match n.parse::<usize>() {
+                Ok(n) => Ok(Command::SetMeasure(Some(n))),
+                Err(_) => Err(CommandError::InvalidArgument {
+                    command: "wrap",
+                    value: n.to_string(),
+                }),
+            },
+        },
+        "buffer" => match rest {
+            "next" => Ok(Command::NextBuffer),
+            "previous" => Ok(Command::PreviousBuffer),
+            "close" => Ok(Command::CloseBuffer { force: false }),
+            "close!" => Ok(Command::CloseBuffer { force: true }),
+            "list" | "" => Ok(Command::ListBuffers),
+            other => Err(CommandError::InvalidArgument {
+                command: "buffer",
+                value: other.to_string(),
             }),
         },
-        "nowrap" => Ok(Command::SetSoftWrap(false)),
-        "buffer-next" | "bn" => Ok(Command::NextBuffer),
-        "buffer-previous" | "bp" => Ok(Command::PreviousBuffer),
-        "buffer-close" | "bd" => Ok(Command::CloseBuffer { force: false }),
-        "buffer-close!" | "bd!" => Ok(Command::CloseBuffer { force: true }),
-        "buffers" | "ls" => Ok(Command::ListBuffers),
         "export" | "ex" => {
             let mut parts = rest.splitn(2, char::is_whitespace);
             let format = parts.next().unwrap_or("").trim();
@@ -374,37 +391,7 @@ pub fn parse(input: &str) -> Result<Command, CommandError> {
                 }
             }
         }
-        "ruby-on" => Ok(Command::RenderRuby {
-            dialect: None,
-            on: true,
-        }),
-        "ruby-off" => Ok(Command::RenderRuby {
-            dialect: None,
-            on: false,
-        }),
-        // `:render-ruby-html`, `:render-ruby-typst-off`, `:format-ruby-typst`.
-        other if other.starts_with("render-ruby-") || other.starts_with("format-ruby-") => {
-            let (verb, rest) = other.split_at("render-ruby-".len());
-            let (name, on) = match rest.strip_suffix("-off") {
-                Some(name) => (name, false),
-                None => (rest, true),
-            };
-            let dialect =
-                Dialect::parse_name(name).ok_or_else(|| CommandError::InvalidArgument {
-                    command: "ruby",
-                    value: name.to_string(),
-                })?;
-            Ok(if verb.starts_with("format") {
-                Command::FormatRuby(dialect)
-            } else {
-                Command::RenderRuby {
-                    dialect: Some(dialect),
-                    on,
-                }
-            })
-        }
-        "vertical" => Ok(Command::SetLayout(Some(Layout::Vertical))),
-        "horizontal" => Ok(Command::SetLayout(Some(Layout::Horizontal))),
+
         other => Err(CommandError::Unknown(other.to_string())),
     }
 }
@@ -453,6 +440,10 @@ pub struct Choice {
     pub name: &'static str,
     pub alias: Option<&'static str>,
     pub help: &'static str,
+    /// What is written before it when it is shown: `:` for a command, nothing
+    /// for a word it takes. A colon on `on` would be a lie about how to type
+    /// it.
+    pub leading: &'static str,
 }
 
 /// The two words every switch takes.
@@ -468,6 +459,63 @@ const YUME: &[Word] = &[
         name: "chaifen",
         help: "候選旁的拆分注解",
         then: Args::Words(ON_OFF),
+    },
+];
+
+/// What `:clipboard` does — the system one, not a register.
+const CLIPBOARD: &[Word] = &[
+    Word {
+        name: "yank",
+        help: "選區送到系統剪貼簿",
+        then: Args::None,
+    },
+    Word {
+        name: "paste",
+        help: "從系統剪貼簿貼進來",
+        then: Args::None,
+    },
+];
+
+/// What `:buffer` does.
+const BUFFERS: &[Word] = &[
+    Word {
+        name: "list",
+        help: "列出開着的檔案",
+        then: Args::None,
+    },
+    Word {
+        name: "next",
+        help: "下一個",
+        then: Args::None,
+    },
+    Word {
+        name: "previous",
+        help: "上一個",
+        then: Args::None,
+    },
+    Word {
+        name: "close",
+        help: "關掉這一個（`close!` 不管改動）",
+        then: Args::None,
+    },
+];
+
+/// What `:wrap` takes.
+const WRAP: &[Word] = &[
+    Word {
+        name: "on",
+        help: "太寬的段落折到下一行",
+        then: Args::None,
+    },
+    Word {
+        name: "off",
+        help: "讓它跑出右邊",
+        then: Args::None,
+    },
+    Word {
+        name: "0",
+        help: "尺度用窗口寬（`:wrap 50` 是固定五十欄）",
+        then: Args::None,
     },
 ];
 
@@ -634,52 +682,16 @@ pub const COMMANDS: &[Entry] = &[
         args: Args::Words(LAYOUTS),
     },
     Entry {
-        name: "vertical",
-        alias: None,
-        help: "lay the text out in 縱",
-        args: Args::None,
-    },
-    Entry {
-        name: "horizontal",
-        alias: None,
-        help: "lay the text out in lines",
-        args: Args::None,
-    },
-    Entry {
         name: "yume",
         alias: None,
         help: "輸入法：方案、拆分注解",
         args: Args::Words(YUME),
     },
     Entry {
-        name: "scheme",
-        alias: Some("sch"),
-        help: "switch the input scheme (靈明 星陳 卿雲 日月 拼音)",
-        args: Args::Free("<方案名>"),
-    },
-    Entry {
-        name: "chaifen",
-        alias: Some("cf"),
-        help: "拆分 beside candidates",
-        args: Args::Words(ON_OFF),
-    },
-    Entry {
         name: "hanging",
         alias: None,
         help: "句讀 in the margin (標點旁置)",
         args: Args::Words(ON_OFF),
-    },
-    Entry {
-        name: "clipboard-yank",
-        alias: Some("cy"),
-        help: "選區複製到系統剪貼簿（空格 y）",
-        args: Args::None,
-    },
-    Entry {
-        name: "clipboard-paste",
-        alias: Some("cp"),
-        help: "從系統剪貼簿貼上（空格 p）",
-        args: Args::None,
     },
     Entry {
         name: "syntax",
@@ -695,15 +707,9 @@ pub const COMMANDS: &[Entry] = &[
     },
     Entry {
         name: "wysiwyg",
-        alias: Some("wys"),
+        alias: None,
         help: "所見即所得：標記只在光標那一處展開",
-        args: Args::None,
-    },
-    Entry {
-        name: "source",
-        alias: Some("src"),
-        help: "回到源碼",
-        args: Args::None,
+        args: Args::Words(ON_OFF),
     },
     Entry {
         name: "dense",
@@ -721,25 +727,19 @@ pub const COMMANDS: &[Entry] = &[
         name: "wrap",
         alias: None,
         help: "wrap long paragraphs to the next row; `:wrap 50` sets a measure",
-        args: Args::Free("<欄寬，0 = 用窗口寬>"),
+        args: Args::Words(WRAP),
     },
     Entry {
-        name: "nowrap",
+        name: "clipboard",
         alias: None,
-        help: "let long paragraphs run off the edge",
-        args: Args::None,
+        help: "系統剪貼簿：送出去、貼進來",
+        args: Args::Words(CLIPBOARD),
     },
     Entry {
-        name: "buffer-next",
-        alias: Some("bn"),
-        help: "show the next open file (gn)",
-        args: Args::None,
-    },
-    Entry {
-        name: "buffer-close",
-        alias: Some("bd"),
-        help: "close this file (`!` discards changes)",
-        args: Args::None,
+        name: "buffer",
+        alias: None,
+        help: "開着的檔案：列出、切換、關掉",
+        args: Args::Words(BUFFERS),
     },
     Entry {
         name: "export",
@@ -760,58 +760,10 @@ pub const COMMANDS: &[Entry] = &[
         args: Args::Free("<第幾條，不寫就列出來>"),
     },
     Entry {
-        name: "buffers",
-        alias: Some("ls"),
-        help: "name every open file",
-        args: Args::None,
-    },
-    Entry {
-        name: "buffer-previous",
-        alias: Some("bp"),
-        help: "show the previous one (gp)",
-        args: Args::None,
-    },
-    Entry {
         name: "ruby",
         alias: None,
         help: "改這裏的注音；`:ruby on|off` 是排不排",
         args: Args::Words(RUBY),
-    },
-    Entry {
-        name: "ruby-on",
-        alias: None,
-        help: "lay readings out",
-        args: Args::None,
-    },
-    Entry {
-        name: "ruby-off",
-        alias: None,
-        help: "show the ruby markup",
-        args: Args::None,
-    },
-    Entry {
-        name: "render-ruby-html",
-        alias: None,
-        help: "read <ruby> markup",
-        args: Args::None,
-    },
-    Entry {
-        name: "render-ruby-typst",
-        alias: None,
-        help: "read #ruby() markup",
-        args: Args::None,
-    },
-    Entry {
-        name: "format-ruby-html",
-        alias: None,
-        help: "rewrite readings as HTML",
-        args: Args::None,
-    },
-    Entry {
-        name: "format-ruby-typst",
-        alias: None,
-        help: "rewrite readings as Typst",
-        args: Args::None,
     },
     Entry {
         name: "s/pat/rep/",
@@ -864,6 +816,7 @@ pub fn complete_at(line: &str) -> (usize, Vec<Choice>) {
                 name: e.name,
                 alias: e.alias,
                 help: e.help,
+                leading: ":",
             })
             .collect(),
         Some(&(_, head)) => {
@@ -891,6 +844,7 @@ pub fn complete_at(line: &str) -> (usize, Vec<Choice>) {
                         name: w.name,
                         alias: None,
                         help: w.help,
+                        leading: "",
                     })
                     .collect(),
                 // A path or free text is the caller's business; there is
@@ -900,6 +854,7 @@ pub fn complete_at(line: &str) -> (usize, Vec<Choice>) {
                     name: "",
                     alias: None,
                     help: what,
+                    leading: "",
                 }],
                 Args::None | Args::Path => Vec::new(),
             }
@@ -1008,14 +963,8 @@ mod tests {
             parse(":layout h"),
             Ok(Command::SetLayout(Some(Layout::Horizontal)))
         );
-        assert_eq!(
-            parse(":vertical"),
-            Ok(Command::SetLayout(Some(Layout::Vertical)))
-        );
-        assert_eq!(
-            parse(":horizontal"),
-            Ok(Command::SetLayout(Some(Layout::Horizontal)))
-        );
+        // `:vertical` was the value wearing the setting's name; it is gone.
+        assert_eq!(parse(":vertical"), Err(CommandError::Unknown("vertical".into())));
         assert_eq!(
             parse(":layout sideways"),
             Err(CommandError::InvalidArgument {
@@ -1026,9 +975,17 @@ mod tests {
     }
 
     #[test]
-    fn parses_chaifen_toggle() {
-        assert_eq!(parse(":chaifen"), Ok(Command::ToggleChaifen));
-        assert_eq!(parse(":cf"), Ok(Command::ToggleChaifen));
+    fn the_input_method_lives_under_one_word() {
+        assert_eq!(parse(":yume chaifen"), Ok(Command::ToggleChaifen));
+        assert_eq!(
+            parse(":yume scheme lingming"),
+            Ok(Command::SetScheme("lingming".into()))
+        );
+        // The flat spellings are gone: `:chaifen` said nothing about which of
+        // the editor's many parts it belonged to, and `:scheme` even less.
+        assert_eq!(parse(":chaifen"), Err(CommandError::Unknown("chaifen".into())));
+        assert_eq!(parse(":scheme x"), Err(CommandError::Unknown("scheme".into())));
+        assert_eq!(parse(":yume"), Err(CommandError::MissingArgument("yume")));
     }
 
     #[test]
@@ -1072,12 +1029,14 @@ mod tests {
             COMMANDS.len(),
             "`:` alone lists them all"
         );
+        // One name, not three: `:ruby-on` and `:ruby-off` were the setting
+        // wearing the verb's name, and they are now words `:ruby` takes.
         let ruby: Vec<&str> = complete("ruby").iter().map(|e| e.name).collect();
-        assert_eq!(ruby, ["ruby", "ruby-on", "ruby-off"]);
-        // Aliases match too, so `:cf` finds the command it is short for.
+        assert_eq!(ruby, ["ruby"]);
+        // Aliases match too, so `:md` finds the command it is short for.
         assert_eq!(
-            complete("cf").iter().map(|e| e.name).collect::<Vec<_>>(),
-            ["chaifen"]
+            complete("md").iter().map(|e| e.name).collect::<Vec<_>>(),
+            ["markup"]
         );
         assert!(complete("zzz").is_empty());
     }
@@ -1126,48 +1085,22 @@ mod tests {
     fn every_command_worth_finding_is_listed() {
         for name in [
             "open",
-            "new",
             "write",
             "quit",
-            "undo",
-            "redo",
-            "segment",
-            "layout",
-            "vertical",
-            "horizontal",
-            "wq",
-            "count",
             "goto",
-            "recover",
-            "chaifen",
-            "scheme",
-            "hanging",
-            "clipboard-yank",
-            "clipboard-paste",
-            "syntax",
-            "markup",
-            "wysiwyg",
-            "source",
-            "dense",
-            "table",
-            "yume",
-            "wrap",
-            "nowrap",
-            "buffer-next",
-            "buffer-previous",
-            "buffer-close",
-            "buffers",
-            "toc",
+            "count",
             "grep",
+            "toc",
             "export",
             "ruby",
-            "ruby-on",
-            "ruby-off",
-            "render-ruby-html",
-            "render-ruby-typst",
-            "format-ruby-html",
-            "format-ruby-typst",
-        ] {
+            "yume",
+            "buffer",
+            "clipboard",
+            "layout",
+            "wrap",
+            "table",
+            "dense",
+                ] {
             assert!(
                 COMMANDS.iter().any(|e| e.name == name),
                 "`:{name}` works but is not in the command list, so nothing shows it"

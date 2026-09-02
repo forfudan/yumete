@@ -70,15 +70,15 @@ Early development, but already an interactive modal editor. Implemented so far:
   right of its 縱. The markup is not yumete's own — HTML `<ruby>漢<rt>hàn</rt></ruby>`
   and Typst `#ruby("漢", "hàn")` are both read, several at once, chosen by the
   file's extension. **Ruby mode** (`:ruby`) edits the reading, which with
-  readings laid out is not on screen to move a cursor into; `:ruby-on` /
-  `:ruby-off` control rendering, `:render-ruby-<dialect>` picks which markups to
-  read, and `:format-ruby-<dialect>` rewrites the whole buffer into one.
+  readings laid out is not on screen to move a cursor into; `:ruby on` / `:ruby
+  off` control rendering, `:ruby <dialect> [on|off]` picks which markups to
+  read, and `:ruby format <dialect>` rewrites the whole buffer into one.
 
 - **#66 IME in the search and command lines** — `/` composes Chinese, so a
   Chinese document can actually be searched; a lone-Shift tap toggles 中/英 there
   too, the preedit shows inline and the candidate panel floats above the prompt.
   `:` gets the same, so `:s/中文/中文/` works — but drops to 英 on the way in and
-  hands 中 back on the way out, because command *names* are ASCII. `:chaifen`
+  hands 中 back on the way out, because command *names* are ASCII. `:yume chaifen`
   toggles the 拆分 annotation beside candidates (off by default,
   `[editor] show_chaifen`).
 
@@ -125,7 +125,7 @@ Early development, but already an interactive modal editor. Implemented so far:
   matters here more than in a code editor: a Chinese paragraph is one line of
   several hundred characters. Latin words are kept whole and 禁則處理 is applied
   (no 。、」）at the head of a row, no 「（ at the end of one). `j` and `k` walk
-  the rows the reader sees. `:nowrap` turns it off; `[editor] soft_wrap`.
+  the rows the reader sees. `:wrap off` turns it off; `[editor] soft_wrap`.
 
 - **#79 Crash recovery** — while a document has unsaved changes, a copy is kept
   beside it (`chapter.md` → `.chapter.md.yumete`), rewritten every few seconds
