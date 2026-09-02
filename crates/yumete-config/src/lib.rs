@@ -78,6 +78,11 @@ pub struct EditorConfig {
     /// unsaved changes (Feature #79). On by default, and removed on save and on
     /// quit, so in an ordinary session it is never seen.
     pub autosave: bool,
+    /// Whether East-Asian Ambiguous characters — `—` `…` `“” ‘’` `·` — are two
+    /// cells wide (Feature #81). `"wide"` by default: this is an editor for
+    /// 漢字 prose, and those characters are drawn wide by the CJK fonts such
+    /// prose is read in. `"narrow"` for a Latin font.
+    pub ambiguous_wide: bool,
 }
 
 impl Default for EditorConfig {
@@ -98,6 +103,7 @@ impl Default for EditorConfig {
             hanging_punctuation: false,
             soft_wrap: true,
             autosave: true,
+            ambiguous_wide: true,
         }
     }
 }
@@ -362,6 +368,7 @@ struct RawEditor {
     hanging_punctuation: Option<bool>,
     soft_wrap: Option<bool>,
     autosave: Option<bool>,
+    ambiguous_width: Option<String>,
 }
 
 #[derive(Deserialize, Default)]
@@ -425,6 +432,9 @@ impl RawConfig {
         }
         if other.editor.autosave.is_some() {
             self.editor.autosave = other.editor.autosave;
+        }
+        if other.editor.ambiguous_width.is_some() {
+            self.editor.ambiguous_width = other.editor.ambiguous_width.clone();
         }
         if other.theme.selection.is_some() {
             self.theme.selection = other.theme.selection;
@@ -504,6 +514,15 @@ impl RawConfig {
         }
         if let Some(on) = self.editor.autosave {
             config.editor.autosave = on;
+        }
+        if let Some(width) = self.editor.ambiguous_width {
+            // An unknown value keeps the default rather than picking one: a
+            // typo here shifts every line on the page.
+            match width.trim().to_ascii_lowercase().as_str() {
+                "wide" | "double" | "full" => config.editor.ambiguous_wide = true,
+                "narrow" | "single" | "half" => config.editor.ambiguous_wide = false,
+                _ => {}
+            }
         }
         if let Some(hex) = self.theme.selection {
             if let Some(rgb) = parse_hex(&hex) {
