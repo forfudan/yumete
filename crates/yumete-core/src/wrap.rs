@@ -46,6 +46,50 @@ use yumete_cjk::{grapheme_width, graphemes};
 /// too narrow; callers clamp to it rather than producing one character per row.
 pub const MIN_WRAP_WIDTH: usize = 8;
 
+/// How the page is measured: how wide it is, and which characters of a line
+/// are not on it.
+///
+/// The second half is what makes 所見即所得 wrap correctly. Measuring rows in
+/// *source* characters puts a row's worth of hidden markup on a row of its own,
+/// which draws as a blank line in the middle of a paragraph. A row holds what
+/// fits **on the screen**.
+#[derive(Clone, Copy)]
+pub struct Measure<'a> {
+    width: usize,
+    hidden: &'a dyn Fn(usize) -> Vec<(usize, usize)>,
+}
+
+/// A page with nothing hidden, for callers that show the source as it is.
+const NOTHING_HIDDEN: &dyn Fn(usize) -> Vec<(usize, usize)> = &|_| Vec::new();
+
+impl<'a> Measure<'a> {
+    /// `width` cells, with every character on the page.
+    pub fn plain(width: usize) -> Measure<'static> {
+        Measure {
+            width: width.max(1),
+            hidden: NOTHING_HIDDEN,
+        }
+    }
+
+    /// `width` cells, with `hidden` naming each line's markup that is off it.
+    pub fn new(width: usize, hidden: &'a dyn Fn(usize) -> Vec<(usize, usize)>) -> Measure<'a> {
+        Measure {
+            width: width.max(1),
+            hidden,
+        }
+    }
+
+    /// How wide the page is.
+    pub fn width(self) -> usize {
+        self.width
+    }
+
+    /// The markup off `line`, as columns within it.
+    fn off(self, line: usize) -> Vec<(usize, usize)> {
+        (self.hidden)(line)
+    }
+}
+
 /// One visual row: the slice of a logical line that fits on one screen row.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Row {
@@ -144,6 +188,18 @@ const MAX_KINSOKU_RETREAT: usize = 2;
 /// Always returns at least one row, so an empty paragraph still occupies a
 /// screen row and can hold the caret.
 pub fn line_rows(text: &str, width: usize) -> Vec<(usize, usize)> {
+    line_rows_hiding(text, width, &[])
+}
+
+/// [`line_rows`], with `hidden` naming the characters that are not on the page.
+///
+/// They take no width, so a row holds as much *writing* as fits — and a run of
+/// markup can never fill a row on its own and draw as a blank line.
+pub fn line_rows_hiding(
+    text: &str,
+    width: usize,
+    hidden: &[(usize, usize)],
+) -> Vec<(usize, usize)> {
     let width = width.max(1);
     let chars: Vec<char> = text.chars().collect();
     if chars.is_empty() {
@@ -157,7 +213,10 @@ pub fn line_rows(text: &str, width: usize) -> Vec<(usize, usize)> {
     let mut at = 0;
     for g in graphemes(text) {
         cuts.push(at);
-        widths.push(grapheme_width(g));
+        // A character that is not drawn takes no room, so it cannot push the
+        // one after it onto the next row.
+        let off = hidden.iter().any(|&(a, b)| at >= a && at < b);
+        widths.push(if off { 0 } else { grapheme_width(g) });
         at += g.chars().count();
     }
     cuts.push(at);
@@ -288,14 +347,20 @@ fn line_hash(rope: &Rope, line: usize) -> u64 {
 /// character paragraph into a `String` four times per keystroke is most of what
 /// made an unmemoised `j` slow, and the questions a keystroke asks are all
 /// about the same handful of paragraphs.
-fn rows_of_line(rope: &Rope, line: usize, width: usize) -> Vec<(usize, usize)> {
-    let hash = line_hash(rope, line);
-    if let Some(rows) = remembered(hash, width) {
+fn rows_of_line(rope: &Rope, line: usize, m: Measure) -> Vec<(usize, usize)> {
+    let hidden = m.off(line);
+    // The hidden runs are part of the answer, so they are part of the key: the
+    // same paragraph wraps differently when the cursor opens a construct in it.
+    let mut hasher = DefaultHasher::new();
+    line_hash(rope, line).hash(&mut hasher);
+    hidden.hash(&mut hasher);
+    let hash = hasher.finish();
+    if let Some(rows) = remembered(hash, m.width) {
         return rows;
     }
     WRAPPED.with(|n| n.set(n.get() + 1));
-    let rows = line_rows(&line_text(rope, line), width);
-    remember(hash, width, &rows);
+    let rows = line_rows_hiding(&line_text(rope, line), m.width, &hidden);
+    remember(hash, m.width, &rows);
     rows
 }
 
@@ -331,17 +396,17 @@ fn line_count(rope: &Rope) -> usize {
 }
 
 /// How many visual rows the logical `line` wraps into (always at least one).
-pub fn row_count_in_line(rope: &Rope, line: usize, width: usize) -> usize {
-    rows_of_line(rope, line, width).len()
+pub fn row_count_in_line(rope: &Rope, line: usize, m: Measure) -> usize {
+    rows_of_line(rope, line, m).len()
 }
 
 /// Locate the char index `pos` in the wrapped grid.
-pub fn position(rope: &Rope, pos: usize, width: usize) -> Position {
+pub fn position(rope: &Rope, pos: usize, m: Measure) -> Position {
     let pos = pos.min(rope.len_chars());
     let line = rope.char_to_line(pos);
     let start = rope.line_to_char(line);
     let col = pos - start;
-    let rows = rows_of_line(rope, line, width);
+    let rows = rows_of_line(rope, line, m);
 
     // The last row that starts at or before the cursor. A cursor resting past
     // the end of the paragraph belongs on the final row, not on a phantom one.
@@ -363,22 +428,22 @@ pub fn position(rope: &Rope, pos: usize, width: usize) -> Position {
 
 /// The display column `pos` sits at within its visual row — the goal column
 /// preserved by `j` and `k` when soft wrap is on.
-pub fn column_of(rope: &Rope, pos: usize, width: usize) -> usize {
-    position(rope, pos, width).column
+pub fn column_of(rope: &Rope, pos: usize, m: Measure) -> usize {
+    position(rope, pos, m).column
 }
 
 /// The next `n` rows starting at `anchor`, stopping at the end of the buffer.
 ///
 /// Costs one pass over each *paragraph the page touches*, not over the
 /// document.
-pub fn rows_from(rope: &Rope, anchor: Anchor, width: usize, n: usize) -> Vec<Row> {
+pub fn rows_from(rope: &Rope, anchor: Anchor, m: Measure, n: usize) -> Vec<Row> {
     let lines = line_count(rope);
     let mut out = Vec::with_capacity(n);
     let mut line = anchor.line;
     let mut index = anchor.index_in_line;
     while out.len() < n && line < lines {
         let start = rope.line_to_char(line);
-        let rows = rows_of_line(rope, line, width);
+        let rows = rows_of_line(rope, line, m);
         while index < rows.len() && out.len() < n {
             let (s, e) = rows[index];
             out.push(Row {
@@ -397,7 +462,7 @@ pub fn rows_from(rope: &Rope, anchor: Anchor, width: usize, n: usize) -> Vec<Row
 }
 
 /// The anchor `n` rows above `anchor`, clamped to the top of the buffer.
-pub fn retreat(rope: &Rope, anchor: Anchor, width: usize, mut n: usize) -> Anchor {
+pub fn retreat(rope: &Rope, anchor: Anchor, m: Measure, mut n: usize) -> Anchor {
     let mut line = anchor.line;
     let mut index = anchor.index_in_line;
     loop {
@@ -412,23 +477,23 @@ pub fn retreat(rope: &Rope, anchor: Anchor, width: usize, mut n: usize) -> Ancho
         }
         n -= index + 1;
         line -= 1;
-        index = row_count_in_line(rope, line, width) - 1;
+        index = row_count_in_line(rope, line, m) - 1;
     }
 }
 
 /// The anchor `n` rows below `anchor`, clamped to the last row of the buffer.
-pub fn advance(rope: &Rope, anchor: Anchor, width: usize, mut n: usize) -> Anchor {
+pub fn advance(rope: &Rope, anchor: Anchor, m: Measure, mut n: usize) -> Anchor {
     let lines = line_count(rope);
     let mut line = anchor.line.min(lines.saturating_sub(1));
     let mut index = anchor.index_in_line;
-    let mut count = row_count_in_line(rope, line, width);
+    let mut count = row_count_in_line(rope, line, m);
     while n > 0 {
         if index + 1 < count {
             index += 1;
         } else if line + 1 < lines {
             line += 1;
             index = 0;
-            count = row_count_in_line(rope, line, width);
+            count = row_count_in_line(rope, line, m);
         } else {
             break;
         }
@@ -445,20 +510,14 @@ pub fn advance(rope: &Rope, anchor: Anchor, width: usize, mut n: usize) -> Ancho
 ///
 /// Bounded on purpose: the renderer only needs to know where the cursor sits
 /// *within the page*.
-pub fn distance(
-    rope: &Rope,
-    from: Anchor,
-    to: Anchor,
-    width: usize,
-    limit: usize,
-) -> Option<usize> {
+pub fn distance(rope: &Rope, from: Anchor, to: Anchor, m: Measure, limit: usize) -> Option<usize> {
     let lines = line_count(rope);
     if from.line >= lines || to < from {
         return None;
     }
     let mut line = from.line;
     let mut index = from.index_in_line;
-    let mut count = row_count_in_line(rope, line, width);
+    let mut count = row_count_in_line(rope, line, m);
     for step in 0..=limit {
         if line == to.line && index == to.index_in_line {
             return Some(step);
@@ -470,7 +529,7 @@ pub fn distance(
                 return None;
             }
             index = 0;
-            count = row_count_in_line(rope, line, width);
+            count = row_count_in_line(rope, line, m);
         }
     }
     None
@@ -482,11 +541,11 @@ fn char_at_column(
     rope: &Rope,
     line: usize,
     index_in_line: usize,
-    width: usize,
+    m: Measure,
     goal: usize,
 ) -> usize {
     let start = rope.line_to_char(line);
-    let rows = rows_of_line(rope, line, width);
+    let rows = rows_of_line(rope, line, m);
     let index_in_line = index_in_line.min(rows.len() - 1);
     let (s, e) = rows[index_in_line];
     // The caret may rest one past the last character of a paragraph, but not
@@ -515,27 +574,27 @@ fn char_at_column(
 }
 
 /// The position one visual row below `pos`, keeping the display column `goal`.
-pub fn next_row(rope: &Rope, pos: usize, width: usize, goal: usize) -> usize {
-    let here = position(rope, pos, width);
-    let count = row_count_in_line(rope, here.line, width);
+pub fn next_row(rope: &Rope, pos: usize, m: Measure, goal: usize) -> usize {
+    let here = position(rope, pos, m);
+    let count = row_count_in_line(rope, here.line, m);
     if here.index_in_line + 1 < count {
-        char_at_column(rope, here.line, here.index_in_line + 1, width, goal)
+        char_at_column(rope, here.line, here.index_in_line + 1, m, goal)
     } else if here.line + 1 < line_count(rope) {
-        char_at_column(rope, here.line + 1, 0, width, goal)
+        char_at_column(rope, here.line + 1, 0, m, goal)
     } else {
         pos
     }
 }
 
 /// The position one visual row above `pos`, keeping the display column `goal`.
-pub fn prev_row(rope: &Rope, pos: usize, width: usize, goal: usize) -> usize {
-    let here = position(rope, pos, width);
+pub fn prev_row(rope: &Rope, pos: usize, m: Measure, goal: usize) -> usize {
+    let here = position(rope, pos, m);
     if here.index_in_line > 0 {
-        char_at_column(rope, here.line, here.index_in_line - 1, width, goal)
+        char_at_column(rope, here.line, here.index_in_line - 1, m, goal)
     } else if here.line > 0 {
         let above = here.line - 1;
-        let last = row_count_in_line(rope, above, width) - 1;
-        char_at_column(rope, above, last, width, goal)
+        let last = row_count_in_line(rope, above, m) - 1;
+        char_at_column(rope, above, last, m, goal)
     } else {
         pos
     }
@@ -562,7 +621,7 @@ mod tests {
     fn one_keystroke_wraps_a_paragraph_once() {
         let text: String = "春夏秋冬".repeat(2_500);
         let rope = Rope::from_str(&text);
-        let width = 80;
+        let width = Measure::plain(80);
 
         reset_wrap_count();
         let p = position(&rope, 5_000, width);
@@ -656,7 +715,7 @@ mod tests {
         assert_eq!(line_rows("春夏秋", 8), vec![(0, 3)]);
 
         let rope = Rope::from_str("春夏秋冬");
-        let p = position(&rope, 4, 8);
+        let p = position(&rope, 4, Measure::plain(8));
         assert_eq!((p.index_in_line, p.column), (1, 0));
     }
 
@@ -667,10 +726,10 @@ mod tests {
         let text = "か\u{3099}か\u{3099}か\u{3099}か\u{3099}";
         assert_eq!(line_rows(text, 8), vec![(0, 8), (8, 8)]);
         let rope = Rope::from_str(text);
-        assert_eq!(position(&rope, 6, 8).column, 6);
+        assert_eq!(position(&rope, 6, Measure::plain(8)).column, 6);
         // And `k` never lands between a base and its mark.
         assert_eq!(
-            prev_row(&rope, 8, 8, 2),
+            prev_row(&rope, 8, Measure::plain(8), 2),
             2,
             "the cursor landed inside a grapheme cluster"
         );
@@ -681,13 +740,13 @@ mod tests {
         // Column 1 is the right half of 甲; `j` belongs on 甲, not on 乙 —
         // which is where an unwrapped `j` lands, and the two must agree.
         let rope = Rope::from_str("abc\n甲乙丙丁\nxyz\n");
-        assert_eq!(next_row(&rope, 1, 40, 1), 4);
+        assert_eq!(next_row(&rope, 1, Measure::plain(40), 1), 4);
     }
 
     #[test]
     fn position_finds_the_row_and_column() {
         let rope = Rope::from_str("春夏秋冬春夏秋冬\n");
-        let p = position(&rope, 5, 8); // 6th char, second row
+        let p = position(&rope, 5, Measure::plain(8)); // 6th char, second row
         assert_eq!(p.line, 0);
         assert_eq!(p.index_in_line, 1);
         assert_eq!(p.column, 2);
@@ -696,7 +755,7 @@ mod tests {
     #[test]
     fn a_page_is_built_from_an_anchor_not_from_the_top() {
         let rope = Rope::from_str("春夏秋冬春夏秋冬\nabc\n");
-        let rows = rows_from(&rope, Anchor::default(), 8, 10);
+        let rows = rows_from(&rope, Anchor::default(), Measure::plain(8), 10);
         // Two rows of text, the caret's row after them, "abc", and the empty
         // line the trailing newline opens.
         assert_eq!(rows.len(), 5);
@@ -716,16 +775,22 @@ mod tests {
         };
         // Three rows in the first paragraph (two of text, one for the caret),
         // one for "abc", then the second row of the last paragraph.
-        assert_eq!(distance(&rope, Anchor::default(), far, 8, 20), Some(5));
-        assert_eq!(retreat(&rope, far, 8, 5), Anchor::default());
-        assert_eq!(advance(&rope, Anchor::default(), 8, 5), far);
+        assert_eq!(
+            distance(&rope, Anchor::default(), far, Measure::plain(8), 20),
+            Some(5)
+        );
+        assert_eq!(retreat(&rope, far, Measure::plain(8), 5), Anchor::default());
+        assert_eq!(advance(&rope, Anchor::default(), Measure::plain(8), 5), far);
     }
 
     #[test]
     fn retreat_and_advance_clamp_at_the_ends() {
         let rope = Rope::from_str("abc\ndef\n");
-        assert_eq!(retreat(&rope, Anchor::default(), 8, 99), Anchor::default());
-        let end = advance(&rope, Anchor::default(), 8, 99);
+        assert_eq!(
+            retreat(&rope, Anchor::default(), Measure::plain(8), 99),
+            Anchor::default()
+        );
+        let end = advance(&rope, Anchor::default(), Measure::plain(8), 99);
         assert_eq!(end.line, 2);
     }
 
@@ -734,9 +799,9 @@ mod tests {
         let rope = Rope::from_str("春夏秋冬春夏秋冬\n");
         // From the first character, down lands on the fifth — the same column
         // one row lower, still inside the same logical line.
-        let down = next_row(&rope, 0, 8, 0);
+        let down = next_row(&rope, 0, Measure::plain(8), 0);
         assert_eq!(down, 4);
-        assert_eq!(prev_row(&rope, down, 8, 0), 0);
+        assert_eq!(prev_row(&rope, down, Measure::plain(8), 0), 0);
     }
 
     #[test]
@@ -744,16 +809,16 @@ mod tests {
         let rope = Rope::from_str("春夏秋冬春夏秋冬\n");
         // Column 8 is past the end of a full row; the caret clamps to the last
         // character of that row rather than sliding onto the next one.
-        assert_eq!(char_at_column(&rope, 0, 0, 8, 99), 3);
-        assert_eq!(char_at_column(&rope, 0, 1, 8, 99), 7);
+        assert_eq!(char_at_column(&rope, 0, 0, Measure::plain(8), 99), 3);
+        assert_eq!(char_at_column(&rope, 0, 1, Measure::plain(8), 99), 7);
         // The row opened for the caret is where the end of the paragraph is.
-        assert_eq!(char_at_column(&rope, 0, 2, 8, 99), 8);
+        assert_eq!(char_at_column(&rope, 0, 2, Measure::plain(8), 99), 8);
     }
 
     #[test]
     fn moving_down_crosses_into_the_next_paragraph() {
         let rope = Rope::from_str("abcd\nefgh\n");
-        assert_eq!(next_row(&rope, 1, 8, 1), 6);
-        assert_eq!(prev_row(&rope, 6, 8, 1), 1);
+        assert_eq!(next_row(&rope, 1, Measure::plain(8), 1), 6);
+        assert_eq!(prev_row(&rope, 6, Measure::plain(8), 1), 1);
     }
 }

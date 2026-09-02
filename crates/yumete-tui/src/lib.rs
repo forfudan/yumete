@@ -1086,8 +1086,13 @@ fn draw_horizontal(
     // width.
     let width = editor.wrap_width().unwrap_or(usize::MAX / 2).max(1);
 
+    // The measure is the width *and* what is off the page: a row holds what
+    // fits on the screen, so markup taken off it takes no room.
+    let hide = |line: usize| editor.hidden_on_line(line);
+    let measure = wrap::Measure::new(width, &hide);
+
     let cursor_line = editor.cursor_line();
-    let cursor_pos = wrap::position(rope, editor.cursor(), width);
+    let cursor_pos = wrap::position(rope, editor.cursor(), measure);
     let cursor_anchor = WrapAnchor::from(cursor_pos);
 
     // Scroll so the cursor's row stays on the page with `scrolloff` rows of
@@ -1096,7 +1101,7 @@ fn draw_horizontal(
     // document from the top on every keystroke.
     let scrolloff = config.editor.scrolloff.min(height.saturating_sub(1) / 2);
     let last_row = height.saturating_sub(1);
-    let cursor_row = match wrap::distance(rope, *viewport, cursor_anchor, width, last_row) {
+    let cursor_row = match wrap::distance(rope, *viewport, cursor_anchor, measure, last_row) {
         Some(d) if d >= scrolloff && d + scrolloff <= last_row => d,
         found => {
             // Off the page, or too close to an edge: re-anchor so the cursor
@@ -1106,8 +1111,8 @@ fn draw_horizontal(
             } else {
                 last_row.saturating_sub(scrolloff)
             };
-            *viewport = wrap::retreat(rope, cursor_anchor, width, inset);
-            wrap::distance(rope, *viewport, cursor_anchor, width, height).unwrap_or(0)
+            *viewport = wrap::retreat(rope, cursor_anchor, measure, inset);
+            wrap::distance(rope, *viewport, cursor_anchor, measure, height).unwrap_or(0)
         }
     };
 
@@ -1137,7 +1142,7 @@ fn draw_horizontal(
     // down to the bottom of this page — a fence opened above decides what the
     // lines below it mean, and there is no way to know that from a line alone.
     let blocks = if show_markup {
-        let last = wrap::rows_from(rope, *viewport, width, height)
+        let last = wrap::rows_from(rope, *viewport, measure, height)
             .last()
             .map_or(0, |row| row.line);
         editor.blocks_through(last)
@@ -1146,7 +1151,7 @@ fn draw_horizontal(
     };
 
     let mut lines: Vec<Line> = Vec::new();
-    for row in wrap::rows_from(rope, *viewport, width, height) {
+    for row in wrap::rows_from(rope, *viewport, measure, height) {
         let text: String = rope.slice(row.start..row.end).to_string();
         let mut spans = Vec::new();
         if gutter > 0 {
@@ -1352,7 +1357,7 @@ fn draw_horizontal(
                     line: cursor_pos.line,
                     index_in_line: cursor_pos.index_in_line,
                 },
-                width,
+                measure,
                 1,
             )
             .first()
@@ -2711,6 +2716,31 @@ mod tests {
         editor.execute(":source").unwrap();
         let buffer = render(&editor, &config, 40, 6);
         assert_eq!(row_text(&buffer, 0).trim_end(), "那**年**冬**天**");
+    }
+
+    #[test]
+    fn a_row_holds_what_fits_on_the_screen_not_what_fits_in_the_source() {
+        // A row's worth of hidden markup used to take a row of its own, which
+        // drew as a blank line in the middle of a paragraph — and the page
+        // repainted completely as the cursor moved onto it.
+        let mut editor =
+            editor_with("見[附錄](https://example.com/a/very/long/target/path/goes/on)後天冬");
+        let mut config = Config::default();
+        config.editor.line_numbers = LineNumbers::None;
+        config.editor.show_segmentation = false;
+        editor.execute(":wysiwyg").unwrap();
+        for c in "gg".chars() {
+            editor.on_key(Key::Char(c));
+        }
+
+        let buffer = render_wrapped(&mut editor, &config, 30, 8);
+        // What the reader sees is one short line, and nothing after it.
+        assert_eq!(row_text(&buffer, 0).trim_end(), "見附錄後天冬");
+        assert_eq!(
+            row_text(&buffer, 1).trim_end(),
+            "",
+            "no blank row in between"
+        );
     }
 
     #[test]
