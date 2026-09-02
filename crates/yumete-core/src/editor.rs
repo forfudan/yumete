@@ -1770,7 +1770,14 @@ impl Editor {
             self.status = "no file, so no schema to read it by".to_string();
             return false;
         };
-        let found = crate::table::schema_for(&path);
+        let (found, problems) = crate::table::schema_for_reporting(&path);
+        // A schema with a typo in it costs every label, both computed fields
+        // and the whole jump. Saying so is the difference between "this file
+        // has no schema" and "your schema has a typo on line 4".
+        if !problems.is_empty() {
+            self.status = format!("schema: {}", problems.join("; "));
+            return false;
+        }
         let (from, schema, how) = match found {
             Some((from, schema)) => {
                 let name = from
@@ -1831,13 +1838,18 @@ impl Editor {
         let Some(path) = self.current_buffer().path().map(Path::to_path_buf) else {
             return;
         };
-        if let Some((from, schema)) = crate::table::schema_for(&path) {
+        let (found, problems) = crate::table::schema_for_reporting(&path);
+        if let Some((from, schema)) = found {
             self.table = Some(TableView {
                 schema,
                 from,
                 goal: 0,
                 grain: Grain::Cell,
             });
+        } else if !problems.is_empty() {
+            // Opening a file says nothing about tables, ordinarily. A schema
+            // that does not parse is the exception: it was meant to apply here.
+            self.status = format!("schema: {}", problems.join("; "));
         }
     }
 
@@ -2309,6 +2321,12 @@ impl Editor {
         if view.schema.header && line == 0 {
             return None;
         }
+        // Nor is the empty line a file ending in a newline leaves behind — the
+        // same thing `row_is_ragged` already knows not to complain about.
+        let rope = self.current_buffer().rope();
+        if line + 1 == rope.len_lines() && rope.line(line).len_chars() == 0 {
+            return None;
+        }
         let text = self.current_buffer().rope().line(line).to_string();
         let spans = crate::table::cells(&text, view.schema.delimiter);
         let value = |name: &str| -> String {
@@ -2390,8 +2408,15 @@ impl Editor {
     }
 
     /// Which line holds the row whose key is this character.
+    ///
+    /// The index behind it is always true: it was tempting to let the panel
+    /// draw from a stale one to save the rebuild after an edit, but a panel
+    /// that says a component has no row when it has — or has one when it does
+    /// not — is worse than a frame that takes nine milliseconds, and a 拆分表
+    /// is edited far less often than it is read.
     pub fn row_named(&self, key: char) -> Option<usize> {
-        self.with_key_index(|index| index.get(&key).copied()).flatten()
+        self.with_key_index(|index| index.get(&key).copied())
+            .flatten()
     }
 
     /// Run `f` over the key index, building it first if the document has moved.
@@ -2399,7 +2424,10 @@ impl Editor {
     /// Every key is one character — a row of a 拆分表 is *about* a character —
     /// so the index is a map from that character to its line, and reading it
     /// needs no allocation at all.
-    fn with_key_index<T>(&self, f: impl FnOnce(&HashMap<char, usize>) -> T) -> Option<T> {
+    fn with_key_index<T>(
+        &self,
+        f: impl FnOnce(&HashMap<char, usize>) -> T,
+    ) -> Option<T> {
         let view = self.table.as_ref()?;
         let jump = view.schema.jump.as_ref()?;
         let at = view.schema.index_of(&jump.to)?;
@@ -6934,6 +6962,73 @@ mod tests {
         assert_eq!(ed.table().unwrap().grain, crate::editor::Grain::Cell);
         press(&mut ed, "h");
         assert_eq!(ed.cell_position(), Some((1, 0)));
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn a_schema_with_a_typo_in_it_says_so_instead_of_vanishing() {
+        // Dropping the parse error cost every label, both computed fields and
+        // the whole jump, and the only clue was 「照首行」 in the status line.
+        let dir = std::env::temp_dir().join(format!("yumete-badschema-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(dir.join(".yumete").join("tables")).unwrap();
+        let schema = dir.join(".yumete").join("tables").join("t.toml");
+        let csv = dir.join("d.csv");
+        std::fs::write(&csv, "char,ids_y\n一,⿰木目\n").unwrap();
+
+        for (body, expect) in [
+            ("[table\nfile = 'd.csv'", "TOML"),
+            ("[table]\nfile = 'd.csv'", "no columns"),
+            (
+                "[table]\nfile = 'd.csv'\nkey = 'nope'\n[[table.column]]\nname = 'char'",
+                "not a column",
+            ),
+            (
+                "[table]\nfile = 'd.csv'\n[[table.column]]\nname = 'char'\n\
+                 [[table.detail]]\nname = 'u'\ncompute = 'codepoint(nope)'",
+                "not a column",
+            ),
+            (
+                "[table]\nfile = 'd.csv'\nquoting = 'minimal'\n[[table.column]]\nname = 'char'",
+                "not supported",
+            ),
+            (
+                "[table]\nfile = 'd.csv'\ndelimiter = '::'\n[[table.column]]\nname = 'char'",
+                "one character",
+            ),
+            (
+                "[table]\nfile = 'd.csv'\ndelimiter = \"\\n\"\n[[table.column]]\nname = 'char'",
+                "separates rows",
+            ),
+        ] {
+            std::fs::write(&schema, body).unwrap();
+            let mut ed = Editor::new();
+            ed.open_file(&csv).unwrap();
+            assert!(ed.table().is_none(), "{expect}: not read as a grid");
+            assert!(
+                ed.status().starts_with("schema:") && ed.status().contains(expect),
+                "opening says what is wrong: {}",
+                ed.status()
+            );
+            // …and asking again says the same thing rather than falling back to
+            // the header row as though no schema had been written at all.
+            assert!(!ed.enter_table(), "{expect}");
+            assert!(ed.status().contains(expect), "{}", ed.status());
+        }
+
+        // A schema for *other* files is not a problem; it is simply not this
+        // file's, and the header row stands in.
+        std::fs::write(
+            &schema,
+            "[table]\nfile = 'somethingelse.csv'\n[[table.column]]\nname = 'char'",
+        )
+        .unwrap();
+        let mut ed = Editor::new();
+        ed.open_file(&csv).unwrap();
+        assert!(ed.status().is_empty(), "{}", ed.status());
+        assert!(ed.enter_table());
+        assert!(ed.status().contains("照首行"), "{}", ed.status());
 
         std::fs::remove_dir_all(&dir).ok();
     }
