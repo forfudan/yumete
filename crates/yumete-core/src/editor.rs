@@ -149,6 +149,9 @@ pub struct Editor {
     count: Option<usize>,
     /// The text typed during the last Insert session, replayed by `.`.
     last_insert: String,
+    /// Whether the last thing to change the buffer was an Insert session, so
+    /// `.` knows whether it has anything to repeat.
+    last_edit_was_insert: bool,
     /// The Insert session being recorded, moved into `last_insert` on Esc.
     insert_recording: String,
     /// The last `f`/`t`/`F`/`T`, replayed by `A-.`.
@@ -286,6 +289,7 @@ impl Editor {
             show_segmentation: false,
             count: None,
             last_insert: String::new(),
+            last_edit_was_insert: false,
             insert_recording: String::new(),
             last_find: None,
             indent_width: 4,
@@ -1169,11 +1173,32 @@ impl Editor {
         // meaning: `j` still reads onward down the 縱, and `h` still steps left,
         // which is now the next 縱 rather than the next line.
         if self.layout == Layout::Vertical {
+            // The count applies here too — `10j` is exactly the key a 縱 of
+            // thirty-two characters is long for. These arms used to return
+            // before `repeat` could see it.
             match key {
-                Key::Char('h') | Key::Left => return self.move_zong_from(true, continuing_zong),
-                Key::Char('l') | Key::Right => return self.move_zong_from(false, continuing_zong),
-                Key::Char('j') | Key::Down => return self.move_horizontal(motion::right),
-                Key::Char('k') | Key::Up => return self.move_horizontal(motion::left),
+                // Only the first step of a run may reset the goal slot; the
+                // rest of a `10h` continues from the one it chose.
+                Key::Char('h') | Key::Left => {
+                    let mut first = continuing_zong;
+                    return self.repeat(count, move |e| {
+                        e.move_zong_from(true, first);
+                        first = true;
+                    });
+                }
+                Key::Char('l') | Key::Right => {
+                    let mut first = continuing_zong;
+                    return self.repeat(count, move |e| {
+                        e.move_zong_from(false, first);
+                        first = true;
+                    });
+                }
+                Key::Char('j') | Key::Down => {
+                    return self.repeat(count, |e| e.move_horizontal(motion::right));
+                }
+                Key::Char('k') | Key::Up => {
+                    return self.repeat(count, |e| e.move_horizontal(motion::left));
+                }
                 _ => {}
             }
         }
@@ -1262,16 +1287,33 @@ impl Editor {
             }
             // Select (extend) mode and collapse (Helix `v` / `;`).
             Key::Char('v') => self.extend = !self.extend,
+            // Esc is every modal editor's way out; here it leaves select mode
+            // and collapses the selection onto the cursor.
+            Key::Esc => {
+                self.extend = false;
+                self.anchor = self.cursor;
+            }
             Key::Char(';') => self.anchor = self.cursor,
             // Selection + changes (Helix: `x` selects the line, `d` deletes the
             // selection, `c` changes it).
             Key::Char('x') => self.repeat(count, |e| e.select_line()),
             Key::Char('d') => {
                 self.snapshot();
+                // A count deletes that many graphemes when there is nothing
+                // selected, the way `3x` does in vim; with a selection it is
+                // the selection that goes, once.
+                let (start, end) = self.selection();
+                if start == end && count > 1 {
+                    self.extend_by_graphemes(count);
+                }
                 self.delete_selection();
             }
             Key::Char('c') => {
                 self.snapshot();
+                let (start, end) = self.selection();
+                if start == end && count > 1 {
+                    self.extend_by_graphemes(count);
+                }
                 self.delete_selection();
                 self.enter_insert();
             }
@@ -1470,6 +1512,7 @@ impl Editor {
             Key::Esc => {
                 // The session just ended is what `.` replays.
                 self.last_insert = std::mem::take(&mut self.insert_recording);
+                self.last_edit_was_insert = !self.last_insert.is_empty();
                 self.mode = Mode::Normal;
             }
             Key::Enter => {
@@ -1613,6 +1656,9 @@ impl Editor {
     /// The history lives on the [`Buffer`], not here: `u` must undo *this*
     /// file's last change, whatever was edited in between.
     fn snapshot(&mut self) {
+        // Every edit takes one, which makes this the one place that knows the
+        // buffer is about to change under something other than typing.
+        self.last_edit_was_insert = false;
         let at = self.cursor;
         self.current_buffer_mut().snapshot(at);
     }
@@ -1665,7 +1711,17 @@ impl Editor {
         };
 
         match found {
-            Some(pos) => self.set_cursor(pos),
+            // The match itself becomes the selection. Every motion leaves one —
+            // that is the first thing the manual says about this editor — and a
+            // search that only moved the cursor made `/` the one motion after
+            // which `d` did something other than what the screen showed.
+            Some(pos) => {
+                let end = (pos + pattern.chars().count()).min(len);
+                self.anchor = pos;
+                self.cursor = end;
+                self.extend = false;
+                self.refresh_goal_column();
+            }
             None => self.status = format!("pattern not found: {pattern}"),
         }
     }
@@ -1681,12 +1737,23 @@ impl Editor {
         }
 
         let text = self.current_buffer().text();
-        let cursor_line = self.cursor_line();
+        // Which lines `:s` touches: the whole file, or the ones the *selection*
+        // covers. Reading the cursor's line instead meant that after `x` — which
+        // leaves the cursor on the line below the one it selected — `:s` edited
+        // a line the writer had not selected and could not see was selected.
+        let rope = self.current_buffer().rope();
+        let (sel_start, sel_end) = self.selection();
+        let first = rope.char_to_line(sel_start);
+        let last = if sel_end > sel_start {
+            rope.char_to_line(sel_end.saturating_sub(1))
+        } else {
+            first
+        };
         let mut count = 0usize;
         let mut rebuilt = String::with_capacity(text.len());
 
         for (idx, line) in text.split_inclusive('\n').enumerate() {
-            if whole_file || idx == cursor_line {
+            if whole_file || (idx >= first && idx <= last) {
                 let (new_line, n) = replace_in_line(line, pattern, replacement, global);
                 count += n;
                 rebuilt.push_str(&new_line);
@@ -1768,11 +1835,15 @@ impl Editor {
     /// typed. Between Latin words the space is kept.
     fn join_lines(&mut self) {
         let rope = self.current_buffer().rope();
-        let line = rope.char_to_line(self.cursor);
+        // The *selection's* first line, not the cursor's: `x` parks the cursor
+        // on the line after the one it selected, so joining from the cursor
+        // joined the wrong pair — and after `xxx` joined nothing at all.
+        let (start, _) = self.selection();
+        let line = rope.char_to_line(start);
         if line >= motion::last_line(rope) {
             return;
         }
-        let end = motion::line_end(rope, self.cursor);
+        let end = motion::line_end(rope, start);
         // Swallow the break and any indentation that follows it.
         let mut next = end + 1;
         let len = rope.len_chars();
@@ -2130,12 +2201,19 @@ impl Editor {
 
     /// Replay the text typed during the last Insert session (Helix `.`).
     fn repeat_insert(&mut self) {
-        if self.last_insert.is_empty() {
+        // `.` sits next to `d` on the keyboard, and repeating a *typing*
+        // session after a delete would pour a paragraph of old text into the
+        // document. Helix's `.` repeats the last change; until this one can do
+        // that, it repeats the last change only when that change was a typing
+        // session, and says so otherwise.
+        if !self.last_edit_was_insert || self.last_insert.is_empty() {
+            self.status = "nothing typed to repeat".to_string();
             return;
         }
         let text = self.last_insert.clone();
         self.snapshot();
         self.insert_str(&text);
+        self.last_edit_was_insert = true;
     }
 
     // ---- Match mode (Helix `m`) -------------------------------------------
@@ -2405,6 +2483,22 @@ impl Editor {
         self.refresh_goal_column();
     }
 
+    /// Grow a collapsed selection rightward by `n` graphemes, so a count in
+    /// front of `d` or `c` names how much to take.
+    fn extend_by_graphemes(&mut self, n: usize) {
+        let rope = self.current_buffer().rope();
+        let mut end = self.cursor;
+        for _ in 0..n {
+            let next = motion::right(rope, end);
+            if next == end {
+                break;
+            }
+            end = next;
+        }
+        self.anchor = self.cursor;
+        self.cursor = end;
+    }
+
     /// Delete the current selection (Helix `d`). A collapsed selection deletes
     /// the grapheme under the cursor. The caller takes the undo snapshot.
     fn delete_selection(&mut self) {
@@ -2530,7 +2624,25 @@ impl Editor {
         }
         self.snapshot();
         let (start, end) = self.selection();
-        let at = if after {
+        // Whole lines go back as whole lines. `xy` copies a line *with* its
+        // break, and dropping that in the middle of another line cuts it in
+        // two — which is exactly what the standard way of moving a paragraph
+        // (`xy`, move, `p`) does most.
+        let line_wise = text.ends_with('\n');
+        let at = if line_wise {
+            let rope = self.current_buffer().rope();
+            let line = rope.char_to_line(if after { end.max(start) } else { start });
+            if after {
+                let next = line + 1;
+                if next < rope.len_lines() {
+                    rope.line_to_char(next)
+                } else {
+                    rope.len_chars()
+                }
+            } else {
+                rope.line_to_char(line)
+            }
+        } else if after {
             if start == end {
                 motion::right(self.current_buffer().rope(), self.cursor)
             } else {
@@ -3052,7 +3164,9 @@ mod tests {
         assert_eq!(ed.prompt(), Some(('/', "潮水")));
         assert_eq!(ed.current_buffer().text(), "春江潮水連海平");
         ed.on_key(Key::Enter);
-        assert_eq!(ed.cursor(), 2, "search jumped to 潮水");
+        // The match becomes the selection, so the head sits past its last
+        // character and 潮水 is what an edit would act on.
+        assert_eq!(ed.selection(), (2, 4), "search selected 潮水");
     }
 
     #[test]
@@ -3120,7 +3234,7 @@ mod tests {
         ed.on_key(Key::Tab);
         assert_eq!(ed.prompt(), Some(('/', "潮水")));
         ed.on_key(Key::Enter);
-        assert_eq!(ed.cursor(), 2, "and it runs");
+        assert_eq!(ed.selection(), (2, 4), "and it runs");
 
         // A pattern that is not a prefix of the last one is not guessed at.
         ed.on_key(Key::Char('/'));
@@ -3447,10 +3561,20 @@ mod tests {
     #[test]
     fn star_searches_for_the_selection() {
         let mut ed = typed("春江春江");
-        press(&mut ed, "vl"); // select 春江
+        // Two `l` for two characters: a selection here is half-open, so `v`
+        // starts one of width zero rather than one covering the cursor's own
+        // grapheme the way Helix does.
+        press(&mut ed, "vll"); // select 春江
         press(&mut ed, "*");
-        press(&mut ed, ";n");
-        assert_eq!(ed.cursor(), 2, "next occurrence of the selected text");
+        // Back to the top, then `n`: the pattern `*` stored is the selection,
+        // and the next occurrence of it is the second 春江.
+        press(&mut ed, "gg");
+        press(&mut ed, "n");
+        assert_eq!(
+            ed.selection(),
+            (2, 4),
+            "next occurrence of the selected text"
+        );
     }
 
     /// A segmenter that records how much text it was handed, so the cache can
@@ -4116,6 +4240,78 @@ mod tests {
     }
 
     #[test]
+    fn dot_does_not_pour_an_old_insert_over_a_delete() {
+        let mut ed = Editor::new();
+        ed.on_key(Key::Char('i'));
+        type_keys(&mut ed, "abcdef");
+        ed.on_key(Key::Esc);
+        type_keys(&mut ed, "gg");
+        // `.` sits next to `d`. Repeating the typing session after a delete
+        // would pour a paragraph of old text into the document.
+        type_keys(&mut ed, "d.");
+        assert_eq!(ed.current_buffer().text(), "bcdef");
+        assert!(ed.status().contains("nothing typed"), "{}", ed.status());
+        // After a typing session it still repeats.
+        ed.on_key(Key::Char('i'));
+        type_keys(&mut ed, "X");
+        ed.on_key(Key::Esc);
+        ed.on_key(Key::Char('.'));
+        assert_eq!(ed.current_buffer().text(), "XXbcdef");
+    }
+
+    #[test]
+    fn esc_leaves_select_mode() {
+        let mut ed = typed("abc");
+        ed.on_key(Key::Char('v'));
+        assert!(ed.is_extending());
+        ed.on_key(Key::Esc);
+        assert!(!ed.is_extending(), "Esc is every modal editor's way out");
+    }
+
+    #[test]
+    fn a_count_reaches_the_operators_too() {
+        let mut ed = typed("abcdef");
+        type_keys(&mut ed, "gg3d");
+        assert_eq!(ed.current_buffer().text(), "def");
+    }
+
+    #[test]
+    fn a_count_moves_that_many_zong() {
+        let mut ed = typed("一二三四五六七八九十");
+        ed.set_layout(crate::zong::Layout::Vertical);
+        ed.set_zong_length(32);
+        type_keys(&mut ed, "gg");
+        let before = ed.cursor();
+        type_keys(&mut ed, "5j");
+        assert_eq!(ed.cursor() - before, 5, "vertical hjkl dropped the count");
+    }
+
+    #[test]
+    fn line_operators_follow_the_selection_not_the_cursor() {
+        // `x` parks the cursor on the line *after* the one it selected, so
+        // anything reading the cursor's line acted on a line the writer had
+        // not selected and could not see was selected.
+        let mut ed = typed("一\n二\n三\n四\n");
+        type_keys(&mut ed, "ggxxxJ");
+        assert_eq!(ed.current_buffer().text(), "一二\n三\n四\n");
+
+        let mut ed = typed("甲甲\n甲甲\n");
+        type_keys(&mut ed, "ggx");
+        ed.execute(":s/甲/乙/g").unwrap();
+        assert_eq!(ed.current_buffer().text(), "乙乙\n甲甲\n");
+    }
+
+    #[test]
+    fn whole_lines_are_pasted_as_whole_lines() {
+        // `xy`, move, `p` is how a paragraph is moved; pasting the copied line
+        // *into* another line cuts that line in two.
+        let mut ed = typed("一二三\n四五六\n");
+        type_keys(&mut ed, "ggxy");
+        type_keys(&mut ed, "jlp");
+        assert_eq!(ed.current_buffer().text(), "一二三\n四五六\n一二三\n");
+    }
+
+    #[test]
     fn a_count_before_f_finds_the_nth_occurrence() {
         let mut ed = Editor::new();
         ed.current_buffer_mut().insert(0, "a.b.c.d");
@@ -4246,21 +4442,25 @@ mod tests {
         ed.on_key(Key::Char('g'));
         ed.on_key(Key::Char('g')); // cursor at 0
 
-        // /two → cursor lands on the "t" of "two" (char index 4).
+        // /two → the match becomes the selection, "two" at 4..7.
         ed.on_key(Key::Char('/'));
         type_keys(&mut ed, "two");
         ed.on_key(Key::Enter);
-        assert_eq!(ed.cursor(), 4);
+        assert_eq!(ed.selection(), (4, 7));
 
         // /one from here finds the second "one" (index 8).
         ed.on_key(Key::Char('/'));
         type_keys(&mut ed, "one");
         ed.on_key(Key::Enter);
-        assert_eq!(ed.cursor(), 8);
+        assert_eq!(ed.selection(), (8, 11));
 
         // n wraps around to the first "one" (index 0).
         ed.on_key(Key::Char('n'));
-        assert_eq!(ed.cursor(), 0);
+        assert_eq!(ed.selection(), (0, 3));
+
+        // And what is selected is what an edit takes.
+        ed.on_key(Key::Char('d'));
+        assert_eq!(ed.current_buffer().text(), " two one");
     }
 
     #[test]
