@@ -25,6 +25,10 @@ pub enum Command {
     Quit {
         force: bool,
     },
+    /// `:wq` / `:x` — save, then leave.
+    WriteQuit,
+    /// `:count` (alias `:wc`) — how much has been written.
+    Count,
     /// `:s/pattern/replacement/[g]` (optionally `:%s/...` for the whole file) —
     /// substitute text. `global` replaces every match on a line; `whole_file`
     /// applies to every line rather than just the cursor's line.
@@ -141,6 +145,8 @@ pub fn parse(input: &str) -> Result<Command, CommandError> {
         } else {
             Some(rest.to_string())
         })),
+        "wq" | "x" => Ok(Command::WriteQuit),
+        "count" | "wc" => Ok(Command::Count),
         "quit" | "q" => Ok(Command::Quit { force: false }),
         "quit!" | "q!" => Ok(Command::Quit { force: true }),
         "undo" | "u" => Ok(Command::Undo),
@@ -233,6 +239,16 @@ pub const COMMANDS: &[Entry] = &[
         name: "write",
         alias: Some("w"),
         help: "save, optionally to a new path",
+    },
+    Entry {
+        name: "wq",
+        alias: Some("x"),
+        help: "save, then leave",
+    },
+    Entry {
+        name: "count",
+        alias: Some("wc"),
+        help: "how much has been written",
     },
     Entry {
         name: "quit",
@@ -541,6 +557,8 @@ mod tests {
             "layout",
             "vertical",
             "horizontal",
+            "wq",
+            "count",
             "chaifen",
             "hanging",
             "buffer-next",
