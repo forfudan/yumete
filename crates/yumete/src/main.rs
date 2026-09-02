@@ -272,9 +272,10 @@ fn preview(editor: &Editor, config: &yumete_config::Config) {
         count -= 1;
     }
 
-    let width = count.to_string().len().max(1);
-    // The preview wraps where the editor would (Feature #77), so `-p` shows the
-    // page rather than a set of lines that run off the terminal.
+    // The gutter is sized from the buffer's own line count, the way the editor
+    // sizes it, so the preview wraps at the width the editor would.
+    let width = buf.line_count().max(1).to_string().len();
+    // ` │ ` between the number and the text, against the editor's single space.
     let gutter = width + 3;
     let wrap = if config.editor.soft_wrap {
         terminal_width().saturating_sub(gutter)

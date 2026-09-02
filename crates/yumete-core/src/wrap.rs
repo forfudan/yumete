@@ -34,6 +34,10 @@
 //! a row always advances by at least one character, so wrapping terminates on
 //! any input.
 
+use std::cell::RefCell;
+use std::collections::hash_map::DefaultHasher;
+use std::hash::{Hash, Hasher};
+
 use ropey::Rope;
 use yumete_cjk::{grapheme_width, graphemes};
 
@@ -53,6 +57,10 @@ pub struct Row {
     pub start: usize,
     /// Char index one past the last character in the row.
     pub end: usize,
+    /// Whether this is the last row the paragraph wraps into — the row whose
+    /// end is the paragraph's own end, and so the only one carrying the line
+    /// break.
+    pub ends_line: bool,
 }
 
 impl Row {
@@ -156,6 +164,7 @@ pub fn line_rows(text: &str, width: usize) -> Vec<(usize, usize)> {
 
     let mut rows = Vec::new();
     let mut g = 0; // grapheme index of the row start
+    let mut last_width = 0;
     while g < widths.len() {
         // As many graphemes as fit, at least one.
         let mut used = 0;
@@ -167,10 +176,33 @@ pub fn line_rows(text: &str, width: usize) -> Vec<(usize, usize)> {
         if end < widths.len() {
             end = g + adjusted_break(&chars, &cuts, g, end);
         }
+        last_width = widths[g..end].iter().sum();
         rows.push((cuts[g], cuts[end]));
         g = end;
     }
+    // A paragraph that exactly fills its last row leaves the end-of-paragraph
+    // caret nowhere to stand: the column after the last glyph is off the row.
+    // Open one more, empty, row for it — which is also where the reader expects
+    // the next character to appear.
+    if last_width >= width {
+        rows.push((cuts[widths.len()], cuts[widths.len()]));
+    }
     rows
+}
+
+/// The graphemes of `text` as `(char index, display width)`.
+///
+/// Columns are measured over *graphemes*, the same unit [`line_rows`] breaks
+/// on: counting a combining mark or a flag's second half as its own column puts
+/// the caret in a cell that has no glyph in it, and lets `j` land inside a
+/// cluster that a later edit would then cut in half.
+fn steps(text: &str) -> impl Iterator<Item = (usize, usize)> + '_ {
+    let mut at = 0;
+    graphemes(text).map(move |g| {
+        let start = at;
+        at += g.chars().count();
+        (start, grapheme_width(g))
+    })
 }
 
 /// Where the row starting at grapheme `g` should really end, given that `end`
@@ -200,6 +232,97 @@ fn adjusted_break(chars: &[char], cuts: &[usize], g: usize, end: usize) -> usize
     (cut - g).max(1)
 }
 
+/// How many wrapped paragraphs to remember.
+///
+/// One keystroke asks where the cursor is, what its goal column is, which rows
+/// fill the page and how far the cursor is from its top — four or five walks
+/// over the *same* paragraph, and on a chapter typed as one paragraph each walk
+/// is the whole chapter. Eight covers the paragraphs a page touches with room
+/// to spare.
+const REMEMBERED_PARAGRAPHS: usize = 8;
+
+/// One remembered paragraph: the hash of its text, the width it was wrapped at,
+/// and the rows that came out.
+type Remembered = (u64, usize, Vec<(usize, usize)>);
+
+thread_local! {
+    /// Wrapped paragraphs, most recently used first: `(text hash, width, rows)`.
+    ///
+    /// Keyed by a hash of the paragraph's own text rather than by a line number
+    /// or a buffer revision, exactly as the segmentation cache is: a matching
+    /// hash is a correct answer whatever else in the document — or in another
+    /// document — has moved since.
+    static ROWS: RefCell<Vec<Remembered>> = const { RefCell::new(Vec::new()) };
+
+    /// How many paragraphs have actually been wrapped, for the test that keeps
+    /// a keystroke from quietly becoming four passes over a chapter again.
+    static WRAPPED: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
+/// How many paragraphs have been wrapped since [`reset_wrap_count`].
+#[cfg(test)]
+fn wrap_count() -> usize {
+    WRAPPED.with(|n| n.get())
+}
+
+/// Start counting wrapped paragraphs again.
+#[cfg(test)]
+fn reset_wrap_count() {
+    WRAPPED.with(|n| n.set(0));
+}
+
+/// A hash of `line`'s text, taken over the rope's own chunks so that asking
+/// costs no allocation. Two identical paragraphs stored differently may hash
+/// differently — that is a cache miss, which is merely slow, never wrong.
+fn line_hash(rope: &Rope, line: usize) -> u64 {
+    let mut hasher = DefaultHasher::new();
+    for chunk in rope.line(line).chunks() {
+        chunk.hash(&mut hasher);
+    }
+    hasher.finish()
+}
+
+/// The rows `line` wraps into, remembering the last few answers.
+///
+/// The paragraph's text is only materialised on a miss: turning a 100,000-
+/// character paragraph into a `String` four times per keystroke is most of what
+/// made an unmemoised `j` slow, and the questions a keystroke asks are all
+/// about the same handful of paragraphs.
+fn rows_of_line(rope: &Rope, line: usize, width: usize) -> Vec<(usize, usize)> {
+    let hash = line_hash(rope, line);
+    if let Some(rows) = remembered(hash, width) {
+        return rows;
+    }
+    WRAPPED.with(|n| n.set(n.get() + 1));
+    let rows = line_rows(&line_text(rope, line), width);
+    remember(hash, width, &rows);
+    rows
+}
+
+/// The rows remembered for this paragraph, if any, moved back to the front.
+fn remembered(hash: u64, width: usize) -> Option<Vec<(usize, usize)>> {
+    ROWS.with(|cache| {
+        let mut cache = cache.borrow_mut();
+        let i = cache
+            .iter()
+            .position(|&(h, w, _)| h == hash && w == width)?;
+        // A page keeps asking about the same paragraphs.
+        let entry = cache.remove(i);
+        let rows = entry.2.clone();
+        cache.insert(0, entry);
+        Some(rows)
+    })
+}
+
+/// Remember `rows` for this paragraph, dropping the least recently asked about.
+fn remember(hash: u64, width: usize, rows: &[(usize, usize)]) {
+    ROWS.with(|cache| {
+        let mut cache = cache.borrow_mut();
+        cache.insert(0, (hash, width, rows.to_vec()));
+        cache.truncate(REMEMBERED_PARAGRAPHS);
+    });
+}
+
 /// How many lines the grid covers — ropey's count, which includes the empty
 /// line a trailing newline opens, because that is where the caret sits after
 /// `o` and the renderer draws it.
@@ -209,7 +332,7 @@ fn line_count(rope: &Rope) -> usize {
 
 /// How many visual rows the logical `line` wraps into (always at least one).
 pub fn row_count_in_line(rope: &Rope, line: usize, width: usize) -> usize {
-    line_rows(&line_text(rope, line), width).len()
+    rows_of_line(rope, line, width).len()
 }
 
 /// Locate the char index `pos` in the wrapped grid.
@@ -218,8 +341,7 @@ pub fn position(rope: &Rope, pos: usize, width: usize) -> Position {
     let line = rope.char_to_line(pos);
     let start = rope.line_to_char(line);
     let col = pos - start;
-    let text = line_text(rope, line);
-    let rows = line_rows(&text, width);
+    let rows = rows_of_line(rope, line, width);
 
     // The last row that starts at or before the cursor. A cursor resting past
     // the end of the paragraph belongs on the final row, not on a phantom one.
@@ -228,12 +350,10 @@ pub fn position(rope: &Rope, pos: usize, width: usize) -> Position {
         .saturating_sub(1)
         .min(rows.len() - 1);
     let (row_start, _) = rows[index_in_line];
-    let column = text
-        .chars()
-        .skip(row_start)
-        .take(col.saturating_sub(row_start))
-        .map(|c| grapheme_width(&c.to_string()))
-        .sum();
+    // Only the part of the row before the cursor is measured — a row, not a
+    // paragraph, however long the paragraph is.
+    let ahead = rope.slice(start + row_start..start + col).to_string();
+    let column = steps(&ahead).map(|(_, w)| w).sum();
     Position {
         line,
         index_in_line,
@@ -258,7 +378,7 @@ pub fn rows_from(rope: &Rope, anchor: Anchor, width: usize, n: usize) -> Vec<Row
     let mut index = anchor.index_in_line;
     while out.len() < n && line < lines {
         let start = rope.line_to_char(line);
-        let rows = line_rows(&line_text(rope, line), width);
+        let rows = rows_of_line(rope, line, width);
         while index < rows.len() && out.len() < n {
             let (s, e) = rows[index];
             out.push(Row {
@@ -266,6 +386,7 @@ pub fn rows_from(rope: &Rope, anchor: Anchor, width: usize, n: usize) -> Vec<Row
                 index_in_line: index,
                 start: start + s,
                 end: start + e,
+                ends_line: index + 1 == rows.len(),
             });
             index += 1;
         }
@@ -365,8 +486,7 @@ fn char_at_column(
     goal: usize,
 ) -> usize {
     let start = rope.line_to_char(line);
-    let text = line_text(rope, line);
-    let rows = line_rows(&text, width);
+    let rows = rows_of_line(rope, line, width);
     let index_in_line = index_in_line.min(rows.len() - 1);
     let (s, e) = rows[index_in_line];
     // The caret may rest one past the last character of a paragraph, but not
@@ -378,14 +498,18 @@ fn char_at_column(
         e.saturating_sub(1)
     };
 
+    // The grapheme whose own columns cover `goal` — not the one after it, which
+    // is where `col >= goal` would stop and would put `j` one glyph right of
+    // the column it was aiming at whenever that column is inside a wide glyph.
+    let row = rope.slice(start + s..start + e).to_string();
     let mut col = 0;
-    let mut at = s;
-    for c in text.chars().skip(s).take(e - s) {
-        if col >= goal {
+    let mut at = e;
+    for (i, w) in steps(&row) {
+        if col + w > goal {
+            at = s + i;
             break;
         }
-        col += grapheme_width(&c.to_string());
-        at += 1;
+        col += w;
     }
     start + at.min(limit)
 }
@@ -428,6 +552,36 @@ mod tests {
             .into_iter()
             .map(|(s, e)| chars[s..e].iter().collect())
             .collect()
+    }
+
+    /// A chapter typed as one paragraph is asked about several times per
+    /// keystroke — where the cursor is, what column it is aiming at, which rows
+    /// fill the page, how far down the page the cursor is. Wrapping it afresh
+    /// for each question is the whole chapter, four times, per `j`.
+    #[test]
+    fn one_keystroke_wraps_a_paragraph_once() {
+        let text: String = "春夏秋冬".repeat(2_500);
+        let rope = Rope::from_str(&text);
+        let width = 80;
+
+        reset_wrap_count();
+        let p = position(&rope, 5_000, width);
+        let _ = column_of(&rope, 5_000, width);
+        let _ = next_row(&rope, 5_000, width, 0);
+        let _ = rows_from(&rope, Anchor::from(p), width, 40);
+        let _ = distance(&rope, Anchor::default(), Anchor::from(p), width, 40);
+        assert_eq!(
+            wrap_count(),
+            1,
+            "one paragraph, one keystroke, more than one pass over it"
+        );
+
+        // Editing it is a different paragraph, and must be wrapped again.
+        let mut edited = rope.clone();
+        edited.insert(0, "新");
+        reset_wrap_count();
+        let _ = position(&edited, 0, width);
+        assert_eq!(wrap_count(), 1, "an edited paragraph was not re-wrapped");
     }
 
     #[test]
@@ -486,9 +640,48 @@ mod tests {
     #[test]
     fn wrapping_always_advances() {
         // Punctuation dense enough to defeat every rule must still terminate.
+        // Every row but the caret's own carries at least one character.
         let rows = line_rows("。。。。。。。。", 4);
-        assert!(rows.iter().all(|&(s, e)| e > s));
+        assert!(rows[..rows.len() - 1].iter().all(|&(s, e)| e > s));
         assert_eq!(rows.last().unwrap().1, 8);
+    }
+
+    #[test]
+    fn a_paragraph_that_exactly_fills_a_row_opens_one_more_for_the_caret() {
+        // Four 漢字 in eight cells leave the caret no column to stand in on
+        // that row — the ninth cell is off the row — so it gets the next one.
+        let rows = line_rows("春夏秋冬", 8);
+        assert_eq!(rows, vec![(0, 4), (4, 4)]);
+        // A row that does not fill the width needs no such thing.
+        assert_eq!(line_rows("春夏秋", 8), vec![(0, 3)]);
+
+        let rope = Rope::from_str("春夏秋冬");
+        let p = position(&rope, 4, 8);
+        assert_eq!((p.index_in_line, p.column), (1, 0));
+    }
+
+    #[test]
+    fn columns_are_counted_over_graphemes_not_chars() {
+        // か + combining dakuten is one grapheme two cells wide; counted as two
+        // characters it would report a column that has no glyph in it.
+        let text = "か\u{3099}か\u{3099}か\u{3099}か\u{3099}";
+        assert_eq!(line_rows(text, 8), vec![(0, 8), (8, 8)]);
+        let rope = Rope::from_str(text);
+        assert_eq!(position(&rope, 6, 8).column, 6);
+        // And `k` never lands between a base and its mark.
+        assert_eq!(
+            prev_row(&rope, 8, 8, 2),
+            2,
+            "the cursor landed inside a grapheme cluster"
+        );
+    }
+
+    #[test]
+    fn a_goal_column_inside_a_wide_glyph_lands_on_that_glyph() {
+        // Column 1 is the right half of 甲; `j` belongs on 甲, not on 乙 —
+        // which is where an unwrapped `j` lands, and the two must agree.
+        let rope = Rope::from_str("abc\n甲乙丙丁\nxyz\n");
+        assert_eq!(next_row(&rope, 1, 40, 1), 4);
     }
 
     #[test]
@@ -504,12 +697,14 @@ mod tests {
     fn a_page_is_built_from_an_anchor_not_from_the_top() {
         let rope = Rope::from_str("春夏秋冬春夏秋冬\nabc\n");
         let rows = rows_from(&rope, Anchor::default(), 8, 10);
-        assert_eq!(rows.len(), 4); // two rows, "abc", and the trailing empty line
+        // Two rows of text, the caret's row after them, "abc", and the empty
+        // line the trailing newline opens.
+        assert_eq!(rows.len(), 5);
         assert_eq!(rows[0].start, 0);
         assert_eq!(rows[1].start, 4);
         assert!(!rows[1].starts_line());
-        assert_eq!(rows[2].line, 1);
-        assert!(rows[2].starts_line());
+        assert_eq!(rows[3].line, 1);
+        assert!(rows[3].starts_line());
     }
 
     #[test]
@@ -519,9 +714,11 @@ mod tests {
             line: 2,
             index_in_line: 1,
         };
-        assert_eq!(distance(&rope, Anchor::default(), far, 8, 20), Some(4));
-        assert_eq!(retreat(&rope, far, 8, 4), Anchor::default());
-        assert_eq!(advance(&rope, Anchor::default(), 8, 4), far);
+        // Three rows in the first paragraph (two of text, one for the caret),
+        // one for "abc", then the second row of the last paragraph.
+        assert_eq!(distance(&rope, Anchor::default(), far, 8, 20), Some(5));
+        assert_eq!(retreat(&rope, far, 8, 5), Anchor::default());
+        assert_eq!(advance(&rope, Anchor::default(), 8, 5), far);
     }
 
     #[test]
@@ -548,8 +745,9 @@ mod tests {
         // Column 8 is past the end of a full row; the caret clamps to the last
         // character of that row rather than sliding onto the next one.
         assert_eq!(char_at_column(&rope, 0, 0, 8, 99), 3);
-        // The final row of the paragraph does hold the end-of-line caret.
-        assert_eq!(char_at_column(&rope, 0, 1, 8, 99), 8);
+        assert_eq!(char_at_column(&rope, 0, 1, 8, 99), 7);
+        // The row opened for the caret is where the end of the paragraph is.
+        assert_eq!(char_at_column(&rope, 0, 2, 8, 99), 8);
     }
 
     #[test]
