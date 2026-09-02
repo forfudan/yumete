@@ -249,7 +249,12 @@ fn place(metrics: &Metrics, area: Rect, annotated: &[bool]) -> Vec<u16> {
 pub(crate) fn number_rows(mode: LineNumbers, total_lines: usize) -> u16 {
     match mode {
         LineNumbers::None => 0,
-        _ => (total_lines.max(1).to_string().len().div_ceil(2)).clamp(1, 3) as u16,
+        // One row per digit. Two digits to a row packed twice as short, but
+        // with the 縱 packed tight (`:dense`) there is no gap between them and
+        // 「119」「118」 ran together into 「11」「11」 over 「9」「8」 — a wall of
+        // digits nobody can read a line number out of. One digit to a row
+        // cannot merge with its neighbour, because there is nothing beside it.
+        _ => (total_lines.max(1).to_string().len()).clamp(1, 6) as u16,
     }
 }
 
@@ -398,25 +403,23 @@ pub(crate) fn index_mark(markers: &str, i: usize) -> String {
 /// reads as a number rather than a stack of loose digits.
 fn put_number(buf: &mut Buffer, x: u16, top: u16, rows: u16, n: usize, style: Style) {
     let digits = n.to_string();
-    let bytes = digits.as_bytes();
-    // Pair the digits from the right, so "123" becomes "1" then "23".
-    let pairs = bytes.len().div_ceil(2);
-    let first = bytes.len() - (pairs - 1) * 2;
-    let mut at = 0usize;
-    for row in 0..pairs.min(rows as usize) {
-        let take = if row == 0 { first } else { 2 };
-        let text = &digits[at..at + take];
-        at += take;
-        // Bottom-align the number against the text it labels.
-        let y = top + rows - pairs.min(rows as usize) as u16 + row as u16;
-        // Half-width throughout, right-aligned. A lone digit could be centred by
-        // using its full-width form — that is two cells and fills the slot — but
-        // then a gutter of 1–9 and 10–99 would mix the two widths, and the
-        // mixture reads worse than the offset it fixes.
-        for (i, ch) in format!("{text:>2}").chars().enumerate() {
-            if let Some(cell) = buf.cell_mut((x + i as u16, y)) {
-                cell.set_symbol(&ch.to_string()).set_style(style);
-            }
+    let shown = digits.len().min(rows as usize);
+    // The last `shown` digits: a number too long for the header loses its
+    // leading digits rather than its trailing ones, since it is the units that
+    // tell two neighbouring 縱 apart.
+    let digits = &digits[digits.len() - shown..];
+    for (row, ch) in digits.chars().enumerate() {
+        // Bottom-aligned, against the text it labels.
+        let y = top + rows - shown as u16 + row as u16;
+        // Hung right, on the same edge the 漢字 below it are hung on, so the
+        // number reads as belonging to this 縱 and not to the one beside it.
+        // Half-width: a full-width digit would fill the slot and centre nicely,
+        // but then 1–9 and 10–99 would mix the two widths down one gutter.
+        if let Some(cell) = buf.cell_mut((x + 1, y)) {
+            cell.set_symbol(&ch.to_string()).set_style(style);
+        }
+        if let Some(cell) = buf.cell_mut((x, y)) {
+            cell.set_symbol(" ").set_style(style);
         }
     }
 }

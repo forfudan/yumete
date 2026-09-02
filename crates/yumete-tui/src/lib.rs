@@ -3400,6 +3400,40 @@ mod tests {
     }
 
     #[test]
+    fn a_zong_number_runs_down_its_own_column_a_digit_at_a_time() {
+        // Two digits to a row is half as tall, but with the 縱 packed tight
+        // there is no gap between them: 「119」「118」 came out as 「11」「11」
+        // over 「9」「8」, a wall of digits with no line number in it.
+        let mut editor = Editor::new();
+        editor.on_key(Key::Char('i'));
+        for i in 0..125 {
+            for c in format!("{i}").chars() {
+                editor.on_key(Key::Char(c));
+            }
+            editor.on_key(Key::Enter);
+        }
+        editor.on_key(Key::Esc);
+        let mut config = vertical_config();
+        config.editor.line_numbers = LineNumbers::Absolute;
+        editor.execute("dense").unwrap();
+        editor.execute("1").unwrap();
+        let buffer = render_vertical(&mut editor, &config, 40, 16);
+
+        // Three rows of header for a file of three-digit lines, one digit each,
+        // and the first 縱 is numbered 1 — bottom-aligned, so its lone digit
+        // sits on the last header row.
+        let rightmost = 40 - 1;
+        assert_eq!(at(&buffer, rightmost, 2), "1", "縱 1 is numbered 1");
+        assert_eq!(at(&buffer, rightmost, 1), " ", "and nothing above it");
+
+        // The 縱 beside it cannot borrow a digit: each column holds one.
+        for y in 0..3u16 {
+            let cell = at(&buffer, rightmost - 1, y);
+            assert!(cell == " " || cell.is_empty(), "the other cell of the slot: {cell:?}");
+        }
+    }
+
+    #[test]
     fn a_vertical_page_is_ruled_like_稿紙() {
         let mut editor = editor_with(&"字".repeat(24));
         let mut config = vertical_config();
