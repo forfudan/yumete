@@ -1924,6 +1924,22 @@ mod tests {
         render_vertical_with(editor, config, &no_ime(), w, h)
     }
 
+    /// Render, returning where the terminal's cursor was left.
+    fn render_caret(
+        editor: &Editor,
+        config: &Config,
+        w: u16,
+        h: u16,
+    ) -> (ratatui::buffer::Buffer, Option<Position>) {
+        let mut terminal = Terminal::new(TestBackend::new(w, h)).unwrap();
+        let mut viewport = Viewport::default();
+        terminal
+            .draw(|frame| draw(frame, editor, config, &no_ime(), &mut viewport))
+            .unwrap();
+        let at = terminal.get_cursor_position().ok();
+        (terminal.backend().buffer().clone(), at)
+    }
+
     /// Render vertically, returning where the terminal's cursor was left — the
     /// caret, in Insert mode.
     fn render_vertical_caret(
@@ -2981,6 +2997,40 @@ mod tests {
         )
         .unwrap();
         (dir, csv)
+    }
+
+    #[test]
+    fn the_caret_moves_inside_a_cell_not_only_between_cells() {
+        let (dir, csv) = a_table_file("caret");
+        let mut editor = Editor::new();
+        editor.open_file(&csv).unwrap();
+        let mut config = Config::default();
+        config.editor.line_numbers = LineNumbers::None;
+        editor.execute("2").unwrap();
+        editor.on_key(Key::Char('l'));
+
+        let caret = |e: &Editor, c: &Config| render_caret(e, c, 60, 10).1.unwrap().x;
+        let at_start = caret(&editor, &config);
+
+        // Reading by character, the caret has to move with the cursor — pinned
+        // to the cell's first 字 it would say the cursor had not moved at all.
+        editor.on_key(Key::Tab);
+        editor.on_key(Key::Char('l'));
+        let one = caret(&editor, &config);
+        assert_eq!(one, at_start + 2, "one 漢字 further along the cell");
+        editor.on_key(Key::Char('l'));
+        assert_eq!(caret(&editor, &config), at_start + 4);
+        editor.on_key(Key::Char('h'));
+        assert_eq!(caret(&editor, &config), one, "and back");
+
+        // The same in Insert, where it decides where the next 字 lands.
+        editor.on_key(Key::Tab);
+        editor.on_key(Key::Char('i'));
+        assert_eq!(caret(&editor, &config), at_start, "`i` is the cell's start");
+        editor.on_key(Key::Right);
+        assert_eq!(caret(&editor, &config), at_start + 2);
+
+        std::fs::remove_dir_all(&dir).ok();
     }
 
     #[test]

@@ -241,8 +241,20 @@ pub fn draw(
             let content = yumete_core::table::cell_text(&source, *span);
             put_text(buf, x, y, (x + w).min(right), &content, style);
             if here {
-                // The caret sits where typing would land: the cell's start.
-                caret = (x, y);
+                // Where typing would land — which is *inside* the cell, not at
+                // its start. Reading by character (`Tab`), and typing in Insert,
+                // both move the cursor within the cell, and a caret pinned to
+                // the cell's first 字 says they did not.
+                let from = editor
+                    .cell_span(line, i)
+                    .map(|(a, _)| a)
+                    .unwrap_or(usize::MAX);
+                let into: String = content
+                    .chars()
+                    .take(editor.cursor().saturating_sub(from))
+                    .collect();
+                let step = (yumete_cjk::str_width(&into) as u16).min(w);
+                caret = ((x + step).min(right.saturating_sub(1)), y);
             }
             x += w + GAP as u16;
         }
