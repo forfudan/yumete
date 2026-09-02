@@ -1606,15 +1606,7 @@ impl Editor {
                 self.move_head(pos);
             }
             // Word motions (Helix `w`/`b`/`e`, and WORD `W`/`B`/`E`).
-            Key::Char('w') => self.repeat(count, |e| {
-                let p = motion::next_word_start(
-                    e.current_buffer().rope(),
-                    e.cursor,
-                    false,
-                    e.segmenter.as_ref(),
-                );
-                e.select_up_to(p);
-            }),
+            Key::Char('w') => self.repeat(count, |e| e.select_word_forward(false)),
             Key::Char('e') => self.repeat(count, |e| {
                 let p = motion::next_word_end(
                     e.current_buffer().rope(),
@@ -1633,15 +1625,7 @@ impl Editor {
                 );
                 e.select_to(p);
             }),
-            Key::Char('W') => self.repeat(count, |e| {
-                let p = motion::next_word_start(
-                    e.current_buffer().rope(),
-                    e.cursor,
-                    true,
-                    e.segmenter.as_ref(),
-                );
-                e.select_up_to(p);
-            }),
+            Key::Char('W') => self.repeat(count, |e| e.select_word_forward(true)),
             Key::Char('E') => self.repeat(count, |e| {
                 let p = motion::next_word_end(
                     e.current_buffer().rope(),
@@ -2851,20 +2835,33 @@ impl Editor {
         self.refresh_goal_column();
     }
 
-    /// Select forward to *just before* `pos` — for `w`, which names where the
-    /// next word begins rather than where this selection ends. The character
-    /// that begins the next word belongs to the next `w`, not this one.
-    fn select_up_to(&mut self, pos: usize) {
-        let old = self.cursor;
+    /// Step forward one word, selecting it (`w` / `W`).
+    ///
+    /// The selection runs from here to *just before* the next word begins — the
+    /// character that starts the next word belongs to the next `w`. But a word
+    /// of one character (which, with the default segmenter, is every 漢字) ends
+    /// where it starts, and stopping just before the next one would leave the
+    /// cursor exactly where it was: `w` would not move at all. So when taking
+    /// this word cannot advance, `w` takes the next one instead — which is also
+    /// what vi's `w` does.
+    fn select_word_forward(&mut self, big: bool) {
         let rope = self.current_buffer().rope();
-        self.cursor = if pos > old {
-            motion::prev_grapheme(rope, pos).max(old)
+        let from = self.cursor;
+        let next = motion::next_word_start(rope, from, big, self.segmenter.as_ref());
+        let head = motion::prev_grapheme(rope, next);
+        let (anchor, cursor) = if head > from {
+            (from, head)
+        } else if next > from {
+            let after = motion::next_word_start(rope, next, big, self.segmenter.as_ref());
+            (next, motion::prev_grapheme(rope, after).max(next))
         } else {
-            pos
+            // Nothing further in the buffer.
+            return;
         };
         if !self.extend {
-            self.anchor = old;
+            self.anchor = anchor;
         }
+        self.cursor = cursor;
         self.refresh_goal_column();
     }
 
@@ -3480,7 +3477,7 @@ fn surrounding(rope: &Rope, pos: usize, open: char, close: char) -> Option<(usiz
 mod tests {
     use super::*;
     use crate::input::{Key, Mode};
-    use yumete_cjk::CategorySegmenter;
+    use yumete_cjk::{CategorySegmenter, DictionarySegmenter};
 
     /// Type `text` into a fresh editor, then return to Normal at the top.
     fn typed(text: &str) -> Editor {
@@ -4673,11 +4670,13 @@ mod tests {
         ed.on_key(Key::Char('i'));
         type_keys(&mut ed, "你好世界");
         ed.on_key(Key::Esc);
-        // Default: each CJK character is its own word, so `w` stops after 你.
+        // Default: each CJK character is its own word. Selecting up to just
+        // before the next one would be a standstill, so `w` takes the next word
+        // — 好 — the way vi's `w` moves onto it.
         ed.on_key(Key::Char('g'));
         ed.on_key(Key::Char('g'));
         ed.on_key(Key::Char('w'));
-        assert_eq!(ed.selection(), (0, 1));
+        assert_eq!(ed.selection(), (1, 2));
 
         // With a dictionary, `w` steps over the whole word 你好.
         ed.set_segmenter(Box::new(yumete_cjk::DictionarySegmenter::new(
@@ -4885,6 +4884,35 @@ mod tests {
     /// The selection covers the grapheme the cursor is on, as it does in Helix.
     /// Without that, the block cursor sits on a character an edit would not
     /// touch — what the screen shows is not what `d` takes.
+    /// `w` must always move. Selecting up to *just before* the next word is
+    /// right for a word of several characters and is a standstill for a word of
+    /// one — and with the default segmenter every 漢字 is a word of one.
+    #[test]
+    fn w_steps_a_word_at_a_time_however_short_the_words_are() {
+        let mut ed = typed("那年冬天雪下得早");
+        press(&mut ed, "gg");
+        let mut walked = Vec::new();
+        for _ in 0..5 {
+            press(&mut ed, "w");
+            walked.push(ed.cursor());
+        }
+        assert_eq!(walked, vec![1, 2, 3, 4, 5], "`w` stood still");
+
+        // With real words it takes one whole word, and `d` takes exactly that.
+        let mut ed = typed("那年冬天下雪");
+        ed.set_segmenter(Box::new(DictionarySegmenter::from_text(
+            "那年 10\n冬天 10\n下雪 10\n",
+            0,
+        )));
+        press(&mut ed, "gg");
+        press(&mut ed, "w");
+        assert_eq!(ed.selection(), (0, 2), "那年");
+        press(&mut ed, "w");
+        assert_eq!(ed.selection(), (2, 4), "冬天");
+        ed.on_key(Key::Char('d'));
+        assert_eq!(ed.current_buffer().text(), "那年下雪");
+    }
+
     #[test]
     fn what_the_cursor_covers_is_what_an_edit_takes() {
         // `f` and `t` reach through their target.
