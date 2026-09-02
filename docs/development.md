@@ -391,6 +391,203 @@ a checksum, so a commit-triggered build would mean a new formula edit and a new
 `brew upgrade` prompt for every push. Homebrew's own convention is that a
 formula follows releases.
 
+## 5.2 Before 0.1.0
+
+Three reviews on 2026-09-02/03 — a 縱書 novelist, the 拆分表 maintainer, and a
+Vim-15/Helix-2 user — each drove the editor and reported separately. What
+follows is the three lists merged and ordered. Where more than one of them
+found the same thing it is marked **(×2)** or **(×3)**: those are not opinions.
+
+Each reviewer was asked whether they would use it today. Novelist: *not as my
+only editor*. 拆分表: *reading and spot-fixing yes, a day's work not yet*. Vim:
+*would keep it installed, would not switch*. All three said the same shape of
+thing — the hard parts are right, and a handful of small wrongs are in the way.
+
+### 1 · Losing work, or lying about it
+
+- **`:w` overwrites a file that changed on disk**, silently, with no reload
+  path (`:e!` does not exist). `Buffer::open`/`save` record no mtime. This is
+  the only silent data-loss route any reviewer found. **high**
+- **Macro recording drops every `q`, operands included.** `on_key` refuses to
+  record `Char('q')` in Normal mode without checking `self.pending`, so `fq`
+  records as `f` and swallows the next key on replay — one reviewer's macro
+  wiped their buffer. Guard on `self.pending != Pending::None`. **high**
+- **No-op edits burn undo steps.** `d` with nothing to delete, `i`+`Esc`, all
+  snapshot unconditionally, so `u` becomes "sometimes does nothing". **medium**
+- **A scratch buffer has no crash copy** — documented, but `yumete` with no
+  argument and an hour of typing is a normal way to start a scene. **medium**
+
+### 2 · Not installable (#135)
+
+`yume-core` is a **path dependency**, so `cargo build` on a clone of yumete
+alone fails; `scripts/build.sh` needs the sibling tree for the data as well.
+Today exactly one person can install this editor, and the manual's 上手 section
+opens by telling a novelist to run a build script. Turn the path dep into a git
+dep and ship the tarballs §5.3 already designs. **high**
+
+### 3 · The vertical page — the reason to choose this editor
+
+- **There is no 禁則處理 down the 縱** (×2). `zong::layout` chunks by
+  `div_ceil(zong_len)` with no adjustment, so a 縱 opens with 。 or ends with 「
+  — both of which the *horizontal* wrap already gets right. **high**
+- **Latin words are split mid-word after a 漢字**, against the manual's own
+  example: `一二三四五六Helix七八` at width 16 breaks `Heli|x`. `adjusted_break`
+  only retreats to a space, and in Chinese prose a Latin word follows a 漢字.
+  **high**
+- **A ruby group can be cut in half by a 縱 boundary** — the reading runs down
+  the next column and the base is no longer centred against it. **medium**
+- **`:dense` does not drop the reading column**, though its own doc comment and
+  the manual's table say it does: `hanging_punctuation()` masks with `!dense`,
+  `ruby()` does not. **medium**
+
+### 4 · Motions — the same gap from three directions (×3)
+
+- **`{` / `}` — paragraph motion.** Absent, with no yumete spelling either.
+  This editor's thesis is that a Chinese paragraph is one line of several
+  hundred characters, which makes `j`/`k` line motions that mostly do not move.
+  All three reviewers named it; two called it the largest hole. **high**
+- **Sentence motion** on 。！？」 — the pieces (the vertical-form tables) are
+  already there and `(`/`)` are free. **medium**
+- **Unbound keys are completely silent.** `0 $ ^ G { } s S C Z & _ @ + -` all
+  do nothing and say nothing; the first minute in any editor is spent pressing
+  exactly these. A status line naming the yumete spelling (`$`→`gl`) turns an
+  hour of dead keys into an hour of learning. **medium**
+- **`.` repeats only the last insert**, so `n.n.n.` — the proofreading loop —
+  does not work. Recording the last operator plus its target covers `r`, `~`,
+  `d`, `ms`, `mr`. **medium**
+- **Insert swallows `C-w` and `C-u`.** `C-w` is in vi, Helix, readline and every
+  terminal prompt; through an IME, taking back a wrong 詞 means holding
+  Backspace. **medium**
+
+### 5 · Table mode (#118)
+
+- **`add_buffer` never re-evaluates table mode**, so `:grep`, `:sh`, `:toc` and
+  picker output are drawn as a 28-column grid with every row flagged torn. One
+  line: call `table_on_open()` there, as `show_buffer` already does. **high**
+- **There is no way to delete a row.** `cell_refuses_cut` fires in char grain
+  too, and `:%s/…\n//` is refused by the grid check. A table editor that cannot
+  remove a line is not one. **high**
+- **`!` / `:pipe` is refused in a table** — after spawning the command and
+  throwing its output away — while the manual advertises `LC_ALL=C sort` as *the*
+  example. Check the invariant before spawning, and let a pipe whose output has
+  the same shape through. **high**
+- **IDS operators are reported as missing rows.** ⿰⿱⿲… appear 9,046 times in
+  the ids_y column alone and every one gets the red 「—」 that means "no row for
+  this", so the panel's one validation signal is false on nearly every
+  structured row. Skip U+2FF0–U+2FFF. **high**
+- **28 columns, ~5 of which carry data on a given row.** `b2` and `d1` are empty
+  in all 123,380 rows and still cost 8 cells each. A `hidden` key per column,
+  and blank-field suppression in the detail panel. **high**
+- **No "go to 木's row".** The `char → line` index is built and answers in
+  300 ns; nothing exposes it. `:row 木`. **high**
+- **`d` in cell grain deletes one character, not the cell** — and errors on an
+  empty cell, which is ~80% of them. **high**
+- **Tab in Insert should commit and move to the next cell** — every grid editor
+  binds it so, and `Tab`'s other job is Normal-mode only. Filling a 28-column
+  row costs 108 keys of pure overhead today. **medium**
+- **`O` on the header row inserts a row above the header**, after which the key
+  index treats the literal string `char` as a key. **medium**
+- **The 部件 list is the first thing truncated** in the detail panel, below 28
+  mostly-blank fields. Draw it first, or pin it to the bottom. **medium**
+- **The vertical candidate panel shows 拆分 for the highlighted candidate only**;
+  the horizontal one shows it for every row, which is what comparing candidates
+  needs. **medium**
+- **`:table check`** — duplicate keys, components with no row, ragged rows,
+  characters outside the declared block. All four are `:grep`-shaped answers
+  over a buffer the editor already knows how to make. **medium**
+
+### 6 · `:s`, and the command line
+
+- **`:s` cannot contain a `/`**, and says *substitute requires an argument* when
+  you try. No alternate delimiter either. Dates, paths, URLs are unreachable.
+  **high**
+- **`:s` flags are swallowed**: `i` does not ignore case, `c` does not confirm,
+  and **`n` — which in vi means "count, change nothing" — performs the
+  substitution**. **high**
+- **No project-wide replace.** `:grep` finds 128 hits across 143 files in 6 ms
+  and there is no way to change any of them; renaming a character across 120
+  chapters means opening 120 files. **high**
+- **The `:` line has no editing and no history** — no `Left`/`Right`, no `C-w`,
+  no `Up`. A typo in a long `:%s` means backspacing through all of it. **medium**
+- **`:s` has no numeric ranges** (`:1,40s`, `:.,$s`). **medium**
+- **`C-o` does nothing after `gg`, `ge` or a search**, though `remember_jump`'s
+  own doc comment claims otherwise — only `goto_line` calls it. Jump-back after
+  a search is the whole reason `C-o` exists. **high**
+
+### 7 · A hundred chapters
+
+- **Past ~8 open files nothing says which one you are in**: the tab bar never
+  scrolls to the current tab, and `[n/m]` is suppressed whenever the tab bar is
+  showing. With 122 buffers neither says it. **high**
+- **A per-project word list.** 阿寧 — the name on every page — segments as
+  `[阿][寧]`. The fallback chain already reads `segmentation.txt` from the data
+  dir; `.yumete/words.txt` from the project, merged in, is the cheapest large
+  win on the list. **high**
+- **`:buffer list` writes 1783 characters into a one-line status bar** with 122
+  buffers open. It should open the picker `Space b` already opens. **medium**
+- **`:grep` searches your own build output** — it found hits in the `.html`
+  `:export` had just written. **medium**
+- **No session (#43)**: five `:open`s every morning. **medium**
+- **No marks (#45).** The jump list half was built; marks were not. **medium**
+
+### 8 · Export and preview
+
+- **`:export` leaks 批注 and prints markup literally.** `%%私話%%` goes into the
+  file you hand a publisher, and `**很好**` exports as four asterisks rather
+  than `<strong>`. The manual says 批注 「不是書的一部分」. **medium**
+- **The HTML export's 縱書 is thinner than it looks**: `text-orientation:
+  upright` sets pinyin one letter per row (`mixed` is what 縱書 wants), and
+  `hanging-punctuation: allow-end last` affects only the last line and only in
+  Safari, so `:hanging` does not survive the export. **medium**
+
+### 9 · The manual is out of date with the editor (×3)
+
+All three reviewers found the same class of thing, which is the sign that the
+docs are drifting faster than anyone is reading them.
+
+- **Commands that no longer exist** are still documented: `:scheme` (manual §六),
+  `:bn :bp :bd :ls :markup` (`--help`), `:markup :md` (manual §七). **high**
+- **`:w` sets no status at all**, while the manual quotes 「存了 ch01.md」 as its
+  example of the hint row. **high**
+- **Messages are half English and half Chinese.** `wrote /tmp/zz.html`,
+  `4 substitution(s)`, `already at oldest change` beside 「語法：markdown」,
+  「密排：一縱兩格」. The manual is entirely Chinese. Pick one. **high**
+- **`zong_length = 32` is stated as the default in four places**; it is 0 (#125).
+- **`--help` binds `J` twice** — half-page and join; join is `gJ`.
+- **The manual's one admitted gap is already closed**: 「橫排的折行寬度目前按源碼
+  算」 was fixed by #107; measured 3 drawn rows where the source has 4.
+- **§5.1's Helix table understates the editor by a dozen keys** — `%`, `r`, `R`,
+  `~`, `.`, `>`, `<`, `*`, `Home`/`End`, `C-u`/`C-d`/`C-f`/`C-b` and `Space` are
+  all shipped and still listed as planned.
+- **`-t`, `:table`, `:clipboard`, `y`/`Y`/`p` in table mode, `Space P`** are
+  implemented and in no reference list.
+- **`main.rs` opens every command-line file twice** — two identical loops, the
+  second carrying a comment explaining why files must be opened *after* the
+  settings, which the first defeats.
+
+### 10 · Two the author asked for
+
+- **First-line indent instead of a blank line.** Chinese paragraphs are marked
+  by a two-em indent, not by a blank line, and the blank line costs a row. Do it
+  as a **view**, not as a rewrite of the file: Markdown and Typst both need the
+  blank line to mean "new paragraph", so deleting it would export as one
+  paragraph. This needs a capability yumete does not have — **drawing text the
+  file does not contain** (today the display layer only hides) — and the mirror
+  of the 所見即所得 invariant: the cursor may never sit on a character that is
+  not in the file. **high**
+- **段組 — two bands down the 縱書 page**, read top-right to top-left, then
+  bottom-right to bottom-left. This is standard Japanese vertical typesetting
+  (newspapers, 文庫本): a 縱 of fifty characters is tiring to read, and the
+  traditional answer is to halve it and use the width instead. A terminal is a
+  wide, short shape, which is exactly what 段組 is for. Bands equal by
+  construction; `[editor] bands = 1|2|…`. **medium**
+
+### What was already fixed while the reviews ran
+
+`r` writing over line endings and merging paragraphs (a silent way to lose a
+chapter), and the `ms` and `~` off-by-ones that left the highlight lying about
+what the next edit would take.
+
 ## 5.1 Helix keybindings & IME hotkeys
 
 A per-key view of the Helix Normal-mode keymap (plus yumete's own IME hotkeys)
