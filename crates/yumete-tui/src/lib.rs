@@ -1688,6 +1688,11 @@ fn draw_status(
                 format!("{}-{}", at.line + 1, at.index_in_line + 1)
             };
             format!("{left}   橫 {which}, 字 {}", at.slot + 1)
+        } else if let Some(where_) = editor.table_status() {
+            // In a grid the useful coordinates are the row and *which column* —
+            // "column 143" of a line of 拆分 means nothing to anybody — plus
+            // what one step of `hjkl` currently moves by.
+            format!("{left}   第 {} 行 · {where_}", editor.cursor_line() + 1)
         } else {
             format!(
                 "{left}   Ln {}, Col {}",

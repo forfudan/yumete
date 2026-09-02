@@ -169,7 +169,15 @@ impl Schema {
         }
         let delimiter = match t.delimiter.as_deref() {
             None => ',',
-            Some(d) if d.chars().count() == 1 => d.chars().next().unwrap(),
+            // A line terminator is one character, and it is the one character
+            // that cannot separate two cells *of the same row*: rows are
+            // already separated by it.
+            Some(d) if d.chars().count() == 1 && !"\n\r".contains(d) => {
+                d.chars().next().unwrap()
+            }
+            Some(d) if "\n\r".contains(d) => {
+                return Err("a line break already separates rows, not cells".to_string())
+            }
             Some(d) => return Err(format!("delimiter must be one character, not '{d}'")),
         };
         // The only quoting this reads is none at all, and saying so out loud
@@ -339,6 +347,18 @@ fn parse_compute(text: &str) -> Result<Compute, String> {
 /// at once from different projects, "the working directory" is not a thing
 /// each of them has.
 pub fn schema_for(path: &Path) -> Option<(PathBuf, Schema)> {
+    schema_for_reporting(path).0
+}
+
+/// The same, and what went wrong with the schemas that did not work.
+///
+/// A schema with a typo in it used to be dropped on the floor: the file opened
+/// with the twenty-eight labels, both computed fields and the whole jump
+/// silently missing, and the only clue was that the status line said 「照首行」
+/// where it should have said the schema's name. The parser has a good message
+/// for every one of these; this is how it reaches a person.
+pub fn schema_for_reporting(path: &Path) -> (Option<(PathBuf, Schema)>, Vec<String>) {
+    let mut problems = Vec::new();
     let mut dir = path.parent();
     while let Some(d) = dir {
         let tables = d.join(".yumete").join("tables");
@@ -355,16 +375,21 @@ pub fn schema_for(path: &Path) -> Option<(PathBuf, Schema)> {
                 let Ok(text) = std::fs::read_to_string(&file) else {
                     continue;
                 };
-                if let Ok(schema) = Schema::parse(&text) {
-                    if schema.covers(path) {
-                        return Some((file, schema));
-                    }
+                match Schema::parse(&text) {
+                    Ok(schema) if schema.covers(path) => return (Some((file, schema)), problems),
+                    // A schema that parses but is for other files is not a
+                    // problem; one that does not parse is, whoever it is for.
+                    Ok(_) => {}
+                    Err(why) => problems.push(format!(
+                        "{}: {why}",
+                        file.file_name().unwrap_or_default().to_string_lossy()
+                    )),
                 }
             }
         }
         dir = d.parent();
     }
-    None
+    (None, problems)
 }
 
 /// Where each cell of a line starts and ends, in characters from the line's
