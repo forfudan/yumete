@@ -1336,6 +1336,37 @@ mod tests {
     }
 
     #[test]
+    fn a_full_width_reading_keeps_the_page_square() {
+        // 注音符號 and kana are full-width. Squeezed into the one cell pinyin
+        // needs, every 縱 after them walks a column left and the page comes
+        // apart into a staircase — and this feature is called 振假名.
+        let mut editor =
+            editor_with("<ruby>永<rt>ㄩㄥˇ</rt></ruby>和\n<ruby>山<rt>ㄕㄢ</rt></ruby>川\n天地");
+        let config = vertical_config();
+        let buffer = render_vertical_ruby(&mut editor, &config, 24, 12);
+
+        // Each reading sits in the two cells to the right of its own 縱, and
+        // the 縱 that carries one is four cells from the next — two for the
+        // text, two for the reading — instead of being walked a column left by
+        // a reading that did not fit.
+        // A base is centred against its reading, so it may sit a row or two in.
+        let cell_of = |c: &str| {
+            (0..12)
+                .flat_map(|y| (0..24).map(move |x| (x, y)))
+                .find(|&(x, y)| at(&buffer, x, y) == c)
+        };
+        let (first, fy) = cell_of("永").expect("永 is on the page");
+        let (second, sy) = cell_of("山").expect("山 is on the page");
+        assert_eq!(first - second, 4, "a full-width reading needs two cells");
+        // The reading runs down the margin beside its base, one 注音符號 to a
+        // row; the base sits against the middle of it.
+        assert_eq!(at(&buffer, first + 2, fy), "ㄥ");
+        assert_eq!(at(&buffer, second + 2, sy), "ㄕ");
+        // …and does not paint over the 縱 to its right.
+        assert_eq!(at(&buffer, second, sy), "山");
+    }
+
+    #[test]
     fn ruby_off_shows_the_markup_in_the_page() {
         let mut editor = editor_with("<ruby>口<rt>kǒu</rt></ruby>");
         let config = vertical_config();

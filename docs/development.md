@@ -282,6 +282,7 @@ Phases are ordered by priority, most writer-critical first:
 | 84  | **Regular expressions**                    | core   | P1    | `/` and `:s`; half of revising     | Done   |
 | 85  | **A novel is many files**                  | core   | P1    | `:grep`, `gf`, `:toc`, `:bd`, `:ls` | Done   |
 | 86  | **The scheme's own key bindings**          | ime    | P1    | `;`/`'` 選二三, `:scheme`, 二重注解 | Done   |
+| 87  | **Full-width readings**                    | tui    | P1    | 注音符號 and kana; the page was a staircase | Done |
 
 ---
 
