@@ -364,6 +364,16 @@ pub struct Editor {
     turned_for_table: Option<Layout>,
     /// Where the cursor was before each far jump, and how far back we have
     /// walked through them.
+    /// A gap between 縱 set at runtime, overriding the config's.
+    ///
+    /// The one piece of the dense arrangement that was a startup-only setting
+    /// while the other three were live toggles — which is why `:dense` had to
+    /// exist rather than being three keys anybody could find.
+    zong_gap: Option<usize>,
+    /// Whether the dense arrangement is on, so the ticks know to stay away.
+    dense: bool,
+    /// What the page looked like before it was packed.
+    dense_was: Option<(crate::ruby::Dialects, bool, Option<usize>)>,
     jumps: Vec<(usize, usize)>,
     jump_at: usize,
     /// Where Enter came from when it followed a footnote, and the line it
@@ -556,6 +566,9 @@ impl Editor {
             show_detail: true,
             table_bypass: std::cell::Cell::new(false),
             turned_for_table: None,
+            zong_gap: None,
+            dense: false,
+            dense_was: None,
             jumps: Vec::new(),
             jump_at: 0,
             note_return: None,
@@ -1549,6 +1562,10 @@ impl Editor {
             // A measure is only a measure if the rows honour it, so setting
             // one turns wrapping on: `:wrap 50` says "write to fifty", and
             // fifty columns of text running off the edge is not that.
+            Command::SetDense(on) => {
+                self.set_dense(on);
+                Ok(CommandOutcome::Continue)
+            }
             Command::SetTable(on) => {
                 if on {
                     self.enter_table();
@@ -2964,6 +2981,51 @@ impl Editor {
     pub fn set_wrap_width(&mut self, available: usize) {
         let width = self.measure.map_or(available, |m| m.min(available));
         self.wrap_width = Some(width.max(crate::wrap::MIN_WRAP_WIDTH));
+    }
+
+    /// The gap between 縱, if the writer has set one for this session.
+    pub fn zong_gap(&self) -> Option<usize> {
+        self.zong_gap
+    }
+
+    /// Pack the page as tight as a terminal can, or let it breathe again.
+    ///
+    /// Four things at once, because they are one thing: **how much of the
+    /// window is writing**. The gap between 縱 goes, the reading column goes,
+    /// the margin 句讀 hang in goes, and the 稿紙 ticks go — after which a 縱 is
+    /// two cells wide, which is exactly one 漢字 and the narrowest a terminal
+    /// can draw one.
+    ///
+    /// What it cannot do is make the 字 itself narrower: a terminal cell is a
+    /// fixed size that the terminal decides, and 90%-wide cells are a setting
+    /// in the terminal, not here.
+    pub fn set_dense(&mut self, on: bool) {
+        if on {
+            // What it was, so that turning it off gives *that* back rather
+            // than a guess at the defaults — a writer who had readings off
+            // already should not find them on again.
+            if self.dense_was.is_none() {
+                self.dense_was = Some((self.ruby, self.hanging, self.zong_gap));
+            }
+            self.zong_gap = Some(0);
+            self.ruby = crate::ruby::Dialects::NONE;
+            self.hanging = false;
+            self.dense = true;
+            self.status = "密排：一縱兩格，無注音、無旁置、無刻度".to_string();
+        } else {
+            if let Some((ruby, hanging, gap)) = self.dense_was.take() {
+                self.ruby = ruby;
+                self.hanging = hanging;
+                self.zong_gap = gap;
+            }
+            self.dense = false;
+            self.status = "密排：關".to_string();
+        }
+    }
+
+    /// Whether the page is packed tight.
+    pub fn dense(&self) -> bool {
+        self.dense
     }
 
     /// The measure the writer set, if any.
