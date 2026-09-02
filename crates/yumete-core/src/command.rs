@@ -79,6 +79,10 @@ pub enum Command {
     /// `:preview` / `:preview off` — hand the file to the real typesetter and
     /// show what it makes (Feature #128).
     SetPreview(bool),
+    /// `:w!` — write over a file that changed on disk since it was read.
+    WriteForce(Option<String>),
+    /// `:e!` — read the file again, losing what is in the buffer.
+    Reread,
     /// `:yume builtin` — use the 碼表 in the binary, whatever is installed.
     BuiltinScheme,
     /// `:yume table <path>` — type with a code table of your own.
@@ -222,6 +226,14 @@ pub fn parse(input: &str) -> Result<Command, CommandError> {
             }
         }
         "new" | "enew" => Ok(Command::NewBuffer),
+        // `!` is "I know, and mine wins" — over a file that changed on disk.
+        "write!" | "w!" => Ok(Command::WriteForce(if rest.is_empty() {
+            None
+        } else {
+            Some(rest.to_string())
+        })),
+        // `:e!` is the other half: take what is on disk and lose what is here.
+        "open!" | "o!" | "edit!" | "e!" => Ok(Command::Reread),
         "write" | "w" => Ok(Command::Write(if rest.is_empty() {
             None
         } else {

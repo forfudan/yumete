@@ -757,6 +757,11 @@ fn load_data_file(engine: &mut Engine, dirs: &[PathBuf], file: &DataFile) -> boo
             Ok(text) => engine.load_simp_trad_text(&text),
             Err(_) => return false,
         },
+        // A kind this yumete was not built against. The doc comment above has
+        // promised since the beginning that these are skipped rather than
+        // treated as errors — but the match was exhaustive, so yume adding a
+        // kind broke the *build* instead. Now it does what it said.
+        _ => return false,
     }
     true
 }
