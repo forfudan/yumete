@@ -88,6 +88,43 @@ pub fn right(rope: &Rope, pos: usize) -> usize {
     ls + col_of_byte(&text, next)
 }
 
+/// One grapheme to the right **in the buffer**, stepping over a line break
+/// onto the next line.
+///
+/// [`right`] stops at the end of a line, because that is what `l` should do.
+/// The selection needs the other one: the grapheme the cursor sits on is inside
+/// the selection, and on the last character of a line that grapheme's far edge
+/// is on the next line.
+pub fn next_grapheme(rope: &Rope, pos: usize) -> usize {
+    let stepped = right(rope, pos);
+    if stepped != pos {
+        return stepped;
+    }
+    let line = rope.char_to_line(pos);
+    if line + 1 < rope.len_lines() {
+        rope.line_to_char(line + 1)
+    } else {
+        rope.len_chars().max(pos)
+    }
+}
+
+/// One grapheme to the left **in the buffer**, stepping back over a line break.
+///
+/// Lands on the *start* of the break, so a CRLF pair is treated as the one
+/// grapheme it is rather than being split down the middle.
+pub fn prev_grapheme(rope: &Rope, pos: usize) -> usize {
+    let stepped = left(rope, pos);
+    if stepped != pos {
+        return stepped;
+    }
+    let line = rope.char_to_line(pos);
+    if line == 0 {
+        return pos;
+    }
+    let previous = line - 1;
+    rope.line_to_char(previous) + line_text(rope, previous).chars().count()
+}
+
 /// The visual column (summed display width) of `pos` within its line.
 pub fn visual_column(rope: &Rope, pos: usize) -> usize {
     let line = rope.char_to_line(pos);

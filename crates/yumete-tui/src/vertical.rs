@@ -349,7 +349,10 @@ pub fn draw(
 
     let text_top = area.y + metrics.head_rows;
     let (sel_start, sel_end) = editor.selection();
-    let has_selection = sel_start != sel_end;
+    // Asked of the editor, not of the range: the selection always covers the
+    // cursor's own grapheme, so a bare cursor would otherwise be drawn as a
+    // one-character highlight and the word-tint overlay would never appear.
+    let has_selection = editor.has_selection();
     let (sr, sg, sb) = config.theme.selection;
     let sel_style = Style::default().bg(Color::Rgb(sr, sg, sb)).fg(Color::White);
     let show_segmentation = editor.segmentation_visible();
