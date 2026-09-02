@@ -199,8 +199,18 @@ pub enum Hint {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Shell {
     pub line: String,
-    /// Whether it takes over the terminal rather than being captured.
-    pub interactive: bool,
+    pub how: How,
+}
+
+/// What is done with a command's output.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum How {
+    /// Bring it back into a buffer (`:sh`).
+    Capture,
+    /// Let the command have the terminal and watch it run (`:!`).
+    Terminal,
+    /// Feed it the text and put what it says back in its place (`:pipe`, `!`).
+    Pipe(String),
 }
 
 /// A file to hand to the typesetter, or a typesetter to stop.
@@ -1628,7 +1638,19 @@ impl Editor {
                 Ok(CommandOutcome::Continue)
             }
             Command::Shell { line, interactive } => {
-                self.shell_request = Some(Shell { line, interactive });
+                self.shell_request = Some(Shell {
+                    line,
+                    how: if interactive { How::Terminal } else { How::Capture },
+                });
+                Ok(CommandOutcome::Continue)
+            }
+            Command::Pipe(line) => {
+                let (start, end) = self.selection();
+                let text = self.current_buffer().rope().slice(start..end).to_string();
+                self.shell_request = Some(Shell {
+                    line,
+                    how: How::Pipe(text),
+                });
                 Ok(CommandOutcome::Continue)
             }
             Command::SetPreview(on) => {
@@ -2242,6 +2264,38 @@ impl Editor {
     /// A command line the front end should run.
     pub fn take_shell_request(&mut self) -> Option<Shell> {
         self.shell_request.take()
+    }
+
+    /// Put what a command said in place of the text it was given.
+    ///
+    /// One edit, so one `u` takes it back — which matters more here than
+    /// anywhere else, because the text that went in is gone and only the
+    /// command knows how to make it again.
+    pub fn provide_pipe_output(&mut self, output: &str) {
+        let (start, end) = self.selection();
+        // A filter ends its output with a newline whether or not what it was
+        // given had one. Keeping it where the selection did not have one pushes
+        // the rest of the paragraph down a line every time; dropping it where
+        // the selection *did* have one runs two lines together. So it follows
+        // what was there.
+        let had = self
+            .current_buffer()
+            .rope()
+            .slice(start..end)
+            .to_string()
+            .ends_with('\n');
+        let text = match had {
+            true => output,
+            false => output.strip_suffix('\n').unwrap_or(output),
+        };
+        self.snapshot();
+        if !self.overwrite(start, end, text) {
+            return;
+        }
+        self.anchor = start;
+        self.cursor = (start + text.chars().count()).saturating_sub(1).max(start);
+        self.clamp_cursor();
+        self.status = format!("換掉了 {} 個字", text.chars().count());
     }
 
     /// Put what a command said into a buffer of its own.
@@ -3859,6 +3913,16 @@ impl Editor {
             Key::Char('u') => self.repeat(count, |e| e.undo()),
             Key::Char('U') => self.repeat(count, |e| e.redo()),
             // Search (`/` forward, `?` backward, `n`/`N` repeat).
+            // `!` is what it is in vi: send this through a command and take
+            // what comes back. It opens the command line with the verb already
+            // typed, so the key is a shortcut and not a second mechanism —
+            // and so a reader who presses it by accident can see what it was
+            // about to do and press Esc.
+            Key::Char('!') => {
+                self.mode = Mode::Command;
+                self.command_line = "pipe ".to_string();
+                self.completion = None;
+            }
             Key::Char('/') => {
                 self.mode = Mode::Search;
                 self.search_forward = true;
@@ -7843,6 +7907,48 @@ mod tests {
         assert!(ed.status().contains("separates cells"), "{}", ed.status());
 
         std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn a_bang_sends_the_selection_through_a_command() {
+        let mut ed = typed("丙\n甲\n乙\n");
+
+        // `!` opens the command line with the verb already typed, so the key is
+        // a shortcut rather than a second mechanism — and pressing it by
+        // accident shows what it was about to do.
+        ed.goto_line(1);
+        press(&mut ed, "x");
+        press(&mut ed, "x");
+        press(&mut ed, "x");
+        ed.on_key(Key::Char('!'));
+        assert_eq!(ed.mode(), Mode::Command);
+        assert_eq!(ed.prompt(), Some((':', "pipe ")));
+
+        // Running it asks the front end, with the selection as the input.
+        for c in "sort".chars() {
+            ed.on_key(Key::Char(c));
+        }
+        ed.on_key(Key::Enter);
+        let asked = ed.take_shell_request().expect("a command to run");
+        assert_eq!(asked.line, "sort");
+        assert_eq!(asked.how, How::Pipe("丙\n甲\n乙\n".to_string()));
+
+        // What it says goes back in place of what it was given, as one edit.
+        ed.provide_pipe_output("甲\n乙\n丙\n");
+        assert_eq!(ed.current_buffer().text(), "甲\n乙\n丙\n");
+        ed.on_key(Key::Char('u'));
+        assert_eq!(ed.current_buffer().text(), "丙\n甲\n乙\n", "one `u` takes it back");
+
+        // `:sh` is the other one: nothing is replaced, the answer comes back in
+        // a buffer of its own.
+        ed.execute("sh wc -l").unwrap();
+        let asked = ed.take_shell_request().unwrap();
+        assert_eq!(asked.how, How::Capture);
+        let before = ed.buffer_count();
+        ed.provide_shell_output("wc -l", "3\n");
+        assert_eq!(ed.buffer_count(), before + 1);
+        assert!(ed.current_buffer().text().contains("$ wc -l"), "what was run");
+        assert!(ed.current_buffer().display_name().contains("wc -l"));
     }
 
     #[test]
