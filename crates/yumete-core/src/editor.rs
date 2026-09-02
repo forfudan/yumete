@@ -1069,11 +1069,14 @@ impl Editor {
                 self.pending = Pending::None;
                 if let Key::Char(c) = key {
                     self.last_find = Some((kind, c));
-                    let count = self.take_count();
+                    // The count belongs to the `f`, which has already spent it:
+                    // `3fx` is the third `x`, not the first.
+                    let count = self.operator_count.take().unwrap_or(1).max(1);
                     for _ in 0..count {
                         self.find_char(kind, c);
                     }
                 }
+                self.operator_count = None;
                 return;
             }
             Pending::Register => {
@@ -1248,10 +1251,15 @@ impl Editor {
                 self.operator_count = operator_count;
             }
             // In-line character search (Helix `f`/`t`/`F`/`T`).
-            Key::Char('f') => self.pending = Pending::Find(FindKind::ForwardTo),
-            Key::Char('t') => self.pending = Pending::Find(FindKind::ForwardTill),
-            Key::Char('F') => self.pending = Pending::Find(FindKind::BackwardTo),
-            Key::Char('T') => self.pending = Pending::Find(FindKind::BackwardTill),
+            Key::Char('f') | Key::Char('t') | Key::Char('F') | Key::Char('T') => {
+                self.pending = Pending::Find(match key {
+                    Key::Char('f') => FindKind::ForwardTo,
+                    Key::Char('t') => FindKind::ForwardTill,
+                    Key::Char('F') => FindKind::BackwardTo,
+                    _ => FindKind::BackwardTill,
+                });
+                self.operator_count = operator_count;
+            }
             // Select (extend) mode and collapse (Helix `v` / `;`).
             Key::Char('v') => self.extend = !self.extend,
             Key::Char(';') => self.anchor = self.cursor,
@@ -2589,6 +2597,7 @@ impl Editor {
         self.mode = Mode::Normal;
         self.extend = false;
         self.pending = Pending::None;
+        self.operator_count = None;
     }
 }
 
@@ -4104,6 +4113,19 @@ mod tests {
         assert!(!swap.exists());
 
         std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn a_count_before_f_finds_the_nth_occurrence() {
+        let mut ed = Editor::new();
+        ed.current_buffer_mut().insert(0, "a.b.c.d");
+        // `3f.` is the third dot, not the first — the count belongs to the `f`,
+        // which has already spent it by the time the target arrives.
+        type_keys(&mut ed, "3f.");
+        assert_eq!(ed.cursor(), 5);
+        type_keys(&mut ed, "gg");
+        type_keys(&mut ed, "f.");
+        assert_eq!(ed.cursor(), 1);
     }
 
     #[test]
