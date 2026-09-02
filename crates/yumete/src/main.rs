@@ -167,6 +167,7 @@ KEYS (Normal mode, Helix-style):
     w b e     next / prev word start, word end (W B E for WORDs)
     gg  ge    goto buffer start / last line (10gg goes to line 10)
     gn  gp    show the next / previous open file
+    gf        open the file:line named on this line (`:grep` results)
     gh gl gs  goto line start / end / first non-blank
     f t F T   find / till a character (forward / backward); A-. repeats it
     x  X      select the current line / extend to whole lines
@@ -201,7 +202,8 @@ KEYS (Normal mode, Helix-style):
               :wq [path]       save (optionally save-as) and quit
               :42  :goto n    put the cursor on a line
               :recover[!]      load (or drop) a crash-recovery draft
-              :bn  :bp  switch between the open files (also gn / gp)
+              :bn  :bp  :bd  :ls   the open files (also gn / gp)
+              :grep <re>  :toc      across the project / this file's headings
               :layout [horizontal|vertical]  :vertical  :horizontal
               :chaifen  toggle the 拆分 annotation beside candidates
               :ruby       edit the reading at the cursor, or annotate the

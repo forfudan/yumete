@@ -21,6 +21,9 @@ pub struct Buffer {
     rope: Rope,
     path: Option<PathBuf>,
     modified: bool,
+    /// A name for a buffer that is not a file — a results listing, say. Shown
+    /// on the status line in place of `[scratch]`.
+    label: Option<String>,
     /// Where the cursor was when this buffer was last left.
     ///
     /// Kept per buffer rather than per editor so that switching away and back
@@ -82,6 +85,7 @@ impl Buffer {
             path: None,
             modified: false,
             cursor: 0,
+            label: None,
             history: History::default(),
             pending_draft: None,
             owns_swap: false,
@@ -95,6 +99,7 @@ impl Buffer {
             path: None,
             modified: false,
             cursor: 0,
+            label: None,
             history: History::default(),
             pending_draft: None,
             owns_swap: false,
@@ -122,6 +127,7 @@ impl Buffer {
             path: Some(path.to_path_buf()),
             modified: false,
             cursor: 0,
+            label: None,
             history: History::default(),
             pending_draft,
             owns_swap: false,
@@ -131,6 +137,14 @@ impl Buffer {
     /// The file this buffer is bound to, if any.
     pub fn path(&self) -> Option<&Path> {
         self.path.as_deref()
+    }
+
+    /// Name a buffer that has no file — a results listing, say.
+    ///
+    /// It stays unbound to any path, so `:w` on it still asks for a name rather
+    /// than writing a listing over something.
+    pub fn name_as(&mut self, label: &str) {
+        self.label = Some(label.to_string());
     }
 
     /// Whether the buffer has unsaved modifications.
@@ -302,6 +316,9 @@ impl Buffer {
     /// A short, human-readable name for status lines: the file name, or
     /// `[scratch]` for an unnamed buffer.
     pub fn display_name(&self) -> String {
+        if let Some(label) = &self.label {
+            return label.clone();
+        }
         match &self.path {
             Some(p) => p
                 .file_name()
