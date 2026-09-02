@@ -92,6 +92,46 @@ impl Default for EditorConfig {
     }
 }
 
+/// The candidate panel's appearance.
+///
+/// The colours are **two** values, not thirteen: an ink and a ground, with the
+/// shades between them interpolated. That is how Yume's own themes are defined
+/// (`yume_core::themes::ink_ladder`) and it is the reason a skin can be changed
+/// by editing a pair of numbers rather than a table — the relationships between
+/// the shades stay right by construction.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PanelConfig {
+    /// The characters candidates are numbered with, in order.
+    ///
+    /// Each has to be **two cells wide**, or the columns come apart: the
+    /// circled Chinese numerals ㊀㊁㊂ are, while the circled Arabic ①②③ are
+    /// East-Asian *ambiguous* and may be drawn either way. A value that is too
+    /// short simply runs out and the rest fall back to plain digits.
+    pub markers: String,
+    /// 墨 — the colour candidates are drawn in.
+    pub ink: (u8, u8, u8),
+    /// 紙 — the panel's ground.
+    pub paper: (u8, u8, u8),
+    /// How many candidates a page offers.
+    pub page_size: usize,
+    /// Whether the panel's ring is rounded.
+    pub rounded: bool,
+}
+
+impl Default for PanelConfig {
+    fn default() -> Self {
+        PanelConfig {
+            // 帶圈中文數字, which are unambiguously wide.
+            markers: "㊀㊁㊂㊃㊄㊅㊆㊇㊈".to_string(),
+            // Yume's 墨香, dark: warm ink on a deep ground.
+            ink: (0xCF, 0xC6, 0xA9),
+            paper: (0x26, 0x2A, 0x27),
+            page_size: 9,
+            rounded: true,
+        }
+    }
+}
+
 /// Theme (colour) settings.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ThemeConfig {
@@ -124,6 +164,7 @@ pub struct KeyConfig {
 pub struct Config {
     pub editor: EditorConfig,
     pub theme: ThemeConfig,
+    pub panel: PanelConfig,
     pub keys: KeyConfig,
 }
 
@@ -255,7 +296,18 @@ struct RawConfig {
     #[serde(default)]
     theme: RawTheme,
     #[serde(default)]
+    panel: RawPanel,
+    #[serde(default)]
     keys: RawKeys,
+}
+
+#[derive(Deserialize, Default)]
+struct RawPanel {
+    markers: Option<String>,
+    ink: Option<String>,
+    paper: Option<String>,
+    page_size: Option<usize>,
+    rounded: Option<bool>,
 }
 
 #[derive(Deserialize, Default)]
@@ -335,6 +387,21 @@ impl RawConfig {
         if other.theme.segmentation.is_some() {
             self.theme.segmentation = other.theme.segmentation;
         }
+        if other.panel.markers.is_some() {
+            self.panel.markers = other.panel.markers;
+        }
+        if other.panel.ink.is_some() {
+            self.panel.ink = other.panel.ink;
+        }
+        if other.panel.paper.is_some() {
+            self.panel.paper = other.panel.paper;
+        }
+        if other.panel.page_size.is_some() {
+            self.panel.page_size = other.panel.page_size;
+        }
+        if other.panel.rounded.is_some() {
+            self.panel.rounded = other.panel.rounded;
+        }
         for (k, v) in other.keys.normal {
             self.keys.normal.insert(k, v);
         }
@@ -398,6 +465,27 @@ impl RawConfig {
                     *slot = rgb;
                 }
             }
+        }
+        if let Some(markers) = self.panel.markers {
+            // An empty list would leave every candidate unnumbered; keep the
+            // default rather than silently taking the numbers away.
+            if !markers.is_empty() {
+                config.panel.markers = markers;
+            }
+        }
+        if let Some(rgb) = self.panel.ink.as_deref().and_then(parse_hex) {
+            config.panel.ink = rgb;
+        }
+        if let Some(rgb) = self.panel.paper.as_deref().and_then(parse_hex) {
+            config.panel.paper = rgb;
+        }
+        if let Some(size) = self.panel.page_size {
+            // Below two there is nothing to choose between; above nine there is
+            // no key left to choose with.
+            config.panel.page_size = size.clamp(2, 9);
+        }
+        if let Some(rounded) = self.panel.rounded {
+            config.panel.rounded = rounded;
         }
         for (k, v) in self.keys.normal {
             // Only single-character aliases are meaningful here.
@@ -527,6 +615,42 @@ mod tests {
         assert_eq!(c.editor.layout, Layout::Horizontal);
         assert_eq!(c.editor.zong_length, 64);
         assert_eq!(c.editor.zong_gap, 4);
+    }
+
+    #[test]
+    fn a_panel_skin_is_two_colours_and_a_marker_list() {
+        let c = Config::from_toml(
+            r##"
+            [panel]
+            markers = "①②③"
+            ink = "#112233"
+            paper = "#445566"
+            page_size = 5
+            rounded = false
+            "##,
+        );
+        assert_eq!(c.panel.markers, "①②③");
+        assert_eq!(c.panel.ink, (0x11, 0x22, 0x33));
+        assert_eq!(c.panel.paper, (0x44, 0x55, 0x66));
+        assert_eq!(c.panel.page_size, 5);
+        assert!(!c.panel.rounded);
+    }
+
+    #[test]
+    fn the_panel_falls_back_rather_than_breaking() {
+        let c = Config::from_toml(
+            r##"
+            [panel]
+            markers = ""
+            ink = "not a colour"
+            page_size = 99
+            "##,
+        );
+        // An empty list would leave every candidate unnumbered.
+        assert_eq!(c.panel.markers, PanelConfig::default().markers);
+        assert_eq!(c.panel.ink, PanelConfig::default().ink);
+        // There is no tenth key to choose a tenth candidate with.
+        assert_eq!(c.panel.page_size, 9);
     }
 
     #[test]

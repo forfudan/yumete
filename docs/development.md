@@ -266,6 +266,7 @@ Phases are ordered by priority, most writer-critical first:
 | 72  | **The prompt's guess**                     | tui    | P4    | ghost text in `:` and `/`, Tab takes | Done   |
 | 73  | **Gap and reading column separated**       | tui    | P3    | `zong_gap = 0` still allows ruby    | Done   |
 | 74  | **Helix tutorial, second pass**            | core   | P2    | `r`, `A-;`, registers, macros, pages | Done   |
+| 75  | **Panel skin in TOML**                     | config | P4    | two colours, not a table of shades  | Done   |
 | 68  | 圏点 (emphasis dots)                       | tui    | P5    | mid-term; markup still open         |        |
 | 70  | **標點旁置 (punctuation in the margin)**   | tui    | P3    | 古文 style; `:hanging`              | Done   |
 | 71  | **Mouse wheel scrolls by 縱**              | tui    | P4    | captures the mouse, as Helix does   | Done   |
@@ -655,6 +656,25 @@ It moves the **cursor**, not only the view. A view scrolled on its own would be
 pulled straight back the moment the cursor had to stay on screen — the two would
 fight every frame — so the cursor travels with the page, which in a modal editor
 is where you were heading anyway.
+
+### The panel's skin, in two numbers (#75)
+
+`[panel]` configures the candidate panel: the characters it numbers with, its two
+colours, the page size, and whether the ring is rounded.
+
+**Two colours, not thirteen.** Yume's own themes are defined by an ink and a
+paper, with every other shade interpolated along a ladder between them
+(`yume_core::themes::ink_ladder`). yumete reproduces the ladder rather than
+storing the shades it produces, which is what lets a skin be changed by editing a
+pair of values: the relationships between border, helper text and highlight stay
+right by construction, and the panel is the *same skin* as the GUI frontends'
+whenever the endpoints match.
+
+**The markers have to be full-width.** The circled Chinese numerals ㊀㊁㊂ are;
+the circled Arabic ①②③ are East-Asian *ambiguous*, so a terminal may draw them
+one cell or two and the columns come apart. A list that runs out falls back to
+plain digits rather than leaving candidates unnumbered, and an empty list is
+ignored for the same reason.
 
 ### The prompt's guess (#72)
 
