@@ -1679,10 +1679,47 @@ fn draw_status(
             )
         }
     };
+    // What the 字 under the cursor *is*, pushed to the right edge so it never
+    // moves the position readout around. A rare 漢字 that came out as a box is
+    // the case this answers: `U+2B740 · CJK Unified Ideographs Extension D`
+    // says the character is fine and the font is not.
+    let right = char_info(editor, config);
+    let used = yumete_cjk::str_width(&status);
+    let room = (status_area.width as usize).saturating_sub(used);
+    // Two stages of giving way: the block name goes first, then the code point,
+    // and the left side is never squeezed.
+    let tail = [right.0.as_str(), right.1.as_str()]
+        .into_iter()
+        .find(|t| !t.is_empty() && yumete_cjk::str_width(t) + 2 <= room)
+        .unwrap_or("");
+    let gap = room.saturating_sub(yumete_cjk::str_width(tail));
+    let reversed = Style::default().add_modifier(Modifier::REVERSED);
     frame.render_widget(
-        Paragraph::new(status).style(Style::default().add_modifier(Modifier::REVERSED)),
+        Paragraph::new(Line::from(vec![
+            Span::styled(status, reversed),
+            Span::styled(format!("{}{tail}", " ".repeat(gap)), reversed),
+        ])),
         status_area,
     );
+}
+
+/// What to say about the character under the cursor, long form and short.
+///
+/// Two strings rather than one, so a narrow terminal can drop the block name
+/// and keep the code point instead of dropping both.
+fn char_info(editor: &Editor, config: &Config) -> (String, String) {
+    if !config.editor.char_info || editor.prompt().is_some() {
+        return (String::new(), String::new());
+    }
+    let Some(c) = editor.char_at_cursor() else {
+        return (String::new(), String::new());
+    };
+    let point = yumete_cjk::blocks::codepoint(c);
+    let short = format!("{c} {point}");
+    match yumete_cjk::blocks::block_of(c) {
+        Some(block) => (format!("{short} · {block}"), short),
+        None => (short.clone(), short),
+    }
 }
 
 /// Draw the floating candidate panel below the cursor (Feature #28).
@@ -2900,6 +2937,43 @@ mod tests {
         let buffer = render_wrapped(&mut editor, &config, 40, 8);
         assert_ne!(buffer[(20, 0)].style().bg, tint);
         assert_eq!(at(&buffer, 20, 0), "字", "the row runs the full width");
+    }
+
+    #[test]
+    fn the_status_line_names_the_character_under_the_cursor() {
+        let mut editor = editor_with("那年冬天");
+        let config = Config::default();
+        let row = |b: &ratatui::buffer::Buffer, w: u16| -> String {
+            let y = b.area.height - 1;
+            (0..w).map(|x| at(b, x, y)).collect::<String>()
+        };
+
+        // The cursor opens on the first 字.
+        let buffer = render(&editor, &config, 90, 10);
+        let line = row(&buffer, 90);
+        assert!(
+            line.contains("U+90A3") && line.contains("CJK Unified Ideographs"),
+            "the 字 is named at the right edge: {line:?}"
+        );
+        assert!(line.starts_with("-- NORMAL --"), "and the left is untouched");
+
+        // Moving names a different one.
+        editor.on_key(Key::Char('l'));
+        editor.on_key(Key::Char('l'));
+        let buffer = render(&editor, &config, 90, 10);
+        assert!(row(&buffer, 90).contains("U+51AC"), "冬");
+
+        // A narrow line gives up the block name before the code point, and the
+        // position readout is never squeezed.
+        let buffer = render(&editor, &config, 60, 10);
+        let line = row(&buffer, 60);
+        assert!(line.contains("U+51AC"), "the code point survives: {line:?}");
+        assert!(!line.contains("CJK Unified"), "the block name gives way first");
+        assert!(line.contains("Ln 1, Col 5"), "position kept: {line:?}");
+
+        // Narrower still and it says nothing rather than truncating.
+        let buffer = render(&editor, &config, 44, 10);
+        assert!(!row(&buffer, 44).contains("U+"), "nothing rather than a stub");
     }
 
     #[test]
