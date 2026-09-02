@@ -164,7 +164,7 @@ fn latin_word_char(c: char) -> bool {
 
 /// Whether `c` may not begin a row (行頭禁則): the marks that belong to the
 /// text before them.
-fn forbidden_at_row_start(c: char) -> bool {
+pub(crate) fn forbidden_at_row_start(c: char) -> bool {
     (yumete_cjk::hangs_in_the_margin(c) && !yumete_cjk::opens_a_pair(c))
         || matches!(c, '、' | '，' | '．' | '·' | 'ー' | '々' | '〜' | '～')
         || matches!(c, ')' | ']' | '}' | ',' | '.' | ';' | ':' | '!' | '?')
@@ -172,7 +172,7 @@ fn forbidden_at_row_start(c: char) -> bool {
 
 /// Whether `c` may not end a row (行末禁則): a bracket that introduces what
 /// follows it.
-fn forbidden_at_row_end(c: char) -> bool {
+pub(crate) fn forbidden_at_row_end(c: char) -> bool {
     yumete_cjk::opens_a_pair(c) || matches!(c, '(' | '[' | '{')
 }
 
@@ -181,7 +181,7 @@ fn forbidden_at_row_end(c: char) -> bool {
 /// Two is enough for the cases that actually occur — a stop followed by a
 /// closing quote, 」。— and small enough that a row of nothing but punctuation
 /// cannot cascade the whole paragraph one character to the right.
-const MAX_KINSOKU_RETREAT: usize = 2;
+pub(crate) const MAX_KINSOKU_RETREAT: usize = 2;
 
 /// The rows `text` wraps into at `width` cells, as char ranges within the line.
 ///
@@ -282,10 +282,20 @@ fn adjusted_break(chars: &[char], cuts: &[usize], g: usize, end: usize) -> usize
         }
     }
 
-    // Then keep a Latin word whole, but only if a space in this row lets us.
+    // Then keep a Latin word whole. A space is the obvious place to break at,
+    // and in English prose it is the only one there is.
     if latin_word_char(char_at(cut.saturating_sub(1))) && latin_word_char(char_at(cut)) {
         if let Some(space) = (g + 1..cut).rev().find(|&i| char_at(i - 1) == ' ') {
             cut = space;
+        } else if let Some(word) = (g + 1..cut).rev().find(|&i| !latin_word_char(char_at(i - 1))) {
+            // …and in Chinese prose there is no space, because the word
+            // follows a 漢字: 一二三四五六Helix七八 has one word in it and
+            // nowhere to break. Retreat to where the word begins instead —
+            // but only while at least half the row survives, so a single
+            // 40-letter token cannot empty the row it is on.
+            if (word - g) * 2 >= end - g {
+                cut = word;
+            }
         }
     }
     (cut - g).max(1)
@@ -671,6 +681,20 @@ mod tests {
             wrapped("the quick brown fox", 10),
             vec!["the quick ", "brown fox"]
         );
+    }
+
+    #[test]
+    fn a_latin_word_after_a_han_character_is_kept_whole() {
+        // The manual's own example, and it used to break `Heli|x`: in Chinese
+        // prose a Latin word follows a 漢字, so there is no space in the row
+        // to retreat to and the old rule gave up.
+        let rows = line_rows("一二三四五六Helix七八", 16);
+        let text: Vec<String> = rows
+            .iter()
+            .map(|&(a, b)| "一二三四五六Helix七八".chars().skip(a).take(b - a).collect())
+            .collect();
+        assert_eq!(text[0], "一二三四五六");
+        assert!(text[1].starts_with("Helix"), "{text:?}");
     }
 
     #[test]
