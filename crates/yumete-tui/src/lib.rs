@@ -725,12 +725,21 @@ fn draw_status(frame: &mut Frame, editor: &Editor, ime: &ImeSession, status_area
             "" => String::new(),
             tag => format!("{tag} "),
         };
+        // With more than one file open, say which — otherwise `gn` moves you
+        // somewhere with no sign that it did.
+        let (n, total) = editor.buffer_position();
+        let which = if total > 1 {
+            format!(" [{n}/{total}]")
+        } else {
+            String::new()
+        };
         let left = format!(
-            "-- {} --  {}{}{}",
+            "-- {} --  {}{}{}{}",
             editor.mode_label(),
             ime_tag,
             buffer.display_name(),
-            dirty
+            dirty,
+            which
         );
         if !editor.status().is_empty() {
             format!("{left}   {}", editor.status())

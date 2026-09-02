@@ -22,7 +22,9 @@ pub enum Command {
     Write(Option<String>),
     /// `:quit` (alias `:q`) or `:quit!` / `:q!` — leave the editor. `force`
     /// skips the unsaved-changes check.
-    Quit { force: bool },
+    Quit {
+        force: bool,
+    },
     /// `:s/pattern/replacement/[g]` (optionally `:%s/...` for the whole file) —
     /// substitute text. `global` replaces every match on a line; `whole_file`
     /// applies to every line rather than just the cursor's line.
@@ -47,13 +49,20 @@ pub enum Command {
     ToggleChaifen,
     /// `:hanging` — 句讀 in the margin rather than a square each (Feature #70).
     ToggleHanging,
+    /// `:buffer-next` / `:buffer-previous` (aliases `:bn` / `:bp`) — show
+    /// another of the open buffers.
+    NextBuffer,
+    PreviousBuffer,
     /// `:ruby` — open Ruby mode on the group or selection at the cursor
     /// (Feature #65).
     Ruby,
     /// `:ruby-on` / `:ruby-off`, and `:render-ruby-<dialect>[-off]` — which
     /// ruby dialects are laid out as readings. A `None` dialect means "the one
     /// this file is written in" for `on`, and "all of them" for `off`.
-    RenderRuby { dialect: Option<Dialect>, on: bool },
+    RenderRuby {
+        dialect: Option<Dialect>,
+        on: bool,
+    },
     /// `:format-ruby-<dialect>` — rewrite every reading in the buffer into one
     /// dialect, whatever it was written in.
     FormatRuby(Dialect),
@@ -153,6 +162,8 @@ pub fn parse(input: &str) -> Result<Command, CommandError> {
         }
         "chaifen" | "cf" => Ok(Command::ToggleChaifen),
         "hanging" => Ok(Command::ToggleHanging),
+        "buffer-next" | "bn" => Ok(Command::NextBuffer),
+        "buffer-previous" | "bp" => Ok(Command::PreviousBuffer),
         "ruby" => Ok(Command::Ruby),
         "ruby-on" => Ok(Command::RenderRuby {
             dialect: None,
@@ -267,6 +278,16 @@ pub const COMMANDS: &[Entry] = &[
         name: "hanging",
         alias: None,
         help: "句讀 in the margin (標點旁置)",
+    },
+    Entry {
+        name: "buffer-next",
+        alias: Some("bn"),
+        help: "show the next open file (gn)",
+    },
+    Entry {
+        name: "buffer-previous",
+        alias: Some("bp"),
+        help: "show the previous one (gp)",
     },
     Entry {
         name: "ruby",
@@ -522,6 +543,8 @@ mod tests {
             "horizontal",
             "chaifen",
             "hanging",
+            "buffer-next",
+            "buffer-previous",
             "ruby",
             "ruby-on",
             "ruby-off",

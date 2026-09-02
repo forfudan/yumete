@@ -267,6 +267,7 @@ Phases are ordered by priority, most writer-critical first:
 | 73  | **Gap and reading column separated**       | tui    | P3    | `zong_gap = 0` still allows ruby    | Done   |
 | 74  | **Helix tutorial, second pass**            | core   | P2    | `r`, `A-;`, registers, macros, pages | Done   |
 | 75  | **Panel skin in TOML**                     | config | P4    | two colours, not a table of shades  | Done   |
+| 76  | **Switching between open buffers**         | core   | P2    | `gn`/`gp`, `:bn`/`:bp`; was a hole  | Done   |
 | 68  | 圏点 (emphasis dots)                       | tui    | P5    | mid-term; markup still open         |        |
 | 70  | **標點旁置 (punctuation in the margin)**   | tui    | P3    | 古文 style; `:hanging`              | Done   |
 | 71  | **Mouse wheel scrolls by 縱**              | tui    | P4    | captures the mouse, as Helix does   | Done   |
@@ -656,6 +657,23 @@ It moves the **cursor**, not only the view. A view scrolled on its own would be
 pulled straight back the moment the cursor had to stay on screen — the two would
 fight every frame — so the cursor travels with the page, which in a modal editor
 is where you were heading anyway.
+
+### Switching between open buffers (#76)
+
+`yumete a.md b.md` opened both and showed the second, and **nothing could reach
+the first** — no key, no command. The buffers were there, the machinery to hold
+them was there, and there was simply no way in. Found by checking rather than by
+using it, which is the uncomfortable part.
+
+`gn`/`gp` and `:bn`/`:bp` now cycle, and the status line says `[2/3]` whenever
+more than one is open — without that, switching moves you somewhere with no sign
+that it did.
+
+**The cursor is per buffer**, not per editor. Coming back to a file you were
+halfway through and being dropped at the top of it is the difference between two
+files being usable together and not. It is saved on the way out, including when a
+new buffer is *added* rather than switched to, and clamped on the way back in
+since the buffer it came from may have been longer.
 
 ### The panel's skin, in two numbers (#75)
 

@@ -21,15 +21,33 @@ pub struct Buffer {
     rope: Rope,
     path: Option<PathBuf>,
     modified: bool,
+    /// Where the cursor was when this buffer was last left.
+    ///
+    /// Kept per buffer rather than per editor so that switching away and back
+    /// returns you to your place — in a novel, being dropped at the top of a
+    /// chapter you were halfway through is the whole difference between two
+    /// files being usable together and not.
+    cursor: usize,
 }
 
 impl Buffer {
+    /// Where the cursor was when this buffer was last left.
+    pub fn saved_cursor(&self) -> usize {
+        self.cursor.min(self.rope.len_chars())
+    }
+
+    /// Remember where the cursor is, before switching away.
+    pub fn save_cursor(&mut self, at: usize) {
+        self.cursor = at;
+    }
+
     /// Create a new, empty, unnamed buffer (a "scratch" buffer).
     pub fn scratch() -> Self {
         Buffer {
             rope: Rope::new(),
             path: None,
             modified: false,
+            cursor: 0,
         }
     }
 
@@ -39,6 +57,7 @@ impl Buffer {
             rope: Rope::from_str(text),
             path: None,
             modified: false,
+            cursor: 0,
         }
     }
 
@@ -59,6 +78,7 @@ impl Buffer {
             rope,
             path: Some(path.to_path_buf()),
             modified: false,
+            cursor: 0,
         })
     }
 
