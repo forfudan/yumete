@@ -179,6 +179,7 @@ KEYS (Normal mode, Helix-style):
     gn  gp    show the next / previous open file
     gf        open the file:line named on this line (`:grep` results)
     Space     menu: e sidebar, o outline, f files, b buffers, / search, y copy
+    C-w       move between the sidebar and the text
     gh gl gs  goto line start / end / first non-blank
     f t F T   find / till a character (forward / backward); A-. repeats it
     J  K      forward / back half a page   (L / H for a whole one)

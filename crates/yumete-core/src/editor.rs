@@ -1855,6 +1855,14 @@ impl Editor {
             Key::Char('q') => self.toggle_recording(),
             Key::Char('Q') => self.replay_macro(count),
             // A page, and half of one, in the direction the text is read.
+            // The other pane. Two panes, one key — vi spells window motions
+            // `C-w` and there is only ever one other place to be.
+            Key::Ctrl('w') => {
+                if self.sidebar.is_some() {
+                    self.sidebar_focus = true;
+                    self.refresh_sidebar();
+                }
+            }
             Key::Ctrl('f') => self.move_page(count, false, 1.0),
             Key::Ctrl('b') => self.move_page(count, true, 1.0),
             Key::Ctrl('d') => self.move_page(count, false, 0.5),
@@ -2098,6 +2106,14 @@ impl Editor {
         self.sidebar_focus && self.sidebar.is_some()
     }
 
+    /// What the sidebar's keys are, for the status line to say while it has
+    /// them.
+    ///
+    /// A pane that takes the keys has to say how to give them back, in the
+    /// place a reader already looks for what is going on.
+    pub const SIDEBAR_KEYS: &'static str =
+        "j k 移動 · l 進入 · h 收起 · Tab 換視圖 · C-w/Esc 回正文 · q 關";
+
     /// Run one key while the sidebar has the keys.
     ///
     /// The same letters that move in the text move here — `j`/`k` down and up,
@@ -2147,7 +2163,7 @@ impl Editor {
                 self.refresh_sidebar();
             }
             // Esc hands the keys back but leaves the tree up; `q` puts it away.
-            Key::Esc => self.sidebar_focus = false,
+            Key::Esc | Key::Ctrl('w') => self.sidebar_focus = false,
             Key::Char('q') => {
                 self.sidebar = None;
                 self.sidebar_focus = false;
@@ -4714,6 +4730,44 @@ mod tests {
         let mut ed = typed("上山\n下海");
         press(&mut ed, "gJ");
         assert_eq!(ed.current_buffer().text(), "上山下海");
+    }
+
+    #[test]
+    fn one_key_moves_between_the_two_panes() {
+        let dir = std::env::temp_dir().join(format!("yumete-panes-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("ch01.md"), "那年冬天\n").unwrap();
+
+        let mut ed = Editor::new();
+        ed.open_sidebar_at(&dir);
+        assert!(ed.sidebar_focused());
+
+        // `C-w` is the other pane, both ways — vi's window key, and there is
+        // only ever one other place to be.
+        ed.on_key(Key::Ctrl('w'));
+        assert!(!ed.sidebar_focused(), "the keys are with the text");
+        // …and the text really has them.
+        ed.on_key(Key::Char('i'));
+        assert_eq!(ed.mode(), Mode::Insert);
+        ed.on_key(Key::Esc);
+
+        ed.on_key(Key::Ctrl('w'));
+        assert!(ed.sidebar_focused(), "and back again");
+        // Esc still hands them back one way, as it does everywhere else.
+        ed.on_key(Key::Esc);
+        assert!(!ed.sidebar_focused());
+
+        // With no sidebar open it does nothing at all.
+        ed.on_key(Key::Char(' '));
+        ed.on_key(Key::Char('e'));
+        ed.on_key(Key::Char(' '));
+        ed.on_key(Key::Char('e'));
+        assert!(ed.sidebar().is_none());
+        ed.on_key(Key::Ctrl('w'));
+        assert!(!ed.sidebar_focused());
+
+        std::fs::remove_dir_all(&dir).ok();
     }
 
     #[test]
