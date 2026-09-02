@@ -2060,6 +2060,14 @@ impl Editor {
             // after its last, and `c` replaces the whole thing — which for a
             // grid is the common case: you land on a cell to give it a new
             // value, not to amend the value it has.
+            // A cell is the unit here, so it is the unit copy and paste work
+            // in. Without this the guard that makes the grid safe is also what
+            // makes copying a cell impossible: `v l y` reaches across the
+            // delimiter, and pasting what it took is then refused.
+            Key::Char('y') => self.yank_cell(),
+            // The whole row, spelled the way vi spells "the whole line".
+            Key::Char('Y') => self.yank_row(),
+            Key::Char('p') | Key::Char('P') => self.put_cell(),
             Key::Char('i') => self.edit_cell(CellEdit::Start),
             Key::Char('a') | Key::Char('A') => self.edit_cell(CellEdit::End),
             Key::Char('I') => self.edit_cell(CellEdit::Start),
@@ -2112,6 +2120,83 @@ impl Editor {
             .map(|c| c.heading().to_string())
             .unwrap_or_else(|| format!("+{}", cell + 1 - view.schema.columns.len()));
         Some(format!("{name} · {}", view.grain.label()))
+    }
+
+    /// Take a copy of the cell the cursor is in.
+    #[cfg(test)]
+    fn set_register_for_test(&mut self, text: &str) {
+        self.register = text.to_string();
+    }
+
+    fn yank_cell(&mut self) {
+        let Some((line, cell)) = self.cell_position() else {
+            return;
+        };
+        let text = self.cell_text(line, cell);
+        let n = text.chars().count();
+        self.store(text);
+        self.status = format!("取了一格（{n} 字）");
+    }
+
+    /// Take a copy of the whole row.
+    fn yank_row(&mut self) {
+        let rope = self.current_buffer().rope();
+        let line = rope.char_to_line(self.cursor.min(rope.len_chars()));
+        let text = rope
+            .line(line)
+            .to_string()
+            .trim_end_matches(['\n', '\r'])
+            .to_string();
+        self.store(text);
+        self.status = "取了一行".to_string();
+    }
+
+    /// Put the register into the cell — or, if it is a whole row, below this one.
+    ///
+    /// Two things are worth pasting in a grid and they are told apart by what
+    /// is in the register, not by a second key: a cell's worth of text replaces
+    /// the cell, and a row's worth becomes a new row. Anything else — half a
+    /// row, two cells — is refused, because there is no honest place to put it.
+    fn put_cell(&mut self) {
+        let text = self.recall();
+        if text.is_empty() {
+            self.status = "沒有取過東西".to_string();
+            return;
+        }
+        let Some((line, cell)) = self.cell_position() else {
+            return;
+        };
+        let Some(view) = &self.table else { return };
+        let (d, columns) = (view.schema.delimiter, view.schema.columns.len());
+        let body = text.trim_end_matches(['\n', '\r']);
+        // A row: the right number of cells, and no line break left inside it.
+        let is_row = !body.contains(['\n', '\r'])
+            && body.chars().filter(|&c| c == d).count() + 1 == columns
+            && columns > 1;
+        if is_row {
+            let body = body.to_string();
+            self.snapshot();
+            let rope = self.current_buffer().rope();
+            let at = motion::line_end(rope, self.cursor);
+            self.without_cell_guard(|e| {
+                e.current_buffer_mut().insert(at, &format!("\n{body}"));
+            });
+            self.set_cursor(at + 1);
+            self.status = "貼成新的一行".to_string();
+            return;
+        }
+        if let Some(why) = self.cell_refuses_text(body) {
+            self.status = why;
+            return;
+        }
+        let Some((start, end)) = self.cell_span(line, cell) else {
+            return;
+        };
+        self.snapshot();
+        if self.overwrite(start, end, body) {
+            self.set_cursor(start);
+            self.status = "換掉了一格".to_string();
+        }
     }
 
     /// The bounds of the cell the cursor is in, for clamping Insert to it.
@@ -7070,6 +7155,50 @@ mod tests {
         assert!(ed.status().is_empty(), "{}", ed.status());
         assert!(ed.enter_table());
         assert!(ed.status().contains("照首行"), "{}", ed.status());
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn a_cell_can_be_copied_and_a_row_can_be_duplicated() {
+        // The guard that makes the grid safe used to make this impossible:
+        // `v l y` reaches across the delimiter, and pasting what it took was
+        // then refused. In the grid the cell is the unit, so it is the unit
+        // copy and paste work in too.
+        let (dir, csv) = a_table("copy");
+        let mut ed = Editor::new();
+        ed.open_file(&csv).unwrap();
+        ed.goto_line(2);
+        press(&mut ed, "l");
+        assert_eq!(ed.cell_text(1, 1), "⿰木目");
+
+        // One key takes the cell, one key puts it in another.
+        press(&mut ed, "y");
+        assert!(ed.status().contains("一格"), "{}", ed.status());
+        press(&mut ed, "j");
+        assert_eq!(ed.cell_text(2, 1), "土");
+        press(&mut ed, "p");
+        assert_eq!(ed.cell_text(2, 1), "⿰木目", "the cell was replaced");
+        assert_eq!(ed.cell_text(2, 0), "二", "and its neighbours are untouched");
+        assert_eq!(ed.cell_text(2, 2), "土");
+        assert_eq!(ed.current_buffer().text().matches(',').count(), 6);
+
+        // A whole row in the register becomes a whole new row — which is how a
+        // variant character gets its neighbour's decomposition.
+        press(&mut ed, "Y");
+        press(&mut ed, "p");
+        let text = ed.current_buffer().text();
+        let lines: Vec<&str> = text.lines().collect();
+        assert_eq!(lines.len(), 4, "a row was added: {lines:?}");
+        assert_eq!(lines[2], lines[3], "and it is a copy of the one above");
+        assert_eq!(ed.cursor_line(), 3, "the cursor is on the new row");
+        assert!(!ed.row_is_ragged(3), "which is a whole row, not a fragment");
+
+        // Half a row has no honest place to go.
+        ed.set_register_for_test("二,土");
+        press(&mut ed, "p");
+        assert_eq!(ed.current_buffer().text().lines().count(), 4, "refused");
+        assert!(ed.status().contains("separates cells"), "{}", ed.status());
 
         std::fs::remove_dir_all(&dir).ok();
     }
