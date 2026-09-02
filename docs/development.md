@@ -331,6 +331,7 @@ Phases are ordered by priority, most writer-critical first:
 | 133 | **The language model yes, the 碼表 no**    | both   | P2    | 27 ms for everyone; `:yume scheme` for the rest | Done |
 | 134 | **靈明 embedded at build time**            | ime    | P2    | never committed; `:yume` says which one answers | Done |
 | 135 | **Release pipeline + Homebrew tap**        | ci     | P2    | see §5.3; deferred until ready to release | Planned |
+| 136 | **`:yume table` — any code table**         | ime    | P2    | Rime `.dict.yaml` as it comes; 五筆/倉頡/粵拼 | Done |
 
 ---
 

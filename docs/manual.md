@@ -692,11 +692,22 @@ Alacritty、Konsole。Apple Terminal 報不出單獨的 Shift。
 
 `:yume chaifen` 打開高亮候選的**二重注解**（拆分＋編碼）。
 
-**換方案**用 `:scheme lingming|xingchen|qingyun|riyue|pinyin`，或者配置檔的
-`[ime] scheme`。yumete 只自帶靈明；其餘四個方案的碼表跟 yume 一樣，從
-yuhao-assess-data 下載後裝進資料目錄（yume 的 `scripts/build.sh` 會裝）。自己的碼表
-放在 `.yumete/` 裏。碼表不在機器上時 `:scheme` 會說清楚是「沒裝」而不是「沒這個方
-案」，並且留在原來能用的方案上。
+**換方案**用 `:yume scheme lingming|xingchen|qingyun|riyue|pinyin`，或者配置檔的
+`[ime] scheme`。yumete 自帶靈明（編進二進制）；其餘四個方案的碼表跟 yume 一樣，從
+yuhao-assess-data 下載後裝進資料目錄（yume 的 `scripts/build.sh` 會裝）。碼表不在機器
+上時它會說清楚是「沒裝」而不是「沒這個方案」，並且留在原來能用的方案上。
+
+**用你自己的碼表**：
+
+```
+:yume table ~/.yumete/wubi86.dict.yaml
+```
+
+**Rime 的 `.dict.yaml` 直接能用**——五筆、倉頡、粵拼、朙月拼音，下載下來就打得了，
+不用轉檔：yume-core 的碼表讀取會自動認出 YAML 檔頭並掐掉，也會自動判斷是
+`字<TAB>碼` 還是 `碼<TAB>字`、是空格分隔還是製表符分隔。手寫的兩列文字檔一樣能用。
+
+語言層（詞頻、詞彙）還是從裝好的資料裏來——換的是**拼法**，不是語言。
 
 ### 分頁條
 

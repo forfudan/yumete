@@ -81,6 +81,8 @@ pub enum Command {
     SetPreview(bool),
     /// `:yume builtin` — use the 碼表 in the binary, whatever is installed.
     BuiltinScheme,
+    /// `:yume table <path>` — type with a code table of your own.
+    UserTable(String),
     /// `:yume` on its own — say what the input method is doing.
     YumeStatus,
     /// `:sh <cmd>` — run it and bring the output back into a buffer, or
@@ -270,6 +272,10 @@ pub fn parse(input: &str) -> Result<Command, CommandError> {
             };
             match pick(word, YUME).map(|w| w.name) {
                 Some("builtin") => Ok(Command::BuiltinScheme),
+                Some("table") => match parts.next() {
+                    Some(path) => Ok(Command::UserTable(path.to_string())),
+                    None => Err(CommandError::MissingArgument("table")),
+                },
                 // No name is "the one the config asked for" — `:yume s` is the
                 // whole of starting to type.
                 Some("scheme") => Ok(Command::SetScheme(
@@ -601,6 +607,11 @@ const YUME: &[Word] = &[
         name: "builtin",
         help: "改用出廠自帶的靈明碼表，不管裝了什麼",
         then: Args::None,
+    },
+    Word {
+        name: "table",
+        help: "用你自己的碼表（Rime 的 .dict.yaml 也行）",
+        then: Args::Path,
     },
 ];
 
