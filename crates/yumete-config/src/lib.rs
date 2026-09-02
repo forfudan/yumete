@@ -108,6 +108,15 @@ pub struct EditorConfig {
     /// and so moves the whole page a column. That is a change to what somebody
     /// is already looking at, and it should be asked for.
     pub paper_ticks: usize,
+    /// Which markup the files here are written in, when their names do not say
+    /// (Feature #106). Empty means: read the file and decide.
+    ///
+    /// This is what a per-project `.yumete/config.toml` is for. A novel written
+    /// in Typst but filed as `.txt` — chapters pulled in by `#include` — cannot
+    /// always be told from prose by reading it: a chapter that is nothing but
+    /// writing has no Typst in it to find. One line in the directory settles
+    /// the whole manuscript.
+    pub syntax: String,
     /// When the tab bar is drawn (Feature #95).
     pub tabs: Tabs,
     /// How many columns the file sidebar takes when it is open (Feature #94).
@@ -137,6 +146,7 @@ impl Default for EditorConfig {
             soft_wrap: true,
             autosave: true,
             ambiguous_wide: true,
+            syntax: String::new(),
             ruler: 0,
             paper_ticks: 0,
             tabs: Tabs::default(),
@@ -268,6 +278,38 @@ impl Default for ThemeConfig {
     }
 }
 
+/// Which markup a file is written in, by extension or by name.
+///
+/// The reliable answer for a manuscript whose files do not say: a novel written
+/// in Typst with its chapters filed as `.txt` is one line here, and then every
+/// chapter is read right — including the ones that are nothing but writing and
+/// have no Typst in them to find.
+///
+/// ```toml
+/// [syntax]
+/// txt = "typst"                 # every .txt in this project
+/// "筆記.txt" = "markdown"        # …except this one
+/// ```
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct SyntaxConfig {
+    /// Extension (without the dot) or exact file name → language.
+    pub by_name: HashMap<String, String>,
+}
+
+impl SyntaxConfig {
+    /// What this config says about `name`, if anything.
+    ///
+    /// The exact name wins over the extension: a project can say "all my `.txt`
+    /// are Typst, except that one".
+    pub fn of(&self, name: &str) -> Option<&str> {
+        if let Some(said) = self.by_name.get(name) {
+            return Some(said);
+        }
+        let extension = name.rsplit_once('.')?.1;
+        self.by_name.get(extension).map(String::as_str)
+    }
+}
+
 /// Keymap overrides.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct KeyConfig {
@@ -283,6 +325,7 @@ pub struct Config {
     pub theme: ThemeConfig,
     pub panel: PanelConfig,
     pub ime: ImeConfig,
+    pub syntax: SyntaxConfig,
     pub keys: KeyConfig,
 }
 
@@ -441,6 +484,8 @@ struct RawConfig {
     #[serde(default)]
     ime: RawIme,
     #[serde(default)]
+    syntax: HashMap<String, String>,
+    #[serde(default)]
     keys: RawKeys,
 }
 
@@ -481,6 +526,7 @@ struct RawEditor {
     ambiguous_width: Option<String>,
     sidebar_width: Option<usize>,
     tabs: Option<String>,
+    syntax: Option<String>,
     ruler: Option<usize>,
     paper_ticks: Option<usize>,
 }
@@ -558,6 +604,9 @@ impl RawConfig {
         if other.editor.tabs.is_some() {
             self.editor.tabs = other.editor.tabs.clone();
         }
+        if other.editor.syntax.is_some() {
+            self.editor.syntax = other.editor.syntax.clone();
+        }
         if other.editor.ruler.is_some() {
             self.editor.ruler = other.editor.ruler;
         }
@@ -578,6 +627,11 @@ impl RawConfig {
         }
         if other.ime.scheme.is_some() {
             self.ime.scheme = other.ime.scheme.clone();
+        }
+        // Merged entry by entry, so a project can add to what the global config
+        // says rather than having to restate it.
+        for (name, language) in &other.syntax {
+            self.syntax.insert(name.clone(), language.clone());
         }
         if other.panel.markers.is_some() {
             self.panel.markers = other.panel.markers;
@@ -658,6 +712,9 @@ impl RawConfig {
         if let Some(ticks) = self.editor.paper_ticks {
             config.editor.paper_ticks = ticks.min(64);
         }
+        if let Some(syntax) = self.editor.syntax {
+            config.editor.syntax = syntax;
+        }
         if let Some(tabs) = self.editor.tabs {
             if let Some(parsed) = Tabs::parse(&tabs) {
                 config.editor.tabs = parsed;
@@ -678,6 +735,7 @@ impl RawConfig {
         if let Some(scheme) = self.ime.scheme {
             config.ime.scheme = scheme;
         }
+        config.syntax.by_name = self.syntax;
         if let Some(hex) = self.theme.selection {
             if let Some(rgb) = parse_hex(&hex) {
                 config.theme.selection = rgb;
