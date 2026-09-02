@@ -810,7 +810,7 @@ fn tab_at(
 fn markup_style(kind: yumete_core::markdown::Kind) -> Style {
     use yumete_core::markdown::Kind;
     match kind {
-        Kind::Marker => Style::default().add_modifier(Modifier::DIM),
+        Kind::Marker | Kind::HeadingMark => Style::default().add_modifier(Modifier::DIM),
         Kind::Heading => Style::default()
             .fg(Color::Rgb(0xd8, 0xc9, 0x9a))
             .add_modifier(Modifier::BOLD),
@@ -1177,6 +1177,17 @@ fn draw_horizontal(
             .copied()
             .and_then(block_style)
             .unwrap_or_default();
+        // 所見即所得: the markup comes off the page. It is dropped from what is
+        // *drawn*, not from the buffer — and never on the construct the cursor
+        // is in, so the cursor is never inside text that is not on the screen.
+        let hide = editor.hidden_on_line(row.line);
+        let start_in_line = row.start - rope.line_to_char(row.line);
+        let shown: Vec<bool> = (0..chars.len())
+            .map(|i| {
+                let at = start_in_line + i;
+                !hide.iter().any(|&(a, b)| at >= a && at < b)
+            })
+            .collect();
         let mut styles = vec![ground; chars.len()];
 
         if show_markup {
@@ -1255,18 +1266,21 @@ fn draw_horizontal(
             }
         }
 
-        // Coalesce the per-character styles into as few spans as the row needs.
+        // Coalesce the per-character styles into as few spans as the row needs,
+        // leaving out what is not on the page.
         let mut at = 0;
         while at < chars.len() {
             let style = styles[at];
             let mut to = at + 1;
-            while to < chars.len() && styles[to] == style {
+            while to < chars.len() && styles[to] == style && shown[to] == shown[at] {
                 to += 1;
             }
-            spans.push(Span::styled(
-                chars[at..to].iter().collect::<String>(),
-                style,
-            ));
+            if shown[at] {
+                spans.push(Span::styled(
+                    chars[at..to].iter().collect::<String>(),
+                    style,
+                ));
+            }
             at = to;
         }
         if !break_cell.is_empty() {
@@ -1310,9 +1324,38 @@ fn draw_horizontal(
         }
     }
 
+    // The caret sits where the writing is, not where the source is: markup
+    // taken off the page before it on this row took its columns with it.
+    let hidden_before: usize = {
+        let hide = editor.hidden_on_line(cursor_pos.line);
+        if hide.is_empty() {
+            0
+        } else {
+            let line_start = rope.line_to_char(cursor_pos.line);
+            let row_start = wrap::rows_from(
+                rope,
+                WrapAnchor {
+                    line: cursor_pos.line,
+                    index_in_line: cursor_pos.index_in_line,
+                },
+                width,
+                1,
+            )
+            .first()
+            .map_or(line_start, |row| row.start);
+            (row_start..editor.cursor())
+                .filter(|&at| {
+                    let column = at - line_start;
+                    hide.iter().any(|&(a, b)| column >= a && column < b)
+                })
+                .map(|at| yumete_cjk::char_width(rope.char(at)))
+                .sum()
+        }
+    };
     // Clamped to the page: a caret resting past a row that exactly fills the
     // width would otherwise be drawn in the column after the last one.
-    let x = (gutter + cursor_pos.column).min(text_area.width.saturating_sub(1) as usize);
+    let x = (gutter + cursor_pos.column.saturating_sub(hidden_before))
+        .min(text_area.width.saturating_sub(1) as usize);
     (
         text_area.x + x as u16,
         text_area.y + cursor_row.min(last_row) as u16,
@@ -2622,6 +2665,66 @@ mod tests {
         editor.set_markup_visible(false);
         let buffer = render(&editor, &config, 40, 8);
         assert!(!buffer[(0, 0)].style().add_modifier.contains(Modifier::DIM));
+    }
+
+    #[test]
+    fn 所見即所得_takes_the_markup_off_except_under_the_cursor() {
+        let mut editor = editor_with("那**年**冬**天**");
+        let mut config = Config::default();
+        config.editor.line_numbers = LineNumbers::None;
+        config.editor.show_segmentation = false;
+
+        // Source mode: the file is what is on the page.
+        let buffer = render(&editor, &config, 40, 6);
+        assert_eq!(row_text(&buffer, 0).trim_end(), "那**年**冬**天**");
+
+        // 所見即所得 with the cursor at the start: all of it comes off.
+        editor.execute(":wysiwyg").unwrap();
+        for c in "gg".chars() {
+            editor.on_key(Key::Char(c));
+        }
+        let buffer = render(&editor, &config, 40, 6);
+        assert_eq!(row_text(&buffer, 0).trim_end(), "那年冬天");
+
+        // Move into the first construct and it — and only it — is shown whole,
+        // which is what lets it be edited at all.
+        editor.on_key(Key::Char('l'));
+        editor.on_key(Key::Char('l'));
+        let buffer = render(&editor, &config, 40, 6);
+        assert_eq!(row_text(&buffer, 0).trim_end(), "那**年**冬天");
+
+        // …and back to source on demand.
+        editor.execute(":source").unwrap();
+        let buffer = render(&editor, &config, 40, 6);
+        assert_eq!(row_text(&buffer, 0).trim_end(), "那**年**冬**天**");
+    }
+
+    #[test]
+    fn the_caret_sits_where_the_writing_is_not_where_the_source_is() {
+        let mut editor = editor_with("那**年**冬天");
+        let mut config = Config::default();
+        config.editor.line_numbers = LineNumbers::None;
+        config.editor.show_segmentation = false;
+        editor.execute(":wysiwyg").unwrap();
+        // Onto 天, clear of the construct whose markup has come off. (Standing
+        // *on* the construct's own boundary keeps it open, which is what stops
+        // the line flickering as the cursor leaves it.)
+        for c in "gg".chars() {
+            editor.on_key(Key::Char(c));
+        }
+        for _ in 0..7 {
+            editor.on_key(Key::Char('l'));
+        }
+        editor.on_key(Key::Char('i'));
+
+        let mut terminal = Terminal::new(TestBackend::new(40, 6)).unwrap();
+        let mut viewport = Viewport::default();
+        terminal
+            .draw(|frame| draw(frame, &editor, &config, &no_ime(), &mut viewport))
+            .unwrap();
+        let at = terminal.get_cursor_position().unwrap();
+        // 那年冬 is six cells; the four asterisks took their columns with them.
+        assert_eq!(at.x, 6, "the caret followed the markup off the page");
     }
 
     #[test]

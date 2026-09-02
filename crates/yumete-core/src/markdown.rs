@@ -43,10 +43,15 @@ pub enum Kind {
     /// `%%a note to myself%%` or `<!-- one -->` — in the manuscript, not in the
     /// book. Set well back, and dropped by `:export`.
     Comment,
-    /// The markup itself — the asterisks, the hashes, the brackets and the
-    /// target. Shown, but set back, so it reads as scaffolding rather than as
-    /// something the reader wrote.
+    /// The markup itself — the asterisks, the brackets and the target. Shown
+    /// and set back in source mode; hidden in 所見即所得.
     Marker,
+    /// A heading's hashes.
+    ///
+    /// A [`Marker`](Kind::Marker) that is never hidden: a terminal cannot make
+    /// a heading bigger, so the hashes are the only thing that says whether
+    /// this is a chapter or a scene, and a writer needs to know which.
+    HeadingMark,
 }
 
 /// What kind of block a line belongs to.
@@ -221,12 +226,44 @@ fn item_body(text: &str) -> Option<&str> {
     None
 }
 
+/// The markup to take off the page in 所見即所得 mode, as char ranges.
+///
+/// Everything a construct is made of *except* the writing inside it — but never
+/// the construct the cursor is in, which is shown whole so the writer can edit
+/// it. That one rule is what keeps the rest coherent: **the cursor is never
+/// inside text that is not on the screen**, so `d`, `x` and every motion act on
+/// exactly what can be seen.
+///
+/// A heading's hashes are never hidden. A terminal cannot make a heading
+/// bigger, so they are the only thing that says whether this is a chapter or a
+/// scene, and that is the writer's own structure.
+pub fn hidden(spans: &[Span], cursor: Option<usize>) -> Vec<(usize, usize)> {
+    // Which construct the cursor is in, taking a construct's whole extent —
+    // approaching its markup from either side opens it.
+    let open = cursor.and_then(|at| {
+        spans
+            .iter()
+            .filter(|s| at >= s.start && at <= s.end)
+            .map(|s| s.construct)
+            .next_back()
+    });
+    spans
+        .iter()
+        .filter(|s| s.kind == Kind::Marker && Some(s.construct) != open)
+        .map(|s| (s.start, s.end))
+        .collect()
+}
+
 /// A run of one line, in char indices.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Span {
     pub start: usize,
     pub end: usize,
     pub kind: Kind,
+    /// Which construct this run belongs to — `**`, its text and the closing
+    /// `**` share one. It is what lets the markup of the construct the cursor
+    /// is in be shown while every other construct's stays hidden.
+    pub construct: usize,
 }
 
 /// The marked-up runs of `line`, in order and non-overlapping.
@@ -244,7 +281,8 @@ pub fn spans(line: &str) -> Vec<Span> {
         out.push(Span {
             start: 0,
             end: hashes,
-            kind: Kind::Marker,
+            kind: Kind::HeadingMark,
+            construct: 0,
         });
         from = hashes;
         // The title itself, under whatever emphasis it also carries.
@@ -253,28 +291,32 @@ pub fn spans(line: &str) -> Vec<Span> {
                 start: from,
                 end: chars.len(),
                 kind: Kind::Heading,
+                construct: 0,
             });
         }
     }
+    let mut construct = 1usize;
 
     let mut at = from;
     while at < chars.len() {
         // A comment is the writer talking to themselves — everything in it is
         // theirs, markup included — so it is taken before anything else.
         if let Some((open, close, end)) = comment(&chars, at) {
-            mark(&mut out, at, at + open, Kind::Marker);
-            mark(&mut out, at + open, end - close, Kind::Comment);
-            mark(&mut out, end - close, end, Kind::Marker);
+            mark(&mut out, at, at + open, Kind::Marker, construct);
+            mark(&mut out, at + open, end - close, Kind::Comment, construct);
+            mark(&mut out, end - close, end, Kind::Marker, construct);
             at = end;
+            construct += 1;
             continue;
         }
         // Code next: inside a code span nothing else is markup.
         if chars[at] == '`' {
             if let Some(close) = find(&chars, at + 1, |c| c == '`') {
-                mark(&mut out, at, at + 1, Kind::Marker);
-                mark(&mut out, at + 1, close, Kind::Code);
-                mark(&mut out, close, close + 1, Kind::Marker);
+                mark(&mut out, at, at + 1, Kind::Marker, construct);
+                mark(&mut out, at + 1, close, Kind::Code, construct);
+                mark(&mut out, close, close + 1, Kind::Marker, construct);
                 at = close + 1;
+                construct += 1;
                 continue;
             }
         }
@@ -286,10 +328,11 @@ pub fn spans(line: &str) -> Vec<Span> {
                 _ => Kind::Emphasis,
             };
             if let Some(close) = closing(&chars, at + len, chars[at], len) {
-                mark(&mut out, at, at + len, Kind::Marker);
-                mark(&mut out, at + len, close, kind);
-                mark(&mut out, close, close + len, Kind::Marker);
+                mark(&mut out, at, at + len, Kind::Marker, construct);
+                mark(&mut out, at + len, close, kind, construct);
+                mark(&mut out, close, close + len, Kind::Marker, construct);
                 at = close + len;
+                construct += 1;
                 continue;
             }
         }
@@ -304,10 +347,11 @@ pub fn spans(line: &str) -> Vec<Span> {
                     .position(|&c| c == '|')
                     .map(|i| at + 2 + i + 1..close)
                     .unwrap_or(body);
-                mark(&mut out, at, shown.start, Kind::Marker);
-                mark(&mut out, shown.start, shown.end, Kind::WikiLink);
-                mark(&mut out, shown.end, close + 2, Kind::Marker);
+                mark(&mut out, at, shown.start, Kind::Marker, construct);
+                mark(&mut out, shown.start, shown.end, Kind::WikiLink, construct);
+                mark(&mut out, shown.end, close + 2, Kind::Marker, construct);
                 at = close + 2;
+                construct += 1;
                 continue;
             }
         }
@@ -315,8 +359,9 @@ pub fn spans(line: &str) -> Vec<Span> {
         if chars[at] == '[' && chars.get(at + 1) == Some(&'^') {
             if let Some(close) = find(&chars, at + 2, |c| c == ']') {
                 let end = close + 1 + usize::from(chars.get(close + 1) == Some(&':'));
-                mark(&mut out, at, end, Kind::Footnote);
+                mark(&mut out, at, end, Kind::Footnote, construct);
                 at = end;
+                construct += 1;
                 continue;
             }
         }
@@ -325,10 +370,11 @@ pub fn spans(line: &str) -> Vec<Span> {
             if let Some(close) = find(&chars, at + 1, |c| c == ']') {
                 if chars.get(close + 1) == Some(&'(') {
                     if let Some(end) = find(&chars, close + 2, |c| c == ')') {
-                        mark(&mut out, at, at + 1, Kind::Marker);
-                        mark(&mut out, at + 1, close, Kind::Link);
-                        mark(&mut out, close, end + 1, Kind::Marker);
+                        mark(&mut out, at, at + 1, Kind::Marker, construct);
+                        mark(&mut out, at + 1, close, Kind::Link, construct);
+                        mark(&mut out, close, end + 1, Kind::Marker, construct);
                         at = end + 1;
+                        construct += 1;
                         continue;
                     }
                 }
@@ -420,9 +466,14 @@ fn find(chars: &[char], from: usize, f: impl Fn(char) -> bool) -> Option<usize> 
 }
 
 /// Push a span, dropping empty ones.
-fn mark(out: &mut Vec<Span>, start: usize, end: usize, kind: Kind) {
+fn mark(out: &mut Vec<Span>, start: usize, end: usize, kind: Kind, construct: usize) {
     if end > start {
-        out.push(Span { start, end, kind });
+        out.push(Span {
+            start,
+            end,
+            kind,
+            construct,
+        });
     }
 }
 
@@ -447,7 +498,7 @@ mod tests {
                 Kind::Footnote => 'F',
                 Kind::WikiLink => 'W',
                 Kind::Comment => '%',
-                Kind::Marker => '.',
+                Kind::Marker | Kind::HeadingMark => '.',
             };
             for slot in out.iter_mut().take(span.end.min(n)).skip(span.start) {
                 *slot = mark;
@@ -572,6 +623,52 @@ mod tests {
         assert_eq!(walk("[^1]: 出自《詩》"), "F");
         // A rule is a scene break; three of anything on its own line.
         assert_eq!(walk("***\n___\n- - -"), "___");
+    }
+
+    /// What a line looks like with its markup taken off, the cursor at `at`.
+    fn rendered(line: &str, at: Option<usize>) -> String {
+        let hide = hidden(&spans(line), at);
+        line.chars()
+            .enumerate()
+            .filter(|(i, _)| !hide.iter().any(|&(a, b)| *i >= a && *i < b))
+            .map(|(_, c)| c)
+            .collect()
+    }
+
+    #[test]
+    fn the_markup_comes_off_except_where_the_cursor_is() {
+        let line = "那**年**冬**天**";
+        // Nowhere near it: all of it comes off.
+        assert_eq!(rendered(line, None), "那年冬天");
+        // In the first construct: that one is whole, the other still off.
+        assert_eq!(rendered(line, Some(4)), "那**年**冬天");
+        // Approaching its markup from either side opens it too — which is what
+        // keeps the cursor from ever being inside text that is not on screen.
+        assert_eq!(rendered(line, Some(1)), "那**年**冬天");
+        assert_eq!(rendered(line, Some(6)), "那**年**冬天");
+        // And the second construct opens on its own.
+        assert_eq!(rendered(line, Some(9)), "那年冬**天**");
+    }
+
+    #[test]
+    fn a_headings_hashes_stay_because_nothing_else_says_the_level() {
+        // A terminal cannot make a heading bigger; the hashes are the level.
+        assert_eq!(rendered("## 第一章", None), "## 第一章");
+        assert_eq!(rendered("### **甲**", None), "### 甲");
+    }
+
+    #[test]
+    fn every_kind_of_markup_comes_off() {
+        assert_eq!(rendered("那`碼`天", None), "那碼天");
+        assert_eq!(rendered("那==年==天", None), "那年天");
+        assert_eq!(rendered("見[附錄](a.md)", None), "見附錄");
+        assert_eq!(rendered("見[[第三章|那一夜]]", None), "見那一夜");
+        assert_eq!(rendered("寫到這裏 %%再想想%%", None), "寫到這裏 再想想");
+        // The note's own text stays: a note you cannot see is a note you will
+        // not act on. Only its fence comes off.
+        assert_eq!(rendered("甲<!-- 待查 -->乙", None), "甲 待查 乙");
+        // A footnote's number is what the reader reads, so it stays whole.
+        assert_eq!(rendered("見[^1]。", None), "見[^1]。");
     }
 
     #[test]

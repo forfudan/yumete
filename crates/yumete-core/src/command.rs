@@ -65,6 +65,9 @@ pub enum Command {
     /// `:wrap` / `:nowrap` — whether a paragraph too wide for the terminal
     /// continues on the next screen row (Feature #77).
     SetSoftWrap(bool),
+    /// `:wysiwyg` / `:source` — whether the markup comes off the page
+    /// (Feature #104).
+    SetWysiwyg(bool),
     /// `:buffer-next` / `:buffer-previous` (aliases `:bn` / `:bp`) — show
     /// another of the open buffers.
     NextBuffer,
@@ -218,6 +221,8 @@ pub fn parse(input: &str) -> Result<Command, CommandError> {
             }
         }
         "hanging" => Ok(Command::ToggleHanging),
+        "wysiwyg" | "wys" => Ok(Command::SetWysiwyg(true)),
+        "source" | "src" => Ok(Command::SetWysiwyg(false)),
         "wrap" => Ok(Command::SetSoftWrap(true)),
         "nowrap" => Ok(Command::SetSoftWrap(false)),
         "buffer-next" | "bn" => Ok(Command::NextBuffer),
@@ -394,6 +399,16 @@ pub const COMMANDS: &[Entry] = &[
         name: "hanging",
         alias: None,
         help: "句讀 in the margin (標點旁置)",
+    },
+    Entry {
+        name: "wysiwyg",
+        alias: Some("wys"),
+        help: "所見即所得：標記只在光標那一處展開",
+    },
+    Entry {
+        name: "source",
+        alias: Some("src"),
+        help: "回到源碼",
     },
     Entry {
         name: "wrap",
@@ -699,6 +714,8 @@ mod tests {
             "chaifen",
             "scheme",
             "hanging",
+            "wysiwyg",
+            "source",
             "wrap",
             "nowrap",
             "buffer-next",
