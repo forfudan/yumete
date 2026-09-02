@@ -245,6 +245,26 @@ pub enum Render {
     Full,
 }
 
+/// One line of a register's contents, for a list to show.
+///
+/// A yank is often a paragraph and sometimes a chapter; what tells two of them
+/// apart is the first line and the size, so that is what is shown.
+fn one_line(text: &str) -> String {
+    let first: String = text.lines().next().unwrap_or("").chars().take(40).collect();
+    let lines = text.lines().count();
+    if lines > 1 {
+        format!("{first} …（{lines} 行）")
+    } else {
+        first
+    }
+}
+
+/// How many yanks and deletes the ring remembers.
+///
+/// Enough to reach back through an afternoon's editing, few enough that the
+/// picker is a list you read rather than one you search.
+const YANKS: usize = 16;
+
 /// How many places the jump list remembers.
 ///
 /// Bounded because a session of a thousand jumps does not need a thousandth of
@@ -367,6 +387,13 @@ pub struct Editor {
     /// still there.
     register: String,
     registers: HashMap<char, String>,
+    /// What the unnamed register held before, newest first.
+    ///
+    /// Every yank and every delete overwrites one register, so the text you cut
+    /// three edits ago is gone — and "where did that paragraph go" is a thing a
+    /// writer asks. Vim answers it with numbered registers you have to know the
+    /// numbers of; this keeps the same list and lets you *look* at it.
+    yanks: Vec<String>,
     /// The register the *next* yank, delete or paste will use, set by `"`.
     /// Cleared as soon as it is used, so it never leaks into the command after.
     pending_register: Option<char>,
@@ -623,6 +650,7 @@ impl Editor {
             extend: false,
             register: String::new(),
             registers: HashMap::new(),
+            yanks: Vec::new(),
             pending_register: None,
             recording: None,
             macro_keys: Vec::new(),
@@ -4146,6 +4174,7 @@ impl Editor {
         ('y', "複製到系統剪貼簿"),
         ('p', "從系統剪貼簿貼上"),
         ('d', "詳情欄"),
+        ('"', "貼上：取過的東西"),
     ];
 
     /// Run one key of a `Space` sequence.
@@ -4155,6 +4184,7 @@ impl Editor {
             // The outline is the sidebar showing the view that has it.
             Key::Char('o') => self.show_sidebar(crate::sidebar::View::Outline),
             Key::Char('d') => self.toggle_detail(),
+            Key::Char('"') => self.open_paste_picker(),
             Key::Char('f') => self.open_file_picker(),
             Key::Char('b') => self.open_buffer_picker(),
             // The two prompts, opened rather than run: a search wants a pattern
@@ -4474,6 +4504,11 @@ impl Editor {
                     }
                     Some(crate::picker::Item::Buffer(i, _)) => self.show_buffer(i),
                     Some(crate::picker::Item::Row(line, _)) => self.goto_line(line + 1),
+                    Some(crate::picker::Item::Paste(Some(which), _)) => {
+                        self.paste_from_menu(which)
+                    }
+                    // The system clipboard is the front end's to read.
+                    Some(crate::picker::Item::Paste(None, _)) => self.clipboard_paste(true),
                     None => self.status = "nothing matched".to_string(),
                 }
             }
@@ -6084,8 +6119,69 @@ impl Editor {
             Some(name) => {
                 self.registers.insert(name, text);
             }
-            None => self.register = text,
+            None => {
+                // The ring keeps what the register is about to lose. Not
+                // duplicates of the top — `yy` twice is one thing you took, not
+                // two — and not nothing.
+                if !text.is_empty() && self.yanks.first() != Some(&text) {
+                    self.yanks.insert(0, text.clone());
+                    self.yanks.truncate(YANKS);
+                }
+                self.register = text;
+            }
         }
+    }
+
+    /// Open the picker over everything that could be pasted (`Space \"`).
+    fn open_paste_picker(&mut self) {
+        let mut items = vec![crate::picker::Item::Paste(
+            None,
+            "系統剪貼簿".to_string(),
+        )];
+        items.extend(
+            self.paste_menu()
+                .into_iter()
+                .enumerate()
+                .map(|(i, (name, text))| {
+                    crate::picker::Item::Paste(Some(i), format!("{name}  {}", one_line(&text)))
+                }),
+        );
+        if items.len() == 1 {
+            self.status = "還沒有取過東西".to_string();
+        }
+        self.picker = Some(crate::picker::Picker::new("貼上", items));
+        self.mode = Mode::Picker;
+    }
+
+    /// Everything that could be pasted, newest first, for the picker to show.
+    ///
+    /// The unnamed register's history, then the named ones. The system
+    /// clipboard is offered too but is not in this list: only the front end can
+    /// read it, so it is a row that asks rather than a row that holds.
+    pub fn paste_menu(&self) -> Vec<(String, String)> {
+        let mut out: Vec<(String, String)> = Vec::new();
+        for (i, text) in self.yanks.iter().enumerate() {
+            out.push((format!("{i}"), text.clone()));
+        }
+        let mut named: Vec<(&char, &String)> = self.registers.iter().collect();
+        named.sort();
+        for (name, text) in named {
+            out.push((format!("\"{name}"), text.clone()));
+        }
+        out
+    }
+
+    /// Paste one of the things `paste_menu` offered.
+    fn paste_from_menu(&mut self, which: usize) {
+        let menu = self.paste_menu();
+        let Some((name, text)) = menu.get(which) else {
+            return;
+        };
+        let (name, text) = (name.clone(), text.clone());
+        self.register = text;
+        self.pending_register = None;
+        self.paste(true);
+        self.status = format!("貼了 {name}");
     }
 
     /// The contents of the register a command should read from.
@@ -7995,6 +8091,50 @@ mod tests {
             "aqb\ncqd\n",
             "replay finds q and selects the line, changing nothing"
         );
+    }
+
+    #[test]
+    fn what_was_cut_three_edits_ago_is_still_reachable() {
+        // Every yank and every delete overwrote one register, so "where did
+        // that paragraph go" had no answer.
+        let mut ed = typed("甲一\n乙二\n丙三\n");
+        ed.goto_line(1);
+        press(&mut ed, "xd");
+        ed.goto_line(1);
+        press(&mut ed, "xd");
+        assert_eq!(ed.current_buffer().text(), "丙三\n");
+
+        // Both are still there, newest first, and the named ones after them.
+        ed.goto_line(1);
+        press(&mut ed, "x");
+        press(&mut ed, "\"ay");
+        let menu = ed.paste_menu();
+        assert_eq!(menu[0].1, "乙二\n", "the last thing cut");
+        assert_eq!(menu[1].1, "甲一\n", "and the one before it");
+        assert_eq!(menu[2].0, "\"a", "then the named registers");
+        assert_eq!(menu[2].1, "丙三\n");
+
+        // `Space \"` offers them, with the system clipboard first — the only
+        // one the core cannot read for itself.
+        type_keys(&mut ed, " \"");
+        assert_eq!(ed.mode(), Mode::Picker);
+        let shown = ed.picker().unwrap().matches();
+        assert!(shown[0].label().contains("系統剪貼簿"));
+        assert!(shown[1].label().contains("乙二"));
+
+        // Choosing one pastes it, without disturbing the ring's order.
+        ed.on_key(Key::Down);
+        ed.on_key(Key::Enter);
+        assert_eq!(ed.mode(), Mode::Normal);
+        assert!(ed.current_buffer().text().contains("乙二"), "{}", ed.current_buffer().text());
+
+        // Taking the same thing twice does not fill the list with it: `yy` is
+        // one thing you took, not two.
+        ed.goto_line(1);
+        press(&mut ed, "y");
+        let before = ed.paste_menu().len();
+        press(&mut ed, "y");
+        assert_eq!(ed.paste_menu().len(), before);
     }
 
     #[test]
