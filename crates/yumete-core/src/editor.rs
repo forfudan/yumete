@@ -3780,6 +3780,14 @@ impl Editor {
                 Key::Char('k') | Key::Up => {
                     return self.repeat(count, |e| e.move_horizontal(motion::left));
                 }
+                // A page at a time, sideways. The capitals follow the direction
+                // their lowercase does, not the direction the words "forward"
+                // and "back" do: `h` is leftward, and leftward is *onward* on a
+                // 縱書 page, so `H` turns the page onward too. Reading `h` as
+                // left and `H` as right would be one letter meaning two
+                // directions.
+                Key::Char('H') => return self.move_page(count, false, 1.0),
+                Key::Char('L') => return self.move_page(count, true, 1.0),
                 _ => {}
             }
         }
@@ -5162,8 +5170,12 @@ impl Editor {
         if !self.overwrite(start, end, &text) {
             return;
         }
+        // The head sits on the selection's last grapheme, not one past it: the
+        // selection covers the cursor's own grapheme, so a head at `end` would
+        // put the *next* character inside the highlight — and the next edit
+        // would take one more than the highlight showed.
         self.anchor = start;
-        self.cursor = end;
+        self.cursor = motion::prev_grapheme(self.current_buffer().rope(), end).max(start);
     }
 
     /// Overwrite every character of the selection with `c` (Helix `r`).
@@ -5177,7 +5189,17 @@ impl Editor {
         if start >= end {
             return;
         }
-        let text: String = std::iter::repeat_n(c, end - start).collect();
+        // Over the *characters*, not over the range: a line ending is not a
+        // character you meant to write over. `x` selects a line including its
+        // newline, so `x r Z` used to run the line into the next one — a lost
+        // paragraph, silently, from two keys that mean "blank this out".
+        let text: String = self
+            .current_buffer()
+            .rope()
+            .slice(start..end)
+            .chars()
+            .map(|had| if had == '\n' || had == '\r' { had } else { c })
+            .collect();
         self.snapshot();
         if !self.overwrite(start, end, &text) {
             return;
@@ -5543,7 +5565,11 @@ impl Editor {
         buffer.insert(end, &close.to_string());
         buffer.insert(start, &open.to_string());
         self.anchor = start;
-        self.cursor = end + 2;
+        // The wrapped text plus its two marks runs `start ..= end + 1`, and the
+        // head sits on the last grapheme of it — not one past. At `end + 2` the
+        // character *after* the closing mark was inside the selection, so `ms(`
+        // then `d` took one more than the highlight showed.
+        self.cursor = end + 1;
         self.clamp_cursor();
     }
 
@@ -8042,6 +8068,34 @@ mod tests {
         assert!(ed.current_buffer().text().contains("⿰禾布"));
 
         std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn a_capital_turns_the_page_the_way_its_lowercase_moves() {
+        // 縱書: `h` is leftward and leftward is onward, so `H` must be onward
+        // too. Reading `h` as left and `H` as back is one letter meaning two
+        // directions, and on a page where the two are not the same it shows.
+        let mut ed = typed(&"字\n".repeat(400));
+        ed.set_layout(Layout::Vertical);
+        ed.set_page(20, 30);
+        ed.execute("200").unwrap();
+        let middle = ed.cursor_line();
+
+        press(&mut ed, "H");
+        assert!(ed.cursor_line() > middle, "H reads on, as h does");
+        let onward = ed.cursor_line();
+        press(&mut ed, "L");
+        assert_eq!(ed.cursor_line(), middle, "and L comes back");
+
+        // Horizontally they keep the meaning the letters have there, where
+        // rightward and onward are the same thing.
+        ed.set_layout(Layout::Horizontal);
+        ed.execute("200").unwrap();
+        press(&mut ed, "L");
+        assert!(ed.cursor_line() > middle, "L reads on");
+        press(&mut ed, "H");
+        assert_eq!(ed.cursor_line(), middle);
+        let _ = onward;
     }
 
     #[test]
