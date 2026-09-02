@@ -181,6 +181,7 @@ KEYS (Normal mode, Helix-style):
     Space     menu: f files, b buffers, / project search, ? commands, y copy
     gh gl gs  goto line start / end / first non-blank
     f t F T   find / till a character (forward / backward); A-. repeats it
+    J  K      forward / back half a page   (L / H for a whole one)
     x  X      select the current line / extend to whole lines
     v  ;  %   select (extend) mode / collapse / select the whole file
     d  c  R   delete / change / replace the selection with the register
