@@ -188,7 +188,7 @@ fn place(metrics: &Metrics, area: Rect, annotated: &[bool]) -> Vec<u16> {
 
 /// How many rows the paragraph-number header needs: two digits stack into one
 /// row 縦中横-style, so a four-digit novel needs two rows.
-fn number_rows(mode: LineNumbers, total_lines: usize) -> u16 {
+pub(crate) fn number_rows(mode: LineNumbers, total_lines: usize) -> u16 {
     match mode {
         LineNumbers::None => 0,
         _ => (total_lines.max(1).to_string().len().div_ceil(2)).clamp(1, 3) as u16,
@@ -384,6 +384,24 @@ pub fn draw(
     // full-width reading covers only when that cell was reserved for it.
     let ruby_width = ruby_width_of(&page.iter().map(|(_, s, _)| s.clone()).collect::<Vec<_>>());
 
+    // Lay the number band down as a band, before anything is drawn on it. In
+    // every other editor a line number is separated from the text by position —
+    // a gutter column the text never enters. Here the numbers sit *above* the
+    // 縱, in the text's own columns, so position separates nothing and a bare
+    // dim digit reads as a digit somebody typed. The colour is the gutter.
+    if metrics.head_rows > 0 {
+        let (gr, gg, gb) = config.theme.gutter;
+        let ground = Style::default().bg(Color::Rgb(gr, gg, gb));
+        let buf = frame.buffer_mut();
+        for y in area.y..area.y + metrics.head_rows.min(area.height) {
+            for x in area.x..area.x + area.width {
+                if let Some(cell) = buf.cell_mut((x, y)) {
+                    cell.set_symbol(" ").set_style(ground);
+                }
+            }
+        }
+    }
+
     let text_top = area.y + metrics.head_rows;
     let (sel_start, sel_end) = editor.selection();
     // Asked of the editor, not of the range: the selection always covers the
@@ -419,10 +437,14 @@ pub fn draw(
             };
             // The cursor's own paragraph keeps its number bright, so the eye can
             // find where it is on a dense page.
+            let (gr, gg, gb) = config.theme.gutter;
+            let style = Style::default().bg(Color::Rgb(gr, gg, gb));
+            // The cursor's own paragraph keeps its number bright against the
+            // band, so the eye can find where it is on a dense page.
             let style = if zong.line == cursor_line {
-                Style::default()
+                style
             } else {
-                Style::default().add_modifier(Modifier::DIM)
+                style.add_modifier(Modifier::DIM)
             };
             put_number(buf, x, area.y, metrics.head_rows, n, style);
         }

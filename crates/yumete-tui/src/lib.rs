@@ -928,12 +928,17 @@ fn draw_status(frame: &mut Frame, editor: &Editor, ime: &ImeSession, status_area
             // 橫 position; the 縱 is which run of it; 字 is how far down that
             // run. "Ln" and "Col" would each mean two things here.
             let at = editor.zong_position();
-            format!(
-                "{left}   橫 {}, 縱 {}, 字 {}",
-                at.line + 1,
-                at.index_in_line + 1,
-                at.slot + 1,
-            )
+            // Two coordinates, not three: which 縱 the cursor is in, and how far
+            // down it. A paragraph long enough to wrap runs over several 縱, so
+            // the 縱 is named by the paragraph and which piece of it — `56-2` is
+            // the second 縱 of paragraph 56 — and the piece is dropped when
+            // there is only one, which is most paragraphs.
+            let which = if at.index_in_line == 0 {
+                format!("{}", at.line + 1)
+            } else {
+                format!("{}-{}", at.line + 1, at.index_in_line + 1)
+            };
+            format!("{left}   橫 {which}, 字 {}", at.slot + 1)
         } else {
             format!(
                 "{left}   Ln {}, Col {}",
@@ -1426,6 +1431,27 @@ mod tests {
         editor.on_key(Key::Char('l'));
         assert_eq!(editor.cursor_line(), 0);
         assert_eq!(editor.zong_position().slot, 1);
+    }
+
+    #[test]
+    fn the_number_band_is_a_gutter_of_its_own_colour() {
+        // Set vertically the numbers sit above the 縱, in the text's own
+        // columns. Position separates nothing, so the band has to be told apart
+        // by colour or it reads as digits somebody typed.
+        let mut editor = editor_with("春江\n潮水");
+        let mut config = vertical_config();
+        config.editor.line_numbers = LineNumbers::Absolute;
+        config.theme.gutter = (0x24, 0x26, 0x2c);
+        let buffer = render_vertical(&mut editor, &config, 30, 12);
+
+        let band = Some(Color::Rgb(0x24, 0x26, 0x2c));
+        let head = vertical::number_rows(LineNumbers::Absolute, 3);
+        assert!(head > 0);
+        for x in 0..30 {
+            assert_eq!(buffer[(x, head - 1)].style().bg, band, "gutter at {x}");
+        }
+        // …and the text below it is not on the band.
+        assert_ne!(buffer[(28, head)].style().bg, band);
     }
 
     #[test]
@@ -1948,10 +1974,26 @@ mod tests {
             .map(|x| buffer[(x, buffer.area.height - 1)].symbol())
             .collect();
         let status = raw.split_whitespace().collect::<Vec<_>>().join(" ");
-        assert!(status.contains("橫 1"), "paragraph, across: {status:?}");
-        assert!(status.contains("縱 1"), "which run of it: {status:?}");
+        assert!(status.contains("橫 1"), "which 縱: {status:?}");
         assert!(status.contains("字 2"), "how far down it: {status:?}");
         assert!(!status.contains("Ln"), "no ambiguous line number");
+
+        // A paragraph long enough to wrap runs over several 縱, and then the
+        // piece is named too: `2-2` is the second 縱 of paragraph 2.
+        let mut editor = editor_with(&format!("一\n{}", "字".repeat(20)));
+        editor.set_layout(WritingLayout::Vertical);
+        // Into the long paragraph, then far enough down it to be past the first
+        // 縱's worth of characters.
+        editor.on_key(Key::Char('h'));
+        for _ in 0..12 {
+            editor.on_key(Key::Char('j'));
+        }
+        let buffer = render_vertical(&mut editor, &config, 60, 12);
+        let raw: String = (0..buffer.area.width)
+            .map(|x| buffer[(x, buffer.area.height - 1)].symbol())
+            .collect();
+        let status = raw.split_whitespace().collect::<Vec<_>>().join(" ");
+        assert!(status.contains("橫 2-2"), "the wrapped piece: {status:?}");
     }
 
     /// The guess has to be visibly *not yet* part of the line, or it reads as

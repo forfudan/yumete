@@ -284,6 +284,7 @@ Phases are ordered by priority, most writer-critical first:
 | 86  | **The scheme's own key bindings**          | ime    | P1    | `;`/`'` 選二三, `:scheme`, 二重注解 | Done   |
 | 87  | **Full-width readings**                    | tui    | P1    | 注音符號 and kana; the page was a staircase | Done |
 | 88  | **Export**                                 | core   | P2    | `:export html` keeps 縱書; typst is honest about not | Done |
+| 89  | **The number band is a gutter**            | tui    | P3    | colour, since position cannot separate it | Done |
 
 ---
 
