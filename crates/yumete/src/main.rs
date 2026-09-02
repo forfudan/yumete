@@ -46,12 +46,6 @@ fn main() -> ExitCode {
     }
 
     let mut editor = Editor::new();
-    for file in &files {
-        if let Err(err) = editor.open_file(file) {
-            eprintln!("yumete: cannot open '{file}': {err}");
-            return ExitCode::FAILURE;
-        }
-    }
 
     // Load global + per-project config and apply the keymap.
     let (config, config_problems) = yumete_config::Config::load_reporting();
@@ -279,7 +273,7 @@ KEYS (Normal mode, Helix-style):
     A-;       flip which end of the selection the cursor is on
     C-d C-u   half a page onward / back (down the lines, or across the 縱)
     C-f C-b   a whole page
-    J         join with the line below (no space between two 全角 characters)
+    gJ        join with the line below (no space between two 全角 characters)
     ~  `      switch case / lowercase the selection (A-` uppercases)
     >  <      indent / unindent the selected lines
     C-a C-x   increment / decrement the number at the cursor
@@ -298,7 +292,7 @@ KEYS (Normal mode, Helix-style):
               :wq [path]       save (optionally save-as) and quit
               :42  :goto n    put the cursor on a line
               :recover[!]      load (or drop) a crash-recovery draft
-              :bn  :bp  :bd  :ls   the open files (also gn / gp)
+              :buffer list|next|previous|close   the open files (gn / gp)
               :grep <re>  :toc      across the project / this file's headings
               :export html|typst    write it out for a typesetter
               :layout [horizontal|vertical]      :dense [on|off]
@@ -315,7 +309,7 @@ by `|` into as many parts as the base has characters annotates each character
 separately — `hàn|zì` over 漢字 — while `hàn zì` stays one reading over the word.
 
 Laid out vertically, text runs top to bottom in 縱 that stack from the right
-edge leftward, wrapping every 32 characters (`zong_length`). h j k l keep their
+edge leftward, wrapping at whatever the window allows (`zong_length`). h j k l keep their
 screen meaning: j and k read down and up a 縱, h and l step to the 縱 on the
 left and on the right. CJK punctuation is drawn in its vertical form; the file
 on disk is unchanged.

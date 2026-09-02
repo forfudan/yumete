@@ -550,8 +550,9 @@ start = true          # 啟動就載入碼表
 `:layout vertical`，或 `yumete -v`，或配置裡 `layout = "vertical"`。
 
 文字從上往下走，一條一條的**縱**從右往左排。「縱」就是竪排裡的「行」——之所以另起
-一個名字，是因為在這裡「行」和「列」各有兩個意思。一個段落會軟折成若干縱，默認每縱
-32 字，這是散文舒服的上限。
+一個名字，是因為在這裡「行」和「列」各有兩個意思。一個段落會軟折成若干縱，默認**窗口能給
+多長就多長**——一縱多長是關於這本書的決定，編輯器沒資格替你做。`:wrap 32` 或
+`[editor] zong_length = 32` 是你自己下的那個決定（32 字前後是散文舒服的上限）。
 
 ### 5.1 移動
 
@@ -1214,7 +1215,7 @@ show_segmentation = true     # 詞語著色
 segmentation_threshold = 0
 
 layout = "horizontal"        # "horizontal" | "vertical"
-zong_length = 32             # 每縱字數，4–64
+zong_length = 0             # 每縱字數，4–64
 zong_gap = 1                 # 縱之間的半角格數，0–4。設 0 則縱與縱相貼，
                              # 只有帶注音的那一縱佔一格
 tatechuyoko = false          # 半角字兩個擠進一格（縦中横）
