@@ -53,6 +53,9 @@ fn main() -> ExitCode {
 
     // Load global + per-project config and apply the keymap.
     let (config, config_problems) = yumete_config::Config::load_reporting();
+    // Settled before anything is measured: every width question downstream —
+    // wrap, gutter, cursor, the 縱 grid — asks the same global.
+    yumete_core::set_ambiguous_wide(config.editor.ambiguous_wide);
     editor.set_key_aliases(config.keys.normal.clone());
     // Layout (Feature #61): the config sets it, a flag overrides for one run,
     // and `:layout` switches it live.

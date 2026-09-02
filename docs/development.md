@@ -276,6 +276,7 @@ Phases are ordered by priority, most writer-critical first:
 | 78  | **Goto line**                              | core   | P3    | `10gg`, `:42`, `:goto` — a reader's page reference | Done   |
 | 79  | **Crash recovery**                         | both   | P1    | A dotfile beside the document; `:recover` | Done   |
 | 80  | **Report a broken config**                 | config | P2    | A typo was silently dropped before  | Done   |
+| 81  | **East-Asian ambiguous width**             | cjk    | P1    | `—` `…` `“”` shifted every line     | Done   |
 
 ---
 

@@ -378,6 +378,10 @@ tatechuyoko = false          # 半角字兩個擠進一格（縦中横）
 hanging_punctuation = false  # 。，、？！：；「」 掛在邊欄（標點旁置）
 soft_wrap = true             # 橫排時長段落折到下一行；關掉則跑出右邊看不見
 autosave = true              # 未存檔時在文件旁留一份搶救副本
+ambiguous_width = "wide"     # 「東亞歧義寬度」字符佔幾格："wide" | "narrow"
+                             # — … “ ” ‘ ’ · ※ 這些字，CJK 字體畫兩格、西文字
+                             # 體畫一格。算錯不是難看而已：一行有十個就整行歪
+                             # 掉，行號、光標、折行全跟着錯位
 
 show_ruby = true             # 排出注音
 ruby_dialects = []           # 除檔案後綴推出的那種以外，還要讀的注音方言

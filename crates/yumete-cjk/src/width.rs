@@ -5,19 +5,55 @@
 //! so the rest of yumete depends on `yumete_cjk::char_width` / `str_width`
 //! rather than the dependency directly.
 
+use std::sync::atomic::{AtomicBool, Ordering};
+
 use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
+
+/// Whether East-Asian **Ambiguous** characters are two cells wide.
+///
+/// Annex #11 leaves this to the environment, and the environment here is the
+/// font: `—` `…` `“” ‘’` `·` `※` are one cell in a Latin font and two in a CJK
+/// one. Getting it wrong is not cosmetic — every one of them on a line shifts
+/// the whole line, and a Chinese paragraph has dozens, so the gutter, the
+/// cursor and the wrap all walk off the text.
+///
+/// Wide by default, because this is an editor for 漢字 prose and `——` and `……`
+/// appear in every chapter. Set once at startup from `[editor] ambiguous_width`
+/// — a process-wide setting, because width is asked for in a hundred places
+/// that have no business knowing about configuration.
+static AMBIGUOUS_IS_WIDE: AtomicBool = AtomicBool::new(true);
+
+/// Set whether Ambiguous characters count as two cells. Call once, at startup,
+/// before anything is measured or drawn.
+pub fn set_ambiguous_wide(wide: bool) {
+    AMBIGUOUS_IS_WIDE.store(wide, Ordering::Relaxed);
+}
+
+/// Whether Ambiguous characters currently count as two cells.
+pub fn ambiguous_is_wide() -> bool {
+    AMBIGUOUS_IS_WIDE.load(Ordering::Relaxed)
+}
 
 /// The number of terminal cells `c` occupies: `0` for combining/zero-width
 /// characters and control characters, `2` for wide (most CJK) and fullwidth
-/// characters, `1` otherwise.
+/// characters, `1` otherwise. East-Asian Ambiguous characters follow
+/// [`ambiguous_is_wide`].
 pub fn char_width(c: char) -> usize {
-    UnicodeWidthChar::width(c).unwrap_or(0)
+    if ambiguous_is_wide() {
+        UnicodeWidthChar::width_cjk(c).unwrap_or(0)
+    } else {
+        UnicodeWidthChar::width(c).unwrap_or(0)
+    }
 }
 
 /// The number of terminal cells the string `s` occupies, summed over its
 /// characters (control characters contribute `0`).
 pub fn str_width(s: &str) -> usize {
-    UnicodeWidthStr::width(s)
+    if ambiguous_is_wide() {
+        UnicodeWidthStr::width_cjk(s)
+    } else {
+        UnicodeWidthStr::width(s)
+    }
 }
 
 /// The visual width of a single grapheme cluster, using *editor* semantics.
@@ -55,6 +91,23 @@ pub fn tab_width_at(visual_x: usize, tab_width: usize) -> usize {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The characters Annex #11 calls Ambiguous: one cell in a Latin font, two
+    /// in a CJK one. A Chinese paragraph is full of them.
+    #[test]
+    fn ambiguous_characters_follow_the_setting() {
+        for c in ['—', '…', '“', '”', '‘', '’', '·', '※', '←', '№'] {
+            assert_eq!(char_width(c), 2, "{c} should be wide by default");
+        }
+        assert_eq!(str_width("他說“好”——走了……"), 22);
+
+        set_ambiguous_wide(false);
+        assert_eq!(char_width('—'), 1);
+        assert_eq!(char_width('“'), 1);
+        // 漢字 are Wide, not Ambiguous, and never move.
+        assert_eq!(char_width('中'), 2);
+        set_ambiguous_wide(true);
+    }
 
     #[test]
     fn ascii_is_one_cell() {
