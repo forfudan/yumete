@@ -228,6 +228,17 @@ impl ImeSession {
         self.engine.select_in_page(i);
     }
 
+    /// Whether the *nth* candidate (1-based) is actually on the page shown.
+    ///
+    /// The page holds `page_size` candidates, which is configurable, and the
+    /// last page is usually short — so a digit key is only a selection when
+    /// there is something under it. yume-core owns this rule; asking it is how
+    /// the panel and the keyboard stay in agreement about what the reader can
+    /// see.
+    pub fn page_has(&self, n: usize) -> bool {
+        self.engine.page_has_index(n)
+    }
+
     /// Previous candidate page.
     pub fn page_up(&mut self) {
         self.engine.page_up();
