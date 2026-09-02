@@ -128,20 +128,12 @@ pub fn run(editor: &mut Editor, config: &Config, ime: &mut ImeSession) -> io::Re
         if editor.layout() == WritingLayout::Vertical {
             if let Ok(size) = terminal.size() {
                 let lines = editor.current_buffer().line_count();
-                let ruby = !editor.ruby().is_empty();
-                let hanging = editor.hanging_punctuation();
-                let measure = editor.measure();
-                let gap = editor.zong_gap();
-                let dense = editor.dense();
+                let look = vertical::Look::of(editor);
                 editor.set_zong_length(vertical::zong_length_for(
                     config,
                     size.height,
                     lines,
-                    ruby,
-                    hanging,
-                    measure,
-                    gap,
-                    dense,
+                    look,
                 ));
             }
         }
@@ -1943,14 +1935,8 @@ mod tests {
         editor.set_layout(WritingLayout::Vertical);
         editor.set_ruby(yumete_core::ruby::Dialects::NONE);
         let lines = editor.current_buffer().line_count();
-        let ruby = !editor.ruby().is_empty();
-        let hanging = editor.hanging_punctuation();
-        let measure = editor.measure();
-        let gap = editor.zong_gap();
-        let dense = editor.dense();
-        editor.set_zong_length(vertical::zong_length_for(
-            config, h, lines, ruby, hanging, measure, gap, dense,
-        ));
+        let look = vertical::Look::of(editor);
+        editor.set_zong_length(vertical::zong_length_for(config, h, lines, look));
         let mut terminal = Terminal::new(TestBackend::new(w, h)).unwrap();
         let mut viewport = Viewport::default();
         terminal
@@ -1983,14 +1969,8 @@ mod tests {
     ) -> ratatui::buffer::Buffer {
         editor.set_layout(WritingLayout::Vertical);
         let lines = editor.current_buffer().line_count();
-        let ruby = !editor.ruby().is_empty();
-        let hanging = editor.hanging_punctuation();
-        let measure = editor.measure();
-        let gap = editor.zong_gap();
-        let dense = editor.dense();
-        editor.set_zong_length(vertical::zong_length_for(
-            config, h, lines, ruby, hanging, measure, gap, dense,
-        ));
+        let look = vertical::Look::of(editor);
+        editor.set_zong_length(vertical::zong_length_for(config, h, lines, look));
         render_with(editor, config, ime, w, h)
     }
 
