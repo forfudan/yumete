@@ -388,6 +388,11 @@ pub struct Editor {
     zong_gap: Option<usize>,
     /// Whether the dense arrangement is on, so the ticks know to stay away.
     dense: bool,
+    /// The rows a table search found, which one it is pointing at, and what it
+    /// was looking for.
+    table_hits: Vec<usize>,
+    table_hit: usize,
+    table_needle: String,
     jumps: Vec<(usize, usize)>,
     jump_at: usize,
     /// Where Enter came from when it followed a footnote, and the line it
@@ -582,6 +587,9 @@ impl Editor {
             turned_for_table: None,
             zong_gap: None,
             dense: false,
+            table_hits: Vec::new(),
+            table_hit: 0,
+            table_needle: String::new(),
             jumps: Vec::new(),
             jump_at: 0,
             note_return: None,
@@ -2367,6 +2375,112 @@ impl Editor {
         self.cell_span(line, cell)
     }
 
+    /// Whether this cell's contents name rows of another column.
+    fn cursor_in_link_column(&self) -> bool {
+        let Some(view) = &self.table else {
+            return false;
+        };
+        let Some(jump) = &view.schema.jump else {
+            return false;
+        };
+        match self.cell_position().and_then(|(_, c)| view.schema.columns.get(c)) {
+            Some(column) => jump.from.contains(&column.name),
+            None => false,
+        }
+    }
+
+    /// Find every row whose 拆分 uses what is under the cursor.
+    ///
+    /// A search rather than a jump, because the answer is usually many rows:
+    /// 卵 is a component of dozens of characters, and which of them you wanted
+    /// is not a question the editor can answer. `n` and `N` walk the answers,
+    /// as they walk the answers to `/`.
+    fn search_the_table(&mut self) {
+        let Some(view) = &self.table else { return };
+        let Some(jump) = &view.schema.jump else {
+            self.status = "這張表沒有說哪些欄是拆分".to_string();
+            return;
+        };
+        let needle = match self.table.as_ref().map(|v| v.grain) {
+            // Reading by character, the character under the cursor is the
+            // question; reading by cell, the whole cell is.
+            Some(Grain::Char) => self.char_at_cursor().map(String::from).unwrap_or_default(),
+            _ => self
+                .cell_position()
+                .map(|(line, cell)| self.cell_text(line, cell))
+                .unwrap_or_default(),
+        };
+        if needle.trim().is_empty() {
+            self.status = "這一格是空的".to_string();
+            return;
+        }
+        let columns: Vec<usize> = jump
+            .from
+            .iter()
+            .filter_map(|name| view.schema.index_of(name))
+            .collect();
+        let delimiter = view.schema.delimiter;
+        let first = usize::from(view.schema.header);
+        let rope = self.current_buffer().rope();
+        let mut hits = Vec::new();
+        for (line, row) in rope.lines().enumerate().skip(first) {
+            let text = row.to_string();
+            let cells = crate::table::cells(&text, delimiter);
+            let used = columns.iter().any(|&i| {
+                cells
+                    .get(i)
+                    .map(|&span| crate::table::cell_text(&text, span).contains(&needle))
+                    .unwrap_or(false)
+            });
+            if used {
+                hits.push(line);
+            }
+        }
+        if hits.is_empty() {
+            self.status = format!("沒有哪一行的拆分用到「{needle}」");
+            self.table_hits.clear();
+            return;
+        }
+        // The first one *after* here, wrapping — the same rule `/` follows, so
+        // pressing Enter again on the same cell walks on rather than sticking.
+        let here = self.cursor_line();
+        let at = hits.iter().position(|&l| l > here).unwrap_or(0);
+        self.table_needle = needle;
+        self.table_hits = hits;
+        self.table_hit = at;
+        self.show_table_hit();
+    }
+
+    /// Step to the next or previous row the table search found.
+    fn walk_table_hits(&mut self, forward: bool) -> bool {
+        if self.table_hits.is_empty() {
+            return false;
+        }
+        let n = self.table_hits.len();
+        self.table_hit = if forward {
+            (self.table_hit + 1) % n
+        } else {
+            (self.table_hit + n - 1) % n
+        };
+        self.show_table_hit();
+        true
+    }
+
+    /// Go to the row the table search is pointing at, and say where you are in
+    /// the answers.
+    fn show_table_hit(&mut self) {
+        let Some(&line) = self.table_hits.get(self.table_hit) else {
+            return;
+        };
+        self.goto_line(line + 1);
+        self.status = format!(
+            "「{}」 第 {}/{} 行（n N 走）",
+            self.table_needle,
+            self.table_hit + 1,
+            self.table_hits.len()
+        );
+    }
+
     /// Whether the cursor sits at the first character of its cell.
     fn at_cell_start(&self) -> bool {
         match self.cell_position() {
@@ -2805,6 +2919,20 @@ impl Editor {
     /// of its own is said out loud rather than silently skipped — for a 拆分表
     /// that absence is itself the finding.
     fn follow_cell(&mut self) {
+        // Two questions, and which one you are asking is decided by which
+        // column you are standing in.
+        //
+        // In a 拆分 column the cell *names* another row — 「⿰木目」 is made of
+        // 木 and 目, each of which has a row of its own — so Enter goes there.
+        // Anywhere else, and above all in the key column, the useful question
+        // is the other way round: **who uses this?** Standing on 卵, a writer
+        // wants the characters decomposed with 卵 in them, and there may be
+        // forty. That is not a jump, it is a search — so it becomes one, with
+        // `n` and `N` to walk it.
+        if !self.cursor_in_link_column() {
+            self.search_the_table();
+            return;
+        }
         // Standing on one character of the sequence, that character is what
         // was meant — there is nothing to ask about.
         if self.table.as_ref().map(|v| v.grain) == Some(Grain::Char) {
@@ -3625,11 +3753,27 @@ impl Editor {
                 self.mode = Mode::Search;
                 self.search_forward = true;
                 self.command_line.clear();
+                // A new search takes `n` back from the table's.
+                self.table_hits.clear();
             }
             Key::Char('?') => {
                 self.mode = Mode::Search;
                 self.search_forward = false;
                 self.command_line.clear();
+                self.table_hits.clear();
+            }
+            // In a table with a search open, `n` walks *its* answers: they are
+            // the last search that happened, which is what `n` has always
+            // meant. A plain `/` clears them and takes the key back.
+            Key::Char('n') if !self.table_hits.is_empty() => {
+                self.repeat(count, |e| {
+                    e.walk_table_hits(true);
+                });
+            }
+            Key::Char('N') if !self.table_hits.is_empty() => {
+                self.repeat(count, |e| {
+                    e.walk_table_hits(false);
+                });
             }
             Key::Char('n') => self.repeat(count, |e| e.repeat_search(e.search_forward)),
             Key::Char('N') => self.repeat(count, |e| e.repeat_search(!e.search_forward)),
@@ -7184,10 +7328,12 @@ mod tests {
         ed.on_key(Key::Enter);
         assert_eq!(ed.cursor_line(), 3, "目 is already its own row");
 
-        // A column that is not a key does not pretend to be one.
+        // From the key column the question turns round: not "what is this made
+        // of" but "who is made of this". 相 and 目 both use 目.
         press(&mut ed, "0");
         ed.on_key(Key::Enter);
-        assert!(ed.status().contains("不指向"), "{}", ed.status());
+        assert_eq!(ed.cursor_line(), 1, "相 uses 目");
+        assert!(ed.status().contains("1/2"), "{}", ed.status());
 
         std::fs::remove_dir_all(&dir).ok();
     }
@@ -7425,6 +7571,68 @@ mod tests {
         assert!(ed.status().is_empty(), "{}", ed.status());
         assert!(ed.enter_table());
         assert!(ed.status().contains("照首行"), "{}", ed.status());
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn enter_asks_who_uses_this_when_the_cell_is_not_a_link() {
+        // Standing on 卵 in the key column, `Enter` used to say 「這一格不指向
+        // 任何一行」 — true, and useless. The question a 拆分表 is corrected by
+        // is the other way round: *who uses this?*
+        let dir = std::env::temp_dir().join(format!("yumete-who-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(dir.join(".yumete").join("tables")).unwrap();
+        std::fs::write(
+            dir.join(".yumete").join("tables").join("t.toml"),
+            "[table]\nfile = ['d.csv']\nkey = 'char'\n\
+             [[table.column]]\nname = 'char'\n[[table.column]]\nname = 'ids_y'\n\
+             [table.jump]\nfrom = ['ids_y']\nto = 'char'\n",
+        )
+        .unwrap();
+        let csv = dir.join("d.csv");
+        std::fs::write(
+            &csv,
+            "char,ids_y\n木,木\n相,⿰木目\n林,⿰木木\n目,目\n杏,⿱木口\n",
+        )
+        .unwrap();
+
+        let mut ed = Editor::new();
+        ed.open_file(&csv).unwrap();
+        ed.execute("2").unwrap();
+        assert_eq!(ed.cell_text(1, 0), "木", "the key column");
+
+        // Every row whose 拆分 uses 木 — 木 itself included — in file order,
+        // starting after where the cursor was.
+        ed.on_key(Key::Enter);
+        assert_eq!(ed.cursor_line(), 2, "相");
+        // Four rows use 木, and the cursor is on the second of them — the
+        // first one *after* where it started, as `/` does.
+        assert!(ed.status().contains("2/4"), "{}", ed.status());
+        ed.on_key(Key::Char('n'));
+        assert_eq!(ed.cursor_line(), 3, "林");
+        ed.on_key(Key::Char('n'));
+        assert_eq!(ed.cursor_line(), 5, "杏");
+        ed.on_key(Key::Char('n'));
+        assert_eq!(ed.cursor_line(), 1, "木 itself, wrapping round");
+        ed.on_key(Key::Char('N'));
+        assert_eq!(ed.cursor_line(), 5, "and back");
+
+        // A 拆分 cell still means the other thing: its components' own rows.
+        ed.execute("3").unwrap();
+        press(&mut ed, "l");
+        ed.on_key(Key::Tab);
+        press(&mut ed, "ll");
+        assert_eq!(ed.char_at_cursor(), Some('目'));
+        ed.on_key(Key::Enter);
+        assert_eq!(ed.cursor_line(), 4, "目's own row");
+
+        // …and the reverse question again, from a different row.
+        ed.on_key(Key::Tab);
+        ed.execute("5").unwrap();
+        assert_eq!(ed.cell_text(4, 0), "目");
+        ed.on_key(Key::Enter);
+        assert!(ed.status().contains("1/2"), "目 is used twice: {}", ed.status());
 
         std::fs::remove_dir_all(&dir).ok();
     }
