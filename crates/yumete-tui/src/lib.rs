@@ -9,6 +9,7 @@
 //! The terminal stack is `ratatui` (the maintained `tui-rs` fork) over its
 //! bundled `crossterm` backend, so no ANSI escapes are hand-written here.
 
+pub mod table;
 pub mod vertical;
 
 use std::io::{self, stdout, Write as _};
@@ -326,6 +327,8 @@ struct Viewport {
     /// The paragraph and piece the rightmost visible 縱 sits at, in vertical
     /// layout. An anchor rather than a 縱 number: see `vertical::draw`.
     zong: Anchor,
+    /// Where the grid is scrolled to, when the file is read as one.
+    table: table::Viewport,
 }
 
 /// The result of feeding a key event to the lone-Shift-tap tracker.
@@ -639,6 +642,11 @@ fn draw(
     // report back the cell the cursor landed on, which the status line and the
     // candidate panel are positioned from.
     let (cursor_x, cursor_y) = match editor.layout() {
+        // A grid is not prose and is not drawn as prose: no wrapping, no
+        // markup, one row per line, columns that line up.
+        _ if editor.table().is_some() => {
+            table::draw(frame, editor, config, text_area, &mut viewport.table)
+        }
         WritingLayout::Horizontal => {
             draw_horizontal(frame, editor, config, text_area, &mut viewport.top)
         }
@@ -2937,6 +2945,128 @@ mod tests {
         let buffer = render_wrapped(&mut editor, &config, 40, 8);
         assert_ne!(buffer[(20, 0)].style().bg, tint);
         assert_eq!(at(&buffer, 20, 0), "字", "the row runs the full width");
+    }
+
+    /// A directory holding a division table, its schema, and the CSV's path.
+    fn a_table_file(tag: &str) -> (std::path::PathBuf, std::path::PathBuf) {
+        let dir = std::env::temp_dir().join(format!("yumete-grid-{tag}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(dir.join(".yumete").join("tables")).unwrap();
+        std::fs::write(
+            dir.join(".yumete").join("tables").join("t.toml"),
+            "[table]\nfile = ['division.csv']\n\
+             [[table.column]]\nname = 'char'\n\
+             [[table.column]]\nname = 'ids_y'\n\
+             [[table.column]]\nname = 'note'\n",
+        )
+        .unwrap();
+        let csv = dir.join("division.csv");
+        std::fs::write(
+            &csv,
+            "char,ids_y,note\n一,⿰木目,x\n齾,⿰⿱⿰木目金,longer\n三,土,\n",
+        )
+        .unwrap();
+        (dir, csv)
+    }
+
+    #[test]
+    fn a_grid_lines_its_columns_up_and_freezes_the_header() {
+        let (dir, csv) = a_table_file("draw");
+        let mut editor = Editor::new();
+        editor.open_file(&csv).unwrap();
+        let mut config = Config::default();
+        config.editor.line_numbers = LineNumbers::None;
+        let buffer = render(&editor, &config, 60, 10);
+        let row = |y: u16| (0..60u16).map(|x| at(&buffer, x, y)).collect::<String>();
+
+        // The header is the top row and names the columns.
+        let head = row(0);
+        assert!(head.starts_with("char"), "the header is frozen on top: {head:?}");
+        assert!(head.contains("ids_y") && head.contains("note"));
+
+        // Every row's second column starts in the same terminal column — which
+        // is the entire point of drawing a CSV as a grid.
+        let column_of = |y: u16, want: &str| {
+            (0..60u16).find(|&x| at(&buffer, x, y) == want)
+        };
+        let a = column_of(1, "⿰").expect("一's 拆分");
+        let b = column_of(2, "⿰").expect("齾's 拆分");
+        assert_eq!(a, b, "the same field of two rows starts in the same column");
+        assert!(a > 4, "and after the first column, not at the edge");
+
+        // The widest visible cell sets the column's width, so `longer` fits.
+        assert!(row(2).contains("longer"), "{:?}", row(2));
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn the_cell_the_cursor_is_in_is_a_box_not_a_word() {
+        let (dir, csv) = a_table_file("cell");
+        let mut editor = Editor::new();
+        editor.open_file(&csv).unwrap();
+        editor.execute("2").unwrap();
+        editor.on_key(Key::Char('l'));
+        let mut config = Config::default();
+        config.editor.line_numbers = LineNumbers::None;
+        config.theme.selection = (0x40, 0x44, 0x52);
+        let buffer = render(&editor, &config, 60, 10);
+        let lit = Some(Color::Rgb(0x40, 0x44, 0x52));
+
+        // Row 2 of the file is the first data row, on screen row 1 under the
+        // header; the cursor is in its second cell.
+        let start = (0..60u16)
+            .find(|&x| buffer[(x, 1)].style().bg == lit)
+            .expect("a lit cell");
+        assert_eq!(at(&buffer, start, 1), "⿰", "it is the 拆分 cell");
+        // The ground runs the column's whole width, past the end of the text —
+        // a cell you are inside, not three highlighted characters.
+        // Counted, not run-length: a wide glyph covers two cells and ratatui
+        // only ever sends the first, so the second reads back unstyled here
+        // even though the terminal paints the whole glyph. What matters is
+        // that the ground reaches past the end of the text.
+        let last = (0..60u16)
+            .rfind(|&x| buffer[(x, 1)].style().bg == lit)
+            .unwrap();
+        let text_ends = (start..60).find(|&x| at(&buffer, x, 1) == " " && at(&buffer, x - 1, 1) == " ");
+        assert!(
+            last > start + 5,
+            "the box is the column's width, not the text's: {start}..{last}"
+        );
+        assert!(text_ends.is_some_and(|e| last >= e), "the padding is lit too");
+        // …and nothing on the header row or another row is lit.
+        assert!((0..60u16).all(|x| buffer[(x, 0)].style().bg != lit), "not the header");
+        assert!((0..60u16).all(|x| buffer[(x, 2)].style().bg != lit), "not another row");
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn a_row_the_schema_cannot_account_for_is_marked_not_hidden() {
+        let (dir, csv) = a_table_file("torn");
+        // A hand edit left a row with four fields where the schema says three.
+        std::fs::write(
+            &csv,
+            "char,ids_y,note\n一,⿰木目,x\n二,土,a,b\n",
+        )
+        .unwrap();
+        let mut editor = Editor::new();
+        editor.open_file(&csv).unwrap();
+        assert!(editor.row_is_ragged(2), "four fields, three columns");
+        assert!(!editor.row_is_ragged(1), "and the good row is not");
+
+        let mut config = Config::default();
+        config.editor.line_numbers = LineNumbers::Absolute;
+        let buffer = render(&editor, &config, 60, 10);
+        let row = |y: u16| (0..60u16).map(|x| at(&buffer, x, y)).collect::<String>();
+        // The extra field is drawn: hiding it would hide the damage.
+        assert!(row(2).contains("a") && row(2).contains("b"), "{:?}", row(2));
+        // And the row number is marked, so it can be found from a distance.
+        let torn = Some(Color::Rgb(0xd8, 0x9a, 0x9a));
+        assert_eq!(buffer[(0, 2)].style().fg, torn, "the bad row's number");
+        assert_ne!(buffer[(0, 1)].style().fg, torn, "not the good one's");
+
+        std::fs::remove_dir_all(&dir).ok();
     }
 
     #[test]
