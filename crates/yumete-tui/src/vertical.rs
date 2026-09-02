@@ -50,6 +50,10 @@ pub struct Metrics {
     pub ruby: bool,
     /// Whether 句讀 hang in the margin, which needs the same column.
     pub hanging: bool,
+    /// How many cells the reading margin takes: one for pinyin, two once any
+    /// reading on the page is full-width. Uniform across the page, because a
+    /// margin that changed width from 縱 to 縱 would not be a margin.
+    pub ruby_width: u16,
 }
 
 impl Metrics {
@@ -77,12 +81,22 @@ impl Metrics {
             gap: config.editor.zong_gap as u16,
             ruby,
             hanging,
+            ruby_width: 1,
         }
     }
 
-    /// Whether a 縱 needs a cell of its own on the right for a reading.
+    /// How wide a margin a 縱 needs on its right for a reading.
+    ///
+    /// `ruby_width` cells, not one: a reading in 注音符號 (ㄩㄥˇ) or in kana is
+    /// full-width, and squeezing it into one cell walks every 縱 after it a
+    /// column to the left — the page comes apart into a staircase. Pinyin is
+    /// half-width and keeps the one cell it always had.
     fn ruby_cell(&self, annotated: bool) -> u16 {
-        u16::from(annotated && (self.ruby || self.hanging))
+        if annotated && (self.ruby || self.hanging) {
+            self.ruby_width
+        } else {
+            0
+        }
     }
 
     /// How many 縱 fit across an area `width` cells wide. Only the gaps
@@ -99,6 +113,21 @@ impl Metrics {
 
 /// The 縱 of one page: each with the rows it draws and where it starts.
 type Page = Vec<(zong::Zong, Vec<zong::Slot>, u16)>;
+
+/// How wide a reading margin the readings on `slots` need.
+///
+/// Readings only. A hung 句讀 is full-width by nature and has always leaned into
+/// the gap beside it; widening the margin for one would move every 縱.
+fn ruby_width_of(slots: &[Vec<zong::Slot>]) -> u16 {
+    slots
+        .iter()
+        .flatten()
+        .filter_map(|r| r.ruby)
+        .map(|c| yumete_cjk::char_width(c) as u16)
+        .max()
+        .unwrap_or(1)
+        .max(1)
+}
 
 /// Lay out a page from `anchor`: fetch the 縱, work out their rows, and place
 /// them right to left until the width runs out.
@@ -119,7 +148,11 @@ fn layout_page(
         .iter()
         .map(|rows| rows.iter().any(|r| r.ruby.is_some() || r.mark.is_some()))
         .collect();
-    let xs = place(metrics, area, &annotated);
+    // Measured from the page itself: one full-width reading anywhere on it
+    // widens the margin for all of them.
+    let mut metrics = metrics.clone();
+    metrics.ruby_width = ruby_width_of(&slots);
+    let xs = place(&metrics, area, &annotated);
     zongs
         .into_iter()
         .zip(slots)
@@ -347,6 +380,10 @@ pub fn draw(
     };
     let visible = page.len();
 
+    // The margin the page settled on, so the renderer blanks the cell a
+    // full-width reading covers only when that cell was reserved for it.
+    let ruby_width = ruby_width_of(&page.iter().map(|(_, s, _)| s.clone()).collect::<Vec<_>>());
+
     let text_top = area.y + metrics.head_rows;
     let (sel_start, sel_end) = editor.selection();
     // Asked of the editor, not of the range: the selection always covers the
@@ -406,7 +443,18 @@ pub fn draw(
                 .map(|m| (m, mark_style))
                 .or_else(|| row.ruby.map(|r| (r, reading_style)));
             if let Some((glyph, style)) = margin {
-                if let Some(cell) = buf.cell_mut((x + SLOT_WIDTH, y)) {
+                let mx = x + SLOT_WIDTH;
+                // A full-width reading covers the cell after it, and that cell
+                // is only ours to blank when the margin was widened for it.
+                // With a one-cell margin the glyph leans into the gap instead —
+                // which is what a hung 句讀 has always done — and blanking there
+                // would rub out the 縱 to the right.
+                if ruby_width >= 2 {
+                    if let Some(cell) = buf.cell_mut((mx + 1, y)) {
+                        cell.set_symbol(" ").set_style(style);
+                    }
+                }
+                if let Some(cell) = buf.cell_mut((mx, y)) {
                     cell.set_symbol(&glyph.to_string()).set_style(style);
                 }
             }
