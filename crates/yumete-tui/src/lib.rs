@@ -182,6 +182,9 @@ pub fn run(editor: &mut Editor, config: &Config, ime: &mut ImeSession) -> io::Re
                 // `:chaifen` configures the IME, which the core cannot reach;
                 // it leaves the request here and the answer goes back, so the
                 // next toggle starts from what the engine actually did.
+                // Keep a recovery copy of anything unsaved (Feature #79).
+                // Throttled inside, so this is a clock check on most keys.
+                editor.autosave_tick();
                 if let Some(on) = editor.take_chaifen_request() {
                     let settled = ime.set_annotations(on);
                     editor.set_chaifen(settled);

@@ -62,6 +62,7 @@ fn main() -> ExitCode {
     editor.set_tatechuyoko(config.editor.tatechuyoko);
     editor.set_hanging_punctuation(config.editor.hanging_punctuation);
     editor.set_soft_wrap(config.editor.soft_wrap);
+    editor.set_autosave(config.editor.autosave);
     // Which ruby dialect to lay out: whatever the config names, else the one
     // the file's extension implies.
     editor
@@ -98,6 +99,9 @@ fn main() -> ExitCode {
         editor.set_segmenter(Box::new(DictionarySegmenter::builtin(threshold)));
     }
     editor.set_segmentation_visible(config.editor.show_segmentation);
+
+    // Say so if a session ended badly and left work behind (Feature #79).
+    editor.announce_recovery();
 
     if force_preview || !std::io::stdout().is_terminal() {
         preview(&editor, &config);
@@ -183,6 +187,7 @@ KEYS (Normal mode, Helix-style):
               :wrap  :nowrap   soft-wrap long paragraphs (on by default)
               :wq [path]       save (optionally save-as) and quit
               :42  :goto n    put the cursor on a line
+              :recover[!]      load (or drop) a crash-recovery draft
               :bn  :bp  switch between the open files (also gn / gp)
               :layout [horizontal|vertical]  :vertical  :horizontal
               :chaifen  toggle the 拆分 annotation beside candidates
@@ -228,6 +233,12 @@ fn preview(editor: &Editor, config: &yumete_config::Config) {
         lines = buf.line_count(),
         chars = buf.char_count(),
     );
+
+    // A recovery draft is the one thing a reader must be told about before they
+    // trust what follows (Feature #79).
+    if buf.recovered_draft().is_some() {
+        println!("!! a newer draft was recovered — :recover to load it in the editor");
+    }
 
     if buf.char_count() == 0 {
         println!("(empty buffer)");
