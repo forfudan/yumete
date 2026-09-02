@@ -79,6 +79,10 @@ pub enum Command {
     /// `:preview` / `:preview off` — hand the file to the real typesetter and
     /// show what it makes (Feature #128).
     SetPreview(bool),
+    /// `:yume builtin` — use the 碼表 in the binary, whatever is installed.
+    BuiltinScheme,
+    /// `:yume` on its own — say what the input method is doing.
+    YumeStatus,
     /// `:sh <cmd>` — run it and bring the output back into a buffer, or
     /// `:!<cmd>` — step out of the way and let it use the terminal
     /// (Feature #129).
@@ -258,10 +262,14 @@ pub fn parse(input: &str) -> Result<Command, CommandError> {
         // and it lists what it takes.
         "yume" => {
             let mut parts = rest.split_whitespace();
+            // On its own it is the question, not a mistake: *which* 靈明 is
+            // answering, and where did it come from. A parent command with
+            // nothing after it should say where you are.
             let Some(word) = parts.next() else {
-                return Err(CommandError::MissingArgument("yume"));
+                return Ok(Command::YumeStatus);
             };
             match pick(word, YUME).map(|w| w.name) {
+                Some("builtin") => Ok(Command::BuiltinScheme),
                 // No name is "the one the config asked for" — `:yume s` is the
                 // whole of starting to type.
                 Some("scheme") => Ok(Command::SetScheme(
@@ -531,6 +539,11 @@ const YUME: &[Word] = &[
         name: "chaifen",
         help: "候選旁的拆分注解",
         then: Args::Words(ON_OFF),
+    },
+    Word {
+        name: "builtin",
+        help: "改用出廠自帶的靈明碼表，不管裝了什麼",
+        then: Args::None,
     },
 ];
 
@@ -804,7 +817,7 @@ pub const COMMANDS: &[Entry] = &[
     Entry {
         name: "yume",
         alias: None,
-        help: "輸入法：方案、拆分注解",
+        help: "輸入法：現在用的是哪一個；換方案、拆分注解",
         args: Args::Words(YUME),
     },
     Entry {
@@ -1123,7 +1136,10 @@ mod tests {
         // the editor's many parts it belonged to, and `:scheme` even less.
         assert_eq!(parse(":chaifen"), Err(CommandError::Unknown("chaifen".into())));
         assert_eq!(parse(":scheme x"), Err(CommandError::Unknown("scheme".into())));
-        assert_eq!(parse(":yume"), Err(CommandError::MissingArgument("yume")));
+        // On its own it is the question "which one is answering", not a
+        // mistake — a parent command should say where you are.
+        assert_eq!(parse(":yume"), Ok(Command::YumeStatus));
+        assert_eq!(parse(":yume b"), Ok(Command::BuiltinScheme));
     }
 
     #[test]
