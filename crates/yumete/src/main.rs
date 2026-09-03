@@ -289,6 +289,10 @@ KEYS (Normal mode, Helix-style):
     Space     menu: e sidebar, o outline, f files, b buffers, / search, y copy
     C-w       move between the sidebar and the text
     gh gl gs  goto line start / end / first non-blank
+    {{ }}      previous / next paragraph — here a paragraph is a logical line
+    ( )       previous / next sentence — 。！？ and the mark that closes after
+    M a  ' a  name this place / go back to it, across files
+    C-o C-i   the jump list: back to where a jump came from, and forward
     f t F T   find / till a character (forward / backward); A-. repeats it
     J  K      forward / back half a page   (L / H for a whole one)
     x  X      select the current line / extend to whole lines
@@ -298,7 +302,7 @@ KEYS (Normal mode, Helix-style):
     i  a      insert before / after the selection
     I  A      insert at line start / end
     o  O      open a line below / above
-    u  U  .   undo / redo / repeat the last insert
+    u  U  .   undo / redo / **repeat the last change** (r, d, c…Esc, ms(, a paste)
     r         write the next key over every character of the selection
     \"a        use register a for the next yank / delete / paste
     q  Q      record a macro / play the last one back
@@ -317,7 +321,6 @@ KEYS (Normal mode, Helix-style):
     :         command line — Tab cycles the completion, and the list of
               commands appears above it and narrows as you type
               (:w  :w <path>  :q  :q!  :o <path>  :new
-              :s/re/new/[g]   :%s/re/new/[g]   regex; $1 captures, \n newline
               :segment  :wq  :count
               :yume scheme <tag>   lingming xingchen qingyun riyue pinyin
               :wrap [on|off|<n>]   soft-wrap; a number is a fixed measure
@@ -331,7 +334,22 @@ KEYS (Normal mode, Helix-style):
               :yume chaifen   the 拆分 annotation beside candidates
               :ruby       edit the reading at the cursor, or annotate the
                           selection — opens Ruby mode in the status line
+              :s/re/new/[gin]  regex; $1 captures, \\n a newline. The delimiter
+                          is whatever follows the s (:s#a/b#c#); ranges are
+                          :%s :1,40s :.,$s :40s; flags g i, and n counts only
+              :replace <new>   change what the last :grep found, everywhere
+              :wa              save every file that changed
+              :indent [n|off]  first-line indent — a Chinese paragraph's mark
+              :bands [n|off]   段組: divide the 縱書 page into bands
+              :words           reload .yumete/words.txt — this book's own names
+              :table [off|check]   edit as a grid; check looks the whole over
+              :row <char>      go to the row a table names by that character
               :ruby [on|off|<dialect>]  lay readings out, or show the markup)
+
+In Insert mode C-w takes back a word and C-u the line. The `:` and `/` prompts
+are editable: arrows, Home/End, C-w, C-u, and Up/Down through what you typed
+before. A key that means something in another editor and nothing here says what
+this one calls it — `$` answers 「行尾是 gl」 rather than doing nothing.
 
 Ruby mode (`:ruby`) edits the *reading*, which with readings laid out is not on
 screen to move the cursor into. It opens on the group under the cursor with its
