@@ -1344,7 +1344,10 @@ fn text_at(
             let goal = want.saturating_sub(gutter);
             let hidden = editor.hidden_on_line(row.line);
             let line_start = buffer.rope().line_to_char(row.line);
-            let mut column = 0;
+            // The row starts where it was drawn: a click anywhere in a
+            // paragraph's opening indent means its first character.
+            let mut column =
+                measure.indent_of(&buffer.rope().line(row.line).to_string(), row.index_in_line);
             for at in row.start..row.end {
                 let c = buffer.rope().char(at);
                 let off = hidden

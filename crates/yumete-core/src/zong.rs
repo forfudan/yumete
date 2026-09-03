@@ -351,7 +351,12 @@ pub(crate) fn opens_a_paragraph(text: &str) -> bool {
     if text.starts_with(' ') || text.starts_with('\t') {
         return false;
     }
-    !trimmed.starts_with(['#', '=', '-', '*', '+', '>', '|', '`', '~', '['])
+    // A `[` is only structure when it opens a footnote definition; a
+    // paragraph may perfectly well begin with a link.
+    if trimmed.starts_with("[^") {
+        return false;
+    }
+    !trimmed.starts_with(['#', '=', '-', '*', '+', '>', '|', '`', '~'])
 }
 
 /// Lay out `chars[from..to]` as ordinary rows.
