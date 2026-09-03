@@ -615,7 +615,7 @@ dep and ship the tarballs §5.3 already designs. **high**
   masked by `dense` exactly as `hanging_punctuation()` is, and
   `ruby_configured()` is what `:ruby` reports and `:dense off` gives back.
 
-### 4 · Motions — the same gap from three directions (×3)
+### 4 · Motions — the same gap from three directions (×3) — **done**
 
 - ~~**`{` / `}` — paragraph motion.**~~ Done. A paragraph is a **logical line**
   — the definition the rest of the editor already works in — and blank lines
@@ -624,13 +624,14 @@ dep and ship the tarballs §5.3 already designs. **high**
 - ~~**Sentence motion** on 。！？」~~ Done: `(`/`)`, ending *after* the closing
   mark (「不。」), a full stop only when whitespace follows it so `3.14` is not
   a sentence, and crossing into the next paragraph when this one has no more.
-- **Unbound keys are completely silent.** `0 $ ^ G { } s S C Z & _ @ + -` all
-  do nothing and say nothing; the first minute in any editor is spent pressing
-  exactly these. A status line naming the yumete spelling (`$`→`gl`) turns an
-  hour of dead keys into an hour of learning. **medium**
-- **`.` repeats only the last insert**, so `n.n.n.` — the proofreading loop —
-  does not work. Recording the last operator plus its target covers `r`, `~`,
-  `d`, `ms`, `mr`. **medium**
+- ~~**Unbound keys are completely silent.**~~ Done — the phrasebook, reached
+  only from the fall-through so it can never contradict a real binding. It
+  never *does* the thing; it says what this editor calls it.
+- ~~**`.` repeats only the last insert.**~~ Done, and not by enumerating the
+  operators: the editor **watches** each command, and a command that leaves the
+  buffer different from how it found it was a change — its keys are what `.`
+  plays back. So every command written after this is repeatable the day it is
+  written, and none of them has to be taught about `.`.
 - ~~**Insert swallows `C-w` and `C-u`.**~~ Done, and both stop at the cell
   boundary when typing in a grid.
 - ~~**A key alias may only name one key.**~~ Done (the 2026-09-03 decision):

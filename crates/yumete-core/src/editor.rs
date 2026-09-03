@@ -2681,10 +2681,7 @@ impl Editor {
     /// table is quick to type: you never reach for a pipe. At the last cell of
     /// the last row it opens a new row, which is org-mode's rule and the right
     /// one — the table you are filling in is not finished.
-    fn md_step_cell(&mut self, forward: bool) -> bool {
-        let Some(region) = self.md_region() else {
-            return false;
-        };
+    fn step_cell(&mut self, forward: bool) -> bool {
         let Some((line, cell)) = self.cell_position() else {
             return false;
         };
@@ -2693,26 +2690,26 @@ impl Editor {
             self.go_to_cell(line, cell + 1);
         } else if !forward && cell > 0 {
             self.go_to_cell(line, cell - 1);
-        } else if forward {
-            let next = self.md_next_row(&region, line, true);
-            match next {
-                Some(l) => self.go_to_cell(l, 0),
-                None => {
+        } else {
+            match (self.next_row(line, forward), forward) {
+                (Some(l), true) => self.go_to_cell(l, 0),
+                (Some(l), false) => {
+                    let last = self.row_cells(l).len().saturating_sub(1);
+                    self.go_to_cell(l, last);
+                }
+                // Past the last row of a Markdown table, Tab opens another —
+                // org-mode's rule, and the right one: the table you are filling
+                // in is not finished. A delimited file's rows are the file's,
+                // so there it simply stops.
+                (None, true) if self.md_region().is_some() => {
                     self.md_new_row(true);
-                    // The new row is empty, so the cell to be typing in is its
-                    // first — not the one Tab happened to be leaving.
                     if let Some((l, _)) = self.cell_position() {
                         self.go_to_cell(l, 0);
                     }
                     self.status = "加了一行".to_string();
                 }
+                (None, _) => return true,
             }
-        } else {
-            let Some(l) = self.md_next_row(&region, line, false) else {
-                return true;
-            };
-            let last = self.row_cells(l).len().saturating_sub(1);
-            self.go_to_cell(l, last);
         }
         if let Some((_, c)) = self.cell_position() {
             if let Some(view) = self.table.as_mut() {
@@ -2720,6 +2717,19 @@ impl Editor {
             }
         }
         true
+    }
+
+    /// The next line of the grid that holds data.
+    fn next_row(&self, line: usize, down: bool) -> Option<usize> {
+        if let Some(region) = self.md_region() {
+            return self.md_next_row(&region, line, down);
+        }
+        let last = motion::last_line(self.current_buffer().rope());
+        if down {
+            (line < last).then_some(line + 1)
+        } else {
+            line.checked_sub(1)
+        }
     }
 
     /// The next line of the table that holds data — the rule row is skipped.
@@ -2943,14 +2953,147 @@ impl Editor {
             // contents, and a Markdown table is the only one whose shape the
             // editor may change: a delimited file's columns are the schema's,
             // and 123,380 rows do not want a column inserted by a keystroke.
-            Key::Char('t') if self.md_region().is_some() => self.pending = Pending::Table,
+            // `d` on a grid means the cell. It used to mean one character —
+            // and to *error* on an empty cell, which in a 28-column 拆分表 is
+            // four cells in five, because the collapsed selection there sits
+            // exactly on the delimiter.
+            // …with a selection standing, `d` still means the selection: `x d`
+            // must go on being refused rather than quietly clearing one cell.
+            Key::Char('d') if self.anchor == self.cursor => self.clear_cell(),
+            Key::Char('t') => self.pending = Pending::Table,
             // `o` in a grid means a new row, and on the header row the new row
             // has to go under the rule rather than between it and its names.
             Key::Char('o') if self.md_region().is_some() => self.md_new_row(true),
             Key::Char('O') if self.md_region().is_some() => self.md_new_row(false),
+            // A grid's header names the columns. A row opened above it would
+            // make the names into data — and then the key index treats the
+            // literal string `char` as a key.
+            Key::Char('O') if self.on_header_row() => {
+                self.open_line_below();
+                self.status = "標題行上面不能插行——加在它下面了".to_string();
+            }
             _ => return false,
         }
         true
+    }
+
+    /// Whether the cursor is on a header row that names the columns.
+    fn on_header_row(&self) -> bool {
+        let Some(view) = self.table.as_ref() else {
+            return false;
+        };
+        if !view.schema.header {
+            return false;
+        }
+        let rope = self.current_buffer().rope();
+        rope.char_to_line(self.cursor.min(rope.len_chars())) == 0
+    }
+
+    /// Empty the cell the cursor is in, keeping its boundaries (`d`).
+    fn clear_cell(&mut self) {
+        let Some((line, cell)) = self.cell_position() else {
+            return;
+        };
+        if self.md_rule_here() {
+            self.status = "分隔行是畫出來的——用 t < = > 改對齊".to_string();
+            return;
+        }
+        let Some((start, end)) = self.cell_span(line, cell) else {
+            return;
+        };
+        if end <= start {
+            self.status = "這一格是空的".to_string();
+            return;
+        }
+        self.snapshot();
+        let text = self.current_buffer().rope().slice(start..end).to_string();
+        let n = text.chars().count();
+        self.store(text);
+        if self.edit_remove(start..end) {
+            self.set_cursor(start);
+            self.format_md_table();
+            self.status = format!("清空了一格（{n} 字）");
+        }
+    }
+
+    /// Delete the row the cursor is on, in a delimited file.
+    ///
+    /// The guard that makes a grid safe is what made this impossible: a whole
+    /// row is nothing *but* delimiters, so every ordinary way of deleting one
+    /// was refused. A table editor that cannot remove a line is not one.
+    fn drop_row(&mut self) {
+        if self.on_header_row() {
+            self.status = "標題行不能刪：它是欄名".to_string();
+            return;
+        }
+        let (start, end, text) = {
+            let rope = self.current_buffer().rope();
+            let line = rope.char_to_line(self.cursor.min(rope.len_chars()));
+            let last = motion::last_line(rope);
+            let start = rope.line_to_char(line);
+            let end = if line >= last {
+                rope.len_chars()
+            } else {
+                rope.line_to_char(line + 1)
+            };
+            (start, end, rope.slice(start..end.max(start)).to_string())
+        };
+        if end <= start {
+            return;
+        }
+        self.snapshot();
+        self.store(text);
+        self.without_cell_guard(|e| e.current_buffer_mut().remove(start..end));
+        self.set_cursor(start.min(self.current_buffer().rope().len_chars()));
+        self.snap_to_cell();
+        self.status = "刪了一行".to_string();
+    }
+
+    /// Move the row the cursor is on down (or up), in a delimited file.
+    fn shift_row(&mut self, down: bool) {
+        let (line, last) = {
+            let rope = self.current_buffer().rope();
+            (
+                rope.char_to_line(self.cursor.min(rope.len_chars())),
+                motion::last_line(rope),
+            )
+        };
+        let other = if down { line + 1 } else { line.wrapping_sub(1) };
+        let header = usize::from(self.table.as_ref().is_some_and(|v| v.schema.header));
+        if other > last || other < header || line < header {
+            self.status = "到頭了".to_string();
+            return;
+        }
+        let (a, b) = (line.min(other), line.max(other));
+        let text_a = self.line_text(a).unwrap_or_default();
+        let text_b = self.line_text(b).unwrap_or_default();
+        let (start, end) = {
+            let rope = self.current_buffer().rope();
+            let end = if b >= last {
+                rope.len_chars()
+            } else {
+                rope.line_to_char(b + 1)
+            };
+            (rope.line_to_char(a), end)
+        };
+        // Whatever the two lines ended with, they go on ending with it: the
+        // last line of a file may have no break at all.
+        let split = |l: &str| -> (String, String) {
+            let body = l.trim_end_matches(['\n', '\r']);
+            (body.to_string(), l[body.len()..].to_string())
+        };
+        let (body_a, tail_a) = split(&text_a);
+        let (body_b, tail_b) = split(&text_b);
+        let swapped = format!("{body_b}{tail_a}{body_a}{tail_b}");
+        self.snapshot();
+        self.without_cell_guard(|e| {
+            e.current_buffer_mut().remove(start..end);
+            e.current_buffer_mut().insert(start, &swapped);
+        });
+        let landed = self.current_buffer().rope().line_to_char(other.min(last));
+        self.set_cursor(landed);
+        self.snap_to_cell();
+        self.status = if down { "下移一行" } else { "上移一行" }.to_string();
     }
 
     /// One key of the `t` structural menu.
@@ -2960,6 +3103,24 @@ impl Editor {
     /// twice. The rest is vi's own spelling — `o`/`O` open, `d` deletes.
     fn table_structure(&mut self, key: Key) {
         use crate::mdtable::Align;
+        // A delimited file's columns are its schema's, and 123,380 rows do not
+        // want one inserted by a keystroke — so only the row half applies.
+        if self.md_region().is_none() {
+            match key {
+                Key::Char('o') => self.open_line_below(),
+                Key::Char('O') if self.on_header_row() => {
+                    self.open_line_below();
+                    self.status = "標題行上面不能插行——加在它下面了".to_string();
+                }
+                Key::Char('O') => self.open_line_above(),
+                Key::Char('d') => self.drop_row(),
+                Key::Char('j') | Key::Down => self.shift_row(true),
+                Key::Char('k') | Key::Up => self.shift_row(false),
+                Key::Esc => {}
+                _ => self.status = "t 後面（這種表格）：o O d j k".to_string(),
+            }
+            return;
+        }
         match key {
             Key::Char('o') => self.md_new_row(true),
             Key::Char('O') => self.md_new_row(false),
@@ -3125,7 +3286,7 @@ impl Editor {
             }
             // The one key worth saying inside a cell — without it a person
             // types a value, presses Esc, walks right and types the next.
-            Mode::Insert if self.md_region().is_some() && self.insert_bounds().is_some() => Hint::Keys(
+            Mode::Insert if self.insert_bounds().is_some() => Hint::Keys(
                 "格內",
                 vec![("Tab", "下一格"), ("S-Tab", "上一格"), ("Esc", "回正常")],
             ),
@@ -3137,7 +3298,7 @@ impl Editor {
                         "表格",
                         vec![
                             ("hjkl", "走格"),
-                            ("c", "換格"),
+                            ("c d", "換格／清空"),
                             ("y Y", "取格/行"),
                             ("p", "貼"),
                             ("t", "增刪行列"),
@@ -3148,9 +3309,10 @@ impl Editor {
                         "表格",
                         vec![
                             ("hjkl", "走格"),
-                            ("c", "換格"),
+                            ("c d", "換格／清空"),
                             ("y Y", "取格/行"),
                             ("p", "貼"),
+                            ("t", "增刪行"),
                             ("Enter", "找相關的行"),
                             ("Tab", "改按字"),
                         ],
@@ -5880,13 +6042,13 @@ impl Editor {
                 // it is why a table is quick to fill in: you never reach for a
                 // pipe. It reflows the row on the way, so the columns stay
                 // lined up while you type rather than after you stop.
-                Key::Tab | Key::BackTab if self.md_region().is_some() => {
+                Key::Tab | Key::BackTab => {
                     self.format_md_table();
-                    self.md_step_cell(key == Key::Tab);
+                    self.step_cell(key == Key::Tab);
                     return;
                 }
-                Key::Enter | Key::Tab => {
-                    self.status = "一格之內：Enter 與 Tab 不進格子".to_string();
+                Key::Enter => {
+                    self.status = "一格之內：Enter 不進格子——Tab 走下一格".to_string();
                     return;
                 }
                 // At the cell's own start there is nothing of this cell to
@@ -9748,6 +9910,51 @@ mod tests {
         );
         // …and nothing was truncated.
         assert!(text.contains(&long), "the long cell is still whole");
+    }
+
+    #[test]
+    fn a_delimited_grid_can_lose_and_move_a_row() {
+        // The guard that makes a grid safe is what made this impossible: a
+        // whole row is nothing *but* delimiters, so every ordinary way of
+        // deleting one was refused. A table editor that cannot remove a line
+        // is not one.
+        let (dir, csv) = a_table("rows");
+        let mut ed = Editor::new();
+        ed.open_file(&csv).unwrap();
+        let rows = ed.current_buffer().line_count();
+        ed.goto_line(2);
+        press(&mut ed, "td");
+        assert_eq!(ed.current_buffer().line_count(), rows - 1, "{}", ed.status());
+        // The header is not a row anyone may delete.
+        ed.goto_line(1);
+        press(&mut ed, "td");
+        assert_eq!(ed.current_buffer().line_count(), rows - 1);
+        assert!(ed.status().contains("標題行"), "{}", ed.status());
+        // Nor may a row be moved above it.
+        ed.goto_line(2);
+        press(&mut ed, "tk");
+        assert!(ed.status().contains("到頭"), "{}", ed.status());
+        // …and one undo takes any of it back.
+        press(&mut ed, "u");
+        assert_eq!(ed.current_buffer().line_count(), rows);
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn d_on_a_grid_means_the_cell() {
+        let (dir, csv) = a_table("clear");
+        let mut ed = Editor::new();
+        ed.open_file(&csv).unwrap();
+        ed.goto_line(2);
+        let cell = ed.cell_text(1, 0);
+        assert!(!cell.is_empty());
+        press(&mut ed, "d");
+        assert_eq!(ed.cell_text(1, 0), "", "{}", ed.status());
+        assert_eq!(ed.row_cells(1).len(), ed.row_cells(0).len(), "the row kept its shape");
+        // And what was cleared is on the register, so it can be put back.
+        press(&mut ed, "p");
+        assert_eq!(ed.cell_text(1, 0), cell);
+        std::fs::remove_dir_all(&dir).ok();
     }
 
     #[test]
