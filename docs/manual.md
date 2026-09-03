@@ -268,7 +268,13 @@ txt = "typst"                # 這個項目裏的 .txt 都是 Typst
 Typst 檔案按 `gf` 跳進 `#include` 的章節，那個章節**繼承** Typst——被引進一本 Typst 書
 裏的章節就是 Typst，不管它叫什麼、裏面有什麼。
 
-`:syntax typst` 可以臨時推翻，`:syntax` 不帶參數就說現在是哪個。
+`:syntax typst` 可以臨時推翻，`:syntax` 不帶參數就說現在是哪個；命令行上
+`yumete --syntax typst 稿子.txt` 是同一句話，它比擴展名和配置都大——你已經知道裏面是
+什麼了，就沒有什麼可猜的。
+
+**`:syntax text` 是「沒有標記」**：檔案裏的每個字符都只是它自己。有人拿 `*` 當分場、拿
+`#` 寫給自己看的批註，那不是 Markdown，按 Markdown 上色只會讓自己的標點在頁面上一閃
+一閃。這種稿子寫 `text`（配置裏也可以：`"日記.txt" = "text"`）。
 
 Typst 那邊認得 `= 標題`、`*粗*`、`_斜_`、`` `碼` ``、`$數學$`、`//` 註釋，以及
 `#import` `#let` `#show` `#set` 和 `#chapter[…]` 這類調用。
@@ -1531,7 +1537,7 @@ GB18030 的舊稿會被擋下並告訴你用 `iconv` 轉，而不是丟一句 Ru
 | `:layout` `:lay` | 橫排／竪排互換 |
 | `:layout vertical`／`horizontal` | 直接指定 |
 | `:hanging` | 標點旁置開關 |
-| `:syntax` `:syn` [`markdown`｜`typst`] | 這個檔案是哪種標記 |
+| `:syntax` `:syn` [`markdown`｜`typst`｜`text`] | 這個檔案是哪種標記；`text` = 沒有標記 |
 | `:render off`／`on`／`full` | 畫面上顯示多少「結果」：原文／著色／所見即所得 |
 | `:preview`（`off`） | 交給 tinymist／HTML，在瀏覽器裏看 |
 | `:sh` *命令* | 跑一條命令，輸出收進一個緩衝區 |
@@ -1615,6 +1621,7 @@ show_chaifen = false         # 候選旁的拆分注解
 [syntax]                     # 這個檔案是哪種標記：按擴展名，或按確切檔名
 txt = "typst"                # 這個項目裏的 .txt 都是 Typst
 "筆記.txt" = "markdown"       # ……除了這一個（確切檔名優先）
+"日記.txt" = "text"           # ……而這一個沒有標記，`*` 就是一個星號
 
 [ime]
 scheme = "lingming"          # 只有靈明自帶，其餘要先裝碼表

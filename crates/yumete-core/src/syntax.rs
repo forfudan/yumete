@@ -29,6 +29,13 @@ pub enum Syntax {
     Markdown,
     /// Typst.
     Typst,
+    /// No markup at all: the file is writing and nothing in it means anything
+    /// else.
+    ///
+    /// A manuscript that uses `*` for a scene break and `#` for a note to
+    /// self is not Markdown, and colouring it as Markdown makes the writer's
+    /// own punctuation flicker at them. `:syntax text` says so.
+    Text,
 }
 
 impl Syntax {
@@ -37,6 +44,7 @@ impl Syntax {
         match name.trim().to_ascii_lowercase().as_str() {
             "markdown" | "md" => Some(Syntax::Markdown),
             "typst" | "typ" => Some(Syntax::Typst),
+            "text" | "txt" | "raw" | "none" | "plain" => Some(Syntax::Text),
             _ => None,
         }
     }
@@ -46,6 +54,7 @@ impl Syntax {
         match self {
             Syntax::Markdown => "markdown",
             Syntax::Typst => "typst",
+            Syntax::Text => "text",
         }
     }
 }

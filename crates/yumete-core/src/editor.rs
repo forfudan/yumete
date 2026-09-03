@@ -1614,6 +1614,8 @@ impl Editor {
         let spans = match self.current_buffer().syntax() {
             crate::syntax::Syntax::Markdown => crate::markdown::spans(&text),
             crate::syntax::Syntax::Typst => crate::markdown::typst::spans(&text),
+            // Nothing in the file means anything but itself.
+            crate::syntax::Syntax::Text => Vec::new(),
         };
         cache.insert(line, (hash, spans.clone()));
         spans
@@ -1647,6 +1649,8 @@ impl Editor {
             let want = match self.current_buffer().syntax() {
                 crate::syntax::Syntax::Markdown => '#',
                 crate::syntax::Syntax::Typst => '=',
+                // A file with no markup has no headings to list.
+                crate::syntax::Syntax::Text => continue,
             };
             let mark = trimmed.chars().next().filter(|&c| c == want);
             let Some(mark) = mark else { continue };

@@ -23,8 +23,19 @@ fn main() -> ExitCode {
     // `--timing` answers「開個檔案怎麼要三秒」 without guessing: it runs the
     // whole of a launch and prints what each part of it cost.
     let mut timing = false;
+    // Which markup the files named on this line are written in. The config's
+    // `[syntax]` says it for a project and the extension says it for a file;
+    // this says it for one run, which is what you want when the file is
+    // called `.txt` and you know what is in it.
+    let mut force_syntax: Option<String> = None;
+    let mut want_syntax = false;
 
     for arg in std::env::args().skip(1) {
+        if want_syntax {
+            force_syntax = Some(arg);
+            want_syntax = false;
+            continue;
+        }
         match arg.as_str() {
             "-h" | "--help" => {
                 print_help();
@@ -37,6 +48,10 @@ fn main() -> ExitCode {
             "-p" | "--preview" => force_preview = true,
             "-t" | "--table" => force_table = true,
             "--timing" => timing = true,
+            "-s" | "--syntax" => want_syntax = true,
+            s if s.starts_with("--syntax=") => {
+                force_syntax = Some(s["--syntax=".len()..].to_string())
+            }
             "-v" | "--vertical" => force_layout = Some(Layout::Vertical),
             "-H" | "--horizontal" => force_layout = Some(Layout::Horizontal),
             // Reject unknown flags, but treat a lone "-" as a filename.
@@ -90,7 +105,18 @@ fn main() -> ExitCode {
     editor.set_tatechuyoko(config.editor.tatechuyoko);
     editor.set_hanging_punctuation(config.editor.hanging_punctuation);
     editor.set_soft_wrap(config.editor.soft_wrap);
-    editor.set_default_syntax(yumete_core::syntax::Syntax::parse(&config.editor.syntax));
+    // `--syntax` outranks the config and the extension both: it is this run's
+    // answer about these files, and there is nothing further to guess from.
+    let named_syntax = force_syntax
+        .as_deref()
+        .and_then(yumete_core::syntax::Syntax::parse);
+    if let (Some(name), None) = (&force_syntax, named_syntax) {
+        eprintln!("yumete: unknown syntax '{name}' — markdown, typst or text");
+        return ExitCode::from(2);
+    }
+    editor.set_default_syntax(
+        named_syntax.or_else(|| yumete_core::syntax::Syntax::parse(&config.editor.syntax)),
+    );
     // …and what it says about particular extensions or names.
     editor.set_syntax_by_name(
         config
@@ -316,9 +342,10 @@ OPTIONS:
                      A grid is always horizontal, so this overrides -v.
     -v, --vertical   Lay the text out vertically for this run (縱書), overriding
                      the config. -H / --horizontal forces the ordinary layout.
+    -s, --syntax     Which markup these files are written in: markdown, typst
+                     or text. Outranks both the extension and the config.
     -p, --preview    Print a non-interactive preview instead of the editor.
-        --timing     Run a whole launch, print what each part of it cost, and
-                     exit — for「開個檔案怎麼要三秒」.
+        --timing     Print how long each part of starting up took, and exit.
     -h, --help       Print this help and exit.
     -V, --version    Print the version and exit.
 

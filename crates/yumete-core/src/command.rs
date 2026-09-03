@@ -1009,6 +1009,11 @@ const SYNTAXES: &[Word] = &[
         help: "`=` 標題、`#import`",
         then: Args::None,
     },
+    Word {
+        name: "text",
+        help: "沒有標記：檔案裏的每個字符都只是它自己",
+        then: Args::None,
+    },
 ];
 
 /// Which way the page runs.
@@ -1265,7 +1270,7 @@ pub const COMMANDS: &[Entry] = &[
     Entry {
         name: "syntax",
         aliases: &["syn"],
-        help: "markdown 還是 typst（不給參數就說現在是哪個）",
+        help: "這個檔案是哪種標記（不給參數就說現在是哪個）",
         args: Args::Words(SYNTAXES),
     },
     Entry {
@@ -2062,7 +2067,7 @@ mod tests {
         assert_eq!(words("dense "), ["on", "off"]);
         assert_eq!(words("dense o"), ["on", "off"]);
         assert_eq!(words("dense of"), ["off"]);
-        assert_eq!(words("syntax "), ["markdown", "typst"]);
+        assert_eq!(words("syntax "), ["markdown", "typst", "text"]);
         assert_eq!(words("layout v"), ["vertical"]);
 
         // A parent command is not a mechanism of its own — its subcommands are
