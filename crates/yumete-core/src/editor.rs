@@ -500,6 +500,10 @@ pub struct Editor {
     show_segmentation: bool,
     /// How a table's columns are told apart (Feature #157).
     table_rules: crate::table::Rules,
+    /// What is drawn in a paragraph's opening squares, if anything.
+    indent_hint: crate::zong::IndentHint,
+    /// The character `IndentHint::Symbol` draws there.
+    indent_symbol: String,
     /// A pending count prefix, so `3w` moves three words (Helix counts).
     count: Option<usize>,
     /// The text typed during the last Insert session, replayed by `.`.
@@ -805,6 +809,8 @@ impl Editor {
             project_words: std::rc::Rc::new(RefCell::new(yumete_cjk::WordList::default())),
             show_segmentation: false,
             table_rules: crate::table::Rules::default(),
+            indent_hint: crate::zong::IndentHint::default(),
+            indent_symbol: "↵".to_string(),
             count: None,
             edit_keys: Vec::new(),
             edit_revision: (0, 0),
@@ -1874,6 +1880,11 @@ impl Editor {
             }
             Command::SetBands(n) => {
                 self.set_bands(n);
+                Ok(CommandOutcome::Continue)
+            }
+            Command::SetIndentHint(hint) => {
+                self.indent_hint = hint;
+                self.status = say!("縮進標記：{0}", hint.name());
                 Ok(CommandOutcome::Continue)
             }
             Command::SetIndent(n) => {
@@ -5070,12 +5081,14 @@ impl Editor {
     /// The paragraph shown **as the file has it**: no indent, and its blank
     /// line back (Feature #159).
     ///
-    /// Insert only. In Normal the page is being *read*, and a page that
-    /// reflowed under every `j` would cost more than the doubt it removes;
-    /// in Insert the structure is being changed, and a mark the file does not
-    /// contain has no business being in the middle of it.
+    /// **Wherever the cursor is**, not only in Insert. The paragraph you are
+    /// standing in is shown as the file has it — no opening squares, and the
+    /// blank line above it back — so there is never a question about what is
+    /// really there. It costs almost no movement: exactly one blank line is
+    /// open at a time, so crossing from one paragraph to the next closes one
+    /// and opens another and the page below does not shift.
     pub fn open_line(&self) -> Option<usize> {
-        match self.mode == Mode::Insert && self.indent > 0 {
+        match self.indent > 0 {
             true => Some(self.cursor_line()),
             false => None,
         }
@@ -5739,6 +5752,24 @@ impl Editor {
     }
 
     /// Turn the segmentation overlay on or off.
+    /// What is drawn in a paragraph's opening squares.
+    pub fn indent_hint(&self) -> crate::zong::IndentHint {
+        self.indent_hint
+    }
+
+    /// The character the `symbol` hint draws there.
+    pub fn indent_symbol(&self) -> &str {
+        &self.indent_symbol
+    }
+
+    /// Say what marks a paragraph's opening squares.
+    pub fn set_indent_hint(&mut self, hint: crate::zong::IndentHint, symbol: Option<String>) {
+        self.indent_hint = hint;
+        if let Some(symbol) = symbol.filter(|s| !s.is_empty()) {
+            self.indent_symbol = symbol;
+        }
+    }
+
     /// How the grid's columns are told apart.
     pub fn table_rules(&self) -> crate::table::Rules {
         self.table_rules

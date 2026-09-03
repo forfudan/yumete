@@ -26,7 +26,7 @@ use ratatui::Frame;
 
 use yumete_cjk::{graphemes, str_width};
 use yumete_config::{Config, LineNumbers};
-use yumete_core::zong::{self, Anchor};
+use yumete_core::zong::{self, Anchor, IndentHint};
 use yumete_core::{Editor, Mode, Rope, TextStore};
 use yumete_ime::ImeSession;
 
@@ -626,6 +626,9 @@ pub fn draw(
     // A hung 句讀 *is* the sentence, set beside the character it follows, so it
     // keeps the writing's own colour and is told apart by position.
     let mark_style = Style::default().fg(ink.text());
+    // What marks a paragraph's opening squares, and how many there are.
+    let hint = editor.indent_hint();
+    let indent = editor.paragraph_indent();
 
     // Word ranges are per paragraph, and consecutive 縱 usually share one, so
     // segment each paragraph once as the page is walked. Its Markdown runs are
@@ -728,6 +731,25 @@ pub fn draw(
             }
             let symbol = row.text;
             if symbol.is_empty() {
+                // A paragraph's opening squares are empty slots, and what goes
+                // in them is the same question the horizontal page answers:
+                // white, a band, or a mark in the first one.
+                if hint != IndentHint::None && zong.starts_line() && slot < indent {
+                    match hint {
+                        IndentHint::Colour => {
+                            let ground = ink.ground(yumete_config::rung::BAND);
+                            put_slot_right(buf, x, y, " ", ground);
+                            if let Some(cell) = buf.cell_mut((x, y)) {
+                                cell.set_symbol(" ").set_style(ground);
+                            }
+                        }
+                        IndentHint::Symbol if slot == 0 => {
+                            let style = ink.page().fg(ink.rule());
+                            put_slot_right(buf, x, y, editor.indent_symbol(), style);
+                        }
+                        _ => {}
+                    }
+                }
                 continue;
             }
             let at = line_start + row.start;

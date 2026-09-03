@@ -237,6 +237,9 @@ fn main() -> ExitCode {
     if let Some(rules) = yumete_core::table::Rules::parse(&config.editor.table_rules) {
         editor.set_table_rules(rules);
     }
+    if let Some(hint) = yumete_core::zong::IndentHint::parse(&config.editor.indent_hint) {
+        editor.set_indent_hint(hint, Some(config.editor.indent_symbol.clone()));
+    }
     // …and the book's own words on top of whichever of the three it was. The
     // name on every page is the one word no dictionary has.
     editor.reload_project_words();

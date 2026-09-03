@@ -97,6 +97,9 @@ pub enum Command {
     },
     /// `:indent 2` — how many squares open a paragraph; `:indent off` is none.
     SetIndent(usize),
+    /// `:indent hint color` — what, if anything, is drawn in the opening
+    /// squares.
+    SetIndentHint(crate::zong::IndentHint),
     /// `:bands 2` — how many bands the 縱書 page is divided into (段組).
     SetBands(usize),
     /// `:words` — read this project's own word list again.
@@ -481,6 +484,15 @@ pub fn parse(input: &str) -> Result<Command, CommandError> {
         "indent" => match rest {
             "" | "on" => Ok(Command::SetIndent(2)),
             "off" | "0" => Ok(Command::SetIndent(0)),
+            _ if rest.starts_with("hint") => {
+                match crate::zong::IndentHint::parse(rest.trim_start_matches("hint").trim()) {
+                    Some(hint) => Ok(Command::SetIndentHint(hint)),
+                    None => Err(CommandError::InvalidArgument {
+                        command: "indent hint",
+                        value: rest.trim_start_matches("hint").trim().to_string(),
+                    }),
+                }
+            }
             n => match n.parse::<usize>() {
                 Ok(n) if n <= 8 => Ok(Command::SetIndent(n)),
                 _ => Err(CommandError::InvalidArgument {
@@ -1045,6 +1057,39 @@ const THEMES: &[Word] = &[
     },
 ];
 
+/// `:indent` and what may follow it.
+const INDENT: &[Word] = &[
+    Word {
+        name: "off",
+        help: "不縮進",
+        then: Args::None,
+    },
+    Word {
+        name: "hint",
+        help: "縮進的那兩格上畫什麼",
+        then: Args::Words(HINTS),
+    },
+];
+
+/// What is drawn in a paragraph's opening squares.
+const HINTS: &[Word] = &[
+    Word {
+        name: "none",
+        help: "什麼都不畫（默認，書上就是白的）",
+        then: Args::None,
+    },
+    Word {
+        name: "color",
+        help: "那兩格帶一條淡底",
+        then: Args::None,
+    },
+    Word {
+        name: "symbol",
+        help: "第一格畫一個記號（默認 ↵，它替掉的正是一個換行）",
+        then: Args::None,
+    },
+];
+
 /// How a table's columns are told apart.
 const RULES: &[Word] = &[
     Word {
@@ -1325,7 +1370,7 @@ pub const COMMANDS: &[Entry] = &[
         name: "indent",
         aliases: &[],
         help: "首行縮進幾格（中文的段落是縮進兩格，不是空一行）；`:indent off` 不縮",
-        args: Args::Free("<幾格，不寫就是 2>"),
+        args: Args::Words(INDENT),
     },
     Entry {
         name: "dense",

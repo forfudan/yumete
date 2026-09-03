@@ -1433,3 +1433,27 @@ en = "no markup: every character in the file is only itself"
 [[message]]
 zh = "這個檔案沒有標記，沒有什麼可以預覽的"
 en = "this file has no markup, so there is nothing to preview"
+
+[[message]]
+zh = "不縮進"
+en = "no indent"
+
+[[message]]
+zh = "縮進的那兩格上畫什麼"
+en = "what is drawn in a paragraph's opening squares"
+
+[[message]]
+zh = "什麼都不畫（默認，書上就是白的）"
+en = "nothing (the default — a book prints them white)"
+
+[[message]]
+zh = "那兩格帶一條淡底"
+en = "a band across them"
+
+[[message]]
+zh = "第一格畫一個記號（默認 ↵，它替掉的正是一個換行）"
+en = "a mark in the first one (↵ by default — a line break is what it replaced)"
+
+[[message]]
+zh = "縮進標記：{0}"
+en = "indent hint: {0}"

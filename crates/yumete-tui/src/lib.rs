@@ -2004,7 +2004,7 @@ fn draw_horizontal(
         // marked — and the blank line it replaces costs a whole row.
         let indent = measure.indent_of(row.line, &rope.line(row.line).to_string(), row.index_in_line);
         if indent > 0 {
-            spans.push(Span::styled(" ".repeat(indent), ink.page()));
+            spans.push(indent_span(indent, editor, ink));
         }
 
         // Three layers, composed rather than fighting: Markdown sets the ink
@@ -2381,6 +2381,29 @@ fn draw_status(
         .style(bar),
         status_area,
     );
+}
+
+/// A paragraph's opening squares, and what is drawn in them.
+///
+/// White by default — that is what a book prints — with two answers for a
+/// draft being edited, where 「這裏原本有個空行」 is a live question: a band,
+/// or a mark in the first square. Both are set **back**, not forward: this is
+/// furniture about the writing, not the writing.
+fn indent_span(indent: usize, editor: &Editor, ink: crate::theme::Palette) -> Span<'static> {
+    use yumete_core::zong::IndentHint;
+    match editor.indent_hint() {
+        IndentHint::None => Span::styled(" ".repeat(indent), ink.page()),
+        IndentHint::Colour => Span::styled(
+            " ".repeat(indent),
+            ink.ground(yumete_config::rung::BAND),
+        ),
+        IndentHint::Symbol => {
+            let mark = editor.indent_symbol().to_string();
+            let width = yumete_cjk::str_width(&mark).min(indent);
+            let text = format!("{mark}{}", " ".repeat(indent.saturating_sub(width)));
+            Span::styled(text, ink.page().fg(ink.rule()))
+        }
+    }
 }
 
 /// The row above the status line: what just happened, and what you can press.
@@ -3987,21 +4010,27 @@ mod tests {
         // The renderer wrapped with the indent and every motion wrapped
         // without it, so `j` and `k` landed on the character under a column
         // nobody was looking at, and a click was two cells off.
-        let mut editor = editor_with("一二三四五六七八\n");
+        let mut editor = editor_with("甲\n\n一二三四五六七八\n");
         editor.set_indent(2);
         editor.set_soft_wrap(true);
         let mut config = Config::default();
         config.editor.line_numbers = yumete_config::LineNumbers::None;
         // Eight cells: two go to the indent, so the first row holds three 字
-        // and the rows under it hold four.
+        // and the rows under it hold four. Read from the *first* paragraph,
+        // where the cursor is not standing — the one it is standing in is
+        // shown as the file has it, flush and with its blank line back.
         let buffer = render_wrapped(&mut editor, &config, 8, 8);
-        assert_eq!(at(&buffer, 0, 0), " ");
-        assert_eq!(at(&buffer, 2, 0), "一");
-        assert_eq!(at(&buffer, 0, 1), "四", "the second row starts flush");
-        // `j` from 一 — drawn at column 2 — lands under it.
-        editor.on_key(Key::Char('g'));
-        editor.on_key(Key::Char('g'));
+        assert_eq!(at(&buffer, 0, 1), " ");
+        assert_eq!(at(&buffer, 2, 1), "一");
+        assert_eq!(at(&buffer, 0, 2), "四", "the second row starts flush");
+        // Down into it, and it opens: no indent, and the blank line above it
+        // is drawn again.
         editor.on_key(Key::Char('j'));
+        editor.on_key(Key::Char('j'));
+        let buffer = render_wrapped(&mut editor, &config, 8, 8);
+        assert_eq!(at(&buffer, 0, 2), "一", "the paragraph being stood in");
+        // …and the second `j` stepped one *visual* row inside it: open, eight
+        // cells hold four 字, so the row under 一 begins at 五.
         assert_eq!(
             editor.current_buffer().rope().char(editor.cursor()),
             '五',
@@ -4062,8 +4091,12 @@ mod tests {
     fn a_paragraph_opens_two_squares_in_on_the_page() {
         // A Chinese paragraph is marked by an indent of two 字, and the blank
         // line it replaces costs a whole row.
-        let mut editor = editor_with("那年冬天很冷。\n# 第一章\n");
+        let mut editor = editor_with("那年冬天很冷。\n# 第一章\n窗外落着雪。\n");
         editor.set_indent(2);
+        // …off the first paragraph, which is shown as the file has it while
+        // the cursor is standing in it.
+        editor.on_key(Key::Char('j'));
+        editor.on_key(Key::Char('j'));
         let mut config = Config::default();
         config.editor.line_numbers = yumete_config::LineNumbers::None;
         let buffer = render(&editor, &config, 40, 8);
@@ -4214,33 +4247,39 @@ mod tests {
     }
 
     #[test]
-    fn insert_shows_the_paragraph_as_the_file_has_it() {
-        // 所見即所得's bargain, one construct larger: what is being typed into
-        // is shown as it really is — no indent the file does not contain, and
-        // the blank line above it back — so there is nothing to work out.
-        let mut editor = editor_with("第一段\n\n第二段\n");
+    fn the_paragraph_the_cursor_is_in_is_shown_as_the_file_has_it() {
+        // 所見即所得's bargain, one construct larger: the paragraph you are
+        // standing in is shown as it really is — no indent the file does not
+        // contain, and the blank line above it back — so there is never a
+        // question about what is there. Exactly one is open at a time, so
+        // moving between them closes one and opens another and the page below
+        // does not shift.
+        let mut editor = editor_with("第一段\n\n第二段\n\n第三段\n");
         editor.set_indent(2);
         let mut config = Config::default();
         config.editor.line_numbers = yumete_config::LineNumbers::None;
 
-        // Normal: a book. Two rows, both indented.
+        // The cursor is in the first: it is flush, and the others are a book.
         let buffer = render(&editor, &config, 40, 8);
-        assert_eq!(row_text(&buffer, 0).trim_end(), "  第一段");
+        assert_eq!(row_text(&buffer, 0).trim_end(), "第一段");
         assert_eq!(row_text(&buffer, 1).trim_end(), "  第二段");
+        assert_eq!(row_text(&buffer, 2).trim_end(), "  第三段");
 
-        // Insert on the second paragraph: a file. The blank line is back and
-        // the paragraph starts where the file starts it.
+        // Down to the second: its blank line comes back above it, and the
+        // first closes up.
         editor.on_key(Key::Char('j'));
-        editor.on_key(Key::Char('i'));
         let buffer = render(&editor, &config, 40, 8);
         assert_eq!(row_text(&buffer, 0).trim_end(), "  第一段");
         assert_eq!(row_text(&buffer, 1).trim_end(), "");
-        assert_eq!(row_text(&buffer, 2).trim_end(), "第二段", "the one being typed");
+        assert_eq!(row_text(&buffer, 2).trim_end(), "第二段", "the one stood in");
+        assert_eq!(row_text(&buffer, 3).trim_end(), "  第三段");
 
-        // Esc, and it is a book again.
-        editor.on_key(Key::Esc);
-        let buffer = render(&editor, &config, 40, 8);
-        assert_eq!(row_text(&buffer, 1).trim_end(), "  第二段");
+        // …and Insert changes nothing: it is the same page, being typed into.
+        editor.on_key(Key::Char('i'));
+        let typing = render(&editor, &config, 40, 8);
+        for row in 0..4 {
+            assert_eq!(row_text(&typing, row), row_text(&buffer, row), "row {row}");
+        }
     }
 
     #[test]

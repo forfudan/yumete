@@ -41,6 +41,11 @@ pub struct EditorConfig {
     pub line_numbers: LineNumbers,
     /// Minimum number of lines to keep above/below the cursor when scrolling.
     pub scrolloff: usize,
+    /// What is drawn in a paragraph's opening squares: `"none"` (default),
+    /// `"color"`, `"symbol"`.
+    pub indent_hint: String,
+    /// The character the `symbol` hint draws in the first of them.
+    pub indent_symbol: String,
     /// How a grid's columns are told apart (Feature #157).
     ///
     /// `"off"`, `"color"`, `"line"`, `"line dash"`, `"line double"`. A
@@ -182,6 +187,8 @@ impl Default for EditorConfig {
             tab_width: 4,
             line_numbers: LineNumbers::Absolute,
             scrolloff: 3,
+            indent_hint: "none".to_string(),
+            indent_symbol: "↵".to_string(),
             table_rules: "line dash".to_string(),
             show_segmentation: true,
             segmentation_threshold: 0,
@@ -771,6 +778,8 @@ struct RawEditor {
     tab_width: Option<usize>,
     line_numbers: Option<String>,
     scrolloff: Option<usize>,
+    indent_hint: Option<String>,
+    indent_symbol: Option<String>,
     table_rules: Option<String>,
     show_segmentation: Option<bool>,
     segmentation_threshold: Option<i64>,
@@ -840,6 +849,12 @@ impl RawConfig {
         }
         if other.editor.table_rules.is_some() {
             self.editor.table_rules = other.editor.table_rules.clone();
+        }
+        if other.editor.indent_hint.is_some() {
+            self.editor.indent_hint = other.editor.indent_hint.clone();
+        }
+        if other.editor.indent_symbol.is_some() {
+            self.editor.indent_symbol = other.editor.indent_symbol.clone();
         }
         if other.editor.show_segmentation.is_some() {
             self.editor.show_segmentation = other.editor.show_segmentation;
@@ -986,6 +1001,12 @@ impl RawConfig {
         }
         if let Some(rules) = self.editor.table_rules {
             config.editor.table_rules = rules;
+        }
+        if let Some(hint) = self.editor.indent_hint {
+            config.editor.indent_hint = hint;
+        }
+        if let Some(symbol) = self.editor.indent_symbol {
+            config.editor.indent_symbol = symbol;
         }
         if let Some(on) = self.editor.show_segmentation {
             config.editor.show_segmentation = on;
