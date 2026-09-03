@@ -1455,6 +1455,10 @@ GB18030 的舊稿會被擋下並告訴你用 `iconv` 轉，而不是丟一句 Ru
 打 `:` 就在命令行上方列出命令，邊打邊篩。**即將補全的部分**用淺色顯示在光標後，
 **Tab** 採納它，再按 Tab 換下一個匹配，**Shift-Tab** 往回。
 
+一個**打完了的**命令會連它收的詞一起列出來：打到 `:yume` 就看見 `yume scheme`、
+`yume chaifen`……所以「這個命令下面還有什麼」是看得見的，不必先知道才找得到。Tab 選
+中子命令時整句一起寫上去。
+
 搜索行也會猜：它給出**上一次搜索詞**的剩餘部分，所以再搜一次同樣的東西就是 `/` 加
 一個 Tab。
 
@@ -1488,6 +1492,9 @@ GB18030 的舊稿會被擋下並告訴你用 `iconv` 轉，而不是丟一句 Ru
 | `:clipboard yank`／`paste` | 和系統剪貼簿交換（`空格 y`／`空格 p`） |
 | `:segment` `:seg` | 分詞著色開關 |
 | `:words` | 重讀 `.yumete/words.txt`——這本書自己的詞 |
+| `:theme` | 現在是哪個主題、深色還是淺色 |
+| `:theme dark`／`light`／`system` | 換深淺；`system` 是回到終端的答案 |
+| `:theme moxiang`（`墨香`） | 指名主題，後面可以再跟深淺 |
 | `:layout` `:lay` | 橫排／竪排互換 |
 | `:layout vertical`／`horizontal` | 直接指定 |
 | `:hanging` | 標點旁置開關 |
@@ -1647,6 +1654,11 @@ rounded = true                 # 圓角邊框
 
 `ground = "terminal"` 把底色還給你的終端：yumete 不畫紙，只按色階決定各處退多遠。適合
 配色是自己調過的人。
+
+臨時要換用 **`:theme`**：`:theme` 說現在是什麼，`:theme dark`／`:theme light` 當場
+換，`:theme system` 回到終端的答案（開機時問到的那一個）。名字寫不寫都行，
+`:theme 墨香 light` 和 `:theme light` 是同一句話。它**不改配置檔案**——這是為了下午
+房間亮起來的那一次，寫進 `[theme] mode` 的才是你每天想要的。
 
 ---
 

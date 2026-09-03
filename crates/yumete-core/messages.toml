@@ -1332,3 +1332,31 @@ en = "show the source"
 zh = "首行縮進幾格（中文的段落是縮進兩格，不是空一行）；`:indent off` 不縮"
 en = "how many squares open a paragraph (Chinese marks one with two, not a blank line); `:indent off` for none"
 
+
+[[message]]
+zh = "主題：哪一個，以及深色淺色還是跟着終端"
+en = "theme: which one, and dark, light or the terminal's own"
+
+[[message]]
+zh = "墨香：三個顏色，其餘的色階都算出來"
+en = "moxiang: three colours, every other shade computed"
+
+[[message]]
+zh = "主題：{0}（{1}）"
+en = "theme: {0} ({1})"
+
+[[message]]
+zh = "沒有這個主題：{0}"
+en = "no theme called '{0}'"
+
+[[message]]
+zh = "深色"
+en = "dark"
+
+[[message]]
+zh = "淺色"
+en = "light"
+
+[[message]]
+zh = "跟終端的底色走"
+en = "follow the terminal's own background"

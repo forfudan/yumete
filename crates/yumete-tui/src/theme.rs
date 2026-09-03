@@ -32,6 +32,14 @@ use yumete_config::{rung, Config, Ground, Ladder, Mode};
 /// of the drawing needs it without having anywhere to have been handed it.
 static MOOD: AtomicU8 = AtomicU8::new(0);
 
+/// What the terminal said when it was asked, so `system` can be gone back to.
+///
+/// Asked once, at start-up, and remembered: the question cannot be put again
+/// from inside the alternate screen without racing the key reader for the
+/// answer, and a terminal's ground rarely changes under a running program.
+/// `0` is「沒問到」.
+static ANSWERED: AtomicU8 = AtomicU8::new(0);
+
 /// Remember what the terminal turned out to be.
 pub fn set_dark(dark: bool) {
     MOOD.store(u8::from(dark), Ordering::Relaxed);
@@ -48,6 +56,14 @@ pub fn dark() -> bool {
 /// right question: a dark terminal on a light desktop wants a dark editor, and
 /// the reader who set it that way has already answered.
 pub fn settle(config: &Config, terminal_is_dark: Option<bool>) {
+    ANSWERED.store(
+        match terminal_is_dark {
+            None => 0,
+            Some(true) => 1,
+            Some(false) => 2,
+        },
+        Ordering::Relaxed,
+    );
     set_dark(match config.theme.mode {
         Mode::Dark => true,
         Mode::Light => false,
@@ -68,6 +84,15 @@ pub fn settle_at_startup(config: &Config) {
         _ => None,
     };
     settle(config, asked);
+}
+
+/// What the terminal answered at start-up, if it answered.
+pub fn terminal_answer() -> Option<bool> {
+    match ANSWERED.load(Ordering::Relaxed) {
+        1 => Some(true),
+        2 => Some(false),
+        _ => None,
+    }
 }
 
 /// Ask the terminal what colour its ground is (OSC 11).
