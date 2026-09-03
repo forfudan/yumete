@@ -52,6 +52,11 @@ fn main() -> ExitCode {
     // Settled before anything is measured: every width question downstream —
     // wrap, gutter, cursor, the 縱 grid — asks the same global.
     yumete_core::set_ambiguous_wide(config.editor.ambiguous_wide);
+    // …and the language everything says itself in, before anything says
+    // anything: a config error is a message too.
+    if let Some(language) = yumete_core::messages::Language::parse(&config.editor.language) {
+        yumete_core::messages::set_language(language);
+    }
     editor.set_key_aliases(config.keys.normal.clone());
     // Layout (Feature #61): the config sets it, a flag overrides for one run,
     // and `:layout` switches it live.

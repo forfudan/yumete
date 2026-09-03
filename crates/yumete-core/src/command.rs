@@ -179,13 +179,15 @@ pub enum CommandError {
 impl fmt::Display for CommandError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            CommandError::Empty => write!(f, "沒打命令"),
-            CommandError::Unknown(word) => write!(f, "沒有「{word}」這個命令"),
+            CommandError::Empty => write!(f, "{}", crate::say!("沒打命令")),
+            CommandError::Unknown(word) => {
+                write!(f, "{}", crate::say!("沒有「{0}」這個命令", word))
+            }
             CommandError::MissingArgument(what) => {
-                write!(f, "{what} 後面要跟一個參數")
+                write!(f, "{}", crate::say!("{0} 後面要跟一個參數", what))
             }
             CommandError::InvalidArgument { command, value } => {
-                write!(f, "{command}：不認得「{value}」")
+                write!(f, "{}", crate::say!("{0}：不認得「{1}」", command, value))
             }
         }
     }
