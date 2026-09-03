@@ -177,7 +177,13 @@ pub fn char_at(
         buffer.line_count(),
         Look::of(editor),
     );
-    let grid = editor.grid().with_zong_len(metrics.zong_len);
+    // The same two answers the horizontal page is drawn from — asked of the
+    // editor, not worked out again here.
+    let hidden = |line: usize| editor.markup_hidden_on_line(line);
+    let folded = |line: usize| editor.line_is_folded(line);
+    let grid = editor
+        .grid_with(&hidden, &folded)
+        .with_zong_len(metrics.zong_len);
     let capacity = metrics.capacity(area.width);
     let page = layout_page(buffer.rope(), viewport, grid, &metrics, area, capacity);
 
@@ -520,7 +526,13 @@ pub fn draw(
     // It must be *the editor's* grid and not a fresh one, or a setting the
     // editor holds — 縦中横, say — would apply to motion and not to drawing, and
     // the cursor would sit a row out from the character it is on.
-    let grid = editor.grid().with_zong_len(metrics.zong_len);
+    // The same two answers the horizontal page is drawn from — asked of the
+    // editor, not worked out again here.
+    let hidden = |line: usize| editor.markup_hidden_on_line(line);
+    let folded = |line: usize| editor.line_is_folded(line);
+    let grid = editor
+        .grid_with(&hidden, &folded)
+        .with_zong_len(metrics.zong_len);
     // A pane that is only being read has no cursor: the page is laid out
     // around the place it was left at, and the hit is what it marks.
     let at = peek.map_or_else(|| editor.cursor(), |pane| pane.cursor());

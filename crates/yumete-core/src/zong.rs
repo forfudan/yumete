@@ -38,21 +38,28 @@ pub use yumete_cjk::vertical::{Layout, DEFAULT_ZONG_GAP, DEFAULT_ZONG_LENGTH};
 /// is. Both change where a slot boundary falls, so any function that answers a
 /// question about slots needs both — a cursor positioned under one and drawn
 /// under the other would sit in the wrong row.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct Grid {
-    /// Whether Markdown's markup comes off the page (所見即所得, Feature #104).
+/// Not `Debug`/`PartialEq`: a page is partly two closures, and the useful
+/// question about two grids is never whether they are equal but whether they
+/// answer the same — which is what the differential tests ask.
+#[derive(Clone, Copy)]
+pub struct Grid<'a> {
+    /// **Which characters of a line are not on the page** — the markup
+    /// 所見即所得 takes off, as columns within the line.
     ///
-    /// A hidden run joins the slot beside it rather than taking one of its own,
-    /// so the cursor steps over `**` in one press and the wrap length counts
+    /// A hidden run joins the slot beside it rather than taking one of its
+    /// own, so the cursor steps over `**` in one press and the 縱 length counts
     /// writing rather than asterisks — the same thing a ruby group's tags have
     /// always done.
-    pub hide_markup: bool,
-    /// What the selection covers, as char indices in the buffer.
     ///
-    /// Every construct it touches is shown whole, so this is part of the grid:
-    /// it changes which characters occupy a slot, and everything that asks the
-    /// grid a question has to be asking about the same page.
-    pub selection: Option<(usize, usize)>,
+    /// **Handed in, never re-derived.** This used to be a `bool` and the
+    /// answer was worked out here, from the bare line, as
+    /// `markdown::spans(text)` — with no syntax and no block. So a 縱書 page
+    /// ate the `**` inside a code fence, hid two asterisks where Typst has
+    /// one, and hid four characters under `:syntax text`, while the horizontal
+    /// page — which is *given* the answer, by [`crate::wrap::Measure`] — hid
+    /// exactly none. One document, two pages, and no test could see it,
+    /// because each side asked its own implementation.
+    hidden: &'a dyn Fn(usize) -> Vec<(usize, usize)>,
     /// Graphemes per 縱.
     pub zong_len: usize,
     /// Which ruby dialects are laid out as readings. Empty shows the markup as
@@ -61,17 +68,13 @@ pub struct Grid {
     /// Whether 句讀 hang in the margin rather than taking a square each
     /// (標點旁置).
     pub hanging: bool,
-    /// Whether the blank line an indent replaces is left off the page.
-    pub fold_blanks: bool,
+    /// Which whole lines are not on the page (Feature #159) — by the same
+    /// argument: one rule for folding a blank line, and both layouts ask it.
+    folded: &'a dyn Fn(usize) -> bool,
     /// The paragraph shown as the file has it: no indent, and its blank line
     /// back. `usize::MAX` for none.
     pub open_line: usize,
-    /// The span of lines that must not be folded, because what is written
-    /// there is not prose — a fence, a page's metadata. Empty when `first >
-    /// last`, which is the ordinary case for a manuscript.
-    pub fold_free: (usize, usize),
-    /// The line the cursor is on, which is never folded.
-    pub cursor_line: usize,
+
     /// Whether a pair of half-width characters shares one slot (縦中横).
     ///
     /// Off by default. Turned sideways a pair reads as a syllable — `yume` set
@@ -94,66 +97,57 @@ pub struct Grid {
     pub indent: usize,
 }
 
-impl Grid {
-    /// Take the markup off the page, showing whole whatever `selection` (char
-    /// indices in the buffer) touches.
-    pub fn with_markup_hidden(self, on: bool, selection: Option<(usize, usize)>) -> Grid {
-        Grid {
-            hide_markup: on,
-            selection,
-            ..self
-        }
+/// A page with every character on it — for callers that show the source as it
+/// is, and for tests, which say what they mean by passing their own.
+const NOTHING_HIDDEN: &dyn Fn(usize) -> Vec<(usize, usize)> = &|_| Vec::new();
+
+/// A page with every line on it.
+const NOTHING_FOLDED: &dyn Fn(usize) -> bool = &|_| false;
+
+impl<'a> Grid<'a> {
+    /// The same grid, told what is off the page: the markup, by line.
+    pub fn with_hidden(self, hidden: &'a dyn Fn(usize) -> Vec<(usize, usize)>) -> Grid<'a> {
+        Grid { hidden, ..self }
     }
 
-    pub fn new(zong_len: usize, ruby: Dialects) -> Grid {
+    /// The same grid, told which lines are off the page.
+    pub fn with_folds(self, folded: &'a dyn Fn(usize) -> bool) -> Grid<'a> {
+        Grid { folded, ..self }
+    }
+
+    /// Whether `line` is off the page altogether.
+    pub fn folded(self, line: usize) -> bool {
+        (self.folded)(line)
+    }
+
+    /// What is off the page on `line`, as columns within it.
+    fn hidden_on(self, line: usize) -> Vec<(usize, usize)> {
+        (self.hidden)(line)
+    }
+
+    pub fn new(zong_len: usize, ruby: Dialects) -> Grid<'static> {
         Grid {
             zong_len: zong_len.max(1),
             ruby,
             hanging: false,
             tatechuyoko: false,
-            hide_markup: false,
-            selection: None,
+            hidden: NOTHING_HIDDEN,
+            folded: NOTHING_FOLDED,
             indent: 0,
-            fold_blanks: false,
-            cursor_line: usize::MAX,
             open_line: usize::MAX,
-            fold_free: (usize::MAX, 0),
-        }
-    }
-
-    /// The same grid, told where folding would be unsafe.
-    pub fn with_fold_free(self, span: (usize, usize)) -> Grid {
-        Grid {
-            fold_free: span,
-            ..self
         }
     }
 
     /// The same grid, with `line` shown as the file has it.
-    pub fn with_open_line(self, line: Option<usize>) -> Grid {
+    pub fn with_open_line(self, line: Option<usize>) -> Grid<'a> {
         Grid {
             open_line: line.unwrap_or(usize::MAX),
             ..self
         }
     }
 
-    /// The same grid, with the blank line an indent replaces left off the page
-    /// (Feature #159).
-    ///
-    /// `cursor_line` is never folded: you have to be able to see the line you
-    /// are typing into. The rule is otherwise the horizontal page's — a single
-    /// blank between two written lines — except that this side does not know
-    /// about fences, which a 縱書 manuscript does not have.
-    pub fn with_folds(self, on: bool, cursor_line: usize) -> Grid {
-        Grid {
-            fold_blanks: on,
-            cursor_line,
-            ..self
-        }
-    }
-
     /// The same grid, opening each paragraph with `n` empty squares.
-    pub fn with_indent(self, n: usize) -> Grid {
+    pub fn with_indent(self, n: usize) -> Grid<'a> {
         Grid {
             indent: n.min(8),
             ..self
@@ -161,7 +155,7 @@ impl Grid {
     }
 
     /// The same grid, hanging 句讀 in the margin.
-    pub fn with_hanging(self, on: bool) -> Grid {
+    pub fn with_hanging(self, on: bool) -> Grid<'a> {
         Grid {
             hanging: on,
             ..self
@@ -169,7 +163,7 @@ impl Grid {
     }
 
     /// The same grid, packing half-width pairs into one slot.
-    pub fn with_tatechuyoko(self, on: bool) -> Grid {
+    pub fn with_tatechuyoko(self, on: bool) -> Grid<'a> {
         Grid {
             tatechuyoko: on,
             ..self
@@ -178,7 +172,7 @@ impl Grid {
 
     /// The same grid at a different wrap length — what the renderer does once
     /// the terminal's height is known.
-    pub fn with_zong_len(self, zong_len: usize) -> Grid {
+    pub fn with_zong_len(self, zong_len: usize) -> Grid<'a> {
         Grid {
             zong_len: zong_len.max(1),
             ..self
@@ -186,8 +180,8 @@ impl Grid {
     }
 }
 
-impl Default for Grid {
-    fn default() -> Grid {
+impl Default for Grid<'static> {
+    fn default() -> Grid<'static> {
         Grid::new(
             DEFAULT_ZONG_LENGTH,
             Dialects::only(crate::ruby::Dialect::Html),
@@ -298,12 +292,15 @@ pub struct Slot {
 /// base is centred over however many rows the reading needs. That spacing is
 /// what real typesetting does and is why two adjacent readings never collide.
 pub fn line_slots(text: &str, grid: Grid) -> Vec<Slot> {
-    line_slots_in(text, grid, None)
+    line_slots_in(text, grid, &[])
 }
 
-/// [`line_slots`] with the part of this line the selection covers, as columns —
-/// which is what decides which constructs are shown whole.
-pub fn line_slots_in(text: &str, grid: Grid, selected: Option<(usize, usize)>) -> Vec<Slot> {
+/// [`line_slots`], told which characters of this line are off the page.
+///
+/// The ranges are columns within the line and come from the editor — the same
+/// answer the horizontal page is given. This function used to work them out
+/// itself and got them wrong in three ways; see [`Grid::hidden`].
+pub fn line_slots_in(text: &str, grid: Grid, hidden: &[(usize, usize)]) -> Vec<Slot> {
     let chars: Vec<char> = text.chars().collect();
     let groups = crate::ruby::groups(&chars, grid.ruby);
     let mut slots = Vec::new();
@@ -330,11 +327,6 @@ pub fn line_slots_in(text: &str, grid: Grid, selected: Option<(usize, usize)>) -
     // Which characters are markup rather than writing. A hidden run takes no
     // slot of its own; it joins the slot beside it, so the cursor steps over
     // `**` in one press and the wrap length counts writing.
-    let hidden = if grid.hide_markup {
-        crate::markdown::hidden(&crate::markdown::spans(text), selected)
-    } else {
-        Vec::new()
-    };
     for group in &groups {
         push_plain(
             &mut slots,
@@ -343,7 +335,7 @@ pub fn line_slots_in(text: &str, grid: Grid, selected: Option<(usize, usize)>) -
             group.start,
             grid,
             &mut opening,
-            &hidden,
+            hidden,
         );
         push_ruby(&mut slots, &chars, group, grid, &mut opening);
         at = group.end;
@@ -355,7 +347,7 @@ pub fn line_slots_in(text: &str, grid: Grid, selected: Option<(usize, usize)>) -
         chars.len(),
         grid,
         &mut opening,
-        &hidden,
+        hidden,
     );
     // Markup at the very end of the line has no slot after it to join, so it
     // joins the one before — the line's last slot then covers it, and the
@@ -786,14 +778,11 @@ pub fn zong_count_in_line(rope: &Rope, line: usize, grid: Grid) -> usize {
 
 /// The rows `line` draws as, under `grid`.
 fn line_grid(rope: &Rope, line: usize, grid: Grid) -> Vec<Slot> {
-    // Where the selection falls on *this* line is what decides which constructs
-    // are shown whole, so it is worked out here, where the rope is.
     let text = line_text(rope, line);
-    let selected = grid.selection.and_then(|(from, to)| {
-        let start = rope.line_to_char(line);
-        let end = start + text.chars().count();
-        (to >= start && from <= end).then(|| (from.max(start) - start, to.min(end) - start))
-    });
+    // What is off this line, asked of the page rather than guessed from the
+    // text: which construct the selection is holding open is part of that
+    // answer, and so is the file's syntax and the block the line sits in.
+    let hidden = grid.hidden_on(line);
     // The paragraph being typed into is laid out as the file has it: no
     // opening squares. Done here, where the line is known — everything
     // downstream asks this function for a line's slots, so nothing else has
@@ -802,7 +791,7 @@ fn line_grid(rope: &Rope, line: usize, grid: Grid) -> Vec<Slot> {
         true => Grid { indent: 0, ..grid },
         false => grid,
     };
-    line_slots_in(&text, grid, selected)
+    line_slots_in(&text, grid, &hidden)
 }
 
 /// Locate the char index `pos` in the 縱 grid.
@@ -964,23 +953,13 @@ impl IndentHint {
 /// The single blank line between two written ones, once an indent is marking
 /// the paragraphs instead. Two blanks in a row are a scene break and both
 /// stay; the cursor's own line always stays.
-pub fn folded(rope: &Rope, line: usize, grid: Grid) -> bool {
-    if !grid.fold_blanks || line == grid.cursor_line || line + 1 == grid.open_line {
-        return false;
-    }
-    // Inside — or between — the parts of the file that are not prose, a blank
-    // line may be content. The horizontal page knows this per line; here the
-    // whole span is left alone, which for a manuscript is nothing at all.
-    let (first, last) = grid.fold_free;
-    if line >= first && line <= last {
-        return false;
-    }
-    let lines = line_count(rope);
-    if line == 0 || line + 1 >= lines {
-        return false;
-    }
-    let blank = |l: usize| line_chars(rope, l).iter().all(|c| c.is_whitespace());
-    blank(line) && !blank(line - 1) && !blank(line + 1)
+pub fn folded(_rope: &Rope, line: usize, grid: Grid) -> bool {
+    // **One rule, asked — not a second copy of it.** This function used to
+    // decide for itself, with a different test from the horizontal page's:
+    // no block knowledge, a span instead of a map, and a `cursor_line` of its
+    // own. Same document, two answers, and flipping `:layout` changed which
+    // lines of the file were on the page.
+    grid.folded(line)
 }
 
 /// The first line at or after `line` that is on the page.
@@ -1271,13 +1250,10 @@ mod tests {
         ruby: Dialects::NONE,
         hanging: false,
         tatechuyoko: false,
-        hide_markup: false,
-        selection: None,
+        hidden: NOTHING_HIDDEN,
+        folded: NOTHING_FOLDED,
         indent: 0,
-        fold_blanks: false,
-        cursor_line: usize::MAX,
         open_line: usize::MAX,
-        fold_free: (usize::MAX, 0),
     };
 
     /// Readings laid out, so the ruby tests exercise the layout.
@@ -1884,8 +1860,9 @@ mod tests {
         // 所見即所得: the `**` is not a row of its own. It belongs to the slot
         // beside it, so `l` steps over it in one press and a 縱 holds writing
         // rather than asterisks.
-        let grid = G.with_markup_hidden(true, None);
-        let slots = line_slots_in("那**年**冬", grid, None);
+        // The page says what is off it — this test *is* the editor, so it
+        // says so itself: `**` at 1..3 and at 4..6.
+        let slots = line_slots_in("那**年**冬", G, &[(1, 3), (4, 6)]);
         let texts: Vec<&str> = slots.iter().map(|s| s.text.as_str()).collect();
         assert_eq!(texts, ["那", "年", "冬"]);
         // …and the ranges cover every character of the line between them, so
@@ -1896,9 +1873,9 @@ mod tests {
         assert_eq!((slots[1].start, slots[1].end), (1, 4), "**年");
         assert_eq!((slots[2].start, slots[2].end), (4, 7), "**冬");
 
-        // The construct the cursor is in is shown whole.
-        let open = G.with_markup_hidden(true, Some((4, 4)));
-        let texts: Vec<String> = line_slots_in("那**年**冬", open, Some((4, 4)))
+        // The construct the cursor is in is shown whole — which is a decision
+        // the *editor* makes, and it makes it by handing over nothing hidden.
+        let texts: Vec<String> = line_slots_in("那**年**冬", G, &[])
             .into_iter()
             .map(|s| s.text)
             .collect();
@@ -1911,7 +1888,9 @@ mod tests {
         // construct under the cursor is hidden like any other, and `j` steps
         // onto an asterisk that is not on the screen.
         let rope = Rope::from_str("那**年**冬\n");
-        let grid = G.with_markup_hidden(true, Some((4, 4)));
+        // Nothing hidden on this line: the selection is holding the construct
+        // open, and it is the editor that decides that.
+        let grid = G;
         let texts: Vec<String> = zong_slots(
             &rope,
             &zongs_from(&rope, Anchor::default(), grid, 1)[0],
@@ -1922,8 +1901,10 @@ mod tests {
         .collect();
         assert_eq!(texts, ["那", "*", "*", "年", "*", "*", "冬"]);
 
-        // With the cursor elsewhere on the line it comes off again.
-        let grid = G.with_markup_hidden(true, Some((0, 0)));
+        // With the cursor elsewhere on the line it comes off again — which
+        // the page says by hiding it.
+        let off = |_: usize| vec![(1usize, 3usize), (4, 6)];
+        let grid = G.with_hidden(&off);
         let texts: Vec<String> = zong_slots(
             &rope,
             &zongs_from(&rope, Anchor::default(), grid, 1)[0],
@@ -1940,7 +1921,6 @@ mod tests {
         // Nothing may be steppable-onto that is not on the screen — so the
         // slots have to tile the line, whatever is hidden and wherever the
         // markup sits next to a ruby group.
-        let grid = RUBY.with_markup_hidden(true, None);
         for line in [
             "那**年**<ruby>漢<rt>h</rt></ruby>冬",
             "**年**<ruby>漢<rt>h</rt></ruby>",
@@ -1949,7 +1929,10 @@ mod tests {
             "[](x)",
             "那**年",
         ] {
-            let slots = line_slots_in(line, grid, None);
+            // Whatever the editor says is off the page — here, the markup
+            // Markdown itself would take off.
+            let hidden = crate::markdown::hidden(&crate::markdown::spans(line), None);
+            let slots = line_slots_in(line, RUBY, &hidden);
             let n = line.chars().count();
             for at in 0..n {
                 assert!(
@@ -1963,8 +1946,8 @@ mod tests {
 
     #[test]
     fn markup_at_the_end_of_a_line_joins_the_slot_before_it() {
-        let grid = G.with_markup_hidden(true, None);
-        let slots = line_slots_in("那年**冬**", grid, None);
+        let hidden = |line: &str| crate::markdown::hidden(&crate::markdown::spans(line), None);
+        let slots = line_slots_in("那年**冬**", G, &hidden("那年**冬**"));
         let texts: Vec<&str> = slots.iter().map(|s| s.text.as_str()).collect();
         assert_eq!(texts, ["那", "年", "冬"]);
         // The last slot reaches the end of the line, so the caret past it sits
@@ -2069,13 +2052,15 @@ mod tests {
         // column down the page, in the one layout where columns are the page.
         let rope = Rope::from_str("第一段\n\n第二段\n\n\n第三段\n");
         let plain = Grid { indent: 2, ..G };
-        let folded_grid = plain.with_folds(true, usize::MAX);
+        // **The page decides, and it decides once** — this is the editor's own
+        // rule (`Editor::line_is_folded`), which the horizontal page asks too.
+        // The 縱書 side used to keep a second copy of it and the two disagreed.
+        let folds = |line: usize| line == 1;
+        let folded_grid = plain.with_folds(&folds);
         assert!(!folded(&rope, 1, plain), "…unless the page says to fold");
         assert!(folded(&rope, 1, folded_grid), "the one between two paragraphs");
         assert!(!folded(&rope, 3, folded_grid), "two blanks are a scene break");
         assert!(!folded(&rope, 4, folded_grid));
-        // The cursor's own line is always drawn.
-        assert!(!folded(&rope, 1, plain.with_folds(true, 1)));
         // …and the page skips it: the 縱 run 0, 2, … with no column for line
         // 1, while the scene break keeps both of its.
         let page = zongs_from(&rope, Anchor::default(), folded_grid, 8);

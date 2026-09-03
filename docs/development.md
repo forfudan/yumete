@@ -462,13 +462,26 @@ worst of it was fixed the same day:
   unpainted stripe. There is now a test that **every cell of the frame is
   painted**, which is the third time that bug has appeared.
 
+**The root fix, done:** `zong::Grid` is now handed the page instead of
+re-deriving it. It carries the same two closures `wrap::Measure` carries —
+`hidden` (what markup is off a line, which knows the file's syntax, the block
+each line is in, and what the selection is holding open) and `folded` (the one
+fold rule) — and five fields went away with the second implementations they
+stood for: `hide_markup`, `selection`, `fold_blanks`, `cursor_line`,
+`fold_free`. `zong::folded` is four lines that ask the page. Three divergences
+closed at once: 縱書 no longer eats the `**` inside a fence, no longer hides
+two asterisks where Typst has one, no longer hides four under `:syntax text`,
+and folds by the same rule as 橫排 because it *is* the same rule.
+
+There is now a **differential test** — `both_layouts_ask_the_same_page` — that
+walks a document with front matter, a fence, a heading and prose, in three
+syntaxes × two indents, and asserts the two layouts fold the same lines and
+hide the same characters. Every defect in this class was invisible to a green
+suite because each side only ever asked its own implementation.
+
 Open, from all four reviews (ranked):
 
-1. `zong::Grid` re-derives the page from raw text where `wrap::Measure` is
-   *handed* it — so 縱書 hides markup inside a fence, ignores `:syntax
-   text`/typst, and folds by a different rule. Three divergences from one
-   asymmetry; the fix is to give `Grid` the same closures `Measure` takes.
-2. The event loop settles `page_lines`/`page_columns` from the whole text area
+1. The event loop settles `page_lines`/`page_columns` from the whole text area
    rather than from the live pane, so `C-f` turns two pages with a split open.
 3. `:replace` rewrites whole buffers without the grid check `:s` makes.
 4. `n`/`N` after `*` or `:search` still walk the *old* hit list.
