@@ -1668,22 +1668,6 @@ impl Editor {
         }
         rows
     }
-
-    /// One line naming every open buffer (`:ls`), the active one marked.
-    fn list_buffers(&mut self) {
-        let listing: Vec<String> = self
-            .buffers
-            .iter()
-            .enumerate()
-            .map(|(i, b)| {
-                let mark = if i == self.current { "*" } else { " " };
-                let dirty = if b.is_modified() { "+" } else { "" };
-                format!("{mark}{} {}{dirty}", i + 1, b.display_name())
-            })
-            .collect();
-        self.status = listing.join("   ");
-    }
-
     /// Create a new, empty scratch buffer and make it active.
     pub fn new_buffer(&mut self) {
         self.add_buffer(Buffer::scratch());
