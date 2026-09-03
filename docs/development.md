@@ -349,6 +349,8 @@ Phases are ordered by priority, most writer-critical first:
 | 150 | **Project-wide replace**                    | core   | P1    | `:grep` then `:replace`: nothing changed that was not on the screen, nothing on disk until `:wa` | Done |
 | 151 | **Both languages**                          | core   | P1    | the Chinese is the key; `messages.toml` holds the pair; `language = "zh"\|"en"` | Done |
 | 152 | **【墨香】 as a computed theme**             | both   | P1    | a few anchors in the config, every other shade a rung on the ladder; see §5.2 group 13 | Planned |
+| 153 | **Search has two directions**               | core   | P1    | `/` is `:search row`, `Enter` is `:search col` — down one column, then the next | Done |
+| 154 | **`:tutor` — a lesson you edit**            | both   | P1    | vimtutor's idea, on Chinese prose, where `w` and 縱書 can actually be taught | Planned |
 
 ---
 
@@ -680,6 +682,43 @@ four are done; the outcomes are noted here rather than in a second list.
   leaving.
 - **Group 10 (first-line indent, 段組) is 0.1.0, not 0.2.0.** — *done: #145, #146.* They are the point
   of a 縱書 editor.
+
+### 14 · `:tutor` — a lesson you learn by editing
+
+`vimtutor` and `hx --tutor` are both the same good idea: **a copy of a file
+whose text tells you what to press, and you learn by pressing it on that file.**
+No modal dialog, no video, no separate mode — the tutorial *is* a document, and
+editing it is the lesson.
+
+It fits this editor better than it fits either of them, because half of what
+yumete does can only be taught on Chinese prose:
+
+- `w` `b` `e` mean nothing on `the quick brown fox`. On 「他抬頭看了看那片天」
+  they are the whole argument — and the lesson can *say* 「按 w 三次，看它停在
+  哪裏」 and be showing the reader the segmenter's answer.
+- `{` `}` need a paragraph that is one line of three hundred characters.
+- The IME cannot be taught by describing it. A lesson that says 「打 `xj`，空格
+  選第一個」 and has a blank line waiting is the only way.
+- 縱書 has to be *flipped into*, mid-lesson, on the reader's own screen: 「按
+  `:layout`。現在你在讀一本書。」
+- A table mode is taught by putting a four-row table in the file and saying
+  「光標放上去，按 `:table`」.
+
+**The shape.** `:tutor` copies a manuscript out of the data directory into a
+scratch buffer (or into `~/.local/share/yumete/tutor-<n>.md`, so `:w` works and
+a session can be come back to), and opens it. It is a **real file the reader
+owns**, so every destructive key in it is safe, and `u` is part of lesson one.
+The text is Chinese, and `--tutor en` gets the English one once §5.2 group 9's
+language work has a second file to point at.
+
+**Chapters, roughly in the order the manual introduces them:** the modes and
+`u`; motion by 字/詞/段/句; 選區 as the thing every motion leaves; `c` `d` `y`
+`p`; 搜索 and `:s`; the IME; 縱書 and what it changes; 表格; `:grep`/`:replace`
+across a book; and the things that stop you losing work.
+
+**Why it is worth doing before 0.1.0**: the terminal reviewer's honest answer
+was that nobody can install this editor and nothing teaches it. One of those is
+§5.2 group 2. This is the other. **high**
 
 ### 13 · 【墨香】 — one theme, computed, and everywhere
 
