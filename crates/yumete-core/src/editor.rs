@@ -79,6 +79,10 @@ enum Pending {
     SurroundTo(char),
     /// `t` in a table, awaiting the structural edit it opens.
     Table,
+    /// `M` awaiting the letter to name this place by.
+    Mark,
+    /// `'` awaiting the letter of a place to go back to.
+    Recall,
 }
 
 /// The four flavours of in-line character search (`f`/`t`/`F`/`T`).
@@ -500,6 +504,8 @@ pub struct Editor {
     edit_revision: u64,
     /// The last change's keys.
     last_edit_keys: Vec<Key>,
+    /// Places named by a letter, and reachable from any file (`M a`, `' a`).
+    marks: HashMap<char, Spot>,
     /// Whether `.` is playing one back, so it cannot record itself.
     repeating_edit: bool,
     /// The Insert session being recorded, so `C-w` can take a word back out
@@ -768,6 +774,7 @@ impl Editor {
             edit_keys: Vec::new(),
             edit_revision: 0,
             last_edit_keys: Vec::new(),
+            marks: HashMap::new(),
             repeating_edit: false,
             insert_recording: String::new(),
             last_find: None,
@@ -3621,6 +3628,8 @@ impl Editor {
             Pending::Surround => ("包起來", vec![("", "打一種括號")]),
             Pending::SurroundFrom => ("去掉", vec![("", "打要去掉的那一種")]),
             Pending::SurroundTo(_) => ("換成", vec![("", "打要換成的那一種")]),
+            Pending::Mark => ("M 記住這裏", vec![("a–z", "叫什麼名字")]),
+            Pending::Recall => ("' 回到", vec![("a–z", "哪一個")]),
             Pending::Table => (
                 "t 表格",
                 vec![
@@ -4450,7 +4459,7 @@ impl Editor {
         match self.row_named(c) {
             Some(line) => {
                 self.remember_jump();
-                self.goto_line(line + 1);
+                self.move_to_line(line + 1);
                 self.snap_to_cell();
                 self.status = format!("「{c}」在第 {} 行", line + 1);
             }
@@ -5383,6 +5392,20 @@ impl Editor {
                 self.table_structure(key);
                 return;
             }
+            Pending::Mark => {
+                self.pending = Pending::None;
+                if let Key::Char(c) = key {
+                    self.set_mark(c);
+                }
+                return;
+            }
+            Pending::Recall => {
+                self.pending = Pending::None;
+                if let Key::Char(c) = key {
+                    self.go_to_mark(c);
+                }
+                return;
+            }
             Pending::Goto => {
                 self.pending = Pending::None;
                 self.handle_goto(key);
@@ -5624,6 +5647,11 @@ impl Editor {
                 let p = motion::prev_sentence(e.current_buffer().rope(), e.cursor);
                 e.select_to(p);
             }),
+            // A mark is where you meant to come *back* to; the jump list is
+            // where you came *from*. `M`/`'` rather than vi's `m`/`'`, because
+            // `m` here opens match mode.
+            Key::Char('M') => self.pending = Pending::Mark,
+            Key::Char('\'') => self.pending = Pending::Recall,
             Key::Char('W') => self.repeat(count, |e| e.select_word_forward(true)),
             Key::Char('E') => self.repeat(count, |e| {
                 let p = motion::next_word_end(
@@ -6402,12 +6430,78 @@ impl Editor {
     /// clamped to the end of the buffer (`10gg`, `:10`, `:goto 10`).
     fn goto_line(&mut self, n: usize) {
         self.remember_jump();
+        self.move_to_line(n);
+    }
+
+    /// The same, without noting a jump.
+    ///
+    /// For the callers that have already noted one — a mark, `:row` — where a
+    /// second note would be of the place *after* the file switch, and `C-o`
+    /// would then take you to the file you had just arrived in.
+    fn move_to_line(&mut self, n: usize) {
         let rope = self.current_buffer().rope();
         let last = motion::last_line(rope);
         let line = n.saturating_sub(1).min(last);
         let at = rope.line_to_char(line);
         let pos = motion::line_first_non_blank(rope, at);
         self.move_head(pos);
+    }
+
+    // ---- Marks (Feature #45) ----------------------------------------------
+
+    /// Name this place by a letter (`M a`).
+    ///
+    /// The jump list remembers where you *came from*; a mark remembers where
+    /// you meant to come back **to** — the scene you are rewriting, the note
+    /// at the end of the file, the chapter you keep checking against. `M` and
+    /// `'` rather than vi's `m` and `'`, because `m` here opens match mode.
+    fn set_mark(&mut self, name: char) {
+        if !name.is_alphanumeric() {
+            self.status = "記號用一個字母或數字".to_string();
+            return;
+        }
+        let rope = self.current_buffer().rope();
+        let line = rope.char_to_line(self.cursor.min(rope.len_chars()));
+        let spot = match self.current_buffer().path() {
+            Some(path) => Spot::InFile(path.to_path_buf(), line),
+            None => Spot::InBuffer(self.current, self.cursor),
+        };
+        self.marks.insert(name, spot);
+        self.status = format!(
+            "記住了「{name}」：{} 第 {} 行",
+            self.current_buffer().display_name(),
+            line + 1
+        );
+    }
+
+    /// Go back to the place a letter names (`' a`).
+    fn go_to_mark(&mut self, name: char) {
+        let Some(spot) = self.marks.get(&name).cloned() else {
+            self.status = format!("沒有記號「{name}」");
+            return;
+        };
+        self.remember_jump();
+        match spot {
+            Spot::InFile(path, line) => {
+                if self.current_buffer().path() != Some(path.as_path()) {
+                    if let Err(err) = self.open_file(&path) {
+                        self.status = format!("打不開「{}」：{err}", path.display());
+                        return;
+                    }
+                }
+                self.move_to_line(line + 1);
+                self.status = format!(
+                    "「{name}」：{} 第 {} 行",
+                    self.current_buffer().display_name(),
+                    line + 1
+                );
+            }
+            Spot::InBuffer(index, pos) => {
+                self.show_buffer(index);
+                self.set_cursor(pos.min(self.current_buffer().rope().len_chars()));
+                self.status = format!("「{name}」");
+            }
+        }
     }
 
     // ---- The jump list (Feature #45) ---------------------------------------
@@ -8305,6 +8399,18 @@ impl Default for Editor {
     fn default() -> Self {
         Self::new()
     }
+}
+
+/// A place a mark names.
+///
+/// By **path and line**, not by buffer index and character offset: a mark is
+/// meant to survive the afternoon, and in that time the buffer list will have
+/// been reordered and the file edited. A buffer with no file keeps its index,
+/// because there is nothing else to call it by.
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum Spot {
+    InFile(PathBuf, usize),
+    InBuffer(usize, usize),
 }
 
 /// How many lines of one prompt's history are kept.
@@ -12242,6 +12348,45 @@ mod tests {
         let after = ed.segment_line(0);
         assert_eq!(after[0], (0, 2), "one word now: {after:?}");
         assert!(ed.status().contains("words.txt"), "{}", ed.status());
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn a_mark_names_a_place_and_survives_the_afternoon() {
+        // The jump list remembers where you came *from*; a mark remembers
+        // where you meant to come back **to**.
+        let dir = std::env::temp_dir().join(format!("yumete-marks-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let one = dir.join("ch01.md");
+        let two = dir.join("ch02.md");
+        std::fs::write(&one, "一\n二\n三\n四\n五\n").unwrap();
+        std::fs::write(&two, "甲\n乙\n丙\n").unwrap();
+
+        let mut ed = Editor::new();
+        ed.open_file(&one).unwrap();
+        ed.goto_line(4);
+        press(&mut ed, "M");
+        ed.on_key(Key::Char('a'));
+        assert!(ed.status().contains('a'), "{}", ed.status());
+
+        // Off to another chapter, and back by name — the file opens itself.
+        ed.open_file(&two).unwrap();
+        ed.goto_line(2);
+        press(&mut ed, "'");
+        ed.on_key(Key::Char('a'));
+        assert_eq!(ed.cursor_line(), 3, "{}", ed.status());
+        assert_eq!(ed.current_buffer().path(), Some(one.as_path()));
+
+        // …and `C-o` goes back to where `'a` was pressed, because a mark is a
+        // jump.
+        ed.on_key(Key::Ctrl('o'));
+        assert_eq!(ed.current_buffer().path(), Some(two.as_path()));
+
+        // A letter nobody marked says so rather than moving.
+        press(&mut ed, "'");
+        ed.on_key(Key::Char('z'));
+        assert!(ed.status().contains('z'), "{}", ed.status());
         std::fs::remove_dir_all(&dir).ok();
     }
 
