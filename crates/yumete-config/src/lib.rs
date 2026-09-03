@@ -62,6 +62,8 @@ pub struct EditorConfig {
     pub indent: usize,
     /// How many bands the vertical page is divided into (段組). 1 is none.
     pub bands: usize,
+    /// Whether `yumete` with no file opens again what was open last time.
+    pub session: bool,
     /// The gap between two 縱, in half-width cells (0–4).
     pub zong_gap: usize,
     /// Whether the 拆分 annotation is shown beside candidates (Feature #66).
@@ -176,6 +178,7 @@ impl Default for EditorConfig {
             zong_length: 0,
             indent: 0,
             bands: 1,
+            session: true,
             zong_gap: DEFAULT_ZONG_GAP,
             show_chaifen: false,
             show_ruby: false,
@@ -574,6 +577,7 @@ struct RawEditor {
     zong_length: Option<usize>,
     indent: Option<usize>,
     bands: Option<usize>,
+    session: Option<bool>,
     zong_gap: Option<usize>,
     show_chaifen: Option<bool>,
     show_ruby: Option<bool>,
@@ -636,6 +640,9 @@ impl RawConfig {
         }
         if other.editor.bands.is_some() {
             self.editor.bands = other.editor.bands;
+        }
+        if other.editor.session.is_some() {
+            self.editor.session = other.editor.session;
         }
         if other.editor.zong_length.is_some() {
             self.editor.zong_length = other.editor.zong_length;
@@ -768,6 +775,9 @@ impl RawConfig {
         }
         if let Some(n) = self.editor.bands {
             config.editor.bands = n.clamp(1, 4);
+        }
+        if let Some(on) = self.editor.session {
+            config.editor.session = on;
         }
         if let Some(length) = self.editor.zong_length {
             // Below ~4 a 縱 stops being a column of text; above 64 no terminal
