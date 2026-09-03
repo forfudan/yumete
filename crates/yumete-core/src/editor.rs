@@ -5551,23 +5551,43 @@ impl Editor {
     /// How this buffer is gridded into 縱 — the wrap length plus whether ruby is
     /// laid out. Every 縱 question takes this, so the cursor and the page can
     /// never disagree about where a row begins.
-    pub fn grid(&self) -> Grid {
+    /// The 縱 grid, **handed the same page the horizontal side is handed**.
+    ///
+    /// The two closures are the whole point of the shape: `hidden` is
+    /// [`Self::markup_hidden_on_line`] — which knows the file's syntax, which
+    /// block each line is in, and what the selection is holding open — and
+    /// `folded` is [`Self::line_is_folded`], the one fold rule. They are
+    /// passed in by the caller exactly as [`crate::wrap::Measure`]'s are,
+    /// because a borrow cannot outlive the call that made it.
+    pub fn grid_with<'a>(
+        &self,
+        hidden: &'a dyn Fn(usize) -> Vec<(usize, usize)>,
+        folded: &'a dyn Fn(usize) -> bool,
+    ) -> Grid<'a> {
         // Through `ruby()` and `hanging_punctuation()`, not the fields: a page
         // packed tight lays out neither, and a grid that disagreed with what is
         // drawn would put the cursor somewhere the writer cannot see.
         Grid::new(self.zong_length, self.ruby())
             .with_tatechuyoko(self.tatechuyoko)
             .with_indent(self.paragraph_indent())
-            // **One rule, both layouts: the indent is the switch.** 縱書 used
-            // to fold unconditionally, so `:indent 0` swallowed blank columns
-            // nobody had asked it to — and then turning the indent *on* made
-            // one reappear (the cursor's own paragraph opens), which reads as
-            // the setting doing the opposite of what it says.
-            .with_folds(self.paragraph_indent() > 0, self.cursor_line())
-            .with_fold_free(self.fold_free_span())
+            .with_hidden(hidden)
+            .with_folds(folded)
             .with_open_line(self.open_line())
             .with_hanging(self.hanging_punctuation())
-            .with_markup_hidden(self.render == Render::Full, Some(self.selection()))
+    }
+
+    /// The markup that is off the page on `line`, as columns within it.
+    ///
+    /// **Markup only** — the ruby markup is not in it, because the 縱書 page
+    /// lays a reading out itself and hides the tags as part of doing so. The
+    /// horizontal page, which draws the reading above the row, asks
+    /// [`Self::hidden_on_line`], which is this plus the ruby tags.
+    pub fn markup_hidden_on_line(&self, line: usize) -> Vec<(usize, usize)> {
+        if !self.wysiwyg() {
+            return Vec::new();
+        }
+        let spans = self.markup_line_in(line, self.block_of(line));
+        crate::markdown::hidden(&spans, self.selected_columns(line))
     }
 
     /// Whether `line` is left off the page altogether (Feature #159).
@@ -5780,7 +5800,10 @@ impl Editor {
 
     /// Where the cursor sits in the 縱 grid (for the status line).
     pub fn zong_position(&self) -> zong::Position {
-        zong::position(self.current_buffer().rope(), self.cursor, self.grid())
+        let hidden = |line: usize| self.markup_hidden_on_line(line);
+        let folded = |line: usize| self.line_is_folded(line);
+        let grid = self.grid_with(&hidden, &folded);
+        zong::position(self.current_buffer().rope(), self.cursor, grid)
     }
 
     /// Install Normal-mode single-key aliases (from the config keymap).
@@ -9296,17 +9319,25 @@ impl Editor {
     /// in which case the goal slot is kept, so crossing a short paragraph does
     /// not drag the cursor permanently upwards.
     fn move_zong_from(&mut self, left: bool, continuing: bool) {
-        let grid = self.grid();
-        let rope = self.current_buffer().rope();
-        let goal = if continuing {
-            self.goal_slot
-        } else {
-            zong::slot_of(rope, self.cursor, grid)
-        };
-        let pos = if left {
-            zong::next_zong(rope, self.cursor, grid, goal)
-        } else {
-            zong::prev_zong(rope, self.cursor, grid, goal)
+        // The page is built here, from the same two answers the horizontal
+        // side is built from — and it lives only as long as this block, which
+        // is what lets the cursor be written after it.
+        let (goal, pos) = {
+            let hidden = |line: usize| self.markup_hidden_on_line(line);
+            let folded = |line: usize| self.line_is_folded(line);
+            let grid = self.grid_with(&hidden, &folded);
+            let rope = self.current_buffer().rope();
+            let goal = if continuing {
+                self.goal_slot
+            } else {
+                zong::slot_of(rope, self.cursor, grid)
+            };
+            let pos = if left {
+                zong::next_zong(rope, self.cursor, grid, goal)
+            } else {
+                zong::prev_zong(rope, self.cursor, grid, goal)
+            };
+            (goal, pos)
         };
         self.cursor = pos;
         if !self.extend {
@@ -10439,7 +10470,9 @@ mod tests {
         ed.set_indent(2);
         ed.set_dense(true);
         assert_eq!(ed.paragraph_indent(), 2);
-        assert_eq!(ed.grid().indent, 2);
+        let nothing = |_: usize| Vec::new();
+        let never = |_: usize| false;
+        assert_eq!(ed.grid_with(&nothing, &never).indent, 2);
         assert!(ed.ruby().is_empty(), "…while the reading column still goes");
     }
 
@@ -10467,7 +10500,13 @@ mod tests {
         // either, and a span from the first heading to the last would be the
         // whole book.
         assert!(first > 6, "the heading is not in the span: {first}..{last}");
-        assert!(!crate::zong::folded(ed.current_buffer().rope(), 8, ed.grid()));
+        let hidden = |line: usize| ed.markup_hidden_on_line(line);
+        let folded = |line: usize| ed.line_is_folded(line);
+        assert!(!crate::zong::folded(
+            ed.current_buffer().rope(),
+            8,
+            ed.grid_with(&hidden, &folded)
+        ));
         // And never the line the cursor is on, or you could not type into it.
         ed.execute(":2").unwrap();
         assert_eq!(ed.cursor_line(), 1);
@@ -11471,6 +11510,59 @@ mod tests {
             "{}",
             ed.status()
         );
+    }
+
+    #[test]
+    fn both_layouts_ask_the_same_page() {
+        // **The differential test.** Every defect in this class was invisible
+        // because each side asked its own implementation: 縱書 worked out what
+        // was off the page from the bare line — no syntax, no block — while
+        // 橫排 was handed the answer. So it ate the `**` inside a fence, hid
+        // two asterisks where Typst has one, hid four under `:syntax text`,
+        // and folded blank lines by a different rule. This asks both.
+        let document = "---\ntitle: 甲\n---\n\n那**年**冬天。\n\n# 第一章\n\n```\n\n程式 **很好** 碼。\n```\n\n最後一段。\n";
+        for syntax in [
+            crate::syntax::Syntax::Markdown,
+            crate::syntax::Syntax::Typst,
+            crate::syntax::Syntax::Text,
+        ] {
+            for indent in [0usize, 2] {
+                let mut ed = Editor::new();
+                ed.current_buffer_mut().insert(0, document);
+                ed.set_default_syntax(Some(syntax));
+                ed.set_indent(indent);
+                ed.set_render(Render::Full);
+                let rope = ed.current_buffer().rope();
+                let hidden = |line: usize| ed.markup_hidden_on_line(line);
+                let folded = |line: usize| ed.line_is_folded(line);
+                let grid = ed.grid_with(&hidden, &folded);
+                for line in 0..rope.len_lines() {
+                    assert_eq!(
+                        crate::zong::folded(rope, line, grid),
+                        ed.line_is_folded(line),
+                        "{syntax:?} indent={indent}: line {line} folds differently in the two \
+                         layouts"
+                    );
+                    // …and what is off the page is one answer, not two: the
+                    // slots of a 縱 cover exactly the characters that are not
+                    // hidden, plus the hidden ones joined to their neighbours.
+                    let text = crate::zong::line_chars(rope, line);
+                    let slots = crate::zong::line_slots_in(
+                        &rope.line(line).to_string(),
+                        grid,
+                        &ed.markup_hidden_on_line(line),
+                    );
+                    for at in 0..text.len() {
+                        assert!(
+                            slots.iter().any(|s| at >= s.start && at < s.end)
+                                || slots.iter().all(|s| s.start == 0 && s.end == 0),
+                            "{syntax:?}: char {at} of line {line} is in no slot — the cursor \
+                             could stand where nothing is drawn"
+                        );
+                    }
+                }
+            }
+        }
     }
 
     #[test]
