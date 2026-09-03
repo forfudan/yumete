@@ -2070,11 +2070,11 @@ mod tests {
                 .collect()
         };
         assert!(
-            mark_of("那年冬天。").iter().any(|m| *m == Some('｡')),
+            mark_of("那年冬天。").contains(&Some('｡')),
             "the 。 hangs"
         );
         assert!(
-            mark_of("那年**冬天**。").iter().any(|m| *m == Some('｡')),
+            mark_of("那年**冬天**。").contains(&Some('｡')),
             "…and it still hangs when there is markup on the page"
         );
 
