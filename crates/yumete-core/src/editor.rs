@@ -31,8 +31,9 @@ use crate::zong::{self, Grid, Layout, DEFAULT_ZONG_LENGTH};
 type SegmentCache = HashMap<usize, (u64, Vec<(usize, usize)>)>;
 
 /// Which lines are off the page, against the buffer and revision they were
-/// worked out for.
-type FoldMap = ((u64, u64), Vec<bool>);
+/// worked out for — and the span of lines where folding is unsafe because
+/// something other than prose is written there.
+type FoldMap = ((u64, u64), Vec<bool>, (usize, usize));
 
 /// Every line's block, against the buffer it was worked out for and that
 /// buffer's revision — the two things that decide whether it is still true.
@@ -5044,6 +5045,7 @@ impl Editor {
             .with_tatechuyoko(self.tatechuyoko)
             .with_indent(self.paragraph_indent())
             .with_folds(self.paragraph_indent() > 0, self.cursor_line())
+            .with_fold_free(self.fold_free_span())
             .with_open_line(self.open_line())
             .with_hanging(self.hanging_punctuation())
             .with_markup_hidden(self.render == Render::Full, Some(self.selection()))
@@ -5069,13 +5071,33 @@ impl Editor {
         if line == self.cursor_line() {
             return false;
         }
-        // The blank line above the paragraph being typed into comes back with
-        // it: in Insert the page shows the file, so there is nothing to work
-        // out about what is really there.
+        // The blank line above the paragraph the cursor is in comes back with
+        // it: that paragraph is shown as the file has it.
         if self.open_line() == Some(line + 1) {
             return false;
         }
-        self.folds().get(line).copied().unwrap_or(false)
+        self.remember_folds();
+        let cache = self.fold_cache.borrow();
+        cache
+            .as_ref()
+            .and_then(|(_, map, _)| map.get(line).copied())
+            .unwrap_or(false)
+    }
+
+    /// The span of lines a fold must not touch, because what is written there
+    /// is not prose: a fence, a page's metadata, a table.
+    ///
+    /// One span rather than a set, because it travels in the [`Grid`], which
+    /// is a `Copy` value every 縱 question is handed. A manuscript has none of
+    /// these at all and the span is empty; a file with one fence loses folding
+    /// only around it.
+    pub fn fold_free_span(&self) -> (usize, usize) {
+        self.remember_folds();
+        self.fold_cache
+            .borrow()
+            .as_ref()
+            .map(|(_, _, span)| *span)
+            .unwrap_or((usize::MAX, 0))
     }
 
     /// The paragraph shown **as the file has it**: no indent, and its blank
@@ -5094,13 +5116,13 @@ impl Editor {
         }
     }
 
-    /// The fold map for the buffer as it stands, worked out once per edit.
-    fn folds(&self) -> Vec<bool> {
+    /// Work out the fold map for the buffer as it stands, once per edit.
+    fn remember_folds(&self) {
         let buffer = self.current_buffer();
         let key = (buffer.id(), buffer.revision());
-        if let Some((cached, map)) = self.fold_cache.borrow().as_ref() {
+        if let Some((cached, _, _)) = self.fold_cache.borrow().as_ref() {
             if *cached == key {
-                return map.clone();
+                return;
             }
         }
         let rope = buffer.rope();
@@ -5125,8 +5147,13 @@ impl Editor {
                     && prose(l)
             })
             .collect();
-        *self.fold_cache.borrow_mut() = Some((key, map.clone()));
-        map
+        // …and where the vertical page, which cannot carry the map, must not
+        // fold at all: from the first line that is not prose to the last.
+        let span = (0..lines).filter(|&l| !prose(l)).fold(
+            (usize::MAX, 0usize),
+            |(first, last), l| (first.min(l), last.max(l)),
+        );
+        *self.fold_cache.borrow_mut() = Some((key, map, span));
     }
 
     /// How many squares open a paragraph, as the page is drawn.
@@ -9608,6 +9635,11 @@ mod tests {
         assert!(!ed.line_is_folded(4));
         // A blank line inside a fence is code, not a paragraph break.
         assert!(!ed.line_is_folded(8), "inside the fence");
+        // …and the vertical page, which carries a span rather than a map, is
+        // told to leave that whole part of the file alone.
+        let (first, last) = ed.fold_free_span();
+        assert!(first <= 6 && last >= 8, "the fence is in the span: {first}..{last}");
+        assert!(!crate::zong::folded(ed.current_buffer().rope(), 8, ed.grid()));
         // And never the line the cursor is on, or you could not type into it.
         ed.execute(":2").unwrap();
         assert_eq!(ed.cursor_line(), 1);
