@@ -221,7 +221,9 @@ yumete/
 │   ├── yumete-tui/            # terminal UI (ratatui + crossterm)
 │   └── yumete/                # binary: CLI, launches the editor or preview
 ├── scripts/build.sh           # release build → ./yumete (gitignored)
-└── docs/development.md        # design & roadmap
+└── docs/
+    ├── manual.md           # the user manual (Chinese)
+    └── development.md      # design & roadmap
 ```
 
 ## Build & test
