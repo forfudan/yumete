@@ -4687,7 +4687,10 @@ impl Editor {
             self.note_return_from = None;
         }
         let Some(detail) = self.note_detail() else {
-            self.status = say!("這裏沒有註");
+            // Not on a note, so `Enter` means what it means everywhere else:
+            // 「這個詞還在哪裏」 — the same previewing search a table's key
+            // column answers, with the word under the cursor as the question.
+            self.search_the_page();
             return;
         };
         let Some(&(_, Some(at))) = detail.links.first() else {
@@ -4702,6 +4705,74 @@ impl Editor {
         self.note_return_from = Some(at);
         self.goto_line(at + 1);
         self.status = say!("Enter 回到正文");
+    }
+
+    /// `Enter` on prose: **who else says this?**
+    ///
+    /// One key, one meaning, in a table and out of it: 「在另一個工作區給我看
+    /// 這個詞還出現在哪裏」. The selection is the question when there is one —
+    /// so a phrase is asked about by selecting it — and the word under the
+    /// cursor when there is not, which is what `w` would have taken.
+    fn search_the_page(&mut self) {
+        let rope = self.current_buffer().rope();
+        let (from, to) = self.selection();
+        let needle = match to > from {
+            true => rope.slice(from..to.min(rope.len_chars())).to_string(),
+            false => {
+                let line = rope.char_to_line(self.cursor);
+                let start = rope.line_to_char(line);
+                let chars = crate::zong::line_chars(rope, line);
+                let at = self.cursor - start;
+                let words = self.segment_line(line);
+                match words.iter().find(|&&(a, b)| at >= a && at < b) {
+                    Some(&(a, b)) => chars[a..b.min(chars.len())].iter().collect(),
+                    None => chars.get(at).map(|c| c.to_string()).unwrap_or_default(),
+                }
+            }
+        };
+        let needle = needle.trim().to_string();
+        if needle.is_empty() {
+            self.status = say!("這裏沒有字可以找");
+            return;
+        }
+        let hits = self.every_match(&regex::escape(&needle));
+        if hits.len() <= 1 {
+            self.status = say!("只有這一處：{0}", needle);
+            self.table_hits.clear();
+            return;
+        }
+        self.last_search = regex::escape(&needle);
+        self.table_hits = hits;
+        // The first one *after* where you are standing: the useful answer to
+        // 「還在哪裏」 is the next place, not the first page of the book.
+        let here = self.cursor;
+        self.table_hit = self
+            .table_hits
+            .iter()
+            .position(|&(from, _)| from > here)
+            .unwrap_or(0);
+        self.show_table_hit();
+    }
+
+    /// Every match of `pattern` in the buffer, as character ranges.
+    fn every_match(&self, pattern: &str) -> Vec<(usize, usize)> {
+        let Ok(re) = self.compile(pattern) else {
+            return Vec::new();
+        };
+        let rope = self.current_buffer().rope();
+        let mut hits = Vec::new();
+        let mut at = 0usize;
+        for line in 0..rope.len_lines() {
+            let text = rope.line(line).to_string();
+            let start = at;
+            at += rope.line(line).len_chars();
+            for m in re.find_iter(&text) {
+                let before = text[..m.start()].chars().count();
+                let length = text[m.start()..m.end()].chars().count();
+                hits.push((start + before, start + before + length));
+            }
+        }
+        hits
     }
 
     /// Where a footnote is defined and what it says.
@@ -10997,6 +11068,29 @@ mod tests {
     }
 
     #[test]
+    fn enter_on_prose_asks_where_else_this_word_is() {
+        // One key, one meaning, in a table and out of it: 「在另一個工作區給我
+        // 看這個詞還出現在哪裏」. It used to say 「這裏沒有註」 and stop,
+        // which is an answer to a question nobody asked.
+        let mut ed = typed("那年冬天很冷。\n第二行。\n那年夏天很熱。\n");
+        ed.goto_line(1);
+        let standing = ed.cursor();
+        ed.on_key(Key::Enter);
+        // 那年 is the word under the cursor, and it is on line 3 as well.
+        assert_eq!(ed.peeked_line(), Some(2), "{}", ed.status());
+        assert_eq!(ed.cursor(), standing, "and you did not go anywhere");
+        assert!(ed.status().contains("2/2") || ed.status().contains("1/2"), "{}", ed.status());
+
+        // A word that is only here says so rather than opening an area for it.
+        ed.execute("2").unwrap();
+        for _ in 0..2 {
+            ed.on_key(Key::Char('l'));
+        }
+        ed.on_key(Key::Enter);
+        assert!(ed.status().contains("只有這一處"), "{}", ed.status());
+    }
+
+    #[test]
     fn a_footnote_reads_beside_the_sentence_it_belongs_to() {
         let mut ed = typed(
             "那年冬天[^1]，山下起了大雪。\n\n[^1]: 據縣志，那是丁丑年。\n",
@@ -11054,8 +11148,10 @@ mod tests {
         assert_eq!(ed.cursor_line(), 2);
         ed.goto_line(1);
         ed.on_key(Key::Enter);
-        assert_eq!(ed.cursor_line(), 0, "no note under the cursor, so nothing moves");
-        assert!(ed.status().contains("沒有註"), "{}", ed.status());
+        assert_eq!(ed.cursor_line(), 0, "nothing moves");
+        // Not on a note, so `Enter` is what it is everywhere else: 「這個詞還
+        //在哪裏」, shown in the other work area.
+        assert!(ed.status().contains("處") || ed.status().contains("只有"), "{}", ed.status());
 
         // A footnote nobody defined has nothing to show, and does not pretend.
         let mut ed = typed("那年冬天[^9]。\n");

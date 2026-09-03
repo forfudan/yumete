@@ -372,7 +372,7 @@ Phases are ordered by priority, most writer-critical first:
 | 173 | **`:shot`**                                 | both   | P3    | the screen as a picture, on the clipboard, taken after the menu closes | Done |
 | 174 | **段組 for the horizontal page**             | tui    | P2    | two columns side by side, the way 縱書 has two bands | Planned |
 | 175 | **Two marks running share a square**        | core   | P2    | JLREQ §3.1.4① / clreq §6.3.2.2 — `。」` is one em, half each, and does not hang | Done |
-| 176 | **Split work areas**                        | both   | P1    | two panes over one buffer; the table's `Enter` peeks into the second — being designed | Planned |
+| 176 | **Split work areas**                        | both   | P1    | two panes over one buffer, cut across the direction the text runs; `Enter` shows rather than goes | Done |
 
 ---
 
