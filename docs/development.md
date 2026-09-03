@@ -356,6 +356,8 @@ Phases are ordered by priority, most writer-critical first:
 | 157 | **`:table rules`**                          | both   | P2    | off (default), a band, or a drawn line — solid, dashed or double | Done |
 | 158 | **Tint only the words that need it**        | core   | P2    | a word bounded by space or 標點 on both sides is already cut; tinting it says it twice | Done |
 | 159 | **The indent takes the blank line off the page** | both | P1  | one paragraph mark, not two; the file keeps its blank line and the numbers show it | Done |
+| 160 | **`:yume on` / `off` / `which` / `installed`** | both | P2  | the 中/英 switch and the 碼表's provenance, by name | Done |
+| 161 | **`--timing`**                              | cli    | P2    | a whole launch, phase by phase — 「開個檔案怎麼要三秒」 answered with numbers | Done |
 
 ---
 

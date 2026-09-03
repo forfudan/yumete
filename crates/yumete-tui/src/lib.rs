@@ -782,6 +782,38 @@ fn switch_scheme(ime: &mut ImeSession, tag: &str, config: &Config) -> String {
             Err(why) => why,
         };
     }
+    // 中/英, by name. The lone-Shift tap is the same switch; this is for the
+    // hand that is already on `:`.
+    if tag == "+" || tag == "-" {
+        let want = tag == "+";
+        // Turning it *on* with no 碼表 loaded is「開始打中文」, which means
+        // loading one — nobody who typed this wanted to be told they are not
+        // ready.
+        if want && !ime.available() {
+            let loaded = switch_scheme(ime, "", config);
+            if !ime.available() {
+                return loaded;
+            }
+        }
+        if ime.is_chinese() != want {
+            ime.toggle_language();
+        }
+        return match ime.is_chinese() {
+            true => say!("中文（{0}）", ime.scheme_name()),
+            false => say!("英文"),
+        };
+    }
+    // The 碼表 the system has — `builtin`'s other half.
+    if tag == "~" {
+        let mut full = ImeSession::from_default_dirs(ime.scheme());
+        if !full.available() {
+            return say!("系統裏沒有裝 {0} 的碼表", ime.scheme_name());
+        }
+        full.set_page_size(config.panel.page_size);
+        full.set_annotations(ime.annotations_enabled());
+        *ime = full;
+        return say!("方案：{0}（系統裝的碼表）", ime.scheme_name());
+    }
     if tag == "!" {
         if !yumete_ime::has_builtin_table() {
             return "這個二進制不帶碼表".to_string();

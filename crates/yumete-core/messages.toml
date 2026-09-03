@@ -1392,3 +1392,35 @@ en = "dashed ┆"
 [[message]]
 zh = "雙線 ║"
 en = "double ║"
+
+[[message]]
+zh = "現在用的是哪個方案、碼表打哪來"
+en = "which scheme is in use, and where its 碼表 came from"
+
+[[message]]
+zh = "開始打中文（碼表沒載就順手載上）"
+en = "start typing 漢字 (loading the 碼表 if it is not loaded)"
+
+[[message]]
+zh = "回到英文"
+en = "back to English"
+
+[[message]]
+zh = "改用系統裝的那份碼表（builtin 的反面）"
+en = "use the 碼表 the system has installed (builtin's other half)"
+
+[[message]]
+zh = "中文（{0}）"
+en = "Chinese ({0})"
+
+[[message]]
+zh = "英文"
+en = "English"
+
+[[message]]
+zh = "系統裏沒有裝 {0} 的碼表"
+en = "no 碼表 for {0} is installed"
+
+[[message]]
+zh = "方案：{0}（系統裝的碼表）"
+en = "scheme: {0} (the system's own 碼表)"

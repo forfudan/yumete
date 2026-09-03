@@ -124,6 +124,16 @@ pub enum Command {
     UserTable(String),
     /// `:yume` on its own — say what the input method is doing.
     YumeStatus,
+    /// `:yume on` / `:yume off` — type 漢字, or type what the keys say.
+    ///
+    /// The 中/英 switch already exists as a lone Shift tap; this is the same
+    /// switch with a name, for a hand that is already on `:` — and `on` also
+    /// loads the 碼表 when it has not been loaded, which is the whole of
+    /// starting to write in Chinese.
+    YumeLanguage(bool),
+    /// `:yume installed` — the 碼表 the *system* has, which is `builtin`'s
+    /// other half: one binary, two tables, and a way back from either.
+    InstalledScheme,
     /// `:sh <cmd>` — run it and bring the output back into a buffer, or
     /// `:!<cmd>` — step out of the way and let it use the terminal
     /// (Feature #129).
@@ -322,6 +332,10 @@ pub fn parse(input: &str) -> Result<Command, CommandError> {
                 return Ok(Command::YumeStatus);
             };
             match pick(word, YUME).map(|w| w.name) {
+                Some("which") => Ok(Command::YumeStatus),
+                Some("on") => Ok(Command::YumeLanguage(true)),
+                Some("off") => Ok(Command::YumeLanguage(false)),
+                Some("installed") => Ok(Command::InstalledScheme),
                 Some("builtin") => Ok(Command::BuiltinScheme),
                 Some("table") => match parts.next() {
                     Some(path) => Ok(Command::UserTable(path.to_string())),
@@ -794,6 +808,26 @@ const YUME: &[Word] = &[
         name: "chaifen",
         help: "候選旁的拆分注解",
         then: Args::Words(ON_OFF),
+    },
+    Word {
+        name: "which",
+        help: "現在用的是哪個方案、碼表打哪來",
+        then: Args::None,
+    },
+    Word {
+        name: "on",
+        help: "開始打中文（碼表沒載就順手載上）",
+        then: Args::None,
+    },
+    Word {
+        name: "off",
+        help: "回到英文",
+        then: Args::None,
+    },
+    Word {
+        name: "installed",
+        help: "改用系統裝的那份碼表（builtin 的反面）",
+        then: Args::None,
     },
     Word {
         name: "builtin",
@@ -1746,6 +1780,11 @@ mod tests {
         // On its own it is the question "which one is answering", not a
         // mistake — a parent command should say where you are.
         assert_eq!(parse(":yume"), Ok(Command::YumeStatus));
+        assert_eq!(parse(":yume which"), Ok(Command::YumeStatus));
+        assert_eq!(parse(":yume on"), Ok(Command::YumeLanguage(true)));
+        assert_eq!(parse(":yume off"), Ok(Command::YumeLanguage(false)));
+        assert_eq!(parse(":yume installed"), Ok(Command::InstalledScheme));
+        assert_eq!(parse(":yume builtin"), Ok(Command::BuiltinScheme));
         assert_eq!(parse(":yume b"), Ok(Command::BuiltinScheme));
     }
 
