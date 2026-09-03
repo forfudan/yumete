@@ -124,12 +124,28 @@ pub fn draw(
     config: &Config,
     area: Rect,
     viewport: &mut Viewport,
+    peek: Option<&yumete_core::editor::Pane>,
 ) -> (u16, u16) {
     let Some(view) = editor.table() else {
         return (area.x, area.y);
     };
     let lines = editor.current_buffer().line_count();
-    let (cursor_row, cursor_cell) = editor.cell_position().unwrap_or((0, 0));
+    // A pane that is only being read is scrolled around the row it was opened
+    // at, and marks it — it has no cursor and no cell of its own.
+    let (cursor_row, cursor_cell) = match peek {
+        None => editor.cell_position().unwrap_or((0, 0)),
+        Some(pane) => {
+            let rope = editor.current_buffer().rope();
+            let line = rope.char_to_line(pane.cursor().min(rope.len_chars()));
+            let at = pane.cursor() - rope.line_to_char(line);
+            let cell = editor
+                .row_cells(line)
+                .iter()
+                .position(|&(from, to)| at >= from && at <= to)
+                .unwrap_or(0);
+            (line, cell)
+        }
+    };
 
     // The header takes the top row and never scrolls, so a page of rows is one
     // shorter than the area.

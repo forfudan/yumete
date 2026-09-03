@@ -79,8 +79,16 @@ fn said() -> BTreeSet<String> {
         let text = source(file);
         out.extend(literals(&text, "say!("));
         // A command's `help` is a key too: the `:` menu translates it as it
-        // draws it.
+        // draws it. So is the label beside a key in the space menu, which is
+        // declared as the second half of a pair.
         out.extend(literals(&text, "help:"));
+        // …and only the labels: `replace('|', "\\|")` is the same shape and
+        // is not a sentence anybody reads.
+        out.extend(
+            literals(&text, "', ")
+                .into_iter()
+                .filter(|s| s.chars().any(|c| ('\u{4e00}'..='\u{9fff}').contains(&c))),
+        );
     }
     out
 }

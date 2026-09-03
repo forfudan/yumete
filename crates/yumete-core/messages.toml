@@ -1507,3 +1507,79 @@ en = "line numbers: on a band"
 [[message]]
 zh = "行號：無底"
 en = "line numbers: on the page"
+
+[[message]]
+zh = "另一個工作區：再按一次過去"
+en = "the other work area: press it again to go there"
+
+[[message]]
+zh = "只留這一個工作區"
+en = "keep only this work area"
+
+[[message]]
+zh = "關掉這一個工作區，到另一個去"
+en = "close this work area and go to the other"
+
+[[message]]
+zh = "另一個工作區：空格 w 過去，空格 W 收掉"
+en = "the other work area: Space w goes there, Space W closes it"
+
+[[message]]
+zh = "只剩這一個工作區了"
+en = "one work area again"
+
+[[message]]
+zh = "關掉了那一半"
+en = "that half is closed"
+
+[[message]]
+zh = "第 {0} 行（空格 w 過去）"
+en = "line {0} (Space w goes there)"
+
+[[message]]
+zh = "{0} · 第 {1} 行"
+en = "{0} · line {1}"
+
+[[message]]
+zh = "{0} · 第 {1} 行 · {2}"
+en = "{0} · line {1} · {2}"
+
+[[message]]
+zh = "檔案側欄"
+en = "the file sidebar"
+
+[[message]]
+zh = "大綱"
+en = "the outline"
+
+[[message]]
+zh = "開啟檔案"
+en = "open a file"
+
+[[message]]
+zh = "切換緩衝區"
+en = "switch buffer"
+
+[[message]]
+zh = "全項目搜索"
+en = "search the project"
+
+[[message]]
+zh = "命令一覽"
+en = "every command"
+
+[[message]]
+zh = "複製到系統剪貼簿"
+en = "copy to the system clipboard"
+
+[[message]]
+zh = "從系統剪貼簿貼上"
+en = "paste from the system clipboard"
+
+[[message]]
+zh = "詳情欄"
+en = "the detail panel"
+
+[[message]]
+zh = "貼上：取過的東西"
+en = "paste: what has been taken"
