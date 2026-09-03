@@ -877,6 +877,10 @@ impl Editor {
         // Segmentation is cached per line number, and the lines are a different
         // document now.
         self.segment_cache.borrow_mut().clear();
+        // The table memo is keyed by the buffer's *index*, and closing a buffer
+        // shifts every later one down — so an index can come to mean a
+        // different document. Dropping it here retires the whole class.
+        self.md_cache.borrow_mut().take();
         // Whether this file is a grid is a fact about *this* file, so it is
         // asked again — otherwise a chapter opened next to a table would
         // inherit the table's columns. How you were reading it, though, is a
@@ -1605,7 +1609,7 @@ impl Editor {
                     Some(l) => l == Layout::Vertical,
                     None => self.layout == Layout::Horizontal,
                 };
-                if self.table.is_some() && wants_vertical {
+                if self.table.as_ref().is_some_and(|v| v.is_grid()) && wants_vertical {
                     self.status = "表格是橫排的；先 `:table off`".to_string();
                     return Ok(CommandOutcome::Continue);
                 }
@@ -2081,6 +2085,13 @@ impl Editor {
         // a pipe does not get to overrule them.
         if self.md_row_at_cursor() && self.table.as_ref().map(|v| v.shape) != Some(Shape::Delimited)
         {
+            // A line that opens with `|` inside a fenced block is *an example
+            // of* a table — the manual has several — and reformatting one
+            // rewrites somebody's quoted text.
+            if self.md_row_in_a_fence() {
+                self.status = "這是代碼塊裏的表格——那是引文，不是表格".to_string();
+                return false;
+            }
             return self.enter_md_table();
         }
         let Some(path) = self.current_buffer().path().map(Path::to_path_buf) else {
@@ -2258,6 +2269,22 @@ impl Editor {
         crate::mdtable::is_row(&rope.line(line).to_string())
     }
 
+    /// Whether the cursor's line looks like a table row but is inside a fence.
+    fn md_row_in_a_fence(&self) -> bool {
+        let rope = self.current_buffer().rope();
+        let at = rope.char_to_line(self.cursor.min(rope.len_chars()));
+        if !self.line_text(at).is_some_and(|l| crate::mdtable::is_row(&l)) {
+            return false;
+        }
+        // The cached scan the renderer already runs, so this costs nothing
+        // the frame was not paying anyway.
+        self.blocks_through(at)
+            .get(at)
+            .copied()
+            .unwrap_or_default()
+            .is_literal()
+    }
+
     /// The text of one line, or `None` past the end of the file.
     fn line_text(&self, line: usize) -> Option<String> {
         let rope = self.current_buffer().rope();
@@ -2298,6 +2325,13 @@ impl Editor {
             return false;
         };
         let header = self.line_text(region.first).unwrap_or_default();
+        // One column is a line with a pipe in it, not a table — and writing a
+        // `| --- |` under a paragraph that happens to start with one is how a
+        // convenience becomes damage.
+        if region.rule.is_none() && crate::mdtable::cells(&header).len() < 2 {
+            self.status = "只有一欄——表格至少要兩欄，或者先寫好 |---| 那一行".to_string();
+            return false;
+        }
         let schema = crate::mdtable::schema(&header);
         self.table = Some(TableView {
             schema,
@@ -2313,10 +2347,19 @@ impl Editor {
         // no to the very first table you try it on.
         let added = region.rule.is_none();
         if added {
-            let start = self.current_buffer().rope().line_to_char(region.first + 1);
             let columns = crate::mdtable::cells(&header).len();
             let row = crate::mdtable::rule_row(columns);
-            self.without_cell_guard(|e| e.current_buffer_mut().insert(start, &format!("{row}\n")));
+            let rope = self.current_buffer().rope();
+            // `line_to_char` of a line that does not exist is the end of the
+            // text, not the start of a next line — so a header written as the
+            // file's last line with no newline after it had the rule row
+            // welded onto its end, and the table was gone.
+            let (at, text) = if region.first + 1 >= rope.len_lines() {
+                (rope.len_chars(), format!("\n{row}"))
+            } else {
+                (rope.line_to_char(region.first + 1), format!("{row}\n"))
+            };
+            self.without_cell_guard(|e| e.current_buffer_mut().insert(at, &text));
         }
         let columns = self
             .table
@@ -2352,9 +2395,14 @@ impl Editor {
             rope.line_to_char(region.last + 1)
         };
         let was = rope.slice(start..end).to_string();
-        let mut text = lines.join("\n");
+        // Whatever this file ends its lines with, it goes on ending them with
+        // it: `md_lines` takes the `\r` off to read the row, and putting it
+        // back is the difference between a round trip and a file that reaches
+        // disk with two kinds of line ending in it.
+        let eol = if was.contains("\r\n") { "\r\n" } else { "\n" };
+        let mut text = lines.join(eol);
         if was.ends_with('\n') || !ends_file {
-            text.push('\n');
+            text.push_str(eol);
         }
         // An edit that changes nothing is not an edit: it would earn an undo
         // point, and `u` would then take back a keystroke that did nothing.
@@ -2417,6 +2465,13 @@ impl Editor {
     fn md_at(&self, region: &crate::mdtable::Region) -> (usize, usize) {
         let rope = self.current_buffer().rope();
         let line = rope.char_to_line(self.cursor.min(rope.len_chars()));
+        // Cell motion steps over the rule, but `gg`, `G`, `:N` and a search
+        // all land on it. Standing there means standing on the header the rule
+        // belongs to — so `t d` refuses (it is the column names) and `t o`
+        // opens the first data row, which is what both of them should do.
+        if region.is_rule(line) {
+            return (0, self.cell_position().map(|(_, c)| c).unwrap_or(0));
+        }
         let mut row = line.saturating_sub(region.first);
         if region.rule.is_some_and(|r| line > r) {
             row -= 1;
@@ -2896,6 +2951,10 @@ impl Editor {
 
     /// Enter a cell to type in it.
     fn edit_cell(&mut self, how: CellEdit) {
+        if self.md_rule_here() {
+            self.status = "分隔行是畫出來的——用 t < = > 改對齊".to_string();
+            return;
+        }
         let Some((line, cell)) = self.cell_position() else {
             return;
         };
@@ -3214,6 +3273,19 @@ impl Editor {
             };
         if is_row {
             let body = body.to_string();
+            // A Markdown table goes through its own parts, so a row pasted
+            // while standing on the header lands *under the rule* rather than
+            // between the rule and the names it draws — which produced a
+            // three-line "header" that no renderer reads as a table, and that
+            // the reflow then made permanent by re-composing it ruleless.
+            if let Some((region, mut parts)) = self.md_parts() {
+                let (row, cell) = self.md_at(&region);
+                let at = parts.insert_row(row + 1);
+                parts.rows[at] = crate::mdtable::split(&body);
+                self.md_write(&region, &parts, at, cell);
+                self.status = "貼成新的一行".to_string();
+                return;
+            }
             self.snapshot();
             let rope = self.current_buffer().rope();
             let at = motion::line_end(rope, self.cursor);
@@ -3221,7 +3293,6 @@ impl Editor {
                 e.current_buffer_mut().insert(at, &format!("\n{body}"));
             });
             self.set_cursor(at + 1);
-            self.format_md_table();
             self.status = "貼成新的一行".to_string();
             return;
         }
@@ -3390,12 +3461,70 @@ impl Editor {
         None
     }
 
+    /// Whether the cursor is standing on a table's `|---|` line.
+    ///
+    /// It is not a row of the table: it is the *drawing* of the alignments,
+    /// remade from the schema every time the table is laid out. Typing into it
+    /// destroyed the table and the reflow on the way out did not notice.
+    fn md_rule_here(&self) -> bool {
+        let Some(region) = self.md_region() else {
+            return false;
+        };
+        let rope = self.current_buffer().rope();
+        region.is_rule(rope.char_to_line(self.cursor.min(rope.len_chars())))
+    }
+
     /// The first reason this text may not go into a cell, if there is one.
     fn cell_refuses_text(&self, text: &str) -> Option<String> {
-        if self.table.is_none() || self.table_bypass.get() {
+        self.cell_refuses_text_at(None, text)
+    }
+
+    /// The same, knowing where the text is going.
+    ///
+    /// Which matters for exactly one thing: a Markdown table has an escape —
+    /// `\|` — and whether the `|` about to be typed is escaped depends on the
+    /// backslash that is *already in the buffer*, not on the text being
+    /// inserted. Without the position the editor forbade the one spelling its
+    /// own manual told a writer to use.
+    fn cell_refuses_text_at(&self, at: Option<usize>, text: &str) -> Option<String> {
+        let view = self.table.as_ref()?;
+        if self.table_bypass.get() || !self.table_here() {
             return None;
         }
+        if self.md_rule_here() {
+            return Some("分隔行是畫出來的——用 t < = > 改對齊".to_string());
+        }
+        if view.shape == Shape::Markdown {
+            let escaped = at.is_some_and(|a| self.backslash_before(a));
+            if crate::mdtable::has_bare_pipe(text, escaped) {
+                return Some("'|' 分隔格子——格子裏要寫，寫成 \\|".to_string());
+            }
+            return text.chars().find_map(|c| self.cell_refuses_shape(c));
+        }
         text.chars().find_map(|c| self.cell_refuses(c))
+    }
+
+    /// Whether an odd run of backslashes sits immediately before `at`, so the
+    /// next character is escaped.
+    fn backslash_before(&self, at: usize) -> bool {
+        let rope = self.current_buffer().rope();
+        let mut run = 0;
+        let mut i = at;
+        while i > 0 && rope.char(i - 1) == '\\' {
+            run += 1;
+            i -= 1;
+        }
+        run % 2 == 1
+    }
+
+    /// The reasons that hold whatever the delimiter is: a row is one line, and
+    /// a tab is not a thing a cell of any of these kinds holds.
+    fn cell_refuses_shape(&self, c: char) -> Option<String> {
+        match c {
+            '\n' | '\r' => Some("換行會把這一行切成兩行".to_string()),
+            '\t' => Some("製表符進不了格子".to_string()),
+            _ => None,
+        }
     }
 
     /// The reason this range may not be cut out, if there is one.
@@ -3403,10 +3532,22 @@ impl Editor {
         if self.table.is_none() || self.table_bypass.get() {
             return None;
         }
+        if self.md_rule_here() {
+            return Some("分隔行是畫出來的——用 t < = > 改對齊".to_string());
+        }
         let rope = self.current_buffer().rope();
         let range = range.start.min(rope.len_chars())..range.end.min(rope.len_chars());
         if range.is_empty() {
             return None;
+        }
+        // The escape again: `\|` inside a cell is not a boundary, so taking it
+        // out is not taking a boundary out.
+        if self.table.as_ref().map(|v| v.shape) == Some(Shape::Markdown) {
+            let escaped = self.backslash_before(range.start);
+            let text = rope.slice(range).to_string();
+            return (crate::mdtable::has_bare_pipe(&text, escaped)
+                || text.contains(['\n', '\r']))
+            .then(|| "格與格之間的分隔不能刪掉".to_string());
         }
         rope.slice(range)
             .chars()
@@ -3421,6 +3562,12 @@ impl Editor {
     /// would then have to mark as damaged the moment it appeared. Opening a
     /// line therefore opens a *row*.
     fn blank_row(&self) -> String {
+        // Only where the grid's rules apply. `o` on the paragraph below a
+        // Markdown table was opening `|  |  |` — the mode leaking out of the
+        // thing it is about, which is the one promise it makes.
+        if !self.table_here() {
+            return String::new();
+        }
         match &self.table {
             Some(view) if view.shape == Shape::Markdown => {
                 crate::mdtable::blank_row(view.schema.columns.len())
@@ -3876,7 +4023,10 @@ impl Editor {
         // One choke point for a rule with three ways in — the config, `-v`, and
         // `:vertical`: a grid is read across, so table mode is horizontal. The
         // command explains the refusal; this is what makes it true.
-        if layout == Layout::Vertical && self.table.is_some() {
+        // Only a whole-file grid. A `|` table is part of a page, and a page
+        // is set the way the manuscript is set — otherwise running `:table`
+        // once locked a 縱書 manuscript horizontal for the session.
+        if layout == Layout::Vertical && self.table.as_ref().is_some_and(|v| v.is_grid()) {
             return;
         }
         self.layout = layout;
@@ -5596,7 +5746,9 @@ impl Editor {
         if self.table_here() {
             match key {
                 Key::Char(c) => {
-                    if let Some(why) = self.cell_refuses(c) {
+                    let mut buf = [0u8; 4];
+                    let one = c.encode_utf8(&mut buf);
+                    if let Some(why) = self.cell_refuses_text_at(Some(self.cursor), one) {
                         self.status = why;
                         return;
                     }
@@ -6696,7 +6848,7 @@ impl Editor {
     /// calls; this is one of them, and the check lives here so that adding an
     /// eighth way in cannot reopen the hole.
     fn edit_insert(&mut self, at: usize, text: &str) -> bool {
-        if let Some(why) = self.cell_refuses_text(text) {
+        if let Some(why) = self.cell_refuses_text_at(Some(at), text) {
             self.status = why;
             return false;
         }
@@ -6713,9 +6865,15 @@ impl Editor {
     fn substitution_breaks_the_grid(&self, rebuilt: &str) -> Option<String> {
         let view = self.table.as_ref()?;
         let d = view.schema.delimiter;
+        // A delimited file is all cells. A document is not: only its table
+        // rows are, and a paragraph that gains a `|` has gained a character.
+        // Counting the whole document refused `:%s/前文/前 | 文/` on a line
+        // nowhere near the table.
+        let rows_only = view.shape == Shape::Markdown;
         let before = self.current_buffer().rope().to_string();
         let count = |text: &str| -> Vec<usize> {
             text.lines()
+                .filter(|l| !rows_only || crate::mdtable::is_row(l))
                 .map(|l| l.chars().filter(|&c| c == d).count())
                 .collect()
         };
@@ -7177,6 +7335,13 @@ impl Editor {
         // of a different document now.
         self.segment_cache.borrow_mut().clear();
         self.cursor = 0;
+        // Whether *this* buffer is a grid is asked again, the way `show_buffer`
+        // asks it. Without this, `:table` and then `:!wc -l` left the shell
+        // output being edited as a table: `o` opened `|  |  |` in it and `:s`
+        // was guarded against a table that was in another file.
+        self.leave_table_quietly();
+        self.md_cache.borrow_mut().take();
+        self.table_on_open();
         self.anchor = 0;
         self.goal_column = 0;
         self.mode = Mode::Normal;
@@ -9271,6 +9436,145 @@ mod tests {
         assert!(ed.table().is_none());
         assert!(ed.status().contains("不像表格"), "{}", ed.status());
         std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn a_header_on_the_last_line_with_no_newline_still_gets_its_rule() {
+        // `line_to_char` of a line that does not exist is the end of the text,
+        // so the rule row was welded onto the header's own end and the table
+        // was gone — in exactly the case the feature advertises.
+        let mut ed = typed("前文\n| a | b |");
+        assert_eq!(ed.current_buffer().text(), "前文\n| a | b |");
+        ed.goto_line(2);
+        assert!(ed.enter_table(), "{}", ed.status());
+        assert_eq!(ed.current_buffer().text(), "前文\n| a | b |\n| - | - |");
+    }
+
+    #[test]
+    fn the_rule_row_is_drawn_not_written() {
+        let mut ed = with_md_table();
+        assert!(ed.enter_table());
+        // `gg`, `G`, `:N` and a search all land on the rule; cell motion does
+        // not. Standing there, nothing may change it.
+        let before = ed.current_buffer().text();
+        for door in ["c", "i", "a"] {
+            ed.goto_line(3);
+            press(&mut ed, door);
+            assert_eq!(ed.mode(), Mode::Normal, "`{door}` must not open a cell here");
+            assert!(ed.status().contains("分隔行"), "`{door}`: {}", ed.status());
+            assert_eq!(ed.current_buffer().text(), before);
+        }
+        // …and a structural key on it means the header it belongs to.
+        ed.goto_line(3);
+        press(&mut ed, "td");
+        assert_eq!(ed.current_buffer().text(), before);
+        assert!(ed.status().contains("標題行"), "{}", ed.status());
+        press(&mut ed, "to");
+        assert_eq!(ed.current_buffer().line_count(), 8, "a row was opened");
+        assert_eq!(ed.cell_position().map(|(l, _)| l), Some(3));
+    }
+
+    #[test]
+    fn the_table_mode_does_not_follow_the_cursor_out_of_the_table() {
+        let mut ed = with_md_table();
+        assert!(ed.enter_table());
+        ed.goto_line(6);
+        // `o` in the prose below opens a line, not a row.
+        press(&mut ed, "o");
+        ed.on_key(Key::Esc);
+        let text = ed.current_buffer().text();
+        assert!(!text.contains("|  |"), "{text}");
+        // The page is still the manuscript's page.
+        ed.set_layout(Layout::Vertical);
+        assert_eq!(ed.layout(), Layout::Vertical);
+        // And a substitution in prose is about prose.
+        ed.goto_line(1);
+        assert!(ed.execute("%s/前文/前 | 文/").is_ok(), "{}", ed.status());
+        assert!(ed.current_buffer().text().contains("前 | 文"), "{}", ed.status());
+    }
+
+    #[test]
+    fn a_cell_may_hold_an_escaped_pipe() {
+        // The manual says so: 「`|` 打不進格子…要用寫 `\|`」. It was not true.
+        let mut ed = with_md_table();
+        assert!(ed.enter_table());
+        press(&mut ed, "c");
+        press(&mut ed, r"a\|b");
+        ed.on_key(Key::Esc);
+        assert!(
+            ed.current_buffer().text().contains(r"a\|b"),
+            "{}",
+            ed.current_buffer().text()
+        );
+        // It is one cell, not two.
+        assert_eq!(ed.cell_text(3, 0), r"a\|b");
+        assert_eq!(ed.row_cells(3).len(), 2);
+        // A bare pipe is still refused.
+        press(&mut ed, "i");
+        press(&mut ed, "|");
+        ed.on_key(Key::Esc);
+        assert_eq!(ed.row_cells(3).len(), 2, "{}", ed.current_buffer().text());
+        // And `c` on a cell that holds the escape empties it, as documented.
+        press(&mut ed, "c");
+        press(&mut ed, "Q");
+        ed.on_key(Key::Esc);
+        assert_eq!(ed.cell_text(3, 0), "Q", "{}", ed.current_buffer().text());
+    }
+
+    #[test]
+    fn a_row_pasted_on_the_header_lands_under_the_rule() {
+        let mut ed = with_md_table();
+        assert!(ed.enter_table());
+        ed.goto_line(2);
+        ed.enter_table();
+        press(&mut ed, "Y");
+        press(&mut ed, "p");
+        let text = ed.current_buffer().text();
+        let lines: Vec<&str> = text.lines().collect();
+        assert!(lines[2].starts_with("| -"), "the rule is still line 2: {lines:?}");
+        assert_eq!(lines.len(), 7);
+    }
+
+    #[test]
+    fn a_table_in_a_code_fence_is_a_quotation() {
+        let mut ed = typed("說明：\n\n```\n| a | b |\n| --- | --- |\n| xxxx | y |\n```\n");
+        ed.goto_line(4);
+        let before = ed.current_buffer().text();
+        assert!(!ed.enter_table(), "{}", ed.status());
+        assert_eq!(ed.current_buffer().text(), before);
+        assert!(ed.status().contains("代碼塊"), "{}", ed.status());
+    }
+
+    #[test]
+    fn one_column_is_a_line_with_a_pipe_in_it() {
+        let mut ed = typed("一段話\n| 這行以豎線開頭\n又一段\n");
+        ed.goto_line(2);
+        let before = ed.current_buffer().text();
+        assert!(!ed.enter_table(), "{}", ed.status());
+        assert_eq!(ed.current_buffer().text(), before);
+    }
+
+    #[test]
+    fn a_crlf_table_stays_crlf() {
+        let mut ed = Editor::new();
+        let buffer = crate::Buffer::from_text("| a | b |\r\n| --- | --- |\r\n| xxx | y |\r\n");
+        ed.add_buffer(buffer);
+        ed.goto_line(1);
+        assert!(ed.enter_table(), "{}", ed.status());
+        let text = ed.current_buffer().text();
+        assert_eq!(text.matches("\r\n").count(), 3, "{text:?}");
+        assert!(!text.contains("|\n"), "{text:?}");
+    }
+
+    #[test]
+    fn a_new_buffer_is_not_the_table_that_was_open() {
+        let mut ed = with_md_table();
+        assert!(ed.enter_table());
+        ed.provide_shell_output("wc -l", "3\n");
+        assert!(ed.table().is_none(), "the grid does not follow to another file");
+        press(&mut ed, "o");
+        ed.on_key(Key::Esc);
+        assert!(!ed.current_buffer().text().contains("|  |"), "{}", ed.current_buffer().text());
     }
 
     #[test]
