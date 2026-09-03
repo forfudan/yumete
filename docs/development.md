@@ -360,6 +360,7 @@ Phases are ordered by priority, most writer-critical first:
 | 161 | **`--timing`**                              | cli    | P2    | a whole launch, phase by phase | Done |
 | 162 | **`:syntax text` and `--syntax`**           | both   | P2    | a file with no markup, and this run's answer about these files | Done |
 | 163 | **`:indent hint`**                          | both   | P3    | white by default; a band or a `↵` while a draft is being edited | Done |
+| 164 | **【黑白】, a second theme**                 | both   | P2    | greys only: what warmth said in 墨香, position says here | Done |
 
 ---
 

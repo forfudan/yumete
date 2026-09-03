@@ -1334,9 +1334,6 @@ en = "how many squares open a paragraph (Chinese marks one with two, not a blank
 zh = "主題：哪一個，以及深色淺色還是跟着終端"
 en = "theme: which one, and dark, light or the terminal's own"
 
-[[message]]
-zh = "墨香：三個顏色，其餘的色階都算出來"
-en = "moxiang: three colours, every other shade computed"
 
 [[message]]
 zh = "主題：{0}（{1}）"
@@ -1457,3 +1454,11 @@ en = "a mark in the first one (↵ by default — a line break is what it replac
 [[message]]
 zh = "縮進標記：{0}"
 en = "indent hint: {0}"
+
+[[message]]
+zh = "墨香：黑墨、白金墨、金墨、紅墨，其餘的色階都算出來"
+en = "moxiang: black, white-gold, gold and red ink; every other shade computed"
+
+[[message]]
+zh = "黑白：只有黑、白和灰——輕重說話，顏色不說"
+en = "heibai: black, white and grey only — weight says it, colour says nothing"

@@ -373,15 +373,14 @@ pub fn parse(input: &str) -> Result<Command, CommandError> {
                     Some("system") => mood = Some(Mood::System),
                     Some("dark") => mood = Some(Mood::Dark),
                     Some("light") => mood = Some(Mood::Light),
-                    _ if word == "墨香"
-                        || pick(word, THEMES).map(|w| w.name) == Some("moxiang") =>
-                    {
-                        name = Some("moxiang".to_string());
-                    }
+                    // Anything else is a theme's name. Which names exist is
+                    // the front end's business — it is the one holding the
+                    // colours — so an unknown one is answered there, in a
+                    // sentence, rather than refused here as a syntax error.
                     _ => {
-                        return Err(CommandError::InvalidArgument {
-                            command: "theme",
-                            value: word.to_string(),
+                        name = Some(match pick(word, THEMES).map(|w| w.name) {
+                            Some(known) => known.to_string(),
+                            None => word.to_string(),
                         })
                     }
                 }
@@ -1037,7 +1036,12 @@ const SYNTAXES: &[Word] = &[
 const THEMES: &[Word] = &[
     Word {
         name: "moxiang",
-        help: "墨香：三個顏色，其餘的色階都算出來",
+        help: "墨香：黑墨、白金墨、金墨、紅墨，其餘的色階都算出來",
+        then: Args::Words(MOODS),
+    },
+    Word {
+        name: "heibai",
+        help: "黑白：只有黑、白和灰——輕重說話，顏色不說",
         then: Args::Words(MOODS),
     },
     Word {
@@ -1980,8 +1984,10 @@ mod tests {
                 mood: None
             }
         );
-        // The name in either script, and the mood with or without it.
-        for line in [":theme moxiang dark", ":theme 墨香 dark", ":theme mo d"] {
+        // The name, and the mood with or without it. A name the words know is
+        // canonicalised; anything else is passed on as typed, because which
+        // themes exist is the front end's business.
+        for line in [":theme moxiang dark", ":theme mo d"] {
             assert_eq!(
                 theme(line),
                 Command::Theme {
@@ -1991,6 +1997,20 @@ mod tests {
                 "{line}"
             );
         }
+        assert_eq!(
+            theme(":theme 墨香 dark"),
+            Command::Theme {
+                name: Some("墨香".into()),
+                mood: Some(Dark)
+            }
+        );
+        assert_eq!(
+            theme(":theme heibai"),
+            Command::Theme {
+                name: Some("heibai".into()),
+                mood: None
+            }
+        );
         for (line, want) in [
             (":theme light", Light),
             (":theme system", System),
@@ -2005,7 +2025,15 @@ mod tests {
                 "{line}"
             );
         }
-        assert!(parse(":theme solarized").is_err());
+        // An unknown name is not a *syntax* error: it is answered where the
+        // colours are.
+        assert_eq!(
+            theme(":theme solarized"),
+            Command::Theme {
+                name: Some("solarized".into()),
+                mood: None
+            }
+        );
     }
 
     #[test]

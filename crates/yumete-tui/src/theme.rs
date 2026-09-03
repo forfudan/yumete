@@ -34,7 +34,36 @@
 
 use ratatui::style::{Color, Style};
 use std::sync::atomic::{AtomicU8, Ordering};
-use yumete_config::{rung, Config, Ground, Ladder, Mode};
+use std::sync::RwLock;
+use yumete_config::{rung, Config, Ground, Ladder, Mode, ThemeConfig};
+
+/// The theme `:theme` picked, if it picked one.
+///
+/// The config's own theme is what the editor starts in; this is the one a
+/// reader named while it was running, and it outranks it for as long as the
+/// session lasts. Not written back to the config file — that is for what you
+/// want every day.
+static CHOSEN: RwLock<Option<ThemeConfig>> = RwLock::new(None);
+
+/// What the theme in force is called.
+pub fn name(config: &Config) -> String {
+    in_force(config).name
+}
+
+/// Wear this theme from now on.
+pub fn choose(theme: ThemeConfig) {
+    if let Ok(mut chosen) = CHOSEN.write() {
+        *chosen = Some(theme);
+    }
+}
+
+/// The theme in force: the one `:theme` named, else the config's.
+fn in_force(config: &Config) -> ThemeConfig {
+    match CHOSEN.read().ok().and_then(|c| c.clone()) {
+        Some(theme) => theme,
+        None => config.theme.clone(),
+    }
+}
 
 /// Which mood is in force, once the terminal has been asked.
 ///
@@ -226,7 +255,7 @@ pub struct Palette {
 impl Palette {
     /// The palette in force.
     pub fn of(config: &Config) -> Palette {
-        Palette::in_mood(config, dark())
+        Palette::of_theme(&in_force(config), dark())
     }
 
     /// The palette a config would give in the stated mood.
@@ -235,11 +264,16 @@ impl Palette {
     /// that draws is handed it; this is the way in that does not consult it,
     /// which is what lets a test say what it means.
     pub fn in_mood(config: &Config, dark: bool) -> Palette {
+        Palette::of_theme(&config.theme, dark)
+    }
+
+    /// One theme, in one mood.
+    pub fn of_theme(theme: &ThemeConfig, dark: bool) -> Palette {
         Palette {
-            ladder: config.theme.ladder(dark),
-            mark: config.theme.mark(dark),
-            gold: config.theme.gold(dark),
-            paint: config.theme.ground == Ground::Paint,
+            ladder: theme.ladder(dark),
+            mark: theme.mark(dark),
+            gold: theme.gold(dark),
+            paint: theme.ground == Ground::Paint,
         }
     }
 
@@ -418,6 +452,38 @@ mod tests {
                 let got = contrast(p.text(), ground);
                 assert!(got >= 4.5, "dark={dark}: the writing is {got:.2}:1 on {name}");
             }
+        }
+    }
+
+    #[test]
+    fn the_black_and_white_theme_says_it_all_without_a_hue() {
+        // 黑白 is not 墨香 with the colour turned down: what warmth said there,
+        // *position* has to say here — so 金 and 朱 leave the ladder by going
+        // past its ends rather than by leaving its hue.
+        for dark in [true, false] {
+            let theme = yumete_config::ThemeConfig::named("黑白").expect("黑白");
+            let p = Palette::of_theme(&theme, dark);
+            for (name, ink, bar) in [
+                ("the writing", p.text(), 4.5),
+                ("a reading", p.quiet(), 4.5),
+                ("furniture", p.furniture(), 3.0),
+                ("金", p.gold(), 4.5),
+                ("朱", p.mark(), 3.0),
+            ] {
+                let got = contrast(ink, p.paper());
+                assert!(got >= bar, "dark={dark}: {name} is {got:.2}:1 on the page");
+            }
+            // Nothing in it has a hue at all.
+            for colour in [p.text(), p.quiet(), p.paper(), p.gold(), p.mark()] {
+                let Color::Rgb(r, g, b) = colour else { panic!() };
+                assert!(r == g && g == b, "dark={dark}: {colour:?} is not a grey");
+            }
+            // 金 is past the writing, not beside it: the one thing brighter
+            // than the prose is the thing that is not prose.
+            assert!(
+                contrast(p.gold(), p.paper()) > contrast(p.text(), p.paper()),
+                "dark={dark}: 金 does not stand out"
+            );
         }
     }
 
