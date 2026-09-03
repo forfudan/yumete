@@ -998,6 +998,8 @@ fn ime_handle(
         | KeyCode::Down
         | KeyCode::Home
         | KeyCode::End
+        | KeyCode::PageUp
+        | KeyCode::PageDown
         | KeyCode::Delete
         | KeyCode::Tab
         | KeyCode::BackTab
@@ -1045,6 +1047,8 @@ fn map_key(code: KeyCode, modifiers: KeyModifiers) -> Option<Key> {
         KeyCode::Down => Some(Key::Down),
         KeyCode::Home => Some(Key::Home),
         KeyCode::End => Some(Key::End),
+        KeyCode::PageUp => Some(Key::PageUp),
+        KeyCode::PageDown => Some(Key::PageDown),
         KeyCode::Tab => Some(Key::Tab),
         KeyCode::BackTab => Some(Key::BackTab),
         _ => None,

@@ -6850,8 +6850,11 @@ impl Editor {
                     self.refresh_sidebar();
                 }
             }
-            Key::Ctrl('f') => self.move_page(count, false, 1.0),
-            Key::Ctrl('b') => self.move_page(count, true, 1.0),
+            // …and the keys a keyboard already has for it. `C-f`/`C-b` are
+            // vi's; these are the ones a reader who has never used vi presses,
+            // and they used to do nothing at all.
+            Key::Ctrl('f') | Key::PageDown => self.move_page(count, false, 1.0),
+            Key::Ctrl('b') | Key::PageUp => self.move_page(count, true, 1.0),
             // Back and forward through the places jumps came from, as in vi
             // and in Helix. Under the Kitty protocol `C-i` and Tab are told
             // apart; without it a terminal sends the same byte for both, and
@@ -7216,6 +7219,17 @@ impl Editor {
         match key {
             Key::Char('j') | Key::Down => sidebar.step(true),
             Key::Char('k') | Key::Up => sidebar.step(false),
+            // A list pages too, and by the same keys.
+            Key::PageDown => {
+                for _ in 0..10 {
+                    sidebar.step(true);
+                }
+            }
+            Key::PageUp => {
+                for _ in 0..10 {
+                    sidebar.step(false);
+                }
+            }
             // The views are built when they are opened, not on every key, so
             // `R` is how a writer who has just added a file or a chapter says
             // to look again.
@@ -7348,6 +7362,16 @@ impl Editor {
             }
             Key::Down | Key::Tab | Key::Ctrl('n') => picker.step(true),
             Key::Up | Key::BackTab | Key::Ctrl('p') => picker.step(false),
+            Key::PageDown => {
+                for _ in 0..10 {
+                    picker.step(true);
+                }
+            }
+            Key::PageUp => {
+                for _ in 0..10 {
+                    picker.step(false);
+                }
+            }
             Key::Enter => {
                 let chosen = picker.chosen();
                 self.close_picker();
@@ -7788,11 +7812,18 @@ impl Editor {
             Key::Right => self.move_horizontal(motion::right),
             Key::Up => self.move_vertical(true),
             Key::Down => self.move_vertical(false),
-            Key::Home => {
+            // A page at a time, while typing: the same motion Normal makes,
+            // because a page is a page whichever mode you are in.
+            Key::PageUp => self.move_page(1, true, 1.0),
+            Key::PageDown => self.move_page(1, false, 1.0),
+            // `C-a`/`C-e` are the same two places, and are what a hand that
+            // has ever used a terminal prompt reaches for — the `:` line has
+            // taken them all along, and Insert swallowed them.
+            Key::Home | Key::Ctrl('a') => {
                 let pos = motion::line_start(self.current_buffer().rope(), self.cursor);
                 self.set_cursor(pos);
             }
-            Key::End => {
+            Key::End | Key::Ctrl('e') => {
                 let pos = motion::line_end(self.current_buffer().rope(), self.cursor);
                 self.set_cursor(pos);
             }
@@ -11056,6 +11087,41 @@ mod tests {
         assert_eq!(ed.current_buffer().text(), before, "and undoes itself");
 
         std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn the_keys_a_keyboard_has_are_not_swallowed() {
+        // PageUp/PageDown reached the editor as *nothing*: the table that turns
+        // a terminal's keys into the editor's had no line for them, so they
+        // fell off the end in every mode. `C-a`/`C-e` were taken by the `:`
+        // line and swallowed by Insert.
+        let mut ed = typed(&"一行\n".repeat(200));
+        ed.set_page(20, 80);
+        ed.execute("1").unwrap();
+        ed.on_key(Key::PageDown);
+        assert!(ed.cursor_line() > 10, "a page down: {}", ed.cursor_line());
+        let down = ed.cursor_line();
+        ed.on_key(Key::PageUp);
+        assert!(ed.cursor_line() < down, "and a page back");
+
+        // …and in Insert, without leaving it.
+        ed.on_key(Key::Char('i'));
+        let was = ed.cursor_line();
+        ed.on_key(Key::PageDown);
+        assert!(ed.cursor_line() > was, "a page down while typing");
+        assert_eq!(ed.mode(), Mode::Insert, "and still typing");
+        ed.on_key(Key::Char('甲'));
+        ed.on_key(Key::Ctrl('a'));
+        assert_eq!(
+            ed.cursor(),
+            crate::motion::line_start(ed.current_buffer().rope(), ed.cursor()),
+            "C-a is the line's start, as it is on the `:` line"
+        );
+        ed.on_key(Key::Ctrl('e'));
+        assert_eq!(
+            ed.cursor(),
+            crate::motion::line_end(ed.current_buffer().rope(), ed.cursor())
+        );
     }
 
     #[test]

@@ -375,6 +375,7 @@ Phases are ordered by priority, most writer-critical first:
 | 176 | **Split work areas**                        | both   | P1    | two panes over one buffer, cut across the direction the text runs; `Enter` shows rather than goes | Done |
 | 177 | **The half being read is a rung back**      | tui    | P1    | which half holds the keys, by weight — tmux's answer, on 墨香's own ladder | Done |
 | 178 | **The hit you are standing on**             | tui    | P2    | 朱's wash on the match, a band on its row, 朱 on its number — the number kept, not replaced | Done |
+| 179 | **The keys a keyboard has**                 | both   | P2    | PageUp/PageDown reached the editor as nothing; `C-a`/`C-e` were swallowed by Insert | Done |
 
 ---
 
