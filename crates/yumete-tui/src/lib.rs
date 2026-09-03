@@ -61,10 +61,22 @@ pub fn terminal_width() -> Option<usize> {
         .filter(|&w| w > 0)
 }
 
+/// The reading a launch puts off until the page is on the screen.
+///
+/// The language data is 14 MB and, read cold, is most of what「開個檔案要幾
+/// 秒」 was: none of it is needed to *draw* the first page — it is needed by
+/// `w`, by the word overlay, and by typing 漢字, all of which are at least one
+/// keystroke away. It cannot be read on another thread (yume's engine holds
+/// `Rc`s and is not `Send`), so it is read here, after the first frame, where
+/// the wait is something the reader watches finish rather than something they
+/// wait through in front of a blank terminal.
+pub type Deferred = Box<dyn FnOnce(&mut ImeSession) -> String>;
+
 pub fn run(
     editor: &mut Editor,
     config: &Config,
     ime: &mut ImeSession,
+    mut deferred: Option<Deferred>,
 ) -> io::Result<()> {
     // Which mood 墨香 is in, settled before the first frame — and before the
     // alternate screen, because the question is put to the terminal and read
@@ -160,6 +172,22 @@ pub fn run(
         }
         if let Err(err) = terminal.draw(|frame| draw(frame, editor, config, ime, &mut viewport)) {
             break Err(err);
+        }
+        // The page is up; now the 14 MB. Between these two lines is the whole
+        // of what a cold start used to spend before showing anything.
+        if let Some(load) = deferred.take() {
+            let said = load(ime);
+            if !said.is_empty() {
+                editor.set_status(said);
+            }
+            let words = ime.segmenter();
+            if words.is_available() {
+                editor.set_segmenter(Box::new(words));
+                // The book's own words sit on top of whichever dictionary it
+                // turned out to be.
+                editor.reload_project_words();
+            }
+            continue;
         }
         match event::read() {
             Ok(Event::Key(key)) => {

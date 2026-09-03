@@ -206,14 +206,36 @@ fn main() -> ExitCode {
     // waits for `:yume scheme`.
     mark("ruby", &mut marks);
     let wanted = Scheme::from_tag(&config.ime.scheme).unwrap_or(Scheme::Lingming);
-    let mut ime = ImeSession::language_only(wanted);
-    ime.set_page_size(config.panel.page_size);
     editor.set_chaifen(config.editor.show_chaifen);
-    if config.ime.start {
-        // …unless the config says this is a session for writing 漢字, which
-        // for the author of an input method it usually is.
-        editor.set_status(switch_scheme_at_startup(&mut ime, wanted, &config));
-    }
+    let page_size = config.panel.page_size;
+    let chaifen = config.editor.show_chaifen;
+    let start_scheme = config.ime.start;
+    // Read after the first frame rather than before it — see `yumete_tui::
+    // Deferred`. Everything it loads is a keystroke away; the page is not.
+    let load = move |ime: &mut ImeSession| -> String {
+        *ime = ImeSession::language_only(wanted);
+        ime.set_page_size(page_size);
+        match start_scheme {
+            // …unless the config says this is a session for writing 漢字,
+            // which for the author of an input method it usually is.
+            true => switch_scheme_at_startup(ime, wanted, (page_size, chaifen)),
+            false => String::new(),
+        }
+    };
+    // A preview prints and exits: there is no frame to be after, so it is read
+    // now. So does `--timing`, which is measuring exactly this.
+    let printing_now = force_preview || !std::io::stdout().is_terminal() || timing;
+    let mut ime = ImeSession::empty(wanted);
+    let deferred: Option<yumete_tui::Deferred> = match printing_now {
+        true => {
+            let said = load(&mut ime);
+            if !said.is_empty() {
+                editor.set_status(said);
+            }
+            None
+        }
+        false => Some(Box::new(load)),
+    };
 
     mark("輸入法", &mut marks);
     // Word segmentation, driving `w`/`b`/`e` and the overlay. Best first:
@@ -277,7 +299,7 @@ fn main() -> ExitCode {
     // Only the editor has one; the preview prints its own notice instead.
     editor.announce_recovery();
 
-    let outcome = yumete_tui::run(&mut editor, &config, &mut ime);
+    let outcome = yumete_tui::run(&mut editor, &config, &mut ime, deferred);
     // Written on the way out, whichever way out it was: an editor that only
     // remembered a clean exit would forget the session you most wanted back.
     editor.save_session();
@@ -307,14 +329,14 @@ fn load_segmentation_dictionary(threshold: i64) -> Option<DictionarySegmenter> {
 fn switch_scheme_at_startup(
     ime: &mut ImeSession,
     wanted: Scheme,
-    config: &yumete_config::Config,
+    (page_size, chaifen): (usize, bool),
 ) -> String {
     let mut full = ImeSession::from_default_dirs(wanted);
     if !full.available() && wanted != Scheme::Lingming {
         full = ImeSession::from_default_dirs(Scheme::Lingming);
     }
-    full.set_page_size(config.panel.page_size);
-    full.set_annotations(config.editor.show_chaifen);
+    full.set_page_size(page_size);
+    full.set_annotations(chaifen);
     let name = full.scheme_name().to_string();
     let ok = full.available();
     *ime = full;
