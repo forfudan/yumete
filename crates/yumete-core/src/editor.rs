@@ -5289,11 +5289,119 @@ impl Editor {
     /// wiki-shaped editor does and what a writer typing `[^1]` means.
     fn show_definition(&mut self, preview: bool) {
         self.definition_preview = preview;
-        if self.table_here() && self.cursor_in_link_column() {
-            self.follow_cell();
+        // **In a grid, `gd` is one question with one answer**: which row has
+        // *this* in the column that names rows. Standing on 木 in a 拆分 cell,
+        // 木's own row; standing on 木 in the key column, the same row, which
+        // is where you already are — and that is not a disappointment, it is
+        // the question answering itself.
+        //
+        // It used to be two questions decided by which column the cursor was
+        // in — follow the link here, search for who uses it there — and 「誰用
+        // 了它」 is what `Enter` is for. One key, one meaning.
+        if self.table_here() {
+            let span = self.column_span.take();
+            self.go_to_the_row_named(span, preview);
             return;
         }
         self.follow_note();
+    }
+
+    /// The row whose cell in the named column is **exactly** what is here.
+    ///
+    /// `gd` searches the key column — the one a schema names as what its rows
+    /// are *about* — or the first, if none is named. `3gd` searches column
+    /// three; `2-5gd` searches columns two through five, which is how a 拆分表
+    /// with four spellings of the same decomposition is asked one question.
+    fn go_to_the_row_named(&mut self, span: Option<(usize, usize)>, preview: bool) {
+        let Some(view) = self.table.as_ref() else {
+            return;
+        };
+        let columns = view.schema.columns.len().max(1);
+        // What is being looked up: the selection when there is one, else what
+        // the cursor is on — by character or by cell, following `Tab`, which is
+        // the same unit `hjkl` move by.
+        // **More than the caret's own character.** Every motion here leaves a
+        // selection — that is the editing model — so 「is something selected」
+        // is not `to > from`, which is true of standing still.
+        let (from, to) = self.selection();
+        let needle = match to > from + 1 {
+            true => self
+                .current_buffer()
+                .rope()
+                .slice(from..to.min(self.current_buffer().rope().len_chars()))
+                .to_string(),
+            false => match view.grain {
+                Grain::Char => self.char_at_cursor().map(String::from).unwrap_or_default(),
+                _ => self
+                    .cell_position()
+                    .map(|(line, cell)| self.cell_text(line, cell))
+                    .unwrap_or_default(),
+            },
+        };
+        let needle = needle.trim().to_string();
+        if needle.is_empty() {
+            self.status = say!("這一格是空的");
+            return;
+        }
+        // ⿰⿱⿲ say how the components are arranged. There is nowhere to go
+        // from one, and 「表裏沒有⿰」 is the wrong thing to say about it — no
+        // table has a row for a piece of grammar.
+        if let Some(c) = needle.chars().next() {
+            if needle.chars().count() == 1 && is_ids_operator(c) {
+                self.status = say!("「{0}」是結構符，不是部件", c);
+                return;
+            }
+        }
+        // The columns to look in, 1-based as the reader counts them.
+        let (first, last) = match span {
+            Some((a, b)) => (a.min(b), a.max(b)),
+            None => {
+                let key = view
+                    .schema
+                    .link
+                    .as_ref()
+                    .and_then(|link| view.schema.index_of(&link.to))
+                    .unwrap_or(0)
+                    + 1;
+                (key, key)
+            }
+        };
+        let (first, last) = (first.clamp(1, columns) - 1, last.clamp(1, columns) - 1);
+        let named: Vec<String> = (first..=last)
+            .filter_map(|c| view.schema.columns.get(c).map(|col| col.name.clone()))
+            .collect();
+        let rows = self.current_buffer().line_count();
+        let mut found = Vec::new();
+        for line in 0..rows {
+            for cell in first..=last {
+                if self.cell_text(line, cell).trim() == needle {
+                    found.push((line, cell));
+                    break;
+                }
+            }
+        }
+        let which = match named.len() {
+            1 => named.first().cloned().unwrap_or_default(),
+            _ => say!("第 {0}–{1} 欄", first + 1, last + 1),
+        };
+        match found.len() {
+            0 => self.status = say!("{0} 裏沒有「{1}」", which, needle),
+            _ => {
+                let (line, cell) = found[0];
+                match preview {
+                    true => self.show_row(line),
+                    false => {
+                        self.remember_jump();
+                        self.goto_line(line + 1);
+                        self.go_to_cell(line, cell);
+                    }
+                }
+                self.status = match found.len() {
+                    1 => say!("{0}：{1}", which, needle),
+                    n => say!("{0}：{1}（{2} 處，第一處）", which, needle, n),
+                };
+            }
+        }
     }
 
     /// `Enter` on prose: **who else says this?**
@@ -12346,6 +12454,67 @@ mod tests {
         std::fs::remove_dir_all(&dir).ok();
     }
 
+    /// `gd` in a grid: **the row named by what is here, in one column**.
+    ///
+    /// `gd` searches the key column, `3gd` column three, `2-5gd` columns two
+    /// through five. One column, one exact match, one place to land — which on
+    /// a 拆分表 is the row the component is *about*.
+    #[test]
+    fn gd_looks_the_cell_up_in_one_named_column() {
+        let dir = std::env::temp_dir().join(format!("yumete-gdcol-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(dir.join(".yumete").join("tables")).unwrap();
+        std::fs::write(
+            dir.join(".yumete").join("tables").join("t.toml"),
+            "[table]\nfile = ['d.csv']\nkey = 'char'\n\
+             [[table.column]]\nname = 'char'\n[[table.column]]\nname = 'ids_y'\n\
+             [[table.column]]\nname = 'ids_g'\n\
+             [table.link]\nfrom = ['ids_y']\nto = 'char'\n",
+        )
+        .unwrap();
+        let csv = dir.join("d.csv");
+        std::fs::write(
+            &csv,
+            "char,ids_y,ids_g\n相,⿰木目,⿰木目\n木,木,朩\n目,目,目\n杏,⿱木口,⿱木囗\n",
+        )
+        .unwrap();
+
+        let mut ed = Editor::new();
+        ed.open_file(&csv).unwrap();
+        // Standing on 杏's 拆分, by character, on the 木.
+        ed.execute("5").unwrap();
+        press(&mut ed, "l");
+        ed.on_key(Key::Tab);
+        press(&mut ed, "l");
+        assert_eq!(ed.char_at_cursor(), Some('木'));
+
+        // `gd` goes to 木's own row and lands in the key cell.
+        press(&mut ed, "gd");
+        assert_eq!(ed.cursor_line(), 2, "{}", ed.status());
+        assert_eq!(ed.cell_position().map(|(_, c)| c), Some(0));
+
+        // Back to reading by cell, on 相's 拆分.
+        ed.on_key(Key::Tab);
+        ed.execute("2").unwrap();
+        press(&mut ed, "l");
+        assert_eq!(ed.cell_text(1, 1), "⿰木目");
+        press(&mut ed, "gd");
+        assert!(ed.status().contains("沒有"), "no row is called ⿰木目: {}", ed.status());
+
+        // `3gd` asks the third column instead, where 朩 is 木's spelling.
+        ed.execute("3").unwrap();
+        press(&mut ed, "l");
+        press(&mut ed, "l");
+        assert_eq!(ed.cell_text(2, 2), "朩");
+        for key in "3gd".chars() {
+            ed.on_key(Key::Char(key));
+        }
+        assert_eq!(ed.cursor_line(), 2, "朩 is in ids_g on 木's row: {}", ed.status());
+        assert_eq!(ed.cell_position().map(|(_, c)| c), Some(2), "in that column");
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
     #[test]
     fn a_component_leads_to_its_own_row() {
         let dir = std::env::temp_dir().join(format!("yumete-jump-{}", std::process::id()));
@@ -12375,25 +12544,44 @@ mod tests {
             "⿰ is the grammar, not a component: it is not listed at all"
         );
 
-        // Two of them do, so Enter asks which rather than guessing — and then
-        // **shows** it in the other work area rather than going there
-        // (Feature #176): you stay on 相, and 木's row is beside it.
+        // **`gd` is one question**: which row is named by what is here. The
+        // cell holds ⿰木目 and no row is called that, so by cell it says so —
+        // and `Tab` is how you ask about one component, because `Tab` is what
+        // decides what 「here」 means for every other key too.
         let here = ed.cursor_line();
+        // **By cell** — which is how a grid is read until `Tab` says otherwise
+        // — the whole cell is the question, and no row is called ⿰木目. It says
+        // so rather than guessing which third of it you meant.
         press(&mut ed, "gw");
-        assert_eq!(ed.mode(), Mode::Picker);
-        ed.on_key(Key::Enter);
-        assert_eq!(ed.peeked_line(), Some(2), "木's own row, in the other area");
-        assert_eq!(ed.cursor_line(), here, "…and the cursor did not move");
-        assert_eq!(ed.mode(), Mode::Normal);
+        assert!(ed.status().contains("⿰木目"), "{}", ed.status());
+        assert_eq!(ed.mode(), Mode::Normal, "no picker: one question, one answer");
 
-        // A cell with one component needs no picker.
-        ed.goto_line(4);
+        // `Tab` is how you ask about one component, because `Tab` is what
+        // decides what 「here」 means for every other key too.
+        ed.on_key(Key::Tab);
+        assert_eq!(ed.char_at_cursor(), Some('⿰'));
+        press(&mut ed, "gw");
+        assert!(ed.status().contains("結構符"), "{}", ed.status());
+        press(&mut ed, "l");
+        assert_eq!(ed.char_at_cursor(), Some('木'));
+        press(&mut ed, "gw");
+        assert_eq!(ed.peeked_line(), Some(2), "木's own row: {}", ed.status());
+        assert_eq!(ed.cursor_line(), here, "…and the cursor did not move");
         press(&mut ed, "l");
         press(&mut ed, "gw");
-        assert_eq!(ed.peeked_line(), Some(3), "目 is already its own row");
+        assert_eq!(ed.peeked_line(), Some(3), "and 目's, one character along");
+        ed.on_key(Key::Tab);
 
-        // From the key column the question turns round: not "what is this made
-        // of" but "who is made of this". 相 and 目 both use 目.
+        // `gd` goes rather than shows, and lands **in the cell**, not merely on
+        // the line.
+        ed.goto_line(4);
+        press(&mut ed, "l");
+        press(&mut ed, "gd");
+        assert_eq!(ed.cursor_line(), 3, "目 is already its own row");
+        assert_eq!(ed.cell_position().map(|(_, c)| c), Some(0), "in the key cell");
+
+        // 「誰用了它」 is `Enter`, and stays `Enter`: 相 and 目 both use 目.
+        ed.goto_line(4);
         press(&mut ed, "0");
         ed.on_key(Key::Enter);
         assert_eq!(ed.peeked_line(), Some(1), "相 uses 目");
