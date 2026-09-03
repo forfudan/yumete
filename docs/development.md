@@ -638,42 +638,35 @@ dep and ship the tarballs §5.3 already designs. **high**
   `[keys.normal] "J" = "gJ"` puts join back. One config line instead of
   leaving.
 
-### 5 · Table mode (#118)
+### 5 · Table mode (#118) — **done**
 
-- **`add_buffer` never re-evaluates table mode**, so `:grep`, `:sh`, `:toc` and
-  picker output are drawn as a 28-column grid with every row flagged torn. One
-  line: call `table_on_open()` there, as `show_buffer` already does. **high**
-- **There is no way to delete a row.** `cell_refuses_cut` fires in char grain
-  too, and `:%s/…\n//` is refused by the grid check. A table editor that cannot
-  remove a line is not one. **high**
-- **`!` / `:pipe` is refused in a table** — after spawning the command and
-  throwing its output away — while the manual advertises `LC_ALL=C sort` as *the*
-  example. Check the invariant before spawning, and let a pipe whose output has
-  the same shape through. **high**
-- **IDS operators are reported as missing rows.** ⿰⿱⿲… appear 9,046 times in
-  the ids_y column alone and every one gets the red 「—」 that means "no row for
-  this", so the panel's one validation signal is false on nearly every
-  structured row. Skip U+2FF0–U+2FFF. **high**
-- **28 columns, ~5 of which carry data on a given row.** `b2` and `d1` are empty
-  in all 123,380 rows and still cost 8 cells each. A `hidden` key per column,
-  and blank-field suppression in the detail panel. **high**
-- **No "go to 木's row".** The `char → line` index is built and answers in
-  300 ns; nothing exposes it. `:row 木`. **high**
-- **`d` in cell grain deletes one character, not the cell** — and errors on an
-  empty cell, which is ~80% of them. **high**
-- **Tab in Insert should commit and move to the next cell** — every grid editor
-  binds it so, and `Tab`'s other job is Normal-mode only. Filling a 28-column
-  row costs 108 keys of pure overhead today. **medium**
-- **`O` on the header row inserts a row above the header**, after which the key
-  index treats the literal string `char` as a key. **medium**
-- **The 部件 list is the first thing truncated** in the detail panel, below 28
-  mostly-blank fields. Draw it first, or pin it to the bottom. **medium**
-- **The vertical candidate panel shows 拆分 for the highlighted candidate only**;
-  the horizontal one shows it for every row, which is what comparing candidates
-  needs. **medium**
-- **`:table check`** — duplicate keys, components with no row, ragged rows,
-  characters outside the declared block. All four are `:grep`-shaped answers
-  over a buffer the editor already knows how to make. **medium**
+- ~~`add_buffer` never re-evaluates table mode~~ — `:grep`, `:sh` and picker
+  output are their own buffers again.
+- ~~No way to delete a row~~ — `t d`, and `t j`/`t k` to move one. The guard
+  that makes a grid safe was what made it impossible: a whole row is nothing
+  *but* delimiters.
+- ~~`!` / `:pipe` refused in a table~~ — a filter over whole rows goes through,
+  checked on the invariant that actually matters: **every row that comes back
+  has a row's shape**. `sort -u` dropping a duplicate row is a table operation,
+  not damage.
+- ~~IDS operators reported as missing rows~~ — ⿰⿱⿲ are the grammar, not
+  components. 9,046 false 「—」 in one column.
+- ~~28 columns, ~5 with data~~ — `hidden = true` per column (read and written,
+  not drawn, not stopped in), and the detail panel drops blank fields.
+- ~~No "go to 木's row"~~ — `:row 木`.
+- ~~`d` in cell grain deletes one character~~ — it clears the cell, unless a
+  selection is standing.
+- ~~Tab in Insert should commit and move to the next cell~~ — and `S-Tab` back;
+  in a Markdown table the last cell of the last row opens another.
+- ~~`O` on the header row~~ — it opens under the header and says so.
+- ~~The 部件 list is the first thing truncated~~ — it is drawn first now, under
+  the title, because it is what the panel is read for.
+- ~~The vertical candidate panel shows 拆分 for the highlighted candidate
+  only~~ — every candidate carries its own, set back. (That extra column was
+  also shifting every candidate one place right of the number the style code
+  thought it was, so with annotations on the highlight was off by one.)
+- ~~`:table check`~~ — duplicate row names, components with no row, ragged
+  rows, in a `gf`-shaped results buffer.
 
 ### 6 · `:s`, and the command line
 
