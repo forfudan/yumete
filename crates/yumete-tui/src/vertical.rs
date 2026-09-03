@@ -88,6 +88,12 @@ impl Metrics {
             bands,
         } = look;
         let head_rows = number_rows(config.editor.line_numbers, total_lines);
+        // …and never taller than the page it sits on. A novel of ten thousand
+        // paragraphs spends five rows on numbers, and on a seven-row page the
+        // writing was then laid out *below* the page — over the hint row and
+        // the status line, which are drawn after it and painted the numbers
+        // out. The page showed its numbers and none of its text.
+        let head_rows = head_rows.min(height.saturating_sub(1));
         // Bands are equal by construction: the page is divided, not packed, so
         // the second band can never be a row shorter than the first.
         let bands = bands.clamp(1, 4);
@@ -545,11 +551,16 @@ pub fn draw(
         found => {
             // …and a 縱 off the page altogether lands in the middle of it: a
             // jump is a jump whichever way the text runs.
+            // `capacity` is the *bound* — the most 縱 that could fit were
+            // every one of them flush. With a gap, or with 稿紙 ticks, the
+            // page holds fewer, so centring on the bound pushed the cursor's
+            // 縱 off the left edge and the block was then drawn on the
+            // rightmost one instead.
+            let holds = page.len().max(1);
             let inset = match found {
-                None if cursor_anchor >= *viewport => capacity / 2,
                 Some(d) if d < scrolloff => scrolloff,
                 Some(_) => last_column.saturating_sub(scrolloff),
-                None => scrolloff,
+                None => holds / 2,
             };
             *viewport = zong::retreat(rope, cursor_anchor, grid, inset);
             page = layout_page(rope, *viewport, grid, &metrics, area, capacity);

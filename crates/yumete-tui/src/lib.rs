@@ -152,7 +152,11 @@ pub fn run(
             // The page's own rectangle, not the terminal's: the hint row, the
             // tab bar and the detail panel are not writing, and a 縱 measured
             // against them is one longer than the 縱 on the screen.
-            let page = page_areas(editor, config, Rect::new(0, 0, size.width, size.height)).text;
+            // …and the half of it the **keys** are in: with a split open the
+            // whole text area is twice the page, so `C-f` turned two pages and
+            // `C-d` moved a whole pane instead of half of one.
+            let areas = page_areas(editor, config, Rect::new(0, 0, size.width, size.height));
+            let page = areas.panes[editor.live_pane().min(1)];
             let lines = editor.current_buffer().line_count();
             if editor.layout() == WritingLayout::Vertical {
                 let look = vertical::Look::of(editor);
@@ -1614,7 +1618,10 @@ fn text_at(
                 buffer.rope(),
                 measure,
                 viewport.top,
-                want_row + 1,
+                // One row further, or the row *below* a reading — the row the
+                // reading belongs to — is never in the list, and the click was
+                // dropped.
+                want_row + 2,
             )
             .into_iter()
             // A click on a reading belongs to the row it reads: that is the
@@ -1874,6 +1881,10 @@ fn sidebar_columns(editor: &Editor, config: &Config, total: u16) -> u16 {
     let Some(sidebar) = editor.sidebar() else {
         return 0;
     };
+    // A sidebar narrower than three cells cannot be drawn — and the drawing
+    // used to *return* at that width, leaving the rectangle it had been given
+    // unpainted: a black stripe down a light page, for the third time. Below
+    // three cells there is no sidebar, so no rectangle is handed out.
     let want = if sidebar.wide() {
         // One column of padding on the left, the rule on the right, and the
         // two the outline indents its rows by.
@@ -1889,7 +1900,10 @@ fn sidebar_columns(editor: &Editor, config: &Config, total: u16) -> u16 {
     } else {
         config.editor.sidebar_width
     };
-    (want as u16).min(total.saturating_sub(8))
+    match (want as u16).min(total.saturating_sub(8)) {
+        got if got < 3 => 0,
+        got => got,
+    }
 }
 
 /// The file sidebar, in the columns taken off the left of the page.
@@ -2131,10 +2145,19 @@ fn draw_horizontal(
             // mark), and landing `scrolloff` from an edge gives the reader
             // nothing on one side of the thing they were looking for.
             let inset = match found {
-                None if cursor_anchor > *viewport => height / 2,
                 Some(d) if d < scrolloff => scrolloff,
                 Some(_) => last_row.saturating_sub(scrolloff),
-                None => scrolloff,
+                // Off the page **either way** is a jump, and a jump lands in
+                // the middle: keying this on direction put a hit found
+                // backwards on the fourth row from the top and one found
+                // forwards in the middle, which is the unpredictability the
+                // reader noticed. `k` at the top edge is not a jump — it is
+                // one row away, and it nudges.
+                None => match wrap::distance(rope, cursor_anchor, *viewport, measure, scrolloff + 1)
+                {
+                    Some(_) => scrolloff,
+                    None => last_row / 2,
+                },
             };
             *viewport = wrap::retreat(rope, cursor_anchor, measure, inset);
             wrap::distance(rope, *viewport, cursor_anchor, measure, height).unwrap_or(0)
@@ -2210,6 +2233,10 @@ fn draw_horizontal(
         Vec::new()
     };
 
+    let readings_above = wrap::rows_from(rope, *viewport, measure, cursor_row + 1)
+        .iter()
+        .filter(|row| row_has_reading(editor, rope, row))
+        .count();
     let mut lines: Vec<Line> = Vec::new();
     for (_, row) in rows_on_screen(editor, rope, measure, *viewport, height) {
         let text: String = rope.slice(row.start..row.end).to_string();
@@ -2526,7 +2553,11 @@ fn draw_horizontal(
         .min(text_area.width.saturating_sub(1) as usize);
     (
         text_area.x + x as u16,
-        text_area.y + cursor_row.min(last_row) as u16,
+        // …in **screen** rows: a reading takes a row of its own above the row
+        // it reads, so a caret placed by wrap-row index sat one row high for
+        // every reading above it — and in Insert that is the terminal's own
+        // cursor, so the characters appeared on a different row from the bar.
+        text_area.y + (cursor_row + readings_above).min(last_row) as u16,
     )
 }
 
@@ -4709,6 +4740,42 @@ mod tests {
         assert!(marked, "the hit is washed in 朱");
         let numbered = (0..rows).any(|y| buffer[(0, y)].style().fg == Some(quiet.mark()));
         assert!(numbered, "and its line number is 朱");
+    }
+
+    #[test]
+    fn every_cell_of_the_frame_is_painted() {
+        // The black-hole-in-light-mode bug, three times over: a rectangle
+        // handed out and not painted shows the terminal's own ground. This is
+        // the assertion that keeps it gone.
+        let mut editor = editor_with("那年冬天很冷。\n第二行\n第三行");
+        let config = Config::default();
+        let ink = ink(&config);
+        for (w, h) in [(9u16, 12u16), (10, 12), (12, 5), (40, 10), (80, 24)] {
+            for sidebar in [false, true] {
+                if sidebar {
+                    editor.execute("open .").ok();
+                    editor.on_key(Key::Char(' '));
+                    editor.on_key(Key::Char('e'));
+                }
+                let buffer = render(&editor, &config, w, h);
+                for y in 0..h {
+                    // Walked by display width: the second half of a wide glyph
+                    // is ratatui's own — it resets that cell and then never
+                    // sends it, because the glyph covers both columns.
+                    let mut x = 0;
+                    while x < w {
+                        let cell = &buffer[(x, y)];
+                        let bg = cell.style().bg;
+                        assert!(
+                            bg.is_some() && bg != Some(ratatui::style::Color::Reset),
+                            "{w}x{h} sidebar={sidebar}: ({x},{y}) shows the terminal's own                              ground — a light page over a dark terminal has a hole there"
+                        );
+                        x += grapheme_width(cell.symbol()).max(1) as u16;
+                    }
+                }
+            }
+        }
+        let _ = ink;
     }
 
     #[test]
