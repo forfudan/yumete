@@ -5177,11 +5177,21 @@ impl Editor {
             })
             .collect();
         // …and where the vertical page, which cannot carry the map, must not
-        // fold at all: from the first line that is not prose to the last.
-        let span = (0..lines).filter(|&l| !prose(l)).fold(
-            (usize::MAX, 0usize),
-            |(first, last), l| (first.min(l), last.max(l)),
-        );
+        // fold: the span holding the two blocks where a **blank line is
+        // content**, which is a fence and a page's metadata. Not every block
+        // that is not prose — a novel's chapter headings are not prose either,
+        // and taking the span from the first heading to the last would be the
+        // whole book, which is how 縱書 came to fold nothing at all.
+        let span = (0..lines)
+            .filter(|&l| {
+                matches!(
+                    blocks.get(l).copied().unwrap_or_default(),
+                    crate::markdown::Block::Code | crate::markdown::Block::FrontMatter
+                )
+            })
+            .fold((usize::MAX, 0usize), |(first, last), l| {
+                (first.min(l), last.max(l))
+            });
         *self.fold_cache.borrow_mut() = Some((key, map, span));
     }
 
@@ -9674,7 +9684,11 @@ mod tests {
         // …and the vertical page, which carries a span rather than a map, is
         // told to leave that whole part of the file alone.
         let (first, last) = ed.fold_free_span();
-        assert!(first <= 6 && last >= 8, "the fence is in the span: {first}..{last}");
+        assert!(first <= 8 && last >= 8, "the fence is in the span: {first}..{last}");
+        // …and a heading is not in it: a novel's chapters are not prose
+        // either, and a span from the first heading to the last would be the
+        // whole book.
+        assert!(first > 6, "the heading is not in the span: {first}..{last}");
         assert!(!crate::zong::folded(ed.current_buffer().rope(), 8, ed.grid()));
         // And never the line the cursor is on, or you could not type into it.
         ed.execute(":2").unwrap();
