@@ -55,5 +55,8 @@ fn real_pinyin_scheme_switch_stays_available() {
     let mut session = ImeSession::new(Scheme::Lingming, vec![dir]);
     // Pinyin uses the shared fluency table, which build.sh also installs.
     assert!(session.set_scheme(Scheme::Pinyin));
-    assert_eq!(session.scheme_name(), "拼音");
+    // The display name is yume's to choose — it has been 「拼音」 and is now
+    // 「宇浩拼音」 — so this asks what the name is *about*, not what it is.
+    let name = session.scheme_name();
+    assert!(name.contains("拼音"), "{name}");
 }
