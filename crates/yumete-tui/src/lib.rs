@@ -2344,7 +2344,8 @@ fn draw_hints(frame: &mut Frame, editor: &Editor, config: &Config, area: Rect) {
     // does is the half you only read once.
     let key = Style::default().fg(ink.text());
     let what = Style::default().fg(ink.furniture());
-    let label = Style::default().fg(ink.quiet()).add_modifier(Modifier::BOLD);
+    // 金墨: the label names what mode you are in, which is not prose either.
+    let label = Style::default().fg(ink.gold()).add_modifier(Modifier::BOLD);
     let right = area.x + area.width;
     let buf = frame.buffer_mut();
     let mut x = area.x + 1;
