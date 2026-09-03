@@ -531,6 +531,8 @@ pub struct Editor {
     chaifen_request: Option<bool>,
     /// A pending `:scheme` request, waiting for the front end to reach the IME.
     scheme_request: Option<String>,
+    /// A pending `:theme`, waiting for the front end that owns the palette.
+    theme_request: Option<(Option<String>, Option<crate::command::Mood>)>,
     /// Text waiting to be put on the system clipboard, which only the front end
     /// can reach (it owns the terminal).
     clipboard_request: Option<String>,
@@ -802,6 +804,7 @@ impl Editor {
             indent_width: 4,
             chaifen_request: None,
             scheme_request: None,
+            theme_request: None,
             clipboard_request: None,
             clipboard_read: None,
             render: Render::On,
@@ -2025,6 +2028,13 @@ impl Editor {
             // fifty columns of text running off the edge is not that.
             Command::SetDense(on) => {
                 self.set_dense(on);
+                Ok(CommandOutcome::Continue)
+            }
+            // The palette lives in the front end — the core does not know a
+            // colour exists — so the request is left here and answered there,
+            // the same way `:yume scheme` reaches the input method.
+            Command::Theme { name, mood } => {
+                self.theme_request = Some((name, mood));
                 Ok(CommandOutcome::Continue)
             }
             Command::SetTable(on) => {
@@ -5056,6 +5066,18 @@ impl Editor {
         self.scheme_request.take()
     }
 
+    /// Take a pending `:theme`, if one is waiting for the front end.
+    ///
+    /// `None` in either half means「別動這一半」: `:theme dark` names no theme
+    /// and `:theme moxiang` names no mood, and a bare `:theme` names neither,
+    /// which is how it comes to be the way to *ask*.
+    #[allow(clippy::type_complexity)]
+    pub fn take_theme_request(
+        &mut self,
+    ) -> Option<(Option<String>, Option<crate::command::Mood>)> {
+        self.theme_request.take()
+    }
+
     /// Take a pending `:chaifen` request, if one is waiting for the IME.
     pub fn take_chaifen_request(&mut self) -> Option<bool> {
         self.chaifen_request.take()
@@ -7846,10 +7868,12 @@ impl Editor {
         // Replace the word being completed, not the whole line: `:yume sch`
         // has to become `:yume scheme`, not `scheme`.
         let (start, _) = command::complete_at(&prefix);
-        let chosen = matches[next].name;
-        if chosen.is_empty() {
+        if matches[next].name.is_empty() {
             return;
         }
+        // A word promoted out of its parent's list writes the parent too:
+        // picking `scheme` out of what `:yume` takes leaves `:yume scheme`.
+        let chosen = matches[next].written();
         self.command_line = format!("{}{chosen}", &prefix[..start.min(prefix.len())]);
         self.command_caret = self.command_line.chars().count();
         self.completion = Some((prefix, next));

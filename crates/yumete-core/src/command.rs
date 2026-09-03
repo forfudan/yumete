@@ -82,6 +82,16 @@ pub enum Command {
     SetMeasure(Option<usize>),
     /// `:table` / `:table off` — read the file as a grid (Feature #118).
     SetTable(bool),
+    /// `:theme` — which theme, and whether it is dark, light or the
+    /// terminal's own answer (Feature #152).
+    ///
+    /// Both halves are optional and either may be written alone: `:theme`
+    /// says where things stand, `:theme dark` keeps the theme and changes the
+    /// mood, `:theme moxiang` names the theme and leaves the mood as it is.
+    Theme {
+        name: Option<String>,
+        mood: Option<Mood>,
+    },
     /// `:indent 2` — how many squares open a paragraph; `:indent off` is none.
     SetIndent(usize),
     /// `:bands 2` — how many bands the 縱書 page is divided into (段組).
@@ -329,6 +339,34 @@ pub fn parse(input: &str) -> Result<Command, CommandError> {
                     value: word.to_string(),
                 }),
             }
+        }
+
+        // 「墨香」 and `moxiang` are the same word, and a mood may be written
+        // with or without the theme's name: every combination of the two
+        // halves is a sentence, because there is nothing to be gained by
+        // refusing one.
+        "theme" => {
+            let mut name = None;
+            let mut mood = None;
+            for word in rest.split_whitespace() {
+                match pick(word, MOODS).map(|w| w.name) {
+                    Some("system") => mood = Some(Mood::System),
+                    Some("dark") => mood = Some(Mood::Dark),
+                    Some("light") => mood = Some(Mood::Light),
+                    _ if word == "墨香"
+                        || pick(word, THEMES).map(|w| w.name) == Some("moxiang") =>
+                    {
+                        name = Some("moxiang".to_string());
+                    }
+                    _ => {
+                        return Err(CommandError::InvalidArgument {
+                            command: "theme",
+                            value: word.to_string(),
+                        })
+                    }
+                }
+            }
+            Ok(Command::Theme { name, mood })
         }
 
         "hanging" => Ok(Command::ToggleHanging),
@@ -685,6 +723,49 @@ pub struct Choice {
     /// for a word it takes. A colon on `on` would be a lie about how to type
     /// it.
     pub leading: &'static str,
+    /// The word this one lives under, when it is being shown *beside* its
+    /// parent rather than after it — `yume`, for the `scheme` in `:yume`'s
+    /// list. Empty for everything else.
+    pub under: &'static str,
+}
+
+impl Choice {
+    /// What Tab writes for this choice, and what the menu shows.
+    ///
+    /// A promoted child carries its parent with it: picking `scheme` out of
+    /// `:yume`'s list has to leave `:yume scheme` on the line, not `:scheme`.
+    pub fn written(&self) -> String {
+        match self.under.is_empty() {
+            true => self.name.to_string(),
+            false => format!("{} {}", self.under, self.name),
+        }
+    }
+}
+
+/// The words a command takes, shown under the command itself.
+///
+/// Typing `:yume` used to answer with one entry — `:yume` — and a reader had
+/// no way to find out from there that the input method's whole set of commands
+/// lives under that word. The list says so: the command, and then everything
+/// it takes, spelled the way you would type it.
+fn children(under: &'static str, args: &Args) -> Vec<Choice> {
+    match args {
+        Args::Words(list) => list
+            .iter()
+            .map(|w| Choice {
+                name: w.name,
+                alias: None,
+                // The short form of a word is only short beside its siblings;
+                // spelled out under its parent it would be a second way to
+                // read the same row.
+                short: None,
+                help: w.help,
+                leading: "",
+                under,
+            })
+            .collect(),
+        _ => Vec::new(),
+    }
 }
 
 /// The two words every switch takes.
@@ -712,6 +793,19 @@ const YUME: &[Word] = &[
         then: Args::Path,
     },
 ];
+
+/// Dark, light, or whichever the terminal is.
+///
+/// Not a colour and not a theme: the same three anchors read one way on a dark
+/// ground and another on a light one, so this says which of the two the theme
+/// is being asked for — and `System` says *don't ask me, ask the terminal*.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Mood {
+    /// Whatever the terminal answered when it was asked its background.
+    System,
+    Dark,
+    Light,
+}
 
 /// Which way a search runs.
 const AXIS: &[Word] = &[
@@ -866,6 +960,53 @@ const SYNTAXES: &[Word] = &[
 ];
 
 /// Which way the page runs.
+/// `:theme` and what may follow it.
+///
+/// The mood words sit at both levels, so `:theme dark` and `:theme moxiang
+/// dark` are both sentences — the theme's name is worth saying and worth
+/// leaving out, and neither should be a special case.
+const THEMES: &[Word] = &[
+    Word {
+        name: "moxiang",
+        help: "墨香：三個顏色，其餘的色階都算出來",
+        then: Args::Words(MOODS),
+    },
+    Word {
+        name: "system",
+        help: "跟終端的底色走",
+        then: Args::None,
+    },
+    Word {
+        name: "dark",
+        help: "深色",
+        then: Args::None,
+    },
+    Word {
+        name: "light",
+        help: "淺色",
+        then: Args::None,
+    },
+];
+
+/// Dark, light, or the terminal's answer — the three words a theme takes.
+const MOODS: &[Word] = &[
+    Word {
+        name: "system",
+        help: "跟終端的底色走",
+        then: Args::None,
+    },
+    Word {
+        name: "dark",
+        help: "深色",
+        then: Args::None,
+    },
+    Word {
+        name: "light",
+        help: "淺色",
+        then: Args::None,
+    },
+];
+
 const LAYOUTS: &[Word] = &[
     Word {
         name: "vertical",
@@ -1012,6 +1153,12 @@ pub const COMMANDS: &[Entry] = &[
         aliases: &["lay"],
         help: "橫排竪排互換",
         args: Args::Words(LAYOUTS),
+    },
+    Entry {
+        name: "theme",
+        aliases: &[],
+        help: "主題：哪一個，以及深色淺色還是跟着終端",
+        args: Args::Words(THEMES),
     },
     Entry {
         name: "yume",
@@ -1200,7 +1347,7 @@ pub fn complete_at(line: &str) -> (usize, Vec<Choice>) {
     // The first word names a command; every word after it walks down what that
     // command says may follow — which is the same walk whether those words are
     // arguments or subcommands, because they are the same thing.
-    let choices: Vec<Choice> = match words.first() {
+    let mut choices: Vec<Choice> = match words.first() {
         None => COMMANDS
             .iter()
             .filter(|e| {
@@ -1212,6 +1359,7 @@ pub fn complete_at(line: &str) -> (usize, Vec<Choice>) {
                 short: shortest(e.name, COMMANDS.iter().map(|c| c.name)),
                 help: e.help,
                 leading: ":",
+                under: "",
             })
             .collect(),
         Some(&(_, head)) => {
@@ -1241,6 +1389,7 @@ pub fn complete_at(line: &str) -> (usize, Vec<Choice>) {
                         short: shortest(w.name, list.iter().map(|o| o.name)),
                         help: w.help,
                         leading: "",
+                        under: "",
                     })
                     .collect(),
                 // A path or free text is the caller's business; there is
@@ -1252,12 +1401,54 @@ pub fn complete_at(line: &str) -> (usize, Vec<Choice>) {
                     short: None,
                     help: what,
                     leading: "",
+                    under: "",
                 }],
                 Args::None | Args::Path => Vec::new(),
             }
         }
     };
+    // A word that is *finished* also says what may follow it. Nothing is
+    // promoted for a half-typed word: `:yu` is still a question about which
+    // command, and answering it with a list of the input method's verbs would
+    // be answering a question nobody asked.
+    if !typed.is_empty() {
+        let below = match words.first() {
+            None => COMMANDS
+                .iter()
+                .find(|e| e.name == typed || e.aliases.contains(&typed))
+                .map(|e| children(e.name, &e.args)),
+            Some(_) => choices
+                .iter()
+                .find(|c| c.name == typed && c.under.is_empty())
+                .and_then(|c| walk(&words).map(|args| (c.name, args)))
+                .and_then(|(name, args)| match args {
+                    Args::Words(list) => list
+                        .iter()
+                        .find(|w| w.name == name)
+                        .map(|w| children(w.name, &w.then)),
+                    _ => None,
+                }),
+        };
+        choices.extend(below.unwrap_or_default());
+    }
     (start, choices)
+}
+
+/// What may follow the words already on the line, or `None` if they name
+/// nothing.
+fn walk(words: &[(usize, &str)]) -> Option<&'static Args> {
+    let (_, head) = words.first()?;
+    let entry = COMMANDS
+        .iter()
+        .find(|e| e.name == *head || e.aliases.contains(head))?;
+    let mut args = &entry.args;
+    for &(_, word) in &words[1..] {
+        match args {
+            Args::Words(list) => args = &list.iter().find(|w| w.name == word)?.then,
+            _ => return None,
+        }
+    }
+    Some(args)
 }
 
 /// Which way a search runs.
@@ -1601,6 +1792,53 @@ mod tests {
     }
 
     #[test]
+    fn a_theme_is_two_questions_and_either_may_be_left_out() {
+        use Mood::*;
+        let theme = |line: &str| parse(line).unwrap();
+        // Neither half: the way to *ask* where things stand.
+        assert_eq!(
+            theme(":theme"),
+            Command::Theme {
+                name: None,
+                mood: None
+            }
+        );
+        assert_eq!(
+            theme(":theme moxiang"),
+            Command::Theme {
+                name: Some("moxiang".into()),
+                mood: None
+            }
+        );
+        // The name in either script, and the mood with or without it.
+        for line in [":theme moxiang dark", ":theme 墨香 dark", ":theme mo d"] {
+            assert_eq!(
+                theme(line),
+                Command::Theme {
+                    name: Some("moxiang".into()),
+                    mood: Some(Dark)
+                },
+                "{line}"
+            );
+        }
+        for (line, want) in [
+            (":theme light", Light),
+            (":theme system", System),
+            (":theme l", Light),
+        ] {
+            assert_eq!(
+                theme(line),
+                Command::Theme {
+                    name: None,
+                    mood: Some(want)
+                },
+                "{line}"
+            );
+        }
+        assert!(parse(":theme solarized").is_err());
+    }
+
+    #[test]
     fn completion_narrows_as_the_command_is_typed() {
         assert_eq!(
             complete("").len(),
@@ -1608,9 +1846,26 @@ mod tests {
             "`:` alone lists them all"
         );
         // One name, not three: `:ruby-on` and `:ruby-off` were the setting
-        // wearing the verb's name, and they are now words `:ruby` takes.
-        let ruby: Vec<&str> = complete("ruby").iter().map(|e| e.name).collect();
-        assert_eq!(ruby, ["ruby"]);
+        // wearing the verb's name, and they are now words `:ruby` takes — and
+        // a finished word says what it takes, so they are listed under it.
+        let ruby: Vec<String> = complete("ruby").iter().map(Choice::written).collect();
+        assert_eq!(
+            ruby,
+            [
+                "ruby",
+                "ruby on",
+                "ruby off",
+                "ruby html",
+                "ruby typst",
+                "ruby format"
+            ]
+        );
+        // Half a word is still a question about which command.
+        let rub: Vec<String> = complete("rub").iter().map(Choice::written).collect();
+        assert_eq!(rub, ["ruby"]);
+        // Two levels down, the same rule and the same spelling.
+        let format: Vec<String> = complete("ruby format").iter().map(Choice::written).collect();
+        assert_eq!(format, ["format", "format html", "format typst"]);
         // Aliases match too, so `:w` finds the command it is short for.
         assert_eq!(
             complete("wq").iter().map(|e| e.name).collect::<Vec<_>>(),

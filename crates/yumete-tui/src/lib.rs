@@ -34,7 +34,7 @@ use yumete_config::{Config, LineNumbers};
 use yumete_core::sidebar::View;
 use yumete_core::wrap::{self, Anchor as WrapAnchor};
 use yumete_core::zong::{Anchor, Layout as WritingLayout};
-use yumete_core::{Editor, Key, KeyOutcome, Mode, TextStore};
+use yumete_core::{say, Editor, Key, KeyOutcome, Mode, TextStore};
 use yumete_ime::{ImeSession, Scheme};
 
 /// Run the interactive editor until the user quits.
@@ -297,6 +297,9 @@ pub fn run(
                 // Keep a recovery copy of anything unsaved (Feature #79).
                 // Throttled inside, so this is a clock check on most keys.
                 editor.autosave_tick();
+                if let Some((name, mood)) = editor.take_theme_request() {
+                    editor.set_status(set_theme(config, name, mood));
+                }
                 if let Some(on) = editor.take_chaifen_request() {
                     let settled = ime.set_annotations(on);
                     editor.set_chaifen(settled);
@@ -579,6 +582,42 @@ fn hand_over<B: ratatui::backend::Backend + io::Write>(
     let _ = execute!(stdout(), EnableMouseCapture, EnableBracketedPaste);
     terminal.clear()?;
     status.map(|_| ())
+}
+
+/// Answer a `:theme`, and say where things stand afterwards.
+///
+/// A theme is two questions — which one, and dark or light — and either may be
+/// left out, so a bare `:theme` changes nothing and reports. The config's own
+/// `[theme]` is not rewritten: this is for the afternoon the room gets bright,
+/// and the file is for what you want every day.
+fn set_theme(
+    config: &Config,
+    name: Option<String>,
+    mood: Option<yumete_core::command::Mood>,
+) -> String {
+    use yumete_core::command::Mood;
+    // One theme, and the config's own name for it — a reader who renamed it is
+    // still allowed to type the name they gave it.
+    let known = ["moxiang", "墨香", config.theme.name.as_str()];
+    if let Some(asked) = &name {
+        if !known.contains(&asked.as_str()) {
+            return say!("沒有這個主題：{0}", asked);
+        }
+    }
+    if let Some(mood) = mood {
+        crate::theme::set_dark(match mood {
+            Mood::Dark => true,
+            Mood::Light => false,
+            // Back to whatever the terminal said at start-up; a terminal that
+            // never answered keeps what the config settled on.
+            Mood::System => crate::theme::terminal_answer().unwrap_or(crate::theme::dark()),
+        });
+    }
+    let mood = match crate::theme::dark() {
+        true => say!("深色"),
+        false => say!("淺色"),
+    };
+    say!("主題：{0}（{1}）", config.theme.name, mood)
 }
 
 /// The shell to run a command line through.
@@ -1288,8 +1327,8 @@ fn draw_command_menu(
         // over the derived prefix: `:w` is `write` because it was declared so,
         // even though `w` is a prefix of three commands.
         .map(|e| match e.alias.or(e.short) {
-            Some(short) => format!("{}{}  ({short})", e.leading, e.name),
-            None => format!("{}{}", e.leading, e.name),
+            Some(short) => format!("{}{}  ({short})", e.leading, e.written()),
+            None => format!("{}{}", e.leading, e.written()),
         })
         .collect();
     // Only the highlighted command's help, on one line. Every command's help at
