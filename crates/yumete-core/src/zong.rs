@@ -61,6 +61,10 @@ pub struct Grid {
     /// Whether 句讀 hang in the margin rather than taking a square each
     /// (標點旁置).
     pub hanging: bool,
+    /// Whether the blank line an indent replaces is left off the page.
+    pub fold_blanks: bool,
+    /// The line the cursor is on, which is never folded.
+    pub cursor_line: usize,
     /// Whether a pair of half-width characters shares one slot (縦中横).
     ///
     /// Off by default. Turned sideways a pair reads as a syllable — `yume` set
@@ -103,6 +107,23 @@ impl Grid {
             hide_markup: false,
             selection: None,
             indent: 0,
+            fold_blanks: false,
+            cursor_line: usize::MAX,
+        }
+    }
+
+    /// The same grid, with the blank line an indent replaces left off the page
+    /// (Feature #159).
+    ///
+    /// `cursor_line` is never folded: you have to be able to see the line you
+    /// are typing into. The rule is otherwise the horizontal page's — a single
+    /// blank between two written lines — except that this side does not know
+    /// about fences, which a 縱書 manuscript does not have.
+    pub fn with_folds(self, on: bool, cursor_line: usize) -> Grid {
+        Grid {
+            fold_blanks: on,
+            cursor_line,
+            ..self
         }
     }
 
@@ -776,8 +797,8 @@ pub fn next_zong(rope: &Rope, pos: usize, grid: Grid, goal_slot: usize) -> usize
     let p = position(rope, pos, grid);
     let (line, index) = if p.index_in_line + 1 < zong_count_in_line(rope, p.line, grid) {
         (p.line, p.index_in_line + 1)
-    } else if p.line + 1 < line_count(rope) {
-        (p.line + 1, 0)
+    } else if next_shown(rope, p.line + 1, grid) < line_count(rope) {
+        (next_shown(rope, p.line + 1, grid), 0)
     } else {
         return pos;
     };
@@ -792,8 +813,10 @@ pub fn prev_zong(rope: &Rope, pos: usize, grid: Grid, goal_slot: usize) -> usize
     let (line, index) = if p.index_in_line > 0 {
         (p.line, p.index_in_line - 1)
     } else if p.line > 0 {
-        let line = p.line - 1;
-        (line, zong_count_in_line(rope, line, grid) - 1)
+        match prev_shown(rope, p.line - 1, grid) {
+            Some(line) => (line, zong_count_in_line(rope, line, grid) - 1),
+            None => return pos,
+        }
     } else {
         return pos;
     };
@@ -821,6 +844,42 @@ impl From<Position> for Anchor {
     }
 }
 
+/// Whether `line` is off the page altogether (Feature #159).
+///
+/// The single blank line between two written ones, once an indent is marking
+/// the paragraphs instead. Two blanks in a row are a scene break and both
+/// stay; the cursor's own line always stays.
+pub fn folded(rope: &Rope, line: usize, grid: Grid) -> bool {
+    if !grid.fold_blanks || line == grid.cursor_line {
+        return false;
+    }
+    let lines = line_count(rope);
+    if line == 0 || line + 1 >= lines {
+        return false;
+    }
+    let blank = |l: usize| line_chars(rope, l).iter().all(|c| c.is_whitespace());
+    blank(line) && !blank(line - 1) && !blank(line + 1)
+}
+
+/// The first line at or after `line` that is on the page.
+fn next_shown(rope: &Rope, line: usize, grid: Grid) -> usize {
+    let lines = line_count(rope);
+    let mut line = line;
+    while line < lines && folded(rope, line, grid) {
+        line += 1;
+    }
+    line
+}
+
+/// The last line at or before `line` that is on the page, if there is one.
+fn prev_shown(rope: &Rope, line: usize, grid: Grid) -> Option<usize> {
+    let mut line = line;
+    while folded(rope, line, grid) {
+        line = line.checked_sub(1)?;
+    }
+    Some(line)
+}
+
 /// The next `n` 縱 starting at `anchor`, stopping early at the end of the
 /// buffer.
 ///
@@ -833,6 +892,11 @@ pub fn zongs_from(rope: &Rope, anchor: Anchor, grid: Grid, n: usize) -> Vec<Zong
     let mut line = anchor.line;
     let mut index = anchor.index_in_line;
     while zongs.len() < n && line < lines {
+        if folded(rope, line, grid) {
+            line += 1;
+            index = 0;
+            continue;
+        }
         let start = rope.line_to_char(line);
         let (slots, breaks) = line_zongs(rope, line, grid);
         let total = slots.len();
@@ -875,7 +939,10 @@ pub fn retreat(rope: &Rope, anchor: Anchor, grid: Grid, mut n: usize) -> Anchor 
         // Step past this paragraph's remaining pieces and land on the last 縱
         // of the one before it.
         n -= index + 1;
-        line -= 1;
+        line = match prev_shown(rope, line - 1, grid) {
+            Some(line) => line,
+            None => return Anchor::default(),
+        };
         index = zong_count_in_line(rope, line, grid) - 1;
     }
 }
@@ -900,7 +967,7 @@ pub fn distance(rope: &Rope, from: Anchor, to: Anchor, grid: Grid, limit: usize)
         }
         index += 1;
         if index >= count {
-            line += 1;
+            line = next_shown(rope, line + 1, grid);
             if line >= lines {
                 return None;
             }
@@ -1085,6 +1152,8 @@ mod tests {
         hide_markup: false,
         selection: None,
         indent: 0,
+        fold_blanks: false,
+        cursor_line: usize::MAX,
     };
 
     /// Readings laid out, so the ruby tests exercise the layout.
@@ -1845,6 +1914,27 @@ mod tests {
             "the reading is wholly above"
         );
         assert_eq!(slots[3].mark, Some('｡'), "and the mark has the base's row");
+    }
+
+    #[test]
+    fn the_blank_line_an_indent_replaces_is_not_a_zong() {
+        // 縱書 pays more for it than 橫排 does: a blank line is a whole empty
+        // column down the page, in the one layout where columns are the page.
+        let rope = Rope::from_str("第一段\n\n第二段\n\n\n第三段\n");
+        let plain = Grid { indent: 2, ..G };
+        let folded_grid = plain.with_folds(true, usize::MAX);
+        assert!(!folded(&rope, 1, plain), "nothing folds without the indent");
+        assert!(folded(&rope, 1, folded_grid), "the one between two paragraphs");
+        assert!(!folded(&rope, 3, folded_grid), "two blanks are a scene break");
+        assert!(!folded(&rope, 4, folded_grid));
+        // The cursor's own line is always drawn.
+        assert!(!folded(&rope, 1, plain.with_folds(true, 1)));
+        // …and the page skips it: the 縱 run 0, 2, … with no column for line
+        // 1, while the scene break keeps both of its.
+        let page = zongs_from(&rope, Anchor::default(), folded_grid, 8);
+        let lines: Vec<usize> = page.iter().map(|z| z.line).collect();
+        assert!(!lines.contains(&1), "{lines:?}");
+        assert_eq!(lines, [0, 2, 3, 4, 5, 6], "{page:?}");
     }
 
     #[test]

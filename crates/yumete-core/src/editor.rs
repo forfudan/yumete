@@ -4978,6 +4978,7 @@ impl Editor {
         Grid::new(self.zong_length, self.ruby())
             .with_tatechuyoko(self.tatechuyoko)
             .with_indent(self.paragraph_indent())
+            .with_folds(self.paragraph_indent() > 0, self.cursor_line())
             .with_hanging(self.hanging_punctuation())
             .with_markup_hidden(self.render == Render::Full, Some(self.selection()))
     }
