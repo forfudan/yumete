@@ -485,82 +485,101 @@ suite because each side only ever asked its own implementation.
 **Two more reviews, 2026-09-03**, verifying the safety fixes and the Grid
 refactor against the real 123,380-row 拆分表, the 74 markdown files of the docs
 site, a 91k-character Typst book and 資治通鑑. The refactor holds — zero
-divergences over that corpus, and the three named bugs are dead — and nine of
-the thirteen safety fixes hold. What they found is below, worst first.
+divergences over that corpus — and nine of the thirteen safety fixes hold.
+**Everything the two of them found is fixed**, worst first:
 
 **Writing that can be lost:**
 
-1. **`:export` writes over the manuscript when the target is spelled
-   differently.** The guard compares `PathBuf`s literally; the writer resolves
-   through `canonicalize`. A symlink, or a relative path against an absolute
-   one, gets past it — 90,939 characters of Typst became an export.
-2. **`:export` overwrites any existing file**, with no `!` and no warning —
-   the rule `:w` now keeps, never applied to the sibling writer. Onto a file
-   open and modified in another buffer, the disk copy is gone while that
-   buffer still says it is clean.
-3. **`.` replays an older edit.** The fix scans the *whole* key sequence for
-   `.`, so any insertion containing `.`, `u`, `q` or `:` — a decimal in a
-   cell, a Latin word — is refused as a definition and the previous one is
-   replayed instead. The re-entrancy guard alone is what stops the abort; the
-   scan should be the first key after the count, and nothing more.
-4. **Four writers reach the rope past the cell gate**: `:ruby format` rewrites
-   every cell of a grid (a comma per cell), a ruby reading writes into the
-   cell it is on, `gJ` joins two `|` table rows whenever `:table` was not
-   typed, and `:replace`/`:s` skip the grid check for `|` tables — across
-   every file `:grep` found, opened or not.
-5. **`:table on` reformats a `|` table file** without a keystroke: 45 lines of
-   the docs site, `modified` set, and `:table off` does not undo it.
-6. **`:w <path>` rebinds the buffer** rather than writing a copy, so every
-   later `:w` goes to the copy and the chapter is frozen.
-7. **`markup_cache` is not keyed by buffer** and is not in
+1. **`:export` wrote over the manuscript when the target was spelled
+   differently.** The guard compared `PathBuf`s literally while the writer
+   resolves through `canonicalize`, so a symlink, or a relative path against an
+   absolute one, walked past it — 90,939 characters of Typst became an export
+   of themselves. Now every writer that is handed a path asks
+   `Editor::buffer_holding`, which resolves the target the way the writer does
+   (`buffer::write_target`) and compares it against **every open buffer**: a
+   file this editor is holding may only be replaced by the buffer bound to it.
+2. **`:export` overwrote any existing file**, with no `!` and no warning. It
+   keeps the rule `:w` keeps now, and `:export!` is how you say you meant it.
+3. **`.` replayed an older edit.** The abort fix scanned the *whole* recorded
+   sequence for `.`, `u`, `q` and `:` — and an insertion is a sequence of typed
+   characters, so `i` `3` `.` `1` `4` Esc was refused as a definition. It asks
+   what command this was: the first key after the count, and nothing else. The
+   re-entrancy guard at `repeat_edit` is what stops the recursion, and always
+   was.
+4. **Four writers reached the rope past the cell gate.** `:replace`/`:s` and
+   `gJ` now ask whether a line **is** a table row (`mdtable::row_lines`, which
+   knows about fences) rather than whether `:table` is on — nobody types
+   `:table on` to fix a typo in their own documentation. `:ruby format` runs
+   the same grid check `:replace` runs, and a ruby reading goes through the
+   cell gate like any other text.
+5. **`:table on` reformatted the file** — 45 lines of the docs site, `modified`
+   set, and `:table off` does not undo it. Looking at a table no longer
+   rewrites it; `t t` is the tidy-up, and says so.
+6. **`:w <path>` rebound the buffer.** It writes a copy and stays where it is,
+   as in vi; `:saveas` is the one that moves house. A buffer with no name of
+   its own still takes the name, because there is no manuscript for the copy to
+   be a copy of.
+7. **`markup_cache` was not keyed by buffer** and was not in
    `forget_the_document` — the fourth cache, left out of the fix that re-keyed
-   the other three.
-8. **A read-only file is overwritten silently**, and the temp file is left
-   behind on every failure but the rename.
+   the other three. The syntax is in its hash too, since `:syntax text` is one
+   keystroke away.
+8. **A read-only file was overwritten silently**, and a failed write left its
+   temporary file beside the manuscript. `chmod 444` is somebody saying 「這份
+   不要動」, and every way out of the write now cleans up after itself.
 
 **The page:**
 
-9. **Markup inside a ruby base**: `push_ruby` is not handed `hidden`, so
-   縱書 draws `**` that 橫排 hides — the same class as the divergence just
-   closed, in the one function that was not part of it.
-10. **A ruby group's tags belong to no slot** when the reading needs padding
+9. **Markup inside a ruby base** — `push_ruby` was the one function never
+   handed `hidden`, so 縱書 drew the `**` that 橫排 hid. A square with nothing
+   left in it takes no row, exactly as in a plain run.
+10. **A ruby group's tags belonged to no slot** when the reading needed padding
     rows above the base: 5 files, 22 lines, 198 characters of the docs site,
-    and *every* ruby group once 標點旁置 is on.
-11. **The slot list is not sorted by `start`** while `zong::position` binary
-    searches it, so the caret resolves to the wrong row beside a hung bracket.
-12. **所見即所得 turns off 禁則處理**: a slot that swallowed a hidden run
-    reports the `*` as its character, so 。 opens a 縱. Both layouts.
-13. **標點旁置 stops working next to hidden markup** — turning one setting on
-    changes what another does. 縱書 only.
-14. `Grid::new` defaults to「nothing is hidden」where `Measure::new` requires an
-    answer; `line_slots` and `slot_text` take a `Grid` and ignore its closures.
-    The refactor is only as good as the one call site that cannot spell it
-    wrong.
-15. **`markup_hidden_on_line` costs O(lines above)**: 11 ns before the
-    refactor, 6.9 µs at line 19,883 of 資治通鑑, because `blocks_through`
-    copies the whole prefix even on the cached path. 364 µs per 縱書 frame.
+    and *every* ruby group with 標點旁置 on. The markup lives on the first
+    padding row, which now has the range to hold it.
+11. **The slot list was not sorted by `start`** while `zong::position` binary
+    searches it — a hung bracket pulled the base's row behind the rows above
+    it, and an opener still waiting was attached past the marks after it. Both
+    now keep document order.
+12. **所見即所得 turned 禁則處理 off**: a slot that swallowed a hidden run
+    reported the `*` as its character, so 。 was allowed to open a 縱. 禁則 asks
+    what the reader sees.
+13. **標點旁置 stopped working next to hidden markup** — turning one setting on
+    changed what another did. The swallowed run joins whichever slot the mark
+    joins.
+14. `Grid::new` defaulted to「nothing is hidden」where `Measure::new` requires an
+    answer. It is `Grid::plain` now, like `Measure::plain`, and `line_slots` is
+    `line_slots_plain`: a call site that shows a different document from the
+    one on the screen has to say so.
+15. **`block_of` cost O(lines above)** — it went through `blocks_through`,
+    which copies every line above the one asked about: 11 ns near the top of
+    資治通鑑 and 6.9 µs at line 19,883. One line's answer is one lookup now:
+    **9 ns**, flat.
 
-**Still open from the first four reviews:**
+**From the first four reviews:**
 
-16. The event loop settles `page_lines`/`page_columns` from the whole text area
-    rather than from the live pane, so `C-f` turns two pages with a split open.
-17. `n`/`N` after `*` or `:search` still walk the *old* hit list.
-18. 縱書 has no paragraph memo: 565 ms per keypress at 500k 字 in one paragraph.
-19. Ruby mode and the picker have no caret: no `Left`, `Home`, `C-a`.
-20. `enter_md_table` reformats — looking at a table marks the file modified.
+16. 縱書 had no paragraph memo, so a page laid the same paragraph out once per
+    縱 — 565 ms a keystroke on 500,000 characters in one paragraph. It
+    remembers the last eight, keyed by a hash of the text and of everything in
+    the grid that changes the answer, exactly as `wrap` does. A test asserts a
+    40-縱 page lays each paragraph out **once**.
+17. `n`/`N` after `*` or `:search` walked the *old* hit list. A new search
+    takes `n` back, whichever way it was started.
+18. Ruby mode and the picker had no caret: no `Left`, no `Home`, no `C-a`. Both
+    go through the same prompt editing as `:` and `/` now, and the picker's
+    caret is drawn where its query is.
+19. `enter_md_table` reformatting is item 5 above.
+20. The event loop measuring the whole text area rather than the live pane was
+    fixed in the first round; verified.
 
-**The two invariants both reviewers asked for**, which close whole families
-rather than instances:
+**The two invariants both reviewers asked for**, which is what the fixes are
+built on rather than instance by instance:
 
-- **Every write is addressed by identity, not by spelling.** Resolve a target
-  the way the writer resolves it, and compare *that* against every open
-  buffer. A write whose resolved target belongs to an open buffer goes through
-  that buffer's save or is refused. Closes 1, 2, and export-onto-an-open-file.
+- **Every write is addressed by identity, not by spelling** —
+  `buffer::write_target` resolves, `Editor::buffer_holding` compares, and no
+  writer is exempt.
 - **A row's cell count never changes while its file is read as a grid** —
-  asserted over the whole file after every key and every command, not at the
-  gate. `join_lines`, `apply_reading`, `format_ruby` and `indent` all reach the
-  rope without passing a gate, and the next one added will too. Closes 4, and
-  its `|` twin, whether or not `:table` was typed.
+  and that question does not ask whether `:table` is on, because a table in a
+  manuscript is a table either way.
 
 ---
 
