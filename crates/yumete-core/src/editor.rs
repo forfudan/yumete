@@ -30,6 +30,10 @@ use crate::zong::{self, Grid, Layout, DEFAULT_ZONG_LENGTH};
 /// A paragraph's word ranges, kept against a hash of the paragraph's text.
 type SegmentCache = HashMap<usize, (u64, Vec<(usize, usize)>)>;
 
+/// Which lines are off the page, against the buffer and revision they were
+/// worked out for.
+type FoldMap = ((u64, u64), Vec<bool>);
+
 /// Every line's block, against the buffer it was worked out for and that
 /// buffer's revision — the two things that decide whether it is still true.
 type BlockCache = ((usize, u64), Vec<crate::markdown::Block>);
@@ -623,6 +627,11 @@ pub struct Editor {
     hanging: bool,
     /// Word ranges already worked out, per line, against a hash of that line.
     segment_cache: RefCell<SegmentCache>,
+    /// Which lines are folded away, against the buffer they were worked out
+    /// for. One pass over the file per edit — the answer is not line-local (a
+    /// blank line inside a fence is code, not a paragraph break), and asking
+    /// per line would walk the document once per line.
+    fold_cache: RefCell<Option<FoldMap>>,
     /// The Markdown runs of each paragraph, cached the same way and for the
     /// same reason: the renderer asks for every paragraph on screen, every
     /// frame, and the answer only changes when the paragraph does.
@@ -837,6 +846,7 @@ impl Editor {
             tatechuyoko: false,
             hanging: false,
             segment_cache: RefCell::new(SegmentCache::new()),
+            fold_cache: RefCell::new(None),
             markup_cache: RefCell::new(HashMap::new()),
             block_cache: RefCell::new(None),
             md_cache: RefCell::new(None),
@@ -4972,6 +4982,64 @@ impl Editor {
             .with_markup_hidden(self.render == Render::Full, Some(self.selection()))
     }
 
+    /// Whether `line` is left off the page altogether (Feature #159).
+    ///
+    /// **The blank line between two indented paragraphs.** A Chinese paragraph
+    /// is marked one way or the other — a blank line, or an indent — and never
+    /// both; but the *file* is Markdown, where the blank line is what makes it
+    /// a paragraph at all. So the file keeps it and the page leaves it out,
+    /// which is the same bargain 所見即所得 makes with `**`.
+    ///
+    /// Three things are never folded: the line the cursor is on (or you could
+    /// not see what you were typing into), a run of two or more blank lines (a
+    /// writer who typed two meant something by the second — it is a scene
+    /// break), and anything inside a fence or a page's metadata, where a blank
+    /// line is content.
+    pub fn line_is_folded(&self, line: usize) -> bool {
+        if self.indent == 0 {
+            return false;
+        }
+        if line == self.cursor_line() {
+            return false;
+        }
+        self.folds().get(line).copied().unwrap_or(false)
+    }
+
+    /// The fold map for the buffer as it stands, worked out once per edit.
+    fn folds(&self) -> Vec<bool> {
+        let buffer = self.current_buffer();
+        let key = (buffer.id(), buffer.revision());
+        if let Some((cached, map)) = self.fold_cache.borrow().as_ref() {
+            if *cached == key {
+                return map.clone();
+            }
+        }
+        let rope = buffer.rope();
+        let lines = rope.len_lines();
+        let blank = |l: usize| {
+            l < lines && rope.line(l).chars().all(char::is_whitespace)
+        };
+        let blocks = self.blocks_through(lines.saturating_sub(1));
+        let prose = |l: usize| {
+            matches!(
+                blocks.get(l).copied().unwrap_or_default(),
+                crate::markdown::Block::Prose | crate::markdown::Block::Quote
+            )
+        };
+        let map: Vec<bool> = (0..lines)
+            .map(|l| {
+                l > 0
+                    && l + 1 < lines
+                    && blank(l)
+                    && !blank(l - 1)
+                    && !blank(l + 1)
+                    && prose(l)
+            })
+            .collect();
+        *self.fold_cache.borrow_mut() = Some((key, map.clone()));
+        map
+    }
+
     /// How many squares open a paragraph, as the page is drawn.
     ///
     /// **Not** masked by `:dense`, unlike the readings, the hung 句讀 and the
@@ -8173,15 +8241,19 @@ impl Editor {
         // the page — so it is built here and dropped before anything is set.
         let column = {
             let hide = |line: usize| self.hidden_on_line(line);
+            let fold = |line: usize| self.line_is_folded(line);
             let rope = self.current_buffer().rope();
             match self.wrap_width() {
                 Some(width) => {
                     // …with the indent, because the indent is where a row
                     // *breaks*: a measure without it wraps a different page
                     // from the one being drawn, and `j` then lands on the
-                    // character under a column nobody is looking at.
+                    // character under a column nobody is looking at. Same for
+                    // the folds: a row the page does not draw is a row `j`
+                    // must not stop on.
                     let m = crate::wrap::Measure::new(width, &hide)
-                        .with_indent(self.paragraph_indent());
+                        .with_indent(self.paragraph_indent())
+                        .with_folds(&fold);
                     crate::wrap::column_of(rope, self.cursor, m)
                 }
                 None => motion::visual_column(rope, self.cursor),
@@ -8205,23 +8277,40 @@ impl Editor {
     fn move_vertical(&mut self, up: bool) {
         let pos = {
             let hide = |line: usize| self.hidden_on_line(line);
+            let fold = |line: usize| self.line_is_folded(line);
             let rope = self.current_buffer().rope();
             match self.wrap_width() {
                 Some(width) => {
-                    // …with the indent, because the indent is where a row
-                    // *breaks*: a measure without it wraps a different page
-                    // from the one being drawn, and `j` then lands on the
-                    // character under a column nobody is looking at.
+                    // …with the indent and the folds, for the same reason: the
+                    // page `j` steps through has to be the page on the screen.
                     let m = crate::wrap::Measure::new(width, &hide)
-                        .with_indent(self.paragraph_indent());
+                        .with_indent(self.paragraph_indent())
+                        .with_folds(&fold);
                     if up {
                         crate::wrap::prev_row(rope, self.cursor, m, self.goal_column)
                     } else {
                         crate::wrap::next_row(rope, self.cursor, m, self.goal_column)
                     }
                 }
-                None if up => motion::up(rope, self.cursor, self.goal_column),
-                None => motion::down(rope, self.cursor, self.goal_column),
+                // With wrapping off a row is a line, and the folds are the
+                // only thing that makes those two differ — so `j` steps over
+                // a folded line here too, or it would stop on a row that is
+                // not on the page.
+                None => {
+                    let step = |at: usize| match up {
+                        true => motion::up(rope, at, self.goal_column),
+                        false => motion::down(rope, at, self.goal_column),
+                    };
+                    let mut at = step(self.cursor);
+                    while self.line_is_folded(rope.char_to_line(at)) {
+                        let next = step(at);
+                        if next == at {
+                            break;
+                        }
+                        at = next;
+                    }
+                    at
+                }
             }
         };
         self.cursor = pos;
@@ -9351,6 +9440,28 @@ mod tests {
         assert_eq!(ed.paragraph_indent(), 2);
         assert_eq!(ed.grid().indent, 2);
         assert!(ed.ruby().is_empty(), "…while the reading column still goes");
+    }
+
+    #[test]
+    fn the_blank_line_an_indent_replaces_comes_off_the_page() {
+        // The file is Markdown and keeps its blank lines; the page is a book
+        // and shows the indent instead. Both marks at once is the one thing
+        // no typesetter does.
+        let mut ed = Editor::new();
+        ed.current_buffer_mut()
+            .insert(0, "第一段\n\n第二段\n\n\n第三段\n# 標題\n\n```\n\n```\n");
+        assert!(!ed.line_is_folded(1), "nothing folds until there is an indent");
+        ed.set_indent(2);
+        assert!(ed.line_is_folded(1), "the one between two paragraphs");
+        // Two blanks is a scene break — the writer meant the second one.
+        assert!(!ed.line_is_folded(3));
+        assert!(!ed.line_is_folded(4));
+        // A blank line inside a fence is code, not a paragraph break.
+        assert!(!ed.line_is_folded(8), "inside the fence");
+        // And never the line the cursor is on, or you could not type into it.
+        ed.execute(":2").unwrap();
+        assert_eq!(ed.cursor_line(), 1);
+        assert!(!ed.line_is_folded(1));
     }
 
     #[test]

@@ -57,6 +57,13 @@ pub const MIN_WRAP_WIDTH: usize = 8;
 pub struct Measure<'a> {
     width: usize,
     hidden: &'a dyn Fn(usize) -> Vec<(usize, usize)>,
+    /// Which whole lines are not on the page at all (Feature #159).
+    ///
+    /// A blank line between two indented paragraphs is the file saying twice
+    /// what the page says once, so the page leaves it out. Part of the measure
+    /// for the same reason as `hidden`: everything that asks where a row is —
+    /// the renderer, `j`, the mouse — has to be asking about the same page.
+    folded: &'a dyn Fn(usize) -> bool,
     /// How many cells open a paragraph (首行縮進).
     ///
     /// Part of the measure and not of the renderer, because it changes **where
@@ -69,12 +76,16 @@ pub struct Measure<'a> {
 /// A page with nothing hidden, for callers that show the source as it is.
 const NOTHING_HIDDEN: &dyn Fn(usize) -> Vec<(usize, usize)> = &|_| Vec::new();
 
+/// A page with every line on it.
+const NOTHING_FOLDED: &dyn Fn(usize) -> bool = &|_| false;
+
 impl<'a> Measure<'a> {
     /// `width` cells, with every character on the page.
     pub fn plain(width: usize) -> Measure<'static> {
         Measure {
             width: width.max(1),
             hidden: NOTHING_HIDDEN,
+            folded: NOTHING_FOLDED,
             indent: 0,
         }
     }
@@ -84,8 +95,28 @@ impl<'a> Measure<'a> {
         Measure {
             width: width.max(1),
             hidden,
+            folded: NOTHING_FOLDED,
             indent: 0,
         }
+    }
+
+    /// The same measure, with `folded` naming the lines that are not drawn.
+    pub fn with_folds(self, folded: &'a dyn Fn(usize) -> bool) -> Measure<'a> {
+        Measure { folded, ..self }
+    }
+
+    /// Whether `line` is off the page altogether.
+    pub fn folded(self, line: usize) -> bool {
+        (self.folded)(line)
+    }
+
+    /// The first line at or after `line` that is on the page.
+    fn next_shown(self, line: usize, lines: usize) -> usize {
+        let mut line = line;
+        while line < lines && self.folded(line) {
+            line += 1;
+        }
+        line
     }
 
     /// The same measure, opening each paragraph `n` cells in.
@@ -509,6 +540,12 @@ pub fn rows_from(rope: &Rope, anchor: Anchor, m: Measure, n: usize) -> Vec<Row> 
     let mut line = anchor.line;
     let mut index = anchor.index_in_line;
     while out.len() < n && line < lines {
+        // A folded line has no rows at all; the page carries on below it.
+        if m.folded(line) {
+            line += 1;
+            index = 0;
+            continue;
+        }
         let start = rope.line_to_char(line);
         let rows = rows_of_line(rope, line, m);
         while index < rows.len() && out.len() < n {
@@ -544,6 +581,12 @@ pub fn retreat(rope: &Rope, anchor: Anchor, m: Measure, mut n: usize) -> Anchor 
         }
         n -= index + 1;
         line -= 1;
+        while m.folded(line) {
+            if line == 0 {
+                return Anchor::default();
+            }
+            line -= 1;
+        }
         index = row_count_in_line(rope, line, m) - 1;
     }
 }
@@ -557,8 +600,8 @@ pub fn advance(rope: &Rope, anchor: Anchor, m: Measure, mut n: usize) -> Anchor 
     while n > 0 {
         if index + 1 < count {
             index += 1;
-        } else if line + 1 < lines {
-            line += 1;
+        } else if m.next_shown(line + 1, lines) < lines {
+            line = m.next_shown(line + 1, lines);
             index = 0;
             count = row_count_in_line(rope, line, m);
         } else {
@@ -591,7 +634,7 @@ pub fn distance(rope: &Rope, from: Anchor, to: Anchor, m: Measure, limit: usize)
         }
         index += 1;
         if index >= count {
-            line += 1;
+            line = m.next_shown(line + 1, lines);
             if line >= lines {
                 return None;
             }
@@ -646,10 +689,11 @@ fn char_at_column(
 pub fn next_row(rope: &Rope, pos: usize, m: Measure, goal: usize) -> usize {
     let here = position(rope, pos, m);
     let count = row_count_in_line(rope, here.line, m);
+    let lines = line_count(rope);
     if here.index_in_line + 1 < count {
         char_at_column(rope, here.line, here.index_in_line + 1, m, goal)
-    } else if here.line + 1 < line_count(rope) {
-        char_at_column(rope, here.line + 1, 0, m, goal)
+    } else if m.next_shown(here.line + 1, lines) < lines {
+        char_at_column(rope, m.next_shown(here.line + 1, lines), 0, m, goal)
     } else {
         pos
     }
@@ -661,7 +705,13 @@ pub fn prev_row(rope: &Rope, pos: usize, m: Measure, goal: usize) -> usize {
     if here.index_in_line > 0 {
         char_at_column(rope, here.line, here.index_in_line - 1, m, goal)
     } else if here.line > 0 {
-        let above = here.line - 1;
+        let mut above = here.line - 1;
+        while m.folded(above) {
+            if above == 0 {
+                return pos;
+            }
+            above -= 1;
+        }
         let last = row_count_in_line(rope, above, m) - 1;
         char_at_column(rope, above, last, m, goal)
     } else {
