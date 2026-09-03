@@ -2557,6 +2557,19 @@ impl Editor {
         // A grid is read across: rows run left to right and columns stack down
         // the page, which is the one thing a 縱書 layout cannot do. Rather than
         // draw something incoherent, table mode is horizontal.
+        // …and the cursor lands on the first **data** row. Standing on the
+        // header, `cell_position` says row 0 — a row the grid draws frozen at
+        // the top and refuses every edit on — while the caret was drawn on the
+        // first row of data, so the cell you were told you were in and the
+        // cell the caret sat in were two different cells.
+        if self.on_header_row() {
+            let rope = self.current_buffer().rope();
+            if rope.len_lines() > 1 {
+                let at = rope.line_to_char(1);
+                self.set_cursor(at);
+            }
+        }
+        self.snap_to_cell();
         let turned = self.turn_for_table();
         self.status = match turned {
             true => say!("表格：{0} 欄，{1}（已轉橫排）", columns, how),
@@ -3945,7 +3958,7 @@ impl Editor {
                             ("c d", say!("換格／清空")),
                             ("y Y", say!("取格／行")),
                             ("p", say!("貼")),
-                            ("t", say!("增刪行列")),
+                            ("t", say!("表格操作")),
                             ("Tab", say!("改按字")),
                         ]),
                     Grain::Cell => Hint::Keys(say!("表格"), vec![
@@ -3953,7 +3966,7 @@ impl Editor {
                             ("c d", say!("換格／清空")),
                             ("y Y", say!("取格／行")),
                             ("p", say!("貼")),
-                            ("t", say!("增刪行")),
+                            ("t", say!("表格操作")),
                             ("Enter", say!("找相關的行")),
                             ("Tab", say!("改按字")),
                         ]),
@@ -4011,6 +4024,17 @@ impl Editor {
             Pending::SurroundTo(_) => (say!("換成"), vec![("", say!("打要換成的那一種"))]),
             Pending::Mark => (say!("M 記住這裏"), vec![("a–z", say!("叫什麼名字"))]),
             Pending::Recall => (say!("' 回到"), vec![("a–z", say!("哪一個"))]),
+            // **What this table can actually do**, not what tables can do.
+            // A delimited file's columns are its schema's — `n`/`D`/`h`/`l`
+            // are not offered there because they are refused there — and the
+            // menu listing them was the one place the editor said a key
+            // existed and then said it did not.
+            Pending::Table if self.md_region().is_none() => (say!("t 表格"), vec![
+                    ("o O", say!("加一行（下／上）")),
+                    ("d", say!("刪這一行")),
+                    ("j k", say!("這行下移／上移")),
+                    ("y p", say!("取這欄／貼一欄")),
+                ]),
             Pending::Table => (say!("t 表格"), vec![
                     ("o O", say!("加一行（下／上）")),
                     ("n N", say!("加一欄（右／左）")),
@@ -6835,9 +6859,17 @@ impl Editor {
             }
             // Select (extend) mode and collapse (Helix `v` / `;`).
             Key::Char('v') => self.extend = !self.extend,
-            // Esc is every modal editor's way out; here it leaves select mode
-            // and collapses the selection onto the cursor.
+            // Esc is every modal editor's way out. It leaves select mode and
+            // collapses the selection — and, when the page is showing you
+            // something in the other work area, it dismisses that first: a
+            // preview is the transient thing on the screen, and Esc is the key
+            // every reader presses at a transient thing.
             Key::Esc => {
+                if self.other.is_some() && self.live_pane == 0 {
+                    self.close_split();
+                    self.table_hits.clear();
+                    return;
+                }
                 self.extend = false;
                 self.anchor = self.cursor;
             }

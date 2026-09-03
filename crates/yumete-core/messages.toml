@@ -673,13 +673,7 @@ en = "back to Normal"
 zh = "回正文"
 en = "back to the text"
 
-[[message]]
-zh = "增刪行"
-en = "add / delete rows"
 
-[[message]]
-zh = "增刪行列"
-en = "add / delete rows and columns"
 
 [[message]]
 zh = "寬窄"
@@ -1607,3 +1601,11 @@ en = "wrote the note for {0} (C-o goes back)"
 [[message]]
 zh = "去／看它指的地方"
 en = "go to / show what it points at"
+
+[[message]]
+zh = "表格操作"
+en = "table operations"
+
+[[message]]
+zh = "刪這一行"
+en = "delete this row"
