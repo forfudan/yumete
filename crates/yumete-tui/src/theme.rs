@@ -250,6 +250,15 @@ pub struct Palette {
     mark: (u8, u8, u8),
     gold: (u8, u8, u8),
     paint: bool,
+    /// Whether this is the work area that is only being *read* (Feature #176).
+    ///
+    /// Everything in it steps one rung back toward the page — the writing, the
+    /// furniture, 金 and 朱 alike — so which half the keys are in is answered
+    /// by *weight*, at a glance, without a second colour and without painting
+    /// the two halves different grounds. It is what tmux does to an inactive
+    /// pane and what a printed page does to a facing note: the thing you are
+    /// not reading is not louder, it is quieter.
+    faded: bool,
 }
 
 impl Palette {
@@ -274,11 +283,27 @@ impl Palette {
             mark: theme.mark(dark),
             gold: theme.gold(dark),
             paint: theme.ground == Ground::Paint,
+            faded: false,
+        }
+    }
+
+    /// The same palette, a rung back: the half that is only being read.
+    pub fn faded(self) -> Palette {
+        Palette {
+            faded: true,
+            ..self
         }
     }
 
     /// One rung, as a colour.
     pub fn at(self, rung: u16) -> Color {
+        let rung = match self.faded {
+            // Toward the page, not toward the ink: a quiet pane is *further
+            // away*, and a ground it carries (a band, a selection) goes with
+            // it so the whole half recedes together.
+            true => (rung as u32 + 260).min(1000) as u16,
+            false => rung,
+        };
         let (r, g, b) = self.ladder.step(rung);
         Color::Rgb(r, g, b)
     }
@@ -326,14 +351,22 @@ impl Palette {
     /// name beside a value. It is the only thing here that is not a quantity
     /// of ink and not 朱.
     pub fn gold(self) -> Color {
-        let (r, g, b) = self.gold;
-        Color::Rgb(r, g, b)
+        self.accent(self.gold)
     }
 
     /// 朱 — 這裏不對.
     pub fn mark(self) -> Color {
-        let (r, g, b) = self.mark;
-        Color::Rgb(r, g, b)
+        self.accent(self.mark)
+    }
+
+    /// An accent, taken back with the rest when the half is only being read.
+    fn accent(self, (r, g, b): (u8, u8, u8)) -> Color {
+        if !self.faded {
+            return Color::Rgb(r, g, b);
+        }
+        let paper = self.ladder.paper;
+        let mix = |a: u8, b: u8| -> u8 { ((a as i64) + (b as i64 - a as i64) * 55 / 100) as u8 };
+        Color::Rgb(mix(r, paper.0), mix(g, paper.1), mix(b, paper.2))
     }
     /// 朱 washed most of the way to the page — a highlighter's ground.
     ///
@@ -357,6 +390,11 @@ impl Palette {
 
     /// 朱, `percent` of the way to the page.
     fn washed(self, percent: i64) -> Color {
+        // A read-only half takes its accents back with everything else.
+        let percent = match self.faded {
+            true => percent + (100 - percent) * 55 / 100,
+            false => percent,
+        };
         let (paper, mark) = (self.ladder.paper, self.mark);
         let mix = |a: u8, b: u8| -> u8 {
             let (a, b) = (a as i64, b as i64);

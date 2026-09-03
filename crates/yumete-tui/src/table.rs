@@ -174,7 +174,11 @@ pub fn draw(
     let widths = widths(editor, viewport.top, rows);
     scroll_columns(&widths, room, cursor_cell, &mut viewport.left);
 
-    let ink = crate::theme::Palette::of(config);
+    let ink = match peek {
+        None => crate::theme::Palette::of(config),
+        // A rung back, all of it: the half that is only being read.
+        Some(_) => crate::theme::Palette::of(config).faded(),
+    };
     let gutter_style = ink.ground(yumete_config::rung::CHROME);
     let head_style = gutter_style.fg(ink.gold()).add_modifier(Modifier::BOLD);
     // A ground, and only a ground: the ink on a selected cell is left alone, so
