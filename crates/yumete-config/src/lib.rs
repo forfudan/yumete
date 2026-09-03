@@ -60,6 +60,8 @@ pub struct EditorConfig {
     pub zong_length: usize,
     /// How many squares open a paragraph (首行縮進). 0 is none.
     pub indent: usize,
+    /// How many bands the vertical page is divided into (段組). 1 is none.
+    pub bands: usize,
     /// The gap between two 縱, in half-width cells (0–4).
     pub zong_gap: usize,
     /// Whether the 拆分 annotation is shown beside candidates (Feature #66).
@@ -173,6 +175,7 @@ impl Default for EditorConfig {
             layout: Layout::Horizontal,
             zong_length: 0,
             indent: 0,
+            bands: 1,
             zong_gap: DEFAULT_ZONG_GAP,
             show_chaifen: false,
             show_ruby: false,
@@ -570,6 +573,7 @@ struct RawEditor {
     layout: Option<String>,
     zong_length: Option<usize>,
     indent: Option<usize>,
+    bands: Option<usize>,
     zong_gap: Option<usize>,
     show_chaifen: Option<bool>,
     show_ruby: Option<bool>,
@@ -629,6 +633,9 @@ impl RawConfig {
         }
         if other.editor.indent.is_some() {
             self.editor.indent = other.editor.indent;
+        }
+        if other.editor.bands.is_some() {
+            self.editor.bands = other.editor.bands;
         }
         if other.editor.zong_length.is_some() {
             self.editor.zong_length = other.editor.zong_length;
@@ -758,6 +765,9 @@ impl RawConfig {
             // Two is the Chinese convention and eight is more than anyone
             // means; a number outside that is a typo, not a preference.
             config.editor.indent = n.min(8);
+        }
+        if let Some(n) = self.editor.bands {
+            config.editor.bands = n.clamp(1, 4);
         }
         if let Some(length) = self.editor.zong_length {
             // Below ~4 a 縱 stops being a column of text; above 64 no terminal

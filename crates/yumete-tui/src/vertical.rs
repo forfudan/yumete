@@ -58,6 +58,16 @@ pub struct Metrics {
     /// every 縱 — including the rightmost, which otherwise sits flush against
     /// the edge and would have nowhere to put a tick.
     pub ticks: bool,
+    /// How many bands the page is divided into (段組).
+    ///
+    /// Japanese vertical typesetting halves a tall page and uses the width
+    /// instead: a 縱 of fifty characters is tiring to read, and the traditional
+    /// answer is two bands of twenty-five, read top-right to top-left and then
+    /// bottom-right to bottom-left. A terminal is a wide, short shape, which is
+    /// exactly the shape 段組 is for.
+    pub bands: usize,
+    /// Rows from the top of one band to the top of the next, numbers included.
+    pub band_height: u16,
 }
 
 impl Metrics {
@@ -75,9 +85,17 @@ impl Metrics {
             measure,
             gap,
             dense,
+            bands,
         } = look;
         let head_rows = number_rows(config.editor.line_numbers, total_lines);
-        let rows = height.saturating_sub(head_rows) as usize;
+        // Bands are equal by construction: the page is divided, not packed, so
+        // the second band can never be a row shorter than the first.
+        let bands = bands.clamp(1, 4);
+        let band_height = height / bands as u16;
+        // A band too short to hold a 縱 at all is not a band; fall back to one.
+        let bands = if band_height <= head_rows + 1 { 1 } else { bands };
+        let band_height = height / bands as u16;
+        let rows = band_height.saturating_sub(head_rows) as usize;
         // A 縱 is as long as the writer said, or — by default — as long as the
         // window allows. The window is the default in both directions and for
         // the same reason: a fixed count is a decision about the *book*, and
@@ -101,6 +119,8 @@ impl Metrics {
             // Ticks cost the column a 縱's reading would have used, so a page
             // packed tight has none: that column is the whole point.
             ticks: config.editor.paper_ticks > 0 && !dense,
+            bands,
+            band_height,
         }
     }
 
@@ -127,7 +147,7 @@ impl Metrics {
     /// real count comes out of [`place`], which knows which of them carry a
     /// reading.
     pub fn capacity(&self, width: u16) -> usize {
-        (width / SLOT_WIDTH.max(1)) as usize
+        (width / SLOT_WIDTH.max(1)) as usize * self.bands
     }
 }
 
@@ -155,27 +175,36 @@ pub fn char_at(
     let capacity = metrics.capacity(area.width);
     let page = layout_page(buffer.rope(), viewport, grid, &metrics, area, capacity);
 
-    let text_top = area.y + metrics.head_rows;
-    if mouse.row < text_top {
-        return None;
-    }
-    let slot = (mouse.row - text_top) as usize;
-    // The 縱 whose two cells the column fell in — or, failing that, the nearest
-    // one to its right, since a click in a gap means the 縱 beside it.
-    let (zong, slots, _) = page
+    // Which band the row fell in, then which 縱 of it the column fell in — or,
+    // failing that, the nearest one to its right, since a click in a gap means
+    // the 縱 beside it.
+    let placed = page
         .iter()
-        .filter(|(_, _, x)| mouse.column >= *x)
-        .min_by_key(|(_, _, x)| mouse.column - *x)?;
-    let start = buffer.rope().line_to_char(zong.line);
-    match slots.get(slot) {
+        .filter(|p| mouse.column >= p.x && mouse.row >= p.top)
+        .min_by_key(|p| (mouse.row - p.top, mouse.column - p.x))?;
+    let slot = (mouse.row - placed.top) as usize;
+    let start = buffer.rope().line_to_char(placed.zong.line);
+    match placed.slots.get(slot) {
         Some(row) => Some(start + row.start),
         // Past the end of that 縱: the caret sits after its last character.
-        None => Some(start + slots.last().map_or(0, |row| row.end)),
+        None => Some(start + placed.slots.last().map_or(0, |row| row.end)),
     }
 }
 
-/// The 縱 of one page: each with the rows it draws and where it starts.
-type Page = Vec<(zong::Zong, Vec<zong::Slot>, u16)>;
+/// One 縱 as it was placed on the page.
+#[derive(Debug, Clone)]
+pub struct Placed {
+    pub zong: zong::Zong,
+    pub slots: Vec<zong::Slot>,
+    /// The left edge of its two cells.
+    pub x: u16,
+    /// The row its first slot is drawn on — which band it landed in.
+    pub top: u16,
+}
+
+/// The 縱 of one page, in reading order: down a band right to left, then the
+/// next band.
+type Page = Vec<Placed>;
 
 /// How wide a reading margin the readings on `slots` need.
 ///
@@ -215,12 +244,31 @@ fn layout_page(
     // widens the margin for all of them.
     let mut metrics = *metrics;
     metrics.ruby_width = ruby_width_of(&slots);
-    let xs = place(&metrics, area, &annotated);
+    // Each band is laid out as its own short page: filled right to left, and
+    // when it runs out of width the next one starts again at the right edge.
+    // Which is all 段組 is — the reading order is the sequence, and the bands
+    // are where the sequence is put.
+    let mut spots: Vec<(u16, u16)> = Vec::new();
+    for band in 0..metrics.bands {
+        let top = area.y + band as u16 * metrics.band_height + metrics.head_rows;
+        let xs = place(&metrics, area, &annotated[spots.len().min(annotated.len())..]);
+        if xs.is_empty() {
+            break;
+        }
+        for x in xs {
+            spots.push((x, top));
+        }
+    }
     zongs
         .into_iter()
         .zip(slots)
-        .zip(xs)
-        .map(|((zong, rows), x)| (zong, rows, x))
+        .zip(spots)
+        .map(|((zong, slots), (x, top))| Placed {
+            zong,
+            slots,
+            x,
+            top,
+        })
         .collect()
 }
 
@@ -287,6 +335,8 @@ pub struct Look {
     pub gap: Option<usize>,
     /// Whether the page is packed as tight as a terminal allows.
     pub dense: bool,
+    /// How many bands the page is divided into (段組).
+    pub bands: usize,
 }
 
 impl Look {
@@ -300,6 +350,7 @@ impl Look {
             measure: editor.measure(),
             gap: editor.zong_gap(),
             dense: editor.dense(),
+            bands: editor.bands(),
         }
     }
 }
@@ -503,7 +554,7 @@ pub fn draw(
 
     // The margin the page settled on, so the renderer blanks the cell a
     // full-width reading covers only when that cell was reserved for it.
-    let ruby_width = ruby_width_of(&page.iter().map(|(_, s, _)| s.clone()).collect::<Vec<_>>());
+    let ruby_width = ruby_width_of(&page.iter().map(|p| p.slots.clone()).collect::<Vec<_>>());
 
     // Lay the number band down as a band, before anything is drawn on it. In
     // every other editor a line number is separated from the text by position —
@@ -514,10 +565,15 @@ pub fn draw(
         let (gr, gg, gb) = config.theme.gutter;
         let ground = Style::default().bg(Color::Rgb(gr, gg, gb));
         let buf = frame.buffer_mut();
-        for y in area.y..area.y + metrics.head_rows.min(area.height) {
-            for x in area.x..area.x + area.width {
-                if let Some(cell) = buf.cell_mut((x, y)) {
-                    cell.set_symbol(" ").set_style(ground);
+        // One band per 段: each is a page of its own and each opens with its
+        // own row of paragraph numbers.
+        for band in 0..metrics.bands as u16 {
+            let top = area.y + band * metrics.band_height;
+            for y in top..(top + metrics.head_rows).min(area.y + area.height) {
+                for x in area.x..area.x + area.width {
+                    if let Some(cell) = buf.cell_mut((x, y)) {
+                        cell.set_symbol(" ").set_style(ground);
+                    }
                 }
             }
         }
@@ -558,15 +614,17 @@ pub fn draw(
     // page shows, exactly as the horizontal side does it.
     let show_markup = editor.markup_visible();
     let blocks = if show_markup {
-        let last = page.iter().map(|(zong, _, _)| zong.line).max().unwrap_or(0);
+        let last = page.iter().map(|p| p.zong.line).max().unwrap_or(0);
         editor.blocks_through(last)
     } else {
         Vec::new()
     };
 
     let buf = frame.buffer_mut();
-    for (zong, slots, x) in page.iter() {
-        let x = *x;
+    for placed in page.iter() {
+        let (zong, slots, x) = (&placed.zong, &placed.slots, placed.x);
+        // Which band this 縱 landed in decides where its first slot is drawn.
+        let text_top = placed.top;
         // Room for a tick: a 縱 that carries a reading or a hung mark has a
         // margin of its own, and with a gap between 縱 the cell to the right is
         // blank anyway. With neither, the next 縱 begins there.
@@ -592,7 +650,9 @@ pub fn draw(
             } else {
                 style.add_modifier(Modifier::DIM)
             };
-            put_number(buf, x, area.y, metrics.head_rows, n, style);
+            // Above its own band, not above the page.
+            let band_top = text_top.saturating_sub(metrics.head_rows);
+            put_number(buf, x, band_top, metrics.head_rows, n, style);
         }
 
         let line_start = rope.line_to_char(zong.line);
@@ -704,13 +764,10 @@ pub fn draw(
     }
 
     // The cursor, drawn last so it wins over a selection or a word tint.
-    let cursor_x = page
-        .get(cursor_column)
-        .map(|(_, _, x)| *x)
-        .or_else(|| page.last().map(|(_, _, x)| *x))
-        .unwrap_or(area.x);
-    let cursor_y =
-        (text_top + cursor_pos.slot as u16).min((area.y + area.height).saturating_sub(1));
+    let at_cursor = page.get(cursor_column).or_else(|| page.last());
+    let cursor_x = at_cursor.map(|p| p.x).unwrap_or(area.x);
+    let cursor_y = (at_cursor.map(|p| p.top).unwrap_or(text_top) + cursor_pos.slot as u16)
+        .min((area.y + area.height).saturating_sub(1));
     // Insert leaves the page alone: the caret is the terminal's own cursor, set
     // to an underscore — a thin horizontal rule, which is the bar of a
     // horizontal editor turned the quarter turn the text turned. Drawing it into

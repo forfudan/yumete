@@ -550,6 +550,8 @@ pub struct Editor {
     dense: bool,
     /// How many squares open a paragraph (首行縮進), as configured.
     indent: usize,
+    /// How many bands the vertical page is divided into (段組).
+    bands: usize,
     /// The rows a table search found, which one it is pointing at, and what it
     /// was looking for.
     table_hits: Vec<usize>,
@@ -774,6 +776,7 @@ impl Editor {
             zong_gap: None,
             dense: false,
             indent: 0,
+            bands: 1,
             table_hits: Vec::new(),
             table_hit: 0,
             table_needle: String::new(),
@@ -1803,6 +1806,10 @@ impl Editor {
                 Ok(CommandOutcome::Continue)
             }
             Command::WriteAll => self.write_all(),
+            Command::SetBands(n) => {
+                self.set_bands(n);
+                Ok(CommandOutcome::Continue)
+            }
             Command::SetIndent(n) => {
                 self.set_indent(n);
                 Ok(CommandOutcome::Continue)
@@ -4690,6 +4697,20 @@ impl Editor {
             true => 0,
             false => self.indent,
         }
+    }
+
+    /// How many bands the vertical page is divided into (段組).
+    pub fn bands(&self) -> usize {
+        self.bands.max(1)
+    }
+
+    /// Divide the vertical page into `n` bands.
+    pub fn set_bands(&mut self, n: usize) {
+        self.bands = n.clamp(1, 4);
+        self.status = match self.bands {
+            1 => "段組：一段（整頁一縱到底）".to_string(),
+            n => format!("段組：{n} 段"),
+        };
     }
 
     /// Set the first-line indent, in squares.

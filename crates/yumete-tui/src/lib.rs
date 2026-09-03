@@ -3715,6 +3715,34 @@ mod tests {
     }
 
     #[test]
+    fn two_bands_read_top_right_to_bottom_left() {
+        // 段組: a 縱 of fifty characters is tiring to read, and the traditional
+        // answer is to halve the page and use the width instead. A terminal is
+        // a wide, short shape, which is exactly what 段組 is for.
+        let text: String = (0..12).map(|_| "一二三四五六七八\n").collect();
+        let mut editor = editor_with(&text);
+        editor.set_layout(WritingLayout::Vertical);
+        let mut config = Config::default();
+        config.editor.line_numbers = yumete_config::LineNumbers::None;
+        config.editor.paper_ticks = 0;
+
+        // Narrow enough that twelve paragraphs cannot fit in one band.
+        let one = render(&editor, &config, 14, 21);
+        editor.set_bands(2);
+        let two = render(&editor, &config, 14, 21);
+        assert_ne!(buffer_text(&one), buffer_text(&two), "the page changed");
+
+        let has = |b: &ratatui::buffer::Buffer, rows: std::ops::Range<u16>| {
+            rows.flat_map(|y| (0..14u16).map(move |x| (x, y)))
+                .any(|(x, y)| at(b, x, y) == "一")
+        };
+        assert!(has(&two, 0..2), "the first band opens at the top");
+        assert!(has(&two, 8..14), "and the second band is a page of its own");
+        // With one band the page runs top to bottom and there is no second one.
+        assert!(!has(&one, 8..14), "one band: nothing starts halfway down");
+    }
+
+    #[test]
     fn a_paragraph_opens_two_squares_in_on_the_page() {
         // A Chinese paragraph is marked by an indent of two 字, and the blank
         // line it replaces costs a whole row.
