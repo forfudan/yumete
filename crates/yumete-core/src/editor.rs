@@ -1485,12 +1485,41 @@ impl Editor {
     /// hidden, so the cursor is never inside text that is not on the screen —
     /// which is what makes every motion and every edit act on what can be seen.
     pub fn hidden_on_line(&self, line: usize) -> Vec<(usize, usize)> {
-        if !self.wysiwyg() {
+        // A reading that is being *laid out* is drawn beside the base, so its
+        // markup comes off the page whatever `:render` says — leaving the tags
+        // on would be showing the same reading twice. This is what the 縱書
+        // page has always done; the horizontal one now does it too.
+        let mut off: Vec<(usize, usize)> = self
+            .readings_on_line(line)
+            .into_iter()
+            .flat_map(|g| [(g.start, g.base.0), (g.base.1, g.end)])
+            .filter(|(a, b)| b > a)
+            .collect();
+        if self.wysiwyg() {
+            // Inside a fence nothing is markup, so nothing comes off.
+            let spans = self.markup_line_in(line, self.block_of(line));
+            off.extend(crate::markdown::hidden(&spans, self.selected_columns(line)));
+            off.sort_unstable();
+        }
+        off
+    }
+
+    /// The ruby groups on `line` that are being laid out as readings.
+    ///
+    /// Empty when no dialect is being rendered, which is also what makes the
+    /// markup show as the text it is: nothing is hidden and nothing is drawn
+    /// above it.
+    pub fn readings_on_line(&self, line: usize) -> Vec<crate::ruby::Ruby> {
+        let dialects = self.ruby();
+        if dialects.is_empty() {
             return Vec::new();
         }
-        // Inside a fence nothing is markup, so nothing comes off.
-        let spans = self.markup_line_in(line, self.block_of(line));
-        crate::markdown::hidden(&spans, self.selected_columns(line))
+        let rope = self.current_buffer().rope();
+        if line >= rope.len_lines() {
+            return Vec::new();
+        }
+        let chars = crate::zong::line_chars(rope, line);
+        crate::ruby::groups(&chars, dialects)
     }
 
     /// The part of `line` the selection covers, as columns within it, or `None`
