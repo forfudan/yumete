@@ -113,8 +113,13 @@ fn blocks(text: &str) -> Vec<Block<'_>> {
     out
 }
 
-/// Rewrite one line's readings into `dialect`, escaping everything around them
-/// with `escape`.
+/// Rewrite one line for `dialect`: its readings, and its markup.
+///
+/// Two things happen here that used not to. **`**很好**` comes out as bold**,
+/// rather than as four asterisks — an export that prints the markup literally
+/// is not an export, it is a copy. And **a 批注 does not leave the manuscript**:
+/// `%%私話%%` is the writer talking to themselves, the manual says so, and it
+/// was going into the file handed to a publisher.
 fn line_into(
     line: &str,
     dialects: Dialects,
@@ -123,20 +128,66 @@ fn line_into(
 ) -> String {
     let chars: Vec<char> = line.chars().collect();
     let groups = ruby::groups(&chars, dialects);
+    let marks = crate::markdown::spans(line);
     let mut out = String::with_capacity(line.len());
+    let mut plain = String::new();
     let mut at = 0;
-    for group in groups {
-        out.push_str(&escape(&chars[at..group.start].iter().collect::<String>()));
-        let base: String = group.base_text(&chars).iter().collect();
-        let reading: String = group.reading_text(&chars).iter().collect();
-        // The base and the reading are escaped, then wrapped: the markup is
-        // ours, the text inside it is the writer's.
-        let base: Vec<char> = escape(&base).chars().collect();
-        out.push_str(&ruby::markup(&base, &escape(&reading), dialect));
-        at = group.end;
+    while at < chars.len() {
+        // A reading group first: it is markup of its own, and its base may hold
+        // characters the Markdown scan would read as delimiters.
+        if let Some(group) = groups.iter().find(|g| g.start == at) {
+            out.push_str(&escape(&std::mem::take(&mut plain)));
+            let base: String = group.base_text(&chars).iter().collect();
+            let reading: String = group.reading_text(&chars).iter().collect();
+            // The base and the reading are escaped, then wrapped: the markup is
+            // ours, the text inside it is the writer's.
+            let base: Vec<char> = escape(&base).chars().collect();
+            out.push_str(&ruby::markup(&base, &escape(&reading), dialect));
+            at = group.end;
+            continue;
+        }
+        match marks.iter().find(|s| at >= s.start && at < s.end) {
+            Some(span) => {
+                out.push_str(&escape(&std::mem::take(&mut plain)));
+                let end = span.end.min(chars.len());
+                let text: String = chars[at.max(span.start)..end].iter().collect();
+                out.push_str(&marked(span.kind, &escape(&text), dialect));
+                at = end.max(at + 1);
+            }
+            None => {
+                plain.push(chars[at]);
+                at += 1;
+            }
+        }
     }
-    out.push_str(&escape(&chars[at..].iter().collect::<String>()));
+    out.push_str(&escape(&plain));
     out
+}
+
+/// One marked run, written the way `dialect` writes it.
+///
+/// The markers themselves and the 批注 come out as nothing at all — those are
+/// the two runs that are *about* the manuscript rather than part of it.
+fn marked(kind: crate::markdown::Kind, text: &str, dialect: Dialect) -> String {
+    use crate::markdown::Kind;
+    match (kind, dialect) {
+        // The delimiters, and the writer's private notes. Not in the book.
+        (Kind::Marker | Kind::Comment, _) => String::new(),
+        (Kind::Strong, Dialect::Html) => format!("<strong>{text}</strong>"),
+        (Kind::Emphasis, Dialect::Html) => format!("<em>{text}</em>"),
+        (Kind::Code, Dialect::Html) => format!("<code>{text}</code>"),
+        (Kind::Strike, Dialect::Html) => format!("<s>{text}</s>"),
+        (Kind::Highlight, Dialect::Html) => format!("<mark>{text}</mark>"),
+        (Kind::Strong, Dialect::Typst) => format!("*{text}*"),
+        (Kind::Emphasis, Dialect::Typst) => format!("_{text}_"),
+        (Kind::Code, Dialect::Typst) => format!("`{text}`"),
+        (Kind::Strike, Dialect::Typst) => format!("#strike[{text}]"),
+        (Kind::Highlight, Dialect::Typst) => format!("#highlight[{text}]"),
+        // A link's target is scaffolding for a manuscript, not part of the
+        // book; its visible text is the book. The heading's own hashes are
+        // handled a level up, where the heading is.
+        _ => text.to_string(),
+    }
 }
 
 /// `&`, `<` and `>` as a browser needs them.
@@ -182,7 +233,11 @@ fn html(text: &str, style: &Style) -> String {
         // The one place outside a terminal where 縱書 costs a line of CSS. The
         // measure is the 縱 length, so a page here holds what a page there did.
         out.push_str(&format!(
-            "body {{ writing-mode: vertical-rl; text-orientation: upright; \
+            // `mixed`, not `upright`: upright sets every Latin letter on its
+            // own row, so a pinyin reading comes out one letter at a time and a
+            // year comes out as four. `mixed` is what 縱書 means — 漢字 upright,
+            // Latin turned — and it is the property's own default.
+            "body {{ writing-mode: vertical-rl; text-orientation: mixed; \
              max-block-size: {}em; block-size: {}em; }}\n",
             style.zong_len, style.zong_len
         ));
@@ -191,7 +246,10 @@ fn html(text: &str, style: &Style) -> String {
     }
     if style.hanging {
         // What `:hanging` means, said in the way a browser understands it.
-        out.push_str("body { hanging-punctuation: allow-end last; }\n");
+        // `allow-end`, not `allow-end last`: `last` narrows it to the final
+        // line of the block, which is not what 標點旁置 means — a stop hangs
+        // wherever it lands at the end of a 縱.
+        out.push_str("body { hanging-punctuation: allow-end; }\n");
     }
     out.push_str("p { text-indent: 2em; margin: 0; }\n");
     out.push_str("rt { font-size: 0.5em; }\n");
@@ -271,6 +329,51 @@ mod tests {
             dialects: Dialects::only(Dialect::Html),
             title: "第一章".to_string(),
         }
+    }
+
+    #[test]
+    fn markup_is_rendered_and_a_note_to_yourself_is_not_exported() {
+        // An export that prints the markup literally is not an export, it is a
+        // copy — and 批注 is the writer talking to themselves, which the manual
+        // says is not part of the book. It was going into the file handed to a
+        // publisher.
+        let style = Style {
+            vertical: false,
+            hanging: false,
+            zong_len: 32,
+            dialects: Dialects::NONE,
+            title: "t".to_string(),
+        };
+        let out = export("他**很好**，%%這裏要改%%不過還行。\n", Format::Html, &style);
+        assert!(out.contains("<strong>很好</strong>"), "{out}");
+        assert!(!out.contains("**"), "the asterisks are gone: {out}");
+        assert!(!out.contains("這裏要改"), "the 批注 is not in the book: {out}");
+        assert!(!out.contains("%%"), "{out}");
+        assert!(out.contains("不過還行"), "and the writing is: {out}");
+
+        // Typst writes the same thing its own way.
+        let out = export("他**很好**，%%私話%%好。\n", Format::Typst, &style);
+        assert!(out.contains("*很好*"), "{out}");
+        assert!(!out.contains("私話"), "{out}");
+    }
+
+    #[test]
+    fn a_vertical_page_sets_latin_the_way_縱書_does() {
+        let style = Style {
+            vertical: true,
+            hanging: true,
+            zong_len: 32,
+            dialects: Dialects::NONE,
+            title: "t".to_string(),
+        };
+        let out = export("一二三\n", Format::Html, &style);
+        // `upright` sets every Latin letter on its own row — a pinyin reading
+        // one letter at a time, a year as four.
+        assert!(out.contains("text-orientation: mixed"), "{out}");
+        assert!(!out.contains("upright"), "{out}");
+        // `last` narrows the hang to the block's final line, which is not what
+        // 標點旁置 means.
+        assert!(out.contains("hanging-punctuation: allow-end;"), "{out}");
     }
 
     #[test]

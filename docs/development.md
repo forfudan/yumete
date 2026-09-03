@@ -701,15 +701,16 @@ dep and ship the tarballs §5.3 already designs. **high**
 - **No session (#43)**: five `:open`s every morning. **medium**
 - **No marks (#45).** The jump list half was built; marks were not. **medium**
 
-### 8 · Export and preview
+### 8 · Export and preview — **done**
 
-- **`:export` leaks 批注 and prints markup literally.** `%%私話%%` goes into the
-  file you hand a publisher, and `**很好**` exports as four asterisks rather
-  than `<strong>`. The manual says 批注 「不是書的一部分」. **medium**
-- **The HTML export's 縱書 is thinner than it looks**: `text-orientation:
-  upright` sets pinyin one letter per row (`mixed` is what 縱書 wants), and
-  `hanging-punctuation: allow-end last` affects only the last line and only in
-  Safari, so `:hanging` does not survive the export. **medium**
+- ~~`:export` leaks 批注 and prints markup literally.~~ `**很好**` is
+  `<strong>` (and `*很好*` in Typst), and `%%…%%` leaves nothing behind — an
+  export that prints the markup is a copy, and the manual has always said a
+  批注 is not part of the book.
+- ~~The HTML export's 縱書 is thinner than it looks.~~ `text-orientation:
+  mixed` (upright set every Latin letter on its own row — a pinyin reading one
+  letter at a time), and `hanging-punctuation: allow-end` without the `last`
+  that narrowed it to the block's final line.
 
 ### 9 · The manual is out of date with the editor (×3)
 
