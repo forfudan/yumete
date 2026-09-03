@@ -1362,13 +1362,33 @@ zh = "跟終端的底色走"
 en = "follow the terminal's own background"
 
 [[message]]
-zh = "欄線：欄與欄之間分不分開"
-en = "column rules: whether the columns are ruled apart"
+zh = "欄線：欄與欄之間怎麼分開"
+en = "column rules: how the columns are told apart"
 
 [[message]]
-zh = "欄線：開"
-en = "column rules: on"
+zh = "欄線：{0}"
+en = "column rules: {0}"
 
 [[message]]
-zh = "欄線：關"
-en = "column rules: off"
+zh = "什麼都不畫，靠對齊分（默認）"
+en = "nothing drawn — the alignment tells them apart (default)"
+
+[[message]]
+zh = "每欄一條淡底，紙從縫裏透出來"
+en = "a band per column, with the page showing in the seam"
+
+[[message]]
+zh = "畫一條竪線"
+en = "draw a vertical line"
+
+[[message]]
+zh = "實線 │（默認）"
+en = "solid │ (default)"
+
+[[message]]
+zh = "虛線 ┆"
+en = "dashed ┆"
+
+[[message]]
+zh = "雙線 ║"
+en = "double ║"

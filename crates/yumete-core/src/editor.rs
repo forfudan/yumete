@@ -498,9 +498,8 @@ pub struct Editor {
     project_words: std::rc::Rc<RefCell<yumete_cjk::WordList>>,
     /// Whether the segmentation overlay (word background tint) is shown.
     show_segmentation: bool,
-    /// Whether a table's columns are drawn as bands with the page showing
-    /// between them (Feature #157).
-    table_rules: bool,
+    /// How a table's columns are told apart (Feature #157).
+    table_rules: crate::table::Rules,
     /// A pending count prefix, so `3w` moves three words (Helix counts).
     count: Option<usize>,
     /// The text typed during the last Insert session, replayed by `.`.
@@ -805,7 +804,7 @@ impl Editor {
             segmenter: Box::new(CategorySegmenter),
             project_words: std::rc::Rc::new(RefCell::new(yumete_cjk::WordList::default())),
             show_segmentation: false,
-            table_rules: true,
+            table_rules: crate::table::Rules::default(),
             count: None,
             edit_keys: Vec::new(),
             edit_revision: (0, 0),
@@ -2051,12 +2050,11 @@ impl Editor {
                 self.theme_request = Some((name, mood));
                 Ok(CommandOutcome::Continue)
             }
-            Command::SetTableRules(on) => {
-                self.table_rules = on.unwrap_or(!self.table_rules);
-                self.status = match self.table_rules {
-                    true => say!("欄線：開"),
-                    false => say!("欄線：關"),
-                };
+            Command::SetTableRules(rules) => {
+                if let Some(rules) = rules {
+                    self.table_rules = rules;
+                }
+                self.status = say!("欄線：{0}", self.table_rules.name());
                 Ok(CommandOutcome::Continue)
             }
             Command::SetTable(on) => {
@@ -5726,19 +5724,19 @@ impl Editor {
     }
 
     /// Turn the segmentation overlay on or off.
-    /// Whether the grid's columns are ruled apart.
-    pub fn table_rules(&self) -> bool {
+    /// How the grid's columns are told apart.
+    pub fn table_rules(&self) -> crate::table::Rules {
         self.table_rules
     }
 
-    /// Rule the columns apart, or let them run together.
+    /// Say how the columns are told apart.
     ///
     /// Twenty-eight columns of one or two characters read as a grid; six wide
-    /// ones read as a page, and then the seams are just noise between the
-    /// words. Which of the two a table is, is not something the editor can
-    /// tell from the file.
-    pub fn set_table_rules(&mut self, on: bool) {
-        self.table_rules = on;
+    /// ones read as a page, and then a rule between every column is noise
+    /// between the words. Which of the two a table is, is not something the
+    /// editor can tell from the file.
+    pub fn set_table_rules(&mut self, rules: crate::table::Rules) {
+        self.table_rules = rules;
     }
 
     pub fn set_segmentation_visible(&mut self, on: bool) {
