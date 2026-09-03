@@ -4705,14 +4705,14 @@ impl Editor {
 
     /// How many squares open a paragraph, as the page is drawn.
     ///
-    /// Masked by `:dense` the way the readings and the hung 句讀 are: a packed
-    /// page spends every column on writing, and two squares a paragraph is a
-    /// column's worth over a chapter.
+    /// **Not** masked by `:dense`, unlike the readings, the hung 句讀 and the
+    /// ticks. Those three each cost a *column* — the width `:dense` exists to
+    /// win back. The indent costs two squares at the head of a paragraph, and
+    /// it is the one thing on a packed page that says where a paragraph
+    /// begins: it is what replaces the blank line, which costs a whole 縱.
+    /// Masking it made the feature invisible on the default page.
     pub fn paragraph_indent(&self) -> usize {
-        match self.dense {
-            true => 0,
-            false => self.indent,
-        }
+        self.indent
     }
 
     /// How many bands the vertical page is divided into (段組).
@@ -8929,6 +8929,20 @@ mod tests {
         let text = ed.current_buffer().text();
         assert_eq!(text.lines().next().unwrap().matches('|').count(), 3, "{text}");
         assert!(!text.contains("春天"), "{text}");
+    }
+
+    #[test]
+    fn a_packed_page_still_says_where_a_paragraph_begins() {
+        // `:dense` is the default page, so masking the indent under it made
+        // 首行縮進 invisible out of the box. The three things `:dense` drops
+        // each cost a *column*; the indent costs two squares, and it is what
+        // replaces the blank line — which costs a whole 縱.
+        let mut ed = Editor::new();
+        ed.set_indent(2);
+        ed.set_dense(true);
+        assert_eq!(ed.paragraph_indent(), 2);
+        assert_eq!(ed.grid().indent, 2);
+        assert!(ed.ruby().is_empty(), "…while the reading column still goes");
     }
 
     #[test]
