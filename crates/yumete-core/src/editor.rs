@@ -5073,7 +5073,12 @@ impl Editor {
         Grid::new(self.zong_length, self.ruby())
             .with_tatechuyoko(self.tatechuyoko)
             .with_indent(self.paragraph_indent())
-            .with_folds(self.paragraph_indent() > 0, self.cursor_line())
+            // **Always, on a 縱書 page.** The blank line is folded when the
+            // paragraph is marked some other way — horizontally that means the
+            // indent, and vertically the 縱 itself: a paragraph *is* a new
+            // column, so a blank line is a second mark for something already
+            // said, and it costs a whole column of reading to say it.
+            .with_folds(true, self.cursor_line())
             .with_fold_free(self.fold_free_span())
             .with_open_line(self.open_line())
             .with_hanging(self.hanging_punctuation())
