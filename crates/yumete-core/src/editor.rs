@@ -4979,6 +4979,7 @@ impl Editor {
             .with_tatechuyoko(self.tatechuyoko)
             .with_indent(self.paragraph_indent())
             .with_folds(self.paragraph_indent() > 0, self.cursor_line())
+            .with_open_line(self.open_line())
             .with_hanging(self.hanging_punctuation())
             .with_markup_hidden(self.render == Render::Full, Some(self.selection()))
     }
@@ -5003,7 +5004,27 @@ impl Editor {
         if line == self.cursor_line() {
             return false;
         }
+        // The blank line above the paragraph being typed into comes back with
+        // it: in Insert the page shows the file, so there is nothing to work
+        // out about what is really there.
+        if self.open_line() == Some(line + 1) {
+            return false;
+        }
         self.folds().get(line).copied().unwrap_or(false)
+    }
+
+    /// The paragraph shown **as the file has it**: no indent, and its blank
+    /// line back (Feature #159).
+    ///
+    /// Insert only. In Normal the page is being *read*, and a page that
+    /// reflowed under every `j` would cost more than the doubt it removes;
+    /// in Insert the structure is being changed, and a mark the file does not
+    /// contain has no business being in the middle of it.
+    pub fn open_line(&self) -> Option<usize> {
+        match self.mode == Mode::Insert && self.indent > 0 {
+            true => Some(self.cursor_line()),
+            false => None,
+        }
     }
 
     /// The fold map for the buffer as it stands, worked out once per edit.
@@ -8254,7 +8275,8 @@ impl Editor {
                     // must not stop on.
                     let m = crate::wrap::Measure::new(width, &hide)
                         .with_indent(self.paragraph_indent())
-                        .with_folds(&fold);
+                        .with_folds(&fold)
+                        .with_open_line(self.open_line());
                     crate::wrap::column_of(rope, self.cursor, m)
                 }
                 None => motion::visual_column(rope, self.cursor),
@@ -8286,7 +8308,8 @@ impl Editor {
                     // page `j` steps through has to be the page on the screen.
                     let m = crate::wrap::Measure::new(width, &hide)
                         .with_indent(self.paragraph_indent())
-                        .with_folds(&fold);
+                        .with_folds(&fold)
+                        .with_open_line(self.open_line());
                     if up {
                         crate::wrap::prev_row(rope, self.cursor, m, self.goal_column)
                     } else {

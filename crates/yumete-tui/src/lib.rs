@@ -1396,7 +1396,8 @@ fn text_at(
             let fold = |line: usize| editor.line_is_folded(line);
             let measure = wrap::Measure::new(width, &hide)
                 .with_indent(editor.paragraph_indent())
-                .with_folds(&fold);
+                .with_folds(&fold)
+                .with_open_line(editor.open_line());
             let row = wrap::rows_from(
                 buffer.rope(),
                 viewport.top,
@@ -1413,7 +1414,7 @@ fn text_at(
             // The row starts where it was drawn: a click anywhere in a
             // paragraph's opening indent means its first character.
             let mut column =
-                measure.indent_of(&buffer.rope().line(row.line).to_string(), row.index_in_line);
+                measure.indent_of(row.line, &buffer.rope().line(row.line).to_string(), row.index_in_line);
             for at in row.start..row.end {
                 let c = buffer.rope().char(at);
                 let off = hidden
@@ -1880,7 +1881,8 @@ fn draw_horizontal(
     let fold = |line: usize| editor.line_is_folded(line);
     let measure = wrap::Measure::new(width, &hide)
         .with_indent(editor.paragraph_indent())
-        .with_folds(&fold);
+        .with_folds(&fold)
+        .with_open_line(editor.open_line());
 
     let cursor_line = editor.cursor_line();
     let cursor_pos = wrap::position(rope, editor.cursor(), measure);
@@ -1961,7 +1963,7 @@ fn draw_horizontal(
         }
         // The paragraph opens two squares in, the way a Chinese paragraph is
         // marked — and the blank line it replaces costs a whole row.
-        let indent = measure.indent_of(&rope.line(row.line).to_string(), row.index_in_line);
+        let indent = measure.indent_of(row.line, &rope.line(row.line).to_string(), row.index_in_line);
         if indent > 0 {
             spans.push(Span::styled(" ".repeat(indent), ink.page()));
         }
@@ -4072,6 +4074,36 @@ mod tests {
         editor.set_indent(0);
         let buffer = render(&editor, &config, 40, 8);
         assert_eq!(row_text(&buffer, 1).trim_end(), "2");
+    }
+
+    #[test]
+    fn insert_shows_the_paragraph_as_the_file_has_it() {
+        // 所見即所得's bargain, one construct larger: what is being typed into
+        // is shown as it really is — no indent the file does not contain, and
+        // the blank line above it back — so there is nothing to work out.
+        let mut editor = editor_with("第一段\n\n第二段\n");
+        editor.set_indent(2);
+        let mut config = Config::default();
+        config.editor.line_numbers = yumete_config::LineNumbers::None;
+
+        // Normal: a book. Two rows, both indented.
+        let buffer = render(&editor, &config, 40, 8);
+        assert_eq!(row_text(&buffer, 0).trim_end(), "  第一段");
+        assert_eq!(row_text(&buffer, 1).trim_end(), "  第二段");
+
+        // Insert on the second paragraph: a file. The blank line is back and
+        // the paragraph starts where the file starts it.
+        editor.on_key(Key::Char('j'));
+        editor.on_key(Key::Char('i'));
+        let buffer = render(&editor, &config, 40, 8);
+        assert_eq!(row_text(&buffer, 0).trim_end(), "  第一段");
+        assert_eq!(row_text(&buffer, 1).trim_end(), "");
+        assert_eq!(row_text(&buffer, 2).trim_end(), "第二段", "the one being typed");
+
+        // Esc, and it is a book again.
+        editor.on_key(Key::Esc);
+        let buffer = render(&editor, &config, 40, 8);
+        assert_eq!(row_text(&buffer, 1).trim_end(), "  第二段");
     }
 
     #[test]
