@@ -6912,8 +6912,15 @@ impl Editor {
             Key::Ctrl('w') => {
                 let head: String = self.command_line.chars().take(self.command_caret).collect();
                 let kept = head.trim_end();
-                let cut = kept.rfind(|c: char| c.is_whitespace()).map_or(0, |i| i + 1);
-                let keep: String = head.chars().take(kept[..cut].chars().count()).collect();
+                // Counted in **characters**, not bytes: a full-width space —
+                // which a Chinese writer types without thinking about it — is
+                // three bytes, and `byte index + 1` lands inside it.
+                let cut = kept
+                    .char_indices()
+                    .rev()
+                    .find(|(_, c)| c.is_whitespace())
+                    .map_or(0, |(i, c)| kept[..i + c.len_utf8()].chars().count());
+                let keep: String = head.chars().take(cut).collect();
                 let tail: String = self.command_line.chars().skip(self.command_caret).collect();
                 self.command_caret = keep.chars().count();
                 self.command_line = format!("{keep}{tail}");
@@ -12366,6 +12373,16 @@ mod tests {
         assert_eq!(ed.prompt(), Some((':', "sh wc ")));
         ed.on_key(Key::Ctrl('u'));
         assert_eq!(ed.prompt(), Some((':', "")));
+
+        // A full-width space is three bytes, and `byte index + 1` lands inside
+        // it — a Chinese writer types one without thinking about it.
+        ed.on_key(Key::Esc);
+        ed.on_key(Key::Char(':'));
+        for c in "grep 甲　乙".chars() {
+            ed.on_key(Key::Char(c));
+        }
+        ed.on_key(Key::Ctrl('w'));
+        assert_eq!(ed.prompt(), Some((':', "grep 甲　")));
     }
 
     #[test]
