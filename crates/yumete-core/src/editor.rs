@@ -501,6 +501,8 @@ pub struct Editor {
     show_segmentation: bool,
     /// How a table's columns are told apart (Feature #157).
     table_rules: crate::table::Rules,
+    /// Whether a 碼表 is loaded, as last reported by the front end.
+    ime_available: bool,
     /// What is drawn in a paragraph's opening squares, if anything.
     indent_hint: crate::zong::IndentHint,
     /// The character `IndentHint::Symbol` draws there.
@@ -810,6 +812,7 @@ impl Editor {
             project_words: std::rc::Rc::new(RefCell::new(yumete_cjk::WordList::default())),
             show_segmentation: false,
             table_rules: crate::table::Rules::default(),
+            ime_available: false,
             indent_hint: crate::zong::IndentHint::default(),
             indent_symbol: "↵".to_string(),
             count: None,
@@ -1767,6 +1770,46 @@ impl Editor {
     /// Returns [`CommandOutcome::Quit`] when a `:q` / `:q!` should end the
     /// session, and [`CommandOutcome::Continue`] otherwise.
     pub fn execute(&mut self, line: &str) -> Result<CommandOutcome, EditorError> {
+        // What this command needs before it can mean anything (Feature #170).
+        // A setting whose prerequisite is missing used to be *set* and then
+        // read by nobody: `:hanging on` on a horizontal page turned a flag on,
+        // changed nothing, and said 「標點旁置：開」, which is three kinds of
+        // wrong at once.
+        let (line, force) = match line.trim_end().strip_suffix(" force") {
+            Some(rest) => (rest.trim_end(), true),
+            None => (line, false),
+        };
+        let unmet: Vec<command::Need> = command::needs_of(line)
+            .iter()
+            .copied()
+            .filter(|need| !self.meets(*need))
+            .collect();
+        if !unmet.is_empty() {
+            if !force {
+                let what: Vec<&str> = unmet.iter().map(|n| n.says()).collect();
+                self.status = say!(
+                    "還不行，需要：{0}——句末加 force 一併打開",
+                    what.join(&say!("、"))
+                );
+                return Ok(CommandOutcome::Continue);
+            }
+            // Satisfied until they stay satisfied: turning the page 縱書 can
+            // make a second prerequisite start mattering, and a `force` that
+            // half-worked would be worse than one that did not.
+            for _ in 0..3 {
+                let left: Vec<command::Need> = command::needs_of(line)
+                    .iter()
+                    .copied()
+                    .filter(|need| !self.meets(*need))
+                    .collect();
+                if left.is_empty() {
+                    break;
+                }
+                for need in left {
+                    self.satisfy(need);
+                }
+            }
+        }
         match command::parse(line)? {
             Command::Open(path) => {
                 self.open_file(path).map_err(EditorError::Io)?;
@@ -5829,6 +5872,41 @@ impl Editor {
     }
 
     /// Turn the segmentation overlay on or off.
+    /// Whether the editor is in the state `need` asks for.
+    fn meets(&self, need: command::Need) -> bool {
+        match need {
+            command::Need::Vertical => self.layout == Layout::Vertical,
+            command::Need::Loose => !self.dense,
+            command::Need::Table => self.table_here(),
+            command::Need::Scheme => self.ime_available,
+        }
+    }
+
+    /// Bring `need` about, for `force`.
+    fn satisfy(&mut self, need: command::Need) {
+        match need {
+            command::Need::Vertical => self.set_layout(Layout::Vertical),
+            command::Need::Loose => self.set_dense(false),
+            command::Need::Table => {
+                self.enter_table();
+            }
+            // The front end is the one holding the input method, so this is a
+            // request like every other one about it.
+            command::Need::Scheme => self.scheme_request = Some(String::new()),
+        }
+    }
+
+    /// Which of `needs` are not met — what the menu shows before a command is
+    /// run.
+    pub fn unmet_needs(&self, needs: &'static [command::Need]) -> Vec<command::Need> {
+        needs.iter().copied().filter(|n| !self.meets(*n)).collect()
+    }
+
+    /// Tell the editor whether a 碼表 is loaded — only the front end knows.
+    pub fn set_ime_available(&mut self, available: bool) {
+        self.ime_available = available;
+    }
+
     /// What is drawn in a paragraph's opening squares.
     pub fn indent_hint(&self) -> crate::zong::IndentHint {
         self.indent_hint
@@ -9878,9 +9956,40 @@ mod tests {
     }
 
     #[test]
+    fn a_command_says_what_it_is_waiting_for() {
+        // 標點旁置 needs a 縱書 page that is not packed. It used to set a flag
+        // nobody read: the setting said 「開」, the page did not change, and
+        // there was nowhere to find out why.
+        let mut ed = Editor::new();
+        ed.set_dense(true);
+        ed.execute(":hanging on").unwrap();
+        assert!(!ed.hanging_punctuation(), "{}", ed.status());
+        let said = ed.status().to_string();
+        assert!(said.contains("竪排") && said.contains("密排關"), "{said}");
+        assert!(said.contains("force"), "{said}");
+
+        // …and `force` brings the prerequisites about, in one line.
+        ed.execute(":hanging on force").unwrap();
+        assert_eq!(ed.layout(), crate::zong::Layout::Vertical);
+        assert!(!ed.dense());
+        assert!(ed.hanging_punctuation(), "{}", ed.status());
+
+        // A command whose needs are met says nothing about them.
+        ed.execute(":hanging off").unwrap();
+        assert!(!ed.hanging_punctuation());
+        assert!(!ed.status().contains("需要"), "{}", ed.status());
+    }
+
+    #[test]
     fn chaifen_command_leaves_a_request_for_the_ime() {
         let mut ed = Editor::new();
         assert_eq!(ed.take_chaifen_request(), None);
+        // 拆分 annotates *candidates*, so it needs a 碼表 — and says so, with
+        // nothing loaded, instead of leaving a request nobody can answer.
+        ed.execute(":yume chaifen").unwrap();
+        assert_eq!(ed.take_chaifen_request(), None, "{}", ed.status());
+        assert!(ed.status().contains("碼表"), "{}", ed.status());
+        ed.set_ime_available(true);
         ed.execute(":yume chaifen").unwrap();
         assert_eq!(ed.take_chaifen_request(), Some(true));
         assert_eq!(ed.take_chaifen_request(), None, "taken once only");

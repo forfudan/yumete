@@ -1462,3 +1462,11 @@ en = "moxiang: black, white-gold, gold and red ink; every other shade computed"
 [[message]]
 zh = "黑白：只有黑、白和灰——輕重說話，顏色不說"
 en = "heibai: black, white and grey only — weight says it, colour says nothing"
+
+[[message]]
+zh = "還不行，需要：{0}——句末加 force 一併打開"
+en = "not yet — this needs {0}; add force at the end to turn them on with it"
+
+[[message]]
+zh = "需要 {0}，句末加 force"
+en = "needs {0}; add force at the end"

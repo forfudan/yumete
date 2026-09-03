@@ -180,6 +180,7 @@ pub fn run(
             if !said.is_empty() {
                 editor.set_status(said);
             }
+            editor.set_ime_available(ime.available());
             let words = ime.segmenter();
             if words.is_available() {
                 editor.set_segmenter(Box::new(words));
@@ -317,6 +318,7 @@ pub fn run(
                 }
                 if let Some(tag) = editor.take_scheme_request() {
                     editor.set_status(switch_scheme(ime, &tag, config));
+                    editor.set_ime_available(ime.available());
                     // The scheme's own language data may be better than what
                     // was loaded before it.
                     let words = ime.segmenter();
@@ -1403,12 +1405,30 @@ fn draw_command_menu(
     // once is what covered the page.
     // Its `help` is written in Chinese and is the key it is translated by, the
     // same as every other thing this editor says.
-    let footer = format!(
-        "{}/{}  {}",
-        focus + 1,
-        matches.len(),
-        yumete_core::messages::say(matches[focus].help, &[])
-    );
+    // …and what it is waiting for, when it is waiting for something. A
+    // prerequisite belongs *here*, before the command is run: the writer who
+    // typed `:hanging` on a horizontal page found out by pressing Enter and
+    // watching nothing happen.
+    let unmet: Vec<&str> = editor
+        .unmet_needs(matches[focus].needs)
+        .iter()
+        .map(|need| need.says())
+        .collect();
+    let footer = match unmet.is_empty() {
+        true => format!(
+            "{}/{}  {}",
+            focus + 1,
+            matches.len(),
+            yumete_core::messages::say(matches[focus].help, &[])
+        ),
+        false => format!(
+            "{}/{}  {}  ⟨{}⟩",
+            focus + 1,
+            matches.len(),
+            yumete_core::messages::say(matches[focus].help, &[]),
+            say!("需要 {0}，句末加 force", unmet.join(&say!("、")))
+        ),
+    };
     // Spread across the window: the command list is short entries and there
     // are a couple of dozen of them, which is exactly the shape that wants
     // columns.
@@ -2580,16 +2600,28 @@ fn indent_span(indent: usize, editor: &Editor, ink: crate::theme::Palette) -> Sp
 fn draw_hints(frame: &mut Frame, editor: &Editor, config: &Config, area: Rect) {
     use yumete_core::editor::Hint;
     let ink = crate::theme::Palette::of(config);
+    // On the page's own ground, and *painted* — this row set colours and no
+    // background at all, so on a light page over a dark terminal it came out
+    // as a black band with the page's dark ink on it, which is to say
+    // unreadable. A blank hint row is part of the margin, not a hole in it.
+    let page = ink.page();
     // News is the loud kind; keys are the quiet kind and read as furniture.
-    let news = Style::default().fg(ink.text());
+    let news = page.fg(ink.text());
     // The key is what the eye is hunting for, so it is the lit half; what it
     // does is the half you only read once.
-    let key = Style::default().fg(ink.text());
-    let what = Style::default().fg(ink.furniture());
+    let key = page.fg(ink.text());
+    let what = page.fg(ink.furniture());
     // 金墨: the label names what mode you are in, which is not prose either.
-    let label = Style::default().fg(ink.gold()).add_modifier(Modifier::BOLD);
+    let label = page.fg(ink.gold()).add_modifier(Modifier::BOLD);
     let right = area.x + area.width;
     let buf = frame.buffer_mut();
+    for y in area.y..area.y + area.height {
+        for x in area.x..right {
+            if let Some(cell) = buf.cell_mut((x, y)) {
+                cell.set_symbol(" ").set_style(page);
+            }
+        }
+    }
     let mut x = area.x + 1;
     let mut put = |text: &str, style: Style, x: &mut u16| {
         if *x >= right {

@@ -652,6 +652,8 @@ pub struct Entry {
     pub help: &'static str,
     /// What may follow it.
     pub args: Args,
+    /// What has to be true before it does anything.
+    pub needs: &'static [Need],
 }
 
 /// What may follow a command, or one of its words.
@@ -678,6 +680,50 @@ pub struct Word {
     pub name: &'static str,
     pub help: &'static str,
     pub then: Args,
+    /// What has to be true before this word does anything (Feature #170).
+    pub needs: &'static [Need],
+}
+
+/// A state a command needs before it can do what it says.
+///
+/// **The editor used to answer these with silence.** `:hanging on` on a
+/// horizontal page set a flag that nothing read: the setting was on, the page
+/// did not change, and there was nowhere to find out why. A prerequisite is
+/// part of what a command *is*, so it is declared beside it — and then it can
+/// be shown in the menu before the command is run, said plainly when it is,
+/// and satisfied on request with `force`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Need {
+    /// The page runs 縱書.
+    Vertical,
+    /// The page is not packed — 密排 drops the margin this needs.
+    Loose,
+    /// A table is open.
+    Table,
+    /// A 碼表 has been loaded.
+    Scheme,
+}
+
+impl Need {
+    /// What it is, in a sentence a status line can hold.
+    pub fn says(self) -> &'static str {
+        match self {
+            Need::Vertical => "竪排",
+            Need::Loose => "密排關",
+            Need::Table => "表格模式",
+            Need::Scheme => "載入碼表",
+        }
+    }
+
+    /// The command that brings it about, for the message and for `force`.
+    pub fn how(self) -> &'static str {
+        match self {
+            Need::Vertical => ":layout vertical",
+            Need::Loose => ":dense off",
+            Need::Table => ":table",
+            Need::Scheme => ":yume scheme",
+        }
+    }
 }
 
 /// The command a typed word names, by prefix when it is not a whole name.
@@ -765,6 +811,8 @@ pub struct Choice {
     /// parent rather than after it — `yume`, for the `scheme` in `:yume`'s
     /// list. Empty for everything else.
     pub under: &'static str,
+    /// What has to be true before it does anything.
+    pub needs: &'static [Need],
 }
 
 impl Choice {
@@ -792,6 +840,7 @@ fn children(under: &'static str, args: &Args) -> Vec<Choice> {
             .iter()
             .map(|w| Choice {
                 name: w.name,
+                needs: w.needs,
                 alias: None,
                 // The short form of a word is only short beside its siblings;
                 // spelled out under its parent it would be a second way to
@@ -813,41 +862,49 @@ const YUME: &[Word] = &[
     Word {
         name: "scheme",
         help: "開始打字：載入一個方案（不寫名字就用配置裏那個）",
+        needs: &[],
         then: Args::Words(SCHEMES),
     },
     Word {
         name: "chaifen",
         help: "候選旁的拆分注解",
+        needs: &[Need::Scheme],
         then: Args::Words(ON_OFF),
     },
     Word {
         name: "which",
         help: "現在用的是哪個方案、碼表打哪來",
+        needs: &[],
         then: Args::None,
     },
     Word {
         name: "on",
         help: "開始打中文（碼表沒載就順手載上）",
+        needs: &[],
         then: Args::None,
     },
     Word {
         name: "off",
         help: "回到英文",
+        needs: &[],
         then: Args::None,
     },
     Word {
         name: "installed",
         help: "改用系統裝的那份碼表（builtin 的反面）",
+        needs: &[],
         then: Args::None,
     },
     Word {
         name: "builtin",
         help: "改用出廠自帶的靈明碼表，不管裝了什麼",
+        needs: &[],
         then: Args::None,
     },
     Word {
         name: "table",
         help: "用你自己的碼表（Rime 的 .dict.yaml 也行）",
+        needs: &[],
         then: Args::Path,
     },
 ];
@@ -870,11 +927,13 @@ const AXIS: &[Word] = &[
     Word {
         name: "row",
         help: "一行一行地找——`/` 就是它",
+        needs: &[],
         then: Args::Free("<正則>"),
     },
     Word {
         name: "column",
         help: "一欄一欄地找，從第一欄的頂上開始——表格裏 Enter 就是它",
+        needs: &[],
         then: Args::Free("<正則>"),
     },
 ];
@@ -884,21 +943,25 @@ const TABLE: &[Word] = &[
     Word {
         name: "on",
         help: "按格子編輯（默認）",
+        needs: &[],
         then: Args::None,
     },
     Word {
         name: "off",
         help: "當普通文字",
+        needs: &[],
         then: Args::None,
     },
     Word {
         name: "check",
         help: "從頭看一遍：重複的行名、查無此行的部件、欄數不對的行、超出字集的字",
+        needs: &[Need::Table],
         then: Args::None,
     },
     Word {
         name: "rules",
         help: "欄線：欄與欄之間怎麼分開",
+        needs: &[Need::Table],
         then: Args::Words(RULES),
     },
 ];
@@ -908,16 +971,19 @@ const RENDER: &[Word] = &[
     Word {
         name: "off",
         help: "原文，不著色",
+        needs: &[],
         then: Args::None,
     },
     Word {
         name: "on",
         help: "著色，標記留在畫面上（默認）",
+        needs: &[],
         then: Args::None,
     },
     Word {
         name: "full",
         help: "標記拿掉，只在光標那一處展開",
+        needs: &[],
         then: Args::None,
     },
 ];
@@ -927,11 +993,13 @@ const CLIPBOARD: &[Word] = &[
     Word {
         name: "yank",
         help: "選區送到系統剪貼簿",
+        needs: &[],
         then: Args::None,
     },
     Word {
         name: "paste",
         help: "從系統剪貼簿貼進來",
+        needs: &[],
         then: Args::None,
     },
 ];
@@ -941,21 +1009,25 @@ const BUFFERS: &[Word] = &[
     Word {
         name: "list",
         help: "列出開着的檔案",
+        needs: &[],
         then: Args::None,
     },
     Word {
         name: "next",
         help: "下一個",
+        needs: &[],
         then: Args::None,
     },
     Word {
         name: "previous",
         help: "上一個",
+        needs: &[],
         then: Args::None,
     },
     Word {
         name: "close",
         help: "關掉這一個（`close!` 不管改動）",
+        needs: &[],
         then: Args::None,
     },
 ];
@@ -965,16 +1037,19 @@ const WRAP: &[Word] = &[
     Word {
         name: "on",
         help: "太寬的段落折到下一行",
+        needs: &[],
         then: Args::None,
     },
     Word {
         name: "off",
         help: "讓它跑出右邊",
+        needs: &[],
         then: Args::None,
     },
     Word {
         name: "0",
         help: "尺度用窗口寬（`:wrap 50` 是固定五十欄）",
+        needs: &[],
         then: Args::None,
     },
 ];
@@ -984,26 +1059,31 @@ const SCHEMES: &[Word] = &[
     Word {
         name: "lingming",
         help: "靈明",
+        needs: &[],
         then: Args::None,
     },
     Word {
         name: "xingchen",
         help: "星陳",
+        needs: &[],
         then: Args::None,
     },
     Word {
         name: "qingyun",
         help: "卿雲",
+        needs: &[],
         then: Args::None,
     },
     Word {
         name: "riyue",
         help: "日月",
+        needs: &[],
         then: Args::None,
     },
     Word {
         name: "pinyin",
         help: "拼音",
+        needs: &[],
         then: Args::None,
     },
 ];
@@ -1013,16 +1093,19 @@ const SYNTAXES: &[Word] = &[
     Word {
         name: "markdown",
         help: "`#` 標題、`**粗**`",
+        needs: &[],
         then: Args::None,
     },
     Word {
         name: "typst",
         help: "`=` 標題、`#import`",
+        needs: &[],
         then: Args::None,
     },
     Word {
         name: "text",
         help: "沒有標記：檔案裏的每個字符都只是它自己",
+        needs: &[],
         then: Args::None,
     },
 ];
@@ -1037,26 +1120,31 @@ const THEMES: &[Word] = &[
     Word {
         name: "moxiang",
         help: "墨香：黑墨、白金墨、金墨、紅墨，其餘的色階都算出來",
+        needs: &[],
         then: Args::Words(MOODS),
     },
     Word {
         name: "heibai",
         help: "黑白：只有黑、白和灰——輕重說話，顏色不說",
+        needs: &[],
         then: Args::Words(MOODS),
     },
     Word {
         name: "system",
         help: "跟終端的底色走",
+        needs: &[],
         then: Args::None,
     },
     Word {
         name: "dark",
         help: "深色",
+        needs: &[],
         then: Args::None,
     },
     Word {
         name: "light",
         help: "淺色",
+        needs: &[],
         then: Args::None,
     },
 ];
@@ -1066,11 +1154,13 @@ const INDENT: &[Word] = &[
     Word {
         name: "off",
         help: "不縮進",
+        needs: &[],
         then: Args::None,
     },
     Word {
         name: "hint",
         help: "縮進的那兩格上畫什麼",
+        needs: &[],
         then: Args::Words(HINTS),
     },
 ];
@@ -1080,16 +1170,19 @@ const HINTS: &[Word] = &[
     Word {
         name: "none",
         help: "什麼都不畫（默認，書上就是白的）",
+        needs: &[],
         then: Args::None,
     },
     Word {
         name: "color",
         help: "那兩格帶一條淡底",
+        needs: &[],
         then: Args::None,
     },
     Word {
         name: "symbol",
         help: "第一格畫一個記號（默認 ↵，它替掉的正是一個換行）",
+        needs: &[],
         then: Args::None,
     },
 ];
@@ -1099,16 +1192,19 @@ const RULES: &[Word] = &[
     Word {
         name: "off",
         help: "什麼都不畫，靠對齊分",
+        needs: &[],
         then: Args::None,
     },
     Word {
         name: "color",
         help: "每欄一條淡底，紙從縫裏透出來",
+        needs: &[],
         then: Args::None,
     },
     Word {
         name: "line",
         help: "畫一條竪線",
+        needs: &[],
         then: Args::Words(STROKES),
     },
 ];
@@ -1118,16 +1214,19 @@ const STROKES: &[Word] = &[
     Word {
         name: "solid",
         help: "實線 │",
+        needs: &[],
         then: Args::None,
     },
     Word {
         name: "dash",
         help: "虛線 ┆（默認）",
+        needs: &[],
         then: Args::None,
     },
     Word {
         name: "double",
         help: "雙線 ║",
+        needs: &[],
         then: Args::None,
     },
 ];
@@ -1137,16 +1236,19 @@ const MOODS: &[Word] = &[
     Word {
         name: "system",
         help: "跟終端的底色走",
+        needs: &[],
         then: Args::None,
     },
     Word {
         name: "dark",
         help: "深色",
+        needs: &[],
         then: Args::None,
     },
     Word {
         name: "light",
         help: "淺色",
+        needs: &[],
         then: Args::None,
     },
 ];
@@ -1155,11 +1257,13 @@ const LAYOUTS: &[Word] = &[
     Word {
         name: "vertical",
         help: "竪排，縱從右往左",
+        needs: &[],
         then: Args::None,
     },
     Word {
         name: "horizontal",
         help: "橫排",
+        needs: &[],
         then: Args::None,
     },
 ];
@@ -1170,36 +1274,43 @@ const RUBY: &[Word] = &[
     Word {
         name: "on",
         help: "排出注音",
+        needs: &[],
         then: Args::None,
     },
     Word {
         name: "off",
         help: "顯示源碼",
+        needs: &[],
         then: Args::None,
     },
     Word {
         name: "html",
         help: "認 `<ruby>` 這一種",
+        needs: &[],
         then: Args::Words(ON_OFF),
     },
     Word {
         name: "typst",
         help: "認 `#ruby(…)` 這一種",
+        needs: &[],
         then: Args::Words(ON_OFF),
     },
     Word {
         name: "format",
         help: "把注音改寫成另一種寫法",
+        needs: &[],
         then: Args::Words(&[
             Word {
                 name: "html",
                 help: "改寫成 `<ruby>`",
-                then: Args::None,
+                needs: &[],
+        then: Args::None,
             },
             Word {
                 name: "typst",
                 help: "改寫成 `#ruby(…)`",
-                then: Args::None,
+                needs: &[],
+        then: Args::None,
             },
         ]),
     },
@@ -1209,11 +1320,13 @@ const ON_OFF: &[Word] = &[
     Word {
         name: "on",
         help: "開",
+        needs: &[],
         then: Args::None,
     },
     Word {
         name: "off",
         help: "關",
+        needs: &[],
         then: Args::None,
     },
 ];
@@ -1230,228 +1343,266 @@ pub const COMMANDS: &[Entry] = &[
         name: "open",
         aliases: &["o", "e", "edit"],
         help: "打開一個檔案",
+        needs: &[],
         args: Args::Path,
     },
     Entry {
         name: "new",
         aliases: &["enew"],
         help: "開一個空的緩衝區",
+        needs: &[],
         args: Args::Path,
     },
     Entry {
         name: "write",
         aliases: &["w"],
         help: "存檔；給路徑就是另存",
+        needs: &[],
         args: Args::Path,
     },
     Entry {
         name: "wq",
         aliases: &["x"],
         help: "存好再退出",
+        needs: &[],
         args: Args::Path,
     },
     Entry {
         name: "recover",
         aliases: &[],
         help: "載入搶救稿；加 ! 是丟掉它",
+        needs: &[],
         args: Args::None,
     },
     Entry {
         name: "goto",
         aliases: &["g"],
         help: "跳到某一行（`:42` 就夠了）",
+        needs: &[],
         args: Args::Free("<行號>"),
     },
     Entry {
         name: "count",
         aliases: &["wc"],
         help: "寫了多少",
+        needs: &[],
         args: Args::None,
     },
     Entry {
         name: "quit",
         aliases: &["q"],
         help: "退出；加 ! 連沒存的改動一起丟",
+        needs: &[],
         args: Args::None,
     },
     Entry {
         name: "undo",
         aliases: &["u"],
         help: "撤銷上一次改動",
+        needs: &[],
         args: Args::None,
     },
     Entry {
         name: "redo",
         aliases: &["red"],
         help: "重做",
+        needs: &[],
         args: Args::None,
     },
     Entry {
         name: "segment",
         aliases: &["seg"],
         help: "分詞著色",
+        needs: &[],
         args: Args::Words(ON_OFF),
     },
     Entry {
         name: "layout",
         aliases: &["lay"],
         help: "橫排竪排互換",
+        needs: &[],
         args: Args::Words(LAYOUTS),
     },
     Entry {
         name: "theme",
         aliases: &[],
         help: "主題：哪一個，以及深色淺色還是跟着終端",
+        needs: &[],
         args: Args::Words(THEMES),
     },
     Entry {
         name: "yume",
         aliases: &[],
         help: "輸入法：現在用的是哪一個；換方案、拆分注解",
+        needs: &[],
         args: Args::Words(YUME),
     },
     Entry {
         name: "hanging",
         aliases: &[],
         help: "標點旁置：句讀掛在邊欄",
+        needs: &[Need::Vertical, Need::Loose],
         args: Args::Words(ON_OFF),
     },
     Entry {
         name: "syntax",
         aliases: &["syn"],
         help: "這個檔案是哪種標記（不給參數就說現在是哪個）",
+        needs: &[],
         args: Args::Words(SYNTAXES),
     },
     Entry {
         name: "pipe",
         aliases: &[],
         help: "把選區送給一條命令，用它的輸出換掉（`!`）",
+        needs: &[],
         args: Args::Free("<命令>"),
     },
     Entry {
         name: "sh",
         aliases: &[],
         help: "跑一條命令，輸出收進一個緩衝區",
+        needs: &[],
         args: Args::Free("<命令>"),
     },
     Entry {
         name: "!command",
         aliases: &[],
         help: "讓出終端跑一條命令，直接看它跑（vi 的寫法）",
+        needs: &[],
         args: Args::None,
     },
     Entry {
         name: "preview",
         aliases: &[],
         help: "交給真正的排版器去排，在瀏覽器裏看",
+        needs: &[],
         args: Args::Words(ON_OFF),
     },
     Entry {
         name: "render",
         aliases: &[],
         help: "畫面上顯示多少「結果」：原文、著色、所見即所得",
+        needs: &[],
         args: Args::Words(RENDER),
     },
     Entry {
         name: "search",
         aliases: &[],
         help: "找：`row` 一行一行（就是 `/`），`column` 一欄一欄（表格裏 Enter 就是它）",
+        needs: &[],
         args: Args::Words(AXIS),
     },
     Entry {
         name: "words",
         aliases: &[],
         help: "重讀 .yumete/words.txt——這本書自己的詞（人名、地名）",
+        needs: &[],
         args: Args::None,
     },
     Entry {
         name: "bands",
         aliases: &[],
         help: "段組：把竪排的頁面橫着分成幾條，右上讀到左上，再右下讀到左下",
+        needs: &[Need::Vertical],
         args: Args::Free("<幾條，1–4；不寫就是 2>"),
     },
     Entry {
         name: "indent",
         aliases: &[],
         help: "首行縮進幾格（中文的段落是縮進兩格，不是空一行）；`:indent off` 不縮",
+        needs: &[],
         args: Args::Words(INDENT),
     },
     Entry {
         name: "dense",
         aliases: &[],
         help: "密排：一縱兩格，無注音、無旁置、無刻度",
+        needs: &[Need::Vertical],
         args: Args::Words(ON_OFF),
     },
     Entry {
         name: "table",
         aliases: &[],
         help: "按格子編輯：CSV 整個檔案，或游標所在的 | 表格；`:table off` 收工",
+        needs: &[],
         args: Args::Words(TABLE),
     },
     Entry {
         name: "wrap",
         aliases: &[],
         help: "長段落折到下一行；`:wrap 50` 定寬度",
+        needs: &[],
         args: Args::Words(WRAP),
     },
     Entry {
         name: "clipboard",
         aliases: &[],
         help: "系統剪貼簿：送出去、貼進來",
+        needs: &[],
         args: Args::Words(CLIPBOARD),
     },
     Entry {
         name: "buffer",
         aliases: &[],
         help: "開着的檔案：列出、切換、關掉",
+        needs: &[],
         args: Args::Words(BUFFERS),
     },
     Entry {
         name: "export",
         aliases: &["ex"],
         help: "導出成 html 或 typst，排版一起帶上",
+        needs: &[],
         args: Args::Free("<檔名>"),
     },
     Entry {
         name: "grep",
         aliases: &["gr"],
         help: "整個項目找一遍",
+        needs: &[],
         args: Args::Free("<正則>"),
     },
     Entry {
         name: "replace",
         aliases: &[],
         help: "把剛才 :grep 找到的那些都換掉——先看見，才改得動",
+        needs: &[],
         args: Args::Free("<換成什麼>"),
     },
     Entry {
         name: "wa",
         aliases: &["wall"],
         help: "存下所有改過的檔案",
+        needs: &[],
         args: Args::None,
     },
     Entry {
         name: "row",
         aliases: &[],
         help: "跳到表格裏叫這個名字的那一行（`:row 木`）",
+        needs: &[Need::Table],
         args: Args::Free("<那一行的名字>"),
     },
     Entry {
         name: "toc",
         aliases: &["outline"],
         help: "列出標題；`:toc 3` 跳到第三條",
+        needs: &[],
         args: Args::Free("<第幾條，不寫就列出來>"),
     },
     Entry {
         name: "ruby",
         aliases: &[],
         help: "改這裏的注音；`:ruby on|off` 是排不排",
+        needs: &[],
         args: Args::Words(RUBY),
     },
     Entry {
         name: "s/pat/rep/",
         aliases: &[],
         help: "取代：選區內；`%s` 全檔、`1,40s` 指定行；旗標 g i n；分隔符可換（s#a/b#c#）",
+        needs: &[],
         args: Args::None,
     },
 ];
@@ -1499,6 +1650,7 @@ pub fn complete_at(line: &str) -> (usize, Vec<Choice>) {
             })
             .map(|e| Choice {
                 name: e.name,
+                needs: e.needs,
                 alias: e.aliases.first().copied(),
                 short: shortest(e.name, COMMANDS.iter().map(|c| c.name)),
                 help: e.help,
@@ -1529,6 +1681,7 @@ pub fn complete_at(line: &str) -> (usize, Vec<Choice>) {
                     .filter(|w| w.name.starts_with(typed))
                     .map(|w| Choice {
                         name: w.name,
+                        needs: w.needs,
                         alias: None,
                         short: shortest(w.name, list.iter().map(|o| o.name)),
                         help: w.help,
@@ -1541,6 +1694,7 @@ pub fn complete_at(line: &str) -> (usize, Vec<Choice>) {
                 // rather than a completion.
                 Args::Free(what) => vec![Choice {
                     name: "",
+                    needs: &[],
                     alias: None,
                     short: None,
                     help: what,
@@ -1576,6 +1730,40 @@ pub fn complete_at(line: &str) -> (usize, Vec<Choice>) {
         choices.extend(below.unwrap_or_default());
     }
     (start, choices)
+}
+
+/// What the command on this line needs before it can do anything.
+///
+/// The *deepest* word that says so: `:table rules` needs a table because
+/// `rules` says it, and `:yume chaifen` needs a 碼表 because `chaifen` does.
+/// Walked from the same table the completion walks, so a prerequisite is
+/// declared once and shown, said and satisfied from the one declaration.
+pub fn needs_of(line: &str) -> &'static [Need] {
+    let line = line.strip_prefix(':').unwrap_or(line);
+    let words: Vec<&str> = line.split_whitespace().collect();
+    let Some(head) = words.first() else {
+        return &[];
+    };
+    // The same prefix rule the parser uses, so `:h on` is answered about
+    // `hanging` and not about nothing.
+    let head = resolve(head);
+    let Some(entry) = COMMANDS
+        .iter()
+        .find(|e| e.name == head || e.aliases.contains(&head))
+    else {
+        return &[];
+    };
+    let mut needs = entry.needs;
+    let mut args = &entry.args;
+    for word in &words[1..] {
+        let Args::Words(list) = args else { break };
+        let Some(found) = pick(word, list) else { break };
+        if !found.needs.is_empty() {
+            needs = found.needs;
+        }
+        args = &found.then;
+    }
+    needs
 }
 
 /// What may follow the words already on the line, or `None` if they name

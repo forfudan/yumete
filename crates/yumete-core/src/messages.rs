@@ -186,9 +186,11 @@ mod tests {
 
     #[test]
     fn a_message_with_no_translation_is_the_chinese_it_was_written_as() {
-        set_language(Language::English);
-        assert_eq!(say("這一句沒人翻過", &[]), "這一句沒人翻過");
-        set_language(Language::Chinese);
+        // Asked of the table, not of the global: the language is a *process*
+        // setting, and a test that flipped it made every other test in the
+        // run assert against whichever half of the switch it caught.
+        assert_eq!(english().get("這一句沒人翻過"), None);
+        assert!(english().contains_key("折行：開"), "a real one is there");
     }
 
     #[test]
