@@ -388,6 +388,7 @@ Phases are ordered by priority, most writer-critical first:
 | 189 | **`:shot` takes the page, not the app**     | tui    | P2    | the tab bar and the title bar are not the editor; a region, or a crop, or the grid drawn by us | Planned |
 | 190 | **One rule for folding a blank line**       | core   | P1    | 竪排 folds with the indent off and opens one *with* it on — two behaviours that read as contradictory | Planned |
 | 191 | **A stored position names its buffer**      | core   | P0    | the hit list held `n`, survived a buffer switch and an edit, and said 「第 3/78 處」 about a character that matched nothing — `d` then deleted it | Done |
+| 192 | **The preview server is a running thing**   | tui    | P1    | `:preview` on a `.typ` starts `tinymist preview` and says the address once; ask again and the address is gone, and a session that ends badly leaves the server holding a port and its memory. The address should be gettable (`:preview` while one runs), visible (a mark in the status bar), and killable on purpose and after a crash | Planned |
 
 ### 14 · What four reviews of the code found, 2026-09-03
 
