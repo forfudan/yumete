@@ -40,17 +40,26 @@ use serde::Deserialize;
 /// editor: twenty-eight columns of one character read as a grid and want a
 /// rule between them; six wide ones read as a page, where a rule between every
 /// column is noise between the words.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Rules {
     /// Nothing between them — the columns are told apart by their alignment,
     /// which is how a printed table does it.
-    #[default]
     Off,
     /// A band: every column sits a shade off the page, and the page shows in
     /// the seam between them.
     Colour,
     /// A drawn line, in one of three strokes.
     Line(Stroke),
+}
+
+impl Default for Rules {
+    /// A dashed line. A drawn rule is what makes twenty-eight one-character
+    /// columns readable as a grid, and *dashed* is the one that does it
+    /// without becoming the loudest thing on the page — the eye takes it as a
+    /// boundary rather than as a column of its own.
+    fn default() -> Rules {
+        Rules::Line(Stroke::Dash)
+    }
 }
 
 /// Which line is drawn between two columns.

@@ -1044,7 +1044,7 @@ const THEMES: &[Word] = &[
 const RULES: &[Word] = &[
     Word {
         name: "off",
-        help: "什麼都不畫，靠對齊分（默認）",
+        help: "什麼都不畫，靠對齊分",
         then: Args::None,
     },
     Word {
@@ -1063,12 +1063,12 @@ const RULES: &[Word] = &[
 const STROKES: &[Word] = &[
     Word {
         name: "solid",
-        help: "實線 │（默認）",
+        help: "實線 │",
         then: Args::None,
     },
     Word {
         name: "dash",
-        help: "虛線 ┆",
+        help: "虛線 ┆（默認）",
         then: Args::None,
     },
     Word {
