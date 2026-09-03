@@ -51,11 +51,17 @@ fn widths(editor: &Editor, first: usize, rows: usize) -> Vec<usize> {
     let Some(view) = editor.table() else {
         return Vec::new();
     };
+    // A hidden column is drawn at no width at all — which is what `hidden`
+    // buys: two of the 拆分表's twenty-eight are empty in all 123,380 rows and
+    // were costing eight cells each across the whole page.
     let mut widths: Vec<usize> = view
         .schema
         .columns
         .iter()
-        .map(|c| yumete_cjk::str_width(c.heading()).clamp(MIN_COLUMN, MAX_COLUMN))
+        .map(|c| match c.hidden {
+            true => 0,
+            false => yumete_cjk::str_width(c.heading()).clamp(MIN_COLUMN, MAX_COLUMN),
+        })
         .collect();
     let lines = editor.current_buffer().line_count();
     for line in first..(first + rows).min(lines) {
@@ -65,6 +71,9 @@ fn widths(editor: &Editor, first: usize, rows: usize) -> Vec<usize> {
                 // are drawn, because hiding them would hide the damage.
                 continue;
             };
+            if !view.schema.shows(i) {
+                continue;
+            }
             let text = editor.current_buffer().rope().line(line).to_string();
             let cell = yumete_core::table::cell_text(&text, span);
             *want = (*want).max(yumete_cjk::str_width(&cell).min(MAX_COLUMN));
@@ -189,7 +198,9 @@ pub fn draw(
                 head_style
             };
             put_text(buf, x, area.y, (x + w).min(right), column.heading(), style);
-            x += w + GAP as u16;
+            // A hidden column takes no gap either — a column of
+            // nothing is not a column with a space beside it.
+            x += w + if w == 0 { 0 } else { GAP as u16 };
         }
     }
 
@@ -256,7 +267,9 @@ pub fn draw(
                 let step = (yumete_cjk::str_width(&into) as u16).min(w);
                 caret = ((x + step).min(right.saturating_sub(1)), y);
             }
-            x += w + GAP as u16;
+            // A hidden column takes no gap either — a column of
+            // nothing is not a column with a space beside it.
+            x += w + if w == 0 { 0 } else { GAP as u16 };
         }
         // A row with fewer cells than the schema says leaves the rest blank
         // rather than drawing columns that are not there.
@@ -381,6 +394,38 @@ pub fn draw_detail(frame: &mut Frame, editor: &Editor, config: &Config, area: Re
     }
     put_text(buf, left, area.y, right, &detail.title, title);
     let mut y = area.y + 2;
+    // The 部件 list first, because it is what the panel is *read for* — and it
+    // used to be drawn last, under twenty-eight mostly-blank fields, which on
+    // any real window meant not drawn at all.
+    if !detail.links.is_empty() {
+        put_text(buf, left, y, right, "部件（Enter 跟過去）", name);
+        y += 1;
+        let mut x = left;
+        for (c, line) in &detail.links {
+            let label = match line {
+                Some(n) => format!("{c} {}", n + 1),
+                None => format!("{c} —"),
+            };
+            let w = yumete_cjk::str_width(&label) as u16 + 2;
+            if x + w > right {
+                x = left;
+                y += 1;
+                if y >= area.y + area.height {
+                    return;
+                }
+            }
+            put_text(
+                buf,
+                x,
+                y,
+                right,
+                &label,
+                if line.is_some() { value } else { missing },
+            );
+            x += w;
+        }
+        y += 2;
+    }
     for (field, text) in &detail.rows {
         if y >= area.y + area.height {
             return;
@@ -394,38 +439,5 @@ pub fn draw_detail(frame: &mut Frame, editor: &Editor, config: &Config, area: Re
             put_text(buf, indent, y, right, text, if *field == detail.here { here } else { value });
         }
         y += 1;
-    }
-    if detail.links.is_empty() {
-        return;
-    }
-    y += 1;
-    if y >= area.y + area.height {
-        return;
-    }
-    put_text(buf, left, y, right, "部件（Enter 跟過去）", name);
-    y += 1;
-    let mut x = left;
-    for (c, line) in &detail.links {
-        let label = match line {
-            Some(n) => format!("{c} {}", n + 1),
-            None => format!("{c} —"),
-        };
-        let w = yumete_cjk::str_width(&label) as u16 + 2;
-        if x + w > right {
-            x = left;
-            y += 1;
-            if y >= area.y + area.height {
-                return;
-            }
-        }
-        put_text(
-            buf,
-            x,
-            y,
-            right,
-            &label,
-            if line.is_some() { value } else { missing },
-        );
-        x += w;
     }
 }

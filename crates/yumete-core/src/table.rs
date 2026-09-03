@@ -54,6 +54,13 @@ pub struct Column {
     pub label: Option<String>,
     /// What it holds.
     pub kind: Kind,
+    /// Whether the grid draws it and movement stops in it.
+    ///
+    /// It is still **read and written**: a hidden column is a column the file
+    /// has and this reader is not interested in. Two of the 拆分表's
+    /// twenty-eight are empty in all 123,380 rows and cost eight cells each
+    /// across the whole page.
+    pub hidden: bool,
 }
 
 impl Column {
@@ -258,6 +265,7 @@ impl Schema {
                     name: c.name,
                     label: c.label,
                     kind: c.kind.unwrap_or_default(),
+                    hidden: c.hidden.unwrap_or(false),
                 })
                 .collect(),
             details,
@@ -289,6 +297,7 @@ impl Schema {
                     },
                     label: None,
                     kind: Kind::String,
+                    hidden: false,
                 }
             })
             .collect();
@@ -315,6 +324,19 @@ impl Schema {
     /// Which column has this name.
     pub fn index_of(&self, name: &str) -> Option<usize> {
         self.columns.iter().position(|c| c.name == name)
+    }
+
+    /// Whether column `i` is drawn and stopped in.
+    ///
+    /// A column the schema does not know about — a ragged row's extra field —
+    /// is always shown: hiding damage is not what hiding is for.
+    pub fn shows(&self, i: usize) -> bool {
+        self.columns.get(i).is_none_or(|c| !c.hidden)
+    }
+
+    /// Whether any column is hidden at all, so the common case costs nothing.
+    pub fn hides_anything(&self) -> bool {
+        self.columns.iter().any(|c| c.hidden)
     }
 }
 
@@ -467,6 +489,7 @@ struct RawColumn {
     label: Option<String>,
     #[serde(rename = "type")]
     kind: Option<Kind>,
+    hidden: Option<bool>,
 }
 
 #[derive(Deserialize)]
