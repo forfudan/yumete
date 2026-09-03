@@ -2120,7 +2120,7 @@ fn draw_status(
     // the row above for that now, and taking this one as well would mean losing
     // the file name and the position for as long as the sidebar has focus.
     let status = if editor.sidebar_focused() && !config.editor.hints {
-        format!("-- 側欄 --  {}", Editor::SIDEBAR_KEYS)
+        format!("-- 側欄 --  {}", Editor::sidebar_keys())
     } else if let Some((prefix, text)) = editor.prompt() {
         // The composition in progress belongs at the caret, so a search reads as
         // the pattern being typed rather than jumping into place on commit. The

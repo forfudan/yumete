@@ -823,18 +823,6 @@ pub fn draw(
     (cursor_x, caret_y)
 }
 
-/// The candidate panel's skin: Yume's 墨香 (Ink) theme, dark.
-///
-/// 墨香 is defined by **four numbers** — an ink and a paper colour for each
-/// mode — with the other slots interpolated along a ladder between them
-/// (`yume_core::themes::ink_ladder`). Reproducing the ladder rather than
-/// pasting the resulting hexes keeps yumete's panel the same skin as the GUI
-/// frontends' if either endpoint is ever retuned.
-///
-/// The green in the ink is deliberate and slight: R and G differ by about 5, so
-/// it reads as ink with a hint of pine rather than grey-green. The paper is warm
-/// rather than white. Dark mode is not the light pair swapped — the ground goes
-/// deeper and the ink dimmer, or the panel glows at night.
 /// The candidate panel's skin, derived from two colours.
 ///
 /// Yume's own themes are defined by **four numbers** — an ink and a paper for
