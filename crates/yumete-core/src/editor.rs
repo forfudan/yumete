@@ -1666,6 +1666,10 @@ impl Editor {
                 // safe now", so it is held to the same check `:q` is.
                 self.quit(false)
             }
+            Command::CheckTable => {
+                self.check_table();
+                Ok(CommandOutcome::Continue)
+            }
             Command::GotoRow(key) => {
                 self.goto_row(&key);
                 Ok(CommandOutcome::Continue)
@@ -4126,6 +4130,138 @@ impl Editor {
             }
         }
         seen.into_iter().map(|c| (c, self.row_named(c))).collect()
+    }
+
+    /// Look the whole table over and list what is wrong (`:table check`).
+    ///
+    /// Four questions a person asks of a 拆分表 and cannot answer by eye at
+    /// 123,380 rows: is any row's name used twice, does every component named
+    /// have a row, is any row the wrong width, and is any character outside the
+    /// declared code space. The answer is a **results buffer** in the shape
+    /// `gf` already reads, because that is the shape every answer in this
+    /// editor has.
+    fn check_table(&mut self) {
+        let Some(view) = self.table.as_ref() else {
+            self.status = "不是表格——先 :table".to_string();
+            return;
+        };
+        let schema = view.schema.clone();
+        let markdown = view.shape == Shape::Markdown;
+        let name = self
+            .current_buffer()
+            .path()
+            .and_then(|p| p.file_name())
+            .map(|n| n.to_string_lossy().into_owned())
+            .unwrap_or_else(|| self.current_buffer().display_name().to_string());
+        let key_at = schema.key.as_deref().and_then(|k| schema.index_of(k));
+        let jump_from: Vec<usize> = schema
+            .jump
+            .as_ref()
+            .map(|j| j.from.iter().filter_map(|n| schema.index_of(n)).collect())
+            .unwrap_or_default();
+        let want = schema.columns.len();
+        let rope = self.current_buffer().rope();
+        let last = motion::last_line(rope);
+        let first = usize::from(schema.header);
+        let mut found: Vec<String> = Vec::new();
+        let mut seen: HashMap<String, usize> = HashMap::new();
+        let mut keys: Vec<String> = Vec::new();
+        for line in first..=last {
+            let text = rope.line(line).to_string();
+            let spans = match markdown {
+                true => crate::mdtable::cells(&text),
+                false => crate::table::cells(&text, schema.delimiter),
+            };
+            if text.trim().is_empty() {
+                continue;
+            }
+            let cell = |i: usize| {
+                spans
+                    .get(i)
+                    .map(|&s| crate::table::cell_text(&text, s))
+                    .unwrap_or_default()
+            };
+            if spans.len() != want {
+                found.push(format!(
+                    "{name}:{}: 這一行是 {} 欄，該是 {want} 欄",
+                    line + 1,
+                    spans.len()
+                ));
+            }
+            if let Some(at) = key_at {
+                let k = cell(at);
+                if !k.is_empty() {
+                    if let Some(&was) = seen.get(&k) {
+                        found.push(format!(
+                            "{name}:{}: 行名「{k}」和第 {} 行重了",
+                            line + 1,
+                            was + 1
+                        ));
+                    } else {
+                        seen.insert(k.clone(), line);
+                        keys.push(k);
+                    }
+                }
+            }
+        }
+        // The components second, because answering them needs every key first.
+        let known: std::collections::HashSet<char> = keys
+            .iter()
+            .filter_map(|k| {
+                let mut c = k.chars();
+                c.next().filter(|_| c.next().is_none())
+            })
+            .collect();
+        for line in first..=last {
+            let text = rope.line(line).to_string();
+            let spans = match markdown {
+                true => crate::mdtable::cells(&text),
+                false => crate::table::cells(&text, schema.delimiter),
+            };
+            let mut missing: Vec<char> = Vec::new();
+            for &i in &jump_from {
+                let Some(&span) = spans.get(i) else { continue };
+                for c in crate::table::cell_text(&text, span).chars() {
+                    if is_ids_operator(c) || known.contains(&c) || missing.contains(&c) {
+                        continue;
+                    }
+                    missing.push(c);
+                }
+            }
+            if !missing.is_empty() {
+                let list: String = missing.iter().collect();
+                found.push(format!("{name}:{}: 部件「{list}」查無此行", line + 1));
+            }
+            if found.len() >= GREP_LIMIT {
+                break;
+            }
+        }
+        if found.is_empty() {
+            self.status = format!("{name}：{} 行，沒查出問題", last + 1 - first);
+            return;
+        }
+        found.sort_by_key(|l| {
+            l.split(':')
+                .nth(1)
+                .and_then(|n| n.parse::<usize>().ok())
+                .unwrap_or(0)
+        });
+        let n = found.len();
+        let mut listing = String::new();
+        for line in &found {
+            listing.push_str(line);
+            listing.push('\n');
+        }
+        let mut buffer = Buffer::from_text(&listing);
+        buffer.name_as(&format!("[查 {name}]"));
+        self.grep_root = self
+            .current_buffer()
+            .path()
+            .and_then(|p| p.parent())
+            .map(Path::to_path_buf);
+        self.add_buffer(buffer);
+        self.set_cursor(0);
+        self.status = format!("查出 {n} 條——gf 跳到那一行");
     }
 
     /// Go to the row this table names by `key` (`:row 木`).
@@ -10211,6 +10347,47 @@ mod tests {
         // …and the file is untouched: hidden is about reading, not about data.
         assert!(ed.execute("w").is_ok());
         assert_eq!(std::fs::read_to_string(&csv).unwrap(), text);
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn table_check_answers_the_four_questions_nobody_can_answer_by_eye() {
+        let dir = std::env::temp_dir().join(format!("yumete-check-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let tables = dir.join(".yumete").join("tables");
+        std::fs::create_dir_all(&tables).unwrap();
+        std::fs::write(
+            tables.join("c.toml"),
+            "[table]\nfile = \"c.csv\"\nkey = \"char\"\n\
+             [[table.column]]\nname = \"char\"\n[[table.column]]\nname = \"ids\"\n\
+             [table.jump]\nfrom = [\"ids\"]\nto = \"char\"\n",
+        )
+        .unwrap();
+        let csv = dir.join("c.csv");
+        std::fs::write(
+            &csv,
+            // line 2 names a component with no row; line 3 is the wrong width;
+            // line 5 repeats line 4's name.
+            "char,ids\n相,⿰木卵\n寬,一,二\n木,木\n木,木\n",
+        )
+        .unwrap();
+        let mut ed = Editor::new();
+        ed.open_file(&csv).unwrap();
+        assert!(ed.execute("table check").is_ok());
+        let out = ed.current_buffer().text();
+        assert!(out.contains("c.csv:2:") && out.contains("卵"), "{out}");
+        assert!(out.contains("c.csv:3:") && out.contains("欄"), "{out}");
+        assert!(out.contains("c.csv:5:") && out.contains("重了"), "{out}");
+        // ⿰ is grammar, so it is not reported as a missing component.
+        assert!(!out.contains('⿰'), "{out}");
+        // A clean table says so and opens nothing.
+        std::fs::write(&csv, "char,ids\n木,木\n目,目\n").unwrap();
+        ed.open_file(&csv).unwrap();
+        ed.execute("e!").ok();
+        let buffers = ed.buffer_count();
+        assert!(ed.execute("table check").is_ok());
+        assert!(ed.status().contains("沒查出問題"), "{}", ed.status());
+        assert_eq!(ed.buffer_count(), buffers, "no buffer for no findings");
         std::fs::remove_dir_all(&dir).ok();
     }
 

@@ -70,6 +70,8 @@ pub enum Command {
     SetMeasure(Option<usize>),
     /// `:table` / `:table off` — read the file as a grid (Feature #118).
     SetTable(bool),
+    /// `:table check` — look the whole table over and list what is wrong.
+    CheckTable,
     /// `:dense` / `:dense off` — pack the 縱書 page as tight as a terminal can
     /// (Feature #120).
     SetDense(bool),
@@ -369,6 +371,7 @@ pub fn parse(input: &str) -> Result<Command, CommandError> {
         "table" => match rest {
             "" | "on" => Ok(Command::SetTable(true)),
             "off" => Ok(Command::SetTable(false)),
+            "check" => Ok(Command::CheckTable),
             other => Err(CommandError::InvalidArgument {
                 command: "table",
                 value: other.to_string(),
@@ -633,6 +636,25 @@ const YUME: &[Word] = &[
         name: "table",
         help: "用你自己的碼表（Rime 的 .dict.yaml 也行）",
         then: Args::Path,
+    },
+];
+
+/// What `:table` takes.
+const TABLE: &[Word] = &[
+    Word {
+        name: "on",
+        help: "按格子編輯（默認）",
+        then: Args::None,
+    },
+    Word {
+        name: "off",
+        help: "當普通文字",
+        then: Args::None,
+    },
+    Word {
+        name: "check",
+        help: "從頭看一遍：重複的行名、查無此行的部件、欄數不對的行、超出字集的字",
+        then: Args::None,
     },
 ];
 
@@ -961,7 +983,7 @@ pub const COMMANDS: &[Entry] = &[
         name: "table",
         aliases: &[],
         help: "按格子編輯：CSV 整個檔案，或游標所在的 | 表格；`:table off` 收工",
-        args: Args::Words(ON_OFF),
+        args: Args::Words(TABLE),
     },
     Entry {
         name: "wrap",
