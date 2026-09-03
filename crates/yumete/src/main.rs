@@ -59,6 +59,9 @@ fn main() -> ExitCode {
     if config.editor.indent > 0 {
         editor.set_indent(config.editor.indent);
     }
+    if config.editor.bands > 1 {
+        editor.set_bands(config.editor.bands);
+    }
     if config.editor.zong_length > 0 {
         editor.set_zong_length(config.editor.zong_length);
     }

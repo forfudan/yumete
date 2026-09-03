@@ -84,6 +84,8 @@ pub enum Command {
     SetTable(bool),
     /// `:indent 2` — how many squares open a paragraph; `:indent off` is none.
     SetIndent(usize),
+    /// `:bands 2` — how many bands the 縱書 page is divided into (段組).
+    SetBands(usize),
     /// `:table check` — look the whole table over and list what is wrong.
     CheckTable,
     /// `:dense` / `:dense off` — pack the 縱書 page as tight as a terminal can
@@ -381,6 +383,17 @@ pub fn parse(input: &str) -> Result<Command, CommandError> {
                 command: "dense",
                 value: other.to_string(),
             }),
+        },
+        "bands" => match rest {
+            "" | "on" | "2" => Ok(Command::SetBands(2)),
+            "off" | "1" => Ok(Command::SetBands(1)),
+            n => match n.parse::<usize>() {
+                Ok(n) if (1..=4).contains(&n) => Ok(Command::SetBands(n)),
+                _ => Err(CommandError::InvalidArgument {
+                    command: "bands",
+                    value: n.to_string(),
+                }),
+            },
         },
         "indent" => match rest {
             "" | "on" => Ok(Command::SetIndent(2)),
@@ -1005,6 +1018,12 @@ pub const COMMANDS: &[Entry] = &[
         aliases: &[],
         help: "畫面上顯示多少「結果」：原文、著色、所見即所得",
         args: Args::Words(RENDER),
+    },
+    Entry {
+        name: "bands",
+        aliases: &[],
+        help: "段組：把竪排的頁面橫着分成幾條，右上讀到左上，再右下讀到左下",
+        args: Args::Free("<幾條，1–4；不寫就是 2>"),
     },
     Entry {
         name: "indent",
