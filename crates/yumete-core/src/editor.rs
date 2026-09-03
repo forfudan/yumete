@@ -1599,9 +1599,18 @@ impl Editor {
                 pattern,
                 replacement,
                 global,
-                whole_file,
+                ignore_case,
+                count_only,
+                rows,
             } => {
-                self.substitute(&pattern, &replacement, global, whole_file);
+                self.substitute(Substitution {
+                    pattern: &pattern,
+                    replacement: &replacement,
+                    global,
+                    ignore_case,
+                    count_only,
+                    rows,
+                });
                 Ok(CommandOutcome::Continue)
             }
             Command::Undo => {
@@ -5640,6 +5649,13 @@ impl Editor {
                 return self.goto_line(n);
             }
         }
+        // `gg` and `ge` cross a document; `gh`, `gl` and `gs` cross a line.
+        // `remember_jump`'s own doc comment said every far motion went through
+        // `goto_line` and so had a way back — and `gg`/`ge` did not, because
+        // they are the two that do not name a line number.
+        if matches!(key, Key::Char('g') | Key::Char('e')) {
+            self.remember_jump();
+        }
         let rope = self.current_buffer().rope();
         let pos = match key {
             Key::Char('g') => motion::buffer_start(rope, self.cursor),
@@ -6554,6 +6570,9 @@ impl Editor {
         if self.last_search.is_empty() {
             return;
         }
+        // Jumping back after a search is the whole reason `C-o` exists: you
+        // look something up, and you want to be back where you were writing.
+        self.remember_jump();
         let pattern = self.last_search.clone();
         let re = match self.compile(&pattern) {
             Ok(re) => re,
@@ -6598,12 +6617,26 @@ impl Editor {
 
     /// Replace `pattern` with `replacement` on the cursor's line, or on every
     /// line when `whole_file`; `global` replaces every match on a line.
-    fn substitute(&mut self, pattern: &str, replacement: &str, global: bool, whole_file: bool) {
+    fn substitute(&mut self, how: Substitution<'_>) {
+        let Substitution {
+            pattern,
+            replacement,
+            global,
+            ignore_case,
+            count_only,
+            rows,
+        } = how;
         if pattern.is_empty() {
-            self.status = "empty pattern".to_string();
+            self.status = "空的模式".to_string();
             return;
         }
-        let re = match self.compile(pattern) {
+        // `i` is the regex engine's own flag, so it is written into the
+        // pattern rather than reimplemented here.
+        let cased = match ignore_case {
+            true => format!("(?i){pattern}"),
+            false => pattern.to_string(),
+        };
+        let re = match self.compile(&cased) {
             Ok(re) => re,
             Err(message) => {
                 self.status = message;
@@ -6613,23 +6646,12 @@ impl Editor {
         let replacement = unescape_replacement(replacement);
 
         let text = self.current_buffer().text();
-        // Which lines `:s` touches: the whole file, or the ones the *selection*
-        // covers. Reading the cursor's line instead meant that after `x` — which
-        // leaves the cursor on the line below the one it selected — `:s` edited
-        // a line the writer had not selected and could not see was selected.
-        let rope = self.current_buffer().rope();
-        let (sel_start, sel_end) = self.selection();
-        let first = rope.char_to_line(sel_start);
-        let last = if sel_end > sel_start {
-            rope.char_to_line(sel_end.saturating_sub(1))
-        } else {
-            first
-        };
+        let (first, last) = self.substitution_rows(rows);
         let mut count = 0usize;
         let mut rebuilt = String::with_capacity(text.len());
 
         for (idx, line) in text.split_inclusive('\n').enumerate() {
-            if whole_file || (idx >= first && idx <= last) {
+            if idx >= first && idx <= last {
                 let (new_line, n) = replace_in_line(line, &re, &replacement, global);
                 count += n;
                 rebuilt.push_str(&new_line);
@@ -6647,6 +6669,11 @@ impl Editor {
                 return;
             }
         }
+        // `n` in vi means "count, and change nothing". It used to substitute.
+        if count_only {
+            self.status = format!("{count} 處（沒有改）");
+            return;
+        }
         if count > 0 {
             self.snapshot();
             let len = self.current_buffer().char_count();
@@ -6658,7 +6685,40 @@ impl Editor {
             self.anchor = self.cursor;
             self.refresh_goal_column();
         }
-        self.status = format!("{count} substitution(s)");
+        self.status = format!("換了 {count} 處");
+    }
+
+    /// The first and last line a `:s` range names.
+    fn substitution_rows(&self, rows: crate::command::Rows) -> (usize, usize) {
+        use crate::command::{Bound, Rows};
+        let rope = self.current_buffer().rope();
+        let last_line = motion::last_line(rope);
+        let resolve = |b: Bound| match b {
+            Bound::Line(n) => n.saturating_sub(1).min(last_line),
+            Bound::Cursor => rope.char_to_line(self.cursor.min(rope.len_chars())),
+            Bound::Last => last_line,
+        };
+        match rows {
+            Rows::All => (0, last_line),
+            Rows::Range(a, b) => {
+                let (a, b) = (resolve(a), resolve(b));
+                (a.min(b), a.max(b))
+            }
+            // No range written: the lines the *selection* covers. Reading the
+            // cursor's line instead meant that after `x` — which leaves the
+            // cursor on the line below the one it selected — `:s` edited a
+            // line the writer had not selected and could not see was selected.
+            Rows::Selection => {
+                let (start, end) = self.selection();
+                let first = rope.char_to_line(start);
+                let last = if end > start {
+                    rope.char_to_line(end.saturating_sub(1))
+                } else {
+                    first
+                };
+                (first, last)
+            }
+        }
     }
 
     // ---- Counts, repetition, and the Helix tutorial verbs -----------------
@@ -7911,6 +7971,16 @@ impl Default for Editor {
     fn default() -> Self {
         Self::new()
     }
+}
+
+/// Everything one `:s` was asked to do.
+struct Substitution<'a> {
+    pattern: &'a str,
+    replacement: &'a str,
+    global: bool,
+    ignore_case: bool,
+    count_only: bool,
+    rows: crate::command::Rows,
 }
 
 /// Whether `c` is an Ideographic Description Character — U+2FF0…U+2FFF.
@@ -10611,10 +10681,25 @@ mod tests {
         assert_eq!(ed.cursor_line(), 6, "back to where `:2` was typed");
         ed.on_key(Key::Ctrl('o'));
         assert_eq!(ed.cursor_line(), 0, "and to where `:7` was typed");
+        // `gg` and `ge` are far motions too, and now leave a way back — which
+        // is what `remember_jump`'s own doc comment always claimed.
+        ed.on_key(Key::Ctrl('o'));
+        assert_eq!(ed.cursor_line(), 8, "and to where `gg` was pressed");
         ed.on_key(Key::Ctrl('o'));
         assert!(ed.status().contains("沒有更早"), "{}", ed.status());
         ed.on_key(Key::Ctrl('i'));
-        assert_eq!(ed.cursor_line(), 6);
+        assert_eq!(ed.cursor_line(), 0);
+
+        // A search is a jump: you look something up and you want to be back
+        // where you were writing.
+        let mut ed = typed("一\n二\n三\n四\n五\n六\n七\n八\n");
+        ed.execute("3").unwrap();
+        let was = ed.cursor();
+        press(&mut ed, "/八");
+        ed.on_key(Key::Enter);
+        assert_eq!(ed.cursor_line(), 7);
+        ed.on_key(Key::Ctrl('o'));
+        assert_eq!(ed.cursor(), was, "back to where the search was typed");
 
         std::fs::remove_dir_all(&dir).ok();
     }

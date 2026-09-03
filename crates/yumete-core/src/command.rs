@@ -36,14 +36,21 @@ pub enum Command {
     Recover {
         discard: bool,
     },
-    /// `:s/pattern/replacement/[g]` (optionally `:%s/...` for the whole file) —
-    /// substitute text. `global` replaces every match on a line; `whole_file`
-    /// applies to every line rather than just the cursor's line.
+    /// `:[range]s/pattern/replacement/[flags]` — substitute text.
+    ///
+    /// The delimiter is whatever character follows the `s`, so a pattern with
+    /// a `/` in it — a date, a path, a URL — is written `:s#a/b#c#`.
     Substitute {
         pattern: String,
         replacement: String,
+        /// `g`: every match on a line, not only the first.
         global: bool,
-        whole_file: bool,
+        /// `i`: ignore case.
+        ignore_case: bool,
+        /// `n`: say how many there are and change nothing, as vi's `n` means.
+        count_only: bool,
+        /// Which lines it touches.
+        rows: Rows,
     },
     /// `:undo` (alias `:u`) — undo the last change.
     Undo,
@@ -1036,7 +1043,7 @@ pub const COMMANDS: &[Entry] = &[
     Entry {
         name: "s/pat/rep/",
         aliases: &[],
-        help: "substitute on this line (%s: all)",
+        help: "取代：選區內；`%s` 全檔、`1,40s` 指定行；旗標 g i n；分隔符可換（s#a/b#c#）",
         args: Args::None,
     },
 ];
@@ -1136,36 +1143,134 @@ pub fn complete_at(line: &str) -> (usize, Vec<Choice>) {
     (start, choices)
 }
 
-/// Try to parse a substitution command (`s/pat/rep/flags`, `%s/pat/rep/flags`).
+/// Which lines a `:s` touches.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Rows {
+    /// No range written: the lines the **selection** covers.
+    Selection,
+    /// `%` — every line.
+    All,
+    /// `1,40`, `.,$`, `5` — from one bound to another, inclusive.
+    Range(Bound, Bound),
+}
+
+/// One end of a `:s` range.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Bound {
+    /// A line number, counting from 1.
+    Line(usize),
+    /// `.` — the line the cursor is on.
+    Cursor,
+    /// `$` — the last line.
+    Last,
+}
+
+/// Read one end of a range, and say how much of `input` it took.
+fn parse_bound(input: &str) -> Option<(Bound, usize)> {
+    let mut chars = input.char_indices();
+    match chars.next()? {
+        (_, '.') => Some((Bound::Cursor, 1)),
+        (_, '$') => Some((Bound::Last, 1)),
+        (_, c) if c.is_ascii_digit() => {
+            let end = input
+                .find(|c: char| !c.is_ascii_digit())
+                .unwrap_or(input.len());
+            input[..end].parse().ok().map(|n| (Bound::Line(n), end))
+        }
+        _ => None,
+    }
+}
+
+/// Split the leading range off a `:s` line.
+fn parse_rows(input: &str) -> (Rows, &str) {
+    if let Some(rest) = input.strip_prefix('%') {
+        return (Rows::All, rest);
+    }
+    let Some((first, took)) = parse_bound(input) else {
+        return (Rows::Selection, input);
+    };
+    let rest = &input[took..];
+    match rest.strip_prefix(',').and_then(|r| parse_bound(r).map(|(b, n)| (b, n, r))) {
+        Some((second, n, r)) => (Rows::Range(first, second), &r[n..]),
+        // A bare number is one line, the way `:40s` reads in vi.
+        None => (Rows::Range(first, first), rest),
+    }
+}
+
+/// Split `body` on unescaped `delim`.
+fn split_escaped(body: &str, delim: char) -> Vec<String> {
+    let mut out = vec![String::new()];
+    let mut escaped = false;
+    for c in body.chars() {
+        if escaped {
+            // `\/` is the delimiter itself; every other escape is the regex's
+            // or the replacement's own and is passed through untouched.
+            if c != delim {
+                out.last_mut().unwrap().push('\\');
+            }
+            out.last_mut().unwrap().push(c);
+            escaped = false;
+        } else if c == '\\' {
+            escaped = true;
+        } else if c == delim {
+            out.push(String::new());
+        } else {
+            out.last_mut().unwrap().push(c);
+        }
+    }
+    if escaped {
+        out.last_mut().unwrap().push('\\');
+    }
+    out
+}
+
+/// Try to parse a substitution command.
 ///
 /// Returns `None` when the input is not a substitution, or `Some(Err(..))` when
-/// it looks like one but is malformed. Only `/` is supported as the delimiter.
+/// it looks like one but is malformed.
+///
+/// **The delimiter is whatever follows the `s`**, as it is in vi and sed: a
+/// pattern holding a `/` — a date, a path, a URL — is unreachable otherwise,
+/// and `:s` used to answer 「substitute requires an argument」 to one.
 fn parse_substitution(input: &str) -> Option<Result<Command, CommandError>> {
-    let (whole_file, rest) = match input.strip_prefix('%') {
-        Some(r) => (true, r),
-        None => (false, input),
-    };
+    let (rows, rest) = parse_rows(input);
     let rest = rest.strip_prefix('s')?;
-    // The character right after `s` must be the `/` delimiter.
-    let body = rest.strip_prefix('/')?;
-
-    let fields: Vec<&str> = body.split('/').collect();
-    // Expect at least "pattern/replacement" (flags optional): 2 or 3 fields.
+    let delim = rest.chars().next()?;
+    // Not a letter, a digit or a space: those are other commands (`:set`, and
+    // `:s` on its own), and a backslash is an escape wherever it appears.
+    if delim.is_alphanumeric() || delim.is_whitespace() || delim == '\\' {
+        return None;
+    }
+    let body = &rest[delim.len_utf8()..];
+    let fields = split_escaped(body, delim);
     if fields.len() < 2 || fields.len() > 3 {
         return Some(Err(CommandError::MissingArgument("substitute")));
     }
-    let pattern = fields[0];
-    if pattern.is_empty() {
+    if fields[0].is_empty() {
         return Some(Err(CommandError::MissingArgument("substitute")));
     }
-    let replacement = fields[1];
-    let flags = fields.get(2).copied().unwrap_or("");
-
+    let flags = fields.get(2).cloned().unwrap_or_default();
+    // Saying so beats doing the substitution the flag was meant to hold back:
+    // `n` in vi means "count, change nothing", and it used to *substitute*.
+    if let Some(bad) = flags.chars().find(|c| !"ginc".contains(*c)) {
+        return Some(Err(CommandError::InvalidArgument {
+            command: "substitute",
+            value: format!("旗標 '{bad}'（有 g 全行、i 不分大小寫、n 只數）"),
+        }));
+    }
+    if flags.contains('c') {
+        return Some(Err(CommandError::InvalidArgument {
+            command: "substitute",
+            value: "旗標 'c'（逐個確認）還沒做——先用 n 數一遍".to_string(),
+        }));
+    }
     Some(Ok(Command::Substitute {
-        pattern: pattern.to_string(),
-        replacement: replacement.to_string(),
+        pattern: fields[0].clone(),
+        replacement: fields[1].clone(),
         global: flags.contains('g'),
-        whole_file,
+        ignore_case: flags.contains('i'),
+        count_only: flags.contains('n'),
+        rows,
     }))
 }
 
@@ -1266,36 +1371,100 @@ mod tests {
 
     #[test]
     fn parses_substitution() {
-        assert_eq!(
-            parse(":s/foo/bar/"),
-            Ok(Command::Substitute {
-                pattern: "foo".into(),
-                replacement: "bar".into(),
-                global: false,
-                whole_file: false,
-            })
-        );
+        let plain = |pattern: &str, replacement: &str| Command::Substitute {
+            pattern: pattern.into(),
+            replacement: replacement.into(),
+            global: false,
+            ignore_case: false,
+            count_only: false,
+            rows: Rows::Selection,
+        };
+        assert_eq!(parse(":s/foo/bar/"), Ok(plain("foo", "bar")));
         assert_eq!(
             parse(":%s/foo/bar/g"),
             Ok(Command::Substitute {
                 pattern: "foo".into(),
                 replacement: "bar".into(),
                 global: true,
-                whole_file: true,
+                ignore_case: false,
+                count_only: false,
+                rows: Rows::All,
             })
         );
         // Empty replacement (a deletion) is allowed.
-        assert_eq!(
-            parse(":s/foo//"),
-            Ok(Command::Substitute {
-                pattern: "foo".into(),
-                replacement: "".into(),
-                global: false,
-                whole_file: false,
-            })
-        );
+        assert_eq!(parse(":s/foo//"), Ok(plain("foo", "")));
         // Empty pattern is rejected.
         assert!(parse(":s//bar/").is_err());
+    }
+
+    #[test]
+    fn the_delimiter_is_whatever_follows_the_s() {
+        // A pattern holding a `/` — a date, a path, a URL — was unreachable,
+        // and `:s` answered 「substitute requires an argument」 to one.
+        let want = Command::Substitute {
+            pattern: "2024/01".into(),
+            replacement: "2025/02".into(),
+            global: false,
+            ignore_case: false,
+            count_only: false,
+            rows: Rows::Selection,
+        };
+        assert_eq!(parse(":s#2024/01#2025/02#"), Ok(want.clone()));
+        assert_eq!(parse(":s,2024/01,2025/02,"), Ok(want.clone()));
+        // …and the vi spelling still works.
+        assert_eq!(parse(r":s/2024\/01/2025\/02/"), Ok(want));
+        // A letter after `s` is another command, not a delimiter — whatever
+        // `:set` turns out to mean, it is not a substitution.
+        assert!(!matches!(parse(":set"), Ok(Command::Substitute { .. })));
+    }
+
+    #[test]
+    fn substitution_flags_are_read_rather_than_swallowed() {
+        assert_eq!(
+            parse(":%s/a/b/gi"),
+            Ok(Command::Substitute {
+                pattern: "a".into(),
+                replacement: "b".into(),
+                global: true,
+                ignore_case: true,
+                count_only: false,
+                rows: Rows::All,
+            })
+        );
+        // `n` in vi means "count, change nothing" — and it used to substitute.
+        assert!(matches!(
+            parse(":%s/a/b/n"),
+            Ok(Command::Substitute { count_only: true, .. })
+        ));
+        // A flag that is not implemented says so rather than being dropped.
+        assert!(parse(":%s/a/b/c").is_err());
+        assert!(parse(":%s/a/b/z").is_err());
+    }
+
+    #[test]
+    fn a_substitution_takes_a_line_range() {
+        assert!(matches!(
+            parse(":1,40s/a/b/"),
+            Ok(Command::Substitute {
+                rows: Rows::Range(Bound::Line(1), Bound::Line(40)),
+                ..
+            })
+        ));
+        assert!(matches!(
+            parse(":.,$s/a/b/"),
+            Ok(Command::Substitute {
+                rows: Rows::Range(Bound::Cursor, Bound::Last),
+                ..
+            })
+        ));
+        // A bare number is one line, the way `:40s` reads in vi.
+        assert!(matches!(
+            parse(":40s/a/b/"),
+            Ok(Command::Substitute {
+                rows: Rows::Range(Bound::Line(40), Bound::Line(40)),
+                ..
+            })
+        ));
     }
 
     #[test]
