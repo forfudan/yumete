@@ -118,6 +118,78 @@ fn band_if(on: bool, band: Style, plain: Style) -> Style {
 }
 
 /// Draw the grid, returning where the terminal's caret belongs.
+/// **Where a click landed, in a grid.**
+///
+/// A grid is not drawn the way prose is: its columns are padded to line up on
+/// screen while the file behind them is ragged, and it scrolls sideways by
+/// whole columns. So a click resolved as if the page were prose lands
+/// somewhere else entirely — which is what it did, on every table, in a way
+/// that looked random because the offset is the padding of every column to the
+/// left of the pointer.
+///
+/// Laid out here from the same numbers `draw` lays it out from, and nothing is
+/// remembered between frames: a click answered from last frame's layout is a
+/// click that lands where the page *was*.
+pub fn char_at(
+    editor: &Editor,
+    config: &Config,
+    area: Rect,
+    viewport: &Viewport,
+    mouse: ratatui::crossterm::event::MouseEvent,
+) -> Option<usize> {
+    let view = editor.table()?;
+    let lines = editor.current_buffer().line_count();
+    let head = u16::from(view.schema.header);
+    let rows = area.height.saturating_sub(head) as usize;
+    if rows == 0 || mouse.row < area.y {
+        return None;
+    }
+    // The header row is not a row of the table: a click on it means the first
+    // row under it, which is the one thing it could sensibly mean.
+    let slot = (mouse.row.saturating_sub(area.y + head)) as usize;
+    let line = (viewport.top + slot).min(lines.saturating_sub(1));
+    let rope = editor.current_buffer().rope();
+    let start = rope.line_to_char(line);
+    let cells = editor.row_cells(line);
+    if cells.is_empty() {
+        return Some(start);
+    }
+    let gutter = crate::gutter_width(lines, config.editor.line_numbers) as u16;
+    let widths = widths(editor, viewport.top, rows);
+    let right = area.x + area.width;
+    // Walk the columns the way they were drawn, and stop at the one the
+    // pointer is in.
+    let mut x = area.x + gutter;
+    for (i, span) in cells.iter().enumerate().skip(viewport.left) {
+        let w = widths.get(i).copied().unwrap_or(MIN_COLUMN) as u16;
+        if x >= right {
+            break;
+        }
+        let end = (x + w).min(right);
+        if mouse.column < end || i + 1 == cells.len() {
+            // Which character of the cell — counted in cells of the terminal,
+            // because that is what was drawn.
+            let want = mouse.column.saturating_sub(x) as usize;
+            let mut column = 0;
+            for at in span.0..span.1 {
+                let c = rope.char(start + at);
+                let cw = yumete_cjk::char_width(c);
+                if want < column + cw {
+                    return Some(start + at);
+                }
+                column += cw;
+            }
+            // Past the text: the cell's last character, or its start when the
+            // cell is empty — and never past the end of the document, which the
+            // last cell of the last line is one character short of.
+            let at = start + span.1.saturating_sub(1).max(span.0);
+            return Some(at.min(rope.len_chars().saturating_sub(1)));
+        }
+        x = end + if w == 0 { 0 } else { GAP as u16 };
+    }
+    Some((start + cells.last().map_or(0, |&(a, _)| a)).min(rope.len_chars().saturating_sub(1)))
+}
+
 pub fn draw(
     frame: &mut Frame,
     editor: &Editor,

@@ -1829,6 +1829,13 @@ fn text_at(
         return None;
     }
     let viewport = &seats[live];
+    // **A grid is drawn by the grid.** Its columns are padded to line up while
+    // the file behind them is ragged, and it scrolls sideways by whole columns
+    // — so resolving a click as if the page were prose landed it somewhere
+    // else on every table, off by the padding of every column to the left.
+    if editor.table().is_some_and(|t| t.is_grid()) {
+        return table::char_at(editor, config, area, &viewport.table, mouse);
+    }
     match editor.layout() {
         WritingLayout::Horizontal => {
             let buffer = editor.current_buffer();
@@ -4625,6 +4632,93 @@ mod tests {
             assert_eq!(hint(&editor).trim(), "", "{key} belongs to the panel");
             editor.on_key(Key::Esc);
         }
+    }
+
+    /// A click in a grid lands on the cell it was pointed at.
+    ///
+    /// The columns are padded to line up on screen while the file behind them
+    /// is ragged, so a click resolved as prose lands off by the padding of
+    /// every column to its left — which looks random, and was.
+    #[test]
+    fn a_click_in_a_grid_lands_where_it_was_pointed() {
+        let dir = std::env::temp_dir().join(format!("yumete-click-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(dir.join(".yumete").join("tables")).unwrap();
+        std::fs::write(
+            dir.join(".yumete").join("tables").join("t.toml"),
+            "[table]\nfile = ['d.csv']\nkey = 'char'\n\
+             [[table.column]]\nname = 'char'\n[[table.column]]\nname = 'ids_y'\n\
+             [[table.column]]\nname = 'note'\n",
+        )
+        .unwrap();
+        let csv = dir.join("d.csv");
+        // Ragged on purpose: one-character cells beside long ones is exactly
+        // what padding hides and what the old mapping tripped over.
+        std::fs::write(
+            &csv,
+            "char,ids_y,note\n木,木,樹\n相,⿰木目,看\n林,⿰木木,樹林很密\n杏,⿱木口,果\n",
+        )
+        .unwrap();
+
+        let mut editor = Editor::new();
+        editor.open_file(&csv).unwrap();
+        let config = Config::default();
+        let mut seats = Seats::default();
+        let (w, h) = (40u16, 10u16);
+        // Draw once so the viewport is settled the way a click will read it.
+        let mut terminal = Terminal::new(TestBackend::new(w, h)).unwrap();
+        terminal
+            .draw(|frame| draw(frame, &editor, &config, &no_ime(), &mut seats))
+            .unwrap();
+        let buffer = terminal.backend().buffer().clone();
+
+        // Point at every cell of every row, by finding what is drawn there —
+        // and take the row's own number, drawn in the gutter, as the truth
+        // about which line that is.
+        let rope = editor.current_buffer().rope();
+        let numbered = |y: u16| -> Option<usize> {
+            let n: String = (0..6).map(|x| at(&buffer, x, y)).collect();
+            n.trim().parse::<usize>().ok().map(|n| n - 1)
+        };
+        for y in 0..h {
+            let Some(line) = numbered(y) else { continue };
+            // The phantom last line a trailing newline opens has no cells to
+            // point at.
+            if rope.line(line).to_string().trim().is_empty() {
+                continue;
+            }
+            for x in 0..w {
+                let symbol = at(&buffer, x, y);
+                if symbol.trim().is_empty() {
+                    continue;
+                }
+                let mouse = ratatui::crossterm::event::MouseEvent {
+                    kind: ratatui::crossterm::event::MouseEventKind::Down(
+                        ratatui::crossterm::event::MouseButton::Left,
+                    ),
+                    column: x,
+                    row: y,
+                    modifiers: ratatui::crossterm::event::KeyModifiers::NONE,
+                };
+                let Some(at_char) = text_at(&editor, &config, Some((w, h).into()), &seats, mouse)
+                else {
+                    continue;
+                };
+                // The line is the row that was clicked…
+                assert_eq!(
+                    rope.char_to_line(at_char),
+                    line,
+                    "click at ({x},{y}) on {symbol:?}"
+                );
+                // …and the character is the one drawn there, or its first half.
+                let got = rope.char(at_char).to_string();
+                assert!(
+                    got == symbol || yumete_cjk::str_width(&got) == 2,
+                    "click at ({x},{y}): drawn {symbol:?}, landed on {got:?}"
+                );
+            }
+        }
+        std::fs::remove_dir_all(&dir).ok();
     }
 
     /// **What you have typed is on the screen** — twice: at the status line's
