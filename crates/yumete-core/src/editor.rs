@@ -5701,7 +5701,7 @@ impl Editor {
         // Through `ruby()` and `hanging_punctuation()`, not the fields: a page
         // packed tight lays out neither, and a grid that disagreed with what is
         // drawn would put the cursor somewhere the writer cannot see.
-        Grid::new(self.zong_length, self.ruby())
+        Grid::plain(self.zong_length, self.ruby())
             .with_tatechuyoko(self.tatechuyoko)
             .with_indent(self.paragraph_indent())
             .with_hidden(hidden)

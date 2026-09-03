@@ -125,7 +125,15 @@ impl<'a> Grid<'a> {
         (self.hidden)(line)
     }
 
-    pub fn new(zong_len: usize, ruby: Dialects) -> Grid<'static> {
+    /// A grid with **nothing off the page** — the source as the file has it.
+    ///
+    /// Named the way [`crate::wrap::Measure::plain`] is named, and for the same
+    /// reason: a page that was never told what is hidden or folded shows a
+    /// different document from the one the reader is looking at, and a
+    /// constructor called `new` does not say so at the call site. The page the
+    /// editor draws is built by `Editor::grid_with`, which cannot leave them
+    /// out.
+    pub fn plain(zong_len: usize, ruby: Dialects) -> Grid<'static> {
         Grid {
             zong_len: zong_len.max(1),
             ruby,
@@ -182,7 +190,7 @@ impl<'a> Grid<'a> {
 
 impl Default for Grid<'static> {
     fn default() -> Grid<'static> {
-        Grid::new(
+        Grid::plain(
             DEFAULT_ZONG_LENGTH,
             Dialects::only(crate::ruby::Dialect::Html),
         )
@@ -291,7 +299,12 @@ pub struct Slot {
 /// markup disappears, the reading is dealt out down the ruby column, and the
 /// base is centred over however many rows the reading needs. That spacing is
 /// what real typesetting does and is why two adjacent readings never collide.
-pub fn line_slots(text: &str, grid: Grid) -> Vec<Slot> {
+/// …with **nothing off the page**, whatever the grid was told.
+///
+/// The name says so now: this used to be spelled `line_slots`, take a `Grid`
+/// carrying the answer, and ignore it — public API that contradicts the value
+/// it is handed. Everything that draws goes through [`line_slots_in`].
+pub fn line_slots_plain(text: &str, grid: Grid) -> Vec<Slot> {
     line_slots_in(text, grid, &[])
 }
 
@@ -430,7 +443,12 @@ fn push_plain(
         // 標點旁置: a 句讀 mark stops being a row of its own and hangs beside the
         // character it follows. It joins that character's slot, so the wrap
         // length, the cursor and every motion agree that 「文。」 is one row.
-        if grid.hanging && body.chars().count() == 1 && swallowed.is_none() {
+        // …**whatever came off the page just before it**. This used to give up
+        // the moment a hidden run had been swallowed, so 那年**冬天**。 took a
+        // whole square for its 。 while 那年冬天。 hung it — turning
+        // 所見即所得 on quietly turned 標點旁置 off. The run has somewhere to
+        // go in every branch below: it joins whichever slot the mark joins.
+        if grid.hanging && body.chars().count() == 1 {
             let mark = body.chars().next().expect("one character");
             // The half-width form is what hangs, and a mark that has none does
             // not hang at all — it keeps its square. So this is one question,
@@ -458,14 +476,16 @@ fn push_plain(
                     // reads down the margin in the order the two were written:
                     // the first has just taken a row of its own above, and this
                     // one waits in its place.
-                    *opening = Some((at, hung));
+                    *opening = Some((swallowed.take().unwrap_or(at), hung));
                     continue;
                 }
                 match slots.last_mut() {
                     // The usual case: it joins the character it follows.
                     Some(previous) if previous.mark.is_none() && !previous.text.is_empty() => {
+                        // The extension covers the hidden run between them too.
                         previous.end = from + w[1];
                         previous.mark = Some(hung);
+                        swallowed = None;
                         continue;
                     }
                     // **Two marks running do not hang at all.** `。」` ends
@@ -518,7 +538,7 @@ fn push_plain(
                     // carrying its opener, say.
                     Some(_) => {
                         slots.push(Slot {
-                            start: at,
+                            start: swallowed.take().unwrap_or(at),
                             end: from + w[1],
                             text: String::new(),
                             ruby: None,
@@ -749,12 +769,26 @@ fn slot_offsets(text: &str, tatechuyoko: bool) -> Vec<usize> {
 /// that opens something (「（), so the offending character is pulled down with
 /// its neighbour. The horizontal page has always done this; the vertical page —
 /// the reason to choose this editor — did not.
-fn zong_breaks(chars: &[char], slots: &[Slot], zong_len: usize, groups: &[crate::ruby::Ruby]) -> Vec<usize> {
+fn zong_breaks(
+    chars: &[char],
+    slots: &[Slot],
+    zong_len: usize,
+    groups: &[crate::ruby::Ruby],
+    hidden: &[(usize, usize)],
+) -> Vec<usize> {
     let total = slots.len();
+    // **The character the reader sees**, not the one the range begins with.
+    // 禁則 is about what stands at the head and the foot of a 縱, and a slot
+    // that swallowed a hidden run begins at the `*` — so with 所見即所得 on,
+    // 。 was read as an asterisk and allowed to open a column, which is the one
+    // thing 禁則處理 exists to prevent. A row with nothing but markup in it
+    // reports a space, which no rule forbids anywhere.
+    let is_hidden = |at: usize| hidden.iter().any(|&(a, b)| at >= a && at < b);
     let char_of = |i: usize| {
         slots
             .get(i)
-            .and_then(|s: &Slot| chars.get(s.start))
+            .and_then(|s: &Slot| (s.start..s.end).find(|&at| !is_hidden(at)))
+            .and_then(|at| chars.get(at))
             .copied()
             .unwrap_or(' ')
     };
@@ -805,7 +839,8 @@ fn line_zongs(rope: &Rope, line: usize, grid: Grid) -> (Vec<Slot>, Vec<usize>) {
     let slots = line_grid(rope, line, grid);
     let chars: Vec<char> = line_text(rope, line).chars().collect();
     let groups = crate::ruby::groups(&chars, grid.ruby);
-    let breaks = zong_breaks(&chars, &slots, grid.zong_len.max(1), &groups);
+    let hidden = (grid.hidden)(line);
+    let breaks = zong_breaks(&chars, &slots, grid.zong_len.max(1), &groups, &hidden);
     (slots, breaks)
 }
 
@@ -1403,7 +1438,7 @@ mod tests {
                 assert_eq!(drawn, zong.slots, "縱 {i} at width {zong_len}");
                 seen += drawn;
             }
-            let total = line_slots(rope.line(0).to_string().trim_end(), grid).len();
+            let total = line_slots_plain(rope.line(0).to_string().trim_end(), grid).len();
             assert_eq!(seen, total, "width {zong_len}: {} 縱", zongs.len());
             // And every character's own position agrees with the layout.
             for pos in 0..rope.len_chars() {
@@ -1431,7 +1466,7 @@ mod tests {
         // A Chinese paragraph is marked by an indent of two 字, not by a blank
         // line — and the blank line costs a whole 縱 of the page.
         let grid = Grid { indent: 2, ..G };
-        let slots = line_slots("那年冬天", grid);
+        let slots = line_slots_plain("那年冬天", grid);
         assert_eq!(slots.len(), 6, "two empty squares, then four characters");
         assert!(slots[0].text.is_empty() && slots[0].start == slots[0].end);
         assert!(slots[1].text.is_empty());
@@ -1456,16 +1491,16 @@ mod tests {
             "# 第一章", "- 一項", "+ 一項", "> 引文", "| a | b |", "```", "~~~",
             "[^1]: 一條腳註", "  已經縮進了",
         ] {
-            let slots = line_slots(line, grid);
+            let slots = line_slots_plain(line, grid);
             assert!(
                 slots.first().is_some_and(|s| !s.text.is_empty()),
                 "{line:?} should not be indented"
             );
         }
         // A blank line stays blank.
-        assert!(line_slots("", grid).is_empty());
+        assert!(line_slots_plain("", grid).is_empty());
         // …but a paragraph may perfectly well open with a link.
-        let slots = line_slots("[書名](a.md) 是這樣寫的。", grid);
+        let slots = line_slots_plain("[書名](a.md) 是這樣寫的。", grid);
         assert!(slots[0].text.is_empty() && slots[1].text.is_empty(), "{slots:?}");
     }
 
@@ -1731,7 +1766,7 @@ mod tests {
     #[test]
     fn a_ruby_group_spaces_its_base_against_the_reading() {
         let ruby = RUBY;
-        let slots = line_slots("他<ruby>口<rt>kǒu</rt></ruby>很", RUBY);
+        let slots = line_slots_plain("他<ruby>口<rt>kǒu</rt></ruby>很", RUBY);
         let bodies: Vec<&str> = slots.iter().map(|s| s.text.as_str()).collect();
         assert_eq!(
             bodies,
@@ -1752,7 +1787,7 @@ mod tests {
 
     #[test]
     fn two_adjacent_readings_do_not_collide() {
-        let slots = line_slots(
+        let slots = line_slots_plain(
             "<ruby>口<rt>kǒu</rt></ruby><ruby>囗<rt>wéi</rt></ruby>",
             RUBY,
         );
@@ -1794,7 +1829,7 @@ mod tests {
 
     #[test]
     fn a_reading_shorter_than_its_base_does_not_shrink_it() {
-        let slots = line_slots("<ruby>漢字<rt>hz</rt></ruby>", RUBY);
+        let slots = line_slots_plain("<ruby>漢字<rt>hz</rt></ruby>", RUBY);
         let bodies: Vec<&str> = slots.iter().map(|s| s.text.as_str()).collect();
         assert_eq!(bodies, ["漢", "字"]);
         assert_eq!(
@@ -1807,7 +1842,7 @@ mod tests {
     /// read and edited.
     #[test]
     fn ruby_off_shows_the_markup() {
-        let slots = line_slots("<ruby>口<rt>kǒu</rt></ruby>", G);
+        let slots = line_slots_plain("<ruby>口<rt>kǒu</rt></ruby>", G);
         let bodies: String = slots.iter().map(|s| s.text.as_str()).collect();
         assert_eq!(bodies, "<ruby>口<rt>kǒu</rt></ruby>");
         assert!(slots.iter().all(|s| s.ruby.is_none()));
@@ -1869,7 +1904,7 @@ mod tests {
     #[test]
     fn a_mark_hangs_beside_the_character_it_follows() {
         let hanging = G.with_hanging(true);
-        let slots = line_slots("春江。潮水，", hanging);
+        let slots = line_slots_plain("春江。潮水，", hanging);
         let bodies: Vec<&str> = slots.iter().map(|s| s.text.as_str()).collect();
         assert_eq!(bodies, ["春", "江", "潮", "水"], "four rows, not six");
         assert_eq!(
@@ -1879,14 +1914,14 @@ mod tests {
         );
 
         // Off, they take a square each, as they did.
-        assert_eq!(line_slots("春江。", G).len(), 3);
+        assert_eq!(line_slots_plain("春江。", G).len(), 3);
     }
 
     /// An opening bracket introduces what follows it, so it hangs beside *that*
     /// character — which is also what keeps the text column unbroken.
     #[test]
     fn an_opener_hangs_on_the_character_it_introduces() {
-        let slots = line_slots("曰「春江", G.with_hanging(true));
+        let slots = line_slots_plain("曰「春江", G.with_hanging(true));
         assert_eq!(
             slots.iter().map(|s| s.text.as_str()).collect::<Vec<_>>(),
             ["曰", "春", "江"],
@@ -2018,6 +2053,53 @@ mod tests {
         }
     }
 
+    /// 所見即所得 does not turn 標點旁置 off, and does not turn 禁則處理 off.
+    ///
+    /// Both used to read the character at a slot's *start*, which after a
+    /// hidden run is an asterisk: so 那年**冬天**。 gave its 。 a whole square
+    /// while 那年冬天。 hung it, and a 。 at a column's head was let through
+    /// because the rule was asked about `*`.
+    #[test]
+    fn what_comes_off_the_page_does_not_change_the_other_settings() {
+        let hang = Grid { hanging: true, ..G };
+        let mark_of = |line: &str| -> Vec<Option<char>> {
+            let hidden = crate::markdown::hidden(&crate::markdown::spans(line), None);
+            line_slots_in(line, hang, &hidden)
+                .iter()
+                .map(|s| s.mark)
+                .collect()
+        };
+        assert!(
+            mark_of("那年冬天。").iter().any(|m| *m == Some('｡')),
+            "the 。 hangs"
+        );
+        assert!(
+            mark_of("那年**冬天**。").iter().any(|m| *m == Some('｡')),
+            "…and it still hangs when there is markup on the page"
+        );
+
+        // 禁則: a 。 may not open a 縱, markup or no markup.
+        let opens_with = |line: &str, len: usize| -> Vec<char> {
+            let hidden = crate::markdown::hidden(&crate::markdown::spans(line), None);
+            let chars: Vec<char> = line.chars().collect();
+            let grid = Grid { zong_len: len, ..G };
+            let slots = line_slots_in(line, grid, &hidden);
+            let groups = crate::ruby::groups(&chars, grid.ruby);
+            zong_breaks(&chars, &slots, len, &groups, &hidden)
+                .iter()
+                .filter_map(|&b| slots.get(b))
+                .filter_map(|s| s.text.chars().next())
+                .collect()
+        };
+        for line in ["一二三四五六七八九十甲乙。丙丁戊己", "一二三四五六七八九十甲**乙**。丙丁戊己"] {
+            let heads = opens_with(line, 12);
+            assert!(
+                !heads.contains(&'︒') && !heads.contains(&'。'),
+                "{line:?} opens a 縱 with 。: {heads:?}"
+            );
+        }
+    }
+
     /// The markup inside a ruby base comes off the page like any other.
     ///
     /// `push_ruby` was the one function never handed `hidden`: it laid the base
@@ -2052,8 +2134,8 @@ mod tests {
         // character is inside the group. Losing the wait at the group's edge
         // left the bracket as a row of its own — the square hanging exists to
         // save.
-        let grid = Grid::new(8, Dialects::only(crate::ruby::Dialect::Html)).with_hanging(true);
-        let slots = line_slots("曰「<ruby>漢<rt>hàn</rt></ruby>字", grid);
+        let grid = Grid::plain(8, Dialects::only(crate::ruby::Dialect::Html)).with_hanging(true);
+        let slots = line_slots_plain("曰「<ruby>漢<rt>hàn</rt></ruby>字", grid);
         let texts: Vec<&str> = slots.iter().map(|s| s.text.as_str()).collect();
         let marks: Vec<Option<char>> = slots.iter().map(|s| s.mark).collect();
         // Three rows of reading above, then 漢 carrying the bracket, then 字.
@@ -2070,8 +2152,8 @@ mod tests {
     fn marks_hang_in_their_narrow_forms() {
         // The margin is one cell. A full-width mark in it spills onto the 縱 to
         // the right; a narrow one is what the margin was sized for.
-        let grid = Grid::new(8, Dialects::NONE).with_hanging(true);
-        let slots = line_slots("春。夏、秋「冬」", grid);
+        let grid = Grid::plain(8, Dialects::NONE).with_hanging(true);
+        let slots = line_slots_plain("春。夏、秋「冬」", grid);
         let marks: Vec<Option<char>> = slots.iter().map(|s| s.mark).collect();
         // 秋 carries nothing: the 「 after it waits for 冬, which it introduces.
         // The closing 」 finds 冬's margin already taken and gets a margin row
@@ -2083,7 +2165,7 @@ mod tests {
 
         // A mark with no narrow form keeps its square rather than making the
         // margin two cells wide for every 縱 on the page.
-        let slots = line_slots("讀《詩》", grid);
+        let slots = line_slots_plain("讀《詩》", grid);
         let texts: Vec<&str> = slots.iter().map(|s| s.text.as_str()).collect();
         assert_eq!(texts, ["讀", "︽", "詩", "︾"]);
         assert!(slots.iter().all(|s| s.mark.is_none()));
@@ -2099,7 +2181,7 @@ mod tests {
         // Before this, the second mark took a margin row of its own and the
         // text square beside it was left empty — a hole in the middle of the
         // column, at the end of almost every line of Chinese dialogue.
-        let slots = line_slots("春。」", G.with_hanging(true));
+        let slots = line_slots_plain("春。」", G.with_hanging(true));
         assert_eq!(slots.len(), 2, "a row for the pair, not one each");
         assert_eq!(slots[0].text, "春");
         assert_eq!(slots[0].mark, None, "the 。 came back out of the margin");
@@ -2111,13 +2193,13 @@ mod tests {
         assert_eq!(slots[1].start + 2, slots[1].end);
 
         // One mark still hangs — that is where the space is actually saved.
-        let slots = line_slots("春。夏", G.with_hanging(true));
+        let slots = line_slots_plain("春。夏", G.with_hanging(true));
         assert_eq!(slots[0].mark, Some('｡'));
 
         // …and a closing bracket after a base that is carrying its own opener
         // is not a cluster: 「 belongs *before* 冬, and pulling it out would
         // put it after the character it opens.
-        let slots = line_slots("秋「冬」", G.with_hanging(true));
+        let slots = line_slots_plain("秋「冬」", G.with_hanging(true));
         let marks: Vec<Option<char>> = slots.iter().map(|s| s.mark).collect();
         assert_eq!(marks, [None, Some('｢'), Some('｣')]);
         assert_eq!(slots[1].text, "冬");
@@ -2126,7 +2208,7 @@ mod tests {
     /// The reading gives way upward, leaving the base's own row for a mark.
     #[test]
     fn a_reading_moves_above_its_base_when_marks_hang() {
-        let slots = line_slots("<ruby>漢<rt>hàn</rt></ruby>。", RUBY.with_hanging(true));
+        let slots = line_slots_plain("<ruby>漢<rt>hàn</rt></ruby>。", RUBY.with_hanging(true));
         let bodies: Vec<&str> = slots.iter().map(|s| s.text.as_str()).collect();
         assert_eq!(bodies, ["", "", "", "漢"], "three rows of space, then 漢");
         assert_eq!(
