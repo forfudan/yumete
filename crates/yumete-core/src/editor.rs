@@ -6842,14 +6842,28 @@ impl Editor {
     /// Empty when nothing is pending, which is most of the time.
     pub fn typed_so_far(&self) -> String {
         let mut out = String::new();
-        if let Some(n) = self.count {
-            out.push_str(&n.to_string());
+        // The count as it stands, or the one a pending sequence has already
+        // taken from the line: `2-5g` is still `2-5g` on the screen after the
+        // `g` has consumed it, which is what the reader typed and what vi
+        // shows. The two live in different fields only because one of them has
+        // been spent.
+        let waiting = self.pending != Pending::None;
+        match (self.count, waiting.then_some(self.operator_count).flatten()) {
+            (Some(n), _) | (None, Some(n)) => out.push_str(&n.to_string()),
+            (None, None) => {}
         }
-        if let Some(to) = self.count_to {
-            out.push('-');
-            if let Some(n) = to {
-                out.push_str(&n.to_string());
+        match (self.count_to, waiting.then_some(self.column_span).flatten()) {
+            (Some(to), _) => {
+                out.push('-');
+                if let Some(n) = to {
+                    out.push_str(&n.to_string());
+                }
             }
+            (None, Some((_, to))) => {
+                out.push('-');
+                out.push_str(&to.to_string());
+            }
+            (None, None) => {}
         }
         out.push_str(match self.pending {
             Pending::None => "",
