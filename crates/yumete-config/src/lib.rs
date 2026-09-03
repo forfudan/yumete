@@ -303,34 +303,188 @@ impl Default for PanelConfig {
     }
 }
 
-/// Theme (colour) settings.
+/// Whether the editor wears its own colours or the terminal's.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Ground {
+    /// Paint the page: the theme owns both its ink and its ground.
+    ///
+    /// The default, because **a theme that does not own its ground cannot make
+    /// any promise about contrast** — every tint would be measured against a
+    /// colour the editor has never seen. Until this existed, 墨香 dressed the
+    /// candidate panel and four other panes and left the manuscript itself in
+    /// the terminal's own ink on the terminal's own ground.
+    #[default]
+    Paint,
+    /// Leave the ground alone and set only the foregrounds, for a reader whose
+    /// terminal palette is a decision they have already made.
+    Terminal,
+}
+
+/// Which of a theme's two moods is in force.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Mode {
+    /// Ask the terminal what colour it is and follow it (the default).
+    #[default]
+    Auto,
+    Dark,
+    Light,
+}
+
+impl Mode {
+    fn parse(name: &str) -> Option<Mode> {
+        match name.trim().to_ascii_lowercase().as_str() {
+            "auto" | "system" | "自動" | "自动" => Some(Mode::Auto),
+            "dark" | "深" | "深色" => Some(Mode::Dark),
+            "light" | "淺" | "浅" | "淺色" | "浅色" => Some(Mode::Light),
+            _ => None,
+        }
+    }
+}
+
+/// A theme's two anchors and every shade between them.
+///
+/// **A theme is a few numbers, not a table of colours.** Yume's own themes are
+/// defined this way — an ink and a paper, with every other shade interpolated
+/// along a ladder between them — and it is what lets a skin be retuned by
+/// editing a pair of values: the relationships between the shades stay right by
+/// construction, and nothing can drift out of agreement with anything else.
+///
+/// Rungs run `0` (pure ink) to `1000` (pure paper). Mixed in **sRGB**, not in
+/// linear light: measured over this ladder, sRGB gives a step of 5.8–7.4 L\*
+/// across the whole ramp while linear light gives 3.2–16.8, piling nine tenths
+/// of the rungs into the light half and then falling off a cliff. The even ramp
+/// is the one you can place an interface on.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Ladder {
+    pub ink: (u8, u8, u8),
+    pub paper: (u8, u8, u8),
+}
+
+impl Ladder {
+    /// One rung: `0` is the ink, `1000` the paper.
+    pub fn step(self, t: u16) -> (u8, u8, u8) {
+        let t = t.min(1000) as i64;
+        let mix = |a: u8, b: u8| -> u8 {
+            let (a, b) = (a as i64, b as i64);
+            ((a * 1000 + (b - a) * t + 500) / 1000) as u8
+        };
+        (
+            mix(self.ink.0, self.paper.0),
+            mix(self.ink.1, self.paper.1),
+            mix(self.ink.2, self.paper.2),
+        )
+    }
+}
+
+/// Where each part of the editor sits on the ladder.
+///
+/// **The rungs are not evenly useful, and that is what this list encodes.**
+/// Measured against 墨香's own pair: at `t ≤ 350` a colour clears 4.5:1 as ink
+/// on the paper; at `t ≥ 730` ink clears 4.5:1 drawn *on* it. The 38% between
+/// carries nothing — too faint to read, too pale to write on — so nothing here
+/// is placed there except the rules, which are neither.
+pub mod rung {
+    /// The writing, and anything that *is* the writing: a hung 句讀, the
+    /// character a highlight covers.
+    pub const TEXT: u16 = 0;
+    /// One shade back: a reading beside its base, a 拆分 annotation, a
+    /// candidate's number, the second line of anything.
+    pub const QUIET: u16 = 300;
+    /// Furniture you read once: line numbers, an unlit tab, a key's label, a
+    /// 批注, a page's front matter.
+    pub const FURNITURE: u16 = 400;
+    /// The markup itself — `**`, `#`, `[]()`. Shown, and set back far enough
+    /// that it is never read as a word.
+    pub const MARKER: u16 = 450;
+    /// A rule: a panel's ring, the sidebar's edge, the ruler's line, a 稿紙
+    /// tick. Not text and not a ground, and the only thing that belongs in the
+    /// middle of the ladder.
+    pub const RULE: u16 = 550;
+    /// Chrome, raised one notch off the page: a sidebar, a tab bar, a detail
+    /// panel, the 縱書 number band. **Toward the ink**, which is the one
+    /// direction that still means "raised" after a light/dark flip.
+    pub const CHROME: u16 = 880;
+    /// A ground that must not shout: a table's cursor row, a code fence, a
+    /// callout, the tint past the measure.
+    pub const BAND: u16 = 920;
+    /// A selection: the loudest ground, and still only a ground — the ink on it
+    /// is untouched, so a heading inside a selection is still a heading.
+    pub const SELECTION: u16 = 800;
+    /// The page.
+    pub const PAPER: u16 = 1000;
+}
+
+/// Theme (colour) settings — 【墨香】 and anything shaped like it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ThemeConfig {
-    /// The selection background, as an RGB triple.
-    pub selection: (u8, u8, u8),
-    /// The two alternating word-background tints for the segmentation overlay
-    /// (Feature #24). Kept subtle so the overlay is not intrusive.
-    pub segmentation: [(u8, u8, u8); 2],
-    /// The ruler: the tint over what runs past the measure, and the line
-    /// itself when there is one (Feature #101).
-    pub ruler: (u8, u8, u8),
-    /// The background of the paragraph-number band (Feature #89).
+    /// What the theme is called. 【墨香】 answers to both spellings.
+    pub name: String,
+    /// Dark or light, or ask the terminal.
+    pub mode: Mode,
+    /// Whether the page is painted.
+    pub ground: Ground,
+    /// 墨 and 紙, dark.
+    pub dark: Ladder,
+    /// 墨 and 紙, light. **Not the dark pair swapped**: the ground goes deeper
+    /// and the ink dimmer in the dark, or the page glows at night.
+    pub light: Ladder,
+    /// 朱 — the red of the reader's brush, and the one colour that is not on
+    /// the ladder.
     ///
-    /// Every other editor separates line numbers from the text by *position* —
-    /// a gutter column the text can never enter — so a dim colour is enough.
-    /// Set vertically the numbers sit above the 縱, in the same columns as the
-    /// text, so position separates nothing and they read as digits somebody
-    /// typed. Colour has to do the whole job.
-    pub gutter: (u8, u8, u8),
+    /// It says **這裏不對**: a row of the wrong width, a component with no row
+    /// of its own, a footnote's mark. Never emphasis, never "here" — "here" is
+    /// ink and paper changing places, which costs no colour and survives a
+    /// light/dark flip. Warm, because the ground is a warm near-black and the
+    /// ink a warm bone, and a cold accent on them reads as a terminal's rather
+    /// than a manuscript's.
+    pub mark_dark: (u8, u8, u8),
+    pub mark_light: (u8, u8, u8),
+}
+
+impl ThemeConfig {
+    /// The ladder in force.
+    pub fn ladder(&self, dark: bool) -> Ladder {
+        match dark {
+            true => self.dark,
+            false => self.light,
+        }
+    }
+
+    /// 朱, in the mood in force.
+    pub fn mark(&self, dark: bool) -> (u8, u8, u8) {
+        match dark {
+            true => self.mark_dark,
+            false => self.mark_light,
+        }
+    }
 }
 
 impl Default for ThemeConfig {
     fn default() -> Self {
         ThemeConfig {
-            selection: (60, 70, 100),
-            segmentation: [(40, 44, 52), (52, 44, 40)],
-            gutter: (36, 38, 44),
-            ruler: (46, 48, 56),
+            name: "墨香".to_string(),
+            mode: Mode::Auto,
+            ground: Ground::Paint,
+            // Yume's own 墨香. The green in the ink is deliberate and slight —
+            // R and G differ by about five — so it reads as ink with a hint of
+            // pine rather than as grey-green, and the paper is warm rather than
+            // white.
+            dark: Ladder {
+                ink: (0xCF, 0xC6, 0xA9),
+                paper: (0x26, 0x2A, 0x27),
+            },
+            // 墨 on paper is darker than 墨 on a screen — the light ladder's
+            // ink is the dark ladder's *ground*, which is both true of the
+            // material and what gives the light mood the range its top rungs
+            // need to stay readable.
+            light: Ladder {
+                ink: (0x26, 0x2A, 0x27),
+                paper: (0xF1, 0xEB, 0xD9),
+            },
+            // A seal's red on paper; lighter in the dark, for the same reason
+            // the ink is dimmer there.
+            mark_light: (0xA8, 0x30, 0x1C),
+            mark_dark: (0xD2, 0x78, 0x5A),
         }
     }
 }
@@ -605,10 +759,18 @@ struct RawEditor {
 #[derive(Deserialize, Default)]
 #[serde(deny_unknown_fields)]
 struct RawTheme {
-    selection: Option<String>,
-    segmentation: Option<Vec<String>>,
-    gutter: Option<String>,
-    ruler: Option<String>,
+    name: Option<String>,
+    mode: Option<String>,
+    ground: Option<String>,
+    /// 墨 and 紙, as `"#RRGGBB"`. Two keys per mood, and every other shade in
+    /// the editor is worked out from them.
+    ink: Option<String>,
+    paper: Option<String>,
+    ink_light: Option<String>,
+    paper_light: Option<String>,
+    /// 朱.
+    mark: Option<String>,
+    mark_light: Option<String>,
 }
 
 #[derive(Deserialize, Default)]
@@ -708,18 +870,6 @@ impl RawConfig {
         if other.editor.paper_ticks.is_some() {
             self.editor.paper_ticks = other.editor.paper_ticks;
         }
-        if other.theme.selection.is_some() {
-            self.theme.selection = other.theme.selection;
-        }
-        if other.theme.segmentation.is_some() {
-            self.theme.segmentation = other.theme.segmentation;
-        }
-        if other.theme.gutter.is_some() {
-            self.theme.gutter = other.theme.gutter;
-        }
-        if other.theme.ruler.is_some() {
-            self.theme.ruler = other.theme.ruler;
-        }
         if other.ime.scheme.is_some() {
             self.ime.scheme = other.ime.scheme.clone();
         }
@@ -745,6 +895,27 @@ impl RawConfig {
         }
         if other.panel.rounded.is_some() {
             self.panel.rounded = other.panel.rounded;
+        }
+        if other.theme.name.is_some() {
+            self.theme.name = other.theme.name.clone();
+        }
+        if other.theme.mode.is_some() {
+            self.theme.mode = other.theme.mode.clone();
+        }
+        if other.theme.ground.is_some() {
+            self.theme.ground = other.theme.ground.clone();
+        }
+        for (from, to) in [
+            (&other.theme.ink, &mut self.theme.ink),
+            (&other.theme.paper, &mut self.theme.paper),
+            (&other.theme.ink_light, &mut self.theme.ink_light),
+            (&other.theme.paper_light, &mut self.theme.paper_light),
+            (&other.theme.mark, &mut self.theme.mark),
+            (&other.theme.mark_light, &mut self.theme.mark_light),
+        ] {
+            if from.is_some() {
+                *to = from.clone();
+            }
         }
         for (k, v) in other.keys.normal {
             self.keys.normal.insert(k, v);
@@ -865,26 +1036,31 @@ impl RawConfig {
             config.ime.start = start;
         }
         config.syntax.by_name = self.syntax;
-        if let Some(hex) = self.theme.selection {
-            if let Some(rgb) = parse_hex(&hex) {
-                config.theme.selection = rgb;
+        if let Some(name) = self.theme.name {
+            if !name.trim().is_empty() {
+                config.theme.name = name;
             }
         }
-        if let Some(colors) = self.theme.segmentation {
-            for (slot, hex) in config.theme.segmentation.iter_mut().zip(colors.iter()) {
-                if let Some(rgb) = parse_hex(hex) {
-                    *slot = rgb;
-                }
+        if let Some(mode) = self.theme.mode.as_deref().and_then(Mode::parse) {
+            config.theme.mode = mode;
+        }
+        if let Some(ground) = self.theme.ground.as_deref() {
+            match ground.trim().to_ascii_lowercase().as_str() {
+                "paint" | "theme" | "自己" => config.theme.ground = Ground::Paint,
+                "terminal" | "終端" | "终端" => config.theme.ground = Ground::Terminal,
+                _ => {}
             }
         }
-        if let Some(hex) = self.theme.gutter {
-            if let Some(rgb) = parse_hex(&hex) {
-                config.theme.gutter = rgb;
-            }
-        }
-        if let Some(hex) = self.theme.ruler {
-            if let Some(rgb) = parse_hex(&hex) {
-                config.theme.ruler = rgb;
+        for (hex, slot) in [
+            (self.theme.ink, &mut config.theme.dark.ink),
+            (self.theme.paper, &mut config.theme.dark.paper),
+            (self.theme.ink_light, &mut config.theme.light.ink),
+            (self.theme.paper_light, &mut config.theme.light.paper),
+            (self.theme.mark, &mut config.theme.mark_dark),
+            (self.theme.mark_light, &mut config.theme.mark_light),
+        ] {
+            if let Some(rgb) = hex.as_deref().and_then(parse_hex) {
+                *slot = rgb;
             }
         }
         if let Some(markers) = self.panel.markers {
@@ -952,7 +1128,8 @@ mod tests {
         assert_eq!(c.editor.tab_width, 4);
         assert_eq!(c.editor.line_numbers, LineNumbers::Absolute);
         assert_eq!(c.editor.scrolloff, 3);
-        assert_eq!(c.theme.selection, (60, 70, 100));
+        assert_eq!(c.theme.name, "墨香");
+        assert_eq!(c.theme.dark.ink, (0xCF, 0xC6, 0xA9));
         assert!(c.keys.normal.is_empty());
     }
 
@@ -966,13 +1143,18 @@ mod tests {
             scrolloff = 5
 
             [theme]
-            selection = "#204060"
+            mode = "light"
+            ink = "#204060"
+            paper_light = "#FFFEF8"
             "##,
         );
         assert_eq!(c.editor.tab_width, 2);
         assert_eq!(c.editor.line_numbers, LineNumbers::Relative);
         assert_eq!(c.editor.scrolloff, 5);
-        assert_eq!(c.theme.selection, (0x20, 0x40, 0x60));
+        assert_eq!(c.theme.mode, Mode::Light);
+        // Two anchors named, and every rung between them moves with the pair.
+        assert_eq!(c.theme.dark.ink, (0x20, 0x40, 0x60));
+        assert_eq!(c.theme.light.paper, (0xFF, 0xFE, 0xF8));
     }
 
     #[test]
@@ -1000,17 +1182,10 @@ mod tests {
             [editor]
             show_segmentation = true
             segmentation_threshold = 50
-
-            [theme]
-            segmentation = ["#101010", "#202020"]
             "##,
         );
         assert!(c.editor.show_segmentation);
         assert_eq!(c.editor.segmentation_threshold, 50);
-        assert_eq!(
-            c.theme.segmentation,
-            [(0x10, 0x10, 0x10), (0x20, 0x20, 0x20)]
-        );
     }
 
     #[test]
@@ -1126,10 +1301,12 @@ mod tests {
             line_numbers = "wat"
 
             [theme]
-            selection = "nothex"
+            mode = "wat"
+            ink = "nothex"
             "#,
         );
         assert_eq!(c.editor.line_numbers, LineNumbers::Absolute);
-        assert_eq!(c.theme.selection, (60, 70, 100));
+        assert_eq!(c.theme.mode, Mode::Auto);
+        assert_eq!(c.theme.dark.ink, ThemeConfig::default().dark.ink);
     }
 }

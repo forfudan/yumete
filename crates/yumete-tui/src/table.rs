@@ -16,7 +16,7 @@
 //! about the rows you just reached.
 
 use ratatui::layout::Rect;
-use ratatui::style::{Color, Modifier, Style};
+use ratatui::style::{Modifier, Style};
 use ratatui::widgets::Clear;
 use ratatui::Frame;
 use yumete_config::Config;
@@ -157,22 +157,24 @@ pub fn draw(
     let widths = widths(editor, viewport.top, rows);
     scroll_columns(&widths, room, cursor_cell, &mut viewport.left);
 
-    let (gr, gg, gb) = config.theme.gutter;
-    let gutter_style = Style::default().bg(Color::Rgb(gr, gg, gb));
-    let head_style = gutter_style
-        .fg(Color::Rgb(0xd8, 0xc9, 0x9a))
-        .add_modifier(Modifier::BOLD);
-    let (sr, sg, sb) = config.theme.selection;
-    let on = Style::default().bg(Color::Rgb(sr, sg, sb)).fg(Color::White);
-    let text = Style::default();
+    let ink = crate::theme::Palette::of(config);
+    let gutter_style = ink.ground(yumete_config::rung::CHROME);
+    let head_style = gutter_style.fg(ink.text()).add_modifier(Modifier::BOLD);
+    // A ground, and only a ground: the ink on a selected cell is left alone, so
+    // a torn cell is still torn while you stand on it to mend it. It used to be
+    // `fg(White)`, which is brighter than the ink and flattened every colour
+    // underneath at the moment the writer was looking hardest.
+    let on = Style::default().bg(ink.selection());
+    let text = ink.page();
     // The row the cursor is on, banded. Across twenty-eight columns the eye
     // loses which row it was reading the moment it looks sideways, and this is
     // the cheapest possible answer to that.
-    let band = Style::default().bg(Color::Rgb(0x2c, 0x2e, 0x34));
-    let quiet = Style::default().add_modifier(Modifier::DIM);
+    let band = ink.ground(yumete_config::rung::BAND);
+    let quiet = Style::default().fg(ink.furniture());
     // A row the schema cannot account for. Not an error to be refused — this
-    // is the tool for mending it — so it is marked, not blocked.
-    let torn = Style::default().fg(Color::Rgb(0xd8, 0x9a, 0x9a));
+    // is the tool for mending it — so it is marked, not blocked. 朱: the one
+    // colour that is not a quantity of ink, because "wrong" is not one.
+    let torn = Style::default().fg(ink.mark());
 
     frame.render_widget(Clear, area);
     let right = area.x + area.width;
@@ -327,19 +329,15 @@ pub fn draw_detail(frame: &mut Frame, editor: &Editor, config: &Config, area: Re
     let Some(detail) = editor.detail() else {
         return;
     };
-    let (gr, gg, gb) = config.theme.gutter;
-    let ground = Style::default().bg(Color::Rgb(gr, gg, gb));
-    let title = ground
-        .fg(Color::Rgb(0xd8, 0xc9, 0x9a))
-        .add_modifier(Modifier::BOLD);
-    let name = ground.fg(Color::Rgb(0x9c, 0x97, 0x82));
-    let value = ground.fg(Color::Rgb(0xcf, 0xc6, 0xa9));
-    let here = ground
-        .fg(Color::Rgb(0xcf, 0xc6, 0xa9))
-        .add_modifier(Modifier::BOLD);
+    let ink = crate::theme::Palette::of(config);
+    let ground = ink.ground(yumete_config::rung::CHROME);
+    let title = ground.fg(ink.text()).add_modifier(Modifier::BOLD);
+    let name = ground.fg(ink.quiet());
+    let value = ground.fg(ink.text());
+    let here = ground.fg(ink.text()).add_modifier(Modifier::BOLD);
     // A component with no row of its own — for a 拆分表 that is a finding, not
     // a blank.
-    let missing = ground.fg(Color::Rgb(0xd8, 0x9a, 0x9a));
+    let missing = ground.fg(ink.mark());
 
     frame.render_widget(Clear, area);
     let right = area.x + area.width;

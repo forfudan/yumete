@@ -12,3 +12,6 @@ yumete-cjk = {path = "../yumete-cjk"}
 yumete-config = {path = "../yumete-config"}
 yumete-core = {path = "../yumete-core"}
 yumete-ime = {path = "../yumete-ime"}
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
