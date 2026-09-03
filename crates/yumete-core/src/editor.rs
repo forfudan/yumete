@@ -576,6 +576,14 @@ pub struct Editor {
     indent_symbol: String,
     /// A pending count prefix, so `3w` moves three words (Helix counts).
     count: Option<usize>,
+    /// The second half of a **span** count — `2-5gd` is columns two through
+    /// five. `Some(None)` means the `-` has been typed and the number after it
+    /// has not; `Some(Some(n))` is that number.
+    ///
+    /// A span is not a repetition, so it is not `count`: 「do this five times」
+    /// and 「do this to columns two through five」 are different things, and one
+    /// number cannot say both.
+    count_to: Option<Option<usize>>,
     /// The text typed during the last Insert session, replayed by `.`.
     /// The keys of the command being watched, and the revision it started at.
     ///
@@ -627,6 +635,8 @@ pub struct Editor {
     /// How much of the result is shown: the source, the source coloured, or
     /// the page with the markup taken off it.
     render: Render,
+    /// The columns `gd` was asked about this time: `(first, last)`, 1-based.
+    column_span: Option<(usize, usize)>,
     /// Whether the move that just happened was a **jump** — a search hit, a
     /// mark, `gg`, `:42` — rather than a step. The page centres a jump.
     jumped: bool,
@@ -926,6 +936,8 @@ impl Editor {
             clipboard_request: None,
             clipboard_read: None,
             render: Render::On,
+            count_to: None,
+            column_span: None,
             jumped: false,
             preview_request: None,
             preview_at: None,
@@ -4378,9 +4390,19 @@ impl Editor {
                     .operator_count
                     .map(|n| Hint::Says(format!("{n} 次 · 接一個動作或編輯")));
             }
-            // `Space` opens a menu that already lists its own keys, and saying
-            // the same thing twice on two surfaces is worse than saying it once.
-            Pending::Space => return None,
+            Pending::Space => (
+                say!("空格"),
+                Self::SPACE_KEYS
+                    .iter()
+                    .map(|(key, what)| {
+                        // Leaked once each, at most a dozen: the panel wants
+                        // `&'static str` keys like every other row here, and a
+                        // `char` is not one.
+                        let key: &'static str = Box::leak(key.to_string().into_boxed_str());
+                        (key, crate::messages::say(what, &[]))
+                    })
+                    .collect(),
+            ),
             Pending::Goto => (say!("g"), vec![
                     ("g", say!("檔首")),
                     ("e", say!("檔尾")),
@@ -4433,7 +4455,19 @@ impl Editor {
         Some(Hint::Keys(keys.0, keys.1))
     }
 
-    /// What the status line says about where the cursor is in a grid.
+    /// **What the half-pressed key can be finished with** — the which-key
+    /// panel's whole content: a title, and each key with what it does.
+    ///
+    /// The same answer the hint row has always had; it is a panel now because a
+    /// row holds four of these and `空格` has fourteen.
+    pub fn pending_menu(&self) -> Option<(String, Vec<(&'static str, String)>)> {
+        match self.pending_keys()? {
+            Hint::Keys(title, keys) => Some((title, keys)),
+            _ => None,
+        }
+    }
+
+    /// What the status line says about where the cursor is in a grid.    /// What the status line says about where the cursor is in a grid.
     ///
     /// Which column, and what a step moves by — the second matters because
     /// `Tab` changes what every arrow key does, and a mode you cannot see is a
@@ -6795,6 +6829,50 @@ impl Editor {
         self.count
     }
 
+    /// **The command as far as it has been typed** — `3`, `3-5`, `g`, `2t`.
+    ///
+    /// A modal editor asks you to type a command a key at a time and then says
+    /// nothing about what you have typed: press `3` and the editor looks
+    /// exactly as it did, so `30d` and `3d` are told apart by memory alone.
+    /// vi has answered this since 1976 (`showcmd`, in the bottom right) and so
+    /// does Helix; this is that string, and the front end draws it in both
+    /// places yumete draws it — the status line's right edge, and beside the
+    /// caret, where the eyes already are.
+    ///
+    /// Empty when nothing is pending, which is most of the time.
+    pub fn typed_so_far(&self) -> String {
+        let mut out = String::new();
+        if let Some(n) = self.count {
+            out.push_str(&n.to_string());
+        }
+        if let Some(to) = self.count_to {
+            out.push('-');
+            if let Some(n) = to {
+                out.push_str(&n.to_string());
+            }
+        }
+        out.push_str(match self.pending {
+            Pending::None => "",
+            Pending::Goto => "g",
+            Pending::Space => "␣",
+            Pending::Find(FindKind::ForwardTo) => "f",
+            Pending::Find(FindKind::ForwardTill) => "t",
+            Pending::Find(FindKind::BackwardTo) => "F",
+            Pending::Find(FindKind::BackwardTill) => "T",
+            Pending::Replace => "r",
+            Pending::Register => "\"",
+            Pending::Match => "m",
+            Pending::MatchPair { around: false } => "mi",
+            Pending::MatchPair { around: true } => "ma",
+            Pending::Surround => "ms",
+            Pending::SurroundFrom | Pending::SurroundTo(_) => "mr",
+            Pending::Table => "t",
+            Pending::Mark => "M",
+            Pending::Recall => "'",
+        });
+        out
+    }
+
     // ---- Word segmentation (Feature #24) ----------------------------------
 
     /// Install the word [`Segmenter`] used by `w`/`b`/`e` and the segmentation
@@ -7280,17 +7358,39 @@ impl Editor {
         if let Key::Char(c) = key {
             if let Some(digit) = c.to_digit(10) {
                 if digit > 0 || self.count.is_some() {
-                    let n = self.count.unwrap_or(0);
-                    self.count = Some(
-                        n.saturating_mul(10)
-                            .saturating_add(digit as usize)
-                            .min(1_000_000),
-                    );
+                    match &mut self.count_to {
+                        // The far end of a span: `2-5`.
+                        Some(to) => {
+                            let n = to.unwrap_or(0);
+                            *to = Some(
+                                n.saturating_mul(10)
+                                    .saturating_add(digit as usize)
+                                    .min(1_000_000),
+                            );
+                        }
+                        None => {
+                            let n = self.count.unwrap_or(0);
+                            self.count = Some(
+                                n.saturating_mul(10)
+                                    .saturating_add(digit as usize)
+                                    .min(1_000_000),
+                            );
+                        }
+                    }
                     return;
                 }
             }
+            // `2-5` — a **span**, for the keys that take a range of columns
+            // rather than a repetition. Only after a number, so `-` is still
+            // free on its own.
+            if c == '-' && self.count.is_some() && self.count_to.is_none() {
+                self.count_to = Some(None);
+                return;
+            }
         }
         let operator_count = self.count;
+        let span = self.count_to.take().flatten().map(|to| (self.count.unwrap_or(1), to));
+        self.column_span = span;
         let count = self.take_count();
 
         // **`Enter` is one thing everywhere: 這個詞還在哪裏.** A footnote used
@@ -7628,6 +7728,20 @@ impl Editor {
             Key::Alt('`') => self.map_selection(|c| c.to_uppercase().next().unwrap_or(c)),
             Key::Char('R') => self.replace_with_register(),
             // Search for whatever is selected (Helix `*`).
+            // **`30G` goes to line 30**, and a bare `G` to the last line —
+            // which is what `G` means in vi and in Helix both, and the key was
+            // unbound here. `10gg` and `:30` still work; this is the one a
+            // reader's fingers already know.
+            Key::Char('G') => {
+                self.remember_jump();
+                match count > 1 || self.count.is_some() {
+                    true => self.goto_line(count),
+                    false => {
+                        let rope = self.current_buffer().rope();
+                        self.move_head(motion::buffer_end(rope, self.cursor));
+                    }
+                }
+            }
             Key::Char('*') => self.search_selection(),
             // Indent / unindent the selected lines.
             Key::Char('>') => self.repeat(count, |e| e.indent(true)),
@@ -7671,7 +7785,6 @@ impl Editor {
         Some(match c {
             '$' => "行尾是 gl（g 開頭的都是「去哪裏」）",
             '^' => "行首第一個非空白是 gs",
-            'G' => "檔尾是 ge，第 n 行是 :n",
             'D' => "刪到行尾是 gl 選起來再 d",
             'C' => "改到行尾是 gl 選起來再 c",
             's' | 'S' => "沒有多光標——見手冊「還沒有的」",
@@ -15230,7 +15343,9 @@ mod tests {
         let mut ed = typed("一行字\n");
         ed.goto_line(1);
         let before = ed.current_buffer().text();
-        for (key, want) in [('$', "gl"), ('^', "gs"), ('G', "ge"), ('@', "Q")] {
+        // `G` is not among them any more: it is bound — `30G` goes to line 30
+        // and a bare `G` to the last line, as in vi and in Helix.
+        for (key, want) in [('$', "gl"), ('^', "gs"), ('@', "Q")] {
             ed.on_key(Key::Char(key));
             assert!(ed.status().contains(want), "{key}: {}", ed.status());
             assert_eq!(ed.current_buffer().text(), before, "and it never does it");
