@@ -582,7 +582,11 @@ pub struct Editor {
     table_hits: Vec<usize>,
     table_hit: usize,
     table_needle: String,
-    jumps: Vec<(usize, usize)>,
+    /// Where a jump came from: the buffer's **id** and the cursor.
+    ///
+    /// By id, not by index: closing a buffer shifts every later one down, and
+    /// a jump list that kept indices would walk back into a different chapter.
+    jumps: Vec<(u64, usize)>,
     jump_at: usize,
     /// Where Enter came from when it followed a footnote, and the line it
     /// landed on — so the same key comes back, and only from there.
@@ -4486,6 +4490,11 @@ impl Editor {
         }
     }
 
+    /// Which buffer holds this id, if any is still open.
+    fn buffer_with(&self, id: u64) -> Option<usize> {
+        self.buffers.iter().position(|b| b.id() == id)
+    }
+
     /// Which line holds the row whose key is this character.
     ///
     /// The index behind it is always true: it was tempting to let the panel
@@ -6582,7 +6591,7 @@ impl Editor {
         let line = rope.char_to_line(self.cursor.min(rope.len_chars()));
         let spot = match self.current_buffer().path() {
             Some(path) => Spot::InFile(path.to_path_buf(), line),
-            None => Spot::InBuffer(self.current, self.cursor),
+            None => Spot::InBuffer(self.current_buffer().id(), self.cursor),
         };
         self.marks.insert(name, spot);
         self.status = format!(
@@ -6614,8 +6623,12 @@ impl Editor {
                     line + 1
                 );
             }
-            Spot::InBuffer(index, pos) => {
-                self.show_buffer(index);
+            Spot::InBuffer(id, pos) => {
+                let Some(i) = self.buffer_with(id) else {
+                    self.status = format!("「{name}」在的那個緩衝區已經關了");
+                    return;
+                };
+                self.show_buffer(i);
                 self.set_cursor(pos.min(self.current_buffer().rope().len_chars()));
                 self.status = format!("「{name}」");
             }
@@ -6636,7 +6649,7 @@ impl Editor {
     /// and coming back meant remembering 螭 and searching for it. The footnote
     /// panel had its own private way back; this is that idea, generalised.
     fn remember_jump(&mut self) {
-        let here = (self.current, self.cursor);
+        let here = (self.current_buffer().id(), self.cursor);
         // Walking away from a place already noted adds nothing.
         if self.jumps.last() == Some(&here) {
             return;
@@ -6662,7 +6675,7 @@ impl Editor {
             // Stepping back for the first time has to note where we are, or
             // `C-i` would have nowhere to return to.
             if self.jump_at == self.jumps.len() {
-                let here = (self.current, self.cursor);
+                let here = (self.current_buffer().id(), self.cursor);
                 if self.jumps.last() != Some(&here) {
                     self.jumps.push(here);
                 }
@@ -6675,9 +6688,16 @@ impl Editor {
             }
             self.jump_at += 1;
         }
-        let (buffer, cursor) = self.jumps[self.jump_at];
-        if buffer != self.current && buffer < self.buffers.len() {
-            self.show_buffer(buffer);
+        let (id, cursor) = self.jumps[self.jump_at];
+        // A buffer that has since been closed leaves its jumps behind rather
+        // than sending you to whichever file took its place in the list.
+        match self.buffer_with(id) {
+            Some(i) if i != self.current => self.show_buffer(i),
+            Some(_) => {}
+            None => {
+                self.status = "那個檔案已經關了".to_string();
+                return;
+            }
         }
         let len = self.current_buffer().rope().len_chars();
         self.move_head(cursor.min(len));
@@ -8562,7 +8582,7 @@ impl Default for Editor {
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum Spot {
     InFile(PathBuf, usize),
-    InBuffer(usize, usize),
+    InBuffer(u64, usize),
 }
 
 /// How many files a session remembers.
@@ -12695,6 +12715,42 @@ mod tests {
         let mut ed = Editor::new();
         ed.keep_session_in(dir.join("state"), &dir);
         assert_eq!(ed.restore_session(), 1);
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn closing_a_file_does_not_send_a_jump_into_a_different_one() {
+        // `close_buffer` removes one and every later buffer shifts down, so a
+        // jump list and a mark kept by *index* came to name a different
+        // chapter than the one they were set in.
+        let dir = std::env::temp_dir().join(format!("yumete-ids-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let (a, b, c) = (dir.join("a.md"), dir.join("b.md"), dir.join("c.md"));
+        std::fs::write(&a, "甲一\n甲二\n甲三\n").unwrap();
+        std::fs::write(&b, "乙一\n乙二\n乙三\n").unwrap();
+        std::fs::write(&c, "丙一\n丙二\n丙三\n").unwrap();
+
+        let mut ed = Editor::new();
+        ed.open_file(&a).unwrap();
+        ed.open_file(&b).unwrap();
+        ed.open_file(&c).unwrap();
+        // A mark in c, then a jump away from it.
+        ed.goto_line(3);
+        press(&mut ed, "M");
+        ed.on_key(Key::Char('a'));
+        // Close b — every buffer after it used to shift down by one.
+        ed.open_file(&b).unwrap();
+        ed.execute("buffer close!").unwrap();
+        ed.open_file(&a).unwrap();
+        ed.goto_line(2);
+        // The mark still means c.
+        press(&mut ed, "'");
+        ed.on_key(Key::Char('a'));
+        assert_eq!(ed.current_buffer().path(), Some(c.as_path()), "{}", ed.status());
+        // …and `C-o` still means where it was pressed from.
+        ed.on_key(Key::Ctrl('o'));
+        assert_eq!(ed.current_buffer().path(), Some(a.as_path()));
         std::fs::remove_dir_all(&dir).ok();
     }
 
