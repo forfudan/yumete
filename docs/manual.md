@@ -1448,6 +1448,11 @@ GB18030 的舊稿會被擋下並告訴你用 `iconv` 轉，而不是丟一句 Ru
 和詞彙表，以引用共享，不會佔第二份內存。沒裝輸入法數據時，退回數據目錄裡的
 `segmentation.txt`，再退回內置的小詞表。
 
+**兩邊本來就分得開的詞不著色。** 一個詞如果左右都是空格、換行或者標點，頁面上已經把它
+斷開了，再上一層底色是把同一件事說兩遍——西文句子大半如此，中文句子也有不少：
+「今天天氣很好。」裏 `今天` 要標，`好。` 不必。剩下的正是眼睛得自己切的那幾串漢字。
+整個著色不想要就 `:segment`，或者配置裏 `show_segmentation = false`。
+
 ---
 
 ## 八、命令
@@ -1488,6 +1493,7 @@ GB18030 的舊稿會被擋下並告訴你用 `iconv` 轉，而不是丟一句 Ru
 | `:row` *字* | 跳到表格裏叫這個名字的那一行 |
 | `:table`（`off`、`check`） | 按格子編輯：CSV 整檔，或游標所在的 `|` 表格 |
 | `:table check` | 把整張表看一遍，列出有問題的行 |
+| `:table rules`（`on`／`off`） | 欄線：欄與欄之間分不分開 |
 | `:search row`／`column` *模式* | 一行一行找（`/`）／一欄一欄找（表格裏的 `Enter`） |
 | `:clipboard yank`／`paste` | 和系統剪貼簿交換（`空格 y`／`空格 p`） |
 | `:segment` `:seg` | 分詞著色開關 |
@@ -1534,8 +1540,9 @@ GB18030 的舊稿會被擋下並告訴你用 `iconv` 轉，而不是丟一句 Ru
 tab_width = 4                # `>` 加、`<` 減的列數
 line_numbers = "absolute"    # "absolute" | "relative" | "none"
 scrolloff = 3                # 光標周圍保留的行（或縱）數
-show_segmentation = true     # 詞語著色
+show_segmentation = true     # 詞語著色（`:segment` 也可以隨時開關）
 segmentation_threshold = 0
+table_rules = true           # 表格的欄線：欄與欄之間分不分開
 
 layout = "horizontal"        # "horizontal" | "vertical"
 zong_length = 0              # 每縱字數，4–64；0 = 窗口能給多長就多長

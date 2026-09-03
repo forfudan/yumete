@@ -353,6 +353,8 @@ Phases are ordered by priority, most writer-critical first:
 | 154 | **`:tutor` — a lesson you edit**            | both   | P1    | vimtutor's idea, on Chinese prose, where `w` and 縱書 can actually be taught | Planned |
 | 155 | **A finished command says what it takes**   | core   | P2    | `:yume` lists `yume scheme`, `yume chaifen`… beside itself; Tab writes the whole sentence | Done |
 | 156 | **`:theme`**                                | both   | P2    | which theme, and dark/light/system, without editing the config | Done |
+| 157 | **A column is a band, and `:table rules`**  | both   | P2    | the page shows between columns, and a wide-columned table can turn the seams off | Done |
+| 158 | **Tint only the words that need it**        | core   | P2    | a word bounded by space or 標點 on both sides is already cut; tinting it says it twice | Done |
 
 ---
 

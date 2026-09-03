@@ -192,6 +192,7 @@ fn main() -> ExitCode {
         editor.set_segmenter(Box::new(DictionarySegmenter::builtin(threshold)));
     }
     editor.set_segmentation_visible(config.editor.show_segmentation);
+    editor.set_table_rules(config.editor.table_rules);
     // …and the book's own words on top of whichever of the three it was. The
     // name on every page is the one word no dictionary has.
     editor.reload_project_words();

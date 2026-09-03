@@ -494,6 +494,9 @@ pub struct Editor {
     project_words: std::rc::Rc<RefCell<yumete_cjk::WordList>>,
     /// Whether the segmentation overlay (word background tint) is shown.
     show_segmentation: bool,
+    /// Whether a table's columns are drawn as bands with the page showing
+    /// between them (Feature #157).
+    table_rules: bool,
     /// A pending count prefix, so `3w` moves three words (Helix counts).
     count: Option<usize>,
     /// The text typed during the last Insert session, replayed by `.`.
@@ -793,6 +796,7 @@ impl Editor {
             segmenter: Box::new(CategorySegmenter),
             project_words: std::rc::Rc::new(RefCell::new(yumete_cjk::WordList::default())),
             show_segmentation: false,
+            table_rules: true,
             count: None,
             edit_keys: Vec::new(),
             edit_revision: (0, 0),
@@ -2035,6 +2039,14 @@ impl Editor {
             // the same way `:yume scheme` reaches the input method.
             Command::Theme { name, mood } => {
                 self.theme_request = Some((name, mood));
+                Ok(CommandOutcome::Continue)
+            }
+            Command::SetTableRules(on) => {
+                self.table_rules = on.unwrap_or(!self.table_rules);
+                self.status = match self.table_rules {
+                    true => say!("欄線：開"),
+                    false => say!("欄線：關"),
+                };
                 Ok(CommandOutcome::Continue)
             }
             Command::SetTable(on) => {
@@ -5583,6 +5595,21 @@ impl Editor {
     }
 
     /// Turn the segmentation overlay on or off.
+    /// Whether the grid's columns are ruled apart.
+    pub fn table_rules(&self) -> bool {
+        self.table_rules
+    }
+
+    /// Rule the columns apart, or let them run together.
+    ///
+    /// Twenty-eight columns of one or two characters read as a grid; six wide
+    /// ones read as a page, and then the seams are just noise between the
+    /// words. Which of the two a table is, is not something the editor can
+    /// tell from the file.
+    pub fn set_table_rules(&mut self, on: bool) {
+        self.table_rules = on;
+    }
+
     pub fn set_segmentation_visible(&mut self, on: bool) {
         self.show_segmentation = on;
     }
@@ -5594,7 +5621,15 @@ impl Editor {
     }
 
     /// The word ranges within line `line`, as character columns `(start, end)`
-    /// relative to the line start. Used by the TUI to tint word backgrounds.
+    /// relative to the line start — **only the ones a reader cannot already
+    /// see**.
+    ///
+    /// A word with a space, a line end or a 標點 on both sides is already
+    /// bounded by something on the page, and tinting it says a second time
+    /// what the text says once. That is most of an English sentence and a good
+    /// deal of a Chinese one: 「今天天氣很好。」 needs to be told where 今天
+    /// ends, and 「好。」 does not. What is left is exactly the run of 漢字 the
+    /// eye has to cut for itself.
     pub fn segment_line(&self, line: usize) -> Vec<(usize, usize)> {
         let rope = self.current_buffer().rope();
         if line >= rope.len_lines() {
@@ -5625,7 +5660,26 @@ impl Editor {
                 return ranges.clone();
             }
         }
-        let ranges = self.segmenter.segment(&text);
+        let chars: Vec<char> = text.chars().collect();
+        // A boundary the reader can see: whitespace, punctuation, a bracket, a
+        // 、 — anything that is not part of a word. The ends of the line count,
+        // because a line end is the most visible boundary there is.
+        let visible = |at: usize| -> bool {
+            match chars.get(at) {
+                None => true,
+                Some(c) => !c.is_alphanumeric(),
+            }
+        };
+        let ranges: Vec<(usize, usize)> = self
+            .segmenter
+            .segment(&text)
+            .into_iter()
+            .filter(|&(a, b)| {
+                let before = a == 0 || visible(a - 1);
+                let after = visible(b);
+                !(before && after)
+            })
+            .collect();
         // Bounded: a page is tens of paragraphs, and scrolling a long document
         // must not accumulate one entry per paragraph in it.
         if cache.len() >= SEGMENT_CACHE_LIMIT {

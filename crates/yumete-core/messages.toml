@@ -1360,3 +1360,15 @@ en = "light"
 [[message]]
 zh = "跟終端的底色走"
 en = "follow the terminal's own background"
+
+[[message]]
+zh = "欄線：欄與欄之間分不分開"
+en = "column rules: whether the columns are ruled apart"
+
+[[message]]
+zh = "欄線：開"
+en = "column rules: on"
+
+[[message]]
+zh = "欄線：關"
+en = "column rules: off"

@@ -165,11 +165,24 @@ pub fn draw(
     // `fg(White)`, which is brighter than the ink and flattened every colour
     // underneath at the moment the writer was looking hardest.
     let on = Style::default().bg(ink.selection());
-    let text = ink.page();
-    // The row the cursor is on, banded. Across twenty-eight columns the eye
-    // loses which row it was reading the moment it looks sideways, and this is
-    // the cheapest possible answer to that.
-    let band = ink.ground(yumete_config::rung::BAND);
+    // **A column is a band, and the page shows between them** — the seam is
+    // the page itself, one cell wide, and that is the whole of the ruling.
+    // Twenty-eight columns of one or two characters need it to read as a grid;
+    // six wide ones do not, and there the seams are noise between the words —
+    // so `:table rules off` gives every cell the page and the columns run
+    // together.
+    let rules = editor.table_rules();
+    let text = match rules {
+        true => ink.ground(yumete_config::rung::BAND),
+        false => ink.page(),
+    };
+    // The seam, and the ground of anything that is not a cell.
+    let page = ink.page();
+    // The row the cursor is on. Across twenty-eight columns the eye loses which
+    // row it was reading the moment it looks sideways, and this is the cheapest
+    // possible answer to that — a rung above the columns, so it still reads as
+    // one row when every column is a band.
+    let band = ink.ground(yumete_config::rung::HEAD);
     let quiet = Style::default().fg(ink.furniture());
     // A row the schema cannot account for. Not an error to be refused — this
     // is the tool for mending it — so it is marked, not blocked. 朱: the one
@@ -179,6 +192,19 @@ pub fn draw(
     frame.render_widget(Clear, area);
     let right = area.x + area.width;
     let buf = frame.buffer_mut();
+    // The whole area, before anything is put on it. `Clear` gives the cells
+    // back to the *terminal*, and a table rarely fills its area to the last
+    // cell — the seams between columns, the rows past the end of the file —
+    // so without this the page shows through in whatever colour the terminal
+    // happens to be. Painting 墨香's light page onto a dark terminal made
+    // every one of those gaps a black bar.
+    for y in area.y..area.y + area.height {
+        for x in area.x..right {
+            if let Some(cell) = buf.cell_mut((x, y)) {
+                cell.set_symbol(" ").set_style(page);
+            }
+        }
+    }
 
     // The header: the column names, in the gutter's own colour so it reads as
     // furniture rather than as the first row of data.
@@ -269,12 +295,28 @@ pub fn draw(
                 let step = (yumete_cjk::str_width(&into) as u16).min(w);
                 caret = ((x + step).min(right.saturating_sub(1)), y);
             }
+            // The seam after the cell: the page's own ground, except on the
+            // row the cursor is on, where the band runs unbroken so the row
+            // reads as one thing.
+            let seam = if w == 0 { 0 } else { GAP as u16 };
+            for cx in (x + w)..(x + w + seam).min(right) {
+                if let Some(cell) = buf.cell_mut((cx, y)) {
+                    cell.set_symbol(" ")
+                        .set_style(band_if(line == cursor_row, band, page));
+                }
+            }
             // A hidden column takes no gap either — a column of
             // nothing is not a column with a space beside it.
-            x += w + if w == 0 { 0 } else { GAP as u16 };
+            x += w + seam;
         }
         // A row with fewer cells than the schema says leaves the rest blank
         // rather than drawing columns that are not there.
+        for cx in x.min(right)..right {
+            if let Some(cell) = buf.cell_mut((cx, y)) {
+                cell.set_symbol(" ")
+                    .set_style(band_if(line == cursor_row, band, page));
+            }
+        }
         if ragged && cells.len() < view.schema.columns.len() {
             put_text(buf, x.min(right), y, right, "⟨缺⟩", quiet.patch(torn));
         }
