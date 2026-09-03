@@ -663,20 +663,22 @@ what the next edit would take.
 
 ## 5.2.1 Decided, 2026-09-03
 
-Asked before an overnight run, so the work would not stop on them.
+Asked before an overnight run, so the work would not stop on them. Three of the
+four are done; the outcomes are noted here rather than in a second list.
 
-- **Messages are configurable, Chinese by default.** `[editor] language = "zh"|"en"`,
+- **Messages are configurable, Chinese by default.** — *content done, mechanism
+  not: see §5.2 group 9.* `[editor] language = "zh"|"en"`,
   two tables. The manual is Chinese and so is the writer; an English-only user
   meeting 「語法：markdown」 in the status bar concludes, correctly, that the
   editor is not for them.
-- **`yume-core` stays a path dependency for now.** Pinning a git rev needs that
+- **`yume-core` stays a path dependency for now.** — *standing.* Pinning a git rev needs that
   commit pushed to a private repo and CI auth; getting it wrong costs a whole
   session's ability to build. It goes in with the release pipeline (§5.3).
-- **A key alias may name a key *sequence*.** `[keys.normal] "J" = "gJ"` puts
+- **A key alias may name a key *sequence*.** — *done.* `[keys.normal] "J" = "gJ"` puts
   join back. The defaults do not change — `J`/`K`/`H`/`L` as paging is the right
   call for a book — but somebody who disagrees spends a config line instead of
   leaving.
-- **Group 10 (first-line indent, 段組) is 0.1.0, not 0.2.0.** They are the point
+- **Group 10 (first-line indent, 段組) is 0.1.0, not 0.2.0.** — *done: #145, #146.* They are the point
   of a 縱書 editor.
 
 ## 5.3 Releasing, and the Homebrew tap (#135, planned)
