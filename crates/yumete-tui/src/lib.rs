@@ -23,7 +23,7 @@ use ratatui::crossterm::event::{
 };
 use ratatui::crossterm::execute;
 use ratatui::crossterm::terminal::supports_keyboard_enhancement;
-use ratatui::layout::{Constraint, Layout, Position, Rect};
+use ratatui::layout::{Position, Rect};
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, BorderType, Borders, Clear, Paragraph};
@@ -131,36 +131,27 @@ pub fn run(
         }
         // The 縱 wrap length depends on the terminal height, and the motions
         // that cross 縱 run before the next draw, so settle it up front.
-        if editor.layout() == WritingLayout::Vertical {
-            if let Ok(size) = terminal.size() {
-                let lines = editor.current_buffer().line_count();
-                let look = vertical::Look::of(editor);
-                editor.set_zong_length(vertical::zong_length_for(
-                    config,
-                    size.height,
-                    lines,
-                    look,
-                ));
-            }
-        }
-        // The width paragraphs soft-wrap at depends on the terminal width and
-        // on how wide the line-number gutter is; `j` and `k` walk those rows, so
-        // this too has to be settled before the keys that use it.
-        if editor.layout() == WritingLayout::Horizontal {
-            if let Ok(size) = terminal.size() {
-                let gutter = gutter_width(
-                    editor.current_buffer().line_count(),
-                    config.editor.line_numbers,
-                );
-                editor.set_wrap_width((size.width as usize).saturating_sub(gutter));
-            }
-        }
-        // Tell the editor how much is on screen, so `C-d` means half of what
-        // can actually be seen.
         if let Ok(size) = terminal.size() {
-            let lines = size.height.saturating_sub(1) as usize;
-            let columns = (size.width / 3).max(1) as usize;
-            editor.set_page(lines, columns);
+            // The page's own rectangle, not the terminal's: the hint row, the
+            // tab bar and the detail panel are not writing, and a 縱 measured
+            // against them is one longer than the 縱 on the screen.
+            let page = page_areas(editor, config, Rect::new(0, 0, size.width, size.height)).text;
+            let lines = editor.current_buffer().line_count();
+            if editor.layout() == WritingLayout::Vertical {
+                let look = vertical::Look::of(editor);
+                editor.set_zong_length(vertical::zong_length_for(config, page.height, lines, look));
+                // How much a page is, for `C-f`/`C-d`: how many 縱 actually fit,
+                // which with 段組 is a band's worth times the number of bands.
+                let metrics = vertical::Metrics::new(config, page.height, lines, look);
+                editor.set_page(page.height as usize, metrics.capacity(page.width));
+            } else {
+                // The width paragraphs soft-wrap at depends on the gutter as
+                // well; `j` and `k` walk those rows, so it too is settled
+                // before the keys that use it.
+                let gutter = gutter_width(lines, config.editor.line_numbers);
+                editor.set_wrap_width((page.width as usize).saturating_sub(gutter));
+                editor.set_page(page.height as usize, page.width.max(1) as usize);
+            }
         }
         if let Err(err) = terminal.draw(|frame| draw(frame, editor, config, ime, &mut viewport)) {
             break Err(err);
@@ -928,6 +919,66 @@ fn gutter_text(i: usize, cursor_line: usize, width: usize, mode: LineNumbers) ->
     }
 }
 
+/// Where each part of the window goes.
+///
+/// **Worked out in one place**, because three parts of this program need the
+/// answer and used to work it out separately: the drawing, the mouse looking
+/// for what it landed on, and the event loop settling the wrap length and the
+/// page size *before* the keys that use them run. They disagreed by the hint
+/// row, the tab bar and the detail panel — so the 縱 the cursor moved on was
+/// one longer than the 縱 on the screen, and a click resolved to the wrong
+/// character.
+#[derive(Debug, Clone, Copy)]
+struct Areas {
+    sidebar: Rect,
+    tabs: Rect,
+    /// What the page itself is drawn into, the detail panel already taken off.
+    text: Rect,
+    detail: Option<Rect>,
+    hint: Rect,
+    status: Rect,
+}
+
+/// Divide `area` up. Pure: it draws nothing and depends only on what the
+/// editor and the config say.
+fn page_areas(editor: &Editor, config: &Config, area: Rect) -> Areas {
+    // Two rows at the foot, answering two questions. The bottom one is *where
+    // am I* and never changes shape; the one above it is *what just happened,
+    // and what can I press*, and is blank when there is neither. Splitting them
+    // is what lets the bottom row stay still: a message used to push the
+    // position along the line, or take it away outright.
+    let hint_rows = u16::from(config.editor.hints && area.height > 4);
+    let body_h = area.height.saturating_sub(hint_rows + 1);
+    let hint = Rect::new(area.x, area.y + body_h, area.width, hint_rows);
+    let status = Rect::new(area.x, area.y + body_h + hint_rows, area.width, 1);
+    // The sidebar takes its columns off the left; set vertically that is the
+    // right side to lose, because the 縱 fill from the right edge and the page
+    // simply ends sooner.
+    let want = match editor.sidebar() {
+        Some(_) => sidebar_columns(editor, config, area.width),
+        None => 0,
+    };
+    let sidebar = Rect::new(area.x, area.y, want, body_h);
+    let body = Rect::new(area.x + want, area.y, area.width.saturating_sub(want), body_h);
+    // The tab bar takes the row off the top of what is left.
+    let (tabs, page) = match config.editor.tabs.showing(editor.buffer_count()) && body.height > 1 {
+        true => (
+            Rect::new(body.x, body.y, body.width, 1),
+            Rect::new(body.x, body.y + 1, body.width, body.height - 1),
+        ),
+        false => (Rect::new(body.x, body.y, body.width, 0), body),
+    };
+    let (text, detail) = table::split_detail(editor, page);
+    Areas {
+        sidebar,
+        tabs,
+        text,
+        detail,
+        hint,
+        status,
+    }
+}
+
 fn draw(
     frame: &mut Frame,
     editor: &Editor,
@@ -936,57 +987,25 @@ fn draw(
     viewport: &mut Viewport,
 ) {
     let area = frame.area();
-    // Two rows at the foot, answering two questions. The bottom one is *where
-    // am I* and never changes shape; the one above it is *what just happened,
-    // and what can I press*, and is blank when there is neither. Splitting them
-    // is what lets the bottom row stay still: a message used to push the
-    // position along the line, or take it away outright.
-    let hint_rows = u16::from(config.editor.hints && area.height > 4);
-    let regions = Layout::vertical([
-        Constraint::Min(1),
-        Constraint::Length(hint_rows),
-        Constraint::Length(1),
-    ])
-    .split(area);
-    let body = regions[0];
-    let hint_area = regions[1];
-    let status_area = regions[2];
-
-    // The sidebar takes its columns off the left of the body, and everything
-    // downstream — the wrap width, where the 縱 are placed, the cursor, the
-    // scroll — follows from the smaller rectangle without knowing about it.
-    // Set vertically that is the right side to lose: the 縱 fill from the right
-    // edge, so the page simply ends sooner.
-    let body = match editor.sidebar() {
-        Some(_) => {
-            let want = sidebar_columns(editor, config, body.width);
-            let split =
-                Layout::horizontal([Constraint::Length(want), Constraint::Min(1)]).split(body);
-            draw_sidebar(frame, editor, config, split[0]);
-            split[1]
-        }
-        None => body,
-    };
-
-    // The tab bar takes the row off the top of what is left, so the page below
-    // it is drawn into a rectangle that already knows about it.
-    let mut tab_area = Rect::new(body.x, body.y, body.width, 0);
-    let text_area = if config.editor.tabs.showing(editor.buffer_count()) && body.height > 1 {
-        let split = Layout::vertical([Constraint::Length(1), Constraint::Min(1)]).split(body);
-        draw_tabs(frame, editor, config, split[0]);
-        tab_area = split[0];
-        split[1]
-    } else {
-        body
-    };
+    let areas = page_areas(editor, config, area);
+    let Areas {
+        sidebar,
+        tabs: tab_area,
+        text: text_area,
+        detail,
+        hint: hint_area,
+        status: status_area,
+    } = areas;
+    let hint_rows = hint_area.height;
+    if sidebar.width > 0 {
+        draw_sidebar(frame, editor, config, sidebar);
+    }
+    if tab_area.height > 0 {
+        draw_tabs(frame, editor, config, tab_area);
+    }
 
     // The text body is the one part that differs between the layouts; both
     // report back the cell the cursor landed on, which the status line and the
-    // The detail panel takes its share of the text area first, so everything
-    // below — wrapping, the 縱 that fit, scrolling — follows from the smaller
-    // rectangle without knowing the panel exists.
-    let (text_area, detail) = table::split_detail(editor, text_area);
-
     // candidate panel are positioned from.
     let (cursor_x, cursor_y) = match editor.layout() {
         // A grid is not prose and is not drawn as prose: no wrapping, no
@@ -1290,17 +1309,15 @@ fn text_at(
     mouse: ratatui::crossterm::event::MouseEvent,
 ) -> Option<usize> {
     let size = size?;
-    let body = Rect::new(0, 0, size.width, size.height.saturating_sub(1));
-    let mut area = body;
-    if editor.sidebar().is_some() {
-        let want = sidebar_columns(editor, config, area.width);
-        area.x += want;
-        area.width = area.width.saturating_sub(want);
-    }
-    if config.editor.tabs.showing(editor.buffer_count()) && area.height > 1 {
-        area.y += 1;
-        area.height -= 1;
-    }
+    // The very rectangle the page was drawn into — hint row, tab bar, sidebar
+    // and detail panel all already taken off. Working it out again by hand is
+    // how a click came to land a row or two from where it was pointed.
+    let area = page_areas(
+        editor,
+        config,
+        Rect::new(0, 0, size.width, size.height),
+    )
+    .text;
     if mouse.column < area.x || mouse.row < area.y || mouse.row >= area.y + area.height {
         return None;
     }
@@ -1362,14 +1379,10 @@ fn tab_at(
     mouse: ratatui::crossterm::event::MouseEvent,
 ) -> Option<usize> {
     let size = size?;
-    if mouse.row != 0 || !config.editor.tabs.showing(editor.buffer_count()) {
+    let area = page_areas(editor, config, Rect::new(0, 0, size.width, size.height)).tabs;
+    if area.height == 0 || mouse.row != area.y {
         return None;
     }
-    let mut x = 0u16;
-    if editor.sidebar().is_some() {
-        x = sidebar_columns(editor, config, size.width);
-    }
-    let area = Rect::new(x, 0, size.width.saturating_sub(x), 1);
     tab_spans(editor, area)
         .into_iter()
         .find(|&(at, w, _)| mouse.column >= at && mouse.column < at + w)
@@ -2530,7 +2543,10 @@ mod tests {
         editor.set_layout(WritingLayout::Vertical);
         let lines = editor.current_buffer().line_count();
         let look = vertical::Look::of(editor);
-        editor.set_zong_length(vertical::zong_length_for(config, h, lines, look));
+        // From the page's own rectangle, exactly as the event loop does it —
+        // otherwise these tests would be asking about a page nobody draws.
+        let page = page_areas(editor, config, Rect::new(0, 0, w, h)).text;
+        editor.set_zong_length(vertical::zong_length_for(config, page.height, lines, look));
         render_with(editor, config, ime, w, h)
     }
 
@@ -3824,6 +3840,27 @@ mod tests {
             '五',
             "one row down, same column"
         );
+    }
+
+    #[test]
+    fn the_page_the_cursor_moves_on_is_the_page_that_is_drawn() {
+        // Three parts of the program worked the geometry out separately — the
+        // drawing, the mouse, and the event loop settling the 縱 length before
+        // the keys that use it. They disagreed by the hint row, the tab bar and
+        // the detail panel, so the 縱 the cursor moved on was longer than the
+        // 縱 on the screen and a click resolved to the wrong character.
+        let mut editor = editor_with("一二三四五六七八九十\n");
+        editor.set_layout(WritingLayout::Vertical);
+        let config = vertical_config();
+        let area = Rect::new(0, 0, 40, 20);
+        let page = page_areas(&editor, &config, area).text;
+        // Twenty rows, less the status line and the hint row.
+        assert_eq!(page.height, 18, "the page is not the terminal");
+        let look = vertical::Look::of(&editor);
+        let lines = editor.current_buffer().line_count();
+        let motion = vertical::zong_length_for(&config, page.height, lines, look);
+        let drawn = vertical::Metrics::new(&config, page.height, lines, look).zong_len;
+        assert_eq!(motion, drawn, "and both sides measure the same one");
     }
 
     #[test]
