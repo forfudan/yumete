@@ -60,6 +60,15 @@ pub enum Align {
     Right,
 }
 
+/// The widest a column is padded to.
+///
+/// A cell longer than this is written out whole — nothing is ever truncated —
+/// but the *other* rows stop being padded out to meet it. Without a ceiling,
+/// one long 備註 sentence in a 人物表 makes every line of the table as wide as
+/// itself, and a table two hundred columns across is not a table anybody can
+/// read on a page set to forty. The same number the CSV grid draws at.
+const WIDEST: usize = 32;
+
 impl Align {
     /// The narrowest this column may be written.
     ///
@@ -412,6 +421,40 @@ impl Parts {
         Ok(at.min(self.columns().saturating_sub(1)))
     }
 
+    /// Put the data rows in order by one column, keeping the header first.
+    ///
+    /// Numbers before text, and numbers compared as numbers — so a 年表 sorted
+    /// by year does not put 1900 between 19 and 2. Everything else compares by
+    /// code point, which for 漢字 is not a collation anybody wants and is the
+    /// only ordering this editor can honestly claim without a pronunciation
+    /// table in front of it.
+    pub fn sort_by(&mut self, column: usize, descending: bool) {
+        self.square();
+        let key = |row: &Vec<String>| -> (bool, f64, String) {
+            let cell = row.get(column).cloned().unwrap_or_default();
+            match cell.trim().parse::<f64>() {
+                Ok(n) => (false, n, String::new()),
+                Err(_) => (true, 0.0, cell),
+            }
+        };
+        if self.rows.len() < 2 {
+            return;
+        }
+        self.rows[1..].sort_by(|a, b| {
+            let (ka, kb) = (key(a), key(b));
+            let order = ka
+                .0
+                .cmp(&kb.0)
+                .then(ka.1.total_cmp(&kb.1))
+                .then_with(|| ka.2.cmp(&kb.2));
+            if descending {
+                order.reverse()
+            } else {
+                order
+            }
+        });
+    }
+
     /// Swap a column with its neighbour, in every row and in the rule.
     pub fn move_column(&mut self, at: usize, right: bool) -> Result<usize, &'static str> {
         self.square();
@@ -463,7 +506,7 @@ pub fn compose(parts: &Parts) -> Vec<String> {
     let mut widths: Vec<usize> = aligns.iter().map(|a| a.min()).collect();
     for row in &parts.rows {
         for (i, cell) in row.iter().enumerate() {
-            widths[i] = widths[i].max(yumete_cjk::str_width(cell));
+            widths[i] = widths[i].max(yumete_cjk::str_width(cell).min(WIDEST));
         }
     }
     let empty = String::new();
