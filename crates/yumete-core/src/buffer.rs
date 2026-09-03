@@ -40,6 +40,13 @@ fn digest(text: &str) -> u64 {
 /// the file the buffer is bound to (if any); `modified` tracks unsaved changes
 /// for the future dirty-check on quit (Feature #3).
 pub struct Buffer {
+    /// Which buffer this is, for as long as the session lasts.
+    ///
+    /// Not its position in the list: `:buffer close` removes one and every
+    /// later buffer shifts down, so an index that named a chapter this morning
+    /// names a different one this afternoon — and the jump list and the marks
+    /// both keep places by buffer.
+    id: u64,
     rope: Rope,
     path: Option<PathBuf>,
     modified: bool,
@@ -127,7 +134,18 @@ struct History {
     pending: Option<EditSnapshot>,
 }
 
+/// Hands out a fresh buffer id.
+fn next_id() -> u64 {
+    static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
+    NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+}
+
 impl Buffer {
+    /// Which buffer this is, for as long as the session lasts.
+    pub fn id(&self) -> u64 {
+        self.id
+    }
+
     /// Where the cursor was when this buffer was last left.
     pub fn saved_cursor(&self) -> usize {
         self.cursor.min(self.rope.len_chars())
@@ -141,6 +159,7 @@ impl Buffer {
     /// Create a new, empty, unnamed buffer (a "scratch" buffer).
     pub fn scratch() -> Self {
         Buffer {
+            id: next_id(),
             rope: Rope::new(),
             path: None,
             modified: false,
@@ -161,6 +180,7 @@ impl Buffer {
     /// Create a buffer holding `text`, not yet associated with any file.
     pub fn from_text(text: &str) -> Self {
         Buffer {
+            id: next_id(),
             rope: Rope::from_str(text),
             path: None,
             modified: false,
@@ -205,6 +225,7 @@ impl Buffer {
         let named = name.as_deref().and_then(crate::syntax::from_extension);
         let syntax = named.unwrap_or_else(|| crate::syntax::sniff(&rope.to_string()));
         Ok(Buffer {
+            id: next_id(),
             rope,
             path: Some(path.to_path_buf()),
             modified: false,

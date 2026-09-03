@@ -705,11 +705,13 @@ its count and mistook `gn` for a change; `substitution_breaks_the_grid` named a
 table-row number as a document line and counted `\|` as a boundary; a paragraph
 opening with a link was not indented.
 
-**Left open, in the code:** a mark set in a buffer with no file is
+~~**Left open:** a mark set in a buffer with no file is
 `Spot::InBuffer(index, …)`, and `close_buffer` shifts every later index down —
 so after closing an earlier buffer the mark, *and every jump-list entry*, names
-a different file. It wants a monotonic buffer id, which is a small change to
-`Buffer` and two call sites. **medium.**
+a different file.~~ Done: a `Buffer` now has an **id** that lasts the session,
+and both the marks and the jump list keep places by it. A jump into a buffer
+that has since been closed says so rather than opening whichever file took its
+place in the list.
 
 ## 5.3 Releasing, and the Homebrew tap (#135, planned)
 
