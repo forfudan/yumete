@@ -435,7 +435,8 @@ worst of it was fixed the same day:
 - **`d`, `3.`, `.` aborted the process.** A count made `.` the *second* key of
   its own definition, and nothing stopped a repeat re-entering: a stack
   overflow, which does not unwind, so **every unsaved buffer went with it**.
-  Guarded, and the exclusion now scans the whole sequence.
+  Guarded — and the *guard* is what stops it, not the exclusion list; see
+  item 3 below.
 - **`:export typst` on a `.typ` chapter wrote over the chapter.** An export
   keeps 標題、段落、注音 and nothing else. It refuses its own source now, and
   writes through the atomic path rather than `fs::write`.
@@ -577,6 +578,34 @@ divergences over that corpus — and nine of the thirteen safety fixes hold.
 19. `enter_md_table` reformatting is item 5 above.
 20. The event loop measuring the whole text area rather than the live pane was
     fixed in the first round; verified.
+
+**A sixth review, the same day**, checked the eight safety fixes against the
+real files and found five more — all fixed:
+
+- **The grid guard was `|`-only when there was no schema.** With no
+  `.yumete/tables` file, `:%s` and `:ruby format` on the real 拆分表 shifted
+  columns silently: the fallback assumed a document. `Editor::grid_shape_here`
+  is the one answer now — the view if there is one, else the file's own name
+  (`.csv`, `.tsv`), else `|` rows. Typing is still judged by the *view*,
+  deliberately: typing a `|` is how a table gets written in the first place.
+- **A ruby reading still went through the `:table` gate**, which is off when
+  table mode is. `Editor::replacement_reshapes_the_grid` asks the file instead.
+- **`:w <path>` reported a save that had not happened.** The caller sniffed the
+  rendered status line for a Chinese character to find out what the write had
+  done, so in English it said 「saved ch1.md」 about an unsaved chapter, and in
+  Chinese it left a stale 「抄了一份」 over a real save. `write_forcing` returns
+  `Wrote::{Saved, Copied}`; the line comes from the value.
+- **`:wq <名字>` wrote a copy and then refused to quit.** It saves the name it
+  is given — `:saveas` and leave — because that is what the words mean.
+- **The grid refusal named an escape that no longer existed** (「先 `:table
+  off`」, from before the check stopped asking). The `t` flag —
+  `:%s/…/…/gt`, and `:replace!` — is the way through, and the message names it.
+- Smaller: a paste the cell refused claimed 「貼了 8 個字」 in Insert mode; a
+  failed command left the previous one's success on the status line; `:exp!`
+  did not resolve where `:expo` did; a hard link was not recognised as the same
+  file (`buffer::same_file`, by inode); and the two `io::Error` payloads in
+  `buffer.rs` were the only user-facing strings not in `messages.toml` — that
+  file is now scanned by the drift test too.
 
 **The two invariants both reviewers asked for**, which is what the fixes are
 built on rather than instance by instance:
