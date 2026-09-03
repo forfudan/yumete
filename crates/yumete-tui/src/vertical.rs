@@ -565,9 +565,24 @@ pub fn draw(
     // a gutter column the text never enters. Here the numbers sit *above* the
     // 縱, in the text's own columns, so position separates nothing and a bare
     // dim digit reads as a digit somebody typed. The colour is the gutter.
+    let ink = crate::theme::Palette::of(config);
+    // **The page is painted, here too.** A 縱書 page is mostly margin — the
+    // squares a 縱 does not reach are the page as much as the ones it does —
+    // and until this line every one of them was the terminal's own ground, so
+    // the paper stopped wherever the writing did.
+    if ink.paints() {
+        let ground = ink.page();
+        let buf = frame.buffer_mut();
+        for y in area.y..area.y + area.height {
+            for x in area.x..area.x + area.width {
+                if let Some(cell) = buf.cell_mut((x, y)) {
+                    cell.set_style(ground);
+                }
+            }
+        }
+    }
     if metrics.head_rows > 0 {
-        let (gr, gg, gb) = config.theme.gutter;
-        let ground = Style::default().bg(Color::Rgb(gr, gg, gb));
+        let ground = ink.ground(yumete_config::rung::CHROME);
         let buf = frame.buffer_mut();
         // One band per 段: each is a page of its own and each opens with its
         // own row of paragraph numbers.
@@ -589,22 +604,28 @@ pub fn draw(
     // cursor's own grapheme, so a bare cursor would otherwise be drawn as a
     // one-character highlight and the word-tint overlay would never appear.
     let has_selection = editor.has_selection();
-    let (sr, sg, sb) = config.theme.selection;
-    let sel_style = Style::default().bg(Color::Rgb(sr, sg, sb)).fg(Color::White);
+    // A ground, and only a ground: `fg(White)` used to flatten every colour
+    // underneath — a heading, a reading, a hung mark — at the moment the writer
+    // was looking hardest at them.
+    let sel_style = Style::default().bg(ink.selection());
     let show_segmentation = editor.segmentation_visible();
-    let seg_colors = config.theme.segmentation;
     let cursor_line = editor.cursor_line();
     let numbers = config.editor.line_numbers;
 
-    // A reading is set back; a hung mark is punctuation and reads as the text's
-    // own, so it keeps the text colour and is told apart by weight instead.
-    let reading_style = Style::default().add_modifier(Modifier::DIM);
+    // A reading is set back — **a rung, not `DIM`**. It was DIM with no colour
+    // at all, so on a terminal that ignores DIM a reading and the character it
+    // annotates were the same colour, in a two-cell margin, down a 縱. That is
+    // the flagship of this editor and its only separation was an attribute
+    // several terminals drop.
+    let reading_style = Style::default().fg(ink.quiet());
     let ticks = config.editor.paper_ticks;
-    let (tr, tg, tb) = config.theme.ruler;
-    let tick_style = Style::default()
-        .fg(Color::Rgb(tr, tg, tb))
-        .add_modifier(Modifier::DIM);
-    let mark_style = Style::default().fg(Color::Rgb(0xb0, 0x8a, 0x6a));
+    // A rule, on the ladder's own rung for one. It used to be drawn in the
+    // ruler's *tint* — a ground colour used as a foreground — and measured
+    // 1.11:1 against the page, which is to say it has never been seen.
+    let tick_style = Style::default().fg(ink.rule());
+    // A hung 句讀 *is* the sentence, set beside the character it follows, so it
+    // keeps the writing's own colour and is told apart by position.
+    let mark_style = Style::default().fg(ink.text());
 
     // Word ranges are per paragraph, and consecutive 縱 usually share one, so
     // segment each paragraph once as the page is walked. Its Markdown runs are
@@ -643,16 +664,18 @@ pub fn draw(
                 }
                 _ => zong.line + 1,
             };
-            // The cursor's own paragraph keeps its number bright, so the eye can
-            // find where it is on a dense page.
-            let (gr, gg, gb) = config.theme.gutter;
-            let style = Style::default().bg(Color::Rgb(gr, gg, gb));
-            // The cursor's own paragraph keeps its number bright against the
-            // band, so the eye can find where it is on a dense page.
-            let style = if zong.line == cursor_line {
-                style
-            } else {
-                style.add_modifier(Modifier::DIM)
+            // Set vertically the numbers sit *above* the 縱, in the text's own
+            // columns — position separates nothing, so colour does the whole
+            // job. Both halves of it: the band is a real ground and the digits
+            // are a real rung. They used to be the terminal's own foreground on
+            // a band at 1.04:1, which made the cursor's number the brightest
+            // thing on a page of somebody's novel.
+            let style = ink.ground(yumete_config::rung::CHROME);
+            let style = match zong.line == cursor_line {
+                // 朱 for the one you are in: the one question vertical layout
+                // strips position of, answered by the one colour off the ladder.
+                true => style.fg(ink.mark()),
+                false => style.fg(ink.furniture()),
             };
             // Above its own band, not above the page.
             let band_top = text_top.saturating_sub(metrics.head_rows);
@@ -719,7 +742,7 @@ pub fn draw(
             let mut style = blocks
                 .get(zong.line)
                 .copied()
-                .and_then(crate::block_style)
+                .and_then(|b| crate::block_style(b, ink))
                 .unwrap_or_default();
 
             if show_markup {
@@ -737,7 +760,7 @@ pub fn draw(
                 // a ruby group, or a 縦中横 pair — so it takes the style of any
                 // run it overlaps.
                 for run in runs.iter().filter(|r| r.end > column && r.start < column + len) {
-                    style = style.patch(crate::markup_style(run.kind));
+                    style = style.patch(crate::markup_style(run.kind, ink));
                 }
             }
 
@@ -751,9 +774,16 @@ pub fn draw(
                 };
                 // The quietest layer of the three: only where nothing else has
                 // claimed the ground, so it never rubs out a `==highlight==`.
+                // **One tint, alternating with the page**, not two tints
+                // alternating with each other. Two differed by temperature and
+                // not by weight — 1.04 and 1.07 against the ground, which is to
+                // say one read as the ground and the other as a stain. The
+                // alternation is strict per word, so an untinted word is always
+                // between two tinted ones and says exactly as much.
                 if let Some(word) = ranges.iter().position(|&(a, b)| column >= a && column < b) {
-                    let (r, g, b) = seg_colors[word % seg_colors.len()];
-                    style = style.bg(Color::Rgb(r, g, b));
+                    if word % 2 == 0 {
+                        style = style.bg(ink.word());
+                    }
                 }
             }
 

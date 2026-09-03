@@ -348,7 +348,7 @@ Phases are ordered by priority, most writer-critical first:
 | 149 | **The session, and marks**                  | both   | P2    | what was open, where the cursor was; `M a` / `' a` across files | Done |
 | 150 | **Project-wide replace**                    | core   | P1    | `:grep` then `:replace`: nothing changed that was not on the screen, nothing on disk until `:wa` | Done |
 | 151 | **Both languages**                          | core   | P1    | the Chinese is the key; `messages.toml` holds the pair; `language = "zh"\|"en"` | Done |
-| 152 | **【墨香】 as a computed theme**             | both   | P1    | a few anchors in the config, every other shade a rung on the ladder; see §5.2 group 13 | Planned |
+| 152 | **【墨香】 as a computed theme**             | both   | P1    | three anchors in the config, every other shade a rung on the ladder; see §5.2 group 13 | Done |
 | 153 | **Search has two directions**               | core   | P1    | `/` is `:search row`, `Enter` is `:search col` — down one column, then the next | Done |
 | 154 | **`:tutor` — a lesson you edit**            | both   | P1    | vimtutor's idea, on Chinese prose, where `w` and 縱書 can actually be taught | Planned |
 
@@ -361,7 +361,7 @@ and how far each is implemented. Not everything is needed yet; this is the map
 for prioritizing. **Done** = implemented; **Pn** = planned in that phase; **—** =
 deferred.
 
-> Brought up to date 2026-09-04. It had a dozen keys marked `P4` that had been
+> Brought up to date 2026-09-03. It had a dozen keys marked `P4` that had been
 > shipped for weeks — which is how a reviewer comes to believe an editor is
 > less than it is. Where a key differs from Helix on purpose, the yumete
 > spelling is the one in the table: `J` is half a page because this is a book,
@@ -463,7 +463,7 @@ only editor*. 拆分表: *reading and spot-fixing yes, a day's work not yet*. Vi
 *would keep it installed, would not switch*. All three said the same shape of
 thing — the hard parts are right, and a handful of small wrongs are in the way.
 
-> **Where this stands, 2026-09-04.** Groups 1 and 3–10 are **done**, and so is
+> **Where this stands, 2026-09-03.** Groups 1 and 3–10 are **done**, and so is
 > a review of #142 that found eleven more. Two things are not, and neither is
 > blocked on work:
 >
@@ -496,7 +496,7 @@ The reviewer's finding: `yume-core` is a **path dependency**, so `cargo build`
 on a clone of yumete alone fails, and `scripts/build.sh` needs the sibling tree
 for the data.
 
-**The author's answer, 2026-09-04, and it is the right one:** this is still
+**The author's answer, 2026-09-03, and it is the right one:** this is still
 development, and during development you build from the tree — that is what
 `scripts/build.sh` is *for*, and 上手 opening with it is not the editor telling
 a novelist to compile, it is the repository telling a developer how to run it.
@@ -634,7 +634,7 @@ release; the git-dep switch goes in with the pipeline.
   `:clipboard` in no reference list~~ — done. `docs/manual.md` also gained a
   proper §七 (the whole run from the status bar down was nested under 六、輸入法,
   and 「表格模式」 was a stray top-level `## 5.5` colliding with 「5.5 Ruby 模式」).
-- ~~**Messages are half English and half Chinese.**~~ Done, 2026-09-04 — and
+- ~~**Messages are half English and half Chinese.**~~ Done, 2026-09-03 — and
   not the way this entry sketched it.
 
   What was sketched was a `msg` module of invented keys (`M::Closed`) and 150
@@ -766,7 +766,7 @@ Retuning a theme then means editing two or three numbers, and every part of the
 editor moves together, which is what makes a theme a theme rather than a
 palette somebody has to keep consistent by hand. **high**
 
-#### What two reviews found, 2026-09-04
+#### What two reviews found, 2026-09-03
 
 A book designer and a terminal-scheme designer read it separately. They agree
 on the two facts that reframe the whole job:
@@ -821,6 +821,46 @@ hard-coded in nine places rather than read from `panel.ink`; `theme.gutter` is
 one name doing five jobs and not the one it is named after; the table has two
 different grammars for "here" inside one widget.
 
+#### What shipped, 2026-09-03
+
+**Three anchors, and the author picked them by picking the theme**: 墨, 紙, 朱,
+in `ThemeConfig` — a `Ladder` per mood, 朱 per mood, and nothing else. There is
+no 青: the cool family the terminal designer found was ten accidents, and every
+one of them is now a rung.
+
+- **The page is painted**, in both renderers, which was the first fix and the
+  one everything else was waiting on. `crates/yumete-tui/src/theme.rs` is the
+  only place a colour is decided; `Palette` has one accessor per *job*, so a
+  part of the editor names what it is, not what colour it wants.
+- **The dead middle is empty by construction.** `rung` names nine positions and
+  its doc says why the 38% between 350 and 730 holds nothing but a rule. The
+  three colours measured at 1.00:1, 1.04:1 and 1.11:1 are gone: a rule is
+  `RULE`, the number band is `CHROME` with 朱 on the cursor's own paragraph,
+  and the 稿紙 ticks are a rule too.
+- **`DIM` is no longer load-bearing** anywhere: a reading, a marker, front
+  matter and the prompt's guess are each a rung, so a terminal that drops the
+  attribute loses nothing.
+- **The light mood's ink is the dark mood's ground** (`#262A27`). Not a
+  flourish: mixing toward a light paper loses contrast faster, and the light
+  ladder needs the range or its top rungs come out under 4.5:1. Every rung is
+  measured in `theme.rs`'s own tests, in **both** moods.
+- **`mode = "auto"` asks the terminal** (OSC 11), read straight off the
+  descriptor before the alternate screen, with a 120 ms bound — not the desktop
+  appearance, because a dark terminal on a light desktop has already answered.
+- **The word tint is 朱 washed 91% to the page**, so it follows the mood; it was
+  a fixed dark triple that would have been a smear on a light page.
+- **The status line is a named ground, not `REVERSED`.** Reversing only inverts
+  the cells something is written on, so the bar stopped wherever the text did —
+  the notch at the right end of a short status line, reported the same day.
+  (It is a *width* disagreement underneath: a PUA character measured two
+  columns and drawn one. Painting the row makes the arithmetic stop mattering.)
+
+Still open from these two reviews: the 256-colour fallback (every colour is
+truecolour today), the eight markup hues (they differ in hue at the same weight
+as the prose — the reviews want them off, which is a question about 所見即所得
+and not about the ladder), and the candidate panel's own `[panel] ink/paper`
+pair, which is still a second ladder beside this one.
+
 **Keep:** `Skin::step`, the ink/paper pair, `step(300)` as "one shade back"
 (independently reinvented as `quiet` in three files), inversion for the chosen
 thing, `REVERSED` for the status line and the block cursor (the best-engineered
@@ -828,7 +868,7 @@ styling in the program), the `==highlight==` pair, `BOLD`-alone for 粗體 and
 `ITALIC`-alone for 斜體, and `torn`'s `#D89A9A` as a *value* — promote it to an
 anchor, do not retune it.
 
-### 12 · What a review of the night found, 2026-09-04
+### 12 · What a review of the night found, 2026-09-03
 
 Ten findings; nine fixed the same night. The three that mattered:
 

@@ -10,6 +10,7 @@
 //! bundled `crossterm` backend, so no ANSI escapes are hand-written here.
 
 pub mod table;
+pub mod theme;
 pub mod vertical;
 
 use std::io::{self, stdout, Write as _};
@@ -65,6 +66,10 @@ pub fn run(
     config: &Config,
     ime: &mut ImeSession,
 ) -> io::Result<()> {
+    // Which mood 墨香 is in, settled before the first frame — and before the
+    // alternate screen, because the question is put to the terminal and read
+    // back off the descriptor.
+    crate::theme::settle_at_startup(config);
     let mut terminal = ratatui::init();
 
     // Enable the Kitty keyboard protocol (report modifier presses/releases) so a
@@ -1036,9 +1041,9 @@ fn draw(
     // two rows deep — anchored to the status line alone they would be drawn
     // over the hint row.
     let footer = if hint_rows == 1 { hint_area } else { status_area };
-    draw_command_menu(frame, editor, area, footer);
-    draw_picker(frame, editor, area, footer);
-    draw_space_menu(frame, editor, area, footer);
+    draw_command_menu(frame, editor, config, area, footer);
+    draw_picker(frame, editor, config, area, footer);
+    draw_space_menu(frame, editor, config, area, footer);
 
     // In vertical layout the cursor is a block drawn into the page: a hardware
     // cursor is one cell wide and would sit lopsided inside a two-cell 縱.
@@ -1130,7 +1135,13 @@ struct List<'a> {
     columns: bool,
 }
 
-fn draw_list(frame: &mut Frame, area: Rect, bottom: u16, list: List) {
+fn draw_list(
+    frame: &mut Frame,
+    ink: crate::theme::Palette,
+    area: Rect,
+    bottom: u16,
+    list: List,
+) {
     let List {
         items,
         focus,
@@ -1179,12 +1190,10 @@ fn draw_list(frame: &mut Frame, area: Rect, bottom: u16, list: List) {
     let menu = Rect::new(area.x, bottom - height, width, height);
     frame.render_widget(Clear, menu);
 
-    let ground = Style::default().bg(Color::Rgb(0x26, 0x2a, 0x27));
-    let text = ground.fg(Color::Rgb(0xcf, 0xc6, 0xa9));
-    let quiet = ground.fg(Color::Rgb(0x9c, 0x97, 0x82));
-    let on = Style::default()
-        .bg(Color::Rgb(0xcf, 0xc6, 0xa9))
-        .fg(Color::Rgb(0x26, 0x2a, 0x27));
+    let ground = Style::default().bg(ink.paper());
+    let text = ground.fg(ink.text());
+    let quiet = ground.fg(ink.quiet());
+    let on = Style::default().bg(ink.text()).fg(ink.paper());
 
     let buf = frame.buffer_mut();
     for y in 0..height {
@@ -1254,10 +1263,17 @@ fn put_text(
 }
 
 /// The `:` command menu — Helix's completion popup, not a wall.
-fn draw_command_menu(frame: &mut Frame, editor: &Editor, area: Rect, status: Rect) {
+fn draw_command_menu(
+    frame: &mut Frame,
+    editor: &Editor,
+    config: &Config,
+    area: Rect,
+    status: Rect,
+) {
     let Some((':', _)) = editor.prompt() else {
         return;
     };
+    let ink = crate::theme::Palette::of(config);
     let (matches, selected) = editor.command_menu();
     if matches.is_empty() {
         return;
@@ -1291,6 +1307,7 @@ fn draw_command_menu(frame: &mut Frame, editor: &Editor, area: Rect, status: Rec
     // columns.
     draw_list(
         frame,
+        ink,
         area,
         status.y,
         List {
@@ -1404,36 +1421,48 @@ fn tab_at(
 /// The markup itself is *shown* and set back; what it marks is set forward.
 /// Nothing is hidden, because the file is the manuscript — the page says what
 /// is in it, and says which part of that is scaffolding.
-fn markup_style(kind: yumete_core::markdown::Kind) -> Style {
+fn markup_style(kind: yumete_core::markdown::Kind, ink: crate::theme::Palette) -> Style {
     use yumete_core::markdown::Kind;
+    // **Weight, not hue.** There were five hues here — a green code, a blue
+    // link, a khaki wikilink — all at the same *weight* as the prose, differing
+    // only in colour. That is right in a syntax highlighter and backwards in a
+    // manuscript: the writing should be the brightest thing on the page and
+    // everything else should recede. A rung plus an underline says which is
+    // which, and it goes on saying it in light mode and on a terminal that
+    // renders no colour at all.
     match kind {
-        Kind::Marker | Kind::HeadingMark => Style::default().add_modifier(Modifier::DIM),
-        Kind::Heading => Style::default()
-            .fg(Color::Rgb(0xd8, 0xc9, 0x9a))
-            .add_modifier(Modifier::BOLD),
+        // A real rung, not `DIM`: a terminal that ignores DIM used to draw
+        // `**` exactly like the word between them, which is the whole of
+        // 所見即所得 gone.
+        Kind::Marker | Kind::HeadingMark => Style::default().fg(ink.marker()),
+        // A terminal cannot make a heading bigger, and bold is what it has.
+        // The old colour was five ΔE from the ink for a third of a stop of
+        // contrast — the weight was doing all the work already.
+        Kind::Heading => Style::default().fg(ink.text()).add_modifier(Modifier::BOLD),
         Kind::Strong => Style::default().add_modifier(Modifier::BOLD),
         Kind::Emphasis => Style::default().add_modifier(Modifier::ITALIC),
-        Kind::Code => Style::default().fg(Color::Rgb(0x9c, 0xc2, 0xa8)),
-        Kind::Strike => Style::default().add_modifier(Modifier::CROSSED_OUT),
-        Kind::Link => Style::default()
-            .fg(Color::Rgb(0x9c, 0xb0, 0xc2))
+        Kind::Code => Style::default().fg(ink.quiet()),
+        // CROSSED_OUT is not everywhere, so the rung carries it as well.
+        Kind::Strike => Style::default()
+            .fg(ink.furniture())
+            .add_modifier(Modifier::CROSSED_OUT),
+        Kind::Link | Kind::WikiLink => Style::default()
+            .fg(ink.quiet())
             .add_modifier(Modifier::UNDERLINED),
-        // A highlighter pen leaves a ground, so this is a ground.
-        Kind::Highlight => Style::default()
-            .bg(Color::Rgb(0x54, 0x4c, 0x2c))
-            .fg(Color::Rgb(0xe4, 0xd8, 0xb0)),
-        Kind::Footnote => Style::default().fg(Color::Rgb(0xc2, 0xa0, 0x9c)),
-        Kind::WikiLink => Style::default()
-            .fg(Color::Rgb(0xa8, 0xb8, 0x9c))
-            .add_modifier(Modifier::UNDERLINED),
-        // Not part of the book: set well back, but never hidden — a note you
-        // cannot see is a note you will not act on.
+        // A highlighter pen leaves a ground, so this is a ground — and the pen
+        // is 朱, washed until the ink still reads on it.
+        Kind::Highlight => Style::default().bg(ink.wash()).fg(ink.text()),
+        // A footnote *is* a 朱批.
+        Kind::Footnote => Style::default().fg(ink.mark()),
+        // Not part of the book: set back, but never hidden and never below
+        // reading — a note you cannot see is a note you will not act on, and
+        // this one measured 2.54:1.
         Kind::Comment => Style::default()
-            .fg(Color::Rgb(0x6a, 0x66, 0x5c))
+            .fg(ink.furniture())
             .add_modifier(Modifier::ITALIC),
         // Typst's own code: the instructions that make the page, not decoration
         // around writing. Set back, never taken away.
-        Kind::Code2 => Style::default().fg(Color::Rgb(0x8c, 0x9c, 0xb4)),
+        Kind::Code2 => Style::default().fg(ink.quiet()),
     }
 }
 
@@ -1442,21 +1471,24 @@ fn markup_style(kind: yumete_core::markdown::Kind) -> Style {
 /// Blocks colour the *row*, inline runs colour the characters, and the two
 /// compose — a bold word inside a `::: warning` keeps its bold and gains the
 /// container's ground.
-fn block_style(block: yumete_core::markdown::Block) -> Option<Style> {
+fn block_style(block: yumete_core::markdown::Block, ink: crate::theme::Palette) -> Option<Style> {
     use yumete_core::markdown::{Block, Callout};
-    let ground = |r, g, b| Some(Style::default().bg(Color::Rgb(r, g, b)));
+    // **A container is a container.** The four callouts used to differ by hue
+    // at 1.4–2.4 ΔE from each other and from the quote and the code fence —
+    // which is below the threshold at which two flat grounds can be told apart
+    // at all, and is also what collapses on a 256-colour terminal. The word
+    // `note` / `tip` / `warning` on the line is what says which; the ground says
+    // only 「這是一塊」. Danger is the exception, because it is the one that
+    // means 這裏不對.
+    let band = || Some(Style::default().bg(ink.at(yumete_config::rung::BAND)));
     match block {
         Block::Prose | Block::Heading(_) | Block::Item { .. } | Block::Table => None,
         // An aside is a block on the page because it is a block on paper.
-        Block::Container(Callout::Note) => ground(0x2a, 0x30, 0x38),
-        Block::Container(Callout::Tip) => ground(0x28, 0x36, 0x30),
-        Block::Container(Callout::Warning) => ground(0x38, 0x33, 0x26),
-        Block::Container(Callout::Danger) => ground(0x3a, 0x2a, 0x2c),
-        Block::Quote => ground(0x2c, 0x2e, 0x34),
-        Block::Code => ground(0x26, 0x2a, 0x2c),
+        Block::Container(Callout::Danger) => Some(Style::default().bg(ink.wash())),
+        Block::Container(_) | Block::Quote | Block::Code => band(),
         // Metadata and scene breaks are furniture, not writing.
         Block::FrontMatter | Block::Rule | Block::FootnoteDef => {
-            Some(Style::default().add_modifier(Modifier::DIM))
+            Some(Style::default().fg(ink.furniture()))
         }
     }
 }
@@ -1535,15 +1567,12 @@ fn tab_label(name: &str, dirty: bool) -> String {
 /// how many things are open, and which one you are in, are questions that
 /// should be answered by looking rather than by pressing a key.
 fn draw_tabs(frame: &mut Frame, editor: &Editor, config: &Config, area: Rect) {
-    let (gr, gg, gb) = config.theme.gutter;
-    let ground = Style::default().bg(Color::Rgb(gr, gg, gb));
-    // The lit tab carries the page's own background, so it reads as the front
-    // of the stack — the sheet the others are behind.
-    let lit = Style::default()
-        .bg(Color::Reset)
-        .fg(Color::Rgb(0xcf, 0xc6, 0xa9))
-        .add_modifier(Modifier::BOLD);
-    let unlit = ground.fg(Color::Rgb(0x8a, 0x86, 0x76));
+    let ink = crate::theme::Palette::of(config);
+    let ground = ink.ground(yumete_config::rung::CHROME);
+    // The lit tab carries the page's own ground, so it reads as the front of
+    // the stack — the sheet the others are behind.
+    let lit = ink.page().add_modifier(Modifier::BOLD);
+    let unlit = ground.fg(ink.furniture());
 
     let current = editor.buffer_position().0.saturating_sub(1);
     let tabs = editor.buffer_tabs();
@@ -1608,21 +1637,18 @@ fn draw_sidebar(frame: &mut Frame, editor: &Editor, config: &Config, area: Rect)
     if area.width < 3 {
         return;
     }
-    let (gr, gg, gb) = config.theme.gutter;
-    let ground = Style::default().bg(Color::Rgb(gr, gg, gb));
-    let text = ground.fg(Color::Rgb(0xcf, 0xc6, 0xa9));
-    let dir = ground.fg(Color::Rgb(0x9c, 0xb0, 0xc2));
-    let quiet = ground.fg(Color::Rgb(0x9c, 0x97, 0x82));
+    let ink = crate::theme::Palette::of(config);
+    let ground = ink.ground(yumete_config::rung::CHROME);
+    let text = ground.fg(ink.text());
+    let dir = ground.fg(ink.quiet()).add_modifier(Modifier::BOLD);
+    let quiet = ground.fg(ink.quiet());
     // Unfocused, the highlight is a quiet band; focused, it is inked — so which
     // half of the screen the keys are going to is never in doubt.
-    let on = if editor.sidebar_focused() {
-        Style::default()
-            .bg(Color::Rgb(0xcf, 0xc6, 0xa9))
-            .fg(Color::Rgb(0x26, 0x2a, 0x27))
-    } else {
-        Style::default()
-            .bg(Color::Rgb(0x3a, 0x3d, 0x46))
-            .fg(Color::Rgb(0xcf, 0xc6, 0xa9))
+    // Focused, it is ink and paper changing places — the most robust 「這裏」
+    // a terminal has, and it costs no colour and survives a light/dark flip.
+    let on = match editor.sidebar_focused() {
+        true => Style::default().bg(ink.text()).fg(ink.paper()),
+        false => Style::default().bg(ink.selection()).fg(ink.text()),
     };
 
     frame.render_widget(Clear, area);
@@ -1691,10 +1717,11 @@ fn draw_sidebar(frame: &mut Frame, editor: &Editor, config: &Config, area: Rect)
 }
 
 /// The `Space f` / `Space b` picker.
-fn draw_picker(frame: &mut Frame, editor: &Editor, area: Rect, status: Rect) {
+fn draw_picker(frame: &mut Frame, editor: &Editor, config: &Config, area: Rect, status: Rect) {
     let Some(picker) = editor.picker() else {
         return;
     };
+    let ink = crate::theme::Palette::of(config);
     let matches = picker.matches();
     let items: Vec<String> = matches.iter().map(|i| i.label().to_string()).collect();
     let footer = format!(
@@ -1713,6 +1740,7 @@ fn draw_picker(frame: &mut Frame, editor: &Editor, area: Rect, status: Rect) {
     // ragged paths are harder to read down than a single list.
     draw_list(
         frame,
+        ink,
         area,
         status.y,
         List {
@@ -1726,16 +1754,24 @@ fn draw_picker(frame: &mut Frame, editor: &Editor, area: Rect, status: Rect) {
 }
 
 /// The `Space` menu, listed while the key is waiting for its second half.
-fn draw_space_menu(frame: &mut Frame, editor: &Editor, area: Rect, status: Rect) {
+fn draw_space_menu(
+    frame: &mut Frame,
+    editor: &Editor,
+    config: &Config,
+    area: Rect,
+    status: Rect,
+) {
     if !editor.space_pending() {
         return;
     }
+    let ink = crate::theme::Palette::of(config);
     let items: Vec<String> = Editor::SPACE_KEYS
         .iter()
         .map(|(key, what)| format!("{key}   {what}"))
         .collect();
     draw_list(
         frame,
+        ink,
         area,
         status.y,
         List {
@@ -1778,6 +1814,7 @@ fn draw_horizontal(
     let mode = config.editor.line_numbers;
     let gutter = gutter_width(total_lines, mode);
     let rope = buffer.rope();
+    let ink = crate::theme::Palette::of(config);
 
     // Unwrapped, every paragraph is one row and anything past the right edge is
     // simply clipped, which is what the row model produces at an unreachable
@@ -1822,10 +1859,9 @@ fn draw_horizontal(
     // cursor's own grapheme, so a bare cursor would otherwise be drawn as a
     // one-character highlight and the word-tint overlay would never appear.
     let has_selection = editor.has_selection();
-    let (sr, sg, sb) = config.theme.selection;
-    let sel_style = Style::default().bg(Color::Rgb(sr, sg, sb)).fg(Color::White);
+    // A ground, and only a ground.
+    let sel_style = Style::default().bg(ink.selection());
     let show_segmentation = editor.segmentation_visible();
-    let seg_colors = config.theme.segmentation;
     let show_markup = editor.markup_visible();
     // The measure is counted in *text*: `ruler = 80` means eighty columns of
     // writing, which is what a writer means by it. The line-number gutter is
@@ -1834,7 +1870,6 @@ fn draw_horizontal(
     // A measure set with `:wrap 50` is a ruler by definition — it is the width
     // the writer asked to write to — so it stands in for the configured one.
     let ruler = editor.measure().unwrap_or(config.editor.ruler);
-    let (rr, rg, rb) = config.theme.ruler;
 
     // Word ranges are per paragraph and consecutive rows usually share one, so
     // each paragraph the page touches is segmented once. Its Markdown runs are
@@ -1866,16 +1901,16 @@ fn draw_horizontal(
             } else {
                 " ".repeat(gutter)
             };
-            spans.push(Span::styled(
-                label,
-                Style::default().add_modifier(Modifier::DIM),
-            ));
+            // A rung, not `DIM`: several terminals ignore DIM outright, and a
+            // line number that is the same colour as the writing is worse than
+            // no line number.
+            spans.push(Span::styled(label, ink.page().fg(ink.furniture())));
         }
         // The paragraph opens two squares in, the way a Chinese paragraph is
         // marked — and the blank line it replaces costs a whole row.
         let indent = measure.indent_of(&rope.line(row.line).to_string(), row.index_in_line);
         if indent > 0 {
-            spans.push(Span::raw(" ".repeat(indent)));
+            spans.push(Span::styled(" ".repeat(indent), ink.page()));
         }
 
         // Three layers, composed rather than fighting: Markdown sets the ink
@@ -1886,11 +1921,19 @@ fn draw_horizontal(
         let row_len = row.end - row.start;
         let chars: Vec<char> = text.chars().collect();
         // The block grounds the whole row; the inline runs are patched onto it.
-        let ground = blocks
-            .get(row.line)
-            .copied()
-            .and_then(block_style)
-            .unwrap_or_default();
+        // **The page is painted.** Until this line, the manuscript itself was
+        // drawn with no colour at all — the terminal's own ink on the
+        // terminal's own ground — while 墨香 dressed five panels around it. A
+        // theme that does not own its ground cannot promise anything about
+        // contrast, because every tint in it is measured against a colour the
+        // editor has never seen.
+        let ground = ink.page().patch(
+            blocks
+                .get(row.line)
+                .copied()
+                .and_then(|b| block_style(b, ink))
+                .unwrap_or_default(),
+        );
         // 所見即所得: the markup comes off the page. It is dropped from what is
         // *drawn*, not from the buffer — and never on the construct the cursor
         // is in, so the cursor is never inside text that is not on the screen.
@@ -1922,12 +1965,13 @@ fn draw_horizontal(
                 // Patched onto the block's ground rather than replacing it, so
                 // a bold word inside a `::: warning` keeps both.
                 for style in styles.iter_mut().take(b).skip(a.min(b)) {
-                    *style = style.patch(markup_style(run.kind));
+                    *style = style.patch(markup_style(run.kind, ink));
                 }
             }
         }
 
         if show_segmentation && !has_selection {
+            let page_bg = ink.page().bg;
             // Tint each word with an alternating background (Feature #24). The
             // words are the paragraph's, sliced to this row, so a word split by
             // a wrap keeps one colour across the break.
@@ -1946,16 +1990,25 @@ fn draw_horizontal(
             // The word's index *in the paragraph* picks its colour, so the two
             // keep alternating across a wrap instead of restarting each row.
             for (n, &(a, b)) in words.iter().enumerate().filter(|(_, w)| visible(w)) {
+                // One tint, every other word, and bare page between: the pair
+                // of tints it replaces differed by *temperature* at 1.04 and
+                // 1.07 against the ground, so one read as the ground and the
+                // other as a stain.
+                if n % 2 != 0 {
+                    continue;
+                }
                 let a = a.saturating_sub(start_in_line);
                 let b = (b - start_in_line).min(chars.len());
-                let (r, g, bl) = seg_colors[n % seg_colors.len()];
                 for style in styles.iter_mut().take(b).skip(a.min(b)) {
                     // Only where nothing has already claimed the ground. A word
                     // tint is the quietest of the three layers — it must not
                     // rub out a `==highlight==`, which exists *to be* a ground,
-                    // nor a container's own colour.
-                    if style.bg.is_none() {
-                        *style = style.bg(Color::Rgb(r, g, bl));
+                    // nor a container's own colour. The page itself is not a
+                    // claim: every style on the row starts from it now that the
+                    // paper is painted, and reading that as taken would have
+                    // left the overlay with nowhere it was allowed to draw.
+                    if style.bg.is_none() || style.bg == page_bg {
+                        *style = style.bg(ink.word());
                     }
                 }
             }
@@ -1968,7 +2021,7 @@ fn draw_horizontal(
             let mut column = 0;
             for (i, ch) in chars.iter().enumerate() {
                 if column >= ruler {
-                    styles[i] = styles[i].bg(Color::Rgb(rr, rg, rb));
+                    styles[i] = styles[i].bg(ink.at(yumete_config::rung::BAND));
                 }
                 column += yumete_cjk::char_width(*ch);
             }
@@ -2009,8 +2062,9 @@ fn draw_horizontal(
         if !break_cell.is_empty() {
             spans.push(Span::styled(break_cell, sel_style));
         }
-        // A block's ground runs the width of the row, not just under its words:
-        // an aside is a block on the page because it is a block on paper.
+        // A row's ground runs its whole width, not just under its words: an
+        // aside is a block on the page because it is a block on paper, and a
+        // painted page is painted to the edge.
         if ground.bg.is_some() {
             // What is *drawn*, not what the source is: markup taken off the
             // page took its columns with it, so the ground would otherwise stop
@@ -2047,8 +2101,8 @@ fn draw_horizontal(
         for y in text_area.y..text_area.y + text_area.height {
             for x in left..text_area.x + text_area.width {
                 if let Some(cell) = buf.cell_mut((x, y)) {
-                    if cell.bg == Color::Reset {
-                        cell.set_bg(Color::Rgb(rr, rg, rb));
+                    if cell.bg == Color::Reset || cell.bg == ink.paper() {
+                        cell.set_bg(ink.at(yumete_config::rung::BAND));
                     }
                 }
             }
@@ -2064,11 +2118,12 @@ fn draw_horizontal(
             for y in text_area.y..text_area.y + text_area.height {
                 if let Some(cell) = buf.cell_mut((x, y)) {
                     if cell.symbol().trim().is_empty() {
-                        cell.set_symbol("│").set_style(
-                            Style::default()
-                                .fg(Color::Rgb(rr, rg, rb))
-                                .add_modifier(Modifier::DIM),
-                        );
+                        // A **rule**, not the tint it stands in. It used to be
+                        // drawn in exactly the colour of the ground behind it —
+                        // 1.00:1, which is to say the line has never once been
+                        // visible since it was written.
+                        cell.set_symbol("│")
+                            .set_style(Style::default().fg(ink.rule()));
                     }
                 }
             }
@@ -2123,6 +2178,13 @@ fn draw_status(
     tab_area: Rect,
 ) {
     let buffer = editor.current_buffer();
+    // The page turned over: the ink is the ground and the paper is the letters.
+    // Named rather than `REVERSED`, which only inverts the cells something is
+    // *written on* — the bar stopped wherever the text did and the rest of the
+    // row was left to the terminal, which is the notch a reader sees at the
+    // right end of a short status line.
+    let ink = crate::theme::Palette::of(config);
+    let bar = Style::default().bg(ink.text()).fg(ink.paper());
     // The sidebar used to take the whole status line to list its keys. It has
     // the row above for that now, and taking this one as well would mean losing
     // the file name and the position for as long as the sidebar has focus.
@@ -2142,13 +2204,17 @@ fn draw_status(
         let gap = (status_area.width as usize).saturating_sub(used);
         // Rendered as three spans so the guess can be a lighter ink than what
         // was actually typed — it has to be visibly *not yet* part of the line.
-        let reversed = Style::default().add_modifier(Modifier::REVERSED);
+        // The guess is a rung back from what was actually typed — a colour,
+        // not `DIM`, so it is still visibly *not yet* part of the line on a
+        // terminal that drops the attribute.
+        let guess = bar.fg(ink.at(yumete_config::rung::SELECTION));
         frame.render_widget(
             Paragraph::new(Line::from(vec![
-                Span::styled(line, reversed),
-                Span::styled(ghost, reversed.add_modifier(Modifier::DIM)),
-                Span::styled(format!("{}{tag}", " ".repeat(gap)), reversed),
-            ])),
+                Span::styled(line, bar),
+                Span::styled(ghost, guess),
+                Span::styled(format!("{}{tag}", " ".repeat(gap)), bar),
+            ]))
+            .style(bar),
             status_area,
         );
         return;
@@ -2209,12 +2275,12 @@ fn draw_status(
         .find(|t| !t.is_empty() && yumete_cjk::str_width(t) + 2 <= room)
         .unwrap_or("");
     let gap = room.saturating_sub(yumete_cjk::str_width(tail));
-    let reversed = Style::default().add_modifier(Modifier::REVERSED);
     frame.render_widget(
         Paragraph::new(Line::from(vec![
-            Span::styled(status, reversed),
-            Span::styled(format!("{}{tail}", " ".repeat(gap)), reversed),
-        ])),
+            Span::styled(status, bar),
+            Span::styled(format!("{}{tail}", " ".repeat(gap)), bar),
+        ]))
+        .style(bar),
         status_area,
     );
 }
@@ -2227,16 +2293,14 @@ fn draw_status(
 /// the margin instead of as an empty bar.
 fn draw_hints(frame: &mut Frame, editor: &Editor, config: &Config, area: Rect) {
     use yumete_core::editor::Hint;
-    let _ = config;
+    let ink = crate::theme::Palette::of(config);
     // News is the loud kind; keys are the quiet kind and read as furniture.
-    let news = Style::default().fg(Color::Rgb(0xd8, 0xc9, 0x9a));
+    let news = Style::default().fg(ink.text());
     // The key is what the eye is hunting for, so it is the lit half; what it
     // does is the half you only read once.
-    let key = Style::default().fg(Color::Rgb(0xcf, 0xc6, 0xa9));
-    let what = Style::default().fg(Color::Rgb(0x8a, 0x86, 0x76));
-    let label = Style::default()
-        .fg(Color::Rgb(0x9c, 0xb0, 0xc2))
-        .add_modifier(Modifier::BOLD);
+    let key = Style::default().fg(ink.text());
+    let what = Style::default().fg(ink.furniture());
+    let label = Style::default().fg(ink.quiet()).add_modifier(Modifier::BOLD);
     let right = area.x + area.width;
     let buf = frame.buffer_mut();
     let mut x = area.x + 1;
@@ -2562,6 +2626,11 @@ mod tests {
 
     /// A vertical-layout config with the decorations off, so tests read the
     /// text grid itself.
+    /// The palette a test's config resolves to.
+    fn ink(config: &Config) -> crate::theme::Palette {
+        crate::theme::Palette::of(config)
+    }
+
     fn vertical_config() -> Config {
         let mut config = Config::default();
         config.editor.layout = WritingLayout::Vertical;
@@ -2850,10 +2919,9 @@ mod tests {
         let mut editor = editor_with("春江\n潮水");
         let mut config = vertical_config();
         config.editor.line_numbers = LineNumbers::Absolute;
-        config.theme.gutter = (0x24, 0x26, 0x2c);
         let buffer = render_vertical(&mut editor, &config, 30, 12);
 
-        let band = Some(Color::Rgb(0x24, 0x26, 0x2c));
+        let band = Some(ink(&config).chrome());
         let head = vertical::number_rows(LineNumbers::Absolute, 3);
         assert!(head > 0);
         for x in 0..30 {
@@ -2893,10 +2961,10 @@ mod tests {
         let style = buffer[(18, 0)].style();
         assert!(!style.add_modifier.contains(Modifier::REVERSED));
         assert!(!style.add_modifier.contains(Modifier::UNDERLINED));
-        assert!(
-            matches!(style.fg, None | Some(Color::Reset)),
-            "the character must not be recoloured, got {:?}",
-            style.fg
+        assert_eq!(
+            style.fg,
+            ink(&config).page().fg,
+            "the character keeps the page's own ink"
         );
     }
 
@@ -2976,18 +3044,10 @@ mod tests {
         // each slot is asserted: a full-width glyph's second column is its
         // continuation, which the renderer skips rather than drawing, so the
         // terminal paints both columns from the style set here.
-        let (a, b) = (config.theme.segmentation[0], config.theme.segmentation[1]);
+        let (tint, page) = (Some(ink(&config).word()), Some(ink(&config).paper()));
         let bg = |x: u16, y: u16| buffer[(x, y)].style().bg;
-        assert_eq!(
-            bg(18, 1),
-            Some(Color::Rgb(a.0, a.1, a.2)),
-            "第一詞 untinted"
-        );
-        assert_eq!(
-            bg(18, 2),
-            Some(Color::Rgb(b.0, b.1, b.2)),
-            "第二詞 untinted"
-        );
+        assert_eq!(bg(18, 1), tint, "第一詞 tinted");
+        assert_eq!(bg(18, 2), page, "第二詞 left as the page");
     }
 
     /// A pane too small to hold even one 縱 must not panic — ratatui hands out
@@ -3352,10 +3412,10 @@ mod tests {
         let config = Config::default();
         let buffer = render(&editor, &config, 40, 6);
 
-        // The two segmentation tints should both appear (one per word).
-        let (a, b) = (config.theme.segmentation[0], config.theme.segmentation[1]);
-        let tint_a = Color::Rgb(a.0, a.1, a.2);
-        let tint_b = Color::Rgb(b.0, b.1, b.2);
+        // One tint, every other word, and bare page between — so both the
+        // tint and the page must appear.
+        let tint_a = ink(&config).word();
+        let tint_b = ink(&config).paper();
         let mut seen_a = false;
         let mut seen_b = false;
         for y in 0..buffer.area.height {
@@ -3384,8 +3444,7 @@ mod tests {
 
         let config = Config::default();
         let buffer = render(&editor, &config, 40, 6);
-        let (a, _) = (config.theme.segmentation[0], config.theme.segmentation[1]);
-        let tint_a = Color::Rgb(a.0, a.1, a.2);
+        let tint_a = ink(&config).word();
         let any_tint = (0..buffer.area.height)
             .any(|y| (0..buffer.area.width).any(|x| buffer[(x, y)].style().bg == Some(tint_a)));
         assert!(!any_tint, "overlay should be hidden when disabled");
@@ -3481,14 +3540,16 @@ mod tests {
             .collect();
         assert!(line.starts_with(":segment"), "guess shown: {line:?}");
 
-        let dim = |x: u16| {
-            buffer[(x, row)]
-                .style()
-                .add_modifier
-                .contains(Modifier::DIM)
-        };
-        assert!(!dim(3), "`seg` was typed");
-        assert!(dim(4), "`ment` is only a guess");
+        // A rung back, not `DIM`: the attribute is dropped by enough terminals
+        // that a guess would read as typed on them.
+        let ink = ink(&config);
+        let fg = |x: u16| buffer[(x, row)].style().fg;
+        assert_eq!(fg(3), Some(ink.paper()), "`seg` was typed");
+        assert_eq!(
+            fg(4),
+            Some(ink.at(yumete_config::rung::SELECTION)),
+            "`ment` is only a guess"
+        );
     }
 
     #[test]
@@ -3498,8 +3559,7 @@ mod tests {
         config.editor.line_numbers = LineNumbers::None;
         config.editor.show_segmentation = false;
         config.editor.ruler = 20;
-        config.theme.ruler = (0x2e, 0x30, 0x38);
-        let tint = Some(Color::Rgb(0x2e, 0x30, 0x38));
+        let tint = Some(ink(&config).at(yumete_config::rung::BAND));
         // The measure is twenty columns of *writing*; with the gutter off it is
         // also cell twenty, which is what makes the coordinates below readable.
         assert_eq!(config.editor.line_numbers, LineNumbers::None);
@@ -3572,8 +3632,7 @@ mod tests {
         let mut config = Config::default();
         config.editor.line_numbers = LineNumbers::None;
         config.editor.show_segmentation = false;
-        config.theme.ruler = (0x2e, 0x30, 0x38);
-        let tint = Some(Color::Rgb(0x2e, 0x30, 0x38));
+        let tint = Some(ink(&config).at(yumete_config::rung::BAND));
         // No configured ruler: the measure is the only thing saying where the
         // page ends.
         assert_eq!(config.editor.ruler, 0);
@@ -3695,9 +3754,8 @@ mod tests {
         editor.on_key(Key::Char('l'));
         let mut config = Config::default();
         config.editor.line_numbers = LineNumbers::None;
-        config.theme.selection = (0x40, 0x44, 0x52);
         let buffer = render(&editor, &config, 60, 10);
-        let lit = Some(Color::Rgb(0x40, 0x44, 0x52));
+        let lit = Some(ink(&config).selection());
 
         // Row 2 of the file is the first data row, on screen row 1 under the
         // header; the cursor is in its second cell.
@@ -3748,7 +3806,7 @@ mod tests {
         // The extra field is drawn: hiding it would hide the damage.
         assert!(row(2).contains("a") && row(2).contains("b"), "{:?}", row(2));
         // And the row number is marked, so it can be found from a distance.
-        let torn = Some(Color::Rgb(0xd8, 0x9a, 0x9a));
+        let torn = Some(ink(&config).mark());
         assert_eq!(buffer[(0, 2)].style().fg, torn, "the bad row's number");
         assert_ne!(buffer[(0, 1)].style().fg, torn, "not the good one's");
 
@@ -4018,8 +4076,9 @@ mod tests {
             .flat_map(|x| (0..16u16).map(move |y| (x, y)))
             .find(|&(x, y)| at(&buffer, x, y) == "*")
             .expect("the markers stay on the page");
-        assert!(
-            buffer[marker].style().add_modifier.contains(Modifier::DIM),
+        assert_eq!(
+            buffer[marker].style().fg,
+            Some(ink(&config).marker()),
             "and the markers themselves are set back"
         );
         let plain = (0..30u16)
@@ -4124,7 +4183,6 @@ mod tests {
         let mut editor = editor_with(&"字".repeat(24));
         let mut config = vertical_config();
         config.editor.paper_ticks = 10;
-        config.theme.ruler = (0x2e, 0x30, 0x38);
         let buffer = render_vertical(&mut editor, &config, 20, 14);
 
         // Ruling the page gives every 縱 a margin — the rightmost included, which
@@ -4171,18 +4229,21 @@ mod tests {
         assert_eq!(row_text(&buffer, 0).trim_end(), "# 第一章");
         assert_eq!(row_text(&buffer, 1).trim_end(), "那**年**冬天");
 
-        // The hashes are set back and the title is set forward.
-        assert!(buffer[(0, 0)].style().add_modifier.contains(Modifier::DIM));
+        // The hashes are set back and the title is set forward. Set back is a
+        // *rung*, not `DIM`: several terminals drop the attribute, and a
+        // manuscript whose markup is only told apart by one is not told apart.
+        let marker = Some(ink(&config).marker());
+        assert_eq!(buffer[(0, 0)].style().fg, marker);
         assert!(buffer[(2, 0)].style().add_modifier.contains(Modifier::BOLD));
-        // 那 is prose, 年 is bold, and the asterisks are dim but present.
+        // 那 is prose, 年 is bold, and the asterisks are quiet but present.
         assert!(!buffer[(0, 1)].style().add_modifier.contains(Modifier::BOLD));
-        assert!(buffer[(2, 1)].style().add_modifier.contains(Modifier::DIM));
+        assert_eq!(buffer[(2, 1)].style().fg, marker);
         assert!(buffer[(4, 1)].style().add_modifier.contains(Modifier::BOLD));
 
         // Turning it off leaves the text alone.
         editor.set_render(yumete_core::editor::Render::Off);
         let buffer = render(&editor, &config, 40, 8);
-        assert!(!buffer[(0, 0)].style().add_modifier.contains(Modifier::DIM));
+        assert_eq!(buffer[(0, 0)].style().fg, ink(&config).page().fg);
     }
 
     #[test]
@@ -4303,7 +4364,7 @@ mod tests {
         // 年 is at cell 6 (那 + the two `=`), and keeps the highlight's ground.
         let highlight = (0..40)
             .map(|x| buffer[(x, 0)].style().bg)
-            .find(|bg| *bg == Some(Color::Rgb(0x54, 0x4c, 0x2c)));
+            .find(|bg| *bg == Some(ink(&config).wash()));
         assert!(highlight.is_some(), "the word tint erased the highlight");
     }
 
@@ -4375,9 +4436,8 @@ mod tests {
         editor.on_key(Key::Char('%'));
         let buffer = render(&editor, &config, 40, 8);
 
-        let (r, g, b) = config.theme.selection;
         let cell = buffer[(4, 0)].style();
-        assert_eq!(cell.bg, Some(Color::Rgb(r, g, b)), "selected");
+        assert_eq!(cell.bg, Some(ink(&config).selection()), "selected");
         assert!(cell.add_modifier.contains(Modifier::BOLD), "and still bold");
     }
 
@@ -4398,8 +4458,10 @@ mod tests {
         assert!(bar.contains('+'), "{bar:?}");
         // It is lit against the bar's own ground, so which one you are in is a
         // thing you can see rather than a key you have to press.
-        let lit = (0..40).any(|x| buffer[(x, 0)].style().bg == Some(Color::Reset));
-        let unlit = (0..40).any(|x| buffer[(x, 0)].style().bg != Some(Color::Reset));
+        // The lit tab carries the page's own ground; the bar behind it is
+        // chrome, one rung off the page.
+        let lit = (0..40).any(|x| buffer[(x, 0)].style().bg == Some(ink(&config).paper()));
+        let unlit = (0..40).any(|x| buffer[(x, 0)].style().bg == Some(ink(&config).chrome()));
         assert!(lit && unlit, "the current tab is not told apart");
 
         // The page starts below the bar, not under it.
@@ -4593,10 +4655,12 @@ mod tests {
         let config = Config::default();
 
         let plain = render_with(&editor, &config, &no_ime(), 90, 24);
+        // Above the footing: the status line is the page turned over and is
+        // inked along its whole length whether or not anything is picked.
         let inked = |b: &ratatui::buffer::Buffer| {
-            (0..b.area.height).any(|y| {
+            (0..b.area.height - 2).any(|y| {
                 (0..b.area.width)
-                    .any(|x| b[(x, y)].style().bg == Some(Color::Rgb(0xcf, 0xc6, 0xa9)))
+                    .any(|x| b[(x, y)].style().bg == Some(ink(&config).text()))
             })
         };
         assert!(!inked(&plain), "nothing picked until Tab is pressed");
@@ -4994,10 +5058,9 @@ mod tests {
         // the selection and must look like it.
         editor.on_key(Key::Char('%'));
         let buf = render_wrapped(&mut editor, &config, 8, 5);
-        let (r, g, b) = config.theme.selection;
         assert_eq!(
             buf[(0, 1)].style().bg,
-            Some(Color::Rgb(r, g, b)),
+            Some(ink(&config).selection()),
             "空行落在選區裏卻看不出來"
         );
     }
