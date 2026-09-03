@@ -2095,7 +2095,7 @@ impl Editor {
             return self.enter_md_table();
         }
         let Some(path) = self.current_buffer().path().map(Path::to_path_buf) else {
-            self.status = "no file, so no schema to read it by".to_string();
+            self.status = "沒有檔名，就沒有 schema 可以照——或者把游標放到 | 表格上".to_string();
             return false;
         };
         let (found, problems) = crate::table::schema_for_reporting(&path);
@@ -2590,6 +2590,32 @@ impl Editor {
         }
     }
 
+    /// Put the rows in order by the cursor's column.
+    fn md_sort(&mut self, descending: bool) {
+        let Some((region, mut parts)) = self.md_parts() else {
+            return;
+        };
+        let (_, cell) = self.md_at(&region);
+        if parts.rows.len() < 3 {
+            self.status = "沒幾行可排".to_string();
+            return;
+        }
+        parts.sort_by(cell, descending);
+        let name = parts
+            .rows
+            .first()
+            .and_then(|r| r.get(cell))
+            .cloned()
+            .unwrap_or_default();
+        // Back to the header, because the row you were standing on is now
+        // somewhere else and pretending otherwise would be a lie.
+        self.md_write(&region, &parts, 0, cell);
+        self.status = format!(
+            "照「{name}」{}排（數字當數字比，其餘按碼位）",
+            if descending { "倒" } else { "順" }
+        );
+    }
+
     /// Change which way this column's cells are set.
     fn md_align(&mut self, align: crate::mdtable::Align) {
         let Some((region, mut parts)) = self.md_parts() else {
@@ -2933,6 +2959,8 @@ impl Editor {
             Key::Char('k') | Key::Up => self.md_move_row(false),
             Key::Char('h') | Key::Left => self.md_move_column(false),
             Key::Char('l') | Key::Right => self.md_move_column(true),
+            Key::Char('s') => self.md_sort(false),
+            Key::Char('S') => self.md_sort(true),
             Key::Char('<') => self.md_align(Align::Left),
             Key::Char('=') => self.md_align(Align::Center),
             Key::Char('>') => self.md_align(Align::Right),
@@ -2945,7 +2973,7 @@ impl Editor {
                 };
             }
             Key::Esc => {}
-            _ => self.status = "t 後面：o O n N d D j k h l < = > t".to_string(),
+            _ => self.status = "t 後面：o O n N d D j k h l s S < = > t".to_string(),
         }
     }
 
@@ -3183,6 +3211,7 @@ impl Editor {
                     ("d D", "刪這行／這欄"),
                     ("j k", "這行下移／上移"),
                     ("h l", "這欄左移／右移"),
+                    ("s S", "照這欄順排／倒排"),
                     ("< = >", "這欄靠左／居中／靠右"),
                     ("t", "重排對齊"),
                 ],
@@ -3445,20 +3474,12 @@ impl Editor {
             return None;
         }
         if c == view.schema.delimiter {
-            return Some(format!(
-                "'{c}' separates cells — it cannot be written inside one"
-            ));
+            return Some(format!("'{c}' 是格與格的分隔——格子裏寫不了它"));
         }
         // A line break would cut the row in two; a tab is not a thing a cell of
         // this kind holds, and it is the one other character that a paste from
         // a spreadsheet brings along.
-        if c == '\n' || c == '\r' {
-            return Some("a line break would cut this row in two".to_string());
-        }
-        if c == '\t' {
-            return Some("a tab cannot be written into a cell".to_string());
-        }
-        None
+        self.cell_refuses_shape(c)
     }
 
     /// Whether the cursor is standing on a table's `|---|` line.
@@ -8629,7 +8650,7 @@ mod tests {
         press(&mut ed, "i");
         ed.on_key(Key::Char(','));
         assert_eq!(ed.current_buffer().text(), before, "refused");
-        assert!(ed.status().contains("separates cells"), "{}", ed.status());
+        assert!(ed.status().contains("分隔"), "{}", ed.status());
 
         // Nor a line break, which would cut the row in half.
         ed.on_key(Key::Enter);
@@ -9578,6 +9599,53 @@ mod tests {
     }
 
     #[test]
+    fn t_s_puts_the_rows_in_order_by_this_column() {
+        // The first thing anyone does to a 年表 or a 人物表.
+        let mut ed = typed("| 年 | 事 |\n| --- | --- |\n| 1900 | 丙 |\n| 19 | 甲 |\n| 200 | 乙 |\n");
+        ed.goto_line(1);
+        assert!(ed.enter_table(), "{}", ed.status());
+        press(&mut ed, "ts");
+        let text = ed.current_buffer().text();
+        let years: Vec<&str> = text
+            .lines()
+            .skip(2)
+            .filter_map(|l| l.split('|').nth(1))
+            .map(str::trim)
+            .collect();
+        assert_eq!(years, ["19", "200", "1900"], "numbers compare as numbers");
+        press(&mut ed, "tS");
+        let text = ed.current_buffer().text();
+        let years: Vec<&str> = text
+            .lines()
+            .skip(2)
+            .filter_map(|l| l.split('|').nth(1))
+            .map(str::trim)
+            .collect();
+        assert_eq!(years, ["1900", "200", "19"]);
+        // The header stayed the header.
+        assert!(text.starts_with("| 年"), "{text}");
+    }
+
+    #[test]
+    fn one_long_cell_does_not_widen_every_row() {
+        // Without a ceiling, one 備註 sentence makes every line of the table
+        // as wide as itself, and a table two hundred columns across is not a
+        // table anybody can read on a page set to forty.
+        let long: String = "很".repeat(40);
+        let mut ed = typed(&format!("| a | b |\n| --- | --- |\n| x | {long} |\n| y | 短 |\n"));
+        ed.goto_line(1);
+        assert!(ed.enter_table(), "{}", ed.status());
+        let text = ed.current_buffer().text();
+        let short = text.lines().nth(3).unwrap();
+        assert!(
+            yumete_cjk::str_width(short) < 45,
+            "the short row stayed short: {short:?}"
+        );
+        // …and nothing was truncated.
+        assert!(text.contains(&long), "the long cell is still whole");
+    }
+
+    #[test]
     fn a_pipe_table_is_never_drawn_as_a_grid() {
         // The renderer switch: a document keeps its layout and its page. A
         // vertical manuscript with a table in it does not turn sideways.
@@ -9844,7 +9912,7 @@ mod tests {
         ed.set_register_for_test("二,土");
         press(&mut ed, "p");
         assert_eq!(ed.current_buffer().text().lines().count(), 4, "refused");
-        assert!(ed.status().contains("separates cells"), "{}", ed.status());
+        assert!(ed.status().contains("分隔"), "{}", ed.status());
 
         std::fs::remove_dir_all(&dir).ok();
     }
