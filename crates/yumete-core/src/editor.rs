@@ -453,7 +453,11 @@ pub struct Editor {
     last_search: String,
     search_forward: bool,
     /// Normal-mode single-key aliases from the config (Feature #23).
-    key_aliases: HashMap<char, char>,
+    key_aliases: HashMap<char, String>,
+    /// Whether a key alias is being played out — so one cannot call itself,
+    /// and so a macro records the key that was pressed rather than the key
+    /// *and* everything it stands for.
+    expanding_alias: bool,
     /// The word segmenter driving `w`/`b`/`e` and the segmentation overlay
     /// (Feature #24). Defaults to [`CategorySegmenter`]; a dictionary segmenter
     /// can be installed via [`Editor::set_segmenter`].
@@ -711,6 +715,7 @@ impl Editor {
             last_search: String::new(),
             search_forward: true,
             key_aliases: HashMap::new(),
+            expanding_alias: false,
             segmenter: Box::new(CategorySegmenter),
             show_segmentation: false,
             count: None,
@@ -3966,7 +3971,7 @@ impl Editor {
     }
 
     /// Install Normal-mode single-key aliases (from the config keymap).
-    pub fn set_key_aliases(&mut self, aliases: HashMap<char, char>) {
+    pub fn set_key_aliases(&mut self, aliases: HashMap<char, String>) {
         self.key_aliases = aliases;
     }
 
@@ -4422,7 +4427,7 @@ impl Editor {
         // Recording happens here rather than in Normal mode's handler, so a
         // macro captures the text typed in Insert and the pattern typed at a
         // prompt too — a macro that can only move is not much of one.
-        if self.recording.is_some() {
+        if self.recording.is_some() && !self.expanding_alias {
             // `q` ends the recording — but only the `q` that is a *command*.
             // A `q` that some half-finished sequence is waiting for is an
             // operand: `fq` is "find q", and dropping its second half left the
@@ -4550,10 +4555,26 @@ impl Editor {
 
         // Apply user key aliases (config `[keys.normal]`) to command keys only;
         // pending operator targets above are taken literally.
+        //
+        // The right-hand side may be several keys — `"J" = "gJ"` puts join
+        // back — so an alias that is not one character is *played* rather than
+        // swapped, and everything downstream sees the keys it would have seen
+        // if they had been typed. `self.replaying` stops an alias for a key
+        // that its own expansion uses from calling itself forever.
         let key = match key {
-            Key::Char(c) => match self.key_aliases.get(&c) {
-                Some(&mapped) => Key::Char(mapped),
-                None => key,
+            Key::Char(c) => match self.key_aliases.get(&c).cloned() {
+                Some(keys) if keys.chars().count() == 1 => {
+                    Key::Char(keys.chars().next().unwrap())
+                }
+                Some(keys) if !self.expanding_alias => {
+                    self.expanding_alias = true;
+                    for c in keys.chars() {
+                        self.on_key(Key::Char(c));
+                    }
+                    self.expanding_alias = false;
+                    return;
+                }
+                _ => key,
             },
             other => other,
         };
@@ -10497,13 +10518,40 @@ mod tests {
 
         // Remap `q` to behave as `d` (delete).
         let mut aliases = std::collections::HashMap::new();
-        aliases.insert('q', 'd');
+        aliases.insert('q', "d".to_string());
         ed.set_key_aliases(aliases);
 
         ed.on_key(Key::Char('g'));
         ed.on_key(Key::Char('g'));
         ed.on_key(Key::Char('q')); // aliased to `d` → deletes 'a'
         assert_eq!(ed.current_buffer().text(), "bc");
+    }
+
+    #[test]
+    fn a_key_alias_may_name_a_sequence() {
+        // The defaults this editor chose on purpose — `J`/`K` paging a book
+        // rather than joining lines — are the ones a Vim reader wants back,
+        // and what they want back is `gJ`. One config line instead of leaving.
+        let mut ed = typed("上一句\n下一句\n");
+        ed.goto_line(1);
+        let mut aliases = std::collections::HashMap::new();
+        aliases.insert('J', "gJ".to_string());
+        ed.set_key_aliases(aliases);
+        ed.on_key(Key::Char('J'));
+        assert_eq!(ed.current_buffer().text(), "上一句下一句\n");
+    }
+
+    #[test]
+    fn an_alias_that_names_itself_does_not_spin() {
+        let mut ed = typed("abc\n");
+        ed.goto_line(1);
+        let mut aliases = std::collections::HashMap::new();
+        // `x` stands for `xx` — which stands for `xx`, and so on.
+        aliases.insert('x', "xx".to_string());
+        ed.set_key_aliases(aliases);
+        ed.on_key(Key::Char('x'));
+        // It ran once, one level deep, and came back.
+        assert!(!ed.current_buffer().text().is_empty());
     }
 
     #[test]

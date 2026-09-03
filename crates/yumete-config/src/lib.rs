@@ -358,9 +358,14 @@ impl SyntaxConfig {
 /// Keymap overrides.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct KeyConfig {
-    /// Normal-mode single-key aliases: pressing the key on the left behaves as
-    /// pressing the key on the right.
-    pub normal: HashMap<char, char>,
+    /// Normal-mode aliases: pressing the key on the left behaves as pressing
+    /// **the keys** on the right.
+    ///
+    /// A sequence rather than a single key, because the defaults this editor
+    /// chose on purpose — `J`/`K` paging a page of a book rather than joining
+    /// lines — are exactly the ones a Vim reader wants back, and what they
+    /// want back is `gJ`. One config line instead of leaving.
+    pub normal: HashMap<char, String>,
 }
 
 /// The fully-resolved configuration.
@@ -862,12 +867,13 @@ impl RawConfig {
             config.panel.rounded = rounded;
         }
         for (k, v) in self.keys.normal {
-            // Only single-character aliases are meaningful here.
+            // The key on the left is one key — there is no key sequence to
+            // *press* here, only one to be sent — and the right may be any
+            // number of them.
             let mut ks = k.chars();
-            let mut vs = v.chars();
-            if let (Some(from), Some(to)) = (ks.next(), vs.next()) {
-                if ks.next().is_none() && vs.next().is_none() {
-                    config.keys.normal.insert(from, to);
+            if let Some(from) = ks.next() {
+                if ks.next().is_none() && !v.is_empty() {
+                    config.keys.normal.insert(from, v);
                 }
             }
         }
@@ -933,11 +939,15 @@ mod tests {
             r#"
             [keys.normal]
             "j" = "h"
+            "J" = "gJ"
             "toolong" = "x"
             "#,
         );
-        assert_eq!(c.keys.normal.get(&'j'), Some(&'h'));
-        // Multi-character keys are ignored.
+        assert_eq!(c.keys.normal.get(&'j').map(String::as_str), Some("h"));
+        // The right-hand side may be a whole sequence: one config line puts
+        // vi's join back on `J` without the editor keeping two spellings.
+        assert_eq!(c.keys.normal.get(&'J').map(String::as_str), Some("gJ"));
+        // Multi-character keys are ignored — there is no sequence to press.
         assert!(!c.keys.normal.contains_key(&'t'));
     }
 
@@ -1062,8 +1072,8 @@ mod tests {
         // ...but keeps the global line_numbers it didn't touch...
         assert_eq!(c.editor.line_numbers, LineNumbers::Absolute);
         // ...and the keymaps are merged.
-        assert_eq!(c.keys.normal.get(&'a'), Some(&'b'));
-        assert_eq!(c.keys.normal.get(&'c'), Some(&'d'));
+        assert_eq!(c.keys.normal.get(&'a').map(String::as_str), Some("b"));
+        assert_eq!(c.keys.normal.get(&'c').map(String::as_str), Some("d"));
     }
 
     #[test]
