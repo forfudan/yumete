@@ -140,8 +140,15 @@ impl Range {
 }
 
 /// "The text in this cell names a row of this same table."
+///
+/// A **link**, and it was called `jump` until it was noticed that a jump is
+/// only one of the two directions it is read in. `Enter` follows it forward —
+/// 「⿰木目 is made of 木 and 目, and 木 has a row of its own」 — and backwards:
+/// *who names this?*, which the manual has always described in the same breath
+/// as 「這不是跳轉，是搜索」. One relation, two questions, and the name has to
+/// be the relation.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Jump {
+pub struct Link {
     /// The columns whose contents are keys.
     pub from: Vec<String>,
     /// The column those keys are found in.
@@ -154,7 +161,7 @@ pub struct Schema {
     /// The file names this schema is for.
     pub files: Vec<String>,
     /// The column that names a row — what the detail panel titles it by, and
-    /// what a jump lands on.
+    /// where a link lands.
     pub key: Option<String>,
     /// What separates two cells.
     pub delimiter: char,
@@ -162,7 +169,7 @@ pub struct Schema {
     pub header: bool,
     pub columns: Vec<Column>,
     pub details: Vec<Detail>,
-    pub jump: Option<Jump>,
+    pub link: Option<Link>,
     pub ranges: HashMap<String, Vec<Range>>,
 }
 
@@ -239,15 +246,15 @@ impl Schema {
                 compute,
             });
         }
-        let jump = match t.jump {
+        let link = match t.link {
             None => None,
             Some(j) => {
                 for name in j.from.iter().chain(std::iter::once(&j.to)) {
                     if !names.contains(&name.as_str()) {
-                        return Err(format!("jump names '{name}', which is not a column"));
+                        return Err(format!("link names '{name}', which is not a column"));
                     }
                 }
-                Some(Jump {
+                Some(Link {
                     from: j.from,
                     to: j.to,
                 })
@@ -269,7 +276,7 @@ impl Schema {
                 })
                 .collect(),
             details,
-            jump,
+            link,
             ranges,
         })
     }
@@ -279,7 +286,7 @@ impl Schema {
     /// What `yumete -t` falls back on: every CSV already says what its columns
     /// are on its first line, so a file nobody has written a schema for can
     /// still be read as a grid. It gets the names and nothing else — no
-    /// labels, no computed fields, no jumps, because those are knowledge about
+    /// labels, no computed fields, no links, because those are knowledge about
     /// the data that only a person has.
     pub fn from_header(line: &str, delimiter: char) -> Schema {
         let columns: Vec<Column> = cells(line, delimiter)
@@ -308,7 +315,7 @@ impl Schema {
             header: true,
             columns,
             details: Vec::new(),
-            jump: None,
+            link: None,
             ranges: HashMap::new(),
         }
     }
@@ -375,7 +382,7 @@ pub fn schema_for(path: &Path) -> Option<(PathBuf, Schema)> {
 /// The same, and what went wrong with the schemas that did not work.
 ///
 /// A schema with a typo in it used to be dropped on the floor: the file opened
-/// with the twenty-eight labels, both computed fields and the whole jump
+/// with the twenty-eight labels, both computed fields and the whole link
 /// silently missing, and the only clue was that the status line said 「照首行」
 /// where it should have said the schema's name. The parser has a good message
 /// for every one of these; this is how it reaches a person.
@@ -462,7 +469,7 @@ struct RawTable {
     column: Vec<RawColumn>,
     #[serde(default)]
     detail: Vec<RawDetail>,
-    jump: Option<RawJump>,
+    link: Option<RawLink>,
 }
 
 /// `file = "a.csv"` and `file = ["a.csv", "b.csv"]` both read.
@@ -501,7 +508,7 @@ struct RawDetail {
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
-struct RawJump {
+struct RawLink {
     from: Vec<String>,
     to: String,
 }
@@ -536,7 +543,7 @@ compute = "codepoint(char)"
 name = "block"
 compute = "range_label(char, cjk_blocks)"
 
-[table.jump]
+[table.link]
 from = ["ids_y", "ids_g"]
 to = "char"
 
@@ -559,8 +566,8 @@ to = "char"
         assert_eq!(s.index_of("ids_y"), Some(1));
         assert_eq!(s.key.as_deref(), Some("char"), "what names a row");
         assert_eq!(
-            s.jump,
-            Some(Jump {
+            s.link,
+            Some(Link {
                 from: vec!["ids_y".into(), "ids_g".into()],
                 to: "char".into()
             })
@@ -607,7 +614,7 @@ to = "char"
         .contains("no such function"));
         assert!(bad(
             "[table]\nfile = 'a.csv'\n[[table.column]]\nname = 'c'\n\
-             [table.jump]\nfrom = ['c']\nto = 'nope'"
+             [table.link]\nfrom = ['c']\nto = 'nope'"
         )
         .contains("not a column"));
         // Range tables have to exist before something names one.
@@ -628,7 +635,7 @@ to = "char"
             vec!["char", "ids_y", "3", "block"],
             "a blank header cell is named by its position, not left nameless"
         );
-        assert!(s.details.is_empty() && s.jump.is_none(), "names only");
+        assert!(s.details.is_empty() && s.link.is_none(), "names only");
     }
 
     #[test]
