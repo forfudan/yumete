@@ -480,6 +480,10 @@ pub struct Editor {
     /// (Feature #24). Defaults to [`CategorySegmenter`]; a dictionary segmenter
     /// can be installed via [`Editor::set_segmenter`].
     segmenter: Box<dyn Segmenter>,
+    /// The project's own words, shared with the segmenter wrapped around the
+    /// one in force — so reloading the list reaches a segmenter already handed
+    /// out.
+    project_words: std::rc::Rc<RefCell<yumete_cjk::WordList>>,
     /// Whether the segmentation overlay (word background tint) is shown.
     show_segmentation: bool,
     /// A pending count prefix, so `3w` moves three words (Helix counts).
@@ -758,6 +762,7 @@ impl Editor {
             key_aliases: HashMap::new(),
             expanding_alias: false,
             segmenter: Box::new(CategorySegmenter),
+            project_words: std::rc::Rc::new(RefCell::new(yumete_cjk::WordList::default())),
             show_segmentation: false,
             count: None,
             edit_keys: Vec::new(),
@@ -1796,6 +1801,10 @@ impl Editor {
                 Ok(CommandOutcome::Continue)
             }
             Command::WriteAll => self.write_all(),
+            Command::ReloadWords => {
+                self.reload_project_words();
+                Ok(CommandOutcome::Continue)
+            }
             Command::SetBands(n) => {
                 self.set_bands(n);
                 Ok(CommandOutcome::Continue)
@@ -5146,7 +5155,55 @@ impl Editor {
     /// words; the default [`yumete_cjk::CategorySegmenter`] treats each as one.
     pub fn set_segmenter(&mut self, segmenter: Box<dyn Segmenter>) {
         self.segment_cache.borrow_mut().clear();
-        self.segmenter = segmenter;
+        // The project's own words go on top of whatever was chosen, so the
+        // book's names survive a change of dictionary.
+        self.segmenter = Box::new(yumete_cjk::WithWords::new(
+            segmenter,
+            std::rc::Rc::clone(&self.project_words),
+        ));
+    }
+
+    /// Read `.yumete/words.txt` again, and say how many words it holds.
+    ///
+    /// The name on every page of a novel is the one word no dictionary has —
+    /// 阿寧 segments as `[阿][寧]`, so `w` steps through it a character at a
+    /// time and the overlay tints it as two words. Found by walking **up from
+    /// the file being edited**, the way a table's schema is: the list belongs
+    /// to the manuscript, not to the session that opened it.
+    pub fn reload_project_words(&mut self) {
+        let from = self
+            .current_buffer()
+            .path()
+            .and_then(|p| p.parent().map(Path::to_path_buf))
+            .or_else(|| std::env::current_dir().ok());
+        let mut found: Option<PathBuf> = None;
+        let mut dir = from.as_deref();
+        while let Some(d) = dir {
+            let candidate = d.join(".yumete").join("words.txt");
+            if candidate.is_file() {
+                found = Some(candidate);
+                break;
+            }
+            dir = d.parent();
+        }
+        let (list, where_from) = match found.as_ref().and_then(|p| {
+            std::fs::read_to_string(p).ok().map(|t| (t, p.clone()))
+        }) {
+            Some((text, path)) => (yumete_cjk::WordList::from_text(&text), Some(path)),
+            None => (yumete_cjk::WordList::default(), None),
+        };
+        let n = list.len();
+        *self.project_words.borrow_mut() = list;
+        self.segment_cache.borrow_mut().clear();
+        self.status = match where_from {
+            Some(path) => format!("{n} 個本項目的詞：{}", path.display()),
+            None => "沒有找到 .yumete/words.txt——本項目的詞寫在那裏".to_string(),
+        };
+    }
+
+    /// How many project words are in force.
+    pub fn project_word_count(&self) -> usize {
+        self.project_words.borrow().len()
     }
 
     /// Whether the segmentation overlay (word background tint) is shown.
@@ -12159,6 +12216,32 @@ mod tests {
             "沒有那個人。\n",
             "a file with no hit is not touched"
         );
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn a_book_can_teach_the_editor_its_own_names() {
+        // 阿寧 — the name on every page — is the one word no dictionary has,
+        // so `w` stepped through it a character at a time and the overlay
+        // tinted it as two words.
+        let dir = std::env::temp_dir().join(format!("yumete-words-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(dir.join(".yumete")).unwrap();
+        let file = dir.join("ch01.md");
+        std::fs::write(&file, "阿寧走了。\n").unwrap();
+
+        let mut ed = Editor::new();
+        ed.set_segmenter(Box::new(DictionarySegmenter::builtin(0)));
+        ed.open_file(&file).unwrap();
+        let before = ed.segment_line(0);
+        assert!(before.len() >= 2, "two characters, two words: {before:?}");
+
+        std::fs::write(dir.join(".yumete").join("words.txt"), "# 人物\n阿寧\n").unwrap();
+        ed.reload_project_words();
+        assert_eq!(ed.project_word_count(), 1, "{}", ed.status());
+        let after = ed.segment_line(0);
+        assert_eq!(after[0], (0, 2), "one word now: {after:?}");
+        assert!(ed.status().contains("words.txt"), "{}", ed.status());
         std::fs::remove_dir_all(&dir).ok();
     }
 
