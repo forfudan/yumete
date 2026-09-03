@@ -53,6 +53,7 @@ yumete                 從空白緩衝區開始
 
   -v, --vertical       這次以竪排（縱書）開啟
   -H, --horizontal     強制橫排
+  -t, --table          當表格讀（CSV 沒有 schema 也行，用首行當表頭）
   -p, --preview        只打印內容，不進編輯器
   -h, --help           按鍵與命令一覽
   -V, --version
@@ -1334,12 +1335,17 @@ GB18030 的舊稿會被擋下並告訴你用 `iconv` 轉，而不是丟一句 Ru
 | `:42` `:goto` `:g` *n* | 跳到第 *n* 行 |
 | `:recover`（`:recover!`） | 載入／丟棄搶救稿 |
 | `:undo` `:u` / `:redo` | 撤銷／重做 |
-| `:s/舊/新/[g]` | 替換本行；`:%s/…` 替換全篇 |
+| `:s/舊/新/[gin]` | 取代：選區內；`%s` 全篇、`1,40s` 指定行；分隔符可換 |
+| `:replace` *新的* | 把剛才 `:grep` 找到的都換掉（不寫盤，`:wa` 才寫） |
+| `:wa` | 存下所有改過的檔案 |
+| `:row` *字* | 跳到表格裏叫這個名字的那一行 |
+| `:table`（`off`、`check`） | 按格子編輯：CSV 整檔，或游標所在的 `|` 表格 |
+| `:table check` | 把整張表看一遍，列出有問題的行 |
+| `:clipboard yank`／`paste` | 和系統剪貼簿交換（`空格 y`／`空格 p`） |
 | `:segment` `:seg` | 分詞著色開關 |
 | `:layout` `:lay` | 橫排／竪排互換 |
 | `:layout vertical`／`horizontal` | 直接指定 |
 | `:hanging` | 標點旁置開關 |
-| `:markup` `:md` | 標記著色開關 |
 | `:syntax` `:syn` [`markdown`｜`typst`] | 這個檔案是哪種標記 |
 | `:render off`／`on`／`full` | 畫面上顯示多少「結果」：原文／著色／所見即所得 |
 | `:preview`（`off`） | 交給 tinymist／HTML，在瀏覽器裏看 |
@@ -1356,7 +1362,7 @@ GB18030 的舊稿會被擋下並告訴你用 `iconv` 轉，而不是丟一句 Ru
 | `:yume` | 現在用的是哪個方案、碼表從哪來、拆分開沒開 |
 | `:yume scheme` [*方案*] | 開始打字：載入碼表（不寫名字用配置那個） |
 | `:yume builtin` | 強制用出廠自帶的靈明碼表 |
-| `:ruby` 及相關 | 見 5.4–5.5 |
+| `:ruby` 及相關 | 見 5.4、5.5 |
 
 ---
 

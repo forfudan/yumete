@@ -135,8 +135,8 @@ Early development, but already an interactive modal editor. Implemented so far:
   how a writer loses track of which version they are reading.
 
 - **#76 / #78 / #80 Getting around, and getting told** — `gn`/`gp` and
-  `:bn`/`:bp` switch between the open files, each keeping its own cursor and its
-  own undo history; `10gg`, `:42` and `:goto` go to a line; `:count` reports 字,
+  `:buffer next`/`previous` switch between the open files, each keeping its own
+  cursor and its own undo history; `10gg`, `:42` and `:goto` go to a line; `:count` reports 字,
   字符 and 段 (a selection counts the selection); `:wq` saves and quits, checking
   *every* open file for unsaved changes. A config file that does not parse now
   says which key is wrong instead of being dropped in silence.

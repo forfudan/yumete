@@ -957,7 +957,7 @@ keys are unaffected.
 ```toml
 [editor]
 layout = "vertical"   # "horizontal" (default) | "vertical"
-zong_length = 32      # graphemes per 縱; clamped to 4–64
+zong_length = 0       # graphemes per 縱; 0 = whatever the window gives (#125)
 zong_gap = 1          # half-width cells between two 縱; 0–4
 ```
 
@@ -975,10 +975,12 @@ horizontal layout, and it is deliberately the *only* such term — the layouts
 themselves stay `horizontal` and `vertical`.
 
 A 縱 is visual, not a buffer line: a paragraph soft-wraps into as many 縱 as it
-needs, `zong_length` graphemes at a time (default 32, the upper end of the
-comfortable 24–32 range for prose — past that the eye loses the return sweep to
-the top of the next 縱). The wrap length is a typographic choice, so a tall
-terminal never *raises* it; only a terminal too short to hold it lowers it. One
+needs, `zong_length` graphemes at a time — **0 by default, meaning whatever
+the window gives** (#125): how long a 縱 runs is a decision about the book, and
+the editor has no business making it. Set to a number (24–32 is the comfortable
+range for prose; past that the eye loses the return sweep to the top of the next
+縱) it is a typographic choice, so a tall terminal never *raises* it; only a
+terminal too short to hold it lowers it. One
 row beyond the 縱 is kept spare for the end-of-paragraph caret. Adjacent 縱 are
 one half-width cell apart (`zong_gap`), giving a half-em 縱距.
 

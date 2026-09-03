@@ -3723,17 +3723,17 @@ mod tests {
         editor.on_key(Key::Char('y'));
         let buffer = render(&editor, &config, 100, 10);
         let hint: String = (0..100u16).map(|x| at(&buffer, x, 8)).collect();
-        assert!(hint.contains("yanked"), "the message is above: {hint:?}");
+        assert!(hint.contains("取"), "the message is above: {hint:?}");
         let status = row(&buffer, 100);
         assert!(status.contains("Ln 1, Col 3"), "position kept: {status:?}");
-        assert!(!status.contains("yanked"), "and not repeated: {status:?}");
+        assert!(!status.contains("取"), "and not repeated: {status:?}");
 
         // With the hint row off the message comes back to the status line —
         // a message nobody can see is not a message.
         let mut plain = config.clone();
         plain.editor.hints = false;
         let status = row(&render(&editor, &plain, 100, 10), 100);
-        assert!(status.contains("yanked") && status.contains("Ln 1, Col 3"), "{status:?}");
+        assert!(status.contains("取") && status.contains("Ln 1, Col 3"), "{status:?}");
     }
 
     #[test]
