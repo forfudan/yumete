@@ -1021,11 +1021,13 @@ fn draw(
 
     // In vertical layout the cursor is a block drawn into the page: a hardware
     // cursor is one cell wide and would sit lopsided inside a two-cell 縱.
-    if let Some((_, text)) = editor.prompt() {
+    if let Some((_, _)) = editor.prompt() {
         // Measured in cells, not characters: a Chinese search pattern is twice
-        // as wide as it is long.
-        let col =
-            1 + yumete_cjk::str_width(text) + yumete_cjk::str_width(&prompt_preedit(editor, ime));
+        // as wide as it is long — and up to the **caret**, not to the end of
+        // the line, now that the prompt can be edited in the middle.
+        let col = 1
+            + yumete_cjk::str_width(&editor.prompt_before_caret())
+            + yumete_cjk::str_width(&prompt_preedit(editor, ime));
         frame.set_cursor_position(Position::new(status_area.x + col as u16, status_area.y));
     } else if editor.layout() == WritingLayout::Horizontal || editor.mode() == Mode::Insert {
         // Vertically the terminal's cursor is shown only in Insert, where it is

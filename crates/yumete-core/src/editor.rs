@@ -407,6 +407,18 @@ pub struct Editor {
     goal_column: usize,
     /// The text being typed after `:` / `/` (without the leading punctuation).
     command_line: String,
+    /// Where the caret is on the prompt, in characters from its start.
+    ///
+    /// The prompt used to be a `String` you could only add to and backspace
+    /// off the end of, so a typo in a long `:%s` meant backspacing through all
+    /// of it.
+    command_caret: usize,
+    /// The `:` lines run this session, newest last.
+    command_history: Vec<String>,
+    /// The `/` patterns searched for this session, newest last.
+    search_history: Vec<String>,
+    /// How far back through a history `Up` has walked.
+    history_at: Option<usize>,
     /// A transient message for the status line (errors, confirmations).
     status: String,
     /// Selection anchor (char index). The selection spans `anchor..cursor` (in
@@ -708,6 +720,10 @@ impl Editor {
             cursor: 0,
             goal_column: 0,
             command_line: String::new(),
+            command_caret: 0,
+            command_history: Vec::new(),
+            search_history: Vec::new(),
+            history_at: None,
             status: String::new(),
             anchor: 0,
             pending: Pending::None,
@@ -1984,6 +2000,17 @@ impl Editor {
         &self.command_line
     }
 
+    /// How far into the prompt the caret is, in characters.
+    pub fn prompt_caret(&self) -> usize {
+        self.command_caret.min(self.command_line.chars().count())
+    }
+
+    /// The prompt's text up to the caret — what the front end measures to put
+    /// the terminal's cursor in the right cell.
+    pub fn prompt_before_caret(&self) -> String {
+        self.command_line.chars().take(self.prompt_caret()).collect()
+    }
+
     /// The active prompt (Command or Search mode): its leading character and the
     /// text typed so far, or `None` when no prompt is open.
     pub fn prompt(&self) -> Option<(char, &str)> {
@@ -2034,6 +2061,7 @@ impl Editor {
     fn adopt_ghost(&mut self) {
         let ghost = self.prompt_ghost();
         self.command_line.push_str(&ghost);
+        self.command_caret = self.command_line.chars().count();
     }
 
     /// The commands to offer for the open command line, and which one Tab has
@@ -5037,6 +5065,7 @@ impl Editor {
         // the mode is collecting them, not always into the buffer.
         if matches!(self.mode, Mode::Command | Mode::Search | Mode::Ruby) {
             self.command_line.push_str(text);
+            self.command_caret = self.command_line.chars().count();
             return;
         }
         self.snapshot();
@@ -5499,12 +5528,14 @@ impl Editor {
             Key::Char('!') => {
                 self.mode = Mode::Command;
                 self.command_line = "pipe ".to_string();
+                self.command_caret = self.command_line.chars().count();
                 self.completion = None;
             }
             Key::Char('/') => {
                 self.mode = Mode::Search;
                 self.search_forward = true;
                 self.command_line.clear();
+                self.command_caret = self.command_line.chars().count();
                 // A new search takes `n` back from the table's.
                 self.table_hits.clear();
             }
@@ -5512,6 +5543,7 @@ impl Editor {
                 self.mode = Mode::Search;
                 self.search_forward = false;
                 self.command_line.clear();
+                self.command_caret = self.command_line.chars().count();
                 self.table_hits.clear();
             }
             // In a table with a search open, `n` walks *its* answers: they are
@@ -5532,6 +5564,7 @@ impl Editor {
             Key::Char(':') => {
                 self.mode = Mode::Command;
                 self.command_line.clear();
+                self.command_caret = self.command_line.chars().count();
             }
             // Match mode (Helix `m`): matching bracket, textobjects, surround.
             Key::Char('m') => self.pending = Pending::Match,
@@ -5712,11 +5745,13 @@ impl Editor {
             Key::Char('/') => {
                 self.mode = Mode::Command;
                 self.command_line = "grep ".to_string();
+                self.command_caret = self.command_line.chars().count();
                 self.completion = None;
             }
             Key::Char('?') => {
                 self.mode = Mode::Command;
                 self.command_line.clear();
+                self.command_caret = self.command_line.chars().count();
                 self.completion = None;
             }
             Key::Char('y') => self.copy_to_clipboard(),
@@ -6404,58 +6439,143 @@ impl Editor {
         if !matches!(key, Key::Tab | Key::BackTab) {
             self.completion = None;
         }
+        // Anything but Up/Down leaves the history where it was: walking back
+        // to a line and then editing it is editing *that line*, not browsing.
+        if !matches!(key, Key::Up | Key::Down) {
+            self.history_at = None;
+        }
         match key {
             Key::Tab => self.cycle_completion(1),
             Key::BackTab => self.cycle_completion(-1),
-            Key::Esc => {
-                self.command_line.clear();
-                self.mode = Mode::Normal;
-            }
-            Key::Backspace => {
-                if self.command_line.pop().is_none() {
-                    self.mode = Mode::Normal;
-                }
-            }
-            Key::Char(c) => self.command_line.push(c),
+            Key::Esc => self.close_prompt(),
+            Key::Up | Key::Down => self.walk_history(key == Key::Up, false),
             Key::Enter => {
                 let line = std::mem::take(&mut self.command_line);
+                self.command_caret = 0;
                 self.mode = Mode::Normal;
+                remember_line(&mut self.command_history, &line);
                 match self.execute(&line) {
                     Ok(CommandOutcome::Quit) => return KeyOutcome::Quit,
                     Ok(CommandOutcome::Continue) => {}
                     Err(err) => self.status = err.to_string(),
                 }
             }
-            _ => {}
+            other => self.edit_prompt(other),
         }
         KeyOutcome::Continue
     }
 
-    fn on_search_key(&mut self, key: Key) {
+    /// Shut the prompt and forget what was on it.
+    fn close_prompt(&mut self) {
+        self.command_line.clear();
+        self.command_caret = 0;
+        self.history_at = None;
+        self.mode = Mode::Normal;
+    }
+
+    /// The keys that edit a prompt rather than submit or cancel it.
+    ///
+    /// One set for `:` and `/` both: a search pattern is as long and as easy to
+    /// mistype as a command, and the same fingers type them.
+    fn edit_prompt(&mut self, key: Key) {
+        let len = self.command_line.chars().count();
+        self.command_caret = self.command_caret.min(len);
+        let byte = |line: &str, at: usize| -> usize {
+            line.char_indices().nth(at).map(|(i, _)| i).unwrap_or(line.len())
+        };
         match key {
-            Key::Esc => {
-                self.command_line.clear();
-                self.mode = Mode::Normal;
+            Key::Char(c) => {
+                let at = byte(&self.command_line, self.command_caret);
+                self.command_line.insert(at, c);
+                self.command_caret += 1;
             }
             Key::Backspace => {
-                if self.command_line.pop().is_none() {
-                    self.mode = Mode::Normal;
+                if self.command_caret == 0 {
+                    // Backspacing past the start leaves the prompt: the line is
+                    // the only thing there was to go back over.
+                    if len == 0 {
+                        self.close_prompt();
+                    }
+                    return;
                 }
+                let from = byte(&self.command_line, self.command_caret - 1);
+                let to = byte(&self.command_line, self.command_caret);
+                self.command_line.replace_range(from..to, "");
+                self.command_caret -= 1;
             }
+            Key::Left => self.command_caret = self.command_caret.saturating_sub(1),
+            Key::Right => self.command_caret = (self.command_caret + 1).min(len),
+            Key::Home | Key::Ctrl('a') => self.command_caret = 0,
+            Key::End | Key::Ctrl('e') => self.command_caret = len,
+            // The same two keys Insert has, and every terminal prompt.
+            Key::Ctrl('w') => {
+                let head: String = self.command_line.chars().take(self.command_caret).collect();
+                let kept = head.trim_end();
+                let cut = kept.rfind(|c: char| c.is_whitespace()).map_or(0, |i| i + 1);
+                let keep: String = head.chars().take(kept[..cut].chars().count()).collect();
+                let tail: String = self.command_line.chars().skip(self.command_caret).collect();
+                self.command_caret = keep.chars().count();
+                self.command_line = format!("{keep}{tail}");
+            }
+            Key::Ctrl('u') => {
+                self.command_line = self.command_line.chars().skip(self.command_caret).collect();
+                self.command_caret = 0;
+            }
+            _ => {}
+        }
+    }
+
+    /// Walk back through what has been typed at this prompt before.
+    fn walk_history(&mut self, back: bool, search: bool) {
+        let history = match search {
+            true => &self.search_history,
+            false => &self.command_history,
+        };
+        if history.is_empty() {
+            return;
+        }
+        let at = match (self.history_at, back) {
+            (None, true) => history.len().saturating_sub(1),
+            (None, false) => return,
+            (Some(0), true) => 0,
+            (Some(n), true) => n - 1,
+            (Some(n), false) if n + 1 < history.len() => n + 1,
+            // Forward past the newest line gives back an empty prompt, which is
+            // where `Up` was pressed from.
+            (Some(_), false) => {
+                self.history_at = None;
+                self.command_line.clear();
+                self.command_caret = 0;
+                return;
+            }
+        };
+        self.history_at = Some(at);
+        self.command_line = history[at].clone();
+        self.command_caret = self.command_line.chars().count();
+    }
+
+    fn on_search_key(&mut self, key: Key) {
+        if !matches!(key, Key::Up | Key::Down) {
+            self.history_at = None;
+        }
+        match key {
+            Key::Esc => self.close_prompt(),
             // Tab takes the rest of the last pattern, so searching for the same
             // thing again is a keystroke rather than retyping it.
             Key::Tab => self.adopt_ghost(),
-            Key::Char(c) => self.command_line.push(c),
+            Key::Up | Key::Down => self.walk_history(key == Key::Up, true),
             Key::Enter => {
                 let pattern = std::mem::take(&mut self.command_line);
+                self.command_caret = 0;
                 self.mode = Mode::Normal;
+                remember_line(&mut self.search_history, &pattern);
                 if !pattern.is_empty() {
                     self.last_search = pattern;
                 }
                 let forward = self.search_forward;
                 self.repeat_search(forward);
             }
-            _ => {}
+            other => self.edit_prompt(other),
         }
     }
 
@@ -7069,6 +7189,7 @@ impl Editor {
             return;
         }
         self.command_line = format!("{}{chosen}", &prefix[..start.min(prefix.len())]);
+        self.command_caret = self.command_line.chars().count();
         self.completion = Some((prefix, next));
     }
 
@@ -7086,6 +7207,7 @@ impl Editor {
 
         if let Some(group) = crate::ruby::group_at(&chars, col) {
             self.command_line = group.reading_text(&chars).iter().collect();
+            self.command_caret = self.command_line.chars().count();
             self.ruby_target = Some(RubyTarget::Existing {
                 span: (line_start + group.start, line_start + group.end),
                 base: (line_start + group.base.0, line_start + group.base.1),
@@ -7103,6 +7225,7 @@ impl Editor {
             return;
         }
         self.command_line.clear();
+        self.command_caret = self.command_line.chars().count();
         self.ruby_target = Some(RubyTarget::New { span: (start, end) });
         self.mode = Mode::Ruby;
     }
@@ -7111,6 +7234,7 @@ impl Editor {
         match key {
             Key::Esc => {
                 self.command_line.clear();
+                self.command_caret = self.command_line.chars().count();
                 self.ruby_target = None;
                 self.mode = Mode::Normal;
             }
@@ -7970,6 +8094,23 @@ impl Editor {
 impl Default for Editor {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+/// How many lines of one prompt's history are kept.
+const HISTORY: usize = 100;
+
+/// Add a line to a prompt's history, newest last.
+///
+/// An empty line is not history, and neither is the same line twice: pressing
+/// `Up` should walk through *different* things you have typed.
+fn remember_line(history: &mut Vec<String>, line: &str) {
+    if line.trim().is_empty() || history.last().map(String::as_str) == Some(line) {
+        return;
+    }
+    history.push(line.to_string());
+    if history.len() > HISTORY {
+        history.remove(0);
     }
 }
 
@@ -11745,6 +11886,69 @@ mod tests {
         // A key that *is* bound is not second-guessed.
         ed.on_key(Key::Char('x'));
         assert!(!ed.status().contains("gl"));
+    }
+
+    #[test]
+    fn the_prompt_can_be_edited_in_the_middle() {
+        // A typo in a long `:%s` used to mean backspacing through all of it.
+        let mut ed = typed("一二三\n");
+        ed.on_key(Key::Char(':'));
+        for c in "s/x/y/".chars() {
+            ed.on_key(Key::Char(c));
+        }
+        assert_eq!(ed.prompt(), Some((':', "s/x/y/")));
+        // Back over the closing `/`, fix the letter, and the tail is still there.
+        ed.on_key(Key::Left);
+        ed.on_key(Key::Backspace);
+        ed.on_key(Key::Char('z'));
+        assert_eq!(ed.prompt(), Some((':', "s/x/z/")));
+        assert_eq!(ed.prompt_caret(), 5, "the caret stayed where the edit was");
+        ed.on_key(Key::Home);
+        assert_eq!(ed.prompt_caret(), 0);
+        ed.on_key(Key::End);
+        assert_eq!(ed.prompt_caret(), 6);
+        // `C-w` takes a word back, `C-u` the whole line.
+        ed.on_key(Key::Esc);
+        ed.on_key(Key::Char(':'));
+        for c in "sh wc -w".chars() {
+            ed.on_key(Key::Char(c));
+        }
+        ed.on_key(Key::Ctrl('w'));
+        assert_eq!(ed.prompt(), Some((':', "sh wc ")));
+        ed.on_key(Key::Ctrl('u'));
+        assert_eq!(ed.prompt(), Some((':', "")));
+    }
+
+    #[test]
+    fn the_prompt_remembers_what_was_typed_at_it() {
+        let mut ed = typed("一二三\n");
+        for line in ["toc", "w"] {
+            ed.on_key(Key::Char(':'));
+            for c in line.chars() {
+                ed.on_key(Key::Char(c));
+            }
+            ed.on_key(Key::Enter);
+        }
+        ed.on_key(Key::Char(':'));
+        ed.on_key(Key::Up);
+        assert_eq!(ed.prompt(), Some((':', "w")), "the newest first");
+        ed.on_key(Key::Up);
+        assert_eq!(ed.prompt(), Some((':', "toc")));
+        ed.on_key(Key::Up);
+        assert_eq!(ed.prompt(), Some((':', "toc")), "and it stops at the oldest");
+        ed.on_key(Key::Down);
+        assert_eq!(ed.prompt(), Some((':', "w")));
+        ed.on_key(Key::Down);
+        assert_eq!(ed.prompt(), Some((':', "")), "back to the empty line");
+        ed.on_key(Key::Esc);
+
+        // The search prompt keeps its own, because patterns and commands are
+        // not the same list.
+        press(&mut ed, "/二");
+        ed.on_key(Key::Enter);
+        ed.on_key(Key::Char('/'));
+        ed.on_key(Key::Up);
+        assert_eq!(ed.prompt(), Some(('/', "二")));
     }
 
     #[test]
