@@ -3215,14 +3215,67 @@ impl Editor {
             true => output,
             false => output.strip_suffix('\n').unwrap_or(output),
         };
+        // A filter over whole rows is the *advertised* use — the manual's own
+        // example is `LC_ALL=C sort` over a table — and the grid used to refuse
+        // it, after spawning the command and reading its output. What matters
+        // is not that no delimiter moved, it is that **every row that comes
+        // back has a row's shape**; `sort -u` dropping a duplicate row is a
+        // table operation, not damage.
+        let rows = self.pipe_covers_whole_rows(start, end);
+        if rows {
+            if let Some(why) = self.rows_break_the_grid(text) {
+                self.status = why;
+                return;
+            }
+        }
         self.snapshot();
-        if !self.overwrite(start, end, text) {
+        let done = if rows {
+            self.without_cell_guard(|e| e.overwrite(start, end, text))
+        } else {
+            self.overwrite(start, end, text)
+        };
+        if !done {
             return;
         }
         self.anchor = start;
         self.cursor = (start + text.chars().count()).saturating_sub(1).max(start);
         self.clamp_cursor();
         self.status = format!("換掉了 {} 個字", text.chars().count());
+    }
+
+    /// Whether a range covers whole rows of the grid — line start to line end.
+    fn pipe_covers_whole_rows(&self, start: usize, end: usize) -> bool {
+        if !self.table_here() {
+            return false;
+        }
+        let rope = self.current_buffer().rope();
+        let end = end.min(rope.len_chars());
+        start == motion::line_start(rope, start)
+            && (end == rope.len_chars()
+                || end == motion::line_end(rope, end.saturating_sub(1))
+                || rope.char(end.saturating_sub(1)) == '\n')
+    }
+
+    /// Whether any line of `text` would not be a row of this grid.
+    fn rows_break_the_grid(&self, text: &str) -> Option<String> {
+        let view = self.table.as_ref()?;
+        let want = view.schema.columns.len();
+        for (i, line) in text.lines().enumerate() {
+            if line.trim().is_empty() {
+                continue;
+            }
+            let got = match view.shape {
+                Shape::Markdown => crate::mdtable::cells(line).len(),
+                Shape::Delimited => crate::table::cells(line, view.schema.delimiter).len(),
+            };
+            if got != want {
+                return Some(format!(
+                    "命令送回來的第 {} 行是 {got} 欄，這張表是 {want} 欄——沒有換",
+                    i + 1
+                ));
+            }
+        }
+        None
     }
 
     /// Put what a command said into a buffer of its own.
@@ -10045,6 +10098,51 @@ mod tests {
         // …and `C-o` comes back, because a jump is a jump.
         assert!(ed.execute("row 木").is_ok());
         assert_eq!(ed.cursor_line(), 2);
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn a_filter_over_whole_rows_is_a_table_operation() {
+        // The manual's own example is `LC_ALL=C sort` over a table, and the
+        // grid used to refuse it — after spawning the command and reading its
+        // output. What matters is that every row that comes back has a row's
+        // shape, not that no delimiter moved.
+        let (dir, csv) = a_table("pipe");
+        let mut ed = Editor::new();
+        ed.open_file(&csv).unwrap();
+        let rows: Vec<String> = ed
+            .current_buffer()
+            .text()
+            .lines()
+            .skip(1)
+            .map(str::to_string)
+            .collect();
+        assert!(rows.len() >= 2, "{rows:?}");
+        ed.goto_line(2);
+        press(&mut ed, "x");
+        for _ in 1..rows.len() {
+            press(&mut ed, "x");
+        }
+        // What a sort would send back: the same rows, another order.
+        let mut sorted = rows.clone();
+        sorted.reverse();
+        ed.provide_pipe_output(&format!("{}\n", sorted.join("\n")));
+        let now: Vec<String> = ed
+            .current_buffer()
+            .text()
+            .lines()
+            .skip(1)
+            .map(str::to_string)
+            .collect();
+        assert_eq!(now, sorted, "{}", ed.status());
+
+        // …and a command that sends back the wrong shape changes nothing.
+        let before = ed.current_buffer().text();
+        ed.goto_line(2);
+        press(&mut ed, "x");
+        ed.provide_pipe_output("一個欄位\n");
+        assert_eq!(ed.current_buffer().text(), before, "{}", ed.status());
+        assert!(ed.status().contains("欄"), "{}", ed.status());
         std::fs::remove_dir_all(&dir).ok();
     }
 
