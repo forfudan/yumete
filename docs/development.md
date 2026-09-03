@@ -482,15 +482,85 @@ syntaxes × two indents, and asserts the two layouts fold the same lines and
 hide the same characters. Every defect in this class was invisible to a green
 suite because each side only ever asked its own implementation.
 
-Open, from all four reviews (ranked):
+**Two more reviews, 2026-09-03**, verifying the safety fixes and the Grid
+refactor against the real 123,380-row 拆分表, the 74 markdown files of the docs
+site, a 91k-character Typst book and 資治通鑑. The refactor holds — zero
+divergences over that corpus, and the three named bugs are dead — and nine of
+the thirteen safety fixes hold. What they found is below, worst first.
 
-1. The event loop settles `page_lines`/`page_columns` from the whole text area
-   rather than from the live pane, so `C-f` turns two pages with a split open.
-3. `:replace` rewrites whole buffers without the grid check `:s` makes.
-4. `n`/`N` after `*` or `:search` still walk the *old* hit list.
-5. 縱書 has no paragraph memo: 565 ms per keypress at 500k 字 in one paragraph.
-6. Ruby mode and the picker have no caret: no `Left`, `Home`, `C-a`.
-7. `enter_md_table` reformats — looking at a table marks the file modified.
+**Writing that can be lost:**
+
+1. **`:export` writes over the manuscript when the target is spelled
+   differently.** The guard compares `PathBuf`s literally; the writer resolves
+   through `canonicalize`. A symlink, or a relative path against an absolute
+   one, gets past it — 90,939 characters of Typst became an export.
+2. **`:export` overwrites any existing file**, with no `!` and no warning —
+   the rule `:w` now keeps, never applied to the sibling writer. Onto a file
+   open and modified in another buffer, the disk copy is gone while that
+   buffer still says it is clean.
+3. **`.` replays an older edit.** The fix scans the *whole* key sequence for
+   `.`, so any insertion containing `.`, `u`, `q` or `:` — a decimal in a
+   cell, a Latin word — is refused as a definition and the previous one is
+   replayed instead. The re-entrancy guard alone is what stops the abort; the
+   scan should be the first key after the count, and nothing more.
+4. **Four writers reach the rope past the cell gate**: `:ruby format` rewrites
+   every cell of a grid (a comma per cell), a ruby reading writes into the
+   cell it is on, `gJ` joins two `|` table rows whenever `:table` was not
+   typed, and `:replace`/`:s` skip the grid check for `|` tables — across
+   every file `:grep` found, opened or not.
+5. **`:table on` reformats a `|` table file** without a keystroke: 45 lines of
+   the docs site, `modified` set, and `:table off` does not undo it.
+6. **`:w <path>` rebinds the buffer** rather than writing a copy, so every
+   later `:w` goes to the copy and the chapter is frozen.
+7. **`markup_cache` is not keyed by buffer** and is not in
+   `forget_the_document` — the fourth cache, left out of the fix that re-keyed
+   the other three.
+8. **A read-only file is overwritten silently**, and the temp file is left
+   behind on every failure but the rename.
+
+**The page:**
+
+9. **Markup inside a ruby base**: `push_ruby` is not handed `hidden`, so
+   縱書 draws `**` that 橫排 hides — the same class as the divergence just
+   closed, in the one function that was not part of it.
+10. **A ruby group's tags belong to no slot** when the reading needs padding
+    rows above the base: 5 files, 22 lines, 198 characters of the docs site,
+    and *every* ruby group once 標點旁置 is on.
+11. **The slot list is not sorted by `start`** while `zong::position` binary
+    searches it, so the caret resolves to the wrong row beside a hung bracket.
+12. **所見即所得 turns off 禁則處理**: a slot that swallowed a hidden run
+    reports the `*` as its character, so 。 opens a 縱. Both layouts.
+13. **標點旁置 stops working next to hidden markup** — turning one setting on
+    changes what another does. 縱書 only.
+14. `Grid::new` defaults to「nothing is hidden」where `Measure::new` requires an
+    answer; `line_slots` and `slot_text` take a `Grid` and ignore its closures.
+    The refactor is only as good as the one call site that cannot spell it
+    wrong.
+15. **`markup_hidden_on_line` costs O(lines above)**: 11 ns before the
+    refactor, 6.9 µs at line 19,883 of 資治通鑑, because `blocks_through`
+    copies the whole prefix even on the cached path. 364 µs per 縱書 frame.
+
+**Still open from the first four reviews:**
+
+16. The event loop settles `page_lines`/`page_columns` from the whole text area
+    rather than from the live pane, so `C-f` turns two pages with a split open.
+17. `n`/`N` after `*` or `:search` still walk the *old* hit list.
+18. 縱書 has no paragraph memo: 565 ms per keypress at 500k 字 in one paragraph.
+19. Ruby mode and the picker have no caret: no `Left`, `Home`, `C-a`.
+20. `enter_md_table` reformats — looking at a table marks the file modified.
+
+**The two invariants both reviewers asked for**, which close whole families
+rather than instances:
+
+- **Every write is addressed by identity, not by spelling.** Resolve a target
+  the way the writer resolves it, and compare *that* against every open
+  buffer. A write whose resolved target belongs to an open buffer goes through
+  that buffer's save or is refused. Closes 1, 2, and export-onto-an-open-file.
+- **A row's cell count never changes while its file is read as a grid** —
+  asserted over the whole file after every key and every command, not at the
+  gate. `join_lines`, `apply_reading`, `format_ruby` and `indent` all reach the
+  rope without passing a gate, and the next one added will too. Closes 4, and
+  its `|` twin, whether or not `:table` was typed.
 
 ---
 
