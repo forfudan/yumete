@@ -169,6 +169,10 @@ fn main() -> ExitCode {
         editor.set_segmenter(Box::new(DictionarySegmenter::builtin(threshold)));
     }
     editor.set_segmentation_visible(config.editor.show_segmentation);
+    // …and the book's own words on top of whichever of the three it was. The
+    // name on every page is the one word no dictionary has.
+    editor.reload_project_words();
+    editor.set_status(String::new());
 
     // A config file that does not parse is worth one line: silence is how a
     // typo comes to look like a setting that does not work.

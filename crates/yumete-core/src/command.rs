@@ -86,6 +86,8 @@ pub enum Command {
     SetIndent(usize),
     /// `:bands 2` — how many bands the 縱書 page is divided into (段組).
     SetBands(usize),
+    /// `:words` — read this project's own word list again.
+    ReloadWords,
     /// `:table check` — look the whole table over and list what is wrong.
     CheckTable,
     /// `:dense` / `:dense off` — pack the 縱書 page as tight as a terminal can
@@ -384,6 +386,7 @@ pub fn parse(input: &str) -> Result<Command, CommandError> {
                 value: other.to_string(),
             }),
         },
+        "words" => Ok(Command::ReloadWords),
         "bands" => match rest {
             "" | "on" | "2" => Ok(Command::SetBands(2)),
             "off" | "1" => Ok(Command::SetBands(1)),
@@ -1018,6 +1021,12 @@ pub const COMMANDS: &[Entry] = &[
         aliases: &[],
         help: "畫面上顯示多少「結果」：原文、著色、所見即所得",
         args: Args::Words(RENDER),
+    },
+    Entry {
+        name: "words",
+        aliases: &[],
+        help: "重讀 .yumete/words.txt——這本書自己的詞（人名、地名）",
+        args: Args::None,
     },
     Entry {
         name: "bands",

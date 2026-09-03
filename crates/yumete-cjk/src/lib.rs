@@ -43,7 +43,7 @@ pub mod word;
 pub use grapheme::{
     grapheme_count, graphemes, next_grapheme_boundary, nth_grapheme, prev_grapheme_boundary,
 };
-pub use segment::{CategorySegmenter, DictionarySegmenter, Segmenter};
+pub use segment::{CategorySegmenter, DictionarySegmenter, Segmenter, WithWords, WordList};
 pub use vertical::{
     hangs_in_the_margin, margin_form, opens_a_pair, vertical_form, vertical_grapheme, Layout,
     DEFAULT_ZONG_GAP, DEFAULT_ZONG_LENGTH,

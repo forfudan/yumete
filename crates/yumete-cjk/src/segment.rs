@@ -294,3 +294,104 @@ mod tests {
         assert_eq!(seg.segment("我们今天"), vec![(0, 2), (2, 4)]);
     }
 }
+
+/// A segmenter with a project's own words layered over it — Feature #144.
+///
+/// The name on every page of a novel is the one word no dictionary has. 阿寧
+/// segments as `[阿][寧]`, so `w` steps through it a character at a time, the
+/// overlay tints it as two words, and every count of 字 that treats a word as a
+/// unit is wrong about the character the book is *about*.
+///
+/// It works by **merging what the segmenter under it already decided** rather
+/// than by joining another dictionary: whatever chose those boundaries — yume's
+/// 1.25M-entry model, a `segmentation.txt`, the bundled list — keeps choosing
+/// them, and a run of adjacent ranges that spells a project word becomes one.
+/// Longest match wins, so 阿寧 beats 阿.
+pub struct WithWords {
+    inner: Box<dyn Segmenter>,
+    words: std::rc::Rc<std::cell::RefCell<WordList>>,
+}
+
+/// The words a project has told the editor about.
+#[derive(Debug, Default, Clone)]
+pub struct WordList {
+    words: std::collections::HashSet<String>,
+    /// The longest word, in characters, so a merge never looks further.
+    longest: usize,
+}
+
+impl WordList {
+    /// Read one word per line; `#` opens a comment and blanks are skipped.
+    pub fn from_text(text: &str) -> WordList {
+        let mut list = WordList::default();
+        for line in text.lines() {
+            let word = line.split('#').next().unwrap_or("").trim();
+            // A one-character "word" is what every segmenter already produces,
+            // so listing one says nothing and cannot join anything.
+            if word.chars().count() < 2 {
+                continue;
+            }
+            list.longest = list.longest.max(word.chars().count());
+            list.words.insert(word.to_string());
+        }
+        list
+    }
+
+    /// How many words are in force.
+    pub fn len(&self) -> usize {
+        self.words.len()
+    }
+
+    /// Whether there are none.
+    pub fn is_empty(&self) -> bool {
+        self.words.is_empty()
+    }
+}
+
+impl WithWords {
+    /// Layer `words` over `inner`. The list is shared, so reloading it reaches
+    /// a segmenter that has already been handed out.
+    pub fn new(
+        inner: Box<dyn Segmenter>,
+        words: std::rc::Rc<std::cell::RefCell<WordList>>,
+    ) -> WithWords {
+        WithWords { inner, words }
+    }
+}
+
+impl Segmenter for WithWords {
+    fn segment(&self, s: &str) -> Vec<(usize, usize)> {
+        let ranges = self.inner.segment(s);
+        let list = self.words.borrow();
+        if list.is_empty() || ranges.len() < 2 {
+            return ranges;
+        }
+        let chars: Vec<char> = s.chars().collect();
+        let mut out: Vec<(usize, usize)> = Vec::with_capacity(ranges.len());
+        let mut i = 0;
+        while i < ranges.len() {
+            let (start, mut end) = ranges[i];
+            let mut took = 1;
+            // The longest run of *adjacent* ranges that spells a known word.
+            // Adjacent, because a merge may not swallow the whitespace the
+            // segmenter deliberately skipped.
+            let mut j = i + 1;
+            let mut reach = ranges[i].1;
+            while j < ranges.len() && ranges[j].0 == reach {
+                reach = ranges[j].1;
+                if reach - start > list.longest {
+                    break;
+                }
+                let word: String = chars[start..reach.min(chars.len())].iter().collect();
+                if list.words.contains(&word) {
+                    end = reach;
+                    took = j + 1 - i;
+                }
+                j += 1;
+            }
+            out.push((start, end));
+            i += took;
+        }
+        out
+    }
+}
