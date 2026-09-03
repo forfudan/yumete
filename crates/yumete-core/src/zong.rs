@@ -471,10 +471,54 @@ fn push_plain(
                         previous.mark = Some(hung);
                         continue;
                     }
-                    // A second mark running — 「？」」 ends a quoted question,
-                    // and it is common. It takes a row of its own, but stays in
-                    // the *margin*: the text column keeps only text, which is
-                    // the whole point of hanging them.
+                    // **Two marks running do not hang at all.** `。」` ends
+                    // most sentences of Chinese dialogue, and only one of them
+                    // can sit beside the character it follows — so the second
+                    // used to take a margin row of its own with the text
+                    // square beside it left empty, which is the hole a reader
+                    // sees in the middle of the column.
+                    //
+                    // Print does not do that. JLREQ §3.1.4① and clreq §6.3.2.2
+                    // set a 句點 followed by a closing bracket **solid**: each
+                    // is a half-em glyph, and the pair fills exactly one em. A
+                    // terminal square is two cells and each half-width mark is
+                    // one, so the pair fills a square here too — and the
+                    // margin, which can only ever hold one, is left out of it.
+                    // (clreq §6.1.3 says the same from the other side: 連續標點
+                    // 不作懸掛.)
+                    //
+                    // The first mark therefore comes back *out* of the margin
+                    // and joins the second in a square of its own. Left to
+                    // right within it, which is the order the file has them in.
+                    // …and only when the two really are **consecutive marks**.
+                    // In 「秋「冬」」 the 冬 slot also carries a mark, but that
+                    // one is the *opener* waiting for the base it introduces,
+                    // with 冬 written between them: pulling it out would put
+                    // 「 after the character it opens.
+                    Some(previous)
+                        if previous.end == at
+                            && !previous.text.is_empty()
+                            && at > from
+                            && yumete_cjk::margin_form(chars[at - 1]).is_some()
+                            && !yumete_cjk::opens_a_pair(chars[at - 1]) =>
+                    {
+                        let earlier = previous.mark.take().expect("a mark to unhang");
+                        // The base keeps its own square; the mark that was
+                        // hanging on it moves into the new one.
+                        let earlier_at = previous.end.saturating_sub(1);
+                        previous.end = earlier_at;
+                        slots.push(Slot {
+                            start: earlier_at,
+                            end: from + w[1],
+                            text: format!("{earlier}{hung}"),
+                            ruby: None,
+                            mark: None,
+                        });
+                        continue;
+                    }
+                    // Anything else that finds the margin taken keeps a margin
+                    // row of its own — a closing bracket after a base that is
+                    // carrying its opener, say.
                     Some(_) => {
                         slots.push(Slot {
                             start: at,
@@ -1972,14 +2016,37 @@ mod tests {
     }
 
     #[test]
-    fn a_second_mark_running_stays_in_the_margin() {
+    fn two_marks_running_share_a_square_instead_of_hanging() {
+        // JLREQ §3.1.4① and clreq §6.3.2.2: a 句點 followed by a closing
+        // bracket is set solid, and since each is a half-em glyph the pair
+        // fills exactly one em — one terminal square, one cell each. clreq
+        // §6.1.3 says it from the other side: 連續標點不作懸掛.
+        //
+        // Before this, the second mark took a margin row of its own and the
+        // text square beside it was left empty — a hole in the middle of the
+        // column, at the end of almost every line of Chinese dialogue.
         let slots = line_slots("春。」", G.with_hanging(true));
         assert_eq!(slots.len(), 2, "a row for the pair, not one each");
         assert_eq!(slots[0].text, "春");
+        assert_eq!(slots[0].mark, None, "the 。 came back out of the margin");
+        assert_eq!(slots[1].text, "｡｣", "both marks, one square, one cell each");
+        assert_eq!(slots[1].mark, None);
+        assert_eq!(yumete_cjk::str_width(&slots[1].text), 2, "a full square");
+        // The square covers both characters, so the cursor crosses it in one
+        // step and 、`d` takes the pair.
+        assert_eq!(slots[1].start + 2, slots[1].end);
+
+        // One mark still hangs — that is where the space is actually saved.
+        let slots = line_slots("春。夏", G.with_hanging(true));
         assert_eq!(slots[0].mark, Some('｡'));
-        // The second takes a row, but in the margin: the text column stays text.
-        assert_eq!(slots[1].text, "", "nothing in the text column");
-        assert_eq!(slots[1].mark, Some('｣'));
+
+        // …and a closing bracket after a base that is carrying its own opener
+        // is not a cluster: 「 belongs *before* 冬, and pulling it out would
+        // put it after the character it opens.
+        let slots = line_slots("秋「冬」", G.with_hanging(true));
+        let marks: Vec<Option<char>> = slots.iter().map(|s| s.mark).collect();
+        assert_eq!(marks, [None, Some('｢'), Some('｣')]);
+        assert_eq!(slots[1].text, "冬");
     }
 
     /// The reading gives way upward, leaving the base's own row for a mark.
