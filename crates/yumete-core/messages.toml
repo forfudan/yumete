@@ -1613,3 +1613,20 @@ en = "delete this row"
 [[message]]
 zh = "那一半的檔案已經關掉了"
 en = "the file that half was showing is closed"
+
+
+[[message]]
+zh = "那是這份稿子本身——導出要另一個檔名"
+en = "that is the manuscript itself — an export needs another name"
+
+[[message]]
+zh = "兩行併成一行會改欄數——先 :table off"
+en = "joining two rows would change the column count — `:table off` first"
+
+[[message]]
+zh = "{0}：{1}"
+en = "{0}: {1}"
+
+[[message]]
+zh = "{0} 個檔案，{1} 處；{2}"
+en = "{0} file(s), {1} place(s); {2}"

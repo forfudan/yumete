@@ -178,6 +178,15 @@ impl Buffer {
     }
 
     /// Create a buffer holding `text`, not yet associated with any file.
+    /// Say this buffer holds text that is nowhere on disk.
+    ///
+    /// For a recovered draft: it has no file, its draft file has been taken
+    /// away, and nothing else in the editor would defend it — `:q` let it go
+    /// without a word, which is the whole of a crashed session's work.
+    pub fn mark_modified(&mut self) {
+        self.modified = true;
+    }
+
     pub fn from_text(text: &str) -> Self {
         Buffer {
             id: next_id(),
@@ -251,8 +260,16 @@ impl Buffer {
     /// has been deleted counts as changed — writing it back would resurrect
     /// something somebody removed.
     pub fn changed_underneath(&self) -> bool {
-        let (Some(path), Some(seen)) = (&self.path, &self.seen) else {
+        let Some(path) = &self.path else {
             return false;
+        };
+        let Some(seen) = &self.seen else {
+            // **No stamp means the file did not exist when it was opened** —
+            // `yumete ch99.md` on a chapter not written yet. If something has
+            // created it since (git, a download, the same file open
+            // elsewhere), writing over it is exactly the loss this check is
+            // for; if it still does not exist, there is nothing to lose.
+            return path.exists();
         };
         let now = stamp_of(path);
         if now.as_ref() == Some(seen) {
@@ -486,13 +503,27 @@ impl Buffer {
     /// that could not be written is one whose every later save and every later
     /// recovery write fails too, silently, while the only copy of the text is
     /// in memory.
-    pub fn save_as<P: Into<PathBuf>>(&mut self, path: P) -> io::Result<()> {
+    pub fn save_as<P: Into<PathBuf>>(&mut self, path: P, force: bool) -> io::Result<()> {
         let old_path = self.path.clone();
         let old_owns = self.owns_swap;
-        self.path = Some(path.into());
-        // A new name, so no copy of ours is out there under it yet.
+        let old_seen = self.seen.take();
+        let old_read_as = self.read_as.take();
+        let target: PathBuf = path.into();
+        // Writing over a file that is already there is a decision, not a
+        // typo's consequence: `:w other.md` used to replace it without a word.
+        if !force && target.exists() {
+            self.seen = old_seen;
+            self.read_as = old_read_as;
+            return Err(io::Error::other(
+                "那個檔案已經存在——`:w!` 才蓋掉它",
+            ));
+        }
+        self.path = Some(target);
+        // A new name, so no copy of ours is out there under it yet — and no
+        // stamp either: the stamps described the *old* file, and leaving them
+        // made every save-as look like a file that had changed underneath.
         self.owns_swap = false;
-        match self.save() {
+        match self.save_forcing(true) {
             Ok(()) => {
                 // Only now is the old name's copy stale; leaving it behind
                 // would offer this text back the next time that file is opened.
@@ -506,6 +537,8 @@ impl Buffer {
             Err(err) => {
                 self.path = old_path;
                 self.owns_swap = old_owns;
+                self.seen = old_seen;
+                self.read_as = old_read_as;
                 Err(err)
             }
         }
@@ -513,33 +546,14 @@ impl Buffer {
 
     /// Write the rope to `path` atomically via a temporary file + rename.
     fn write_atomically(&self, path: &Path) -> io::Result<()> {
-        let dir = match path.parent() {
-            Some(p) if !p.as_os_str().is_empty() => p.to_path_buf(),
-            _ => PathBuf::from("."),
-        };
-
-        let nanos = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .map(|d| d.as_nanos())
-            .unwrap_or(0);
-        let tmp = dir.join(format!(".yumete-tmp-{}-{}", std::process::id(), nanos));
-
-        // Write the rope's chunks, then flush, before the rename.
-        {
-            let mut file = fs::File::create(&tmp)?;
+        write_bytes_atomically(path, |file| {
             for chunk in self.rope.chunks() {
                 file.write_all(chunk.as_bytes())?;
             }
-            file.flush()?;
-        }
-
-        // Rename over the destination; clean up the temp file on failure.
-        if let Err(err) = fs::rename(&tmp, path) {
-            let _ = fs::remove_file(&tmp);
-            return Err(err);
-        }
-        Ok(())
+            Ok(())
+        })
     }
+
 
     /// A short, human-readable name for status lines: the file name, or
     /// `[scratch]` for an unnamed buffer.
@@ -710,6 +724,62 @@ impl TextStore for Buffer {
     fn text(&self) -> String {
         self.rope.to_string()
     }
+}
+
+/// Write `text` to `path` whole, or not at all — the way a save is written.
+///
+/// Public because an export is a write too, and it was using `fs::write`,
+/// which truncates first: a failure in the middle left a half file where a
+/// chapter had been.
+pub fn write_file_atomically(path: &Path, text: &str) -> io::Result<()> {
+    write_bytes_atomically(path, |file| file.write_all(text.as_bytes()))
+}
+
+/// The one place a file is replaced.
+///
+/// Whole or not at all, **durable** (the data is fsynced before the rename and
+/// the directory entry after it, so a power cut cannot leave a chapter of
+/// zeroes), through a symlink rather than over it, and keeping the file's own
+/// permissions.
+fn write_bytes_atomically(
+    path: &Path,
+    write: impl FnOnce(&mut fs::File) -> io::Result<()>,
+) -> io::Result<()> {
+    // Through the link, not over it: a chapter that is a symlink into a sync
+    // folder used to become a regular file here, and everything downstream
+    // went on reading the stale copy it pointed at.
+    let path = fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
+    let dir = match path.parent() {
+        Some(p) if !p.as_os_str().is_empty() => p.to_path_buf(),
+        _ => PathBuf::from("."),
+    };
+    let nanos = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_nanos())
+        .unwrap_or(0);
+    let tmp = dir.join(format!(".yumete-tmp-{}-{}", std::process::id(), nanos));
+    {
+        let mut file = fs::File::create(&tmp)?;
+        // The manuscript's own permissions, kept: `File::create` takes the
+        // umask, so a 0600 diary came back 0644.
+        if let Ok(from) = fs::metadata(&path) {
+            let _ = file.set_permissions(from.permissions());
+        }
+        write(&mut file)?;
+        file.flush()?;
+        // A flush only empties this process's buffer. With the rename durable
+        // and the blocks not, a power cut just after `:w` leaves zeroes — and
+        // the recovery copy has already been deleted by then.
+        file.sync_all()?;
+    }
+    if let Err(err) = fs::rename(&tmp, &path) {
+        let _ = fs::remove_file(&tmp);
+        return Err(err);
+    }
+    if let Ok(dir) = fs::File::open(&dir) {
+        let _ = dir.sync_all();
+    }
+    Ok(())
 }
 
 #[cfg(test)]

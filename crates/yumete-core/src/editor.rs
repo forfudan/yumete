@@ -1305,6 +1305,7 @@ impl Editor {
         let replacement = unescape_replacement(text);
         let was = self.current;
         let (mut hits, mut changed) = (0usize, 0usize);
+        let mut refused: Vec<String> = Vec::new();
         for path in &files {
             if self.open_file(path).is_err() {
                 continue;
@@ -1318,6 +1319,14 @@ impl Editor {
                 rebuilt.push_str(&new_line);
             }
             if here == 0 {
+                continue;
+            }
+            // **The same check `:s` makes.** A whole-buffer rewrite lifts the
+            // cell guard, so the one thing table mode promises — a row's
+            // delimiter count never changes — was checked for `:s` and not for
+            // the command that reaches *every file in the project*.
+            if let Some(why) = self.substitution_breaks_the_grid(&rebuilt) {
+                refused.push(say!("{0}：{1}", self.buffer_name(), why));
                 continue;
             }
             self.snapshot();
@@ -1334,11 +1343,24 @@ impl Editor {
         self.current = was.min(self.buffers.len().saturating_sub(1));
         self.set_cursor(self.current_buffer().saved_cursor());
         if changed == 0 {
-            self.status = say!("「{0}」一處也沒換到", pattern);
+            self.status = match refused.is_empty() {
+                true => say!("「{0}」一處也沒換到", pattern),
+                false => listed(&refused),
+            };
             return;
         }
-        self.status =
-            say!("{0} 個檔案，{1} 處——都還沒存：:wa 存全部，u 各自撤銷", changed, hits);
+        self.status = match refused.is_empty() {
+            true => say!("{0} 個檔案，{1} 處——都還沒存：:wa 存全部，u 各自撤銷", changed, hits),
+            // The files it would have broken are named: a rename across a book
+            // that quietly skipped the 拆分表 would be worse than one that
+            // says which files it did not touch.
+            false => say!(
+                "{0} 個檔案，{1} 處；{2}",
+                changed,
+                hits,
+                listed(&refused)
+            ),
+        };
     }
 
     /// Save every buffer that has changed (`:wa`).
@@ -1439,8 +1461,18 @@ impl Editor {
             dialects: self.ruby,
             title: self.current_buffer().display_name(),
         };
+        // **Never onto the manuscript itself.** `:export typst` on a `.typ`
+        // chapter used to名 its own source — an export keeps 標題、段落、注音
+        // and nothing else, so the figures, the tables and the raw Typst were
+        // gone from the file on disk, and the message that followed pointed at
+        // `:e!`, which throws the good copy in memory away too.
+        if self.current_buffer().path() == Some(target.as_path()) {
+            self.status = say!("那是這份稿子本身——導出要另一個檔名");
+            return Ok(CommandOutcome::Continue);
+        }
         let written = crate::export::export(&self.current_buffer().text(), format, &style);
-        std::fs::write(&target, written).map_err(EditorError::Io)?;
+        // Written the way a save is written: whole, or not at all.
+        crate::buffer::write_file_atomically(&target, &written).map_err(EditorError::Io)?;
         self.status = say!("寫好了 {0}", target.display());
         Ok(CommandOutcome::Continue)
     }
@@ -2314,9 +2346,12 @@ impl Editor {
     /// The same, and `force` writes over a file that changed on disk (`:w!`).
     fn write_forcing(&mut self, path: Option<&str>, force: bool) -> Result<(), EditorError> {
         let saved = match path {
+            // `:w path` writes a copy; `:w! path` writes it over whatever is
+            // already there. Neither may be stopped by the *old* file's stamp,
+            // which is what made save-as fail every time.
             Some(p) => self
                 .current_buffer_mut()
-                .save_as(p)
+                .save_as(p, force)
                 .map_err(EditorError::Io),
             None => {
                 if self.current_buffer().path().is_none() {
@@ -3752,12 +3787,23 @@ impl Editor {
             match key {
                 Key::Char('y') => self.yank_column(),
                 Key::Char('p') => self.put_column(),
-                Key::Char('o') => self.open_line_below(),
+                // Each of these is an edit, and each announces an undo point
+                // of its own: without one they were folded into whatever came
+                // before, so a single `u` took back the cell you had just
+                // finished as well as the row you had just opened.
+                Key::Char('o') => {
+                    self.snapshot();
+                    self.open_line_below();
+                }
                 Key::Char('O') if self.on_header_row() => {
+                    self.snapshot();
                     self.open_line_below();
                     self.status = say!("標題行上面加不了——加在它下面了");
                 }
-                Key::Char('O') => self.open_line_above(),
+                Key::Char('O') => {
+                    self.snapshot();
+                    self.open_line_above();
+                }
                 Key::Char('d') => self.drop_row(),
                 Key::Char('j') | Key::Down => self.shift_row(true),
                 Key::Char('k') | Key::Up => self.shift_row(false),
@@ -5512,12 +5558,12 @@ impl Editor {
         Grid::new(self.zong_length, self.ruby())
             .with_tatechuyoko(self.tatechuyoko)
             .with_indent(self.paragraph_indent())
-            // **Always, on a 縱書 page.** The blank line is folded when the
-            // paragraph is marked some other way — horizontally that means the
-            // indent, and vertically the 縱 itself: a paragraph *is* a new
-            // column, so a blank line is a second mark for something already
-            // said, and it costs a whole column of reading to say it.
-            .with_folds(true, self.cursor_line())
+            // **One rule, both layouts: the indent is the switch.** 縱書 used
+            // to fold unconditionally, so `:indent 0` swallowed blank columns
+            // nobody had asked it to — and then turning the indent *on* made
+            // one reappear (the cursor's own paragraph opens), which reads as
+            // the setting doing the opposite of what it says.
+            .with_folds(self.paragraph_indent() > 0, self.cursor_line())
             .with_fold_free(self.fold_free_span())
             .with_open_line(self.open_line())
             .with_hanging(self.hanging_punctuation())
@@ -5833,7 +5879,17 @@ impl Editor {
         // may have been closed, in which case there is nowhere to go and
         // saying so is the whole of the right answer.
         match self.buffer_with(pane.buffer) {
-            Some(index) => self.current = index,
+            // Through the same door `gn` uses: whether *this* file is a grid,
+            // and every memo about the one being left, are re-asked there. Set
+            // directly, the schema of a 拆分表 followed you into a chapter and
+            // `o` wrote 「,,」 into your novel.
+            Some(index) if index != self.current => {
+                let at = self.cursor;
+                self.buffers[self.current].save_cursor(at);
+                self.current = index;
+                self.forget_the_document();
+            }
+            Some(_) => {}
             None => {
                 self.other = None;
                 self.live_pane = 0;
@@ -6137,9 +6193,15 @@ impl Editor {
                 .map(|n| n.to_string_lossy().into_owned())
                 .unwrap_or_default();
             buffer.name_as(&format!("草稿 {name}"));
+            // **It is text that exists nowhere else.** Recovered clean, it had
+            // no file, no draft (the line below deletes it), and no dirty flag
+            // — so `:q` threw away the crashed session's work without a word,
+            // and the autosave never wrote it either.
+            buffer.mark_modified();
             self.add_buffer(buffer);
             // The copy is now in a buffer the writer can see and save; leaving
-            // the file behind would offer it again on the next launch.
+            // the file behind would offer it again on the next launch — and it
+            // is written again immediately, because the buffer is modified.
             let _ = std::fs::remove_file(path);
             taken += 1;
         }
@@ -6638,10 +6700,17 @@ impl Editor {
         // `.` mean "undo again" the moment you used it. A `:` line and a macro
         // are their own way of being repeated, and `.` repeating itself is not
         // a definition.
-        let excluded = matches!(
-            self.edit_keys.first(),
-            Some(Key::Char(':' | '/' | '?' | 'u' | 'U' | '.' | 'q' | 'Q')) | Some(Key::Ctrl('r'))
-        );
+        // …**anywhere in the sequence**, not only at its head. `3` then `.`
+        // is recorded as `['3', '.']`, whose first key is a digit — so `.`
+        // adopted a definition of itself, and replaying it replayed the replay:
+        // a stack overflow, which is an *abort*, so nothing unwound and every
+        // unsaved buffer went with it. Three keystrokes.
+        let excluded = self.edit_keys.iter().any(|key| {
+            matches!(
+                key,
+                Key::Char(':' | '/' | '?' | 'u' | 'U' | '.' | 'q' | 'Q') | Key::Ctrl('r')
+            )
+        });
         if excluded || self.edit_keys.is_empty() {
             return;
         }
@@ -7212,6 +7281,13 @@ impl Editor {
             Key::Char('l') => motion::line_end(rope, self.cursor),
             Key::Char('s') => motion::line_first_non_blank(rope, self.cursor),
             // Joining lines, which vi also spells `gJ`.
+            // Joining two lines of a grid makes one row with twice the fields
+            // — the one thing table mode promises cannot happen. It went
+            // round the two gates because it edits the rope directly.
+            Key::Char('J') if self.table_here() => {
+                self.status = say!("兩行併成一行會改欄數——先 :table off");
+                return;
+            }
             Key::Char('J') => {
                 // The count belongs to the `g`, which has already spent it.
                 let count = self.operator_count.take().unwrap_or(1).max(1);
@@ -7681,6 +7757,15 @@ impl Editor {
             // selection does — and what a writer means by pasting over
             // something they have just picked out.
             Mode::Normal => {
+                // **Both halves judged before either runs**, the way `r` and
+                // `R` already do it: pasting a comma into a cell used to
+                // delete what was selected and *then* refuse the paste, so the
+                // cell came back short and the message only talked about the
+                // refusal.
+                if let Some(why) = self.cell_refuses_text(text) {
+                    self.status = why;
+                    return;
+                }
                 self.delete_selection();
                 let at = self.cursor;
                 if !self.edit_insert(at, text) {
@@ -8992,6 +9077,11 @@ impl Editor {
     fn repeat_edit(&mut self) {
         if self.last_edit_keys.is_empty() {
             self.status = say!("還沒有可以重複的改動");
+            return;
+        }
+        // …and a guard, the way `replay_macro` has one: whatever the recorder
+        // manages to record, a repeat may never repeat itself.
+        if self.repeating_edit {
             return;
         }
         let keys = self.last_edit_keys.clone();
@@ -11381,6 +11471,24 @@ mod tests {
             "{}",
             ed.status()
         );
+    }
+
+    #[test]
+    fn a_repeat_can_never_repeat_itself() {
+        // `d`, `3`, `.`, `.` used to abort the process — a stack overflow,
+        // which does not unwind, so every unsaved buffer went with it. Two
+        // causes, both here: a count made `.` the *second* key of its own
+        // definition, and nothing stopped a repeat from re-entering.
+        let mut ed = typed("一二三四五六七八九十\n");
+        ed.execute("1").unwrap();
+        ed.on_key(Key::Char('d'));
+        ed.on_key(Key::Char('3'));
+        ed.on_key(Key::Char('.'));
+        ed.on_key(Key::Char('.'));
+        ed.on_key(Key::Char('.'));
+        // Still here — and `.` still means the `d`: one, then three, then one,
+        // then one.
+        assert_eq!(ed.current_buffer().text(), "七八九十\n");
     }
 
     #[test]
