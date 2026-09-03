@@ -700,9 +700,9 @@ impl fmt::Display for EditorError {
             EditorError::Command(e) => write!(f, "{e}"),
             EditorError::Io(e) => write!(f, "{e}"),
             EditorError::UnsavedChanges => {
-                write!(f, "unsaved changes (add ! to override)")
+                write!(f, "還有沒存的改動（加 ! 強制）")
             }
-            EditorError::NoFileName => write!(f, "no file name"),
+            EditorError::NoFileName => write!(f, "沒有檔名"),
         }
     }
 }
@@ -881,7 +881,7 @@ impl Editor {
     /// key: a `gn` that does nothing silently reads as a broken keymap.
     fn only_one_buffer(&mut self) -> bool {
         if self.buffers.len() == 1 {
-            self.status = "only one file open".to_string();
+            self.status = "只開了一個檔案".to_string();
             return true;
         }
         false
@@ -1020,7 +1020,7 @@ impl Editor {
         if self.buffers.len() == 1 {
             self.buffers[0] = Buffer::scratch();
             self.set_cursor(0);
-            self.status = "closed".to_string();
+            self.status = "關了".to_string();
             return Ok(CommandOutcome::Continue);
         }
         let closed = self.buffers.remove(self.current).display_name();
@@ -1029,7 +1029,7 @@ impl Editor {
         self.set_cursor(restored);
         self.segment_cache.borrow_mut().clear();
         let (n, total) = self.buffer_position();
-        self.status = format!("closed {closed} — now {} [{n}/{total}]", self.buffer_name());
+        self.status = format!("關了 {closed} —— 現在是 {} [{n}/{total}]", self.buffer_name());
         Ok(CommandOutcome::Continue)
     }
 
@@ -1095,7 +1095,7 @@ impl Editor {
         });
 
         if hits.is_empty() {
-            self.status = format!("no match for {pattern} in {files} file(s)");
+            self.status = format!("{files} 個檔案裏都沒有「{pattern}」");
             return Ok(CommandOutcome::Continue);
         }
         let found = hits.len();
@@ -1233,13 +1233,13 @@ impl Editor {
                 None => PathBuf::from(&quoted),
             };
             if let Err(err) = self.open_included_file(&full) {
-                self.status = format!("cannot open '{quoted}': {err}");
+                self.status = format!("打不開「{quoted}」：{err}");
             }
             return;
         }
 
         let Some((path, rest)) = text.split_once(':') else {
-            self.status = "no file named on this line".to_string();
+            self.status = "這一行沒寫檔名".to_string();
             return;
         };
         let at = rest
@@ -1253,7 +1253,7 @@ impl Editor {
             _ => path.to_path_buf(),
         };
         if let Err(err) = self.open_file(&full) {
-            self.status = format!("cannot open '{}': {err}", path.display());
+            self.status = format!("打不開「{}」：{err}", path.display());
             return;
         }
         if let Some(n) = at {
@@ -1268,7 +1268,7 @@ impl Editor {
     /// wins. A scratch buffer has no name to derive one from and must be told.
     fn export(&mut self, format: &str, path: Option<&str>) -> Result<CommandOutcome, EditorError> {
         let Some(format) = crate::export::Format::parse(format) else {
-            self.status = format!("no such format '{format}' — html or typst");
+            self.status = format!("沒有「{format}」這種格式 —— html 或 typst");
             return Ok(CommandOutcome::Continue);
         };
         let target = match path {
@@ -1287,7 +1287,7 @@ impl Editor {
         };
         let written = crate::export::export(&self.current_buffer().text(), format, &style);
         std::fs::write(&target, written).map_err(EditorError::Io)?;
-        self.status = format!("wrote {}", target.display());
+        self.status = format!("寫好了 {}", target.display());
         Ok(CommandOutcome::Continue)
     }
 
@@ -1834,14 +1834,14 @@ impl Editor {
             Command::Outline(nth) => {
                 let headings = self.outline();
                 if headings.is_empty() {
-                    self.status = "no headings in this file".to_string();
+                    self.status = "這個檔案沒有標題".to_string();
                     return Ok(CommandOutcome::Continue);
                 }
                 match nth {
                     // `:toc <n>` goes to the nth heading…
                     Some(n) => match headings.get(n.saturating_sub(1)) {
                         Some(&(line, _, _)) => self.goto_line(line + 1),
-                        None => self.status = format!("only {} headings", headings.len()),
+                        None => self.status = format!("只有 {} 條標題", headings.len()),
                     },
                     // …and a bare `:toc` lists them, numbered so it can.
                     None => {
@@ -1888,7 +1888,7 @@ impl Editor {
                             self.status = format!("語法：{}", syntax.name());
                         }
                         None => {
-                            self.status = format!("no such syntax '{name}' — markdown or typst")
+                            self.status = format!("沒有「{name}」這種語法 —— markdown 或 typst")
                         }
                     },
                     None => {
@@ -4824,7 +4824,7 @@ impl Editor {
         if let Some(what) = failed {
             if !self.swap_warned {
                 self.swap_warned = true;
-                self.status = format!("no recovery copy kept — {what}");
+                self.status = format!("沒有留搶救稿 —— {what}");
             }
         } else {
             self.swap_warned = false;
@@ -4967,7 +4967,7 @@ impl Editor {
         };
         if discard {
             self.current_buffer_mut().discard_swap();
-            self.status = "recovered draft thrown away".to_string();
+            self.status = "搶救稿丟掉了".to_string();
             return Ok(CommandOutcome::Continue);
         }
         // An ordinary, undoable edit: `u` puts the file on disk back, so
@@ -4979,7 +4979,7 @@ impl Editor {
         buffer.insert(0, &draft);
         self.current_buffer_mut().adopt_draft();
         self.clamp_cursor();
-        self.status = "recovered draft loaded — :w to keep it, u to go back".to_string();
+        self.status = "搶救稿開好了 —— :w 留下它，u 回到原來的".to_string();
         Ok(CommandOutcome::Continue)
     }
 
@@ -6041,7 +6041,7 @@ impl Editor {
                 match chosen {
                     Some(crate::sidebar::Chosen::File(path)) => {
                         if let Err(err) = self.open_file(&path) {
-                            self.status = format!("cannot open '{}': {err}", path.display());
+                            self.status = format!("打不開「{}」：{err}", path.display());
                         }
                         // Entering a file means going to write in it.
                         self.sidebar_focus = false;
@@ -6060,7 +6060,7 @@ impl Editor {
                         match self.open_included_file(&path) {
                             Ok(()) => self.goto_line(line + 1),
                             Err(err) => {
-                                self.status = format!("cannot open '{}': {err}", path.display())
+                                self.status = format!("打不開「{}」：{err}", path.display())
                             }
                         }
                         self.sidebar_focus = false;
@@ -6104,7 +6104,7 @@ impl Editor {
             }
         });
         if items.is_empty() {
-            self.status = "no files here".to_string();
+            self.status = "這裏沒有檔案".to_string();
             return;
         }
         self.grep_root = Some(root);
@@ -6162,7 +6162,7 @@ impl Editor {
                             None => PathBuf::from(&path),
                         };
                         if let Err(err) = self.open_file(&full) {
-                            self.status = format!("cannot open '{path}': {err}");
+                            self.status = format!("打不開「{path}」：{err}");
                         }
                     }
                     Some(crate::picker::Item::Buffer(i, _)) => self.show_buffer(i),
@@ -6172,7 +6172,7 @@ impl Editor {
                     }
                     // The system clipboard is the front end's to read.
                     Some(crate::picker::Item::Paste(None, _)) => self.clipboard_paste(true),
-                    None => self.status = "nothing matched".to_string(),
+                    None => self.status = "沒有匹配的".to_string(),
                 }
             }
             Key::Char(c) => picker.push(c),
@@ -6227,7 +6227,7 @@ impl Editor {
             }
             Mode::Picker => {}
         }
-        self.status = format!("pasted {} char(s)", text.chars().count());
+        self.status = format!("貼了 {} 個字", text.chars().count());
     }
 
     /// Put the selection on the system clipboard (`Space y`).
@@ -6240,7 +6240,7 @@ impl Editor {
         let (start, end) = self.selection();
         let text = self.current_buffer().rope().slice(start..end).to_string();
         if text.is_empty() {
-            self.status = "nothing selected".to_string();
+            self.status = "沒有選中東西".to_string();
             return;
         }
         // Into the editor's own register too: having copied something, `p` is
@@ -6248,7 +6248,7 @@ impl Editor {
         self.store(text.clone());
         let n = text.chars().count();
         self.clipboard_request = Some(text);
-        self.status = format!("copied {n} char(s) — asked the terminal for the clipboard");
+        self.status = format!("複製了 {n} 個字 —— 已經交給系統剪貼板");
     }
 
     /// Put the cursor at char index `pos`, starting a selection there
@@ -6286,7 +6286,7 @@ impl Editor {
     /// Hand over what the system clipboard held, and paste it.
     pub fn provide_clipboard(&mut self, text: &str, after: bool) {
         if text.is_empty() {
-            self.status = "the clipboard is empty".to_string();
+            self.status = "剪貼板是空的".to_string();
             return;
         }
         self.snapshot();
@@ -6745,7 +6745,7 @@ impl Editor {
                 self.anchor = cursor;
                 self.clamp_cursor();
             }
-            None => self.status = "already at oldest change".to_string(),
+            None => self.status = "已經是最早的了".to_string(),
         }
     }
 
@@ -6758,7 +6758,7 @@ impl Editor {
                 self.anchor = cursor;
                 self.clamp_cursor();
             }
-            None => self.status = "already at newest change".to_string(),
+            None => self.status = "已經是最新的了".to_string(),
         }
     }
 
@@ -6838,7 +6838,7 @@ impl Editor {
                 self.extend = false;
                 self.refresh_goal_column();
             }
-            None => self.status = format!("pattern not found: {pattern}"),
+            None => self.status = format!("找不到：{pattern}"),
         }
     }
 
@@ -7144,14 +7144,14 @@ impl Editor {
     fn search_selection(&mut self) {
         let (start, end) = self.selection();
         if end <= start {
-            self.status = "nothing selected".to_string();
+            self.status = "沒有選中東西".to_string();
             return;
         }
         // Escaped: `*` searches for the text that is selected, and a selection
         // is text, not a pattern — 「（」 must not open a group.
         let text = self.current_buffer().rope().slice(start..end).to_string();
         self.last_search = regex::escape(&text);
-        self.status = format!("search: {text}");
+        self.status = format!("搜索：{text}");
     }
 
     /// Indent (`>`) or unindent (`<`) every line the selection touches.
@@ -7256,7 +7256,7 @@ impl Editor {
     fn format_ruby(&mut self, dialect: Dialect) {
         let text = self.current_buffer().text();
         let Some(formatted) = crate::ruby::reformat(&text, dialect) else {
-            self.status = format!("already {} ruby", dialect.name());
+            self.status = format!("已經是 {} 的注音了", dialect.name());
             return;
         };
         self.snapshot();
@@ -7265,7 +7265,7 @@ impl Editor {
         buffer.remove(0..len);
         buffer.insert(0, &formatted);
         self.clamp_cursor();
-        self.status = format!("ruby rewritten as {}", dialect.name());
+        self.status = format!("注音改寫成 {} 了", dialect.name());
     }
 
     /// Step Tab's completion through the matching commands, writing each onto
@@ -7330,7 +7330,7 @@ impl Editor {
         // nothing to annotate.
         let (start, end) = self.selection();
         if end <= start {
-            self.status = "put the cursor in a reading, or select what to annotate".to_string();
+            self.status = "把游標放進注音裏，或者選中要注音的字".to_string();
             return;
         }
         self.command_line.clear();
@@ -7452,7 +7452,7 @@ impl Editor {
             return;
         };
         let Some((start, end)) = surrounding(rope, self.cursor, open, close) else {
-            self.status = format!("no surrounding {open}{close}");
+            self.status = format!("外面沒有 {open}{close}");
             return;
         };
         // `end` is the closing bracket's own index. The head goes on the last
@@ -7490,7 +7490,7 @@ impl Editor {
     /// Remove the innermost pair around the cursor (`md`).
     fn surround_delete(&mut self) {
         let Some((start, end)) = self.innermost_pair() else {
-            self.status = "no surrounding pair".to_string();
+            self.status = "外面沒有成對的符號".to_string();
             return;
         };
         self.snapshot();
@@ -7511,7 +7511,7 @@ impl Editor {
         };
         let rope = self.current_buffer().rope();
         let Some((start, end)) = surrounding(rope, self.cursor, open, close) else {
-            self.status = format!("no surrounding {open}{close}");
+            self.status = format!("外面沒有 {open}{close}");
             return;
         };
         self.snapshot();
@@ -7965,11 +7965,11 @@ impl Editor {
             Some(keys) => {
                 let n = keys.len();
                 self.macro_keys = keys;
-                self.status = format!("recorded {n} key(s)");
+                self.status = format!("錄了 {n} 個鍵");
             }
             None => {
                 self.recording = Some(Vec::new());
-                self.status = "recording…".to_string();
+                self.status = "錄製中…".to_string();
             }
         }
     }
@@ -8084,7 +8084,7 @@ impl Editor {
         let text = self.current_buffer().rope().slice(start..end).to_string();
         let n = end - start;
         self.store(text);
-        self.status = format!("yanked {n} char(s)");
+        self.status = format!("取了 {n} 個字");
     }
 
     /// Paste the register after (`p`) or before (`P`) the selection, and select
@@ -8657,7 +8657,7 @@ mod tests {
         );
         // Already uniform: nothing to do, and no undo step spent on it.
         ed.execute(":ruby format typst").unwrap();
-        assert!(ed.status().starts_with("already"));
+        assert!(ed.status().contains("已經是"), "{}", ed.status());
 
         ed.execute(":ruby format html").unwrap();
         assert_eq!(

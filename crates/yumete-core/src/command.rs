@@ -173,13 +173,13 @@ pub enum CommandError {
 impl fmt::Display for CommandError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            CommandError::Empty => write!(f, "empty command"),
-            CommandError::Unknown(word) => write!(f, "unknown command: {word}"),
+            CommandError::Empty => write!(f, "沒打命令"),
+            CommandError::Unknown(word) => write!(f, "沒有「{word}」這個命令"),
             CommandError::MissingArgument(what) => {
-                write!(f, "{what} requires an argument")
+                write!(f, "{what} 後面要跟一個參數")
             }
             CommandError::InvalidArgument { command, value } => {
-                write!(f, "{command}: unknown value '{value}'")
+                write!(f, "{command}：不認得「{value}」")
             }
         }
     }
