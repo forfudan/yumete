@@ -1987,6 +1987,17 @@ impl Editor {
                 self.scheme_request = Some(String::from("!"));
                 Ok(CommandOutcome::Continue)
             }
+            Command::InstalledScheme => {
+                self.scheme_request = Some(String::from("~"));
+                Ok(CommandOutcome::Continue)
+            }
+            Command::YumeLanguage(on) => {
+                self.scheme_request = Some(String::from(match on {
+                    true => "+",
+                    false => "-",
+                }));
+                Ok(CommandOutcome::Continue)
+            }
             Command::UserTable(path) => {
                 // The `=` marks it as a path rather than a scheme tag: the
                 // front end holds the IME, and this is the third thing to ask
