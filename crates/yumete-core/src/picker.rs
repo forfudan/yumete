@@ -46,6 +46,17 @@ pub struct Picker {
     query: String,
     /// Which of the *matching* items is highlighted.
     selected: usize,
+    /// How far into the query the caret is, in characters.
+    caret: usize,
+}
+
+/// Where a caret is being asked to go.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Caret {
+    Left,
+    Right,
+    Start,
+    End,
 }
 
 impl Picker {
@@ -56,6 +67,7 @@ impl Picker {
             items,
             query: String::new(),
             selected: 0,
+            caret: 0,
         }
     }
 
@@ -102,18 +114,80 @@ impl Picker {
         matches.get(self.selected()).map(|&item| item.clone())
     }
 
-    /// Add a character to the query. The highlight goes back to the top,
+    /// How far into the query the caret is, in characters.
+    ///
+    /// A query is typed text, and typed text is edited in the middle: this had
+    /// `push` and `backspace` and nothing else, so a typo four characters back
+    /// meant deleting everything after it.
+    pub fn caret(&self) -> usize {
+        self.caret.min(self.query.chars().count())
+    }
+
+    /// The query up to the caret — what the front end measures to put the
+    /// terminal's cursor in the right cell.
+    pub fn before_caret(&self) -> String {
+        self.query.chars().take(self.caret()).collect()
+    }
+
+    /// Add a character at the caret. The highlight goes back to the top,
     /// because the list under it is a different list.
     pub fn push(&mut self, c: char) {
-        self.query.push(c);
+        let at = self.byte(self.caret());
+        self.query.insert(at, c);
+        self.caret = self.caret() + 1;
         self.selected = 0;
     }
 
-    /// Remove the last character, returning `false` when there was none — which
-    /// is how Backspace on an empty query closes the picker.
+    /// Remove the character before the caret, returning `false` when there was
+    /// none — which is how Backspace on an empty query closes the picker.
     pub fn backspace(&mut self) -> bool {
         self.selected = 0;
-        self.query.pop().is_some()
+        let caret = self.caret();
+        if caret == 0 {
+            return !self.query.is_empty();
+        }
+        let (from, to) = (self.byte(caret - 1), self.byte(caret));
+        self.query.replace_range(from..to, "");
+        self.caret = caret - 1;
+        true
+    }
+
+    /// Remove the character *under* the caret; the caret stays where it is.
+    pub fn delete(&mut self) {
+        let caret = self.caret();
+        if caret < self.query.chars().count() {
+            let (from, to) = (self.byte(caret), self.byte(caret + 1));
+            self.query.replace_range(from..to, "");
+            self.selected = 0;
+        }
+    }
+
+    /// Move the caret: `Left`, `Right`, `Home`/`C-a`, `End`/`C-e`.
+    pub fn move_caret(&mut self, to: Caret) {
+        let len = self.query.chars().count();
+        self.caret = match to {
+            Caret::Left => self.caret().saturating_sub(1),
+            Caret::Right => (self.caret() + 1).min(len),
+            Caret::Start => 0,
+            Caret::End => len,
+        };
+    }
+
+    /// Everything from the caret back to the start, gone (`C-u`).
+    pub fn clear_before_caret(&mut self) {
+        let at = self.byte(self.caret());
+        self.query = self.query[at..].to_string();
+        self.caret = 0;
+        self.selected = 0;
+    }
+
+    /// Where the `at`-th character begins, in bytes.
+    fn byte(&self, at: usize) -> usize {
+        self.query
+            .char_indices()
+            .nth(at)
+            .map(|(i, _)| i)
+            .unwrap_or(self.query.len())
     }
 
     /// Move the highlight, wrapping at both ends.

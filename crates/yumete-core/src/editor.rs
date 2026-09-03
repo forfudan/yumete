@@ -7953,6 +7953,13 @@ impl Editor {
                 }
             }
             Key::Char(c) => picker.push(c),
+            // A query is typed text, and typed text is edited in the middle.
+            Key::Delete => picker.delete(),
+            Key::Left => picker.move_caret(crate::picker::Caret::Left),
+            Key::Right => picker.move_caret(crate::picker::Caret::Right),
+            Key::Home | Key::Ctrl('a') => picker.move_caret(crate::picker::Caret::Start),
+            Key::End | Key::Ctrl('e') => picker.move_caret(crate::picker::Caret::End),
+            Key::Ctrl('u') => picker.clear_before_caret(),
             _ => {}
         }
     }
@@ -9250,23 +9257,24 @@ impl Editor {
                 self.ruby_target = None;
                 self.mode = Mode::Normal;
             }
-            Key::Backspace => {
-                // Unlike a search prompt, backspacing to empty does *not* leave:
-                // an empty reading is a meaningful thing to submit here — it is
-                // how an annotation is taken off — so it has to be reachable.
-                // Esc is the way out.
-                self.command_line.pop();
-            }
-            Key::Char(c) => self.command_line.push(c),
+            // Backspacing to empty does *not* leave: an empty reading is a
+            // meaningful thing to submit here — it is how an annotation is
+            // taken off — so it has to be reachable. Esc is the way out.
+            Key::Backspace if self.command_line.is_empty() => {}
             Key::Enter => {
                 let reading = std::mem::take(&mut self.command_line);
                 let target = self.ruby_target.take();
                 self.mode = Mode::Normal;
+                self.command_caret = 0;
                 if let Some(target) = target {
                     self.apply_reading(target, &reading);
                 }
             }
-            _ => {}
+            // **The same prompt keys as everywhere else.** A reading is typed
+            // text like a command or a search, and this mode had no caret at
+            // all: no `Left`, no `Home`, no `C-a`, no `C-w` — a typo in the
+            // middle of a reading meant deleting back to it.
+            other => self.edit_prompt(other),
         }
     }
 
@@ -14477,6 +14485,44 @@ mod tests {
         assert_eq!(ed.current_buffer().text(), source, "the grid is untouched");
 
         std::fs::remove_dir_all(&dir).ok();
+    }
+
+    /// A reading and a picker's query are typed text, and typed text is edited
+    /// in the middle.
+    #[test]
+    fn every_prompt_has_a_caret() {
+        // Ruby mode: type a reading, go back into it, fix it.
+        let mut ed = typed("那年冬天。\n");
+        press(&mut ed, "gg");
+        ed.on_key(Key::Char('v'));
+        ed.execute(":ruby").unwrap();
+        assert_eq!(ed.mode(), Mode::Ruby, "{}", ed.status());
+        for c in "hàn".chars() {
+            ed.on_key(Key::Char(c));
+        }
+        ed.on_key(Key::Left);
+        ed.on_key(Key::Left);
+        ed.on_key(Key::Char('X'));
+        assert_eq!(ed.prompt().map(|(_, line)| line), Some("hXàn"));
+        ed.on_key(Key::Home);
+        ed.on_key(Key::Char('Z'));
+        assert_eq!(ed.prompt().map(|(_, line)| line), Some("ZhXàn"));
+        assert_eq!(ed.prompt_before_caret(), "Z");
+        ed.on_key(Key::Esc);
+
+        // The picker's query, the same way.
+        let mut ed = typed("那年冬天。\n");
+        ed.open_buffer_picker();
+        for c in "abc".chars() {
+            ed.on_key(Key::Char(c));
+        }
+        ed.on_key(Key::Left);
+        ed.on_key(Key::Backspace);
+        assert_eq!(ed.picker().map(|p| p.query()), Some("ac"));
+        ed.on_key(Key::Home);
+        ed.on_key(Key::Delete);
+        assert_eq!(ed.picker().map(|p| p.query()), Some("c"));
+        assert_eq!(ed.picker().map(|p| p.caret()), Some(0));
     }
 
     #[test]
