@@ -315,7 +315,11 @@ pub(crate) fn number_rows(mode: LineNumbers, total_lines: usize) -> u16 {
 /// status line), so the event loop can tell the editor where 縱 break before the
 /// motions that depend on it run.
 pub fn zong_length_for(config: &Config, height: u16, total_lines: usize, look: Look) -> usize {
-    Metrics::new(config, height.saturating_sub(1), total_lines, look).zong_len
+    // `height` is the page's own, already free of the status line, the hint
+    // row, the tab bar and the detail panel — so nothing is subtracted here.
+    // It used to take one off for the status line and know about none of the
+    // rest, which made the 縱 the cursor moved on longer than the drawn one.
+    Metrics::new(config, height, total_lines, look).zong_len
 }
 
 /// What the editor says about how this page is to be set.
