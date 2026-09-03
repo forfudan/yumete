@@ -1551,9 +1551,10 @@ GB18030 的舊稿會被擋下並告訴你用 `iconv` 轉，而不是丟一句 Ru
 | `:segment` `:seg` | 分詞著色開關 |
 | `:words` | 重讀 `.yumete/words.txt`——這本書自己的詞 |
 | `:theme` | 現在是哪個主題、深色還是淺色 |
-| `:theme dark`／`light`／`system` | 換深淺；`system` 是回到終端的答案 |
-| `:theme moxiang`（`墨香`） | 指名主題，後面可以再跟深淺 |
-| `:theme heibai`（`黑白`） | 只有黑白灰的那一套 |
+| `:theme moxiang`（`墨香`）／`heibai`（`黑白`） | 換一套墨，後面可以再跟深淺 |
+| `:appearance dark`／`light`／`system` | 只換深淺；`system` 是回到終端的答案 |
+| `:numbers fill on`／`off` | 行號那一條要不要自己的底色（默認沒有） |
+| `:shot` | 把畫面截成圖放進剪貼簿 |
 | `:layout` `:lay` | 橫排／竪排互換 |
 | `:layout vertical`／`horizontal` | 直接指定 |
 | `:hanging` | 標點旁置開關 |
@@ -1740,10 +1741,11 @@ rounded = true                 # 圓角邊框
 它不是墨香關掉顏色的版本，而是「把顏色全拿走以後，這套設計還立不立得住」的那個問題本
 身——順帶也是色弱、色盲和單色終端上看到的東西。
 
-臨時要換用 **`:theme`**：`:theme` 說現在是什麼，`:theme dark`／`:theme light` 當場
-換，`:theme system` 回到終端的答案（開機時問到的那一個）。名字寫不寫都行，
-`:theme 墨香 light` 和 `:theme light` 是同一句話。它**不改配置檔案**——這是為了下午
-房間亮起來的那一次，寫進 `[theme] mode` 的才是你每天想要的。
+臨時要換用 **`:theme`** 和 **`:appearance`**——**主題是主題，深淺是深淺**，兩個問題兩
+條命令：`:theme heibai` 換一套墨，`:appearance light` 只換深淺（`system` 是回到終端
+開機時答的那個），`:theme moxiang dark` 是一句話問完兩件事。`:theme` 不帶參數說現在是
+什麼。它們**不改配置檔案**——這是為了下午房間亮起來的那一次，寫進 `[theme] mode` 的才
+是你每天想要的。
 
 ---
 

@@ -366,6 +366,11 @@ Phases are ordered by priority, most writer-critical first:
 | 167 | **`:help`**                                 | both   | P1    | the keys worth knowing, in the editor; `:help chinese`, `:help vertical` | Planned |
 | 168 | **The page before the dictionary**          | cli    | P1    | 14 MB of language data read after the first frame, not before it | Done |
 | 169 | **Schemes found rather than listed**        | both   | P2    | what is installed — including a scheme of the reader's own — is what `:yume scheme` offers; a Rime folder later | Planned |
+| 170 | **A command says what it is waiting for**   | both   | P1    | prerequisites declared beside the command, shown in the menu, said when it is run, and `force` satisfies them | Done |
+| 171 | **`:appearance`, apart from `:theme`**      | both   | P2    | which inks and which way round are two questions | Done |
+| 172 | **`:numbers fill`**                         | both   | P3    | the number band's ground, off by default and the same in both layouts | Done |
+| 173 | **`:shot`**                                 | both   | P3    | the screen as a picture, on the clipboard, taken after the menu closes | Done |
+| 174 | **段組 for the horizontal page**             | tui    | P2    | two columns side by side, the way 縱書 has two bands | Planned |
 
 ---
 

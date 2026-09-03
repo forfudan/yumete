@@ -1330,9 +1330,6 @@ zh = "首行縮進幾格（中文的段落是縮進兩格，不是空一行）�
 en = "how many squares open a paragraph (Chinese marks one with two, not a blank line); `:indent off` for none"
 
 
-[[message]]
-zh = "主題：哪一個，以及深色淺色還是跟着終端"
-en = "theme: which one, and dark, light or the terminal's own"
 
 
 [[message]]
@@ -1470,3 +1467,43 @@ en = "not yet — this needs {0}; add force at the end to turn them on with it"
 [[message]]
 zh = "需要 {0}，句末加 force"
 en = "needs {0}; add force at the end"
+
+[[message]]
+zh = "主題：用哪一套墨（後面可以再跟深淺）"
+en = "theme: which set of inks (an appearance may follow it)"
+
+[[message]]
+zh = "深色、淺色，還是跟着終端"
+en = "dark, light, or whatever the terminal is"
+
+[[message]]
+zh = "把畫面截成圖放進剪貼簿——命令面板收起來之後才截"
+en = "put a picture of the screen on the clipboard — taken after the menu closes"
+
+[[message]]
+zh = "畫面已放進剪貼簿"
+en = "the screen is on the clipboard"
+
+[[message]]
+zh = "截圖失敗（{0}）"
+en = "no picture taken ({0})"
+
+[[message]]
+zh = "這個平台上沒有截圖命令——`[editor] screenshot` 寫一條"
+en = "no screenshot command on this platform — write one at `[editor] screenshot`"
+
+[[message]]
+zh = "行號那一條：要不要自己的底色"
+en = "the line-number band: whether it has a ground of its own"
+
+[[message]]
+zh = "行號那一條有沒有自己的底色（默認沒有，橫排竪排一樣）"
+en = "whether the line-number band has a ground of its own (no by default, in both layouts)"
+
+[[message]]
+zh = "行號：有底"
+en = "line numbers: on a band"
+
+[[message]]
+zh = "行號：無底"
+en = "line numbers: on the page"

@@ -503,6 +503,10 @@ pub struct Editor {
     table_rules: crate::table::Rules,
     /// Whether a 碼表 is loaded, as last reported by the front end.
     ime_available: bool,
+    /// A `:shot` waiting for the frame it is a picture of.
+    screenshot_request: bool,
+    /// Whether the line-number band carries a ground of its own.
+    number_fill: bool,
     /// What is drawn in a paragraph's opening squares, if anything.
     indent_hint: crate::zong::IndentHint,
     /// The character `IndentHint::Symbol` draws there.
@@ -813,6 +817,8 @@ impl Editor {
             show_segmentation: false,
             table_rules: crate::table::Rules::default(),
             ime_available: false,
+            screenshot_request: false,
+            number_fill: false,
             indent_hint: crate::zong::IndentHint::default(),
             indent_symbol: "↵".to_string(),
             count: None,
@@ -1955,6 +1961,14 @@ impl Editor {
                 self.set_bands(n);
                 Ok(CommandOutcome::Continue)
             }
+            Command::SetNumberFill(on) => {
+                self.number_fill = on.unwrap_or(!self.number_fill);
+                self.status = match self.number_fill {
+                    true => say!("行號：有底"),
+                    false => say!("行號：無底"),
+                };
+                Ok(CommandOutcome::Continue)
+            }
             Command::SetIndentHint(hint) => {
                 self.indent_hint = hint;
                 self.status = say!("縮進標記：{0}", hint.name());
@@ -2073,6 +2087,14 @@ impl Editor {
             }
             Command::BuiltinScheme => {
                 self.scheme_request = Some(String::from("!"));
+                Ok(CommandOutcome::Continue)
+            }
+            // Taken by the front end **after the next frame**: the command
+            // line is still open on this one, and a picture of the thing you
+            // are debugging with the debugger's own prompt across it is not a
+            // picture of the thing.
+            Command::Screenshot => {
+                self.screenshot_request = true;
                 Ok(CommandOutcome::Continue)
             }
             Command::InstalledScheme => {
@@ -5353,6 +5375,21 @@ impl Editor {
     /// [`Self::set_status`].
     pub fn take_scheme_request(&mut self) -> Option<String> {
         self.scheme_request.take()
+    }
+
+    /// Whether the line-number band carries a ground of its own.
+    pub fn number_fill(&self) -> bool {
+        self.number_fill
+    }
+
+    /// Give the numbers a band, or leave them on the page.
+    pub fn set_number_fill(&mut self, on: bool) {
+        self.number_fill = on;
+    }
+
+    /// Take a pending `:shot`, if one is waiting for a frame.
+    pub fn take_screenshot_request(&mut self) -> bool {
+        std::mem::take(&mut self.screenshot_request)
     }
 
     /// Take a pending `:theme`, if one is waiting for the front end.

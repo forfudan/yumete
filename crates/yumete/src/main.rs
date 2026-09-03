@@ -259,6 +259,7 @@ fn main() -> ExitCode {
     if let Some(rules) = yumete_core::table::Rules::parse(&config.editor.table_rules) {
         editor.set_table_rules(rules);
     }
+    editor.set_number_fill(config.editor.line_number_fill);
     if let Some(hint) = yumete_core::zong::IndentHint::parse(&config.editor.indent_hint) {
         editor.set_indent_hint(hint, Some(config.editor.indent_symbol.clone()));
     }

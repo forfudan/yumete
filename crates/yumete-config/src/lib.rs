@@ -41,6 +41,20 @@ pub struct EditorConfig {
     pub line_numbers: LineNumbers,
     /// Minimum number of lines to keep above/below the cursor when scrolling.
     pub scrolloff: usize,
+    /// Whether the line-number band carries a ground of its own.
+    ///
+    /// Off, and the same in both layouts: 縱書 painted its number band and
+    /// 橫排 did not, which is one editor with two answers to one question.
+    pub line_number_fill: bool,
+    /// The shell line `:shot` runs to put a picture of the screen on the
+    /// clipboard.
+    ///
+    /// A command rather than a built-in: what「截圖」 means is the window
+    /// system's business, not the editor's, and every desktop answers it
+    /// differently (`screencapture` on macOS, `grim` on Wayland, `import` on
+    /// X11). The default is macOS's, and it takes the *frontmost window* —
+    /// which, while the editor is running, is the terminal it is running in.
+    pub screenshot: String,
     /// What is drawn in a paragraph's opening squares: `"none"` (default),
     /// `"color"`, `"symbol"`.
     pub indent_hint: String,
@@ -187,6 +201,12 @@ impl Default for EditorConfig {
             tab_width: 4,
             line_numbers: LineNumbers::Absolute,
             scrolloff: 3,
+            line_number_fill: false,
+            screenshot: match cfg!(target_os = "macos") {
+                true => "b=$(osascript -e 'tell application \"System Events\" to tell                      (first application process whose frontmost is true) to get                      {position, size} of front window' | tr -d ' ') &&                      screencapture -x -o -c -R\"$b\""
+                    .to_string(),
+                false => String::new(),
+            },
             indent_hint: "none".to_string(),
             indent_symbol: "↵".to_string(),
             table_rules: "line dash".to_string(),
@@ -817,6 +837,8 @@ struct RawEditor {
     tab_width: Option<usize>,
     line_numbers: Option<String>,
     scrolloff: Option<usize>,
+    line_number_fill: Option<bool>,
+    screenshot: Option<String>,
     indent_hint: Option<String>,
     indent_symbol: Option<String>,
     table_rules: Option<String>,
@@ -888,6 +910,12 @@ impl RawConfig {
         }
         if other.editor.table_rules.is_some() {
             self.editor.table_rules = other.editor.table_rules.clone();
+        }
+        if other.editor.line_number_fill.is_some() {
+            self.editor.line_number_fill = other.editor.line_number_fill;
+        }
+        if other.editor.screenshot.is_some() {
+            self.editor.screenshot = other.editor.screenshot.clone();
         }
         if other.editor.indent_hint.is_some() {
             self.editor.indent_hint = other.editor.indent_hint.clone();
@@ -1040,6 +1068,12 @@ impl RawConfig {
         }
         if let Some(rules) = self.editor.table_rules {
             config.editor.table_rules = rules;
+        }
+        if let Some(on) = self.editor.line_number_fill {
+            config.editor.line_number_fill = on;
+        }
+        if let Some(line) = self.editor.screenshot {
+            config.editor.screenshot = line;
         }
         if let Some(hint) = self.editor.indent_hint {
             config.editor.indent_hint = hint;
