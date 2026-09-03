@@ -585,6 +585,7 @@ pub fn schema(header: &str) -> Schema {
             },
             label: None,
             kind: Kind::String,
+            hidden: false,
         })
         .collect();
     Schema {

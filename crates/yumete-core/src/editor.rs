@@ -2826,11 +2826,18 @@ impl Editor {
             return;
         };
         let cells = self.row_cells(line);
-        let want = if right {
-            (at + 1).min(cells.len().saturating_sub(1))
-        } else {
-            at.saturating_sub(1)
-        };
+        let last = cells.len().saturating_sub(1);
+        let mut want = if right { (at + 1).min(last) } else { at.saturating_sub(1) };
+        // A hidden column is not drawn, so stopping in it would put the caret
+        // where there is nothing on the screen.
+        while !self.column_shows(want) {
+            let next = if right { want + 1 } else { want.checked_sub(1).unwrap_or(at) };
+            if next > last || next == want {
+                want = at;
+                break;
+            }
+            want = next;
+        }
         if let Some(view) = self.table.as_mut() {
             view.goal = want;
         }
@@ -2872,9 +2879,22 @@ impl Editor {
         if cells.is_empty() {
             return;
         }
-        let at = cell.min(cells.len() - 1);
+        let mut at = cell.min(cells.len() - 1);
+        // Walking down a column that this row hides lands on the nearest one
+        // that is drawn, rather than on a caret nobody can see.
+        while !self.column_shows(at) && at + 1 < cells.len() {
+            at += 1;
+        }
+        while !self.column_shows(at) && at > 0 {
+            at -= 1;
+        }
         let start = self.current_buffer().rope().line_to_char(line);
         self.move_head(start + cells[at].0);
+    }
+
+    /// Whether column `i` is drawn, and so worth stopping in.
+    pub fn column_shows(&self, i: usize) -> bool {
+        self.table.as_ref().is_none_or(|v| v.schema.shows(i))
     }
 
     /// The first or last cell of the row.
@@ -4025,11 +4045,20 @@ impl Editor {
             Some(key) => value(key),
             None => format!("{}", line + 1),
         };
+        // The field the cursor is in is shown even when it is empty: that it
+        // *is* empty is the answer to "what is in this cell".
+        let here_name = view
+            .schema
+            .columns
+            .get(cell)
+            .map(|c| c.heading().to_string())
+            .unwrap_or_default();
         let mut rows: Vec<(String, String)> = view
             .schema
             .columns
             .iter()
             .enumerate()
+            .filter(|(i, column)| !column.hidden || spans.get(*i).is_some())
             .map(|(i, column)| {
                 let text = spans
                     .get(i)
@@ -4037,6 +4066,10 @@ impl Editor {
                     .unwrap_or_default();
                 (column.heading().to_string(), text)
             })
+            // A row of a 拆分表 has twenty-eight fields and about five of them
+            // say anything; the twenty-three blanks pushed the 部件 list — the
+            // one thing the panel is read for — off the bottom.
+            .filter(|(name, value)| !value.trim().is_empty() || *name == here_name)
             .collect();
         // Worked out, not stored — and marked as such, so nobody goes looking
         // for a column that is not in the file.
@@ -4049,12 +4082,7 @@ impl Editor {
         }
         Some(Detail {
             title,
-            here: view
-                .schema
-                .columns
-                .get(cell)
-                .map(|c| c.heading().to_string())
-                .unwrap_or_default(),
+            here: here_name,
             rows,
             links: self.cell_links(),
         })
@@ -10143,6 +10171,46 @@ mod tests {
         ed.provide_pipe_output("一個欄位\n");
         assert_eq!(ed.current_buffer().text(), before, "{}", ed.status());
         assert!(ed.status().contains("欄"), "{}", ed.status());
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn a_hidden_column_is_read_and_written_but_not_walked() {
+        // Two of the 拆分表's twenty-eight columns are empty in all 123,380
+        // rows and cost eight cells each across the whole page. `hidden` is
+        // for those — the file still has them, this reader does not care.
+        let dir = std::env::temp_dir().join(format!("yumete-hide-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let tables = dir.join(".yumete").join("tables");
+        std::fs::create_dir_all(&tables).unwrap();
+        std::fs::write(
+            tables.join("h.toml"),
+            "[table]\nfile = \"h.csv\"\n\
+             [[table.column]]\nname = \"a\"\n\
+             [[table.column]]\nname = \"b\"\nhidden = true\n\
+             [[table.column]]\nname = \"c\"\n",
+        )
+        .unwrap();
+        let csv = dir.join("h.csv");
+        let text = "a,b,c\n一,,三\n";
+        std::fs::write(&csv, text).unwrap();
+        let mut ed = Editor::new();
+        ed.open_file(&csv).unwrap();
+        assert!(ed.table().is_some());
+        assert!(!ed.column_shows(1), "b is hidden");
+        ed.goto_line(2);
+        assert_eq!(ed.cell_position().map(|(_, c)| c), Some(0));
+        press(&mut ed, "l");
+        assert_eq!(
+            ed.cell_position().map(|(_, c)| c),
+            Some(2),
+            "`l` steps over the hidden column, not into it"
+        );
+        press(&mut ed, "h");
+        assert_eq!(ed.cell_position().map(|(_, c)| c), Some(0));
+        // …and the file is untouched: hidden is about reading, not about data.
+        assert!(ed.execute("w").is_ok());
+        assert_eq!(std::fs::read_to_string(&csv).unwrap(), text);
         std::fs::remove_dir_all(&dir).ok();
     }
 
