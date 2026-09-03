@@ -355,6 +355,7 @@ Phases are ordered by priority, most writer-critical first:
 | 156 | **`:theme`**                                | both   | P2    | which theme, and dark/light/system, without editing the config | Done |
 | 157 | **A column is a band, and `:table rules`**  | both   | P2    | the page shows between columns, and a wide-columned table can turn the seams off | Done |
 | 158 | **Tint only the words that need it**        | core   | P2    | a word bounded by space or 標點 on both sides is already cut; tinting it says it twice | Done |
+| 159 | **The indent takes the blank line off the page** | both | P1  | one paragraph mark, not two; the file keeps its blank line and the numbers show it. 橫排 done, 竪排 open | Partly |
 
 ---
 

@@ -1393,7 +1393,10 @@ fn text_at(
             // The same measure the page was drawn with — the indent changes
             // where a row breaks, so a click resolved without it lands `indent`
             // cells off on every paragraph's first row.
-            let measure = wrap::Measure::new(width, &hide).with_indent(editor.paragraph_indent());
+            let fold = |line: usize| editor.line_is_folded(line);
+            let measure = wrap::Measure::new(width, &hide)
+                .with_indent(editor.paragraph_indent())
+                .with_folds(&fold);
             let row = wrap::rows_from(
                 buffer.rope(),
                 viewport.top,
@@ -1874,7 +1877,10 @@ fn draw_horizontal(
     // 首行縮進 is part of the measure, not of this function: it changes where a
     // row breaks, so the cursor and the page have to be asking about the same
     // one. Here it is only *drawn*.
-    let measure = wrap::Measure::new(width, &hide).with_indent(editor.paragraph_indent());
+    let fold = |line: usize| editor.line_is_folded(line);
+    let measure = wrap::Measure::new(width, &hide)
+        .with_indent(editor.paragraph_indent())
+        .with_folds(&fold);
 
     let cursor_line = editor.cursor_line();
     let cursor_pos = wrap::position(rope, editor.cursor(), measure);
@@ -4036,6 +4042,36 @@ mod tests {
             ),
             2
         );
+    }
+
+    #[test]
+    fn the_indent_takes_the_blank_line_off_the_page() {
+        // Both marks at once is the one thing no typesetter does: the file
+        // keeps the blank line (it is what makes it a paragraph in Markdown),
+        // the page shows the indent instead. The numbers then run 1, 3, 5 —
+        // which is the file's own numbering, not a renumbering.
+        let mut editor = editor_with("第一段\n\n第二段\n\n第三段\n");
+        editor.set_indent(2);
+        let mut config = Config::default();
+        config.editor.line_numbers = yumete_config::LineNumbers::Absolute;
+        let buffer = render(&editor, &config, 40, 8);
+        let row = |y: u16| row_text(&buffer, y).trim_end().to_string();
+        assert!(row(0).ends_with("第一段"), "{:?}", row(0));
+        assert!(row(1).ends_with("第二段"), "{:?}", row(1));
+        assert!(row(2).ends_with("第三段"), "{:?}", row(2));
+        assert!(row(0).starts_with('1'), "{:?}", row(0));
+        assert!(row(1).starts_with('3'), "the file's own numbers: {:?}", row(1));
+        assert!(row(2).starts_with('5'), "{:?}", row(2));
+
+        // `j` steps over it rather than onto it — a row nobody can see is not
+        // a row the cursor may rest on.
+        editor.on_key(Key::Char('j'));
+        assert_eq!(editor.cursor_line(), 2, "j landed on the folded blank line");
+
+        // With no indent the page is the file again.
+        editor.set_indent(0);
+        let buffer = render(&editor, &config, 40, 8);
+        assert_eq!(row_text(&buffer, 1).trim_end(), "2");
     }
 
     #[test]
