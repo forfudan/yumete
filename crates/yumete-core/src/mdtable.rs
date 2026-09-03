@@ -159,9 +159,18 @@ pub fn is_row(line: &str) -> bool {
 /// quoting — a cell that needs a pipe writes it that way, and this is where
 /// that promise is kept.
 fn pipes(line: &str) -> Vec<usize> {
+    pipes_from(line.trim_end_matches(['\n', '\r']), false)
+}
+
+/// The same, over any text, saying whether a backslash was already open.
+///
+/// The flag is what lets the editor decide whether a `|` about to be typed is
+/// escaped: the backslash that escapes it is already in the buffer, not in the
+/// text being inserted.
+pub fn pipes_from(text: &str, escaped: bool) -> Vec<usize> {
     let mut out = Vec::new();
-    let mut escaped = false;
-    for (i, c) in line.trim_end_matches(['\n', '\r']).chars().enumerate() {
+    let mut escaped = escaped;
+    for (i, c) in text.chars().enumerate() {
         if escaped {
             escaped = false;
             continue;
@@ -173,6 +182,15 @@ fn pipes(line: &str) -> Vec<usize> {
         }
     }
     out
+}
+
+/// Whether `text` holds a `|` that would really separate two cells.
+///
+/// `escaped` says whether the character just before it is a backslash that is
+/// itself unescaped — so typing `|` after a `\` already in the cell is allowed,
+/// which is what the manual promises and what the editor used to refuse.
+pub fn has_bare_pipe(text: &str, escaped: bool) -> bool {
+    !pipes_from(text, escaped).is_empty()
 }
 
 /// Where each cell's *content* begins and ends, in characters from the line's
