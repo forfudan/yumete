@@ -904,3 +904,34 @@ mod tests {
         assert_eq!(other.scheme(), Scheme::Riyue);
     }
 }
+
+#[cfg(test)]
+mod timing {
+    use super::*;
+    use std::time::Instant;
+
+    /// Where a launch's time actually goes. A measurement, not an assertion:
+    /// `cargo test -p yumete-ime --release what_startup_costs -- --ignored --nocapture`.
+    #[test]
+    #[ignore]
+    fn what_startup_costs() {
+        let t = Instant::now();
+        let ime = ImeSession::language_only(Scheme::Lingming);
+        println!("language_only:      {:.1?}", t.elapsed());
+        let t = Instant::now();
+        let seg = ime.segmenter();
+        println!("segmenter():        {:.1?}  (available: {})", t.elapsed(), seg.is_available());
+        let t = Instant::now();
+        let words = yumete_cjk::Segmenter::segment(&seg, "那年冬天下雪以後，岳復山聽到了如竹笛般清脆的聲音。");
+        println!("first segment:      {:.1?}  ({} words)", t.elapsed(), words.len());
+        let t = Instant::now();
+        for _ in 0..100 {
+            let _ = yumete_cjk::Segmenter::segment(&seg, "那年冬天下雪以後，岳復山聽到了如竹笛般清脆的聲音。");
+        }
+        println!("100 more segments:  {:.1?}", t.elapsed());
+        let t = Instant::now();
+        let mut full = ImeSession::from_default_dirs(Scheme::Lingming);
+        println!("碼表 (from_default_dirs): {:.1?} (available: {})", t.elapsed(), full.available());
+        let _ = &mut full;
+    }
+}
