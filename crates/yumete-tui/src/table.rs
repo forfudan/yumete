@@ -272,7 +272,13 @@ pub fn draw(
         // it is the only thing left that says which row this is.
         if gutter > 0 {
             let n = crate::gutter_text(line, cursor_row, gutter as usize, config.editor.line_numbers);
-            let style = if ragged { gutter_style.patch(torn) } else { gutter_style };
+            let style = match (ragged, peek.is_some() && line == cursor_row) {
+                (true, _) => gutter_style.patch(torn),
+                // The row the hit is on, so 「在哪一行」 is answered before the
+                // eye has found the cell.
+                (false, true) => gutter_style.fg(ink.mark()).add_modifier(Modifier::BOLD),
+                (false, false) => gutter_style,
+            };
             for x in area.x..area.x + gutter {
                 if let Some(cell) = buf.cell_mut((x, y)) {
                     cell.set_symbol(" ").set_style(style);
@@ -289,9 +295,18 @@ pub fn draw(
             if x >= right {
                 break;
             }
+            // The cell the cursor is in — or, in a pane that is only being
+            // read, the cell the hit is in. A grid marked *nothing* when it
+            // was the one showing a search hit, which is the one case the
+            // second work area exists for.
             let here = line == cursor_row && i == cursor_cell;
             let style = if here {
-                on
+                match peek {
+                    None => on,
+                    // 朱's own wash, the same mark the prose page gives the
+                    // hit you are standing on.
+                    Some(_) => Style::default().bg(ink.wash()),
+                }
             } else if ragged && i >= view.schema.columns.len() {
                 band_if(line == cursor_row, band, text).patch(torn)
             } else {
