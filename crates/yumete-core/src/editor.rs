@@ -4068,6 +4068,7 @@ impl Editor {
             Some(named) if !named.is_empty() => named.clone(),
             _ => (0..view.schema.columns.len()).collect(),
         };
+        let anchored = pattern.contains('^') || pattern.contains('$');
         let markdown = view.shape == Shape::Markdown;
         let delimiter = view.schema.delimiter;
         let first = usize::from(view.schema.header);
@@ -4075,32 +4076,72 @@ impl Editor {
         let rope = self.current_buffer().rope();
         let last = motion::last_line(rope);
         // Down the first column, then down the second: the order is the whole
-        // point, so the column loop is the outer one.
-        let mut hits: Vec<(usize, usize)> = Vec::new();
-        for &column in &columns {
-            for line in first..=last {
-                if region.as_ref().is_some_and(|r| !r.holds(line) || r.is_rule(line)) {
-                    continue;
+        // point. It is **not** the loop order, though — reading the file once
+        // per column meant splitting all 123,380 rows of a 拆分表 twenty-eight
+        // times over, which is three seconds of the same work. The rows are
+        // read once and the hits are filed by column, which is where the order
+        // actually comes from.
+        let mut by_column: Vec<Vec<(usize, usize)>> = vec![Vec::new(); columns.len()];
+        // Walked with the rope's own iterator, carrying the character offset
+        // along: `line(n)` and `line_to_char(n)` are each a descent of the
+        // tree, and a search that asks them 123,380 times has read the file
+        // twice before it looks at anything.
+        let mut line_start = rope.line_to_char(first);
+        for (nth_line, slice) in rope.lines_at(first).enumerate() {
+            let line = first + nth_line;
+            if line > last {
+                break;
+            }
+            let here = line_start;
+            line_start += slice.len_chars();
+            if region.as_ref().is_some_and(|r| !r.holds(line) || r.is_rule(line)) {
+                continue;
+            }
+            // Borrowed while the rope keeps the row in one piece, which is the
+            // ordinary case; copied only when it straddles a chunk boundary.
+            let owned;
+            let text: &str = match slice.as_str() {
+                Some(text) => text,
+                None => {
+                    owned = slice.to_string();
+                    &owned
                 }
-                let text = rope.line(line).to_string();
-                let spans = match markdown {
-                    true => crate::mdtable::cells(&text),
-                    false => crate::table::cells(&text, delimiter),
-                };
-                let Some(&(from, _)) = spans.get(column) else {
+            };
+            // A row with nothing in it anywhere has nothing in any of its
+            // cells, and that is almost every row — so the row is only cut
+            // into cells when it might pay. Not when the pattern is anchored:
+            // `^木` asks about the start of a *cell*, and the row it sits in
+            // need not start with it.
+            if !anchored && !re.is_match(text) {
+                continue;
+            }
+            let spans = match markdown {
+                true => crate::mdtable::cells(text),
+                false => crate::table::cells(text, delimiter),
+            };
+            let line_start = here;
+            // The row's characters, once. `cell_text` walks the row from the
+            // start for each cell it cuts, which over twenty-eight columns is
+            // the row read twenty-eight times.
+            let chars: Vec<char> = text.trim_end_matches(['\n', '\r']).chars().collect();
+            for (nth, &column) in columns.iter().enumerate() {
+                let Some(&span) = spans.get(column) else {
                     continue;
                 };
-                let cell = crate::table::cell_text(&text, spans[column]);
-                let start = rope.line_to_char(line) + from;
+                let cell: String = chars[span.0.min(chars.len())..span.1.min(chars.len())]
+                    .iter()
+                    .collect();
+                let start = line_start + span.0;
                 // Every match inside the cell, not one per cell: two hits on
                 // one line are two hits for `/` too.
                 for m in re.find_iter(&cell) {
                     let before = cell[..m.start()].chars().count();
                     let length = cell[m.start()..m.end()].chars().count();
-                    hits.push((start + before, start + before + length));
+                    by_column[nth].push((start + before, start + before + length));
                 }
             }
         }
+        let hits: Vec<(usize, usize)> = by_column.into_iter().flatten().collect();
         if hits.is_empty() {
             self.status = say!("找不到：{0}", pattern);
             self.table_hits.clear();
@@ -14077,6 +14118,46 @@ mod tests {
             (4, 7),
             "（甲） found as text, not as a group"
         );
+    }
+
+    /// What a search costs on the table this editor was built for.
+    ///
+    /// A measurement, not an assertion. Run it with
+    /// `cargo test -p yumete-core --release searching_a_big_table -- --ignored --nocapture`.
+    #[test]
+    #[ignore]
+    fn searching_a_big_table() {
+        use std::time::Instant;
+        // 宇浩's 拆分表: 123,380 rows of 28 columns.
+        let mut csv = String::from("char,ids_y,ids_g,ids_t,ids_h,o1,o2,block,unicode,pinyin,sypy,tupa,meaning,note,ids_j,ids_k,ids_v,ids_u,ids_s,ids_b,ids_m,ids_p,ids_x,ids_z,b1,b2,d1,d2\n");
+        let pool: Vec<char> = (0x4E00u32..0x9FA5).filter_map(char::from_u32).collect();
+        for i in 0..123_380usize {
+            let c = pool[i % pool.len()];
+            csv.push_str(&format!(
+                "{c},⿰木{c},⿰木{c},⿰木{c},⿰木{c},,,CJK,{:04X},pin,sy,tu,,,,,,,,,,,,,,,,\n",
+                0x4E00 + (i % 20000)
+            ));
+        }
+        let dir = std::env::temp_dir().join("yumete-table-bench");
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("division.csv");
+        std::fs::write(&path, &csv).unwrap();
+
+        let mut ed = Editor::new();
+        let t = Instant::now();
+        ed.open_file(path.to_str().unwrap()).unwrap();
+        println!("open:          {:.1?}", t.elapsed());
+        let t = Instant::now();
+        assert!(ed.enter_table(), "{}", ed.status());
+        println!("enter table:   {:.1?}", t.elapsed());
+
+        let t = Instant::now();
+        ed.execute(":search column 龜").ok();
+        println!("search column: {:.1?}  ({})", t.elapsed(), ed.status());
+        let t = Instant::now();
+        ed.execute(":search row 龜").ok();
+        println!("search row:    {:.1?}  ({})", t.elapsed(), ed.status());
+        std::fs::remove_dir_all(&dir).ok();
     }
 
     #[test]
