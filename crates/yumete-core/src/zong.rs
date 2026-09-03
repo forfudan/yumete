@@ -864,6 +864,44 @@ impl From<Position> for Anchor {
     }
 }
 
+/// What, if anything, is drawn in a paragraph's opening squares.
+///
+/// **Nothing, by default.** In a printed book those two squares are white, and
+/// a mark that appears at the head of *every* paragraph is a mark that says
+/// nothing — the eye stops reading it by the third page. It is here because
+/// while a draft is being *edited* the question 「這裏原本是不是有個空行」 is
+/// a real one, and the answer is otherwise only in the line numbers.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum IndentHint {
+    /// White, the way a book prints it.
+    #[default]
+    None,
+    /// The opening squares carry a band, a shade off the page.
+    Colour,
+    /// A character in the first square — a `↵`, say, for the line break it
+    /// stands in for.
+    Symbol,
+}
+
+impl IndentHint {
+    pub fn parse(value: &str) -> Option<IndentHint> {
+        match value.trim().to_ascii_lowercase().as_str() {
+            "none" | "off" | "無" | "无" => Some(IndentHint::None),
+            "color" | "colour" | "底色" => Some(IndentHint::Colour),
+            "symbol" | "mark" | "符號" | "符号" => Some(IndentHint::Symbol),
+            _ => None,
+        }
+    }
+
+    pub fn name(self) -> &'static str {
+        match self {
+            IndentHint::None => "none",
+            IndentHint::Colour => "color",
+            IndentHint::Symbol => "symbol",
+        }
+    }
+}
+
 /// Whether `line` is off the page altogether (Feature #159).
 ///
 /// The single blank line between two written ones, once an indent is marking
