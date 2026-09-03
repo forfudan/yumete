@@ -353,7 +353,7 @@ Phases are ordered by priority, most writer-critical first:
 | 154 | **`:tutor` — a lesson you edit**            | both   | P1    | vimtutor's idea, on Chinese prose, where `w` and 縱書 can actually be taught | Planned |
 | 155 | **A finished command says what it takes**   | core   | P2    | `:yume` lists `yume scheme`, `yume chaifen`… beside itself; Tab writes the whole sentence | Done |
 | 156 | **`:theme`**                                | both   | P2    | which theme, and dark/light/system, without editing the config | Done |
-| 157 | **`:table rules`**                          | both   | P2    | off (default), a band, or a drawn line — solid, dashed or double | Done |
+| 157 | **`:table rules`**                          | both   | P2    | a dashed line (default), solid, double, a band, or nothing | Done |
 | 158 | **Tint only the words that need it**        | core   | P2    | a word bounded by space or 標點 on both sides is already cut; tinting it says it twice | Done |
 | 159 | **The indent takes the blank line off the page** | both | P1  | one paragraph mark, not two; the file keeps its blank line and the numbers show it | Done |
 | 160 | **`:yume on` / `off` / `which` / `installed`** | both | P2  | the 中/英 switch and the 碼表's provenance, by name | Done |

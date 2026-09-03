@@ -1370,8 +1370,8 @@ zh = "欄線：{0}"
 en = "column rules: {0}"
 
 [[message]]
-zh = "什麼都不畫，靠對齊分（默認）"
-en = "nothing drawn — the alignment tells them apart (default)"
+zh = "什麼都不畫，靠對齊分"
+en = "nothing drawn — the alignment tells them apart"
 
 [[message]]
 zh = "每欄一條淡底，紙從縫裏透出來"
@@ -1382,12 +1382,12 @@ zh = "畫一條竪線"
 en = "draw a vertical line"
 
 [[message]]
-zh = "實線 │（默認）"
-en = "solid │ (default)"
+zh = "實線 │"
+en = "solid │"
 
 [[message]]
-zh = "虛線 ┆"
-en = "dashed ┆"
+zh = "虛線 ┆（默認）"
+en = "dashed ┆ (default)"
 
 [[message]]
 zh = "雙線 ║"

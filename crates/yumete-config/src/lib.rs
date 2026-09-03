@@ -182,7 +182,7 @@ impl Default for EditorConfig {
             tab_width: 4,
             line_numbers: LineNumbers::Absolute,
             scrolloff: 3,
-            table_rules: "off".to_string(),
+            table_rules: "line dash".to_string(),
             show_segmentation: true,
             segmentation_threshold: 0,
             layout: Layout::Horizontal,

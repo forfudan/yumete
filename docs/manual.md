@@ -972,16 +972,16 @@ yumete -t 表.csv          # 或者在裏面 :table
 
 **欄與欄之間怎麼分開**，是這張表的事，不是編輯器的事：二十八欄一個字寬的拆分表讀起來
 是格子，要一條線才分得清；六欄很寬的表讀起來是頁面，欄欄之間都畫一條反而是字與字之間
-的噪音。所以有三種，默認**什麼都不畫**——靠對齊分，印出來的表格就是這麼做的：
+的噪音。默認是**虛線**——畫得出邊界，又不會自己變成一欄：
 
 ```
-:table rules off            什麼都不畫（默認）
-:table rules color          每欄一條淡底，紙從縫裏透出來
+:table rules line dash      虛線 ┆（默認）
 :table rules line           一條實線 │
-:table rules line dash      虛線 ┆
 :table rules line double    雙線 ║
+:table rules color          每欄一條淡底，紙從縫裏透出來
+:table rules off            什麼都不畫，靠對齊分
 :table rules                說現在是哪一種
-[editor] table_rules = "line dash"
+[editor] table_rules = "off"
 ```
 
 **放一份 schema 在資料旁邊，它就自動是表格。** `.yumete/tables/*.toml`，從**檔案所在
@@ -1568,8 +1568,8 @@ line_numbers = "absolute"    # "absolute" | "relative" | "none"
 scrolloff = 3                # 光標周圍保留的行（或縱）數
 show_segmentation = true     # 詞語著色（`:segment` 也可以隨時開關）
 segmentation_threshold = 0
-table_rules = "off"          # 表格的欄線："off" | "color" | "line"
-                             # | "line dash" | "line double"
+table_rules = "line dash"    # 表格的欄線："line dash"（默認）| "line"
+                             # | "line double" | "color" | "off"
 
 layout = "horizontal"        # "horizontal" | "vertical"
 zong_length = 0              # 每縱字數，4–64；0 = 窗口能給多長就多長
