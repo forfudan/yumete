@@ -681,6 +681,36 @@ four are done; the outcomes are noted here rather than in a second list.
 - **Group 10 (first-line indent, 段組) is 0.1.0, not 0.2.0.** — *done: #145, #146.* They are the point
   of a 縱書 editor.
 
+### 12 · What a review of the night found, 2026-09-04
+
+Ten findings; nine fixed the same night. The three that mattered:
+
+- **A `|` table quoted inside a code fence was edited as a live grid.** The
+  fence was checked at the door (`enter_table`) and nowhere after, and `gg`,
+  `G`, `:N` and a search all land outside the cells — the manual says so. So
+  `t t` reformatted somebody's quoted example. The check belongs in
+  `md_region`, which is what everything downstream asks.
+- **The page and the cursor wrapped differently.** The renderer wrapped with
+  首行縮進 and every motion wrapped without it, so `j` landed on the character
+  under a column nobody was looking at.
+- **The geometry was worked out in three places** — the drawing, the mouse, and
+  the event loop settling the 縱 length before the keys that use it. They
+  disagreed by the hint row, the tab bar and the detail panel: the 縱 the
+  cursor moved on was one longer than the 縱 on the screen, a click resolved to
+  the wrong character, and `C-f` in 段組 was told a third of the truth.
+  `page_areas` is now the one answer.
+
+Also: `C-w` at the prompt sliced a full-width space in half (a panic); `.` lost
+its count and mistook `gn` for a change; `substitution_breaks_the_grid` named a
+table-row number as a document line and counted `\|` as a boundary; a paragraph
+opening with a link was not indented.
+
+**Left open, in the code:** a mark set in a buffer with no file is
+`Spot::InBuffer(index, …)`, and `close_buffer` shifts every later index down —
+so after closing an earlier buffer the mark, *and every jump-list entry*, names
+a different file. It wants a monotonic buffer id, which is a small change to
+`Buffer` and two call sites. **medium.**
+
 ## 5.3 Releasing, and the Homebrew tap (#135, planned)
 
 Deferred until there is something to release. The investigation is written down
