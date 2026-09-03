@@ -713,6 +713,68 @@ Retuning a theme then means editing two or three numbers, and every part of the
 editor moves together, which is what makes a theme a theme rather than a
 palette somebody has to keep consistent by hand. **high**
 
+#### What two reviews found, 2026-09-04
+
+A book designer and a terminal-scheme designer read it separately. They agree
+on the two facts that reframe the whole job:
+
+**1. The page is never painted.** Body prose is drawn with no `fg` and no `bg` —
+`Style::default()` in both renderers. 墨香's two colours dress the candidate
+panel, the sidebar, the tab bar, the `:` menu and the detail panel, and nothing
+else. **The manuscript is the terminal's own ink on the terminal's own ground.**
+So every tint in the program was tuned against a ground it does not control, and
+seven of the eight markup colours measure between 1.5:1 and 2.8:1 on a *light*
+terminal. Nothing else here can be decided until this is: a scheme that does not
+own its ground cannot make any of the promises below. **This is the first fix.**
+
+**2. The ladder has a dead middle, and colours are being picked out of it.**
+Measured: `t ≤ 350` clears 4.5:1 as ink on paper; `t ≥ 730` is where ink can sit
+on it as a ground. **The 38% between carries nothing** — too faint to read, too
+pale to write on. `border()` at `step(750)` is a *ground* rung used as a
+foreground and measures 1.81:1; `Kind::Comment` sits at ≈`step(606)` and
+measures 2.54:1. (The good news: sRGB mixing was the right call and the comment
+defending it is right for a better reason than it gives — ΔL\* across the ramp
+is 5.84–7.38, against 3.22–16.81 for linear light. **Do not touch `Skin::step`.**)
+
+**Invisible today, all three for the same reason** — a *tint* colour used as a
+*rule* colour: the ruler line is drawn in exactly its own background (**1.00:1**
+— it has never been seen), the 稿紙 ticks are at 1.11:1, and the 縱書 number
+band is at 1.04:1 while the digits inside it render in the terminal's default
+foreground, which on the cursor's own paragraph is *brighter than the prose*.
+That band is the one place vertical layout strips position of its job — the
+numbers sit in the text's own columns — and it is the worst thing in the scheme.
+
+**`DIM` is load-bearing in four places and is not a colour.** The ruby reading
+(`vertical.rs:601`) is DIM with no `fg` at all: on a terminal that ignores DIM,
+**a reading and its base are the same colour**. Same for the cursor's paragraph
+number, the Markdown markers (which is the whole 所見即所得 promise) and front
+matter. Each wants a real rung.
+
+**Anchors.** The book designer argues **three** — 墨, 紙, and 朱, the red of the
+reader's brush, for "this is not the writing" (a torn row, a component with no
+row) — and against a fourth, because "這裏" is already answered by ink/paper
+inversion, which three parts of the editor already do and which survives a mode
+flip. The terminal designer argues **four**, adding 青 for reference/furniture,
+on the evidence that a cool family *already exists unnamed*: ten blue-shifted
+values across four files agreeing by accident. Both agree the five markup hues
+should go: they differ in hue at the same weight as the prose, which is
+backwards for a manuscript. **The author picks.**
+
+**Also found:** `fg(Color::White)` on the selection (three files) flattens every
+markup colour exactly when the writer is looking hardest, and is *brighter than
+the ink*; the overlay grounds are 1.4–2.4 ΔE apart, which is invisible and also
+what breaks the 256-colour fallback (fix one, get the other free); the ink is
+hard-coded in nine places rather than read from `panel.ink`; `theme.gutter` is
+one name doing five jobs and not the one it is named after; the table has two
+different grammars for "here" inside one widget.
+
+**Keep:** `Skin::step`, the ink/paper pair, `step(300)` as "one shade back"
+(independently reinvented as `quiet` in three files), inversion for the chosen
+thing, `REVERSED` for the status line and the block cursor (the best-engineered
+styling in the program), the `==highlight==` pair, `BOLD`-alone for 粗體 and
+`ITALIC`-alone for 斜體, and `torn`'s `#D89A9A` as a *value* — promote it to an
+anchor, do not retune it.
+
 ### 12 · What a review of the night found, 2026-09-04
 
 Ten findings; nine fixed the same night. The three that mattered:
