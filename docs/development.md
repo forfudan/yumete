@@ -364,6 +364,8 @@ Phases are ordered by priority, most writer-critical first:
 | 165 | **Readings on the horizontal page**         | tui    | P1    | the row above, over the 字 it reads; only a row that has one costs one | Done |
 | 166 | **Typewriter / focus mode**                 | tui    | P2    | the cursor's row stays in the middle of the screen | Planned |
 | 167 | **`:help`**                                 | both   | P1    | the keys worth knowing, in the editor; `:help chinese`, `:help vertical` | Planned |
+| 168 | **The page before the dictionary**          | cli    | P1    | 14 MB of language data read after the first frame, not before it | Done |
+| 169 | **Schemes found rather than listed**        | both   | P2    | what is installed — including a scheme of the reader's own — is what `:yume scheme` offers; a Rime folder later | Planned |
 
 ---
 
