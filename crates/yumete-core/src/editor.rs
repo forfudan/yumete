@@ -368,6 +368,12 @@ fn walk(root: &Path, f: &mut impl FnMut(&Path)) {
         if name.starts_with('.') || name == "target" || name == "node_modules" {
             continue;
         }
+        // Not what this editor just wrote. `:export html` puts the book's own
+        // words into a `.html` beside it, and `:grep` then found every one of
+        // them twice — the second time in a file the writer cannot edit.
+        if entry.file_type().is_ok_and(|t| t.is_file()) && is_build_output(&name) {
+            continue;
+        }
         match entry.file_type() {
             Ok(t) if t.is_dir() => dirs.push(path),
             Ok(t) if t.is_file() => files.push(path),
@@ -1873,16 +1879,20 @@ impl Editor {
                 Ok(CommandOutcome::Continue)
             }
             Command::ListBuffers => {
-                self.list_buffers();
+                // The picker, not the status line: with 122 chapters open the
+                // list is 1,783 characters and the status line is one row. A
+                // list you cannot read is not a list — and the picker is the
+                // same list, searchable, which is what you wanted anyway.
+                self.open_buffer_picker();
                 Ok(CommandOutcome::Continue)
             }
             Command::ToggleHanging => {
                 let on = !self.hanging;
                 self.set_hanging_punctuation(on);
                 self.status = if on {
-                    "句讀 hang in the margin".to_string()
+                    "標點旁置：開".to_string()
                 } else {
-                    "句讀 take a square each".to_string()
+                    "標點旁置：關（每個標點佔一格）".to_string()
                 };
                 Ok(CommandOutcome::Continue)
             }
@@ -8283,6 +8293,19 @@ struct Substitution<'a> {
     rows: crate::command::Rows,
 }
 
+/// Whether a file is something a tool produced rather than something a writer
+/// wrote.
+///
+/// The manuscript's own words are *in* the export, so searching the export
+/// finds every hit twice — the second time in a file that cannot be edited and
+/// will be overwritten. The same goes for a typesetter's output.
+fn is_build_output(name: &str) -> bool {
+    let lower = name.to_ascii_lowercase();
+    [".html", ".htm", ".pdf", ".epub", ".docx"]
+        .iter()
+        .any(|ext| lower.ends_with(ext))
+}
+
 /// Whether `c` is an Ideographic Description Character — U+2FF0…U+2FFF.
 ///
 /// The operators of the 表意文字描述序列 grammar: ⿰ left-to-right, ⿱ above and
@@ -11677,8 +11700,10 @@ mod tests {
         assert_eq!(ed.buffer_count(), 1);
         assert_eq!(ed.current_buffer().text(), "");
 
+        // `:buffer list` opens the picker: with 122 chapters open the list is
+        // 1,783 characters and the status line is one row.
         ed.execute(":buffer list").unwrap();
-        assert!(ed.status().contains("*1"), "{}", ed.status());
+        assert_eq!(ed.mode(), Mode::Picker);
     }
 
     #[test]

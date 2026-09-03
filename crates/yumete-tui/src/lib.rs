@@ -970,9 +970,11 @@ fn draw(
 
     // The tab bar takes the row off the top of what is left, so the page below
     // it is drawn into a rectangle that already knows about it.
+    let mut tab_area = Rect::new(body.x, body.y, body.width, 0);
     let text_area = if config.editor.tabs.showing(editor.buffer_count()) && body.height > 1 {
         let split = Layout::vertical([Constraint::Length(1), Constraint::Min(1)]).split(body);
         draw_tabs(frame, editor, config, split[0]);
+        tab_area = split[0];
         split[1]
     } else {
         body
@@ -1010,7 +1012,7 @@ fn draw(
     if hint_rows == 1 {
         draw_hints(frame, editor, config, hint_area);
     }
-    draw_status(frame, editor, config, ime, status_area);
+    draw_status(frame, editor, config, ime, status_area, tab_area);
     // The floating panels stack upward from the footer, and the footer is now
     // two rows deep — anchored to the status line alone they would be drawn
     // over the hint row.
@@ -1439,18 +1441,61 @@ fn block_style(block: yumete_core::markdown::Block) -> Option<Style> {
 /// the last frame: a remembered layout is one that can be a frame out of date,
 /// and a click that opens the wrong file is worse than no click at all.
 fn tab_spans(editor: &Editor, area: Rect) -> Vec<(u16, u16, usize)> {
+    let tabs = editor.buffer_tabs();
+    if tabs.is_empty() || area.width == 0 {
+        return Vec::new();
+    }
+    let widths: Vec<u16> = tabs
+        .iter()
+        .map(|(name, dirty)| yumete_cjk::str_width(&tab_label(name, *dirty)) as u16)
+        .collect();
+    let current = editor
+        .buffer_position()
+        .0
+        .saturating_sub(1)
+        .min(tabs.len() - 1);
+    // **The bar scrolls to the tab you are in.** It used to start at the first
+    // file and stop when it ran out of room, so past about eight chapters the
+    // one being written was never on it — and the `[n/m]` that would have said
+    // so was suppressed *because* the bar was up.
+    //
+    // Widen leftward from the current tab until one more would not fit, then
+    // rightward with whatever is left — the same rule the table's columns
+    // follow, and it keeps the bar still while you walk within a page of it.
+    let room = area.width;
+    let mut used = widths[current].min(room);
+    let mut first = current;
+    while first > 0 && used + widths[first - 1] <= room {
+        first -= 1;
+        used += widths[first];
+    }
+    let mut last = current;
+    while last + 1 < tabs.len() && used + widths[last + 1] <= room {
+        last += 1;
+        used += widths[last];
+    }
     let mut spans = Vec::new();
     let mut x = area.x;
-    for (i, (name, dirty)) in editor.buffer_tabs().into_iter().enumerate() {
-        let label = tab_label(&name, dirty);
-        let w = yumete_cjk::str_width(&label) as u16;
-        if x + w > area.x + area.width {
+    for i in first..=last {
+        if x + widths[i] > area.x + area.width {
             break;
         }
-        spans.push((x, w, i));
-        x += w;
+        spans.push((x, widths[i], i));
+        x += widths[i];
     }
     spans
+}
+
+/// Whether the tab bar is showing every open file.
+///
+/// When it is not, the status line says `[n/m]` again: the bar answers "which
+/// one am I in" better than a fraction does, but only about the files it is
+/// actually drawing.
+fn tabs_show_everything(editor: &Editor, config: &Config, area: Rect) -> bool {
+    if area.height == 0 || !config.editor.tabs.showing(editor.buffer_count()) {
+        return false;
+    }
+    tab_spans(editor, area).len() == editor.buffer_count()
 }
 
 /// One tab's text, padded so the lit one reads as a tab rather than as a word.
@@ -2048,6 +2093,7 @@ fn draw_status(
     config: &Config,
     ime: &ImeSession,
     status_area: Rect,
+    tab_area: Rect,
 ) {
     let buffer = editor.current_buffer();
     // The sidebar used to take the whole status line to list its keys. It has
@@ -2097,7 +2143,7 @@ fn draw_status(
         // With more than one file open, say which — unless the tab bar is up,
         // which says it better and already says it.
         let (n, total) = editor.buffer_position();
-        let which = if total > 1 && !config.editor.tabs.showing(total) {
+        let which = if total > 1 && !tabs_show_everything(editor, config, tab_area) {
             format!(" [{n}/{total}]")
         } else {
             String::new()
@@ -3712,6 +3758,41 @@ mod tests {
         editor.on_key(Key::Char(' '));
         assert_eq!(hint(&editor).trim(), "");
         editor.on_key(Key::Esc);
+    }
+
+    #[test]
+    fn the_tab_bar_scrolls_to_the_file_you_are_in() {
+        // The bar used to start at the first file and stop when it ran out of
+        // room, so past about eight chapters the one being written was never
+        // on it — and the `[n/m]` that would have said so was suppressed
+        // *because* the bar was up. With 122 buffers neither said it.
+        let mut editor = Editor::new();
+        for n in 1..=20 {
+            editor.execute("new").unwrap();
+            // A buffer with nothing in it is the one `:new` reuses.
+            editor.on_key(Key::Char('i'));
+            editor.on_key(Key::Char('字'));
+            editor.on_key(Key::Esc);
+            editor
+                .current_buffer_mut()
+                .name_as(&format!("第{n:02}章.md"));
+        }
+        let config = Config::default();
+        let buffer = render(&editor, &config, 40, 10);
+        let bar: String = (0..40u16).map(|x| at(&buffer, x, 0)).collect();
+        assert!(bar.contains("20"), "the tab you are in is on the bar: {bar:?}");
+        // …and the status line says the fraction again, because the bar cannot
+        // show them all.
+        let status: String = (0..40u16).map(|x| at(&buffer, x, 9)).collect();
+        assert!(status.contains("/20]"), "{status:?}");
+
+        // Walk back to the first and the bar comes with you.
+        for _ in 0..19 {
+            editor.execute("buffer previous").unwrap();
+        }
+        let buffer = render(&editor, &config, 40, 10);
+        let bar: String = (0..40u16).map(|x| at(&buffer, x, 0)).collect();
+        assert!(bar.contains("01"), "{bar:?}");
     }
 
     #[test]
