@@ -668,23 +668,22 @@ dep and ship the tarballs §5.3 already designs. **high**
 - ~~`:table check`~~ — duplicate row names, components with no row, ragged
   rows, in a `gf`-shaped results buffer.
 
-### 6 · `:s`, and the command line
+### 6 · `:s`, and the command line — **done**
 
-- **`:s` cannot contain a `/`**, and says *substitute requires an argument* when
-  you try. No alternate delimiter either. Dates, paths, URLs are unreachable.
-  **high**
-- **`:s` flags are swallowed**: `i` does not ignore case, `c` does not confirm,
-  and **`n` — which in vi means "count, change nothing" — performs the
-  substitution**. **high**
-- **No project-wide replace.** `:grep` finds 128 hits across 143 files in 6 ms
-  and there is no way to change any of them; renaming a character across 120
-  chapters means opening 120 files. **high**
-- **The `:` line has no editing and no history** — no `Left`/`Right`, no `C-w`,
-  no `Up`. A typo in a long `:%s` means backspacing through all of it. **medium**
-- **`:s` has no numeric ranges** (`:1,40s`, `:.,$s`). **medium**
-- **`C-o` does nothing after `gg`, `ge` or a search**, though `remember_jump`'s
-  own doc comment claims otherwise — only `goto_line` calls it. Jump-back after
-  a search is the whole reason `C-o` exists. **high**
+- ~~`:s` cannot contain a `/`~~ — the delimiter is whatever follows the `s`, as
+  in vi and sed: `:s#2024/01#2025/02#`.
+- ~~`:s` flags are swallowed~~ — `g` and `i` work, **`n` counts and changes
+  nothing** as vi means it, and a flag that is not implemented (`c`) says so
+  rather than being dropped.
+- ~~No project-wide replace~~ — `:grep`, then `:replace`. The safety is the
+  order: the pattern is the one already looked at, and nothing reaches disk —
+  every hit file is opened as a buffer, so `u` takes any of them back and `:wa`
+  is the moment a person says yes.
+- ~~The `:` line has no editing and no history~~ — `←`/`→`, `Home`/`End`,
+  `C-w`, `C-u`, `↑`/`↓`, with `:` and `/` keeping separate histories.
+- ~~`:s` has no numeric ranges~~ — `:1,40s`, `:.,$s`, `:40s`, `%`.
+- ~~`C-o` does nothing after `gg`, `ge` or a search~~ — all three leave a way
+  back now, which is what `remember_jump`'s own doc comment always claimed.
 
 ### 7 · A hundred chapters
 
