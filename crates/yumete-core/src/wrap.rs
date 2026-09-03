@@ -71,6 +71,13 @@ pub struct Measure<'a> {
     /// and everything that asks where a character is has to be asking about
     /// the same page.
     indent: usize,
+    /// The one paragraph that is shown **as the file has it**: no indent, and
+    /// the blank line above it back (Feature #159).
+    ///
+    /// The paragraph being typed into. Everywhere else the page is a book;
+    /// here it is a file, because this is the line whose structure is being
+    /// changed and there must be no doubt about what is in it.
+    open: Option<usize>,
 }
 
 /// A page with nothing hidden, for callers that show the source as it is.
@@ -87,6 +94,7 @@ impl<'a> Measure<'a> {
             hidden: NOTHING_HIDDEN,
             folded: NOTHING_FOLDED,
             indent: 0,
+            open: None,
         }
     }
 
@@ -97,7 +105,13 @@ impl<'a> Measure<'a> {
             hidden,
             folded: NOTHING_FOLDED,
             indent: 0,
+            open: None,
         }
+    }
+
+    /// The same measure, with `line` shown as the file has it.
+    pub fn with_open_line(self, line: Option<usize>) -> Measure<'a> {
+        Measure { open: line, ..self }
     }
 
     /// The same measure, with `folded` naming the lines that are not drawn.
@@ -137,10 +151,18 @@ impl<'a> Measure<'a> {
     /// Only a paragraph's own first row, and only when it is prose: a heading
     /// or a list item carries its own leading structure, and pushing it two
     /// cells right would say something about it that is not true.
-    pub fn indent_of(self, text: &str, index_in_line: usize) -> usize {
+    pub fn indent_of(self, line: usize, text: &str, index_in_line: usize) -> usize {
         match index_in_line == 0 && crate::zong::opens_a_paragraph(text) {
-            true => self.indent,
+            true => self.indent_on(line),
             false => 0,
+        }
+    }
+
+    /// How many cells open `line` — none, on the paragraph being typed into.
+    fn indent_on(self, line: usize) -> usize {
+        match self.open == Some(line) {
+            true => 0,
+            false => self.indent,
         }
     }
 
@@ -448,13 +470,13 @@ fn rows_of_line(rope: &Rope, line: usize, m: Measure) -> Vec<(usize, usize)> {
     line_hash(rope, line).hash(&mut hasher);
     hidden.hash(&mut hasher);
     // The indent changes where a row breaks, so it is part of the key too.
-    m.indent.hash(&mut hasher);
+    m.indent_on(line).hash(&mut hasher);
     let hash = hasher.finish();
     if let Some(rows) = remembered(hash, m.width) {
         return rows;
     }
     WRAPPED.with(|n| n.set(n.get() + 1));
-    let rows = line_rows_indented(&line_text(rope, line), m.width, &hidden, m.indent);
+    let rows = line_rows_indented(&line_text(rope, line), m.width, &hidden, m.indent_on(line));
     remember(hash, m.width, &rows);
     rows
 }
@@ -516,7 +538,7 @@ pub fn position(rope: &Rope, pos: usize, m: Measure) -> Position {
     let column: usize = steps(&ahead).map(|(_, w)| w).sum();
     // The indent is real page: a caret on the paragraph's first character sits
     // two cells in, and `j` from the row below should land under it.
-    let column = column + m.indent_of(&line_text(rope, line), index_in_line);
+    let column = column + m.indent_of(line, &line_text(rope, line), index_in_line);
     Position {
         line,
         index_in_line,
@@ -673,7 +695,7 @@ fn char_at_column(
     let row = rope.slice(start + s..start + e).to_string();
     // A goal column inside the indent lands on the row's first character:
     // there is nothing in the indent to land on.
-    let mut col = m.indent_of(&line_text(rope, line), index_in_line);
+    let mut col = m.indent_of(line, &line_text(rope, line), index_in_line);
     let mut at = e;
     for (i, w) in steps(&row) {
         if col + w > goal {

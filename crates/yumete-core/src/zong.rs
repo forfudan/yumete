@@ -63,6 +63,9 @@ pub struct Grid {
     pub hanging: bool,
     /// Whether the blank line an indent replaces is left off the page.
     pub fold_blanks: bool,
+    /// The paragraph shown as the file has it: no indent, and its blank line
+    /// back. `usize::MAX` for none.
+    pub open_line: usize,
     /// The line the cursor is on, which is never folded.
     pub cursor_line: usize,
     /// Whether a pair of half-width characters shares one slot (縦中横).
@@ -109,6 +112,15 @@ impl Grid {
             indent: 0,
             fold_blanks: false,
             cursor_line: usize::MAX,
+            open_line: usize::MAX,
+        }
+    }
+
+    /// The same grid, with `line` shown as the file has it.
+    pub fn with_open_line(self, line: Option<usize>) -> Grid {
+        Grid {
+            open_line: line.unwrap_or(usize::MAX),
+            ..self
         }
     }
 
@@ -725,6 +737,14 @@ fn line_grid(rope: &Rope, line: usize, grid: Grid) -> Vec<Slot> {
         let end = start + text.chars().count();
         (to >= start && from <= end).then(|| (from.max(start) - start, to.min(end) - start))
     });
+    // The paragraph being typed into is laid out as the file has it: no
+    // opening squares. Done here, where the line is known — everything
+    // downstream asks this function for a line's slots, so nothing else has
+    // to know about it.
+    let grid = match line == grid.open_line {
+        true => Grid { indent: 0, ..grid },
+        false => grid,
+    };
     line_slots_in(&text, grid, selected)
 }
 
@@ -850,7 +870,7 @@ impl From<Position> for Anchor {
 /// the paragraphs instead. Two blanks in a row are a scene break and both
 /// stay; the cursor's own line always stays.
 pub fn folded(rope: &Rope, line: usize, grid: Grid) -> bool {
-    if !grid.fold_blanks || line == grid.cursor_line {
+    if !grid.fold_blanks || line == grid.cursor_line || line + 1 == grid.open_line {
         return false;
     }
     let lines = line_count(rope);
@@ -1154,6 +1174,7 @@ mod tests {
         indent: 0,
         fold_blanks: false,
         cursor_line: usize::MAX,
+        open_line: usize::MAX,
     };
 
     /// Readings laid out, so the ruby tests exercise the layout.
