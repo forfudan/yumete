@@ -32,6 +32,25 @@ pub enum LineNumbers {
     None,
 }
 
+/// How wide an East-Asian **Ambiguous** character is drawn.
+///
+/// Annex #11 leaves it to the environment, and the environment is the terminal
+/// and its font: `—` `…` `“”` `·` `※` `▓` are one cell in a Latin font and two
+/// in a CJK one. Nobody can work this out from the text — but the terminal can
+/// be *asked*, which is what `Auto` does.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Ambiguity {
+    /// Ask the terminal at start-up, by printing one and reading back where the
+    /// cursor landed. The default: it is the only answer that is about the
+    /// terminal actually in front of the writer.
+    #[default]
+    Auto,
+    /// Two cells, as a CJK font draws them.
+    Wide,
+    /// One cell, as a Latin font draws them.
+    Narrow,
+}
+
 /// Editor behaviour settings.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct EditorConfig {
@@ -121,11 +140,10 @@ pub struct EditorConfig {
     /// unsaved changes (Feature #79). On by default, and removed on save and on
     /// quit, so in an ordinary session it is never seen.
     pub autosave: bool,
-    /// Whether East-Asian Ambiguous characters — `—` `…` `“” ‘’` `·` — are two
-    /// cells wide (Feature #81). `"wide"` by default: this is an editor for
-    /// 漢字 prose, and those characters are drawn wide by the CJK fonts such
-    /// prose is read in. `"narrow"` for a Latin font.
-    pub ambiguous_wide: bool,
+    /// How wide East-Asian Ambiguous characters — `—` `…` `“” ‘’` `·` — are
+    /// drawn (Feature #81, #193). `"auto"` by default, which asks the terminal;
+    /// `"wide"` and `"narrow"` say so outright.
+    pub ambiguous_width: Ambiguity,
     /// The measure a horizontal page is written to, in cells; `0` for none
     /// (Feature #101).
     ///
@@ -226,7 +244,7 @@ impl Default for EditorConfig {
             hanging_punctuation: false,
             soft_wrap: true,
             autosave: true,
-            ambiguous_wide: true,
+            ambiguous_width: Ambiguity::default(),
             syntax: String::new(),
             ruler: 0,
             measure: 0,
@@ -1172,8 +1190,9 @@ impl RawConfig {
             // An unknown value keeps the default rather than picking one: a
             // typo here shifts every line on the page.
             match width.trim().to_ascii_lowercase().as_str() {
-                "wide" | "double" | "full" => config.editor.ambiguous_wide = true,
-                "narrow" | "single" | "half" => config.editor.ambiguous_wide = false,
+                "wide" | "double" | "full" => config.editor.ambiguous_width = Ambiguity::Wide,
+                "narrow" | "single" | "half" => config.editor.ambiguous_width = Ambiguity::Narrow,
+                "auto" | "ask" | "terminal" => config.editor.ambiguous_width = Ambiguity::Auto,
                 _ => {}
             }
         }

@@ -77,7 +77,19 @@ fn main() -> ExitCode {
     let (config, config_problems) = yumete_config::Config::load_reporting();
     // Settled before anything is measured: every width question downstream —
     // wrap, gutter, cursor, the 縱 grid — asks the same global.
-    yumete_core::set_ambiguous_wide(config.editor.ambiguous_wide);
+    //
+    // `auto` asks the terminal, because the terminal is the only thing that
+    // knows what its font does with `—` and `…`, and a writer cannot be
+    // expected to diagnose a caret two cells off the character as a setting.
+    // A terminal that will not answer is taken to draw them narrow: that is
+    // what the page itself does, so at least the caret sits on the character.
+    yumete_core::set_ambiguous_wide(match config.editor.ambiguous_width {
+        yumete_config::Ambiguity::Wide => true,
+        yumete_config::Ambiguity::Narrow => false,
+        yumete_config::Ambiguity::Auto => {
+            yumete_tui::width::ask_the_terminal_about_width().unwrap_or(false)
+        }
+    });
     // …and the language everything says itself in, before anything says
     // anything: a config error is a message too.
     if let Some(language) = yumete_core::messages::Language::parse(&config.editor.language) {

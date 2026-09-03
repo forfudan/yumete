@@ -12,6 +12,7 @@
 pub mod table;
 pub mod theme;
 pub mod vertical;
+pub mod width;
 
 use std::io::{self, stdout, Write as _};
 
@@ -2452,22 +2453,14 @@ fn draw_horizontal(
         // aside is a block on the page because it is a block on paper, and a
         // painted page is painted to the edge.
         if ground.bg.is_some() {
-            // What is *drawn*, not what the source is: markup taken off the
-            // page took its columns with it, so the ground would otherwise stop
-            // short of the right edge by exactly the hidden width.
-            let used: usize = gutter
-                + indent
-                + chars
-                    .iter()
-                    .zip(&shown)
-                    .filter(|(_, &on)| on)
-                    .map(|(&c, _)| yumete_cjk::char_width(c))
-                    .sum::<usize>()
-                + break_cell.len();
-            let rest = (text_area.width as usize).saturating_sub(used);
-            if rest > 0 {
-                spans.push(Span::styled(" ".repeat(rest), ground));
-            }
+            // A whole width of spaces, and the page truncates them. Working out
+            // where the row ends and padding *exactly* the rest was one width
+            // question too many: it asked `char_width`, while the columns are
+            // dealt out by ratatui, and the two disagree about every East-Asian
+            // ambiguous character (`—` `…` `▓`). One `——` in a fenced line and
+            // the ground stopped two cells short of the edge. Over-filling
+            // cannot be wrong: nothing is drawn past the area.
+            spans.push(Span::styled(" ".repeat(text_area.width as usize), ground));
         }
         lines.push(Line::from(spans));
     }
@@ -4740,6 +4733,33 @@ mod tests {
         assert!(marked, "the hit is washed in 朱");
         let numbered = (0..rows).any(|y| buffer[(0, y)].style().fg == Some(quiet.mark()));
         assert!(numbered, "and its line number is 朱");
+    }
+
+    /// A block's ground is painted to the edge of the page even on a row whose
+    /// width the editor and ratatui disagree about.
+    ///
+    /// `▓` and `—` are East-Asian *ambiguous*: two cells to an editor set up
+    /// for 漢字 prose, one to ratatui, which lays every span out with the Latin
+    /// widths and has no CJK setting. The fill used to be sized by subtracting
+    /// the editor's width from the page's, so a fenced line with eleven `▓` in
+    /// it stopped its ground eleven cells short of the right edge — visible in
+    /// the manual's own `:wrap` example.
+    #[test]
+    fn a_blocks_ground_reaches_the_edge_whatever_the_widths_say() {
+        let editor = editor_with("前一段。\n\n```\n那年冬天。   ▓▓▓▓▓▓\n雪——一直下。\n```\n");
+        let mut config = Config::default();
+        config.editor.line_numbers = yumete_config::LineNumbers::None;
+        let buffer = render(&editor, &config, 40, 8);
+        let band = ink(&config).at(yumete_config::rung::BAND);
+        // Rows 2–5 are the fence and what is inside it.
+        for y in 2..=5 {
+            let last = buffer.area.width - 1;
+            assert_eq!(
+                buffer[(last, y)].style().bg,
+                Some(band),
+                "row {y} of the fence is grounded to the last column",
+            );
+        }
     }
 
     #[test]

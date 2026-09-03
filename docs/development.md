@@ -389,6 +389,8 @@ Phases are ordered by priority, most writer-critical first:
 | 190 | **One rule for folding a blank line**       | core   | P1    | 竪排 folds with the indent off and opens one *with* it on — two behaviours that read as contradictory | Planned |
 | 191 | **A stored position names its buffer**      | core   | P0    | the hit list held `n`, survived a buffer switch and an edit, and said 「第 3/78 處」 about a character that matched nothing — `d` then deleted it | Done |
 | 192 | **The preview server is a running thing**   | tui    | P1    | `:preview` on a `.typ` starts `tinymist preview` and says the address once; ask again and the address is gone, and a session that ends badly leaves the server holding a port and its memory. The address should be gettable (`:preview` while one runs), visible (a mark in the status bar), and killable on purpose and after a crash | Planned |
+| 193 | **The terminal is asked how wide `—` is**   | tui    | P0    | `ambiguous_width` was a setting nobody could get right: `wide` while the terminal drew narrow put the caret two cells past the character on every line with `——` in it, and stopped a fenced row's ground short by one cell per `▓`. `auto` prints one and reads back the column | Done |
+| 194 | **Esc shuts the window, not the search**    | core   | P1    | after Esc on a preview, `n` fell through to `/`'s repeat — answering about an older pattern, or doing nothing and saying nothing. The hit list outlives the pane, and `n` brings it back | Done |
 
 ### 14 · What four reviews of the code found, 2026-09-03
 

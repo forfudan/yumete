@@ -250,6 +250,10 @@ zh = "找不到：{0}"
 en = "not found: {0}"
 
 [[message]]
+zh = "還沒有搜索過——先用 / 搜索，或用 Enter 預覽搜索"
+en = "nothing has been searched for yet — / searches, Enter previews"
+
+[[message]]
 zh = "把光標放進注音裏，或者選中要注音的字"
 en = "put the cursor in a reading, or select what to annotate"
 
