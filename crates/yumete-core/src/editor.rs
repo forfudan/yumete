@@ -4937,8 +4937,16 @@ impl Editor {
         };
         let here = self.cursor;
         self.buffers[self.current].save_cursor(here);
+        // The file you are in first, then the rest in order — and **capped**.
+        // `:replace` opens every file it changes, so a rename across a book
+        // leaves 120 buffers open, and a session that remembered all of them
+        // would reopen 120 files tomorrow morning.
+        let order = std::iter::once(self.current).chain(
+            (0..self.buffers.len()).filter(|&i| i != self.current),
+        );
         let mut out = String::new();
-        for buffer in &self.buffers {
+        for i in order.take(SESSION_FILES) {
+            let buffer = &self.buffers[i];
             let Some(path) = buffer.path() else { continue };
             let line = buffer
                 .rope()
@@ -8501,6 +8509,13 @@ enum Spot {
     InFile(PathBuf, usize),
     InBuffer(usize, usize),
 }
+
+/// How many files a session remembers.
+///
+/// Enough for an afternoon's chapters, and few enough that a project-wide
+/// `:replace` — which opens every file it changes — cannot turn tomorrow
+/// morning into a hundred-and-twenty-file startup.
+const SESSION_FILES: usize = 24;
 
 /// How many lines of one prompt's history are kept.
 const HISTORY: usize = 100;
