@@ -467,11 +467,21 @@ pub struct Editor {
     /// A pending count prefix, so `3w` moves three words (Helix counts).
     count: Option<usize>,
     /// The text typed during the last Insert session, replayed by `.`.
-    last_insert: String,
-    /// Whether the last thing to change the buffer was an Insert session, so
-    /// `.` knows whether it has anything to repeat.
-    last_edit_was_insert: bool,
-    /// The Insert session being recorded, moved into `last_insert` on Esc.
+    /// The keys of the command being watched, and the revision it started at.
+    ///
+    /// `.` repeats the last **change**, and a change here is not one shape: it
+    /// is `r` plus a character, `d` on a selection, `ms(`, `mr\"'`, a whole
+    /// typing session. Rather than enumerate them, the editor watches: a
+    /// command that leaves the buffer different from how it found it *was* a
+    /// change, and its keys are what `.` plays back.
+    edit_keys: Vec<Key>,
+    edit_revision: u64,
+    /// The last change's keys.
+    last_edit_keys: Vec<Key>,
+    /// Whether `.` is playing one back, so it cannot record itself.
+    repeating_edit: bool,
+    /// The Insert session being recorded, so `C-w` can take a word back out
+    /// of it.
     insert_recording: String,
     /// The last `f`/`t`/`F`/`T`, replayed by `A-.`.
     last_find: Option<(FindKind, char)>,
@@ -719,8 +729,10 @@ impl Editor {
             segmenter: Box::new(CategorySegmenter),
             show_segmentation: false,
             count: None,
-            last_insert: String::new(),
-            last_edit_was_insert: false,
+            edit_keys: Vec::new(),
+            edit_revision: 0,
+            last_edit_keys: Vec::new(),
+            repeating_edit: false,
             insert_recording: String::new(),
             last_find: None,
             indent_width: 4,
@@ -4619,15 +4631,67 @@ impl Editor {
             self.on_sidebar_key(key);
             return KeyOutcome::Continue;
         }
-        match self.mode {
-            Mode::Normal => self.on_normal_key(key),
-            Mode::Insert => self.on_insert_key(key),
-            Mode::Command => return self.on_command_key(key),
-            Mode::Search => self.on_search_key(key),
-            Mode::Ruby => self.on_ruby_key(key),
-            Mode::Picker => self.on_picker_key(key),
+        // Watch this command, so `.` can play it back. A command begins in
+        // Normal mode with nothing pending; it ends when it is back there.
+        let watching = !self.repeating_edit;
+        if watching {
+            if self.mode == Mode::Normal && self.pending == Pending::None {
+                self.edit_keys.clear();
+                self.edit_revision = self.current_buffer().revision();
+            }
+            self.edit_keys.push(key);
         }
-        KeyOutcome::Continue
+        let outcome = match self.mode {
+            Mode::Normal => {
+                self.on_normal_key(key);
+                KeyOutcome::Continue
+            }
+            Mode::Insert => {
+                self.on_insert_key(key);
+                KeyOutcome::Continue
+            }
+            Mode::Command => self.on_command_key(key),
+            Mode::Search => {
+                self.on_search_key(key);
+                KeyOutcome::Continue
+            }
+            Mode::Ruby => {
+                self.on_ruby_key(key);
+                KeyOutcome::Continue
+            }
+            Mode::Picker => {
+                self.on_picker_key(key);
+                KeyOutcome::Continue
+            }
+        };
+        if watching {
+            self.finish_watching();
+        }
+        outcome
+    }
+
+    /// If the command that just ended changed the buffer, it is what `.`
+    /// repeats.
+    fn finish_watching(&mut self) {
+        if self.mode != Mode::Normal || self.pending != Pending::None {
+            return;
+        }
+        if self.current_buffer().revision() == self.edit_revision {
+            return;
+        }
+        // Four kinds of key change the buffer and are not *changes* in the
+        // sense `.` means. Undo is the obvious one — repeating it would make
+        // `.` mean "undo again" the moment you used it. A `:` line and a macro
+        // are their own way of being repeated, and `.` repeating itself is not
+        // a definition.
+        let excluded = matches!(
+            self.edit_keys.first(),
+            Some(Key::Char(':' | '/' | '?' | 'u' | 'U' | '.' | 'q' | 'Q')) | Some(Key::Ctrl('r'))
+        );
+        if excluded || self.edit_keys.is_empty() {
+            return;
+        }
+        self.last_edit_keys = std::mem::take(&mut self.edit_keys);
     }
 
     fn on_normal_key(&mut self, key: Key) {
@@ -5087,14 +5151,52 @@ impl Editor {
             Key::Ctrl('a') => self.repeat(count, |e| e.bump_number(1)),
             Key::Ctrl('x') => self.repeat(count, |e| e.bump_number(-1)),
             // Repeat the last insert, and the last `f`/`t`.
-            Key::Char('.') => self.repeat(count, |e| e.repeat_insert()),
+            Key::Char('.') => self.repeat(count, |e| e.repeat_edit()),
             Key::Alt('.') => {
                 if let Some((kind, c)) = self.last_find {
                     self.repeat(count, |e| e.find_char(kind, c));
                 }
             }
-            _ => {}
+            // Nothing here does what this key does elsewhere — so say what
+            // yumete calls the thing you meant, in the place a reader is
+            // already looking. See [`Self::phrasebook`].
+            other => {
+                if let Some(said) = Self::phrasebook(other) {
+                    self.status = said.to_string();
+                }
+            }
         }
+    }
+
+    /// What to say when a key that means something in another editor is
+    /// pressed here and means nothing.
+    ///
+    /// **Not a compatibility layer**: it never *does* the thing. The first
+    /// minute in any editor is spent pressing exactly these keys, and a key
+    /// that does nothing and says nothing is an hour of guessing. A key that
+    /// says 「行尾是 gl」 is an hour of learning.
+    ///
+    /// Reached only from the fall-through, so it can never contradict a real
+    /// binding: bind the key and this stops being consulted.
+    fn phrasebook(key: Key) -> Option<&'static str> {
+        let c = match key {
+            Key::Char(c) => c,
+            _ => return None,
+        };
+        Some(match c {
+            '$' => "行尾是 gl（g 開頭的都是「去哪裏」）",
+            '^' => "行首第一個非空白是 gs",
+            'G' => "檔尾是 ge，第 n 行是 :n",
+            'D' => "刪到行尾是 gl 選起來再 d",
+            'C' => "改到行尾是 gl 選起來再 c",
+            's' | 'S' => "沒有多光標——見手冊「還沒有的」",
+            'Z' => "存檔是 :w，存了就走是 :wq",
+            '@' => "重放宏是 Q（錄是 q）",
+            '&' => "再替換一次：把 :s 那一行叫回來（: 然後上鍵）",
+            '_' | '+' | '-' => "上下行是 j k；段落是 { }",
+            '\\' => "空格是選單鍵：空格 f 開檔、空格 b 換緩衝區、空格 d 詳情",
+            _ => return None,
+        })
     }
 
     /// Handle the second key of a goto (`g`) sequence, Helix-style: `gg` to the
@@ -5800,8 +5902,7 @@ impl Editor {
         match key {
             Key::Esc => {
                 // The session just ended is what `.` replays.
-                self.last_insert = std::mem::take(&mut self.insert_recording);
-                self.last_edit_was_insert = !self.last_insert.is_empty();
+                self.insert_recording.clear();
                 self.mode = Mode::Normal;
                 // A cell that grew while it was being typed in made its column
                 // too narrow for it. Laying the table out again on the way out
@@ -5956,9 +6057,6 @@ impl Editor {
     /// The history lives on the [`Buffer`], not here: `u` must undo *this*
     /// file's last change, whatever was edited in between.
     fn snapshot(&mut self) {
-        // Every edit takes one, which makes this the one place that knows the
-        // buffer is about to change under something other than typing.
-        self.last_edit_was_insert = false;
         let at = self.cursor;
         self.current_buffer_mut().snapshot(at);
     }
@@ -6580,20 +6678,27 @@ impl Editor {
     }
 
     /// Replay the text typed during the last Insert session (Helix `.`).
-    fn repeat_insert(&mut self) {
-        // `.` sits next to `d` on the keyboard, and repeating a *typing*
-        // session after a delete would pour a paragraph of old text into the
-        // document. Helix's `.` repeats the last change; until this one can do
-        // that, it repeats the last change only when that change was a typing
-        // session, and says so otherwise.
-        if !self.last_edit_was_insert || self.last_insert.is_empty() {
-            self.status = "nothing typed to repeat".to_string();
+    /// Do the last change again (`.`).
+    ///
+    /// The whole change, not only a typing session: `r`, `~`, `d`, `c…Esc`,
+    /// `ms(`, a paste. Which makes `n.n.n.` — search, fix, search, fix — work,
+    /// and that is the loop a manuscript is proofread in.
+    ///
+    /// It plays the *keys* back rather than re-running a remembered operation,
+    /// so every command is repeatable the day it is written and none of them
+    /// has to be taught about `.` — the price being that the keys act on where
+    /// the cursor is *now*, which is exactly what a person pressing `.` means.
+    fn repeat_edit(&mut self) {
+        if self.last_edit_keys.is_empty() {
+            self.status = "還沒有可以重複的改動".to_string();
             return;
         }
-        let text = self.last_insert.clone();
-        self.snapshot();
-        self.insert_str(&text);
-        self.last_edit_was_insert = true;
+        let keys = self.last_edit_keys.clone();
+        self.repeating_edit = true;
+        for key in keys {
+            self.on_key(key);
+        }
+        self.repeating_edit = false;
     }
 
     // ---- Match mode (Helix `m`) -------------------------------------------
@@ -10900,6 +11005,23 @@ mod tests {
     }
 
     #[test]
+    fn an_unbound_key_says_what_this_editor_calls_it() {
+        // The first minute in any editor is spent pressing exactly these, and
+        // a key that does nothing and says nothing is an hour of guessing.
+        let mut ed = typed("一行字\n");
+        ed.goto_line(1);
+        let before = ed.current_buffer().text();
+        for (key, want) in [('$', "gl"), ('^', "gs"), ('G', "ge"), ('@', "Q")] {
+            ed.on_key(Key::Char(key));
+            assert!(ed.status().contains(want), "{key}: {}", ed.status());
+            assert_eq!(ed.current_buffer().text(), before, "and it never does it");
+        }
+        // A key that *is* bound is not second-guessed.
+        ed.on_key(Key::Char('x'));
+        assert!(!ed.status().contains("gl"));
+    }
+
+    #[test]
     fn a_key_alias_may_name_a_sequence() {
         // The defaults this editor chose on purpose — `J`/`K` paging a book
         // rather than joining lines — are the ones a Vim reader wants back,
@@ -11229,23 +11351,41 @@ mod tests {
     }
 
     #[test]
-    fn dot_does_not_pour_an_old_insert_over_a_delete() {
+    fn dot_repeats_the_change_it_actually_follows() {
+        // `.` sits next to `d`, and it used to repeat the last *typing
+        // session* whatever came after — so it had to refuse after a delete.
+        // Now it repeats the change it follows, so there is nothing to refuse.
         let mut ed = Editor::new();
         ed.on_key(Key::Char('i'));
         type_keys(&mut ed, "abcdef");
         ed.on_key(Key::Esc);
         type_keys(&mut ed, "gg");
-        // `.` sits next to `d`. Repeating the typing session after a delete
-        // would pour a paragraph of old text into the document.
         type_keys(&mut ed, "d.");
-        assert_eq!(ed.current_buffer().text(), "bcdef");
-        assert!(ed.status().contains("nothing typed"), "{}", ed.status());
-        // After a typing session it still repeats.
+        assert_eq!(ed.current_buffer().text(), "cdef", "d then . deletes twice");
+        // And after a typing session it repeats the typing.
         ed.on_key(Key::Char('i'));
         type_keys(&mut ed, "X");
         ed.on_key(Key::Esc);
         ed.on_key(Key::Char('.'));
-        assert_eq!(ed.current_buffer().text(), "XXbcdef");
+        assert_eq!(ed.current_buffer().text(), "XXcdef");
+    }
+
+    #[test]
+    fn dot_repeats_an_operator_so_the_proofreading_loop_works() {
+        // `n . n .` — search, fix, search, fix. The loop a manuscript is
+        // proofread in, and the reason all three reviewers named `.`.
+        let mut ed = typed("裏面\n那裏\n這裏\n");
+        press(&mut ed, "gg");
+        press(&mut ed, "/裏");
+        ed.on_key(Key::Enter);
+        // `r` and its operand are one change, so `.` plays both back.
+        press(&mut ed, "r");
+        ed.on_key(Key::Char('裡'));
+        press(&mut ed, "n");
+        ed.on_key(Key::Char('.'));
+        press(&mut ed, "n");
+        ed.on_key(Key::Char('.'));
+        assert_eq!(ed.current_buffer().text(), "裡面\n那裡\n這裡\n");
     }
 
     #[test]
