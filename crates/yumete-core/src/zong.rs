@@ -64,6 +64,21 @@ pub struct Grid<'a> {
     /// exactly none. One document, two pages, and no test could see it,
     /// because each side asked its own implementation.
     hidden: &'a dyn Fn(usize) -> Vec<(usize, usize)>,
+    /// **Which document, and which version of it** — for the memo, and for
+    /// nothing else.
+    ///
+    /// A laid-out paragraph is remembered so that a page of forty 縱 lays it
+    /// out once rather than forty times, and the memo has to be able to say
+    /// whether a remembered answer is about the text in front of it. Hashing
+    /// the paragraph would answer that, and does in [`crate::wrap`] — but a
+    /// 縱書 page asks per 縱, and hashing 500,000 characters forty times a
+    /// frame costs more than the layout it was saving. The editor already
+    /// knows: a buffer's id and its revision.
+    ///
+    /// `0` means「no stamp」— a grid built by hand, in a test — and nothing is
+    /// remembered for it, because without a stamp two different documents look
+    /// the same to the key.
+    pub stamp: u64,
     /// Graphemes per 縱.
     pub zong_len: usize,
     /// Which ruby dialects are laid out as readings. Empty shows the markup as
@@ -119,14 +134,14 @@ impl<'a> Grid<'a> {
         Grid { folded, ..self }
     }
 
+    /// The same grid, told which document and which version of it this is.
+    pub fn with_stamp(self, stamp: u64) -> Grid<'a> {
+        Grid { stamp, ..self }
+    }
+
     /// Whether `line` is off the page altogether.
     pub fn folded(self, line: usize) -> bool {
         (self.folded)(line)
-    }
-
-    /// What is off the page on `line`, as columns within it.
-    fn hidden_on(self, line: usize) -> Vec<(usize, usize)> {
-        (self.hidden)(line)
     }
 
     /// A grid with **nothing off the page** — the source as the file has it.
@@ -139,6 +154,7 @@ impl<'a> Grid<'a> {
     /// out.
     pub fn plain(zong_len: usize, ruby: Dialects) -> Grid<'static> {
         Grid {
+            stamp: 0,
             zong_len: zong_len.max(1),
             ruby,
             hanging: false,
@@ -474,6 +490,12 @@ fn push_plain(
                         ruby: None,
                         mark: Some(earlier),
                     });
+                    swallowed = None;
+                    // That row covers everything from the bracket to here, the
+                    // markup between them included. Leaving the run pending
+                    // would hand the same characters to the row after it as
+                    // well, and two rows holding one character is the same
+                    // defect as none holding it.
                 }
                 if yumete_cjk::opens_a_pair(mark) {
                     // A second opener while one is already waiting — `（「` —
@@ -577,7 +599,11 @@ fn push_plain(
     // group, say — has no slot after it to join, so it joins the one before.
     // Left dropped, its characters would belong to no slot at all, and the
     // cursor could be put on one of them.
-    if let Some(at) = swallowed {
+    //
+    // …unless a bracket is still waiting. Its own row starts before this run
+    // and is drawn covering the rest of the line, so handing the run to the
+    // slot *before* the bracket would put those characters in two rows at once.
+    if let Some(at) = swallowed.filter(|_| opening.is_none()) {
         match slots.last_mut() {
             Some(last) => last.end = last.end.max(to),
             // Nothing before it either: the whole run is markup, and it still
@@ -692,7 +718,16 @@ fn push_ruby(
     // against the base's *first* row — the row the reader sees the base on —
     // rather than being left behind as a row of its own before the group.
     if let Some((opened_at, mark)) = opening.take() {
-        let base_row = slots.len().checked_sub(rows.saturating_sub(top));
+        // The base's first row — or, when the base is empty (`<ruby><rt>…`),
+        // the group's first row, which is the one the reader sees. Without the
+        // fallback the index landed one past the end, the bracket was put back,
+        // and it came out later with a `start` behind rows already pushed:
+        // unsorted rows, which `position` binary-searches.
+        let base_row = slots
+            .len()
+            .checked_sub(rows.saturating_sub(top))
+            .filter(|&i| i < slots.len())
+            .or(first_row);
         match base_row.and_then(|i| slots.get_mut(i)) {
             Some(slot) if slot.mark.is_none() => {
                 slot.mark = Some(mark);
@@ -838,11 +873,29 @@ fn zong_breaks(
     breaks
 }
 
-type RememberedZongs = (u64, Vec<Slot>, Vec<usize>);
+/// One laid-out paragraph: the hash it is keyed by, its rows, and where its 縱
+/// begin.
+///
+/// Behind `Rc`, because a page asks for the same paragraph once per 縱 and the
+/// answer is one `Slot` per character: handing back a copy meant a 500,000-
+/// character paragraph was *copied* forty times a frame even when every one of
+/// those asks was a cache hit — and merely asking **how many** 縱 it has copied
+/// all of them.
+type RememberedZongs = (u64, Laid);
 
-/// How many paragraphs' worth of 縱 are kept. A page asks about the same
-/// handful over and over; more than a few would be holding a chapter twice.
-const REMEMBERED_PARAGRAPHS: usize = 8;
+/// A paragraph's rows and 縱 boundaries, shared rather than copied.
+type Laid = (std::rc::Rc<Vec<Slot>>, std::rc::Rc<Vec<usize>>);
+
+/// How many paragraphs' worth of 縱 are kept.
+///
+/// A page of 縱書 walks its paragraphs **twice** — `zongs_from` to find the
+/// columns, then `zong_slots` for each of them — so a page whose 縱 come from
+/// more than this many paragraphs lays every one of them out again on the
+/// second pass. Prose with short paragraphs (dialogue, a 論語 chapter) is
+/// exactly that page, and eight was fewer than one screen holds. The entries
+/// are `Rc`, so the cost of a larger number is one pointer per paragraph plus
+/// whatever is still referenced.
+const REMEMBERED_PARAGRAPHS: usize = 96;
 
 thread_local! {
     /// Laid-out paragraphs, most recently used first.
@@ -874,16 +927,16 @@ fn reset_layout_count() {
 }
 
 /// One line's slots and where its 縱 begin — always asked for together.
-fn line_zongs(rope: &Rope, line: usize, grid: Grid) -> (Vec<Slot>, Vec<usize>) {
-    let hidden = (grid.hidden)(line);
+fn line_zongs(rope: &Rope, line: usize, grid: Grid) -> Laid {
     let mut hasher = DefaultHasher::new();
-    // Over the rope's own chunks, so asking costs no allocation. Two identical
-    // paragraphs stored differently may hash differently — that is a miss,
-    // which is merely slow, never wrong.
-    for chunk in rope.line(line).chunks() {
-        chunk.hash(&mut hasher);
-    }
-    hidden.hash(&mut hasher);
+    // **Which document, which version, which line** — and everything about the
+    // grid that changes the answer. Neither the text nor what is hidden on it
+    // is read here: both are answers *about* that version, and the stamp
+    // already names it (see [`Grid::stamp`]). Asking the page what is hidden
+    // costs a Markdown scan of the paragraph, and asking it before the cache
+    // was consulted put that scan back on every one of a page's forty 縱 —
+    // which was the whole cost the memo had just removed.
+    (grid.stamp, line).hash(&mut hasher);
     (
         grid.zong_len,
         grid.indent,
@@ -891,31 +944,41 @@ fn line_zongs(rope: &Rope, line: usize, grid: Grid) -> (Vec<Slot>, Vec<usize>) {
         grid.tatechuyoko,
         grid.ruby.bits(),
         grid.open_line == line,
-        opens_a_paragraph(&line_text(rope, line)),
     )
         .hash(&mut hasher);
     let hash = hasher.finish();
+    if grid.stamp == 0 {
+        let hidden = (grid.hidden)(line);
+        return lay_out(rope, line, grid, &hidden);
+    }
     if let Some(answer) = ZONGS.with(|cache| {
         let mut cache = cache.borrow_mut();
-        let i = cache.iter().position(|(h, _, _)| *h == hash)?;
+        let i = cache.iter().position(|(h, _)| *h == hash)?;
         let entry = cache.remove(i);
-        let answer = (entry.1.clone(), entry.2.clone());
+        let answer = entry.1.clone();
         cache.insert(0, entry);
         Some(answer)
     }) {
         return answer;
     }
-    LAID_OUT.with(|n| n.set(n.get() + 1));
-    let slots = line_grid(rope, line, grid);
-    let chars: Vec<char> = line_text(rope, line).chars().collect();
-    let groups = crate::ruby::groups(&chars, grid.ruby);
-    let breaks = zong_breaks(&chars, &slots, grid.zong_len.max(1), &groups, &hidden);
+    let hidden = (grid.hidden)(line);
+    let laid = lay_out(rope, line, grid, &hidden);
     ZONGS.with(|cache| {
         let mut cache = cache.borrow_mut();
-        cache.insert(0, (hash, slots.clone(), breaks.clone()));
+        cache.insert(0, (hash, laid.clone()));
         cache.truncate(REMEMBERED_PARAGRAPHS);
     });
-    (slots, breaks)
+    laid
+}
+
+/// Lay one paragraph out: its rows, and where its 縱 begin.
+fn lay_out(rope: &Rope, line: usize, grid: Grid, hidden: &[(usize, usize)]) -> Laid {
+    LAID_OUT.with(|n| n.set(n.get() + 1));
+    let slots = line_grid_in(rope, line, grid, hidden);
+    let chars: Vec<char> = line_text(rope, line).chars().collect();
+    let groups = crate::ruby::groups(&chars, grid.ruby);
+    let breaks = zong_breaks(&chars, &slots, grid.zong_len.max(1), &groups, hidden);
+    (std::rc::Rc::new(slots), std::rc::Rc::new(breaks))
 }
 
 /// Where the `index`-th 縱 of a line begins and ends, in slots.
@@ -932,12 +995,8 @@ pub fn zong_count_in_line(rope: &Rope, line: usize, grid: Grid) -> usize {
 }
 
 /// The rows `line` draws as, under `grid`.
-fn line_grid(rope: &Rope, line: usize, grid: Grid) -> Vec<Slot> {
+fn line_grid_in(rope: &Rope, line: usize, grid: Grid, hidden: &[(usize, usize)]) -> Vec<Slot> {
     let text = line_text(rope, line);
-    // What is off this line, asked of the page rather than guessed from the
-    // text: which construct the selection is holding open is part of that
-    // answer, and so is the file's syntax and the block the line sits in.
-    let hidden = grid.hidden_on(line);
     // The paragraph being typed into is laid out as the file has it: no
     // opening squares. Done here, where the line is known — everything
     // downstream asks this function for a line's slots, so nothing else has
@@ -946,7 +1005,7 @@ fn line_grid(rope: &Rope, line: usize, grid: Grid) -> Vec<Slot> {
         true => Grid { indent: 0, ..grid },
         false => grid,
     };
-    line_slots_in(&text, grid, &hidden)
+    line_slots_in(&text, grid, hidden)
 }
 
 /// Locate the char index `pos` in the 縱 grid.
@@ -1269,14 +1328,14 @@ pub fn layout(rope: &Rope, grid: Grid) -> Vec<Zong> {
 /// because a ruby group must not be re-parsed from a slice that might cut it in
 /// half at a 縱 boundary.
 pub fn zong_slots(rope: &Rope, zong: &Zong, grid: Grid) -> Vec<Slot> {
-    let (mut slots, breaks) = line_zongs(rope, zong.line, grid);
+    let (slots, breaks) = line_zongs(rope, zong.line, grid);
     let (first, last) = zong_span(&breaks, slots.len(), zong.index_in_line);
     if first >= last {
         return Vec::new();
     }
-    slots.drain(..first);
-    slots.truncate(last - first);
-    slots
+    // One 縱's worth, not the paragraph's: what the caller draws is a column,
+    // and the paragraph behind it stays shared.
+    slots[first..last].to_vec()
 }
 
 /// The index into [`layout`] of the 縱 holding char index `pos`.
@@ -1401,6 +1460,9 @@ mod tests {
     const HTML_ONLY: Dialects = Dialects(1 << (crate::ruby::Dialect::Html as u8));
 
     const G: Grid = Grid {
+        // No stamp: a grid built by hand remembers nothing, because without one
+        // two different documents look the same to the memo's key.
+        stamp: 0,
         zong_len: 32,
         ruby: Dialects::NONE,
         hanging: false,
@@ -1704,7 +1766,10 @@ mod tests {
         // unmemoised layout ran over the whole chapter once per column: 565 ms
         // a keystroke on 500,000 characters.
         let r = rope(&"那年冬天，山下起了大雪。".repeat(4_000));
-        let grid = Grid { zong_len: 24, ..G };
+        // Stamped, as the editor stamps it: which document and which version.
+        // Without one nothing is remembered — see `Grid::stamp` — which is the
+        // right answer for a grid built by hand and the wrong one for a page.
+        let grid = Grid { zong_len: 24, ..G }.with_stamp(1);
         reset_layout_count();
         let page = zongs_from(&r, Anchor { line: 0, index_in_line: 0 }, grid, 40);
         for zong in &page {
@@ -2193,6 +2258,99 @@ mod tests {
                 "{line:?} opens a 縱 with 。: {heads:?}"
             );
         }
+    }
+
+    /// **Every character in exactly one row, and the rows in document order** —
+    /// over every short line that can be built from the characters that fight.
+    ///
+    /// Enumerated rather than chosen: each of these defects was found by
+    /// somebody reading the code and none by the tests, because the test that
+    /// existed asked whether every character was in *at least* one slot. Two
+    /// rows holding one character is the same defect as none holding it —
+    /// `position` binary-searches the rows, and a caret that resolves into the
+    /// wrong one of two overlapping rows is drawn a row off the mark.
+    #[test]
+    fn the_rows_of_a_line_tile_it_exactly_and_in_order() {
+        const ATOMS: &[&str] = &[
+            "文",
+            "。",
+            "、",
+            "「",
+            "」",
+            "（",
+            "）",
+            "**",
+            "*",
+            "<ruby>永<rt>えい</rt></ruby>",
+            // An empty base: not a thing anybody writes, and the shape that
+            // made the rows overlap.
+            "<ruby><rt>えい</rt></ruby>",
+        ];
+        let grids = [
+            G,
+            Grid { hanging: true, ..G },
+            RUBY,
+            Grid { hanging: true, ..RUBY },
+            Grid {
+                hanging: true,
+                tatechuyoko: true,
+                indent: 2,
+                ..RUBY
+            },
+        ];
+        let mut lines: Vec<String> = vec![String::new()];
+        // Four atoms deep: the families that break need a bracket, a run of
+        // markup, a mark and *another* run of markup — `「**。**` is the
+        // shortest of them — and at four this is a second of testing.
+        for _ in 0..4 {
+            let mut next = Vec::new();
+            for line in &lines {
+                for atom in ATOMS {
+                    next.push(format!("{line}{atom}"));
+                }
+            }
+            lines.extend(next);
+        }
+        let mut broken: Vec<String> = Vec::new();
+        for line in &lines {
+            if line.is_empty() {
+                continue;
+            }
+            let markup = crate::markdown::hidden(&crate::markdown::spans(line), None);
+            for hidden in [Vec::new(), markup] {
+                for grid in grids {
+                    let slots = line_slots_in(line, grid, &hidden);
+                    if !slots.windows(2).all(|w| w[0].start <= w[1].start) {
+                        broken.push(format!(
+                            "{line:?} hanging={} wysiwyg={}: out of order {:?}",
+                            grid.hanging,
+                            !hidden.is_empty(),
+                            slots.iter().map(|s| (s.start, s.end)).collect::<Vec<_>>()
+                        ));
+                        continue;
+                    }
+                    for at in 0..line.chars().count() {
+                        let holding = slots.iter().filter(|s| at >= s.start && at < s.end).count();
+                        if holding != 1 {
+                            broken.push(format!(
+                                "{line:?} hanging={} wysiwyg={}: char {at} is in {holding} rows {:?}",
+                                grid.hanging,
+                                !hidden.is_empty(),
+                                slots.iter().map(|s| (s.start, s.end)).collect::<Vec<_>>()
+                            ));
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+        assert!(
+            broken.is_empty(),
+            "{} of {} lines:\n{}",
+            broken.len(),
+            lines.len(),
+            broken.iter().take(8).cloned().collect::<Vec<_>>().join("\n")
+        );
     }
 
     /// The markup inside a ruby base comes off the page like any other.

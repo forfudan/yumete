@@ -2525,37 +2525,15 @@ fn draw_horizontal(
         }
     }
 
-    // The caret sits where the writing is, not where the source is: markup
-    // taken off the page before it on this row took its columns with it.
-    let hidden_before: usize = {
-        let hide = editor.hidden_on_line(cursor_pos.line);
-        if hide.is_empty() {
-            0
-        } else {
-            let line_start = rope.line_to_char(cursor_pos.line);
-            let row_start = wrap::rows_from(
-                rope,
-                WrapAnchor {
-                    line: cursor_pos.line,
-                    index_in_line: cursor_pos.index_in_line,
-                },
-                measure,
-                1,
-            )
-            .first()
-            .map_or(line_start, |row| row.start);
-            (row_start..editor.cursor())
-                .filter(|&at| {
-                    let column = at - line_start;
-                    hide.iter().any(|&(a, b)| column >= a && column < b)
-                })
-                .map(|at| yumete_cjk::char_width(rope.char(at)))
-                .sum()
-        }
-    };
+    // The caret sits where the writing is, not where the source is — and
+    // `wrap::position` is where that is decided, for the caret and for `j`
+    // alike. It used to be worked out **again** here, subtracting the hidden
+    // width from a column that had been measured over the source: two
+    // derivations of one rule, agreeing about the caret and disagreeing about
+    // every motion, which is exactly the shape this editor keeps getting wrong.
     // Clamped to the page: a caret resting past a row that exactly fills the
     // width would otherwise be drawn in the column after the last one.
-    let x = (gutter + cursor_pos.column.saturating_sub(hidden_before))
+    let x = (gutter + cursor_pos.column)
         .min(text_area.width.saturating_sub(1) as usize);
     (
         text_area.x + x as u16,

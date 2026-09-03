@@ -338,7 +338,7 @@ pub fn line_rows_indented(
             end += 1;
         }
         if end < widths.len() {
-            end = g + adjusted_break(&chars, &cuts, g, end);
+            end = g + adjusted_break(&chars, &cuts, &widths, g, end);
         }
         last_width = widths[g..end].iter().sum();
         rows.push((cuts[g], cuts[end]));
@@ -371,7 +371,27 @@ fn steps(text: &str) -> impl Iterator<Item = (usize, usize)> + '_ {
 
 /// Where the row starting at grapheme `g` should really end, given that `end`
 /// is where it stops fitting. Returns a count of graphemes, always at least 1.
-fn adjusted_break(chars: &[char], cuts: &[usize], g: usize, end: usize) -> usize {
+fn adjusted_break(
+    chars: &[char],
+    cuts: &[usize],
+    widths: &[usize],
+    g: usize,
+    end: usize,
+) -> usize {
+    // **The character the reader sees.** A grapheme that is not drawn has no
+    // width, and 禁則 is about what stands at a row's head and foot — so a
+    // retreat onto a hidden `` ` `` used to stop there, having moved nothing,
+    // and the row after it opened with 。 in the author's own documentation.
+    // The vertical page was taught this; this is the same rule, on the other
+    // side, asked the same way.
+    let seen = |i: usize| -> Option<char> {
+        (widths.get(i).copied().unwrap_or(1) > 0)
+            .then(|| chars.get(cuts.get(i).copied().unwrap_or(0)).copied())
+            .flatten()
+    };
+    // The last drawn character at or before `i`, and the first at or after it.
+    let before = |i: usize| (g..i).rev().find_map(seen).unwrap_or(' ');
+    let after = |i: usize| (i..widths.len()).find_map(seen).unwrap_or(' ');
     let char_at = |i: usize| chars.get(cuts[i]).copied().unwrap_or(' ');
 
     // 禁則處理 first: pull the offending character down with its neighbour.
@@ -380,7 +400,7 @@ fn adjusted_break(chars: &[char], cuts: &[usize], g: usize, end: usize) -> usize
         if cut <= g + 1 {
             break;
         }
-        if forbidden_at_row_start(char_at(cut)) || forbidden_at_row_end(char_at(cut - 1)) {
+        if forbidden_at_row_start(after(cut)) || forbidden_at_row_end(before(cut)) {
             cut -= 1;
         } else {
             break;
@@ -405,6 +425,16 @@ fn adjusted_break(chars: &[char], cuts: &[usize], g: usize, end: usize) -> usize
     }
     (cut - g).max(1)
 }
+
+/// The width to measure at when soft wrap is **off**.
+///
+/// Wrap off means one row per paragraph, however long — which is what a very
+/// large width gives, through the same code the wrapped page uses. Going round
+/// it instead (`motion::down`, over the source) was a second answer to「which
+/// column is this character in」, and it did not know what was off the page: with
+/// 所見即所得 on and wrap off, `j` landed a glyph left per `**` above it, and
+/// could land *on* an asterisk that is not drawn.
+pub const NO_WRAP: usize = 1 << 40;
 
 /// How many wrapped paragraphs to remember.
 ///
@@ -535,7 +565,20 @@ pub fn position(rope: &Rope, pos: usize, m: Measure) -> Position {
     // Only the part of the row before the cursor is measured — a row, not a
     // paragraph, however long the paragraph is.
     let ahead = rope.slice(start + row_start..start + col).to_string();
-    let column: usize = steps(&ahead).map(|(_, w)| w).sum();
+    // **A character that is not drawn takes no column.** This summed the
+    // source, while `line_rows_indented` — the function that decides where the
+    // rows actually break — zeroes what is hidden. So with 所見即所得 on, a
+    // `j` from a row above a paragraph with `**` in it landed one glyph right
+    // per hidden character, and the front end papered over the caret's half of
+    // it by subtracting the hidden width again on its way to the screen.
+    let hidden = m.off(line);
+    let column: usize = steps(&ahead)
+        .filter(|(i, _)| {
+            let at = row_start + i;
+            !hidden.iter().any(|&(a, b)| at >= a && at < b)
+        })
+        .map(|(_, w)| w)
+        .sum();
     // The indent is real page: a caret on the paragraph's first character sits
     // two cells in, and `j` from the row below should land under it.
     let column = column + m.indent_of(line, &line_text(rope, line), index_in_line);
@@ -696,8 +739,15 @@ fn char_at_column(
     // A goal column inside the indent lands on the row's first character:
     // there is nothing in the indent to land on.
     let mut col = m.indent_of(line, &line_text(rope, line), index_in_line);
+    let hidden = m.off(line);
     let mut at = e;
     for (i, w) in steps(&row) {
+        // Hidden markup takes no column here either — the same rule the rows
+        // were broken by, asked the same way.
+        let w = match hidden.iter().any(|&(a, b)| s + i >= a && s + i < b) {
+            true => 0,
+            false => w,
+        };
         if col + w > goal {
             at = s + i;
             break;

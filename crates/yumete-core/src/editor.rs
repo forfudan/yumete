@@ -1866,16 +1866,21 @@ impl Editor {
         if line >= rope.len_lines() {
             return Vec::new();
         }
-        // Hashed **without a copy**: a hit is the common case by far, and
-        // materialising the paragraph to find out whether it changed made the
-        // cache cost what it was saving.
+        // **Which version of the document, not what it says.** Reading the
+        // paragraph to find out whether it had changed made the cache cost more
+        // than it saved: a chapter written as one 500,000-character paragraph
+        // was hashed once per 縱 of every frame. A revision moves on every
+        // edit, so an edit anywhere costs the visible lines one pass — which is
+        // what they would have cost anyway.
+        //
+        // The syntax is in it too: the same characters mean different things in
+        // different syntaxes, and `:syntax text` is one keystroke away.
         let mut hasher = DefaultHasher::new();
-        for c in rope.line(line).chars().filter(|c| !matches!(c, '\n' | '\r')) {
-            c.hash(&mut hasher);
-        }
-        // The same characters mean different things in different syntaxes, and
-        // `:syntax text` on the file in front of you is one keystroke away.
-        (self.current_buffer().syntax() as u8).hash(&mut hasher);
+        (
+            self.current_buffer().revision(),
+            self.current_buffer().syntax() as u8,
+        )
+            .hash(&mut hasher);
         let hash = hasher.finish();
 
         let key = (self.current_buffer().id(), line);
@@ -5890,7 +5895,25 @@ impl Editor {
         // Through `ruby()` and `hanging_punctuation()`, not the fields: a page
         // packed tight lays out neither, and a grid that disagreed with what is
         // drawn would put the cursor somewhere the writer cannot see.
+        // The stamp is what lets a page of forty 縱 lay a paragraph out once:
+        // which document, and which version of it. Two numbers, hashed —
+        // never the paragraph's own text, which on a chapter written as one
+        // paragraph costs more to hash than to lay out.
+        let mut stamp = DefaultHasher::new();
+        (
+            self.current_buffer().id(),
+            self.current_buffer().revision(),
+            // A revision does not move when the *selection* does, and a
+            // selection holds a construct open — which changes the page.
+            self.selection(),
+            self.render as u8,
+            // …and the syntax, which decides what counts as markup and does
+            // not move the revision when `:syntax text` changes it.
+            self.current_buffer().syntax() as u8,
+        )
+            .hash(&mut stamp);
         Grid::plain(self.zong_length, self.ruby())
+            .with_stamp(stamp.finish().max(1))
             .with_tatechuyoko(self.tatechuyoko)
             .with_indent(self.paragraph_indent())
             .with_hidden(hidden)
@@ -9615,22 +9638,22 @@ impl Editor {
             let hide = |line: usize| self.hidden_on_line(line);
             let fold = |line: usize| self.line_is_folded(line);
             let rope = self.current_buffer().rope();
-            match self.wrap_width() {
-                Some(width) => {
-                    // …with the indent, because the indent is where a row
-                    // *breaks*: a measure without it wraps a different page
-                    // from the one being drawn, and `j` then lands on the
-                    // character under a column nobody is looking at. Same for
-                    // the folds: a row the page does not draw is a row `j`
-                    // must not stop on.
-                    let m = crate::wrap::Measure::new(width, &hide)
-                        .with_indent(self.paragraph_indent())
-                        .with_folds(&fold)
-                        .with_open_line(self.open_line());
-                    crate::wrap::column_of(rope, self.cursor, m)
-                }
-                None => motion::visual_column(rope, self.cursor),
-            }
+            // …with the indent, because the indent is where a row *breaks*: a
+            // measure without it wraps a different page from the one being
+            // drawn, and `j` then lands on the character under a column nobody
+            // is looking at. Same for the folds: a row the page does not draw
+            // is a row `j` must not stop on.
+            //
+            // **Wrap off goes the same way**, at [`crate::wrap::NO_WRAP`]: one
+            // row per paragraph is what a very large width gives, and the
+            // alternative was a second answer to「which column is this」 that
+            // did not know what is off the page.
+            let width = self.wrap_width().unwrap_or(crate::wrap::NO_WRAP);
+            let m = crate::wrap::Measure::new(width, &hide)
+                .with_indent(self.paragraph_indent())
+                .with_folds(&fold)
+                .with_open_line(self.open_line());
+            crate::wrap::column_of(rope, self.cursor, m)
         };
         self.goal_column = column;
     }
@@ -9652,39 +9675,20 @@ impl Editor {
             let hide = |line: usize| self.hidden_on_line(line);
             let fold = |line: usize| self.line_is_folded(line);
             let rope = self.current_buffer().rope();
-            match self.wrap_width() {
-                Some(width) => {
-                    // …with the indent and the folds, for the same reason: the
-                    // page `j` steps through has to be the page on the screen.
-                    let m = crate::wrap::Measure::new(width, &hide)
-                        .with_indent(self.paragraph_indent())
-                        .with_folds(&fold)
-                        .with_open_line(self.open_line());
-                    if up {
-                        crate::wrap::prev_row(rope, self.cursor, m, self.goal_column)
-                    } else {
-                        crate::wrap::next_row(rope, self.cursor, m, self.goal_column)
-                    }
-                }
-                // With wrapping off a row is a line, and the folds are the
-                // only thing that makes those two differ — so `j` steps over
-                // a folded line here too, or it would stop on a row that is
-                // not on the page.
-                None => {
-                    let step = |at: usize| match up {
-                        true => motion::up(rope, at, self.goal_column),
-                        false => motion::down(rope, at, self.goal_column),
-                    };
-                    let mut at = step(self.cursor);
-                    while self.line_is_folded(rope.char_to_line(at)) {
-                        let next = step(at);
-                        if next == at {
-                            break;
-                        }
-                        at = next;
-                    }
-                    at
-                }
+            // …with the indent and the folds, for the same reason: the page
+            // `j` steps through has to be the page on the screen. With wrapping
+            // off a row is a paragraph, which is what `NO_WRAP` gives — through
+            // this same code, so the two cases cannot answer differently about
+            // what is off the page.
+            let width = self.wrap_width().unwrap_or(crate::wrap::NO_WRAP);
+            let m = crate::wrap::Measure::new(width, &hide)
+                .with_indent(self.paragraph_indent())
+                .with_folds(&fold)
+                .with_open_line(self.open_line());
+            if up {
+                crate::wrap::prev_row(rope, self.cursor, m, self.goal_column)
+            } else {
+                crate::wrap::next_row(rope, self.cursor, m, self.goal_column)
             }
         };
         self.cursor = pos;
