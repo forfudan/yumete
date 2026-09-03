@@ -1716,7 +1716,10 @@ fn draw_horizontal(
     // The measure is the width *and* what is off the page: a row holds what
     // fits on the screen, so markup taken off it takes no room.
     let hide = |line: usize| editor.hidden_on_line(line);
-    let measure = wrap::Measure::new(width, &hide);
+    // 首行縮進 is part of the measure, not of this function: it changes where a
+    // row breaks, so the cursor and the page have to be asking about the same
+    // one. Here it is only *drawn*.
+    let measure = wrap::Measure::new(width, &hide).with_indent(editor.paragraph_indent());
 
     let cursor_line = editor.cursor_line();
     let cursor_pos = wrap::position(rope, editor.cursor(), measure);
@@ -1796,6 +1799,12 @@ fn draw_horizontal(
                 label,
                 Style::default().add_modifier(Modifier::DIM),
             ));
+        }
+        // The paragraph opens two squares in, the way a Chinese paragraph is
+        // marked — and the blank line it replaces costs a whole row.
+        let indent = measure.indent_of(&rope.line(row.line).to_string(), row.index_in_line);
+        if indent > 0 {
+            spans.push(Span::raw(" ".repeat(indent)));
         }
 
         // Three layers, composed rather than fighting: Markdown sets the ink
@@ -3703,6 +3712,33 @@ mod tests {
         editor.on_key(Key::Char(' '));
         assert_eq!(hint(&editor).trim(), "");
         editor.on_key(Key::Esc);
+    }
+
+    #[test]
+    fn a_paragraph_opens_two_squares_in_on_the_page() {
+        // A Chinese paragraph is marked by an indent of two 字, and the blank
+        // line it replaces costs a whole row.
+        let mut editor = editor_with("那年冬天很冷。\n# 第一章\n");
+        editor.set_indent(2);
+        let mut config = Config::default();
+        config.editor.line_numbers = yumete_config::LineNumbers::None;
+        let buffer = render(&editor, &config, 40, 8);
+        assert_eq!(at(&buffer, 0, 0), " ");
+        assert_eq!(at(&buffer, 1, 0), " ");
+        assert_eq!(at(&buffer, 2, 0), "那", "two squares, then the paragraph");
+        // A heading carries its own leading structure and is not pushed right.
+        assert_eq!(at(&buffer, 0, 1), "#");
+        // The caret sits on the first character, not in the indent.
+        editor.on_key(Key::Char('g'));
+        editor.on_key(Key::Char('g'));
+        assert_eq!(
+            yumete_core::wrap::column_of(
+                editor.current_buffer().rope(),
+                editor.cursor(),
+                yumete_core::wrap::Measure::plain(40).with_indent(2)
+            ),
+            2
+        );
     }
 
     #[test]

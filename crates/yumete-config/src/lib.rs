@@ -58,6 +58,8 @@ pub struct EditorConfig {
     /// for you. A number here (or `:wrap n`) is that decision; it is clamped to
     /// 4–64, and the renderer lowers it further when the terminal is short.
     pub zong_length: usize,
+    /// How many squares open a paragraph (首行縮進). 0 is none.
+    pub indent: usize,
     /// The gap between two 縱, in half-width cells (0–4).
     pub zong_gap: usize,
     /// Whether the 拆分 annotation is shown beside candidates (Feature #66).
@@ -170,6 +172,7 @@ impl Default for EditorConfig {
             segmentation_threshold: 0,
             layout: Layout::Horizontal,
             zong_length: 0,
+            indent: 0,
             zong_gap: DEFAULT_ZONG_GAP,
             show_chaifen: false,
             show_ruby: false,
@@ -566,6 +569,7 @@ struct RawEditor {
     segmentation_threshold: Option<i64>,
     layout: Option<String>,
     zong_length: Option<usize>,
+    indent: Option<usize>,
     zong_gap: Option<usize>,
     show_chaifen: Option<bool>,
     show_ruby: Option<bool>,
@@ -622,6 +626,9 @@ impl RawConfig {
         }
         if other.editor.layout.is_some() {
             self.editor.layout = other.editor.layout;
+        }
+        if other.editor.indent.is_some() {
+            self.editor.indent = other.editor.indent;
         }
         if other.editor.zong_length.is_some() {
             self.editor.zong_length = other.editor.zong_length;
@@ -746,6 +753,11 @@ impl RawConfig {
             if let Some(parsed) = Layout::parse(&layout) {
                 config.editor.layout = parsed;
             }
+        }
+        if let Some(n) = self.editor.indent {
+            // Two is the Chinese convention and eight is more than anyone
+            // means; a number outside that is a typo, not a preference.
+            config.editor.indent = n.min(8);
         }
         if let Some(length) = self.editor.zong_length {
             // Below ~4 a 縱 stops being a column of text; above 64 no terminal
