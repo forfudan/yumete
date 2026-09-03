@@ -363,7 +363,9 @@ impl Parts {
     /// blank row above it would silently make the names into data.
     pub fn insert_row(&mut self, at: usize) -> usize {
         self.square();
-        let at = at.clamp(1, self.rows.len());
+        // `clamp(1, 0)` panics, and a table with no header is a table somebody
+        // is in the middle of writing.
+        let at = at.max(1).min(self.rows.len().max(1));
         self.rows.insert(at, vec![String::new(); self.columns().max(1)]);
         at
     }
@@ -386,8 +388,10 @@ impl Parts {
     /// Swap a row with the one after it (or before, when `down` is false).
     pub fn move_row(&mut self, at: usize, down: bool) -> Result<usize, &'static str> {
         let to = if down { at + 1 } else { at.wrapping_sub(1) };
-        // The header stays first, and there is nothing outside the table.
-        if at == 0 || to == 0 || to >= self.rows.len() {
+        // The header stays first, and there is nothing outside the table. `at`
+        // is checked as well as `to`: a caller that asks about a row this table
+        // does not have should get an answer, not a panic.
+        if at == 0 || to == 0 || at >= self.rows.len() || to >= self.rows.len() {
             return Err("到頭了");
         }
         self.rows.swap(at, to);
@@ -459,7 +463,7 @@ impl Parts {
     pub fn move_column(&mut self, at: usize, right: bool) -> Result<usize, &'static str> {
         self.square();
         let to = if right { at + 1 } else { at.wrapping_sub(1) };
-        if to >= self.columns() {
+        if at >= self.columns() || to >= self.columns() {
             return Err("到頭了");
         }
         for row in &mut self.rows {

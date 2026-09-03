@@ -8050,10 +8050,23 @@ impl Editor {
         // nowhere near the table.
         let rows_only = view.shape == Shape::Markdown;
         let before = self.current_buffer().rope().to_string();
-        let count = |text: &str| -> Vec<usize> {
+        // Numbered by the **document's** lines, not by the filtered list: for a
+        // Markdown table the filtered index is a table-row number, and 「第 3
+        // 行」 then names a line the writer cannot find.
+        let count = |text: &str| -> Vec<(usize, usize)> {
             text.lines()
-                .filter(|l| !rows_only || crate::mdtable::is_row(l))
-                .map(|l| l.chars().filter(|&c| c == d).count())
+                .enumerate()
+                .filter(|(_, l)| !rows_only || crate::mdtable::is_row(l))
+                .map(|(n, l)| {
+                    // Unescaped only: `\|` is a pipe *inside* a cell, and the
+                    // manual promises it works — so a substitution that adds
+                    // one must not be refused as if it split a row.
+                    let cells = match rows_only {
+                        true => crate::mdtable::pipes_from(l, false).len(),
+                        false => l.chars().filter(|&c| c == d).count(),
+                    };
+                    (n, cells)
+                })
                 .collect()
         };
         let (was, now) = (count(&before), count(rebuilt));
@@ -8064,12 +8077,16 @@ impl Editor {
                 now.len()
             ));
         }
-        let at = was.iter().zip(&now).position(|(a, b)| a != b)?;
+        let (line, from, to) = was
+            .iter()
+            .zip(&now)
+            .find(|((_, a), (_, b))| a != b)
+            .map(|((n, a), (_, b))| (*n, *a, *b))?;
         Some(format!(
             "第 {} 行會從 {} 格變成 {} 格——先 `:table off`",
-            at + 1,
-            was[at] + 1,
-            now[at] + 1
+            line + 1,
+            from + 1,
+            to + 1
         ))
     }
 
@@ -11153,6 +11170,24 @@ mod tests {
         ed.on_key(Key::Char('.'));
         assert_ne!(ed.current_buffer().text(), indented, "`.` indented again");
         assert!(ed.current_buffer().text().contains("甲"), "…in this buffer");
+    }
+
+    #[test]
+    fn a_substitution_names_a_line_the_writer_can_find() {
+        // The refusal counted rows and printed the number as a *line*, so in a
+        // Markdown table 「第 3 行」 named a line the writer could not find —
+        // and it counted raw `|`, so it refused a substitution that inserted
+        // the escape the manual tells you to use.
+        let mut ed = with_md_table();
+        assert!(ed.enter_table());
+        // `\|` is a pipe inside a cell, so this does not change any row's shape.
+        assert!(ed.execute(r"%s/mu/a\|b/").is_ok(), "{}", ed.status());
+        assert!(ed.current_buffer().text().contains(r"a\|b"), "{}", ed.status());
+        // A bare one does, and the line it names is the document's.
+        let before = ed.current_buffer().text();
+        assert!(ed.execute("%s/木/木|/").is_ok());
+        assert_eq!(ed.current_buffer().text(), before);
+        assert!(ed.status().contains("第 4 行"), "{}", ed.status());
     }
 
     #[test]
