@@ -1560,10 +1560,25 @@ impl Editor {
     /// Walks from the top, because a fence opened above decides what this line
     /// means. Cached, because everything on a page asks.
     pub fn block_of(&self, line: usize) -> crate::markdown::Block {
-        self.blocks_through(line)
-            .get(line)
-            .copied()
-            .unwrap_or_default()
+        // **One line's answer is one lookup.** This used to go through
+        // `blocks_through`, which hands back a copy of every line above it —
+        // so a question the 縱書 page asks per line cost 11 ns near the top of
+        // 資治通鑑 and 6.9 µs at line 19,883, and a page anchored down there
+        // spent 364 µs a frame copying blocks nobody looked at.
+        if !self.markup_visible() {
+            return crate::markdown::Block::Prose;
+        }
+        self.scan_blocks();
+        let key = (
+            self.current_buffer().id(),
+            self.current_buffer().revision(),
+        );
+        match self.block_cache.borrow().as_ref() {
+            Some((cached, blocks)) if *cached == key => {
+                blocks.get(line).copied().unwrap_or_default()
+            }
+            _ => crate::markdown::Block::default(),
+        }
     }
 
     /// Which block each line from the top of the buffer through `last` belongs
@@ -1590,10 +1605,34 @@ impl Editor {
         // down, and a fresh buffer opens at revision 0 — so an index-keyed
         // entry could be handed to a different document that happens to sit
         // where the old one did, and answer for it.
+        self.scan_blocks();
         let key = (buffer.id(), buffer.revision());
         if let Some((cached, blocks)) = self.block_cache.borrow().as_ref() {
             if *cached == key {
                 return blocks[..=last.min(blocks.len() - 1)].to_vec();
+            }
+        }
+        vec![crate::markdown::Block::Prose; last + 1]
+    }
+
+    /// Read every line's block, once per edit, into the cache.
+    ///
+    /// Blocks are the part of Markdown that is *not* line-local — a fence
+    /// opened three paragraphs ago decides whether this line is code — so the
+    /// scan is from the top, and the answer only changes when the text does.
+    ///
+    /// By **id**, never by index: closing a buffer shifts every later one down,
+    /// and a fresh buffer opens at revision 0 — so an index-keyed entry could
+    /// be handed to a different document that happens to sit where the old one
+    /// did, and answer for it.
+    fn scan_blocks(&self) {
+        let buffer = self.current_buffer();
+        let rope = buffer.rope();
+        let lines = rope.len_lines();
+        let key = (buffer.id(), buffer.revision());
+        if let Some((cached, _)) = self.block_cache.borrow().as_ref() {
+            if *cached == key {
+                return;
             }
         }
         let typst = buffer.syntax() == crate::syntax::Syntax::Typst;
@@ -1619,9 +1658,7 @@ impl Editor {
                 markdown.feed(&prefix, end - start)
             });
         }
-        let through = blocks[..=last.min(blocks.len() - 1)].to_vec();
         *self.block_cache.borrow_mut() = Some((key, blocks));
-        through
     }
 
     /// Whether the markup is taken off the page (所見即所得).
@@ -1703,12 +1740,17 @@ impl Editor {
         if line >= rope.len_lines() {
             return None;
         }
+        // Asked once per line of every 縱書 frame, so it does not materialise
+        // the line to measure it: a chapter of 資治通鑑 is one paragraph, and
+        // copying it out to count its characters cost more than laying it out.
         let start = rope.line_to_char(line);
-        let mut text = rope.line(line).to_string();
-        while text.ends_with('\n') || text.ends_with('\r') {
-            text.pop();
+        let mut end = match line + 1 < rope.len_lines() {
+            true => rope.line_to_char(line + 1),
+            false => rope.len_chars(),
+        };
+        while end > start && matches!(rope.char(end - 1), '\n' | '\r') {
+            end -= 1;
         }
-        let end = start + text.chars().count();
         let (from, to) = self.selection();
         (to >= start && from <= end).then(|| (from.max(start) - start, to.min(end) - start))
     }
@@ -1803,12 +1845,13 @@ impl Editor {
         if line >= rope.len_lines() {
             return Vec::new();
         }
-        let mut text = rope.line(line).to_string();
-        while text.ends_with('\n') || text.ends_with('\r') {
-            text.pop();
-        }
+        // Hashed **without a copy**: a hit is the common case by far, and
+        // materialising the paragraph to find out whether it changed made the
+        // cache cost what it was saving.
         let mut hasher = DefaultHasher::new();
-        text.hash(&mut hasher);
+        for c in rope.line(line).chars().filter(|c| !matches!(c, '\n' | '\r')) {
+            c.hash(&mut hasher);
+        }
         // The same characters mean different things in different syntaxes, and
         // `:syntax text` on the file in front of you is one keystroke away.
         (self.current_buffer().syntax() as u8).hash(&mut hasher);
@@ -1820,6 +1863,10 @@ impl Editor {
             if *cached == hash {
                 return spans.clone();
             }
+        }
+        let mut text = rope.line(line).to_string();
+        while text.ends_with('\n') || text.ends_with('\r') {
+            text.pop();
         }
         let spans = match self.current_buffer().syntax() {
             crate::syntax::Syntax::Markdown => crate::markdown::spans(&text),
