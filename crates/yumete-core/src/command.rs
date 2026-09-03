@@ -2185,6 +2185,33 @@ mod tests {
     }
 
     #[test]
+    fn a_theme_and_an_appearance_are_two_questions() {
+        use Mood::*;
+        // `:theme` names the inks; `:appearance` says which way round they go.
+        assert_eq!(
+            parse(":theme heibai"),
+            Ok(Command::Theme { name: Some("heibai".into()), mood: None })
+        );
+        assert_eq!(
+            parse(":appearance light"),
+            Ok(Command::Theme { name: None, mood: Some(Light) })
+        );
+        // …and one line may still ask both.
+        assert_eq!(
+            parse(":theme moxiang dark"),
+            Ok(Command::Theme { name: Some("moxiang".into()), mood: Some(Dark) })
+        );
+        // The menu lists them apart, too.
+        let themes: Vec<String> = complete("theme ").iter().map(Choice::written).collect();
+        assert_eq!(themes, ["moxiang", "heibai"]);
+        let moods: Vec<String> = complete("appearance ").iter().map(Choice::written).collect();
+        assert_eq!(moods, ["system", "dark", "light"]);
+        // The shortest spelling the menu offers has to work.
+        let short = shortest("appearance", COMMANDS.iter().map(|c| c.name));
+        assert!(parse(&format!(":{} dark", short.unwrap_or("appearance"))).is_ok());
+    }
+
+    #[test]
     fn a_table_says_how_its_columns_are_told_apart() {
         use crate::table::{Rules, Stroke};
         let rules = |line: &str| match parse(line) {
