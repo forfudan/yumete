@@ -1438,13 +1438,21 @@ fn text_at(
                 .with_indent(editor.paragraph_indent())
                 .with_folds(&fold)
                 .with_open_line(editor.open_line());
-            let row = wrap::rows_from(
+            // The same walk the page was drawn with: a row with a reading
+            // over it takes two screen rows, so counting rows from the top
+            // would land a click one row low for every reading above it.
+            let want_row = (mouse.row - area.y) as usize;
+            let (_, row) = rows_on_screen(
+                editor,
                 buffer.rope(),
-                viewport.top,
                 measure,
-                (mouse.row - area.y) as usize + 1,
+                viewport.top,
+                want_row + 1,
             )
-            .pop()?;
+            .into_iter()
+            // A click on a reading belongs to the row it reads: that is the
+            // 字 the reader was pointing at.
+            .find(|(y, _)| *y == want_row || *y == want_row + 1)?;
             // Which character of that row the column landed on, counting only
             // what is drawn — hidden markup takes no columns.
             let want = (mouse.column - area.x) as usize;
@@ -1949,6 +1957,23 @@ fn draw_horizontal(
         }
     };
 
+    // …and the readings push it further down: a row with one over it takes
+    // two screen rows, so the cursor can be on the page by row count and off
+    // it by *screen* row. Walked rather than guessed, and one row at a time,
+    // because how many readings there are is a property of what is on screen.
+    let mut cursor_row = cursor_row;
+    while cursor_row > 0 {
+        let above = wrap::rows_from(rope, *viewport, measure, cursor_row + 1)
+            .iter()
+            .filter(|row| row_has_reading(editor, rope, row))
+            .count();
+        if cursor_row + above < height {
+            break;
+        }
+        *viewport = wrap::advance(rope, *viewport, measure, 1);
+        cursor_row -= 1;
+    }
+
     let (sel_start, sel_end) = editor.selection();
     // Asked of the editor, not of the range: the selection always covers the
     // cursor's own grapheme, so a bare cursor would otherwise be drawn as a
@@ -1984,7 +2009,7 @@ fn draw_horizontal(
     };
 
     let mut lines: Vec<Line> = Vec::new();
-    for row in wrap::rows_from(rope, *viewport, measure, height) {
+    for (_, row) in rows_on_screen(editor, rope, measure, *viewport, height) {
         let text: String = rope.slice(row.start..row.end).to_string();
         let mut spans = Vec::new();
         if gutter > 0 {
@@ -2135,6 +2160,14 @@ fn draw_horizontal(
             if row.ends_line && sel_end > row.start + row_len {
                 break_cell = " ";
             }
+        }
+
+        // The reading goes above the row it reads — pushed after the row's
+        // own spans are styled, because it is placed by the columns the row
+        // is actually drawn in.
+        if let Some(reading) = reading_line(editor, ink, rope, &row, &chars, &shown, gutter + indent)
+        {
+            lines.push(reading);
         }
 
         // Coalesce the per-character styles into as few spans as the row needs,
@@ -2382,6 +2415,109 @@ fn draw_status(
         .style(bar),
         status_area,
     );
+}
+
+/// Whether `row` has any reading over it — which costs it a screen row.
+fn row_has_reading(editor: &Editor, rope: &yumete_core::Rope, row: &wrap::Row) -> bool {
+    let groups = editor.readings_on_line(row.line);
+    if groups.is_empty() {
+        return false;
+    }
+    let start = row.start - rope.line_to_char(row.line);
+    let end = start + (row.end - row.start);
+    groups.iter().any(|g| g.base.1 > start && g.base.0 < end)
+}
+
+/// The rows a page of `height` screen rows holds, and where each is drawn.
+///
+/// **One walk, asked by three** — the drawing, the mouse, and the scroll —
+/// because a row with a reading over it takes two screen rows and the three
+/// would otherwise disagree about which row a given line of the terminal is.
+fn rows_on_screen(
+    editor: &Editor,
+    rope: &yumete_core::Rope,
+    measure: wrap::Measure,
+    top: wrap::Anchor,
+    height: usize,
+) -> Vec<(usize, wrap::Row)> {
+    let mut out = Vec::with_capacity(height);
+    let mut y = 0usize;
+    for row in wrap::rows_from(rope, top, measure, height) {
+        // The reading sits *above* its base, so the row it belongs to moves
+        // down one — and a row whose reading would be the last thing on the
+        // page is not drawn at all, rather than drawn without it.
+        y += usize::from(row_has_reading(editor, rope, &row));
+        if y >= height {
+            break;
+        }
+        out.push((y, row));
+        y += 1;
+    }
+    out
+}
+
+/// The readings over one row, as the line that is drawn above it.
+///
+/// Placed by *column*, not by character: a reading belongs over the base it
+/// reads, and the base may be anywhere along the row once the markup that
+/// wrote it has come off the page. Two readings that would collide are not
+/// squeezed — the second is left out, because a reading over the wrong 字 is
+/// worse than no reading at all.
+fn reading_line(
+    editor: &Editor,
+    ink: crate::theme::Palette,
+    rope: &yumete_core::Rope,
+    row: &wrap::Row,
+    chars: &[char],
+    shown: &[bool],
+    lead: usize,
+) -> Option<Line<'static>> {
+    let groups = editor.readings_on_line(row.line);
+    if groups.is_empty() {
+        return None;
+    }
+    let line_start = rope.line_to_char(row.line);
+    let start_in_line = row.start - line_start;
+    let text: Vec<char> = yumete_core::zong::line_chars(rope, row.line);
+    // Where each of the row's characters is drawn, in cells from the left edge
+    // of the page — the gutter and the paragraph's indent included, so the
+    // reading lands over its own 字 and not two cells to the left of it.
+    let mut column = Vec::with_capacity(chars.len() + 1);
+    let mut at = lead;
+    for (i, &c) in chars.iter().enumerate() {
+        column.push(at);
+        if shown[i] {
+            at += yumete_cjk::char_width(c);
+        }
+    }
+    column.push(at);
+    let mut out = String::new();
+    let mut col = 0usize;
+    for group in &groups {
+        if group.base.1 <= start_in_line || group.base.0 >= start_in_line + chars.len() {
+            continue;
+        }
+        let i = group.base.0.saturating_sub(start_in_line);
+        let Some(&want) = column.get(i) else { continue };
+        if want < col {
+            continue;
+        }
+        let reading: String = text[group.reading.0.min(text.len())..group.reading.1.min(text.len())]
+            .iter()
+            .collect();
+        if reading.is_empty() {
+            continue;
+        }
+        out.push_str(&" ".repeat(want - col));
+        out.push_str(&reading);
+        col = want + yumete_cjk::str_width(&reading);
+    }
+    (!out.trim().is_empty()).then(|| {
+        // A rung back from the writing, the way the 縱書 margin sets one: a
+        // reading is *about* the text, and a reading in the text's own colour
+        // reads as a second line of it.
+        Line::from(Span::styled(out, ink.page().fg(ink.quiet())))
+    })
 }
 
 /// A paragraph's opening squares, and what is drawn in them.
@@ -4245,6 +4381,60 @@ mod tests {
             println!("{chars:>10}  {open:>10.1?}  {first:>12.1?}  {scrolling:>12.1?}  {end:>10.1?}");
             std::fs::remove_dir_all(&dir).ok();
         }
+    }
+
+    /// Render horizontally with the readings laid out.
+    fn render_with_ruby(
+        editor: &mut Editor,
+        config: &Config,
+        w: u16,
+        h: u16,
+    ) -> ratatui::buffer::Buffer {
+        editor.set_ruby(yumete_core::ruby::Dialects::only(
+            yumete_core::ruby::Dialect::Html,
+        ));
+        render_wrapped(editor, config, w, h)
+    }
+
+    #[test]
+    fn a_reading_is_set_over_the_字_it_reads() {
+        // 橫排 laid out no readings at all: the markup sat on the page as the
+        // characters it is, and `<ruby>韋<rt>wéi</rt></ruby>` is not a word
+        // anybody wrote. The 縱書 page has always put it in the margin; here
+        // it goes in the row above, over its own base.
+        let mut editor = editor_with("那<ruby>韋<rt>wéi</rt></ruby>字。");
+        let mut config = Config::default();
+        config.editor.line_numbers = yumete_config::LineNumbers::None;
+        let buffer = render_with_ruby(&mut editor, &config, 40, 8);
+
+        // The tags are off the page and the base is not.
+        assert_eq!(row_text(&buffer, 1).trim_end(), "那韋字。");
+        // …and the reading is above the 字 it reads: 那 is two cells, so 韋
+        // begins at cell 2 and so does its reading.
+        let reading = row_text(&buffer, 0);
+        assert_eq!(reading.trim_end(), "  wéi", "{reading:?}");
+
+        // With no dialect laid out the file is the page again.
+        editor.set_ruby(yumete_core::ruby::Dialects::NONE);
+        let buffer = render_wrapped(&mut editor, &config, 40, 8);
+        assert_eq!(
+            row_text(&buffer, 0).trim_end(),
+            "那<ruby>韋<rt>wéi</rt></ruby>字。"
+        );
+    }
+
+    #[test]
+    fn a_row_with_no_reading_costs_no_row() {
+        // The reading row is *per row*, not per page: a paragraph with one
+        // annotated 字 in it does not double-space the whole book.
+        let mut editor = editor_with("第一行\n第二行<ruby>甲<rt>jiǎ</rt></ruby>\n第三行");
+        let mut config = Config::default();
+        config.editor.line_numbers = yumete_config::LineNumbers::None;
+        let buffer = render_with_ruby(&mut editor, &config, 40, 8);
+        assert_eq!(row_text(&buffer, 0).trim_end(), "第一行");
+        assert_eq!(row_text(&buffer, 1).trim_end(), "      jiǎ", "over 甲, six cells in");
+        assert_eq!(row_text(&buffer, 2).trim_end(), "第二行甲");
+        assert_eq!(row_text(&buffer, 3).trim_end(), "第三行");
     }
 
     #[test]
