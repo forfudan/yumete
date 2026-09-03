@@ -495,6 +495,7 @@ pub fn draw(
     config: &Config,
     area: Rect,
     viewport: &mut Anchor,
+    peek: Option<&yumete_core::editor::Pane>,
 ) -> (u16, u16) {
     let buffer = editor.current_buffer();
     let total_lines = buffer.line_count();
@@ -514,7 +515,10 @@ pub fn draw(
     // editor holds — 縦中横, say — would apply to motion and not to drawing, and
     // the cursor would sit a row out from the character it is on.
     let grid = editor.grid().with_zong_len(metrics.zong_len);
-    let cursor_pos = zong::position(rope, editor.cursor(), grid);
+    // A pane that is only being read has no cursor: the page is laid out
+    // around the place it was left at, and the hit is what it marks.
+    let at = peek.map_or_else(|| editor.cursor(), |pane| pane.cursor());
+    let cursor_pos = zong::position(rope, at, grid);
     let cursor_anchor = Anchor::from(cursor_pos);
 
     // Scroll leftward/rightward so the cursor's 縱 stays on the page, keeping
@@ -607,11 +611,19 @@ pub fn draw(
     }
 
     let text_top = area.y + metrics.head_rows;
-    let (sel_start, sel_end) = editor.selection();
+    let (sel_start, sel_end) = match peek {
+        None => editor.selection(),
+        Some(pane) => pane.highlight.unwrap_or((at, at)),
+    };
     // Asked of the editor, not of the range: the selection always covers the
     // cursor's own grapheme, so a bare cursor would otherwise be drawn as a
     // one-character highlight and the word-tint overlay would never appear.
-    let has_selection = editor.has_selection();
+    // …and a peeked hit is a selection for drawing purposes: it is the one
+    // thing that pane is showing you.
+    let has_selection = match peek {
+        None => editor.has_selection(),
+        Some(pane) => pane.highlight.is_some(),
+    };
     // A ground, and only a ground: `fg(White)` used to flatten every colour
     // underneath — a heading, a reading, a hung mark — at the moment the writer
     // was looking hardest at them.

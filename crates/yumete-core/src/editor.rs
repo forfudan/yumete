@@ -30,6 +30,37 @@ use crate::zong::{self, Grid, Layout, DEFAULT_ZONG_LENGTH};
 /// A paragraph's word ranges, kept against a hash of the paragraph's text.
 type SegmentCache = HashMap<usize, (u64, Vec<(usize, usize)>)>;
 
+/// The other work area: a buffer, a place in it, and what to look at there.
+///
+/// **The editor has one cursor** (Feature #176). A split does not give it a
+/// second one: one pane holds the keys and this holds the place the *other*
+/// pane was left at — written when it loses the keys, read when it gets them
+/// back. It is the same act `Buffer::cursor` performs when you leave a file,
+/// one level up, because two panes can hold one buffer and a buffer has room
+/// for one place.
+#[derive(Debug, Clone)]
+pub struct Pane {
+    /// The buffer's **id**, never its index: closing a file shifts every
+    /// index, and a pane that kept one would show a different chapter.
+    pub buffer: u64,
+    cursor: usize,
+    anchor: usize,
+    goal_column: usize,
+    goal_slot: usize,
+    extend: bool,
+    /// What to mark in it while it is only being read — a search hit, say.
+    pub highlight: Option<(usize, usize)>,
+    /// One line saying what this pane is showing.
+    pub caption: String,
+}
+
+impl Pane {
+    /// Where the pane is looking.
+    pub fn cursor(&self) -> usize {
+        self.cursor
+    }
+}
+
 /// Which lines are off the page, against the buffer and revision they were
 /// worked out for — and the span of lines where folding is unsafe because
 /// something other than prose is written there.
@@ -505,6 +536,11 @@ pub struct Editor {
     ime_available: bool,
     /// A `:shot` waiting for the frame it is a picture of.
     screenshot_request: bool,
+    /// The other work area, when the page is split (Feature #176).
+    other: Option<Pane>,
+    /// Which half of the screen holds the keys — **screen order**, so
+    /// switching panes never makes the top one jump to the bottom.
+    live_pane: usize,
     /// Whether the line-number band carries a ground of its own.
     number_fill: bool,
     /// What is drawn in a paragraph's opening squares, if anything.
@@ -818,6 +854,8 @@ impl Editor {
             table_rules: crate::table::Rules::default(),
             ime_available: false,
             screenshot_request: false,
+            other: None,
+            live_pane: 0,
             number_fill: false,
             indent_hint: crate::zong::IndentHint::default(),
             indent_symbol: "↵".to_string(),
@@ -4304,19 +4342,68 @@ impl Editor {
         };
         let rope = self.current_buffer().rope();
         let len = rope.len_chars();
-        // The match itself becomes the selection, exactly as `/` leaves it —
-        // on its last grapheme, not one past it.
         let to = to.min(len);
+        let from = from.min(len);
         let head = motion::prev_grapheme(rope, to).max(from);
-        self.anchor = from.min(len);
-        self.cursor = head;
-        self.extend = false;
-        self.refresh_goal_column();
-        self.status = say!(
+        let which = say!(
             "第 {0}/{1} 處（n N 走）",
             self.table_hit + 1,
             self.table_hits.len()
         );
+        // **Shown, not jumped to** (Feature #176). 卵's own row and a row that
+        // uses 卵 are two places, and the question 「誰用了卵」 is about both
+        // of them at once — so the hit opens in the other work area and the
+        // cursor stays where it was standing. Nothing is remembered in the
+        // jump list, because nothing was left.
+        //
+        // Except when the keys are already in the other pane: there the hits
+        // are being walked by hand, and「給你看」 means moving the cursor.
+        if self.live_pane == 0 {
+            let line = rope.char_to_line(from);
+            let caption = say!(
+                "{0} · 第 {1} 行 · {2}",
+                self.current_buffer().display_name(),
+                line + 1,
+                which
+            );
+            self.show_in_split(from, Some((from, to)), caption);
+            self.status = which;
+            return;
+        }
+        // The match itself becomes the selection, exactly as `/` leaves it —
+        // on its last grapheme, not one past it.
+        self.anchor = from;
+        self.cursor = head;
+        self.extend = false;
+        self.refresh_goal_column();
+        self.status = which;
+    }
+
+    /// Show `line` in the other work area — `Enter`'s one meaning.
+    ///
+    /// **`Enter` shows; a verb goes.** Both of a table's directions — 「這一格
+    /// 指着哪一行」 and 「誰用了這一格」 — are the same question about two
+    /// places at once, so both answer it in the other work area and leave the
+    /// cursor where it was standing. `:row 木` and `gf` still *move* you: they
+    /// are verbs that mean 「去」, and this is not one.
+    fn show_row(&mut self, line: usize) {
+        let rope = self.current_buffer().rope();
+        let at = rope.line_to_char(line.min(rope.len_lines().saturating_sub(1)));
+        let end = at + crate::zong::line_chars(rope, line).len();
+        let caption = say!(
+            "{0} · 第 {1} 行",
+            self.current_buffer().display_name(),
+            line + 1
+        );
+        self.show_in_split(at, Some((at, end)), caption);
+        self.status = say!("第 {0} 行（空格 w 過去）", line + 1);
+    }
+
+    /// Which line the other work area is showing, for tests and for the
+    /// status line.
+    pub fn peeked_line(&self) -> Option<usize> {
+        let pane = self.other.as_ref()?;
+        Some(self.current_buffer().rope().char_to_line(pane.cursor))
     }
 
     /// Whether the cursor sits at the first character of its cell.
@@ -5047,7 +5134,7 @@ impl Editor {
                 }
                 match self.row_named(c) {
                     Some(line) => {
-                        self.goto_line(line + 1);
+                        self.show_row(line);
                         return;
                     }
                     None if self.cell_links().iter().any(|&(k, _)| k == c) => {
@@ -5074,7 +5161,7 @@ impl Editor {
             }
             [(_, line)] => {
                 let line = *line;
-                self.goto_line(line + 1);
+                self.show_row(line);
             }
             many => {
                 let items = many
@@ -5375,6 +5462,96 @@ impl Editor {
     /// [`Self::set_status`].
     pub fn take_scheme_request(&mut self) -> Option<String> {
         self.scheme_request.take()
+    }
+
+    /// The other work area, if the page is split.
+    pub fn other_pane(&self) -> Option<&Pane> {
+        self.other.as_ref()
+    }
+
+    /// Which half of the screen holds the keys (0 = the first drawn).
+    pub fn live_pane(&self) -> usize {
+        self.live_pane
+    }
+
+    /// Open the other work area, showing `at` in the current buffer.
+    ///
+    /// It opens **where you are standing**: nothing moves, which is the whole
+    /// point — the second area is for reading a place without leaving the one
+    /// you are in.
+    pub fn open_split(&mut self, at: usize, highlight: Option<(usize, usize)>, caption: String) {
+        let buffer = self.current_buffer().id();
+        self.other = Some(Pane {
+            buffer,
+            cursor: at.min(self.current_buffer().rope().len_chars()),
+            anchor: at.min(self.current_buffer().rope().len_chars()),
+            goal_column: 0,
+            goal_slot: 0,
+            extend: false,
+            highlight,
+            caption,
+        });
+    }
+
+    /// Show something else in the other work area, opening it if need be.
+    pub fn show_in_split(&mut self, at: usize, highlight: Option<(usize, usize)>, caption: String) {
+        match self.other.as_mut() {
+            Some(pane) => {
+                pane.cursor = at;
+                pane.anchor = at;
+                pane.highlight = highlight;
+                pane.caption = caption;
+            }
+            None => self.open_split(at, highlight, caption),
+        }
+    }
+
+    /// Close the other work area, keeping the one the keys are in.
+    ///
+    /// Which is the same act as「關掉另一個」 when there are two of them, and
+    /// it means the half you are standing in can never vanish under you.
+    pub fn close_split(&mut self) -> bool {
+        let had = self.other.take().is_some();
+        self.live_pane = 0;
+        had
+    }
+
+    /// Hand the keys to the other work area, and take back the place it held.
+    ///
+    /// The one place where the editor's single cursor moves between panes: the
+    /// live pane's place is written into the pane it leaves, and the other's
+    /// is installed. Nothing else in the editor learns that panes exist.
+    pub fn switch_pane(&mut self) -> bool {
+        let Some(mut pane) = self.other.take() else {
+            return false;
+        };
+        let here = Pane {
+            buffer: self.current_buffer().id(),
+            cursor: self.cursor,
+            anchor: self.anchor,
+            goal_column: self.goal_column,
+            goal_slot: self.goal_slot,
+            extend: self.extend,
+            highlight: None,
+            caption: String::new(),
+        };
+        // The place is clamped rather than trusted: the other pane may have
+        // been edited while this one was not looking.
+        if let Some(index) = self.buffer_with(pane.buffer) {
+            self.current = index;
+        }
+        let len = self.current_buffer().rope().len_chars();
+        pane.cursor = pane.cursor.min(len);
+        pane.anchor = pane.anchor.min(len);
+        self.cursor = pane.cursor;
+        self.anchor = pane.anchor;
+        self.goal_column = pane.goal_column;
+        self.goal_slot = pane.goal_slot;
+        self.extend = pane.extend;
+        self.other = Some(here);
+        self.live_pane = 1 - self.live_pane;
+        self.refresh_goal_column();
+        true
     }
 
     /// Whether the line-number band carries a ground of its own.
@@ -6754,6 +6931,9 @@ impl Editor {
         ('y', "複製到系統剪貼簿"),
         ('p', "從系統剪貼簿貼上"),
         ('d', "詳情欄"),
+        ('w', "另一個工作區：再按一次過去"),
+        ('W', "只留這一個工作區"),
+        ('q', "關掉這一個工作區，到另一個去"),
         ('"', "貼上：取過的東西"),
     ];
 
@@ -6781,6 +6961,40 @@ impl Editor {
                 self.command_line.clear();
                 self.command_caret = self.command_line.chars().count();
                 self.completion = None;
+            }
+            // 工作區 (Feature #176): one key, three meanings that are the same
+            // meaning — 「另一個工作區」. Nothing open: open one, showing this
+            // same place. Open: hand it the keys. `W`:收掉，留下你站着的這半。
+            Key::Char('w') => match self.other.is_some() {
+                false => {
+                    let at = self.cursor;
+                    self.open_split(at, None, self.current_buffer().display_name().to_string());
+                    self.status = say!("另一個工作區：空格 w 過去，空格 W 收掉");
+                }
+                true => {
+                    self.switch_pane();
+                }
+            },
+            // Two ways out, because there are two things you might mean, and
+            // both are one keystroke:
+            //
+            // `W` — 只留我這一半. This is the common one: you looked at the
+            // preview and are done with it, or you decided to work in it and
+            // want the window back. vi spells it `C-w o`(nly), and 空格 o is
+            // the outline here, so the capital of the pane's own letter says
+            // it instead.
+            Key::Char('W') => {
+                if self.close_split() {
+                    self.status = say!("只剩這一個工作區了");
+                }
+            }
+            // `q` — 關掉我這一半，鍵跟着到另一半. vi's `C-w q`, and the same
+            // word: 「這一半我不要了」.
+            Key::Char('q') => {
+                if self.switch_pane() {
+                    self.close_split();
+                    self.status = say!("關掉了那一半");
+                }
             }
             Key::Char('y') => self.copy_to_clipboard(),
             Key::Char('p') => self.clipboard_paste(true),
@@ -7086,7 +7300,9 @@ impl Editor {
                         }
                     }
                     Some(crate::picker::Item::Buffer(i, _)) => self.show_buffer(i),
-                    Some(crate::picker::Item::Row(line, _)) => self.goto_line(line + 1),
+                    // The 部件 picker is `Enter`'s own list, and `Enter` shows
+                    // rather than goes — so choosing from it shows too.
+                    Some(crate::picker::Item::Row(line, _)) => self.show_row(line),
                     Some(crate::picker::Item::Paste(Some(which), _)) => {
                         self.paste_from_menu(which)
                     }
@@ -10909,24 +11125,28 @@ mod tests {
             "⿰ is the grammar, not a component: it is not listed at all"
         );
 
-        // Two of them do, so Enter asks which rather than guessing.
+        // Two of them do, so Enter asks which rather than guessing — and then
+        // **shows** it in the other work area rather than going there
+        // (Feature #176): you stay on 相, and 木's row is beside it.
+        let here = ed.cursor_line();
         ed.on_key(Key::Enter);
         assert_eq!(ed.mode(), Mode::Picker);
         ed.on_key(Key::Enter);
-        assert_eq!(ed.cursor_line(), 2, "木's own row");
+        assert_eq!(ed.peeked_line(), Some(2), "木's own row, in the other area");
+        assert_eq!(ed.cursor_line(), here, "…and the cursor did not move");
         assert_eq!(ed.mode(), Mode::Normal);
 
-        // A cell with one component jumps straight there.
+        // A cell with one component needs no picker.
         ed.goto_line(4);
         press(&mut ed, "l");
         ed.on_key(Key::Enter);
-        assert_eq!(ed.cursor_line(), 3, "目 is already its own row");
+        assert_eq!(ed.peeked_line(), Some(3), "目 is already its own row");
 
         // From the key column the question turns round: not "what is this made
         // of" but "who is made of this". 相 and 目 both use 目.
         press(&mut ed, "0");
         ed.on_key(Key::Enter);
-        assert_eq!(ed.cursor_line(), 1, "相 uses 目");
+        assert_eq!(ed.peeked_line(), Some(1), "相 uses 目");
         assert!(ed.status().contains("1/2"), "{}", ed.status());
 
         std::fs::remove_dir_all(&dir).ok();
@@ -11080,10 +11300,10 @@ mod tests {
         press(&mut ed, "l");
         assert_eq!(ed.char_at_cursor(), Some('目'));
 
-        // Standing on one component, Enter goes straight to *that* row —
-        // nothing to ask about, because the cursor already said which.
+        // Standing on one component, Enter shows *that* row — nothing to ask
+        // about, because the cursor already said which.
         ed.on_key(Key::Enter);
-        assert_eq!(ed.cursor_line(), 3, "目's own row");
+        assert_eq!(ed.peeked_line(), Some(3), "目's own row");
         assert_eq!(ed.mode(), Mode::Normal, "no picker");
 
         // Standing on the descriptor itself, there is nothing to go to — it
@@ -11204,28 +11424,31 @@ mod tests {
         // Five, not four: 林 is ⿰木木 and that is two of them, exactly as `/`
         // would count two matches on one line. A column search differs from a
         // row search in its *direction* and in nothing else.
+        let standing = ed.cursor();
         ed.on_key(Key::Enter);
-        assert_eq!(ed.cursor_line(), 1, "木 itself, the first of them");
+        assert_eq!(ed.peeked_line(), Some(1), "木 itself, the first of them");
+        assert_eq!(ed.cursor(), standing, "…and you did not go anywhere");
         assert!(ed.status().contains("1/5"), "{}", ed.status());
-        // …and the match is the selection, as it is after `/`.
-        let (a, b) = ed.selection();
+        // …and the match is what is marked in the other area, exactly the
+        // range `/` would have left as the selection.
+        let (a, b) = ed.other_pane().and_then(|p| p.highlight).expect("a hit");
         assert_eq!(
             ed.current_buffer().rope().slice(a..b).to_string(),
             "木",
-            "the match is the selection, as it is after `/`"
+            "the match is what is marked"
         );
         ed.on_key(Key::Char('n'));
-        assert_eq!(ed.cursor_line(), 2, "相");
+        assert_eq!(ed.peeked_line(), Some(2), "相");
         ed.on_key(Key::Char('n'));
-        assert_eq!(ed.cursor_line(), 3, "林's first 木");
+        assert_eq!(ed.peeked_line(), Some(3), "林's first 木");
         ed.on_key(Key::Char('n'));
-        assert_eq!(ed.cursor_line(), 3, "…and its second");
+        assert_eq!(ed.peeked_line(), Some(3), "…and its second");
         ed.on_key(Key::Char('n'));
-        assert_eq!(ed.cursor_line(), 5, "杏");
+        assert_eq!(ed.peeked_line(), Some(5), "杏");
         ed.on_key(Key::Char('n'));
-        assert_eq!(ed.cursor_line(), 1, "and round again");
+        assert_eq!(ed.peeked_line(), Some(1), "and round again");
         ed.on_key(Key::Char('N'));
-        assert_eq!(ed.cursor_line(), 5, "and back");
+        assert_eq!(ed.peeked_line(), Some(5), "and back");
 
         // A 拆分 cell still means the other thing: its components' own rows.
         ed.execute("3").unwrap();
@@ -11234,7 +11457,7 @@ mod tests {
         press(&mut ed, "ll");
         assert_eq!(ed.char_at_cursor(), Some('目'));
         ed.on_key(Key::Enter);
-        assert_eq!(ed.cursor_line(), 4, "目's own row");
+        assert_eq!(ed.peeked_line(), Some(4), "目's own row");
 
         // …and the reverse question again, from a different row.
         ed.on_key(Key::Tab);
@@ -12154,7 +12377,21 @@ mod tests {
 
         assert!(ed.execute("search column 甲").is_ok(), "{}", ed.status());
         assert!(ed.status().contains("1/4"), "{}", ed.status());
-        let where_am_i = |ed: &Editor| ed.cell_position().unwrap();
+        // The hits are *shown* in the other work area; the cursor stays where
+        // it was standing, which is the point of the split (Feature #176).
+        let where_am_i = |ed: &Editor| {
+            let at = ed.other_pane().expect("the other work area").cursor();
+            let line = ed.current_buffer().rope().char_to_line(at);
+            let cell = ed
+                .row_cells(line)
+                .iter()
+                .position(|&(from, to)| {
+                    let start = ed.current_buffer().rope().line_to_char(line);
+                    at >= start + from && at <= start + to
+                })
+                .unwrap_or(0);
+            (line, cell)
+        };
         assert_eq!(where_am_i(&ed), (1, 0), "column a, row 1");
         ed.on_key(Key::Char('n'));
         assert_eq!(where_am_i(&ed), (2, 0), "column a, row 2 — still column a");
@@ -12192,11 +12429,13 @@ mod tests {
         assert!(ed.enter_table(), "{}", ed.status());
         ed.goto_line(2);
         ed.on_key(Key::Enter);
-        assert_eq!(ed.cell_position(), Some((1, 0)), "{}", ed.status());
+        assert_eq!(ed.peeked_line(), Some(1), "{}", ed.status());
         assert!(ed.status().contains("未指定"), "and it says so: {}", ed.status());
         assert!(ed.status().contains("1/2"), "{}", ed.status());
         ed.on_key(Key::Char('n'));
-        assert_eq!(ed.cell_position(), Some((2, 1)), "the other column");
+        // Down the first column and then down the second: the second hit is
+        // the 甲 in row 2's *other* column.
+        assert_eq!(ed.peeked_line(), Some(2), "the other column");
         std::fs::remove_dir_all(&dir).ok();
     }
 
@@ -12399,11 +12638,14 @@ mod tests {
         ed.execute("2").unwrap();
         press(&mut ed, "l");
 
-        // Follow a component, then come back to the exact character.
+        // `:row` is a *verb* and still goes; `Enter` shows in the other work
+        // area and leaves the jump list alone, because nothing was left.
         ed.on_key(Key::Tab);
         press(&mut ed, "l");
         let was = ed.cursor();
         ed.on_key(Key::Enter);
+        assert_eq!(ed.cursor(), was, "Enter does not move you");
+        ed.execute("row 木").unwrap();
         assert_eq!(ed.cursor_line(), 2, "木's own row");
         ed.on_key(Key::Ctrl('o'));
         assert_eq!(ed.cursor(), was, "and back where the jump started");

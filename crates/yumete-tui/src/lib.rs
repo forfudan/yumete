@@ -111,7 +111,7 @@ pub fn run(
     // paste going wrong so much as an editor running a macro nobody wrote.
     let _ = execute!(stdout(), EnableBracketedPaste);
 
-    let mut viewport = Viewport::default();
+    let mut viewport = Seats::default();
     let mut shift = ShiftTap::default();
     // A typesetter started with `:preview`, if one is running.
     let mut job: Option<Job> = None;
@@ -454,6 +454,26 @@ struct Viewport {
     zong: Anchor,
     /// Where the grid is scrolled to, when the file is read as one.
     table: table::Viewport,
+}
+
+/// Where each work area is scrolled to (Feature #176).
+///
+/// Two, in **screen order**, so that switching panes moves the keys and not
+/// the pages: the half you were reading stays where it is on the screen.
+#[derive(Default)]
+struct Seats([Viewport; 2]);
+
+impl std::ops::Index<usize> for Seats {
+    type Output = Viewport;
+    fn index(&self, which: usize) -> &Viewport {
+        &self.0[which.min(1)]
+    }
+}
+
+impl std::ops::IndexMut<usize> for Seats {
+    fn index_mut(&mut self, which: usize) -> &mut Viewport {
+        &mut self.0[which.min(1)]
+    }
 }
 
 /// The result of feeding a key event to the lone-Shift-tap tracker.
@@ -1068,6 +1088,13 @@ fn gutter_text(i: usize, cursor_line: usize, width: usize, mode: LineNumbers) ->
 #[derive(Debug, Clone, Copy)]
 struct Areas {
     sidebar: Rect,
+    /// The two work areas, **in screen order** — `panes[0]` is the one drawn
+    /// first (top, or right in 縱書). Which of them holds the keys is
+    /// [`Editor::live_pane`], and it is a different question on purpose:
+    /// switching panes must not make the top one jump to the bottom.
+    panes: [Rect; 2],
+    /// The rule between them, when there are two.
+    divider: Option<Rect>,
     tabs: Rect,
     /// What the page itself is drawn into, the detail panel already taken off.
     text: Rect,
@@ -1106,10 +1133,44 @@ fn page_areas(editor: &Editor, config: &Config, area: Rect) -> Areas {
         false => (Rect::new(body.x, body.y, body.width, 0), body),
     };
     let (text, detail) = table::split_detail(editor, page);
+    // 工作區 (Feature #176). **The cut runs across the direction the text
+    // advances in**: 橫排 advances downward, so the panes are 上下; 縱書
+    // advances leftward, so they are 左右 and the second takes the left. That
+    // is what keeps the measure untouched — both panes keep the full width in
+    // 橫排 and the full height in 縱書, so not one row rewraps and not one 縱
+    // is shortened. A divider carries the boundary and the caption.
+    let (panes, divider) = match editor.other_pane().is_some() {
+        false => ([text, Rect::new(text.x, text.y, 0, 0)], None),
+        true => match editor.layout() {
+            WritingLayout::Vertical if !editor.table().is_some_and(|t| t.is_grid()) => {
+                let half = text.width.saturating_sub(1) / 2;
+                let rule = Rect::new(text.x + half, text.y, 1.min(text.width), text.height);
+                let right = Rect::new(text.x + half + 1, text.y, text.width - half - 1, text.height);
+                let left = Rect::new(text.x, text.y, half, text.height);
+                // 縱 fill from the right edge, so the page you were reading
+                // keeps the right and the new one opens to the left of it.
+                ([right, left], Some(rule))
+            }
+            _ => {
+                let half = text.height.saturating_sub(1) / 2;
+                let rule = Rect::new(text.x, text.y + half, text.width, 1.min(text.height));
+                let top = Rect::new(text.x, text.y, text.width, half);
+                let bottom = Rect::new(
+                    text.x,
+                    text.y + half + 1,
+                    text.width,
+                    text.height.saturating_sub(half + 1),
+                );
+                ([top, bottom], Some(rule))
+            }
+        },
+    };
     Areas {
         sidebar,
         tabs,
         text,
+        panes,
+        divider,
         detail,
         hint,
         status,
@@ -1121,12 +1182,14 @@ fn draw(
     editor: &Editor,
     config: &Config,
     ime: &ImeSession,
-    viewport: &mut Viewport,
+    viewport: &mut Seats,
 ) {
     let area = frame.area();
     let areas = page_areas(editor, config, area);
     let Areas {
         sidebar,
+        panes,
+        divider,
         tabs: tab_area,
         text: text_area,
         detail,
@@ -1144,22 +1207,42 @@ fn draw(
     // The text body is the one part that differs between the layouts; both
     // report back the cell the cursor landed on, which the status line and the
     // candidate panel are positioned from.
-    let (cursor_x, cursor_y) = match editor.layout() {
-        // A grid is not prose and is not drawn as prose: no wrapping, no
-        // markup, one row per line, columns that line up.
-        // A `|` table lives inside a page of prose and is drawn by whatever
-        // draws that page — the paragraph above it must not vanish because the
-        // cursor landed in a cell.
-        _ if editor.table().is_some_and(|t| t.is_grid()) => {
-            table::draw(frame, editor, config, text_area, &mut viewport.table)
+    // One work area, or two. The live one is drawn from the editor's own
+    // cursor; the other from the place it was left at, with its hit marked —
+    // it has no cursor at all, which is what keeps this feature from being
+    // multi-cursor by the back door.
+    let live = editor.live_pane().min(1);
+    let mut cursor = (text_area.x, text_area.y);
+    for (which, rect) in panes.iter().enumerate() {
+        if rect.width == 0 || rect.height == 0 {
+            continue;
         }
-        WritingLayout::Horizontal => {
-            draw_horizontal(frame, editor, config, text_area, &mut viewport.top)
+        let seat = &mut viewport[which];
+        let peek = (which != live).then(|| editor.other_pane()).flatten();
+        let at = match editor.layout() {
+            // A grid is not prose and is not drawn as prose: no wrapping, no
+            // markup, one row per line, columns that line up.
+            // A `|` table lives inside a page of prose and is drawn by whatever
+            // draws that page — the paragraph above it must not vanish because
+            // the cursor landed in a cell.
+            _ if editor.table().is_some_and(|t| t.is_grid()) => {
+                table::draw(frame, editor, config, *rect, &mut seat.table, peek)
+            }
+            WritingLayout::Horizontal => {
+                draw_horizontal(frame, editor, config, *rect, &mut seat.top, peek)
+            }
+            WritingLayout::Vertical => {
+                vertical::draw(frame, editor, config, *rect, &mut seat.zong, peek)
+            }
+        };
+        if which == live {
+            cursor = at;
         }
-        WritingLayout::Vertical => {
-            vertical::draw(frame, editor, config, text_area, &mut viewport.zong)
-        }
-    };
+    }
+    if let Some(rule) = divider {
+        draw_divider(frame, editor, config, rule);
+    }
+    let (cursor_x, cursor_y) = cursor;
 
     if let Some(panel) = detail {
         table::draw_detail(frame, editor, config, panel);
@@ -1479,22 +1562,26 @@ fn text_at(
     editor: &Editor,
     config: &Config,
     size: Option<ratatui::layout::Size>,
-    viewport: &Viewport,
+    seats: &Seats,
     mouse: ratatui::crossterm::event::MouseEvent,
 ) -> Option<usize> {
     let size = size?;
     // The very rectangle the page was drawn into — hint row, tab bar, sidebar
     // and detail panel all already taken off. Working it out again by hand is
     // how a click came to land a row or two from where it was pointed.
-    let area = page_areas(
-        editor,
-        config,
-        Rect::new(0, 0, size.width, size.height),
-    )
-    .text;
-    if mouse.column < area.x || mouse.row < area.y || mouse.row >= area.y + area.height {
+    // …and the work area it landed in, which with two of them is the one
+    // question a click has to answer before any of the others.
+    let areas = page_areas(editor, config, Rect::new(0, 0, size.width, size.height));
+    let live = editor.live_pane().min(1);
+    let area = areas.panes[live];
+    if mouse.column < area.x
+        || mouse.column >= area.x + area.width
+        || mouse.row < area.y
+        || mouse.row >= area.y + area.height
+    {
         return None;
     }
+    let viewport = &seats[live];
     match editor.layout() {
         WritingLayout::Horizontal => {
             let buffer = editor.current_buffer();
@@ -1935,9 +2022,12 @@ fn draw_space_menu(
         return;
     }
     let ink = crate::theme::Palette::of(config);
+    // Translated as it is drawn, the way a command's `help` is: the label is
+    // written in Chinese at the one place it is declared, and that sentence is
+    // the key it is looked up by.
     let items: Vec<String> = Editor::SPACE_KEYS
         .iter()
-        .map(|(key, what)| format!("{key}   {what}"))
+        .map(|(key, what)| format!("{key}   {}", yumete_core::messages::say(what, &[])))
         .collect();
     draw_list(
         frame,
@@ -1977,6 +2067,7 @@ fn draw_horizontal(
     config: &Config,
     text_area: Rect,
     viewport: &mut WrapAnchor,
+    peek: Option<&yumete_core::editor::Pane>,
 ) -> (u16, u16) {
     let buffer = editor.current_buffer();
     let total_lines = buffer.line_count();
@@ -2003,8 +2094,11 @@ fn draw_horizontal(
         .with_folds(&fold)
         .with_open_line(editor.open_line());
 
-    let cursor_line = editor.cursor_line();
-    let cursor_pos = wrap::position(rope, editor.cursor(), measure);
+    // A pane that is only being read has no cursor: it is drawn from the
+    // place it was left at, and *that* is what the page is scrolled around.
+    let at = peek.map_or_else(|| editor.cursor(), |pane| pane.cursor());
+    let cursor_line = rope.char_to_line(at.min(rope.len_chars()));
+    let cursor_pos = wrap::position(rope, at, measure);
     let cursor_anchor = WrapAnchor::from(cursor_pos);
 
     // Scroll so the cursor's row stays on the page with `scrolloff` rows of
@@ -2045,11 +2139,19 @@ fn draw_horizontal(
         cursor_row -= 1;
     }
 
-    let (sel_start, sel_end) = editor.selection();
+    // What is marked: the live pane's selection, or the hit the other one was
+    // opened to show.
+    let (sel_start, sel_end) = match peek {
+        None => editor.selection(),
+        Some(pane) => pane.highlight.unwrap_or((at, at)),
+    };
     // Asked of the editor, not of the range: the selection always covers the
     // cursor's own grapheme, so a bare cursor would otherwise be drawn as a
     // one-character highlight and the word-tint overlay would never appear.
-    let has_selection = editor.has_selection();
+    let has_selection = match peek {
+        None => editor.has_selection(),
+        Some(pane) => pane.highlight.is_some(),
+    };
     // A ground, and only a ground.
     let sel_style = Style::default().bg(ink.selection());
     let show_segmentation = editor.segmentation_visible();
@@ -2595,6 +2697,47 @@ fn reading_line(
     })
 }
 
+/// The rule between two work areas, and the caption of the one being read.
+///
+/// The boundary and the label for one row: 橫排 gets a `─` across the page
+/// with the caption at its left, 縱書 a `│` down it and no caption — a line of
+/// text cannot be written down one cell, and the status line says it instead.
+fn draw_divider(frame: &mut Frame, editor: &Editor, config: &Config, area: Rect) {
+    let ink = crate::theme::Palette::of(config);
+    let rule = ink.page().fg(ink.rule());
+    let buf = frame.buffer_mut();
+    let across = area.height == 1;
+    for y in area.y..area.y + area.height {
+        for x in area.x..area.x + area.width {
+            if let Some(cell) = buf.cell_mut((x, y)) {
+                cell.set_symbol(match across {
+                    true => "─",
+                    false => "│",
+                })
+                .set_style(rule);
+            }
+        }
+    }
+    // 金墨, because a caption is not prose. It names the pane being *read* —
+    // the one you are standing in is named by the status line, which has said
+    // where you are all along.
+    if across {
+        if let Some(pane) = editor.other_pane() {
+            if !pane.caption.is_empty() {
+                let text = format!(" {} ", pane.caption);
+                put_text(
+                    buf,
+                    area.x + 2,
+                    area.y,
+                    area.x + area.width,
+                    &text,
+                    ink.page().fg(ink.gold()),
+                );
+            }
+        }
+    }
+}
+
 /// A paragraph's opening squares, and what is drawn in them.
 ///
 /// White by default — that is what a book prints — with two answers for a
@@ -2857,7 +3000,7 @@ mod tests {
         h: u16,
     ) -> ratatui::buffer::Buffer {
         let mut terminal = Terminal::new(TestBackend::new(w, h)).unwrap();
-        let mut viewport = Viewport::default();
+        let mut viewport = Seats::default();
         terminal
             .draw(|frame| draw(frame, editor, config, ime, &mut viewport))
             .unwrap();
@@ -2909,7 +3052,7 @@ mod tests {
         h: u16,
     ) -> (ratatui::buffer::Buffer, Option<Position>) {
         let mut terminal = Terminal::new(TestBackend::new(w, h)).unwrap();
-        let mut viewport = Viewport::default();
+        let mut viewport = Seats::default();
         terminal
             .draw(|frame| draw(frame, editor, config, &no_ime(), &mut viewport))
             .unwrap();
@@ -2931,7 +3074,7 @@ mod tests {
         let look = vertical::Look::of(editor);
         editor.set_zong_length(vertical::zong_length_for(config, h, lines, look));
         let mut terminal = Terminal::new(TestBackend::new(w, h)).unwrap();
-        let mut viewport = Viewport::default();
+        let mut viewport = Seats::default();
         terminal
             .draw(|frame| draw(frame, editor, config, &no_ime(), &mut viewport))
             .unwrap();
@@ -4487,6 +4630,50 @@ mod tests {
     }
 
     #[test]
+    fn the_other_work_area_shows_a_place_without_going_there() {
+        // 「誰用了卵」 is a question about two places at once, and the answer
+        // used to be a jump: you were taken to one of them and could no longer
+        // see the other. The second work area answers it as it was asked.
+        let mut editor = editor_with("第一行\n第二行\n第三行\n第四行\n");
+        let mut config = Config::default();
+        config.editor.line_numbers = yumete_config::LineNumbers::None;
+
+        // One area: the whole page.
+        let buffer = render(&editor, &config, 40, 9);
+        assert_eq!(row_text(&buffer, 0).trim_end(), "第一行");
+
+        // 空格 w opens the other one, showing the same place; the divider
+        // carries its caption.
+        editor.on_key(Key::Char(' '));
+        editor.on_key(Key::Char('w'));
+        assert!(editor.other_pane().is_some());
+        let buffer = render(&editor, &config, 40, 9);
+        let rows: Vec<String> = (0..9).map(|y| row_text(&buffer, y).trim_end().to_string()).collect();
+        let divider = rows.iter().position(|r| r.starts_with('─')).expect("a rule between them");
+        assert!(divider > 0 && divider + 1 < 9, "an equal cut: {rows:?}");
+        assert!(rows[divider].contains("[scratch]"), "the caption: {:?}", rows[divider]);
+        // Both halves show the file.
+        assert_eq!(rows[0], "第一行");
+        assert_eq!(rows[divider + 1], "第一行");
+
+        // 空格 w again hands it the keys — and the halves stay where they are.
+        editor.on_key(Key::Char(' '));
+        editor.on_key(Key::Char('w'));
+        assert_eq!(editor.live_pane(), 1, "the keys are in the second half");
+
+        // 空格 W keeps the half you are standing in.
+        editor.on_key(Key::Char(' '));
+        editor.on_key(Key::Char('W'));
+        assert!(editor.other_pane().is_none());
+        assert_eq!(editor.live_pane(), 0);
+        let buffer = render(&editor, &config, 40, 9);
+        assert!(
+            !(0..9).any(|y| row_text(&buffer, y).starts_with('─')),
+            "and the rule is gone"
+        );
+    }
+
+    #[test]
     fn a_reading_is_set_over_the_字_it_reads() {
         // 橫排 laid out no readings at all: the markup sat on the page as the
         // characters it is, and `<ruby>韋<rt>wéi</rt></ruby>` is not a word
@@ -4899,7 +5086,7 @@ mod tests {
         editor.on_key(Key::Char('i'));
 
         let mut terminal = Terminal::new(TestBackend::new(40, 6)).unwrap();
-        let mut viewport = Viewport::default();
+        let mut viewport = Seats::default();
         terminal
             .draw(|frame| draw(frame, &editor, &config, &no_ime(), &mut viewport))
             .unwrap();
@@ -5597,7 +5784,7 @@ mod tests {
         render_wrapped(&mut editor, &config, 8, 5);
         editor.on_key(Key::Char('j'));
         let mut terminal = Terminal::new(TestBackend::new(8, 5)).unwrap();
-        let mut viewport = Viewport::default();
+        let mut viewport = Seats::default();
         terminal
             .draw(|frame| draw(frame, &editor, &config, &no_ime(), &mut viewport))
             .unwrap();
@@ -5659,7 +5846,7 @@ mod tests {
         assert_eq!(editor.cursor_line(), 0);
         assert!(row_text(&buf, 0).contains('春'));
         let mut terminal = Terminal::new(TestBackend::new(16, 4)).unwrap();
-        let mut viewport = Viewport::default();
+        let mut viewport = Seats::default();
         terminal
             .draw(|frame| draw(frame, &editor, &config, &no_ime(), &mut viewport))
             .unwrap();
