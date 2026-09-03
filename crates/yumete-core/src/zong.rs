@@ -337,7 +337,7 @@ pub fn line_slots_in(text: &str, grid: Grid, hidden: &[(usize, usize)]) -> Vec<S
             &mut opening,
             hidden,
         );
-        push_ruby(&mut slots, &chars, group, grid, &mut opening);
+        push_ruby(&mut slots, &chars, group, grid, &mut opening, hidden);
         at = group.end;
     }
     push_plain(
@@ -436,23 +436,28 @@ fn push_plain(
             // not hang at all — it keeps its square. So this is one question,
             // not two, and the two can no longer disagree.
             if let Some(hung) = yumete_cjk::margin_form(mark) {
+                // **An opener still waiting goes into the margin first.** It is
+                // waiting for the character it introduces, and a mark is not
+                // that character — so `（；，。` used to leave the （ to be
+                // attached to whatever came *after* the three marks, giving its
+                // row a start behind rows already pushed. `position` looks a
+                // caret up in these rows with a binary search, which needs them
+                // in document order and answered quietly with the wrong row
+                // when they were not.
+                if let Some((opened_at, earlier)) = opening.take() {
+                    slots.push(Slot {
+                        start: opened_at,
+                        end: at,
+                        text: String::new(),
+                        ruby: None,
+                        mark: Some(earlier),
+                    });
+                }
                 if yumete_cjk::opens_a_pair(mark) {
                     // A second opener while one is already waiting — `（「` —
-                    // must not fall through to the branch below, which hangs a
-                    // mark on the character *before* it: the one side an opener
-                    // never belongs on. The one already waiting takes a margin
-                    // row of its own, above the character, and the new one waits
-                    // in its place, so they read down the margin in the order
-                    // they were written.
-                    if let Some((opened_at, earlier)) = opening.take() {
-                        slots.push(Slot {
-                            start: opened_at,
-                            end: at,
-                            text: String::new(),
-                            ruby: None,
-                            mark: Some(earlier),
-                        });
-                    }
+                    // reads down the margin in the order the two were written:
+                    // the first has just taken a row of its own above, and this
+                    // one waits in its place.
                     *opening = Some((at, hung));
                     continue;
                 }
@@ -571,16 +576,38 @@ fn push_ruby(
     group: &crate::ruby::Ruby,
     grid: Grid,
     opening: &mut Option<(usize, char)>,
+    hidden: &[(usize, usize)],
 ) {
     let base = group.base_text(chars);
     let reading: Vec<char> = group.reading_text(chars).to_vec();
+    let is_hidden = |at: usize| hidden.iter().any(|&(a, b)| at >= a && at < b);
     // The base's own rows, then as many more as the reading needs.
+    //
+    // **The base is text like any other**, so the markup in it comes off the
+    // page like any other: `<ruby>**永和**<rt>` is 永和 in bold, and this
+    // function was the one place that was never handed the answer — so 縱書
+    // drew the asterisks that 橫排 hid, in the class of bug the page-as-data
+    // refactor was written to close.
     let base_rows: Vec<(usize, usize)> = {
         let text: String = base.iter().collect();
-        slot_offsets(&text, grid.tatechuyoko)
+        let squares: Vec<(usize, usize)> = slot_offsets(&text, grid.tatechuyoko)
             .windows(2)
             .map(|w| (group.base.0 + w[0], group.base.0 + w[1]))
-            .collect()
+            .collect();
+        // A square with nothing left in it takes no row: it joins its
+        // neighbour, exactly as a hidden run does in a plain one, so the rows
+        // still tile the base and no character belongs to nothing.
+        let mut rows: Vec<(usize, usize)> = Vec::new();
+        for (a, b) in squares {
+            let all_gone = (a..b).all(is_hidden);
+            match rows.last_mut() {
+                // A run held at the head joins the first row with writing in it.
+                Some(last) if (last.0..last.1).all(is_hidden) => last.1 = b,
+                Some(last) if all_gone => last.1 = b,
+                _ => rows.push((a, b)),
+            }
+        }
+        rows
     };
     // Where the reading goes relative to its base.
     //
@@ -604,12 +631,23 @@ fn push_ruby(
     let base_end = base_rows.last().map_or(group.base.0, |&(_, b)| b);
     for row in 0..rows {
         let (start, end, body) = match row.checked_sub(top).and_then(|i| base_rows.get(i)) {
-            Some(&(a, b)) => (a, b, chars[a..b].iter().collect::<String>()),
+            Some(&(a, b)) => (
+                a,
+                b,
+                (a..b).filter(|&i| !is_hidden(i)).map(|i| chars[i]).collect::<String>(),
+            ),
             // A padding row stands for no characters of its own. It still has to
-            // sit in document order — above the base it reports the group's
-            // start, below it the base's end — or the rows stop being sorted and
-            // nothing can look the cursor up in them.
-            None if row < top => (group.start, group.start, String::new()),
+            // sit in document order — or the rows stop being sorted and nothing
+            // can look the cursor up in them.
+            //
+            // **The group's own markup lives on the first of them.** It used to
+            // be given to the first row as an afterthought, which wrote
+            // `start = group.start` onto a row whose range was empty — so
+            // `<ruby>` belonged to no slot at all, the caret for those six
+            // characters collapsed onto a blank square, and with 標點旁置 on it
+            // happened to *every* ruby group.
+            None if row == 0 => (group.start, group.base.0, String::new()),
+            None if row < top => (group.base.0, group.base.0, String::new()),
             None => (base_end, base_end, String::new()),
         };
         slots.push(Slot {
@@ -622,7 +660,8 @@ fn push_ruby(
     }
     // The very first row owns the whole group's markup, so a cursor stepping
     // over it steps over the tags too rather than into them.
-    if let Some(first) = slots.len().checked_sub(rows).and_then(|i| slots.get_mut(i)) {
+    let first_row = slots.len().checked_sub(rows);
+    if let Some(first) = first_row.and_then(|i| slots.get_mut(i)) {
         first.start = group.start;
     }
     // A bracket that was waiting for the character this group annotates hangs
@@ -632,8 +671,15 @@ fn push_ruby(
         let base_row = slots.len().checked_sub(rows.saturating_sub(top));
         match base_row.and_then(|i| slots.get_mut(i)) {
             Some(slot) if slot.mark.is_none() => {
-                slot.start = opened_at.min(slot.start);
                 slot.mark = Some(mark);
+                // The bracket's own character belongs to the group's **first**
+                // row, not to the base's. Giving it to the base pulled that row
+                // behind the padding rows above it, and `position` looks a
+                // caret up with a binary search — which needs the rows sorted,
+                // and quietly answered with the wrong one when they were not.
+                if let Some(first) = first_row.and_then(|i| slots.get_mut(i)) {
+                    first.start = opened_at.min(first.start);
+                }
             }
             // Its row is already spoken for; put the bracket back to be drawn
             // on its own rather than dropping it.
@@ -1928,20 +1974,65 @@ mod tests {
             "`碼`",
             "[](x)",
             "那**年",
+            // A reading of **more than one character**, which is what every
+            // real one is: the base then needs padding rows above it, and the
+            // group's own tags used to be written onto a row whose range was
+            // empty — so `<ruby>` belonged to no slot at all. The line this
+            // test had always used, `<rt>h</rt>`, is the one length at which
+            // that cannot happen.
+            "他<ruby>漢<rt>hàn</rt></ruby>字。",
+            "曰「<ruby>漢<rt>hàn</rt></ruby>字",
+            "「<ruby>口<rt>kǒu</rt></ruby>」和「<ruby>囗<rt>wéi</rt></ruby>」。",
+            // Markup inside the base: the base is text like any other.
+            "<ruby>**永和**<rt>えいわ</rt></ruby>九年。",
+            // A mark that arrives while an opening bracket is still waiting.
+            "條目（；，。￥）不改",
         ] {
             // Whatever the editor says is off the page — here, the markup
             // Markdown itself would take off.
             let hidden = crate::markdown::hidden(&crate::markdown::spans(line), None);
-            let slots = line_slots_in(line, RUBY, &hidden);
-            let n = line.chars().count();
-            for at in 0..n {
+            // 標點旁置 makes the reading take the rows *above* the base
+            // outright, so every ruby group has padding rows — with it on, a
+            // one-character reading is no longer the safe case either.
+            for grid in [RUBY, Grid { hanging: true, ..RUBY }] {
+                let slots = line_slots_in(line, grid, &hidden);
+                let n = line.chars().count();
+                for at in 0..n {
+                    assert!(
+                        slots.iter().any(|s| at >= s.start && at < s.end),
+                        "char {at} of {line:?} is in no slot (hanging={})",
+                        grid.hanging
+                    );
+                }
+                // …and in document order, because `position` looks a caret up
+                // in them with a binary search, which on unsorted rows does not
+                // fail — it answers with the wrong row.
                 assert!(
-                    slots.iter().any(|s| at >= s.start && at < s.end),
-                    "char {at} of {line:?} is in no slot"
+                    slots.windows(2).all(|w| w[0].start <= w[1].start),
+                    "{line:?} (hanging={}) is out of order: {:?}",
+                    grid.hanging,
+                    slots.iter().map(|s| s.start).collect::<Vec<_>>()
                 );
+                assert!(!slots.is_empty(), "{line:?} has nowhere to put the cursor");
             }
-            assert!(!slots.is_empty(), "{line:?} has nowhere to put the cursor");
         }
+    }
+
+    /// The markup inside a ruby base comes off the page like any other.
+    ///
+    /// `push_ruby` was the one function never handed `hidden`: it laid the base
+    /// out from the raw characters, so 縱書 drew the `**` that 橫排 hid — the
+    /// same divergence the page-as-data refactor closed everywhere else.
+    #[test]
+    fn markup_inside_a_ruby_base_comes_off_the_page() {
+        let line = "<ruby>**永和**<rt>えいわ</rt></ruby>九年。";
+        let hidden = crate::markdown::hidden(&crate::markdown::spans(line), None);
+        let drawn: String = line_slots_in(line, RUBY, &hidden)
+            .iter()
+            .map(|s| s.text.as_str())
+            .collect();
+        // 。 is drawn in its vertical form; the asterisks are drawn not at all.
+        assert_eq!(drawn, "永和九年︒", "the asterisks are markup");
     }
 
     #[test]
