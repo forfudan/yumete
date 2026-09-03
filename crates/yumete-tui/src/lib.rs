@@ -1476,12 +1476,12 @@ fn tab_spans(editor: &Editor, area: Rect) -> Vec<(u16, u16, usize)> {
     }
     let mut spans = Vec::new();
     let mut x = area.x;
-    for i in first..=last {
-        if x + widths[i] > area.x + area.width {
+    for (i, w) in widths.iter().enumerate().take(last + 1).skip(first) {
+        if x + w > area.x + area.width {
             break;
         }
-        spans.push((x, widths[i], i));
-        x += widths[i];
+        spans.push((x, *w, i));
+        x += w;
     }
     spans
 }
