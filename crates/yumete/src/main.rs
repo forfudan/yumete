@@ -20,6 +20,9 @@ fn main() -> ExitCode {
     let mut force_preview = false;
     let mut force_layout: Option<Layout> = None;
     let mut force_table = false;
+    // `--timing` answers「開個檔案怎麼要三秒」 without guessing: it runs the
+    // whole of a launch and prints what each part of it cost.
+    let mut timing = false;
 
     for arg in std::env::args().skip(1) {
         match arg.as_str() {
@@ -33,6 +36,7 @@ fn main() -> ExitCode {
             }
             "-p" | "--preview" => force_preview = true,
             "-t" | "--table" => force_table = true,
+            "--timing" => timing = true,
             "-v" | "--vertical" => force_layout = Some(Layout::Vertical),
             "-H" | "--horizontal" => force_layout = Some(Layout::Horizontal),
             // Reject unknown flags, but treat a lone "-" as a filename.
@@ -46,6 +50,13 @@ fn main() -> ExitCode {
     }
 
     let mut editor = Editor::new();
+    let launch = std::time::Instant::now();
+    let mut marks: Vec<(&str, std::time::Duration)> = Vec::new();
+    // Each mark is the time *since the launch*; the deltas are worked out
+    // when they are printed, so a mark cannot drift.
+    let mark = |what: &'static str, marks: &mut Vec<(&str, std::time::Duration)>| {
+        marks.push((what, launch.elapsed()));
+    };
 
     // Load global + per-project config and apply the keymap.
     let (config, config_problems) = yumete_config::Config::load_reporting();
@@ -106,6 +117,7 @@ fn main() -> ExitCode {
         }
     }
     editor.set_dense(config.editor.dense);
+    mark("config", &mut marks);
 
     // The files, *after* the session's settings. Opening one may turn the page
     // horizontal — a file a schema calls a table is read across — and a setting
@@ -117,6 +129,7 @@ fn main() -> ExitCode {
             return ExitCode::FAILURE;
         }
     }
+    mark("open", &mut marks);
     // With no file named, open what was open last time — five `:open`s every
     // morning is five too many. Only then: somebody who said which file they
     // wanted gets that file, and nothing else.
@@ -128,6 +141,7 @@ fn main() -> ExitCode {
     } else {
         0
     };
+    mark("session", &mut marks);
     // `-t` is the writer saying "this is a table" about a file no schema names.
     // After the files, because it is about the file that is open.
     if force_table {
@@ -164,6 +178,7 @@ fn main() -> ExitCode {
     // somebody who came here to type 宇浩. Loading it for everyone means every
     // launch pays for an input method most of them did not ask for. So it
     // waits for `:yume scheme`.
+    mark("ruby", &mut marks);
     let wanted = Scheme::from_tag(&config.ime.scheme).unwrap_or(Scheme::Lingming);
     let mut ime = ImeSession::language_only(wanted);
     ime.set_page_size(config.panel.page_size);
@@ -174,6 +189,7 @@ fn main() -> ExitCode {
         editor.set_status(switch_scheme_at_startup(&mut ime, wanted, &config));
     }
 
+    mark("輸入法", &mut marks);
     // Word segmentation, driving `w`/`b`/`e` and the overlay. Best first:
     //
     // 1. Yume's own language model (Feature #63) — 1.25M weighted entries plus
@@ -199,6 +215,16 @@ fn main() -> ExitCode {
     // name on every page is the one word no dictionary has.
     editor.reload_project_words();
     editor.set_status(String::new());
+    mark("分詞", &mut marks);
+    if timing {
+        let mut last = std::time::Duration::default();
+        for (what, at) in &marks {
+            println!("{what:>8}  {:.1?}", *at - last);
+            last = *at;
+        }
+        println!("{:>8}  {last:.1?}", "合計");
+        return ExitCode::SUCCESS;
+    }
 
     // A config file that does not parse is worth one line: silence is how a
     // typo comes to look like a setting that does not work.
@@ -291,6 +317,8 @@ OPTIONS:
     -v, --vertical   Lay the text out vertically for this run (縱書), overriding
                      the config. -H / --horizontal forces the ordinary layout.
     -p, --preview    Print a non-interactive preview instead of the editor.
+        --timing     Run a whole launch, print what each part of it cost, and
+                     exit — for「開個檔案怎麼要三秒」.
     -h, --help       Print this help and exit.
     -V, --version    Print the version and exit.
 
