@@ -2120,12 +2120,16 @@ fn draw_horizontal(
     let cursor_row = match wrap::distance(rope, *viewport, cursor_anchor, measure, last_row) {
         Some(d) if d >= scrolloff && d + scrolloff <= last_row => d,
         found => {
-            // Off the page, or too close to an edge: re-anchor so the cursor
-            // sits `scrolloff` in from whichever side it left by.
-            let inset = if found.is_some_and(|d| d < scrolloff) || cursor_anchor < *viewport {
-                scrolloff
-            } else {
-                last_row.saturating_sub(scrolloff)
+            // Too close to an edge: scroll by as little as it takes, which is
+            // what reading down a page wants. **Off the page altogether: put
+            // it in the middle** — that is a *jump* (a search hit, `gg`, a
+            // mark), and landing `scrolloff` from an edge gives the reader
+            // nothing on one side of the thing they were looking for.
+            let inset = match found {
+                None if cursor_anchor > *viewport => height / 2,
+                Some(d) if d < scrolloff => scrolloff,
+                Some(_) => last_row.saturating_sub(scrolloff),
+                None => scrolloff,
             };
             *viewport = wrap::retreat(rope, cursor_anchor, measure, inset);
             wrap::distance(rope, *viewport, cursor_anchor, measure, height).unwrap_or(0)

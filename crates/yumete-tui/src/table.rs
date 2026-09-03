@@ -158,10 +158,15 @@ pub fn draw(
     // Vertical scroll: the ordinary rule, keeping the cursor's row on screen.
     let scrolloff = config.editor.scrolloff.min(rows / 2);
     let first_data = usize::from(view.schema.header);
-    if cursor_row < viewport.top + scrolloff {
+    // A row off the page altogether is a *jump* — a hit, a `:row`, a mark —
+    // and it lands in the middle. Walking off an edge scrolls by as little as
+    // it takes, which is what walking wants.
+    let far = cursor_row < viewport.top || cursor_row >= viewport.top + rows;
+    if far {
+        viewport.top = cursor_row.saturating_sub(rows / 2);
+    } else if cursor_row < viewport.top + scrolloff {
         viewport.top = cursor_row.saturating_sub(scrolloff);
-    }
-    if cursor_row + scrolloff >= viewport.top + rows {
+    } else if cursor_row + scrolloff >= viewport.top + rows {
         viewport.top = (cursor_row + scrolloff + 1).saturating_sub(rows);
     }
     viewport.top = viewport
