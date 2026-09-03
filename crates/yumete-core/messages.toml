@@ -1582,3 +1582,23 @@ en = "only here: {0}"
 [[message]]
 zh = "這裏沒有字可以找"
 en = "nothing here to look for"
+
+[[message]]
+zh = "看它指的地方"
+en = "show what it points at"
+
+[[message]]
+zh = "寫下了 {0} 的註（空格 w 過去寫）"
+en = "wrote the note for {0} (Space w to go and write it)"
+
+[[message]]
+zh = "腳注"
+en = "footnote"
+
+[[message]]
+zh = "看這條註（沒有就寫一條）"
+en = "show the note (or write one)"
+
+[[message]]
+zh = "這個詞還在哪裏"
+en = "where else this word is"

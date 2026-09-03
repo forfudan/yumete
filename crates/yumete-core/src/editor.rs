@@ -3914,6 +3914,15 @@ impl Editor {
                     ("q", say!("關")),
                 ]);
         }
+        // Standing on a footnote reference, the key that shows the note is
+        // worth saying: it is the one place `gd` has an answer that the reader
+        // could not guess from the page.
+        if self.mode == Mode::Normal && self.note_tag_at_cursor().is_some() {
+            return Hint::Keys(say!("腳注"), vec![
+                ("gd", say!("看這條註（沒有就寫一條）")),
+                ("Enter", say!("這個詞還在哪裏")),
+            ]);
+        }
         match self.mode {
             Mode::Ruby if self.ruby_target.is_some() => {
                 Hint::Keys(say!("注音"), vec![("Enter", say!("收下")), ("Esc", say!("取消"))])
@@ -3976,6 +3985,7 @@ impl Editor {
                     ("h l", say!("行首／行尾")),
                     ("s", say!("首個非空白")),
                     ("f", say!("開這個檔")),
+                    ("d", say!("看它指的地方")),
                     ("J", say!("併下一行")),
                 ]),
             Pending::Find(_) => (say!("找"), vec![("", say!("打一個字"))]),
@@ -4676,6 +4686,14 @@ impl Editor {
     /// foot of a hundred-page file is no use if finding your place again is a
     /// search.
     fn follow_note(&mut self) {
+        // A reference with no note is the ordinary way a note gets written:
+        // you type `[^1]` in the sentence and then need somewhere to put it.
+        if let Some(tag) = self.note_tag_at_cursor() {
+            if self.footnote_body(&tag).is_none() {
+                self.write_note(&tag);
+                return;
+            }
+        }
         let Some(detail) = self.note_detail() else {
             // Not on a note, so `Enter` means what it means everywhere else:
             // 「這個詞還在哪裏」 — the same previewing search a table's key
@@ -4696,6 +4714,21 @@ impl Editor {
         // remembered position, a second meaning for `Enter`, and a state that
         // could go stale — is gone with it.
         self.show_row(at);
+    }
+
+    /// `gd`: **what is this?** — the note, or the row a component names.
+    ///
+    /// The other half of the pair `Enter` is one half of. Shown in the other
+    /// work area like everything else, and on a footnote reference that has no
+    /// note yet it **writes the note** and shows that: following a link to a
+    /// page that does not exist is how one gets written, which is what every
+    /// wiki-shaped editor does and what a writer typing `[^1]` means.
+    fn show_definition(&mut self) {
+        if self.table_here() && self.cursor_in_link_column() {
+            self.follow_cell();
+            return;
+        }
+        self.follow_note();
     }
 
     /// `Enter` on prose: **who else says this?**
@@ -4764,6 +4797,57 @@ impl Editor {
             }
         }
         hits
+    }
+
+    /// The footnote reference the cursor is standing in, if it is in one.
+    fn note_tag_at_cursor(&self) -> Option<String> {
+        if self.current_buffer().syntax() != crate::syntax::Syntax::Markdown {
+            return None;
+        }
+        let rope = self.current_buffer().rope();
+        let line = self.cursor_line();
+        let within = self.cursor - rope.line_to_char(line);
+        let block = self.blocks_through(line).get(line).copied().unwrap_or_default();
+        let runs = self.markup_line_in(line, block);
+        let span = runs.iter().find(|s| {
+            s.kind == crate::markdown::Kind::Footnote && within >= s.start && within < s.end
+        })?;
+        let text: String = rope
+            .line(line)
+            .chars()
+            .skip(span.start)
+            .take(span.end - span.start)
+            .collect();
+        let tag = text.trim_end_matches(':').to_string();
+        // The *definition* is not a reference: standing on `[^1]:` there is
+        // nothing to go to — you are already there.
+        match text.ends_with(':') {
+            true => None,
+            false => Some(tag),
+        }
+    }
+
+    /// Write the note for `tag` at the foot of the file, and show it.
+    fn write_note(&mut self, tag: &str) {
+        let rope = self.current_buffer().rope();
+        let end = rope.len_chars();
+        let text = rope.to_string();
+        // One blank line between the manuscript and its notes, and none added
+        // when the file already ends with one.
+        let lead = match text.ends_with("\n\n") {
+            true => String::new(),
+            false => match text.ends_with('\n') {
+                true => "\n".to_string(),
+                false => "\n\n".to_string(),
+            },
+        };
+        let note = format!("{lead}{tag}: ");
+        self.snapshot();
+        let at = end;
+        self.current_buffer_mut().insert(at, &note);
+        let line = self.current_buffer().rope().char_to_line(at + note.chars().count());
+        self.show_row(line);
+        self.status = say!("寫下了 {0} 的註（空格 w 過去寫）", tag);
     }
 
     /// Where a footnote is defined and what it says.
@@ -6561,14 +6645,12 @@ impl Editor {
         let operator_count = self.count;
         let count = self.take_count();
 
-        // A footnote reference is a link, and Enter follows a link — the same
-        // key that follows a table cell to the row it names. Enter again comes
-        // back, because a note read at the foot of the file is no use if
-        // finding your sentence again is a search.
-        // A Markdown table is part of a document, so a link in a cell is a
-        // link: the key that follows one everywhere else follows it here too.
+        // **`Enter` is one thing everywhere: 這個詞還在哪裏.** A footnote used
+        // to take it, which meant a word *inside* a note could not be asked
+        // about at all — the key was busy. What a thing points *at* is the
+        // other question, and it has the name every editor gives it: `gd`.
         if (self.table.is_none() || self.md_region().is_some()) && key == Key::Enter {
-            self.follow_note();
+            self.search_the_page();
             return;
         }
 
@@ -6978,6 +7060,12 @@ impl Editor {
             // Open the file named on this line — a `:grep` hit, or a line
             // pasted in from any other tool that prints `path:line:`.
             Key::Char('f') => return self.goto_file_under_cursor(),
+            // **`gd` — what is this?** The pair every editor has: `Enter` asks
+            // 「還在哪裏」 (references), `gd` asks 「它在哪裏定義的」. On a
+            // footnote that is the note; in a 拆分 column it is the row the
+            // component names. Both are *shown* in the other work area, since
+            // both are questions about two places at once.
+            Key::Char('d') => return self.show_definition(),
             _ => return,
         };
         self.move_head(pos);
@@ -11090,6 +11178,38 @@ mod tests {
     }
 
     #[test]
+    fn gd_shows_what_a_thing_points_at_and_writes_a_note_that_is_missing() {
+        // The pair every editor has: `Enter` is 「還在哪裏」 (references), `gd`
+        // is 「它在哪裏定義的」. Keeping both on `Enter` meant a word inside a
+        // footnote could not be searched for at all.
+        let mut ed = typed("那年冬天[^1]，山下起了大雪。\n那年夏天。\n");
+        ed.set_render(Render::On);
+        ed.goto_line(1);
+        for _ in 0..4 {
+            ed.on_key(Key::Char('l'));
+        }
+        // No note for it yet: `gd` writes one at the foot and shows it, which
+        // is how a note gets written — you type `[^1]` and then need somewhere
+        // to put it.
+        press(&mut ed, "gd");
+        let text = ed.current_buffer().text();
+        assert!(text.ends_with("[^1]: "), "{text:?}");
+        assert!(ed.status().contains("寫下了"), "{}", ed.status());
+        assert_eq!(ed.peeked_line(), Some(3), "…and it is shown");
+        // …and it is one edit, so one `u` takes it back.
+        ed.on_key(Key::Char('u'));
+        assert!(!ed.current_buffer().text().contains("[^1]: "));
+
+        // `Enter` on the same character is the other question entirely.
+        ed.on_key(Key::Enter);
+        assert!(
+            ed.status().contains("處") || ed.status().contains("只有"),
+            "{}",
+            ed.status()
+        );
+    }
+
+    #[test]
     fn the_keys_a_keyboard_has_are_not_swallowed() {
         // PageUp/PageDown reached the editor as *nothing*: the table that turns
         // a terminal's keys into the editor's had no line for them, so they
@@ -11195,12 +11315,13 @@ mod tests {
             ed.on_key(Key::Char('l'));
         }
         let was = ed.cursor();
-        ed.on_key(Key::Enter);
-        // Shown in the other work area, not gone to — so there is nothing to
-        // come back from, and `Enter` keeps its one meaning.
+        // **`gd`**, not `Enter`: 「它指着哪裏」 and 「還在哪裏」 are two
+        // questions, and `Enter` is the second one everywhere — otherwise a
+        // word *inside* a note could never be asked about.
+        press(&mut ed, "gd");
         assert_eq!(ed.peeked_line(), Some(2), "the note, beside the sentence");
         assert_eq!(ed.cursor(), was, "and the sentence is still under the cursor");
-        ed.on_key(Key::Enter);
+        press(&mut ed, "gd");
         assert_eq!(ed.cursor(), was, "…however many times you press it");
         assert_eq!(ed.peeked_line(), Some(2));
         ed.goto_line(1);
