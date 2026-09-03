@@ -270,7 +270,9 @@ USAGE:
 ARGS:
     FILE    One or more files to open. Each is loaded into its own buffer;
             a file that does not yet exist opens an empty buffer bound to it.
-            With no FILE, yumete starts with a new, empty scratch buffer.
+            With no FILE, yumete opens again what was open last time in this
+            directory, each at the line it was left on — or an empty scratch
+            buffer the first time.
 
 OPTIONS:
     -t, --table      Read the file as a grid. A schema in .yumete/tables/ names

@@ -49,7 +49,7 @@ scripts/build.sh --no-data   # 只編譯二進制
 
 ```
 yumete <檔案>...       打開一個或多個檔案
-yumete                 從空白緩衝區開始
+yumete                 接着上次——上次開着的那些檔案，各自停在離開時的那一行
 
   -v, --vertical       這次以竪排（縱書）開啟
   -H, --horizontal     強制橫排
