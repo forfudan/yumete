@@ -569,7 +569,11 @@ pub fn draw(
     // a gutter column the text never enters. Here the numbers sit *above* the
     // 縱, in the text's own columns, so position separates nothing and a bare
     // dim digit reads as a digit somebody typed. The colour is the gutter.
-    let ink = crate::theme::Palette::of(config);
+    let ink = match peek {
+        None => crate::theme::Palette::of(config),
+        // A rung back, all of it: the half that is only being read.
+        Some(_) => crate::theme::Palette::of(config).faded(),
+    };
     // **The page is painted, here too.** A 縱書 page is mostly margin — the
     // squares a 縱 does not reach are the page as much as the ones it does —
     // and until this line every one of them was the terminal's own ground, so

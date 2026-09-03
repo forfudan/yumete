@@ -23,9 +23,6 @@
 zh = "「{0}」不像表格——每行要有同樣多的欄，或者把光標放到 | 表格上"
 en = "'{0}' is not a table — every line needs the same columns, or put the cursor on a | table"
 
-[[message]]
-zh = "Enter 回到正文"
-en = "Enter goes back to the text"
 
 [[message]]
 zh = "schema：{0}"
@@ -183,9 +180,6 @@ en = "one column only — a table needs two, or write the |---| line first"
 zh = "只開了一個檔案"
 en = "only one file open"
 
-[[message]]
-zh = "回到正文"
-en = "back to the text"
 
 [[message]]
 zh = "外面沒有 {0}{1}"

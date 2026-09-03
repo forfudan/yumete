@@ -651,10 +651,6 @@ pub struct Editor {
     /// a jump list that kept indices would walk back into a different chapter.
     jumps: Vec<(u64, usize)>,
     jump_at: usize,
-    /// Where Enter came from when it followed a footnote, and the line it
-    /// landed on — so the same key comes back, and only from there.
-    note_return: Option<usize>,
-    note_return_from: Option<usize>,
     /// Which line holds the row with each key, and what the document looked
     /// like when that was worked out.
     ///
@@ -890,8 +886,6 @@ impl Editor {
             table_hit: 0,
             jumps: Vec::new(),
             jump_at: 0,
-            note_return: None,
-            note_return_from: None,
             key_index: RefCell::new(None),
             chaifen: false,
             ruby_target: None,
@@ -4399,6 +4393,15 @@ impl Editor {
         self.status = say!("第 {0} 行（空格 w 過去）", line + 1);
     }
 
+    /// The hit the search is standing on, if there is one.
+    ///
+    /// What the renderer marks louder than the rest: on a long line a hit in
+    /// the ordinary selection ground is easy to miss, and every editor's
+    /// answer to that is to give the **current** match a mark of its own.
+    pub fn current_hit(&self) -> Option<(usize, usize)> {
+        self.table_hits.get(self.table_hit).copied()
+    }
+
     /// Which line the other work area is showing, for tests and for the
     /// status line.
     pub fn peeked_line(&self) -> Option<usize> {
@@ -4673,19 +4676,6 @@ impl Editor {
     /// foot of a hundred-page file is no use if finding your place again is a
     /// search.
     fn follow_note(&mut self) {
-        // Coming back takes priority: standing on the note you were just sent
-        // to, Enter can only sensibly mean "back".
-        if let Some(back) = self.note_return.take() {
-            let line = self.cursor_line();
-            if Some(line) == self.note_return_from {
-                self.set_cursor(back.min(self.current_buffer().rope().len_chars()));
-                self.note_return_from = None;
-                self.status = say!("回到正文");
-                return;
-            }
-            // Somewhere else entirely — the way back has gone stale.
-            self.note_return_from = None;
-        }
         let Some(detail) = self.note_detail() else {
             // Not on a note, so `Enter` means what it means everywhere else:
             // 「這個詞還在哪裏」 — the same previewing search a table's key
@@ -4701,10 +4691,11 @@ impl Editor {
             self.status = say!("註就在這一行");
             return;
         }
-        self.note_return = Some(self.cursor);
-        self.note_return_from = Some(at);
-        self.goto_line(at + 1);
-        self.status = say!("Enter 回到正文");
+        // **Shown, not gone to** (Feature #176), like everything else `Enter`
+        // answers. There is nothing to come back from, so the way back — a
+        // remembered position, a second meaning for `Enter`, and a state that
+        // could go stale — is gone with it.
+        self.show_row(at);
     }
 
     /// `Enter` on prose: **who else says this?**
@@ -11139,13 +11130,13 @@ mod tests {
         }
         let was = ed.cursor();
         ed.on_key(Key::Enter);
-        assert_eq!(ed.cursor_line(), 2, "at the note");
+        // Shown in the other work area, not gone to — so there is nothing to
+        // come back from, and `Enter` keeps its one meaning.
+        assert_eq!(ed.peeked_line(), Some(2), "the note, beside the sentence");
+        assert_eq!(ed.cursor(), was, "and the sentence is still under the cursor");
         ed.on_key(Key::Enter);
-        assert_eq!(ed.cursor(), was, "and back to the exact character");
-
-        // The way back goes stale rather than firing from somewhere else.
-        ed.on_key(Key::Enter);
-        assert_eq!(ed.cursor_line(), 2);
+        assert_eq!(ed.cursor(), was, "…however many times you press it");
+        assert_eq!(ed.peeked_line(), Some(2));
         ed.goto_line(1);
         ed.on_key(Key::Enter);
         assert_eq!(ed.cursor_line(), 0, "nothing moves");

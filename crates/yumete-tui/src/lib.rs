@@ -2075,7 +2075,13 @@ fn draw_horizontal(
     let mode = config.editor.line_numbers;
     let gutter = gutter_width(total_lines, mode);
     let rope = buffer.rope();
-    let ink = crate::theme::Palette::of(config);
+    // The half that is only being read is drawn a rung back, all of it — that
+    // is how you can see which half the keys are in without looking for the
+    // cursor.
+    let ink = match peek {
+        None => crate::theme::Palette::of(config),
+        Some(_) => crate::theme::Palette::of(config).faded(),
+    };
 
     // Unwrapped, every paragraph is one row and anything past the right edge is
     // simply clipped, which is what the row model produces at an unreachable
@@ -2145,6 +2151,16 @@ fn draw_horizontal(
         None => editor.selection(),
         Some(pane) => pane.highlight.unwrap_or((at, at)),
     };
+    // **The one you are standing on**, told apart from every other mark on the
+    // page. A hit in the ordinary selection ground is easy to lose in a long
+    // line of 漢字, so it gets 朱 washed to a highlighter's ground — the one
+    // colour on the page that is not a quantity of ink — and the row it sits
+    // on carries a band, the way a table bands the row the cursor is in.
+    let hit = editor.current_hit().filter(|_| {
+        peek.is_some_and(|pane| pane.highlight.is_some()) || peek.is_none()
+    });
+    let hit_line = hit.map(|(from, _)| rope.char_to_line(from.min(rope.len_chars())));
+    let hit_style = Style::default().bg(ink.wash());
     // Asked of the editor, not of the range: the selection always covers the
     // cursor's own grapheme, so a bare cursor would otherwise be drawn as a
     // one-character highlight and the word-tint overlay would never appear.
@@ -2201,7 +2217,15 @@ fn draw_horizontal(
                 true => ink.ground(yumete_config::rung::HEAD),
                 false => ink.page(),
             };
-            spans.push(Span::styled(label, band.fg(ink.furniture())));
+            // 朱 on the number of the row the current hit is on. **The number
+            // is kept** — an arrow in its place would take away the one thing
+            // the gutter is for, which is saying *which* line; a coloured
+            // number says both at once and costs no column.
+            let band = match hit_line == Some(row.line) && row.starts_line() {
+                true => band.fg(ink.mark()).add_modifier(Modifier::BOLD),
+                false => band.fg(ink.furniture()),
+            };
+            spans.push(Span::styled(label, band));
         }
         // The paragraph opens two squares in, the way a Chinese paragraph is
         // marked — and the blank line it replaces costs a whole row.
@@ -2231,6 +2255,12 @@ fn draw_horizontal(
                 .and_then(|b| block_style(b, ink))
                 .unwrap_or_default(),
         );
+        // The row the current hit is on, banded — 「在哪一行」 answered before
+        // you have found the word itself.
+        let ground = match hit_line == Some(row.line) {
+            true => ground.patch(ink.ground(yumete_config::rung::BAND)),
+            false => ground,
+        };
         // 所見即所得: the markup comes off the page. It is dropped from what is
         // *drawn*, not from the buffer — and never on the construct the cursor
         // is in, so the cursor is never inside text that is not on the screen.
@@ -2345,6 +2375,17 @@ fn draw_horizontal(
         if let Some(reading) = reading_line(editor, ink, rope, &row, &chars, &shown, gutter + indent)
         {
             lines.push(reading);
+        }
+
+        // …and the hit itself, over everything else on the row.
+        if let Some((from, to)) = hit {
+            if to > row.start && from < row.end {
+                let a = from.saturating_sub(row.start).min(chars.len());
+                let b = (to.saturating_sub(row.start)).min(chars.len());
+                for style in styles.iter_mut().take(b).skip(a) {
+                    *style = style.patch(hit_style);
+                }
+            }
         }
 
         // Coalesce the per-character styles into as few spans as the row needs,
@@ -4627,6 +4668,34 @@ mod tests {
             yumete_core::ruby::Dialect::Html,
         ));
         render_wrapped(editor, config, w, h)
+    }
+
+    #[test]
+    fn the_hit_you_are_standing_on_is_told_apart_from_the_rest() {
+        // On a long line of 漢字 a hit in the ordinary selection ground is easy
+        // to lose. Three cues, none of which costs a column: the row is banded,
+        // the hit itself takes 朱 washed to a highlighter's ground, and the
+        // row's *number* turns 朱 — the number is kept rather than replaced by
+        // an arrow, because which line it is is what a gutter is for.
+        let mut editor = editor_with("那年冬天很冷。\n第二行。\n那年夏天很熱。\n");
+        let mut config = Config::default();
+        config.editor.line_numbers = yumete_config::LineNumbers::Absolute;
+        editor.on_key(Key::Enter);
+        assert_eq!(editor.peeked_line(), Some(2), "{}", editor.status());
+
+        let buffer = render(&editor, &config, 40, 9);
+        let ink = ink(&config);
+        // The hit is in the *other* half, which is drawn a rung back — so the
+        // marks there are the faded ones.
+        let quiet = ink.faded();
+        let rows = buffer.area.height;
+        let marked = (0..rows).any(|y| {
+            (0..buffer.area.width)
+                .any(|x| buffer[(x, y)].style().bg == Some(quiet.wash()))
+        });
+        assert!(marked, "the hit is washed in 朱");
+        let numbered = (0..rows).any(|y| buffer[(0, y)].style().fg == Some(quiet.mark()));
+        assert!(numbered, "and its line number is 朱");
     }
 
     #[test]

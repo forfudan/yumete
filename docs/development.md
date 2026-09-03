@@ -373,6 +373,8 @@ Phases are ordered by priority, most writer-critical first:
 | 174 | **段組 for the horizontal page**             | tui    | P2    | two columns side by side, the way 縱書 has two bands | Planned |
 | 175 | **Two marks running share a square**        | core   | P2    | JLREQ §3.1.4① / clreq §6.3.2.2 — `。」` is one em, half each, and does not hang | Done |
 | 176 | **Split work areas**                        | both   | P1    | two panes over one buffer, cut across the direction the text runs; `Enter` shows rather than goes | Done |
+| 177 | **The half being read is a rung back**      | tui    | P1    | which half holds the keys, by weight — tmux's answer, on 墨香's own ladder | Done |
+| 178 | **The hit you are standing on**             | tui    | P2    | 朱's wash on the match, a band on its row, 朱 on its number — the number kept, not replaced | Done |
 
 ---
 
