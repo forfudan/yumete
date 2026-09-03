@@ -2003,7 +2003,7 @@ mod tests {
         let rope = Rope::from_str("第一段\n\n第二段\n\n\n第三段\n");
         let plain = Grid { indent: 2, ..G };
         let folded_grid = plain.with_folds(true, usize::MAX);
-        assert!(!folded(&rope, 1, plain), "nothing folds without the indent");
+        assert!(!folded(&rope, 1, plain), "…unless the page says to fold");
         assert!(folded(&rope, 1, folded_grid), "the one between two paragraphs");
         assert!(!folded(&rope, 3, folded_grid), "two blanks are a scene break");
         assert!(!folded(&rope, 4, folded_grid));
