@@ -64,10 +64,6 @@ zh = "「{0}」"
 en = "'{0}'"
 
 [[message]]
-zh = "「{0}」第 {1}/{2} 行（n N 走）"
-en = "'{0}': hit {1} of {2} — n and N walk them"
-
-[[message]]
 zh = "「{0}」一處也沒換到"
 en = "'{0}': nothing replaced"
 
@@ -360,7 +356,7 @@ zh = "沒有「{0}」這種語法——markdown 或 typst"
 en = "no such markup as '{0}' — markdown or typst"
 
 [[message]]
-zh = "沒有分隔行，對不了齊"
+zh = "沒有分隔行，無從對齊"
 en = "no rule row, so there is no alignment to set"
 
 [[message]]
@@ -370,10 +366,6 @@ en = "nothing matched"
 [[message]]
 zh = "還沒有取過東西"
 en = "nothing has been yanked yet"
-
-[[message]]
-zh = "沒有哪一行的拆分用到「{0}」"
-en = "no row's decomposition uses '{0}'"
 
 [[message]]
 zh = "沒有找到 .yumete/words.txt——本項目的詞寫在那裏"
@@ -536,10 +528,6 @@ zh = "這個檔案沒有搶救稿"
 en = "no draft for this file"
 
 [[message]]
-zh = "這張表沒說哪些是拆分欄"
-en = "this table does not name its decomposition columns"
-
-[[message]]
 zh = "這張表沒說哪一欄是行名（schema 的 key）"
 en = "this table does not name a key column (the schema's key)"
 
@@ -564,7 +552,7 @@ zh = "還沒有取過東西"
 en = "nothing has been yanked yet"
 
 [[message]]
-zh = "還沒有改動可以重複"
+zh = "還沒有可以重複的改動"
 en = "no change to repeat yet"
 
 [[message]]
@@ -875,7 +863,7 @@ zh = "關"
 en = "close"
 
 [[message]]
-zh = "第一個非空白"
+zh = "首個非空白"
 en = "first non-blank"
 
 
@@ -1032,4 +1020,315 @@ en = "this column: left"
 [[message]]
 zh = "選區"
 en = "the selection"
+
+[[message]]
+zh = "第 {0}/{1} 處（n N 走）"
+en = "hit {0} of {1} — n and N walk them"
+
+[[message]]
+zh = "本表格文件未指定快速跳轉之範圍，從第一欄起搜索——第 1/{0} 處"
+en = "this table names no scope to jump within, so the search runs from the first column — hit 1 of {0}"
+
+[[message]]
+zh = "一行一行地找——`/` 就是它"
+en = "row by row — this is what `/` does"
+
+[[message]]
+zh = "一欄一欄地找，從第一欄的頂上開始——表格裏 Enter 就是它"
+en = "column by column, from the top of the first — this is what Enter does in a table"
+
+[[message]]
+zh = "找：`row` 一行一行（就是 `/`），`column` 一欄一欄（表格裏 Enter 就是它）"
+en = "search: `row` runs across (that is `/`), `column` runs down (that is Enter in a table)"
+
+
+# ---- The `:` menu ---------------------------------------------------------
+#
+# One line per command, shown under the list as you narrow it. Says what the
+# command is *for*, not what its arguments are — the arguments have their own
+# lines, and the completion shows them.
+
+[[message]]
+zh = "`#` 標題、`**粗**`"
+en = "`#` headings, `**bold**`"
+
+[[message]]
+zh = "`=` 標題、`#import`"
+en = "`=` headings, `#import`"
+
+[[message]]
+zh = "markdown 還是 typst（不給參數就說現在是哪個）"
+en = "markdown or typst — with no argument it says which"
+
+[[message]]
+zh = "上一個"
+en = "the previous one"
+
+[[message]]
+zh = "下一個"
+en = "the next one"
+
+[[message]]
+zh = "交給真正的排版器去排，在瀏覽器裏看"
+en = "hand it to a real typesetter and read it in a browser"
+
+[[message]]
+zh = "候選旁的拆分注解"
+en = "the 拆分 annotation beside the candidates"
+
+[[message]]
+zh = "分詞著色"
+en = "the word tint"
+
+[[message]]
+zh = "列出標題；`:toc 3` 跳到第三條"
+en = "list the headings; `:toc 3` goes to the third"
+
+[[message]]
+zh = "列出開着的檔案"
+en = "list the open files"
+
+[[message]]
+zh = "卿雲"
+en = "卿雲"
+
+[[message]]
+zh = "原文，不著色"
+en = "the source, uncoloured"
+
+[[message]]
+zh = "取代：選區內；`%s` 全檔、`1,40s` 指定行；旗標 g i n；分隔符可換（s#a/b#c#）"
+en = "substitute in the selection; `%s` the file, `1,40s` a range; flags g i n; any delimiter (s#a/b#c#)"
+
+[[message]]
+zh = "標點旁置：句讀掛在邊欄"
+en = "hung punctuation: 句讀 sit in the margin"
+
+[[message]]
+zh = "太寬的段落折到下一行"
+en = "wrap a paragraph too wide for the window"
+
+[[message]]
+zh = "存下所有改過的檔案"
+en = "save every file that changed"
+
+[[message]]
+zh = "存好再退出"
+en = "save, then leave"
+
+[[message]]
+zh = "存檔；給路徑就是另存"
+en = "save; with a path, save as"
+
+[[message]]
+zh = "寫了多少"
+en = "how much has been written"
+
+[[message]]
+zh = "導出成 html 或 typst，排版一起帶上"
+en = "write it out as html or typst, layout and all"
+
+[[message]]
+zh = "尺度用窗口寬（`:wrap 50` 是固定五十欄）"
+en = "measure by the window (`:wrap 50` fixes it at fifty)"
+
+[[message]]
+zh = "從系統剪貼簿貼進來"
+en = "paste from the system clipboard"
+
+[[message]]
+zh = "從頭看一遍：重複的行名、查無此行的部件、欄數不對的行、超出字集的字"
+en = "look the whole table over: repeated row names, components with no row, rows of the wrong width"
+
+[[message]]
+zh = "打開一個檔案"
+en = "open a file"
+
+[[message]]
+zh = "把剛才 :grep 找到的那些都換掉——先看見，才改得動"
+en = "change everything the last :grep found — you see it before you change it"
+
+[[message]]
+zh = "把注音改寫成另一種寫法"
+en = "rewrite the readings in another dialect"
+
+[[message]]
+zh = "把選區送給一條命令，用它的輸出換掉（`!`）"
+en = "send the selection through a command and take back its output (`!`)"
+
+[[message]]
+zh = "拼音"
+en = "拼音"
+
+[[message]]
+zh = "按格子編輯（默認）"
+en = "edit it as a grid (the default)"
+
+[[message]]
+zh = "按格子編輯：CSV 整個檔案，或游標所在的 | 表格；`:table off` 收工"
+en = "edit as a grid: a whole CSV, or the | table under the cursor; `:table off` stops"
+
+[[message]]
+zh = "排出注音"
+en = "lay the readings out"
+
+[[message]]
+zh = "撤銷上一次改動"
+en = "undo the last change"
+
+[[message]]
+zh = "改寫成 `#ruby(…)`"
+en = "rewrite as `#ruby(…)`"
+
+[[message]]
+zh = "改寫成 `<ruby>`"
+en = "rewrite as `<ruby>`"
+
+[[message]]
+zh = "改用出廠自帶的靈明碼表，不管裝了什麼"
+en = "use the built-in 靈明 table, whatever else is installed"
+
+[[message]]
+zh = "改這裏的注音；`:ruby on|off` 是排不排"
+en = "edit the reading here; `:ruby on|off` is whether they are laid out"
+
+[[message]]
+zh = "整個項目找一遍"
+en = "search every file in the project"
+
+[[message]]
+zh = "日月"
+en = "日月"
+
+[[message]]
+zh = "星陳"
+en = "星陳"
+
+[[message]]
+zh = "標記拿掉，只在光標那一處展開"
+en = "the markup comes off, and opens only where the cursor is"
+
+[[message]]
+zh = "橫排"
+en = "horizontal"
+
+[[message]]
+zh = "橫排竪排互換"
+en = "flip horizontal and vertical"
+
+[[message]]
+zh = "段組：把竪排的頁面橫着分成幾條，右上讀到左上，再右下讀到左下"
+en = "bands: divide the vertical page across — top right to top left, then bottom right to bottom left"
+
+[[message]]
+zh = "用你自己的碼表（Rime 的 .dict.yaml 也行）"
+en = "use your own table (a Rime .dict.yaml will do)"
+
+[[message]]
+zh = "畫面上顯示多少「結果」：原文、著色、所見即所得"
+en = "how much of the result the page shows: source, coloured, WYSIWYG"
+
+[[message]]
+zh = "當普通文字"
+en = "as ordinary text"
+
+[[message]]
+zh = "竪排，縱從右往左"
+en = "vertical, 縱 running from the right"
+
+[[message]]
+zh = "系統剪貼簿：送出去、貼進來"
+en = "the system clipboard: out, and back in"
+
+[[message]]
+zh = "著色，標記留在畫面上（默認）"
+en = "coloured, the markup staying on the page (the default)"
+
+[[message]]
+zh = "認 `#ruby(…)` 這一種"
+en = "read `#ruby(…)`"
+
+[[message]]
+zh = "認 `<ruby>` 這一種"
+en = "read `<ruby>`"
+
+[[message]]
+zh = "讓出終端跑一條命令，直接看它跑（vi 的寫法）"
+en = "hand the terminal over and watch it run (vi's spelling)"
+
+[[message]]
+zh = "讓它跑出右邊"
+en = "let it run off the edge"
+
+[[message]]
+zh = "跑一條命令，輸出收進一個緩衝區"
+en = "run a command and keep its output in a buffer"
+
+[[message]]
+zh = "跳到某一行（`:42` 就夠了）"
+en = "go to a line (`:42` will do)"
+
+[[message]]
+zh = "跳到表格裏叫這個名字的那一行（`:row 木`）"
+en = "go to the row this table names (`:row 木`)"
+
+[[message]]
+zh = "載入搶救稿；加 ! 是丟掉它"
+en = "load the recovered draft; with ! throw it away"
+
+[[message]]
+zh = "輸入法：現在用的是哪一個；換方案、拆分注解"
+en = "the IME: which one is answering, changing scheme, the 拆分 annotation"
+
+[[message]]
+zh = "退出；加 ! 連沒存的改動一起丟"
+en = "leave; with ! throw away unsaved changes too"
+
+[[message]]
+zh = "選區送到系統剪貼簿"
+en = "put the selection on the system clipboard"
+
+[[message]]
+zh = "重做"
+en = "redo"
+
+[[message]]
+zh = "重讀 .yumete/words.txt——這本書自己的詞（人名、地名）"
+en = "re-read .yumete/words.txt — this book's own names"
+
+[[message]]
+zh = "長段落折到下一行；`:wrap 50` 定寬度"
+en = "wrap long paragraphs to the next row; `:wrap 50` sets a measure"
+
+[[message]]
+zh = "開"
+en = "on"
+
+[[message]]
+zh = "開一個空的緩衝區"
+en = "start an empty buffer"
+
+[[message]]
+zh = "開始打字：載入一個方案（不寫名字就用配置裏那個）"
+en = "start typing: load a scheme (with no name, the configured one)"
+
+[[message]]
+zh = "開着的檔案：列出、切換、關掉"
+en = "the open files: list, switch, close"
+
+[[message]]
+zh = "關掉這一個（`close!` 不管改動）"
+en = "close this one (`close!` ignores changes)"
+
+[[message]]
+zh = "靈明"
+en = "靈明"
+
+[[message]]
+zh = "顯示源碼"
+en = "show the source"
+
+[[message]]
+zh = "首行縮進幾格（中文的段落是縮進兩格，不是空一行）；`:indent off` 不縮"
+en = "how many squares open a paragraph (Chinese marks one with two, not a blank line); `:indent off` for none"
 

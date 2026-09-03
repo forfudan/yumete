@@ -88,6 +88,8 @@ pub enum Command {
     SetBands(usize),
     /// `:words` — read this project's own word list again.
     ReloadWords,
+    /// `:search row|column <pattern>` — the two directions a search can run.
+    Search { pattern: String, by: Axis },
     /// `:table check` — look the whole table over and list what is wrong.
     CheckTable,
     /// `:dense` / `:dense off` — pack the 縱書 page as tight as a terminal can
@@ -389,6 +391,27 @@ pub fn parse(input: &str) -> Result<Command, CommandError> {
             }),
         },
         "words" => Ok(Command::ReloadWords),
+        "search" => {
+            // `:search <pattern>` with no direction is a row search, because
+            // that is what a search is anywhere but a table.
+            let (by, pattern) = match rest.split_once(char::is_whitespace) {
+                Some((word, rest)) if pick(word, AXIS).map(|w| w.name) == Some("column") => {
+                    (Axis::Column, rest.trim())
+                }
+                Some((word, rest)) if pick(word, AXIS).map(|w| w.name) == Some("row") => {
+                    (Axis::Row, rest.trim())
+                }
+                _ => (Axis::Row, rest),
+            };
+            if pattern.is_empty() {
+                Err(CommandError::MissingArgument("search"))
+            } else {
+                Ok(Command::Search {
+                    pattern: pattern.to_string(),
+                    by,
+                })
+            }
+        }
         "bands" => match rest {
             "" | "on" | "2" => Ok(Command::SetBands(2)),
             "off" | "1" => Ok(Command::SetBands(1)),
@@ -690,6 +713,20 @@ const YUME: &[Word] = &[
     },
 ];
 
+/// Which way a search runs.
+const AXIS: &[Word] = &[
+    Word {
+        name: "row",
+        help: "一行一行地找——`/` 就是它",
+        then: Args::Free("<正則>"),
+    },
+    Word {
+        name: "column",
+        help: "一欄一欄地找，從第一欄的頂上開始——表格裏 Enter 就是它",
+        then: Args::Free("<正則>"),
+    },
+];
+
 /// What `:table` takes.
 const TABLE: &[Word] = &[
     Word {
@@ -907,73 +944,73 @@ pub const COMMANDS: &[Entry] = &[
     Entry {
         name: "open",
         aliases: &["o", "e", "edit"],
-        help: "open a file",
+        help: "打開一個檔案",
         args: Args::Path,
     },
     Entry {
         name: "new",
         aliases: &["enew"],
-        help: "start an empty buffer",
+        help: "開一個空的緩衝區",
         args: Args::Path,
     },
     Entry {
         name: "write",
         aliases: &["w"],
-        help: "save, optionally to a new path",
+        help: "存檔；給路徑就是另存",
         args: Args::Path,
     },
     Entry {
         name: "wq",
         aliases: &["x"],
-        help: "save, then leave",
+        help: "存好再退出",
         args: Args::Path,
     },
     Entry {
         name: "recover",
         aliases: &[],
-        help: "load the recovery draft (`!` throws it away)",
+        help: "載入搶救稿；加 ! 是丟掉它",
         args: Args::None,
     },
     Entry {
         name: "goto",
         aliases: &["g"],
-        help: "put the cursor on a line (or just `:42`)",
+        help: "跳到某一行（`:42` 就夠了）",
         args: Args::Free("<行號>"),
     },
     Entry {
         name: "count",
         aliases: &["wc"],
-        help: "how much has been written",
+        help: "寫了多少",
         args: Args::None,
     },
     Entry {
         name: "quit",
         aliases: &["q"],
-        help: "leave; ! discards changes",
+        help: "退出；加 ! 連沒存的改動一起丟",
         args: Args::None,
     },
     Entry {
         name: "undo",
         aliases: &["u"],
-        help: "undo the last change",
+        help: "撤銷上一次改動",
         args: Args::None,
     },
     Entry {
         name: "redo",
         aliases: &["red"],
-        help: "redo it",
+        help: "重做",
         args: Args::None,
     },
     Entry {
         name: "segment",
         aliases: &["seg"],
-        help: "word-segmentation tint",
+        help: "分詞著色",
         args: Args::Words(ON_OFF),
     },
     Entry {
         name: "layout",
         aliases: &["lay"],
-        help: "flip horizontal / vertical",
+        help: "橫排竪排互換",
         args: Args::Words(LAYOUTS),
     },
     Entry {
@@ -985,7 +1022,7 @@ pub const COMMANDS: &[Entry] = &[
     Entry {
         name: "hanging",
         aliases: &[],
-        help: "句讀 in the margin (標點旁置)",
+        help: "標點旁置：句讀掛在邊欄",
         args: Args::Words(ON_OFF),
     },
     Entry {
@@ -1025,6 +1062,12 @@ pub const COMMANDS: &[Entry] = &[
         args: Args::Words(RENDER),
     },
     Entry {
+        name: "search",
+        aliases: &[],
+        help: "找：`row` 一行一行（就是 `/`），`column` 一欄一欄（表格裏 Enter 就是它）",
+        args: Args::Words(AXIS),
+    },
+    Entry {
         name: "words",
         aliases: &[],
         help: "重讀 .yumete/words.txt——這本書自己的詞（人名、地名）",
@@ -1057,7 +1100,7 @@ pub const COMMANDS: &[Entry] = &[
     Entry {
         name: "wrap",
         aliases: &[],
-        help: "wrap long paragraphs to the next row; `:wrap 50` sets a measure",
+        help: "長段落折到下一行；`:wrap 50` 定寬度",
         args: Args::Words(WRAP),
     },
     Entry {
@@ -1075,13 +1118,13 @@ pub const COMMANDS: &[Entry] = &[
     Entry {
         name: "export",
         aliases: &["ex"],
-        help: "write out as html or typst, with the layout",
+        help: "導出成 html 或 typst，排版一起帶上",
         args: Args::Free("<檔名>"),
     },
     Entry {
         name: "grep",
         aliases: &["gr"],
-        help: "search every file in the project",
+        help: "整個項目找一遍",
         args: Args::Free("<正則>"),
     },
     Entry {
@@ -1105,7 +1148,7 @@ pub const COMMANDS: &[Entry] = &[
     Entry {
         name: "toc",
         aliases: &["outline"],
-        help: "list the headings, or `:toc 3` to go to one",
+        help: "列出標題；`:toc 3` 跳到第三條",
         args: Args::Free("<第幾條，不寫就列出來>"),
     },
     Entry {
@@ -1215,6 +1258,22 @@ pub fn complete_at(line: &str) -> (usize, Vec<Choice>) {
         }
     };
     (start, choices)
+}
+
+/// Which way a search runs.
+///
+/// A page is read across a line and then down to the next, and `/` searches it
+/// that way. A **table** has a second way of being read that a document does
+/// not: down one column, then down the next. Asking 「誰用了卵」 of a 拆分表 is
+/// asking about one column at a time, and the answers want to arrive in that
+/// order — so it is not a different feature, it is the same verb on the other
+/// axis. `Enter` in a table is its shortcut, as `/` is row's.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Axis {
+    /// Across a line, then the next — what `/` does, in a table or not.
+    Row,
+    /// Down a column, then the next. Only a table has these.
+    Column,
 }
 
 /// Which lines a `:s` touches.
