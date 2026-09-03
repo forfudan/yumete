@@ -2330,7 +2330,7 @@ impl Editor {
         };
         let (found, problems) = crate::table::schema_for_reporting(&path);
         // A schema with a typo in it costs every label, both computed fields
-        // and the whole jump. Saying so is the difference between "this file
+        // and the whole link. Saying so is the difference between "this file
         // has no schema" and "your schema has a typo on line 4".
         if !problems.is_empty() {
             self.status = say!("schema：{0}", listed(&problems));
@@ -3968,11 +3968,11 @@ impl Editor {
         let Some(view) = &self.table else {
             return false;
         };
-        let Some(jump) = &view.schema.jump else {
+        let Some(link) = &view.schema.link else {
             return false;
         };
         match self.cell_position().and_then(|(_, c)| view.schema.columns.get(c)) {
-            Some(column) => jump.from.contains(&column.name),
+            Some(column) => link.from.contains(&column.name),
             None => false,
         }
     }
@@ -4009,7 +4009,7 @@ impl Editor {
     /// does. The one thing that differs is the order the page is read in —
     /// across a line and down, or down a column and across.
     ///
-    /// Which columns: the ones a `[table.jump] from` names, in the order it
+    /// Which columns: the ones a `[table.link] from` names, in the order it
     /// names them — that is what a schema is *for*, and on a 28-column table it
     /// is two columns instead of twenty-eight. With none named, all of them,
     /// from the first.
@@ -4026,8 +4026,8 @@ impl Editor {
             }
         };
         let view = self.table.as_ref().expect("table_here");
-        let declared: Option<Vec<usize>> = view.schema.jump.as_ref().map(|jump| {
-            jump.from
+        let declared: Option<Vec<usize>> = view.schema.link.as_ref().map(|link| {
+            link.from
                 .iter()
                 .filter_map(|name| view.schema.index_of(name))
                 .collect()
@@ -4519,7 +4519,7 @@ impl Editor {
         let Some(view) = &self.table else {
             return Vec::new();
         };
-        let Some(jump) = &view.schema.jump else {
+        let Some(link) = &view.schema.link else {
             return Vec::new();
         };
         let Some((line, cell)) = self.cell_position() else {
@@ -4528,7 +4528,7 @@ impl Editor {
         let Some(column) = view.schema.columns.get(cell) else {
             return Vec::new();
         };
-        if !jump.from.contains(&column.name) {
+        if !link.from.contains(&column.name) {
             return Vec::new();
         }
         let text = self.cell_text(line, cell);
@@ -4573,7 +4573,7 @@ impl Editor {
             .unwrap_or_else(|| self.current_buffer().display_name().to_string());
         let key_at = schema.key.as_deref().and_then(|k| schema.index_of(k));
         let jump_from: Vec<usize> = schema
-            .jump
+            .link
             .as_ref()
             .map(|j| j.from.iter().filter_map(|n| schema.index_of(n)).collect())
             .unwrap_or_default();
@@ -4693,7 +4693,7 @@ impl Editor {
             self.status = say!("不是表格——先 :table");
             return;
         };
-        if view.schema.jump.is_none() && view.schema.key.is_none() {
+        if view.schema.link.is_none() && view.schema.key.is_none() {
             self.status = say!("這張表沒說哪一欄是行名（schema 的 key）");
             return;
         }
@@ -4740,8 +4740,8 @@ impl Editor {
         f: impl FnOnce(&HashMap<char, usize>) -> T,
     ) -> Option<T> {
         let view = self.table.as_ref()?;
-        let jump = view.schema.jump.as_ref()?;
-        let at = view.schema.index_of(&jump.to)?;
+        let link = view.schema.link.as_ref()?;
+        let at = view.schema.index_of(&link.to)?;
         let rope_lines = self.current_buffer().line_count();
         let want = (self.current, self.current_buffer().revision(), rope_lines);
         // Typing inside a cell cannot move a row or rename another one: table
@@ -4812,10 +4812,10 @@ impl Editor {
         let Some(view) = &self.table else {
             return false;
         };
-        let Some(jump) = &view.schema.jump else {
+        let Some(link) = &view.schema.link else {
             return false;
         };
-        match (self.cell_position(), view.schema.index_of(&jump.to)) {
+        match (self.cell_position(), view.schema.index_of(&link.to)) {
             (Some((_, cell)), Some(key)) => cell == key,
             _ => false,
         }
@@ -7979,7 +7979,7 @@ impl Editor {
 
     // ---- Match mode (Helix `m`) -------------------------------------------
 
-    /// Jump to the bracket matching the one under the cursor (`mm`).
+    /// Link to the bracket matching the one under the cursor (`mm`).
     fn goto_matching_bracket(&mut self) {
         let rope = self.current_buffer().rope();
         if self.cursor >= rope.len_chars() {
@@ -10094,7 +10094,7 @@ mod tests {
              [[table.column]]\nname = 'ids_y'\n\
              [[table.column]]\nname = 'ids_g'\n\
              [[table.detail]]\nname = 'unicode'\ncompute = 'codepoint(char)'\n\
-             [table.jump]\nfrom = ['ids_y']\nto = 'char'\n",
+             [table.link]\nfrom = ['ids_y']\nto = 'char'\n",
         )
         .unwrap();
         let csv = dir.join("division.csv");
@@ -10311,7 +10311,7 @@ mod tests {
             dir.join(".yumete").join("tables").join("t.toml"),
             "[table]\nfile = ['d.csv']\nkey = 'char'\n\
              [[table.column]]\nname = 'char'\n[[table.column]]\nname = 'ids_y'\n\
-             [table.jump]\nfrom = ['ids_y']\nto = 'char'\n",
+             [table.link]\nfrom = ['ids_y']\nto = 'char'\n",
         )
         .unwrap();
         let csv = dir.join("d.csv");
@@ -10366,7 +10366,7 @@ mod tests {
             dir.join(".yumete").join("tables").join("t.toml"),
             "[table]\nfile = ['d.csv']\nkey = 'char'\n\
              [[table.column]]\nname = 'char'\n[[table.column]]\nname = 'ids_y'\n\
-             [table.jump]\nfrom = ['ids_y']\nto = 'char'\n",
+             [table.link]\nfrom = ['ids_y']\nto = 'char'\n",
         )
         .unwrap();
         let csv = dir.join("d.csv");
@@ -10476,7 +10476,7 @@ mod tests {
             dir.join(".yumete").join("tables").join("t.toml"),
             "[table]\nfile = ['d.csv']\nkey = 'char'\n\
              [[table.column]]\nname = 'char'\n[[table.column]]\nname = 'ids_y'\n\
-             [table.jump]\nfrom = ['ids_y']\nto = 'char'\n",
+             [table.link]\nfrom = ['ids_y']\nto = 'char'\n",
         )
         .unwrap();
         let csv = dir.join("d.csv");
@@ -10604,7 +10604,7 @@ mod tests {
             dir.join(".yumete").join("tables").join("t.toml"),
             "[table]\nfile = ['d.csv']\nkey = 'char'\n\
              [[table.column]]\nname = 'char'\n[[table.column]]\nname = 'ids_y'\n\
-             [table.jump]\nfrom = ['ids_y']\nto = 'char'\n",
+             [table.link]\nfrom = ['ids_y']\nto = 'char'\n",
         )
         .unwrap();
         let csv = dir.join("d.csv");
@@ -11250,7 +11250,7 @@ mod tests {
             tables.join("d.toml"),
             "[table]\nfile = \"d.csv\"\nkey = \"char\"\n\
              [[table.column]]\nname = \"char\"\n[[table.column]]\nname = \"ids_y\"\n\
-             [table.jump]\nfrom = [\"ids_y\"]\nto = \"char\"\n",
+             [table.link]\nfrom = [\"ids_y\"]\nto = \"char\"\n",
         )
         .unwrap();
         let csv = dir.join("d.csv");
@@ -11362,7 +11362,7 @@ mod tests {
             tables.join("c.toml"),
             "[table]\nfile = \"c.csv\"\nkey = \"char\"\n\
              [[table.column]]\nname = \"char\"\n[[table.column]]\nname = \"ids\"\n\
-             [table.jump]\nfrom = [\"ids\"]\nto = \"char\"\n",
+             [table.link]\nfrom = [\"ids\"]\nto = \"char\"\n",
         )
         .unwrap();
         let csv = dir.join("c.csv");
@@ -11810,7 +11810,7 @@ mod tests {
             dir.join(".yumete").join("tables").join("t.toml"),
             "[table]\nfile = ['d.csv']\nkey = 'char'\n\
              [[table.column]]\nname = 'char'\n[[table.column]]\nname = 'ids_y'\n\
-             [table.jump]\nfrom = ['ids_y']\nto = 'char'\n",
+             [table.link]\nfrom = ['ids_y']\nto = 'char'\n",
         )
         .unwrap();
         let csv = dir.join("d.csv");
@@ -11851,7 +11851,7 @@ mod tests {
         ed.on_key(Key::Ctrl('i'));
         assert_eq!(ed.cursor_line(), 0);
 
-        // A search is a jump: you look something up and you want to be back
+        // A search is a link: you look something up and you want to be back
         // where you were writing.
         let mut ed = typed("一\n二\n三\n四\n五\n六\n七\n八\n");
         ed.execute("3").unwrap();

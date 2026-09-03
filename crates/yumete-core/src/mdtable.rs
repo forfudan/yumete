@@ -599,7 +599,7 @@ pub fn schema(header: &str) -> Schema {
         header: true,
         columns,
         details: Vec::new(),
-        jump: None,
+        link: None,
         ranges: HashMap::new(),
     }
 }

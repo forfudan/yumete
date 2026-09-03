@@ -982,9 +982,9 @@ hidden = true                 # 這一欄照樣讀、照樣寫，只是不畫、
 name = "block"
 compute = "block(char)"       # codepoint(欄) / block(欄) / range_label(欄, 區間表)
 
-[table.jump]                  # 「這一格的內容是本表某一行的名字」
-from = ["ids_y", "ids_g"]
-to = "char"
+[table.link]                  # 「這一格指着本表的另一行」——正反兩個方向都靠它
+from = ["ids_y", "ids_g"]     # 這些欄的內容是別的行的名字
+to = "char"                   # 名字寫在這一欄
 
 [ranges.cjk_blocks]           # 你自己的叫法，不是 Unicode 的
 "CJK-D" = [0x2B740, 0x2B81F]
@@ -1015,9 +1015,12 @@ to = "char"
 
 #### `Enter`：兩個方向的同一個問題
 
+`[table.link]` 說的是一件事：**這一格指着本表的另一行**。`Enter` 把它正反兩個方向都
+讀了——所以它叫 link，不叫 jump：跳轉只是其中一個方向。
+
 站在哪一欄，決定 `Enter` 問的是哪個問題。
 
-**站在拆分欄**（schema 的 `[table.jump] from`）——這一格**指着**別的行：`⿰木目` 是
+**站在拆分欄**（schema 的 `[table.link] from`）——這一格**指着**別的行：`⿰木目` 是
 木和目拼的，兩個都有自己的行。`Enter` 就過去。按字的時候光標停在哪個部件上就跳哪個；
 按格的時候幾個部件會讓你挑。
 
@@ -1052,7 +1055,7 @@ to = "char"
 回開頭。不搞特例——`林` 的拆分是 `⿰木木`，那裏面有**兩個**木，就是兩處，和 `/` 在一行
 裏數出兩處是同一回事。
 
-**搜哪幾欄**：schema 的 `[table.jump] from` 列了哪幾欄就搜哪幾欄，按它列的順序——這正
+**搜哪幾欄**：schema 的 `[table.link] from` 列了哪幾欄就搜哪幾欄，按它列的順序——這正
 是 schema 的用處，二十八欄的表只搜兩欄。沒列就搜全表，並且說一句：
 
 ```
