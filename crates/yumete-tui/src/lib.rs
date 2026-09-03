@@ -1612,9 +1612,13 @@ fn tab_label(name: &str, dirty: bool) -> String {
 fn draw_tabs(frame: &mut Frame, editor: &Editor, config: &Config, area: Rect) {
     let ink = crate::theme::Palette::of(config);
     let ground = ink.ground(yumete_config::rung::CHROME);
-    // The lit tab carries the page's own ground, so it reads as the front of
-    // the stack — the sheet the others are behind.
-    let lit = ink.page().add_modifier(Modifier::BOLD);
+    // The lit tab is raised off the bar and written in 金墨 — the bar itself is
+    // black, so a lit tab told apart by its *ground* alone would be telling it
+    // in the one register this theme keeps quiet.
+    let lit = ink
+        .ground(yumete_config::rung::HEAD)
+        .fg(ink.gold())
+        .add_modifier(Modifier::BOLD);
     let unlit = ground.fg(ink.furniture());
 
     let current = editor.buffer_position().0.saturating_sub(1);
@@ -2966,7 +2970,7 @@ mod tests {
         config.editor.line_numbers = LineNumbers::Absolute;
         let buffer = render_vertical(&mut editor, &config, 30, 12);
 
-        let band = Some(ink(&config).chrome());
+        let band = Some(ink(&config).at(yumete_config::rung::HEAD));
         let head = vertical::number_rows(LineNumbers::Absolute, 3);
         assert!(head > 0);
         for x in 0..30 {
@@ -4503,9 +4507,9 @@ mod tests {
         assert!(bar.contains('+'), "{bar:?}");
         // It is lit against the bar's own ground, so which one you are in is a
         // thing you can see rather than a key you have to press.
-        // The lit tab carries the page's own ground; the bar behind it is
-        // chrome, one rung off the page.
-        let lit = (0..40).any(|x| buffer[(x, 0)].style().bg == Some(ink(&config).paper()));
+        // The bar is black like the page; the lit tab is raised off it.
+        let lit = (0..40)
+            .any(|x| buffer[(x, 0)].style().bg == Some(ink(&config).at(yumete_config::rung::HEAD)));
         let unlit = (0..40).any(|x| buffer[(x, 0)].style().bg == Some(ink(&config).chrome()));
         assert!(lit && unlit, "the current tab is not told apart");
 
