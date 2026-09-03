@@ -56,6 +56,9 @@ fn main() -> ExitCode {
     // Layout (Feature #61): the config sets it, a flag overrides for one run,
     // and `:layout` switches it live.
     editor.set_layout(force_layout.unwrap_or(config.editor.layout));
+    if config.editor.indent > 0 {
+        editor.set_indent(config.editor.indent);
+    }
     if config.editor.zong_length > 0 {
         editor.set_zong_length(config.editor.zong_length);
     }

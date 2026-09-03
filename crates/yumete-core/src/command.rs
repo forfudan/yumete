@@ -82,6 +82,8 @@ pub enum Command {
     SetMeasure(Option<usize>),
     /// `:table` / `:table off` — read the file as a grid (Feature #118).
     SetTable(bool),
+    /// `:indent 2` — how many squares open a paragraph; `:indent off` is none.
+    SetIndent(usize),
     /// `:table check` — look the whole table over and list what is wrong.
     CheckTable,
     /// `:dense` / `:dense off` — pack the 縱書 page as tight as a terminal can
@@ -379,6 +381,17 @@ pub fn parse(input: &str) -> Result<Command, CommandError> {
                 command: "dense",
                 value: other.to_string(),
             }),
+        },
+        "indent" => match rest {
+            "" | "on" => Ok(Command::SetIndent(2)),
+            "off" | "0" => Ok(Command::SetIndent(0)),
+            n => match n.parse::<usize>() {
+                Ok(n) if n <= 8 => Ok(Command::SetIndent(n)),
+                _ => Err(CommandError::InvalidArgument {
+                    command: "indent",
+                    value: n.to_string(),
+                }),
+            },
         },
         "table" => match rest {
             "" | "on" => Ok(Command::SetTable(true)),
@@ -992,6 +1005,12 @@ pub const COMMANDS: &[Entry] = &[
         aliases: &[],
         help: "畫面上顯示多少「結果」：原文、著色、所見即所得",
         args: Args::Words(RENDER),
+    },
+    Entry {
+        name: "indent",
+        aliases: &[],
+        help: "首行縮進幾格（中文的段落是縮進兩格，不是空一行）；`:indent off` 不縮",
+        args: Args::Free("<幾格，不寫就是 2>"),
     },
     Entry {
         name: "dense",

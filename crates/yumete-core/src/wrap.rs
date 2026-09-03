@@ -57,6 +57,13 @@ pub const MIN_WRAP_WIDTH: usize = 8;
 pub struct Measure<'a> {
     width: usize,
     hidden: &'a dyn Fn(usize) -> Vec<(usize, usize)>,
+    /// How many cells open a paragraph (首行縮進).
+    ///
+    /// Part of the measure and not of the renderer, because it changes **where
+    /// a row breaks**: a paragraph's first row is that many cells narrower,
+    /// and everything that asks where a character is has to be asking about
+    /// the same page.
+    indent: usize,
 }
 
 /// A page with nothing hidden, for callers that show the source as it is.
@@ -68,6 +75,7 @@ impl<'a> Measure<'a> {
         Measure {
             width: width.max(1),
             hidden: NOTHING_HIDDEN,
+            indent: 0,
         }
     }
 
@@ -76,6 +84,32 @@ impl<'a> Measure<'a> {
         Measure {
             width: width.max(1),
             hidden,
+            indent: 0,
+        }
+    }
+
+    /// The same measure, opening each paragraph `n` cells in.
+    pub fn with_indent(self, n: usize) -> Measure<'a> {
+        Measure {
+            indent: n.min(8),
+            ..self
+        }
+    }
+
+    /// How many cells open a paragraph.
+    pub fn indent(self) -> usize {
+        self.indent
+    }
+
+    /// How far in this row of this line begins.
+    ///
+    /// Only a paragraph's own first row, and only when it is prose: a heading
+    /// or a list item carries its own leading structure, and pushing it two
+    /// cells right would say something about it that is not true.
+    pub fn indent_of(self, text: &str, index_in_line: usize) -> usize {
+        match index_in_line == 0 && crate::zong::opens_a_paragraph(text) {
+            true => self.indent,
+            false => 0,
         }
     }
 
@@ -200,7 +234,23 @@ pub fn line_rows_hiding(
     width: usize,
     hidden: &[(usize, usize)],
 ) -> Vec<(usize, usize)> {
+    line_rows_indented(text, width, hidden, 0)
+}
+
+/// [`line_rows_hiding`], with `indent` cells taken off the paragraph's first
+/// row.
+pub fn line_rows_indented(
+    text: &str,
+    width: usize,
+    hidden: &[(usize, usize)],
+    indent: usize,
+) -> Vec<(usize, usize)> {
     let width = width.max(1);
+    let indent = if crate::zong::opens_a_paragraph(text) {
+        indent.min(width.saturating_sub(1))
+    } else {
+        0
+    };
     let chars: Vec<char> = text.chars().collect();
     if chars.is_empty() {
         return vec![(0, 0)];
@@ -225,6 +275,8 @@ pub fn line_rows_hiding(
     let mut g = 0; // grapheme index of the row start
     let mut last_width = 0;
     while g < widths.len() {
+        // The paragraph's first row is the indent narrower.
+        let width = width - if rows.is_empty() { indent } else { 0 };
         // As many graphemes as fit, at least one.
         let mut used = 0;
         let mut end = g;
@@ -243,7 +295,7 @@ pub fn line_rows_hiding(
     // caret nowhere to stand: the column after the last glyph is off the row.
     // Open one more, empty, row for it — which is also where the reader expects
     // the next character to appear.
-    if last_width >= width {
+    if last_width >= width - if rows.len() == 1 { indent } else { 0 } {
         rows.push((cuts[widths.len()], cuts[widths.len()]));
     }
     rows
@@ -364,12 +416,14 @@ fn rows_of_line(rope: &Rope, line: usize, m: Measure) -> Vec<(usize, usize)> {
     let mut hasher = DefaultHasher::new();
     line_hash(rope, line).hash(&mut hasher);
     hidden.hash(&mut hasher);
+    // The indent changes where a row breaks, so it is part of the key too.
+    m.indent.hash(&mut hasher);
     let hash = hasher.finish();
     if let Some(rows) = remembered(hash, m.width) {
         return rows;
     }
     WRAPPED.with(|n| n.set(n.get() + 1));
-    let rows = line_rows_hiding(&line_text(rope, line), m.width, &hidden);
+    let rows = line_rows_indented(&line_text(rope, line), m.width, &hidden, m.indent);
     remember(hash, m.width, &rows);
     rows
 }
@@ -428,7 +482,10 @@ pub fn position(rope: &Rope, pos: usize, m: Measure) -> Position {
     // Only the part of the row before the cursor is measured — a row, not a
     // paragraph, however long the paragraph is.
     let ahead = rope.slice(start + row_start..start + col).to_string();
-    let column = steps(&ahead).map(|(_, w)| w).sum();
+    let column: usize = steps(&ahead).map(|(_, w)| w).sum();
+    // The indent is real page: a caret on the paragraph's first character sits
+    // two cells in, and `j` from the row below should land under it.
+    let column = column + m.indent_of(&line_text(rope, line), index_in_line);
     Position {
         line,
         index_in_line,
@@ -571,7 +628,9 @@ fn char_at_column(
     // is where `col >= goal` would stop and would put `j` one glyph right of
     // the column it was aiming at whenever that column is inside a wide glyph.
     let row = rope.slice(start + s..start + e).to_string();
-    let mut col = 0;
+    // A goal column inside the indent lands on the row's first character:
+    // there is nothing in the indent to land on.
+    let mut col = m.indent_of(&line_text(rope, line), index_in_line);
     let mut at = e;
     for (i, w) in steps(&row) {
         if col + w > goal {

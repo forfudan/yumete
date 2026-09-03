@@ -548,6 +548,8 @@ pub struct Editor {
     zong_gap: Option<usize>,
     /// Whether the dense arrangement is on, so the ticks know to stay away.
     dense: bool,
+    /// How many squares open a paragraph (首行縮進), as configured.
+    indent: usize,
     /// The rows a table search found, which one it is pointing at, and what it
     /// was looking for.
     table_hits: Vec<usize>,
@@ -771,6 +773,7 @@ impl Editor {
             turned_for_table: None,
             zong_gap: None,
             dense: false,
+            indent: 0,
             table_hits: Vec::new(),
             table_hit: 0,
             table_needle: String::new(),
@@ -1800,6 +1803,10 @@ impl Editor {
                 Ok(CommandOutcome::Continue)
             }
             Command::WriteAll => self.write_all(),
+            Command::SetIndent(n) => {
+                self.set_indent(n);
+                Ok(CommandOutcome::Continue)
+            }
             Command::CheckTable => {
                 self.check_table();
                 Ok(CommandOutcome::Continue)
@@ -4668,8 +4675,30 @@ impl Editor {
         // drawn would put the cursor somewhere the writer cannot see.
         Grid::new(self.zong_length, self.ruby())
             .with_tatechuyoko(self.tatechuyoko)
+            .with_indent(self.paragraph_indent())
             .with_hanging(self.hanging_punctuation())
             .with_markup_hidden(self.render == Render::Full, Some(self.selection()))
+    }
+
+    /// How many squares open a paragraph, as the page is drawn.
+    ///
+    /// Masked by `:dense` the way the readings and the hung 句讀 are: a packed
+    /// page spends every column on writing, and two squares a paragraph is a
+    /// column's worth over a chapter.
+    pub fn paragraph_indent(&self) -> usize {
+        match self.dense {
+            true => 0,
+            false => self.indent,
+        }
+    }
+
+    /// Set the first-line indent, in squares.
+    pub fn set_indent(&mut self, n: usize) {
+        self.indent = n.min(8);
+        self.status = match self.indent {
+            0 => "首行縮進：關".to_string(),
+            n => format!("首行縮進：{n} 格"),
+        };
     }
 
     /// Whether 句讀 hang in the margin beside the character they follow.

@@ -68,6 +68,19 @@ pub struct Grid {
     /// to a row, hung right, is what a reader of vertical text expects. It stays
     /// available because a two-digit year genuinely does read better packed.
     pub tatechuyoko: bool,
+    /// How many empty squares open a paragraph (首行縮進).
+    ///
+    /// A Chinese paragraph is marked by an indent of two 字, not by a blank
+    /// line — the blank line is Markdown's way of saying "new paragraph", and
+    /// it costs a whole 縱 on the page.
+    ///
+    /// This is a **view**, never a rewrite: the file keeps its blank lines, so
+    /// it still exports as the paragraphs it is. The indent is made of *padding
+    /// slots* — the same thing a long reading already opens to make room for
+    /// itself — which is why nothing downstream had to learn about it: the
+    /// layout, the cursor, the mouse and the caret all read the slot list, and
+    /// a padding slot holds no character for the cursor to sit on.
+    pub indent: usize,
 }
 
 impl Grid {
@@ -89,6 +102,15 @@ impl Grid {
             tatechuyoko: false,
             hide_markup: false,
             selection: None,
+            indent: 0,
+        }
+    }
+
+    /// The same grid, opening each paragraph with `n` empty squares.
+    pub fn with_indent(self, n: usize) -> Grid {
+        Grid {
+            indent: n.min(8),
+            ..self
         }
     }
 
@@ -239,6 +261,20 @@ pub fn line_slots_in(text: &str, grid: Grid, selected: Option<(usize, usize)>) -
     let chars: Vec<char> = text.chars().collect();
     let groups = crate::ruby::groups(&chars, grid.ruby);
     let mut slots = Vec::new();
+    // 首行縮進: empty squares before the paragraph's first character. They are
+    // padding slots — no text, no reading, and `start == end == 0`, so a cursor
+    // at the line's start resolves past them onto the first real character.
+    if opens_a_paragraph(text) {
+        for _ in 0..grid.indent {
+            slots.push(Slot {
+                start: 0,
+                end: 0,
+                text: String::new(),
+                ruby: None,
+                mark: None,
+            });
+        }
+    }
     let mut at = 0usize;
     // An opening bracket waits for the character it introduces, and that
     // character may be inside the next ruby group — 「<ruby>漢…. The wait has to
@@ -297,6 +333,25 @@ pub fn line_slots_in(text: &str, grid: Grid, selected: Option<(usize, usize)>) -
         });
     }
     slots
+}
+
+/// Whether this line is a paragraph of prose, and so takes the indent.
+///
+/// Prose is what is left when the markup lead-ins are taken out: a heading, a
+/// list item, a quote, a rule, a fence and a table row all carry their own
+/// leading structure, and pushing them two squares right would say something
+/// about them that is not true. The test is the first character or two, the
+/// same few the block scan looks at.
+pub(crate) fn opens_a_paragraph(text: &str) -> bool {
+    let trimmed = text.trim_start();
+    if trimmed.trim_end().is_empty() {
+        return false;
+    }
+    // An indented line is already saying something about itself.
+    if text.starts_with(' ') || text.starts_with('\t') {
+        return false;
+    }
+    !trimmed.starts_with(['#', '=', '-', '*', '+', '>', '|', '`', '~', '['])
 }
 
 /// Lay out `chars[from..to]` as ordinary rows.
@@ -1024,6 +1079,7 @@ mod tests {
         tatechuyoko: false,
         hide_markup: false,
         selection: None,
+        indent: 0,
     };
 
     /// Readings laid out, so the ruby tests exercise the layout.
@@ -1148,6 +1204,62 @@ mod tests {
                 );
             }
         }
+    }
+
+    #[test]
+    fn a_paragraph_opens_two_squares_in() {
+        // A Chinese paragraph is marked by an indent of two 字, not by a blank
+        // line — and the blank line costs a whole 縱 of the page.
+        let grid = Grid { indent: 2, ..G };
+        let slots = line_slots("那年冬天", grid);
+        assert_eq!(slots.len(), 6, "two empty squares, then four characters");
+        assert!(slots[0].text.is_empty() && slots[0].start == slots[0].end);
+        assert!(slots[1].text.is_empty());
+        assert_eq!(slots[2].text, "那");
+
+        // The file is untouched: this is a view, so the document still exports
+        // as the paragraphs it is.
+        let rope = Rope::from_str("那年冬天\n");
+        assert_eq!(rope.to_string(), "那年冬天\n");
+
+        // And the cursor never sits in the indent: at the line's start it is on
+        // the first real character.
+        let p = position(&rope, 0, grid);
+        assert_eq!(p.slot, 2, "past the padding");
+        assert_eq!(char_at(&rope, 0, 0, p.slot, grid), 0, "…and on 那");
+    }
+
+    #[test]
+    fn only_prose_is_indented() {
+        let grid = Grid { indent: 2, ..G };
+        for line in ["# 第一章", "- 一項", "> 引文", "| a | b |", "```", "  已經縮進了"] {
+            let slots = line_slots(line, grid);
+            assert!(
+                slots.first().is_some_and(|s| !s.text.is_empty()),
+                "{line:?} should not be indented"
+            );
+        }
+        // A blank line stays blank.
+        assert!(line_slots("", grid).is_empty());
+    }
+
+    #[test]
+    fn the_indent_costs_the_first_zong_its_squares() {
+        // It is made of slots, so it is paid for where a reader sees it paid:
+        // the paragraph's first 縱 holds two characters fewer.
+        let rope = Rope::from_str("一二三四五六七八九十\n");
+        let grid = Grid {
+            zong_len: 5,
+            indent: 2,
+            ..G
+        };
+        let zongs = layout(&rope, grid);
+        assert_eq!(zongs[0].slots, 5, "two of them empty");
+        let first: String = zong_slots(&rope, &zongs[0], grid)
+            .iter()
+            .map(|s| s.text.as_str())
+            .collect();
+        assert_eq!(first, "一二三");
     }
 
     #[test]
