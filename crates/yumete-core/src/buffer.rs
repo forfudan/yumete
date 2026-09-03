@@ -544,6 +544,23 @@ impl Buffer {
         }
     }
 
+    /// Write this buffer's text to another file, **staying bound to its own**.
+    ///
+    /// This is what `:w <path>` has always claimed to do and did not: it called
+    /// [`Buffer::save_as`], which rebinds, so a writer who took a copy of a
+    /// chapter found every later `:w` going to the copy while the chapter sat
+    /// frozen at the version before it. Rebinding is `:saveas`, which says so.
+    ///
+    /// The buffer's own state — its path, its stamps, its recovery copy, and
+    /// whether it is modified — is untouched, because none of it is about this
+    /// file. Exactly as in vi.
+    pub fn write_copy(&self, path: &Path, force: bool) -> io::Result<()> {
+        if !force && path.exists() {
+            return Err(io::Error::other("那個檔案已經存在——`:w!` 才蓋掉它"));
+        }
+        self.write_atomically(path)
+    }
+
     /// Write the rope to `path` atomically via a temporary file + rename.
     fn write_atomically(&self, path: &Path) -> io::Result<()> {
         write_bytes_atomically(path, |file| {
@@ -733,6 +750,33 @@ impl TextStore for Buffer {
 /// chapter had been.
 pub fn write_file_atomically(path: &Path, text: &str) -> io::Result<()> {
     write_bytes_atomically(path, |file| file.write_all(text.as_bytes()))
+}
+
+/// **Which file a write to `path` would actually replace.**
+///
+/// Spelling is not identity. `main.typ`, `./main.typ`, `/一/長/路/main.typ` and
+/// a symlink pointing at it are one manuscript, and a guard that compares
+/// `PathBuf`s says they are four different ones — which is how `:export typst
+/// draft.typ` came to write an export over the book `draft.typ` was a link to.
+///
+/// Resolved the way [`write_bytes_atomically`] resolves it: the file itself
+/// when it exists, through every link; otherwise its directory resolved and its
+/// own name kept, so a target that does not exist yet still compares equal
+/// however it was spelled. A path whose directory does not exist either is
+/// returned as it came — there is nothing to resolve it against, and a write
+/// there is going to fail anyway.
+pub fn write_target(path: &Path) -> PathBuf {
+    if let Ok(real) = fs::canonicalize(path) {
+        return real;
+    }
+    let dir = match path.parent() {
+        Some(p) if !p.as_os_str().is_empty() => p.to_path_buf(),
+        _ => PathBuf::from("."),
+    };
+    match (fs::canonicalize(&dir), path.file_name()) {
+        (Ok(dir), Some(name)) => dir.join(name),
+        _ => path.to_path_buf(),
+    }
 }
 
 /// The one place a file is replaced.

@@ -1634,3 +1634,23 @@ en = "{0}: {1}"
 [[message]]
 zh = "{0} 個檔案，{1} 處；{2}"
 en = "{0} file(s), {1} place(s); {2}"
+
+[[message]]
+zh = "{0} 正開着——切過去存，或另取一個檔名"
+en = "{0} is open here — save from there, or pick another name"
+
+[[message]]
+zh = "{0} 正開着——導出會蓋掉它，請另取一個檔名"
+en = "{0} is open here — an export would write over it; pick another name"
+
+[[message]]
+zh = "另存成新檔並改編輯它（`:w <檔名>` 只抄一份，人還在這邊）"
+en = "save under a new name and edit that one (`:w <path>` only copies)"
+
+[[message]]
+zh = "已經有 {0} 了——`:export!` 才蓋掉它"
+en = "{0} is already there — `:export!` writes over it"
+
+[[message]]
+zh = "抄了一份到 {0}"
+en = "copied to {0}"
