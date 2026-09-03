@@ -21,6 +21,10 @@
 //! walk of the current logical line. [`layout`] materialises the full list only
 //! for the renderer, which needs to know how many 縱 precede the viewport.
 
+use std::cell::RefCell;
+use std::collections::hash_map::DefaultHasher;
+use std::hash::{Hash, Hasher};
+
 use ropey::Rope;
 
 use crate::ruby::Dialects;
@@ -834,13 +838,83 @@ fn zong_breaks(
     breaks
 }
 
+type RememberedZongs = (u64, Vec<Slot>, Vec<usize>);
+
+/// How many paragraphs' worth of 縱 are kept. A page asks about the same
+/// handful over and over; more than a few would be holding a chapter twice.
+const REMEMBERED_PARAGRAPHS: usize = 8;
+
+thread_local! {
+    /// Laid-out paragraphs, most recently used first.
+    ///
+    /// Keyed by a hash of the paragraph's own text and of everything about the
+    /// grid that changes the answer — never by a line number or a revision, so
+    /// a matching hash is a correct answer whatever else in the document, or in
+    /// another document, has moved since. Exactly how [`crate::wrap`] does it,
+    /// and for the same reason: the vertical page asks `zongs_from` and
+    /// `zong_slots` once per 縱, so a paragraph holding 500,000 characters was
+    /// laid out afresh forty times a frame — 565 ms per keystroke.
+    static ZONGS: RefCell<Vec<RememberedZongs>> = const { RefCell::new(Vec::new()) };
+
+    /// How many paragraphs have actually been laid out, for the test that
+    /// keeps a frame from quietly becoming forty passes over a chapter again.
+    static LAID_OUT: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
+/// How many paragraphs have been laid out since [`reset_layout_count`].
+#[cfg(test)]
+fn layout_count() -> usize {
+    LAID_OUT.with(|n| n.get())
+}
+
+/// Start counting laid-out paragraphs again.
+#[cfg(test)]
+fn reset_layout_count() {
+    LAID_OUT.with(|n| n.set(0));
+}
+
 /// One line's slots and where its 縱 begin — always asked for together.
 fn line_zongs(rope: &Rope, line: usize, grid: Grid) -> (Vec<Slot>, Vec<usize>) {
+    let hidden = (grid.hidden)(line);
+    let mut hasher = DefaultHasher::new();
+    // Over the rope's own chunks, so asking costs no allocation. Two identical
+    // paragraphs stored differently may hash differently — that is a miss,
+    // which is merely slow, never wrong.
+    for chunk in rope.line(line).chunks() {
+        chunk.hash(&mut hasher);
+    }
+    hidden.hash(&mut hasher);
+    (
+        grid.zong_len,
+        grid.indent,
+        grid.hanging,
+        grid.tatechuyoko,
+        grid.ruby.bits(),
+        grid.open_line == line,
+        opens_a_paragraph(&line_text(rope, line)),
+    )
+        .hash(&mut hasher);
+    let hash = hasher.finish();
+    if let Some(answer) = ZONGS.with(|cache| {
+        let mut cache = cache.borrow_mut();
+        let i = cache.iter().position(|(h, _, _)| *h == hash)?;
+        let entry = cache.remove(i);
+        let answer = (entry.1.clone(), entry.2.clone());
+        cache.insert(0, entry);
+        Some(answer)
+    }) {
+        return answer;
+    }
+    LAID_OUT.with(|n| n.set(n.get() + 1));
     let slots = line_grid(rope, line, grid);
     let chars: Vec<char> = line_text(rope, line).chars().collect();
     let groups = crate::ruby::groups(&chars, grid.ruby);
-    let hidden = (grid.hidden)(line);
     let breaks = zong_breaks(&chars, &slots, grid.zong_len.max(1), &groups, &hidden);
+    ZONGS.with(|cache| {
+        let mut cache = cache.borrow_mut();
+        cache.insert(0, (hash, slots.clone(), breaks.clone()));
+        cache.truncate(REMEMBERED_PARAGRAPHS);
+    });
     (slots, breaks)
 }
 
@@ -1621,6 +1695,27 @@ mod tests {
         let onto = next_zong(&r, 0, G, 0);
         assert_eq!(position(&r, onto, G).line, 1);
         assert_eq!(next_zong(&r, end, G, 0), end, "nothing past the last 縱");
+    }
+
+    #[test]
+    fn a_page_lays_each_paragraph_out_once() {
+        // A Chinese chapter is one paragraph, and the vertical page asks
+        // `zongs_from` and then `zong_slots` for every 縱 on it — so an
+        // unmemoised layout ran over the whole chapter once per column: 565 ms
+        // a keystroke on 500,000 characters.
+        let r = rope(&"那年冬天，山下起了大雪。".repeat(4_000));
+        let grid = Grid { zong_len: 24, ..G };
+        reset_layout_count();
+        let page = zongs_from(&r, Anchor { line: 0, index_in_line: 0 }, grid, 40);
+        for zong in &page {
+            let _ = zong_slots(&r, zong, grid);
+        }
+        assert_eq!(page.len(), 40, "a page of 縱");
+        assert_eq!(
+            layout_count(),
+            1,
+            "the paragraph is laid out once for the whole page"
+        );
     }
 
     #[test]

@@ -118,6 +118,11 @@ impl Dialects {
     /// No dialects: the markup is shown as the text it is.
     pub const NONE: Dialects = Dialects(0);
 
+    /// The set as a number, for a cache key.
+    pub fn bits(self) -> u8 {
+        self.0
+    }
+
     /// Just this one.
     pub fn only(dialect: Dialect) -> Dialects {
         let mut set = Dialects::NONE;

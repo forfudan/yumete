@@ -2168,6 +2168,9 @@ impl Editor {
                 match by {
                     crate::command::Axis::Row => {
                         self.last_search = pattern;
+                        // A row search takes `n` back from a column search's
+                        // answers, the way `/` does.
+                        self.hits = None;
                         let forward = self.search_forward;
                         self.repeat_search(forward);
                     }
@@ -9037,6 +9040,10 @@ impl Editor {
         // is text, not a pattern — 「（」 must not open a group.
         let text = self.current_buffer().rope().slice(start..end).to_string();
         self.last_search = regex::escape(&text);
+        // A new search takes `n` back, exactly as `/` does. Without this, `*`
+        // set the pattern and `n` went on walking a list found before it —
+        // 「第 3/78 處」 about a word nobody asked about.
+        self.hits = None;
         self.status = say!("搜索：{0}", text);
     }
 
