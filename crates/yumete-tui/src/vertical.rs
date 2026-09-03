@@ -582,7 +582,7 @@ pub fn draw(
         }
     }
     if metrics.head_rows > 0 {
-        let ground = ink.ground(yumete_config::rung::CHROME);
+        let ground = ink.ground(yumete_config::rung::HEAD);
         let buf = frame.buffer_mut();
         // One band per 段: each is a page of its own and each opens with its
         // own row of paragraph numbers.
@@ -670,7 +670,7 @@ pub fn draw(
             // are a real rung. They used to be the terminal's own foreground on
             // a band at 1.04:1, which made the cursor's number the brightest
             // thing on a page of somebody's novel.
-            let style = ink.ground(yumete_config::rung::CHROME);
+            let style = ink.ground(yumete_config::rung::HEAD);
             let style = match zong.line == cursor_line {
                 // 朱 for the one you are in: the one question vertical layout
                 // strips position of, answered by the one colour off the ladder.

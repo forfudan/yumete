@@ -400,13 +400,19 @@ pub mod rung {
     /// tick. Not text and not a ground, and the only thing that belongs in the
     /// middle of the ladder.
     pub const RULE: u16 = 550;
-    /// Chrome, raised one notch off the page: a sidebar, a tab bar, a detail
-    /// panel, the 縱書 number band. **Toward the ink**, which is the one
-    /// direction that still means "raised" after a light/dark flip.
-    pub const CHROME: u16 = 850;
-    /// A ground that must not shout: a table's cursor row, a code fence, a
-    /// callout, the tint past the measure.
-    pub const BAND: u16 = 920;
+    /// Chrome: a sidebar, a tab bar, a table's gutter and header, a detail
+    /// panel, the status line. **A hair off the page and no more** — the
+    /// theme is 墨黑, and furniture that is grey rather than black flattens
+    /// the whole screen toward the middle of the ladder. What separates a
+    /// panel from the page is its rule and its 金墨, not a lighter ground.
+    pub const CHROME: u16 = 970;
+    /// A ground that must not shout: a table's alternating columns, its cursor
+    /// row, a code fence, a callout, the tint past the measure.
+    pub const BAND: u16 = 940;
+    /// A band that must be **seen**, because position is not separating it
+    /// from the text: the 縱書 number band sits in the text's own columns, and
+    /// the lit tab sits among the unlit ones.
+    pub const HEAD: u16 = 880;
     /// A selection: the loudest ground, and still only a ground — the ink on it
     /// is untouched, so a heading inside a selection is still a heading.
     pub const SELECTION: u16 = 800;
@@ -511,7 +517,7 @@ impl Default for ThemeConfig {
             // 墨香's own bone, kept for the one job it is best at. On a light
             // page a bone would be invisible, so there it is the same warmth
             // taken the other way down: a dark gold on cream.
-            gold_dark: (0xCF, 0xC6, 0xA9),
+            gold_dark: (0xD8, 0xC9, 0x9A),
             gold_light: (0x6B, 0x54, 0x26),
         }
     }
