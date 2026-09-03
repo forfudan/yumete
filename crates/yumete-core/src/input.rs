@@ -61,6 +61,12 @@ pub enum Key {
     Down,
     Home,
     End,
+    /// A whole page back, and a whole page on — the keys a reader who is not
+    /// holding `hjkl` reaches for. They reached the editor as nothing at all
+    /// until Feature #179: the table that turns a terminal's keys into these
+    /// simply had no line for them.
+    PageUp,
+    PageDown,
     /// Tab — cycles the command-line completion forward.
     Tab,
     /// Shift-Tab, cycling it back.
