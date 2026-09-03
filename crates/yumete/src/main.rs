@@ -93,6 +93,11 @@ fn main() -> ExitCode {
     if std::fs::create_dir_all(&drafts).is_ok() {
         editor.keep_drafts_in(drafts);
     }
+    // …and somewhere to remember which files were open. Keyed by the working
+    // directory, so a novel and a codebase do not share one.
+    if let Ok(here) = std::env::current_dir() {
+        editor.keep_session_in(yumete_config::data_dir().join("sessions"), &here);
+    }
     editor.set_dense(config.editor.dense);
 
     // The files, *after* the session's settings. Opening one may turn the page
@@ -105,6 +110,14 @@ fn main() -> ExitCode {
             return ExitCode::FAILURE;
         }
     }
+    // With no file named, open what was open last time — five `:open`s every
+    // morning is five too many. Only then: somebody who said which file they
+    // wanted gets that file, and nothing else.
+    let restored = if files.is_empty() {
+        editor.restore_session()
+    } else {
+        0
+    };
     // `-t` is the writer saying "this is a table" about a file no schema names.
     // After the files, because it is about the file that is open.
     if force_table {
@@ -187,11 +200,20 @@ fn main() -> ExitCode {
         return ExitCode::SUCCESS;
     }
 
+    // Restoring five chapters without saying so leaves a person wondering
+    // what they are looking at.
+    if restored > 0 {
+        editor.set_status(format!("接着上次：開了 {restored} 個檔案"));
+    }
     // Recovered work outranks a config typo for the one status line there is.
     // Only the editor has one; the preview prints its own notice instead.
     editor.announce_recovery();
 
-    match yumete_tui::run(&mut editor, &config, &mut ime) {
+    let outcome = yumete_tui::run(&mut editor, &config, &mut ime);
+    // Written on the way out, whichever way out it was: an editor that only
+    // remembered a clean exit would forget the session you most wanted back.
+    editor.save_session();
+    match outcome {
         Ok(()) => ExitCode::SUCCESS,
         Err(err) => {
             eprintln!("yumete: {err}");

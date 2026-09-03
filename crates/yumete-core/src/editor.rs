@@ -552,6 +552,9 @@ pub struct Editor {
     table_bypass: std::cell::Cell<bool>,
     /// Where buffers with no file keep their recovery copies.
     drafts_dir: Option<PathBuf>,
+    /// Where this project's session is remembered — which files were open and
+    /// where the cursor was in each.
+    session_file: Option<PathBuf>,
     /// The layout a grid turned the page away from, so leaving gives it back.
     turned_for_table: Option<Layout>,
     /// Where the cursor was before each far jump, and how far back we have
@@ -790,6 +793,7 @@ impl Editor {
             show_detail: true,
             table_bypass: std::cell::Cell::new(false),
             drafts_dir: None,
+            session_file: None,
             turned_for_table: None,
             zong_gap: None,
             dense: false,
@@ -4905,6 +4909,90 @@ impl Editor {
     /// is what it did before.
     pub fn keep_drafts_in(&mut self, dir: PathBuf) {
         self.drafts_dir = Some(dir);
+    }
+
+    // ---- The session (Feature #43) ----------------------------------------
+
+    /// Where to remember which files are open (`<data>/sessions/<key>.txt`).
+    ///
+    /// Kept in the data directory rather than in the project, because a
+    /// session is a fact about *you* and this afternoon, not about the book —
+    /// and because an editor should not leave a file in every directory it is
+    /// ever run in.
+    pub fn keep_session_in(&mut self, dir: PathBuf, project: &Path) {
+        let mut hasher = DefaultHasher::new();
+        project.hash(&mut hasher);
+        let key = format!("{:016x}", hasher.finish());
+        self.session_file = Some(dir.join(format!("{key}.txt")));
+    }
+
+    /// Write down which files are open and where the cursor is in each.
+    ///
+    /// One line per file: `path\tline`. A plain list rather than a format,
+    /// because the only thing that reads it is the next hour of this editor,
+    /// and a person looking at it should be able to see what it says.
+    pub fn save_session(&mut self) {
+        let Some(file) = self.session_file.clone() else {
+            return;
+        };
+        let here = self.cursor;
+        self.buffers[self.current].save_cursor(here);
+        let mut out = String::new();
+        for buffer in &self.buffers {
+            let Some(path) = buffer.path() else { continue };
+            let line = buffer
+                .rope()
+                .char_to_line(buffer.saved_cursor().min(buffer.rope().len_chars()));
+            out.push_str(&format!("{}\t{}\n", path.display(), line + 1));
+        }
+        if out.is_empty() {
+            // Nothing was open, so there is nothing to come back to — and a
+            // stale session is worse than none.
+            let _ = std::fs::remove_file(&file);
+            return;
+        }
+        if let Some(parent) = file.parent() {
+            let _ = std::fs::create_dir_all(parent);
+        }
+        let _ = std::fs::write(&file, out);
+    }
+
+    /// Open again what was open last time, each at the line it was left on.
+    ///
+    /// Only when the editor was started with **no file named**: someone who
+    /// said which file they wanted gets that file. Returns how many were
+    /// opened, so the front end can say so — restoring five chapters silently
+    /// would leave a person wondering what they were looking at.
+    pub fn restore_session(&mut self) -> usize {
+        let Some(file) = self.session_file.clone() else {
+            return 0;
+        };
+        let Ok(text) = std::fs::read_to_string(&file) else {
+            return 0;
+        };
+        let mut opened = 0usize;
+        let mut first = None;
+        for line in text.lines() {
+            let (path, at) = match line.split_once('\t') {
+                Some((p, n)) => (PathBuf::from(p), n.parse::<usize>().unwrap_or(1)),
+                None => (PathBuf::from(line), 1),
+            };
+            // A file that has since been moved or deleted is simply not opened:
+            // the session is a convenience, and a convenience does not get to
+            // put an error on the screen every morning.
+            if !path.is_file() || self.open_file(&path).is_err() {
+                continue;
+            }
+            self.move_to_line(at);
+            self.buffers[self.current].save_cursor(self.cursor);
+            first.get_or_insert(self.current);
+            opened += 1;
+        }
+        if let Some(i) = first {
+            self.show_buffer(i);
+        }
+        self.status = String::new();
+        opened
     }
 
     /// Give every unsaved file-less buffer a name to keep its draft under.
@@ -12388,6 +12476,45 @@ mod tests {
         press(&mut ed, "'");
         ed.on_key(Key::Char('z'));
         assert!(ed.status().contains('z'), "{}", ed.status());
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn the_session_opens_again_what_was_open() {
+        // Five `:open`s every morning is five too many.
+        let dir = std::env::temp_dir().join(format!("yumete-session-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(dir.join("state")).unwrap();
+        let one = dir.join("ch01.md");
+        let two = dir.join("ch02.md");
+        std::fs::write(&one, "一\n二\n三\n四\n").unwrap();
+        std::fs::write(&two, "甲\n乙\n丙\n").unwrap();
+
+        let mut ed = Editor::new();
+        ed.keep_session_in(dir.join("state"), &dir);
+        ed.open_file(&one).unwrap();
+        ed.goto_line(3);
+        ed.open_file(&two).unwrap();
+        ed.goto_line(2);
+        ed.save_session();
+
+        // A new morning.
+        let mut ed = Editor::new();
+        ed.keep_session_in(dir.join("state"), &dir);
+        assert_eq!(ed.restore_session(), 2);
+        assert_eq!(ed.buffer_count(), 2);
+        // Each at the line it was left on.
+        ed.open_file(&one).unwrap();
+        assert_eq!(ed.cursor_line(), 2, "ch01 was left on line 3");
+        ed.open_file(&two).unwrap();
+        assert_eq!(ed.cursor_line(), 1, "ch02 on line 2");
+
+        // A file that has since been deleted is simply not opened — a
+        // convenience does not get to put an error on the screen every morning.
+        std::fs::remove_file(&two).unwrap();
+        let mut ed = Editor::new();
+        ed.keep_session_in(dir.join("state"), &dir);
+        assert_eq!(ed.restore_session(), 1);
         std::fs::remove_dir_all(&dir).ok();
     }
 
