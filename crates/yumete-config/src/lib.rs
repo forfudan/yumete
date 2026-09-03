@@ -403,7 +403,7 @@ pub mod rung {
     /// Chrome, raised one notch off the page: a sidebar, a tab bar, a detail
     /// panel, the 縱書 number band. **Toward the ink**, which is the one
     /// direction that still means "raised" after a light/dark flip.
-    pub const CHROME: u16 = 880;
+    pub const CHROME: u16 = 850;
     /// A ground that must not shout: a table's cursor row, a code fence, a
     /// callout, the tint past the measure.
     pub const BAND: u16 = 920;
@@ -439,6 +439,17 @@ pub struct ThemeConfig {
     /// than a manuscript's.
     pub mark_dark: (u8, u8, u8),
     pub mark_light: (u8, u8, u8),
+    /// 金 — the warm one, for what is **not the prose**.
+    ///
+    /// The page's own ladder runs from a near-white ink to a cool near-black
+    /// ground, and everything on it is therefore a grey: prose, a reading, a
+    /// marker, a rule. That is what prose should look like, and it leaves the
+    /// one thing greys cannot do — saying 「這不是正文」 without shouting. A
+    /// heading, a table's header row, the label beside a value in a panel:
+    /// warm, against a page that is not, so the eye finds them without
+    /// reading. Never 朱, which is for what is *wrong*.
+    pub gold_dark: (u8, u8, u8),
+    pub gold_light: (u8, u8, u8),
 }
 
 impl ThemeConfig {
@@ -457,6 +468,14 @@ impl ThemeConfig {
             false => self.mark_light,
         }
     }
+
+    /// 金, in the mood in force.
+    pub fn gold(&self, dark: bool) -> (u8, u8, u8) {
+        match dark {
+            true => self.gold_dark,
+            false => self.gold_light,
+        }
+    }
 }
 
 impl Default for ThemeConfig {
@@ -465,13 +484,17 @@ impl Default for ThemeConfig {
             name: "墨香".to_string(),
             mode: Mode::Auto,
             ground: Ground::Paint,
-            // Yume's own 墨香. The green in the ink is deliberate and slight —
-            // R and G differ by about five — so it reads as ink with a hint of
-            // pine rather than as grey-green, and the paper is warm rather than
-            // white.
+            // **The page is cool and the writing is near-white.** 墨香's own
+            // pair — a bone ink on a warm near-black — is the right skin for a
+            // *panel*, where it has always been; laid over the whole page it
+            // makes every grey on the ladder a warm grey, and then the prose,
+            // the headings and the furniture are all the same colour and the
+            // page has no ranks in it. So the page keeps the ink 白 and the
+            // ground 墨, and the warmth goes to 金, below, which is worth
+            // finding precisely because most of the screen is not warm.
             dark: Ladder {
-                ink: (0xCF, 0xC6, 0xA9),
-                paper: (0x26, 0x2A, 0x27),
+                ink: (0xE8, 0xE4, 0xDA),
+                paper: (0x24, 0x26, 0x2C),
             },
             // 墨 on paper is darker than 墨 on a screen — the light ladder's
             // ink is the dark ladder's *ground*, which is both true of the
@@ -485,6 +508,11 @@ impl Default for ThemeConfig {
             // the ink is dimmer there.
             mark_light: (0xA8, 0x30, 0x1C),
             mark_dark: (0xD2, 0x78, 0x5A),
+            // 墨香's own bone, kept for the one job it is best at. On a light
+            // page a bone would be invisible, so there it is the same warmth
+            // taken the other way down: a dark gold on cream.
+            gold_dark: (0xCF, 0xC6, 0xA9),
+            gold_light: (0x6B, 0x54, 0x26),
         }
     }
 }
@@ -771,6 +799,8 @@ struct RawTheme {
     /// 朱.
     mark: Option<String>,
     mark_light: Option<String>,
+    gold: Option<String>,
+    gold_light: Option<String>,
 }
 
 #[derive(Deserialize, Default)]
@@ -912,6 +942,8 @@ impl RawConfig {
             (&other.theme.paper_light, &mut self.theme.paper_light),
             (&other.theme.mark, &mut self.theme.mark),
             (&other.theme.mark_light, &mut self.theme.mark_light),
+            (&other.theme.gold, &mut self.theme.gold),
+            (&other.theme.gold_light, &mut self.theme.gold_light),
         ] {
             if from.is_some() {
                 *to = from.clone();
@@ -1058,6 +1090,8 @@ impl RawConfig {
             (self.theme.paper_light, &mut config.theme.light.paper),
             (self.theme.mark, &mut config.theme.mark_dark),
             (self.theme.mark_light, &mut config.theme.mark_light),
+            (self.theme.gold, &mut config.theme.gold_dark),
+            (self.theme.gold_light, &mut config.theme.gold_light),
         ] {
             if let Some(rgb) = hex.as_deref().and_then(parse_hex) {
                 *slot = rgb;
@@ -1129,7 +1163,7 @@ mod tests {
         assert_eq!(c.editor.line_numbers, LineNumbers::Absolute);
         assert_eq!(c.editor.scrolloff, 3);
         assert_eq!(c.theme.name, "墨香");
-        assert_eq!(c.theme.dark.ink, (0xCF, 0xC6, 0xA9));
+        assert_eq!(c.theme.dark.ink, (0xE8, 0xE4, 0xDA));
         assert!(c.keys.normal.is_empty());
     }
 

@@ -159,7 +159,7 @@ pub fn draw(
 
     let ink = crate::theme::Palette::of(config);
     let gutter_style = ink.ground(yumete_config::rung::CHROME);
-    let head_style = gutter_style.fg(ink.text()).add_modifier(Modifier::BOLD);
+    let head_style = gutter_style.fg(ink.gold()).add_modifier(Modifier::BOLD);
     // A ground, and only a ground: the ink on a selected cell is left alone, so
     // a torn cell is still torn while you stand on it to mend it. It used to be
     // `fg(White)`, which is brighter than the ink and flattened every colour
@@ -331,10 +331,10 @@ pub fn draw_detail(frame: &mut Frame, editor: &Editor, config: &Config, area: Re
     };
     let ink = crate::theme::Palette::of(config);
     let ground = ink.ground(yumete_config::rung::CHROME);
-    let title = ground.fg(ink.text()).add_modifier(Modifier::BOLD);
+    let title = ground.fg(ink.gold()).add_modifier(Modifier::BOLD);
     let name = ground.fg(ink.quiet());
     let value = ground.fg(ink.text());
-    let here = ground.fg(ink.text()).add_modifier(Modifier::BOLD);
+    let here = ground.fg(ink.gold()).add_modifier(Modifier::BOLD);
     // A component with no row of its own — for a 拆分表 that is a finding, not
     // a blank.
     let missing = ground.fg(ink.mark());

@@ -1477,7 +1477,11 @@ fn markup_style(kind: yumete_core::markdown::Kind, ink: crate::theme::Palette) -
         // A terminal cannot make a heading bigger, and bold is what it has.
         // The old colour was five ΔE from the ink for a third of a stop of
         // contrast — the weight was doing all the work already.
-        Kind::Heading => Style::default().fg(ink.text()).add_modifier(Modifier::BOLD),
+        // 金, because a heading is not prose and the page is otherwise grey.
+        // Weight alone said it in a hundred-line file and stopped saying it in
+        // a chapter: bold prose and a heading are the same colour, and the eye
+        // has to read them to tell them apart.
+        Kind::Heading => Style::default().fg(ink.gold()).add_modifier(Modifier::BOLD),
         Kind::Strong => Style::default().add_modifier(Modifier::BOLD),
         Kind::Emphasis => Style::default().add_modifier(Modifier::ITALIC),
         Kind::Code => Style::default().fg(ink.quiet()),
@@ -1679,7 +1683,7 @@ fn draw_sidebar(frame: &mut Frame, editor: &Editor, config: &Config, area: Rect)
     let ink = crate::theme::Palette::of(config);
     let ground = ink.ground(yumete_config::rung::CHROME);
     let text = ground.fg(ink.text());
-    let dir = ground.fg(ink.quiet()).add_modifier(Modifier::BOLD);
+    let dir = ground.fg(ink.gold()).add_modifier(Modifier::BOLD);
     let quiet = ground.fg(ink.quiet());
     // Unfocused, the highlight is a quiet band; focused, it is inked — so which
     // half of the screen the keys are going to is never in doubt.
@@ -2217,13 +2221,14 @@ fn draw_status(
     tab_area: Rect,
 ) {
     let buffer = editor.current_buffer();
-    // The page turned over: the ink is the ground and the paper is the letters.
-    // Named rather than `REVERSED`, which only inverts the cells something is
-    // *written on* — the bar stopped wherever the text did and the rest of the
-    // row was left to the terminal, which is the notch a reader sees at the
-    // right end of a short status line.
+    // A raised strip, not a reversal. Reversing gave a **white bar** under a
+    // dark page — the loudest thing on the screen, saying the least — and it
+    // only inverted the cells something was written on, so the bar stopped
+    // wherever the text did and left a notch at the right end.
     let ink = crate::theme::Palette::of(config);
-    let bar = Style::default().bg(ink.text()).fg(ink.paper());
+    let bar = ink
+        .ground(yumete_config::rung::CHROME)
+        .fg(ink.text());
     // The sidebar used to take the whole status line to list its keys. It has
     // the row above for that now, and taking this one as well would mean losing
     // the file name and the position for as long as the sidebar has focus.
@@ -2246,7 +2251,7 @@ fn draw_status(
         // The guess is a rung back from what was actually typed — a colour,
         // not `DIM`, so it is still visibly *not yet* part of the line on a
         // terminal that drops the attribute.
-        let guess = bar.fg(ink.at(yumete_config::rung::SELECTION));
+        let guess = bar.fg(ink.at(yumete_config::rung::RULE));
         frame.render_widget(
             Paragraph::new(Line::from(vec![
                 Span::styled(line, bar),
@@ -3583,10 +3588,10 @@ mod tests {
         // that a guess would read as typed on them.
         let ink = ink(&config);
         let fg = |x: u16| buffer[(x, row)].style().fg;
-        assert_eq!(fg(3), Some(ink.paper()), "`seg` was typed");
+        assert_eq!(fg(3), Some(ink.text()), "`seg` was typed");
         assert_eq!(
             fg(4),
-            Some(ink.at(yumete_config::rung::SELECTION)),
+            Some(ink.at(yumete_config::rung::RULE)),
             "`ment` is only a guess"
         );
     }

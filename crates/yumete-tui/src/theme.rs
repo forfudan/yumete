@@ -1,9 +1,19 @@
 //! 【墨香】 — one theme, computed, and everywhere (Feature #152).
 //!
-//! Every colour the editor draws comes from here, and here has **three
-//! numbers**: 墨, 紙, and 朱. Everything between the first two is a rung on a
-//! ladder ([`Ladder::step`]); 朱 is the one thing that is not a quantity of ink
-//! and so cannot be on it.
+//! Every colour the editor draws comes from here, and here is **four inks**:
+//!
+//! - **黑墨** — the ground the page is written on.
+//! - **白金墨** — the writing. A white with a little gold in it, not a bone:
+//!   over a whole screen a bone ink turns every grey on the ladder warm, and
+//!   then the prose, the headings and the furniture are one colour and the
+//!   page has no ranks in it.
+//! - **金墨** — what is **not** prose: a heading, a table's header row, the
+//!   name beside a value. Worth finding precisely because the rest is grey.
+//! - **紅墨** — what is **wrong**: a torn row, a component with no row, a
+//!   footnote's mark. Never emphasis.
+//!
+//! Everything between the first two is a rung on a ladder ([`Ladder::step`]);
+//! 金 and 紅 are not quantities of ink and so cannot be on it.
 //!
 //! Before this, the two anchors dressed the candidate panel, the sidebar, the
 //! tab bar, the `:` menu and the detail panel — and the manuscript itself was
@@ -209,6 +219,7 @@ fn ground_is_dark(reply: &[u8]) -> Option<bool> {
 pub struct Palette {
     ladder: Ladder,
     mark: (u8, u8, u8),
+    gold: (u8, u8, u8),
     paint: bool,
 }
 
@@ -227,6 +238,7 @@ impl Palette {
         Palette {
             ladder: config.theme.ladder(dark),
             mark: config.theme.mark(dark),
+            gold: config.theme.gold(dark),
             paint: config.theme.ground == Ground::Paint,
         }
     }
@@ -273,6 +285,17 @@ impl Palette {
     pub fn paper(self) -> Color {
         self.at(rung::PAPER)
     }
+    /// 金 — 這不是正文.
+    ///
+    /// The page's ladder is a run of greys, on purpose, so the one warm colour
+    /// on the screen is worth looking at: a heading, a table's header row, the
+    /// name beside a value. It is the only thing here that is not a quantity
+    /// of ink and not 朱.
+    pub fn gold(self) -> Color {
+        let (r, g, b) = self.gold;
+        Color::Rgb(r, g, b)
+    }
+
     /// 朱 — 這裏不對.
     pub fn mark(self) -> Color {
         let (r, g, b) = self.mark;
@@ -381,6 +404,7 @@ mod tests {
                 ("the markup", p.marker(), 3.0),
                 ("a rule", p.rule(), 2.5),
                 ("朱", p.mark(), 3.0),
+                ("金", p.gold(), 4.5),
             ] {
                 let got = contrast(ink, p.paper());
                 assert!(got >= bar, "dark={dark}: {name} is {got:.2}:1 on the page");
