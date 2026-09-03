@@ -5623,6 +5623,12 @@ impl Editor {
                 self.insert_recording.pop();
                 self.delete_before_cursor();
             }
+            // `C-w` and `C-u` are in vi, in Helix, in readline and in every
+            // terminal prompt a person has ever typed at, and Insert mode ate
+            // both. Through an IME that mattered more than it looks: taking
+            // back a 詞 the candidate list got wrong meant holding Backspace down.
+            Key::Ctrl('w') => self.delete_word_before_cursor(),
+            Key::Ctrl('u') => self.delete_to_line_start(),
             Key::Left => self.move_horizontal(motion::left),
             Key::Right => self.move_horizontal(motion::right),
             Key::Up => self.move_vertical(true),
@@ -6775,6 +6781,64 @@ impl Editor {
         self.enter_insert();
     }
 
+    /// Take back the word before the cursor (`C-w` in Insert).
+    ///
+    /// The word is the segmenter's, not a run of non-space: this is an editor
+    /// for a language that does not put spaces between words, and `C-w` that
+    /// deleted the whole paragraph would be worse than not having it.
+    fn delete_word_before_cursor(&mut self) {
+        let at = self.cursor;
+        let rope = self.current_buffer().rope();
+        let mut from = motion::prev_word_start(rope, at, false, self.segmenter.as_ref());
+        // At the start of a word, the word to take back is the one before it.
+        if from >= at {
+            from = motion::line_start(rope, at);
+        }
+        // Never out of the cell it is typing in, and never over a line break:
+        // both are the invariants Insert mode already keeps.
+        from = from.max(self.insert_floor());
+        if from >= at {
+            return;
+        }
+        self.snapshot();
+        if self.edit_remove(from..at) {
+            self.set_cursor(from);
+            // What `.` replays has to match what happened.
+            let taken = at - from;
+            for _ in 0..taken {
+                self.insert_recording.pop();
+            }
+        }
+    }
+
+    /// Take back everything from the start of the line to the cursor (`C-u`).
+    fn delete_to_line_start(&mut self) {
+        let at = self.cursor;
+        let from = motion::line_start(self.current_buffer().rope(), at).max(self.insert_floor());
+        if from >= at {
+            return;
+        }
+        self.snapshot();
+        if self.edit_remove(from..at) {
+            self.set_cursor(from);
+            for _ in 0..(at - from) {
+                self.insert_recording.pop();
+            }
+        }
+    }
+
+    /// The earliest character an Insert-mode deletion may reach.
+    ///
+    /// The start of the cell when typing in a grid, and the start of the line
+    /// otherwise — the two places where deleting one character further would
+    /// join two things the file keeps apart.
+    fn insert_floor(&self) -> usize {
+        match self.insert_bounds() {
+            Some((start, _)) => start,
+            None => motion::line_start(self.current_buffer().rope(), self.cursor),
+        }
+    }
+
     /// Where `a` (append) places the cursor: after the selection, or one grapheme
     /// past the cursor when the selection is collapsed.
     fn append_position(&self) -> usize {
@@ -7435,6 +7499,41 @@ mod tests {
             ed.on_key(Key::Char(c));
         }
         ed.on_key(Key::Enter);
+    }
+
+    #[test]
+    fn insert_takes_back_a_word_and_a_line() {
+        // `C-w` and `C-u` exist in vi, Helix, readline and every terminal
+        // prompt, and Insert mode ate both of them.
+        let mut ed = typed("春天到了很好\n");
+        ed.goto_line(1);
+        ed.on_key(Key::Char('A'));
+        ed.on_key(Key::Ctrl('w'));
+        let after = ed.current_buffer().text();
+        assert!(
+            after.starts_with("春天到了") && after.trim_end() != "春天到了很好",
+            "one word, not the whole paragraph: {after:?}"
+        );
+        ed.on_key(Key::Ctrl('u'));
+        assert_eq!(ed.current_buffer().text(), "\n", "and C-u takes the line");
+        // One undo point each, and the line comes back.
+        ed.on_key(Key::Esc);
+        press(&mut ed, "u");
+        assert_eq!(ed.current_buffer().text(), after);
+    }
+
+    #[test]
+    fn taking_back_a_word_stays_inside_its_cell() {
+        let mut ed = typed("| 甲 | 春天到了很好 |\n| --- | --- |\n| 丙 | 丁 |\n");
+        ed.goto_line(1);
+        assert!(ed.enter_table(), "{}", ed.status());
+        press(&mut ed, "l");
+        ed.on_key(Key::Char('A'));
+        ed.on_key(Key::Ctrl('u'));
+        // The cell emptied; the pipe beside it is still there.
+        let text = ed.current_buffer().text();
+        assert_eq!(text.lines().next().unwrap().matches('|').count(), 3, "{text}");
+        assert!(!text.contains("春天"), "{text}");
     }
 
     #[test]
