@@ -638,22 +638,20 @@ dep and ship the tarballs §5.3 already designs. **high**
   editor's voice, which is not a thing to generate unattended. The manual's
   English half (`README.md`, `--help`) is the register to match.
 
-### 10 · Two the author asked for
+### 10 · Two the author asked for — **done**
 
-- **First-line indent instead of a blank line.** Chinese paragraphs are marked
-  by a two-em indent, not by a blank line, and the blank line costs a row. Do it
-  as a **view**, not as a rewrite of the file: Markdown and Typst both need the
-  blank line to mean "new paragraph", so deleting it would export as one
-  paragraph. This needs a capability yumete does not have — **drawing text the
-  file does not contain** (today the display layer only hides) — and the mirror
-  of the 所見即所得 invariant: the cursor may never sit on a character that is
-  not in the file. **high**
-- **段組 — two bands down the 縱書 page**, read top-right to top-left, then
-  bottom-right to bottom-left. This is standard Japanese vertical typesetting
-  (newspapers, 文庫本): a 縱 of fifty characters is tiring to read, and the
-  traditional answer is to halve it and use the width instead. A terminal is a
-  wide, short shape, which is exactly what 段組 is for. Bands equal by
-  construction; `[editor] bands = 1|2|…`. **medium**
+- ~~**First-line indent instead of a blank line.**~~ Done, as a **view**: the
+  file keeps the blank line Markdown needs, so it still exports as the
+  paragraphs it is. It did not need the general virtual-text layer after all —
+  vertically the indent is made of **padding slots**, the same thing a long
+  reading already opens to make room for itself, so the cursor, the mouse and
+  the caret needed no teaching; horizontally it is `Measure::indent`, which
+  makes the paragraph's first row that much narrower.
+- ~~**段組 — bands down the 縱書 page.**~~ Done. Each band is a short page of
+  its own — its own 縱 length, its own row of paragraph numbers, filled right to
+  left — and they are equal by construction, because the page is *divided*
+  rather than packed. Vertical only; the horizontal counterpart (Emacs's
+  `follow-mode`) is a different thing and is not built.
 
 ### What was already fixed while the reviews ran
 
@@ -911,9 +909,8 @@ the same review wanted and did not get:
 - **The current cell is not drawn** in a Markdown table — the prose renderer
   knows nothing about cells, so the only feedback is the column name in the
   status line, while Insert *is* constrained to the cell. **medium**
-- **Messages.** The CSV grid's refusals were English in a Chinese feature; the
-  table ones are fixed, and `cannot open '…'` and its kind are not. Part of the
-  2026-09-03 language decision (§5.2.1). **medium**
+- ~~**Messages.**~~ Done — every one of them is Chinese now. What remains is
+  the *mechanism* (`language = "zh"|"en"`), which is §5.2 group 9's last item.
 
 ## 6. Phase-by-phase deliverables
 
