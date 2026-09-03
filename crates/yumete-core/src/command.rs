@@ -85,6 +85,11 @@ pub enum Command {
     /// `:table rules …` — how the columns are told apart (Feature #157).
     /// `None` only reports.
     SetTableRules(Option<crate::table::Rules>),
+    /// `:numbers fill` — whether the line-number band has a ground of its
+    /// own. `None` toggles.
+    SetNumberFill(Option<bool>),
+    /// `:shot` — the screen as it stands, as an image, on the clipboard.
+    Screenshot,
     /// `:theme` — which theme, and whether it is dark, light or the
     /// terminal's own answer (Feature #152).
     ///
@@ -365,6 +370,38 @@ pub fn parse(input: &str) -> Result<Command, CommandError> {
         // with or without the theme's name: every combination of the two
         // halves is a sentence, because there is nothing to be gained by
         // refusing one.
+        "shot" => Ok(Command::Screenshot),
+        "numbers" => match rest {
+            // On its own it says nothing about *what* of the numbers, so it
+            // asks rather than guessing.
+            "" => Err(CommandError::MissingArgument("numbers")),
+            "fill" => Ok(Command::SetNumberFill(None)),
+            "fill on" => Ok(Command::SetNumberFill(Some(true))),
+            "fill off" => Ok(Command::SetNumberFill(Some(false))),
+            other => Err(CommandError::InvalidArgument {
+                command: "numbers",
+                value: other.to_string(),
+            }),
+        },
+        // The appearance on its own: which way round the theme's inks go.
+        "appearance" => {
+            let mut mood = None;
+            for word in rest.split_whitespace() {
+                match pick(word, MOODS).map(|w| w.name) {
+                    Some("system") => mood = Some(Mood::System),
+                    Some("dark") => mood = Some(Mood::Dark),
+                    Some("light") => mood = Some(Mood::Light),
+                    _ => {
+                        return Err(CommandError::InvalidArgument {
+                            command: "appearance",
+                            value: word.to_string(),
+                        })
+                    }
+                }
+            }
+            Ok(Command::Theme { name: None, mood })
+        }
+
         "theme" => {
             let mut name = None;
             let mut mood = None;
@@ -1129,24 +1166,6 @@ const THEMES: &[Word] = &[
         needs: &[],
         then: Args::Words(MOODS),
     },
-    Word {
-        name: "system",
-        help: "跟終端的底色走",
-        needs: &[],
-        then: Args::None,
-    },
-    Word {
-        name: "dark",
-        help: "深色",
-        needs: &[],
-        then: Args::None,
-    },
-    Word {
-        name: "light",
-        help: "淺色",
-        needs: &[],
-        then: Args::None,
-    },
 ];
 
 /// `:indent` and what may follow it.
@@ -1184,6 +1203,16 @@ const HINTS: &[Word] = &[
         help: "第一格畫一個記號（默認 ↵，它替掉的正是一個換行）",
         needs: &[],
         then: Args::None,
+    },
+];
+
+/// `:numbers` and what may follow it.
+const NUMBERS: &[Word] = &[
+    Word {
+        name: "fill",
+        help: "行號那一條有沒有自己的底色（默認沒有，橫排竪排一樣）",
+        needs: &[],
+        then: Args::Words(ON_OFF),
     },
 ];
 
@@ -1231,7 +1260,13 @@ const STROKES: &[Word] = &[
     },
 ];
 
-/// Dark, light, or the terminal's answer — the three words a theme takes.
+/// Dark, light, or the terminal's answer.
+///
+/// **A theme and an appearance are two questions**, and mixing them in one
+/// list made `:theme` offer 「moxiang、heibai、system、dark、light」 as though
+/// they were five of a kind. They are not: one says which set of inks, the
+/// other says which way round they go. `:appearance` asks the second on its
+/// own, and `:theme moxiang dark` still asks both in one line.
 const MOODS: &[Word] = &[
     Word {
         name: "system",
@@ -1426,9 +1461,30 @@ pub const COMMANDS: &[Entry] = &[
     Entry {
         name: "theme",
         aliases: &[],
-        help: "主題：哪一個，以及深色淺色還是跟着終端",
+        help: "主題：用哪一套墨（後面可以再跟深淺）",
         needs: &[],
         args: Args::Words(THEMES),
+    },
+    Entry {
+        name: "numbers",
+        aliases: &[],
+        help: "行號那一條：要不要自己的底色",
+        needs: &[],
+        args: Args::Words(NUMBERS),
+    },
+    Entry {
+        name: "shot",
+        aliases: &[],
+        help: "把畫面截成圖放進剪貼簿——命令面板收起來之後才截",
+        needs: &[],
+        args: Args::None,
+    },
+    Entry {
+        name: "appearance",
+        aliases: &[],
+        help: "深色、淺色，還是跟着終端",
+        needs: &[],
+        args: Args::Words(MOODS),
     },
     Entry {
         name: "yume",

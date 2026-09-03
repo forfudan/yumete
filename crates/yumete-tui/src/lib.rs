@@ -173,6 +173,12 @@ pub fn run(
         if let Err(err) = terminal.draw(|frame| draw(frame, editor, config, ime, &mut viewport)) {
             break Err(err);
         }
+        // …and the picture is of *this* frame, which is the one with no
+        // command line across it.
+        if editor.take_screenshot_request() {
+            editor.set_status(take_a_picture(config));
+            continue;
+        }
         // The page is up; now the 14 MB. Between these two lines is the whole
         // of what a cold start used to spend before showing anything.
         if let Some(load) = deferred.take() {
@@ -654,6 +660,23 @@ fn set_theme(
         false => say!("淺色"),
     };
     say!("主題：{0}（{1}）", crate::theme::name(config), mood)
+}
+
+/// Put a picture of the screen on the clipboard (`:shot`).
+///
+/// The window system's job, so it is a shell line in the config rather than
+/// something built in here — and it is run **without** giving up the terminal,
+/// because handing the screen over is exactly what would spoil the picture.
+fn take_a_picture(config: &Config) -> String {
+    let line = config.editor.screenshot.trim();
+    if line.is_empty() {
+        return say!("這個平台上沒有截圖命令——`[editor] screenshot` 寫一條");
+    }
+    match std::process::Command::new(shell()).arg("-c").arg(line).status() {
+        Ok(status) if status.success() => say!("畫面已放進剪貼簿"),
+        Ok(status) => say!("截圖失敗（{0}）", status),
+        Err(err) => say!("截圖失敗（{0}）", err),
+    }
 }
 
 /// The shell to run a command line through.
@@ -2072,7 +2095,11 @@ fn draw_horizontal(
             // A rung, not `DIM`: several terminals ignore DIM outright, and a
             // line number that is the same colour as the writing is worse than
             // no line number.
-            spans.push(Span::styled(label, ink.page().fg(ink.furniture())));
+            let band = match editor.number_fill() {
+                true => ink.ground(yumete_config::rung::HEAD),
+                false => ink.page(),
+            };
+            spans.push(Span::styled(label, band.fg(ink.furniture())));
         }
         // The paragraph opens two squares in, the way a Chinese paragraph is
         // marked — and the blank line it replaces costs a whole row.
@@ -3232,12 +3259,15 @@ mod tests {
 
     #[test]
     fn the_number_band_is_a_gutter_of_its_own_colour() {
+        // …when it is asked for. Off by default now, and off in both layouts:
+        // 縱書 painted this band and 橫排 painted nothing.
         // Set vertically the numbers sit above the 縱, in the text's own
         // columns. Position separates nothing, so the band has to be told apart
         // by colour or it reads as digits somebody typed.
         let mut editor = editor_with("春江\n潮水");
         let mut config = vertical_config();
         config.editor.line_numbers = LineNumbers::Absolute;
+        editor.set_number_fill(true);
         let buffer = render_vertical(&mut editor, &config, 30, 12);
 
         let band = Some(ink(&config).at(yumete_config::rung::HEAD));
