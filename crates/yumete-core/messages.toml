@@ -937,3 +937,11 @@ en = "there are unsaved changes — add ! to override"
 zh = "沒有檔名"
 en = "no file name"
 
+[[message]]
+zh = "貼進了 {0}×{1} 格"
+en = "pasted {0}×{1} cells"
+
+[[message]]
+zh = "貼不下：這張表只有 {0} 欄"
+en = "does not fit: this table has {0} columns"
+

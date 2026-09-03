@@ -2989,6 +2989,73 @@ impl Editor {
         }
     }
 
+    /// Put a block of cells in, starting at the cursor's.
+    ///
+    /// Growing the table as it needs to when the table is Markdown's — its
+    /// shape is the document's and the document is the writer's. A delimited
+    /// file's columns are its schema's, so a block too wide for it is refused
+    /// rather than silently shifting every row.
+    fn paste_grid(&mut self, grid: Vec<Vec<String>>) {
+        let (rows, columns) = (grid.len(), grid.iter().map(Vec::len).max().unwrap_or(0));
+        if let Some((region, mut parts)) = self.md_parts() {
+            let (row, cell) = self.md_at(&region);
+            for (r, line) in grid.iter().enumerate() {
+                while row + r >= parts.rows.len() {
+                    parts.insert_row(parts.rows.len());
+                }
+                for (c, text) in line.iter().enumerate() {
+                    while cell + c >= parts.columns() {
+                        parts.insert_column(parts.columns());
+                    }
+                    // A pipe in a pasted cell would be a boundary the file did
+                    // not mean; it goes in as the escape the manual promises.
+                    let text = text.replace('|', "\\|");
+                    let width = parts.columns();
+                    let at = &mut parts.rows[row + r];
+                    at.resize(width, String::new());
+                    at[cell + c] = text;
+                }
+            }
+            self.md_reschema(&parts);
+            self.md_write(&region, &parts, row, cell);
+            self.status = say!("貼進了 {0}×{1} 格", rows, columns);
+            return;
+        }
+        let Some((line, cell)) = self.cell_position() else {
+            return;
+        };
+        let Some(view) = self.table.as_ref() else { return };
+        let (d, width) = (view.schema.delimiter, view.schema.columns.len());
+        if cell + columns > width {
+            self.status = say!("貼不下：這張表只有 {0} 欄", width);
+            return;
+        }
+        self.snapshot();
+        for (r, values) in grid.iter().enumerate() {
+            let at = line + r;
+            // Past the last row, the block writes new rows of its own.
+            if at >= self.current_buffer().line_count() || self.row_cells(at).len() != width {
+                let row = self.blank_row();
+                let end = self.current_buffer().rope().len_chars();
+                self.without_cell_guard(|e| {
+                    e.current_buffer_mut().insert(end, &format!("\n{row}"))
+                });
+            }
+            for (c, text) in values.iter().enumerate() {
+                let text: String = text.chars().filter(|&ch| ch != d).collect();
+                let Some((from, to)) = self.cell_span(at, cell + c) else {
+                    continue;
+                };
+                self.without_cell_guard(|e| {
+                    e.current_buffer_mut().remove(from..to);
+                    e.current_buffer_mut().insert(from, &text);
+                });
+            }
+        }
+        self.go_to_cell(line, cell);
+        self.status = say!("貼進了 {0}×{1} 格", rows, columns);
+    }
+
     /// Whether a row has a different number of cells than the header says.
     ///
     /// Not an error to be refused: a table editor is the tool for *fixing*
@@ -3706,6 +3773,14 @@ impl Editor {
             view.shape == Shape::Markdown,
         );
         let body = text.trim_end_matches(['\n', '\r']);
+        // A block of cells — what a spreadsheet puts on the clipboard. It goes
+        // in **at the cursor's cell**, filling right and down from there, which
+        // is what every grid does with a pasted block and what a writer means
+        // by it.
+        if let Some(grid) = sniff_grid(body) {
+            self.paste_grid(grid);
+            return;
+        }
         // A row: the right number of cells, and no line break left inside it.
         // A Markdown row says what it is by its own pipes, so it is recognised
         // by the same test that finds a table in the first place.
@@ -8581,6 +8656,40 @@ fn is_build_output(name: &str) -> bool {
         .any(|ext| lower.ends_with(ext))
 }
 
+/// Read a block of cells out of pasted text, if that is what it is.
+///
+/// **Tabs first.** Every spreadsheet — Excel, Numbers, LibreOffice, a browser
+/// table — puts tab-separated rows on the clipboard, and a tab is the one
+/// character that never appears in a cell by accident. Commas are read only
+/// when every line has the same number of them, because a paragraph with two
+/// commas in it is a paragraph.
+///
+/// One cell is not a block: text with no tab and no line break is what `p`
+/// has always pasted, and goes on being it.
+fn sniff_grid(text: &str) -> Option<Vec<Vec<String>>> {
+    let lines: Vec<&str> = text.lines().collect();
+    if lines.is_empty() {
+        return None;
+    }
+    let delimiter = if lines.iter().any(|l| l.contains('\t')) {
+        '\t'
+    } else if lines.len() > 1 {
+        let commas = lines[0].matches(',').count();
+        if commas == 0 || !lines.iter().all(|l| l.matches(',').count() == commas) {
+            return None;
+        }
+        ','
+    } else {
+        return None;
+    };
+    let grid: Vec<Vec<String>> = lines
+        .iter()
+        .map(|l| l.split(delimiter).map(str::to_string).collect())
+        .collect();
+    // One cell in one row is not a block.
+    (grid.len() > 1 || grid[0].len() > 1).then_some(grid)
+}
+
 /// Whether `c` is an Ideographic Description Character — U+2FF0…U+2FFF.
 ///
 /// The operators of the 表意文字描述序列 grammar: ⿰ left-to-right, ⿱ above and
@@ -11157,6 +11266,64 @@ mod tests {
         assert!(ed.execute("%s/木/木|/").is_ok());
         assert_eq!(ed.current_buffer().text(), before);
         assert!(ed.status().contains("第 4 行"), "{}", ed.status());
+    }
+
+    #[test]
+    fn a_block_from_a_spreadsheet_goes_in_as_cells() {
+        // Every spreadsheet puts tab-separated rows on the clipboard, and a
+        // tab was refused outright — so a writer built tables in a spreadsheet
+        // and never brought them here.
+        let mut ed = typed("| 字 | 音 |\n| --- | --- |\n| a | b |\n");
+        ed.goto_line(1);
+        assert!(ed.enter_table(), "{}", ed.status());
+        ed.goto_line(3);
+        ed.set_register_for_test("木\tmu\n目\tmu\n禾\the\n");
+        press(&mut ed, "p");
+        assert_eq!(
+            ed.current_buffer().text(),
+            "| 字 | 音 |\n| -- | -- |\n| 木 | mu |\n| 目 | mu |\n| 禾 | he |\n",
+            "{}",
+            ed.status()
+        );
+        assert!(ed.status().contains("3×2"), "{}", ed.status());
+
+        // A pipe in a pasted cell goes in as the escape, not as a boundary.
+        ed.goto_line(3);
+        ed.set_register_for_test("a|b\tc\n");
+        press(&mut ed, "p");
+        assert_eq!(ed.row_cells(2).len(), 2, "{}", ed.current_buffer().text());
+        assert!(ed.current_buffer().text().contains(r"a\|b"));
+    }
+
+    #[test]
+    fn a_block_too_wide_for_a_schema_is_refused() {
+        let (dir, csv) = a_table("block");
+        let mut ed = Editor::new();
+        ed.open_file(&csv).unwrap();
+        let width = ed.table().unwrap().schema.columns.len();
+        ed.goto_line(2);
+        let wide: String = (0..width + 1).map(|i| format!("{i}\t")).collect();
+        ed.set_register_for_test(&wide);
+        let before = ed.current_buffer().text();
+        press(&mut ed, "p");
+        assert_eq!(ed.current_buffer().text(), before, "{}", ed.status());
+        assert!(ed.status().contains("貼不下"), "{}", ed.status());
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn ordinary_text_is_still_pasted_as_text() {
+        // One cell is not a block: no tab, no line break.
+        let mut ed = typed("| a | b |\n| --- | --- |\n| x | y |\n");
+        ed.goto_line(3);
+        assert!(ed.enter_table());
+        ed.set_register_for_test("春天");
+        press(&mut ed, "p");
+        assert_eq!(ed.cell_text(2, 0), "春天", "{}", ed.status());
+        // …and a paragraph with commas in it is a paragraph, not a grid.
+        ed.set_register_for_test("他說，這樣，那樣");
+        press(&mut ed, "p");
+        assert!(ed.cell_text(2, 0).contains('，'), "{}", ed.current_buffer().text());
     }
 
     #[test]
