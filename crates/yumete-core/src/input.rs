@@ -51,6 +51,9 @@ pub enum Key {
     Alt(char),
     Enter,
     Backspace,
+    /// Forward delete — the key beside Backspace on a full keyboard, and
+    /// `fn`-Backspace on this one.
+    Delete,
     Esc,
     Left,
     Right,

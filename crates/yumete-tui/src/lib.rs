@@ -919,6 +919,7 @@ fn ime_handle(
         | KeyCode::Down
         | KeyCode::Home
         | KeyCode::End
+        | KeyCode::Delete
         | KeyCode::Tab
         | KeyCode::BackTab
             if composing => {}
@@ -957,6 +958,7 @@ fn map_key(code: KeyCode, modifiers: KeyModifiers) -> Option<Key> {
         KeyCode::Char(c) => Some(Key::Char(c)),
         KeyCode::Enter => Some(Key::Enter),
         KeyCode::Backspace => Some(Key::Backspace),
+        KeyCode::Delete => Some(Key::Delete),
         KeyCode::Esc => Some(Key::Esc),
         KeyCode::Left => Some(Key::Left),
         KeyCode::Right => Some(Key::Right),

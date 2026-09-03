@@ -7270,6 +7270,9 @@ impl Editor {
                 self.insert_recording.pop();
                 self.delete_before_cursor();
             }
+            // Forward delete. It did nothing at all before — the key never
+            // reached the editor, in any mode.
+            Key::Delete => self.delete_at_cursor(),
             // `C-w` and `C-u` are in vi, in Helix, in readline and in every
             // terminal prompt a person has ever typed at, and Insert mode ate
             // both. Through an IME that mattered more than it looks: taking
@@ -7359,6 +7362,15 @@ impl Editor {
                 let at = byte(&self.command_line, self.command_caret);
                 self.command_line.insert(at, c);
                 self.command_caret += 1;
+            }
+            // Forward delete on the prompt: the character *under* the caret,
+            // and the caret stays where it is.
+            Key::Delete => {
+                if self.command_caret < len {
+                    let from = byte(&self.command_line, self.command_caret);
+                    let to = byte(&self.command_line, self.command_caret + 1);
+                    self.command_line.replace_range(from..to, "");
+                }
             }
             Key::Backspace => {
                 if self.command_caret == 0 {
@@ -8976,6 +8988,35 @@ impl Editor {
             return;
         }
         self.cursor = start;
+        self.anchor = self.cursor;
+        self.refresh_goal_column();
+    }
+
+    /// Delete the grapheme **after** the cursor (Insert-mode Delete).
+    ///
+    /// Backspace's mirror: it takes the character the cursor is sitting in
+    /// front of and leaves the cursor where it is. At the end of a line it
+    /// takes the newline, joining the line below — which is what Backspace
+    /// does at the start of one.
+    fn delete_at_cursor(&mut self) {
+        let rope = self.current_buffer().rope();
+        if self.cursor >= rope.len_chars() {
+            return;
+        }
+        let line = rope.char_to_line(self.cursor);
+        let line_end = rope.line_to_char(line) + rope.line(line).len_chars();
+        let end = match self.cursor + 1 >= line_end {
+            // At the end of the line: the newline itself.
+            true => self.cursor + 1,
+            false => motion::right(rope, self.cursor),
+        };
+        let end = end.min(rope.len_chars());
+        if end <= self.cursor {
+            return;
+        }
+        if !self.edit_remove(self.cursor..end) {
+            return;
+        }
         self.anchor = self.cursor;
         self.refresh_goal_column();
     }
@@ -14167,6 +14208,45 @@ mod tests {
         ed.execute(":search row 龜").ok();
         println!("search row:    {:.1?}  ({})", t.elapsed(), ed.status());
         std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn delete_takes_the_character_the_cursor_is_in_front_of() {
+        // The key did nothing at all before this: `KeyCode::Delete` was not in
+        // the table that turns a terminal's keys into the editor's, so it fell
+        // off the end in every mode.
+        let mut ed = Editor::new();
+        ed.current_buffer_mut().insert(0, "那年冬天\n下雪");
+        ed.on_key(Key::Char('i'));
+        ed.on_key(Key::Delete);
+        assert_eq!(ed.current_buffer().text(), "年冬天\n下雪");
+        assert_eq!(ed.cursor(), 0, "the cursor stays where it is");
+        // Backspace's mirror at the edges: at the end of a line it takes the
+        // newline, joining the line below.
+        ed.on_key(Key::Char('l'));
+        for _ in 0..3 {
+            ed.on_key(Key::Delete);
+        }
+        assert_eq!(ed.current_buffer().text(), "l\n下雪");
+        ed.on_key(Key::Delete);
+        assert_eq!(ed.current_buffer().text(), "l下雪");
+        // …and nothing at the very end of the buffer.
+        ed.on_key(Key::Esc);
+        ed.on_key(Key::Char('G'));
+        ed.on_key(Key::Char('i'));
+        let before = ed.current_buffer().text();
+        for _ in 0..5 {
+            ed.on_key(Key::Delete);
+        }
+        assert!(ed.current_buffer().text().len() <= before.len());
+
+        // On the `:` line it takes the character under the caret.
+        ed.on_key(Key::Esc);
+        ed.on_key(Key::Char(':'));
+        type_keys(&mut ed, "wq");
+        ed.on_key(Key::Left);
+        ed.on_key(Key::Delete);
+        assert_eq!(ed.prompt().map(|(_, line)| line.to_string()), Some("w".into()));
     }
 
     #[test]
