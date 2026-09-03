@@ -203,7 +203,7 @@ fn main() -> ExitCode {
         for problem in &config_problems {
             eprintln!("yumete: {problem}");
         }
-        editor.set_status(config_problems.join("; "));
+        editor.set_status(config_problems.join(&yumete_core::say!("、")));
     }
     if printing {
         preview(&editor, &config);
@@ -213,7 +213,7 @@ fn main() -> ExitCode {
     // Restoring five chapters without saying so leaves a person wondering
     // what they are looking at.
     if restored > 0 {
-        editor.set_status(format!("接着上次：開了 {restored} 個檔案"));
+        editor.set_status(yumete_core::say!("接着上次：開了 {0} 個檔案", restored));
     }
     // Recovered work outranks a config typo for the one status line there is.
     // Only the editor has one; the preview prints its own notice instead.
@@ -261,9 +261,9 @@ fn switch_scheme_at_startup(
     let ok = full.available();
     *ime = full;
     if ok {
-        format!("方案：{name}")
+        yumete_core::say!("方案：{0}", name)
     } else {
-        format!("{name} 的碼表沒有裝——`:yume scheme` 換一個")
+        yumete_core::say!("{0} 的碼表沒有裝——:yume scheme 換一個", name)
     }
 }
 

@@ -20,8 +20,8 @@
 # `[editor] language = "zh"` (the default) or `"en"`.
 
 [[message]]
-zh = "'{0}' 不像表格 — 表格是每行同樣多的欄，或者游標放在 | 表格上"
-en = "'{0}' does not look like a table — a table has the same number of fields on every line, or put the cursor on a | table"
+zh = "「{0}」不像表格——每行要有同樣多的欄，或者把光標放到 | 表格上"
+en = "'{0}' is not a table — every line needs the same columns, or put the cursor on a | table"
 
 [[message]]
 zh = "Enter 回到正文"
@@ -32,24 +32,12 @@ zh = "schema：{0}"
 en = "schema: {0}"
 
 [[message]]
-zh = "t 後面（這種表格）：o O d j k"
-en = "after t, in this kind of table: o O d j k"
-
-[[message]]
-zh = "t 後面：o O n N d D j k h l s S < = > t"
-en = "after t: o O n N d D j k h l s S < = > t"
-
-[[message]]
 zh = "{0} 個本項目的詞：{1}"
-en = "{0} words from this project: {1}"
+en = "{0} word(s) from this project: {1}"
 
 [[message]]
 zh = "{0} 個檔案裏都沒有「{1}」"
 en = "no '{1}' in {0} file(s)"
-
-[[message]]
-zh = "{0} 有比檔案新的草稿——`:recover` 打開，`:recover!` 丟掉"
-en = "{0} have drafts newer than the files — `:recover` opens them, `:recover!` throws them away"
 
 [[message]]
 zh = "{0} 處以上（不數了）——gf 開游標下那一條，:replace 全換"
@@ -69,19 +57,19 @@ en = "{0}{1}{2}"
 
 [[message]]
 zh = "{0}：{1} 行，沒查出問題"
-en = "{0}: {1} rows, nothing wrong"
+en = "{0}: {1} row(s), nothing wrong"
 
 [[message]]
 zh = "「{0}」"
 en = "'{0}'"
 
 [[message]]
-zh = "「{0}」 第 {1}/{2} 行（n N 走）"
-en = "'{0}' row {1} of {2} — n and N walk them"
+zh = "「{0}」第 {1}/{2} 行（n N 走）"
+en = "'{0}': hit {1} of {2} — n and N walk them"
 
 [[message]]
 zh = "「{0}」一處也沒換到"
-en = "'{0}' matched nothing"
+en = "'{0}': nothing replaced"
 
 [[message]]
 zh = "「{0}」不是一個字——行名是一個字"
@@ -89,7 +77,7 @@ en = "'{0}' is not one character — a row is named by one"
 
 [[message]]
 zh = "「{0}」在的那個緩衝區已經關了"
-en = "the buffer '{0}' was set in is closed"
+en = "the file '{0}' was marked in is closed"
 
 [[message]]
 zh = "「{0}」在第 {1} 行"
@@ -104,12 +92,12 @@ zh = "「{0}」：{1} 第 {2} 行"
 en = "'{0}': {1} line {2}"
 
 [[message]]
-zh = "一格之內：Enter 不進格子——Tab 走下一格"
-en = "inside a cell: Enter does not go in — Tab is the next cell"
+zh = "一格之內：Enter 不換行——Tab 走下一格"
+en = "inside a cell: Enter makes no new line — Tab goes to the next cell"
 
 [[message]]
 zh = "一格之內：先 Esc 再換行"
-en = "inside a cell: Esc first, then change row"
+en = "inside a cell: Esc first, then move up or down"
 
 [[message]]
 zh = "不是表格——先 :table"
@@ -124,8 +112,8 @@ zh = "側欄：窄"
 en = "sidebar: narrow"
 
 [[message]]
-zh = "側欄：讀得下整條標題"
-en = "sidebar: wide enough for a whole title"
+zh = "側欄：寬（讀得下整條標題）"
+en = "sidebar: wide, for a whole heading"
 
 [[message]]
 zh = "先 :grep 找一遍——換的是你已經看過的那些"
@@ -149,27 +137,27 @@ en = "the rule row is drawn, not written — t < = > sets the alignment"
 
 [[message]]
 zh = "刪了一欄"
-en = "column deleted"
+en = "deleted a column"
 
 [[message]]
 zh = "刪了一行"
-en = "row deleted"
+en = "deleted a row"
 
 [[message]]
 zh = "到頭了"
-en = "that is the end"
+en = "no further"
 
 [[message]]
-zh = "剪貼板是空的"
+zh = "剪貼簿是空的"
 en = "the clipboard is empty"
 
 [[message]]
 zh = "加了一欄"
-en = "column added"
+en = "added a column"
 
 [[message]]
 zh = "加了一行"
-en = "row added"
+en = "added a row"
 
 [[message]]
 zh = "原文：不著色"
@@ -180,7 +168,7 @@ zh = "取了 {0} 個字"
 en = "yanked {0} character(s)"
 
 [[message]]
-zh = "取了一格（{0} 字）"
+zh = "取了一格（{0} 個字）"
 en = "yanked a cell ({0} character(s))"
 
 [[message]]
@@ -220,24 +208,20 @@ zh = "存了 {0} 個"
 en = "saved {0} file(s)"
 
 [[message]]
-zh = "存了 {0} 個；{1} 個沒存：{2}"
-en = "saved {0}; {1} not saved: {2}"
-
-[[message]]
 zh = "密排：一縱兩格，無注音、無旁置、無刻度"
-en = "packed: two cells to a 縱, no readings, no hung marks, no ticks"
+en = "dense: two squares to a 縱, no readings, no hung marks, no ticks"
 
 [[message]]
 zh = "密排：關"
-en = "packed: off"
+en = "dense: off"
 
 [[message]]
 zh = "寫到 {0} 欄寬"
-en = "writing to {0} columns"
+en = "measure: {0} columns"
 
 [[message]]
-zh = "寫多寬：跟着窗口"
-en = "how wide: whatever the window gives"
+zh = "寫到窗口寬"
+en = "measure: whatever the window gives"
 
 [[message]]
 zh = "寫好了 {0}"
@@ -261,22 +245,22 @@ en = "already at the oldest change"
 
 [[message]]
 zh = "所見即所得：標記只在光標那一處展開"
-en = "所見即所得: the markup is shown only where the cursor is"
+en = "WYSIWYG: the markup is shown only where the cursor is"
 
 [[message]]
 zh = "打不開「{0}」：{1}"
 en = "cannot open '{0}': {1}"
 
 [[message]]
-zh = "打開了 {0} 份沒存的草稿——`:w <名字>` 留下它們"
-en = "opened {0} unsaved draft(s) — `:w <name>` keeps them"
+zh = "打開了 {0} 份沒存的草稿——:w <名字> 留下它們"
+en = "opened {0} unsaved draft(s) — :w <name> keeps them"
 
 [[message]]
 zh = "找不到：{0}"
 en = "not found: {0}"
 
 [[message]]
-zh = "把游標放進注音裏，或者選中要注音的字"
+zh = "把光標放進注音裏，或者選中要注音的字"
 en = "put the cursor in a reading, or select what to annotate"
 
 [[message]]
@@ -301,7 +285,7 @@ en = "layout: {0}"
 
 [[message]]
 zh = "換了 {0} 處"
-en = "changed {0}"
+en = "changed {0} hit(s)"
 
 [[message]]
 zh = "換掉了 {0} 個字"
@@ -309,7 +293,7 @@ en = "replaced {0} character(s)"
 
 [[message]]
 zh = "換掉了一格"
-en = "cell replaced"
+en = "replaced the cell"
 
 [[message]]
 zh = "搜索：{0}"
@@ -317,35 +301,35 @@ en = "search: {0}"
 
 [[message]]
 zh = "搶救稿丟掉了"
-en = "the recovered draft was thrown away"
+en = "threw the draft away"
 
 [[message]]
-zh = "搶救稿開好了 —— :w 留下它，u 回到原來的"
-en = "the recovered draft is open — :w keeps it, u goes back"
+zh = "搶救稿開好了——:w 留下它，u 回到原來那份"
+en = "the draft is open — :w keeps it, u goes back"
 
 [[message]]
-zh = "有 {0} 份沒存的草稿——`:recover` 打開"
-en = "{0} unsaved draft(s) — `:recover` opens them"
+zh = "有 {0} 份沒存的草稿——:recover 打開"
+en = "{0} unsaved draft(s) — :recover opens them"
 
 [[message]]
 zh = "查出 {0} 條——gf 跳到那一行"
-en = "{0} finding(s) — gf goes to the row"
+en = "{0} problem(s) — gf goes to the row"
 
 [[message]]
-zh = "格與格之間的分隔不能刪掉"
-en = "the boundary between two cells cannot be deleted"
+zh = "格與格之間的分隔符刪不掉"
+en = "the divider between cells cannot be deleted"
 
 [[message]]
 zh = "格首：再刪就把兩格併成一格了"
 en = "start of a cell: one more would join it to the one before"
 
 [[message]]
-zh = "標題行上面不能插行——加在它下面了"
+zh = "標題行上面加不了——加在它下面了"
 en = "nothing goes above the header — added it below instead"
 
 [[message]]
-zh = "標題行不能刪：它是欄名"
-en = "the header is not a row you may delete: it names the columns"
+zh = "標題行不能刪：欄名寫在那裏"
+en = "the header names the columns — it cannot be deleted"
 
 [[message]]
 zh = "標點旁置：開"
@@ -364,28 +348,28 @@ zh = "段組：一段（整頁一縱到底）"
 en = "bands: one — a 縱 runs the whole page"
 
 [[message]]
-zh = "沒幾行可排"
-en = "not enough rows to sort"
+zh = "行太少，排不了"
+en = "too few rows to sort"
 
 [[message]]
-zh = "沒有「{0}」這種格式 —— html 或 typst"
+zh = "沒有「{0}」這種格式——html 或 typst"
 en = "no such format as '{0}' — html or typst"
 
 [[message]]
-zh = "沒有「{0}」這種語法 —— markdown 或 typst"
+zh = "沒有「{0}」這種語法——markdown 或 typst"
 en = "no such markup as '{0}' — markdown or typst"
 
 [[message]]
-zh = "沒有分隔行，無從對齊"
+zh = "沒有分隔行，對不了齊"
 en = "no rule row, so there is no alignment to set"
 
 [[message]]
-zh = "沒有匹配的"
+zh = "沒有符合的"
 en = "nothing matched"
 
 [[message]]
-zh = "沒有取過東西"
-en = "nothing has been yanked"
+zh = "還沒有取過東西"
+en = "nothing has been yanked yet"
 
 [[message]]
 zh = "沒有哪一行的拆分用到「{0}」"
@@ -397,19 +381,19 @@ en = "no .yumete/words.txt — this project's own words go there"
 
 [[message]]
 zh = "沒有更早的位置了"
-en = "no earlier place"
+en = "no earlier jump"
 
 [[message]]
 zh = "沒有更晚的位置了"
-en = "no later place"
+en = "no later jump"
 
 [[message]]
-zh = "沒有檔名，就沒有 schema 可以照——或者把游標放到 | 表格上"
+zh = "沒有檔名，就沒有 schema 可以照——或者把光標放到 | 表格上"
 en = "no file name, so no schema to read it by — or put the cursor on a | table"
 
 [[message]]
-zh = "沒有留搶救稿 —— {0}"
-en = "no recovery copy kept — {0}"
+zh = "沒有留搶救稿——{0}"
+en = "no draft kept — {0}"
 
 [[message]]
 zh = "沒有草稿"
@@ -425,11 +409,11 @@ en = "nothing selected"
 
 [[message]]
 zh = "注音去掉了"
-en = "reading removed"
+en = "removed the reading"
 
 [[message]]
 zh = "注音改寫成 {0} 了"
-en = "readings rewritten as {0}"
+en = "rewrote the readings as {0}"
 
 [[message]]
 zh = "注音：{0}"
@@ -444,36 +428,24 @@ zh = "注音：排 {0}"
 en = "readings: laying out {0}"
 
 [[message]]
-zh = "清空了一格（{0} 字）"
+zh = "清空了一格（{0} 個字）"
 en = "cleared a cell ({0} character(s))"
 
 [[message]]
-zh = "游標不在表格裏"
+zh = "光標不在表格裏"
 en = "the cursor is not in a table"
 
 [[message]]
-zh = "照「{0}」{1}排（數字當數字比，其餘按碼位）"
-en = "sorted {1} by '{0}' — numbers compare as numbers, everything else by code point"
-
-[[message]]
-zh = "空的模式"
-en = "empty pattern"
+zh = "模式是空的"
+en = "the pattern is empty"
 
 [[message]]
 zh = "著色：標記留在畫面上"
 en = "coloured: the markup stays on the page"
 
 [[message]]
-zh = "表格是橫排的；先 `:table off`"
-en = "a grid is read across; `:table off` first"
-
-[[message]]
-zh = "表格：{0} 欄{1}"
-en = "table: {0} columns{1}"
-
-[[message]]
-zh = "表格：{0} 欄，{1}{2}"
-en = "table: {0} columns, {1}{2}"
+zh = "表格是橫排的——先 :table off"
+en = "a table is always horizontal — :table off first"
 
 [[message]]
 zh = "表格：關"
@@ -492,7 +464,7 @@ zh = "表裏沒有這些字：{0}"
 en = "not in this table: {0}"
 
 [[message]]
-zh = "複製了 {0} 個字 —— 已經交給系統剪貼板"
+zh = "複製了 {0} 個字到系統剪貼簿"
 en = "copied {0} character(s) to the system clipboard"
 
 [[message]]
@@ -540,16 +512,12 @@ zh = "跳轉表 {0}/{1}"
 en = "jump list {0}/{1}"
 
 [[message]]
-zh = "這一格不指向任何一行"
-en = "this cell points at no row"
+zh = "這一格沒有指着別的行"
+en = "this cell names no row"
 
 [[message]]
 zh = "這一格是空的"
 en = "this cell is empty"
-
-[[message]]
-zh = "這一欄：{0}"
-en = "this column: {0}"
 
 [[message]]
 zh = "這一行上沒有「{0}」"
@@ -564,16 +532,16 @@ zh = "這個檔案沒有標題"
 en = "no headings in this file"
 
 [[message]]
-zh = "這個檔案沒有草稿"
+zh = "這個檔案沒有搶救稿"
 en = "no draft for this file"
 
 [[message]]
-zh = "這張表沒有說哪些欄是拆分"
-en = "this table does not say which columns hold the decomposition"
+zh = "這張表沒說哪些是拆分欄"
+en = "this table does not name its decomposition columns"
 
 [[message]]
 zh = "這張表沒說哪一欄是行名（schema 的 key）"
-en = "this table does not say which column names a row (the schema's key)"
+en = "this table does not name a key column (the schema's key)"
 
 [[message]]
 zh = "這是代碼塊裏的表格——那是引文，不是表格"
@@ -581,7 +549,7 @@ en = "that table is inside a code block — a quotation, not a table"
 
 [[message]]
 zh = "這條註沒有寫在別處"
-en = "this note is not written anywhere else"
+en = "this note points nowhere else"
 
 [[message]]
 zh = "這裏沒有檔案"
@@ -596,7 +564,7 @@ zh = "還沒有取過東西"
 en = "nothing has been yanked yet"
 
 [[message]]
-zh = "還沒有可以重複的改動"
+zh = "還沒有改動可以重複"
 en = "no change to repeat yet"
 
 [[message]]
@@ -604,7 +572,7 @@ zh = "那個檔案已經關了"
 en = "that file is closed"
 
 [[message]]
-zh = "重排好了"
+zh = "對齊好了"
 en = "lined up"
 
 [[message]]
@@ -616,7 +584,7 @@ zh = "錄了 {0} 個鍵"
 en = "recorded {0} key(s)"
 
 [[message]]
-zh = "錄製中…"
+zh = "正在錄…"
 en = "recording…"
 
 [[message]]
@@ -624,12 +592,12 @@ zh = "關了"
 en = "closed"
 
 [[message]]
-zh = "關了 {0} —— 現在是 {1} [{2}/{3}]"
+zh = "關了 {0}——現在是 {1} [{2}/{3}]"
 en = "closed {0} — now {1} [{2}/{3}]"
 
 [[message]]
 zh = "首行縮進：{0} 格"
-en = "first-line indent: {0}"
+en = "first-line indent: {0} squares"
 
 [[message]]
 zh = "首行縮進：關"
@@ -675,8 +643,8 @@ zh = "之內"
 en = "inside"
 
 [[message]]
-zh = "併行"
-en = "join"
+zh = "併下一行"
+en = "join with the line below"
 
 [[message]]
 zh = "側欄"
@@ -703,7 +671,7 @@ zh = "去掉"
 en = "take off"
 
 [[message]]
-zh = "取格/行"
+zh = "取格／行"
 en = "yank cell / row"
 
 [[message]]
@@ -712,14 +680,14 @@ en = "cancel"
 
 [[message]]
 zh = "叫什麼名字"
-en = "call it what"
+en = "name it"
 
 [[message]]
 zh = "哪一個"
 en = "which one"
 
 [[message]]
-zh = "回正常"
+zh = "回 Normal"
 en = "back to Normal"
 
 [[message]]
@@ -744,7 +712,7 @@ en = "type a character"
 
 [[message]]
 zh = "打一個字蓋掉選區"
-en = "type a character to write over the selection"
+en = "type a character to write over it"
 
 [[message]]
 zh = "打一種括號"
@@ -800,7 +768,7 @@ en = "keep it"
 
 [[message]]
 zh = "收起"
-en = "close"
+en = "collapse"
 
 [[message]]
 zh = "改按字"
@@ -832,7 +800,7 @@ en = "reading"
 
 [[message]]
 zh = "照這欄順排／倒排"
-en = "sort by this column, up / down"
+en = "sort by this column up / down"
 
 [[message]]
 zh = "移動"
@@ -843,7 +811,7 @@ zh = "蓋掉"
 en = "write over"
 
 [[message]]
-zh = "行首行尾"
+zh = "行首／行尾"
 en = "line start / end"
 
 [[message]]
@@ -851,7 +819,7 @@ zh = "表格"
 en = "table"
 
 [[message]]
-zh = "表格·字"
+zh = "表格 · 字"
 en = "table · character"
 
 [[message]]
@@ -896,7 +864,7 @@ en = "line it up again"
 
 [[message]]
 zh = "重讀"
-en = "read again"
+en = "re-read"
 
 [[message]]
 zh = "開這個檔"
@@ -907,7 +875,7 @@ zh = "關"
 en = "close"
 
 [[message]]
-zh = "首個非空白"
+zh = "第一個非空白"
 en = "first non-blank"
 
 
@@ -944,4 +912,124 @@ en = "pasted {0}×{1} cells"
 [[message]]
 zh = "貼不下：這張表只有 {0} 欄"
 en = "does not fit: this table has {0} columns"
+
+[[message]]
+zh = "取了一欄「{0}」（{1} 格）"
+en = "yanked the '{0}' column ({1} cells)"
+
+[[message]]
+zh = "貼了一欄（{0} 格）"
+en = "pasted a column ({0} cells)"
+
+[[message]]
+zh = "這一欄是空的"
+en = "this column is empty"
+
+[[message]]
+zh = "t 後面（這種表格）：o O d j k y p"
+en = "after t, in this kind of table: o O d j k y p"
+
+[[message]]
+zh = "t 後面：o O n N d D j k h l y p s S < = > t"
+en = "after t: o O n N d D j k h l y p s S < = > t"
+
+[[message]]
+zh = "取這欄／貼一欄"
+en = "yank this column / paste a column"
+
+[[message]]
+zh = "j k 移動 · l 進入 · h 收起 · Tab 換視圖 · w 寬窄 · R 重讀 · C-w/Esc 回正文 · q 關"
+en = "j k move · l into · h collapse · Tab other view · w wide/narrow · R re-read · C-w/Esc back to the text · q close"
+
+[[message]]
+zh = "{0}  {1} 字  {2} 字符  {3} 段"
+en = "{0}  {1} 字  {2} characters  {3} paragraphs"
+
+[[message]]
+zh = "{0} 個檔案，{1} 處——都還沒存：:wa 存全部，u 各自撤銷"
+en = "{0} file(s), {1} hit(s) — none saved yet: :wa saves them all, u takes any of them back"
+
+[[message]]
+zh = "{0} 有比檔案新的搶救稿——:recover 打開，:recover! 丟掉"
+en = "{0}: draft(s) newer than the file(s) — :recover opens, :recover! throws away"
+
+[[message]]
+zh = "{0} 的碼表沒有裝——:yume scheme 換一個"
+en = "{0}'s table is not installed — :yume scheme picks another"
+
+[[message]]
+zh = "、"
+en = ", "
+
+[[message]]
+zh = "全篇"
+en = "the whole file"
+
+[[message]]
+zh = "字"
+en = "character"
+
+[[message]]
+zh = "存了 {0} 個檔案；{1} 個沒存：{2}"
+en = "saved {0} file(s); {1} not saved: {2}"
+
+[[message]]
+zh = "接着上次：開了 {0} 個檔案"
+en = "picking up where you left off: opened {0} file(s)"
+
+[[message]]
+zh = "方案：{0}"
+en = "scheme: {0}"
+
+[[message]]
+zh = "格"
+en = "cell"
+
+[[message]]
+zh = "照 {0}"
+en = "by {0}"
+
+[[message]]
+zh = "照「{0}」倒排（數字當數字比，其餘按碼位）"
+en = "sorted by '{0}', down — numbers as numbers, everything else by code point"
+
+[[message]]
+zh = "照「{0}」順排（數字當數字比，其餘按碼位）"
+en = "sorted by '{0}', up — numbers as numbers, everything else by code point"
+
+[[message]]
+zh = "照首行"
+en = "by its own header row"
+
+[[message]]
+zh = "表格：{0} 欄"
+en = "table: {0} columns"
+
+[[message]]
+zh = "表格：{0} 欄（補上了分隔行）"
+en = "table: {0} columns — added the rule row"
+
+[[message]]
+zh = "表格：{0} 欄，{1}"
+en = "table: {0} columns, {1}"
+
+[[message]]
+zh = "表格：{0} 欄，{1}（已轉橫排）"
+en = "table: {0} columns, {1} — set horizontally"
+
+[[message]]
+zh = "這一欄：居中"
+en = "this column: centred"
+
+[[message]]
+zh = "這一欄：靠右"
+en = "this column: right"
+
+[[message]]
+zh = "這一欄：靠左"
+en = "this column: left"
+
+[[message]]
+zh = "選區"
+en = "the selection"
 
