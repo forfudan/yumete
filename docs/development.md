@@ -791,6 +791,12 @@ and how far each is implemented. Not everything is needed yet; this is the map
 for prioritizing. **Done** = implemented; **Pn** = planned in that phase; **—** =
 deferred.
 
+> Brought up to date 2026-09-04. It had a dozen keys marked `P4` that had been
+> shipped for weeks — which is how a reviewer comes to believe an editor is
+> less than it is. Where a key differs from Helix on purpose, the yumete
+> spelling is the one in the table: `J` is half a page because this is a book,
+> so join is `gJ`; `m` opens match mode, so a mark is `M`.
+
 ### Movement
 
 | Keys                    | Action                                       | Status |
@@ -799,15 +805,17 @@ deferred.
 | `w` `b` `e`             | next / prev word start, word end (CJK words) | Done   |
 | `W` `B` `E`             | WORD variants (whitespace-delimited)         | Done   |
 | `f` `t` `F` `T` + char  | find / till a character, forward / backward  | Done   |
-| `Home` `End`            | line start / end                             | P4     |
+| `Home` `End`            | line start / end                             | Done   |
 | `gg`                    | goto file start (or line N with a count)     | Done   |
 | `ge`                    | goto last line                               | Done   |
 | `gh` `gl`               | goto line start / end                        | Done   |
 | `gs`                    | goto first non-blank character               | Done   |
-| `gt` `gc` `gb`          | goto screen top / center / bottom            | P4     |
-| `Ctrl-u` `Ctrl-d`       | scroll half a page up / down                 | P4     |
-| `Ctrl-b` `Ctrl-f`       | page up / down                               | P4     |
-| `%`                     | match / select the bracket pair              | P4     |
+| `gt` `gc` `gb`          | goto screen top / center / bottom            | —      |
+| `Ctrl-u` `Ctrl-d`       | scroll half a page up / down                 | Done   |
+| `Ctrl-b` `Ctrl-f`       | page up / down                               | Done   |
+| `mm`                    | match / select the bracket pair (`m` mode)   | Done   |
+| `{` `}` `(` `)`         | paragraph / sentence — yumete's own          | Done   |
+| `M` `'`                 | set a mark / go to it — `m` is match mode    | Done   |
 
 ### Selection
 
@@ -816,10 +824,10 @@ deferred.
 | `x`     | select the current line (extend on repeat) | Done   |
 | `v`     | enter select (extend) mode                 | Done   |
 | `;`     | collapse the selection to the cursor       | Done   |
-| `,`     | keep only the primary selection            | P4     |
-| `Alt-;` | flip the selection's anchor and head       | P4     |
-| `%`     | select the whole file                      | P4     |
-| `s` `S` | select / split on a regex within selection | P4     |
+| `,`     | keep only the primary selection            | —      |
+| `Alt-;` | flip the selection's anchor and head       | Done   |
+| `%`     | select the whole file                      | Done   |
+| `s` `S` | select / split on a regex within selection | — (needs multi-cursor) |
 
 ### Changes
 
@@ -832,11 +840,12 @@ deferred.
 | `o` `O`     | open a line below / above              | Done   |
 | `u` `U`     | undo / redo                            | Done   |
 | `y` `p` `P` | yank / paste after / before            | Done   |
-| `r` `R`     | replace a character / with the yank    | P4     |
-| `~`         | switch case                            | P4     |
-| `J`         | join lines                             | P4     |
-| `.`         | repeat the last change                 | P4     |
-| `>` `<` `=` | indent / unindent / format             | P4–P5  |
+| `r` `R`     | replace a character / with the yank    | Done   |
+| `~` `` ` `` | switch case / lowercase (`A-``` uppercases) | Done |
+| `gJ`        | join lines (`J` is half a page — this is a book) | Done |
+| `.`         | repeat the last change                 | Done   |
+| `>` `<`     | indent / unindent                      | Done   |
+| `=`         | format                                 | —      |
 
 ### Search & command
 
@@ -844,9 +853,13 @@ deferred.
 | ------- | -------------------------------- | -------- |
 | `/` `?` | search forward / backward        | Done     |
 | `n` `N` | next / previous match            | Done     |
-| `*`     | search for the current selection | P4       |
+| `*`     | search for the current selection | Done     |
 | `:`     | command line (`:w` `:q` `:s` …)  | Done     |
-| `Space` | which-key / help overlay         | P3 (#38) |
+| `Space` | the menu — files, buffers, search, the clipboard, 詳情 | Done |
+| `q` `Q` | record a macro / play the last one back | Done  |
+| `\"a`    | use register `a` for the next yank / delete / paste | Done |
+| `C-a` `C-x` | increment / decrement the number at the cursor | Done |
+| `C-o` `C-i` | the jump list, back and forward  | Done     |
 
 ### CJK IME hotkeys (yumete-specific — not in Helix)
 
