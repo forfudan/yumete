@@ -1149,7 +1149,12 @@ fn page_areas(editor: &Editor, config: &Config, area: Rect) -> Areas {
             WritingLayout::Vertical if !editor.table().is_some_and(|t| t.is_grid()) => {
                 let half = text.width.saturating_sub(1) / 2;
                 let rule = Rect::new(text.x + half, text.y, 1.min(text.width), text.height);
-                let right = Rect::new(text.x + half + 1, text.y, text.width - half - 1, text.height);
+                let right = Rect::new(
+                    text.x + half + 1,
+                    text.y,
+                    text.width.saturating_sub(half + 1),
+                    text.height,
+                );
                 let left = Rect::new(text.x, text.y, half, text.height);
                 // 縱 fill from the right edge, so the page you were reading
                 // keeps the right and the new one opens to the left of it.
