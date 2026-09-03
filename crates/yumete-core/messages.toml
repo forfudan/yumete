@@ -543,9 +543,6 @@ en = "this note points nowhere else"
 zh = "這裏沒有檔案"
 en = "no files here"
 
-[[message]]
-zh = "這裏沒有註"
-en = "no note here"
 
 [[message]]
 zh = "還沒有取過東西"
@@ -1583,3 +1580,11 @@ en = "the detail panel"
 [[message]]
 zh = "貼上：取過的東西"
 en = "paste: what has been taken"
+
+[[message]]
+zh = "只有這一處：{0}"
+en = "only here: {0}"
+
+[[message]]
+zh = "這裏沒有字可以找"
+en = "nothing here to look for"
