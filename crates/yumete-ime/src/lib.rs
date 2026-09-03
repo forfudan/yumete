@@ -689,12 +689,12 @@ fn load_data_file(engine: &mut Engine, dirs: &[PathBuf], file: &DataFile) -> boo
             }
             engine.set_symbol_table(table);
         }
-        DataKind::PinyinTable => {
+        DataKind::Reading => {
             let mut fluency = FluencyTable::new();
             if fluency.load_binary(p).is_err() {
                 return false;
             }
-            engine.set_pinyin_table(Arc::new(fluency));
+            engine.set_reading_table(Arc::new(fluency));
         }
         DataKind::Weights => {
             let mut unigram = UnigramTable::new();
@@ -789,7 +789,7 @@ fn build_engine(scheme: Scheme, dirs: &[PathBuf]) -> (Engine, bool) {
         // 拼音 decodes through the shared 音節表; the shape schemes need their
         // own 碼表.
         let essential = match scheme {
-            Scheme::Pinyin => DataKind::PinyinTable,
+            Scheme::Pinyin => DataKind::Reading,
             _ => DataKind::Table,
         };
         if loaded && file.kind == essential {

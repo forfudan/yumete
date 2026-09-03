@@ -287,6 +287,11 @@ pub enum Preview {
         path: PathBuf,
         syntax: crate::syntax::Syntax,
     },
+    /// A typesetter is already running: open its page again rather than start a
+    /// second one. `:preview` twice used to kill the server and start another,
+    /// which is a fresh compile of the whole book to answer 「where was that
+    /// page again?」.
+    Show,
     Stop,
 }
 
@@ -622,9 +627,19 @@ pub struct Editor {
     /// How much of the result is shown: the source, the source coloured, or
     /// the page with the markup taken off it.
     render: Render,
+    /// Whether the move that just happened was a **jump** — a search hit, a
+    /// mark, `gg`, `:42` — rather than a step. The page centres a jump.
+    jumped: bool,
     /// A pending `:preview`, waiting for the front end — starting a typesetter
     /// is running a program, which only the front end can do.
     preview_request: Option<Preview>,
+    /// Where the typesetter that **is running** put its page.
+    ///
+    /// A preview server is a thing with a life of its own: it holds a port and
+    /// a few hundred megabytes for as long as it runs. The editor knows it is
+    /// there so it can say so on the status bar, hand the address back when
+    /// asked, and refuse to start a second one.
+    preview_at: Option<String>,
     /// A pending `:sh` or `:!`, waiting for the front end.
     shell_request: Option<Shell>,
     /// The grid this file is being read as, when a schema says it is a table.
@@ -911,7 +926,9 @@ impl Editor {
             clipboard_request: None,
             clipboard_read: None,
             render: Render::On,
+            jumped: false,
             preview_request: None,
+            preview_at: None,
             shell_request: None,
             table: None,
             show_detail: true,
@@ -2426,6 +2443,12 @@ impl Editor {
                 Ok(CommandOutcome::Continue)
             }
             Command::SetPreview(on) => {
+                // Already running: the question 「where is it?」 is the one a
+                // writer actually asks, and the address was said once and lost.
+                if on && self.preview_at.is_some() {
+                    self.preview_request = Some(Preview::Show);
+                    return Ok(CommandOutcome::Continue);
+                }
                 self.preview_request = Some(if on {
                     match self.current_buffer().path() {
                         Some(path) => Preview::Start {
@@ -4238,6 +4261,24 @@ impl Editor {
     }
 
     /// A typesetter the front end should start or stop.
+    /// Whether the move that just happened was a jump, so the page can centre
+    /// what it landed on rather than nudge it in from an edge.
+    pub fn jumped(&self) -> bool {
+        self.jumped
+    }
+
+    /// Say where the running typesetter's page is — or that there is none.
+    ///
+    /// The front end owns the process, so it is the front end that knows.
+    pub fn set_preview_at(&mut self, url: Option<String>) {
+        self.preview_at = url;
+    }
+
+    /// The running typesetter's address, for the status bar and for `:preview`.
+    pub fn preview_at(&self) -> Option<&str> {
+        self.preview_at.as_deref()
+    }
+
     pub fn take_preview_request(&mut self) -> Option<Preview> {
         self.preview_request.take()
     }
@@ -7012,6 +7053,8 @@ impl Editor {
         }
         // Watch this command, so `.` can play it back. A command begins in
         // Normal mode with nothing pending; it ends when it is back there.
+        // A key describes one move, and「was that a jump?」is about *this* one.
+        self.jumped = false;
         let watching = !self.repeating_edit;
         if watching {
             // A count is part of the command it prefixes, not a command: `3>`
@@ -8346,6 +8389,12 @@ impl Editor {
     /// and coming back meant remembering 螭 and searching for it. The footnote
     /// panel had its own private way back; this is that idea, generalised.
     fn remember_jump(&mut self) {
+        // **This move was a jump**, which is what the page needs to know to
+        // decide where to put the cursor: a jump lands in the middle, because
+        // a search hit `scrolloff` from an edge shows nothing on one side of
+        // the thing that was looked for. Cleared on the next key, so it
+        // describes the move that just happened and nothing after it.
+        self.jumped = true;
         let here = (self.current_buffer().id(), self.cursor);
         // Walking away from a place already noted adds nothing.
         if self.jumps.last() == Some(&here) {
@@ -14677,6 +14726,38 @@ mod tests {
         ed.on_key(Key::Delete);
         assert_eq!(ed.picker().map(|p| p.query()), Some("c"));
         assert_eq!(ed.picker().map(|p| p.caret()), Some(0));
+    }
+
+    /// A preview server is a running thing: `:preview` while one is up asks
+    /// *where* it is, not for a second one.
+    #[test]
+    fn a_second_preview_asks_where_the_first_one_is() {
+        let dir = std::env::temp_dir().join(format!("yumete-prev-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let book = dir.join("book.typ");
+        std::fs::write(&book, "= 第一章\n").unwrap();
+
+        let mut ed = Editor::new();
+        ed.open_file(&book).unwrap();
+        ed.execute(":preview").unwrap();
+        assert!(
+            matches!(ed.take_preview_request(), Some(Preview::Start { .. })),
+            "the first one starts a typesetter"
+        );
+        // The front end says where it put the page.
+        ed.set_preview_at(Some("http://127.0.0.1:23625".to_string()));
+        assert_eq!(ed.preview_at(), Some("http://127.0.0.1:23625"));
+
+        ed.execute(":preview").unwrap();
+        assert!(
+            matches!(ed.take_preview_request(), Some(Preview::Show)),
+            "the second one asks for the address, not for another server"
+        );
+
+        ed.execute(":preview off").unwrap();
+        assert!(matches!(ed.take_preview_request(), Some(Preview::Stop)));
+        std::fs::remove_dir_all(&dir).ok();
     }
 
     #[test]
