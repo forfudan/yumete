@@ -685,21 +685,27 @@ dep and ship the tarballs §5.3 already designs. **high**
 - ~~`C-o` does nothing after `gg`, `ge` or a search~~ — all three leave a way
   back now, which is what `remember_jump`'s own doc comment always claimed.
 
-### 7 · A hundred chapters
+### 7 · A hundred chapters — **done**
 
-- **Past ~8 open files nothing says which one you are in**: the tab bar never
-  scrolls to the current tab, and `[n/m]` is suppressed whenever the tab bar is
-  showing. With 122 buffers neither says it. **high**
-- **A per-project word list.** 阿寧 — the name on every page — segments as
-  `[阿][寧]`. The fallback chain already reads `segmentation.txt` from the data
-  dir; `.yumete/words.txt` from the project, merged in, is the cheapest large
-  win on the list. **high**
-- **`:buffer list` writes 1783 characters into a one-line status bar** with 122
-  buffers open. It should open the picker `Space b` already opens. **medium**
-- **`:grep` searches your own build output** — it found hits in the `.html`
-  `:export` had just written. **medium**
-- **No session (#43)**: five `:open`s every morning. **medium**
-- **No marks (#45).** The jump list half was built; marks were not. **medium**
+- ~~Past ~8 open files nothing says which one you are in.~~ The tab bar scrolls
+  to the file you are in (widening leftward from it, the rule the table's
+  columns follow), and `[n/m]` comes back whenever the bar is not showing all
+  of them — it used to be suppressed *because* the bar was up.
+- ~~A per-project word list.~~ `.yumete/words.txt`, found by walking up from
+  the file being edited, `:words` to reload. It **layers over** whatever
+  segmenter is in force rather than replacing it: a run of adjacent ranges that
+  spells a project word becomes one, longest match first.
+- ~~`:buffer list` writes 1783 characters into a one-line status bar.~~ It
+  opens the picker, which is the same list and searchable.
+- ~~`:grep` searches your own build output.~~ `.html`, `.pdf`, `.epub`, `.docx`
+  are skipped: the manuscript's own words are *in* the export, so every hit was
+  found twice, the second time in a file that cannot be edited.
+- ~~No session (#43).~~ `yumete` with no file named opens what was open last
+  time, each at the line it was left on, and says so. Kept in the data
+  directory keyed by the working directory, so nothing is left in the project.
+- ~~No marks (#45).~~ `M a` names this place, `' a` goes back to it across
+  files, and `C-o` returns — `M`/`'` rather than vi's `m`/`'` because `m` here
+  opens match mode.
 
 ### 8 · Export and preview — **done**
 
