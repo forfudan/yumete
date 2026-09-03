@@ -4076,6 +4076,104 @@ mod tests {
         assert_eq!(row_text(&buffer, 1).trim_end(), "2");
     }
 
+    /// A book of roughly `chars` 漢字, in paragraphs with a blank line between.
+    #[cfg(test)]
+    fn a_book_of(chars: usize) -> String {
+        let pool: Vec<char> = (0x4E00u32..0x9FA5).filter_map(char::from_u32).collect();
+        let mut out = String::with_capacity(chars * 4);
+        let mut seed = 0x2545F491_4F6CDD1Du64;
+        let mut next = move || {
+            seed ^= seed << 13;
+            seed ^= seed >> 7;
+            seed ^= seed << 17;
+            seed
+        };
+        let mut written = 0usize;
+        while written < chars {
+            let want = 40 + (next() % 360) as usize;
+            for i in 0..want {
+                out.push(pool[(next() % pool.len() as u64) as usize]);
+                if i % 17 == 16 {
+                    out.push('。');
+                }
+            }
+            out.push_str("\n\n");
+            written += want;
+        }
+        out
+    }
+
+    /// How long a book takes to open, and to draw. A measurement, not an
+    /// assertion — run it with
+    /// `cargo test -p yumete-tui --release opening_a_book -- --ignored --nocapture`.
+    #[test]
+    #[ignore]
+    fn what_a_frame_costs() {
+        use std::time::Instant;
+        // **The input method is built once**, as the real editor builds it —
+        // `no_ime()` loads 靈明's built-in 碼表, and a harness that builds one
+        // per frame measures the table and not the page.
+        let ime = no_ime();
+        let config = Config::default();
+        let frame = |editor: &mut Editor, n: u32| {
+            editor.set_wrap_width(100 - 4);
+            let t = Instant::now();
+            for _ in 0..n {
+                let _ = render_with(editor, &config, &ime, 100, 40);
+            }
+            t.elapsed() / n
+        };
+        let mut editor = editor_with("那年冬天");
+        println!("empty page: {:.2?} a frame", frame(&mut editor, 200));
+        let mut editor = Editor::new();
+        editor.current_buffer_mut().insert(0, &a_book_of(20_000));
+        println!("a book:     {:.2?} a frame", frame(&mut editor, 200));
+        editor.set_segmentation_visible(true);
+        println!("…segmented: {:.2?} a frame", frame(&mut editor, 200));
+        editor.set_indent(2);
+        println!("…indented:  {:.2?} a frame", frame(&mut editor, 200));
+    }
+
+    #[test]
+    #[ignore]
+    fn opening_a_book_of_ten_million_characters() {
+        use std::time::Instant;
+        println!("{:>10}  {:>10}  {:>12}  {:>12}  {:>10}", "字", "open", "first frame", "40 × j", "G");
+        for chars in [10_000usize, 100_000, 1_000_000, 10_000_000] {
+            let dir = std::env::temp_dir().join(format!("yumete-open-{chars}"));
+            std::fs::create_dir_all(&dir).unwrap();
+            let path = dir.join("book.txt");
+            std::fs::write(&path, a_book_of(chars)).unwrap();
+
+            let mut editor = Editor::new();
+            let t = Instant::now();
+            editor.open_file(path.to_str().unwrap()).unwrap();
+            let open = t.elapsed();
+
+            let config = Config::default();
+            let ime = no_ime();
+            editor.set_wrap_width(96);
+            let t = Instant::now();
+            let _ = render_with(&editor, &config, &ime, 100, 40);
+            let first = t.elapsed();
+
+            let t = Instant::now();
+            for _ in 0..40 {
+                editor.on_key(Key::Char('j'));
+                let _ = render_with(&editor, &config, &ime, 100, 40);
+            }
+            let scrolling = t.elapsed();
+
+            let t = Instant::now();
+            editor.on_key(Key::Char('G'));
+            let _ = render_with(&editor, &config, &ime, 100, 40);
+            let end = t.elapsed();
+
+            println!("{chars:>10}  {open:>10.1?}  {first:>12.1?}  {scrolling:>12.1?}  {end:>10.1?}");
+            std::fs::remove_dir_all(&dir).ok();
+        }
+    }
+
     #[test]
     fn insert_shows_the_paragraph_as_the_file_has_it() {
         // 所見即所得's bargain, one construct larger: what is being typed into
