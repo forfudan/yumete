@@ -10,7 +10,7 @@ to grow into a full editor.
 
 > **The terminal is the product.** This header used to say the terminal target
 > was on hold and the work had moved to a web frontend; §10 still argues that
-> case. It is out of date — features #96–#142 shipped in the TUI, and a reviewer
+> case. It is out of date — features #96–#150 shipped in the TUI, and a reviewer
 > reading that header reasonably concluded the project was dead. §10 is kept as
 > the record of an option that was considered and not taken.
 
@@ -339,6 +339,14 @@ Phases are ordered by priority, most writer-critical first:
 | 140 | **An undo point has to be earned**         | core   | P1    | announced on `snapshot`, kept on the first edit | Done |
 | 141 | **A crash copy for a buffer with no file**  | both   | P2    | in the data dir; `:recover` is what finds them | Done |
 | 142 | **Markdown `|` tables as a grid**           | both   | P1    | the cell model over a *region*; aligned by East-Asian width, in the file | Done |
+| 143 | **Paragraph and sentence motions**          | core   | P1    | `{}`/`()`; a paragraph is a logical line, and `j` walks rows | Done |
+| 144 | **This book's own words**                   | both   | P1    | `.yumete/words.txt`, layered over whatever segmenter is in force | Done |
+| 145 | **首行縮進 as a view**                      | both   | P1    | padding slots down the 縱, a narrower first row across; the file keeps its blank lines | Done |
+| 146 | **段組 — bands down the 縱書 page**         | tui    | P2    | each band is a short page of its own; equal by construction | Done |
+| 147 | **`.` repeats the last change**             | core   | P1    | the editor watches; a command that changed the buffer *was* a change | Done |
+| 148 | **A phrasebook for keys we do not bind**    | core   | P2    | `$` says 「行尾是 gl」; it never does the thing | Done |
+| 149 | **The session, and marks**                  | both   | P2    | what was open, where the cursor was; `M a` / `' a` across files | Done |
+| 150 | **Project-wide replace**                    | core   | P1    | `:grep` then `:replace`: nothing changed that was not on the screen, nothing on disk until `:wa` | Done |
 
 ---
 
