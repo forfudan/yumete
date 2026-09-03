@@ -4668,6 +4668,28 @@ impl Editor {
                 );
                 e.select_to(p);
             }),
+            // A paragraph is a logical line here, and with soft wrap on `j`
+            // and `k` move by visual row — so these are the keys that move by
+            // what a writer calls a paragraph, and nothing else does.
+            Key::Char('}') => self.repeat(count, |e| {
+                let p = motion::next_paragraph(e.current_buffer().rope(), e.cursor);
+                e.select_to(p);
+            }),
+            Key::Char('{') => self.repeat(count, |e| {
+                let p = motion::prev_paragraph(e.current_buffer().rope(), e.cursor);
+                e.select_to(p);
+            }),
+            // 。！？ and the closing mark that follows one. The unit a person
+            // proofreads in, and the one the manual already teaches by telling you
+            // to break the file on 。 with `:%s`.
+            Key::Char(')') => self.repeat(count, |e| {
+                let p = motion::next_sentence(e.current_buffer().rope(), e.cursor);
+                e.select_to(p);
+            }),
+            Key::Char('(') => self.repeat(count, |e| {
+                let p = motion::prev_sentence(e.current_buffer().rope(), e.cursor);
+                e.select_to(p);
+            }),
             Key::Char('W') => self.repeat(count, |e| e.select_word_forward(true)),
             Key::Char('E') => self.repeat(count, |e| {
                 let p = motion::next_word_end(
