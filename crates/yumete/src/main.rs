@@ -95,8 +95,10 @@ fn main() -> ExitCode {
     }
     // …and somewhere to remember which files were open. Keyed by the working
     // directory, so a novel and a codebase do not share one.
-    if let Ok(here) = std::env::current_dir() {
-        editor.keep_session_in(yumete_config::data_dir().join("sessions"), &here);
+    if config.editor.session {
+        if let Ok(here) = std::env::current_dir() {
+            editor.keep_session_in(yumete_config::data_dir().join("sessions"), &here);
+        }
     }
     editor.set_dense(config.editor.dense);
 
