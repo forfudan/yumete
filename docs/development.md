@@ -419,7 +419,50 @@ Fixed the same day, worst first:
 - **延伸模式 survived Insert**: `v i X Esc` came back to Normal still
   extending. Cleared at the door.
 
-Open, from the same two reviews (ranked):
+The other two reviews — **data safety** and **geometry** — found more, and the
+worst of it was fixed the same day:
+
+- **`d`, `3.`, `.` aborted the process.** A count made `.` the *second* key of
+  its own definition, and nothing stopped a repeat re-entering: a stack
+  overflow, which does not unwind, so **every unsaved buffer went with it**.
+  Guarded, and the exclusion now scans the whole sequence.
+- **`:export typst` on a `.typ` chapter wrote over the chapter.** An export
+  keeps 標題、段落、注音 and nothing else. It refuses its own source now, and
+  writes through the atomic path rather than `fs::write`.
+- **`:w <path>` could not save a copy** (the old file's stamp refused it, and
+  `:w!` could not get past either) and **could silently replace an existing
+  file** from a scratch buffer. Stamps are reset on rebinding, `force` is
+  threaded through, and an existing target needs `:w!`.
+- **A file created after you opened it was overwritten without a word** — the
+  changed-underneath guard was off for exactly the buffers most likely to
+  collide.
+- **`:w` was not durable**: no `sync_all`, no directory fsync, so a power cut
+  just after a save could leave a chapter of zeroes with the recovery copy
+  already deleted. It also replaced symlinks with regular files and dropped
+  the file's permissions. All three fixed in one place, which every writer —
+  including the exporter — now goes through.
+- **A recovered draft was thrown away by `:q`**: recovered clean, with its
+  draft file already deleted. It comes back modified now.
+- **`gJ` joined two rows of a grid** — the one thing table mode promises
+  cannot happen — because it edits the rope directly. Refused, with a reason.
+- **`:replace` rewrote whole buffers without the grid check `:s` makes**, in
+  every file `:grep` found. It runs the same check and names the files it
+  would have broken.
+- **`⌘V` of a comma into a cell deleted the cell and then refused the paste.**
+  Both halves are judged before either runs, the way `r` already did it.
+- **`空格 w` carried the CSV's schema into the manuscript** — `switch_pane` set
+  the buffer directly instead of going through the one door that re-asks.
+- **`t o` / `t O` were not undoable**, and folded into the edit before them.
+- Geometry: the caret sat one row high for every ruby reading above it; a click
+  on a reading row was dropped; `page_areas` could overflow at width 0; the
+  event loop measured the whole text area rather than the pane holding the
+  keys (so `C-f` turned two pages in a split); a jump landed in the middle only
+  when it went *forwards*; the 縱書 number band could be taller than its own
+  page and draw over the status line; a sidebar under three cells left an
+  unpainted stripe. There is now a test that **every cell of the frame is
+  painted**, which is the third time that bug has appeared.
+
+Open, from all four reviews (ranked):
 
 1. `zong::Grid` re-derives the page from raw text where `wrap::Measure` is
    *handed* it — so 縱書 hides markup inside a fence, ignores `:syntax
