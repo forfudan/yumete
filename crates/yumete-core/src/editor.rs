@@ -501,7 +501,13 @@ pub struct Editor {
     /// command that leaves the buffer different from how it found it *was* a
     /// change, and its keys are what `.` plays back.
     edit_keys: Vec<Key>,
-    edit_revision: u64,
+    /// Which buffer the command started in, and that buffer's revision.
+    ///
+    /// The buffer too: after `gn` the revision belongs to a *different* file,
+    /// so a pure motion looked like a change and `.` came to mean 「switch
+    /// buffer」 — which for someone walking a hundred chapters is the common
+    /// case.
+    edit_revision: (usize, u64),
     /// The last change's keys.
     last_edit_keys: Vec<Key>,
     /// Places named by a letter, and reachable from any file (`M a`, `' a`).
@@ -775,7 +781,7 @@ impl Editor {
             show_segmentation: false,
             count: None,
             edit_keys: Vec::new(),
-            edit_revision: 0,
+            edit_revision: (0, 0),
             last_edit_keys: Vec::new(),
             marks: HashMap::new(),
             repeating_edit: false,
@@ -2502,7 +2508,16 @@ impl Editor {
                 return cache.region.clone();
             }
         }
-        let region = crate::mdtable::region(|i| self.line_text(i), line);
+        // The fence is checked **here**, not only on the way in. Checking it at
+        // the door was not enough: `gg`, `G`, `:N` and a search all land
+        // outside the cells — the manual says so — and from a quoted example
+        // in a code block `t t` then reformatted somebody's text. The region
+        // is what everything downstream asks about, so this is where a table
+        // that is really a quotation has to stop being one.
+        let region = match self.md_row_in_a_fence() {
+            true => None,
+            false => crate::mdtable::region(|i| self.line_text(i), line),
+        };
         *self.md_cache.borrow_mut() = Some(MdCache {
             asked,
             region: region.clone(),
@@ -5418,9 +5433,11 @@ impl Editor {
         // Normal mode with nothing pending; it ends when it is back there.
         let watching = !self.repeating_edit;
         if watching {
-            if self.mode == Mode::Normal && self.pending == Pending::None {
+            // A count is part of the command it prefixes, not a command: `3>`
+            // is one change and `.` has to repeat all three levels of it.
+            if self.mode == Mode::Normal && self.pending == Pending::None && self.count.is_none() {
                 self.edit_keys.clear();
-                self.edit_revision = self.current_buffer().revision();
+                self.edit_revision = (self.current, self.current_buffer().revision());
             }
             self.edit_keys.push(key);
         }
@@ -5459,7 +5476,11 @@ impl Editor {
         if self.mode != Mode::Normal || self.pending != Pending::None {
             return;
         }
-        if self.current_buffer().revision() == self.edit_revision {
+        if (self.current, self.current_buffer().revision()) == self.edit_revision {
+            return;
+        }
+        // A command that ended in a different buffer changed nothing here.
+        if self.current != self.edit_revision.0 {
             return;
         }
         // Four kinds of key change the buffer and are not *changes* in the
@@ -11054,6 +11075,74 @@ mod tests {
         assert!(ed.status().contains("沒查出問題"), "{}", ed.status());
         assert_eq!(ed.buffer_count(), buffers, "no buffer for no findings");
         std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn a_quoted_table_stays_a_quotation_even_when_walked_into() {
+        // Refusing at the door was not enough: `gg`, `G`, `:N` and a search
+        // all land outside the cells — the manual says so — and from a quoted
+        // example in a code fence `t t` reformatted somebody's text.
+        let mut ed = typed(
+            "| a | b |\n| --- | --- |\n| x | y |\n\n說明：\n\n```\n|字|讀音|\n|--|--|\n```\n",
+        );
+        ed.goto_line(1);
+        assert!(ed.enter_table(), "{}", ed.status());
+        let before = ed.current_buffer().text();
+        // Walk into the fence the way a search would.
+        ed.goto_line(8);
+        assert!(ed.md_region().is_none(), "a quotation is not a table");
+        // The structural keys are the ones that used to rewrite it. `t` here
+        // is vi's till-motion again, and `o` opens an ordinary line.
+        press(&mut ed, "tt");
+        assert_eq!(ed.current_buffer().text(), before, "{}", ed.status());
+        assert!(
+            ed.current_buffer().text().contains("|字|讀音|"),
+            "the quotation is as it was written"
+        );
+        // …and back in the real table the keys work.
+        ed.goto_line(1);
+        assert!(ed.md_region().is_some());
+        press(&mut ed, "to");
+        assert_ne!(ed.current_buffer().text(), before);
+    }
+
+    #[test]
+    fn dot_repeats_the_change_and_the_count_it_was_given() {
+        // `3>` indents three levels; `.` used to indent one, because the digit
+        // key started a fresh recording and threw the count away.
+        let mut ed = typed("一\n二\n");
+        ed.goto_line(1);
+        press(&mut ed, "3>");
+        let three = ed.current_buffer().text();
+        press(&mut ed, "j");
+        ed.on_key(Key::Char('.'));
+        let lines: Vec<usize> = ed
+            .current_buffer()
+            .text()
+            .lines()
+            .map(|l| l.len() - l.trim_start().len())
+            .collect();
+        assert_eq!(lines[0], lines[1], "the same three levels: {three:?}");
+    }
+
+    #[test]
+    fn switching_buffers_is_not_the_change_dot_repeats() {
+        // `finish_watching` compared a revision with a *different* buffer's,
+        // so after `gn` a pure motion looked like a change and `.` came to
+        // mean 「switch buffer」 — the common case at a hundred chapters.
+        let mut ed = typed("一\n");
+        ed.execute("new").unwrap();
+        ed.on_key(Key::Char('i'));
+        ed.on_key(Key::Char('甲'));
+        ed.on_key(Key::Esc);
+        ed.goto_line(1);
+        press(&mut ed, ">");
+        let indented = ed.current_buffer().text();
+        press(&mut ed, "gp");
+        press(&mut ed, "gn");
+        ed.on_key(Key::Char('.'));
+        assert_ne!(ed.current_buffer().text(), indented, "`.` indented again");
+        assert!(ed.current_buffer().text().contains("甲"), "…in this buffer");
     }
 
     #[test]
