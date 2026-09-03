@@ -22,6 +22,7 @@ pub mod editor;
 pub mod export;
 pub mod input;
 pub mod markdown;
+pub mod messages;
 pub mod mdtable;
 pub mod motion;
 pub mod picker;

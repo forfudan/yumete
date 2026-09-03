@@ -6,6 +6,7 @@
 //! [`Key`] presses, so the whole interaction can be unit-tested without a
 //! terminal.
 
+use crate::say;
 use std::cell::RefCell;
 use std::collections::hash_map::DefaultHasher;
 use std::collections::HashMap;
@@ -191,7 +192,10 @@ pub enum Hint {
     /// Something just happened.
     Says(String),
     /// A named set of keys: what this is, then each key and what it does.
-    Keys(&'static str, Vec<(&'static str, &'static str)>),
+    ///
+    /// The *keys* are `&'static str` — `hjkl` is `hjkl` in any language — and
+    /// what they mean is a `String`, because it is said in the reader's.
+    Keys(String, Vec<(&'static str, String)>),
 }
 
 /// A command line to run, and how the writer expects to watch it.
@@ -733,9 +737,9 @@ impl fmt::Display for EditorError {
             EditorError::Command(e) => write!(f, "{e}"),
             EditorError::Io(e) => write!(f, "{e}"),
             EditorError::UnsavedChanges => {
-                write!(f, "還有沒存的改動（加 ! 強制）")
+                write!(f, "{}", say!("還有沒存的改動（加 ! 強制）"))
             }
-            EditorError::NoFileName => write!(f, "沒有檔名"),
+            EditorError::NoFileName => write!(f, "{}", say!("沒有檔名")),
         }
     }
 }
@@ -919,7 +923,7 @@ impl Editor {
     /// key: a `gn` that does nothing silently reads as a broken keymap.
     fn only_one_buffer(&mut self) -> bool {
         if self.buffers.len() == 1 {
-            self.status = "只開了一個檔案".to_string();
+            self.status = say!("只開了一個檔案");
             return true;
         }
         false
@@ -1058,7 +1062,7 @@ impl Editor {
         if self.buffers.len() == 1 {
             self.buffers[0] = Buffer::scratch();
             self.set_cursor(0);
-            self.status = "關了".to_string();
+            self.status = say!("關了");
             return Ok(CommandOutcome::Continue);
         }
         let closed = self.buffers.remove(self.current).display_name();
@@ -1067,7 +1071,7 @@ impl Editor {
         self.set_cursor(restored);
         self.segment_cache.borrow_mut().clear();
         let (n, total) = self.buffer_position();
-        self.status = format!("關了 {closed} —— 現在是 {} [{n}/{total}]", self.buffer_name());
+        self.status = say!("關了 {0} —— 現在是 {1} [{2}/{3}]", closed, self.buffer_name(), n, total);
         Ok(CommandOutcome::Continue)
     }
 
@@ -1133,7 +1137,7 @@ impl Editor {
         });
 
         if hits.is_empty() {
-            self.status = format!("{files} 個檔案裏都沒有「{pattern}」");
+            self.status = say!("{0} 個檔案裏都沒有「{1}」", files, pattern);
             return Ok(CommandOutcome::Continue);
         }
         let found = hits.len();
@@ -1149,9 +1153,9 @@ impl Editor {
         self.add_buffer(buffer);
         self.set_cursor(0);
         self.status = if found >= GREP_LIMIT {
-            format!("{found} 處以上（不數了）——gf 開游標下那一條，:replace 全換")
+            say!("{0} 處以上（不數了）——gf 開游標下那一條，:replace 全換", found)
         } else {
-            format!("{found} 處，{files} 個檔案——gf 開游標下那一條，:replace 全換")
+            say!("{0} 處，{1} 個檔案——gf 開游標下那一條，:replace 全換", found, files)
         };
         Ok(CommandOutcome::Continue)
     }
@@ -1176,7 +1180,7 @@ impl Editor {
     /// make easy.
     fn replace_found(&mut self, text: &str) {
         let Some((pattern, files)) = self.grep_found.clone() else {
-            self.status = "先 :grep 找一遍——換的是你已經看過的那些".to_string();
+            self.status = say!("先 :grep 找一遍——換的是你已經看過的那些");
             return;
         };
         let re = match self.compile(&pattern) {
@@ -1218,7 +1222,7 @@ impl Editor {
         self.current = was.min(self.buffers.len().saturating_sub(1));
         self.set_cursor(self.current_buffer().saved_cursor());
         if changed == 0 {
-            self.status = format!("「{pattern}」一處也沒換到");
+            self.status = say!("「{0}」一處也沒換到", pattern);
             return;
         }
         self.status =
@@ -1242,9 +1246,9 @@ impl Editor {
         }
         self.current = was.min(self.buffers.len().saturating_sub(1));
         self.status = if failed.is_empty() {
-            format!("存了 {saved} 個")
+            say!("存了 {0} 個", saved)
         } else {
-            format!("存了 {saved} 個；{} 個沒存：{}", failed.len(), failed.join("；"))
+            say!("存了 {0} 個；{1} 個沒存：{2}", saved, failed.len(), failed.join("；"))
         };
         Ok(CommandOutcome::Continue)
     }
@@ -1271,13 +1275,13 @@ impl Editor {
                 None => PathBuf::from(&quoted),
             };
             if let Err(err) = self.open_included_file(&full) {
-                self.status = format!("打不開「{quoted}」：{err}");
+                self.status = say!("打不開「{0}」：{1}", quoted, err);
             }
             return;
         }
 
         let Some((path, rest)) = text.split_once(':') else {
-            self.status = "這一行沒寫檔名".to_string();
+            self.status = say!("這一行沒寫檔名");
             return;
         };
         let at = rest
@@ -1291,7 +1295,7 @@ impl Editor {
             _ => path.to_path_buf(),
         };
         if let Err(err) = self.open_file(&full) {
-            self.status = format!("打不開「{}」：{err}", path.display());
+            self.status = say!("打不開「{0}」：{1}", path.display(), err);
             return;
         }
         if let Some(n) = at {
@@ -1306,7 +1310,7 @@ impl Editor {
     /// wins. A scratch buffer has no name to derive one from and must be told.
     fn export(&mut self, format: &str, path: Option<&str>) -> Result<CommandOutcome, EditorError> {
         let Some(format) = crate::export::Format::parse(format) else {
-            self.status = format!("沒有「{format}」這種格式 —— html 或 typst");
+            self.status = say!("沒有「{0}」這種格式 —— html 或 typst", format);
             return Ok(CommandOutcome::Continue);
         };
         let target = match path {
@@ -1325,7 +1329,7 @@ impl Editor {
         };
         let written = crate::export::export(&self.current_buffer().text(), format, &style);
         std::fs::write(&target, written).map_err(EditorError::Io)?;
-        self.status = format!("寫好了 {}", target.display());
+        self.status = say!("寫好了 {0}", target.display());
         Ok(CommandOutcome::Continue)
     }
 
@@ -1733,7 +1737,7 @@ impl Editor {
                 self.markup_cache.borrow_mut().clear();
                 *self.block_cache.borrow_mut() = None;
                 self.segment_cache.borrow_mut().clear();
-                self.status = format!("重讀了 {}", self.current_buffer().display_name());
+                self.status = say!("重讀了 {0}", self.current_buffer().display_name());
                 Ok(CommandOutcome::Continue)
             }
             Command::Quit { force } => self.quit(force),
@@ -1773,7 +1777,7 @@ impl Editor {
                     None => self.layout == Layout::Horizontal,
                 };
                 if self.table.as_ref().is_some_and(|v| v.is_grid()) && wants_vertical {
-                    self.status = "表格是橫排的；先 `:table off`".to_string();
+                    self.status = say!("表格是橫排的；先 `:table off`");
                     return Ok(CommandOutcome::Continue);
                 }
                 let layout = match direction {
@@ -1783,7 +1787,7 @@ impl Editor {
                     }
                     None => self.toggle_layout(),
                 };
-                self.status = format!("{} layout", layout.label());
+                self.status = say!("排版：{0}", layout.label());
                 Ok(CommandOutcome::Continue)
             }
             Command::Ruby => {
@@ -1800,9 +1804,9 @@ impl Editor {
                 }
                 let listed: Vec<&str> = self.ruby.iter().map(|d| d.name()).collect();
                 self.status = if listed.is_empty() {
-                    "ruby markup shown".to_string()
+                    say!("注音：不排，標記留在畫面上")
                 } else {
-                    format!("ruby rendered: {}", listed.join(", "))
+                    say!("注音：排 {0}", listed.join("、"))
                 };
                 Ok(CommandOutcome::Continue)
             }
@@ -1868,14 +1872,14 @@ impl Editor {
             Command::Outline(nth) => {
                 let headings = self.outline();
                 if headings.is_empty() {
-                    self.status = "這個檔案沒有標題".to_string();
+                    self.status = say!("這個檔案沒有標題");
                     return Ok(CommandOutcome::Continue);
                 }
                 match nth {
                     // `:toc <n>` goes to the nth heading…
                     Some(n) => match headings.get(n.saturating_sub(1)) {
                         Some(&(line, _, _)) => self.goto_line(line + 1),
-                        None => self.status = format!("只有 {} 條標題", headings.len()),
+                        None => self.status = say!("只有 {0} 條標題", headings.len()),
                     },
                     // …and a bare `:toc` lists them, numbered so it can.
                     None => {
@@ -1884,7 +1888,7 @@ impl Editor {
                             .enumerate()
                             .map(|(i, (_, depth, title))| {
                                 let indent = "·".repeat(depth.saturating_sub(1));
-                                format!("{}{indent}{title}", i + 1)
+                                say!("{0}{1}{2}", i + 1, indent, title)
                             })
                             .collect::<Vec<_>>()
                             .join("   ");
@@ -1904,9 +1908,9 @@ impl Editor {
                 let on = !self.hanging;
                 self.set_hanging_punctuation(on);
                 self.status = if on {
-                    "標點旁置：開".to_string()
+                    say!("標點旁置：開")
                 } else {
-                    "標點旁置：關（每個標點佔一格）".to_string()
+                    say!("標點旁置：關（每個標點佔一格）")
                 };
                 Ok(CommandOutcome::Continue)
             }
@@ -1923,14 +1927,14 @@ impl Editor {
                     Some(name) => match crate::syntax::Syntax::parse(&name) {
                         Some(syntax) => {
                             self.set_syntax(syntax);
-                            self.status = format!("語法：{}", syntax.name());
+                            self.status = say!("語法：{0}", syntax.name());
                         }
                         None => {
-                            self.status = format!("沒有「{name}」這種語法 —— markdown 或 typst")
+                            self.status = say!("沒有「{0}」這種語法 —— markdown 或 typst", name)
                         }
                     },
                     None => {
-                        self.status = format!("語法：{}", self.syntax().name());
+                        self.status = say!("語法：{0}", self.syntax().name());
                     }
                 }
                 Ok(CommandOutcome::Continue)
@@ -1976,7 +1980,7 @@ impl Editor {
                             syntax: self.current_buffer().syntax(),
                         },
                         None => {
-                            self.status = "先存檔——排版器讀的是檔案".to_string();
+                            self.status = say!("先存檔——排版器讀的是檔案");
                             return Ok(CommandOutcome::Continue);
                         }
                     }
@@ -1988,9 +1992,9 @@ impl Editor {
             Command::SetRender(how) => {
                 self.set_render(how);
                 self.status = match how {
-                    Render::Off => "原文：不著色".to_string(),
-                    Render::On => "著色：標記留在畫面上".to_string(),
-                    Render::Full => "所見即所得：標記只在光標那一處展開".to_string(),
+                    Render::Off => say!("原文：不著色"),
+                    Render::On => say!("著色：標記留在畫面上"),
+                    Render::Full => say!("所見即所得：標記只在光標那一處展開"),
                 };
                 Ok(CommandOutcome::Continue)
             }
@@ -2021,9 +2025,9 @@ impl Editor {
                 self.set_soft_wrap(on);
                 self.refresh_goal_column();
                 self.status = if on {
-                    "long paragraphs wrap".to_string()
+                    say!("折行：開")
                 } else {
-                    "long paragraphs run off the edge".to_string()
+                    say!("折行：關（長段落跑出右邊）")
                 };
                 Ok(CommandOutcome::Continue)
             }
@@ -2039,9 +2043,9 @@ impl Editor {
             Command::ToggleSegmentation => {
                 let on = self.toggle_segmentation();
                 self.status = if on {
-                    "segmentation overlay on".to_string()
+                    say!("分詞著色：開")
                 } else {
-                    "segmentation overlay off".to_string()
+                    say!("分詞著色：關")
                 };
                 Ok(CommandOutcome::Continue)
             }
@@ -2073,7 +2077,7 @@ impl Editor {
         // that did not happen — and the manual has been quoting this line as
         // its example of the hint row all along.
         if saved.is_ok() {
-            self.status = format!("存了 {}", self.current_buffer().display_name());
+            self.status = say!("存了 {0}", self.current_buffer().display_name());
         }
         saved
     }
@@ -2293,13 +2297,13 @@ impl Editor {
             // of* a table — the manual has several — and reformatting one
             // rewrites somebody's quoted text.
             if self.md_row_in_a_fence() {
-                self.status = "這是代碼塊裏的表格——那是引文，不是表格".to_string();
+                self.status = say!("這是代碼塊裏的表格——那是引文，不是表格");
                 return false;
             }
             return self.enter_md_table();
         }
         let Some(path) = self.current_buffer().path().map(Path::to_path_buf) else {
-            self.status = "沒有檔名，就沒有 schema 可以照——或者把游標放到 | 表格上".to_string();
+            self.status = say!("沒有檔名，就沒有 schema 可以照——或者把游標放到 | 表格上");
             return false;
         };
         let (found, problems) = crate::table::schema_for_reporting(&path);
@@ -2307,7 +2311,7 @@ impl Editor {
         // and the whole jump. Saying so is the difference between "this file
         // has no schema" and "your schema has a typo on line 4".
         if !problems.is_empty() {
-            self.status = format!("schema: {}", problems.join("; "));
+            self.status = say!("schema：{0}", problems.join("；"));
             return false;
         }
         let (from, schema, how) = match found {
@@ -2325,10 +2329,7 @@ impl Editor {
                 let head = self.current_buffer().rope().line(0).to_string();
                 let schema = crate::table::Schema::from_header(&head, ',');
                 if schema.columns.len() < 2 || !self.looks_delimited(schema.columns.len()) {
-                    self.status = format!(
-                        "'{}' 不像表格 — 表格是每行同樣多的欄，或者游標放在 | 表格上",
-                        path.file_name().unwrap_or_default().to_string_lossy()
-                    );
+                    self.status = say!("'{0}' 不像表格 — 表格是每行同樣多的欄，或者游標放在 | 表格上", path.file_name().unwrap_or_default().to_string_lossy());
                     return false;
                 }
                 (PathBuf::new(), schema, "照首行".to_string())
@@ -2346,10 +2347,7 @@ impl Editor {
         // the page, which is the one thing a 縱書 layout cannot do. Rather than
         // draw something incoherent, table mode is horizontal.
         let turned = self.turn_for_table();
-        self.status = format!(
-            "表格：{columns} 欄，{how}{}",
-            if turned { "（已轉橫排）" } else { "" }
-        );
+        self.status = say!("表格：{0} 欄，{1}{2}", columns, how, if turned { "（已轉橫排）" } else { "" });
         true
     }
 
@@ -2381,9 +2379,9 @@ impl Editor {
         let turned = self.turned_for_table.is_some();
         self.leave_table_quietly();
         self.status = if turned {
-            "表格：關（已轉回竪排）".to_string()
+            say!("表格：關（已轉回竪排）")
         } else {
-            "表格：關".to_string()
+            say!("表格：關")
         };
     }
 
@@ -2427,7 +2425,7 @@ impl Editor {
         } else if !problems.is_empty() {
             // Opening a file says nothing about tables, ordinarily. A schema
             // that does not parse is the exception: it was meant to apply here.
-            self.status = format!("schema: {}", problems.join("; "));
+            self.status = say!("schema：{0}", problems.join("；"));
         }
     }
 
@@ -2534,7 +2532,7 @@ impl Editor {
         let rope = self.current_buffer().rope();
         let at = rope.char_to_line(self.cursor.min(rope.len_chars()));
         let Some(region) = crate::mdtable::region(|i| self.line_text(i), at) else {
-            self.status = "游標不在表格裏".to_string();
+            self.status = say!("游標不在表格裏");
             return false;
         };
         let header = self.line_text(region.first).unwrap_or_default();
@@ -2542,7 +2540,7 @@ impl Editor {
         // `| --- |` under a paragraph that happens to start with one is how a
         // convenience becomes damage.
         if region.rule.is_none() && crate::mdtable::cells(&header).len() < 2 {
-            self.status = "只有一欄——表格至少要兩欄，或者先寫好 |---| 那一行".to_string();
+            self.status = say!("只有一欄——表格至少要兩欄，或者先寫好 |---| 那一行");
             return false;
         }
         let schema = crate::mdtable::schema(&header);
@@ -2581,10 +2579,7 @@ impl Editor {
             .unwrap_or(0);
         self.format_md_table();
         self.snap_to_cell();
-        self.status = format!(
-            "表格：{columns} 欄{}",
-            if added { "（補上了分隔行）" } else { "" }
-        );
+        self.status = say!("表格：{0} 欄{1}", columns, if added { "（補上了分隔行）" } else { "" });
         true
     }
 
@@ -2726,7 +2721,7 @@ impl Editor {
         let (row, cell) = self.md_at(&region);
         let at = parts.insert_row(if below { row + 1 } else { row });
         self.md_write(&region, &parts, at, cell);
-        self.status = "加了一行".to_string();
+        self.status = say!("加了一行");
     }
 
     /// Take the cursor's row out.
@@ -2738,7 +2733,7 @@ impl Editor {
         match parts.remove_row(row) {
             Ok(at) => {
                 self.md_write(&region, &parts, at, cell);
-                self.status = "刪了一行".to_string();
+                self.status = say!("刪了一行");
             }
             Err(why) => self.status = why.to_string(),
         }
@@ -2768,7 +2763,7 @@ impl Editor {
         let at = parts.insert_column(if after { cell + 1 } else { cell });
         self.md_reschema(&parts);
         self.md_write(&region, &parts, row, at);
-        self.status = "加了一欄".to_string();
+        self.status = say!("加了一欄");
     }
 
     /// Take the cursor's column out of every row.
@@ -2781,7 +2776,7 @@ impl Editor {
             Ok(at) => {
                 self.md_reschema(&parts);
                 self.md_write(&region, &parts, row, at);
-                self.status = "刪了一欄".to_string();
+                self.status = say!("刪了一欄");
             }
             Err(why) => self.status = why.to_string(),
         }
@@ -2810,7 +2805,7 @@ impl Editor {
         };
         let (_, cell) = self.md_at(&region);
         if parts.rows.len() < 3 {
-            self.status = "沒幾行可排".to_string();
+            self.status = say!("沒幾行可排");
             return;
         }
         parts.sort_by(cell, descending);
@@ -2823,10 +2818,7 @@ impl Editor {
         // Back to the header, because the row you were standing on is now
         // somewhere else and pretending otherwise would be a lie.
         self.md_write(&region, &parts, 0, cell);
-        self.status = format!(
-            "照「{name}」{}排（數字當數字比，其餘按碼位）",
-            if descending { "倒" } else { "順" }
-        );
+        self.status = say!("照「{0}」{1}排（數字當數字比，其餘按碼位）", name, if descending { "倒" } else { "順" });
     }
 
     /// Change which way this column's cells are set.
@@ -2836,7 +2828,7 @@ impl Editor {
         };
         let (row, cell) = self.md_at(&region);
         if !parts.ruled {
-            self.status = "沒有分隔行，無從對齊".to_string();
+            self.status = say!("沒有分隔行，無從對齊");
             return;
         }
         let columns = parts.columns();
@@ -2846,14 +2838,11 @@ impl Editor {
         }
         parts.aligns[cell] = align;
         self.md_write(&region, &parts, row, cell);
-        self.status = format!(
-            "這一欄：{}",
-            match align {
+        self.status = say!("這一欄：{0}", match align {
                 crate::mdtable::Align::Left | crate::mdtable::Align::Plain => "靠左",
                 crate::mdtable::Align::Center => "居中",
                 crate::mdtable::Align::Right => "靠右",
-            }
-        );
+            });
     }
 
     /// Re-read the column names after their number has changed.
@@ -2907,7 +2896,7 @@ impl Editor {
                     if let Some((l, _)) = self.cell_position() {
                         self.go_to_cell(l, 0);
                     }
-                    self.status = "加了一行".to_string();
+                    self.status = say!("加了一行");
                 }
                 (None, _) => return true,
             }
@@ -3125,8 +3114,8 @@ impl Editor {
                 view.grain = grain;
             }
             self.status = match grain {
-                Grain::Cell => "按格移動".to_string(),
-                Grain::Char => "按字移動（Tab 回到按格）".to_string(),
+                Grain::Cell => say!("按格移動"),
+                Grain::Char => say!("按字移動（Tab 回到按格）"),
             };
             return true;
         }
@@ -3191,7 +3180,7 @@ impl Editor {
             // literal string `char` as a key.
             Key::Char('O') if self.on_header_row() => {
                 self.open_line_below();
-                self.status = "標題行上面不能插行——加在它下面了".to_string();
+                self.status = say!("標題行上面不能插行——加在它下面了");
             }
             _ => return false,
         }
@@ -3216,14 +3205,14 @@ impl Editor {
             return;
         };
         if self.md_rule_here() {
-            self.status = "分隔行是畫出來的——用 t < = > 改對齊".to_string();
+            self.status = say!("分隔行是畫出來的——用 t < = > 改對齊");
             return;
         }
         let Some((start, end)) = self.cell_span(line, cell) else {
             return;
         };
         if end <= start {
-            self.status = "這一格是空的".to_string();
+            self.status = say!("這一格是空的");
             return;
         }
         self.snapshot();
@@ -3233,7 +3222,7 @@ impl Editor {
         if self.edit_remove(start..end) {
             self.set_cursor(start);
             self.format_md_table();
-            self.status = format!("清空了一格（{n} 字）");
+            self.status = say!("清空了一格（{0} 字）", n);
         }
     }
 
@@ -3244,7 +3233,7 @@ impl Editor {
     /// was refused. A table editor that cannot remove a line is not one.
     fn drop_row(&mut self) {
         if self.on_header_row() {
-            self.status = "標題行不能刪：它是欄名".to_string();
+            self.status = say!("標題行不能刪：它是欄名");
             return;
         }
         let (start, end, text) = {
@@ -3267,7 +3256,7 @@ impl Editor {
         self.without_cell_guard(|e| e.current_buffer_mut().remove(start..end));
         self.set_cursor(start.min(self.current_buffer().rope().len_chars()));
         self.snap_to_cell();
-        self.status = "刪了一行".to_string();
+        self.status = say!("刪了一行");
     }
 
     /// Move the row the cursor is on down (or up), in a delimited file.
@@ -3282,7 +3271,7 @@ impl Editor {
         let other = if down { line + 1 } else { line.wrapping_sub(1) };
         let header = usize::from(self.table.as_ref().is_some_and(|v| v.schema.header));
         if other > last || other < header || line < header {
-            self.status = "到頭了".to_string();
+            self.status = say!("到頭了");
             return;
         }
         let (a, b) = (line.min(other), line.max(other));
@@ -3331,14 +3320,14 @@ impl Editor {
                 Key::Char('o') => self.open_line_below(),
                 Key::Char('O') if self.on_header_row() => {
                     self.open_line_below();
-                    self.status = "標題行上面不能插行——加在它下面了".to_string();
+                    self.status = say!("標題行上面不能插行——加在它下面了");
                 }
                 Key::Char('O') => self.open_line_above(),
                 Key::Char('d') => self.drop_row(),
                 Key::Char('j') | Key::Down => self.shift_row(true),
                 Key::Char('k') | Key::Up => self.shift_row(false),
                 Key::Esc => {}
-                _ => self.status = "t 後面（這種表格）：o O d j k".to_string(),
+                _ => self.status = say!("t 後面（這種表格）：o O d j k"),
             }
             return;
         }
@@ -3361,20 +3350,20 @@ impl Editor {
             Key::Char('t') => {
                 self.snapshot();
                 self.status = if self.format_md_table() {
-                    "重排好了".to_string()
+                    say!("重排好了")
                 } else {
-                    "已經是對齊的".to_string()
+                    say!("已經是對齊的")
                 };
             }
             Key::Esc => {}
-            _ => self.status = "t 後面：o O n N d D j k h l s S < = > t".to_string(),
+            _ => self.status = say!("t 後面：o O n N d D j k h l s S < = > t"),
         }
     }
 
     /// Enter a cell to type in it.
     fn edit_cell(&mut self, how: CellEdit) {
         if self.md_rule_here() {
-            self.status = "分隔行是畫出來的——用 t < = > 改對齊".to_string();
+            self.status = say!("分隔行是畫出來的——用 t < = > 改對齊");
             return;
         }
         let Some((line, cell)) = self.cell_position() else {
@@ -3457,7 +3446,7 @@ impl Editor {
         self.anchor = start;
         self.cursor = (start + text.chars().count()).saturating_sub(1).max(start);
         self.clamp_cursor();
-        self.status = format!("換掉了 {} 個字", text.chars().count());
+        self.status = say!("換掉了 {0} 個字", text.chars().count());
     }
 
     /// Whether a range covers whole rows of the grid — line start to line end.
@@ -3510,7 +3499,7 @@ impl Editor {
         let mut buffer = crate::Buffer::from_text(&text);
         buffer.name_as(&format!("!{line}"));
         self.add_buffer(buffer);
-        self.status = format!("跑完了：{line}");
+        self.status = say!("跑完了：{0}", line);
     }
 
     /// A typesetter the front end should start or stop.
@@ -3540,65 +3529,50 @@ impl Editor {
             return keys;
         }
         if self.sidebar_focus && self.sidebar.is_some() {
-            return Hint::Keys(
-                "側欄",
-                vec![
-                    ("j k", "移動"),
-                    ("l", "進入"),
-                    ("h", "收起"),
-                    ("Tab", "換視圖"),
-                    ("w", "寬窄"),
-                    ("R", "重讀"),
-                    ("C-w", "回正文"),
-                    ("q", "關"),
-                ],
-            );
+            return Hint::Keys(say!("側欄"), vec![
+                    ("j k", say!("移動")),
+                    ("l", say!("進入")),
+                    ("h", say!("收起")),
+                    ("Tab", say!("換視圖")),
+                    ("w", say!("寬窄")),
+                    ("R", say!("重讀")),
+                    ("C-w", say!("回正文")),
+                    ("q", say!("關")),
+                ]);
         }
         match self.mode {
             Mode::Ruby if self.ruby_target.is_some() => {
-                Hint::Keys("注音", vec![("Enter", "收下"), ("Esc", "取消")])
+                Hint::Keys(say!("注音"), vec![("Enter", say!("收下")), ("Esc", say!("取消"))])
             }
             // The one key worth saying inside a cell — without it a person
             // types a value, presses Esc, walks right and types the next.
-            Mode::Insert if self.insert_bounds().is_some() => Hint::Keys(
-                "格內",
-                vec![("Tab", "下一格"), ("S-Tab", "上一格"), ("Esc", "回正常")],
-            ),
+            Mode::Insert if self.insert_bounds().is_some() => Hint::Keys(say!("格內"), vec![("Tab", say!("下一格")), ("S-Tab", say!("上一格")), ("Esc", say!("回正常"))]),
             Mode::Normal if self.table_here() => {
                 let grain = self.table.as_ref().map(|v| v.grain).unwrap_or(Grain::Cell);
                 let markdown = self.md_region().is_some();
                 match grain {
-                    Grain::Cell if markdown => Hint::Keys(
-                        "表格",
-                        vec![
-                            ("hjkl", "走格"),
-                            ("c d", "換格／清空"),
-                            ("y Y", "取格/行"),
-                            ("p", "貼"),
-                            ("t", "增刪行列"),
-                            ("Tab", "改按字"),
-                        ],
-                    ),
-                    Grain::Cell => Hint::Keys(
-                        "表格",
-                        vec![
-                            ("hjkl", "走格"),
-                            ("c d", "換格／清空"),
-                            ("y Y", "取格/行"),
-                            ("p", "貼"),
-                            ("t", "增刪行"),
-                            ("Enter", "找相關的行"),
-                            ("Tab", "改按字"),
-                        ],
-                    ),
-                    Grain::Char => Hint::Keys(
-                        "表格·字",
-                        vec![
-                            ("hjkl", "走字"),
-                            ("Enter", "找這個字"),
-                            ("Tab", "改按格"),
-                        ],
-                    ),
+                    Grain::Cell if markdown => Hint::Keys(say!("表格"), vec![
+                            ("hjkl", say!("走格")),
+                            ("c d", say!("換格／清空")),
+                            ("y Y", say!("取格/行")),
+                            ("p", say!("貼")),
+                            ("t", say!("增刪行列")),
+                            ("Tab", say!("改按字")),
+                        ]),
+                    Grain::Cell => Hint::Keys(say!("表格"), vec![
+                            ("hjkl", say!("走格")),
+                            ("c d", say!("換格／清空")),
+                            ("y Y", say!("取格/行")),
+                            ("p", say!("貼")),
+                            ("t", say!("增刪行")),
+                            ("Enter", say!("找相關的行")),
+                            ("Tab", say!("改按字")),
+                        ]),
+                    Grain::Char => Hint::Keys(say!("表格·字"), vec![
+                            ("hjkl", say!("走字")),
+                            ("Enter", say!("找這個字")),
+                            ("Tab", say!("改按格")),
+                        ]),
                 }
             }
             _ => Hint::Quiet,
@@ -3622,50 +3596,41 @@ impl Editor {
             // `Space` opens a menu that already lists its own keys, and saying
             // the same thing twice on two surfaces is worse than saying it once.
             Pending::Space => return None,
-            Pending::Goto => (
-                "g",
-                vec![
-                    ("g", "檔首"),
-                    ("e", "檔尾"),
-                    ("h l", "行首行尾"),
-                    ("s", "首個非空白"),
-                    ("f", "開這個檔"),
-                    ("J", "併行"),
-                ],
-            ),
-            Pending::Find(_) => ("找", vec![("", "打一個字")]),
-            Pending::Replace => ("蓋掉", vec![("", "打一個字蓋掉選區")]),
-            Pending::Register => ("暫存器", vec![("a–z", "哪一個")]),
-            Pending::Match => (
-                "m",
-                vec![
-                    ("m", "配對"),
-                    ("i", "之內"),
-                    ("a", "連同"),
-                    ("s", "包起來"),
-                    ("d", "去掉"),
-                    ("r", "換掉"),
-                ],
-            ),
-            Pending::MatchPair { .. } => ("括號", vec![("", "打一種括號或引號")]),
-            Pending::Surround => ("包起來", vec![("", "打一種括號")]),
-            Pending::SurroundFrom => ("去掉", vec![("", "打要去掉的那一種")]),
-            Pending::SurroundTo(_) => ("換成", vec![("", "打要換成的那一種")]),
-            Pending::Mark => ("M 記住這裏", vec![("a–z", "叫什麼名字")]),
-            Pending::Recall => ("' 回到", vec![("a–z", "哪一個")]),
-            Pending::Table => (
-                "t 表格",
-                vec![
-                    ("o O", "加一行（下／上）"),
-                    ("n N", "加一欄（右／左）"),
-                    ("d D", "刪這行／這欄"),
-                    ("j k", "這行下移／上移"),
-                    ("h l", "這欄左移／右移"),
-                    ("s S", "照這欄順排／倒排"),
-                    ("< = >", "這欄靠左／居中／靠右"),
-                    ("t", "重排對齊"),
-                ],
-            ),
+            Pending::Goto => (say!("g"), vec![
+                    ("g", say!("檔首")),
+                    ("e", say!("檔尾")),
+                    ("h l", say!("行首行尾")),
+                    ("s", say!("首個非空白")),
+                    ("f", say!("開這個檔")),
+                    ("J", say!("併行")),
+                ]),
+            Pending::Find(_) => (say!("找"), vec![("", say!("打一個字"))]),
+            Pending::Replace => (say!("蓋掉"), vec![("", say!("打一個字蓋掉選區"))]),
+            Pending::Register => (say!("暫存器"), vec![("a–z", say!("哪一個"))]),
+            Pending::Match => (say!("m"), vec![
+                    ("m", say!("配對")),
+                    ("i", say!("之內")),
+                    ("a", say!("連同")),
+                    ("s", say!("包起來")),
+                    ("d", say!("去掉")),
+                    ("r", say!("換掉")),
+                ]),
+            Pending::MatchPair { .. } => (say!("括號"), vec![("", say!("打一種括號或引號"))]),
+            Pending::Surround => (say!("包起來"), vec![("", say!("打一種括號"))]),
+            Pending::SurroundFrom => (say!("去掉"), vec![("", say!("打要去掉的那一種"))]),
+            Pending::SurroundTo(_) => (say!("換成"), vec![("", say!("打要換成的那一種"))]),
+            Pending::Mark => (say!("M 記住這裏"), vec![("a–z", say!("叫什麼名字"))]),
+            Pending::Recall => (say!("' 回到"), vec![("a–z", say!("哪一個"))]),
+            Pending::Table => (say!("t 表格"), vec![
+                    ("o O", say!("加一行（下／上）")),
+                    ("n N", say!("加一欄（右／左）")),
+                    ("d D", say!("刪這行／這欄")),
+                    ("j k", say!("這行下移／上移")),
+                    ("h l", say!("這欄左移／右移")),
+                    ("s S", say!("照這欄順排／倒排")),
+                    ("< = >", say!("這欄靠左／居中／靠右")),
+                    ("t", say!("重排對齊")),
+                ]),
         };
         Some(Hint::Keys(keys.0, keys.1))
     }
@@ -3703,7 +3668,7 @@ impl Editor {
         let text = self.cell_text(line, cell);
         let n = text.chars().count();
         self.store(text);
-        self.status = format!("取了一格（{n} 字）");
+        self.status = say!("取了一格（{0} 字）", n);
     }
 
     /// Take a copy of the whole row.
@@ -3716,7 +3681,7 @@ impl Editor {
             .trim_end_matches(['\n', '\r'])
             .to_string();
         self.store(text);
-        self.status = "取了一行".to_string();
+        self.status = say!("取了一行");
     }
 
     /// Put the register into the cell — or, if it is a whole row, below this one.
@@ -3728,7 +3693,7 @@ impl Editor {
     fn put_cell(&mut self) {
         let text = self.recall();
         if text.is_empty() {
-            self.status = "沒有取過東西".to_string();
+            self.status = say!("沒有取過東西");
             return;
         }
         let Some((line, cell)) = self.cell_position() else {
@@ -3762,7 +3727,7 @@ impl Editor {
                 let at = parts.insert_row(row + 1);
                 parts.rows[at] = crate::mdtable::split(&body);
                 self.md_write(&region, &parts, at, cell);
-                self.status = "貼成新的一行".to_string();
+                self.status = say!("貼成新的一行");
                 return;
             }
             self.snapshot();
@@ -3772,7 +3737,7 @@ impl Editor {
                 e.current_buffer_mut().insert(at, &format!("\n{body}"));
             });
             self.set_cursor(at + 1);
-            self.status = "貼成新的一行".to_string();
+            self.status = say!("貼成新的一行");
             return;
         }
         if let Some(why) = self.cell_refuses_text(body) {
@@ -3785,7 +3750,7 @@ impl Editor {
         self.snapshot();
         if self.overwrite(start, end, body) {
             self.set_cursor(start);
-            self.status = "換掉了一格".to_string();
+            self.status = say!("換掉了一格");
         }
     }
 
@@ -3821,7 +3786,7 @@ impl Editor {
     fn search_the_table(&mut self) {
         let Some(view) = &self.table else { return };
         let Some(jump) = &view.schema.jump else {
-            self.status = "這張表沒有說哪些欄是拆分".to_string();
+            self.status = say!("這張表沒有說哪些欄是拆分");
             return;
         };
         let needle = match self.table.as_ref().map(|v| v.grain) {
@@ -3834,7 +3799,7 @@ impl Editor {
                 .unwrap_or_default(),
         };
         if needle.trim().is_empty() {
-            self.status = "這一格是空的".to_string();
+            self.status = say!("這一格是空的");
             return;
         }
         let columns: Vec<usize> = jump
@@ -3860,7 +3825,7 @@ impl Editor {
             }
         }
         if hits.is_empty() {
-            self.status = format!("沒有哪一行的拆分用到「{needle}」");
+            self.status = say!("沒有哪一行的拆分用到「{0}」", needle);
             self.table_hits.clear();
             return;
         }
@@ -3896,12 +3861,7 @@ impl Editor {
             return;
         };
         self.goto_line(line + 1);
-        self.status = format!(
-            "「{}」 第 {}/{} 行（n N 走）",
-            self.table_needle,
-            self.table_hit + 1,
-            self.table_hits.len()
-        );
+        self.status = say!("「{0}」 第 {1}/{2} 行（n N 走）", self.table_needle, self.table_hit + 1, self.table_hits.len());
     }
 
     /// Whether the cursor sits at the first character of its cell.
@@ -4070,9 +4030,9 @@ impl Editor {
     pub fn toggle_detail(&mut self) {
         self.show_detail = !self.show_detail;
         self.status = if self.show_detail {
-            "詳情欄：開".to_string()
+            say!("詳情欄：開")
         } else {
-            "詳情欄：關".to_string()
+            say!("詳情欄：關")
         };
     }
 
@@ -4178,28 +4138,28 @@ impl Editor {
             if Some(line) == self.note_return_from {
                 self.set_cursor(back.min(self.current_buffer().rope().len_chars()));
                 self.note_return_from = None;
-                self.status = "回到正文".to_string();
+                self.status = say!("回到正文");
                 return;
             }
             // Somewhere else entirely — the way back has gone stale.
             self.note_return_from = None;
         }
         let Some(detail) = self.note_detail() else {
-            self.status = "這裏沒有註".to_string();
+            self.status = say!("這裏沒有註");
             return;
         };
         let Some(&(_, Some(at))) = detail.links.first() else {
-            self.status = "這條註沒有寫在別處".to_string();
+            self.status = say!("這條註沒有寫在別處");
             return;
         };
         if at == self.cursor_line() {
-            self.status = "註就在這一行".to_string();
+            self.status = say!("註就在這一行");
             return;
         }
         self.note_return = Some(self.cursor);
         self.note_return_from = Some(at);
         self.goto_line(at + 1);
-        self.status = "Enter 回到正文".to_string();
+        self.status = say!("Enter 回到正文");
     }
 
     /// Where a footnote is defined and what it says.
@@ -4337,7 +4297,7 @@ impl Editor {
     /// editor has.
     fn check_table(&mut self) {
         let Some(view) = self.table.as_ref() else {
-            self.status = "不是表格——先 :table".to_string();
+            self.status = say!("不是表格——先 :table");
             return;
         };
         let schema = view.schema.clone();
@@ -4432,7 +4392,7 @@ impl Editor {
             }
         }
         if found.is_empty() {
-            self.status = format!("{name}：{} 行，沒查出問題", last + 1 - first);
+            self.status = say!("{0}：{1} 行，沒查出問題", name, last + 1 - first);
             return;
         }
         found.sort_by_key(|l| {
@@ -4456,7 +4416,7 @@ impl Editor {
             .map(Path::to_path_buf);
         self.add_buffer(buffer);
         self.set_cursor(0);
-        self.status = format!("查出 {n} 條——gf 跳到那一行");
+        self.status = say!("查出 {0} 條——gf 跳到那一行", n);
     }
 
     /// Go to the row this table names by `key` (`:row 木`).
@@ -4467,16 +4427,16 @@ impl Editor {
     /// way.
     fn goto_row(&mut self, key: &str) {
         let Some(view) = self.table.as_ref() else {
-            self.status = "不是表格——先 :table".to_string();
+            self.status = say!("不是表格——先 :table");
             return;
         };
         if view.schema.jump.is_none() && view.schema.key.is_none() {
-            self.status = "這張表沒說哪一欄是行名（schema 的 key）".to_string();
+            self.status = say!("這張表沒說哪一欄是行名（schema 的 key）");
             return;
         }
         let mut chars = key.chars();
         let (Some(c), None) = (chars.next(), chars.next()) else {
-            self.status = format!("「{key}」不是一個字——行名是一個字");
+            self.status = say!("「{0}」不是一個字——行名是一個字", key);
             return;
         };
         match self.row_named(c) {
@@ -4484,9 +4444,9 @@ impl Editor {
                 self.remember_jump();
                 self.move_to_line(line + 1);
                 self.snap_to_cell();
-                self.status = format!("「{c}」在第 {} 行", line + 1);
+                self.status = say!("「{0}」在第 {1} 行", c, line + 1);
             }
-            None => self.status = format!("表裏沒有「{c}」"),
+            None => self.status = say!("表裏沒有「{0}」", c),
         }
     }
 
@@ -4627,7 +4587,7 @@ impl Editor {
                 // to go from one, and 「表裏沒有⿰」 was the wrong thing to say
                 // about it — no table has a row for a piece of grammar.
                 if is_ids_operator(c) {
-                    self.status = format!("「{c}」是結構符，不是部件");
+                    self.status = say!("「{0}」是結構符，不是部件", c);
                     return;
                 }
                 match self.row_named(c) {
@@ -4636,7 +4596,7 @@ impl Editor {
                         return;
                     }
                     None if self.cell_links().iter().any(|&(k, _)| k == c) => {
-                        self.status = format!("表裏沒有「{c}」");
+                        self.status = say!("表裏沒有「{0}」", c);
                         return;
                     }
                     None => {}
@@ -4645,7 +4605,7 @@ impl Editor {
         }
         let links = self.cell_links();
         if links.is_empty() {
-            self.status = "這一格不指向任何一行".to_string();
+            self.status = say!("這一格不指向任何一行");
             return;
         }
         let found: Vec<(char, usize)> = links
@@ -4655,7 +4615,7 @@ impl Editor {
         match found.as_slice() {
             [] => {
                 let missing: String = links.iter().map(|&(c, _)| c).collect();
-                self.status = format!("表裏沒有這些字：{missing}");
+                self.status = say!("表裏沒有這些字：{0}", missing);
             }
             [(_, line)] => {
                 let line = *line;
@@ -4748,8 +4708,8 @@ impl Editor {
     pub fn set_bands(&mut self, n: usize) {
         self.bands = n.clamp(1, 4);
         self.status = match self.bands {
-            1 => "段組：一段（整頁一縱到底）".to_string(),
-            n => format!("段組：{n} 段"),
+            1 => say!("段組：一段（整頁一縱到底）"),
+            n => say!("段組：{0} 段", n),
         };
     }
 
@@ -4757,8 +4717,8 @@ impl Editor {
     pub fn set_indent(&mut self, n: usize) {
         self.indent = n.min(8);
         self.status = match self.indent {
-            0 => "首行縮進：關".to_string(),
-            n => format!("首行縮進：{n} 格"),
+            0 => say!("首行縮進：關"),
+            n => say!("首行縮進：{0} 格", n),
         };
     }
 
@@ -4914,7 +4874,7 @@ impl Editor {
         if let Some(what) = failed {
             if !self.swap_warned {
                 self.swap_warned = true;
-                self.status = format!("沒有留搶救稿 —— {what}");
+                self.status = say!("沒有留搶救稿 —— {0}", what);
             }
         } else {
             self.swap_warned = false;
@@ -5103,7 +5063,7 @@ impl Editor {
         // so this does.
         let orphans = self.orphan_drafts().len();
         if orphans > 0 {
-            self.status = format!("有 {orphans} 份沒存的草稿——`:recover` 打開");
+            self.status = say!("有 {0} 份沒存的草稿——`:recover` 打開", orphans);
         }
         let waiting: Vec<String> = self
             .buffers
@@ -5117,10 +5077,7 @@ impl Editor {
         // The status line is cleared by the next keystroke, so the buffer also
         // wears a `[draft]` tag until the draft is taken or thrown away — the
         // notice has to still be there when the writer looks up.
-        self.status = format!(
-            "a newer draft was recovered for {} — :recover to load it, :recover! to drop it",
-            waiting.join(", ")
-        );
+        self.status = say!("{0} 有比檔案新的草稿——`:recover` 打開，`:recover!` 丟掉", waiting.join("、"));
     }
 
     /// Load this buffer's recovery draft, or throw it away (`:recover[!]`).
@@ -5135,21 +5092,21 @@ impl Editor {
                     let _ = std::fs::remove_file(path);
                 }
                 self.status = match orphans.len() {
-                    0 => "沒有草稿".to_string(),
-                    n => format!("丟掉了 {n} 份草稿"),
+                    0 => say!("沒有草稿"),
+                    n => say!("丟掉了 {0} 份草稿", n),
                 };
                 return Ok(CommandOutcome::Continue);
             }
             let taken = self.take_orphan_drafts();
             self.status = match taken {
-                0 => "這個檔案沒有草稿".to_string(),
-                n => format!("打開了 {n} 份沒存的草稿——`:w <名字>` 留下它們"),
+                0 => say!("這個檔案沒有草稿"),
+                n => say!("打開了 {0} 份沒存的草稿——`:w <名字>` 留下它們", n),
             };
             return Ok(CommandOutcome::Continue);
         };
         if discard {
             self.current_buffer_mut().discard_swap();
-            self.status = "搶救稿丟掉了".to_string();
+            self.status = say!("搶救稿丟掉了");
             return Ok(CommandOutcome::Continue);
         }
         // An ordinary, undoable edit: `u` puts the file on disk back, so
@@ -5161,7 +5118,7 @@ impl Editor {
         buffer.insert(0, &draft);
         self.current_buffer_mut().adopt_draft();
         self.clamp_cursor();
-        self.status = "搶救稿開好了 —— :w 留下它，u 回到原來的".to_string();
+        self.status = say!("搶救稿開好了 —— :w 留下它，u 回到原來的");
         Ok(CommandOutcome::Continue)
     }
 
@@ -5218,9 +5175,9 @@ impl Editor {
         // configured was never touched, and simply applies again.
         self.dense = on;
         self.status = if on {
-            "密排：一縱兩格，無注音、無旁置、無刻度".to_string()
+            say!("密排：一縱兩格，無注音、無旁置、無刻度")
         } else {
-            "密排：關".to_string()
+            say!("密排：關")
         };
     }
 
@@ -5246,8 +5203,8 @@ impl Editor {
             }
         }
         self.status = match self.measure {
-            Some(m) => format!("measure {m}"),
-            None => "measure: the window".to_string(),
+            Some(m) => say!("寫到 {0} 欄寬", m),
+            None => say!("寫多寬：跟着窗口"),
         };
     }
 
@@ -5325,8 +5282,8 @@ impl Editor {
         *self.project_words.borrow_mut() = list;
         self.segment_cache.borrow_mut().clear();
         self.status = match where_from {
-            Some(path) => format!("{n} 個本項目的詞：{}", path.display()),
-            None => "沒有找到 .yumete/words.txt——本項目的詞寫在那裏".to_string(),
+            Some(path) => say!("{0} 個本項目的詞：{1}", n, path.display()),
+            None => say!("沒有找到 .yumete/words.txt——本項目的詞寫在那裏"),
         };
     }
 
@@ -6286,9 +6243,9 @@ impl Editor {
             Key::Char('w') => {
                 let wide = sidebar.toggle_width();
                 self.status = if wide {
-                    "側欄：讀得下整條標題".to_string()
+                    say!("側欄：讀得下整條標題")
                 } else {
-                    "側欄：窄".to_string()
+                    say!("側欄：窄")
                 };
             }
             Key::Char('h') | Key::Left => sidebar.collapse(),
@@ -6297,7 +6254,7 @@ impl Editor {
                 match chosen {
                     Some(crate::sidebar::Chosen::File(path)) => {
                         if let Err(err) = self.open_file(&path) {
-                            self.status = format!("打不開「{}」：{err}", path.display());
+                            self.status = say!("打不開「{0}」：{1}", path.display(), err);
                         }
                         // Entering a file means going to write in it.
                         self.sidebar_focus = false;
@@ -6316,7 +6273,7 @@ impl Editor {
                         match self.open_included_file(&path) {
                             Ok(()) => self.goto_line(line + 1),
                             Err(err) => {
-                                self.status = format!("打不開「{}」：{err}", path.display())
+                                self.status = say!("打不開「{0}」：{1}", path.display(), err)
                             }
                         }
                         self.sidebar_focus = false;
@@ -6360,7 +6317,7 @@ impl Editor {
             }
         });
         if items.is_empty() {
-            self.status = "這裏沒有檔案".to_string();
+            self.status = say!("這裏沒有檔案");
             return;
         }
         self.grep_root = Some(root);
@@ -6418,7 +6375,7 @@ impl Editor {
                             None => PathBuf::from(&path),
                         };
                         if let Err(err) = self.open_file(&full) {
-                            self.status = format!("打不開「{path}」：{err}");
+                            self.status = say!("打不開「{0}」：{1}", path, err);
                         }
                     }
                     Some(crate::picker::Item::Buffer(i, _)) => self.show_buffer(i),
@@ -6428,7 +6385,7 @@ impl Editor {
                     }
                     // The system clipboard is the front end's to read.
                     Some(crate::picker::Item::Paste(None, _)) => self.clipboard_paste(true),
-                    None => self.status = "沒有匹配的".to_string(),
+                    None => self.status = say!("沒有匹配的"),
                 }
             }
             Key::Char(c) => picker.push(c),
@@ -6483,7 +6440,7 @@ impl Editor {
             }
             Mode::Picker => {}
         }
-        self.status = format!("貼了 {} 個字", text.chars().count());
+        self.status = say!("貼了 {0} 個字", text.chars().count());
     }
 
     /// Put the selection on the system clipboard (`Space y`).
@@ -6496,7 +6453,7 @@ impl Editor {
         let (start, end) = self.selection();
         let text = self.current_buffer().rope().slice(start..end).to_string();
         if text.is_empty() {
-            self.status = "沒有選中東西".to_string();
+            self.status = say!("沒有選中東西");
             return;
         }
         // Into the editor's own register too: having copied something, `p` is
@@ -6504,7 +6461,7 @@ impl Editor {
         self.store(text.clone());
         let n = text.chars().count();
         self.clipboard_request = Some(text);
-        self.status = format!("複製了 {n} 個字 —— 已經交給系統剪貼板");
+        self.status = say!("複製了 {0} 個字 —— 已經交給系統剪貼板", n);
     }
 
     /// Put the cursor at char index `pos`, starting a selection there
@@ -6542,7 +6499,7 @@ impl Editor {
     /// Hand over what the system clipboard held, and paste it.
     pub fn provide_clipboard(&mut self, text: &str, after: bool) {
         if text.is_empty() {
-            self.status = "剪貼板是空的".to_string();
+            self.status = say!("剪貼板是空的");
             return;
         }
         self.snapshot();
@@ -6584,7 +6541,7 @@ impl Editor {
     /// `'` rather than vi's `m` and `'`, because `m` here opens match mode.
     fn set_mark(&mut self, name: char) {
         if !name.is_alphanumeric() {
-            self.status = "記號用一個字母或數字".to_string();
+            self.status = say!("記號用一個字母或數字");
             return;
         }
         let rope = self.current_buffer().rope();
@@ -6594,17 +6551,13 @@ impl Editor {
             None => Spot::InBuffer(self.current_buffer().id(), self.cursor),
         };
         self.marks.insert(name, spot);
-        self.status = format!(
-            "記住了「{name}」：{} 第 {} 行",
-            self.current_buffer().display_name(),
-            line + 1
-        );
+        self.status = say!("記住了「{0}」：{1} 第 {2} 行", name, self.current_buffer().display_name(), line + 1);
     }
 
     /// Go back to the place a letter names (`' a`).
     fn go_to_mark(&mut self, name: char) {
         let Some(spot) = self.marks.get(&name).cloned() else {
-            self.status = format!("沒有記號「{name}」");
+            self.status = say!("沒有記號「{0}」", name);
             return;
         };
         self.remember_jump();
@@ -6612,25 +6565,21 @@ impl Editor {
             Spot::InFile(path, line) => {
                 if self.current_buffer().path() != Some(path.as_path()) {
                     if let Err(err) = self.open_file(&path) {
-                        self.status = format!("打不開「{}」：{err}", path.display());
+                        self.status = say!("打不開「{0}」：{1}", path.display(), err);
                         return;
                     }
                 }
                 self.move_to_line(line + 1);
-                self.status = format!(
-                    "「{name}」：{} 第 {} 行",
-                    self.current_buffer().display_name(),
-                    line + 1
-                );
+                self.status = say!("「{0}」：{1} 第 {2} 行", name, self.current_buffer().display_name(), line + 1);
             }
             Spot::InBuffer(id, pos) => {
                 let Some(i) = self.buffer_with(id) else {
-                    self.status = format!("「{name}」在的那個緩衝區已經關了");
+                    self.status = say!("「{0}」在的那個緩衝區已經關了", name);
                     return;
                 };
                 self.show_buffer(i);
                 self.set_cursor(pos.min(self.current_buffer().rope().len_chars()));
-                self.status = format!("「{name}」");
+                self.status = say!("「{0}」", name);
             }
         }
     }
@@ -6669,7 +6618,7 @@ impl Editor {
     fn walk_jumps(&mut self, back: bool) {
         if back {
             if self.jump_at == 0 {
-                self.status = "沒有更早的位置了".to_string();
+                self.status = say!("沒有更早的位置了");
                 return;
             }
             // Stepping back for the first time has to note where we are, or
@@ -6683,7 +6632,7 @@ impl Editor {
             self.jump_at -= 1;
         } else {
             if self.jump_at + 1 >= self.jumps.len() {
-                self.status = "沒有更晚的位置了".to_string();
+                self.status = say!("沒有更晚的位置了");
                 return;
             }
             self.jump_at += 1;
@@ -6695,13 +6644,13 @@ impl Editor {
             Some(i) if i != self.current => self.show_buffer(i),
             Some(_) => {}
             None => {
-                self.status = "那個檔案已經關了".to_string();
+                self.status = say!("那個檔案已經關了");
                 return;
             }
         }
         let len = self.current_buffer().rope().len_chars();
         self.move_head(cursor.min(len));
-        self.status = format!("跳轉表 {}/{}", self.jump_at + 1, self.jumps.len());
+        self.status = say!("跳轉表 {0}/{1}", self.jump_at + 1, self.jumps.len());
     }
 
     /// Find `target` on the current line (`f`/`t`/`F`/`T`), moving the head and
@@ -6729,7 +6678,7 @@ impl Editor {
         };
 
         let Some(idx) = found else {
-            self.status = format!("'{target}' not found on this line");
+            self.status = say!("這一行上沒有「{0}」", target);
             return;
         };
         let head = match kind {
@@ -6783,7 +6732,7 @@ impl Editor {
                 // A row is not a paragraph: stepping up or down mid-word would
                 // leave half a value in one cell and half in another.
                 Key::Up | Key::Down => {
-                    self.status = "一格之內：先 Esc 再換行".to_string();
+                    self.status = say!("一格之內：先 Esc 再換行");
                     return;
                 }
                 _ => {}
@@ -6809,13 +6758,13 @@ impl Editor {
                     return;
                 }
                 Key::Enter => {
-                    self.status = "一格之內：Enter 不進格子——Tab 走下一格".to_string();
+                    self.status = say!("一格之內：Enter 不進格子——Tab 走下一格");
                     return;
                 }
                 // At the cell's own start there is nothing of this cell to
                 // delete, and the character before it is the delimiter.
                 Key::Backspace if self.at_cell_start() => {
-                    self.status = "格首：再刪就把兩格併成一格了".to_string();
+                    self.status = say!("格首：再刪就把兩格併成一格了");
                     return;
                 }
                 _ => {}
@@ -7085,7 +7034,7 @@ impl Editor {
                 self.anchor = cursor;
                 self.clamp_cursor();
             }
-            None => self.status = "已經是最早的了".to_string(),
+            None => self.status = say!("已經是最早的了"),
         }
     }
 
@@ -7098,7 +7047,7 @@ impl Editor {
                 self.anchor = cursor;
                 self.clamp_cursor();
             }
-            None => self.status = "已經是最新的了".to_string(),
+            None => self.status = say!("已經是最新的了"),
         }
     }
 
@@ -7178,7 +7127,7 @@ impl Editor {
                 self.extend = false;
                 self.refresh_goal_column();
             }
-            None => self.status = format!("找不到：{pattern}"),
+            None => self.status = say!("找不到：{0}", pattern),
         }
     }
 
@@ -7196,7 +7145,7 @@ impl Editor {
             rows,
         } = how;
         if pattern.is_empty() {
-            self.status = "空的模式".to_string();
+            self.status = say!("空的模式");
             return;
         }
         // `i` is the regex engine's own flag, so it is written into the
@@ -7240,7 +7189,7 @@ impl Editor {
         }
         // `n` in vi means "count, and change nothing". It used to substitute.
         if count_only {
-            self.status = format!("{count} 處（沒有改）");
+            self.status = say!("{0} 處（沒有改）", count);
             return;
         }
         if count > 0 {
@@ -7254,7 +7203,7 @@ impl Editor {
             self.anchor = self.cursor;
             self.refresh_goal_column();
         }
-        self.status = format!("換了 {count} 處");
+        self.status = say!("換了 {0} 處", count);
     }
 
     /// The first and last line a `:s` range names.
@@ -7484,14 +7433,14 @@ impl Editor {
     fn search_selection(&mut self) {
         let (start, end) = self.selection();
         if end <= start {
-            self.status = "沒有選中東西".to_string();
+            self.status = say!("沒有選中東西");
             return;
         }
         // Escaped: `*` searches for the text that is selected, and a selection
         // is text, not a pattern — 「（」 must not open a group.
         let text = self.current_buffer().rope().slice(start..end).to_string();
         self.last_search = regex::escape(&text);
-        self.status = format!("搜索：{text}");
+        self.status = say!("搜索：{0}", text);
     }
 
     /// Indent (`>`) or unindent (`<`) every line the selection touches.
@@ -7596,7 +7545,7 @@ impl Editor {
     fn format_ruby(&mut self, dialect: Dialect) {
         let text = self.current_buffer().text();
         let Some(formatted) = crate::ruby::reformat(&text, dialect) else {
-            self.status = format!("已經是 {} 的注音了", dialect.name());
+            self.status = say!("已經是 {0} 的注音了", dialect.name());
             return;
         };
         self.snapshot();
@@ -7605,7 +7554,7 @@ impl Editor {
         buffer.remove(0..len);
         buffer.insert(0, &formatted);
         self.clamp_cursor();
-        self.status = format!("注音改寫成 {} 了", dialect.name());
+        self.status = say!("注音改寫成 {0} 了", dialect.name());
     }
 
     /// Step Tab's completion through the matching commands, writing each onto
@@ -7670,7 +7619,7 @@ impl Editor {
         // nothing to annotate.
         let (start, end) = self.selection();
         if end <= start {
-            self.status = "把游標放進注音裏，或者選中要注音的字".to_string();
+            self.status = say!("把游標放進注音裏，或者選中要注音的字");
             return;
         }
         self.command_line.clear();
@@ -7734,9 +7683,9 @@ impl Editor {
         self.cursor = span.0;
         self.clamp_cursor();
         self.status = if reading.is_empty() {
-            "reading removed".to_string()
+            say!("注音去掉了")
         } else {
-            format!("reading: {reading}")
+            say!("注音：{0}", reading)
         };
     }
 
@@ -7753,7 +7702,7 @@ impl Editor {
     /// the cursor is *now*, which is exactly what a person pressing `.` means.
     fn repeat_edit(&mut self) {
         if self.last_edit_keys.is_empty() {
-            self.status = "還沒有可以重複的改動".to_string();
+            self.status = say!("還沒有可以重複的改動");
             return;
         }
         let keys = self.last_edit_keys.clone();
@@ -7792,7 +7741,7 @@ impl Editor {
             return;
         };
         let Some((start, end)) = surrounding(rope, self.cursor, open, close) else {
-            self.status = format!("外面沒有 {open}{close}");
+            self.status = say!("外面沒有 {0}{1}", open, close);
             return;
         };
         // `end` is the closing bracket's own index. The head goes on the last
@@ -7830,7 +7779,7 @@ impl Editor {
     /// Remove the innermost pair around the cursor (`md`).
     fn surround_delete(&mut self) {
         let Some((start, end)) = self.innermost_pair() else {
-            self.status = "外面沒有成對的符號".to_string();
+            self.status = say!("外面沒有成對的符號");
             return;
         };
         self.snapshot();
@@ -7851,7 +7800,7 @@ impl Editor {
         };
         let rope = self.current_buffer().rope();
         let Some((start, end)) = surrounding(rope, self.cursor, open, close) else {
-            self.status = format!("外面沒有 {open}{close}");
+            self.status = say!("外面沒有 {0}{1}", open, close);
             return;
         };
         self.snapshot();
@@ -8285,7 +8234,7 @@ impl Editor {
         if end > start {
             // Deleting yanks, as it does in Helix: `d` then `p` moves text.
             if self.cell_refuses_cut(start..end).is_some() {
-                self.status = "格與格之間的分隔不能刪掉".to_string();
+                self.status = say!("格與格之間的分隔不能刪掉");
                 return;
             }
             let text = self.current_buffer().rope().slice(start..end).to_string();
@@ -8332,11 +8281,11 @@ impl Editor {
             Some(keys) => {
                 let n = keys.len();
                 self.macro_keys = keys;
-                self.status = format!("錄了 {n} 個鍵");
+                self.status = say!("錄了 {0} 個鍵", n);
             }
             None => {
                 self.recording = Some(Vec::new());
-                self.status = "錄製中…".to_string();
+                self.status = say!("錄製中…");
             }
         }
     }
@@ -8399,7 +8348,7 @@ impl Editor {
                 }),
         );
         if items.len() == 1 {
-            self.status = "還沒有取過東西".to_string();
+            self.status = say!("還沒有取過東西");
         }
         self.picker = Some(crate::picker::Picker::new("貼上", items));
         self.mode = Mode::Picker;
@@ -8433,7 +8382,7 @@ impl Editor {
         self.register = text;
         self.pending_register = None;
         self.paste(true);
-        self.status = format!("貼了 {name}");
+        self.status = say!("貼了 {0}", name);
     }
 
     /// The contents of the register a command should read from.
@@ -8451,7 +8400,7 @@ impl Editor {
         let text = self.current_buffer().rope().slice(start..end).to_string();
         let n = end - start;
         self.store(text);
-        self.status = format!("取了 {n} 個字");
+        self.status = say!("取了 {0} 個字", n);
     }
 
     /// Paste the register after (`p`) or before (`P`) the selection, and select
@@ -9315,7 +9264,7 @@ mod tests {
         ed.on_key(Key::Tab);
         assert_eq!(ed.prompt(), Some((':', "segment")));
         ed.on_key(Key::Enter);
-        assert!(ed.status().starts_with("segmentation"));
+        assert!(ed.status().contains("分詞"), "{}", ed.status());
     }
 
     #[test]
@@ -10311,7 +10260,7 @@ mod tests {
             ed.open_file(&csv).unwrap();
             assert!(ed.table().is_none(), "{expect}: not read as a grid");
             assert!(
-                ed.status().starts_with("schema:") && ed.status().contains(expect),
+                ed.status().starts_with("schema：") && ed.status().contains(expect),
                 "opening says what is wrong: {}",
                 ed.status()
             );

@@ -1490,6 +1490,9 @@ indent = 0                   # 首行縮進幾格；中文段落慣例是 2
 bands = 1                    # 段組：竪排頁面橫着分成幾條，1–4
 dense = true                 # 密排（預設）：一縱兩格，無注音、無旁置、無刻度
 session = true               # 不帶檔名啓動時，接着上次那些檔案。false 從空白開始
+language = "zh"              # 編輯器說話用哪種語言："zh" | "en"
+                             # 兩種寫法都在 crates/yumete-core/messages.toml 裏，
+                             # 一條消息一段，中英並排，改英文只改 en 那一行
 zong_gap = 1                 # 縱之間的半角格數，0–4。設 0 則縱與縱相貼，
                              # 只有帶注音的那一縱佔一格
 tatechuyoko = false          # 半角字兩個擠進一格（縦中横）

@@ -2244,14 +2244,14 @@ fn draw_hints(frame: &mut Frame, editor: &Editor, config: &Config, area: Rect) {
         Hint::Quiet => {}
         Hint::Says(text) => put(&text, news, &mut x),
         Hint::Keys(name, keys) => {
-            put(name, label, &mut x);
+            put(&name, label, &mut x);
             put("  ", what, &mut x);
             for (k, doing) in keys {
                 if !k.is_empty() {
                     put(k, key, &mut x);
                     put(" ", what, &mut x);
                 }
-                put(doing, what, &mut x);
+                put(&doing, what, &mut x);
                 // Two spaces between pairs rather than a bullet: the gap is
                 // what groups a key with its meaning, and a separator between
                 // groups only competes with it.

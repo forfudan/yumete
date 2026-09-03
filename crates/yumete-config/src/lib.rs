@@ -64,6 +64,8 @@ pub struct EditorConfig {
     pub bands: usize,
     /// Whether `yumete` with no file opens again what was open last time.
     pub session: bool,
+    /// What language the editor says things in: `"zh"` or `"en"`.
+    pub language: String,
     /// The gap between two 縱, in half-width cells (0–4).
     pub zong_gap: usize,
     /// Whether the 拆分 annotation is shown beside candidates (Feature #66).
@@ -179,6 +181,7 @@ impl Default for EditorConfig {
             indent: 0,
             bands: 1,
             session: true,
+            language: "zh".to_string(),
             zong_gap: DEFAULT_ZONG_GAP,
             show_chaifen: false,
             show_ruby: false,
@@ -578,6 +581,7 @@ struct RawEditor {
     indent: Option<usize>,
     bands: Option<usize>,
     session: Option<bool>,
+    language: Option<String>,
     zong_gap: Option<usize>,
     show_chaifen: Option<bool>,
     show_ruby: Option<bool>,
@@ -643,6 +647,9 @@ impl RawConfig {
         }
         if other.editor.session.is_some() {
             self.editor.session = other.editor.session;
+        }
+        if other.editor.language.is_some() {
+            self.editor.language = other.editor.language.clone();
         }
         if other.editor.zong_length.is_some() {
             self.editor.zong_length = other.editor.zong_length;
@@ -778,6 +785,9 @@ impl RawConfig {
         }
         if let Some(on) = self.editor.session {
             config.editor.session = on;
+        }
+        if let Some(name) = &self.editor.language {
+            config.editor.language = name.clone();
         }
         if let Some(length) = self.editor.zong_length {
             // Below ~4 a 縱 stops being a column of text; above 64 no terminal
