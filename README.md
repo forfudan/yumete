@@ -15,7 +15,8 @@ feature roadmap.
 
 ## Status
 
-Early development, but already an interactive modal editor. Implemented so far:
+A working editor — not finished, and used daily by its author. Implemented so
+far, oldest first:
 
 - **#1 Open file / new buffer** — `yumete <file>` opens a file (a non-existent
   path opens an empty buffer bound to it); `yumete` with no argument starts a new
@@ -143,13 +144,49 @@ Early development, but already an interactive modal editor. Implemented so far:
 
 - **#61 Vertical layout (縱書)** — text can be set the way a Chinese novel is:
   running top to bottom in **縱** (*zong*) that stack from the right edge
-  leftward, one paragraph soft-wrapping into as many 縱 as it needs at 32
-  characters each. `h j k l` keep their screen meaning — `j`/`k` read down and up
+  leftward, one paragraph soft-wrapping into as many 縱 as the window allows —
+  or as many as `zong_length` / `:wrap n` says, when the writer has made that
+  decision themselves. `h j k l` keep their screen meaning — `j`/`k` read down and up
   a 縱, `h`/`l` step to the 縱 on the left and on the right. CJK punctuation is
   drawn in its vertical form (`。`→`︒`, `「」`→`﹁﹂`) on screen only, so the file
   on disk is unchanged. The candidate panel turns with it: the preedit on the
   right, candidates running leftward. Turn it on with `layout = "vertical"`,
   `--vertical`, or `:layout`.
+
+### Since then
+
+The list above is the first sixty features and stops in the middle of the story.
+The rest, by what it is for rather than one line per number (`docs/development.md`
+has the table, through #150):
+
+- **The page a Chinese book is set on.** 標點旁置 (hung punctuation), 縦中横,
+  ruby laid out beside the base, 稿紙 ticks, `:dense` for a page that spends
+  every column on writing, **首行縮進** (a paragraph opens two squares in — as a
+  *view*, so the file keeps the blank line Markdown needs), and **段組**, which
+  halves a tall page into bands read top-right to top-left and then bottom-right
+  to bottom-left, the way a 文庫本 is set. 禁則處理 down the 縱 as well as
+  across: a column never opens with 。 or closes with 「.
+- **Markdown that stays on the page.** `:render off|on|full` — the markup is
+  coloured and *shown*, because the file is the manuscript; 所見即所得 takes it
+  off, except on the construct the cursor is in.
+- **Tables.** A CSV is edited as a grid — the cell is the unit of movement, a
+  schema beside the data names the columns, and an 8 MB hand-edited file goes
+  back out byte for byte. The same cell model works on a **Markdown `|` table**
+  inside a document, aligned by East-Asian display width, which is the thing
+  every other formatter gets wrong for Chinese.
+- **A hundred chapters.** `:grep` and `:toc` make results that are *text*, so
+  `gf` walks them; `:grep` then `:replace` renames a character across the whole
+  book without touching disk until `:wa`; a session reopens what was open; `M a`
+  and `' a` name a place and come back to it.
+- **Not losing work.** A file changed on disk is not written over; a crash copy
+  is kept for every buffer, including the ones with no name; an undo point has
+  to be *earned*; a macro keeps its operands.
+- **The IME.** Yume's engine built in: 靈明 embedded in the binary so a fresh
+  install can type Chinese, any Rime `.dict.yaml` loadable with `:yume table`,
+  and 拆分 shown beside every candidate.
+- **Prose the editor understands.** Word segmentation from Yume's language
+  model drives `w`/`b`/`e`; `.yumete/words.txt` teaches it the names in *this*
+  book; `{}`/`()` move by paragraph and by sentence.
 
 Launch `yumete <file>` in a terminal for the editor, or `yumete --preview <file>`
 (or pipe the output) for a non-interactive preview — with `--vertical`, the
