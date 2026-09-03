@@ -41,6 +41,12 @@ pub struct EditorConfig {
     pub line_numbers: LineNumbers,
     /// Minimum number of lines to keep above/below the cursor when scrolling.
     pub scrolloff: usize,
+    /// Whether a grid's columns are ruled apart (Feature #157).
+    ///
+    /// A wide-columned table reads as a page and wants no seams; a 拆分表 of
+    /// twenty-eight one-character columns reads as a grid and cannot do
+    /// without them. The file does not say which it is.
+    pub table_rules: bool,
     /// Whether the word-segmentation overlay is shown at start-up (Feature #24).
     /// On by default so the CJK word grouping is visible; toggle with `:segment`
     /// or set `show_segmentation = false`.
@@ -174,6 +180,7 @@ impl Default for EditorConfig {
             tab_width: 4,
             line_numbers: LineNumbers::Absolute,
             scrolloff: 3,
+            table_rules: true,
             show_segmentation: true,
             segmentation_threshold: 0,
             layout: Layout::Horizontal,
@@ -762,6 +769,7 @@ struct RawEditor {
     tab_width: Option<usize>,
     line_numbers: Option<String>,
     scrolloff: Option<usize>,
+    table_rules: Option<bool>,
     show_segmentation: Option<bool>,
     segmentation_threshold: Option<i64>,
     layout: Option<String>,
@@ -827,6 +835,9 @@ impl RawConfig {
         }
         if other.editor.scrolloff.is_some() {
             self.editor.scrolloff = other.editor.scrolloff;
+        }
+        if other.editor.table_rules.is_some() {
+            self.editor.table_rules = other.editor.table_rules;
         }
         if other.editor.show_segmentation.is_some() {
             self.editor.show_segmentation = other.editor.show_segmentation;
@@ -970,6 +981,9 @@ impl RawConfig {
         }
         if let Some(off) = self.editor.scrolloff {
             config.editor.scrolloff = off;
+        }
+        if let Some(on) = self.editor.table_rules {
+            config.editor.table_rules = on;
         }
         if let Some(on) = self.editor.show_segmentation {
             config.editor.show_segmentation = on;

@@ -2132,7 +2132,10 @@ fn draw_horizontal(
         }
         lines.push(Line::from(spans));
     }
-    frame.render_widget(Paragraph::new(lines), text_area);
+    // `.style` paints the **whole area**, not only the rows there is writing
+    // on: past the last line of a short file the page is still the page, and
+    // 墨香's light page on a dark terminal made that half of the window black.
+    frame.render_widget(Paragraph::new(lines).style(ink.page()), text_area);
 
     // The margin: everything past the measure, whether or not there is writing
     // in it. Tinting only the characters that run past says nothing at all

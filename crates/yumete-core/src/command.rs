@@ -82,6 +82,9 @@ pub enum Command {
     SetMeasure(Option<usize>),
     /// `:table` / `:table off` — read the file as a grid (Feature #118).
     SetTable(bool),
+    /// `:table rules` — whether the columns are ruled apart (Feature #157).
+    /// `None` toggles.
+    SetTableRules(Option<bool>),
     /// `:theme` — which theme, and whether it is dark, light or the
     /// terminal's own answer (Feature #152).
     ///
@@ -476,6 +479,9 @@ pub fn parse(input: &str) -> Result<Command, CommandError> {
             "" | "on" => Ok(Command::SetTable(true)),
             "off" => Ok(Command::SetTable(false)),
             "check" => Ok(Command::CheckTable),
+            "rules" => Ok(Command::SetTableRules(None)),
+            "rules on" => Ok(Command::SetTableRules(Some(true))),
+            "rules off" => Ok(Command::SetTableRules(Some(false))),
             other => Err(CommandError::InvalidArgument {
                 command: "table",
                 value: other.to_string(),
@@ -837,6 +843,11 @@ const TABLE: &[Word] = &[
         name: "check",
         help: "從頭看一遍：重複的行名、查無此行的部件、欄數不對的行、超出字集的字",
         then: Args::None,
+    },
+    Word {
+        name: "rules",
+        help: "欄線：欄與欄之間分不分開",
+        then: Args::Words(ON_OFF),
     },
 ];
 
