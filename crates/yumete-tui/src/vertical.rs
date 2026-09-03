@@ -543,15 +543,13 @@ pub fn draw(
         // Off the page, or too close to an edge: re-anchor so the cursor sits
         // `scrolloff` in from whichever side it left by.
         found => {
-            let inset = if found.is_some() || cursor_anchor >= *viewport {
-                last_column.saturating_sub(scrolloff)
-            } else {
-                scrolloff
-            };
-            let inset = if found.is_some_and(|d| d < scrolloff) {
-                scrolloff
-            } else {
-                inset
+            // …and a 縱 off the page altogether lands in the middle of it: a
+            // jump is a jump whichever way the text runs.
+            let inset = match found {
+                None if cursor_anchor >= *viewport => capacity / 2,
+                Some(d) if d < scrolloff => scrolloff,
+                Some(_) => last_column.saturating_sub(scrolloff),
+                None => scrolloff,
             };
             *viewport = zong::retreat(rope, cursor_anchor, grid, inset);
             page = layout_page(rope, *viewport, grid, &metrics, area, capacity);

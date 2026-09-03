@@ -387,6 +387,51 @@ Phases are ordered by priority, most writer-critical first:
 | 188 | **The hint row wraps**                      | tui    | P3    | more keys than a row holds; never between a key and what it does | Planned |
 | 189 | **`:shot` takes the page, not the app**     | tui    | P2    | the tab bar and the title bar are not the editor; a region, or a crop, or the grid drawn by us | Planned |
 | 190 | **One rule for folding a blank line**       | core   | P1    | 竪排 folds with the indent off and opens one *with* it on — two behaviours that read as contradictory | Planned |
+| 191 | **A stored position names its buffer**      | core   | P0    | the hit list held `n`, survived a buffer switch and an edit, and said 「第 3/78 處」 about a character that matched nothing — `d` then deleted it | Done |
+
+### 14 · What four reviews of the code found, 2026-09-03
+
+Two of the four are in as this is written. They agree on the shape of the
+problem, and it is the author's own diagnosis: **there is no object for "the
+page" or for "a place in a document", so every such thing is loose fields on
+`Editor`, and each layout builds its own out of them.** Every finding is one of
+two shapes — *the same rule derived twice from loose primitives*, or *a stored
+position that does not name what it is a position in*.
+
+Fixed the same day, worst first:
+
+- **The hit list was global.** `table_hits: Vec<(usize, usize)>` with no owner,
+  holding `n`/`N`. Reproduced: `Enter` on 卵 in one chapter, `gn` to another,
+  `n` → 「第 3/78 處」 about a character that matches nothing, and `d` deletes
+  it. Now `Hits { buffer, revision, spans, at }` with one gate (`live_hits`):
+  another document or a moved revision is **no answer**, not a wrong one.
+- **A pane named one buffer and showed another.** `show_in_split` wrote every
+  field except `buffer`, so `空格 w` went to the file the pane was opened on
+  rather than the one on the screen. And a pane whose file was closed
+  teleported the cursor into whatever buffer took its index; now it says so.
+- **Three caches keyed by a buffer *index*.** A fresh buffer opens at revision
+  0, so after `:bd` the key collided and the next file was told it was inside a
+  code fence — Markdown colouring, 所見即所得 and the fold map all wrong until
+  the next edit. Keyed by `id` now, like the marks and the jump list.
+- **Three functions meaning「the document changed」cleared three different
+  subsets.** They call one `forget_the_document` now, and table mode no longer
+  outlives its table.
+- **延伸模式 survived Insert**: `v i X Esc` came back to Normal still
+  extending. Cleared at the door.
+
+Open, from the same two reviews (ranked):
+
+1. `zong::Grid` re-derives the page from raw text where `wrap::Measure` is
+   *handed* it — so 縱書 hides markup inside a fence, ignores `:syntax
+   text`/typst, and folds by a different rule. Three divergences from one
+   asymmetry; the fix is to give `Grid` the same closures `Measure` takes.
+2. The event loop settles `page_lines`/`page_columns` from the whole text area
+   rather than from the live pane, so `C-f` turns two pages with a split open.
+3. `:replace` rewrites whole buffers without the grid check `:s` makes.
+4. `n`/`N` after `*` or `:search` still walk the *old* hit list.
+5. 縱書 has no paragraph memo: 565 ms per keypress at 500k 字 in one paragraph.
+6. Ruby mode and the picker have no caret: no `Left`, `Home`, `C-a`.
+7. `enter_md_table` reformats — looking at a table marks the file modified.
 
 ---
 

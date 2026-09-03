@@ -61,6 +61,18 @@ impl Pane {
     }
 }
 
+/// The places one search found, in the buffer and revision it found them in.
+#[derive(Debug, Clone)]
+struct Hits {
+    /// The buffer's id — never its index.
+    buffer: u64,
+    /// The revision it was searched at. An edit does not move the offsets
+    /// *usefully*, so a stale list is dropped rather than adjusted.
+    revision: u64,
+    spans: Vec<(usize, usize)>,
+    at: usize,
+}
+
 /// Which lines are off the page, against the buffer and revision they were
 /// worked out for — and the span of lines where folding is unsafe because
 /// something other than prose is written there.
@@ -68,7 +80,7 @@ type FoldMap = ((u64, u64), Vec<bool>, (usize, usize));
 
 /// Every line's block, against the buffer it was worked out for and that
 /// buffer's revision — the two things that decide whether it is still true.
-type BlockCache = ((usize, u64), Vec<crate::markdown::Block>);
+type BlockCache = ((u64, u64), Vec<crate::markdown::Block>);
 
 /// How many paragraphs of segmentation to remember.
 ///
@@ -191,7 +203,7 @@ enum CellEdit {
 /// Which line holds the row with each key, and what it was built from.
 struct KeyIndex {
     /// The buffer, its revision, and how many lines it had.
-    of: (usize, u64, usize),
+    of: (u64, u64, usize),
     keys: HashMap<char, usize>,
 }
 
@@ -320,8 +332,9 @@ const JUMPS: usize = 100;
 /// The last answer [`Editor::md_region`] gave, and what it was an answer to.
 #[derive(Debug, Clone)]
 struct MdCache {
-    /// Which buffer, which revision of it, and which line the cursor was on.
-    asked: (usize, u64, usize),
+    /// Which buffer (by id), which revision of it, and which line the cursor
+    /// was on.
+    asked: (u64, u64, usize),
     region: Option<crate::mdtable::Region>,
 }
 
@@ -569,7 +582,7 @@ pub struct Editor {
     /// so a pure motion looked like a change and `.` came to mean 「switch
     /// buffer」 — which for someone walking a hundred chapters is the common
     /// case.
-    edit_revision: (usize, u64),
+    edit_revision: (u64, u64),
     /// The last change's keys.
     last_edit_keys: Vec<Key>,
     /// Places named by a letter, and reachable from any file (`M a`, `' a`).
@@ -641,14 +654,17 @@ pub struct Editor {
     indent: usize,
     /// How many bands the vertical page is divided into (段組).
     bands: usize,
-    /// The rows a table search found, which one it is pointing at, and what it
-    /// was looking for.
-    /// The cells a column search found, as `(line, column)`.
+    /// What the last `Enter` search found, **and which document it found it
+    /// in** (Feature #191).
     ///
-    /// Cells, not rows: 卵 may sit in two columns of one row, and those are two
-    /// answers.
-    table_hits: Vec<(usize, usize)>,
-    table_hit: usize,
+    /// A bare `Vec<(usize, usize)>` of char offsets is the most dangerous
+    /// thing this editor can hold: it survived a buffer switch and an edit,
+    /// while `n` and `N` belonged to it, so 「第 3/78 處」 could be said about a
+    /// character in a file that was never searched — and the next `d` deleted
+    /// it. The rule the marks and the jump list already follow, applied here:
+    /// **a stored position names the buffer it is in**, and a revision that
+    /// has moved means the answer is gone rather than wrong.
+    hits: Option<Hits>,
 
     /// Where a jump came from: the buffer's **id** and the cursor.
     ///
@@ -888,8 +904,7 @@ impl Editor {
             dense: false,
             indent: 0,
             bands: 1,
-            table_hits: Vec::new(),
-            table_hit: 0,
+            hits: None,
             jumps: Vec::new(),
             jump_at: 0,
             key_index: RefCell::new(None),
@@ -1023,20 +1038,14 @@ impl Editor {
         let restored = self.current_buffer().saved_cursor();
         self.set_cursor(restored);
         self.extend = false;
-        // Segmentation is cached per line number, and the lines are a different
-        // document now.
-        self.segment_cache.borrow_mut().clear();
-        // The table memo is keyed by the buffer's *index*, and closing a buffer
-        // shifts every later one down — so an index can come to mean a
-        // different document. Dropping it here retires the whole class.
-        self.md_cache.borrow_mut().take();
-        // Whether this file is a grid is a fact about *this* file, so it is
-        // asked again — otherwise a chapter opened next to a table would
-        // inherit the table's columns. How you were reading it, though, is a
-        // fact about you: coming back to a table you were walking by character
-        // should not silently put you back on cells.
+        // Everything that was about the *other* document goes — one list, in
+        // one place. Whether this file is a grid is asked again there, so a
+        // chapter opened next to a table cannot inherit the table's columns.
+        // How you were reading it, though, is a fact about you: coming back to
+        // a table you were walking by character should not silently put you
+        // back on cells.
         let grain = self.table.as_ref().map(|v| v.grain);
-        self.table_on_open();
+        self.forget_the_document();
         if let (Some(grain), Some(view)) = (grain, self.table.as_mut()) {
             view.grain = grain;
         }
@@ -1135,6 +1144,7 @@ impl Editor {
         if self.buffers.len() == 1 {
             self.buffers[0] = Buffer::scratch();
             self.set_cursor(0);
+            self.forget_the_document();
             self.status = say!("關了");
             return Ok(CommandOutcome::Continue);
         }
@@ -1142,10 +1152,39 @@ impl Editor {
         self.current = self.current.min(self.buffers.len() - 1);
         let restored = self.current_buffer().saved_cursor();
         self.set_cursor(restored);
-        self.segment_cache.borrow_mut().clear();
+        self.forget_the_document();
         let (n, total) = self.buffer_position();
         self.status = say!("關了 {0}——現在是 {1} [{2}/{3}]", closed, self.buffer_name(), n, total);
         Ok(CommandOutcome::Continue)
+    }
+
+    /// Let go of everything that was about the document you were just in.
+    ///
+    /// **One list, called from every place the document changes** — closing a
+    /// buffer, switching to another. Three sibling functions used to clear
+    /// three different subsets of this, which is how a grid stayed on after
+    /// its table was closed and a hit list went on answering `n` in a file it
+    /// had never seen.
+    fn forget_the_document(&mut self) {
+        self.segment_cache.borrow_mut().clear();
+        *self.md_cache.borrow_mut() = None;
+        *self.block_cache.borrow_mut() = None;
+        *self.fold_cache.borrow_mut() = None;
+        *self.key_index.borrow_mut() = None;
+        // The hits are *not* thrown away: they name their own buffer and
+        // revision now, so they are simply not an answer while you are
+        // elsewhere — and they are one again when you come back to the file
+        // and the text they were found in.
+        self.table_on_open();
+        // A pane naming a buffer that is gone is not a pane.
+        if self
+            .other
+            .as_ref()
+            .is_some_and(|pane| self.buffer_with(pane.buffer).is_none())
+        {
+            self.other = None;
+            self.live_pane = 0;
+        }
     }
 
     /// The active buffer's short name.
@@ -1467,7 +1506,11 @@ impl Editor {
         // Worked out once per edit, not once per frame. Blocks depend on the
         // whole document above a line, so asking per row was quadratic — and
         // the answer only changes when the text does.
-        let key = (self.current, buffer.revision());
+        // By **id**, never by index: closing a buffer shifts every later one
+        // down, and a fresh buffer opens at revision 0 — so an index-keyed
+        // entry could be handed to a different document that happens to sit
+        // where the old one did, and answer for it.
+        let key = (buffer.id(), buffer.revision());
         if let Some((cached, blocks)) = self.block_cache.borrow().as_ref() {
             if *cached == key {
                 return blocks[..=last.min(blocks.len() - 1)].to_vec();
@@ -2731,7 +2774,8 @@ impl Editor {
         }
         let rope = self.current_buffer().rope();
         let line = rope.char_to_line(self.cursor.min(rope.len_chars()));
-        let asked = (self.current, self.current_buffer().revision(), line);
+        // Keyed by the buffer's **id**, not by its index — see `blocks_through`.
+        let asked = (self.current_buffer().id(), self.current_buffer().revision(), line);
         if let Some(cache) = self.md_cache.borrow().as_ref() {
             if cache.asked == asked {
                 return cache.region.clone();
@@ -4332,46 +4376,83 @@ impl Editor {
                 }
             }
         }
-        let hits: Vec<(usize, usize)> = by_column.into_iter().flatten().collect();
-        if hits.is_empty() {
+        let spans: Vec<(usize, usize)> = by_column.into_iter().flatten().collect();
+        if spans.is_empty() {
             self.status = say!("找不到：{0}", pattern);
-            self.table_hits.clear();
+            self.hits = None;
             return;
         }
         self.last_search = pattern.to_string();
-        self.table_hits = hits;
+        let found = spans.len();
         // From the first column's first hit, whatever column you were standing
         // in: `Enter` on 卵 gives the same route through the table every time,
         // which is what 「把所有用到它的地方過一遍」 means.
-        self.table_hit = 0;
-        self.remember_jump();
+        self.remember_hits(spans, 0);
         self.show_table_hit();
         if declared.is_none() {
             self.status = say!(
                 "本表格文件未指定快速跳轉之範圍，從第一欄起搜索——第 1/{0} 處",
-                self.table_hits.len()
+                found
             );
         }
     }
 
+    /// Remember what a search found, and which document it found it in.
+    fn remember_hits(&mut self, spans: Vec<(usize, usize)>, at: usize) {
+        let buffer = self.current_buffer();
+        self.hits = Some(Hits {
+            buffer: buffer.id(),
+            revision: buffer.revision(),
+            spans,
+            at,
+        });
+    }
+
+    /// The hits, if they are still about the document in front of you.
+    ///
+    /// **The one gate.** A list found in another file, or before an edit, is
+    /// not a shorter answer — it is a wrong one, and it used to be given
+    /// confidently: 「第 3/78 處」 about a character that matched nothing, in a
+    /// chapter that was never searched.
+    fn live_hits(&self) -> Option<&Hits> {
+        let buffer = self.current_buffer();
+        self.hits
+            .as_ref()
+            .filter(|h| h.buffer == buffer.id() && h.revision == buffer.revision())
+    }
+
+    /// Whether `n` and `N` belong to a hit list rather than to `/`.
+    fn walking_hits(&self) -> bool {
+        self.live_hits().is_some_and(|h| !h.spans.is_empty())
+    }
+
     /// Step to the next or previous match the column search found.
     fn walk_table_hits(&mut self, forward: bool) -> bool {
-        if self.table_hits.is_empty() {
+        let Some(hits) = self.live_hits() else {
+            return false;
+        };
+        let n = hits.spans.len();
+        if n == 0 {
             return false;
         }
-        let n = self.table_hits.len();
-        self.table_hit = if forward {
-            (self.table_hit + 1) % n
-        } else {
-            (self.table_hit + n - 1) % n
+        let at = match forward {
+            true => (hits.at + 1) % n,
+            false => (hits.at + n - 1) % n,
         };
+        if let Some(hits) = self.hits.as_mut() {
+            hits.at = at;
+        }
         self.show_table_hit();
         true
     }
 
     /// Select the match the column search is pointing at, and say which it is.
     fn show_table_hit(&mut self) {
-        let Some(&(from, to)) = self.table_hits.get(self.table_hit) else {
+        let Some(hits) = self.live_hits() else {
+            return;
+        };
+        let (at, found) = (hits.at, hits.spans.len());
+        let Some(&(from, to)) = hits.spans.get(at) else {
             return;
         };
         let rope = self.current_buffer().rope();
@@ -4379,11 +4460,7 @@ impl Editor {
         let to = to.min(len);
         let from = from.min(len);
         let head = motion::prev_grapheme(rope, to).max(from);
-        let which = say!(
-            "第 {0}/{1} 處（n N 走）",
-            self.table_hit + 1,
-            self.table_hits.len()
-        );
+        let which = say!("第 {0}/{1} 處（n N 走）", at + 1, found);
         // **Shown, not jumped to** (Feature #176). 卵's own row and a row that
         // uses 卵 are two places, and the question 「誰用了卵」 is about both
         // of them at once — so the hit opens in the other work area and the
@@ -4449,7 +4526,8 @@ impl Editor {
     /// the ordinary selection ground is easy to miss, and every editor's
     /// answer to that is to give the **current** match a mark of its own.
     pub fn current_hit(&self) -> Option<(usize, usize)> {
-        self.table_hits.get(self.table_hit).copied()
+        let hits = self.live_hits()?;
+        hits.spans.get(hits.at).copied()
     }
 
     /// Which line the other work area is showing, for tests and for the
@@ -4797,22 +4875,21 @@ impl Editor {
             self.status = say!("這裏沒有字可以找");
             return;
         }
-        let hits = self.every_match(&regex::escape(&needle));
-        if hits.len() <= 1 {
+        let spans = self.every_match(&regex::escape(&needle));
+        if spans.len() <= 1 {
             self.status = say!("只有這一處：{0}", needle);
-            self.table_hits.clear();
+            self.hits = None;
             return;
         }
         self.last_search = regex::escape(&needle);
-        self.table_hits = hits;
         // The first one *after* where you are standing: the useful answer to
         // 「還在哪裏」 is the next place, not the first page of the book.
         let here = self.cursor;
-        self.table_hit = self
-            .table_hits
+        let at = spans
             .iter()
             .position(|&(from, _)| from > here)
             .unwrap_or(0);
+        self.remember_hits(spans, at);
         self.show_table_hit();
     }
 
@@ -5226,7 +5303,11 @@ impl Editor {
         let link = view.schema.link.as_ref()?;
         let at = view.schema.index_of(&link.to)?;
         let rope_lines = self.current_buffer().line_count();
-        let want = (self.current, self.current_buffer().revision(), rope_lines);
+        let want = (
+            self.current_buffer().id(),
+            self.current_buffer().revision(),
+            rope_lines,
+        );
         // Typing inside a cell cannot move a row or rename another one: table
         // mode refuses Enter, so the line count is fixed, and the only key that
         // could change is this row's own — which is only in play when the
@@ -5701,8 +5782,14 @@ impl Editor {
 
     /// Show something else in the other work area, opening it if need be.
     pub fn show_in_split(&mut self, at: usize, highlight: Option<(usize, usize)>, caption: String) {
+        // **Which buffer, every time.** A pane that kept the id it was opened
+        // with while being handed another file's offsets is a pane that names
+        // one document and shows another — and `空格 w` then goes to the one it
+        // names.
+        let buffer = self.current_buffer().id();
         match self.other.as_mut() {
             Some(pane) => {
+                pane.buffer = buffer;
                 pane.cursor = at;
                 pane.anchor = at;
                 pane.highlight = highlight;
@@ -5742,9 +5829,17 @@ impl Editor {
             caption: String::new(),
         };
         // The place is clamped rather than trusted: the other pane may have
-        // been edited while this one was not looking.
-        if let Some(index) = self.buffer_with(pane.buffer) {
-            self.current = index;
+        // been edited while this one was not looking — and the file it names
+        // may have been closed, in which case there is nowhere to go and
+        // saying so is the whole of the right answer.
+        match self.buffer_with(pane.buffer) {
+            Some(index) => self.current = index,
+            None => {
+                self.other = None;
+                self.live_pane = 0;
+                self.status = say!("那一半的檔案已經關掉了");
+                return false;
+            }
         }
         let len = self.current_buffer().rope().len_chars();
         pane.cursor = pane.cursor.min(len);
@@ -6492,7 +6587,7 @@ impl Editor {
             // is one change and `.` has to repeat all three levels of it.
             if self.mode == Mode::Normal && self.pending == Pending::None && self.count.is_none() {
                 self.edit_keys.clear();
-                self.edit_revision = (self.current, self.current_buffer().revision());
+                self.edit_revision = (self.current_buffer().id(), self.current_buffer().revision());
             }
             self.edit_keys.push(key);
         }
@@ -6531,11 +6626,11 @@ impl Editor {
         if self.mode != Mode::Normal || self.pending != Pending::None {
             return;
         }
-        if (self.current, self.current_buffer().revision()) == self.edit_revision {
+        if (self.current_buffer().id(), self.current_buffer().revision()) == self.edit_revision {
             return;
         }
         // A command that ended in a different buffer changed nothing here.
-        if self.current != self.edit_revision.0 {
+        if self.current_buffer().id() != self.edit_revision.0 {
             return;
         }
         // Four kinds of key change the buffer and are not *changes* in the
@@ -6867,7 +6962,7 @@ impl Editor {
             Key::Esc => {
                 if self.other.is_some() && self.live_pane == 0 {
                     self.close_split();
-                    self.table_hits.clear();
+                    self.hits = None;
                     return;
                 }
                 self.extend = false;
@@ -6953,24 +7048,24 @@ impl Editor {
                 self.command_line.clear();
                 self.command_caret = self.command_line.chars().count();
                 // A new search takes `n` back from the table's.
-                self.table_hits.clear();
+                self.hits = None;
             }
             Key::Char('?') => {
                 self.mode = Mode::Search;
                 self.search_forward = false;
                 self.command_line.clear();
                 self.command_caret = self.command_line.chars().count();
-                self.table_hits.clear();
+                self.hits = None;
             }
             // In a table with a search open, `n` walks *its* answers: they are
             // the last search that happened, which is what `n` has always
             // meant. A plain `/` clears them and takes the key back.
-            Key::Char('n') if !self.table_hits.is_empty() => {
+            Key::Char('n') if self.walking_hits() => {
                 self.repeat(count, |e| {
                     e.walk_table_hits(true);
                 });
             }
-            Key::Char('N') if !self.table_hits.is_empty() => {
+            Key::Char('N') if self.walking_hits() => {
                 self.repeat(count, |e| {
                     e.walk_table_hits(false);
                 });
@@ -8430,6 +8525,11 @@ impl Editor {
 
     /// Enter Insert mode, starting a fresh recording for `.` to replay.
     fn enter_insert(&mut self) {
+        // 延伸模式 is left at the door. It is a *mode* kept outside `Mode`, so
+        // every operation has had to remember to clear it and some did not —
+        // `v i X Esc` came back to Normal still extending, and the next `j`
+        // grew a selection instead of moving.
+        self.extend = false;
         self.insert_recording.clear();
         self.mode = Mode::Insert;
     }
@@ -11281,6 +11381,37 @@ mod tests {
             "{}",
             ed.status()
         );
+    }
+
+    #[test]
+    fn a_hit_list_belongs_to_the_document_it_was_found_in() {
+        // The worst thing this editor could hold: a list of char offsets with
+        // no owner, holding `n` and `N`, surviving a buffer switch and an
+        // edit. 「第 3/78 處」 could be said about a character in a chapter
+        // that was never searched — and the next `d` deleted it.
+        let mut ed = typed("那年冬天。\n那年夏天。\n");
+        ed.goto_line(1);
+        ed.on_key(Key::Enter);
+        assert!(ed.current_hit().is_some(), "{}", ed.status());
+
+        // Another file: the hits do not follow, and `n` goes back to `/`.
+        ed.execute("new").unwrap();
+        ed.current_buffer_mut().insert(0, "完全不相干的一行。\n");
+        assert_eq!(ed.current_hit(), None, "another document, no hits");
+        let before = ed.cursor();
+        ed.on_key(Key::Char('n'));
+        assert_eq!(ed.current_hit(), None);
+        assert!(!ed.status().contains("處"), "{}", ed.status());
+        let _ = before;
+
+        // …and an edit retires them rather than moving them: an offset into
+        // the text as it was is not a shorter answer, it is a wrong one.
+        ed.execute("buffer previous").unwrap();
+        assert!(ed.current_hit().is_some(), "back where they were found");
+        ed.on_key(Key::Char('i'));
+        ed.on_key(Key::Char('甲'));
+        ed.on_key(Key::Esc);
+        assert_eq!(ed.current_hit(), None, "the text moved under them");
     }
 
     #[test]

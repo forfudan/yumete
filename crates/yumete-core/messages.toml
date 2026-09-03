@@ -1609,3 +1609,7 @@ en = "table operations"
 [[message]]
 zh = "刪這一行"
 en = "delete this row"
+
+[[message]]
+zh = "那一半的檔案已經關掉了"
+en = "the file that half was showing is closed"
