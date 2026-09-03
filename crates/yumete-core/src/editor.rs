@@ -1666,6 +1666,10 @@ impl Editor {
                 // safe now", so it is held to the same check `:q` is.
                 self.quit(false)
             }
+            Command::GotoRow(key) => {
+                self.goto_row(&key);
+                Ok(CommandOutcome::Continue)
+            }
             Command::Recover { discard } => self.recover(discard),
             Command::GotoLine(n) => {
                 self.goto_line(n);
@@ -4027,11 +4031,51 @@ impl Editor {
         let text = self.cell_text(line, cell);
         let mut seen: Vec<char> = Vec::new();
         for c in text.chars() {
+            // ⿰⿱⿲… are not components, they are the *grammar* saying how the
+            // components are arranged, and no table has a row for one. They
+            // appear 9,046 times in the ids_y column alone, and every one used
+            // to get the red 「—」 that means "no row for this" — so the
+            // panel's one validation signal was false on nearly every
+            // structured row, which is the same as not having one.
+            if is_ids_operator(c) {
+                continue;
+            }
             if !seen.contains(&c) {
                 seen.push(c);
             }
         }
         seen.into_iter().map(|c| (c, self.row_named(c))).collect()
+    }
+
+    /// Go to the row this table names by `key` (`:row 木`).
+    ///
+    /// The index behind it has always been built and has always answered in
+    /// about 300 ns; until now nothing let a person ask it. Finding 木 in a
+    /// 123,380-row table meant `/^木,` and hoping no other row started that
+    /// way.
+    fn goto_row(&mut self, key: &str) {
+        let Some(view) = self.table.as_ref() else {
+            self.status = "不是表格——先 :table".to_string();
+            return;
+        };
+        if view.schema.jump.is_none() && view.schema.key.is_none() {
+            self.status = "這張表沒說哪一欄是行名（schema 的 key）".to_string();
+            return;
+        }
+        let mut chars = key.chars();
+        let (Some(c), None) = (chars.next(), chars.next()) else {
+            self.status = format!("「{key}」不是一個字——行名是一個字");
+            return;
+        };
+        match self.row_named(c) {
+            Some(line) => {
+                self.remember_jump();
+                self.goto_line(line + 1);
+                self.snap_to_cell();
+                self.status = format!("「{c}」在第 {} 行", line + 1);
+            }
+            None => self.status = format!("表裏沒有「{c}」"),
+        }
     }
 
     /// Which line holds the row whose key is this character.
@@ -4162,6 +4206,13 @@ impl Editor {
         // was meant — there is nothing to ask about.
         if self.table.as_ref().map(|v| v.grain) == Some(Grain::Char) {
             if let Some(c) = self.char_at_cursor() {
+                // ⿰⿱⿲ say how the components are arranged. There is nowhere
+                // to go from one, and 「表裏沒有⿰」 was the wrong thing to say
+                // about it — no table has a row for a piece of grammar.
+                if is_ids_operator(c) {
+                    self.status = format!("「{c}」是結構符，不是部件");
+                    return;
+                }
                 match self.row_named(c) {
                     Some(line) => {
                         self.goto_line(line + 1);
@@ -7645,6 +7696,15 @@ impl Default for Editor {
     }
 }
 
+/// Whether `c` is an Ideographic Description Character — U+2FF0…U+2FFF.
+///
+/// The operators of the 表意文字描述序列 grammar: ⿰ left-to-right, ⿱ above and
+/// below, ⿲ three across, and so on. They describe an arrangement; they are not
+/// characters anybody writes and no 拆分表 has a row for one.
+fn is_ids_operator(c: char) -> bool {
+    ('\u{2FF0}'..='\u{2FFF}').contains(&c)
+}
+
 /// Replace occurrences of `pattern` in a single line (which may include a
 /// trailing newline). Returns the new line text and the number of replacements.
 /// With `global`, every match is replaced; otherwise only the first.
@@ -9062,8 +9122,8 @@ mod tests {
         let d = ed.detail().unwrap();
         assert_eq!(
             d.links,
-            vec![('⿰', None), ('木', Some(2)), ('目', Some(3))],
-            "a descriptor has no row, and saying so is the point"
+            vec![('木', Some(2)), ('目', Some(3))],
+            "⿰ is the grammar, not a component: it is not listed at all"
         );
 
         // Two of them do, so Enter asks which rather than guessing.
@@ -9111,7 +9171,7 @@ mod tests {
         ed.open_file(&csv).unwrap();
         ed.goto_line(2);
         press(&mut ed, "l");
-        assert_eq!(ed.detail().unwrap().links[1], ('木', Some(2)));
+        assert_eq!(ed.detail().unwrap().links[0], ('木', Some(2)));
 
         // Typing in a cell that is not the key column cannot move a row or
         // rename one — table mode refuses Enter — so the index stands.
@@ -9243,12 +9303,13 @@ mod tests {
         assert_eq!(ed.cursor_line(), 3, "目's own row");
         assert_eq!(ed.mode(), Mode::Normal, "no picker");
 
-        // A component with no row of its own says so by name.
+        // Standing on the descriptor itself, there is nothing to go to — it
+        // says how the components are arranged, it is not one of them.
         ed.goto_line(2);
         press(&mut ed, "ll");
         assert_eq!(ed.char_at_cursor(), Some('⿰'));
         ed.on_key(Key::Enter);
-        assert!(ed.status().contains("沒有「⿰」"), "{}", ed.status());
+        assert!(ed.status().contains("結構符"), "{}", ed.status());
 
         // Tab back, and the cursor snaps to cells again.
         ed.on_key(Key::Tab);
@@ -9954,6 +10015,36 @@ mod tests {
         // And what was cleared is on the register, so it can be put back.
         press(&mut ed, "p");
         assert_eq!(ed.cell_text(1, 0), cell);
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn row_goes_straight_to_the_row_a_character_names() {
+        // The index has always been built and has always answered in about
+        // 300 ns; nothing let a person ask it. Finding 木 in a 123,380-row
+        // table meant `/^木,` and hoping no other row started that way.
+        let dir = std::env::temp_dir().join(format!("yumete-row-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let tables = dir.join(".yumete").join("tables");
+        std::fs::create_dir_all(&tables).unwrap();
+        std::fs::write(
+            tables.join("d.toml"),
+            "[table]\nfile = \"d.csv\"\nkey = \"char\"\n\
+             [[table.column]]\nname = \"char\"\n[[table.column]]\nname = \"ids_y\"\n\
+             [table.jump]\nfrom = [\"ids_y\"]\nto = \"char\"\n",
+        )
+        .unwrap();
+        let csv = dir.join("d.csv");
+        std::fs::write(&csv, "char,ids_y\n相,⿰木目\n木,木\n目,目\n").unwrap();
+        let mut ed = Editor::new();
+        ed.open_file(&csv).unwrap();
+        assert!(ed.execute("row 目").is_ok());
+        assert_eq!(ed.cursor_line(), 3, "{}", ed.status());
+        assert!(ed.execute("row 卵").is_ok());
+        assert!(ed.status().contains("沒有"), "{}", ed.status());
+        // …and `C-o` comes back, because a jump is a jump.
+        assert!(ed.execute("row 木").is_ok());
+        assert_eq!(ed.cursor_line(), 2);
         std::fs::remove_dir_all(&dir).ok();
     }
 

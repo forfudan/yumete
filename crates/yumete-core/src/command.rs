@@ -116,6 +116,8 @@ pub enum Command {
     ListBuffers,
     /// `:toc [n]` — list the headings, or go to the nth.
     Outline(Option<usize>),
+    /// `:row 木` — go to the row this table names by that character.
+    GotoRow(String),
     /// `:grep <pattern>` — search every file in the project.
     Grep(String),
     /// `:export html|typst [path]` — write the manuscript out for a typesetter.
@@ -418,6 +420,13 @@ pub fn parse(input: &str) -> Result<Command, CommandError> {
                 Err(CommandError::MissingArgument("grep"))
             } else {
                 Ok(Command::Grep(rest.to_string()))
+            }
+        }
+        "row" => {
+            if rest.is_empty() {
+                Err(CommandError::MissingArgument("row"))
+            } else {
+                Ok(Command::GotoRow(rest.to_string()))
             }
         }
         "toc" | "outline" => Ok(Command::Outline(if rest.is_empty() {
@@ -983,6 +992,12 @@ pub const COMMANDS: &[Entry] = &[
         aliases: &["gr"],
         help: "search every file in the project",
         args: Args::Free("<正則>"),
+    },
+    Entry {
+        name: "row",
+        aliases: &[],
+        help: "跳到表格裏叫這個名字的那一行（`:row 木`）",
+        args: Args::Free("<那一行的名字>"),
     },
     Entry {
         name: "toc",
