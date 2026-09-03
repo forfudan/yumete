@@ -347,6 +347,8 @@ Phases are ordered by priority, most writer-critical first:
 | 148 | **A phrasebook for keys we do not bind**    | core   | P2    | `$` says 「行尾是 gl」; it never does the thing | Done |
 | 149 | **The session, and marks**                  | both   | P2    | what was open, where the cursor was; `M a` / `' a` across files | Done |
 | 150 | **Project-wide replace**                    | core   | P1    | `:grep` then `:replace`: nothing changed that was not on the screen, nothing on disk until `:wa` | Done |
+| 151 | **Both languages**                          | core   | P1    | the Chinese is the key; `messages.toml` holds the pair; `language = "zh"\|"en"` | Done |
+| 152 | **【墨香】 as a computed theme**             | both   | P1    | a few anchors in the config, every other shade a rung on the ladder; see §5.2 group 13 | Planned |
 
 ---
 
@@ -678,6 +680,38 @@ four are done; the outcomes are noted here rather than in a second list.
   leaving.
 - **Group 10 (first-line indent, 段組) is 0.1.0, not 0.2.0.** — *done: #145, #146.* They are the point
   of a 縱書 editor.
+
+### 13 · 【墨香】 — one theme, computed, and everywhere
+
+**Wanted.** The candidate panel already wears Yume's 墨香: two colours — an ink
+and a paper — with every shade between them interpolated along a ladder
+(`Skin::step`, `crates/yumete-tui/src/vertical.rs`). That is the right shape for
+a theme, and it is used by **one panel**. Everything else — the selection, the
+word tint, the gutter, the ruler, the table's grid and its detail panel, the
+tab bar, the Markdown colours, the hint row — is a hard-coded RGB triple, in
+four different files, with no relationship to the panel or to each other.
+
+So:
+
+1. **A theme is a few anchors in the config**, not a table of every colour.
+   Ink and paper at least; probably an accent (the one warm colour that says
+   「這裏」 — the cursor's row, the lit tab, the chosen candidate) and a mark
+   colour (the one that says 「這裏不對」 — a torn row, a component with no row,
+   an unbalanced quote). Everything else is a rung: `step(0)` is ink, `step(1000)`
+   is paper, and the parts of the editor are placed along it by *how far back*
+   they should read.
+2. **It is called 【墨香】 / `moxiang`**, and both spellings work in
+   `[theme] name = …`. It is the default, so a fresh install already looks like
+   this. `Skin::step` is the mechanism; it moves out of the vertical renderer
+   and into `yumete-config` where every crate can reach it.
+3. **Where each part of the editor sits on the ladder is a design question**,
+   not a mechanical one: today the numbers were each picked in isolation, and
+   two subagents are being asked what the map should be — which is the thing
+   this entry is really for.
+
+Retuning a theme then means editing two or three numbers, and every part of the
+editor moves together, which is what makes a theme a theme rather than a
+palette somebody has to keep consistent by hand. **high**
 
 ### 12 · What a review of the night found, 2026-09-04
 

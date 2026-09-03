@@ -2989,6 +2989,95 @@ impl Editor {
         }
     }
 
+    /// Take a copy of the whole column the cursor is in (`t y`).
+    ///
+    /// One cell to a line — which is what a column *is*, and what `t p` reads
+    /// back. It is also a shape every other tool understands, so a column
+    /// yanked here pastes into a spreadsheet as a column.
+    fn yank_column(&mut self) {
+        let Some((_, cell)) = self.cell_position() else {
+            return;
+        };
+        let values = self.column_values(cell);
+        if values.is_empty() {
+            self.status = say!("這一欄是空的");
+            return;
+        }
+        let n = values.len();
+        self.store(format!("{}\n", values.join("\n")));
+        let name = self
+            .table
+            .as_ref()
+            .and_then(|v| v.schema.columns.get(cell))
+            .map(|c| c.heading().to_string())
+            .unwrap_or_default();
+        self.status = say!("取了一欄「{0}」（{1} 格）", name, n);
+    }
+
+    /// Every cell of one column, header included, top to bottom.
+    fn column_values(&self, cell: usize) -> Vec<String> {
+        if let Some((_, parts)) = self.md_parts() {
+            return parts
+                .rows
+                .iter()
+                .map(|row| row.get(cell).cloned().unwrap_or_default())
+                .collect();
+        }
+        let last = motion::last_line(self.current_buffer().rope());
+        (0..=last)
+            .filter(|&line| !self.row_cells(line).is_empty())
+            .map(|line| self.cell_text(line, cell))
+            .collect()
+    }
+
+    /// Write what was yanked down the cursor's column (`t p`).
+    fn put_column(&mut self) {
+        let text = self.recall();
+        let values: Vec<String> = text
+            .trim_end_matches('\n')
+            .lines()
+            .map(str::to_string)
+            .collect();
+        if values.is_empty() {
+            self.status = say!("沒有取過東西");
+            return;
+        }
+        let n = values.len();
+        if let Some((region, mut parts)) = self.md_parts() {
+            let (_, cell) = self.md_at(&region);
+            for (r, value) in values.iter().enumerate() {
+                while r >= parts.rows.len() {
+                    parts.insert_row(parts.rows.len());
+                }
+                let width = parts.columns().max(cell + 1);
+                let row = &mut parts.rows[r];
+                row.resize(width, String::new());
+                row[cell] = value.replace('|', "\\|");
+            }
+            self.md_reschema(&parts);
+            self.md_write(&region, &parts, 0, cell);
+            self.status = say!("貼了一欄（{0} 格）", n);
+            return;
+        }
+        let Some((_, cell)) = self.cell_position() else {
+            return;
+        };
+        let d = self.table.as_ref().map(|v| v.schema.delimiter).unwrap_or(',');
+        self.snapshot();
+        for (line, value) in values.iter().enumerate() {
+            let value: String = value.chars().filter(|&c| c != d).collect();
+            let Some((from, to)) = self.cell_span(line, cell) else {
+                continue;
+            };
+            self.without_cell_guard(|e| {
+                e.current_buffer_mut().remove(from..to);
+                e.current_buffer_mut().insert(from, &value);
+            });
+        }
+        self.snap_to_cell();
+        self.status = say!("貼了一欄（{0} 格）", n);
+    }
+
     /// Put a block of cells in, starting at the cursor's.
     ///
     /// Growing the table as it needs to when the table is Markdown's — its
@@ -3384,6 +3473,8 @@ impl Editor {
         // want one inserted by a keystroke — so only the row half applies.
         if self.md_region().is_none() {
             match key {
+                Key::Char('y') => self.yank_column(),
+                Key::Char('p') => self.put_column(),
                 Key::Char('o') => self.open_line_below(),
                 Key::Char('O') if self.on_header_row() => {
                     self.open_line_below();
@@ -3394,7 +3485,7 @@ impl Editor {
                 Key::Char('j') | Key::Down => self.shift_row(true),
                 Key::Char('k') | Key::Up => self.shift_row(false),
                 Key::Esc => {}
-                _ => self.status = say!("t 後面（這種表格）：o O d j k"),
+                _ => self.status = say!("t 後面（這種表格）：o O d j k y p"),
             }
             return;
         }
@@ -3409,6 +3500,8 @@ impl Editor {
             Key::Char('k') | Key::Up => self.md_move_row(false),
             Key::Char('h') | Key::Left => self.md_move_column(false),
             Key::Char('l') | Key::Right => self.md_move_column(true),
+            Key::Char('y') => self.yank_column(),
+            Key::Char('p') => self.put_column(),
             Key::Char('s') => self.md_sort(false),
             Key::Char('S') => self.md_sort(true),
             Key::Char('<') => self.md_align(Align::Left),
@@ -3423,7 +3516,7 @@ impl Editor {
                 };
             }
             Key::Esc => {}
-            _ => self.status = say!("t 後面：o O n N d D j k h l s S < = > t"),
+            _ => self.status = say!("t 後面：o O n N d D j k h l y p s S < = > t"),
         }
     }
 
@@ -3694,6 +3787,7 @@ impl Editor {
                     ("d D", say!("刪這行／這欄")),
                     ("j k", say!("這行下移／上移")),
                     ("h l", say!("這欄左移／右移")),
+                    ("y p", say!("取這欄／貼一欄")),
                     ("s S", say!("照這欄順排／倒排")),
                     ("< = >", say!("這欄靠左／居中／靠右")),
                     ("t", say!("重排對齊")),
