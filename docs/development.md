@@ -98,10 +98,17 @@ a Rust program, it depends on `yume-core` directly, with no FFI layer:
 - A lone Shift tap toggles 中/英 via `toggle_language()`, matching the web frontend.
 - Number mode, special `/` commands, and reverse lookup (`z`) come directly from
   the core.
-- Data tables (`ling.ytab`, `symbols.ytab`, `pinyin.yflb`, `lang.ywtb`/`.ywl`,
-  `chaifen.ydiv` + `zigen_*.yzg`, charsets, and the bundled
-  `Yuniversus.ttf`) are loaded from yumete's data directory, reusing the compiled
-  artifacts produced by the yume build.
+- Data tables are loaded from yumete's data directory, reusing the compiled
+  artifacts produced by the yume build, and laid out the way
+  `yume_core::data_manifest` names them: **`data/`** for what every scheme
+  shares (`symbols.ytab`, `pinyin.yflb`, `lang.ywtb`/`.ywl`, `chaifen.ydiv`,
+  `charsets/*.ycs`, `words_yuling.ywrd`, `simptrad.txt`, `lang.ygram`, the
+  bundled `Yuniversus.ttf`) and **`schemes/`** for what one scheme owns
+  (`ling.ytab`, `zigen_ling.yzg`, …). The split is yume's, so that somebody
+  bringing their own 方案 replaces one directory and leaves the 字料 alone; the
+  editor walks the manifest, so a file left in the old flat place is not found
+  and the failure is silent — worse candidates, or a scheme that will not
+  switch.
 - Custom 碼表 upload follows naturally: scheme tables are just files loaded at
   runtime, so a user can drop a custom `.ytab` and `.ydiv` into the data directory
   and register a new scheme.

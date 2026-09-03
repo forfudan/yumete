@@ -71,6 +71,14 @@ install_ime_data() {
   local compiler="$yume_root/target/release/yume-compile"
   (cd "$yume_root" && cargo build --release -p yume-compile)
 
+  # **Two directories, because yume says so.** As of yume's「Split the bundle
+  # into data/ and schemes/」, `yume_core::data_manifest` names every shared file
+  # under `data/` and every scheme's own under `schemes/` — so that a person who
+  # brings their own 方案 replaces one directory and leaves the 字料 alone. The
+  # editor loads by walking that manifest, so a file left in the old flat place
+  # is not found and the failure is silent: worse candidates, or a scheme that
+  # will not switch.
+  #
   # Clear the tables we manage — including the names from older layouts, so a
   # data directory built by a previous yumete is not left with files the current
   # yume-core can no longer parse. User files (segmentation.txt) are preserved.
@@ -79,8 +87,9 @@ install_ime_data() {
         "$dest"/chaifen.ydiv "$dest"/zigen_{ling,xing,qing,riyue}.yzg \
         "$dest"/words_yuling.ywrd "$dest"/simptrad.txt \
         "$dest"/pinyin.ywtb "$dest"/chaifen{,_xing,_qing,_riyue}.yann
-  rm -rf "$dest/charsets" "$dest/fonts"
-  mkdir -p "$dest/charsets"
+  rm -rf "$dest/charsets" "$dest/fonts" "$dest/data" "$dest/schemes"
+  mkdir -p "$dest/data/charsets" "$dest/schemes"
+  local shared="$dest/data" schemes="$dest/schemes"
 
   local d="$yume_root/data"
   for f in ling.txt pinyin.txt lang.txt words_yuling.txt chaifen.txt zigen_ling.txt \
@@ -92,8 +101,8 @@ install_ime_data() {
   done
 
   # 碼表 and the shared 符號表 extracted from it.
-  "$compiler" "$d/ling.txt" "$dest/ling.ytab"
-  "$compiler" --symbols "$dest/ling.ytab" "$dest/symbols.ytab"
+  "$compiler" "$d/ling.txt" "$schemes/ling.ytab"
+  "$compiler" --symbols "$schemes/ling.ytab" "$shared/symbols.ytab"
 
   # Multi-character words come from every code table on hand: a word is a fact
   # about the language, not about one 方案.
@@ -106,10 +115,10 @@ install_ime_data() {
   # 詞頻表 and 詞彙表 come from lang.txt, share one cut-off, and must use the same
   # one or the words above the cut fall out of both. These three numbers are
   # yume's tuning (its docs/LANGUAGE-MODEL.md §4.6); yumete follows them.
-  "$compiler" --pinyin "$d/pinyin.txt" "$dest/pinyin.yflb" \
+  "$compiler" --pinyin "$d/pinyin.txt" "$shared/pinyin.yflb" \
     "${word_sources[@]}" --lang "$d/lang.txt" --lang-words 300000
-  "$compiler" --weights "$d/lang.txt" "$dest/lang.ywtb" --max-entries 1250000
-  "$compiler" --lexicon "$d/lang.txt" "$dest/lang.ywl" \
+  "$compiler" --weights "$d/lang.txt" "$shared/lang.ywtb" --max-entries 1250000
+  "$compiler" --lexicon "$d/lang.txt" "$shared/lang.ywl" \
     "${word_sources[@]}" --max-entries 1250000
 
   # 全息拆分表 (shared by every scheme) with its 字集 tags, and the 單字白名單.
@@ -118,31 +127,31 @@ install_ime_data() {
               "charsets/tai.txt:臺" "charsets/gang.txt:港"; do
     [[ -f "$d/${spec%%:*}" ]] && division_tags+=("$d/${spec%%:*}:${spec##*:}")
   done
-  "$compiler" --division "$d/chaifen.txt" "$dest/chaifen.ydiv" "${division_tags[@]}"
-  "$compiler" --words "$d/words_yuling.txt" "$dest/words_yuling.ywrd"
+  "$compiler" --division "$d/chaifen.txt" "$shared/chaifen.ydiv" "${division_tags[@]}"
+  "$compiler" --words "$d/words_yuling.txt" "$shared/words_yuling.ywrd"
 
   # 字集: slots 0–2 drive the input filters, the rest only list rows in a UI.
   for cs in common tonggui harmonic tongfan guji tai gang; do
     if [[ -f "$d/charsets/$cs.txt" ]]; then
-      "$compiler" --charset "$d/charsets/$cs.txt" "$dest/charsets/$cs.ycs"
+      "$compiler" --charset "$d/charsets/$cs.txt" "$shared/charsets/$cs.ycs"
     fi
   done
 
   # Optional, copied not compiled: the language model (without it 整句 falls back
   # to plain word frequency) and the 簡繁 table (one annotation column).
-  [[ -f "$d/lang.ygram" ]] && cp "$d/lang.ygram" "$dest/lang.ygram"
-  [[ -f "$d/simptrad.txt" ]] && cp "$d/simptrad.txt" "$dest/simptrad.txt"
+  [[ -f "$d/lang.ygram" ]] && cp "$d/lang.ygram" "$shared/lang.ygram"
+  [[ -f "$d/simptrad.txt" ]] && cp "$d/simptrad.txt" "$shared/simptrad.txt"
 
   # 字根表: one per scheme, ~1KB each, and each must be compiled against the very
   # .ydiv above — it indexes into that file's root order.
-  "$compiler" --zigen lingming "$d/zigen_ling.txt" "$dest/chaifen.ydiv" "$dest/zigen_ling.yzg"
+  "$compiler" --zigen lingming "$d/zigen_ling.txt" "$shared/chaifen.ydiv" "$schemes/zigen_ling.yzg"
 
   # Optional sibling schemes (星陳 / 卿雲 / 日月).
   compile_scheme() {
     local id="$1" scheme="$2"
-    [[ -f "$d/$id.txt" ]] && "$compiler" "$d/$id.txt" "$dest/$id.ytab"
+    [[ -f "$d/$id.txt" ]] && "$compiler" "$d/$id.txt" "$schemes/$id.ytab"
     [[ -f "$d/zigen_$id.txt" ]] && "$compiler" --zigen "$scheme" "$d/zigen_$id.txt" \
-      "$dest/chaifen.ydiv" "$dest/zigen_$id.yzg"
+      "$shared/chaifen.ydiv" "$schemes/zigen_$id.yzg"
     return 0
   }
   compile_scheme xing xingchen
@@ -152,11 +161,11 @@ install_ime_data() {
   # The bundled CJK root font, for terminals whose fallback chain lacks 宇浩's
   # PUA roots.
   if compgen -G "$d/fonts/*.ttf" >/dev/null 2>&1; then
-    mkdir -p "$dest/fonts"
-    cp "$d"/fonts/*.ttf "$dest/fonts/" 2>/dev/null || true
+    mkdir -p "$shared/fonts"
+    cp "$d"/fonts/*.ttf "$shared/fonts/" 2>/dev/null || true
   fi
 
-  echo "==> IME data installed ($(ls -1 "$dest"/*.ytab 2>/dev/null | wc -l | tr -d ' ') table(s) in $dest)"
+  echo "==> IME data installed ($(ls -1 "$schemes"/*.ytab 2>/dev/null | wc -l | tr -d ' ') table(s) in $dest)"
 }
 
 if [[ "$install_data" == "1" ]]; then

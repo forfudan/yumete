@@ -581,7 +581,7 @@ yume 的資料裏有兩樣東西，它們該有不同的待遇。
 **問一句現在用的是哪一個：**
 
 ```
-:yume                 靈明 · 碼表 /Users/…/.local/share/yumete/ling.ytab · 拆分 關
+:yume                 靈明 · 碼表 /Users/…/.local/share/yumete/schemes/ling.ytab · 拆分 關
 :yume builtin         改用出廠自帶那一份（裝的那份壞了、或者比它舊的時候）
 ```
 

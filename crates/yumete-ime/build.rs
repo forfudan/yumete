@@ -21,8 +21,12 @@ use std::path::{Path, PathBuf};
 fn main() {
     println!("cargo:rerun-if-env-changed=YUMETE_BUILTIN_DIR");
     let out = PathBuf::from(std::env::var("OUT_DIR").expect("OUT_DIR"));
-    let table = find("ling.ytab");
-    let symbols = find("symbols.ytab");
+    // Where `yume_core::data_manifest` says they live: a scheme's own table
+    // under `schemes/`, the shared 符號表 under `data/`. The old flat names are
+    // still looked for, so a machine whose data directory predates yume's
+    // split still builds with 靈明 in it.
+    let table = find("schemes/ling.ytab").or_else(|| find("ling.ytab"));
+    let symbols = find("data/symbols.ytab").or_else(|| find("symbols.ytab"));
     let mut body = String::new();
     body.push_str(&declare("BUILTIN_TABLE", table.as_deref()));
     body.push_str(&declare("BUILTIN_SYMBOLS", symbols.as_deref()));
@@ -56,9 +60,15 @@ fn declare(name: &str, path: Option<&Path>) -> String {
 /// the honest answer: it says *when*, which is what the question is really
 /// asking.
 fn stamp(table: &Path) -> Option<String> {
+    // Beside the tables, which since yume's `data/` + `schemes/` split is one
+    // directory up from the table itself.
     let dir = table.parent()?;
-    if let Ok(text) = std::fs::read_to_string(dir.join("VERSION")) {
-        println!("cargo:rerun-if-changed={}", dir.join("VERSION").display());
+    let version = [dir.join("VERSION"), dir.join("../VERSION")]
+        .into_iter()
+        .find(|p| p.is_file())
+        .unwrap_or_else(|| dir.join("VERSION"));
+    if let Ok(text) = std::fs::read_to_string(&version) {
+        println!("cargo:rerun-if-changed={}", version.display());
         let field = |key: &str| {
             text.lines()
                 .find_map(|l| l.trim().strip_prefix(key))

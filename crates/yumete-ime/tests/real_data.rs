@@ -13,7 +13,8 @@ fn data_dir() -> Option<PathBuf> {
         .map(PathBuf::from)
         .or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".local/share")))?;
     let dir = base.join("yumete");
-    if dir.join("ling.ytab").is_file() {
+    // The layout `yume_core::data_manifest` names: schemes under `schemes/`.
+    if dir.join("schemes/ling.ytab").is_file() {
         Some(dir)
     } else {
         None
