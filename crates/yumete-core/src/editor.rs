@@ -7053,8 +7053,14 @@ impl Editor {
             // every reader presses at a transient thing.
             Key::Esc => {
                 if self.other.is_some() && self.live_pane == 0 {
+                    // **The window goes; the search stays.** Esc dismissed the
+                    // pane, and the reader who then presses `n` means the same
+                    // 「下一處」 they meant a moment ago — so `n` walks to the
+                    // next hit and brings the pane back with it. Throwing the
+                    // list away here handed `n` to `/` instead, which answered
+                    // about some older pattern, or about nothing at all, and
+                    // never said which.
                     self.close_split();
-                    self.hits = None;
                     return;
                 }
                 self.extend = false;
@@ -8475,7 +8481,10 @@ impl Editor {
 
     /// Search for [`Self::last_search`] in `forward` direction and move there.
     fn repeat_search(&mut self, forward: bool) {
+        // `n` with nothing to repeat used to do nothing and say nothing, which
+        // reads as a key that is broken rather than one with no answer yet.
         if self.last_search.is_empty() {
+            self.status = say!("還沒有搜索過——先用 / 搜索，或用 Enter 預覽搜索");
             return;
         }
         // Jumping back after a search is the whole reason `C-o` exists: you
@@ -15033,6 +15042,44 @@ mod tests {
         press(&mut ed, "n");
         ed.on_key(Key::Char('.'));
         assert_eq!(ed.current_buffer().text(), "裡面\n那裡\n這裡\n");
+    }
+
+    /// Esc dismisses the preview; `n` brings it back on the next hit.
+    ///
+    /// The reader who presses Esc has closed a window, not called off the
+    /// search — and `n` after it used to fall through to `/`'s own repeat,
+    /// which answered about whatever was last typed at a `/` prompt, or did
+    /// nothing at all and said nothing about why.
+    #[test]
+    fn escape_shuts_the_preview_and_n_opens_it_again() {
+        let mut ed = typed("那年冬天。\n第二行。\n那年夏天。\n又一行。\n那年秋天。\n");
+        press(&mut ed, "gg");
+        // A previewing search: 那 is on lines 1, 3 and 5.
+        ed.on_key(Key::Enter);
+        assert_eq!(ed.peeked_line(), Some(2), "{}", ed.status());
+        ed.on_key(Key::Char('n'));
+        assert_eq!(ed.peeked_line(), Some(4), "{}", ed.status());
+
+        ed.on_key(Key::Esc);
+        assert!(ed.other_pane().is_none(), "Esc shuts the preview");
+
+        // …and `n` is still walking the same list, pane and all.
+        ed.on_key(Key::Char('n'));
+        assert_eq!(ed.peeked_line(), Some(0), "round to the first 那");
+        assert!(ed.other_pane().is_some(), "the preview is back");
+        assert!(ed.status().contains("1/3"), "{}", ed.status());
+    }
+
+    /// `n` with nothing to repeat says so.
+    #[test]
+    fn n_with_no_search_behind_it_says_so() {
+        let mut ed = typed("那年冬天。\n");
+        ed.on_key(Key::Char('n'));
+        assert!(
+            ed.status().contains("還沒有搜索過") || ed.status().contains("searched"),
+            "{}",
+            ed.status()
+        );
     }
 
     #[test]
