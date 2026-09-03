@@ -1690,3 +1690,15 @@ en = "preview: {0} (`:preview off` stops it)"
 [[message]]
 zh = "空格"
 en = "Space"
+
+[[message]]
+zh = "{0} 裏沒有「{1}」"
+en = "no row in {0} is named 「{1}」"
+
+[[message]]
+zh = "{0}：{1}（{2} 處，第一處）"
+en = "{0}: {1} ({2} rows; the first)"
+
+[[message]]
+zh = "第 {0}–{1} 欄"
+en = "columns {0}–{1}"
