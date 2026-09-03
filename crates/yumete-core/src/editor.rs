@@ -5247,7 +5247,13 @@ impl Editor {
     /// The configured set — what `:ruby` reports and what `:dense off` gives
     /// back — is [`Self::ruby_configured`].
     pub fn ruby(&self) -> Dialects {
-        match self.dense {
+        // …and only where 密排 costs anything. It packs the *縱書* page: the
+        // reading column is a column off every 縱's width. A horizontal page
+        // pays no width for a reading — the row above is only taken where
+        // there is one — so there is nothing for packing to win there, and
+        // masking it would mean 橫排 could never show a reading at all, since
+        // 密排 is the default page.
+        match self.dense && self.layout == Layout::Vertical {
             true => Dialects::NONE,
             false => self.ruby,
         }
@@ -9641,6 +9647,7 @@ mod tests {
         // each cost a *column*; the indent costs two squares, and it is what
         // replaces the blank line — which costs a whole 縱.
         let mut ed = Editor::new();
+        ed.set_layout(crate::zong::Layout::Vertical);
         ed.set_indent(2);
         ed.set_dense(true);
         assert_eq!(ed.paragraph_indent(), 2);
@@ -9682,9 +9689,15 @@ mod tests {
         // hung 句讀 and not on the readings, so a packed page still reserved
         // two cells a 縱 for a column it was not drawing.
         let mut ed = Editor::new();
+        ed.set_layout(crate::zong::Layout::Vertical);
         assert!(!ed.ruby().is_empty(), "readings are laid out by default");
         ed.set_dense(true);
-        assert!(ed.ruby().is_empty(), "a packed page lays out none");
+        assert!(ed.ruby().is_empty(), "a packed 縱書 page lays out none");
+        // …but a horizontal page pays no width for one, so packing takes
+        // nothing away there.
+        ed.set_layout(crate::zong::Layout::Horizontal);
+        assert!(!ed.ruby().is_empty(), "橫排 is not what 密排 packs");
+        ed.set_layout(crate::zong::Layout::Vertical);
         assert!(
             !ed.ruby_configured().is_empty(),
             "but nothing was turned off — `:dense off` gives them back"
