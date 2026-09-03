@@ -66,6 +66,10 @@ pub struct Grid {
     /// The paragraph shown as the file has it: no indent, and its blank line
     /// back. `usize::MAX` for none.
     pub open_line: usize,
+    /// The span of lines that must not be folded, because what is written
+    /// there is not prose — a fence, a page's metadata. Empty when `first >
+    /// last`, which is the ordinary case for a manuscript.
+    pub fold_free: (usize, usize),
     /// The line the cursor is on, which is never folded.
     pub cursor_line: usize,
     /// Whether a pair of half-width characters shares one slot (縦中横).
@@ -113,6 +117,15 @@ impl Grid {
             fold_blanks: false,
             cursor_line: usize::MAX,
             open_line: usize::MAX,
+            fold_free: (usize::MAX, 0),
+        }
+    }
+
+    /// The same grid, told where folding would be unsafe.
+    pub fn with_fold_free(self, span: (usize, usize)) -> Grid {
+        Grid {
+            fold_free: span,
+            ..self
         }
     }
 
@@ -911,6 +924,13 @@ pub fn folded(rope: &Rope, line: usize, grid: Grid) -> bool {
     if !grid.fold_blanks || line == grid.cursor_line || line + 1 == grid.open_line {
         return false;
     }
+    // Inside — or between — the parts of the file that are not prose, a blank
+    // line may be content. The horizontal page knows this per line; here the
+    // whole span is left alone, which for a manuscript is nothing at all.
+    let (first, last) = grid.fold_free;
+    if line >= first && line <= last {
+        return false;
+    }
     let lines = line_count(rope);
     if line == 0 || line + 1 >= lines {
         return false;
@@ -1213,6 +1233,7 @@ mod tests {
         fold_blanks: false,
         cursor_line: usize::MAX,
         open_line: usize::MAX,
+        fold_free: (usize::MAX, 0),
     };
 
     /// Readings laid out, so the ruby tests exercise the layout.
