@@ -574,6 +574,20 @@ only editor*. 拆分表: *reading and spot-fixing yes, a day's work not yet*. Vi
 *would keep it installed, would not switch*. All three said the same shape of
 thing — the hard parts are right, and a handful of small wrongs are in the way.
 
+> **Where this stands, 2026-09-04.** Groups 1 and 3–10 are **done**, and so is
+> a review of #142 that found eleven more. Two things are not, and neither is
+> blocked on work:
+>
+> - **Group 2, being installable** — deferred on the night of 2026-09-03 (§5.2.1):
+>   pinning `yume-core` to a git rev needs that commit pushed and CI auth, and
+>   getting it wrong costs a session's ability to build. It goes in with the
+>   release pipeline.
+> - **English messages** (group 9's last item) — the content is Chinese
+>   throughout now; the `language = "zh"|"en"` mechanism is 150 call sites and
+>   150 English sentences in this editor's voice, which wants the author's eye.
+>
+> Everything else on this list is struck through.
+
 ### 1 · Losing work, or lying about it
 
 - **`:w` overwrites a file that changed on disk**, silently, with no reload
@@ -718,30 +732,26 @@ dep and ship the tarballs §5.3 already designs. **high**
   letter at a time), and `hanging-punctuation: allow-end` without the `last`
   that narrowed it to the block's final line.
 
-### 9 · The manual is out of date with the editor (×3)
+### 9 · The manual is out of date with the editor (×3) — **all but one**
 
-All three reviewers found the same class of thing, which is the sign that the
-docs are drifting faster than anyone is reading them.
+- ~~Commands that no longer exist are still documented~~ · ~~`:w` sets no
+  status~~ · ~~`zong_length = 32` stated as the default~~ · ~~`--help` binds `J`
+  twice~~ · ~~`main.rs` opens every file twice~~ · ~~`-t`, `:table`,
+  `:clipboard` in no reference list~~ — done. `docs/manual.md` also gained a
+  proper §七 (the whole run from the status bar down was nested under 六、輸入法,
+  and 「表格模式」 was a stray top-level `## 5.5` colliding with 「5.5 Ruby 模式」).
+- **Messages are half English and half Chinese** — the *content* is fixed: every
+  status line, every command error and every editor error the reviewers named is
+  Chinese now. What is **not** done is the 2026-09-03 decision behind it:
+  `[editor] language = "zh"|"en"`, two tables. **left for the author.**
 
-- **Commands that no longer exist** are still documented: `:scheme` (manual §六),
-  `:bn :bp :bd :ls :markup` (`--help`), `:markup :md` (manual §七). **high**
-- **`:w` sets no status at all**, while the manual quotes 「存了 ch01.md」 as its
-  example of the hint row. **high**
-- **Messages are half English and half Chinese.** `wrote /tmp/zz.html`,
-  `4 substitution(s)`, `already at oldest change` beside 「語法：markdown」,
-  「密排：一縱兩格」. The manual is entirely Chinese. Pick one. **high**
-- **`zong_length = 32` is stated as the default in four places**; it is 0 (#125).
-- **`--help` binds `J` twice** — half-page and join; join is `gJ`.
-- **The manual's one admitted gap is already closed**: 「橫排的折行寬度目前按源碼
-  算」 was fixed by #107; measured 3 drawn rows where the source has 4.
-- **§5.1's Helix table understates the editor by a dozen keys** — `%`, `r`, `R`,
-  `~`, `.`, `>`, `<`, `*`, `Home`/`End`, `C-u`/`C-d`/`C-f`/`C-b` and `Space` are
-  all shipped and still listed as planned.
-- **`-t`, `:table`, `:clipboard`, `y`/`Y`/`p` in table mode, `Space P`** are
-  implemented and in no reference list.
-- **`main.rs` opens every command-line file twice** — two identical loops, the
-  second carrying a comment explaining why files must be opened *after* the
-  settings, which the first defeats.
+  The design, so it is not re-derived: the messages are built with `format!` at
+  ~150 call sites, so a lookup keyed by the finished string cannot work. It
+  wants a `msg` module of `(&'static str, &'static str)` pairs with `{}`
+  placeholders and a `self.say(M::Closed, &[…])` at each call site — mechanical,
+  but 150 sites and 150 English sentences that have to be written in this
+  editor's voice, which is not a thing to generate unattended. The manual's
+  English half (`README.md`, `--help`) is the register to match.
 
 ### 10 · Two the author asked for
 
