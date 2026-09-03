@@ -1056,9 +1056,6 @@ en = "`#` headings, `**bold**`"
 zh = "`=` 標題、`#import`"
 en = "`=` headings, `#import`"
 
-[[message]]
-zh = "markdown 還是 typst（不給參數就說現在是哪個）"
-en = "markdown or typst — with no argument it says which"
 
 [[message]]
 zh = "上一個"
@@ -1424,3 +1421,15 @@ en = "no 碼表 for {0} is installed"
 [[message]]
 zh = "方案：{0}（系統裝的碼表）"
 en = "scheme: {0} (the system's own 碼表)"
+
+[[message]]
+zh = "這個檔案是哪種標記（不給參數就說現在是哪個）"
+en = "which markup this file is written in (with no argument, which one it is now)"
+
+[[message]]
+zh = "沒有標記：檔案裏的每個字符都只是它自己"
+en = "no markup: every character in the file is only itself"
+
+[[message]]
+zh = "這個檔案沒有標記，沒有什麼可以預覽的"
+en = "this file has no markup, so there is nothing to preview"

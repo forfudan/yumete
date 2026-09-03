@@ -273,6 +273,11 @@ pub fn run(
                                     Err(err) => editor.set_status(format!("預覽：{err}")),
                                 }
                             }
+                            // Nothing to typeset: a file with no markup is
+                            // already what it is going to look like.
+                            yumete_core::syntax::Syntax::Text => {
+                                editor.set_status(say!("這個檔案沒有標記，沒有什麼可以預覽的"))
+                            }
                         }
                     }
                 }
