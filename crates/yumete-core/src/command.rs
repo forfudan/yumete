@@ -82,9 +82,9 @@ pub enum Command {
     SetMeasure(Option<usize>),
     /// `:table` / `:table off` — read the file as a grid (Feature #118).
     SetTable(bool),
-    /// `:table rules` — whether the columns are ruled apart (Feature #157).
-    /// `None` toggles.
-    SetTableRules(Option<bool>),
+    /// `:table rules …` — how the columns are told apart (Feature #157).
+    /// `None` only reports.
+    SetTableRules(Option<crate::table::Rules>),
     /// `:theme` — which theme, and whether it is dark, light or the
     /// terminal's own answer (Feature #152).
     ///
@@ -480,8 +480,15 @@ pub fn parse(input: &str) -> Result<Command, CommandError> {
             "off" => Ok(Command::SetTable(false)),
             "check" => Ok(Command::CheckTable),
             "rules" => Ok(Command::SetTableRules(None)),
-            "rules on" => Ok(Command::SetTableRules(Some(true))),
-            "rules off" => Ok(Command::SetTableRules(Some(false))),
+            _ if rest.starts_with("rules ") => {
+                match crate::table::Rules::parse(rest.trim_start_matches("rules ")) {
+                    Some(rules) => Ok(Command::SetTableRules(Some(rules))),
+                    None => Err(CommandError::InvalidArgument {
+                        command: "table rules",
+                        value: rest["rules ".len()..].to_string(),
+                    }),
+                }
+            }
             other => Err(CommandError::InvalidArgument {
                 command: "table",
                 value: other.to_string(),
@@ -846,8 +853,8 @@ const TABLE: &[Word] = &[
     },
     Word {
         name: "rules",
-        help: "欄線：欄與欄之間分不分開",
-        then: Args::Words(ON_OFF),
+        help: "欄線：欄與欄之間怎麼分開",
+        then: Args::Words(RULES),
     },
 ];
 
@@ -995,6 +1002,44 @@ const THEMES: &[Word] = &[
     Word {
         name: "light",
         help: "淺色",
+        then: Args::None,
+    },
+];
+
+/// How a table's columns are told apart.
+const RULES: &[Word] = &[
+    Word {
+        name: "off",
+        help: "什麼都不畫，靠對齊分（默認）",
+        then: Args::None,
+    },
+    Word {
+        name: "color",
+        help: "每欄一條淡底，紙從縫裏透出來",
+        then: Args::None,
+    },
+    Word {
+        name: "line",
+        help: "畫一條竪線",
+        then: Args::Words(STROKES),
+    },
+];
+
+/// Which line `:table rules line` draws.
+const STROKES: &[Word] = &[
+    Word {
+        name: "solid",
+        help: "實線 │（默認）",
+        then: Args::None,
+    },
+    Word {
+        name: "dash",
+        help: "虛線 ┆",
+        then: Args::None,
+    },
+    Word {
+        name: "double",
+        help: "雙線 ║",
         then: Args::None,
     },
 ];
@@ -1800,6 +1845,31 @@ mod tests {
                 ..
             })
         ));
+    }
+
+    #[test]
+    fn a_table_says_how_its_columns_are_told_apart() {
+        use crate::table::{Rules, Stroke};
+        let rules = |line: &str| match parse(line) {
+            Ok(Command::SetTableRules(r)) => r,
+            other => panic!("{line}: {other:?}"),
+        };
+        assert_eq!(rules(":table rules"), None, "bare, it only reports");
+        assert_eq!(rules(":table rules off"), Some(Rules::Off));
+        assert_eq!(rules(":table rules color"), Some(Rules::Colour));
+        assert_eq!(rules(":table rules colour"), Some(Rules::Colour));
+        for line in [":table rules line", ":table rules line solid"] {
+            assert_eq!(rules(line), Some(Rules::Line(Stroke::Solid)), "{line}");
+        }
+        assert_eq!(rules(":table rules line dash"), Some(Rules::Line(Stroke::Dash)));
+        assert_eq!(
+            rules(":table rules line double"),
+            Some(Rules::Line(Stroke::Double))
+        );
+        assert!(parse(":table rules squiggly").is_err());
+        // …and the menu lists them, the way a finished word does.
+        let words: Vec<String> = complete("table rules ").iter().map(Choice::written).collect();
+        assert_eq!(words, ["off", "color", "line"]);
     }
 
     #[test]

@@ -970,6 +970,20 @@ yuhao-assess-data 下載後裝進資料目錄（yume 的 `scripts/build.sh` 會�
 yumete -t 表.csv          # 或者在裏面 :table
 ```
 
+**欄與欄之間怎麼分開**，是這張表的事，不是編輯器的事：二十八欄一個字寬的拆分表讀起來
+是格子，要一條線才分得清；六欄很寬的表讀起來是頁面，欄欄之間都畫一條反而是字與字之間
+的噪音。所以有三種，默認**什麼都不畫**——靠對齊分，印出來的表格就是這麼做的：
+
+```
+:table rules off            什麼都不畫（默認）
+:table rules color          每欄一條淡底，紙從縫裏透出來
+:table rules line           一條實線 │
+:table rules line dash      虛線 ┆
+:table rules line double    雙線 ║
+:table rules                說現在是哪一種
+[editor] table_rules = "line dash"
+```
+
 **放一份 schema 在資料旁邊，它就自動是表格。** `.yumete/tables/*.toml`，從**檔案所在
 目錄**往上找（不是工作目錄——schema 是資料的屬性，不是這次會話的）：
 
@@ -1503,7 +1517,9 @@ GB18030 的舊稿會被擋下並告訴你用 `iconv` 轉，而不是丟一句 Ru
 | `:row` *字* | 跳到表格裏叫這個名字的那一行 |
 | `:table`（`off`、`check`） | 按格子編輯：CSV 整檔，或游標所在的 `|` 表格 |
 | `:table check` | 把整張表看一遍，列出有問題的行 |
-| `:table rules`（`on`／`off`） | 欄線：欄與欄之間分不分開 |
+| `:table rules` | 說現在用的是哪一種欄線 |
+| `:table rules off`／`color`／`line` | 欄線：什麼都不畫／淡底／竪線 |
+| `:table rules line dash`／`double` | 虛線 ┆／雙線 ║ |
 | `:search row`／`column` *模式* | 一行一行找（`/`）／一欄一欄找（表格裏的 `Enter`） |
 | `:clipboard yank`／`paste` | 和系統剪貼簿交換（`空格 y`／`空格 p`） |
 | `:segment` `:seg` | 分詞著色開關 |
@@ -1552,7 +1568,8 @@ line_numbers = "absolute"    # "absolute" | "relative" | "none"
 scrolloff = 3                # 光標周圍保留的行（或縱）數
 show_segmentation = true     # 詞語著色（`:segment` 也可以隨時開關）
 segmentation_threshold = 0
-table_rules = true           # 表格的欄線：欄與欄之間分不分開
+table_rules = "off"          # 表格的欄線："off" | "color" | "line"
+                             # | "line dash" | "line double"
 
 layout = "horizontal"        # "horizontal" | "vertical"
 zong_length = 0              # 每縱字數，4–64；0 = 窗口能給多長就多長

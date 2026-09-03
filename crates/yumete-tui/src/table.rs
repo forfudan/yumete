@@ -21,6 +21,7 @@ use ratatui::widgets::Clear;
 use ratatui::Frame;
 use yumete_config::Config;
 use yumete_core::editor::Editor;
+use yumete_core::table::Rules;
 use yumete_core::TextStore;
 
 use crate::{gutter_width, put_text};
@@ -173,8 +174,14 @@ pub fn draw(
     // together.
     let rules = editor.table_rules();
     let text = match rules {
-        true => ink.ground(yumete_config::rung::BAND),
-        false => ink.page(),
+        Rules::Colour => ink.ground(yumete_config::rung::BAND),
+        Rules::Off | Rules::Line(_) => ink.page(),
+    };
+    // A drawn rule is a *rule*: the ladder's own rung for one, the same one
+    // the ruler's line and the 稿紙 ticks are drawn in.
+    let stroke = match rules {
+        Rules::Line(stroke) => Some((stroke.glyph(), ink.rule())),
+        _ => None,
     };
     // The seam, and the ground of anything that is not a cell.
     let page = ink.page();
@@ -297,12 +304,16 @@ pub fn draw(
             }
             // The seam after the cell: the page's own ground, except on the
             // row the cursor is on, where the band runs unbroken so the row
-            // reads as one thing.
+            // reads as one thing. A drawn rule goes in it — and keeps the
+            // row's ground, so the cursor's band is not cut into pieces.
             let seam = if w == 0 { 0 } else { GAP as u16 };
+            let ground = band_if(line == cursor_row, band, page);
             for cx in (x + w)..(x + w + seam).min(right) {
                 if let Some(cell) = buf.cell_mut((cx, y)) {
-                    cell.set_symbol(" ")
-                        .set_style(band_if(line == cursor_row, band, page));
+                    match stroke {
+                        Some((glyph, rule)) => cell.set_symbol(glyph).set_style(ground.fg(rule)),
+                        None => cell.set_symbol(" ").set_style(ground),
+                    };
                 }
             }
             // A hidden column takes no gap either — a column of

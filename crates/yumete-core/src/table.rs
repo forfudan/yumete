@@ -34,6 +34,78 @@ use std::path::{Path, PathBuf};
 
 use serde::Deserialize;
 
+/// How a table's columns are told apart (Feature #157).
+///
+/// Three answers, because the right one depends on the table and not on the
+/// editor: twenty-eight columns of one character read as a grid and want a
+/// rule between them; six wide ones read as a page, where a rule between every
+/// column is noise between the words.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Rules {
+    /// Nothing between them — the columns are told apart by their alignment,
+    /// which is how a printed table does it.
+    #[default]
+    Off,
+    /// A band: every column sits a shade off the page, and the page shows in
+    /// the seam between them.
+    Colour,
+    /// A drawn line, in one of three strokes.
+    Line(Stroke),
+}
+
+/// Which line is drawn between two columns.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Stroke {
+    Solid,
+    Dash,
+    Double,
+}
+
+impl Stroke {
+    /// The character it is drawn with.
+    pub fn glyph(self) -> &'static str {
+        match self {
+            Stroke::Solid => "│",
+            Stroke::Dash => "┆",
+            Stroke::Double => "║",
+        }
+    }
+}
+
+impl Rules {
+    /// Read a config value or the words of a command: `off`, `color`, `line`,
+    /// `line dash`, `line double`.
+    pub fn parse(value: &str) -> Option<Rules> {
+        let mut words = value.split_whitespace();
+        let rules = match words.next()? {
+            "off" | "none" | "無" | "无" => Rules::Off,
+            "colour" | "color" | "底色" => Rules::Colour,
+            "line" | "線" | "线" => match words.next() {
+                None | Some("solid") => Rules::Line(Stroke::Solid),
+                Some("dash" | "dashed") => Rules::Line(Stroke::Dash),
+                Some("double") => Rules::Line(Stroke::Double),
+                Some(_) => return None,
+            },
+            "solid" => Rules::Line(Stroke::Solid),
+            "dash" | "dashed" => Rules::Line(Stroke::Dash),
+            "double" => Rules::Line(Stroke::Double),
+            _ => return None,
+        };
+        Some(rules)
+    }
+
+    /// How it is written in a config file, and said on the status line.
+    pub fn name(self) -> &'static str {
+        match self {
+            Rules::Off => "off",
+            Rules::Colour => "color",
+            Rules::Line(Stroke::Solid) => "line",
+            Rules::Line(Stroke::Dash) => "line dash",
+            Rules::Line(Stroke::Double) => "line double",
+        }
+    }
+}
+
 /// What a column holds. Generic on purpose — the first table's twenty-eight
 /// columns happen to be all strings, and the next one will not be.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Deserialize)]
