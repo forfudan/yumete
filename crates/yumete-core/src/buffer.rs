@@ -10,6 +10,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use ropey::Rope;
 
+use crate::say;
 use crate::text_store::TextStore;
 
 /// A file's size and modification time, for noticing that it changed.
@@ -514,9 +515,7 @@ impl Buffer {
         if !force && target.exists() {
             self.seen = old_seen;
             self.read_as = old_read_as;
-            return Err(io::Error::other(
-                "那個檔案已經存在——`:w!` 才蓋掉它",
-            ));
+            return Err(io::Error::other(say!("那個檔案已經存在——`:w!` 才蓋掉它")));
         }
         self.path = Some(target);
         // A new name, so no copy of ours is out there under it yet — and no
@@ -556,7 +555,7 @@ impl Buffer {
     /// file. Exactly as in vi.
     pub fn write_copy(&self, path: &Path, force: bool) -> io::Result<()> {
         if !force && path.exists() {
-            return Err(io::Error::other("那個檔案已經存在——`:w!` 才蓋掉它"));
+            return Err(io::Error::other(say!("那個檔案已經存在——`:w!` 才蓋掉它")));
         }
         self.write_atomically(path)
     }
@@ -779,6 +778,28 @@ pub fn write_target(path: &Path) -> PathBuf {
     }
 }
 
+/// Whether two paths name the **same file on disk**, links and all.
+///
+/// `write_target` answers for spellings of a path; this answers for a hard
+/// link, which is not a spelling — it is a second name for one file, and no
+/// amount of resolving makes the two paths equal. Both must exist, or there is
+/// nothing to compare and the answer is no.
+pub fn same_file(a: &Path, b: &Path) -> bool {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::MetadataExt;
+        match (fs::metadata(a), fs::metadata(b)) {
+            (Ok(a), Ok(b)) => a.dev() == b.dev() && a.ino() == b.ino(),
+            _ => false,
+        }
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = (a, b);
+        false
+    }
+}
+
 /// The one place a file is replaced.
 ///
 /// Whole or not at all, **durable** (the data is fsynced before the rename and
@@ -809,7 +830,7 @@ fn write_bytes_atomically(
         if from.permissions().readonly() {
             return Err(io::Error::new(
                 io::ErrorKind::PermissionDenied,
-                "這個檔案是唯讀的——先 chmod，或者換個檔名存",
+                say!("這個檔案是唯讀的——先 chmod，或者換個檔名存"),
             ));
         }
     }

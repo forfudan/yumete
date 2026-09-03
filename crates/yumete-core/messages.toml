@@ -1654,3 +1654,23 @@ en = "{0} is already there — `:export!` writes over it"
 [[message]]
 zh = "抄了一份到 {0}"
 en = "copied to {0}"
+
+[[message]]
+zh = "第 {0} 行會從 {1} 格變成 {2} 格"
+en = "row {0} would go from {1} cells to {2}"
+
+[[message]]
+zh = "第 {0} 行會從 {1} 格變成 {2} 格——真要改欄數，加 t 旗標（`:%s/…/…/gt`）"
+en = "row {0} would go from {1} cells to {2} — add the t flag to mean it (`:%s/…/…/gt`)"
+
+[[message]]
+zh = "這次替換會把 {0} 行變成 {1} 行——表格裏不改行數"
+en = "this would turn {0} rows into {1} — a grid keeps its rows"
+
+[[message]]
+zh = "這個檔案是唯讀的——先 chmod，或者換個檔名存"
+en = "this file is read-only — chmod it, or save under another name"
+
+[[message]]
+zh = "那個檔案已經存在——`:w!` 才蓋掉它"
+en = "that file is already there — `:w!` writes over it"

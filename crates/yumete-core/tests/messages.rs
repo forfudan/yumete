@@ -71,6 +71,7 @@ fn literals(text: &str, opener: &str) -> BTreeSet<String> {
 fn said() -> BTreeSet<String> {
     let mut out = BTreeSet::new();
     for file in [
+        "crates/yumete-core/src/buffer.rs",
         "crates/yumete-core/src/editor.rs",
         "crates/yumete-core/src/command.rs",
         "crates/yumete-tui/src/lib.rs",

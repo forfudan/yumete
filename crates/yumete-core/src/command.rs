@@ -49,12 +49,17 @@ pub enum Command {
         ignore_case: bool,
         /// `n`: say how many there are and change nothing, as vi's `n` means.
         count_only: bool,
+        /// `t`: yes, this changes how many cells a row has — 表格的欄數也改.
+        /// Without it a substitution that would reshape a grid is refused, and
+        /// that refusal has to name a way through or it is a wall.
+        reshape: bool,
         /// Which lines it touches.
         rows: Rows,
     },
     /// `:replace <text>` — change what the last `:grep` found, everywhere it
-    /// found it. The pattern is the one you already looked at.
-    ReplaceFound(String),
+    /// found it. The pattern is the one you already looked at. `:replace!`
+    /// goes through even where it changes how many cells a row has.
+    ReplaceFound(String, bool),
     /// `:wa` — save every buffer that has changed.
     WriteAll,
     /// `:undo` (alias `:u`) — undo the last change.
@@ -626,11 +631,11 @@ pub fn parse(input: &str) -> Result<Command, CommandError> {
             }
         }
         "wa" | "wall" => Ok(Command::WriteAll),
-        "replace" => {
+        "replace" | "replace!" => {
             if rest.trim().is_empty() {
                 Err(CommandError::MissingArgument("replace"))
             } else {
-                Ok(Command::ReplaceFound(rest.to_string()))
+                Ok(Command::ReplaceFound(rest.to_string(), word.ends_with('!')))
             }
         }
         "row" => {
@@ -802,12 +807,44 @@ fn resolve(word: &str) -> &str {
     {
         return word;
     }
+    // **`!` composes with the prefix rule.** `:expo html` resolved and
+    // `:exp! html` did not, so the shorthand a writer had settled into stopped
+    // working at exactly the moment they meant「yes, overwrite it」. The bang
+    // belongs to the command, not to its spelling.
+    if let Some(stem) = word.strip_suffix('!') {
+        let mut banged = COMMANDS.iter().filter_map(|e| {
+            let named = e.name.starts_with(stem) || e.aliases.iter().any(|a| a.starts_with(stem));
+            (named && FORCEABLE.contains(&e.name)).then_some(e.name)
+        });
+        if let (Some(only), None) = (banged.next(), banged.next()) {
+            return match only {
+                "write" => "write!",
+                "open" => "open!",
+                "quit" => "quit!",
+                "export" => "export!",
+                "saveas" => "saveas!",
+                "replace" => "replace!",
+                other => other,
+            };
+        }
+        return word;
+    }
     let mut hits = COMMANDS.iter().filter(|e| e.name.starts_with(word));
     match (hits.next(), hits.next()) {
         (Some(only), None) => only.name,
         _ => word,
     }
 }
+
+/// The commands that take a `!`, so a prefix of one can too.
+const FORCEABLE: &[&str] = &[
+    "write",
+    "open",
+    "quit",
+    "export",
+    "saveas",
+    "replace",
+];
 
 /// The one word of `from` that `typed` names, exactly or by prefix.
 ///
@@ -1992,10 +2029,10 @@ fn parse_substitution(input: &str) -> Option<Result<Command, CommandError>> {
     let flags = fields.get(2).cloned().unwrap_or_default();
     // Saying so beats doing the substitution the flag was meant to hold back:
     // `n` in vi means "count, change nothing", and it used to *substitute*.
-    if let Some(bad) = flags.chars().find(|c| !"ginc".contains(*c)) {
+    if let Some(bad) = flags.chars().find(|c| !"ginct".contains(*c)) {
         return Some(Err(CommandError::InvalidArgument {
             command: "substitute",
-            value: format!("旗標 '{bad}'（有 g 全行、i 不分大小寫、n 只數）"),
+            value: format!("旗標 '{bad}'（有 g 全行、i 不分大小寫、n 只數、t 連欄數一起改）"),
         }));
     }
     if flags.contains('c') {
@@ -2010,6 +2047,7 @@ fn parse_substitution(input: &str) -> Option<Result<Command, CommandError>> {
         global: flags.contains('g'),
         ignore_case: flags.contains('i'),
         count_only: flags.contains('n'),
+        reshape: flags.contains('t'),
         rows,
     }))
 }
@@ -2122,6 +2160,7 @@ mod tests {
             global: false,
             ignore_case: false,
             count_only: false,
+            reshape: false,
             rows: Rows::Selection,
         };
         assert_eq!(parse(":s/foo/bar/"), Ok(plain("foo", "bar")));
@@ -2133,6 +2172,7 @@ mod tests {
                 global: true,
                 ignore_case: false,
                 count_only: false,
+            reshape: false,
                 rows: Rows::All,
             })
         );
@@ -2152,6 +2192,7 @@ mod tests {
             global: false,
             ignore_case: false,
             count_only: false,
+            reshape: false,
             rows: Rows::Selection,
         };
         assert_eq!(parse(":s#2024/01#2025/02#"), Ok(want.clone()));
@@ -2173,13 +2214,15 @@ mod tests {
                 global: true,
                 ignore_case: true,
                 count_only: false,
+            reshape: false,
                 rows: Rows::All,
             })
         );
         // `n` in vi means "count, change nothing" — and it used to substitute.
         assert!(matches!(
             parse(":%s/a/b/n"),
-            Ok(Command::Substitute { count_only: true, .. })
+            Ok(Command::Substitute { count_only: true,
+            reshape: false, .. })
         ));
         // A flag that is not implemented says so rather than being dropped.
         assert!(parse(":%s/a/b/c").is_err());

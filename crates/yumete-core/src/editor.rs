@@ -807,6 +807,17 @@ pub enum CommandOutcome {
     Quit,
 }
 
+/// What a write actually did — the three are different things, and `:wq` in
+/// particular has to be able to tell「the chapter is on disk」from「a copy of it
+/// is somewhere else」.
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum Wrote {
+    /// The buffer's own file is on disk.
+    Saved,
+    /// A copy went elsewhere; the buffer is still where it was, still modified.
+    Copied(PathBuf),
+}
+
 /// An error from running an editor command.
 #[derive(Debug)]
 pub enum EditorError {
@@ -1299,7 +1310,7 @@ impl Editor {
     /// and `:wa` is the moment a person says yes. Writing 120 files from a
     /// command line with no undo is the kind of thing an editor should not
     /// make easy.
-    fn replace_found(&mut self, text: &str) {
+    fn replace_found(&mut self, text: &str, reshape: bool) {
         let Some((pattern, files)) = self.grep_found.clone() else {
             self.status = say!("先 :grep 找一遍——換的是你已經看過的那些");
             return;
@@ -1334,7 +1345,10 @@ impl Editor {
             // cell guard, so the one thing table mode promises — a row's
             // delimiter count never changes — was checked for `:s` and not for
             // the command that reaches *every file in the project*.
-            if let Some(why) = self.substitution_breaks_the_grid(&rebuilt) {
+            if let Some(why) = (!reshape)
+                .then(|| self.substitution_breaks_the_grid(&rebuilt))
+                .flatten()
+            {
                 refused.push(say!("{0}：{1}", self.buffer_name(), why));
                 continue;
             }
@@ -1456,10 +1470,17 @@ impl Editor {
     ///
     /// Returns the buffer's index, so the caller can name it in the message.
     fn buffer_holding(&self, target: &Path) -> Option<usize> {
-        let target = crate::buffer::write_target(target);
-        self.buffers
-            .iter()
-            .position(|b| b.path().map(crate::buffer::write_target) == Some(target.clone()))
+        let resolved = crate::buffer::write_target(target);
+        self.buffers.iter().position(|b| {
+            let Some(path) = b.path() else {
+                return false;
+            };
+            crate::buffer::write_target(path) == resolved
+                // …**or the same file under another name**: a hard link is one
+                // file with two directory entries, and canonicalizing tells
+                // them apart because there is nothing to tell.
+                || crate::buffer::same_file(path, target)
+        })
     }
 
     /// Write the manuscript out for somebody else to typeset (`:export`).
@@ -1988,6 +2009,11 @@ impl Editor {
     /// Returns [`CommandOutcome::Quit`] when a `:q` / `:q!` should end the
     /// session, and [`CommandOutcome::Continue`] otherwise.
     pub fn execute(&mut self, line: &str) -> Result<CommandOutcome, EditorError> {
+        // **The line belongs to this command.** A command that fails says so
+        // through its error, and the status is where the *last* command's
+        // answer was: a failed `:export` used to leave 「存了 ch1.md」 standing,
+        // which reads as an export that worked.
+        self.status.clear();
         // What this command needs before it can mean anything (Feature #170).
         // A setting whose prerequisite is missing used to be *set* and then
         // read by nobody: `:hanging on` on a horizontal page turned a flag on,
@@ -2084,6 +2110,7 @@ impl Editor {
                 global,
                 ignore_case,
                 count_only,
+                reshape,
                 rows,
             } => {
                 self.substitute(Substitution {
@@ -2092,6 +2119,7 @@ impl Editor {
                     global,
                     ignore_case,
                     count_only,
+                    reshape,
                     rows,
                 });
                 Ok(CommandOutcome::Continue)
@@ -2153,14 +2181,39 @@ impl Editor {
                 Ok(CommandOutcome::Continue)
             }
             Command::WriteQuit(path) => {
-                self.write_current(path.as_deref())?;
+                // **`:wq <名字>` means 「save it as this, I am done」.** Left as
+                // `:w <path>` it wrote a *copy* and then refused to quit,
+                // because the chapter itself was still unsaved — and a writer
+                // with vi's muscle memory reads that refusal and reaches for
+                // `:q!`. So it rebinds, exactly as `:saveas` does, and the file
+                // that is saved is the one the name says.
+                match path.as_deref() {
+                    Some(path) => {
+                        let target = PathBuf::from(path);
+                        if let Some(which) = self.buffer_holding(&target) {
+                            if which != self.current {
+                                let name = self.buffers[which].display_name();
+                                self.status =
+                                    say!("{0} 正開着——切過去存，或另取一個檔名", name);
+                                return Ok(CommandOutcome::Continue);
+                            }
+                        }
+                        self.current_buffer_mut()
+                            .save_as(target, false)
+                            .map_err(EditorError::Io)?;
+                        self.status = say!("存了 {0}", self.current_buffer().display_name());
+                    }
+                    None => {
+                        self.write_current(None)?;
+                    }
+                }
                 // Saving *this* buffer is not saving the session: another open
                 // file may still be dirty, and `:wq` reads as "everything is
                 // safe now", so it is held to the same check `:q` is.
                 self.quit(false)
             }
-            Command::ReplaceFound(text) => {
-                self.replace_found(&text);
+            Command::ReplaceFound(text, reshape) => {
+                self.replace_found(&text, reshape);
                 Ok(CommandOutcome::Continue)
             }
             Command::WriteAll => self.write_all(),
@@ -2463,12 +2516,19 @@ impl Editor {
 
     /// Save the active buffer, optionally to a new `path` (save-as).
     fn write_current(&mut self, path: Option<&str>) -> Result<(), EditorError> {
-        self.write_forcing(path, false)
+        self.write_forcing(path, false).map(|_| ())
     }
 
     /// The same, and `force` writes over a file that changed on disk (`:w!`).
-    fn write_forcing(&mut self, path: Option<&str>, force: bool) -> Result<(), EditorError> {
-        let saved = match path {
+    ///
+    /// Returns **what it did**, because the three are different things and the
+    /// caller has to be able to tell them apart. It used to return `()` and the
+    /// caller sniffed the rendered status line for a Chinese character to find
+    /// out — which in English said 「saved ch1.md」 about a chapter that had not
+    /// been saved, and in Chinese left a stale 「抄了一份」 standing over a save
+    /// that had happened.
+    fn write_forcing(&mut self, path: Option<&str>, force: bool) -> Result<Wrote, EditorError> {
+        let saved: Result<Wrote, EditorError> = match path {
             // `:w path` writes a **copy** and stays here; `:w! path` writes it
             // over whatever is already there. Rebinding this buffer to another
             // name is `:saveas`, which says so — `:w chapter-copy.md` used to
@@ -2498,13 +2558,12 @@ impl Editor {
                     None if self.current_buffer().path().is_none() => self
                         .current_buffer_mut()
                         .save_as(target, force)
+                        .map(|()| Wrote::Saved)
                         .map_err(EditorError::Io),
                     None => self
                         .current_buffer()
                         .write_copy(&target, force)
-                        .map(|()| {
-                            self.status = say!("抄了一份到 {0}", target.display());
-                        })
+                        .map(|()| Wrote::Copied(target))
                         .map_err(EditorError::Io),
                 }
             }
@@ -2514,15 +2573,19 @@ impl Editor {
                 }
                 self.current_buffer_mut()
                     .save_forcing(force)
+                    .map(|()| Wrote::Saved)
                     .map_err(EditorError::Io)
             }
         };
         // A save that said nothing was a save you could not tell from a save
         // that did not happen — and the manual has been quoting this line as
         // its example of the hint row all along.
-        // A copy says 「抄了一份」 for itself; every other save says 存了.
-        if saved.is_ok() && !self.status.starts_with("抄") {
-            self.status = say!("存了 {0}", self.current_buffer().display_name());
+        match &saved {
+            Ok(Wrote::Saved) => {
+                self.status = say!("存了 {0}", self.current_buffer().display_name())
+            }
+            Ok(Wrote::Copied(to)) => self.status = say!("抄了一份到 {0}", to.display()),
+            Err(_) => {}
         }
         saved
     }
@@ -4775,6 +4838,77 @@ impl Editor {
         }
     }
 
+    /// **What divides this file into cells, whatever mode it is in.**
+    ///
+    /// `(delimiter, rows_only)` — `rows_only` says that only the lines which
+    /// are `|` table rows are cells, as in a document; otherwise every line is
+    /// a row, as in a `.csv`.
+    ///
+    /// The one answer every gate asks for. The gates used to open with
+    /// `self.table.as_ref()?` and so were off whenever `:table` was — which is
+    /// the state a table in a manuscript is normally edited in, and the state
+    /// the 拆分表 is in whenever the project has no schema file. A `.csv` is a
+    /// grid because of its own name; a `|` table is a grid because of what is
+    /// written there.
+    fn grid_shape_here(&self) -> Option<(char, bool)> {
+        if let Some(view) = self.table.as_ref() {
+            return Some((view.schema.delimiter, view.shape == Shape::Markdown));
+        }
+        let extension = self
+            .current_buffer()
+            .path()
+            .and_then(|p| p.extension())
+            .and_then(|e| e.to_str())
+            .unwrap_or_default()
+            .to_ascii_lowercase();
+        match extension.as_str() {
+            "csv" => Some((',', false)),
+            "tsv" | "tab" => Some(('\t', false)),
+            _ => Some(('|', true)),
+        }
+    }
+
+    /// Whether putting `text` where `span` is would change how many cells that
+    /// row has.
+    ///
+    /// For the writers that replace a range outright rather than typing into
+    /// it — a ruby reading is the one that reaches the rope past every gate —
+    /// and, like every bulk check, it does not ask whether `:table` is on.
+    fn replacement_reshapes_the_grid(
+        &self,
+        span: (usize, usize),
+        text: &str,
+    ) -> Option<String> {
+        let (delimiter, rows_only) = self.grid_shape_here()?;
+        let rope = self.current_buffer().rope();
+        let line = rope.char_to_line(span.0.min(rope.len_chars()));
+        if rows_only {
+            let here = self.line_text(line).unwrap_or_default();
+            // A row inside a fence is writing *about* a table.
+            if !crate::mdtable::is_row(&here) || self.block_of(line).is_literal() {
+                return None;
+            }
+        }
+        let was = rope
+            .slice(span.0.min(rope.len_chars())..span.1.min(rope.len_chars()))
+            .to_string();
+        let cells = |s: &str| -> usize {
+            match rows_only {
+                true => crate::mdtable::pipes_from(s, false).len(),
+                false => s.chars().filter(|&c| c == delimiter).count(),
+            }
+        };
+        let (before, after) = (cells(&was), cells(text));
+        (before != after).then(|| {
+            say!(
+                "第 {0} 行會從 {1} 格變成 {2} 格",
+                line + 1,
+                before + 1,
+                after + 1
+            )
+        })
+    }
+
     /// Whether typing `c` into a cell would break the file.
     ///
     /// With no quoting, a delimiter inside a cell is not a delimiter inside a
@@ -4782,6 +4916,11 @@ impl Editor {
     /// generator that reads this file back would take the damage silently, so
     /// the key is refused here, where it can still be explained.
     fn cell_refuses(&self, c: char) -> Option<String> {
+        // The **view**, deliberately: typing a `|` is how a table is written in
+        // the first place, so a document is a grid to this gate only once the
+        // writer has said so. What is *rewritten in bulk* — `:s`, `:replace`,
+        // `:ruby format`, `gJ` — asks [`Self::grid_shape_here`] instead, which
+        // does not care whether `:table` is on.
         let view = self.table.as_ref()?;
         if !self.table_here() {
             return None;
@@ -7981,6 +8120,16 @@ impl Editor {
         if text.is_empty() {
             return;
         }
+        // **Judged before anything happens**, in Insert as well as in Normal:
+        // the Insert branch used to hand the text to `insert_str`, which
+        // silently drops what a cell refuses, and then say 「貼了 8 個字」 about
+        // a paste that had not happened. It also spent an undo point on it.
+        if self.mode == Mode::Insert || self.mode == Mode::Normal {
+            if let Some(why) = self.cell_refuses_text(text) {
+                self.status = why;
+                return;
+            }
+        }
         self.snapshot();
         match self.mode {
             // In Insert it lands where the caret is, like anything typed.
@@ -7994,10 +8143,6 @@ impl Editor {
                 // delete what was selected and *then* refuse the paste, so the
                 // cell came back short and the message only talked about the
                 // refusal.
-                if let Some(why) = self.cell_refuses_text(text) {
-                    self.status = why;
-                    return;
-                }
                 self.delete_selection();
                 let at = self.cursor;
                 if !self.edit_insert(at, text) {
@@ -8744,6 +8889,7 @@ impl Editor {
             global,
             ignore_case,
             count_only,
+            reshape,
             rows,
         } = how;
         if pattern.is_empty() {
@@ -8783,7 +8929,7 @@ impl Editor {
         // A substitution rewrites whole lines, so the cell guard cannot judge it
         // character by character. What it can check is the thing the guard
         // exists to protect: that no row gained or lost a cell.
-        if count > 0 {
+        if count > 0 && !reshape {
             if let Some(why) = self.substitution_breaks_the_grid(&rebuilt) {
                 self.status = why;
                 return;
@@ -9297,10 +9443,12 @@ impl Editor {
             crate::ruby::markup(&base_chars, reading, self.ruby.writer())
         };
 
-        // A reading is text, and text going into a cell obeys the cell's rule:
+        // A reading is text, and text going into a row obeys the row's rule:
         // `a,b` typed as a reading used to be written straight into the rope,
-        // past both gates, and the row it was on gained a field.
-        if let Some(why) = self.cell_refuses_text_at(Some(span.0), &text) {
+        // past every gate, and the row it was on gained a field. Asked of the
+        // *file*, not of `:table`, since nobody turns table mode on to annotate
+        // a character.
+        if let Some(why) = self.replacement_reshapes_the_grid(span, &text) {
             self.status = why;
             return;
         }
@@ -9680,10 +9828,7 @@ impl Editor {
         // used to open with `self.table.as_ref()?`, so `:replace` — which
         // reaches every file `:grep` found, including files never opened — went
         // through 13 rows of the author's own documentation and broke them.
-        let (d, rows_only) = match self.table.as_ref() {
-            Some(view) => (view.schema.delimiter, view.shape == Shape::Markdown),
-            None => ('|', true),
-        };
+        let (d, rows_only) = self.grid_shape_here()?;
         // A delimited file is all cells. A document is not: only its table
         // rows are, and a paragraph that gains a `|` has gained a character.
         // Counting the whole document refused `:%s/前文/前 | 文/` on a line
@@ -9711,8 +9856,8 @@ impl Editor {
         };
         let (was, now) = (count(&before), count(rebuilt));
         if was.len() != now.len() {
-            return Some(format!(
-                "這次替換會把 {} 行變成 {} 行——表格模式下不改行",
+            return Some(say!(
+                "這次替換會把 {0} 行變成 {1} 行——表格裏不改行數",
                 was.len(),
                 now.len()
             ));
@@ -9722,8 +9867,11 @@ impl Editor {
             .zip(&now)
             .find(|((_, a), (_, b))| a != b)
             .map(|((n, a), (_, b))| (*n, *a, *b))?;
-        Some(format!(
-            "第 {} 行會從 {} 格變成 {} 格——先 `:table off`",
+        // **A refusal that names no way through is a wall.** It used to say
+        // 「先 :table off」, which stopped being an escape the moment the check
+        // stopped asking whether table mode was on.
+        Some(say!(
+            "第 {0} 行會從 {1} 格變成 {2} 格——真要改欄數，加 t 旗標（`:%s/…/…/gt`）",
             line + 1,
             from + 1,
             to + 1
@@ -10265,6 +10413,8 @@ struct Substitution<'a> {
     global: bool,
     ignore_case: bool,
     count_only: bool,
+    /// The `t` flag: the writer means to change how many cells a row has.
+    reshape: bool,
     rows: crate::command::Rows,
 }
 
@@ -14553,6 +14703,100 @@ mod tests {
         ed.on_key(Key::Char('.'));
         let text = ed.current_buffer().text();
         assert!(text.matches("qu").count() > 2, "{text}");
+    }
+
+    /// What a path command **did** is what it says it did.
+    ///
+    /// `:w copy.md` writes a copy and leaves the chapter unsaved. The caller
+    /// used to find that out by sniffing the rendered status line for a Chinese
+    /// character — which in English reported 「saved ch1.md」 about a chapter
+    /// that had not been saved. It is a value now, not a string.
+    #[test]
+    fn a_path_command_says_what_it_actually_did() {
+        let dir = std::env::temp_dir().join(format!("yumete-said-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let chapter = dir.join("ch1.md");
+        std::fs::write(&chapter, "第一稿\n").unwrap();
+
+        let mut ed = Editor::new();
+        ed.open_file(&chapter).unwrap();
+        press(&mut ed, "i");
+        type_keys(&mut ed, "改");
+        ed.on_key(Key::Esc);
+
+        let copy = dir.join("copy.md");
+        assert_eq!(
+            ed.write_forcing(Some(&copy.display().to_string()), false)
+                .unwrap(),
+            Wrote::Copied(copy.clone()),
+            "a copy is a copy, whatever language the line is in"
+        );
+        // The chapter is still unsaved, so the line may not say it is.
+        assert!(ed.current_buffer().is_modified());
+        assert!(!ed.status().contains("ch1.md"), "{}", ed.status());
+
+        // …and the save that follows says so, rather than leaving the copy's
+        // message standing.
+        assert_eq!(ed.write_forcing(None, false).unwrap(), Wrote::Saved);
+        assert!(ed.status().contains("ch1.md"), "{}", ed.status());
+        assert!(!ed.current_buffer().is_modified());
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    /// `:wq <名字>` saves the file it names and quits — it does not write a
+    /// copy and then refuse to leave.
+    #[test]
+    fn write_quit_with_a_name_saves_that_name() {
+        let dir = std::env::temp_dir().join(format!("yumete-wqn-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let chapter = dir.join("ch1.md");
+        std::fs::write(&chapter, "第一稿\n").unwrap();
+
+        let mut ed = Editor::new();
+        ed.open_file(&chapter).unwrap();
+        press(&mut ed, "i");
+        type_keys(&mut ed, "改");
+        ed.on_key(Key::Esc);
+        let out = dir.join("ch1-final.md");
+        assert_eq!(
+            ed.execute(&format!(":wq {}", out.display())).unwrap(),
+            CommandOutcome::Quit,
+            "{}",
+            ed.status()
+        );
+        assert!(std::fs::read_to_string(&out).unwrap().contains('改'));
+        assert!(!ed.current_buffer().is_modified());
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    /// A substitution that would reshape a grid names a way through, and the
+    /// way through works.
+    #[test]
+    fn the_grid_refusal_names_a_way_through() {
+        let table = "| 鍵 | 拆分 |\n| --- | --- |\n| 木 | 木 |\n";
+        let mut ed = typed(table);
+        ed.execute(":%s/拆分/拆分 | 註/").ok();
+        assert!(ed.status().contains("t 旗標"), "{}", ed.status());
+        assert_eq!(ed.current_buffer().text(), table);
+        // …and with the flag it goes through.
+        ed.execute(":%s/拆分/拆分 | 註/t").unwrap();
+        assert!(ed.current_buffer().text().contains("拆分 | 註"), "{}", ed.status());
+    }
+
+    /// A paste the cell refuses says so — in Insert as well as in Normal.
+    #[test]
+    fn a_refused_paste_does_not_claim_to_have_happened() {
+        let mut ed = typed("| 字 | 說明 |\n| --- | --- |\n| 木 | 樹 |\n");
+        ed.goto_line(3);
+        assert!(ed.enter_table(), "{}", ed.status());
+        let before = ed.current_buffer().text();
+        press(&mut ed, "i");
+        ed.paste_text("甲\t乙\n丙\t丁\n");
+        assert_eq!(ed.current_buffer().text(), before, "{}", ed.status());
+        assert!(!ed.status().contains("貼了"), "{}", ed.status());
     }
 
     #[test]
