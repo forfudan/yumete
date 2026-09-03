@@ -350,225 +350,102 @@ Phases are ordered by priority, most writer-critical first:
 
 ---
 
-## 5.2.1 Decided, 2026-09-03
+## 5.1 Helix keybindings & IME hotkeys
 
-Asked before an overnight run, so the work would not stop on them.
+A per-key view of the Helix Normal-mode keymap (plus yumete's own IME hotkeys)
+and how far each is implemented. Not everything is needed yet; this is the map
+for prioritizing. **Done** = implemented; **Pn** = planned in that phase; **—** =
+deferred.
 
-- **Messages are configurable, Chinese by default.** `[editor] language = "zh"|"en"`,
-  two tables. The manual is Chinese and so is the writer; an English-only user
-  meeting 「語法：markdown」 in the status bar concludes, correctly, that the
-  editor is not for them.
-- **`yume-core` stays a path dependency for now.** Pinning a git rev needs that
-  commit pushed to a private repo and CI auth; getting it wrong costs a whole
-  session's ability to build. It goes in with the release pipeline (§5.3).
-- **A key alias may name a key *sequence*.** `[keys.normal] "J" = "gJ"` puts
-  join back. The defaults do not change — `J`/`K`/`H`/`L` as paging is the right
-  call for a book — but somebody who disagrees spends a config line instead of
-  leaving.
-- **Group 10 (first-line indent, 段組) is 0.1.0, not 0.2.0.** They are the point
-  of a 縱書 editor.
+> Brought up to date 2026-09-04. It had a dozen keys marked `P4` that had been
+> shipped for weeks — which is how a reviewer comes to believe an editor is
+> less than it is. Where a key differs from Helix on purpose, the yumete
+> spelling is the one in the table: `J` is half a page because this is a book,
+> so join is `gJ`; `m` opens match mode, so a mark is `M`.
 
-## 5.4 Wanted for 0.2.0
+### Movement
 
-Two reviews on 2026-09-03, from a Chinese writer and from a terminal
-power-user who does not write Chinese, asked the same question: **what would
-make yumete the only editor that does this?** Their lists barely overlap, which
-is the useful part. Recorded here, not scheduled — 0.1.0 first.
+| Keys                    | Action                                       | Status |
+| ----------------------- | -------------------------------------------- | ------ |
+| `h` `j` `k` `l`, arrows | left / down / up / right (grapheme-aware)    | Done   |
+| `w` `b` `e`             | next / prev word start, word end (CJK words) | Done   |
+| `W` `B` `E`             | WORD variants (whitespace-delimited)         | Done   |
+| `f` `t` `F` `T` + char  | find / till a character, forward / backward  | Done   |
+| `Home` `End`            | line start / end                             | Done   |
+| `gg`                    | goto file start (or line N with a count)     | Done   |
+| `ge`                    | goto last line                               | Done   |
+| `gh` `gl`               | goto line start / end                        | Done   |
+| `gs`                    | goto first non-blank character               | Done   |
+| `gt` `gc` `gb`          | goto screen top / center / bottom            | —      |
+| `Ctrl-u` `Ctrl-d`       | scroll half a page up / down                 | Done   |
+| `Ctrl-b` `Ctrl-f`       | page up / down                               | Done   |
+| `mm`                    | match / select the bracket pair (`m` mode)   | Done   |
+| `{` `}` `(` `)`         | paragraph / sentence — yumete's own          | Done   |
+| `M` `'`                 | set a mark / go to it — `m` is match mode    | Done   |
 
-### What both of them noticed about the machinery
+### Selection
 
-- The **data directory already holds a Chinese-language database no editor
-  ships**: `chaifen.ydiv` (per-character 拼音, 字集, 拆分), `pinyin.yflb`
-  (`spell_logprob(reading, text)` — a word-level reading model), `simptrad.txt`,
-  1.25M weighted words, an n-gram model, and seven `.ycs` character sets — all
-  loaded at startup already, and spent today on candidates and `w`/`b`/`e` and
-  nothing else.
-- The **display-transform layer** (`hidden_on_line` → `wrap::Measure` →
-  `zong::Grid` → `text_at`) makes hidden text cost zero columns *everywhere at
-  once*, and the selection-touches-it-so-show-it rule is a stronger conceal than
-  anything shipping. **Helix has no conceal and no virtual text at all.**
-- **Results are text.** `:grep` and `:sh` make `path:line:` buffers and `gf`
-  parses them, so the quickfix list already exists and nobody noticed.
-- A **per-frame budget**: 64-char prefixes, per-paragraph hashes, caches keyed by
-  revision. O(what is on screen) with O(edit) invalidation — the substrate a
-  live overlay needs and the thing Vim's `synmaxcol` is an apology for.
+| Keys    | Action                                     | Status |
+| ------- | ------------------------------------------ | ------ |
+| `x`     | select the current line (extend on repeat) | Done   |
+| `v`     | enter select (extend) mode                 | Done   |
+| `;`     | collapse the selection to the cursor       | Done   |
+| `,`     | keep only the primary selection            | —      |
+| `Alt-;` | flip the selection's anchor and head       | Done   |
+| `%`     | select the whole file                      | Done   |
+| `s` `S` | select / split on a regex within selection | — (needs multi-cursor) |
 
-### From the writer — spend the language model on the manuscript
+### Changes
 
-1. **`:check 用字`** — 裡 412 / 裏 3, 為/爲, 台/臺, 着/著, and project names, as a
-   jumpable buffer. *Nobody has this.* Word checks 病句; Grammarly is English;
-   spell-checkers tokenize on spaces and see one word. **high**
-2. **`:ruby auto`, and `:ruby auto rare`** — generate readings by word so 了 is
-   `le`, and annotate **only** characters outside 通用规范汉字表. Word's 拼音指南
-   guesses per character and detaches on edit; no editor generates readings from
-   a language model and none can then set them vertically. **high**
-3. **`:diff` at 詞 grain, over the autosave snapshots already written** — every
-   line-based diff reports a 500-字 paragraph as wholly changed when one 的 moved.
-   The snapshots are being thrown away today. **high**
-4. **圈點 in the margin the 標點旁置 column already draws** — and the open markup
-   question answers itself: `*字*` *is* it, because the Chinese rendering of
-   `<em>` is 着重號. 1–2 days; `Slot` already carries the channel. **high**
-5. **`:sentence`** — one 句 to a 縱, as a view, no edit. The manual already
-   teaches `:%s/。/。\n/g` for proofreading; this is that, non-destructively —
-   and it hands the `(`/`)` sentence motion its boundaries. **high**
-6. **`:check 標點`** — half-width marks in Chinese text, `...` for ……, and
-   **unbalanced 「」（）《》 across a paragraph**, which silently inverts every
-   quote after it and is invisible in prose. **high**
-7. **This book's own words** — mine repeated OOV n-grams from the project, feed
-   them to *both* the segmenter and the IME, so 阿甯 walks as one word and types
-   as one. `yume-lm/src/discover.rs` already implements the signals. **high**
-8. **`:check 字集`** — every character outside 通用规范/臺灣/香港/古籍, before the
-   typesetter finds out. The seven `.ycs` sets are already loaded; two days.
-   Best value-per-day on either list. **high**
-9. **繁簡 conversion that shows what it guessed** — `simptrad.txt` stores the
-   one-to-many sets, so ambiguity is *visible in the data*; drop the unsure ones
-   in a review buffer instead of picking silently. **medium-high**
-10. **`:words`** — crutch words by **surprisal against 詞頻表**, not raw count,
-    so it says 「然後 47 次」 and not 「的」. **medium-high**
-11. **割注 — 小字雙行 inside the 縱.** InDesign J has it; nothing else does. The
-    縦中横 slot packing is already the mechanism, run down a run of slots. **medium**
-12. 寫作進度 (Scrivener's targets, but counting 字 correctly) · a print-ready
-    直排 HTML export (browsers are the only free vertical typesetter and no
-    editor drives one) · 焦點模式 vertically · 平仄/韻腳 in the margin. **medium**
+| Keys        | Action                                 | Status |
+| ----------- | -------------------------------------- | ------ |
+| `d`         | delete the selection                   | Done   |
+| `c`         | change the selection (delete + insert) | Done   |
+| `i` `a`     | insert before / after the selection    | Done   |
+| `I` `A`     | insert at line start / end             | Done   |
+| `o` `O`     | open a line below / above              | Done   |
+| `u` `U`     | undo / redo                            | Done   |
+| `y` `p` `P` | yank / paste after / before            | Done   |
+| `r` `R`     | replace a character / with the yank    | Done   |
+| `~` `` ` `` | switch case / lowercase (`A-``` uppercases) | Done |
+| `gJ`        | join lines (`J` is half a page — this is a book) | Done |
+| `.`         | repeat the last change                 | Done   |
+| `>` `<`     | indent / unindent                      | Done   |
+| `=`         | format                                 | —      |
 
-### From the programmer — spend the display layer on everyone else
+### Search & command
 
-1. **Virtual text — the mirror of `hidden_on_line`.** `drawn_on_line` with the
-   mirror invariant: *the cursor may never sit on a character that is not in the
-   file*. Downstream: inline diagnostics, blame, inlay hints, fold markers,
-   `↵`/`·`, and the author's own first-line indent and 圈點. Only Neovim has
-   anything like it; Helix has nothing. **high**
-2. **Merge conflicts as a `Block` kind.** `<<<<<<<` is exactly the shape
-   `BlockScanner` was built for; tint the two sides, hide the markers under
-   `:render full`, three keys, `]c`/`[c`, `:conflicts` as a results buffer.
-   Emacs `smerge-mode` is the only good prior art and nobody knows it exists.
-   Cheapest high-value item on either list. **high**
-3. **Jobs, and `]q`/`[q` over the results buffer.** `:preview` already models a
-   supervised child correctly; generalise it, and walk `path:line:` lines
-   without leaving the file. That is a complete build-error loop with **no
-   quickfix list, no `errorformat`, no problem matcher** — Vim's quickfix is the
-   right idea under a mini-language. **high**
-4. **Table mode over any delimited text** — quoting (the invariant generalises
-   from delimiters to *cells*), TSV/`|`/`;`, the header fallback as a first-class
-   path, and `:sh ps aux` landing in a grid. `csv.vim` colours, VisiData is not
-   an editor and will not hand back a byte-identical 8 MB file. **high**
-5. **The Unicode alarm** — tint invisibles, bidi controls (Trojan Source) and
-   ASCII homoglyphs, plus `describe-char` in the `Detail` panel. VS Code's
-   `unicodeHighlight` is the only implementation anywhere and it is a GUI;
-   Emacs has the panel and no alarm. **high**
-6. **`yumete -p` as a pager and an `fzf --preview`** — the same renderer, so it
-   can never disagree with the editor. `bat` highlights syntax and renders a CSV
-   as commas; `glow` deletes the markup. Distribution precedes adoption. **high**
-7. **The phrasebook** — an unbound key names its local spelling (`$` → `gl`,
-   `G` → `ge`, `ciw` → `miwc`), dialect-configurable. Not a compatibility layer:
-   it never *does* the thing. which-key tells you what is available, never what
-   you meant. **high**
-8. 段組 horizontally (Emacs `follow-mode` is the entire prior art) · byte
-   fidelity as a stated promise with `:diff` against disk · an undo browser on
-   the existing picker · `Enter` as the universal follow with the expiring
-   return · files with 40 MB single lines · a live prose tint for English ·
-   macros as editable text. **medium**
+| Keys    | Action                           | Status   |
+| ------- | -------------------------------- | -------- |
+| `/` `?` | search forward / backward        | Done     |
+| `n` `N` | next / previous match            | Done     |
+| `*`     | search for the current selection | Done     |
+| `:`     | command line (`:w` `:q` `:s` …)  | Done     |
+| `Space` | the menu — files, buffers, search, the clipboard, 詳情 | Done |
+| `q` `Q` | record a macro / play the last one back | Done  |
+| `\"a`    | use register `a` for the next yank / delete / paste | Done |
+| `C-a` `C-x` | increment / decrement the number at the cursor | Done |
+| `C-o` `C-i` | the jump list, back and forward  | Done     |
 
-### Four they would not build
+### CJK IME hotkeys (yumete-specific — not in Helix)
 
-A plugin runtime (#58) — "every editor grows one and it becomes the product";
-an embedded terminal pane (already argued); a git UI (lazygit is one `:!` away);
-and **tree-sitter/LSP at 0.2**, because its parse-the-whole-document model
-fights the per-paragraph, cached, markup-stays-on-the-page invariant that made
-this editor good.
+Active only in Insert mode while the built-in Yume IME is engaged; Normal-mode
+keys are unaffected.
 
-### Their honest answers
+| Keys                          | Action                                                  | Status       |
+| ----------------------------- | ------------------------------------------------------- | ------------ |
+| `Shift` (tap)                 | toggle 中 / 英 (Chinese to ASCII) in insert/search mode | P2 (#29)     |
+| letters (composing)           | drive the Yume candidate panel in insert/search mode    | P2 (#27/#28) |
+| `Space` / `Enter` (composing) | commit the highlighted candidate / raw code             | P2           |
+| `1`–`9` (composing)           | select a candidate by index                             | P2           |
+| `-` `=` (composing)           | previous / next candidate page                          | P2           |
+| `Backspace` (composing)       | delete the last code letter                             | P2           |
+| `:`-led commands              | switch scheme (Ling / Xing / Qing / …)                  | P2 (#31)     |
+| `:`-led commands              | other Yume settings                                     |              |
+| `/`-led (composing)           | special commands (punctuation, symbols)                 | P2 (#30)     |
+| `z` (composing)               | reverse lookup                                          | P2 (#30)     |
 
-The writer: *yumete would be the only editor that **reads** Chinese rather than
-displaying it* — knows where the words and sentences are, how each character is
-pronounced, and which ones the publisher's edition will accept.
-
-The programmer: **not today, and not close** — nobody can install it, there is
-no multi-cursor (which for a Helix user is the thesis, not a feature), and the
-docs told the reader the project was dead. But the way to yes is not competing
-with Helix: **the editor you reach for when the file is a particular shape** — a
-CSV, a merge conflict, a document with a hostile character in it, a long piece
-of prose. Four files a week that all have bad answers today.
-
-### 11 · Markdown tables — what a review of #142 left open
-
-Eleven defects found and fixed the same night (data loss when the header was
-the file's last line without a newline; the mode leaking into the prose around
-the table through `o`, `:layout vertical`, `:s` and `add_buffer`; the rule row
-being editable; the `\|` escape the manual promised and the editor refused;
-CRLF; a row pasted onto the header; `:table` firing inside a code fence). What
-the same review wanted and did not get:
-
-- **Paste from a spreadsheet.** A TSV or CSV clipboard becoming rows. The one
-  thing that would make a writer build tables here instead of in a spreadsheet;
-  Tab is refused outright today. **high**
-- **`:table` on a selection**, and the two conversions it implies — a selected
-  block of CSV into a `|` table, and a `|` table out to CSV. `export.rs` has no
-  CSV path either. **medium**
-- **`t y` / `t p` for a whole column.** Rows have `Y`; a column can only be
-  moved one step at a time. **medium**
-- **The current cell is not drawn** in a Markdown table — the prose renderer
-  knows nothing about cells, so the only feedback is the column name in the
-  status line, while Insert *is* constrained to the cell. **medium**
-- **Messages.** The CSV grid's refusals were English in a Chinese feature; the
-  table ones are fixed, and `cannot open '…'` and its kind are not. Part of the
-  2026-09-03 language decision (§5.2.1). **medium**
-
-## 5.3 Releasing, and the Homebrew tap (#135, planned)
-
-Deferred until there is something to release. The investigation is written down
-here so it does not have to be done twice.
-
-**The shape**, copied from `forfudan/decimo`, which already does this well: the
-formula in `forfudan/homebrew-tap` ships **prebuilt tarballs** and Homebrew
-never compiles anything. A GitHub Release on this repo triggers the workflow;
-`workflow_dispatch` runs it by hand.
-
-**Why prebuilt is not merely convenient.** `yumete-ime` depends on `yume-core`
-by *relative path* (`../../../yume/crates/yume-core`), so a source-build formula
-would fail: the sibling repository is not in the tarball. Shipping binaries
-sidesteps it. A `--HEAD` install, or a formula that builds from source, would
-first need that path turned into a git dependency.
-
-**Where the 宇浩 data comes from.** Not from this repository (a compiled 碼表 is
-3.7 MB and does not delta) and not from `yume/data/`, which is gitignored — 102
-MB generated from the assets repository and present only on the author's
-machine. It comes from **`forfudan/yume-release`**, whose releases carry the
-compiled tables for every platform. The Linux asset is the one to use:
-
-```
-Yume-v3.12.0-<build>-linux-x86_64.tar.gz      ~30 MB, plain tar.gz
-  └── share/yume/
-        ling.ytab  symbols.ytab  lang.ywtb  lang.ywl  chaifen.ydiv
-        qing.ytab  xing.ytab  riyue.ytab  pinyin.yflb  lang.ygram
-        charsets/*.ycs  zigen_*.yzg  words_yuling.ywrd
-        VERSION            ← version=, build=, and a SHA-256 per file
-```
-
-Plain `tar.gz`, so any runner can open it — no `hdiutil`, no `dmg2img`. Verified
-against v3.12.0 on 2026-09-02: every file yumete loads is there, and `VERSION`
-is what `crates/yumete-ime/build.rs` reads to date the built-in table.
-
-**The pipeline.**
-
-1. One job downloads that tarball, extracts `share/yume/*`, uploads it as a
-   workflow artifact. One download for the whole run, so the four builds cannot
-   disagree about which 靈明 they embedded.
-2. Four build jobs — macOS arm64, macOS x86_64, Linux x86_64, Linux aarch64 —
-   download it, set `YUMETE_BUILTIN_DIR` to it, `cargo build --release`, then
-   tar the binary **together with the runtime data**, so a Homebrew install has
-   the language model and the 拆分 annotations too, not only the embedded 碼表.
-3. Attach the tarballs and their `.sha256` files to the release.
-4. **Open a pull request against `homebrew-tap`** with the new version and the
-   four checksums. decimo does this last step by hand, and its own workflow
-   comment records what that cost: three releases went out with the tarballs
-   missing, and Homebrew sat four versions behind for four months. The same
-   trap is one manual step away here.
-
-**Release-triggered, not commit-triggered.** A formula pins a versioned URL and
-a checksum, so a commit-triggered build would mean a new formula edit and a new
-`brew upgrade` prompt for every push. Homebrew's own convention is that a
-formula follows releases.
+---
 
 ## 5.2 Before 0.1.0
 
@@ -784,102 +661,225 @@ dep and ship the tarballs §5.3 already designs. **high**
 chapter), and the `ms` and `~` off-by-ones that left the highlight lying about
 what the next edit would take.
 
-## 5.1 Helix keybindings & IME hotkeys
+## 5.2.1 Decided, 2026-09-03
 
-A per-key view of the Helix Normal-mode keymap (plus yumete's own IME hotkeys)
-and how far each is implemented. Not everything is needed yet; this is the map
-for prioritizing. **Done** = implemented; **Pn** = planned in that phase; **—** =
-deferred.
+Asked before an overnight run, so the work would not stop on them.
 
-> Brought up to date 2026-09-04. It had a dozen keys marked `P4` that had been
-> shipped for weeks — which is how a reviewer comes to believe an editor is
-> less than it is. Where a key differs from Helix on purpose, the yumete
-> spelling is the one in the table: `J` is half a page because this is a book,
-> so join is `gJ`; `m` opens match mode, so a mark is `M`.
+- **Messages are configurable, Chinese by default.** `[editor] language = "zh"|"en"`,
+  two tables. The manual is Chinese and so is the writer; an English-only user
+  meeting 「語法：markdown」 in the status bar concludes, correctly, that the
+  editor is not for them.
+- **`yume-core` stays a path dependency for now.** Pinning a git rev needs that
+  commit pushed to a private repo and CI auth; getting it wrong costs a whole
+  session's ability to build. It goes in with the release pipeline (§5.3).
+- **A key alias may name a key *sequence*.** `[keys.normal] "J" = "gJ"` puts
+  join back. The defaults do not change — `J`/`K`/`H`/`L` as paging is the right
+  call for a book — but somebody who disagrees spends a config line instead of
+  leaving.
+- **Group 10 (first-line indent, 段組) is 0.1.0, not 0.2.0.** They are the point
+  of a 縱書 editor.
 
-### Movement
+## 5.3 Releasing, and the Homebrew tap (#135, planned)
 
-| Keys                    | Action                                       | Status |
-| ----------------------- | -------------------------------------------- | ------ |
-| `h` `j` `k` `l`, arrows | left / down / up / right (grapheme-aware)    | Done   |
-| `w` `b` `e`             | next / prev word start, word end (CJK words) | Done   |
-| `W` `B` `E`             | WORD variants (whitespace-delimited)         | Done   |
-| `f` `t` `F` `T` + char  | find / till a character, forward / backward  | Done   |
-| `Home` `End`            | line start / end                             | Done   |
-| `gg`                    | goto file start (or line N with a count)     | Done   |
-| `ge`                    | goto last line                               | Done   |
-| `gh` `gl`               | goto line start / end                        | Done   |
-| `gs`                    | goto first non-blank character               | Done   |
-| `gt` `gc` `gb`          | goto screen top / center / bottom            | —      |
-| `Ctrl-u` `Ctrl-d`       | scroll half a page up / down                 | Done   |
-| `Ctrl-b` `Ctrl-f`       | page up / down                               | Done   |
-| `mm`                    | match / select the bracket pair (`m` mode)   | Done   |
-| `{` `}` `(` `)`         | paragraph / sentence — yumete's own          | Done   |
-| `M` `'`                 | set a mark / go to it — `m` is match mode    | Done   |
+Deferred until there is something to release. The investigation is written down
+here so it does not have to be done twice.
 
-### Selection
+**The shape**, copied from `forfudan/decimo`, which already does this well: the
+formula in `forfudan/homebrew-tap` ships **prebuilt tarballs** and Homebrew
+never compiles anything. A GitHub Release on this repo triggers the workflow;
+`workflow_dispatch` runs it by hand.
 
-| Keys    | Action                                     | Status |
-| ------- | ------------------------------------------ | ------ |
-| `x`     | select the current line (extend on repeat) | Done   |
-| `v`     | enter select (extend) mode                 | Done   |
-| `;`     | collapse the selection to the cursor       | Done   |
-| `,`     | keep only the primary selection            | —      |
-| `Alt-;` | flip the selection's anchor and head       | Done   |
-| `%`     | select the whole file                      | Done   |
-| `s` `S` | select / split on a regex within selection | — (needs multi-cursor) |
+**Why prebuilt is not merely convenient.** `yumete-ime` depends on `yume-core`
+by *relative path* (`../../../yume/crates/yume-core`), so a source-build formula
+would fail: the sibling repository is not in the tarball. Shipping binaries
+sidesteps it. A `--HEAD` install, or a formula that builds from source, would
+first need that path turned into a git dependency.
 
-### Changes
+**Where the 宇浩 data comes from.** Not from this repository (a compiled 碼表 is
+3.7 MB and does not delta) and not from `yume/data/`, which is gitignored — 102
+MB generated from the assets repository and present only on the author's
+machine. It comes from **`forfudan/yume-release`**, whose releases carry the
+compiled tables for every platform. The Linux asset is the one to use:
 
-| Keys        | Action                                 | Status |
-| ----------- | -------------------------------------- | ------ |
-| `d`         | delete the selection                   | Done   |
-| `c`         | change the selection (delete + insert) | Done   |
-| `i` `a`     | insert before / after the selection    | Done   |
-| `I` `A`     | insert at line start / end             | Done   |
-| `o` `O`     | open a line below / above              | Done   |
-| `u` `U`     | undo / redo                            | Done   |
-| `y` `p` `P` | yank / paste after / before            | Done   |
-| `r` `R`     | replace a character / with the yank    | Done   |
-| `~` `` ` `` | switch case / lowercase (`A-``` uppercases) | Done |
-| `gJ`        | join lines (`J` is half a page — this is a book) | Done |
-| `.`         | repeat the last change                 | Done   |
-| `>` `<`     | indent / unindent                      | Done   |
-| `=`         | format                                 | —      |
+```
+Yume-v3.12.0-<build>-linux-x86_64.tar.gz      ~30 MB, plain tar.gz
+  └── share/yume/
+        ling.ytab  symbols.ytab  lang.ywtb  lang.ywl  chaifen.ydiv
+        qing.ytab  xing.ytab  riyue.ytab  pinyin.yflb  lang.ygram
+        charsets/*.ycs  zigen_*.yzg  words_yuling.ywrd
+        VERSION            ← version=, build=, and a SHA-256 per file
+```
 
-### Search & command
+Plain `tar.gz`, so any runner can open it — no `hdiutil`, no `dmg2img`. Verified
+against v3.12.0 on 2026-09-02: every file yumete loads is there, and `VERSION`
+is what `crates/yumete-ime/build.rs` reads to date the built-in table.
 
-| Keys    | Action                           | Status   |
-| ------- | -------------------------------- | -------- |
-| `/` `?` | search forward / backward        | Done     |
-| `n` `N` | next / previous match            | Done     |
-| `*`     | search for the current selection | Done     |
-| `:`     | command line (`:w` `:q` `:s` …)  | Done     |
-| `Space` | the menu — files, buffers, search, the clipboard, 詳情 | Done |
-| `q` `Q` | record a macro / play the last one back | Done  |
-| `\"a`    | use register `a` for the next yank / delete / paste | Done |
-| `C-a` `C-x` | increment / decrement the number at the cursor | Done |
-| `C-o` `C-i` | the jump list, back and forward  | Done     |
+**The pipeline.**
 
-### CJK IME hotkeys (yumete-specific — not in Helix)
+1. One job downloads that tarball, extracts `share/yume/*`, uploads it as a
+   workflow artifact. One download for the whole run, so the four builds cannot
+   disagree about which 靈明 they embedded.
+2. Four build jobs — macOS arm64, macOS x86_64, Linux x86_64, Linux aarch64 —
+   download it, set `YUMETE_BUILTIN_DIR` to it, `cargo build --release`, then
+   tar the binary **together with the runtime data**, so a Homebrew install has
+   the language model and the 拆分 annotations too, not only the embedded 碼表.
+3. Attach the tarballs and their `.sha256` files to the release.
+4. **Open a pull request against `homebrew-tap`** with the new version and the
+   four checksums. decimo does this last step by hand, and its own workflow
+   comment records what that cost: three releases went out with the tarballs
+   missing, and Homebrew sat four versions behind for four months. The same
+   trap is one manual step away here.
 
-Active only in Insert mode while the built-in Yume IME is engaged; Normal-mode
-keys are unaffected.
+**Release-triggered, not commit-triggered.** A formula pins a versioned URL and
+a checksum, so a commit-triggered build would mean a new formula edit and a new
+`brew upgrade` prompt for every push. Homebrew's own convention is that a
+formula follows releases.
 
-| Keys                          | Action                                                  | Status       |
-| ----------------------------- | ------------------------------------------------------- | ------------ |
-| `Shift` (tap)                 | toggle 中 / 英 (Chinese to ASCII) in insert/search mode | P2 (#29)     |
-| letters (composing)           | drive the Yume candidate panel in insert/search mode    | P2 (#27/#28) |
-| `Space` / `Enter` (composing) | commit the highlighted candidate / raw code             | P2           |
-| `1`–`9` (composing)           | select a candidate by index                             | P2           |
-| `-` `=` (composing)           | previous / next candidate page                          | P2           |
-| `Backspace` (composing)       | delete the last code letter                             | P2           |
-| `:`-led commands              | switch scheme (Ling / Xing / Qing / …)                  | P2 (#31)     |
-| `:`-led commands              | other Yume settings                                     |              |
-| `/`-led (composing)           | special commands (punctuation, symbols)                 | P2 (#30)     |
-| `z` (composing)               | reverse lookup                                          | P2 (#30)     |
+## 5.4 Wanted for 0.2.0
 
----
+Two reviews on 2026-09-03, from a Chinese writer and from a terminal
+power-user who does not write Chinese, asked the same question: **what would
+make yumete the only editor that does this?** Their lists barely overlap, which
+is the useful part. Recorded here, not scheduled — 0.1.0 first.
+
+### What both of them noticed about the machinery
+
+- The **data directory already holds a Chinese-language database no editor
+  ships**: `chaifen.ydiv` (per-character 拼音, 字集, 拆分), `pinyin.yflb`
+  (`spell_logprob(reading, text)` — a word-level reading model), `simptrad.txt`,
+  1.25M weighted words, an n-gram model, and seven `.ycs` character sets — all
+  loaded at startup already, and spent today on candidates and `w`/`b`/`e` and
+  nothing else.
+- The **display-transform layer** (`hidden_on_line` → `wrap::Measure` →
+  `zong::Grid` → `text_at`) makes hidden text cost zero columns *everywhere at
+  once*, and the selection-touches-it-so-show-it rule is a stronger conceal than
+  anything shipping. **Helix has no conceal and no virtual text at all.**
+- **Results are text.** `:grep` and `:sh` make `path:line:` buffers and `gf`
+  parses them, so the quickfix list already exists and nobody noticed.
+- A **per-frame budget**: 64-char prefixes, per-paragraph hashes, caches keyed by
+  revision. O(what is on screen) with O(edit) invalidation — the substrate a
+  live overlay needs and the thing Vim's `synmaxcol` is an apology for.
+
+### From the writer — spend the language model on the manuscript
+
+1. **`:check 用字`** — 裡 412 / 裏 3, 為/爲, 台/臺, 着/著, and project names, as a
+   jumpable buffer. *Nobody has this.* Word checks 病句; Grammarly is English;
+   spell-checkers tokenize on spaces and see one word. **high**
+2. **`:ruby auto`, and `:ruby auto rare`** — generate readings by word so 了 is
+   `le`, and annotate **only** characters outside 通用规范汉字表. Word's 拼音指南
+   guesses per character and detaches on edit; no editor generates readings from
+   a language model and none can then set them vertically. **high**
+3. **`:diff` at 詞 grain, over the autosave snapshots already written** — every
+   line-based diff reports a 500-字 paragraph as wholly changed when one 的 moved.
+   The snapshots are being thrown away today. **high**
+4. **圈點 in the margin the 標點旁置 column already draws** — and the open markup
+   question answers itself: `*字*` *is* it, because the Chinese rendering of
+   `<em>` is 着重號. 1–2 days; `Slot` already carries the channel. **high**
+5. **`:sentence`** — one 句 to a 縱, as a view, no edit. The manual already
+   teaches `:%s/。/。\n/g` for proofreading; this is that, non-destructively —
+   and it hands the `(`/`)` sentence motion its boundaries. **high**
+6. **`:check 標點`** — half-width marks in Chinese text, `...` for ……, and
+   **unbalanced 「」（）《》 across a paragraph**, which silently inverts every
+   quote after it and is invisible in prose. **high**
+7. **This book's own words** — mine repeated OOV n-grams from the project, feed
+   them to *both* the segmenter and the IME, so 阿甯 walks as one word and types
+   as one. `yume-lm/src/discover.rs` already implements the signals. **high**
+8. **`:check 字集`** — every character outside 通用规范/臺灣/香港/古籍, before the
+   typesetter finds out. The seven `.ycs` sets are already loaded; two days.
+   Best value-per-day on either list. **high**
+9. **繁簡 conversion that shows what it guessed** — `simptrad.txt` stores the
+   one-to-many sets, so ambiguity is *visible in the data*; drop the unsure ones
+   in a review buffer instead of picking silently. **medium-high**
+10. **`:words`** — crutch words by **surprisal against 詞頻表**, not raw count,
+    so it says 「然後 47 次」 and not 「的」. **medium-high**
+11. **割注 — 小字雙行 inside the 縱.** InDesign J has it; nothing else does. The
+    縦中横 slot packing is already the mechanism, run down a run of slots. **medium**
+12. 寫作進度 (Scrivener's targets, but counting 字 correctly) · a print-ready
+    直排 HTML export (browsers are the only free vertical typesetter and no
+    editor drives one) · 焦點模式 vertically · 平仄/韻腳 in the margin. **medium**
+
+### From the programmer — spend the display layer on everyone else
+
+1. **Virtual text — the mirror of `hidden_on_line`.** `drawn_on_line` with the
+   mirror invariant: *the cursor may never sit on a character that is not in the
+   file*. Downstream: inline diagnostics, blame, inlay hints, fold markers,
+   `↵`/`·`, and the author's own first-line indent and 圈點. Only Neovim has
+   anything like it; Helix has nothing. **high**
+2. **Merge conflicts as a `Block` kind.** `<<<<<<<` is exactly the shape
+   `BlockScanner` was built for; tint the two sides, hide the markers under
+   `:render full`, three keys, `]c`/`[c`, `:conflicts` as a results buffer.
+   Emacs `smerge-mode` is the only good prior art and nobody knows it exists.
+   Cheapest high-value item on either list. **high**
+3. **Jobs, and `]q`/`[q` over the results buffer.** `:preview` already models a
+   supervised child correctly; generalise it, and walk `path:line:` lines
+   without leaving the file. That is a complete build-error loop with **no
+   quickfix list, no `errorformat`, no problem matcher** — Vim's quickfix is the
+   right idea under a mini-language. **high**
+4. **Table mode over any delimited text** — quoting (the invariant generalises
+   from delimiters to *cells*), TSV/`|`/`;`, the header fallback as a first-class
+   path, and `:sh ps aux` landing in a grid. `csv.vim` colours, VisiData is not
+   an editor and will not hand back a byte-identical 8 MB file. **high**
+5. **The Unicode alarm** — tint invisibles, bidi controls (Trojan Source) and
+   ASCII homoglyphs, plus `describe-char` in the `Detail` panel. VS Code's
+   `unicodeHighlight` is the only implementation anywhere and it is a GUI;
+   Emacs has the panel and no alarm. **high**
+6. **`yumete -p` as a pager and an `fzf --preview`** — the same renderer, so it
+   can never disagree with the editor. `bat` highlights syntax and renders a CSV
+   as commas; `glow` deletes the markup. Distribution precedes adoption. **high**
+7. **The phrasebook** — an unbound key names its local spelling (`$` → `gl`,
+   `G` → `ge`, `ciw` → `miwc`), dialect-configurable. Not a compatibility layer:
+   it never *does* the thing. which-key tells you what is available, never what
+   you meant. **high**
+8. 段組 horizontally (Emacs `follow-mode` is the entire prior art) · byte
+   fidelity as a stated promise with `:diff` against disk · an undo browser on
+   the existing picker · `Enter` as the universal follow with the expiring
+   return · files with 40 MB single lines · a live prose tint for English ·
+   macros as editable text. **medium**
+
+### Four they would not build
+
+A plugin runtime (#58) — "every editor grows one and it becomes the product";
+an embedded terminal pane (already argued); a git UI (lazygit is one `:!` away);
+and **tree-sitter/LSP at 0.2**, because its parse-the-whole-document model
+fights the per-paragraph, cached, markup-stays-on-the-page invariant that made
+this editor good.
+
+### Their honest answers
+
+The writer: *yumete would be the only editor that **reads** Chinese rather than
+displaying it* — knows where the words and sentences are, how each character is
+pronounced, and which ones the publisher's edition will accept.
+
+The programmer: **not today, and not close** — nobody can install it, there is
+no multi-cursor (which for a Helix user is the thesis, not a feature), and the
+docs told the reader the project was dead. But the way to yes is not competing
+with Helix: **the editor you reach for when the file is a particular shape** — a
+CSV, a merge conflict, a document with a hostile character in it, a long piece
+of prose. Four files a week that all have bad answers today.
+
+### 11 · Markdown tables — what a review of #142 left open
+
+Eleven defects found and fixed the same night (data loss when the header was
+the file's last line without a newline; the mode leaking into the prose around
+the table through `o`, `:layout vertical`, `:s` and `add_buffer`; the rule row
+being editable; the `\|` escape the manual promised and the editor refused;
+CRLF; a row pasted onto the header; `:table` firing inside a code fence). What
+the same review wanted and did not get:
+
+- **Paste from a spreadsheet.** A TSV or CSV clipboard becoming rows. The one
+  thing that would make a writer build tables here instead of in a spreadsheet;
+  Tab is refused outright today. **high**
+- **`:table` on a selection**, and the two conversions it implies — a selected
+  block of CSV into a `|` table, and a `|` table out to CSV. `export.rs` has no
+  CSV path either. **medium**
+- **`t y` / `t p` for a whole column.** Rows have `Y`; a column can only be
+  moved one step at a time. **medium**
+- **The current cell is not drawn** in a Markdown table — the prose renderer
+  knows nothing about cells, so the only feedback is the column name in the
+  status line, while Insert *is* constrained to the cell. **medium**
+- **Messages.** The CSV grid's refusals were English in a Chinese feature; the
+  table ones are fixed, and `cannot open '…'` and its kind are not. Part of the
+  2026-09-03 language decision (§5.2.1). **medium**
 
 ## 6. Phase-by-phase deliverables
 
