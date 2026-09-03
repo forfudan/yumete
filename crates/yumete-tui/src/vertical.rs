@@ -883,31 +883,35 @@ pub fn draw_candidate_panel(
     // 縱書. `Dyu_Do_Ne` set one letter to a row is nine rows of nothing, and
     // with 拆分 on it made the panel taller than the page it was covering.
     let header = packed(&ime.display_buffer());
-    // The 拆分 of the highlighted candidate is a *different* thing from the
-    // code, so it gets a column of its own rather than being stacked under it.
-    // Down one column the two together decided the panel's height by their
-    // sum; side by side they decide it by the longer of the two.
-    let comment = candidates
-        .get(highlight)
-        .map(|c| c.comment.as_str())
-        .filter(|c| !c.is_empty())
-        .map(packed);
-
     // Each column is the number, a blank row, then the candidate. The gap is
     // what stops the number reading as the first character of the word.
     // Column 0 is the header; the candidates run leftward from column 1, the
     // direction the text they are joining runs.
+    //
+    // **Each candidate carries its own 拆分**, under it and set back. It used
+    // to be one extra column showing the *highlighted* candidate's — which is
+    // the one thing 拆分 is not for: you turn it on to see why 相 and 想 want
+    // different codes, and that means seeing both at once. (That column also
+    // shifted every candidate one place right of the number the style code
+    // thought it was, so with annotations on the highlight was off by one.)
     let mut columns: Vec<Vec<String>> = vec![header];
-    if let Some(comment) = comment {
-        columns.push(comment);
-    }
-    columns.extend(candidates.iter().enumerate().map(|(i, cand)| {
+    let mut comment_from: Vec<usize> = vec![usize::MAX];
+    for (i, cand) in candidates.iter().enumerate() {
         // Number, a blank row, the candidate, then the keys still owed.
         let mut column = vec![index_mark(&config.panel.markers, i), String::new()];
         column.extend(graphemes(&cand.text).map(String::from));
         column.extend(graphemes(&cand.completion).map(String::from));
-        column
-    }));
+        let at = if cand.comment.is_empty() {
+            usize::MAX
+        } else {
+            let at = column.len() + 1;
+            column.push(String::new());
+            column.extend(packed(&cand.comment));
+            at
+        };
+        columns.push(column);
+        comment_from.push(at);
+    }
 
     let depth = columns.iter().map(|c| c.len()).max().unwrap_or(1);
     let count = columns.len();
@@ -980,7 +984,10 @@ pub fn draw_candidate_panel(
             let text_rows = candidates
                 .get(i.wrapping_sub(1))
                 .map_or(0, |c| 2 + graphemes(&c.text).count());
-            let style = if i == 0 {
+            let annotated = comment_from.get(i).copied().unwrap_or(usize::MAX);
+            let style = if i == 0 || slot >= annotated {
+                // The 拆分 is an aside, so it stays quiet even under the
+                // candidate that is chosen.
                 dim
             } else if i - 1 == highlight {
                 chosen

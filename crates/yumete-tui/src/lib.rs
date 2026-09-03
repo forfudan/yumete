@@ -2992,6 +2992,30 @@ mod tests {
         assert!(buffer_text(&plain).contains('吧'));
     }
 
+    #[test]
+    fn every_candidate_carries_its_own_chaifen() {
+        // 拆分 is turned on to see *why* two candidates want different codes,
+        // which means seeing both at once. The vertical panel used to show the
+        // highlighted one's alone, in a column of its own — and that column
+        // also shifted every candidate one place right of the number the style
+        // code thought it was.
+        let mut editor = Editor::new();
+        editor.on_key(Key::Char('i'));
+        let mut ime = ImeSession::from_table_text(
+            Scheme::Lingming,
+            "xj 相 \u{2ff0}\u{6728}\u{76ee}\nxj 想 \u{2ff1}\u{76f8}\u{5fc3}\n",
+        );
+        ime.set_annotations(true);
+        ime.input('x');
+        ime.input('j');
+        let config = vertical_config();
+        let text = buffer_text(&render_vertical_with(&mut editor, &config, &ime, 40, 20));
+        assert!(text.contains('相') && text.contains('想'), "{text}");
+        // Both decompositions are on the page, not only the highlighted one's.
+        assert!(text.contains('目'), "相's own 拆分 is missing: {text}");
+        assert!(text.contains('心'), "想's own 拆分 is missing: {text}");
+    }
+
     /// The number of rows between the panel's top and bottom border.
     fn panel_depth(buffer: &ratatui::buffer::Buffer) -> u16 {
         let find = |glyph: &str| {
