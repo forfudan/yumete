@@ -1310,7 +1310,10 @@ fn text_at(
             let gutter = gutter_width(buffer.line_count(), config.editor.line_numbers);
             let width = editor.wrap_width().unwrap_or(usize::MAX / 2).max(1);
             let hide = |line: usize| editor.hidden_on_line(line);
-            let measure = wrap::Measure::new(width, &hide);
+            // The same measure the page was drawn with — the indent changes
+            // where a row breaks, so a click resolved without it lands `indent`
+            // cells off on every paragraph's first row.
+            let measure = wrap::Measure::new(width, &hide).with_indent(editor.paragraph_indent());
             let row = wrap::rows_from(
                 buffer.rope(),
                 viewport.top,
@@ -1990,6 +1993,7 @@ fn draw_horizontal(
             // page took its columns with it, so the ground would otherwise stop
             // short of the right edge by exactly the hidden width.
             let used: usize = gutter
+                + indent
                 + chars
                     .iter()
                     .zip(&shown)
@@ -3793,6 +3797,33 @@ mod tests {
         let buffer = render(&editor, &config, 40, 10);
         let bar: String = (0..40u16).map(|x| at(&buffer, x, 0)).collect();
         assert!(bar.contains("01"), "{bar:?}");
+    }
+
+    #[test]
+    fn the_indent_moves_the_cursor_as_well_as_the_page() {
+        // The renderer wrapped with the indent and every motion wrapped
+        // without it, so `j` and `k` landed on the character under a column
+        // nobody was looking at, and a click was two cells off.
+        let mut editor = editor_with("一二三四五六七八\n");
+        editor.set_indent(2);
+        editor.set_soft_wrap(true);
+        let mut config = Config::default();
+        config.editor.line_numbers = yumete_config::LineNumbers::None;
+        // Eight cells: two go to the indent, so the first row holds three 字
+        // and the rows under it hold four.
+        let buffer = render_wrapped(&mut editor, &config, 8, 8);
+        assert_eq!(at(&buffer, 0, 0), " ");
+        assert_eq!(at(&buffer, 2, 0), "一");
+        assert_eq!(at(&buffer, 0, 1), "四", "the second row starts flush");
+        // `j` from 一 — drawn at column 2 — lands under it.
+        editor.on_key(Key::Char('g'));
+        editor.on_key(Key::Char('g'));
+        editor.on_key(Key::Char('j'));
+        assert_eq!(
+            editor.current_buffer().rope().char(editor.cursor()),
+            '五',
+            "one row down, same column"
+        );
     }
 
     #[test]

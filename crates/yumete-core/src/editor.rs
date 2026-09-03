@@ -7865,7 +7865,12 @@ impl Editor {
             let rope = self.current_buffer().rope();
             match self.wrap_width() {
                 Some(width) => {
-                    let m = crate::wrap::Measure::new(width, &hide);
+                    // …with the indent, because the indent is where a row
+                    // *breaks*: a measure without it wraps a different page
+                    // from the one being drawn, and `j` then lands on the
+                    // character under a column nobody is looking at.
+                    let m = crate::wrap::Measure::new(width, &hide)
+                        .with_indent(self.paragraph_indent());
                     crate::wrap::column_of(rope, self.cursor, m)
                 }
                 None => motion::visual_column(rope, self.cursor),
@@ -7892,7 +7897,12 @@ impl Editor {
             let rope = self.current_buffer().rope();
             match self.wrap_width() {
                 Some(width) => {
-                    let m = crate::wrap::Measure::new(width, &hide);
+                    // …with the indent, because the indent is where a row
+                    // *breaks*: a measure without it wraps a different page
+                    // from the one being drawn, and `j` then lands on the
+                    // character under a column nobody is looking at.
+                    let m = crate::wrap::Measure::new(width, &hide)
+                        .with_indent(self.paragraph_indent());
                     if up {
                         crate::wrap::prev_row(rope, self.cursor, m, self.goal_column)
                     } else {
