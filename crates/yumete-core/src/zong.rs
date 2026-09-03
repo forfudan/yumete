@@ -1237,7 +1237,10 @@ mod tests {
     #[test]
     fn only_prose_is_indented() {
         let grid = Grid { indent: 2, ..G };
-        for line in ["# 第一章", "- 一項", "> 引文", "| a | b |", "```", "  已經縮進了"] {
+        for line in [
+            "# 第一章", "- 一項", "+ 一項", "> 引文", "| a | b |", "```", "~~~",
+            "[^1]: 一條腳註", "  已經縮進了",
+        ] {
             let slots = line_slots(line, grid);
             assert!(
                 slots.first().is_some_and(|s| !s.text.is_empty()),
@@ -1246,6 +1249,9 @@ mod tests {
         }
         // A blank line stays blank.
         assert!(line_slots("", grid).is_empty());
+        // …but a paragraph may perfectly well open with a link.
+        let slots = line_slots("[書名](a.md) 是這樣寫的。", grid);
+        assert!(slots[0].text.is_empty() && slots[1].text.is_empty(), "{slots:?}");
     }
 
     #[test]
