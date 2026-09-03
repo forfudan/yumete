@@ -1156,8 +1156,8 @@ impl RawConfig {
                 // then override whichever of them the reader has an opinion
                 // about — so `name = "黑白"` plus `mark = "#…"` is a sentence.
                 let mut named = ThemeConfig::named(&name).unwrap_or_else(|| config.theme.clone());
-                named.mode = config.theme.mode.clone();
-                named.ground = config.theme.ground.clone();
+                named.mode = config.theme.mode;
+                named.ground = config.theme.ground;
                 if ThemeConfig::named(&name).is_some() {
                     config.theme = named;
                 } else {
