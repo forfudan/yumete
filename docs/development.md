@@ -482,6 +482,30 @@ with Helix: **the editor you reach for when the file is a particular shape** —
 CSV, a merge conflict, a document with a hostile character in it, a long piece
 of prose. Four files a week that all have bad answers today.
 
+### 11 · Markdown tables — what a review of #142 left open
+
+Eleven defects found and fixed the same night (data loss when the header was
+the file's last line without a newline; the mode leaking into the prose around
+the table through `o`, `:layout vertical`, `:s` and `add_buffer`; the rule row
+being editable; the `\|` escape the manual promised and the editor refused;
+CRLF; a row pasted onto the header; `:table` firing inside a code fence). What
+the same review wanted and did not get:
+
+- **Paste from a spreadsheet.** A TSV or CSV clipboard becoming rows. The one
+  thing that would make a writer build tables here instead of in a spreadsheet;
+  Tab is refused outright today. **high**
+- **`:table` on a selection**, and the two conversions it implies — a selected
+  block of CSV into a `|` table, and a `|` table out to CSV. `export.rs` has no
+  CSV path either. **medium**
+- **`t y` / `t p` for a whole column.** Rows have `Y`; a column can only be
+  moved one step at a time. **medium**
+- **The current cell is not drawn** in a Markdown table — the prose renderer
+  knows nothing about cells, so the only feedback is the column name in the
+  status line, while Insert *is* constrained to the cell. **medium**
+- **Messages.** The CSV grid's refusals were English in a Chinese feature; the
+  table ones are fixed, and `cannot open '…'` and its kind are not. Part of the
+  2026-09-03 language decision (§5.2.1). **medium**
+
 ## 5.3 Releasing, and the Homebrew tap (#135, planned)
 
 Deferred until there is something to release. The investigation is written down
@@ -593,12 +617,13 @@ dep and ship the tarballs §5.3 already designs. **high**
 
 ### 4 · Motions — the same gap from three directions (×3)
 
-- **`{` / `}` — paragraph motion.** Absent, with no yumete spelling either.
-  This editor's thesis is that a Chinese paragraph is one line of several
-  hundred characters, which makes `j`/`k` line motions that mostly do not move.
-  All three reviewers named it; two called it the largest hole. **high**
-- **Sentence motion** on 。！？」 — the pieces (the vertical-form tables) are
-  already there and `(`/`)` are free. **medium**
+- ~~**`{` / `}` — paragraph motion.**~~ Done. A paragraph is a **logical line**
+  — the definition the rest of the editor already works in — and blank lines
+  are skipped. With soft wrap on, `j` moves one of a paragraph's twenty rows,
+  which is what left the hole.
+- ~~**Sentence motion** on 。！？」~~ Done: `(`/`)`, ending *after* the closing
+  mark (「不。」), a full stop only when whitespace follows it so `3.14` is not
+  a sentence, and crossing into the next paragraph when this one has no more.
 - **Unbound keys are completely silent.** `0 $ ^ G { } s S C Z & _ @ + -` all
   do nothing and say nothing; the first minute in any editor is spent pressing
   exactly these. A status line naming the yumete spelling (`$`→`gl`) turns an
@@ -606,9 +631,11 @@ dep and ship the tarballs §5.3 already designs. **high**
 - **`.` repeats only the last insert**, so `n.n.n.` — the proofreading loop —
   does not work. Recording the last operator plus its target covers `r`, `~`,
   `d`, `ms`, `mr`. **medium**
-- **Insert swallows `C-w` and `C-u`.** `C-w` is in vi, Helix, readline and every
-  terminal prompt; through an IME, taking back a wrong 詞 means holding
-  Backspace. **medium**
+- ~~**Insert swallows `C-w` and `C-u`.**~~ Done, and both stop at the cell
+  boundary when typing in a grid.
+- ~~**A key alias may only name one key.**~~ Done (the 2026-09-03 decision):
+  `[keys.normal] "J" = "gJ"` puts join back. One config line instead of
+  leaving.
 
 ### 5 · Table mode (#118)
 
