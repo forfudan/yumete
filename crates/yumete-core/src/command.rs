@@ -52,6 +52,11 @@ pub enum Command {
         /// Which lines it touches.
         rows: Rows,
     },
+    /// `:replace <text>` — change what the last `:grep` found, everywhere it
+    /// found it. The pattern is the one you already looked at.
+    ReplaceFound(String),
+    /// `:wa` — save every buffer that has changed.
+    WriteAll,
     /// `:undo` (alias `:u`) — undo the last change.
     Undo,
     /// `:redo` (alias `:red`) — redo the last undone change.
@@ -430,6 +435,14 @@ pub fn parse(input: &str) -> Result<Command, CommandError> {
                 Err(CommandError::MissingArgument("grep"))
             } else {
                 Ok(Command::Grep(rest.to_string()))
+            }
+        }
+        "wa" | "wall" => Ok(Command::WriteAll),
+        "replace" => {
+            if rest.trim().is_empty() {
+                Err(CommandError::MissingArgument("replace"))
+            } else {
+                Ok(Command::ReplaceFound(rest.to_string()))
             }
         }
         "row" => {
@@ -1021,6 +1034,18 @@ pub const COMMANDS: &[Entry] = &[
         aliases: &["gr"],
         help: "search every file in the project",
         args: Args::Free("<正則>"),
+    },
+    Entry {
+        name: "replace",
+        aliases: &[],
+        help: "把剛才 :grep 找到的那些都換掉——先看見，才改得動",
+        args: Args::Free("<換成什麼>"),
+    },
+    Entry {
+        name: "wa",
+        aliases: &["wall"],
+        help: "存下所有改過的檔案",
+        args: Args::None,
     },
     Entry {
         name: "row",

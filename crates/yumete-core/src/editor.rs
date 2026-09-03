@@ -643,6 +643,11 @@ pub struct Editor {
     /// The directory the last `:grep` listing was gathered from, so `gf` on one
     /// of its lines resolves the same relative path it printed.
     grep_root: Option<PathBuf>,
+    /// The last `:grep`: its pattern and the files it hit.
+    ///
+    /// What `:replace` acts on — so a project-wide change can only be made to
+    /// something the writer has **already looked at**.
+    grep_found: Option<(String, Vec<PathBuf>)>,
     /// The last pattern, compiled. `n` and `N` ask for the same one over and
     /// over, and compiling a regex costs more than running it once.
     compiled: RefCell<Option<(String, Regex)>>,
@@ -802,6 +807,7 @@ impl Editor {
             default_syntax: None,
             syntax_by_name: HashMap::new(),
             grep_root: None,
+            grep_found: None,
         }
     }
 
@@ -1048,6 +1054,7 @@ impl Editor {
             }
         };
         let mut hits = Vec::new();
+        let mut hit_files: Vec<PathBuf> = Vec::new();
         let mut files = 0usize;
         walk(root, &mut |path| {
             if hits.len() >= GREP_LIMIT {
@@ -1079,6 +1086,9 @@ impl Editor {
                     return;
                 }
                 if re.is_match(line) {
+                    if hit_files.last().map(PathBuf::as_path) != Some(path) {
+                        hit_files.push(path.to_path_buf());
+                    }
                     hits.push(format!("{shown}:{}: {}", n + 1, line.trim()));
                 }
             }
@@ -1097,12 +1107,106 @@ impl Editor {
         let mut buffer = Buffer::from_text(&listing);
         buffer.name_as(&format!("[grep {pattern}]"));
         self.grep_root = Some(root.to_path_buf());
+        self.grep_found = Some((pattern.to_string(), hit_files));
         self.add_buffer(buffer);
         self.set_cursor(0);
         self.status = if found >= GREP_LIMIT {
-            format!("{found}+ hits (stopped counting) — gf opens the one under the cursor")
+            format!("{found} 處以上（不數了）——gf 開游標下那一條，:replace 全換")
         } else {
-            format!("{found} hit(s) in {files} file(s) — gf opens the one under the cursor")
+            format!("{found} 處，{files} 個檔案——gf 開游標下那一條，:replace 全換")
+        };
+        Ok(CommandOutcome::Continue)
+    }
+
+    /// `:grep` rooted somewhere other than the working directory, for tests.
+    #[cfg(test)]
+    fn grep_here(&mut self, root: &Path, pattern: &str) {
+        let _ = self.grep(pattern, root);
+    }
+
+    /// Change what the last `:grep` found, everywhere it found it.
+    ///
+    /// **The safety is the order.** There is no project-wide substitute you
+    /// can type blind: the pattern is the one you already ran `:grep` with and
+    /// already read the hits of, so nothing is changed that was not on the
+    /// screen a moment ago.
+    ///
+    /// And nothing reaches disk. Every file with a hit is *opened as a buffer*
+    /// and changed there, so `u` takes any one of them back, `gn` walks them,
+    /// and `:wa` is the moment a person says yes. Writing 120 files from a
+    /// command line with no undo is the kind of thing an editor should not
+    /// make easy.
+    fn replace_found(&mut self, text: &str) {
+        let Some((pattern, files)) = self.grep_found.clone() else {
+            self.status = "先 :grep 找一遍——換的是你已經看過的那些".to_string();
+            return;
+        };
+        let re = match self.compile(&pattern) {
+            Ok(re) => re,
+            Err(message) => {
+                self.status = message;
+                return;
+            }
+        };
+        let replacement = unescape_replacement(text);
+        let was = self.current;
+        let (mut hits, mut changed) = (0usize, 0usize);
+        for path in &files {
+            if self.open_file(path).is_err() {
+                continue;
+            }
+            let source = self.current_buffer().text();
+            let mut rebuilt = String::with_capacity(source.len());
+            let mut here = 0usize;
+            for line in source.split_inclusive('\n') {
+                let (new_line, n) = replace_in_line(line, &re, &replacement, true);
+                here += n;
+                rebuilt.push_str(&new_line);
+            }
+            if here == 0 {
+                continue;
+            }
+            self.snapshot();
+            let len = self.current_buffer().char_count();
+            self.without_cell_guard(|e| {
+                e.current_buffer_mut().remove(0..len);
+                e.current_buffer_mut().insert(0, &rebuilt);
+            });
+            self.clamp_cursor();
+            self.anchor = self.cursor;
+            hits += here;
+            changed += 1;
+        }
+        self.current = was.min(self.buffers.len().saturating_sub(1));
+        self.set_cursor(self.current_buffer().saved_cursor());
+        if changed == 0 {
+            self.status = format!("「{pattern}」一處也沒換到");
+            return;
+        }
+        self.status =
+            format!("{changed} 個檔案，{hits} 處——都還沒存：:wa 存全部，u 各自撤銷");
+    }
+
+    /// Save every buffer that has changed (`:wa`).
+    fn write_all(&mut self) -> Result<CommandOutcome, EditorError> {
+        let was = self.current;
+        let mut saved = 0usize;
+        let mut failed: Vec<String> = Vec::new();
+        for i in 0..self.buffers.len() {
+            if !self.buffers[i].is_modified() {
+                continue;
+            }
+            self.current = i;
+            match self.write_current(None) {
+                Ok(()) => saved += 1,
+                Err(err) => failed.push(err.to_string()),
+            }
+        }
+        self.current = was.min(self.buffers.len().saturating_sub(1));
+        self.status = if failed.is_empty() {
+            format!("存了 {saved} 個")
+        } else {
+            format!("存了 {saved} 個；{} 個沒存：{}", failed.len(), failed.join("；"))
         };
         Ok(CommandOutcome::Continue)
     }
@@ -1691,6 +1795,11 @@ impl Editor {
                 // safe now", so it is held to the same check `:q` is.
                 self.quit(false)
             }
+            Command::ReplaceFound(text) => {
+                self.replace_found(&text);
+                Ok(CommandOutcome::Continue)
+            }
+            Command::WriteAll => self.write_all(),
             Command::CheckTable => {
                 self.check_table();
                 Ok(CommandOutcome::Continue)
@@ -11949,6 +12058,49 @@ mod tests {
         ed.on_key(Key::Char('/'));
         ed.on_key(Key::Up);
         assert_eq!(ed.prompt(), Some(('/', "二")));
+    }
+
+    #[test]
+    fn replace_changes_what_grep_already_showed_you() {
+        // Renaming a character across 120 chapters used to mean opening 120
+        // files. The safety is the order: the pattern is the one you already
+        // ran `:grep` with and already read the hits of.
+        let dir = std::env::temp_dir().join(format!("yumete-proj-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("ch01.md"), "阿甯走進來。\n阿甯坐下。\n").unwrap();
+        std::fs::write(dir.join("ch02.md"), "他看見阿甯。\n").unwrap();
+        std::fs::write(dir.join("ch03.md"), "沒有那個人。\n").unwrap();
+
+        let mut ed = Editor::new();
+        // Nothing to replace before you have looked.
+        assert!(ed.execute("replace 阿寧").is_ok());
+        assert!(ed.status().contains(":grep"), "{}", ed.status());
+
+        ed.grep_here(&dir, "阿甯");
+        assert!(ed.execute("replace 阿寧").is_ok(), "{}", ed.status());
+        assert!(ed.status().contains('3'), "3 hits: {}", ed.status());
+
+        // Changed in the buffers, and **not on disk** until somebody says so.
+        assert_eq!(
+            std::fs::read_to_string(dir.join("ch01.md")).unwrap(),
+            "阿甯走進來。\n阿甯坐下。\n"
+        );
+        assert!(ed.execute("wa").is_ok());
+        assert_eq!(
+            std::fs::read_to_string(dir.join("ch01.md")).unwrap(),
+            "阿寧走進來。\n阿寧坐下。\n"
+        );
+        assert_eq!(
+            std::fs::read_to_string(dir.join("ch02.md")).unwrap(),
+            "他看見阿寧。\n"
+        );
+        assert_eq!(
+            std::fs::read_to_string(dir.join("ch03.md")).unwrap(),
+            "沒有那個人。\n",
+            "a file with no hit is not touched"
+        );
+        std::fs::remove_dir_all(&dir).ok();
     }
 
     #[test]
