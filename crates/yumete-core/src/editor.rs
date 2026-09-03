@@ -583,9 +583,13 @@ pub struct Editor {
     bands: usize,
     /// The rows a table search found, which one it is pointing at, and what it
     /// was looking for.
-    table_hits: Vec<usize>,
+    /// The cells a column search found, as `(line, column)`.
+    ///
+    /// Cells, not rows: 卵 may sit in two columns of one row, and those are two
+    /// answers.
+    table_hits: Vec<(usize, usize)>,
     table_hit: usize,
-    table_needle: String,
+
     /// Where a jump came from: the buffer's **id** and the cursor.
     ///
     /// By id, not by index: closing a buffer shifts every later one down, and
@@ -815,7 +819,6 @@ impl Editor {
             bands: 1,
             table_hits: Vec::new(),
             table_hit: 0,
-            table_needle: String::new(),
             jumps: Vec::new(),
             jump_at: 0,
             note_return: None,
@@ -1827,6 +1830,24 @@ impl Editor {
                 Ok(CommandOutcome::Continue)
             }
             Command::WriteAll => self.write_all(),
+            Command::Search { pattern, by } => {
+                match by {
+                    crate::command::Axis::Row => {
+                        self.last_search = pattern;
+                        let forward = self.search_forward;
+                        self.repeat_search(forward);
+                    }
+                    // A column search is a table's; a document has no columns
+                    // to run down.
+                    crate::command::Axis::Column if self.table_here() => {
+                        self.search_columns(&pattern)
+                    }
+                    crate::command::Axis::Column => {
+                        self.status = say!("不是表格——先 :table")
+                    }
+                }
+                Ok(CommandOutcome::Continue)
+            }
             Command::ReloadWords => {
                 self.reload_project_words();
                 Ok(CommandOutcome::Continue)
@@ -2838,7 +2859,7 @@ impl Editor {
         };
         let (row, cell) = self.md_at(&region);
         if !parts.ruled {
-            self.status = say!("沒有分隔行，對不了齊");
+            self.status = say!("沒有分隔行，無從對齊");
             return;
         }
         let columns = parts.columns();
@@ -3770,7 +3791,7 @@ impl Editor {
                     ("g", say!("檔首")),
                     ("e", say!("檔尾")),
                     ("h l", say!("行首／行尾")),
-                    ("s", say!("第一個非空白")),
+                    ("s", say!("首個非空白")),
                     ("f", say!("開這個檔")),
                     ("J", say!("併下一行")),
                 ]),
@@ -3963,11 +3984,6 @@ impl Editor {
     /// is not a question the editor can answer. `n` and `N` walk the answers,
     /// as they walk the answers to `/`.
     fn search_the_table(&mut self) {
-        let Some(view) = &self.table else { return };
-        let Some(jump) = &view.schema.jump else {
-            self.status = say!("這張表沒說哪些是拆分欄");
-            return;
-        };
         let needle = match self.table.as_ref().map(|v| v.grain) {
             // Reading by character, the character under the cursor is the
             // question; reading by cell, the whole cell is.
@@ -3981,44 +3997,100 @@ impl Editor {
             self.status = say!("這一格是空的");
             return;
         }
-        let columns: Vec<usize> = jump
-            .from
-            .iter()
-            .filter_map(|name| view.schema.index_of(name))
-            .collect();
+        // The text, not a pattern — the same rule `*` follows for a selection.
+        self.search_columns(&regex::escape(&needle));
+    }
+
+    /// Search **down one column, then the next** (`:search column`, `Enter`).
+    ///
+    /// The other axis of the same verb, and *only* the axis: a hit is a match,
+    /// the match becomes the selection, `n` and `N` walk them, the pattern is a
+    /// regular expression, and it wraps at the end. All of that is what `/`
+    /// does. The one thing that differs is the order the page is read in —
+    /// across a line and down, or down a column and across.
+    ///
+    /// Which columns: the ones a `[table.jump] from` names, in the order it
+    /// names them — that is what a schema is *for*, and on a 28-column table it
+    /// is two columns instead of twenty-eight. With none named, all of them,
+    /// from the first.
+    fn search_columns(&mut self, pattern: &str) {
+        if !self.table_here() {
+            self.status = say!("不是表格——先 :table");
+            return;
+        }
+        let re = match self.compile(pattern) {
+            Ok(re) => re,
+            Err(message) => {
+                self.status = message;
+                return;
+            }
+        };
+        let view = self.table.as_ref().expect("table_here");
+        let declared: Option<Vec<usize>> = view.schema.jump.as_ref().map(|jump| {
+            jump.from
+                .iter()
+                .filter_map(|name| view.schema.index_of(name))
+                .collect()
+        });
+        let columns: Vec<usize> = match &declared {
+            Some(named) if !named.is_empty() => named.clone(),
+            _ => (0..view.schema.columns.len()).collect(),
+        };
+        let markdown = view.shape == Shape::Markdown;
         let delimiter = view.schema.delimiter;
         let first = usize::from(view.schema.header);
+        let region = self.md_region();
         let rope = self.current_buffer().rope();
-        let mut hits = Vec::new();
-        for (line, row) in rope.lines().enumerate().skip(first) {
-            let text = row.to_string();
-            let cells = crate::table::cells(&text, delimiter);
-            let used = columns.iter().any(|&i| {
-                cells
-                    .get(i)
-                    .map(|&span| crate::table::cell_text(&text, span).contains(&needle))
-                    .unwrap_or(false)
-            });
-            if used {
-                hits.push(line);
+        let last = motion::last_line(rope);
+        // Down the first column, then down the second: the order is the whole
+        // point, so the column loop is the outer one.
+        let mut hits: Vec<(usize, usize)> = Vec::new();
+        for &column in &columns {
+            for line in first..=last {
+                if region.as_ref().is_some_and(|r| !r.holds(line) || r.is_rule(line)) {
+                    continue;
+                }
+                let text = rope.line(line).to_string();
+                let spans = match markdown {
+                    true => crate::mdtable::cells(&text),
+                    false => crate::table::cells(&text, delimiter),
+                };
+                let Some(&(from, _)) = spans.get(column) else {
+                    continue;
+                };
+                let cell = crate::table::cell_text(&text, spans[column]);
+                let start = rope.line_to_char(line) + from;
+                // Every match inside the cell, not one per cell: two hits on
+                // one line are two hits for `/` too.
+                for m in re.find_iter(&cell) {
+                    let before = cell[..m.start()].chars().count();
+                    let length = cell[m.start()..m.end()].chars().count();
+                    hits.push((start + before, start + before + length));
+                }
             }
         }
         if hits.is_empty() {
-            self.status = say!("沒有哪一行的拆分用到「{0}」", needle);
+            self.status = say!("找不到：{0}", pattern);
             self.table_hits.clear();
             return;
         }
-        // The first one *after* here, wrapping — the same rule `/` follows, so
-        // pressing Enter again on the same cell walks on rather than sticking.
-        let here = self.cursor_line();
-        let at = hits.iter().position(|&l| l > here).unwrap_or(0);
-        self.table_needle = needle;
+        self.last_search = pattern.to_string();
         self.table_hits = hits;
-        self.table_hit = at;
+        // From the first column's first hit, whatever column you were standing
+        // in: `Enter` on 卵 gives the same route through the table every time,
+        // which is what 「把所有用到它的地方過一遍」 means.
+        self.table_hit = 0;
+        self.remember_jump();
         self.show_table_hit();
+        if declared.is_none() {
+            self.status = say!(
+                "本表格文件未指定快速跳轉之範圍，從第一欄起搜索——第 1/{0} 處",
+                self.table_hits.len()
+            );
+        }
     }
 
-    /// Step to the next or previous row the table search found.
+    /// Step to the next or previous match the column search found.
     fn walk_table_hits(&mut self, forward: bool) -> bool {
         if self.table_hits.is_empty() {
             return false;
@@ -4033,14 +4105,26 @@ impl Editor {
         true
     }
 
-    /// Go to the row the table search is pointing at, and say where you are in
-    /// the answers.
+    /// Select the match the column search is pointing at, and say which it is.
     fn show_table_hit(&mut self) {
-        let Some(&line) = self.table_hits.get(self.table_hit) else {
+        let Some(&(from, to)) = self.table_hits.get(self.table_hit) else {
             return;
         };
-        self.goto_line(line + 1);
-        self.status = say!("「{0}」第 {1}/{2} 行（n N 走）", self.table_needle, self.table_hit + 1, self.table_hits.len());
+        let rope = self.current_buffer().rope();
+        let len = rope.len_chars();
+        // The match itself becomes the selection, exactly as `/` leaves it —
+        // on its last grapheme, not one past it.
+        let to = to.min(len);
+        let head = motion::prev_grapheme(rope, to).max(from);
+        self.anchor = from.min(len);
+        self.cursor = head;
+        self.extend = false;
+        self.refresh_goal_column();
+        self.status = say!(
+            "第 {0}/{1} 處（n N 走）",
+            self.table_hit + 1,
+            self.table_hits.len()
+        );
     }
 
     /// Whether the cursor sits at the first character of its cell.
@@ -7882,7 +7966,7 @@ impl Editor {
     /// the cursor is *now*, which is exactly what a person pressing `.` means.
     fn repeat_edit(&mut self) {
         if self.last_edit_keys.is_empty() {
-            self.status = say!("還沒有改動可以重複");
+            self.status = say!("還沒有可以重複的改動");
             return;
         }
         let keys = self.last_edit_keys.clone();
@@ -10535,19 +10619,33 @@ mod tests {
         ed.execute("2").unwrap();
         assert_eq!(ed.cell_text(1, 0), "木", "the key column");
 
-        // Every row whose 拆分 uses 木 — 木 itself included — in file order,
-        // starting after where the cursor was.
+        // Every 木 in the column the schema names, down it from the top —
+        // and the cursor starts at the **first** whatever row it was standing
+        // on, so asking about 木 gives the same route every time.
+        //
+        // Five, not four: 林 is ⿰木木 and that is two of them, exactly as `/`
+        // would count two matches on one line. A column search differs from a
+        // row search in its *direction* and in nothing else.
         ed.on_key(Key::Enter);
-        assert_eq!(ed.cursor_line(), 2, "相");
-        // Four rows use 木, and the cursor is on the second of them — the
-        // first one *after* where it started, as `/` does.
-        assert!(ed.status().contains("2/4"), "{}", ed.status());
+        assert_eq!(ed.cursor_line(), 1, "木 itself, the first of them");
+        assert!(ed.status().contains("1/5"), "{}", ed.status());
+        // …and the match is the selection, as it is after `/`.
+        let (a, b) = ed.selection();
+        assert_eq!(
+            ed.current_buffer().rope().slice(a..b).to_string(),
+            "木",
+            "the match is the selection, as it is after `/`"
+        );
         ed.on_key(Key::Char('n'));
-        assert_eq!(ed.cursor_line(), 3, "林");
+        assert_eq!(ed.cursor_line(), 2, "相");
+        ed.on_key(Key::Char('n'));
+        assert_eq!(ed.cursor_line(), 3, "林's first 木");
+        ed.on_key(Key::Char('n'));
+        assert_eq!(ed.cursor_line(), 3, "…and its second");
         ed.on_key(Key::Char('n'));
         assert_eq!(ed.cursor_line(), 5, "杏");
         ed.on_key(Key::Char('n'));
-        assert_eq!(ed.cursor_line(), 1, "木 itself, wrapping round");
+        assert_eq!(ed.cursor_line(), 1, "and round again");
         ed.on_key(Key::Char('N'));
         assert_eq!(ed.cursor_line(), 5, "and back");
 
@@ -11458,6 +11556,70 @@ mod tests {
             "{}",
             ed.status()
         );
+    }
+
+    #[test]
+    fn a_column_search_reads_down_before_across() {
+        // `/` reads the page the way a page is read; a table has a second way
+        // a document does not have. The only difference is the direction: the
+        // pattern is a regex, the match is the selection, `n` walks, it wraps.
+        let dir = std::env::temp_dir().join(format!("yumete-colsearch-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let csv = dir.join("d.csv");
+        // Two columns. Read across, 甲 comes at row 1 then row 2; read down,
+        // both of column A come before either of column B.
+        std::fs::write(&csv, "a,b\n甲一,甲二\n甲三,甲四\n").unwrap();
+        let mut ed = Editor::new();
+        ed.open_file(&csv).unwrap();
+        assert!(ed.enter_table(), "{}", ed.status());
+
+        assert!(ed.execute("search column 甲").is_ok(), "{}", ed.status());
+        assert!(ed.status().contains("1/4"), "{}", ed.status());
+        let where_am_i = |ed: &Editor| ed.cell_position().unwrap();
+        assert_eq!(where_am_i(&ed), (1, 0), "column a, row 1");
+        ed.on_key(Key::Char('n'));
+        assert_eq!(where_am_i(&ed), (2, 0), "column a, row 2 — still column a");
+        ed.on_key(Key::Char('n'));
+        assert_eq!(where_am_i(&ed), (1, 1), "only now column b");
+        ed.on_key(Key::Char('n'));
+        assert_eq!(where_am_i(&ed), (2, 1));
+        ed.on_key(Key::Char('n'));
+        assert_eq!(where_am_i(&ed), (1, 0), "and it wraps");
+
+        // A row search is `/`, and reads the other way.
+        assert!(ed.execute("search row 甲").is_ok());
+        assert_eq!(ed.cursor_line(), 1);
+
+        // No direction means row, because that is what a search is anywhere
+        // but a table.
+        assert!(ed.execute("search 甲").is_ok());
+        // A pattern is a pattern in both directions.
+        assert!(ed.execute("search column 甲[一三]").is_ok());
+        assert!(ed.status().contains("1/2"), "{}", ed.status());
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn a_table_with_no_declared_scope_searches_all_of_it() {
+        // It used to refuse: 「這張表沒說哪些是拆分欄」. A schema is an
+        // optimisation — two columns instead of twenty-eight — not a licence.
+        let dir = std::env::temp_dir().join(format!("yumete-scope-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let csv = dir.join("d.csv");
+        std::fs::write(&csv, "a,b\n甲,乙\n丙,甲\n").unwrap();
+        let mut ed = Editor::new();
+        ed.open_file(&csv).unwrap();
+        assert!(ed.enter_table(), "{}", ed.status());
+        ed.goto_line(2);
+        ed.on_key(Key::Enter);
+        assert_eq!(ed.cell_position(), Some((1, 0)), "{}", ed.status());
+        assert!(ed.status().contains("未指定"), "and it says so: {}", ed.status());
+        assert!(ed.status().contains("1/2"), "{}", ed.status());
+        ed.on_key(Key::Char('n'));
+        assert_eq!(ed.cell_position(), Some((2, 1)), "the other column");
+        std::fs::remove_dir_all(&dir).ok();
     }
 
     #[test]

@@ -1278,7 +1278,14 @@ fn draw_command_menu(frame: &mut Frame, editor: &Editor, area: Rect, status: Rec
         .collect();
     // Only the highlighted command's help, on one line. Every command's help at
     // once is what covered the page.
-    let footer = format!("{}/{}  {}", focus + 1, matches.len(), matches[focus].help);
+    // Its `help` is written in Chinese and is the key it is translated by, the
+    // same as every other thing this editor says.
+    let footer = format!(
+        "{}/{}  {}",
+        focus + 1,
+        matches.len(),
+        yumete_core::messages::say(matches[focus].help, &[])
+    );
     // Spread across the window: the command list is short entries and there
     // are a couple of dozen of them, which is exactly the shape that wants
     // columns.
