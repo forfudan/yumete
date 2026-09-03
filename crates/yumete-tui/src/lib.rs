@@ -114,8 +114,13 @@ pub fn run(
 
     let mut viewport = Seats::default();
     let mut shift = ShiftTap::default();
-    // A typesetter started with `:preview`, if one is running.
+    // A typesetter started with `:preview`, if one is running — and one left
+    // behind by a session that ended badly, which is stopped before this one
+    // can start another.
     let mut job: Option<Job> = None;
+    if let Some(said) = adopt_an_orphan() {
+        editor.set_status(said);
+    }
     let mut last_mode = None;
 
     let result = loop {
@@ -288,9 +293,22 @@ pub fn run(
                     }
                 }
                 if let Some(want) = editor.take_preview_request() {
+                    // Already running: hand back the address and open the page
+                    // again. Killing it and starting another is a fresh compile
+                    // of the whole book to answer 「where was that page?」.
+                    if let yumete_core::editor::Preview::Show = want {
+                        if let Some(url) = editor.preview_at().map(str::to_string) {
+                            show(&url);
+                            editor.set_status(say!("預覽：{0}（`:preview off` 停）", url));
+                        }
+                        continue;
+                    }
                     if let Some(mut running) = job.take() {
                         let _ = running.child.kill();
-                        editor.set_status(format!("預覽：{} 已停", running.what));
+                        let _ = running.child.wait();
+                        forget_the_server();
+                        editor.set_preview_at(None);
+                        editor.set_status(say!("預覽：{0} 已停", running.what));
                     }
                     if let yumete_core::editor::Preview::Start { path, syntax } = want {
                         match syntax {
@@ -324,7 +342,11 @@ pub fn run(
                 if let Some(running) = job.as_ref() {
                     if let Ok(url) = running.said.try_recv() {
                         show(&url);
-                        editor.set_status(format!("預覽：{url}（`:preview off` 停）"));
+                        // Remembered, not just said: a line on the status bar
+                        // is gone by the next keystroke, and the address is
+                        // what a writer comes back to ask for.
+                        editor.set_preview_at(Some(url.clone()));
+                        editor.set_status(say!("預覽：{0}（`:preview off` 停）", url));
                     }
                 }
                 if let Some(tag) = editor.take_scheme_request() {
@@ -400,7 +422,9 @@ pub fn run(
     // has no reason to go on holding a port after it.
     if let Some(mut running) = job.take() {
         let _ = running.child.kill();
+        let _ = running.child.wait();
     }
+    forget_the_server();
 
     let _ = execute!(
         stdout(),
@@ -734,6 +758,62 @@ struct Job {
     said: std::sync::mpsc::Receiver<String>,
 }
 
+/// Where the pid of a running typesetter is written.
+///
+/// A preview server holds a port and a few hundred megabytes, and it is killed
+/// when the session ends — but only when the session ends *properly*. A panic,
+/// a `SIGKILL`, a closed terminal window, and it is still there tomorrow, still
+/// holding both, and nothing in the editor knows it exists. So the pid goes to
+/// a file, and the next yumete to start looks.
+fn server_note() -> std::path::PathBuf {
+    std::env::temp_dir().join(format!("yumete-preview-{}.pid", whose()))
+}
+
+/// Which user's file this is: two people on one machine do not share a pid.
+fn whose() -> String {
+    std::env::var("USER").unwrap_or_else(|_| "anon".to_string())
+}
+
+/// Remember that this process is running a typesetter.
+fn note_the_server(pid: u32) {
+    let _ = std::fs::write(server_note(), pid.to_string());
+}
+
+/// Forget it: the server has been stopped.
+fn forget_the_server() {
+    let _ = std::fs::remove_file(server_note());
+}
+
+/// Kill a typesetter left behind by a session that ended badly.
+///
+/// **Checked before it is killed**, because a pid is reused: the process must
+/// still be one of ours by name. A pid file naming something else — or nothing —
+/// is simply removed. Returns what it did, for the status line.
+#[cfg(unix)]
+fn adopt_an_orphan() -> Option<String> {
+    let note = server_note();
+    let pid: u32 = std::fs::read_to_string(&note).ok()?.trim().parse().ok()?;
+    let named = std::process::Command::new("ps")
+        .args(["-p", &pid.to_string(), "-o", "comm="])
+        .output()
+        .ok()?;
+    let name = String::from_utf8_lossy(&named.stdout).trim().to_string();
+    let _ = std::fs::remove_file(&note);
+    if !name.ends_with("tinymist") {
+        return None;
+    }
+    // SAFETY: a pid this process wrote down, checked to still be the program
+    // we started, and SIGTERM, which is the polite one.
+    let killed = unsafe { libc::kill(pid as libc::pid_t, libc::SIGTERM) } == 0;
+    killed.then(|| say!("上次留下的預覽伺服器（{0}）停掉了", pid))
+}
+
+#[cfg(not(unix))]
+fn adopt_an_orphan() -> Option<String> {
+    let _ = std::fs::remove_file(server_note());
+    None
+}
+
 impl Job {
     /// Start `tinymist preview`, watching its log for the address it opens on.
     fn typst(path: &std::path::Path) -> Result<Job, String> {
@@ -745,6 +825,7 @@ impl Job {
             .stderr(std::process::Stdio::piped())
             .spawn()
             .map_err(|e| format!("tinymist: {e}（`cargo install tinymist`）"))?;
+        note_the_server(child.id());
         let (send, said) = std::sync::mpsc::channel();
         if let Some(log) = child.stderr.take() {
             std::thread::spawn(move || {
@@ -2150,8 +2231,15 @@ fn draw_horizontal(
     // document from the top on every keystroke.
     let scrolloff = config.editor.scrolloff.min(height.saturating_sub(1) / 2);
     let last_row = height.saturating_sub(1);
+    // **A jump lands in the middle, wherever it came from.** Whether the page
+    // has to scroll at all is the wrong question to key this on: a hit two rows
+    // below the bottom edge and a hit two rows above it are the same act, and
+    // one of them used to land on the fourth row from the top while the other
+    // landed in the middle. The editor knows which moves are jumps — it is the
+    // same answer `C-o` is built on.
+    let jumped = editor.jumped();
     let cursor_row = match wrap::distance(rope, *viewport, cursor_anchor, measure, last_row) {
-        Some(d) if d >= scrolloff && d + scrolloff <= last_row => d,
+        Some(d) if !jumped && d >= scrolloff && d + scrolloff <= last_row => d,
         found => {
             // Too close to an edge: scroll by as little as it takes, which is
             // what reading down a page wants. **Off the page altogether: put
@@ -2159,6 +2247,7 @@ fn draw_horizontal(
             // mark), and landing `scrolloff` from an edge gives the reader
             // nothing on one side of the thing they were looking for.
             let inset = match found {
+                _ if jumped => last_row / 2,
                 Some(d) if d < scrolloff => scrolloff,
                 Some(_) => last_row.saturating_sub(scrolloff),
                 // Off the page **either way** is a jump, and a jump lands in
@@ -2619,13 +2708,22 @@ fn draw_status(
         } else {
             String::new()
         };
+        // A running typesetter is a **process**, holding a port and a few
+        // hundred megabytes for as long as it runs. It said its address once,
+        // hours ago, and nothing since — so it gets a standing mark, the way a
+        // recovered draft does.
+        let preview = match editor.preview_at().is_some() {
+            true => " [preview]",
+            false => "",
+        };
         let left = format!(
-            "-- {} --  {}{}{}{}{}",
+            "-- {} --  {}{}{}{}{}{}",
             editor.mode_label(),
             ime_tag,
             buffer.display_name(),
             dirty,
             draft,
+            preview,
             which
         );
         // Where you are, and nothing else. What just happened is the row
@@ -4724,6 +4822,62 @@ mod tests {
         assert!(marked, "the hit is washed in 朱");
         let numbered = (0..rows).any(|y| buffer[(0, y)].style().fg == Some(quiet.mark()));
         assert!(numbered, "and its line number is 朱");
+    }
+
+    /// **A jump lands in the middle; a step nudges.**
+    ///
+    /// Which it was is the editor's answer, not the page's: a hit two rows
+    /// below the bottom edge and one two rows above it are the same act, and
+    /// keying the decision on「did the page have to scroll」put one of them on
+    /// the fourth row from the top and the other in the middle.
+    /// Render repeatedly **keeping the page's own scroll**, the way the event
+    /// loop does: a fresh `Seats` starts at the top of the document and
+    /// re-derives the scroll from nothing, which is not what a second keystroke
+    /// sees.
+    fn caret_over_time(
+        editor: &Editor,
+        config: &Config,
+        viewport: &mut Seats,
+        w: u16,
+        h: u16,
+    ) -> Option<Position> {
+        let mut terminal = Terminal::new(TestBackend::new(w, h)).unwrap();
+        terminal
+            .draw(|frame| draw(frame, editor, config, &no_ime(), viewport))
+            .unwrap();
+        terminal.get_cursor_position().ok()
+    }
+
+    #[test]
+    fn a_jump_lands_in_the_middle_and_a_step_does_not() {
+        let mut editor = editor_with(&(1..=60).map(|n| format!("第{n}行。\n")).collect::<String>());
+        let mut config = Config::default();
+        config.editor.line_numbers = yumete_config::LineNumbers::None;
+        config.editor.hints = false;
+        // 13 terminal rows: twelve of page and the status line, so the last
+        // row of the page is 11 and the middle of it is 5.
+        let rows = 13u16;
+        let middle = 5;
+
+        let mut seats = Seats::default();
+
+        // `:30` is a jump: line 30 lands in the middle of the page.
+        editor.execute(":30").unwrap();
+        let caret = caret_over_time(&editor, &config, &mut seats, 30, rows);
+        assert_eq!(caret.map(|p| p.y), Some(middle), "a jump centres");
+
+        // `j` from there is a step: it moves one row, it does not re-centre.
+        editor.on_key(Key::Char('j'));
+        let caret = caret_over_time(&editor, &config, &mut seats, 30, rows);
+        assert_eq!(caret.map(|p| p.y), Some(middle + 1), "a step nudges");
+
+        // …and a search hit is a jump, whichever direction it was found in.
+        editor.execute(":search 第55行").unwrap();
+        let caret = caret_over_time(&editor, &config, &mut seats, 30, rows);
+        assert_eq!(caret.map(|p| p.y), Some(middle), "forwards");
+        editor.execute(":search 第9行").unwrap();
+        let caret = caret_over_time(&editor, &config, &mut seats, 30, rows);
+        assert_eq!(caret.map(|p| p.y), Some(middle), "and backwards");
     }
 
     /// A block's ground is painted to the edge of the page even on a row whose

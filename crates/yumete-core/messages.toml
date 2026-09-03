@@ -1674,3 +1674,15 @@ en = "this file is read-only — chmod it, or save under another name"
 [[message]]
 zh = "那個檔案已經存在——`:w!` 才蓋掉它"
 en = "that file is already there — `:w!` writes over it"
+
+[[message]]
+zh = "上次留下的預覽伺服器（{0}）停掉了"
+en = "stopped the preview server left over from last time ({0})"
+
+[[message]]
+zh = "預覽：{0} 已停"
+en = "preview: {0} stopped"
+
+[[message]]
+zh = "預覽：{0}（`:preview off` 停）"
+en = "preview: {0} (`:preview off` stops it)"
