@@ -1354,8 +1354,12 @@ pub fn zong_index(zongs: &[Zong], pos: usize) -> usize {
 ///
 /// The renderer walks this rather than the graphemes, so a 縦中横 pair arrives
 /// as one two-cell string and lands in one row.
-pub fn slot_text(text: &str, grid: Grid) -> Vec<String> {
-    let offsets = slot_offsets(text, grid.tatechuyoko);
+///
+/// Takes the one setting it uses rather than a whole [`Grid`]: it used to take
+/// the page and read only `tatechuyoko` from it, which is API that contradicts
+/// the value it is handed — the same thing `line_slots` was renamed for.
+pub fn slot_text(text: &str, tatechuyoko: bool) -> Vec<String> {
+    let offsets = slot_offsets(text, tatechuyoko);
     let chars: Vec<char> = text.chars().collect();
     offsets
         .windows(2)
@@ -2035,7 +2039,7 @@ mod tests {
         let r = rope("第12章");
         let zongs = layout(&r, PACKED);
         assert_eq!(zongs[0].slots, 3, "第 / 12 / 章");
-        assert_eq!(slot_text("第12章", PACKED), ["第", "12", "章"]);
+        assert_eq!(slot_text("第12章", true), ["第", "12", "章"]);
 
         // The cursor agrees: the character after the pair is slot 2, not 3.
         assert_eq!(position(&r, 1, PACKED).slot, 1, "on the 1");
@@ -2047,16 +2051,16 @@ mod tests {
     fn packing_is_off_by_default() {
         // One letter to a row: turned sideways a pair reads as a syllable that
         // is not there.
-        assert_eq!(slot_text("yume", G), ["y", "u", "m", "e"]);
-        assert_eq!(slot_text("第12章", G), ["第", "1", "2", "章"]);
+        assert_eq!(slot_text("yume", false), ["y", "u", "m", "e"]);
+        assert_eq!(slot_text("第12章", false), ["第", "1", "2", "章"]);
     }
 
     #[test]
     fn a_longer_latin_run_packs_two_at_a_time() {
         // Beyond a pair there is nothing to rotate into, so it stacks — legibly,
         // but it is the one thing a terminal cannot set properly.
-        assert_eq!(slot_text("abcde", PACKED), ["ab", "cd", "e"]);
-        assert_eq!(slot_text("2026年", PACKED), ["20", "26", "年"]);
+        assert_eq!(slot_text("abcde", true), ["ab", "cd", "e"]);
+        assert_eq!(slot_text("2026年", true), ["20", "26", "年"]);
     }
 
     /// A 句讀 mark stops being a row of its own and hangs beside the character

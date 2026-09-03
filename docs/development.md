@@ -607,6 +607,46 @@ real files and found five more — all fixed:
   `buffer.rs` were the only user-facing strings not in `messages.toml` — that
   file is now scanned by the drift test too.
 
+**A seventh review** checked the page fixes against the same corpus and found
+that items 9–16 hold — 0 unsorted, 0 overlapping, 0 caret and 0 fold
+disagreements over 680,844 line-passes — while adding three of its own and
+naming three that were already there. All fixed:
+
+- **`j` and `k` carried a column measured over the source**, while the rows
+  they step between are broken over what is *drawn*. With 所見即所得 on, `j`
+  landed one glyph off per `**` above it, and with wrap off it could land on an
+  asterisk that is not on the page. `wrap::position` and `char_at_column` count
+  the drawn width now, the front end no longer subtracts the hidden width a
+  second time on its way to the screen, and **wrap off goes through the same
+  code** at `wrap::NO_WRAP` — one row per paragraph — rather than through a
+  second answer that knew nothing about the page.
+- **禁則處理 on the horizontal page still read the source character.** Item 12
+  fixed 縱書 only, so the two layouts broke lines differently: over the docs
+  site, ten rows opened with 。、）or ended with 「（[. `adjusted_break` asks
+  what the reader sees, one retreat is one *visible* character (it used to
+  spend both tries walking over a zero-width run and move nothing), and 禁則 is
+  asked again after the Latin-word rule, which could put a bracket back at the
+  row's end. What is left is the documented two-character limit: a row of
+  nothing but punctuation — a `|:---|` rule row, a run of `～～～～` — cannot be
+  fixed by retreating, and cascading further is worse.
+- **Two rows could hold one character.** A bracket waiting in the margin and a
+  hidden run beside it claimed the same characters twice (`「**。**`), and a
+  ruby group with an *empty* base put its bracket back to be drawn later, out
+  of order. Both are gone, and the test that missed them asked whether every
+  character was in *at least* one row — it asks for **exactly one** now, over
+  every line that can be built from four of the characters that fight
+  (20,736 of them × hanging × 所見即所得 × 縦中横).
+- **The memo copied the paragraph on every hit**, and asked the page what was
+  hidden *before* consulting it — so a 500,000-character paragraph was copied
+  and re-scanned once per 縱. The remembered rows are `Rc`, the key is a
+  **stamp** (buffer, revision, selection, render, syntax) rather than a hash of
+  the text, and the page is asked only on a miss: a warm frame of that
+  paragraph went from 16.9 s before the memo, to 526 ms with it, to **17 µs**.
+  Eight remembered paragraphs was also fewer than one screen of short-paragraph
+  prose holds, so the second pass over a page missed every time; it is 96.
+- `slot_text` took a whole `Grid` and read one field of it — the same
+  contradiction `line_slots` was renamed for. It takes the field.
+
 **The two invariants both reviewers asked for**, which is what the fixes are
 built on rather than instance by instance:
 

@@ -395,17 +395,29 @@ fn adjusted_break(
     let char_at = |i: usize| chars.get(cuts[i]).copied().unwrap_or(' ');
 
     // 禁則處理 first: pull the offending character down with its neighbour.
-    let mut cut = end;
-    for _ in 0..MAX_KINSOKU_RETREAT {
-        if cut <= g + 1 {
-            break;
+    let kinsoku = |mut cut: usize| {
+        for _ in 0..MAX_KINSOKU_RETREAT {
+            if cut <= g + 1 {
+                break;
+            }
+            if forbidden_at_row_start(after(cut)) || forbidden_at_row_end(before(cut)) {
+                // **One retreat is one character the reader can see.** Stepping
+                // by grapheme spent both tries walking back over a hidden run —
+                // `字**」**。` — and moved the boundary past nothing, so the 。
+                // still opened the next row. The markup travels down with the
+                // character it belongs to.
+                let mut back = cut - 1;
+                while back > g + 1 && widths.get(back).copied().unwrap_or(1) == 0 {
+                    back -= 1;
+                }
+                cut = back;
+            } else {
+                break;
+            }
         }
-        if forbidden_at_row_start(after(cut)) || forbidden_at_row_end(before(cut)) {
-            cut -= 1;
-        } else {
-            break;
-        }
-    }
+        cut
+    };
+    let mut cut = kinsoku(end);
 
     // Then keep a Latin word whole. A space is the obvious place to break at,
     // and in English prose it is the only one there is.
@@ -423,7 +435,11 @@ fn adjusted_break(
             }
         }
     }
-    (cut - g).max(1)
+    // …and 禁則 again over what the word rule chose, because it may have put a
+    // bracket back at the row's end: a URL in `[名字](網址)` retreats to the
+    // start of `https`, which is exactly one character after the `(` that
+    // 行末禁則 had just pulled down.
+    (kinsoku(cut) - g).max(1)
 }
 
 /// The width to measure at when soft wrap is **off**.
