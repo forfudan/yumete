@@ -1353,7 +1353,11 @@ fn draw(
     let footer = if hint_rows == 1 { hint_area } else { status_area };
     draw_command_menu(frame, editor, config, area, footer);
     draw_picker(frame, editor, config, area, footer);
-    draw_space_menu(frame, editor, config, area, footer);
+    // One panel for every half-pressed sequence, `空格` included — it used to
+    // draw its own menu and every other prefix got a row.
+    draw_which_key(frame, editor, config, area, footer.y, cursor_x);
+    // …and the same string beside the caret, where the eyes are.
+    draw_hud(frame, editor, config, text_area, (cursor_x, cursor_y));
 
     // In vertical layout the cursor is a block drawn into the page: a hardware
     // cursor is one cell wide and would sit lopsided inside a two-cell 縱.
@@ -1546,7 +1550,152 @@ fn draw_list(
     );
 }
 
-/// Write `text` from `x`, stopping at `limit`, one cell per column.
+/// The **HUD**: what you have typed, beside the caret.
+///
+/// The status line's right edge is where vi has always put this, and it is
+/// twenty rows from where the eyes are. So it is drawn twice: there, and here,
+/// one row under the caret — small, 金 on the band, and gone the moment the
+/// command completes.
+///
+/// Normal mode only. While prose is being typed nothing may flicker beside the
+/// characters, and in Insert there is no command being built anyway.
+fn draw_hud(frame: &mut Frame, editor: &Editor, config: &Config, page: Rect, caret: (u16, u16)) {
+    if editor.mode() != Mode::Normal || editor.prompt().is_some() {
+        return;
+    }
+    let typed = editor.typed_so_far();
+    if typed.is_empty() || page.height < 2 {
+        return;
+    }
+    let ink = crate::theme::Palette::of(config);
+    let text = format!("╰ {typed}");
+    let width = yumete_cjk::str_width(&text) as u16;
+    let (caret_x, caret_y) = caret;
+    // Under the caret — or over it, on the page's last row, where there is no
+    // under. Never *on* it: the character being worked on stays visible.
+    let y = match caret_y + 1 < page.y + page.height {
+        true => caret_y + 1,
+        false => caret_y.saturating_sub(1),
+    };
+    if y < page.y || y >= page.y + page.height {
+        return;
+    }
+    // Beside it, and shifted left rather than cut off at the edge.
+    let x = caret_x
+        .min(page.x + page.width.saturating_sub(width))
+        .max(page.x);
+    let style = Style::default()
+        .bg(ink.at(yumete_config::rung::BAND))
+        .fg(ink.gold());
+    put_text(frame.buffer_mut(), x, y, page.x + page.width, &text, style);
+}
+
+/// The **which-key panel**: what the half-pressed key can be finished with.
+///
+/// A bordered list, titled in its own top border, in the corner the writing
+/// ends at — bottom right in 橫排, bottom left in 縱書, because that is where
+/// the eye already is when a line runs out. It replaces the hint row for the
+/// sequence it is about: two surfaces saying the same thing is the thing this
+/// editor keeps taking apart.
+///
+/// One column while it fits, two when it does not. Not scrolling: a menu you
+/// have to scroll is one you cannot answer at a glance, which is the whole of
+/// what it is for.
+fn draw_which_key(
+    frame: &mut Frame,
+    editor: &Editor,
+    config: &Config,
+    area: Rect,
+    bottom: u16,
+    caret_x: u16,
+) {
+    let Some((title, keys)) = editor.pending_menu() else {
+        return;
+    };
+    if keys.is_empty() {
+        return;
+    }
+    let ink = crate::theme::Palette::of(config);
+    // The keys line up, so the meanings do: a ragged left edge on a list of
+    // two-character keys reads as noise.
+    let key_width = keys
+        .iter()
+        .map(|(k, _)| yumete_cjk::str_width(k))
+        .max()
+        .unwrap_or(1);
+    let rows: Vec<(String, String)> = keys
+        .iter()
+        .map(|(k, what)| {
+            let pad = " ".repeat(key_width.saturating_sub(yumete_cjk::str_width(k)));
+            (format!("{k}{pad}"), what.clone())
+        })
+        .collect();
+    let one = rows
+        .iter()
+        .map(|(k, what)| yumete_cjk::str_width(k) + 2 + yumete_cjk::str_width(what))
+        .max()
+        .unwrap_or(0);
+
+    // Half the page is as tall as a menu may be; past that it goes to two
+    // columns, column-major, so reading runs down and then across.
+    let room = (area.height.saturating_sub(2) / 2).max(1) as usize;
+    let across = if rows.len() > room { 2 } else { 1 };
+    let deep = rows.len().div_ceil(across);
+    let inner = one * across + (across - 1) * 2;
+    let width = (inner + 2)
+        .max(yumete_cjk::str_width(&title) + 4)
+        .min(area.width as usize) as u16;
+    let height = (deep + 2) as u16;
+    if height > area.height || bottom < height {
+        return;
+    }
+    // **The corner the cursor is not in.** A fixed corner is right half the
+    // time and covers what you are working on the other half; the panel goes to
+    // whichever side of the page the caret is not on. One rule for both
+    // layouts, because in both of them the caret has a column.
+    let far = area.x + area.width.saturating_sub(width);
+    let x = match caret_x >= area.x + area.width / 2 {
+        true => area.x,
+        false => far,
+    };
+    let panel = Rect::new(x, bottom - height, width, height);
+    frame.render_widget(Clear, panel);
+    frame.render_widget(
+        Block::default()
+            .borders(Borders::ALL)
+            .border_type(if config.panel.rounded {
+                BorderType::Rounded
+            } else {
+                BorderType::Plain
+            })
+            .border_style(Style::default().fg(ink.furniture()).bg(ink.paper()))
+            .title(Span::styled(
+                title,
+                Style::default().fg(ink.gold()).bg(ink.paper()),
+            ))
+            .style(Style::default().bg(ink.paper())),
+        panel,
+    );
+    let ground = Style::default().bg(ink.paper());
+    let buf = frame.buffer_mut();
+    for (i, (key, what)) in rows.iter().enumerate() {
+        let (column, row) = (i / deep, i % deep);
+        let x = panel.x + 1 + (column * (one + 2)) as u16;
+        let y = panel.y + 1 + row as u16;
+        let limit = panel.x + width - 1;
+        put_text(buf, x, y, limit, key, ground.fg(ink.gold()));
+        put_text(
+            buf,
+            x + key_width as u16 + 2,
+            y,
+            limit,
+            what,
+            ground.fg(ink.text()),
+        );
+    }
+}
+
+/// Write `text` from `x`, stopping at `limit`, one cell per column./// Write `text` from `x`, stopping at `limit`, one cell per column.
 fn put_text(
     buf: &mut ratatui::buffer::Buffer,
     x: u16,
@@ -2128,40 +2277,6 @@ fn draw_picker(frame: &mut Frame, editor: &Editor, config: &Config, area: Rect, 
     ));
 }
 
-/// The `Space` menu, listed while the key is waiting for its second half.
-fn draw_space_menu(
-    frame: &mut Frame,
-    editor: &Editor,
-    config: &Config,
-    area: Rect,
-    status: Rect,
-) {
-    if !editor.space_pending() {
-        return;
-    }
-    let ink = crate::theme::Palette::of(config);
-    // Translated as it is drawn, the way a command's `help` is: the label is
-    // written in Chinese at the one place it is declared, and that sentence is
-    // the key it is looked up by.
-    let items: Vec<String> = Editor::SPACE_KEYS
-        .iter()
-        .map(|(key, what)| format!("{key}   {}", yumete_core::messages::say(what, &[])))
-        .collect();
-    draw_list(
-        frame,
-        ink,
-        area,
-        status.y,
-        List {
-            items: &items,
-            focus: 0,
-            highlight: None,
-            footer: "空格",
-            columns: true,
-        },
-    );
-}
-
 /// The composition in progress, when a `/` or `:` prompt is open.
 fn prompt_preedit(editor: &Editor, ime: &ImeSession) -> String {
     if editor.prompt().is_some() && ime.available() && ime.is_composing() {
@@ -2741,7 +2856,17 @@ fn draw_status(
     // moves the position readout around. A rare 漢字 that came out as a box is
     // the case this answers: `U+2B740 · CJK Unified Ideographs Extension D`
     // says the character is fine and the font is not.
-    let right = char_info(editor, config);
+    // **What has been typed so far**, where vi has put it since 1976 and where
+    // Helix puts it: the far right of the status line. Pressing `3` used to
+    // change nothing on the screen at all, so `30d` and `3d` were told apart by
+    // memory. It takes the place of the character readout while a command is
+    // half-typed — that readout is about the character you are standing on, and
+    // right now you are in the middle of saying something.
+    let typed = editor.typed_so_far();
+    let right = match typed.is_empty() {
+        true => char_info(editor, config),
+        false => (typed, String::new()),
+    };
     let used = yumete_cjk::str_width(&status);
     let room = (status_area.width as usize).saturating_sub(used);
     // Two stages of giving way: the block name goes first, then the code point,
@@ -2970,6 +3095,10 @@ fn draw_hints(frame: &mut Frame, editor: &Editor, config: &Config, area: Rect) {
     match editor.hint() {
         Hint::Quiet => {}
         Hint::Says(text) => put(&text, news, &mut x),
+        // **The panel has this now.** A row holds four keys and `空格` has
+        // fourteen, so a half-pressed sequence is drawn as a list you can read
+        // down; the row keeps what it was always for — what just happened.
+        Hint::Keys(..) if editor.pending_menu().is_some() => {}
         Hint::Keys(name, keys) => {
             put(&name, label, &mut x);
             put("  ", what, &mut x);
@@ -4487,23 +4616,101 @@ mod tests {
         // with something to read.
         assert_eq!(hint(&editor).trim(), "");
 
-        // A sequence begun and not finished is the case this row exists for —
-        // `m` is otherwise only in the manual.
+        // **A half-pressed sequence belongs to the panel now**, not to this
+        // row: a row holds four keys and `空格` has fourteen. The row keeps
+        // what it was always for — what just happened — and the two surfaces
+        // stop saying the same thing.
+        for key in ['m', 'g', ' '] {
+            editor.on_key(Key::Char(key));
+            assert_eq!(hint(&editor).trim(), "", "{key} belongs to the panel");
+            editor.on_key(Key::Esc);
+        }
+    }
+
+    /// **What you have typed is on the screen** — twice: at the status line's
+    /// right edge, where vi has put it since 1976, and beside the caret, where
+    /// the eyes are. Pressing `3` used to change nothing at all.
+    #[test]
+    fn what_has_been_typed_shows_beside_the_caret_and_in_the_corner() {
+        let mut editor = editor_with("那年冬天，山下起了大雪。\n雪一直下到開春。\n");
+        let config = Config::default();
+        let page = |editor: &Editor| -> String {
+            let b = render(editor, &config, 60, 10);
+            (0..b.area.height)
+                .map(|y| (0..b.area.width).map(|x| at(&b, x, y)).collect::<String>())
+                .collect::<Vec<_>>()
+                .join("\n")
+                .replace(' ', "")
+        };
+        assert!(!page(&editor).contains("╰"), "nothing pending, nothing drawn");
+
+        editor.on_key(Key::Char('3'));
+        let drawn = page(&editor);
+        assert!(drawn.contains("╰3"), "beside the caret: {drawn}");
+        assert!(
+            drawn.lines().last().unwrap().ends_with('3'),
+            "and in the corner: {drawn}"
+        );
+
+        // `30` is not `3`, which is the whole point.
+        editor.on_key(Key::Char('0'));
+        assert!(page(&editor).contains("╰30"), "{}", page(&editor));
+
+        // The command completes and it is gone.
+        editor.on_key(Key::Char('l'));
+        assert!(!page(&editor).contains("╰"), "{}", page(&editor));
+
+        // Insert mode never draws it: nothing may flicker beside the writing.
+        editor.on_key(Key::Char('i'));
+        editor.on_key(Key::Char('甲'));
+        assert!(!page(&editor).contains("╰"));
+    }
+
+    /// The panel says what can finish the key you pressed, and stands on the
+    /// side of the page the cursor is not on.
+    #[test]
+    fn the_panel_lists_what_would_finish_the_sequence() {
+        let mut editor = editor_with("那年冬天，山下起了大雪。\n");
+        let config = Config::default();
+        // A wide glyph leaves its second cell empty, so the spaces come out.
+        let drawn = |editor: &Editor| -> Vec<String> {
+            let b = render(editor, &config, 60, 14);
+            (0..b.area.height)
+                .map(|y| {
+                    (0..b.area.width)
+                        .map(|x| at(&b, x, y))
+                        .collect::<String>()
+                        .replace(' ', "")
+                })
+                .collect()
+        };
+
+        // Nothing pending: no panel.
+        assert!(!drawn(&editor).iter().any(|row| row.contains("配對")));
+
         editor.on_key(Key::Char('m'));
-        let h = hint(&editor);
-        assert!(h.contains("配對") && h.contains("包起來"), "{h:?}");
-        editor.on_key(Key::Esc);
+        let page = drawn(&editor);
+        let panel: Vec<&String> = page.iter().filter(|r| r.contains('│')).collect();
+        assert!(!panel.is_empty(), "a bordered panel: {page:?}");
+        assert!(
+            page.iter().any(|r| r.contains("配對")) && page.iter().any(|r| r.contains("包起來")),
+            "{page:?}"
+        );
+        // Its title is in its own border.
+        assert!(page.iter().any(|r| r.contains('m')), "{page:?}");
 
-        // `g` likewise.
-        editor.on_key(Key::Char('g'));
-        assert!(hint(&editor).contains("檔首"), "{:?}", hint(&editor));
-        editor.on_key(Key::Esc);
-
-        // `Space` says nothing here, because it opens a menu that already
-        // lists its own keys — the same thing twice on two surfaces is worse
-        // than once.
-        editor.on_key(Key::Char(' '));
-        assert_eq!(hint(&editor).trim(), "");
+        // The cursor is at the line's start, so the panel keeps to the right:
+        // the panel's rows are the ones with a ring on them, and they start
+        // well past the middle of a 60-column page.
+        let b = render(&editor, &config, 60, 14);
+        let ring = (0..b.area.height)
+            .find_map(|y| {
+                (0..b.area.width)
+                    .find(|&x| at(&b, x, y) == "│")
+                    .map(|x| (x, y))
+            })
+            .expect("a ring");
+        assert!(ring.0 > 30, "the panel is on the right: {ring:?}");
         editor.on_key(Key::Esc);
     }
 

@@ -1686,3 +1686,7 @@ en = "preview: {0} stopped"
 [[message]]
 zh = "預覽：{0}（`:preview off` 停）"
 en = "preview: {0} (`:preview off` stops it)"
+
+[[message]]
+zh = "空格"
+en = "Space"
