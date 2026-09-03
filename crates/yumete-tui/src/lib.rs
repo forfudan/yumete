@@ -1276,7 +1276,10 @@ fn draw(
 
     // In vertical layout the cursor is a block drawn into the page: a hardware
     // cursor is one cell wide and would sit lopsided inside a two-cell 縱.
-    if let Some((_, _)) = editor.prompt() {
+    if editor.picker().is_some() {
+        // `draw_picker` put the caret in its query, which is the prompt while a
+        // picker is open.
+    } else if let Some((_, _)) = editor.prompt() {
         // Measured in cells, not characters: a Chinese search pattern is twice
         // as wide as it is long — and up to the **caret**, not to the end of
         // the line, now that the prompt can be edited in the middle.
@@ -2032,6 +2035,16 @@ fn draw_picker(frame: &mut Frame, editor: &Editor, config: &Config, area: Rect, 
             columns: false,
         },
     );
+    // The caret sits in the query, which is typed text like any other prompt.
+    // The footer is `title  n/total  query`, so the query begins as far in as
+    // everything before it is wide.
+    let before = footer.len() - picker.query().len();
+    let col = yumete_cjk::str_width(&footer[..before])
+        + yumete_cjk::str_width(&picker.before_caret());
+    frame.set_cursor_position(Position::new(
+        status.x + 1 + col as u16,
+        status.y,
+    ));
 }
 
 /// The `Space` menu, listed while the key is waiting for its second half.
