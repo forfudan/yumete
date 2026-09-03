@@ -467,15 +467,14 @@ thing — the hard parts are right, and a handful of small wrongs are in the way
 > a review of #142 that found eleven more. Two things are not, and neither is
 > blocked on work:
 >
-> - **Group 2, being installable** — deferred on the night of 2026-09-03 (§5.2.1):
->   pinning `yume-core` to a git rev needs that commit pushed and CI auth, and
->   getting it wrong costs a session's ability to build. It goes in with the
->   release pipeline.
-> - **English messages** (group 9's last item) — the content is Chinese
->   throughout now; the `language = "zh"|"en"` mechanism is 150 call sites and
->   150 English sentences in this editor's voice, which wants the author's eye.
+> - **Group 2, being installable** — **not a problem**: a release concern, and
+>   it goes with §5.3's pipeline.
+> - ~~**English messages**~~ — done: `messages.toml`, 323 messages, both
+>   languages side by side, and three tests keeping the code and the file from
+>   drifting apart.
 >
-> Everything else on this list is struck through.
+> **The whole list is struck through.** What is open is new: §5.2 groups 13
+> (【墨香】 as a real theme) and 14 (`:tutor`).
 
 ### 1 · Losing work, or lying about it
 
@@ -491,13 +490,19 @@ thing — the hard parts are right, and a handful of small wrongs are in the way
 - **A scratch buffer has no crash copy** — documented, but `yumete` with no
   argument and an hour of typing is a normal way to start a scene. **medium**
 
-### 2 · Not installable (#135)
+### 2 · Not installable (#135) — **not a problem yet**
 
-`yume-core` is a **path dependency**, so `cargo build` on a clone of yumete
-alone fails; `scripts/build.sh` needs the sibling tree for the data as well.
-Today exactly one person can install this editor, and the manual's 上手 section
-opens by telling a novelist to run a build script. Turn the path dep into a git
-dep and ship the tarballs §5.3 already designs. **high**
+The reviewer's finding: `yume-core` is a **path dependency**, so `cargo build`
+on a clone of yumete alone fails, and `scripts/build.sh` needs the sibling tree
+for the data.
+
+**The author's answer, 2026-09-04, and it is the right one:** this is still
+development, and during development you build from the tree — that is what
+`scripts/build.sh` is *for*, and 上手 opening with it is not the editor telling
+a novelist to compile, it is the repository telling a developer how to run it.
+Installing is a **release** concern and the release goes through the Homebrew
+tap §5.3 already designs. Nothing to do here until there is something to
+release; the git-dep switch goes in with the pipeline.
 
 ### 3 · The vertical page — the reason to choose this editor — **done**
 
@@ -621,7 +626,7 @@ dep and ship the tarballs §5.3 already designs. **high**
   letter at a time), and `hanging-punctuation: allow-end` without the `last`
   that narrowed it to the block's final line.
 
-### 9 · The manual is out of date with the editor (×3) — **all but one**
+### 9 · The manual is out of date with the editor (×3) — **done**
 
 - ~~Commands that no longer exist are still documented~~ · ~~`:w` sets no
   status~~ · ~~`zong_length = 32` stated as the default~~ · ~~`--help` binds `J`
@@ -629,18 +634,27 @@ dep and ship the tarballs §5.3 already designs. **high**
   `:clipboard` in no reference list~~ — done. `docs/manual.md` also gained a
   proper §七 (the whole run from the status bar down was nested under 六、輸入法,
   and 「表格模式」 was a stray top-level `## 5.5` colliding with 「5.5 Ruby 模式」).
-- **Messages are half English and half Chinese** — the *content* is fixed: every
-  status line, every command error and every editor error the reviewers named is
-  Chinese now. What is **not** done is the 2026-09-03 decision behind it:
-  `[editor] language = "zh"|"en"`, two tables. **left for the author.**
+- ~~**Messages are half English and half Chinese.**~~ Done, 2026-09-04 — and
+  not the way this entry sketched it.
 
-  The design, so it is not re-derived: the messages are built with `format!` at
-  ~150 call sites, so a lookup keyed by the finished string cannot work. It
-  wants a `msg` module of `(&'static str, &'static str)` pairs with `{}`
-  placeholders and a `self.say(M::Closed, &[…])` at each call site — mechanical,
-  but 150 sites and 150 English sentences that have to be written in this
-  editor's voice, which is not a thing to generate unattended. The manual's
-  English half (`README.md`, `--help`) is the register to match.
+  What was sketched was a `msg` module of invented keys (`M::Closed`) and 150
+  call sites rewritten to name them. What was built makes **the Chinese sentence
+  itself the key**: `say!("關了 {0}——現在是 {1}", …)` stays where it is said, and
+  `crates/yumete-core/messages.toml` holds the pair. No key has to be invented,
+  none can be got wrong, the code still reads as prose, and a message with no
+  translation falls back to the Chinese — which is exactly what the editor did
+  before the file existed. The holes are numbered (`{0}`, `{1}`) so a
+  translation may put them in the other order. 323 messages: every status line,
+  every error, the hint row, and the `:` menu's own descriptions.
+
+  Two reviews of the file — a novelist on the Chinese, a terminal user on the
+  English — found the same class of defect independently, and **neither found it
+  by reading the file**: a Chinese literal handed to a message as an *argument*
+  (`倒`/`順`, `照首行`, `（已轉橫排）`, `join("、")`) stays Chinese in an English
+  session, so the line reads 「table: 6 columns, 照首行（已轉橫排）」. The table
+  cannot show that, because the table is right. `crates/yumete-core/tests/
+  messages.rs` reads the source instead, and fails on that, on anything said but
+  not translated, and on anything translated but no longer said.
 
 ### 10 · Two the author asked for — **done**
 
