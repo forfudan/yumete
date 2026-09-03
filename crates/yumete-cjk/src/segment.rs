@@ -379,10 +379,15 @@ impl Segmenter for WithWords {
             let mut reach = ranges[i].1;
             while j < ranges.len() && ranges[j].0 == reach {
                 reach = ranges[j].1;
-                if reach - start > list.longest {
+                if reach.saturating_sub(start) > list.longest {
                     break;
                 }
-                let word: String = chars[start..reach.min(chars.len())].iter().collect();
+                // Clamped at both ends: this trusts another segmenter's ranges,
+                // and a slice whose start is past its end is a panic rather
+                // than a wrong answer.
+                let from = start.min(chars.len());
+                let to = reach.clamp(from, chars.len());
+                let word: String = chars[from..to].iter().collect();
                 if list.words.contains(&word) {
                     end = reach;
                     took = j + 1 - i;
