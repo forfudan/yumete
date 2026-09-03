@@ -113,7 +113,10 @@ fn main() -> ExitCode {
     // With no file named, open what was open last time — five `:open`s every
     // morning is five too many. Only then: somebody who said which file they
     // wanted gets that file, and nothing else.
-    let restored = if files.is_empty() {
+    // …and not when printing: `yumete -p` and `yumete | cat` are a look at one
+    // thing, not a return to work.
+    let printing = force_preview || !std::io::stdout().is_terminal();
+    let restored = if files.is_empty() && !printing {
         editor.restore_session()
     } else {
         0
@@ -195,7 +198,7 @@ fn main() -> ExitCode {
         }
         editor.set_status(config_problems.join("; "));
     }
-    if force_preview || !std::io::stdout().is_terminal() {
+    if printing {
         preview(&editor, &config);
         return ExitCode::SUCCESS;
     }
