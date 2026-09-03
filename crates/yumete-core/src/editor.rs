@@ -534,6 +534,11 @@ pub struct Editor {
     table_rules: crate::table::Rules,
     /// Whether a 碼表 is loaded, as last reported by the front end.
     ime_available: bool,
+    /// Whether the definition being followed is being *shown* (`gw`) or
+    /// *gone to* (`gd`). Set as the key is pressed and read wherever the
+    /// landing happens — including a page later, when a picker asked which
+    /// component was meant.
+    definition_preview: bool,
     /// A `:shot` waiting for the frame it is a picture of.
     screenshot_request: bool,
     /// The other work area, when the page is split (Feature #176).
@@ -849,6 +854,7 @@ impl Editor {
             show_segmentation: false,
             table_rules: crate::table::Rules::default(),
             ime_available: false,
+            definition_preview: false,
             screenshot_request: false,
             other: None,
             live_pane: 0,
@@ -3985,7 +3991,7 @@ impl Editor {
                     ("h l", say!("行首／行尾")),
                     ("s", say!("首個非空白")),
                     ("f", say!("開這個檔")),
-                    ("d", say!("看它指的地方")),
+                    ("d w", say!("去／看它指的地方")),
                     ("J", say!("併下一行")),
                 ]),
             Pending::Find(_) => (say!("找"), vec![("", say!("打一個字"))]),
@@ -4383,13 +4389,23 @@ impl Editor {
         self.status = which;
     }
 
-    /// Show `line` in the other work area — `Enter`'s one meaning.
+    /// Land on `line` — in the other work area, or here.
     ///
-    /// **`Enter` shows; a verb goes.** Both of a table's directions — 「這一格
-    /// 指着哪一行」 and 「誰用了這一格」 — are the same question about two
-    /// places at once, so both answer it in the other work area and leave the
-    /// cursor where it was standing. `:row 木` and `gf` still *move* you: they
-    /// are verbs that mean 「去」, and this is not one.
+    /// **`gd` goes and `gw` shows**, which is the pair every editor has: `gd`
+    /// is *go to definition* everywhere, and the peek is the second command
+    /// (VS Code's Peek Definition, vim's `C-w }`). Going leaves a jump behind,
+    /// so `C-o` comes back; showing leaves nothing, because nothing was left.
+    fn land_on_row(&mut self, line: usize, preview: bool) {
+        match preview {
+            true => self.show_row(line),
+            false => {
+                self.remember_jump();
+                self.goto_line(line + 1);
+            }
+        }
+    }
+
+    /// Show `line` in the other work area.
     fn show_row(&mut self, line: usize) {
         let rope = self.current_buffer().rope();
         let at = rope.line_to_char(line.min(rope.len_lines().saturating_sub(1)));
@@ -4709,11 +4725,8 @@ impl Editor {
             self.status = say!("註就在這一行");
             return;
         }
-        // **Shown, not gone to** (Feature #176), like everything else `Enter`
-        // answers. There is nothing to come back from, so the way back — a
-        // remembered position, a second meaning for `Enter`, and a state that
-        // could go stale — is gone with it.
-        self.show_row(at);
+        let preview = self.definition_preview;
+        self.land_on_row(at, preview);
     }
 
     /// `gd`: **what is this?** — the note, or the row a component names.
@@ -4723,7 +4736,8 @@ impl Editor {
     /// note yet it **writes the note** and shows that: following a link to a
     /// page that does not exist is how one gets written, which is what every
     /// wiki-shaped editor does and what a writer typing `[^1]` means.
-    fn show_definition(&mut self) {
+    fn show_definition(&mut self, preview: bool) {
+        self.definition_preview = preview;
         if self.table_here() && self.cursor_in_link_column() {
             self.follow_cell();
             return;
@@ -4845,9 +4859,29 @@ impl Editor {
         self.snapshot();
         let at = end;
         self.current_buffer_mut().insert(at, &note);
-        let line = self.current_buffer().rope().char_to_line(at + note.chars().count());
-        self.show_row(line);
-        self.status = say!("寫下了 {0} 的註（空格 w 過去寫）", tag);
+        // The other area is opened **at the end of the stub**, not at the head
+        // of its line: 空格 w lands where the note is going to be typed, which
+        // is the only place anybody is going next.
+        let caret = at + note.chars().count();
+        let line = self.current_buffer().rope().char_to_line(caret);
+        match self.definition_preview {
+            true => {
+                let caption = say!(
+                    "{0} · 第 {1} 行",
+                    self.current_buffer().display_name(),
+                    line + 1
+                );
+                self.show_in_split(caret, None, caption);
+                self.status = say!("寫下了 {0} 的註（空格 w 過去寫）", tag);
+            }
+            // `gd` goes, and a stub is written to be typed into, so it lands
+            // at the end of it with Insert one keystroke away.
+            false => {
+                self.remember_jump();
+                self.set_cursor(caret);
+                self.status = say!("寫下了 {0} 的註（C-o 回去）", tag);
+            }
+        }
     }
 
     /// Where a footnote is defined and what it says.
@@ -5280,7 +5314,8 @@ impl Editor {
                 }
                 match self.row_named(c) {
                     Some(line) => {
-                        self.show_row(line);
+                        let preview = self.definition_preview;
+                        self.land_on_row(line, preview);
                         return;
                     }
                     None if self.cell_links().iter().any(|&(k, _)| k == c) => {
@@ -5307,7 +5342,8 @@ impl Editor {
             }
             [(_, line)] => {
                 let line = *line;
-                self.show_row(line);
+                let preview = self.definition_preview;
+                self.land_on_row(line, preview);
             }
             many => {
                 let items = many
@@ -7060,12 +7096,12 @@ impl Editor {
             // Open the file named on this line — a `:grep` hit, or a line
             // pasted in from any other tool that prints `path:line:`.
             Key::Char('f') => return self.goto_file_under_cursor(),
-            // **`gd` — what is this?** The pair every editor has: `Enter` asks
-            // 「還在哪裏」 (references), `gd` asks 「它在哪裏定義的」. On a
-            // footnote that is the note; in a 拆分 column it is the row the
-            // component names. Both are *shown* in the other work area, since
-            // both are questions about two places at once.
-            Key::Char('d') => return self.show_definition(),
+            // **`gd` goes, `gw` shows.** The pair every editor has: `gd` is
+            // *go to definition* — on a footnote that is the note, in a 拆分
+            // column the row the component names — and `gw` is the same
+            // question answered in the other work area, without leaving.
+            Key::Char('d') => return self.show_definition(false),
+            Key::Char('w') => return self.show_definition(true),
             _ => return,
         };
         self.move_head(pos);
@@ -7474,9 +7510,12 @@ impl Editor {
                         }
                     }
                     Some(crate::picker::Item::Buffer(i, _)) => self.show_buffer(i),
-                    // The 部件 picker is `Enter`'s own list, and `Enter` shows
-                    // rather than goes — so choosing from it shows too.
-                    Some(crate::picker::Item::Row(line, _)) => self.show_row(line),
+                    // The picker belongs to whichever key opened it, so
+                    // choosing from it lands the way that key lands.
+                    Some(crate::picker::Item::Row(line, _)) => {
+                        let preview = self.definition_preview;
+                        self.land_on_row(line, preview)
+                    }
                     Some(crate::picker::Item::Paste(Some(which), _)) => {
                         self.paste_from_menu(which)
                     }
@@ -11178,7 +11217,7 @@ mod tests {
     }
 
     #[test]
-    fn gd_shows_what_a_thing_points_at_and_writes_a_note_that_is_missing() {
+    fn gd_goes_gw_shows_and_a_missing_note_gets_written() {
         // The pair every editor has: `Enter` is 「還在哪裏」 (references), `gd`
         // is 「它在哪裏定義的」. Keeping both on `Enter` meant a word inside a
         // footnote could not be searched for at all.
@@ -11188,14 +11227,17 @@ mod tests {
         for _ in 0..4 {
             ed.on_key(Key::Char('l'));
         }
-        // No note for it yet: `gd` writes one at the foot and shows it, which
-        // is how a note gets written — you type `[^1]` and then need somewhere
-        // to put it.
+        // No note for it yet: the stub is written at the foot — and `gd`
+        // *goes* there, landing at its end with Insert one keystroke away,
+        // which is how a note gets written.
+        let was = ed.cursor();
         press(&mut ed, "gd");
         let text = ed.current_buffer().text();
         assert!(text.ends_with("[^1]: "), "{text:?}");
         assert!(ed.status().contains("寫下了"), "{}", ed.status());
-        assert_eq!(ed.peeked_line(), Some(3), "…and it is shown");
+        assert_eq!(ed.cursor(), ed.current_buffer().rope().len_chars(), "at its end");
+        ed.on_key(Key::Ctrl('o'));
+        assert_eq!(ed.cursor(), was, "C-o comes back to the sentence");
         // …and it is one edit, so one `u` takes it back.
         ed.on_key(Key::Char('u'));
         assert!(!ed.current_buffer().text().contains("[^1]: "));
@@ -11318,12 +11360,15 @@ mod tests {
         // **`gd`**, not `Enter`: 「它指着哪裏」 and 「還在哪裏」 are two
         // questions, and `Enter` is the second one everywhere — otherwise a
         // word *inside* a note could never be asked about.
-        press(&mut ed, "gd");
+        // `gw` shows it beside the sentence; `gd` goes to it, and `C-o` comes
+        // back — the pair every editor has.
+        press(&mut ed, "gw");
         assert_eq!(ed.peeked_line(), Some(2), "the note, beside the sentence");
         assert_eq!(ed.cursor(), was, "and the sentence is still under the cursor");
         press(&mut ed, "gd");
-        assert_eq!(ed.cursor(), was, "…however many times you press it");
-        assert_eq!(ed.peeked_line(), Some(2));
+        assert_eq!(ed.cursor_line(), 2, "…and this one goes there");
+        ed.on_key(Key::Ctrl('o'));
+        assert_eq!(ed.cursor(), was, "C-o comes back");
         ed.goto_line(1);
         ed.on_key(Key::Enter);
         assert_eq!(ed.cursor_line(), 0, "nothing moves");
@@ -11403,7 +11448,7 @@ mod tests {
         // **shows** it in the other work area rather than going there
         // (Feature #176): you stay on 相, and 木's row is beside it.
         let here = ed.cursor_line();
-        ed.on_key(Key::Enter);
+        press(&mut ed, "gw");
         assert_eq!(ed.mode(), Mode::Picker);
         ed.on_key(Key::Enter);
         assert_eq!(ed.peeked_line(), Some(2), "木's own row, in the other area");
@@ -11413,7 +11458,7 @@ mod tests {
         // A cell with one component needs no picker.
         ed.goto_line(4);
         press(&mut ed, "l");
-        ed.on_key(Key::Enter);
+        press(&mut ed, "gw");
         assert_eq!(ed.peeked_line(), Some(3), "目 is already its own row");
 
         // From the key column the question turns round: not "what is this made
@@ -11574,9 +11619,9 @@ mod tests {
         press(&mut ed, "l");
         assert_eq!(ed.char_at_cursor(), Some('目'));
 
-        // Standing on one component, Enter shows *that* row — nothing to ask
+        // Standing on one component, `gw` shows *that* row — nothing to ask
         // about, because the cursor already said which.
-        ed.on_key(Key::Enter);
+        press(&mut ed, "gw");
         assert_eq!(ed.peeked_line(), Some(3), "目's own row");
         assert_eq!(ed.mode(), Mode::Normal, "no picker");
 
@@ -11730,7 +11775,7 @@ mod tests {
         ed.on_key(Key::Tab);
         press(&mut ed, "ll");
         assert_eq!(ed.char_at_cursor(), Some('目'));
-        ed.on_key(Key::Enter);
+        press(&mut ed, "gw");
         assert_eq!(ed.peeked_line(), Some(4), "目's own row");
 
         // …and the reverse question again, from a different row.
@@ -12912,14 +12957,14 @@ mod tests {
         ed.execute("2").unwrap();
         press(&mut ed, "l");
 
-        // `:row` is a *verb* and still goes; `Enter` shows in the other work
-        // area and leaves the jump list alone, because nothing was left.
+        // `gd` goes and leaves a way back; `gw` shows and leaves nothing,
+        // because nothing was left.
         ed.on_key(Key::Tab);
         press(&mut ed, "l");
         let was = ed.cursor();
-        ed.on_key(Key::Enter);
-        assert_eq!(ed.cursor(), was, "Enter does not move you");
-        ed.execute("row 木").unwrap();
+        press(&mut ed, "gw");
+        assert_eq!(ed.cursor(), was, "gw does not move you");
+        press(&mut ed, "gd");
         assert_eq!(ed.cursor_line(), 2, "木's own row");
         ed.on_key(Key::Ctrl('o'));
         assert_eq!(ed.cursor(), was, "and back where the jump started");

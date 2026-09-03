@@ -376,7 +376,8 @@ Phases are ordered by priority, most writer-critical first:
 | 177 | **The half being read is a rung back**      | tui    | P1    | which half holds the keys, by weight — tmux's answer, on 墨香's own ladder | Done |
 | 178 | **The hit you are standing on**             | tui    | P2    | 朱's wash on the match, a band on its row, 朱 on its number — the number kept, not replaced | Done |
 | 179 | **The keys a keyboard has**                 | both   | P2    | PageUp/PageDown reached the editor as nothing; `C-a`/`C-e` were swallowed by Insert | Done |
-| 180 | **`gd` beside `Enter`**                     | core   | P1    | references and definition are two questions; a footnote no longer holds `Enter` hostage, and `gd` writes the note it cannot find | Done |
+| 180 | **`gd` / `gw` beside `Enter`**              | core   | P1    | references, definition, and definition-without-leaving; a footnote no longer holds `Enter` hostage, and either key writes the note it cannot find | Done |
+| 181 | **`:dense off` for the horizontal page**    | tui    | P2    | 密排 is a 縱書 word; horizontally the same idea is the reading row and the margin the page does not otherwise pay for | Planned |
 
 ---
 
