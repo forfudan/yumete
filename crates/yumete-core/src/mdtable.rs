@@ -162,6 +162,29 @@ pub fn is_row(line: &str) -> bool {
     trimmed.starts_with('|') && trimmed.chars().count() > 1
 }
 
+/// Which lines of `text` are rows of a `|` table — one flag per line.
+///
+/// **Whether or not `:table` was typed.** A table in a manuscript is a table
+/// because of what it is; the guards that asked `self.table` first were off
+/// exactly when the author was editing their own documentation, which is the
+/// state a `|` table is normally in.
+///
+/// A row inside a fence is not one: `| a | b |` quoted in a code block is
+/// writing about a table, and the whole editor already agrees about that.
+pub fn row_lines(text: &str) -> Vec<bool> {
+    let mut fenced = false;
+    text.lines()
+        .map(|line| {
+            let trimmed = line.trim_start();
+            if trimmed.starts_with("```") || trimmed.starts_with("~~~") {
+                fenced = !fenced;
+                return false;
+            }
+            !fenced && is_row(line)
+        })
+        .collect()
+}
+
 /// The character positions of the unescaped `|` in a line.
 ///
 /// `\|` is the one escape a Markdown table has, and it is the whole of its

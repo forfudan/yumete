@@ -801,8 +801,23 @@ fn write_bytes_atomically(
         .duration_since(UNIX_EPOCH)
         .map(|d| d.as_nanos())
         .unwrap_or(0);
+    // **A file marked read-only stays read-only.** The rename replaces the
+    // directory entry, so the mode on the file itself never stops it — the
+    // writer has to. `chmod 444 稿子.md` is somebody saying 「這份不要動」, and
+    // the editor answered `ok` and replaced it.
+    if let Ok(from) = fs::metadata(&path) {
+        if from.permissions().readonly() {
+            return Err(io::Error::new(
+                io::ErrorKind::PermissionDenied,
+                "這個檔案是唯讀的——先 chmod，或者換個檔名存",
+            ));
+        }
+    }
     let tmp = dir.join(format!(".yumete-tmp-{}-{}", std::process::id(), nanos));
-    {
+    // Every way out of the write leaves the directory as it found it. Only the
+    // rename used to clean up after itself, so a disk-full `:w` on a 9.6 MB
+    // novel left a `.yumete-tmp-…` beside the manuscript, once per attempt.
+    let written = (|| -> io::Result<()> {
         let mut file = fs::File::create(&tmp)?;
         // The manuscript's own permissions, kept: `File::create` takes the
         // umask, so a 0600 diary came back 0644.
@@ -814,9 +829,9 @@ fn write_bytes_atomically(
         // A flush only empties this process's buffer. With the rename durable
         // and the blocks not, a power cut just after `:w` leaves zeroes — and
         // the recovery copy has already been deleted by then.
-        file.sync_all()?;
-    }
-    if let Err(err) = fs::rename(&tmp, &path) {
+        file.sync_all()
+    })();
+    if let Err(err) = written.and_then(|()| fs::rename(&tmp, &path)) {
         let _ = fs::remove_file(&tmp);
         return Err(err);
     }
@@ -829,6 +844,63 @@ fn write_bytes_atomically(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A file the writer marked read-only is not replaced, and no temporary
+    /// file is left beside it.
+    #[cfg(unix)]
+    #[test]
+    fn a_read_only_manuscript_is_not_written_over() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = std::env::temp_dir().join(format!("yumete-ro-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("locked.md");
+        fs::write(&path, "不要動\n").unwrap();
+        fs::set_permissions(&path, fs::Permissions::from_mode(0o444)).unwrap();
+
+        let err = write_file_atomically(&path, "動了\n").expect_err("a read-only file is refused");
+        assert_eq!(err.kind(), io::ErrorKind::PermissionDenied);
+        assert_eq!(fs::read_to_string(&path).unwrap(), "不要動\n");
+        let leftovers: Vec<_> = fs::read_dir(&dir)
+            .unwrap()
+            .filter_map(Result::ok)
+            .map(|e| e.file_name().to_string_lossy().to_string())
+            .filter(|n| n.starts_with(".yumete-tmp-"))
+            .collect();
+        assert!(leftovers.is_empty(), "{leftovers:?}");
+
+        fs::set_permissions(&path, fs::Permissions::from_mode(0o644)).unwrap();
+        fs::remove_dir_all(&dir).ok();
+    }
+
+    /// A write that cannot finish takes its temporary file with it.
+    #[test]
+    fn a_failed_write_leaves_nothing_behind() {
+        let dir = std::env::temp_dir().join(format!("yumete-tmpclean-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("ch1.md");
+        fs::write(&path, "第一稿\n").unwrap();
+
+        // The write itself fails: the closure gives up half way, as a full disk
+        // does.
+        let err = write_bytes_atomically(&path, |file| {
+            file.write_all("半句".as_bytes())?;
+            Err(io::Error::other("磁碟滿了"))
+        })
+        .expect_err("the write failed");
+        assert_eq!(err.to_string(), "磁碟滿了");
+        assert_eq!(fs::read_to_string(&path).unwrap(), "第一稿\n");
+        let leftovers: Vec<_> = fs::read_dir(&dir)
+            .unwrap()
+            .filter_map(Result::ok)
+            .map(|e| e.file_name().to_string_lossy().to_string())
+            .filter(|n| n.starts_with(".yumete-tmp-"))
+            .collect();
+        assert!(leftovers.is_empty(), "{leftovers:?}");
+
+        fs::remove_dir_all(&dir).ok();
+    }
 
     #[test]
     fn scratch_buffer_is_empty_and_unnamed() {

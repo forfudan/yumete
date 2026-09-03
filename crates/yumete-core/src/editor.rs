@@ -78,6 +78,10 @@ struct Hits {
 /// something other than prose is written there.
 type FoldMap = ((u64, u64), Vec<bool>, (usize, usize));
 
+/// One line's Markdown runs, against the hash of the text they were read from,
+/// keyed by the buffer that line is in and its number.
+type MarkupCache = HashMap<(u64, usize), (u64, Vec<crate::markdown::Span>)>;
+
 /// Every line's block, against the buffer it was worked out for and that
 /// buffer's revision — the two things that decide whether it is still true.
 type BlockCache = ((u64, u64), Vec<crate::markdown::Block>);
@@ -698,7 +702,11 @@ pub struct Editor {
     /// The Markdown runs of each paragraph, cached the same way and for the
     /// same reason: the renderer asks for every paragraph on screen, every
     /// frame, and the answer only changes when the paragraph does.
-    markup_cache: RefCell<HashMap<usize, (u64, Vec<crate::markdown::Span>)>>,
+    /// Keyed by the buffer's **id** and the line — see `blocks_through`.
+    /// A `HashMap<line, …>` said that line 3 of every file was the same line,
+    /// so `*強調*` in a Markdown chapter came back as emphasis in a `:syntax
+    /// text` manuscript that happened to hold the same words.
+    markup_cache: RefCell<MarkupCache>,
     /// The block of every line, against the buffer it was worked out for and
     /// that buffer's revision.
     block_cache: RefCell<Option<BlockCache>>,
@@ -1167,6 +1175,7 @@ impl Editor {
     /// had never seen.
     fn forget_the_document(&mut self) {
         self.segment_cache.borrow_mut().clear();
+        self.markup_cache.borrow_mut().clear();
         *self.md_cache.borrow_mut() = None;
         *self.block_cache.borrow_mut() = None;
         *self.fold_cache.borrow_mut() = None;
@@ -1800,10 +1809,14 @@ impl Editor {
         }
         let mut hasher = DefaultHasher::new();
         text.hash(&mut hasher);
+        // The same characters mean different things in different syntaxes, and
+        // `:syntax text` on the file in front of you is one keystroke away.
+        (self.current_buffer().syntax() as u8).hash(&mut hasher);
         let hash = hasher.finish();
 
+        let key = (self.current_buffer().id(), line);
         let mut cache = self.markup_cache.borrow_mut();
-        if let Some((cached, spans)) = cache.get(&line) {
+        if let Some((cached, spans)) = cache.get(&key) {
             if *cached == hash {
                 return spans.clone();
             }
@@ -1814,7 +1827,7 @@ impl Editor {
             // Nothing in the file means anything but itself.
             crate::syntax::Syntax::Text => Vec::new(),
         };
-        cache.insert(line, (hash, spans.clone()));
+        cache.insert(key, (hash, spans.clone()));
         spans
     }
 
@@ -2862,6 +2875,29 @@ impl Editor {
         }
     }
 
+    /// Whether joining the line the cursor is on with the one below welds two
+    /// rows of a grid together.
+    ///
+    /// **Not `table_here()`.** That asks whether `:table` is on, and a `|`
+    /// table in a manuscript is a grid whether or not anybody said so — which
+    /// is the state the author's own documentation is edited in. It is also
+    /// true one line *above* a table: joining a paragraph onto the header row
+    /// gives that row the paragraph's zero cells.
+    fn joining_welds_a_grid(&self) -> bool {
+        if self.table_here() {
+            return true;
+        }
+        let rope = self.current_buffer().rope();
+        let line = rope.char_to_line(self.cursor.min(rope.len_chars()));
+        if line + 1 >= rope.len_lines() {
+            return false;
+        }
+        // Only the lines in question, and only the fence state above them: the
+        // whole file is scanned once per `gJ`, which is a key nobody holds down.
+        let rows = crate::mdtable::row_lines(&self.current_buffer().text());
+        rows.get(line).copied().unwrap_or(false) || rows.get(line + 1).copied().unwrap_or(false)
+    }
+
     /// Whether the cursor's own line is a row of a `|` table.
     fn md_row_at_cursor(&self) -> bool {
         let rope = self.current_buffer().rope();
@@ -2950,13 +2986,13 @@ impl Editor {
             grain: Grain::Cell,
             shape: Shape::Markdown,
         });
-        self.snapshot();
         // A header with no rule under it is a table nobody can render yet —
         // and the person is standing in it, so they meant to write one. Adding
         // it is the difference between a mode that works and a mode that says
         // no to the very first table you try it on.
         let added = region.rule.is_none();
         if added {
+            self.snapshot();
             let columns = crate::mdtable::cells(&header).len();
             let row = crate::mdtable::rule_row(columns);
             let rope = self.current_buffer().rope();
@@ -2976,7 +3012,12 @@ impl Editor {
             .as_ref()
             .map(|v| v.schema.columns.len())
             .unwrap_or(0);
-        self.format_md_table();
+        // **Looking at a table does not rewrite it.** Entering used to lay the
+        // whole region out again — 45 lines of the author's own documentation,
+        // `modified` set, and `:table off` does not undo it. The padding is
+        // this editor's, not theirs, and `:wa` was one keystroke from
+        // committing a diff nobody typed. The layout is kept up *after an
+        // edit*, which is where it came from and where it belongs.
         self.snap_to_cell();
         self.status = match added {
             true => say!("表格：{0} 欄（補上了分隔行）", columns),
@@ -7418,7 +7459,7 @@ impl Editor {
             // Joining two lines of a grid makes one row with twice the fields
             // — the one thing table mode promises cannot happen. It went
             // round the two gates because it edits the rope directly.
-            Key::Char('J') if self.table_here() => {
+            Key::Char('J') if self.joining_welds_a_grid() => {
                 self.status = say!("兩行併成一行會改欄數——先 :table off");
                 return;
             }
@@ -9057,6 +9098,14 @@ impl Editor {
             self.status = say!("已經是 {0} 的注音了", dialect.name());
             return;
         };
+        // The same rule `:replace` keeps, in the sibling that rewrites just as
+        // much text: `#ruby("永", "ㄩㄥˇ")` carries a comma, so reformatting a
+        // 拆分表 whose cells hold readings gave every one of those rows an
+        // extra field — silently, in one keystroke, across the whole file.
+        if let Some(why) = self.substitution_breaks_the_grid(&formatted) {
+            self.status = why;
+            return;
+        }
         self.snapshot();
         let len = self.current_buffer().char_count();
         let buffer = self.current_buffer_mut();
@@ -9186,6 +9235,13 @@ impl Editor {
             crate::ruby::markup(&base_chars, reading, self.ruby.writer())
         };
 
+        // A reading is text, and text going into a cell obeys the cell's rule:
+        // `a,b` typed as a reading used to be written straight into the rope,
+        // past both gates, and the row it was on gained a field.
+        if let Some(why) = self.cell_refuses_text_at(Some(span.0), &text) {
+            self.status = why;
+            return;
+        }
         self.snapshot();
         let buffer = self.current_buffer_mut();
         buffer.remove(span.0..span.1);
@@ -9558,21 +9614,27 @@ impl Editor {
     /// cells it had. A substitution that only changes what is *inside* cells
     /// passes, which is the useful kind — `:%s/⿰木/⿰禾/g` over a 拆分表.
     fn substitution_breaks_the_grid(&self, rebuilt: &str) -> Option<String> {
-        let view = self.table.as_ref()?;
-        let d = view.schema.delimiter;
+        // **A table is a table whether or not `:table` was typed.** This check
+        // used to open with `self.table.as_ref()?`, so `:replace` — which
+        // reaches every file `:grep` found, including files never opened — went
+        // through 13 rows of the author's own documentation and broke them.
+        let (d, rows_only) = match self.table.as_ref() {
+            Some(view) => (view.schema.delimiter, view.shape == Shape::Markdown),
+            None => ('|', true),
+        };
         // A delimited file is all cells. A document is not: only its table
         // rows are, and a paragraph that gains a `|` has gained a character.
         // Counting the whole document refused `:%s/前文/前 | 文/` on a line
         // nowhere near the table.
-        let rows_only = view.shape == Shape::Markdown;
         let before = self.current_buffer().rope().to_string();
         // Numbered by the **document's** lines, not by the filtered list: for a
         // Markdown table the filtered index is a table-row number, and 「第 3
         // 行」 then names a line the writer cannot find.
         let count = |text: &str| -> Vec<(usize, usize)> {
+            let rows = crate::mdtable::row_lines(text);
             text.lines()
                 .enumerate()
-                .filter(|(_, l)| !rows_only || crate::mdtable::is_row(l))
+                .filter(|(n, _)| !rows_only || rows.get(*n).copied().unwrap_or(false))
                 .map(|(n, l)| {
                     // Unescaped only: `\|` is a pipe *inside* a cell, and the
                     // manual promises it works — so a substitution that adds
@@ -12343,9 +12405,15 @@ mod tests {
     #[test]
     fn a_pipe_table_is_a_grid_wherever_it_is() {
         let mut ed = with_md_table();
+        let before = ed.current_buffer().text();
         assert!(ed.enter_table(), "{}", ed.status());
-        // Entering lays it out: the columns line up on the terminal, which is
-        // what a Markdown table is supposed to look like and never does.
+        // **Looking does not rewrite.** Entering used to lay the whole region
+        // out, which marks a file modified for having been read — 45 lines of
+        // the author's own documentation, and `:table off` does not undo it.
+        assert_eq!(ed.current_buffer().text(), before, "entering changed nothing");
+        // `t t` is the tidy-up, said out loud: the columns line up on the
+        // terminal, which is what a Markdown table is supposed to look like.
+        press(&mut ed, "tt");
         assert_eq!(
             ed.current_buffer().text(),
             "前文\n| 字 | 讀音 |\n| -- | ---- |\n| 木 | mu   |\n| 目 | mu   |\n後文\n"
@@ -12403,6 +12471,7 @@ mod tests {
         let mut ed = typed("| a | 甲 |\n| --- | --- |\n| bbbb | 乙丙 |\n");
         ed.goto_line(1);
         assert!(ed.enter_table());
+        press(&mut ed, "tt");
         let widths: Vec<usize> = ed
             .current_buffer()
             .text()
@@ -12420,7 +12489,7 @@ mod tests {
         let mut ed = typed("| 字 | 讀音 |\n");
         ed.goto_line(1);
         assert!(ed.enter_table(), "{}", ed.status());
-        assert_eq!(ed.current_buffer().text(), "| 字 | 讀音 |\n| -- | ---- |\n");
+        assert_eq!(ed.current_buffer().text(), "| 字 | 讀音 |\n| --- | --- |\n");
         assert!(ed.status().contains("分隔行"), "and it says so: {}", ed.status());
     }
 
@@ -12612,7 +12681,7 @@ mod tests {
         assert_eq!(ed.current_buffer().text(), "前文\n| a | b |");
         ed.goto_line(2);
         assert!(ed.enter_table(), "{}", ed.status());
-        assert_eq!(ed.current_buffer().text(), "前文\n| a | b |\n| - | - |");
+        assert_eq!(ed.current_buffer().text(), "前文\n| a | b |\n| --- | --- |");
     }
 
     #[test]
@@ -14283,6 +14352,79 @@ mod tests {
     /// definition — and an insertion is a sequence of typed characters. So
     /// `i` `3` `.` `1` `4` Esc was refused as a definition, and `.` afterwards
     /// silently replayed an older edit into the document.
+    /// **A row's cell count does not change**, and not only at the gate.
+    ///
+    /// Four writers reached the rope without passing one: `gJ`, `:replace`,
+    /// `:s` and `:ruby format`. Three of the four asked `self.table` first, so
+    /// they were off in exactly the state a `|` table in a manuscript is
+    /// normally edited in — nobody types `:table on` to fix a typo in their own
+    /// documentation.
+    #[test]
+    fn no_writer_changes_how_many_cells_a_row_has() {
+        let table = "# 標題\n\n| 鍵 | 拆分 |\n| --- | --- |\n| 木 | 木 |\n| 林 | ⿰木木 |\n\n後面一段。\n";
+
+        // `gJ` on a table row, with table mode never turned on.
+        let mut ed = typed(table);
+        press(&mut ed, "gg");
+        for _ in 0..4 {
+            press(&mut ed, "j");
+        }
+        assert!(ed.current_buffer().line(4).unwrap().starts_with("| 木"));
+        press(&mut ed, "gJ");
+        assert!(ed.status().contains("欄數"), "{}", ed.status());
+        assert_eq!(ed.current_buffer().text(), table, "the grid is untouched");
+
+        // …and one line *above* the table: joining a paragraph onto the header
+        // gives the header the paragraph's zero cells.
+        press(&mut ed, "gg");
+        press(&mut ed, "j");
+        press(&mut ed, "gJ");
+        assert!(ed.status().contains("欄數"), "{}", ed.status());
+        assert_eq!(ed.current_buffer().text(), table);
+
+        // `:s` and `:replace` put a bare `|` into a cell.
+        let mut ed = typed(table);
+        ed.execute(":%s/木/a|b/g").ok();
+        assert_eq!(ed.current_buffer().text(), table, "{}", ed.status());
+
+        // …while a `|` in the prose around it is just a character.
+        let mut ed = typed(table);
+        ed.execute(":%s/後面/前 | 後/g").unwrap();
+        assert!(ed.current_buffer().text().contains("前 | 後"), "{}", ed.status());
+
+        // …and a `|` inside a fence is writing about a table, not a table.
+        let quoted = "```\n| 鍵 | 拆分 |\n```\n那年冬天。\n";
+        let mut ed = typed(quoted);
+        ed.execute(":%s/冬天/冬 | 天/g").unwrap();
+        assert!(ed.current_buffer().text().contains("冬 | 天"), "{}", ed.status());
+    }
+
+    /// `:ruby format` rewrites as much text as `:replace` and kept none of its
+    /// rules: `#ruby("永", "ㄩㄥˇ")` carries a comma into every cell it touches.
+    #[test]
+    fn reformatting_the_readings_does_not_reshape_a_grid() {
+        let dir = std::env::temp_dir().join(format!("yumete-rubygrid-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(dir.join(".yumete").join("tables")).unwrap();
+        std::fs::write(
+            dir.join(".yumete").join("tables").join("t.toml"),
+            "[table]\nfile = ['d.csv']\nkey = 'char'\n\
+             [[table.column]]\nname = 'char'\n[[table.column]]\nname = 'note'\n",
+        )
+        .unwrap();
+        let csv = dir.join("d.csv");
+        let source = "char,note\n永,<ruby>永<rt>ㄩㄥˇ</rt></ruby>\n和,平\n";
+        std::fs::write(&csv, source).unwrap();
+
+        let mut ed = Editor::new();
+        ed.open_file(&csv).unwrap();
+        ed.execute(":ruby format typst").unwrap();
+        assert!(ed.status().contains("格"), "{}", ed.status());
+        assert_eq!(ed.current_buffer().text(), source, "the grid is untouched");
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
     #[test]
     fn a_full_stop_typed_into_the_text_is_still_an_edit() {
         let mut ed = typed("第一行。\n第二行。\n");
