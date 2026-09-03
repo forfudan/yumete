@@ -498,6 +498,45 @@ impl ThemeConfig {
             false => self.gold_light,
         }
     }
+
+    /// A theme by name, or `None` if nothing is called that.
+    ///
+    /// Two, and they are the two arguments a scheme can make: 【墨香】 says
+    /// rank with warmth, 【黑白】 says it with nothing but weight. The second
+    /// is not a lesser version of the first — it is what a scheme looks like
+    /// when every colour has been taken away and the design has to hold
+    /// anyway, which is also what a reader with a monochrome terminal, or with
+    /// colour-blindness, is left with.
+    pub fn named(name: &str) -> Option<ThemeConfig> {
+        match name.trim().to_ascii_lowercase().as_str() {
+            "墨香" | "moxiang" => Some(ThemeConfig::default()),
+            "黑白" | "heibai" | "mono" => Some(ThemeConfig {
+                name: "黑白".to_string(),
+                // A true neutral, and no accident of temperature anywhere: the
+                // ink is off-white so it does not glare, the ground is off-
+                // black so it is not a hole in the screen.
+                dark: Ladder {
+                    ink: (0xE6, 0xE6, 0xE6),
+                    paper: (0x1E, 0x1E, 0x1E),
+                },
+                light: Ladder {
+                    ink: (0x1E, 0x1E, 0x1E),
+                    paper: (0xF6, 0xF6, 0xF6),
+                },
+                // 金 and 朱 have to go on saying what they said — 「不是正文」
+                // and 「這裏不對」 — with no hue to say it in, so they say it
+                // by *position*: 金 is brighter than the writing (nothing else
+                // on the page is), 朱 is brighter still and is the only thing
+                // that ever reaches the ends of the ladder.
+                gold_dark: (0xFF, 0xFF, 0xFF),
+                gold_light: (0x00, 0x00, 0x00),
+                mark_dark: (0xB4, 0xB4, 0xB4),
+                mark_light: (0x6E, 0x6E, 0x6E),
+                ..ThemeConfig::default()
+            }),
+            _ => None,
+        }
+    }
 }
 
 impl Default for ThemeConfig {
@@ -1113,7 +1152,17 @@ impl RawConfig {
         config.syntax.by_name = self.syntax;
         if let Some(name) = self.theme.name {
             if !name.trim().is_empty() {
-                config.theme.name = name;
+                // The name picks the whole set of anchors, and the keys below
+                // then override whichever of them the reader has an opinion
+                // about — so `name = "黑白"` plus `mark = "#…"` is a sentence.
+                let mut named = ThemeConfig::named(&name).unwrap_or_else(|| config.theme.clone());
+                named.mode = config.theme.mode.clone();
+                named.ground = config.theme.ground.clone();
+                if ThemeConfig::named(&name).is_some() {
+                    config.theme = named;
+                } else {
+                    config.theme.name = name;
+                }
             }
         }
         if let Some(mode) = self.theme.mode.as_deref().and_then(Mode::parse) {

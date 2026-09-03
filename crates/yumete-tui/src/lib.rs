@@ -601,12 +601,13 @@ fn set_theme(
     mood: Option<yumete_core::command::Mood>,
 ) -> String {
     use yumete_core::command::Mood;
-    // One theme, and the config's own name for it — a reader who renamed it is
-    // still allowed to type the name they gave it.
-    let known = ["moxiang", "墨香", config.theme.name.as_str()];
     if let Some(asked) = &name {
-        if !known.contains(&asked.as_str()) {
-            return say!("沒有這個主題：{0}", asked);
+        match yumete_config::ThemeConfig::named(asked) {
+            Some(theme) => crate::theme::choose(theme),
+            // …unless it is the name the reader gave their *own* theme in the
+            // config, which is a theme too.
+            None if asked == &config.theme.name => crate::theme::choose(config.theme.clone()),
+            None => return say!("沒有這個主題：{0}", asked),
         }
     }
     if let Some(mood) = mood {
@@ -622,7 +623,7 @@ fn set_theme(
         true => say!("深色"),
         false => say!("淺色"),
     };
-    say!("主題：{0}（{1}）", config.theme.name, mood)
+    say!("主題：{0}（{1}）", crate::theme::name(config), mood)
 }
 
 /// The shell to run a command line through.
