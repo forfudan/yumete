@@ -1437,12 +1437,33 @@ impl Editor {
         }
     }
 
+    /// Which open buffer a write to `target` would land in, if any.
+    ///
+    /// **Identity, not spelling** — see [`crate::buffer::write_target`]. Every
+    /// writer that is handed a path by the reader asks this before it writes:
+    /// a file that is open in this editor may only be replaced by the buffer
+    /// that is bound to it, stamps and all. Anything else replaces text the
+    /// editor is still holding, and the buffer goes on saying it is clean.
+    ///
+    /// Returns the buffer's index, so the caller can name it in the message.
+    fn buffer_holding(&self, target: &Path) -> Option<usize> {
+        let target = crate::buffer::write_target(target);
+        self.buffers
+            .iter()
+            .position(|b| b.path().map(crate::buffer::write_target) == Some(target.clone()))
+    }
+
     /// Write the manuscript out for somebody else to typeset (`:export`).
     ///
     /// The default name is the document's own with the extension swapped, which
     /// is what a writer means by "export this chapter"; a path given explicitly
     /// wins. A scratch buffer has no name to derive one from and must be told.
-    fn export(&mut self, format: &str, path: Option<&str>) -> Result<CommandOutcome, EditorError> {
+    fn export(
+        &mut self,
+        format: &str,
+        path: Option<&str>,
+        force: bool,
+    ) -> Result<CommandOutcome, EditorError> {
         let Some(format) = crate::export::Format::parse(format) else {
             self.status = say!("沒有「{0}」這種格式——html 或 typst", format);
             return Ok(CommandOutcome::Continue);
@@ -1461,13 +1482,31 @@ impl Editor {
             dialects: self.ruby,
             title: self.current_buffer().display_name(),
         };
-        // **Never onto the manuscript itself.** `:export typst` on a `.typ`
-        // chapter used to名 its own source — an export keeps 標題、段落、注音
-        // and nothing else, so the figures, the tables and the raw Typst were
-        // gone from the file on disk, and the message that followed pointed at
-        // `:e!`, which throws the good copy in memory away too.
-        if self.current_buffer().path() == Some(target.as_path()) {
-            self.status = say!("那是這份稿子本身——導出要另一個檔名");
+        // **Never onto a manuscript.** `:export typst` on a `.typ` chapter used
+        // to name its own source — an export keeps 標題、段落、注音 and nothing
+        // else, so the figures, the tables and the raw Typst were gone from the
+        // file on disk, and the message that followed pointed at `:e!`, which
+        // throws the good copy in memory away too.
+        //
+        // The guard used to compare the two paths as *strings*, while the
+        // writer resolves them: `main.typ` against `/…/main.typ`, or a symlink
+        // against what it points at, walked straight past it. And the chapter
+        // in danger is not only this one — any file open in this editor is
+        // being held in memory and will be saved from there.
+        if let Some(which) = self.buffer_holding(&target) {
+            self.status = match which == self.current {
+                true => say!("那是這份稿子本身——導出要另一個檔名"),
+                false => say!(
+                    "{0} 正開着——導出會蓋掉它，請另取一個檔名",
+                    self.buffers[which].display_name()
+                ),
+            };
+            return Ok(CommandOutcome::Continue);
+        }
+        // An existing file is replaced only when you say so, which is the rule
+        // `:w` keeps. The exporter is the other writer, and it did not.
+        if !force && target.exists() {
+            self.status = say!("已經有 {0} 了——`:export!` 才蓋掉它", target.display());
             return Ok(CommandOutcome::Continue);
         }
         let written = crate::export::export(&self.current_buffer().text(), format, &style);
@@ -1945,6 +1984,23 @@ impl Editor {
                 self.write_current(path.as_deref())?;
                 Ok(CommandOutcome::Continue)
             }
+            Command::SaveAs { path, force } => {
+                let target = PathBuf::from(&path);
+                // The same one rule: a file another buffer is holding may only
+                // be written by that buffer.
+                if let Some(which) = self.buffer_holding(&target) {
+                    if which != self.current {
+                        let name = self.buffers[which].display_name();
+                        self.status = say!("{0} 正開着——切過去存，或另取一個檔名", name);
+                        return Ok(CommandOutcome::Continue);
+                    }
+                }
+                self.current_buffer_mut()
+                    .save_as(target, force)
+                    .map_err(EditorError::Io)?;
+                self.status = say!("存了 {0}", self.current_buffer().display_name());
+                Ok(CommandOutcome::Continue)
+            }
             Command::WriteForce(path) => {
                 self.write_forcing(path.as_deref(), true)?;
                 Ok(CommandOutcome::Continue)
@@ -2117,7 +2173,11 @@ impl Editor {
                 Ok(CommandOutcome::Continue)
             }
             Command::CloseBuffer { force } => self.close_buffer(force),
-            Command::Export { format, path } => self.export(&format, path.as_deref()),
+            Command::Export {
+                format,
+                path,
+                force,
+            } => self.export(&format, path.as_deref(), force),
             Command::Grep(pattern) => {
                 let root = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
                 self.grep(&pattern, &root)
@@ -2346,13 +2406,45 @@ impl Editor {
     /// The same, and `force` writes over a file that changed on disk (`:w!`).
     fn write_forcing(&mut self, path: Option<&str>, force: bool) -> Result<(), EditorError> {
         let saved = match path {
-            // `:w path` writes a copy; `:w! path` writes it over whatever is
-            // already there. Neither may be stopped by the *old* file's stamp,
-            // which is what made save-as fail every time.
-            Some(p) => self
-                .current_buffer_mut()
-                .save_as(p, force)
-                .map_err(EditorError::Io),
+            // `:w path` writes a **copy** and stays here; `:w! path` writes it
+            // over whatever is already there. Rebinding this buffer to another
+            // name is `:saveas`, which says so — `:w chapter-copy.md` used to
+            // rebind silently, and every save after it went to the copy while
+            // the chapter itself stayed at the version before.
+            Some(p) => {
+                let target = PathBuf::from(p);
+                match self.buffer_holding(&target) {
+                    // Its own file, spelled another way: an ordinary save.
+                    Some(which) if which == self.current => {
+                        return self.write_forcing(None, force)
+                    }
+                    // Somebody else's file, and that somebody is holding it in
+                    // memory: a copy written here is text they will overwrite
+                    // from a buffer that still believes it is clean.
+                    Some(which) => {
+                        let name = self.buffers[which].display_name();
+                        self.status = say!("{0} 正開着——切過去存，或另取一個檔名", name);
+                        return Err(EditorError::Io(std::io::Error::other(
+                            self.status.clone(),
+                        )));
+                    }
+                    // A buffer with no name of its own takes this one, as vi
+                    // does: there is no manuscript here for the copy to be a
+                    // copy *of*, and a scratch buffer that stayed nameless
+                    // after `:w 第一章.md` would ask again at the next save.
+                    None if self.current_buffer().path().is_none() => self
+                        .current_buffer_mut()
+                        .save_as(target, force)
+                        .map_err(EditorError::Io),
+                    None => self
+                        .current_buffer()
+                        .write_copy(&target, force)
+                        .map(|()| {
+                            self.status = say!("抄了一份到 {0}", target.display());
+                        })
+                        .map_err(EditorError::Io),
+                }
+            }
             None => {
                 if self.current_buffer().path().is_none() {
                     return Err(EditorError::NoFileName);
@@ -2365,7 +2457,8 @@ impl Editor {
         // A save that said nothing was a save you could not tell from a save
         // that did not happen — and the manual has been quoting this line as
         // its example of the hint row all along.
-        if saved.is_ok() {
+        // A copy says 「抄了一份」 for itself; every other save says 存了.
+        if saved.is_ok() && !self.status.starts_with("抄") {
             self.status = say!("存了 {0}", self.current_buffer().display_name());
         }
         saved
@@ -6723,17 +6816,29 @@ impl Editor {
         // `.` mean "undo again" the moment you used it. A `:` line and a macro
         // are their own way of being repeated, and `.` repeating itself is not
         // a definition.
-        // …**anywhere in the sequence**, not only at its head. `3` then `.`
-        // is recorded as `['3', '.']`, whose first key is a digit — so `.`
-        // adopted a definition of itself, and replaying it replayed the replay:
-        // a stack overflow, which is an *abort*, so nothing unwound and every
-        // unsaved buffer went with it. Three keystrokes.
-        let excluded = self.edit_keys.iter().any(|key| {
-            matches!(
-                key,
-                Key::Char(':' | '/' | '?' | 'u' | 'U' | '.' | 'q' | 'Q') | Key::Ctrl('r')
-            )
-        });
+        // It is the **command's own key** that says which kind this is: the
+        // first key after any count digits, and nothing after it. `3` then `.`
+        // is recorded as `['3', '.']`, so looking only at the head let `.`
+        // adopt a definition of itself and replay the replay — a stack
+        // overflow, which is an *abort*, so nothing unwound and every unsaved
+        // buffer went with it. Three keystrokes.
+        //
+        // Scanning the whole sequence instead was worse in the other
+        // direction: `i` `3` `.` `1` `4` Esc — typing 3.14 into a cell — has a
+        // `.` in it, so the insertion was refused as a definition and `.`
+        // silently replayed some older edit into the document. So do neither:
+        // ask what command this was. Repeating it is guarded separately, at
+        // `repeat_edit`, which is what actually stops the recursion.
+        let excluded = self
+            .edit_keys
+            .iter()
+            .find(|key| !matches!(key, Key::Char(c) if c.is_ascii_digit()))
+            .is_some_and(|key| {
+                matches!(
+                    key,
+                    Key::Char(':' | '/' | '?' | 'u' | 'U' | '.' | 'q' | 'Q') | Key::Ctrl('r')
+                )
+            });
         if excluded || self.edit_keys.is_empty() {
             return;
         }
@@ -14163,6 +14268,149 @@ mod tests {
             ed.execute(":frobnicate"),
             Err(EditorError::Command(CommandError::Unknown(_)))
         ));
+    }
+
+    /// **A write is addressed by identity, not by spelling.**
+    ///
+    /// `main.typ`, `./main.typ`, the absolute path and a symlink pointing at it
+    /// are one manuscript. The export guard used to compare `PathBuf`s, so
+    /// three of those four spellings walked past it and 90,000 characters of a
+    /// book became an export of themselves.
+    /// `.` repeats **the edit you just made**, whatever characters it holds.
+    ///
+    /// The abort guard used to scan the whole recorded sequence for `.`, `u`,
+    /// `q` and `:` — which are the *commands* that must not become a
+    /// definition — and an insertion is a sequence of typed characters. So
+    /// `i` `3` `.` `1` `4` Esc was refused as a definition, and `.` afterwards
+    /// silently replayed an older edit into the document.
+    #[test]
+    fn a_full_stop_typed_into_the_text_is_still_an_edit() {
+        let mut ed = typed("第一行。\n第二行。\n");
+        press(&mut ed, "gg");
+        // An edit with a `.` in it — a decimal, as in a 拆分表 cell.
+        press(&mut ed, "i");
+        type_keys(&mut ed, "3.14");
+        ed.on_key(Key::Esc);
+        // …and one with a `u` and a `q` in it, which are the other two.
+        press(&mut ed, "j");
+        press(&mut ed, "i");
+        type_keys(&mut ed, "qu");
+        ed.on_key(Key::Esc);
+        assert!(ed.current_buffer().text().contains("qu"));
+
+        // `.` repeats *that*, not something from earlier in the session.
+        press(&mut ed, "j");
+        ed.on_key(Key::Char('.'));
+        let text = ed.current_buffer().text();
+        assert_eq!(text.matches("qu").count(), 2, "{text}");
+        assert_eq!(text.matches("3.14").count(), 1, "{text}");
+
+        // And the three keystrokes that used to abort the process still do not
+        // define anything: `.` after `3.` repeats the insertion, once more.
+        press(&mut ed, "3");
+        ed.on_key(Key::Char('.'));
+        let text = ed.current_buffer().text();
+        assert!(text.matches("qu").count() > 2, "{text}");
+    }
+
+    #[test]
+    fn no_writer_replaces_a_file_the_editor_is_holding() {
+        let dir = std::env::temp_dir().join(format!("yumete-ident-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let book = dir.join("main.typ");
+        let source = "= 第一章\n\n那年冬天，山下起了大雪。\n";
+        std::fs::write(&book, source).unwrap();
+
+        let mut ed = Editor::new();
+        ed.open_file(&book).unwrap();
+
+        // Every spelling of this buffer's own file.
+        let link = dir.join("draft.typ");
+        #[cfg(unix)]
+        std::os::unix::fs::symlink(&book, &link).unwrap();
+        let mut spellings = vec![book.display().to_string()];
+        #[cfg(unix)]
+        spellings.push(link.display().to_string());
+        for spelling in &spellings {
+            ed.execute(&format!(":export typst {spelling}")).unwrap();
+            assert!(
+                ed.status().contains("稿子本身") || ed.status().contains("正開着"),
+                "{spelling}: {}",
+                ed.status()
+            );
+            assert_eq!(
+                std::fs::read_to_string(&book).unwrap(),
+                source,
+                "{spelling} wrote over the manuscript"
+            );
+        }
+
+        // …and another *open* buffer's file is just as much a manuscript.
+        let other = dir.join("ch2.md");
+        std::fs::write(&other, "第二章\n").unwrap();
+        ed.open_file(&other).unwrap();
+        press(&mut ed, "gp");
+        assert_eq!(ed.current_buffer().path(), Some(book.as_path()));
+        ed.execute(&format!(":export html {}", other.display()))
+            .unwrap();
+        assert!(ed.status().contains("正開着"), "{}", ed.status());
+        assert_eq!(std::fs::read_to_string(&other).unwrap(), "第二章\n");
+
+        // An export onto a file nobody is holding still asks before it
+        // replaces one that is already there.
+        let out = dir.join("out.html");
+        std::fs::write(&out, "早就有的東西\n").unwrap();
+        ed.execute(&format!(":export html {}", out.display()))
+            .unwrap();
+        assert!(ed.status().contains("已經有"), "{}", ed.status());
+        assert_eq!(std::fs::read_to_string(&out).unwrap(), "早就有的東西\n");
+        // …and `:export!` is how you say you meant it.
+        ed.execute(&format!(":export! html {}", out.display()))
+            .unwrap();
+        assert!(ed.status().contains("寫好了"), "{}", ed.status());
+        assert!(std::fs::read_to_string(&out).unwrap().contains("那年冬天"));
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    /// `:w <path>` copies and stays; `:saveas <path>` rebinds and says so.
+    #[test]
+    fn writing_a_copy_does_not_move_the_manuscript() {
+        let dir = std::env::temp_dir().join(format!("yumete-copy-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let chapter = dir.join("ch1.md");
+        std::fs::write(&chapter, "第一稿\n").unwrap();
+
+        let mut ed = Editor::new();
+        ed.open_file(&chapter).unwrap();
+        press(&mut ed, "i");
+        type_keys(&mut ed, "改");
+        ed.on_key(Key::Esc);
+
+        let copy = dir.join("copy.md");
+        ed.execute(&format!(":w {}", copy.display())).unwrap();
+        assert!(std::fs::read_to_string(&copy).unwrap().contains('改'));
+        // The keys are still in the chapter, and so is the next `:w`.
+        assert_eq!(ed.current_buffer().path(), Some(chapter.as_path()));
+        ed.execute(":w").unwrap();
+        assert!(std::fs::read_to_string(&chapter).unwrap().contains('改'));
+
+        // The copy exists now, so a second one is a decision.
+        press(&mut ed, "i");
+        type_keys(&mut ed, "又");
+        ed.on_key(Key::Esc);
+        assert!(ed.execute(&format!(":w {}", copy.display())).is_err());
+        assert!(!std::fs::read_to_string(&copy).unwrap().contains('又'));
+
+        // `:saveas` is the one that moves house.
+        let renamed = dir.join("ch1-final.md");
+        ed.execute(&format!(":saveas {}", renamed.display())).unwrap();
+        assert_eq!(ed.current_buffer().path(), Some(renamed.as_path()));
+        assert!(std::fs::read_to_string(&renamed).unwrap().contains('又'));
+
+        std::fs::remove_dir_all(&dir).ok();
     }
 
     #[test]

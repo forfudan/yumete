@@ -157,6 +157,13 @@ pub enum Command {
     /// `:syntax [markdown|typst]` — which markup this file is in
     /// (Feature #106). No argument says what it was guessed to be.
     SetSyntax(Option<String>),
+    /// `:saveas <path>` (and `:saveas!`) — write this buffer to another file
+    /// **and go on editing that one**. `:w <path>` is the other half: a copy,
+    /// leaving the buffer where it is.
+    SaveAs {
+        path: String,
+        force: bool,
+    },
     /// `:buffer-next` / `:buffer-previous` (aliases `:bn` / `:bp`) — show
     /// another of the open buffers.
     NextBuffer,
@@ -173,10 +180,12 @@ pub enum Command {
     GotoRow(String),
     /// `:grep <pattern>` — search every file in the project.
     Grep(String),
-    /// `:export html|typst [path]` — write the manuscript out for a typesetter.
+    /// `:export html|typst [path]`, and `:export!` over a file that is
+    /// already there — write the manuscript out for a typesetter.
     Export {
         format: String,
         path: Option<String>,
+        force: bool,
     },
     /// `:ruby` — open Ruby mode on the group or selection at the cursor
     /// (Feature #65).
@@ -291,6 +300,17 @@ pub fn parse(input: &str) -> Result<Command, CommandError> {
         })),
         // `:e!` is the other half: take what is on disk and lose what is here.
         "open!" | "o!" | "edit!" | "e!" => Ok(Command::Reread),
+        // Rebinding, said out loud. `:w <path>` is a copy.
+        "saveas" | "sav" | "saveas!" | "sav!" => {
+            if rest.is_empty() {
+                Err(CommandError::MissingArgument("saveas"))
+            } else {
+                Ok(Command::SaveAs {
+                    path: rest.to_string(),
+                    force: word.ends_with('!'),
+                })
+            }
+        }
         "write" | "w" => Ok(Command::Write(if rest.is_empty() {
             None
         } else {
@@ -582,7 +602,7 @@ pub fn parse(input: &str) -> Result<Command, CommandError> {
                 value: other.to_string(),
             }),
         },
-        "export" | "ex" => {
+        "export" | "ex" | "export!" | "ex!" => {
             let mut parts = rest.splitn(2, char::is_whitespace);
             let format = parts.next().unwrap_or("").trim();
             if format.is_empty() {
@@ -595,6 +615,7 @@ pub fn parse(input: &str) -> Result<Command, CommandError> {
             Ok(Command::Export {
                 format: format.to_string(),
                 path,
+                force: word.ends_with('!'),
             })
         }
         "grep" | "gr" => {
@@ -1606,6 +1627,13 @@ pub const COMMANDS: &[Entry] = &[
         args: Args::Words(BUFFERS),
     },
     Entry {
+        name: "saveas",
+        aliases: &["sav"],
+        help: "另存成新檔並改編輯它（`:w <檔名>` 只抄一份，人還在這邊）",
+        needs: &[],
+        args: Args::Free("<檔名>"),
+    },
+    Entry {
         name: "export",
         aliases: &["ex"],
         help: "導出成 html 或 typst，排版一起帶上",
@@ -2524,6 +2552,7 @@ mod tests {
                     "g" => ":g 1".to_string(),
                     "gr" => ":gr x".to_string(),
                     "ex" => ":ex html".to_string(),
+                    "sav" => ":sav a.md".to_string(),
                     alias => format!(":{alias}"),
                 };
                 assert!(parse(&line).is_ok(), "alias {alias} does not parse");
