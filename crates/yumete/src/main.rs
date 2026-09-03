@@ -289,7 +289,7 @@ KEYS (Normal mode, Helix-style):
     Space     menu: e sidebar, o outline, f files, b buffers, / search, y copy
     C-w       move between the sidebar and the text
     gh gl gs  goto line start / end / first non-blank
-    {{ }}      previous / next paragraph — here a paragraph is a logical line
+    {{ }}       previous / next paragraph — here a paragraph is a logical line
     ( )       previous / next sentence — 。！？ and the mark that closes after
     M a  ' a  name this place / go back to it, across files
     C-o C-i   the jump list: back to where a jump came from, and forward
