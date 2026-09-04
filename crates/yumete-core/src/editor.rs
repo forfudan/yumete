@@ -4432,6 +4432,39 @@ impl Editor {
     /// twice. The rest is vi's own spelling — `o`/`O` open, `d` deletes.
     fn table_structure(&mut self, key: Key) {
         use crate::mdtable::Align;
+        // **The three that work whether or not there is a table here.** `t` is
+        // one group in every mode now, so the first thing it has to answer is
+        // 「get me into a table」 — from prose, from another table, from the top
+        // of a document whose tables are three screens down.
+        match key {
+            // `t t` — read this file as a grid, `t q` — stop.
+            Key::Char('t') => {
+                if self.table_here() {
+                    self.status = say!("已經在表格裏了——t q 退出");
+                    return;
+                }
+                if !self.enter_table() {
+                    // `enter_table` has already said why.
+                    return;
+                }
+                self.status = say!("表格模式——t q 退出");
+                return;
+            }
+            Key::Char('q') => {
+                if self.table.is_none() {
+                    self.status = say!("本來就不在表格裏");
+                    return;
+                }
+                self.leave_table();
+                return;
+            }
+            // `t ]` / `t [` — the next table in the file, and into it. A
+            // document's tables are the other thing worth walking between,
+            // and the brackets are where Helix keeps 「the next one of these」.
+            Key::Char(']') => return self.go_to_table(true),
+            Key::Char('[') => return self.go_to_table(false),
+            _ => {}
+        }
         // **誰用了它**, down the columns rather than across the lines — the
         // other axis of the same verb `g/` is in prose, and the same pair of
         // letters: `/` answers here, `?` answers in the other work area. It
@@ -4533,7 +4566,7 @@ impl Editor {
             Key::Char('<') => self.md_align(Align::Left),
             Key::Char('=') => self.md_align(Align::Center),
             Key::Char('>') => self.md_align(Align::Right),
-            Key::Char('t') => {
+            Key::Char('f') => {
                 self.snapshot();
                 self.status = if self.format_md_table() {
                     say!("對齊好了")
@@ -4542,8 +4575,59 @@ impl Editor {
                 };
             }
             Key::Esc => {}
-            _ => self.status = say!("t 後面：/ ? g s S o O n N d D j k h l y p < = > t"),
+            _ => self.status = say!("t 後面：t q / ? g f s S o O n N d D j k h l y p < = > ] ["),
         }
+    }
+
+    /// Go to the next `|` table in the file, or the previous one, and read it.
+    ///
+    /// **A document is mostly not a table**, so the way into one has to be a
+    /// key rather than a scroll: 手冊 has forty of them, and 「the one after
+    /// this」 is how a writer moves between them.
+    fn go_to_table(&mut self, forward: bool) {
+        let rope = self.current_buffer().rope();
+        let here = self.cursor_line();
+        let last = motion::last_line(rope);
+        let is_table = |line: usize| -> bool {
+            let text = rope.line(line).to_string();
+            let trimmed = text.trim_start();
+            trimmed.starts_with('|') && trimmed.trim_end().ends_with('|')
+        };
+        // Out of the table the cursor is in first, or 「next」 lands on the row
+        // below and calls it a table.
+        let mut line = here;
+        let step = |line: usize| match forward {
+            true => (line < last).then(|| line + 1),
+            false => line.checked_sub(1),
+        };
+        while is_table(line) {
+            match step(line) {
+                Some(next) => line = next,
+                None => break,
+            }
+        }
+        while !is_table(line) {
+            match step(line) {
+                Some(next) => line = next,
+                None => {
+                    self.status = match forward {
+                        true => say!("後面沒有表格了"),
+                        false => say!("前面沒有表格了"),
+                    };
+                    return;
+                }
+            }
+        }
+        // Walk to its first row, whichever direction we arrived from.
+        while line > 0 && is_table(line - 1) {
+            line -= 1;
+        }
+        self.remember_jump();
+        self.goto_line(line + 1);
+        if self.table.is_none() {
+            self.enter_table();
+        }
+        self.status = say!("第 {0} 行的表格", line + 1);
     }
 
     /// Enter a cell to type in it.
@@ -8667,14 +8751,24 @@ impl Editor {
             }
             // Helix's Space menu: the things that are not motions.
             Key::Char(' ') => self.pending = Pending::Space,
-            // In-line character search (Helix `f`/`t`/`F`/`T`).
-            Key::Char('f') | Key::Char('t') | Key::Char('F') | Key::Char('T') => {
+            // In-line character search (Helix `f`/`F`).
+            //
+            // **`t` and `T` are gone**, and `t` is the table group in every
+            // mode. One letter meant two unrelated things depending on whether
+            // the cursor happened to be inside a `|` table, which is the kind
+            // of inconsistency a reader cannot hold in their head — and vi's
+            // `t` was never reachable here anyway: this editor puts the verb
+            // last (`t，d`, not `dt，`), so till was one keystroke away from
+            // find and no more.
+            Key::Char('f') | Key::Char('F') => {
                 self.pending = Pending::Find(match key {
                     Key::Char('f') => FindKind::ForwardTo,
-                    Key::Char('t') => FindKind::ForwardTill,
-                    Key::Char('F') => FindKind::BackwardTo,
-                    _ => FindKind::BackwardTill,
+                    _ => FindKind::BackwardTo,
                 });
+                self.operator_count = operator_count;
+            }
+            Key::Char('t') => {
+                self.pending = Pending::Table;
                 self.operator_count = operator_count;
             }
             // Select (extend) mode and collapse (Helix `v` / `;`).
@@ -14357,9 +14451,10 @@ mod tests {
         // out, which marks a file modified for having been read — 45 lines of
         // the author's own documentation, and `:table off` does not undo it.
         assert_eq!(ed.current_buffer().text(), before, "entering changed nothing");
-        // `t t` is the tidy-up, said out loud: the columns line up on the
+        // `t f` is the tidy-up, said out loud: the columns line up on the
         // terminal, which is what a Markdown table is supposed to look like.
-        press(&mut ed, "tt");
+        // (`t t` is 「read this as a grid」 now — one letter, one meaning.)
+        press(&mut ed, "tf");
         assert_eq!(
             ed.current_buffer().text(),
             "前文\n| 字 | 讀音 |\n| -- | ---- |\n| 木 | mu   |\n| 目 | mu   |\n後文\n"
@@ -14417,7 +14512,7 @@ mod tests {
         let mut ed = typed("| a | 甲 |\n| --- | --- |\n| bbbb | 乙丙 |\n");
         ed.goto_line(1);
         assert!(ed.enter_table());
-        press(&mut ed, "tt");
+        press(&mut ed, "tf");
         let widths: Vec<usize> = ed
             .current_buffer()
             .text()
@@ -16896,15 +16991,14 @@ mod tests {
         assert_eq!(ed.cursor(), 6);
         assert_eq!(ed.selection(), (0, 7));
 
-        // t + 'd' from there stops one before the 'd' (index 9).
-        ed.on_key(Key::Char('t'));
-        ed.on_key(Key::Char('d'));
-        assert_eq!(ed.cursor(), 9);
+        // `t` is the table group now, in every mode — vi's till is gone, and
+        // with the verb last (`f，d`) it was one keystroke from `f` anyway.
 
         // A missing target reports and does not move.
+        let was = ed.cursor();
         ed.on_key(Key::Char('f'));
         ed.on_key(Key::Char('z'));
-        assert_eq!(ed.cursor(), 9);
+        assert_eq!(ed.cursor(), was);
         assert!(!ed.status().is_empty());
     }
 
@@ -17322,6 +17416,25 @@ mod tests {
         assert_eq!(ed.selection(), (0, 2));
         // segment_line reflects the same grouping.
         assert_eq!(ed.segment_line(0), vec![(0, 2), (2, 4)]);
+    }
+
+    #[test]
+    fn aligning_a_table_measures_what_the_terminal_draws() {
+        // 「重排對齊」 that counts characters leaves a column of 漢字 ragged:
+        // 木 is one character and two cells, and a table lines up in cells.
+        let mut ed = typed("| 字 | 拆分 | 說明 |\n| --- | --- | --- |\n| 木 | 木 | 樹 |\n| 相 | ⿰木目 | 看 |\n| a | bb | ccc |\n");
+        ed.goto_line(1);
+        assert!(ed.enter_table(), "{}", ed.status());
+        press(&mut ed, "tf");
+        let text = ed.current_buffer().text();
+        let widths: Vec<usize> = text
+            .lines()
+            .map(|line| yumete_cjk::str_width(line))
+            .collect();
+        assert!(
+            widths.windows(2).all(|w| w[0] == w[1]),
+            "every row is the same width on the terminal:\n{text}"
+        );
     }
 
     #[test]

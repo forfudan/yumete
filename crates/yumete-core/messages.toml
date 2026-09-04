@@ -876,9 +876,6 @@ en = "this column is empty"
 zh = "t 後面（這種表格）：/ ? g s S o O d j k y p"
 en = "after t, in this kind of table: / ? g s S o O d j k y p"
 
-[[message]]
-zh = "t 後面：/ ? g s S o O n N d D j k h l y p < = > t"
-en = "after t: / ? g s S o O n N d D j k h l y p < = > t"
 
 [[message]]
 zh = "取這欄／貼一欄"
@@ -2277,3 +2274,31 @@ en = "kiln: ash-glazed stoneware — kiln-ash ground, wood-ash green for the gol
 [[message]]
 zh = "靛橘：顏色只活在底色裏，正文永遠是中性灰"
 en = "complement: colour lives in the grounds only; the writing stays neutral grey"
+
+[[message]]
+zh = "t 後面：t q / ? g f s S o O n N d D j k h l y p < = > ] ["
+en = "after t: t q / ? g f s S o O n N d D j k h l y p < = > ] ["
+
+[[message]]
+zh = "已經在表格裏了——t q 退出"
+en = "already reading this as a grid — t q leaves"
+
+[[message]]
+zh = "表格模式——t q 退出"
+en = "grid mode — t q leaves"
+
+[[message]]
+zh = "本來就不在表格裏"
+en = "not reading anything as a grid"
+
+[[message]]
+zh = "後面沒有表格了"
+en = "no table after this one"
+
+[[message]]
+zh = "前面沒有表格了"
+en = "no table before this one"
+
+[[message]]
+zh = "第 {0} 行的表格"
+en = "the table on line {0}"
