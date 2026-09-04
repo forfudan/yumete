@@ -3561,6 +3561,14 @@ impl Editor {
         let header = usize::from(view.schema.header);
         let text = self.current_buffer().text();
         let ends_with_newline = text.ends_with('\n');
+        // **Whatever this file ends its lines with, it goes on ending them with
+        // it.** `str::lines` strips `\r\n` and a naive rejoin writes `\n`, so
+        // one keystroke rewrote all 123,381 lines of a Windows-authored 拆分表
+        // and nothing on the screen said so.
+        let eol = match text.contains("\r\n") {
+            true => "\r\n",
+            false => "\n",
+        };
         let mut lines: Vec<&str> = text.lines().collect();
         if lines.len() <= header + 1 {
             self.status = say!("行太少，排不了");
@@ -3601,9 +3609,9 @@ impl Editor {
             }
             std::cmp::Ordering::Equal
         });
-        let mut rebuilt = lines.join("\n");
+        let mut rebuilt = lines.join(eol);
         if ends_with_newline {
-            rebuilt.push('\n');
+            rebuilt.push_str(eol);
         }
         if rebuilt == text {
             self.status = say!("已經是這個順序了");
@@ -4539,6 +4547,13 @@ impl Editor {
         use crate::command::MarkdownBit;
         match bit {
             MarkdownBit::Footnote => {
+                // A footnote is Markdown. In a Typst book `[^1]` is four
+                // characters of nothing, and in a plain manuscript it is four
+                // characters the reader did not ask for.
+                if self.current_buffer().syntax() != crate::syntax::Syntax::Markdown {
+                    self.status = say!("這個檔案不是 Markdown——腳注在這裏只是四個字");
+                    return;
+                }
                 // **The next free number**, from the file itself: a footnote
                 // whose number is already taken is a footnote pointing at
                 // somebody else's note.
@@ -4556,7 +4571,18 @@ impl Editor {
                 // exactly this when it cannot find a note; this is the same
                 // path, asked for rather than stumbled into.
                 self.definition_preview = false;
-                self.write_note(&tag);
+                let rope = self.current_buffer().rope();
+                let end = rope.len_chars();
+                let text = self.current_buffer().text();
+                let lead = match text.ends_with("\n\n") {
+                    true => String::new(),
+                    false => match text.ends_with('\n') {
+                        true => "\n".to_string(),
+                        false => "\n\n".to_string(),
+                    },
+                };
+                let note = format!("{lead}{tag}: ");
+                self.write_the_note(end, &note, &tag);
                 self.mode = Mode::Insert;
             }
             MarkdownBit::InlineNote => {
@@ -4716,7 +4742,12 @@ impl Editor {
         out.push_str(&format!("\n## {}\n\n", say!("改")));
         for (keys, what) in [
             ("i a", say!("在光標前／後開始打字")),
-            ("x", say!("選這一行；d 刪選區，c 換掉選區")),
+            ("o O", say!("下面／上面開新的一行，直接打字")),
+            ("d c", say!("刪掉選區／換掉選區（換完就在打字了）")),
+            ("x", say!("選這一整行——小說裏一行就是一整段")),
+            ("v ;", say!("延伸模式開關／收成一個字；Esc 也退出延伸")),
+            (") (", say!("下一句／上一句")),
+            ("}} {{", say!("下一段／上一段")),
             ("y p", say!("複製／貼上")),
             ("u U", say!("撤銷／重做")),
             (".", say!("再做一次剛才那次改動")),
@@ -4750,16 +4781,17 @@ impl Editor {
         let mut out = format!("# {}\n\n", say!("中文"));
         for (keys, what) in [
             ("C-Space", say!("開／關輸入法；單獨按一下 Shift 切中英")),
-            (":scheme", say!("換方案：靈明、星陳、卿雲、日月、拼音")),
-            (":chaifen on", say!("候選詞下面顯示拆分")),
+            (":yume scheme", say!("換方案：靈明、星陳、卿雲、日月、拼音")),
+            (":yume chaifen on", say!("候選詞下面顯示拆分")),
             ("w b e", say!("詞的邊界是分詞算出來的，不是空格")),
-            (":segmentation on", say!("把分出來的詞用底色標出來")),
+            (":segment on", say!("把分出來的詞用底色標出來")),
             (":words", say!("重讀 .yumete/words.txt——這本書自己的詞")),
-            (":ruby", say!("給選中的字注音；:ruby format 統一寫法")),
+            (":ruby", say!("給選中的字注音")),
+            (":ruby format html", say!("把全篇的注音統一成一種寫法（html｜typst）")),
             (":render full", say!("所見即所得：標記只在光標那一處展開")),
             (":indent 2", say!("段首空兩格，段間的空行就收起來")),
             (":hanging on", say!("標點旁置：句讀掛在字旁邊的邊欄裏")),
-            (":count", say!("數字數——漢字、標點、西文分開數")),
+            (":count", say!("數字數：漢字多少、連標點西文一共多少、幾段")),
         ] {
             out.push_str(&format!("- `{keys}` — {what}
 "));
@@ -4773,12 +4805,12 @@ impl Editor {
             (":layout vertical", say!("轉成竪排；:layout 來回切")),
             ("h l", say!("上一縱／下一縱——縱是往左疊的")),
             ("j k", say!("沿着這一縱往下／往上")),
-            (":zong 24", say!("一縱多少字；0 是跟着窗高走")),
+            (":wrap 24", say!("一縱多少字；:wrap 0 跟着窗高走")),
             (":bands 2", say!("分幾段：一頁上下兩段，像報紙")),
-            (":hanging on", say!("標點旁置")),
-            (":tatechuyoko on", say!("縦中横：兩位數字轉正")),
+            (":hanging on", say!("標點旁置：句讀掛到字旁邊")),
             (":dense off", say!("疏排：每縱之間留一格")),
-            (":paper 10", say!("稿紙刻度：每十個字一個記號")),
+            (":indent 2", say!("段首空兩格")),
+            (":render full", say!("所見即所得：注音排出來，標記收起來")),
         ] {
             out.push_str(&format!("- `{keys}` — {what}
 "));
@@ -4834,7 +4866,33 @@ impl Editor {
         self.jumped
     }
 
-    /// Take the language command the reader asked for, if any.
+    /// **Replace the whole document**, as one undoable edit.
+    ///
+    /// What a formatter does: the buffer went out, this came back, and `u`
+    /// takes it back like any other change. Returns whether anything moved —
+    /// an edit that changes nothing must not earn an undo point.
+    ///
+    /// The cursor keeps its place by character index, clamped: a formatter
+    /// moves text about and there is no honest way to follow it, but landing
+    /// near where you were beats landing at the top.
+    pub fn replace_everything(&mut self, text: &str) -> bool {
+        if self.current_buffer().text() == text {
+            return false;
+        }
+        let at = self.cursor;
+        self.snapshot();
+        let len = self.current_buffer().char_count();
+        self.without_cell_guard(|e| {
+            e.current_buffer_mut().remove(0..len);
+            e.current_buffer_mut().insert(0, text);
+        });
+        self.set_cursor(at.min(self.current_buffer().char_count()));
+        self.clamp_cursor();
+        self.forget_the_document();
+        true
+    }
+
+    /// Take the language command the reader asked for, if any.    /// Take the language command the reader asked for, if any.
     pub fn take_language_run(&mut self) -> Option<LanguageRun> {
         self.language_run.take()
     }
@@ -4894,7 +4952,7 @@ impl Editor {
         if self.mode == Mode::Normal && self.note_tag_at_cursor().is_some() {
             return Hint::Keys(say!("腳注"), vec![
                 ("gd", say!("看這條註（沒有就寫一條）")),
-                ("Enter", say!("這個詞還在哪裏")),
+                ("g/ g?", say!("這個詞還在哪裏")),
             ]);
         }
         match self.mode {
@@ -4914,6 +4972,7 @@ impl Editor {
                             ("y Y", say!("取格／行")),
                             ("p", say!("貼")),
                             ("t", say!("表格操作")),
+                            ("t/ t?", say!("誰用了它")),
                             ("Tab", say!("改按字")),
                         ]),
                     Grain::Cell => Hint::Keys(say!("表格"), vec![
@@ -4922,12 +4981,14 @@ impl Editor {
                             ("y Y", say!("取格／行")),
                             ("p", say!("貼")),
                             ("t", say!("表格操作")),
-                            ("Enter", say!("找相關的行")),
+                            ("t/ t?", say!("誰用了它")),
+                            ("gd gw", say!("它自己那一行")),
                             ("Tab", say!("改按字")),
                         ]),
                     Grain::Char => Hint::Keys(say!("表格 · 字"), vec![
                             ("hjkl", say!("走字")),
-                            ("Enter", say!("找這個字")),
+                            ("t/ t?", say!("誰用了這個字")),
+                            ("gd gw", say!("這個字自己那一行")),
                             ("Tab", say!("改按格")),
                         ]),
                 }
@@ -6103,9 +6164,29 @@ impl Editor {
             },
         };
         let note = format!("{lead}{tag}: ");
+        // The same gate every other writer passes: a note appended to a grid
+        // gives it two one-column rows. `:markdown footnote` reaches this from
+        // a key now, so「表格裏不寫註」 has to be said here rather than assumed.
+        if let Some(why) = self.replacement_reshapes_the_grid((end, end), &note) {
+            self.status = why;
+            return;
+        }
+        if self.table_here() {
+            self.status = say!("表格裏寫不了腳注——先 :table off");
+            return;
+        }
         self.snapshot();
+        self.write_the_note(end, &note, tag);
+    }
+
+    /// The note itself, with the undo point already taken.
+    ///
+    /// **One edit, one `u`.** `:markdown footnote` writes the tag *and* the
+    /// note, and two snapshots left a `[^1]` pointing at nothing after a single
+    /// undo — so the caller takes the one snapshot that covers both.
+    fn write_the_note(&mut self, end: usize, note: &str, tag: &str) {
         let at = end;
-        self.current_buffer_mut().insert(at, &note);
+        self.current_buffer_mut().insert(at, note);
         // The other area is opened **at the end of the stub**, not at the head
         // of its line: 空格 w lands where the note is going to be typed, which
         // is the only place anybody is going next.
@@ -9749,7 +9830,7 @@ impl Editor {
         // `n` with nothing to repeat used to do nothing and say nothing, which
         // reads as a key that is broken rather than one with no answer yet.
         if self.last_search.is_empty() {
-            self.status = say!("還沒有搜索過——先用 / 搜索，或用 Enter 預覽搜索");
+            self.status = say!("還沒有搜索過——先用 / 搜索，或者選中一段按 g/");
             return;
         }
         // Jumping back after a search is the whole reason `C-o` exists: you
@@ -12774,7 +12855,10 @@ mod tests {
         ed.on_key(Key::Char('u'));
         assert!(!ed.current_buffer().text().contains("[^1]: "));
 
-        // `Enter` on the same character is the other question entirely.
+        // `g?` is the other question entirely — asked from a word, since
+        // 「還在哪裏」 needs something to be about.
+        press(&mut ed, "gg");
+        press(&mut ed, "ll");
         press(&mut ed, "g?");
         assert!(
             ed.status().contains("處") || ed.status().contains("只有"),
@@ -13106,6 +13190,58 @@ mod tests {
         assert_eq!(rows(&ed), ["甲,A,10", "乙,B,9", "丙,B,2", "丁,A,1"], "{}", ed.status());
 
         std::fs::remove_dir_all(&dir).ok();
+    }
+
+    /// 命令＋選擇＋動作: the digits inside a sequence are its argument, and
+    /// nothing leaks out of it.
+    #[test]
+    fn a_sequence_argument_belongs_to_its_own_sequence() {
+        let mut ed = typed(&(1..=40).map(|n| format!("第{n}行。\n")).collect::<String>());
+
+        // `g30g` — the sequence's own argument.
+        press(&mut ed, "gg");
+        for key in "g30g".chars() {
+            ed.on_key(Key::Char(key));
+        }
+        assert_eq!(ed.cursor_line(), 29, "{}", ed.status());
+
+        // …and it does not leak: the next `j` moves one line, not thirty.
+        let before = ed.cursor_line();
+        ed.on_key(Key::Char('j'));
+        assert_eq!(ed.cursor_line(), before + 1, "the argument was spent");
+
+        // An argument the verb does not use is dropped, not applied to
+        // something else.
+        for key in "g5h".chars() {
+            ed.on_key(Key::Char(key));
+        }
+        let line = ed.cursor_line();
+        ed.on_key(Key::Char('j'));
+        assert_eq!(ed.cursor_line(), line + 1, "still one line");
+
+        // Esc in the middle of a sequence leaves nothing behind.
+        ed.on_key(Key::Char('g'));
+        ed.on_key(Key::Char('2'));
+        ed.on_key(Key::Char('-'));
+        ed.on_key(Key::Esc);
+        assert_eq!(ed.typed_so_far(), "", "the half-typed command is gone");
+        let line = ed.cursor_line();
+        ed.on_key(Key::Char('j'));
+        assert_eq!(ed.cursor_line(), line + 1);
+
+        // The old order still works, because fifty years of fingers know it.
+        press(&mut ed, "gg");
+        for key in "30G".chars() {
+            ed.on_key(Key::Char(key));
+        }
+        assert_eq!(ed.cursor_line(), 29, "{}", ed.status());
+
+        // A count before a plain key is still a count.
+        press(&mut ed, "gg");
+        for key in "5j".chars() {
+            ed.on_key(Key::Char(key));
+        }
+        assert_eq!(ed.cursor_line(), 5);
     }
 
     #[test]

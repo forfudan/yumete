@@ -250,8 +250,8 @@ zh = "找不到：{0}"
 en = "not found: {0}"
 
 [[message]]
-zh = "還沒有搜索過——先用 / 搜索，或用 Enter 預覽搜索"
-en = "nothing has been searched for yet — / searches, Enter previews"
+zh = "還沒有搜索過——先用 / 搜索，或者選中一段按 g/"
+en = "nothing has been searched for yet — / searches, or select something and press g/"
 
 [[message]]
 zh = "把光標放進注音裏，或者選中要注音的字"
@@ -700,14 +700,6 @@ zh = "找"
 en = "find"
 
 [[message]]
-zh = "找相關的行"
-en = "find the rows this names"
-
-[[message]]
-zh = "找這個字"
-en = "find this character"
-
-[[message]]
 zh = "括號"
 en = "bracket"
 
@@ -1007,11 +999,11 @@ zh = "一行一行地找——`/` 就是它"
 en = "row by row — this is what `/` does"
 
 [[message]]
-zh = "一欄一欄地找，從第一欄的頂上開始——表格裏 Enter 就是它"
+zh = "一欄一欄地找，從第一欄的頂上開始——表格裏 t/ t? 就是它"
 en = "column by column, from the top of the first — this is what Enter does in a table"
 
 [[message]]
-zh = "找：`row` 一行一行（就是 `/`），`column` 一欄一欄（表格裏 Enter 就是它）"
+zh = "找：`row` 一行一行（就是 `/`），`column` 一欄一欄（表格裏 t/ t? 就是它）"
 en = "search: `row` runs across (that is `/`), `column` runs down (that is Enter in a table)"
 
 
@@ -1704,10 +1696,6 @@ zh = "{0}（:q 關掉；/ 可以搜）"
 en = "{0} (:q closes it; / searches)"
 
 [[message]]
-zh = "一縱多少字；0 是跟着窗高走"
-en = "how many characters a column holds; 0 follows the window"
-
-[[message]]
 zh = "上一縱／下一縱——縱是往左疊的"
 en = "previous/next column — columns stack leftwards"
 
@@ -1816,16 +1804,8 @@ zh = "數字在前是次數"
 en = "a number in front is a count"
 
 [[message]]
-zh = "數字數——漢字、標點、西文分開數"
-en = "count the characters — 漢字, punctuation and Latin counted apart"
-
-[[message]]
 zh = "格子裏：下一格／上一格"
 en = "inside a cell: next cell / previous cell"
-
-[[message]]
-zh = "標點旁置"
-en = "hanging punctuation"
 
 [[message]]
 zh = "標點旁置：句讀掛在字旁邊的邊欄裏"
@@ -1864,24 +1844,12 @@ zh = "疏排：每縱之間留一格"
 en = "loose setting: a cell of air between columns"
 
 [[message]]
-zh = "稿紙刻度：每十個字一個記號"
-en = "manuscript ticks: a mark every ten characters"
-
-[[message]]
 zh = "空格開頭的"
 en = "what Space opens"
 
 [[message]]
 zh = "竪排"
 en = "vertical writing"
-
-[[message]]
-zh = "給選中的字注音；:ruby format 統一寫法"
-en = "annotate the selection; :ruby format makes the spellings agree"
-
-[[message]]
-zh = "縦中横：兩位數字轉正"
-en = "縦中横: two digits set upright"
 
 [[message]]
 zh = "縮進／退縮進"
@@ -1930,10 +1898,6 @@ en = "where else this word is: / here, ? in the other work area"
 [[message]]
 zh = "進格子打字／清掉這一格"
 en = "type in the cell / empty it"
-
-[[message]]
-zh = "選這一行；d 刪選區，c 換掉選區"
-en = "select the line; d deletes the selection, c changes it"
 
 [[message]]
 zh = "重讀 .yumete/words.txt——這本書自己的詞"
@@ -2114,3 +2078,79 @@ en = "could not run it: {0}"
 [[message]]
 zh = "預覽：{0} 起來中……"
 en = "preview: starting {0}…"
+
+[[message]]
+zh = "它自己那一行"
+en = "the row it is about"
+
+[[message]]
+zh = "這個字自己那一行"
+en = "the row this character is about"
+
+[[message]]
+zh = "誰用了它"
+en = "who uses this"
+
+[[message]]
+zh = "誰用了這個字"
+en = "who uses this character"
+
+[[message]]
+zh = "一縱多少字；:wrap 0 跟着窗高走"
+en = "how many characters a column holds; :wrap 0 follows the window"
+
+[[message]]
+zh = "下面／上面開新的一行，直接打字"
+en = "open a line below/above and start typing"
+
+[[message]]
+zh = "刪掉選區／換掉選區（換完就在打字了）"
+en = "delete the selection / change it (and you are typing)"
+
+[[message]]
+zh = "延伸模式開關／收成一個字；Esc 也退出延伸"
+en = "extend mode on-off / collapse to one character; Esc also leaves extend"
+
+[[message]]
+zh = "所見即所得：注音排出來，標記收起來"
+en = "what you get: readings laid out, markup off the page"
+
+[[message]]
+zh = "把全篇的注音統一成一種寫法（html｜typst）"
+en = "make every reading in the file use one spelling (html or typst)"
+
+[[message]]
+zh = "數字數：漢字多少、連標點西文一共多少、幾段"
+en = "count: how many 漢字, how many characters in all, how many paragraphs"
+
+[[message]]
+zh = "標點旁置：句讀掛到字旁邊"
+en = "hanging punctuation: 句讀 sit beside the character"
+
+[[message]]
+zh = "段首空兩格"
+en = "a paragraph opens two squares in"
+
+[[message]]
+zh = "給選中的字注音"
+en = "annotate the selection with a reading"
+
+[[message]]
+zh = "選這一整行——小說裏一行就是一整段"
+en = "select the whole line — in a novel a line is a paragraph"
+
+[[message]]
+zh = "下一句／上一句"
+en = "next sentence / previous sentence"
+
+[[message]]
+zh = "下一段／上一段"
+en = "next paragraph / previous paragraph"
+
+[[message]]
+zh = "表格裏寫不了腳注——先 :table off"
+en = "a grid holds no footnotes — :table off first"
+
+[[message]]
+zh = "這個檔案不是 Markdown——腳注在這裏只是四個字"
+en = "this file is not Markdown — a footnote here is just four characters"

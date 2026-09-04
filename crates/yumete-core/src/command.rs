@@ -1195,7 +1195,7 @@ const AXIS: &[Word] = &[
     },
     Word {
         name: "column",
-        help: "一欄一欄地找，從第一欄的頂上開始——表格裏 Enter 就是它",
+        help: "一欄一欄地找，從第一欄的頂上開始——表格裏 t/ t? 就是它",
         needs: &[],
         then: Args::Free("<正則>"),
     },
@@ -1789,7 +1789,7 @@ pub const COMMANDS: &[Entry] = &[
     Entry {
         name: "search",
         aliases: &[],
-        help: "找：`row` 一行一行（就是 `/`），`column` 一欄一欄（表格裏 Enter 就是它）",
+        help: "找：`row` 一行一行（就是 `/`），`column` 一欄一欄（表格裏 t/ t? 就是它）",
         needs: &[],
         args: Args::Words(AXIS),
     },
