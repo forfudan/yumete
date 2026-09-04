@@ -752,8 +752,8 @@ zh = "注音"
 en = "reading"
 
 [[message]]
-zh = "照這欄順排／倒排"
-en = "sort by this column up / down"
+zh = "照這欄順排／倒排（t1s）"
+en = "sort by this column, up / down (t1s)"
 
 [[message]]
 zh = "移動"
@@ -879,12 +879,12 @@ zh = "這一欄是空的"
 en = "this column is empty"
 
 [[message]]
-zh = "t 後面（這種表格）：o O d j k y p"
-en = "after t, in this kind of table: o O d j k y p"
+zh = "t 後面（這種表格）：/ ? g s S o O d j k y p"
+en = "after t, in this kind of table: / ? g s S o O d j k y p"
 
 [[message]]
-zh = "t 後面：o O n N d D j k h l y p s S < = > t"
-en = "after t: o O n N d D j k h l y p s S < = > t"
+zh = "t 後面：/ ? g s S o O n N d D j k h l y p < = > t"
+en = "after t: / ? g s S o O n N d D j k h l y p < = > t"
 
 [[message]]
 zh = "取這欄／貼一欄"
@@ -2154,3 +2154,7 @@ en = "a grid holds no footnotes — :table off first"
 [[message]]
 zh = "這個檔案不是 Markdown——腳注在這裏只是四個字"
 en = "this file is not Markdown — a footnote here is just four characters"
+
+[[message]]
+zh = "去某一格（t20-20g）"
+en = "go to a cell (t20-20g)"
