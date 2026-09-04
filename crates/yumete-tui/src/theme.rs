@@ -498,6 +498,46 @@ mod tests {
         Palette::in_mood(&Config::default(), dark)
     }
 
+    /// **The grounds a reader meets on one screen are told apart.**
+    ///
+    /// Near the paper end of the ladder the rungs compress, so two grounds
+    /// sixty rungs apart can be the same colour: a table's cursor row (`head`)
+    /// against its alternating columns (`band`) measured 1.11–1.20:1 in every
+    /// theme, and a reader could not see which row they were on.
+    #[test]
+    fn the_grounds_that_meet_are_a_rung_apart() {
+        for name in ["ink", "bw", "cyanotype", "amber", "mogao", "morandi", "meridian", "kiln"] {
+            let theme = yumete_config::ThemeConfig::named(name).expect(name);
+            for dark in [true, false] {
+                let config = Config {
+                    theme: theme.clone(),
+                    ..Config::default()
+                };
+                set_dark(dark);
+                let ink = Palette::of(&config);
+                // The three that stack inside a table: the column band, the
+                // cursor's row, and a selection within it.
+                let pairs = [
+                    ("欄底 / 光標行", ink.band(), ink.at(yumete_config::rung::HEAD)),
+                    ("光標行 / 選區", ink.at(yumete_config::rung::HEAD), ink.selection()),
+                ];
+                for (what, a, b) in pairs {
+                    assert!(
+                        contrast(a, b) >= 1.24,
+                        "{name} {dark}: {what} are the same colour ({:.2}:1)",
+                        contrast(a, b)
+                    );
+                }
+                // …and the writing still reads on the loudest of them.
+                assert!(
+                    contrast(ink.text(), ink.selection()) >= 4.5,
+                    "{name} {dark}: {:.2}:1 on a selection",
+                    contrast(ink.text(), ink.selection())
+                );
+            }
+        }
+    }
+
     /// **A word boundary is not a highlighter.**
     ///
     /// Both used to be 朱 washed toward the page — 78% for `==marked==`, 91%
