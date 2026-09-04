@@ -226,7 +226,12 @@ pub struct Detail {
     pub here: String,
     /// Every field, as `(name, value)`. A name ending in `*` is worked out
     /// rather than stored.
-    pub rows: Vec<(String, String)>,
+    ///
+    /// **`None` is not the same as `Some("")`**: an empty field is a finding in
+    /// a 拆分表, and a field this row does not have at all is a *different*
+    /// finding — the row is short, and the panel that drew both as a blank was
+    /// the one place a person fixing cells by eye could not tell them apart.
+    pub rows: Vec<(String, Option<String>)>,
     /// The rows this cell points at, and whether each one exists.
     pub links: Vec<(char, Option<usize>)>,
 }
@@ -5538,11 +5543,22 @@ impl Editor {
         // which is what 「把所有用到它的地方過一遍」 means.
         self.remember_hits(spans, 0);
         self.show_table_hit();
-        if declared.is_none() {
-            self.status = say!(
-                "本表格文件未指定快速跳轉之範圍，從第一欄起搜索——第 1/{0} 處",
-                found
-            );
+        // Only when nobody said which columns: a schema's `[table.link] from`,
+        // or the number the reader just typed. `t2-10/` *is* saying so, and
+        // being told 「你沒說範圍，從第一欄找起」 about the range you named is
+        // the editor disagreeing with what it just did.
+        match (declared.is_none(), span) {
+            (true, None) => {
+                self.status = say!(
+                    "本表格文件未指定快速跳轉之範圍，從第一欄起搜索——第 1/{0} 處",
+                    found
+                );
+            }
+            (_, Some((a, b))) if a != b => {
+                self.status = say!("第 {0}–{1} 欄：第 1/{2} 處", a.min(b), a.max(b), found);
+            }
+            (_, Some((a, _))) => self.status = say!("第 {0} 欄：第 1/{1} 處", a, found),
+            (false, None) => {}
         }
     }
 
@@ -6007,7 +6023,7 @@ impl Editor {
             crate::markdown::Kind::Comment => Some(Detail {
                 title: "批注".to_string(),
                 here: String::new(),
-                rows: vec![(String::new(), text.trim_matches('%').trim().to_string())],
+                rows: vec![(String::new(), Some(text.trim_matches('%').trim().to_string()))],
                 links: Vec::new(),
             }),
             _ => {
@@ -6019,7 +6035,7 @@ impl Editor {
                     // do, so it simply reads the note back.
                     title: tag.to_string(),
                     here: String::new(),
-                    rows: vec![(String::new(), body)],
+                    rows: vec![(String::new(), Some(body))],
                     links: vec![('↩', Some(at))],
                 })
             }
@@ -6396,17 +6412,17 @@ impl Editor {
             .get(cell)
             .map(|c| format!("{:>2} {}", cell + 1, c.heading()))
             .unwrap_or_default();
-        let mut rows: Vec<(String, String)> = view
+        let mut rows: Vec<(String, Option<String>)> = view
             .schema
             .columns
             .iter()
             .enumerate()
             .filter(|(i, column)| !column.hidden || spans.get(*i).is_some())
             .map(|(i, column)| {
-                let text = spans
-                    .get(i)
-                    .map(|&s| crate::table::cell_text(&text, s))
-                    .unwrap_or_default();
+                // `None` when the row has no such field — a short row, which
+                // the grid already marks as ragged. An empty field is
+                // `Some("")`, and they are different answers to 「這一格有什麼」.
+                let text = spans.get(i).map(|&s| crate::table::cell_text(&text, s));
                 // **Numbered**, because the keys count columns: `3gd` looks in
                 // the third, `t20-20g` goes to a cell by number, and the panel
                 // is where a reader finds out which number a field is without
@@ -6427,7 +6443,7 @@ impl Editor {
             let from = value(detail.compute.column());
             rows.push((
                 format!("{}*", detail.name),
-                detail.compute.apply(&from, &view.schema.ranges),
+                Some(detail.compute.apply(&from, &view.schema.ranges)),
             ));
         }
         Some(Detail {
@@ -13404,7 +13420,7 @@ mod tests {
         }
         let d = ed.detail().expect("standing on the reference");
         assert_eq!(d.title, "[^1]");
-        assert_eq!(d.rows[0].1, "據縣志，那是丁丑年。");
+        assert_eq!(d.rows[0].1.as_deref(), Some("據縣志，那是丁丑年。"));
         assert_eq!(d.links, vec![('↩', Some(2))], "and where it is written");
 
         // A step off it and the panel is gone: it answers about *here*.
@@ -13425,7 +13441,7 @@ mod tests {
         }
         let d = ed.detail().expect("standing on the comment");
         assert_eq!(d.title, "批注");
-        assert_eq!(d.rows[0].1, "這裏要改，冬天太早了");
+        assert_eq!(d.rows[0].1.as_deref(), Some("這裏要改，冬天太早了"));
 
         // Enter goes to the note and Enter comes back — one key, because from
         // the note there is only one place you can mean.
@@ -13487,12 +13503,12 @@ mod tests {
         assert_eq!(
             d.rows,
             vec![
-                (" 1 字".to_string(), "一".to_string()),
-                (" 2 ids_y".to_string(), "⿰木目".to_string()),
-                (" 3 ids_g".to_string(), "⿰木目".to_string()),
+                (" 1 字".to_string(), Some("一".to_string())),
+                (" 2 ids_y".to_string(), Some("⿰木目".to_string())),
+                (" 3 ids_g".to_string(), Some("⿰木目".to_string())),
                 // Worked out, not stored, and marked so nobody looks for a
                 // column that is not in the file.
-                ("unicode*".to_string(), "U+4E00".to_string()),
+                ("unicode*".to_string(), Some("U+4E00".to_string())),
             ]
         );
 
