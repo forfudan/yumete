@@ -559,6 +559,14 @@ fn walk(root: &Path, f: &mut impl FnMut(&Path)) {
 /// chunks, so it costs nothing at prose speed.
 const SWAP_INTERVAL: std::time::Duration = std::time::Duration::from_secs(5);
 
+/// How often the disk is asked whether the file moved, under `:reload auto on`
+/// (Feature #214).
+///
+/// Two seconds, not five: this one answers a question the writer is *waiting*
+/// on — they alt-tabbed away, ran a script, and came back to see whether the
+/// page caught up. The cheap path is one `stat`.
+const DISK_INTERVAL: std::time::Duration = std::time::Duration::from_secs(2);
+
 /// The editor: a non-empty list of open buffers and the index of the active one.
 pub struct Editor {
     buffers: Vec<Buffer>,
@@ -915,6 +923,23 @@ pub struct Editor {
     /// Whether the writer has already been told that recovery copies cannot be
     /// written, so the status line says it once rather than every few seconds.
     swap_warned: bool,
+    /// Whether every file opened from here on is locked (Feature #213).
+    ///
+    /// What `--readonly` sets. Kept on the editor rather than handed to each
+    /// buffer at birth because `:open` opens buffers too, and a session started
+    /// to *read* a directory of chapters should not go writable at the second
+    /// file.
+    readonly_default: bool,
+    /// Whether a clean buffer re-reads itself when the file changes on disk
+    /// (Feature #214). `:reload auto on`.
+    reload_auto: bool,
+    /// When the disk was last asked about it, so a held-down `j` does not
+    /// `stat` the file a thousand times.
+    last_disk_check: Option<std::time::Instant>,
+    /// Whether the writer has already been told that the file underneath them
+    /// changed and their own edits are in the way — said once per change, not
+    /// once per keystroke.
+    reload_warned: bool,
     /// The open picker, if `Space f` or `Space b` is up (Feature #90).
     picker: Option<crate::picker::Picker>,
     /// The file sidebar, when it is showing (Feature #94).
@@ -1126,6 +1151,10 @@ impl Editor {
             autosave: true,
             last_swap: None,
             swap_warned: false,
+            readonly_default: false,
+            reload_auto: false,
+            last_disk_check: None,
+            reload_warned: false,
             compiled: RefCell::new(None),
             picker: None,
             sidebar: None,
@@ -1297,6 +1326,12 @@ impl Editor {
             return Ok(());
         }
         let mut buffer = Buffer::open(path)?;
+        // `--readonly` is about the *session*, so it locks what the session
+        // opens — not only the file named on the command line. The disk's own
+        // answer is already in there and is never overruled by this.
+        if self.readonly_default {
+            buffer.set_readonly(true);
+        }
         // A file whose name does not say what it is takes the project's word
         // for it — by extension, or by that exact name.
         if buffer.syntax_was_guessed() {
@@ -2354,16 +2389,44 @@ impl Editor {
                 self.write_forcing(path.as_deref(), true)?;
                 Ok(CommandOutcome::Continue)
             }
-            Command::Reread => {
-                if self.current_buffer().path().is_none() {
-                    return Err(EditorError::NoFileName);
+            Command::Reload { force } => {
+                self.reload(force)?;
+                Ok(CommandOutcome::Continue)
+            }
+            Command::ReloadAuto(on) => {
+                match on {
+                    Some(on) => {
+                        self.reload_auto = on;
+                        // Asked now, not at the next keystroke: turning it on
+                        // is usually a writer who already suspects the file
+                        // moved.
+                        self.last_disk_check = None;
+                        self.reload_warned = false;
+                        let word = if on { "on" } else { "off" };
+                        self.status = say!("改在外面就自動重讀：{0}", word);
+                    }
+                    None => {
+                        self.status = say!(
+                            "改在外面就自動重讀：{0}",
+                            if self.reload_auto { "on" } else { "off" }
+                        )
+                    }
                 }
-                self.current_buffer_mut().reread().map_err(EditorError::Io)?;
-                self.clamp_cursor();
-                self.markup_cache.borrow_mut().clear();
-                *self.block_cache.borrow_mut() = None;
-                self.segment_cache.borrow_mut().clear();
-                self.status = say!("重讀了 {0}", self.current_buffer().display_name());
+                Ok(CommandOutcome::Continue)
+            }
+            Command::SetReadonly(on) => {
+                match on {
+                    Some(on) => {
+                        self.current_buffer_mut().set_readonly(on);
+                        self.status = say!("唯讀：{0}", if on { "on" } else { "off" });
+                    }
+                    None => {
+                        self.status = say!(
+                            "唯讀：{0}",
+                            if self.current_buffer().is_readonly() { "on" } else { "off" }
+                        )
+                    }
+                }
                 Ok(CommandOutcome::Continue)
             }
             Command::Quit { force } => self.quit(force),
@@ -7534,6 +7597,80 @@ impl Editor {
         }
     }
 
+    // ---- Reading the file again (Feature #214) ----------------------------
+
+    /// Re-read the file from disk, throwing away what is in the buffer.
+    ///
+    /// `force` is the `!`: without it a buffer with unsaved changes is refused,
+    /// because re-reading over them is losing them and the writer has to be the
+    /// one who says so.
+    fn reload(&mut self, force: bool) -> Result<(), EditorError> {
+        if self.current_buffer().path().is_none() {
+            return Err(EditorError::NoFileName);
+        }
+        if self.current_buffer().is_modified() && !force {
+            return Err(EditorError::UnsavedChanges);
+        }
+        self.reread_now();
+        self.status = say!("重讀了 {0}", self.current_buffer().display_name());
+        Ok(())
+    }
+
+    /// Take what is on disk, and put the editor back in step with it.
+    ///
+    /// Three caches answer questions *about the whole document* and every one
+    /// of them is now about a document that is no longer here.
+    fn reread_now(&mut self) {
+        // A locked buffer is still re-readable: read-only is about **editing**
+        // it, and taking a fresh copy of the file is the one thing a reader
+        // does want.
+        if let Err(err) = self.current_buffer_mut().reread() {
+            self.status = say!("重讀不了：{0}", err.to_string());
+            return;
+        }
+        self.clamp_cursor();
+        self.markup_cache.borrow_mut().clear();
+        *self.block_cache.borrow_mut() = None;
+        self.segment_cache.borrow_mut().clear();
+        self.reload_warned = false;
+    }
+
+    /// Notice a file that changed underneath, if `:reload auto on` (Feature
+    /// #214).
+    ///
+    /// Throttled the way [`Editor::autosave_tick`] is, so this is a clock check
+    /// on most keys: `changed_underneath` costs a `stat` on the cheap path and
+    /// a whole read on the expensive one, and a held-down `j` would pay it per
+    /// row.
+    pub fn disk_tick(&mut self) {
+        if !self.reload_auto {
+            return;
+        }
+        let now = std::time::Instant::now();
+        if let Some(last) = self.last_disk_check {
+            if now.duration_since(last) < DISK_INTERVAL {
+                return;
+            }
+        }
+        self.last_disk_check = Some(now);
+        if !self.current_buffer().changed_underneath() {
+            return;
+        }
+        // **A dirty buffer is never re-read behind the writer's back.** The
+        // whole point of the setting is convenience, and there is no
+        // convenience worth an afternoon's typing: this is the one case where
+        // it stops and asks.
+        if self.current_buffer().is_modified() {
+            if !self.reload_warned {
+                self.reload_warned = true;
+                self.status = say!("檔案在外面改過了，你這裏也有改動——:reload! 丟掉你的");
+            }
+            return;
+        }
+        self.reread_now();
+        self.status = say!("外面改了，重讀了 {0}", self.current_buffer().display_name());
+    }
+
     /// Say so, on opening a file, when a newer draft is waiting.
     ///
     /// The draft is *not* loaded on its own: silently showing text that is not
@@ -10310,6 +10447,9 @@ impl Editor {
 
     /// Undo the last change to this buffer (`u` / `:undo`).
     fn undo(&mut self) {
+        if self.refuse_readonly() {
+            return;
+        }
         let at = self.cursor;
         match self.current_buffer_mut().undo(at) {
             Some(cursor) => {
@@ -10323,6 +10463,9 @@ impl Editor {
 
     /// Redo the last undone change to this buffer (`:redo`).
     fn redo(&mut self) {
+        if self.refuse_readonly() {
+            return;
+        }
         let at = self.cursor;
         match self.current_buffer_mut().redo(at) {
             Some(cursor) => {
@@ -10530,6 +10673,13 @@ impl Editor {
 
     /// Enter Insert mode, starting a fresh recording for `.` to replay.
     fn enter_insert(&mut self) {
+        // A locked buffer does not get an Insert mode to type into
+        // (Feature #213). Refusing here rather than at each keystroke is the
+        // difference between 「唯讀」 once and a status line that says it forty
+        // times while the writer works out that nothing is going in.
+        if self.refuse_readonly() {
+            return;
+        }
         // 延伸模式 is left at the door. It is a *mode* kept outside `Mode`, so
         // every operation has had to remember to clear it and some did not —
         // `v i X Esc` came back to Normal still extending, and the next `j`
@@ -11349,6 +11499,9 @@ impl Editor {
     /// calls; this is one of them, and the check lives here so that adding an
     /// eighth way in cannot reopen the hole.
     fn edit_insert(&mut self, at: usize, text: &str) -> bool {
+        if self.refuse_readonly() {
+            return false;
+        }
         if let Some(why) = self.cell_refuses_text_at(Some(at), text) {
             self.status = why;
             return false;
@@ -11445,12 +11598,54 @@ impl Editor {
     /// easily broken — `d` on an empty cell sits exactly on the delimiter, so
     /// the collapsed selection covered it and two cells became one.
     fn edit_remove(&mut self, range: std::ops::Range<usize>) -> bool {
+        if self.refuse_readonly() {
+            return false;
+        }
         if let Some(why) = self.cell_refuses_cut(range.clone()) {
             self.status = why;
             return false;
         }
         self.current_buffer_mut().remove(range);
         true
+    }
+
+    /// Say why nothing happened, when the buffer is locked (Feature #213).
+    ///
+    /// `true` means the caller must not edit. The refusal that *matters* is in
+    /// [`Buffer::insert`](crate::buffer::Buffer::insert) — the rope does not
+    /// move whatever anyone here forgets. This one exists so the writer is told:
+    /// an editor that swallows keystrokes in silence is one you stop trusting
+    /// long before you work out why.
+    fn refuse_readonly(&mut self) -> bool {
+        if !self.current_buffer().is_readonly() {
+            return false;
+        }
+        self.status = say!("唯讀——:readonly off 解開");
+        true
+    }
+
+    /// Whether the buffer on screen refuses to be edited (Feature #213).
+    ///
+    /// What draws `[唯讀]` on the status line.
+    pub fn is_readonly(&self) -> bool {
+        self.current_buffer().is_readonly()
+    }
+
+    /// Lock every file this session opens, including the ones already open
+    /// (`--readonly`).
+    pub fn set_readonly_default(&mut self, on: bool) {
+        self.readonly_default = on;
+        if on {
+            for buffer in &mut self.buffers {
+                buffer.set_readonly(true);
+            }
+        }
+    }
+
+    /// Whether a clean buffer re-reads itself when the file changes underneath
+    /// it (Feature #214).
+    pub fn reload_auto(&self) -> bool {
+        self.reload_auto
     }
 
     /// Insert `text` at the cursor and advance past it.
@@ -14573,12 +14768,256 @@ mod tests {
         );
         assert!(ed.execute("w").is_ok(), "and the save goes through quietly");
 
-        // `:e!` is the other half: take what is on disk and lose what is here.
+        // `:reload!` is the other half: take what is on disk and lose what is
+        // here.
         std::fs::write(&file, "外面的版本\n").unwrap();
-        assert!(ed.execute("e!").is_ok());
+        assert!(ed.execute("reload!").is_ok());
         assert_eq!(ed.current_buffer().text(), "外面的版本\n");
         assert!(!ed.current_buffer().is_modified());
         assert!(ed.execute("w").is_ok(), "and saving is fine again");
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    // ---- Read-only, and reading again (Features #213 / #214) --------------
+
+    /// #213: one gate, and everything is behind it.
+    ///
+    /// The point of putting the refusal in `Buffer::insert`/`remove` rather
+    /// than in each command is that a path nobody thought about is still
+    /// refused. So this presses the ones that reach the rope by different
+    /// routes: Insert mode, `x`, `d`, `o` (which goes round the cell guard),
+    /// paste, and `u`.
+    #[test]
+    fn a_locked_buffer_refuses_every_way_in() {
+        let mut ed = Editor::new();
+        ed.current_buffer_mut().insert(0, "一二三\n四五六\n");
+        ed.current_buffer_mut().set_readonly(true);
+        let before = ed.current_buffer().text();
+        // Set up by hand, so it is already dirty; what matters is that nothing
+        // below makes it *any* dirtier.
+        let dirty = ed.current_buffer().is_modified();
+
+        press(&mut ed, "i");
+        assert_eq!(ed.mode(), Mode::Normal, "Insert mode is not even entered");
+        assert!(ed.status().contains("唯讀"), "{}", ed.status());
+        ed.on_key(Key::Char('甲'));
+        assert_eq!(
+            ed.current_buffer().text(),
+            before,
+            "{}",
+            ed.current_buffer().text()
+        );
+
+        // Each of these is checked twice: once on a buffer that is *not*
+        // locked, to prove the keystroke edits at all — a list of keys that do
+        // nothing anywhere would pass the locked half and prove nothing — and
+        // once on the locked one.
+        for keys in ["d", "yp", "o", "O", "a甲", "c甲", "i甲"] {
+            let mut open = Editor::new();
+            open.current_buffer_mut().insert(0, "一二三\n四五六\n");
+            press(&mut open, "gg");
+            press(&mut open, keys);
+            open.on_key(Key::Esc);
+            assert_ne!(
+                open.current_buffer().text(),
+                before,
+                "`{keys}` does not edit even an unlocked buffer — bad test"
+            );
+
+            ed.set_status(String::new());
+            press(&mut ed, "gg");
+            press(&mut ed, keys);
+            ed.on_key(Key::Esc);
+            assert_eq!(
+                ed.current_buffer().text(),
+                before,
+                "`{keys}` moved a locked buffer"
+            );
+        }
+
+        // …and going *back* is still moving it.
+        press(&mut ed, "u");
+        assert_eq!(ed.current_buffer().text(), before);
+        assert!(ed.status().contains("唯讀"), "{}", ed.status());
+        assert_eq!(
+            ed.current_buffer().is_modified(),
+            dirty,
+            "and nothing marked it changed"
+        );
+
+        // …and unlocking gives it all back.
+        assert!(ed.execute("readonly off").is_ok());
+        press(&mut ed, "ggi");
+        assert_eq!(ed.mode(), Mode::Insert, "unlocked, the door opens again");
+        ed.on_key(Key::Char('甲'));
+        assert!(
+            ed.current_buffer().text().starts_with('甲'),
+            "{}",
+            ed.current_buffer().text()
+        );
+    }
+
+    /// #213: `:readonly` with no word asks rather than sets.
+    #[test]
+    fn readonly_says_which_way_it_is() {
+        let mut ed = Editor::new();
+        assert!(ed.execute("readonly").is_ok());
+        assert!(ed.status().contains("off"), "{}", ed.status());
+        assert!(ed.execute("ro on").is_ok());
+        assert!(ed.is_readonly());
+        assert!(ed.execute("readonly").is_ok());
+        assert!(ed.status().contains("on"), "{}", ed.status());
+        // A word that is neither is a mistake, not a toggle.
+        assert!(ed.execute("readonly 也許").is_err());
+    }
+
+    /// #213: `--readonly` locks the ones already open *and* the next one.
+    #[test]
+    fn the_readonly_flag_is_about_the_session_not_one_file() {
+        let dir = std::env::temp_dir().join(format!("yumete-ro-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let a = dir.join("a.md");
+        let b = dir.join("b.md");
+        std::fs::write(&a, "甲\n").unwrap();
+        std::fs::write(&b, "乙\n").unwrap();
+
+        let mut ed = Editor::new();
+        ed.open_file(&a).unwrap();
+        ed.set_readonly_default(true);
+        assert!(ed.is_readonly(), "the one already open");
+        ed.open_file(&b).unwrap();
+        assert!(ed.is_readonly(), "and the next one `:open` reaches for");
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    /// #213: the disk's own answer, read at open rather than at `:w`.
+    #[cfg(unix)]
+    #[test]
+    fn a_file_the_disk_calls_read_only_comes_up_locked() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = std::env::temp_dir().join(format!("yumete-ro444-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let file = dir.join("別動.md");
+        std::fs::write(&file, "這一份不要改\n").unwrap();
+        std::fs::set_permissions(&file, std::fs::Permissions::from_mode(0o444)).unwrap();
+
+        let mut ed = Editor::new();
+        ed.open_file(&file).unwrap();
+        assert!(ed.is_readonly(), "read at open, not discovered at :w");
+        press(&mut ed, "i");
+        ed.on_key(Key::Char('改'));
+        assert_eq!(ed.current_buffer().text(), "這一份不要改\n");
+
+        // …and a file that does not exist yet is *unwritten*, not read-only.
+        ed.open_file(dir.join("還沒寫.md")).unwrap();
+        assert!(!ed.is_readonly());
+
+        std::fs::set_permissions(&file, std::fs::Permissions::from_mode(0o644)).ok();
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    /// #213 × #214: locked is about *editing*. Taking a fresh copy of the file
+    /// is the one thing a reader does want.
+    #[test]
+    fn a_locked_buffer_can_still_be_re_read() {
+        let dir = std::env::temp_dir().join(format!("yumete-rorl-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let file = dir.join("表.txt");
+        std::fs::write(&file, "第一版\n").unwrap();
+
+        let mut ed = Editor::new();
+        ed.open_file(&file).unwrap();
+        ed.current_buffer_mut().set_readonly(true);
+        std::fs::write(&file, "第二版\n").unwrap();
+        assert!(ed.execute("reload").is_ok());
+        assert_eq!(ed.current_buffer().text(), "第二版\n");
+        assert!(ed.is_readonly(), "and it is still locked afterwards");
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    /// #214: `:reload` will not take your afternoon; `:reload!` will, and says
+    /// so in its name.
+    #[test]
+    fn reload_stops_at_unsaved_changes_and_the_bang_does_not() {
+        let dir = std::env::temp_dir().join(format!("yumete-rl-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let file = dir.join("章.md");
+        std::fs::write(&file, "原稿\n").unwrap();
+
+        let mut ed = Editor::new();
+        ed.open_file(&file).unwrap();
+        press(&mut ed, "i");
+        ed.on_key(Key::Char('改'));
+        ed.on_key(Key::Esc);
+        assert!(ed.current_buffer().is_modified());
+
+        std::fs::write(&file, "外面的版本\n").unwrap();
+        assert!(
+            ed.execute("reload").is_err(),
+            "unsaved changes are in the way"
+        );
+        assert!(ed.current_buffer().text().contains('改'), "and still here");
+
+        assert!(ed.execute("reload!").is_ok());
+        assert_eq!(ed.current_buffer().text(), "外面的版本\n");
+        assert!(!ed.current_buffer().is_modified());
+
+        // A buffer with no file has nothing to re-read.
+        let mut scratch = Editor::new();
+        assert!(scratch.execute("reload").is_err());
+
+        // `:e!` and `:o!` are gone outright — no alias, no hint.
+        assert!(ed.execute("e!").is_err());
+        assert!(ed.execute("o!").is_err());
+        assert!(ed.execute("edit!").is_err());
+        assert!(ed.execute("open!").is_err());
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    /// #214: the automatic half takes a clean buffer and never a dirty one.
+    #[test]
+    fn auto_reload_takes_a_clean_buffer_and_only_warns_about_a_dirty_one() {
+        let dir = std::env::temp_dir().join(format!("yumete-rlauto-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let file = dir.join("同步中.md");
+        std::fs::write(&file, "第一版\n").unwrap();
+
+        let mut ed = Editor::new();
+        ed.open_file(&file).unwrap();
+        // Off by default: nothing happens on its own until it is asked for.
+        std::fs::write(&file, "第二版\n").unwrap();
+        ed.disk_tick();
+        assert_eq!(ed.current_buffer().text(), "第一版\n", "off by default");
+
+        assert!(ed.execute("reload auto on").is_ok());
+        ed.disk_tick();
+        assert_eq!(ed.current_buffer().text(), "第二版\n", "clean, so it reads");
+        assert!(ed.status().contains("外面改了"), "{}", ed.status());
+
+        // Now type into it, and let the file move again.
+        press(&mut ed, "i");
+        ed.on_key(Key::Char('我'));
+        ed.on_key(Key::Esc);
+        std::fs::write(&file, "第三版\n").unwrap();
+        // Re-asking for the setting also resets the clock, which is what a
+        // writer who just turned it on means by turning it on.
+        assert!(ed.execute("reload auto on").is_ok());
+        ed.disk_tick();
+        assert!(
+            ed.current_buffer().text().contains('我'),
+            "a dirty buffer is never read over: {}",
+            ed.current_buffer().text()
+        );
+        assert!(ed.status().contains("丟掉你的"), "{}", ed.status());
+
+        assert!(ed.execute("reload auto off").is_ok());
+        assert!(!ed.reload_auto());
+        assert!(ed.execute("reload auto").is_ok());
+        assert!(ed.status().contains("off"), "{}", ed.status());
 
         std::fs::remove_dir_all(&dir).ok();
     }
@@ -15242,7 +15681,7 @@ mod tests {
         // A clean table says so and opens nothing.
         std::fs::write(&csv, "char,ids\n木,木\n目,目\n").unwrap();
         ed.open_file(&csv).unwrap();
-        ed.execute("e!").ok();
+        ed.execute("reload!").ok();
         let buffers = ed.buffer_count();
         assert!(ed.execute("table check").is_ok());
         assert!(ed.status().contains("沒查出問題"), "{}", ed.status());

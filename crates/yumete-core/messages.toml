@@ -2392,7 +2392,7 @@ en = "candidate panel: {0}"
 
 [[message]]
 zh = "候選框"
-en = "候選框"
+en = "the bordered list (候選框)"
 
 [[message]]
 zh = "行內預覽"
@@ -2405,3 +2405,43 @@ en = "panel {0}"
 [[message]]
 zh = "沒有「{0}」這種候選面板——full、bare"
 en = "no candidate panel '{0}' — full, bare"
+
+# Feature #213 — 唯讀
+
+[[message]]
+zh = "唯讀——:readonly off 解開"
+en = "read-only — `:readonly off` unlocks it"
+
+[[message]]
+zh = "唯讀：{0}"
+en = "read-only: {0}"
+
+[[message]]
+zh = "唯讀：鎖住這一份，不許改"
+en = "read-only: lock this one against editing"
+
+# Feature #214 — 重讀
+
+[[message]]
+zh = "把檔案再讀一遍；加 ! 是丟掉你這裏的改動"
+en = "read the file again; ! throws away what you changed here"
+
+[[message]]
+zh = "檔案在外面改了就自己重讀——你這裏有改動時只提醒，不動手"
+en = "re-read by itself when the file changes outside — a warning, not a re-read, when you have changes of your own"
+
+[[message]]
+zh = "改在外面就自動重讀：{0}"
+en = "auto re-read on outside change: {0}"
+
+[[message]]
+zh = "檔案在外面改過了，你這裏也有改動——:reload! 丟掉你的"
+en = "the file changed outside and you have changes too — `:reload!` throws yours away"
+
+[[message]]
+zh = "外面改了，重讀了 {0}"
+en = "changed outside; re-read {0}"
+
+[[message]]
+zh = "重讀不了：{0}"
+en = "cannot re-read: {0}"

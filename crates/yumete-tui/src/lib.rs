@@ -183,6 +183,11 @@ fn frame_to(
         editor.set_wrap_width((page.width as usize).saturating_sub(gutter));
         editor.set_page(page.height as usize, page.width.max(1) as usize);
     }
+    // …and the candidate goes into the text, the same last step the loop takes
+    // before it draws. Without it `--shot` cannot photograph `bare` at all —
+    // and a picture is how this repo reviews anything that touches the front
+    // end.
+    settle_inline_candidate(editor, ime);
     terminal
         .draw(|frame| draw(frame, editor, config, ime, &mut viewport))
         .expect("draw one frame");
@@ -577,6 +582,9 @@ pub fn run(
                 // Keep a recovery copy of anything unsaved (Feature #79).
                 // Throttled inside, so this is a clock check on most keys.
                 editor.autosave_tick();
+                // …and ask the disk whether the file moved under us
+                // (Feature #214). Throttled inside too, and off by default.
+                editor.disk_tick();
                 if let Some((name, mood)) = editor.take_theme_request() {
                     editor.set_status(set_theme(config, name, mood));
                 }
@@ -1434,13 +1442,28 @@ fn settle_inline_candidate(editor: &mut Editor, ime: &ImeSession) {
 fn inline_candidate(editor: &Editor, ime: &ImeSession) -> String {
     if ime.panel_is_full()
         || !composes(editor.mode())
-        || editor.prompt().is_some()
+        || !page_can_hold_a_candidate(editor)
         || !ime.available()
         || !ime.is_composing()
     {
         return String::new();
     }
     ime.inline_candidate()
+}
+
+/// Whether what is on screen is a page that ghost text can be drawn into.
+///
+/// The two gates — panel or inline — are complementary, and this is the term
+/// they share, so there can be no state that draws both and none that draws
+/// neither. Two things on screen are not that page:
+///
+/// * a **prompt**, which composes on the status line;
+/// * a **grid**, which `table::draw` renders cell by cell out of the cells
+///   themselves and knows nothing about ghost runs (that is #212's job).
+///
+/// In both, `bare` gives the panel back rather than showing nothing at all.
+fn page_can_hold_a_candidate(editor: &Editor) -> bool {
+    editor.prompt().is_none() && !editor.table().is_some_and(|t| t.is_grid())
 }
 
 /// Switch the IME to the named scheme, and say what happened.
@@ -1952,9 +1975,9 @@ fn draw(
     }
 
     // `bare` draws no panel — the candidate is already in the sentence and the
-    // code is under the caret. A prompt is the exception: it composes on the
-    // status line, which has no page to draw a candidate into.
-    let panel = ime.panel_is_full() || editor.prompt().is_some();
+    // code is under the caret. Unless there is no sentence to draw it into:
+    // see `page_can_hold_a_candidate`.
+    let panel = ime.panel_is_full() || !page_can_hold_a_candidate(editor);
     if panel && composes(editor.mode()) && ime.available() && ime.is_composing() {
         // The panel follows the page, not the prompt: a `/` search in a
         // vertically set document still picks its candidates out of a vertical
@@ -2126,24 +2149,17 @@ fn draw_list(
     );
 }
 
-/// The **HUD**: what you have typed, beside the caret.
-///
-/// The status line's right edge is where vi has always put this, and it is
-/// twenty rows from where the eyes are. So it is drawn twice: there, and here,
-/// one row under the caret — small, 金 on the band, and gone the moment the
-/// command completes.
-///
-/// Normal mode only. While prose is being typed nothing may flicker beside the
-/// characters, and in Insert there is no command being built anyway.
 /// What the mark under the caret says: a half-typed command, or a half-typed
 /// code (Feature #211).
 ///
-/// Two callers with one answer — this row and the status line's right edge —
+/// Two callers with one answer — the HUD row and the status line's right edge —
 /// so the two surfaces can never disagree about what is being typed.
 ///
 /// They cannot both be true at once: `typed_so_far` is Normal mode's, and a
 /// composition is Insert's. In `full` the code is the panel's first row and
-/// this stays empty, which is why the mark is not simply always drawn.
+/// this stays empty, which is why the mark is not simply always drawn — in
+/// Normal, while prose is being typed, nothing may flicker beside the
+/// characters.
 fn hud_line(editor: &Editor, ime: &ImeSession) -> String {
     if editor.prompt().is_some() {
         return String::new();
@@ -2159,6 +2175,12 @@ fn hud_line(editor: &Editor, ime: &ImeSession) -> String {
     }
 }
 
+/// The **HUD**: what you have typed, beside the caret.
+///
+/// The status line's right edge is where vi has always put this, and it is
+/// twenty rows from where the eyes are. So it is drawn twice: there, and here,
+/// one row under the caret — small, 金 on the band, and gone the moment the
+/// command completes. What it says is [`hud_line`]'s to decide.
 fn draw_hud(
     frame: &mut Frame,
     editor: &Editor,
@@ -3660,6 +3682,10 @@ fn draw_status(
         } else {
             ""
         };
+        // Locked, and said so standing (Feature #213). A writer who cannot type
+        // needs to know that from the screen and not from the status line's
+        // memory of a refusal three keystrokes ago.
+        let locked = if buffer.is_readonly() { " [唯讀]" } else { "" };
         // In Insert mode with the IME available, show the 中/英 state + scheme.
         let ime_tag = match language_tag(editor, ime).as_str() {
             "" => String::new(),
@@ -3682,11 +3708,12 @@ fn draw_status(
             false => "",
         };
         let left = format!(
-            "-- {} --  {}{}{}{}{}{}",
+            "-- {} --  {}{}{}{}{}{}{}",
             editor.mode_label(),
             ime_tag,
             buffer.display_name(),
             dirty,
+            locked,
             draft,
             preview,
             which
@@ -5327,6 +5354,33 @@ mod tests {
         // status line's right edge.
         assert_eq!(hud_line(&editor, &ime), "b");
         assert!(rows.iter().any(|r| r.contains("╰ b")), "{rows:#?}");
+    }
+
+    /// #213: a locked buffer says so standing, not once.
+    #[test]
+    fn a_locked_buffer_wears_it_on_the_status_line() {
+        let mut editor = Editor::new();
+        editor.current_buffer_mut().insert(0, "讀一讀\n");
+        let config = Config::default();
+
+        let rows = |editor: &Editor| -> String {
+            let buffer = render(editor, &config, 60, 6);
+            (0..buffer.area.height)
+                .map(|y| {
+                    (0..buffer.area.width)
+                        .map(|x| buffer[(x, y)].symbol())
+                        .collect::<String>()
+                })
+                .collect::<Vec<_>>()
+                .join("\n")
+                // A wide 字 fills two cells, so the second is a blank the
+                // renderer owns; squeezing them out is how you ask what the
+                // line *says*.
+                .replace(' ', "")
+        };
+        assert!(!rows(&editor).contains("唯讀"));
+        editor.current_buffer_mut().set_readonly(true);
+        assert!(rows(&editor).contains("[唯讀]"), "{}", rows(&editor));
     }
 
     /// #211: `Tab` is the way back to the whole list, for one word.

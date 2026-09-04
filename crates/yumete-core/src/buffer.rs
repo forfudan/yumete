@@ -98,6 +98,14 @@ pub struct Buffer {
     seen: Option<(u64, std::time::SystemTime)>,
     /// Where a buffer with no file keeps its recovery copy.
     scratch_swap: Option<PathBuf>,
+    /// Whether this buffer refuses to be edited (Feature #213).
+    ///
+    /// Per buffer, not per editor: read-only is a property of the *document* —
+    /// a reference 碼表 opened beside a chapter is not to be typed into, and
+    /// the chapter is. Set by `:readonly on`, by `--readonly`, and by the disk
+    /// itself when the file's permissions say so — which until now was only
+    /// discovered at `:w`, after an afternoon of typing.
+    readonly: bool,
     /// …and a hash of the text that was there.
     ///
     /// The stamp above is the fast question — "might this have changed?" — and
@@ -175,6 +183,7 @@ impl Buffer {
             seen: None,
             read_as: None,
             scratch_swap: None,
+            readonly: false,
         }
     }
 
@@ -205,6 +214,7 @@ impl Buffer {
             seen: None,
             read_as: None,
             scratch_swap: None,
+            readonly: false,
         }
     }
 
@@ -250,7 +260,28 @@ impl Buffer {
             seen: stamp_of(path),
             read_as,
             scratch_swap: None,
+            // **What the disk says, asked now rather than at `:w`.** A file
+            // somebody `chmod 444`-ed is one they meant nobody to change, and
+            // finding that out after an afternoon of typing is the whole
+            // complaint. A file that does not exist yet is not read-only — it
+            // is unwritten.
+            readonly: fs::metadata(path).is_ok_and(|m| m.permissions().readonly()),
         })
+    }
+
+    /// Whether this buffer refuses to be edited (Feature #213).
+    pub fn is_readonly(&self) -> bool {
+        self.readonly
+    }
+
+    /// Lock the buffer against editing, or unlock it.
+    ///
+    /// Unlocking is allowed even for a file the disk calls read-only: the
+    /// editor is not the permission system, and a writer who says
+    /// `:readonly off` is saying they will deal with the save when they get
+    /// there. [`write_file_atomically`] still refuses, and says why.
+    pub fn set_readonly(&mut self, on: bool) {
+        self.readonly = on;
     }
 
     /// Whether the file has changed since this buffer last read or wrote it.
@@ -357,7 +388,15 @@ impl Buffer {
     ///
     /// Indices are counted in `char`s (Unicode scalar values), consistent with
     /// [`TextStore::char_count`]. Panics if `char_idx` is out of bounds.
+    /// A read-only buffer is not moved (Feature #213). This is the *backstop*,
+    /// not the message: [`Editor`](crate::editor::Editor) refuses earlier and
+    /// says why. It lives here because this is the one place the rope moves,
+    /// so no path — a table reflow, `:s`, a filter, a feature written next
+    /// year — can get around it by not knowing about it.
     pub fn insert(&mut self, char_idx: usize, text: &str) {
+        if self.readonly {
+            return;
+        }
         self.earn_snapshot();
         self.rope.insert(char_idx, text);
         self.modified = true;
@@ -366,7 +405,11 @@ impl Buffer {
 
     /// Remove the characters in `range` (a half-open range of `char` indices),
     /// marking the buffer modified. Panics if the range is out of bounds.
+    /// A read-only buffer is not moved; see [`Buffer::insert`].
     pub fn remove(&mut self, range: Range<usize>) {
+        if self.readonly {
+            return;
+        }
         self.earn_snapshot();
         self.rope.remove(range);
         self.modified = true;
@@ -485,7 +528,7 @@ impl Buffer {
             .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "buffer has no file name"))?;
         if !force && self.changed_underneath() {
             return Err(io::Error::other(
-                "這個檔案在外面被改過了——`:e!` 讀它的，`:w!` 用你的",
+                "這個檔案在外面被改過了——`:reload!` 讀它的，`:w!` 用你的",
             ));
         }
         self.write_atomically(&path)?;
@@ -620,6 +663,11 @@ impl Buffer {
     /// Step back one undo point, returning the cursor position it was taken at,
     /// or `None` when there is nothing left to undo.
     pub fn undo(&mut self, cursor: usize) -> Option<usize> {
+        // Read-only means the text does not move, and going *back* is still
+        // moving it (Feature #213). The editor refuses first, with a reason.
+        if self.readonly {
+            return None;
+        }
         // A point nobody earned is not a place to go back to.
         self.history.pending = None;
         let prev = self.history.undo.pop()?;
@@ -632,6 +680,9 @@ impl Buffer {
 
     /// Step forward one undo point, returning the cursor position to restore.
     pub fn redo(&mut self, cursor: usize) -> Option<usize> {
+        if self.readonly {
+            return None;
+        }
         let next = self.history.redo.pop()?;
         self.history.undo.push(self.here(cursor));
         self.revision += 1;
