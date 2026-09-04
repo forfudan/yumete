@@ -10,6 +10,7 @@ and commands do, how vertical layout works, and how to configure it.
 feature roadmap.
 
 > Licensed under the **Apache License 2.0** — see [LICENSE](LICENSE).
+> What changed lately is in **[CHANGELOG.md](CHANGELOG.md)**.
 
 ---
 
