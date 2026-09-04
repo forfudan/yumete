@@ -2110,3 +2110,7 @@ en = "your text was left alone: {0}"
 [[message]]
 zh = "跑不動：{0}"
 en = "could not run it: {0}"
+
+[[message]]
+zh = "預覽：{0} 起來中……"
+en = "preview: starting {0}…"
