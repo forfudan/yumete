@@ -389,8 +389,10 @@ impl ImeSession {
     /// Every entry of the data set that did not make it into the engine, and
     /// why (Feature #220).
     ///
-    /// In manifest order, so the essential tables come before the optional
-    /// ones. Most of it is [`DataFault::Missing`] on a normal install; see
+    /// In the order they were tried, which is the manifest's — the shared
+    /// files, then the scheme's own. That is a load order, not a ranking:
+    /// `required` is a flag on the entry, not a place in the list. Most of it
+    /// is [`DataFault::Missing`] on a normal install; see
     /// [`DataProblem::is_loud`] for the part worth showing.
     pub fn problems(&self) -> &[DataProblem] {
         &self.problems
@@ -949,11 +951,30 @@ binary_reasons!(
 /// scheme's own.
 ///
 /// `yume_core::data_manifest` is the one place that says so, and this hands it
-/// on to a frontend that has no yume-core of its own to ask.
+/// on to a frontend that has no yume-core of its own to ask. It is also what
+/// [`build_engine`] walks, so what a caller inspects is exactly what was
+/// loaded.
+///
+/// **An entry that appears twice is loaded once.** The two halves of the
+/// manifest overlap on purpose: `shared()` carries `data/pinyin.yflb` and
+/// `for_scheme` appends a reading table to every scheme that did not name one
+/// of its own — which, for the 形碼 schemes, is that same file. Parsing 13 MB
+/// twice to end at the same table is a second or so of startup for nothing.
+/// Only an *identical* entry is dropped: a scheme with a reading table of its
+/// own names a different file, and it still loads last and still wins.
 pub fn data_set(scheme: Scheme) -> Vec<DataFile> {
+    let mut seen: Vec<(DataKind, String, String, i32)> = Vec::new();
     data_manifest::shared()
         .into_iter()
         .chain(data_manifest::for_scheme(scheme.tag()))
+        .filter(|f| {
+            let key = (f.kind, f.file.clone(), f.aux.clone(), f.slot);
+            let fresh = !seen.contains(&key);
+            if fresh {
+                seen.push(key);
+            }
+            fresh
+        })
         .collect()
 }
 
@@ -982,8 +1003,12 @@ pub fn expected_magic(kind: DataKind) -> Option<&'static [u8]> {
 /// worse than no mismatch at all, because it looks like the answer.
 fn magic_mismatch(path: &Path, kind: DataKind) -> Option<MagicMismatch> {
     let want = expected_magic(kind)?;
-    let bytes = std::fs::read(path).ok()?;
-    let head = bytes.get(..want.len())?;
+    // The head, not the file: some of these are tens of megabytes, and this
+    // runs on the failing path of a load that has already read them once.
+    let mut head = vec![0u8; want.len()];
+    let mut file = std::fs::File::open(path).ok()?;
+    std::io::Read::read_exact(&mut file, &mut head).ok()?;
+    let head = &head[..];
     if head == want {
         return None;
     }
@@ -1005,7 +1030,11 @@ fn magic_mismatch(path: &Path, kind: DataKind) -> Option<MagicMismatch> {
 ///
 /// The error carries the core's own reason (Feature #220). yume-core has always
 /// returned one; this function used to throw it away.
-fn load_data_file(engine: &mut Engine, dirs: &[PathBuf], file: &DataFile) -> Result<(), DataProblem> {
+fn load_data_file(
+    engine: &mut Engine,
+    dirs: &[PathBuf],
+    file: &DataFile,
+) -> Result<(), DataProblem> {
     let at = |name: &str, fault: DataFault| DataProblem {
         file: name.to_string(),
         kind: file.kind,
@@ -1019,8 +1048,8 @@ fn load_data_file(engine: &mut Engine, dirs: &[PathBuf], file: &DataFile) -> Res
         // so there is nothing to try.
         return Err(at(&file.file, DataFault::Unreadable("path is not UTF-8".into())));
     };
-    // Building the mismatch costs a read of the file, so it is only built on
-    // the failing path.
+    // Building the mismatch costs a read of the file's head, so it is only
+    // built on the failing path.
     let rejected = |path: &Path, reason: String| DataFault::Rejected {
         reason,
         magic: magic_mismatch(path, file.kind),
@@ -1073,13 +1102,16 @@ fn load_data_file(engine: &mut Engine, dirs: &[PathBuf], file: &DataFile) -> Res
                 .map_err(|e| at(&file.file, DataFault::Unreadable(e.to_string())))?;
             let divisions = DivisionTable::from_binary(&bytes)
                 .map_err(|e| at(&file.file, rejected(&path, e.to_string())))?;
+            // The 字根表 is the *second* half of this entry, and losing it must
+            // not cost the first: 拆分・讀音・字集 all come off the divisions,
+            // and only 編碼 comes off the 字根表. So the annotations go in
+            // either way, and a refused 字根表 is reported afterwards.
+            let divisions = Arc::new(divisions);
             let zigen = match find_file(dirs, &file.aux) {
-                Some(aux) => {
-                    let bytes = std::fs::read(&aux)
-                        .map_err(|e| at(&file.aux, DataFault::Unreadable(e.to_string())))?;
+                Some(aux) => match std::fs::read(&aux) {
                     // The 字根表 has no exported magic of its own, so the
                     // core's sentence is the whole answer here.
-                    ZigenTable::from_binary(&bytes).map_err(|e| {
+                    Ok(bytes) => ZigenTable::from_binary(&bytes).map_err(|e| {
                         at(
                             &file.aux,
                             DataFault::Rejected {
@@ -1087,25 +1119,35 @@ fn load_data_file(engine: &mut Engine, dirs: &[PathBuf], file: &DataFile) -> Res
                                 magic: None,
                             },
                         )
-                    })?
-                }
-                None => ZigenTable::default(),
+                    }),
+                    Err(e) => Err(at(&file.aux, DataFault::Unreadable(e.to_string()))),
+                },
+                None => Ok(ZigenTable::default()),
             };
-            engine.set_annotations(AnnotationTable::with_tables(Arc::new(divisions), zigen));
+            let (zigen, problem) = match zigen {
+                Ok(zigen) => (zigen, None),
+                Err(problem) => (ZigenTable::default(), Some(problem)),
+            };
+            engine.set_annotations(AnnotationTable::with_tables(divisions, zigen));
+            if let Some(problem) = problem {
+                return Err(problem);
+            }
         }
         DataKind::Charset => {
             let Some(&id) = usize::try_from(file.slot)
                 .ok()
                 .and_then(|i| NAMED_CHARSETS.get(i))
             else {
-                return Err(at(&file.file, rejected(&path, format!("no charset slot {}", file.slot))));
+                let why = format!("no charset slot {}", file.slot);
+                return Err(at(&file.file, rejected(&path, why)));
             };
             let mut charset = Charset::new(id);
             if let Err(e) = charset.load_binary(p) {
                 return Err(at(&file.file, rejected(&path, e.to_string())));
             }
             if !engine.set_named_charset(id, charset) {
-                return Err(at(&file.file, rejected(&path, "the engine refused the charset".into())));
+                let why = "the engine refused the charset".to_string();
+                return Err(at(&file.file, rejected(&path, why)));
             }
         }
         DataKind::Words => match yume_core::word_whitelist::load_binary(p) {
@@ -1146,10 +1188,7 @@ fn build_engine(scheme: Scheme, dirs: &[PathBuf]) -> (Engine, bool, Vec<DataProb
     let mut dictionary = false;
     let mut problems = Vec::new();
 
-    for file in data_manifest::shared()
-        .into_iter()
-        .chain(data_manifest::for_scheme(scheme.tag()))
-    {
+    for file in data_set(scheme) {
         let loaded = match load_data_file(&mut engine, dirs, &file) {
             Ok(()) => true,
             Err(problem) => {
@@ -1442,6 +1481,71 @@ mod data_faults {
         // Everything else in that directory is simply absent, and the session
         // still carries those — quietly.
         assert!(ime.problems().len() > 1);
+    }
+    /// #220: the manifest's two halves overlap, and the overlap used to be
+    /// loaded twice — 13 MB of 讀音表 parsed a second time to arrive at the
+    /// same table.
+    #[test]
+    fn the_data_set_names_每一份_once() {
+        for scheme in Scheme::ALL {
+            let set = data_set(scheme);
+            let mut seen: Vec<(DataKind, &str, &str, i32)> = Vec::new();
+            for f in &set {
+                let key = (f.kind, f.file.as_str(), f.aux.as_str(), f.slot);
+                assert!(!seen.contains(&key), "{scheme:?} names {} twice", f.file);
+                seen.push(key);
+            }
+            // And the reason it can happen: `shared()` carries the 讀音表 and
+            // `for_scheme` appends one to a scheme that has none of its own.
+            assert!(
+                set.iter().filter(|f| f.kind == DataKind::Reading).count() <= 1,
+                "{scheme:?} loads more than one 讀音表"
+            );
+        }
+    }
+
+    /// A `.ydiv` yume-core accepts and a `.yzg` it refuses arrive as one
+    /// manifest entry. Losing the second must not cost the first: 拆分・讀音・
+    /// 字集 are all off the divisions, and only 編碼 is off the 字根表.
+    #[test]
+    fn a_refused_字根表_keeps_the_拆分表_that_was_good() {
+        let dir = std::env::temp_dir().join(format!(
+            "yumete-zigen-fault-{}-{:?}",
+            std::process::id(),
+            std::thread::current().id()
+        ));
+        let entry = data_set(Scheme::Lingming)
+            .into_iter()
+            .find(|f| f.kind == DataKind::Annotations)
+            .expect("拆分 is in the manifest");
+        let lay = |relative: &str, bytes: &[u8]| {
+            let mut path = dir.clone();
+            for part in relative.split('/') {
+                path.push(part);
+            }
+            std::fs::create_dir_all(path.parent().expect("a parent")).expect("fixture dir");
+            std::fs::write(&path, bytes).expect("fixture file");
+        };
+        // The smallest 拆分表 the core will have: one 字根 and no entries.
+        let mut ydiv = yume_core::division::MAGIC.to_vec();
+        ydiv.extend_from_slice(&1u32.to_le_bytes()); // one root
+        ydiv.extend_from_slice(&(u32::from('木')).to_le_bytes());
+        for _ in 0..3 {
+            ydiv.extend_from_slice(&0u32.to_le_bytes()); // labels, 讀音, 注釋
+        }
+        lay(&entry.file, &ydiv);
+        lay(&entry.aux, "not a 字根表 at all".as_bytes());
+
+        let mut engine = Engine::new(CodeTable::new());
+        let problem = load_data_file(&mut engine, &[dir.clone()], &entry)
+            .expect_err("the 字根表 is refused");
+        let _ = std::fs::remove_dir_all(&dir);
+
+        // The problem names the 字根表, not the 拆分表 …
+        assert_eq!(problem.file, entry.aux);
+        assert!(matches!(problem.fault, DataFault::Rejected { .. }));
+        // … and the 拆分表 is in the engine anyway.
+        assert_eq!(engine.annotations().divisions().roots(), &['木']);
     }
 }
 
