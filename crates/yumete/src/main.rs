@@ -29,8 +29,19 @@ fn main() -> ExitCode {
     // called `.txt` and you know what is in it.
     let mut force_syntax: Option<String> = None;
     let mut want_syntax = false;
+    // `--shot` prints one frame — the page as it would be drawn — and exits.
+    // `:shot` needs a window, a GUI session and a person; this is the same
+    // picture for a headless machine, a bug report, or a reviewer who has to
+    // *see* the layout rather than read an assertion about it.
+    let mut shot: Option<(u16, u16)> = None;
+    let mut want_shot = false;
 
     for arg in std::env::args().skip(1) {
+        if want_shot {
+            shot = Some(parse_size(&arg));
+            want_shot = false;
+            continue;
+        }
         if want_syntax {
             force_syntax = Some(arg);
             want_syntax = false;
@@ -48,6 +59,11 @@ fn main() -> ExitCode {
             "-p" | "--preview" => force_preview = true,
             "-t" | "--table" => force_table = true,
             "--timing" => timing = true,
+            "--shot" => {
+                shot = Some((100, 30));
+                want_shot = false;
+            }
+            s if s.starts_with("--shot=") => shot = Some(parse_size(&s["--shot=".len()..])),
             "-s" | "--syntax" => want_syntax = true,
             s if s.starts_with("--syntax=") => {
                 force_syntax = Some(s["--syntax=".len()..].to_string())
@@ -236,7 +252,7 @@ fn main() -> ExitCode {
     };
     // A preview prints and exits: there is no frame to be after, so it is read
     // now. So does `--timing`, which is measuring exactly this.
-    let printing_now = force_preview || !std::io::stdout().is_terminal() || timing;
+    let printing_now = force_preview || (!std::io::stdout().is_terminal() && shot.is_none()) || timing;
     let mut ime = ImeSession::empty(wanted);
     let deferred: Option<yumete_tui::Deferred> = match printing_now {
         true => {
@@ -298,6 +314,14 @@ fn main() -> ExitCode {
         }
         editor.set_status(config_problems.join(&yumete_core::say!("、")));
     }
+    if let Some((width, height)) = shot {
+        // The layout the flags asked for, before the picture is taken.
+        print!(
+            "{}",
+            yumete_tui::frame_to_text(&mut editor, &config, &ime, width, height)
+        );
+        return ExitCode::SUCCESS;
+    }
     if printing {
         preview(&editor, &config);
         return ExitCode::SUCCESS;
@@ -323,6 +347,15 @@ fn main() -> ExitCode {
             ExitCode::FAILURE
         }
     }
+}
+
+/// `WIDTHxHEIGHT`, for `--shot`. Anything unreadable is the default page.
+fn parse_size(text: &str) -> (u16, u16) {
+    let (w, h) = text.split_once(['x', 'X', '*']).unwrap_or(("100", "30"));
+    (
+        w.trim().parse().unwrap_or(100),
+        h.trim().parse().unwrap_or(30),
+    )
 }
 
 /// Load a `word<TAB>weight` segmentation dictionary from the first
@@ -383,6 +416,11 @@ OPTIONS:
     -s, --syntax     Which markup these files are written in: markdown, typst
                      or text. Outranks both the extension and the config.
     -p, --preview    Print a non-interactive preview instead of the editor.
+        --shot[=WxH] Draw one frame — the page exactly as the editor would set
+                     it — to standard output and exit. Text only, 100x30 by
+                     default. `:shot` inside the editor hands the screen to the
+                     platform's screenshot program; this is the same picture on
+                     a machine with no window, for a report or a review.
         --timing     Print how long each part of starting up took, and exit.
     -h, --help       Print this help and exit.
     -V, --version    Print the version and exit.
