@@ -17,11 +17,17 @@ use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
 /// the whole line, and a Chinese paragraph has dozens, so the gutter, the
 /// cursor and the wrap all walk off the text.
 ///
-/// Wide by default, because this is an editor for 漢字 prose and `——` and `……`
-/// appear in every chapter. Set once at startup from `[editor] ambiguous_width`
-/// — a process-wide setting, because width is asked for in a hundred places
-/// that have no business knowing about configuration.
-static AMBIGUOUS_IS_WIDE: AtomicBool = AtomicBool::new(true);
+/// **Narrow until something says otherwise**, which is the same answer the
+/// front end reaches when it asks the terminal and the terminal will not say
+/// (`ambiguous_width = "auto"`, the default). The two used to disagree — this
+/// said wide, `main.rs` said narrow — so anything that measured before start-up
+/// finished, or that never ran `main` at all, laid the page out one way and
+/// drew it the other.
+///
+/// Set once at startup from `[editor] ambiguous_width`: a process-wide setting,
+/// because width is asked for in a hundred places that have no business knowing
+/// about configuration.
+static AMBIGUOUS_IS_WIDE: AtomicBool = AtomicBool::new(false);
 
 /// Set whether Ambiguous characters count as two cells. Call once, at startup,
 /// before anything is measured or drawn.
@@ -96,8 +102,14 @@ mod tests {
     /// in a CJK one. A Chinese paragraph is full of them.
     #[test]
     fn ambiguous_characters_follow_the_setting() {
+        // Narrow until something sets it — the same answer the front end
+        // reaches when it asks the terminal and gets no reply.
         for c in ['—', '…', '“', '”', '‘', '’', '·', '※', '←', '№'] {
-            assert_eq!(char_width(c), 2, "{c} should be wide by default");
+            assert_eq!(char_width(c), 1, "{c} is narrow until told otherwise");
+        }
+        set_ambiguous_wide(true);
+        for c in ['—', '…', '“', '”', '‘', '’', '·', '※', '←', '№'] {
+            assert_eq!(char_width(c), 2, "{c} is wide when the font is");
         }
         assert_eq!(str_width("他說“好”——走了……"), 22);
 
@@ -106,7 +118,6 @@ mod tests {
         assert_eq!(char_width('“'), 1);
         // 漢字 are Wide, not Ambiguous, and never move.
         assert_eq!(char_width('中'), 2);
-        set_ambiguous_wide(true);
     }
 
     #[test]
