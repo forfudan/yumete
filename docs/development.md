@@ -422,7 +422,7 @@ Phases are ordered by priority, most writer-critical first:
 | 216 | **A table recognised rather than declared** | both | P2 | `\|` is not the only grid: a run of lines split by tabs or by runs of spaces is a 碼表, and `dict.yaml` is one with a `---` preamble. Detect it and offer the grid. Test against the 宇浩 tables and the generated `dict.yaml` | Planned |
 | 217 | **A grid whose first row is data** | both | P3 | a 碼表 has no header. One key says so: row one becomes an ordinary row, and the columns are named by number — which #184 already draws | Planned |
 | 218 | **The schema beside the table** | both | P3 | when the file is nothing but a table, open its schema file in the other work area (`:split` already has one), and write a starting one next to the file if none exists | Planned |
-| 219 | **A Windows build** | both | P3 | it cross-compiles today. What is wrong there: `data_dir()` has no `%APPDATA%` branch and falls back to a relative path; `same_file` returns `false` with no inodes, so 「寫入按身份認」 loses its guard; `shell()` assumes `$SHELL`/`/bin/sh`; and nothing looks where yume installs its own tables (`%APPDATA%\Yume\` and the module's `Resources\`, per the yume side — the core will not answer this, by design), so 卿雲 is not found | Planned |
+| 219 | **A Windows build** | both | P3 | `%APPDATA%\yumete` for both config and data; `same_file` by `GetFileInformationByHandle` (volume serial + file index); one `shell_command()` that knows `cmd.exe /C` as well as `$SHELL -c`; `ambiguous_width = "auto"` asked of the console API rather than of a CPR reply; the search reaches where **yume** installs its own tables, overlay first, and falls back to a flat directory; `[ime] data_dirs` lets the reader name the place outright; `scripts/build.sh` runs under Git Bash. Cross-checked against `x86_64-pc-windows-gnu` | Done |
 | 220 | **A data file that fails to parse says so** | ime | P1 | `load_data_file` returns `bool`, so 「not there」 and 「there and the core refuses it」 are the same answer — and yume-core *does* return a reason. `.ydiv` changed its magic on 2026-09-04 (`YDV20260828` → `YDV20260904`) and an older data directory now loses its annotations **silently**. `DivisionTable::load_binary` wraps the reason as `InvalidData`, `from_binary` gives `&'static str` (`"bad division magic"`…), and `division::MAGIC` is the expected value — enough for a whole sentence: 「`chaifen.ydiv` 核心不認：bad division magic（期望 YDV20260904，檔頭是 YDV20260828）」. `:yume` is where it belongs | Planned |
 
 ### 14 · What four reviews of the code found, 2026-09-03
@@ -1222,23 +1222,74 @@ neither is written with `|`. Detecting them is what makes table mode useful on
 the files this editor was built for; a headerless grid (#217) and a schema file
 opened in the other work area (#218) are what make them editable.
 
-**#219, Windows: it compiles.** Cross-built on 2026-09-04 with
+**#219, Windows: it runs.** Cross-built on 2026-09-04 with
 `x86_64-pc-windows-gnu` and mingw-w64 — an 8.9 MB PE32+ console executable,
-yume-core and all. The platform-specific code is all behind `cfg` with a
-fallback, and `libc` is declared only under `[target.'cfg(unix)'.dependencies]`.
-What is **wrong** there, none of it caught by the compiler:
+yume-core and all. Compiling was never the hard part; four things were wrong
+that no compiler would say a word about, and all four are now answered. The
+whole workspace is checked against that target as well as the host, so a
+`cfg(windows)` branch that does not compile is a red build rather than a
+surprise on somebody else's machine.
 
-- `yumete_config::data_dir()` knows `XDG_DATA_HOME` and `HOME` and nothing else,
-  so on Windows it falls back to a *relative* `.local\share\yumete` — a data
-  directory that moves with the working directory. It needs `%APPDATA%`.
-- `Buffer::same_file` compares `dev` and `ino`, and returns `false` everywhere
-  else. 「寫入按身份認，不按拼法認」 is a real invariant with a real test, and on
-  Windows it silently has no teeth: the answer there is
-  `GetFileInformationByHandle` (volume serial + file index).
-- `shell()` is `$SHELL` or `/bin/sh`, which `:sh`, `:!` and `:shot` all go
-  through.
-- Nothing looks where **yume** installs its own tables, so a machine with 卿雲
-  already installed would still be asked to compile them.
+- **Where the files are.** `config_dir()` and `data_dir()` both resolve to
+  `%APPDATA%\yumete` — the *same* directory, deliberately: Windows has no split
+  between「設定」and「資料」at this level, yume's own `%APPDATA%\Yume\` holds
+  both, and one directory is the whole answer to「我的東西在哪」. `config.toml`
+  sits at its root with `data\` and `schemes\` beside it, which is the layout
+  the manifest already names. `XDG_CONFIG_HOME` / `XDG_DATA_HOME` still win
+  first **on every platform**, because a shell that sets them is saying so on
+  purpose. `HOME` gains `USERPROFILE` as a fallback, and `~` in a config value
+  and `~` in a `:!` line now expand through the same function.
+- **`Buffer::same_file`** asks `GetFileInformationByHandle` for the volume
+  serial and the file index — Windows's `dev` and `ino` under other names. It
+  has to be asked of an open handle, which is why it is not `fs::metadata`: the
+  standard library reads the same structure but keeps the fields behind an
+  unstable trait, and a text editor is not a reason to ask for a nightly
+  compiler. `windows-sys` is declared under
+  `[target.'cfg(windows)'.dependencies]`, symmetric with `libc` under the unix
+  one, and was already in the lock file by way of crossterm.
+- **One `shell_command(line)`** rather than a `shell()` whose callers each
+  supplied the flag: the program and the flag are one decision, and a call site
+  that got `cmd.exe` right and `-c` wrong would sit waiting for input on a
+  terminal the editor has taken over. `%ComSpec%` else `cmd.exe` with `/C`;
+  `$SHELL` else `/bin/sh` with `-c`.
+- **`ambiguous_width = "auto"` works there too**, and by a better route than the
+  unix one: the console API answers where the cursor is
+  (`GetConsoleScreenBufferInfo`, which is what crossterm's `position()` calls),
+  so there is no escape sequence to write, no raw mode to enter, and no reply
+  that can arrive late. Print `—` at the start of the line, ask, erase. The
+  *theme* probe (OSC 11) has no such API and still answers `None` on Windows —
+  `[theme] mood` is the answer there, and Windows Terminal's default ground is
+  dark, which is also the fallback.
+
+**Where it looks for 宇浩 data now**, in order, first hit wins: the directories
+`[ime] data_dirs` names, then `$YUMETE_DATA_DIR` (split like `PATH`), then
+yumete's own data dir, then what shipped beside the binary, and only then
+**yume's own** locations — `%APPDATA%\Yume\data\compiled` and `%APPDATA%\Yume`
+on Windows, `$XDG_DATA_HOME/yume/data/compiled` and `$XDG_DATA_HOME/yume`
+elsewhere, plus `$YUME_DATA_DIR`, `YUME_DATADIR` and `$XDG_DATA_DIRS`. **The
+overlay first**, because that is where a freshly recompiled table lands and the
+one under it is then the stale copy. A machine that already types 卿雲 has paid
+for that 碼表 once and is not asked to pay again.
+
+`find_file` asks each directory for the manifest's own two-level path first and
+then for the **basename**. Nested wins, so a directory laid out the way the
+manifest describes is read the way it was arranged — but a writer who unzipped a
+release into one folder, and a `compile_data_windows.ps1` older than the
+`data/`+`schemes/` split, both work. The names are distinctive enough
+(`chaifen.ydiv`, `lang.ywl`, `ling.ytab`) that the basename is a safe second
+question.
+
+`scripts/build.sh` **is** the Windows build script, run under Git Bash or MSYS2.
+A PowerShell port was the obvious move and is the wrong one: the file list in
+it must match `yume_core::data_manifest`, and a second copy is a second thing to
+forget when yume adds a data file. Three things genuinely differ and are named
+once at the top — `.exe`, `%APPDATA%` (through `cygpath`), and that the global
+`yumete` is a **copy** rather than a symlink, because a symlink needs Developer
+Mode and a build script must not need that.
+
+Still missing there, and named so it is not rediscovered: no installer, no code
+signing, and「碼表沒有裝」now names the directory to put it in — which is the
+one message a writer on a fresh Windows machine is certain to meet.
 
 **Where yume keeps its data, from the yume side, 2026-09-04.** `yume-core` does
 *not* answer this and deliberately will not: `data_manifest` says **what** to

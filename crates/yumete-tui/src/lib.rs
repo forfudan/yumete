@@ -786,9 +786,7 @@ fn normalize_shift(code: KeyCode, mods: KeyModifiers) -> (KeyCode, KeyModifiers)
 /// means the pipe and the glob, and a command line that quietly did not is
 /// worse than one that says it cannot.
 fn run_capturing(line: &str, input: Option<&str>) -> io::Result<Ran> {
-    let mut child = std::process::Command::new(shell())
-        .arg("-c")
-        .arg(line)
+    let mut child = shell_command(line)
         .stdin(if input.is_some() {
             std::process::Stdio::piped()
         } else {
@@ -850,10 +848,7 @@ fn hand_over<B: ratatui::backend::Backend + io::Write>(
         terminal.backend_mut(),
         ratatui::crossterm::terminal::LeaveAlternateScreen
     )?;
-    let status = std::process::Command::new(shell())
-        .arg("-c")
-        .arg(line)
-        .status();
+    let status = shell_command(line).status();
     println!();
     match &status {
         Ok(code) if code.success() => println!("[{line}]"),
@@ -927,27 +922,48 @@ fn take_a_picture(config: &Config) -> String {
     if line.is_empty() {
         return say!("這個平台上沒有截圖命令——`[editor] screenshot` 寫一條");
     }
-    match std::process::Command::new(shell()).arg("-c").arg(line).status() {
+    match shell_command(line).status() {
         Ok(status) if status.success() => say!("畫面已放進剪貼簿"),
         Ok(status) => say!("截圖失敗（{0}）", status),
         Err(err) => say!("截圖失敗（{0}）", err),
     }
 }
 
-/// The shell to run a command line through.
-fn shell() -> String {
-    std::env::var("SHELL").unwrap_or_else(|_| "/bin/sh".to_string())
+/// A command that runs `line` through the shell.
+///
+/// The program and the flag come from **one** place because they are one
+/// decision: `cmd.exe` wants `/C` and every Unix shell wants `-c`, and a call
+/// site that got the program right and the flag wrong would run a shell that
+/// sits waiting for input on a terminal the editor has taken over.
+///
+/// `$SHELL` on Unix, `%ComSpec%` on Windows — what the machine says it uses,
+/// falling back to what it is certain to have.
+fn shell_command(line: &str) -> std::process::Command {
+    #[cfg(windows)]
+    {
+        let shell = std::env::var("ComSpec").unwrap_or_else(|_| "cmd.exe".to_string());
+        let mut command = std::process::Command::new(shell);
+        // `/C` and not `/c`: identical to `cmd.exe`, and it reads as a flag
+        // rather than as a stray letter in the line being run.
+        command.arg("/C").arg(line);
+        command
+    }
+    #[cfg(not(windows))]
+    {
+        let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/sh".to_string());
+        let mut command = std::process::Command::new(shell);
+        command.arg("-c").arg(line);
+        command
+    }
 }
 
 /// `~` at the front of a path, the way a shell would read it.
+///
+/// The config crate's, so that a `~` in a command line and a `~` in
+/// `config.toml` mean the same directory — including on Windows, where the
+/// home is `%USERPROFILE%` and nobody sets `HOME`.
 fn shellexpand(path: &str) -> String {
-    match path.strip_prefix("~/") {
-        Some(rest) => match std::env::var("HOME") {
-            Ok(home) => format!("{home}/{rest}"),
-            Err(_) => path.to_string(),
-        },
-        None => path.to_string(),
-    }
+    yumete_config::expand_tilde(path)
 }
 
 /// A typesetter running in the background, and where its output is to be seen.
@@ -1426,9 +1442,10 @@ fn switch_scheme(ime: &mut ImeSession, tag: &str, config: &Config) -> String {
             *ime = full;
             return format!("方案：{name}");
         }
-        return format!(
-            "{tag} 的碼表沒有裝——放進資料目錄（yume 的 scripts/build.sh 會裝），\
-             或者把自己的碼表放進 .yumete/"
+        return say!(
+            "{0} 的碼表沒有裝——放進 {1}，或者把自己的碼表放進 .yumete/",
+            tag,
+            yumete_config::data_dir().display()
         );
     }
     let was = ime.scheme();
@@ -1437,9 +1454,10 @@ fn switch_scheme(ime: &mut ImeSession, tag: &str, config: &Config) -> String {
     }
     // Put back what was working rather than leaving the writer unable to type.
     ime.set_scheme(was);
-    format!(
-        "{tag} is not installed — put its tables in the data directory \
-         (yume's scripts/build.sh installs them) or a 碼表 of your own in .yumete/"
+    say!(
+        "{0} 的碼表沒有裝——放進 {1}，或者把自己的碼表放進 .yumete/",
+        tag,
+        yumete_config::data_dir().display()
     )
 }
 

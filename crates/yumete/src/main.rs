@@ -86,6 +86,12 @@ fn main() -> ExitCode {
 
     // Load global + per-project config and apply the keymap.
     let (config, config_problems) = yumete_config::Config::load_reporting();
+    // Where the reader says the 宇浩 data is, before anything asks. Set once
+    // here rather than passed down, because the places that build an IME
+    // session are several and none of them carries a config.
+    if !config.ime.data_dirs.is_empty() {
+        yumete_config::set_data_dirs(config.ime.data_dirs.clone());
+    }
     // Settled before anything is measured: every width question downstream —
     // wrap, gutter, cursor, the 縱 grid — asks the same global.
     //

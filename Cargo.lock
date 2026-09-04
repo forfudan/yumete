@@ -800,6 +800,7 @@ dependencies = [
  "ropey",
  "serde",
  "toml",
+ "windows-sys 0.59.0",
  "yumete-cjk",
 ]
 

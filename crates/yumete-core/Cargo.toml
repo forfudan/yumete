@@ -12,3 +12,9 @@ serde = {version = "1", features = ["derive"]}
 toml = "0.8"
 ropey = "1.6"
 yumete-cjk = {path = "../yumete-cjk"}
+
+# `GetFileInformationByHandle` — the only way to ask NTFS whether two paths are
+# one file, since the standard library keeps the answer behind an unstable
+# trait. Already in the lock file by way of crossterm, so it costs no build.
+[target.'cfg(windows)'.dependencies]
+windows-sys = {version = "0.59", features = ["Win32_Storage_FileSystem", "Win32_Foundation"]}

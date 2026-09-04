@@ -16,6 +16,7 @@ use std::collections::HashMap;
 use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::sync::OnceLock;
 
 use serde::Deserialize;
 
@@ -323,6 +324,16 @@ pub struct ImeConfig {
     /// are yume's own, so a line written here means the same thing in the
     /// input method's own panel (Feature #209).
     pub commit: Option<String>,
+    /// Directories to search for 宇浩 data **before** any of the conventional
+    /// ones, in the order written.
+    ///
+    /// The reader naming the place themselves. Every platform has a convention
+    /// and yumete follows several of them (see
+    /// [`yumete_config::data_search_dirs`]), but a machine where the tables
+    /// live somewhere else — a shared drive, a checkout of the yume repo, a
+    /// portable install on a USB stick — has no convention to follow, and
+    /// guessing harder is not the answer. `~` is expanded.
+    pub data_dirs: Vec<PathBuf>,
 }
 
 impl Default for ImeConfig {
@@ -331,6 +342,7 @@ impl Default for ImeConfig {
             scheme: "lingming".to_string(),
             start: false,
             commit: None,
+            data_dirs: Vec::new(),
         }
     }
 }
@@ -1174,20 +1186,92 @@ impl Config {
     }
 }
 
-/// The global config directory (`$XDG_CONFIG_HOME/yumete` or `~/.config/yumete`).
+/// The user's home directory.
+///
+/// `HOME` everywhere, and `USERPROFILE` as well on Windows, where a plain
+/// `cmd.exe` sets only the latter — a shell that sets `HOME` (Git Bash, MSYS)
+/// still wins, because somebody who set it meant it.
+fn home_dir() -> Option<PathBuf> {
+    if let Ok(home) = env::var("HOME") {
+        if !home.is_empty() {
+            return Some(PathBuf::from(home));
+        }
+    }
+    #[cfg(windows)]
+    if let Ok(home) = env::var("USERPROFILE") {
+        if !home.is_empty() {
+            return Some(PathBuf::from(home));
+        }
+    }
+    None
+}
+
+/// `~` at the front of a path, the way a shell would read it.
+///
+/// Bare `~` as well as `~/…` — and `~\…` too on Windows, where a path typed
+/// into a config file is as likely to have been copied out of Explorer as
+/// typed into a shell. An unknown home is left alone rather than guessed at:
+/// a path that still says `~` is a path somebody can see is wrong.
+pub fn expand_tilde(path: &str) -> String {
+    let rest = if path == "~" {
+        ""
+    } else if let Some(rest) = path.strip_prefix("~/") {
+        rest
+    } else if cfg!(windows) && path.starts_with("~\\") {
+        &path[2..]
+    } else {
+        return path.to_string();
+    };
+    match home_dir() {
+        Some(home) => home.join(rest).to_string_lossy().into_owned(),
+        None => path.to_string(),
+    }
+}
+
+/// Windows's per-user application directory, `%APPDATA%` — the **roaming** one.
+///
+/// Roaming rather than Local because that is where yume itself keeps its own
+/// (`%APPDATA%\Yume\`), and because a config file and a 碼表 are exactly the
+/// kind of thing a writer expects to follow them to another machine.
+#[cfg(windows)]
+fn appdata_dir() -> Option<PathBuf> {
+    match env::var("APPDATA") {
+        Ok(dir) if !dir.is_empty() => Some(PathBuf::from(dir)),
+        _ => None,
+    }
+}
+
+/// The global config directory.
+///
+/// `$XDG_CONFIG_HOME/yumete` or `~/.config/yumete`; on Windows,
+/// `%APPDATA%\yumete`. The XDG variables are honoured **first on every
+/// platform**: they are how a writer says where they want their files, and a
+/// Windows shell that sets them (MSYS, WSL-adjacent tooling) is saying it on
+/// purpose.
 pub fn config_dir() -> PathBuf {
     if let Ok(dir) = env::var("XDG_CONFIG_HOME") {
         if !dir.is_empty() {
             return PathBuf::from(dir).join("yumete");
         }
     }
-    if let Ok(home) = env::var("HOME") {
-        return PathBuf::from(home).join(".config").join("yumete");
+    #[cfg(windows)]
+    if let Some(appdata) = appdata_dir() {
+        return appdata.join("yumete");
+    }
+    if let Some(home) = home_dir() {
+        return home.join(".config").join("yumete");
     }
     PathBuf::from(".config").join("yumete")
 }
 
-/// The user data directory (`$XDG_DATA_HOME/yumete` or `~/.local/share/yumete`).
+/// The user data directory.
+///
+/// `$XDG_DATA_HOME/yumete` or `~/.local/share/yumete`; on Windows,
+/// `%APPDATA%\yumete` — the *same* directory the config is in, which is
+/// deliberate. Windows has no split between「設定」and「資料」at this level,
+/// and yume's own `%APPDATA%\Yume\` holds both; so `config.toml` sits at the
+/// root with `data\` and `schemes\` beside it, and one directory is the whole
+/// answer to「我的東西在哪」.
 ///
 /// This is where user-added scheme tables and 碼表 live; see the development
 /// plan's data-management section for the full resolution order.
@@ -1197,11 +1281,12 @@ pub fn data_dir() -> PathBuf {
             return PathBuf::from(dir).join("yumete");
         }
     }
-    if let Ok(home) = env::var("HOME") {
-        return PathBuf::from(home)
-            .join(".local")
-            .join("share")
-            .join("yumete");
+    #[cfg(windows)]
+    if let Some(appdata) = appdata_dir() {
+        return appdata.join("yumete");
+    }
+    if let Some(home) = home_dir() {
+        return home.join(".local").join("share").join("yumete");
     }
     PathBuf::from(".local").join("share").join("yumete")
 }
@@ -1210,6 +1295,8 @@ pub fn data_dir() -> PathBuf {
 ///
 /// Resolves `<prefix>/bin/yumete` to `<prefix>/share/yumete`, which is where a
 /// Homebrew (or manual) install places the bundled scheme tables and fonts.
+/// On Windows there is no such prefix convention — a program's data sits
+/// beside its `.exe` — so the executable's **own** directory is searched too.
 /// Returns `None` if the executable path can't be determined.
 pub fn installed_data_dir() -> Option<PathBuf> {
     let exe = env::current_exe().ok()?;
@@ -1217,13 +1304,113 @@ pub fn installed_data_dir() -> Option<PathBuf> {
     Some(prefix.join("share").join("yumete"))
 }
 
-/// The ordered list of directories to search for IME data (first found wins):
-/// the user data dir, then the install-prefix data dir.
+/// Directories named by the reader rather than found by convention.
+///
+/// Set once, at start-up, from `[ime] data_dirs`; read by every later call to
+/// [`data_search_dirs`]. A one-shot rather than a parameter because the five
+/// places that build an IME session are deliberately configuration-free — they
+/// ask「資料在哪」and this is the answer, whoever set it.
+static NAMED_DATA_DIRS: OnceLock<Vec<PathBuf>> = OnceLock::new();
+
+/// Say where else to look for IME data, ahead of every convention.
+///
+/// Called once from start-up with `[ime] data_dirs`; later calls do nothing,
+/// so the config that was loaded is the config that is in force.
+pub fn set_data_dirs(dirs: Vec<PathBuf>) {
+    let _ = NAMED_DATA_DIRS.set(dirs);
+}
+
+/// `$YUMETE_DATA_DIR`, split the way the platform splits a path list.
+///
+/// The same shape as `PATH` — `:` on Unix, `;` on Windows — so it can name
+/// more than one directory, and so it reads the way every other path list on
+/// the machine reads.
+fn env_data_dirs() -> Vec<PathBuf> {
+    match env::var_os("YUMETE_DATA_DIR") {
+        Some(value) => env::split_paths(&value).filter(|p| !p.as_os_str().is_empty()).collect(),
+        None => Vec::new(),
+    }
+}
+
+/// Where **yume itself** keeps the tables it compiled, if it is installed.
+///
+/// A machine that already types 卿雲 has already paid for that 碼表 once; it
+/// should not be asked to compile it again to type in a text editor. These are
+/// yume's own locations, in yume's own order — the **overlay first**, because
+/// that is where a freshly recompiled table lands and the one under it is then
+/// the stale copy.
+pub fn yume_data_dirs() -> Vec<PathBuf> {
+    let mut dirs = Vec::new();
+    if let Ok(dir) = env::var("YUME_DATA_DIR") {
+        if !dir.is_empty() {
+            dirs.push(PathBuf::from(dir));
+        }
+    }
+    #[cfg(windows)]
+    {
+        if let Some(appdata) = appdata_dir() {
+            let yume = appdata.join("Yume");
+            dirs.push(yume.join("data").join("compiled"));
+            dirs.push(yume);
+        }
+        // Windows programs keep their data beside the `.exe`, and yume's
+        // installer puts its tables in a `Resources\` under that.
+        if let Ok(exe) = env::current_exe() {
+            if let Some(dir) = exe.parent() {
+                dirs.push(dir.join("Resources"));
+                dirs.push(dir.to_path_buf());
+            }
+        }
+    }
+    #[cfg(not(windows))]
+    {
+        let base = match env::var("XDG_DATA_HOME") {
+            Ok(dir) if !dir.is_empty() => Some(PathBuf::from(dir)),
+            _ => home_dir().map(|home| home.join(".local").join("share")),
+        };
+        if let Some(base) = base {
+            dirs.push(base.join("yume").join("data").join("compiled"));
+            dirs.push(base.join("yume"));
+        }
+        if let Ok(dir) = env::var("YUME_DATADIR") {
+            if !dir.is_empty() {
+                dirs.push(PathBuf::from(dir));
+            }
+        }
+        if let Ok(list) = env::var("XDG_DATA_DIRS") {
+            for dir in list.split(':').filter(|d| !d.is_empty()) {
+                dirs.push(PathBuf::from(dir).join("yume"));
+            }
+        }
+    }
+    dirs
+}
+
+/// The ordered list of directories to search for IME data (first found wins).
+///
+/// In order: the directories the reader named (`[ime] data_dirs`, then
+/// `$YUMETE_DATA_DIR`), yumete's own user data dir, what shipped beside the
+/// binary, and finally wherever **yume** installed its own tables.
 pub fn data_search_dirs() -> Vec<PathBuf> {
-    let mut dirs = vec![data_dir()];
+    let mut dirs: Vec<PathBuf> = NAMED_DATA_DIRS.get().cloned().unwrap_or_default();
+    dirs.extend(env_data_dirs());
+    dirs.push(data_dir());
     if let Some(installed) = installed_data_dir() {
         dirs.push(installed);
     }
+    #[cfg(windows)]
+    if let Ok(exe) = env::current_exe() {
+        if let Some(dir) = exe.parent() {
+            dirs.push(dir.to_path_buf());
+        }
+    }
+    dirs.extend(yume_data_dirs());
+    // A name can be reached twice — `%APPDATA%\yumete` is both the config dir
+    // and the data dir, and the `.exe`'s own directory arrives from two sides.
+    // Searching it twice is only wasted syscalls, but it also makes `:yume`'s
+    // account of where it looked read like a mistake.
+    let mut seen = std::collections::HashSet::new();
+    dirs.retain(|dir| seen.insert(dir.clone()));
     dirs
 }
 
@@ -1280,6 +1467,7 @@ struct RawIme {
     scheme: Option<String>,
     start: Option<bool>,
     commit: Option<String>,
+    data_dirs: Option<Vec<String>>,
 }
 
 #[derive(Deserialize, Default)]
@@ -1474,6 +1662,9 @@ impl RawConfig {
         }
         if other.ime.commit.is_some() {
             self.ime.commit = other.ime.commit.clone();
+        }
+        if other.ime.data_dirs.is_some() {
+            self.ime.data_dirs = other.ime.data_dirs.clone();
         }
         if other.ime.start.is_some() {
             self.ime.start = other.ime.start;
@@ -1686,6 +1877,9 @@ impl RawConfig {
             // that a word may be neither.
             config.ime.commit = commit_tag(&commit).map(String::from);
         }
+        if let Some(dirs) = self.ime.data_dirs {
+            config.ime.data_dirs = dirs.iter().map(|d| PathBuf::from(expand_tilde(d))).collect();
+        }
         config.syntax.by_name = self.syntax;
         if let Some(name) = self.theme.name {
             if !name.trim().is_empty() {
@@ -1828,6 +2022,7 @@ mod runner_tests {
         assert_eq!(typst["preview"].kind, RunKind::Server);
         assert_eq!(config.language["markdown"]["format"].kind, RunKind::Once);
     }
+
 }
 
 #[cfg(test)]
@@ -2037,5 +2232,42 @@ mod tests {
         assert_eq!(c.editor.line_numbers, LineNumbers::Absolute);
         assert_eq!(c.theme.mode, Mode::Auto);
         assert_eq!(c.theme.dark.ink, ThemeConfig::default().dark.ink);
+    }
+
+    /// 資料在哪，讀者自己說得算 —— and `~` means what it does in a shell.
+    #[test]
+    fn the_reader_can_name_the_data_directories() {
+        assert!(Config::from_toml("").ime.data_dirs.is_empty());
+        let config = Config::from_toml("[ime]\ndata_dirs = [\"/srv/yuhao\", \"~/tables\"]\n");
+        assert_eq!(config.ime.data_dirs.len(), 2);
+        assert_eq!(config.ime.data_dirs[0], PathBuf::from("/srv/yuhao"));
+        assert!(
+            !config.ime.data_dirs[1].starts_with("~"),
+            "`~` is expanded when the config is read, not carried to the syscall"
+        );
+    }
+
+    /// The named directories come **first**: naming one and being handed the
+    /// convention anyway is the failure the key exists to prevent.
+    #[test]
+    fn named_directories_are_searched_before_the_conventional_ones() {
+        let dirs = data_search_dirs();
+        assert!(dirs.contains(&data_dir()), "{dirs:?}");
+        let mut seen = std::collections::HashSet::new();
+        assert!(
+            dirs.iter().all(|d| seen.insert(d.clone())),
+            "a directory is searched twice: {dirs:?}"
+        );
+    }
+
+    #[test]
+    fn a_path_without_a_tilde_is_left_alone() {
+        assert_eq!(expand_tilde("/etc/yumete"), "/etc/yumete");
+        assert_eq!(expand_tilde("tables/ling.txt"), "tables/ling.txt");
+        assert_eq!(
+            expand_tilde("~notyou/tables"),
+            "~notyou/tables",
+            "only the writer's own `~` is a home; `~user` is somebody else's"
+        );
     }
 }
