@@ -1907,7 +1907,8 @@ fn draw_which_key(
             } else {
                 BorderType::Plain
             })
-            .border_style(Style::default().fg(ink.furniture()).bg(ink.paper()))
+            // `rule()`, the rung every other ring on the screen is drawn at.
+            .border_style(Style::default().fg(ink.rule()).bg(ink.paper()))
             .title(Span::styled(
                 title,
                 Style::default().fg(ink.gold()).bg(ink.paper()),
@@ -4376,7 +4377,8 @@ mod tests {
         // 墨香 dark: warm ink on a deep ground, ringed in a mid rung of the same
         // ladder. Nothing in the panel falls back to the terminal default.
         let paper = Color::Rgb(0x26, 0x2A, 0x27);
-        let ring = Color::Rgb(0x50, 0x51, 0x48);
+        // rung::RULE, where every ring on the screen is drawn.
+        let ring = Color::Rgb(0x72, 0x70, 0x62);
         let corner = (0..buffer.area.height)
             .flat_map(|y| (0..buffer.area.width).map(move |x| (x, y)))
             .find(|&(x, y)| buffer[(x, y)].symbol() == "\u{256d}")

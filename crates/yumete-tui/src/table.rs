@@ -639,15 +639,24 @@ pub fn draw_detail(frame: &mut Frame, editor: &Editor, config: &Config, area: Re
         .position(|(field, _)| *field == detail.here)
         .unwrap_or(0);
     let first = at.saturating_sub(room.saturating_sub(1));
+    let column = detail
+        .rows
+        .iter()
+        .map(|(field, _)| yumete_cjk::str_width(field) as u16 + 1)
+        .max()
+        .unwrap_or(10)
+        .clamp(10, 20);
     for (field, text) in detail.rows.iter().skip(first) {
         if y >= area.y + area.height {
             return;
         }
         let style = if *field == detail.here { here } else { name };
         put_text(buf, left, y, right, field, style);
-        // The value on its own line when the name is long, which for a table
-        // of 拆分 it usually is not.
-        let indent = left + 10;
+        // **The values line up past the longest name**, rather than at a fixed
+        // ten cells: the names carry their column number now (「12 pinyin」),
+        // and a name longer than the guess ran straight into its own value.
+        // Capped, so one long name does not push every value off the panel.
+        let indent = left + column;
         if indent < right {
             put_text(buf, indent, y, right, text, if *field == detail.here { here } else { value });
         }
