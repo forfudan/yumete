@@ -1064,10 +1064,21 @@ it, in the order a reader meets the damage.
 no Yume data.** The list *bundled in the binary* was simplified-only: 抬頭、
 已經、時候、什麼 were all absent. **Not the whole story, and the author caught
 the overstatement**: with the data installed the editor segments with Yume's own
-language model (`lang.ywl`, 繁簡混合, over a million entries), which reads both
-scripts and always did — `crates/yumete-ime/tests/real_data.rs` now asserts it
-against the real tables so the claim cannot drift again. What was broken is the
-fallback, which is what a fresh clone, a first run, and every CI machine use. The list now carries both, derived where the 簡繁
+language model, which reads both scripts and always did:
+of its 1.1M entries, 131,159 hold traditional-only characters and 126,870
+simplified-only — near halves, not a simplified table with traditional
+sprinkled in (measured on yume's own `lang.txt` by the yume side, 2026-09-04).
+`crates/yumete-ime/tests/real_data.rs` now asserts it against the real tables so
+the claim cannot drift again. What was broken is the fallback, which is what a
+fresh clone, a first run, and every CI machine use.
+
+**And the two scripts are separate entries, not one entry plus a conversion.**
+The coverage is not symmetric — 14,595 traditional entries (1.3%) have no
+simplified twin: 古語 and 成語 that never occur in simplified corpora, 異體 and
+old forms, and the one-to-many characters (於/于, 著/着) that fold wrong. So no
+future 「fold to the other script and look it up again」 fallback: it would miss
+that 1.3% and mis-fold the rest, which is exactly the machinery that produced
+大家傢 and 别彆人 on this file's first attempt. The list now carries both, derived where the 簡繁
 mapping is one-to-one and written out by hand where it is not: conversion is
 what produced 大家傢 and 别彆人 on the first attempt, and a word nobody writes
 is worse than a word missing.
