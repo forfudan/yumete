@@ -1509,6 +1509,31 @@ digits of them. `Args::Schemes` in the command table is the one argument whose
 words are not written in the table, and every reader of a word list goes through
 `Args::words()` so that a `match` arm on `Args::Words` cannot silently skip it.
 
+### 17 · Paging in a table drifted across the columns, 2026-09-05
+
+Reported by the author: 「in the table view, `HJKL` moves several rows, which is
+right — but it swings between columns. In column 5, press `J`, land in column
+10.」
+
+`table_motion` claimed `hjkl` and left the capitals to fall through to
+`move_page`, which is the right number of rows and the wrong idea of *where*:
+every page motion in the editor aims at a **character** column, and a character
+column is in a different cell on every row a table has, because no two rows are
+the same width. Where the offset runs past the end of a shorter row it lands in
+the last cell, which is how column 5 becomes column 10.
+
+So `J K H L`, `C-d`/`C-u` and `C-f`/`C-b`/PageUp/PageDown are now
+`move_cell_page`: the same count of steps, each one `move_cell_row`, so the
+goal column survives the whole run, a ragged row is passed over rather than
+landed in, and a Markdown table stops at its last row instead of paging out
+into the prose.
+
+One thing decided along the way: **`H` and `L` are back and onward inside a
+table even on a 縱書 page**, where the rest of the editor reads `H` as onward
+because leftward is onward down there. A table is read across whatever the
+file's layout is — `h` is already the column to the left rather than the next
+縱 — so the four capitals follow the table, not the page.
+
 ### 14 · What was deliberately left undone, 2026-09-04
 
 Two items on the list were **not** implemented, and each for a reason worth

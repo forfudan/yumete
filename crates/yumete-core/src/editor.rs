@@ -4528,6 +4528,30 @@ impl Editor {
         self.go_to_cell(want, goal);
     }
 
+    /// Page through the rows, keeping to the column.
+    ///
+    /// A page is as many rows as the screen shows, which is the same number of
+    /// steps `move_page` takes — the difference is what a step *is*. Each one
+    /// here is [`Self::move_cell_row`], so the goal column survives the whole
+    /// run, a ragged row is passed over rather than landed in, and a Markdown
+    /// table stops at its last row instead of paging out into the prose.
+    fn move_cell_page(&mut self, count: usize, down: bool, fraction: f64) {
+        let page = match self.layout {
+            // Laid out vertically a row of the table is a 縱, so the page is
+            // as many 縱 as fit across.
+            Layout::Vertical => self.page_columns,
+            Layout::Horizontal => self.page_lines,
+        };
+        let steps = ((page as f64 * fraction).round() as usize).max(1) * count;
+        for _ in 0..steps {
+            let before = self.cursor;
+            self.move_cell_row(down);
+            if self.cursor == before {
+                break;
+            }
+        }
+    }
+
     /// Put the cursor at the start of a cell.
     ///
     /// Clamped to the row: a ragged row with fewer cells than the goal takes
@@ -4614,6 +4638,26 @@ impl Editor {
             Key::Char('k') | Key::Up => self.repeat(count, |e| e.move_cell_row(false)),
             Key::Char('0') | Key::Home => self.move_cell_end(false),
             Key::Char('$') | Key::End => self.move_cell_end(true),
+            // **Several rows, down the same column.** These mean "a page" for
+            // everything else and reach `move_page`, which aims at a
+            // *character* column — and a character column is in a different
+            // cell on every row a table has, because no two rows are the same
+            // width. Half a page from column 5 landed in column 10.
+            //
+            // `H`/`L` are back and onward here even on a 縱書 page, where the
+            // rest of the editor reads `H` as onward because leftward is
+            // onward down there. A table is read across whatever the file's
+            // layout is — `h` is already the column to the left rather than
+            // the next 縱 — so the four capitals follow the table, not the
+            // page, and mean what they mean when it is laid out across.
+            Key::Char('J') => self.move_cell_page(count, true, 0.5),
+            Key::Char('K') => self.move_cell_page(count, false, 0.5),
+            Key::Char('L') => self.move_cell_page(count, true, 1.0),
+            Key::Char('H') => self.move_cell_page(count, false, 1.0),
+            Key::Ctrl('d') => self.move_cell_page(count, true, 0.5),
+            Key::Ctrl('u') => self.move_cell_page(count, false, 0.5),
+            Key::Ctrl('f') | Key::PageDown => self.move_cell_page(count, true, 1.0),
+            Key::Ctrl('b') | Key::PageUp => self.move_cell_page(count, false, 1.0),
 
             // The three ways into a cell. `i` is at its first character, `a`
             // after its last, and `c` replaces the whole thing — which for a
@@ -16500,6 +16544,50 @@ mod tests {
         // A pattern is a pattern in both directions.
         assert!(ed.execute("search column 甲[一三]").is_ok());
         assert!(ed.status().contains("1/2"), "{}", ed.status());
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    /// `J K H L` and `C-d`/`C-u` mean "several rows" in a table, and a table's
+    /// rows are not the same width twice — so aiming at a *character* column,
+    /// which is what the page motions do everywhere else, drifts sideways as
+    /// it goes. The author reported it as 「in column 5, press J, land in
+    /// column 10」.
+    #[test]
+    fn paging_through_a_table_keeps_to_the_column() {
+        let dir = std::env::temp_dir().join(format!("yumete-page-column-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let csv = dir.join("wide.csv");
+        // Deliberately ragged, and by a lot: the first field swings between 1
+        // and 19 characters, so the character offset of column c on one row is
+        // past the end of another row entirely.
+        let mut text = String::from("a,b,c,d\n");
+        for i in 0..40 {
+            let wide = "x".repeat(1 + (i % 7) * 3);
+            text.push_str(&format!("{wide},b{i},c{i},d{i}\n"));
+        }
+        std::fs::write(&csv, &text).unwrap();
+        let mut ed = Editor::new();
+        ed.open_file(&csv).unwrap();
+        ed.set_page(8, 8);
+        assert!(ed.enter_table(), "{}", ed.status());
+        // Row 7 is the widest of the seven; half a page on is one of the
+        // narrowest, whose whole line is shorter than where column c starts
+        // here.
+        ed.goto_line(7);
+        press(&mut ed, "ll");
+        assert_eq!(ed.cell_position().map(|(_, c)| c), Some(2), "column c");
+        let row = ed.cursor_line();
+        ed.on_key(Key::Char('J'));
+        assert_eq!(ed.cell_position().map(|(_, c)| c), Some(2), "still column c");
+        assert!(ed.cursor_line() > row + 1, "and it moved several rows");
+        ed.on_key(Key::Char('K'));
+        assert_eq!(ed.cell_position().map(|(_, c)| c), Some(2), "and coming back");
+        assert_eq!(ed.cursor_line(), row, "to the row it started on");
+        ed.on_key(Key::Ctrl('d'));
+        assert_eq!(ed.cell_position().map(|(_, c)| c), Some(2), "C-d is the same motion");
+        ed.on_key(Key::Char('L'));
+        assert_eq!(ed.cell_position().map(|(_, c)| c), Some(2), "and a whole page of it");
         std::fs::remove_dir_all(&dir).ok();
     }
 
