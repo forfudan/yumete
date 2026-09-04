@@ -259,8 +259,12 @@ zh = "折行：開"
 en = "soft wrap: on"
 
 [[message]]
-zh = "折行：關（長段落跑出右邊）"
-en = "soft wrap: off — long paragraphs run off the edge"
+zh = "折行：關（長段落成一行，頁面跟着光標左右走）"
+en = "soft wrap: off — a long paragraph is one row, and the page follows the caret"
+
+[[message]]
+zh = "縱書不折行：一縱斷在窗高上。這一項只管橫排（`:wrap 40` 兩邊都算）"
+en = "vertical does not soft-wrap: a 縱 breaks at the height of the window. This is a horizontal setting (`:wrap 40` counts in both)"
 
 [[message]]
 zh = "按字移動（Tab 回到按格）"
