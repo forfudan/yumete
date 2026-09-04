@@ -157,6 +157,12 @@ fn frame_to(
     height: u16,
     html: bool,
 ) -> String {
+    // **The mood, before the first cell is painted.** `run` settles this and
+    // the shot did not, so every picture came out in the theme's default mood
+    // however loudly the config said `mode = "dark"` — 48 frames of a
+    // light/dark comparison, all of them light. There is no terminal here to
+    // ask, so `auto` takes the same answer an unanswering terminal gets: dark.
+    crate::theme::settle(config, None);
     let backend = ratatui::backend::TestBackend::new(width, height);
     let mut terminal = ratatui::Terminal::new(backend).expect("a terminal over a buffer");
     let mut viewport = Seats::default();
