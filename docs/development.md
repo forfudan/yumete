@@ -1060,10 +1060,14 @@ quietly does something else.
 The night's own review found more than one night could fix; this is the rest of
 it, in the order a reader meets the damage.
 
-**`w`/`b`/`e` stepped one 字 at a time through 繁體 prose.** The bundled word
-list was simplified-only — 抬頭、已經、時候、什麼 were all absent — so the
-motion this editor exists for did not work on the script its own manual, help
-and lesson are written in. The list now carries both, derived where the 簡繁
+**`w`/`b`/`e` stepped one 字 at a time through 繁體 prose — on a machine with
+no Yume data.** The list *bundled in the binary* was simplified-only: 抬頭、
+已經、時候、什麼 were all absent. **Not the whole story, and the author caught
+the overstatement**: with the data installed the editor segments with Yume's own
+language model (`lang.ywl`, 繁簡混合, over a million entries), which reads both
+scripts and always did — `crates/yumete-ime/tests/real_data.rs` now asserts it
+against the real tables so the claim cannot drift again. What was broken is the
+fallback, which is what a fresh clone, a first run, and every CI machine use. The list now carries both, derived where the 簡繁
 mapping is one-to-one and written out by hand where it is not: conversion is
 what produced 大家傢 and 别彆人 on the first attempt, and a word nobody writes
 is worse than a word missing.
