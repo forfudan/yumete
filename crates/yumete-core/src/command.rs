@@ -181,6 +181,8 @@ pub enum Command {
     ListBuffers,
     /// `:help [節]` — the keys and the commands, in a buffer.
     Help(Option<String>),
+    /// `:tutor` — a lesson, written into a file of the reader's own.
+    Tutor,
     /// `:toc [n]` — list the headings, or go to the nth.
     Outline(Option<usize>),
     /// `:row 木` — go to the row this table names by that character.
@@ -647,6 +649,7 @@ pub fn parse(input: &str) -> Result<Command, CommandError> {
                 Ok(Command::GotoRow(rest.to_string()))
             }
         }
+        "tutor" => Ok(Command::Tutor),
         "help" => Ok(Command::Help(match rest.is_empty() {
             true => None,
             false => Some(rest.to_string()),
@@ -1693,6 +1696,13 @@ pub const COMMANDS: &[Entry] = &[
         help: "開着的檔案：列出、切換、關掉",
         needs: &[],
         args: Args::Words(BUFFERS),
+    },
+    Entry {
+        name: "tutor",
+        aliases: &[],
+        help: "一課：把課文抄成你自己的一個檔案，邊改邊學",
+        needs: &[],
+        args: Args::None,
     },
     Entry {
         name: "help",

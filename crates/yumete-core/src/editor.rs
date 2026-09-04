@@ -2367,6 +2367,10 @@ impl Editor {
                 }
                 Ok(CommandOutcome::Continue)
             }
+            Command::Tutor => {
+                self.open_tutor();
+                Ok(CommandOutcome::Continue)
+            }
             Command::Help(topic) => {
                 self.open_help(topic.as_deref());
                 Ok(CommandOutcome::Continue)
@@ -4292,7 +4296,44 @@ impl Editor {
         self.status = say!("跑完了：{0}", line);
     }
 
-    /// **`:help`** — the keys and the commands, in a buffer you can read with
+    /// **`:tutor`** — the lesson, copied into a file of the reader's own.
+    ///
+    /// A **real file**, not a scratch buffer: `:w` works, `u` is part of lesson
+    /// one, and every destructive key in it is safe because it is a copy. A
+    /// second `:tutor` numbers a fresh one rather than overwriting the first,
+    /// which may have a week's notes in it by then.
+    fn open_tutor(&mut self) {
+        let Some(dir) = self.drafts_dir.as_ref().and_then(|d| d.parent()) else {
+            // No data directory — the front end never said where it is. The
+            // lesson still opens; it just has nowhere to live.
+            let mut buffer = crate::Buffer::from_text(crate::tutor::LESSON);
+            buffer.name_as("[tutor]");
+            self.add_buffer(buffer);
+            self.status = say!("課文開好了（沒有資料目錄，存不下來）");
+            return;
+        };
+        let dir = dir.to_path_buf();
+        let _ = std::fs::create_dir_all(&dir);
+        // The first name that is free: a lesson from last week is somebody's
+        // notes now.
+        let path = (0..100)
+            .map(|n| dir.join(crate::tutor::file_name(n)))
+            .find(|p| !p.exists());
+        let Some(path) = path else {
+            self.status = say!("課文的檔名都用光了——刪掉幾份 tutor*.md");
+            return;
+        };
+        if let Err(err) = crate::buffer::write_file_atomically(&path, crate::tutor::LESSON) {
+            self.status = say!("寫不下課文：{0}", err);
+            return;
+        }
+        match self.open_file(&path) {
+            Ok(()) => self.status = say!("這是你自己的一份，隨便改（:q 退出）"),
+            Err(err) => self.status = say!("打不開課文：{0}", err),
+        }
+    }
+
+    /// **`:help`** — the keys and the commands, in a buffer you can read with    /// **`:help`** — the keys and the commands, in a buffer you can read with
     /// the editor itself.
     ///
     /// Written from the same declarations the editor runs on — `COMMANDS`,

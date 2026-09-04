@@ -31,6 +31,7 @@ pub mod sidebar;
 pub mod table;
 pub mod syntax;
 pub mod text_store;
+pub mod tutor;
 pub mod wrap;
 pub mod zong;
 
