@@ -230,6 +230,49 @@ impl Segmenter for DictionarySegmenter {
 mod tests {
     use super::*;
 
+    /// **The bundled dictionary reads the script this editor is written in.**
+    ///
+    /// It was simplified-only, so `w` stepped one character at a time through
+    /// every 繁體 manuscript — including the editor's own lesson, whose example
+    /// sentence exists to show the feature working. The sentence below is that
+    /// line, verbatim from `tutor.rs`.
+    #[test]
+    fn word_motions_find_words_in_traditional_prose() {
+        let seg = DictionarySegmenter::builtin(0);
+        let line = "他抬頭看了看那片天，雪還在下，山路已經看不見了。";
+        // The ranges are in characters, the way every motion in the editor
+        // counts them.
+        let chars: Vec<char> = line.chars().collect();
+        let words: Vec<String> = seg
+            .segment(line)
+            .into_iter()
+            .map(|(a, b)| chars[a..b].iter().collect())
+            .collect();
+        for word in ["抬頭", "已經"] {
+            assert!(words.contains(&word.to_string()), "{words:?} never joins {word}");
+        }
+    }
+
+    /// The traditional forms are an addition, not a replacement: a writer with a
+    /// simplified manuscript keeps every word they had.
+    #[test]
+    fn the_simplified_words_are_still_there() {
+        let seg = DictionarySegmenter::builtin(0);
+        let line = "他抬头看了看那片天，雪还在下，山路已经看不见了。";
+        // The ranges are in characters, the way every motion in the editor
+        // counts them.
+        let chars: Vec<char> = line.chars().collect();
+        let words: Vec<String> = seg
+            .segment(line)
+            .into_iter()
+            .map(|(a, b)| chars[a..b].iter().collect())
+            .collect();
+        for word in ["抬头", "已经"] {
+            assert!(words.contains(&word.to_string()), "{words:?} never joins {word}");
+        }
+    }
+
+
     #[test]
     fn category_segmenter_matches_word_ranges() {
         let seg = CategorySegmenter;
