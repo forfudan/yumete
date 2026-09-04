@@ -547,12 +547,15 @@ impl ThemeConfig {
 
     /// A theme by name, or `None` if nothing is called that.
     ///
-    /// Two, and they are the two arguments a scheme can make: 【墨香】 says
-    /// rank with warmth, 【黑白】 says it with nothing but weight. The second
-    /// is not a lesser version of the first — it is what a scheme looks like
-    /// when every colour has been taken away and the design has to hold
-    /// anyway, which is also what a reader with a monochrome terminal, or with
-    /// colour-blindness, is left with.
+    /// **Ten.** 【墨香】 says rank with warmth and 【黑白】 says it with nothing
+    /// but weight — the second is not a lesser version of the first, it is what
+    /// the design looks like with every colour taken away, which is also what a
+    /// monochrome terminal and a colour-blind reader are left with.
+    ///
+    /// The other eight carry 宇浩's own candidate palettes onto a page of
+    /// prose: 藍曬、琥珀、莫高、莫蘭迪、夜螢、明度階、陶窯、靛橘. Each is two
+    /// anchors per mood plus 金 and 朱, and every other shade on the page is a
+    /// rung worked out from them — so a theme is eight colours and no more.
     /// **A theme's name is ASCII**, because a command line is: `:theme ink`
     /// has to be typeable with the IME off, which is where a reader who has
     /// just opened the editor is. The pinyin is an alias for the hand that
@@ -585,6 +588,142 @@ impl ThemeConfig {
                 gold_light: (0x00, 0x00, 0x00),
                 mark_dark: (0xB4, 0xB4, 0xB4),
                 mark_light: (0x6E, 0x6E, 0x6E),
+                ..ThemeConfig::default()
+            }),
+            // 藍曬 — 普魯士藍的地、白線的字——八套裏唯一底色真帶飽和色的一套。暗是氰版藍曬，明是重氮曬圖。
+            "cyanotype" | "lanshai" => Some(ThemeConfig {
+                name: "cyanotype".to_string(),
+                dark: Ladder {
+                    ink: (0xEA, 0xF2, 0xFB),
+                    paper: (0x10, 0x32, 0x57),
+                },
+                light: Ladder {
+                    ink: (0x10, 0x2C, 0x50),
+                    paper: (0xF5, 0xF2, 0xE8),
+                },
+                gold_dark: (0xC7, 0x9A, 0x45),
+                gold_light: (0x7A, 0x5A, 0x18),
+                mark_dark: (0xE2, 0x60, 0x4B),
+                mark_light: (0xA6, 0x37, 0x1F),
+                ..ThemeConfig::default()
+            }),
+            // 琥珀 — 整頁只有一種顏色。正文本身就是磷光，金是同一個琥珀燒得更亮，不是第二個色相。
+            "amber" | "hupo" => Some(ThemeConfig {
+                name: "amber".to_string(),
+                dark: Ladder {
+                    ink: (0xFF, 0xB1, 0x00),
+                    paper: (0x0D, 0x0F, 0x09),
+                },
+                light: Ladder {
+                    ink: (0x14, 0x18, 0x0F),
+                    paper: (0xCB, 0xCE, 0xC0),
+                },
+                gold_dark: (0xFF, 0xE9, 0xB0),
+                gold_light: (0x6B, 0x46, 0x10),
+                mark_dark: (0xFF, 0x3B, 0x30),
+                mark_light: (0xA6, 0x31, 0x1F),
+                ..ThemeConfig::default()
+            }),
+            // 莫高 — 墨是壁畫氧化之後真正變成的褐黑；金不是金色，是石綠——洞窟自己的礦物。
+            "mogao" => Some(ThemeConfig {
+                name: "mogao".to_string(),
+                dark: Ladder {
+                    ink: (0xE6, 0xDA, 0xB8),
+                    paper: (0x22, 0x1B, 0x14),
+                },
+                light: Ladder {
+                    ink: (0x2E, 0x21, 0x18),
+                    paper: (0xF3, 0xEC, 0xDF),
+                },
+                gold_dark: (0x56, 0x98, 0x73),
+                gold_light: (0x38, 0x6B, 0x4D),
+                mark_dark: (0xD9, 0x78, 0x54),
+                mark_light: (0x9C, 0x41, 0x28),
+                ..ThemeConfig::default()
+            }),
+            // 莫蘭迪 — 八套裏最低的正文對比、最灰的地。長夜寫作最不刺眼的一套，朱也降成塵土般的磚紅。
+            "morandi" | "molandi" => Some(ThemeConfig {
+                name: "morandi".to_string(),
+                dark: Ladder {
+                    ink: (0xC8, 0xC1, 0xB6),
+                    paper: (0x20, 0x1F, 0x1D),
+                },
+                light: Ladder {
+                    ink: (0x2C, 0x28, 0x24),
+                    paper: (0xED, 0xEA, 0xE4),
+                },
+                gold_dark: (0xC7, 0xA7, 0x8C),
+                gold_light: (0x82, 0x64, 0x49),
+                mark_dark: (0xB9, 0x7C, 0x6E),
+                mark_light: (0x96, 0x50, 0x3E),
+                ..ThemeConfig::default()
+            }),
+            // 夜螢 — 近乎全黑的地，字是冷灰，唯一的暖處是那點黃金——螢火不是霓虹，一頁上只該有幾點。
+            "firefly" | "yeying" => Some(ThemeConfig {
+                name: "firefly".to_string(),
+                dark: Ladder {
+                    ink: (0xC9, 0xCF, 0xC4),
+                    paper: (0x08, 0x09, 0x0B),
+                },
+                light: Ladder {
+                    ink: (0x14, 0x15, 0x0F),
+                    paper: (0xFB, 0xFB, 0xF7),
+                },
+                gold_dark: (0xD9, 0xC2, 0x4A),
+                gold_light: (0x7A, 0x6D, 0x0A),
+                mark_dark: (0xE0, 0x6A, 0x52),
+                mark_light: (0xB2, 0x3D, 0x22),
+                ..ThemeConfig::default()
+            }),
+            // 明度階 — 朱不是紅的，是藍的：紅綠色盲也分得開。金與朱在色相和明度上各自分開了兩次。
+            "meridian" | "mingdujie" => Some(ThemeConfig {
+                name: "meridian".to_string(),
+                dark: Ladder {
+                    ink: (0xEE, 0xF1, 0xF5),
+                    paper: (0x14, 0x17, 0x1B),
+                },
+                light: Ladder {
+                    ink: (0x14, 0x18, 0x1E),
+                    paper: (0xFC, 0xFC, 0xFD),
+                },
+                gold_dark: (0xD9, 0xB1, 0x5C),
+                gold_light: (0x8A, 0x65, 0x12),
+                mark_dark: (0x5A, 0xA6, 0xEE),
+                mark_light: (0x1D, 0x4C, 0x88),
+                ..ThemeConfig::default()
+            }),
+            // 陶窯 — 灰釉炻器：地是窯灰，金是草木灰的青綠。橘色只留給錯誤——那是窯裏的火。
+            "kiln" | "taoyao" => Some(ThemeConfig {
+                name: "kiln".to_string(),
+                dark: Ladder {
+                    ink: (0xE8, 0xE1, 0xD3),
+                    paper: (0x2A, 0x25, 0x21),
+                },
+                light: Ladder {
+                    ink: (0x24, 0x1F, 0x1A),
+                    paper: (0xE3, 0xDD, 0xD0),
+                },
+                gold_dark: (0x8F, 0xA6, 0x6B),
+                gold_light: (0x4A, 0x5A, 0x2C),
+                mark_dark: (0xE2, 0x79, 0x3D),
+                mark_light: (0xA8, 0x50, 0x1E),
+                ..ThemeConfig::default()
+            }),
+            // 靛橘 — 顏色只活在底色裏，正文永遠是中性灰。唯一破例的是朱，它用紫，故意違反自己這條規矩。
+            "complement" | "dianju" => Some(ThemeConfig {
+                name: "complement".to_string(),
+                dark: Ladder {
+                    ink: (0xE9, 0xE9, 0xEC),
+                    paper: (0x14, 0x16, 0x2B),
+                },
+                light: Ladder {
+                    ink: (0x19, 0x1A, 0x1E),
+                    paper: (0xF2, 0xF3, 0xFA),
+                },
+                gold_dark: (0xE8, 0x86, 0x2A),
+                gold_light: (0xA8, 0x54, 0x00),
+                mark_dark: (0xB9, 0x8C, 0xFF),
+                mark_light: (0x5B, 0x3F, 0xA0),
                 ..ThemeConfig::default()
             }),
             _ => None,
