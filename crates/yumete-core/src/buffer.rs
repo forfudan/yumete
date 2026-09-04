@@ -778,6 +778,45 @@ pub fn write_target(path: &Path) -> PathBuf {
     }
 }
 
+/// NTFS's answer to「這是不是同一個檔案」: the volume it is on and its index
+/// within that volume — Windows's `dev`/`ino`, under other names.
+///
+/// It has to be asked of an **open handle** (`GetFileInformationByHandle`),
+/// which is why this is not `fs::metadata`: the standard library reads the
+/// same structure but keeps the two fields behind an unstable trait, and a
+/// text editor is not a reason to ask a writer for a nightly compiler.
+///
+/// `FILE_FLAG_BACKUP_SEMANTICS` so that a directory can be opened too, and no
+/// sharing restriction, because opening a file the writer is also editing
+/// elsewhere must not be what stops them saving it.
+#[cfg(windows)]
+fn file_identity(path: &Path) -> Option<(u32, u32, u32)> {
+    use std::os::windows::fs::OpenOptionsExt as _;
+    use std::os::windows::io::AsRawHandle as _;
+    use windows_sys::Win32::Storage::FileSystem::{
+        GetFileInformationByHandle, BY_HANDLE_FILE_INFORMATION, FILE_FLAG_BACKUP_SEMANTICS,
+    };
+
+    let file = fs::OpenOptions::new()
+        .read(true)
+        .custom_flags(FILE_FLAG_BACKUP_SEMANTICS)
+        .open(path)
+        .ok()?;
+    let mut info: BY_HANDLE_FILE_INFORMATION = unsafe { std::mem::zeroed() };
+    // SAFETY: the handle is live for the length of the call — `file` is not
+    // dropped until this function returns — and `info` is a fully-owned,
+    // correctly-sized structure of exactly the type the call writes.
+    let ok = unsafe { GetFileInformationByHandle(file.as_raw_handle() as _, &mut info) };
+    if ok == 0 {
+        return None;
+    }
+    Some((
+        info.dwVolumeSerialNumber,
+        info.nFileIndexHigh,
+        info.nFileIndexLow,
+    ))
+}
+
 /// Whether two paths name the **same file on disk**, links and all.
 ///
 /// `write_target` answers for spellings of a path; this answers for a hard
@@ -793,7 +832,14 @@ pub fn same_file(a: &Path, b: &Path) -> bool {
             _ => false,
         }
     }
-    #[cfg(not(unix))]
+    #[cfg(windows)]
+    {
+        match (file_identity(a), file_identity(b)) {
+            (Some(a), Some(b)) => a == b,
+            _ => false,
+        }
+    }
+    #[cfg(not(any(unix, windows)))]
     {
         let _ = (a, b);
         false

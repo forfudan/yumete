@@ -250,3 +250,36 @@ YUMETE_BIN_DIR=/usr/local/bin scripts/build.sh
 ./yumete docs/development.md          # interactive editor (in a terminal)
 ./yumete --preview docs/development.md # non-interactive preview
 ```
+
+`yume` must sit **beside** `yumete` (`../yume`): `yumete-ime` depends on
+`yume-core` by path, so without it nothing builds at all. `YUME_ROOT` points
+elsewhere.
+
+### Windows
+
+The same script, run under **Git Bash** (ships with Git for Windows) or MSYS2 —
+not PowerShell. The file list it compiles has to match `yume_core::data_manifest`
+exactly, and a second copy in another language is a second thing to forget when
+yume adds a data file.
+
+```bash
+scripts/build.sh                       # ./yumete.exe, data into %APPDATA%\yumete
+./yumete.exe --help
+```
+
+Three things differ there and the script handles all three: the binary is
+`yumete.exe`, the data goes to `%APPDATA%\yumete` rather than
+`~/.local/share/yumete`, and the global `yumete` is a **copy** rather than a
+symlink, because a symlink needs Developer Mode.
+
+Without the sibling yume repo, `cargo build --release` alone still produces a
+working editor at `target\release\yumete.exe` — it just has no 碼表 beyond the
+one built into the binary. If yume is already installed on the machine, its own
+tables are found where it put them (`%APPDATA%\Yume\`); if they are somewhere
+else entirely, name the place:
+
+```toml
+# %APPDATA%\yumete\config.toml
+[ime]
+data_dirs = ["D:/yuhao/tables"]
+```

@@ -2342,3 +2342,10 @@ en = "no commit method '{0}' — delayed, unique, fluency"
 [[message]]
 zh = "{0} 只能整句上屏（沒有碼表可以逐段查），上屏方式仍然是{1}"
 en = "{0} can only be typed as whole sentences — no 碼表 to look a segment up in — so the commit method is still {1}"
+
+# Where to put it, spelled out: the directory is `%APPDATA%\yumete` on Windows,
+# `~/.local/share/yumete` elsewhere, and nobody can be expected to know which
+# without being told.
+[[message]]
+zh = "{0} 的碼表沒有裝——放進 {1}，或者把自己的碼表放進 .yumete/"
+en = "{0}'s table is not installed — put it in {1}, or a table of your own in .yumete/"

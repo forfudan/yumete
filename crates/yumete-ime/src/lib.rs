@@ -664,6 +664,22 @@ fn find_file(dirs: &[PathBuf], relative: &str) -> Option<PathBuf> {
             return Some(path);
         }
     }
+    // Then flat. The manifest lays its files out in `data/` and `schemes/`
+    // because that is how yume's own bundle is arranged — but a writer who
+    // unzipped a release into one folder, or a build script older than the
+    // split, has every one of them side by side, and the names are distinctive
+    // enough (`chaifen.ydiv`, `lang.ywl`, `ling.ytab`) that the basename is a
+    // safe second question. Nested wins, so a directory holding both is read
+    // the way it was arranged.
+    let name = relative.rsplit('/').next()?;
+    if name != relative {
+        for dir in dirs {
+            let path = dir.join(name);
+            if path.is_file() {
+                return Some(path);
+            }
+        }
+    }
     None
 }
 

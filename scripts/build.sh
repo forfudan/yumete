@@ -12,12 +12,50 @@
 # typed in any directory is this build. Set YUMETE_BIN_DIR to link elsewhere, or
 # --no-link to leave the global command alone.
 #
+# On Windows, run this under **Git Bash** (or MSYS2): it is the same script,
+# because the file list below must match `yume_core::data_manifest` and a second
+# copy in PowerShell would be a second thing to forget to update. What differs
+# is only the three things that are genuinely different — `.exe`, `%APPDATA%`,
+# and that a symlink needs Developer Mode there, so the global command is a copy.
+#
 # Usage: scripts/build.sh [--no-data] [--no-link]
 set -euo pipefail
 
 # Repository root (this script lives in <root>/scripts).
 cd "$(dirname "$0")/.."
 YUMETE_ROOT="$(pwd)"
+
+# Windows under Git Bash / MSYS2 / Cygwin: a POSIX shell on a machine whose
+# conventions are not POSIX. Everything below asks this rather than `uname`
+# directly, so the three differences are named once.
+case "$(uname -s)" in
+  MINGW* | MSYS* | CYGWIN*) WINDOWS=1 ;;
+  *) WINDOWS=0 ;;
+esac
+EXE=""
+[[ "$WINDOWS" == "1" ]] && EXE=".exe"
+
+# A Windows path (`C:\Users\...`) as this shell can open it.
+to_unix_path() {
+  if command -v cygpath >/dev/null 2>&1; then
+    cygpath -u "$1"
+  else
+    # No cygpath (a bare MSYS): `C:\x\y` → `/c/x/y`, which is what it mounts as.
+    printf '/%s\n' "$(printf '%s' "$1" | sed 's|\\|/|g; s|^\([A-Za-z]\):|\L\1|')"
+  fi
+}
+
+# Where the editor will look for its data — `yumete_config::data_dir()`, in
+# shell. The two must agree or the tables are compiled somewhere nothing reads.
+data_dir() {
+  if [[ -n "${XDG_DATA_HOME:-}" ]]; then
+    echo "$XDG_DATA_HOME/yumete"
+  elif [[ "$WINDOWS" == "1" && -n "${APPDATA:-}" ]]; then
+    echo "$(to_unix_path "$APPDATA")/yumete"
+  else
+    echo "$HOME/.local/share/yumete"
+  fi
+}
 
 install_data=1
 link_global=1
@@ -33,7 +71,7 @@ if [[ "${YUMETE_SKIP_DATA:-0}" == "1" ]]; then
 fi
 
 cargo build --release
-cp target/release/yumete ./yumete
+cp "target/release/yumete$EXE" "./yumete$EXE"
 
 # On macOS, `strip = true` invalidates the linker's ad-hoc code signature, and
 # AMFI then kills the binary on launch (SIGKILL). Re-sign it ad-hoc.
@@ -41,7 +79,7 @@ if [[ "$(uname)" == "Darwin" ]]; then
   codesign --sign - --force ./yumete
 fi
 
-echo "Built ./yumete ($(./yumete --version))"
+echo "Built ./yumete$EXE ($("./yumete$EXE" --version))"
 
 # ---- IME data: compile the Yume tables and install them into the data dir -----
 #
@@ -71,10 +109,10 @@ install_ime_data() {
     return 0
   fi
 
-  local dest="${XDG_DATA_HOME:-$HOME/.local/share}/yumete"
+  local dest; dest="$(data_dir)"
   echo "==> IME data: compiling from $yume_root/data into $dest"
 
-  local compiler="$yume_root/target/release/yume-compile"
+  local compiler="$yume_root/target/release/yume-compile$EXE"
   (cd "$yume_root" && cargo build --release -p yume-compile)
 
   # **Two directories, because yume says so.** As of yume's「Split the bundle
@@ -197,12 +235,20 @@ link_globally() {
   local link="$bin_dir/yumete"
 
   mkdir -p "$bin_dir"
-  if [[ -e "$link" && ! -L "$link" ]]; then
-    echo "==> global yumete: skipped ($link is a real file, not ours — remove it or set YUMETE_BIN_DIR)"
-    return 0
+  # On Windows a symlink needs Developer Mode or an elevated shell, and a build
+  # script must not need either — so the global command is a **copy**, and the
+  # cost is that it is only as new as the last build that ran this step.
+  if [[ "$WINDOWS" == "1" ]]; then
+    cp "$YUMETE_ROOT/yumete$EXE" "$link$EXE"
+    echo "==> global yumete: $link$EXE (a copy: a symlink needs Developer Mode)"
+  else
+    if [[ -e "$link" && ! -L "$link" ]]; then
+      echo "==> global yumete: skipped ($link is a real file, not ours — remove it or set YUMETE_BIN_DIR)"
+      return 0
+    fi
+    ln -sfn "$YUMETE_ROOT/yumete" "$link"
+    echo "==> global yumete: $link -> $YUMETE_ROOT/yumete"
   fi
-  ln -sfn "$YUMETE_ROOT/yumete" "$link"
-  echo "==> global yumete: $link -> $YUMETE_ROOT/yumete"
 
   # A link nothing can reach is not an install. `command -v` would find the one
   # we just made even if the directory is absent from PATH — via the shell's

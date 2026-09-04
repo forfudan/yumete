@@ -21,7 +21,6 @@
 /// it is the one that appears in every chapter of Chinese prose, so it is the
 /// one whose width the writer will actually notice being wrong, and a font
 /// that draws it wide draws the rest of the ambiguous block wide too.
-#[cfg(unix)]
 const ASK_WITH: &str = "—";
 
 /// Ask the terminal whether an ambiguous character takes two cells.
@@ -96,7 +95,38 @@ pub fn ask_the_terminal_about_width() -> Option<bool> {
     answer
 }
 
-#[cfg(not(unix))]
+/// The same question on Windows, asked of the console rather than of a reply.
+///
+/// The console API answers where the cursor is (`GetConsoleScreenBufferInfo`,
+/// which is what crossterm's `position()` calls there), so there is no escape
+/// sequence to write, no raw mode to enter, and no reply that could arrive
+/// late or not at all. Print the character at the start of the line, ask, and
+/// erase what was printed.
+#[cfg(windows)]
+pub fn ask_the_terminal_about_width() -> Option<bool> {
+    use std::io::{IsTerminal, Write};
+
+    let mut out = std::io::stdout();
+    if !out.is_terminal() {
+        return None;
+    }
+    write!(out, "\r{ASK_WITH}").ok()?;
+    out.flush().ok()?;
+    let (column, _) = ratatui::crossterm::cursor::position().ok()?;
+    // Put the line back the way it was found — this runs before the alternate
+    // screen, on a line the reader can still see.
+    write!(out, "\r\x1b[K").ok()?;
+    let _ = out.flush();
+    // Printed in column 0, so the cursor lands in column 1 for one cell and
+    // column 2 for two. Anything else is no answer rather than a guess.
+    match column {
+        1 => Some(false),
+        2 => Some(true),
+        _ => None,
+    }
+}
+
+#[cfg(not(any(unix, windows)))]
 pub fn ask_the_terminal_about_width() -> Option<bool> {
     None
 }

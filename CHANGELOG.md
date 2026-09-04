@@ -28,6 +28,24 @@ in `docs/development.md` §5.2.
 
 ### 新的 · New
 
+- **Windows 上能用了**（#219）——本來也能編出 `.exe`，但那個 `.exe` 上有四件事是錯的，
+  而且編譯器一個字都不會說：設定與資料落在**跟着工作目錄跑**的相對路徑上、
+  「寫入按身份認」在沒有 inode 的地方悄悄失效、`:sh` 和 `:!` 去找 `/bin/sh`、
+  一個字幾格問不出來（於是 `——` 一行差十格）。現在：
+  - 設定和資料都在 `%APPDATA%\yumete`——**同一個目錄**，`config.toml` 在根上，
+    `data\` 和 `schemes\` 在旁邊，跟宇浩自己的 `%APPDATA%\Yume\` 一個形狀。
+    `XDG_CONFIG_HOME`／`XDG_DATA_HOME` 在**哪個平台上都仍然優先**。
+  - 同一個檔案認得出來了（`GetFileInformationByHandle`：卷序號＋檔案索引）。
+  - `%ComSpec%`／`cmd.exe` 加 `/C`；`~` 在配置裏和在命令行裏是同一個家。
+  - `ambiguous_width = "auto"` 那邊走的是控制台 API 而不是回覆，比 Unix 那條還準。
+  - **會去找宇浩自己裝的碼表了**——`%APPDATA%\Yume\data\compiled` 那一套，
+    覆蓋層在前。已經在打卿雲的機器不必再編一次。碼表攤平在一個資料夾裏也認。
+  - `[ime] data_dirs` ——資料在哪，自己說了算，哪個平台都能寫。
+  - `scripts/build.sh` 就是 Windows 的構建腳本，用 Git Bash 跑。
+    不另寫一份 PowerShell：那份檔案清單必須跟 `data_manifest` 一致，
+    抄第二份就是第二個會忘記更新的地方。
+  - 「碼表沒有裝」現在會把**該放進哪個目錄**寫出來。
+
 - **`:yume commit delayed|unique|fluency`**（#209）——**上屏方式**：碼打完了什麼時候
   上屏。`delayed` 延遲（頂字，出廠）、`unique` 唯一（也可以寫 `auto`）、`fluency` 整句。
   三個名字是 yume 自己的，合成也在 yume 的核心裏，所以這裏選的那一個在輸入法自己的面板

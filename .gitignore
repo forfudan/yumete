@@ -4,6 +4,7 @@
 # Compiled binary placed at the repository root by `scripts/build.sh`.
 # Released via a Homebrew tap, not tracked in git.
 /yumete
+/yumete.exe
 
 # macOS
 .DS_Store
