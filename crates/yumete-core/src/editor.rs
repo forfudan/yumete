@@ -4101,6 +4101,15 @@ impl Editor {
         // drawn as a grid: `hjkl`, the operators and the selection all mean
         // what they mean everywhere else. Only Enter still knows about cells.
         if self.table.as_ref().map(|v| v.grain) == Some(Grain::Char) {
+            // …except `t`. Reading by character is how you get *inside* a
+            // cell, and the lesson itself asks the reader to press `Tab` and
+            // then `t/` — 「找哪些字的拆分裏用了光標下這個字」. When `Enter`
+            // did that job it worked in both grains; the key that replaced it
+            // has to as well. `f` is still there for a find-till.
+            if key == Key::Char('t') {
+                self.pending = Pending::Table;
+                return true;
+            }
             return false;
         }
         match key {
@@ -4317,13 +4326,17 @@ impl Editor {
         // number is the column you are standing in, which is what it has always
         // been.
         if matches!(key, Key::Char('s') | Key::Char('S')) {
+            let down = key == Key::Char('S');
             if let Some((column, _)) = self.sequence_span() {
-                let down = key == Key::Char('S');
                 self.sort_table(&[(column, down)]);
                 return;
             }
+            // No number: the column the cursor is standing in. `S` means
+            // *down* here too — a delimited file used to sort up either way,
+            // silently, which is the worst way to disagree with a keystroke.
             if self.md_region().is_none() {
-                self.sort_table(&[]);
+                let here = self.cell_position().map(|(_, c)| c).unwrap_or(0);
+                self.sort_table(&[(here + 1, down)]);
                 return;
             }
         }
@@ -4360,7 +4373,7 @@ impl Editor {
                 Key::Char('j') | Key::Down => self.shift_row(true),
                 Key::Char('k') | Key::Up => self.shift_row(false),
                 Key::Esc => {}
-                _ => self.status = say!("t 後面（這種表格）：o O d j k y p"),
+                _ => self.status = say!("t 後面（這種表格）：/ ? g s S o O d j k y p"),
             }
             return;
         }
@@ -4391,7 +4404,7 @@ impl Editor {
                 };
             }
             Key::Esc => {}
-            _ => self.status = say!("t 後面：o O n N d D j k h l y p s S < = > t"),
+            _ => self.status = say!("t 後面：/ ? g s S o O n N d D j k h l y p < = > t"),
         }
     }
 
@@ -5058,6 +5071,8 @@ impl Editor {
             // existed and then said it did not.
             Pending::Table if self.md_region().is_none() => (say!("t 表格"), vec![
                     ("/ ?", say!("一欄一欄找：這邊找／那邊看（t2-10?）")),
+                    ("g", say!("去某一格（t20-20g）")),
+                    ("s S", say!("照這欄順排／倒排（t1s）")),
                     ("o O", say!("加一行（下／上）")),
                     ("d", say!("刪這一行")),
                     ("j k", say!("這行下移／上移")),
@@ -5065,13 +5080,14 @@ impl Editor {
                 ]),
             Pending::Table => (say!("t 表格"), vec![
                     ("/ ?", say!("一欄一欄找：這邊找／那邊看（t2-10?）")),
+                    ("g", say!("去某一格（t20-20g）")),
                     ("o O", say!("加一行（下／上）")),
                     ("n N", say!("加一欄（右／左）")),
                     ("d D", say!("刪這行／這欄")),
                     ("j k", say!("這行下移／上移")),
                     ("h l", say!("這欄左移／右移")),
                     ("y p", say!("取這欄／貼一欄")),
-                    ("s S", say!("照這欄順排／倒排")),
+                    ("s S", say!("照這欄順排／倒排（t1s）")),
                     ("< = >", say!("這欄靠左／居中／靠右")),
                     ("t", say!("重排對齊")),
                 ]),
@@ -8082,7 +8098,12 @@ impl Editor {
                 // `3gd` — vi's own order, kept because fifty years of fingers
                 // know it — puts it in the count.
                 if self.column_span.is_none() {
-                    self.column_span = self.sequence_span();
+                    // `g3d`, then `3gd`: the sequence's own argument first,
+                    // and failing that the count typed before the `g`, which
+                    // the comment above has always promised and nothing read.
+                    self.column_span = self
+                        .sequence_span()
+                        .or_else(|| self.operator_count.map(|n| (n, n)));
                 }
                 self.handle_goto(key);
                 self.operator_count = None;
@@ -8565,7 +8586,10 @@ impl Editor {
             // reader's fingers already know.
             Key::Char('G') => {
                 self.remember_jump();
-                match count > 1 || self.count.is_some() {
+                // `operator_count`, not `self.count`: the count was taken at
+                // the top of this function, so asking `self.count` here always
+                // said "no digits" and `1G` went to the *last* line.
+                match operator_count.is_some() {
                     true => self.goto_line(count),
                     false => {
                         let rope = self.current_buffer().rope();
@@ -11824,6 +11848,74 @@ mod tests {
             ed.on_key(Key::Char(c));
         }
         ed.on_key(Key::Enter);
+    }
+
+    #[test]
+    fn a_column_can_be_named_either_way_round() {
+        // `g3d` and `3gd` are the same question — 「in column three」 — and the
+        // comment beside the code has said so all along, but the vi-order
+        // spelling put its number in the count and nothing ever read it.
+        let table = "| 字 | 甲 | 乙 |\n| -- | -- | -- |\n| 木 | 目 | 相 |\n| 甲 | 乙 | 木 |\n| 相 | 木 | 目 |\n";
+        let start = |keys: &str| {
+            let mut ed = typed(table);
+            ed.goto_line(3);
+            assert!(ed.enter_table(), "{}", ed.status());
+            press(&mut ed, keys);
+            ed.cursor_line()
+        };
+        assert_eq!(start("g3d"), 3, "column three holds 木 on the fourth line");
+        assert_eq!(start("3gd"), 3, "and vi's order says the same thing");
+        assert_eq!(start("gd"), 2, "no number is the key column, which is here");
+    }
+
+    #[test]
+    fn a_capital_s_sorts_a_delimited_file_downwards() {
+        // `t S` sorted *up* on a delimited file: the branch that handles a
+        // bare `s`/`S` never looked at which of the two had been pressed, so
+        // the editor did the opposite of the key and said nothing.
+        let dir = std::env::temp_dir().join(format!("yumete-sortS-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let sorted = |name: &str, keys: &str| {
+            let csv = dir.join(name);
+            std::fs::write(&csv, "字,序\n甲,1\n丙,3\n乙,2\n").unwrap();
+            let mut ed = Editor::new();
+            ed.open_file(&csv).unwrap();
+            assert!(ed.enter_table(), "{}", ed.status());
+            press(&mut ed, keys);
+            ed.current_buffer().text()
+        };
+        // By code point, which is what the sort promises for anything that is
+        // not a number: 丙 U+4E19, 乙 U+4E59, 甲 U+7532.
+        assert_eq!(sorted("up.csv", "ts"), "字,序\n丙,3\n乙,2\n甲,1\n");
+        assert_eq!(sorted("down.csv", "tS"), "字,序\n甲,1\n乙,2\n丙,3\n");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn t_still_works_when_the_grid_is_read_by_character() {
+        // `Tab` reads the grid by character — which is how you get *inside* a
+        // cell, and exactly where the lesson tells the reader to press `t/`.
+        // When `Enter` did that job it worked in both grains; `t` did not.
+        let mut ed = typed("| 字 | 拆分 |\n| -- | -- |\n| 木 | 木 |\n| 相 | 木目 |\n");
+        ed.goto_line(3);
+        assert!(ed.enter_table(), "{}", ed.status());
+        ed.on_key(Key::Tab);
+        ed.on_key(Key::Char('t'));
+        assert!(ed.pending_menu().is_some(), "t opened nothing in the char grain");
+    }
+
+    #[test]
+    fn one_g_goes_to_the_first_line() {
+        // `1G` went to the *last* line: the count had already been taken by the
+        // time `G` asked whether there was one.
+        let mut ed = typed("一\n二\n三\n四\n");
+        press(&mut ed, "1G");
+        assert_eq!(ed.cursor_line(), 0, "1G is the first line");
+        press(&mut ed, "3G");
+        assert_eq!(ed.cursor_line(), 2);
+        press(&mut ed, "G");
+        assert_eq!(ed.cursor_line(), 3, "a bare G is still the last line");
     }
 
     #[test]
