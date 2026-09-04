@@ -482,12 +482,27 @@ pub mod rung {
     /// a highlighter.
     pub const WORD: u16 = 962;
     /// A band that must be **seen**, because position is not separating it
-    /// from the text: the 縱書 number band sits in the text's own columns, and
-    /// the lit tab sits among the unlit ones.
-    pub const HEAD: u16 = 880;
+    /// from the text: the 縱書 number band sits in the text's own columns, the
+    /// lit tab sits among the unlit ones, and a table's cursor row sits among
+    /// its alternating columns.
+    ///
+    /// **820, not 880.** Near the paper end of the ladder the rungs compress:
+    /// 880 against [`BAND`]'s 940 is 1.11–1.20:1 in every theme, which is not a
+    /// difference a reader can see — so in a table with coloured columns the
+    /// cursor's own row could not be told from the column beside it. At 820 it
+    /// is 1.27:1 at worst, which can.
+    pub const HEAD: u16 = 815;
     /// A selection: the loudest ground, and still only a ground — the ink on it
     /// is untouched, so a heading inside a selection is still a heading.
-    pub const SELECTION: u16 = 800;
+    ///
+    /// **700**, moved down with [`HEAD`] to keep the two apart: a selection
+    /// inside a table's cursor row is two grounds one inside the other, and at
+    /// the old 800 against 880 they were the same colour. It also makes a
+    /// selection what it should have been — the ground you see first (1.26:1
+    /// clear of the row band, and the writing on it still over 4.5:1 — 莫蘭迪,
+    /// the theme with the least contrast to spend, is the one that decides
+    /// this pair of numbers).
+    pub const SELECTION: u16 = 700;
     /// The page.
     pub const PAPER: u16 = 1000;
 }
