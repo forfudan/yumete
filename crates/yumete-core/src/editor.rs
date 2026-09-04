@@ -1063,7 +1063,7 @@ impl Editor {
         let prose = self.without_markup(&text);
         let chars = prose.iter().filter(|c| !c.is_whitespace()).count();
         let han = prose.iter().filter(|&&c| is_han(c)).count();
-        say!("{0}  {1} 字  {2} 字符  {3} 段", what, han, chars, paragraphs)
+        say!("{0}  漢字 {1}  字數 {2}（不含空白）  {3} 段", what, han, chars, paragraphs)
     }
 
     /// `text` with every ruby group reduced to the base it annotates — what a
@@ -12783,8 +12783,8 @@ mod tests {
         ed.execute(":count").unwrap();
         let report = ed.status().to_string();
         // 21 漢字, plus three marks; two paragraphs, the blank line not counted.
-        assert!(report.contains("21 字"), "{report}");
-        assert!(report.contains("24 字符"), "{report}");
+        assert!(report.contains("漢字 21"), "{report}");
+        assert!(report.contains("字數 24"), "{report}");
         assert!(report.contains("2 段"), "{report}");
         assert!(report.starts_with("全篇"), "{report}");
     }
@@ -12797,7 +12797,7 @@ mod tests {
         ed.execute(":wc").unwrap();
         let report = ed.status().to_string();
         assert!(report.starts_with("選區"), "{report}");
-        assert!(report.contains("2 字"), "{report}");
+        assert!(report.contains("漢字 2"), "{report}");
     }
 
     #[test]
@@ -17514,8 +17514,8 @@ mod tests {
         ed.execute(":count").unwrap();
         let report = ed.status().to_string();
         // 永和九年歲在癸丑 is eight 字; the tags are not writing.
-        assert!(report.contains("8 字"), "{report}");
-        assert!(report.contains("10 字符"), "{report}");
+        assert!(report.contains("漢字 8"), "{report}");
+        assert!(report.contains("字數 10"), "{report}");
     }
 
     #[test]
@@ -17524,7 +17524,7 @@ mod tests {
         ed.current_buffer_mut().insert(0, "二〇二五年");
         ed.execute(":count").unwrap();
         let report = ed.status().to_string();
-        assert!(report.contains("5 字"), "{report}");
+        assert!(report.contains("漢字 5"), "{report}");
     }
 
     #[test]
