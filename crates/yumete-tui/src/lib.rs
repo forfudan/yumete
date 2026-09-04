@@ -262,6 +262,9 @@ pub fn run(
 
     let mut viewport = Seats::default();
     let mut shift = ShiftTap::default();
+    // Whether the command line turned 中文 off on the way in, and so owes it
+    // back on the way out (#225).
+    let mut borrowed_english = false;
     // A typesetter started with `:preview`, if one is running — and one left
     // behind by a session that ended badly, which is stopped before this one
     // can start another.
@@ -291,12 +294,27 @@ pub fn run(
                 }
             );
 
-            // Opening the command line cancels a composition rather than leaving
-            // it hanging: `:` does not compose, so there is nothing to finish it
-            // with. The 中/英 state itself is left alone — it belongs to Insert,
-            // and a command is over in a keystroke or two.
-            if mode == Mode::Command && ime.available() && ime.is_composing() {
-                ime.escape();
+            // Leaving the command line gives Insert its 中/英 back (#225).
+            if last_mode == Some(Mode::Command) && borrowed_english {
+                if ime.available() && !ime.is_chinese() {
+                    ime.toggle_language();
+                }
+                borrowed_english = false;
+            }
+            // Opening it cancels a composition rather than leaving it hanging:
+            // the first keystroke after `:` is a command name, so there is
+            // nothing to finish the composition with. **And the line opens in
+            // 英 whatever Insert was in** — otherwise `:layout` typed straight
+            // after writing 中文 is eaten a letter at a time. Insert's own
+            // state is borrowed, not overwritten; it is put back above.
+            if mode == Mode::Command && ime.available() {
+                if ime.is_composing() {
+                    ime.escape();
+                }
+                if ime.is_chinese() {
+                    ime.toggle_language();
+                    borrowed_english = true;
+                }
             }
             last_mode = Some(mode);
         }
@@ -381,7 +399,7 @@ pub fn run(
                 // activity is swallowed so it never reaches the editor.
                 match shift.update(&key) {
                     ShiftResult::Toggle => {
-                        if composes(editor.mode()) && ime.available() {
+                        if composes_here(editor) && ime.available() {
                             ime.toggle_language();
                         }
                         continue;
@@ -401,13 +419,13 @@ pub fn run(
                 // NUL sends `Char('\0')`; both spellings arrive here.
                 let control_space = mods.contains(KeyModifiers::CONTROL)
                     && matches!(code, KeyCode::Char(' ') | KeyCode::Char('\0') | KeyCode::Null);
-                if control_space && composes(editor.mode()) {
+                if control_space && composes_here(editor) {
                     let want = if ime.is_chinese() { "-" } else { "+" };
                     let said = switch_scheme(ime, want, config);
                     editor.set_status(said);
                     continue;
                 }
-                let consumed = composes(editor.mode())
+                let consumed = composes_here(editor)
                     && ime.available()
                     && ime_handle(ime, editor, code, mods);
                 if !consumed {
@@ -693,10 +711,26 @@ const DISK_POLL: std::time::Duration = std::time::Duration::from_secs(2);
 /// what could be typed as ASCII, which in a novel is almost nothing.
 fn composes(mode: Mode) -> bool {
     // Ruby included: a reading is kana or 拼音, and kana needs the IME as much
-    // as the body text does. The `:` command line is **not** — its vocabulary is
-    // ASCII command names, so running the IME there would only mean toggling out
-    // of it before every command.
+    // as the body text does. The `:` command line is **not** — its vocabulary
+    // is ASCII command names. For the half of it that is *not* names, see
+    // [`composes_here`].
     matches!(mode, Mode::Insert | Mode::Search | Mode::Ruby)
+}
+
+/// Whether the IME may run for what is being typed **right now** (#225).
+///
+/// The mode is not the whole answer in a command line. Its names are ASCII —
+/// so `:layout` is still typed straight, and lone-Shift on a command name does
+/// nothing, because there is no 中文 to type there — but its **arguments** are
+/// where a Chinese novel's file names and search patterns live. `:s/照首行/`
+/// and `:e 第三章.md` could only be pasted before this.
+///
+/// Not automatic on reaching an argument: `:s/[a-z]+/x/` is as common as the
+/// Chinese one, so the IME is *permitted* here rather than switched on.
+fn composes_here(editor: &Editor) -> bool {
+    composes(editor.mode())
+        || (editor.mode() == Mode::Command
+            && yumete_core::command::takes_text(editor.command_line()))
 }
 
 /// Whether a key event should drive the editor.
@@ -1465,7 +1499,7 @@ fn settle_inline_candidate(editor: &mut Editor, ime: &ImeSession) {
 /// The text `bare` draws into the sentence, or empty when it draws nothing.
 fn inline_candidate(editor: &Editor, ime: &ImeSession) -> String {
     if ime.panel_is_full()
-        || !composes(editor.mode())
+        || !composes_here(editor)
         || !page_can_hold_a_candidate(editor)
         || !ime.available()
         || !ime.is_composing()
@@ -2008,7 +2042,7 @@ fn draw(
     // code is under the caret. Unless there is no sentence to draw it into:
     // see `page_can_hold_a_candidate`.
     let panel = ime.panel_is_full() || !page_can_hold_a_candidate(editor);
-    if panel && composes(editor.mode()) && ime.available() && ime.is_composing() {
+    if panel && composes_here(editor) && ime.available() && ime.is_composing() {
         // The panel follows the page, not the prompt: a `/` search in a
         // vertically set document still picks its candidates out of a vertical
         // list, and one panel wearing a different skin from the other reads as a
@@ -2037,7 +2071,7 @@ fn draw(
 /// composing there is that the pattern is Chinese, and without the tag there is
 /// no way to tell why letters are or are not turning into 漢字.
 fn language_tag(editor: &Editor, ime: &ImeSession) -> String {
-    if !composes(editor.mode()) || !ime.available() {
+    if !composes_here(editor) || !ime.available() {
         return String::new();
     }
     if ime.is_chinese() {
@@ -2194,7 +2228,7 @@ fn hud_line(editor: &Editor, ime: &ImeSession) -> String {
     if editor.prompt().is_some() {
         return String::new();
     }
-    if composes(editor.mode()) && ime.available() && ime.is_composing() && !ime.panel_is_full() {
+    if composes_here(editor) && ime.available() && ime.is_composing() && !ime.panel_is_full() {
         // 空空如也 leaves the code nowhere else to be: the candidate is in the
         // sentence, and what was typed to get it is not.
         return ime.display_buffer();
@@ -7744,6 +7778,35 @@ mod tests {
         assert!(composes(Mode::Ruby));
         assert!(!composes(Mode::Normal));
         assert!(!composes(Mode::Command));
+    }
+
+    /// The command line is half ASCII and half prose (#225): its names are
+    /// commands, its arguments are a novel's file names and search patterns.
+    #[test]
+    fn the_command_line_composes_only_where_it_takes_text() {
+        let mut editor = Editor::new();
+        editor.on_key(Key::Char(':'));
+        assert!(!composes_here(&editor), "a bare `:` is about to take a name");
+        for c in "s/照首行".chars() {
+            editor.on_key(Key::Char(c));
+        }
+        assert!(composes_here(&editor), "a substitution is prose: {:?}", editor.command_line());
+
+        let mut editor = Editor::new();
+        editor.on_key(Key::Char(':'));
+        for c in "layout".chars() {
+            editor.on_key(Key::Char(c));
+        }
+        assert!(!composes_here(&editor), "`layout` takes one of its own words");
+        editor.on_key(Key::Char(' '));
+        assert!(!composes_here(&editor), "and still does after the space");
+
+        let mut editor = Editor::new();
+        editor.on_key(Key::Char(':'));
+        for c in "e ".chars() {
+            editor.on_key(Key::Char(c));
+        }
+        assert!(composes_here(&editor), "`:e 第三章.md` is a path");
     }
 
     #[test]
