@@ -437,6 +437,12 @@ impl Grain {
 /// front and back matter. A line of prose that happens to open with 第一章的
 /// 那天 is 20 characters into a sentence and is not caught by this.
 fn chapter_heading(line: &str) -> Option<usize> {
+    const NAMED: &[&str] = &[
+        "序", "序章", "序言", "自序", "前言", "引子", "楔子", "小引", "凡例",
+        "尾聲", "尾声", "終章", "终章", "後記", "后记", "跋", "附錄", "附录",
+        "番外", "外傳", "外传", "目錄", "目录",
+    ];
+    const DIGITS: &str = "一二三四五六七八九十百千萬万零〇兩两0123456789０１２３４５６７８９";
     let text = line.trim();
     let chars: Vec<char> = text.chars().collect();
     // A heading is a line by itself, and a short one. The longest real chapter
@@ -445,38 +451,43 @@ fn chapter_heading(line: &str) -> Option<usize> {
         return None;
     }
     // 序、楔子、後記: no number, so the whole line has to be the name.
-    const NAMED: &[&str] = &[
-        "序", "序章", "序言", "自序", "前言", "引子", "楔子", "小引", "凡例",
-        "尾聲", "尾声", "終章", "终章", "後記", "后记", "跋", "附錄", "附录",
-        "番外", "外傳", "外传", "目錄", "目录",
-    ];
     if NAMED.contains(&text) {
         return Some(2);
     }
-    if chars[0] != '第' {
-        return None;
-    }
-    let digits = chars[1..]
-        .iter()
-        .take_while(|c| "一二三四五六七八九十百千萬万零〇兩两0123456789".contains(**c))
-        .count();
-    if digits == 0 {
-        return None;
-    }
-    let unit = *chars.get(1 + digits)?;
-    // What comes after the unit is the title, and it has to be separated from
-    // it — 第三章 or 第三章　風雪, but not 第三章魚 (which is prose).
-    match chars.get(2 + digits) {
-        None => {}
-        Some(c) if c.is_whitespace() || matches!(c, '、' | '：' | ':' | '.' | '·') => {}
-        Some(_) => return None,
-    }
-    match unit {
-        // A 卷 holds 章 the way a part holds chapters, so it sits above them.
+    // A 卷 holds 章 the way a part holds chapters, so it sits above them.
+    let depth = |unit: char| match unit {
         '卷' | '部' | '篇' | '集' => Some(1),
         '章' | '回' | '節' | '节' | '折' | '幕' | '話' | '话' => Some(2),
         _ => None,
+    };
+    let run = |from: usize| chars[from..].iter().take_while(|c| DIGITS.contains(**c)).count();
+    // **Both spellings.** 第三章 and 第一卷 put the number between 第 and the
+    // unit; 卷002 and 卷二十 put the unit first and drop 第 — which is how
+    // 資治通鑑 writes all 294 of its 卷, and the book this feature was written
+    // for. A unit with no number after it is prose: 「話說天下大勢」 opens 三國
+    // 演義 and is not a chapter heading.
+    let (unit, after) = match chars[0] {
+        '第' => {
+            let digits = run(1);
+            if digits == 0 {
+                return None;
+            }
+            (*chars.get(1 + digits)?, 2 + digits)
+        }
+        first if depth(first).is_some() => {
+            let digits = run(1);
+            (digits > 0).then_some((first, 1 + digits))?
+        }
+        _ => return None,
+    };
+    // What comes after the unit is the title, and it has to be separated from
+    // it — 第三章 or 第三章　風雪, but not 第三章魚 (which is prose).
+    match chars.get(after) {
+        None => {}
+        Some(c) if c.is_whitespace() || matches!(c, '、' | '：' | ':' | '.' | '·' | '，') => {}
+        Some(_) => return None,
     }
+    depth(unit)
 }
 
 /// Call `f` for every readable file under `root`, depth first.
@@ -10323,12 +10334,16 @@ impl Editor {
 
     /// Replace the selection with the yank register (Helix `R`).
     fn replace_with_register(&mut self) {
+        // Read before `recall`, which *takes* it: asking afterwards always
+        // answered `None`, so the reader who named a register was told 「nothing
+        // has been yanked」 about a register they had just named.
+        let named = self.pending_register;
         let text = self.recall();
         if text.is_empty() {
             // A key that does nothing and says nothing is indistinguishable
             // from a key that is broken — and the reader whose `y` went to a
             // named register is the one most likely to press this.
-            self.status = match self.pending_register {
+            self.status = match named {
                 Some(name) => say!("暫存器 {0} 是空的", name),
                 None => say!("沒有取過東西——先 y 複製，或者 空格 p 從系統剪貼簿貼"),
             };
@@ -10884,8 +10899,15 @@ impl Editor {
     /// A motion that cannot advance (already at the end of the writing) leaves
     /// the selection where it is rather than running backwards.
     fn select_up_to(&mut self, pos: usize) {
+        // `head.max(cursor)`, with no branch back to `pos`: standing *on* the
+        // 。 that ends the sentence puts the next one exactly one grapheme
+        // away, and the guard that was here — 「only step back when it
+        // advances」 — fell through to `pos` in precisely that case and took
+        // the next sentence's first character after all. When the motion
+        // cannot advance, `max` collapses the selection where it stands, which
+        // is the same thing standing still means everywhere else.
         let head = motion::prev_grapheme(self.current_buffer().rope(), pos);
-        self.select_to(if head > self.cursor { head } else { pos });
+        self.select_to(head.max(self.cursor));
     }
 
     /// Step forward one word, selecting it (`w` / `W`).
@@ -11369,12 +11391,16 @@ impl Editor {
     /// Paste the register after (`p`) or before (`P`) the selection, and select
     /// the pasted text. Does nothing when the register is empty.
     fn paste(&mut self, after: bool) {
+        // Read before `recall`, which *takes* it: asking afterwards always
+        // answered `None`, so the reader who named a register was told 「nothing
+        // has been yanked」 about a register they had just named.
+        let named = self.pending_register;
         let text = self.recall();
         if text.is_empty() {
             // A key that does nothing and says nothing is indistinguishable
             // from a key that is broken — and the reader whose `y` went to a
             // named register is the one most likely to press this.
-            self.status = match self.pending_register {
+            self.status = match named {
                 Some(name) => say!("暫存器 {0} 是空的", name),
                 None => say!("沒有取過東西——先 y 複製，或者 空格 p 從系統剪貼簿貼"),
             };
@@ -12057,6 +12083,12 @@ mod tests {
         let mut ed = typed("第一段。\n第二段。\n");
         press(&mut ed, "}d");
         assert_eq!(ed.current_buffer().text(), "第二段。\n");
+
+        // …and standing **on** the 。 — the next sentence exactly one
+        // grapheme away, which is the case the first fix still got wrong.
+        let mut ed = typed("第一句。第二句。第三句。\n");
+        press(&mut ed, "lll)d");
+        assert_eq!(ed.current_buffer().text(), "第一句第二句。第三句。\n");
     }
 
     #[test]
@@ -12998,6 +13030,20 @@ mod tests {
         assert_eq!(headings[2].1, 2);
         ed.execute(":toc 3").unwrap();
         assert_eq!(ed.cursor_line(), 3);
+
+        // **資治通鑑 writes all 294 of its 卷 as 卷002** — the unit first and no
+        // 第 at all, which is the book this was written for and the one the
+        // first version found twelve chapters in. 史記 writes 卷一　五帝本紀第一.
+        let history = dir.join("history.txt");
+        std::fs::write(
+            &history,
+            "卷002\n漢紀。\n卷003　夏本紀第二\n周紀。\n話說天下大勢，分久必合。\n",
+        )
+        .unwrap();
+        let mut ed = Editor::new();
+        ed.open_file(&history).unwrap();
+        let titles: Vec<String> = ed.outline().into_iter().map(|(_, _, t)| t).collect();
+        assert_eq!(titles, ["卷002", "卷003　夏本紀第二"], "話說 is prose, not a 話");
         let _ = std::fs::remove_dir_all(&dir);
     }
 
