@@ -436,7 +436,16 @@ impl ImeSession {
         if !self.is_composing() {
             self.summoned = false;
         }
+        // **A word landing is the event, not the buffer emptying.** Under
+        // 頂功 and 整句 the engine commits the head of the buffer and goes on
+        // composing the tail in the same call, so it is never *not* composing
+        // between two words — and a panel summoned for 靈 stayed up for the
+        // whole of a paragraph typed without a space.
+        let landed = self.engine.committed().len();
         self.engine.input(ch);
+        if self.engine.committed().len() != landed {
+            self.summoned = false;
+        }
     }
 
     /// Space: commit the highlighted candidate (or the raw buffer if none).
@@ -739,16 +748,19 @@ impl ImeSession {
         self.display == PanelDisplay::Full || (self.summoned && self.is_composing())
     }
 
-    /// `Tab`: show me the whole list for this one word.
+    /// `Tab`: show me the whole list for this one word — and `Tab` again to
+    /// put it away.
     ///
-    /// Nothing when the panel is already up — and nothing when there is no
-    /// composition to summon it for, so a `Tab` that fell through cannot leave
-    /// the panel armed for whatever is typed next.
+    /// A toggle, because a key that only goes one way is one you cannot undo:
+    /// a `Tab` pressed by mistake would have covered the page until the word
+    /// ended. Nothing when there is no composition to summon it for, so a
+    /// `Tab` that fell through cannot leave the panel armed for whatever is
+    /// typed next.
     pub fn summon_panel(&mut self) -> bool {
-        if self.display == PanelDisplay::Full || !self.is_composing() || self.summoned {
+        if self.display == PanelDisplay::Full || !self.is_composing() {
             return false;
         }
-        self.summoned = true;
+        self.summoned = !self.summoned;
         true
     }
 
@@ -1211,7 +1223,12 @@ mod tests {
         ime.input('b');
         assert!(ime.summon_panel());
         assert!(ime.panel_is_full());
-        assert!(!ime.summon_panel(), "already up");
+        // A second `Tab` takes it back down — a key that cannot be un-pressed
+        // is a trap.
+        assert!(ime.summon_panel());
+        assert!(!ime.panel_is_full(), "Tab again puts it away");
+        assert!(ime.summon_panel());
+        assert!(ime.panel_is_full(), "and again brings it back");
         ime.space();
         assert_eq!(ime.take_committed(), "吧");
         assert!(!ime.panel_is_full(), "gone with the word");
