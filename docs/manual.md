@@ -64,6 +64,7 @@ yumete                 接着上次——上次開着的那些檔案，各自停
   -v, --vertical       這次以竪排（縱書）開啟
   -H, --horizontal     強制橫排
   -t, --table          當表格讀（CSV 沒有 schema 也行，用首行當表頭）
+  -R, --readonly       鎖住這一次開的每一份，不許改
   -p, --preview        只打印內容，不進編輯器
       --shot[=寬x高]   把一幀畫成文字印出來就退出（預設 100x30）
   -h, --help           按鍵與命令一覽
@@ -1658,7 +1659,7 @@ GB18030 的舊稿會被擋下並告訴你用 `iconv` 轉，而不是丟一句 Ru
 | `:w!` | 檔案在外面被改過時，用你的蓋掉 |
 | `:reload`（`:reload!`） | 重讀檔案；`!` 丟掉這裏的改動 |
 | `:reload auto on`｜`off` | 檔案在外面改了就自己重讀——你這裏有改動時只提醒 |
-| `:readonly` `:ro` `on`｜`off` | 唯讀：鎖住這一份，不許改 |
+| `:readonly` `:ro` `on`｜`off` | 只讀：鎖住這一份，不許改 |
 | `:wq` `:x` [*路徑*] | 保存後退出，可另存 |
 | `:count` `:wc` | 字數統計 |
 | `:help` [*節*] | 鍵和命令，開成一份可以讀、可以搜的檔案：`chinese`、`vertical`、`table`、`commands` |

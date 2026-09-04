@@ -187,7 +187,6 @@ impl Buffer {
         }
     }
 
-    /// Create a buffer holding `text`, not yet associated with any file.
     /// Say this buffer holds text that is nowhere on disk.
     ///
     /// For a recovered draft: it has no file, its draft file has been taken
@@ -197,6 +196,7 @@ impl Buffer {
         self.modified = true;
     }
 
+    /// Create a buffer holding `text`, not yet associated with any file.
     pub fn from_text(text: &str) -> Self {
         Buffer {
             id: next_id(),
@@ -227,6 +227,9 @@ impl Buffer {
     pub fn open<P: AsRef<Path>>(path: P) -> io::Result<Self> {
         let path = path.as_ref();
         let mut read_as = None;
+        // Before the read, not after it — see [`Buffer::reread`] for why a
+        // stamp taken afterwards can pin a half-written file down as current.
+        let seen = stamp_of(path);
         let rope = match fs::read(path) {
             Ok(bytes) => {
                 let text = decode(&bytes, path)?;
@@ -257,7 +260,7 @@ impl Buffer {
             owns_swap: false,
             syntax,
             syntax_guessed: named.is_none(),
-            seen: stamp_of(path),
+            seen,
             read_as,
             scratch_swap: None,
             // **What the disk says, asked now rather than at `:w`.** A file
@@ -265,6 +268,11 @@ impl Buffer {
             // finding that out after an afternoon of typing is the whole
             // complaint. A file that does not exist yet is not read-only — it
             // is unwritten.
+            //
+            // Only half the complaint, mind: `readonly()` on unix is
+            // 「no write bit at all」, so somebody else's `0644` file — which
+            // this user cannot write either — still opens unlocked, and still
+            // says so at `:w`.
             readonly: fs::metadata(path).is_ok_and(|m| m.permissions().readonly()),
         })
     }
@@ -280,6 +288,11 @@ impl Buffer {
     /// editor is not the permission system, and a writer who says
     /// `:readonly off` is saying they will deal with the save when they get
     /// there. [`write_file_atomically`] still refuses, and says why.
+    ///
+    /// The other way round is not symmetrical: this locks the **text**, and
+    /// `:w` still writes. Locking is for「do not let me type into this」, and
+    /// a writer who locks a buffer they had already changed still owns those
+    /// changes and may still save them.
     pub fn set_readonly(&mut self, on: bool) {
         self.readonly = on;
     }
@@ -331,11 +344,20 @@ impl Buffer {
             .path
             .clone()
             .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "buffer has no file name"))?;
+        // **The stamp is taken first, and it is not a nicety.** Somebody
+        // else's write is not atomic: `fmt > chapter.md` truncates, then
+        // fills. Stamping afterwards pairs the half-written text we just read
+        // with the finished file's size and mtime — so `changed_underneath`
+        // says no forever, the buffer keeps the truncated version, and `:w`
+        // writes it back over the good one. Stamped first, a write that lands
+        // between the two lines leaves a mismatch, and the next tick reads it
+        // again.
+        let seen = stamp_of(&path);
         let bytes = fs::read(&path)?;
         let text = decode(&bytes, &path)?;
         self.read_as = Some(digest(&text));
         self.rope = Rope::from_str(text.as_ref());
-        self.seen = stamp_of(&path);
+        self.seen = seen;
         self.modified = false;
         self.revision = self.revision.wrapping_add(1);
         self.cursor = self.cursor.min(self.rope.len_chars());
@@ -392,7 +414,12 @@ impl Buffer {
     /// not the message: [`Editor`](crate::editor::Editor) refuses earlier and
     /// says why. It lives here because this is the one place the rope moves,
     /// so no path — a table reflow, `:s`, a filter, a feature written next
-    /// year — can get around it by not knowing about it.
+    /// year — can change the **text** without knowing about it.
+    ///
+    /// **It does not protect the state around the text**, and cannot: a caller
+    /// that inserts and then moves the cursor past what it inserted has moved
+    /// the cursor past nothing. That is why each of those callers refuses for
+    /// itself as well, and why a new one must.
     pub fn insert(&mut self, char_idx: usize, text: &str) {
         if self.readonly {
             return;
@@ -927,7 +954,7 @@ fn write_bytes_atomically(
         if from.permissions().readonly() {
             return Err(io::Error::new(
                 io::ErrorKind::PermissionDenied,
-                say!("這個檔案是唯讀的——先 chmod，或者換個檔名存"),
+                say!("這個檔案是只讀的——先 chmod，或者換個檔名存"),
             ));
         }
     }
