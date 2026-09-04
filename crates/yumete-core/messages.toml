@@ -892,8 +892,8 @@ zh = "j k 移動 · l 進入 · h 收起 · Tab 換視圖 · w 寬窄 · R 重�
 en = "j k move · l into · h collapse · Tab other view · w wide/narrow · R re-read · C-w/Esc back to the text · q close"
 
 [[message]]
-zh = "{0}  {1} 字  {2} 字符  {3} 段"
-en = "{0}  {1} 字  {2} characters  {3} paragraphs"
+zh = "{0}  漢字 {1}  字數 {2}（不含空白）  {3} 段"
+en = "{0}  {1} han  {2} characters (no spaces)  {3} paragraphs"
 
 [[message]]
 zh = "{0} 個檔案，{1} 處——都還沒存：:wa 存全部，u 各自撤銷"
