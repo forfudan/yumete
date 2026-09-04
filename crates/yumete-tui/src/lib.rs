@@ -2898,6 +2898,16 @@ fn draw_status(
 
 /// Whether `row` has any reading over it — which costs it a screen row.
 fn row_has_reading(editor: &Editor, rope: &yumete_core::Rope, row: &wrap::Row) -> bool {
+    // **疏排 (`:dense off`) on the horizontal page** is line spacing: a row of
+    // air above every row. 密排 is a 縱書 word for the same thing — there it is
+    // the gap between columns — and this is the other axis of it.
+    //
+    // It is the row a reading lives in, which is why it is *this* function:
+    // the page already knows how to give a row two screen rows, and a page set
+    // loose has that row whether or not anything is written in it.
+    if editor.loose_rows() && editor.layout() == WritingLayout::Horizontal {
+        return true;
+    }
     let groups = editor.readings_on_line(row.line);
     if groups.is_empty() {
         return false;
@@ -2953,7 +2963,11 @@ fn reading_line(
 ) -> Option<Line<'static>> {
     let groups = editor.readings_on_line(row.line);
     if groups.is_empty() {
-        return None;
+        // 疏排: the row of air itself. Painted rather than skipped, so the page
+        // keeps its ground.
+        return editor
+            .loose_rows()
+            .then(|| Line::from(Span::styled("", ink.page())));
     }
     let line_start = rope.line_to_char(row.line);
     let start_in_line = row.start - line_start;
@@ -5138,6 +5152,44 @@ mod tests {
         assert!(marked, "the hit is washed in 朱");
         let numbered = (0..rows).any(|y| buffer[(0, y)].style().fg == Some(quiet.mark()));
         assert!(numbered, "and its line number is 朱");
+    }
+
+    /// 疏排 on the horizontal page: a row of air above every row.
+    #[test]
+    fn a_loose_horizontal_page_keeps_a_row_of_air() {
+        let mut editor = editor_with("那年冬天。\n雪一直下。\n山路斷了。\n");
+        let mut config = Config::default();
+        config.editor.line_numbers = yumete_config::LineNumbers::None;
+        config.editor.hints = false;
+        let rows = |editor: &Editor| -> Vec<String> {
+            let b = render(editor, &config, 30, 10);
+            (0..b.area.height)
+                .map(|y| {
+                    (0..b.area.width)
+                        .map(|x| at(&b, x, y))
+                        .collect::<String>()
+                        .trim_end()
+                        .to_string()
+                })
+                .collect()
+        };
+        // Packed: the rows are against each other.
+        assert!(rows(&editor)[1].contains("雪"), "{:?}", rows(&editor));
+
+        editor.execute(":dense off").unwrap();
+        let loose = rows(&editor);
+        assert!(loose[0].trim().is_empty(), "a row of air first: {loose:?}");
+        assert!(loose[1].contains("那"), "{loose:?}");
+        assert!(loose[2].trim().is_empty(), "and between them: {loose:?}");
+        assert!(loose[3].contains("雪"), "{loose:?}");
+
+        // …and the caret follows the page it is drawn on.
+        editor.on_key(Key::Char('j'));
+        let (_, caret) = render_caret(&editor, &config, 30, 10);
+        assert_eq!(caret.map(|p| p.y), Some(3), "the second row is drawn at 3");
+
+        editor.execute(":dense on").unwrap();
+        assert!(rows(&editor)[1].contains("雪"));
     }
 
     /// Typewriter mode: the row being written stays in the middle, and the

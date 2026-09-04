@@ -554,6 +554,12 @@ pub struct Editor {
     show_segmentation: bool,
     /// How a table's columns are told apart (Feature #157).
     table_rules: crate::table::Rules,
+    /// **疏排 on the horizontal page** (Feature #181): a row of air above every
+    /// row, which is what 密排's opposite means when the writing runs across
+    /// rather than down. Its own field rather than `!dense`, because `dense`
+    /// starts out false on a fresh editor and 疏排 must be something the reader
+    /// asked for.
+    loose_rows: bool,
     /// **Typewriter mode** (Feature #166): the row being written stays in the
     /// middle of the screen and the paper moves under it, the way a typewriter
     /// works and the way every focus mode since has.
@@ -970,6 +976,7 @@ impl Editor {
             turned_for_table: None,
             zong_gap: None,
             dense: false,
+            loose_rows: false,
             indent: 0,
             bands: 1,
             hits: None,
@@ -7267,16 +7274,27 @@ impl Editor {
         // the window. So `:dense off` needs nothing remembered — what was
         // configured was never touched, and simply applies again.
         self.dense = on;
-        self.status = if on {
-            say!("密排：一縱兩格，無注音、無旁置、無刻度")
-        } else {
-            say!("密排：關")
+        // 橫排 has no columns to pack, so `:dense` means the other axis there:
+        // the row of air above every row.
+        if self.layout == Layout::Horizontal {
+            self.loose_rows = !on;
+        }
+        self.status = match (on, self.layout) {
+            (true, Layout::Vertical) => say!("密排：一縱兩格，無注音、無旁置、無刻度"),
+            (false, Layout::Vertical) => say!("密排：關"),
+            (true, Layout::Horizontal) => say!("密排：行貼着行"),
+            (false, Layout::Horizontal) => say!("疏排：每行之間留一行"),
         };
     }
 
     /// Whether the page is packed tight.
     pub fn dense(&self) -> bool {
         self.dense
+    }
+
+    /// Whether the horizontal page keeps a row of air above every row (疏排).
+    pub fn loose_rows(&self) -> bool {
+        self.loose_rows
     }
 
     /// The measure the writer set, if any.
