@@ -756,10 +756,6 @@ zh = "檔尾"
 en = "end of file"
 
 [[message]]
-zh = "檔首"
-en = "start of file"
-
-[[message]]
 zh = "注音"
 en = "reading"
 
@@ -1690,3 +1686,15 @@ en = "{0}: {1} ({2} rows; the first)"
 [[message]]
 zh = "第 {0}–{1} 欄"
 en = "columns {0}–{1}"
+
+[[message]]
+zh = "一欄一欄找：這邊找／那邊看（t2-10?）"
+en = "search down the columns: / here, ? in the other area (t2-10?)"
+
+[[message]]
+zh = "檔首（g30g 去第 30 行）"
+en = "start of the file (g30g goes to line 30)"
+
+[[message]]
+zh = "這個詞還在哪裏：這邊找／那邊看"
+en = "where else this word is: / here, ? in the other area"
