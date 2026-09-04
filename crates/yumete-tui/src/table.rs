@@ -233,16 +233,15 @@ pub fn draw(
     // Vertical scroll: the ordinary rule, keeping the cursor's row on screen.
     let scrolloff = config.editor.scrolloff.min(rows / 2);
     let first_data = usize::from(view.schema.header);
-    // A row off the page altogether is a *jump* — a hit, a `:row`, a mark —
-    // and it lands in the middle. Walking off an edge scrolls by as little as
-    // it takes, which is what walking wants.
-    let far = cursor_row < viewport.top || cursor_row >= viewport.top + rows;
-    if far {
-        viewport.top = cursor_row.saturating_sub(rows / 2);
-    } else if cursor_row < viewport.top + scrolloff {
-        viewport.top = cursor_row.saturating_sub(scrolloff);
-    } else if cursor_row + scrolloff >= viewport.top + rows {
-        viewport.top = (cursor_row + scrolloff + 1).saturating_sub(rows);
+    // **Where the cursor sits on a page is the editor's answer**, not this
+    // surface's: a row off the page is a jump and lands in the middle, a step
+    // off an edge scrolls by as little as it takes, and typewriter mode keeps
+    // the row in the middle whatever it was. This used to be a third copy of
+    // that rule, and it was the copy that never heard of `:typewriter`.
+    let distance = (cursor_row >= viewport.top && cursor_row < viewport.top + rows)
+        .then(|| cursor_row - viewport.top);
+    if let Some(inset) = editor.page_inset(distance, rows.saturating_sub(1), scrolloff) {
+        viewport.top = cursor_row.saturating_sub(inset);
     }
     viewport.top = viewport
         .top

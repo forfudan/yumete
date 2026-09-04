@@ -556,24 +556,23 @@ pub fn draw(
     let visible = page.len().max(1);
     let scrolloff = config.editor.scrolloff.min(visible.saturating_sub(1) / 2);
     let last_column = visible.saturating_sub(1);
-    let cursor_column = match zong::distance(rope, *viewport, cursor_anchor, grid, last_column) {
-        Some(d) if d >= scrolloff && d + scrolloff <= last_column => d,
-        // Off the page, or too close to an edge: re-anchor so the cursor sits
-        // `scrolloff` in from whichever side it left by.
-        found => {
-            // …and a 縱 off the page altogether lands in the middle of it: a
-            // jump is a jump whichever way the text runs.
-            // `capacity` is the *bound* — the most 縱 that could fit were
-            // every one of them flush. With a gap, or with 稿紙 ticks, the
-            // page holds fewer, so centring on the bound pushed the cursor's
-            // 縱 off the left edge and the block was then drawn on the
-            // rightmost one instead.
-            let holds = page.len().max(1);
-            let inset = match found {
+    // **Where the cursor sits on a page is the editor's answer** — the same
+    // one the horizontal page and the grid ask, so a jump lands in the middle
+    // whichever way the text runs and `:typewriter` means something here too.
+    // This used to be a second copy of that rule, and it was the copy that had
+    // never heard of typewriter mode.
+    //
+    // `capacity` is the *bound* — the most 縱 that could fit were every one of
+    // them flush. With a gap, or with 稿紙 ticks, the page holds fewer, so
+    // centring on the bound pushed the cursor's 縱 off the left edge.
+    let found = zong::distance(rope, *viewport, cursor_anchor, grid, last_column);
+    let cursor_column = match editor.page_inset(found, last_column, scrolloff) {
+        None => found.unwrap_or(0),
+        Some(inset) => {
+            let inset = inset.min(page.len().max(1) / 2).max(match found {
                 Some(d) if d < scrolloff => scrolloff,
-                Some(_) => last_column.saturating_sub(scrolloff),
-                None => holds / 2,
-            };
+                _ => 0,
+            });
             *viewport = zong::retreat(rope, cursor_anchor, grid, inset);
             page = layout_page(rope, *viewport, grid, &metrics, area, capacity);
             zong::distance(rope, *viewport, cursor_anchor, grid, page.len()).unwrap_or(0)
