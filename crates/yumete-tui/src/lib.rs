@@ -73,6 +73,51 @@ pub fn terminal_width() -> Option<usize> {
 /// wait through in front of a blank terminal.
 pub type Deferred = Box<dyn FnOnce(&mut ImeSession) -> String>;
 
+/// **One frame, drawn into a string** — the page as it would appear, with no
+/// terminal involved.
+///
+/// `:shot` hands the screen to the platform's own screenshot program, which
+/// needs a window, a GUI session and a person to look at the result. This is
+/// the same picture for everyone else: a reviewer on a headless machine, a
+/// regression that has to be *seen* rather than asserted about, a bug report
+/// that can carry the page it is about.
+///
+/// Text only. Colour is what the theme tests already check cell by cell; what
+/// a picture is wanted for is where things are — the wrap, the caret, the
+/// gutter, the panel, the 縱 that the page is laid out in.
+pub fn frame_to_text(
+    editor: &mut Editor,
+    config: &Config,
+    ime: &ImeSession,
+    width: u16,
+    height: u16,
+) -> String {
+    let backend = ratatui::backend::TestBackend::new(width, height);
+    let mut terminal = ratatui::Terminal::new(backend).expect("a terminal over a buffer");
+    let mut viewport = Seats::default();
+    editor.set_page(height.saturating_sub(2) as usize, width.max(1) as usize);
+    terminal
+        .draw(|frame| draw(frame, editor, config, ime, &mut viewport))
+        .expect("draw one frame");
+    let buffer = terminal.backend().buffer();
+    let mut out = String::new();
+    for y in 0..buffer.area.height {
+        let mut row = String::new();
+        let mut x = 0;
+        while x < buffer.area.width {
+            let symbol = buffer[(x, y)].symbol();
+            row.push_str(symbol);
+            // A wide glyph owns the cell beside it, which the backend keeps as
+            // a blank. Copying that blank out puts a space between every two
+            // 漢字 — the one thing a picture of a Chinese page must not do.
+            x += yumete_cjk::str_width(symbol).max(1) as u16;
+        }
+        out.push_str(row.trim_end());
+        out.push('\n');
+    }
+    out
+}
+
 pub fn run(
     editor: &mut Editor,
     config: &Config,
@@ -234,7 +279,7 @@ pub fn run(
                     && matches!(code, KeyCode::Char(' ') | KeyCode::Char('\0') | KeyCode::Null);
                 if control_space && composes(editor.mode()) {
                     let want = if ime.is_chinese() { "-" } else { "+" };
-                    let said = switch_scheme(ime, want, &config);
+                    let said = switch_scheme(ime, want, config);
                     editor.set_status(said);
                     continue;
                 }
@@ -6628,6 +6673,22 @@ mod tests {
     }
 
     /// `C-Space` is the first key the lesson asks a reader to press.
+    /// The headless picture: `--shot`, and what a reviewer sees.
+    #[test]
+    fn a_frame_can_be_drawn_without_a_terminal() {
+        let mut editor = editor_with("那年冬天，雪下得早。\n山路斷了。\n");
+        let config = Config::default();
+        let ime = ImeSession::empty(Scheme::Lingming);
+        let shot = frame_to_text(&mut editor, &config, &ime, 40, 8);
+        // The writing is in it, one 漢字 to two cells and no space between two
+        // of them — the blank a wide glyph owns is not part of the picture.
+        assert!(shot.contains("那年冬天，雪下得早。"), "{shot}");
+        assert!(shot.contains("山路斷了。"), "{shot}");
+        // …and so is the status line, which is half of what a picture is for.
+        assert!(shot.contains("NORMAL"), "{shot}");
+        assert_eq!(shot.lines().count(), 8, "one line per row: {shot}");
+    }
+
     #[test]
     fn control_space_turns_the_ime_on_and_off() {
         // The switch itself, spelled the way the main loop spells it. It went
