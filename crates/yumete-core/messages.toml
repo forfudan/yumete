@@ -2002,3 +2002,23 @@ en = "the detail panel is {0} wide"
 [[message]]
 zh = "詳情欄：開、關，或者給個寬度"
 en = "the detail panel: on, off, or a width"
+
+[[message]]
+zh = "{0}↑"
+en = "{0}↑"
+
+[[message]]
+zh = "{0}↓"
+en = "{0}↓"
+
+[[message]]
+zh = "排好了：{0}"
+en = "sorted: {0}"
+
+[[message]]
+zh = "已經是這個順序了"
+en = "already in that order"
+
+[[message]]
+zh = "照這幾欄排：`sort 1 a 2 d` 是先第一欄順排、再第二欄倒排"
+en = "sort by these columns: `sort 1 a 2 d` is column 1 ascending, then column 2 descending"

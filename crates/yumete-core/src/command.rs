@@ -96,6 +96,9 @@ pub enum Command {
     ShowDetail(Option<bool>),
     /// `:table detail 40` — how wide it is.
     SetDetailWidth(usize),
+    /// `:table sort 1 a 2 d` — put the rows in order by these columns, in this
+    /// order. Empty sorts by the column the cursor is in.
+    SortTable(Vec<(usize, bool)>),
     /// `:numbers fill` — whether the line-number band has a ground of its
     /// own. `None` toggles.
     SetNumberFill(Option<bool>),
@@ -590,6 +593,32 @@ pub fn parse(input: &str) -> Result<Command, CommandError> {
                 }
             }
             "detail" => Ok(Command::ShowDetail(None)),
+            _ if rest.starts_with("sort") => {
+                // `:table sort 1 a 2 d 4 a` — column, direction, column,
+                // direction. Nothing at all sorts by the column you are in.
+                let mut keys = Vec::new();
+                let mut words = rest["sort".len()..].split_whitespace();
+                while let Some(word) = words.next() {
+                    let Ok(column) = word.parse::<usize>() else {
+                        return Err(CommandError::InvalidArgument {
+                            command: "table sort",
+                            value: word.to_string(),
+                        });
+                    };
+                    let down = match words.next() {
+                        None | Some("a") | Some("asc") => false,
+                        Some("d") | Some("desc") => true,
+                        Some(other) => {
+                            return Err(CommandError::InvalidArgument {
+                                command: "table sort",
+                                value: other.to_string(),
+                            })
+                        }
+                    };
+                    keys.push((column, down));
+                }
+                Ok(Command::SortTable(keys))
+            }
             "numbers" | "numbers on" => Ok(Command::SetTableNumbers(true)),
             "numbers off" => Ok(Command::SetTableNumbers(false)),
             "rules" => Ok(Command::SetTableRules(None)),
@@ -1114,6 +1143,12 @@ const TABLE: &[Word] = &[
         help: "欄線：欄與欄之間怎麼分開",
         needs: &[Need::Table],
         then: Args::Words(RULES),
+    },
+    Word {
+        name: "sort",
+        help: "照這幾欄排：`sort 1 a 2 d` 是先第一欄順排、再第二欄倒排",
+        needs: &[Need::Table],
+        then: Args::Free("<欄> a｜d …"),
     },
     Word {
         name: "detail",
