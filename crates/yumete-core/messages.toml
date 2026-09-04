@@ -1954,3 +1954,27 @@ en = "turn the IME on/off; a lone Shift tap switches 中/英"
 [[message]]
 zh = "關掉欄之間的分隔線"
 en = "turn off the rules between columns"
+
+[[message]]
+zh = "一課：把課文抄成你自己的一個檔案，邊改邊學"
+en = "a lesson: the text is copied into a file of your own, and you learn by editing it"
+
+[[message]]
+zh = "寫不下課文：{0}"
+en = "could not write the lesson: {0}"
+
+[[message]]
+zh = "打不開課文：{0}"
+en = "could not open the lesson: {0}"
+
+[[message]]
+zh = "課文的檔名都用光了——刪掉幾份 tutor*.md"
+en = "every lesson name is taken — delete a few tutor*.md"
+
+[[message]]
+zh = "課文開好了（沒有資料目錄，存不下來）"
+en = "the lesson is open (no data directory, so it cannot be saved)"
+
+[[message]]
+zh = "這是你自己的一份，隨便改（:q 退出）"
+en = "this copy is yours — break it as you like (:q leaves)"
