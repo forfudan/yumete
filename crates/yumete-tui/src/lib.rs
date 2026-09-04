@@ -3326,6 +3326,29 @@ fn draw_horizontal(
     };
     // A ground, and only a ground.
     let sel_style = Style::default().bg(ink.selection());
+    // **The cell you are standing on** (#229). Insert has always been confined
+    // to it, and until now the only sign of that was the column name in the
+    // status line — so a table you were editing looked exactly like a table you
+    // were not. The grid renderer has said this since #118 (a cursor row banded
+    // at `HEAD`, the cell itself at `SELECTION`); this is the same answer for
+    // the table that is drawn as part of a page.
+    //
+    // A rung quieter than the grid's, because here the ground is competing with
+    // prose and with a real selection: the cell takes `HEAD`, so a selection
+    // inside it — `SELECTION`, one rung louder and patched on afterwards — is
+    // still the ground you see first.
+    //
+    // The **box**, not the content: a `|` table's padding is the column's own
+    // width, and an empty cell has no content to tint at all.
+    let cell = match peek.is_none() && editor.table().is_some_and(|t| !t.is_grid()) {
+        true => editor
+            .cell_position()
+            .and_then(|(line, at)| editor.cell_box(line, at)),
+        // A whole-file grid draws its own cell, and the peek pane is showing
+        // somebody else's buffer — the cursor is not in it.
+        false => None,
+    };
+    let cell_style = Style::default().bg(ink.at(yumete_config::rung::HEAD));
     let show_segmentation = editor.segmentation_visible();
     let show_markup = editor.markup_visible();
     // The measure is counted in *text*: `ruler = 80` means eighty columns of
@@ -3533,6 +3556,18 @@ fn draw_horizontal(
             }
         }
 
+        // The cell first, so that everything louder — the selection, the hit —
+        // still goes over it.
+        if let Some((from, to)) = cell {
+            if to > row.start && from < row.end {
+                let a = from.saturating_sub(row.start).min(chars.len());
+                let b = to.saturating_sub(row.start).min(chars.len());
+                for style in styles.iter_mut().take(b).skip(a) {
+                    *style = style.patch(cell_style);
+                }
+            }
+        }
+
         // The selection's ground goes over everything, because it is the answer
         // to "what would an edit take" and nothing may obscure that.
         let reach = row.start + row_len + usize::from(row.ends_line);
@@ -3577,7 +3612,22 @@ fn draw_horizontal(
         let mut gi = 0;
         loop {
             while gi < ghosts.len() && ghosts[gi].0 <= at {
-                spans.push(Span::styled(ghosts[gi].1.clone(), ghost_style));
+                // Padding inside the cell is part of the cell. Without this the
+                // tint stops at the last character the file actually holds and
+                // the column it is squaring up to stays bare — the one place
+                // the drawing is *about* alignment is the one place it would
+                // have looked ragged.
+                let style = match cell {
+                    Some((from, to)) => {
+                        let col = row.start + ghosts[gi].0;
+                        match col >= from && col <= to {
+                            true => ghost_style.patch(cell_style),
+                            false => ghost_style,
+                        }
+                    }
+                    None => ghost_style,
+                };
+                spans.push(Span::styled(ghosts[gi].1.clone(), style));
                 gi += 1;
             }
             if at >= chars.len() {
@@ -6016,6 +6066,129 @@ mod tests {
         assert!((0..60u16).all(|x| buffer[(x, 3)].style().bg != lit), "not another row");
 
         std::fs::remove_dir_all(&dir).ok();
+    }
+
+    // ---- The cell you are standing on (#229) ------------------------------
+
+    /// A `|` table is drawn as part of its page, so until #229 the only sign
+    /// that Insert was confined to a cell was the column name in the status
+    /// line. The cell now carries a ground — **its whole box**, padding
+    /// included, because the padding is the column's width and an empty cell
+    /// has no content to tint.
+    #[test]
+    fn a_pipe_tables_cell_carries_a_ground_too() {
+        let mut config = Config::default();
+        config.editor.line_numbers = LineNumbers::None;
+        config.editor.show_segmentation = false;
+        let ink = ink(&config);
+        let mut editor = Editor::new();
+        editor
+            .current_buffer_mut()
+            .insert(0, "前文\n| 字 | 讀音 |\n| --- | --- |\n| 木 | mu |\n");
+        // Onto the `木` row: `gg` then three `j`.
+        editor.on_key(Key::Char('g'));
+        editor.on_key(Key::Char('g'));
+        for _ in 0..3 {
+            editor.on_key(Key::Char('j'));
+        }
+        assert!(editor.enter_table(), "{}", editor.status());
+        // …and into the second cell, which is `mu`.
+        editor.on_key(Key::Char('l'));
+        let (line, at) = editor.cell_position().expect("in a cell");
+        assert_eq!(at, 1, "the second cell");
+        let buf = render(&editor, &config, 30, 8);
+        let want = ink.at(yumete_config::rung::HEAD);
+        // Row 3 on screen is the fourth line of the file.
+        let row = 3;
+        let text = row_text(&buf, row);
+        let mu = text.find("mu").expect("the cell is on the page") as u16;
+        for x in mu..mu + 2 {
+            assert_eq!(buf[(x, row)].bg, want, "column {x} is in the cell");
+        }
+        // The pipe that closes the cell is not in it.
+        let bar = text.rfind('|').expect("a closing pipe") as u16;
+        assert_ne!(buf[(bar, row)].bg, want, "the pipe is furniture");
+        // And the cell on the same row that the cursor is *not* in stays plain.
+        let mu_cell = editor.cell_box(line, at).expect("a box");
+        let other = editor.cell_box(line, 0).expect("a box");
+        assert!(other.1 <= mu_cell.0, "the first cell ends before the second");
+        let wood = text.find('木').expect("the first cell") as u16;
+        assert_ne!(buf[(wood, row)].bg, want, "the other cell is not tinted");
+    }
+
+    /// The padding that squares the page up (#212) is *inside* the cell, so it
+    /// wears the cell's ground. Without this the tint stops at the last
+    /// character the file actually holds, and the one drawing that is about
+    /// alignment is the one that looks ragged.
+    #[test]
+    fn the_padding_inside_the_cell_is_part_of_the_cell() {
+        let mut config = Config::default();
+        config.editor.line_numbers = LineNumbers::None;
+        config.editor.show_segmentation = false;
+        let ink = ink(&config);
+        let mut editor = Editor::new();
+        // `miao` is the widest cell of the second column, so the `mu` row is
+        // padded by two columns the file does not hold.
+        editor
+            .current_buffer_mut()
+            .insert(0, "| 字 | 讀音 |\n| --- | --- |\n| 木 | mu |\n| 目 | miao |\n");
+        editor.on_key(Key::Char('g'));
+        editor.on_key(Key::Char('g'));
+        editor.on_key(Key::Char('j'));
+        editor.on_key(Key::Char('j'));
+        assert!(editor.enter_table(), "{}", editor.status());
+        editor.on_key(Key::Char('l'));
+        assert_eq!(editor.cell_position().map(|(_, c)| c), Some(1));
+        let buf = render(&editor, &config, 30, 8);
+        let want = ink.at(yumete_config::rung::HEAD);
+        let row = 2;
+        let text = row_text(&buf, row);
+        let mu = text.find("mu").expect("the cell is on the page") as u16;
+        // `mu` itself, then the two columns of padding after it, all one cell.
+        for x in mu..mu + 4 {
+            assert_eq!(buf[(x, row)].bg, want, "column {x} of {text:?}");
+        }
+        assert_ne!(buf[(mu + 4, row)].bg, want, "and it stops at the pipe");
+    }
+
+    /// 縱書 keeps its page when a `|` table is entered — `turn_for_table`
+    /// refuses to turn it, because turning a whole chapter sideways to mend
+    /// three lines throws away everything around them. So the vertical page is
+    /// the **only** surface that ever says which cell Insert is confined to,
+    /// and #229 has to reach it too.
+    #[test]
+    fn the_vertical_page_draws_the_cell_as_well() {
+        // Two characters in the first cell, because the cursor's own slot is
+        // painted over by the block cursor last of all — the character *beside*
+        // it is where the cell's ground has to show through.
+        let mut editor = editor_with("| 字 | 讀音 |\n| --- | --- |\n| 木頭 | mu |\n");
+        editor.set_layout(WritingLayout::Vertical);
+        // 縱書 turns the motions with the text: `h` walks to the next 縱, which
+        // is the next line of the file.
+        editor.on_key(Key::Char('g'));
+        editor.on_key(Key::Char('g'));
+        editor.on_key(Key::Char('h'));
+        editor.on_key(Key::Char('h'));
+        assert!(editor.enter_table(), "{}", editor.status());
+        assert_eq!(editor.layout(), WritingLayout::Vertical, "the page is not turned");
+        let (line, cell) = editor.cell_position().expect("in a cell");
+        assert_eq!(cell, 0, "the first cell, on 木頭");
+        assert!(editor.cell_box(line, cell).is_some(), "the cell has a box");
+        let config = vertical_config();
+        let ink = ink(&config);
+        let buffer = render_vertical(&mut editor, &config, 24, 14);
+        let want = ink.at(yumete_config::rung::HEAD);
+        let find = |ch: &str| {
+            (0..24u16)
+                .flat_map(|x| (0..14u16).map(move |y| (x, y)))
+                .find(|&(x, y)| at(&buffer, x, y) == ch)
+                .unwrap_or_else(|| panic!("{ch} is on the page"))
+        };
+        let head = find("頭");
+        assert_eq!(buffer[(head.0, head.1)].bg, want, "the cell it is in is drawn");
+        // …and the cell beside it, in the same row, is not.
+        let other = find("m");
+        assert_ne!(buffer[(other.0, other.1)].bg, want, "the cell beside it is not");
     }
 
     #[test]

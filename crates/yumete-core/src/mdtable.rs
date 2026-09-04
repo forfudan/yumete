@@ -236,7 +236,7 @@ pub fn cells(line: &str) -> Vec<(usize, usize)> {
 /// pipes are in the same place, and the spaces the file already holds are part
 /// of getting them there. [`cells`] trims this down to the content, which is
 /// what an edit wants and what a measurement does not.
-fn boxes(line: &str) -> Vec<(usize, usize)> {
+pub fn boxes(line: &str) -> Vec<(usize, usize)> {
     let text = line.trim_end_matches(['\n', '\r']);
     let chars: Vec<char> = text.chars().collect();
     let bars = pipes(text);

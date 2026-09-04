@@ -662,6 +662,22 @@ pub fn draw(
     // underneath — a heading, a reading, a hung mark — at the moment the writer
     // was looking hardest at them.
     let sel_style = Style::default().bg(ink.selection());
+    // **The cell you are standing on** (#229), on the vertical page too. A `|`
+    // table inside a 縱書 manuscript is edited where it lies — the page is not
+    // turned for it (`turn_for_table`) — so this is the only surface that ever
+    // says which cell Insert is confined to. `HEAD`, one rung quieter than a
+    // selection, so a selection inside the cell still reads first.
+    //
+    // The padding of #212 is horizontal-only (`table_padding_on`), so here the
+    // box holds nothing the file does not: the spaces around the content are
+    // the ones that were typed.
+    let cell = match peek.is_none() && editor.table().is_some_and(|t| !t.is_grid()) {
+        true => editor
+            .cell_position()
+            .and_then(|(line, at)| editor.cell_box(line, at)),
+        false => None,
+    };
+    let cell_style = Style::default().bg(ink.at(yumete_config::rung::HEAD));
     let show_segmentation = editor.segmentation_visible();
     let cursor_line = editor.cursor_line();
     let numbers = config.editor.line_numbers;
@@ -860,6 +876,13 @@ pub fn draw(
                     if word % 2 == 0 {
                         style = style.bg(ink.word());
                     }
+                }
+            }
+
+            // The cell first, so the selection still goes over it.
+            if let Some((from, to)) = cell {
+                if at < to && at + len > from {
+                    style = style.patch(cell_style);
                 }
             }
 
