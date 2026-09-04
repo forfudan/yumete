@@ -885,8 +885,8 @@ zh = "取這欄／貼一欄"
 en = "yank this column / paste a column"
 
 [[message]]
-zh = "j k 移動 · l 進入 · h 收起 · Tab 換視圖 · w 寬窄 · R 重讀 · C-w/Esc 回正文 · q 關"
-en = "j k move · l into · h collapse · Tab other view · w wide/narrow · R re-read · C-w/Esc back to the text · q close"
+zh = "j k 移動 · J K 翻頁 · g G 兩端 · l 進入 · h 收起 · Tab 換視圖 · w 寬窄 · R 重讀 · C-w/Esc 回正文 · q 關"
+en = "j k move · J K page · g G ends · l enter · h collapse · Tab view · w width · R reread · C-w/Esc back to the text · q close"
 
 [[message]]
 zh = "{0}  漢字 {1}  字數 {2}（不含空白）  {3} 段"
