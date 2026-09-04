@@ -494,7 +494,7 @@ pub fn parse(input: &str) -> Result<Command, CommandError> {
                 Some("scheme") => Ok(Command::SetScheme(
                     parts
                         .next()
-                        .and_then(|tag| pick(tag, SCHEMES).map(|w| w.name))
+                        .and_then(|tag| pick(tag, schemes()).map(|w| w.name))
                         .unwrap_or("")
                         .to_string(),
                 )),
@@ -966,23 +966,84 @@ pub enum Args {
     Path,
     /// Anything at all; the string is the placeholder to show while typing.
     Free(&'static str),
+    /// One of the input schemes — **whichever ones are installed** (#169).
+    ///
+    /// The one argument in the table that is not written in the table. Every
+    /// other list here is a closed set the editor defines (`on｜off`,
+    /// `markdown｜typst｜text`); the schemes are a directory. A build that ships
+    /// only 冰雪 should offer only 冰雪, and one that ships none of them falls
+    /// back to the five this crate knows, which is what [`schemes`] answers.
+    Schemes,
 }
 
 impl Args {
+    /// The words this argument may be, as they stand now — `None` when it is
+    /// not a word list at all.
+    ///
+    /// **Every reader of a word list goes through here**, and that is the point
+    /// rather than a convenience: `Args::Schemes` is answered from a registry
+    /// that a `match` arm on `Args::Words` would silently skip, and skipping it
+    /// means a scheme that is installed does not appear. Written as one
+    /// accessor so there is one place to be right.
+    pub fn words(&self) -> Option<&'static [Word]> {
+        match self {
+            Args::Words(list) => Some(list),
+            Args::Schemes => Some(schemes()),
+            _ => None,
+        }
+    }
+
     /// What may follow the command, for a listing: `<檔名>`, `on|off`, or
     /// nothing at all.
     pub fn hint(&self) -> String {
-        match self {
-            Args::None => String::new(),
-            Args::Path => say!("cmd.arg.path"),
-            Args::Free(what) => (*what).to_string(),
-            Args::Words(words) => words
+        match self.words() {
+            Some(words) => words
                 .iter()
                 .map(|w| w.name)
                 .collect::<Vec<_>>()
                 .join("｜"),
+            None => match self {
+                Args::Path => say!("cmd.arg.path"),
+                Args::Free(what) => (*what).to_string(),
+                _ => String::new(),
+            },
         }
     }
+}
+
+/// The schemes the frontend found installed, or nothing while none has looked.
+static FOUND_SCHEMES: std::sync::OnceLock<&'static [Word]> = std::sync::OnceLock::new();
+
+/// Tell the command table what schemes are installed (#169).
+///
+/// Each pair is a tag and a display name. The name is shown beside the tag in
+/// the `:` menu the way a `help` tag's translation is — an unknown tag renders
+/// as itself, so a found scheme's 方案名 can stand in that slot directly and
+/// reads correctly in every language, which is right, because 「冰雪四拼」 is
+/// its name in all three.
+///
+/// Called once, at startup, before anything is drawn. A second call is ignored:
+/// the completion table and the which-key panel are `&'static`, and a list that
+/// changed under them mid-session would leak a slice per change for no gain.
+pub fn set_schemes(found: &[(&str, &str)]) {
+    if found.is_empty() {
+        return;
+    }
+    let words: Vec<Word> = found
+        .iter()
+        .map(|(tag, name)| Word {
+            name: Box::leak(tag.to_string().into_boxed_str()),
+            help: Box::leak(name.to_string().into_boxed_str()),
+            needs: &[],
+            then: Args::None,
+        })
+        .collect();
+    let _ = FOUND_SCHEMES.set(Box::leak(words.into_boxed_slice()));
+}
+
+/// The schemes `:yume scheme` offers: what was found, else the built-in five.
+pub fn schemes() -> &'static [Word] {
+    FOUND_SCHEMES.get().copied().unwrap_or(SCHEMES)
 }
 
 /// The pieces of Markdown `:markdown` can write.
@@ -1225,8 +1286,8 @@ impl Choice {
 /// lives under that word. The list says so: the command, and then everything
 /// it takes, spelled the way you would type it.
 fn children(under: &'static str, args: &Args) -> Vec<Choice> {
-    match args {
-        Args::Words(list) => list
+    match args.words() {
+        Some(list) => list
             .iter()
             .map(|w| Choice {
                 name: w.name,
@@ -1277,7 +1338,7 @@ fn deep(
                 under: path.join(" "),
             });
         }
-        if let Args::Words(inner) = &w.then {
+        if let Some(inner) = w.then.words() {
             let mut below = path.to_vec();
             below.push(w.name);
             deep(inner, &below, typed, leading, out);
@@ -1297,7 +1358,7 @@ fn deep(
 fn deep_from_root(typed: &str) -> Vec<Choice> {
     let mut out = Vec::new();
     for e in COMMANDS {
-        if let Args::Words(list) = &e.args {
+        if let Some(list) = e.args.words() {
             deep(list, &[e.name], typed, ":", &mut out);
         }
     }
@@ -1317,7 +1378,7 @@ const YUME: &[Word] = &[
         name: "scheme",
         help: "cmd.yume.scheme",
         needs: &[],
-        then: Args::Words(SCHEMES),
+        then: Args::Schemes,
     },
     Word {
         name: "chaifen",
@@ -2393,13 +2454,12 @@ pub fn takes_text(line: &str) -> bool {
     };
     let mut args = &entry.args;
     for word in &words[1..] {
-        match args {
-            Args::Words(list) => match list.iter().find(|w| w.name == *word) {
+        match args.words() {
+            Some(list) => match list.iter().find(|w| w.name == *word) {
                 Some(found) => args = &found.then,
                 None => return false,
             },
-            Args::Free(_) | Args::Path => return true,
-            Args::None => return false,
+            None => return matches!(args, Args::Free(_) | Args::Path),
         }
     }
     matches!(args, Args::Free(_) | Args::Path)
@@ -2465,16 +2525,16 @@ pub fn complete_at(line: &str) -> (usize, Vec<Choice>) {
             };
             let mut args = &entry.args;
             for &(_, word) in &words[1..] {
-                match args {
-                    Args::Words(list) => match list.iter().find(|w| w.name == word) {
+                match args.words() {
+                    Some(list) => match list.iter().find(|w| w.name == word) {
                         Some(found) => args = &found.then,
                         None => return (start, Vec::new()),
                     },
-                    _ => return (start, Vec::new()),
+                    None => return (start, Vec::new()),
                 }
             }
-            match args {
-                Args::Words(list) => list
+            match args.words() {
+                Some(list) => list
                     .iter()
                     .filter(|w| w.name.starts_with(typed))
                     .map(|w| Choice {
@@ -2487,6 +2547,7 @@ pub fn complete_at(line: &str) -> (usize, Vec<Choice>) {
                         under: String::new(),
                     })
                     .collect(),
+                None => match args {
                 // A path or free text is the caller's business; there is
                 // nothing here to offer but the placeholder, which is help
                 // rather than a completion.
@@ -2499,7 +2560,8 @@ pub fn complete_at(line: &str) -> (usize, Vec<Choice>) {
                     leading: "",
                     under: String::new(),
                 }],
-                Args::None | Args::Path => Vec::new(),
+                    _ => Vec::new(),
+                },
             }
         }
     };
@@ -2514,10 +2576,10 @@ pub fn complete_at(line: &str) -> (usize, Vec<Choice>) {
             Some(_) => match walk(&words) {
                 // The path already typed is the prefix the reader does not
                 // have to type again, so the offer starts below it.
-                Some(Args::Words(list)) => {
+                Some(args) if args.words().is_some() => {
                     let mut out = Vec::new();
-                    for w in *list {
-                        if let Args::Words(inner) = &w.then {
+                    for w in args.words().unwrap_or_default() {
+                        if let Some(inner) = w.then.words() {
                             deep(inner, &[w.name], typed, "", &mut out);
                         }
                     }
@@ -2542,12 +2604,11 @@ pub fn complete_at(line: &str) -> (usize, Vec<Choice>) {
                 .iter()
                 .find(|c| c.name == typed && c.under.is_empty())
                 .and_then(|c| walk(&words).map(|args| (c.name, args)))
-                .and_then(|(name, args)| match args {
-                    Args::Words(list) => list
+                .and_then(|(name, args)| {
+                    args.words()?
                         .iter()
                         .find(|w| w.name == name)
-                        .map(|w| children(w.name, &w.then)),
-                    _ => None,
+                        .map(|w| children(w.name, &w.then))
                 }),
         };
         choices.extend(below.unwrap_or_default());
@@ -2579,7 +2640,7 @@ pub fn needs_of(line: &str) -> &'static [Need] {
     let mut needs = entry.needs;
     let mut args = &entry.args;
     for word in &words[1..] {
-        let Args::Words(list) = args else { break };
+        let Some(list) = args.words() else { break };
         let Some(found) = pick(word, list) else { break };
         if !found.needs.is_empty() {
             needs = found.needs;
@@ -2598,9 +2659,9 @@ fn walk(words: &[(usize, &str)]) -> Option<&'static Args> {
         .find(|e| e.name == *head || e.aliases.contains(head))?;
     let mut args = &entry.args;
     for &(_, word) in &words[1..] {
-        match args {
-            Args::Words(list) => args = &list.iter().find(|w| w.name == word)?.then,
-            _ => return None,
+        match args.words() {
+            Some(list) => args = &list.iter().find(|w| w.name == word)?.then,
+            None => return None,
         }
     }
     Some(args)
@@ -3402,9 +3463,12 @@ mod tests {
         /// moment it is offered by completion.
         fn sample(path: &str, args: &Args) -> String {
             match args {
-                Args::None => path.to_string(),
+                _ if args.words().is_some_and(|l| !l.is_empty()) => {
+                    let list = args.words().unwrap_or_default();
+                    sample(&format!("{path} {}", list[0].name), &list[0].then)
+                }
+                Args::None | Args::Words(_) | Args::Schemes => path.to_string(),
                 Args::Path => format!("{path} a.md"),
-                Args::Words(list) => sample(&format!("{path} {}", list[0].name), &list[0].then),
                 // A word only this command knows the shape of.
                 Args::Free(_) => {
                     let word = match path {
@@ -3429,8 +3493,8 @@ mod tests {
             // Every *word* a command offers has to parse too, not only the
             // first — completion offering a word the parser rejects is the
             // exact drift this table exists to catch.
-            if let Args::Words(list) = &entry.args {
-                for word in *list {
+            if let Some(list) = entry.args.words() {
+                for word in list {
                     let line = sample(&format!(":{} {}", entry.name, word.name), &word.then);
                     assert!(parse(&line).is_ok(), "{line} does not parse");
                 }

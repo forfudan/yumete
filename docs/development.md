@@ -379,7 +379,7 @@ index, and a row with no number anywhere else is a row that got lost.
 | 166 | **Typewriter / focus mode**                 | tui    | P2    | the cursor's row stays in the middle of the screen | Done |
 | 167 | **`:help`**                                 | both   | P1    | the keys worth knowing, in the editor; `:help chinese`, `:help vertical` | Done |
 | 168 | **The page before the dictionary**          | cli    | P1    | 14 MB of language data read after the first frame, not before it | Done |
-| 169 | **Schemes found rather than listed**        | both   | P2    | what is installed is what `:yume scheme` offers — needs a dynamic word source through the completion table; `:yume scheme =<path>` already loads one's own. See group 14 | Planned |
+| 169 | **Schemes found rather than listed**        | both   | P2    | `schemes/*.toml` under any data directory is a scheme. Launch scans, hands each to yume-core, and `:yume scheme` offers what was found; nothing found leaves the built-in five standing | Done |
 | 170 | **A command says what it is waiting for**   | both   | P1    | prerequisites declared beside the command, shown in the menu, said when it is run, and `force` satisfies them | Done |
 | 171 | **`:appearance`, apart from `:theme`**      | both   | P2    | which inks and which way round are two questions | Done |
 | 172 | **`:numbers fill`**                         | both   | P3    | the number band's ground, off by default and the same in both layouts | Done |
@@ -1416,9 +1416,32 @@ Until the search is written, a `[ime] data_dirs` key — the reader naming the
 directory themselves — is the honest fallback, and it is worth having on every
 platform anyway.
 
+**What is installed is what the editor offers, 2026-09-04 (#169).** Launch scans
+`schemes/*.toml` under every data directory and hands each file to yume-core's
+`add_factory_scheme`; `:yume scheme` then offers `shipped_schemes()` in the
+core's own menu order (系列 → index → name) rather than a list compiled into
+this repo. Two things make that safe:
+
+- **Nothing found leaves everything alone.** yume-core's `factory_lists()`
+  answers `Some(false)` for a tag that is *missing from a list that exists*, so
+  a half-populated directory does not add schemes — it **removes** them. An
+  install whose only scheme file is 靈明's would lose 拼音. So a scan that takes
+  zero files calls `reset_factory_schemes()` and the built-in five stand, which
+  is every install today.
+- **The scan runs before argument dispatch.** `--shot` and `--timing` both run
+  the whole launch and then exit inside dispatch; scanning after it would draw a
+  menu of schemes the build does not have, and the picture would look perfectly
+  normal. (The same trap caught macOS — `../local/claude_yumete.md`, 2026-09-03.)
+
+`Scheme` is therefore a tag (`Scheme(&'static str)`) rather than one variant per
+scheme: the found tags are leaked once, at discovery, and there are single
+digits of them. `Args::Schemes` in the command table is the one argument whose
+words are not written in the table, and every reader of a word list goes through
+`Args::words()` so that a `match` arm on `Args::Words` cannot silently skip it.
+
 ### 14 · What was deliberately left undone, 2026-09-04
 
-Three items on the list were **not** implemented, and each for a reason worth
+Two items on the list were **not** implemented, and each for a reason worth
 writing down rather than rediscovering:
 
 - **#174 段組 for the horizontal page.** Two columns of text side by side means
@@ -1433,10 +1456,6 @@ writing down rather than rediscovering:
   pixels and `CSI 13 t` its position, but neither is universal and a Retina
   factor of two turns a correct-looking calculation into a picture of the wrong
   half of the screen — silently. A wrong crop is worse than an uncropped shot.
-- **#169 schemes found rather than listed.** The command table is
-  `&'static [Word]`, so 「what is installed」 needs a dynamic word source
-  threaded through completion and the which-key panel. `:yume scheme =<path>`
-  already loads a table of one's own, which is the case that mattered.
 
 ### 14 · `:tutor` — a lesson you learn by editing
 

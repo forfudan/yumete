@@ -43,59 +43,184 @@ pub use yume_core::data_manifest::{DataFile, DataKind};
 pub use yume_core::DisplayMode;
 pub use yume_core::CommitStrategy;
 
-/// One of yumete's five input schemes (方案).
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub enum Scheme {
-    /// 靈明 (Lingming) — the default shape scheme.
-    Lingming,
-    /// 星陳 (Xingchen) — shape scheme.
-    Xingchen,
-    /// 卿雲 (Qingyun) — shape scheme.
-    Qingyun,
-    /// 日月 (Riyue) — shape scheme.
-    Riyue,
-    /// 拼音 (Pinyin) — the phonetic, fluency-only scheme.
-    Pinyin,
-}
+/// One input scheme (方案), named by its tag.
+///
+/// **A tag, not a variant per scheme** (#169). The four 宇浩 schemes and 拼音
+/// are what a build with no scheme files finds, but they are a fallback and not
+/// a definition: a `schemes/<tag>.toml` in any data directory is a scheme too,
+/// and yume-core has shipped 冰雪四拼 and 三拼 that way since 2026-09-04. The
+/// tag is `&'static str` because the command table it feeds is `&'static`; a
+/// found tag is leaked once, at discovery, and there are single digits of them.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+pub struct Scheme(&'static str);
+
+/// What [`discover`] found, or `None` while nothing has looked.
+///
+/// `None` and `Some(empty)` are different answers: the first means no directory
+/// was ever scanned (a unit test, a `--help` run) and the built-in five stand;
+/// the second means a directory was scanned and holds no scheme file, which is
+/// every install today and also stands. Only a non-empty find replaces them.
+static FOUND: std::sync::OnceLock<Vec<(&'static str, String)>> = std::sync::OnceLock::new();
+
+/// The schemes a build knows when no scheme file has been found.
+const BUILT_IN: [Scheme; 5] = [
+    Scheme::LINGMING,
+    Scheme::XINGCHEN,
+    Scheme::QINGYUN,
+    Scheme::RIYUE,
+    Scheme::PINYIN,
+];
 
 impl Scheme {
-    /// All schemes, in menu order.
-    pub const ALL: [Scheme; 5] = [
-        Scheme::Lingming,
-        Scheme::Xingchen,
-        Scheme::Qingyun,
-        Scheme::Riyue,
-        Scheme::Pinyin,
-    ];
+    /// 靈明 — the default shape scheme.
+    pub const LINGMING: Scheme = Scheme("lingming");
+    /// 星陳 — shape scheme.
+    pub const XINGCHEN: Scheme = Scheme("xingchen");
+    /// 卿雲 — shape scheme.
+    pub const QINGYUN: Scheme = Scheme("qingyun");
+    /// 日月 — shape scheme.
+    pub const RIYUE: Scheme = Scheme("riyue");
+    /// 拼音 — the phonetic, fluency-only scheme.
+    pub const PINYIN: Scheme = Scheme("pinyin");
+
+    /// Every scheme, in menu order.
+    pub fn all() -> Vec<Scheme> {
+        match FOUND.get() {
+            Some(found) if !found.is_empty() => found.iter().map(|(tag, _)| Scheme(tag)).collect(),
+            _ => BUILT_IN.to_vec(),
+        }
+    }
 
     /// The canonical scheme tag understood by `yume-core`.
     pub fn tag(self) -> &'static str {
-        match self {
-            Scheme::Lingming => "lingming",
-            Scheme::Xingchen => "xingchen",
-            Scheme::Qingyun => "qingyun",
-            Scheme::Riyue => "riyue",
-            Scheme::Pinyin => "pinyin",
-        }
+        self.0
     }
 
-    /// Parse a scheme from a tag (canonical or a common legacy alias).
-    pub fn from_tag(tag: &str) -> Option<Scheme> {
-        match tag.trim().to_ascii_lowercase().as_str() {
-            "lingming" | "ling" | "靈明" => Some(Scheme::Lingming),
-            "xingchen" | "xing" | "星陳" => Some(Scheme::Xingchen),
-            "qingyun" | "qing" | "卿雲" => Some(Scheme::Qingyun),
-            "riyue" | "日月" => Some(Scheme::Riyue),
-            "pinyin" | "拼音" => Some(Scheme::Pinyin),
-            _ => None,
+    /// This scheme's display name (方案名), when the scheme file gave one.
+    ///
+    /// Empty for a built-in: the name of a built-in comes from the engine once
+    /// its tables are loaded ([`ImeSession::scheme_name`]), which is a better
+    /// answer than any table here because it is the one the panel shows.
+    pub fn found_name(self) -> &'static str {
+        FOUND
+            .get()
+            .into_iter()
+            .flatten()
+            .find(|(tag, _)| *tag == self.0)
+            .map(|(_, name)| name.as_str())
+            .unwrap_or("")
+    }
+
+    /// Whether this scheme decodes through a reading table rather than a 碼表.
+    ///
+    /// Asked of the tag rather than matched on, because a found 音碼 scheme —
+    /// 冰雪四拼 is the first — is not a variant anything here can name. A
+    /// scheme file says so itself; without one, 拼音 is the only phonetic
+    /// scheme a build ships.
+    pub fn is_phonetic(self) -> bool {
+        if self.0 == "pinyin" {
+            return true;
         }
+        data_manifest::for_scheme(self.0)
+            .iter()
+            .all(|f| f.kind != DataKind::Table)
+            && data_manifest::for_scheme(self.0)
+                .iter()
+                .any(|f| f.kind == DataKind::Reading)
+    }
+
+    /// Parse a scheme from a tag (canonical, found, or a common legacy alias).
+    pub fn from_tag(tag: &str) -> Option<Scheme> {
+        let tag = tag.trim().to_ascii_lowercase();
+        let canonical = match tag.as_str() {
+            "ling" | "靈明" => "lingming",
+            "xing" | "星陳" => "xingchen",
+            "qing" | "卿雲" => "qingyun",
+            "日月" => "riyue",
+            "拼音" => "pinyin",
+            other => other,
+        };
+        Scheme::all().into_iter().find(|s| s.0 == canonical)
     }
 
     /// The next scheme, cycling in menu order.
-    pub fn next(self) -> Scheme {
-        let idx = Scheme::ALL.iter().position(|&s| s == self).unwrap_or(0);
-        Scheme::ALL[(idx + 1) % Scheme::ALL.len()]
+    /// The scheme to fall back on when nobody named one that exists.
+    ///
+    /// The **first installed** scheme, not 靈明 — a build that ships only 冰雪
+    /// has no 靈明 to fall back to, and naming one that is not there is how a
+    /// startup ends up with a scheme the menu cannot even show. `all()` is
+    /// never empty (it is the built-in five when nothing was found), so the
+    /// last resort here is unreachable rather than a real answer.
+    pub fn first() -> Scheme {
+        Scheme::all().first().copied().unwrap_or(Scheme::LINGMING)
     }
+
+    pub fn next(self) -> Scheme {
+        let all = Scheme::all();
+        let idx = all.iter().position(|&s| s == self).unwrap_or(0);
+        all[(idx + 1) % all.len()]
+    }
+}
+
+/// Scan `dirs` for scheme files and make what is there the scheme list (#169).
+///
+/// A scheme file is `<dir>/schemes/<tag>.toml`. Each is handed to yume-core,
+/// which parses it, keeps the last one under a given tag (so a user directory
+/// shadows the shipped file, the old Rime rule) and sorts the result into menu
+/// order — 系列 first, then the author's own index, then the name.
+///
+/// **Nothing found leaves everything alone**, deliberately: `factory_lists()`
+/// in yume-core answers `Some(false)` for a tag that is *not* on a list that
+/// exists, and refuses it. Registering a half-populated directory would take
+/// away 拼音 from an install whose only scheme file happens to be 靈明's.
+///
+/// Called once, at startup, before the first line is drawn. Answers how many
+/// were taken.
+pub fn discover(dirs: &[PathBuf]) -> usize {
+    if FOUND.get().is_some() {
+        return FOUND.get().map(Vec::len).unwrap_or(0);
+    }
+    let mut files: Vec<PathBuf> = Vec::new();
+    // Last directory first: `add_factory_scheme` lets a later file win, and the
+    // search order runs from the most specific directory to the least.
+    for dir in dirs.iter().rev() {
+        let Ok(entries) = std::fs::read_dir(dir.join("schemes")) else {
+            continue;
+        };
+        let mut here: Vec<PathBuf> = entries
+            .flatten()
+            .map(|e| e.path())
+            .filter(|p| p.extension().is_some_and(|e| e == "toml"))
+            .collect();
+        here.sort();
+        files.extend(here);
+    }
+    let mut taken = 0;
+    for file in &files {
+        if let Ok(text) = std::fs::read_to_string(file) {
+            if data_manifest::add_factory_scheme(&text) {
+                taken += 1;
+            }
+        }
+    }
+    let list: Vec<(&'static str, String)> = match taken {
+        0 => Vec::new(),
+        _ => data_manifest::shipped_schemes()
+            .into_iter()
+            .map(|tag| {
+                let name = data_manifest::factory_scheme_name(&tag).unwrap_or_default();
+                (&*Box::leak(tag.into_boxed_str()), name)
+            })
+            .collect(),
+    };
+    // Nothing was found: forget the scheme files entirely rather than leaving
+    // yume-core with a list that half-answers.
+    if taken == 0 {
+        data_manifest::reset_factory_schemes();
+    }
+    let len = list.len();
+    let _ = FOUND.set(list);
+    len
 }
 
 /// A candidate as shown in the panel: the text plus its inline annotations.
@@ -161,7 +286,7 @@ impl ImeSession {
         // somebody clones the 宇浩 source tree, 靈明's own 碼表 stands in when
         // this binary was built on a machine that had it.
         let mut builtin = false;
-        if !available && scheme == Scheme::Lingming {
+        if !available && scheme == Scheme::LINGMING {
             available = load_builtin(&mut engine);
             builtin = available;
         }
@@ -209,10 +334,10 @@ impl ImeSession {
         engine.set_table(Arc::new(table));
         // 靈明's rules are the ones yumete knows; a foreign table is driven by
         // them until it says otherwise, which for a shape scheme is right.
-        engine.set_scheme_by_tag(Scheme::Lingming.tag());
+        engine.set_scheme_by_tag(Scheme::LINGMING.tag());
         Ok(ImeSession {
             engine,
-            scheme: Scheme::Lingming,
+            scheme: Scheme::LINGMING,
             data_dirs: dirs,
             available: true,
             annotations: false,
@@ -244,10 +369,10 @@ impl ImeSession {
             }
         }
         let available = load_builtin(&mut engine);
-        engine.set_scheme_by_tag(Scheme::Lingming.tag());
+        engine.set_scheme_by_tag(Scheme::LINGMING.tag());
         ImeSession {
             engine,
-            scheme: Scheme::Lingming,
+            scheme: Scheme::LINGMING,
             data_dirs: dirs,
             available,
             annotations: false,
@@ -1187,6 +1312,13 @@ fn build_engine(scheme: Scheme, dirs: &[PathBuf]) -> (Engine, bool, Vec<DataProb
     let mut engine = Engine::new(CodeTable::new());
     let mut dictionary = false;
     let mut problems = Vec::new();
+    // Which file *is* this scheme: a 形碼 scheme is dead without its 碼表, a
+    // 音碼 one decodes through its reading table and has no 碼表 at all. Asked
+    // once — the answer walks the manifest, and the loop below is per file.
+    let essential = match scheme.is_phonetic() {
+        true => DataKind::Reading,
+        false => DataKind::Table,
+    };
 
     for file in data_set(scheme) {
         let loaded = match load_data_file(&mut engine, dirs, &file) {
@@ -1195,12 +1327,6 @@ fn build_engine(scheme: Scheme, dirs: &[PathBuf]) -> (Engine, bool, Vec<DataProb
                 problems.push(problem);
                 false
             }
-        };
-        // 拼音 decodes through the shared 音節表; the shape schemes need their
-        // own 碼表.
-        let essential = match scheme {
-            Scheme::Pinyin => DataKind::Reading,
-            _ => DataKind::Table,
         };
         if loaded && file.kind == essential {
             dictionary = true;
@@ -1224,16 +1350,16 @@ mod tests {
     fn synthetic_session() -> ImeSession {
         let mut table = CodeTable::new();
         table.load_text("a 啊\nb 吧 八\n");
-        ImeSession::from_engine(Engine::new(table), Scheme::Lingming)
+        ImeSession::from_engine(Engine::new(table), Scheme::LINGMING)
     }
 
     #[test]
     fn scheme_tags_round_trip() {
-        for s in Scheme::ALL {
+        for s in Scheme::all() {
             assert_eq!(Scheme::from_tag(s.tag()), Some(s));
         }
-        assert_eq!(Scheme::from_tag("ling"), Some(Scheme::Lingming));
-        assert_eq!(Scheme::from_tag("拼音"), Some(Scheme::Pinyin));
+        assert_eq!(Scheme::from_tag("ling"), Some(Scheme::LINGMING));
+        assert_eq!(Scheme::from_tag("拼音"), Some(Scheme::PINYIN));
         assert_eq!(Scheme::from_tag("nope"), None);
     }
 
@@ -1281,8 +1407,8 @@ mod tests {
 
     #[test]
     fn scheme_cycles_in_order() {
-        assert_eq!(Scheme::Lingming.next(), Scheme::Xingchen);
-        assert_eq!(Scheme::Pinyin.next(), Scheme::Lingming);
+        assert_eq!(Scheme::LINGMING.next(), Scheme::XINGCHEN);
+        assert_eq!(Scheme::PINYIN.next(), Scheme::LINGMING);
     }
 
     #[test]
@@ -1359,13 +1485,13 @@ mod tests {
 
     #[test]
     fn a_machine_with_nothing_installed_can_still_type() {
-        let mut s = ImeSession::new(Scheme::Lingming, vec![PathBuf::from("/no/such/dir")]);
+        let mut s = ImeSession::new(Scheme::LINGMING, vec![PathBuf::from("/no/such/dir")]);
         // Whether it can depends on the machine that *built* this binary, and
         // both answers are correct — so the test is that the two facts agree,
         // not that either one holds.
         assert_eq!(s.available(), has_builtin_table());
         assert_eq!(s.is_builtin(), has_builtin_table());
-        assert_eq!(s.scheme(), Scheme::Lingming);
+        assert_eq!(s.scheme(), Scheme::LINGMING);
         if has_builtin_table() {
             s.input('a');
             assert!(!s.page_candidates().is_empty(), "and it really answers");
@@ -1378,9 +1504,9 @@ mod tests {
 
         // Only 靈明 — the others are installed, and without their tables the
         // session is honestly unavailable rather than silently 靈明.
-        let other = ImeSession::new(Scheme::Riyue, vec![PathBuf::from("/no/such/dir")]);
+        let other = ImeSession::new(Scheme::RIYUE, vec![PathBuf::from("/no/such/dir")]);
         assert!(!other.available());
-        assert_eq!(other.scheme(), Scheme::Riyue);
+        assert_eq!(other.scheme(), Scheme::RIYUE);
     }
 }
 
@@ -1406,7 +1532,7 @@ mod data_faults {
     fn entry(kind: DataKind) -> DataFile {
         data_manifest::shared()
             .into_iter()
-            .chain(data_manifest::for_scheme(Scheme::Lingming.tag()))
+            .chain(data_manifest::for_scheme(Scheme::LINGMING.tag()))
             .find(|f| f.kind == kind)
             .expect("the manifest has one of these")
     }
@@ -1474,7 +1600,7 @@ mod data_faults {
         let mut old = b"YDV20260828".to_vec();
         old.extend_from_slice(&[0u8; 64]);
         let dir = dir_with(&entry.file, &old, "session");
-        let ime = ImeSession::new(Scheme::Lingming, vec![dir]);
+        let ime = ImeSession::new(Scheme::LINGMING, vec![dir]);
         let loud: Vec<&DataProblem> = ime.problems().iter().filter(|p| p.is_loud()).collect();
         assert_eq!(loud.len(), 1, "only the one that is there and refused");
         assert_eq!(loud[0].file, entry.file);
@@ -1487,7 +1613,7 @@ mod data_faults {
     /// same table.
     #[test]
     fn the_data_set_names_每一份_once() {
-        for scheme in Scheme::ALL {
+        for scheme in Scheme::all() {
             let set = data_set(scheme);
             let mut seen: Vec<(DataKind, &str, &str, i32)> = Vec::new();
             for f in &set {
@@ -1514,7 +1640,7 @@ mod data_faults {
             std::process::id(),
             std::thread::current().id()
         ));
-        let entry = data_set(Scheme::Lingming)
+        let entry = data_set(Scheme::LINGMING)
             .into_iter()
             .find(|f| f.kind == DataKind::Annotations)
             .expect("拆分 is in the manifest");
@@ -1560,7 +1686,7 @@ mod timing {
     #[ignore]
     fn what_startup_costs() {
         let t = Instant::now();
-        let ime = ImeSession::language_only(Scheme::Lingming);
+        let ime = ImeSession::language_only(Scheme::LINGMING);
         println!("language_only:      {:.1?}", t.elapsed());
         let t = Instant::now();
         let seg = ime.segmenter();
@@ -1574,7 +1700,7 @@ mod timing {
         }
         println!("100 more segments:  {:.1?}", t.elapsed());
         let t = Instant::now();
-        let mut full = ImeSession::from_default_dirs(Scheme::Lingming);
+        let mut full = ImeSession::from_default_dirs(Scheme::LINGMING);
         println!("碼表 (from_default_dirs): {:.1?} (available: {})", t.elapsed(), full.available());
         let _ = &mut full;
     }

@@ -1643,7 +1643,7 @@ fn switch_scheme(ime: &mut ImeSession, tag: &str, config: &Config) -> String {
         tag
     };
     let Some(scheme) = Scheme::from_tag(tag) else {
-        let names = Scheme::ALL
+        let names = Scheme::all()
             .iter()
             .map(|s| s.tag())
             .collect::<Vec<_>>()
@@ -4296,7 +4296,7 @@ mod tests {
     /// only 拆分 comments that had stopped appearing.
     #[test]
     fn yume_names_a_data_file_the_core_will_not_have() {
-        let entry = yumete_ime::data_set(Scheme::Lingming)
+        let entry = yumete_ime::data_set(Scheme::LINGMING)
             .into_iter()
             .find(|f| f.kind == yumete_ime::DataKind::Annotations)
             .expect("拆分 is in the manifest");
@@ -4307,7 +4307,7 @@ mod tests {
         stale.extend_from_slice(&[0u8; 64]);
         std::fs::write(&path, &stale).expect("fixture file");
 
-        let ime = ImeSession::new(Scheme::Lingming, vec![dir]);
+        let ime = ImeSession::new(Scheme::LINGMING, vec![dir]);
         let said = data_faults(&ime);
         assert!(said.contains("chaifen.ydiv"), "names the file: {said}");
         assert!(said.contains("YDV20260828"), "names what the file says: {said}");
@@ -4323,7 +4323,7 @@ mod tests {
     /// screen for every writer who has not installed the optional data.
     #[test]
     fn nothing_installed_is_not_a_fault_worth_saying() {
-        let ime = ImeSession::new(Scheme::Lingming, vec![std::path::PathBuf::from("/no/such/dir")]);
+        let ime = ImeSession::new(Scheme::LINGMING, vec![std::path::PathBuf::from("/no/such/dir")]);
         assert_eq!(data_faults(&ime), "");
     }
 
@@ -4336,7 +4336,7 @@ mod tests {
 
     /// An unavailable IME (no data), for tests that don't exercise composing.
     fn no_ime() -> ImeSession {
-        ImeSession::new(Scheme::Lingming, vec![])
+        ImeSession::new(Scheme::LINGMING, vec![])
     }
 
     /// Render `editor` with `config` and `ime` to an in-memory terminal buffer.
@@ -5119,7 +5119,7 @@ mod tests {
     #[test]
     fn a_tiny_pane_renders_without_panicking() {
         let mut editor = editor_with("甲乙丙\n丁戊");
-        let mut ime = ImeSession::from_table_text(Scheme::Lingming, "b 吧 八\n");
+        let mut ime = ImeSession::from_table_text(Scheme::LINGMING, "b 吧 八\n");
         ime.input('b');
         let config = vertical_config();
         for (w, h) in [(1, 1), (2, 2), (3, 1), (1, 8), (4, 3), (2, 40)] {
@@ -5136,7 +5136,7 @@ mod tests {
     fn candidates_are_numbered_with_circled_chinese_numerals() {
         let mut editor = Editor::new();
         editor.on_key(Key::Char('i'));
-        let mut ime = ImeSession::from_table_text(Scheme::Lingming, "b 吧 八\n");
+        let mut ime = ImeSession::from_table_text(Scheme::LINGMING, "b 吧 八\n");
         ime.input('b');
         let config = vertical_config();
         let buffer = render_vertical_with(&mut editor, &config, &ime, 40, 16);
@@ -5159,7 +5159,7 @@ mod tests {
         editor.on_key(Key::Char('i'));
         // The only match needs three more letters, so it is the highlighted one
         // and the header carries its code.
-        let mut ime = ImeSession::from_table_text(Scheme::Lingming, "ajvy 奧\n");
+        let mut ime = ImeSession::from_table_text(Scheme::LINGMING, "ajvy 奧\n");
         ime.input('a');
         let config = vertical_config();
         let buffer = render_vertical_with(&mut editor, &config, &ime, 40, 16);
@@ -5189,7 +5189,7 @@ mod tests {
         let mut editor = Editor::new();
         editor.on_key(Key::Char('i'));
         // `code text completion comment` — the fourth field is the 拆分.
-        let mut ime = ImeSession::from_table_text(Scheme::Lingming, "b 吧\n");
+        let mut ime = ImeSession::from_table_text(Scheme::LINGMING, "b 吧\n");
         ime.input('b');
         let config = vertical_config();
 
@@ -5213,7 +5213,7 @@ mod tests {
         let mut editor = Editor::new();
         editor.on_key(Key::Char('i'));
         let mut ime = ImeSession::from_table_text(
-            Scheme::Lingming,
+            Scheme::LINGMING,
             "xj 相 \u{2ff0}\u{6728}\u{76ee}\nxj 想 \u{2ff1}\u{76f8}\u{5fc3}\n",
         );
         ime.set_annotations(true);
@@ -5246,7 +5246,7 @@ mod tests {
     fn no_cell_is_ever_left_with_an_empty_symbol() {
         let mut editor = editor_with("那年冬天");
         editor.on_key(Key::Char('a'));
-        let mut ime = ImeSession::from_table_text(Scheme::Lingming, "b 吧 八\n");
+        let mut ime = ImeSession::from_table_text(Scheme::LINGMING, "b 吧 八\n");
         ime.input('b');
         let config = Config::default();
         for (w, h) in [(40, 16), (24, 12), (60, 24)] {
@@ -5270,7 +5270,7 @@ mod tests {
     fn the_panel_takes_its_markers_and_skin_from_the_config() {
         let mut editor = Editor::new();
         editor.on_key(Key::Char('i'));
-        let mut ime = ImeSession::from_table_text(Scheme::Lingming, "b 吧 八\n");
+        let mut ime = ImeSession::from_table_text(Scheme::LINGMING, "b 吧 八\n");
         ime.input('b');
         let mut config = vertical_config();
         config.panel.markers = "壹貳參".to_string();
@@ -5295,7 +5295,7 @@ mod tests {
     fn the_horizontal_panel_takes_the_same_markers_and_border() {
         let mut editor = Editor::new();
         editor.on_key(Key::Char('i'));
-        let mut ime = ImeSession::from_table_text(Scheme::Lingming, "b 吧 八\n");
+        let mut ime = ImeSession::from_table_text(Scheme::LINGMING, "b 吧 八\n");
         ime.input('b');
         let mut config = Config::default();
         config.editor.line_numbers = LineNumbers::None;
@@ -5317,7 +5317,7 @@ mod tests {
         // and the code lives only in the panel — there is no inline preedit.
         let mut editor = Editor::new();
         editor.on_key(Key::Char('i'));
-        let mut ime = ImeSession::from_table_text(Scheme::Lingming, "b 吧 八\n");
+        let mut ime = ImeSession::from_table_text(Scheme::LINGMING, "b 吧 八\n");
         for c in "qxqx".chars() {
             ime.input(c);
         }
@@ -5334,7 +5334,7 @@ mod tests {
     fn a_digit_past_the_page_never_picks_a_candidate_off_it() {
         let mut editor = Editor::new();
         editor.on_key(Key::Char('i'));
-        let mut ime = ImeSession::from_table_text(Scheme::Lingming, "b 吧 八 巴 芭 疤\n");
+        let mut ime = ImeSession::from_table_text(Scheme::LINGMING, "b 吧 八 巴 芭 疤\n");
         // A short page: the reader sees three candidates, not five.
         ime.set_page_size(3);
         ime.input('b');
@@ -5357,7 +5357,7 @@ mod tests {
         // A digit that *is* on the page still selects.
         let mut editor = Editor::new();
         editor.on_key(Key::Char('i'));
-        let mut ime = ImeSession::from_table_text(Scheme::Lingming, "b 吧 八 巴 芭 疤\n");
+        let mut ime = ImeSession::from_table_text(Scheme::LINGMING, "b 吧 八 巴 芭 疤\n");
         ime.set_page_size(3);
         ime.input('b');
         ime_handle(
@@ -5372,7 +5372,7 @@ mod tests {
     #[test]
     fn the_commit_method_says_which_one_is_answering() {
         // `:yume commit` with nothing after it is the question (Feature #209).
-        let mut ime = ImeSession::from_table_text(Scheme::Lingming, "a 啊\n");
+        let mut ime = ImeSession::from_table_text(Scheme::LINGMING, "a 啊\n");
         let said = commit_method(&mut ime, "");
         assert!(said.contains("延遲"), "{said}");
         let said = commit_method(&mut ime, "unique");
@@ -5394,7 +5394,7 @@ mod tests {
     fn bare_puts_the_candidate_in_the_text_and_draws_no_panel() {
         let mut editor = Editor::new();
         editor.on_key(Key::Char('i'));
-        let mut ime = ImeSession::from_table_text(Scheme::Lingming, "b 吧 八 巴
+        let mut ime = ImeSession::from_table_text(Scheme::LINGMING, "b 吧 八 巴
 ");
         ime.set_panel_display(PanelDisplay::Bare);
         ime.input('b');
@@ -5459,7 +5459,7 @@ mod tests {
     fn tab_summons_the_panel_and_it_leaves_with_the_word() {
         let mut editor = Editor::new();
         editor.on_key(Key::Char('i'));
-        let mut ime = ImeSession::from_table_text(Scheme::Lingming, "b 吧 八 巴
+        let mut ime = ImeSession::from_table_text(Scheme::LINGMING, "b 吧 八 巴
 ");
         ime.set_panel_display(PanelDisplay::Bare);
         ime.input('b');
@@ -5489,7 +5489,7 @@ mod tests {
     /// #211: the setting, the command, and the question, in the writer's words.
     #[test]
     fn the_panel_says_which_way_it_is_drawing() {
-        let mut ime = ImeSession::from_table_text(Scheme::Lingming, "a 啊
+        let mut ime = ImeSession::from_table_text(Scheme::LINGMING, "a 啊
 ");
         let said = panel_method(&mut ime, "");
         assert!(said.contains("候選框"), "{said}");
@@ -5513,7 +5513,7 @@ mod tests {
     fn a_prompt_keeps_its_panel_even_under_bare() {
         let mut editor = Editor::new();
         editor.on_key(Key::Char('/'));
-        let mut ime = ImeSession::from_table_text(Scheme::Lingming, "b 吧 八 巴
+        let mut ime = ImeSession::from_table_text(Scheme::LINGMING, "b 吧 八 巴
 ");
         ime.set_panel_display(PanelDisplay::Bare);
         ime.input('b');
@@ -5534,7 +5534,7 @@ mod tests {
     fn the_candidate_panel_wears_the_ink_skin() {
         let mut editor = Editor::new();
         editor.on_key(Key::Char('i'));
-        let mut ime = ImeSession::from_table_text(Scheme::Lingming, "b 吧 八\n");
+        let mut ime = ImeSession::from_table_text(Scheme::LINGMING, "b 吧 八\n");
         ime.input('b');
         let config = vertical_config();
         let buffer = render_vertical_with(&mut editor, &config, &ime, 40, 14);
@@ -5574,7 +5574,7 @@ mod tests {
         // the panel came out taller than the page it was covering.
         let mut editor = Editor::new();
         editor.on_key(Key::Char('i'));
-        let mut ime = ImeSession::from_table_text(Scheme::Lingming, "dydn 靈 聯絡員
+        let mut ime = ImeSession::from_table_text(Scheme::LINGMING, "dydn 靈 聯絡員
 ");
         for c in "dydn".chars() {
             ime.input(c);
@@ -5597,7 +5597,7 @@ mod tests {
     fn vertical_candidate_panel_runs_right_to_left() {
         let mut editor = Editor::new();
         editor.on_key(Key::Char('i')); // Insert mode
-        let mut ime = ImeSession::from_table_text(Scheme::Lingming, "b 吧 八\n");
+        let mut ime = ImeSession::from_table_text(Scheme::LINGMING, "b 吧 八\n");
         ime.input('b');
 
         let config = vertical_config();
@@ -5699,7 +5699,7 @@ mod tests {
     fn candidate_panel_shows_while_composing() {
         let mut editor = Editor::new();
         editor.on_key(Key::Char('i')); // Insert mode
-        let mut ime = ImeSession::from_table_text(Scheme::Lingming, "b 吧 八\n");
+        let mut ime = ImeSession::from_table_text(Scheme::LINGMING, "b 吧 八\n");
         ime.input('b');
         assert!(ime.is_composing());
 
@@ -7692,7 +7692,7 @@ mod tests {
         let mut editor = editor_with("那年冬天");
         editor.set_layout(WritingLayout::Vertical);
         editor.on_key(Key::Char('/'));
-        let mut ime = ImeSession::from_table_text(Scheme::Lingming, "b 吧 八\n");
+        let mut ime = ImeSession::from_table_text(Scheme::LINGMING, "b 吧 八\n");
         ime.input('b');
         let config = vertical_config();
         let buffer = render_vertical_with(&mut editor, &config, &ime, 40, 20);
@@ -7729,7 +7729,7 @@ mod tests {
     fn the_ime_composes_into_a_search_prompt() {
         let mut editor = editor_with("春江潮水連海平");
         editor.on_key(Key::Char('/'));
-        let mut ime = ImeSession::from_table_text(Scheme::Lingming, "b 吧 八\n");
+        let mut ime = ImeSession::from_table_text(Scheme::LINGMING, "b 吧 八\n");
 
         // Letters typed at a `/` prompt compose instead of landing literally.
         assert!(ime_handle(
@@ -7756,7 +7756,7 @@ mod tests {
     fn the_prompt_shows_the_preedit_and_the_language_tag() {
         let mut editor = editor_with("春江潮水");
         editor.on_key(Key::Char('/'));
-        let mut ime = ImeSession::from_table_text(Scheme::Lingming, "b 吧\n");
+        let mut ime = ImeSession::from_table_text(Scheme::LINGMING, "b 吧\n");
         ime.input('b');
         let config = Config::default();
         let buffer = render_with(&editor, &config, &ime, 60, 8);
@@ -7813,7 +7813,7 @@ mod tests {
     fn typing_then_space_commits_into_the_editor() {
         let mut editor = Editor::new();
         editor.on_key(Key::Char('i'));
-        let mut ime = ImeSession::from_table_text(Scheme::Lingming, "b 吧 八\n");
+        let mut ime = ImeSession::from_table_text(Scheme::LINGMING, "b 吧 八\n");
 
         assert!(ime_handle(
             &mut ime,
@@ -7837,7 +7837,7 @@ mod tests {
     fn digit_selects_a_candidate_into_the_editor() {
         let mut editor = Editor::new();
         editor.on_key(Key::Char('i'));
-        let mut ime = ImeSession::from_table_text(Scheme::Lingming, "b 吧 八\n");
+        let mut ime = ImeSession::from_table_text(Scheme::LINGMING, "b 吧 八\n");
         ime_handle(
             &mut ime,
             &mut editor,
@@ -7860,7 +7860,7 @@ mod tests {
     fn a_frame_can_be_drawn_without_a_terminal() {
         let mut editor = editor_with("那年冬天，雪下得早。\n山路斷了。\n");
         let config = Config::default();
-        let ime = ImeSession::empty(Scheme::Lingming);
+        let ime = ImeSession::empty(Scheme::LINGMING);
         let shot = frame_to_text(&mut editor, &config, &ime, 40, 8);
         // The writing is in it, one 漢字 to two cells and no space between two
         // of them — the blank a wide glyph owns is not part of the picture.
@@ -7878,7 +7878,7 @@ mod tests {
         // reached the editor, which has no binding for it, and nothing
         // happened or was said.
         let config = Config::default();
-        let mut ime = ImeSession::from_table_text(Scheme::Lingming, "b 吧 八\n");
+        let mut ime = ImeSession::from_table_text(Scheme::LINGMING, "b 吧 八\n");
         assert!(ime.is_chinese(), "a loaded table starts in Chinese");
         let said = switch_scheme(&mut ime, "-", &config);
         assert!(!ime.is_chinese(), "{said}");
@@ -7890,7 +7890,7 @@ mod tests {
     fn ascii_mode_lets_keys_fall_through_to_the_editor() {
         let mut editor = Editor::new();
         editor.on_key(Key::Char('i'));
-        let mut ime = ImeSession::from_table_text(Scheme::Lingming, "b 吧\n");
+        let mut ime = ImeSession::from_table_text(Scheme::LINGMING, "b 吧\n");
         // Switch to ASCII: the IME no longer consumes letters.
         ime.toggle_language();
         assert!(!ime.is_chinese());
@@ -7966,7 +7966,7 @@ mod tests {
         // `c` into the manuscript.
         let mut editor = Editor::new();
         editor.on_key(Key::Char('i'));
-        let mut ime = ImeSession::from_table_text(Scheme::Lingming, "b 吧 八\n");
+        let mut ime = ImeSession::from_table_text(Scheme::LINGMING, "b 吧 八\n");
         ime_handle(
             &mut ime,
             &mut editor,

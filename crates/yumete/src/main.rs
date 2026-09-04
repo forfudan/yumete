@@ -249,7 +249,23 @@ fn main() -> ExitCode {
     // launch pays for an input method most of them did not ask for. So it
     // waits for `:yume scheme`.
     mark("ruby", &mut marks);
-    let wanted = Scheme::from_tag(&config.ime.scheme).unwrap_or(Scheme::Lingming);
+    // **What is installed is what the editor offers** (#169). A directory scan,
+    // not a compiled-in list: `schemes/*.toml` under any of the data
+    // directories names a scheme, and yume-core sorts what it is given into
+    // menu order. It reads a few kilobytes of TOML and touches no table, so it
+    // is cheap enough to do before anything is drawn — and it has to be, since
+    // `--shot` and `--timing` both run the whole launch and would otherwise
+    // draw a menu of schemes this build does not have. Nothing found leaves the
+    // built-in five standing, which is every install today.
+    if yumete_ime::discover(&yumete_config::data_search_dirs()) > 0 {
+        let found: Vec<(&str, &str)> = Scheme::all()
+            .into_iter()
+            .map(|s| (s.tag(), s.found_name()))
+            .collect();
+        yumete_core::command::set_schemes(&found);
+    }
+    mark("方案", &mut marks);
+    let wanted = Scheme::from_tag(&config.ime.scheme).unwrap_or_else(Scheme::first);
     editor.set_chaifen(config.editor.show_chaifen);
     let page_size = config.panel.page_size;
     let chaifen = config.editor.show_chaifen;
@@ -394,8 +410,11 @@ fn switch_scheme_at_startup(
     (page_size, chaifen): (usize, bool),
 ) -> String {
     let mut full = ImeSession::from_default_dirs(wanted);
-    if !full.available() && wanted != Scheme::Lingming {
-        full = ImeSession::from_default_dirs(Scheme::Lingming);
+    // The first installed scheme, not 靈明: on a build that ships only 冰雪
+    // there is no 靈明 to retreat to.
+    let fallback = Scheme::first();
+    if !full.available() && wanted != fallback {
+        full = ImeSession::from_default_dirs(fallback);
     }
     full.set_page_size(page_size);
     full.set_annotations(chaifen);
