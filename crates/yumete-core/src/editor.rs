@@ -2527,6 +2527,10 @@ impl Editor {
                 self.theme_request = Some((name, mood));
                 Ok(CommandOutcome::Continue)
             }
+            Command::SortTable(keys) => {
+                self.sort_table(&keys);
+                Ok(CommandOutcome::Continue)
+            }
             Command::ShowDetail(want) => {
                 self.show_detail = want.unwrap_or(!self.show_detail);
                 self.status = match self.show_detail {
@@ -3469,7 +3473,116 @@ impl Editor {
         };
     }
 
-    /// Change which way this column's cells are set.
+    /// **Put the rows in order** by one column or several.
+    ///
+    /// `:table sort 1 a 2 d 4 a` — first column ascending, then second
+    /// descending, then fourth ascending — and `t1s` / `t1S` for one column
+    /// from the keyboard. With no columns named it sorts by the one the cursor
+    /// is in, which is what `t s` has always meant.
+    ///
+    /// A grid keeps its rows: sorting moves them, and moves nothing else. The
+    /// header stays where it is, and every row's cells are the cells it had.
+    fn sort_table(&mut self, keys: &[(usize, bool)]) {
+        let Some(view) = self.table.as_ref() else {
+            self.status = say!("不是表格——先 :table");
+            return;
+        };
+        // A `|` table in a document is laid out as text, and it already has a
+        // sort that keeps that layout right.
+        if view.shape == Shape::Markdown {
+            let descending = keys.first().map(|&(_, d)| d).unwrap_or(false);
+            if let Some((column, _)) = keys.first() {
+                let line = self.cursor_line();
+                self.go_to_cell(line, column.saturating_sub(1));
+            }
+            self.md_sort(descending);
+            return;
+        }
+        let here = self.cell_position().map(|(_, c)| c).unwrap_or(0);
+        let keys: Vec<(usize, bool)> = match keys.is_empty() {
+            true => vec![(here, false)],
+            // The reader counts columns from one; the file counts from zero.
+            false => keys.iter().map(|&(c, d)| (c.saturating_sub(1), d)).collect(),
+        };
+        let delimiter = view.schema.delimiter;
+        let header = usize::from(view.schema.header);
+        let text = self.current_buffer().text();
+        let ends_with_newline = text.ends_with('\n');
+        let mut lines: Vec<&str> = text.lines().collect();
+        if lines.len() <= header + 1 {
+            self.status = say!("行太少，排不了");
+            return;
+        }
+        // The trailing empty line a file ending in a newline leaves is not a
+        // row and must not be sorted into the middle.
+        let body = &mut lines[header..];
+        let cell = |line: &str, at: usize| -> String {
+            crate::table::cells(line, delimiter)
+                .get(at)
+                .map(|&s| crate::table::cell_text(line, s))
+                .unwrap_or_default()
+        };
+        // Numbers as numbers, everything else by code point — the same rule the
+        // `|` sort follows, so one table does not sort two ways.
+        let rank = |value: String| -> (bool, f64, String) {
+            match value.trim().parse::<f64>() {
+                Ok(n) => (false, n, String::new()),
+                Err(_) => (true, 0.0, value),
+            }
+        };
+        body.sort_by(|a, b| {
+            for &(column, descending) in &keys {
+                let (ka, kb) = (rank(cell(a, column)), rank(cell(b, column)));
+                let order = ka
+                    .0
+                    .cmp(&kb.0)
+                    .then(ka.1.total_cmp(&kb.1))
+                    .then_with(|| ka.2.cmp(&kb.2));
+                let order = match descending {
+                    true => order.reverse(),
+                    false => order,
+                };
+                if order != std::cmp::Ordering::Equal {
+                    return order;
+                }
+            }
+            std::cmp::Ordering::Equal
+        });
+        let mut rebuilt = lines.join("\n");
+        if ends_with_newline {
+            rebuilt.push('\n');
+        }
+        if rebuilt == text {
+            self.status = say!("已經是這個順序了");
+            return;
+        }
+        self.snapshot();
+        let len = self.current_buffer().char_count();
+        self.without_cell_guard(|e| {
+            e.current_buffer_mut().remove(0..len);
+            e.current_buffer_mut().insert(0, &rebuilt);
+        });
+        self.clamp_cursor();
+        self.forget_the_document();
+        let named: Vec<String> = keys
+            .iter()
+            .map(|&(c, d)| {
+                let name = self
+                    .table
+                    .as_ref()
+                    .and_then(|v| v.schema.columns.get(c))
+                    .map(|col| col.heading().to_string())
+                    .unwrap_or_else(|| (c + 1).to_string());
+                match d {
+                    true => say!("{0}↓", name),
+                    false => say!("{0}↑", name),
+                }
+            })
+            .collect();
+        self.status = say!("排好了：{0}", named.join(" "));
+    }
+
+    /// Change which way this column's cells are set.    /// Change which way this column's cells are set.
     fn md_align(&mut self, align: crate::mdtable::Align) {
         let Some((region, mut parts)) = self.md_parts() else {
             return;
@@ -4136,6 +4249,20 @@ impl Editor {
                 self.goto_line(line + 1);
                 self.go_to_cell(line, cell);
                 self.status = say!("第 {0} 行 · 第 {1} 欄", line + 1, cell + 1);
+                return;
+            }
+        }
+        // `t1s` / `t1S` — sort by a column named by number. `t s` with no
+        // number is the column you are standing in, which is what it has always
+        // been.
+        if matches!(key, Key::Char('s') | Key::Char('S')) {
+            if let Some((column, _)) = self.sequence_span() {
+                let down = key == Key::Char('S');
+                self.sort_table(&[(column, down)]);
+                return;
+            }
+            if self.md_region().is_none() {
+                self.sort_table(&[]);
                 return;
             }
         }
@@ -12773,6 +12900,57 @@ mod tests {
     /// `gd` searches the key column, `3gd` column three, `2-5gd` columns two
     /// through five. One column, one exact match, one place to land — which on
     /// a 拆分表 is the row the component is *about*.
+    /// A delimited grid sorts by one column or several, and keeps its rows.
+    #[test]
+    fn a_grid_sorts_by_the_columns_it_is_told() {
+        let dir = std::env::temp_dir().join(format!("yumete-sort-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(dir.join(".yumete").join("tables")).unwrap();
+        std::fs::write(
+            dir.join(".yumete").join("tables").join("t.toml"),
+            "[table]\nfile = ['d.csv']\nkey = 'char'\n\
+             [[table.column]]\nname = 'char'\n[[table.column]]\nname = 'block'\n\
+             [[table.column]]\nname = 'n'\n",
+        )
+        .unwrap();
+        let csv = dir.join("d.csv");
+        std::fs::write(&csv, "char,block,n\n丙,B,2\n甲,A,10\n乙,B,9\n丁,A,1\n").unwrap();
+
+        let mut ed = Editor::new();
+        ed.open_file(&csv).unwrap();
+        let rows = |ed: &Editor| -> Vec<String> {
+            ed.current_buffer().text().lines().skip(1).map(str::to_string).collect()
+        };
+
+        // By the first column, ascending — the header stays put.
+        ed.execute(":table sort 1 a").unwrap();
+        assert!(ed.current_buffer().text().starts_with("char,block,n\n"), "{}", ed.status());
+        assert_eq!(rows(&ed), ["丁,A,1", "丙,B,2", "乙,B,9", "甲,A,10"], "{}", ed.status());
+
+        // **Numbers as numbers**: 10 after 9, not before it.
+        ed.execute(":table sort 3 a").unwrap();
+        assert_eq!(rows(&ed), ["丁,A,1", "丙,B,2", "乙,B,9", "甲,A,10"]);
+
+        // Two columns: block ascending, then n descending inside each block.
+        ed.execute(":table sort 2 a 3 d").unwrap();
+        assert_eq!(rows(&ed), ["甲,A,10", "丁,A,1", "乙,B,9", "丙,B,2"], "{}", ed.status());
+
+        // The rows are the same rows: nothing gained, nothing lost.
+        let mut before: Vec<String> = "丙,B,2 甲,A,10 乙,B,9 丁,A,1".split(' ').map(str::to_string).collect();
+        before.sort();
+        let mut after = rows(&ed);
+        after.sort();
+        assert_eq!(before, after);
+
+        // `t3S` is the same thing from the keyboard.
+        for key in "t3S".chars() {
+            ed.on_key(Key::Char(key));
+        }
+        assert_eq!(rows(&ed), ["甲,A,10", "乙,B,9", "丙,B,2", "丁,A,1"], "{}", ed.status());
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
     #[test]
     fn gd_looks_the_cell_up_in_one_named_column() {
         let dir = std::env::temp_dir().join(format!("yumete-gdcol-{}", std::process::id()));
