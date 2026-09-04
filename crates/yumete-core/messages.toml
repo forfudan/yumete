@@ -2184,3 +2184,11 @@ en = "layout: horizontal"
 [[message]]
 zh = "大綱：{0} 條標題（:toc 3 直接去第三條）"
 en = "outline: {0} headings (:toc 3 goes straight to the third)"
+
+[[message]]
+zh = "第 {0}–{1} 欄：第 1/{2} 處"
+en = "columns {0}–{1}: hit 1/{2}"
+
+[[message]]
+zh = "第 {0} 欄：第 1/{1} 處"
+en = "column {0}: hit 1/{1}"

@@ -568,7 +568,11 @@ pub fn draw_detail(frame: &mut Frame, editor: &Editor, config: &Config, area: Re
     // text, because there is no room to spend a row on a heading.
     if editor.table().is_none() {
         put_text(buf, left, area.y, right, &detail.title, title);
-        let body = detail.rows.first().map(|(_, v)| v.as_str()).unwrap_or("");
+        let body = detail
+            .rows
+            .first()
+            .and_then(|(_, v)| v.as_deref())
+            .unwrap_or("");
         let indent = left + yumete_cjk::str_width(&detail.title) as u16 + 2;
         // Wrapped by hand across the panel's rows — a long note is the case
         // this exists for, so cutting it off would defeat the point.
@@ -652,13 +656,21 @@ pub fn draw_detail(frame: &mut Frame, editor: &Editor, config: &Config, area: Re
         }
         let style = if *field == detail.here { here } else { name };
         put_text(buf, left, y, right, field, style);
+        // **A field the row does not have**, said in 朱 and in words: a blank
+        // here used to mean either 「this cell is empty」 or 「this row is short
+        // by twenty-four columns」, and telling those apart is most of what
+        // this panel is for.
+        let (text, style) = match text {
+            Some(text) => (text.as_str(), if *field == detail.here { here } else { value }),
+            None => ("⟨缺⟩", missing),
+        };
         // **The values line up past the longest name**, rather than at a fixed
         // ten cells: the names carry their column number now (「12 pinyin」),
         // and a name longer than the guess ran straight into its own value.
         // Capped, so one long name does not push every value off the panel.
         let indent = left + column;
         if indent < right {
-            put_text(buf, indent, y, right, text, if *field == detail.here { here } else { value });
+            put_text(buf, indent, y, right, text, style);
         }
         y += 1;
     }
