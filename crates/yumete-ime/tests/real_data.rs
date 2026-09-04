@@ -28,7 +28,7 @@ fn real_lingming_data_loads_and_produces_candidates() {
         return;
     };
 
-    let mut session = ImeSession::new(Scheme::Lingming, vec![dir]);
+    let mut session = ImeSession::new(Scheme::LINGMING, vec![dir]);
     assert!(session.available(), "Lingming tables should load");
     assert_eq!(session.scheme_name(), "靈明");
 
@@ -53,15 +53,15 @@ fn a_chosen_commit_method_survives_a_scheme_switch_but_never_overrules_pinyin() 
     let Some(dir) = data_dir() else {
         return;
     };
-    let mut session = ImeSession::new(Scheme::Lingming, vec![dir]);
+    let mut session = ImeSession::new(Scheme::LINGMING, vec![dir]);
     session.set_commit_strategy(Some(CommitStrategy::Unique));
-    assert!(session.set_scheme(Scheme::Pinyin));
+    assert!(session.set_scheme(Scheme::PINYIN));
     // Chosen, and remembered — but 拼音 has no 碼表 to look a segment up in, so
     // what is *in force* there is 整句 whatever was asked (Feature #209).
     assert_eq!(session.commit_override(), Some(CommitStrategy::Unique));
     assert_eq!(session.commit_strategy(), CommitStrategy::Fluency);
     // …and coming back, the choice is still the writer's.
-    assert!(session.set_scheme(Scheme::Lingming));
+    assert!(session.set_scheme(Scheme::LINGMING));
     assert_eq!(session.commit_strategy(), CommitStrategy::Unique);
 }
 
@@ -70,9 +70,9 @@ fn real_pinyin_scheme_switch_stays_available() {
     let Some(dir) = data_dir() else {
         return;
     };
-    let mut session = ImeSession::new(Scheme::Lingming, vec![dir]);
+    let mut session = ImeSession::new(Scheme::LINGMING, vec![dir]);
     // Pinyin uses the shared fluency table, which build.sh also installs.
-    assert!(session.set_scheme(Scheme::Pinyin));
+    assert!(session.set_scheme(Scheme::PINYIN));
     // The display name is yume's to choose — it has been 「拼音」 and is now
     // 「宇浩拼音」 — so this asks what the name is *about*, not what it is.
     let name = session.scheme_name();
@@ -92,7 +92,7 @@ fn the_yume_model_segments_both_scripts() {
         eprintln!("skipping: no installed IME data (run scripts/build.sh)");
         return;
     };
-    let session = ImeSession::new(Scheme::Lingming, vec![dir]);
+    let session = ImeSession::new(Scheme::LINGMING, vec![dir]);
     let words = session.segmenter();
     if !words.is_available() {
         eprintln!("skipping: the language tables are not installed");
@@ -126,7 +126,7 @@ fn the_word_level_changes_how_readily_words_join() {
         eprintln!("skipping: no installed IME data (run scripts/build.sh)");
         return;
     };
-    let session = ImeSession::new(Scheme::Lingming, vec![dir]);
+    let session = ImeSession::new(Scheme::LINGMING, vec![dir]);
     if !session.segmenter().is_available() {
         eprintln!("skipping: the language tables are not installed");
         return;
@@ -162,7 +162,7 @@ fn the_word_level_changes_how_readily_words_join() {
 #[ignore]
 fn probe_bias_sensitivity() {
     let Some(dir) = data_dir() else { return };
-    let session = ImeSession::new(Scheme::Lingming, vec![dir]);
+    let session = ImeSession::new(Scheme::LINGMING, vec![dir]);
     let line = "那年冬天他抬頭看了看那片天，山路已經看不見了。";
     for tenths in -40..=40 {
         if tenths % 5 != 0 {
