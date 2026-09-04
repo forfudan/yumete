@@ -10,6 +10,31 @@ use std::fmt;
 use crate::ruby::Dialect;
 use crate::zong::Layout;
 
+/// What `:word` was asked about — 分詞邊界, from three sides.
+///
+/// **One subject, one command.** Where a word ends is decided by a dictionary,
+/// shown by a colour, and tuned by a level; those were `:words`, `:segment` and
+/// a config key nobody could see, and nothing said they were the same question.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WordCommand {
+    /// `:word` — which dictionary is in force, and how many words this book adds.
+    Report,
+    /// `:word show on|off` — the colour under the writing that says where the
+    /// boundaries fell. `None` flips it.
+    Show(Option<bool>),
+    /// `:word list` — the same report, from the list's side.
+    List,
+    /// `:word list reload` — read this book's list and the global one again.
+    Reload,
+    /// `:word list edit` — open this book's `.yumete/words.txt`, existing or not.
+    Edit,
+    /// `:word list global` — open the global `segmentation.txt`, existing or not.
+    Global,
+    /// `:word level strict|balanced|full` — how readily characters join into
+    /// words. `None` says which it is.
+    Level(Option<yumete_cjk::WordLevel>),
+}
+
 /// A parsed command-line command.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Command {
@@ -66,9 +91,10 @@ pub enum Command {
     Undo,
     /// `:redo` (alias `:red`) — redo the last undone change.
     Redo,
-    /// `:segment` (alias `:seg`) — toggle the word-segmentation overlay
-    /// (Feature #24).
-    ToggleSegmentation,
+    /// `:word …` — everything about **where one word ends and the next
+    /// begins**, which is one subject and used to be two commands (`:segment`
+    /// coloured the boundaries, `:words` reloaded the list that decides them).
+    Word(WordCommand),
     /// `:layout [horizontal|vertical]` (aliases `:horizontal`, `:vertical`) —
     /// choose the layout (Feature #61). `None` toggles between the two.
     SetLayout(Option<Layout>),
@@ -128,8 +154,7 @@ pub enum Command {
     SetIndentHint(crate::zong::IndentHint),
     /// `:bands 2` — how many bands the 縱書 page is divided into (段組).
     SetBands(usize),
-    /// `:words` — read this project's own word list again.
-    ReloadWords,
+
     /// `:search row|column <pattern>` — the two directions a search can run.
     Search { pattern: String, by: Axis },
     /// `:table check` — look the whole table over and list what is wrong.
@@ -357,7 +382,31 @@ pub fn parse(input: &str) -> Result<Command, CommandError> {
         "quit!" | "q!" => Ok(Command::Quit { force: true }),
         "undo" | "u" => Ok(Command::Undo),
         "redo" | "red" => Ok(Command::Redo),
-        "segment" | "seg" => Ok(Command::ToggleSegmentation),
+        // 分詞邊界, from three sides — see [`Word`]. `:segment` and `:words`
+        // were the two halves of it and are gone; `retired` names the new
+        // spelling for fingers that knew the old one.
+        "word" | "wd" => match rest.split_whitespace().collect::<Vec<_>>().as_slice() {
+            [] => Ok(Command::Word(WordCommand::Report)),
+            ["show"] => Ok(Command::Word(WordCommand::Show(None))),
+            ["show", "on"] => Ok(Command::Word(WordCommand::Show(Some(true)))),
+            ["show", "off"] => Ok(Command::Word(WordCommand::Show(Some(false)))),
+            ["list"] => Ok(Command::Word(WordCommand::List)),
+            ["list", "reload"] => Ok(Command::Word(WordCommand::Reload)),
+            ["list", "edit"] => Ok(Command::Word(WordCommand::Edit)),
+            ["list", "global"] => Ok(Command::Word(WordCommand::Global)),
+            ["level"] => Ok(Command::Word(WordCommand::Level(None))),
+            ["level", name] => match yumete_cjk::WordLevel::parse(name) {
+                Some(level) => Ok(Command::Word(WordCommand::Level(Some(level)))),
+                None => Err(CommandError::InvalidArgument {
+                    command: "word level",
+                    value: (*name).to_string(),
+                }),
+            },
+            other => Err(CommandError::InvalidArgument {
+                command: "word",
+                value: other.join(" "),
+            }),
+        },
         // Layout (Feature #61): `:layout` alone flips it, the two long forms
         // name the layout outright.
         "layout" | "lay" => {
@@ -529,7 +578,6 @@ pub fn parse(input: &str) -> Result<Command, CommandError> {
                 value: other.to_string(),
             }),
         },
-        "words" => Ok(Command::ReloadWords),
         "search" => {
             // `:search <pattern>` with no direction is a row search, because
             // that is what a search is anywhere but a table.
@@ -1595,6 +1643,70 @@ const RUBY: &[Word] = &[
     },
 ];
 
+/// `:word` — one subject, three sides of it.
+const WORD_TOPICS: &[Word] = &[
+    Word {
+        name: "show",
+        help: "分詞著色",
+        needs: &[],
+        then: Args::Words(ON_OFF),
+    },
+    Word {
+        name: "list",
+        help: "詞表：用哪一份、重讀、編輯",
+        needs: &[],
+        then: Args::Words(WORD_LISTS),
+    },
+    Word {
+        name: "level",
+        help: "分詞粒度：多少個字算一個詞",
+        needs: &[],
+        then: Args::Words(WORD_LEVELS),
+    },
+];
+
+const WORD_LISTS: &[Word] = &[
+    Word {
+        name: "reload",
+        help: "重讀（本書的 ＋ 全域的）",
+        needs: &[],
+        then: Args::None,
+    },
+    Word {
+        name: "edit",
+        help: "開本書的 .yumete/words.txt——人名、地名",
+        needs: &[],
+        then: Args::None,
+    },
+    Word {
+        name: "global",
+        help: "開全域 segmentation.txt",
+        needs: &[],
+        then: Args::None,
+    },
+];
+
+const WORD_LEVELS: &[Word] = &[
+    Word {
+        name: "strict",
+        help: "只認很常見的詞——更多單字",
+        needs: &[],
+        then: Args::None,
+    },
+    Word {
+        name: "balanced",
+        help: "詞表怎麼說就怎麼切",
+        needs: &[],
+        then: Args::None,
+    },
+    Word {
+        name: "full",
+        help: "長詞、怪詞也算",
+        needs: &[],
+        then: Args::None,
+    },
+];
+
 const ON_OFF: &[Word] = &[
     Word {
         name: "on",
@@ -1689,11 +1801,11 @@ pub const COMMANDS: &[Entry] = &[
         args: Args::None,
     },
     Entry {
-        name: "segment",
-        aliases: &["seg"],
-        help: "分詞著色",
+        name: "word",
+        aliases: &["wd"],
+        help: "分詞：哪一份詞表、著色、粒度",
         needs: &[],
-        args: Args::Words(ON_OFF),
+        args: Args::Words(WORD_TOPICS),
     },
     Entry {
         name: "layout",
@@ -1792,13 +1904,6 @@ pub const COMMANDS: &[Entry] = &[
         help: "找：`row` 一行一行（就是 `/`），`column` 一欄一欄（表格裏 t/ t? 就是它）",
         needs: &[],
         args: Args::Words(AXIS),
-    },
-    Entry {
-        name: "words",
-        aliases: &[],
-        help: "重讀 .yumete/words.txt——這本書自己的詞（人名、地名）",
-        needs: &[],
-        args: Args::None,
     },
     Entry {
         name: "bands",
@@ -2336,8 +2441,28 @@ mod tests {
 
     #[test]
     fn parses_segment_toggle() {
-        assert_eq!(parse(":segment"), Ok(Command::ToggleSegmentation));
-        assert_eq!(parse(":seg"), Ok(Command::ToggleSegmentation));
+        // 分詞邊界 is one subject and one command now.
+        assert_eq!(parse(":word"), Ok(Command::Word(WordCommand::Report)));
+        assert_eq!(
+            parse(":word show on"),
+            Ok(Command::Word(WordCommand::Show(Some(true))))
+        );
+        assert_eq!(parse(":word list"), Ok(Command::Word(WordCommand::List)));
+        assert_eq!(
+            parse(":word list reload"),
+            Ok(Command::Word(WordCommand::Reload))
+        );
+        assert_eq!(
+            parse(":word level strict"),
+            Ok(Command::Word(WordCommand::Level(Some(
+                yumete_cjk::WordLevel::Strict
+            ))))
+        );
+        // A level nobody defined is refused by name, not silently taken.
+        assert!(parse(":word level 中等").is_err());
+        // The two commands it replaced are gone.
+        assert!(parse(":segment").is_err());
+        assert!(parse(":words").is_err());
     }
 
     #[test]

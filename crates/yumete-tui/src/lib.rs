@@ -32,6 +32,7 @@ use ratatui::widgets::{Block, BorderType, Borders, Clear, Paragraph};
 use ratatui::Frame;
 
 use yumete_config::{Config, LineNumbers};
+use yumete_cjk::Segmenter;
 use yumete_core::sidebar::View;
 use yumete_core::wrap::{self, Anchor as WrapAnchor};
 use yumete_core::zong::{Anchor, Layout as WritingLayout};
@@ -72,6 +73,42 @@ pub fn terminal_width() -> Option<usize> {
 /// the wait is something the reader watches finish rather than something they
 /// wait through in front of a blank terminal.
 pub type Deferred = Box<dyn FnOnce(&mut ImeSession) -> String>;
+
+/// The dictionary that decides where one word ends and the next begins.
+///
+/// **Best first**, and one copy of the answer: the start-up path and
+/// `:word list reload` used to be two, and only one of them knew about the
+/// language model.
+///
+/// 1. Yume's own language model — over a million weighted entries in both
+///    scripts, already loaded with the IME and shared by reference.
+/// 2. A `segmentation.txt` the reader wrote, in the data directory.
+/// 3. The compact list bundled with the binary, which covers common prose.
+///
+/// `level` is `:word level`, applied to whichever of the three it settled on.
+pub fn choose_words(ime: &ImeSession, level: yumete_cjk::WordLevel) -> Box<dyn Segmenter> {
+    let yume = ime.segmenter();
+    let mut words: Box<dyn Segmenter> = if yume.is_available() {
+        Box::new(yume)
+    } else if let Some(written) = read_word_list() {
+        Box::new(written)
+    } else {
+        Box::new(yumete_core::DictionarySegmenter::builtin(0))
+    };
+    words.set_level(level);
+    words
+}
+
+/// A `word<TAB>weight` list the reader wrote, from the first data directory
+/// that has one.
+fn read_word_list() -> Option<yumete_core::DictionarySegmenter> {
+    for dir in yumete_config::data_search_dirs() {
+        if let Ok(text) = std::fs::read_to_string(dir.join("segmentation.txt")) {
+            return Some(yumete_core::DictionarySegmenter::from_text(&text, 0));
+        }
+    }
+    None
+}
 
 /// **One frame, drawn into a string** — the page as it would appear, with no
 /// terminal involved.
@@ -324,6 +361,14 @@ pub fn run(
                 // itself (OSC 52) — no library, and the only route that
                 // survives ssh and tmux, which is where this editor is often
                 // run. A terminal may refuse it; nothing here can tell.
+                // `:word list reload` — the dictionary is the front end's to
+                // build (it holds the IME and knows the data directory), and
+                // the level the reader chose survives the rebuild.
+                if editor.take_words_request() {
+                    let level = editor.word_level();
+                    editor.set_segmenter(choose_words(ime, level));
+                    editor.set_status(say!("詞表重讀了：{0}", editor.words_in_force()));
+                }
                 if let Some(text) = editor.take_clipboard_request() {
                     let _ = write!(io::stdout(), "\x1b]52;c;{}\x07", base64(text.as_bytes()));
                     let _ = io::stdout().flush();
@@ -4698,7 +4743,7 @@ mod tests {
     fn the_prompt_guess_is_a_lighter_ink() {
         let mut editor = editor_with("那年冬天");
         editor.on_key(Key::Char(':'));
-        for c in "seg".chars() {
+        for c in "reco".chars() {
             editor.on_key(Key::Char(c));
         }
         let config = Config::default();
@@ -4708,17 +4753,17 @@ mod tests {
         let line: String = (0..buffer.area.width)
             .map(|x| buffer[(x, row)].symbol())
             .collect();
-        assert!(line.starts_with(":segment"), "guess shown: {line:?}");
+        assert!(line.starts_with(":recover"), "guess shown: {line:?}");
 
         // A rung back, not `DIM`: the attribute is dropped by enough terminals
         // that a guess would read as typed on them.
         let ink = ink(&config);
         let fg = |x: u16| buffer[(x, row)].style().fg;
-        assert_eq!(fg(3), Some(ink.text()), "`seg` was typed");
+        assert_eq!(fg(3), Some(ink.text()), "`rec` was typed");
         assert_eq!(
-            fg(4),
+            fg(5),
             Some(ink.at(yumete_config::rung::RULE)),
-            "`ment` is only a guess"
+            "`ver` is only a guess"
         );
     }
 

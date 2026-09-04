@@ -1248,9 +1248,6 @@ en = "put the selection on the system clipboard"
 zh = "重做"
 en = "redo"
 
-[[message]]
-zh = "重讀 .yumete/words.txt——這本書自己的詞（人名、地名）"
-en = "re-read .yumete/words.txt — this book's own names"
 
 [[message]]
 zh = "長段落折到下一行；`:wrap 50` 定寬度"
@@ -2192,3 +2189,59 @@ en = "columns {0}–{1}: hit 1/{2}"
 [[message]]
 zh = "第 {0} 欄：第 1/{1} 處"
 en = "column {0}: hit 1/{1}"
+
+[[message]]
+zh = "{0}——一行一個詞，寫完 :w，再 :word list reload"
+en = "{0} — one word per line; :w when done, then :word list reload"
+
+[[message]]
+zh = "不知道資料目錄在哪裏——這一台上沒有全域詞表"
+en = "no data directory known — this machine has no global word list"
+
+[[message]]
+zh = "分詞粒度：{0}"
+en = "word level: {0}"
+
+[[message]]
+zh = "分詞粒度：多少個字算一個詞"
+en = "word level: how readily characters join into words"
+
+[[message]]
+zh = "分詞：{0} · {1} · 著色{2}"
+en = "words: {0} · {1} · tint {2}"
+
+[[message]]
+zh = "詞表重讀了：{0}"
+en = "word lists reread: {0}"
+
+[[message]]
+zh = "分詞：哪一份詞表、著色、粒度"
+en = "words: which list, the tint, the level"
+
+[[message]]
+zh = "詞表：用哪一份、重讀、編輯"
+en = "the lists: which one, reread, edit"
+
+[[message]]
+zh = "重讀（本書的 ＋ 全域的）"
+en = "reread (this book's and the global one)"
+
+[[message]]
+zh = "開本書的 .yumete/words.txt——人名、地名"
+en = "open this book's .yumete/words.txt — names of people and places"
+
+[[message]]
+zh = "開全域 segmentation.txt"
+en = "open the global segmentation.txt"
+
+[[message]]
+zh = "只認很常見的詞——更多單字"
+en = "only words beyond argument — more single characters"
+
+[[message]]
+zh = "詞表怎麼說就怎麼切"
+en = "as the dictionary has it"
+
+[[message]]
+zh = "長詞、怪詞也算"
+en = "long and odd words too"
