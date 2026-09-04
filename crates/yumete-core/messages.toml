@@ -1994,3 +1994,11 @@ en = "column numbers: off"
 [[message]]
 zh = "第 {0} 行 · 第 {1} 欄"
 en = "row {0} · column {1}"
+
+[[message]]
+zh = "詳情欄寬 {0}"
+en = "the detail panel is {0} wide"
+
+[[message]]
+zh = "詳情欄：開、關，或者給個寬度"
+en = "the detail panel: on, off, or a width"

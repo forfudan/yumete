@@ -496,15 +496,17 @@ const DETAIL_WIDTH: u16 = 30;
 /// fields and that is a tall thing. Prose gets the same panel along the
 /// **bottom** instead: a footnote is one short paragraph, and taking thirty
 /// columns off a page of writing to show it would be paying the wrong price.
-pub fn split_detail(editor: &Editor, area: Rect) -> (Rect, Option<Rect>) {
+pub fn split_detail(editor: &Editor, config: &Config, area: Rect) -> (Rect, Option<Rect>) {
     if !editor.detail_visible() {
         return (area, None);
     }
     if editor.table().is_some_and(|t| t.is_grid()) {
-        if area.width < DETAIL_WIDTH * 2 {
+        if area.width < DETAIL_WIDTH {
             return (area, None);
         }
-        let w = DETAIL_WIDTH;
+        let w = (editor.detail_width().unwrap_or(config.editor.detail_width) as u16)
+            .min(area.width / 2)
+            .max(12);
         let grid = Rect::new(area.x, area.y, area.width - w, area.height);
         let panel = Rect::new(area.x + area.width - w, area.y, w, area.height);
         return (grid, Some(panel));
@@ -626,7 +628,19 @@ pub fn draw_detail(frame: &mut Frame, editor: &Editor, config: &Config, area: Re
         }
         y += 2;
     }
-    for (field, text) in &detail.rows {
+    // **Scrolled to the field you are in.** Every column is listed now, empty
+    // ones included, so a 28-column row is longer than the panel — and the one
+    // field that must never be off the bottom is the one the cursor is in.
+    // Scrolled by the panel itself, from where the cursor is, rather than by a
+    // key: a reading surface with a scrollbar is a surface with a mode.
+    let room = (area.y + area.height).saturating_sub(y) as usize;
+    let at = detail
+        .rows
+        .iter()
+        .position(|(field, _)| *field == detail.here)
+        .unwrap_or(0);
+    let first = at.saturating_sub(room.saturating_sub(1));
+    for (field, text) in detail.rows.iter().skip(first) {
         if y >= area.y + area.height {
             return;
         }

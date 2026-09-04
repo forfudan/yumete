@@ -387,10 +387,10 @@ Phases are ordered by priority, most writer-critical first:
 | 181 | **`:dense off` for the horizontal page**    | tui    | P2    | 密排 is a 縱書 word; horizontally the same idea is the reading row and the margin the page does not otherwise pay for | Planned |
 | 182 | **A search hit lands in the middle**        | tui    | P1    | today a jump lands `scrolloff` from whichever edge it came in by — 4th row or 4th from the bottom, unpredictably. A *far* motion should centre; a near one should not | Planned |
 | 183 | **`t s` sorts a delimited grid**            | core   | P2    | `s`/`S` sort a `\|` table today and nothing else; and `t s1 S2 s4` is sugar for `:table sort 1 a 2 d 4 a` | Planned |
-| 184 | **Column numbers above the header**         | tui    | P2    | one row of indices, so a column can be named by number — the thing every other key here wants | Planned |
-| 185 | **`t g` goes to a cell**                    | both   | P2    | `:table goto 20 20`, and `t20-20g` for it — see #199 | Planned |
-| 186 | **The detail panel shows every column**     | tui    | P2    | including the empty ones (an empty field is a finding in a 拆分表), each with its column number | Planned |
-| 187 | **The detail panel is a panel**             | both   | P2    | close it, edit a value in it, change its width — it is the only surface here that can do none of those | Planned |
+| 184 | **Column numbers above the header**         | tui    | P2    | one row of indices, so a column can be named by number — the thing every other key here wants | Done |
+| 185 | **`t g` goes to a cell**                    | both   | P2    | `:table goto 20 20`, and `t20-20g` for it — see #199 | Done |
+| 186 | **The detail panel shows every column**     | tui    | P2    | including the empty ones (an empty field is a finding in a 拆分表), each with its column number | Done |
+| 187 | **The detail panel is a panel**             | both   | P2    | close it, edit a value in it, change its width — it is the only surface here that can do none of those | Done |
 | 188 | **The hint row wraps**                      | tui    | P3    | more keys than a row holds; never between a key and what it does | Planned |
 | 189 | **`:shot` takes the page, not the app**     | tui    | P2    | the tab bar and the title bar are not the editor; a region, or a crop, or the grid drawn by us | Planned |
 | 190 | **One rule for folding a blank line**       | core   | P1    | 竪排 folds with the indent off and opens one *with* it on — two behaviours that read as contradictory | Done |

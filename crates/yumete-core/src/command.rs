@@ -92,6 +92,10 @@ pub enum Command {
     SetTableRules(Option<crate::table::Rules>),
     /// `:table numbers on|off` — the row of column numbers above the header.
     SetTableNumbers(bool),
+    /// `:table detail [on|off]` — the panel; `None` toggles.
+    ShowDetail(Option<bool>),
+    /// `:table detail 40` — how wide it is.
+    SetDetailWidth(usize),
     /// `:numbers fill` — whether the line-number band has a ground of its
     /// own. `None` toggles.
     SetNumberFill(Option<bool>),
@@ -572,6 +576,20 @@ pub fn parse(input: &str) -> Result<Command, CommandError> {
             "" | "on" => Ok(Command::SetTable(true)),
             "off" => Ok(Command::SetTable(false)),
             "check" => Ok(Command::CheckTable),
+            _ if rest.starts_with("detail ") => {
+                match rest["detail ".len()..].trim() {
+                    "off" => Ok(Command::ShowDetail(Some(false))),
+                    "on" => Ok(Command::ShowDetail(Some(true))),
+                    n => match n.parse::<usize>() {
+                        Ok(n) => Ok(Command::SetDetailWidth(n)),
+                        Err(_) => Err(CommandError::InvalidArgument {
+                            command: "table detail",
+                            value: n.to_string(),
+                        }),
+                    },
+                }
+            }
+            "detail" => Ok(Command::ShowDetail(None)),
             "numbers" | "numbers on" => Ok(Command::SetTableNumbers(true)),
             "numbers off" => Ok(Command::SetTableNumbers(false)),
             "rules" => Ok(Command::SetTableRules(None)),
@@ -1096,6 +1114,12 @@ const TABLE: &[Word] = &[
         help: "欄線：欄與欄之間怎麼分開",
         needs: &[Need::Table],
         then: Args::Words(RULES),
+    },
+    Word {
+        name: "detail",
+        help: "詳情欄：開、關，或者給個寬度",
+        needs: &[Need::Table],
+        then: Args::Free("on｜off｜<寬度>"),
     },
     Word {
         name: "numbers",
