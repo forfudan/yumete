@@ -60,15 +60,6 @@ pub enum Align {
     Right,
 }
 
-/// The widest a column is padded to.
-///
-/// A cell longer than this is written out whole — nothing is ever truncated —
-/// but the *other* rows stop being padded out to meet it. Without a ceiling,
-/// one long 備註 sentence in a 人物表 makes every line of the table as wide as
-/// itself, and a table two hundred columns across is not a table anybody can
-/// read on a page set to forty. The same number the CSV grid draws at.
-const WIDEST: usize = 32;
-
 impl Align {
     /// The narrowest this column may be written.
     ///
@@ -523,6 +514,20 @@ pub fn parse(lines: &[String]) -> Parts {
 /// A column is as wide as its widest cell **measured in terminal columns**, so
 /// a column of 漢字 lines up. Every other formatter counts characters, which
 /// is why every other formatter leaves Chinese ragged.
+///
+/// There is no ceiling on that width. There used to be one — 32 columns, so
+/// that a single long 備註 sentence could not make every line of a 人物表 as
+/// wide as itself — but a ceiling and alignment are the same knob: any cell
+/// over the ceiling stops being padded, and its closing `|` lands wherever its
+/// own text ends. A table whose right edge is ragged is not lined up, which is
+/// the one thing this function is for. So the table grows as wide as it has to
+/// and the pane scrolls sideways.
+///
+/// The width counted is the width of the **source**: the `**` of a bold cell
+/// is two columns here even though 所見即所得 hides it on screen. That keeps
+/// the file lined up for every other reader of it — GitHub, another editor,
+/// `less`. The screen is squared up at the other end, when the table is drawn,
+/// by the renderer adding back what it hid.
 pub fn compose(parts: &Parts) -> Vec<String> {
     let columns = parts.columns();
     if columns == 0 {
@@ -533,7 +538,7 @@ pub fn compose(parts: &Parts) -> Vec<String> {
     let mut widths: Vec<usize> = aligns.iter().map(|a| a.min()).collect();
     for row in &parts.rows {
         for (i, cell) in row.iter().enumerate() {
-            widths[i] = widths[i].max(yumete_cjk::str_width(cell).min(WIDEST));
+            widths[i] = widths[i].max(yumete_cjk::str_width(cell));
         }
     }
     let empty = String::new();
