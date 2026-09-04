@@ -290,10 +290,6 @@ zh = "換掉了一格"
 en = "replaced the cell"
 
 [[message]]
-zh = "搜索：{0}"
-en = "search: {0}"
-
-[[message]]
 zh = "搶救稿丟掉了"
 en = "threw the draft away"
 
@@ -450,10 +446,6 @@ zh = "表裏沒有「{0}」"
 en = "no '{0}' in this table"
 
 [[message]]
-zh = "表裏沒有這些字：{0}"
-en = "not in this table: {0}"
-
-[[message]]
 zh = "複製了 {0} 個字到系統剪貼簿"
 en = "copied {0} character(s) to the system clipboard"
 
@@ -500,10 +492,6 @@ en = "done: {0}"
 [[message]]
 zh = "跳轉表 {0}/{1}"
 en = "jump list {0}/{1}"
-
-[[message]]
-zh = "這一格沒有指着別的行"
-en = "this cell names no row"
 
 [[message]]
 zh = "這一格是空的"

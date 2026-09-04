@@ -5107,7 +5107,9 @@ mod tests {
         let mut editor = editor_with("那年冬天很冷。\n第二行。\n那年夏天很熱。\n");
         let mut config = Config::default();
         config.editor.line_numbers = yumete_config::LineNumbers::Absolute;
-        editor.on_key(Key::Enter);
+        // `g?`: 「這個詞還在哪裏」, shown in the other work area.
+        editor.on_key(Key::Char('g'));
+        editor.on_key(Key::Char('?'));
         assert_eq!(editor.peeked_line(), Some(2), "{}", editor.status());
 
         let buffer = render(&editor, &config, 40, 9);
