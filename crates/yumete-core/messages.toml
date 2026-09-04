@@ -2245,3 +2245,35 @@ en = "as the dictionary has it"
 [[message]]
 zh = "長詞、怪詞也算"
 en = "long and odd words too"
+
+[[message]]
+zh = "藍曬：普魯士藍的地、白線的字——八套裏唯一底色真帶飽和色的一套"
+en = "cyanotype: white lines on Prussian blue — the one theme whose ground carries colour"
+
+[[message]]
+zh = "琥珀：整頁只有一種顏色"
+en = "amber: one colour for the whole page"
+
+[[message]]
+zh = "莫高：墨是壁畫氧化之後真正變成的褐黑；金不是金色，是石綠——洞窟自己的礦物"
+en = "mogao: the brown-black the murals oxidised into; the gold is malachite, the caves' own mineral"
+
+[[message]]
+zh = "莫蘭迪：八套裏最低的正文對比、最灰的地"
+en = "morandi: the lowest text contrast and the greyest ground of the eight"
+
+[[message]]
+zh = "夜螢：近乎全黑的地，字是冷灰，唯一的暖處是那點黃金——螢火不是霓虹，一頁上只該有幾點"
+en = "firefly: a near-black ground, cool grey text, and warmth only in the gold — a few sparks to a page"
+
+[[message]]
+zh = "明度階：朱不是紅的，是藍的：紅綠色盲也分得開"
+en = "meridian: the mark is blue, not red — separable without the red-green axis"
+
+[[message]]
+zh = "陶窯：灰釉炻器：地是窯灰，金是草木灰的青綠"
+en = "kiln: ash-glazed stoneware — kiln-ash ground, wood-ash green for the gold"
+
+[[message]]
+zh = "靛橘：顏色只活在底色裏，正文永遠是中性灰"
+en = "complement: colour lives in the grounds only; the writing stays neutral grey"

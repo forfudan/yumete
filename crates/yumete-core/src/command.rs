@@ -1460,6 +1460,62 @@ const THEMES: &[Word] = &[
         needs: &[],
         then: Args::Words(MOODS),
     },
+    Word {
+        // 藍曬
+        name: "cyanotype",
+        help: "藍曬：普魯士藍的地、白線的字——八套裏唯一底色真帶飽和色的一套",
+        needs: &[],
+        then: Args::Words(MOODS),
+    },
+    Word {
+        // 琥珀
+        name: "amber",
+        help: "琥珀：整頁只有一種顏色",
+        needs: &[],
+        then: Args::Words(MOODS),
+    },
+    Word {
+        // 莫高
+        name: "mogao",
+        help: "莫高：墨是壁畫氧化之後真正變成的褐黑；金不是金色，是石綠——洞窟自己的礦物",
+        needs: &[],
+        then: Args::Words(MOODS),
+    },
+    Word {
+        // 莫蘭迪
+        name: "morandi",
+        help: "莫蘭迪：八套裏最低的正文對比、最灰的地",
+        needs: &[],
+        then: Args::Words(MOODS),
+    },
+    Word {
+        // 夜螢
+        name: "firefly",
+        help: "夜螢：近乎全黑的地，字是冷灰，唯一的暖處是那點黃金——螢火不是霓虹，一頁上只該有幾點",
+        needs: &[],
+        then: Args::Words(MOODS),
+    },
+    Word {
+        // 明度階
+        name: "meridian",
+        help: "明度階：朱不是紅的，是藍的：紅綠色盲也分得開",
+        needs: &[],
+        then: Args::Words(MOODS),
+    },
+    Word {
+        // 陶窯
+        name: "kiln",
+        help: "陶窯：灰釉炻器：地是窯灰，金是草木灰的青綠",
+        needs: &[],
+        then: Args::Words(MOODS),
+    },
+    Word {
+        // 靛橘
+        name: "complement",
+        help: "靛橘：顏色只活在底色裏，正文永遠是中性灰",
+        needs: &[],
+        then: Args::Words(MOODS),
+    },
 ];
 
 /// `:indent` and what may follow it.
@@ -2633,7 +2689,22 @@ mod tests {
         );
         // The menu lists them apart, too.
         let themes: Vec<String> = complete("theme ").iter().map(Choice::written).collect();
-        assert_eq!(themes, ["ink", "bw"], "the menu lists what can be typed");
+        assert_eq!(
+            themes,
+            [
+                "ink",
+                "bw",
+                "cyanotype",
+                "amber",
+                "mogao",
+                "morandi",
+                "firefly",
+                "meridian",
+                "kiln",
+                "complement"
+            ],
+            "the menu lists what can be typed — ASCII, with the pinyin as an alias"
+        );
         let moods: Vec<String> = complete("appearance ").iter().map(Choice::written).collect();
         assert_eq!(moods, ["system", "dark", "light"]);
         // The shortest spelling the menu offers has to work.
