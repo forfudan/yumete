@@ -5,15 +5,28 @@
 # higher means more common — used by the maximum-probability segmentation path.
 #
 # **This is the fallback, not the dictionary.** With Yume's data installed the
-# editor segments with Yume's own language model (`lang.ywl` / `lang.ygram`,
-# 繁簡混合, over a million entries) — that is what `w`/`b`/`e` actually use on a
-# machine that has run `scripts/build.sh`, and it reads both scripts. This list
-# is what is left when there is no data at all: a compact everyday-prose list so
-# the word motions and the segmentation overlay work with no setup. A user may
-# also override it with a richer "segmentation.txt" in the data directory.
+# editor segments with Yume's own tables — `lang.ywl` is the lexicon (is this a
+# word), `lang.ywtb` the frequencies, `lang.ygram` the model trained on the same
+# corpus — and those read both scripts: of 1.1M entries, 131,159 hold
+# traditional-only characters and 126,870 simplified-only, counted on yume's own
+# source (2026-09-04, confirmed by the yume side). That is what `w`/`b`/`e`
+# actually use on a machine that has run `scripts/build.sh`.
 #
-# It was simplified-only until 2026-09-04, so *that* machine — and only that
-# machine — stepped through 繁體 one 字 at a time.
+# This list is what is left when there is no data at all: a compact
+# everyday-prose list so the word motions and the segmentation overlay work with
+# no setup. A user may also override it with a richer "segmentation.txt" in the
+# data directory. It was simplified-only until 2026-09-04, so *that* machine —
+# a fresh clone, a first run, CI — and only that machine stepped through 繁體
+# one 字 at a time.
+#
+# **The two scripts are separate entries, not one entry plus a conversion**, and
+# the coverage is not symmetric: 14,595 of the traditional entries (1.3%) have
+# no simplified twin — 古語 and 成語 that never occur in simplified corpora
+# (粉吝紅慳), 異體 and old forms (麪), and the one-to-many characters (於/于,
+# 著/着) that fold wrong. So never fall back by folding a word into the other
+# script and looking it up again: that is the machinery that produced 大家傢 and
+# 别彆人 on the first attempt at this file. Write the word in both scripts, or
+# leave it out.
 
 # Pronouns & people
 我	60000
