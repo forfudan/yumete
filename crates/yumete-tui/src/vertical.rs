@@ -966,8 +966,13 @@ impl Skin {
         self.step(1000)
     }
     /// The ring around the panel.
+    ///
+    /// [`yumete_config::rung::RULE`], which is where every other ring on the
+    /// screen is drawn — the which-key panel, the sidebar's edge, the ruler's
+    /// line. Four panels used to ring themselves at four different rungs, and
+    /// on one screen that reads as four different kinds of thing.
     pub fn border(self) -> Color {
-        self.step(750)
+        self.step(yumete_config::rung::RULE as u32)
     }
     /// A candidate.
     pub fn text(self) -> Color {
