@@ -2822,12 +2822,23 @@ impl Editor {
                 Ok(CommandOutcome::Continue)
             }
             Command::SetSoftWrap(on) => {
+                // **縱書 has nothing to turn off.** A 縱 is broken by the
+                // height of the window, and that is not the writer's to set —
+                // `:wrap 40` does set the 縱 length, in either layout, but
+                // 開／關 does not reach it. Taking it anyway and answering
+                // 「長段落跑出右邊」 named a right edge this page does not
+                // have, and left the reader looking for a change that had not
+                // been made.
+                if self.layout == Layout::Vertical {
+                    self.status = say!("縱書不折行：一縱斷在窗高上。這一項只管橫排（`:wrap 40` 兩邊都算）");
+                    return Ok(CommandOutcome::Continue);
+                }
                 self.set_soft_wrap(on);
                 self.refresh_goal_column();
                 self.status = if on {
                     say!("折行：開")
                 } else {
-                    say!("折行：關（長段落跑出右邊）")
+                    say!("折行：關（長段落成一行，頁面跟着光標左右走）")
                 };
                 Ok(CommandOutcome::Continue)
             }
@@ -16062,6 +16073,31 @@ mod tests {
         assert_eq!(ed.wrap_width(), None, "vertical does not wrap");
 
         assert!(ed.execute("wrap wide").is_err(), "not a width");
+    }
+
+    /// 縱書 has no 折行 to turn off, and says so.
+    ///
+    /// A 縱 is broken by the height of the window. `:wrap off` used to be
+    /// taken there and answered 「長段落跑出右邊」 — a right edge this page
+    /// does not have — while changing nothing the reader could see.
+    #[test]
+    fn wrap_on_and_off_are_refused_in_vertical_and_say_why() {
+        let mut ed = typed("那年冬天，山下起了大雪。");
+        ed.execute("layout vertical").unwrap();
+        assert!(ed.soft_wrap(), "on, as it always is");
+
+        ed.execute("wrap off").unwrap();
+        assert!(ed.soft_wrap(), "…and untouched: there was nothing to turn");
+        assert!(ed.status().contains("縱書不折行"), "{}", ed.status());
+
+        // The measure is a different question, and it *is* answered here.
+        ed.execute("wrap 12").unwrap();
+        assert_eq!(ed.zong_length(), 12);
+
+        // Horizontally it works as it always did.
+        ed.execute("layout horizontal").unwrap();
+        ed.execute("wrap off").unwrap();
+        assert!(!ed.soft_wrap());
     }
 
     #[test]
