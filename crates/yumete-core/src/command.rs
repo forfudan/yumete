@@ -1745,8 +1745,12 @@ pub const COMMANDS: &[Entry] = &[
     Entry {
         name: "dense",
         aliases: &[],
-        help: "密排：一縱兩格，無注音、無旁置、無刻度",
-        needs: &[Need::Vertical],
+        help: "密排／疏排：竪排是縱與縱之間，橫排是行與行之間",
+        // **Both layouts**: 密排 packs a 縱書 page by taking the gap between
+        // 縱 away, and packs a 橫排 page by taking the row between rows away.
+        // It used to need 竪排, which made 「疏排」 unsayable on the page most
+        // writing is done on.
+        needs: &[],
         args: Args::Words(ON_OFF),
     },
     Entry {

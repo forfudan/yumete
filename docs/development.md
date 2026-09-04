@@ -384,7 +384,7 @@ Phases are ordered by priority, most writer-critical first:
 | 178 | **The hit you are standing on**             | tui    | P2    | 朱's wash on the match, a band on its row, 朱 on its number — the number kept, not replaced | Done |
 | 179 | **The keys a keyboard has**                 | both   | P2    | PageUp/PageDown reached the editor as nothing; `C-a`/`C-e` were swallowed by Insert | Done |
 | 180 | **`gd` / `gw` beside `Enter`**              | core   | P1    | references, definition, and definition-without-leaving; a footnote no longer holds `Enter` hostage, and either key writes the note it cannot find | Done |
-| 181 | **`:dense off` for the horizontal page**    | tui    | P2    | 密排 is a 縱書 word; horizontally the same idea is the reading row and the margin the page does not otherwise pay for | Planned |
+| 181 | **`:dense off` for the horizontal page**    | tui    | P2    | 密排 is a 縱書 word; horizontally the same idea is the reading row and the margin the page does not otherwise pay for | Done |
 | 182 | **A search hit lands in the middle**        | tui    | P1    | today a jump lands `scrolloff` from whichever edge it came in by — 4th row or 4th from the bottom, unpredictably. A *far* motion should centre; a near one should not | Planned |
 | 183 | **`t s` sorts a delimited grid**            | core   | P2    | `:table sort 1 a 2 d 4 a` over any grid, and `t1s` / `t1S` for one column from the keyboard. The chord `t1s2S4s` is not implemented: with no terminator it cannot be told from three sorts, and three stable sorts in the reverse order give the same answer | Done |
 | 184 | **Column numbers above the header**         | tui    | P2    | one row of indices, so a column can be named by number — the thing every other key here wants | Done |

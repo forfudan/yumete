@@ -2034,3 +2034,15 @@ en = "typewriter: on (the paper moves, the line does not)"
 [[message]]
 zh = "打字機：關"
 en = "typewriter: off"
+
+[[message]]
+zh = "密排：行貼着行"
+en = "tight: rows against rows"
+
+[[message]]
+zh = "疏排：每行之間留一行"
+en = "loose: a row of air between rows"
+
+[[message]]
+zh = "密排／疏排：竪排是縱與縱之間，橫排是行與行之間"
+en = "tight or loose: between columns in 竪排, between rows in 橫排"
