@@ -1453,9 +1453,14 @@ fn settle_inline_candidate(editor: &mut Editor, ime: &ImeSession) {
     // dirty by a `set_ghost` that changes nothing, since both layout memos are
     // keyed on the runs.
     if want.is_empty() {
-        if editor.has_ghost() {
-            editor.set_ghost(Vec::new());
-        }
+        // Cleared outright, not only when there is something to clear:
+        // `has_ghost` stopped meaning "a candidate is stored" the day the
+        // padding that squares a table up became ghost too (#212), and that
+        // padding is **derived**, so asking it here would clear the candidate
+        // once per frame on every page with a table on it. Setting an empty
+        // list that is already empty changes no key: both memos are keyed on
+        // the runs themselves.
+        editor.set_ghost(Vec::new());
         return;
     }
     editor.set_ghost(vec![(editor.cursor_line(), editor.cursor_column(), want)]);
@@ -1482,7 +1487,10 @@ fn inline_candidate(editor: &Editor, ime: &ImeSession) -> String {
 ///
 /// * a **prompt**, which composes on the status line;
 /// * a **grid**, which `table::draw` renders cell by cell out of the cells
-///   themselves and knows nothing about ghost runs (that is #212's job).
+///   themselves and knows nothing about ghost runs. #212 did not change that:
+///   what it squares up is a `|` table **on the text page**, where the runs
+///   are what everything measures; a whole-file grid draws its own columns and
+///   has nothing for a run to stand before.
 ///
 /// In both, `bare` gives the panel back rather than showing nothing at all.
 fn page_can_hold_a_candidate(editor: &Editor) -> bool {
