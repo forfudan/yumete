@@ -281,6 +281,18 @@ pub enum How {
 /// other kind of preview — the real one, made by the tool that makes the book,
 /// shown where a book can be shown. They are different questions and they get
 /// different words.
+/// A language's own command, which the front end runs (Feature #197).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LanguageRun {
+    /// The verb the reader asked for: `format`, `preview`, or a name of their
+    /// own.
+    pub verb: String,
+    /// Which language's table to look in — the buffer's syntax, by name.
+    pub language: String,
+    /// The file it is about.
+    pub path: PathBuf,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Preview {
     Start {
@@ -662,6 +674,10 @@ pub struct Editor {
     /// Whether the move that just happened was a **jump** — a search hit, a
     /// mark, `gg`, `:42` — rather than a step. The page centres a jump.
     jumped: bool,
+    /// A pending `:format` or `:run <name>`, waiting for the front end — the
+    /// editor knows *what* was asked for and the front end knows how to run a
+    /// program.
+    language_run: Option<LanguageRun>,
     /// A pending `:preview`, waiting for the front end — starting a typesetter
     /// is running a program, which only the front end can do.
     preview_request: Option<Preview>,
@@ -965,6 +981,7 @@ impl Editor {
             column_span: None,
             sequence: None,
             jumped: false,
+            language_run: None,
             preview_request: None,
             preview_at: None,
             shell_request: None,
@@ -2555,6 +2572,18 @@ impl Editor {
                 self.detail_width = Some(n.clamp(12, 80));
                 self.show_detail = true;
                 self.status = say!("詳情欄寬 {0}", self.detail_width.unwrap_or(n));
+                Ok(CommandOutcome::Continue)
+            }
+            Command::Language(verb) => {
+                let Some(path) = self.current_buffer().path().map(Path::to_path_buf) else {
+                    self.status = say!("先存檔——外面的程序讀的是檔案");
+                    return Ok(CommandOutcome::Continue);
+                };
+                self.language_run = Some(LanguageRun {
+                    verb,
+                    language: self.current_buffer().syntax().name().to_string(),
+                    path,
+                });
                 Ok(CommandOutcome::Continue)
             }
             Command::Markdown(bit) => {
@@ -4803,6 +4832,11 @@ impl Editor {
     /// what it landed on rather than nudge it in from an edge.
     pub fn jumped(&self) -> bool {
         self.jumped
+    }
+
+    /// Take the language command the reader asked for, if any.
+    pub fn take_language_run(&mut self) -> Option<LanguageRun> {
+        self.language_run.take()
     }
 
     /// Say where the running typesetter's page is — or that there is none.
@@ -11989,16 +12023,17 @@ mod tests {
         for c in "ru".chars() {
             ed.on_key(Key::Char(c));
         }
-        // Tab walks the matches, writing each onto the line.
+        // Tab walks the matches, writing each onto the line — `run` and `ruby`
+        // both start with `ru`, in the order the table lists them.
         ed.on_key(Key::Tab);
-        assert_eq!(ed.prompt(), Some((':', "ruby")));
+        assert_eq!(ed.prompt(), Some((':', "run")));
         ed.on_key(Key::Tab);
         assert_eq!(ed.prompt(), Some((':', "ruby")), "one `ruby` now, not three");
         // …and the prefix is remembered rather than re-read from the line, so
         // walking back returns to the same one instead of starting over from
         // what Tab just wrote.
         ed.on_key(Key::BackTab);
-        assert_eq!(ed.prompt(), Some((':', "ruby")));
+        assert_eq!(ed.prompt(), Some((':', "run")));
 
         // Typing abandons the completion, so the next Tab starts from the line.
         ed.on_key(Key::Char('x'));

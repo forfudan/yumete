@@ -665,6 +665,150 @@ pub struct KeyConfig {
     pub normal: HashMap<char, String>,
 }
 
+/// **What a language can be told to run** (Feature #197).
+///
+/// `tinymist preview` was written into the front end in Rust, which is the
+/// wrong place for it: whether a `.typ` is previewed by tinymist and a `.md` is
+/// formatted by rumdl is a fact about the reader's machine, not about the
+/// editor. So it is config:
+///
+/// ```toml
+/// [language.typst]
+/// preview = { run = "tinymist preview --no-open {file}", kind = "server" }
+/// format  = { run = "typstfmt {file}" }
+///
+/// [language.markdown]
+/// format = { run = "rumdl check --fix {file}" }
+/// ```
+///
+/// **The verbs are language-independent** — `:preview`, `:format` — so one key
+/// means one thing in every file and the config says how it is done here.
+///
+/// **A project may define these**, and the safety is in *how* they run: no
+/// shell (so `;` and `$( )` are ordinary characters, not syntax), placeholders
+/// substituted as **whole arguments** (so a file named `我的 稿;rm -rf ~.md`
+/// cannot become a second command), and the line is checked when the config is
+/// read — an unbalanced quote, an unknown `{placeholder}` or a shell
+/// metacharacter is a config error that names the file, rather than a command
+/// that quietly does something else.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct Runner {
+    /// The command line, as written.
+    pub run: String,
+    /// Whether it finishes (`once`), or runs until it is stopped (`server`),
+    /// or takes the buffer on stdin and gives it back (`filter`).
+    pub kind: RunKind,
+}
+
+/// How a language's command is run.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum RunKind {
+    /// Runs, says what it said, and is done.
+    #[default]
+    Once,
+    /// Runs until it is stopped, and its output is watched for an address.
+    Server,
+    /// Takes the buffer on stdin and replaces it with what comes back.
+    Filter,
+}
+
+impl RunKind {
+    fn parse(word: &str) -> Option<RunKind> {
+        match word.trim() {
+            "once" | "" => Some(RunKind::Once),
+            "server" => Some(RunKind::Server),
+            "filter" => Some(RunKind::Filter),
+            _ => None,
+        }
+    }
+}
+
+impl Runner {
+    /// The program and its arguments, with the placeholders filled in.
+    ///
+    /// **Never a shell.** The line is split on whitespace outside quotes, and
+    /// each placeholder becomes one whole argument — so nothing in a file name
+    /// can start a second command.
+    pub fn argv(&self, file: &str) -> Option<Vec<String>> {
+        let mut out = Vec::new();
+        let mut word = String::new();
+        let mut quote: Option<char> = None;
+        let mut any = false;
+        for c in self.run.chars() {
+            match (quote, c) {
+                (Some(q), c) if c == q => quote = None,
+                (Some(_), c) => word.push(c),
+                (None, '"') | (None, '\'') => quote = Some(c),
+                (None, c) if c.is_whitespace() => {
+                    if any {
+                        out.push(std::mem::take(&mut word));
+                        any = false;
+                    }
+                }
+                (None, c) => word.push(c),
+            }
+            if !c.is_whitespace() || quote.is_some() {
+                any = true;
+            }
+        }
+        if quote.is_some() {
+            return None;
+        }
+        if any {
+            out.push(word);
+        }
+        // Whole arguments, one substitution each.
+        let path = Path::new(file);
+        let dir = path.parent().map(|p| p.display().to_string()).unwrap_or_default();
+        let name = path
+            .file_name()
+            .map(|n| n.to_string_lossy().to_string())
+            .unwrap_or_default();
+        Some(
+            out.into_iter()
+                .map(|w| {
+                    w.replace("{file}", file)
+                        .replace("{dir}", &dir)
+                        .replace("{name}", &name)
+                })
+                .collect(),
+        )
+    }
+
+    /// What is wrong with this command line, if anything.
+    ///
+    /// Checked when the config is read, so a typo is a message about the config
+    /// rather than a command that runs and does something else.
+    pub fn fault(&self) -> Option<String> {
+        if self.run.trim().is_empty() {
+            return Some("空的命令".to_string());
+        }
+        if let Some(c) = self.run.chars().find(|c| "|;&<>`$".contains(*c)) {
+            return Some(format!(
+                "命令裏有 '{c}'——這裏不經過 shell，管道和重定向不會照你想的跑"
+            ));
+        }
+        let mut rest = self.run.as_str();
+        while let Some(at) = rest.find('{') {
+            let after = &rest[at + 1..];
+            let Some(end) = after.find('}') else {
+                return Some("{ 沒有配對的 }".to_string());
+            };
+            let name = &after[..end];
+            if !["file", "dir", "name"].contains(&name) {
+                return Some(format!(
+                    "不認識的佔位符 {{{name}}}——只有 {{file}} {{dir}} {{name}}"
+                ));
+            }
+            rest = &after[end + 1..];
+        }
+        if self.argv("x").is_none() {
+            return Some("引號沒有配對".to_string());
+        }
+        None
+    }
+}
+
 /// The fully-resolved configuration.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Config {
@@ -674,6 +818,9 @@ pub struct Config {
     pub ime: ImeConfig,
     pub syntax: SyntaxConfig,
     pub keys: KeyConfig,
+    /// What each language can be told to run, by verb: `preview`, `format`, and
+    /// whatever else a reader names.
+    pub language: HashMap<String, HashMap<String, Runner>>,
 }
 
 impl Config {
@@ -712,6 +859,24 @@ impl Config {
             }
         }
 
+        // A command a language declares that will not do what it says is a
+        // problem *about the config*, named here rather than discovered when
+        // the key is pressed.
+        for (language, verbs) in &raw.language {
+            for (verb, runner) in verbs {
+                let checked = Runner {
+                    run: runner.run.clone(),
+                    kind: RunKind::parse(runner.kind.as_deref().unwrap_or("")).unwrap_or_default(),
+                };
+                if RunKind::parse(runner.kind.as_deref().unwrap_or("")).is_none() {
+                    problems.push(format!(
+                        "[language.{language}] {verb}: kind 只能是 once、server 或 filter"
+                    ));
+                } else if let Some(fault) = checked.fault() {
+                    problems.push(format!("[language.{language}] {verb}: {fault}"));
+                }
+            }
+        }
         (raw.into_config(), problems)
     }
 
@@ -834,6 +999,17 @@ struct RawConfig {
     syntax: HashMap<String, String>,
     #[serde(default)]
     keys: RawKeys,
+    #[serde(default)]
+    language: HashMap<String, HashMap<String, RawRunner>>,
+}
+
+/// One command a language declares, as it is written in the file.
+#[derive(Deserialize, Default)]
+#[serde(deny_unknown_fields)]
+struct RawRunner {
+    run: String,
+    #[serde(default)]
+    kind: Option<String>,
 }
 
 #[derive(Deserialize, Default)]
@@ -1204,6 +1380,23 @@ impl RawConfig {
                 _ => {}
             }
         }
+        // **What each language can be told to run.** A command that will not
+        // do what it says is a config error, reported with the file, rather
+        // than a program that runs and does something else — see [`Runner`].
+        for (language, verbs) in self.language {
+            let mut here: HashMap<String, Runner> = HashMap::new();
+            for (verb, raw) in verbs {
+                let Some(kind) = RunKind::parse(raw.kind.as_deref().unwrap_or("")) else {
+                    continue;
+                };
+                let runner = Runner { run: raw.run, kind };
+                if runner.fault().is_some() {
+                    continue;
+                }
+                here.insert(verb, runner);
+            }
+            config.language.entry(language).or_default().extend(here);
+        }
         if let Some(scheme) = self.ime.scheme {
             config.ime.scheme = scheme;
         }
@@ -1303,6 +1496,55 @@ fn parse_hex(value: &str) -> Option<(u8, u8, u8)> {
     let g = u8::from_str_radix(&hex[2..4], 16).ok()?;
     let b = u8::from_str_radix(&hex[4..6], 16).ok()?;
     Some((r, g, b))
+}
+
+#[cfg(test)]
+mod runner_tests {
+    use super::*;
+
+    #[test]
+    fn a_placeholder_is_one_whole_argument() {
+        let r = Runner { run: "tinymist preview --no-open {file}".into(), kind: RunKind::Server };
+        // **Nothing in a file name can start a second command**: there is no
+        // shell, and the substitution never re-splits.
+        let argv = r.argv("/書/第一章;rm -rf ~.md").unwrap();
+        assert_eq!(
+            argv,
+            ["tinymist", "preview", "--no-open", "/書/第一章;rm -rf ~.md"]
+        );
+        // A quoted argument stays one argument.
+        let r = Runner { run: "fmt --style \"a b\" {file}".into(), kind: RunKind::Once };
+        assert_eq!(r.argv("x.md").unwrap(), ["fmt", "--style", "a b", "x.md"]);
+    }
+
+    #[test]
+    fn a_line_that_would_not_do_what_it_says_is_a_config_error() {
+        for bad in [
+            "rumdl {file} | tee log",
+            "fmt {file} && echo done",
+            "fmt {file} > out",
+            "fmt $(echo {file})",
+            "fmt {fil}",
+            "fmt \"{file}",
+            "   ",
+        ] {
+            let r = Runner { run: bad.into(), kind: RunKind::Once };
+            assert!(r.fault().is_some(), "{bad:?} should be refused");
+        }
+        let good = Runner { run: "rumdl check --fix {file}".into(), kind: RunKind::Once };
+        assert_eq!(good.fault(), None);
+    }
+
+    #[test]
+    fn a_language_declares_its_commands() {
+        let config = Config::from_toml(
+            "[language.typst]\npreview = { run = \"tinymist preview {file}\", kind = \"server\" }\n\
+             [language.markdown]\nformat = { run = \"rumdl check --fix {file}\" }\n",
+        );
+        let typst = config.language.get("typst").expect("typst");
+        assert_eq!(typst["preview"].kind, RunKind::Server);
+        assert_eq!(config.language["markdown"]["format"].kind, RunKind::Once);
+    }
 }
 
 #[cfg(test)]

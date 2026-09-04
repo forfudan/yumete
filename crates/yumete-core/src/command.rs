@@ -90,6 +90,9 @@ pub enum Command {
     /// `:table rules …` — how the columns are told apart (Feature #157).
     /// `None` only reports.
     SetTableRules(Option<crate::table::Rules>),
+    /// `:format`, `:run <名字>` — a command this language declares in the
+    /// config, run by the front end.
+    Language(String),
     /// `:markdown …` — write a piece of Markdown at the cursor.
     Markdown(MarkdownBit),
     /// `:typewriter [on|off]` — the cursor's row stays in the middle.
@@ -582,6 +585,13 @@ pub fn parse(input: &str) -> Result<Command, CommandError> {
         // `:markdown footnote` and friends — what Markdown is *made of*,
         // written for you. The verb is the language's, because these are things
         // only a Markdown file has.
+        // **The verb is the same in every file; the config says how.** See
+        // `yumete_config::Runner`.
+        "format" | "fmt" => Ok(Command::Language("format".to_string())),
+        "run" => match rest.is_empty() {
+            true => Err(CommandError::MissingArgument("run")),
+            false => Ok(Command::Language(rest.to_string())),
+        },
         "markdown" | "md" => match rest {
             "" => Err(CommandError::MissingArgument("markdown")),
             "footnote" | "fn" => Ok(Command::Markdown(MarkdownBit::Footnote)),
@@ -1842,6 +1852,20 @@ pub const COMMANDS: &[Entry] = &[
         help: "開着的檔案：列出、切換、關掉",
         needs: &[],
         args: Args::Words(BUFFERS),
+    },
+    Entry {
+        name: "format",
+        aliases: &["fmt"],
+        help: "照這種檔案在設定裏說的那樣格式化（[language.markdown] format = …）",
+        needs: &[],
+        args: Args::None,
+    },
+    Entry {
+        name: "run",
+        aliases: &[],
+        help: "跑這種檔案在設定裏自己起名的那條命令",
+        needs: &[],
+        args: Args::Free("<名字>"),
     },
     Entry {
         name: "markdown",
