@@ -223,6 +223,20 @@ pub fn has_bare_pipe(text: &str, escaped: bool) -> bool {
 /// first real character, not on the space before it — and a `c` that took the
 /// padding with it would put the new value hard against the pipe.
 pub fn cells(line: &str) -> Vec<(usize, usize)> {
+    let chars: Vec<char> = line.trim_end_matches(['\n', '\r']).chars().collect();
+    boxes(line)
+        .into_iter()
+        .map(|span| trimmed(&chars, span))
+        .collect()
+}
+
+/// Where each cell begins and ends **including its padding**: pipe to pipe.
+///
+/// The screen cares about the box, not the content: two rows line up when the
+/// pipes are in the same place, and the spaces the file already holds are part
+/// of getting them there. [`cells`] trims this down to the content, which is
+/// what an edit wants and what a measurement does not.
+fn boxes(line: &str) -> Vec<(usize, usize)> {
     let text = line.trim_end_matches(['\n', '\r']);
     let chars: Vec<char> = text.chars().collect();
     let bars = pipes(text);
@@ -236,7 +250,7 @@ pub fn cells(line: &str) -> Vec<(usize, usize)> {
     if chars[tail.0.min(chars.len())..].iter().any(|c| !c.is_whitespace()) {
         raw.push(tail);
     }
-    raw.into_iter().map(|span| trimmed(&chars, span)).collect()
+    raw
 }
 
 /// The span inside a cell's padding.
@@ -582,6 +596,137 @@ pub fn format(lines: &[String]) -> Vec<String> {
     }
 }
 
+/// The padding that squares a table up **on the screen** (Feature #212).
+///
+/// `rows` is the table's lines in order, each with the char ranges 所見即所得
+/// is taking off that line; `rule` says which of them is the `|---|` row.
+/// The answer is one list of ghost runs per row — `(the char the run stands
+/// before, what is drawn there)` — for [`crate::editor::Editor::set_ghost`]'s
+/// layer to hand to the page.
+///
+/// **Why this cannot be done in the file.** [`compose`] pads the source by
+/// display width, and that is right for every other reader of the file. But
+/// the screen is not the file: 所見即所得 takes the `**` off a bold cell and
+/// the `(url)` off a link, and it takes a *different* number of columns off
+/// every row. A table padded perfectly in the file is therefore ragged on the
+/// page, and no amount of rewriting the file fixes it. So the padding that
+/// squares the page up is drawn, not written — and an unformatted table
+/// (`|a|b|`, straight from the writer's fingers) lines up on the screen too,
+/// with the file left exactly as it was typed.
+///
+/// The width a column is padded to is the widest **visible** cell in it, the
+/// rule row included — a ghost can only add, so a column can be no narrower
+/// than the widest row already drawn, whichever row that is. What the rule row
+/// does not decide is what it is *made of*: `---` is drawing, not data, so its
+/// fill is dashes and it is stretched all the way across, and the colons of
+/// `:---:` are the alignment and are never written over.
+pub fn padding(
+    rows: &[(String, Vec<(usize, usize)>)],
+    rule: Option<usize>,
+) -> Vec<Vec<(usize, String)>> {
+    let chars: Vec<Vec<char>> = rows
+        .iter()
+        .map(|(line, _)| line.trim_end_matches(['\n', '\r']).chars().collect())
+        .collect();
+    let boxed: Vec<Vec<(usize, usize)>> = rows.iter().map(|(line, _)| boxes(line)).collect();
+    let spans: Vec<Vec<(usize, usize)>> = rows.iter().map(|(line, _)| cells(line)).collect();
+    let aligns = rule
+        .and_then(|i| rows.get(i))
+        .and_then(|(line, _)| rule_of(line))
+        .unwrap_or_default();
+
+    // What each cell takes on the screen as the file stands: the box, less
+    // what is hidden inside it, plus the space this module is about to draw
+    // off each pipe where the writer typed none.
+    let mut room: Vec<Vec<usize>> = Vec::with_capacity(rows.len());
+    for (i, cs) in boxed.iter().enumerate() {
+        let mut widths = Vec::with_capacity(cs.len());
+        for (c, &(start, end)) in cs.iter().enumerate() {
+            let (from, to) = spans[i][c];
+            let lead = usize::from(from == start);
+            let trail = usize::from(to == end);
+            widths.push(visible_width(&chars[i], (start, end), &rows[i].1) + lead + trail);
+        }
+        room.push(widths);
+    }
+    let columns = boxed.iter().map(Vec::len).max().unwrap_or(0);
+    // **Every row votes, the rule row included.** A ghost can only add, so a
+    // column can be no narrower than its widest row already is — and no
+    // narrower than its own alignment marker with a space each side.
+    let mut target = vec![0usize; columns];
+    for widths in &room {
+        for (c, width) in widths.iter().enumerate() {
+            target[c] = target[c].max(*width);
+        }
+    }
+    for (c, width) in target.iter_mut().enumerate() {
+        *width = (*width).max(aligns.get(c).copied().unwrap_or_default().min() + 2);
+    }
+
+    let mut out = vec![Vec::new(); rows.len()];
+    for (i, cs) in boxed.iter().enumerate() {
+        let ruled = Some(i) == rule;
+        let fill = if ruled { "-" } else { " " };
+        let line = &chars[i];
+        let mut runs: Vec<(usize, String)> = Vec::new();
+        for (c, &(start, end)) in cs.iter().enumerate() {
+            let (from, to) = spans[i][c];
+            // One space off each pipe, where the writer has not typed one:
+            // `|a|b|` is a table, it is only not *drawn* as one yet.
+            if from == start {
+                push_run(&mut runs, from, " ".to_string());
+            }
+            let short = target[c] - room[i][c];
+            // The colons of `:---:` are the alignment: the dashes grow between
+            // them, never over them.
+            let (at_lead, at_trail) = match ruled {
+                true => (
+                    from + usize::from(line.get(from) == Some(&':')),
+                    to - usize::from(to > from && line.get(to - 1) == Some(&':')),
+                ),
+                false => (from, to),
+            };
+            // The rule row is dashes either way round, so it goes on one side
+            // and stays one run.
+            let (before, after) = match (ruled, aligns.get(c).copied().unwrap_or_default()) {
+                (true, _) | (false, Align::Plain | Align::Left) => (0, short),
+                (false, Align::Right) => (short, 0),
+                (false, Align::Center) => (short / 2, short - short / 2),
+            };
+            push_run(&mut runs, at_lead, fill.repeat(before));
+            push_run(&mut runs, at_trail, fill.repeat(after));
+            // Last, so that it stays the space against the pipe: a run is one
+            // string, and what is pushed into it first is drawn first.
+            if to == end {
+                push_run(&mut runs, to, " ".to_string());
+            }
+        }
+        runs.retain(|(_, text)| !text.is_empty());
+        runs.sort_by_key(|&(at, _)| at);
+        out[i] = runs;
+    }
+    out
+}
+
+/// Add `text` to the run standing before `at`, keeping one run per anchor.
+fn push_run(runs: &mut Vec<(usize, String)>, at: usize, text: String) {
+    if text.is_empty() {
+        return;
+    }
+    match runs.iter_mut().find(|(a, _)| *a == at) {
+        Some((_, held)) => held.push_str(&text),
+        None => runs.push((at, text)),
+    }
+}
+
+/// How wide a cell is **on the screen**: its own width, less what is hidden.
+fn visible_width(chars: &[char], (start, end): (usize, usize), hidden: &[(usize, usize)]) -> usize {
+    (start..end.min(chars.len()))
+        .filter(|at| !hidden.iter().any(|&(a, b)| (a..b).contains(at)))
+        .map(|at| yumete_cjk::char_width(chars[at]))
+        .sum()
+}
+
 /// A rule row for a table this wide, for a header that has not got one yet.
 pub fn rule_row(columns: usize) -> String {
     let mut text = String::from("|");
@@ -755,6 +900,98 @@ mod tests {
     fn an_indented_table_keeps_its_indent() {
         let out = format(&lines("  | a |\n  | --- |\n  | x |\n"));
         assert!(out.iter().all(|l| l.starts_with("  |")), "{out:?}");
+    }
+
+    // ---- Padding drawn on the page (Feature #212) -------------------------
+
+    /// What a row looks like once the ghost runs are drawn into it, which is
+    /// the only thing #212 is about.
+    fn drawn(line: &str, hidden: &[(usize, usize)], runs: &[(usize, String)]) -> String {
+        let chars: Vec<char> = line.trim_end_matches('\n').chars().collect();
+        let mut out = String::new();
+        let mut gi = 0;
+        for at in 0..=chars.len() {
+            while gi < runs.len() && runs[gi].0 <= at {
+                out.push_str(&runs[gi].1);
+                gi += 1;
+            }
+            if at < chars.len() && !hidden.iter().any(|&(a, b)| (a..b).contains(&at)) {
+                out.push(chars[at]);
+            }
+        }
+        out
+    }
+
+    fn padded(text: &str, hidden: &[&[(usize, usize)]]) -> Vec<String> {
+        let rows: Vec<String> = lines(text);
+        let with: Vec<(String, Vec<(usize, usize)>)> = rows
+            .iter()
+            .enumerate()
+            .map(|(i, l)| {
+                (
+                    l.clone(),
+                    hidden.get(i).map(|h| h.to_vec()).unwrap_or_default(),
+                )
+            })
+            .collect();
+        let rule = rows.get(1).and_then(|l| rule_of(l)).map(|_| 1);
+        padding(&with, rule)
+            .iter()
+            .enumerate()
+            .map(|(i, runs)| drawn(&rows[i], with[i].1.as_slice(), runs))
+            .collect()
+    }
+
+    #[test]
+    fn a_table_nobody_formatted_is_drawn_as_a_table() {
+        let out = padded("|a|bbb|\n|-|-|\n|cc|d|\n", &[]);
+        assert_eq!(
+            out,
+            vec!["| a  | bbb |", "| -- | --- |", "| cc | d   |"],
+            "the file is untouched; the page lines up"
+        );
+    }
+
+    #[test]
+    fn a_table_the_file_already_lines_up_is_left_alone() {
+        let text = "| a  | bbb |\n| -- | --- |\n| cc | d   |\n";
+        let with: Vec<(String, Vec<(usize, usize)>)> =
+            lines(text).into_iter().map(|l| (l, Vec::new())).collect();
+        assert!(
+            padding(&with, Some(1)).iter().all(|r| r.is_empty()),
+            "nothing to draw, so nothing is drawn"
+        );
+    }
+
+    #[test]
+    fn the_page_gives_back_what_所見即所得_took() {
+        // `**a**` is one column wide on the page and five in the file, so the
+        // row that carries the markup is the row that loses the alignment.
+        let out = padded(
+            "| **a** | b |\n| ----- | - |\n| c     | d |\n",
+            &[&[(2, 4), (5, 7)], &[], &[]],
+        );
+        assert_eq!(out[0], "| a     | b |");
+        assert_eq!(out[2], "| c     | d |");
+    }
+
+    #[test]
+    fn the_colons_of_an_alignment_are_never_written_over() {
+        let out = padded("|abcd|abcd|\n|:-|-:|\n", &[]);
+        assert_eq!(out[1], "| :--- | ---: |");
+    }
+
+    #[test]
+    fn a_right_aligned_cell_is_padded_on_its_left() {
+        let out = padded("| a | bbb |\n| - | --: |\n| a | b |\n", &[]);
+        assert_eq!(out[2], "| a |   b |");
+    }
+
+    #[test]
+    fn a_column_is_never_narrower_than_its_own_marker() {
+        // `:-:` needs three columns of dashes-and-colons whatever the data is.
+        let out = padded("| a |\n| :-: |\n", &[]);
+        assert_eq!(out[1], "| :-: |");
     }
 
     #[test]

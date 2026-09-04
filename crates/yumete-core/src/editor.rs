@@ -362,6 +362,25 @@ struct MdCache {
     region: Option<crate::mdtable::Region>,
 }
 
+/// What one table's ghost padding was worked out from (Feature #212).
+///
+/// Everything the answer depends on, so that a hit is really a hit: which
+/// document and which revision of it, which lines the table occupies, and the
+/// state that decides what comes *off* the page on the way to the screen —
+/// 所見即所得, the readings being laid out, and the cursor and selection,
+/// since the construct they are inside is never hidden.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct PadKey {
+    buffer: u64,
+    revision: u64,
+    first: usize,
+    last: usize,
+    cursor: usize,
+    selection: (usize, usize),
+    render: Render,
+    ruby: Dialects,
+}
+
 /// A file being read as a grid.
 #[derive(Debug, Clone)]
 pub struct TableView {
@@ -868,6 +887,12 @@ pub struct Editor {
     /// The block of every line, against the buffer it was worked out for and
     /// that buffer's revision.
     block_cache: RefCell<Option<BlockCache>>,
+    /// The ghost padding of the table last asked about (Feature #212).
+    ///
+    /// One table at a time: the page asks per line, every line of a table
+    /// needs the widths of all the others, and a document has at most a
+    /// screenful of table on it at once.
+    pad_cache: RefCell<Option<(PadKey, Vec<Vec<(usize, String)>>)>>,
     /// Which `|` table the cursor is in, against the buffer, its revision and
     /// the line the answer was worked out for.
     ///
@@ -1137,6 +1162,7 @@ impl Editor {
             fold_cache: RefCell::new(None),
             markup_cache: RefCell::new(HashMap::new()),
             block_cache: RefCell::new(None),
+            pad_cache: RefCell::new(None),
             md_cache: RefCell::new(None),
             ruby_before: None,
             ghost: Vec::new(),
@@ -1958,14 +1984,94 @@ impl Editor {
     /// Ordered by column, so the renderer, the wrap and the mouse walk it the
     /// same way.
     pub fn ghost_on_line(&self, line: usize) -> Vec<(usize, String)> {
-        let mut runs: Vec<(usize, String)> = self
-            .ghost
-            .iter()
-            .filter(|&&(l, _, _)| l == line)
-            .map(|(_, at, text)| (*at, text.clone()))
-            .collect();
+        let mut runs: Vec<(usize, String)> = self.table_padding_on_line(line);
+        runs.extend(
+            self.ghost
+                .iter()
+                .filter(|&&(l, _, _)| l == line)
+                .map(|(_, at, text)| (*at, text.clone())),
+        );
         runs.sort_by_key(|&(at, _)| at);
+        // **One run per anchor.** Two runs standing before the same character
+        // are two answers to "what is drawn here", and the caret, the click
+        // map and the wrap would each pick their own. The padding is drawn
+        // first because it is the page the writer is typing onto.
+        runs.dedup_by(|(at, text), (kept, held)| {
+            (*at == *kept).then(|| held.push_str(text)).is_some()
+        });
         runs
+    }
+
+    /// Whether `|` tables are squared up as the page draws them (Feature #212).
+    ///
+    /// **Horizontal only.** Down a 縱 a row is one column and every character
+    /// takes one cell of it, wide or narrow — so padding measured in display
+    /// width, which is what squares a table up across a page, aligns nothing
+    /// there.
+    ///
+    /// **Only while the markup means something.** `:render off` asks for the
+    /// file exactly as it is; drawing what it does not contain is the one
+    /// thing that setting is against.
+    ///
+    /// Whether or not `:table` was typed, though: a table in a manuscript is a
+    /// table because of what it is, and the writer who most needs to see one
+    /// squared up is the one editing their own documentation.
+    fn table_padding_on(&self) -> bool {
+        self.layout == Layout::Horizontal && self.markup_visible()
+    }
+
+    /// The padding drawn on `line` so its table lines up (Feature #212).
+    ///
+    /// Empty unless the line really is a row of a `|` table — a quoted one
+    /// inside a fence is writing *about* a table, and the whole editor already
+    /// agrees about that.
+    ///
+    /// **The file is not touched.** [`crate::mdtable::format`] pads the source
+    /// by display width, which is right for every other reader of it, and
+    /// still leaves the page ragged: 所見即所得 takes `**` off one cell and
+    /// `(url)` off another, a different number of columns from every row. So
+    /// the padding that squares the *page* up is drawn rather than written,
+    /// and an unformatted `|a|b|` lines up too, with the file left as it was
+    /// typed.
+    fn table_padding_on_line(&self, line: usize) -> Vec<(usize, String)> {
+        if !self.table_padding_on() {
+            return Vec::new();
+        }
+        let Some(text) = self.line_text(line) else {
+            return Vec::new();
+        };
+        if !crate::mdtable::is_row(&text) || self.block_of(line).is_literal() {
+            return Vec::new();
+        }
+        let Some(region) = crate::mdtable::region(|i| self.line_text(i), line) else {
+            return Vec::new();
+        };
+        let buffer = self.current_buffer();
+        let key = PadKey {
+            buffer: buffer.id(),
+            revision: buffer.revision(),
+            first: region.first,
+            last: region.last,
+            cursor: self.cursor,
+            selection: self.selection(),
+            render: self.render,
+            ruby: self.ruby,
+        };
+        if let Some((cached, runs)) = self.pad_cache.borrow().as_ref() {
+            if *cached == key {
+                return runs.get(line - region.first).cloned().unwrap_or_default();
+            }
+        }
+        // The whole table at once: every row's padding is decided by the
+        // widest cell in each column, so there is no such thing as one row's
+        // answer on its own.
+        let rows: Vec<(String, Vec<(usize, usize)>)> = (region.first..=region.last)
+            .map(|i| (self.line_text(i).unwrap_or_default(), self.hidden_on_line(i)))
+            .collect();
+        let runs = crate::mdtable::padding(&rows, region.rule.map(|at| at - region.first));
+        let answer = runs.get(line - region.first).cloned().unwrap_or_default();
+        *self.pad_cache.borrow_mut() = Some((key, runs));
+        answer
     }
 
     /// Whether anything at all is drawn that the file does not contain.
@@ -1973,7 +2079,26 @@ impl Editor {
     /// The page is measured differently when it is, so the cheap answer is
     /// worth having: a frame with no candidate on it pays nothing.
     pub fn has_ghost(&self) -> bool {
-        !self.ghost.is_empty()
+        !self.ghost.is_empty() || (self.table_padding_on() && self.any_table_row())
+    }
+
+    /// Whether any line of the document is a `|` table row.
+    ///
+    /// Read off the block scan, which is done once per edit anyway — and a
+    /// novel with no table in it is the case that has to stay cheap, since it
+    /// is asked once a frame.
+    fn any_table_row(&self) -> bool {
+        self.scan_blocks();
+        let key = (
+            self.current_buffer().id(),
+            self.current_buffer().revision(),
+        );
+        match self.block_cache.borrow().as_ref() {
+            Some((cached, blocks)) if *cached == key => {
+                blocks.iter().any(|b| *b == crate::markdown::Block::Table)
+            }
+            _ => false,
+        }
     }
 
     /// Put `runs` on the page in place of whatever was there.
@@ -14870,6 +14995,152 @@ mod tests {
         assert!(ed.execute("w").is_ok(), "and saving is fine again");
 
         std::fs::remove_dir_all(&dir).ok();
+    }
+
+    // ---- Tables squared up on the page (Feature #212) ---------------------
+
+    /// The width of one line **as the page draws it**: what is left after
+    /// 所見即所得 has taken its markup off, plus the padding drawn back on.
+    fn drawn_width(ed: &Editor, line: usize) -> usize {
+        let text = ed.line_text(line).unwrap_or_default();
+        let chars: Vec<char> = text.trim_end_matches(['\n', '\r']).chars().collect();
+        let hidden = ed.hidden_on_line(line);
+        let visible: usize = (0..chars.len())
+            .filter(|at| !hidden.iter().any(|&(a, b)| (a..b).contains(at)))
+            .map(|at| yumete_cjk::char_width(chars[at]))
+            .sum();
+        let ghost: usize = ed
+            .ghost_on_line(line)
+            .iter()
+            .map(|(_, text)| text.chars().map(yumete_cjk::char_width).sum::<usize>())
+            .sum();
+        visible + ghost
+    }
+
+    /// #212: a table nobody has formatted is drawn as a table anyway.
+    #[test]
+    fn a_table_is_squared_up_on_the_page_and_not_in_the_file() {
+        const TEXT: &str = "|甲|乙|\n|---|---|\n|一二三|四|\n";
+        let mut ed = Editor::new();
+        ed.add_buffer(crate::Buffer::from_text(TEXT));
+        assert!(!ed.ghost_on_line(0).is_empty(), "the header is padded");
+        let widths: Vec<usize> = (0..3).map(|l| drawn_width(&ed, l)).collect();
+        assert_eq!(widths[0], widths[1], "{widths:?}");
+        assert_eq!(widths[1], widths[2], "{widths:?}");
+        // …and the file is exactly what was typed.
+        assert_eq!(ed.current_buffer().text(), TEXT);
+        assert!(!ed.current_buffer().is_modified());
+    }
+
+    /// #212: the ragged page the *file* cannot fix.
+    ///
+    /// This table is padded perfectly in the source — every other reader of it
+    /// sees straight pipes. 所見即所得 then takes six columns off one row and
+    /// none off the next, and the page is ragged however the file is written.
+    #[test]
+    fn the_padding_makes_up_for_what_所見即所得_took() {
+        let mut ed = Editor::new();
+        ed.add_buffer(crate::Buffer::from_text(
+            "| 方案 | 說明                 |\n| ---- | -------------------- |\n| 光華 | `宇浩`系列的**基礎** |\n| 星陳 | 大字集               |\n",
+        ));
+        // With the markup on the page the file is already square, so nothing
+        // is drawn: the padding is not a second opinion about a formatted
+        // table.
+        ed.execute("render on").unwrap();
+        let source: Vec<usize> = (0..4).map(|l| drawn_width(&ed, l)).collect();
+        assert!(source.iter().all(|w| *w == source[0]), "{source:?}");
+        assert!(ed.ghost_on_line(2).is_empty(), "{:?}", ed.ghost_on_line(2));
+
+        ed.execute("render full").unwrap();
+        // Off the marked-up row: the construct the cursor is in is never
+        // hidden, which is the one row that would not be short.
+        press(&mut ed, "G");
+        let widths: Vec<usize> = (0..4).map(|l| drawn_width(&ed, l)).collect();
+        assert!(widths.iter().all(|w| *w == widths[0]), "{widths:?}");
+        // Six columns of markup came off that one row — `` ` `` twice and
+        // `**` twice — and six columns of padding went back on. Only there:
+        // the rows that lost nothing are still exactly the file.
+        assert_eq!(
+            ed.ghost_on_line(2)
+                .iter()
+                .map(|(_, text)| text.chars().count())
+                .sum::<usize>(),
+            6,
+            "{:?}",
+            ed.ghost_on_line(2)
+        );
+        assert!(ed.ghost_on_line(3).is_empty(), "{:?}", ed.ghost_on_line(3));
+    }
+
+    /// #212: every table in the document, not only the one the cursor is in.
+    #[test]
+    fn every_table_on_the_page_is_squared_up_not_only_the_cursors() {
+        let mut ed = Editor::new();
+        ed.add_buffer(crate::Buffer::from_text(
+            "|甲|乙|\n|---|---|\n|一二三|四|\n\n中間一段散文。\n\n|丙|丁|\n|---|---|\n|五六七|八|\n",
+        ));
+        press(&mut ed, "gg");
+        for table in [0, 6] {
+            let widths: Vec<usize> = (table..table + 3).map(|l| drawn_width(&ed, l)).collect();
+            assert_eq!(widths[0], widths[1], "table at {table}: {widths:?}");
+            assert_eq!(widths[1], widths[2], "table at {table}: {widths:?}");
+        }
+        assert!(ed.ghost_on_line(4).is_empty(), "prose is not a table");
+    }
+
+    /// #212: a table in a fence is writing *about* a table.
+    #[test]
+    fn a_quoted_table_is_not_padded() {
+        let mut ed = Editor::new();
+        ed.add_buffer(crate::Buffer::from_text(
+            "```\n|甲|乙|\n|---|---|\n|一二三|四|\n```\n",
+        ));
+        for line in 1..4 {
+            assert!(ed.ghost_on_line(line).is_empty(), "line {line}");
+        }
+        assert!(!ed.has_ghost(), "and the page pays nothing for it");
+    }
+
+    /// #212: the two settings that mean "draw me the file".
+    #[test]
+    fn the_padding_goes_away_when_the_page_is_the_file() {
+        let mut ed = Editor::new();
+        ed.add_buffer(crate::Buffer::from_text("|甲|乙|\n|---|---|\n|一二三|四|\n"));
+        assert!(ed.has_ghost());
+
+        // `:render off` is a request for the file exactly as it is.
+        ed.execute("render off").unwrap();
+        assert!(ed.ghost_on_line(0).is_empty(), "{:?}", ed.ghost_on_line(0));
+        assert!(!ed.has_ghost());
+        ed.execute("render on").unwrap();
+        assert!(ed.has_ghost());
+
+        // Down a 縱 every character takes one cell, so display width squares
+        // nothing up.
+        ed.set_layout(Layout::Vertical);
+        assert!(ed.ghost_on_line(0).is_empty());
+        assert!(!ed.has_ghost());
+    }
+
+    /// #212 with #211: a candidate and the padding on the same line.
+    ///
+    /// Two runs standing before the same character would be two answers to
+    /// "what is drawn here", and the caret, the click map and the wrap would
+    /// each pick their own.
+    #[test]
+    fn a_candidate_and_the_padding_are_one_run_each() {
+        let mut ed = Editor::new();
+        ed.add_buffer(crate::Buffer::from_text("|甲|乙|\n|---|---|\n|一二三|四|\n"));
+        let at = ed.ghost_on_line(0).first().map(|&(at, _)| at).unwrap();
+        ed.set_ghost(vec![(0, at, "候".to_string())]);
+        let runs = ed.ghost_on_line(0);
+        let mut anchors: Vec<usize> = runs.iter().map(|&(at, _)| at).collect();
+        anchors.dedup();
+        assert_eq!(anchors.len(), runs.len(), "one run per anchor: {runs:?}");
+        assert!(
+            runs.iter().any(|(_, text)| text.contains('候')),
+            "{runs:?}"
+        );
     }
 
     // ---- Read-only, and reading again (Features #213 / #214) --------------
