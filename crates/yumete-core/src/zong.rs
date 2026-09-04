@@ -680,6 +680,19 @@ fn push_ruby(
         (rows, (rows - base_rows.len()) / 2)
     };
     let rows = rows.max(1);
+    // **And the reading is centred against the base** (JLREQ §3.3.6), which is
+    // the same rule the base follows against the span two lines up. A reading
+    // shorter than what it reads — 「上海話」 read 「zon」 — used to start at
+    // the group's first row and stop two rows above the base's last, pointing
+    // at the top character rather than at the word.
+    //
+    // Except when marks hang: there the reading has *taken* the rows above the
+    // base outright so every base row is free for a mark, and centring it
+    // would push it back down into them.
+    let reading_top = match grid.hanging {
+        true => 0,
+        false => (rows - reading.len().min(rows)) / 2,
+    };
 
     let base_end = base_rows.last().map_or(group.base.0, |&(_, b)| b);
     for row in 0..rows {
@@ -707,7 +720,7 @@ fn push_ruby(
             start,
             end,
             text: rotate(&body),
-            ruby: reading.get(row).copied(),
+            ruby: row.checked_sub(reading_top).and_then(|i| reading.get(i)).copied(),
             mark: None,
         });
     }
@@ -1969,6 +1982,31 @@ mod tests {
         // The markup itself never takes a row of its own.
         let r = rope("他<ruby>口<rt>kǒu</rt></ruby>很");
         assert_eq!(layout(&r, ruby)[0].slots, 5);
+    }
+
+    /// A reading shorter than the word it reads sits against the middle of it
+    /// — JLREQ §3.3.6, the same rule the base follows when the reading is the
+    /// longer of the two.
+    #[test]
+    fn a_group_reading_is_centred_against_its_word() {
+        let slots = line_slots_plain("<ruby>上海話<rt>zon</rt></ruby>好", RUBY);
+        let bodies: Vec<&str> = slots.iter().map(|s| s.text.as_str()).collect();
+        assert_eq!(bodies, ["上", "海", "話", "好"]);
+        let readings: Vec<Option<char>> = slots.iter().map(|s| s.ruby).collect();
+        assert_eq!(readings, [Some('z'), Some('o'), Some('n'), None]);
+
+        // Two rows of reading over four of base: one row of space above it and
+        // one below, rather than the reading starting at the top and pointing
+        // at 上.
+        let slots = line_slots_plain("<ruby>上海話劇<rt>zo</rt></ruby>好", RUBY);
+        let readings: Vec<Option<char>> = slots.iter().map(|s| s.ruby).collect();
+        assert_eq!(readings, [None, Some('z'), Some('o'), None, None]);
+
+        // An odd row left over goes below, so a reading never sits lower than
+        // the middle of its word.
+        let slots = line_slots_plain("<ruby>上海話<rt>zo</rt></ruby>好", RUBY);
+        let readings: Vec<Option<char>> = slots.iter().map(|s| s.ruby).collect();
+        assert_eq!(readings, [Some('z'), Some('o'), None, None]);
     }
 
     #[test]

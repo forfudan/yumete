@@ -3228,12 +3228,25 @@ fn reading_line(
         // instead. A reading a cell off its base is a misalignment the reader
         // can see and correct for; a missing one is a reading they will never
         // know was there.
-        let want = want.max(col + usize::from(col > 0));
+        let mut want = want.max(col + usize::from(col > 0));
         let reading: String = text[group.reading.0.min(text.len())..group.reading.1.min(text.len())]
             .iter()
             .collect();
         if reading.is_empty() {
             continue;
+        }
+        // **Group ruby is centred over its base** (JLREQ §3.3.6): 「大阪」 read
+        // 「おおさか」 is one reading of one word, and setting it flush left
+        // over a four-square base leaves it pointing at the first character.
+        // Only when there is room — a reading wider than its base already
+        // starts where its base does.
+        let base_end = group.base.1.saturating_sub(start_in_line);
+        if let Some(&end) = column.get(base_end) {
+            let base_width = end.saturating_sub(want);
+            let reading_width = yumete_cjk::str_width(&reading);
+            if base_width > reading_width {
+                want += (base_width - reading_width) / 2;
+            }
         }
         out.push_str(&" ".repeat(want - col));
         out.push_str(&reading);
@@ -5665,6 +5678,27 @@ mod tests {
         assert!(reading.contains("ㄩㄥˇ"), "{reading:?}");
         assert!(reading.contains("ㄏㄜˊ"), "the second reading too: {reading:?}");
         assert_eq!(row_text(&buffer, 1).trim_end(), "永和九年");
+    }
+
+    #[test]
+    fn a_group_reading_is_centred_over_its_word() {
+        // JLREQ §3.3.6: a reading of a *word* is centred over the word. Set
+        // flush left over a four-square base it points at the first character
+        // and reads as a reading of that one 字.
+        let mut editor = editor_with("<ruby>上海話<rt>zaonhe</rt></ruby>很好聽");
+        let mut config = Config::default();
+        config.editor.line_numbers = yumete_config::LineNumbers::None;
+        let buffer = render_with_ruby(&mut editor, &config, 40, 8);
+        // The base is six cells wide, the reading six — nothing to centre.
+        assert_eq!(row_text(&buffer, 1).trim_end(), "上海話很好聽");
+        assert_eq!(row_text(&buffer, 0).trim_end(), "zaonhe", "{:?}", row_text(&buffer, 0));
+
+        // A short reading over a wide base is centred: 「zon」 is three cells
+        // over six, so it starts one cell in — the half cell an exact centre
+        // would want is not a thing a terminal has.
+        let mut editor = editor_with("<ruby>上海話<rt>zon</rt></ruby>很好聽");
+        let buffer = render_with_ruby(&mut editor, &config, 40, 8);
+        assert_eq!(row_text(&buffer, 0).trim_end(), " zon", "{:?}", row_text(&buffer, 0));
     }
 
     #[test]
