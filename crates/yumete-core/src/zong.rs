@@ -773,27 +773,39 @@ fn rotate(body: &str) -> String {
 /// The result always has at least one element, so `offsets.len() - 1` is the
 /// slot count and `offsets[i]` is where slot `i` begins.
 fn slot_offsets(text: &str, tatechuyoko: bool) -> Vec<usize> {
-    let mut offsets = Vec::with_capacity(text.len() / 3 + 1);
+    let all: Vec<&str> = graphemes(text).collect();
+    let mut offsets = Vec::with_capacity(all.len() + 1);
     let mut chars = 0usize;
-    let mut run = 0usize;
-    for g in graphemes(text) {
-        if !tatechuyoko {
+    let mut i = 0;
+    // A run of half-width *alphanumerics* may share a slot; anything else —
+    // full-width, punctuation, a space — stands on its own. 縦中横 is for
+    // numbers and short Latin, and packing a comma in beside a letter would
+    // only look like a mistake.
+    let narrow = |g: &str| grapheme_width(g) == 1 && g.chars().all(char::is_alphanumeric);
+    while i < all.len() {
+        if !tatechuyoko || !narrow(all[i]) {
             offsets.push(chars);
-            chars += g.chars().count();
+            chars += all[i].chars().count();
+            i += 1;
             continue;
         }
-        // A run of half-width *alphanumerics* fills the slot it started, up to
-        // the limit; anything else — full-width, punctuation, a space — opens a
-        // new one. 縦中横 is for numbers and short Latin, and packing a comma in
-        // beside a letter would only look like a mistake.
-        let narrow = grapheme_width(g) == 1 && g.chars().all(char::is_alphanumeric);
-        if narrow && run > 0 && run < TATECHUYOKO {
+        // **The whole run, or none of it.** Filling one slot and spilling the
+        // rest turned 「1997」 into 「19」 and 「97」 stacked — two numbers, read
+        // as two numbers. A run that will not fit is set the way a Japanese
+        // book sets a long number in a 縱: one digit to a slot, straight up.
+        let mut run = i;
+        while run < all.len() && narrow(all[run]) {
             run += 1;
-        } else {
-            offsets.push(chars);
-            run = if narrow { 1 } else { 0 };
         }
-        chars += g.chars().count();
+        let pack = run - i <= TATECHUYOKO;
+        offsets.push(chars);
+        for g in &all[i..run] {
+            if !pack && chars > offsets[offsets.len() - 1] {
+                offsets.push(chars);
+            }
+            chars += g.chars().count();
+        }
+        i = run;
     }
     offsets.push(chars);
     offsets
@@ -2066,11 +2078,17 @@ mod tests {
     }
 
     #[test]
-    fn a_longer_latin_run_packs_two_at_a_time() {
-        // Beyond a pair there is nothing to rotate into, so it stacks — legibly,
-        // but it is the one thing a terminal cannot set properly.
-        assert_eq!(slot_text("abcde", true), ["ab", "cd", "e"]);
-        assert_eq!(slot_text("2026年", true), ["20", "26", "年"]);
+    fn a_run_too_long_to_pack_is_not_packed_at_all() {
+        // **The whole run, or none of it.** Two slots of two turned 「2026」
+        // into 「20」 over 「26」 — two numbers, and read as two numbers. A run
+        // that will not fit is set the way a Japanese book sets a long number
+        // in a 縱: one character to a slot, straight up.
+        assert_eq!(slot_text("2026年", true), ["2", "0", "2", "6", "年"]);
+        assert_eq!(slot_text("abcde", true), ["a", "b", "c", "d", "e"]);
+        // A run that *does* fit still packs, which is the whole point: 第12章
+        // reads as a number rather than a stack of loose digits.
+        assert_eq!(slot_text("第12章", true), ["第", "12", "章"]);
+        assert_eq!(slot_text("第7章", true), ["第", "7", "章"]);
     }
 
     /// A 句讀 mark stops being a row of its own and hangs beside the character

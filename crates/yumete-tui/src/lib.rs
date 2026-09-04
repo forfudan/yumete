@@ -3221,9 +3221,14 @@ fn reading_line(
         }
         let i = group.base.0.saturating_sub(start_in_line);
         let Some(&want) = column.get(i) else { continue };
-        if want < col {
-            continue;
-        }
+        // **A reading wider than its base runs on past it**, and the next one
+        // then wants to start before the pen has got there. It used to be
+        // dropped: 「<ruby>永<rt>ㄩㄥˇ</rt></ruby><ruby>和<rt>ㄏㄜˊ</rt></ruby>」
+        // — two 字, two readings, one of them silently gone. Push it right
+        // instead. A reading a cell off its base is a misalignment the reader
+        // can see and correct for; a missing one is a reading they will never
+        // know was there.
+        let want = want.max(col + usize::from(col > 0));
         let reading: String = text[group.reading.0.min(text.len())..group.reading.1.min(text.len())]
             .iter()
             .collect();
@@ -5645,6 +5650,21 @@ mod tests {
             row_text(&buffer, 0).trim_end(),
             "那<ruby>韋<rt>wéi</rt></ruby>字。"
         );
+    }
+
+    #[test]
+    fn two_readings_in_a_row_both_get_drawn() {
+        // 注音 is wider than the 字 it reads, so the second reading wanted to
+        // start before the first had finished — and was dropped. On 注音-annotated
+        // prose, which is what this feature is *for*, that is most of them.
+        let mut editor = editor_with("<ruby>永<rt>ㄩㄥˇ</rt></ruby><ruby>和<rt>ㄏㄜˊ</rt></ruby>九年");
+        let mut config = Config::default();
+        config.editor.line_numbers = yumete_config::LineNumbers::None;
+        let buffer = render_with_ruby(&mut editor, &config, 40, 8);
+        let reading = row_text(&buffer, 0);
+        assert!(reading.contains("ㄩㄥˇ"), "{reading:?}");
+        assert!(reading.contains("ㄏㄜˊ"), "the second reading too: {reading:?}");
+        assert_eq!(row_text(&buffer, 1).trim_end(), "永和九年");
     }
 
     #[test]
