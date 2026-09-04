@@ -1716,17 +1716,42 @@ fn draw_hud(frame: &mut Frame, editor: &Editor, config: &Config, page: Rect, car
         true => caret_y + 1,
         false => caret_y.saturating_sub(1),
     };
-    if y < page.y || y >= page.y + page.height {
+    if y < page.y || y >= page.y + page.height || width >= page.width {
         return;
     }
-    // Beside it, and shifted left rather than cut off at the edge.
-    let x = caret_x
-        .min(page.x + page.width.saturating_sub(width))
-        .max(page.x);
+    // **Never over the writing.** It used to start at the caret's own column
+    // and paint over whatever was on the row below — 整整 covered by `╰ 30`,
+    // and in 縱書 over a live 縱, with the leading `╰` swallowed by a wide
+    // glyph's second cell. So it goes *after* what is drawn on that row: the
+    // margin is the only part of a page that is not somebody's writing.
+    let after = {
+        let buf = frame.buffer_mut();
+        let mut last = page.x;
+        for x in page.x..page.x + page.width {
+            let Some(cell) = buf.cell((x, y)) else { continue };
+            let symbol = cell.symbol();
+            if symbol.trim().is_empty() {
+                continue;
+            }
+            // **Past the whole glyph.** A wide character's second cell reads
+            // back empty, and writing into it is writing into the middle of a
+            // 漢字: the terminal never receives it, so the mark simply vanishes.
+            last = x + yumete_cjk::str_width(symbol).max(1) as u16;
+        }
+        last
+    };
+    let right = page.x + page.width;
+    // Beside the caret when the margin there is free, else at the row's end;
+    // and if the row is full to the edge, not at all — a HUD is a convenience
+    // and the manuscript is not.
+    let x = caret_x.max(after).min(right.saturating_sub(width));
+    if x < after || x + width > right {
+        return;
+    }
     let style = Style::default()
         .bg(ink.at(yumete_config::rung::BAND))
         .fg(ink.gold());
-    put_text(frame.buffer_mut(), x, y, page.x + page.width, &text, style);
+    put_text(frame.buffer_mut(), x, y, right, &text, style);
 }
 
 /// The **which-key panel**: what the half-pressed key can be finished with.
@@ -1775,17 +1800,27 @@ fn draw_which_key(
         .max()
         .unwrap_or(0);
 
-    // Half the page is as tall as a menu may be; past that it goes to two
-    // columns, column-major, so reading runs down and then across.
+    // **Half the page, and half the width.** A menu is a thing you glance at
+    // beside your writing: one that fills the window has stopped being a menu,
+    // and one wider than half the page cannot dodge the caret — it covers the
+    // corner it was trying to avoid either way.
     let room = (area.height.saturating_sub(2) / 2).max(1) as usize;
     let across = if rows.len() > room { 2 } else { 1 };
     let deep = rows.len().div_ceil(across);
+    let widest = (area.width as usize).saturating_sub(2);
+    // Each column gets its share, and what does not fit is cut *inside* the
+    // column rather than beyond the border — where it used to be dropped
+    // silently, leaving keys with no meanings beside them.
+    let one = one.min(widest.saturating_sub((across - 1) * 2) / across.max(1));
     let inner = one * across + (across - 1) * 2;
     let width = (inner + 2)
         .max(yumete_cjk::str_width(&title) + 4)
         .min(area.width as usize) as u16;
     let height = (deep + 2) as u16;
-    if height > area.height || bottom < height {
+    // It may take half the page's height and no more, and it must leave the
+    // page something: at a very small window there is nowhere to put a menu,
+    // and covering the manuscript with one is worse than not drawing it.
+    if height > area.height / 2 + 1 || bottom < height || width < 8 {
         return;
     }
     // **The corner the cursor is not in.** A fixed corner is right half the
