@@ -418,8 +418,11 @@ pub(crate) fn opens_a_paragraph(text: &str) -> bool {
     if trimmed.trim_end().is_empty() {
         return false;
     }
-    // An indented line is already saying something about itself.
-    if text.starts_with(' ') || text.starts_with('\t') {
+    // An indented line is already saying something about itself — **and a
+    // Chinese manuscript indents with 　 (U+3000)**, not with spaces. 226 of
+    // 紅樓夢's first 400 paragraphs open with two of them, and 395 of 三体's;
+    // every one of those was getting two more squares on top.
+    if text.starts_with([' ', '\t', '\u{3000}']) {
         return false;
     }
     // A `[` is only structure when it opens a footnote definition; a
@@ -859,7 +862,14 @@ fn zong_breaks(
             if cut <= at + 1 {
                 break;
             }
-            if crate::wrap::forbidden_at_row_start(char_of(cut))
+            // 分離禁止 (clreq §6.1.2.1): `——` and `……` take two squares and
+            // are one mark. Vertically the halves are stroke glyphs, so a
+            // split leaves a rule that stops at the foot of one 縱 and starts
+            // again at the head of the next.
+            let split_a_pair = crate::wrap::half_of_a_pair(char_of(cut))
+                && char_of(cut) == char_of(cut - 1);
+            if split_a_pair
+                || crate::wrap::forbidden_at_row_start(char_of(cut))
                 || crate::wrap::forbidden_at_row_end(char_of(cut - 1))
             {
                 cut -= 1;
@@ -2273,6 +2283,51 @@ mod tests {
     /// rows holding one character is the same defect as none holding it —
     /// `position` binary-searches the rows, and a caret that resolves into the
     /// wrong one of two overlapping rows is drawn a row off the mark.
+    /// 禁則處理 against the marks a Chinese manuscript actually uses.
+    ///
+    /// The set used to be derived from what fits in a one-cell margin, which is
+    /// a rendering question — so `》〉』】〕` and the 簡體 quotes `”’` were free
+    /// to open a column, and did, thirteen times on one page of 論語集解.
+    #[test]
+    fn the_marks_that_may_not_open_a_line_are_the_ones_clreq_names() {
+        for c in ['、', '，', '。', '：', '；', '！', '？', '」', '』', '”', '’',
+                  '）', '〕', '】', '》', '〉', '·', '—', '…', '～'] {
+            assert!(
+                crate::wrap::forbidden_at_row_start(c),
+                "{c} may not open a line (clreq §6.1.1)"
+            );
+        }
+        for c in ['「', '『', '“', '‘', '（', '〔', '【', '《', '〈'] {
+            assert!(
+                crate::wrap::forbidden_at_row_end(c),
+                "{c} may not end a line (clreq §6.1.1)"
+            );
+        }
+        // …and a 漢字 is free at either end, which is the whole point.
+        assert!(!crate::wrap::forbidden_at_row_start('雪'));
+        assert!(!crate::wrap::forbidden_at_row_end('雪'));
+
+        // 分離禁止: `——` and `……` are one mark of two squares.
+        let text = "一二三四五六七八九十甲——乙丙";
+        for len in [11usize, 12] {
+            let grid = Grid { zong_len: len, ..G };
+            let slots = line_slots_in(text, grid, &[]);
+            let chars: Vec<char> = text.chars().collect();
+            let groups = crate::ruby::groups(&chars, grid.ruby);
+            let breaks = zong_breaks(&chars, &slots, len, &groups, &[]);
+            for &at in &breaks {
+                if let Some(slot) = slots.get(at) {
+                    let head = slot.start;
+                    assert!(
+                        !(chars.get(head) == Some(&'—') && chars.get(head + 1) == Some(&'—'))
+                            || head == 0,
+                        "a 縱 opens with half a 破折號 at {head}, zong_len {len}"
+                    );
+                }
+            }
+        }
+    }
+
     #[test]
     fn the_rows_of_a_line_tile_it_exactly_and_in_order() {
         const ATOMS: &[&str] = &[

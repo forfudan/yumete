@@ -251,16 +251,60 @@ fn latin_word_char(c: char) -> bool {
 
 /// Whether `c` may not begin a row (行頭禁則): the marks that belong to the
 /// text before them.
+///
+/// **clreq §6.1.1, 基本處理** — the level it calls 最推薦:
+///
+/// > 點號（頓號、逗號、句號、冒號、分號、嘆號、問號）、結束引號、結束括號、
+/// > 結束書名號乙式（單雙書名號）、連接號、間隔號、分隔號不能出現在一行的開頭。
+///
+/// The list used to be derived from [`yumete_cjk::hangs_in_the_margin`], which
+/// is a *rendering* question — what fits in a one-cell margin — and answers
+/// `false` for every mark with no half-width form. So `》〉』】〕` and the
+/// 簡體 quotes `”’` were free to open a column, and did: thirteen offences on
+/// one page of 論語集解 at `zong_length 12`, every one of them a 書名號.
+/// Line breaking and margin hanging are different questions and are asked
+/// separately now.
 pub(crate) fn forbidden_at_row_start(c: char) -> bool {
-    (yumete_cjk::hangs_in_the_margin(c) && !yumete_cjk::opens_a_pair(c))
-        || matches!(c, '、' | '，' | '．' | '·' | 'ー' | '々' | '〜' | '～')
-        || matches!(c, ')' | ']' | '}' | ',' | '.' | ';' | ':' | '!' | '?')
+    matches!(
+        c,
+        // 點號
+        '、' | '，' | '。' | '．' | '：' | '；' | '！' | '？' | '｡' | '､'
+        // 結束引號・結束括號・結束書名號
+        | '」' | '』' | '”' | '’' | '）' | '〕' | '】' | '｝' | '］' | '》' | '〉'
+        | '〞' | '﹂' | '﹄' | '︶' | '︸' | '︺' | '︼' | '︾' | '﹀'
+        // 連接號・間隔號・分隔號・疊字號
+        | '·' | '‧' | '・' | '—' | '－' | '～' | '〜' | '/' | 'ー' | '々' | '〻'
+        // …and the Latin marks a Chinese manuscript still contains
+        | ')' | ']' | '}' | ',' | '.' | ';' | ':' | '!' | '?' | '…' | '‥'
+    )
 }
 
 /// Whether `c` may not end a row (行末禁則): a bracket that introduces what
 /// follows it.
+///
+/// > 開始引號、開始括號、開始書名號乙式等符號，不能出現在一行的結尾。
+/// > — clreq §6.1.1
 pub(crate) fn forbidden_at_row_end(c: char) -> bool {
-    yumete_cjk::opens_a_pair(c) || matches!(c, '(' | '[' | '{')
+    matches!(
+        c,
+        '「' | '『' | '“' | '‘' | '（' | '〔' | '【' | '｛' | '［' | '《' | '〈'
+        | '〝' | '﹁' | '﹃' | '︵' | '︷' | '︹' | '︻' | '︽' | '︿'
+        | '(' | '[' | '{'
+    )
+}
+
+/// Whether `c` is half of a mark that takes two squares and may not be split.
+///
+/// **clreq §6.1.2.1 分離禁止**:
+///
+/// > 以下標點符號佔用二個漢字的空間，應視為一體，不能拆成兩行。
+///
+/// `——` and `……` are one mark written twice, and a row that ends with the
+/// first half leaves the second stranded at the head of the next — which
+/// vertically is worse still, since `︱` and `︙` are *stroke* glyphs and the
+/// reader sees a rule that stops and starts again.
+pub(crate) fn half_of_a_pair(c: char) -> bool {
+    matches!(c, '—' | '…' | '︱' | '︙' | '‥' | '﹏')
 }
 
 /// How far a kinsoku adjustment may pull characters onto the next row.
@@ -400,7 +444,13 @@ fn adjusted_break(
             if cut <= g + 1 {
                 break;
             }
-            if forbidden_at_row_start(after(cut)) || forbidden_at_row_end(before(cut)) {
+            // 分離禁止 first: `——` and `……` are one mark, and a row may not
+            // end with half of one.
+            let split_a_pair = half_of_a_pair(before(cut)) && before(cut) == after(cut);
+            if split_a_pair
+                || forbidden_at_row_start(after(cut))
+                || forbidden_at_row_end(before(cut))
+            {
                 // **One retreat is one character the reader can see.** Stepping
                 // by grapheme spent both tries walking back over a hidden run —
                 // `字**」**。` — and moved the boundary past nothing, so the 。
