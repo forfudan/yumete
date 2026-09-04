@@ -1397,6 +1397,11 @@ impl Editor {
     /// its table was closed and a hit list went on answering `n` in a file it
     /// had never seen.
     fn forget_the_document(&mut self) {
+        // What was said about the last document's file, and when its disk was
+        // last looked at, are not facts about this one: a warning latched on
+        // buffer A must not silence the warning buffer B has coming (#214).
+        self.last_disk_check = None;
+        self.reload_warned = false;
         self.segment_cache.borrow_mut().clear();
         self.markup_cache.borrow_mut().clear();
         *self.md_cache.borrow_mut() = None;
@@ -1540,6 +1545,10 @@ impl Editor {
         let mut refused: Vec<String> = Vec::new();
         for path in &files {
             if self.open_file(path).is_err() {
+                continue;
+            }
+            if self.current_buffer().is_readonly() {
+                refused.push(say!("{0}：只讀", self.buffer_name()));
                 continue;
             }
             let source = self.current_buffer().text();
@@ -2418,11 +2427,25 @@ impl Editor {
                 match on {
                     Some(on) => {
                         self.current_buffer_mut().set_readonly(on);
-                        self.status = say!("唯讀：{0}", if on { "on" } else { "off" });
+                        // **`off` lifts `-R` too.** The flag locks every file
+                        // the session opens, and a writer who has just said
+                        // 「no, I do mean to edit this」 should not find the
+                        // next `:open` locked again with no way to say it.
+                        if !on {
+                            self.readonly_default = false;
+                        }
+                        let word = if on { "on" } else { "off" };
+                        // Locking a buffer that has unsaved changes takes `u`
+                        // away with everything else, so say so once rather
+                        // than let it be discovered at the worst moment.
+                        self.status = match on && self.current_buffer().is_modified() {
+                            true => say!("只讀：on——這一份還有沒存的改動，u 也用不了了"),
+                            false => say!("只讀：{0}", word),
+                        };
                     }
                     None => {
                         self.status = say!(
-                            "唯讀：{0}",
+                            "只讀：{0}",
                             if self.current_buffer().is_readonly() { "on" } else { "off" }
                         )
                     }
@@ -4130,6 +4153,9 @@ impl Editor {
 
     /// Write what was yanked down the cursor's column (`t p`).
     fn put_column(&mut self) {
+        if self.refuse_readonly() {
+            return;
+        }
         let text = self.recall();
         let values: Vec<String> = text
             .trim_end_matches('\n')
@@ -4183,6 +4209,9 @@ impl Editor {
     /// file's columns are its schema's, so a block too wide for it is refused
     /// rather than silently shifting every row.
     fn paste_grid(&mut self, grid: Vec<Vec<String>>) {
+        if self.refuse_readonly() {
+            return;
+        }
         let (rows, columns) = (grid.len(), grid.iter().map(Vec::len).max().unwrap_or(0));
         if let Some((region, mut parts)) = self.md_parts() {
             let (row, cell) = self.md_at(&region);
@@ -4489,6 +4518,9 @@ impl Editor {
     /// row is nothing *but* delimiters, so every ordinary way of deleting one
     /// was refused. A table editor that cannot remove a line is not one.
     fn drop_row(&mut self) {
+        if self.refuse_readonly() {
+            return;
+        }
         if self.on_header_row() {
             self.status = say!("標題行不能刪：欄名寫在那裏");
             return;
@@ -4518,6 +4550,9 @@ impl Editor {
 
     /// Move the row the cursor is on down (or up), in a delimited file.
     fn shift_row(&mut self, down: bool) {
+        if self.refuse_readonly() {
+            return;
+        }
         let (line, last) = {
             let rope = self.current_buffer().rope();
             (
@@ -5565,6 +5600,9 @@ impl Editor {
     /// the cell, and a row's worth becomes a new row. Anything else — half a
     /// row, two cells — is refused, because there is no honest place to put it.
     fn put_cell(&mut self) {
+        if self.refuse_readonly() {
+            return;
+        }
         let text = self.recall();
         if text.is_empty() {
             self.status = say!("還沒有取過東西");
@@ -6599,6 +6637,9 @@ impl Editor {
     /// note, and two snapshots left a `[^1]` pointing at nothing after a single
     /// undo — so the caller takes the one snapshot that covers both.
     fn write_the_note(&mut self, end: usize, note: &str, tag: &str) {
+        if self.refuse_readonly() {
+            return;
+        }
         let at = end;
         self.current_buffer_mut().insert(at, note);
         // The other area is opened **at the end of the stub**, not at the head
@@ -7626,13 +7667,18 @@ impl Editor {
         // does want.
         if let Err(err) = self.current_buffer_mut().reread() {
             self.status = say!("重讀不了：{0}", err.to_string());
+            // **Latched, or it says it every two seconds.** A file that was
+            // moved or deleted out from under a `:reload auto` session
+            // answers `changed_underneath` yes for ever, and the failure
+            // would stamp over whatever the reader is actually reading.
+            self.reload_warned = true;
             return;
         }
         self.clamp_cursor();
-        self.markup_cache.borrow_mut().clear();
-        *self.block_cache.borrow_mut() = None;
-        self.segment_cache.borrow_mut().clear();
-        self.reload_warned = false;
+        // The one list, not the three caches this used to clear: a re-read is
+        // a new document, and `md_cache`, `fold_cache` and `key_index` all
+        // described the old one. It also puts the warning latch back.
+        self.forget_the_document();
     }
 
     /// Notice a file that changed underneath, if `:reload auto on` (Feature
@@ -7654,6 +7700,14 @@ impl Editor {
         }
         self.last_disk_check = Some(now);
         if !self.current_buffer().changed_underneath() {
+            // All is well again — so the next divergence is worth saying out
+            // loud, even though this one has been said.
+            self.reload_warned = false;
+            return;
+        }
+        // Said once already about this file, and nothing has changed since:
+        // the writer knows, and the status line is theirs to use.
+        if self.reload_warned {
             return;
         }
         // **A dirty buffer is never re-read behind the writer's back.** The
@@ -7661,10 +7715,8 @@ impl Editor {
         // convenience worth an afternoon's typing: this is the one case where
         // it stops and asks.
         if self.current_buffer().is_modified() {
-            if !self.reload_warned {
-                self.reload_warned = true;
-                self.status = say!("檔案在外面改過了，你這裏也有改動——:reload! 丟掉你的");
-            }
+            self.reload_warned = true;
+            self.status = say!("檔案在外面改過了，你這裏也有改動——:reload! 丟掉你的");
             return;
         }
         self.reread_now();
@@ -7907,6 +7959,14 @@ impl Editor {
         }
         // An ordinary, undoable edit: `u` puts the file on disk back, so
         // recovering is a decision the writer can take back.
+        //
+        // **Which a locked buffer cannot do at all**, and must not pretend to:
+        // `adopt_draft` below takes the swap file over, and on quit it is
+        // deleted — so a `:recover` that quietly changed nothing would throw
+        // away the crashed session's work while saying it had opened it.
+        if self.refuse_readonly() {
+            return Ok(CommandOutcome::Continue);
+        }
         self.snapshot();
         let len = self.current_buffer().char_count();
         let buffer = self.current_buffer_mut();
@@ -10565,6 +10625,9 @@ impl Editor {
     /// Replace `pattern` with `replacement` on the cursor's line, or on every
     /// line when `whole_file`; `global` replaces every match on a line.
     fn substitute(&mut self, how: Substitution<'_>) {
+        if self.refuse_readonly() {
+            return;
+        }
         let Substitution {
             pattern,
             replacement,
@@ -10675,7 +10738,7 @@ impl Editor {
     fn enter_insert(&mut self) {
         // A locked buffer does not get an Insert mode to type into
         // (Feature #213). Refusing here rather than at each keystroke is the
-        // difference between 「唯讀」 once and a status line that says it forty
+        // difference between 「只讀」 once and a status line that says it forty
         // times while the writer works out that nothing is going in.
         if self.refuse_readonly() {
             return;
@@ -10746,6 +10809,9 @@ impl Editor {
     /// space and joining two 漢字 with one would insert text the author never
     /// typed. Between Latin words the space is kept.
     fn join_lines(&mut self) {
+        if self.refuse_readonly() {
+            return;
+        }
         let rope = self.current_buffer().rope();
         // The *selection's* first line, not the cursor's: `x` parks the cursor
         // on the line after the one it selected, so joining from the cursor
@@ -10912,6 +10978,9 @@ impl Editor {
     /// Add `delta` to the number at or after the cursor on its line
     /// (Helix `C-a` / `C-x`).
     fn bump_number(&mut self, delta: i64) {
+        if self.refuse_readonly() {
+            return;
+        }
         let rope = self.current_buffer().rope();
         let line = rope.char_to_line(self.cursor);
         let line_start = rope.line_to_char(line);
@@ -10981,6 +11050,9 @@ impl Editor {
 
     /// Rewrite every reading in the buffer into one dialect (`:format-ruby-…`).
     fn format_ruby(&mut self, dialect: Dialect) {
+        if self.refuse_readonly() {
+            return;
+        }
         let text = self.current_buffer().text();
         let Some(formatted) = crate::ruby::reformat(&text, dialect) else {
             self.status = say!("已經是 {0} 的注音了", dialect.name());
@@ -11107,6 +11179,9 @@ impl Editor {
 
     /// Write `reading` onto `target`, or strip the markup when it is empty.
     fn apply_reading(&mut self, target: RubyTarget, reading: &str) {
+        if self.refuse_readonly() {
+            return;
+        }
         let (span, base) = match target {
             RubyTarget::Existing { span, base } => (span, base),
             RubyTarget::New { span } => (span, span),
@@ -11221,6 +11296,9 @@ impl Editor {
 
     /// Wrap the selection in the pair named by `c` (`ms`).
     fn surround_add(&mut self, c: char) {
+        if self.refuse_readonly() {
+            return;
+        }
         let Some((open, close)) = pair_of(c) else {
             return;
         };
@@ -11241,6 +11319,9 @@ impl Editor {
 
     /// Remove the innermost pair around the cursor (`md`).
     fn surround_delete(&mut self) {
+        if self.refuse_readonly() {
+            return;
+        }
         let Some((start, end)) = self.innermost_pair() else {
             self.status = say!("外面沒有成對的符號");
             return;
@@ -11257,6 +11338,9 @@ impl Editor {
 
     /// Swap the innermost pair around the cursor for another (`mr`).
     fn surround_replace(&mut self, from: char, to: char) {
+        if self.refuse_readonly() {
+            return;
+        }
         let (Some((open, close)), Some((new_open, new_close))) = (pair_of(from), pair_of(to))
         else {
             return;
@@ -11620,13 +11704,13 @@ impl Editor {
         if !self.current_buffer().is_readonly() {
             return false;
         }
-        self.status = say!("唯讀——:readonly off 解開");
+        self.status = say!("只讀——:readonly off 解開");
         true
     }
 
     /// Whether the buffer on screen refuses to be edited (Feature #213).
     ///
-    /// What draws `[唯讀]` on the status line.
+    /// What draws `[只讀]` on the status line.
     pub fn is_readonly(&self) -> bool {
         self.current_buffer().is_readonly()
     }
@@ -11640,6 +11724,9 @@ impl Editor {
                 buffer.set_readonly(true);
             }
         }
+        // Turning it *off* unlocks nothing on its own: a buffer the disk
+        // itself calls read-only is locked for a reason of its own, and
+        // `:readonly off` is how one buffer says otherwise.
     }
 
     /// Whether a clean buffer re-reads itself when the file changes underneath
@@ -11661,6 +11748,9 @@ impl Editor {
 
     /// Open a new line below the cursor and enter Insert mode (`o`).
     fn open_line_below(&mut self) {
+        if self.refuse_readonly() {
+            return;
+        }
         let end = motion::line_end(self.current_buffer().rope(), self.cursor);
         let row = self.blank_row();
         self.without_cell_guard(|e| e.current_buffer_mut().insert(end, &format!("\n{row}")));
@@ -11671,6 +11761,9 @@ impl Editor {
 
     /// Open a new line above the cursor and enter Insert mode (`O`).
     fn open_line_above(&mut self) {
+        if self.refuse_readonly() {
+            return;
+        }
         let start = motion::line_start(self.current_buffer().rope(), self.cursor);
         let row = self.blank_row();
         self.without_cell_guard(|e| e.current_buffer_mut().insert(start, &format!("{row}\n")));
@@ -14787,20 +14880,23 @@ mod tests {
     /// than in each command is that a path nobody thought about is still
     /// refused. So this presses the ones that reach the rope by different
     /// routes: Insert mode, `x`, `d`, `o` (which goes round the cell guard),
-    /// paste, and `u`.
+    /// paste, `J`, `Ctrl-A`, `ms`, `:s` — and `u`.
     #[test]
     fn a_locked_buffer_refuses_every_way_in() {
+        // Built with `from_text`, not by typing into it: the buffer starts
+        // **clean**, so the `is_modified()` check at the end has something to
+        // catch. Built by typing, it would already be dirty and the check
+        // could not fail however much leaked through.
+        const TEXT: &str = "一二三 1\n四五六\n";
         let mut ed = Editor::new();
-        ed.current_buffer_mut().insert(0, "一二三\n四五六\n");
+        ed.add_buffer(crate::Buffer::from_text(TEXT));
         ed.current_buffer_mut().set_readonly(true);
         let before = ed.current_buffer().text();
-        // Set up by hand, so it is already dirty; what matters is that nothing
-        // below makes it *any* dirtier.
-        let dirty = ed.current_buffer().is_modified();
+        assert!(!ed.current_buffer().is_modified(), "clean to begin with");
 
         press(&mut ed, "i");
         assert_eq!(ed.mode(), Mode::Normal, "Insert mode is not even entered");
-        assert!(ed.status().contains("唯讀"), "{}", ed.status());
+        assert!(ed.status().contains("只讀"), "{}", ed.status());
         ed.on_key(Key::Char('甲'));
         assert_eq!(
             ed.current_buffer().text(),
@@ -14813,36 +14909,66 @@ mod tests {
         // locked, to prove the keystroke edits at all — a list of keys that do
         // nothing anywhere would pass the locked half and prove nothing — and
         // once on the locked one.
-        for keys in ["d", "yp", "o", "O", "a甲", "c甲", "i甲"] {
+        let ways: [(&str, &[Key]); 11] = [
+            ("d", &[Key::Char('d')]),
+            ("yp", &[Key::Char('y'), Key::Char('p')]),
+            ("o", &[Key::Char('o')]),
+            ("O", &[Key::Char('O')]),
+            ("a甲", &[Key::Char('a'), Key::Char('甲')]),
+            ("c甲", &[Key::Char('c'), Key::Char('甲')]),
+            ("i甲", &[Key::Char('i'), Key::Char('甲')]),
+            ("gJ", &[Key::Char('g'), Key::Char('J')]),
+            ("ms(", &[Key::Char('m'), Key::Char('s'), Key::Char('(')]),
+            ("Ctrl-A", &[Key::Ctrl('a')]),
+            ("Ctrl-X", &[Key::Ctrl('x')]),
+        ];
+        for (name, keys) in ways {
             let mut open = Editor::new();
-            open.current_buffer_mut().insert(0, "一二三\n四五六\n");
+            open.add_buffer(crate::Buffer::from_text(TEXT));
             press(&mut open, "gg");
-            press(&mut open, keys);
+            for key in keys {
+                open.on_key(*key);
+            }
             open.on_key(Key::Esc);
             assert_ne!(
                 open.current_buffer().text(),
                 before,
-                "`{keys}` does not edit even an unlocked buffer — bad test"
+                "`{name}` does not edit even an unlocked buffer — bad test"
             );
 
             ed.set_status(String::new());
             press(&mut ed, "gg");
-            press(&mut ed, keys);
+            for key in keys {
+                ed.on_key(*key);
+            }
             ed.on_key(Key::Esc);
             assert_eq!(
                 ed.current_buffer().text(),
                 before,
-                "`{keys}` moved a locked buffer"
+                "`{name}` moved a locked buffer"
             );
         }
+
+        // The commands go the same way, and say which file refused rather than
+        // reporting a count of replacements nobody made.
+        let mut open = Editor::new();
+        open.add_buffer(crate::Buffer::from_text(TEXT));
+        assert!(open.execute("s/一/壹/g").is_ok());
+        assert_ne!(
+            open.current_buffer().text(),
+            before,
+            "`:s` does not edit even an unlocked buffer — bad test"
+        );
+        assert!(ed.execute("s/一/壹/g").is_ok());
+        assert_eq!(ed.current_buffer().text(), before, "`:s` moved a locked one");
+        assert!(ed.status().contains("只讀"), "{}", ed.status());
 
         // …and going *back* is still moving it.
         press(&mut ed, "u");
         assert_eq!(ed.current_buffer().text(), before);
-        assert!(ed.status().contains("唯讀"), "{}", ed.status());
-        assert_eq!(
-            ed.current_buffer().is_modified(),
-            dirty,
+        assert!(ed.status().contains("只讀"), "{}", ed.status());
+        assert!(
+            !ed.current_buffer().is_modified(),
             "and nothing marked it changed"
         );
 
@@ -14856,6 +14982,70 @@ mod tests {
             "{}",
             ed.current_buffer().text()
         );
+    }
+
+    /// #213: `o` on a file whose last line has no newline of its own.
+    ///
+    /// The refusal returns early, so everything the caller worked out about
+    /// where the new line would be is now about a line that does not exist.
+    /// This is the shape that used to put the cursor one past the end and
+    /// panic on the next frame.
+    #[test]
+    fn a_locked_buffer_refuses_the_line_that_would_have_been_added() {
+        for text in ["一二三", "一二三\n"] {
+            let mut ed = Editor::new();
+            ed.add_buffer(crate::Buffer::from_text(text));
+            ed.current_buffer_mut().set_readonly(true);
+            for keys in ["Go", "ggO"] {
+                press(&mut ed, keys);
+                ed.on_key(Key::Esc);
+                assert_eq!(ed.current_buffer().text(), text, "{keys} on {text:?}");
+                assert!(
+                    ed.cursor() <= ed.current_buffer().char_count(),
+                    "{keys} on {text:?}: cursor {} past the end {}",
+                    ed.cursor(),
+                    ed.current_buffer().char_count()
+                );
+                // The frame is drawn from the cursor, so this is where the
+                // panic used to land.
+                let _ = ed.render();
+            }
+        }
+    }
+
+    /// #213: a locked buffer must not *take over* a crashed session's draft.
+    ///
+    /// `:recover` loads the draft as an undoable edit and adopts the swap
+    /// file, which is deleted on quit. A refusal that only skipped the edit
+    /// would still have adopted — and thrown the work away.
+    #[test]
+    fn a_locked_buffer_keeps_the_draft_it_cannot_open() {
+        let dir = std::env::temp_dir().join(format!(
+            "yumete-lock-rec-{}-{}",
+            std::process::id(),
+            "a_locked_buffer_keeps_the_draft_it_cannot_open"
+        ));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("chapter.md");
+        let swap = dir.join(".chapter.md.yumete");
+        std::fs::write(&path, "第一稿\n").unwrap();
+        std::fs::write(&swap, "第一稿，還有三千字沒存的\n").unwrap();
+
+        let mut ed = Editor::new();
+        ed.execute(&format!(":open {}", path.display())).unwrap();
+        ed.current_buffer_mut().set_readonly(true);
+        ed.execute(":recover").unwrap();
+        assert!(ed.status().contains("只讀"), "{}", ed.status());
+        assert_eq!(ed.current_buffer().text(), "第一稿\n", "nothing was loaded");
+        assert!(swap.exists(), "and the draft is still there to be recovered");
+
+        // Unlock, and it is all still waiting.
+        assert!(ed.execute("readonly off").is_ok());
+        ed.execute(":recover").unwrap();
+        assert!(ed.current_buffer().text().contains("三千字"));
+
+        std::fs::remove_dir_all(&dir).ok();
     }
 
     /// #213: `:readonly` with no word asks rather than sets.

@@ -360,6 +360,21 @@ pub fn run(
             }
             continue;
         }
+        // **`:reload auto` needs a clock, not a keystroke.** `event::read`
+        // blocks, so the case the setting is for — alt-tab away, run a script,
+        // come back and look — produced nothing at all until a key was pressed
+        // (Feature #214). Only while it is on: an editor that wakes up twice a
+        // second for nobody is an editor that flattens a battery.
+        if editor.reload_auto() {
+            match event::poll(DISK_POLL) {
+                Ok(false) => {
+                    editor.disk_tick();
+                    continue;
+                }
+                Ok(true) => {}
+                Err(err) => break Err(err),
+            }
+        }
         match event::read() {
             Ok(Event::Key(key)) => {
                 // A lone-Shift tap toggles 中/英 in Insert mode; other Shift
@@ -584,6 +599,7 @@ pub fn run(
                 editor.autosave_tick();
                 // …and ask the disk whether the file moved under us
                 // (Feature #214). Throttled inside too, and off by default.
+                // Also asked on the idle path above, which is where it matters.
                 editor.disk_tick();
                 if let Some((name, mood)) = editor.take_theme_request() {
                     editor.set_status(set_theme(config, name, mood));
@@ -662,6 +678,13 @@ pub fn run(
 /// How far one notch of the wheel moves — three, as a terminal scrolls three
 /// lines, counted in whichever unit the page is set in.
 const WHEEL_STEP: usize = 3;
+
+/// How long an idle `:reload auto` session waits before looking at the disk.
+///
+/// The same two seconds the core throttles at, so the wait and the throttle do
+/// not beat against each other: one look per wake, and no wake at all while
+/// the setting is off.
+const DISK_POLL: std::time::Duration = std::time::Duration::from_secs(2);
 
 /// Whether a mode collects text the IME should compose into.
 ///
@@ -3685,7 +3708,7 @@ fn draw_status(
         // Locked, and said so standing (Feature #213). A writer who cannot type
         // needs to know that from the screen and not from the status line's
         // memory of a refusal three keystrokes ago.
-        let locked = if buffer.is_readonly() { " [唯讀]" } else { "" };
+        let locked = if buffer.is_readonly() { " [只讀]" } else { "" };
         // In Insert mode with the IME available, show the 中/英 state + scheme.
         let ime_tag = match language_tag(editor, ime).as_str() {
             "" => String::new(),
@@ -5378,9 +5401,9 @@ mod tests {
                 // line *says*.
                 .replace(' ', "")
         };
-        assert!(!rows(&editor).contains("唯讀"));
+        assert!(!rows(&editor).contains("只讀"));
         editor.current_buffer_mut().set_readonly(true);
-        assert!(rows(&editor).contains("[唯讀]"), "{}", rows(&editor));
+        assert!(rows(&editor).contains("[只讀]"), "{}", rows(&editor));
     }
 
     /// #211: `Tab` is the way back to the whole list, for one word.

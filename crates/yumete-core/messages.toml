@@ -1636,7 +1636,7 @@ zh = "這次替換會把 {0} 行變成 {1} 行——表格裏不改行數"
 en = "this would turn {0} rows into {1} — a grid keeps its rows"
 
 [[message]]
-zh = "這個檔案是唯讀的——先 chmod，或者換個檔名存"
+zh = "這個檔案是只讀的——先 chmod，或者換個檔名存"
 en = "this file is read-only — chmod it, or save under another name"
 
 [[message]]
@@ -2406,19 +2406,27 @@ en = "panel {0}"
 zh = "沒有「{0}」這種候選面板——full、bare"
 en = "no candidate panel '{0}' — full, bare"
 
-# Feature #213 — 唯讀
+# Feature #213 — 只讀
 
 [[message]]
-zh = "唯讀——:readonly off 解開"
+zh = "只讀——:readonly off 解開"
 en = "read-only — `:readonly off` unlocks it"
 
 [[message]]
-zh = "唯讀：{0}"
+zh = "只讀：{0}"
 en = "read-only: {0}"
 
 [[message]]
-zh = "唯讀：鎖住這一份，不許改"
+zh = "只讀：鎖住這一份，不許改"
 en = "read-only: lock this one against editing"
+
+[[message]]
+zh = "只讀：on——這一份還有沒存的改動，u 也用不了了"
+en = "read-only: on — this one has unsaved changes, and `u` is locked out too"
+
+[[message]]
+zh = "{0}：只讀"
+en = "{0}: read-only"
 
 # Feature #214 — 重讀
 

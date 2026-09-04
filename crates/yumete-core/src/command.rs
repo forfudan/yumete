@@ -371,18 +371,21 @@ pub fn parse(input: &str) -> Result<Command, CommandError> {
         // actually does is discard the afternoon.
         "reload" | "reload!" => {
             let force = word.ends_with('!');
-            match rest {
-                "" => Ok(Command::Reload { force }),
-                "auto" => Ok(Command::ReloadAuto(None)),
-                "auto on" => Ok(Command::ReloadAuto(Some(true))),
-                "auto off" => Ok(Command::ReloadAuto(Some(false))),
-                other => Err(CommandError::InvalidArgument {
+            // The bang answers 「throw this buffer's changes away」, which is
+            // not a question `auto` asks — so `:reload! auto on` is a typo,
+            // not a setting, and saying so beats obeying half of it.
+            match (force, rest) {
+                (_, "") => Ok(Command::Reload { force }),
+                (false, "auto") => Ok(Command::ReloadAuto(None)),
+                (false, "auto on") => Ok(Command::ReloadAuto(Some(true))),
+                (false, "auto off") => Ok(Command::ReloadAuto(Some(false))),
+                (_, other) => Err(CommandError::InvalidArgument {
                     command: "reload",
                     value: other.to_string(),
                 }),
             }
         }
-        // 唯讀 (Feature #213).
+        // 只讀 (Feature #213).
         "readonly" | "ro" => match rest {
             "" => Ok(Command::SetReadonly(None)),
             "on" => Ok(Command::SetReadonly(Some(true))),
@@ -1105,7 +1108,7 @@ fn resolve(word: &str) -> &str {
         if let (Some(only), None) = (banged.next(), banged.next()) {
             return match only {
                 "write" => "write!",
-                "open" => "open!",
+                "reload" => "reload!",
                 "quit" => "quit!",
                 "export" => "export!",
                 "saveas" => "saveas!",
@@ -1125,7 +1128,7 @@ fn resolve(word: &str) -> &str {
 /// The commands that take a `!`, so a prefix of one can too.
 const FORCEABLE: &[&str] = &[
     "write",
-    "open",
+    "reload",
     "quit",
     "export",
     "saveas",
@@ -1965,7 +1968,7 @@ pub const COMMANDS: &[Entry] = &[
     Entry {
         name: "readonly",
         aliases: &["ro"],
-        help: "唯讀：鎖住這一份，不許改",
+        help: "只讀：鎖住這一份，不許改",
         needs: &[],
         args: Args::Words(ON_OFF),
     },
