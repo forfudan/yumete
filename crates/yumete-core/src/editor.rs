@@ -4420,12 +4420,13 @@ impl Editor {
                     .collect(),
             ),
             Pending::Goto => (say!("g"), vec![
-                    ("g", say!("檔首")),
+                    ("g", say!("檔首（g30g 去第 30 行）")),
                     ("e", say!("檔尾")),
                     ("h l", say!("行首／行尾")),
                     ("s", say!("首個非空白")),
                     ("f", say!("開這個檔")),
                     ("d w", say!("去／看它指的地方")),
+                    ("/ ?", say!("這個詞還在哪裏：這邊找／那邊看")),
                     ("J", say!("併下一行")),
                 ]),
             Pending::Find(_) => (say!("找"), vec![("", say!("打一個字"))]),
@@ -4451,12 +4452,14 @@ impl Editor {
             // menu listing them was the one place the editor said a key
             // existed and then said it did not.
             Pending::Table if self.md_region().is_none() => (say!("t 表格"), vec![
+                    ("/ ?", say!("一欄一欄找：這邊找／那邊看（t2-10?）")),
                     ("o O", say!("加一行（下／上）")),
                     ("d", say!("刪這一行")),
                     ("j k", say!("這行下移／上移")),
                     ("y p", say!("取這欄／貼一欄")),
                 ]),
             Pending::Table => (say!("t 表格"), vec![
+                    ("/ ?", say!("一欄一欄找：這邊找／那邊看（t2-10?）")),
                     ("o O", say!("加一行（下／上）")),
                     ("n N", say!("加一欄（右／左）")),
                     ("d D", say!("刪這行／這欄")),
