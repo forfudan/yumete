@@ -21,6 +21,7 @@
 /// it is the one that appears in every chapter of Chinese prose, so it is the
 /// one whose width the writer will actually notice being wrong, and a font
 /// that draws it wide draws the rest of the ambiguous block wide too.
+#[cfg(unix)]
 const ASK_WITH: &str = "—";
 
 /// Ask the terminal whether an ambiguous character takes two cells.
@@ -106,6 +107,7 @@ pub fn ask_the_terminal_about_width() -> Option<bool> {
 /// took one cell and column 3 if it took two. Anything else — a terminal that
 /// wrapped, or answered about a different row — is no answer at all rather than
 /// a guess, because a guess here shifts every line on the page.
+#[cfg(unix)]
 fn cursor_moved_two(reply: &[u8]) -> Option<bool> {
     let text = std::str::from_utf8(reply).ok()?;
     let rest = text.split(';').nth(1)?;
@@ -121,7 +123,7 @@ fn cursor_moved_two(reply: &[u8]) -> Option<bool> {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, unix))]
 mod tests {
     use super::cursor_moved_two;
 

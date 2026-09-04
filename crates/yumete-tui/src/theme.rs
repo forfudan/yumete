@@ -212,6 +212,10 @@ pub fn ask_the_terminal() -> Option<bool> {
 /// The components are hexadecimal and may be one to four digits wide, which is
 /// a scale and not a number: `f` and `ffff` are both full. Each is read as a
 /// fraction of its own width.
+///
+/// Only the probe above calls it, and the probe is the unix one — so on a
+/// platform without it this parser is dead code rather than a warning.
+#[cfg(unix)]
 fn ground_is_dark(reply: &[u8]) -> Option<bool> {
     let text = std::str::from_utf8(reply).ok()?;
     let rest = text.split("rgb:").nth(1)?;
@@ -680,6 +684,7 @@ mod tests {
         assert!(lo > 4.0 && hi < 9.0, "uneven ladder: {steps:?}");
     }
 
+    #[cfg(unix)]
     #[test]
     fn a_terminals_answer_is_weighed_not_just_read() {
         let dark = |reply: &str| ground_is_dark(reply.as_bytes());
