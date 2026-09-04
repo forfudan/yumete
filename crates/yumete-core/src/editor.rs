@@ -554,6 +554,12 @@ pub struct Editor {
     show_segmentation: bool,
     /// How a table's columns are told apart (Feature #157).
     table_rules: crate::table::Rules,
+    /// Whether a row of column numbers is drawn above the header.
+    ///
+    /// **The keys need it.** `3gd`, `t20-20g`, `t1s2S4s` all name a column by
+    /// number, and a 28-column 拆分表 gives no way to count to 17 except by
+    /// counting. One row, and the numeric keys become usable.
+    table_numbers: bool,
     /// Whether a 碼表 is loaded, as last reported by the front end.
     ime_available: bool,
     /// Whether the answer is being **shown in the other work area** (`gw`,
@@ -916,6 +922,7 @@ impl Editor {
             project_words: std::rc::Rc::new(RefCell::new(yumete_cjk::WordList::default())),
             show_segmentation: false,
             table_rules: crate::table::Rules::default(),
+            table_numbers: true,
             ime_available: false,
             definition_preview: false,
             screenshot_request: false,
@@ -2516,6 +2523,14 @@ impl Editor {
                 self.theme_request = Some((name, mood));
                 Ok(CommandOutcome::Continue)
             }
+            Command::SetTableNumbers(on) => {
+                self.table_numbers = on;
+                self.status = match on {
+                    true => say!("欄號：開"),
+                    false => say!("欄號：關"),
+                };
+                Ok(CommandOutcome::Continue)
+            }
             Command::SetTableRules(rules) => {
                 if let Some(rules) = rules {
                     self.table_rules = rules;
@@ -4086,6 +4101,26 @@ impl Editor {
         // Which columns: the sequence's own argument — `t1/` is the first, and
         // `t2-10?` is the second through the tenth — or, with no argument, the
         // ones a schema's `[table.link] from` names.
+        // **`t20-20g` goes to a cell**: row 20, column 20. `t20g` is row 20 in
+        // the column you are standing in — the row number is the one a reader
+        // has in front of them, from the gutter, and the column number is the
+        // one drawn above the header.
+        if key == Key::Char('g') {
+            if let Some((row, column)) = self.sequence_span() {
+                let had = self.sequence.and_then(|(_, to)| to).is_some();
+                let cell = match had {
+                    true => column.saturating_sub(1),
+                    false => self.cell_position().map(|(_, c)| c).unwrap_or(0),
+                };
+                let lines = self.current_buffer().line_count();
+                let line = row.clamp(1, lines).saturating_sub(1);
+                self.remember_jump();
+                self.goto_line(line + 1);
+                self.go_to_cell(line, cell);
+                self.status = say!("第 {0} 行 · 第 {1} 欄", line + 1, cell + 1);
+                return;
+            }
+        }
         if matches!(key, Key::Char('/') | Key::Char('?')) {
             self.definition_preview = key == Key::Char('?');
             let span = self.sequence_span();
@@ -4708,6 +4743,11 @@ impl Editor {
             Hint::Keys(title, keys) => Some((title, keys)),
             _ => None,
         }
+    }
+
+    /// Whether the row of column numbers is drawn.
+    pub fn table_numbers(&self) -> bool {
+        self.table_numbers
     }
 
     /// What the status line says about where the cursor is in a grid.    /// What the status line says about where the cursor is in a grid.
@@ -5857,12 +5897,18 @@ impl Editor {
                     .get(i)
                     .map(|&s| crate::table::cell_text(&text, s))
                     .unwrap_or_default();
-                (column.heading().to_string(), text)
+                // **Numbered**, because the keys count columns: `3gd` looks in
+                // the third, `t20-20g` goes to a cell by number, and the panel
+                // is where a reader finds out which number a field is without
+                // counting along the header.
+                (format!("{:>2} {}", i + 1, column.heading()), text)
             })
-            // A row of a 拆分表 has twenty-eight fields and about five of them
-            // say anything; the twenty-three blanks pushed the 部件 list — the
-            // one thing the panel is read for — off the bottom.
-            .filter(|(name, value)| !value.trim().is_empty() || *name == here_name)
+            // **Every column, empty ones included** — an empty field *is* a
+            // finding in a 拆分表, and a panel that leaves it out is a panel
+            // that cannot answer 「這一格是不是空的」. They were hidden because
+            // twenty-three blanks pushed the 部件 list off the bottom; the
+            // panel scrolls now (`空格 d` opens it, `[` `]` walk it), so there
+            // is somewhere for them to go.
             .collect();
         // Worked out, not stored — and marked as such, so nobody goes looking
         // for a column that is not in the file.
@@ -7570,8 +7616,14 @@ impl Editor {
         // A pending multi-key operator consumes this key.
         match self.pending {
             Pending::Table => {
+                // 命令＋選擇＋動作: `t20-20g` is 「table · row 20, column 20 ·
+                // go」, and the sequence stays open while the digits arrive.
+                if self.take_sequence_argument(key) {
+                    return;
+                }
                 self.pending = Pending::None;
                 self.table_structure(key);
+                self.sequence = None;
                 return;
             }
             Pending::Mark => {
@@ -12670,12 +12722,15 @@ mod tests {
         let d = ed.detail().expect("a row has fields");
         assert_eq!(d.title, "一", "titled by its key");
         assert_eq!(d.here, "字", "and it says which field you are in");
+        // **Numbered, and all of them** — the keys count columns (`3gd`,
+        // `t20-20g`), and an empty field is a finding in a 拆分表, not a thing
+        // to hide.
         assert_eq!(
             d.rows,
             vec![
-                ("字".to_string(), "一".to_string()),
-                ("ids_y".to_string(), "⿰木目".to_string()),
-                ("ids_g".to_string(), "⿰木目".to_string()),
+                (" 1 字".to_string(), "一".to_string()),
+                (" 2 ids_y".to_string(), "⿰木目".to_string()),
+                (" 3 ids_g".to_string(), "⿰木目".to_string()),
                 // Worked out, not stored, and marked so nobody looks for a
                 // column that is not in the file.
                 ("unicode*".to_string(), "U+4E00".to_string()),

@@ -4519,8 +4519,14 @@ mod tests {
         let buffer = render(&editor, &config, 60, 10);
         let row = |y: u16| (0..60u16).map(|x| at(&buffer, x, y)).collect::<String>();
 
-        // The header is the top row and names the columns.
-        let head = row(0);
+        // **The column numbers** are the very top row: every numeric key in a
+        // grid counts columns, and a 28-column 拆分表 gives no other way to
+        // count to seventeen.
+        let numbers = row(0);
+        assert!(numbers.contains('1') && numbers.contains('2') && numbers.contains('3'), "{numbers:?}");
+
+        // The header is under them and names the columns; both are frozen.
+        let head = row(1);
         assert!(head.starts_with("char"), "the header is frozen on top: {head:?}");
         assert!(head.contains("ids_y") && head.contains("note"));
 
@@ -4529,13 +4535,13 @@ mod tests {
         let column_of = |y: u16, want: &str| {
             (0..60u16).find(|&x| at(&buffer, x, y) == want)
         };
-        let a = column_of(1, "⿰").expect("一's 拆分");
-        let b = column_of(2, "⿰").expect("齾's 拆分");
+        let a = column_of(2, "⿰").expect("一's 拆分");
+        let b = column_of(3, "⿰").expect("齾's 拆分");
         assert_eq!(a, b, "the same field of two rows starts in the same column");
         assert!(a > 4, "and after the first column, not at the edge");
 
         // The widest visible cell sets the column's width, so `longer` fits.
-        assert!(row(2).contains("longer"), "{:?}", row(2));
+        assert!(row(3).contains("longer"), "{:?}", row(3));
 
         std::fs::remove_dir_all(&dir).ok();
     }
