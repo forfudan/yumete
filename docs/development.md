@@ -1009,6 +1009,28 @@ four are done; the outcomes are noted here rather than in a second list.
 - **Group 10 (first-line indent, 段組) is 0.1.0, not 0.2.0.** — *done: #145, #146.* They are the point
   of a 縱書 editor.
 
+### 14 · What was deliberately left undone, 2026-09-04
+
+Three items on the list were **not** implemented, and each for a reason worth
+writing down rather than rediscovering:
+
+- **#174 段組 for the horizontal page.** Two columns of text side by side means
+  the horizontal page has to know about several rectangles — the caret, the
+  click map and the scroll all move to (band, row) coordinates, which is
+  exactly the shape 縱書's bands took. Half of that is worse than none of it:
+  the failure mode is a caret that lands in the wrong column on the surface
+  where all the writing happens. Worth doing with the author awake.
+- **#189 `:shot` takes the page, not the app.** Cropping needs two numbers this
+  editor cannot get on its own: the terminal window's **origin on screen** and
+  the display's **scale factor**. `CSI 14 t` gives the text area's size in
+  pixels and `CSI 13 t` its position, but neither is universal and a Retina
+  factor of two turns a correct-looking calculation into a picture of the wrong
+  half of the screen — silently. A wrong crop is worse than an uncropped shot.
+- **#169 schemes found rather than listed.** The command table is
+  `&'static [Word]`, so 「what is installed」 needs a dynamic word source
+  threaded through completion and the which-key panel. `:yume scheme =<path>`
+  already loads a table of one's own, which is the case that mattered.
+
 ### 14 · `:tutor` — a lesson you learn by editing
 
 `vimtutor` and `hx --tutor` are both the same good idea: **a copy of a file
