@@ -90,6 +90,8 @@ pub enum Command {
     /// `:table rules …` — how the columns are told apart (Feature #157).
     /// `None` only reports.
     SetTableRules(Option<crate::table::Rules>),
+    /// `:markdown …` — write a piece of Markdown at the cursor.
+    Markdown(MarkdownBit),
     /// `:typewriter [on|off]` — the cursor's row stays in the middle.
     SetTypewriter(Option<bool>),
     /// `:table numbers on|off` — the row of column numbers above the header.
@@ -577,6 +579,31 @@ pub fn parse(input: &str) -> Result<Command, CommandError> {
                 }),
             },
         },
+        // `:markdown footnote` and friends — what Markdown is *made of*,
+        // written for you. The verb is the language's, because these are things
+        // only a Markdown file has.
+        "markdown" | "md" => match rest {
+            "" => Err(CommandError::MissingArgument("markdown")),
+            "footnote" | "fn" => Ok(Command::Markdown(MarkdownBit::Footnote)),
+            "footnote inline" | "fni" => Ok(Command::Markdown(MarkdownBit::InlineNote)),
+            _ if rest.starts_with("table ") => {
+                let spec = rest["table ".len()..].trim();
+                let (cols, rows) = spec.split_once(['x', 'X', '×']).unwrap_or((spec, "2"));
+                match (cols.trim().parse::<usize>(), rows.trim().parse::<usize>()) {
+                    (Ok(c), Ok(r)) if (1..=32).contains(&c) && (1..=200).contains(&r) => {
+                        Ok(Command::Markdown(MarkdownBit::Table(c, r)))
+                    }
+                    _ => Err(CommandError::InvalidArgument {
+                        command: "markdown table",
+                        value: spec.to_string(),
+                    }),
+                }
+            }
+            other => Err(CommandError::InvalidArgument {
+                command: "markdown",
+                value: other.to_string(),
+            }),
+        },
         "typewriter" => match rest {
             "" | "on" => Ok(Command::SetTypewriter(Some(true))),
             "off" => Ok(Command::SetTypewriter(Some(false))),
@@ -824,6 +851,41 @@ impl Args {
                 .join("｜"),
         }
     }
+}
+
+/// The pieces of Markdown `:markdown` can write.
+const MARKDOWN_BITS: &[Word] = &[
+    Word {
+        name: "footnote",
+        help: "腳注：號碼自己找空的，註也一併開好",
+        needs: &[],
+        then: Args::Words(FOOTNOTE_KINDS),
+    },
+    Word {
+        name: "table",
+        help: "一張空表：`table 3x4` 是三欄四行",
+        needs: &[],
+        then: Args::Free("3x4"),
+    },
+];
+
+/// …and the one word a footnote takes.
+const FOOTNOTE_KINDS: &[Word] = &[Word {
+    name: "inline",
+    help: "行內註 ^[…]，不去文末",
+    needs: &[],
+    then: Args::None,
+}];
+
+/// A piece of Markdown the editor can write for you.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MarkdownBit {
+    /// `[^3]` here, `[^3]: ` at the foot, the cursor in the note.
+    Footnote,
+    /// `^[…]`, the cursor inside the brackets.
+    InlineNote,
+    /// A table of this many columns and rows, with its rule row.
+    Table(usize, usize),
 }
 
 /// The sections `:help` offers.
@@ -1782,6 +1844,13 @@ pub const COMMANDS: &[Entry] = &[
         args: Args::Words(BUFFERS),
     },
     Entry {
+        name: "markdown",
+        aliases: &["md"],
+        help: "寫一段 Markdown：footnote、footnote inline、table 3x4",
+        needs: &[],
+        args: Args::Words(MARKDOWN_BITS),
+    },
+    Entry {
         name: "typewriter",
         aliases: &[],
         help: "打字機：光標那一行一直停在畫面中間，紙往上走",
@@ -2735,6 +2804,7 @@ mod tests {
                     "gr" => ":gr x".to_string(),
                     "ex" => ":ex html".to_string(),
                     "sav" => ":sav a.md".to_string(),
+                    "md" => ":md footnote".to_string(),
                     alias => format!(":{alias}"),
                 };
                 assert!(parse(&line).is_ok(), "alias {alias} does not parse");

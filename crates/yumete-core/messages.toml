@@ -2046,3 +2046,27 @@ en = "loose: a row of air between rows"
 [[message]]
 zh = "密排／疏排：竪排是縱與縱之間，橫排是行與行之間"
 en = "tight or loose: between columns in 竪排, between rows in 橫排"
+
+[[message]]
+zh = "{0} 欄 {1} 行的表格（:table 進去編）"
+en = "a {0}-column, {1}-row table (:table to edit it)"
+
+[[message]]
+zh = "行內註：打在括號裏"
+en = "inline note: type inside the brackets"
+
+[[message]]
+zh = "寫一段 Markdown：footnote、footnote inline、table 3x4"
+en = "write a piece of Markdown: footnote, footnote inline, table 3x4"
+
+[[message]]
+zh = "腳注：號碼自己找空的，註也一併開好"
+en = "a footnote: the next free number, and its note opened with it"
+
+[[message]]
+zh = "一張空表：`table 3x4` 是三欄四行"
+en = "an empty table: `table 3x4` is three columns and four rows"
+
+[[message]]
+zh = "行內註 ^[…]，不去文末"
+en = "an inline note ^[…], which does not go to the foot"

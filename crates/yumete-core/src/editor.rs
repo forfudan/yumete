@@ -2557,6 +2557,10 @@ impl Editor {
                 self.status = say!("詳情欄寬 {0}", self.detail_width.unwrap_or(n));
                 Ok(CommandOutcome::Continue)
             }
+            Command::Markdown(bit) => {
+                self.write_markdown(bit);
+                Ok(CommandOutcome::Continue)
+            }
             Command::SetTypewriter(want) => {
                 self.typewriter = want.unwrap_or(!self.typewriter);
                 self.status = match self.typewriter {
@@ -4496,7 +4500,89 @@ impl Editor {
         self.status = say!("跑完了：{0}", line);
     }
 
-    /// **`:tutor`** — the lesson, copied into a file of the reader's own.
+    /// **`:markdown …`** — write a piece of Markdown at the cursor.
+    ///
+    /// The things a manuscript keeps needing and nobody wants to type: a
+    /// footnote with the next free number *and* its note at the foot, an inline
+    /// note, a table of a given size. The cursor is left where the typing goes,
+    /// in Insert, because that is the next thing that happens every time.
+    fn write_markdown(&mut self, bit: crate::command::MarkdownBit) {
+        use crate::command::MarkdownBit;
+        match bit {
+            MarkdownBit::Footnote => {
+                // **The next free number**, from the file itself: a footnote
+                // whose number is already taken is a footnote pointing at
+                // somebody else's note.
+                let text = self.current_buffer().text();
+                let taken: Vec<usize> = crate::markdown::footnote_numbers(&text);
+                let n = (1..).find(|n| !taken.contains(n)).unwrap_or(1);
+                let tag = format!("[^{n}]");
+                self.snapshot();
+                let at = self.cursor;
+                if !self.edit_insert(at, &tag) {
+                    return;
+                }
+                self.set_cursor(at + tag.chars().count());
+                // …and the note it points at, written and stood in. `gd` does
+                // exactly this when it cannot find a note; this is the same
+                // path, asked for rather than stumbled into.
+                self.definition_preview = false;
+                self.write_note(&tag);
+                self.mode = Mode::Insert;
+            }
+            MarkdownBit::InlineNote => {
+                let at = self.cursor;
+                self.snapshot();
+                if !self.edit_insert(at, "^[]") {
+                    return;
+                }
+                // Between the brackets, where the note goes.
+                self.set_cursor(at + 2);
+                self.mode = Mode::Insert;
+                self.status = say!("行內註：打在括號裏");
+            }
+            MarkdownBit::Table(columns, rows) => {
+                let head: String = (1..=columns)
+                    .map(|n| format!(" {n} "))
+                    .collect::<Vec<_>>()
+                    .join("|");
+                let rule: String = std::iter::repeat_n(" --- ", columns)
+                    .collect::<Vec<_>>()
+                    .join("|");
+                let body: String = std::iter::repeat_n("   ", columns)
+                    .collect::<Vec<_>>()
+                    .join("|");
+                let mut table = format!("|{head}|\n|{rule}|\n");
+                for _ in 0..rows {
+                    table.push_str(&format!("|{body}|\n"));
+                }
+                // On a line of its own: a table welded onto the end of a
+                // sentence is not a table.
+                let rope = self.current_buffer().rope();
+                let line = rope.char_to_line(self.cursor.min(rope.len_chars()));
+                let at = match line + 1 < rope.len_lines() {
+                    true => rope.line_to_char(line + 1),
+                    false => rope.len_chars(),
+                };
+                let lead = match at == 0 || rope.char(at.saturating_sub(1)) == '\n' {
+                    true => String::new(),
+                    false => "\n".to_string(),
+                };
+                self.snapshot();
+                let text = format!("{lead}{table}");
+                if !self.edit_insert(at, &text) {
+                    return;
+                }
+                // In the first cell of the first row, which is where the first
+                // thing anybody types goes.
+                let first = at + lead.chars().count();
+                self.set_cursor(first + 1);
+                self.status = say!("{0} 欄 {1} 行的表格（:table 進去編）", columns, rows);
+            }
+        }
+    }
+
+    /// **`:tutor`** — the lesson, copied into a file of the reader's own.    /// **`:tutor`** — the lesson, copied into a file of the reader's own.
     ///
     /// A **real file**, not a scratch buffer: `:w` works, `u` is part of lesson
     /// one, and every destructive key in it is safe because it is a copy. A
@@ -15574,6 +15660,43 @@ mod tests {
     /// A preview server is a running thing: `:preview` while one is up asks
     /// *where* it is, not for a second one.
     /// `:help` is written from what the editor actually runs on.
+    /// `:markdown` writes the pieces a manuscript keeps needing.
+    #[test]
+    fn markdown_writes_a_footnote_and_a_table() {
+        let mut ed = typed("那年冬天[^2]，山下起了大雪。\n\n[^2]: 據縣志。\n");
+        press(&mut ed, "gg");
+        press(&mut ed, "llll");
+
+        // **The next free number**, not one more than the last: 2 is taken.
+        ed.execute(":markdown footnote").unwrap();
+        let text = ed.current_buffer().text();
+        assert!(text.contains("[^1]"), "{text}");
+        assert!(text.contains("[^1]: "), "and its note is opened: {text}");
+        assert_eq!(ed.mode(), Mode::Insert, "the cursor is in the note");
+        // Typing goes into the note, not into the sentence.
+        type_keys(&mut ed, "說法不一");
+        assert!(ed.current_buffer().text().contains("[^1]: 說法不一"));
+        ed.on_key(Key::Esc);
+
+        // An inline note leaves the cursor between the brackets.
+        let mut ed = typed("那年冬天。\n");
+        press(&mut ed, "gg");
+        ed.execute(":markdown footnote inline").unwrap();
+        assert_eq!(ed.mode(), Mode::Insert);
+        type_keys(&mut ed, "存疑");
+        assert!(ed.current_buffer().text().starts_with("^[存疑]"), "{}", ed.current_buffer().text());
+
+        // A table of the size asked for, on a line of its own.
+        let mut ed = typed("前文。\n");
+        press(&mut ed, "gg");
+        ed.execute(":markdown table 3x4").unwrap();
+        let text = ed.current_buffer().text();
+        let rows: Vec<&str> = text.lines().filter(|l| l.starts_with('|')).collect();
+        assert_eq!(rows.len(), 6, "a header, a rule and four rows: {text}");
+        assert_eq!(rows[0].matches('|').count(), 4, "three columns: {text}");
+        assert!(rows[1].contains("---"), "{text}");
+    }
+
     #[test]
     fn help_is_the_editor_describing_itself() {
         let mut ed = typed("那年冬天。\n");
