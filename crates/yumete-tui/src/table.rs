@@ -139,7 +139,7 @@ pub fn char_at(
 ) -> Option<usize> {
     let view = editor.table()?;
     let lines = editor.current_buffer().line_count();
-    let head = u16::from(view.schema.header);
+    let head = u16::from(view.schema.header) + u16::from(editor.table_numbers());
     let rows = area.height.saturating_sub(head) as usize;
     if rows == 0 || mouse.row < area.y {
         return None;
@@ -220,8 +220,11 @@ pub fn draw(
     };
 
     // The header takes the top row and never scrolls, so a page of rows is one
-    // shorter than the area.
-    let head = u16::from(view.schema.header);
+    // shorter than the area — and the column numbers take one more, because
+    // every numeric key here (`3gd`, `t20-20g`, `t1s2S4s`) names a column by
+    // number and a 28-column 拆分表 gives no other way to count to 17.
+    let numbers = u16::from(editor.table_numbers());
+    let head = u16::from(view.schema.header) + numbers;
     let rows = (area.height.saturating_sub(head)) as usize;
     if rows == 0 {
         return (area.x, area.y);
@@ -310,11 +313,45 @@ pub fn draw(
         }
     }
 
-    // The header: the column names, in the gutter's own colour so it reads as
-    // furniture rather than as the first row of data.
-    if head == 1 {
+    // **The column numbers**, above the header: one row of indices, so a column
+    // can be *named*. Every numeric key in a grid — `3gd` for a column, `t20-20g`
+    // for a cell, `t1s2S4s` for a sort — asks the reader to count columns, and
+    // on the 拆分表 that is counting to seventeen by eye.
+    //
+    // Right-aligned in each column and a rung quieter than the heading: they
+    // are a ruler, not a row.
+    if numbers == 1 {
         for x in area.x..right {
             if let Some(cell) = buf.cell_mut((x, area.y)) {
+                cell.set_symbol(" ").set_style(gutter_style);
+            }
+        }
+        let quiet = gutter_style.fg(ink.furniture());
+        let mut x = area.x + gutter;
+        for (i, _) in view.schema.columns.iter().enumerate().skip(viewport.left) {
+            let w = widths[i] as u16;
+            if x + w > right {
+                break;
+            }
+            if w > 0 {
+                let n = (i + 1).to_string();
+                let at = x + w.saturating_sub(n.chars().count() as u16);
+                let style = match i == cursor_cell {
+                    true => quiet.fg(ink.gold()),
+                    false => quiet,
+                };
+                put_text(buf, at, area.y, (x + w).min(right), &n, style);
+            }
+            x += w + if w == 0 { 0 } else { GAP as u16 };
+        }
+    }
+
+    // The header: the column names, in the gutter's own colour so it reads as
+    // furniture rather than as the first row of data.
+    if view.schema.header {
+        let head_y = area.y + numbers;
+        for x in area.x..right {
+            if let Some(cell) = buf.cell_mut((x, head_y)) {
                 cell.set_symbol(" ").set_style(gutter_style);
             }
         }
@@ -329,7 +366,7 @@ pub fn draw(
             } else {
                 head_style
             };
-            put_text(buf, x, area.y, (x + w).min(right), column.heading(), style);
+            put_text(buf, x, head_y, (x + w).min(right), column.heading(), style);
             // A hidden column takes no gap either — a column of
             // nothing is not a column with a space beside it.
             x += w + if w == 0 { 0 } else { GAP as u16 };

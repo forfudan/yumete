@@ -1978,3 +1978,15 @@ en = "the lesson is open (no data directory, so it cannot be saved)"
 [[message]]
 zh = "這是你自己的一份，隨便改（:q 退出）"
 en = "this copy is yours — break it as you like (:q leaves)"
+
+[[message]]
+zh = "欄號那一行：3gd、t20-20g 用的就是它"
+en = "the row of column numbers — what 3gd and t20-20g count with"
+
+[[message]]
+zh = "欄號：開"
+en = "column numbers: on"
+
+[[message]]
+zh = "欄號：關"
+en = "column numbers: off"

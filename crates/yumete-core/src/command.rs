@@ -90,6 +90,8 @@ pub enum Command {
     /// `:table rules …` — how the columns are told apart (Feature #157).
     /// `None` only reports.
     SetTableRules(Option<crate::table::Rules>),
+    /// `:table numbers on|off` — the row of column numbers above the header.
+    SetTableNumbers(bool),
     /// `:numbers fill` — whether the line-number band has a ground of its
     /// own. `None` toggles.
     SetNumberFill(Option<bool>),
@@ -570,6 +572,8 @@ pub fn parse(input: &str) -> Result<Command, CommandError> {
             "" | "on" => Ok(Command::SetTable(true)),
             "off" => Ok(Command::SetTable(false)),
             "check" => Ok(Command::CheckTable),
+            "numbers" | "numbers on" => Ok(Command::SetTableNumbers(true)),
+            "numbers off" => Ok(Command::SetTableNumbers(false)),
             "rules" => Ok(Command::SetTableRules(None)),
             _ if rest.starts_with("rules ") => {
                 match crate::table::Rules::parse(rest.trim_start_matches("rules ")) {
@@ -1092,6 +1096,12 @@ const TABLE: &[Word] = &[
         help: "欄線：欄與欄之間怎麼分開",
         needs: &[Need::Table],
         then: Args::Words(RULES),
+    },
+    Word {
+        name: "numbers",
+        help: "欄號那一行：3gd、t20-20g 用的就是它",
+        needs: &[Need::Table],
+        then: Args::Words(ON_OFF),
     },
 ];
 

@@ -357,7 +357,7 @@ Phases are ordered by priority, most writer-critical first:
 | 151 | **Both languages**                          | core   | P1    | the Chinese is the key; `messages.toml` holds the pair; `language = "zh"\|"en"` | Done |
 | 152 | **【墨香】 as a computed theme**             | both   | P1    | three anchors in the config, every other shade a rung on the ladder; see §5.2 group 13 | Done |
 | 153 | **Search has two directions**               | core   | P1    | `/` is `:search row`, `Enter` is `:search col` — down one column, then the next | Done |
-| 154 | **`:tutor` — a lesson you edit**            | both   | P1    | vimtutor's idea, on Chinese prose, where `w` and 縱書 can actually be taught | Planned |
+| 154 | **`:tutor` — a lesson you edit**            | both   | P1    | vimtutor's idea, on Chinese prose, where `w` and 縱書 can actually be taught | Done |
 | 155 | **A finished command says what it takes**   | core   | P2    | `:yume` lists `yume scheme`, `yume chaifen`… beside itself; Tab writes the whole sentence | Done |
 | 156 | **`:theme`**                                | both   | P2    | which theme, and dark/light/system, without editing the config | Done |
 | 157 | **`:table rules`**                          | both   | P2    | a dashed line (default), solid, double, a band, or nothing | Done |
