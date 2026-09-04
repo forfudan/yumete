@@ -1176,7 +1176,7 @@ pub fn pick<'a>(typed: &str, from: &'a [Word]) -> Option<&'a Word> {
 }
 
 /// A word offered by completion, whether a command or an argument.
-#[derive(Clone, Copy)]
+#[derive(Clone)]
 pub struct Choice {
     pub name: &'static str,
     pub alias: Option<&'static str>,
@@ -1192,10 +1192,15 @@ pub struct Choice {
     /// for a word it takes. A colon on `on` would be a lie about how to type
     /// it.
     pub leading: &'static str,
-    /// The word this one lives under, when it is being shown *beside* its
+    /// The words this one lives under, when it is being shown *beside* its
     /// parent rather than after it — `yume`, for the `scheme` in `:yume`'s
     /// list. Empty for everything else.
-    pub under: &'static str,
+    ///
+    /// A `String` rather than a `&'static str` because a deep match (#223)
+    /// carries a whole path: `:lingming` is answered with `yume scheme
+    /// lingming`, and `yume scheme` is two words that exist separately in the
+    /// table and nowhere together.
+    pub under: String,
     /// What has to be true before it does anything.
     pub needs: &'static [Need],
 }
@@ -1233,11 +1238,75 @@ fn children(under: &'static str, args: &Args) -> Vec<Choice> {
                 short: None,
                 help: w.help,
                 leading: "",
-                under,
+                under: under.to_string(),
             })
             .collect(),
         _ => Vec::new(),
     }
+}
+
+/// Every word deeper in the tree whose name starts with `typed`, carrying the
+/// path that has to be typed to reach it (#223).
+///
+/// The fallback for a word that names nothing at the depth it was typed at.
+/// `:vert` is not a command — but `vertical` is a word `:layout` takes, and
+/// that is what the reader who typed it meant. The tree is already walked to
+/// offer children; this walks the rest of it.
+///
+/// **Only when nothing matched at this depth.** `:t` is a question about
+/// `:table`, and answering it with a dozen grandchildren called `top` and
+/// `tight` would bury the answer under the guesses.
+fn deep(
+    list: &'static [Word],
+    path: &[&'static str],
+    typed: &str,
+    leading: &'static str,
+    out: &mut Vec<Choice>,
+) {
+    for w in list {
+        if w.name.starts_with(typed) {
+            out.push(Choice {
+                name: w.name,
+                needs: w.needs,
+                alias: None,
+                // Same reason as `children`: a short form is only short beside
+                // its siblings, and this row is being read beside its path.
+                short: None,
+                help: w.help,
+                leading,
+                under: path.join(" "),
+            });
+        }
+        if let Args::Words(inner) = &w.then {
+            let mut below = path.to_vec();
+            below.push(w.name);
+            deep(inner, &below, typed, leading, out);
+        }
+    }
+}
+
+/// The same, from the top: every subcommand of every command.
+///
+/// Sorted shallowest first, so `:layout vertical` is offered before something
+/// three words down that happens to share the prefix.
+///
+/// **`:help`'s own words go last.** Every one of them is the name of something
+/// else — that is what a help topic *is* — so in a deep match they shadow the
+/// thing itself: `:vert` would be answered 「read about 竪排」 before 「switch
+/// to 竪排」. The reader who typed the name of a thing meant the thing.
+fn deep_from_root(typed: &str) -> Vec<Choice> {
+    let mut out = Vec::new();
+    for e in COMMANDS {
+        if let Args::Words(list) = &e.args {
+            deep(list, &[e.name], typed, ":", &mut out);
+        }
+    }
+    let about = |c: &Choice| c.under.starts_with("help");
+    out.sort_by(|a, b| {
+        (about(a), a.under.split(' ').count(), &a.under, a.name)
+            .cmp(&(about(b), b.under.split(' ').count(), &b.under, b.name))
+    });
+    out
 }
 
 /// The two words every switch takes.
@@ -2273,6 +2342,69 @@ pub const COMMANDS: &[Entry] = &[
     },
 ];
 
+/// Whether what is being typed **right now** is free text or a path (#225).
+///
+/// A command line's *names* are ASCII — that is why the IME was kept out of it
+/// altogether — but its **arguments are not**: `:s <正則> <換成什麼>` and
+/// `:e`/`:w`/`:r <檔名>` are exactly the two an editor for Chinese novels wants
+/// 中文 in, and until this they could only be pasted.
+///
+/// Three ways a line can be in text rather than in names:
+///
+/// * `:!…` hands the whole rest of the line to a shell, where a file name is
+///   as likely to be Chinese as anywhere else;
+/// * `:s/照首行/照全表/` is **one word** to a space-splitter, because a
+///   substitution's delimiter is whatever follows the `s` — so it is answered
+///   before the walk, or the case this feature is named after would be the one
+///   case it missed;
+/// * everything else: the finished words are walked, and what they lead to
+///   decides. Once the walk is in `Free` or `Path`, the rest of the line is
+///   too — `:grep 中文 再一個` is all pattern.
+pub fn takes_text(line: &str) -> bool {
+    let line = line.strip_prefix(':').unwrap_or(line);
+    let (_, rest) = parse_rows(line);
+    if rest.starts_with('!') {
+        return true;
+    }
+    if let Some(after) = rest.strip_prefix('s') {
+        if let Some(d) = after.chars().next() {
+            if !(d.is_alphanumeric() || d.is_whitespace() || d == '\\') {
+                return true;
+            }
+        }
+    }
+    // The word at the caret is the one being typed; what comes *before* it is
+    // what says whether it is a name or a value. A line ending in a space is
+    // already asking about the next word.
+    let mut words: Vec<&str> = line.split(' ').filter(|w| !w.is_empty()).collect();
+    if !line.ends_with(' ') {
+        words.pop();
+    }
+    let Some(head) = words.first() else {
+        // Still naming the command. `:層` names nothing and never will.
+        return false;
+    };
+    let head = resolve(head);
+    let Some(entry) = COMMANDS
+        .iter()
+        .find(|e| e.name == head || e.aliases.contains(&head))
+    else {
+        return false;
+    };
+    let mut args = &entry.args;
+    for word in &words[1..] {
+        match args {
+            Args::Words(list) => match list.iter().find(|w| w.name == *word) {
+                Some(found) => args = &found.then,
+                None => return false,
+            },
+            Args::Free(_) | Args::Path => return true,
+            Args::None => return false,
+        }
+    }
+    matches!(args, Args::Free(_) | Args::Path)
+}
+
 /// The commands whose name or alias starts with what has been typed.
 ///
 /// An empty prefix lists everything, which is what makes `:` on its own a menu
@@ -2321,7 +2453,7 @@ pub fn complete_at(line: &str) -> (usize, Vec<Choice>) {
                 short: shortest(e.name, COMMANDS.iter().map(|c| c.name)),
                 help: e.help,
                 leading: ":",
-                under: "",
+                under: String::new(),
             })
             .collect(),
         Some(&(_, head)) => {
@@ -2352,7 +2484,7 @@ pub fn complete_at(line: &str) -> (usize, Vec<Choice>) {
                         short: shortest(w.name, list.iter().map(|o| o.name)),
                         help: w.help,
                         leading: "",
-                        under: "",
+                        under: String::new(),
                     })
                     .collect(),
                 // A path or free text is the caller's business; there is
@@ -2365,12 +2497,37 @@ pub fn complete_at(line: &str) -> (usize, Vec<Choice>) {
                     short: None,
                     help: what,
                     leading: "",
-                    under: "",
+                    under: String::new(),
                 }],
                 Args::None | Args::Path => Vec::new(),
             }
         }
     };
+    // Nothing at this depth knows that word — so look for it deeper (#223).
+    // `:vert` is answered with `:layout vertical`, and `:yume ling` with
+    // `scheme lingming`, because in both the reader named the leaf and not the
+    // path. Guarded on an empty result rather than merged into it: a word that
+    // *does* name something here has been answered already.
+    if choices.is_empty() && !typed.is_empty() {
+        choices = match words.first() {
+            None => deep_from_root(typed),
+            Some(_) => match walk(&words) {
+                // The path already typed is the prefix the reader does not
+                // have to type again, so the offer starts below it.
+                Some(Args::Words(list)) => {
+                    let mut out = Vec::new();
+                    for w in *list {
+                        if let Args::Words(inner) = &w.then {
+                            deep(inner, &[w.name], typed, "", &mut out);
+                        }
+                    }
+                    out
+                }
+                _ => Vec::new(),
+            },
+        };
+    }
+
     // A word that is *finished* also says what may follow it. Nothing is
     // promoted for a half-typed word: `:yu` is still a question about which
     // command, and answering it with a list of the input method's verbs would
@@ -3143,6 +3300,62 @@ mod tests {
         // nothing rather than the whole list again.
         assert!(complete("write draft.md ").is_empty());
         assert!(complete("quit ").is_empty());
+    }
+
+    /// A word that names nothing at the depth it was typed at is looked for
+    /// **deeper** (#223).
+    ///
+    /// The reader who types `:vert` has not made a mistake; they have named
+    /// the leaf and left out the path. Before this, the answer was nothing at
+    /// all — `complete_at` looked the first word up in `COMMANDS`, missed, and
+    /// returned an empty list.
+    #[test]
+    fn a_word_that_names_no_command_is_looked_for_deeper() {
+        let written = |line: &str| -> Vec<String> {
+            complete(line).iter().map(|c| c.written()).collect()
+        };
+
+        // The case that started it. The whole path is what Tab writes, so the
+        // line ends up sayable rather than clever.
+        // `:help` has a 竪排 topic too, and a topic is by construction named
+        // after the thing it is about — so it comes second. Doing beats
+        // reading about doing.
+        assert_eq!(written("vert"), ["layout vertical", "help vertical"]);
+        assert_eq!(written("horiz"), ["layout horizontal"]);
+
+        // And the fallback reaches past the first level: a scheme's name is
+        // two words below `:yume`.
+        assert!(
+            written("lingming").contains(&"yume scheme lingming".to_string()),
+            "a leaf three deep is still reachable by its own name"
+        );
+
+        // What Tab replaces is the word that was typed, and the word starts at
+        // the top of the line — so `:vert` becomes `:layout vertical` and not
+        // `:vertlayout vertical`.
+        assert_eq!(complete_at("vert").0, 0);
+
+        // **Only when nothing matched at this depth.** `:t` names commands, so
+        // it is answered about those and not buried under every grandchild of
+        // the tree that happens to start with a `t`.
+        let shallow = written("t");
+        assert!(shallow.iter().all(|w| !w.contains(' ')), "{shallow:?}");
+        assert!(shallow.len() > 1, "several commands start with t");
+
+        // Deeper down it works the same way: `:yume` knows no word `ling`, so
+        // the offer comes from below it — and carries only the part still
+        // missing, because `yume ` is already on the line.
+        let under_yume: Vec<String> = complete("yume ling")
+            .iter()
+            .map(|c| c.written())
+            .collect();
+        assert!(
+            under_yume.contains(&"scheme lingming".to_string()),
+            "{under_yume:?}"
+        );
+
+        // An empty prefix is not a question, and must never dump the tree.
+        assert!(complete("nosuchcommandanywhere ").is_empty());
     }
 
     /// The other direction of `every_listed_command_parses`: a command that
