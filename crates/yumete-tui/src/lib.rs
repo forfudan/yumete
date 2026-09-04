@@ -1494,7 +1494,10 @@ fn draw(
     draw_picker(frame, editor, config, area, footer);
     // One panel for every half-pressed sequence, `空格` included — it used to
     // draw its own menu and every other prefix got a row.
-    draw_which_key(frame, editor, config, area, footer.y, cursor_x);
+    // **The page's rectangle, not the frame's**: a menu drawn from the frame
+    // covers the sidebar, which is a list the reader may be in the middle of
+    // using.
+    draw_which_key(frame, editor, config, text_area, footer.y, cursor_x);
     // …and the same string beside the caret, where the eyes are.
     draw_hud(frame, editor, config, text_area, (cursor_x, cursor_y));
 
@@ -2533,33 +2536,23 @@ fn draw_horizontal(
     // one of them used to land on the fourth row from the top while the other
     // landed in the middle. The editor knows which moves are jumps — it is the
     // same answer `C-o` is built on.
-    // **Typewriter mode**: the row being written stays in the middle and the
-    // paper moves under it. Every move is treated as a jump, which is exactly
-    // what「keep it centred」means — the centring rule already exists.
-    let jumped = editor.jumped() || editor.typewriter();
-    let cursor_row = match wrap::distance(rope, *viewport, cursor_anchor, measure, last_row) {
-        Some(d) if !jumped && d >= scrolloff && d + scrolloff <= last_row => d,
-        found => {
-            // Too close to an edge: scroll by as little as it takes, which is
-            // what reading down a page wants. **Off the page altogether: put
-            // it in the middle** — that is a *jump* (a search hit, `gg`, a
-            // mark), and landing `scrolloff` from an edge gives the reader
-            // nothing on one side of the thing they were looking for.
-            let inset = match found {
-                _ if jumped => last_row / 2,
-                Some(d) if d < scrolloff => scrolloff,
-                Some(_) => last_row.saturating_sub(scrolloff),
-                // Off the page **either way** is a jump, and a jump lands in
-                // the middle: keying this on direction put a hit found
-                // backwards on the fourth row from the top and one found
-                // forwards in the middle, which is the unpredictability the
-                // reader noticed. `k` at the top edge is not a jump — it is
-                // one row away, and it nudges.
-                None => match wrap::distance(rope, cursor_anchor, *viewport, measure, scrolloff + 1)
-                {
-                    Some(_) => scrolloff,
-                    None => last_row / 2,
-                },
+    // **Where the cursor sits on a page is the editor's answer** — one rule,
+    // asked by this page, by 縱書 and by the grid. A jump lands in the middle
+    // (a search hit, `gg`, a mark), a step off an edge nudges by `scrolloff`,
+    // and typewriter mode keeps the row being written in the middle whatever
+    // it was.
+    let found = wrap::distance(rope, *viewport, cursor_anchor, measure, last_row);
+    let cursor_row = match editor.page_inset(found, last_row, scrolloff) {
+        None => found.unwrap_or(0),
+        Some(inset) => {
+            // `k` at the top edge is one row away, not a jump: it nudges.
+            let inset = match found.is_none()
+                && wrap::distance(rope, cursor_anchor, *viewport, measure, scrolloff + 1).is_some()
+                && !editor.typewriter()
+                && !editor.jumped()
+            {
+                true => scrolloff,
+                false => inset,
             };
             *viewport = wrap::retreat(rope, cursor_anchor, measure, inset);
             wrap::distance(rope, *viewport, cursor_anchor, measure, height).unwrap_or(0)

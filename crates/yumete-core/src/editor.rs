@@ -5091,7 +5091,34 @@ impl Editor {
         }
     }
 
-    /// Whether the cursor's row is kept in the middle of the page.
+    /// **Where the cursor should sit on the page**, in rows from its top.
+    ///
+    /// One answer, asked by all three drawing surfaces — the horizontal page,
+    /// the vertical one and the grid — because 「where does the cursor sit」 is
+    /// one question and three copies of it is how two of them came to miss
+    /// typewriter mode entirely.
+    ///
+    /// `distance` is how far the cursor is from the page's top, if it is on the
+    /// page at all; `last` is the page's last row. `None` means 「leave the
+    /// page where it is」.
+    pub fn page_inset(&self, distance: Option<usize>, last: usize, scrolloff: usize) -> Option<usize> {
+        // Typewriter: the row being written stays in the middle and the paper
+        // moves under it. Every move is a jump, which is what that means.
+        if self.typewriter || self.jumped {
+            return Some(last / 2);
+        }
+        match distance {
+            // On the page with room to spare: leave it alone.
+            Some(d) if d >= scrolloff && d + scrolloff <= last => None,
+            Some(d) if d < scrolloff => Some(scrolloff),
+            Some(_) => Some(last.saturating_sub(scrolloff)),
+            // Off the page altogether is a jump, and a jump lands in the
+            // middle.
+            None => Some(last / 2),
+        }
+    }
+
+    /// Whether the cursor's row is kept in the middle of the page.    /// Whether the cursor's row is kept in the middle of the page.
     pub fn typewriter(&self) -> bool {
         self.typewriter
     }
