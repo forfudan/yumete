@@ -100,3 +100,65 @@ fn the_yume_model_segments_both_scripts() {
     joins("他說道：這裏沒有人。", "說道");
     joins("他说道：这里没有人。", "说道");
 }
+
+/// `:word level` on the real model: the knob moves the boundaries, and it moves
+/// them in the direction its name promises.
+#[test]
+fn the_word_level_changes_how_readily_words_join() {
+    let Some(dir) = data_dir() else {
+        eprintln!("skipping: no installed IME data (run scripts/build.sh)");
+        return;
+    };
+    let session = ImeSession::new(Scheme::Lingming, vec![dir]);
+    if !session.segmenter().is_available() {
+        eprintln!("skipping: the language tables are not installed");
+        return;
+    }
+    let line = "那年冬天他抬頭看了看那片天，山路已經看不見了。";
+    let cut = |level| {
+        let mut words = session.segmenter();
+        yumete_cjk::Segmenter::set_level(&mut words, level);
+        let chars: Vec<char> = line.chars().collect();
+        let found: Vec<String> = yumete_cjk::Segmenter::segment(&words, line)
+            .into_iter()
+            .map(|(a, b)| chars[a..b].iter().collect())
+            .collect();
+        found
+    };
+    let strict = cut(yumete_cjk::WordLevel::Strict);
+    let balanced = cut(yumete_cjk::WordLevel::Balanced);
+    let full = cut(yumete_cjk::WordLevel::Full);
+    assert!(
+        strict.len() > balanced.len(),
+        "strict should cut more:\n  strict   {strict:?}\n  balanced {balanced:?}"
+    );
+    assert!(
+        full.len() < balanced.len(),
+        "full should join more:\n  full     {full:?}\n  balanced {balanced:?}"
+    );
+    // …and none of the three reads the sentence one 字 at a time.
+    assert!(strict.iter().any(|w| w.chars().count() > 1), "{strict:?}");
+}
+
+/// A probe, not an assertion: what each bias does to one real sentence.
+#[test]
+#[ignore]
+fn probe_bias_sensitivity() {
+    let Some(dir) = data_dir() else { return };
+    let session = ImeSession::new(Scheme::Lingming, vec![dir]);
+    let line = "那年冬天他抬頭看了看那片天，山路已經看不見了。";
+    for tenths in -40..=40 {
+        if tenths % 5 != 0 {
+            continue;
+        }
+        let bias = tenths as f64 / 10.0;
+        let mut words = session.segmenter();
+        words.set_bias_for_probe(bias);
+        let chars: Vec<char> = line.chars().collect();
+        let found: Vec<String> = yumete_cjk::Segmenter::segment(&words, line)
+            .into_iter()
+            .map(|(a, b)| chars[a..b].iter().collect())
+            .collect();
+        println!("{bias:+.1}  {}  {found:?}", found.len());
+    }
+}

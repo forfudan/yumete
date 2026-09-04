@@ -64,12 +64,30 @@ const WORD_BONUS: f64 = 3.0;
 pub struct YumeSegmenter {
     unigram: Arc<UnigramTable>,
     lexicon: Arc<Lexicon>,
+    /// `:word level`, as an adjustment to [`WORD_BONUS`] — see
+    /// [`yumete_cjk::WordLevel::split_bias`].
+    ///
+    /// **The tables are shared and never touched.** This lives on the
+    /// segmenter, which only the editor's word motions and the segmentation
+    /// overlay use; typing, candidates and 整句 go through the engine and
+    /// cannot see it.
+    bias: f64,
 }
 
 impl YumeSegmenter {
     /// Build a segmenter over the two language-layer tables.
     pub fn new(unigram: Arc<UnigramTable>, lexicon: Arc<Lexicon>) -> Self {
-        YumeSegmenter { unigram, lexicon }
+        YumeSegmenter {
+            unigram,
+            lexicon,
+            bias: 0.0,
+        }
+    }
+
+    /// A probe for tuning the three levels; not part of the editor's path.
+    #[doc(hidden)]
+    pub fn set_bias_for_probe(&mut self, bias: f64) {
+        self.bias = bias;
     }
 
     /// Whether either table holds enough to segment with.
@@ -114,7 +132,7 @@ impl YumeSegmenter {
                     f64::NEG_INFINITY
                 });
                 if score > f64::NEG_INFINITY {
-                    let total = score + WORD_BONUS + best[i + len];
+                    let total = score + WORD_BONUS + self.bias + best[i + len];
                     if total > best[i] {
                         best[i] = total;
                         cut[i] = len;
@@ -139,6 +157,17 @@ impl YumeSegmenter {
 }
 
 impl Segmenter for YumeSegmenter {
+    fn set_level(&mut self, level: yumete_cjk::WordLevel) {
+        self.bias = level.split_bias();
+    }
+
+    fn source(&self) -> String {
+        format!(
+            "宇浩語言模型 {} 條",
+            self.unigram.count().max(self.lexicon.count())
+        )
+    }
+
     fn segment(&self, s: &str) -> Vec<(usize, usize)> {
         // Non-CJK stretches keep the category rules; only the runs of 漢字 and
         // kana need the dictionary.

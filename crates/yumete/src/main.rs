@@ -10,7 +10,7 @@ use std::io::{self, IsTerminal, Write};
 use std::process::ExitCode;
 
 use yumete_config::Layout;
-use yumete_core::{DictionarySegmenter, Editor, TextStore};
+use yumete_core::{Editor, TextStore};
 use yumete_ime::{ImeSession, Scheme};
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -159,6 +159,9 @@ fn main() -> ExitCode {
     editor.set_autosave(config.editor.autosave);
     // Somewhere for a buffer with no file to keep its recovery copy. Only the
     // front end knows where the data directory is.
+    // Where `:word list global` writes, and where a reader's own dictionary is
+    // read from — the front end's answer, because only it knows XDG.
+    editor.keep_word_list_in(yumete_config::data_dir());
     let drafts = yumete_config::data_dir().join("drafts");
     if std::fs::create_dir_all(&drafts).is_ok() {
         editor.keep_drafts_in(drafts);
@@ -274,15 +277,10 @@ fn main() -> ExitCode {
     // 3. The compact list bundled with yumete, which covers common prose only.
     // Yume's own model is the best of the three and is already loaded above,
     // whether or not the 碼表 is.
-    let threshold = config.editor.segmentation_threshold;
-    let yume = ime.segmenter();
-    if yume.is_available() {
-        editor.set_segmenter(Box::new(yume));
-    } else if let Some(dictionary) = load_segmentation_dictionary(threshold) {
-        editor.set_segmenter(Box::new(dictionary));
-    } else {
-        editor.set_segmenter(Box::new(DictionarySegmenter::builtin(threshold)));
-    }
+    // One answer, in `yumete_tui::choose_words`, so `:word list reload` cannot
+    // pick a different dictionary from the one start-up picked.
+    editor.set_segmenter(yumete_tui::choose_words(&ime, config.editor.word_level));
+    editor.set_word_level(config.editor.word_level);
     editor.set_segmentation_visible(config.editor.show_segmentation);
     if let Some(rules) = yumete_core::table::Rules::parse(&config.editor.table_rules) {
         editor.set_table_rules(rules);
@@ -358,18 +356,6 @@ fn parse_size(text: &str) -> (u16, u16) {
     )
 }
 
-/// Load a `word<TAB>weight` segmentation dictionary from the first
-/// `segmentation.txt` found in the data search path, or `None` if none exists
-/// (in which case the caller falls back to the bundled dictionary).
-fn load_segmentation_dictionary(threshold: i64) -> Option<DictionarySegmenter> {
-    for dir in yumete_config::data_search_dirs() {
-        let path = dir.join("segmentation.txt");
-        if let Ok(text) = std::fs::read_to_string(&path) {
-            return Some(DictionarySegmenter::from_text(&text, threshold));
-        }
-    }
-    None
-}
 
 /// Load a scheme's 碼表 at startup, for a config that asked for one.
 fn switch_scheme_at_startup(

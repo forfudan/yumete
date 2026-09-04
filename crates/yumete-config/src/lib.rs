@@ -88,12 +88,16 @@ pub struct EditorConfig {
     /// does. Kept as the string the reader wrote — the core owns the meaning.
     pub table_rules: String,
     /// Whether the word-segmentation overlay is shown at start-up (Feature #24).
-    /// On by default so the CJK word grouping is visible; toggle with `:segment`
-    /// or set `show_segmentation = false`.
+    /// On by default so the CJK word grouping is visible; toggle with
+    /// `:word show off` or set `show_segmentation = false`.
     pub show_segmentation: bool,
-    /// Minimum weight for a multi-character word to be joined by the dictionary
-    /// segmenter (Feature #24). Zero joins every dictionary word.
-    pub segmentation_threshold: i64,
+    /// How readily characters join into words: `strict`, `balanced`, `full`
+    /// (Feature #24), the same three `:word level` names.
+    ///
+    /// **Replaces `segmentation_threshold`**, which was a raw weight on a scale
+    /// only the bundled list had — it said nothing to a reader and nothing at
+    /// all to the language model, which most machines actually segment with.
+    pub word_level: yumete_cjk::WordLevel,
     /// Horizontal (default) or vertical layout (Feature #61).
     pub layout: Layout,
     /// How many characters fit in one 縱 in vertical layout.
@@ -232,7 +236,7 @@ impl Default for EditorConfig {
             indent_symbol: "↵".to_string(),
             table_rules: "line dash".to_string(),
             show_segmentation: true,
-            segmentation_threshold: 0,
+            word_level: yumete_cjk::WordLevel::default(),
             layout: Layout::Horizontal,
             zong_length: 0,
             indent: 0,
@@ -896,6 +900,16 @@ impl Config {
             }
         }
 
+        // A setting that is gone is said out loud, not dropped: a reader whose
+        // `segmentation_threshold = 50` stopped doing anything would have no
+        // way to find out that the question is now spelled `word_level`.
+        if raw.editor.segmentation_threshold.is_some() {
+            problems.push(
+                "segmentation_threshold 已經沒有了——改成 word_level = \"strict\"／\"balanced\"／\"full\""
+                    .to_string(),
+            );
+        }
+
         // A command a language declares that will not do what it says is a
         // problem *about the config*, named here rather than discovered when
         // the key is pressed.
@@ -1078,6 +1092,9 @@ struct RawEditor {
     indent_symbol: Option<String>,
     table_rules: Option<String>,
     show_segmentation: Option<bool>,
+    word_level: Option<String>,
+    /// Retired. Kept so a config that still sets it is *told*, rather than
+    /// refused by the unknown-key check with no idea what to write instead.
     segmentation_threshold: Option<i64>,
     layout: Option<String>,
     zong_length: Option<usize>,
@@ -1161,6 +1178,9 @@ impl RawConfig {
         }
         if other.editor.show_segmentation.is_some() {
             self.editor.show_segmentation = other.editor.show_segmentation;
+        }
+        if other.editor.word_level.is_some() {
+            self.editor.word_level = other.editor.word_level.clone();
         }
         if other.editor.segmentation_threshold.is_some() {
             self.editor.segmentation_threshold = other.editor.segmentation_threshold;
@@ -1320,8 +1340,13 @@ impl RawConfig {
         if let Some(on) = self.editor.show_segmentation {
             config.editor.show_segmentation = on;
         }
-        if let Some(threshold) = self.editor.segmentation_threshold {
-            config.editor.segmentation_threshold = threshold.max(0);
+        if let Some(level) = self
+            .editor
+            .word_level
+            .as_deref()
+            .and_then(yumete_cjk::WordLevel::parse)
+        {
+            config.editor.word_level = level;
         }
         if let Some(layout) = self.editor.layout {
             // An unrecognised value keeps the default rather than refusing to
@@ -1647,11 +1672,14 @@ mod tests {
             r##"
             [editor]
             show_segmentation = true
-            segmentation_threshold = 50
+            word_level = "strict"
             "##,
         );
         assert!(c.editor.show_segmentation);
-        assert_eq!(c.editor.segmentation_threshold, 50);
+        assert_eq!(c.editor.word_level, yumete_cjk::WordLevel::Strict);
+        // A word nobody defined keeps the default rather than refusing the file.
+        let c = Config::from_toml("[editor]\nword_level = \"whatever\"\n");
+        assert_eq!(c.editor.word_level, yumete_cjk::WordLevel::Balanced);
     }
 
     #[test]

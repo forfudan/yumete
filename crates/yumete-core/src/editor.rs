@@ -631,6 +631,12 @@ pub struct Editor {
     project_words: std::rc::Rc<RefCell<yumete_cjk::WordList>>,
     /// Whether the segmentation overlay (word background tint) is shown.
     show_segmentation: bool,
+    /// How readily characters join into words (`:word level`), kept so a
+    /// segmenter installed later arrives at the level the reader chose.
+    word_level: yumete_cjk::WordLevel,
+    /// `:word list reload` asking the front end to build the dictionary again
+    /// — it owns the IME and the data directory; the editor owns neither.
+    words_request: bool,
     /// How a table's columns are told apart (Feature #157).
     table_rules: crate::table::Rules,
     /// **疏排 on the horizontal page** (Feature #181): a row of air above every
@@ -769,6 +775,8 @@ pub struct Editor {
     table_bypass: std::cell::Cell<bool>,
     /// Where buffers with no file keep their recovery copies.
     drafts_dir: Option<PathBuf>,
+    /// The data directory, for the global word list. Set by the front end.
+    data_dir: Option<PathBuf>,
     /// Where this project's session is remembered — which files were open and
     /// where the cursor was in each.
     session_file: Option<PathBuf>,
@@ -1021,6 +1029,8 @@ impl Editor {
             segmenter: Box::new(CategorySegmenter),
             project_words: std::rc::Rc::new(RefCell::new(yumete_cjk::WordList::default())),
             show_segmentation: false,
+            word_level: yumete_cjk::WordLevel::default(),
+            words_request: false,
             table_rules: crate::table::Rules::default(),
             table_numbers: true,
             detail_width: None,
@@ -1060,6 +1070,7 @@ impl Editor {
             show_detail: true,
             table_bypass: std::cell::Cell::new(false),
             drafts_dir: None,
+            data_dir: None,
             session_file: None,
             turned_for_table: None,
             zong_gap: None,
@@ -2415,10 +2426,7 @@ impl Editor {
                 }
                 Ok(CommandOutcome::Continue)
             }
-            Command::ReloadWords => {
-                self.reload_project_words();
-                Ok(CommandOutcome::Continue)
-            }
+            Command::Word(what) => self.word_command(what),
             Command::SetBands(n) => {
                 self.set_bands(n);
                 Ok(CommandOutcome::Continue)
@@ -2740,15 +2748,7 @@ impl Editor {
                 self.chaifen_request = Some(self.chaifen);
                 Ok(CommandOutcome::Continue)
             }
-            Command::ToggleSegmentation => {
-                let on = self.toggle_segmentation();
-                self.status = if on {
-                    say!("分詞著色：開")
-                } else {
-                    say!("分詞著色：關")
-                };
-                Ok(CommandOutcome::Continue)
-            }
+
         }
     }
 
@@ -7823,6 +7823,138 @@ impl Editor {
         ));
     }
 
+    /// Everything `:word` asks — see [`crate::command::WordCommand`].
+    ///
+    /// **Where one word ends is one subject.** The dictionary decides it, the
+    /// colour shows it, the level tunes it; they were three unrelated things to
+    /// find out about, and two of them were commands nobody would think to look
+    /// for from the third.
+    fn word_command(
+        &mut self,
+        what: crate::command::WordCommand,
+    ) -> Result<CommandOutcome, EditorError> {
+        use crate::command::WordCommand;
+        match what {
+            WordCommand::Report | WordCommand::List => {
+                self.status = say!(
+                    "分詞：{0} · {1} · 著色{2}",
+                    self.segmenter.source(),
+                    self.word_level.name(),
+                    match self.show_segmentation {
+                        true => say!("開"),
+                        false => say!("關"),
+                    }
+                );
+            }
+            WordCommand::Show(on) => {
+                let on = on.unwrap_or(!self.show_segmentation);
+                self.show_segmentation = on;
+                self.status = match on {
+                    true => say!("分詞著色：開"),
+                    false => say!("分詞著色：關"),
+                };
+            }
+            WordCommand::Reload => {
+                // The book's own list, here; the dictionary underneath it is
+                // the front end's to build, so it is asked for one.
+                self.reload_project_words();
+                self.words_request = true;
+            }
+            WordCommand::Edit => {
+                let path = self.project_words_path();
+                self.open_word_list(&path)?;
+            }
+            WordCommand::Global => match self.global_word_list() {
+                Some(path) => self.open_word_list(&path)?,
+                None => self.status = say!("不知道資料目錄在哪裏——這一台上沒有全域詞表"),
+            },
+            WordCommand::Level(None) => {
+                self.status = say!("分詞粒度：{0}", self.word_level.name());
+            }
+            WordCommand::Level(Some(level)) => {
+                self.set_word_level(level);
+                self.status = say!("分詞粒度：{0}", level.name());
+            }
+        }
+        Ok(CommandOutcome::Continue)
+    }
+
+    /// How readily characters join into words (`:word level`).
+    ///
+    /// Kept here as well as pushed into the segmenter, because a segmenter
+    /// installed later — the IME finishing its load, `:word list reload` — has
+    /// to arrive at the level the reader chose rather than at the default.
+    pub fn set_word_level(&mut self, level: yumete_cjk::WordLevel) {
+        self.word_level = level;
+        self.segmenter.set_level(level);
+        self.segment_cache.borrow_mut().clear();
+    }
+
+    /// What the dictionary in force calls itself, for the status line.
+    pub fn words_in_force(&self) -> String {
+        self.segmenter.source()
+    }
+
+    /// The level in force, for the front end to keep across a rebuild.
+    pub fn word_level(&self) -> yumete_cjk::WordLevel {
+        self.word_level
+    }
+
+    /// Take the front end's cue to build the dictionary again.
+    pub fn take_words_request(&mut self) -> bool {
+        std::mem::take(&mut self.words_request)
+    }
+
+    /// Where the global word list lives — the one a reader may edit.
+    ///
+    /// The list compiled into the binary cannot be edited; this is the file
+    /// that overrides it. **The front end says where**, as it does for the
+    /// drafts directory: where the data lives is a question about the machine,
+    /// and the core has no business knowing XDG from a hole in the ground.
+    pub fn keep_word_list_in(&mut self, dir: PathBuf) {
+        self.data_dir = Some(dir);
+    }
+
+    /// That file, or `None` when nobody said where the data directory is.
+    fn global_word_list(&self) -> Option<PathBuf> {
+        self.data_dir.as_ref().map(|d| d.join("segmentation.txt"))
+    }
+
+    /// Where this book's own word list lives, whether or not it is there yet.
+    fn project_words_path(&self) -> PathBuf {
+        let from = self
+            .current_buffer()
+            .path()
+            .and_then(|p| p.parent().map(Path::to_path_buf))
+            .or_else(|| std::env::current_dir().ok())
+            .unwrap_or_else(|| PathBuf::from("."));
+        let mut dir = Some(from.as_path());
+        while let Some(d) = dir {
+            let candidate = d.join(".yumete").join("words.txt");
+            if candidate.is_file() {
+                return candidate;
+            }
+            dir = d.parent();
+        }
+        from.join(".yumete").join("words.txt")
+    }
+
+    /// Open a word list for editing, making the directory it belongs in.
+    ///
+    /// **A list that does not exist yet is opened, not refused** — the same
+    /// answer `gd` gives for a note nobody has written: a page that does not
+    /// exist is how one gets written.
+    fn open_word_list(&mut self, path: &Path) -> Result<(), EditorError> {
+        if let Some(parent) = path.parent() {
+            let _ = std::fs::create_dir_all(parent);
+        }
+        self.open_file(path).map_err(EditorError::Io)?;
+        if self.current_buffer().text().trim().is_empty() {
+            self.status = say!("{0}——一行一個詞，寫完 :w，再 :word list reload", path.display());
+        }
+        Ok(())
+    }
+
     /// Read `.yumete/words.txt` again, and say how many words it holds.
     ///
     /// The name on every page of a novel is the one word no dictionary has —
@@ -7871,7 +8003,6 @@ impl Editor {
         self.show_segmentation
     }
 
-    /// Turn the segmentation overlay on or off.
     /// Whether the editor is in the state `need` asks for.
     fn meets(&self, need: command::Need) -> bool {
         match need {
@@ -12460,14 +12591,14 @@ mod tests {
     fn the_command_line_guesses_the_rest_of_the_name() {
         let mut ed = Editor::new();
         ed.on_key(Key::Char(':'));
-        for c in "seg".chars() {
+        for c in "reco".chars() {
             ed.on_key(Key::Char(c));
         }
-        assert_eq!(ed.prompt_ghost(), "ment", "the rest of `segment`");
+        assert_eq!(ed.prompt_ghost(), "ver", "the rest of `recover`");
 
         // Tab takes the guess, and then there is nothing left to guess.
         ed.on_key(Key::Tab);
-        assert_eq!(ed.prompt(), Some((':', "segment")));
+        assert_eq!(ed.prompt(), Some((':', "recover")));
         assert_eq!(ed.prompt_ghost(), "", "the line is the completion now");
 
         // Nothing is guessed before anything is typed, or once arguments start.
@@ -12524,10 +12655,10 @@ mod tests {
     fn the_completed_command_runs() {
         let mut ed = typed("春江潮水");
         ed.on_key(Key::Char(':'));
-        ed.on_key(Key::Char('s'));
-        ed.on_key(Key::Char('e'));
+        ed.on_key(Key::Char('w'));
+        ed.on_key(Key::Char('o'));
         ed.on_key(Key::Tab);
-        assert_eq!(ed.prompt(), Some((':', "segment")));
+        assert_eq!(ed.prompt(), Some((':', "word")));
         ed.on_key(Key::Enter);
         assert!(ed.status().contains("分詞"), "{}", ed.status());
     }
@@ -17127,13 +17258,29 @@ mod tests {
     }
 
     #[test]
-    fn segment_command_toggles_the_overlay() {
+    fn the_word_command_is_one_subject_from_three_sides() {
         let mut ed = Editor::new();
+        // 著色: named on and off, and flipped when neither is said.
         assert!(!ed.segmentation_visible());
-        ed.execute(":segment").unwrap();
+        ed.execute(":word show on").unwrap();
         assert!(ed.segmentation_visible());
-        ed.execute(":seg").unwrap();
+        ed.execute(":word show").unwrap();
         assert!(!ed.segmentation_visible());
+
+        // 粒度: it says which, and it takes which.
+        ed.execute(":word level").unwrap();
+        assert!(ed.status().contains("balanced"), "{}", ed.status());
+        ed.execute(":word level strict").unwrap();
+        assert_eq!(ed.word_level(), yumete_cjk::WordLevel::Strict);
+        assert!(ed.status().contains("strict"), "{}", ed.status());
+
+        // 詞表: `:word` reports what is in force rather than doing anything.
+        ed.execute(":word").unwrap();
+        assert!(ed.status().contains("分詞"), "{}", ed.status());
+
+        // …and reload is a question for the front end, which owns the IME.
+        ed.execute(":word list reload").unwrap();
+        assert!(ed.take_words_request(), "the front end is asked to rebuild");
     }
 
     #[test]

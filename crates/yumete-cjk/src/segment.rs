@@ -42,6 +42,107 @@ const BUILTIN_DICTIONARY: &str = include_str!("common_words.txt");
 pub trait Segmenter {
     /// Segment `s` into word ranges (character indices, whitespace skipped).
     fn segment(&self, s: &str) -> Vec<(usize, usize)>;
+
+    /// How readily this segmenter joins characters into words (`:word level`).
+    ///
+    /// A default that does nothing, because a segmenter with no dictionary has
+    /// no scale to be strict about: [`CategorySegmenter`] gives every 漢字 a
+    /// word of its own whatever anyone asks for.
+    fn set_level(&mut self, _level: WordLevel) {}
+
+    /// Where these words come from, for the status line to name.
+    fn source(&self) -> String {
+        String::new()
+    }
+}
+
+/// How readily a segmenter joins characters into words.
+///
+/// **One question asked of two different dictionaries.** The bundled list
+/// answers it with a weight threshold (a rare word simply does not join); Yume's
+/// language model answers it with a bias on the score of every multi-character
+/// word, because there is no threshold in a maximum-probability path — the two
+/// mechanisms differ, the reader's question does not.
+///
+/// It is about the **word motions and the overlay only**. Typing, candidates and
+/// 整句 go through the IME engine, which never sees this.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum WordLevel {
+    /// Only words common enough to be beyond argument. 「山路」 stays two
+    /// characters, which is what a proofreader stepping character by character
+    /// actually wants.
+    Strict,
+    /// What the dictionary says, with no thumb on the scale.
+    #[default]
+    Balanced,
+    /// Every word in the table joins, long and odd ones included — 「不由得」,
+    /// 「一時之間」. Useful on 古文, where the long ones are real.
+    Full,
+}
+
+impl WordLevel {
+    /// Parse a `:word level` argument or a `word_level` config value.
+    pub fn parse(value: &str) -> Option<WordLevel> {
+        match value.trim().to_ascii_lowercase().as_str() {
+            "strict" | "few" | "少" | "嚴" => Some(WordLevel::Strict),
+            "balanced" | "normal" | "平衡" => Some(WordLevel::Balanced),
+            "full" | "all" | "全" => Some(WordLevel::Full),
+            _ => None,
+        }
+    }
+
+    /// Its name, as the config writes it and the status line says it.
+    pub fn name(self) -> &'static str {
+        match self {
+            WordLevel::Strict => "strict",
+            WordLevel::Balanced => "balanced",
+            WordLevel::Full => "full",
+        }
+    }
+
+    /// The weight a word must reach to join, on the bundled list's own scale
+    /// (where 我 is 60,000, the median entry 6,000, and a word a novel uses
+    /// once a chapter about 1,000).
+    ///
+    /// `strict` keeps the top quarter — 時候, 什麼, 知道 — and leaves the rest
+    /// as single characters. `balanced` and `full` differ only for the model
+    /// (see [`WordLevel::split_bias`]): a threshold below the smallest weight
+    /// admits everything the list holds, and the list holds nothing absurd.
+    pub fn threshold(self) -> i64 {
+        match self {
+            WordLevel::Strict => 12_000,
+            WordLevel::Balanced | WordLevel::Full => 0,
+        }
+    }
+
+    /// What is added to the **per-word bonus** in a maximum-probability path,
+    /// in log-probability units (nats).
+    ///
+    /// A bonus paid once per word favours *more* words, so a bigger one splits
+    /// harder. The model's own bonus is 3 nats; these are the adjustment.
+    ///
+    /// **Measured, not guessed** — on the installed tables, over 「那年冬天他抬
+    /// 頭看了看那片天，山路已經看不見了。」 (the probe is
+    /// `yumete-ime/tests/real_data.rs::probe_bias_sensitivity`):
+    ///
+    /// ```text
+    /// -1.5   8  那年冬天 他 抬頭 看了看 那片天 山路 已經 看不見了
+    ///  0.0   9  那年冬天 他 抬頭 看了看 那片天 山路 已經 看不見 了
+    /// +2.0  12  那 年 冬天 他 抬頭 看了看 那片 天 山路 已經 看不見 了
+    /// +3.0  16  那 年 冬天 他 抬頭 看 了 看 那 片 天 山 路 已經 看不見 了
+    /// ```
+    ///
+    /// +2.0 for `strict`: 那年冬天 comes apart and 山路 does not, which is 「more
+    /// single characters」 without making the motion useless. +3 takes real
+    /// words apart. −1.5 for `full`: the particles stay glued (看不見了 as one),
+    /// and further down changes nothing — the plateau starts at about −0.5.
+    pub fn split_bias(self) -> f64 {
+        match self {
+            WordLevel::Strict => 2.0,
+            WordLevel::Balanced => 0.0,
+            WordLevel::Full => -1.5,
+        }
+    }
 }
 
 /// The default, dictionary-free segmenter: alphanumeric runs, punctuation runs,
@@ -186,6 +287,14 @@ impl DictionarySegmenter {
 }
 
 impl Segmenter for DictionarySegmenter {
+    fn set_level(&mut self, level: WordLevel) {
+        self.threshold = level.threshold();
+    }
+
+    fn source(&self) -> String {
+        format!("{} 條（內置）", self.word_count())
+    }
+
     fn segment(&self, s: &str) -> Vec<(usize, usize)> {
         let chars: Vec<char> = s.chars().collect();
         let mut ranges = Vec::new();
@@ -403,6 +512,19 @@ impl WithWords {
 }
 
 impl Segmenter for WithWords {
+    fn set_level(&mut self, level: WordLevel) {
+        self.inner.set_level(level);
+    }
+
+    /// The dictionary underneath, and this book's own words on top of it.
+    fn source(&self) -> String {
+        let inner = self.inner.source();
+        match self.words.borrow().len() {
+            0 => inner,
+            n => format!("{inner} ＋ 本書 {n} 個詞"),
+        }
+    }
+
     fn segment(&self, s: &str) -> Vec<(usize, usize)> {
         let ranges = self.inner.segment(s);
         let list = self.words.borrow();
