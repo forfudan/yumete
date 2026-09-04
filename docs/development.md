@@ -413,7 +413,7 @@ Phases are ordered by priority, most writer-critical first:
 | 207 | **The HUD takes whichever row has room** | tui | P2 | beside the caret means the row below it, unless the caret is on the last row — then the row above, the way the command panel already chooses | Done |
 | 208 | **A word boundary is not a highlighter** | tui | P1 | both were 朱, 78% and 91% washed — 1.23:1 apart, which is to say indistinguishable. The word tint is a neutral rung (WORD 962) and `==highlight==` is 金 washed to a contrast target. The quiet end of the ladder was re-spaced with it: SELECTION 700, HEAD 815, chosen by search so 莫蘭迪 still keeps 4.5:1 text on a selection | Done |
 | 209 | **`:yume commit delayed\|unique\|fluency`** | ime | P2 | the three are yume's own (延遲/頂字, 唯一, 整句), merged in yume's own core as the **user layer** of `CommitOverrides`, so what is chosen here means the same in the input method's panel everywhere else. `auto` is 唯一 under the name the habit uses. It survives a scheme switch (it is the writer's, not the scheme's) and never overrules 拼音, which has no 碼表 to look a segment up in and says so. `[ime] commit` is the same setting; `:yume` says which one is answering. `:yume c` is now ambiguous — `ch` / `co` | Done |
-| 210 | **Ghost text — what the file does not have and the page must draw** | both | P1 | the inverse of `hidden`/`folded`, which the page already takes as data. A layout input that inserts cells the buffer has no bytes for, with the caret, the click map, wrapping and 縱 breaks all agreeing about them. Two things need it and neither is doable without it: #211 and #212 | Planned |
+| 210 | **Ghost text — what the file does not have and the page must draw** | both | P1 | the inverse of `hidden`/`folded`, which the page already takes as data. `ghost: &dyn Fn(usize) -> Vec<(usize, String)>` on both `wrap::Measure` and `zong::Grid`, held in the editor (`set_ghost` / `ghost_on_line` / `has_ghost`) because what goes on the page comes from outside the core. A run stands **before** the character it is anchored at and is never split from it; the caret on that character has already passed it; a click on it means it; down the column it takes rows of its own (`Slot::is_ghost()`). Both memos take the runs into their key — a candidate moves while the buffer does not. Two things needed it and neither was doable without it: #211 and #212 | Done |
 | 211 | **`:yume panel full\|bare` and the inline preview** | ime | P1 | 空空如也: the first candidate is drawn **in the text**, as ghost text, with the caret at its end and the code in the HUD below the caret's row (the status line when there is no room). `Tab` summons the full panel from `bare`. Two visual modes, three commit modes (#209), and they are independent | Planned |
 | 212 | **Every table in the file drawn as a table** | both | P1 | `:table on` renders the grid for the whole document, not only the region the cursor is in. It is also the real fix for a markup-bearing table looking ragged: `t f` pads the **source** by display width correctly, but 所見即所得 hides `` ` `` and `**`, so each row loses a different number of cells on the way to the screen. Alignment has to happen **on the page** (ghost padding, #210), not in the file | Planned |
 | 213 | **`:readonly on\|off` and `--readonly`** | core | P1 | one gate at `edit_insert`/`edit_remove` rather than a check per command, `[唯讀]` in the status line, and a file the disk says is read-only enters it by itself — today that is only discovered at `:w` | Planned |
@@ -1171,12 +1171,12 @@ this is the same picture for a headless machine, a bug report, or a reviewer.
 Everything below was agreed with the author, in this order. The table entries
 are #209–#219; this is the detail that does not fit in a Notes column.
 
-**#210 is the keystone.** The page already takes *removal* as data: `wrap::Measure`
-and `zong::Grid` both carry `hidden: &dyn Fn(usize) -> Vec<(usize, usize)>` and
-`folded: &dyn Fn(usize) -> bool`, so 所見即所得 and folding are layout inputs
-rather than special cases in five places. What is missing is the inverse —
-**text the file does not contain and the page must draw**. Two separate features
-turn out to need exactly that, and both are unbuildable without it:
+**#210 was the keystone, and it is in.** The page already took *removal* as data:
+`wrap::Measure` and `zong::Grid` both carry `hidden: &dyn Fn(usize) -> Vec<(usize,
+usize)>` and `folded: &dyn Fn(usize) -> bool`, so 所見即所得 and folding are layout
+inputs rather than special cases in five places. What was missing was the inverse
+— **text the file does not contain and the page must draw**. Two separate
+features need exactly that, and neither was buildable without it:
 
 - the IME's inline preview (#211) draws the first candidate *in the sentence*,
   where the caret has to sit at its end and a click has to resolve past it;
@@ -1187,6 +1187,33 @@ turn out to need exactly that, and both are unbuildable without it:
 So: one layer, `ghost: &dyn Fn(usize) -> Vec<(usize, String)>`, with the caret,
 the click map, wrapping, 縱 breaks and 禁則 all reading it — the same discipline
 `zong_breaks` imposed when a 縱 boundary was being decided in five places.
+
+The runs live on the `Editor` (`set_ghost`, wholesale; `ghost_on_line`;
+`has_ghost`) rather than being worked out in the core, because what stands on
+the page comes from outside it — the candidate the input method is offering, the
+padding that squares a table up. The core's only job is that **everything which
+asks where a character is asks about the same page**.
+
+Four decisions in it that were not obvious, and that the tests now hold:
+
+- **A run stands *before* the character it is anchored at.** So the caret
+  resting on that character has already passed the run, which is what an inline
+  candidate wants: you typed it, the caret is at its end.
+- **A run is measured with its anchor and never split from it.** Otherwise a
+  candidate can be left at the foot of one row with the character it is a
+  candidate *for* at the head of the next.
+- **A click cannot land *in* ghost text** — the cells are on the page but not in
+  the file — so a click anywhere in a run resolves to its anchor.
+- **Both memos have to take the runs into their key.** They are keyed on the
+  buffer's revision, which is why what is *hidden* need not be hashed; a
+  candidate changes on every keystroke while the buffer does not move at all,
+  so keyed without it the page keeps answering with the candidate before last.
+
+Down the column a run takes 縱 rows of its own, standing for no characters —
+`Slot::is_ghost()` is `start == end && !text.is_empty()`, no field of its own,
+because the indent's padding (no characters, draws nothing) is the only other
+thing shaped like it. A candidate typed at the head of a paragraph stands
+*after* the 首行縮進, not in front of it.
 
 **#211, and what「空空如也」means here.** yume's own front end has a full
 candidate panel; yumete does not need a second one on the surface where the

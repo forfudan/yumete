@@ -78,6 +78,16 @@ pub struct Measure<'a> {
     /// here it is a file, because this is the line whose structure is being
     /// changed and there must be no doubt about what is in it.
     open: Option<usize>,
+    /// **Text on the page that the file has no bytes for** — the inverse of
+    /// `hidden`, as `(column within the line, what is drawn there)`.
+    ///
+    /// A ghost run stands *before* the character it is anchored at, and takes
+    /// its width from the page: the row it is on holds that much less writing,
+    /// the caret at the anchor sits after it, and a click on it means the
+    /// anchor. Which is the whole point of it being part of the measure: an
+    /// inline candidate drawn by the renderer alone would put the caret, `j`,
+    /// the mouse and the wrap all on different pages.
+    ghost: &'a dyn Fn(usize) -> Vec<(usize, String)>,
 }
 
 /// A page with nothing hidden, for callers that show the source as it is.
@@ -85,6 +95,9 @@ const NOTHING_HIDDEN: &dyn Fn(usize) -> Vec<(usize, usize)> = &|_| Vec::new();
 
 /// A page with every line on it.
 const NOTHING_FOLDED: &dyn Fn(usize) -> bool = &|_| false;
+
+/// A page with nothing on it but the file's own characters.
+const NOTHING_GHOSTED: &dyn Fn(usize) -> Vec<(usize, String)> = &|_| Vec::new();
 
 impl<'a> Measure<'a> {
     /// `width` cells, with every character on the page.
@@ -95,6 +108,7 @@ impl<'a> Measure<'a> {
             folded: NOTHING_FOLDED,
             indent: 0,
             open: None,
+            ghost: NOTHING_GHOSTED,
         }
     }
 
@@ -106,6 +120,7 @@ impl<'a> Measure<'a> {
             folded: NOTHING_FOLDED,
             indent: 0,
             open: None,
+            ghost: NOTHING_GHOSTED,
         }
     }
 
@@ -175,6 +190,31 @@ impl<'a> Measure<'a> {
     fn off(self, line: usize) -> Vec<(usize, usize)> {
         (self.hidden)(line)
     }
+
+    /// The same measure, with `ghost` naming the text drawn into each line
+    /// that the file does not contain.
+    pub fn with_ghost(self, ghost: &'a dyn Fn(usize) -> Vec<(usize, String)>) -> Measure<'a> {
+        Measure { ghost, ..self }
+    }
+
+    /// The ghost text on `line`, anchored at columns within it, in order.
+    ///
+    /// Public because the renderer and the mouse have to draw and resolve the
+    /// very cells this measured: three questions, one answer.
+    pub fn ghost_on(self, line: usize) -> Vec<(usize, String)> {
+        let mut runs = (self.ghost)(line);
+        runs.sort_by_key(|&(at, _)| at);
+        runs
+    }
+}
+
+/// How many cells the ghost runs anchored at `at` take.
+fn ghost_width(ghost: &[(usize, String)], at: usize) -> usize {
+    ghost
+        .iter()
+        .filter(|&&(a, _)| a == at)
+        .map(|(_, text)| yumete_cjk::str_width(text))
+        .sum()
 }
 
 /// One visual row: the slice of a logical line that fits on one screen row.
@@ -342,6 +382,23 @@ pub fn line_rows_indented(
     hidden: &[(usize, usize)],
     indent: usize,
 ) -> Vec<(usize, usize)> {
+    line_rows_ghosting(text, width, hidden, indent, &[])
+}
+
+/// [`line_rows_indented`], with `ghost` naming text drawn into the line that
+/// the line does not contain.
+///
+/// A ghost run is measured with the character it is anchored at and never
+/// split from it, so it cannot be left hanging at the foot of one row with its
+/// anchor at the head of the next. It is *not* a character: the rows are still
+/// char ranges within the line, and a ghost changes only where they break.
+pub fn line_rows_ghosting(
+    text: &str,
+    width: usize,
+    hidden: &[(usize, usize)],
+    indent: usize,
+    ghost: &[(usize, String)],
+) -> Vec<(usize, usize)> {
     let width = width.max(1);
     let indent = if crate::zong::opens_a_paragraph(text) {
         indent.min(width.saturating_sub(1))
@@ -357,6 +414,11 @@ pub fn line_rows_indented(
     // inside a cluster and a wide glyph is never half on the row.
     let mut cuts: Vec<usize> = Vec::with_capacity(chars.len() + 1);
     let mut widths: Vec<usize> = Vec::with_capacity(chars.len());
+    // What stands *before* each grapheme that the line has no characters for.
+    // Kept apart from `widths` rather than added into it, because `widths` is
+    // also how 禁則 asks 「is this character drawn」: a hidden `**` carrying a
+    // ghost would otherwise start counting as writing.
+    let mut lead: Vec<usize> = Vec::with_capacity(chars.len());
     let mut at = 0;
     for g in graphemes(text) {
         cuts.push(at);
@@ -364,9 +426,13 @@ pub fn line_rows_indented(
         // one after it onto the next row.
         let off = hidden.iter().any(|&(a, b)| at >= a && at < b);
         widths.push(if off { 0 } else { grapheme_width(g) });
+        lead.push(ghost_width(ghost, at));
         at += g.chars().count();
     }
     cuts.push(at);
+    // Ghost text at the very end of the line has no character to stand before;
+    // it stands after the last one, on the last row.
+    let tail = ghost_width(ghost, at);
 
     let mut rows = Vec::new();
     let mut g = 0; // grapheme index of the row start
@@ -377,17 +443,19 @@ pub fn line_rows_indented(
         // As many graphemes as fit, at least one.
         let mut used = 0;
         let mut end = g;
-        while end < widths.len() && (used + widths[end] <= width || end == g) {
-            used += widths[end];
+        while end < widths.len() && (used + lead[end] + widths[end] <= width || end == g) {
+            used += lead[end] + widths[end];
             end += 1;
         }
         if end < widths.len() {
             end = g + adjusted_break(&chars, &cuts, &widths, g, end);
         }
-        last_width = widths[g..end].iter().sum();
+        last_width = widths[g..end].iter().chain(&lead[g..end]).sum();
         rows.push((cuts[g], cuts[end]));
         g = end;
     }
+    // The last row carries whatever was anchored past the last character.
+    last_width += tail;
     // A paragraph that exactly fills its last row leaves the end-of-paragraph
     // caret nowhere to stand: the column after the last glyph is off the row.
     // Open one more, empty, row for it — which is also where the reader expects
@@ -567,12 +635,22 @@ fn rows_of_line(rope: &Rope, line: usize, m: Measure) -> Vec<(usize, usize)> {
     hidden.hash(&mut hasher);
     // The indent changes where a row breaks, so it is part of the key too.
     m.indent_on(line).hash(&mut hasher);
+    // …and so does the ghost text, for exactly the same reason: the same
+    // paragraph wraps differently while a candidate stands in the middle of it.
+    let ghost = m.ghost_on(line);
+    ghost.hash(&mut hasher);
     let hash = hasher.finish();
     if let Some(rows) = remembered(hash, m.width) {
         return rows;
     }
     WRAPPED.with(|n| n.set(n.get() + 1));
-    let rows = line_rows_indented(&line_text(rope, line), m.width, &hidden, m.indent_on(line));
+    let rows = line_rows_ghosting(
+        &line_text(rope, line),
+        m.width,
+        &hidden,
+        m.indent_on(line),
+        &ghost,
+    );
     remember(hash, m.width, &rows);
     rows
 }
@@ -645,6 +723,17 @@ pub fn position(rope: &Rope, pos: usize, m: Measure) -> Position {
         })
         .map(|(_, w)| w)
         .sum();
+    // **Ghost text before the caret is page the caret is past.** A run stands
+    // before the character it is anchored at, so the caret resting *on* that
+    // character sits after it — which is what an inline candidate wants: you
+    // typed it, the caret is at its end.
+    let ghost = m.ghost_on(line);
+    let column = column
+        + ghost
+            .iter()
+            .filter(|&&(a, _)| a >= row_start && a <= col)
+            .map(|(_, text)| yumete_cjk::str_width(text))
+            .sum::<usize>();
     // The indent is real page: a caret on the paragraph's first character sits
     // two cells in, and `j` from the row below should land under it.
     let column = column + m.indent_of(line, &line_text(rope, line), index_in_line);
@@ -1091,5 +1180,63 @@ mod tests {
         let rope = Rope::from_str("abcd\nefgh\n");
         assert_eq!(next_row(&rope, 1, Measure::plain(8), 1), 6);
         assert_eq!(prev_row(&rope, 6, Measure::plain(8), 1), 1);
+    }
+    /// The rows of `text` with ghost runs standing in it — Feature #210.
+    fn ghosted(text: &str, width: usize, ghost: &[(usize, &str)]) -> Vec<(usize, usize)> {
+        let ghost: Vec<(usize, String)> = ghost.iter().map(|(at, t)| (*at, t.to_string())).collect();
+        line_rows_ghosting(text, width, &[], 0, &ghost)
+    }
+
+    #[test]
+    fn ghost_text_takes_room_on_the_row() {
+        // Five 漢字 in eight cells is four and one. Two cells of candidate at
+        // the head of the line leave room for three.
+        assert_eq!(ghosted("春夏秋冬春", 8, &[]), vec![(0, 4), (4, 5)]);
+        assert_eq!(ghosted("春夏秋冬春", 8, &[(0, "候")]), vec![(0, 3), (3, 5)]);
+    }
+
+    #[test]
+    fn a_ghost_is_never_split_from_its_anchor() {
+        // The run is anchored at the fifth character, which is on the second
+        // row. Leaving it at the foot of the first would put a candidate above
+        // the character it is a candidate *for*.
+        assert_eq!(ghosted("春夏秋冬春", 8, &[(4, "候")]), vec![(0, 4), (4, 5)]);
+    }
+
+    #[test]
+    fn ghost_past_the_last_character_still_takes_room() {
+        // Nothing to stand before, so it stands after — on the last row, whose
+        // width it fills, which is what opens the row the caret needs.
+        assert_eq!(ghosted("春夏秋", 8, &[]), vec![(0, 3)]);
+        assert_eq!(ghosted("春夏秋", 8, &[(3, "候")]), vec![(0, 3), (3, 3)]);
+    }
+
+    #[test]
+    fn the_caret_sits_after_the_ghost_it_typed() {
+        // You typed the候: the caret belongs at its end, not in front of it.
+        // Which is to say a run stands *before* its anchor, and the caret
+        // resting on the anchor has already passed it.
+        let rope = Rope::from_str("春夏秋冬\n");
+        let runs = |line: usize| match line {
+            0 => vec![(2usize, "候".to_string())],
+            _ => Vec::new(),
+        };
+        let m = Measure::plain(40).with_ghost(&runs);
+        assert_eq!(position(&rope, 1, m).column, 2, "before the run");
+        assert_eq!(position(&rope, 2, m).column, 6, "on its anchor, so past it");
+        assert_eq!(position(&rope, 3, m).column, 8);
+    }
+
+    #[test]
+    fn a_paragraph_is_re_wrapped_when_only_the_candidate_changed() {
+        // The wrap memo is keyed on the buffer's revision, and a candidate
+        // moves while the buffer does not move at all. Keyed without it, the
+        // page would keep answering with the candidate before last.
+        let rope = Rope::from_str("春夏秋冬春\n");
+        let one = |_: usize| vec![(0usize, "候".to_string())];
+        let two = |_: usize| vec![(0usize, "候補".to_string())];
+        let rows = |m: Measure| rows_of_line(&rope, 0, m);
+        assert_eq!(rows(Measure::plain(8).with_ghost(&one)), vec![(0, 3), (3, 5)]);
+        assert_eq!(rows(Measure::plain(8).with_ghost(&two)), vec![(0, 2), (2, 5)]);
     }
 }

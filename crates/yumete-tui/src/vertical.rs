@@ -181,8 +181,9 @@ pub fn char_at(
     // editor, not worked out again here.
     let hidden = |line: usize| editor.markup_hidden_on_line(line);
     let folded = |line: usize| editor.line_is_folded(line);
+    let ghost = |line: usize| editor.ghost_on_line(line);
     let grid = editor
-        .grid_with(&hidden, &folded)
+        .grid_with(&hidden, &folded, &ghost)
         .with_zong_len(metrics.zong_len);
     let capacity = metrics.capacity(area.width);
     let page = layout_page(buffer.rope(), viewport, grid, &metrics, area, capacity);
@@ -538,8 +539,9 @@ pub fn draw(
     // editor, not worked out again here.
     let hidden = |line: usize| editor.markup_hidden_on_line(line);
     let folded = |line: usize| editor.line_is_folded(line);
+    let ghost = |line: usize| editor.ghost_on_line(line);
     let grid = editor
-        .grid_with(&hidden, &folded)
+        .grid_with(&hidden, &folded, &ghost)
         .with_zong_len(metrics.zong_len);
     // A pane that is only being read has no cursor: the page is laid out
     // around the place it was left at, and the hit is what it marks.

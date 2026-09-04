@@ -2399,9 +2399,11 @@ fn text_at(
             // where a row breaks, so a click resolved without it lands `indent`
             // cells off on every paragraph's first row.
             let fold = |line: usize| editor.line_is_folded(line);
+            let ghost = |line: usize| editor.ghost_on_line(line);
             let measure = wrap::Measure::new(width, &hide)
                 .with_indent(editor.paragraph_indent())
                 .with_folds(&fold)
+                .with_ghost(&ghost)
                 .with_open_line(editor.open_line());
             // The same walk the page was drawn with: a row with a reading
             // over it takes two screen rows, so counting rows from the top
@@ -2426,13 +2428,29 @@ fn text_at(
             let want = (mouse.column - area.x) as usize;
             let goal = want.saturating_sub(gutter);
             let hidden = editor.hidden_on_line(row.line);
+            let ghosts = editor.ghost_on_line(row.line);
             let line_start = buffer.rope().line_to_char(row.line);
             // The row starts where it was drawn: a click anywhere in a
             // paragraph's opening indent means its first character.
             let mut column =
                 measure.indent_of(row.line, &buffer.rope().line(row.line).to_string(), row.index_in_line);
+            // **A click on ghost text means the character it stands before.**
+            // The cells are on the page but not in the file, so they are the
+            // one thing a click cannot land *in*.
+            let ghost_width = |at: usize| -> usize {
+                ghosts
+                    .iter()
+                    .filter(|&&(g, _)| g == at)
+                    .map(|(_, text)| yumete_cjk::str_width(text))
+                    .sum()
+            };
             for at in row.start..row.end {
                 let c = buffer.rope().char(at);
+                let g = ghost_width(at - line_start);
+                if goal < column + g {
+                    return Some(at);
+                }
+                column += g;
                 let off = hidden
                     .iter()
                     .any(|&(a, b)| at - line_start >= a && at - line_start < b);
@@ -2888,9 +2906,11 @@ fn draw_horizontal(
     // row breaks, so the cursor and the page have to be asking about the same
     // one. Here it is only *drawn*.
     let fold = |line: usize| editor.line_is_folded(line);
+    let ghost = |line: usize| editor.ghost_on_line(line);
     let measure = wrap::Measure::new(width, &hide)
         .with_indent(editor.paragraph_indent())
         .with_folds(&fold)
+        .with_ghost(&ghost)
         .with_open_line(editor.open_line());
 
     // A pane that is only being read has no cursor: it is drawn from the
@@ -3076,6 +3096,7 @@ fn draw_horizontal(
         // *drawn*, not from the buffer — and never on the construct the cursor
         // is in, so the cursor is never inside text that is not on the screen.
         let hide = editor.hidden_on_line(row.line);
+        let ghost_runs = editor.ghost_on_line(row.line);
         let start_in_line = row.start - rope.line_to_char(row.line);
         let shown: Vec<bool> = (0..chars.len())
             .map(|i| {
@@ -3083,6 +3104,24 @@ fn draw_horizontal(
                 !hide.iter().any(|&(a, b)| at >= a && at < b)
             })
             .collect();
+        // **Text on the page the file has no bytes for** (Feature #210): the
+        // candidate being typed, a table's padding. Anchored at a column and
+        // drawn before the character there, which is exactly where the measure
+        // charged it — so the caret, `j` and the mouse land on the same cells.
+        let ghosts: Vec<(usize, String)> = ghost_runs
+            .iter()
+            .filter(|&&(at, _)| {
+                at >= start_in_line
+                    && (at < start_in_line + chars.len()
+                        || (row.ends_line && at == start_in_line + chars.len()))
+            })
+            .map(|(at, text)| (at - start_in_line, text.clone()))
+            .collect();
+        // A rung back from the writing, the way a reading is set: it is *about*
+        // the text and is not in it, and ghost text in the text's own ink reads
+        // as something that has already been written.
+        let ghost_style = ground.fg(ink.quiet());
+
         let mut styles = vec![ground; chars.len()];
 
         if show_markup {
@@ -3183,8 +3222,12 @@ fn draw_horizontal(
         // The reading goes above the row it reads — pushed after the row's
         // own spans are styled, because it is placed by the columns the row
         // is actually drawn in.
-        if let Some(reading) = reading_line(editor, ink, rope, &row, &chars, &shown, gutter + indent)
-        {
+        let drawn = Drawn {
+            chars: &chars,
+            shown: &shown,
+            ghosts: &ghosts,
+        };
+        if let Some(reading) = reading_line(editor, ink, rope, &row, drawn, gutter + indent) {
             lines.push(reading);
         }
 
@@ -3202,10 +3245,22 @@ fn draw_horizontal(
         // Coalesce the per-character styles into as few spans as the row needs,
         // leaving out what is not on the page.
         let mut at = 0;
-        while at < chars.len() {
+        let mut gi = 0;
+        loop {
+            while gi < ghosts.len() && ghosts[gi].0 <= at {
+                spans.push(Span::styled(ghosts[gi].1.clone(), ghost_style));
+                gi += 1;
+            }
+            if at >= chars.len() {
+                break;
+            }
             let style = styles[at];
             let mut to = at + 1;
-            while to < chars.len() && styles[to] == style && shown[to] == shown[at] {
+            while to < chars.len()
+                && styles[to] == style
+                && shown[to] == shown[at]
+                && ghosts.get(gi).is_none_or(|&(g, _)| g != to)
+            {
                 to += 1;
             }
             if shown[at] {
@@ -3486,6 +3541,20 @@ fn rows_on_screen(
     out
 }
 
+/// One row as it is **drawn**: the characters on it, which of them reach the
+/// page at all, and the text standing between them that the file has no bytes
+/// for.
+///
+/// Three answers to one question — which cell does each thing go in — so they
+/// travel together. Anything placed by column rather than by character (a
+/// reading, a rule, a highlight) needs all three or it lands somewhere else.
+#[derive(Clone, Copy)]
+struct Drawn<'a> {
+    chars: &'a [char],
+    shown: &'a [bool],
+    ghosts: &'a [(usize, String)],
+}
+
 /// The readings over one row, as the line that is drawn above it.
 ///
 /// Placed by *column*, not by character: a reading belongs over the base it
@@ -3498,10 +3567,14 @@ fn reading_line(
     ink: crate::theme::Palette,
     rope: &yumete_core::Rope,
     row: &wrap::Row,
-    chars: &[char],
-    shown: &[bool],
+    drawn: Drawn,
     lead: usize,
 ) -> Option<Line<'static>> {
+    let Drawn {
+        chars,
+        shown,
+        ghosts,
+    } = drawn;
     let groups = editor.readings_on_line(row.line);
     if groups.is_empty() {
         // 疏排: the row of air itself. Painted rather than skipped, so the page
@@ -3518,12 +3591,23 @@ fn reading_line(
     // reading lands over its own 字 and not two cells to the left of it.
     let mut column = Vec::with_capacity(chars.len() + 1);
     let mut at = lead;
+    // Ghost text takes cells on the row like anything else, so a reading over a
+    // base after it belongs that much further right.
+    let ghost_before = |i: usize| -> usize {
+        ghosts
+            .iter()
+            .filter(|&&(g, _)| g == i)
+            .map(|(_, text)| yumete_cjk::str_width(text))
+            .sum()
+    };
     for (i, &c) in chars.iter().enumerate() {
+        at += ghost_before(i);
         column.push(at);
         if shown[i] {
             at += yumete_cjk::char_width(c);
         }
     }
+    at += ghost_before(chars.len());
     column.push(at);
     let mut out = String::new();
     let mut col = 0usize;
@@ -4043,6 +4127,96 @@ mod tests {
             x += grapheme_width(symbol).max(1) as u16;
         }
         out
+    }
+
+    /// Feature #210: text on the page the file has no bytes for.
+    ///
+    /// Drawn where the *measure* charged for it — this is the whole point of
+    /// the runs going through [`wrap::Measure`] rather than living in the
+    /// renderer: the cells the candidate takes are cells the caret, `j` and
+    /// the mouse all already know about.
+    #[test]
+    fn a_candidate_is_drawn_in_the_cells_the_measure_charged_for() {
+        let mut editor = editor_with("春夏秋冬");
+        editor.set_ghost(vec![(0, 2, "候補".to_string())]);
+        let mut config = Config::default();
+        config.editor.line_numbers = LineNumbers::None;
+        config.editor.show_segmentation = false;
+        let buffer = render_wrapped(&mut editor, &config, 20, 4);
+        assert_eq!(row_text(&buffer, 0).trim_end(), "春夏候補秋冬");
+
+        // A rung back from the writing: it is *about* the text and is not in
+        // it, and a candidate in the text's own ink reads as already written.
+        let quiet = ink(&config).quiet();
+        assert_eq!(buffer[(4, 0)].fg, quiet, "the candidate");
+        assert_ne!(buffer[(0, 0)].fg, quiet, "…but not 春");
+    }
+
+    #[test]
+    fn the_caret_lands_past_the_candidate_it_typed() {
+        let mut editor = editor_with("春夏秋冬");
+        editor.set_ghost(vec![(0, 2, "候補".to_string())]);
+        let mut config = Config::default();
+        config.editor.line_numbers = LineNumbers::None;
+        config.editor.show_segmentation = false;
+        editor.set_wrap_width(20);
+        // On 秋 — which is drawn four cells further right than the file alone
+        // would put it, and the caret has to be there and not on 候.
+        editor.on_key(Key::Char('l'));
+        editor.on_key(Key::Char('l'));
+        let (_, at) = render_caret(&editor, &config, 20, 4);
+        assert_eq!(at.map(|p| p.x), Some(8));
+    }
+
+    /// A click on ghost text means the character it stands before.
+    ///
+    /// The cells are on the page but not in the file, so they are the one
+    /// thing a click cannot land *in* — and the candidate's own cells belong
+    /// to the character being typed, which is the character after them.
+    #[test]
+    fn a_click_on_a_candidate_means_the_character_it_stands_before() {
+        let mut editor = editor_with("春夏秋冬");
+        editor.set_ghost(vec![(0, 2, "候補".to_string())]);
+        let mut config = Config::default();
+        config.editor.line_numbers = LineNumbers::None;
+        config.editor.show_segmentation = false;
+        editor.set_wrap_width(20);
+        let (w, h) = (20u16, 4u16);
+        let mut seats = Seats::default();
+        let mut terminal = Terminal::new(TestBackend::new(w, h)).unwrap();
+        terminal
+            .draw(|frame| draw(frame, &editor, &config, &no_ime(), &mut seats))
+            .unwrap();
+
+        let click = |x: u16| {
+            let mouse = ratatui::crossterm::event::MouseEvent {
+                kind: ratatui::crossterm::event::MouseEventKind::Down(
+                    ratatui::crossterm::event::MouseButton::Left,
+                ),
+                column: x,
+                row: 0,
+                modifiers: ratatui::crossterm::event::KeyModifiers::NONE,
+            };
+            text_at(&editor, &config, Some((w, h).into()), &seats, mouse)
+        };
+        // 春夏候補秋冬 — the candidate is the four cells from 4.
+        assert_eq!(click(0), Some(0), "春");
+        assert_eq!(click(2), Some(1), "夏");
+        for x in 4..8 {
+            assert_eq!(click(x), Some(2), "the candidate at {x} means 秋");
+        }
+        assert_eq!(click(8), Some(2), "秋 itself");
+        assert_eq!(click(10), Some(3), "冬");
+    }
+
+    #[test]
+    fn a_candidate_takes_rows_of_its_own_down_the_column() {
+        let mut editor = editor_with("春夏秋冬");
+        editor.set_ghost(vec![(0, 2, "候補".to_string())]);
+        let config = vertical_config();
+        let buffer = render_vertical(&mut editor, &config, 30, 12);
+        let column: Vec<String> = (0..6).map(|y| at(&buffer, 28, y)).collect();
+        assert_eq!(column, ["春", "夏", "候", "補", "秋", "冬"]);
     }
 
     #[test]
