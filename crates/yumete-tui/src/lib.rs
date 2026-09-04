@@ -4558,12 +4558,12 @@ mod tests {
         let buffer = render(&editor, &config, 60, 10);
         let lit = Some(ink(&config).selection());
 
-        // Row 2 of the file is the first data row, on screen row 1 under the
-        // header; the cursor is in its second cell.
+        // Row 2 of the file is the first data row, on screen row 2 under the
+        // column numbers and the header; the cursor is in its second cell.
         let start = (0..60u16)
-            .find(|&x| buffer[(x, 1)].style().bg == lit)
+            .find(|&x| buffer[(x, 2)].style().bg == lit)
             .expect("a lit cell");
-        assert_eq!(at(&buffer, start, 1), "⿰", "it is the 拆分 cell");
+        assert_eq!(at(&buffer, start, 2), "⿰", "it is the 拆分 cell");
         // The ground runs the column's whole width, past the end of the text —
         // a cell you are inside, not three highlighted characters.
         // Counted, not run-length: a wide glyph covers two cells and ratatui
@@ -4571,17 +4571,18 @@ mod tests {
         // even though the terminal paints the whole glyph. What matters is
         // that the ground reaches past the end of the text.
         let last = (0..60u16)
-            .rfind(|&x| buffer[(x, 1)].style().bg == lit)
+            .rfind(|&x| buffer[(x, 2)].style().bg == lit)
             .unwrap();
-        let text_ends = (start..60).find(|&x| at(&buffer, x, 1) == " " && at(&buffer, x - 1, 1) == " ");
+        let text_ends = (start..60).find(|&x| at(&buffer, x, 2) == " " && at(&buffer, x - 1, 2) == " ");
         assert!(
             last > start + 5,
             "the box is the column's width, not the text's: {start}..{last}"
         );
         assert!(text_ends.is_some_and(|e| last >= e), "the padding is lit too");
-        // …and nothing on the header row or another row is lit.
-        assert!((0..60u16).all(|x| buffer[(x, 0)].style().bg != lit), "not the header");
-        assert!((0..60u16).all(|x| buffer[(x, 2)].style().bg != lit), "not another row");
+        // …and nothing on the frozen rows or on another data row is lit.
+        assert!((0..60u16).all(|x| buffer[(x, 0)].style().bg != lit), "not the numbers");
+        assert!((0..60u16).all(|x| buffer[(x, 1)].style().bg != lit), "not the header");
+        assert!((0..60u16).all(|x| buffer[(x, 3)].style().bg != lit), "not another row");
 
         std::fs::remove_dir_all(&dir).ok();
     }
@@ -4604,12 +4605,13 @@ mod tests {
         config.editor.line_numbers = LineNumbers::Absolute;
         let buffer = render(&editor, &config, 60, 10);
         let row = |y: u16| (0..60u16).map(|x| at(&buffer, x, y)).collect::<String>();
-        // The extra field is drawn: hiding it would hide the damage.
-        assert!(row(2).contains("a") && row(2).contains("b"), "{:?}", row(2));
+        // The extra field is drawn: hiding it would hide the damage. Two rows
+        // are frozen above the data now — the column numbers and the header.
+        assert!(row(3).contains("a") && row(3).contains("b"), "{:?}", row(3));
         // And the row number is marked, so it can be found from a distance.
         let torn = Some(ink(&config).mark());
-        assert_eq!(buffer[(0, 2)].style().fg, torn, "the bad row's number");
-        assert_ne!(buffer[(0, 1)].style().fg, torn, "not the good one's");
+        assert_eq!(buffer[(0, 3)].style().fg, torn, "the bad row's number");
+        assert_ne!(buffer[(0, 2)].style().fg, torn, "not the good one's");
 
         std::fs::remove_dir_all(&dir).ok();
     }
@@ -4686,7 +4688,9 @@ mod tests {
             let n: String = (0..6).map(|x| at(&buffer, x, y)).collect();
             n.trim().parse::<usize>().ok().map(|n| n - 1)
         };
-        for y in 0..h {
+        // The two frozen rows — the column numbers and the header — are not
+        // rows of the table, and the numbers row is all digits.
+        for y in 2..h {
             let Some(line) = numbered(y) else { continue };
             // The phantom last line a trailing newline opens has no cells to
             // point at.

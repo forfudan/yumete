@@ -1990,3 +1990,7 @@ en = "column numbers: on"
 [[message]]
 zh = "欄號：關"
 en = "column numbers: off"
+
+[[message]]
+zh = "第 {0} 行 · 第 {1} 欄"
+en = "row {0} · column {1}"
