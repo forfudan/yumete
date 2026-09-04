@@ -443,10 +443,6 @@ impl Palette {
         self.at(yumete_config::rung::WORD)
     }
 
-    /// 朱, `percent` of the way to the page.
-    fn washed(self, percent: i64) -> Color {
-        self.washed_toward(self.mark, percent)
-    }
 
     /// An accent, `percent` of the way to the page.
     fn washed_toward(self, accent: (u8, u8, u8), percent: i64) -> Color {
