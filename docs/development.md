@@ -405,6 +405,24 @@ Phases are ordered by priority, most writer-critical first:
 | 199 | **The action goes last, after the numbers** | core   | P2    | the author's rule for the table sugars: `t20-20g` goes to cell 20,20 and `t1s2S4s` sorts by column 1 ascending, 2 descending, 4 ascending — the digits are the argument and the verb ends the sequence, so no separator and no space is needed. Supersedes the spellings in #183 and #185 | Done |
 | 200 | **The terminal is asked how wide `—` is**   | tui    | P0    | `ambiguous_width` was a setting nobody could get right: `wide` while the terminal drew narrow put the caret two cells past the character on every line with `——` in it, and stopped a fenced row's ground short by one cell per `▓`. `auto` prints one and reads back the column | Done |
 | 201 | **Esc shuts the window, not the search**    | core   | P1    | after Esc on a preview, `n` fell through to `/`'s repeat — answering about an older pattern, or doing nothing and saying nothing. The hit list outlives the pane, and `n` brings it back | Done |
+| 202 | **`:word` — one command for where a word ends** | both | P1 | `words` and `segment` were two names for one question. `:word segment on\|off`, `:word show`, `:word list reload\|edit\|global`, `:word level less\|more\|full` — the level reaches **both** dictionaries: a threshold for the bundled one, a per-word bonus (+2.0 / 0 / −1.5 nats, measured) for Yume's model. Replaces `segmentation_threshold` in the config | Done |
+| 203 | **Ten themes, and an ASCII name for each** | config | P2 | 藍曬 琥珀 莫高 莫蘭迪 夜螢 明度階 陶窯 靛橘 beside 墨香 and 黑白. A command may not be typed in Chinese, so the name is English (`ink`, `bw`, `cyan`…), the pinyin is the alias (`moxiang`, `heibai`), and the 中文名 lives in the comment. Each is exactly 8 hexes — ink and paper per mood, plus 金 and 朱 | Done |
+| 204 | **`--shot --html`** | cli | P2 | the same frame with its colours, for a review that has to *see* the theme. The shot settles the mood first, or every picture is the light one | Done |
+| 205 | **A sidebar you can page through** | tui | P2 | `J`/`K` by 12, `g`/`G` to the ends. And an outline that leaves the 目錄 out: a heading with fewer than three non-blank lines under it, or a duplicate of the one before it, is a table-of-contents line, not a chapter — 資治通鑑 862 → 295, 紅樓夢 240 → 121 | Done |
+| 206 | **`t` is the table group in every mode** | core | P1 | in source mode `t` used to be 「till the next letter」, which on Chinese prose is a key that does nothing worth a key. Now `t t` enters the grid, `t q` leaves it, `t f` aligns, `t ]` / `t [` walk to the next table. `f`/`F` stay; till retires outright | Done |
+| 207 | **The HUD takes whichever row has room** | tui | P2 | beside the caret means the row below it, unless the caret is on the last row — then the row above, the way the command panel already chooses | Done |
+| 208 | **A word boundary is not a highlighter** | tui | P1 | both were 朱, 78% and 91% washed — 1.23:1 apart, which is to say indistinguishable. The word tint is a neutral rung (WORD 962) and `==highlight==` is 金 washed to a contrast target. The quiet end of the ladder was re-spaced with it: SELECTION 700, HEAD 815, chosen by search so 莫蘭迪 still keeps 4.5:1 text on a selection | Done |
+| 209 | **`:yume commit delayed\|unique\|fluency`** | ime | P2 | yume already has the three strategies (延遲/頂字, 唯一, 整句) behind `CommitOverrides { preset }`; `yumete-ime` does not expose them. One command, one config key, and the mode in `:yume` | Planned |
+| 210 | **Ghost text — what the file does not have and the page must draw** | both | P1 | the inverse of `hidden`/`folded`, which the page already takes as data. A layout input that inserts cells the buffer has no bytes for, with the caret, the click map, wrapping and 縱 breaks all agreeing about them. Two things need it and neither is doable without it: #211 and #212 | Planned |
+| 211 | **`:yume panel full\|bare` and the inline preview** | ime | P1 | 空空如也: the first candidate is drawn **in the text**, as ghost text, with the caret at its end and the code in the HUD below the caret's row (the status line when there is no room). `Tab` summons the full panel from `bare`. Two visual modes, three commit modes (#209), and they are independent | Planned |
+| 212 | **Every table in the file drawn as a table** | both | P1 | `:table on` renders the grid for the whole document, not only the region the cursor is in. It is also the real fix for a markup-bearing table looking ragged: `t f` pads the **source** by display width correctly, but 所見即所得 hides `` ` `` and `**`, so each row loses a different number of cells on the way to the screen. Alignment has to happen **on the page** (ghost padding, #210), not in the file | Planned |
+| 213 | **`:readonly on\|off` and `--readonly`** | core | P1 | one gate at `edit_insert`/`edit_remove` rather than a check per command, `[唯讀]` in the status line, and a file the disk says is read-only enters it by itself — today that is only discovered at `:w` | Planned |
+| 214 | **`:reload`, `:reload!`, `:reload auto`** | core | P1 | a file changed by another program is noticed at `:w` and nowhere else. `:reload` re-reads it, `:reload!` throws local changes away, `:reload auto on` re-reads a **clean** buffer by itself and warns about a dirty one. `:e!` and `:o!` retire outright — no alias, no hint | Planned |
+| 215 | **The dictionary panel, and `t i` for the table's own** | both | P2 | `Tab` on a candidate opens 字典查詢 in the sidebar, the way yume's own panel does; `空格 d`（定義）does the same for a selection in the buffer. Data is yume-core's `AnnotationTable::annotations_for(ch)` — 拆分/編碼/分節編碼/讀音/注釋/字集/Unicode/全息拆分. `空格 d` is the table detail panel today; a table key belongs in the `t` group, so that becomes `t i` | Planned |
+| 216 | **A table recognised rather than declared** | both | P2 | `\|` is not the only grid: a run of lines split by tabs or by runs of spaces is a 碼表, and `dict.yaml` is one with a `---` preamble. Detect it and offer the grid. Test against the 宇浩 tables and the generated `dict.yaml` | Planned |
+| 217 | **A grid whose first row is data** | both | P3 | a 碼表 has no header. One key says so: row one becomes an ordinary row, and the columns are named by number — which #184 already draws | Planned |
+| 218 | **The schema beside the table** | both | P3 | when the file is nothing but a table, open its schema file in the other work area (`:split` already has one), and write a starting one next to the file if none exists | Planned |
+| 219 | **A Windows build** | both | P3 | it cross-compiles today. What is wrong there: `data_dir()` has no `%APPDATA%` branch and falls back to a relative path; `same_file` returns `false` with no inodes, so 「寫入按身份認」 loses its guard; `shell()` assumes `$SHELL`/`/bin/sh`; and nothing looks where yume installs its own tables, so 卿雲 is not found | Planned |
 
 ### 14 · What four reviews of the code found, 2026-09-03
 
@@ -1146,6 +1164,85 @@ this is the same picture for a headless machine, a bug report, or a reviewer.
 - **The column-number row's contrast** on the chrome ground was raised as a
   finding; measuring it properly means measuring the whole ladder, which is a
   theme review rather than a patch.
+
+### 16 · The queue, 2026-09-04
+
+Everything below was agreed with the author, in this order. The table entries
+are #209–#219; this is the detail that does not fit in a Notes column.
+
+**#210 is the keystone.** The page already takes *removal* as data: `wrap::Measure`
+and `zong::Grid` both carry `hidden: &dyn Fn(usize) -> Vec<(usize, usize)>` and
+`folded: &dyn Fn(usize) -> bool`, so 所見即所得 and folding are layout inputs
+rather than special cases in five places. What is missing is the inverse —
+**text the file does not contain and the page must draw**. Two separate features
+turn out to need exactly that, and both are unbuildable without it:
+
+- the IME's inline preview (#211) draws the first candidate *in the sentence*,
+  where the caret has to sit at its end and a click has to resolve past it;
+- a table drawn as a table (#212) pads cells **on the screen**, which is the only
+  place the padding can be right when 所見即所得 has already eaten a different
+  number of markup cells from every row.
+
+So: one layer, `ghost: &dyn Fn(usize) -> Vec<(usize, String)>`, with the caret,
+the click map, wrapping, 縱 breaks and 禁則 all reading it — the same discipline
+`zong_breaks` imposed when a 縱 boundary was being decided in five places.
+
+**#211, and what「空空如也」means here.** yume's own front end has a full
+candidate panel; yumete does not need a second one on the surface where the
+writing happens. Two visual modes, then: `full` is today's panel, `bare` draws
+nothing but the first candidate as ghost text, with the code in the HUD below
+the caret's row (the status line when there is no room below it), and `Tab`
+summons the full panel for the one word that needs it. This is independent of
+**how** a word commits — that is #209, three modes (延遲, 唯一, 整句), which yume
+already implements behind `CommitOverrides { preset }` and which `yumete-ime`
+simply does not pass through.
+
+**#213 and #214 are one worry with two answers.** A file open in the editor and
+changed by something else is noticed today at `:w` and nowhere else — the hash
+check that stops the overwrite is right, but it fires at the *last* possible
+moment, after an hour of typing into a stale buffer. `:reload` is the way back,
+`:reload auto on` is the way to not need it (a **clean** buffer re-reads itself;
+a dirty one is warned about and left alone, because merging is not the editor's
+decision), and `:readonly` is the way to open something you have no business
+changing. `:e!` and `:o!` retire outright: no alias and no hint, per the author's
+standing rule that a better spelling replaces the old one rather than joining it.
+
+**#215 moves a key that was in the wrong group.** `空格 d` is the table detail
+panel, which is a table key living outside `t`. With `t` now the table group in
+every mode (#206) it becomes `t i`, and `空格 d`（定義）is freed for the thing a
+reader of Chinese actually wants a definition key for: 字典查詢 on the selection,
+the same panel `Tab` opens on a candidate. The data is already there —
+`AnnotationTable::annotations_for(ch)` gives 拆分, 編碼, 分節編碼, 讀音, 注釋,
+字集, Unicode and 全息拆分.
+
+**#216–#218 are the 碼表 as a first-class document.** A 拆分表 is a table whose
+delimiter happens to be a tab, `dict.yaml` is one behind a `---` preamble, and
+neither is written with `|`. Detecting them is what makes table mode useful on
+the files this editor was built for; a headerless grid (#217) and a schema file
+opened in the other work area (#218) are what make them editable.
+
+**#219, Windows: it compiles.** Cross-built on 2026-09-04 with
+`x86_64-pc-windows-gnu` and mingw-w64 — an 8.9 MB PE32+ console executable,
+yume-core and all. The platform-specific code is all behind `cfg` with a
+fallback, and `libc` is declared only under `[target.'cfg(unix)'.dependencies]`.
+What is **wrong** there, none of it caught by the compiler:
+
+- `yumete_config::data_dir()` knows `XDG_DATA_HOME` and `HOME` and nothing else,
+  so on Windows it falls back to a *relative* `.local\share\yumete` — a data
+  directory that moves with the working directory. It needs `%APPDATA%`.
+- `Buffer::same_file` compares `dev` and `ino`, and returns `false` everywhere
+  else. 「寫入按身份認，不按拼法認」 is a real invariant with a real test, and on
+  Windows it silently has no teeth: the answer there is
+  `GetFileInformationByHandle` (volume serial + file index).
+- `shell()` is `$SHELL` or `/bin/sh`, which `:sh`, `:!` and `:shot` all go
+  through.
+- Nothing looks where **yume** installs its own tables, so a machine with 卿雲
+  already installed would still be asked to compile them. This is the one item
+  that is not yumete's to decide: the platform paths belong in `yume-core`
+  beside `data_manifest`, and the question is with the yume side.
+
+Until then a `[ime] data_dirs` key — the reader naming the directory themselves —
+is the honest fallback, and it is worth having on every platform anyway.
 
 ### 14 · What was deliberately left undone, 2026-09-04
 
