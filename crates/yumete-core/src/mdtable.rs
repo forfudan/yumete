@@ -644,7 +644,7 @@ pub fn padding(
         for (c, &(start, end)) in cs.iter().enumerate() {
             let (from, to) = spans[i][c];
             let lead = usize::from(from == start);
-            let trail = usize::from(to == end);
+            let trail = usize::from(to == end && closes(&chars[i], end));
             widths.push(visible_width(&chars[i], (start, end), &rows[i].1) + lead + trail);
         }
         room.push(widths);
@@ -675,6 +675,15 @@ pub fn padding(
             // `|a|b|` is a table, it is only not *drawn* as one yet.
             if from == start {
                 push_run(&mut runs, from, " ".to_string());
+            }
+            // **A cell with no pipe after it is padded against nothing.** A row
+            // may end without its closing pipe; filling that last cell out to
+            // the column's width would leave trailing space on the page and
+            // line nothing up, so it gets the space off its own pipe and no
+            // more. It still votes on the width — its content is as real as
+            // any other row's.
+            if !closes(line, end) {
+                continue;
             }
             let short = target[c] - room[i][c];
             // The colons of `:---:` are the alignment: the dashes grow between
@@ -708,6 +717,11 @@ pub fn padding(
     out
 }
 
+/// Whether the box ending at `end` is closed by a pipe of its own.
+fn closes(chars: &[char], end: usize) -> bool {
+    chars.get(end) == Some(&'|')
+}
+
 /// Add `text` to the run standing before `at`, keeping one run per anchor.
 fn push_run(runs: &mut Vec<(usize, String)>, at: usize, text: String) {
     if text.is_empty() {
@@ -720,11 +734,25 @@ fn push_run(runs: &mut Vec<(usize, String)>, at: usize, text: String) {
 }
 
 /// How wide a cell is **on the screen**: its own width, less what is hidden.
+///
+/// Measured over graphemes, and hidden by the cluster's first character —
+/// which is how [`crate::wrap`] measures the row this padding has to line up
+/// with. Per *character* it disagreed with the page over anything the two
+/// count differently: a tab, a control character or a lone combining mark is
+/// nought here and one cell there, and the table stood one cell out for good.
 fn visible_width(chars: &[char], (start, end): (usize, usize), hidden: &[(usize, usize)]) -> usize {
-    (start..end.min(chars.len()))
-        .filter(|at| !hidden.iter().any(|&(a, b)| (a..b).contains(at)))
-        .map(|at| yumete_cjk::char_width(chars[at]))
-        .sum()
+    let end = end.min(chars.len());
+    let start = start.min(end);
+    let text: String = chars[start..end].iter().collect();
+    let mut at = start;
+    let mut width = 0;
+    for g in yumete_cjk::graphemes(&text) {
+        if !hidden.iter().any(|&(a, b)| (a..b).contains(&at)) {
+            width += yumete_cjk::grapheme_width(g);
+        }
+        at += g.chars().count();
+    }
+    width
 }
 
 /// A rule row for a table this wide, for a header that has not got one yet.
@@ -950,6 +978,27 @@ mod tests {
             vec!["| a  | bbb |", "| -- | --- |", "| cc | d   |"],
             "the file is untouched; the page lines up"
         );
+    }
+
+    /// A row may end without its closing pipe, and then its last cell has
+    /// nothing to line up against: padding it would put trailing whitespace on
+    /// the page and square nothing up.
+    #[test]
+    fn a_cell_with_no_pipe_after_it_is_padded_against_nothing() {
+        let out = padded("|a|bbb|\n|-|-|\n|cc|d\n", &[]);
+        assert_eq!(out[2], "| cc | d", "no fill, no space, no pipe");
+        // It still votes: `cc` is as real as any other row's content.
+        assert_eq!(out[0], "| a  | bbb |");
+    }
+
+    /// The page measures graphemes and gives every ASCII byte one cell; per
+    /// *character* this module gave a tab nought, and the table stood one cell
+    /// out for good.
+    #[test]
+    fn a_cell_is_measured_the_way_the_page_measures_it() {
+        let out = padded("|a\tb|c|\n|-|-|\n|xyz|c|\n", &[]);
+        let width = |s: &str| s.chars().count();
+        assert_eq!(width(&out[0]), width(&out[2]), "{out:?}");
     }
 
     #[test]
