@@ -1698,3 +1698,259 @@ en = "start of the file (g30g goes to line 30)"
 [[message]]
 zh = "這個詞還在哪裏：這邊找／那邊看"
 en = "where else this word is: / here, ? in the other area"
+
+[[message]]
+zh = "{0}（:q 關掉；/ 可以搜）"
+en = "{0} (:q closes it; / searches)"
+
+[[message]]
+zh = "一縱多少字；0 是跟着窗高走"
+en = "how many characters a column holds; 0 follows the window"
+
+[[message]]
+zh = "上一縱／下一縱——縱是往左疊的"
+en = "previous/next column — columns stack leftwards"
+
+[[message]]
+zh = "下一詞首、上一詞首、詞尾——認得漢字的詞"
+en = "next word, previous word, end of word — it knows 漢字 words"
+
+[[message]]
+zh = "中文"
+en = "Chinese"
+
+[[message]]
+zh = "候選詞下面顯示拆分"
+en = "show the 拆分 under each candidate"
+
+[[message]]
+zh = "再做一次剛才那次改動"
+en = "do that edit again"
+
+[[message]]
+zh = "分幾段：一頁上下兩段，像報紙"
+en = "bands: two per page, one above the other, as a newspaper sets them"
+
+[[message]]
+zh = "別的幾節"
+en = "the other sections"
+
+[[message]]
+zh = "前進／後退半頁；L H 是整頁"
+en = "half a page forward/back; L and H are whole pages"
+
+[[message]]
+zh = "加一行／刪一行；t j t k 上下移"
+en = "add a row / drop this row; t j and t k move it"
+
+[[message]]
+zh = "動：命令＋選擇＋動作"
+en = "moving: command + selection + action"
+
+[[message]]
+zh = "去第 30 行"
+en = "go to line 30"
+
+[[message]]
+zh = "去／看它指的地方：腳註的註、拆分的那一行"
+en = "go to / show what this points at: a footnote's note, a component's row"
+
+[[message]]
+zh = "取這一欄／貼一欄"
+en = "yank this column / put one"
+
+[[message]]
+zh = "命令"
+en = "commands"
+
+[[message]]
+zh = "在光標前／後開始打字"
+en = "start typing before/after the cursor"
+
+[[message]]
+zh = "左下上右；竪排裏是沿着縱走"
+en = "left, down, up, right — down the column in 竪排"
+
+[[message]]
+zh = "常用"
+en = "the usual keys"
+
+[[message]]
+zh = "所有 : 命令"
+en = "every : command"
+
+[[message]]
+zh = "把分出來的詞用底色標出來"
+en = "tint each word the segmenter found"
+
+[[message]]
+zh = "把這個檔案當表格讀；:table off 退出"
+en = "read this file as a grid; :table off leaves"
+
+[[message]]
+zh = "按格走；Tab 換成按字走"
+en = "step by cell; Tab steps by character instead"
+
+[[message]]
+zh = "換方案：靈明、星陳、卿雲、日月、拼音"
+en = "switch scheme: 靈明, 星陳, 卿雲, 日月, 拼音"
+
+[[message]]
+zh = "搜索、下一處、上一處"
+en = "search, next, previous"
+
+[[message]]
+zh = "撤銷／重做"
+en = "undo / redo"
+
+[[message]]
+zh = "改"
+en = "editing"
+
+[[message]]
+zh = "改成在第 3 欄／第 2–5 欄裏找"
+en = "look in column 3 / columns 2–5 instead"
+
+[[message]]
+zh = "數字在前是次數"
+en = "a number in front is a count"
+
+[[message]]
+zh = "數字數——漢字、標點、西文分開數"
+en = "count the characters — 漢字, punctuation and Latin counted apart"
+
+[[message]]
+zh = "格子裏：下一格／上一格"
+en = "inside a cell: next cell / previous cell"
+
+[[message]]
+zh = "標點旁置"
+en = "hanging punctuation"
+
+[[message]]
+zh = "標點旁置：句讀掛在字旁邊的邊欄裏"
+en = "hanging punctuation: 句讀 sit in the margin beside the character"
+
+[[message]]
+zh = "檔首／檔尾"
+en = "start / end of the file"
+
+[[message]]
+zh = "段首空兩格，段間的空行就收起來"
+en = "open a paragraph two squares in, and take the blank line between them off the page"
+
+[[message]]
+zh = "每一節都是這個編輯器自己報上來的，不是抄的。"
+en = "every section here is reported by the editor itself, not copied out of a manual."
+
+[[message]]
+zh = "沒有「{0}」這一節——:help 有 chinese、vertical、table、commands"
+en = "there is no section 「{0}」 — :help has chinese, vertical, table, commands"
+
+[[message]]
+zh = "沿着這一縱往下／往上"
+en = "down / up this column"
+
+[[message]]
+zh = "漢字、標點、注音、輸入法"
+en = "漢字, punctuation, readings, the IME"
+
+[[message]]
+zh = "照這一欄順排／倒排"
+en = "sort by this column, ascending / descending"
+
+[[message]]
+zh = "疏排：每縱之間留一格"
+en = "loose setting: a cell of air between columns"
+
+[[message]]
+zh = "稿紙刻度：每十個字一個記號"
+en = "manuscript ticks: a mark every ten characters"
+
+[[message]]
+zh = "空格開頭的"
+en = "what Space opens"
+
+[[message]]
+zh = "竪排"
+en = "vertical writing"
+
+[[message]]
+zh = "給選中的字注音；:ruby format 統一寫法"
+en = "annotate the selection; :ruby format makes the spellings agree"
+
+[[message]]
+zh = "縦中横：兩位數字轉正"
+en = "縦中横: two digits set upright"
+
+[[message]]
+zh = "縮進／退縮進"
+en = "indent / unindent"
+
+[[message]]
+zh = "行首／行尾／首個非空白"
+en = "line start / line end / first non-blank"
+
+[[message]]
+zh = "表格與拆分表"
+en = "grids, and the 拆分表"
+
+[[message]]
+zh = "複製／貼上"
+en = "yank / put"
+
+[[message]]
+zh = "記住這裏／回到那裏"
+en = "remember this place / go back to it"
+
+[[message]]
+zh = "詞的邊界是分詞算出來的，不是空格"
+en = "word boundaries come from segmentation, not from spaces"
+
+[[message]]
+zh = "誰用了它——一欄一欄地找：這邊找／那邊看"
+en = "who uses this — down the columns: / here, ? in the other area"
+
+[[message]]
+zh = "跳回去／再跳回來"
+en = "jump back / forward again"
+
+[[message]]
+zh = "轉成竪排；:layout 來回切"
+en = "turn the page vertical; :layout switches back and forth"
+
+[[message]]
+zh = "這一格在 key 欄裏是哪一行：去／看"
+en = "which row this cell names in the key column: go / show"
+
+[[message]]
+zh = "這個詞還在哪裏：這邊找／另一個工作區看"
+en = "where else this word is: / here, ? in the other work area"
+
+[[message]]
+zh = "進格子打字／清掉這一格"
+en = "type in the cell / empty it"
+
+[[message]]
+zh = "選這一行；d 刪選區，c 換掉選區"
+en = "select the line; d deletes the selection, c changes it"
+
+[[message]]
+zh = "重讀 .yumete/words.txt——這本書自己的詞"
+en = "re-read .yumete/words.txt — this book's own words"
+
+[[message]]
+zh = "錄一段按鍵／放一遍"
+en = "record keys / play them back"
+
+[[message]]
+zh = "鍵和命令，開成一個可以讀、可以搜的檔案"
+en = "the keys and the commands, opened as a file you can read and search"
+
+[[message]]
+zh = "開／關輸入法；單獨按一下 Shift 切中英"
+en = "turn the IME on/off; a lone Shift tap switches 中/英"
+
+[[message]]
+zh = "關掉欄之間的分隔線"
+en = "turn off the rules between columns"
