@@ -61,3 +61,42 @@ fn real_pinyin_scheme_switch_stays_available() {
     let name = session.scheme_name();
     assert!(name.contains("拼音"), "{name}");
 }
+
+/// **Which dictionary actually drives `w`/`b`/`e`**, on a machine that has the
+/// real data.
+///
+/// Yume's own language model is 繁簡混合 and is what the editor prefers; the
+/// list bundled in the binary is the fallback for a machine with no data
+/// installed. Asserting it here so 「the word list is simplified-only」 can
+/// never again be said about the model, only about the fallback.
+#[test]
+fn the_yume_model_segments_both_scripts() {
+    let Some(dir) = data_dir() else {
+        eprintln!("skipping: no installed IME data (run scripts/build.sh)");
+        return;
+    };
+    let session = ImeSession::new(Scheme::Lingming, vec![dir]);
+    let words = session.segmenter();
+    if !words.is_available() {
+        eprintln!("skipping: the language tables are not installed");
+        return;
+    }
+    let joins = |line: &str, want: &str| {
+        let chars: Vec<char> = line.chars().collect();
+        let found: Vec<String> = yumete_cjk::Segmenter::segment(&words, line)
+            .into_iter()
+            .map(|(a, b)| chars[a..b].iter().collect())
+            .collect();
+        // Joined *into a word* — the model may take 「那時候」 whole, which is
+        // still a word motion stepping over 時候 rather than through it.
+        assert!(
+            found.iter().any(|w| w.chars().count() > 1 && w.contains(want)),
+            "{found:?} never joins {want}"
+        );
+    };
+    // The same sentence in both scripts, and neither is read one 字 at a time.
+    joins("那時候他抬頭看了看。", "時候");
+    joins("那时候他抬头看了看。", "时候");
+    joins("他說道：這裏沒有人。", "說道");
+    joins("他说道：这里没有人。", "说道");
+}

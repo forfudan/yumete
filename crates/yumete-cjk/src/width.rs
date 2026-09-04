@@ -62,6 +62,18 @@ pub fn str_width(s: &str) -> usize {
     }
 }
 
+/// The width **a renderer that never heard of the setting** gives `s`.
+///
+/// Plain Annex #11, Ambiguous counted narrow, whatever [`set_ambiguous_wide`]
+/// was told. ratatui lays its cells out with exactly this, so anything reading
+/// a drawn buffer back — `frame_to_text`, a click map over a rendered panel —
+/// has to step by *this* width and not by the editor's, or it walks off the
+/// row: one `—` set wide by the editor is one cell to the renderer, and the
+/// reader skips the character standing in the next one.
+pub fn drawn_width(s: &str) -> usize {
+    UnicodeWidthStr::width(s)
+}
+
 /// The visual width of a single grapheme cluster, using *editor* semantics.
 ///
 /// This differs from [`str_width`] in two ways, matching Helix's `grapheme_width`:
