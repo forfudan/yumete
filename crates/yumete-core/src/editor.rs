@@ -6256,11 +6256,15 @@ impl Editor {
         };
         // The field the cursor is in is shown even when it is empty: that it
         // *is* empty is the answer to "what is in this cell".
+        // **Numbered the same way the rows are**, or the panel can never find
+        // the field the cursor is in: it compared 「unicode」 against 「 9
+        // unicode」, never matched, and so never scrolled to it and never lit
+        // it — both of the things it promises.
         let here_name = view
             .schema
             .columns
             .get(cell)
-            .map(|c| c.heading().to_string())
+            .map(|c| format!("{:>2} {}", cell + 1, c.heading()))
             .unwrap_or_default();
         let mut rows: Vec<(String, String)> = view
             .schema
@@ -7628,13 +7632,20 @@ impl Editor {
                 }
                 // A count typed the other way round is still part of what was
                 // typed: `3gd` says `3g` here, not `g`.
+                // A count typed the other way round is still part of what was
+                // typed: `3gd` says `3g` here, not `g`. **In the order it was
+                // typed** — `2-5g`, not `-52g`, which is what two inserts at
+                // index 0 produced.
                 None => {
+                    let mut before = String::new();
                     if let Some(n) = self.operator_count {
-                        out.insert_str(0, &n.to_string());
+                        before.push_str(&n.to_string());
                     }
                     if let Some((_, to)) = self.column_span {
-                        out.insert_str(0, &format!("-{to}"));
+                        before.push('-');
+                        before.push_str(&to.to_string());
                     }
+                    out.insert_str(0, &before);
                 }
             }
             return out;
@@ -13113,7 +13124,11 @@ mod tests {
 
         let d = ed.detail().expect("a row has fields");
         assert_eq!(d.title, "一", "titled by its key");
-        assert_eq!(d.here, "字", "and it says which field you are in");
+        // Numbered exactly as the rows are, or the panel can never find the
+        // field the cursor is in — which is how it came to scroll to the top
+        // and light nothing.
+        assert_eq!(d.here, " 1 字", "and it says which field you are in");
+        assert!(d.rows.iter().any(|(name, _)| *name == d.here), "and it is one of them");
         // **Numbered, and all of them** — the keys count columns (`3gd`,
         // `t20-20g`), and an empty field is a finding in a 拆分表, not a thing
         // to hide.
