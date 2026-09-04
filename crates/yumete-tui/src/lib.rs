@@ -224,6 +224,20 @@ pub fn run(
                     continue;
                 }
                 let (code, mods) = normalize_shift(key.code, key.modifiers);
+                // **`C-Space` 開／關輸入法.** The lesson opens with it, `:help`
+                // lists it, and nothing implemented it: the key fell through to
+                // the editor as an unbound `Ctrl(' ')` and was ignored, so the
+                // first thing this editor asks a new reader to press did
+                // nothing at all. A terminal that cannot tell Ctrl+Space from
+                // NUL sends `Char('\0')`; both spellings arrive here.
+                let control_space = mods.contains(KeyModifiers::CONTROL)
+                    && matches!(code, KeyCode::Char(' ') | KeyCode::Char('\0') | KeyCode::Null);
+                if control_space && composes(editor.mode()) {
+                    let want = if ime.is_chinese() { "-" } else { "+" };
+                    let said = switch_scheme(ime, want, &config);
+                    editor.set_status(said);
+                    continue;
+                }
                 let consumed = composes(editor.mode())
                     && ime.available()
                     && ime_handle(ime, editor, code, mods);
@@ -6611,6 +6625,22 @@ mod tests {
             KeyModifiers::NONE,
         );
         assert_eq!(editor.current_buffer().text(), "八");
+    }
+
+    /// `C-Space` is the first key the lesson asks a reader to press.
+    #[test]
+    fn control_space_turns_the_ime_on_and_off() {
+        // The switch itself, spelled the way the main loop spells it. It went
+        // unimplemented for as long as the lesson has taught it: `Ctrl(' ')`
+        // reached the editor, which has no binding for it, and nothing
+        // happened or was said.
+        let config = Config::default();
+        let mut ime = ImeSession::from_table_text(Scheme::Lingming, "b 吧 八\n");
+        assert!(ime.is_chinese(), "a loaded table starts in Chinese");
+        let said = switch_scheme(&mut ime, "-", &config);
+        assert!(!ime.is_chinese(), "{said}");
+        let said = switch_scheme(&mut ime, "+", &config);
+        assert!(ime.is_chinese(), "{said}");
     }
 
     #[test]
