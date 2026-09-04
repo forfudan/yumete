@@ -27,10 +27,19 @@ fn a_seven_hundred_chapter_book_has_seven_hundred_chapters() {
     let mut editor = Editor::new();
     editor.open_file(&path).expect("open 資治通鑑");
     let outline = editor.outline();
+    // 294 卷, and the outline is that many and not much more: the 目錄 at the
+    // top of the file names every one of them and is *not* in it.
     assert!(
-        outline.len() > 250,
-        "only {} headings in a book of 294 卷",
+        (250..350).contains(&outline.len()),
+        "{} headings in a book of 294 卷",
         outline.len()
+    );
+    // The listing lines — 卷002, 卷003 one after another with nothing under
+    // them — are gone, and the ones that are left have writing under them.
+    assert!(
+        outline.iter().filter(|(line, _, _)| *line < 300).count() <= 1,
+        "the 目錄 at the top is still in the outline: {:?}",
+        outline.iter().take(4).collect::<Vec<_>>()
     );
     // The unit comes first and there is no 第 — the spelling that made the
     // first version of this find twelve chapters in the whole book.

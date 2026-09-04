@@ -195,6 +195,17 @@ impl Sidebar {
         };
     }
 
+    /// Jump to the top or the bottom of the list.
+    ///
+    /// `g` and `G`, as in the text: an outline of 700 chapters has two ends
+    /// worth reaching in one key, and 「hold j」 is not a way to reach either.
+    pub fn go_to_end(&mut self, bottom: bool) {
+        self.selected = match bottom {
+            true => self.rows.len().saturating_sub(1),
+            false => 0,
+        };
+    }
+
     /// Enter the highlighted row.
     ///
     /// In the tree a directory opens or closes and a file is handed back to be

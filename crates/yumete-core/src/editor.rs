@@ -441,7 +441,7 @@ impl Grain {
 /// and a chapter word, or that is one of a dozen names a book uses for its
 /// front and back matter. A line of prose that happens to open with 第一章的
 /// 那天 is 20 characters into a sentence and is not caught by this.
-fn chapter_heading(line: &str) -> Option<usize> {
+fn chapter_heading(line: &str) -> Option<(usize, String)> {
     const NAMED: &[&str] = &[
         "序", "序章", "序言", "自序", "前言", "引子", "楔子", "小引", "凡例",
         "尾聲", "尾声", "終章", "终章", "後記", "后记", "跋", "附錄", "附录",
@@ -457,7 +457,7 @@ fn chapter_heading(line: &str) -> Option<usize> {
     }
     // 序、楔子、後記: no number, so the whole line has to be the name.
     if NAMED.contains(&text) {
-        return Some(2);
+        return Some((2, text.to_string()));
     }
     // A 卷 holds 章 the way a part holds chapters, so it sits above them.
     let depth = |unit: char| match unit {
@@ -471,17 +471,22 @@ fn chapter_heading(line: &str) -> Option<usize> {
     // 資治通鑑 writes all 294 of its 卷, and the book this feature was written
     // for. A unit with no number after it is prose: 「話說天下大勢」 opens 三國
     // 演義 and is not a chapter heading.
-    let (unit, after) = match chars[0] {
+    let (unit, after, number) = match chars[0] {
         '第' => {
             let digits = run(1);
             if digits == 0 {
                 return None;
             }
-            (*chars.get(1 + digits)?, 2 + digits)
+            let number: String = chars[1..1 + digits].iter().collect();
+            (*chars.get(1 + digits)?, 2 + digits, number)
         }
         first if depth(first).is_some() => {
             let digits = run(1);
-            (digits > 0).then_some((first, 1 + digits))?
+            if digits == 0 {
+                return None;
+            }
+            let number: String = chars[1..1 + digits].iter().collect();
+            (first, 1 + digits, number)
         }
         _ => return None,
     };
@@ -492,7 +497,16 @@ fn chapter_heading(line: &str) -> Option<usize> {
         Some(c) if c.is_whitespace() || matches!(c, '、' | '：' | ':' | '.' | '·' | '，') => {}
         Some(_) => return None,
     }
-    depth(unit)
+    // **The number, not the line**, so a book that writes the same chapter twice
+    // running — 「第一卷　周紀一」 and then 「巻一 ◄ 資治通鑑」 at its end — is
+    // one chapter in the outline. 巻 and 卷 are the same 卷.
+    let same = |c: char| match c {
+        '巻' => '卷',
+        '节' => '節',
+        '话' => '話',
+        other => other,
+    };
+    depth(unit).map(|d| (d, format!("{}{}", same(unit), number)))
 }
 
 /// Call `f` for every readable file under `root`, depth first.
@@ -2111,12 +2125,44 @@ impl Editor {
         // has said how it marks a chapter, and a stray 第三章 line in its prose
         // is not a second opinion.
         if out.is_empty() {
+            // Every line that *reads* as a chapter heading…
+            let mut found: Vec<(usize, usize, String, String)> = Vec::new();
             for line in 0..rope.len_lines() {
                 let text = rope.line(line).to_string();
                 let trimmed = text.trim_end_matches(['\n', '\r']);
-                if let Some(depth) = chapter_heading(trimmed) {
-                    out.push((line, depth, trimmed.trim().to_string()));
+                if let Some((depth, key)) = chapter_heading(trimmed) {
+                    found.push((line, depth, trimmed.trim().to_string(), key));
                 }
+            }
+            // …minus the **table of contents**. 資治通鑑 opens with 294 lines
+            // reading 卷002, 卷003, 卷004 — every chapter named, none of them
+            // *at* its chapter, and together they are the whole of the outline
+            // panel before a reader can reach the first page of writing.
+            //
+            // What tells them apart is not how they are written but what is
+            // under them: **a chapter has writing under it.** A listing has the
+            // next listing — and, in this book, the odd 「秦紀」 label between
+            // two of them, which is why the bar is three lines and not one.
+            // Measured on the corpora: at three lines 資治通鑑's outline is 295
+            // for its 294 卷 and 紅樓夢's is 121 for its 120 回; at one line
+            // they are 310 and 122, the extras all listing lines.
+            const WRITING_UNDER_A_CHAPTER: usize = 3;
+            let mut last: Option<String> = None;
+            for (n, (line, depth, title, key)) in found.iter().enumerate() {
+                let next = found.get(n + 1).map(|&(l, ..)| l).unwrap_or(rope.len_lines());
+                let writing = (line + 1..next)
+                    .filter(|&l| !rope.line(l).to_string().trim().is_empty())
+                    .take(WRITING_UNDER_A_CHAPTER)
+                    .count();
+                if writing < WRITING_UNDER_A_CHAPTER {
+                    continue;
+                }
+                // …and a chapter marked twice running is one chapter.
+                if last.as_deref() == Some(key.as_str()) {
+                    continue;
+                }
+                last = Some(key.clone());
+                out.push((*line, *depth, title.clone()));
             }
         }
         out
@@ -9201,8 +9247,14 @@ impl Editor {
     /// A pane that takes the keys has to say how to give them back, in the
     /// place a reader already looks for what is going on.
     pub fn sidebar_keys() -> String {
-        say!("j k 移動 · l 進入 · h 收起 · Tab 換視圖 · w 寬窄 · R 重讀 · C-w/Esc 回正文 · q 關")
+        say!("j k 移動 · J K 翻頁 · g G 兩端 · l 進入 · h 收起 · Tab 換視圖 · w 寬窄 · R 重讀 · C-w/Esc 回正文 · q 關")
     }
+
+    /// How many rows `J`/`K` move in a list — a screenful of a sidebar, near
+    /// enough. The sidebar does not know how tall it is drawn (the front end
+    /// does), and a list moves by a *fixed* amount for the same reason `J`
+    /// moves by half a page in the text: the eye keeps its place.
+    const PAGE_IN_A_LIST: usize = 12;
 
     /// Run one key while the sidebar has the keys.
     ///
@@ -9217,17 +9269,23 @@ impl Editor {
         match key {
             Key::Char('j') | Key::Down => sidebar.step(true),
             Key::Char('k') | Key::Up => sidebar.step(false),
-            // A list pages too, and by the same keys.
-            Key::PageDown => {
-                for _ in 0..10 {
+            // **A list pages by the same keys the page does.** `J`/`K` are
+            // half a page in the text; a 700-chapter outline is the one list
+            // where walking it by `j` is not walking, and `PageDown` is not on
+            // every keyboard a novelist owns.
+            Key::Char('J') | Key::PageDown => {
+                for _ in 0..Self::PAGE_IN_A_LIST {
                     sidebar.step(true);
                 }
             }
-            Key::PageUp => {
-                for _ in 0..10 {
+            Key::Char('K') | Key::PageUp => {
+                for _ in 0..Self::PAGE_IN_A_LIST {
                     sidebar.step(false);
                 }
             }
+            // …and the ends, spelled as they are in the text.
+            Key::Char('g') | Key::Home => sidebar.go_to_end(false),
+            Key::Char('G') | Key::End => sidebar.go_to_end(true),
             // The views are built when they are opened, not on every key, so
             // `R` is how a writer who has just added a file or a chapter says
             // to look again.
@@ -13163,9 +13221,15 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         let novel = dir.join("novel.txt");
+        // Three lines of writing under each: a heading with nothing under it
+        // is a 目錄 line, and this file is not a 目錄.
         std::fs::write(
             &novel,
-            "楔子\n那年冬天。\n第一卷\n第一章　風雪\n他抬頭看了看那片天。\n第二章\n雪還在下。\n第三章魚是一句話的開頭\n",
+            "楔子\n那年冬天。\n雪下得早。\n山路斷了。\n\
+             第一卷\n他抬頭看了看那片天。\n雪還在下。\n山路已經看不見了。\n\
+             第一章　風雪\n風從北面來。\n院子裏那棵老槐樹壓斷了一根枝。\n他站了很久。\n\
+             第二章\n第二天雪停了。\n路上沒有人。\n他一個人走。\n\
+             第三章魚是一句話的開頭，不是標題。\n",
         )
         .unwrap();
         let mut ed = Editor::new();
@@ -13175,8 +13239,9 @@ mod tests {
         assert_eq!(titles, ["楔子", "第一卷", "第一章　風雪", "第二章"]);
         assert_eq!(headings[1].1, 1, "a 卷 holds 章, so it sits above them");
         assert_eq!(headings[2].1, 2);
+        // The third heading is 第一章　風雪, eight lines in.
         ed.execute(":toc 3").unwrap();
-        assert_eq!(ed.cursor_line(), 3);
+        assert_eq!(ed.cursor_line(), headings[2].0);
 
         // **資治通鑑 writes all 294 of its 卷 as 卷002** — the unit first and no
         // 第 at all, which is the book this was written for and the one the
@@ -13184,7 +13249,9 @@ mod tests {
         let history = dir.join("history.txt");
         std::fs::write(
             &history,
-            "卷002\n漢紀。\n卷003　夏本紀第二\n周紀。\n話說天下大勢，分久必合。\n",
+            "卷002\n漢紀一。\n威烈王二十三年。\n初命晉大夫。\n\
+             卷003　夏本紀第二\n周紀二。\n臣光曰。\n夫禮，辨貴賤。\n\
+             話說天下大勢，分久必合。\n",
         )
         .unwrap();
         let mut ed = Editor::new();
