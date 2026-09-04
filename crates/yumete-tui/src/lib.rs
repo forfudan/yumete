@@ -356,7 +356,15 @@ pub fn run(
                             // the preview, made once and handed to the browser.
                             yumete_core::syntax::Syntax::Markdown => {
                                 let out = std::env::temp_dir().join("yumete-preview.html");
-                                match editor.execute(&format!("export html {}", out.display())) {
+                                // `export!`, not `export`: the plain form
+                                // refuses to overwrite a file that is already
+                                // there, which is right for a manuscript and
+                                // wrong for the scratch page this rewrites
+                                // every time. Without the `!` the *second*
+                                // `:preview` of a Markdown file failed, and
+                                // said so in the language of a command the
+                                // reader had not typed.
+                                match editor.execute(&format!("export! html {}", out.display())) {
                                     Ok(_) => {
                                         show(&out.to_string_lossy());
                                         editor.set_status(format!("預覽：{}", out.display()));
@@ -807,9 +815,40 @@ fn whose() -> String {
     std::env::var("USER").unwrap_or_else(|_| "anon".to_string())
 }
 
-/// Remember that this process is running a typesetter.
-fn note_the_server(pid: u32) {
-    let _ = std::fs::write(server_note(), pid.to_string());
+/// Remember that this process is running a typesetter, and which one.
+///
+/// **The name goes in beside the pid.** Adoption has to check that the pid is
+/// still the program we started — a pid is reused, and killing whatever
+/// inherited it would be far worse than leaving a server running — and the
+/// check used to compare against the literal string `tinymist`. A preview
+/// server declared in a project's own config (`[language.markdown] preview`)
+/// was therefore never adopted: it is exactly the orphan nobody would think to
+/// look for.
+///
+/// **Written without following a symlink.** The path is predictable and lives
+/// in a directory anyone can write to, so the plain `fs::write` would happily
+/// follow a link somebody left there and truncate the file at the other end.
+fn note_the_server(pid: u32, program: &str) {
+    let line = format!("{pid}\t{program}");
+    #[cfg(unix)]
+    {
+        use std::io::Write;
+        use std::os::unix::fs::OpenOptionsExt;
+        let opened = std::fs::OpenOptions::new()
+            .write(true)
+            .create(true)
+            .truncate(true)
+            .mode(0o600)
+            .custom_flags(libc::O_NOFOLLOW)
+            .open(server_note());
+        if let Ok(mut file) = opened {
+            let _ = file.write_all(line.as_bytes());
+        }
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = std::fs::write(server_note(), line);
+    }
 }
 
 /// Forget it: the server has been stopped.
@@ -824,15 +863,38 @@ fn forget_the_server() {
 /// is simply removed. Returns what it did, for the status line.
 #[cfg(unix)]
 fn adopt_an_orphan() -> Option<String> {
+    use std::io::Read;
+    use std::os::unix::fs::OpenOptionsExt;
     let note = server_note();
-    let pid: u32 = std::fs::read_to_string(&note).ok()?.trim().parse().ok()?;
+    // Read without following a link, for the same reason it is written that
+    // way: the path is predictable and the directory is public.
+    let mut wrote = String::new();
+    std::fs::OpenOptions::new()
+        .read(true)
+        .custom_flags(libc::O_NOFOLLOW)
+        .open(&note)
+        .ok()?
+        .read_to_string(&mut wrote)
+        .ok()?;
+    let (pid, started) = match wrote.trim().split_once('\t') {
+        Some((pid, program)) => (pid, program.to_string()),
+        // A note from a version that wrote the pid alone.
+        None => (wrote.trim(), "tinymist".to_string()),
+    };
+    let pid: u32 = pid.trim().parse().ok()?;
     let named = std::process::Command::new("ps")
         .args(["-p", &pid.to_string(), "-o", "comm="])
         .output()
         .ok()?;
     let name = String::from_utf8_lossy(&named.stdout).trim().to_string();
     let _ = std::fs::remove_file(&note);
-    if !name.ends_with("tinymist") {
+    // Still the program we started? `ps` gives a path for some programs and a
+    // bare name for others, and the config may have named either.
+    let started = std::path::Path::new(&started)
+        .file_name()
+        .map(|n| n.to_string_lossy().to_string())
+        .unwrap_or(started);
+    if started.is_empty() || !name.ends_with(&started) {
         return None;
     }
     // SAFETY: a pid this process wrote down, checked to still be the program
@@ -873,7 +935,7 @@ impl Job {
             .stderr(std::process::Stdio::piped())
             .spawn()
             .map_err(|e| say!("{0}：{1}", program, e))?;
-        note_the_server(child.id());
+        note_the_server(child.id(), program);
         let (send, said) = std::sync::mpsc::channel();
         if let Some(log) = child.stderr.take() {
             std::thread::spawn(move || {
