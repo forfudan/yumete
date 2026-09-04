@@ -471,6 +471,76 @@ index, and a row with no number anywhere else is a row that got lost.
 | 258 | **Files with 40 MB single lines** | core | P4 | the per-paragraph caches are keyed by revision and sized by what is on screen, so the budget is already the right shape; nothing has tested it against one line that is the whole file. **medium** | Planned |
 | 259 | **A live prose tint for English** | tui | P4 | the same per-frame budget the CJK work spends, aimed at the other language. **medium** | Planned |
 | 260 | **Macros as editable text** | core | P4 | record, then *read and fix* what was recorded. **medium** | Planned |
+| 261 | **A table is a delimiter, a surface and a boundary** | core | P2 | the author's model, 2026-09-05: a CSV file is the special case of a table whose boundary is the whole file, so `Shape::{Delimited,Markdown}` should split into two independent axes — **separator** (`Delimiter(c)` / `Pipe`) and **surface** (`Page` / `InProse`) — plus a `Boundary` that is recomputed, never stored (`md_region()`'s own rule). Three tiers fall out: a CSV/TSV/schema'd file is `Delimiter` × `Page` over the whole file; a `\|` table is `Pipe` × `InProse` over `md_region()`; and **the third cell does not exist today** — a block of TSV or `&` pasted into a chapter, entered by standing on the delimiter (or selecting the lines) and walked out while the line still holds it. `turn_for_table` then asks `surface == Page` instead of `shape != Markdown`, which is what it always meant. Enables #227 (one rewriter instead of two) and #142's 「cell model over a region」. See §5.5 | Planned |
+
+### 5.5 · A table is a delimiter, a surface and a boundary (#261)
+
+**The author's model, 2026-09-05:** 「csv 文件等同于一个从第一行到最后一行都是表格
+的普通文本文件」 — a CSV file is not a different kind of thing from a table inside a
+document, it is the case where the boundary happens to be the whole file.
+
+That is right, and it says where the current type is wrong. `TableView` was
+already built around one cell model and two surfaces — `cell_position`,
+`cell_span`, `cell_text`, `row_cells`, `column_values`, `goal` and `Grain` do
+not know whether the grid is the file or a block in it. What is *not*
+generalised is the boundary: `Shape::Markdown` gets one from `md_region()`, a
+walk from the cursor recomputed every time and cached by `(buffer, revision,
+line)`, while `Shape::Delimited` has **no boundary at all** — it is implicitly
+`0..len_lines`. So the fix is to make 「the whole file」 a value of the boundary
+rather than the absence of one.
+
+But `Shape` cannot collapse to one dimension, because it is currently saying two
+things at once: *the separator is a comma* **and** *this is drawn by
+`yumete-tui/src/table.rs`*, a separate grid widget that clears the frame and
+freezes a header. A delimited block inside a chapter cannot use that widget —
+the paragraph above it would vanish — so it has to draw through #212's ghost-text
+padding, like a `|` table. Two independent axes:
+
+```
+Separator: Delimiter(char) | Pipe
+Surface:   Page | InProse
+Boundary:  WholeFile | Md | Block { … }      ← recomputed, never stored
+```
+
+| | separator | surface | boundary |
+| --- | --- | --- | --- |
+| CSV / TSV / a file a schema claims | `Delimiter(c)` | `Page` | the whole file |
+| a `\|` table in a document | `Pipe` | `InProse` | `md_region()` |
+| **a block in a chapter — new** | `Delimiter(c)` | `InProse` | walked from the cursor |
+| a `\|` file with nothing else in it | `Pipe` | `Page` | the whole file |
+
+This is the decoupling: `editor.rs` holds about twenty `shape == Shape::Markdown`
+tests, and they are not all asking the same question — some mean 「which splitter」
+and some mean 「is this inside prose」. Mixed into one enum, every new kind of
+table makes all twenty need rereading.
+
+**Entering the third tier.** Stand on the delimiter and press the key: what is
+under the cursor names the separator, so nothing has to be prompted for — `ci"`'s
+own idea. Or select the lines, and the separator is inferred from what the
+selection holds most of. Four rules the walk needs:
+
+- **A single space is never a delimiter.** A paragraph of 中文 with an English
+  word in it has one; 中文 that really is aligned is padded with runs of spaces
+  or 全角空格. Two or more, or nothing — which is how `column -t` and awk read it
+  too.
+- **A blank line is not the boundary, it is *a* boundary.** A table often sits
+  directly under `## 第三章` with no blank line, and may hold a blank line of its
+  own. Walk up and down while the line still contains the separator; stop at a
+  blank line as well.
+- **Check before entering.** If the walked block's rows disagree wildly about how
+  many cells they have, the separator was guessed wrong: say so on the status
+  line rather than draw a crooked grid. `looks_delimited()` is that test already.
+- **`&` is LaTeX and Typst**, and the editor already knows Typst. Covering it as
+  a third-tier separator is cheap now; `#table` may earn the second tier later.
+
+**縱書 stays as it is** (the author, 2026-09-05): only the `Page` axis forces the
+page horizontal. A `|` table inside a vertical chapter is edited in place, which
+is what `turn_for_table`'s existing Markdown exception already does — under the
+split it stops being an exception and becomes `surface == Surface::Page`, which
+is what the line always meant.
+
+**Land it as one commit that changes no behaviour**, with the third tier and #227
+after it.
 
 ### 14 · What four reviews of the code found, 2026-09-03
 
