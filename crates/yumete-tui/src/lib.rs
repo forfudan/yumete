@@ -129,6 +129,34 @@ pub fn frame_to_text(
     width: u16,
     height: u16,
 ) -> String {
+    frame_to(editor, config, ime, width, height, false)
+}
+
+/// The same frame **with its colours**, as one self-contained HTML `<pre>`.
+///
+/// Text answers 「where is everything」; this answers 「what does it look
+/// like」, which is the other half of a screenshot and the half a theme is
+/// judged on. Every cell becomes a span carrying its own ink and ground, so
+/// what a browser shows is what the terminal would show — no palette, no
+/// approximation, the actual bytes the renderer produced.
+pub fn frame_to_html(
+    editor: &mut Editor,
+    config: &Config,
+    ime: &ImeSession,
+    width: u16,
+    height: u16,
+) -> String {
+    frame_to(editor, config, ime, width, height, true)
+}
+
+fn frame_to(
+    editor: &mut Editor,
+    config: &Config,
+    ime: &ImeSession,
+    width: u16,
+    height: u16,
+    html: bool,
+) -> String {
     let backend = ratatui::backend::TestBackend::new(width, height);
     let mut terminal = ratatui::Terminal::new(backend).expect("a terminal over a buffer");
     let mut viewport = Seats::default();
@@ -153,6 +181,9 @@ pub fn frame_to_text(
         .draw(|frame| draw(frame, editor, config, ime, &mut viewport))
         .expect("draw one frame");
     let buffer = terminal.backend().buffer();
+    if html {
+        return buffer_to_html(buffer);
+    }
     let mut out = String::new();
     for y in 0..buffer.area.height {
         let mut row = String::new();
@@ -2064,6 +2095,64 @@ fn draw_which_key(
 }
 
 /// Write `text` from `x`, stopping at `limit`, one cell per column./// Write `text` from `x`, stopping at `limit`, one cell per column.
+/// A drawn buffer as one HTML `<pre>`: a span per run of same-styled cells.
+fn buffer_to_html(buffer: &ratatui::buffer::Buffer) -> String {
+    use ratatui::style::Color;
+    // The terminal's own default, for a cell that names no colour of its own.
+    // A picture has no terminal, so it says what the theme's page says.
+    let hex = |c: Option<Color>, fallback: &str| -> String {
+        match c {
+            Some(Color::Rgb(r, g, b)) => format!("#{r:02X}{g:02X}{b:02X}"),
+            Some(Color::Indexed(i)) => format!("var(--ansi-{i}, {fallback})"),
+            _ => fallback.to_string(),
+        }
+    };
+    let escape = |s: &str| -> String {
+        s.replace('&', "&amp;").replace('<', "&lt;").replace('>', "&gt;")
+    };
+    let ground = hex(buffer[(0, buffer.area.height.saturating_sub(1))].style().bg, "#111111");
+    let mut out = format!("<pre class=\"yumete-shot\" style=\"background:{ground}\">");
+    for y in 0..buffer.area.height {
+        let mut x = 0;
+        while x < buffer.area.width {
+            let cell = &buffer[(x, y)];
+            let style = cell.style();
+            let fg = hex(style.fg, "#DDDDDD");
+            let bg = hex(style.bg, &ground);
+            let bold = style
+                .add_modifier
+                .contains(ratatui::style::Modifier::BOLD);
+            let reversed = style
+                .add_modifier
+                .contains(ratatui::style::Modifier::REVERSED);
+            let (fg, bg) = match reversed {
+                true => (bg, fg),
+                false => (fg, bg),
+            };
+            // One span per *run* of cells that look the same, or a page of
+            // Chinese prose is three thousand spans.
+            let mut run = String::new();
+            while x < buffer.area.width {
+                let here = &buffer[(x, y)];
+                let same = here.style() == style;
+                if !same {
+                    break;
+                }
+                run.push_str(here.symbol());
+                x += yumete_cjk::drawn_width(here.symbol()).max(1) as u16;
+            }
+            let weight = if bold { ";font-weight:600" } else { "" };
+            out.push_str(&format!(
+                "<span style=\"color:{fg};background:{bg}{weight}\">{}</span>",
+                escape(&run)
+            ));
+        }
+        out.push('\n');
+    }
+    out.push_str("</pre>");
+    out
+}
+
 /// `text` with the characters a terminal would *obey* taken out.
 ///
 /// **A manuscript is data, not instructions.** A file can contain `\x1b]0;…\x07`

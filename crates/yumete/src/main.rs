@@ -34,14 +34,11 @@ fn main() -> ExitCode {
     // picture for a headless machine, a bug report, or a reviewer who has to
     // *see* the layout rather than read an assertion about it.
     let mut shot: Option<(u16, u16)> = None;
-    let mut want_shot = false;
+    // Text, or the same frame with its colours as HTML — a theme is judged on
+    // what it looks like, and a terminal is not always there to look at.
+    let mut shot_html = false;
 
     for arg in std::env::args().skip(1) {
-        if want_shot {
-            shot = Some(parse_size(&arg));
-            want_shot = false;
-            continue;
-        }
         if want_syntax {
             force_syntax = Some(arg);
             want_syntax = false;
@@ -59,11 +56,9 @@ fn main() -> ExitCode {
             "-p" | "--preview" => force_preview = true,
             "-t" | "--table" => force_table = true,
             "--timing" => timing = true,
-            "--shot" => {
-                shot = Some((100, 30));
-                want_shot = false;
-            }
+            "--shot" => shot = Some((100, 30)),
             s if s.starts_with("--shot=") => shot = Some(parse_size(&s["--shot=".len()..])),
+            "--html" => shot_html = true,
             "-s" | "--syntax" => want_syntax = true,
             s if s.starts_with("--syntax=") => {
                 force_syntax = Some(s["--syntax=".len()..].to_string())
@@ -314,10 +309,11 @@ fn main() -> ExitCode {
     }
     if let Some((width, height)) = shot {
         // The layout the flags asked for, before the picture is taken.
-        print!(
-            "{}",
-            yumete_tui::frame_to_text(&mut editor, &config, &ime, width, height)
-        );
+        let picture = match shot_html {
+            true => yumete_tui::frame_to_html(&mut editor, &config, &ime, width, height),
+            false => yumete_tui::frame_to_text(&mut editor, &config, &ime, width, height),
+        };
+        print!("{picture}");
         return ExitCode::SUCCESS;
     }
     if printing {
@@ -403,10 +399,12 @@ OPTIONS:
                      or text. Outranks both the extension and the config.
     -p, --preview    Print a non-interactive preview instead of the editor.
         --shot[=WxH] Draw one frame — the page exactly as the editor would set
-                     it — to standard output and exit. Text only, 100x30 by
-                     default. `:shot` inside the editor hands the screen to the
+                     it — to standard output and exit. 100x30 by default.
+                     `:shot` inside the editor hands the screen to the
                      platform's screenshot program; this is the same picture on
                      a machine with no window, for a report or a review.
+        --html       With --shot: the frame **with its colours**, as one
+                     self-contained HTML <pre>. What a theme is judged on.
         --timing     Print how long each part of starting up took, and exit.
     -h, --help       Print this help and exit.
     -V, --version    Print the version and exit.
