@@ -250,6 +250,9 @@ fn main() -> ExitCode {
         .commit
         .as_deref()
         .and_then(CommitStrategy::from_str_tag);
+    // 候選面板 (Feature #211) — the other axis, and a plain value: `full` is a
+    // real answer, not「ask the scheme」.
+    let panel = config.panel.display;
     // Read after the first frame rather than before it — see `yumete_tui::
     // Deferred`. Everything it loads is a keystroke away; the page is not.
     let load = move |ime: &mut ImeSession| -> String {
@@ -264,6 +267,7 @@ fn main() -> ExitCode {
         // After, not before: the line above may have replaced the session
         // wholesale with one built from the installed tables.
         ime.set_commit_strategy(commit);
+        ime.set_panel_display(panel);
         said
     };
     // A preview prints and exits: there is no frame to be after, so it is read

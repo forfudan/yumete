@@ -371,6 +371,47 @@ pub struct PanelConfig {
     pub page_size: usize,
     /// Whether the panel's ring is rounded.
     pub rounded: bool,
+    /// Whether the panel is drawn at all, or the candidate goes in the text
+    /// (Feature #211).
+    pub display: PanelDisplay,
+}
+
+/// How the input method offers its candidates: a panel, or the page itself.
+///
+/// 空空如也. yume's own front end already has a full candidate panel, and the
+/// surface a novel is written on does not need a second one hanging off the
+/// caret — most keystrokes take the first candidate, and a list of nine to
+/// choose it from is nine rows of the manuscript covered up to say what the
+/// writer already knew. `Bare` draws the candidate **in the sentence** instead
+/// and keeps the code under the caret; `Tab` still summons the panel for the
+/// one word that needs it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum PanelDisplay {
+    /// The bordered list beside the caret — what yumete has always drawn.
+    #[default]
+    Full,
+    /// Nothing but the first candidate, drawn into the text as ghost text.
+    Bare,
+}
+
+impl PanelDisplay {
+    /// The name this is written with, in the config file and on the command
+    /// line — one word, both places.
+    pub fn tag(self) -> &'static str {
+        match self {
+            PanelDisplay::Full => "full",
+            PanelDisplay::Bare => "bare",
+        }
+    }
+
+    /// Read a name, or `None` — an unknown word is a typo, not a third mode.
+    pub fn parse(word: &str) -> Option<PanelDisplay> {
+        match word {
+            "full" => Some(PanelDisplay::Full),
+            "bare" => Some(PanelDisplay::Bare),
+            _ => None,
+        }
+    }
 }
 
 impl Default for PanelConfig {
@@ -383,6 +424,7 @@ impl Default for PanelConfig {
             paper: (0x26, 0x2A, 0x27),
             page_size: 9,
             rounded: true,
+            display: PanelDisplay::Full,
         }
     }
 }
@@ -1478,6 +1520,7 @@ struct RawPanel {
     paper: Option<String>,
     page_size: Option<usize>,
     rounded: Option<bool>,
+    display: Option<String>,
 }
 
 #[derive(Deserialize, Default)]
@@ -1688,6 +1731,9 @@ impl RawConfig {
         }
         if other.panel.rounded.is_some() {
             self.panel.rounded = other.panel.rounded;
+        }
+        if other.panel.display.is_some() {
+            self.panel.display = other.panel.display;
         }
         if other.theme.name.is_some() {
             self.theme.name = other.theme.name.clone();
@@ -1941,6 +1987,12 @@ impl RawConfig {
         if let Some(rounded) = self.panel.rounded {
             config.panel.rounded = rounded;
         }
+        // An unknown word leaves the default standing, the way an unknown
+        // layout does: a config file is read once, and a typo in it must not
+        // take the panel away.
+        if let Some(display) = self.panel.display.as_deref().and_then(PanelDisplay::parse) {
+            config.panel.display = display;
+        }
         for (k, v) in self.keys.normal {
             // The key on the left is one key — there is no key sequence to
             // *press* here, only one to be sent — and the right may be any
@@ -2110,6 +2162,19 @@ mod tests {
         // A word nobody defined keeps the default rather than refusing the file.
         let c = Config::from_toml("[editor]\nword_level = \"whatever\"\n");
         assert_eq!(c.editor.word_level, yumete_cjk::WordLevel::Balanced);
+    }
+
+    /// #211: `bare` is a setting, not only a command — a writer who wants the
+    /// page to itself wants it from the first keystroke of every session.
+    #[test]
+    fn the_panel_can_be_asked_to_get_out_of_the_way() {
+        assert_eq!(PanelConfig::default().display, PanelDisplay::Full);
+        let c = Config::from_toml("[panel]\ndisplay = \"bare\"\n");
+        assert_eq!(c.panel.display, PanelDisplay::Bare);
+        // A typo is a typo, not a third mode: the panel stays.
+        let c = Config::from_toml("[panel]\ndisplay = \"invisible\"\n");
+        assert_eq!(c.panel.display, PanelDisplay::Full);
+        assert_eq!(PanelDisplay::Bare.tag(), "bare");
     }
 
     #[test]

@@ -2372,3 +2372,36 @@ en = "{0} could not be read: {1}"
 [[message]]
 zh = "{0}（另有 {1} 個檔同樣沒進去）"
 en = "{0} ({1} more file(s) did not load either)"
+
+# Feature #211 — 候選面板. 空空如也: the panel, or the sentence itself.
+[[message]]
+zh = "候選面板：full 是候選框，bare 是行內預覽"
+en = "candidate panel: full is the boxed list, bare is the inline preview"
+
+[[message]]
+zh = "候選框：光標旁邊的那張帶框的表"
+en = "候選框: the bordered list beside the caret"
+
+[[message]]
+zh = "空空如也：首選直接畫在正文裏，編碼在光標下面，Tab 召出候選框"
+en = "空空如也: the first candidate is drawn into the text, the code sits under the caret, Tab summons the list"
+
+[[message]]
+zh = "候選面板：{0}"
+en = "candidate panel: {0}"
+
+[[message]]
+zh = "候選框"
+en = "候選框"
+
+[[message]]
+zh = "行內預覽"
+en = "inline preview"
+
+[[message]]
+zh = "面板 {0}"
+en = "panel {0}"
+
+[[message]]
+zh = "沒有「{0}」這種候選面板——full、bare"
+en = "no candidate panel '{0}' — full, bare"
