@@ -554,6 +554,10 @@ pub struct Editor {
     show_segmentation: bool,
     /// How a table's columns are told apart (Feature #157).
     table_rules: crate::table::Rules,
+    /// **Typewriter mode** (Feature #166): the row being written stays in the
+    /// middle of the screen and the paper moves under it, the way a typewriter
+    /// works and the way every focus mode since has.
+    typewriter: bool,
     /// The detail panel's width, when the reader has said one (Feature #187).
     /// `None` follows the config.
     detail_width: Option<usize>,
@@ -927,6 +931,7 @@ impl Editor {
             table_rules: crate::table::Rules::default(),
             table_numbers: true,
             detail_width: None,
+            typewriter: false,
             ime_available: false,
             definition_preview: false,
             screenshot_request: false,
@@ -2543,6 +2548,14 @@ impl Editor {
                 self.detail_width = Some(n.clamp(12, 80));
                 self.show_detail = true;
                 self.status = say!("詳情欄寬 {0}", self.detail_width.unwrap_or(n));
+                Ok(CommandOutcome::Continue)
+            }
+            Command::SetTypewriter(want) => {
+                self.typewriter = want.unwrap_or(!self.typewriter);
+                self.status = match self.typewriter {
+                    true => say!("打字機：開（紙走，字不走）"),
+                    false => say!("打字機：關"),
+                };
                 Ok(CommandOutcome::Continue)
             }
             Command::SetTableNumbers(on) => {
@@ -4888,6 +4901,11 @@ impl Editor {
             Hint::Keys(title, keys) => Some((title, keys)),
             _ => None,
         }
+    }
+
+    /// Whether the cursor's row is kept in the middle of the page.
+    pub fn typewriter(&self) -> bool {
+        self.typewriter
     }
 
     /// How wide the detail panel should be, when it has been said.

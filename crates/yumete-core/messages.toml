@@ -2022,3 +2022,15 @@ en = "already in that order"
 [[message]]
 zh = "照這幾欄排：`sort 1 a 2 d` 是先第一欄順排、再第二欄倒排"
 en = "sort by these columns: `sort 1 a 2 d` is column 1 ascending, then column 2 descending"
+
+[[message]]
+zh = "打字機：光標那一行一直停在畫面中間，紙往上走"
+en = "typewriter: the row you are writing stays in the middle and the paper moves"
+
+[[message]]
+zh = "打字機：開（紙走，字不走）"
+en = "typewriter: on (the paper moves, the line does not)"
+
+[[message]]
+zh = "打字機：關"
+en = "typewriter: off"
