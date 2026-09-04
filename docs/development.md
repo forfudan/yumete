@@ -422,7 +422,7 @@ Phases are ordered by priority, most writer-critical first:
 | 216 | **A table recognised rather than declared** | both | P2 | `\|` is not the only grid: a run of lines split by tabs or by runs of spaces is a 碼表, and `dict.yaml` is one with a `---` preamble. Detect it and offer the grid. Test against the 宇浩 tables and the generated `dict.yaml` | Planned |
 | 217 | **A grid whose first row is data** | both | P3 | a 碼表 has no header. One key says so: row one becomes an ordinary row, and the columns are named by number — which #184 already draws | Planned |
 | 218 | **The schema beside the table** | both | P3 | when the file is nothing but a table, open its schema file in the other work area (`:split` already has one), and write a starting one next to the file if none exists | Planned |
-| 219 | **A Windows build** | both | P3 | it cross-compiles today. What is wrong there: `data_dir()` has no `%APPDATA%` branch and falls back to a relative path; `same_file` returns `false` with no inodes, so 「寫入按身份認」 loses its guard; `shell()` assumes `$SHELL`/`/bin/sh`; and nothing looks where yume installs its own tables, so 卿雲 is not found | Planned |
+| 219 | **A Windows build** | both | P3 | it cross-compiles today. What is wrong there: `data_dir()` has no `%APPDATA%` branch and falls back to a relative path; `same_file` returns `false` with no inodes, so 「寫入按身份認」 loses its guard; `shell()` assumes `$SHELL`/`/bin/sh`; and nothing looks where yume installs its own tables (`%APPDATA%\Yume\` and the module's `Resources\`, per the yume side — the core will not answer this, by design), so 卿雲 is not found | Planned |
 
 ### 14 · What four reviews of the code found, 2026-09-03
 
@@ -1237,12 +1237,40 @@ What is **wrong** there, none of it caught by the compiler:
 - `shell()` is `$SHELL` or `/bin/sh`, which `:sh`, `:!` and `:shot` all go
   through.
 - Nothing looks where **yume** installs its own tables, so a machine with 卿雲
-  already installed would still be asked to compile them. This is the one item
-  that is not yumete's to decide: the platform paths belong in `yume-core`
-  beside `data_manifest`, and the question is with the yume side.
+  already installed would still be asked to compile them.
 
-Until then a `[ime] data_dirs` key — the reader naming the directory themselves —
-is the honest fallback, and it is worth having on every platform anyway.
+**Where yume keeps its data, from the yume side, 2026-09-04.** `yume-core` does
+*not* answer this and deliberately will not: `data_manifest` says **what** to
+find (relative paths — `data/chaifen.ydiv`, `schemes/ling.ytab`), and **where**
+is each front end's own business. There are four implementations and they are
+not the same shape — a macOS bundle lookup, a two-level Windows one with a
+portable branch, a five-step Linux search order — so a `default_data_dirs()` in
+the core today would be their union rather than their agreement. yumete writes
+its own, and if it turns out to be the right shape it is the specification the
+core adopts later (a feature-gated `data_paths` module, so wasm does not take a
+dependency on `dirs`).
+
+| | 出廠資源 | 使用者資料 |
+| --- | --- | --- |
+| **Windows** | the directory of the running module (`GetModuleFileNameW`) + `\Resources\`; installed by `install_windows.ps1` to `C:\Program Files\Yume\Resources\` | `%APPDATA%\Yume\` (Roaming, not Local); a reader's own tables in `data\custom\`, and a run-time overlay searched **first** at `data\compiled\` |
+| **Linux** | a search order, first hit wins: `$YUME_DATA_DIR`, `$XDG_DATA_HOME/yume/data/compiled`, `$XDG_DATA_HOME/yume`, the compiled-in `YUME_DATADIR`, then each of `$XDG_DATA_DIRS` + `/yume` | `$XDG_DATA_HOME/yume` (`~/.local/share/yume`) — the same directory as the third search step |
+
+Two warnings that came with it:
+
+- macOS split the bundle into `Resources/data/` and `Resources/schemes/` and the
+  manifest now emits the two-level paths **unconditionally**, but Windows's
+  `compile_data_windows.ps1` has not followed — a real Windows install today is
+  very likely still flat. Laying our own directory out by the manifest is right;
+  expecting an existing Windows install to match it is not.
+- `.ydiv` changed its magic from `YDV20260828` to `YDV20260904` on 2026-09-04,
+  and `from_binary` **rejects** the old one. The symptom is not an error, it is
+  the annotations quietly disappearing — worth a word from `:yume` rather than a
+  silent absence, since `scripts/build.sh` recompiles but a data directory built
+  by an older run does not.
+
+Until the search is written, a `[ime] data_dirs` key — the reader naming the
+directory themselves — is the honest fallback, and it is worth having on every
+platform anyway.
 
 ### 14 · What was deliberately left undone, 2026-09-04
 
