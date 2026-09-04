@@ -471,6 +471,16 @@ pub mod rung {
     /// A ground that must not shout: a table's alternating columns, its cursor
     /// row, a code fence, a callout, the tint past the measure.
     pub const BAND: u16 = 940;
+    /// **The word tint** (分詞著色), and the quietest ground there is.
+    ///
+    /// Every other ground says 「this block is a different kind of thing」; this
+    /// one says 「these two squares belong to the same word」, on *every* line of
+    /// the page at once. It is a hair off the paper and carries **no hue at
+    /// all** — it used to be 朱 washed almost away, which put it in the same
+    /// family as `==marked==` (朱 washed rather less), and on a dark ground the
+    /// two were the same colour: the reader could not tell a word boundary from
+    /// a highlighter.
+    pub const WORD: u16 = 962;
     /// A band that must be **seen**, because position is not separating it
     /// from the text: the 縱書 number band sits in the text's own columns, and
     /// the lit tab sits among the unlit ones.
