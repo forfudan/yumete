@@ -2158,3 +2158,7 @@ en = "this file is not Markdown — a footnote here is just four characters"
 [[message]]
 zh = "去某一格（t20-20g）"
 en = "go to a cell (t20-20g)"
+
+[[message]]
+zh = "從系統剪貼簿貼在前面"
+en = "paste before, from the system clipboard"

@@ -3643,7 +3643,7 @@ impl Editor {
         self.status = say!("排好了：{0}", named.join(" "));
     }
 
-    /// Change which way this column's cells are set.    /// Change which way this column's cells are set.
+    /// Change which way this column's cells are set.
     fn md_align(&mut self, align: crate::mdtable::Align) {
         let Some((region, mut parts)) = self.md_parts() else {
             return;
@@ -4650,7 +4650,7 @@ impl Editor {
         }
     }
 
-    /// **`:tutor`** — the lesson, copied into a file of the reader's own.    /// **`:tutor`** — the lesson, copied into a file of the reader's own.
+    /// **`:tutor`** — the lesson, copied into a file of the reader's own.
     ///
     /// A **real file**, not a scratch buffer: `:w` works, `u` is part of lesson
     /// one, and every destructive key in it is safe because it is a copy. A
@@ -4687,7 +4687,7 @@ impl Editor {
         }
     }
 
-    /// **`:help`** — the keys and the commands, in a buffer you can read with    /// **`:help`** — the keys and the commands, in a buffer you can read with
+    /// **`:help`** — the keys and the commands, in a buffer you can read with
     /// the editor itself.
     ///
     /// Written from the same declarations the editor runs on — `COMMANDS`,
@@ -4872,7 +4872,7 @@ impl Editor {
         out
     }
 
-    /// A typesetter the front end should start or stop.    /// A typesetter the front end should start or stop.
+    /// A typesetter the front end should start or stop.
     /// Whether the move that just happened was a jump, so the page can centre
     /// what it landed on rather than nudge it in from an edge.
     pub fn jumped(&self) -> bool {
@@ -4905,7 +4905,7 @@ impl Editor {
         true
     }
 
-    /// Take the language command the reader asked for, if any.    /// Take the language command the reader asked for, if any.
+    /// Take the language command the reader asked for, if any.
     pub fn take_language_run(&mut self) -> Option<LanguageRun> {
         self.language_run.take()
     }
@@ -5134,7 +5134,7 @@ impl Editor {
         }
     }
 
-    /// Whether the cursor's row is kept in the middle of the page.    /// Whether the cursor's row is kept in the middle of the page.
+    /// Whether the cursor's row is kept in the middle of the page.
     pub fn typewriter(&self) -> bool {
         self.typewriter
     }
@@ -5149,7 +5149,7 @@ impl Editor {
         self.table_numbers
     }
 
-    /// What the status line says about where the cursor is in a grid.    /// What the status line says about where the cursor is in a grid.
+    /// What the status line says about where the cursor is in a grid.
     ///
     /// Which column, and what a step moves by — the second matters because
     /// `Tab` changes what every arrow key does, and a mode you cannot see is a
@@ -7626,7 +7626,7 @@ impl Editor {
         Some((from, to.unwrap_or(from)))
     }
 
-    /// **The command as far as it has been typed**    /// **The command as far as it has been typed** — `3`, `3-5`, `g`, `2t`.
+    /// **The command as far as it has been typed** — `3`, `3-5`, `g`, `2t`.
     ///
     /// A modal editor asks you to type a command a key at a time and then says
     /// nothing about what you have typed: press `3` and the editor looks
@@ -8635,9 +8635,18 @@ impl Editor {
     fn phrasebook(key: Key) -> Option<&'static str> {
         let c = match key {
             Key::Char(c) => c,
+            // **The two keys this editor itself retired.** They did something
+            // here until recently, and `Enter` still does in every other
+            // editor — so the reader who presses one is not coming from vi,
+            // they are coming from last week, and silence is the one answer
+            // that teaches nothing.
+            Key::Enter => {
+                return Some("Enter 在 Normal 不做事了——找選中的是 g/（那邊看是 g?）；表格一欄一欄找是 t/ t?");
+            }
             _ => return None,
         };
         Some(match c {
+            '*' => "找選中的是 g/（那邊看是 g?）；表格裏一欄一欄找是 t/ t?",
             '$' => "行尾是 gl（g 開頭的都是「去哪裏」）",
             '^' => "行首第一個非空白是 gs",
             'D' => "刪到行尾是 gl 選起來再 d",
@@ -8740,6 +8749,7 @@ impl Editor {
         ('?', "命令一覽"),
         ('y', "複製到系統剪貼簿"),
         ('p', "從系統剪貼簿貼上"),
+        ('P', "從系統剪貼簿貼在前面"),
         ('d', "詳情欄"),
         ('w', "另一個工作區：再按一次過去"),
         ('W', "只留這一個工作區"),
@@ -11848,6 +11858,19 @@ mod tests {
             ed.on_key(Key::Char(c));
         }
         ed.on_key(Key::Enter);
+    }
+
+    #[test]
+    fn the_retired_keys_say_what_replaced_them() {
+        // `Enter` and `*` did something here until they were retired, so the
+        // reader pressing one is coming from *last week*, not from vi. The
+        // phrasebook exists for exactly that reader.
+        let mut ed = typed("那年冬天。\n");
+        ed.on_key(Key::Enter);
+        assert!(ed.status().contains("g/"), "{}", ed.status());
+        let mut ed = typed("那年冬天。\n");
+        ed.on_key(Key::Char('*'));
+        assert!(ed.status().contains("g/"), "{}", ed.status());
     }
 
     #[test]
