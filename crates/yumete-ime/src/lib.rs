@@ -25,6 +25,7 @@ pub mod segment;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
+use yume_core::commit_strategy::CommitOverrides;
 use yume_core::data_manifest::{self, DataFile, DataKind};
 use yume_core::division::DivisionTable;
 use yume_core::key_bindings::{FuncKey, KeyAction};
@@ -36,6 +37,7 @@ use yume_core::{
 
 pub use segment::YumeSegmenter;
 pub use yume_core::DisplayMode;
+pub use yume_core::CommitStrategy;
 
 /// One of yumete's five input schemes (方案).
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -351,10 +353,15 @@ impl ImeSession {
     /// Switch to `scheme`, reloading its tables from the session's data
     /// directories. Returns [`available`](ImeSession::available) after the swap.
     pub fn set_scheme(&mut self, scheme: Scheme) -> bool {
+        // The 上屏方式 is the writer's, not the scheme's: switching 方案 builds a
+        // new engine, and a preference that evaporated when you tried another
+        // scheme would look like a setting that does not stick.
+        let chosen = self.commit_override();
         let (engine, available) = build_engine(scheme, &self.data_dirs);
         self.engine = engine;
         self.scheme = scheme;
         self.available = available;
+        self.set_commit_strategy(chosen);
         available
     }
 
@@ -588,6 +595,49 @@ impl ImeSession {
     /// segmenter shares them rather than holding a second copy of 1.25M entries.
     pub fn segmenter(&self) -> YumeSegmenter {
         YumeSegmenter::new(self.engine.unigram.clone(), self.engine.lexicon.clone())
+    }
+
+    // ---- 上屏方式 (commit method) ------------------------------------------
+
+    /// The 上屏方式 in force: **when** a finished code goes to the page.
+    ///
+    /// 延遲（頂字）waits and pushes the *previous* code on the keystroke that
+    /// cannot continue it; 唯一 goes as soon as a code has one candidate; 整句
+    /// never goes on its own, and the whole sentence is confirmed with Space.
+    ///
+    /// This is the answer for the status line, so it is what is *in force* —
+    /// which for 拼音 is 整句 whether or not anybody chose it, because a scheme
+    /// with no 碼表 to look a segment up in has nothing else it could be.
+    pub fn commit_strategy(&self) -> CommitStrategy {
+        match self.commit_override() {
+            // 拼音 has no 碼表 to look a segment up in, so the core pins its
+            // decoder to 整句 whatever is asked of it — and a status line that
+            // answered 「延遲」 there would be describing something the engine
+            // is not doing.
+            Some(cs) if !self.engine.fluency_only() => cs,
+            _ => self.engine.effective_commit_strategy(),
+        }
+    }
+
+    /// What the writer *asked for*, which is not the same question: `None` is
+    /// 「whatever this scheme's own default is」, and it has to stay tellable
+    /// apart from a choice, or carrying the setting across a scheme switch
+    /// would pin 拼音's 整句 onto 靈明.
+    pub fn commit_override(&self) -> Option<CommitStrategy> {
+        self.engine.commit_overrides().preset
+    }
+
+    /// Choose the 上屏方式, or hand the question back to the scheme (`None`).
+    ///
+    /// It goes in as yume's *user layer* (`CommitOverrides`), which is the one
+    /// that wins over both the engine default and a scheme file — the three
+    /// layers are merged in the core so that every front end gets the same
+    /// answer.
+    pub fn set_commit_strategy(&mut self, cs: Option<CommitStrategy>) {
+        self.engine.set_commit_overrides(CommitOverrides {
+            preset: cs,
+            ..CommitOverrides::default()
+        });
     }
 
     /// The candidate page size (每頁候選數).
@@ -831,6 +881,33 @@ mod tests {
     fn scheme_cycles_in_order() {
         assert_eq!(Scheme::Lingming.next(), Scheme::Xingchen);
         assert_eq!(Scheme::Pinyin.next(), Scheme::Lingming);
+    }
+
+    #[test]
+    fn the_commit_method_is_the_writers_and_it_changes_what_a_key_does() {
+        // 唯一上屏: `a` is 啊 and nothing else, so the code is finished the
+        // moment it is typed and the character goes without a Space. Under
+        // 延遲 the same key waits (Feature #209).
+        let mut s = synthetic_session();
+        assert_eq!(s.commit_strategy(), CommitStrategy::Delayed);
+        assert_eq!(s.commit_override(), None, "nobody has chosen yet");
+        s.input('a');
+        assert_eq!(s.take_committed(), "", "延遲 waits");
+        s.escape();
+
+        s.set_commit_strategy(Some(CommitStrategy::Unique));
+        assert_eq!(s.commit_strategy(), CommitStrategy::Unique);
+        s.input('a');
+        assert_eq!(s.take_committed(), "啊", "唯一 goes on its own");
+        // 吧/八 share `b`, so even 唯一 has to ask.
+        s.input('b');
+        assert_eq!(s.take_committed(), "");
+        s.escape();
+
+        // 整句 never goes on its own, whatever the code.
+        s.set_commit_strategy(Some(CommitStrategy::Fluency));
+        s.input('a');
+        assert_eq!(s.take_committed(), "");
     }
 
     #[test]

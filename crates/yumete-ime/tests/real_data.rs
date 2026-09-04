@@ -6,7 +6,7 @@
 
 use std::path::PathBuf;
 
-use yumete_ime::{ImeSession, Scheme};
+use yumete_ime::{CommitStrategy, ImeSession, Scheme};
 
 fn data_dir() -> Option<PathBuf> {
     let base = std::env::var_os("XDG_DATA_HOME")
@@ -46,6 +46,23 @@ fn real_lingming_data_loads_and_produces_candidates() {
         produced,
         "no candidates for any single letter — table not loaded?"
     );
+}
+
+#[test]
+fn a_chosen_commit_method_survives_a_scheme_switch_but_never_overrules_pinyin() {
+    let Some(dir) = data_dir() else {
+        return;
+    };
+    let mut session = ImeSession::new(Scheme::Lingming, vec![dir]);
+    session.set_commit_strategy(Some(CommitStrategy::Unique));
+    assert!(session.set_scheme(Scheme::Pinyin));
+    // Chosen, and remembered — but 拼音 has no 碼表 to look a segment up in, so
+    // what is *in force* there is 整句 whatever was asked (Feature #209).
+    assert_eq!(session.commit_override(), Some(CommitStrategy::Unique));
+    assert_eq!(session.commit_strategy(), CommitStrategy::Fluency);
+    // …and coming back, the choice is still the writer's.
+    assert!(session.set_scheme(Scheme::Lingming));
+    assert_eq!(session.commit_strategy(), CommitStrategy::Unique);
 }
 
 #[test]
