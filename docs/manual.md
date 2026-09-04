@@ -1574,6 +1574,9 @@ GB18030 的舊稿會被擋下並告訴你用 `iconv` 轉，而不是丟一句 Ru
 | `:count` `:wc` | 字數統計 |
 | `:help` [*節*] | 鍵和命令，開成一份可以讀、可以搜的檔案：`chinese`、`vertical`、`table`、`commands` |
 | `:tutor` | 一課：把課文抄成你自己的一個檔案，邊改邊學 |
+| `:markdown footnote` | 插一個腳注：號碼自己找空的，文末的註也一併開好，光標停在註裏 |
+| `:markdown footnote inline` | 行內註 `^[…]`，光標在括號裏 |
+| `:markdown table 3x4` | 三欄四行的空表 |
 | `:typewriter` [`on`｜`off`] | 打字機：光標那一行停在畫面中間，紙往上走 |
 | `:dense off` | 疏排——竪排是縱與縱之間留一格，橫排是行與行之間留一行 |
 | `:table sort` *欄* `a`｜`d` … | 照這幾欄排；`t1s` `t1S` 是鍵盤上的同一件事 |

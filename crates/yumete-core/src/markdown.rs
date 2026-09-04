@@ -573,6 +573,34 @@ fn mark(out: &mut Vec<Span>, start: usize, end: usize, kind: Kind, construct: us
     }
 }
 
+/// Every footnote number already used in `text`, references and notes alike.
+///
+/// So that a new one can be *the next free number* rather than one more than
+/// the last, which after a deletion points at somebody else's note.
+pub fn footnote_numbers(text: &str) -> Vec<usize> {
+    let chars: Vec<char> = text.chars().collect();
+    let mut out = Vec::new();
+    let mut i = 0;
+    while i + 2 < chars.len() {
+        if chars[i] == '[' && chars[i + 1] == '^' {
+            let mut j = i + 2;
+            let mut n = 0usize;
+            let mut digits = 0;
+            while j < chars.len() && chars[j].is_ascii_digit() {
+                n = n.saturating_mul(10).saturating_add(chars[j] as usize - '0' as usize);
+                j += 1;
+                digits += 1;
+            }
+            if digits > 0 && chars.get(j) == Some(&']') {
+                out.push(n);
+                i = j;
+            }
+        }
+        i += 1;
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
