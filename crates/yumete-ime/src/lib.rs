@@ -36,6 +36,7 @@ use yume_core::{
 };
 
 pub use segment::YumeSegmenter;
+pub use yumete_config::PanelDisplay;
 // A frontend that reads [`DataProblem`] has to be able to name its `kind`, and
 // it has no yume-core of its own.
 pub use yume_core::data_manifest::{DataFile, DataKind};
@@ -134,6 +135,17 @@ pub struct ImeSession {
     /// refuses looks exactly like a file that was never installed, and the
     /// writer sees neither — only annotations that stopped appearing.
     problems: Vec<DataProblem>,
+    /// Whether the candidates get a panel of their own, or the page
+    /// (Feature #211). A session's rather than a frame's, because it is the
+    /// same question as [`Self::page_size`] — how this session offers what it
+    /// has found — and the front end asks it once per frame.
+    display: PanelDisplay,
+    /// Whether `Tab` has summoned the full panel for the composition in hand.
+    ///
+    /// It dies with that composition: [`Self::input`] clears it when a new one
+    /// begins, so 「這一個詞我要看清楚」 never turns into a setting nobody
+    /// remembers changing.
+    summoned: bool,
 }
 
 impl ImeSession {
@@ -162,6 +174,8 @@ impl ImeSession {
             builtin,
             table_file: None,
             problems,
+            display: PanelDisplay::default(),
+            summoned: false,
         }
     }
 
@@ -205,6 +219,8 @@ impl ImeSession {
             builtin: false,
             table_file: Some(path.to_path_buf()),
             problems,
+            display: PanelDisplay::default(),
+            summoned: false,
         })
     }
 
@@ -238,6 +254,8 @@ impl ImeSession {
             builtin: true,
             table_file: None,
             problems,
+            display: PanelDisplay::default(),
+            summoned: false,
         }
     }
 
@@ -303,6 +321,8 @@ impl ImeSession {
             builtin: false,
             table_file: None,
             problems,
+            display: PanelDisplay::default(),
+            summoned: false,
         }
     }
 
@@ -322,6 +342,8 @@ impl ImeSession {
             builtin: false,
             table_file: None,
             problems: Vec::new(),
+            display: PanelDisplay::default(),
+            summoned: false,
         }
     }
 
@@ -337,6 +359,8 @@ impl ImeSession {
             builtin: false,
             table_file: None,
             problems: Vec::new(),
+            display: PanelDisplay::default(),
+            summoned: false,
         }
     }
 
@@ -357,6 +381,8 @@ impl ImeSession {
             builtin: false,
             table_file: None,
             problems: Vec::new(),
+            display: PanelDisplay::default(),
+            summoned: false,
         }
     }
 
@@ -405,6 +431,11 @@ impl ImeSession {
 
     /// Feed one printable character to the engine.
     pub fn input(&mut self, ch: char) {
+        // A new composition starts with the panel the *setting* asks for:
+        // `Tab` was asked for one word, not for the rest of the session.
+        if !self.is_composing() {
+            self.summoned = false;
+        }
         self.engine.input(ch);
     }
 
@@ -684,6 +715,58 @@ impl ImeSession {
     /// Set the candidate page size.
     pub fn set_page_size(&mut self, size: usize) {
         self.engine.page_size = size.max(1);
+    }
+
+    /// Which way the candidates are offered — the setting, not this frame's
+    /// answer. [`Self::panel_is_full`] is the question a renderer asks.
+    pub fn panel_display(&self) -> PanelDisplay {
+        self.display
+    }
+
+    /// Set it, forgetting any panel `Tab` had summoned.
+    pub fn set_panel_display(&mut self, display: PanelDisplay) {
+        self.display = display;
+        self.summoned = false;
+    }
+
+    /// Whether the bordered panel is drawn on **this** frame.
+    ///
+    /// `bare` plus a `Tab`: the list comes up for the composition in hand and
+    /// goes away with it. Asked of the session rather than worked out by the
+    /// renderer because the same answer settles two things — whether to draw
+    /// the panel, and whether the code needs somewhere else to be shown.
+    pub fn panel_is_full(&self) -> bool {
+        self.display == PanelDisplay::Full || (self.summoned && self.is_composing())
+    }
+
+    /// `Tab`: show me the whole list for this one word.
+    ///
+    /// Nothing when the panel is already up — and nothing when there is no
+    /// composition to summon it for, so a `Tab` that fell through cannot leave
+    /// the panel armed for whatever is typed next.
+    pub fn summon_panel(&mut self) -> bool {
+        if self.display == PanelDisplay::Full || !self.is_composing() || self.summoned {
+            return false;
+        }
+        self.summoned = true;
+        true
+    }
+
+    /// The candidate that would land on the page if you pressed Space now.
+    ///
+    /// What `bare` draws into the sentence: the **highlighted** one, not
+    /// literally the first, so that moving the highlight moves what you are
+    /// reading. Empty when nothing is being composed, or when the engine has
+    /// found nothing to offer.
+    pub fn inline_candidate(&self) -> String {
+        if !self.is_composing() {
+            return String::new();
+        }
+        self.engine
+            .page_candidates()
+            .get(self.highlight())
+            .cloned()
+            .unwrap_or_default()
     }
 }
 
@@ -1101,6 +1184,43 @@ mod tests {
         assert_eq!(Scheme::from_tag("ling"), Some(Scheme::Lingming));
         assert_eq!(Scheme::from_tag("拼音"), Some(Scheme::Pinyin));
         assert_eq!(Scheme::from_tag("nope"), None);
+    }
+
+    /// #211: what `bare` draws is the candidate a Space would take, so moving
+    /// the highlight moves what the sentence shows.
+    #[test]
+    fn the_inline_candidate_follows_the_highlight() {
+        let mut ime = synthetic_session();
+        assert_eq!(ime.inline_candidate(), "", "nothing composed, nothing shown");
+        ime.input('b');
+        assert_eq!(ime.inline_candidate(), "吧");
+        ime.move_highlight(1);
+        assert_eq!(ime.inline_candidate(), "八");
+        ime.escape();
+        assert_eq!(ime.inline_candidate(), "");
+    }
+
+    /// #211: `Tab` is for one word, and it cannot be armed for the next.
+    #[test]
+    fn a_summoned_panel_dies_with_the_word_it_was_summoned_for() {
+        let mut ime = synthetic_session();
+        ime.set_panel_display(PanelDisplay::Bare);
+        // Nothing to summon it for: a `Tab` that fell through must not leave
+        // the panel waiting for whatever is typed next.
+        assert!(!ime.summon_panel());
+        ime.input('b');
+        assert!(ime.summon_panel());
+        assert!(ime.panel_is_full());
+        assert!(!ime.summon_panel(), "already up");
+        ime.space();
+        assert_eq!(ime.take_committed(), "吧");
+        assert!(!ime.panel_is_full(), "gone with the word");
+        ime.input('b');
+        assert!(!ime.panel_is_full(), "and not inherited by the next one");
+        // Under `full` there is nothing to summon, and the setting outranks it.
+        ime.set_panel_display(PanelDisplay::Full);
+        assert!(!ime.summon_panel());
+        assert!(ime.panel_is_full());
     }
 
     #[test]

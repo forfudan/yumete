@@ -181,6 +181,13 @@ pub enum Command {
     /// `:yume commit delayed|unique|fluency` — 上屏方式: when a finished code
     /// goes to the page. `None` asks which one is in force (Feature #209).
     YumeCommit(Option<String>),
+    /// `:yume panel full|bare` — 候選面板: the bordered list, or the first
+    /// candidate drawn into the sentence. `None` asks which one is in force.
+    ///
+    /// Independent of [`Command::YumeCommit`]: **when** a word lands on the
+    /// page and **where** you read the candidate are two questions, and the
+    /// nine combinations are all sensible (Feature #211).
+    YumePanel(Option<String>),
     /// `:yume on` / `:yume off` — type 漢字, or type what the keys say.
     ///
     /// The 中/英 switch already exists as a lone Shift tap; this is the same
@@ -467,6 +474,19 @@ pub fn parse(input: &str) -> Result<Command, CommandError> {
                         Some(name) => Ok(Command::YumeCommit(Some(name.to_string()))),
                         None => Err(CommandError::InvalidArgument {
                             command: "yume commit",
+                            value: word.to_string(),
+                        }),
+                    },
+                },
+                // Likewise a question on its own — and one word for both
+                // halves of it, because「面板」is what a reader calls the
+                // thing whether it is drawn or not.
+                Some("panel") => match parts.next() {
+                    None => Ok(Command::YumePanel(None)),
+                    Some(word) => match pick(word, PANELS).map(|w| w.name) {
+                        Some(name) => Ok(Command::YumePanel(Some(name.to_string()))),
+                        None => Err(CommandError::InvalidArgument {
+                            command: "yume panel",
                             value: word.to_string(),
                         }),
                     },
@@ -1207,6 +1227,12 @@ const YUME: &[Word] = &[
         then: Args::Words(COMMITS),
     },
     Word {
+        name: "panel",
+        help: "候選面板：full 是候選框，bare 是行內預覽",
+        needs: &[Need::Scheme],
+        then: Args::Words(PANELS),
+    },
+    Word {
         name: "which",
         help: "現在用的是哪個方案、碼表打哪來",
         needs: &[],
@@ -1430,6 +1456,21 @@ const COMMITS: &[Word] = &[
     Word {
         name: "fluency",
         help: "整句輸入：一路打下去，空格確認整句，從不自己上屏",
+        needs: &[],
+        then: Args::None,
+    },
+];
+
+const PANELS: &[Word] = &[
+    Word {
+        name: "full",
+        help: "候選框：光標旁邊的那張帶框的表",
+        needs: &[],
+        then: Args::None,
+    },
+    Word {
+        name: "bare",
+        help: "空空如也：首選直接畫在正文裏，編碼在光標下面，Tab 召出候選框",
         needs: &[],
         then: Args::None,
     },
@@ -2635,6 +2676,23 @@ mod tests {
             parse(":yume commit fluency"),
             Ok(Command::YumeCommit(Some("fluency".into())))
         );
+        // #211: 候選面板 is the other axis, and it parses by prefix too.
+        assert_eq!(parse(":yume panel"), Ok(Command::YumePanel(None)));
+        assert_eq!(
+            parse(":yume panel bare"),
+            Ok(Command::YumePanel(Some("bare".into())))
+        );
+        assert_eq!(
+            parse(":yume p f"),
+            Ok(Command::YumePanel(Some("full".into())))
+        );
+        assert!(matches!(
+            parse(":yume panel invisible"),
+            Err(CommandError::InvalidArgument {
+                command: "yume panel",
+                ..
+            })
+        ));
         // Not silently the first of the three.
         assert!(matches!(
             parse(":yume commit slow"),

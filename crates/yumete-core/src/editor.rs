@@ -2660,6 +2660,13 @@ impl Editor {
                 self.scheme_request = Some(format!("commit:{}", mode.unwrap_or_default()));
                 Ok(CommandOutcome::Continue)
             }
+            // 候選面板 rides it too, for the same reason: the front end is the
+            // one that draws a panel, so it is the one that can be asked not
+            // to (Feature #211).
+            Command::YumePanel(mode) => {
+                self.scheme_request = Some(format!("panel:{}", mode.unwrap_or_default()));
+                Ok(CommandOutcome::Continue)
+            }
             // Taken by the front end **after the next frame**: the command
             // line is still open on this one, and a picture of the thing you
             // are debugging with the debugger's own prompt across it is not a
@@ -3098,6 +3105,17 @@ impl Editor {
     /// The 0-based line the cursor is on.
     pub fn cursor_line(&self) -> usize {
         self.current_buffer().rope().char_to_line(self.cursor)
+    }
+
+    /// The 0-based **character** column the cursor is at within its line.
+    ///
+    /// Not [`Self::cursor_visual_column`], which is cells: this is the column
+    /// a ghost run is anchored at, and those are counted in characters the way
+    /// `hidden` is (Feature #211).
+    pub fn cursor_column(&self) -> usize {
+        let rope = self.current_buffer().rope();
+        let at = self.cursor.min(rope.len_chars());
+        at - rope.line_to_char(rope.char_to_line(at))
     }
 
     /// The cursor's visual column (summed display width within its line).

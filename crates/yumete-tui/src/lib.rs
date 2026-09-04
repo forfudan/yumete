@@ -37,7 +37,7 @@ use yumete_core::sidebar::View;
 use yumete_core::wrap::{self, Anchor as WrapAnchor};
 use yumete_core::zong::{Anchor, Layout as WritingLayout};
 use yumete_core::{say, Editor, Key, KeyOutcome, Mode, TextStore};
-use yumete_ime::{CommitStrategy, DataFault, DataProblem, ImeSession, Scheme};
+use yumete_ime::{CommitStrategy, DataFault, DataProblem, ImeSession, PanelDisplay, Scheme};
 
 /// Run the interactive editor until the user quits.
 ///
@@ -323,6 +323,12 @@ pub fn run(
                 editor.set_page(page.height as usize, page.width.max(1) as usize);
             }
         }
+        // …and what the input method is offering, in the text, before anybody
+        // measures the page. `draw` only holds the editor by reference, and
+        // the caret, `j`, the mouse and 折行 all have to agree that the
+        // candidate is on the page — which is the whole reason #210 made ghost
+        // text an input to the layout rather than something painted over it.
+        settle_inline_candidate(editor, ime);
         if let Err(err) = terminal.draw(|frame| draw(frame, editor, config, ime, &mut viewport)) {
             break Err(err);
         }
@@ -1334,6 +1340,32 @@ fn commit_method(ime: &mut ImeSession, mode: &str) -> String {
     say!("上屏方式：{0}", commit_name(now))
 }
 
+/// 候選面板: the bordered list, or the sentence itself (Feature #211).
+///
+/// The other axis from [`commit_method`], and independent of it: **when** a
+/// word lands on the page and **where** you read the candidate are two
+/// questions. `bare` is 空空如也 — yume's own front end already has a full
+/// panel, and the surface a novel is written on does not need a second one
+/// hanging off the caret.
+fn panel_method(ime: &mut ImeSession, mode: &str) -> String {
+    if mode.is_empty() {
+        return say!("候選面板：{0}", panel_name(ime.panel_display()));
+    }
+    let Some(display) = PanelDisplay::parse(mode) else {
+        return say!("沒有「{0}」這種候選面板——full、bare", mode);
+    };
+    ime.set_panel_display(display);
+    say!("候選面板：{0}", panel_name(display))
+}
+
+/// The name a 候選面板 is called by, in the language the writer reads.
+fn panel_name(display: PanelDisplay) -> String {
+    match display {
+        PanelDisplay::Full => say!("候選框"),
+        PanelDisplay::Bare => say!("行內預覽"),
+    }
+}
+
 /// The data files that are installed and doing nothing, in one clause (#220).
 ///
 /// A file that is simply **not there** is left out: half the manifest is
@@ -1375,6 +1407,42 @@ fn data_faults(ime: &ImeSession) -> String {
     }
 }
 
+/// Put the candidate `bare` is offering into the text, or take it away again.
+///
+/// Wholesale, every frame, because [`Editor::set_ghost`] is wholesale: what is
+/// on the page now is exactly what this says, so a committed candidate leaves
+/// nothing behind and a cancelled one disappears without anybody remembering
+/// to clear it.
+///
+/// **Not in a prompt.** A `/` search composes on the status line, which has no
+/// page to draw into; the panel comes up there whatever this setting says.
+fn settle_inline_candidate(editor: &mut Editor, ime: &ImeSession) {
+    let want = inline_candidate(editor, ime);
+    // A page with no candidate on it pays nothing — and must not be marked
+    // dirty by a `set_ghost` that changes nothing, since both layout memos are
+    // keyed on the runs.
+    if want.is_empty() {
+        if editor.has_ghost() {
+            editor.set_ghost(Vec::new());
+        }
+        return;
+    }
+    editor.set_ghost(vec![(editor.cursor_line(), editor.cursor_column(), want)]);
+}
+
+/// The text `bare` draws into the sentence, or empty when it draws nothing.
+fn inline_candidate(editor: &Editor, ime: &ImeSession) -> String {
+    if ime.panel_is_full()
+        || !composes(editor.mode())
+        || editor.prompt().is_some()
+        || !ime.available()
+        || !ime.is_composing()
+    {
+        return String::new();
+    }
+    ime.inline_candidate()
+}
+
 /// Switch the IME to the named scheme, and say what happened.
 ///
 /// Only 靈明 ships with yumete. The others are yume's own data, installed the
@@ -1399,6 +1467,13 @@ fn switch_scheme(ime: &mut ImeSession, tag: &str, config: &Config) -> String {
         } else {
             "還沒開始打字，而且這個二進制不帶碼表——先裝資料".to_string()
         };
+        // 面板 only when there is not one: a writer who sees no candidate list
+        // and wonders where it went is the only one who needs telling, and the
+        // line is already four clauses long (Feature #211).
+        let head = match ime.panel_display() {
+            PanelDisplay::Full => head,
+            display => format!("{head} · {}", say!("面板 {0}", panel_name(display))),
+        };
         // The one thing `:yume` could not say before #220: a file that is
         // installed and doing nothing. It goes last because it is rare, and it
         // goes here because this is the question it answers.
@@ -1411,12 +1486,16 @@ fn switch_scheme(ime: &mut ImeSession, tag: &str, config: &Config) -> String {
     if let Some(mode) = tag.strip_prefix("commit:") {
         return commit_method(ime, mode);
     }
+    if let Some(mode) = tag.strip_prefix("panel:") {
+        return panel_method(ime, mode);
+    }
     if let Some(path) = tag.strip_prefix('=') {
         let path = std::path::PathBuf::from(shellexpand(path));
         return match ImeSession::from_table_file(&path) {
             Ok(mut table) => {
                 table.set_page_size(config.panel.page_size);
                 table.set_commit_strategy(ime.commit_override());
+                table.set_panel_display(ime.panel_display());
                 *ime = table;
                 format!("碼表：{}", path.display())
             }
@@ -1453,6 +1532,7 @@ fn switch_scheme(ime: &mut ImeSession, tag: &str, config: &Config) -> String {
         full.set_page_size(config.panel.page_size);
         full.set_annotations(ime.annotations_enabled());
         full.set_commit_strategy(ime.commit_override());
+        full.set_panel_display(ime.panel_display());
         *ime = full;
         return say!("方案：{0}（系統裝的碼表）", ime.scheme_name());
     }
@@ -1464,6 +1544,7 @@ fn switch_scheme(ime: &mut ImeSession, tag: &str, config: &Config) -> String {
         full.set_page_size(config.panel.page_size);
         full.set_annotations(ime.annotations_enabled());
         full.set_commit_strategy(ime.commit_override());
+        full.set_panel_display(ime.panel_display());
         *ime = full;
         return "方案：靈明（出廠自帶的碼表）".to_string();
     }
@@ -1492,6 +1573,7 @@ fn switch_scheme(ime: &mut ImeSession, tag: &str, config: &Config) -> String {
             full.set_page_size(config.panel.page_size);
             full.set_commit_strategy(ime.commit_override());
             full.set_annotations(ime.annotations_enabled());
+            full.set_panel_display(ime.panel_display());
             let name = full.scheme_name().to_string();
             *ime = full;
             return format!("方案：{name}");
@@ -1568,9 +1650,15 @@ fn ime_handle(
         | KeyCode::PageUp
         | KeyCode::PageDown
         | KeyCode::Delete
-        | KeyCode::Tab
         | KeyCode::BackTab
             if composing => {}
+        // 空空如也 with a way out: `Tab` brings the whole list up for the one
+        // word that needs it, and it goes away with that word (Feature #211).
+        // Swallowed either way — a Tab typed mid-composition has never been an
+        // indent, and under `full` there is nothing to summon.
+        KeyCode::Tab if composing => {
+            ime.summon_panel();
+        }
         // Any other printable character (letters start/continue a composition;
         // punctuation and digits are handled by the engine). A literal space
         // with no composition falls through to the editor.
@@ -1841,7 +1929,7 @@ fn draw(
     // using.
     draw_which_key(frame, editor, config, text_area, footer.y, cursor_x);
     // …and the same string beside the caret, where the eyes are.
-    draw_hud(frame, editor, config, text_area, (cursor_x, cursor_y));
+    draw_hud(frame, editor, config, ime, text_area, (cursor_x, cursor_y));
 
     // In vertical layout the cursor is a block drawn into the page: a hardware
     // cursor is one cell wide and would sit lopsided inside a two-cell 縱.
@@ -1863,7 +1951,11 @@ fn draw(
         frame.set_cursor_position(Position::new(cursor_x, cursor_y));
     }
 
-    if composes(editor.mode()) && ime.available() && ime.is_composing() {
+    // `bare` draws no panel — the candidate is already in the sentence and the
+    // code is under the caret. A prompt is the exception: it composes on the
+    // status line, which has no page to draw a candidate into.
+    let panel = ime.panel_is_full() || editor.prompt().is_some();
+    if panel && composes(editor.mode()) && ime.available() && ime.is_composing() {
         // The panel follows the page, not the prompt: a `/` search in a
         // vertically set document still picks its candidates out of a vertical
         // list, and one panel wearing a different skin from the other reads as a
@@ -2043,11 +2135,39 @@ fn draw_list(
 ///
 /// Normal mode only. While prose is being typed nothing may flicker beside the
 /// characters, and in Insert there is no command being built anyway.
-fn draw_hud(frame: &mut Frame, editor: &Editor, config: &Config, page: Rect, caret: (u16, u16)) {
-    if editor.mode() != Mode::Normal || editor.prompt().is_some() {
-        return;
+/// What the mark under the caret says: a half-typed command, or a half-typed
+/// code (Feature #211).
+///
+/// Two callers with one answer — this row and the status line's right edge —
+/// so the two surfaces can never disagree about what is being typed.
+///
+/// They cannot both be true at once: `typed_so_far` is Normal mode's, and a
+/// composition is Insert's. In `full` the code is the panel's first row and
+/// this stays empty, which is why the mark is not simply always drawn.
+fn hud_line(editor: &Editor, ime: &ImeSession) -> String {
+    if editor.prompt().is_some() {
+        return String::new();
     }
-    let typed = editor.typed_so_far();
+    if composes(editor.mode()) && ime.available() && ime.is_composing() && !ime.panel_is_full() {
+        // 空空如也 leaves the code nowhere else to be: the candidate is in the
+        // sentence, and what was typed to get it is not.
+        return ime.display_buffer();
+    }
+    match editor.mode() {
+        Mode::Normal => editor.typed_so_far(),
+        _ => String::new(),
+    }
+}
+
+fn draw_hud(
+    frame: &mut Frame,
+    editor: &Editor,
+    config: &Config,
+    ime: &ImeSession,
+    page: Rect,
+    caret: (u16, u16),
+) {
+    let typed = hud_line(editor, ime);
     if typed.is_empty() || page.height < 2 {
         return;
     }
@@ -3592,7 +3712,9 @@ fn draw_status(
     // memory. It takes the place of the character readout while a command is
     // half-typed — that readout is about the character you are standing on, and
     // right now you are in the middle of saying something.
-    let typed = editor.typed_so_far();
+    // The same string the HUD carries — and the reason the HUD may give up on
+    // finding a row: whatever happens beside the caret, it is also here.
+    let typed = hud_line(editor, ime);
     let right = match typed.is_empty() {
         true => char_info(editor, config),
         false => (typed, String::new()),
@@ -5166,6 +5288,121 @@ mod tests {
         // the 碼表 — the question a writer asks is 「what is it doing」.
         let said = switch_scheme(&mut ime, "?", &Config::default());
         assert!(said.contains("上屏 唯一"), "{said}");
+    }
+
+    /// #211: 空空如也 — the candidate goes into the sentence and the panel
+    /// does not come up at all.
+    #[test]
+    fn bare_puts_the_candidate_in_the_text_and_draws_no_panel() {
+        let mut editor = Editor::new();
+        editor.on_key(Key::Char('i'));
+        let mut ime = ImeSession::from_table_text(Scheme::Lingming, "b 吧 八 巴
+");
+        ime.set_panel_display(PanelDisplay::Bare);
+        ime.input('b');
+        settle_inline_candidate(&mut editor, &ime);
+
+        // The first candidate is on the page, at the caret, though the file
+        // holds not one byte of it.
+        assert_eq!(editor.current_buffer().text(), "");
+        assert_eq!(editor.ghost_on_line(0), vec![(0, "吧".to_string())]);
+
+        let config = Config::default();
+        let buffer = render_with(&editor, &config, &ime, 40, 8);
+        let rows: Vec<String> = (0..buffer.area.height)
+            .map(|y| {
+                (0..buffer.area.width)
+                    .map(|x| buffer[(x, y)].symbol())
+                    .collect()
+            })
+            .collect();
+        // The gutter, then the candidate, and nothing else on the row.
+        assert_eq!(rows[0].trim_end(), "1 吧", "{:?}", rows[0]);
+        // No panel: the second and third candidates are nowhere on the screen.
+        assert!(
+            !rows.iter().any(|r| r.contains('八') || r.contains('巴')),
+            "{rows:#?}"
+        );
+        // …and the code has somewhere to be — beside the caret, and on the
+        // status line's right edge.
+        assert_eq!(hud_line(&editor, &ime), "b");
+        assert!(rows.iter().any(|r| r.contains("╰ b")), "{rows:#?}");
+    }
+
+    /// #211: `Tab` is the way back to the whole list, for one word.
+    #[test]
+    fn tab_summons_the_panel_and_it_leaves_with_the_word() {
+        let mut editor = Editor::new();
+        editor.on_key(Key::Char('i'));
+        let mut ime = ImeSession::from_table_text(Scheme::Lingming, "b 吧 八 巴
+");
+        ime.set_panel_display(PanelDisplay::Bare);
+        ime.input('b');
+        assert!(!ime.panel_is_full());
+
+        assert!(ime_handle(
+            &mut ime,
+            &mut editor,
+            KeyCode::Tab,
+            KeyModifiers::NONE
+        ));
+        assert!(ime.panel_is_full(), "the whole list, for this one word");
+        // …so nothing is drawn into the text while it is up: two surfaces
+        // saying the same thing is the thing this editor keeps taking apart.
+        settle_inline_candidate(&mut editor, &ime);
+        assert!(!editor.has_ghost());
+
+        // The word lands, and the panel goes with it.
+        ime.space();
+        editor.insert_committed(&ime.take_committed());
+        assert_eq!(editor.current_buffer().text(), "吧");
+        assert!(!ime.panel_is_full());
+        ime.input('b');
+        assert!(!ime.panel_is_full(), "a new word starts空空如也 again");
+    }
+
+    /// #211: the setting, the command, and the question, in the writer's words.
+    #[test]
+    fn the_panel_says_which_way_it_is_drawing() {
+        let mut ime = ImeSession::from_table_text(Scheme::Lingming, "a 啊
+");
+        let said = panel_method(&mut ime, "");
+        assert!(said.contains("候選框"), "{said}");
+        let said = panel_method(&mut ime, "bare");
+        assert!(said.contains("行內預覽"), "{said}");
+        assert_eq!(ime.panel_display(), PanelDisplay::Bare);
+        // …and `:yume` says so, because a page with no candidate list on it is
+        // the thing a writer asks about.
+        let said = switch_scheme(&mut ime, "?", &Config::default());
+        assert!(said.contains("面板 行內預覽"), "{said}");
+        // A word it cannot read names the two rather than picking one.
+        let said = panel_method(&mut ime, "invisible");
+        assert!(said.contains("invisible") && said.contains("bare"), "{said}");
+        assert_eq!(ime.panel_display(), PanelDisplay::Bare, "unchanged");
+    }
+
+    /// #211: a `/` search composes on the status line, which has no page to
+    /// draw a candidate into — so the panel comes up there whatever the
+    /// setting says.
+    #[test]
+    fn a_prompt_keeps_its_panel_even_under_bare() {
+        let mut editor = Editor::new();
+        editor.on_key(Key::Char('/'));
+        let mut ime = ImeSession::from_table_text(Scheme::Lingming, "b 吧 八 巴
+");
+        ime.set_panel_display(PanelDisplay::Bare);
+        ime.input('b');
+        settle_inline_candidate(&mut editor, &ime);
+        assert!(!editor.has_ghost(), "nothing goes into the manuscript");
+        assert_eq!(hud_line(&editor, &ime), "", "nor beside the caret");
+
+        let config = Config::default();
+        let buffer = render_with(&editor, &config, &ime, 40, 8);
+        let screen: String = (0..buffer.area.height)
+            .flat_map(|y| (0..buffer.area.width).map(move |x| (x, y)))
+            .map(|at| buffer[at].symbol().to_string())
+            .collect();
+        assert!(screen.contains('八'), "the list is where it can be read");
     }
 
     #[test]
