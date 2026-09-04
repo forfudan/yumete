@@ -471,7 +471,7 @@ index, and a row with no number anywhere else is a row that got lost.
 | 258 | **Files with 40 MB single lines** | core | P4 | the per-paragraph caches are keyed by revision and sized by what is on screen, so the budget is already the right shape; nothing has tested it against one line that is the whole file. **medium** | Planned |
 | 259 | **A live prose tint for English** | tui | P4 | the same per-frame budget the CJK work spends, aimed at the other language. **medium** | Planned |
 | 260 | **Macros as editable text** | core | P4 | record, then *read and fix* what was recorded. **medium** | Planned |
-| 261 | **A table is a delimiter, a surface and a boundary** | core | P2 | the author's model, 2026-09-05: a CSV file is the special case of a table whose boundary is the whole file, so `Shape::{Delimited,Markdown}` should split into two independent axes — **separator** (`Delimiter(c)` / `Pipe`) and **surface** (`Page` / `InProse`) — plus a `Boundary` that is recomputed, never stored (`md_region()`'s own rule). Three tiers fall out: a CSV/TSV/schema'd file is `Delimiter` × `Page` over the whole file; a `\|` table is `Pipe` × `InProse` over `md_region()`; and **the third cell does not exist today** — a block of TSV or `&` pasted into a chapter, entered by standing on the delimiter (or selecting the lines) and walked out while the line still holds it. `turn_for_table` then asks `surface == Page` instead of `shape != Markdown`, which is what it always meant. Enables #227 (one rewriter instead of two) and #142's 「cell model over a region」. See §5.5 | Planned |
+| 261 | **A table is a delimiter, a surface and a boundary** | core | P2 | the author's model, 2026-09-05: a CSV file is the special case of a table whose boundary is the whole file, so `Shape::{Delimited,Markdown}` should split into two independent axes — **separator** (`Delimiter(c)` / `Pipe`) and **surface** (`Page` / `InProse`) — plus a `Boundary` that is recomputed, never stored (`md_region()`'s own rule). Three tiers fall out: a CSV/TSV/schema'd file is `Delimiter` × `Page` over the whole file; a `\|` table is `Pipe` × `InProse` over `md_region()`; and **the third cell does not exist today** — a block of TSV or `&` pasted into a chapter, entered by standing on the delimiter (or selecting the lines) and walked out while the line still holds it. `turn_for_table` then asks `surface == Page` instead of `shape != Markdown`, which is what it always meant. Enables #227 (one rewriter instead of two) and #142's 「cell model over a region」. See §5.5. **The two axes and the boundary landed 2026-09-05, behaviour unchanged; the third tier is #227.** | Done |
 
 ### 5.5 · A table is a delimiter, a surface and a boundary (#261)
 
@@ -541,6 +541,30 @@ is what the line always meant.
 
 **Land it as one commit that changes no behaviour**, with the third tier and #227
 after it.
+
+**What landed, 2026-09-05.** The three axes are in `editor.rs`, `Shape` and
+`is_grid()` are gone, and the two tiers that exist keep every bit of their old
+behaviour:
+
+| | `separator` | `surface` | `bounds` |
+| --- | --- | --- | --- |
+| a file a schema claims, `.csv`, `.tsv` | `Delimiter(c)` | `Page` | `WholeFile` |
+| a `\|` table in a document | `Pipe` | `InProse` | `Md` |
+
+`Bounds::Block` is deliberately **not** written yet — an enum with a variant
+nothing constructs is a promise, and the walk it needs (the four rules above) is
+#227's work. The twenty tests split roughly evenly, which was the point:
+
+- **which splitter** → `separator`, and mostly not even that: `TableView::cells`
+  and `TableView::boxes` answer it once, so `row_cells`, `row_cell_boxes` and
+  `rows_break_the_grid` no longer match on anything. `grid_shape_here` returns a
+  `Separator` instead of `(char, bool)`, and its two callers stopped carrying a
+  bool named `rows_only` that meant 「the separator is a pipe」.
+- **is this drawn on its own page** → `surface`. All eight `is_grid()` calls in
+  `yumete-tui` were this question, and `turn_for_table`'s Markdown exception
+  became `in_prose()` — the same line, finally saying what it meant.
+- **where does it start and stop** → `bounds`. Only three sites: `table_here`,
+  `md_region`'s own gate, and `enter_table`'s 「a schema outranks a pipe」 rule.
 
 ### 14 · What four reviews of the code found, 2026-09-03
 
