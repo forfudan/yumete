@@ -2367,6 +2367,10 @@ impl Editor {
                 }
                 Ok(CommandOutcome::Continue)
             }
+            Command::Help(topic) => {
+                self.open_help(topic.as_deref());
+                Ok(CommandOutcome::Continue)
+            }
             Command::ListBuffers => {
                 // The picker, not the status line: with 122 chapters open the
                 // list is 1,783 characters and the status line is one row. A
@@ -4288,7 +4292,186 @@ impl Editor {
         self.status = say!("跑完了：{0}", line);
     }
 
-    /// A typesetter the front end should start or stop.
+    /// **`:help`** — the keys and the commands, in a buffer you can read with
+    /// the editor itself.
+    ///
+    /// Written from the same declarations the editor runs on — `COMMANDS`,
+    /// `SPACE_KEYS`, the which-key lists — so it cannot drift from what the
+    /// keys actually do. A manual can be out of date; this cannot be, because
+    /// there is nothing here to keep up to date.
+    ///
+    /// It opens as an ordinary buffer, so `/`, `n`, `空格 f` and every motion
+    /// work in it: the way to learn an editor is to use it on something, and
+    /// this is something.
+    fn open_help(&mut self, topic: Option<&str>) {
+        let (title, text) = match topic.map(str::trim).unwrap_or_default() {
+            "" => (say!("常用"), self.help_common()),
+            t if "chinese".starts_with(t) || "中文".starts_with(t) => {
+                (say!("中文"), Self::help_chinese())
+            }
+            t if "vertical".starts_with(t) || "竪排".starts_with(t) => {
+                (say!("竪排"), Self::help_vertical())
+            }
+            t if "table".starts_with(t) || "表格".starts_with(t) => {
+                (say!("表格"), self.help_table())
+            }
+            t if "commands".starts_with(t) || "命令".starts_with(t) => {
+                (say!("命令"), Self::help_commands())
+            }
+            other => {
+                self.status = say!(
+                    "沒有「{0}」這一節——:help 有 chinese、vertical、table、commands",
+                    other
+                );
+                return;
+            }
+        };
+        let mut buffer = crate::Buffer::from_text(&text);
+        buffer.name_as(&format!("[help · {title}]"));
+        self.add_buffer(buffer);
+        self.status = say!("{0}（:q 關掉；/ 可以搜）", title);
+    }
+
+    /// The keys a writer uses in the first hour, drawn from what is bound.
+    fn help_common(&self) -> String {
+        let mut out = String::new();
+        out.push_str("# yumete
+
+");
+        out.push_str(&format!("{}\n\n", say!("每一節都是這個編輯器自己報上來的，不是抄的。")));
+        out.push_str(&format!("## {}\n\n", say!("動：命令＋選擇＋動作")));
+        for (keys, what) in [
+            ("h j k l", say!("左下上右；竪排裏是沿着縱走")),
+            ("w b e", say!("下一詞首、上一詞首、詞尾——認得漢字的詞")),
+            ("3w 5j", say!("數字在前是次數")),
+            ("g30g / 30G", say!("去第 30 行")),
+            ("gg ge", say!("檔首／檔尾")),
+            ("gh gl gs", say!("行首／行尾／首個非空白")),
+            ("J K", say!("前進／後退半頁；L H 是整頁")),
+            ("gd gw", say!("去／看它指的地方：腳註的註、拆分的那一行")),
+            ("g/ g?", say!("這個詞還在哪裏：這邊找／另一個工作區看")),
+            ("/ n N", say!("搜索、下一處、上一處")),
+            ("C-o C-i", say!("跳回去／再跳回來")),
+            ("M a  'a", say!("記住這裏／回到那裏")),
+        ] {
+            out.push_str(&format!("- `{keys}` — {what}
+"));
+        }
+        out.push_str(&format!("\n## {}\n\n", say!("改")));
+        for (keys, what) in [
+            ("i a", say!("在光標前／後開始打字")),
+            ("x", say!("選這一行；d 刪選區，c 換掉選區")),
+            ("y p", say!("複製／貼上")),
+            ("u U", say!("撤銷／重做")),
+            (".", say!("再做一次剛才那次改動")),
+            ("q Q", say!("錄一段按鍵／放一遍")),
+            ("> <", say!("縮進／退縮進")),
+        ] {
+            out.push_str(&format!("- `{keys}` — {what}
+"));
+        }
+        out.push_str(&format!("\n## {}\n\n", say!("空格開頭的")));
+        for (key, what) in Self::SPACE_KEYS {
+            out.push_str(&format!(
+                "- `空格 {key}` — {}
+",
+                crate::messages::say(what, &[])
+            ));
+        }
+        out.push_str(&format!("\n## {}\n\n", say!("別的幾節")));
+        for (topic, what) in [
+            ("chinese", say!("漢字、標點、注音、輸入法")),
+            ("vertical", say!("竪排")),
+            ("table", say!("表格與拆分表")),
+            ("commands", say!("所有 : 命令")),
+        ] {
+            out.push_str(&format!("- `:help {topic}` — {what}\n"));
+        }
+        out
+    }
+
+    fn help_chinese() -> String {
+        let mut out = format!("# {}\n\n", say!("中文"));
+        for (keys, what) in [
+            ("C-Space", say!("開／關輸入法；單獨按一下 Shift 切中英")),
+            (":scheme", say!("換方案：靈明、星陳、卿雲、日月、拼音")),
+            (":chaifen on", say!("候選詞下面顯示拆分")),
+            ("w b e", say!("詞的邊界是分詞算出來的，不是空格")),
+            (":segmentation on", say!("把分出來的詞用底色標出來")),
+            (":words", say!("重讀 .yumete/words.txt——這本書自己的詞")),
+            (":ruby", say!("給選中的字注音；:ruby format 統一寫法")),
+            (":render full", say!("所見即所得：標記只在光標那一處展開")),
+            (":indent 2", say!("段首空兩格，段間的空行就收起來")),
+            (":hanging on", say!("標點旁置：句讀掛在字旁邊的邊欄裏")),
+            (":count", say!("數字數——漢字、標點、西文分開數")),
+        ] {
+            out.push_str(&format!("- `{keys}` — {what}
+"));
+        }
+        out
+    }
+
+    fn help_vertical() -> String {
+        let mut out = format!("# {}\n\n", say!("竪排"));
+        for (keys, what) in [
+            (":layout vertical", say!("轉成竪排；:layout 來回切")),
+            ("h l", say!("上一縱／下一縱——縱是往左疊的")),
+            ("j k", say!("沿着這一縱往下／往上")),
+            (":zong 24", say!("一縱多少字；0 是跟着窗高走")),
+            (":bands 2", say!("分幾段：一頁上下兩段，像報紙")),
+            (":hanging on", say!("標點旁置")),
+            (":tatechuyoko on", say!("縦中横：兩位數字轉正")),
+            (":dense off", say!("疏排：每縱之間留一格")),
+            (":paper 10", say!("稿紙刻度：每十個字一個記號")),
+        ] {
+            out.push_str(&format!("- `{keys}` — {what}
+"));
+        }
+        out
+    }
+
+    fn help_table(&self) -> String {
+        let mut out = format!("# {}\n\n", say!("表格"));
+        for (keys, what) in [
+            (":table", say!("把這個檔案當表格讀；:table off 退出")),
+            ("h j k l", say!("按格走；Tab 換成按字走")),
+            ("Tab S-Tab", say!("格子裏：下一格／上一格")),
+            ("i a c d", say!("進格子打字／清掉這一格")),
+            ("gd gw", say!("這一格在 key 欄裏是哪一行：去／看")),
+            ("3gd g2-5d", say!("改成在第 3 欄／第 2–5 欄裏找")),
+            ("t/ t?", say!("誰用了它——一欄一欄地找：這邊找／那邊看")),
+            ("t o t d", say!("加一行／刪一行；t j t k 上下移")),
+            ("t s t S", say!("照這一欄順排／倒排")),
+            ("t y t p", say!("取這一欄／貼一欄")),
+            (":table rules off", say!("關掉欄之間的分隔線")),
+        ] {
+            out.push_str(&format!("- `{keys}` — {what}
+"));
+        }
+        out
+    }
+
+    /// Every `:` command, from the table the parser itself reads.
+    fn help_commands() -> String {
+        let mut out = format!("# {}\n\n", say!("命令"));
+        for entry in crate::command::COMMANDS {
+            let aliases = match entry.aliases.is_empty() {
+                true => String::new(),
+                false => format!("（{}）", entry.aliases.join(" ")),
+            };
+            out.push_str(&format!(
+                "- `:{}`{} {} — {}
+",
+                entry.name,
+                aliases,
+                entry.args.hint(),
+                crate::messages::say(entry.help, &[])
+            ));
+        }
+        out
+    }
+
+    /// A typesetter the front end should start or stop.    /// A typesetter the front end should start or stop.
     /// Whether the move that just happened was a jump, so the page can centre
     /// what it landed on rather than nudge it in from an edge.
     pub fn jumped(&self) -> bool {
@@ -15056,6 +15239,32 @@ mod tests {
 
     /// A preview server is a running thing: `:preview` while one is up asks
     /// *where* it is, not for a second one.
+    /// `:help` is written from what the editor actually runs on.
+    #[test]
+    fn help_is_the_editor_describing_itself() {
+        let mut ed = typed("那年冬天。\n");
+        ed.execute(":help").unwrap();
+        let text = ed.current_buffer().text();
+        assert!(ed.buffer_name().contains("help"), "{}", ed.buffer_name());
+        // Every key the Space menu declares is in it, because it is *made* of
+        // that list rather than written beside it.
+        for (key, _) in Editor::SPACE_KEYS {
+            assert!(text.contains(&format!("空格 {key}")), "空格 {key} missing");
+        }
+        assert!(text.contains("g/") && text.contains("gd"), "{text}");
+
+        // …and the command section is the parser's own table.
+        ed.execute(":help commands").unwrap();
+        let text = ed.current_buffer().text();
+        for entry in crate::command::COMMANDS {
+            assert!(text.contains(&format!(":{}", entry.name)), "{} missing", entry.name);
+        }
+
+        // A section that does not exist says which ones do.
+        ed.execute(":help 火星文").unwrap();
+        assert!(ed.status().contains("chinese"), "{}", ed.status());
+    }
+
     #[test]
     fn a_second_preview_asks_where_the_first_one_is() {
         let dir = std::env::temp_dir().join(format!("yumete-prev-{}", std::process::id()));

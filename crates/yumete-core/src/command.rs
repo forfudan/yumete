@@ -179,6 +179,8 @@ pub enum Command {
     },
     /// `:buffers` (alias `:ls`) — name every open buffer.
     ListBuffers,
+    /// `:help [節]` — the keys and the commands, in a buffer.
+    Help(Option<String>),
     /// `:toc [n]` — list the headings, or go to the nth.
     Outline(Option<usize>),
     /// `:row 木` — go to the row this table names by that character.
@@ -645,6 +647,10 @@ pub fn parse(input: &str) -> Result<Command, CommandError> {
                 Ok(Command::GotoRow(rest.to_string()))
             }
         }
+        "help" => Ok(Command::Help(match rest.is_empty() {
+            true => None,
+            false => Some(rest.to_string()),
+        })),
         "toc" | "outline" => Ok(Command::Outline(if rest.is_empty() {
             None
         } else {
@@ -738,7 +744,32 @@ pub enum Args {
     Free(&'static str),
 }
 
-/// One word a command accepts, and what may follow *it*.
+impl Args {
+    /// What may follow the command, for a listing: `<檔名>`, `on|off`, or
+    /// nothing at all.
+    pub fn hint(&self) -> String {
+        match self {
+            Args::None => String::new(),
+            Args::Path => "<路徑>".to_string(),
+            Args::Free(what) => (*what).to_string(),
+            Args::Words(words) => words
+                .iter()
+                .map(|w| w.name)
+                .collect::<Vec<_>>()
+                .join("｜"),
+        }
+    }
+}
+
+/// The sections `:help` offers.
+const HELP_SECTIONS: &[Word] = &[
+    Word { name: "chinese", help: "漢字、標點、注音、輸入法", then: Args::None, needs: &[] },
+    Word { name: "vertical", help: "竪排", then: Args::None, needs: &[] },
+    Word { name: "table", help: "表格與拆分表", then: Args::None, needs: &[] },
+    Word { name: "commands", help: "所有 : 命令", then: Args::None, needs: &[] },
+];
+
+/// One word a command accepts, and what may follow *it*./// One word a command accepts, and what may follow *it*.
 pub struct Word {
     pub name: &'static str,
     pub help: &'static str,
@@ -1662,6 +1693,13 @@ pub const COMMANDS: &[Entry] = &[
         help: "開着的檔案：列出、切換、關掉",
         needs: &[],
         args: Args::Words(BUFFERS),
+    },
+    Entry {
+        name: "help",
+        aliases: &[],
+        help: "鍵和命令，開成一個可以讀、可以搜的檔案",
+        needs: &[],
+        args: Args::Words(HELP_SECTIONS),
     },
     Entry {
         name: "saveas",

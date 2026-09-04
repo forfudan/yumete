@@ -370,7 +370,7 @@ Phases are ordered by priority, most writer-critical first:
 | 164 | **【黑白】, a second theme**                 | both   | P2    | greys only: what warmth said in 墨香, position says here | Done |
 | 165 | **Readings on the horizontal page**         | tui    | P1    | the row above, over the 字 it reads; only a row that has one costs one | Done |
 | 166 | **Typewriter / focus mode**                 | tui    | P2    | the cursor's row stays in the middle of the screen | Planned |
-| 167 | **`:help`**                                 | both   | P1    | the keys worth knowing, in the editor; `:help chinese`, `:help vertical` | Planned |
+| 167 | **`:help`**                                 | both   | P1    | the keys worth knowing, in the editor; `:help chinese`, `:help vertical` | Done |
 | 168 | **The page before the dictionary**          | cli    | P1    | 14 MB of language data read after the first frame, not before it | Done |
 | 169 | **Schemes found rather than listed**        | both   | P2    | what is installed — including a scheme of the reader's own — is what `:yume scheme` offers; a Rime folder later | Planned |
 | 170 | **A command says what it is waiting for**   | both   | P1    | prerequisites declared beside the command, shown in the menu, said when it is run, and `force` satisfies them | Done |
@@ -393,7 +393,7 @@ Phases are ordered by priority, most writer-critical first:
 | 187 | **The detail panel is a panel**             | both   | P2    | close it, edit a value in it, change its width — it is the only surface here that can do none of those | Planned |
 | 188 | **The hint row wraps**                      | tui    | P3    | more keys than a row holds; never between a key and what it does | Planned |
 | 189 | **`:shot` takes the page, not the app**     | tui    | P2    | the tab bar and the title bar are not the editor; a region, or a crop, or the grid drawn by us | Planned |
-| 190 | **One rule for folding a blank line**       | core   | P1    | 竪排 folds with the indent off and opens one *with* it on — two behaviours that read as contradictory | Planned |
+| 190 | **One rule for folding a blank line**       | core   | P1    | 竪排 folds with the indent off and opens one *with* it on — two behaviours that read as contradictory | Done |
 | 191 | **A stored position names its buffer**      | core   | P0    | the hit list held `n`, survived a buffer switch and an edit, and said 「第 3/78 處」 about a character that matched nothing — `d` then deleted it | Done |
 | 192 | **The preview server is a running thing**   | tui    | P1    | `:preview` on a `.typ` starts `tinymist preview` and says the address once; ask again and the address is gone, and a session that ends badly leaves the server holding a port and its memory. The address should be gettable (`:preview` while one runs), visible (a mark in the status bar), and killable on purpose and after a crash | Planned |
 | 193 | **What you have typed is on the screen**    | both   | P1    | pressing `3` changed nothing at all, so `30d` and `3d` were told apart by memory. `showcmd` at the status line's right edge, a HUD beside the caret, and the which-key panel — one string, three surfaces, none of them guessing | Done |
