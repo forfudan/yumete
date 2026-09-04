@@ -684,6 +684,11 @@ struct Viewport {
     /// horizontal layout. An anchor rather than a row number: see
     /// [`yumete_core::wrap`].
     top: WrapAnchor,
+    /// How many columns of writing are off the **left** edge, in horizontal
+    /// layout. Zero whenever the rows fit, which with soft wrap on is always;
+    /// with `:wrap off` a paragraph is one row of any length, and without this
+    /// the page could only ever show its first screenful (Feature #221).
+    left: usize,
     /// The paragraph and piece the rightmost visible 縱 sits at, in vertical
     /// layout. An anchor rather than a 縱 number: see `vertical::draw`.
     zong: Anchor,
@@ -1751,7 +1756,7 @@ fn draw(
                 table::draw(frame, editor, config, *rect, &mut seat.table, peek)
             }
             WritingLayout::Horizontal => {
-                draw_horizontal(frame, editor, config, *rect, &mut seat.top, peek)
+                draw_horizontal(frame, editor, config, *rect, &mut seat.top, &mut seat.left, peek)
             }
             WritingLayout::Vertical => {
                 vertical::draw(frame, editor, config, *rect, &mut seat.zong, peek)
@@ -2426,7 +2431,11 @@ fn text_at(
             // Which character of that row the column landed on, counting only
             // what is drawn — hidden markup takes no columns.
             let want = (mouse.column - area.x) as usize;
-            let goal = want.saturating_sub(gutter);
+            // …plus what is off the left edge, so a click on a long line that
+            // the page has scrolled sideways to follow lands on the 字 under
+            // the pointer and not on one a screenful back (Feature #221). A
+            // click in the gutter means the first character on the page.
+            let goal = want.saturating_sub(gutter) + viewport.left;
             let hidden = editor.hidden_on_line(row.line);
             let ghosts = editor.ghost_on_line(row.line);
             let line_start = buffer.rope().line_to_char(row.line);
@@ -2864,6 +2873,47 @@ fn prompt_preedit(editor: &Editor, ime: &ImeSession) -> String {
     }
 }
 
+/// A drawn row with `left` columns of **writing** taken off its left edge.
+///
+/// The gutter is furniture and does not scroll: line numbers that slid away
+/// with the text would leave the reader with no way to say where they are. So
+/// the cut is made between the two — the first `gutter` columns are kept, the
+/// next `left` are dropped, and the rest moves over.
+///
+/// A 漢字 the cut lands in the middle of becomes air: half a 字 is not a
+/// character the terminal can draw, and drawing the whole one would put a
+/// column of writing where the reader is owed none.
+fn scrolled(line: Line<'static>, gutter: usize, left: usize) -> Line<'static> {
+    if left == 0 {
+        return line;
+    }
+    let cut = gutter + left;
+    let mut out: Vec<Span<'static>> = Vec::new();
+    let mut column = 0usize;
+    let style = line.style;
+    for span in line.spans {
+        let span_style = span.style;
+        let mut text = String::new();
+        for ch in span.content.chars() {
+            let end = column + yumete_cjk::char_width(ch);
+            if end <= gutter || column >= cut {
+                text.push(ch);
+            } else if column < gutter {
+                // A character straddling the gutter's edge: only the part of it
+                // that is furniture survives.
+                text.push_str(&" ".repeat(gutter - column));
+            } else if end > cut {
+                text.push_str(&" ".repeat(end - cut));
+            }
+            column = end;
+        }
+        if !text.is_empty() {
+            out.push(Span::styled(text, span_style));
+        }
+    }
+    Line::from(out).style(style)
+}
+
 /// Draw the buffer as horizontal rows with a line-number gutter, returning the
 /// cell the cursor sits on.
 ///
@@ -2878,6 +2928,7 @@ fn draw_horizontal(
     config: &Config,
     text_area: Rect,
     viewport: &mut WrapAnchor,
+    left: &mut usize,
     peek: Option<&yumete_core::editor::Pane>,
 ) -> (u16, u16) {
     let buffer = editor.current_buffer();
@@ -2919,6 +2970,25 @@ fn draw_horizontal(
     let cursor_line = rope.char_to_line(at.min(rope.len_chars()));
     let cursor_pos = wrap::position(rope, at, measure);
     let cursor_anchor = WrapAnchor::from(cursor_pos);
+
+    // …and sideways, by the same promise: **the caret is on the page**. With
+    // soft wrap on this never moves — a row is folded before it can reach the
+    // right edge, so the column is always inside the window and `left` settles
+    // back to zero. With `:wrap off` a paragraph is one row of whatever length
+    // it happens to be, and until this was here the window showed its first
+    // screenful and nothing else: `gl` walked the cursor off the right edge and
+    // the writing it landed in was never drawn (Feature #221).
+    //
+    // Scrolled by the single column that is needed and no more — no
+    // half-screen jump — because a caret walking one 字 at a time along a long
+    // line should not make the whole page slide out from under the reader.
+    let page = (text_area.width as usize).saturating_sub(gutter).max(1);
+    if cursor_pos.column < *left {
+        *left = cursor_pos.column;
+    } else if cursor_pos.column >= *left + page {
+        *left = cursor_pos.column + 1 - page;
+    }
+    let left = *left;
 
     // Scroll so the cursor's row stays on the page with `scrolloff` rows of
     // context above and below. Counted from the page's own anchor rather than
@@ -3228,7 +3298,7 @@ fn draw_horizontal(
             ghosts: &ghosts,
         };
         if let Some(reading) = reading_line(editor, ink, rope, &row, drawn, gutter + indent) {
-            lines.push(reading);
+            lines.push(scrolled(reading, gutter, left));
         }
 
         // …and the hit itself, over everything else on the row.
@@ -3283,9 +3353,14 @@ fn draw_horizontal(
             // ambiguous character (`—` `…` `▓`). One `——` in a fenced line and
             // the ground stopped two cells short of the edge. Over-filling
             // cannot be wrong: nothing is drawn past the area.
-            spans.push(Span::styled(" ".repeat(text_area.width as usize), ground));
+            // …plus what the sideways scroll will cut off the front of it, so a
+            // scrolled row is still painted to the right edge.
+            spans.push(Span::styled(
+                " ".repeat(text_area.width as usize + left),
+                ground,
+            ));
         }
-        lines.push(Line::from(spans));
+        lines.push(scrolled(Line::from(spans), gutter, left));
     }
     // `.style` paints the **whole area**, not only the rows there is writing
     // on: past the last line of a short file the page is still the page, and
@@ -3301,10 +3376,10 @@ fn draw_horizontal(
     // Only cells nothing else has coloured, so a selection reaching into the
     // margin still reads as selected.
     if ruler > 0 {
-        let left = text_area.x + (gutter + ruler) as u16;
+        let edge = text_area.x + (gutter + ruler.saturating_sub(left)) as u16;
         let buf = frame.buffer_mut();
         for y in text_area.y..text_area.y + text_area.height {
-            for x in left..text_area.x + text_area.width {
+            for x in edge..text_area.x + text_area.width {
                 if let Some(cell) = buf.cell_mut((x, y)) {
                     if cell.bg == Color::Reset || cell.bg == ink.paper() {
                         cell.set_bg(ink.at(yumete_config::rung::BAND));
@@ -3317,8 +3392,8 @@ fn draw_horizontal(
     // The line itself, only with wrap off. With it on, the edge of the tint is
     // already the line, and drawing one would be saying the same thing twice.
     if ruler > 0 && editor.wrap_width().is_none() {
-        let x = text_area.x + (gutter + ruler) as u16;
-        if x < text_area.x + text_area.width {
+        let x = text_area.x + (gutter + ruler) as u16 - left.min(ruler) as u16;
+        if ruler >= left && x < text_area.x + text_area.width {
             let buf = frame.buffer_mut();
             for y in text_area.y..text_area.y + text_area.height {
                 if let Some(cell) = buf.cell_mut((x, y)) {
@@ -3343,7 +3418,7 @@ fn draw_horizontal(
     // every motion, which is exactly the shape this editor keeps getting wrong.
     // Clamped to the page: a caret resting past a row that exactly fills the
     // width would otherwise be drawn in the column after the last one.
-    let x = (gutter + cursor_pos.column)
+    let x = (gutter + cursor_pos.column - left)
         .min(text_area.width.saturating_sub(1) as usize);
     (
         text_area.x + x as u16,
@@ -4166,6 +4241,140 @@ mod tests {
         editor.on_key(Key::Char('l'));
         let (_, at) = render_caret(&editor, &config, 20, 4);
         assert_eq!(at.map(|p| p.x), Some(8));
+    }
+
+    /// A configuration for reading one bare row: no gutter, no word tint, no
+    /// measure — only the writing, so a column in the assertions is a column
+    /// on the page.
+    fn bare() -> Config {
+        let mut config = Config::default();
+        config.editor.line_numbers = LineNumbers::None;
+        config.editor.show_segmentation = false;
+        config.editor.ruler = 0;
+        config
+    }
+
+    /// With `:wrap off` the page follows the caret off the right edge
+    /// (Feature #221).
+    ///
+    /// A paragraph is then one row of whatever length it happens to be, and
+    /// the window used to show its first screenful and nothing else: `gl`
+    /// walked the cursor to the end of the line and the writing it landed in
+    /// was never drawn.
+    #[test]
+    fn the_page_scrolls_sideways_to_keep_the_caret_on_it() {
+        let mut editor = editor_with("abcdefghijklmnopqrstuvwxyz");
+        editor.set_soft_wrap(false);
+        let config = bare();
+
+        // At the head of the line the page is not scrolled at all.
+        let (buffer, at) = render_caret(&editor, &config, 10, 4);
+        assert!(row_text(&buffer, 0).starts_with("abcdefghij"));
+        assert_eq!(at.map(|p| p.x), Some(0));
+
+        // `gl` — the end of the line, twenty-six columns along a ten-column
+        // window.
+        editor.on_key(Key::Char('g'));
+        editor.on_key(Key::Char('l'));
+        assert_eq!(editor.cursor(), 26, "past the last character");
+        let (buffer, at) = render_caret(&editor, &config, 10, 4);
+        assert_eq!(
+            row_text(&buffer, 0).trim_end(),
+            "rstuvwxyz",
+            "the tail of the line, not its head"
+        );
+        assert_eq!(at.map(|p| p.x), Some(9), "the caret is on the page");
+
+        // …and back: `gh` is the head of the line, and the page comes with it.
+        editor.on_key(Key::Char('g'));
+        editor.on_key(Key::Char('h'));
+        let (buffer, at) = render_caret(&editor, &config, 10, 4);
+        assert!(row_text(&buffer, 0).starts_with("abcdefghij"));
+        assert_eq!(at.map(|p| p.x), Some(0));
+    }
+
+    /// One column at a time, not a screenful.
+    ///
+    /// A caret walking along a long line should not make the whole page slide
+    /// out from under the reader every tenth character.
+    #[test]
+    fn the_page_slides_by_the_one_column_it_needs() {
+        let mut editor = editor_with("abcdefghijklmnopqrstuvwxyz");
+        editor.set_soft_wrap(false);
+        let config = bare();
+        for _ in 0..10 {
+            editor.on_key(Key::Char('l'));
+        }
+        let (buffer, at) = render_caret(&editor, &config, 10, 4);
+        assert_eq!(row_text(&buffer, 0).trim_end(), "bcdefghijk");
+        assert_eq!(at.map(|p| p.x), Some(9));
+    }
+
+    /// The gutter is furniture: it does not scroll with the writing.
+    ///
+    /// Line numbers that slid away with the text would leave the reader with
+    /// no way to say where they are.
+    #[test]
+    fn the_gutter_stays_where_it_is_while_the_writing_slides() {
+        let mut editor = editor_with("abcdefghijklmnopqrstuvwxyz");
+        editor.set_soft_wrap(false);
+        let mut config = bare();
+        config.editor.line_numbers = LineNumbers::Absolute;
+        editor.on_key(Key::Char('g'));
+        editor.on_key(Key::Char('l'));
+        let buffer = render(&editor, &config, 14, 4);
+        let row = row_text(&buffer, 0);
+        assert!(row.trim_start().starts_with('1'), "the number is still there: {row:?}");
+        assert!(
+            row.trim_end().ends_with("xyz"),
+            "and the tail of the line beside it: {row:?}"
+        );
+    }
+
+    /// A click lands on the 字 under the pointer, not on one a screenful back.
+    #[test]
+    fn a_click_counts_from_what_is_on_the_page() {
+        let mut editor = editor_with("abcdefghijklmnopqrstuvwxyz");
+        editor.set_soft_wrap(false);
+        let config = bare();
+        editor.on_key(Key::Char('g'));
+        editor.on_key(Key::Char('l'));
+        let (w, h) = (10u16, 4u16);
+        let mut seats = Seats::default();
+        let mut terminal = Terminal::new(TestBackend::new(w, h)).unwrap();
+        terminal
+            .draw(|frame| draw(frame, &editor, &config, &no_ime(), &mut seats))
+            .unwrap();
+        let click = |x: u16| {
+            let mouse = ratatui::crossterm::event::MouseEvent {
+                kind: ratatui::crossterm::event::MouseEventKind::Down(
+                    ratatui::crossterm::event::MouseButton::Left,
+                ),
+                column: x,
+                row: 0,
+                modifiers: ratatui::crossterm::event::KeyModifiers::NONE,
+            };
+            text_at(&editor, &config, Some((w, h).into()), &seats, mouse)
+        };
+        // The leftmost cell is `r`, the seventeenth character.
+        assert_eq!(click(0), Some(17));
+        assert_eq!(click(8), Some(25));
+    }
+
+    /// A 漢字 the scroll cuts in half is drawn as air, not as half a 字.
+    #[test]
+    fn a_character_split_by_the_scroll_becomes_a_blank() {
+        let mut editor = editor_with(&"字".repeat(20));
+        editor.set_soft_wrap(false);
+        let config = bare();
+        editor.on_key(Key::Char('g'));
+        editor.on_key(Key::Char('l'));
+        // The caret rests past the twentieth 字, at column 40, in a window ten
+        // columns wide — so the cut falls at column 31, inside a 字.
+        let (buffer, caret) = render_caret(&editor, &config, 10, 4);
+        assert_eq!(caret.map(|p| p.x), Some(9), "the caret is on the page");
+        assert_eq!(at(&buffer, 0, 0), " ", "the half 字 is air");
+        assert_eq!(at(&buffer, 1, 0), "字", "and the whole ones follow it");
     }
 
     /// A click on ghost text means the character it stands before.
