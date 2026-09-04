@@ -8319,7 +8319,7 @@ impl Editor {
             // what a writer calls a paragraph, and nothing else does.
             Key::Char('}') => self.repeat(count, |e| {
                 let p = motion::next_paragraph(e.current_buffer().rope(), e.cursor);
-                e.select_to(p);
+                e.select_up_to(p);
             }),
             Key::Char('{') => self.repeat(count, |e| {
                 let p = motion::prev_paragraph(e.current_buffer().rope(), e.cursor);
@@ -8330,7 +8330,7 @@ impl Editor {
             // to break the file on 。 with `:%s`.
             Key::Char(')') => self.repeat(count, |e| {
                 let p = motion::next_sentence(e.current_buffer().rope(), e.cursor);
-                e.select_to(p);
+                e.select_up_to(p);
             }),
             Key::Char('(') => self.repeat(count, |e| {
                 let p = motion::prev_sentence(e.current_buffer().rope(), e.cursor);
@@ -10746,6 +10746,22 @@ impl Editor {
         self.refresh_goal_column();
     }
 
+    /// Select from here up to — but not including — `pos`.
+    ///
+    /// The rule `w` already follows, and the one every forward motion that
+    /// lands on *the start of the next thing* has to follow: the character that
+    /// begins the next sentence belongs to the next sentence. Selecting through
+    /// it means `)d` deletes this sentence and the first character of the one
+    /// after it — a corruption a proofreader would not notice until the page
+    /// was set.
+    ///
+    /// A motion that cannot advance (already at the end of the writing) leaves
+    /// the selection where it is rather than running backwards.
+    fn select_up_to(&mut self, pos: usize) {
+        let head = motion::prev_grapheme(self.current_buffer().rope(), pos);
+        self.select_to(if head > self.cursor { head } else { pos });
+    }
+
     /// Step forward one word, selecting it (`w` / `W`).
     ///
     /// The selection runs from here to *just before* the next word begins — the
@@ -11808,6 +11824,21 @@ mod tests {
             ed.on_key(Key::Char(c));
         }
         ed.on_key(Key::Enter);
+    }
+
+    #[test]
+    fn a_sentence_motion_stops_before_the_next_sentence() {
+        // `)d` used to delete this sentence *and the first character of the
+        // next one*, because the motion lands on the next sentence's start and
+        // the selection ran through it. `w` has always stepped back one
+        // character for exactly this reason; these had not.
+        let mut ed = typed("第一句。第二句。第三句。\n");
+        press(&mut ed, ")d");
+        assert_eq!(ed.current_buffer().text(), "第二句。第三句。\n");
+        // The same for a paragraph.
+        let mut ed = typed("第一段。\n第二段。\n");
+        press(&mut ed, "}d");
+        assert_eq!(ed.current_buffer().text(), "第二段。\n");
     }
 
     #[test]
