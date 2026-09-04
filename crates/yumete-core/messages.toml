@@ -41,8 +41,8 @@
 [[message]]
 # 外面改了，你這裏也改了
 key = "autoreload.both-changed"
-zht = "檔案在外面改過了，你這裏也有改動——:reload! 丟掉你的"
-zhs = "档案在外面改过了，你这里也有改动——:reload! 丢掉你的"
+zht = "檔案已被外部修改，你也有所改動。可使用 :reload! 丟棄你的更改"
+zhs = "档案已被外部修改，你也有所改动。可使用 :reload! 丢弃你的更改"
 en = "the file changed outside and you have changes too — `:reload!` throws yours away"
 
 [[message]]

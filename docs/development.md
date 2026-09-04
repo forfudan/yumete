@@ -1534,6 +1534,76 @@ because leftward is onward down there. A table is read across whatever the
 file's layout is — `h` is already the column to the left rather than the next
 縱 — so the four capitals follow the table, not the page.
 
+### 18 · What the review of #223 / #225 found, 2026-09-05
+
+Six findings, all in the seam between the command line and the input method,
+and all of the same shape: **the command line asks a question about itself and
+answers it in the wrong place.**
+
+- **`:yume off` was undone one keystroke later.** The command line opens in 英
+  and gives Insert its 中/英 back on the way out (#225). `:yume off` typed on
+  that very line *is* an answer about the language — and the borrow was put
+  back over it, silently, on the next loop. The borrow is now cleared when the
+  request that goes out is `+` or `-`.
+- **The borrow only went one way.** It was a `bool` meaning「turned 中文 off」,
+  so a line opened from 英 during which something turned 中 on handed Insert a
+  language it never had. It is an `Option<bool>` now: what Insert *was*, put
+  back exactly, in both directions.
+- **`:w! 第三章.md` refused the IME.** `resolve` answers `write!` for `:w!` —
+  the bang belongs to the command — and the table lists `write`, so the lookup
+  missed and the line was declared「still naming a command」. The one spelling
+  a writer reaches for *because the file is already there* was the one that
+  could not take a Chinese name.
+- **A prefix argument refused it too.** `takes_text` matched argument words
+  exactly where the parser walks them with `pick`. `:yume tab 詞庫.txt` runs;
+  it did not compose.
+- **The question was asked of the whole line, not of the caret.** Walk back
+  onto the command name of `:e 第三章.md` and the tail still said「a path」.
+- **The guess and Tab disagreed about a deep name.** #223 answers `:sch` with
+  the whole path `yume scheme`; the guess offered the leaf, so Tab wrote
+  `:yume scheme` and the guess wrote `:scheme`, which parses as nothing. Both
+  read `written()` now — where the parent was not typed there is simply no
+  guess, and Tab still says the whole thing.
+- **Committed text ignored the prompt's caret.** The prompt has had ← → Home
+  End since it was written; 中文 committed into the middle of a pattern landed
+  at the end of it.
+
+Not fixed, and worth knowing: `pick(tag, schemes())` answers `None` for an
+ambiguous scheme name and the parser turns that into `SetScheme("")`. It
+predates all of this and is more likely now that tags share the `snow-`
+prefix.
+
+### 19 · What the review of #229 / #169 found, 2026-09-05
+
+- **The cell ground was drawn on lines that hold no cell.** The guard asked
+  whether `:table` was on, and nothing puts it away when `G`, `gg`, `:N` or a
+  search walks the cursor out of a `|` table — so the ground appeared on the
+  prose under the table, and on a table quoted inside a code fence. The rule
+  row went with them: `clear_cell` refuses it and `move_cell_row` steps over
+  it, so a ground saying「an edit lands here」was a lie. Both renderers now ask
+  `md_region()` and skip `is_rule`.
+- **The cell tint rubbed out a `==highlight==`.** The word tint beside it has
+  stepped around one since it was written; the cell now does too. The band and
+  the word tint are quieter than the cell and still give way to it.
+- **Two assertions were aimed by byte offset at a screen column.** `row_text`
+  walks the buffer by display width, so `text.rfind('|') as u16` on a row
+  holding 漢字 lands past the end of the row — the「the pipe is furniture」
+  assertion had been inspecting a blank cell and could not fail. `column_of` /
+  `last_column_of` count columns.
+- **The ordering that justifies the whole feature was untested.** The cell is
+  `HEAD` so that a selection inside it, one rung louder and patched on
+  afterwards, still reads first. Nothing asserted it.
+- **`move_cell_page` was tested only on a CSV.** The `|` table is the shape the
+  motion can walk *out* of — a page is longer than most tables anybody writes.
+
+Not a defect, but the comment said more than the code did: `is_own` in
+`build_engine` closes the case of a scheme that **names** its own reading table
+and is missing the file. A scheme that names none is handed `data/pinyin.yflb`
+by `data_manifest::with_reading` on purpose — 拼音's readings are its readings,
+which is how a 雙拼 scheme carrying only a syllable table works — so it is
+typable, and that is the right answer. The comment now says which case is
+which.
+
 ### 14 · What was deliberately left undone, 2026-09-04
 
 Two items on the list were **not** implemented, and each for a reason worth

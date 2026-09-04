@@ -429,6 +429,22 @@ fn switch_scheme_at_startup(
 }
 
 fn print_help() {
+    // **What is installed, not what was compiled in** (#169). A `--help` run
+    // stops before the launch reaches the scan, so the scan happens here — it
+    // is idempotent, and the reader who runs `--help` to find out what to pass
+    // `:yume scheme` is asking exactly this question. The config's own
+    // `data_dirs` are read first for the same reason: a scheme installed
+    // somewhere only the config knows about is still installed.
+    let (config, _) = yumete_config::Config::load_reporting();
+    if !config.ime.data_dirs.is_empty() {
+        yumete_config::set_data_dirs(config.ime.data_dirs.clone());
+    }
+    yumete_ime::discover(&yumete_config::data_search_dirs());
+    let schemes: String = yumete_ime::Scheme::all()
+        .iter()
+        .map(|s| s.tag())
+        .collect::<Vec<_>>()
+        .join(" ");
     println!(
         "yumete {VERSION} — a CJK-aware, Helix-like terminal editor with a built-in Yume IME.
 
@@ -508,7 +524,7 @@ KEYS (Normal mode, Helix-style):
               commands appears above it and narrows as you type
               (:w  :w <path>  :q  :q!  :o <path>  :new
               :segment  :wq  :count
-              :yume scheme <tag>   lingming xingchen qingyun riyue pinyin
+              :yume scheme <tag>   {schemes}
               :wrap [on|off|<n>]   soft-wrap; a number is a fixed measure
               :wq [path]       save (optionally save-as) and quit
               :42  :goto n    put the cursor on a line

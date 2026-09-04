@@ -118,15 +118,19 @@ impl Scheme {
     /// scheme file says so itself; without one, 拼音 is the only phonetic
     /// scheme a build ships.
     pub fn is_phonetic(self) -> bool {
+        // A found scheme says so itself: its file carries `kind`, and reading
+        // that is one lookup rather than an inference from which files it
+        // happens to ship. Only a scheme yume-core has no file for falls
+        // through to the inference below.
+        if let Some(kind) = data_manifest::factory_scheme_kind(self.0) {
+            return kind == "yinma";
+        }
         if self.0 == "pinyin" {
             return true;
         }
-        data_manifest::for_scheme(self.0)
-            .iter()
-            .all(|f| f.kind != DataKind::Table)
-            && data_manifest::for_scheme(self.0)
-                .iter()
-                .any(|f| f.kind == DataKind::Reading)
+        let files = data_manifest::for_scheme(self.0);
+        files.iter().all(|f| f.kind != DataKind::Table)
+            && files.iter().any(|f| f.kind == DataKind::Reading)
     }
 
     /// Parse a scheme from a tag (canonical, found, or a common legacy alias).
@@ -140,10 +144,13 @@ impl Scheme {
             "拼音" => "pinyin",
             other => other,
         };
-        Scheme::all().into_iter().find(|s| s.0 == canonical)
+        // `canonical` is lower-cased and a found tag need not be: comparing
+        // raw would refuse `Snow-Sipin` while accepting `snow-sipin`.
+        Scheme::all()
+            .into_iter()
+            .find(|s| s.0.eq_ignore_ascii_case(canonical))
     }
 
-    /// The next scheme, cycling in menu order.
     /// The scheme to fall back on when nobody named one that exists.
     ///
     /// The **first installed** scheme, not 靈明 — a build that ships only 冰雪
@@ -155,10 +162,18 @@ impl Scheme {
         Scheme::all().first().copied().unwrap_or(Scheme::LINGMING)
     }
 
+    /// The next scheme, cycling in menu order.
+    ///
+    /// A scheme that is not on the list — the one a `:yume scheme` held across
+    /// a directory that stopped shipping it — starts the cycle rather than
+    /// continuing it, so ⌃⇧N lands on the first installed scheme instead of
+    /// the second.
     pub fn next(self) -> Scheme {
         let all = Scheme::all();
-        let idx = all.iter().position(|&s| s == self).unwrap_or(0);
-        all[(idx + 1) % all.len()]
+        match all.iter().position(|&s| s == self) {
+            Some(idx) => all[(idx + 1) % all.len()],
+            None => all[0],
+        }
     }
 }
 
@@ -190,7 +205,11 @@ pub fn discover(dirs: &[PathBuf]) -> usize {
         let mut here: Vec<PathBuf> = entries
             .flatten()
             .map(|e| e.path())
-            .filter(|p| p.extension().is_some_and(|e| e == "toml"))
+            .filter(|p| {
+                p.is_file()
+                    && p.extension()
+                        .is_some_and(|e| e.eq_ignore_ascii_case("toml"))
+            })
             .collect();
         here.sort();
         files.extend(here);
@@ -213,8 +232,11 @@ pub fn discover(dirs: &[PathBuf]) -> usize {
             })
             .collect(),
     };
-    // Nothing was found: forget the scheme files entirely rather than leaving
-    // yume-core with a list that half-answers.
+    // Nothing was taken — no file, or every file refused — so forget them
+    // entirely rather than leaving yume-core with a list that half-answers.
+    // A refused file is the dangerous half: yume-core would hold a list that
+    // exists and is missing everything, and `factory_lists()` answers
+    // `Some(false)` to every tag on it.
     if taken == 0 {
         data_manifest::reset_factory_schemes();
     }
@@ -1320,6 +1342,24 @@ fn build_engine(scheme: Scheme, dirs: &[PathBuf]) -> (Engine, bool, Vec<DataProb
         false => DataKind::Table,
     };
 
+    // **Its own table, not the shared one.** `data_set` is the shared files
+    // plus this scheme's, and the shared set carries `data/pinyin.yflb` — so a
+    // found 音碼 scheme that **names** a reading table of its own, and whose
+    // file is not on disk, would be marked typable off 拼音's, and every
+    // keystroke would decode as 拼音 under its name. That is the one this
+    // closes; the schemes it matters for are the 冰雪 pair, which name
+    // `schemes/snow/reading.yflb`.
+    //
+    // A scheme that names **no** reading is a different case and is left
+    // alone: `data_manifest::for_scheme` ends in `with_reading`, which hands
+    // that scheme `data/pinyin.yflb` on purpose — 拼音's readings *are* its
+    // readings, which is how a 雙拼 scheme with only a syllable table of its
+    // own is meant to work. So the file is in `own`, `is_own` is true, and the
+    // scheme is typable, which is the right answer. 拼音 itself loses nothing
+    // either: its manifest names that very file.
+    let own = data_manifest::for_scheme(scheme.tag());
+    let is_own = |f: &DataFile| own.iter().any(|o| o.kind == f.kind && o.file == f.file);
+
     for file in data_set(scheme) {
         let loaded = match load_data_file(&mut engine, dirs, &file) {
             Ok(()) => true,
@@ -1328,7 +1368,7 @@ fn build_engine(scheme: Scheme, dirs: &[PathBuf]) -> (Engine, bool, Vec<DataProb
                 false
             }
         };
-        if loaded && file.kind == essential {
+        if loaded && file.kind == essential && is_own(&file) {
             dictionary = true;
         }
     }

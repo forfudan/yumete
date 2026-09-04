@@ -3272,9 +3272,15 @@ impl Editor {
             return String::new();
         }
         let whole = match self.mode {
+            // `written()`, the same as Tab writes (`cycle_completion`). A deep
+            // match carries its parent — `:sch` is answered with `yume scheme`
+            // — and offering the bare `name` guessed `:scheme`, a line that
+            // does not parse, while Tab on the same keystroke wrote
+            // `:yume scheme`. Where the parent is not what was typed the guess
+            // is now simply not offered, and Tab still says the whole thing.
             Mode::Command => command::complete(&self.command_line)
                 .first()
-                .map(|e| e.name.to_string()),
+                .map(|e| e.written()),
             Mode::Search => Some(self.last_search.clone()),
             _ => None,
         };
@@ -8801,8 +8807,20 @@ impl Editor {
         // document it is usually Chinese text. Committed characters go wherever
         // the mode is collecting them, not always into the buffer.
         if matches!(self.mode, Mode::Command | Mode::Search | Mode::Ruby) {
-            self.command_line.push_str(text);
-            self.command_caret = self.command_line.chars().count();
+            // At the caret, not at the end. The prompt has had ← → Home End
+            // since it was written, and committing 中文 into the middle of a
+            // pattern that has already been typed is exactly what you go back
+            // for.
+            let len = self.command_line.chars().count();
+            self.command_caret = self.command_caret.min(len);
+            let at = self
+                .command_line
+                .char_indices()
+                .nth(self.command_caret)
+                .map(|(i, _)| i)
+                .unwrap_or(self.command_line.len());
+            self.command_line.insert_str(at, text);
+            self.command_caret += text.chars().count();
             return;
         }
         self.snapshot();
@@ -13442,6 +13460,48 @@ mod tests {
         assert_eq!(ed.prompt_ghost(), "", "a file name is not a command name");
     }
 
+    /// The guess and Tab are two spellings of one answer, so they have to
+    /// spell it the same way. A deep name (#223) is answered with its whole
+    /// path — `:sch` is `yume scheme` — and the guess used to offer the leaf
+    /// alone, which as a line parses as nothing.
+    #[test]
+    fn the_guess_and_tab_agree_on_a_deep_name() {
+        let mut ed = Editor::new();
+        ed.on_key(Key::Char(':'));
+        for c in "sch".chars() {
+            ed.on_key(Key::Char(c));
+        }
+        let (_, before) = ed.prompt().expect("a command line");
+        let before = before.to_string();
+        let guessed = format!("{before}{}", ed.prompt_ghost());
+        ed.on_key(Key::Tab);
+        let (_, tabbed) = ed.prompt().expect("a command line");
+        assert_eq!(
+            tabbed, "yume scheme",
+            "the deep answer is the whole path",
+        );
+        assert!(
+            guessed == before || guessed == tabbed,
+            "the guess says {guessed:?} and Tab says {tabbed:?}",
+        );
+    }
+
+    /// The prompt has had ← → Home End since it was written, so what the IME
+    /// commits goes **at the caret**. It used to be appended, which put 中文
+    /// typed into the middle of a pattern at the end of it instead.
+    #[test]
+    fn committed_text_lands_at_the_prompt_caret() {
+        let mut ed = typed("春江潮水連海平");
+        ed.on_key(Key::Char('/'));
+        ed.insert_committed("海平");
+        ed.on_key(Key::Home);
+        ed.insert_committed("潮水");
+        assert_eq!(ed.prompt(), Some(('/', "潮水海平")));
+        // …and the caret came with it, so the next commit follows on.
+        ed.insert_committed("連");
+        assert_eq!(ed.prompt(), Some(('/', "潮水連海平")));
+    }
+
     #[test]
     fn a_search_guesses_the_last_pattern() {
         let mut ed = typed("春江潮水連海平，海上明月共潮生");
@@ -15649,7 +15709,10 @@ mod tests {
             "a dirty buffer is never read over: {}",
             ed.current_buffer().text()
         );
-        assert!(ed.status().contains("丟掉你的"), "{}", ed.status());
+        // On `:reload!`, not on the wording: these lines are hand-edited in
+        // three languages and the command name is the one part of the sentence
+        // that is the same in all of them.
+        assert!(ed.status().contains(":reload!"), "{}", ed.status());
 
         assert!(ed.execute("reload auto off").is_ok());
         assert!(!ed.reload_auto());
@@ -16589,6 +16652,64 @@ mod tests {
         ed.on_key(Key::Char('L'));
         assert_eq!(ed.cell_position().map(|(_, c)| c), Some(2), "and a whole page of it");
         std::fs::remove_dir_all(&dir).ok();
+    }
+
+    /// The same motions in a `|` table, which is the shape they can walk
+    /// **out** of: a grid is the whole file and clamps at its last line, but a
+    /// Markdown table has prose under it, and a page is longer than most
+    /// tables anybody writes.
+    #[test]
+    fn paging_through_a_pipe_table_stops_at_its_last_row() {
+        let mut ed = Editor::new();
+        let mut text = String::from("前文\n\n| a | b | c |\n| --- | --- | --- |\n");
+        for i in 0..6 {
+            // Ragged again, so keeping the column is a real claim and not the
+            // accident of every row being the same width.
+            text.push_str(&format!("| {} | b{i} | c{i} |\n", "x".repeat(1 + i * 4)));
+        }
+        text.push_str("\n後文\n");
+        ed.current_buffer_mut().insert(0, &text);
+        ed.set_page(8, 8);
+        ed.goto_line(5);
+        assert!(ed.enter_table(), "{}", ed.status());
+        press(&mut ed, "ll");
+        assert_eq!(ed.cell_position().map(|(_, c)| c), Some(2), "column c");
+
+        let region = ed.md_region().expect("in the table");
+        // Pages down, and keeps going: six rows is shorter than a page, so
+        // this runs off the end — and stops on the last row, in its column,
+        // rather than carrying on into the prose under the table.
+        for _ in 0..3 {
+            ed.on_key(Key::Char('J'));
+            assert_eq!(ed.cell_position().map(|(_, c)| c), Some(2), "still column c");
+        }
+        assert_eq!(ed.cursor_line(), region.last, "and stopped at the last row");
+
+        // …and up again, which stops at the header rather than in the blank
+        // line above it. `C-f` and `C-b` are the same motion by another name.
+        for _ in 0..3 {
+            ed.on_key(Key::Char('K'));
+            assert_eq!(ed.cell_position().map(|(_, c)| c), Some(2), "coming back");
+        }
+        assert_eq!(ed.cursor_line(), region.first, "the header is the top");
+        for _ in 0..3 {
+            ed.on_key(Key::Ctrl('f'));
+        }
+        assert_eq!(ed.cursor_line(), region.last, "C-f pages the same way");
+        assert_eq!(ed.cell_position().map(|(_, c)| c), Some(2));
+        for _ in 0..3 {
+            ed.on_key(Key::Ctrl('b'));
+        }
+        assert_eq!(ed.cursor_line(), region.first, "and C-b back");
+
+        // `L` and `H` are the whole page rather than half of it, and page the
+        // same way — down and up the rows, not across the columns.
+        ed.on_key(Key::Char('L'));
+        assert_eq!(ed.cursor_line(), region.last, "a whole page down");
+        assert_eq!(ed.cell_position().map(|(_, c)| c), Some(2), "in its column");
+        ed.on_key(Key::Char('H'));
+        assert_eq!(ed.cursor_line(), region.first, "and a whole page back");
+        assert_eq!(ed.cell_position().map(|(_, c)| c), Some(2));
     }
 
     #[test]
