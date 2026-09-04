@@ -261,6 +261,26 @@ pub struct Palette {
     faded: bool,
 }
 
+/// Relative luminance (WCAG), for the palette's own contrast questions.
+fn luminance(c: Color) -> f64 {
+    let Color::Rgb(r, g, b) = c else { panic!("not an rgb colour") };
+    let f = |v: u8| {
+        let v = v as f64 / 255.0;
+        match v <= 0.03928 {
+            true => v / 12.92,
+            false => ((v + 0.055) / 1.055).powf(2.4),
+        }
+    };
+    0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b)
+}
+
+/// The WCAG contrast ratio between two colours.
+fn contrast(a: Color, b: Color) -> f64 {
+    let (x, y) = (luminance(a), luminance(b));
+    let (hi, lo) = if x > y { (x, y) } else { (y, x) };
+    (hi + 0.05) / (lo + 0.05)
+}
+
 impl Palette {
     /// The palette in force.
     pub fn of(config: &Config) -> Palette {
@@ -368,42 +388,82 @@ impl Palette {
         let mix = |a: u8, b: u8| -> u8 { ((a as i64) + (b as i64 - a as i64) * 55 / 100) as u8 };
         Color::Rgb(mix(r, paper.0), mix(g, paper.1), mix(b, paper.2))
     }
-    /// 朱 washed most of the way to the page — a highlighter's ground.
+    /// A highlighter's ground — **金**, washed toward the page.
     ///
-    /// The one place 朱 is not saying 這裏不對: `==marked==` is the reader's own
-    /// pen, which is what 朱 has always been. Washed, so the ink still reads on
-    /// it and it cannot be mistaken for a selection.
+    /// `==marked==` is the reader's own pen, and a pen is not a correction: 朱
+    /// says 這裏不對 and belongs to errors and hits, 金 says 「not the prose」
+    /// and belongs to everything a reader puts *on* the prose. They were both
+    /// 朱 — one washed 78%, the other 91% — and thirteen points of the same hue
+    /// is not a difference anybody can see on a dark ground.
+    ///
+    /// It also puts the highlight where a highlighter actually is: yellow in
+    /// 墨香, malachite in 莫高, ash-green in 陶窯 — the theme's own second
+    /// colour, whatever that theme decided it was.
     pub fn wash(self) -> Color {
-        self.washed(78)
+        // **A fixed *look*, not a fixed mix.** 72% of the way to the page is a
+        // different amount of visible in every theme — on 藍曬 it landed a
+        // hair from the word tint, which is the very confusion this separation
+        // was made to end. So the wash is chosen to sit a set distance off the
+        // page (about 1.9:1, a ground a reader sees without reading it), and
+        // is pushed further toward the page only if the writing on it would
+        // otherwise fall under 4.5:1.
+        self.washed_to(self.gold, 1.9, 4.5)
+    }
+
+    /// An accent washed toward the page until it sits `off_page` from it —
+    /// and further, if the writing on it would not clear `readable`.
+    fn washed_to(self, accent: (u8, u8, u8), off_page: f64, readable: f64) -> Color {
+        let paper = Color::Rgb(self.ladder.paper.0, self.ladder.paper.1, self.ladder.paper.2);
+        let text = self.text();
+        let mut chosen = self.washed_toward(accent, 90);
+        // From the page outward: the first mix that is far enough off the page
+        // and still carries the writing.
+        for percent in (30..=90).rev().step_by(2) {
+            let ground = self.washed_toward(accent, percent);
+            if contrast(ground, paper) >= off_page {
+                if contrast(text, ground) >= readable {
+                    return ground;
+                }
+                // Too dim for the writing: keep the last one that was not.
+                return chosen;
+            }
+            chosen = ground;
+        }
+        chosen
     }
 
     /// The word tint, which alternates with bare paper (Feature #24).
     ///
-    /// 朱 again, washed until almost nothing is left of it: a square that
-    /// belongs to the same word as its neighbour is a *hair* warmer than the
-    /// page, never a colour in its own right. Derived rather than configured,
-    /// so it follows the mood — a tint picked for a dark page is a smear on a
-    /// light one.
+    /// **A rung, not a hue.** A square that belongs to the same word as its
+    /// neighbour is a hair off the paper and nothing more — see
+    /// [`yumete_config::rung::WORD`]. Being on the ladder, it follows the mood
+    /// and the theme without carrying any of the accents' meanings: a word
+    /// boundary is structure, not a mark somebody made.
     pub fn word(self) -> Color {
-        self.washed(91)
+        self.at(yumete_config::rung::WORD)
     }
 
     /// 朱, `percent` of the way to the page.
     fn washed(self, percent: i64) -> Color {
+        self.washed_toward(self.mark, percent)
+    }
+
+    /// An accent, `percent` of the way to the page.
+    fn washed_toward(self, accent: (u8, u8, u8), percent: i64) -> Color {
         // A read-only half takes its accents back with everything else.
         let percent = match self.faded {
             true => percent + (100 - percent) * 55 / 100,
             false => percent,
         };
-        let (paper, mark) = (self.ladder.paper, self.mark);
+        let (paper, accent) = (self.ladder.paper, accent);
         let mix = |a: u8, b: u8| -> u8 {
             let (a, b) = (a as i64, b as i64);
             ((a * 100 + (b - a) * percent) / 100) as u8
         };
         Color::Rgb(
-            mix(mark.0, paper.0),
-            mix(mark.1, paper.1),
-            mix(mark.2, paper.2),
+            mix(accent.0, paper.0),
+            mix(accent.1, paper.1),
+            mix(accent.2, paper.2),
         )
     }
 
@@ -438,27 +498,50 @@ impl Palette {
 mod tests {
     use super::*;
 
-    /// Relative luminance, for the contrast checks below.
-    fn luminance(c: Color) -> f64 {
-        let Color::Rgb(r, g, b) = c else { panic!("not an rgb colour") };
-        let f = |v: u8| {
-            let v = v as f64 / 255.0;
-            match v <= 0.03928 {
-                true => v / 12.92,
-                false => ((v + 0.055) / 1.055).powf(2.4),
-            }
-        };
-        0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b)
-    }
-
-    fn contrast(a: Color, b: Color) -> f64 {
-        let (x, y) = (luminance(a), luminance(b));
-        let (hi, lo) = if x > y { (x, y) } else { (y, x) };
-        (hi + 0.05) / (lo + 0.05)
-    }
-
     fn palette(dark: bool) -> Palette {
         Palette::in_mood(&Config::default(), dark)
+    }
+
+    /// **A word boundary is not a highlighter.**
+    ///
+    /// Both used to be 朱 washed toward the page — 78% for `==marked==`, 91%
+    /// for the word tint — and on a dark ground thirteen points of one hue is
+    /// not a difference: a reader could not tell which of the two they were
+    /// looking at (reported with a screenshot, 2026-09-04).
+    #[test]
+    fn the_word_tint_and_the_highlighter_are_told_apart() {
+        for name in ["ink", "bw", "cyanotype", "amber", "mogao", "firefly"] {
+            let theme = yumete_config::ThemeConfig::named(name).expect(name);
+            for dark in [true, false] {
+                let config = Config {
+                    theme: theme.clone(),
+                    ..Config::default()
+                };
+                set_dark(dark);
+                let ink = Palette::of(&config);
+                let (paper, tint, wash) = (ink.paper(), ink.word(), ink.wash());
+                // Each is a *ground*, so they are compared to the page and to
+                // each other by contrast, the way the eye compares them.
+                let off_page = |c| contrast(c, paper);
+                assert!(
+                    off_page(tint) < 1.25,
+                    "{name} {dark}: the word tint shouts ({:.2}:1 off the page)",
+                    off_page(tint)
+                );
+                assert!(
+                    contrast(wash, tint) > 1.4,
+                    "{name} {dark}: the highlighter and the word tint are the same colour \
+                     ({:.2}:1 apart)",
+                    contrast(wash, tint)
+                );
+                // …and the writing still reads on the highlighter.
+                assert!(
+                    contrast(ink.text(), wash) >= 4.5,
+                    "{name} {dark}: {:.2}:1 on the highlighter",
+                    contrast(ink.text(), wash)
+                );
+            }
+        }
     }
 
     #[test]
