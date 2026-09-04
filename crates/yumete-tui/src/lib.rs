@@ -262,9 +262,11 @@ pub fn run(
 
     let mut viewport = Seats::default();
     let mut shift = ShiftTap::default();
-    // Whether the command line turned 中文 off on the way in, and so owes it
-    // back on the way out (#225).
-    let mut borrowed_english = false;
+    // What Insert's 中/英 was when the command line borrowed it, and so what
+    // it owes back on the way out (#225). `None` means nothing is owed —
+    // either the command line is not open, or a command typed on it said what
+    // the language should be and that answer is not a state to put back.
+    let mut borrowed: Option<bool> = None;
     // A typesetter started with `:preview`, if one is running — and one left
     // behind by a session that ended badly, which is stopped before this one
     // can start another.
@@ -294,12 +296,17 @@ pub fn run(
                 }
             );
 
-            // Leaving the command line gives Insert its 中/英 back (#225).
-            if last_mode == Some(Mode::Command) && borrowed_english {
-                if ime.available() && !ime.is_chinese() {
-                    ime.toggle_language();
+            // Leaving the command line gives Insert its 中/英 back (#225) —
+            // *its* state, not 中文 unconditionally. Forcing 中文 back on put
+            // the borrow only one way round: a command line opened from 英,
+            // during which something turned 中 on, handed Insert a language it
+            // never had.
+            if last_mode == Some(Mode::Command) {
+                if let Some(was) = borrowed.take() {
+                    if ime.available() && ime.is_chinese() != was {
+                        ime.toggle_language();
+                    }
                 }
-                borrowed_english = false;
             }
             // Opening it cancels a composition rather than leaving it hanging:
             // the first keystroke after `:` is a command name, so there is
@@ -311,9 +318,9 @@ pub fn run(
                 if ime.is_composing() {
                     ime.escape();
                 }
+                borrowed = Some(ime.is_chinese());
                 if ime.is_chinese() {
                     ime.toggle_language();
-                    borrowed_english = true;
                 }
             }
             last_mode = Some(mode);
@@ -600,6 +607,13 @@ pub fn run(
                     }
                 }
                 if let Some(tag) = editor.take_scheme_request() {
+                    // `:yume on` / `:yume off` **is** an answer about the
+                    // language, typed on the command line that borrowed it.
+                    // Putting the borrow back afterwards undid the command the
+                    // writer had just run, silently, one keystroke later.
+                    if tag == "+" || tag == "-" {
+                        borrowed = None;
+                    }
                     editor.set_status(switch_scheme(ime, &tag, config));
                     editor.set_ime_available(ime.available());
                     // The scheme's own language data may be better than what
@@ -728,9 +742,23 @@ fn composes(mode: Mode) -> bool {
 /// Not automatic on reaching an argument: `:s/[a-z]+/x/` is as common as the
 /// Chinese one, so the IME is *permitted* here rather than switched on.
 fn composes_here(editor: &Editor) -> bool {
-    composes(editor.mode())
-        || (editor.mode() == Mode::Command
-            && yumete_core::command::takes_text(editor.command_line()))
+    if composes(editor.mode()) {
+        return true;
+    }
+    if editor.mode() != Mode::Command {
+        return false;
+    }
+    // What is **before the caret**, not the whole line. Typing is done at the
+    // caret, so that is where the question is asked: on `:e 第三章.md` with the
+    // caret walked back onto `e`, the whole line says「a path」and the caret
+    // says「a command name」, and the caret is the one that is right.
+    let line = editor.command_line();
+    let caret = editor.prompt_caret();
+    let upto: String = match caret >= line.chars().count() {
+        true => line.to_string(),
+        false => line.chars().take(caret).collect(),
+    };
+    yumete_core::command::takes_text(&upto)
 }
 
 /// Whether a key event should drive the editor.
@@ -3340,10 +3368,21 @@ fn draw_horizontal(
     //
     // The **box**, not the content: a `|` table's padding is the column's own
     // width, and an empty cell has no content to tint at all.
+    //
+    // Asked of the **region**, not of `:table` being on. `j`, `G`, a search and
+    // the mouse all walk the cursor out of a `|` table — into the prose under
+    // it, or onto a table quoted inside a fence — and nothing puts `:table`
+    // away when they do; `cell_position` answers「cell 0」for any line at all,
+    // so the ground was drawn on prose. The rule row goes with them: it is the
+    // drawing of the alignments, `clear_cell` refuses it and `move_cell_row`
+    // steps over it, so a ground saying「an edit lands here」would be a lie.
     let cell = match peek.is_none() && editor.table().is_some_and(|t| !t.is_grid()) {
-        true => editor
-            .cell_position()
-            .and_then(|(line, at)| editor.cell_box(line, at)),
+        true => editor.md_region().and_then(|region| {
+            editor
+                .cell_position()
+                .filter(|&(line, _)| region.holds(line) && !region.is_rule(line))
+                .and_then(|(line, at)| editor.cell_box(line, at))
+        }),
         // A whole-file grid draws its own cell, and the peek pane is showing
         // somebody else's buffer — the cursor is not in it.
         false => None,
@@ -3563,6 +3602,13 @@ fn draw_horizontal(
                 let a = from.saturating_sub(row.start).min(chars.len());
                 let b = to.saturating_sub(row.start).min(chars.len());
                 for style in styles.iter_mut().take(b).skip(a) {
+                    // Never over a `==highlight==`. The band and the word tint
+                    // are quieter than the cell and give way to it, but a
+                    // highlight exists *to be* a ground — the same reason the
+                    // word tint above steps around it.
+                    if style.bg == Some(ink.wash()) {
+                        continue;
+                    }
                     *style = style.patch(cell_style);
                 }
             }
@@ -4557,6 +4603,28 @@ mod tests {
             x += grapheme_width(symbol).max(1) as u16;
         }
         out
+    }
+
+    /// Which **screen column** a row's text holds `needle` at.
+    ///
+    /// Not `str::find`. [`row_text`] walks the buffer by display width, so its
+    /// byte offsets and the buffer's columns part company at the first 漢字 on
+    /// the row — aiming an assertion by one lands it a cell or two to the
+    /// right of the character it names, which is how `assert_ne!` on a closing
+    /// pipe came to be inspecting the blank past the end of the row.
+    fn column_of(text: &str, needle: &str) -> u16 {
+        let at = text
+            .find(needle)
+            .unwrap_or_else(|| panic!("{needle:?} is on the page: {text:?}"));
+        text[..at].chars().map(|c| yumete_cjk::char_width(c) as u16).sum()
+    }
+
+    /// The same, for the **last** time `needle` appears.
+    fn last_column_of(text: &str, needle: &str) -> u16 {
+        let at = text
+            .rfind(needle)
+            .unwrap_or_else(|| panic!("{needle:?} is on the page: {text:?}"));
+        text[..at].chars().map(|c| yumete_cjk::char_width(c) as u16).sum()
     }
 
     /// Feature #210: text on the page the file has no bytes for.
@@ -6101,19 +6169,117 @@ mod tests {
         // Row 3 on screen is the fourth line of the file.
         let row = 3;
         let text = row_text(&buf, row);
-        let mu = text.find("mu").expect("the cell is on the page") as u16;
+        let mu = column_of(&text, "mu");
         for x in mu..mu + 2 {
-            assert_eq!(buf[(x, row)].bg, want, "column {x} is in the cell");
+            assert_eq!(buf[(x, row)].bg, want, "column {x} of {text:?} is in the cell");
         }
         // The pipe that closes the cell is not in it.
-        let bar = text.rfind('|').expect("a closing pipe") as u16;
+        let bar = last_column_of(&text, "|");
         assert_ne!(buf[(bar, row)].bg, want, "the pipe is furniture");
         // And the cell on the same row that the cursor is *not* in stays plain.
         let mu_cell = editor.cell_box(line, at).expect("a box");
         let other = editor.cell_box(line, 0).expect("a box");
         assert!(other.1 <= mu_cell.0, "the first cell ends before the second");
-        let wood = text.find('木').expect("the first cell") as u16;
+        let wood = column_of(&text, "木");
         assert_ne!(buf[(wood, row)].bg, want, "the other cell is not tinted");
+    }
+
+    /// A ground that says「an edit lands here」has to be told the truth about
+    /// where the cursor is. `:table` staying on is not that truth: `gg`, `G`,
+    /// `:N` and a search all walk out of the table without putting it away,
+    /// and the rule row is the drawing of the alignments rather than a row
+    /// anything can be typed into.
+    #[test]
+    fn no_cell_is_drawn_off_the_rows() {
+        let mut config = Config::default();
+        config.editor.line_numbers = LineNumbers::None;
+        config.editor.show_segmentation = false;
+        let ink = ink(&config);
+        let want = ink.at(yumete_config::rung::HEAD);
+        let mut editor = Editor::new();
+        editor
+            .current_buffer_mut()
+            .insert(0, "| 字 | 讀音 |\n| --- | --- |\n| 木 | mu |\n後文\n");
+        editor.on_key(Key::Char('g'));
+        editor.on_key(Key::Char('g'));
+        editor.on_key(Key::Char('j'));
+        editor.on_key(Key::Char('j'));
+        assert!(editor.enter_table(), "{}", editor.status());
+        // Found, not counted: `G` scrolls the header off, so a hard-coded
+        // screen row would be asserting about a different line of the file
+        // after the motion than before it.
+        let row_with = |buf: &ratatui::buffer::Buffer, needle: &str| {
+            (0..8u16)
+                .find(|&y| row_text(buf, y).contains(needle))
+                .unwrap_or_else(|| {
+                    panic!("{needle:?}: {:?}", (0..8).map(|y| row_text(buf, y)).collect::<Vec<_>>())
+                })
+        };
+        // Standing in the table, the ground is there — otherwise the two
+        // assertions below would pass on a renderer that never draws it.
+        let buf = render(&editor, &config, 30, 8);
+        let y = row_with(&buf, "木");
+        let text = row_text(&buf, y);
+        assert_eq!(buf[(column_of(&text, "木"), y)].bg, want, "{text:?}");
+
+        // Out of the table altogether. `G` is not a table motion, so this is
+        // the ordinary prose under it — no cell of anything.
+        editor.on_key(Key::Char('G'));
+        let buf = render(&editor, &config, 30, 8);
+        let y = row_with(&buf, "後");
+        for x in 0..30u16 {
+            assert_ne!(buf[(x, y)].bg, want, "column {x} of the prose row");
+        }
+
+        // …and onto the rule. `clear_cell` refuses it and `move_cell_row`
+        // steps over it, so nothing may say an edit lands in it.
+        editor.on_key(Key::Char(':'));
+        editor.on_key(Key::Char('2'));
+        editor.on_key(Key::Enter);
+        assert_eq!(editor.cursor_line(), 1, "on the rule: {}", editor.status());
+        let buf = render(&editor, &config, 30, 8);
+        let y = row_with(&buf, "---");
+        for x in 0..30u16 {
+            assert_ne!(buf[(x, y)].bg, want, "column {x} of the rule row");
+        }
+    }
+
+    /// The cell is `HEAD` and a selection is `SELECTION`, one rung louder and
+    /// patched on afterwards — which is the whole reason the cell was allowed
+    /// to be a ground at all. Nothing asserted it, so a patch that reordered
+    /// the two would have passed the suite.
+    #[test]
+    fn a_selection_inside_the_cell_still_reads_first() {
+        let mut config = Config::default();
+        config.editor.line_numbers = LineNumbers::None;
+        config.editor.show_segmentation = false;
+        let ink = ink(&config);
+        let mut editor = Editor::new();
+        editor
+            .current_buffer_mut()
+            .insert(0, "| 字 | 讀音 |\n| --- | --- |\n| 木 | mu |\n");
+        editor.on_key(Key::Char('g'));
+        editor.on_key(Key::Char('g'));
+        editor.on_key(Key::Char('j'));
+        editor.on_key(Key::Char('j'));
+        assert!(editor.enter_table(), "{}", editor.status());
+        editor.on_key(Key::Char('l'));
+        assert_eq!(editor.cell_position().map(|(_, c)| c), Some(1), "on `mu`");
+        // Tab is `Grain::Char`, so `l` walks inside the cell and the selection
+        // covers two characters. It has to: the block cursor is painted over
+        // its own slot last of all, so the column that answers this question is
+        // the one **beside** the cursor.
+        editor.on_key(Key::Tab);
+        editor.on_key(Key::Char('v'));
+        editor.on_key(Key::Char('l'));
+        let buf = render(&editor, &config, 30, 8);
+        let text = row_text(&buf, 2);
+        let mu = column_of(&text, "mu");
+        assert_eq!(
+            buf[(mu, 2)].bg,
+            ink.at(yumete_config::rung::SELECTION),
+            "the selection, not the cell, at column {mu} of {text:?}",
+        );
     }
 
     /// The padding that squares the page up (#212) is *inside* the cell, so it
@@ -6143,12 +6309,16 @@ mod tests {
         let want = ink.at(yumete_config::rung::HEAD);
         let row = 2;
         let text = row_text(&buf, row);
-        let mu = text.find("mu").expect("the cell is on the page") as u16;
+        let mu = column_of(&text, "mu");
         // `mu` itself, then the two columns of padding after it, all one cell.
         for x in mu..mu + 4 {
             assert_eq!(buf[(x, row)].bg, want, "column {x} of {text:?}");
         }
-        assert_ne!(buf[(mu + 4, row)].bg, want, "and it stops at the pipe");
+        // …and it stops at the pipe. **The pipe**, not `mu + 4`: the box holds
+        // the space on either side of the content as well as the padding, so
+        // counting columns off the content lands inside it.
+        let bar = last_column_of(&text, "|");
+        assert_ne!(buf[(bar, row)].bg, want, "and it stops at the pipe: {text:?}");
     }
 
     /// 縱書 keeps its page when a `|` table is entered — `turn_for_table`
@@ -7980,6 +8150,45 @@ mod tests {
             editor.on_key(Key::Char(c));
         }
         assert!(composes_here(&editor), "`:e 第三章.md` is a path");
+    }
+
+    /// Three ways the same question was answered wrongly, all found by the
+    /// review of #225.
+    #[test]
+    fn the_command_line_takes_text_after_a_bang_a_prefix_and_before_the_caret() {
+        // The bang belongs to the command, and `:w!` is the spelling you reach
+        // for **because** the file is already there — the one line where the
+        // path is most likely to be a chapter's Chinese name.
+        let mut editor = Editor::new();
+        editor.on_key(Key::Char(':'));
+        for c in "w! ".chars() {
+            editor.on_key(Key::Char(c));
+        }
+        assert!(composes_here(&editor), "`:w! 第三章.md` is a path too");
+
+        // A prefix of an argument word is what the parser accepts, so it is
+        // what this has to accept: `:yume tab 詞庫.txt` runs, and the walk has
+        // to reach `table`'s path through the three letters that were typed.
+        let mut editor = Editor::new();
+        editor.on_key(Key::Char(':'));
+        for c in "yume tab ".chars() {
+            editor.on_key(Key::Char(c));
+        }
+        assert!(composes_here(&editor), "`tab` is `table`: {:?}", editor.command_line());
+
+        // …and the question is asked at the caret. Walk back onto the command
+        // name and the IME must be out of the way again, whatever the tail of
+        // the line says.
+        let mut editor = Editor::new();
+        editor.on_key(Key::Char(':'));
+        for c in "e 第三章.md".chars() {
+            editor.on_key(Key::Char(c));
+        }
+        assert!(composes_here(&editor), "the caret is in the path");
+        for _ in 0..editor.command_line().chars().count() {
+            editor.on_key(Key::Left);
+        }
+        assert!(!composes_here(&editor), "the caret is on the command name");
     }
 
     #[test]

@@ -1026,7 +1026,9 @@ static FOUND_SCHEMES: std::sync::OnceLock<&'static [Word]> = std::sync::OnceLock
 /// the completion table and the which-key panel are `&'static`, and a list that
 /// changed under them mid-session would leak a slice per change for no gain.
 pub fn set_schemes(found: &[(&str, &str)]) {
-    if found.is_empty() {
+    // Before any leaking: a second call would otherwise leak a `Word` and two
+    // strings per scheme and then throw the slice away at the `set`.
+    if found.is_empty() || FOUND_SCHEMES.get().is_some() {
         return;
     }
     let words: Vec<Word> = found
@@ -2446,6 +2448,12 @@ pub fn takes_text(line: &str) -> bool {
         return false;
     };
     let head = resolve(head);
+    // `resolve` answers `write!` for `:w!`, and the table lists `write`: the
+    // bang belongs to the command, not to its name. Without this the line
+    // where a path is *most* likely to be Chinese — `:w! 第三章.md`, the one
+    // you type because the file is already there — was the one line that
+    // refused the IME.
+    let head = head.strip_suffix('!').unwrap_or(head);
     let Some(entry) = COMMANDS
         .iter()
         .find(|e| e.name == head || e.aliases.contains(&head))
@@ -2455,7 +2463,10 @@ pub fn takes_text(line: &str) -> bool {
     let mut args = &entry.args;
     for word in &words[1..] {
         match args.words() {
-            Some(list) => match list.iter().find(|w| w.name == *word) {
+            // `pick`, not an exact match: it is the rule the parser walks by,
+            // and a rule that only half applies is worse than either. `:yume
+            // tab 詞庫.txt` runs, so it has to compose too.
+            Some(list) => match pick(word, list) {
                 Some(found) => args = &found.then,
                 None => return false,
             },

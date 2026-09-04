@@ -671,10 +671,17 @@ pub fn draw(
     // The padding of #212 is horizontal-only (`table_padding_on`), so here the
     // box holds nothing the file does not: the spaces around the content are
     // the ones that were typed.
+    //
+    // Asked of the **region**, the same as the horizontal page: `h`, `G` and a
+    // search all walk out of the table without putting `:table` away, and the
+    // rule row is drawn rather than edited.
     let cell = match peek.is_none() && editor.table().is_some_and(|t| !t.is_grid()) {
-        true => editor
-            .cell_position()
-            .and_then(|(line, at)| editor.cell_box(line, at)),
+        true => editor.md_region().and_then(|region| {
+            editor
+                .cell_position()
+                .filter(|&(line, _)| region.holds(line) && !region.is_rule(line))
+                .and_then(|(line, at)| editor.cell_box(line, at))
+        }),
         false => None,
     };
     let cell_style = Style::default().bg(ink.at(yumete_config::rung::HEAD));
