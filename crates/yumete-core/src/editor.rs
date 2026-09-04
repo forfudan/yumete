@@ -876,6 +876,15 @@ pub struct Editor {
     /// all on, so leaving it gives back what the writer had rather than
     /// nothing.
     ruby_before: Option<Dialects>,
+    /// **Text on the page the file has no bytes for** (Feature #210), as
+    /// `(line, column, what is drawn there)`.
+    ///
+    /// Held here rather than worked out here, because what goes on the page
+    /// comes from outside the core: the candidate the input method is offering
+    /// (#211), the padding that squares a table up without rewriting it (#212).
+    /// The core's job is that everything which asks where a character is —
+    /// the wrap, the caret, `j`, the mouse — asks about the same page.
+    ghost: Vec<(usize, usize, String)>,
     /// The command-line completion in progress: the prefix Tab started from, and
     /// which match is selected. The prefix is kept because the typed text is
     /// replaced by each candidate in turn, so the line itself can no longer say
@@ -1105,6 +1114,7 @@ impl Editor {
             block_cache: RefCell::new(None),
             md_cache: RefCell::new(None),
             ruby_before: None,
+            ghost: Vec::new(),
             ruby: Dialects::only(crate::ruby::Dialect::Html),
             layout: Layout::default(),
             zong_length: DEFAULT_ZONG_LENGTH,
@@ -1897,6 +1907,37 @@ impl Editor {
             off.sort_unstable();
         }
         off
+    }
+
+    /// The ghost text on `line`: `(column within the line, what is drawn)`.
+    ///
+    /// Ordered by column, so the renderer, the wrap and the mouse walk it the
+    /// same way.
+    pub fn ghost_on_line(&self, line: usize) -> Vec<(usize, String)> {
+        let mut runs: Vec<(usize, String)> = self
+            .ghost
+            .iter()
+            .filter(|&&(l, _, _)| l == line)
+            .map(|(_, at, text)| (*at, text.clone()))
+            .collect();
+        runs.sort_by_key(|&(at, _)| at);
+        runs
+    }
+
+    /// Whether anything at all is drawn that the file does not contain.
+    ///
+    /// The page is measured differently when it is, so the cheap answer is
+    /// worth having: a frame with no candidate on it pays nothing.
+    pub fn has_ghost(&self) -> bool {
+        !self.ghost.is_empty()
+    }
+
+    /// Put `runs` on the page in place of whatever was there.
+    ///
+    /// Wholesale, never appended: the caller says what the page holds now, so
+    /// a candidate that has been committed leaves nothing behind.
+    pub fn set_ghost(&mut self, runs: Vec<(usize, usize, String)>) {
+        self.ghost = runs;
     }
 
     /// The ruby groups on `line` that are being laid out as readings.
@@ -6957,6 +6998,7 @@ impl Editor {
         &self,
         hidden: &'a dyn Fn(usize) -> Vec<(usize, usize)>,
         folded: &'a dyn Fn(usize) -> bool,
+        ghost: &'a dyn Fn(usize) -> Vec<(usize, String)>,
     ) -> Grid<'a> {
         // Through `ruby()` and `hanging_punctuation()`, not the fields: a page
         // packed tight lays out neither, and a grid that disagreed with what is
@@ -6986,6 +7028,7 @@ impl Editor {
             .with_folds(folded)
             .with_open_line(self.open_line())
             .with_hanging(self.hanging_punctuation())
+            .with_ghost(ghost)
     }
 
     /// The markup that is off the page on `line`, as columns within it.
@@ -7214,7 +7257,8 @@ impl Editor {
     pub fn zong_position(&self) -> zong::Position {
         let hidden = |line: usize| self.markup_hidden_on_line(line);
         let folded = |line: usize| self.line_is_folded(line);
-        let grid = self.grid_with(&hidden, &folded);
+        let ghost = |line: usize| self.ghost_on_line(line);
+        let grid = self.grid_with(&hidden, &folded, &ghost);
         zong::position(self.current_buffer().rope(), self.cursor, grid)
     }
 
@@ -11084,9 +11128,11 @@ impl Editor {
             // alternative was a second answer to「which column is this」 that
             // did not know what is off the page.
             let width = self.wrap_width().unwrap_or(crate::wrap::NO_WRAP);
+            let ghost = |line: usize| self.ghost_on_line(line);
             let m = crate::wrap::Measure::new(width, &hide)
                 .with_indent(self.paragraph_indent())
                 .with_folds(&fold)
+                .with_ghost(&ghost)
                 .with_open_line(self.open_line());
             crate::wrap::column_of(rope, self.cursor, m)
         };
@@ -11116,9 +11162,11 @@ impl Editor {
             // this same code, so the two cases cannot answer differently about
             // what is off the page.
             let width = self.wrap_width().unwrap_or(crate::wrap::NO_WRAP);
+            let ghost = |line: usize| self.ghost_on_line(line);
             let m = crate::wrap::Measure::new(width, &hide)
                 .with_indent(self.paragraph_indent())
                 .with_folds(&fold)
+                .with_ghost(&ghost)
                 .with_open_line(self.open_line());
             if up {
                 crate::wrap::prev_row(rope, self.cursor, m, self.goal_column)
@@ -11144,7 +11192,8 @@ impl Editor {
         let (goal, pos) = {
             let hidden = |line: usize| self.markup_hidden_on_line(line);
             let folded = |line: usize| self.line_is_folded(line);
-            let grid = self.grid_with(&hidden, &folded);
+            let ghost = |line: usize| self.ghost_on_line(line);
+            let grid = self.grid_with(&hidden, &folded, &ghost);
             let rope = self.current_buffer().rope();
             let goal = if continuing {
                 self.goal_slot
@@ -12275,6 +12324,55 @@ mod tests {
         ed
     }
 
+    /// Feature #210. The core holds the runs and hands them to whatever asks
+    /// where a character is; it does not decide what they say.
+    #[test]
+    fn ghost_runs_are_held_wholesale_and_answered_by_line() {
+        let mut ed = typed("春夏\n秋冬\n");
+        assert!(!ed.has_ghost(), "a page with no candidate on it pays nothing");
+        assert!(ed.ghost_on_line(0).is_empty());
+
+        // Out of order on the way in, in column order on the way out: the
+        // renderer, the wrap and the mouse all walk it forwards.
+        ed.set_ghost(vec![
+            (0, 2, "補".to_string()),
+            (1, 1, "候".to_string()),
+            (0, 1, "候".to_string()),
+        ]);
+        assert!(ed.has_ghost());
+        assert_eq!(
+            ed.ghost_on_line(0),
+            vec![(1, "候".to_string()), (2, "補".to_string())]
+        );
+        assert_eq!(ed.ghost_on_line(1), vec![(1, "候".to_string())]);
+        assert!(ed.ghost_on_line(2).is_empty());
+
+        // Wholesale, never appended — a committed candidate leaves nothing.
+        ed.set_ghost(Vec::new());
+        assert!(!ed.has_ghost());
+        assert!(ed.ghost_on_line(0).is_empty());
+    }
+
+    /// The point of #210: **one page**. A candidate the renderer alone knew
+    /// about would put the caret, `j` and the mouse on three different ones.
+    #[test]
+    fn the_caret_and_the_grid_agree_about_a_candidate() {
+        let mut ed = typed("春夏秋冬\n");
+        ed.set_ghost(vec![(0, 2, "候補".to_string())]);
+        // Down the column: two rows of candidate between 夏 and 秋.
+        ed.execute(":layout vertical").unwrap();
+        assert_eq!(ed.zong_position().slot, 0);
+        // Down the column is `j`: the keys follow the screen, not the file.
+        ed.on_key(Key::Char('j'));
+        ed.on_key(Key::Char('j'));
+        assert_eq!(ed.cursor(), 2, "two 字 along");
+        assert_eq!(
+            ed.zong_position().slot,
+            4,
+            "…and four rows down, the candidate being two of them"
+        );
+    }
+
     fn press(ed: &mut Editor, keys: &str) {
         for c in keys.chars() {
             ed.on_key(Key::Char(c));
@@ -12439,7 +12537,8 @@ mod tests {
         assert_eq!(ed.paragraph_indent(), 2);
         let nothing = |_: usize| Vec::new();
         let never = |_: usize| false;
-        assert_eq!(ed.grid_with(&nothing, &never).indent, 2);
+        let bare = |_: usize| Vec::new();
+        assert_eq!(ed.grid_with(&nothing, &never, &bare).indent, 2);
         assert!(ed.ruby().is_empty(), "…while the reading column still goes");
     }
 
@@ -12469,10 +12568,11 @@ mod tests {
         assert!(first > 6, "the heading is not in the span: {first}..{last}");
         let hidden = |line: usize| ed.markup_hidden_on_line(line);
         let folded = |line: usize| ed.line_is_folded(line);
+        let ghost = |line: usize| ed.ghost_on_line(line);
         assert!(!crate::zong::folded(
             ed.current_buffer().rope(),
             8,
-            ed.grid_with(&hidden, &folded)
+            ed.grid_with(&hidden, &folded, &ghost)
         ));
         // And never the line the cursor is on, or you could not type into it.
         ed.execute(":2").unwrap();
@@ -13581,7 +13681,8 @@ mod tests {
                 let rope = ed.current_buffer().rope();
                 let hidden = |line: usize| ed.markup_hidden_on_line(line);
                 let folded = |line: usize| ed.line_is_folded(line);
-                let grid = ed.grid_with(&hidden, &folded);
+                let ghost = |line: usize| ed.ghost_on_line(line);
+                let grid = ed.grid_with(&hidden, &folded, &ghost);
                 for line in 0..rope.len_lines() {
                     assert_eq!(
                         crate::zong::folded(rope, line, grid),

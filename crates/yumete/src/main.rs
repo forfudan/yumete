@@ -567,7 +567,8 @@ fn preview(editor: &Editor, config: &yumete_config::Config) {
         if editor.layout() == Layout::Vertical {
             let hidden = |line: usize| editor.markup_hidden_on_line(line);
             let folded = |line: usize| editor.line_is_folded(line);
-            let grid = editor.grid_with(&hidden, &folded);
+            let ghost = |line: usize| editor.ghost_on_line(line);
+            let grid = editor.grid_with(&hidden, &folded, &ghost);
             for line in yumete_core::zong::render_page(buf.rope(), grid, config.editor.zong_gap) {
                 writeln!(out, "{line}")?;
             }
