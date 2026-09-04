@@ -1940,21 +1940,16 @@ fn draw_hud(frame: &mut Frame, editor: &Editor, config: &Config, page: Rect, car
     let text = format!("╰ {typed}");
     let width = yumete_cjk::str_width(&text) as u16;
     let (caret_x, caret_y) = caret;
-    // Under the caret — or over it, on the page's last row, where there is no
-    // under. Never *on* it: the character being worked on stays visible.
-    let y = match caret_y + 1 < page.y + page.height {
-        true => caret_y + 1,
-        false => caret_y.saturating_sub(1),
-    };
-    if y < page.y || y >= page.y + page.height || width >= page.width {
+    if width >= page.width {
         return;
     }
+    let right = page.x + page.width;
     // **Never over the writing.** It used to start at the caret's own column
     // and paint over whatever was on the row below — 整整 covered by `╰ 30`,
     // and in 縱書 over a live 縱, with the leading `╰` swallowed by a wide
     // glyph's second cell. So it goes *after* what is drawn on that row: the
     // margin is the only part of a page that is not somebody's writing.
-    let after = {
+    let after_the_writing = |frame: &mut Frame, y: u16| -> u16 {
         let buf = frame.buffer_mut();
         let mut last = page.x;
         for x in page.x..page.x + page.width {
@@ -1970,14 +1965,25 @@ fn draw_hud(frame: &mut Frame, editor: &Editor, config: &Config, page: Rect, car
         }
         last
     };
-    let right = page.x + page.width;
-    // Beside the caret when the margin there is free, else at the row's end;
-    // and if the row is full to the edge, not at all — a HUD is a convenience
-    // and the manuscript is not.
-    let x = caret_x.max(after).min(right.saturating_sub(width));
-    if x < after || x + width > right {
-        return;
+    // **Under the caret, then over it** — and never *on* it, so the character
+    // being worked on stays visible. Both rows are tried rather than only the
+    // one: a full row below used to make the HUD vanish, when the row above
+    // was empty margin. (The status line's right edge carries the same string
+    // whatever happens here, so a HUD with nowhere to go loses nothing.)
+    let below = (caret_y + 1 < page.y + page.height).then_some(caret_y + 1);
+    let above = (caret_y > page.y).then(|| caret_y - 1);
+    let mut placed = None;
+    for y in below.into_iter().chain(above) {
+        let after = after_the_writing(frame, y);
+        let x = caret_x.max(after).min(right.saturating_sub(width));
+        if x >= after && x + width <= right {
+            placed = Some((x, y));
+            break;
+        }
     }
+    let Some((x, y)) = placed else {
+        return;
+    };
     let style = Style::default()
         .bg(ink.at(yumete_config::rung::BAND))
         .fg(ink.gold());
@@ -5283,6 +5289,36 @@ mod tests {
         editor.on_key(Key::Char('i'));
         editor.on_key(Key::Char('甲'));
         assert!(!page(&editor).contains("╰"));
+    }
+
+    /// **It takes the row that has room.**
+    ///
+    /// Under the caret first, over it when that row is full — a HUD that
+    /// vanishes because the line below happens to reach the edge is a HUD you
+    /// cannot rely on, and the eye stops looking for it.
+    #[test]
+    fn the_hud_takes_whichever_row_has_room_for_it() {
+        // Above the caret: a short line with margin to spare. Below it: a line
+        // that reaches the right edge.
+        let full = "那年冬天山下起了大雪一直下到開春天氣才回暖起來了。";
+        let mut editor = editor_with(&format!("短。\n短二。\n{full}\n{full}\n"));
+        editor.on_key(Key::Char('j'));
+        let config = Config::default();
+        let rows = |editor: &Editor| -> Vec<String> {
+            let b = render(editor, &config, 30, 8);
+            (0..b.area.height)
+                .map(|y| (0..b.area.width).map(|x| at(&b, x, y)).collect::<String>())
+                .collect()
+        };
+        // Caret on the short first line: the row below is full to the edge, so
+        // the HUD goes *above* — the top row of the page is empty margin.
+        editor.on_key(Key::Char('3'));
+        let drawn = rows(&editor);
+        let where_is_it = drawn
+            .iter()
+            .position(|r| r.contains('╰'))
+            .unwrap_or_else(|| panic!("the HUD had a row and did not take it: {drawn:#?}"));
+        assert_eq!(where_is_it, 0, "the row above, since the one below is full: {drawn:#?}");
     }
 
     /// The panel says what can finish the key you pressed, and stands on the
