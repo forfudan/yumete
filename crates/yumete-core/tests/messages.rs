@@ -1,16 +1,21 @@
-//! Every message the editor says is in `messages.toml`, and nothing else is.
+//! Every tag the editor says has an entry in `messages.toml`, and nothing else
+//! does.
 //!
-//! The two reviews of that file both found the same class of defect and neither
-//! found it by reading the file: **a Chinese sentence built at a call site and
-//! handed to a message as an argument** stays Chinese in an English session, so
-//! the line reads 「table: 6 columns, 照首行（已轉橫排）」. There is no way to
-//! see that in the table, because the table is right — the leak is in the code.
+//! **Both halves matter, and for opposite reasons.** A tag with no entry is
+//! said as itself: the status line reads `readonly.refuzed` instead of a
+//! sentence — visibly wrong, but only to whoever happens to hit that condition,
+//! which for a message about a rare failure may be nobody for months. An entry
+//! no tag names is the other way round: it looks perfectly well from inside the
+//! file, and is dead weight a translator spends time on. Neither can be seen by
+//! reading either the code or the table on its own, so this reads both.
 //!
-//! So this reads the source instead. It is a test rather than a lint because
-//! the failure it prevents is silent: an English session that is quietly
-//! bilingual at exactly the moments something interesting happened.
+//! There is a third check here that is older than the tags and unaffected by
+//! them: **a Chinese sentence built at a call site and handed to a message as
+//! an argument** stays Chinese in an English session, so the line reads
+//! 「table: 6 columns, 照首行（已轉橫排）」. The template switches language and
+//! the value does not.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::PathBuf;
 
 /// The workspace root, from this crate's manifest.
@@ -22,8 +27,17 @@ fn root() -> PathBuf {
         .to_path_buf()
 }
 
-/// A source file, with its test module cut off — a test's Chinese is document
-/// content, not something the editor says.
+/// Every file that says anything.
+const SPEAKERS: &[&str] = &[
+    "crates/yumete-core/src/buffer.rs",
+    "crates/yumete-core/src/editor.rs",
+    "crates/yumete-core/src/command.rs",
+    "crates/yumete-tui/src/lib.rs",
+    "crates/yumete/src/main.rs",
+];
+
+/// A source file, with its test module cut off — a test's tags are examples,
+/// not something the editor says.
 fn source(relative: &str) -> String {
     let text = std::fs::read_to_string(root().join(relative))
         .unwrap_or_else(|e| panic!("{relative}: {e}"));
@@ -33,14 +47,14 @@ fn source(relative: &str) -> String {
     }
 }
 
-/// Every string literal `f` is applied to, in `text`.
+/// Every string literal `opener` is applied to, in `text`.
 fn literals(text: &str, opener: &str) -> BTreeSet<String> {
     let mut out = BTreeSet::new();
     let mut at = 0;
     while let Some(found) = text[at..].find(opener) {
         let mut i = at + found + opener.len();
-        // Whitespace and newlines between the opener and its literal: a long
-        // message is written on its own line.
+        // Whitespace and newlines between the opener and its literal: a call
+        // with several arguments is written across lines.
         while text[i..].starts_with([' ', '\n', '\r', '\t']) {
             i += 1;
         }
@@ -67,67 +81,96 @@ fn literals(text: &str, opener: &str) -> BTreeSet<String> {
     out
 }
 
-/// Everything the editor says, gathered from the source.
-fn said() -> BTreeSet<String> {
-    let mut out = BTreeSet::new();
-    for file in [
-        "crates/yumete-core/src/buffer.rs",
-        "crates/yumete-core/src/editor.rs",
-        "crates/yumete-core/src/command.rs",
-        "crates/yumete-tui/src/lib.rs",
-        "crates/yumete/src/main.rs",
-    ] {
+/// Whether a literal is shaped like a tag.
+///
+/// The openers this scans are not used *only* for messages — `help:` is also a
+/// struct field somewhere, `('c', "…")` is also `replace('|', "\\|")` — so the
+/// shape is what tells a tag from a passer-by. It is deliberately strict: a
+/// leftover Chinese sentence at one of these openers is not tag-shaped, and
+/// falls out here rather than being reported as a missing entry.
+fn is_tag(literal: &str) -> bool {
+    literal.contains('.')
+        && literal
+            .chars()
+            .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '.' || c == '-')
+}
+
+/// Every tag the editor says, and where it says it.
+fn said() -> BTreeMap<String, String> {
+    let mut out = BTreeMap::new();
+    for file in SPEAKERS {
         let text = source(file);
-        out.extend(literals(&text, "say!("));
-        // A command's `help` is a key too: the `:` menu translates it as it
+        let mut tags = literals(&text, "say!(");
+        // A command's `help` is a tag too: the `:` menu translates it as it
         // draws it. So is the label beside a key in the space menu, which is
         // declared as the second half of a pair.
-        out.extend(literals(&text, "help:"));
-        // …and only the labels: `replace('|', "\\|")` is the same shape and
-        // is not a sentence anybody reads.
-        out.extend(
-            literals(&text, "', ")
-                .into_iter()
-                .filter(|s| s.chars().any(|c| ('\u{4e00}'..='\u{9fff}').contains(&c))),
-        );
+        tags.extend(literals(&text, "help:"));
+        tags.extend(literals(&text, "', "));
+        for tag in tags.into_iter().filter(|t| is_tag(t)) {
+            out.entry(tag).or_insert_with(|| file.to_string());
+        }
     }
     out
 }
 
-/// Every `zh` in the table.
-fn table() -> BTreeSet<String> {
-    std::fs::read_to_string(root().join("crates/yumete-core/messages.toml"))
-        .expect("messages.toml")
-        .lines()
-        .filter_map(|l| l.trim().strip_prefix("zh = "))
-        .filter_map(|v| v.trim().strip_prefix('"')?.strip_suffix('"'))
-        .map(str::to_string)
-        .collect()
+/// One entry of the table, as written.
+#[derive(Default)]
+struct Entry {
+    note: bool,
+    zht: bool,
+}
+
+/// The table: tag → what was written under it.
+fn table() -> BTreeMap<String, Entry> {
+    let text = std::fs::read_to_string(root().join("crates/yumete-core/messages.toml"))
+        .expect("messages.toml");
+    let unquote = |v: &str| Some(v.trim().strip_prefix('"')?.strip_suffix('"')?.to_string());
+    let mut out = BTreeMap::new();
+    let mut note = false;
+    let mut key: Option<String> = None;
+    for line in text.lines() {
+        let line = line.trim();
+        if line == "[[message]]" {
+            (note, key) = (false, None);
+        } else if line.starts_with('#') && key.is_none() {
+            note = line.len() > 1;
+        } else if let Some(rest) = line.strip_prefix("key = ") {
+            if let Some(k) = unquote(rest) {
+                out.insert(k.clone(), Entry { note, zht: false });
+                key = Some(k);
+            }
+        } else if let Some(rest) = line.strip_prefix("zht = ") {
+            if let Some(entry) = key.as_ref().and_then(|k| out.get_mut(k)) {
+                entry.zht = unquote(rest).is_some_and(|v| !v.is_empty());
+            }
+        }
+    }
+    out
 }
 
 #[test]
-fn everything_the_editor_says_is_in_the_table() {
+fn every_tag_the_editor_says_has_an_entry() {
     let (said, table) = (said(), table());
-    let missing: Vec<&String> = said.difference(&table).collect();
+    let missing: Vec<String> = said
+        .iter()
+        .filter(|(tag, _)| !table.contains_key(*tag))
+        .map(|(tag, file)| format!("  {tag}  ({file})"))
+        .collect();
     assert!(
         missing.is_empty(),
-        "said but never translated — add them to messages.toml:\n{}",
-        missing
-            .iter()
-            .map(|m| format!("  {m}"))
-            .collect::<Vec<_>>()
-            .join("\n")
+        "said but not in messages.toml — the editor will say the tag itself:\n{}",
+        missing.join("\n")
     );
 }
 
 #[test]
-fn the_table_holds_nothing_the_editor_no_longer_says() {
+fn the_table_holds_no_entry_the_editor_never_says() {
     let (said, table) = (said(), table());
-    let stale: Vec<&String> = table.difference(&said).collect();
+    let stale: Vec<&String> = table.keys().filter(|k| !said.contains_key(*k)).collect();
     assert!(
         stale.is_empty(),
-        "in messages.toml but no longer said — the Chinese was edited in the \
-         code and not here, so the English has quietly stopped applying:\n{}",
+        "in messages.toml but said by nothing — a renamed or deleted tag, and \
+         work for whoever translates it next:\n{}",
         stale
             .iter()
             .map(|m| format!("  {m}"))
@@ -137,17 +180,30 @@ fn the_table_holds_nothing_the_editor_no_longer_says() {
 }
 
 #[test]
+fn every_entry_says_when_it_is_said_and_has_its_traditional() {
+    let table = table();
+    let bad: Vec<String> = table
+        .iter()
+        .filter(|(_, e)| !e.note || !e.zht)
+        .map(|(k, e)| match e.zht {
+            false => format!("  {k}  — no zht"),
+            true => format!("  {k}  — no `#` line saying when it is said"),
+        })
+        .collect();
+    assert!(
+        bad.is_empty(),
+        "an entry is a `# when it is said` line, a key, and at least `zht`:\n{}",
+        bad.join("\n")
+    );
+}
+
+#[test]
 fn no_message_is_handed_a_chinese_argument() {
-    // The leak both reviews found. A `say!` whose arguments include a Chinese
-    // string literal produces a sentence that is half translated: the template
-    // switches language and the value does not.
+    // A `say!` whose arguments include a Chinese string literal produces a
+    // sentence that is half translated: the template switches language and the
+    // value does not.
     let mut leaks = Vec::new();
-    for file in [
-        "crates/yumete-core/src/editor.rs",
-        "crates/yumete-core/src/command.rs",
-        "crates/yumete-tui/src/lib.rs",
-        "crates/yumete/src/main.rs",
-    ] {
+    for file in SPEAKERS {
         let text = source(file);
         let mut at = 0;
         while let Some(found) = text[at..].find("say!(") {
@@ -169,7 +225,7 @@ fn no_message_is_handed_a_chinese_argument() {
                 }
             }
             let call = &text[start..end.min(text.len())];
-            // Past the template: everything after the first literal.
+            // Past the tag: everything after the first literal.
             if let Some(after) = call.find("\",").map(|i| &call[i + 2..]) {
                 for literal in literals(&format!("x({after}"), "x(") {
                     if literal.chars().any(|c| ('\u{3000}'..='\u{9fff}').contains(&c)) {

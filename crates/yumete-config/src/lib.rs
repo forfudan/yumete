@@ -115,7 +115,8 @@ pub struct EditorConfig {
     pub bands: usize,
     /// Whether `yumete` with no file opens again what was open last time.
     pub session: bool,
-    /// What language the editor says things in: `"zh"` or `"en"`.
+    /// What language the editor says things in: `"zh"` (繁體, the
+    /// default), `"zhs"` (简体) or `"en"`.
     pub language: String,
     /// The gap between two 縱, in half-width cells (0–4).
     pub zong_gap: usize,

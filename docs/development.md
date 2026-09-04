@@ -354,7 +354,7 @@ Phases are ordered by priority, most writer-critical first:
 | 148 | **A phrasebook for keys we do not bind**    | core   | P2    | `$` says 「行尾是 gl」; it never does the thing | Done |
 | 149 | **The session, and marks**                  | both   | P2    | what was open, where the cursor was; `M a` / `' a` across files | Done |
 | 150 | **Project-wide replace**                    | core   | P1    | `:grep` then `:replace`: nothing changed that was not on the screen, nothing on disk until `:wa` | Done |
-| 151 | **Both languages**                          | core   | P1    | the Chinese is the key; `messages.toml` holds the pair; `language = "zh"\|"en"` | Done |
+| 151 | **Three languages**                         | core   | P1    | an English tag is the key; `messages.toml` holds 繁/简/en; `language = "zh"\|"zhs"\|"en"` | Done |
 | 152 | **【墨香】 as a computed theme**             | both   | P1    | three anchors in the config, every other shade a rung on the ladder; see §5.2 group 13 | Done |
 | 153 | **Search has two directions**               | core   | P1    | `/` is `:search row`, `Enter` is `:search col` — down one column, then the next | Done |
 | 154 | **`:tutor` — a lesson you edit**            | both   | P1    | vimtutor's idea, on Chinese prose, where `w` and 縱書 can actually be taught | Done |
@@ -801,9 +801,9 @@ thing — the hard parts are right, and a handful of small wrongs are in the way
 >
 > - **Group 2, being installable** — **not a problem**: a release concern, and
 >   it goes with §5.3's pipeline.
-> - ~~**English messages**~~ — done: `messages.toml`, 323 messages, both
->   languages side by side, and three tests keeping the code and the file from
->   drifting apart.
+> - ~~**English messages**~~ — done: `messages.toml`, 597 messages tagged by
+>   the condition that says them, 繁/简/en side by side, and four tests keeping
+>   the code and the file from drifting apart.
 >
 > **The whole list is struck through.** What is open is new: §5.2 groups 13
 > (【墨香】 as a real theme) and 14 (`:tutor`).
@@ -969,15 +969,30 @@ release; the git-dep switch goes in with the pipeline.
 - ~~**Messages are half English and half Chinese.**~~ Done, 2026-09-03 — and
   not the way this entry sketched it.
 
-  What was sketched was a `msg` module of invented keys (`M::Closed`) and 150
-  call sites rewritten to name them. What was built makes **the Chinese sentence
-  itself the key**: `say!("關了 {0}——現在是 {1}", …)` stays where it is said, and
-  `crates/yumete-core/messages.toml` holds the pair. No key has to be invented,
-  none can be got wrong, the code still reads as prose, and a message with no
-  translation falls back to the Chinese — which is exactly what the editor did
-  before the file existed. The holes are numbered (`{0}`, `{1}`) so a
-  translation may put them in the other order. 323 messages: every status line,
-  every error, the hint row, and the `:` menu's own descriptions.
+  It was built twice. The first build made **the Chinese sentence itself the
+  key** — `say!("關了 {0}——現在是 {1}", …)` where it is said, the pair in
+  `crates/yumete-core/messages.toml`. Nothing had to be invented and nothing
+  could be got wrong, and it was still the wrong key, for one decisive reason
+  the author put plainly: **the sentence is the part that changes.** Improving a
+  word of the Chinese silently unhooked its English, and the table could not be
+  edited at all — changing 「只讀」 there changed nothing on the screen, because
+  the screen was reading the literal in the code. 緣木求魚.
+
+  So, 2026-09-04, the second build: the key is an **English tag naming the
+  condition** — `readonly.refused`, `reload.refused-dirty`,
+  `table.column-out-of-range`. `area.condition`, lower case, dots between
+  segments and hyphens inside one. Under each `[[message]]` is a `#` line saying
+  *when* it is said, which is what a translator needs and cannot get from the
+  sentence. Three languages under that: `zht` 繁體 (always filled in), `zhs`
+  简体, `en`, each falling back to `zht`. 597 messages: every status line, every
+  error, the hint row, the space menu's labels and the `:` menu's own
+  descriptions. The holes stay numbered (`{0}`, `{1}`) so a translation may put
+  them in the other order. A tag with no entry is said **as itself**, so a typo
+  reads `readonly.refuzed` on the status line rather than vanishing.
+
+  The 简体 was converted mechanically (opencc `t2s`) and is marked in the
+  header as wanting a read-over: 简体 is not only different characters, it is
+  sometimes a different word.
 
   Two reviews of the file — a novelist on the Chinese, a terminal user on the
   English — found the same class of defect independently, and **neither found it
@@ -985,8 +1000,8 @@ release; the git-dep switch goes in with the pipeline.
   (`倒`/`順`, `照首行`, `（已轉橫排）`, `join("、")`) stays Chinese in an English
   session, so the line reads 「table: 6 columns, 照首行（已轉橫排）」. The table
   cannot show that, because the table is right. `crates/yumete-core/tests/
-  messages.rs` reads the source instead, and fails on that, on anything said but
-  not translated, and on anything translated but no longer said.
+  messages.rs` reads the source instead, and fails on that, on any tag with no
+  entry, on any entry no tag names, and on an entry with no `#` line.
 
 ### 10 · Two the author asked for — **done**
 

@@ -430,7 +430,7 @@ pub fn run(
                 if editor.take_words_request() {
                     let level = editor.word_level();
                     editor.set_segmenter(choose_words(ime, level));
-                    editor.set_status(say!("詞表重讀了：{0}", editor.words_in_force()));
+                    editor.set_status(say!("word.lists-reread", editor.words_in_force()));
                 }
                 if let Some(text) = editor.take_clipboard_request() {
                     let _ = write!(io::stdout(), "\x1b]52;c;{}\x07", base64(text.as_bytes()));
@@ -454,8 +454,8 @@ pub fn run(
                     use yumete_core::editor::How;
                     match want.how {
                         How::Terminal => match hand_over(&mut terminal, &want.line) {
-                            Ok(()) => editor.set_status(format!("跑完了：{}", want.line)),
-                            Err(err) => editor.set_status(format!("跑不動：{err}")),
+                            Ok(()) => editor.set_status(say!("shell.finished", want.line)),
+                            Err(err) => editor.set_status(say!("shell.cannot-run", err)),
                         },
                         // Showing you the run: the complaints belong with the
                         // answer, since between them they are what happened.
@@ -465,7 +465,7 @@ pub fn run(
                                 text.push_str(&ran.complained);
                                 editor.provide_shell_output(&want.line, &text);
                             }
-                            Err(err) => editor.set_status(format!("跑不動：{err}")),
+                            Err(err) => editor.set_status(say!("shell.cannot-run", err)),
                         },
                         // Editing your text: a command that failed does not get
                         // to touch it. `tr -D ' '` is a typo, and its answer is
@@ -475,11 +475,11 @@ pub fn run(
                             Ok(ran) if ran.ok => {
                                 editor.provide_pipe_output(&ran.said);
                                 if !ran.complained.trim().is_empty() {
-                                    editor.set_status(format!("換好了，但它說：{}", ran.why()));
+                                    editor.set_status(say!("shell.replaced-with-complaints", ran.why()));
                                 }
                             }
-                            Ok(ran) => editor.set_status(format!("沒有動你的字：{}", ran.why())),
-                            Err(err) => editor.set_status(format!("跑不動：{err}")),
+                            Ok(ran) => editor.set_status(say!("shell.left-alone", ran.why())),
+                            Err(err) => editor.set_status(say!("shell.cannot-run", err)),
                         },
                     }
                 }
@@ -497,7 +497,7 @@ pub fn run(
                     if let yumete_core::editor::Preview::Show = want {
                         if let Some(url) = editor.preview_at().map(str::to_string) {
                             show(&url);
-                            editor.set_status(say!("預覽：{0}（`:preview off` 停）", url));
+                            editor.set_status(say!("preview.running", url));
                         }
                         continue;
                     }
@@ -506,7 +506,7 @@ pub fn run(
                         let _ = running.child.wait();
                         forget_the_server();
                         editor.set_preview_at(None);
-                        editor.set_status(say!("預覽：{0} 已停", running.what));
+                        editor.set_status(say!("preview.stopped", running.what));
                     }
                     if let yumete_core::editor::Preview::Start { path, syntax } = want {
                         // **What the config says, if it says anything.** The
@@ -526,19 +526,19 @@ pub fn run(
                             }) {
                                 Some((program, args)) => match Job::server(&program, &args) {
                                     Ok(started) => {
-                                        editor.set_status(say!("預覽：{0} 起來中……", program));
+                                        editor.set_status(say!("preview.starting", program));
                                         job = Some(started);
                                     }
                                     Err(why) => editor.set_status(why),
                                 },
-                                None => editor.set_status(say!("命令寫壞了：{0}", runner.run)),
+                                None => editor.set_status(say!("command.broken-line", runner.run)),
                             }
                             continue;
                         }
                         match syntax {
                             yumete_core::syntax::Syntax::Typst => match Job::typst(&path) {
                                 Ok(started) => {
-                                    editor.set_status("預覽：tinymist 起來中……".to_string());
+                                    editor.set_status(say!("preview.typst-starting"));
                                     job = Some(started);
                                 }
                                 Err(why) => editor.set_status(why),
@@ -558,15 +558,15 @@ pub fn run(
                                 match editor.execute(&format!("export! html {}", out.display())) {
                                     Ok(_) => {
                                         show(&out.to_string_lossy());
-                                        editor.set_status(format!("預覽：{}", out.display()));
+                                        editor.set_status(say!("preview.made", out.display()));
                                     }
-                                    Err(err) => editor.set_status(format!("預覽：{err}")),
+                                    Err(err) => editor.set_status(say!("preview.failed", err)),
                                 }
                             }
                             // Nothing to typeset: a file with no markup is
                             // already what it is going to look like.
                             yumete_core::syntax::Syntax::Text => {
-                                editor.set_status(say!("這個檔案沒有標記，沒有什麼可以預覽的"))
+                                editor.set_status(say!("preview.nothing-to-preview"))
                             }
                         }
                     }
@@ -578,7 +578,7 @@ pub fn run(
                         // is gone by the next keystroke, and the address is
                         // what a writer comes back to ask for.
                         editor.set_preview_at(Some(url.clone()));
-                        editor.set_status(say!("預覽：{0}（`:preview off` 停）", url));
+                        editor.set_status(say!("preview.running", url));
                     }
                 }
                 if let Some(tag) = editor.take_scheme_request() {
@@ -608,11 +608,11 @@ pub fn run(
                     let settled = ime.set_annotations(on);
                     editor.set_chaifen(settled);
                     editor.set_status(if settled {
-                        "拆分 on".to_string()
+                        say!("chaifen.on")
                     } else if ime.annotations_available() {
-                        "拆分 off".to_string()
+                        say!("chaifen.off")
                     } else {
-                        "拆分 unavailable for this scheme".to_string()
+                        say!("chaifen.unavailable")
                     });
                 }
             }
@@ -868,8 +868,8 @@ impl Ran {
         self.complained
             .lines()
             .find(|l| !l.trim().is_empty())
-            .unwrap_or("命令失敗了")
-            .to_string()
+            .map(str::to_string)
+            .unwrap_or_else(|| say!("shell.failed"))
     }
 }
 
@@ -897,7 +897,7 @@ fn hand_over<B: ratatui::backend::Backend + io::Write>(
         Ok(code) => println!("[{line} — {code}]"),
         Err(err) => println!("[{line} — {err}]"),
     }
-    println!("按任意鍵回到 yumete…");
+    println!("{}", say!("shell.press-any-key"));
     let _ = io::Write::flush(&mut stdout());
     ratatui::crossterm::terminal::enable_raw_mode()?;
     // Anything at all: this is "I have read it", not a command.
@@ -935,7 +935,7 @@ fn set_theme(
             // …unless it is the name the reader gave their *own* theme in the
             // config, which is a theme too.
             None if asked == &config.theme.name => crate::theme::choose(config.theme.clone()),
-            None => return say!("沒有這個主題：{0}", asked),
+            None => return say!("theme.no-such-theme", asked),
         }
     }
     if let Some(mood) = mood {
@@ -948,10 +948,10 @@ fn set_theme(
         });
     }
     let mood = match crate::theme::dark() {
-        true => say!("深色"),
-        false => say!("淺色"),
+        true => say!("cmd.moods.dark"),
+        false => say!("cmd.moods.light"),
     };
-    say!("主題：{0}（{1}）", crate::theme::name(config), mood)
+    say!("theme.set", crate::theme::name(config), mood)
 }
 
 /// Put a picture of the screen on the clipboard (`:shot`).
@@ -962,12 +962,12 @@ fn set_theme(
 fn take_a_picture(config: &Config) -> String {
     let line = config.editor.screenshot.trim();
     if line.is_empty() {
-        return say!("這個平台上沒有截圖命令——`[editor] screenshot` 寫一條");
+        return say!("ui.no-screenshot-command");
     }
     match shell_command(line).status() {
-        Ok(status) if status.success() => say!("畫面已放進剪貼簿"),
-        Ok(status) => say!("截圖失敗（{0}）", status),
-        Err(err) => say!("截圖失敗（{0}）", err),
+        Ok(status) if status.success() => say!("ui.screenshot-taken"),
+        Ok(status) => say!("ui.screenshot-failed", status),
+        Err(err) => say!("ui.screenshot-failed", err),
     }
 }
 
@@ -1123,7 +1123,7 @@ fn adopt_an_orphan() -> Option<String> {
     // SAFETY: a pid this process wrote down, checked to still be the program
     // we started, and SIGTERM, which is the polite one.
     let killed = unsafe { libc::kill(pid as libc::pid_t, libc::SIGTERM) } == 0;
-    killed.then(|| say!("上次留下的預覽伺服器（{0}）停掉了", pid))
+    killed.then(|| say!("preview.orphan-stopped", pid))
 }
 
 #[cfg(not(unix))]
@@ -1157,7 +1157,7 @@ impl Job {
             .stdout(std::process::Stdio::null())
             .stderr(std::process::Stdio::piped())
             .spawn()
-            .map_err(|e| say!("{0}：{1}", program, e))?;
+            .map_err(|e| say!("find.file-and-message", program, e))?;
         note_the_server(child.id(), program);
         let (send, said) = std::sync::mpsc::channel();
         if let Some(log) = child.stderr.take() {
@@ -1202,17 +1202,17 @@ fn run_for_language(
         .and_then(|verbs| verbs.get(&want.verb))
     else {
         return say!(
-            "{0} 沒有說 {1} 要跑什麼——在設定裏寫 [language.{0}] {1} = …",
+            "language.no-such-action",
             want.language,
             want.verb
         );
     };
     let file = want.path.display().to_string();
     let Some(argv) = runner.argv(&file) else {
-        return say!("命令寫壞了：{0}", runner.run);
+        return say!("command.broken-line", runner.run);
     };
     let Some((program, args)) = argv.split_first() else {
-        return say!("命令寫壞了：{0}", runner.run);
+        return say!("command.broken-line", runner.run);
     };
     match runner.kind {
         // The buffer goes in and comes back: the file on disk is not touched,
@@ -1223,10 +1223,10 @@ fn run_for_language(
             match run_program(program, args, Some(&text)) {
                 Ok(ran) if ran.ok => {
                     editor.provide_pipe_output(&ran.said);
-                    say!("{0}：換好了", want.verb)
+                    say!("language.replaced", want.verb)
                 }
-                Ok(ran) => say!("沒有動你的字：{0}", ran.why()),
-                Err(err) => say!("跑不動：{0}", err),
+                Ok(ran) => say!("language.text-untouched", ran.why()),
+                Err(err) => say!("language.cannot-run", err),
             }
         }
         // It reads and rewrites the file itself, so the buffer is re-read
@@ -1234,20 +1234,20 @@ fn run_for_language(
         // unsaved changes is losing them.
         yumete_config::RunKind::Once => {
             if editor.current_buffer().is_modified() {
-                return say!("先存檔——外面的程序讀的是檔案");
+                return say!("language.save-first");
             }
             match run_program(program, args, None) {
                 Ok(ran) if ran.ok => {
                     let _ = editor.current_buffer_mut().reread();
-                    say!("{0}：跑完了", want.verb)
+                    say!("language.done", want.verb)
                 }
-                Ok(ran) => say!("{0}：{1}", want.verb, ran.why()),
-                Err(err) => say!("跑不動：{0}", err),
+                Ok(ran) => say!("find.file-and-message", want.verb, ran.why()),
+                Err(err) => say!("language.cannot-run", err),
             }
         }
         // A server is a life of its own; `:preview` owns that path.
         yumete_config::RunKind::Server => {
-            say!("{0} 是個伺服器——用 :preview 開它", want.verb)
+            say!("language.is-a-server", want.verb)
         }
     }
 }
@@ -1339,9 +1339,9 @@ fn base64(bytes: &[u8]) -> String {
 /// 上屏方式, in the words the input method's own panel uses.
 fn commit_name(cs: CommitStrategy) -> String {
     match cs {
-        CommitStrategy::Delayed => say!("延遲（頂字）"),
-        CommitStrategy::Unique => say!("唯一"),
-        CommitStrategy::Fluency => say!("整句"),
+        CommitStrategy::Delayed => say!("commit.name.delayed"),
+        CommitStrategy::Unique => say!("commit.name.unique"),
+        CommitStrategy::Fluency => say!("commit.name.fluency"),
     }
 }
 
@@ -1354,21 +1354,21 @@ fn commit_name(cs: CommitStrategy) -> String {
 /// segment up in — says so rather than pretending the choice took.
 fn commit_method(ime: &mut ImeSession, mode: &str) -> String {
     if mode.is_empty() {
-        return say!("上屏方式：{0}", commit_name(ime.commit_strategy()));
+        return say!("commit.set", commit_name(ime.commit_strategy()));
     }
     let Some(cs) = CommitStrategy::from_str_tag(mode) else {
-        return say!("沒有「{0}」這種上屏方式——delayed、unique、fluency", mode);
+        return say!("commit.no-such-method", mode);
     };
     ime.set_commit_strategy(Some(cs));
     let now = ime.commit_strategy();
     if now != cs {
         return say!(
-            "{0} 只能整句上屏（沒有碼表可以逐段查），上屏方式仍然是{1}",
+            "commit.scheme-is-sentence-only",
             ime.scheme_name(),
             commit_name(now)
         );
     }
-    say!("上屏方式：{0}", commit_name(now))
+    say!("commit.set", commit_name(now))
 }
 
 /// 候選面板: the bordered list, or the sentence itself (Feature #211).
@@ -1380,20 +1380,20 @@ fn commit_method(ime: &mut ImeSession, mode: &str) -> String {
 /// hanging off the caret.
 fn panel_method(ime: &mut ImeSession, mode: &str) -> String {
     if mode.is_empty() {
-        return say!("候選面板：{0}", panel_name(ime.panel_display()));
+        return say!("panel.set", panel_name(ime.panel_display()));
     }
     let Some(display) = PanelDisplay::parse(mode) else {
-        return say!("沒有「{0}」這種候選面板——full、bare", mode);
+        return say!("panel.no-such-panel", mode);
     };
     ime.set_panel_display(display);
-    say!("候選面板：{0}", panel_name(display))
+    say!("panel.set", panel_name(display))
 }
 
 /// The name a 候選面板 is called by, in the language the writer reads.
 fn panel_name(display: PanelDisplay) -> String {
     match display {
-        PanelDisplay::Full => say!("候選框"),
-        PanelDisplay::Bare => say!("行內預覽"),
+        PanelDisplay::Full => say!("panel.name.full"),
+        PanelDisplay::Bare => say!("panel.name.bare"),
     }
 }
 
@@ -1419,22 +1419,22 @@ fn data_faults(ime: &ImeSession) -> String {
             reason,
             magic: Some(magic),
         } => say!(
-            "{0} 核心不認：{1}（期望 {2}，檔頭是 {3}）",
+            "data.refused-magic",
             first.file,
             reason,
             magic.expected,
             magic.found
         ),
         DataFault::Rejected { reason, magic: None } => {
-            say!("{0} 核心不認：{1}", first.file, reason)
+            say!("data.refused", first.file, reason)
         }
-        DataFault::Unreadable(why) => say!("{0} 讀不了：{1}", first.file, why),
+        DataFault::Unreadable(why) => say!("data.unreadable", first.file, why),
         // `is_loud` admits no others.
         _ => return String::new(),
     };
     match loud.len() {
         1 => one,
-        n => say!("{0}（另有 {1} 個檔同樣沒進去）", one, n - 1),
+        n => say!("data.and-more-failed", one, n - 1),
     }
 }
 
@@ -1505,24 +1505,27 @@ fn switch_scheme(ime: &mut ImeSession, tag: &str, config: &Config) -> String {
     // the front end holds and neither is worth a second channel.
     if tag == "?" {
         let head = if ime.available() {
-            format!(
-                "{} · 碼表 {} · 拆分 {} · 上屏 {}",
+            say!(
+                "ime.state",
                 ime.scheme_name(),
                 ime.table_source(),
-                if ime.annotations_enabled() { "開" } else { "關" },
+                match ime.annotations_enabled() {
+                    true => say!("label.on"),
+                    false => say!("label.off"),
+                },
                 commit_name(ime.commit_strategy()),
             )
         } else if yumete_ime::has_builtin_table() {
-            "還沒開始打字——`:yume scheme` 載入碼表".to_string()
+            say!("ime.not-started")
         } else {
-            "還沒開始打字，而且這個二進制不帶碼表——先裝資料".to_string()
+            say!("ime.not-started-no-builtin")
         };
         // 面板 only when there is not one: a writer who sees no candidate list
         // and wonders where it went is the only one who needs telling, and the
         // line is already four clauses long (Feature #211).
         let head = match ime.panel_display() {
             PanelDisplay::Full => head,
-            display => format!("{head} · {}", say!("面板 {0}", panel_name(display))),
+            display => format!("{head} · {}", say!("scheme.panel-is", panel_name(display))),
         };
         // The one thing `:yume` could not say before #220: a file that is
         // installed and doing nothing. It goes last because it is rare, and it
@@ -1547,7 +1550,7 @@ fn switch_scheme(ime: &mut ImeSession, tag: &str, config: &Config) -> String {
                 table.set_commit_strategy(ime.commit_override());
                 table.set_panel_display(ime.panel_display());
                 *ime = table;
-                format!("碼表：{}", path.display())
+                say!("ime.table-loaded", path.display())
             }
             Err(why) => why,
         };
@@ -1569,26 +1572,26 @@ fn switch_scheme(ime: &mut ImeSession, tag: &str, config: &Config) -> String {
             ime.toggle_language();
         }
         return match ime.is_chinese() {
-            true => say!("中文（{0}）", ime.scheme_name()),
-            false => say!("英文"),
+            true => say!("ime.chinese", ime.scheme_name()),
+            false => say!("ime.english"),
         };
     }
     // The 碼表 the system has — `builtin`'s other half.
     if tag == "~" {
         let mut full = ImeSession::from_default_dirs(ime.scheme());
         if !full.available() {
-            return say!("系統裏沒有裝 {0} 的碼表", ime.scheme_name());
+            return say!("ime.no-table-installed", ime.scheme_name());
         }
         full.set_page_size(config.panel.page_size);
         full.set_annotations(ime.annotations_enabled());
         full.set_commit_strategy(ime.commit_override());
         full.set_panel_display(ime.panel_display());
         *ime = full;
-        return say!("方案：{0}（系統裝的碼表）", ime.scheme_name());
+        return say!("ime.scheme-from-system", ime.scheme_name());
     }
     if tag == "!" {
         if !yumete_ime::has_builtin_table() {
-            return "這個二進制不帶碼表".to_string();
+            return say!("ime.no-builtin-table");
         }
         let mut full = ImeSession::builtin_lingming();
         full.set_page_size(config.panel.page_size);
@@ -1596,7 +1599,7 @@ fn switch_scheme(ime: &mut ImeSession, tag: &str, config: &Config) -> String {
         full.set_commit_strategy(ime.commit_override());
         full.set_panel_display(ime.panel_display());
         *ime = full;
-        return "方案：靈明（出廠自帶的碼表）".to_string();
+        return say!("ime.builtin-lingming");
     }
     // No name means "the one this project writes in" — `:yume s` is the whole
     // of starting to type, and the config already said which.
@@ -1626,22 +1629,22 @@ fn switch_scheme(ime: &mut ImeSession, tag: &str, config: &Config) -> String {
             full.set_panel_display(ime.panel_display());
             let name = full.scheme_name().to_string();
             *ime = full;
-            return format!("方案：{name}");
+            return say!("ime.scheme-now", name);
         }
         return say!(
-            "{0} 的碼表沒有裝——放進 {1}，或者把自己的碼表放進 .yumete/",
+            "scheme.table-not-installed",
             tag,
             yumete_config::data_dir().display()
         );
     }
     let was = ime.scheme();
     if ime.set_scheme(scheme) {
-        return format!("方案：{}", ime.scheme_name());
+        return say!("ime.scheme-now", ime.scheme_name());
     }
     // Put back what was working rather than leaving the writer unable to type.
     ime.set_scheme(was);
     say!(
-        "{0} 的碼表沒有裝——放進 {1}，或者把自己的碼表放進 .yumete/",
+        "scheme.table-not-installed",
         tag,
         yumete_config::data_dir().display()
     )
@@ -2038,7 +2041,7 @@ fn language_tag(editor: &Editor, ime: &ImeSession) -> String {
         return String::new();
     }
     if ime.is_chinese() {
-        format!("[中 {}]", ime.scheme_name())
+        say!("ime.chinese-tag", ime.scheme_name())
     } else {
         "[ABC]".to_string()
     }
@@ -2538,7 +2541,7 @@ fn draw_command_menu(
     // prerequisite belongs *here*, before the command is run: the writer who
     // typed `:hanging` on a horizontal page found out by pressing Enter and
     // watching nothing happen.
-    let unmet: Vec<&str> = editor
+    let unmet: Vec<String> = editor
         .unmet_needs(matches[focus].needs)
         .iter()
         .map(|need| need.says())
@@ -2555,7 +2558,7 @@ fn draw_command_menu(
             focus + 1,
             matches.len(),
             yumete_core::messages::say(matches[focus].help, &[]),
-            say!("需要 {0}，句末加 force", unmet.join(&say!("、")))
+            say!("ui.needs-these-first", unmet.join(&say!("label.comma")))
         ),
     };
     // Spread across the window: the command list is short entries and there
@@ -3674,7 +3677,7 @@ fn draw_status(
     // the row above for that now, and taking this one as well would mean losing
     // the file name and the position for as long as the sidebar has focus.
     let status = if editor.sidebar_focused() && !config.editor.hints {
-        format!("-- 側欄 --  {}", Editor::sidebar_keys())
+        say!("ui.sidebar-mode", Editor::sidebar_keys())
     } else if let Some((prefix, text)) = editor.prompt() {
         // The composition in progress belongs at the caret, so a search reads as
         // the pattern being typed rather than jumping into place on commit. The
@@ -3716,7 +3719,10 @@ fn draw_status(
         // Locked, and said so standing (Feature #213). A writer who cannot type
         // needs to know that from the screen and not from the status line's
         // memory of a refusal three keystrokes ago.
-        let locked = if buffer.is_readonly() { " [只讀]" } else { "" };
+        let locked = match buffer.is_readonly() {
+            true => say!("ui.readonly-tag"),
+            false => String::new(),
+        };
         // In Insert mode with the IME available, show the 中/英 state + scheme.
         let ime_tag = match language_tag(editor, ime).as_str() {
             "" => String::new(),
@@ -4102,7 +4108,7 @@ fn draw_hints(frame: &mut Frame, editor: &Editor, config: &Config, area: Rect) {
 /// *which column* — "column 143" of a line of 拆分 means nothing to anybody.
 fn position_of(editor: &Editor) -> String {
     if let Some(where_) = editor.table_status() {
-        return format!("第 {} 行 · {where_}", editor.cursor_line() + 1);
+        return say!("ui.position-in-table", editor.cursor_line() + 1, where_);
     }
     if editor.layout() == WritingLayout::Vertical {
         let at = editor.zong_position();
@@ -4116,7 +4122,7 @@ fn position_of(editor: &Editor) -> String {
         } else {
             format!("{}-{}", at.line + 1, at.index_in_line + 1)
         };
-        return format!("橫 {which}, 字 {}", at.slot + 1);
+        return say!("ui.position-vertical", which, at.slot + 1);
     }
     format!(
         "Ln {}, Col {}",

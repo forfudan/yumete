@@ -1,29 +1,46 @@
 //! What the editor says, in the reader's language — Feature #151.
 //!
-//! Every message is written **in Chinese at the place it is said**, and
-//! translated on the way out. That is the opposite of the usual arrangement,
-//! where the code holds a key like `BUFFER_CLOSED` and the sentences live
-//! somewhere else, and it is deliberate:
+//! Every message is written at its call site as a **tag**: a short English
+//! name for the condition that says it — `readonly.refused`, `table.entered`,
+//! `hint.goto.title`. The sentences themselves live in
+//! [`messages.toml`](../messages.toml), one block per tag, with a language on
+//! each line.
 //!
-//! - The code goes on reading as prose. `say!("關了 {0} —— 現在是 {1}", …)` says
-//!   what will appear on the screen; `say!(M::Closed, …)` says nothing at all
-//!   until you go and look it up.
-//! - **There are no keys to invent, and none to get wrong.** A key is a name
-//!   somebody has to make up for every sentence and everybody else has to learn.
-//! - A message with no translation falls back to the Chinese, which is exactly
-//!   what the editor did before this file existed. Forgetting an entry is a
-//!   missing translation, never a missing message.
+//! It was the other way round: the Chinese sentence *was* the key, written
+//! where it is said and looked up to translate. That is pleasant to read and
+//! wrong in one decisive way — **the sentence is the part that changes.**
+//! Every time a word of the Chinese was improved the entry stopped matching,
+//! the English quietly stopped applying, and the table could not be edited at
+//! all: changing 「只讀」 there changed nothing on the screen, because the
+//! screen was reading the literal in the code. A key has to be the thing that
+//! holds still.
 //!
-//! The table itself is [`messages.toml`](../messages.toml), one block per
-//! message with both languages side by side, so whoever writes the English can
-//! see the Chinese it has to match.
+//! So a tag names the *condition*, not the sentence:
+//!
+//! - `reload.refused-dirty`, not "the file changed outside and you have
+//!   changes too". The words will be rewritten; the condition will not.
+//! - It is short, lower case, and dotted: `area.condition`, with hyphens
+//!   inside a segment. The area is the part of the editor it belongs to.
+//! - It is English, so that it reads the same to everyone editing the table,
+//!   and so that a missing translation shows as a tag rather than as one
+//!   language leaking into another.
+//!
+//! Under each `[[message]]` is a `#` comment saying **when** the message is
+//! said — which mode, which key, which condition. That is what a translator
+//! needs and cannot get from the sentence alone.
+//!
+//! ## The languages
+//!
+//! `zht` 繁體, `zhs` 简体, `en`. Traditional is the default and the one that is
+//! always filled in; the other two fall back to it when they are empty, so a
+//! missing translation is a missing *translation*, never a missing message.
 //!
 //! ## The placeholders are numbered
 //!
-//! `{0}` and `{1}`, not `{}` — because the two languages do not put things in
-//! the same order. 「{0} 個檔案裏都沒有「{1}」」 is "no 「{1}」 in {0} files": the
-//! same two values, the other way round, and a positional hole is what lets a
-//! translator move them.
+//! `{0}` and `{1}`, not `{}` — because the three languages do not put things
+//! in the same order. 「{0} 個檔案裏都沒有「{1}」」 is "no 「{1}」 in {0} files":
+//! the same two values, the other way round, and a positional hole is what
+//! lets a translator move them.
 
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicU8, Ordering};
@@ -31,17 +48,24 @@ use std::sync::atomic::{AtomicU8, Ordering};
 /// Which language the editor speaks.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum Language {
-    /// Traditional Chinese — the manual's language, and the writer's.
+    /// 繁體中文 — the manual's language, and the writer's.
     #[default]
-    Chinese,
+    Traditional,
+    /// 简体中文.
+    Simplified,
     English,
 }
 
 impl Language {
-    /// Read `zh` / `en` from a config file.
+    /// Read the language out of a config file.
+    ///
+    /// `zh` is Traditional, which is what it has always meant here.
     pub fn parse(name: &str) -> Option<Language> {
         match name.trim().to_ascii_lowercase().as_str() {
-            "zh" | "chinese" | "中文" => Some(Language::Chinese),
+            "zh" | "zht" | "zh-hant" | "zh-tw" | "chinese" | "中文" | "繁體" | "繁体" => {
+                Some(Language::Traditional)
+            }
+            "zhs" | "zh-hans" | "zh-cn" | "简体" | "簡體" => Some(Language::Simplified),
             "en" | "english" => Some(Language::English),
             _ => None,
         }
@@ -59,8 +83,9 @@ static LANGUAGE: AtomicU8 = AtomicU8::new(0);
 pub fn set_language(language: Language) {
     LANGUAGE.store(
         match language {
-            Language::Chinese => 0,
-            Language::English => 1,
+            Language::Traditional => 0,
+            Language::Simplified => 1,
+            Language::English => 2,
         },
         Ordering::Relaxed,
     );
@@ -69,43 +94,80 @@ pub fn set_language(language: Language) {
 /// The language in force.
 pub fn language() -> Language {
     match LANGUAGE.load(Ordering::Relaxed) {
-        1 => Language::English,
-        _ => Language::Chinese,
+        1 => Language::Simplified,
+        2 => Language::English,
+        _ => Language::Traditional,
     }
 }
 
 /// The table, as written.
 const TABLE: &str = include_str!("../messages.toml");
 
-/// Chinese → English, built once.
-fn english() -> &'static HashMap<&'static str, &'static str> {
-    static ONCE: std::sync::OnceLock<HashMap<&'static str, &'static str>> =
-        std::sync::OnceLock::new();
+/// One message, in every language it has been written in.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct Entry {
+    /// 繁體中文 — always filled in, and what the others fall back to.
+    pub zht: &'static str,
+    /// 简体中文, or empty.
+    pub zhs: &'static str,
+    /// English, or empty.
+    pub en: &'static str,
+}
+
+impl Entry {
+    /// This message in `language`, falling back to the Traditional.
+    fn in_language(&self, language: Language) -> &'static str {
+        let wanted = match language {
+            Language::Traditional => self.zht,
+            Language::Simplified => self.zhs,
+            Language::English => self.en,
+        };
+        match wanted.is_empty() {
+            true => self.zht,
+            false => wanted,
+        }
+    }
+}
+
+/// Tag → the sentences, built once.
+pub fn table() -> &'static HashMap<&'static str, Entry> {
+    static ONCE: std::sync::OnceLock<HashMap<&'static str, Entry>> = std::sync::OnceLock::new();
     ONCE.get_or_init(|| parse(TABLE))
 }
 
 /// Read the table.
 ///
 /// A hand-rolled reader rather than the TOML crate: the file is a list of
-/// `zh = "…"` / `en = "…"` pairs and nothing else, this runs once, and the core
-/// has no business gaining a dependency for it. Anything it does not
-/// understand it ignores — a message with no translation falls back to the
-/// Chinese, which is the behaviour that was there before.
-fn parse(text: &str) -> HashMap<&str, &str> {
+/// `key = "…"` lines and nothing else, this runs once, and the core has no
+/// business gaining a dependency for it. A block with no `key` is dropped, and
+/// anything else it does not understand it ignores.
+fn parse(text: &'static str) -> HashMap<&'static str, Entry> {
     let mut out = HashMap::new();
-    let mut zh: Option<&str> = None;
-    for line in text.lines() {
-        let line = line.trim();
-        if let Some(rest) = line.strip_prefix("zh = ") {
-            zh = unquote(rest);
-        } else if let Some(rest) = line.strip_prefix("en = ") {
-            if let (Some(from), Some(to)) = (zh.take(), unquote(rest)) {
-                if !to.is_empty() {
-                    out.insert(from, to);
-                }
+    let mut key: Option<&str> = None;
+    let mut entry = Entry::default();
+    let flush = |key: &mut Option<&'static str>, entry: &mut Entry, out: &mut HashMap<_, _>| {
+        if let Some(k) = key.take() {
+            if !entry.zht.is_empty() {
+                out.insert(k, *entry);
             }
         }
+        *entry = Entry::default();
+    };
+    for line in text.lines() {
+        let line = line.trim();
+        if line == "[[message]]" {
+            flush(&mut key, &mut entry, &mut out);
+        } else if let Some(rest) = line.strip_prefix("key = ") {
+            key = unquote(rest);
+        } else if let Some(rest) = line.strip_prefix("zht = ") {
+            entry.zht = unquote(rest).unwrap_or_default();
+        } else if let Some(rest) = line.strip_prefix("zhs = ") {
+            entry.zhs = unquote(rest).unwrap_or_default();
+        } else if let Some(rest) = line.strip_prefix("en = ") {
+            entry.en = unquote(rest).unwrap_or_default();
+        }
     }
+    flush(&mut key, &mut entry, &mut out);
     out
 }
 
@@ -113,15 +175,21 @@ fn parse(text: &str) -> HashMap<&str, &str> {
 ///
 /// The templates hold no escapes — they are sentences, and a `\` in one would
 /// be a message about a backslash — so this is the whole of the quoting.
-fn unquote(value: &str) -> Option<&str> {
+fn unquote(value: &'static str) -> Option<&'static str> {
     value.trim().strip_prefix('"')?.strip_suffix('"')
 }
 
-/// Say `zh`, in the language in force, with `args` in its numbered holes.
-pub fn say(zh: &str, args: &[&str]) -> String {
-    let template = match language() {
-        Language::Chinese => zh,
-        Language::English => english().get(zh).copied().unwrap_or(zh),
+/// Say the message tagged `key`, in the language in force, with `args` in its
+/// numbered holes.
+///
+/// **A tag with no entry says itself.** A mistyped or deleted tag then reads
+/// `readonly.refuzed` on the status line — wrong, and visibly wrong, which is
+/// what a silent empty string is not. A test catches it before that; this is
+/// the behaviour if one ever gets past.
+pub fn say(key: &str, args: &[&str]) -> String {
+    let template = match table().get(key) {
+        Some(entry) => entry.in_language(language()),
+        None => key,
     };
     fill(template, args)
 }
@@ -168,15 +236,16 @@ fn fill(template: &str, args: &[&str]) -> String {
 
 /// Say something, in the language in force.
 ///
-/// The first argument is the Chinese, written where it is said; the rest fill
-/// its numbered holes and may be anything with a `Display`.
+/// The first argument is the **tag** — the short English name of the condition
+/// this message belongs to, which `messages.toml` holds the sentences for. The
+/// rest fill its numbered holes and may be anything with a `Display`.
 #[macro_export]
 macro_rules! say {
-    ($zh:literal) => {
-        $crate::messages::say($zh, &[])
+    ($key:literal) => {
+        $crate::messages::say($key, &[])
     };
-    ($zh:literal $(, $arg:expr)+ $(,)?) => {
-        $crate::messages::say($zh, &[$(&$arg.to_string()),+])
+    ($key:literal $(, $arg:expr)+ $(,)?) => {
+        $crate::messages::say($key, &[$(&$arg.to_string()),+])
     };
 }
 
@@ -185,12 +254,32 @@ mod tests {
     use super::*;
 
     #[test]
-    fn a_message_with_no_translation_is_the_chinese_it_was_written_as() {
+    fn a_tag_with_no_entry_says_itself() {
         // Asked of the table, not of the global: the language is a *process*
         // setting, and a test that flipped it made every other test in the
         // run assert against whichever half of the switch it caught.
-        assert_eq!(english().get("這一句沒人翻過"), None);
-        assert!(english().contains_key("折行：開"), "a real one is there");
+        assert_eq!(table().get("readonly.refuzed"), None);
+        assert_eq!(say("readonly.refuzed", &[]), "readonly.refuzed");
+        assert!(table().contains_key("wrap.on"), "a real one is there");
+    }
+
+    #[test]
+    fn a_language_that_was_never_written_falls_back_to_the_traditional() {
+        let entry = Entry {
+            zht: "只讀",
+            zhs: "",
+            en: "",
+        };
+        assert_eq!(entry.in_language(Language::Traditional), "只讀");
+        assert_eq!(entry.in_language(Language::Simplified), "只讀");
+        assert_eq!(entry.in_language(Language::English), "只讀");
+        let entry = Entry {
+            zht: "只讀",
+            zhs: "只读",
+            en: "read-only",
+        };
+        assert_eq!(entry.in_language(Language::Simplified), "只读");
+        assert_eq!(entry.in_language(Language::English), "read-only");
     }
 
     #[test]
@@ -204,10 +293,15 @@ mod tests {
     }
 
     #[test]
-    fn every_entry_in_the_table_has_both_languages_and_the_same_holes() {
+    fn every_entry_is_tagged_and_every_language_it_has_takes_the_same_holes() {
         let table = parse(TABLE);
-        assert!(table.len() > 100, "the table is {} entries", table.len());
-        for (zh, en) in &table {
+        assert!(table.len() > 500, "the table is {} entries", table.len());
+        for (key, entry) in &table {
+            assert!(
+                key.chars()
+                    .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '.' || c == '-'),
+                "a tag is lower-case ASCII, dots and hyphens: {key}"
+            );
             let holes = |s: &str| {
                 let mut found: Vec<String> = Vec::new();
                 let mut chars = s.chars().peekable();
@@ -231,13 +325,20 @@ mod tests {
                 found.sort();
                 found
             };
-            assert_eq!(holes(zh), holes(en), "different holes:\n  {zh}\n  {en}");
+            let want = holes(entry.zht);
+            for (name, text) in [("zhs", entry.zhs), ("en", entry.en)] {
+                if text.is_empty() {
+                    continue;
+                }
+                assert_eq!(holes(text), want, "{key}: different holes in {name}");
+            }
         }
     }
 
     #[test]
     fn the_language_is_read_from_a_word() {
-        assert_eq!(Language::parse("zh"), Some(Language::Chinese));
+        assert_eq!(Language::parse("zh"), Some(Language::Traditional));
+        assert_eq!(Language::parse("zhs"), Some(Language::Simplified));
         assert_eq!(Language::parse("English"), Some(Language::English));
         assert_eq!(Language::parse("fr"), None);
     }
