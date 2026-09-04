@@ -1222,7 +1222,7 @@ fn page_areas(editor: &Editor, config: &Config, area: Rect) -> Areas {
         ),
         false => (Rect::new(body.x, body.y, body.width, 0), body),
     };
-    let (text, detail) = table::split_detail(editor, page);
+    let (text, detail) = table::split_detail(editor, config, page);
     // 工作區 (Feature #176). **The cut runs across the direction the text
     // advances in**: 橫排 advances downward, so the panes are 上下; 縱書
     // advances leftward, so they are 左右 and the second takes the left. That

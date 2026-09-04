@@ -554,6 +554,9 @@ pub struct Editor {
     show_segmentation: bool,
     /// How a table's columns are told apart (Feature #157).
     table_rules: crate::table::Rules,
+    /// The detail panel's width, when the reader has said one (Feature #187).
+    /// `None` follows the config.
+    detail_width: Option<usize>,
     /// Whether a row of column numbers is drawn above the header.
     ///
     /// **The keys need it.** `3gd`, `t20-20g`, `t1s2S4s` all name a column by
@@ -923,6 +926,7 @@ impl Editor {
             show_segmentation: false,
             table_rules: crate::table::Rules::default(),
             table_numbers: true,
+            detail_width: None,
             ime_available: false,
             definition_preview: false,
             screenshot_request: false,
@@ -2521,6 +2525,20 @@ impl Editor {
             // the same way `:yume scheme` reaches the input method.
             Command::Theme { name, mood } => {
                 self.theme_request = Some((name, mood));
+                Ok(CommandOutcome::Continue)
+            }
+            Command::ShowDetail(want) => {
+                self.show_detail = want.unwrap_or(!self.show_detail);
+                self.status = match self.show_detail {
+                    true => say!("詳情欄：開"),
+                    false => say!("詳情欄：關"),
+                };
+                Ok(CommandOutcome::Continue)
+            }
+            Command::SetDetailWidth(n) => {
+                self.detail_width = Some(n.clamp(12, 80));
+                self.show_detail = true;
+                self.status = say!("詳情欄寬 {0}", self.detail_width.unwrap_or(n));
                 Ok(CommandOutcome::Continue)
             }
             Command::SetTableNumbers(on) => {
@@ -4745,6 +4763,11 @@ impl Editor {
         }
     }
 
+    /// How wide the detail panel should be, when it has been said.
+    pub fn detail_width(&self) -> Option<usize> {
+        self.detail_width
+    }
+
     /// Whether the row of column numbers is drawn.
     pub fn table_numbers(&self) -> bool {
         self.table_numbers
@@ -5907,8 +5930,9 @@ impl Editor {
             // finding in a 拆分表, and a panel that leaves it out is a panel
             // that cannot answer 「這一格是不是空的」. They were hidden because
             // twenty-three blanks pushed the 部件 list off the bottom; the
-            // panel scrolls now (`空格 d` opens it, `[` `]` walk it), so there
-            // is somewhere for them to go.
+            // panel scrolls to the field the cursor is in, so there is
+            // somewhere for them to go — and `t20-20g` reaches any of them by
+            // number, which is what the numbers are for.
             .collect();
         // Worked out, not stored — and marked as such, so nobody goes looking
         // for a column that is not in the file.
