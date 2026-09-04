@@ -369,7 +369,7 @@ Phases are ordered by priority, most writer-critical first:
 | 163 | **`:indent hint`**                          | both   | P3    | white by default; a band or a `↵` while a draft is being edited | Done |
 | 164 | **【黑白】, a second theme**                 | both   | P2    | greys only: what warmth said in 墨香, position says here | Done |
 | 165 | **Readings on the horizontal page**         | tui    | P1    | the row above, over the 字 it reads; only a row that has one costs one | Done |
-| 166 | **Typewriter / focus mode**                 | tui    | P2    | the cursor's row stays in the middle of the screen | Planned |
+| 166 | **Typewriter / focus mode**                 | tui    | P2    | the cursor's row stays in the middle of the screen | Done |
 | 167 | **`:help`**                                 | both   | P1    | the keys worth knowing, in the editor; `:help chinese`, `:help vertical` | Done |
 | 168 | **The page before the dictionary**          | cli    | P1    | 14 MB of language data read after the first frame, not before it | Done |
 | 169 | **Schemes found rather than listed**        | both   | P2    | what is installed — including a scheme of the reader's own — is what `:yume scheme` offers; a Rime folder later | Planned |

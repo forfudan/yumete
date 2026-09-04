@@ -2359,7 +2359,10 @@ fn draw_horizontal(
     // one of them used to land on the fourth row from the top while the other
     // landed in the middle. The editor knows which moves are jumps — it is the
     // same answer `C-o` is built on.
-    let jumped = editor.jumped();
+    // **Typewriter mode**: the row being written stays in the middle and the
+    // paper moves under it. Every move is treated as a jump, which is exactly
+    // what「keep it centred」means — the centring rule already exists.
+    let jumped = editor.jumped() || editor.typewriter();
     let cursor_row = match wrap::distance(rope, *viewport, cursor_anchor, measure, last_row) {
         Some(d) if !jumped && d >= scrolloff && d + scrolloff <= last_row => d,
         found => {
@@ -5135,6 +5138,42 @@ mod tests {
         assert!(marked, "the hit is washed in 朱");
         let numbered = (0..rows).any(|y| buffer[(0, y)].style().fg == Some(quiet.mark()));
         assert!(numbered, "and its line number is 朱");
+    }
+
+    /// Typewriter mode: the row being written stays in the middle, and the
+    /// paper moves under it.
+    #[test]
+    fn typewriter_keeps_the_line_you_are_writing_in_the_middle() {
+        let mut editor = editor_with(&(1..=60).map(|n| format!("第{n}行。\n")).collect::<String>());
+        let mut config = Config::default();
+        config.editor.line_numbers = yumete_config::LineNumbers::None;
+        config.editor.hints = false;
+        let rows = 13u16;
+        let middle = 5;
+        let mut seats = Seats::default();
+
+        editor.execute(":typewriter").unwrap();
+        editor.execute(":20").unwrap();
+        assert_eq!(
+            caret_over_time(&editor, &config, &mut seats, 30, rows).map(|p| p.y),
+            Some(middle)
+        );
+        // …and it *stays* there: a step does not nudge, the page moves.
+        for _ in 0..4 {
+            editor.on_key(Key::Char('j'));
+            assert_eq!(
+                caret_over_time(&editor, &config, &mut seats, 30, rows).map(|p| p.y),
+                Some(middle),
+                "the paper moves, not the line"
+            );
+        }
+        // Off again, and a step is a step.
+        editor.execute(":typewriter off").unwrap();
+        editor.on_key(Key::Char('j'));
+        assert_eq!(
+            caret_over_time(&editor, &config, &mut seats, 30, rows).map(|p| p.y),
+            Some(middle + 1)
+        );
     }
 
     /// **A jump lands in the middle; a step nudges.**

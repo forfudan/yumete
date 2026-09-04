@@ -90,6 +90,8 @@ pub enum Command {
     /// `:table rules …` — how the columns are told apart (Feature #157).
     /// `None` only reports.
     SetTableRules(Option<crate::table::Rules>),
+    /// `:typewriter [on|off]` — the cursor's row stays in the middle.
+    SetTypewriter(Option<bool>),
     /// `:table numbers on|off` — the row of column numbers above the header.
     SetTableNumbers(bool),
     /// `:table detail [on|off]` — the panel; `None` toggles.
@@ -574,6 +576,15 @@ pub fn parse(input: &str) -> Result<Command, CommandError> {
                     value: n.to_string(),
                 }),
             },
+        },
+        "typewriter" => match rest {
+            "" | "on" => Ok(Command::SetTypewriter(Some(true))),
+            "off" => Ok(Command::SetTypewriter(Some(false))),
+            "toggle" => Ok(Command::SetTypewriter(None)),
+            other => Err(CommandError::InvalidArgument {
+                command: "typewriter",
+                value: other.to_string(),
+            }),
         },
         "table" => match rest {
             "" | "on" => Ok(Command::SetTable(true)),
@@ -1765,6 +1776,13 @@ pub const COMMANDS: &[Entry] = &[
         help: "開着的檔案：列出、切換、關掉",
         needs: &[],
         args: Args::Words(BUFFERS),
+    },
+    Entry {
+        name: "typewriter",
+        aliases: &[],
+        help: "打字機：光標那一行一直停在畫面中間，紙往上走",
+        needs: &[],
+        args: Args::Words(ON_OFF),
     },
     Entry {
         name: "tutor",
