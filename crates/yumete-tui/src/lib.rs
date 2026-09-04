@@ -6710,4 +6710,277 @@ mod tests {
         let at = terminal.get_cursor_position().unwrap();
         assert!(at.y < 3, "the caret stays on the page, was at row {}", at.y);
     }
+
+    // ===================== TEMPORARY LOOK PROBES =====================
+    use std::io::Write as _;
+
+    fn hex(c: Option<ratatui::style::Color>) -> String {
+        match c {
+            Some(ratatui::style::Color::Rgb(r, g, b)) => format!("#{r:02x}{g:02x}{b:02x}"),
+            Some(other) => format!("{other:?}"),
+            None => "-".to_string(),
+        }
+    }
+
+    /// Print the buffer as a grid with a column ruler.
+    fn show(name: &str, b: &ratatui::buffer::Buffer) {
+        let w = b.area.width;
+        let h = b.area.height;
+        eprintln!("### {name}  ({w}x{h})");
+        // ruler
+        let mut tens = String::new();
+        let mut ones = String::new();
+        for x in 0..w {
+            tens.push(if x % 10 == 0 { char::from_digit(((x / 10) % 10) as u32, 10).unwrap() } else { ' ' });
+            ones.push(char::from_digit((x % 10) as u32, 10).unwrap());
+        }
+        eprintln!("    {tens}");
+        eprintln!("    {ones}");
+        for y in 0..h {
+            let mut row = String::new();
+            for x in 0..w {
+                let s = b[(x, y)].symbol();
+                row.push_str(if s.is_empty() { " " } else { s });
+            }
+            eprintln!("{y:3}|{row}|");
+        }
+        std::io::stderr().flush().unwrap();
+    }
+
+    /// Print the buffer plus, for each row, the runs of (fg,bg).
+    fn show_colors(name: &str, b: &ratatui::buffer::Buffer) {
+        show(name, b);
+        eprintln!("--- colour runs");
+        for y in 0..b.area.height {
+            let mut runs: Vec<(u16, u16, String, String, String)> = Vec::new();
+            for x in 0..b.area.width {
+                let c = &b[(x, y)];
+                let (f, g) = (hex(c.style().fg), hex(c.style().bg));
+                match runs.last_mut() {
+                    Some(last) if last.2 == f && last.3 == g => {
+                        last.1 = x;
+                        last.4.push_str(c.symbol());
+                    }
+                    _ => runs.push((x, x, f, g, c.symbol().to_string())),
+                }
+            }
+            let line: Vec<String> = runs
+                .iter()
+                .map(|(a, z, f, g, t)| format!("[{a}-{z} {f}/{g} {:?}]", t))
+                .collect();
+            eprintln!("{y:3}: {}", line.join(" "));
+        }
+        std::io::stderr().flush().unwrap();
+    }
+
+    fn probe_config(vertical: bool) -> Config {
+        let mut config = Config::default();
+        if vertical {
+            config.editor.layout = WritingLayout::Vertical;
+        }
+        config.theme.mode = yumete_config::Mode::Dark;
+        config
+    }
+
+    fn keys(editor: &mut Editor, s: &str) {
+        for c in s.chars() {
+            editor.on_key(Key::Char(c));
+        }
+    }
+
+    const PROSE: &str = "那年冬天，山下起了大雪。雪一直下到開春，路都埋了，村裏的人整整兩個月沒有出去。\n第二段：他把信寫好，卻沒有寄出去。\n第三段短。\n第四段又長一些，說的是山上的事，和山下沒有關係。\n";
+
+    #[test]
+    #[ignore = "picture"]
+    fn look_whichkey() {
+        for &(w, h) in &[(60u16, 20u16), (100, 30), (40, 12), (30, 8)] {
+            for vertical in [false, true] {
+                for seq in ["g", "t", "m", " "] {
+                    let mut editor = editor_with(PROSE);
+                    let config = probe_config(vertical);
+                    if vertical {
+                        editor.set_layout(WritingLayout::Vertical);
+                    }
+                    editor.on_key(if seq == " " { Key::Char(' ') } else { Key::Char(seq.chars().next().unwrap()) });
+                    let b = if vertical {
+                        render_vertical_with(&mut editor, &config, &no_ime(), w, h)
+                    } else {
+                        render_wrapped(&mut editor, &config, w, h)
+                    };
+                    show(&format!("whichkey seq={seq:?} vertical={vertical} {w}x{h}"), &b);
+                }
+            }
+        }
+    }
+
+
+    /// Print rows y-1..y+2 around the caret with per-cell indices.
+    fn show_around(name: &str, b: &ratatui::buffer::Buffer, rows: std::ops::Range<u16>) {
+        eprintln!("### {name}");
+        for y in rows {
+            if y >= b.area.height { break; }
+            let cells: Vec<String> = (0..b.area.width)
+                .map(|x| {
+                    let s = b[(x, y)].symbol();
+                    format!("{x}:{}", if s.is_empty() { "∅" } else { s })
+                })
+                .collect();
+            eprintln!("{y:3}| {}", cells.join(" "));
+        }
+    }
+
+    #[test]
+    #[ignore = "picture"]
+    fn look_hud() {
+        for vertical in [false, true] {
+            for seq in ["3", "30", "g", "2-5g", "t20-20", "3g", "\"", "mi"] {
+                let mut editor = editor_with(PROSE);
+                let config = probe_config(vertical);
+                if vertical { editor.set_layout(WritingLayout::Vertical); }
+                for c in seq.chars() { editor.on_key(Key::Char(c)); }
+                let typed = editor.typed_so_far();
+                let b = if vertical {
+                    render_vertical_with(&mut editor, &config, &no_ime(), 60, 16)
+                } else {
+                    render_wrapped(&mut editor, &config, 60, 16)
+                };
+                show(&format!("HUD keys={seq:?} typed={typed:?} vertical={vertical}"), &b);
+            }
+        }
+        // the exact cells, vertical
+        let mut editor = editor_with(PROSE);
+        let config = probe_config(true);
+        editor.set_layout(WritingLayout::Vertical);
+        editor.on_key(Key::Char('g'));
+        let b = render_vertical_with(&mut editor, &config, &no_ime(), 60, 16);
+        show_around("vertical HUD cells rows 0..4", &b, 0..4);
+    }
+
+    #[test]
+    #[ignore = "picture"]
+    fn look_dense_typewriter() {
+        // :dense off on the horizontal page
+        for (w, h) in [(60u16, 20u16), (40, 12), (30, 8)] {
+            let mut editor = editor_with(PROSE);
+            let mut config = probe_config(false);
+            config.editor.dense = false;
+            editor.execute("dense off").unwrap();
+            let (b, at) = {
+                let gutter = gutter_width(editor.current_buffer().line_count(), config.editor.line_numbers);
+                editor.set_wrap_width((w as usize).saturating_sub(gutter));
+                render_caret(&editor, &config, w, h)
+            };
+            show(&format!("dense off horizontal {w}x{h} caret={at:?}"), &b);
+        }
+        // caret on the air row? move down a few lines
+        let mut editor = editor_with(PROSE);
+        let config = probe_config(false);
+        editor.execute("dense off").unwrap();
+        for _ in 0..2 { editor.on_key(Key::Char('j')); }
+        let gutter = gutter_width(editor.current_buffer().line_count(), config.editor.line_numbers);
+        editor.set_wrap_width(60 - gutter);
+        let (b, at) = render_caret(&editor, &config, 60, 20);
+        show(&format!("dense off, after jj, caret={at:?}"), &b);
+
+        // typewriter
+        let mut editor = editor_with(&"一二三四五六七八九十\n".repeat(40));
+        let config = probe_config(false);
+        editor.execute("typewriter").unwrap();
+        for _ in 0..12 { editor.on_key(Key::Char('j')); }
+        let gutter = gutter_width(editor.current_buffer().line_count(), config.editor.line_numbers);
+        editor.set_wrap_width(60 - gutter);
+        let (b, at) = render_caret(&editor, &config, 60, 20);
+        show(&format!("typewriter horizontal after 12j caret={at:?}"), &b);
+
+        let mut editor = editor_with(&"一二三四五六七八九十\n".repeat(40));
+        let config = probe_config(true);
+        editor.set_layout(WritingLayout::Vertical);
+        editor.execute("typewriter").unwrap();
+        for _ in 0..12 { editor.on_key(Key::Char('j')); }
+        let b = render_vertical_with(&mut editor, &config, &no_ime(), 60, 20);
+        show("typewriter vertical after 12j", &b);
+    }
+
+
+    const CORPUS: &str = "/private/tmp/claude-501/-Users-ZHU-Programs-yuhao-ime-yumete/bdc09235-d47e-4493-a6ac-9c931ae317ef/scratchpad/corpus";
+
+    fn csv_editor() -> Editor {
+        let mut editor = Editor::new();
+        editor
+            .open_file(format!("{CORPUS}/yuhao_division_golden_source.csv"))
+            .unwrap();
+        editor.execute("table").unwrap();
+        eprintln!("[table? {} status={:?}]", editor.table().is_some(), editor.status());
+        editor
+    }
+
+    #[test]
+    #[ignore = "picture"]
+    fn look_table() {
+        for (w, h) in [(100u16, 30u16), (60, 20), (40, 12), (30, 8)] {
+            let mut editor = csv_editor();
+            let config = probe_config(false);
+            // walk into the middle of the row
+            for _ in 0..2000 { editor.on_key(Key::Char('j')); }
+            let b = render(&editor, &config, w, h);
+            show(&format!("table numbers on {w}x{h}"), &b);
+        }
+        // numbers off, for the difference
+        let mut editor = csv_editor();
+        let config = probe_config(false);
+        editor.execute("table numbers off").unwrap();
+        let b = render(&editor, &config, 100, 20);
+        show("table numbers off 100x20", &b);
+
+        // the cursor way out to the right — column 17
+        let mut editor = csv_editor();
+        let config = probe_config(false);
+        for _ in 0..20 { editor.on_key(Key::Char('l')); }
+        let b = render(&editor, &config, 100, 20);
+        show("table, cursor at column 21, 100x20", &b);
+
+        // detail panel
+        for (w, h) in [(100u16, 30u16), (60, 20), (40, 12), (30, 8)] {
+            let mut editor = csv_editor();
+            let config = probe_config(false);
+            for _ in 0..300 { editor.on_key(Key::Char('j')); }
+            for _ in 0..9 { editor.on_key(Key::Char('l')); }
+            editor.execute("table detail on").unwrap();
+            let b = render(&editor, &config, w, h);
+            show(&format!("table + detail {w}x{h}"), &b);
+        }
+        // :table detail 40
+        let mut editor = csv_editor();
+        let config = probe_config(false);
+        for _ in 0..300 { editor.on_key(Key::Char('j')); }
+        editor.execute("table detail on").unwrap();
+        editor.execute("table detail 40").unwrap();
+        let b = render(&editor, &config, 100, 24);
+        show("table detail 40, 100x24", &b);
+
+        // detail panel, vertical layout
+        let mut editor = csv_editor();
+        let config = probe_config(true);
+        editor.set_layout(WritingLayout::Vertical);
+        for _ in 0..300 { editor.on_key(Key::Char('j')); }
+        editor.execute("table detail on").unwrap();
+        let b = render(&editor, &config, 100, 24);
+        show("table detail vertical 100x24", &b);
+    }
+
+    #[test]
+    #[ignore = "picture"]
+    fn look_table_showcmd() {
+        let mut editor = csv_editor();
+        let config = probe_config(false);
+        for seq in ["t", "t2", "t20-", "t20-20", "3", "3g"] {
+            let mut e = csv_editor();
+            for c in seq.chars() { e.on_key(Key::Char(c)); }
+            eprintln!("### keys={seq:?} typed_so_far={:?}", e.typed_so_far());
+            let b = render(&e, &config, 80, 20);
+            show(&format!("table showcmd keys={seq:?}"), &b);
+        }
+        let _ = &mut editor;
+    }
+
 }
