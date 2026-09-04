@@ -764,15 +764,35 @@ impl Runner {
             .file_name()
             .map(|n| n.to_string_lossy().to_string())
             .unwrap_or_default();
-        Some(
-            out.into_iter()
-                .map(|w| {
-                    w.replace("{file}", file)
-                        .replace("{dir}", &dir)
-                        .replace("{name}", &name)
-                })
-                .collect(),
-        )
+        // **One pass, not three.** Chained `replace`s substitute into what the
+        // previous one just wrote: a manuscript called `{name}.md` came back as
+        // `{name}.md.md`, and the program was handed a path that is not the
+        // buffer's — which with `kind = "once"` means re-reading a file nobody
+        // formatted.
+        let fill = |word: &str| -> String {
+            let mut out = String::with_capacity(word.len());
+            let mut rest = word;
+            while let Some(at) = rest.find('{') {
+                out.push_str(&rest[..at]);
+                let after = &rest[at..];
+                let (name_of, len) = match after.find('}') {
+                    Some(end) => (&after[1..end], end + 1),
+                    None => break,
+                };
+                out.push_str(match name_of {
+                    "file" => file,
+                    "dir" => &dir,
+                    "name" => &name,
+                    // Checked at load; anything else is passed through as the
+                    // text it is rather than guessed at.
+                    _ => &after[..len],
+                });
+                rest = &after[len..];
+            }
+            out.push_str(rest);
+            out
+        };
+        Some(out.iter().map(|w| fill(w)).collect())
     }
 
     /// What is wrong with this command line, if anything.
