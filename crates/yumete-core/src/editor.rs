@@ -556,10 +556,10 @@ pub struct Editor {
     table_rules: crate::table::Rules,
     /// Whether a 碼表 is loaded, as last reported by the front end.
     ime_available: bool,
-    /// Whether the definition being followed is being *shown* (`gw`) or
-    /// *gone to* (`gd`). Set as the key is pressed and read wherever the
-    /// landing happens — including a page later, when a picker asked which
-    /// component was meant.
+    /// Whether the answer is being **shown in the other work area** (`gw`,
+    /// `g?`, `t?`) or **gone to** (`gd`, `g/`, `t/`). Set as the key is pressed
+    /// and read wherever the landing happens — including a page later, when a
+    /// search's `n` walks to the next hit.
     definition_preview: bool,
     /// A `:shot` waiting for the frame it is a picture of.
     screenshot_request: bool,
@@ -637,6 +637,9 @@ pub struct Editor {
     render: Render,
     /// The columns `gd` was asked about this time: `(first, last)`, 1-based.
     column_span: Option<(usize, usize)>,
+    /// The numeric argument of the sequence being typed — `g3d`'s 3, `g2-5d`'s
+    /// 2 and 5. `(first, Some(last))` once a `-` has been typed.
+    sequence: Option<(usize, Option<usize>)>,
     /// Whether the move that just happened was a **jump** — a search hit, a
     /// mark, `gg`, `:42` — rather than a step. The page centres a jump.
     jumped: bool,
@@ -938,6 +941,7 @@ impl Editor {
             render: Render::On,
             count_to: None,
             column_span: None,
+            sequence: None,
             jumped: false,
             preview_request: None,
             preview_at: None,
@@ -2264,6 +2268,10 @@ impl Editor {
                     // A column search is a table's; a document has no columns
                     // to run down.
                     crate::command::Axis::Column if self.table_here() => {
+                        // Shown in the other work area, which is what a column
+                        // search is for: 卵's own row and a row that uses 卵
+                        // are two places, and the question is about both.
+                        self.definition_preview = true;
                         self.search_columns(&pattern)
                     }
                     crate::command::Axis::Column => {
@@ -3878,10 +3886,6 @@ impl Editor {
         // drawn as a grid: `hjkl`, the operators and the selection all mean
         // what they mean everywhere else. Only Enter still knows about cells.
         if self.table.as_ref().map(|v| v.grain) == Some(Grain::Char) {
-            if key == Key::Enter {
-                self.follow_cell();
-                return true;
-            }
             return false;
         }
         match key {
@@ -3891,9 +3895,7 @@ impl Editor {
             Key::Char('k') | Key::Up => self.repeat(count, |e| e.move_cell_row(false)),
             Key::Char('0') | Key::Home => self.move_cell_end(false),
             Key::Char('$') | Key::End => self.move_cell_end(true),
-            // A cell whose column is a foreign key is a link, and Enter is what
-            // follows a link.
-            Key::Enter => self.follow_cell(),
+
             // The three ways into a cell. `i` is at its first character, `a`
             // after its last, and `c` replaces the whole thing — which for a
             // grid is the common case: you land on a cell to give it a new
@@ -4068,6 +4070,20 @@ impl Editor {
     /// twice. The rest is vi's own spelling — `o`/`O` open, `d` deletes.
     fn table_structure(&mut self, key: Key) {
         use crate::mdtable::Align;
+        // **誰用了它**, down the columns rather than across the lines — the
+        // other axis of the same verb `g/` is in prose, and the same pair of
+        // letters: `/` answers here, `?` answers in the other work area. It
+        // used to be `Enter`, which a writer presses by accident.
+        //
+        // Which columns: the sequence's own argument — `t1/` is the first, and
+        // `t2-10?` is the second through the tenth — or, with no argument, the
+        // ones a schema's `[table.link] from` names.
+        if matches!(key, Key::Char('/') | Key::Char('?')) {
+            self.definition_preview = key == Key::Char('?');
+            let span = self.sequence_span();
+            self.search_columns_in(span);
+            return;
+        }
         // A delimited file's columns are its schema's, and 123,380 rows do not
         // want one inserted by a keystroke — so only the row half applies.
         if self.md_region().is_none() {
@@ -4602,45 +4618,39 @@ impl Editor {
         let (line, cell) = self.cell_position()?;
         self.cell_span(line, cell)
     }
-
-    /// Whether this cell's contents name rows of another column.
-    fn cursor_in_link_column(&self) -> bool {
-        let Some(view) = &self.table else {
-            return false;
-        };
-        let Some(link) = &view.schema.link else {
-            return false;
-        };
-        match self.cell_position().and_then(|(_, c)| view.schema.columns.get(c)) {
-            Some(column) => link.from.contains(&column.name),
-            None => false,
-        }
-    }
-
     /// Find every row whose 拆分 uses what is under the cursor.
     ///
     /// A search rather than a jump, because the answer is usually many rows:
     /// 卵 is a component of dozens of characters, and which of them you wanted
     /// is not a question the editor can answer. `n` and `N` walk the answers,
     /// as they walk the answers to `/`.
-    fn search_the_table(&mut self) {
-        let needle = match self.table.as_ref().map(|v| v.grain) {
-            // Reading by character, the character under the cursor is the
-            // question; reading by cell, the whole cell is.
+    fn search_columns_in(&mut self, span: Option<(usize, usize)>) {
+        let needle = self.what_is_here();
+        if needle.trim().is_empty() {
+            self.status = say!("這一格是空的");
+            return;
+        }
+        // The text, not a pattern — the same rule a search of the selection
+        // follows.
+        self.search_columns_within(&regex::escape(&needle), span);
+    }
+
+    /// The question a table key is asking: the selection, or what the cursor is
+    /// on by whichever unit `Tab` last chose.
+    fn what_is_here(&self) -> String {
+        let (from, to) = self.selection();
+        if to > from + 1 {
+            let rope = self.current_buffer().rope();
+            return rope.slice(from..to.min(rope.len_chars())).to_string();
+        }
+        match self.table.as_ref().map(|v| v.grain) {
             Some(Grain::Char) => self.char_at_cursor().map(String::from).unwrap_or_default(),
             _ => self
                 .cell_position()
                 .map(|(line, cell)| self.cell_text(line, cell))
                 .unwrap_or_default(),
-        };
-        if needle.trim().is_empty() {
-            self.status = say!("這一格是空的");
-            return;
         }
-        // The text, not a pattern — the same rule `*` follows for a selection.
-        self.search_columns(&regex::escape(&needle));
     }
-
     /// Search **down one column, then the next** (`:search column`, `Enter`).
     ///
     /// The other axis of the same verb, and *only* the axis: a hit is a match,
@@ -4654,6 +4664,11 @@ impl Editor {
     /// is two columns instead of twenty-eight. With none named, all of them,
     /// from the first.
     fn search_columns(&mut self, pattern: &str) {
+        self.search_columns_within(pattern, None)
+    }
+
+    /// The same, over the columns the sequence named — `t2-10?`.
+    fn search_columns_within(&mut self, pattern: &str, span: Option<(usize, usize)>) {
         if !self.table_here() {
             self.status = say!("不是表格——先 :table");
             return;
@@ -4672,9 +4687,17 @@ impl Editor {
                 .filter_map(|name| view.schema.index_of(name))
                 .collect()
         });
-        let columns: Vec<usize> = match &declared {
-            Some(named) if !named.is_empty() => named.clone(),
-            _ => (0..view.schema.columns.len()).collect(),
+        let total = view.schema.columns.len();
+        let columns: Vec<usize> = match span {
+            // Said outright: 1-based, as the reader counts them.
+            Some((a, b)) => {
+                let (a, b) = (a.min(b).max(1), a.max(b).max(1));
+                (a.min(total)..=b.min(total)).map(|n| n - 1).collect()
+            }
+            None => match &declared {
+                Some(named) if !named.is_empty() => named.clone(),
+                _ => (0..total).collect(),
+            },
         };
         let anchored = pattern.contains('^') || pattern.contains('$');
         let markdown = view.shape == Shape::Markdown;
@@ -4842,7 +4865,11 @@ impl Editor {
         //
         // Except when the keys are already in the other pane: there the hits
         // are being walked by hand, and「給你看」 means moving the cursor.
-        if self.live_pane == 0 {
+        //
+        // …and except when the reader asked for the other answer: `/` finds it
+        // **here**, `?` shows it over there. One pair of letters, in the goto
+        // family and the table family alike.
+        if self.definition_preview && self.live_pane == 0 {
             let line = rope.char_to_line(from);
             let caption = say!(
                 "{0} · 第 {1} 行 · {2}",
@@ -5941,85 +5968,6 @@ impl Editor {
             _ => false,
         }
     }
-
-    /// Follow this cell to the row it names.
-    ///
-    /// One component jumps; several offer a choice, because guessing which of
-    /// 「⿰木目」's parts you meant is worse than asking. A component with no row
-    /// of its own is said out loud rather than silently skipped — for a 拆分表
-    /// that absence is itself the finding.
-    fn follow_cell(&mut self) {
-        // Two questions, and which one you are asking is decided by which
-        // column you are standing in.
-        //
-        // In a 拆分 column the cell *names* another row — 「⿰木目」 is made of
-        // 木 and 目, each of which has a row of its own — so Enter goes there.
-        // Anywhere else, and above all in the key column, the useful question
-        // is the other way round: **who uses this?** Standing on 卵, a writer
-        // wants the characters decomposed with 卵 in them, and there may be
-        // forty. That is not a jump, it is a search — so it becomes one, with
-        // `n` and `N` to walk it.
-        if !self.cursor_in_link_column() {
-            self.search_the_table();
-            return;
-        }
-        // Standing on one character of the sequence, that character is what
-        // was meant — there is nothing to ask about.
-        if self.table.as_ref().map(|v| v.grain) == Some(Grain::Char) {
-            if let Some(c) = self.char_at_cursor() {
-                // ⿰⿱⿲ say how the components are arranged. There is nowhere
-                // to go from one, and 「表裏沒有⿰」 was the wrong thing to say
-                // about it — no table has a row for a piece of grammar.
-                if is_ids_operator(c) {
-                    self.status = say!("「{0}」是結構符，不是部件", c);
-                    return;
-                }
-                match self.row_named(c) {
-                    Some(line) => {
-                        let preview = self.definition_preview;
-                        self.land_on_row(line, preview);
-                        return;
-                    }
-                    None if self.cell_links().iter().any(|&(k, _)| k == c) => {
-                        self.status = say!("表裏沒有「{0}」", c);
-                        return;
-                    }
-                    None => {}
-                }
-            }
-        }
-        let links = self.cell_links();
-        if links.is_empty() {
-            self.status = say!("這一格沒有指着別的行");
-            return;
-        }
-        let found: Vec<(char, usize)> = links
-            .iter()
-            .filter_map(|&(c, line)| line.map(|l| (c, l)))
-            .collect();
-        match found.as_slice() {
-            [] => {
-                let missing: String = links.iter().map(|&(c, _)| c).collect();
-                self.status = say!("表裏沒有這些字：{0}", missing);
-            }
-            [(_, line)] => {
-                let line = *line;
-                let preview = self.definition_preview;
-                self.land_on_row(line, preview);
-            }
-            many => {
-                let items = many
-                    .iter()
-                    .map(|&(c, line)| {
-                        crate::picker::Item::Row(line, format!("{c}  第 {} 行", line + 1))
-                    })
-                    .collect();
-                self.picker = Some(crate::picker::Picker::new("部件", items));
-                self.mode = Mode::Picker;
-            }
-        }
-    }
-
     // ---- Layout (Feature #61) ---------------------------------------------
 
     /// The current layout.
@@ -6937,7 +6885,40 @@ impl Editor {
         self.count
     }
 
-    /// **The command as far as it has been typed** — `3`, `3-5`, `g`, `2t`.
+    /// Take one key of a sequence's numeric argument, if that is what it is.
+    ///
+    /// Returns whether the key was swallowed — in which case the sequence stays
+    /// open, waiting for its verb.
+    fn take_sequence_argument(&mut self, key: Key) -> bool {
+        let Key::Char(c) = key else {
+            return false;
+        };
+        if let Some(digit) = c.to_digit(10) {
+            let (from, to) = self.sequence.get_or_insert((0, None));
+            let at = match to {
+                Some(n) => n,
+                None => from,
+            };
+            *at = at.saturating_mul(10).saturating_add(digit as usize).min(1_000_000);
+            return true;
+        }
+        // `2-5`: the far end of a span. Only after a number, so `-` is free.
+        if c == '-' {
+            if let Some((_, to @ None)) = self.sequence.as_mut() {
+                *to = Some(0);
+                return true;
+            }
+        }
+        false
+    }
+
+    /// The sequence's argument as a span, if it was given one.
+    fn sequence_span(&self) -> Option<(usize, usize)> {
+        let (from, to) = self.sequence?;
+        Some((from, to.unwrap_or(from)))
+    }
+
+    /// **The command as far as it has been typed**    /// **The command as far as it has been typed** — `3`, `3-5`, `g`, `2t`.
     ///
     /// A modal editor asks you to type a command a key at a time and then says
     /// nothing about what you have typed: press `3` and the editor looks
@@ -6949,31 +6930,7 @@ impl Editor {
     ///
     /// Empty when nothing is pending, which is most of the time.
     pub fn typed_so_far(&self) -> String {
-        let mut out = String::new();
-        // The count as it stands, or the one a pending sequence has already
-        // taken from the line: `2-5g` is still `2-5g` on the screen after the
-        // `g` has consumed it, which is what the reader typed and what vi
-        // shows. The two live in different fields only because one of them has
-        // been spent.
-        let waiting = self.pending != Pending::None;
-        match (self.count, waiting.then_some(self.operator_count).flatten()) {
-            (Some(n), _) | (None, Some(n)) => out.push_str(&n.to_string()),
-            (None, None) => {}
-        }
-        match (self.count_to, waiting.then_some(self.column_span).flatten()) {
-            (Some(to), _) => {
-                out.push('-');
-                if let Some(n) = to {
-                    out.push_str(&n.to_string());
-                }
-            }
-            (None, Some((_, to))) => {
-                out.push('-');
-                out.push_str(&to.to_string());
-            }
-            (None, None) => {}
-        }
-        out.push_str(match self.pending {
+        let word = match self.pending {
             Pending::None => "",
             Pending::Goto => "g",
             Pending::Space => "␣",
@@ -6991,7 +6948,45 @@ impl Editor {
             Pending::Table => "t",
             Pending::Mark => "M",
             Pending::Recall => "'",
-        });
+        };
+        // **In the order it was typed.** Inside a sequence the number comes
+        // *after* the prefix — `g3` is on its way to `g3d` — and outside one it
+        // comes before the key it multiplies, which is `3w`.
+        let mut out = String::new();
+        if self.pending != Pending::None {
+            out.push_str(word);
+            match self.sequence {
+                Some((from, to)) => {
+                    out.push_str(&from.to_string());
+                    if let Some(n) = to {
+                        out.push('-');
+                        if n > 0 {
+                            out.push_str(&n.to_string());
+                        }
+                    }
+                }
+                // A count typed the other way round is still part of what was
+                // typed: `3gd` says `3g` here, not `g`.
+                None => {
+                    if let Some(n) = self.operator_count {
+                        out.insert_str(0, &n.to_string());
+                    }
+                    if let Some((_, to)) = self.column_span {
+                        out.insert_str(0, &format!("-{to}"));
+                    }
+                }
+            }
+            return out;
+        }
+        if let Some(n) = self.count {
+            out.push_str(&n.to_string());
+        }
+        if let Some(to) = self.count_to {
+            out.push('-');
+            if let Some(n) = to {
+                out.push_str(&n.to_string());
+            }
+        }
         out
     }
 
@@ -7367,9 +7362,26 @@ impl Editor {
                 return;
             }
             Pending::Goto => {
+                // **命令＋選擇＋動作.** Inside a sequence the digits are its
+                // *argument*, not a repetition: `g3d` is 「goto · column 3 ·
+                // definition」 and `g2-5d` names a span of columns, the way
+                // `t20-20g` names a cell and `t1s2S4s` names three columns to
+                // sort by. The verb ends the sequence, so no separator and no
+                // space is needed — and the sequence stays open while digits
+                // are being typed.
+                if self.take_sequence_argument(key) {
+                    return;
+                }
                 self.pending = Pending::None;
+                // Whichever way the number was written: `g3d` puts it here,
+                // `3gd` — vi's own order, kept because fifty years of fingers
+                // know it — puts it in the count.
+                if self.column_span.is_none() {
+                    self.column_span = self.sequence_span();
+                }
                 self.handle_goto(key);
                 self.operator_count = None;
+                self.sequence = None;
                 return;
             }
             Pending::Space => {
@@ -7515,14 +7527,6 @@ impl Editor {
         self.column_span = span;
         let count = self.take_count();
 
-        // **`Enter` is one thing everywhere: 這個詞還在哪裏.** A footnote used
-        // to take it, which meant a word *inside* a note could not be asked
-        // about at all — the key was busy. What a thing points *at* is the
-        // other question, and it has the name every editor gives it: `gd`.
-        if (self.table.is_none() || self.md_region().is_some()) && key == Key::Enter {
-            self.search_the_page();
-            return;
-        }
 
         // Read as a grid, `hjkl` walk cells. Before the vertical branch because
         // a table is read across, whatever the file's writing layout is.
@@ -7864,7 +7868,7 @@ impl Editor {
                     }
                 }
             }
-            Key::Char('*') => self.search_selection(),
+
             // Indent / unindent the selected lines.
             Key::Char('>') => self.repeat(count, |e| e.indent(true)),
             Key::Char('<') => self.repeat(count, |e| e.indent(false)),
@@ -7927,7 +7931,10 @@ impl Editor {
         // `10gg` is "goto line 10", the way Helix reads a count before `gg`;
         // a bare `gg` is the same thing with the count 1.
         if key == Key::Char('g') {
-            if let Some(n) = self.operator_count.take() {
+            // `g30g` — the sequence's own argument — and `30gg`, vi's order.
+            let line = self.sequence_span().map(|(n, _)| n).or(self.operator_count.take());
+            if let Some(n) = line.filter(|&n| n > 0) {
+                self.column_span = None;
                 return self.goto_line(n);
             }
         }
@@ -7970,6 +7977,23 @@ impl Editor {
             // question answered in the other work area, without leaving.
             Key::Char('d') => return self.show_definition(false),
             Key::Char('w') => return self.show_definition(true),
+            // **`/` here, `?` over there.** 「這個詞還在哪裏」 — the selection,
+            // or what the cursor is on — searched across the whole document.
+            // `g/` is the sugar `/` has always wanted: search for *this*,
+            // without retyping it. `g?` is the same answer shown in the other
+            // work area, so the place you are standing is still on the screen.
+            //
+            // It used to be `Enter`, which is the key a writer presses by
+            // accident: one keystroke too many in Normal mode and the page
+            // jumped somewhere else.
+            Key::Char('/') => {
+                self.definition_preview = false;
+                return self.search_the_page();
+            }
+            Key::Char('?') => {
+                self.definition_preview = true;
+                return self.search_the_page();
+            }
             _ => return,
         };
         self.move_head(pos);
@@ -9488,25 +9512,6 @@ impl Editor {
         self.cursor = start + text.chars().count();
         self.clamp_cursor();
     }
-
-    /// Search for whatever is selected (Helix `*`).
-    fn search_selection(&mut self) {
-        let (start, end) = self.selection();
-        if end <= start {
-            self.status = say!("沒有選中東西");
-            return;
-        }
-        // Escaped: `*` searches for the text that is selected, and a selection
-        // is text, not a pattern — 「（」 must not open a group.
-        let text = self.current_buffer().rope().slice(start..end).to_string();
-        self.last_search = regex::escape(&text);
-        // A new search takes `n` back, exactly as `/` does. Without this, `*`
-        // set the pattern and `n` went on walking a list found before it —
-        // 「第 3/78 處」 about a word nobody asked about.
-        self.hits = None;
-        self.status = say!("搜索：{0}", text);
-    }
-
     /// Indent (`>`) or unindent (`<`) every line the selection touches.
     fn indent(&mut self, add: bool) {
         let rope = self.current_buffer().rope();
@@ -11816,21 +11821,24 @@ mod tests {
 
     #[test]
     fn star_searches_for_the_selection() {
-        let mut ed = typed("春江春江");
+        let mut ed = typed("春江春江\n");
         // Two `l` for two characters: a selection here is half-open, so `v`
         // starts one of width zero rather than one covering the cursor's own
         // grapheme the way Helix does.
         press(&mut ed, "vl"); // select 春江
-        press(&mut ed, "*");
-        // Back to the top, then `n`: the pattern `*` stored is the selection,
-        // and the next occurrence of it is the second 春江.
-        press(&mut ed, "gg");
-        press(&mut ed, "n");
+        press(&mut ed, "g?");
+        // **Shown, not jumped to**: 「這個詞還在哪裏」 is answered beside the
+        // place you are standing, and you are still standing there.
+        let (from, to) = ed.other_pane().and_then(|p| p.highlight).expect("a hit");
         assert_eq!(
-            ed.selection(),
-            (2, 4),
-            "next occurrence of the selected text"
+            ed.current_buffer().rope().slice(from..to).to_string(),
+            "春江",
+            "the other occurrence of the selected text"
         );
+        assert_eq!((from, to), (2, 4));
+        // The *next* one after where you are standing, which here is the
+        // second of two.
+        assert!(ed.status().contains("2/2"), "{}", ed.status());
     }
 
     /// A segmenter that records how much text it was handed, so the cache can
@@ -12180,7 +12188,7 @@ mod tests {
         assert!(!ed.current_buffer().text().contains("[^1]: "));
 
         // `Enter` on the same character is the other question entirely.
-        ed.on_key(Key::Enter);
+        press(&mut ed, "g?");
         assert!(
             ed.status().contains("處") || ed.status().contains("只有"),
             "{}",
@@ -12267,7 +12275,7 @@ mod tests {
         // that was never searched — and the next `d` deleted it.
         let mut ed = typed("那年冬天。\n那年夏天。\n");
         ed.goto_line(1);
-        ed.on_key(Key::Enter);
+        press(&mut ed, "g?");
         assert!(ed.current_hit().is_some(), "{}", ed.status());
 
         // Another file: the hits do not follow, and `n` goes back to `/`.
@@ -12333,7 +12341,7 @@ mod tests {
         let mut ed = typed("那年冬天很冷。\n第二行。\n那年夏天很熱。\n");
         ed.goto_line(1);
         let standing = ed.cursor();
-        ed.on_key(Key::Enter);
+        press(&mut ed, "g?");
         // 那年 is the word under the cursor, and it is on line 3 as well.
         assert_eq!(ed.peeked_line(), Some(2), "{}", ed.status());
         assert_eq!(ed.cursor(), standing, "and you did not go anywhere");
@@ -12344,7 +12352,7 @@ mod tests {
         for _ in 0..2 {
             ed.on_key(Key::Char('l'));
         }
-        ed.on_key(Key::Enter);
+        press(&mut ed, "g?");
         assert!(ed.status().contains("只有這一處"), "{}", ed.status());
     }
 
@@ -12409,7 +12417,7 @@ mod tests {
         ed.on_key(Key::Ctrl('o'));
         assert_eq!(ed.cursor(), was, "C-o comes back");
         ed.goto_line(1);
-        ed.on_key(Key::Enter);
+        press(&mut ed, "g?");
         assert_eq!(ed.cursor_line(), 0, "nothing moves");
         // Not on a note, so `Enter` is what it is everywhere else: 「這個詞還
         //在哪裏」, shown in the other work area.
@@ -12583,7 +12591,7 @@ mod tests {
         // 「誰用了它」 is `Enter`, and stays `Enter`: 相 and 目 both use 目.
         ed.goto_line(4);
         press(&mut ed, "0");
-        ed.on_key(Key::Enter);
+        press(&mut ed, "t?");
         assert_eq!(ed.peeked_line(), Some(1), "相 uses 目");
         assert!(ed.status().contains("1/2"), "{}", ed.status());
 
@@ -12749,7 +12757,7 @@ mod tests {
         ed.goto_line(2);
         press(&mut ed, "ll");
         assert_eq!(ed.char_at_cursor(), Some('⿰'));
-        ed.on_key(Key::Enter);
+        press(&mut ed, "gw");
         assert!(ed.status().contains("結構符"), "{}", ed.status());
 
         // Tab back, and the cursor snaps to cells again.
@@ -12863,7 +12871,7 @@ mod tests {
         // would count two matches on one line. A column search differs from a
         // row search in its *direction* and in nothing else.
         let standing = ed.cursor();
-        ed.on_key(Key::Enter);
+        press(&mut ed, "t?");
         assert_eq!(ed.peeked_line(), Some(1), "木 itself, the first of them");
         assert_eq!(ed.cursor(), standing, "…and you did not go anywhere");
         assert!(ed.status().contains("1/5"), "{}", ed.status());
@@ -12901,7 +12909,7 @@ mod tests {
         ed.on_key(Key::Tab);
         ed.execute("5").unwrap();
         assert_eq!(ed.cell_text(4, 0), "目");
-        ed.on_key(Key::Enter);
+        press(&mut ed, "t?");
         assert!(ed.status().contains("1/2"), "目 is used twice: {}", ed.status());
 
         std::fs::remove_dir_all(&dir).ok();
@@ -13873,7 +13881,7 @@ mod tests {
         ed.open_file(&csv).unwrap();
         assert!(ed.enter_table(), "{}", ed.status());
         ed.goto_line(2);
-        ed.on_key(Key::Enter);
+        press(&mut ed, "t?");
         assert_eq!(ed.peeked_line(), Some(1), "{}", ed.status());
         assert!(ed.status().contains("未指定"), "and it says so: {}", ed.status());
         assert!(ed.status().contains("1/2"), "{}", ed.status());
@@ -16191,7 +16199,7 @@ mod tests {
         let mut ed = typed("那年冬天。\n第二行。\n那年夏天。\n又一行。\n那年秋天。\n");
         press(&mut ed, "gg");
         // A previewing search: 那 is on lines 1, 3 and 5.
-        ed.on_key(Key::Enter);
+        press(&mut ed, "g?");
         assert_eq!(ed.peeked_line(), Some(2), "{}", ed.status());
         ed.on_key(Key::Char('n'));
         assert_eq!(ed.peeked_line(), Some(4), "{}", ed.status());
@@ -16539,14 +16547,15 @@ mod tests {
         ed.on_key(Key::Char('n'));
         assert_eq!(ed.selection(), (0, 3));
 
-        // `*` searches for the *text* selected, so its punctuation is literal.
-        let mut ed = typed("（甲）乙（甲）");
+        // `*` searches for the *text* selected, so its punctuation is literal:
+        // the second （甲） is found, and shown in the other work area.
+        let mut ed = typed("（甲）乙（甲）\n");
         press(&mut ed, "ggvll");
-        press(&mut ed, "*");
-        press(&mut ed, "n");
+        press(&mut ed, "g?");
+        let (from, to) = ed.other_pane().and_then(|p| p.highlight).expect("a hit");
         assert_eq!(
-            ed.selection(),
-            (4, 7),
+            ed.current_buffer().rope().slice(from..to).to_string(),
+            "（甲）",
             "（甲） found as text, not as a group"
         );
     }
