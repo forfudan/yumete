@@ -170,8 +170,15 @@ pub enum Command {
     SetPreview(bool),
     /// `:w!` — write over a file that changed on disk since it was read.
     WriteForce(Option<String>),
-    /// `:e!` — read the file again, losing what is in the buffer.
-    Reread,
+    /// `:reload` / `:reload!` — read the file again. The `!` throws away
+    /// unsaved changes; without it a dirty buffer is refused (Feature #214).
+    Reload { force: bool },
+    /// `:reload auto on|off` — re-read a **clean** buffer by itself when the
+    /// file changes on disk. `None` asks which it is (Feature #214).
+    ReloadAuto(Option<bool>),
+    /// `:readonly on|off` — lock this buffer against editing. `None` asks
+    /// (Feature #213).
+    SetReadonly(Option<bool>),
     /// `:yume builtin` — use the 碼表 in the binary, whatever is installed.
     BuiltinScheme,
     /// `:yume table <path>` — type with a code table of your own.
@@ -358,8 +365,33 @@ pub fn parse(input: &str) -> Result<Command, CommandError> {
         } else {
             Some(rest.to_string())
         })),
-        // `:e!` is the other half: take what is on disk and lose what is here.
-        "open!" | "o!" | "edit!" | "e!" => Ok(Command::Reread),
+        // The other half of `:w!`: take what is on disk and lose what is here.
+        // `:e!` and `:o!` used to say this; they are gone, with no alias and no
+        // hint, because `open!` reads as 「open, but harder」 and what it
+        // actually does is discard the afternoon.
+        "reload" | "reload!" => {
+            let force = word.ends_with('!');
+            match rest {
+                "" => Ok(Command::Reload { force }),
+                "auto" => Ok(Command::ReloadAuto(None)),
+                "auto on" => Ok(Command::ReloadAuto(Some(true))),
+                "auto off" => Ok(Command::ReloadAuto(Some(false))),
+                other => Err(CommandError::InvalidArgument {
+                    command: "reload",
+                    value: other.to_string(),
+                }),
+            }
+        }
+        // 唯讀 (Feature #213).
+        "readonly" | "ro" => match rest {
+            "" => Ok(Command::SetReadonly(None)),
+            "on" => Ok(Command::SetReadonly(Some(true))),
+            "off" => Ok(Command::SetReadonly(Some(false))),
+            other => Err(CommandError::InvalidArgument {
+                command: "readonly",
+                value: other.to_string(),
+            }),
+        },
         // Rebinding, said out loud. `:w <path>` is a copy.
         "saveas" | "sav" | "saveas!" | "sav!" => {
             if rest.is_empty() {
@@ -1857,6 +1889,14 @@ const WORD_LEVELS: &[Word] = &[
     },
 ];
 
+/// The one word `:reload` takes besides nothing at all.
+const RELOAD: &[Word] = &[Word {
+    name: "auto",
+    help: "檔案在外面改了就自己重讀——你這裏有改動時只提醒，不動手",
+    needs: &[],
+    then: Args::Words(ON_OFF),
+}];
+
 const ON_OFF: &[Word] = &[
     Word {
         name: "on",
@@ -1914,6 +1954,20 @@ pub const COMMANDS: &[Entry] = &[
         help: "載入搶救稿；加 ! 是丟掉它",
         needs: &[],
         args: Args::None,
+    },
+    Entry {
+        name: "reload",
+        aliases: &[],
+        help: "把檔案再讀一遍；加 ! 是丟掉你這裏的改動",
+        needs: &[],
+        args: Args::Words(RELOAD),
+    },
+    Entry {
+        name: "readonly",
+        aliases: &["ro"],
+        help: "唯讀：鎖住這一份，不許改",
+        needs: &[],
+        args: Args::Words(ON_OFF),
     },
     Entry {
         name: "goto",

@@ -37,6 +37,12 @@ fn main() -> ExitCode {
     // Text, or the same frame with its colours as HTML — a theme is judged on
     // what it looks like, and a terminal is not always there to look at.
     let mut shot_html = false;
+    // `--readonly` opens the session locked (Feature #213): a reference 碼表,
+    // somebody else's manuscript, a file you came to read. Every buffer this
+    // run opens is locked, not only the ones named here — `:open` opens them
+    // too, and a session started to read should not go writable at the second
+    // file.
+    let mut readonly = false;
 
     for arg in std::env::args().skip(1) {
         if want_syntax {
@@ -55,6 +61,7 @@ fn main() -> ExitCode {
             }
             "-p" | "--preview" => force_preview = true,
             "-t" | "--table" => force_table = true,
+            "-R" | "--readonly" => readonly = true,
             "--timing" => timing = true,
             "--shot" => shot = Some((100, 30)),
             s if s.starts_with("--shot=") => shot = Some(parse_size(&s["--shot=".len()..])),
@@ -175,6 +182,11 @@ fn main() -> ExitCode {
         }
     }
     editor.set_dense(config.editor.dense);
+    // Before the files, so the files come up locked rather than being locked a
+    // moment after they are on screen.
+    if readonly {
+        editor.set_readonly_default(true);
+    }
     mark("config", &mut marks);
 
     // The files, *after* the session's settings. Opening one may turn the page
@@ -417,6 +429,8 @@ OPTIONS:
                      A grid is always horizontal, so this overrides -v.
     -v, --vertical   Lay the text out vertically for this run (縱書), overriding
                      the config. -H / --horizontal forces the ordinary layout.
+    -R, --readonly   Open locked: nothing this run opens can be typed into.
+                     `:readonly off` unlocks the one you are looking at.
     -s, --syntax     Which markup these files are written in: markdown, typst
                      or text. Outranks both the extension and the config.
     -p, --preview    Print a non-interactive preview instead of the editor.
