@@ -202,6 +202,13 @@ Phases are ordered by priority, most writer-critical first:
 - **P4 — Polish & QoL**: themes, help overlay, better search UX, sessions.
 - **P5+ — Future / advanced**: coding LSP, git, splits, plugins, debugging.
 
+**Everything still open is in this table.** Anything wanted, agreed or merely
+recorded elsewhere in this file carries a number here — the 0.2.0 wishlists of
+§5.4 are #233–#260 at P4, the Markdown-table review's leftovers are #226–#229,
+and the three typographic judgements of §5.2 15 are #230–#232. The prose
+sections keep the reasoning that does not fit a Notes column; the table is the
+index, and a row with no number anywhere else is a row that got lost.
+
 | #   | Feature                                   | Area   | Phase | Notes                               | Status |
 | --- | ----------------------------------------- | ------ | ----- | ----------------------------------- | ------ |
 | 1   | Open file / new buffer                    | core   | P1    | args + `:open`                      | Done   |
@@ -261,7 +268,7 @@ Phases are ordered by priority, most writer-critical first:
 | 55  | Git gutter / blame                        | vcs    | P5    |                                     |        |
 | 56  | Splits / multiple windows                 | tui    | P5    |                                     |        |
 | 57  | Debugging (DAP)                           | dap    | P6    | far future                          |        |
-| 58  | Plugin runtime (scripting)                | plugin | P6    | Lua/WASM                            |        |
+| 58  | Plugin runtime (scripting) | plugin | P6 | Lua/WASM. **Dropped, 2026-09-03**: both 0.2.0 reviews said the same thing — 「every editor grows one and it becomes the product」. Also declined with it: an embedded terminal pane, a git UI (lazygit is one `:!` away), and tree-sitter/LSP at 0.2, whose parse-the-whole-document model fights the per-paragraph cached invariant that made this editor good | Dropped |
 | 59  | Remote / SSH editing                      | net    | P6    |                                     |        |
 | 60  | Collaborative editing                     | net    | P6    |                                     |        |
 | 61  | **Vertical layout (縱書)**                | tui    | P2    | 縱 model + rotated punctuation      | Done   |
@@ -425,6 +432,45 @@ Phases are ordered by priority, most writer-critical first:
 | 219 | **A Windows build** | both | P3 | `%APPDATA%\yumete` for both config and data; `same_file` by `GetFileInformationByHandle` (volume serial + file index); one `shell_command()` that knows `cmd.exe /C` as well as `$SHELL -c`; `ambiguous_width = "auto"` asked of the console API rather than of a CPR reply; the search reaches where **yume** installs its own tables, overlay first, and falls back to a flat directory; `[ime] data_dirs` lets the reader name the place outright; `scripts/build.sh` runs under Git Bash. Cross-checked against `x86_64-pc-windows-gnu` | Done |
 | 220 | **A data file that fails to parse says so** | ime | P1 | `load_data_file` answered `bool`, so 「not there」 and 「there and the core refuses it」 were the same answer — and yume-core *does* return a reason. It now answers `Result<(), DataProblem>`, and the session keeps every one of them (`ImeSession::problems()`). `DataFault` is the four honest outcomes: `Missing`, `Unreadable`, `Rejected { reason, magic }`, `UnknownKind`; only the middle two are `is_loud()`, because half the manifest is optional and an ordinary install is missing several. `expected_magic()` reads the constant out of yume-core rather than writing it down — a copy would rot on exactly the day the constant changes, which is the day it matters. So `:yume` now ends with 「`data/chaifen.ydiv` 核心不認：bad division magic（期望 YDV20260904，檔頭是 YDV20260828）」 instead of nothing at all, which is what an older data directory looked like after `.ydiv` changed its magic on 2026-09-04: every 拆分 comment gone, and no word anywhere | Done |
 | 221 | **The page follows the caret sideways** | editor | P1 | with `:wrap off` a paragraph is one row of whatever length it happens to be, and the window only ever drew its first screenful: `gl` walked the caret off the right edge and the writing it landed in was never shown. The 縱 grid and the CSV grid both scroll on two axes already; the prose page had a vertical anchor and nothing else. `Viewport.left` counts the columns of writing that are off the left edge, settled from the caret's own column before the rows are drawn, one column at a time rather than a screenful. The gutter does not scroll — `scrolled()` cuts between the furniture and the writing — and a 漢字 the cut lands inside is drawn as air. The click map counts from the same number. 縱書 refuses `:wrap on\|off` outright and says why — a 縱 is broken by the height of the window, and the old answer 「長段落跑出右邊」 named a right edge that page does not have (`:wrap 40` still sets the 縱 length in either layout) | Done |
+| 222 | **The wheel scrolls too far, and nothing can be told otherwise** | tui | P2 | one notch is `WHEEL_STEP = 3` in `crates/yumete-tui/src/lib.rs`, a `const` nobody can reach: no config key, no command. On a trackpad that is not three lines but twenty — macOS terminals send a **burst** of `ScrollDown` events for one gesture, and each of them moves three. So the number to settle is not only the step but what the step is multiplied by. Wanted: `[editor] wheel_step` and a `:wheel n` beside it (0 = the terminal's own, i.e. one), counted in whichever unit the page is in — 縱 vertically, lines horizontally — and an answer for the burst, which is either a floor of one unit per event or a short coalescing window. See §6, 「Mouse wheel by 縱 (#71)」, which chose the three and did not consider the burst | Planned |
+| 223 | **A half-typed word that names no command still finds one** | core | P1 | `:vert` is answered with nothing at all: `complete_at()` looks the first word up in `COMMANDS`, misses, and `return (start, Vec::new())`. But `vertical` **is** a word — it is `:layout vertical`, and the completion already knows every subcommand of every command because it walks the same `Args::Words` tables to offer them. Wanted: when the first word matches no command name or alias, fall back to matching it against every subcommand in the tree and offer the whole path — `:vert` ⇥ `:layout vertical` — with the parent shown so it is clear what is about to be typed. **Only** when there is no parent match, so `:t` still answers about `:table` rather than burying it under a dozen children. The same fallback wants to hold for a second word that matches nothing at that depth but matches deeper. See §6 「Command hints (#67)」, which built the walk this reuses | Planned |
+| 224 | **`::` searches the commands by what they do** | core | P2 | you cannot type a command whose name you have forgotten, and the names are English while the reader thinks 「竖排模式」. `::` opens a search over the descriptions, which already exist in three languages — the `help` tag of every command and subcommand is a `messages.toml` entry with `zht` / `zhs` / `en`, 147 of them, keyed `cmd.<parent>.<child>`, editable by hand. Three parts. **(a)** an optional `find` line per entry: words that are searched but never shown (`find = "直排 縱書 tategaki columns"`), so descriptions stay short and the search still covers every way a thing is said. **(b)** the scoring, split by script rather than one distance over the whole string: an ASCII run is an fzf-style subsequence match with bonuses for consecutive and word-start hits (so `lyt` finds `layout`), a CJK run is a bigram-set overlap with a longest-common-substring bonus (the `pg_trgm` / ES CJK-analyzer shape — the cosine of the entry, with bigrams for the vector), both weighted by IDF so 「模式」「命令」 sink and 「竖排」 carries, and by field so a name beats a `find` beats a description; a Damerau-Levenshtein ≤ 2 branch on the *name* alone for a typo. 147 entries is a full scan in microseconds — no index. **(c)** 中文 in the `::` line throughout — it is a Chinese query by design, so `composes()` admits it whole (see #225, which admits `:` only where an argument can be Chinese); 英 when the line opens, lone-Shift to 中, which needs a Kitty-protocol terminal exactly as `/` does today. **`:` and `::` are two modes, not one** (the author, 2026-09-04): a merged line would have to decide per keystroke whether a word is a name or a description — and `vert` is both — and its Enter would either run a guessed match (`:q!` is not undoable) or mean two different things on one key. Separate, they are also free to move between: a second `:` on an empty line enters `::`, backspacing `::` empty leaves it, and ⇥ on a result **writes the whole command back into the `:` line** and returns there with the caret after it, so what Enter runs is always the full line the reader can see, never the guess. Ranked descending. Not `numpy.lookfor` — that counted docstring words with no weighting, and NumPy 2.0 deleted it | Planned |
+| 225 | **`:s/照首行/照全表/` cannot be typed** | tui | P1 | `composes()` at `crates/yumete-tui/src/lib.rs:694` excludes `Mode::Command` entirely, reasoning that a command line's vocabulary is ASCII names. Half true: the *names* are ASCII, the **arguments are not** — `:s <正則> <換成什麼>` and `:e`/`:w`/`:r <檔名>` are `Args::Free` and `Args::Path`, and in an editor for Chinese novels those are exactly the two that want 中文. Today they can only be pasted. Wanted, in three rules: the command line opens in 英 always, whatever Insert was in, with its own 中/英 that resets each time it opens (it already leaves Insert's alone, `lib.rs:294`); while the word under the caret is a command name or a subcommand word, lone-Shift does nothing, because there is no 中文 to type there; once the walk reaches `Args::Free` or `Args::Path`, lone-Shift may start Yume. The walk is not new work — `complete_at()` already descends the same tree to know what to hint. Not automatic on reaching an argument: `:s/[a-z]+/x/` is as common as the Chinese one, so Shift stays permitted rather than triggered | Planned |
+| 226 | **A spreadsheet pasted into a table** | core | P2 | a TSV or CSV clipboard becoming rows. The one thing that would make a writer build a table here instead of in a spreadsheet — and Tab is refused outright today, so there is not even a wrong answer. `Event::Paste` already arrives whole (`paste_text`), so the work is recognising a grid in it and widening the table to fit. Called **high** by the review of #142 | Planned |
+| 227 | **`:table` on a selection, and CSV both ways** | core | P3 | a selected block of CSV becomes a `|` table, and a `|` table exports as CSV. `export.rs` has no CSV path at all. The quoting invariant the table mode already keeps generalises from delimiters to *cells*, which is the same machinery #253 wants | Planned |
+| 228 | **`t y` / `t p` for a whole column** | core | P3 | rows have `Y`; a column can only be moved one step at a time with `t <` / `t >`, so reordering four columns is twelve keystrokes and a mistake. Same shape as the row yank already written | Planned |
+| 229 | **The current cell is not drawn** | tui | P3 | Insert *is* constrained to the cell, but the prose renderer knows nothing about cells, so the only feedback that you are inside one is the column name in the status line. Since #212 the padding is drawn as ghost text, which is where a cell tint would also live | Planned |
+| 230 | **`？」` and `！」` squeezed into one square** | tui | P3 | treated like `。」`, but clreq §6.3.2 treats the full-width 問號/嘆號 differently from the 句號 group. Which way a terminal should follow is a typographic judgement, not a bug fix — wanted: the author's call, then a line in `zong.rs` | Planned |
+| 231 | **The 「hole」 branch in `zong.rs`** | tui | P3 | a third consecutive mark that finds both the margin and the pair-square taken still keeps a margin row with an empty text square beside it. Rare. What print does with three marks in a row is worth asking a typesetter rather than guessing | Planned |
+| 232 | **The column-number row's contrast** | tui | P3 | raised as a review finding on the chrome ground. Measuring it properly means measuring the whole ladder — a theme review rather than a patch, and 【墨香】 (§5.2 13) is the ladder it would measure | Planned |
+| 233 | **`:check 用字`** | core | P4 | 裡 412 / 裏 3, 為/爲, 台/臺, 着/著, and the project's own names, as a jumpable buffer. **Nobody has this**: Word checks 病句, Grammarly is English, and a spell-checker tokenizes on spaces and sees one word. Called **high** by the writer's review, 2026-09-03 | Planned |
+| 234 | **`:ruby auto`, and `:ruby auto rare`** | core | P4 | generate readings *by word* so 了 is `le`, and annotate **only** characters outside 通用规范汉字表. Word's 拼音指南 guesses per character and detaches on edit; no editor generates readings from a language model, and none can then set them vertically. `pinyin.yflb` (`spell_logprob`) and #65's ruby channel are both already there. **high** | Planned |
+| 235 | **`:diff` at 詞 grain, over the autosave snapshots** | core | P4 | every line-based diff reports a 500-字 paragraph as wholly changed when one 的 moved. The snapshots are already being written — and thrown away. Segmentation is `yumete-cjk`'s, so the diff is over words the editor already computes. **high** | Planned |
+| 236 | **圈點 in the margin the 標點旁置 column draws** | tui | P4 | and the open markup question answers itself: `*字*` **is** it, because the Chinese rendering of `<em>` is 着重號. 1–2 days — `Slot` already carries the channel #70 built. **high** | Planned |
+| 237 | **`:sentence`** | core | P4 | one 句 to a 縱, as a view, no edit. The manual already teaches `:%s/。/。\n/g` for proofreading; this is that, non-destructively — and it hands the `(`/`)` sentence motion its boundaries. **high** | Planned |
+| 238 | **`:check 標點`** | core | P4 | half-width marks in Chinese text, `...` for ……, and **unbalanced 「」（）《》 across a paragraph**, which silently inverts every quote after it and is invisible in prose. **high** | Planned |
+| 239 | **This book's own words** | ime | P4 | mine repeated OOV n-grams from the project and feed them to *both* the segmenter and the IME, so 阿甯 walks as one word and types as one. `yume-lm/src/discover.rs` already implements the signals. **high** | Planned |
+| 240 | **`:check 字集`** | core | P4 | every character outside 通用规范／臺灣／香港／古籍, before the typesetter finds out. The seven `.ycs` sets are loaded at startup already; two days. The writer's review called it the **best value-per-day on either list**. **high** | Planned |
+| 241 | **繁簡 conversion that shows what it guessed** | core | P4 | `simptrad.txt` stores the one-to-many sets, so the ambiguity is *visible in the data*: drop the unsure ones into a review buffer instead of picking silently. Every other converter picks silently. **medium-high** | Planned |
+| 242 | **`:words`** | core | P4 | crutch words by **surprisal against 詞頻表**, not raw count, so it says 「然後 47 次」 and not 「的」. **medium-high** | Planned |
+| 243 | **割注 — 小字雙行 inside the 縱** | tui | P4 | InDesign J has it; nothing else does. The 縦中横 slot packing is already the mechanism — run it down a run of slots instead of one. **medium** | Planned |
+| 244 | **寫作進度** | core | P4 | Scrivener's targets, but counting 字 correctly. **medium** | Planned |
+| 245 | **A print-ready 直排 HTML export** | core | P4 | browsers are the only free vertical typesetter and no editor drives one. `export.rs` is where it goes. **medium** | Planned |
+| 246 | **焦點模式, vertically** | tui | P4 | dim everything but the 縱 being written. The display-transform layer already decides what each square shows. **medium** | Planned |
+| 247 | **平仄／韻腳 in the margin** | tui | P4 | `chaifen.ydiv` carries per-character 拼音, so the tone is already in the data; the margin column is #70's. **medium** | Planned |
+| 248 | **Virtual text — the mirror of `hidden_on_line`** | core | P4 | `drawn_on_line`, with the mirror invariant: *the cursor may never sit on a character that is not in the file*. Downstream of it: inline diagnostics, blame, inlay hints, fold markers, `↵`/`·`, first-line indent and 圈點. #212's ghost text is the first half, built for one case; this is the general one. Only Neovim has anything like it; **Helix has none**. **high** | Planned |
+| 249 | **Merge conflicts as a `Block` kind** | core | P4 | `<<<<<<<` is exactly the shape `BlockScanner` was built for: tint the two sides, hide the markers under `:render full`, three keys, `]c`/`[c`, `:conflicts` as a results buffer. Emacs `smerge-mode` is the only good prior art and nobody knows it exists. The programmer's review called it the **cheapest high-value item on either list** | Planned |
+| 250 | **Jobs, and `]q`/`[q` over a results buffer** | core | P4 | `:preview` already models a supervised child correctly; generalise it, and walk `path:line:` lines without leaving the file. That is a complete build-error loop with **no quickfix list, no `errorformat`, no problem matcher** — `:grep` and `:sh` already make the buffers and `gf` already parses them. **high** | Planned |
+| 251 | **Table mode over any delimited text** | core | P4 | quoting (the invariant generalises from delimiters to *cells*), TSV／`|`／`;`, the header fallback as a first-class path, and `:sh ps aux` landing in a grid. `csv.vim` colours; VisiData is not an editor and will not hand back a byte-identical 8 MB file. Overlaps #216–#218 and #227. **high** | Planned |
+| 252 | **The Unicode alarm** | tui | P4 | tint invisibles, bidi controls (Trojan Source) and ASCII homoglyphs, plus `describe-char` in the `Detail` panel. VS Code's `unicodeHighlight` is the only implementation anywhere and it is a GUI; Emacs has the panel and no alarm. **high** | Planned |
+| 253 | **`yumete -p` as a pager, and an `fzf --preview`** | cli | P4 | the same renderer, so it can never disagree with the editor. `bat` highlights syntax and renders a CSV as commas; `glow` deletes the markup. Distribution precedes adoption. **high** | Planned |
+| 254 | **The phrasebook as a feature** | core | P4 | an unbound key names its local spelling (`$` → `gl`, `G` → `ge`, `ciw` → `miwc`), dialect-configurable. Not a compatibility layer: it never *does* the thing. which-key tells you what is available, never what you meant. Half of it exists — `phrasebook()` in `editor.rs` — as messages, not as a configurable table. **high** | Planned |
+| 255 | **Byte fidelity as a stated promise** | core | P4 | with `:diff` against what is on disk, so the promise is checkable rather than claimed. **medium** | Planned |
+| 256 | **An undo browser** | tui | P4 | on the picker that already exists. **medium** | Planned |
+| 257 | **`Enter` as the universal follow** | core | P4 | with an expiring return — `gf`, a results line, a heading in the outline, all one key. **medium** | Planned |
+| 258 | **Files with 40 MB single lines** | core | P4 | the per-paragraph caches are keyed by revision and sized by what is on screen, so the budget is already the right shape; nothing has tested it against one line that is the whole file. **medium** | Planned |
+| 259 | **A live prose tint for English** | tui | P4 | the same per-frame budget the CJK work spends, aimed at the other language. **medium** | Planned |
+| 260 | **Macros as editable text** | core | P4 | record, then *read and fix* what was recorded. **medium** | Planned |
 
 ### 14 · What four reviews of the code found, 2026-09-03
 
@@ -1171,6 +1217,9 @@ this is the same picture for a headless machine, a bug report, or a reviewer.
 
 ### 15 · Still open, 2026-09-04
 
+**#230–#232 in §5.** All three are judgements rather than patches, which is why
+they are here and not done.
+
 - **`？」` and `！」` are squeezed into one square** like `。」`. clreq §6.3.2
   treats the full-width 問號/嘆號 differently from the 句號 group, and which
   way a terminal should follow is a typographic judgement, not a bug fix.
@@ -1653,7 +1702,8 @@ formula follows releases.
 Two reviews on 2026-09-03, from a Chinese writer and from a terminal
 power-user who does not write Chinese, asked the same question: **what would
 make yumete the only editor that does this?** Their lists barely overlap, which
-is the useful part. Recorded here, not scheduled — 0.1.0 first.
+is the useful part. **They are #233–#260 in §5, all at P4** — numbered so none
+of them goes missing, still not scheduled: 0.1.0 first.
 
 ### What both of them noticed about the machinery
 
@@ -1751,7 +1801,7 @@ is the useful part. Recorded here, not scheduled — 0.1.0 first.
 
 ### Four they would not build
 
-A plugin runtime (#58) — "every editor grows one and it becomes the product";
+**#58 is marked Dropped in §5 for all four.** A plugin runtime (#58) — "every editor grows one and it becomes the product";
 an embedded terminal pane (already argued); a git UI (lazygit is one `:!` away);
 and **tree-sitter/LSP at 0.2**, because its parse-the-whole-document model
 fights the per-paragraph, cached, markup-stays-on-the-page invariant that made
@@ -1771,6 +1821,8 @@ CSV, a merge conflict, a document with a hostile character in it, a long piece
 of prose. Four files a week that all have bad answers today.
 
 ### 11 · Markdown tables — what a review of #142 left open
+
+**#226–#229 in §5.**
 
 Eleven defects found and fixed the same night (data loss when the header was
 the file's last line without a newline; the mode leaking into the prose around
@@ -2093,6 +2145,14 @@ It moves the **cursor**, not only the view. A view scrolled on its own would be
 pulled straight back the moment the cursor had to stay on screen — the two would
 fight every frame — so the cursor travels with the page, which in a modal editor
 is where you were heading anyway.
+
+**The three was chosen for a wheel and met a trackpad** (#222, the author,
+2026-09-04: 「一次20行上下」). `WHEEL_STEP` is a `const` in
+`crates/yumete-tui/src/lib.rs` — no config key, no command, nothing a reader can
+say. And the number that lands on the page is not three: one trackpad gesture
+sends a **burst** of `ScrollDown` events, each of which moves three, so a flick
+is twenty 縱. Whatever it becomes has to settle both halves — the step, and what
+the step is multiplied by.
 
 ### Switching between open buffers (#76)
 
