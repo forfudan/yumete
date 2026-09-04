@@ -1055,6 +1055,83 @@ shell, placeholders substituted as whole arguments, and a line that would not do
 what it says is a config error naming the file rather than a program that
 quietly does something else.
 
+### 15 · The second night: what six reviews had found, 2026-09-04
+
+The night's own review found more than one night could fix; this is the rest of
+it, in the order a reader meets the damage.
+
+**`w`/`b`/`e` stepped one 字 at a time through 繁體 prose.** The bundled word
+list was simplified-only — 抬頭、已經、時候、什麼 were all absent — so the
+motion this editor exists for did not work on the script its own manual, help
+and lesson are written in. The list now carries both, derived where the 簡繁
+mapping is one-to-one and written out by hand where it is not: conversion is
+what produced 大家傢 and 别彆人 on the first attempt, and a word nobody writes
+is worse than a word missing.
+
+**`)` and `}` ate the first character of the next sentence.** Every forward
+motion that lands on *the start of the next thing* has to stop one character
+short of it — `w` always did; these did not, so `)d` quietly corrupted the
+sentence after the one it deleted.
+
+**`1G` went to the last line.** The count was taken at the top of `on_key`, and
+`G` then asked whether a count had been typed. **`3gd` was accepted and
+ignored** — the comment beside it had promised vi's order for a year.
+
+**`t` was unreachable in the character grain**, which is exactly where the
+lesson tells the reader to press `t/`; **`t S` sorted a delimited file upwards**,
+silently doing the opposite of the key; and the `t` menus and fallbacks were
+missing half the keys they had.
+
+**Keys that did nothing said nothing**: `p` with an empty register, `R`, `Q`
+with no macro. And the two keys *this editor itself retired* — `Enter` and `*` —
+went silent, which is the one case where the reader is not coming from vi but
+from last week; the phrasebook now names what replaced them.
+
+**`C-Space` was never implemented.** The lesson opens with it, `:help` lists it,
+and the key fell through to the editor as an unbound `Ctrl(' ')`. The first
+thing this editor asks a new reader to press did nothing at all.
+
+**A plain-text novel had no outline.** 資治通鑑 is 700 chapters and not one `#`,
+so `:toc` said 「這個檔案沒有標題」 about exactly the file where 「go to chapter
+412」 is worth a key. Chapters written 第四百一十二卷 are found now — only when
+no markup heading was found, since a file that uses `#` has said how it marks a
+chapter — and a bare `:toc` opens the outline instead of joining 700 titles into
+one status line.
+
+**Typography.** A run of digits too long to set 縦中横 was packed two at a time,
+so 「2026」 read as 「20」 over 「26」 — two numbers; it is set one digit to a
+slot now, the way a Japanese book sets a long number in a 縱. A second reading
+on the same row was dropped whenever the first overran its base, which on 注音
+prose is most of them. And a group reading is centred over the word it reads
+(JLREQ §3.3.6) in both layouts, rather than pointing at its first character.
+
+**Two answers that disagreed.** `yumete-cjk` defaulted Ambiguous width to
+*wide* while `main.rs`'s `auto` fell back to *narrow*, so anything measuring
+before start-up finished laid the page out one way and drew it the other.
+
+**A preview server that was not tinymist was never adopted** — the orphan check
+compared against the literal string — and its pid note was written through
+whatever symlink happened to be sitting at a predictable path in `/tmp`. Both
+fixed; the note carries the program's name now. `:preview` on Markdown also
+failed the *second* time, because the export it runs refuses to overwrite.
+
+**`--shot`** draws one frame — the page exactly as the editor would set it — to
+standard output and exits. `:shot` needs a window, a GUI session and a person;
+this is the same picture for a headless machine, a bug report, or a reviewer.
+
+### 15 · Still open, 2026-09-04
+
+- **`？」` and `！」` are squeezed into one square** like `。」`. clreq §6.3.2
+  treats the full-width 問號/嘆號 differently from the 句號 group, and which
+  way a terminal should follow is a typographic judgement, not a bug fix.
+- **The 「hole」 branch in `zong.rs`** — a third consecutive mark that finds
+  both the margin and the pair-square taken still keeps a margin row with an
+  empty text square beside it. Rare, and what print does with three marks in a
+  row is worth asking a typesetter rather than guessing.
+- **The column-number row's contrast** on the chrome ground was raised as a
+  finding; measuring it properly means measuring the whole ladder, which is a
+  theme review rather than a patch.
+
 ### 14 · What was deliberately left undone, 2026-09-04
 
 Three items on the list were **not** implemented, and each for a reason worth
