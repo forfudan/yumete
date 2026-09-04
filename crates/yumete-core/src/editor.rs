@@ -10240,6 +10240,13 @@ impl Editor {
     fn replace_with_register(&mut self) {
         let text = self.recall();
         if text.is_empty() {
+            // A key that does nothing and says nothing is indistinguishable
+            // from a key that is broken — and the reader whose `y` went to a
+            // named register is the one most likely to press this.
+            self.status = match self.pending_register {
+                Some(name) => say!("暫存器 {0} 是空的", name),
+                None => say!("沒有取過東西——先 y 複製，或者 空格 p 從系統剪貼簿貼"),
+            };
             return;
         }
         let (start, end) = self.selection();
@@ -11163,7 +11170,11 @@ impl Editor {
     /// itself: `Q` recorded into a macro would otherwise recurse until the
     /// stack ran out.
     fn replay_macro(&mut self, count: usize) {
-        if self.replaying || self.macro_keys.is_empty() {
+        if self.replaying {
+            return;
+        }
+        if self.macro_keys.is_empty() {
+            self.status = say!("還沒有錄過——q 開始錄，再按 q 停");
             return;
         }
         let keys = self.macro_keys.clone();
@@ -11275,6 +11286,13 @@ impl Editor {
     fn paste(&mut self, after: bool) {
         let text = self.recall();
         if text.is_empty() {
+            // A key that does nothing and says nothing is indistinguishable
+            // from a key that is broken — and the reader whose `y` went to a
+            // named register is the one most likely to press this.
+            self.status = match self.pending_register {
+                Some(name) => say!("暫存器 {0} 是空的", name),
+                None => say!("沒有取過東西——先 y 複製，或者 空格 p 從系統剪貼簿貼"),
+            };
             return;
         }
         self.snapshot();

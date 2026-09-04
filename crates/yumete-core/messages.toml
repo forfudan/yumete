@@ -2162,3 +2162,15 @@ en = "go to a cell (t20-20g)"
 [[message]]
 zh = "從系統剪貼簿貼在前面"
 en = "paste before, from the system clipboard"
+
+[[message]]
+zh = "暫存器 {0} 是空的"
+en = "register {0} is empty"
+
+[[message]]
+zh = "沒有取過東西——先 y 複製，或者 空格 p 從系統剪貼簿貼"
+en = "nothing has been yanked — y copies, or Space p pastes from the system clipboard"
+
+[[message]]
+zh = "還沒有錄過——q 開始錄，再按 q 停"
+en = "nothing recorded yet — q starts recording, q again stops"
