@@ -400,7 +400,11 @@ fn put_slot(buf: &mut Buffer, x: u16, y: u16, symbol: &str, style: Style) {
     // *continuation* of a wide glyph, so it emits nothing and everything after
     // it on the row slides a column left — which paints the panel's ground
     // across its own border.
-    let symbol = if symbol.is_empty() { " " } else { symbol };
+    // A control character in a manuscript is not a glyph, it is an instruction
+    // to the terminal — see `crate::drawable`. It measures zero cells, so
+    // dropping it moves nothing on the page.
+    let clean = crate::drawable(symbol);
+    let symbol = if clean.is_empty() { " " } else { clean.as_ref() };
     // The trailing cell first: a wide symbol makes the renderer skip it, and a
     // half-width one leaves it as the styled other half of the slot.
     if let Some(cell) = buf.cell_mut((x + 1, y)) {
@@ -421,7 +425,11 @@ fn put_slot_right(buf: &mut Buffer, x: u16, y: u16, symbol: &str, style: Style) 
     if str_width(symbol) >= 2 {
         return put_slot(buf, x, y, symbol, style);
     }
-    let symbol = if symbol.is_empty() { " " } else { symbol };
+    // A control character in a manuscript is not a glyph, it is an instruction
+    // to the terminal — see `crate::drawable`. It measures zero cells, so
+    // dropping it moves nothing on the page.
+    let clean = crate::drawable(symbol);
+    let symbol = if clean.is_empty() { " " } else { clean.as_ref() };
     if let Some(cell) = buf.cell_mut((x, y)) {
         cell.set_symbol(" ").set_style(style);
     }

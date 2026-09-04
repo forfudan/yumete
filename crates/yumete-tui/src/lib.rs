@@ -95,7 +95,23 @@ pub fn frame_to_text(
     let backend = ratatui::backend::TestBackend::new(width, height);
     let mut terminal = ratatui::Terminal::new(backend).expect("a terminal over a buffer");
     let mut viewport = Seats::default();
-    editor.set_page(height.saturating_sub(2) as usize, width.max(1) as usize);
+    // **The page is settled the way the loop settles it**, or the picture is
+    // not of the page: without the wrap width a paragraph runs off the right
+    // edge and the shot shows a book with no second line in it. The 縱 length
+    // is the same question asked the other way round.
+    let areas = page_areas(editor, config, Rect::new(0, 0, width, height));
+    let page = areas.panes[editor.live_pane().min(1)];
+    let lines = editor.current_buffer().line_count();
+    if editor.layout() == WritingLayout::Vertical {
+        let look = vertical::Look::of(editor);
+        editor.set_zong_length(vertical::zong_length_for(config, page.height, lines, look));
+        let metrics = vertical::Metrics::new(config, page.height, lines, look);
+        editor.set_page(page.height as usize, metrics.capacity(page.width));
+    } else {
+        let gutter = gutter_width(lines, config.editor.line_numbers);
+        editor.set_wrap_width((page.width as usize).saturating_sub(gutter));
+        editor.set_page(page.height as usize, page.width.max(1) as usize);
+    }
     terminal
         .draw(|frame| draw(frame, editor, config, ime, &mut viewport))
         .expect("draw one frame");
@@ -110,7 +126,15 @@ pub fn frame_to_text(
             // A wide glyph owns the cell beside it, which the backend keeps as
             // a blank. Copying that blank out puts a space between every two
             // 漢字 — the one thing a picture of a Chinese page must not do.
-            x += yumete_cjk::str_width(symbol).max(1) as u16;
+            //
+            // **`drawn_width`, not `str_width`**: the cells were laid out by
+            // ratatui, which counts Ambiguous characters narrow whatever the
+            // editor was told. With `ambiguous_width = "wide"` the editor's
+            // own width says `—` owns two cells; the renderer put the next
+            // character in the second one, and stepping by the editor's answer
+            // silently dropped it — one character per em dash, on a page of
+            // Chinese prose.
+            x += yumete_cjk::drawn_width(symbol).max(1) as u16;
         }
         out.push_str(row.trim_end());
         out.push('\n');
@@ -1995,6 +2019,28 @@ fn draw_which_key(
 }
 
 /// Write `text` from `x`, stopping at `limit`, one cell per column./// Write `text` from `x`, stopping at `limit`, one cell per column.
+/// `text` with the characters a terminal would *obey* taken out.
+///
+/// **A manuscript is data, not instructions.** A file can contain `\x1b]0;…\x07`
+/// as easily as it can contain 「他抬頭」, and every one of those bytes used to
+/// be handed to the terminal verbatim: a title bar rewritten by opening a file,
+/// text hidden behind an SGR run, and on a terminal with a permissive OSC 52
+/// handler, a clipboard written by a page that was only ever *displayed*.
+///
+/// Removing them costs nothing on the page, which is why this is the whole fix:
+/// a control character measures zero cells ([`yumete_cjk::char_width`]), so
+/// every column, caret, wrap and click map already places the row as though it
+/// were not there. Newlines never reach a row, and tabs are expanded upstream.
+///
+/// Borrowed when the text is clean, which is every row of every real
+/// manuscript.
+fn drawable(text: &str) -> std::borrow::Cow<'_, str> {
+    match text.contains(|c: char| c.is_control()) {
+        false => std::borrow::Cow::Borrowed(text),
+        true => std::borrow::Cow::Owned(text.chars().filter(|c| !c.is_control()).collect()),
+    }
+}
+
 fn put_text(
     buf: &mut ratatui::buffer::Buffer,
     x: u16,
@@ -2004,7 +2050,8 @@ fn put_text(
     style: Style,
 ) {
     let mut at = x;
-    for g in yumete_cjk::graphemes(text) {
+    let text = drawable(text);
+    for g in yumete_cjk::graphemes(&text) {
         let w = yumete_cjk::grapheme_width(g).max(1) as u16;
         if at + w > limit {
             break;
@@ -2955,10 +3002,8 @@ fn draw_horizontal(
                 to += 1;
             }
             if shown[at] {
-                spans.push(Span::styled(
-                    chars[at..to].iter().collect::<String>(),
-                    style,
-                ));
+                let text: String = chars[at..to].iter().filter(|c| !c.is_control()).collect();
+                spans.push(Span::styled(text, style));
             }
             at = to;
         }
@@ -3276,7 +3321,12 @@ fn reading_line(
     let mut out = String::new();
     let mut col = 0usize;
     for group in &groups {
-        if group.base.1 <= start_in_line || group.base.0 >= start_in_line + chars.len() {
+        // **The row the base *begins* on owns the reading.** A group whose base
+        // starts before this row is a group the wrap cut in half, and drawing
+        // it again here put a second, complete copy of the reading over the
+        // tail — 「上海」 broken across two rows, `zaonhe` written above both.
+        // One reading, over the row the word starts on.
+        if group.base.0 < start_in_line || group.base.0 >= start_in_line + chars.len() {
             continue;
         }
         let i = group.base.0.saturating_sub(start_in_line);
@@ -5739,6 +5789,23 @@ mod tests {
         assert!(reading.contains("ㄩㄥˇ"), "{reading:?}");
         assert!(reading.contains("ㄏㄜˊ"), "the second reading too: {reading:?}");
         assert_eq!(row_text(&buffer, 1).trim_end(), "永和九年");
+    }
+
+    #[test]
+    fn a_reading_is_not_written_twice_when_the_wrap_cuts_its_word() {
+        // 橫排 has no ruby-aware wrap yet, so a group's base can be split
+        // across two rows. What must not happen is the *reading* being drawn
+        // in full over both halves — two readings of one word, and the second
+        // one over characters it does not read.
+        let mut editor = editor_with("一二三<ruby>上海<rt>zaonhe</rt></ruby>四五");
+        let mut config = Config::default();
+        config.editor.line_numbers = yumete_config::LineNumbers::None;
+        let buffer = render_with_ruby(&mut editor, &config, 10, 8);
+        let rows: Vec<String> = (0..buffer.area.height)
+            .map(|y| row_text(&buffer, y).trim_end().to_string())
+            .collect();
+        let times = rows.iter().filter(|r| r.contains("za")).count();
+        assert_eq!(times, 1, "one reading, not one per row: {rows:?}");
     }
 
     #[test]

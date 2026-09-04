@@ -102,11 +102,6 @@ fn main() -> ExitCode {
     yumete_core::set_ambiguous_wide(match config.editor.ambiguous_width {
         yumete_config::Ambiguity::Wide => true,
         yumete_config::Ambiguity::Narrow => false,
-        // A picture has no terminal to ask, and the page it is a picture *of*
-        // is Chinese prose in a CJK font, where `—` `…` `“ ”` take the square.
-        // Narrow there would shift every row that holds one and make the shot
-        // lie about the layout it was taken to show.
-        yumete_config::Ambiguity::Auto if shot.is_some() => true,
         yumete_config::Ambiguity::Auto => {
             yumete_tui::width::ask_the_terminal_about_width().unwrap_or(false)
         }
@@ -468,7 +463,8 @@ KEYS (Normal mode, Helix-style):
               inside/around a pair; ms surround, md delete, mr replace —
               「」『』（）《》【】〔〕 and the ASCII pairs
     / ? n N   search forward / backward; next / previous match
-    *         search for whatever is selected
+    g/ g?     find what is selected: jump to it / show it in the other pane
+    t/ t?     the same, down a table's columns (t2-10? names the columns)
     :         command line — Tab cycles the completion, and the list of
               commands appears above it and narrows as you type
               (:w  :w <path>  :q  :q!  :o <path>  :new

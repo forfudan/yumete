@@ -872,7 +872,24 @@ impl Config {
             if let Some(local) = local_config_path(&cwd) {
                 if let Ok(text) = fs::read_to_string(&local) {
                     match toml::from_str::<RawConfig>(&text) {
-                        Ok(parsed) => raw.merge(parsed),
+                        Ok(mut parsed) => {
+                            // **`screenshot` is the one setting that runs
+                            // through a shell**, and a `.yumete/` directory
+                            // travels with a manuscript — cloned, unzipped,
+                            // handed over by a collaborator. Everything else a
+                            // project may declare runs *without* a shell, with
+                            // whole-argument placeholders; this one cannot, so
+                            // a project does not get to set it. Said out loud
+                            // rather than dropped, or a writer whose own line
+                            // stopped working would never learn why.
+                            if parsed.editor.screenshot.take().is_some() {
+                                problems.push(format!(
+                                    "{}：screenshot 只認全域設定——它是唯一經過 shell 的一條",
+                                    local.display()
+                                ));
+                            }
+                            raw.merge(parsed);
+                        }
                         Err(err) => problems.push(Self::describe(&local, &err)),
                     }
                 }
