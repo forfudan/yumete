@@ -4,10 +4,16 @@
 # and lines beginning with "#" are ignored. Weights are relative frequencies —
 # higher means more common — used by the maximum-probability segmentation path.
 #
-# This is a compact everyday-prose list so word motions (w/b/e) and the
-# segmentation overlay work without any setup. A user may override it with a
-# richer "segmentation.txt" in the data directory, and the IME milestone will
-# feed Yume's full weight table here.
+# **This is the fallback, not the dictionary.** With Yume's data installed the
+# editor segments with Yume's own language model (`lang.ywl` / `lang.ygram`,
+# 繁簡混合, over a million entries) — that is what `w`/`b`/`e` actually use on a
+# machine that has run `scripts/build.sh`, and it reads both scripts. This list
+# is what is left when there is no data at all: a compact everyday-prose list so
+# the word motions and the segmentation overlay work with no setup. A user may
+# also override it with a richer "segmentation.txt" in the data directory.
+#
+# It was simplified-only until 2026-09-04, so *that* machine — and only that
+# machine — stepped through 繁體 one 字 at a time.
 
 # Pronouns & people
 我	60000
@@ -523,3 +529,150 @@
 因為	12000
 以為	5000
 成為	5000
+
+# ——— 小說的敘述語 · the words that carry narration ———
+#
+# Nine of the corpora in assets/articles, counted: 笑道 4,995 times, 說道
+# 2,787, 姑娘 2,415, 只見 1,433, 卻說 727. Without them `w` steps one 字 at a
+# time through the commonest word in the language after every line of
+# dialogue — which is what a novel is mostly made of.
+#
+# Rescaled onto this list's own 我 = 60000, so a `segmentation_threshold`
+# means one thing across the whole file.
+
+說道	3100
+说道	3800
+笑道	5500
+卻說	1000
+却说	1000
+且說	1000
+且说	1000
+只見	1600
+只见	1000
+忽見	1000
+忽见	1000
+忽聽	1000
+忽听	1000
+不覺	1000
+不觉	1000
+一面	2400
+一時	1000
+一时	1000
+便是	1600
+已是	1000
+卻是	1000
+却是	1000
+原來	1000
+原来	1000
+姑娘	2800
+丫頭	1100
+丫头	1000
+太太	2300
+老爺	1400
+老爷	1000
+少爺	1000
+少爷	1000
+奶奶	1400
+夫人	4900
+公子	2400
+娘子	1000
+婆子	1000
+小廝	1000
+媳婦	1000
+主子	1000
+大人	1000
+將軍	2500
+将军	1700
+皇上	1000
+如今	1200
+方纔	1000
+不由	1000
+不禁	1000
+只得	1100
+只好	1000
+自然	1700
+竟自	1000
+越發	1000
+越发	1000
+索性	1000
+心下	1000
+眼見	1000
+眼见	1000
+見了	1000
+见了	1000
+聽了	1200
+听了	1000
+說了	1000
+说了	1000
+走了	1000
+來了	1300
+来了	1200
+去了	3100
+罷了	1000
+罢了	1000
+起身	1200
+進去	1000
+进去	1000
+今日	1900
+昨日	1000
+明日	1000
+早已	1000
+從此	1000
+从此	1000
+此時	1000
+此时	1000
+少時	1000
+少时	1000
+須臾	1000
+须臾	1000
+頃刻	1000
+顷刻	1000
+一日	1000
+一夜	1000
+這日	1000
+說起	1000
+说起	1000
+說完	1000
+说完	1000
+說著	1300
+说着	1000
+想著	1000
+想着	1000
+聽著	1000
+听着	1000
+拿著	1000
+拿着	1000
+帶著	1000
+带着	1000
+坐著	1000
+坐着	1000
+站著	1000
+站着	1000
+走着	1000
+曉得	1000
+晓得	1000
+不知	5400
+不肯	1100
+不敢	2900
+不好	1400
+不成	1000
+如此	3500
+這般	1000
+这般	1000
+為何	1000
+为何	1000
+何必	1000
+兄弟	1700
+姊妹	1000
+家人	1000
+下人	1000
+眾人	1600
+众人	1000
+二人	2900
+三人	1100
+那人	1000
+此人	1000
+眾位	1000
+众位	1000
+諸位	1000
+诸位	1000
