@@ -292,6 +292,13 @@ pub fn run(
                         },
                     }
                 }
+                // **What a language was told to run** (Feature #197): the
+                // editor says which verb and which file, the config says what
+                // to run, and the front end is the only one that can run it.
+                if let Some(want) = editor.take_language_run() {
+                    let said = run_for_language(editor, config, &want);
+                    editor.set_status(said);
+                }
                 if let Some(want) = editor.take_preview_request() {
                     // Already running: hand back the address and open the page
                     // again. Killing it and starting another is a fresh compile
@@ -848,6 +855,97 @@ impl Job {
             said,
         })
     }
+}
+
+/// Run what a language declares for this verb (Feature #197).
+///
+/// **No shell.** The line is split by [`yumete_config::Runner::argv`] and the
+/// placeholders become whole arguments, so nothing in a file name can turn
+/// into a second command — which is what makes it safe for a *project's* config
+/// to declare these, and a project's config is where they belong: whether a
+/// `.typ` is formatted by `typstfmt` is a fact about this book, not about the
+/// editor.
+fn run_for_language(
+    editor: &mut Editor,
+    config: &Config,
+    want: &yumete_core::editor::LanguageRun,
+) -> String {
+    let Some(runner) = config
+        .language
+        .get(&want.language)
+        .and_then(|verbs| verbs.get(&want.verb))
+    else {
+        return say!(
+            "{0} 沒有說 {1} 要跑什麼——在設定裏寫 [language.{0}] {1} = …",
+            want.language,
+            want.verb
+        );
+    };
+    let file = want.path.display().to_string();
+    let Some(argv) = runner.argv(&file) else {
+        return say!("命令寫壞了：{0}", runner.run);
+    };
+    let Some((program, args)) = argv.split_first() else {
+        return say!("命令寫壞了：{0}", runner.run);
+    };
+    match runner.kind {
+        // The buffer goes in and comes back: the file on disk is not touched,
+        // so a formatter that fails cannot destroy anything, and `u` takes the
+        // formatting back like any other edit.
+        yumete_config::RunKind::Filter => {
+            let text = editor.current_buffer().text();
+            match run_program(program, args, Some(&text)) {
+                Ok(ran) if ran.ok => {
+                    editor.provide_pipe_output(&ran.said);
+                    say!("{0}：換好了", want.verb)
+                }
+                Ok(ran) => say!("沒有動你的字：{0}", ran.why()),
+                Err(err) => say!("跑不動：{0}", err),
+            }
+        }
+        // It reads and rewrites the file itself, so the buffer is re-read
+        // afterwards — and only when it is clean, because re-reading over
+        // unsaved changes is losing them.
+        yumete_config::RunKind::Once => {
+            if editor.current_buffer().is_modified() {
+                return say!("先存檔——外面的程序讀的是檔案");
+            }
+            match run_program(program, args, None) {
+                Ok(ran) if ran.ok => {
+                    let _ = editor.current_buffer_mut().reread();
+                    say!("{0}：跑完了", want.verb)
+                }
+                Ok(ran) => say!("{0}：{1}", want.verb, ran.why()),
+                Err(err) => say!("跑不動：{0}", err),
+            }
+        }
+        // A server is a life of its own; `:preview` owns that path.
+        yumete_config::RunKind::Server => {
+            say!("{0} 是個伺服器——用 :preview 開它", want.verb)
+        }
+    }
+}
+
+/// Run a program **directly**, with no shell between.
+fn run_program(program: &str, args: &[String], input: Option<&str>) -> io::Result<Ran> {
+    let mut child = std::process::Command::new(program)
+        .args(args)
+        .stdin(match input.is_some() {
+            true => std::process::Stdio::piped(),
+            false => std::process::Stdio::null(),
+        })
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()?;
+    if let (Some(text), Some(mut pipe)) = (input, child.stdin.take()) {
+        io::Write::write_all(&mut pipe, text.as_bytes())?;
+    }
+    let out = child.wait_with_output()?;
+    Ok(Ran {
+        ok: out.status.success(),
+        said: String::from_utf8_lossy(&out.stdout).into_owned(),
+        complained: String::from_utf8_lossy(&out.stderr).into_owned(),
+    })
 }
 
 /// Open a URL or a file the way the platform opens things.

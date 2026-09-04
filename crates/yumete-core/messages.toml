@@ -2070,3 +2070,43 @@ en = "an empty table: `table 3x4` is three columns and four rows"
 [[message]]
 zh = "行內註 ^[…]，不去文末"
 en = "an inline note ^[…], which does not go to the foot"
+
+[[message]]
+zh = "{0} 是個伺服器——用 :preview 開它"
+en = "{0} is a server — :preview starts it"
+
+[[message]]
+zh = "{0} 沒有說 {1} 要跑什麼——在設定裏寫 [language.{0}] {1} = …"
+en = "{0} does not say what {1} runs — write [language.{0}] {1} = … in the config"
+
+[[message]]
+zh = "{0}：換好了"
+en = "{0}: replaced"
+
+[[message]]
+zh = "{0}：跑完了"
+en = "{0}: done"
+
+[[message]]
+zh = "命令寫壞了：{0}"
+en = "that command line is broken: {0}"
+
+[[message]]
+zh = "照這種檔案在設定裏說的那樣格式化（[language.markdown] format = …）"
+en = "format this file the way the config says ([language.markdown] format = …)"
+
+[[message]]
+zh = "跑這種檔案在設定裏自己起名的那條命令"
+en = "run the command this language names in the config"
+
+[[message]]
+zh = "先存檔——外面的程序讀的是檔案"
+en = "save first — the program outside reads the file"
+
+[[message]]
+zh = "沒有動你的字：{0}"
+en = "your text was left alone: {0}"
+
+[[message]]
+zh = "跑不動：{0}"
+en = "could not run it: {0}"
