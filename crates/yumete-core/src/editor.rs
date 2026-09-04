@@ -4232,6 +4232,40 @@ impl Editor {
         }
     }
 
+    /// Where every cell's **box** begins and ends — its padding included.
+    ///
+    /// [`Self::row_cells`] answers what an edit takes; this answers what a
+    /// reader sees as one cell. The two differ only for a `|` table, where the
+    /// spaces around the content are the column's own width: tinting the
+    /// content alone leaves the tint ragged where the table is square, and an
+    /// **empty** cell — the one you are most likely to be standing in, because
+    /// you came here to fill it — has a content span of zero characters and
+    /// would not be drawn at all.
+    pub fn row_cell_boxes(&self, line: usize) -> Vec<(usize, usize)> {
+        let Some(view) = &self.table else {
+            return Vec::new();
+        };
+        let rope = self.current_buffer().rope();
+        if line >= rope.len_lines() {
+            return Vec::new();
+        }
+        let text = rope.line(line).to_string();
+        match view.shape {
+            Shape::Markdown => crate::mdtable::boxes(&text),
+            // A delimited row has no padding to include: the cells are already
+            // contiguous, delimiter to delimiter.
+            Shape::Delimited => crate::table::cells(&text, view.schema.delimiter),
+        }
+    }
+
+    /// The buffer range one cell's box covers, padding included.
+    pub fn cell_box(&self, line: usize, cell: usize) -> Option<(usize, usize)> {
+        let boxes = self.row_cell_boxes(line);
+        let &(a, b) = boxes.get(cell)?;
+        let start = self.current_buffer().rope().line_to_char(line);
+        Some((start + a, start + b))
+    }
+
     /// Which cell of which row the cursor is in.
     pub fn cell_position(&self) -> Option<(usize, usize)> {
         self.table.as_ref()?;

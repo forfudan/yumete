@@ -439,7 +439,7 @@ index, and a row with no number anywhere else is a row that got lost.
 | 226 | **A spreadsheet pasted into a table** | core | P2 | a TSV or CSV clipboard becoming rows. The one thing that would make a writer build a table here instead of in a spreadsheet — and Tab is refused outright today, so there is not even a wrong answer. `Event::Paste` already arrives whole (`paste_text`), so the work is recognising a grid in it and widening the table to fit. Called **high** by the review of #142 | Planned |
 | 227 | **`:table` on a selection, and CSV both ways** | core | P3 | a selected block of CSV becomes a `|` table, and a `|` table exports as CSV. `export.rs` has no CSV path at all. The quoting invariant the table mode already keeps generalises from delimiters to *cells*, which is the same machinery #253 wants | Planned |
 | 228 | **`t y` / `t p` for a whole column** | core | P3 | rows have `Y`; a column can only be moved one step at a time with `t <` / `t >`, so reordering four columns is twelve keystrokes and a mistake. Same shape as the row yank already written | Planned |
-| 229 | **The current cell is not drawn** | tui | P3 | Insert *is* constrained to the cell, but the prose renderer knows nothing about cells, so the only feedback that you are inside one is the column name in the status line. Since #212 the padding is drawn as ghost text, which is where a cell tint would also live | Planned |
+| 229 | **The current cell is not drawn** | tui | P3 | Insert *is* constrained to the cell, but the prose renderer knows nothing about cells, so the only feedback that you are inside one is the column name in the status line. Since #212 the padding is drawn as ghost text, which is where a cell tint would also live | Done |
 | 230 | **`？」` and `！」` squeezed into one square** | tui | P3 | treated like `。」`, but clreq §6.3.2 treats the full-width 問號/嘆號 differently from the 句號 group. Which way a terminal should follow is a typographic judgement, not a bug fix — wanted: the author's call, then a line in `zong.rs` | Planned |
 | 231 | **The 「hole」 branch in `zong.rs`** | tui | P3 | a third consecutive mark that finds both the margin and the pair-square taken still keeps a margin row with an empty text square beside it. Rare. What print does with three marks in a row is worth asking a typesetter rather than guessing | Planned |
 | 232 | **The column-number row's contrast** | tui | P3 | raised as a review finding on the chrome ground. Measuring it properly means measuring the whole ladder — a theme review rather than a patch, and 【墨香】 (§5.2 13) is the ladder it would measure | Planned |
@@ -1928,9 +1928,22 @@ the same review wanted and did not get:
   CSV path either. **medium**
 - **`t y` / `t p` for a whole column.** Rows have `Y`; a column can only be
   moved one step at a time. **medium**
-- **The current cell is not drawn** in a Markdown table — the prose renderer
-  knows nothing about cells, so the only feedback is the column name in the
-  status line, while Insert *is* constrained to the cell. **medium**
+- ~~**The current cell is not drawn**~~ Done, 2026-09-05 (#229). Both prose
+  pages — 橫 and 縱 — now lay a ground at `HEAD` under the cell the cursor is
+  in, one rung quieter than a selection so a selection inside the cell still
+  reads first. Two things it took to get right:
+  - **The box, not the content.** `Editor::row_cell_boxes` answers pipe to
+    pipe, padding included, where `row_cells` answers what an edit takes. The
+    two differ only for a `|` table, and they differ where it matters most: an
+    **empty** cell — the one you are most likely to be standing in, because you
+    came here to fill it — has a content span of zero characters and would not
+    be drawn at all.
+  - **The #212 ghost padding is part of the cell.** The tint has to reach the
+    columns the file does not hold, or the one drawing that is *about*
+    alignment is the one that looks ragged.
+
+  A whole-file grid draws its own cell already (`tui/table.rs`) and is left
+  alone; so is the peek pane, whose buffer the cursor is not in.
 - ~~**Messages.**~~ Done — every one of them is Chinese now. What remains is
   the *mechanism* (`language = "zh"|"en"`), which is §5.2 group 9's last item.
 
