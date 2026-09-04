@@ -1453,13 +1453,9 @@ fn settle_inline_candidate(editor: &mut Editor, ime: &ImeSession) {
     // dirty by a `set_ghost` that changes nothing, since both layout memos are
     // keyed on the runs.
     if want.is_empty() {
-        // Cleared outright, not only when there is something to clear:
-        // `has_ghost` stopped meaning "a candidate is stored" the day the
-        // padding that squares a table up became ghost too (#212), and that
-        // padding is **derived**, so asking it here would clear the candidate
-        // once per frame on every page with a table on it. Setting an empty
-        // list that is already empty changes no key: both memos are keyed on
-        // the runs themselves.
+        // Cleared outright, not only when there is something to clear.
+        // Setting an empty list that is already empty changes no key: both
+        // memos are keyed on the runs themselves.
         editor.set_ghost(Vec::new());
         return;
     }
@@ -2627,10 +2623,12 @@ fn text_at(
             // cells off on every paragraph's first row.
             let fold = |line: usize| editor.line_is_folded(line);
             let ghost = |line: usize| editor.ghost_on_line(line);
+            let typed = |line: usize| editor.typed_ghost_on_line(line);
             let measure = wrap::Measure::new(width, &hide)
                 .with_indent(editor.paragraph_indent())
                 .with_folds(&fold)
                 .with_ghost(&ghost)
+                .with_typed_ghost(&typed)
                 .with_open_line(editor.open_line());
             // The same walk the page was drawn with: a row with a reading
             // over it takes two screen rows, so counting rows from the top
@@ -3180,10 +3178,12 @@ fn draw_horizontal(
     // one. Here it is only *drawn*.
     let fold = |line: usize| editor.line_is_folded(line);
     let ghost = |line: usize| editor.ghost_on_line(line);
+    let typed = |line: usize| editor.typed_ghost_on_line(line);
     let measure = wrap::Measure::new(width, &hide)
         .with_indent(editor.paragraph_indent())
         .with_folds(&fold)
         .with_ghost(&ghost)
+        .with_typed_ghost(&typed)
         .with_open_line(editor.open_line());
 
     // A pane that is only being read has no cursor: it is drawn from the
@@ -5435,7 +5435,7 @@ mod tests {
         // …so nothing is drawn into the text while it is up: two surfaces
         // saying the same thing is the thing this editor keeps taking apart.
         settle_inline_candidate(&mut editor, &ime);
-        assert!(!editor.has_ghost());
+        assert!(!editor.has_candidate());
 
         // The word lands, and the panel goes with it.
         ime.space();
@@ -5478,7 +5478,7 @@ mod tests {
         ime.set_panel_display(PanelDisplay::Bare);
         ime.input('b');
         settle_inline_candidate(&mut editor, &ime);
-        assert!(!editor.has_ghost(), "nothing goes into the manuscript");
+        assert!(!editor.has_candidate(), "nothing goes into the manuscript");
         assert_eq!(hud_line(&editor, &ime), "", "nor beside the caret");
 
         let config = Config::default();

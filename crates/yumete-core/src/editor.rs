@@ -379,6 +379,11 @@ struct PadKey {
     selection: (usize, usize),
     render: Render,
     ruby: Dialects,
+    /// What comes off the page depends on how the file is being read, and
+    /// `:syntax` changes that without touching a byte of it — so a table drawn
+    /// with the backticks hidden stayed drawn that way after `:syntax text`
+    /// put them back, one cell ragged per hidden character.
+    syntax: crate::syntax::Syntax,
 }
 
 /// A file being read as a grid.
@@ -1984,22 +1989,37 @@ impl Editor {
     /// Ordered by column, so the renderer, the wrap and the mouse walk it the
     /// same way.
     pub fn ghost_on_line(&self, line: usize) -> Vec<(usize, String)> {
-        let mut runs: Vec<(usize, String)> = self.table_padding_on_line(line);
-        runs.extend(
-            self.ghost
-                .iter()
-                .filter(|&&(l, _, _)| l == line)
-                .map(|(_, at, text)| (*at, text.clone())),
-        );
+        let mut runs: Vec<(usize, String)> = self.typed_ghost_on_line(line);
+        runs.extend(self.table_padding_on_line(line));
+        // Stable, so that at a shared anchor the candidate keeps its place
+        // ahead of the padding.
         runs.sort_by_key(|&(at, _)| at);
         // **One run per anchor.** Two runs standing before the same character
         // are two answers to "what is drawn here", and the caret, the click
-        // map and the wrap would each pick their own. The padding is drawn
-        // first because it is the page the writer is typing onto.
+        // map and the wrap would each pick their own. The candidate is drawn
+        // first because it continues the word: the padding's job is to reach
+        // the pipe, so it belongs on the far side of what was typed.
         runs.dedup_by(|(at, text), (kept, held)| {
             (*at == *kept).then(|| held.push_str(text)).is_some()
         });
         runs
+    }
+
+    /// The part of the ghost on `line` that the writer **typed**: the inline
+    /// candidate, and nothing derived.
+    ///
+    /// The caret's own page. A run is drawn before the character it is
+    /// anchored at, and a caret resting on that character stands after the
+    /// candidate — you typed it — but *before* the padding that reaches from
+    /// the same anchor to the pipe. Told apart here so [`crate::wrap`] can put
+    /// the caret between them; everything else wants them as one page and
+    /// asks [`Self::ghost_on_line`].
+    pub fn typed_ghost_on_line(&self, line: usize) -> Vec<(usize, String)> {
+        self.ghost
+            .iter()
+            .filter(|&&(l, _, _)| l == line)
+            .map(|(_, at, text)| (*at, text.clone()))
+            .collect()
     }
 
     /// Whether `|` tables are squared up as the page draws them (Feature #212).
@@ -2037,31 +2057,37 @@ impl Editor {
         if !self.table_padding_on() {
             return Vec::new();
         }
-        let Some(text) = self.line_text(line) else {
-            return Vec::new();
-        };
-        if !crate::mdtable::is_row(&text) || self.block_of(line).is_literal() {
+        if !self.opens_a_row(line) || self.block_of(line).is_literal() {
             return Vec::new();
         }
-        let Some(region) = crate::mdtable::region(|i| self.line_text(i), line) else {
-            return Vec::new();
-        };
         let buffer = self.current_buffer();
-        let key = PadKey {
+        let key = |first, last| PadKey {
             buffer: buffer.id(),
             revision: buffer.revision(),
-            first: region.first,
-            last: region.last,
+            first,
+            last,
             cursor: self.cursor,
             selection: self.selection(),
             render: self.render,
             ruby: self.ruby,
+            syntax: buffer.syntax(),
         };
+        // **The memo answers before the region is worked out.** Finding where
+        // the table starts and ends is a walk to both ends of it, and this is
+        // asked of every line the page touches, several times a frame: on the
+        // 223-row table in this project's own `development.md` that walk alone
+        // was 15 ms a frame. A line inside the remembered region needs no walk
+        // — that is what the region *is*.
         if let Some((cached, runs)) = self.pad_cache.borrow().as_ref() {
-            if *cached == key {
-                return runs.get(line - region.first).cloned().unwrap_or_default();
+            if cached.first <= line && line <= cached.last && *cached == key(cached.first, cached.last)
+            {
+                return runs.get(line - cached.first).cloned().unwrap_or_default();
             }
         }
+        let Some(region) = crate::mdtable::region(|i| self.line_text(i), line) else {
+            return Vec::new();
+        };
+        let key = key(region.first, region.last);
         // The whole table at once: every row's padding is decided by the
         // widest cell in each column, so there is no such thing as one row's
         // answer on its own.
@@ -2074,31 +2100,14 @@ impl Editor {
         answer
     }
 
-    /// Whether anything at all is drawn that the file does not contain.
+    /// Whether an inline candidate is standing on the page.
     ///
-    /// The page is measured differently when it is, so the cheap answer is
-    /// worth having: a frame with no candidate on it pays nothing.
-    pub fn has_ghost(&self) -> bool {
-        !self.ghost.is_empty() || (self.table_padding_on() && self.any_table_row())
-    }
-
-    /// Whether any line of the document is a `|` table row.
-    ///
-    /// Read off the block scan, which is done once per edit anyway — and a
-    /// novel with no table in it is the case that has to stay cheap, since it
-    /// is asked once a frame.
-    fn any_table_row(&self) -> bool {
-        self.scan_blocks();
-        let key = (
-            self.current_buffer().id(),
-            self.current_buffer().revision(),
-        );
-        match self.block_cache.borrow().as_ref() {
-            Some((cached, blocks)) if *cached == key => {
-                blocks.iter().any(|b| *b == crate::markdown::Block::Table)
-            }
-            _ => false,
-        }
+    /// Only the candidate. It used to be "anything the file does not contain",
+    /// which stopped being a useful question the day the padding that squares
+    /// a table up became ghost too (#212): that padding is **derived**, it is
+    /// on nearly every page of documentation, and no caller ever meant it.
+    pub fn has_candidate(&self) -> bool {
+        !self.ghost.is_empty()
     }
 
     /// Put `runs` on the page in place of whatever was there.
@@ -3608,6 +3617,22 @@ impl Editor {
     fn line_text(&self, line: usize) -> Option<String> {
         let rope = self.current_buffer().rope();
         (line < rope.len_lines()).then(|| rope.line(line).to_string())
+    }
+
+    /// Whether `line` reads as a `|` table row, **without copying it out**.
+    ///
+    /// The same test as [`crate::mdtable::is_row`], asked of the rope: a line
+    /// here is a paragraph and a paragraph is routinely a chapter, so
+    /// materialising one to look at its first character cost 44 µs a call on a
+    /// half-million-character paragraph — and every line the page touches is
+    /// asked, several times a frame, in a novel with no table in it at all.
+    fn opens_a_row(&self, line: usize) -> bool {
+        let rope = self.current_buffer().rope();
+        if line >= rope.len_lines() {
+            return false;
+        }
+        let mut chars = rope.line(line).chars().skip_while(|c| c.is_whitespace());
+        chars.next() == Some('|') && chars.any(|c| !c.is_whitespace())
     }
 
     /// The Markdown table the cursor is in — worked out afresh, never stored.
@@ -11517,10 +11542,12 @@ impl Editor {
             // did not know what is off the page.
             let width = self.wrap_width().unwrap_or(crate::wrap::NO_WRAP);
             let ghost = |line: usize| self.ghost_on_line(line);
+            let typed = |line: usize| self.typed_ghost_on_line(line);
             let m = crate::wrap::Measure::new(width, &hide)
                 .with_indent(self.paragraph_indent())
                 .with_folds(&fold)
                 .with_ghost(&ghost)
+                .with_typed_ghost(&typed)
                 .with_open_line(self.open_line());
             crate::wrap::column_of(rope, self.cursor, m)
         };
@@ -11551,10 +11578,12 @@ impl Editor {
             // what is off the page.
             let width = self.wrap_width().unwrap_or(crate::wrap::NO_WRAP);
             let ghost = |line: usize| self.ghost_on_line(line);
+            let typed = |line: usize| self.typed_ghost_on_line(line);
             let m = crate::wrap::Measure::new(width, &hide)
                 .with_indent(self.paragraph_indent())
                 .with_folds(&fold)
                 .with_ghost(&ghost)
+                .with_typed_ghost(&typed)
                 .with_open_line(self.open_line());
             if up {
                 crate::wrap::prev_row(rope, self.cursor, m, self.goal_column)
@@ -12771,7 +12800,7 @@ mod tests {
     #[test]
     fn ghost_runs_are_held_wholesale_and_answered_by_line() {
         let mut ed = typed("春夏\n秋冬\n");
-        assert!(!ed.has_ghost(), "a page with no candidate on it pays nothing");
+        assert!(!ed.has_candidate(), "a page with no candidate on it pays nothing");
         assert!(ed.ghost_on_line(0).is_empty());
 
         // Out of order on the way in, in column order on the way out: the
@@ -12781,7 +12810,7 @@ mod tests {
             (1, 1, "候".to_string()),
             (0, 1, "候".to_string()),
         ]);
-        assert!(ed.has_ghost());
+        assert!(ed.has_candidate());
         assert_eq!(
             ed.ghost_on_line(0),
             vec![(1, "候".to_string()), (2, "補".to_string())]
@@ -12791,7 +12820,7 @@ mod tests {
 
         // Wholesale, never appended — a committed candidate leaves nothing.
         ed.set_ghost(Vec::new());
-        assert!(!ed.has_ghost());
+        assert!(!ed.has_candidate());
         assert!(ed.ghost_on_line(0).is_empty());
     }
 
@@ -15098,7 +15127,6 @@ mod tests {
         for line in 1..4 {
             assert!(ed.ghost_on_line(line).is_empty(), "line {line}");
         }
-        assert!(!ed.has_ghost(), "and the page pays nothing for it");
     }
 
     /// #212: the two settings that mean "draw me the file".
@@ -15106,20 +15134,22 @@ mod tests {
     fn the_padding_goes_away_when_the_page_is_the_file() {
         let mut ed = Editor::new();
         ed.add_buffer(crate::Buffer::from_text("|甲|乙|\n|---|---|\n|一二三|四|\n"));
-        assert!(ed.has_ghost());
+        assert!(!ed.ghost_on_line(0).is_empty());
 
         // `:render off` is a request for the file exactly as it is.
         ed.execute("render off").unwrap();
         assert!(ed.ghost_on_line(0).is_empty(), "{:?}", ed.ghost_on_line(0));
-        assert!(!ed.has_ghost());
         ed.execute("render on").unwrap();
-        assert!(ed.has_ghost());
+        assert!(!ed.ghost_on_line(0).is_empty());
 
         // Down a 縱 every character takes one cell, so display width squares
         // nothing up.
         ed.set_layout(Layout::Vertical);
         assert!(ed.ghost_on_line(0).is_empty());
-        assert!(!ed.has_ghost());
+
+        // Neither is a candidate: `has_candidate` answers only for what the
+        // writer typed, and the padding is derived.
+        assert!(!ed.has_candidate());
     }
 
     /// #212 with #211: a candidate and the padding on the same line.
@@ -15137,9 +15167,67 @@ mod tests {
         let mut anchors: Vec<usize> = runs.iter().map(|&(at, _)| at).collect();
         anchors.dedup();
         assert_eq!(anchors.len(), runs.len(), "one run per anchor: {runs:?}");
-        assert!(
-            runs.iter().any(|(_, text)| text.contains('候')),
-            "{runs:?}"
+        // **The candidate comes first in it.** It continues the word the caret
+        // is in; the padding's job is to reach the closing pipe, so it belongs
+        // on the far side of what was typed.
+        let held = runs
+            .iter()
+            .find(|(_, text)| text.contains('候'))
+            .map(|(_, text)| text.clone())
+            .unwrap_or_else(|| panic!("{runs:?}"));
+        assert!(held.starts_with('候'), "{held:?}");
+    }
+
+    /// #212 with #211: the caret stands between the two of them.
+    ///
+    /// A candidate and the padding are drawn at the same anchor, and the caret
+    /// goes *after* what was typed and *before* the space that reaches to the
+    /// pipe. Counting the whole run drew the caret on the pipe after every
+    /// keystroke in a table — even with no candidate at all, since the one
+    /// space off a pipe is anchored exactly where a caret typing at the end of
+    /// a cell is.
+    #[test]
+    fn the_caret_stands_after_what_was_typed_and_before_the_padding() {
+        let mut ed = Editor::new();
+        ed.add_buffer(crate::Buffer::from_text("|a|bbb|
+|-|-|
+|cc|d|
+"));
+        // Typing at the end of the first cell: the caret is on the `|` at
+        // index 2, and the padding that widens that cell is anchored there.
+        ed.set_cursor(2);
+        let hide = |line: usize| ed.hidden_on_line(line);
+        let fold = |line: usize| ed.line_is_folded(line);
+        let ghost = |line: usize| ed.ghost_on_line(line);
+        let typed = |line: usize| ed.typed_ghost_on_line(line);
+        let m = crate::wrap::Measure::new(crate::wrap::NO_WRAP, &hide)
+            .with_folds(&fold)
+            .with_ghost(&ghost)
+            .with_typed_ghost(&typed);
+        let at = crate::wrap::position(ed.current_buffer().rope(), 2, m);
+        // `| a` — the caret is right after the `a` it just typed, not out on
+        // the pipe two cells further along.
+        assert_eq!(at.column, 3, "{:?}", ed.ghost_on_line(0));
+    }
+
+    /// #212: `:syntax` changes what comes off the page without touching a byte
+    /// of the file, so the padding memo has to be keyed on it too.
+    #[test]
+    fn the_padding_follows_the_syntax_the_file_is_read_with() {
+        let mut ed = Editor::new();
+        ed.add_buffer(crate::Buffer::from_text("| `a` | bbbb |
+| --- | ---- |
+| cc | d |
+"));
+        ed.execute("render full").unwrap();
+        let with_markup_off = ed.ghost_on_line(0);
+        ed.execute("syntax text").unwrap();
+        let as_plain_text = ed.ghost_on_line(0);
+        // With the backticks back on the page the first cell is two cells
+        // wider, so it cannot want the same padding.
+        assert_ne!(
+            with_markup_off, as_plain_text,
+            "the memo answered for the other syntax"
         );
     }
 

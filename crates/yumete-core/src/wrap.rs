@@ -88,6 +88,16 @@ pub struct Measure<'a> {
     /// inline candidate drawn by the renderer alone would put the caret, `j`,
     /// the mouse and the wrap all on different pages.
     ghost: &'a dyn Fn(usize) -> Vec<(usize, String)>,
+    /// The part of `ghost` that stands **before the caret** at its own anchor.
+    ///
+    /// Two things are drawn at the same anchor and the caret goes between
+    /// them: the inline candidate, which the writer typed and the caret is at
+    /// the end of, and the padding that squares a table up, which reaches from
+    /// there to the closing pipe. Counting both put the caret on the pipe
+    /// after every keystroke in a table; counting neither would put it back
+    /// inside the candidate. So the caret asks this, and everything else —
+    /// where a row breaks, what a click means — asks `ghost`.
+    typed: &'a dyn Fn(usize) -> Vec<(usize, String)>,
 }
 
 /// A page with nothing hidden, for callers that show the source as it is.
@@ -109,6 +119,7 @@ impl<'a> Measure<'a> {
             indent: 0,
             open: None,
             ghost: NOTHING_GHOSTED,
+            typed: NOTHING_GHOSTED,
         }
     }
 
@@ -121,6 +132,7 @@ impl<'a> Measure<'a> {
             indent: 0,
             open: None,
             ghost: NOTHING_GHOSTED,
+            typed: NOTHING_GHOSTED,
         }
     }
 
@@ -193,8 +205,21 @@ impl<'a> Measure<'a> {
 
     /// The same measure, with `ghost` naming the text drawn into each line
     /// that the file does not contain.
+    ///
+    /// All of it counts as standing before the caret until
+    /// [`Self::with_typed_ghost`] says which part of it does.
     pub fn with_ghost(self, ghost: &'a dyn Fn(usize) -> Vec<(usize, String)>) -> Measure<'a> {
-        Measure { ghost, ..self }
+        Measure {
+            ghost,
+            typed: ghost,
+            ..self
+        }
+    }
+
+    /// The same measure, with `typed` naming the part of the ghost the writer
+    /// typed — the part the caret stands after. See [`Self::typed`].
+    pub fn with_typed_ghost(self, typed: &'a dyn Fn(usize) -> Vec<(usize, String)>) -> Measure<'a> {
+        Measure { typed, ..self }
     }
 
     /// The ghost text on `line`, anchored at columns within it, in order.
@@ -205,6 +230,11 @@ impl<'a> Measure<'a> {
         let mut runs = (self.ghost)(line);
         runs.sort_by_key(|&(at, _)| at);
         runs
+    }
+
+    /// The typed part of the ghost on `line` — what the caret stands after.
+    fn typed_on(self, line: usize) -> Vec<(usize, String)> {
+        (self.typed)(line)
     }
 }
 
@@ -724,14 +754,25 @@ pub fn position(rope: &Rope, pos: usize, m: Measure) -> Position {
         .map(|(_, w)| w)
         .sum();
     // **Ghost text before the caret is page the caret is past.** A run stands
-    // before the character it is anchored at, so the caret resting *on* that
-    // character sits after it — which is what an inline candidate wants: you
-    // typed it, the caret is at its end.
+    // before the character it is anchored at, so a run anchored anywhere to
+    // the left of the caret is wholly behind it.
     let ghost = m.ghost_on(line);
     let column = column
         + ghost
             .iter()
-            .filter(|&&(a, _)| a >= row_start && a <= col)
+            .filter(|&&(a, _)| a >= row_start && a < col)
+            .map(|(_, text)| yumete_cjk::str_width(text))
+            .sum::<usize>();
+    // At the caret's *own* anchor the two kinds part company: the candidate is
+    // what you typed and the caret is at its end, while the padding that
+    // reaches to a table's closing pipe belongs on the far side of the caret.
+    // Counting the whole run here drew the caret on the pipe after every
+    // keystroke in a table — even an unpadded `|ab|`, whose one space off the
+    // pipe is anchored exactly where the caret is.
+    let column = column
+        + m.typed_on(line)
+            .iter()
+            .filter(|&&(a, _)| a == col)
             .map(|(_, text)| yumete_cjk::str_width(text))
             .sum::<usize>();
     // The indent is real page: a caret on the paragraph's first character sits
