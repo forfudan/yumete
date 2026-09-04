@@ -1447,13 +1447,15 @@ const SYNTAXES: &[Word] = &[
 /// leaving out, and neither should be a special case.
 const THEMES: &[Word] = &[
     Word {
-        name: "moxiang",
+        // 墨香
+        name: "ink",
         help: "墨香：黑墨、白金墨、金墨、紅墨，其餘的色階都算出來",
         needs: &[],
         then: Args::Words(MOODS),
     },
     Word {
-        name: "heibai",
+        // 黑白
+        name: "bw",
         help: "黑白：只有黑、白和灰——輕重說話，顏色不說",
         needs: &[],
         then: Args::Words(MOODS),
@@ -2631,7 +2633,7 @@ mod tests {
         );
         // The menu lists them apart, too.
         let themes: Vec<String> = complete("theme ").iter().map(Choice::written).collect();
-        assert_eq!(themes, ["moxiang", "heibai"]);
+        assert_eq!(themes, ["ink", "bw"], "the menu lists what can be typed");
         let moods: Vec<String> = complete("appearance ").iter().map(Choice::written).collect();
         assert_eq!(moods, ["system", "dark", "light"]);
         // The shortest spelling the menu offers has to work.
@@ -2686,21 +2688,30 @@ mod tests {
         // The name, and the mood with or without it. A name the words know is
         // canonicalised; anything else is passed on as typed, because which
         // themes exist is the front end's business.
-        for line in [":theme moxiang dark", ":theme mo d"] {
+        for line in [":theme ink dark", ":theme in d"] {
             assert_eq!(
                 theme(line),
                 Command::Theme {
-                    name: Some("moxiang".into()),
+                    name: Some("ink".into()),
                     mood: Some(Dark)
                 },
                 "{line}"
             );
         }
+        // A name is ASCII — a command line is typed with the IME off — and the
+        // pinyin answers for the hand that thinks in Chinese.
         assert_eq!(
-            theme(":theme 墨香 dark"),
+            theme(":theme ink dark"),
             Command::Theme {
-                name: Some("墨香".into()),
+                name: Some("ink".into()),
                 mood: Some(Dark)
+            }
+        );
+        assert_eq!(
+            theme(":theme moxiang"),
+            Command::Theme {
+                name: Some("moxiang".into()),
+                mood: None
             }
         );
         assert_eq!(

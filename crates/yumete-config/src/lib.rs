@@ -553,11 +553,18 @@ impl ThemeConfig {
     /// when every colour has been taken away and the design has to hold
     /// anyway, which is also what a reader with a monochrome terminal, or with
     /// colour-blindness, is left with.
+    /// **A theme's name is ASCII**, because a command line is: `:theme ink`
+    /// has to be typeable with the IME off, which is where a reader who has
+    /// just opened the editor is. The pinyin is an alias for the hand that
+    /// thinks in the Chinese name, and the Chinese name itself lives in the
+    /// comment beside it, which is where a name that cannot be typed belongs.
     pub fn named(name: &str) -> Option<ThemeConfig> {
         match name.trim().to_ascii_lowercase().as_str() {
-            "墨香" | "moxiang" => Some(ThemeConfig::default()),
-            "黑白" | "heibai" | "mono" => Some(ThemeConfig {
-                name: "黑白".to_string(),
+            // 墨香 — warm ink on a deep ground.
+            "ink" | "moxiang" => Some(ThemeConfig::default()),
+            // 黑白 — the same design with every colour taken away.
+            "bw" | "heibai" | "mono" => Some(ThemeConfig {
+                name: "bw".to_string(),
                 // A true neutral, and no accident of temperature anywhere: the
                 // ink is off-white so it does not glare, the ground is off-
                 // black so it is not a hole in the screen.
@@ -588,7 +595,7 @@ impl ThemeConfig {
 impl Default for ThemeConfig {
     fn default() -> Self {
         ThemeConfig {
-            name: "墨香".to_string(),
+            name: "ink".to_string(),
             mode: Mode::Auto,
             ground: Ground::Paint,
             // **The page is cool and the writing is near-white.** 墨香's own
@@ -1619,7 +1626,7 @@ mod tests {
         assert_eq!(c.editor.tab_width, 4);
         assert_eq!(c.editor.line_numbers, LineNumbers::Absolute);
         assert_eq!(c.editor.scrolloff, 3);
-        assert_eq!(c.theme.name, "墨香");
+        assert_eq!(c.theme.name, "ink", "the name is ASCII; 墨香 is what it means");
         assert_eq!(c.theme.dark.ink, (0xE8, 0xE4, 0xDA));
         assert!(c.keys.normal.is_empty());
     }
