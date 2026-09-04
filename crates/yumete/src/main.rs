@@ -11,7 +11,7 @@ use std::process::ExitCode;
 
 use yumete_config::Layout;
 use yumete_core::{Editor, TextStore};
-use yumete_ime::{ImeSession, Scheme};
+use yumete_ime::{CommitStrategy, ImeSession, Scheme};
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
@@ -236,17 +236,29 @@ fn main() -> ExitCode {
     let page_size = config.panel.page_size;
     let chaifen = config.editor.show_chaifen;
     let start_scheme = config.ime.start;
+    // 上屏方式 (Feature #209). `None` is 「whatever the scheme's own default is」
+    // and has to stay a `None` all the way down, or a config that says nothing
+    // would pin 拼音's 整句 onto every 形碼 scheme.
+    let commit = config
+        .ime
+        .commit
+        .as_deref()
+        .and_then(CommitStrategy::from_str_tag);
     // Read after the first frame rather than before it — see `yumete_tui::
     // Deferred`. Everything it loads is a keystroke away; the page is not.
     let load = move |ime: &mut ImeSession| -> String {
         *ime = ImeSession::language_only(wanted);
         ime.set_page_size(page_size);
-        match start_scheme {
+        let said = match start_scheme {
             // …unless the config says this is a session for writing 漢字,
             // which for the author of an input method it usually is.
             true => switch_scheme_at_startup(ime, wanted, (page_size, chaifen)),
             false => String::new(),
-        }
+        };
+        // After, not before: the line above may have replaced the session
+        // wholesale with one built from the installed tables.
+        ime.set_commit_strategy(commit);
+        said
     };
     // A preview prints and exits: there is no frame to be after, so it is read
     // now. So does `--timing`, which is measuring exactly this.

@@ -2302,3 +2302,43 @@ en = "no table before this one"
 [[message]]
 zh = "第 {0} 行的表格"
 en = "the table on line {0}"
+
+[[message]]
+zh = "上屏方式：延遲（頂字）、唯一、整句"
+en = "commit method: delayed (頂字), unique, whole-sentence"
+
+[[message]]
+zh = "延遲上屏（頂字）：碼成立了先等着，下一鍵拼不成碼才把前面那段頂上去"
+en = "延遲上屏 (頂字): a finished code waits, and goes when the next key cannot continue it"
+
+[[message]]
+zh = "唯一上屏（自動、auto）：碼成立而且只有一個候選，就直接上屏"
+en = "唯一上屏 (auto): a finished code with one candidate goes straight to the page"
+
+[[message]]
+zh = "整句輸入：一路打下去，空格確認整句，從不自己上屏"
+en = "整句輸入: type on, Space confirms the sentence; nothing goes on its own"
+
+[[message]]
+zh = "上屏方式：{0}"
+en = "commit method: {0}"
+
+[[message]]
+zh = "延遲（頂字）"
+en = "delayed (頂字)"
+
+[[message]]
+zh = "唯一"
+en = "unique"
+
+[[message]]
+zh = "整句"
+en = "whole-sentence"
+
+[[message]]
+zh = "沒有「{0}」這種上屏方式——delayed、unique、fluency"
+en = "no commit method '{0}' — delayed, unique, fluency"
+
+[[message]]
+zh = "{0} 只能整句上屏（沒有碼表可以逐段查），上屏方式仍然是{1}"
+en = "{0} can only be typed as whole sentences — no 碼表 to look a segment up in — so the commit method is still {1}"

@@ -869,6 +869,20 @@ Alacritty、Konsole。Apple Terminal 報不出單獨的 Shift。
 
 `:yume chaifen` 打開高亮候選的**二重注解**（拆分＋編碼）。
 
+**上屏方式**用 `:yume commit delayed|unique|fluency`（不寫模式就是問現在是哪一個）：
+
+- **`delayed`** 延遲上屏（頂字）——碼成立了先等着，下一鍵拼不成碼時纔把前面那段頂上去。
+- **`unique`** 唯一上屏（也可以寫 `auto`）——碼成立而且只有一個候選，直接上屏。
+- **`fluency`** 整句——一路打下去，空格確認整句，從不自己上屏。
+
+三個名字是 yume 自己的（`CommitStrategy`），三層合成也在 yume 的核心裏做，所以這裏選的
+那一個，在 macOS／Windows 的輸入法面板裏是同一件事。選了以後**換方案不會丟**；只有拼音
+例外——它沒有碼表可以逐段查，永遠是整句，命令會直接說出來而不是假裝設上了。配置檔的
+`[ime] commit` 是同一個設置，不寫就交給輸入法自己按方案定。
+
+注意 `:yume c` 現在同時像 `chaifen` 和 `commit`，兩個都不算——`:yume ch` 與 `:yume co`
+各自明確（打 `:yume c` 再按空格，選單會把兩個都列出來）。
+
 **換方案**用 `:yume scheme lingming|xingchen|qingyun|riyue|pinyin`，或者配置檔的
 `[ime] scheme`。yumete 自帶靈明（編進二進制）；其餘四個方案的碼表跟 yume 一樣，從
 yuhao-assess-data 下載後裝進資料目錄（yume 的 `scripts/build.sh` 會裝）。碼表不在機器
@@ -1727,6 +1741,8 @@ txt = "typst"                # 這個項目裏的 .txt 都是 Typst
 scheme = "lingming"          # 只有靈明自帶，其餘要先裝碼表
 start = false                # 啟動就載入碼表。默認不載入——語言模型照常載入（分詞要它），
                              # 但打字用的碼表等你 `:yume scheme`
+# commit = "delayed"         # 上屏方式：delayed 延遲（頂字）| unique 唯一（auto）| fluency 整句
+                             # 不寫就交給輸入法自己定（形碼延遲、拼音整句）
 
 [theme]                        # 主題只有三個顏色，其餘全部算出來。見下節
 name = "墨香"                   # 名字而已，寫 "moxiang" 一樣

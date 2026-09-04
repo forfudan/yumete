@@ -2612,6 +2612,13 @@ impl Editor {
                 self.scheme_request = Some(String::from("!"));
                 Ok(CommandOutcome::Continue)
             }
+            // 上屏方式 is the engine's, so it rides the same channel: a word
+            // rather than a sigil, because there is no scheme called `commit:`
+            // and a request one can read is worth the four characters.
+            Command::YumeCommit(mode) => {
+                self.scheme_request = Some(format!("commit:{}", mode.unwrap_or_default()));
+                Ok(CommandOutcome::Continue)
+            }
             // Taken by the front end **after the next frame**: the command
             // line is still open on this one, and a picture of the thing you
             // are debugging with the debugger's own prompt across it is not a
@@ -12672,6 +12679,25 @@ mod tests {
         ed.execute(":hanging off").unwrap();
         assert!(!ed.hanging_punctuation());
         assert!(!ed.status().contains("需要"), "{}", ed.status());
+    }
+
+    #[test]
+    fn the_commit_method_rides_the_same_channel_as_the_scheme() {
+        // 上屏方式 belongs to the engine, which the core does not hold, so
+        // `:yume commit` leaves a request the front end answers (Feature #209).
+        let mut ed = Editor::new();
+        ed.set_ime_available(true);
+        ed.execute(":yume commit").unwrap();
+        assert_eq!(ed.take_scheme_request().as_deref(), Some("commit:"));
+        ed.execute(":yume commit auto").unwrap();
+        assert_eq!(ed.take_scheme_request().as_deref(), Some("commit:unique"));
+        assert_eq!(ed.take_scheme_request(), None, "taken once only");
+        // It is about typing 漢字, so with no 碼表 it says so rather than
+        // leaving a request nobody can answer.
+        let mut cold = Editor::new();
+        cold.execute(":yume commit fluency").unwrap();
+        assert_eq!(cold.take_scheme_request(), None, "{}", cold.status());
+        assert!(cold.status().contains("碼表"), "{}", cold.status());
     }
 
     #[test]

@@ -314,6 +314,15 @@ pub struct ImeConfig {
     /// is loaded either way, because that is about the words and not about how
     /// they are typed. `:yume scheme` starts typing whenever you want it.
     pub start: bool,
+    /// 上屏方式 — **when** a finished code goes to the page: `"delayed"`
+    /// (延遲／頂字), `"unique"` (唯一, also written `auto`), `"fluency"` (整句).
+    ///
+    /// `None` — the default — leaves the question to the input method, which
+    /// answers it per scheme: a 形碼 scheme waits, and 拼音, having no 碼表 to
+    /// look a segment up in, is 整句 whatever anybody writes here. The names
+    /// are yume's own, so a line written here means the same thing in the
+    /// input method's own panel (Feature #209).
+    pub commit: Option<String>,
 }
 
 impl Default for ImeConfig {
@@ -321,6 +330,7 @@ impl Default for ImeConfig {
         ImeConfig {
             scheme: "lingming".to_string(),
             start: false,
+            commit: None,
         }
     }
 }
@@ -1018,6 +1028,21 @@ pub struct Config {
     pub language: HashMap<String, HashMap<String, Runner>>,
 }
 
+/// The 上屏方式 a config line names, in yume's own spelling — or `None` when it
+/// names none of them.
+///
+/// `auto` is 唯一 under the name the habit uses for it (自動上屏); the other
+/// three are `CommitStrategy::from_str_tag`'s, so a value written here means
+/// the same thing in the input method's own panel on every platform.
+fn commit_tag(written: &str) -> Option<&'static str> {
+    match written {
+        "delayed" => Some("delayed"),
+        "unique" | "auto" => Some("unique"),
+        "fluency" => Some("fluency"),
+        _ => None,
+    }
+}
+
 impl Config {
     /// Load the global config, then apply the nearest per-project override.
     pub fn load() -> Config {
@@ -1079,6 +1104,21 @@ impl Config {
                 "segmentation_threshold 已經沒有了——改成 word_level = \"strict\"／\"balanced\"／\"full\""
                     .to_string(),
             );
+        }
+
+        // The three 上屏方式 are yume's, and the list is short enough to check
+        // here — a misspelt one is otherwise a setting that silently does
+        // nothing, which is the failure this whole function exists to end.
+        // A misspelt 上屏方式 is otherwise a setting that silently does nothing,
+        // which is the failure this whole function exists to end. The value is
+        // dropped either way — `into_config` reads it through the same list —
+        // and this is where it is said out loud.
+        if let Some(mode) = raw.ime.commit.as_deref() {
+            if commit_tag(mode).is_none() {
+                problems.push(format!(
+                    "[ime] commit = \"{mode}\" 不是上屏方式——delayed、unique（auto）、fluency"
+                ));
+            }
         }
 
         // A command a language declares that will not do what it says is a
@@ -1239,6 +1279,7 @@ struct RawRunner {
 struct RawIme {
     scheme: Option<String>,
     start: Option<bool>,
+    commit: Option<String>,
 }
 
 #[derive(Deserialize, Default)]
@@ -1430,6 +1471,9 @@ impl RawConfig {
         }
         if other.ime.scheme.is_some() {
             self.ime.scheme = other.ime.scheme.clone();
+        }
+        if other.ime.commit.is_some() {
+            self.ime.commit = other.ime.commit.clone();
         }
         if other.ime.start.is_some() {
             self.ime.start = other.ime.start;
@@ -1636,6 +1680,12 @@ impl RawConfig {
         if let Some(start) = self.ime.start {
             config.ime.start = start;
         }
+        if let Some(commit) = self.ime.commit {
+            // Whatever comes out here is one of yume's three tags, so nothing
+            // downstream has to know that 自動 is a second name for 唯一 — or
+            // that a word may be neither.
+            config.ime.commit = commit_tag(&commit).map(String::from);
+        }
         config.syntax.by_name = self.syntax;
         if let Some(name) = self.theme.name {
             if !name.trim().is_empty() {
@@ -1817,6 +1867,20 @@ mod tests {
         // Two anchors named, and every rung between them moves with the pair.
         assert_eq!(c.theme.dark.ink, (0x20, 0x40, 0x60));
         assert_eq!(c.theme.light.paper, (0xFF, 0xFE, 0xF8));
+    }
+
+    #[test]
+    fn the_commit_method_is_written_in_yumes_own_words() {
+        // Nothing said leaves the question to the input method, which answers
+        // it per scheme — a default here would pin 拼音's 整句 onto 靈明.
+        assert_eq!(Config::from_toml("").ime.commit, None);
+        let commit = |line: &str| Config::from_toml(line).ime.commit;
+        assert_eq!(commit("[ime]\ncommit = \"fluency\"").as_deref(), Some("fluency"));
+        // 自動上屏 is what the habit calls 唯一, and it comes out as yume's tag.
+        assert_eq!(commit("[ime]\ncommit = \"auto\"").as_deref(), Some("unique"));
+        // A word that is not one of the three is dropped rather than passed on
+        // as something no front end can read.
+        assert_eq!(commit("[ime]\ncommit = \"slow\""), None);
     }
 
     #[test]

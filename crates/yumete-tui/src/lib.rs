@@ -37,7 +37,7 @@ use yumete_core::sidebar::View;
 use yumete_core::wrap::{self, Anchor as WrapAnchor};
 use yumete_core::zong::{Anchor, Layout as WritingLayout};
 use yumete_core::{say, Editor, Key, KeyOutcome, Mode, TextStore};
-use yumete_ime::{ImeSession, Scheme};
+use yumete_ime::{CommitStrategy, ImeSession, Scheme};
 
 /// Run the interactive editor until the user quits.
 ///
@@ -1278,6 +1278,41 @@ fn base64(bytes: &[u8]) -> String {
     out
 }
 
+/// 上屏方式, in the words the input method's own panel uses.
+fn commit_name(cs: CommitStrategy) -> String {
+    match cs {
+        CommitStrategy::Delayed => say!("延遲（頂字）"),
+        CommitStrategy::Unique => say!("唯一"),
+        CommitStrategy::Fluency => say!("整句"),
+    }
+}
+
+/// `:yume commit [delayed|unique|fluency]` — **when** a finished code goes to
+/// the page (Feature #209).
+///
+/// The three are yume's own, merged in yume's own core, so what is chosen here
+/// is what the same word means in the input method everywhere else. A scheme
+/// that can only be typed as whole sentences — 拼音 has no 碼表 to look a
+/// segment up in — says so rather than pretending the choice took.
+fn commit_method(ime: &mut ImeSession, mode: &str) -> String {
+    if mode.is_empty() {
+        return say!("上屏方式：{0}", commit_name(ime.commit_strategy()));
+    }
+    let Some(cs) = CommitStrategy::from_str_tag(mode) else {
+        return say!("沒有「{0}」這種上屏方式——delayed、unique、fluency", mode);
+    };
+    ime.set_commit_strategy(Some(cs));
+    let now = ime.commit_strategy();
+    if now != cs {
+        return say!(
+            "{0} 只能整句上屏（沒有碼表可以逐段查），上屏方式仍然是{1}",
+            ime.scheme_name(),
+            commit_name(now)
+        );
+    }
+    say!("上屏方式：{0}", commit_name(now))
+}
+
 /// Switch the IME to the named scheme, and say what happened.
 ///
 /// Only 靈明 ships with yumete. The others are yume's own data, installed the
@@ -1291,10 +1326,11 @@ fn switch_scheme(ime: &mut ImeSession, tag: &str, config: &Config) -> String {
     if tag == "?" {
         return if ime.available() {
             format!(
-                "{} · 碼表 {} · 拆分 {}",
+                "{} · 碼表 {} · 拆分 {} · 上屏 {}",
                 ime.scheme_name(),
                 ime.table_source(),
-                if ime.annotations_enabled() { "開" } else { "關" }
+                if ime.annotations_enabled() { "開" } else { "關" },
+                commit_name(ime.commit_strategy()),
             )
         } else if yumete_ime::has_builtin_table() {
             "還沒開始打字——`:yume scheme` 載入碼表".to_string()
@@ -1302,11 +1338,15 @@ fn switch_scheme(ime: &mut ImeSession, tag: &str, config: &Config) -> String {
             "還沒開始打字，而且這個二進制不帶碼表——先裝資料".to_string()
         };
     }
+    if let Some(mode) = tag.strip_prefix("commit:") {
+        return commit_method(ime, mode);
+    }
     if let Some(path) = tag.strip_prefix('=') {
         let path = std::path::PathBuf::from(shellexpand(path));
         return match ImeSession::from_table_file(&path) {
             Ok(mut table) => {
                 table.set_page_size(config.panel.page_size);
+                table.set_commit_strategy(ime.commit_override());
                 *ime = table;
                 format!("碼表：{}", path.display())
             }
@@ -1342,6 +1382,7 @@ fn switch_scheme(ime: &mut ImeSession, tag: &str, config: &Config) -> String {
         }
         full.set_page_size(config.panel.page_size);
         full.set_annotations(ime.annotations_enabled());
+        full.set_commit_strategy(ime.commit_override());
         *ime = full;
         return say!("方案：{0}（系統裝的碼表）", ime.scheme_name());
     }
@@ -1352,6 +1393,7 @@ fn switch_scheme(ime: &mut ImeSession, tag: &str, config: &Config) -> String {
         let mut full = ImeSession::builtin_lingming();
         full.set_page_size(config.panel.page_size);
         full.set_annotations(ime.annotations_enabled());
+        full.set_commit_strategy(ime.commit_override());
         *ime = full;
         return "方案：靈明（出廠自帶的碼表）".to_string();
     }
@@ -1378,6 +1420,7 @@ fn switch_scheme(ime: &mut ImeSession, tag: &str, config: &Config) -> String {
         let mut full = ImeSession::from_default_dirs(scheme);
         if full.available() {
             full.set_page_size(config.panel.page_size);
+            full.set_commit_strategy(ime.commit_override());
             full.set_annotations(ime.annotations_enabled());
             let name = full.scheme_name().to_string();
             *ime = full;
@@ -4618,6 +4661,25 @@ mod tests {
             KeyModifiers::NONE,
         );
         assert_eq!(editor.current_buffer().text(), "巴");
+    }
+
+    #[test]
+    fn the_commit_method_says_which_one_is_answering() {
+        // `:yume commit` with nothing after it is the question (Feature #209).
+        let mut ime = ImeSession::from_table_text(Scheme::Lingming, "a 啊\n");
+        let said = commit_method(&mut ime, "");
+        assert!(said.contains("延遲"), "{said}");
+        let said = commit_method(&mut ime, "unique");
+        assert!(said.contains("唯一"), "{said}");
+        assert_eq!(ime.commit_strategy(), CommitStrategy::Unique);
+        // A word it cannot read names the three rather than picking one.
+        let said = commit_method(&mut ime, "slow");
+        assert!(said.contains("slow") && said.contains("fluency"), "{said}");
+        assert_eq!(ime.commit_strategy(), CommitStrategy::Unique, "unchanged");
+        // …and `:yume` itself says which one is answering, beside the 方案 and
+        // the 碼表 — the question a writer asks is 「what is it doing」.
+        let said = switch_scheme(&mut ime, "?", &Config::default());
+        assert!(said.contains("上屏 唯一"), "{said}");
     }
 
     #[test]

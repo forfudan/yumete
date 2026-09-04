@@ -412,7 +412,7 @@ Phases are ordered by priority, most writer-critical first:
 | 206 | **`t` is the table group in every mode** | core | P1 | in source mode `t` used to be 「till the next letter」, which on Chinese prose is a key that does nothing worth a key. Now `t t` enters the grid, `t q` leaves it, `t f` aligns, `t ]` / `t [` walk to the next table. `f`/`F` stay; till retires outright | Done |
 | 207 | **The HUD takes whichever row has room** | tui | P2 | beside the caret means the row below it, unless the caret is on the last row — then the row above, the way the command panel already chooses | Done |
 | 208 | **A word boundary is not a highlighter** | tui | P1 | both were 朱, 78% and 91% washed — 1.23:1 apart, which is to say indistinguishable. The word tint is a neutral rung (WORD 962) and `==highlight==` is 金 washed to a contrast target. The quiet end of the ladder was re-spaced with it: SELECTION 700, HEAD 815, chosen by search so 莫蘭迪 still keeps 4.5:1 text on a selection | Done |
-| 209 | **`:yume commit delayed\|unique\|fluency`** | ime | P2 | yume already has the three strategies (延遲/頂字, 唯一, 整句) behind `CommitOverrides { preset }`; `yumete-ime` does not expose them. One command, one config key, and the mode in `:yume` | Planned |
+| 209 | **`:yume commit delayed\|unique\|fluency`** | ime | P2 | the three are yume's own (延遲/頂字, 唯一, 整句), merged in yume's own core as the **user layer** of `CommitOverrides`, so what is chosen here means the same in the input method's panel everywhere else. `auto` is 唯一 under the name the habit uses. It survives a scheme switch (it is the writer's, not the scheme's) and never overrules 拼音, which has no 碼表 to look a segment up in and says so. `[ime] commit` is the same setting; `:yume` says which one is answering. `:yume c` is now ambiguous — `ch` / `co` | Done |
 | 210 | **Ghost text — what the file does not have and the page must draw** | both | P1 | the inverse of `hidden`/`folded`, which the page already takes as data. A layout input that inserts cells the buffer has no bytes for, with the caret, the click map, wrapping and 縱 breaks all agreeing about them. Two things need it and neither is doable without it: #211 and #212 | Planned |
 | 211 | **`:yume panel full\|bare` and the inline preview** | ime | P1 | 空空如也: the first candidate is drawn **in the text**, as ghost text, with the caret at its end and the code in the HUD below the caret's row (the status line when there is no room). `Tab` summons the full panel from `bare`. Two visual modes, three commit modes (#209), and they are independent | Planned |
 | 212 | **Every table in the file drawn as a table** | both | P1 | `:table on` renders the grid for the whole document, not only the region the cursor is in. It is also the real fix for a markup-bearing table looking ragged: `t f` pads the **source** by display width correctly, but 所見即所得 hides `` ` `` and `**`, so each row loses a different number of cells on the way to the screen. Alignment has to happen **on the page** (ghost padding, #210), not in the file | Planned |
@@ -1195,8 +1195,8 @@ nothing but the first candidate as ghost text, with the code in the HUD below
 the caret's row (the status line when there is no room below it), and `Tab`
 summons the full panel for the one word that needs it. This is independent of
 **how** a word commits — that is #209, three modes (延遲, 唯一, 整句), which yume
-already implements behind `CommitOverrides { preset }` and which `yumete-ime`
-simply does not pass through.
+already implements behind `CommitOverrides { preset }`. **#209 is done**:
+`:yume commit`, `[ime] commit`, and the mode in `:yume`.
 
 **#213 and #214 are one worry with two answers.** A file open in the editor and
 changed by something else is noticed today at `:w` and nowhere else — the hash

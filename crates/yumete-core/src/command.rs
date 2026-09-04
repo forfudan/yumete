@@ -178,6 +178,9 @@ pub enum Command {
     UserTable(String),
     /// `:yume` on its own — say what the input method is doing.
     YumeStatus,
+    /// `:yume commit delayed|unique|fluency` — 上屏方式: when a finished code
+    /// goes to the page. `None` asks which one is in force (Feature #209).
+    YumeCommit(Option<String>),
     /// `:yume on` / `:yume off` — type 漢字, or type what the keys say.
     ///
     /// The 中/英 switch already exists as a lone Shift tap; this is the same
@@ -453,6 +456,21 @@ pub fn parse(input: &str) -> Result<Command, CommandError> {
                         .to_string(),
                 )),
                 Some("chaifen") => Ok(Command::ToggleChaifen),
+                // On its own it is the question — which of the three is
+                // answering — the same as a bare `:yume`.
+                Some("commit") => match parts.next() {
+                    None => Ok(Command::YumeCommit(None)),
+                    // `auto` is 唯一 under the name people use for it; every
+                    // other spelling is picked by prefix, so `d` `u` `f` work.
+                    Some("auto") => Ok(Command::YumeCommit(Some("unique".to_string()))),
+                    Some(word) => match pick(word, COMMITS).map(|w| w.name) {
+                        Some(name) => Ok(Command::YumeCommit(Some(name.to_string()))),
+                        None => Err(CommandError::InvalidArgument {
+                            command: "yume commit",
+                            value: word.to_string(),
+                        }),
+                    },
+                },
                 _ => Err(CommandError::InvalidArgument {
                     command: "yume",
                     value: word.to_string(),
@@ -1183,6 +1201,12 @@ const YUME: &[Word] = &[
         then: Args::Words(ON_OFF),
     },
     Word {
+        name: "commit",
+        help: "上屏方式：延遲（頂字）、唯一、整句",
+        needs: &[Need::Scheme],
+        then: Args::Words(COMMITS),
+    },
+    Word {
         name: "which",
         help: "現在用的是哪個方案、碼表打哪來",
         needs: &[],
@@ -1384,6 +1408,33 @@ const WRAP: &[Word] = &[
 ];
 
 /// The input schemes yume ships with.
+/// The three 上屏方式 — *when* a finished code goes to the page.
+///
+/// The names are yume's own tags (`CommitStrategy::from_str_tag`), so that a
+/// setting written here means the same thing in the input method's own panel
+/// on macOS and Windows. `auto` is taken as 唯一 because that is what the
+/// habit calls it — 自動上屏.
+const COMMITS: &[Word] = &[
+    Word {
+        name: "delayed",
+        help: "延遲上屏（頂字）：碼成立了先等着，下一鍵拼不成碼才把前面那段頂上去",
+        needs: &[],
+        then: Args::None,
+    },
+    Word {
+        name: "unique",
+        help: "唯一上屏（自動、auto）：碼成立而且只有一個候選，就直接上屏",
+        needs: &[],
+        then: Args::None,
+    },
+    Word {
+        name: "fluency",
+        help: "整句輸入：一路打下去，空格確認整句，從不自己上屏",
+        needs: &[],
+        then: Args::None,
+    },
+];
+
 const SCHEMES: &[Word] = &[
     Word {
         name: "lingming",
@@ -2565,6 +2616,30 @@ mod tests {
         assert_eq!(parse(":yume installed"), Ok(Command::InstalledScheme));
         assert_eq!(parse(":yume builtin"), Ok(Command::BuiltinScheme));
         assert_eq!(parse(":yume b"), Ok(Command::BuiltinScheme));
+        // 上屏方式 (Feature #209): the three are yume's own tags, `auto` is
+        // 唯一 under the name the habit uses, and no argument is the question.
+        assert_eq!(parse(":yume commit"), Ok(Command::YumeCommit(None)));
+        assert_eq!(
+            parse(":yume commit delayed"),
+            Ok(Command::YumeCommit(Some("delayed".into())))
+        );
+        assert_eq!(
+            parse(":yume commit u"),
+            Ok(Command::YumeCommit(Some("unique".into())))
+        );
+        assert_eq!(
+            parse(":yume commit auto"),
+            Ok(Command::YumeCommit(Some("unique".into())))
+        );
+        assert_eq!(
+            parse(":yume commit fluency"),
+            Ok(Command::YumeCommit(Some("fluency".into())))
+        );
+        // Not silently the first of the three.
+        assert!(matches!(
+            parse(":yume commit slow"),
+            Err(CommandError::InvalidArgument { .. })
+        ));
     }
 
     #[test]
@@ -2902,7 +2977,13 @@ mod tests {
             Ok(Command::SetScheme("lingming".into()))
         );
         assert_eq!(parse(":yume scheme ling"), Ok(Command::SetScheme("lingming".into())));
-        assert_eq!(parse(":yume c"), Ok(Command::ToggleChaifen));
+        // `chaifen` and `commit` both start with `c`, so `c` alone names
+        // neither — the menu on `:yume c` shows both, which is the answer.
+        assert_eq!(parse(":yume ch"), Ok(Command::ToggleChaifen));
+        assert!(matches!(
+            parse(":yume c"),
+            Err(CommandError::InvalidArgument { .. })
+        ));
         // No name at all means the one the config asked for.
         assert_eq!(parse(":yume s"), Ok(Command::SetScheme(String::new())));
         // A prefix that names two words names neither, loudly, rather than

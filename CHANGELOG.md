@@ -28,6 +28,12 @@ in `docs/development.md` §5.2.
 
 ### 新的 · New
 
+- **`:yume commit delayed|unique|fluency`**（#209）——**上屏方式**：碼打完了什麼時候
+  上屏。`delayed` 延遲（頂字，出廠）、`unique` 唯一（也可以寫 `auto`）、`fluency` 整句。
+  三個名字是 yume 自己的，合成也在 yume 的核心裏，所以這裏選的那一個在輸入法自己的面板
+  裏是同一件事。換方案不會丟；拼音沒有碼表可以逐段查，永遠是整句，命令會直接說出來。
+  配置檔是 `[ime] commit`，不寫就交給輸入法按方案定。
+  **`:yume c` 現在不明確了**——`chaifen` 和 `commit` 都以 `c` 起頭，寫 `ch` 或 `co`。
 - **`:word`**（#202）——`words` 和 `segment`本來是同一個問題的兩個名字：
   詞在哪裏斷。現在一條命令：`:word segment on|off`、`:word show`、
   `:word list reload|edit|global`、`:word level less|more|full`。
