@@ -1577,6 +1577,8 @@ GB18030 的舊稿會被擋下並告訴你用 `iconv` 轉，而不是丟一句 Ru
 | `:markdown footnote` | 插一個腳注：號碼自己找空的，文末的註也一併開好，光標停在註裏 |
 | `:markdown footnote inline` | 行內註 `^[…]`，光標在括號裏 |
 | `:markdown table 3x4` | 三欄四行的空表 |
+| `:format` | 照這種檔案在設定裏說的那樣格式化 |
+| `:run` *名字* | 跑這種檔案自己起名的那條命令 |
 | `:typewriter` [`on`｜`off`] | 打字機：光標那一行停在畫面中間，紙往上走 |
 | `:dense off` | 疏排——竪排是縱與縱之間留一格，橫排是行與行之間留一行 |
 | `:table sort` *欄* `a`｜`d` … | 照這幾欄排；`t1s` `t1S` 是鍵盤上的同一件事 |
@@ -1726,6 +1728,33 @@ rounded = true                 # 圓角邊框
 # 按左邊那一個鍵，等於按右邊那一串鍵。
 "，" = ","
 "J" = "gJ"                     # 把 vi 的併行放回 J —— 一行配置，不是分叉
+```
+
+**每種檔案自己說要跑什麼**（`[language.…]`）。`tinymist` 以前是寫死在程序裏的，
+其實那是你這台機器的事，不是編輯器的事：
+
+```toml
+[language.typst]
+preview = { run = "tinymist preview --no-open {file}", kind = "server" }
+format  = { run = "typstfmt {file}" }
+
+[language.markdown]
+format = { run = "rumdl check --fix {file}" }
+zhuyin = { run = "pandoc {file} -o {dir}/{name}.docx" }   # :run zhuyin
+```
+
+`kind` 有三種：`once` 跑完就完（跑完重讀檔案），`server` 一直跑着（`:preview` 用它，
+`:preview off` 停），`filter` 把稿子從 stdin 送進去、把回來的東西換上（不碰檔案，
+`u` 可以撤銷）。佔位符：`{file}` `{dir}` `{name}`。
+
+**動詞不分語言**：`:preview`、`:format` 在每種檔案裏都是同一個鍵，設定說這種檔案怎麼做；
+自己起名的用 `:run <名字>`。
+
+**項目自己的 `.yumete/config.toml` 也可以定**，因為安全不靠「誰能寫」，靠**怎麼跑**：
+不經過 shell（所以 `;` `&&` `$( )` 只是普通字符，不是語法），佔位符**整個當成一個參數**
+（檔名叫 `我的 稿;rm -rf ~.md` 也還是一個參數），而且載入時就檢查——引號不配對、
+不認識的佔位符、出現 shell 元字符，都會在狀態列指出是哪個檔案的哪一條。
+
 ```
 
 右邊可以是**一串**鍵，不只一個。這樣默認值可以照我們認為對的來定（`J`／`K`／`H`／`L`

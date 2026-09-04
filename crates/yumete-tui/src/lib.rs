@@ -318,6 +318,32 @@ pub fn run(
                         editor.set_status(say!("預覽：{0} 已停", running.what));
                     }
                     if let yumete_core::editor::Preview::Start { path, syntax } = want {
+                        // **What the config says, if it says anything.** The
+                        // typesetter for a language is a fact about the
+                        // reader's machine, not about the editor — see
+                        // `yumete_config::Runner`. The built-in tinymist below
+                        // is what happens when nobody has said otherwise.
+                        let declared = config
+                            .language
+                            .get(syntax.name())
+                            .and_then(|verbs| verbs.get("preview"))
+                            .filter(|r| r.kind == yumete_config::RunKind::Server);
+                        if let Some(runner) = declared {
+                            let file = path.display().to_string();
+                            match runner.argv(&file).and_then(|argv| {
+                                argv.split_first().map(|(p, a)| (p.clone(), a.to_vec()))
+                            }) {
+                                Some((program, args)) => match Job::server(&program, &args) {
+                                    Ok(started) => {
+                                        editor.set_status(say!("預覽：{0} 起來中……", program));
+                                        job = Some(started);
+                                    }
+                                    Err(why) => editor.set_status(why),
+                                },
+                                None => editor.set_status(say!("命令寫壞了：{0}", runner.run)),
+                            }
+                            continue;
+                        }
                         match syntax {
                             yumete_core::syntax::Syntax::Typst => match Job::typst(&path) {
                                 Ok(started) => {
@@ -824,14 +850,29 @@ fn adopt_an_orphan() -> Option<String> {
 impl Job {
     /// Start `tinymist preview`, watching its log for the address it opens on.
     fn typst(path: &std::path::Path) -> Result<Job, String> {
-        let mut child = std::process::Command::new("tinymist")
-            .arg("preview")
-            .arg("--no-open")
-            .arg(path)
+        Job::server(
+            "tinymist",
+            &[
+                "preview".to_string(),
+                "--no-open".to_string(),
+                path.display().to_string(),
+            ],
+        )
+    }
+
+    /// Start a long-running program and watch its output for an address.
+    ///
+    /// **No shell**, and the arguments arrive already split — see
+    /// `yumete_config::Runner::argv`. A server declared in a project's config
+    /// is therefore a program with arguments, never a line somebody can hide a
+    /// second command in.
+    fn server(program: &str, args: &[String]) -> Result<Job, String> {
+        let mut child = std::process::Command::new(program)
+            .args(args)
             .stdout(std::process::Stdio::null())
             .stderr(std::process::Stdio::piped())
             .spawn()
-            .map_err(|e| format!("tinymist: {e}（`cargo install tinymist`）"))?;
+            .map_err(|e| say!("{0}：{1}", program, e))?;
         note_the_server(child.id());
         let (send, said) = std::sync::mpsc::channel();
         if let Some(log) = child.stderr.take() {
@@ -850,7 +891,7 @@ impl Job {
             });
         }
         Ok(Job {
-            what: "tinymist",
+            what: Box::leak(program.to_string().into_boxed_str()),
             child,
             said,
         })
