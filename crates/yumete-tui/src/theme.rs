@@ -499,7 +499,7 @@ mod tests {
         // *position* has to say here — so 金 and 朱 leave the ladder by going
         // past its ends rather than by leaving its hue.
         for dark in [true, false] {
-            let theme = yumete_config::ThemeConfig::named("黑白").expect("黑白");
+            let theme = yumete_config::ThemeConfig::named("bw").expect("黑白");
             let p = Palette::of_theme(&theme, dark);
             for (name, ink, bar) in [
                 ("the writing", p.text(), 4.5),
