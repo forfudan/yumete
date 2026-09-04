@@ -2353,3 +2353,22 @@ en = "{0} can only be typed as whole sentences — no 碼表 to look a segment u
 [[message]]
 zh = "{0} 的碼表沒有裝——放進 {1}，或者把自己的碼表放進 .yumete/"
 en = "{0}'s table is not installed — put it in {1}, or a table of your own in .yumete/"
+
+# Feature #220. `{1}` is yume-core's own word for it (`bad division magic`,
+# `truncated`), left as it comes: it is what a bug report should quote, and
+# translating it would make it unsearchable.
+[[message]]
+zh = "{0} 核心不認：{1}（期望 {2}，檔頭是 {3}）"
+en = "{0} was refused by the core: {1} (expected {2}, the file says {3})"
+
+[[message]]
+zh = "{0} 核心不認：{1}"
+en = "{0} was refused by the core: {1}"
+
+[[message]]
+zh = "{0} 讀不了：{1}"
+en = "{0} could not be read: {1}"
+
+[[message]]
+zh = "{0}（另有 {1} 個檔同樣沒進去）"
+en = "{0} ({1} more file(s) did not load either)"

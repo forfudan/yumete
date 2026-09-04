@@ -26,7 +26,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use yume_core::commit_strategy::CommitOverrides;
-use yume_core::data_manifest::{self, DataFile, DataKind};
+use yume_core::data_manifest;
 use yume_core::division::DivisionTable;
 use yume_core::key_bindings::{FuncKey, KeyAction};
 use yume_core::lexicon::Lexicon;
@@ -36,6 +36,9 @@ use yume_core::{
 };
 
 pub use segment::YumeSegmenter;
+// A frontend that reads [`DataProblem`] has to be able to name its `kind`, and
+// it has no yume-core of its own.
+pub use yume_core::data_manifest::{DataFile, DataKind};
 pub use yume_core::DisplayMode;
 pub use yume_core::CommitStrategy;
 
@@ -125,6 +128,12 @@ pub struct ImeSession {
     builtin: bool,
     /// The file a table of your own was read from, if it was.
     table_file: Option<PathBuf>,
+    /// Every entry of the data set that did not make it into the engine, and
+    /// why (Feature #220). Kept rather than discarded because the interesting
+    /// half of it is **silent**: a file that is there and that the core
+    /// refuses looks exactly like a file that was never installed, and the
+    /// writer sees neither — only annotations that stopped appearing.
+    problems: Vec<DataProblem>,
 }
 
 impl ImeSession {
@@ -135,7 +144,7 @@ impl ImeSession {
     ///
     /// [`available`]: ImeSession::available
     pub fn new(scheme: Scheme, data_dirs: Vec<PathBuf>) -> Self {
-        let (mut engine, mut available) = build_engine(scheme, &data_dirs);
+        let (mut engine, mut available, problems) = build_engine(scheme, &data_dirs);
         // Nothing installed. Rather than an editor that cannot type 漢字 until
         // somebody clones the 宇浩 source tree, 靈明's own 碼表 stands in when
         // this binary was built on a machine that had it.
@@ -152,6 +161,7 @@ impl ImeSession {
             annotations: false,
             builtin,
             table_file: None,
+            problems,
         }
     }
 
@@ -174,9 +184,12 @@ impl ImeSession {
         }
         let dirs = yumete_config::data_search_dirs();
         let mut engine = Engine::new(CodeTable::new());
+        let mut problems = Vec::new();
         for file in data_manifest::shared() {
             if !matches!(file.kind, DataKind::Table) {
-                load_data_file(&mut engine, &dirs, &file);
+                if let Err(problem) = load_data_file(&mut engine, &dirs, &file) {
+                    problems.push(problem);
+                }
             }
         }
         engine.set_table(Arc::new(table));
@@ -191,6 +204,7 @@ impl ImeSession {
             annotations: false,
             builtin: false,
             table_file: Some(path.to_path_buf()),
+            problems,
         })
     }
 
@@ -205,9 +219,12 @@ impl ImeSession {
         let mut engine = Engine::new(CodeTable::new());
         // The language layer still comes from disk where it is: it is not what
         // was being overridden, and it is what makes the candidates sensible.
+        let mut problems = Vec::new();
         for file in data_manifest::shared() {
             if !matches!(file.kind, DataKind::Table | DataKind::Symbols) {
-                load_data_file(&mut engine, &dirs, &file);
+                if let Err(problem) = load_data_file(&mut engine, &dirs, &file) {
+                    problems.push(problem);
+                }
             }
         }
         let available = load_builtin(&mut engine);
@@ -220,6 +237,7 @@ impl ImeSession {
             annotations: false,
             builtin: true,
             table_file: None,
+            problems,
         }
     }
 
@@ -268,9 +286,12 @@ impl ImeSession {
     pub fn language_only(scheme: Scheme) -> Self {
         let dirs = yumete_config::data_search_dirs();
         let mut engine = Engine::new(CodeTable::new());
+        let mut problems = Vec::new();
         for file in data_manifest::shared() {
             if matches!(file.kind, DataKind::Weights | DataKind::Lexicon) {
-                load_data_file(&mut engine, &dirs, &file);
+                if let Err(problem) = load_data_file(&mut engine, &dirs, &file) {
+                    problems.push(problem);
+                }
             }
         }
         ImeSession {
@@ -281,6 +302,7 @@ impl ImeSession {
             annotations: false,
             builtin: false,
             table_file: None,
+            problems,
         }
     }
 
@@ -299,6 +321,7 @@ impl ImeSession {
             annotations: false,
             builtin: false,
             table_file: None,
+            problems: Vec::new(),
         }
     }
 
@@ -313,6 +336,7 @@ impl ImeSession {
             annotations: false,
             builtin: false,
             table_file: None,
+            problems: Vec::new(),
         }
     }
 
@@ -332,7 +356,18 @@ impl ImeSession {
             annotations: false,
             builtin: false,
             table_file: None,
+            problems: Vec::new(),
         }
+    }
+
+    /// Every entry of the data set that did not make it into the engine, and
+    /// why (Feature #220).
+    ///
+    /// In manifest order, so the essential tables come before the optional
+    /// ones. Most of it is [`DataFault::Missing`] on a normal install; see
+    /// [`DataProblem::is_loud`] for the part worth showing.
+    pub fn problems(&self) -> &[DataProblem] {
+        &self.problems
     }
 
     /// Whether the scheme's data tables loaded successfully.
@@ -357,10 +392,11 @@ impl ImeSession {
         // new engine, and a preference that evaporated when you tried another
         // scheme would look like a setting that does not stick.
         let chosen = self.commit_override();
-        let (engine, available) = build_engine(scheme, &self.data_dirs);
+        let (engine, available, problems) = build_engine(scheme, &self.data_dirs);
         self.engine = engine;
         self.scheme = scheme;
         self.available = available;
+        self.problems = problems;
         self.set_commit_strategy(chosen);
         available
     }
@@ -727,72 +763,237 @@ pub fn builtin_version() -> Option<&'static str> {
     builtin::BUILTIN_VERSION
 }
 
+/// Why one entry of the factory data set is not in the engine (Feature #220).
+///
+/// It used to be a `bool`, and that made 「不在」 and 「在，而核心不收」 the
+/// same answer. The second one is the one worth saying out loud: when a binary
+/// format changes its magic — `.ydiv` did, on 2026-09-04 — an older data
+/// directory keeps every file in place and quietly stops answering. Nothing in
+/// the editor looked wrong; the 拆分 comments simply were not there any more.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum DataFault {
+    /// In none of the search directories. The ordinary case for optional data,
+    /// and not worth interrupting anybody over.
+    Missing,
+    /// There, and the operating system would not hand it over.
+    Unreadable(String),
+    /// There and readable, and yume-core will not have it.
+    Rejected {
+        /// The core's own words — `bad division magic`, `truncated`, …
+        reason: String,
+        /// The 檔頭 this format expects against the one the file carries, when
+        /// they differ and both are legible. This is the whole point of the
+        /// feature: it names the *version* mismatch rather than the symptom.
+        magic: Option<MagicMismatch>,
+    },
+    /// A `kind` this build of yumete was not compiled against — yume is newer
+    /// than this binary. Skipped by design, and only a note.
+    UnknownKind,
+}
+
+/// What a format's 檔頭 should say, and what this file's does.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MagicMismatch {
+    /// The magic this build of yume-core writes and reads.
+    pub expected: String,
+    /// The magic in the file, as far as it is printable.
+    pub found: String,
+}
+
+/// One entry of the data set that did not make it into the engine.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DataProblem {
+    /// The manifest-relative name, which is what a writer will recognise —
+    /// `chaifen.ydiv`, `schemes/ling.ytab`.
+    pub file: String,
+    /// Which door of the engine it would have gone through.
+    pub kind: DataKind,
+    /// What went wrong.
+    pub fault: DataFault,
+}
+
+impl DataProblem {
+    /// Whether this is something the writer should be told without asking.
+    ///
+    /// A missing file is not: half the manifest is optional and a normal
+    /// install is missing several. A file that is **there and refused** is —
+    /// somebody put it there on purpose and it is doing nothing.
+    pub fn is_loud(&self) -> bool {
+        matches!(
+            self.fault,
+            DataFault::Unreadable(_) | DataFault::Rejected { .. }
+        )
+    }
+}
+
+/// The three-variant `BinaryError` that yume-core declares once per format, in
+/// words. Four identical enums in four modules and no shared trait upstream, so
+/// the `match` is written once and stamped out four times.
+macro_rules! binary_reasons {
+    ($($name:ident => $module:ident),* $(,)?) => {
+        $(
+            fn $name(e: yume_core::$module::BinaryError) -> String {
+                match e {
+                    yume_core::$module::BinaryError::BadMagic => "bad magic".to_string(),
+                    yume_core::$module::BinaryError::Truncated => "truncated".to_string(),
+                    yume_core::$module::BinaryError::Io(e) => e.to_string(),
+                }
+            }
+        )*
+    };
+}
+
+binary_reasons!(
+    table_reason => code_table,
+    reading_reason => fluency_table,
+    weights_reason => unigram_table,
+    lexicon_reason => lexicon,
+);
+
+/// The data set a scheme is made of, in load order: the shared files, then the
+/// scheme's own.
+///
+/// `yume_core::data_manifest` is the one place that says so, and this hands it
+/// on to a frontend that has no yume-core of its own to ask.
+pub fn data_set(scheme: Scheme) -> Vec<DataFile> {
+    data_manifest::shared()
+        .into_iter()
+        .chain(data_manifest::for_scheme(scheme.tag()))
+        .collect()
+}
+
+/// The magic this kind of file should begin with, when yume-core exports it.
+///
+/// Only the formats that name their constant are here; the rest answer `None`
+/// and the reason stands on its own. Reading the expected value from yume-core
+/// rather than writing it down is the point — a copy would rot on exactly the
+/// day the constant changes, which is the day it matters.
+pub fn expected_magic(kind: DataKind) -> Option<&'static [u8]> {
+    Some(match kind {
+        DataKind::Table | DataKind::Symbols => yume_core::code_table::MAGIC.as_slice(),
+        DataKind::Reading => yume_core::fluency_table::MAGIC.as_slice(),
+        DataKind::Weights => yume_core::unigram_table::MAGIC.as_slice(),
+        DataKind::Lexicon => yume_core::lexicon::MAGIC.as_slice(),
+        DataKind::Annotations => yume_core::division::MAGIC.as_slice(),
+        DataKind::Grammar => yume_core::grammar::YGRAM_MAGIC.as_slice(),
+        _ => return None,
+    })
+}
+
+/// Compare the head of `path` against what its format expects.
+///
+/// `None` when they agree, when the format has no constant to compare against,
+/// or when the file's head is not printable — a mismatch nobody can read is
+/// worse than no mismatch at all, because it looks like the answer.
+fn magic_mismatch(path: &Path, kind: DataKind) -> Option<MagicMismatch> {
+    let want = expected_magic(kind)?;
+    let bytes = std::fs::read(path).ok()?;
+    let head = bytes.get(..want.len())?;
+    if head == want {
+        return None;
+    }
+    if !head.iter().all(|b| b.is_ascii_graphic()) {
+        return None;
+    }
+    Some(MagicMismatch {
+        expected: String::from_utf8_lossy(want).into_owned(),
+        found: String::from_utf8_lossy(head).into_owned(),
+    })
+}
+
 /// Load one entry of the factory data set into `engine`.
 ///
 /// This is yumete's copy of the one dispatch every Yume frontend has — the
 /// `kind` of a [`DataFile`] says which door of the engine it goes through. An
 /// unrecognised `kind` is skipped rather than treated as an error, so a yumete
 /// built against an older `yume-core` still starts against newer data.
-fn load_data_file(engine: &mut Engine, dirs: &[PathBuf], file: &DataFile) -> bool {
+///
+/// The error carries the core's own reason (Feature #220). yume-core has always
+/// returned one; this function used to throw it away.
+fn load_data_file(engine: &mut Engine, dirs: &[PathBuf], file: &DataFile) -> Result<(), DataProblem> {
+    let at = |name: &str, fault: DataFault| DataProblem {
+        file: name.to_string(),
+        kind: file.kind,
+        fault,
+    };
     let Some(path) = find_file(dirs, &file.file) else {
-        return false;
+        return Err(at(&file.file, DataFault::Missing));
     };
     let Some(p) = path.to_str() else {
-        return false;
+        // A path this host cannot spell in UTF-8. The core's doors take `&str`,
+        // so there is nothing to try.
+        return Err(at(&file.file, DataFault::Unreadable("path is not UTF-8".into())));
+    };
+    // Building the mismatch costs a read of the file, so it is only built on
+    // the failing path.
+    let rejected = |path: &Path, reason: String| DataFault::Rejected {
+        reason,
+        magic: magic_mismatch(path, file.kind),
     };
     match file.kind {
         DataKind::Table => {
             let mut table = CodeTable::new();
-            if table.load_binary(p).is_err() {
-                return false;
+            if let Err(e) = table.load_binary(p) {
+                let why = table_reason(e);
+                return Err(at(&file.file, rejected(&path, why)));
             }
             engine.set_table(Arc::new(table));
         }
         DataKind::Symbols => {
             let mut table = CodeTable::new();
-            if table.load_binary(p).is_err() {
-                return false;
+            if let Err(e) = table.load_binary(p) {
+                let why = table_reason(e);
+                return Err(at(&file.file, rejected(&path, why)));
             }
             engine.set_symbol_table(table);
         }
         DataKind::Reading => {
             let mut fluency = FluencyTable::new();
-            if fluency.load_binary(p).is_err() {
-                return false;
+            if let Err(e) = fluency.load_binary(p) {
+                let why = reading_reason(e);
+                return Err(at(&file.file, rejected(&path, why)));
             }
             engine.set_reading_table(Arc::new(fluency));
         }
         DataKind::Weights => {
             let mut unigram = UnigramTable::new();
-            if unigram.load_binary(p).is_err() {
-                return false;
+            if let Err(e) = unigram.load_binary(p) {
+                let why = weights_reason(e);
+                return Err(at(&file.file, rejected(&path, why)));
             }
             engine.unigram = Arc::new(unigram);
         }
         DataKind::Lexicon => {
             let mut lexicon = Lexicon::new();
-            if lexicon.load_binary(p).is_err() {
-                return false;
+            if let Err(e) = lexicon.load_binary(p) {
+                let why = lexicon_reason(e);
+                return Err(at(&file.file, rejected(&path, why)));
             }
             engine.lexicon = Arc::new(lexicon);
         }
         DataKind::Annotations => {
             // 全息拆分表 plus this scheme's 字根表; the divisions are shared by
             // every scheme, and pinyin takes them with no 字根表 at all.
-            let Ok(divisions) = std::fs::read(&path)
-                .map_err(drop)
-                .and_then(|b| DivisionTable::from_binary(&b).map_err(drop))
-            else {
-                return false;
-            };
+            let bytes = std::fs::read(&path)
+                .map_err(|e| at(&file.file, DataFault::Unreadable(e.to_string())))?;
+            let divisions = DivisionTable::from_binary(&bytes)
+                .map_err(|e| at(&file.file, rejected(&path, e.to_string())))?;
             let zigen = match find_file(dirs, &file.aux) {
-                Some(aux) => match std::fs::read(&aux)
-                    .map_err(drop)
-                    .and_then(|b| ZigenTable::from_binary(&b).map_err(drop))
-                {
-                    Ok(z) => z,
-                    Err(()) => return false,
-                },
+                Some(aux) => {
+                    let bytes = std::fs::read(&aux)
+                        .map_err(|e| at(&file.aux, DataFault::Unreadable(e.to_string())))?;
+                    // The 字根表 has no exported magic of its own, so the
+                    // core's sentence is the whole answer here.
+                    ZigenTable::from_binary(&bytes).map_err(|e| {
+                        at(
+                            &file.aux,
+                            DataFault::Rejected {
+                                reason: e.to_string(),
+                                magic: None,
+                            },
+                        )
+                    })?
+                }
                 None => ZigenTable::default(),
             };
             engine.set_annotations(AnnotationTable::with_tables(Arc::new(divisions), zigen));
@@ -802,34 +1003,36 @@ fn load_data_file(engine: &mut Engine, dirs: &[PathBuf], file: &DataFile) -> boo
                 .ok()
                 .and_then(|i| NAMED_CHARSETS.get(i))
             else {
-                return false;
+                return Err(at(&file.file, rejected(&path, format!("no charset slot {}", file.slot))));
             };
             let mut charset = Charset::new(id);
-            if charset.load_binary(p).is_err() {
-                return false;
+            if let Err(e) = charset.load_binary(p) {
+                return Err(at(&file.file, rejected(&path, e.to_string())));
             }
-            return engine.set_named_charset(id, charset);
+            if !engine.set_named_charset(id, charset) {
+                return Err(at(&file.file, rejected(&path, "the engine refused the charset".into())));
+            }
         }
         DataKind::Words => match yume_core::word_whitelist::load_binary(p) {
             Ok(words) => engine.set_word_whitelist(words),
-            Err(_) => return false,
+            Err(e) => return Err(at(&file.file, rejected(&path, e.to_string()))),
         },
         DataKind::Grammar => {
-            if engine.load_grammar_binary(p).is_err() {
-                return false;
+            if let Err(e) = engine.load_grammar_binary(p) {
+                return Err(at(&file.file, rejected(&path, e.to_string())));
             }
         }
         DataKind::SimpTrad => match std::fs::read_to_string(&path) {
             Ok(text) => engine.load_simp_trad_text(&text),
-            Err(_) => return false,
+            Err(e) => return Err(at(&file.file, DataFault::Unreadable(e.to_string()))),
         },
         // A kind this yumete was not built against. The doc comment above has
         // promised since the beginning that these are skipped rather than
         // treated as errors — but the match was exhaustive, so yume adding a
         // kind broke the *build* instead. Now it does what it said.
-        _ => return false,
+        _ => return Err(at(&file.file, DataFault::UnknownKind)),
     }
-    true
+    Ok(())
 }
 
 /// Assemble an engine for `scheme` from the compiled tables in `dirs`. Returns
@@ -843,15 +1046,22 @@ fn load_data_file(engine: &mut Engine, dirs: &[PathBuf], file: &DataFile) -> boo
 /// composing needs the scheme's own dictionary and nothing else. Missing word
 /// weights or charsets cost ranking and filtering, but an editor that can still
 /// type 漢字 should not fall back to ASCII over them.
-fn build_engine(scheme: Scheme, dirs: &[PathBuf]) -> (Engine, bool) {
+fn build_engine(scheme: Scheme, dirs: &[PathBuf]) -> (Engine, bool, Vec<DataProblem>) {
     let mut engine = Engine::new(CodeTable::new());
     let mut dictionary = false;
+    let mut problems = Vec::new();
 
     for file in data_manifest::shared()
         .into_iter()
         .chain(data_manifest::for_scheme(scheme.tag()))
     {
-        let loaded = load_data_file(&mut engine, dirs, &file);
+        let loaded = match load_data_file(&mut engine, dirs, &file) {
+            Ok(()) => true,
+            Err(problem) => {
+                problems.push(problem);
+                false
+            }
+        };
         // 拼音 decodes through the shared 音節表; the shape schemes need their
         // own 碼表.
         let essential = match scheme {
@@ -867,7 +1077,7 @@ fn build_engine(scheme: Scheme, dirs: &[PathBuf]) -> (Engine, bool) {
     // pinyin, so it comes after its tables are in place.
     engine.set_scheme_by_tag(scheme.tag());
 
-    (engine, dictionary)
+    (engine, dictionary, problems)
 }
 
 #[cfg(test)]
@@ -995,6 +1205,106 @@ mod tests {
         let other = ImeSession::new(Scheme::Riyue, vec![PathBuf::from("/no/such/dir")]);
         assert!(!other.available());
         assert_eq!(other.scheme(), Scheme::Riyue);
+    }
+}
+
+#[cfg(test)]
+mod data_faults {
+    use super::*;
+
+    /// A data directory with one file in it, written by hand.
+    fn dir_with(name: &str, bytes: &[u8], tag: &str) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!("yumete-fault-{tag}-{}", std::process::id()));
+        let path = dir.join(name.replace('/', std::path::MAIN_SEPARATOR_STR));
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent).expect("fixture dir");
+        }
+        std::fs::write(&path, bytes).expect("fixture file");
+        dir
+    }
+
+    /// The manifest entry for one kind, whatever it is called this month.
+    ///
+    /// 拆分 is per-scheme (the 字根表 is), so the search covers both halves of
+    /// what a session loads rather than only the shared list.
+    fn entry(kind: DataKind) -> DataFile {
+        data_manifest::shared()
+            .into_iter()
+            .chain(data_manifest::for_scheme(Scheme::Lingming.tag()))
+            .find(|f| f.kind == kind)
+            .expect("the manifest has one of these")
+    }
+
+    /// The whole point of #220: a file **left over from an older Yume** is
+    /// present, is refused, and used to be indistinguishable from one that was
+    /// never installed. `.ydiv` changed its magic on 2026-09-04 and every old
+    /// data directory lost its 拆分 comments without a word.
+    #[test]
+    fn an_old_file_says_which_version_it_is() {
+        let entry = entry(DataKind::Annotations);
+        let mut old = b"YDV20260828".to_vec();
+        old.extend_from_slice(&[0u8; 64]);
+        let dir = dir_with(&entry.file, &old, "old");
+
+        let mut engine = Engine::new(CodeTable::new());
+        let problem = load_data_file(&mut engine, &[dir], &entry).expect_err("refused");
+        assert_eq!(problem.file, entry.file);
+        assert!(problem.is_loud(), "an installed file that does nothing is loud");
+        let DataFault::Rejected { reason, magic } = &problem.fault else {
+            panic!("expected a rejection, got {:?}", problem.fault);
+        };
+        assert!(!reason.is_empty(), "the core's own words are the reason");
+        let magic = magic.as_ref().expect("both magics are printable ASCII");
+        assert_eq!(magic.found, "YDV20260828");
+        assert_eq!(
+            magic.expected,
+            String::from_utf8_lossy(yume_core::division::MAGIC)
+        );
+    }
+
+    /// A file that is not there is **not** loud. Half the manifest is optional
+    /// and an ordinary install is missing several; if those spoke up, the one
+    /// line that matters would be buried.
+    #[test]
+    fn a_file_that_was_never_installed_is_quiet() {
+        let entry = entry(DataKind::Annotations);
+        let mut engine = Engine::new(CodeTable::new());
+        let problem = load_data_file(&mut engine, &[PathBuf::from("/no/such/dir")], &entry)
+            .expect_err("missing");
+        assert_eq!(problem.fault, DataFault::Missing);
+        assert!(!problem.is_loud());
+    }
+
+    /// Bytes that are not a header at all: there is a reason, and no mismatch
+    /// to show. A 檔頭 nobody can read is worse than none, because it looks
+    /// like the answer.
+    #[test]
+    fn unreadable_bytes_give_a_reason_and_no_magic() {
+        let entry = entry(DataKind::Annotations);
+        let dir = dir_with(&entry.file, &[0xff; 40], "junk");
+        let mut engine = Engine::new(CodeTable::new());
+        let problem = load_data_file(&mut engine, &[dir], &entry).expect_err("refused");
+        let DataFault::Rejected { reason, magic } = &problem.fault else {
+            panic!("expected a rejection, got {:?}", problem.fault);
+        };
+        assert!(!reason.is_empty());
+        assert!(magic.is_none(), "not printable, so not shown");
+    }
+
+    /// The session keeps them, which is what `:yume` reads.
+    #[test]
+    fn a_session_remembers_what_did_not_load() {
+        let entry = entry(DataKind::Annotations);
+        let mut old = b"YDV20260828".to_vec();
+        old.extend_from_slice(&[0u8; 64]);
+        let dir = dir_with(&entry.file, &old, "session");
+        let ime = ImeSession::new(Scheme::Lingming, vec![dir]);
+        let loud: Vec<&DataProblem> = ime.problems().iter().filter(|p| p.is_loud()).collect();
+        assert_eq!(loud.len(), 1, "only the one that is there and refused");
+        assert_eq!(loud[0].file, entry.file);
+        // Everything else in that directory is simply absent, and the session
+        // still carries those — quietly.
+        assert!(ime.problems().len() > 1);
     }
 }
 

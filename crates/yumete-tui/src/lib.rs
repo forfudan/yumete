@@ -37,7 +37,7 @@ use yumete_core::sidebar::View;
 use yumete_core::wrap::{self, Anchor as WrapAnchor};
 use yumete_core::zong::{Anchor, Layout as WritingLayout};
 use yumete_core::{say, Editor, Key, KeyOutcome, Mode, TextStore};
-use yumete_ime::{CommitStrategy, ImeSession, Scheme};
+use yumete_ime::{CommitStrategy, DataFault, DataProblem, ImeSession, Scheme};
 
 /// Run the interactive editor until the user quits.
 ///
@@ -1334,6 +1334,47 @@ fn commit_method(ime: &mut ImeSession, mode: &str) -> String {
     say!("上屏方式：{0}", commit_name(now))
 }
 
+/// The data files that are installed and doing nothing, in one clause (#220).
+///
+/// A file that is simply **not there** is left out: half the manifest is
+/// optional and an ordinary install is missing several, so listing those would
+/// bury the line that matters. What is left is 「somebody put this here and the
+/// core will not have it」, which is what a binary format changing its magic
+/// under an old data directory looks like from the writer's chair — and which
+/// was, until this, completely silent: the 拆分 comments simply stopped
+/// appearing and nothing anywhere said why.
+///
+/// Only the first is spelled out. One reason is enough to send somebody to
+/// `scripts/build.sh`, and they are nearly always the same reason.
+fn data_faults(ime: &ImeSession) -> String {
+    let loud: Vec<&DataProblem> = ime.problems().iter().filter(|p| p.is_loud()).collect();
+    let Some(first) = loud.first() else {
+        return String::new();
+    };
+    let one = match &first.fault {
+        DataFault::Rejected {
+            reason,
+            magic: Some(magic),
+        } => say!(
+            "{0} 核心不認：{1}（期望 {2}，檔頭是 {3}）",
+            first.file,
+            reason,
+            magic.expected,
+            magic.found
+        ),
+        DataFault::Rejected { reason, magic: None } => {
+            say!("{0} 核心不認：{1}", first.file, reason)
+        }
+        DataFault::Unreadable(why) => say!("{0} 讀不了：{1}", first.file, why),
+        // `is_loud` admits no others.
+        _ => return String::new(),
+    };
+    match loud.len() {
+        1 => one,
+        n => say!("{0}（另有 {1} 個檔同樣沒進去）", one, n - 1),
+    }
+}
+
 /// Switch the IME to the named scheme, and say what happened.
 ///
 /// Only 靈明 ships with yumete. The others are yume's own data, installed the
@@ -1345,7 +1386,7 @@ fn switch_scheme(ime: &mut ImeSession, tag: &str, config: &Config) -> String {
     // Two questions ride the same request, because both are about the session
     // the front end holds and neither is worth a second channel.
     if tag == "?" {
-        return if ime.available() {
+        let head = if ime.available() {
             format!(
                 "{} · 碼表 {} · 拆分 {} · 上屏 {}",
                 ime.scheme_name(),
@@ -1357,6 +1398,14 @@ fn switch_scheme(ime: &mut ImeSession, tag: &str, config: &Config) -> String {
             "還沒開始打字——`:yume scheme` 載入碼表".to_string()
         } else {
             "還沒開始打字，而且這個二進制不帶碼表——先裝資料".to_string()
+        };
+        // The one thing `:yume` could not say before #220: a file that is
+        // installed and doing nothing. It goes last because it is rare, and it
+        // goes here because this is the question it answers.
+        let faults = data_faults(ime);
+        return match faults.is_empty() {
+            true => head,
+            false => format!("{head} · {faults}"),
         };
     }
     if let Some(mode) = tag.strip_prefix("commit:") {
@@ -4022,6 +4071,42 @@ fn draw_candidate_panel(
 
 #[cfg(test)]
 mod tests {
+    /// #220: an installed data file the core refuses names the *version*, not
+    /// the symptom. Before this, `:yume` said nothing at all and the writer saw
+    /// only 拆分 comments that had stopped appearing.
+    #[test]
+    fn yume_names_a_data_file_the_core_will_not_have() {
+        let entry = yumete_ime::data_set(Scheme::Lingming)
+            .into_iter()
+            .find(|f| f.kind == yumete_ime::DataKind::Annotations)
+            .expect("拆分 is in the manifest");
+        let dir = std::env::temp_dir().join(format!("yumete-yume-fault-{}", std::process::id()));
+        let path = dir.join(entry.file.replace('/', std::path::MAIN_SEPARATOR_STR));
+        std::fs::create_dir_all(path.parent().expect("a parent")).expect("fixture dir");
+        let mut stale = b"YDV20260828".to_vec();
+        stale.extend_from_slice(&[0u8; 64]);
+        std::fs::write(&path, &stale).expect("fixture file");
+
+        let ime = ImeSession::new(Scheme::Lingming, vec![dir]);
+        let said = data_faults(&ime);
+        assert!(said.contains("chaifen.ydiv"), "names the file: {said}");
+        assert!(said.contains("YDV20260828"), "names what the file says: {said}");
+        let want = yumete_ime::expected_magic(yumete_ime::DataKind::Annotations).expect("拆分 has a magic");
+        assert!(
+            said.contains(&String::from_utf8_lossy(want).into_owned()),
+            "names what this build wants: {said}"
+        );
+    }
+
+    /// The other half of the same rule: a directory with nothing in it is
+    /// missing everything, and says nothing. Otherwise the clause would be on
+    /// screen for every writer who has not installed the optional data.
+    #[test]
+    fn nothing_installed_is_not_a_fault_worth_saying() {
+        let ime = ImeSession::new(Scheme::Lingming, vec![std::path::PathBuf::from("/no/such/dir")]);
+        assert_eq!(data_faults(&ime), "");
+    }
+
     use super::*;
     use ratatui::backend::TestBackend;
     use ratatui::Terminal;
