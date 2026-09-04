@@ -48,9 +48,6 @@ en = "{0} hit(s), nothing changed"
 zh = "{0} 處，{1} 個檔案——gf 開游標下那一條，:replace 全換"
 en = "{0} hit(s) in {1} file(s) — gf opens the one under the cursor, :replace changes them all"
 
-[[message]]
-zh = "{0}{1}{2}"
-en = "{0}{1}{2}"
 
 [[message]]
 zh = "{0}：{1} 行，沒查出問題"
@@ -2183,3 +2180,7 @@ en = "layout: vertical"
 [[message]]
 zh = "排版：橫排"
 en = "layout: horizontal"
+
+[[message]]
+zh = "大綱：{0} 條標題（:toc 3 直接去第三條）"
+en = "outline: {0} headings (:toc 3 goes straight to the third)"

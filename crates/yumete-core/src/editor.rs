@@ -428,6 +428,57 @@ impl Grain {
     }
 }
 
+/// The depth of a Chinese chapter heading, if this line is one.
+///
+/// 「第三章」, 「第四百一十二卷」, 「楔子」, 「後記」 — how a manuscript with no
+/// markup says where a chapter begins, and the only thing `:toc` can go on in a
+/// `.txt`. Deliberately narrow: a *short* line that begins with 第 and a number
+/// and a chapter word, or that is one of a dozen names a book uses for its
+/// front and back matter. A line of prose that happens to open with 第一章的
+/// 那天 is 20 characters into a sentence and is not caught by this.
+fn chapter_heading(line: &str) -> Option<usize> {
+    let text = line.trim();
+    let chars: Vec<char> = text.chars().collect();
+    // A heading is a line by itself, and a short one. The longest real chapter
+    // title in the corpora this was written against is well under this.
+    if chars.is_empty() || chars.len() > 40 {
+        return None;
+    }
+    // 序、楔子、後記: no number, so the whole line has to be the name.
+    const NAMED: &[&str] = &[
+        "序", "序章", "序言", "自序", "前言", "引子", "楔子", "小引", "凡例",
+        "尾聲", "尾声", "終章", "终章", "後記", "后记", "跋", "附錄", "附录",
+        "番外", "外傳", "外传", "目錄", "目录",
+    ];
+    if NAMED.contains(&text) {
+        return Some(2);
+    }
+    if chars[0] != '第' {
+        return None;
+    }
+    let digits = chars[1..]
+        .iter()
+        .take_while(|c| "一二三四五六七八九十百千萬万零〇兩两0123456789".contains(**c))
+        .count();
+    if digits == 0 {
+        return None;
+    }
+    let unit = *chars.get(1 + digits)?;
+    // What comes after the unit is the title, and it has to be separated from
+    // it — 第三章 or 第三章　風雪, but not 第三章魚 (which is prose).
+    match chars.get(2 + digits) {
+        None => {}
+        Some(c) if c.is_whitespace() || matches!(c, '、' | '：' | ':' | '.' | '·') => {}
+        Some(_) => return None,
+    }
+    match unit {
+        // A 卷 holds 章 the way a part holds chapters, so it sits above them.
+        '卷' | '部' | '篇' | '集' => Some(1),
+        '章' | '回' | '節' | '节' | '折' | '幕' | '話' | '话' => Some(2),
+        _ => None,
+    }
+}
+
 /// Call `f` for every readable file under `root`, depth first.
 ///
 /// Skips what a manuscript directory holds but a writer never searches: hidden
@@ -2009,7 +2060,7 @@ impl Editor {
             let want = match self.current_buffer().syntax() {
                 crate::syntax::Syntax::Markdown => '#',
                 crate::syntax::Syntax::Typst => '=',
-                // A file with no markup has no headings to list.
+                // A file with no markup has its chapters found below instead.
                 crate::syntax::Syntax::Text => continue,
             };
             let mark = trimmed.chars().next().filter(|&c| c == want);
@@ -2022,6 +2073,24 @@ impl Editor {
                 continue;
             }
             out.push((line, depth, title.to_string()));
+        }
+        // **A novel is a text file with chapters in it and no markup at all.**
+        // 資治通鑑 is 700 chapters and not one `#` — exactly the file where
+        // 「go to chapter 412」 is worth a key, and the one this said had no
+        // outline. The chapters are written 第四百一十二卷, which is a heading
+        // whether or not anybody marked it up.
+        //
+        // Only when nothing else was found: a manuscript that *does* use `#`
+        // has said how it marks a chapter, and a stray 第三章 line in its prose
+        // is not a second opinion.
+        if out.is_empty() {
+            for line in 0..rope.len_lines() {
+                let text = rope.line(line).to_string();
+                let trimmed = text.trim_end_matches(['\n', '\r']);
+                if let Some(depth) = chapter_heading(trimmed) {
+                    out.push((line, depth, trimmed.trim().to_string()));
+                }
+            }
         }
         out
     }
@@ -2402,17 +2471,14 @@ impl Editor {
                         Some(&(line, _, _)) => self.goto_line(line + 1),
                         None => self.status = say!("只有 {0} 條標題", headings.len()),
                     },
-                    // …and a bare `:toc` lists them, numbered so it can.
+                    // …and a bare `:toc` opens the outline, which is a *list*
+                    // — one heading a line, scrollable, with the keys. It used
+                    // to join all of them into the status line with three
+                    // spaces between, which for a novel is 700 chapters on one
+                    // row, of which the reader can see four.
                     None => {
-                        self.status = headings
-                            .iter()
-                            .enumerate()
-                            .map(|(i, (_, depth, title))| {
-                                let indent = "·".repeat(depth.saturating_sub(1));
-                                say!("{0}{1}{2}", i + 1, indent, title)
-                            })
-                            .collect::<Vec<_>>()
-                            .join("   ");
+                        self.show_sidebar(crate::sidebar::View::Outline);
+                        self.status = say!("大綱：{0} 條標題（:toc 3 直接去第三條）", headings.len());
                     }
                 }
                 Ok(CommandOutcome::Continue)
@@ -12901,8 +12967,38 @@ mod tests {
         ed.execute(":toc 3").unwrap();
         assert_eq!(ed.cursor_line(), 4);
 
+        // A bare `:toc` opens the outline — a list, one heading a line — and
+        // says how many there are. It used to join every heading into the
+        // status line, which for a novel is 700 chapters on one row.
         ed.execute(":toc").unwrap();
-        assert!(ed.status().contains("第一章"), "{}", ed.status());
+        assert!(ed.sidebar().is_some(), "{}", ed.status());
+        assert!(ed.status().contains("4"), "{}", ed.status());
+    }
+
+    #[test]
+    fn a_novel_with_no_markup_still_has_chapters() {
+        // 資治通鑑 is a `.txt` with 700 chapters in it and not one `#`. The
+        // outline used to be empty for exactly the file where 「go to chapter
+        // 412」 is worth a key.
+        let dir = std::env::temp_dir().join(format!("yumete-toc-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let novel = dir.join("novel.txt");
+        std::fs::write(
+            &novel,
+            "楔子\n那年冬天。\n第一卷\n第一章　風雪\n他抬頭看了看那片天。\n第二章\n雪還在下。\n第三章魚是一句話的開頭\n",
+        )
+        .unwrap();
+        let mut ed = Editor::new();
+        ed.open_file(&novel).unwrap();
+        let headings = ed.outline();
+        let titles: Vec<&str> = headings.iter().map(|(_, _, t)| t.as_str()).collect();
+        assert_eq!(titles, ["楔子", "第一卷", "第一章　風雪", "第二章"]);
+        assert_eq!(headings[1].1, 1, "a 卷 holds 章, so it sits above them");
+        assert_eq!(headings[2].1, 2);
+        ed.execute(":toc 3").unwrap();
+        assert_eq!(ed.cursor_line(), 3);
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]
