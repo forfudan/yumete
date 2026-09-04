@@ -555,7 +555,7 @@ impl Buffer {
             .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "buffer has no file name"))?;
         if !force && self.changed_underneath() {
             return Err(io::Error::other(
-                "這個檔案在外面被改過了——`:reload!` 讀它的，`:w!` 用你的",
+                say!("buffer.changed-outside"),
             ));
         }
         self.write_atomically(&path)?;
@@ -585,7 +585,7 @@ impl Buffer {
         if !force && target.exists() {
             self.seen = old_seen;
             self.read_as = old_read_as;
-            return Err(io::Error::other(say!("那個檔案已經存在——`:w!` 才蓋掉它")));
+            return Err(io::Error::other(say!("buffer.file-already-exists")));
         }
         self.path = Some(target);
         // A new name, so no copy of ours is out there under it yet — and no
@@ -625,7 +625,7 @@ impl Buffer {
     /// file. Exactly as in vi.
     pub fn write_copy(&self, path: &Path, force: bool) -> io::Result<()> {
         if !force && path.exists() {
-            return Err(io::Error::other(say!("那個檔案已經存在——`:w!` 才蓋掉它")));
+            return Err(io::Error::other(say!("buffer.file-already-exists")));
         }
         self.write_atomically(path)
     }
@@ -954,7 +954,7 @@ fn write_bytes_atomically(
         if from.permissions().readonly() {
             return Err(io::Error::new(
                 io::ErrorKind::PermissionDenied,
-                say!("這個檔案是只讀的——先 chmod，或者換個檔名存"),
+                say!("buffer.file-is-read-only"),
             ));
         }
     }

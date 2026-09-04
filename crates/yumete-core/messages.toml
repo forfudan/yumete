@@ -1,2455 +1,4835 @@
-# What the editor says, in both languages — Feature #151.
+# What the editor says — Feature #151.
+
+# One block per message, keyed by a **tag**: a short English name for the
+# condition that says it. The tag is what the code holds; the sentences under it
+# are free to be rewritten, and rewriting them here is how they change on the
+# screen. That is the whole point of the file — the words move, the tag does
+# not.
 #
-# One block per message. `zh` is what the code says, **verbatim**: it is the key
-# the translation is looked up by, so do not edit it here — edit it where it is
-# said, and change it here to match. `en` is the translation, and is the only
-# line this file exists for.
+# The tag reads `area.condition`: lower case, dots between segments, hyphens
+# inside one. `readonly.refused`, `reload.refused-dirty`,
+# `table.column-out-of-range`. It names the **condition** — which mode, which
+# key, what went wrong — never the sentence, because the sentence is the part
+# that changes. A tag no message uses, or a message with no tag, fails a test.
 #
-# `{0}` `{1}` are the values the message is given, **numbered** so a translation
-# may put them in the other order — 「{0} 個檔案裏都沒有「{1}」」 is "no 「{1}」 in
-# {0} file(s)". Both languages must use the same set of holes; a test checks it.
-# An `en` left empty falls back to the Chinese, which is what the editor did
-# before this file existed.
+# The `#` line under each `[[message]]` says **when** it is said. Write it for
+# somebody translating who cannot see the code: the mode, the key, the
+# condition. It is not a paraphrase of the sentence.
 #
-# The register to match is `README.md` and `--help`: plain, short, lower-case
-# unless a name starts the line, no exclamation marks, and it says what happened
-# rather than apologising for it. Where the Chinese uses a term of the art — 縱,
-# 拆分, 所見即所得 — the English keeps it: it is the word, and a reader of this
-# editor is going to meet it anyway.
+# Three languages: `zht` 繁體, `zhs` 简体, `en`. `zht` is the original and must
+# be filled in; the other two fall back to it when empty, so an untranslated
+# message is still a message. The `zhs` here was converted mechanically and is
+# meant to be read over — 簡體 is not only different characters, it is sometimes
+# a different word.
 #
-# `[editor] language = "zh"` (the default) or `"en"`.
-
-[[message]]
-zh = "「{0}」不像表格——每行要有同樣多的欄，或者把光標放到 | 表格上"
-en = "'{0}' is not a table — every line needs the same columns, or put the cursor on a | table"
-
-
-[[message]]
-zh = "schema：{0}"
-en = "schema: {0}"
-
-[[message]]
-zh = "{0} 個本項目的詞：{1}"
-en = "{0} word(s) from this project: {1}"
-
-[[message]]
-zh = "{0} 個檔案裏都沒有「{1}」"
-en = "no '{1}' in {0} file(s)"
-
-[[message]]
-zh = "{0} 處以上（不數了）——gf 開游標下那一條，:replace 全換"
-en = "{0}+ hits (stopped counting) — gf opens the one under the cursor, :replace changes them all"
-
-[[message]]
-zh = "{0} 處（沒有改）"
-en = "{0} hit(s), nothing changed"
-
-[[message]]
-zh = "{0} 處，{1} 個檔案——gf 開游標下那一條，:replace 全換"
-en = "{0} hit(s) in {1} file(s) — gf opens the one under the cursor, :replace changes them all"
-
-
-[[message]]
-zh = "{0}：{1} 行，沒查出問題"
-en = "{0}: {1} row(s), nothing wrong"
-
-[[message]]
-zh = "「{0}」"
-en = "'{0}'"
-
-[[message]]
-zh = "「{0}」一處也沒換到"
-en = "'{0}': nothing replaced"
-
-[[message]]
-zh = "「{0}」不是一個字——行名是一個字"
-en = "'{0}' is not one character — a row is named by one"
-
-[[message]]
-zh = "「{0}」在的那個緩衝區已經關了"
-en = "the file '{0}' was marked in is closed"
-
-[[message]]
-zh = "「{0}」在第 {1} 行"
-en = "'{0}' is on line {1}"
-
-[[message]]
-zh = "「{0}」是結構符，不是部件"
-en = "'{0}' is a descriptor, not a component"
-
-[[message]]
-zh = "「{0}」：{1} 第 {2} 行"
-en = "'{0}': {1} line {2}"
-
-[[message]]
-zh = "一格之內：Enter 不換行——Tab 走下一格"
-en = "inside a cell: Enter makes no new line — Tab goes to the next cell"
-
-[[message]]
-zh = "一格之內：先 Esc 再換行"
-en = "inside a cell: Esc first, then move up or down"
-
-[[message]]
-zh = "不是表格——先 :table"
-en = "not a table — :table first"
-
-[[message]]
-zh = "丟掉了 {0} 份草稿"
-en = "threw away {0} draft(s)"
-
-[[message]]
-zh = "側欄：窄"
-en = "sidebar: narrow"
-
-[[message]]
-zh = "側欄：寬（讀得下整條標題）"
-en = "sidebar: wide, for a whole heading"
-
-[[message]]
-zh = "先 :grep 找一遍——換的是你已經看過的那些"
-en = "run :grep first — what it changes is what you have already read"
-
-[[message]]
-zh = "先存檔——排版器讀的是檔案"
-en = "save first — the typesetter reads the file"
-
-[[message]]
-zh = "分詞著色：開"
-en = "word tint: on"
-
-[[message]]
-zh = "分詞著色：關"
-en = "word tint: off"
-
-[[message]]
-zh = "分隔行是畫出來的——用 t < = > 改對齊"
-en = "the rule row is drawn, not written — t < = > sets the alignment"
-
-[[message]]
-zh = "刪了一欄"
-en = "deleted a column"
-
-[[message]]
-zh = "刪了一行"
-en = "deleted a row"
-
-[[message]]
-zh = "到頭了"
-en = "no further"
-
-[[message]]
-zh = "剪貼簿是空的"
-en = "the clipboard is empty"
-
-[[message]]
-zh = "加了一欄"
-en = "added a column"
-
-[[message]]
-zh = "加了一行"
-en = "added a row"
-
-[[message]]
-zh = "原文：不著色"
-en = "source: no colour"
-
-[[message]]
-zh = "取了 {0} 個字"
-en = "yanked {0} character(s)"
-
-[[message]]
-zh = "取了一格（{0} 個字）"
-en = "yanked a cell ({0} character(s))"
-
-[[message]]
-zh = "取了一行"
-en = "yanked a row"
-
-[[message]]
-zh = "只有 {0} 條標題"
-en = "only {0} heading(s)"
-
-[[message]]
-zh = "只有一欄——表格至少要兩欄，或者先寫好 |---| 那一行"
-en = "one column only — a table needs two, or write the |---| line first"
-
-[[message]]
-zh = "只開了一個檔案"
-en = "only one file open"
-
-
-[[message]]
-zh = "外面沒有 {0}{1}"
-en = "no {0}{1} around this"
-
-[[message]]
-zh = "外面沒有成對的符號"
-en = "no pair around this"
-
-[[message]]
-zh = "存了 {0}"
-en = "saved {0}"
-
-[[message]]
-zh = "存了 {0} 個"
-en = "saved {0} file(s)"
-
-[[message]]
-zh = "密排：一縱兩格，無注音、無旁置、無刻度"
-en = "dense: two squares to a 縱, no readings, no hung marks, no ticks"
-
-[[message]]
-zh = "密排：關"
-en = "dense: off"
-
-[[message]]
-zh = "寫到 {0} 欄寬"
-en = "measure: {0} columns"
-
-[[message]]
-zh = "寫到窗口寬"
-en = "measure: whatever the window gives"
-
-[[message]]
-zh = "寫好了 {0}"
-en = "wrote {0}"
-
-[[message]]
-zh = "已經是 {0} 的注音了"
-en = "the readings are already {0}"
-
-[[message]]
-zh = "已經是對齊的"
-en = "already lined up"
-
-[[message]]
-zh = "已經是最新的了"
-en = "already at the newest change"
-
-[[message]]
-zh = "已經是最早的了"
-en = "already at the oldest change"
-
-[[message]]
-zh = "所見即所得：標記只在光標那一處展開"
-en = "WYSIWYG: the markup is shown only where the cursor is"
-
-[[message]]
-zh = "打不開「{0}」：{1}"
-en = "cannot open '{0}': {1}"
-
-[[message]]
-zh = "打開了 {0} 份沒存的草稿——:w <名字> 留下它們"
-en = "opened {0} unsaved draft(s) — :w <name> keeps them"
-
-[[message]]
-zh = "找不到：{0}"
-en = "not found: {0}"
-
-[[message]]
-zh = "還沒有搜索過——先用 / 搜索，或者選中一段按 g/"
-en = "nothing has been searched for yet — / searches, or select something and press g/"
-
-[[message]]
-zh = "把光標放進注音裏，或者選中要注音的字"
-en = "put the cursor in a reading, or select what to annotate"
-
-[[message]]
-zh = "折行：開"
-en = "soft wrap: on"
-
-[[message]]
-zh = "折行：關（長段落成一行，頁面跟着光標左右走）"
-en = "soft wrap: off — a long paragraph is one row, and the page follows the caret"
-
-[[message]]
-zh = "縱書不折行：一縱斷在窗高上。這一項只管橫排（`:wrap 40` 兩邊都算）"
-en = "vertical does not soft-wrap: a 縱 breaks at the height of the window. This is a horizontal setting (`:wrap 40` counts in both)"
-
-[[message]]
-zh = "按字移動（Tab 回到按格）"
-en = "moving by character — Tab goes back to cells"
-
-[[message]]
-zh = "按格移動"
-en = "moving by cell"
-
-
-[[message]]
-zh = "換了 {0} 處"
-en = "changed {0} hit(s)"
-
-[[message]]
-zh = "換掉了 {0} 個字"
-en = "replaced {0} character(s)"
-
-[[message]]
-zh = "換掉了一格"
-en = "replaced the cell"
-
-[[message]]
-zh = "搶救稿丟掉了"
-en = "threw the draft away"
-
-[[message]]
-zh = "搶救稿開好了——:w 留下它，u 回到原來那份"
-en = "the draft is open — :w keeps it, u goes back"
-
-[[message]]
-zh = "有 {0} 份沒存的草稿——:recover 打開"
-en = "{0} unsaved draft(s) — :recover opens them"
-
-[[message]]
-zh = "查出 {0} 條——gf 跳到那一行"
-en = "{0} problem(s) — gf goes to the row"
-
-[[message]]
-zh = "格與格之間的分隔符刪不掉"
-en = "the divider between cells cannot be deleted"
-
-[[message]]
-zh = "格首：再刪就把兩格併成一格了"
-en = "start of a cell: one more would join it to the one before"
-
-[[message]]
-zh = "標題行上面加不了——加在它下面了"
-en = "nothing goes above the header — added it below instead"
-
-[[message]]
-zh = "標題行不能刪：欄名寫在那裏"
-en = "the header names the columns — it cannot be deleted"
-
-[[message]]
-zh = "標點旁置：開"
-en = "hung punctuation: on"
-
-[[message]]
-zh = "標點旁置：關（每個標點佔一格）"
-en = "hung punctuation: off — each mark takes a square"
-
-[[message]]
-zh = "段組：{0} 段"
-en = "bands: {0}"
-
-[[message]]
-zh = "段組：一段（整頁一縱到底）"
-en = "bands: one — a 縱 runs the whole page"
-
-[[message]]
-zh = "行太少，排不了"
-en = "too few rows to sort"
-
-[[message]]
-zh = "沒有「{0}」這種格式——html 或 typst"
-en = "no such format as '{0}' — html or typst"
-
-[[message]]
-zh = "沒有「{0}」這種語法——markdown 或 typst"
-en = "no such markup as '{0}' — markdown or typst"
-
-[[message]]
-zh = "沒有分隔行，無從對齊"
-en = "no rule row, so there is no alignment to set"
-
-[[message]]
-zh = "沒有符合的"
-en = "nothing matched"
-
-[[message]]
-zh = "還沒有取過東西"
-en = "nothing has been yanked yet"
-
-[[message]]
-zh = "沒有找到 .yumete/words.txt——本項目的詞寫在那裏"
-en = "no .yumete/words.txt — this project's own words go there"
-
-[[message]]
-zh = "沒有更早的位置了"
-en = "no earlier jump"
-
-[[message]]
-zh = "沒有更晚的位置了"
-en = "no later jump"
-
-[[message]]
-zh = "沒有檔名，就沒有 schema 可以照——或者把光標放到 | 表格上"
-en = "no file name, so no schema to read it by — or put the cursor on a | table"
-
-[[message]]
-zh = "沒有留搶救稿——{0}"
-en = "no draft kept — {0}"
-
-[[message]]
-zh = "沒有草稿"
-en = "no drafts"
-
-[[message]]
-zh = "沒有記號「{0}」"
-en = "no mark '{0}'"
-
-[[message]]
-zh = "沒有選中東西"
-en = "nothing selected"
-
-[[message]]
-zh = "注音去掉了"
-en = "removed the reading"
-
-[[message]]
-zh = "注音改寫成 {0} 了"
-en = "rewrote the readings as {0}"
-
-[[message]]
-zh = "注音：{0}"
-en = "reading: {0}"
-
-[[message]]
-zh = "注音：不排，標記留在畫面上"
-en = "readings: not laid out, the markup stays on the page"
-
-[[message]]
-zh = "注音：排 {0}"
-en = "readings: laying out {0}"
-
-[[message]]
-zh = "清空了一格（{0} 個字）"
-en = "cleared a cell ({0} character(s))"
-
-[[message]]
-zh = "光標不在表格裏"
-en = "the cursor is not in a table"
-
-[[message]]
-zh = "模式是空的"
-en = "the pattern is empty"
-
-[[message]]
-zh = "著色：標記留在畫面上"
-en = "coloured: the markup stays on the page"
-
-[[message]]
-zh = "表格是橫排的——先 :table off"
-en = "a table is always horizontal — :table off first"
-
-[[message]]
-zh = "表格：關"
-en = "table: off"
-
-[[message]]
-zh = "表格：關（已轉回竪排）"
-en = "table: off — set vertically again"
-
-[[message]]
-zh = "表裏沒有「{0}」"
-en = "no '{0}' in this table"
-
-[[message]]
-zh = "複製了 {0} 個字到系統剪貼簿"
-en = "copied {0} character(s) to the system clipboard"
-
-[[message]]
-zh = "記住了「{0}」：{1} 第 {2} 行"
-en = "marked '{0}': {1} line {2}"
-
-[[message]]
-zh = "記號用一個字母或數字"
-en = "a mark is named by one letter or digit"
-
-[[message]]
-zh = "註就在這一行"
-en = "the note is on this line"
-
-[[message]]
-zh = "詳情欄：開"
-en = "detail panel: on"
-
-[[message]]
-zh = "詳情欄：關"
-en = "detail panel: off"
-
-[[message]]
-zh = "語法：{0}"
-en = "markup: {0}"
-
-[[message]]
-zh = "貼了 {0}"
-en = "pasted {0}"
-
-[[message]]
-zh = "貼了 {0} 個字"
-en = "pasted {0} character(s)"
-
-[[message]]
-zh = "貼成新的一行"
-en = "pasted as a new row"
-
-[[message]]
-zh = "跑完了：{0}"
-en = "done: {0}"
-
-[[message]]
-zh = "跳轉表 {0}/{1}"
-en = "jump list {0}/{1}"
-
-[[message]]
-zh = "這一格是空的"
-en = "this cell is empty"
-
-[[message]]
-zh = "這一行上沒有「{0}」"
-en = "no '{0}' on this line"
-
-[[message]]
-zh = "這一行沒寫檔名"
-en = "no file named on this line"
-
-[[message]]
-zh = "這個檔案沒有標題"
-en = "no headings in this file"
-
-[[message]]
-zh = "這個檔案沒有搶救稿"
-en = "no draft for this file"
-
-[[message]]
-zh = "這張表沒說哪一欄是行名（schema 的 key）"
-en = "this table does not name a key column (the schema's key)"
-
-[[message]]
-zh = "這是代碼塊裏的表格——那是引文，不是表格"
-en = "that table is inside a code block — a quotation, not a table"
-
-[[message]]
-zh = "這條註沒有寫在別處"
-en = "this note points nowhere else"
-
-[[message]]
-zh = "這裏沒有檔案"
-en = "no files here"
-
-
-[[message]]
-zh = "還沒有取過東西"
-en = "nothing has been yanked yet"
-
-[[message]]
-zh = "還沒有可以重複的改動"
-en = "no change to repeat yet"
-
-[[message]]
-zh = "那個檔案已經關了"
-en = "that file is closed"
-
-[[message]]
-zh = "對齊好了"
-en = "lined up"
-
-[[message]]
-zh = "重讀了 {0}"
-en = "re-read {0}"
-
-[[message]]
-zh = "錄了 {0} 個鍵"
-en = "recorded {0} key(s)"
-
-[[message]]
-zh = "正在錄…"
-en = "recording…"
-
-[[message]]
-zh = "關了"
-en = "closed"
-
-[[message]]
-zh = "關了 {0}——現在是 {1} [{2}/{3}]"
-en = "closed {0} — now {1} [{2}/{3}]"
-
-[[message]]
-zh = "首行縮進：{0} 格"
-en = "first-line indent: {0} squares"
-
-[[message]]
-zh = "首行縮進：關"
-en = "first-line indent: off"
-
-
-# ---- The hint row ---------------------------------------------------------
+# `{0}` `{1}` are the values the message is handed, **numbered** so a
+# translation may put them in the other order: 「{0} 個檔案裏都沒有「{1}」」 is
+# "no 「{1}」 in {0} files". Every language of one message must use the same set
+# of holes; a test checks it.
 #
-# The row above the status line: what a half-pressed sequence can be finished
-# with, and what the keys do where the keys have changed meaning. Short — it is
-# one row, beside its key, and a phrase that wraps is a phrase nobody reads.
-
-[[message]]
-zh = "' 回到"
-en = "' go back to"
-
-[[message]]
-zh = "M 記住這裏"
-en = "M mark this place"
-
-[[message]]
-zh = "g"
-en = "g"
-
-[[message]]
-zh = "m"
-en = "m"
-
-[[message]]
-zh = "t 表格"
-en = "t table"
-
-[[message]]
-zh = "上一格"
-en = "previous cell"
-
-[[message]]
-zh = "下一格"
-en = "next cell"
-
-[[message]]
-zh = "之內"
-en = "inside"
-
-[[message]]
-zh = "併下一行"
-en = "join with the line below"
-
-[[message]]
-zh = "側欄"
-en = "sidebar"
-
-[[message]]
-zh = "刪這行／這欄"
-en = "delete this row / column"
-
-[[message]]
-zh = "加一欄（右／左）"
-en = "add a column (right / left)"
-
-[[message]]
-zh = "加一行（下／上）"
-en = "add a row (below / above)"
-
-[[message]]
-zh = "包起來"
-en = "surround"
-
-[[message]]
-zh = "去掉"
-en = "take off"
-
-[[message]]
-zh = "取格／行"
-en = "yank cell / row"
-
-[[message]]
-zh = "取消"
-en = "cancel"
-
-[[message]]
-zh = "叫什麼名字"
-en = "name it"
-
-[[message]]
-zh = "哪一個"
-en = "which one"
-
-[[message]]
-zh = "回 Normal"
-en = "back to Normal"
-
-[[message]]
-zh = "回正文"
-en = "back to the text"
-
-
-
-[[message]]
-zh = "寬窄"
-en = "wide / narrow"
-
-[[message]]
-zh = "打一個字"
-en = "type a character"
-
-[[message]]
-zh = "打一個字蓋掉選區"
-en = "type a character to write over it"
-
-[[message]]
-zh = "打一種括號"
-en = "type a kind of bracket"
-
-[[message]]
-zh = "打一種括號或引號"
-en = "type a bracket or a quote"
-
-[[message]]
-zh = "打要去掉的那一種"
-en = "type the one to take off"
-
-[[message]]
-zh = "打要換成的那一種"
-en = "type the one to change it to"
-
-[[message]]
-zh = "找"
-en = "find"
-
-[[message]]
-zh = "括號"
-en = "bracket"
-
-[[message]]
-zh = "換成"
-en = "change to"
-
-[[message]]
-zh = "換掉"
-en = "change"
-
-[[message]]
-zh = "換格／清空"
-en = "change / clear the cell"
-
-[[message]]
-zh = "換視圖"
-en = "other view"
-
-[[message]]
-zh = "收下"
-en = "keep it"
-
-[[message]]
-zh = "收起"
-en = "collapse"
-
-[[message]]
-zh = "改按字"
-en = "by character instead"
-
-[[message]]
-zh = "改按格"
-en = "by cell instead"
-
-[[message]]
-zh = "暫存器"
-en = "register"
-
-[[message]]
-zh = "格內"
-en = "in a cell"
-
-[[message]]
-zh = "檔尾"
-en = "end of file"
-
-[[message]]
-zh = "注音"
-en = "reading"
-
-[[message]]
-zh = "照這欄順排／倒排（t1s）"
-en = "sort by this column, up / down (t1s)"
-
-[[message]]
-zh = "移動"
-en = "move"
-
-[[message]]
-zh = "蓋掉"
-en = "write over"
-
-[[message]]
-zh = "行首／行尾"
-en = "line start / end"
-
-[[message]]
-zh = "表格"
-en = "table"
-
-[[message]]
-zh = "表格 · 字"
-en = "table · character"
-
-[[message]]
-zh = "貼"
-en = "paste"
-
-[[message]]
-zh = "走字"
-en = "by character"
-
-[[message]]
-zh = "走格"
-en = "by cell"
-
-[[message]]
-zh = "這欄左移／右移"
-en = "move this column left / right"
-
-[[message]]
-zh = "這欄靠左／居中／靠右"
-en = "this column left / centre / right"
-
-[[message]]
-zh = "這行下移／上移"
-en = "move this row down / up"
-
-[[message]]
-zh = "連同"
-en = "around"
-
-[[message]]
-zh = "進入"
-en = "into"
-
-[[message]]
-zh = "配對"
-en = "match"
-
-[[message]]
-zh = "重排對齊"
-en = "line it up again"
-
-[[message]]
-zh = "重讀"
-en = "re-read"
-
-[[message]]
-zh = "開這個檔"
-en = "open this file"
-
-[[message]]
-zh = "關"
-en = "close"
-
-[[message]]
-zh = "首個非空白"
-en = "first non-blank"
-
-
-# ---- What a command line and a file operation can go wrong with -----------
-
-[[message]]
-zh = "沒打命令"
-en = "no command typed"
-
-[[message]]
-zh = "沒有「{0}」這個命令"
-en = "no such command as '{0}'"
-
-[[message]]
-zh = "{0} 後面要跟一個參數"
-en = "{0} takes an argument"
-
-[[message]]
-zh = "{0}：不認得「{1}」"
-en = "{0}: '{1}' is not one of its values"
-
-[[message]]
-zh = "還有沒存的改動（加 ! 強制）"
-en = "there are unsaved changes — add ! to override"
-
-[[message]]
-zh = "這份稿子還沒有名字——:w 名字 存成新檔"
-en = "this manuscript has no name yet — :w <name> writes it as a new file"
-
-[[message]]
-zh = "貼進了 {0}×{1} 格"
-en = "pasted {0}×{1} cells"
-
-[[message]]
-zh = "貼不下：這張表只有 {0} 欄"
-en = "does not fit: this table has {0} columns"
-
-[[message]]
-zh = "取了一欄「{0}」（{1} 格）"
-en = "yanked the '{0}' column ({1} cells)"
-
-[[message]]
-zh = "貼了一欄（{0} 格）"
-en = "pasted a column ({0} cells)"
-
-[[message]]
-zh = "這一欄是空的"
-en = "this column is empty"
-
-[[message]]
-zh = "t 後面（這種表格）：/ ? g s S o O d j k y p"
-en = "after t, in this kind of table: / ? g s S o O d j k y p"
-
-
-[[message]]
-zh = "取這欄／貼一欄"
-en = "yank this column / paste a column"
-
-[[message]]
-zh = "j k 移動 · J K 翻頁 · g G 兩端 · l 進入 · h 收起 · Tab 換視圖 · w 寬窄 · R 重讀 · C-w/Esc 回正文 · q 關"
-en = "j k move · J K page · g G ends · l enter · h collapse · Tab view · w width · R reread · C-w/Esc back to the text · q close"
-
-[[message]]
-zh = "{0}  漢字 {1}  字數 {2}（不含空白）  {3} 段"
-en = "{0}  {1} han  {2} characters (no spaces)  {3} paragraphs"
-
-[[message]]
-zh = "{0} 個檔案，{1} 處——都還沒存：:wa 存全部，u 各自撤銷"
-en = "{0} file(s), {1} hit(s) — none saved yet: :wa saves them all, u takes any of them back"
-
-[[message]]
-zh = "{0} 有比檔案新的搶救稿——:recover 打開，:recover! 丟掉"
-en = "{0}: draft(s) newer than the file(s) — :recover opens, :recover! throws away"
-
-[[message]]
-zh = "{0} 的碼表沒有裝——:yume scheme 換一個"
-en = "{0}'s table is not installed — :yume scheme picks another"
-
-[[message]]
-zh = "、"
-en = ", "
-
-[[message]]
-zh = "全篇"
-en = "the whole file"
-
-[[message]]
-zh = "字"
-en = "character"
-
-[[message]]
-zh = "存了 {0} 個檔案；{1} 個沒存：{2}"
-en = "saved {0} file(s); {1} not saved: {2}"
-
-[[message]]
-zh = "接着上次：開了 {0} 個檔案"
-en = "picking up where you left off: opened {0} file(s)"
-
-[[message]]
-zh = "方案：{0}"
-en = "scheme: {0}"
-
-[[message]]
-zh = "格"
-en = "cell"
-
-[[message]]
-zh = "照 {0}"
-en = "by {0}"
-
-[[message]]
-zh = "照「{0}」倒排（數字當數字比，其餘按碼位）"
-en = "sorted by '{0}', down — numbers as numbers, everything else by code point"
-
-[[message]]
-zh = "照「{0}」順排（數字當數字比，其餘按碼位）"
-en = "sorted by '{0}', up — numbers as numbers, everything else by code point"
-
-[[message]]
-zh = "照首行"
-en = "by its own header row"
-
-[[message]]
-zh = "表格：{0} 欄"
-en = "table: {0} columns"
-
-[[message]]
-zh = "表格：{0} 欄（補上了分隔行）"
-en = "table: {0} columns — added the rule row"
-
-[[message]]
-zh = "表格：{0} 欄，{1}"
-en = "table: {0} columns, {1}"
-
-[[message]]
-zh = "表格：{0} 欄，{1}（已轉橫排）"
-en = "table: {0} columns, {1} — set horizontally"
-
-[[message]]
-zh = "這一欄：居中"
-en = "this column: centred"
-
-[[message]]
-zh = "這一欄：靠右"
-en = "this column: right"
-
-[[message]]
-zh = "這一欄：靠左"
-en = "this column: left"
-
-[[message]]
-zh = "選區"
-en = "the selection"
-
-[[message]]
-zh = "第 {0}/{1} 處（n N 走）"
-en = "hit {0} of {1} — n and N walk them"
-
-[[message]]
-zh = "本表格文件未指定快速跳轉之範圍，從第一欄起搜索——第 1/{0} 處"
-en = "this table names no scope to jump within, so the search runs from the first column — hit 1 of {0}"
-
-[[message]]
-zh = "一行一行地找——`/` 就是它"
-en = "row by row — this is what `/` does"
-
-[[message]]
-zh = "一欄一欄地找，從第一欄的頂上開始——表格裏 t/ t? 就是它"
-en = "column by column, from the top of the first — this is what Enter does in a table"
-
-[[message]]
-zh = "找：`row` 一行一行（就是 `/`），`column` 一欄一欄（表格裏 t/ t? 就是它）"
-en = "search: `row` runs across (that is `/`), `column` runs down (that is Enter in a table)"
-
-
-# ---- The `:` menu ---------------------------------------------------------
+# The English register to match is `README.md` and `--help`: plain, short, lower
+# case unless a name starts the line, no exclamation marks, and it says what
+# happened rather than apologising for it. Where the Chinese uses a term of the
+# art — 縱, 拆分, 所見即所得 — the English keeps it: it is the word, and a reader
+# of this editor is going to meet it anyway.
 #
-# One line per command, shown under the list as you narrow it. Says what the
-# command is *for*, not what its arguments are — the arguments have their own
-# lines, and the completion shows them.
+# Which one you get: `[editor] language = "zh"` (the default, 繁體), `"zhs"` or
+# `"en"`.
 
-[[message]]
-zh = "`#` 標題、`**粗**`"
-en = "`#` headings, `**bold**`"
-
-[[message]]
-zh = "`=` 標題、`#import`"
-en = "`=` headings, `#import`"
-
-
-[[message]]
-zh = "上一個"
-en = "the previous one"
-
-[[message]]
-zh = "下一個"
-en = "the next one"
-
-[[message]]
-zh = "交給真正的排版器去排，在瀏覽器裏看"
-en = "hand it to a real typesetter and read it in a browser"
-
-[[message]]
-zh = "候選旁的拆分注解"
-en = "the 拆分 annotation beside the candidates"
-
-[[message]]
-zh = "分詞著色"
-en = "the word tint"
-
-[[message]]
-zh = "列出標題；`:toc 3` 跳到第三條"
-en = "list the headings; `:toc 3` goes to the third"
-
-[[message]]
-zh = "列出開着的檔案"
-en = "list the open files"
-
-[[message]]
-zh = "卿雲"
-en = "卿雲"
-
-[[message]]
-zh = "原文，不著色"
-en = "the source, uncoloured"
-
-[[message]]
-zh = "取代：選區內；`%s` 全檔、`1,40s` 指定行；旗標 g i n；分隔符可換（s#a/b#c#）"
-en = "substitute in the selection; `%s` the file, `1,40s` a range; flags g i n; any delimiter (s#a/b#c#)"
-
-[[message]]
-zh = "標點旁置：句讀掛在邊欄"
-en = "hung punctuation: 句讀 sit in the margin"
-
-[[message]]
-zh = "太寬的段落折到下一行"
-en = "wrap a paragraph too wide for the window"
-
-[[message]]
-zh = "存下所有改過的檔案"
-en = "save every file that changed"
-
-[[message]]
-zh = "存好再退出"
-en = "save, then leave"
-
-[[message]]
-zh = "存檔；給路徑就是另存"
-en = "save; with a path, save as"
-
-[[message]]
-zh = "寫了多少"
-en = "how much has been written"
-
-[[message]]
-zh = "導出成 html 或 typst，排版一起帶上"
-en = "write it out as html or typst, layout and all"
-
-[[message]]
-zh = "尺度用窗口寬（`:wrap 50` 是固定五十欄）"
-en = "measure by the window (`:wrap 50` fixes it at fifty)"
-
-[[message]]
-zh = "從系統剪貼簿貼進來"
-en = "paste from the system clipboard"
-
-[[message]]
-zh = "從頭看一遍：重複的行名、查無此行的部件、欄數不對的行、超出字集的字"
-en = "look the whole table over: repeated row names, components with no row, rows of the wrong width"
-
-[[message]]
-zh = "打開一個檔案"
-en = "open a file"
-
-[[message]]
-zh = "把剛才 :grep 找到的那些都換掉——先看見，才改得動"
-en = "change everything the last :grep found — you see it before you change it"
-
-[[message]]
-zh = "把注音改寫成另一種寫法"
-en = "rewrite the readings in another dialect"
-
-[[message]]
-zh = "把選區送給一條命令，用它的輸出換掉（`!`）"
-en = "send the selection through a command and take back its output (`!`)"
-
-[[message]]
-zh = "拼音"
-en = "拼音"
-
-[[message]]
-zh = "按格子編輯（默認）"
-en = "edit it as a grid (the default)"
-
-[[message]]
-zh = "按格子編輯：CSV 整個檔案，或游標所在的 | 表格；`:table off` 收工"
-en = "edit as a grid: a whole CSV, or the | table under the cursor; `:table off` stops"
-
-[[message]]
-zh = "排出注音"
-en = "lay the readings out"
-
-[[message]]
-zh = "撤銷上一次改動"
-en = "undo the last change"
-
-[[message]]
-zh = "改寫成 `#ruby(…)`"
-en = "rewrite as `#ruby(…)`"
-
-[[message]]
-zh = "改寫成 `<ruby>`"
-en = "rewrite as `<ruby>`"
-
-[[message]]
-zh = "改用出廠自帶的靈明碼表，不管裝了什麼"
-en = "use the built-in 靈明 table, whatever else is installed"
-
-[[message]]
-zh = "改這裏的注音；`:ruby on|off` 是排不排"
-en = "edit the reading here; `:ruby on|off` is whether they are laid out"
-
-[[message]]
-zh = "整個項目找一遍"
-en = "search every file in the project"
-
-[[message]]
-zh = "日月"
-en = "日月"
-
-[[message]]
-zh = "星陳"
-en = "星陳"
-
-[[message]]
-zh = "標記拿掉，只在光標那一處展開"
-en = "the markup comes off, and opens only where the cursor is"
-
-[[message]]
-zh = "橫排"
-en = "horizontal"
-
-[[message]]
-zh = "橫排竪排互換"
-en = "flip horizontal and vertical"
-
-[[message]]
-zh = "段組：把竪排的頁面橫着分成幾條，右上讀到左上，再右下讀到左下"
-en = "bands: divide the vertical page across — top right to top left, then bottom right to bottom left"
-
-[[message]]
-zh = "用你自己的碼表（Rime 的 .dict.yaml 也行）"
-en = "use your own table (a Rime .dict.yaml will do)"
-
-[[message]]
-zh = "畫面上顯示多少「結果」：原文、著色、所見即所得"
-en = "how much of the result the page shows: source, coloured, WYSIWYG"
-
-[[message]]
-zh = "當普通文字"
-en = "as ordinary text"
-
-[[message]]
-zh = "竪排，縱從右往左"
-en = "vertical, 縱 running from the right"
-
-[[message]]
-zh = "系統剪貼簿：送出去、貼進來"
-en = "the system clipboard: out, and back in"
-
-[[message]]
-zh = "著色，標記留在畫面上（默認）"
-en = "coloured, the markup staying on the page (the default)"
-
-[[message]]
-zh = "認 `#ruby(…)` 這一種"
-en = "read `#ruby(…)`"
-
-[[message]]
-zh = "認 `<ruby>` 這一種"
-en = "read `<ruby>`"
-
-[[message]]
-zh = "讓出終端跑一條命令，直接看它跑（vi 的寫法）"
-en = "hand the terminal over and watch it run (vi's spelling)"
-
-[[message]]
-zh = "讓它跑出右邊"
-en = "let it run off the edge"
-
-[[message]]
-zh = "跑一條命令，輸出收進一個緩衝區"
-en = "run a command and keep its output in a buffer"
-
-[[message]]
-zh = "跳到某一行（`:42` 就夠了）"
-en = "go to a line (`:42` will do)"
-
-[[message]]
-zh = "跳到表格裏叫這個名字的那一行（`:row 木`）"
-en = "go to the row this table names (`:row 木`)"
-
-[[message]]
-zh = "載入搶救稿；加 ! 是丟掉它"
-en = "load the recovered draft; with ! throw it away"
-
-[[message]]
-zh = "輸入法：現在用的是哪一個；換方案、拆分注解"
-en = "the IME: which one is answering, changing scheme, the 拆分 annotation"
-
-[[message]]
-zh = "退出；加 ! 連沒存的改動一起丟"
-en = "leave; with ! throw away unsaved changes too"
-
-[[message]]
-zh = "選區送到系統剪貼簿"
-en = "put the selection on the system clipboard"
-
-[[message]]
-zh = "重做"
-en = "redo"
-
-
-[[message]]
-zh = "長段落折到下一行；`:wrap 50` 定寬度"
-en = "wrap long paragraphs to the next row; `:wrap 50` sets a measure"
-
-[[message]]
-zh = "開"
-en = "on"
-
-[[message]]
-zh = "開一個空的緩衝區"
-en = "start an empty buffer"
-
-[[message]]
-zh = "開始打字：載入一個方案（不寫名字就用配置裏那個）"
-en = "start typing: load a scheme (with no name, the configured one)"
-
-[[message]]
-zh = "開着的檔案：列出、切換、關掉"
-en = "the open files: list, switch, close"
-
-[[message]]
-zh = "關掉這一個（`close!` 不管改動）"
-en = "close this one (`close!` ignores changes)"
-
-[[message]]
-zh = "靈明"
-en = "靈明"
-
-[[message]]
-zh = "顯示源碼"
-en = "show the source"
-
-[[message]]
-zh = "首行縮進幾格（中文的段落是縮進兩格，不是空一行）；`:indent off` 不縮"
-en = "how many squares open a paragraph (Chinese marks one with two, not a blank line); `:indent off` for none"
-
-
-
-
-[[message]]
-zh = "主題：{0}（{1}）"
-en = "theme: {0} ({1})"
-
-[[message]]
-zh = "沒有這個主題：{0}"
-en = "no theme called '{0}'"
-
-[[message]]
-zh = "深色"
-en = "dark"
-
-[[message]]
-zh = "淺色"
-en = "light"
-
-[[message]]
-zh = "跟終端的底色走"
-en = "follow the terminal's own background"
-
-[[message]]
-zh = "欄線：欄與欄之間怎麼分開"
-en = "column rules: how the columns are told apart"
-
-[[message]]
-zh = "欄線：{0}"
-en = "column rules: {0}"
-
-[[message]]
-zh = "什麼都不畫，靠對齊分"
-en = "nothing drawn — the alignment tells them apart"
-
-[[message]]
-zh = "每欄一條淡底，紙從縫裏透出來"
-en = "a band per column, with the page showing in the seam"
-
-[[message]]
-zh = "畫一條竪線"
-en = "draw a vertical line"
-
-[[message]]
-zh = "實線 │"
-en = "solid │"
-
-[[message]]
-zh = "虛線 ┆（默認）"
-en = "dashed ┆ (default)"
-
-[[message]]
-zh = "雙線 ║"
-en = "double ║"
-
-[[message]]
-zh = "現在用的是哪個方案、碼表打哪來"
-en = "which scheme is in use, and where its 碼表 came from"
-
-[[message]]
-zh = "開始打中文（碼表沒載就順手載上）"
-en = "start typing 漢字 (loading the 碼表 if it is not loaded)"
-
-[[message]]
-zh = "回到英文"
-en = "back to English"
-
-[[message]]
-zh = "改用系統裝的那份碼表（builtin 的反面）"
-en = "use the 碼表 the system has installed (builtin's other half)"
-
-[[message]]
-zh = "中文（{0}）"
-en = "Chinese ({0})"
-
-[[message]]
-zh = "英文"
-en = "English"
-
-[[message]]
-zh = "系統裏沒有裝 {0} 的碼表"
-en = "no 碼表 for {0} is installed"
-
-[[message]]
-zh = "方案：{0}（系統裝的碼表）"
-en = "scheme: {0} (the system's own 碼表)"
-
-[[message]]
-zh = "這個檔案是哪種標記（不給參數就說現在是哪個）"
-en = "which markup this file is written in (with no argument, which one it is now)"
-
-[[message]]
-zh = "沒有標記：檔案裏的每個字符都只是它自己"
-en = "no markup: every character in the file is only itself"
-
-[[message]]
-zh = "這個檔案沒有標記，沒有什麼可以預覽的"
-en = "this file has no markup, so there is nothing to preview"
-
-[[message]]
-zh = "不縮進"
-en = "no indent"
-
-[[message]]
-zh = "縮進的那兩格上畫什麼"
-en = "what is drawn in a paragraph's opening squares"
-
-[[message]]
-zh = "什麼都不畫（默認，書上就是白的）"
-en = "nothing (the default — a book prints them white)"
-
-[[message]]
-zh = "那兩格帶一條淡底"
-en = "a band across them"
-
-[[message]]
-zh = "第一格畫一個記號（默認 ↵，它替掉的正是一個換行）"
-en = "a mark in the first one (↵ by default — a line break is what it replaced)"
-
-[[message]]
-zh = "縮進標記：{0}"
-en = "indent hint: {0}"
-
-[[message]]
-zh = "墨香：黑墨、白金墨、金墨、紅墨，其餘的色階都算出來"
-en = "moxiang: black, white-gold, gold and red ink; every other shade computed"
-
-[[message]]
-zh = "黑白：只有黑、白和灰——輕重說話，顏色不說"
-en = "heibai: black, white and grey only — weight says it, colour says nothing"
-
-[[message]]
-zh = "還不行，需要：{0}——句末加 force 一併打開"
-en = "not yet — this needs {0}; add force at the end to turn them on with it"
-
-[[message]]
-zh = "需要 {0}，句末加 force"
-en = "needs {0}; add force at the end"
-
-[[message]]
-zh = "主題：用哪一套墨（後面可以再跟深淺）"
-en = "theme: which set of inks (an appearance may follow it)"
-
-[[message]]
-zh = "深色、淺色，還是跟着終端"
-en = "dark, light, or whatever the terminal is"
-
-[[message]]
-zh = "把畫面截成圖放進剪貼簿——命令面板收起來之後才截"
-en = "put a picture of the screen on the clipboard — taken after the menu closes"
-
-[[message]]
-zh = "畫面已放進剪貼簿"
-en = "the screen is on the clipboard"
-
-[[message]]
-zh = "截圖失敗（{0}）"
-en = "no picture taken ({0})"
-
-[[message]]
-zh = "這個平台上沒有截圖命令——`[editor] screenshot` 寫一條"
-en = "no screenshot command on this platform — write one at `[editor] screenshot`"
-
-[[message]]
-zh = "行號那一條：要不要自己的底色"
-en = "the line-number band: whether it has a ground of its own"
-
-[[message]]
-zh = "行號那一條有沒有自己的底色（默認沒有，橫排竪排一樣）"
-en = "whether the line-number band has a ground of its own (no by default, in both layouts)"
-
-[[message]]
-zh = "行號：有底"
-en = "line numbers: on a band"
-
-[[message]]
-zh = "行號：無底"
-en = "line numbers: on the page"
-
-[[message]]
-zh = "另一個工作區：再按一次過去"
-en = "the other work area: press it again to go there"
-
-[[message]]
-zh = "只留這一個工作區"
-en = "keep only this work area"
-
-[[message]]
-zh = "關掉這一個工作區，到另一個去"
-en = "close this work area and go to the other"
-
-[[message]]
-zh = "另一個工作區：空格 w 過去，空格 W 收掉"
-en = "the other work area: Space w goes there, Space W closes it"
-
-[[message]]
-zh = "只剩這一個工作區了"
-en = "one work area again"
-
-[[message]]
-zh = "關掉了那一半"
-en = "that half is closed"
-
-[[message]]
-zh = "第 {0} 行（空格 w 過去）"
-en = "line {0} (Space w goes there)"
-
-[[message]]
-zh = "{0} · 第 {1} 行"
-en = "{0} · line {1}"
-
-[[message]]
-zh = "{0} · 第 {1} 行 · {2}"
-en = "{0} · line {1} · {2}"
-
-[[message]]
-zh = "檔案側欄"
-en = "the file sidebar"
-
-[[message]]
-zh = "大綱"
-en = "the outline"
-
-[[message]]
-zh = "開啟檔案"
-en = "open a file"
-
-[[message]]
-zh = "切換緩衝區"
-en = "switch buffer"
-
-[[message]]
-zh = "全項目搜索"
-en = "search the project"
-
-[[message]]
-zh = "命令一覽"
-en = "every command"
-
-[[message]]
-zh = "複製到系統剪貼簿"
-en = "copy to the system clipboard"
-
-[[message]]
-zh = "從系統剪貼簿貼上"
-en = "paste from the system clipboard"
-
-[[message]]
-zh = "詳情欄"
-en = "the detail panel"
-
-[[message]]
-zh = "貼上：取過的東西"
-en = "paste: what has been taken"
-
-[[message]]
-zh = "只有這一處：{0}"
-en = "only here: {0}"
-
-[[message]]
-zh = "這裏沒有字可以找"
-en = "nothing here to look for"
-
-
-[[message]]
-zh = "寫下了 {0} 的註（空格 w 過去寫）"
-en = "wrote the note for {0} (Space w to go and write it)"
-
-[[message]]
-zh = "腳注"
-en = "footnote"
-
-[[message]]
-zh = "看這條註（沒有就寫一條）"
-en = "show the note (or write one)"
-
-[[message]]
-zh = "這個詞還在哪裏"
-en = "where else this word is"
-
-[[message]]
-zh = "寫下了 {0} 的註（C-o 回去）"
-en = "wrote the note for {0} (C-o goes back)"
-
-[[message]]
-zh = "去／看它指的地方"
-en = "go to / show what it points at"
-
-[[message]]
-zh = "表格操作"
-en = "table operations"
-
-[[message]]
-zh = "刪這一行"
-en = "delete this row"
-
-[[message]]
-zh = "那一半的檔案已經關掉了"
-en = "the file that half was showing is closed"
-
-
-[[message]]
-zh = "那是這份稿子本身——導出要另一個檔名"
-en = "that is the manuscript itself — an export needs another name"
-
-[[message]]
-zh = "兩行併成一行會改欄數——先 :table off"
-en = "joining two rows would change the column count — `:table off` first"
-
-[[message]]
-zh = "{0}：{1}"
-en = "{0}: {1}"
-
-[[message]]
-zh = "{0} 個檔案，{1} 處；{2}"
-en = "{0} file(s), {1} place(s); {2}"
-
-[[message]]
-zh = "{0} 正開着——切過去存，或另取一個檔名"
-en = "{0} is open here — save from there, or pick another name"
-
-[[message]]
-zh = "{0} 正開着——導出會蓋掉它，請另取一個檔名"
-en = "{0} is open here — an export would write over it; pick another name"
-
-[[message]]
-zh = "另存成新檔並改編輯它（`:w <檔名>` 只抄一份，人還在這邊）"
-en = "save under a new name and edit that one (`:w <path>` only copies)"
-
-[[message]]
-zh = "已經有 {0} 了——`:export!` 才蓋掉它"
-en = "{0} is already there — `:export!` writes over it"
-
-[[message]]
-zh = "抄了一份到 {0}"
-en = "copied to {0}"
-
-[[message]]
-zh = "第 {0} 行會從 {1} 格變成 {2} 格"
-en = "row {0} would go from {1} cells to {2}"
-
-[[message]]
-zh = "第 {0} 行會從 {1} 格變成 {2} 格——真要改欄數，加 t 旗標（`:%s/…/…/gt`）"
-en = "row {0} would go from {1} cells to {2} — add the t flag to mean it (`:%s/…/…/gt`)"
-
-[[message]]
-zh = "這次替換會把 {0} 行變成 {1} 行——表格裏不改行數"
-en = "this would turn {0} rows into {1} — a grid keeps its rows"
-
-[[message]]
-zh = "這個檔案是只讀的——先 chmod，或者換個檔名存"
-en = "this file is read-only — chmod it, or save under another name"
-
-[[message]]
-zh = "那個檔案已經存在——`:w!` 才蓋掉它"
-en = "that file is already there — `:w!` writes over it"
-
-[[message]]
-zh = "上次留下的預覽伺服器（{0}）停掉了"
-en = "stopped the preview server left over from last time ({0})"
-
-[[message]]
-zh = "預覽：{0} 已停"
-en = "preview: {0} stopped"
-
-[[message]]
-zh = "預覽：{0}（`:preview off` 停）"
-en = "preview: {0} (`:preview off` stops it)"
-
-[[message]]
-zh = "空格"
-en = "Space"
-
-[[message]]
-zh = "{0} 裏沒有「{1}」"
-en = "no row in {0} is named 「{1}」"
-
-[[message]]
-zh = "{0}：{1}（{2} 處，第一處）"
-en = "{0}: {1} ({2} rows; the first)"
-
-[[message]]
-zh = "第 {0}–{1} 欄"
-en = "columns {0}–{1}"
-
-[[message]]
-zh = "一欄一欄找：這邊找／那邊看（t2-10?）"
-en = "search down the columns: / here, ? in the other area (t2-10?)"
-
-[[message]]
-zh = "檔首（g30g 去第 30 行）"
-en = "start of the file (g30g goes to line 30)"
-
-[[message]]
-zh = "這個詞還在哪裏：這邊找／那邊看"
-en = "where else this word is: / here, ? in the other area"
-
-[[message]]
-zh = "{0}（:q 關掉；/ 可以搜）"
-en = "{0} (:q closes it; / searches)"
-
-[[message]]
-zh = "上一縱／下一縱——縱是往左疊的"
-en = "previous/next column — columns stack leftwards"
-
-[[message]]
-zh = "下一詞首、上一詞首、詞尾——認得漢字的詞"
-en = "next word, previous word, end of word — it knows 漢字 words"
-
-[[message]]
-zh = "中文"
-en = "Chinese"
-
-[[message]]
-zh = "候選詞下面顯示拆分"
-en = "show the 拆分 under each candidate"
-
-[[message]]
-zh = "再做一次剛才那次改動"
-en = "do that edit again"
-
-[[message]]
-zh = "分幾段：一頁上下兩段，像報紙"
-en = "bands: two per page, one above the other, as a newspaper sets them"
-
-[[message]]
-zh = "別的幾節"
-en = "the other sections"
-
-[[message]]
-zh = "前進／後退半頁；L H 是整頁"
-en = "half a page forward/back; L and H are whole pages"
-
-[[message]]
-zh = "加一行／刪一行；t j t k 上下移"
-en = "add a row / drop this row; t j and t k move it"
-
-[[message]]
-zh = "動：命令＋選擇＋動作"
-en = "moving: command + selection + action"
-
-[[message]]
-zh = "去第 30 行"
-en = "go to line 30"
-
-[[message]]
-zh = "去／看它指的地方：腳註的註、拆分的那一行"
-en = "go to / show what this points at: a footnote's note, a component's row"
-
-[[message]]
-zh = "取這一欄／貼一欄"
-en = "yank this column / put one"
-
-[[message]]
-zh = "命令"
-en = "commands"
-
-[[message]]
-zh = "在光標前／後開始打字"
-en = "start typing before/after the cursor"
-
-[[message]]
-zh = "左下上右；竪排裏是沿着縱走"
-en = "left, down, up, right — down the column in 竪排"
-
-[[message]]
-zh = "常用"
-en = "the usual keys"
-
-[[message]]
-zh = "所有 : 命令"
-en = "every : command"
-
-[[message]]
-zh = "把分出來的詞用底色標出來"
-en = "tint each word the segmenter found"
-
-[[message]]
-zh = "把這個檔案當表格讀；:table off 退出"
-en = "read this file as a grid; :table off leaves"
-
-[[message]]
-zh = "按格走；Tab 換成按字走"
-en = "step by cell; Tab steps by character instead"
-
-[[message]]
-zh = "換方案：靈明、星陳、卿雲、日月、拼音"
-en = "switch scheme: 靈明, 星陳, 卿雲, 日月, 拼音"
-
-[[message]]
-zh = "搜索、下一處、上一處"
-en = "search, next, previous"
-
-[[message]]
-zh = "撤銷／重做"
-en = "undo / redo"
-
-[[message]]
-zh = "改"
-en = "editing"
-
-[[message]]
-zh = "改成在第 3 欄／第 2–5 欄裏找"
-en = "look in column 3 / columns 2–5 instead"
-
-[[message]]
-zh = "數字在前是次數"
-en = "a number in front is a count"
-
-[[message]]
-zh = "格子裏：下一格／上一格"
-en = "inside a cell: next cell / previous cell"
-
-[[message]]
-zh = "標點旁置：句讀掛在字旁邊的邊欄裏"
-en = "hanging punctuation: 句讀 sit in the margin beside the character"
-
-[[message]]
-zh = "檔首／檔尾"
-en = "start / end of the file"
-
-[[message]]
-zh = "段首空兩格，段間的空行就收起來"
-en = "open a paragraph two squares in, and take the blank line between them off the page"
-
-[[message]]
-zh = "每一節都是這個編輯器自己報上來的，不是抄的。"
-en = "every section here is reported by the editor itself, not copied out of a manual."
-
-[[message]]
-zh = "沒有「{0}」這一節——:help 有 chinese、vertical、table、commands"
-en = "there is no section 「{0}」 — :help has chinese, vertical, table, commands"
-
-[[message]]
-zh = "沿着這一縱往下／往上"
-en = "down / up this column"
-
-[[message]]
-zh = "漢字、標點、注音、輸入法"
-en = "漢字, punctuation, readings, the IME"
-
-[[message]]
-zh = "照這一欄順排／倒排"
-en = "sort by this column, ascending / descending"
-
-[[message]]
-zh = "疏排：每縱之間留一格"
-en = "loose setting: a cell of air between columns"
-
-[[message]]
-zh = "空格開頭的"
-en = "what Space opens"
-
-[[message]]
-zh = "竪排"
-en = "vertical writing"
-
-[[message]]
-zh = "縮進／退縮進"
-en = "indent / unindent"
-
-[[message]]
-zh = "行首／行尾／首個非空白"
-en = "line start / line end / first non-blank"
-
-[[message]]
-zh = "表格與拆分表"
-en = "grids, and the 拆分表"
-
-[[message]]
-zh = "複製／貼上"
-en = "yank / put"
-
-[[message]]
-zh = "記住這裏／回到那裏"
-en = "remember this place / go back to it"
-
-[[message]]
-zh = "詞的邊界是分詞算出來的，不是空格"
-en = "word boundaries come from segmentation, not from spaces"
-
-[[message]]
-zh = "誰用了它——一欄一欄地找：這邊找／那邊看"
-en = "who uses this — down the columns: / here, ? in the other area"
-
-[[message]]
-zh = "跳回去／再跳回來"
-en = "jump back / forward again"
-
-[[message]]
-zh = "轉成竪排；:layout 來回切"
-en = "turn the page vertical; :layout switches back and forth"
-
-[[message]]
-zh = "這一格在 key 欄裏是哪一行：去／看"
-en = "which row this cell names in the key column: go / show"
-
-[[message]]
-zh = "這個詞還在哪裏：這邊找／另一個工作區看"
-en = "where else this word is: / here, ? in the other work area"
-
-[[message]]
-zh = "進格子打字／清掉這一格"
-en = "type in the cell / empty it"
-
-[[message]]
-zh = "重讀 .yumete/words.txt——這本書自己的詞"
-en = "re-read .yumete/words.txt — this book's own words"
-
-[[message]]
-zh = "錄一段按鍵／放一遍"
-en = "record keys / play them back"
-
-[[message]]
-zh = "鍵和命令，開成一個可以讀、可以搜的檔案"
-en = "the keys and the commands, opened as a file you can read and search"
-
-[[message]]
-zh = "開／關輸入法；單獨按一下 Shift 切中英"
-en = "turn the IME on/off; a lone Shift tap switches 中/英"
-
-[[message]]
-zh = "關掉欄之間的分隔線"
-en = "turn off the rules between columns"
-
-[[message]]
-zh = "一課：把課文抄成你自己的一個檔案，邊改邊學"
-en = "a lesson: the text is copied into a file of your own, and you learn by editing it"
-
-[[message]]
-zh = "寫不下課文：{0}"
-en = "could not write the lesson: {0}"
-
-[[message]]
-zh = "打不開課文：{0}"
-en = "could not open the lesson: {0}"
-
-[[message]]
-zh = "課文的檔名都用光了——刪掉幾份 tutor*.md"
-en = "every lesson name is taken — delete a few tutor*.md"
-
-[[message]]
-zh = "課文開好了（沒有資料目錄，存不下來）"
-en = "the lesson is open (no data directory, so it cannot be saved)"
-
-[[message]]
-zh = "這是你自己的一份，隨便改（:q 退出）"
-en = "this copy is yours — break it as you like (:q leaves)"
-
-[[message]]
-zh = "欄號那一行：3gd、t20-20g 用的就是它"
-en = "the row of column numbers — what 3gd and t20-20g count with"
-
-[[message]]
-zh = "欄號：開"
-en = "column numbers: on"
-
-[[message]]
-zh = "欄號：關"
-en = "column numbers: off"
-
-[[message]]
-zh = "第 {0} 行 · 第 {1} 欄"
-en = "row {0} · column {1}"
-
-[[message]]
-zh = "詳情欄寬 {0}"
-en = "the detail panel is {0} wide"
-
-[[message]]
-zh = "詳情欄：開、關，或者給個寬度"
-en = "the detail panel: on, off, or a width"
-
-[[message]]
-zh = "{0}↑"
-en = "{0}↑"
-
-[[message]]
-zh = "{0}↓"
-en = "{0}↓"
-
-[[message]]
-zh = "排好了：{0}"
-en = "sorted: {0}"
-
-[[message]]
-zh = "已經是這個順序了"
-en = "already in that order"
-
-[[message]]
-zh = "照這幾欄排：`sort 1 a 2 d` 是先第一欄順排、再第二欄倒排"
-en = "sort by these columns: `sort 1 a 2 d` is column 1 ascending, then column 2 descending"
-
-[[message]]
-zh = "打字機：光標那一行一直停在畫面中間，紙往上走"
-en = "typewriter: the row you are writing stays in the middle and the paper moves"
-
-[[message]]
-zh = "打字機：開（紙走，字不走）"
-en = "typewriter: on (the paper moves, the line does not)"
-
-[[message]]
-zh = "打字機：關"
-en = "typewriter: off"
-
-[[message]]
-zh = "密排：行貼着行"
-en = "tight: rows against rows"
-
-[[message]]
-zh = "疏排：每行之間留一行"
-en = "loose: a row of air between rows"
-
-[[message]]
-zh = "密排／疏排：竪排是縱與縱之間，橫排是行與行之間"
-en = "tight or loose: between columns in 竪排, between rows in 橫排"
-
-[[message]]
-zh = "{0} 欄 {1} 行的表格（:table 進去編）"
-en = "a {0}-column, {1}-row table (:table to edit it)"
-
-[[message]]
-zh = "行內註：打在括號裏"
-en = "inline note: type inside the brackets"
-
-[[message]]
-zh = "寫一段 Markdown：footnote、footnote inline、table 3x4"
-en = "write a piece of Markdown: footnote, footnote inline, table 3x4"
-
-[[message]]
-zh = "腳注：號碼自己找空的，註也一併開好"
-en = "a footnote: the next free number, and its note opened with it"
-
-[[message]]
-zh = "一張空表：`table 3x4` 是三欄四行"
-en = "an empty table: `table 3x4` is three columns and four rows"
-
-[[message]]
-zh = "行內註 ^[…]，不去文末"
-en = "an inline note ^[…], which does not go to the foot"
-
-[[message]]
-zh = "{0} 是個伺服器——用 :preview 開它"
-en = "{0} is a server — :preview starts it"
-
-[[message]]
-zh = "{0} 沒有說 {1} 要跑什麼——在設定裏寫 [language.{0}] {1} = …"
-en = "{0} does not say what {1} runs — write [language.{0}] {1} = … in the config"
-
-[[message]]
-zh = "{0}：換好了"
-en = "{0}: replaced"
-
-[[message]]
-zh = "{0}：跑完了"
-en = "{0}: done"
-
-[[message]]
-zh = "命令寫壞了：{0}"
-en = "that command line is broken: {0}"
-
-[[message]]
-zh = "照這種檔案在設定裏說的那樣格式化（[language.markdown] format = …）"
-en = "format this file the way the config says ([language.markdown] format = …)"
-
-[[message]]
-zh = "跑這種檔案在設定裏自己起名的那條命令"
-en = "run the command this language names in the config"
-
-[[message]]
-zh = "先存檔——外面的程序讀的是檔案"
-en = "save first — the program outside reads the file"
-
-[[message]]
-zh = "沒有動你的字：{0}"
-en = "your text was left alone: {0}"
-
-[[message]]
-zh = "跑不動：{0}"
-en = "could not run it: {0}"
-
-[[message]]
-zh = "預覽：{0} 起來中……"
-en = "preview: starting {0}…"
-
-[[message]]
-zh = "它自己那一行"
-en = "the row it is about"
-
-[[message]]
-zh = "這個字自己那一行"
-en = "the row this character is about"
-
-[[message]]
-zh = "誰用了它"
-en = "who uses this"
-
-[[message]]
-zh = "誰用了這個字"
-en = "who uses this character"
-
-[[message]]
-zh = "一縱多少字；:wrap 0 跟着窗高走"
-en = "how many characters a column holds; :wrap 0 follows the window"
-
-[[message]]
-zh = "下面／上面開新的一行，直接打字"
-en = "open a line below/above and start typing"
-
-[[message]]
-zh = "刪掉選區／換掉選區（換完就在打字了）"
-en = "delete the selection / change it (and you are typing)"
-
-[[message]]
-zh = "延伸模式開關／收成一個字；Esc 也退出延伸"
-en = "extend mode on-off / collapse to one character; Esc also leaves extend"
-
-[[message]]
-zh = "所見即所得：注音排出來，標記收起來"
-en = "what you get: readings laid out, markup off the page"
-
-[[message]]
-zh = "把全篇的注音統一成一種寫法（html｜typst）"
-en = "make every reading in the file use one spelling (html or typst)"
-
-[[message]]
-zh = "數字數：漢字多少、連標點西文一共多少、幾段"
-en = "count: how many 漢字, how many characters in all, how many paragraphs"
-
-[[message]]
-zh = "標點旁置：句讀掛到字旁邊"
-en = "hanging punctuation: 句讀 sit beside the character"
-
-[[message]]
-zh = "段首空兩格"
-en = "a paragraph opens two squares in"
-
-[[message]]
-zh = "給選中的字注音"
-en = "annotate the selection with a reading"
-
-[[message]]
-zh = "選這一整行——小說裏一行就是一整段"
-en = "select the whole line — in a novel a line is a paragraph"
-
-[[message]]
-zh = "下一句／上一句"
-en = "next sentence / previous sentence"
-
-[[message]]
-zh = "下一段／上一段"
-en = "next paragraph / previous paragraph"
-
-[[message]]
-zh = "表格裏寫不了腳注——先 :table off"
-en = "a grid holds no footnotes — :table off first"
-
-[[message]]
-zh = "這個檔案不是 Markdown——腳注在這裏只是四個字"
-en = "this file is not Markdown — a footnote here is just four characters"
-
-[[message]]
-zh = "去某一格（t20-20g）"
-en = "go to a cell (t20-20g)"
-
-[[message]]
-zh = "從系統剪貼簿貼在前面"
-en = "paste before, from the system clipboard"
-
-[[message]]
-zh = "暫存器 {0} 是空的"
-en = "register {0} is empty"
-
-[[message]]
-zh = "沒有取過東西——先 y 複製，或者 空格 p 從系統剪貼簿貼"
-en = "nothing has been yanked — y copies, or Space p pastes from the system clipboard"
-
-[[message]]
-zh = "還沒有錄過——q 開始錄，再按 q 停"
-en = "nothing recorded yet — q starts recording, q again stops"
-
-[[message]]
-zh = "收回成一個字——v 還開着，一走又跟着長"
-en = "collapsed to one character — v is still on, so the next move grows it again"
-
-[[message]]
-zh = "排版：竪排"
-en = "layout: vertical"
-
-[[message]]
-zh = "排版：橫排"
-en = "layout: horizontal"
-
-[[message]]
-zh = "大綱：{0} 條標題（:toc 3 直接去第三條）"
-en = "outline: {0} headings (:toc 3 goes straight to the third)"
-
-[[message]]
-zh = "第 {0}–{1} 欄：第 1/{2} 處"
-en = "columns {0}–{1}: hit 1/{2}"
-
-[[message]]
-zh = "第 {0} 欄：第 1/{1} 處"
-en = "column {0}: hit 1/{1}"
-
-[[message]]
-zh = "{0}——一行一個詞，寫完 :w，再 :word list reload"
-en = "{0} — one word per line; :w when done, then :word list reload"
-
-[[message]]
-zh = "不知道資料目錄在哪裏——這一台上沒有全域詞表"
-en = "no data directory known — this machine has no global word list"
-
-[[message]]
-zh = "分詞粒度：{0}"
-en = "word level: {0}"
-
-[[message]]
-zh = "分詞粒度：多少個字算一個詞"
-en = "word level: how readily characters join into words"
-
-[[message]]
-zh = "分詞：{0} · {1} · 著色{2}"
-en = "words: {0} · {1} · tint {2}"
-
-[[message]]
-zh = "詞表重讀了：{0}"
-en = "word lists reread: {0}"
-
-[[message]]
-zh = "分詞：哪一份詞表、著色、粒度"
-en = "words: which list, the tint, the level"
-
-[[message]]
-zh = "詞表：用哪一份、重讀、編輯"
-en = "the lists: which one, reread, edit"
-
-[[message]]
-zh = "重讀（本書的 ＋ 全域的）"
-en = "reread (this book's and the global one)"
-
-[[message]]
-zh = "開本書的 .yumete/words.txt——人名、地名"
-en = "open this book's .yumete/words.txt — names of people and places"
-
-[[message]]
-zh = "開全域 segmentation.txt"
-en = "open the global segmentation.txt"
-
-[[message]]
-zh = "只認很常見的詞——更多單字"
-en = "only words beyond argument — more single characters"
-
-[[message]]
-zh = "詞表怎麼說就怎麼切"
-en = "as the dictionary has it"
-
-[[message]]
-zh = "長詞、怪詞也算"
-en = "long and odd words too"
-
-[[message]]
-zh = "藍曬：普魯士藍的地、白線的字——八套裏唯一底色真帶飽和色的一套"
-en = "cyanotype: white lines on Prussian blue — the one theme whose ground carries colour"
-
-[[message]]
-zh = "琥珀：整頁只有一種顏色"
-en = "amber: one colour for the whole page"
-
-[[message]]
-zh = "莫高：墨是壁畫氧化之後真正變成的褐黑；金不是金色，是石綠——洞窟自己的礦物"
-en = "mogao: the brown-black the murals oxidised into; the gold is malachite, the caves' own mineral"
-
-[[message]]
-zh = "莫蘭迪：八套裏最低的正文對比、最灰的地"
-en = "morandi: the lowest text contrast and the greyest ground of the eight"
-
-[[message]]
-zh = "夜螢：近乎全黑的地，字是冷灰，唯一的暖處是那點黃金——螢火不是霓虹，一頁上只該有幾點"
-en = "firefly: a near-black ground, cool grey text, and warmth only in the gold — a few sparks to a page"
-
-[[message]]
-zh = "明度階：朱不是紅的，是藍的：紅綠色盲也分得開"
-en = "meridian: the mark is blue, not red — separable without the red-green axis"
-
-[[message]]
-zh = "陶窯：灰釉炻器：地是窯灰，金是草木灰的青綠"
-en = "kiln: ash-glazed stoneware — kiln-ash ground, wood-ash green for the gold"
-
-[[message]]
-zh = "靛橘：顏色只活在底色裏，正文永遠是中性灰"
-en = "complement: colour lives in the grounds only; the writing stays neutral grey"
-
-[[message]]
-zh = "t 後面：t q / ? g f s S o O n N d D j k h l y p < = > ] ["
-en = "after t: t q / ? g f s S o O n N d D j k h l y p < = > ] ["
-
-[[message]]
-zh = "已經在表格裏了——t q 退出"
-en = "already reading this as a grid — t q leaves"
-
-[[message]]
-zh = "表格模式——t q 退出"
-en = "grid mode — t q leaves"
-
-[[message]]
-zh = "本來就不在表格裏"
-en = "not reading anything as a grid"
-
-[[message]]
-zh = "後面沒有表格了"
-en = "no table after this one"
-
-[[message]]
-zh = "前面沒有表格了"
-en = "no table before this one"
-
-[[message]]
-zh = "第 {0} 行的表格"
-en = "the table on line {0}"
-
-[[message]]
-zh = "上屏方式：延遲（頂字）、唯一、整句"
-en = "commit method: delayed (頂字), unique, whole-sentence"
-
-[[message]]
-zh = "延遲上屏（頂字）：碼成立了先等着，下一鍵拼不成碼才把前面那段頂上去"
-en = "延遲上屏 (頂字): a finished code waits, and goes when the next key cannot continue it"
-
-[[message]]
-zh = "唯一上屏（自動、auto）：碼成立而且只有一個候選，就直接上屏"
-en = "唯一上屏 (auto): a finished code with one candidate goes straight to the page"
-
-[[message]]
-zh = "整句輸入：一路打下去，空格確認整句，從不自己上屏"
-en = "整句輸入: type on, Space confirms the sentence; nothing goes on its own"
-
-[[message]]
-zh = "上屏方式：{0}"
-en = "commit method: {0}"
-
-[[message]]
-zh = "延遲（頂字）"
-en = "delayed (頂字)"
-
-[[message]]
-zh = "唯一"
-en = "unique"
-
-[[message]]
-zh = "整句"
-en = "whole-sentence"
-
-[[message]]
-zh = "沒有「{0}」這種上屏方式——delayed、unique、fluency"
-en = "no commit method '{0}' — delayed, unique, fluency"
-
-[[message]]
-zh = "{0} 只能整句上屏（沒有碼表可以逐段查），上屏方式仍然是{1}"
-en = "{0} can only be typed as whole sentences — no 碼表 to look a segment up in — so the commit method is still {1}"
-
-# Where to put it, spelled out: the directory is `%APPDATA%\yumete` on Windows,
-# `~/.local/share/yumete` elsewhere, and nobody can be expected to know which
-# without being told.
-[[message]]
-zh = "{0} 的碼表沒有裝——放進 {1}，或者把自己的碼表放進 .yumete/"
-en = "{0}'s table is not installed — put it in {1}, or a table of your own in .yumete/"
-
-# Feature #220. `{1}` is yume-core's own word for it (`bad division magic`,
-# `truncated`), left as it comes: it is what a bug report should quote, and
-# translating it would make it unsearchable.
-[[message]]
-zh = "{0} 核心不認：{1}（期望 {2}，檔頭是 {3}）"
-en = "{0} was refused by the core: {1} (expected {2}, the file says {3})"
-
-[[message]]
-zh = "{0} 核心不認：{1}"
-en = "{0} was refused by the core: {1}"
-
-[[message]]
-zh = "{0} 讀不了：{1}"
-en = "{0} could not be read: {1}"
-
-[[message]]
-zh = "{0}（另有 {1} 個檔同樣沒進去）"
-en = "{0} ({1} more file(s) did not load either)"
-
-# Feature #211 — 候選面板. 空空如也: the panel, or the sentence itself.
-[[message]]
-zh = "候選面板：full 是候選框，bare 是行內預覽"
-en = "candidate panel: full is the boxed list, bare is the inline preview"
-
-[[message]]
-zh = "候選框：光標旁邊的那張帶框的表"
-en = "候選框: the bordered list beside the caret"
-
-[[message]]
-zh = "空空如也：首選直接畫在正文裏，編碼在光標下面，Tab 召出候選框"
-en = "空空如也: the first candidate is drawn into the text, the code sits under the caret, Tab summons the list"
-
-[[message]]
-zh = "候選面板：{0}"
-en = "candidate panel: {0}"
-
-[[message]]
-zh = "候選框"
-en = "the bordered list (候選框)"
-
-[[message]]
-zh = "行內預覽"
-en = "inline preview"
-
-[[message]]
-zh = "面板 {0}"
-en = "panel {0}"
-
-[[message]]
-zh = "沒有「{0}」這種候選面板——full、bare"
-en = "no candidate panel '{0}' — full, bare"
-
-# Feature #213 — 只讀
-
-[[message]]
-zh = "只讀——:readonly off 解開"
-en = "read-only — `:readonly off` unlocks it"
-
-[[message]]
-zh = "只讀：{0}"
-en = "read-only: {0}"
-
-[[message]]
-zh = "只讀：鎖住這一份，不許改"
-en = "read-only: lock this one against editing"
-
-[[message]]
-zh = "只讀：on——這一份還有沒存的改動，u 也用不了了"
-en = "read-only: on — this one has unsaved changes, and `u` is locked out too"
-
-[[message]]
-zh = "{0}：只讀"
-en = "{0}: read-only"
-
-# Feature #214 — 重讀
-
-[[message]]
-zh = "把檔案再讀一遍；加 ! 是丟掉你這裏的改動"
-en = "read the file again; ! throws away what you changed here"
-
-[[message]]
-zh = "檔案在外面改了就自己重讀——你這裏有改動時只提醒，不動手"
-en = "re-read by itself when the file changes outside — a warning, not a re-read, when you have changes of your own"
-
-[[message]]
-zh = "改在外面就自動重讀：{0}"
-en = "auto re-read on outside change: {0}"
+# ── autoreload ────────────────────────────────────────────────────────
 
 [[message]]
-zh = "檔案在外面改過了，你這裏也有改動——:reload! 丟掉你的"
+# 外面改了，你這裏也改了
+key = "autoreload.both-changed"
+zht = "檔案在外面改過了，你這裏也有改動——:reload! 丟掉你的"
+zhs = "档案在外面改过了，你这里也有改动——:reload! 丢掉你的"
 en = "the file changed outside and you have changes too — `:reload!` throws yours away"
 
 [[message]]
-zh = "外面改了，重讀了 {0}"
+# 外面改了，自動重讀完成
+key = "autoreload.reread"
+zht = "外面改了，重讀了 {0}"
+zhs = "外面改了，重读了 {0}"
 en = "changed outside; re-read {0}"
 
 [[message]]
-zh = "重讀不了：{0}"
+# 自動重讀開關換好了
+key = "autoreload.set"
+zht = "改在外面就自動重讀：{0}"
+zhs = "改在外面就自动重读：{0}"
+en = "auto re-read on outside change: {0}"
+
+
+# ── buffer ────────────────────────────────────────────────────────────
+
+[[message]]
+# 存成一個已經開着的檔名
+key = "buffer.already-open-elsewhere"
+zht = "{0} 正開着——切過去存，或另取一個檔名"
+zhs = "{0} 正开着——切过去存，或另取一个档名"
+en = "{0} is open here — save from there, or pick another name"
+
+[[message]]
+# 打不開一個檔案，帶系統給的理由
+key = "buffer.cannot-open"
+zht = "打不開「{0}」：{1}"
+zhs = "打不开「{0}」：{1}"
+en = "cannot open '{0}': {1}"
+
+[[message]]
+# :w 一個磁盤上已經被別人改過的檔案
+key = "buffer.changed-outside"
+zht = "這個檔案在外面被改過了——`:reload!` 讀它的，`:w!` 用你的"
+zhs = "这个档案在外面被改过了——`:reload!` 读它的，`:w!` 用你的"
+en = "the file changed on disk — `:reload!` takes its version, `:w!` keeps yours"
+
+[[message]]
+# 關掉最後一個緩衝區
+key = "buffer.closed"
+zht = "關了"
+zhs = "关了"
+en = "closed"
+
+[[message]]
+# 關掉一個緩衝區，切到下一個
+key = "buffer.closed-now-showing"
+zht = "關了 {0}——現在是 {1} [{2}/{3}]"
+zhs = "关了 {0}——现在是 {1} [{2}/{3}]"
+en = "closed {0} — now {1} [{2}/{3}]"
+
+[[message]]
+# :w 帶路徑，抄了一份出去
+key = "buffer.copied-to"
+zht = "抄了一份到 {0}"
+zhs = "抄了一份到 {0}"
+en = "copied to {0}"
+
+[[message]]
+# 另存成一個已經存在的檔名
+key = "buffer.file-already-exists"
+zht = "那個檔案已經存在——`:w!` 才蓋掉它"
+zhs = "那个档案已经存在——`:w!` 才盖掉它"
+en = "that file is already there — `:w!` writes over it"
+
+[[message]]
+# 存檔時檔案本身是只讀的
+key = "buffer.file-is-read-only"
+zht = "這個檔案是只讀的——先 chmod，或者換個檔名存"
+zhs = "这个档案是只读的——先 chmod，或者换个档名存"
+en = "this file is read-only — chmod it, or save under another name"
+
+[[message]]
+# gf 用在沒有檔名的行上
+key = "buffer.no-file-named-on-this-line"
+zht = "這一行沒寫檔名"
+zhs = "这一行没写档名"
+en = "no file named on this line"
+
+[[message]]
+# 存一份還沒有名字的稿子
+key = "buffer.no-name-yet"
+zht = "這份稿子還沒有名字——:w 名字 存成新檔"
+zhs = "这份稿子还没有名字——:w 名字 存成新档"
+en = "this manuscript has no name yet — :w <name> writes it as a new file"
+
+[[message]]
+# 只開了一個檔案時切換緩衝區
+key = "buffer.only-one-open"
+zht = "只開了一個檔案"
+zhs = "只开了一个档案"
+en = "only one file open"
+
+[[message]]
+# :reload 重讀完成
+key = "buffer.re-read"
+zht = "重讀了 {0}"
+zhs = "重读了 {0}"
+en = "re-read {0}"
+
+[[message]]
+# 存好一個檔案
+key = "buffer.saved"
+zht = "存了 {0}"
+zhs = "存了 {0}"
+en = "saved {0}"
+
+[[message]]
+# :wa 存好多個檔案
+key = "buffer.saved-many"
+zht = "存了 {0} 個"
+zhs = "存了 {0} 个"
+en = "saved {0} file(s)"
+
+[[message]]
+# :wa 有幾份沒存成
+key = "buffer.saved-some-not-all"
+zht = "存了 {0} 個檔案；{1} 個沒存：{2}"
+zhs = "存了 {0} 个档案；{1} 个没存：{2}"
+en = "saved {0} file(s); {1} not saved: {2}"
+
+[[message]]
+# 要丟掉沒存的改動，缺 !
+key = "buffer.unsaved-changes"
+zht = "還有沒存的改動（加 ! 強制）"
+zhs = "还有没存的改动（加 ! 强制）"
+en = "there are unsaved changes — add ! to override"
+
+
+# ── cell ──────────────────────────────────────────────────────────────
+
+[[message]]
+# 表格模式下往格子裏打分隔符（拆分表是製表符，Markdown 是 |）
+key = "cell.refuses-delimiter"
+zht = "'{0}' 是格與格的分隔——格子裏寫不了它"
+zhs = "'{0}' 是格与格的分隔——格子里写不了它"
+en = "'{0}' separates the cells — a cell cannot hold one"
+
+[[message]]
+# 表格模式下往格子裏貼或打一個換行
+key = "cell.refuses-newline"
+zht = "換行會把這一行切成兩行"
+zhs = "换行会把这一行切成两行"
+en = "a line break would cut this row in two"
+
+[[message]]
+# 表格模式下往格子裏貼或打一個製表符
+key = "cell.refuses-tab"
+zht = "製表符進不了格子"
+zhs = "制表符进不了格子"
+en = "a tab does not go in a cell"
+
+
+# ── chaifen ───────────────────────────────────────────────────────────
+
+[[message]]
+# 拆分表裏搜索的欄範圍
+key = "chaifen.column-range"
+zht = "第 {0}–{1} 欄"
+zhs = "第 {0}–{1} 栏"
+en = "columns {0}–{1}"
+
+[[message]]
+# :lint 查一張拆分表，某一行拆出來的部件在表裏找不到
+key = "chaifen.component-not-found"
+zht = "{0}:{1}: 部件「{2}」查無此行"
+zhs = "{0}:{1}: 部件「{2}」查无此行"
+en = "{0}:{1}: no row for the component 「{2}」"
+
+[[message]]
+# 拆分裏按部件跳，給的是結構符
+key = "chaifen.descriptor-not-component"
+zht = "「{0}」是結構符，不是部件"
+zhs = "「{0}」是结构符，不是部件"
+en = "'{0}' is a descriptor, not a component"
+
+[[message]]
+# :lint 查一張拆分表，兩行用了同一個行名
+key = "chaifen.duplicate-row-name"
+zht = "{0}:{1}: 行名「{2}」和第 {3} 行重了"
+zhs = "{0}:{1}: 行名「{2}」和第 {3} 行重了"
+en = "{0}:{1}: the name 「{2}」 is already row {3}"
+
+[[message]]
+# :lint 的結果那一份緩衝區的名字
+key = "chaifen.lint-results"
+zht = "[查 {0}]"
+zhs = "[查 {0}]"
+en = "[lint {0}]"
+
+[[message]]
+# 拆分表裏找不到這個部件
+key = "chaifen.no-such-row-in"
+zht = "{0} 裏沒有「{1}」"
+zhs = "{0} 里没有「{1}」"
+en = "no row in {0} is named 「{1}」"
+
+[[message]]
+# :yume chaifen off ——關了
+key = "chaifen.off"
+zht = "拆分 off"
+zhs = "拆分 off"
+en = "chaifen off"
+
+[[message]]
+# :yume chaifen on ——候選後面掛拆分注解，開了
+key = "chaifen.on"
+zht = "拆分 on"
+zhs = "拆分 on"
+en = "chaifen on"
+
+[[message]]
+# 拆分表裏找到了，報處數
+key = "chaifen.row-found"
+zht = "{0}：{1}（{2} 處，第一處）"
+zhs = "{0}：{1}（{2} 处，第一处）"
+en = "{0}: {1} ({2} rows; the first)"
+
+[[message]]
+# :yume chaifen on，但這個方案沒有拆分表
+key = "chaifen.unavailable"
+zht = "拆分 unavailable for this scheme"
+zhs = "拆分 unavailable for this scheme"
+en = "chaifen unavailable for this scheme"
+
+[[message]]
+# :lint 查一張拆分表，某一行的欄數和表頭對不上
+key = "chaifen.wrong-column-count"
+zht = "{0}:{1}: 這一行是 {2} 欄，該是 {3} 欄"
+zhs = "{0}:{1}: 这一行是 {2} 栏，该是 {3} 栏"
+en = "{0}:{1}: {2} columns here, {3} expected"
+
+
+# ── cli ───────────────────────────────────────────────────────────────
+
+[[message]]
+# 啓動時接着上次的檔案
+key = "cli.picked-up-where-you-left-off"
+zht = "接着上次：開了 {0} 個檔案"
+zhs = "接着上次：开了 {0} 个档案"
+en = "picking up where you left off: opened {0} file(s)"
+
+[[message]]
+# 啓動時報用的是哪個方案
+key = "cli.scheme"
+zht = "方案：{0}"
+zhs = "方案：{0}"
+en = "scheme: {0}"
+
+[[message]]
+# 啓動時要換的方案沒有碼表
+key = "cli.scheme-table-not-installed"
+zht = "{0} 的碼表沒有裝——:yume scheme 換一個"
+zhs = "{0} 的码表没有装——:yume scheme 换一个"
+en = "{0}'s table is not installed — :yume scheme picks another"
+
+
+# ── cmd ───────────────────────────────────────────────────────────────
+
+[[message]]
+# : 命令選單裏，吃一個路徑的命令後面畫的佔位
+key = "cmd.arg.path"
+zht = "<路徑>"
+zhs = "<路径>"
+en = "<path>"
+
+[[message]]
+# : 命令選單裏 column 那一項的說明（axis 組）
+key = "cmd.axis.column"
+zht = "一欄一欄地找，從第一欄的頂上開始——表格裏 t/ t? 就是它"
+zhs = "一栏一栏地找，从第一栏的顶上开始——表格里 t/ t? 就是它"
+en = "column by column, from the top of the first — this is what Enter does in a table"
+
+[[message]]
+# : 命令選單裏 row 那一項的說明（axis 組）
+key = "cmd.axis.row"
+zht = "一行一行地找——`/` 就是它"
+zhs = "一行一行地找——`/` 就是它"
+en = "row by row — this is what `/` does"
+
+[[message]]
+# : 命令選單裏 close 那一項的說明（buffers 組）
+key = "cmd.buffers.close"
+zht = "關掉這一個（`close!` 不管改動）"
+zhs = "关掉这一个（`close!` 不管改动）"
+en = "close this one (`close!` ignores changes)"
+
+[[message]]
+# : 命令選單裏 list 那一項的說明（buffers 組）
+key = "cmd.buffers.list"
+zht = "列出開着的檔案"
+zhs = "列出开着的档案"
+en = "list the open files"
+
+[[message]]
+# : 命令選單裏 next 那一項的說明（buffers 組）
+key = "cmd.buffers.next"
+zht = "下一個"
+zhs = "下一个"
+en = "the next one"
+
+[[message]]
+# : 命令選單裏 previous 那一項的說明（buffers 組）
+key = "cmd.buffers.previous"
+zht = "上一個"
+zhs = "上一个"
+en = "the previous one"
+
+[[message]]
+# : 命令選單裏 paste 那一項的說明（clipboard 組）
+key = "cmd.clipboard.paste"
+zht = "從系統剪貼簿貼進來"
+zhs = "从系统剪贴簿贴进来"
+en = "paste from the system clipboard"
+
+[[message]]
+# : 命令選單裏 yank 那一項的說明（clipboard 組）
+key = "cmd.clipboard.yank"
+zht = "選區送到系統剪貼簿"
+zhs = "选区送到系统剪贴簿"
+en = "put the selection on the system clipboard"
+
+[[message]]
+# : 命令選單裏 appearance 那一項的說明（commands 組）
+key = "cmd.commands.appearance"
+zht = "深色、淺色，還是跟着終端"
+zhs = "深色、浅色，还是跟着终端"
+en = "dark, light, or whatever the terminal is"
+
+[[message]]
+# : 命令選單裏 bands 那一項的說明（commands 組）
+key = "cmd.commands.bands"
+zht = "段組：把竪排的頁面橫着分成幾條，右上讀到左上，再右下讀到左下"
+zhs = "段组：把竖排的页面横着分成几条，右上读到左上，再右下读到左下"
+en = "bands: divide the vertical page across — top right to top left, then bottom right to bottom left"
+
+[[message]]
+# : 命令選單裏 buffer 那一項的說明（commands 組）
+key = "cmd.commands.buffer"
+zht = "開着的檔案：列出、切換、關掉"
+zhs = "开着的档案：列出、切换、关掉"
+en = "the open files: list, switch, close"
+
+[[message]]
+# : 命令選單裏 clipboard 那一項的說明（commands 組）
+key = "cmd.commands.clipboard"
+zht = "系統剪貼簿：送出去、貼進來"
+zhs = "系统剪贴簿：送出去、贴进来"
+en = "the system clipboard: out, and back in"
+
+[[message]]
+# : 命令選單裏 count 那一項的說明（commands 組）
+key = "cmd.commands.count"
+zht = "寫了多少"
+zhs = "写了多少"
+en = "how much has been written"
+
+[[message]]
+# : 命令選單裏 dense 那一項的說明（commands 組）
+key = "cmd.commands.dense"
+zht = "密排／疏排：竪排是縱與縱之間，橫排是行與行之間"
+zhs = "密排／疏排：竖排是纵与纵之间，横排是行与行之间"
+en = "tight or loose: between columns in 竪排, between rows in 橫排"
+
+[[message]]
+# : 命令選單裏 export 那一項的說明（commands 組）
+key = "cmd.commands.export"
+zht = "導出成 html 或 typst，排版一起帶上"
+zhs = "导出成 html 或 typst，排版一起带上"
+en = "write it out as html or typst, layout and all"
+
+[[message]]
+# : 命令選單裏 format 那一項的說明（commands 組）
+key = "cmd.commands.format"
+zht = "照這種檔案在設定裏說的那樣格式化（[language.markdown] format = …）"
+zhs = "照这种档案在设定里说的那样格式化（[language.markdown] format = …）"
+en = "format this file the way the config says ([language.markdown] format = …)"
+
+[[message]]
+# : 命令選單裏 goto 那一項的說明（commands 組）
+key = "cmd.commands.goto"
+zht = "跳到某一行（`:42` 就夠了）"
+zhs = "跳到某一行（`:42` 就够了）"
+en = "go to a line (`:42` will do)"
+
+[[message]]
+# : 命令選單裏 grep 那一項的說明（commands 組）
+key = "cmd.commands.grep"
+zht = "整個項目找一遍"
+zhs = "整个项目找一遍"
+en = "search every file in the project"
+
+[[message]]
+# : 命令選單裏 hanging 那一項的說明（commands 組）
+key = "cmd.commands.hanging"
+zht = "標點旁置：句讀掛在邊欄"
+zhs = "标点旁置：句读挂在边栏"
+en = "hung punctuation: 句讀 sit in the margin"
+
+[[message]]
+# : 命令選單裏 help 那一項的說明（commands 組）
+key = "cmd.commands.help"
+zht = "鍵和命令，開成一個可以讀、可以搜的檔案"
+zhs = "键和命令，开成一个可以读、可以搜的档案"
+en = "the keys and the commands, opened as a file you can read and search"
+
+[[message]]
+# : 命令選單裏 indent 那一項的說明（commands 組）
+key = "cmd.commands.indent"
+zht = "首行縮進幾格（中文的段落是縮進兩格，不是空一行）；`:indent off` 不縮"
+zhs = "首行缩进几格（中文的段落是缩进两格，不是空一行）；`:indent off` 不缩"
+en = "how many squares open a paragraph (Chinese marks one with two, not a blank line); `:indent off` for none"
+
+[[message]]
+# : 命令選單裏 layout 那一項的說明（commands 組）
+key = "cmd.commands.layout"
+zht = "橫排竪排互換"
+zhs = "横排竖排互换"
+en = "flip horizontal and vertical"
+
+[[message]]
+# : 命令選單裏 markdown 那一項的說明（commands 組）
+key = "cmd.commands.markdown"
+zht = "寫一段 Markdown：footnote、footnote inline、table 3x4"
+zhs = "写一段 Markdown：footnote、footnote inline、table 3x4"
+en = "write a piece of Markdown: footnote, footnote inline, table 3x4"
+
+[[message]]
+# : 命令選單裏 new 那一項的說明（commands 組）
+key = "cmd.commands.new"
+zht = "開一個空的緩衝區"
+zhs = "开一个空的缓冲区"
+en = "start an empty buffer"
+
+[[message]]
+# : 命令選單裏 numbers 那一項的說明（commands 組）
+key = "cmd.commands.numbers"
+zht = "行號那一條：要不要自己的底色"
+zhs = "行号那一条：要不要自己的底色"
+en = "the line-number band: whether it has a ground of its own"
+
+[[message]]
+# : 命令選單裏 open 那一項的說明（commands 組）
+key = "cmd.commands.open"
+zht = "打開一個檔案"
+zhs = "打开一个档案"
+en = "open a file"
+
+[[message]]
+# : 命令選單裏 pipe 那一項的說明（commands 組）
+key = "cmd.commands.pipe"
+zht = "把選區送給一條命令，用它的輸出換掉（`!`）"
+zhs = "把选区送给一条命令，用它的输出换掉（`!`）"
+en = "send the selection through a command and take back its output (`!`)"
+
+[[message]]
+# : 命令選單裏 preview 那一項的說明（commands 組）
+key = "cmd.commands.preview"
+zht = "交給真正的排版器去排，在瀏覽器裏看"
+zhs = "交给真正的排版器去排，在浏览器里看"
+en = "hand it to a real typesetter and read it in a browser"
+
+[[message]]
+# : 命令選單裏 quit 那一項的說明（commands 組）
+key = "cmd.commands.quit"
+zht = "退出；加 ! 連沒存的改動一起丟"
+zhs = "退出；加 ! 连没存的改动一起丢"
+en = "leave; with ! throw away unsaved changes too"
+
+[[message]]
+# : 命令選單裏 readonly 那一項的說明（commands 組）
+key = "cmd.commands.readonly"
+zht = "只讀：鎖住這一份，不許改"
+zhs = "只读：锁住这一份，不许改"
+en = "read-only: lock this one against editing"
+
+[[message]]
+# : 命令選單裏 recover 那一項的說明（commands 組）
+key = "cmd.commands.recover"
+zht = "載入搶救稿；加 ! 是丟掉它"
+zhs = "载入抢救稿；加 ! 是丢掉它"
+en = "load the recovered draft; with ! throw it away"
+
+[[message]]
+# : 命令選單裏 redo 那一項的說明（commands 組）
+key = "cmd.commands.redo"
+zht = "重做"
+zhs = "重做"
+en = "redo"
+
+[[message]]
+# : 命令選單裏 reload 那一項的說明（commands 組）
+key = "cmd.commands.reload"
+zht = "把檔案再讀一遍；加 ! 是丟掉你這裏的改動"
+zhs = "把档案再读一遍；加 ! 是丢掉你这里的改动"
+en = "read the file again; ! throws away what you changed here"
+
+[[message]]
+# : 命令選單裏 render 那一項的說明（commands 組）
+key = "cmd.commands.render"
+zht = "畫面上顯示多少「結果」：原文、著色、所見即所得"
+zhs = "画面上显示多少「结果」：原文、著色、所见即所得"
+en = "how much of the result the page shows: source, coloured, WYSIWYG"
+
+[[message]]
+# : 命令選單裏 replace 那一項的說明（commands 組）
+key = "cmd.commands.replace"
+zht = "把剛才 :grep 找到的那些都換掉——先看見，才改得動"
+zhs = "把刚才 :grep 找到的那些都换掉——先看见，才改得动"
+en = "change everything the last :grep found — you see it before you change it"
+
+[[message]]
+# : 命令選單裏 row 那一項的說明（commands 組）
+key = "cmd.commands.row"
+zht = "跳到表格裏叫這個名字的那一行（`:row 木`）"
+zhs = "跳到表格里叫这个名字的那一行（`:row 木`）"
+en = "go to the row this table names (`:row 木`)"
+
+[[message]]
+# : 命令選單裏 ruby 那一項的說明（commands 組）
+key = "cmd.commands.ruby"
+zht = "改這裏的注音；`:ruby on|off` 是排不排"
+zhs = "改这里的注音；`:ruby on|off` 是排不排"
+en = "edit the reading here; `:ruby on|off` is whether they are laid out"
+
+[[message]]
+# : 命令選單裏 run 那一項的說明（commands 組）
+key = "cmd.commands.run"
+zht = "跑這種檔案在設定裏自己起名的那條命令"
+zhs = "跑这种档案在设定里自己起名的那条命令"
+en = "run the command this language names in the config"
+
+[[message]]
+# : 命令選單裏 saveas 那一項的說明（commands 組）
+key = "cmd.commands.saveas"
+zht = "另存成新檔並改編輯它（`:w <檔名>` 只抄一份，人還在這邊）"
+zhs = "另存成新档并改编辑它（`:w <档名>` 只抄一份，人还在这边）"
+en = "save under a new name and edit that one (`:w <path>` only copies)"
+
+[[message]]
+# : 命令選單裏 search 那一項的說明（commands 組）
+key = "cmd.commands.search"
+zht = "找：`row` 一行一行（就是 `/`），`column` 一欄一欄（表格裏 t/ t? 就是它）"
+zhs = "找：`row` 一行一行（就是 `/`），`column` 一栏一栏（表格里 t/ t? 就是它）"
+en = "search: `row` runs across (that is `/`), `column` runs down (that is Enter in a table)"
+
+[[message]]
+# : 命令選單裏 sh 那一項的說明（commands 組）
+key = "cmd.commands.sh"
+zht = "跑一條命令，輸出收進一個緩衝區"
+zhs = "跑一条命令，输出收进一个缓冲区"
+en = "run a command and keep its output in a buffer"
+
+[[message]]
+# : 命令選單裏 !command 那一項的說明（commands 組）
+key = "cmd.commands.shell"
+zht = "讓出終端跑一條命令，直接看它跑（vi 的寫法）"
+zhs = "让出终端跑一条命令，直接看它跑（vi 的写法）"
+en = "hand the terminal over and watch it run (vi's spelling)"
+
+[[message]]
+# : 命令選單裏 shot 那一項的說明（commands 組）
+key = "cmd.commands.shot"
+zht = "把畫面截成圖放進剪貼簿——命令面板收起來之後才截"
+zhs = "把画面截成图放进剪贴簿——命令面板收起来之后才截"
+en = "put a picture of the screen on the clipboard — taken after the menu closes"
+
+[[message]]
+# : 命令選單裏 s/pat/rep/ 那一項的說明（commands 組）
+key = "cmd.commands.substitute"
+zht = "取代：選區內；`%s` 全檔、`1,40s` 指定行；旗標 g i n；分隔符可換（s#a/b#c#）"
+zhs = "取代：选区内；`%s` 全档、`1,40s` 指定行；旗标 g i n；分隔符可换（s#a/b#c#）"
+en = "substitute in the selection; `%s` the file, `1,40s` a range; flags g i n; any delimiter (s#a/b#c#)"
+
+[[message]]
+# : 命令選單裏 syntax 那一項的說明（commands 組）
+key = "cmd.commands.syntax"
+zht = "這個檔案是哪種標記（不給參數就說現在是哪個）"
+zhs = "这个档案是哪种标记（不给参数就说现在是哪个）"
+en = "which markup this file is written in (with no argument, which one it is now)"
+
+[[message]]
+# : 命令選單裏 table 那一項的說明（commands 組）
+key = "cmd.commands.table"
+zht = "按格子編輯：CSV 整個檔案，或游標所在的 | 表格；`:table off` 收工"
+zhs = "按格子编辑：CSV 整个档案，或游标所在的 | 表格；`:table off` 收工"
+en = "edit as a grid: a whole CSV, or the | table under the cursor; `:table off` stops"
+
+[[message]]
+# : 命令選單裏 theme 那一項的說明（commands 組）
+key = "cmd.commands.theme"
+zht = "主題：用哪一套墨（後面可以再跟深淺）"
+zhs = "主题：用哪一套墨（后面可以再跟深浅）"
+en = "theme: which set of inks (an appearance may follow it)"
+
+[[message]]
+# : 命令選單裏 toc 那一項的說明（commands 組）
+key = "cmd.commands.toc"
+zht = "列出標題；`:toc 3` 跳到第三條"
+zhs = "列出标题；`:toc 3` 跳到第三条"
+en = "list the headings; `:toc 3` goes to the third"
+
+[[message]]
+# : 命令選單裏 tutor 那一項的說明（commands 組）
+key = "cmd.commands.tutor"
+zht = "一課：把課文抄成你自己的一個檔案，邊改邊學"
+zhs = "一课：把课文抄成你自己的一个档案，边改边学"
+en = "a lesson: the text is copied into a file of your own, and you learn by editing it"
+
+[[message]]
+# : 命令選單裏 typewriter 那一項的說明（commands 組）
+key = "cmd.commands.typewriter"
+zht = "打字機：光標那一行一直停在畫面中間，紙往上走"
+zhs = "打字机：光标那一行一直停在画面中间，纸往上走"
+en = "typewriter: the row you are writing stays in the middle and the paper moves"
+
+[[message]]
+# : 命令選單裏 undo 那一項的說明（commands 組）
+key = "cmd.commands.undo"
+zht = "撤銷上一次改動"
+zhs = "撤销上一次改动"
+en = "undo the last change"
+
+[[message]]
+# : 命令選單裏 wa 那一項的說明（commands 組）
+key = "cmd.commands.wa"
+zht = "存下所有改過的檔案"
+zhs = "存下所有改过的档案"
+en = "save every file that changed"
+
+[[message]]
+# : 命令選單裏 word 那一項的說明（commands 組）
+key = "cmd.commands.word"
+zht = "分詞：哪一份詞表、著色、粒度"
+zhs = "分词：哪一份词表、著色、粒度"
+en = "words: which list, the tint, the level"
+
+[[message]]
+# : 命令選單裏 wq 那一項的說明（commands 組）
+key = "cmd.commands.wq"
+zht = "存好再退出"
+zhs = "存好再退出"
+en = "save, then leave"
+
+[[message]]
+# : 命令選單裏 wrap 那一項的說明（commands 組）
+key = "cmd.commands.wrap"
+zht = "長段落折到下一行；`:wrap 50` 定寬度"
+zhs = "长段落折到下一行；`:wrap 50` 定宽度"
+en = "wrap long paragraphs to the next row; `:wrap 50` sets a measure"
+
+[[message]]
+# : 命令選單裏 write 那一項的說明（commands 組）
+key = "cmd.commands.write"
+zht = "存檔；給路徑就是另存"
+zhs = "存档；给路径就是另存"
+en = "save; with a path, save as"
+
+[[message]]
+# : 命令選單裏 yume 那一項的說明（commands 組）
+key = "cmd.commands.yume"
+zht = "輸入法：現在用的是哪一個；換方案、拆分注解"
+zhs = "输入法：现在用的是哪一个；换方案、拆分注解"
+en = "the IME: which one is answering, changing scheme, the 拆分 annotation"
+
+[[message]]
+# : 命令選單裏 delayed 那一項的說明（commits 組）
+key = "cmd.commits.delayed"
+zht = "延遲上屏（頂字）：碼成立了先等着，下一鍵拼不成碼才把前面那段頂上去"
+zhs = "延迟上屏（顶字）：码成立了先等着，下一键拼不成码才把前面那段顶上去"
+en = "延遲上屏 (頂字): a finished code waits, and goes when the next key cannot continue it"
+
+[[message]]
+# : 命令選單裏 fluency 那一項的說明（commits 組）
+key = "cmd.commits.fluency"
+zht = "整句輸入：一路打下去，空格確認整句，從不自己上屏"
+zhs = "整句输入：一路打下去，空格确认整句，从不自己上屏"
+en = "整句輸入: type on, Space confirms the sentence; nothing goes on its own"
+
+[[message]]
+# : 命令選單裏 unique 那一項的說明（commits 組）
+key = "cmd.commits.unique"
+zht = "唯一上屏（自動、auto）：碼成立而且只有一個候選，就直接上屏"
+zhs = "唯一上屏（自动、auto）：码成立而且只有一个候选，就直接上屏"
+en = "唯一上屏 (auto): a finished code with one candidate goes straight to the page"
+
+[[message]]
+# : 命令選單裏 inline 那一項的說明（footnote-kinds 組）
+key = "cmd.footnote-kinds.inline"
+zht = "行內註 ^[…]，不去文末"
+zhs = "行内注 ^[…]，不去文末"
+en = "an inline note ^[…], which does not go to the foot"
+
+[[message]]
+# : 命令選單裏 color 那一項的說明（hints 組）
+key = "cmd.hints.color"
+zht = "那兩格帶一條淡底"
+zhs = "那两格带一条淡底"
+en = "a band across them"
+
+[[message]]
+# : 命令選單裏 none 那一項的說明（hints 組）
+key = "cmd.hints.none"
+zht = "什麼都不畫（默認，書上就是白的）"
+zhs = "什么都不画（默认，书上就是白的）"
+en = "nothing (the default — a book prints them white)"
+
+[[message]]
+# : 命令選單裏 symbol 那一項的說明（hints 組）
+key = "cmd.hints.symbol"
+zht = "第一格畫一個記號（默認 ↵，它替掉的正是一個換行）"
+zhs = "第一格画一个记号（默认 ↵，它替掉的正是一个换行）"
+en = "a mark in the first one (↵ by default — a line break is what it replaced)"
+
+[[message]]
+# : 命令選單裏 hint 那一項的說明（indent 組）
+key = "cmd.indent.hint"
+zht = "縮進的那兩格上畫什麼"
+zhs = "缩进的那两格上画什么"
+en = "what is drawn in a paragraph's opening squares"
+
+[[message]]
+# : 命令選單裏 off 那一項的說明（indent 組）
+key = "cmd.indent.off"
+zht = "不縮進"
+zhs = "不缩进"
+en = "no indent"
+
+[[message]]
+# : 命令選單裏 horizontal 那一項的說明（layouts 組）
+key = "cmd.layouts.horizontal"
+zht = "橫排"
+zhs = "横排"
+en = "horizontal"
+
+[[message]]
+# : 命令選單裏 vertical 那一項的說明（layouts 組）
+key = "cmd.layouts.vertical"
+zht = "竪排，縱從右往左"
+zhs = "竖排，纵从右往左"
+en = "vertical, 縱 running from the right"
+
+[[message]]
+# : 命令選單裏 footnote 那一項的說明（markdown-bits 組）
+key = "cmd.markdown-bits.footnote"
+zht = "腳注：號碼自己找空的，註也一併開好"
+zhs = "脚注：号码自己找空的，注也一并开好"
+en = "a footnote: the next free number, and its note opened with it"
+
+[[message]]
+# : 命令選單裏 table 那一項的說明（markdown-bits 組）
+key = "cmd.markdown-bits.table"
+zht = "一張空表：`table 3x4` 是三欄四行"
+zhs = "一张空表：`table 3x4` 是三栏四行"
+en = "an empty table: `table 3x4` is three columns and four rows"
+
+[[message]]
+# : 命令選單裏 dark 那一項的說明（moods 組）
+key = "cmd.moods.dark"
+zht = "深色"
+zhs = "深色"
+en = "dark"
+
+[[message]]
+# : 命令選單裏 light 那一項的說明（moods 組）
+key = "cmd.moods.light"
+zht = "淺色"
+zhs = "浅色"
+en = "light"
+
+[[message]]
+# : 命令選單裏 system 那一項的說明（moods 組）
+key = "cmd.moods.system"
+zht = "跟終端的底色走"
+zhs = "跟终端的底色走"
+en = "follow the terminal's own background"
+
+[[message]]
+# 命令少了參數
+key = "cmd.needs-an-argument"
+zht = "{0} 後面要跟一個參數"
+zhs = "{0} 后面要跟一个参数"
+en = "{0} takes an argument"
+
+[[message]]
+# 命令要求的前提沒開，提示加 force
+key = "cmd.needs-these-first"
+zht = "還不行，需要：{0}——句末加 force 一併打開"
+zhs = "还不行，需要：{0}——句末加 force 一并打开"
+en = "not yet — this needs {0}; add force at the end to turn them on with it"
+
+[[message]]
+# 冒號命令是空的
+key = "cmd.no-command-typed"
+zht = "沒打命令"
+zhs = "没打命令"
+en = "no command typed"
+
+[[message]]
+# 打了一個不存在的命令
+key = "cmd.no-such-command"
+zht = "沒有「{0}」這個命令"
+zhs = "没有「{0}」这个命令"
+en = "no such command as '{0}'"
+
+[[message]]
+# 參數不在這個命令認得的值裏
+key = "cmd.not-one-of-its-values"
+zht = "{0}：不認得「{1}」"
+zhs = "{0}：不认得「{1}」"
+en = "{0}: '{1}' is not one of its values"
+
+[[message]]
+# : 命令選單裏 fill 那一項的說明（numbers 組）
+key = "cmd.numbers.fill"
+zht = "行號那一條有沒有自己的底色（默認沒有，橫排竪排一樣）"
+zhs = "行号那一条有没有自己的底色（默认没有，横排竖排一样）"
+en = "whether the line-number band has a ground of its own (no by default, in both layouts)"
+
+[[message]]
+# : 命令選單裏 on 那一項的說明（on-off 組）
+key = "cmd.on-off.on"
+zht = "開"
+zhs = "开"
+en = "on"
+
+[[message]]
+# : 命令選單裏 bare 那一項的說明（panels 組）
+key = "cmd.panels.bare"
+zht = "空空如也：首選直接畫在正文裏，編碼在光標下面，Tab 召出候選框"
+zhs = "空空如也：首选直接画在正文里，编码在光标下面，Tab 召出候选框"
+en = "空空如也: the first candidate is drawn into the text, the code sits under the caret, Tab summons the list"
+
+[[message]]
+# : 命令選單裏 full 那一項的說明（panels 組）
+key = "cmd.panels.full"
+zht = "候選框：光標旁邊的那張帶框的表"
+zhs = "候选框：光标旁边的那张带框的表"
+en = "候選框: the bordered list beside the caret"
+
+[[message]]
+# : 命令選單裏 auto 那一項的說明（reload 組）
+key = "cmd.reload.auto"
+zht = "檔案在外面改了就自己重讀——你這裏有改動時只提醒，不動手"
+zhs = "档案在外面改了就自己重读——你这里有改动时只提醒，不动手"
+en = "re-read by itself when the file changes outside — a warning, not a re-read, when you have changes of your own"
+
+[[message]]
+# : 命令選單裏 full 那一項的說明（render 組）
+key = "cmd.render.full"
+zht = "標記拿掉，只在光標那一處展開"
+zhs = "标记拿掉，只在光标那一处展开"
+en = "the markup comes off, and opens only where the cursor is"
+
+[[message]]
+# : 命令選單裏 off 那一項的說明（render 組）
+key = "cmd.render.off"
+zht = "原文，不著色"
+zhs = "原文，不著色"
+en = "the source, uncoloured"
+
+[[message]]
+# : 命令選單裏 on 那一項的說明（render 組）
+key = "cmd.render.on"
+zht = "著色，標記留在畫面上（默認）"
+zhs = "著色，标记留在画面上（默认）"
+en = "coloured, the markup staying on the page (the default)"
+
+[[message]]
+# : 命令選單裏 format 那一項的說明（ruby 組）
+key = "cmd.ruby.format"
+zht = "把注音改寫成另一種寫法"
+zhs = "把注音改写成另一种写法"
+en = "rewrite the readings in another dialect"
+
+[[message]]
+# : 命令選單裏 html 那一項的說明（ruby.format 組）
+key = "cmd.ruby.format.html"
+zht = "改寫成 `<ruby>`"
+zhs = "改写成 `<ruby>`"
+en = "rewrite as `<ruby>`"
+
+[[message]]
+# : 命令選單裏 typst 那一項的說明（ruby.format 組）
+key = "cmd.ruby.format.typst"
+zht = "改寫成 `#ruby(…)`"
+zhs = "改写成 `#ruby(…)`"
+en = "rewrite as `#ruby(…)`"
+
+[[message]]
+# : 命令選單裏 html 那一項的說明（ruby 組）
+key = "cmd.ruby.html"
+zht = "認 `<ruby>` 這一種"
+zhs = "认 `<ruby>` 这一种"
+en = "read `<ruby>`"
+
+[[message]]
+# : 命令選單裏 off 那一項的說明（ruby 組）
+key = "cmd.ruby.off"
+zht = "顯示源碼"
+zhs = "显示源码"
+en = "show the source"
+
+[[message]]
+# : 命令選單裏 on 那一項的說明（ruby 組）
+key = "cmd.ruby.on"
+zht = "排出注音"
+zhs = "排出注音"
+en = "lay the readings out"
+
+[[message]]
+# : 命令選單裏 typst 那一項的說明（ruby 組）
+key = "cmd.ruby.typst"
+zht = "認 `#ruby(…)` 這一種"
+zhs = "认 `#ruby(…)` 这一种"
+en = "read `#ruby(…)`"
+
+[[message]]
+# : 命令選單裏 color 那一項的說明（rules 組）
+key = "cmd.rules.color"
+zht = "每欄一條淡底，紙從縫裏透出來"
+zhs = "每栏一条淡底，纸从缝里透出来"
+en = "a band per column, with the page showing in the seam"
+
+[[message]]
+# : 命令選單裏 line 那一項的說明（rules 組）
+key = "cmd.rules.line"
+zht = "畫一條竪線"
+zhs = "画一条竖线"
+en = "draw a vertical line"
+
+[[message]]
+# : 命令選單裏 off 那一項的說明（rules 組）
+key = "cmd.rules.off"
+zht = "什麼都不畫，靠對齊分"
+zhs = "什么都不画，靠对齐分"
+en = "nothing drawn — the alignment tells them apart"
+
+[[message]]
+# : 命令選單裏 lingming 那一項的說明（schemes 組）
+key = "cmd.schemes.lingming"
+zht = "靈明"
+zhs = "灵明"
+en = "靈明"
+
+[[message]]
+# : 命令選單裏 pinyin 那一項的說明（schemes 組）
+key = "cmd.schemes.pinyin"
+zht = "拼音"
+zhs = "拼音"
+en = "拼音"
+
+[[message]]
+# : 命令選單裏 qingyun 那一項的說明（schemes 組）
+key = "cmd.schemes.qingyun"
+zht = "卿雲"
+zhs = "卿云"
+en = "卿雲"
+
+[[message]]
+# : 命令選單裏 riyue 那一項的說明（schemes 組）
+key = "cmd.schemes.riyue"
+zht = "日月"
+zhs = "日月"
+en = "日月"
+
+[[message]]
+# : 命令選單裏 xingchen 那一項的說明（schemes 組）
+key = "cmd.schemes.xingchen"
+zht = "星陳"
+zhs = "星陈"
+en = "星陳"
+
+[[message]]
+# : 命令選單裏 dash 那一項的說明（strokes 組）
+key = "cmd.strokes.dash"
+zht = "虛線 ┆（默認）"
+zhs = "虚线 ┆（默认）"
+en = "dashed ┆ (default)"
+
+[[message]]
+# : 命令選單裏 double 那一項的說明（strokes 組）
+key = "cmd.strokes.double"
+zht = "雙線 ║"
+zhs = "双线 ║"
+en = "double ║"
+
+[[message]]
+# : 命令選單裏 solid 那一項的說明（strokes 組）
+key = "cmd.strokes.solid"
+zht = "實線 │"
+zhs = "实线 │"
+en = "solid │"
+
+[[message]]
+# : 命令選單裏 markdown 那一項的說明（syntaxes 組）
+key = "cmd.syntaxes.markdown"
+zht = "`#` 標題、`**粗**`"
+zhs = "`#` 标题、`**粗**`"
+en = "`#` headings, `**bold**`"
+
+[[message]]
+# : 命令選單裏 text 那一項的說明（syntaxes 組）
+key = "cmd.syntaxes.text"
+zht = "沒有標記：檔案裏的每個字符都只是它自己"
+zhs = "没有标记：档案里的每个字符都只是它自己"
+en = "no markup: every character in the file is only itself"
+
+[[message]]
+# : 命令選單裏 typst 那一項的說明（syntaxes 組）
+key = "cmd.syntaxes.typst"
+zht = "`=` 標題、`#import`"
+zhs = "`=` 标题、`#import`"
+en = "`=` headings, `#import`"
+
+[[message]]
+# : 命令選單裏 check 那一項的說明（table 組）
+key = "cmd.table.check"
+zht = "從頭看一遍：重複的行名、查無此行的部件、欄數不對的行、超出字集的字"
+zhs = "从头看一遍：重复的行名、查无此行的部件、栏数不对的行、超出字集的字"
+en = "look the whole table over: repeated row names, components with no row, rows of the wrong width"
+
+[[message]]
+# : 命令選單裏 detail 那一項的說明（table 組）
+key = "cmd.table.detail"
+zht = "詳情欄：開、關，或者給個寬度"
+zhs = "详情栏：开、关，或者给个宽度"
+en = "the detail panel: on, off, or a width"
+
+[[message]]
+# : 命令選單裏 numbers 那一項的說明（table 組）
+key = "cmd.table.numbers"
+zht = "欄號那一行：3gd、t20-20g 用的就是它"
+zhs = "栏号那一行：3gd、t20-20g 用的就是它"
+en = "the row of column numbers — what 3gd and t20-20g count with"
+
+[[message]]
+# : 命令選單裏 off 那一項的說明（table 組）
+key = "cmd.table.off"
+zht = "當普通文字"
+zhs = "当普通文字"
+en = "as ordinary text"
+
+[[message]]
+# : 命令選單裏 on 那一項的說明（table 組）
+key = "cmd.table.on"
+zht = "按格子編輯（默認）"
+zhs = "按格子编辑（默认）"
+en = "edit it as a grid (the default)"
+
+[[message]]
+# : 命令選單裏 rules 那一項的說明（table 組）
+key = "cmd.table.rules"
+zht = "欄線：欄與欄之間怎麼分開"
+zhs = "栏线：栏与栏之间怎么分开"
+en = "column rules: how the columns are told apart"
+
+[[message]]
+# : 命令選單裏 sort 那一項的說明（table 組）
+key = "cmd.table.sort"
+zht = "照這幾欄排：`sort 1 a 2 d` 是先第一欄順排、再第二欄倒排"
+zhs = "照这几栏排：`sort 1 a 2 d` 是先第一栏顺排、再第二栏倒排"
+en = "sort by these columns: `sort 1 a 2 d` is column 1 ascending, then column 2 descending"
+
+[[message]]
+# : 命令選單裏 amber 那一項的說明（themes 組）
+key = "cmd.themes.amber"
+zht = "琥珀：整頁只有一種顏色"
+zhs = "琥珀：整页只有一种颜色"
+en = "amber: one colour for the whole page"
+
+[[message]]
+# : 命令選單裏 bw 那一項的說明（themes 組）
+key = "cmd.themes.bw"
+zht = "黑白：只有黑、白和灰——輕重說話，顏色不說"
+zhs = "黑白：只有黑、白和灰——轻重说话，颜色不说"
+en = "heibai: black, white and grey only — weight says it, colour says nothing"
+
+[[message]]
+# : 命令選單裏 complement 那一項的說明（themes 組）
+key = "cmd.themes.complement"
+zht = "靛橘：顏色只活在底色裏，正文永遠是中性灰"
+zhs = "靛橘：颜色只活在底色里，正文永远是中性灰"
+en = "complement: colour lives in the grounds only; the writing stays neutral grey"
+
+[[message]]
+# : 命令選單裏 cyanotype 那一項的說明（themes 組）
+key = "cmd.themes.cyanotype"
+zht = "藍曬：普魯士藍的地、白線的字——八套裏唯一底色真帶飽和色的一套"
+zhs = "蓝晒：普鲁士蓝的地、白线的字——八套里唯一底色真带饱和色的一套"
+en = "cyanotype: white lines on Prussian blue — the one theme whose ground carries colour"
+
+[[message]]
+# : 命令選單裏 firefly 那一項的說明（themes 組）
+key = "cmd.themes.firefly"
+zht = "夜螢：近乎全黑的地，字是冷灰，唯一的暖處是那點黃金——螢火不是霓虹，一頁上只該有幾點"
+zhs = "夜萤：近乎全黑的地，字是冷灰，唯一的暖处是那点黄金——萤火不是霓虹，一页上只该有几点"
+en = "firefly: a near-black ground, cool grey text, and warmth only in the gold — a few sparks to a page"
+
+[[message]]
+# : 命令選單裏 ink 那一項的說明（themes 組）
+key = "cmd.themes.ink"
+zht = "墨香：黑墨、白金墨、金墨、紅墨，其餘的色階都算出來"
+zhs = "墨香：黑墨、白金墨、金墨、红墨，其余的色阶都算出来"
+en = "moxiang: black, white-gold, gold and red ink; every other shade computed"
+
+[[message]]
+# : 命令選單裏 kiln 那一項的說明（themes 組）
+key = "cmd.themes.kiln"
+zht = "陶窯：灰釉炻器：地是窯灰，金是草木灰的青綠"
+zhs = "陶窑：灰釉炻器：地是窑灰，金是草木灰的青绿"
+en = "kiln: ash-glazed stoneware — kiln-ash ground, wood-ash green for the gold"
+
+[[message]]
+# : 命令選單裏 meridian 那一項的說明（themes 組）
+key = "cmd.themes.meridian"
+zht = "明度階：朱不是紅的，是藍的：紅綠色盲也分得開"
+zhs = "明度阶：朱不是红的，是蓝的：红绿色盲也分得开"
+en = "meridian: the mark is blue, not red — separable without the red-green axis"
+
+[[message]]
+# : 命令選單裏 mogao 那一項的說明（themes 組）
+key = "cmd.themes.mogao"
+zht = "莫高：墨是壁畫氧化之後真正變成的褐黑；金不是金色，是石綠——洞窟自己的礦物"
+zhs = "莫高：墨是壁画氧化之后真正变成的褐黑；金不是金色，是石绿——洞窟自己的矿物"
+en = "mogao: the brown-black the murals oxidised into; the gold is malachite, the caves' own mineral"
+
+[[message]]
+# : 命令選單裏 morandi 那一項的說明（themes 組）
+key = "cmd.themes.morandi"
+zht = "莫蘭迪：八套裏最低的正文對比、最灰的地"
+zhs = "莫兰迪：八套里最低的正文对比、最灰的地"
+en = "morandi: the lowest text contrast and the greyest ground of the eight"
+
+[[message]]
+# : 命令選單裏 balanced 那一項的說明（word-levels 組）
+key = "cmd.word-levels.balanced"
+zht = "詞表怎麼說就怎麼切"
+zhs = "词表怎么说就怎么切"
+en = "as the dictionary has it"
+
+[[message]]
+# : 命令選單裏 full 那一項的說明（word-levels 組）
+key = "cmd.word-levels.full"
+zht = "長詞、怪詞也算"
+zhs = "长词、怪词也算"
+en = "long and odd words too"
+
+[[message]]
+# : 命令選單裏 strict 那一項的說明（word-levels 組）
+key = "cmd.word-levels.strict"
+zht = "只認很常見的詞——更多單字"
+zhs = "只认很常见的词——更多单字"
+en = "only words beyond argument — more single characters"
+
+[[message]]
+# : 命令選單裏 edit 那一項的說明（word-lists 組）
+key = "cmd.word-lists.edit"
+zht = "開本書的 .yumete/words.txt——人名、地名"
+zhs = "开本书的 .yumete/words.txt——人名、地名"
+en = "open this book's .yumete/words.txt — names of people and places"
+
+[[message]]
+# : 命令選單裏 global 那一項的說明（word-lists 組）
+key = "cmd.word-lists.global"
+zht = "開全域 segmentation.txt"
+zhs = "开全域 segmentation.txt"
+en = "open the global segmentation.txt"
+
+[[message]]
+# : 命令選單裏 reload 那一項的說明（word-lists 組）
+key = "cmd.word-lists.reload"
+zht = "重讀（本書的 ＋ 全域的）"
+zhs = "重读（本书的 ＋ 全域的）"
+en = "reread (this book's and the global one)"
+
+[[message]]
+# : 命令選單裏 level 那一項的說明（word-topics 組）
+key = "cmd.word-topics.level"
+zht = "分詞粒度：多少個字算一個詞"
+zhs = "分词粒度：多少个字算一个词"
+en = "word level: how readily characters join into words"
+
+[[message]]
+# : 命令選單裏 list 那一項的說明（word-topics 組）
+key = "cmd.word-topics.list"
+zht = "詞表：用哪一份、重讀、編輯"
+zhs = "词表：用哪一份、重读、编辑"
+en = "the lists: which one, reread, edit"
+
+[[message]]
+# : 命令選單裏 show 那一項的說明（word-topics 組）
+key = "cmd.word-topics.show"
+zht = "分詞著色"
+zhs = "分词著色"
+en = "the word tint"
+
+[[message]]
+# : 命令選單裏 0 那一項的說明（wrap 組）
+key = "cmd.wrap.0"
+zht = "尺度用窗口寬（`:wrap 50` 是固定五十欄）"
+zhs = "尺度用窗口宽（`:wrap 50` 是固定五十栏）"
+en = "measure by the window (`:wrap 50` fixes it at fifty)"
+
+[[message]]
+# : 命令選單裏 off 那一項的說明（wrap 組）
+key = "cmd.wrap.off"
+zht = "讓它跑出右邊"
+zhs = "让它跑出右边"
+en = "let it run off the edge"
+
+[[message]]
+# : 命令選單裏 on 那一項的說明（wrap 組）
+key = "cmd.wrap.on"
+zht = "太寬的段落折到下一行"
+zhs = "太宽的段落折到下一行"
+en = "wrap a paragraph too wide for the window"
+
+[[message]]
+# : 命令選單裏 builtin 那一項的說明（yume 組）
+key = "cmd.yume.builtin"
+zht = "改用出廠自帶的靈明碼表，不管裝了什麼"
+zhs = "改用出厂自带的灵明码表，不管装了什么"
+en = "use the built-in 靈明 table, whatever else is installed"
+
+[[message]]
+# : 命令選單裏 chaifen 那一項的說明（yume 組）
+key = "cmd.yume.chaifen"
+zht = "候選旁的拆分注解"
+zhs = "候选旁的拆分注解"
+en = "the 拆分 annotation beside the candidates"
+
+[[message]]
+# : 命令選單裏 commit 那一項的說明（yume 組）
+key = "cmd.yume.commit"
+zht = "上屏方式：延遲（頂字）、唯一、整句"
+zhs = "上屏方式：延迟（顶字）、唯一、整句"
+en = "commit method: delayed (頂字), unique, whole-sentence"
+
+[[message]]
+# : 命令選單裏 installed 那一項的說明（yume 組）
+key = "cmd.yume.installed"
+zht = "改用系統裝的那份碼表（builtin 的反面）"
+zhs = "改用系统装的那份码表（builtin 的反面）"
+en = "use the 碼表 the system has installed (builtin's other half)"
+
+[[message]]
+# : 命令選單裏 off 那一項的說明（yume 組）
+key = "cmd.yume.off"
+zht = "回到英文"
+zhs = "回到英文"
+en = "back to English"
+
+[[message]]
+# : 命令選單裏 on 那一項的說明（yume 組）
+key = "cmd.yume.on"
+zht = "開始打中文（碼表沒載就順手載上）"
+zhs = "开始打中文（码表没载就顺手载上）"
+en = "start typing 漢字 (loading the 碼表 if it is not loaded)"
+
+[[message]]
+# : 命令選單裏 panel 那一項的說明（yume 組）
+key = "cmd.yume.panel"
+zht = "候選面板：full 是候選框，bare 是行內預覽"
+zhs = "候选面板：full 是候选框，bare 是行内预览"
+en = "candidate panel: full is the boxed list, bare is the inline preview"
+
+[[message]]
+# : 命令選單裏 scheme 那一項的說明（yume 組）
+key = "cmd.yume.scheme"
+zht = "開始打字：載入一個方案（不寫名字就用配置裏那個）"
+zhs = "开始打字：载入一个方案（不写名字就用配置里那个）"
+en = "start typing: load a scheme (with no name, the configured one)"
+
+[[message]]
+# : 命令選單裏 table 那一項的說明（yume 組）
+key = "cmd.yume.table"
+zht = "用你自己的碼表（Rime 的 .dict.yaml 也行）"
+zhs = "用你自己的码表（Rime 的 .dict.yaml 也行）"
+en = "use your own table (a Rime .dict.yaml will do)"
+
+[[message]]
+# : 命令選單裏 which 那一項的說明（yume 組）
+key = "cmd.yume.which"
+zht = "現在用的是哪個方案、碼表打哪來"
+zhs = "现在用的是哪个方案、码表打哪来"
+en = "which scheme is in use, and where its 碼表 came from"
+
+
+# ── command ───────────────────────────────────────────────────────────
+
+[[message]]
+# 命令列語法壞了
+key = "command.broken-line"
+zht = "命令寫壞了：{0}"
+zhs = "命令写坏了：{0}"
+en = "that command line is broken: {0}"
+
+
+# ── commit ────────────────────────────────────────────────────────────
+
+[[message]]
+# 上屏方式的名字：延遲
+key = "commit.name.delayed"
+zht = "延遲（頂字）"
+zhs = "延迟（顶字）"
+en = "delayed (頂字)"
+
+[[message]]
+# 上屏方式的名字：整句
+key = "commit.name.fluency"
+zht = "整句"
+zhs = "整句"
+en = "whole-sentence"
+
+[[message]]
+# 上屏方式的名字：唯一
+key = "commit.name.unique"
+zht = "唯一"
+zhs = "唯一"
+en = "unique"
+
+[[message]]
+# 沒有這種上屏方式
+key = "commit.no-such-method"
+zht = "沒有「{0}」這種上屏方式——delayed、unique、fluency"
+zhs = "没有「{0}」这种上屏方式——delayed、unique、fluency"
+en = "no commit method '{0}' — delayed, unique, fluency"
+
+[[message]]
+# 這個方案只能整句上屏
+key = "commit.scheme-is-sentence-only"
+zht = "{0} 只能整句上屏（沒有碼表可以逐段查），上屏方式仍然是{1}"
+zhs = "{0} 只能整句上屏（没有码表可以逐段查），上屏方式仍然是{1}"
+en = "{0} can only be typed as whole sentences — no 碼表 to look a segment up in — so the commit method is still {1}"
+
+[[message]]
+# 上屏方式換好了
+key = "commit.set"
+zht = "上屏方式：{0}"
+zhs = "上屏方式：{0}"
+en = "commit method: {0}"
+
+
+# ── count ─────────────────────────────────────────────────────────────
+
+[[message]]
+# 字數統計的範圍：選區
+key = "count.of-selection"
+zht = "選區"
+zhs = "选区"
+en = "the selection"
+
+[[message]]
+# :count 報字數
+key = "count.report"
+zht = "{0}  漢字 {1}  字數 {2}（不含空白）  {3} 段"
+zhs = "{0}  汉字 {1}  字数 {2}（不含空白）  {3} 段"
+en = "{0}  {1} han  {2} characters (no spaces)  {3} paragraphs"
+
+[[message]]
+# :count 的範圍：全篇
+key = "count.whole-file"
+zht = "全篇"
+zhs = "全篇"
+en = "the whole file"
+
+
+# ── data ──────────────────────────────────────────────────────────────
+
+[[message]]
+# 另有幾個檔同樣沒進去
+key = "data.and-more-failed"
+zht = "{0}（另有 {1} 個檔同樣沒進去）"
+zhs = "{0}（另有 {1} 个档同样没进去）"
+en = "{0} ({1} more file(s) did not load either)"
+
+[[message]]
+# 核心不認這個檔
+key = "data.refused"
+zht = "{0} 核心不認：{1}"
+zhs = "{0} 核心不认：{1}"
+en = "{0} was refused by the core: {1}"
+
+[[message]]
+# 核心不認這個檔，魔數對不上
+key = "data.refused-magic"
+zht = "{0} 核心不認：{1}（期望 {2}，檔頭是 {3}）"
+zhs = "{0} 核心不认：{1}（期望 {2}，档头是 {3}）"
+en = "{0} was refused by the core: {1} (expected {2}, the file says {3})"
+
+[[message]]
+# 這個檔讀不了
+key = "data.unreadable"
+zht = "{0} 讀不了：{1}"
+zhs = "{0} 读不了：{1}"
+en = "{0} could not be read: {1}"
+
+
+# ── detail ────────────────────────────────────────────────────────────
+
+[[message]]
+# 詳情欄（空格 d）：光標停在一段 Typst 批注上
+key = "detail.comment"
+zht = "批注"
+zhs = "批注"
+en = "comment"
+
+
+# ── edit ──────────────────────────────────────────────────────────────
+
+[[message]]
+# 系統剪貼簿是空的
+key = "edit.clipboard-empty"
+zht = "剪貼簿是空的"
+zhs = "剪贴簿是空的"
+en = "the clipboard is empty"
+
+[[message]]
+# 複製到系統剪貼簿
+key = "edit.copied-to-clipboard"
+zht = "複製了 {0} 個字到系統剪貼簿"
+zhs = "复制了 {0} 个字到系统剪贴簿"
+en = "copied {0} character(s) to the system clipboard"
+
+[[message]]
+# mi/ma 之類，光標外面沒有那一對符號
+key = "edit.no-pair-around"
+zht = "外面沒有 {0}{1}"
+zhs = "外面没有 {0}{1}"
+en = "no {0}{1} around this"
+
+[[message]]
+# md 刪一對符號，外面沒有成對的
+key = "edit.no-pair-to-delete"
+zht = "外面沒有成對的符號"
+zhs = "外面没有成对的符号"
+en = "no pair around this"
+
+[[message]]
+# 複製到系統剪貼簿，但沒選中東西
+key = "edit.nothing-selected"
+zht = "沒有選中東西"
+zhs = "没有选中东西"
+en = "nothing selected"
+
+[[message]]
+# . 重複，但還沒有改過東西
+key = "edit.nothing-to-repeat"
+zht = "還沒有可以重複的改動"
+zhs = "还没有可以重复的改动"
+en = "no change to repeat yet"
+
+[[message]]
+# 貼上之前一次都沒取過
+key = "edit.nothing-yanked-yet"
+zht = "還沒有取過東西"
+zhs = "还没有取过东西"
+en = "nothing has been yanked yet"
+
+[[message]]
+# 從貼上選單貼了一條
+key = "edit.pasted"
+zht = "貼了 {0}"
+zhs = "贴了 {0}"
+en = "pasted {0}"
+
+[[message]]
+# 貼上一段字
+key = "edit.pasted-characters"
+zht = "貼了 {0} 個字"
+zhs = "贴了 {0} 个字"
+en = "pasted {0} character(s)"
+
+[[message]]
+# :! 用外部命令換掉了選中的字
+key = "edit.pipe-replaced-characters"
+zht = "換掉了 {0} 個字"
+zhs = "换掉了 {0} 个字"
+en = "replaced {0} character(s)"
+
+[[message]]
+# 重做，已經到最新
+key = "edit.redo-at-newest"
+zht = "已經是最新的了"
+zhs = "已经是最新的了"
+en = "already at the newest change"
+
+[[message]]
+# 撤銷，已經到最早
+key = "edit.undo-at-oldest"
+zht = "已經是最早的了"
+zhs = "已经是最早的了"
+en = "already at the oldest change"
+
+[[message]]
+# y 取了一段字
+key = "edit.yanked-characters"
+zht = "取了 {0} 個字"
+zhs = "取了 {0} 个字"
+en = "yanked {0} character(s)"
+
+
+# ── export ────────────────────────────────────────────────────────────
+
+[[message]]
+# :export 給了不認得的格式
+key = "export.no-such-format"
+zht = "沒有「{0}」這種格式——html 或 typst"
+zhs = "没有「{0}」这种格式——html 或 typst"
+en = "no such format as '{0}' — html or typst"
+
+[[message]]
+# 導出的檔名就是稿子本身
+key = "export.same-as-the-manuscript"
+zht = "那是這份稿子本身——導出要另一個檔名"
+zhs = "那是这份稿子本身——导出要另一个档名"
+en = "that is the manuscript itself — an export needs another name"
+
+[[message]]
+# 導出的目標已經存在，要 :export!
+key = "export.target-exists"
+zht = "已經有 {0} 了——`:export!` 才蓋掉它"
+zhs = "已经有 {0} 了——`:export!` 才盖掉它"
+en = "{0} is already there — `:export!` writes over it"
+
+[[message]]
+# 導出的目標檔案正開着
+key = "export.target-is-open"
+zht = "{0} 正開着——導出會蓋掉它，請另取一個檔名"
+zhs = "{0} 正开着——导出会盖掉它，请另取一个档名"
+en = "{0} is open here — an export would write over it; pick another name"
+
+[[message]]
+# 導出寫好了檔案
+key = "export.wrote"
+zht = "寫好了 {0}"
+zhs = "写好了 {0}"
+en = "wrote {0}"
+
+
+# ── find ──────────────────────────────────────────────────────────────
+
+[[message]]
+# :s 的模式是空的
+key = "find.empty-pattern"
+zht = "模式是空的"
+zhs = "模式是空的"
+en = "the pattern is empty"
+
+[[message]]
+# 把檔名與一句話連起來
+key = "find.file-and-message"
+zht = "{0}：{1}"
+zhs = "{0}：{1}"
+en = "{0}: {1}"
+
+[[message]]
+# 把檔案數、處數與一句話連起來
+key = "find.files-hits-and-message"
+zht = "{0} 個檔案，{1} 處；{2}"
+zhs = "{0} 个档案，{1} 处；{2}"
+en = "{0} file(s), {1} place(s); {2}"
+
+[[message]]
+# :grep 找到了，報處數與檔案數
+key = "find.grep-hits"
+zht = "{0} 處，{1} 個檔案——gf 開游標下那一條，:replace 全換"
+zhs = "{0} 处，{1} 个档案——gf 开游标下那一条，:replace 全换"
+en = "{0} hit(s) in {1} file(s) — gf opens the one under the cursor, :replace changes them all"
+
+[[message]]
+# :grep 一處都沒找到
+key = "find.grep-no-hits"
+zht = "{0} 個檔案裏都沒有「{1}」"
+zhs = "{0} 个档案里都没有「{1}」"
+en = "no '{1}' in {0} file(s)"
+
+[[message]]
+# :grep 命中太多，停止計數
+key = "find.grep-too-many"
+zht = "{0} 處以上（不數了）——gf 開游標下那一條，:replace 全換"
+zhs = "{0} 处以上（不数了）——gf 开游标下那一条，:replace 全换"
+en = "{0}+ hits (stopped counting) — gf opens the one under the cursor, :replace changes them all"
+
+[[message]]
+# f/F 在本行找不到那個字
+key = "find.no-such-character-on-this-line"
+zht = "這一行上沒有「{0}」"
+zhs = "这一行上没有「{0}」"
+en = "no '{0}' on this line"
+
+[[message]]
+# 表格裏一欄一欄地找，沒找到
+key = "find.not-found"
+zht = "找不到：{0}"
+zhs = "找不到：{0}"
+en = "not found: {0}"
+
+[[message]]
+# 在本頁找，光標下沒有字
+key = "find.nothing-here-to-look-for"
+zht = "這裏沒有字可以找"
+zhs = "这里没有字可以找"
+en = "nothing here to look for"
+
+[[message]]
+# n/N 之前一次都沒搜索過
+key = "find.nothing-searched-yet"
+zht = "還沒有搜索過——先用 / 搜索，或者選中一段按 g/"
+zhs = "还没有搜索过——先用 / 搜索，或者选中一段按 g/"
+en = "nothing has been searched for yet — / searches, or select something and press g/"
+
+[[message]]
+# 在本頁找，只有光標這一處
+key = "find.only-here"
+zht = "只有這一處：{0}"
+zhs = "只有这一处：{0}"
+en = "only here: {0}"
+
+[[message]]
+# :replace 之前沒有 :grep 過
+key = "find.replace-needs-grep"
+zht = "先 :grep 找一遍——換的是你已經看過的那些"
+zhs = "先 :grep 找一遍——换的是你已经看过的那些"
+en = "run :grep first — what it changes is what you have already read"
+
+[[message]]
+# :replace 一處也沒換到
+key = "find.replace-nothing-replaced"
+zht = "「{0}」一處也沒換到"
+zhs = "「{0}」一处也没换到"
+en = "'{0}': nothing replaced"
+
+[[message]]
+# :replace 跨檔案換完，都還沒存
+key = "find.replaced-across-files"
+zht = "{0} 個檔案，{1} 處——都還沒存：:wa 存全部，u 各自撤銷"
+zhs = "{0} 个档案，{1} 处——都还没存：:wa 存全部，u 各自撤销"
+en = "{0} file(s), {1} hit(s) — none saved yet: :wa saves them all, u takes any of them back"
+
+[[message]]
+# :s 換好了，報處數
+key = "find.substitute-changed"
+zht = "換了 {0} 處"
+zhs = "换了 {0} 处"
+en = "changed {0} hit(s)"
+
+[[message]]
+# :s 找到了但一處也沒改
+key = "find.substitute-nothing-changed"
+zht = "{0} 處（沒有改）"
+zhs = "{0} 处（没有改）"
+en = "{0} hit(s), nothing changed"
+
+
+# ── goto ──────────────────────────────────────────────────────────────
+
+[[message]]
+# 在跳轉表裏前後走
+key = "goto.jump-list-position"
+zht = "跳轉表 {0}/{1}"
+zhs = "跳转表 {0}/{1}"
+en = "jump list {0}/{1}"
+
+[[message]]
+# 標記所在的緩衝區已經關了
+key = "goto.mark-buffer-closed"
+zht = "「{0}」在的那個緩衝區已經關了"
+zhs = "「{0}」在的那个缓冲区已经关了"
+en = "the file '{0}' was marked in is closed"
+
+[[message]]
+# 跳到別的檔案裏的標記
+key = "goto.mark-in-another-file"
+zht = "「{0}」：{1} 第 {2} 行"
+zhs = "「{0}」：{1} 第 {2} 行"
+en = "'{0}': {1} line {2}"
+
+[[message]]
+# 跳到本檔案裏的標記
+key = "goto.mark-in-this-file"
+zht = "「{0}」"
+zhs = "「{0}」"
+en = "'{0}'"
+
+[[message]]
+# 設記號時給的名字不是單個字母或數字
+key = "goto.mark-name-one-character"
+zht = "記號用一個字母或數字"
+zhs = "记号用一个字母或数字"
+en = "a mark is named by one letter or digit"
+
+[[message]]
+# 設下一個記號
+key = "goto.mark-set"
+zht = "記住了「{0}」：{1} 第 {2} 行"
+zhs = "记住了「{0}」：{1} 第 {2} 行"
+en = "marked '{0}': {1} line {2}"
+
+[[message]]
+# 跳轉表已經到最早
+key = "goto.no-earlier-jump"
+zht = "沒有更早的位置了"
+zhs = "没有更早的位置了"
+en = "no earlier jump"
+
+[[message]]
+# 按標題跳，整份沒有標題
+key = "goto.no-headings"
+zht = "這個檔案沒有標題"
+zhs = "这个档案没有标题"
+en = "no headings in this file"
+
+[[message]]
+# 跳轉表已經到最晚
+key = "goto.no-later-jump"
+zht = "沒有更晚的位置了"
+zhs = "没有更晚的位置了"
+en = "no later jump"
+
+[[message]]
+# 跳到一個沒設過的記號
+key = "goto.no-such-mark"
+zht = "沒有記號「{0}」"
+zhs = "没有记号「{0}」"
+en = "no mark '{0}'"
+
+[[message]]
+# 按標題序號跳，序號超出標題數
+key = "goto.only-n-headings"
+zht = "只有 {0} 條標題"
+zhs = "只有 {0} 条标题"
+en = "only {0} heading(s)"
+
+[[message]]
+# 跳轉表裏那一項的檔案已經關了
+key = "goto.that-file-is-closed"
+zht = "那個檔案已經關了"
+zhs = "那个档案已经关了"
+en = "that file is closed"
+
+
+# ── help ──────────────────────────────────────────────────────────────
+
+[[message]]
+# 中文幫助：給選中的字注音
+key = "help.chinese.annotate-reading"
+zht = "給選中的字注音"
+zhs = "给选中的字注音"
+en = "annotate the selection with a reading"
+
+[[message]]
+# 中文幫助：候選下顯示拆分
+key = "help.chinese.chaifen-under-candidates"
+zht = "候選詞下面顯示拆分"
+zhs = "候选词下面显示拆分"
+en = "show the 拆分 under each candidate"
+
+[[message]]
+# 中文幫助：數字數
+key = "help.chinese.count"
+zht = "數字數：漢字多少、連標點西文一共多少、幾段"
+zhs = "数字数：汉字多少、连标点西文一共多少、几段"
+en = "count: how many 漢字, how many characters in all, how many paragraphs"
+
+[[message]]
+# 中文幫助：段首空兩格
+key = "help.chinese.first-line-indent"
+zht = "段首空兩格，段間的空行就收起來"
+zhs = "段首空两格，段间的空行就收起来"
+en = "open a paragraph two squares in, and take the blank line between them off the page"
+
+[[message]]
+# 中文幫助：標點旁置
+key = "help.chinese.hung-punctuation"
+zht = "標點旁置：句讀掛在字旁邊的邊欄裏"
+zhs = "标点旁置：句读挂在字旁边的边栏里"
+en = "hanging punctuation: 句讀 sit in the margin beside the character"
+
+[[message]]
+# 中文幫助：重讀本項目的詞
+key = "help.chinese.reload-project-words"
+zht = "重讀 .yumete/words.txt——這本書自己的詞"
+zhs = "重读 .yumete/words.txt——这本书自己的词"
+en = "re-read .yumete/words.txt — this book's own words"
+
+[[message]]
+# 中文那一節的小標題
+key = "help.chinese.section-summary"
+zht = "漢字、標點、注音、輸入法"
+zhs = "汉字、标点、注音、输入法"
+en = "漢字, punctuation, readings, the IME"
+
+[[message]]
+# 中文幫助：換方案
+key = "help.chinese.switch-scheme"
+zht = "換方案：靈明、星陳、卿雲、日月、拼音"
+zhs = "换方案：灵明、星陈、卿云、日月、拼音"
+en = "switch scheme: 靈明, 星陳, 卿雲, 日月, 拼音"
+
+[[message]]
+# 幫助分節：中文
+key = "help.chinese.title"
+zht = "中文"
+zhs = "中文"
+en = "Chinese"
+
+[[message]]
+# 中文幫助：開／關輸入法
+key = "help.chinese.toggle-ime"
+zht = "開／關輸入法；單獨按一下 Shift 切中英"
+zhs = "开／关输入法；单独按一下 Shift 切中英"
+en = "turn the IME on/off; a lone Shift tap switches 中/英"
+
+[[message]]
+# 中文幫助：注音寫法統一
+key = "help.chinese.unify-reading-spelling"
+zht = "把全篇的注音統一成一種寫法（html｜typst）"
+zhs = "把全篇的注音统一成一种写法（html｜typst）"
+en = "make every reading in the file use one spelling (html or typst)"
+
+[[message]]
+# 中文幫助：詞的邊界是分詞算出來的
+key = "help.chinese.word-boundaries"
+zht = "詞的邊界是分詞算出來的，不是空格"
+zhs = "词的边界是分词算出来的，不是空格"
+en = "word boundaries come from segmentation, not from spaces"
+
+[[message]]
+# 中文幫助：分詞著色
+key = "help.chinese.word-tint"
+zht = "把分出來的詞用底色標出來"
+zhs = "把分出来的词用底色标出来"
+en = "tint each word the segmenter found"
+
+[[message]]
+# 幫助分節：命令
+key = "help.commands.title"
+zht = "命令"
+zhs = "命令"
+en = "commands"
+
+[[message]]
+# 常用幫助：數字在前是次數
+key = "help.common.count-first"
+zht = "數字在前是次數"
+zhs = "数字在前是次数"
+en = "a number in front is a count"
+
+[[message]]
+# 常用幫助：刪掉選區／換掉選區
+key = "help.common.delete-change"
+zht = "刪掉選區／換掉選區（換完就在打字了）"
+zhs = "删掉选区／换掉选区（换完就在打字了）"
+en = "delete the selection / change it (and you are typing)"
+
+[[message]]
+# 常用幫助的小標題：改
+key = "help.common.editing-title"
+zht = "改"
+zhs = "改"
+en = "editing"
+
+[[message]]
+# 常用幫助：所有 : 命令
+key = "help.common.every-command"
+zht = "所有 : 命令"
+zhs = "所有 : 命令"
+en = "every : command"
+
+[[message]]
+# 常用幫助：延伸模式開關／收成一個字
+key = "help.common.extend-collapse"
+zht = "延伸模式開關／收成一個字；Esc 也退出延伸"
+zhs = "延伸模式开关／收成一个字；Esc 也退出延伸"
+en = "extend mode on-off / collapse to one character; Esc also leaves extend"
+
+[[message]]
+# 常用幫助：去／看它指的地方
+key = "help.common.follow-what-it-points-at"
+zht = "去／看它指的地方：腳註的註、拆分的那一行"
+zhs = "去／看它指的地方：脚注的注、拆分的那一行"
+en = "go to / show what this points at: a footnote's note, a component's row"
+
+[[message]]
+# 常用幫助：去第 30 行
+key = "help.common.go-to-line"
+zht = "去第 30 行"
+zhs = "去第 30 行"
+en = "go to line 30"
+
+[[message]]
+# 常用幫助：前進／後退半頁
+key = "help.common.half-page"
+zht = "前進／後退半頁；L H 是整頁"
+zhs = "前进／后退半页；L H 是整页"
+en = "half a page forward/back; L and H are whole pages"
+
+[[message]]
+# 常用幫助：左下上右
+key = "help.common.hjkl"
+zht = "左下上右；竪排裏是沿着縱走"
+zhs = "左下上右；竖排里是沿着纵走"
+en = "left, down, up, right — down the column in 竪排"
+
+[[message]]
+# 常用幫助：縮進／退縮進
+key = "help.common.indent"
+zht = "縮進／退縮進"
+zhs = "缩进／退缩进"
+en = "indent / unindent"
+
+[[message]]
+# 常用幫助：在光標前／後打字
+key = "help.common.insert-before-after"
+zht = "在光標前／後開始打字"
+zhs = "在光标前／后开始打字"
+en = "start typing before/after the cursor"
+
+[[message]]
+# 常用幫助：跳回去／再跳回來
+key = "help.common.jump-list"
+zht = "跳回去／再跳回來"
+zhs = "跳回去／再跳回来"
+en = "jump back / forward again"
+
+[[message]]
+# 常用幫助：行首／行尾／首個非空白
+key = "help.common.line-start-end"
+zht = "行首／行尾／首個非空白"
+zhs = "行首／行尾／首个非空白"
+en = "line start / line end / first non-blank"
+
+[[message]]
+# 常用幫助：錄一段按鍵／放一遍
+key = "help.common.macros"
+zht = "錄一段按鍵／放一遍"
+zhs = "录一段按键／放一遍"
+en = "record keys / play them back"
+
+[[message]]
+# 常用幫助：記住這裏／回到那裏
+key = "help.common.marks"
+zht = "記住這裏／回到那裏"
+zhs = "记住这里／回到那里"
+en = "remember this place / go back to it"
+
+[[message]]
+# 常用幫助：動——命令＋選擇＋動作
+key = "help.common.motion-title"
+zht = "動：命令＋選擇＋動作"
+zhs = "动：命令＋选择＋动作"
+en = "moving: command + selection + action"
+
+[[message]]
+# 常用幫助：下面／上面開新的一行
+key = "help.common.open-line"
+zht = "下面／上面開新的一行，直接打字"
+zhs = "下面／上面开新的一行，直接打字"
+en = "open a line below/above and start typing"
+
+[[message]]
+# 常用幫助：別的幾節
+key = "help.common.other-sections"
+zht = "別的幾節"
+zhs = "别的几节"
+en = "the other sections"
+
+[[message]]
+# 常用幫助：下一段／上一段
+key = "help.common.paragraph-motions"
+zht = "下一段／上一段"
+zhs = "下一段／上一段"
+en = "next paragraph / previous paragraph"
+
+[[message]]
+# 常用幫助：再做一次剛才那次改動
+key = "help.common.repeat-edit"
+zht = "再做一次剛才那次改動"
+zhs = "再做一次刚才那次改动"
+en = "do that edit again"
+
+[[message]]
+# 常用幫助：搜索、下一處、上一處
+key = "help.common.search"
+zht = "搜索、下一處、上一處"
+zhs = "搜索、下一处、上一处"
+en = "search, next, previous"
+
+[[message]]
+# 常用幫助：選這一整行
+key = "help.common.select-line"
+zht = "選這一整行——小說裏一行就是一整段"
+zhs = "选这一整行——小说里一行就是一整段"
+en = "select the whole line — in a novel a line is a paragraph"
+
+[[message]]
+# 常用幫助：下一句／上一句
+key = "help.common.sentence-motions"
+zht = "下一句／上一句"
+zhs = "下一句／上一句"
+en = "next sentence / previous sentence"
+
+[[message]]
+# 常用幫助的小標題：空格開頭的
+key = "help.common.space-title"
+zht = "空格開頭的"
+zhs = "空格开头的"
+en = "what Space opens"
+
+[[message]]
+# 常用幫助：檔首／檔尾
+key = "help.common.start-end-of-file"
+zht = "檔首／檔尾"
+zhs = "档首／档尾"
+en = "start / end of the file"
+
+[[message]]
+# 幫助分節：常用
+key = "help.common.title"
+zht = "常用"
+zhs = "常用"
+en = "the usual keys"
+
+[[message]]
+# 常用幫助：撤銷／重做
+key = "help.common.undo-redo"
+zht = "撤銷／重做"
+zhs = "撤销／重做"
+en = "undo / redo"
+
+[[message]]
+# 常用幫助：這個詞還在哪裏
+key = "help.common.word-elsewhere"
+zht = "這個詞還在哪裏：這邊找／另一個工作區看"
+zhs = "这个词还在哪里：这边找／另一个工作区看"
+en = "where else this word is: / here, ? in the other work area"
+
+[[message]]
+# 常用幫助：按詞移動
+key = "help.common.word-motions"
+zht = "下一詞首、上一詞首、詞尾——認得漢字的詞"
+zhs = "下一词首、上一词首、词尾——认得汉字的词"
+en = "next word, previous word, end of word — it knows 漢字 words"
+
+[[message]]
+# 常用幫助：複製／貼上
+key = "help.common.yank-put"
+zht = "複製／貼上"
+zhs = "复制／贴上"
+en = "yank / put"
+
+[[message]]
+# :help 給了不認得的節名
+key = "help.no-such-section"
+zht = "沒有「{0}」這一節——:help 有 chinese、vertical、table、commands"
+zhs = "没有「{0}」这一节——:help 有 chinese、vertical、table、commands"
+en = "there is no section 「{0}」 — :help has chinese, vertical, table, commands"
+
+[[message]]
+# 幫助頁開頭那句：每一節都是編輯器自己報的
+key = "help.self-reported"
+zht = "每一節都是這個編輯器自己報上來的，不是抄的。"
+zhs = "每一节都是这个编辑器自己报上来的，不是抄的。"
+en = "every section here is reported by the editor itself, not copied out of a manual."
+
+[[message]]
+# 表格幫助：加一行／刪一行
+key = "help.table.add-or-drop-row"
+zht = "加一行／刪一行；t j t k 上下移"
+zhs = "加一行／删一行；t j t k 上下移"
+en = "add a row / drop this row; t j and t k move it"
+
+[[message]]
+# 表格幫助：把檔案當表格讀
+key = "help.table.enter-table"
+zht = "把這個檔案當表格讀；:table off 退出"
+zhs = "把这个档案当表格读；:table off 退出"
+en = "read this file as a grid; :table off leaves"
+
+[[message]]
+# 表格幫助：格子裏下一格／上一格
+key = "help.table.next-previous-cell"
+zht = "格子裏：下一格／上一格"
+zhs = "格子里：下一格／上一格"
+en = "inside a cell: next cell / previous cell"
+
+[[message]]
+# 表格幫助：關掉欄線
+key = "help.table.no-column-rules"
+zht = "關掉欄之間的分隔線"
+zhs = "关掉栏之间的分隔线"
+en = "turn off the rules between columns"
+
+[[message]]
+# 表格幫助：改在某幾欄裏找
+key = "help.table.search-in-columns"
+zht = "改成在第 3 欄／第 2–5 欄裏找"
+zhs = "改成在第 3 栏／第 2–5 栏里找"
+en = "look in column 3 / columns 2–5 instead"
+
+[[message]]
+# 表格那一節的小標題
+key = "help.table.section-summary"
+zht = "表格與拆分表"
+zhs = "表格与拆分表"
+en = "grids, and the 拆分表"
+
+[[message]]
+# 表格幫助：照這一欄順排／倒排
+key = "help.table.sort-by-column"
+zht = "照這一欄順排／倒排"
+zhs = "照这一栏顺排／倒排"
+en = "sort by this column, ascending / descending"
+
+[[message]]
+# 表格幫助：按格走
+key = "help.table.step-by-cell"
+zht = "按格走；Tab 換成按字走"
+zhs = "按格走；Tab 换成按字走"
+en = "step by cell; Tab steps by character instead"
+
+[[message]]
+# 表格幫助：進格子打字／清掉這一格
+key = "help.table.type-in-cell"
+zht = "進格子打字／清掉這一格"
+zhs = "进格子打字／清掉这一格"
+en = "type in the cell / empty it"
+
+[[message]]
+# 表格幫助：這一格在 key 欄裏是哪一行
+key = "help.table.which-row-this-names"
+zht = "這一格在 key 欄裏是哪一行：去／看"
+zhs = "这一格在 key 栏里是哪一行：去／看"
+en = "which row this cell names in the key column: go / show"
+
+[[message]]
+# 表格幫助：誰用了它
+key = "help.table.who-uses-this"
+zht = "誰用了它——一欄一欄地找：這邊找／那邊看"
+zhs = "谁用了它——一栏一栏地找：这边找／那边看"
+en = "who uses this — down the columns: / here, ? in the other area"
+
+[[message]]
+# 表格幫助：取這一欄／貼一欄
+key = "help.table.yank-or-put-column"
+zht = "取這一欄／貼一欄"
+zhs = "取这一栏／贴一栏"
+en = "yank this column / put one"
+
+[[message]]
+# :help 開出來的那一頁的標題
+key = "help.title"
+zht = "{0}（:q 關掉；/ 可以搜）"
+zhs = "{0}（:q 关掉；/ 可以搜）"
+en = "{0} (:q closes it; / searches)"
+
+[[message]]
+# 竪排幫助：分幾段
+key = "help.vertical.bands"
+zht = "分幾段：一頁上下兩段，像報紙"
+zhs = "分几段：一页上下两段，像报纸"
+en = "bands: two per page, one above the other, as a newspaper sets them"
+
+[[message]]
+# 竪排幫助：一縱多少字
+key = "help.vertical.column-length"
+zht = "一縱多少字；:wrap 0 跟着窗高走"
+zhs = "一纵多少字；:wrap 0 跟着窗高走"
+en = "how many characters a column holds; :wrap 0 follows the window"
+
+[[message]]
+# 竪排幫助：沿着這一縱往下／往上
+key = "help.vertical.down-up-column"
+zht = "沿着這一縱往下／往上"
+zhs = "沿着这一纵往下／往上"
+en = "down / up this column"
+
+[[message]]
+# 竪排幫助：段首空兩格
+key = "help.vertical.first-line-indent"
+zht = "段首空兩格"
+zhs = "段首空两格"
+en = "a paragraph opens two squares in"
+
+[[message]]
+# 竪排幫助：標點旁置
+key = "help.vertical.hung-punctuation"
+zht = "標點旁置：句讀掛到字旁邊"
+zhs = "标点旁置：句读挂到字旁边"
+en = "hanging punctuation: 句讀 sit beside the character"
+
+[[message]]
+# 竪排幫助：疏排
+key = "help.vertical.loose"
+zht = "疏排：每縱之間留一格"
+zhs = "疏排：每纵之间留一格"
+en = "loose setting: a cell of air between columns"
+
+[[message]]
+# 竪排幫助：上一縱／下一縱
+key = "help.vertical.previous-next-column"
+zht = "上一縱／下一縱——縱是往左疊的"
+zhs = "上一纵／下一纵——纵是往左叠的"
+en = "previous/next column — columns stack leftwards"
+
+[[message]]
+# 幫助分節：竪排
+key = "help.vertical.title"
+zht = "竪排"
+zhs = "竖排"
+en = "vertical writing"
+
+[[message]]
+# 竪排幫助：轉成竪排
+key = "help.vertical.turn-vertical"
+zht = "轉成竪排；:layout 來回切"
+zhs = "转成竖排；:layout 来回切"
+en = "turn the page vertical; :layout switches back and forth"
+
+[[message]]
+# 竪排幫助：所見即所得
+key = "help.vertical.wysiwyg"
+zht = "所見即所得：注音排出來，標記收起來"
+zhs = "所见即所得：注音排出来，标记收起来"
+en = "what you get: readings laid out, markup off the page"
+
+
+# ── hint ──────────────────────────────────────────────────────────────
+
+[[message]]
+# 提示欄：回 Normal
+key = "hint.back-to-normal"
+zht = "回 Normal"
+zhs = "回 Normal"
+en = "back to Normal"
+
+[[message]]
+# 提示：括號
+key = "hint.bracket"
+zht = "括號"
+zhs = "括号"
+en = "bracket"
+
+[[message]]
+# 提示欄：取消
+key = "hint.cancel"
+zht = "取消"
+zhs = "取消"
+en = "cancel"
+
+[[message]]
+# 提示：換掉
+key = "hint.change"
+zht = "換掉"
+zhs = "换掉"
+en = "change"
+
+[[message]]
+# 提示：換成
+key = "hint.change-to"
+zht = "換成"
+zhs = "换成"
+en = "change to"
+
+[[message]]
+# 提示：關
+key = "hint.close"
+zht = "關"
+zhs = "关"
+en = "close"
+
+[[message]]
+# 提示行：數字打了一半，還沒接動作
+key = "hint.count-pending"
+zht = "{0} 次 · 接一個動作或編輯"
+zhs = "{0} 次 · 接一个动作或编辑"
+en = "{0} times · now an action or an edit"
+
+[[message]]
+# 提示：進入
+key = "hint.enter"
+zht = "進入"
+zhs = "进入"
+en = "into"
+
+[[message]]
+# 提示：找
+key = "hint.find"
+zht = "找"
+zhs = "找"
+en = "find"
+
+[[message]]
+# 提示：腳注
+key = "hint.footnote"
+zht = "腳注"
+zhs = "脚注"
+en = "footnote"
+
+[[message]]
+# 提示：看這條註（沒有就寫一條）
+key = "hint.footnote.show-or-write"
+zht = "看這條註（沒有就寫一條）"
+zhs = "看这条注（没有就写一条）"
+en = "show the note (or write one)"
+
+[[message]]
+# g 組：命令一覽
+key = "hint.goto.all-commands"
+zht = "命令一覽"
+zhs = "命令一览"
+en = "every command"
+
+[[message]]
+# g 組：關掉這一個工作區
+key = "hint.goto.close-this-pane"
+zht = "關掉這一個工作區，到另一個去"
+zhs = "关掉这一个工作区，到另一个去"
+en = "close this work area and go to the other"
+
+[[message]]
+# g 組：複製到系統剪貼簿
+key = "hint.goto.copy-to-clipboard"
+zht = "複製到系統剪貼簿"
+zhs = "复制到系统剪贴簿"
+en = "copy to the system clipboard"
+
+[[message]]
+# g 組：詳情欄
+key = "hint.goto.detail-panel"
+zht = "詳情欄"
+zhs = "详情栏"
+en = "the detail panel"
+
+[[message]]
+# g 組：檔尾
+key = "hint.goto.end-of-file"
+zht = "檔尾"
+zhs = "档尾"
+en = "end of file"
+
+[[message]]
+# g 組：檔案側欄
+key = "hint.goto.file-sidebar"
+zht = "檔案側欄"
+zhs = "档案侧栏"
+en = "the file sidebar"
+
+[[message]]
+# g 組：首個非空白
+key = "hint.goto.first-non-blank"
+zht = "首個非空白"
+zhs = "首个非空白"
+en = "first non-blank"
+
+[[message]]
+# g 組：去／看它指的地方
+key = "hint.goto.follow-note"
+zht = "去／看它指的地方"
+zhs = "去／看它指的地方"
+en = "go to / show what it points at"
+
+[[message]]
+# g 組：行首／行尾
+key = "hint.goto.line-start-or-end"
+zht = "行首／行尾"
+zhs = "行首／行尾"
+en = "line start / end"
+
+[[message]]
+# g 組：只留這一個工作區
+key = "hint.goto.only-this-pane"
+zht = "只留這一個工作區"
+zhs = "只留这一个工作区"
+en = "keep only this work area"
+
+[[message]]
+# g 組：開啟檔案
+key = "hint.goto.open-file"
+zht = "開啟檔案"
+zhs = "开启档案"
+en = "open a file"
+
+[[message]]
+# g 組：開這個檔
+key = "hint.goto.open-this-file"
+zht = "開這個檔"
+zhs = "开这个档"
+en = "open this file"
+
+[[message]]
+# g 組：另一個工作區
+key = "hint.goto.other-pane"
+zht = "另一個工作區：再按一次過去"
+zhs = "另一个工作区：再按一次过去"
+en = "the other work area: press it again to go there"
+
+[[message]]
+# g 組：大綱
+key = "hint.goto.outline"
+zht = "大綱"
+zhs = "大纲"
+en = "the outline"
+
+[[message]]
+# g 組：從系統剪貼簿貼上
+key = "hint.goto.paste-from-clipboard"
+zht = "從系統剪貼簿貼上"
+zhs = "从系统剪贴簿贴上"
+en = "paste from the system clipboard"
+
+[[message]]
+# g 組：全項目搜索
+key = "hint.goto.search-project"
+zht = "全項目搜索"
+zhs = "全项目搜索"
+en = "search the project"
+
+[[message]]
+# g 組：檔首
+key = "hint.goto.start-of-file"
+zht = "檔首（g30g 去第 30 行）"
+zhs = "档首（g30g 去第 30 行）"
+en = "start of the file (g30g goes to line 30)"
+
+[[message]]
+# g 組：切換緩衝區
+key = "hint.goto.switch-buffer"
+zht = "切換緩衝區"
+zhs = "切换缓冲区"
+en = "switch buffer"
+
+[[message]]
+# g 組提示的標題
+key = "hint.goto.title"
+zht = "g"
+zhs = "g"
+en = "g"
+
+[[message]]
+# g 組：這個詞還在哪裏
+key = "hint.goto.word-elsewhere"
+zht = "這個詞還在哪裏：這邊找／那邊看"
+zhs = "这个词还在哪里：这边找／那边看"
+en = "where else this word is: / here, ? in the other area"
+
+[[message]]
+# g 組：併下一行
+key = "hint.join-with-line-below"
+zht = "併下一行"
+zhs = "并下一行"
+en = "join with the line below"
+
+[[message]]
+# 提示：收下
+key = "hint.keep-it"
+zht = "收下"
+zhs = "收下"
+en = "keep it"
+
+[[message]]
+# 記號組的提示：' 回到
+key = "hint.mark.go-back"
+zht = "' 回到"
+zhs = "' 回到"
+en = "' go back to"
+
+[[message]]
+# 記號組：叫什麼名字
+key = "hint.mark.name-it"
+zht = "叫什麼名字"
+zhs = "叫什么名字"
+en = "name it"
+
+[[message]]
+# 記號組的提示：M 記住這裏
+key = "hint.mark.set-here"
+zht = "M 記住這裏"
+zhs = "M 记住这里"
+en = "M mark this place"
+
+[[message]]
+# m 組：連同
+key = "hint.match.around"
+zht = "連同"
+zhs = "连同"
+en = "around"
+
+[[message]]
+# m 組：之內
+key = "hint.match.inside"
+zht = "之內"
+zhs = "之内"
+en = "inside"
+
+[[message]]
+# m 組：配對
+key = "hint.match.pair"
+zht = "配對"
+zhs = "配对"
+en = "match"
+
+[[message]]
+# m 組：包起來
+key = "hint.match.surround"
+zht = "包起來"
+zhs = "包起来"
+en = "surround"
+
+[[message]]
+# m 組：去掉
+key = "hint.match.take-off"
+zht = "去掉"
+zhs = "去掉"
+en = "take off"
+
+[[message]]
+# m 組提示的標題
+key = "hint.match.title"
+zht = "m"
+zhs = "m"
+en = "m"
+
+[[message]]
+# 提示：移動
+key = "hint.move"
+zht = "移動"
+zhs = "移动"
+en = "move"
+
+[[message]]
+# 提示：蓋掉
+key = "hint.overwrite"
+zht = "蓋掉"
+zhs = "盖掉"
+en = "write over"
+
+[[message]]
+# 提示：貼
+key = "hint.paste"
+zht = "貼"
+zhs = "贴"
+en = "paste"
+
+[[message]]
+# 提示：注音
+key = "hint.reading"
+zht = "注音"
+zhs = "注音"
+en = "reading"
+
+[[message]]
+# 暫存器組的標題
+key = "hint.register.title"
+zht = "暫存器"
+zhs = "暂存器"
+en = "register"
+
+[[message]]
+# 暫存器組：哪一個
+key = "hint.register.which-one"
+zht = "哪一個"
+zhs = "哪一个"
+en = "which one"
+
+[[message]]
+# 提示欄：側欄
+key = "hint.sidebar"
+zht = "側欄"
+zhs = "侧栏"
+en = "sidebar"
+
+[[message]]
+# 側欄提示：回正文
+key = "hint.sidebar.back-to-text"
+zht = "回正文"
+zhs = "回正文"
+en = "back to the text"
+
+[[message]]
+# 側欄提示：收起
+key = "hint.sidebar.collapse"
+zht = "收起"
+zhs = "收起"
+en = "collapse"
+
+[[message]]
+# 側欄底下那一行按鍵說明
+key = "hint.sidebar.keys"
+zht = "j k 移動 · J K 翻頁 · g G 兩端 · l 進入 · h 收起 · Tab 換視圖 · w 寬窄 · R 重讀 · C-w/Esc 回正文 · q 關"
+zhs = "j k 移动 · J K 翻页 · g G 两端 · l 进入 · h 收起 · Tab 换视图 · w 宽窄 · R 重读 · C-w/Esc 回正文 · q 关"
+en = "j k move · J K page · g G ends · l enter · h collapse · Tab view · w width · R reread · C-w/Esc back to the text · q close"
+
+[[message]]
+# 側欄提示：換視圖
+key = "hint.sidebar.other-view"
+zht = "換視圖"
+zhs = "换视图"
+en = "other view"
+
+[[message]]
+# 側欄提示：重讀
+key = "hint.sidebar.re-read"
+zht = "重讀"
+zhs = "重读"
+en = "re-read"
+
+[[message]]
+# 側欄提示：寬窄
+key = "hint.sidebar.width"
+zht = "寬窄"
+zhs = "宽窄"
+en = "wide / narrow"
+
+[[message]]
+# 空格組：從系統剪貼簿貼在前面
+key = "hint.space.paste-before"
+zht = "從系統剪貼簿貼在前面"
+zhs = "从系统剪贴簿贴在前面"
+en = "paste before, from the system clipboard"
+
+[[message]]
+# 空格組提示的標題
+key = "hint.space.title"
+zht = "空格"
+zhs = "空格"
+en = "Space"
+
+[[message]]
+# 表格提示：加一欄
+key = "hint.table.add-column"
+zht = "加一欄（右／左）"
+zhs = "加一栏（右／左）"
+en = "add a column (right / left)"
+
+[[message]]
+# 表格提示：加一行
+key = "hint.table.add-row"
+zht = "加一行（下／上）"
+zhs = "加一行（下／上）"
+en = "add a row (below / above)"
+
+[[message]]
+# t 之後認得哪些鍵
+key = "hint.table.after-t"
+zht = "t 後面：t q / ? g f s S o O n N d D j k h l y p < = > ] ["
+zhs = "t 后面：t q / ? g f s S o O n N d D j k h l y p < = > ] ["
+en = "after t: t q / ? g f s S o O n N d D j k h l y p < = > ] ["
+
+[[message]]
+# 表格提示：這欄靠左／居中／靠右
+key = "hint.table.align-column"
+zht = "這欄靠左／居中／靠右"
+zhs = "这栏靠左／居中／靠右"
+en = "this column left / centre / right"
+
+[[message]]
+# 表格提示：走格
+key = "hint.table.by-cell"
+zht = "走格"
+zhs = "走格"
+en = "by cell"
+
+[[message]]
+# 表格提示：改按格
+key = "hint.table.by-cell-instead"
+zht = "改按格"
+zhs = "改按格"
+en = "by cell instead"
+
+[[message]]
+# 表格提示：走字
+key = "hint.table.by-character"
+zht = "走字"
+zhs = "走字"
+en = "by character"
+
+[[message]]
+# 表格提示：改按字
+key = "hint.table.by-character-instead"
+zht = "改按字"
+zhs = "改按字"
+en = "by character instead"
+
+[[message]]
+# 表格提示：換格／清空
+key = "hint.table.change-or-clear-cell"
+zht = "換格／清空"
+zhs = "换格／清空"
+en = "change / clear the cell"
+
+[[message]]
+# 表格提示欄的標題（按字）
+key = "hint.table.character-mode"
+zht = "表格 · 字"
+zhs = "表格 · 字"
+en = "table · character"
+
+[[message]]
+# 非 | 表格裏 t 之後可以按的鍵
+key = "hint.table.csv-keys"
+zht = "t 後面（這種表格）：/ ? g s S o O d j k y p"
+zhs = "t 后面（这种表格）：/ ? g s S o O d j k y p"
+en = "after t, in this kind of table: / ? g s S o O d j k y p"
+
+[[message]]
+# 表格提示：刪這一行
+key = "hint.table.delete-row"
+zht = "刪這一行"
+zhs = "删这一行"
+en = "delete this row"
+
+[[message]]
+# 表格提示：刪這行／這欄
+key = "hint.table.delete-row-or-column"
+zht = "刪這行／這欄"
+zhs = "删这行／这栏"
+en = "delete this row / column"
+
+[[message]]
+# 表格提示：去某一格
+key = "hint.table.go-to-cell"
+zht = "去某一格（t20-20g）"
+zhs = "去某一格（t20-20g）"
+en = "go to a cell (t20-20g)"
+
+[[message]]
+# 表格提示：格內
+key = "hint.table.in-a-cell"
+zht = "格內"
+zhs = "格内"
+en = "in a cell"
+
+[[message]]
+# 表格提示：重排對齊
+key = "hint.table.line-it-up"
+zht = "重排對齊"
+zhs = "重排对齐"
+en = "line it up again"
+
+[[message]]
+# 表格提示：這欄左移／右移
+key = "hint.table.move-column"
+zht = "這欄左移／右移"
+zhs = "这栏左移／右移"
+en = "move this column left / right"
+
+[[message]]
+# 表格提示：這行下移／上移
+key = "hint.table.move-row"
+zht = "這行下移／上移"
+zhs = "这行下移／上移"
+en = "move this row down / up"
+
+[[message]]
+# 表格提示：下一格
+key = "hint.table.next-cell"
+zht = "下一格"
+zhs = "下一格"
+en = "next cell"
+
+[[message]]
+# 提示：表格操作
+key = "hint.table.operations"
+zht = "表格操作"
+zhs = "表格操作"
+en = "table operations"
+
+[[message]]
+# 表格提示：上一格
+key = "hint.table.previous-cell"
+zht = "上一格"
+zhs = "上一格"
+en = "previous cell"
+
+[[message]]
+# 表格提示：這個字自己那一行
+key = "hint.table.row-this-character-is-about"
+zht = "這個字自己那一行"
+zhs = "这个字自己那一行"
+en = "the row this character is about"
+
+[[message]]
+# 表格提示：它自己那一行
+key = "hint.table.row-this-is-about"
+zht = "它自己那一行"
+zhs = "它自己那一行"
+en = "the row it is about"
+
+[[message]]
+# 表格提示：一欄一欄找
+key = "hint.table.search-columns"
+zht = "一欄一欄找：這邊找／那邊看（t2-10?）"
+zhs = "一栏一栏找：这边找／那边看（t2-10?）"
+en = "search down the columns: / here, ? in the other area (t2-10?)"
+
+[[message]]
+# 表格提示：照這欄順排／倒排
+key = "hint.table.sort-by-column"
+zht = "照這欄順排／倒排（t1s）"
+zhs = "照这栏顺排／倒排（t1s）"
+en = "sort by this column, up / down (t1s)"
+
+[[message]]
+# t 組提示的標題
+key = "hint.table.title"
+zht = "t 表格"
+zhs = "t 表格"
+en = "t table"
+
+[[message]]
+# 表格提示：誰用了它
+key = "hint.table.who-uses-this"
+zht = "誰用了它"
+zhs = "谁用了它"
+en = "who uses this"
+
+[[message]]
+# 表格提示：誰用了這個字
+key = "hint.table.who-uses-this-character"
+zht = "誰用了這個字"
+zhs = "谁用了这个字"
+en = "who uses this character"
+
+[[message]]
+# 表格提示：取格／行
+key = "hint.table.yank-cell-or-row"
+zht = "取格／行"
+zhs = "取格／行"
+en = "yank cell / row"
+
+[[message]]
+# 表格提示：取這欄／貼一欄
+key = "hint.table.yank-or-paste-column"
+zht = "取這欄／貼一欄"
+zhs = "取这栏／贴一栏"
+en = "yank this column / paste a column"
+
+[[message]]
+# 提示：打一種括號
+key = "hint.type-a-bracket"
+zht = "打一種括號"
+zhs = "打一种括号"
+en = "type a kind of bracket"
+
+[[message]]
+# 提示：打一種括號或引號
+key = "hint.type-a-bracket-or-quote"
+zht = "打一種括號或引號"
+zhs = "打一种括号或引号"
+en = "type a bracket or a quote"
+
+[[message]]
+# 提示：打一個字
+key = "hint.type-a-character"
+zht = "打一個字"
+zhs = "打一个字"
+en = "type a character"
+
+[[message]]
+# 提示：打一個字蓋掉選區
+key = "hint.type-a-character-to-overwrite"
+zht = "打一個字蓋掉選區"
+zhs = "打一个字盖掉选区"
+en = "type a character to write over it"
+
+[[message]]
+# 提示：打要換成的那一種
+key = "hint.type-the-one-to-change-to"
+zht = "打要換成的那一種"
+zhs = "打要换成的那一种"
+en = "type the one to change it to"
+
+[[message]]
+# 提示：打要去掉的那一種
+key = "hint.type-the-one-to-take-off"
+zht = "打要去掉的那一種"
+zhs = "打要去掉的那一种"
+en = "type the one to take off"
+
+[[message]]
+# Normal 模式按 &（vi 的再替換一次，這裏沒有）
+key = "hint.vi.ampersand"
+zht = "再替換一次：把 :s 那一行叫回來（: 然後上鍵）"
+zhs = "再替换一次：把 :s 那一行叫回来（: 然后上键）"
+en = "to substitute again, call the :s line back (: then up)"
+
+[[message]]
+# Normal 模式按 @（vi 的重放鍵，這裏是 Q）
+key = "hint.vi.at"
+zht = "重放宏是 Q（錄是 q）"
+zhs = "重放宏是 Q（录是 q）"
+en = "Q replays a macro (q records one)"
+
+[[message]]
+# Normal 模式按 \（別的編輯器的 leader 鍵，這裏是空格）
+key = "hint.vi.backslash"
+zht = "空格是選單鍵：空格 f 開檔、空格 b 換緩衝區、空格 d 詳情"
+zhs = "空格是选单键：空格 f 开档、空格 b 换缓冲区、空格 d 详情"
+en = "Space is the menu key: Space f opens a file, Space b switches buffer, Space d the detail pane"
+
+[[message]]
+# Normal 模式按 `（vi 的記號鍵，這裏是 M 和 '）
+key = "hint.vi.backtick"
+zht = "記號用 M 記、' 回去（`m` 在這裏是配對模式）"
+zhs = "记号用 M 记、' 回去（`m` 在这里是配对模式）"
+en = "M sets a mark and ' goes back (`m` here is match mode)"
+
+[[message]]
+# Normal 模式按 C（vi 的改到行尾，這裏沒有）
+key = "hint.vi.c-upper"
+zht = "改到行尾是 gl 選起來再 c"
+zhs = "改到行尾是 gl 选起来再 c"
+en = "to change to end of line, select with gl then c"
+
+[[message]]
+# Normal 模式按 ^（vi 的行首鍵，這裏沒有）
+key = "hint.vi.caret"
+zht = "行首第一個非空白是 gs"
+zhs = "行首第一个非空白是 gs"
+en = "first non-blank is gs"
+
+[[message]]
+# Normal 模式按 D（vi 的刪到行尾，這裏沒有）
+key = "hint.vi.d-upper"
+zht = "刪到行尾是 gl 選起來再 d"
+zhs = "删到行尾是 gl 选起来再 d"
+en = "to delete to end of line, select with gl then d"
+
+[[message]]
+# Normal 模式按 $（vi 的行尾鍵，這裏沒有）
+key = "hint.vi.dollar"
+zht = "行尾是 gl（g 開頭的都是「去哪裏」）"
+zhs = "行尾是 gl（g 开头的都是「去哪里」）"
+en = "end of line is gl (everything starting with g is "go where")"
+
+[[message]]
+# Normal 模式按 Enter（它退場了，這一條說接手的是誰）
+key = "hint.vi.enter"
+zht = "Enter 在 Normal 不做事了——找選中的是 g/（那邊看是 g?）；表格一欄一欄找是 t/ t?"
+zhs = "Enter 在 Normal 不做事了——找选中的是 g/（那边看是 g?）；表格一栏一栏找是 t/ t?"
+en = "Enter does nothing in Normal now — g/ finds the selection (g? shows it beside), t/ t? go column by column in a table"
+
+[[message]]
+# Normal 模式按 _ + 或 -（vi 的行間移動，這裏是 j k）
+key = "hint.vi.line-motions"
+zht = "上下行是 j k；段落是 { }"
+zhs = "上下行是 j k；段落是 { }"
+en = "j k move by line; { } by paragraph"
+
+[[message]]
+# Normal 模式按 s 或 S（Helix 的多光標鍵，這裏還沒有）
+key = "hint.vi.s"
+zht = "沒有多光標——見手冊「還沒有的」"
+zhs = "没有多光标——见手册「还没有的」"
+en = "no multiple cursors — see the manual, 「還沒有的」"
+
+[[message]]
+# Normal 模式按 * （它退場了）
+key = "hint.vi.star"
+zht = "找選中的是 g/（那邊看是 g?）；表格裏一欄一欄找是 t/ t?"
+zhs = "找选中的是 g/（那边看是 g?）；表格里一栏一栏找是 t/ t?"
+en = "g/ finds the selection (g? shows it beside); t/ t? go column by column in a table"
+
+[[message]]
+# Normal 模式按 Z（vi 的 ZZ，這裏沒有）
+key = "hint.vi.z-upper"
+zht = "存檔是 :w，存了就走是 :wq"
+zhs = "存档是 :w，存了就走是 :wq"
+en = ":w saves, :wq saves and leaves"
+
+[[message]]
+# 提示：這個詞還在哪裏
+key = "hint.word-elsewhere"
+zht = "這個詞還在哪裏"
+zhs = "这个词还在哪里"
+en = "where else this word is"
+
+
+# ── ime ───────────────────────────────────────────────────────────────
+
+[[message]]
+# :yume ! 切到編進二進制的那一份靈明
+key = "ime.builtin-lingming"
+zht = "方案：靈明（出廠自帶的碼表）"
+zhs = "方案：灵明（出厂自带的码表）"
+en = "scheme: 靈明 (the built-in 碼表)"
+
+[[message]]
+# 輸入法切到中文
+key = "ime.chinese"
+zht = "中文（{0}）"
+zhs = "中文（{0}）"
+en = "Chinese ({0})"
+
+[[message]]
+# 狀態欄右端：Insert 模式，輸入法在中文那一邊
+key = "ime.chinese-tag"
+zht = "[中 {0}]"
+zhs = "[中 {0}]"
+en = "[中 {0}]"
+
+[[message]]
+# 輸入法切回英文
+key = "ime.english"
+zht = "英文"
+zhs = "英文"
+en = "English"
+
+[[message]]
+# :yume ! 要出廠碼表，而這個二進制沒編進去
+key = "ime.no-builtin-table"
+zht = "這個二進制不帶碼表"
+zhs = "这个二进制不带码表"
+en = "this build carries no 碼表"
+
+[[message]]
+# 要換的方案系統裏沒有碼表
+key = "ime.no-table-installed"
+zht = "系統裏沒有裝 {0} 的碼表"
+zhs = "系统里没有装 {0} 的码表"
+en = "no 碼表 for {0} is installed"
+
+[[message]]
+# :yume ?，而這一次還沒有載過碼表
+key = "ime.not-started"
+zht = "還沒開始打字——`:yume scheme` 載入碼表"
+zhs = "还没开始打字——`:yume scheme` 载入码表"
+en = "not typing yet — `:yume scheme` loads a 碼表"
+
+[[message]]
+# :yume ?，而這個二進制連出廠碼表都沒編進去
+key = "ime.not-started-no-builtin"
+zht = "還沒開始打字，而且這個二進制不帶碼表——先裝資料"
+zhs = "还没开始打字，而且这个二进制不带码表——先装资料"
+en = "not typing yet, and this build carries no 碼表 — install the data first"
+
+[[message]]
+# 換到系統裝的那份碼表
+key = "ime.scheme-from-system"
+zht = "方案：{0}（系統裝的碼表）"
+zhs = "方案：{0}（系统装的码表）"
+en = "scheme: {0} (the system's own 碼表)"
+
+[[message]]
+# :yume scheme 換好了方案
+key = "ime.scheme-now"
+zht = "方案：{0}"
+zhs = "方案：{0}"
+en = "scheme: {0}"
+
+[[message]]
+# :yume ? ——輸入法此刻的樣子
+key = "ime.state"
+zht = "{0} · 碼表 {1} · 拆分 {2} · 上屏 {3}"
+zhs = "{0} · 码表 {1} · 拆分 {2} · 上屏 {3}"
+en = "{0} · 碼表 {1} · chaifen {2} · commit {3}"
+
+[[message]]
+# :yume table 直接指一個碼表檔，裝上了
+key = "ime.table-loaded"
+zht = "碼表：{0}"
+zhs = "码表：{0}"
+en = "碼表: {0}"
+
+
+# ── label ─────────────────────────────────────────────────────────────
+
+[[message]]
+# 量詞標籤：格
+key = "label.cell"
+zht = "格"
+zhs = "格"
+en = "cell"
+
+[[message]]
+# 量詞標籤：字
+key = "label.character"
+zht = "字"
+zhs = "字"
+en = "character"
+
+[[message]]
+# 把幾樣東西連起來寫時的頓號
+key = "label.comma"
+zht = "、"
+zhs = "、"
+en = ", "
+
+[[message]]
+# 一句話裏「關着」那半個詞（:yume ? 的拆分那一格）
+key = "label.off"
+zht = "關"
+zhs = "关"
+en = "off"
+
+[[message]]
+# 一句話裏「開着」那半個詞（:yume ? 的拆分那一格）
+key = "label.on"
+zht = "開"
+zhs = "开"
+en = "on"
+
+[[message]]
+# 欄名旁的順排箭頭
+key = "label.sort-ascending"
+zht = "{0}↑"
+zhs = "{0}↑"
+en = "{0}↑"
+
+[[message]]
+# 欄名旁的倒排箭頭
+key = "label.sort-descending"
+zht = "{0}↓"
+zhs = "{0}↓"
+en = "{0}↓"
+
+[[message]]
+# 標籤：表格
+key = "label.table"
+zht = "表格"
+zhs = "表格"
+en = "table"
+
+
+# ── language ──────────────────────────────────────────────────────────
+
+[[message]]
+# 外部命令起不來
+key = "language.cannot-run"
+zht = "跑不動：{0}"
+zhs = "跑不动：{0}"
+en = "could not run it: {0}"
+
+[[message]]
+# 外部命令跑完，沒有輸出
+key = "language.done"
+zht = "{0}：跑完了"
+zhs = "{0}：跑完了"
+en = "{0}: done"
+
+[[message]]
+# 設定裏那條命令其實是伺服器
+key = "language.is-a-server"
+zht = "{0} 是個伺服器——用 :preview 開它"
+zhs = "{0} 是个伺服器——用 :preview 开它"
+en = "{0} is a server — :preview starts it"
+
+[[message]]
+# 設定裏沒說這種檔要跑什麼
+key = "language.no-such-action"
+zht = "{0} 沒有說 {1} 要跑什麼——在設定裏寫 [language.{0}] {1} = …"
+zhs = "{0} 没有说 {1} 要跑什么——在设定里写 [language.{0}] {1} = …"
+en = "{0} does not say what {1} runs — write [language.{0}] {1} = … in the config"
+
+[[message]]
+# 外部命令把正文換掉了
+key = "language.replaced"
+zht = "{0}：換好了"
+zhs = "{0}：换好了"
+en = "{0}: replaced"
+
+[[message]]
+# 外部命令要先存檔
+key = "language.save-first"
+zht = "先存檔——外面的程序讀的是檔案"
+zhs = "先存档——外面的程序读的是档案"
+en = "save first — the program outside reads the file"
+
+[[message]]
+# 外部命令失敗，正文沒動
+key = "language.text-untouched"
+zht = "沒有動你的字：{0}"
+zhs = "没有动你的字：{0}"
+en = "your text was left alone: {0}"
+
+
+# ── layout ────────────────────────────────────────────────────────────
+
+[[message]]
+# 段組設成多段
+key = "layout.bands"
+zht = "段組：{0} 段"
+zhs = "段组：{0} 段"
+en = "bands: {0}"
+
+[[message]]
+# 段組設成一段
+key = "layout.bands-one"
+zht = "段組：一段（整頁一縱到底）"
+zhs = "段组：一段（整页一纵到底）"
+en = "bands: one — a 縱 runs the whole page"
+
+[[message]]
+# 密排關掉
+key = "layout.dense-off"
+zht = "密排：關"
+zhs = "密排：关"
+en = "dense: off"
+
+[[message]]
+# 密排打開
+key = "layout.dense-on"
+zht = "密排：一縱兩格，無注音、無旁置、無刻度"
+zhs = "密排：一纵两格，无注音、无旁置、无刻度"
+en = "dense: two squares to a 縱, no readings, no hung marks, no ticks"
+
+[[message]]
+# 首行縮進設成幾格
+key = "layout.first-line-indent"
+zht = "首行縮進：{0} 格"
+zhs = "首行缩进：{0} 格"
+en = "first-line indent: {0} squares"
+
+[[message]]
+# 首行縮進關掉
+key = "layout.first-line-indent-off"
+zht = "首行縮進：關"
+zhs = "首行缩进：关"
+en = "first-line indent: off"
+
+[[message]]
+# 排版換成橫排
+key = "layout.horizontal"
+zht = "排版：橫排"
+zhs = "排版：横排"
+en = "layout: horizontal"
+
+[[message]]
+# 標點旁置關掉
+key = "layout.hung-punctuation-off"
+zht = "標點旁置：關（每個標點佔一格）"
+zhs = "标点旁置：关（每个标点占一格）"
+en = "hung punctuation: off — each mark takes a square"
+
+[[message]]
+# 標點旁置打開
+key = "layout.hung-punctuation-on"
+zht = "標點旁置：開"
+zhs = "标点旁置：开"
+en = "hung punctuation: on"
+
+[[message]]
+# 縮進標記換了畫法
+key = "layout.indent-hint"
+zht = "縮進標記：{0}"
+zhs = "缩进标记：{0}"
+en = "indent hint: {0}"
+
+[[message]]
+# 行號那一條有自己的底色
+key = "layout.line-numbers-on-a-band"
+zht = "行號：有底"
+zhs = "行号：有底"
+en = "line numbers: on a band"
+
+[[message]]
+# 行號那一條沒有底色
+key = "layout.line-numbers-on-the-page"
+zht = "行號：無底"
+zhs = "行号：无底"
+en = "line numbers: on the page"
+
+[[message]]
+# 疏排：每行之間留一行
+key = "layout.loose"
+zht = "疏排：每行之間留一行"
+zhs = "疏排：每行之间留一行"
+en = "loose: a row of air between rows"
+
+[[message]]
+# :measure 定了欄寬
+key = "layout.measure-columns"
+zht = "寫到 {0} 欄寬"
+zhs = "写到 {0} 栏宽"
+en = "measure: {0} columns"
+
+[[message]]
+# :measure 交回窗口寬
+key = "layout.measure-window"
+zht = "寫到窗口寬"
+zhs = "写到窗口宽"
+en = "measure: whatever the window gives"
+
+[[message]]
+# 密排：行貼着行
+key = "layout.tight"
+zht = "密排：行貼着行"
+zhs = "密排：行贴着行"
+en = "tight: rows against rows"
+
+[[message]]
+# 打字機模式關掉
+key = "layout.typewriter-off"
+zht = "打字機：關"
+zhs = "打字机：关"
+en = "typewriter: off"
+
+[[message]]
+# 打字機模式打開
+key = "layout.typewriter-on"
+zht = "打字機：開（紙走，字不走）"
+zhs = "打字机：开（纸走，字不走）"
+en = "typewriter: on (the paper moves, the line does not)"
+
+[[message]]
+# 排版換成竪排
+key = "layout.vertical"
+zht = "排版：竪排"
+zhs = "排版：竖排"
+en = "layout: vertical"
+
+
+# ── macro ─────────────────────────────────────────────────────────────
+
+[[message]]
+# 還沒錄過巨集就按了播放
+key = "macro.nothing-recorded"
+zht = "還沒有錄過——q 開始錄，再按 q 停"
+zhs = "还没有录过——q 开始录，再按 q 停"
+en = "nothing recorded yet — q starts recording, q again stops"
+
+[[message]]
+# 錄製結束，報鍵數
+key = "macro.recorded-keys"
+zht = "錄了 {0} 個鍵"
+zhs = "录了 {0} 个键"
+en = "recorded {0} key(s)"
+
+[[message]]
+# 開始錄製
+key = "macro.recording"
+zht = "正在錄…"
+zhs = "正在录…"
+en = "recording…"
+
+
+# ── md ────────────────────────────────────────────────────────────────
+
+[[message]]
+# 插入了一條行內註
+key = "md.inline-note-inserted"
+zht = "行內註：打在括號裏"
+zhs = "行内注：打在括号里"
+en = "inline note: type inside the brackets"
+
+[[message]]
+# 插入了一張空表
+key = "md.table-inserted"
+zht = "{0} 欄 {1} 行的表格（:table 進去編）"
+zhs = "{0} 栏 {1} 行的表格（:table 进去编）"
+en = "a {0}-column, {1}-row table (:table to edit it)"
+
+
+# ── menu ──────────────────────────────────────────────────────────────
+
+[[message]]
+# 貼上選單的標題
+key = "menu.paste.title"
+zht = "貼上：取過的東西"
+zhs = "贴上：取过的东西"
+en = "paste: what has been taken"
+
+
+# ── need ──────────────────────────────────────────────────────────────
+
+[[message]]
+# 一條要求關掉密排的命令被攔住時，數出來的那一項
+key = "need.loose"
+zht = "密排關"
+zhs = "密排关"
+en = "dense off"
+
+[[message]]
+# 一條要先有碼表的命令被攔住時，數出來的那一項
+key = "need.scheme"
+zht = "載入碼表"
+zhs = "载入码表"
+en = "a loaded 碼表"
+
+[[message]]
+# 一條只在表格模式下作數的命令被攔住時，數出來的那一項
+key = "need.table"
+zht = "表格模式"
+zhs = "表格模式"
+en = "table mode"
+
+[[message]]
+# 一條只在竪排下作數的命令，在橫排下被攔住時，數出來的那一項
+key = "need.vertical"
+zht = "竪排"
+zhs = "竖排"
+en = "vertical layout"
+
+
+# ── note ──────────────────────────────────────────────────────────────
+
+[[message]]
+# 跟着註走，註就在本行
+key = "note.already-on-this-line"
+zht = "註就在這一行"
+zhs = "注就在这一行"
+en = "the note is on this line"
+
+[[message]]
+# 表格模式下不許寫腳注
+key = "note.not-in-a-grid"
+zht = "表格裏寫不了腳注——先 :table off"
+zhs = "表格里写不了脚注——先 :table off"
+en = "a grid holds no footnotes — :table off first"
+
+[[message]]
+# 這個檔不是 Markdown，寫不了腳注
+key = "note.not-markdown"
+zht = "這個檔案不是 Markdown——腳注在這裏只是四個字"
+zhs = "这个档案不是 Markdown——脚注在这里只是四个字"
+en = "this file is not Markdown — a footnote here is just four characters"
+
+[[message]]
+# 跟着註走，那條註沒有寫在別處
+key = "note.points-nowhere"
+zht = "這條註沒有寫在別處"
+zhs = "这条注没有写在别处"
+en = "this note points nowhere else"
+
+[[message]]
+# 寫下一條註，開在另一半
+key = "note.written-other-pane"
+zht = "寫下了 {0} 的註（空格 w 過去寫）"
+zhs = "写下了 {0} 的注（空格 w 过去写）"
+en = "wrote the note for {0} (Space w to go and write it)"
+
+[[message]]
+# 寫下一條註，就在這一半
+key = "note.written-same-pane"
+zht = "寫下了 {0} 的註（C-o 回去）"
+zhs = "写下了 {0} 的注（C-o 回去）"
+en = "wrote the note for {0} (C-o goes back)"
+
+
+# ── pane ──────────────────────────────────────────────────────────────
+
+[[message]]
+# 關掉了那一半
+key = "pane.closed"
+zht = "關掉了那一半"
+zhs = "关掉了那一半"
+en = "that half is closed"
+
+[[message]]
+# 另一半顯示的檔案已經關掉了
+key = "pane.file-was-closed"
+zht = "那一半的檔案已經關掉了"
+zhs = "那一半的档案已经关掉了"
+en = "the file that half was showing is closed"
+
+[[message]]
+# 收掉另一半，只剩一個工作區
+key = "pane.only-one-left"
+zht = "只剩這一個工作區了"
+zhs = "只剩这一个工作区了"
+en = "one work area again"
+
+[[message]]
+# 分出另一個工作區
+key = "pane.opened"
+zht = "另一個工作區：空格 w 過去，空格 W 收掉"
+zhs = "另一个工作区：空格 w 过去，空格 W 收掉"
+en = "the other work area: Space w goes there, Space W closes it"
+
+
+# ── panel ─────────────────────────────────────────────────────────────
+
+[[message]]
+# 候選面板的名字：行內預覽
+key = "panel.name.bare"
+zht = "行內預覽"
+zhs = "行内预览"
+en = "inline preview"
+
+[[message]]
+# 候選面板的名字：候選框
+key = "panel.name.full"
+zht = "候選框"
+zhs = "候选框"
+en = "the bordered list (候選框)"
+
+[[message]]
+# 沒有這種候選面板
+key = "panel.no-such-panel"
+zht = "沒有「{0}」這種候選面板——full、bare"
+zhs = "没有「{0}」这种候选面板——full、bare"
+en = "no candidate panel '{0}' — full, bare"
+
+[[message]]
+# 候選面板換好了
+key = "panel.set"
+zht = "候選面板：{0}"
+zhs = "候选面板：{0}"
+en = "candidate panel: {0}"
+
+
+# ── picker ────────────────────────────────────────────────────────────
+
+[[message]]
+# 空格 b 開的換緩衝區那一格，標題
+key = "picker.buffers"
+zht = "緩衝區"
+zhs = "缓冲区"
+en = "buffers"
+
+[[message]]
+# 空格 f 開的挑檔案那一格，標題
+key = "picker.files"
+zht = "檔案"
+zhs = "档案"
+en = "files"
+
+[[message]]
+# 檔案選擇面板裏這個目錄是空的
+key = "picker.no-files-here"
+zht = "這裏沒有檔案"
+zhs = "这里没有档案"
+en = "no files here"
+
+[[message]]
+# 選擇面板裏篩不出東西
+key = "picker.nothing-matched"
+zht = "沒有符合的"
+zhs = "没有符合的"
+en = "nothing matched"
+
+[[message]]
+# 空格 " 開的貼上單，標題
+key = "picker.paste"
+zht = "貼上"
+zhs = "贴上"
+en = "paste"
+
+
+# ── preview ───────────────────────────────────────────────────────────
+
+[[message]]
+# :preview 做不出那一頁
+key = "preview.failed"
+zht = "預覽：{0}"
+zhs = "预览：{0}"
+en = "preview: {0}"
+
+[[message]]
+# :preview 一份 Markdown 稿子，導出的那一頁交給瀏覽器了
+key = "preview.made"
+zht = "預覽：{0}"
+zhs = "预览：{0}"
+en = "preview: {0}"
+
+[[message]]
+# :preview 用在沒有標記語法的檔案上
+key = "preview.nothing-to-preview"
+zht = "這個檔案沒有標記，沒有什麼可以預覽的"
+zhs = "这个档案没有标记，没有什么可以预览的"
+en = "this file has no markup, so there is nothing to preview"
+
+[[message]]
+# 啓動時停掉上次留下的預覽伺服器
+key = "preview.orphan-stopped"
+zht = "上次留下的預覽伺服器（{0}）停掉了"
+zhs = "上次留下的预览伺服器（{0}）停掉了"
+en = "stopped the preview server left over from last time ({0})"
+
+[[message]]
+# 預覽伺服器起來了
+key = "preview.running"
+zht = "預覽：{0}（`:preview off` 停）"
+zhs = "预览：{0}（`:preview off` 停）"
+en = "preview: {0} (`:preview off` stops it)"
+
+[[message]]
+# :preview 用在沒存過的緩衝區上
+key = "preview.save-first"
+zht = "先存檔——排版器讀的是檔案"
+zhs = "先存档——排版器读的是档案"
+en = "save first — the typesetter reads the file"
+
+[[message]]
+# 預覽伺服器起來中
+key = "preview.starting"
+zht = "預覽：{0} 起來中……"
+zhs = "预览：{0} 起来中……"
+en = "preview: starting {0}…"
+
+[[message]]
+# 預覽伺服器停了
+key = "preview.stopped"
+zht = "預覽：{0} 已停"
+zhs = "预览：{0} 已停"
+en = "preview: {0} stopped"
+
+[[message]]
+# :preview 一份 Typst 稿子，排版器正在起來
+key = "preview.typst-starting"
+zht = "預覽：tinymist 起來中……"
+zhs = "预览：tinymist 起来中……"
+en = "preview: tinymist starting…"
+
+
+# ── readonly ──────────────────────────────────────────────────────────
+
+[[message]]
+# 只讀開起來，但還有沒存的改動
+key = "readonly.on-with-unsaved"
+zht = "只讀：on——這一份還有沒存的改動，u 也用不了了"
+zhs = "只读：on——这一份还有没存的改动，u 也用不了了"
+en = "read-only: on — this one has unsaved changes, and `u` is locked out too"
+
+[[message]]
+# 只讀擋下了一次改動
+key = "readonly.refused"
+zht = "只讀——:readonly off 解開"
+zhs = "只读——:readonly off 解开"
+en = "read-only — `:readonly off` unlocks it"
+
+[[message]]
+# 只讀擋下了替換
+key = "readonly.replace-refused"
+zht = "{0}：只讀"
+zhs = "{0}：只读"
+en = "{0}: read-only"
+
+[[message]]
+# 只讀開關換好了
+key = "readonly.set"
+zht = "只讀：{0}"
+zhs = "只读：{0}"
+en = "read-only: {0}"
+
+
+# ── recover ───────────────────────────────────────────────────────────
+
+[[message]]
+# 丟掉本檔案的搶救稿
+key = "recover.draft-dropped"
+zht = "搶救稿丟掉了"
+zhs = "抢救稿丢掉了"
+en = "threw the draft away"
+
+[[message]]
+# 搶救回來的自動存檔副本，那一份緩衝區的名字
+key = "recover.draft-name"
+zht = "草稿 {0}"
+zhs = "草稿 {0}"
+en = "draft {0}"
+
+[[message]]
+# 打開本檔案的搶救稿
+key = "recover.draft-opened"
+zht = "搶救稿開好了——:w 留下它，u 回到原來那份"
+zhs = "抢救稿开好了——:w 留下它，u 回到原来那份"
+en = "the draft is open — :w keeps it, u goes back"
+
+[[message]]
+# 草稿救回面板裏丟掉草稿之後
+key = "recover.drafts-dropped"
+zht = "丟掉了 {0} 份草稿"
+zhs = "丢掉了 {0} 份草稿"
+en = "threw away {0} draft(s)"
+
+[[message]]
+# 啓動時發現搶救稿比檔案新
+key = "recover.drafts-newer-than-file"
+zht = "{0} 有比檔案新的搶救稿——:recover 打開，:recover! 丟掉"
+zhs = "{0} 有比档案新的抢救稿——:recover 打开，:recover! 丢掉"
+en = "{0}: draft(s) newer than the file(s) — :recover opens, :recover! throws away"
+
+[[message]]
+# 啓動時救回沒存的草稿
+key = "recover.drafts-opened"
+zht = "打開了 {0} 份沒存的草稿——:w <名字> 留下它們"
+zhs = "打开了 {0} 份没存的草稿——:w <名字> 留下它们"
+en = "opened {0} unsaved draft(s) — :w <name> keeps them"
+
+[[message]]
+# 啓動時發現有沒存的草稿
+key = "recover.drafts-waiting"
+zht = "有 {0} 份沒存的草稿——:recover 打開"
+zhs = "有 {0} 份没存的草稿——:recover 打开"
+en = "{0} unsaved draft(s) — :recover opens them"
+
+[[message]]
+# 本檔案沒有搶救稿
+key = "recover.no-draft-for-this-file"
+zht = "這個檔案沒有搶救稿"
+zhs = "这个档案没有抢救稿"
+en = "no draft for this file"
+
+[[message]]
+# 自動存搶救稿失敗，帶系統理由
+key = "recover.no-draft-kept"
+zht = "沒有留搶救稿——{0}"
+zhs = "没有留抢救稿——{0}"
+en = "no draft kept — {0}"
+
+[[message]]
+# :recover 但一份草稿都沒有
+key = "recover.no-drafts"
+zht = "沒有草稿"
+zhs = "没有草稿"
+en = "no drafts"
+
+
+# ── register ──────────────────────────────────────────────────────────
+
+[[message]]
+# 指名的暫存器是空的
+key = "register.empty"
+zht = "暫存器 {0} 是空的"
+zhs = "暂存器 {0} 是空的"
+en = "register {0} is empty"
+
+[[message]]
+# 預設暫存器空着，還沒複製過
+key = "register.nothing-yanked"
+zht = "沒有取過東西——先 y 複製，或者 空格 p 從系統剪貼簿貼"
+zhs = "没有取过东西——先 y 复制，或者 空格 p 从系统剪贴簿贴"
+en = "nothing has been yanked — y copies, or Space p pastes from the system clipboard"
+
+[[message]]
+# 空格 " 的貼上單，某一條取過的東西不止一行時的那一行摘要
+key = "register.several-lines"
+zht = "{0} …（{1} 行）"
+zhs = "{0} …（{1} 行）"
+en = "{0} … ({1} lines)"
+
+[[message]]
+# 空格 " 的貼上單裏，系統剪貼簿那一條的名字
+key = "register.system-clipboard"
+zht = "系統剪貼簿"
+zhs = "系统剪贴簿"
+en = "system clipboard"
+
+
+# ── reload ────────────────────────────────────────────────────────────
+
+[[message]]
+# 重讀失敗
+key = "reload.failed"
+zht = "重讀不了：{0}"
+zhs = "重读不了：{0}"
 en = "cannot re-read: {0}"
+
+
+# ── render ────────────────────────────────────────────────────────────
+
+[[message]]
+# :render full，標記留在畫面上
+key = "render.full"
+zht = "著色：標記留在畫面上"
+zhs = "著色：标记留在画面上"
+en = "coloured: the markup stays on the page"
+
+[[message]]
+# :markup 換了語法
+key = "render.markup-is"
+zht = "語法：{0}"
+zhs = "语法：{0}"
+en = "markup: {0}"
+
+[[message]]
+# :markup 給了不認得的語法
+key = "render.no-such-markup"
+zht = "沒有「{0}」這種語法——markdown 或 typst"
+zhs = "没有「{0}」这种语法——markdown 或 typst"
+en = "no such markup as '{0}' — markdown or typst"
+
+[[message]]
+# :render off，原文照畫
+key = "render.source"
+zht = "原文：不著色"
+zhs = "原文：不著色"
+en = "source: no colour"
+
+[[message]]
+# :render on，所見即所得
+key = "render.wysiwyg"
+zht = "所見即所得：標記只在光標那一處展開"
+zhs = "所见即所得：标记只在光标那一处展开"
+en = "WYSIWYG: the markup is shown only where the cursor is"
+
+
+# ── ruby ──────────────────────────────────────────────────────────────
+
+[[message]]
+# 注音已經是要換的那一種了
+key = "ruby.already-in-that-form"
+zht = "已經是 {0} 的注音了"
+zhs = "已经是 {0} 的注音了"
+en = "the readings are already {0}"
+
+[[message]]
+# :ruby off，注音不排
+key = "ruby.layout-off"
+zht = "注音：不排，標記留在畫面上"
+zhs = "注音：不排，标记留在画面上"
+en = "readings: not laid out, the markup stays on the page"
+
+[[message]]
+# :ruby 排某一種注音
+key = "ruby.layout-on"
+zht = "注音：排 {0}"
+zhs = "注音：排 {0}"
+en = "readings: laying out {0}"
+
+[[message]]
+# 進注音模式，光標不在注音上也沒有選中
+key = "ruby.put-cursor-in-a-reading"
+zht = "把光標放進注音裏，或者選中要注音的字"
+zhs = "把光标放进注音里，或者选中要注音的字"
+en = "put the cursor in a reading, or select what to annotate"
+
+[[message]]
+# 去掉一處注音
+key = "ruby.removed"
+zht = "注音去掉了"
+zhs = "注音去掉了"
+en = "removed the reading"
+
+[[message]]
+# 整份注音改寫成另一種
+key = "ruby.rewritten-as"
+zht = "注音改寫成 {0} 了"
+zhs = "注音改写成 {0} 了"
+en = "rewrote the readings as {0}"
+
+[[message]]
+# 給選中的字寫上注音
+key = "ruby.set"
+zht = "注音：{0}"
+zhs = "注音：{0}"
+en = "reading: {0}"
+
+
+# ── scheme ────────────────────────────────────────────────────────────
+
+[[message]]
+# 換方案時順帶報面板
+key = "scheme.panel-is"
+zht = "面板 {0}"
+zhs = "面板 {0}"
+en = "panel {0}"
+
+[[message]]
+# 換方案時碼表沒裝
+key = "scheme.table-not-installed"
+zht = "{0} 的碼表沒有裝——放進 {1}，或者把自己的碼表放進 .yumete/"
+zhs = "{0} 的码表没有装——放进 {1}，或者把自己的码表放进 .yumete/"
+en = "{0}'s table is not installed — put it in {1}, or a table of your own in .yumete/"
+
+
+# ── search ────────────────────────────────────────────────────────────
+
+[[message]]
+# 限定一欄搜到第一處
+key = "search.hit-in-column"
+zht = "第 {0} 欄：第 1/{1} 處"
+zhs = "第 {0} 栏：第 1/{1} 处"
+en = "column {0}: hit 1/{1}"
+
+[[message]]
+# 限定欄範圍搜到第一處
+key = "search.hit-in-column-range"
+zht = "第 {0}–{1} 欄：第 1/{2} 處"
+zhs = "第 {0}–{1} 栏：第 1/{2} 处"
+en = "columns {0}–{1}: hit 1/{2}"
+
+[[message]]
+# 搜到第幾處，共幾處
+key = "search.hit-n-of-m"
+zht = "第 {0}/{1} 處（n N 走）"
+zhs = "第 {0}/{1} 处（n N 走）"
+en = "hit {0} of {1} — n and N walk them"
+
+[[message]]
+# 表格沒指定跳轉範圍，從第一欄起搜
+key = "search.no-jump-scope"
+zht = "本表格文件未指定快速跳轉之範圍，從第一欄起搜索——第 1/{0} 處"
+zhs = "本表格文件未指定快速跳转之范围，从第一栏起搜索——第 1/{0} 处"
+en = "this table names no scope to jump within, so the search runs from the first column — hit 1 of {0}"
+
+
+# ── selection ─────────────────────────────────────────────────────────
+
+[[message]]
+# 延伸模式下收回成一個字
+key = "selection.collapsed-in-extend"
+zht = "收回成一個字——v 還開着，一走又跟着長"
+zhs = "收回成一个字——v 还开着，一走又跟着长"
+en = "collapsed to one character — v is still on, so the next move grows it again"
+
+
+# ── shell ─────────────────────────────────────────────────────────────
+
+[[message]]
+# :! :sh :| 起不了那個命令（找不到、沒有執行權……）
+key = "shell.cannot-run"
+zht = "跑不動：{0}"
+zhs = "跑不动：{0}"
+en = "cannot run: {0}"
+
+[[message]]
+# :! 或 :sh 跑完了
+key = "shell.done"
+zht = "跑完了：{0}"
+zhs = "跑完了：{0}"
+en = "done: {0}"
+
+[[message]]
+# :| 或 :sh 的命令失敗了，而它一個字都沒說
+key = "shell.failed"
+zht = "命令失敗了"
+zhs = "命令失败了"
+en = "the command failed"
+
+[[message]]
+# :!命令 讓出螢幕跑完，回到編輯器
+key = "shell.finished"
+zht = "跑完了：{0}"
+zhs = "跑完了：{0}"
+en = "finished: {0}"
+
+[[message]]
+# :| 交出去的命令跑失敗了——失敗的答案不許蓋掉稿子
+key = "shell.left-alone"
+zht = "沒有動你的字：{0}"
+zhs = "没有动你的字：{0}"
+en = "your text is untouched: {0}"
+
+[[message]]
+# :!命令 跑完，螢幕還在命令那邊，等你看完
+key = "shell.press-any-key"
+zht = "按任意鍵回到 yumete…"
+zhs = "按任意键回到 yumete…"
+en = "press any key to return to yumete…"
+
+[[message]]
+# :| 把選區交出去，命令跑成了卻還在 stderr 上說了話
+key = "shell.replaced-with-complaints"
+zht = "換好了，但它說：{0}"
+zhs = "换好了，但它说：{0}"
+en = "replaced, but it said: {0}"
+
+
+# ── show ──────────────────────────────────────────────────────────────
+
+[[message]]
+# 在另一半顯示某一行
+key = "show.row"
+zht = "第 {0} 行（空格 w 過去）"
+zhs = "第 {0} 行（空格 w 过去）"
+en = "line {0} (Space w goes there)"
+
+[[message]]
+# 在另一半顯示某個檔案的某一行
+key = "show.row-in-file"
+zht = "{0} · 第 {1} 行"
+zhs = "{0} · 第 {1} 行"
+en = "{0} · line {1}"
+
+[[message]]
+# 在另一半顯示表格裏的一處命中
+key = "show.table-hit"
+zht = "{0} · 第 {1} 行 · {2}"
+zhs = "{0} · 第 {1} 行 · {2}"
+en = "{0} · line {1} · {2}"
+
+
+# ── sidebar ───────────────────────────────────────────────────────────
+
+[[message]]
+# 側欄切成窄的
+key = "sidebar.narrow"
+zht = "側欄：窄"
+zhs = "侧栏：窄"
+en = "sidebar: narrow"
+
+[[message]]
+# 側欄切成寬的
+key = "sidebar.wide"
+zht = "側欄：寬（讀得下整條標題）"
+zhs = "侧栏：宽（读得下整条标题）"
+en = "sidebar: wide, for a whole heading"
+
+
+# ── substitute ────────────────────────────────────────────────────────
+
+[[message]]
+# :s 用了 c 旗標
+key = "substitute.confirm-not-yet"
+zht = "旗標 'c'（逐個確認）還沒做——先用 n 數一遍"
+zhs = "旗标 'c'（逐个确认）还没做——先用 n 数一遍"
+en = "flag 'c' (confirm each) is not built yet — count them with n first"
+
+[[message]]
+# :s 的旗標裏有一個不認得的字母
+key = "substitute.unknown-flag"
+zht = "旗標 '{0}'（有 g 全行、i 不分大小寫、n 只數、t 連欄數一起改）"
+zhs = "旗标 '{0}'（有 g 全行、i 不分大小写、n 只数、t 连栏数一起改）"
+en = "flag '{0}' (g every match on the line, i ignore case, n count only, t let the column count change)"
+
+
+# ── table ─────────────────────────────────────────────────────────────
+
+[[message]]
+# t f 對齊，本來就是齊的
+key = "table.already-aligned"
+zht = "已經是對齊的"
+zhs = "已经是对齐的"
+en = "already lined up"
+
+[[message]]
+# :sort 但本來就是這個順序
+key = "table.already-in-that-order"
+zht = "已經是這個順序了"
+zhs = "已经是这个顺序了"
+en = "already in that order"
+
+[[message]]
+# 本來就不在表格模式
+key = "table.already-off"
+zht = "本來就不在表格裏"
+zhs = "本来就不在表格里"
+en = "not reading anything as a grid"
+
+[[message]]
+# 本來就在表格模式裏
+key = "table.already-on"
+zht = "已經在表格裏了——t q 退出"
+zhs = "已经在表格里了——t q 退出"
+en = "already reading this as a grid — t q leaves"
+
+[[message]]
+# 在格首按退格
+key = "table.backspace-would-join-cells"
+zht = "格首：再刪就把兩格併成一格了"
+zhs = "格首：再删就把两格并成一格了"
+en = "start of a cell: one more would join it to the one before"
+
+[[message]]
+# 進表格模式，照某個 schema 讀
+key = "table.by-schema"
+zht = "照 {0}"
+zhs = "照 {0}"
+en = "by {0}"
+
+[[message]]
+# 清空一格
+key = "table.cell-cleared"
+zht = "清空了一格（{0} 個字）"
+zhs = "清空了一格（{0} 个字）"
+en = "cleared a cell ({0} character(s))"
+
+[[message]]
+# 要動的那一格是空的
+key = "table.cell-is-empty"
+zht = "這一格是空的"
+zhs = "这一格是空的"
+en = "this cell is empty"
+
+[[message]]
+# 表格裏貼進一格，換掉原來的
+key = "table.cell-replaced"
+zht = "換掉了一格"
+zhs = "换掉了一格"
+en = "replaced the cell"
+
+[[message]]
+# :check 查完表格，沒有問題
+key = "table.check-clean"
+zht = "{0}：{1} 行，沒查出問題"
+zhs = "{0}：{1} 行，没查出问题"
+en = "{0}: {1} row(s), nothing wrong"
+
+[[message]]
+# :check 查出了問題
+key = "table.check-problems"
+zht = "查出 {0} 條——gf 跳到那一行"
+zhs = "查出 {0} 条——gf 跳到那一行"
+en = "{0} problem(s) — gf goes to the row"
+
+[[message]]
+# 加了一欄之後
+key = "table.column-added"
+zht = "加了一欄"
+zhs = "加了一栏"
+en = "added a column"
+
+[[message]]
+# 這一欄改居中
+key = "table.column-centred"
+zht = "這一欄：居中"
+zhs = "这一栏：居中"
+en = "this column: centred"
+
+[[message]]
+# 刪掉一欄之後
+key = "table.column-deleted"
+zht = "刪了一欄"
+zhs = "删了一栏"
+en = "deleted a column"
+
+[[message]]
+# 要取的那一欄是空的
+key = "table.column-is-empty"
+zht = "這一欄是空的"
+zhs = "这一栏是空的"
+en = "this column is empty"
+
+[[message]]
+# 這一欄改靠左
+key = "table.column-left"
+zht = "這一欄：靠左"
+zhs = "这一栏：靠左"
+en = "this column: left"
+
+[[message]]
+# 表格模式下把一欄往左挪一格（t H）
+key = "table.column-moved-left"
+zht = "左移一欄"
+zhs = "左移一栏"
+en = "column moved left"
+
+[[message]]
+# 表格模式下把一欄往右挪一格（t L）
+key = "table.column-moved-right"
+zht = "右移一欄"
+zhs = "右移一栏"
+en = "column moved right"
+
+[[message]]
+# 欄號那一行關掉
+key = "table.column-numbers-off"
+zht = "欄號：關"
+zhs = "栏号：关"
+en = "column numbers: off"
+
+[[message]]
+# 欄號那一行打開
+key = "table.column-numbers-on"
+zht = "欄號：開"
+zhs = "栏号：开"
+en = "column numbers: on"
+
+[[message]]
+# 這一欄改靠右
+key = "table.column-right"
+zht = "這一欄：靠右"
+zhs = "这一栏：靠右"
+en = "this column: right"
+
+[[message]]
+# 欄線換了畫法
+key = "table.column-rules"
+zht = "欄線：{0}"
+zhs = "栏线：{0}"
+en = "column rules: {0}"
+
+[[message]]
+# 進 | 表格模式，光標不在表格裏
+key = "table.cursor-not-in-a-table"
+zht = "光標不在表格裏"
+zhs = "光标不在表格里"
+en = "the cursor is not in a table"
+
+[[message]]
+# 想刪掉格與格之間的 |
+key = "table.divider-cannot-be-deleted"
+zht = "格與格之間的分隔符刪不掉"
+zhs = "格与格之间的分隔符删不掉"
+en = "the divider between cells cannot be deleted"
+
+[[message]]
+# 在格子裏按 Enter
+key = "table.enter-makes-no-newline"
+zht = "一格之內：Enter 不換行——Tab 走下一格"
+zhs = "一格之内：Enter 不换行——Tab 走下一格"
+en = "inside a cell: Enter makes no new line — Tab goes to the next cell"
+
+[[message]]
+# 進表格模式，報幾欄
+key = "table.entered"
+zht = "表格：{0} 欄"
+zhs = "表格：{0} 栏"
+en = "table: {0} columns"
+
+[[message]]
+# 進表格模式，順帶補了分隔行
+key = "table.entered-rule-added"
+zht = "表格：{0} 欄（補上了分隔行）"
+zhs = "表格：{0} 栏（补上了分隔行）"
+en = "table: {0} columns — added the rule row"
+
+[[message]]
+# 進表格模式，順帶轉了橫排
+key = "table.entered-turned-horizontal"
+zht = "表格：{0} 欄，{1}（已轉橫排）"
+zhs = "表格：{0} 栏，{1}（已转横排）"
+en = "table: {0} columns, {1} — set horizontally"
+
+[[message]]
+# 進表格模式，報幾欄與欄名來源
+key = "table.entered-with-header"
+zht = "表格：{0} 欄，{1}"
+zhs = "表格：{0} 栏，{1}"
+en = "table: {0} columns, {1}"
+
+[[message]]
+# 在格子裏按上下移動鍵
+key = "table.esc-before-moving"
+zht = "一格之內：先 Esc 再換行"
+zhs = "一格之内：先 Esc 再换行"
+en = "inside a cell: Esc first, then move up or down"
+
+[[message]]
+# :table 用在一個每行欄數不一樣的檔案上
+key = "table.file-is-not-a-grid"
+zht = "「{0}」不像表格——每行要有同樣多的欄，或者把光標放到 | 表格上"
+zhs = "「{0}」不像表格——每行要有同样多的栏，或者把光标放到 | 表格上"
+en = "'{0}' is not a table — every line needs the same columns, or put the cursor on a | table"
+
+[[message]]
+# 表格裏 :| 過濾，外部命令送回來的行欄數對不上
+key = "table.filter-changed-shape"
+zht = "命令送回來的第 {0} 行是 {1} 欄，這張表是 {2} 欄——沒有換"
+zhs = "命令送回来的第 {0} 行是 {1} 栏，这张表是 {2} 栏——没有换"
+en = "line {0} came back with {1} columns and this table has {2} — nothing replaced"
+
+[[message]]
+# 想刪掉標題行
+key = "table.header-cannot-be-deleted"
+zht = "標題行不能刪：欄名寫在那裏"
+zhs = "标题行不能删：栏名写在那里"
+en = "the header names the columns — it cannot be deleted"
+
+[[message]]
+# 欄名取自首行
+key = "table.header-from-first-row"
+zht = "照首行"
+zhs = "照首行"
+en = "by its own header row"
+
+[[message]]
+# 表格裏想併兩行
+key = "table.join-would-change-columns"
+zht = "兩行併成一行會改欄數——先 :table off"
+zhs = "两行并成一行会改栏数——先 :table off"
+en = "joining two rows would change the column count — `:table off` first"
+
+[[message]]
+# 跳到某一行的表格
+key = "table.jumped-to-line"
+zht = "第 {0} 行的表格"
+zhs = "第 {0} 行的表格"
+en = "the table on line {0}"
+
+[[message]]
+# t f 對齊完成
+key = "table.lined-up"
+zht = "對齊好了"
+zhs = "对齐好了"
+en = "lined up"
+
+[[message]]
+# 表格裏切回按格移動
+key = "table.moving-by-cell"
+zht = "按格移動"
+zhs = "按格移动"
+en = "moving by cell"
+
+[[message]]
+# 表格裏切成按字移動
+key = "table.moving-by-character"
+zht = "按字移動（Tab 回到按格）"
+zhs = "按字移动（Tab 回到按格）"
+en = "moving by character — Tab goes back to cells"
+
+[[message]]
+# :table 用在沒有檔名的緩衝區上
+key = "table.no-file-name-no-schema"
+zht = "沒有檔名，就沒有 schema 可以照——或者把光標放到 | 表格上"
+zhs = "没有档名，就没有 schema 可以照——或者把光标放到 | 表格上"
+en = "no file name, so no schema to read it by — or put the cursor on a | table"
+
+[[message]]
+# 表格裏行或欄已經移到頭了
+key = "table.no-further"
+zht = "到頭了"
+zhs = "到头了"
+en = "no further"
+
+[[message]]
+# 後面沒有表格了
+key = "table.no-next"
+zht = "後面沒有表格了"
+zhs = "后面没有表格了"
+en = "no table after this one"
+
+[[message]]
+# 前面沒有表格了
+key = "table.no-previous"
+zht = "前面沒有表格了"
+zhs = "前面没有表格了"
+en = "no table before this one"
+
+[[message]]
+# t < = > 用在沒有分隔行的表上
+key = "table.no-rule-row-to-align"
+zht = "沒有分隔行，無從對齊"
+zhs = "没有分隔行，无从对齐"
+en = "no rule row, so there is no alignment to set"
+
+[[message]]
+# 表格裏按行名跳，表裏沒有
+key = "table.no-such-row-name"
+zht = "表裏沒有「{0}」"
+zhs = "表里没有「{0}」"
+en = "no '{0}' in this table"
+
+[[message]]
+# 表格命令用在表格外面
+key = "table.not-in-a-table"
+zht = "不是表格——先 :table"
+zhs = "不是表格——先 :table"
+en = "not a table — :table first"
+
+[[message]]
+# 想在標題行上面加一行
+key = "table.nothing-above-the-header"
+zht = "標題行上面加不了——加在它下面了"
+zhs = "标题行上面加不了——加在它下面了"
+en = "nothing goes above the header — added it below instead"
+
+[[message]]
+# 離開表格模式
+key = "table.off"
+zht = "表格：關"
+zhs = "表格：关"
+en = "table: off"
+
+[[message]]
+# 離開表格模式，並轉回竪排
+key = "table.off-back-to-vertical"
+zht = "表格：關（已轉回竪排）"
+zhs = "表格：关（已转回竖排）"
+en = "table: off — set vertically again"
+
+[[message]]
+# 進了表格模式
+key = "table.on"
+zht = "表格模式——t q 退出"
+zhs = "表格模式——t q 退出"
+en = "grid mode — t q leaves"
+
+[[message]]
+# 進 | 表格模式，只有一欄
+key = "table.one-column-only"
+zht = "只有一欄——表格至少要兩欄，或者先寫好 |---| 那一行"
+zhs = "只有一栏——表格至少要两栏，或者先写好 |---| 那一行"
+en = "one column only — a table needs two, or write the |---| line first"
+
+[[message]]
+# 貼進的格子比表格的欄數寬
+key = "table.paste-does-not-fit"
+zht = "貼不下：這張表只有 {0} 欄"
+zhs = "贴不下：这张表只有 {0} 栏"
+en = "does not fit: this table has {0} columns"
+
+[[message]]
+# 表格裏貼成新的一行
+key = "table.pasted-as-new-row"
+zht = "貼成新的一行"
+zhs = "贴成新的一行"
+en = "pasted as a new row"
+
+[[message]]
+# 貼了一整欄
+key = "table.pasted-column"
+zht = "貼了一欄（{0} 格）"
+zhs = "贴了一栏（{0} 格）"
+en = "pasted a column ({0} cells)"
+
+[[message]]
+# 表格裏貼進一片格子
+key = "table.pasted-grid"
+zht = "貼進了 {0}×{1} 格"
+zhs = "贴进了 {0}×{1} 格"
+en = "pasted {0}×{1} cells"
+
+[[message]]
+# 加了一行之後
+key = "table.row-added"
+zht = "加了一行"
+zhs = "加了一行"
+en = "added a row"
+
+[[message]]
+# 報光標在第幾行第幾欄
+key = "table.row-and-column"
+zht = "第 {0} 行 · 第 {1} 欄"
+zhs = "第 {0} 行 · 第 {1} 栏"
+en = "row {0} · column {1}"
+
+[[message]]
+# 刪掉一行之後
+key = "table.row-deleted"
+zht = "刪了一行"
+zhs = "删了一行"
+en = "deleted a row"
+
+[[message]]
+# 表格裏按行名跳，找到了
+key = "table.row-found-at-line"
+zht = "「{0}」在第 {1} 行"
+zhs = "「{0}」在第 {1} 行"
+en = "'{0}' is on line {1}"
+
+[[message]]
+# 表格模式下把一行往下挪一格（t J，或 :move）
+key = "table.row-moved-down"
+zht = "下移一行"
+zhs = "下移一行"
+en = "row moved down"
+
+[[message]]
+# 表格模式下把一行往上挪一格（t K，或 :move）
+key = "table.row-moved-up"
+zht = "上移一行"
+zhs = "上移一行"
+en = "row moved up"
+
+[[message]]
+# 表格裏按行名跳，給的不是單個字
+key = "table.row-name-not-one-char"
+zht = "「{0}」不是一個字——行名是一個字"
+zhs = "「{0}」不是一个字——行名是一个字"
+en = "'{0}' is not one character — a row is named by one"
+
+[[message]]
+# 替換會改掉某一行的欄數
+key = "table.row-would-change-width"
+zht = "第 {0} 行會從 {1} 格變成 {2} 格"
+zhs = "第 {0} 行会从 {1} 格变成 {2} 格"
+en = "row {0} would go from {1} cells to {2}"
+
+[[message]]
+# 想改 |---| 那一行的內容
+key = "table.rule-row-is-drawn"
+zht = "分隔行是畫出來的——用 t < = > 改對齊"
+zhs = "分隔行是画出来的——用 t < = > 改对齐"
+en = "the rule row is drawn, not written — t < = > sets the alignment"
+
+[[message]]
+# 按行名跳，schema 沒說哪一欄是行名
+key = "table.schema-has-no-key-column"
+zht = "這張表沒說哪一欄是行名（schema 的 key）"
+zhs = "这张表没说哪一栏是行名（schema 的 key）"
+en = "this table does not name a key column (the schema's key)"
+
+[[message]]
+# 進表格模式時，schema 檔有毛病
+key = "table.schema-problems"
+zht = "schema：{0}"
+zhs = "schema：{0}"
+en = "schema: {0}"
+
+[[message]]
+# :sort 排好了
+key = "table.sorted"
+zht = "排好了：{0}"
+zhs = "排好了：{0}"
+en = "sorted: {0}"
+
+[[message]]
+# 照某一欄順排
+key = "table.sorted-ascending"
+zht = "照「{0}」順排（數字當數字比，其餘按碼位）"
+zhs = "照「{0}」顺排（数字当数字比，其余按码位）"
+en = "sorted by '{0}', up — numbers as numbers, everything else by code point"
+
+[[message]]
+# 照某一欄倒排
+key = "table.sorted-descending"
+zht = "照「{0}」倒排（數字當數字比，其餘按碼位）"
+zhs = "照「{0}」倒排（数字当数字比，其余按码位）"
+en = "sorted by '{0}', down — numbers as numbers, everything else by code point"
+
+[[message]]
+# :s 會改掉表格的行數
+key = "table.substitution-would-change-rows"
+zht = "這次替換會把 {0} 行變成 {1} 行——表格裏不改行數"
+zhs = "这次替换会把 {0} 行变成 {1} 行——表格里不改行数"
+en = "this would turn {0} rows into {1} — a grid keeps its rows"
+
+[[message]]
+# :s 會改掉某一行的欄數，提示 t 旗標
+key = "table.substitution-would-change-width"
+zht = "第 {0} 行會從 {1} 格變成 {2} 格——真要改欄數，加 t 旗標（`:%s/…/…/gt`）"
+zhs = "第 {0} 行会从 {1} 格变成 {2} 格——真要改栏数，加 t 旗标（`:%s/…/…/gt`）"
+en = "row {0} would go from {1} cells to {2} — add the t flag to mean it (`:%s/…/…/gt`)"
+
+[[message]]
+# :table 用在代碼塊裏的表格上
+key = "table.table-inside-a-code-block"
+zht = "這是代碼塊裏的表格——那是引文，不是表格"
+zhs = "这是代码块里的表格——那是引文，不是表格"
+en = "that table is inside a code block — a quotation, not a table"
+
+[[message]]
+# t s 排序，行數不夠
+key = "table.too-few-rows-to-sort"
+zht = "行太少，排不了"
+zhs = "行太少，排不了"
+en = "too few rows to sort"
+
+[[message]]
+# 竪排下進表格模式
+key = "table.vertical-not-allowed"
+zht = "表格是橫排的——先 :table off"
+zhs = "表格是横排的——先 :table off"
+en = "a table is always horizontal — :table off first"
+
+[[message]]
+# 表格裏取了一格
+key = "table.yanked-cell"
+zht = "取了一格（{0} 個字）"
+zhs = "取了一格（{0} 个字）"
+en = "yanked a cell ({0} character(s))"
+
+[[message]]
+# 取了一整欄
+key = "table.yanked-column"
+zht = "取了一欄「{0}」（{1} 格）"
+zhs = "取了一栏「{0}」（{1} 格）"
+en = "yanked the '{0}' column ({1} cells)"
+
+[[message]]
+# 表格裏取了一行
+key = "table.yanked-row"
+zht = "取了一行"
+zhs = "取了一行"
+en = "yanked a row"
+
+
+# ── theme ─────────────────────────────────────────────────────────────
+
+[[message]]
+# :theme 給了不認得的名字
+key = "theme.no-such-theme"
+zht = "沒有這個主題：{0}"
+zhs = "没有这个主题：{0}"
+en = "no theme called '{0}'"
+
+[[message]]
+# 換好了主題
+key = "theme.set"
+zht = "主題：{0}（{1}）"
+zhs = "主题：{0}（{1}）"
+en = "theme: {0} ({1})"
+
+
+# ── toc ───────────────────────────────────────────────────────────────
+
+[[message]]
+# :toc 報有幾條標題
+key = "toc.headings-found"
+zht = "大綱：{0} 條標題（:toc 3 直接去第三條）"
+zhs = "大纲：{0} 条标题（:toc 3 直接去第三条）"
+en = "outline: {0} headings (:toc 3 goes straight to the third)"
+
+
+# ── tutor ─────────────────────────────────────────────────────────────
+
+[[message]]
+# 打不開課文
+key = "tutor.cannot-open"
+zht = "打不開課文：{0}"
+zhs = "打不开课文：{0}"
+en = "could not open the lesson: {0}"
+
+[[message]]
+# 寫不下課文
+key = "tutor.cannot-write"
+zht = "寫不下課文：{0}"
+zhs = "写不下课文：{0}"
+en = "could not write the lesson: {0}"
+
+[[message]]
+# 課文的檔名都用光了
+key = "tutor.no-name-left"
+zht = "課文的檔名都用光了——刪掉幾份 tutor*.md"
+zhs = "课文的档名都用光了——删掉几份 tutor*.md"
+en = "every lesson name is taken — delete a few tutor*.md"
+
+[[message]]
+# 課文開好了，但沒有資料目錄
+key = "tutor.open-unsaved"
+zht = "課文開好了（沒有資料目錄，存不下來）"
+zhs = "课文开好了（没有资料目录，存不下来）"
+en = "the lesson is open (no data directory, so it cannot be saved)"
+
+[[message]]
+# 課文開好了，這是你自己的一份
+key = "tutor.this-copy-is-yours"
+zht = "這是你自己的一份，隨便改（:q 退出）"
+zhs = "这是你自己的一份，随便改（:q 退出）"
+en = "this copy is yours — break it as you like (:q leaves)"
+
+
+# ── ui ────────────────────────────────────────────────────────────────
+
+[[message]]
+# 詳情欄關掉
+key = "ui.detail-panel-off"
+zht = "詳情欄：關"
+zhs = "详情栏：关"
+en = "detail panel: off"
+
+[[message]]
+# 詳情欄打開
+key = "ui.detail-panel-on"
+zht = "詳情欄：開"
+zhs = "详情栏：开"
+en = "detail panel: on"
+
+[[message]]
+# 詳情欄設了寬度
+key = "ui.detail-panel-width"
+zht = "詳情欄寬 {0}"
+zhs = "详情栏宽 {0}"
+en = "the detail panel is {0} wide"
+
+[[message]]
+# 命令面板裏那一條的前提沒開
+key = "ui.needs-these-first"
+zht = "需要 {0}，句末加 force"
+zhs = "需要 {0}，句末加 force"
+en = "needs {0}; add force at the end"
+
+[[message]]
+# 這個平台上沒有配截圖命令
+key = "ui.no-screenshot-command"
+zht = "這個平台上沒有截圖命令——`[editor] screenshot` 寫一條"
+zhs = "这个平台上没有截图命令——`[editor] screenshot` 写一条"
+en = "no screenshot command on this platform — write one at `[editor] screenshot`"
+
+[[message]]
+# 狀態欄的位置：光標在表格裏
+key = "ui.position-in-table"
+zht = "第 {0} 行 · {1}"
+zhs = "第 {0} 行 · {1}"
+en = "row {0} · {1}"
+
+[[message]]
+# 狀態欄的位置：竪排
+key = "ui.position-vertical"
+zht = "橫 {0}, 字 {1}"
+zhs = "横 {0}, 字 {1}"
+en = "橫 {0}, 字 {1}"
+
+[[message]]
+# 狀態欄：這一份是只讀的（:readonly on，或磁盤上就不許寫）
+key = "ui.readonly-tag"
+zht = " [只讀]"
+zhs = " [只读]"
+en = " [read-only]"
+
+[[message]]
+# 截圖失敗，帶理由
+key = "ui.screenshot-failed"
+zht = "截圖失敗（{0}）"
+zhs = "截图失败（{0}）"
+en = "no picture taken ({0})"
+
+[[message]]
+# 截圖進了剪貼簿
+key = "ui.screenshot-taken"
+zht = "畫面已放進剪貼簿"
+zhs = "画面已放进剪贴簿"
+en = "the screen is on the clipboard"
+
+[[message]]
+# 側欄有焦點，而提示行關着——狀態欄整條讓給側欄的按鍵
+key = "ui.sidebar-mode"
+zht = "-- 側欄 --  {0}"
+zhs = "-- 侧栏 --  {0}"
+en = "-- SIDEBAR --  {0}"
+
+
+# ── word ──────────────────────────────────────────────────────────────
+
+[[message]]
+# 分詞粒度設好了
+key = "word.level-set"
+zht = "分詞粒度：{0}"
+zhs = "分词粒度：{0}"
+en = "word level: {0}"
+
+[[message]]
+# 詞表開起來了，怎麼寫怎麼重讀
+key = "word.list-opened"
+zht = "{0}——一行一個詞，寫完 :w，再 :word list reload"
+zhs = "{0}——一行一个词，写完 :w，再 :word list reload"
+en = "{0} — one word per line; :w when done, then :word list reload"
+
+[[message]]
+# 詞表重讀完了
+key = "word.lists-reread"
+zht = "詞表重讀了：{0}"
+zhs = "词表重读了：{0}"
+en = "word lists reread: {0}"
+
+[[message]]
+# 沒有資料目錄，沒有全域詞表
+key = "word.no-data-directory"
+zht = "不知道資料目錄在哪裏——這一台上沒有全域詞表"
+zhs = "不知道资料目录在哪里——这一台上没有全域词表"
+en = "no data directory known — this machine has no global word list"
+
+[[message]]
+# 重讀本項目詞表，檔案不在
+key = "word.no-project-words-file"
+zht = "沒有找到 .yumete/words.txt——本項目的詞寫在那裏"
+zhs = "没有找到 .yumete/words.txt——本项目的词写在那里"
+en = "no .yumete/words.txt — this project's own words go there"
+
+[[message]]
+# 重新讀本項目的詞表之後
+key = "word.project-words-loaded"
+zht = "{0} 個本項目的詞：{1}"
+zhs = "{0} 个本项目的词：{1}"
+en = "{0} word(s) from this project: {1}"
+
+[[message]]
+# 分詞現在的狀態
+key = "word.status"
+zht = "分詞：{0} · {1} · 著色{2}"
+zhs = "分词：{0} · {1} · 著色{2}"
+en = "words: {0} · {1} · tint {2}"
+
+[[message]]
+# 分詞著色關掉
+key = "word.tint-off"
+zht = "分詞著色：關"
+zhs = "分词著色：关"
+en = "word tint: off"
+
+[[message]]
+# 分詞著色打開
+key = "word.tint-on"
+zht = "分詞著色：開"
+zhs = "分词著色：开"
+en = "word tint: on"
+
+
+# ── wrap ──────────────────────────────────────────────────────────────
+
+[[message]]
+# 折行關掉
+key = "wrap.off"
+zht = "折行：關（長段落成一行，頁面跟着光標左右走）"
+zhs = "折行：关（长段落成一行，页面跟着光标左右走）"
+en = "soft wrap: off — a long paragraph is one row, and the page follows the caret"
+
+[[message]]
+# 折行打開
+key = "wrap.on"
+zht = "折行：開"
+zhs = "折行：开"
+en = "soft wrap: on"
+
+[[message]]
+# :wrap on/off 用在竪排下
+key = "wrap.vertical-has-no-wrap"
+zht = "縱書不折行：一縱斷在窗高上。這一項只管橫排（`:wrap 40` 兩邊都算）"
+zhs = "纵书不折行：一纵断在窗高上。这一项只管横排（`:wrap 40` 两边都算）"
+en = "vertical does not soft-wrap: a 縱 breaks at the height of the window. This is a horizontal setting (`:wrap 40` counts in both)"
+

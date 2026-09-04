@@ -39,7 +39,10 @@ impl Item {
 #[derive(Debug, Clone)]
 pub struct Picker {
     /// What it is picking, for the prompt.
-    pub title: &'static str,
+    ///
+    /// A `String`, not a `&'static str`: the title is a message like everything
+    /// else on the screen, so it arrives already translated.
+    pub title: String,
     /// Everything it could offer, in the order it was gathered.
     items: Vec<Item>,
     /// What has been typed to narrow it.
@@ -61,9 +64,9 @@ pub enum Caret {
 
 impl Picker {
     /// Open a picker over `items`.
-    pub fn new(title: &'static str, items: Vec<Item>) -> Picker {
+    pub fn new(title: &str, items: Vec<Item>) -> Picker {
         Picker {
-            title,
+            title: title.to_string(),
             items,
             query: String::new(),
             selected: 0,
