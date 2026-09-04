@@ -1009,6 +1009,52 @@ four are done; the outcomes are noted here rather than in a second list.
 - **Group 10 (first-line indent, 段組) is 0.1.0, not 0.2.0.** — *done: #145, #146.* They are the point
   of a 縱書 editor.
 
+### 14 · One night's work, 2026-09-04
+
+The author went to sleep and left the list. What came out of it, in the order it
+was done — the numbered entries in §5.2 carry the detail:
+
+**The keys became one grammar.** 命令 ＋ 選擇 ＋ 動作: inside a sequence the
+digits are its *argument* and the verb ends it — `g3d`, `g2-5d`, `g30g`,
+`t20-20g`, `t1s`, `t2-10?` — while a count before a plain key is still a
+repetition, as in vi (`3w`, `30G`). `Enter` and `*` were retired: `Enter` is the
+key a writer presses by accident, and one keystroke too many in Normal mode used
+to make the page jump. What they did is now `g/` (find the selection, here) and
+`g?` (the same, shown in the other work area), with `t/` and `t?` the same pair
+down a table's columns. `gd`/`gw` keep their meaning.
+
+**What you have typed is on the screen** — three surfaces, one string:
+`showcmd` at the status line's right edge, a HUD beside the caret, and a
+which-key panel that opens on any half-pressed prefix and takes the corner the
+cursor is not in. The hint row gave the key lists up to the panel and went back
+to what it was for: what just happened.
+
+**The editor can teach itself.** `:help` in four sections, written from
+`COMMANDS`, `SPACE_KEYS` and the which-key lists — so it cannot drift from what
+the keys do — and `:tutor`, which copies a lesson into a file of the reader's
+own, where `u` is lesson one and every destructive key is safe.
+
+**A grid became usable by number.** A row of column numbers above the header,
+because every numeric key counts columns; `t20-20g` to a cell; `:table sort 1 a
+2 d` over any grid (and `t1s`/`t1S` from the keyboard) with the rows kept
+exactly; the detail panel showing **every** column — an empty field is a finding
+in a 拆分表 — numbered, scrolled to the field the cursor is in, and resizable.
+And a click in a grid lands where it was pointed, which it never had: the click
+map had a prose branch and a 縱書 branch and no grid branch at all.
+
+**The page learned two more settings**: 疏排 for the horizontal page (a row of
+air between rows, which is what 密排's opposite means when the writing runs
+across) and typewriter mode (the row being written stays in the middle and the
+paper moves under it).
+
+**What a language runs is config, not code.** `tinymist preview` was written
+into the front end; it is `[language.typst] preview = { run = …, kind = "server"
+}` now, with `:preview`, `:format` and `:run <name>` as language-independent
+verbs. A project may declare these, and the safety is in *how* they run: no
+shell, placeholders substituted as whole arguments, and a line that would not do
+what it says is a config error naming the file rather than a program that
+quietly does something else.
+
 ### 14 · What was deliberately left undone, 2026-09-04
 
 Three items on the list were **not** implemented, and each for a reason worth
