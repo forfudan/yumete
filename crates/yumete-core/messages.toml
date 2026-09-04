@@ -273,9 +273,6 @@ en = "moving by character — Tab goes back to cells"
 zh = "按格移動"
 en = "moving by cell"
 
-[[message]]
-zh = "排版：{0}"
-en = "layout: {0}"
 
 [[message]]
 zh = "換了 {0} 處"
@@ -855,8 +852,8 @@ zh = "還有沒存的改動（加 ! 強制）"
 en = "there are unsaved changes — add ! to override"
 
 [[message]]
-zh = "沒有檔名"
-en = "no file name"
+zh = "這份稿子還沒有名字——:w 名字 存成新檔"
+en = "this manuscript has no name yet — :w <name> writes it as a new file"
 
 [[message]]
 zh = "貼進了 {0}×{1} 格"
@@ -2174,3 +2171,15 @@ en = "nothing has been yanked — y copies, or Space p pastes from the system cl
 [[message]]
 zh = "還沒有錄過——q 開始錄，再按 q 停"
 en = "nothing recorded yet — q starts recording, q again stops"
+
+[[message]]
+zh = "收回成一個字——v 還開着，一走又跟着長"
+en = "collapsed to one character — v is still on, so the next move grows it again"
+
+[[message]]
+zh = "排版：竪排"
+en = "layout: vertical"
+
+[[message]]
+zh = "排版：橫排"
+en = "layout: horizontal"

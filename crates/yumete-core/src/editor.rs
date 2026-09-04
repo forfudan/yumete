@@ -902,7 +902,11 @@ impl fmt::Display for EditorError {
             EditorError::UnsavedChanges => {
                 write!(f, "{}", say!("還有沒存的改動（加 ! 強制）"))
             }
-            EditorError::NoFileName => write!(f, "{}", say!("沒有檔名")),
+            // A dead end otherwise: this is the first thing a new file says
+            // back, and 「沒有檔名」 alone does not tell you how to give it one.
+            EditorError::NoFileName => {
+                write!(f, "{}", say!("這份稿子還沒有名字——:w 名字 存成新檔"))
+            }
         }
     }
 }
@@ -2230,7 +2234,13 @@ impl Editor {
                     }
                     None => self.toggle_layout(),
                 };
-                self.status = say!("排版：{0}", layout.label());
+                // Not `layout.label()`: that is the config's spelling, in
+                // English, and it was being read out inside a Chinese
+                // sentence to a reader who had just switched to 竪排.
+                self.status = match layout {
+                    Layout::Vertical => say!("排版：竪排"),
+                    Layout::Horizontal => say!("排版：橫排"),
+                };
                 Ok(CommandOutcome::Continue)
             }
             Command::Ruby => {
@@ -8419,7 +8429,16 @@ impl Editor {
                 self.extend = false;
                 self.anchor = self.cursor;
             }
-            Key::Char(';') => self.anchor = self.cursor,
+            // `;` collapses the selection but leaves select mode standing —
+            // Helix's own behaviour, and the reason it looks broken to a
+            // reader who has just pressed `v`: the very next motion grows the
+            // selection again. So it says which of the two happened.
+            Key::Char(';') => {
+                self.anchor = self.cursor;
+                if self.extend {
+                    self.status = say!("收回成一個字——v 還開着，一走又跟着長");
+                }
+            }
             // Selection + changes (Helix: `x` selects the line, `d` deletes the
             // selection, `c` changes it).
             Key::Char('x') => self.repeat(count, |e| e.select_line()),
