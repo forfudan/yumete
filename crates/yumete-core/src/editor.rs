@@ -142,9 +142,7 @@ enum Pending {
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum FindKind {
     ForwardTo,
-    ForwardTill,
     BackwardTo,
-    BackwardTill,
 }
 
 /// How many hits `:grep` gathers before it stops looking.
@@ -7876,9 +7874,7 @@ impl Editor {
             Pending::Goto => "g",
             Pending::Space => "␣",
             Pending::Find(FindKind::ForwardTo) => "f",
-            Pending::Find(FindKind::ForwardTill) => "t",
             Pending::Find(FindKind::BackwardTo) => "F",
-            Pending::Find(FindKind::BackwardTill) => "T",
             Pending::Replace => "r",
             Pending::Register => "\"",
             Pending::Match => "m",
@@ -9860,7 +9856,7 @@ impl Editor {
         }
         let chars: Vec<char> = text.chars().collect();
 
-        let forward = matches!(kind, FindKind::ForwardTo | FindKind::ForwardTill);
+        let forward = kind == FindKind::ForwardTo;
         let found = if forward {
             (col + 1..chars.len()).find(|&i| chars[i] == target)
         } else {
@@ -9873,8 +9869,6 @@ impl Editor {
         };
         let head = match kind {
             FindKind::ForwardTo | FindKind::BackwardTo => line_start + idx,
-            FindKind::ForwardTill => line_start + idx.saturating_sub(1).max(col),
-            FindKind::BackwardTill => line_start + idx + 1,
         };
 
         let old = self.cursor;
@@ -17429,7 +17423,7 @@ mod tests {
         let text = ed.current_buffer().text();
         let widths: Vec<usize> = text
             .lines()
-            .map(|line| yumete_cjk::str_width(line))
+            .map(yumete_cjk::str_width)
             .collect();
         assert!(
             widths.windows(2).all(|w| w[0] == w[1]),
