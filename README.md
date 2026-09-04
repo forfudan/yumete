@@ -233,12 +233,17 @@ yumete/
 # Run the tests:
 cargo test
 
-# Build the release binary to the repo root as ./yumete, and compile + install
-# the Yume IME data into ~/.local/share/yumete (needs the sibling yume repo):
+# Build the release binary to the repo root as ./yumete, compile + install the
+# Yume IME data into ~/.local/share/yumete (needs the sibling yume repo), and
+# point ~/.local/bin/yumete at the binary so `yumete` anywhere is this build:
 scripts/build.sh
 
 # Build only the binary, skipping the IME data step:
 scripts/build.sh --no-data
+
+# Leave the global command alone (or link somewhere else):
+scripts/build.sh --no-link
+YUMETE_BIN_DIR=/usr/local/bin scripts/build.sh
 
 # Try it:
 ./yumete --help

@@ -43,9 +43,15 @@ Vim 一脈的編輯器是「動詞 + 賓語」——`dw` 是「刪一個詞」�
 ## 二、上手
 
 ```sh
-scripts/build.sh             # 編譯出 ./yumete，並安裝輸入法數據
+scripts/build.sh             # 編譯出 ./yumete，安裝輸入法數據，並接上全局的 yumete
 scripts/build.sh --no-data   # 只編譯二進制
+scripts/build.sh --no-link   # 不動全局那一條命令
 ```
+
+最後一步是把 `~/.local/bin/yumete` 指到剛編出來的那個二進制上，所以在任何目錄裏
+打 `yumete` 用的都是這一次的編譯。想放到別處：`YUMETE_BIN_DIR=/usr/local/bin`。
+那個位置上如果已經有一個**真的檔案**（不是我們建的連結），它不動——別人裝的東西
+不該被一個編譯腳本悄悄換掉。
 
 **第一次用**：進去之後打 `:tutor` ——它會把一課抄成**你自己的一個檔案**，
 邊改邊學，裏面每一個會破壞東西的鍵都可以放心按（`u` 是第一課）。

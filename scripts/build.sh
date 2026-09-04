@@ -8,7 +8,11 @@
 # user data directory (~/.local/share/yumete) so CJK input works in the editor.
 # Pass --no-data (or set YUMETE_SKIP_DATA=1) to build only the binary.
 #
-# Usage: scripts/build.sh [--no-data]
+# Finally it points ~/.local/bin/yumete at the binary it just built, so `yumete`
+# typed in any directory is this build. Set YUMETE_BIN_DIR to link elsewhere, or
+# --no-link to leave the global command alone.
+#
+# Usage: scripts/build.sh [--no-data] [--no-link]
 set -euo pipefail
 
 # Repository root (this script lives in <root>/scripts).
@@ -16,9 +20,11 @@ cd "$(dirname "$0")/.."
 YUMETE_ROOT="$(pwd)"
 
 install_data=1
+link_global=1
 for arg in "$@"; do
   case "$arg" in
     --no-data) install_data=0 ;;
+    --no-link) link_global=0 ;;
     *) echo "build.sh: unknown option '$arg'" >&2; exit 2 ;;
   esac
 done
@@ -172,4 +178,43 @@ if [[ "$install_data" == "1" ]]; then
   install_ime_data
 else
   echo "==> IME data: skipped (--no-data)"
+fi
+
+# ---- The global `yumete`: one symlink, so every build is the one on PATH -----
+#
+# Testing the editor means opening real manuscripts in whatever directory they
+# live in, so `yumete` has to work from anywhere — and it has to be *this*
+# build, not one from last week. A symlink is what makes that true without a
+# second install step: `./yumete` is rewritten above, and the link already
+# points at it, so the global command follows every build for free.
+#
+# It refuses to touch anything it did not put there. A real file at that path
+# is somebody else's install (a tap, a manual copy), and silently replacing a
+# binary the user installed on purpose is exactly the kind of thing a build
+# script must not do.
+link_globally() {
+  local bin_dir="${YUMETE_BIN_DIR:-$HOME/.local/bin}"
+  local link="$bin_dir/yumete"
+
+  mkdir -p "$bin_dir"
+  if [[ -e "$link" && ! -L "$link" ]]; then
+    echo "==> global yumete: skipped ($link is a real file, not ours — remove it or set YUMETE_BIN_DIR)"
+    return 0
+  fi
+  ln -sfn "$YUMETE_ROOT/yumete" "$link"
+  echo "==> global yumete: $link -> $YUMETE_ROOT/yumete"
+
+  # A link nothing can reach is not an install. `command -v` would find the one
+  # we just made even if the directory is absent from PATH — via the shell's
+  # own lookup of an absolute path — so ask PATH itself.
+  case ":$PATH:" in
+    *":$bin_dir:"*) ;;
+    *) echo "!! $bin_dir is not on PATH — add it, or 'yumete' from another directory is still the old one" >&2 ;;
+  esac
+}
+
+if [[ "$link_global" == "1" ]]; then
+  link_globally
+else
+  echo "==> global yumete: skipped (--no-link)"
 fi
