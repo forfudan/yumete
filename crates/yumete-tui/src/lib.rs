@@ -1552,7 +1552,7 @@ fn inline_candidate(editor: &Editor, ime: &ImeSession) -> String {
 ///
 /// In both, `bare` gives the panel back rather than showing nothing at all.
 fn page_can_hold_a_candidate(editor: &Editor) -> bool {
-    editor.prompt().is_none() && !editor.table().is_some_and(|t| t.is_grid())
+    editor.prompt().is_none() && !editor.table().is_some_and(|t| t.is_page())
 }
 
 /// Switch the IME to the named scheme, and say what happened.
@@ -1916,7 +1916,7 @@ fn page_areas(editor: &Editor, config: &Config, area: Rect) -> Areas {
     let (panes, divider) = match editor.other_pane().is_some() {
         false => ([text, Rect::new(text.x, text.y, 0, 0)], None),
         true => match editor.layout() {
-            WritingLayout::Vertical if !editor.table().is_some_and(|t| t.is_grid()) => {
+            WritingLayout::Vertical if !editor.table().is_some_and(|t| t.is_page()) => {
                 let half = text.width.saturating_sub(1) / 2;
                 let rule = Rect::new(text.x + half, text.y, 1.min(text.width), text.height);
                 let right = Rect::new(
@@ -2004,7 +2004,7 @@ fn draw(
             // A `|` table lives inside a page of prose and is drawn by whatever
             // draws that page — the paragraph above it must not vanish because
             // the cursor landed in a cell.
-            _ if editor.table().is_some_and(|t| t.is_grid()) => {
+            _ if editor.table().is_some_and(|t| t.is_page()) => {
                 table::draw(frame, editor, config, *rect, &mut seat.table, peek)
             }
             WritingLayout::Horizontal => {
@@ -2674,7 +2674,7 @@ fn text_at(
     // the file behind them is ragged, and it scrolls sideways by whole columns
     // — so resolving a click as if the page were prose landed it somewhere
     // else on every table, off by the padding of every column to the left.
-    if editor.table().is_some_and(|t| t.is_grid()) {
+    if editor.table().is_some_and(|t| t.is_page()) {
         return table::char_at(editor, config, area, &viewport.table, mouse);
     }
     match editor.layout() {
@@ -3376,7 +3376,7 @@ fn draw_horizontal(
     // so the ground was drawn on prose. The rule row goes with them: it is the
     // drawing of the alignments, `clear_cell` refuses it and `move_cell_row`
     // steps over it, so a ground saying「an edit lands here」would be a lie.
-    let cell = match peek.is_none() && editor.table().is_some_and(|t| !t.is_grid()) {
+    let cell = match peek.is_none() && editor.table().is_some_and(|t| t.in_prose()) {
         true => editor.md_region().and_then(|region| {
             editor
                 .cell_position()

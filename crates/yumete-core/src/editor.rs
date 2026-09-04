@@ -398,35 +398,99 @@ pub struct TableView {
     goal: usize,
     /// What one step of `hjkl` moves by.
     pub grain: Grain,
-    /// Whether the grid is the file or a table inside a document.
-    pub shape: Shape,
+    /// What splits one cell from the next.
+    pub separator: Separator,
+    /// What the table is drawn on.
+    pub surface: Surface,
+    /// Where the table starts and stops.
+    pub bounds: Bounds,
 }
 
-/// What kind of table is being read.
+/// What splits one cell of a row from the next (#261).
 ///
-/// The cell model is the same for both — land on a cell, walk to the next one,
-/// add a row — and everything else differs, which is why this is one enum and
-/// not two modes.
+/// **The splitter, and nothing else.** It used to be half of `Shape`, whose
+/// other half was which renderer draws the thing — so every one of the twenty
+/// tests against it had to be reread to find out which of the two questions it
+/// was really asking.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Shape {
-    /// The whole file, split on a delimiter, and **drawn as a grid**: the
-    /// columns line up on the terminal because the renderer puts them there,
-    /// and the file on disk is untouched.
-    Delimited,
-    /// A `|` table inside a document, **drawn as the document it is in**. The
-    /// columns line up because the text itself is padded — which is what a
-    /// Markdown table is supposed to look like anyway.
-    Markdown,
+pub enum Separator {
+    /// One character between cells: `,` in a CSV, a tab in a TSV, and — when
+    /// the third tier of #261 lands — `&` in LaTeX or Typst. Every line of the
+    /// file is a row.
+    Delimiter(char),
+    /// Markdown's own spelling: a `|` on both sides of every cell. **Only** a
+    /// line that opens with one is a row, which is what lets a table live in a
+    /// chapter without the paragraphs around it becoming cells.
+    Pipe,
+}
+
+/// What the table is drawn on (#261).
+///
+/// The author's model, 2026-09-05: 「csv 文件等同于一个从第一行到最后一行都是表格
+/// 的普通文本文件」 — a CSV is not a different kind of thing from a table in a
+/// document, so which of the two renderers draws it is a fact about the table,
+/// not about its splitter.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Surface {
+    /// A page of its own, drawn by `yumete-tui`'s grid widget: the columns line
+    /// up because the renderer puts them there, the header freezes at the top,
+    /// and the file on disk is untouched. Only this surface turns a 縱書 page
+    /// horizontal — a grid is read across, and that is the one thing 縱書
+    /// cannot do.
+    Page,
+    /// Drawn as part of the document it sits in, through #212's ghost padding:
+    /// the columns line up because the text itself is padded. The paragraph
+    /// above the table does not vanish the moment the cursor lands in a cell,
+    /// and a 縱書 chapter stays 縱書.
+    InProse,
+}
+
+/// Where the table starts and stops (#261).
+///
+/// **The rule, not the answer.** The lines are walked from the cursor every
+/// time they are wanted — a document is edited while the table is open, so a
+/// stored pair of line numbers is wrong one keystroke later.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Bounds {
+    /// The first line to the last. A schema, or a name like `.csv`, is a person
+    /// saying「this whole file is one table」, and the boundary is the one thing
+    /// that used to have no value at all for such a file — it was the *absence*
+    /// of `md_region()`, which is why a CSV and a `|` table could not share a
+    /// code path.
+    WholeFile,
+    /// Walked out from the cursor by [`crate::mdtable::region`]: up and down
+    /// while the line is still a `|` row, and never into a fenced block.
+    Md,
 }
 
 impl TableView {
-    /// Whether this is the grid the table renderer draws.
+    /// Whether this table is drawn on a page of its own.
+    pub fn is_page(&self) -> bool {
+        self.surface == Surface::Page
+    }
+
+    /// Whether it is drawn as part of the document it sits in.
+    pub fn in_prose(&self) -> bool {
+        self.surface == Surface::InProse
+    }
+
+    /// Where the cells of one line are — what an edit takes.
+    pub fn cells(&self, line: &str) -> Vec<(usize, usize)> {
+        match self.separator {
+            Separator::Pipe => crate::mdtable::cells(line),
+            Separator::Delimiter(d) => crate::table::cells(line, d),
+        }
+    }
+
+    /// Where the **boxes** of one line are — what a reader sees as one cell.
     ///
-    /// A Markdown table is part of a page of prose: it is drawn by whatever
-    /// draws the page, so that the paragraph above it does not vanish the
-    /// moment the cursor lands in a cell.
-    pub fn is_grid(&self) -> bool {
-        self.shape == Shape::Delimited
+    /// The two differ only for a `|` table, where the spaces around the content
+    /// are the column's own width. See [`Editor::row_cell_boxes`].
+    pub fn boxes(&self, line: &str) -> Vec<(usize, usize)> {
+        match self.separator {
+            Separator::Pipe => crate::mdtable::boxes(line),
+            Separator::Delimiter(d) => crate::table::cells(line, d),
+        }
     }
 }
 
@@ -2624,7 +2688,7 @@ impl Editor {
                     Some(l) => l == Layout::Vertical,
                     None => self.layout == Layout::Horizontal,
                 };
-                if self.table.as_ref().is_some_and(|v| v.is_grid()) && wants_vertical {
+                if self.table.as_ref().is_some_and(|v| v.is_page()) && wants_vertical {
                     self.status = say!("table.vertical-not-allowed");
                     return Ok(CommandOutcome::Continue);
                 }
@@ -3384,7 +3448,8 @@ impl Editor {
         // …unless a schema already claims the file. A schema is a person
         // saying what this data is, and a row of it that happens to open with
         // a pipe does not get to overrule them.
-        if self.md_row_at_cursor() && self.table.as_ref().map(|v| v.shape) != Some(Shape::Delimited)
+        if self.md_row_at_cursor()
+            && self.table.as_ref().map(|v| v.bounds) != Some(Bounds::WholeFile)
         {
             // A line that opens with `|` inside a fenced block is *an example
             // of* a table — the manual has several — and reformatting one
@@ -3429,12 +3494,15 @@ impl Editor {
             }
         };
         let columns = schema.columns.len();
+        let delimiter = schema.delimiter;
         self.table = Some(TableView {
             schema,
             from,
             goal: 0,
             grain: Grain::Cell,
-            shape: Shape::Delimited,
+            separator: Separator::Delimiter(delimiter),
+            surface: Surface::Page,
+            bounds: Bounds::WholeFile,
         });
         // A grid is read across: rows run left to right and columns stack down
         // the page, which is the one thing a 縱書 layout cannot do. Rather than
@@ -3518,12 +3586,15 @@ impl Editor {
         };
         let (found, problems) = crate::table::schema_for_reporting(&path);
         if let Some((from, schema)) = found {
+            let delimiter = schema.delimiter;
             self.table = Some(TableView {
                 schema,
                 from,
                 goal: 0,
                 grain: Grain::Cell,
-                shape: Shape::Delimited,
+                separator: Separator::Delimiter(delimiter),
+                surface: Surface::Page,
+                bounds: Bounds::WholeFile,
             });
             // The same door as `:table`, and the same rule: a grid is read
             // across. This is the door the manual calls the ordinary one —
@@ -3540,10 +3611,12 @@ impl Editor {
 
     /// Turn the page horizontal for a grid, remembering what it was.
     fn turn_for_table(&mut self) -> bool {
-        // Only a whole-file grid is drawn as a grid. A `|` table is part of a
-        // page, and turning the page sideways to edit three lines of it would
-        // throw away everything around them.
-        if self.table.as_ref().map(|v| v.shape) == Some(Shape::Markdown) {
+        // **The surface, and only the surface** (#261). A table drawn in prose
+        // is part of a page, and turning the page sideways to edit three lines
+        // of it would throw away everything around them. This line always meant
+        // that; it used to have to say it by naming Markdown, which made it
+        // read as an exception for one kind of table.
+        if self.table.as_ref().is_some_and(|v| v.in_prose()) {
             return false;
         }
         if self.layout != Layout::Vertical {
@@ -3566,9 +3639,9 @@ impl Editor {
     /// the grid back. A mode scoped to the thing it is about never has to be
     /// turned off.
     fn table_here(&self) -> bool {
-        match self.table.as_ref().map(|v| v.shape) {
-            Some(Shape::Delimited) => true,
-            Some(Shape::Markdown) => self.md_region().is_some(),
+        match self.table.as_ref().map(|v| v.bounds) {
+            Some(Bounds::WholeFile) => true,
+            Some(Bounds::Md) => self.md_region().is_some(),
             None => false,
         }
     }
@@ -3647,7 +3720,7 @@ impl Editor {
     /// the walk costs a few lines around the cursor. So the region is a
     /// question the editor asks, not a fact it keeps.
     pub fn md_region(&self) -> Option<crate::mdtable::Region> {
-        if self.table.as_ref().map(|v| v.shape) != Some(Shape::Markdown) {
+        if self.table.as_ref().map(|v| v.bounds) != Some(Bounds::Md) {
             return None;
         }
         let rope = self.current_buffer().rope();
@@ -3698,7 +3771,9 @@ impl Editor {
             from: PathBuf::new(),
             goal: 0,
             grain: Grain::Cell,
-            shape: Shape::Markdown,
+            separator: Separator::Pipe,
+            surface: Surface::InProse,
+            bounds: Bounds::Md,
         });
         // A header with no rule under it is a table nobody can render yet —
         // and the person is standing in it, so they meant to write one. Adding
@@ -4001,9 +4076,10 @@ impl Editor {
             self.status = say!("table.not-in-a-table");
             return;
         };
-        // A `|` table in a document is laid out as text, and it already has a
-        // sort that keeps that layout right.
-        if view.shape == Shape::Markdown {
+        // A table laid out **in the text** already has a sort that keeps that
+        // layout right: moving its rows means rewriting them, padding and all,
+        // where a grid's rows are moved and the renderer lays them out again.
+        if view.in_prose() {
             let descending = keys.first().map(|&(_, d)| d).unwrap_or(false);
             if let Some((column, _)) = keys.first() {
                 let line = self.cursor_line();
@@ -4228,14 +4304,10 @@ impl Editor {
         if line >= rope.len_lines() {
             return Vec::new();
         }
-        let text = rope.line(line).to_string();
-        match view.shape {
-            // A Markdown cell's padding is layout, not content: it is not in
-            // the span, so landing on a cell lands on its first real
-            // character rather than on the space before it.
-            Shape::Markdown => crate::mdtable::cells(&text),
-            Shape::Delimited => crate::table::cells(&text, view.schema.delimiter),
-        }
+        // A `|` cell's padding is layout, not content: it is not in the span,
+        // so landing on a cell lands on its first real character rather than on
+        // the space before it.
+        view.cells(&rope.line(line).to_string())
     }
 
     /// Where every cell's **box** begins and ends — its padding included.
@@ -4255,13 +4327,10 @@ impl Editor {
         if line >= rope.len_lines() {
             return Vec::new();
         }
-        let text = rope.line(line).to_string();
-        match view.shape {
-            Shape::Markdown => crate::mdtable::boxes(&text),
-            // A delimited row has no padding to include: the cells are already
-            // contiguous, delimiter to delimiter.
-            Shape::Delimited => crate::table::cells(&text, view.schema.delimiter),
-        }
+        // A delimited row has no padding to include: its cells are already
+        // contiguous, delimiter to delimiter, which is why `boxes` and `cells`
+        // are the same answer there.
+        view.boxes(&rope.line(line).to_string())
     }
 
     /// The buffer range one cell's box covers, padding included.
@@ -5156,10 +5225,7 @@ impl Editor {
             if line.trim().is_empty() {
                 continue;
             }
-            let got = match view.shape {
-                Shape::Markdown => crate::mdtable::cells(line).len(),
-                Shape::Delimited => crate::table::cells(line, view.schema.delimiter).len(),
-            };
+            let got = view.cells(line).len();
             if got != want {
                 return Some(say!("table.filter-changed-shape", i + 1, got, want));
             }
@@ -5852,11 +5918,7 @@ impl Editor {
             return;
         };
         let Some(view) = &self.table else { return };
-        let (d, columns, markdown) = (
-            view.schema.delimiter,
-            view.schema.columns.len(),
-            view.shape == Shape::Markdown,
-        );
+        let (separator, columns) = (view.separator, view.schema.columns.len());
         let body = text.trim_end_matches(['\n', '\r']);
         // A block of cells — what a spreadsheet puts on the clipboard. It goes
         // in **at the cursor's cell**, filling right and down from there, which
@@ -5870,10 +5932,11 @@ impl Editor {
         // A Markdown row says what it is by its own pipes, so it is recognised
         // by the same test that finds a table in the first place.
         let is_row = !body.contains(['\n', '\r'])
-            && if markdown {
-                crate::mdtable::is_row(body)
-            } else {
-                body.chars().filter(|&c| c == d).count() + 1 == columns && columns > 1
+            && match separator {
+                Separator::Pipe => crate::mdtable::is_row(body),
+                Separator::Delimiter(d) => {
+                    body.chars().filter(|&c| c == d).count() + 1 == columns && columns > 1
+                }
             };
         if is_row {
             let body = body.to_string();
@@ -6004,8 +6067,7 @@ impl Editor {
             },
         };
         let anchored = pattern.contains('^') || pattern.contains('$');
-        let markdown = view.shape == Shape::Markdown;
-        let delimiter = view.schema.delimiter;
+        let separator = view.separator;
         let first = usize::from(view.schema.header);
         let region = self.md_region();
         let rope = self.current_buffer().rope();
@@ -6050,9 +6112,9 @@ impl Editor {
             if !anchored && !re.is_match(text) {
                 continue;
             }
-            let spans = match markdown {
-                true => crate::mdtable::cells(text),
-                false => crate::table::cells(text, delimiter),
+            let spans = match separator {
+                Separator::Pipe => crate::mdtable::cells(text),
+                Separator::Delimiter(d) => crate::table::cells(text, d),
             };
             let line_start = here;
             // The row's characters, once. `cell_text` walks the row from the
@@ -6272,9 +6334,9 @@ impl Editor {
     /// the 拆分表 is in whenever the project has no schema file. A `.csv` is a
     /// grid because of its own name; a `|` table is a grid because of what is
     /// written there.
-    fn grid_shape_here(&self) -> Option<(char, bool)> {
+    fn grid_shape_here(&self) -> Option<Separator> {
         if let Some(view) = self.table.as_ref() {
-            return Some((view.schema.delimiter, view.shape == Shape::Markdown));
+            return Some(view.separator);
         }
         let extension = self
             .current_buffer()
@@ -6284,9 +6346,9 @@ impl Editor {
             .unwrap_or_default()
             .to_ascii_lowercase();
         match extension.as_str() {
-            "csv" => Some((',', false)),
-            "tsv" | "tab" => Some(('\t', false)),
-            _ => Some(('|', true)),
+            "csv" => Some(Separator::Delimiter(',')),
+            "tsv" | "tab" => Some(Separator::Delimiter('\t')),
+            _ => Some(Separator::Pipe),
         }
     }
 
@@ -6301,7 +6363,8 @@ impl Editor {
         span: (usize, usize),
         text: &str,
     ) -> Option<String> {
-        let (delimiter, rows_only) = self.grid_shape_here()?;
+        let separator = self.grid_shape_here()?;
+        let rows_only = separator == Separator::Pipe;
         let rope = self.current_buffer().rope();
         let line = rope.char_to_line(span.0.min(rope.len_chars()));
         if rows_only {
@@ -6315,9 +6378,9 @@ impl Editor {
             .slice(span.0.min(rope.len_chars())..span.1.min(rope.len_chars()))
             .to_string();
         let cells = |s: &str| -> usize {
-            match rows_only {
-                true => crate::mdtable::pipes_from(s, false).len(),
-                false => s.chars().filter(|&c| c == delimiter).count(),
+            match separator {
+                Separator::Pipe => crate::mdtable::pipes_from(s, false).len(),
+                Separator::Delimiter(d) => s.chars().filter(|&c| c == d).count(),
             }
         };
         let (before, after) = (cells(&was), cells(text));
@@ -6389,7 +6452,7 @@ impl Editor {
         if self.md_rule_here() {
             return Some("分隔行是畫出來的——用 t < = > 改對齊".to_string());
         }
-        if view.shape == Shape::Markdown {
+        if view.separator == Separator::Pipe {
             let escaped = at.is_some_and(|a| self.backslash_before(a));
             if crate::mdtable::has_bare_pipe(text, escaped) {
                 return Some("'|' 分隔格子——格子裏要寫，寫成 \\|".to_string());
@@ -6437,7 +6500,7 @@ impl Editor {
         }
         // The escape again: `\|` inside a cell is not a boundary, so taking it
         // out is not taking a boundary out.
-        if self.table.as_ref().map(|v| v.shape) == Some(Shape::Markdown) {
+        if self.table.as_ref().map(|v| v.separator) == Some(Separator::Pipe) {
             let escaped = self.backslash_before(range.start);
             let text = rope.slice(range).to_string();
             return (crate::mdtable::has_bare_pipe(&text, escaped)
@@ -6464,14 +6527,12 @@ impl Editor {
             return String::new();
         }
         match &self.table {
-            Some(view) if view.shape == Shape::Markdown => {
-                crate::mdtable::blank_row(view.schema.columns.len())
-            }
-            Some(view) => view
-                .schema
-                .delimiter
-                .to_string()
-                .repeat(view.schema.columns.len().saturating_sub(1)),
+            Some(view) => match view.separator {
+                Separator::Pipe => crate::mdtable::blank_row(view.schema.columns.len()),
+                Separator::Delimiter(d) => {
+                    d.to_string().repeat(view.schema.columns.len().saturating_sub(1))
+                }
+            },
             None => String::new(),
         }
     }
@@ -6511,7 +6572,7 @@ impl Editor {
         // answers there is the document's question — what is this footnote,
         // what does this comment say — not "what are this row's twenty-eight
         // fields", which a two-column table does not have.
-        match self.table.as_ref().is_some_and(|v| v.is_grid()) {
+        match self.table.as_ref().is_some_and(|v| v.is_page()) {
             true => self.row_detail(),
             false => self.note_detail(),
         }
@@ -7057,7 +7118,7 @@ impl Editor {
             return;
         };
         let schema = view.schema.clone();
-        let markdown = view.shape == Shape::Markdown;
+        let separator = view.separator;
         let name = self
             .current_buffer()
             .path()
@@ -7079,9 +7140,9 @@ impl Editor {
         let mut keys: Vec<String> = Vec::new();
         for line in first..=last {
             let text = rope.line(line).to_string();
-            let spans = match markdown {
-                true => crate::mdtable::cells(&text),
-                false => crate::table::cells(&text, schema.delimiter),
+            let spans = match separator {
+                Separator::Pipe => crate::mdtable::cells(&text),
+                Separator::Delimiter(d) => crate::table::cells(&text, d),
             };
             if text.trim().is_empty() {
                 continue;
@@ -7129,9 +7190,9 @@ impl Editor {
             .collect();
         for line in first..=last {
             let text = rope.line(line).to_string();
-            let spans = match markdown {
-                true => crate::mdtable::cells(&text),
-                false => crate::table::cells(&text, schema.delimiter),
+            let spans = match separator {
+                Separator::Pipe => crate::mdtable::cells(&text),
+                Separator::Delimiter(d) => crate::table::cells(&text, d),
             };
             let mut missing: Vec<char> = Vec::new();
             for &i in &jump_from {
@@ -7336,7 +7397,7 @@ impl Editor {
         // Only a whole-file grid. A `|` table is part of a page, and a page
         // is set the way the manuscript is set — otherwise running `:table`
         // once locked a 縱書 manuscript horizontal for the session.
-        if layout == Layout::Vertical && self.table.as_ref().is_some_and(|v| v.is_grid()) {
+        if layout == Layout::Vertical && self.table.as_ref().is_some_and(|v| v.is_page()) {
             return;
         }
         self.layout = layout;
@@ -11865,7 +11926,8 @@ impl Editor {
         // used to open with `self.table.as_ref()?`, so `:replace` — which
         // reaches every file `:grep` found, including files never opened — went
         // through 13 rows of the author's own documentation and broke them.
-        let (d, rows_only) = self.grid_shape_here()?;
+        let separator = self.grid_shape_here()?;
+        let rows_only = separator == Separator::Pipe;
         // A delimited file is all cells. A document is not: only its table
         // rows are, and a paragraph that gains a `|` has gained a character.
         // Counting the whole document refused `:%s/前文/前 | 文/` on a line
@@ -11883,9 +11945,9 @@ impl Editor {
                     // Unescaped only: `\|` is a pipe *inside* a cell, and the
                     // manual promises it works — so a substitution that adds
                     // one must not be refused as if it split a row.
-                    let cells = match rows_only {
-                        true => crate::mdtable::pipes_from(l, false).len(),
-                        false => l.chars().filter(|&c| c == d).count(),
+                    let cells = match separator {
+                        Separator::Pipe => crate::mdtable::pipes_from(l, false).len(),
+                        Separator::Delimiter(d) => l.chars().filter(|&c| c == d).count(),
                     };
                     (n, cells)
                 })
@@ -16744,7 +16806,7 @@ mod tests {
         ed.set_layout(Layout::Vertical);
         assert!(ed.enter_table());
         assert_eq!(ed.layout(), Layout::Vertical);
-        assert!(!ed.table().unwrap().is_grid());
+        assert!(!ed.table().unwrap().is_page());
     }
 
     #[test]
