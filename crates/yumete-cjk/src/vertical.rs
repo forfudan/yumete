@@ -57,8 +57,12 @@ impl Layout {
     /// Parse a layout from a config value or a `:layout` argument.
     pub fn parse(value: &str) -> Option<Layout> {
         match value.trim().to_ascii_lowercase().as_str() {
-            "vertical" | "vert" | "v" => Some(Layout::Vertical),
-            "horizontal" | "horiz" | "h" => Some(Layout::Horizontal),
+            // The Chinese names too: `:layout 竪排` is what a writer of this
+            // editor's own manual would type, and it was a syntax error.
+            "vertical" | "vert" | "v" | "竪排" | "豎排" | "直排" | "縱書" | "纵书" => {
+                Some(Layout::Vertical)
+            }
+            "horizontal" | "horiz" | "h" | "橫排" | "横排" => Some(Layout::Horizontal),
             _ => None,
         }
     }
