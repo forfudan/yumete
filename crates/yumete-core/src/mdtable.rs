@@ -773,6 +773,92 @@ pub fn blank_row(columns: usize) -> String {
     text
 }
 
+// ---- Delimited text, both ways (Feature #227) ----------------------------
+
+/// Write a cell so that reading the row back gives this text again.
+///
+/// A `|` table has exactly one escape, `\|`, and [`pipes_from`] already reads
+/// it. A backslash is doubled as well, and it has to be: a cell holding `\|`
+/// as its own text would otherwise be written `\\|`, where the two backslashes
+/// read as one escaped backslash and the pipe that follows is bare — the row
+/// would come back a cell too many.
+pub fn escape(cell: &str) -> String {
+    cell.replace('\\', r"\\").replace('|', r"\|")
+}
+
+/// Read a cell's own text back out of a table.
+///
+/// Only the two escapes [`escape`] writes are undone. Anything else after a
+/// backslash is left exactly as it stands — `C:\next` is a path somebody typed,
+/// not an escaped `n`, and an unescaper that dropped the backslash would eat a
+/// character out of a cell it was only asked to copy.
+pub fn unescape(cell: &str) -> String {
+    let mut out = String::with_capacity(cell.len());
+    let mut chars = cell.chars().peekable();
+    while let Some(c) = chars.next() {
+        if c == '\\' && matches!(chars.peek(), Some('\\') | Some('|')) {
+            out.push(chars.next().unwrap_or('\\'));
+        } else {
+            out.push(c);
+        }
+    }
+    out
+}
+
+/// Turn delimited lines into the lines of a `|` table.
+///
+/// The first line becomes the header and a rule row is written under it —
+/// which is what makes the result a table rather than five lines that begin
+/// with a pipe. Cells are trimmed, because the padding is about to be put back
+/// by [`compose`] and two lots of it would only be crooked.
+pub fn from_delimited(lines: &[String], delimiter: char) -> Vec<String> {
+    let rows: Vec<Vec<String>> = lines
+        .iter()
+        .map(|line| {
+            crate::table::cells(line, delimiter)
+                .into_iter()
+                .map(|span| escape(crate::table::cell_text(line, span).trim()))
+                .collect()
+        })
+        .collect();
+    if rows.is_empty() {
+        return Vec::new();
+    }
+    compose(&Parts {
+        rows,
+        aligns: Vec::new(),
+        ruled: true,
+        indent: String::new(),
+    })
+}
+
+/// Turn a `|` table's lines into delimited ones, or say which cell will not go.
+///
+/// `Err((row, column))` counting from zero over what [`parse`] sees — so the
+/// header is row 0 and the rule row is not counted at all.
+///
+/// **A cell holding the delimiter is refused, not quoted.** That is the same
+/// stance [`crate::table`] takes at the keyboard: a file where one cell is
+/// quoted and the rest are not is a file that reads correctly in one program
+/// and shifts every column right of the damage in the next. There is another
+/// delimiter, and the writer knows their data well enough to pick it.
+pub fn to_delimited(lines: &[String], delimiter: char) -> Result<Vec<String>, (usize, usize)> {
+    let parts = parse(lines);
+    let mut out = Vec::with_capacity(parts.rows.len());
+    for (r, row) in parts.rows.iter().enumerate() {
+        let mut cells = Vec::with_capacity(row.len());
+        for (c, cell) in row.iter().enumerate() {
+            let text = unescape(cell);
+            if text.contains(delimiter) {
+                return Err((r, c));
+            }
+            cells.push(text);
+        }
+        out.push(cells.join(&delimiter.to_string()));
+    }
+    Ok(out)
+}
+
 /// The columns a header row names.
 ///
 /// A Markdown table carries its own schema and nothing more: the names on the
@@ -1041,6 +1127,71 @@ mod tests {
         // `:-:` needs three columns of dashes-and-colons whatever the data is.
         let out = padded("| a |\n| :-: |\n", &[]);
         assert_eq!(out[1], "| :-: |");
+    }
+
+    #[test]
+    fn delimited_text_becomes_a_table_and_comes_back() {
+        let lines: Vec<String> = ["字,讀音,義", "永,ㄩㄥˇ,長", "和,ㄏㄜˊ,調"]
+            .iter()
+            .map(|s| s.to_string())
+            .collect();
+        let table = from_delimited(&lines, ',');
+        // Lined up **on the terminal**: 讀音 is two 漢字 wide, ㄩㄥˇ is four
+        // cells, and the pipes still land in the same column.
+        assert_eq!(table[0], "| 字 | 讀音  | 義 |");
+        assert_eq!(table[1], "| -- | ----- | -- |");
+        assert_eq!(table[2], "| 永 | ㄩㄥˇ | 長 |");
+        assert_eq!(table.len(), 4, "header, rule, two rows: {table:?}");
+        // …and back, the rule row gone and the padding with it.
+        assert_eq!(to_delimited(&table, ',').unwrap(), lines);
+    }
+
+    #[test]
+    fn a_pipe_in_a_cell_survives_the_round_trip() {
+        let lines = vec!["式,義".to_string(), "a|b,或".to_string()];
+        let table = from_delimited(&lines, ',');
+        // Written as the one escape a `|` table has…
+        assert!(table[2].contains(r"a\|b"), "{:?}", table[2]);
+        // …and it is still one cell: three pipes on the row, not four.
+        assert_eq!(split(&table[2]), ["a\\|b", "或"]);
+        assert_eq!(to_delimited(&table, ',').unwrap(), lines);
+    }
+
+    #[test]
+    fn a_backslash_in_a_cell_does_not_turn_the_next_pipe_loose() {
+        // The cell's own text is `a\|b` — a backslash, then a pipe. Escaping
+        // only the pipe writes `a\\|b`, where the two backslashes are an
+        // escaped backslash and the pipe that follows is *bare*: the row comes
+        // back three cells instead of two. Hence the doubling.
+        let lines = vec!["式,義".to_string(), r"a\|b,或".to_string()];
+        let table = from_delimited(&lines, ',');
+        assert_eq!(split(&table[2]).len(), 2, "{:?}", table[2]);
+        assert_eq!(to_delimited(&table, ',').unwrap(), lines);
+    }
+
+    #[test]
+    fn an_ordinary_backslash_is_left_alone_on_the_way_out() {
+        // A hand-written table nobody escaped: `C:\next` is a path, and an
+        // unescaper that read `\n` would hand back `C:next`.
+        assert_eq!(unescape(r"C:\next"), r"C:\next");
+        assert_eq!(unescape(r"a\|b"), "a|b");
+        assert_eq!(unescape(r"a\\b"), r"a\b");
+    }
+
+    #[test]
+    fn a_cell_holding_the_delimiter_is_refused_rather_than_quoted() {
+        let table = vec![
+            "| 字 | 註 |".to_string(),
+            "| -- | -- |".to_string(),
+            "| 永 | 長, 久 |".to_string(),
+        ];
+        // Row 1 (the header is row 0), column 1 — where a reader can find it.
+        assert_eq!(to_delimited(&table, ','), Err((1, 1)));
+        // The same table goes out fine under a delimiter its cells do not hold.
+        assert_eq!(
+            to_delimited(&table, '\t').unwrap(),
+            ["字\t註", "永\t長, 久"]
+        );
     }
 
     #[test]
