@@ -52,23 +52,22 @@ const GAP: usize = 1;
 /// `last` is the table's last row, not the file's: since 2026-09-05 the widget
 /// is given `|` tables that are three lines of a chapter, and measuring the
 /// chapter under them would make every column as wide as the prose.
-fn widths(editor: &Editor, first: usize, rows: usize, last: usize) -> Vec<usize> {
+fn widths(editor: &Editor, anchor: usize, first: usize, rows: usize, last: usize) -> Vec<usize> {
     let Some(view) = editor.table() else {
         return Vec::new();
     };
     // A hidden column is drawn at no width at all — which is what `hidden`
     // buys: two of the 拆分表's twenty-eight are empty in all 123,380 rows and
     // were costing eight cells each across the whole page.
-    let headings = editor.table_headings();
-    let mut widths: Vec<usize> = view
-        .schema
-        .columns
-        .iter()
-        .enumerate()
-        .map(|(i, c)| match c.hidden {
+    let headings = editor.table_headings_at(anchor);
+    // **This** table's columns, not the schema's: `t ]` into the next table of
+    // a document lands in one with a different number of them.
+    let mut widths: Vec<usize> = (0..editor.table_column_count_at(anchor))
+        .map(|i| match view.schema.columns.get(i).is_some_and(|c| c.hidden) {
             true => 0,
             false => {
-                let text = headings.get(i).map(String::as_str).unwrap_or(c.heading());
+                let named = view.schema.columns.get(i).map(|c| c.heading());
+                let text = headings.get(i).map(String::as_str).or(named).unwrap_or("");
                 yumete_cjk::str_width(text).clamp(MIN_COLUMN, MAX_COLUMN)
             }
         })
@@ -166,7 +165,7 @@ pub fn char_at(
         return Some(start);
     }
     let gutter = crate::gutter_width(lines, config.editor.line_numbers) as u16;
-    let widths = widths(editor, viewport.top, rows, bottom);
+    let widths = widths(editor, editor.cursor_line(), viewport.top, rows, bottom);
     let right = area.x + area.width;
     // Walk the columns the way they were drawn, and stop at the one the
     // pointer is in.
@@ -217,7 +216,17 @@ pub fn draw(
     // this widget a `|` table that is three lines of a chapter, and the rows
     // below are the chapter — measured, scrolled through and clicked on, they
     // would be the chapter drawn as a grid.
-    let Some((top_row, bottom_row)) = editor.table_row_span() else {
+    // **Whose table**: a pane that is only being read is parked on a line of
+    // its own, and every one of these questions is about the table *that* line
+    // is in — its rows, its headings, how many columns it has.
+    let anchor = match peek {
+        None => editor.cursor_line(),
+        Some(pane) => {
+            let rope = editor.current_buffer().rope();
+            rope.char_to_line(pane.cursor().min(rope.len_chars()))
+        }
+    };
+    let Some((top_row, bottom_row)) = editor.table_row_span_at(anchor) else {
         return (area.x, area.y);
     };
     // A pane that is only being read is scrolled around the row it was opened
@@ -268,7 +277,10 @@ pub fn draw(
 
     let gutter = gutter_width(lines, config.editor.line_numbers) as u16;
     let room = area.width.saturating_sub(gutter) as usize;
-    let widths = widths(editor, viewport.top, rows, bottom_row);
+    let widths = widths(editor, anchor, viewport.top, rows, bottom_row);
+    // How many columns this table has — what a row is measured against when
+    // asking whether it is ragged, and where the drawn extras start.
+    let columns = editor.table_column_count_at(anchor);
     scroll_columns(&widths, room, cursor_cell, &mut viewport.left);
 
     let ink = match peek {
@@ -345,7 +357,7 @@ pub fn draw(
         }
         let quiet = gutter_style.fg(ink.furniture());
         let mut x = area.x + gutter;
-        for (i, _) in view.schema.columns.iter().enumerate().skip(viewport.left) {
+        for i in viewport.left..widths.len() {
             let w = widths[i] as u16;
             if x + w > right {
                 break;
@@ -372,9 +384,9 @@ pub fn draw(
                 cell.set_symbol(" ").set_style(gutter_style);
             }
         }
-        let headings = editor.table_headings();
+        let headings = editor.table_headings_at(anchor);
         let mut x = area.x + gutter;
-        for (i, column) in view.schema.columns.iter().enumerate().skip(viewport.left) {
+        for i in viewport.left..widths.len() {
             let w = widths[i] as u16;
             if x + w > right {
                 break;
@@ -384,7 +396,8 @@ pub fn draw(
             } else {
                 head_style
             };
-            let text = headings.get(i).map(String::as_str).unwrap_or(column.heading());
+            let named = view.schema.columns.get(i).map(|c| c.heading());
+            let text = headings.get(i).map(String::as_str).or(named).unwrap_or("");
             put_text(buf, x, head_y, (x + w).min(right), text, style);
             // A hidden column takes no gap either — a column of
             // nothing is not a column with a space beside it.
@@ -440,7 +453,7 @@ pub fn draw(
                     // hit you are standing on.
                     Some(_) => Style::default().bg(ink.wash()),
                 }
-            } else if ragged && i >= view.schema.columns.len() {
+            } else if ragged && i >= columns {
                 band_if(line == cursor_row, band, text).patch(torn)
             } else {
                 band_if(line == cursor_row, band, text)
@@ -496,7 +509,7 @@ pub fn draw(
                     .set_style(band_if(line == cursor_row, band, page));
             }
         }
-        if ragged && cells.len() < view.schema.columns.len() {
+        if ragged && cells.len() < columns {
             put_text(buf, x.min(right), y, right, "⟨缺⟩", quiet.patch(torn));
         }
     }
