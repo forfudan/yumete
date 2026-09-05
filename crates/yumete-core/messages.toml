@@ -1040,6 +1040,22 @@ en = "coloured, the markup staying on the page (the default)"
 find = "著色 着色 高亮 highlight"
 
 [[message]]
+# : 命令選單裏 auto 那一項的說明（ruby 組）
+key = "cmd.ruby.auto"
+zht = "按詞自動注音（選中的，或者整份）"
+zhs = "按词自动注音（选中的，或者整份）"
+en = "write the readings in, by word (the selection, or the file)"
+find = "注音 拼音 自動 自动 生成 標音 标音 逐詞 逐词 pinyin auto"
+
+[[message]]
+# : 命令選單裏 rare 那一項的說明（ruby.auto 組）
+key = "cmd.ruby.auto.rare"
+zht = "只注通用規範漢字表以外的那些字"
+zhs = "只注通用规范汉字表以外的那些字"
+en = "annotate only the characters outside 通用規範漢字表"
+find = "生僻 冷僻 罕見 罕见 難字 难字 字集 通用規範 通用规范 rare"
+
+[[message]]
 # : 命令選單裏 format 那一項的說明（ruby 組）
 key = "cmd.ruby.format"
 zht = "把注音改寫成另一種寫法"
@@ -4117,6 +4133,27 @@ key = "ruby.already-in-that-form"
 zht = "已經是 {0} 的注音了"
 zhs = "已经是 {0} 的注音了"
 en = "the readings are already {0}"
+
+[[message]]
+# :ruby auto 寫進去了幾條注音
+key = "ruby.auto-added"
+zht = "注了 {0} 個詞——不要就 u"
+zhs = "注了 {0} 个词——不要就 u"
+en = "{0} words annotated — `u` takes it back"
+
+[[message]]
+# :ruby auto，但字料層沒裝，讀音無從查起
+key = "ruby.auto-no-readings"
+zht = "查不到讀音：拆分表沒裝（`:yume scheme` 載一次）"
+zhs = "查不到读音：拆分表没装（`:yume scheme` 载一次）"
+en = "no readings here: the 拆分表 is not loaded (`:yume scheme` loads it)"
+
+[[message]]
+# :ruby auto，範圍裏沒有一個字要注
+key = "ruby.auto-none"
+zht = "沒有要注的字"
+zhs = "没有要注的字"
+en = "nothing here to annotate"
 
 [[message]]
 # :ruby off，注音不排

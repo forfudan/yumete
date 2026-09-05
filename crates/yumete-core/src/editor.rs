@@ -17,7 +17,7 @@ use std::path::{Path, PathBuf};
 
 use regex::Regex;
 use ropey::Rope;
-use yumete_cjk::{CategorySegmenter, Segmenter};
+use yumete_cjk::{is_han, CategorySegmenter, NoReader, Reader, Segmenter};
 
 use crate::buffer::Buffer;
 use crate::command::{self, Command, CommandError};
@@ -821,6 +821,10 @@ pub struct Editor {
     /// (Feature #24). Defaults to [`CategorySegmenter`]; a dictionary segmenter
     /// can be installed via [`Editor::set_segmenter`].
     segmenter: Box<dyn Segmenter>,
+    /// Where readings come from for `:ruby auto` (Feature #234). Defaults to
+    /// [`NoReader`], which knows nothing; the front end installs a reader over
+    /// 宇浩's 字料層 once the data is loaded, exactly as it does the segmenter.
+    reader: Box<dyn Reader>,
     /// The project's own words, shared with the segmenter wrapped around the
     /// one in force — so reloading the list reaches a segmenter already handed
     /// out.
@@ -1296,6 +1300,7 @@ impl Editor {
             key_aliases: HashMap::new(),
             expanding_alias: false,
             segmenter: Box::new(CategorySegmenter),
+            reader: Box::new(NoReader),
             project_words: std::rc::Rc::new(RefCell::new(yumete_cjk::WordList::default())),
             show_segmentation: false,
             word_level: yumete_cjk::WordLevel::default(),
@@ -3021,6 +3026,10 @@ impl Editor {
                 } else {
                     say!("ruby.layout-on", listed(&listed_names))
                 };
+                Ok(CommandOutcome::Continue)
+            }
+            Command::AutoRuby { rare } => {
+                self.auto_ruby(rare);
                 Ok(CommandOutcome::Continue)
             }
             Command::FormatRuby(dialect) => {
@@ -10154,6 +10163,15 @@ impl Editor {
         ));
     }
 
+    /// Install the [`Reader`] `:ruby auto` generates readings from (#234).
+    ///
+    /// The same shape as [`set_segmenter`](Self::set_segmenter) and for the same
+    /// reason: the knowledge is 宇浩's tables, which the front end owns and the
+    /// editor never opens.
+    pub fn set_reader(&mut self, reader: Box<dyn Reader>) {
+        self.reader = reader;
+    }
+
     /// Everything `:word` asks — see [`crate::command::WordCommand`].
     ///
     /// **Where one word ends is one subject.** The dictionary decides it, the
@@ -13242,6 +13260,121 @@ impl Editor {
             .unwrap_or(Dialect::Html)
     }
 
+    /// `:ruby auto` — write the readings in, by word (Feature #234).
+    ///
+    /// **Why a word and not a character.** 了 is `le` in 為了 and `liǎo` in
+    /// 了解, and every tool that annotates 拼音 one character at a time gets one
+    /// of those wrong — Word's 拼音指南 included, which is why nobody uses it
+    /// twice. The reading comes from the 讀音表 by whole word, so the polyphone
+    /// is settled by the word it is in rather than by a coin toss over a
+    /// dictionary entry; see [`yumete_cjk::Reader`].
+    ///
+    /// **`rare` is the one people actually want.** A novel with a reading over
+    /// every character is a textbook, not a novel; a novel with a reading over
+    /// 饕餮 and over nothing else is a novel a reader can finish. So `:ruby auto
+    /// rare` keeps only the words holding a character outside 通用規範漢字表 —
+    /// and keeps the *word*, because 「饕」 alone read `tāo` above one character
+    /// of a two-character word is worse typography than either extreme.
+    ///
+    /// The markup is mono-ruby ([`crate::ruby::SPLIT`]): one group per
+    /// character, which is how CJK ruby is set and what [`crate::zong`] already
+    /// spaces the 縱 out for.
+    fn auto_ruby(&mut self, rare: bool) {
+        if self.refuse_readonly() {
+            return;
+        }
+        if !self.reader.available() {
+            self.status = say!("ruby.auto-no-readings");
+            return;
+        }
+        let dialect = self.file_dialect();
+        // A standing selection is the region; without one it is the whole file,
+        // which is the pass a manuscript is actually given. `u` takes all of it
+        // back in one step either way.
+        let (from, to) = if self.anchor == self.cursor {
+            (0, self.current_buffer().char_count())
+        } else {
+            self.selection()
+        };
+        let rebuilt = {
+            let rope = self.current_buffer().rope();
+            let first = rope.char_to_line(from);
+            let last = rope.char_to_line(to.saturating_sub(1).max(from));
+            let mut edits: Vec<(usize, usize, String)> = Vec::new();
+            for line in first..=last.min(rope.len_lines().saturating_sub(1)) {
+                let line_start = rope.line_to_char(line);
+                let chars: Vec<char> = crate::zong::line_chars(rope, line);
+                // Whatever is already annotated stays as it is: a reader who
+                // corrected one reading by hand does not get it overwritten by
+                // the command that offered to help.
+                let groups = crate::ruby::all_groups(&chars);
+                // The segmenter itself, not [`Self::segment_line`]: that one
+                // drops words the reader can already see the edges of, which is
+                // right for the overlay and wrong here — 字 sitting alone after
+                // a `</ruby>` is exactly a word this pass has to annotate.
+                let text: String = chars.iter().collect();
+                for (ws, we) in self.segmenter.segment(&text) {
+                    let (start, end) = (line_start + ws, line_start + we);
+                    if start < from || end > to || we > chars.len() {
+                        continue;
+                    }
+                    if groups.iter().any(|g| ws < g.end && g.start < we) {
+                        continue;
+                    }
+                    let word: String = chars[ws..we].iter().collect();
+                    if word.is_empty() || !word.chars().all(is_han) {
+                        continue;
+                    }
+                    if rare && !word.chars().any(|c| self.reader.is_rare(c) == Some(true)) {
+                        continue;
+                    }
+                    let Some(readings) = self.reader.read(&word) else {
+                        continue;
+                    };
+                    // A reading that does not cover the word is not a reading —
+                    // writing it would put syllables over the wrong characters.
+                    if readings.len() != we - ws {
+                        continue;
+                    }
+                    let split = crate::ruby::SPLIT.to_string();
+                    let markup =
+                        crate::ruby::markup(&chars[ws..we], &readings.join(&split), dialect);
+                    edits.push((start, end, markup));
+                }
+            }
+            if edits.is_empty() {
+                None
+            } else {
+                let mut out = String::with_capacity(rope.len_chars());
+                let mut at = 0usize;
+                for (start, end, markup) in &edits {
+                    out.push_str(&rope.slice(at..*start).to_string());
+                    out.push_str(markup);
+                    at = *end;
+                }
+                out.push_str(&rope.slice(at..rope.len_chars()).to_string());
+                Some((edits.len(), out))
+            }
+        };
+        let Some((n, rebuilt)) = rebuilt else {
+            self.status = say!("ruby.auto-none");
+            return;
+        };
+        // The same rule `:replace` and `:format ruby` keep: a 拆分表 whose cells
+        // hold readings must not gain a field because a command rewrote it.
+        if let Some(why) = self.substitution_breaks_the_grid(&rebuilt) {
+            self.status = why;
+            return;
+        }
+        self.snapshot();
+        let len = self.current_buffer().char_count();
+        let buffer = self.current_buffer_mut();
+        buffer.remove(0..len);
+        buffer.insert(0, &rebuilt);
+        self.clamp_cursor();
+        self.status = say!("ruby.auto-added", n);
+    }
+
     /// Rewrite every reading in the buffer into one dialect (`:format-ruby-…`).
     fn format_ruby(&mut self, dialect: Dialect) {
         if self.refuse_readonly() {
@@ -14744,20 +14877,6 @@ fn opening_of(c: char) -> Option<char> {
         .map(|&(open, _)| open)
 }
 
-/// Whether `c` is a 漢字 — what a Chinese word count actually counts.
-///
-/// The unified blocks and their extensions, plus the compatibility ideographs
-/// and the two ideographs that live outside them: 〇 (U+3007), which is how a
-/// year is written — 二〇二五年 is five 字, not four — and 々 (U+3005), the
-/// repetition mark, which stands for a 漢字 and is counted as one.
-///
-/// Kana and punctuation are deliberately out: a 字數 is not a character count,
-/// which is why `:count` reports both.
-fn is_han(c: char) -> bool {
-    matches!(c as u32,
-        0x3005 | 0x3007 | 0x3400..=0x4DBF | 0x4E00..=0x9FFF | 0xF900..=0xFAFF | 0x20000..=0x3FFFF)
-}
-
 /// Swap the case of `c`, leaving anything caseless (every 漢字) alone.
 fn switch_case(c: char) -> char {
     if c.is_lowercase() {
@@ -15300,6 +15419,122 @@ mod tests {
             ed.on_key(Key::Char(c));
         }
         ed.on_key(Key::Esc);
+    }
+
+    /// A reader with a handful of characters in it, so `:ruby auto` can be
+    /// tested without the 14 MB the real one comes from.
+    struct Toy;
+
+    impl yumete_cjk::Reader for Toy {
+        fn read(&self, word: &str) -> Option<Vec<String>> {
+            let one = |c: char| match c {
+                '漢' => Some("hàn"),
+                '字' => Some("zì"),
+                '很' => Some("hěn"),
+                '難' => Some("nán"),
+                '龘' => Some("dá"),
+                _ => None,
+            };
+            word.chars().map(|c| one(c).map(str::to_string)).collect()
+        }
+
+        fn is_rare(&self, ch: char) -> Option<bool> {
+            Some(ch == '龘')
+        }
+
+        fn available(&self) -> bool {
+            true
+        }
+    }
+
+    fn with_toy_reader(text: &str) -> Editor {
+        let mut ed = typed(text);
+        ed.set_reader(Box::new(Toy));
+        // One 漢字 per word, so what the test reads is the ruby and not the
+        // dictionary's opinion of where 詞 end.
+        ed.set_segmenter(Box::new(CategorySegmenter));
+        ed
+    }
+
+    #[test]
+    fn auto_ruby_annotates_a_word_per_character() {
+        let mut ed = with_toy_reader("漢字");
+        ed.execute(":ruby auto").unwrap();
+        assert_eq!(
+            ed.current_buffer().text(),
+            "<ruby>漢<rt>hàn</rt></ruby><ruby>字<rt>zì</rt></ruby>"
+        );
+        // One step back, however many words it wrote.
+        press(&mut ed, "u");
+        assert_eq!(ed.current_buffer().text(), "漢字");
+    }
+
+    #[test]
+    fn auto_ruby_leaves_a_reading_the_writer_already_corrected() {
+        let mut ed = with_toy_reader("<ruby>漢<rt>hon</rt></ruby>字");
+        ed.execute(":ruby auto").unwrap();
+        assert!(
+            ed.current_buffer().text().contains("<rt>hon</rt>"),
+            "{}",
+            ed.current_buffer().text()
+        );
+        assert!(ed.current_buffer().text().contains("<rt>zì</rt>"));
+    }
+
+    #[test]
+    fn auto_ruby_says_so_when_there_is_nothing_to_annotate() {
+        let mut ed = with_toy_reader("abc、。");
+        ed.execute(":ruby auto").unwrap();
+        assert_eq!(ed.current_buffer().text(), "abc、。");
+        assert!(ed.status().contains("沒有"), "{}", ed.status());
+    }
+
+    #[test]
+    fn auto_ruby_without_a_reader_says_where_readings_come_from() {
+        let mut ed = typed("漢字");
+        ed.execute(":ruby auto").unwrap();
+        assert_eq!(ed.current_buffer().text(), "漢字");
+        assert!(ed.status().contains("拆分表"), "{}", ed.status());
+    }
+
+    #[test]
+    fn auto_ruby_rare_annotates_only_what_a_reader_would_stumble_on() {
+        let mut ed = with_toy_reader("漢龘字");
+        ed.execute(":ruby auto rare").unwrap();
+        assert_eq!(
+            ed.current_buffer().text(),
+            "漢<ruby>龘<rt>dá</rt></ruby>字"
+        );
+    }
+
+    #[test]
+    fn auto_ruby_annotates_the_selection_and_nothing_outside_it() {
+        let mut ed = with_toy_reader("漢字很難");
+        press(&mut ed, "ggvl"); // 漢字
+        ed.execute(":ruby auto").unwrap();
+        assert_eq!(
+            ed.current_buffer().text(),
+            "<ruby>漢<rt>hàn</rt></ruby><ruby>字<rt>zì</rt></ruby>很難"
+        );
+    }
+
+    #[test]
+    fn auto_ruby_writes_the_dialect_the_file_is_written_in() {
+        let dir = std::env::temp_dir().join(format!("yumete-auto-ruby-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let file = dir.join("ch01.typ");
+        std::fs::write(&file, "#ruby(\"漢\", \"hàn\")字\n").unwrap();
+        let mut ed = Editor::new();
+        ed.open_file(&file).unwrap();
+        ed.set_reader(Box::new(Toy));
+        ed.set_segmenter(Box::new(CategorySegmenter));
+        ed.execute(":ruby auto").unwrap();
+        assert_eq!(
+            ed.current_buffer().text(),
+            "#ruby(\"漢\", \"hàn\")#ruby(\"字\", \"zì\")\n"
+        );
+        std::fs::remove_dir_all(&dir).ok();
     }
 
     #[test]

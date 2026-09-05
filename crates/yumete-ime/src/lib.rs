@@ -20,6 +20,7 @@
 //! dictionary is missing the session still constructs but reports
 //! [`ImeSession::available`] as `false`, so the editor falls back to plain input.
 
+pub mod reading;
 pub mod segment;
 
 use std::path::{Path, PathBuf};
@@ -35,6 +36,7 @@ use yume_core::{
     AnnotationTable, Charset, CodeTable, Engine, FluencyTable, UnigramTable, NAMED_CHARSETS,
 };
 
+pub use reading::YumeReader;
 pub use segment::YumeSegmenter;
 pub use yumete_config::PanelDisplay;
 // A frontend that reads [`DataProblem`] has to be able to name its `kind`, and
@@ -878,6 +880,18 @@ impl ImeSession {
     /// segmenter shares them rather than holding a second copy of 1.25M entries.
     pub fn segmenter(&self) -> YumeSegmenter {
         YumeSegmenter::new(self.engine.unigram.clone(), self.engine.lexicon.clone())
+    }
+
+    /// A reader over this session's 字料層 and 讀音表 (Feature #234).
+    ///
+    /// The sibling of [`segmenter`](Self::segmenter), and it takes the same
+    /// stance: the tables are already loaded and reference-counted, so `:ruby
+    /// auto` shares them rather than opening `chaifen.ydiv` a second time.
+    pub fn reader(&self) -> YumeReader {
+        YumeReader::new(
+            self.engine.annotations().clone(),
+            self.engine.reading_table.clone(),
+        )
     }
 
     // ---- 上屏方式 (commit method) ------------------------------------------
