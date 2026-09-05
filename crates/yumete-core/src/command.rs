@@ -7,6 +7,7 @@
 
 use std::fmt;
 
+use crate::convert::Side;
 use crate::ruby::Dialect;
 use crate::say;
 use crate::zong::Layout;
@@ -64,6 +65,8 @@ pub enum Command {
     /// `:check charset` — the characters no current standard carries, before
     /// the typesetter's font finds out (Feature #240).
     CheckCharset,
+    /// `:convert …` — 簡繁, run through opencc (Feature #241).
+    Convert(ConvertAsk),
     /// `:<n>` or `:goto <n>` (alias `:g`) — put the cursor on line `n`.
     GotoLine(usize),
     /// `:recover` — load the crash-recovery draft into the buffer;
@@ -476,6 +479,36 @@ pub fn parse(input: &str) -> Result<Command, CommandError> {
             other => Err(CommandError::InvalidArgument {
                 command: "check",
                 value: other.to_string(),
+            }),
+        },
+        // 簡繁 (Feature #241). Two words and an optional `force`: the pair
+        // names an opencc config (`s tw` is `s2tw`), so what the editor runs is
+        // readable from what was typed.
+        "convert" => match rest.split_whitespace().collect::<Vec<_>>().as_slice() {
+            [] | ["opencc"] => Ok(Command::Convert(ConvertAsk::Explain)),
+            ["opencc", "install"] => Ok(Command::Convert(ConvertAsk::Opencc { update: false })),
+            ["opencc", "update"] => Ok(Command::Convert(ConvertAsk::Opencc { update: true })),
+            [from, to] | [from, to, "force"] => {
+                let force = rest.split_whitespace().count() == 3;
+                match (Side::parse(from), Side::parse(to)) {
+                    (Some(from), Some(to)) => Ok(Command::Convert(ConvertAsk::Run {
+                        from,
+                        to,
+                        force,
+                    })),
+                    (None, _) => Err(CommandError::InvalidArgument {
+                        command: "convert",
+                        value: (*from).to_string(),
+                    }),
+                    (_, None) => Err(CommandError::InvalidArgument {
+                        command: "convert",
+                        value: (*to).to_string(),
+                    }),
+                }
+            }
+            other => Err(CommandError::InvalidArgument {
+                command: "convert",
+                value: other.join(" "),
             }),
         },
         "goto" | "g" => rest
@@ -1065,6 +1098,36 @@ pub fn parse(input: &str) -> Result<Command, CommandError> {
 }
 
 /// One entry of the command list: what to type, and what it does.
+/// What was asked of `:convert`.
+///
+/// Three shapes rather than one because they are three different questions:
+/// what can this do, do it, and 「the program it needs is not here」.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ConvertAsk {
+    /// `:convert` on its own — every pair it can do, and whether opencc is
+    /// installed.
+    ///
+    /// **There is deliberately no default direction.** Half the manuscripts in
+    /// the world want `s t` and half want `t s`; a bare `:convert` that picked
+    /// one would rewrite a book the wrong way for the other half, and undo is
+    /// not a good enough answer for that.
+    Explain,
+    /// `:convert <從> <到> [force]`.
+    Run {
+        from: Side,
+        to: Side,
+        /// Convert **words** too — opencc's `p` configs, which turn 内存 into
+        /// 記憶體. Behind a word because it is a different promise: the text
+        /// comes back a different length, and running the reverse config does
+        /// not bring it back.
+        force: bool,
+    },
+    /// `:convert opencc install` / `:convert opencc update`.
+    Opencc {
+        update: bool,
+    },
+}
+
 pub struct Entry {
     /// The command word, as typed after the `:`.
     pub name: &'static str,
@@ -2328,6 +2391,79 @@ const CHECK: &[Word] = &[
     },
 ];
 
+/// What `:convert opencc` can be asked to do.
+const OPENCC: &[Word] = &[
+    Word {
+        name: "install",
+        help: "cmd.opencc.install",
+        needs: &[],
+        then: Args::None,
+    },
+    Word {
+        name: "update",
+        help: "cmd.opencc.update",
+        needs: &[],
+        then: Args::None,
+    },
+];
+
+/// The side `:convert` starts from.
+///
+/// The placeholder after each one lists **that side's** destinations rather
+/// than all seven: opencc has `s2tw` and `tw2s` but no `tw2hk`, and a menu that
+/// offered every pair would be offering combinations that fail at the command
+/// line. 日本新字体 only goes back to 繁體, so it says so.
+const CONVERT: &[Word] = &[
+    Word {
+        name: "s",
+        help: "cmd.convert.s",
+        needs: &[],
+        then: Args::Free("t｜tw｜hk｜c｜g [force]"),
+    },
+    Word {
+        name: "t",
+        help: "cmd.convert.t",
+        needs: &[],
+        then: Args::Free("s｜tw｜hk｜jp｜c｜g"),
+    },
+    Word {
+        name: "tw",
+        help: "cmd.convert.tw",
+        needs: &[],
+        then: Args::Free("s｜t｜c｜g [force]"),
+    },
+    Word {
+        name: "hk",
+        help: "cmd.convert.hk",
+        needs: &[],
+        then: Args::Free("s｜t｜c｜g [force]"),
+    },
+    Word {
+        name: "jp",
+        help: "cmd.convert.jp",
+        needs: &[],
+        then: Args::Free("t｜c｜g"),
+    },
+    Word {
+        name: "c",
+        help: "cmd.convert.c",
+        needs: &[],
+        then: Args::Free("s｜t｜tw｜hk｜jp｜g"),
+    },
+    Word {
+        name: "g",
+        help: "cmd.convert.g",
+        needs: &[],
+        then: Args::Free("s｜t｜tw｜hk｜jp｜c"),
+    },
+    Word {
+        name: "opencc",
+        help: "cmd.convert.opencc",
+        needs: &[],
+        then: Args::Words(OPENCC),
+    },
+];
+
 /// The one word `:reload` takes besides nothing at all.
 const RELOAD: &[Word] = &[Word {
     name: "auto",
@@ -2428,6 +2564,13 @@ pub const COMMANDS: &[Entry] = &[
         help: "cmd.commands.check",
         needs: &[],
         args: Args::Words(CHECK),
+    },
+    Entry {
+        name: "convert",
+        aliases: &[],
+        help: "cmd.commands.convert",
+        needs: &[],
+        args: Args::Words(CONVERT),
     },
     Entry {
         name: "quit",
@@ -3978,6 +4121,11 @@ mod tests {
                         p if p.ends_with("scheme") => "lingming",
                         ":export" => "html",
                         ":grep" => "x",
+                        // Both words are sides, and the pair has to be a
+                        // conversion someone could actually ask for: a side
+                        // converted to itself is refused on purpose.
+                        ":convert t" => "s",
+                        p if p.starts_with(":convert ") => "t",
                         _ => "1",
                     };
                     format!("{path} {word}")

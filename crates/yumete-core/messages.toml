@@ -576,6 +576,14 @@ en = "the system clipboard: out, and back in"
 find = "剪貼簿 剪贴板 複製 复制 貼上 粘贴 copy paste yank"
 
 [[message]]
+# : 命令選單裏 convert 那一條
+key = "cmd.commands.convert"
+zht = "簡繁轉換：交給 opencc 跑，:convert 看能走哪幾條路"
+zhs = "简繁转换：交给 opencc 跑，:convert 看能走哪几条路"
+en = "簡繁 conversion, run by opencc — :convert lists the pairs it can do"
+find = "簡繁 简繁 繁簡 繁简 轉換 转换 opencc 正體 正体 臺灣 台湾 香港 通規 通规 古籍 新字体 convert traditional simplified"
+
+[[message]]
 # : 命令選單裏 count 那一項的說明（commands 組）
 key = "cmd.commands.count"
 zht = "寫了多少"
@@ -984,6 +992,62 @@ en = "唯一上屏 (auto): a finished code with one candidate goes straight to t
 find = "上屏 唯一 自動 自动 auto unique"
 
 [[message]]
+# : 命令選單裏 c 那一項（convert 組），是稿子現在的樣子，也是要變成的樣子
+key = "cmd.convert.c"
+zht = "大陸通規繁體（説 爲 内 吴 裏 髮 臺）"
+zhs = "大陆通规繁体（説 爲 内 吴 裏 髮 臺）"
+en = "大陸通規繁體"
+
+[[message]]
+# : 命令選單裏 g 那一項（convert 組），是稿子現在的樣子，也是要變成的樣子
+key = "cmd.convert.g"
+zht = "古籍通規繁體（説 爲 内 吳 裏 髮 臺）"
+zhs = "古籍通规繁体（説 爲 内 吳 裏 髮 臺）"
+en = "古籍通規繁體"
+
+[[message]]
+# : 命令選單裏 hk 那一項（convert 組），是稿子現在的樣子，也是要變成的樣子
+key = "cmd.convert.hk"
+zht = "香港繁體（説 為 內 吳 裏 髮 台）"
+zhs = "香港繁体（説 為 內 吳 裏 髮 台）"
+en = "香港繁體"
+
+[[message]]
+# : 命令選單裏 jp 那一項（convert 組），是稿子現在的樣子，也是要變成的樣子
+key = "cmd.convert.jp"
+zht = "日本新字体（説 為 内 呉 裏 髪 台）"
+zhs = "日本新字体（説 為 内 呉 裏 髪 台）"
+en = "Japanese 新字体"
+
+[[message]]
+# : 命令選單裏 opencc 那一項（convert 組）
+key = "cmd.convert.opencc"
+zht = "opencc 本身：沒裝就裝，裝了就升級"
+zhs = "opencc 本身：没装就装，装了就升级"
+en = "opencc itself: install it, or bring it up to date"
+
+[[message]]
+# : 命令選單裏 s 那一項（convert 組），是稿子現在的樣子，也是要變成的樣子
+key = "cmd.convert.s"
+zht = "簡體（说 为 内 吴 里 发 台）"
+zhs = "简体（说 为 内 吴 里 发 台）"
+en = "simplified"
+
+[[message]]
+# : 命令選單裏 t 那一項（convert 組），是稿子現在的樣子，也是要變成的樣子
+key = "cmd.convert.t"
+zht = "opencc 繁體，港臺字形（說 爲 內 吳 裏 髮 臺）"
+zhs = "opencc 繁体，港台字形（說 爲 內 吳 裏 髮 臺）"
+en = "OpenCC's plain 繁體"
+
+[[message]]
+# : 命令選單裏 tw 那一項（convert 組），是稿子現在的樣子，也是要變成的樣子
+key = "cmd.convert.tw"
+zht = "臺灣正體（說 為 內 吳 裡 髮 臺）"
+zhs = "台湾正体（說 為 內 吳 裡 髮 臺）"
+en = "臺灣正體"
+
+[[message]]
 # : 命令選單裏 inline 那一項的說明（footnote-kinds 組）
 key = "cmd.footnote-kinds.inline"
 zht = "行內註 ^[…]，不去文末"
@@ -1127,6 +1191,20 @@ key = "cmd.on-off.on"
 zht = "開"
 zhs = "开"
 en = "on"
+
+[[message]]
+# : 命令選單裏 install 那一項（convert opencc 組）
+key = "cmd.opencc.install"
+zht = "裝 opencc（macOS 這裏真的會跑，別的機器只把命令印給你）"
+zhs = "装 opencc（macOS 这里真的会跑，别的机器只把命令印给你）"
+en = "install opencc — run here on macOS, printed for you elsewhere"
+
+[[message]]
+# : 命令選單裏 update 那一項（convert opencc 組）
+key = "cmd.opencc.update"
+zht = "把 opencc 升到最新"
+zhs = "把 opencc 升到最新"
+en = "bring opencc up to date"
 
 [[message]]
 # : 命令選單裏 bare 那一項的說明（panels 組）
@@ -1757,6 +1835,167 @@ en = "commit method: {0}"
 
 
 # ── count ─────────────────────────────────────────────────────────────
+
+[[message]]
+# :convert 這一趟能走的路，一行一個起點
+key = "convert.can-go"
+zht = "  {0}  →  {1}"
+zhs = "  {0}  →  {1}"
+en = "  {0}  →  {1}"
+
+[[message]]
+# :convert 換完了，字數沒變（除了 force，簡繁都是一個字換一個字）
+key = "convert.characters-changed"
+zht = "換好了：{0} 個字換了樣"
+zhs = "换好了：{0} 个字换了样"
+en = "converted: {0} characters changed"
+
+[[message]]
+# :convert 的說明頁最後一行，解釋 force 是什麼
+key = "convert.force-means"
+zht = "加 force ＝ 連詞一起換（内存 → 記憶體）。字數會變，也回不來，所以要自己寫出來。"
+zhs = "加 force ＝ 连词一起换（内存 → 記憶體）。字数会变，也回不来，所以要自己写出来。"
+en = "`force` converts words too (内存 → 記憶體): the length changes and nothing reverses it, so it has to be asked for"
+
+[[message]]
+# :convert opencc install，這台機器不能替你跑，只把命令說出來
+key = "convert.install-it-yourself"
+zht = "這台機器要你自己裝：{0}"
+zhs = "这台机器要你自己装：{0}"
+en = "install it yourself on this machine: {0}"
+
+[[message]]
+# :convert opencc install 交出螢幕之前
+key = "convert.installing"
+zht = "跑：{0}"
+zhs = "跑：{0}"
+en = "running: {0}"
+
+[[message]]
+# :convert 換完了，字數變了（force 那一檔連詞一起換）
+key = "convert.length-changed"
+zht = "換好了：{0} 字 → {1} 字"
+zhs = "换好了：{0} 字 → {1} 字"
+en = "converted: {0} characters → {1}"
+
+[[message]]
+# :convert 加了 force，可這一對沒有連詞一起換的那一檔
+key = "convert.no-force"
+zht = "「{0} → {1}」沒有連詞一起換的那一檔，force 去掉"
+zhs = "「{0} → {1}」没有连词一起换的那一档，force 去掉"
+en = "{0} → {1} has no word-level variant; drop `force`"
+
+[[message]]
+# :convert 這兩邊之間 opencc 沒有這條路
+key = "convert.no-route"
+zht = "opencc 沒有「{0} → {1}」這條路；:convert 看有哪幾條"
+zhs = "opencc 没有「{0} → {1}」这条路；:convert 看有哪几条"
+en = "opencc has no {0} → {1}; `:convert` lists the pairs it has"
+
+[[message]]
+# :convert 換完發現一個字都不用換
+key = "convert.not-a-character"
+zht = "一個字都不用換"
+zhs = "一个字都不用换"
+en = "not one character needed changing"
+
+[[message]]
+# :convert 跑成了，可 opencc 一個字都沒交回來
+key = "convert.nothing-came-back"
+zht = "opencc 什麼都沒交回來，沒有動你的字"
+zhs = "opencc 什么都没交回来，没有动你的字"
+en = "opencc returned nothing; your text is untouched"
+
+[[message]]
+# :convert 的說明頁裏，opencc 裝在哪
+key = "convert.opencc-at"
+zht = "opencc：{0}"
+zhs = "opencc：{0}"
+en = "opencc: {0}"
+
+[[message]]
+# :convert 要跑了才發現沒裝 opencc
+key = "convert.opencc-needed"
+zht = "沒裝 opencc。裝它：{0}（macOS 上 :convert opencc install 就是這句）"
+zhs = "没装 opencc。装它：{0}（macOS 上 :convert opencc install 就是这句）"
+en = "opencc is not installed. Install it with: {0}"
+
+[[message]]
+# :convert 說明頁開出來之後的狀態行
+key = "convert.pick-two"
+zht = "挑兩個：:convert <現在> <要變成>"
+zhs = "挑两个：:convert <现在> <要变成>"
+en = "pick two: :convert <from> <to>"
+
+[[message]]
+# :convert 兩邊寫的是同一邊
+key = "convert.same-side"
+zht = "「{0}」和「{1}」是同一邊，沒什麼可換的"
+zhs = "「{0}」和「{1}」是同一边，没什么可换的"
+en = "{0} and {1} are the same side"
+
+[[message]]
+# :convert 的說明頁裏 c 那一行——這一邊叫什麼，長什麼樣
+key = "convert.side-c"
+zht = "  c   大陸通規繁體　説 爲 内 吴 裏 髮 臺"
+zhs = "  c   大陆通规繁体　説 爲 内 吴 裏 髮 臺"
+en = "  c   大陸通規繁體          説 爲 内 吴 裏 髮 臺"
+
+[[message]]
+# :convert 的說明頁裏 g 那一行——這一邊叫什麼，長什麼樣
+key = "convert.side-g"
+zht = "  g   古籍通規繁體　説 爲 内 吳 裏 髮 臺"
+zhs = "  g   古籍通规繁体　説 爲 内 吳 裏 髮 臺"
+en = "  g   古籍通規繁體          説 爲 内 吳 裏 髮 臺"
+
+[[message]]
+# :convert 的說明頁裏 hk 那一行——這一邊叫什麼，長什麼樣
+key = "convert.side-hk"
+zht = "  hk  香港繁體　　　説 為 內 吳 裏 髮 台"
+zhs = "  hk  香港繁体　　　説 為 內 吳 裏 髮 台"
+en = "  hk  香港繁體            説 為 內 吳 裏 髮 台"
+
+[[message]]
+# :convert 的說明頁裏 jp 那一行——這一邊叫什麼，長什麼樣
+key = "convert.side-jp"
+zht = "  jp  日本新字体　　説 為 内 呉 裏 髪 台"
+zhs = "  jp  日本新字体　　説 為 内 呉 裏 髪 台"
+en = "  jp  日本新字体           説 為 内 呉 裏 髪 台"
+
+[[message]]
+# :convert 的說明頁裏 s 那一行——這一邊叫什麼，長什麼樣
+key = "convert.side-s"
+zht = "  s   簡體　　　　　说 为 内 吴 里 发 台"
+zhs = "  s   简体　　　　　说 为 内 吴 里 发 台"
+en = "  s   simplified      说 为 内 吴 里 发 台"
+
+[[message]]
+# :convert 的說明頁裏 t 那一行——這一邊叫什麼，長什麼樣
+key = "convert.side-t"
+zht = "  t   opencc 繁體　 說 爲 內 吳 裏 髮 臺"
+zhs = "  t   opencc 繁体　 說 爲 內 吳 裏 髮 臺"
+en = "  t   OpenCC 繁體       說 爲 內 吳 裏 髮 臺"
+
+[[message]]
+# :convert 的說明頁裏 tw 那一行——這一邊叫什麼，長什麼樣
+key = "convert.side-tw"
+zht = "  tw  臺灣正體　　　說 為 內 吳 裡 髮 臺"
+zhs = "  tw  台湾正体　　　說 為 內 吳 裡 髮 臺"
+en = "  tw  臺灣正體            說 為 內 吳 裡 髮 臺"
+
+[[message]]
+# :convert 的說明頁最後一行，說撤銷只有 u 這一條路
+key = "convert.undo-with-u"
+zht = "換錯了按 u。別靠反方向再跑一次——s2tw 之後 tw2s 不是原路返回，裏和裡都會變成里。"
+zhs = "换错了按 u。别靠反方向再跑一次——s2tw 之后 tw2s 不是原路返回，裏和裡都会变成里。"
+en = "undo with u. Never by running the reverse: `s2tw` then `tw2s` is not the identity — 裏 and 裡 both come back as 里."
+
+[[message]]
+# :convert 說明頁那個緩衝的名字
+key = "convert.what-it-can-do"
+zht = "convert：能走哪幾條路"
+zhs = "convert：能走哪几条路"
+en = "convert: the pairs it can do"
 
 [[message]]
 # 字數統計的範圍：選區
