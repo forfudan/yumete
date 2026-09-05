@@ -13,7 +13,12 @@ use yumete_config::Layout;
 use yumete_core::{Editor, TextStore};
 use yumete_ime::{CommitStrategy, ImeSession, Scheme};
 
-const VERSION: &str = env!("CARGO_PKG_VERSION");
+/// What this binary is, exactly — stamped by `build.rs` at compile time.
+///
+/// `0.1.0-dev.20260905123000+bbc1485.dirty`: the version, when it was built,
+/// the commit it was built from, and whether that commit was the whole truth.
+/// A release build (`YUMETE_RELEASE=1`) is the bare `0.1.0`.
+const VERSION: &str = env!("YUMETE_VERSION");
 
 fn main() -> ExitCode {
     let mut files: Vec<String> = Vec::new();
@@ -357,6 +362,10 @@ fn main() -> ExitCode {
         }
         editor.set_status(config_problems.join(&yumete_core::say!("label.comma")));
     }
+    // Every picture from here on — `--shot`, `--html`, and `:shot` inside the
+    // editor — carries the build under it, so a shot in a bug report says what
+    // it is a picture of.
+    yumete_tui::set_build(VERSION);
     if let Some((width, height)) = shot {
         // The layout the flags asked for, before the picture is taken.
         let picture = match shot_html {

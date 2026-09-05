@@ -198,8 +198,32 @@ fn frame_to(
     }
 }
 
+/// Which build drew the pictures — set once, by the binary, at start-up.
+///
+/// A shot pasted into a bug report is useless if nobody can say what it is a
+/// picture *of*: 「面板畫錯了」 about a binary three days old is a different
+/// conversation from the same sentence about HEAD. The binary knows its own
+/// stamp ([`env!("YUMETE_VERSION")`]) and hands it over here; a caller that
+/// never does — every test in this crate — gets frames with no footer, which
+/// is what a frame compared against an expected picture needs.
+static BUILD: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+
+/// Tell the shot machinery which build it is drawing for.
+pub fn set_build(version: &str) {
+    let _ = BUILD.set(version.to_string());
+}
+
+/// The footer line, or nothing when no build was declared.
+fn build_footer() -> Option<String> {
+    BUILD.get().map(|version| format!("-- yumete {version}"))
+}
+
 /// One drawn frame as plain text — the cells, with the blanks a wide glyph
 /// owns left out.
+///
+/// The build stamp goes **under** the frame, not in it: a picture of the page
+/// has to stay a picture of the page, and a reviewer counting columns must not
+/// find a column that the editor never drew.
 fn buffer_to_text(buffer: &ratatui::buffer::Buffer) -> String {
     let mut out = String::new();
     for y in 0..buffer.area.height {
@@ -222,6 +246,10 @@ fn buffer_to_text(buffer: &ratatui::buffer::Buffer) -> String {
             x += yumete_cjk::drawn_width(symbol).max(1) as u16;
         }
         out.push_str(row.trim_end());
+        out.push('\n');
+    }
+    if let Some(footer) = build_footer() {
+        out.push_str(&footer);
         out.push('\n');
     }
     out
@@ -2598,6 +2626,14 @@ fn buffer_to_html(buffer: &ratatui::buffer::Buffer) -> String {
         }
         out.push('\n');
     }
+    if let Some(footer) = build_footer() {
+        // Dimmed, and outside the drawn rows: the same line as the text shot,
+        // in the one colour that reads as「not the page」 on either ground.
+        out.push_str(&format!(
+            "<span style=\"color:#888888\">{}</span>\n",
+            escape(&footer)
+        ));
+    }
     out.push_str("</pre>");
     out
 }
@@ -3468,8 +3504,12 @@ fn draw_horizontal(
     // so the ground was drawn on prose. The rule row goes with them: it is the
     // drawing of the alignments, `clear_cell` refuses it and `move_cell_row`
     // steps over it, so a ground saying「an edit lands here」would be a lie.
+    //
+    // Either kind of region: a block recognised in a document (#216) stops
+    // where its delimiter does, and the tint is the only thing on the page
+    // that says where that is.
     let cell = match peek.is_none() && editor.table().is_some_and(|t| t.in_prose()) {
-        true => editor.md_region().and_then(|region| {
+        true => editor.prose_region().and_then(|region| {
             editor
                 .cell_position()
                 .filter(|&(line, _)| region.holds(line) && !region.is_rule(line))

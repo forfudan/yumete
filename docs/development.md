@@ -426,7 +426,7 @@ index, and a row with no number anywhere else is a row that got lost.
 | 213 | **`:readonly on\|off` and `--readonly`** | core | P1 | two layers: `Buffer::insert`/`remove` refuse outright — the one place the rope moves, so no path gets round it by not knowing — and `Editor::refuse_readonly` says why, at `edit_insert`/`edit_remove`, `enter_insert`, `undo` and `redo`. `[只讀]` on the status line; `Buffer::open` reads the disk's own permission bit, which used to surface only at `:w`. `--readonly` (`-R`) locks the whole session, `:open` included | Done |
 | 214 | **`:reload`, `:reload!`, `:reload auto`** | core | P1 | `:reload` re-reads, refusing a dirty buffer; `:reload!` throws local changes away; `:reload auto on` re-reads a **clean** buffer by itself and warns once about a dirty one. `Editor::disk_tick`, throttled at 2 s the way `autosave_tick` is, called from the event loop. `:e!` and `:o!` are gone — no alias, no hint | Done |
 | 215 | **The dictionary panel, and `t i` for the table's own** | both | P2 | `Tab` on a candidate opens 字典查詢 in the sidebar, the way yume's own panel does — **under `bare` (#211) `Tab` is already spoken for**, so there it summons the panel first and opens the dictionary on the second press; `空格 d`（定義）does the same for a selection in the buffer. Data is yume-core's `AnnotationTable::annotations_for(ch)` — 拆分/編碼/分節編碼/讀音/注釋/字集/Unicode/全息拆分. `空格 d` was the table detail panel; a table key belongs in the `t` group, so that is now `t i`. The panel is a fourth sidebar view, **out of the `Tab` cycle** — the other three are always about something, this one only after somebody asks. The editor parks the character and the front end answers it before the next draw, the way `:shot` (#189) parks a frame | Done |
-| 216 | **A table recognised rather than declared** | both | P2 | `\|` is not the only grid: a run of lines split by tabs or by runs of spaces is a 碼表, and `dict.yaml` is one with a `---` preamble. Detect it and offer the grid. **`Bounds::Block` is this one's** (see §「Three questions, three enums」): a block recognised where it stands, not converted. Test against the 宇浩 tables and the generated `dict.yaml` | Planned |
+| 216 | **A table recognised rather than declared** | both | P2 | `\|` is not the only grid: a run of lines split by tabs or by runs of spaces is a 碼表, and `dict.yaml` is one with a `---` preamble. Detect it and offer the grid. **`Bounds::Block` is this one's** (see §「Three questions, three enums」): a block recognised where it stands, not converted. Test against the 宇浩 tables and the generated `dict.yaml`. **Landed 2026-09-05: the walk is the test, the block is read where it lies, `Separator::Spaces` deferred — see §5.5** | Done |
 | 217 | **A grid whose first row is data** | both | P3 | a 碼表 has no header. One key says so: row one becomes an ordinary row, and the columns are named by number — which #184 already draws | Planned |
 | 218 | **The schema beside the table** | both | P3 | when the file is nothing but a table, open its schema file in the other work area (`:split` already has one), and write a starting one next to the file if none exists | Planned |
 | 219 | **A Windows build** | both | P3 | `%APPDATA%\yumete` for both config and data; `same_file` by `GetFileInformationByHandle` (volume serial + file index); one `shell_command()` that knows `cmd.exe /C` as well as `$SHELL -c`; `ambiguous_width = "auto"` asked of the console API rather than of a CPR reply; the search reaches where **yume** installs its own tables, overlay first, and falls back to a flat directory; `[ime] data_dirs` lets the reader name the place outright; `scripts/build.sh` runs under Git Bash. Cross-checked against `x86_64-pc-windows-gnu` | Done |
@@ -563,7 +563,7 @@ it: 「a block of delimited text in a document」 is answered by **converting** 
 one of its own lines, rather than by a mode that reads a block one way while the
 file reads it another. The variant now belongs to **#216**, where the block is
 recognised and left as it stands — a 碼表 is not a thing to rewrite — and the
-four rules above are that walk's.
+four rules above are that walk's (landed 2026-09-05; see below).
 
 The twenty tests split roughly evenly, which was the point:
 
@@ -578,6 +578,66 @@ The twenty tests split roughly evenly, which was the point:
   became `in_prose()` — the same line, finally saying what it meant.
 - **where does it start and stop** → `bounds`. Only three sites: `table_here`,
   `md_region`'s own gate, and `enter_table`'s 「a schema outranks a pipe」 rule.
+
+**The third tier landed, 2026-09-05 (#216).** `Bounds::Block` is now
+constructed: a run of delimited lines **recognised where it stands**, in a file
+that is not a table and never becomes one.
+
+| | `separator` | `surface` | `bounds` |
+| --- | --- | --- | --- |
+| a 碼表 pasted into a chapter, a `dict.yaml` under its `---` preamble | `Delimiter(c)` | `InProse` | `Block` |
+
+Four things decide it, and the order matters:
+
+1. **The walk is the test.** Guessing the separator first cannot work — the
+   lines to guess *from* are the block, and the block is not known until the
+   separator is. A 碼表 sitting directly under `## 第三章` has a heading in its
+   own paragraph, and no count of tabs over that run agrees about anything. So
+   each candidate is tried by walking the block out with it
+   (`delimited_block`) and asking whether what comes back is rectangular; the
+   first that answers yes is the separator.
+2. **Candidates, best first** (`separators_worth_trying`): what the cursor is
+   standing on, if it is one of `BLOCK_GUESSES` — that is how a person says
+   「this one」 about a line holding a tab *and* a comma, with nothing to
+   prompt for; then, if lines are selected, whatever they agree about
+   (`sniff_among`); then `['\t', ',', ';', '&']` in that order. `&` is there
+   because it is LaTeX's and Typst's.
+3. **Check before entering** (`rows_agree`). A short block must agree
+   *exactly*: with two or three rows there is no such thing as「most of them」,
+   and letting two lines out of three carry it is how a paragraph of English
+   with a comma in it becomes a grid. From four rows up, two thirds is enough,
+   because the slack is real — a `dict.yaml` carries a 權重 on some entries and
+   not others, and refusing the table over the entries that lack one is
+   refusing every real one. The grid is then as wide as its **widest** row, not
+   as wide as the count they agreed on: a column drawn nowhere cannot be walked
+   into.
+4. **A blank line is *a* boundary, not *the* boundary.** The walk stops at any
+   line that does not hold the delimiter, which is what stops it at `## 第三章`
+   above and at the preamble's `name: yuhao`.
+
+**Recognised, not converted, and therefore read-only in shape.** A 碼表 is
+somebody's data and the prose around it is somebody's chapter; a block will not
+rewrite either. Inside `Bounds::Block` the keys that walk work, `t g`, `t / ?`
+and `t y` / `t p` work — and every key that rewrites whole lines
+(`t s S o O d D n N j k h l`) answers `hint.table.block-keys` instead.
+`:table sort` says `table.block-is-read-where-it-lies` and names the two
+commands that *would* do it: `:table pipe` and `:table csv`, which convert, and
+then the file says what it is on every one of its own lines.
+
+`cell_lines()` is bounded by the block for the same reason — without it `t p`
+inside a 碼表 pasted into a chapter would write the yanked column down the rest
+of the manuscript. The first row is **data**: a 碼表 has no header, so the
+schema is `Schema::numbered`, which is also #217's half of this.
+
+Two things were deliberately left out:
+
+- **`Separator::Spaces`** — columns aligned by runs of spaces, which #216's own
+  line asks for. It needs an arm at some fifteen match sites and, worse, has no
+  obvious write-back: how many spaces does an edited cell get? Tabs, commas,
+  semicolons and `&` cover every file this editor was built for.
+- **Ghost padding (#212) inside a block.** `mdtable::padding` is pipe-shaped
+  and the renderer does not expand tabs, so a block is drawn as the file has
+  it. Worth doing when #212 next moves.
 
 ### 14 · What four reviews of the code found, 2026-09-03
 
