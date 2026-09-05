@@ -563,8 +563,9 @@ nothing constructs is a promise, and the walk it needs (the four rules above) is
 - **which splitter** → `separator`, and mostly not even that: `TableView::cells`
   and `TableView::boxes` answer it once, so `row_cells`, `row_cell_boxes` and
   `rows_break_the_grid` no longer match on anything. `grid_shape_here` returns a
-  `Separator` instead of `(char, bool)`, and its two callers stopped carrying a
-  bool named `rows_only` that meant 「the separator is a pipe」.
+  `Separator` instead of `(char, bool)`, so the bool named `rows_only` that meant
+  「the separator is a pipe」 stopped being a return value; its two callers say
+  `separator == Separator::Pipe` where they stand.
 - **is this drawn on its own page** → `surface`. All eight `is_grid()` calls in
   `yumete-tui` were this question, and `turn_for_table`'s Markdown exception
   became `in_prose()` — the same line, finally saying what it meant.
