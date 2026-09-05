@@ -2193,9 +2193,9 @@ en = "grids, and the 拆分表"
 [[message]]
 # 表格幫助：照這一欄順排／倒排
 key = "help.table.sort-by-column"
-zht = "照這一欄順排／倒排"
-zhs = "照这一栏顺排／倒排"
-en = "sort by this column, ascending / descending"
+zht = "照這一欄順排／倒排；t1a2d8as 一次排幾欄"
+zhs = "照这一栏顺排／倒排；t1a2d8as 一次排几栏"
+en = "sort by this column, ascending / descending; t1a2d8as sorts by several"
 
 [[message]]
 # 表格幫助：按格走
@@ -2740,6 +2740,13 @@ zhs = "这栏靠左／居中／靠右"
 en = "this column left / centre / right"
 
 [[message]]
+# t 選單：t q 這一行
+key = "hint.table.back-to-prose"
+zht = "回到正文"
+zhs = "回到正文"
+en = "back to prose"
+
+[[message]]
 # 表格提示：文中的表格區塊，t 後面只有這幾個
 key = "hint.table.block-keys"
 zht = "t 後面（文中的表格區塊）：/ ? g y p"
@@ -2817,6 +2824,13 @@ zhs = "详情栏"
 en = "the detail panel"
 
 [[message]]
+# t 選單：t t 這一行
+key = "hint.table.draw-it"
+zht = "畫成表格"
+zhs = "画成表格"
+en = "draw it as a grid"
+
+[[message]]
 # 表格提示：第一行當欄名／當資料
 key = "hint.table.first-row-is-data"
 zht = "第一行：欄名⇄資料"
@@ -2836,13 +2850,6 @@ key = "hint.table.in-a-cell"
 zht = "格內"
 zhs = "格内"
 en = "in a cell"
-
-[[message]]
-# 表格提示：進表格／出表格
-key = "hint.table.in-or-out"
-zht = "進表格／出來"
-zhs = "进表格／出来"
-en = "read this as a grid / stop"
 
 [[message]]
 # 表格提示：重排對齊
@@ -2878,6 +2885,13 @@ key = "hint.table.next-or-previous"
 zht = "下一張表／上一張"
 zhs = "下一张表／上一张"
 en = "the next table / the one before"
+
+[[message]]
+# t 選單：t i 這一行
+key = "hint.table.operate-it"
+zht = "原文照舊，按鍵歸表格"
+zhs = "原文照旧，按键归表格"
+en = "keep the source, take the grid's keys"
 
 [[message]]
 # 提示：表格操作
@@ -2924,9 +2938,9 @@ en = "search down the columns: / here, ? in the other area (t2-10?)"
 [[message]]
 # 表格提示：照這欄順排／倒排
 key = "hint.table.sort-by-column"
-zht = "照這欄順排／倒排（t1s）"
-zhs = "照这栏顺排／倒排（t1s）"
-en = "sort by this column, up / down (t1s)"
+zht = "照這欄順排／倒排（t1s；t1a2d8as 排幾欄）"
+zhs = "照这栏顺排／倒排（t1s；t1a2d8as 排几栏）"
+en = "sort by this column, up / down (t1s; t1a2d8as for several)"
 
 [[message]]
 # t 組提示的標題
@@ -4144,6 +4158,13 @@ zhs = "已经是对齐的"
 en = "already lined up"
 
 [[message]]
+# t t，但這張表已經是真表格顯示
+key = "table.already-drawn"
+zht = "已經畫成表格了——t i 看原文，t q 退出"
+zhs = "已经画成表格了——t i 看原文，t q 退出"
+en = "already drawn as a grid — t i shows the source, t q leaves"
+
+[[message]]
 # :sort 但本來就是這個順序
 key = "table.already-in-that-order"
 zht = "已經是這個順序了"
@@ -4158,11 +4179,11 @@ zhs = "本来就不在表格里"
 en = "not reading anything as a grid"
 
 [[message]]
-# 本來就在表格模式裏
-key = "table.already-on"
-zht = "已經在表格裏了——t q 退出"
-zhs = "已经在表格里了——t q 退出"
-en = "already reading this as a grid — t q leaves"
+# t i，但這張表已經在表格操作模式
+key = "table.already-operated"
+zht = "已經在表格操作模式了——t t 畫成表格，t q 退出"
+zhs = "已经在表格操作模式了——t t 画成表格，t q 退出"
+en = "already in table keys — t t draws it, t q leaves"
 
 [[message]]
 # 在格首按退格
@@ -4331,6 +4352,13 @@ key = "table.divider-cannot-be-deleted"
 zht = "格與格之間的分隔符刪不掉"
 zhs = "格与格之间的分隔符删不掉"
 en = "the divider between cells cannot be deleted"
+
+[[message]]
+# t t：把表格畫成格子（真表格顯示）
+key = "table.drawn"
+zht = "真表格顯示——t i 看原文，t q 退出"
+zhs = "真表格显示——t i 看原文，t q 退出"
+en = "drawn as a grid — t i shows the source, t q leaves"
 
 [[message]]
 # 在格子裏按 Enter
@@ -4564,18 +4592,18 @@ zhs = "表格：关（已转回竖排）"
 en = "table: off — set vertically again"
 
 [[message]]
-# 進了表格模式
-key = "table.on"
-zht = "表格模式——t q 退出"
-zhs = "表格模式——t q 退出"
-en = "grid mode — t q leaves"
-
-[[message]]
 # 進 | 表格模式，只有一欄
 key = "table.one-column-only"
 zht = "只有一欄——表格至少要兩欄，或者先寫好 |---| 那一行"
 zhs = "只有一栏——表格至少要两栏，或者先写好 |---| 那一行"
 en = "one column only — a table needs two, or write the |---| line first"
+
+[[message]]
+# t i：原文照舊，按鍵歸表格（表格操作）
+key = "table.operated"
+zht = "表格操作——原文照舊，t t 畫成表格，t q 退出"
+zhs = "表格操作——原文照旧，t t 画成表格，t q 退出"
+en = "table keys — the source stays, t t draws it, t q leaves"
 
 [[message]]
 # 貼進的格子比表格的欄數寬

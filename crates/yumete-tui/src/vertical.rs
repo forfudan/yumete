@@ -675,7 +675,7 @@ pub fn draw(
     // Asked of the **region**, the same as the horizontal page: `h`, `G` and a
     // search all walk out of the table without putting `:table` away, and the
     // rule row is drawn rather than edited. Either kind of region (#216).
-    let cell = match peek.is_none() && editor.table().is_some_and(|t| t.in_prose()) {
+    let cell = match peek.is_none() && editor.table().is_some_and(|t| !t.takes_the_pane()) {
         true => editor.prose_region().and_then(|region| {
             editor
                 .cell_position()
