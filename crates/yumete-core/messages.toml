@@ -694,6 +694,14 @@ en = "search: `row` runs across (that is `/`), `column` runs down (that is Enter
 find = "查找 搜索 搜尋 搜寻 一行 一欄 一栏 direction"
 
 [[message]]
+# : 命令選單裏 sentence 那一項的說明（commands 組）
+key = "cmd.commands.sentence"
+zht = "一句一縱：竪排時每句話單起一縱，只是看法，不動文件"
+zhs = "一句一纵：竖排时每句话单起一纵，只是看法，不动文件"
+en = "one sentence to a column — a view of the page, not an edit"
+find = "一句一行 斷句 断句 校對 校对 sentence proofread"
+
+[[message]]
 # : 命令選單裏 sh 那一項的說明（commands 組）
 key = "cmd.commands.sh"
 zht = "跑一條命令，輸出收進一個緩衝區"
@@ -2543,6 +2551,13 @@ zhs = "上一纵／下一纵——纵是往左叠的"
 en = "previous/next column — columns stack leftwards"
 
 [[message]]
+# 竪排幫助：一句一縱
+key = "help.vertical.sentence"
+zht = "一句一縱地讀一遍——只是看法，文件沒動"
+zhs = "一句一纵地读一遍——只是看法，文件没动"
+en = "read it back one sentence to a column — a view, not an edit"
+
+[[message]]
 # 幫助分節：竪排
 key = "help.vertical.title"
 zht = "竪排"
@@ -4314,6 +4329,23 @@ key = "selection.collapsed-in-extend"
 zht = "收回成一個字——v 還開着，一走又跟着長"
 zhs = "收回成一个字——v 还开着，一走又跟着长"
 en = "collapsed to one character — v is still on, so the next move grows it again"
+
+
+# ── sentence ──────────────────────────────────────────────────────────
+
+[[message]]
+# :sentence off——回到滿縱排
+key = "sentence.off"
+zht = "回到滿縱——一縱寫到底"
+zhs = "回到满纵——一纵写到底"
+en = "back to full columns"
+
+[[message]]
+# :sentence——一句一縱
+key = "sentence.on"
+zht = "一句一縱——文件沒有動，:sentence off 回去"
+zhs = "一句一纵——文件没有动，:sentence off 回去"
+en = "one 句 to a column — the file is untouched; :sentence off goes back"
 
 
 # ── shell ─────────────────────────────────────────────────────────────

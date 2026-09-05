@@ -185,6 +185,8 @@ pub enum Command {
     /// `:dense` / `:dense off` — pack the 縱書 page as tight as a terminal can
     /// (Feature #120).
     SetDense(bool),
+    /// One 句 to a 縱 — a view of the page, not a change to the file.
+    SetSentences(bool),
     /// `:render off|on|full` — how much of the result the page shows
     /// (Features #96 / #104).
     SetRender(crate::editor::Render),
@@ -707,6 +709,14 @@ pub fn parse(input: &str) -> Result<Command, CommandError> {
             "off" => Ok(Command::SetDense(false)),
             other => Err(CommandError::InvalidArgument {
                 command: "dense",
+                value: other.to_string(),
+            }),
+        },
+        "sentence" => match rest {
+            "" | "on" => Ok(Command::SetSentences(true)),
+            "off" => Ok(Command::SetSentences(false)),
+            other => Err(CommandError::InvalidArgument {
+                command: "sentence",
                 value: other.to_string(),
             }),
         },
@@ -2528,6 +2538,15 @@ pub const COMMANDS: &[Entry] = &[
         help: "cmd.commands.bands",
         needs: &[Need::Vertical],
         args: Args::Free("<幾條，1–4；不寫就是 2>"),
+    },
+    Entry {
+        name: "sentence",
+        aliases: &[],
+        help: "cmd.commands.sentence",
+        // 竪排 only: a 句 gets a 縱 of its own, and 橫排 has no 縱. `:sentence!`
+        // turns the page for you rather than refusing.
+        needs: &[Need::Vertical],
+        args: Args::Words(ON_OFF),
     },
     Entry {
         name: "indent",

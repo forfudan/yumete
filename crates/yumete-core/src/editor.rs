@@ -1017,6 +1017,8 @@ pub struct Editor {
     zong_gap: Option<usize>,
     /// Whether the dense arrangement is on, so the ticks know to stay away.
     dense: bool,
+    /// Whether every 句 opens a 縱 of its own (`:sentence`, Feature #237).
+    sentences: bool,
     /// How many squares open a paragraph (首行縮進), as configured.
     indent: usize,
     /// How many bands the vertical page is divided into (段組).
@@ -1353,6 +1355,7 @@ impl Editor {
             turned_for_table: None,
             zong_gap: None,
             dense: false,
+            sentences: false,
             loose_rows: false,
             indent: 0,
             bands: 1,
@@ -3338,6 +3341,10 @@ impl Editor {
             // fifty columns of text running off the edge is not that.
             Command::SetDense(on) => {
                 self.set_dense(on);
+                Ok(CommandOutcome::Continue)
+            }
+            Command::SetSentences(on) => {
+                self.set_sentences(on);
                 Ok(CommandOutcome::Continue)
             }
             // The palette lives in the front end — the core does not know a
@@ -7020,6 +7027,7 @@ impl Editor {
             (":bands 2", say!("help.vertical.bands")),
             (":hanging on", say!("help.vertical.hung-punctuation")),
             (":dense off", say!("help.vertical.loose")),
+            (":sentence", say!("help.vertical.sentence")),
             (":indent 2", say!("help.vertical.first-line-indent")),
             (":render full", say!("help.vertical.wysiwyg")),
         ] {
@@ -9167,6 +9175,7 @@ impl Editor {
             .with_folds(folded)
             .with_open_line(self.open_line())
             .with_hanging(self.hanging_punctuation())
+            .with_sentences(self.sentences)
             .with_ghost(ghost)
     }
 
@@ -10052,6 +10061,32 @@ impl Editor {
     /// Whether the page is packed tight.
     pub fn dense(&self) -> bool {
         self.dense
+    }
+
+    /// One 句 to a 縱 (`:sentence`, Feature #237).
+    ///
+    /// **A view, and the point is that it is one.** The manual has taught
+    /// `:%s/。/。\n/g` for reading a draft back one sentence at a time since the
+    /// first version — a substitution that edits the manuscript in order to
+    /// read it, and has to be undone before anybody can write again. This is
+    /// that, without touching the file: the page breaks a 縱 at the end of every
+    /// 句 as well as at the measure, so a long sentence still wraps rather than
+    /// running off the foot of the page.
+    ///
+    /// The boundaries are `motion::sentence_starts`', which is what `(` and `)`
+    /// jump between — one answer, so the cursor cannot walk to a place the page
+    /// does not break at.
+    pub fn set_sentences(&mut self, on: bool) {
+        self.sentences = on;
+        self.status = match on {
+            true => say!("sentence.on"),
+            false => say!("sentence.off"),
+        };
+    }
+
+    /// Whether every 句 opens a 縱 of its own.
+    pub fn sentences(&self) -> bool {
+        self.sentences
     }
 
     /// Whether the horizontal page keeps a row of air above every row (疏排).

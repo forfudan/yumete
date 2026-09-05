@@ -87,6 +87,12 @@ pub struct Grid<'a> {
     /// Whether 句讀 hang in the margin rather than taking a square each
     /// (標點旁置).
     pub hanging: bool,
+    /// Whether every 句 opens a 縱 of its own (`:sentence`, Feature #237).
+    ///
+    /// A **view**: the file is not touched, which is the whole point — the
+    /// manual has taught `:%s/。/。\n/g` for proofreading since the beginning,
+    /// and that edits the manuscript to read it.
+    pub sentences: bool,
     /// Which whole lines are not on the page (Feature #159) — by the same
     /// argument: one rule for folding a blank line, and both layouts ask it.
     folded: &'a dyn Fn(usize) -> bool,
@@ -184,6 +190,7 @@ impl<'a> Grid<'a> {
             zong_len: zong_len.max(1),
             ruby,
             hanging: false,
+            sentences: false,
             tatechuyoko: false,
             hidden: NOTHING_HIDDEN,
             folded: NOTHING_FOLDED,
@@ -217,7 +224,16 @@ impl<'a> Grid<'a> {
         }
     }
 
+    /// The same grid, opening a 縱 at every 句.
+    pub fn with_sentences(self, on: bool) -> Grid<'a> {
+        Grid {
+            sentences: on,
+            ..self
+        }
+    }
+
     /// The same grid, packing half-width pairs into one slot.
+
     pub fn with_tatechuyoko(self, on: bool) -> Grid<'a> {
         Grid {
             tatechuyoko: on,
@@ -916,6 +932,7 @@ fn zong_breaks(
     zong_len: usize,
     groups: &[crate::ruby::Ruby],
     hidden: &[(usize, usize)],
+    sentences: bool,
 ) -> Vec<usize> {
     let total = slots.len();
     // **The character the reader sees**, not the one the range begins with.
@@ -944,9 +961,41 @@ fn zong_breaks(
             .find(|g| at > g.start && at < g.end)
             .map(|g| slots.partition_point(|s| s.start < g.start))
     };
+    // Where each 句 opens, in slots (`:sentence`, Feature #237). The
+    // boundaries are `motion`'s, so the page breaks where `(` and `)` jump; the
+    // *character* index they come back as is turned into a slot index here,
+    // because a slot may have swallowed hidden markup or a ruby group and the
+    // two stopped counting alike several features ago.
+    let sentence_cuts: Vec<usize> = match sentences {
+        false => Vec::new(),
+        true => crate::motion::sentence_starts(chars)
+            .into_iter()
+            .map(|at| slots.partition_point(|s: &Slot| s.start < at))
+            .filter(|&i| i > 0 && i < total)
+            .collect(),
+    };
     let mut breaks = vec![0usize];
     let mut at = 0;
-    while at + zong_len < total {
+    while at < total {
+        // The 縱 ends at whichever comes first: the end of the 句, or the
+        // measure. A 句 longer than the column still wraps — one 句 to a 縱 is
+        // the *most* a 縱 holds, never a licence to run off the foot of the
+        // page.
+        //
+        // A sentence cut needs no 禁則 adjustment and must not be given one: it
+        // already falls after the 。 and after whatever closed the quotation,
+        // which is exactly where the rule would have moved it to, and retreating
+        // from it would put the 。 at the head of the next 縱 instead.
+        if let Some(cut) = sentence_cuts.iter().copied().find(|&c| c > at) {
+            if cut <= at + zong_len {
+                breaks.push(cut);
+                at = cut;
+                continue;
+            }
+        }
+        if at + zong_len >= total {
+            break;
+        }
         let mut cut = at + zong_len;
         // A reading group is not two characters and cannot be pulled down two
         // at a time; it moves whole or not at all. Moving it whole is right
@@ -1050,6 +1099,7 @@ fn line_zongs(rope: &Rope, line: usize, grid: Grid) -> Laid {
         grid.zong_len,
         grid.indent,
         grid.hanging,
+        grid.sentences,
         grid.tatechuyoko,
         grid.ruby.bits(),
         grid.open_line == line,
@@ -1093,7 +1143,14 @@ fn lay_out(rope: &Rope, line: usize, grid: Grid, hidden: &[(usize, usize)]) -> L
     let slots = line_grid_in(rope, line, grid, hidden);
     let chars: Vec<char> = line_text(rope, line).chars().collect();
     let groups = crate::ruby::groups(&chars, grid.ruby);
-    let breaks = zong_breaks(&chars, &slots, grid.zong_len.max(1), &groups, hidden);
+    let breaks = zong_breaks(
+        &chars,
+        &slots,
+        grid.zong_len.max(1),
+        &groups,
+        hidden,
+        grid.sentences,
+    );
     (std::rc::Rc::new(slots), std::rc::Rc::new(breaks))
 }
 
@@ -1591,6 +1648,7 @@ mod tests {
         zong_len: 32,
         ruby: Dialects::NONE,
         hanging: false,
+        sentences: false,
         tatechuyoko: false,
         hidden: NOTHING_HIDDEN,
         folded: NOTHING_FOLDED,
@@ -2402,7 +2460,7 @@ mod tests {
             let grid = Grid { zong_len: len, ..G };
             let slots = line_slots_in(line, grid, &hidden);
             let groups = crate::ruby::groups(&chars, grid.ruby);
-            zong_breaks(&chars, &slots, len, &groups, &hidden)
+            zong_breaks(&chars, &slots, len, &groups, &hidden, false)
                 .iter()
                 .filter_map(|&b| slots.get(b))
                 .filter_map(|s| s.text.chars().next())
@@ -2414,6 +2472,48 @@ mod tests {
                 !heads.contains(&'︒') && !heads.contains(&'。'),
                 "{line:?} opens a 縱 with 。: {heads:?}"
             );
+        }
+    }
+
+    /// `:sentence` (Feature #237): a 縱 ends where the 句 does — and the file
+    /// is not touched, which is what the manual's `:%s/。/。\n/g` could never
+    /// say.
+    #[test]
+    fn one_sentence_to_a_zong() {
+        // Each 縱's opening character, at a measure far longer than any of the
+        // sentences: without `sentences` the whole line is one 縱.
+        let heads = |line: &str, len: usize, sentences: bool| -> Vec<String> {
+            let grid = Grid {
+                zong_len: len,
+                sentences,
+                ..G
+            };
+            let chars: Vec<char> = line.chars().collect();
+            let slots = line_slots_in(line, grid, &[]);
+            let groups = crate::ruby::groups(&chars, grid.ruby);
+            zong_breaks(&chars, &slots, len, &groups, &[], sentences)
+                .iter()
+                .filter_map(|&b| slots.get(b))
+                .map(|s| s.text.to_string())
+                .collect()
+        };
+
+        let line = "雪下得極早。她說：「你回來了。」他沒有答話。";
+        assert_eq!(heads(line, 40, false).len(), 1, "one 縱 without it");
+        // Three 句 — and the third opens at 他, not at 」: a quotation closes
+        // the sentence it belongs to.
+        assert_eq!(heads(line, 40, true), ["雪", "她", "他"]);
+
+        // A 句 longer than the measure still wraps: one 句 to a 縱 is the most a
+        // 縱 holds, not a licence to run off the foot of the page.
+        let long = "一二三四五六七八九十。甲乙丙";
+        assert_eq!(heads(long, 6, true), ["一", "七", "甲"]);
+
+        // 禁則 still holds where the measure does the breaking, and a sentence
+        // break never leaves a 。 at the head of a 縱.
+        for zong in heads("一二三四五。六七八九十。", 4, true) {
+            assert_ne!(zong, "︒");
+            assert_ne!(zong, "。");
         }
     }
 
@@ -2457,7 +2557,7 @@ mod tests {
             let slots = line_slots_in(text, grid, &[]);
             let chars: Vec<char> = text.chars().collect();
             let groups = crate::ruby::groups(&chars, grid.ruby);
-            let breaks = zong_breaks(&chars, &slots, len, &groups, &[]);
+            let breaks = zong_breaks(&chars, &slots, len, &groups, &[], false);
             for &at in &breaks {
                 if let Some(slot) = slots.get(at) {
                     let head = slot.start;
