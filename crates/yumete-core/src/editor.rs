@@ -5770,13 +5770,28 @@ impl Editor {
         self.snapshot();
         for (r, values) in grid.iter().enumerate() {
             let at = line + r;
-            // Past the last row, the block writes new rows of its own.
-            if at >= self.current_buffer().line_count() || self.row_cells(at).len() != width {
+            // Past the last row, the block writes new rows of its own — **at
+            // the row's own place**, not at the end of the file. A file that
+            // ends in a newline has an empty last line, so appending behind
+            // that put the new row one line below where the block was being
+            // laid down: a two-row paste into 「字,說明 / 木,樹」 came back as
+            // 「甲,乙 / 丙 / ,」, the second row's cells written into the empty
+            // line and the row that was meant to hold them left blank at the
+            // bottom.
+            let lines = self.current_buffer().line_count();
+            if at >= lines || self.row_cells(at).len() != width {
                 let row = self.blank_row();
-                let end = self.current_buffer().rope().len_chars();
-                self.without_cell_guard(|e| {
-                    e.current_buffer_mut().insert(end, &format!("\n{row}"))
-                });
+                if at < lines {
+                    let head = self.current_buffer().rope().line_to_char(at);
+                    self.without_cell_guard(|e| {
+                        e.current_buffer_mut().insert(head, &format!("{row}\n"))
+                    });
+                } else {
+                    let end = self.current_buffer().rope().len_chars();
+                    self.without_cell_guard(|e| {
+                        e.current_buffer_mut().insert(end, &format!("\n{row}"))
+                    });
+                }
             }
             for (c, text) in values.iter().enumerate() {
                 let Some((from, to)) = self.cell_span(at, cell + c) else {
@@ -11873,6 +11888,19 @@ impl Editor {
     pub fn paste_text(&mut self, text: &str) {
         if text.is_empty() {
             return;
+        }
+        // **A spreadsheet's clipboard becomes rows** (Feature #226). Excel,
+        // Numbers, LibreOffice and a browser table all put tab-separated lines
+        // on the clipboard, and until now the cell refused every one of them
+        // for holding a tab — the writer got 「格子裏不能有 Tab」 for the one
+        // paste a table editor exists to accept. `t p` had already learned to
+        // read a block out of the register; this is the same block arriving by
+        // the other door, and it lands the same way.
+        if (self.mode == Mode::Insert || self.mode == Mode::Normal) && self.table_here() {
+            if let Some(grid) = sniff_grid(text.trim_end_matches(['\n', '\r'])) {
+                self.paste_grid(grid);
+                return;
+            }
         }
         // **Judged before anything happens**, in Insert as well as in Normal:
         // the Insert branch used to hand the text to `insert_str`, which
@@ -20892,6 +20920,9 @@ mod tests {
     }
 
     /// A paste the cell refuses says so — in Insert as well as in Normal.
+    ///
+    /// The text is a bare `|`, not the tab-separated block this test used to
+    /// paste: since #226 a block is not refused, it is a grid.
     #[test]
     fn a_refused_paste_does_not_claim_to_have_happened() {
         let mut ed = typed("| 字 | 說明 |\n| --- | --- |\n| 木 | 樹 |\n");
@@ -20899,9 +20930,69 @@ mod tests {
         assert!(ed.enter_table(), "{}", ed.status());
         let before = ed.current_buffer().text();
         press(&mut ed, "i");
-        ed.paste_text("甲\t乙\n丙\t丁\n");
+        ed.paste_text("甲 | 乙");
         assert_eq!(ed.current_buffer().text(), before, "{}", ed.status());
         assert!(!ed.status().contains("貼了"), "{}", ed.status());
+    }
+
+    /// A spreadsheet's clipboard lands as rows, and widens the table (#226).
+    #[test]
+    fn a_pasted_spreadsheet_becomes_rows() {
+        let mut ed = typed("| 字 | 說明 |\n| --- | --- |\n| 木 | 樹 |\n");
+        ed.goto_line(3);
+        assert!(ed.enter_table(), "{}", ed.status());
+        press(&mut ed, "i");
+        // Two rows, three columns, into a table two columns wide: the third
+        // column is written rather than refused.
+        ed.paste_text("甲\t乙\t丙\n丁\t戊\t己\n");
+        let text = ed.current_buffer().text();
+        assert!(text.contains("甲"), "{text}\n{}", ed.status());
+        assert!(text.contains("己"), "{text}\n{}", ed.status());
+        // The row that was standing there is overwritten from the cursor's
+        // cell, the way every grid pastes a block.
+        assert!(!text.contains("樹"), "{text}");
+        // Three columns now, rule row included.
+        for line in text.lines().filter(|l| crate::mdtable::is_row(l)) {
+            assert_eq!(crate::mdtable::split(line).len(), 3, "{line}");
+        }
+    }
+
+    /// The same paste into a CSV — the block lands, and one too wide is
+    /// refused rather than shifting every column right of it (#226).
+    #[test]
+    fn a_pasted_spreadsheet_lands_in_a_csv_too() {
+        let dir = std::env::temp_dir().join(format!("yumete-paste-grid-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let csv = dir.join("d.csv");
+        std::fs::write(&csv, "字,說明\n木,樹\n").unwrap();
+
+        let mut ed = Editor::new();
+        ed.open_file(&csv).unwrap();
+        assert!(ed.enter_table(), "{}", ed.status());
+        ed.goto_line(2);
+        ed.paste_text("甲\t乙\n丙\t丁\n");
+        assert_eq!(ed.current_buffer().text(), "字,說明\n甲,乙\n丙,丁\n", "{}", ed.status());
+
+        // Three columns into a table two wide: named, and nothing moves.
+        let before = ed.current_buffer().text();
+        ed.paste_text("戊\t己\t庚\n");
+        assert_eq!(ed.current_buffer().text(), before, "{}", ed.status());
+        assert!(!ed.status().contains("貼了"), "{}", ed.status());
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// A single line with no tab is still a cell, not a grid (#226).
+    #[test]
+    fn one_cell_of_text_is_not_a_spreadsheet() {
+        let mut ed = typed("| 字 | 說明 |\n| --- | --- |\n| 木 | 樹 |\n");
+        ed.goto_line(3);
+        assert!(ed.enter_table(), "{}", ed.status());
+        press(&mut ed, "i");
+        ed.paste_text("大樹，很高");
+        assert!(ed.current_buffer().text().contains("大樹，很高"), "{}", ed.status());
+        assert!(ed.status().contains("貼了"), "{}", ed.status());
     }
 
     #[test]
