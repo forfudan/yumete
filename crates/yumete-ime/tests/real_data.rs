@@ -157,6 +157,34 @@ fn the_word_level_changes_how_readily_words_join() {
     assert!(strict.iter().any(|w| w.chars().count() > 1), "{strict:?}");
 }
 
+/// `:ruby auto rare` asked the 字集 column for the 簡 tag alone, and 簡 is
+/// 通用規範漢字表 — a list of *simplified* standard forms. So on the 繁體 a
+/// novel is written in it answered 「生僻」 for 說, 為, 這, 裏, 學 and 國, which
+/// is every second character: the mode that exists to keep a novel from
+/// becoming a textbook turned every novel into one. Ordinary now means carried
+/// by any standard in current use.
+#[test]
+fn a_traditional_character_in_daily_use_is_not_a_rare_one() {
+    let Some(dir) = data_dir() else { return };
+    let session = ImeSession::new(Scheme::LINGMING, vec![dir]);
+    let reader = session.reader();
+    assert!(
+        yumete_cjk::Reader::available(&reader),
+        "the annotation table should be loaded"
+    );
+    for ch in "說為這裏學國們臺灣".chars() {
+        assert_eq!(
+            yumete_cjk::Reader::is_rare(&reader, ch),
+            Some(false),
+            "{ch} is written every day"
+        );
+    }
+    // 龘 is in none of the four, and is what the mode is for.
+    assert_eq!(yumete_cjk::Reader::is_rare(&reader, '龘'), Some(true));
+    // Not a 漢字 at all — nothing to stumble on.
+    assert_eq!(yumete_cjk::Reader::is_rare(&reader, 'a'), Some(false));
+}
+
 /// A probe, not an assertion: what each bias does to one real sentence.
 #[test]
 #[ignore]

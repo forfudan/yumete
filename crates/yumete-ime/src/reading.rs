@@ -155,12 +155,20 @@ impl Reader for YumeReader {
             return Some(false);
         }
         // The 字集 column reads `簡繁古臺港-CJK`: the 字集 marks, then the
-        // Unicode block. 簡 is 通用規範漢字表, so a character the column does not
-        // mark 簡 — including one the table has no row for at all — is outside
-        // it, which is precisely the question `:ruby auto rare` asks.
+        // Unicode block.
+        //
+        // **Every standard in daily use counts, not 簡 alone.** 簡 is
+        // 通用規範漢字表 — a list of *simplified* standard forms — so asking it
+        // and nothing else answered 「生僻」 for 說, 為, 這, 裏, 學 and 國, which
+        // is every second character of a 繁體 manuscript: the reading went over
+        // half the page and `rare` became the mode it exists to avoid. A
+        // character is ordinary if any of the four current standards carries
+        // it. 古 is deliberately not among them — a character only 古籍 has is
+        // exactly the one a reader stumbles on.
+        const EVERYDAY: [char; 4] = ['簡', '繁', '臺', '港'];
         let field = self.annotations.lookup(&ch.to_string()).charset;
         let tags = field.split('-').next().unwrap_or("");
-        Some(!tags.contains('簡'))
+        Some(!EVERYDAY.iter().any(|t| tags.contains(*t)))
     }
 
     fn available(&self) -> bool {
