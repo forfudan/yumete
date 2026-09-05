@@ -3127,6 +3127,10 @@ impl Editor {
                 self.check_table();
                 Ok(CommandOutcome::Continue)
             }
+            Command::CheckPunct => {
+                self.check_punct();
+                Ok(CommandOutcome::Continue)
+            }
             Command::CheckUsage => {
                 self.check_usage();
                 Ok(CommandOutcome::Continue)
@@ -8838,8 +8842,24 @@ impl Editor {
             ));
             listing.push('\n');
         }
+        self.show_listing(listing, say!("check.usage-results", name));
+        // The listing stops at `GREP_LIMIT`; the count must say so, or the
+        // status line reports 八百處 over a buffer holding five hundred and the
+        // reader believes they have seen them all. `:grep` has always said it.
+        self.status = match n > GREP_LIMIT {
+            true => say!("check.usage-too-many", GREP_LIMIT),
+            false => say!("check.usage-found", n),
+        };
+    }
+
+    /// Put a `檔名:行號: …` listing in a buffer of its own and go to it.
+    ///
+    /// The shape `:grep`, `:table check` and both `:check` share: `gf` on a row
+    /// is how a reader goes and fixes one, and that needs `grep_root` to be the
+    /// directory the file it was run on lives in.
+    fn show_listing(&mut self, listing: String, name: String) {
         let mut buffer = Buffer::from_text(&listing);
-        buffer.name_as(&say!("check.usage-results", name));
+        buffer.name_as(&name);
         self.grep_root = self
             .current_buffer()
             .path()
@@ -8847,12 +8867,59 @@ impl Editor {
             .map(Path::to_path_buf);
         self.add_buffer(buffer);
         self.set_cursor(0);
-        // The listing stops at `GREP_LIMIT`; the count must say so, or the
-        // status line reports 八百處 over a buffer holding five hundred and the
-        // reader believes they have seen them all. `:grep` has always said it.
+    }
+
+    /// `:check punct` — the marks a manuscript cannot see (Feature #238).
+    ///
+    /// **The one that matters is the third.** A half-width comma is ugly and a
+    /// `...` is wrong, and both are caught by a careful read. A 「 that never
+    /// closes is not: it does not look wrong on the line it is on, and from
+    /// there to the end of the chapter every quotation mark means the opposite
+    /// of what it says. Nobody proofreading a page finds it, because the page
+    /// is fine.
+    ///
+    /// **Only where it is Chinese.** `3.14`, `1,000`, `README.md` and an
+    /// English sentence are full of half-width marks and every one of them is
+    /// right; what makes a mark wrong is the 漢字 beside it. See
+    /// [`crate::punct`] for the rest of that rule, and for why a 「 left open
+    /// at the end of a paragraph may be perfectly correct.
+    fn check_punct(&mut self) {
+        let name = self
+            .current_buffer()
+            .path()
+            .and_then(|p| p.file_name())
+            .map(|n| n.to_string_lossy().into_owned())
+            .unwrap_or_else(|| self.current_buffer().display_name().to_string());
+        let text = self.current_buffer().rope().to_string();
+        let slips = crate::punct::check(&text);
+        if slips.is_empty() {
+            self.status = say!("check.punct-clean", name);
+            return;
+        }
+        let n = slips.len();
+        let mut listing = String::new();
+        for slip in slips.iter().take(GREP_LIMIT) {
+            let at = slip.line + 1;
+            listing.push_str(&match slip.kind {
+                crate::punct::Kind::HalfWidth => {
+                    say!("check.punct-half", name, at, slip.written, slip.wanted)
+                }
+                crate::punct::Kind::Ellipsis => {
+                    say!("check.punct-ellipsis", name, at, slip.written)
+                }
+                crate::punct::Kind::Unclosed => {
+                    say!("check.punct-unclosed", name, at, slip.written, slip.wanted)
+                }
+                crate::punct::Kind::Unopened => {
+                    say!("check.punct-unopened", name, at, slip.written, slip.wanted)
+                }
+            });
+            listing.push('\n');
+        }
+        self.show_listing(listing, say!("check.punct-results", name));
         self.status = match n > GREP_LIMIT {
-            true => say!("check.usage-too-many", GREP_LIMIT),
-            false => say!("check.usage-found", n),
+            true => say!("check.punct-too-many", GREP_LIMIT),
+            false => say!("check.punct-found", n),
         };
     }
 
@@ -19450,6 +19517,24 @@ mod tests {
             "{}",
             ed.status()
         );
+    }
+
+    /// `:check punct` answers in the same jumpable shape, and the finding that
+    /// matters — the 「 nothing closes — is the one no eye finds (#238).
+    #[test]
+    fn check_punct_finds_the_quote_that_never_closes() {
+        let mut ed = typed("他說,好。\n她問：「你回來了。\n這一行沒事。\n");
+        assert!(ed.execute("check punct").is_ok());
+        let out = ed.current_buffer().text();
+        assert!(out.contains(":1:") && out.contains('，'), "{out}");
+        assert!(out.contains(":2:") && out.contains('」'), "{out}");
+        assert_eq!(out.lines().count(), 2, "{out}");
+
+        // Nothing to say is said, rather than an empty buffer being opened.
+        let mut ed = typed("他說：「好。」\n圓周率是 3.14。\n");
+        let before = ed.buffer_count();
+        assert!(ed.execute("check punct").is_ok());
+        assert_eq!(ed.buffer_count(), before, "clean: no listing");
     }
 
     #[test]

@@ -58,6 +58,9 @@ pub enum Command {
     /// `:check usage` — which of two spellings the manuscript settled on, and
     /// where it slipped (Feature #233).
     CheckUsage,
+    /// `:check punct` — half-width marks in Chinese text, `...` for ……, and
+    /// the 「 nothing closes (Feature #238).
+    CheckPunct,
     /// `:<n>` or `:goto <n>` (alias `:g`) — put the cursor on line `n`.
     GotoLine(usize),
     /// `:recover` — load the crash-recovery draft into the buffer;
@@ -460,6 +463,7 @@ pub fn parse(input: &str) -> Result<Command, CommandError> {
         "count" | "wc" => Ok(Command::Count),
         "check" => match rest {
             "usage" => Ok(Command::CheckUsage),
+            "punct" => Ok(Command::CheckPunct),
             // `:check` on its own asks what to check rather than guessing:
             // 用字 is the first of several, and the day 標點 lands a bare
             // `:check` that had quietly meant one of them would change what
@@ -2295,15 +2299,23 @@ const WORD_LEVELS: &[Word] = &[
 
 /// What `:check` can be asked to look over (Feature #233).
 ///
-/// One word today. It is a list rather than `Args::None` because 用字 is the
-/// first of several — 標點, 空格 — and a command that took nothing at all
-/// would have to be re-shaped the day the second one lands.
-const CHECK: &[Word] = &[Word {
-    name: "usage",
-    help: "cmd.check.usage",
-    needs: &[],
-    then: Args::None,
-}];
+/// Two words. 空格 is the third, and the list is why adding this one cost a
+/// line: a command that had taken nothing at all would have had to be
+/// re-shaped, and every `:check` anybody had typed would have changed meaning.
+const CHECK: &[Word] = &[
+    Word {
+        name: "usage",
+        help: "cmd.check.usage",
+        needs: &[],
+        then: Args::None,
+    },
+    Word {
+        name: "punct",
+        help: "cmd.check.punct",
+        needs: &[],
+        then: Args::None,
+    },
+];
 
 /// The one word `:reload` takes besides nothing at all.
 const RELOAD: &[Word] = &[Word {
