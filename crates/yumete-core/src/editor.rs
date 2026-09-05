@@ -3131,6 +3131,10 @@ impl Editor {
                 self.check_punct();
                 Ok(CommandOutcome::Continue)
             }
+            Command::CheckCharset => {
+                self.check_charset();
+                Ok(CommandOutcome::Continue)
+            }
             Command::CheckUsage => {
                 self.check_usage();
                 Ok(CommandOutcome::Continue)
@@ -8920,6 +8924,91 @@ impl Editor {
         self.status = match n > GREP_LIMIT {
             true => say!("check.punct-too-many", GREP_LIMIT),
             false => say!("check.punct-found", n),
+        };
+    }
+
+    /// `:check charset` — the characters that are in no standard (#240).
+    ///
+    /// **The failure this exists to prevent happens after the manuscript
+    /// leaves.** A character outside 通用規範／臺灣／香港／古籍 reads perfectly
+    /// on the screen it was typed on, because the editor has a font with it;
+    /// the typesetter's does not, and it comes back as a box, or as a
+    /// substituted glyph in a face that does not match, three weeks later and
+    /// once per printing. Nothing in the writing tools asks the question, and
+    /// the data to answer it — the 字集 column of the 拆分表 — has been sitting
+    /// in the editor since `:yume scheme`.
+    ///
+    /// **One line per character, not per occurrence.** A 名字 with a rare 字 in
+    /// it appears four hundred times and is *one* decision: keep it, or change
+    /// it everywhere. Four hundred rows would bury the other three characters
+    /// that are the actual finding. So the listing gives each character its
+    /// first place, its count, and the Unicode block it lives in — the block
+    /// being the part that predicts whether a font will have it.
+    fn check_charset(&mut self) {
+        let name = self
+            .current_buffer()
+            .path()
+            .and_then(|p| p.file_name())
+            .map(|n| n.to_string_lossy().into_owned())
+            .unwrap_or_else(|| self.current_buffer().display_name().to_string());
+        if !self.reader.available() {
+            self.status = say!("check.charset-no-data");
+            return;
+        }
+        let text = self.current_buffer().rope().to_string();
+        // First line, count, block — keyed by the character, with `order`
+        // keeping the sequence they were first written in so that the listing
+        // reads down the page the way every other results buffer does.
+        let mut seen: std::collections::HashMap<char, (usize, usize, String)> =
+            std::collections::HashMap::new();
+        let mut order: Vec<char> = Vec::new();
+        for (line, body) in text.lines().enumerate() {
+            for ch in body.chars() {
+                if !is_han(ch) {
+                    continue;
+                }
+                if let Some(entry) = seen.get_mut(&ch) {
+                    entry.1 += 1;
+                    continue;
+                }
+                let Some(field) = self.reader.charset(ch) else {
+                    // The reader answers 「I have no 字集 data」 the same way for
+                    // every character; one no is the whole answer.
+                    self.status = say!("check.charset-no-data");
+                    return;
+                };
+                let mut parts = field.splitn(2, '-');
+                let tags = parts.next().unwrap_or("");
+                let block = parts.next().unwrap_or("").to_string();
+                if !tags.is_empty() {
+                    continue;
+                }
+                order.push(ch);
+                seen.insert(ch, (line, 1, block));
+            }
+        }
+        if order.is_empty() {
+            self.status = say!("check.charset-clean", name);
+            return;
+        }
+        let n = order.len();
+        let mut listing = String::new();
+        for ch in order.iter().take(GREP_LIMIT) {
+            let (line, count, block) = &seen[ch];
+            listing.push_str(&say!(
+                "check.charset-outside",
+                name,
+                line + 1,
+                ch,
+                block,
+                count
+            ));
+            listing.push('\n');
+        }
+        self.show_listing(listing, say!("check.charset-results", name));
+        self.status = match n > GREP_LIMIT {
+            true => say!("check.charset-too-many", GREP_LIMIT),
+            false => say!("check.charset-found", n),
         };
     }
 
@@ -15713,6 +15802,16 @@ mod tests {
             Some(ch == '龘')
         }
 
+        fn charset(&self, ch: char) -> Option<String> {
+            Some(match ch {
+                // In 古籍 only, so rare — but a standard does carry it.
+                '龘' => "古-CJK".to_string(),
+                // In nothing at all, and in a block a font may well lack.
+                '𠮷' => "-CJK擴展B".to_string(),
+                _ => "簡繁臺港-CJK".to_string(),
+            })
+        }
+
         fn available(&self) -> bool {
             true
         }
@@ -19518,6 +19617,25 @@ mod tests {
             "{}",
             ed.status()
         );
+    }
+
+    /// `:check charset` reports the character no standard carries — once,
+    /// however many times it was written (#240).
+    #[test]
+    fn check_charset_reports_each_character_once() {
+        let mut ed = with_toy_reader("漢字龘\n𠮷很難𠮷\n");
+        assert!(ed.execute("check charset").is_ok());
+        let out = ed.current_buffer().text();
+        assert_eq!(out.lines().count(), 1, "one line per character: {out}");
+        assert!(out.contains('𠮷') && out.contains(":2:"), "{out}");
+        assert!(out.contains('2'), "how many times, not just where: {out}");
+        // 龘 is rare — `:ruby auto rare` annotates it — but 古籍 is a standard
+        // and carries it, so it is not this command's finding.
+        assert!(!out.contains('龘'), "{out}");
+
+        let mut ed = typed("漢字");
+        assert!(ed.execute("check charset").is_ok());
+        assert!(!ed.status().is_empty(), "no 字集 data is worth saying");
     }
 
     /// `:check punct` answers in the same jumpable shape, and the finding that

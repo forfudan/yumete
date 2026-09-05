@@ -39,6 +39,21 @@ pub trait Reader {
         None
     }
 
+    /// Which 字集 carry `ch`, exactly as the 拆分表 spells it — `簡古臺-CJK`:
+    /// the standards first, then the Unicode block, separated by a `-`.
+    ///
+    /// The field is handed over unsplit on purpose. The two halves answer two
+    /// different questions — *is this character standard* and *is this
+    /// character in a block the typesetter's font has* — and a check that asks
+    /// the second one (#240) needs the block name to say anything useful.
+    ///
+    /// `None` is 「the 字集 data is not loaded」, which is not the same finding
+    /// as an empty field: an empty field means the data was consulted and this
+    /// character is in nothing.
+    fn charset(&self, _ch: char) -> Option<String> {
+        None
+    }
+
     /// Whether this reader can answer anything at all, for the status line.
     fn available(&self) -> bool {
         false

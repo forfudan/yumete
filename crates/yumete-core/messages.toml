@@ -281,6 +281,48 @@ en = "{0}:{1}: {2} columns here, {3} expected"
 # ── check ─────────────────────────────────────────────────────────────
 
 [[message]]
+# :check charset 查完，每個字都在某個字集裏
+key = "check.charset-clean"
+zht = "{0}：每個字都在字集裏"
+zhs = "{0}：每个字都在字集里"
+en = "{0}: every character is in a standard"
+
+[[message]]
+# :check charset 查出了不在任何字集裏的字
+key = "check.charset-found"
+zht = "{0} 個字不在任何字集裏——gf 跳到那一行"
+zhs = "{0} 个字不在任何字集里——gf 跳到那一行"
+en = "{0} character(s) in no standard — gf goes to the line"
+
+[[message]]
+# :check charset 沒有字集資料可問（碼表沒載）
+key = "check.charset-no-data"
+zht = "沒有字集資料——先 :yume scheme 載一個方案"
+zhs = "没有字集资料——先 :yume scheme 载一个方案"
+en = "no 字集 data — load a scheme first with :yume scheme"
+
+[[message]]
+# :check charset 結果裏的一行：這個字不在任何字集裏
+key = "check.charset-outside"
+zht = "{0}:{1}: 「{2}」不在任何字集裏（{3}），全文 {4} 處"
+zhs = "{0}:{1}: 「{2}」不在任何字集里（{3}），全文 {4} 处"
+en = "{0}:{1}: 「{2}」 is in no standard ({3}), {4} time(s) in all"
+
+[[message]]
+# :check charset 的結果那一份緩衝區的名字
+key = "check.charset-results"
+zht = "[字集 {0}]"
+zhs = "[字集 {0}]"
+en = "[charset {0}]"
+
+[[message]]
+# :check charset 查出來的太多，只列了前面那些
+key = "check.charset-too-many"
+zht = "{0} 個以上（只列了前 {0} 個）——gf 跳到那一行"
+zhs = "{0} 个以上（只列了前 {0} 个）——gf 跳到那一行"
+en = "{0}+ characters in no standard (first {0} listed) — gf goes to the line"
+
+[[message]]
 # :check punct 查完，標點沒有問題
 key = "check.punct-clean"
 zht = "{0}：標點沒有問題"
@@ -452,6 +494,14 @@ zht = "上一個"
 zhs = "上一个"
 en = "the previous one"
 find = "上一個 上一个 前一個 prev bp"
+
+[[message]]
+# : 命令選單裏 charset 那一項的說明（check 組）
+key = "cmd.check.charset"
+zht = "查字集：不在通用規範／臺灣／香港／古籍裏的字，排版社的字體多半也沒有"
+zhs = "查字集：不在通用规范／台湾／香港／古籍里的字，排版社的字体多半也没有"
+en = "check 字集: characters no current standard carries — the ones a typesetter's font will not have"
+find = "字集 生僻 罕用 缺字 豆腐塊 豆腐块 通用規範 通用规范 造字 charset rare glyph"
 
 [[message]]
 # : 命令選單裏 punct 那一項的說明（check 組）
