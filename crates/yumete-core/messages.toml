@@ -609,9 +609,9 @@ en = "hand the terminal over and watch it run (vi's spelling)"
 [[message]]
 # : 命令選單裏 shot 那一項的說明（commands 組）
 key = "cmd.commands.shot"
-zht = "把畫面截成圖放進剪貼簿——命令面板收起來之後才截"
-zhs = "把画面截成图放进剪贴簿——命令面板收起来之后才截"
-en = "put a picture of the screen on the clipboard — taken after the menu closes"
+zht = "把這一頁畫成一張圖存起來；screen 則交給系統的截圖程序"
+zhs = "把这一页画成一张图存起来；screen 则交给系统的截图程序"
+en = "draw this page to a file; `screen` hands it to the platform's own"
 
 [[message]]
 # : 命令選單裏 s/pat/rep/ 那一項的說明（commands 組）
@@ -2390,11 +2390,11 @@ zhs = "复制到系统剪贴簿"
 en = "copy to the system clipboard"
 
 [[message]]
-# g 組：詳情欄
-key = "hint.goto.detail-panel"
-zht = "詳情欄"
-zhs = "详情栏"
-en = "the detail panel"
+# 空格組：字典
+key = "hint.goto.dictionary"
+zht = "字典：查這個字的拆分與編碼"
+zhs = "字典：查这个字的拆分与编码"
+en = "dictionary: how this character is written and coded"
 
 [[message]]
 # g 組：檔尾
@@ -2705,11 +2705,18 @@ zhs = "加一行（下／上）"
 en = "add a row (below / above)"
 
 [[message]]
+# t 組：詳情欄（從前是 空格 d）
+key = "hint.table.detail-panel"
+zht = "詳情欄"
+zhs = "详情栏"
+en = "the detail panel"
+
+[[message]]
 # t 之後認得哪些鍵
 key = "hint.table.after-t"
-zht = "t 後面：t q / ? g f s S o O n N d D j k h l y p < = > ] ["
-zhs = "t 后面：t q / ? g f s S o O n N d D j k h l y p < = > ] ["
-en = "after t: t q / ? g f s S o O n N d D j k h l y p < = > ] ["
+zht = "t 後面：t q / ? g f i s S o O n N d D j k h l y p < = > ] ["
+zhs = "t 后面：t q / ? g f i s S o O n N d D j k h l y p < = > ] ["
+en = "after t: t q / ? g f i s S o O n N d D j k h l y p < = > ] ["
 
 [[message]]
 # 表格提示：這欄靠左／居中／靠右
@@ -2763,9 +2770,9 @@ en = "table · character"
 [[message]]
 # 非 | 表格裏 t 之後可以按的鍵
 key = "hint.table.csv-keys"
-zht = "t 後面（這種表格）：/ ? g s S o O d j k y p"
-zhs = "t 后面（这种表格）：/ ? g s S o O d j k y p"
-en = "after t, in this kind of table: / ? g s S o O d j k y p"
+zht = "t 後面（這種表格）：/ ? g i s S o O d j k y p"
+zhs = "t 后面（这种表格）：/ ? g i s S o O d j k y p"
+en = "after t, in this kind of table: / ? g i s S o O d j k y p"
 
 [[message]]
 # 表格提示：刪這一行
@@ -4756,6 +4763,34 @@ key = "ui.needs-these-first"
 zht = "需要 {0}，句末加 force"
 zhs = "需要 {0}，句末加 force"
 en = "needs {0}; add force at the end"
+
+[[message]]
+# 字典欄：拆分表裏沒有這個字
+key = "ui.not-in-the-table"
+zht = "拆分表裏沒有這個字"
+zhs = "拆分表里没有这个字"
+en = "not in the decomposition table"
+
+[[message]]
+# 空格 d：游標下沒有字可查
+key = "ui.nothing-to-look-up"
+zht = "游標下沒有字可查"
+zhs = "光标下没有字可查"
+en = "no character under the cursor to look up"
+
+[[message]]
+# `:shot` 把這一幀畫成檔案了
+key = "ui.shot-drawn"
+zht = "這一頁畫成了 {0}"
+zhs = "这一页画成了 {0}"
+en = "drew this page to {0}"
+
+[[message]]
+# `:shot` 寫不出那個檔
+key = "ui.shot-failed"
+zht = "寫不出這張圖：{0}"
+zhs = "写不出这张图：{0}"
+en = "could not write the picture: {0}"
 
 [[message]]
 # 這個平台上沒有配截圖命令

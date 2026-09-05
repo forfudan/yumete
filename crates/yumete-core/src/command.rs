@@ -142,8 +142,8 @@ pub enum Command {
     /// `:numbers fill` — whether the line-number band has a ground of its
     /// own. `None` toggles.
     SetNumberFill(Option<bool>),
-    /// `:shot` — the screen as it stands, as an image, on the clipboard.
-    Screenshot,
+    /// `:shot` — a picture of the page, drawn by the editor itself (#189).
+    Screenshot { shot: Shot, force: bool },
     /// `:theme` — which theme, and whether it is dark, light or the
     /// terminal's own answer (Feature #152).
     ///
@@ -544,7 +544,15 @@ pub fn parse(input: &str) -> Result<Command, CommandError> {
         // with or without the theme's name: every combination of the two
         // halves is a sentence, because there is nothing to be gained by
         // refusing one.
-        "shot" => Ok(Command::Screenshot),
+        "shot" | "shot!" => {
+            let force = word.ends_with('!');
+            let shot = match rest.trim() {
+                "screen" => Shot::Screen,
+                "" => Shot::Page(None),
+                path => Shot::Page(Some(path.to_string())),
+            };
+            Ok(Command::Screenshot { shot, force })
+        }
         "numbers" => match rest {
             // On its own it says nothing about *what* of the numbers, so it
             // asks rather than guessing.
@@ -971,6 +979,29 @@ pub struct Entry {
     pub needs: &'static [Need],
 }
 
+/// What `:shot` makes a picture **with** — Feature #189.
+///
+/// The platform's screenshot program photographs a *window*: the title bar,
+/// the tab strip, the terminal's own padding and whatever is in front of it.
+/// Cropping that down to the page needs the window's origin on screen and the
+/// display's scale factor, and the editor can get neither reliably — a wrong
+/// crop is worse than an uncropped shot.
+///
+/// So the picture is drawn rather than taken. The renderer already produces
+/// the frame cell by cell for `--shot`; writing *that* out is the page and
+/// nothing else, by construction — no window, no scale, no chrome — and it
+/// works over ssh, on a headless machine, and in a test.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Shot {
+    /// The editor draws the page into a file. `None` names it after the
+    /// document; a name ending in `.txt` asks for the plain-text picture
+    /// instead of the coloured one.
+    Page(Option<String>),
+    /// The old way, kept because a bug report is sometimes *about* the
+    /// terminal: hand the screen to the platform's own screenshot program.
+    Screen,
+}
+
 /// What may follow a command, or one of its words.
 ///
 /// **A parent command is not a mechanism of its own.** `:yume scheme` is a
@@ -1211,6 +1242,7 @@ fn resolve(word: &str) -> &str {
                 "export" => "export!",
                 "saveas" => "saveas!",
                 "replace" => "replace!",
+                "shot" => "shot!",
                 other => other,
             };
         }
@@ -1231,6 +1263,7 @@ const FORCEABLE: &[&str] = &[
     "export",
     "saveas",
     "replace",
+    "shot",
 ];
 
 /// The one word of `from` that `typed` names, exactly or by prefix.
@@ -2245,7 +2278,7 @@ pub const COMMANDS: &[Entry] = &[
         aliases: &[],
         help: "cmd.commands.shot",
         needs: &[],
-        args: Args::None,
+        args: Args::Free("<檔名｜screen>"),
     },
     Entry {
         name: "appearance",

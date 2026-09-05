@@ -36,7 +36,7 @@ use yumete_cjk::Segmenter;
 use yumete_core::sidebar::View;
 use yumete_core::wrap::{self, Anchor as WrapAnchor};
 use yumete_core::zong::{Anchor, Layout as WritingLayout};
-use yumete_core::{say, Editor, Key, KeyOutcome, Mode, TextStore};
+use yumete_core::{say, Editor, Key, KeyOutcome, Mode, ShotJob, TextStore};
 use yumete_ime::{CommitStrategy, DataFault, DataProblem, ImeSession, PanelDisplay, Scheme};
 
 /// Run the interactive editor until the user quits.
@@ -192,9 +192,15 @@ fn frame_to(
         .draw(|frame| draw(frame, editor, config, ime, &mut viewport))
         .expect("draw one frame");
     let buffer = terminal.backend().buffer();
-    if html {
-        return buffer_to_html(buffer);
+    match html {
+        true => buffer_to_html(buffer),
+        false => buffer_to_text(buffer),
     }
+}
+
+/// One drawn frame as plain text — the cells, with the blanks a wide glyph
+/// owns left out.
+fn buffer_to_text(buffer: &ratatui::buffer::Buffer) -> String {
     let mut out = String::new();
     for y in 0..buffer.area.height {
         let mut row = String::new();
@@ -359,13 +365,39 @@ pub fn run(
         // candidate is on the page — which is the whole reason #210 made ghost
         // text an input to the layout rather than something painted over it.
         settle_inline_candidate(editor, ime);
+        // …and 字典 asked about a character (#215). The 拆分表 is yume's, not
+        // the editor's, so the question is parked in the editor and answered
+        // here — before the draw, so the panel is filled on the very frame the
+        // key opened it.
+        if let Some(ch) = editor.take_dictionary_query() {
+            let found = ime.glosses(ch);
+            editor.set_dictionary(ch, found);
+        }
         if let Err(err) = terminal.draw(|frame| draw(frame, editor, config, ime, &mut viewport)) {
             break Err(err);
         }
         // …and the picture is of *this* frame, which is the one with no
         // command line across it.
-        if editor.take_screenshot_request() {
-            editor.set_status(take_a_picture(config));
+        if let Some(job) = editor.take_screenshot_request() {
+            let said = match job {
+                ShotJob::Screen => hand_the_screen_over(config),
+                // **The buffer that was just drawn**, not one drawn again: a
+                // second render would be of the state *after* this frame, and
+                // the whole point of waiting a frame is that this is the one
+                // the reader is looking at.
+                ShotJob::Page { target, text } => {
+                    let frame = terminal.current_buffer_mut();
+                    let written = match text {
+                        true => buffer_to_text(frame),
+                        false => buffer_to_html(frame),
+                    };
+                    match yumete_core::buffer::write_file_atomically(&target, &written) {
+                        Ok(()) => say!("ui.shot-drawn", target.display()),
+                        Err(err) => say!("ui.shot-failed", err),
+                    }
+                }
+            };
+            editor.set_status(said);
             continue;
         }
         // The page is up; now the 14 MB. Between these two lines is the whole
@@ -1024,12 +1056,17 @@ fn set_theme(
     say!("theme.set", crate::theme::name(config), mood)
 }
 
-/// Put a picture of the screen on the clipboard (`:shot`).
+/// Put a picture of the screen on the clipboard (`:shot screen`).
 ///
 /// The window system's job, so it is a shell line in the config rather than
 /// something built in here — and it is run **without** giving up the terminal,
 /// because handing the screen over is exactly what would spoil the picture.
-fn take_a_picture(config: &Config) -> String {
+///
+/// This photographs the **window**: its title bar, its tab strip and whatever
+/// is in front of it. `:shot` on its own draws the page instead (#189), which
+/// is the one a review or a bug report usually wants; this is kept for the
+/// reports that are about the terminal rather than about the page.
+fn hand_the_screen_over(config: &Config) -> String {
     let line = config.editor.screenshot.trim();
     if line.is_empty() {
         return say!("ui.no-screenshot-command");
@@ -1778,10 +1815,29 @@ fn ime_handle(
         // 空空如也 with a way out: `Tab` brings the whole list up for the one
         // word that needs it, and it goes away with that word (Feature #211).
         // Swallowed either way — a Tab typed mid-composition has never been an
-        // indent, and under `full` there is nothing to summon.
-        KeyCode::Tab if composing => {
-            ime.summon_panel();
-        }
+        // indent.
+        //
+        // With the list already up, `Tab` is the 字典 on the candidate the
+        // highlight is on (#215) — the panel has one line per candidate and
+        // spends it on 拆分 and a code, and this is where the rest of what the
+        // 拆分表 knows about that character is. A 詞 is asked about by its
+        // first character: a 拆分 is a thing a single 字 has.
+        //
+        // So under `full` `Tab` is the 字典 at once, and under `bare` it takes
+        // two — you cannot ask about a candidate you cannot see. The cost is
+        // that a panel summoned by mistake can no longer be put away with a
+        // second `Tab`; it goes away with the word, which is as long as the
+        // undo ever bought.
+        KeyCode::Tab if composing => match ime.panel_is_full() {
+            true => {
+                if let Some(ch) = ime.inline_candidate().chars().next() {
+                    editor.look_up(ch, false);
+                }
+            }
+            false => {
+                ime.summon_panel();
+            }
+        },
         // Any other printable character (letters start/continue a composition;
         // punctuation and digits are handled by the engine). A literal space
         // with no composition falls through to the editor.
@@ -3129,6 +3185,10 @@ fn draw_sidebar(frame: &mut Frame, editor: &Editor, config: &Config, area: Rect)
             }
             View::Buffers => format!("{} {}", if row.expanded { "▸" } else { " " }, row.name),
             View::Outline => format!("  {}", row.name),
+            // No indent and no mark: the panel is a list of 名／值 pairs
+            // already lined up into columns, and a narrow sidebar has no cells
+            // to spend on decorating them.
+            View::Dictionary => row.name.clone(),
         };
         put_text(buf, area.x + 1, y, rule, &line, style);
     }
@@ -5655,6 +5715,79 @@ mod tests {
         assert!(!ime.panel_is_full());
         ime.input('b');
         assert!(!ime.panel_is_full(), "a new word starts空空如也 again");
+    }
+
+    /// #215: what the 字典 panel looks like on the page.
+    ///
+    /// The rows are the editor's, but only a drawn frame says whether the
+    /// names line up — the padding is counted in columns, and every one of
+    /// these names is CJK.
+    #[test]
+    fn the_dictionary_panel_lines_its_columns_up() {
+        let mut editor = Editor::new();
+        editor.on_key(Key::Char('i'));
+        for c in "那年冬天".chars() {
+            editor.on_key(Key::Char(c));
+        }
+        editor.on_key(Key::Esc);
+        editor.on_key(Key::Char('g'));
+        editor.on_key(Key::Char('g'));
+        editor.look_up('那', true);
+        editor.take_dictionary_query();
+        editor.set_dictionary('那', vec![
+            ("拆分".to_string(), "刀二阝".to_string()),
+            ("分節編碼".to_string(), "vf-b".to_string()),
+        ]);
+
+        let ime = ImeSession::from_table_text(Scheme::LINGMING, "a 啊\n");
+        let buffer = render_with(&editor, &Config::default(), &ime, 60, 8);
+        let head = row_text(&buffer, 0);
+        assert!(head.contains("字典"), "{head}");
+        let rows: Vec<String> = (1..4).map(|y| row_text(&buffer, y)).collect();
+        assert!(rows[0].starts_with(" 那"), "{:?}", rows[0]);
+        // 拆分 is four columns and 分節編碼 is eight, so the shorter name is
+        // padded by four — and the two values start in the same column.
+        // In **columns**, which is the only measure a terminal lines things up
+        // in: 拆分 is two characters and four columns.
+        let at = |row: &str, what: &str| row.find(what).map(|b| yumete_cjk::str_width(&row[..b]));
+        assert_eq!(at(&rows[1], "刀二阝"), at(&rows[2], "vf-b"), "{rows:?}");
+    }
+
+    /// #215: with the list up, `Tab` asks the 字典 about the highlighted one.
+    ///
+    /// Under `bare` that is the second press — the first brings the list up,
+    /// and you cannot ask about a candidate you cannot see. Under `full` the
+    /// list is always up, so it is the first.
+    #[test]
+    fn tab_on_a_candidate_asks_the_dictionary_about_it() {
+        let mut editor = Editor::new();
+        editor.on_key(Key::Char('i'));
+        let mut ime = ImeSession::from_table_text(Scheme::LINGMING, "b 吧 八 巴\n");
+        ime.set_panel_display(PanelDisplay::Bare);
+        ime.input('b');
+
+        ime_handle(&mut ime, &mut editor, KeyCode::Tab, KeyModifiers::NONE);
+        assert!(ime.panel_is_full(), "the first press is still the panel");
+        assert_eq!(editor.take_dictionary_query(), None, "…and only the panel");
+
+        ime_handle(&mut ime, &mut editor, KeyCode::Tab, KeyModifiers::NONE);
+        assert_eq!(editor.take_dictionary_query(), Some('吧'));
+        assert_eq!(
+            editor.sidebar().map(|s| s.view()),
+            Some(yumete_core::sidebar::View::Dictionary)
+        );
+        // The keys stay with the word: the reader is mid-composition, and the
+        // panel is only there to be glanced at.
+        assert!(!editor.sidebar_focused());
+        assert!(ime.is_composing(), "…and the word is still being written");
+
+        // Under `full` there is nothing to summon, so one press does it.
+        let mut editor = Editor::new();
+        editor.on_key(Key::Char('i'));
+        let mut ime = ImeSession::from_table_text(Scheme::LINGMING, "b 吧 八 巴\n");
+        ime.input('b');
+        ime_handle(&mut ime, &mut editor, KeyCode::Tab, KeyModifiers::NONE);
+        assert_eq!(editor.take_dictionary_query(), Some('吧'));
     }
 
     /// #211: the setting, the command, and the question, in the writer's words.

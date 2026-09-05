@@ -471,9 +471,8 @@ OPTIONS:
     -p, --preview    Print a non-interactive preview instead of the editor.
         --shot[=WxH] Draw one frame — the page exactly as the editor would set
                      it — to standard output and exit. 100x30 by default.
-                     `:shot` inside the editor hands the screen to the
-                     platform's screenshot program; this is the same picture on
-                     a machine with no window, for a report or a review.
+                     `:shot` inside the editor draws the same picture into a
+                     file; this is it without opening the editor at all.
         --html       With --shot: the frame **with its colours**, as one
                      self-contained HTML <pre>. What a theme is judged on.
         --timing     Print how long each part of starting up took, and exit.
@@ -487,7 +486,8 @@ KEYS (Normal mode, Helix-style):
     gg  ge    goto buffer start / last line (10gg goes to line 10)
     gn  gp    show the next / previous open file
     gf        open the file:line named on this line (`:grep` results)
-    Space     menu: e sidebar, o outline, f files, b buffers, / search, y copy
+    Space     menu: e sidebar, o outline, f files, b buffers, / search,
+              d 字典 (how the character under the cursor is written), y copy
     C-w       move between the sidebar and the text
     gh gl gs  goto line start / end / first non-blank
     {{ }}       previous / next paragraph — here a paragraph is a logical line
