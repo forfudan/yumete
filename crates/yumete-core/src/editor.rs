@@ -478,18 +478,19 @@ pub enum Separator {
 ///
 /// **Three of them since 2026-09-05**, which is the author's own list:
 ///
-/// > 源碼模式 `t o`（ordinary）；保持源碼、表格接管快捷鍵 `t i`（inline）；
+/// > 源碼模式 `t o`（ordinary）；保持源碼、表格接管快捷鍵 `t n`（normal）；
 /// > 正文裏畫成網格 `t a`（advanced）；csv 的全屏表格模式 `t t`（table）。
 ///
 /// The fourth of those is no table at all, which is why this enum has three:
-/// 源碼模式 is `table == None`.
+/// 源碼模式 is `table == None`. The middle one was lettered `t i` for its
+/// first day; `t i` is the detail panel again since 2026-09-06.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Surface {
-    /// `t i` — the file is left looking exactly as it is, `|` and commas and
+    /// `t n` — the file is left looking exactly as it is, `|` and commas and
     /// all, and the **keys** belong to the grid: `hjkl` walk cells, `t d`
     /// drops a row. Nothing is drawn that the file does not contain, so a
     /// 縱書 chapter stays 縱書.
-    Inline,
+    Normal,
     /// `t a` — drawn as part of the document it sits in, through #212's ghost
     /// padding: the columns line up because the text itself is padded, and the
     /// `|` the writer typed is drawn as the wall it is. The paragraph above
@@ -573,12 +574,12 @@ impl TableView {
     ///
     /// The question 縱書 asks: a grid is read across, and that is the one
     /// thing a vertical page cannot do, so either of these two turns the page
-    /// horizontal. `t i` draws nothing and leaves the page alone.
+    /// horizontal. `t n` draws nothing and leaves the page alone.
     pub fn draws_a_grid(&self) -> bool {
-        self.surface != Surface::Inline
+        self.surface != Surface::Normal
     }
 
-    /// Whether it is drawn as part of the document it sits in — `t i` or `t a`.
+    /// Whether it is drawn as part of the document it sits in — `t n` or `t a`.
     pub fn in_prose(&self) -> bool {
         self.surface != Surface::Grid
     }
@@ -3897,7 +3898,7 @@ impl Editor {
     ///
     /// The surface is now the **mode**, and the mode is chosen by the key, not
     /// by the kind of table: `t t` draws a grid whether the table is a whole
-    /// `.csv` or three lines of a chapter, and `t i` leaves the pipes and the
+    /// `.csv` or three lines of a chapter, and `t n` leaves the pipes and the
     /// commas on the page whether or not the file is nothing but table.
     pub fn enter_table_as(&mut self, surface: Surface) -> bool {
         // A `|` table under the cursor is a table, whatever the file is called
@@ -4221,7 +4222,7 @@ impl Editor {
             self.status = match want {
                 Surface::Grid => say!("table.already-the-window"),
                 Surface::Advanced => say!("table.already-drawn"),
-                Surface::Inline => say!("table.already-operated"),
+                Surface::Normal => say!("table.already-operated"),
             };
             return;
         }
@@ -4246,7 +4247,7 @@ impl Editor {
             }
             // …and 表格操作 gives the page back, because the writing around the
             // table is being read as writing again.
-            Surface::Inline => {
+            Surface::Normal => {
                 if let Some(back) = self.turned_for_table.take() {
                     self.layout = back;
                     self.zong_motion = false;
@@ -5291,7 +5292,7 @@ impl Editor {
         // **表格操作, not 真表格顯示** (#275): the writer is about to fill this
         // in, and the pipes they just asked for should be on the page while
         // they do it. `t t` draws it once it has something in it.
-        self.enter_md_table_as(Surface::Inline);
+        self.enter_md_table_as(Surface::Normal);
         self.go_to_cell(heading, 0);
         self.enter_insert();
         self.status = say!("table.written", rows.to_string(), columns.to_string());
@@ -6591,23 +6592,28 @@ impl Editor {
         // 「get me into a table」 — from prose, from another table, from the top
         // of a document whose tables are three screens down.
         match key {
-            // **The four ways to look at a table** (#275, remade 2026-09-05).
-            // The author's own list: 「源碼模式 to (ordinary)；保持源碼，表格
-            // 接管，快捷鍵 ti (inline)；現在的 tt 模式，快捷鍵 ta (advanced)；
-            // csv 的全屏表格模式，tt (table)。」
+            // **The four ways to look at a table** (#275, remade 2026-09-05,
+            // lettered 2026-09-06). The author's own list: 「源碼模式 to
+            // (ordinary)；保持源碼，表格接管 tn (normal)；現在的 tt 模式 ta
+            // (advanced)；csv 的全屏表格模式 tt (table)。」
             //
-            // `t o` is the file as it is written. `t i` leaves the pipes and
+            // `t o` is the file as it is written. `t n` leaves the pipes and
             // the commas on the page and gives the keys to the grid. `t a`
             // draws the grid where the table stands, inside the document it
             // belongs to. `t t` gives the table the whole window — the widget
             // a `.csv` has always been drawn by, now reachable from three
             // lines of a chapter. Any of them switches **straight into any
             // other**, so none of them is the way out.
-            Key::Char('t') | Key::Char('a') | Key::Char('i') => {
+            //
+            // **`n`, not `i`** (author, 2026-09-06): `t i` had been the detail
+            // panel for long enough that the hand knew it, and 「還是小寫方便」
+            // — a key a writer presses all day is not the one to move to a
+            // capital for a mode that was named after an implementation detail.
+            Key::Char('t') | Key::Char('a') | Key::Char('n') => {
                 let want = match key {
                     Key::Char('t') => Surface::Grid,
                     Key::Char('a') => Surface::Advanced,
-                    _ => Surface::Inline,
+                    _ => Surface::Normal,
                 };
                 // **A file-wide mode is switched from anywhere in the file**
                 // — 「可以在文件任何位置通過 ti tt 進入表格視圖」 — so this is
@@ -6625,7 +6631,7 @@ impl Editor {
                 self.status = match want {
                     Surface::Grid => say!("table.given-the-window"),
                     Surface::Advanced => say!("table.drawn"),
-                    Surface::Inline => say!("table.operated"),
+                    Surface::Normal => say!("table.operated"),
                 };
                 self.snap_into_the_grid();
                 return;
@@ -6761,10 +6767,10 @@ impl Editor {
                 // document's menu and `t` is the table's, and a key that only
                 // ever does anything inside a table belongs in `t`.
                 //
-                // `t I`, not `t i`: `t i` is 表格操作模式 since #275, and the
-                // capital is the nearest free key to the one this lost — the
-                // hand that knew `t i` finds it by pressing harder.
-                Key::Char('I') => self.toggle_detail(),
+                // `t i` (information), and it was `t i` for one day only in
+                // between: 表格操作模式 borrowed the letter on 2026-09-05 and
+                // gave it back on the 6th as `t n`. The hand wins.
+                Key::Char('i') => self.toggle_detail(),
                 // Each of these is an edit, and each announces an undo point
                 // of its own: without one they were folded into whatever came
                 // before, so a single `u` took back the cell you had just
@@ -6810,8 +6816,8 @@ impl Editor {
             Key::Char('l') | Key::Right => self.md_move_column(true),
             Key::Char('y') => self.yank_column(),
             Key::Char('p') => self.put_column(),
-            // `t I` — see the note on the delimited file's copy of this key.
-            Key::Char('I') => self.toggle_detail(),
+            // `t i` — see the note on the delimited file's copy of this key.
+            Key::Char('i') => self.toggle_detail(),
             Key::Char('s') => self.md_sort(false),
             Key::Char('S') => self.md_sort(true),
             Key::Char('<') => self.md_align(Align::Left),
@@ -9746,8 +9752,8 @@ impl Editor {
         // **Whichever surface it is drawn on** (#275): 真表格顯示 turns the
         // page for a table in the middle of a chapter too — 「照舊把整頁轉橫」
         // — so while a grid is on the screen, vertical is refused wherever the
-        // grid sits. 表格操作 (`t i`) leaves the pipes on the page and does not
-        // ask for the turn, so it is not this case; `t i` and `t q` are what
+        // grid sits. 表格操作 (`t n`) leaves the pipes on the page and does not
+        // ask for the turn, so it is not this case; `t n` and `t q` are what
         // give the manuscript back, and both restore the layout the grid took.
         if layout == Layout::Vertical && self.table.as_ref().is_some_and(|v| v.draws_a_grid()) {
             return;
@@ -19754,7 +19760,7 @@ mod tests {
         let mut ed = with_md_table();
         // 表格操作, so the page is still the manuscript's to set — `t t` turns
         // it horizontal on purpose (#275).
-        press(&mut ed, "ti");
+        press(&mut ed, "tn");
         ed.goto_line(6);
         // `o` in the prose below opens a line, not a row.
         press(&mut ed, "o");
@@ -20547,11 +20553,11 @@ mod tests {
     /// is which key you pressed.
     #[test]
     fn a_pipe_table_is_drawn_as_a_grid_only_when_that_is_the_key_pressed() {
-        // `t i` — 表格操作: the syntax stays on the page, the keys are the
+        // `t n` — 表格操作: the syntax stays on the page, the keys are the
         // grid's, and a 縱書 manuscript is still 縱書.
         let mut ed = with_md_table();
         ed.set_layout(Layout::Vertical);
-        press(&mut ed, "ti");
+        press(&mut ed, "tn");
         assert_eq!(ed.layout(), Layout::Vertical, "{}", ed.status());
         assert!(ed.table().unwrap().in_prose(), "{}", ed.status());
         assert!(!ed.table().unwrap().takes_the_pane(), "three lines, not the pane");
@@ -20574,9 +20580,9 @@ mod tests {
         assert!(ed.table().unwrap().draws_a_grid(), "{}", ed.status());
         assert!(ed.table().unwrap().in_prose(), "back on t a, not in prose");
 
-        // And any of them switches straight into any other — `t i` is a
+        // And any of them switches straight into any other — `t n` is a
         // surface, not the way out — which is what gives the page back.
-        press(&mut ed, "ti");
+        press(&mut ed, "tn");
         assert!(ed.table().unwrap().in_prose(), "{}", ed.status());
         assert_eq!(ed.layout(), Layout::Vertical, "{}", ed.status());
 
@@ -20593,7 +20599,7 @@ mod tests {
         // 「完全画成表格」 — and only there. 表格操作 keeps 「markdown/csv 的语法
         // 标记」 on the page, which is the whole difference between the two.
         let mut ed = with_md_table();
-        press(&mut ed, "ti");
+        press(&mut ed, "tn");
         assert!(ed.grid_on_line(1).is_empty(), "the pipes stay pipes");
         assert!(ed.table_ruler_on_line(1).is_empty(), "and no ruler over them");
 
