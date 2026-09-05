@@ -1165,6 +1165,18 @@ fn resolve(word: &str) -> &str {
     // working at exactly the moment they meant「yes, overwrite it」. The bang
     // belongs to the command, not to its spelling.
     if let Some(stem) = word.strip_suffix('!') {
+        // **An exact spelling that takes no bang is not a prefix of one.**
+        // `e` and `o` are `open`'s own aliases and `:e!` / `:o!` are retired
+        // outright (see `parse`); because `open` is not forceable they fell
+        // through to the walk below and came out as `export!`, so `:e!
+        // 第三章.md` — typed by a hand meaning「re-read it」 — wrote an export
+        // over the chapter.
+        if COMMANDS
+            .iter()
+            .any(|e| (e.name == stem || e.aliases.contains(&stem)) && !FORCEABLE.contains(&e.name))
+        {
+            return word;
+        }
         let mut banged = COMMANDS.iter().filter_map(|e| {
             let named = e.name.starts_with(stem) || e.aliases.iter().any(|a| a.starts_with(stem));
             (named && FORCEABLE.contains(&e.name)).then_some(e.name)
@@ -2453,7 +2465,15 @@ pub fn takes_text(line: &str) -> bool {
     // where a path is *most* likely to be Chinese — `:w! 第三章.md`, the one
     // you type because the file is already there — was the one line that
     // refused the IME.
-    let head = head.strip_suffix('!').unwrap_or(head);
+    // Only where the bang is really this command's: `resolve` hands back a
+    // `…!` spelling for the six that take one and leaves every other bang
+    // where it found it, so stripping unconditionally resurrected a command
+    // the parser refuses — `:o! 第三章.md` became `open` and was offered the
+    // IME for a line that can only end in an error.
+    let head = match head.strip_suffix('!') {
+        Some(stem) if FORCEABLE.contains(&stem) => stem,
+        _ => head,
+    };
     let Some(entry) = COMMANDS
         .iter()
         .find(|e| e.name == head || e.aliases.contains(&head))

@@ -1597,6 +1597,52 @@ ambiguous scheme name and the parser turns that into `SetScheme("")`. It
 predates all of this and is more likely now that tags share the `snow-`
 prefix.
 
+### 20 · What the second review of those three commits found, 2026-09-05
+
+The first fix for「never over a `==highlight==`」was written as「the ground here
+is already `wash`」, and `wash` has **three** painters. All four findings are in;
+the two that changed behaviour are the first two.
+
+- **The cell ground vanished inside a `::: danger`.** A container paints the
+  whole row `wash`, so the colour test skipped every character and table mode
+  drew nothing at all in a callout — a regression on the commit that added the
+  guard. It is asked of the **run** now: the `Kind::Highlight` spans of the row
+  are collected while the markup is drawn, and the cell steps around those.
+  (The third painter, the current search hit, was harmless — it is patched on
+  after the cell.)
+- **`==highlight==` was still rubbed out on the 縱書 page.** §19 stated the
+  finding without qualifying it to the horizontal renderer, and only the
+  horizontal renderer got it. `vertical.rs` carries the same guard now.
+- **The lone-Shift tap and `C-Space` did not end the command line's borrow**
+  (#225). `:yume on` was carved out because「a command typed on that line *is*
+  an answer about the language」; the two keyboard routes to the same switch
+  were not, so turning 中文 on while typing a path was undone one keystroke
+  later, silently. All three clear the borrow now.
+- **`takes_text` stripped a `!` the command does not take.** `resolve` hands
+  back a `…!` spelling only for the six forceable commands and leaves every
+  other bang where it found it, so `:o! 第三章.md` was resolved to `open` and
+  offered the IME for a line that can only error. It strips only a bang whose
+  stem is `FORCEABLE`.
+- **And the same walk turned `:e!` into `:export!`** — found while fixing the
+  line above, worse than it. `e` and `o` are `open`'s own aliases and `:e!` /
+  `:o!` are retired outright; because `open` takes no bang the prefix walk
+  skipped it and landed on the one forceable command starting with `e`. So
+  `:e! 第三章.md`, typed by a hand meaning「re-read it, throw mine away」, wrote
+  an export **over the chapter**. An exact name or alias that takes no bang now
+  stops the walk.
+
+Two more the review raised that were left as they are:
+
+- **`region.holds(line)` in both renderers can never reject**, because
+  `md_region` and `cell_position` derive their line from the same expression.
+  True, and it stays: it is the sentence that says what the filter is for, and
+  the day either of them takes its line from somewhere else it is the only
+  thing standing there.
+- **`5fdcbe2` looks like it rewords a message that was already correct.** It
+  does, against the parent *commit* — the hand edit it repairs was in the
+  working tree, never committed. The author's wording is kept; 己→已, 丢→丟 and
+  the 繁 forms that had leaked into the `zhs` line are what changed.
+
 ### 19 · What the review of #229 / #169 found, 2026-09-05
 
 - **The cell ground was drawn on lines that hold no cell.** The guard asked
