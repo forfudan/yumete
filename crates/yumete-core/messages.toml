@@ -3548,7 +3548,7 @@ zhs = "下一张表／上一张"
 en = "the next table / the one before"
 
 [[message]]
-# t 選單：t i 這一行
+# t 選單：t n 這一行
 key = "hint.table.operate-it"
 zht = "原文照舊，按鍵歸表格"
 zhs = "原文照旧，按键归表格"
@@ -4876,9 +4876,9 @@ en = "already lined up"
 [[message]]
 # t a，但這張表已經畫在正文裏了
 key = "table.already-drawn"
-zht = "已經畫成表格了——t t 全窗，t i 看原文，t o 退出"
-zhs = "已经画成表格了——t t 全窗，t i 看原文，t o 退出"
-en = "already drawn as a grid — t t takes the window, t i shows the source, t o leaves"
+zht = "已經畫成表格了——t t 全窗，t n 看原文，t o 退出"
+zhs = "已经画成表格了——t t 全窗，t n 看原文，t o 退出"
+en = "already drawn as a grid — t t takes the window, t n shows the source, t o leaves"
 
 [[message]]
 # :sort 但本來就是這個順序
@@ -5086,9 +5086,9 @@ en = "the divider between cells cannot be deleted"
 [[message]]
 # t a：在正文裏把表格畫成格子
 key = "table.drawn"
-zht = "畫成表格——t t 全窗，t i 看原文，t o 退出"
-zhs = "画成表格——t t 全窗，t i 看原文，t o 退出"
-en = "drawn as a grid — t t takes the window, t i shows the source, t o leaves"
+zht = "畫成表格——t t 全窗，t n 看原文，t o 退出"
+zhs = "画成表格——t t 全窗，t n 看原文，t o 退出"
+en = "drawn as a grid — t t takes the window, t n shows the source, t o leaves"
 
 [[message]]
 # 在格子裏按 Enter
