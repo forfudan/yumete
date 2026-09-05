@@ -985,7 +985,12 @@ contains.
 Two more things the author fixed in the same exchange:
 
 - **縱書**: `t t` keeps turning the whole page horizontal (`turn_for_table`),
-  and `t q` turns it back. A grid is read across.
+  and `t q` turns it back. A grid is read across. **Every door has to do it**:
+  the whole-file one always did, and `t t` / `-t` on a `|` table or a guessed
+  block went in without turning — the status line said 「第 1 行 · 甲 · 格」
+  and the screen had not changed by one character, because nothing in
+  `vertical.rs` draws a grid. They go through `turn_for_table_and_say`, which
+  says 「（已轉橫排）」 after whatever the door itself said.
 - **列號標尺**: every table draws its own, along its top edge — so a chapter
   with three tables in it shows three rulers, each numbering its own columns.
 
@@ -1008,14 +1013,24 @@ The「不 soft wrap」rule lives in the **measure**, not the renderer:
 `wrap::Measure::with_unwrapped(&|line| editor.table_row_at(line))`, checked
 ahead of the paragraph cache in `rows_of_line`. Put it anywhere else and the
 caret, `j`, the mouse and the page would each have their own idea of where a
-row ends. All five measure-construction sites pass it.
+row ends. All four production measure-construction sites pass it
+(`editor.rs` twice, `yumete-tui/src/lib.rs` twice).
 
 `Editor::table_lines_at(line)` is the renderer's one question: *is this line
 part of a table that is currently turned, and where does that table begin and
-end?* For a file-wide Markdown mode it re-parses the region at that line and
-re-checks that it is a real table and not a quotation — so a chapter with three
-tables answers for all three, without any one of them being「the」table the
-cursor is in.
+end?* For a file-wide Markdown mode it looks the line up in
+`with_md_tables` — every `|` table in the file that parses as one and is not
+quoted inside a fence — so a chapter with three tables answers for all three,
+without any one of them being「the」table the cursor is in.
+
+**That list is walked once per edit, not once per row.** It used to re-parse
+the region at every line it was asked about, and it is asked about every
+visible row, five or six times each, through the measure: a 20 000-row table
+cost 1.9 seconds a frame and a 500-row one 55 ms — which is every keystroke.
+The walk is O(file) and the lookup is O(tables). `Editor::first_md_table_line`
+reads the same list, which is what stopped the door and the renderer
+disagreeing about the fence rule: `t t` in a file whose only table was quoted
+inside a fence used to enter a mode that then drew nothing.
 
 ---
 
