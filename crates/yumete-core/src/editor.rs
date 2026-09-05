@@ -1810,6 +1810,14 @@ impl Editor {
         path: Option<&str>,
         force: bool,
     ) -> Result<CommandOutcome, EditorError> {
+        // **`csv` is the one export that is a region, not the document.** A
+        // manuscript has no rows; the table under the cursor does. So it is
+        // answered here, from the same machinery `:table csv` uses, rather than
+        // by `export::export`, which is handed whole texts and answers with
+        // whole texts (Feature #227).
+        if crate::export::is_delimited(format) {
+            return self.export_delimited(format, path, force);
+        }
         let Some(format) = crate::export::Format::parse(format) else {
             self.status = say!("export.no-such-format", format);
             return Ok(CommandOutcome::Continue);
@@ -1857,6 +1865,94 @@ impl Editor {
         }
         let written = crate::export::export(&self.current_buffer().text(), format, &style);
         // Written the way a save is written: whole, or not at all.
+        crate::buffer::write_file_atomically(&target, &written).map_err(EditorError::Io)?;
+        self.status = say!("export.wrote", target.display());
+        Ok(CommandOutcome::Continue)
+    }
+
+    /// `:export csv` / `:export tsv` — the table under the cursor, as a file.
+    ///
+    /// The buffer is not touched: this is the difference between `:table csv`,
+    /// which converts the table in place because that is what the writer wants
+    /// to go on editing, and this, which hands a copy to whatever else is going
+    /// to read it.
+    fn export_delimited(
+        &mut self,
+        format: &str,
+        path: Option<&str>,
+        force: bool,
+    ) -> Result<CommandOutcome, EditorError> {
+        let delimiter = crate::export::delimiter_of(format).unwrap_or(',');
+        let rope = self.current_buffer().rope();
+        let line = rope.char_to_line(self.cursor.min(rope.len_chars()));
+        let region = match self.md_row_in_a_fence() {
+            true => None,
+            false => crate::mdtable::region(|i| self.line_text(i), line),
+        };
+        // A file that is already a grid exports as itself — reading a `.csv`
+        // and writing a `.tsv` is a conversion, and it is the same one.
+        let lines = match region.as_ref() {
+            Some(region) => crate::mdtable::to_delimited(&self.md_lines(region), delimiter),
+            None if self.table.as_ref().is_some_and(|v| v.bounds == Bounds::WholeFile) => {
+                let from = self.table.as_ref().map(|v| v.schema.delimiter).unwrap_or(',');
+                let text = self.current_buffer().text();
+                let mut out = Vec::new();
+                let mut bad = None;
+                for (r, source) in text.lines().enumerate() {
+                    let mut row = Vec::new();
+                    for (c, span) in crate::table::cells(source, from).into_iter().enumerate() {
+                        let cell = crate::table::cell_text(source, span);
+                        if from != delimiter && cell.contains(delimiter) {
+                            bad = bad.or(Some((r, c)));
+                        }
+                        row.push(cell);
+                    }
+                    out.push(row.join(&delimiter.to_string()));
+                }
+                match bad {
+                    Some(at) => Err(at),
+                    None => Ok(out),
+                }
+            }
+            None => {
+                self.status = say!("table.not-in-a-pipe-table");
+                return Ok(CommandOutcome::Continue);
+            }
+        };
+        let lines = match lines {
+            Ok(lines) => lines,
+            Err((row, column)) => {
+                self.status = say!(
+                    "table.cell-holds-the-delimiter",
+                    row + 1,
+                    column + 1,
+                    delimiter
+                );
+                return Ok(CommandOutcome::Continue);
+            }
+        };
+        let target = match path {
+            Some(path) => PathBuf::from(path),
+            None => match self.current_buffer().path() {
+                Some(source) => source.with_extension(format.trim().to_ascii_lowercase()),
+                None => return Err(EditorError::NoFileName),
+            },
+        };
+        // The same two guards a document export keeps: never onto a manuscript
+        // that is open, and never over an existing file unless told to.
+        if let Some(which) = self.buffer_holding(&target) {
+            self.status = match which == self.current {
+                true => say!("export.same-as-the-manuscript"),
+                false => say!("export.target-is-open", self.buffers[which].display_name()),
+            };
+            return Ok(CommandOutcome::Continue);
+        }
+        if !force && target.exists() {
+            self.status = say!("export.target-exists", target.display());
+            return Ok(CommandOutcome::Continue);
+        }
+        let mut written = lines.join("\n");
+        written.push('\n');
         crate::buffer::write_file_atomically(&target, &written).map_err(EditorError::Io)?;
         self.status = say!("export.wrote", target.display());
         Ok(CommandOutcome::Continue)
@@ -3039,6 +3135,14 @@ impl Editor {
                 self.theme_request = Some((name, mood));
                 Ok(CommandOutcome::Continue)
             }
+            Command::TableToPipe(delimiter) => {
+                self.table_to_pipe(delimiter);
+                Ok(CommandOutcome::Continue)
+            }
+            Command::TableToDelimited(delimiter) => {
+                self.table_to_delimited(delimiter);
+                Ok(CommandOutcome::Continue)
+            }
             Command::SortTable(keys) => {
                 self.sort_table(&keys);
                 Ok(CommandOutcome::Continue)
@@ -3826,13 +3930,19 @@ impl Editor {
     /// Put `lines` in place of the region, keeping the file's own last-line
     /// rule about trailing newlines.
     fn replace_md_region(&mut self, region: &crate::mdtable::Region, lines: &[String]) {
+        self.replace_lines(region.first, region.last, lines);
+    }
+
+    /// Put `lines` in place of lines `first..=last`, keeping the file's own
+    /// line endings and its rule about a trailing newline.
+    fn replace_lines(&mut self, first: usize, last: usize, lines: &[String]) {
         let rope = self.current_buffer().rope();
-        let start = rope.line_to_char(region.first);
-        let ends_file = region.last + 1 >= rope.len_lines();
+        let start = rope.line_to_char(first.min(rope.len_lines().saturating_sub(1)));
+        let ends_file = last + 1 >= rope.len_lines();
         let end = if ends_file {
             rope.len_chars()
         } else {
-            rope.line_to_char(region.last + 1)
+            rope.line_to_char(last + 1)
         };
         let was = rope.slice(start..end).to_string();
         // Whatever this file ends its lines with, it goes on ending them with
@@ -3853,6 +3963,129 @@ impl Editor {
             e.current_buffer_mut().remove(start..end);
             e.current_buffer_mut().insert(start, &text);
         });
+    }
+
+    // ---- Delimited text and `|` tables, both ways (Feature #227) ----------
+
+    /// The lines a conversion is about: the selection, or the block the cursor
+    /// stands in.
+    ///
+    /// **A blank line is a boundary.** Not the only one — a document is full of
+    /// headings and prose — but it is the one every writer already uses to say
+    /// 「this much belongs together」, and it costs nothing to honour it. Where
+    /// there is a selection it wins outright: a selection is a person pointing.
+    fn block_here(&self) -> (usize, usize) {
+        let rope = self.current_buffer().rope();
+        let last_line = rope.len_lines().saturating_sub(1);
+        if self.has_selection() {
+            let (a, b) = self.selection();
+            let first = rope.char_to_line(a.min(rope.len_chars()));
+            let mut last = rope.char_to_line(b.min(rope.len_chars()));
+            // A selection that ends at the very start of a line stops before
+            // that line, not on it — dragging down one row should not take the
+            // row after it.
+            if last > first && b == rope.line_to_char(last) {
+                last -= 1;
+            }
+            return (first, last.min(last_line));
+        }
+        let here = self.cursor_line().min(last_line);
+        let blank = |i: usize| {
+            self.line_text(i)
+                .is_none_or(|l| l.trim().is_empty())
+        };
+        let mut first = here;
+        while first > 0 && !blank(first - 1) {
+            first -= 1;
+        }
+        let mut last = here;
+        while last < last_line && !blank(last + 1) {
+            last += 1;
+        }
+        (first, last)
+    }
+
+    /// `:table pipe` — the delimited block under the cursor becomes a `|` table.
+    fn table_to_pipe(&mut self, delimiter: Option<char>) {
+        let (first, last) = self.block_here();
+        let lines: Vec<String> = (first..=last)
+            .filter_map(|i| self.line_text(i))
+            .map(|l| l.trim_end_matches(['\n', '\r']).to_string())
+            .filter(|l| !l.trim().is_empty())
+            .collect();
+        if lines.is_empty() {
+            self.status = say!("table.nothing-to-convert");
+            return;
+        }
+        // Already a table: `:table pipe` on one would split every cell again on
+        // whatever the sniffer guessed and hand back a wider, wrong table.
+        if lines.iter().all(|l| crate::mdtable::is_row(l)) {
+            self.status = say!("table.already-a-pipe-table");
+            return;
+        }
+        let Some(delimiter) = delimiter.or_else(|| crate::table::sniff(&lines)) else {
+            self.status = say!("table.no-delimiter-in-sight");
+            return;
+        };
+        let out = crate::mdtable::from_delimited(&lines, delimiter);
+        if out.is_empty() {
+            self.status = say!("table.nothing-to-convert");
+            return;
+        }
+        let rows = out.len().saturating_sub(1);
+        let columns = crate::mdtable::split(&out[0]).len();
+        self.snapshot();
+        self.leave_table_quietly();
+        self.replace_lines(first, last, &out);
+        let at = self.current_buffer().rope().line_to_char(first);
+        self.set_cursor(at);
+        self.clamp_cursor();
+        self.forget_the_document();
+        // Straight into the grid: the writer asked for a table, and a table in
+        // this editor is something you walk by cell.
+        self.enter_table();
+        self.status = say!("table.now-a-pipe-table", rows, columns, delimiter);
+    }
+
+    /// `:table csv` — the `|` table under the cursor becomes delimited lines.
+    fn table_to_delimited(&mut self, delimiter: char) {
+        let rope = self.current_buffer().rope();
+        let line = rope.char_to_line(self.cursor.min(rope.len_chars()));
+        let region = match self.md_row_in_a_fence() {
+            true => None,
+            false => crate::mdtable::region(|i| self.line_text(i), line),
+        };
+        let Some(region) = region else {
+            self.status = say!("table.not-in-a-pipe-table");
+            return;
+        };
+        let lines = self.md_lines(&region);
+        let out = match crate::mdtable::to_delimited(&lines, delimiter) {
+            Ok(out) => out,
+            // Named where the writer can see it: 「row 4, column 2」 is a place
+            // in the table on the screen, not an offset in a file.
+            Err((row, column)) => {
+                self.status = say!(
+                    "table.cell-holds-the-delimiter",
+                    row + 1,
+                    column + 1,
+                    delimiter
+                );
+                return;
+            }
+        };
+        let rows = out.len().saturating_sub(1);
+        self.snapshot();
+        self.leave_table_quietly();
+        self.replace_lines(region.first, region.last, &out);
+        let at = self
+            .current_buffer()
+            .rope()
+            .line_to_char(region.first.min(self.current_buffer().rope().len_lines() - 1));
+        self.set_cursor(at);
+        self.clamp_cursor();
+        self.forget_the_document();
+        self.status = say!("table.now-delimited", rows, delimiter);
     }
 
     /// Lay the table under the cursor out again. Returns whether it changed.
@@ -14025,6 +14258,142 @@ mod tests {
         press(&mut ed, "gf");
         assert_eq!(ed.current_buffer().display_name(), "ch01.md");
         assert_eq!(ed.cursor_line(), 1);
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn a_block_of_delimited_text_becomes_a_table_and_goes_back() {
+        let mut ed = typed("那年冬天。\n\n字,讀音\n永,ㄩㄥˇ\n和,ㄏㄜˊ\n\n雪下得早。\n");
+        ed.execute(":3").unwrap();
+        ed.execute(":table pipe").unwrap();
+        assert_eq!(
+            ed.current_buffer().text(),
+            "那年冬天。\n\n| 字 | 讀音  |\n| -- | ----- |\n| 永 | ㄩㄥˇ |\n| 和 | ㄏㄜˊ |\n\n雪下得早。\n"
+        );
+        // The prose either side of the blank lines is untouched — a blank line
+        // is where the block stops.
+        assert!(ed.status.contains("2"), "rows and columns: {}", ed.status);
+        // And it is a grid now, not five lines that happen to start with a pipe.
+        assert!(ed.table.is_some(), "walked by cell straight away");
+
+        // Back the other way, from anywhere inside it.
+        ed.execute(":5").unwrap();
+        ed.execute(":table csv").unwrap();
+        assert_eq!(
+            ed.current_buffer().text(),
+            "那年冬天。\n\n字,讀音\n永,ㄩㄥˇ\n和,ㄏㄜˊ\n\n雪下得早。\n"
+        );
+
+        // One undo apiece: a conversion is one edit, not one per row.
+        ed.on_key(Key::Char('u'));
+        assert!(ed.current_buffer().text().contains("| 永 |"), "{}", ed.current_buffer().text());
+    }
+
+    #[test]
+    fn a_selection_says_which_lines_the_table_is_made_of() {
+        // No blank line anywhere: without a selection the walk would take the
+        // heading and the sentence with it.
+        let mut ed = typed("# 人物\n甲,乙\n丙,丁\n那年冬天。\n");
+        ed.execute(":2").unwrap();
+        press(&mut ed, "xx"); // the two data rows, and only those
+        ed.execute(":table pipe").unwrap();
+        let text = ed.current_buffer().text();
+        assert!(text.starts_with("# 人物\n| 甲 | 乙 |\n"), "{text:?}");
+        assert!(text.ends_with("| 丙 | 丁 |\n那年冬天。\n"), "{text:?}");
+    }
+
+    #[test]
+    fn a_conversion_that_would_lose_a_cell_is_refused() {
+        let mut ed = typed("| 字 | 註 |\n| -- | -- |\n| 永 | 長, 久 |\n");
+        ed.execute(":3").unwrap();
+        let before = ed.current_buffer().text();
+        ed.execute(":table csv").unwrap();
+        // Named, and nothing written: the file is exactly as it was.
+        assert_eq!(ed.current_buffer().text(), before);
+        assert!(ed.status.contains('2'), "row and column: {}", ed.status);
+
+        // The writer picks a delimiter the data does not hold, and it goes.
+        ed.execute(":table csv tab").unwrap();
+        assert_eq!(ed.current_buffer().text(), "字\t註\n永\t長, 久\n");
+    }
+
+    #[test]
+    fn a_paragraph_is_not_quietly_cut_into_columns() {
+        let mut ed = typed("那年冬天，雪下得早。\n他站在門口，看了很久，沒有進去。\n");
+        let before = ed.current_buffer().text();
+        ed.execute(":table pipe").unwrap();
+        // Nothing regular separates these lines, so nothing is guessed at.
+        assert_eq!(ed.current_buffer().text(), before);
+        assert!(ed.status.contains("tab") || ed.status.contains("分隔"), "{}", ed.status);
+
+        // …but a writer who says what the delimiter is gets what they asked
+        // for, even a 、 — they have looked at their data.
+        let mut ed = typed("甲、乙\n丙、丁\n");
+        ed.execute(":table pipe 、").unwrap();
+        assert_eq!(
+            ed.current_buffer().text(),
+            "| 甲 | 乙 |\n| -- | -- |\n| 丙 | 丁 |\n"
+        );
+
+        // And `:table pipe` on a table already made is a no-op, not a table
+        // twice as wide.
+        let before = ed.current_buffer().text();
+        ed.execute(":table pipe").unwrap();
+        assert_eq!(ed.current_buffer().text(), before);
+    }
+
+    #[test]
+    fn a_table_exports_as_a_file_without_being_converted_in_place() {
+        let dir = std::env::temp_dir().join(format!("yumete-csv-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("人物.md");
+        std::fs::write(&path, "# 人物\n\n| 名 | 字 |\n| -- | -- |\n| 淵明 | 元亮 |\n").unwrap();
+
+        let mut ed = Editor::new();
+        ed.execute(&format!(":open {}", path.display())).unwrap();
+        ed.execute(":5").unwrap();
+        let before = ed.current_buffer().text();
+        ed.execute(":export csv").unwrap();
+
+        // Named after the file, and the manuscript untouched — this is a copy
+        // handed out, not a conversion.
+        let out = std::fs::read_to_string(dir.join("人物.csv")).unwrap();
+        assert_eq!(out, "名,字\n淵明,元亮\n");
+        assert_eq!(ed.current_buffer().text(), before);
+
+        // `tsv` is the same table, split another way.
+        ed.execute(":export tsv").unwrap();
+        assert_eq!(
+            std::fs::read_to_string(dir.join("人物.tsv")).unwrap(),
+            "名\t字\n淵明\t元亮\n"
+        );
+
+        // An existing file is not replaced unless the bang says so — the rule
+        // `:w` keeps and the document exports keep.
+        ed.execute(":export csv").unwrap();
+        assert!(ed.status.contains("人物.csv"), "{}", ed.status);
+        ed.execute(":export! csv").unwrap();
+        assert!(ed.status.contains("人物.csv"), "{}", ed.status);
+
+        // Away from any table there is nothing to export.
+        ed.execute(":1").unwrap();
+        ed.execute(":export csv").unwrap();
+        assert!(ed.status.contains('|'), "says what is missing: {}", ed.status);
+
+        // A file that is already a grid exports as itself: reading a `.csv` and
+        // writing a `.tsv` is the same conversion by another name.
+        let csv = dir.join("表.csv");
+        std::fs::write(&csv, "字,讀音\n永,ㄩㄥˇ\n").unwrap();
+        let mut ed = Editor::new();
+        ed.execute(&format!(":open {}", csv.display())).unwrap();
+        assert!(ed.execute(":table").is_ok());
+        ed.execute(":export tsv").unwrap();
+        assert_eq!(
+            std::fs::read_to_string(dir.join("表.tsv")).unwrap(),
+            "字\t讀音\n永\tㄩㄥˇ\n"
+        );
 
         std::fs::remove_dir_all(&dir).ok();
     }

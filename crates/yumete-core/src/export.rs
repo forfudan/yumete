@@ -50,6 +50,28 @@ impl Format {
     }
 }
 
+/// Whether `name` is one of the delimited formats — a **table**, not a page.
+///
+/// These are deliberately not [`Format`] variants. Everything a `Format` names
+/// is a way of setting a manuscript: [`export`] is handed the whole text and
+/// answers with the whole text. A CSV is a grid, it comes from one table rather
+/// than from a document, and a cell that holds the delimiter has to be refused
+/// out loud — three things that shape does not fit. So the editor serves them
+/// itself, from the table under the cursor, and this is the list it consults
+/// (Feature #227).
+pub fn is_delimited(name: &str) -> bool {
+    delimiter_of(name).is_some()
+}
+
+/// What separates two cells in the file `:export <name>` writes.
+pub fn delimiter_of(name: &str) -> Option<char> {
+    match name.trim().to_ascii_lowercase().as_str() {
+        "csv" => Some(','),
+        "tsv" => Some('\t'),
+        _ => None,
+    }
+}
+
 /// How the page is set, so the export can carry it over.
 #[derive(Debug, Clone)]
 pub struct Style {

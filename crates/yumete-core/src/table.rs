@@ -522,6 +522,38 @@ pub fn cells(line: &str, delimiter: char) -> Vec<(usize, usize)> {
     out
 }
 
+/// The delimiters worth guessing at, best first.
+///
+/// **A single space is not among them, and never will be.** A run of spaces
+/// separating columns is a real thing — a 碼表 is usually written that way —
+/// but *one* space is the character that holds a sentence together, and a rule
+/// that splits on it turns every line of prose into a grid. Runs of spaces are
+/// a different question with a different answer (#216).
+const GUESSES: [char; 3] = ['\t', ',', ';'];
+
+/// Which character splits these lines into cells, if one plainly does.
+///
+/// The test is not 「which appears most often」 but 「which appears the **same**
+/// number of times in every line, at least once」 — a grid is rectangular, and
+/// that is the only property of one visible from the outside. A 、 in a
+/// sentence fails it; a comma in a CSV passes it; and a block of prose, where
+/// every line holds a different number of 逗號, comes back `None` rather than
+/// being cut into ragged cells.
+pub fn sniff(lines: &[String]) -> Option<char> {
+    let rows: Vec<&String> = lines.iter().filter(|l| !l.trim().is_empty()).collect();
+    if rows.len() < 2 {
+        // One line says nothing about what is regular: a single 「甲,乙」 is as
+        // likely a sentence as a row. Two lines that agree is the least
+        // evidence worth acting on.
+        return None;
+    }
+    GUESSES.into_iter().find(|&c| {
+        let mut counts = rows.iter().map(|l| l.matches(c).count());
+        let first = counts.next().unwrap_or(0);
+        first > 0 && counts.all(|n| n == first)
+    })
+}
+
 /// The text of one cell, given the line and the ranges.
 pub fn cell_text(line: &str, span: (usize, usize)) -> String {
     line.chars().take(span.1).skip(span.0).collect()
@@ -775,5 +807,30 @@ to = "char"
         assert!(schema_for(&other).is_none());
 
         std::fs::remove_dir_all(&root).ok();
+    }
+
+    #[test]
+    fn the_sniffer_asks_whether_the_lines_agree_not_which_is_commonest() {
+        let of = |text: &str| -> Option<char> {
+            sniff(&text.lines().map(str::to_string).collect::<Vec<_>>())
+        };
+        assert_eq!(of("字,讀音\n永,ㄩㄥˇ\n和,ㄏㄜˊ"), Some(','));
+        assert_eq!(of("字\t讀音\n永\tㄩㄥˇ"), Some('\t'));
+        assert_eq!(of("a;b;c\nd;e;f"), Some(';'));
+        // A tab beats a comma that is also regular: a file with both is a TSV
+        // whose cells hold 逗號.
+        assert_eq!(of("甲,乙\tb\n丙,丁\te"), Some('\t'));
+
+        // Prose. Every line holds a different number of 逗號, so nothing here
+        // is a column — and a grid is what would otherwise be made of a novel.
+        assert_eq!(
+            of("那年冬天，雪下得早。\n他站在門口，看了很久，沒有進去。"),
+            None
+        );
+        // A single space is never guessed at, however regular it is.
+        assert_eq!(of("one two\nthree four"), None);
+        // One line is not evidence of a shape.
+        assert_eq!(of("字,讀音"), None);
+        assert_eq!(of(""), None);
     }
 }

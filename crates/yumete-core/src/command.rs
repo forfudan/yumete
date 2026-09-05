@@ -133,6 +133,12 @@ pub enum Command {
     /// `:table sort 1 a 2 d` — put the rows in order by these columns, in this
     /// order. Empty sorts by the column the cursor is in.
     SortTable(Vec<(usize, bool)>),
+    /// `:table pipe [分隔]` — the delimited block under the cursor becomes a
+    /// `|` table (Feature #227). `None` guesses the delimiter.
+    TableToPipe(Option<char>),
+    /// `:table csv [分隔]` — the `|` table under the cursor becomes delimited
+    /// lines (Feature #227). The delimiter defaults to a comma.
+    TableToDelimited(char),
     /// `:numbers fill` — whether the line-number band has a ground of its
     /// own. `None` toggles.
     SetNumberFill(Option<bool>),
@@ -789,6 +795,22 @@ pub fn parse(input: &str) -> Result<Command, CommandError> {
                 }
                 Ok(Command::SortTable(keys))
             }
+            "pipe" => Ok(Command::TableToPipe(None)),
+            "csv" => Ok(Command::TableToDelimited(',')),
+            _ if rest.starts_with("pipe ") || rest.starts_with("csv ") => {
+                let (word, arg) = rest.split_once(' ').unwrap_or((rest, ""));
+                match delimiter_named(arg.trim()) {
+                    Some(c) if word == "pipe" => Ok(Command::TableToPipe(Some(c))),
+                    Some(c) => Ok(Command::TableToDelimited(c)),
+                    None => Err(CommandError::InvalidArgument {
+                        command: match word {
+                            "pipe" => "table pipe",
+                            _ => "table csv",
+                        },
+                        value: arg.trim().to_string(),
+                    }),
+                }
+            }
             "numbers" | "numbers on" => Ok(Command::SetTableNumbers(true)),
             "numbers off" => Ok(Command::SetTableNumbers(false)),
             "rules" => Ok(Command::SetTableRules(None)),
@@ -1223,6 +1245,30 @@ const FORCEABLE: &[&str] = &[
 /// What the menu shows in parentheses, and it is *true* — the same prefix rule
 /// resolves it when typed, at every level. Worked out rather than declared, so
 /// it cannot promise a spelling that a later word made ambiguous.
+/// The character a `<分隔>` argument names.
+///
+/// A delimiter is one character, and most of them can simply be typed. The two
+/// that cannot are the tab — which the command line would never see, because
+/// `Tab` completes — and the space, which is spelled out for the same reason
+/// and is accepted here even though the sniffer will never guess it: a writer
+/// who says `:table pipe " "` has looked at their data and decided.
+fn delimiter_named(word: &str) -> Option<char> {
+    match word {
+        "tab" | "\\t" => Some('\t'),
+        "space" | "\\s" => Some(' '),
+        "comma" => Some(','),
+        "semicolon" => Some(';'),
+        "\" \"" | "' '" => Some(' '),
+        _ => {
+            let mut chars = word.chars();
+            match (chars.next(), chars.next()) {
+                (Some(c), None) if !c.is_whitespace() => Some(c),
+                _ => None,
+            }
+        }
+    }
+}
+
 pub fn shortest(
     name: &'static str,
     among: impl Iterator<Item = &'static str>,
@@ -1522,6 +1568,20 @@ const TABLE: &[Word] = &[
         help: "cmd.table.numbers",
         needs: &[Need::Table],
         then: Args::Words(ON_OFF),
+    },
+    // Neither of these needs a table to be *open*: turning a block of text into
+    // one is how you get a table in the first place.
+    Word {
+        name: "pipe",
+        help: "cmd.table.pipe",
+        needs: &[],
+        then: Args::Free("<分隔>"),
+    },
+    Word {
+        name: "csv",
+        help: "cmd.table.csv",
+        needs: &[],
+        then: Args::Free("<分隔>"),
     },
 ];
 
