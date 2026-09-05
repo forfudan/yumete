@@ -32,6 +32,9 @@ pub enum WordCommand {
     Edit,
     /// `:word list global` — open the global `segmentation.txt`, existing or not.
     Global,
+    /// `:word discover` — mine this book for the words no dictionary has, and
+    /// write them into `.yumete/words.txt` unsaved (Feature #239).
+    Discover,
     /// `:word level strict|balanced|full` — how readily characters join into
     /// words. `None` says which it is.
     Level(Option<yumete_cjk::WordLevel>),
@@ -537,6 +540,7 @@ pub fn parse(input: &str) -> Result<Command, CommandError> {
             ["list", "reload"] => Ok(Command::Word(WordCommand::Reload)),
             ["list", "edit"] => Ok(Command::Word(WordCommand::Edit)),
             ["list", "global"] => Ok(Command::Word(WordCommand::Global)),
+            ["discover"] => Ok(Command::Word(WordCommand::Discover)),
             ["level"] => Ok(Command::Word(WordCommand::Level(None))),
             ["level", name] => match yumete_cjk::WordLevel::parse(name) {
                 Some(level) => Ok(Command::Word(WordCommand::Level(Some(level)))),
@@ -2323,6 +2327,12 @@ const WORD_TOPICS: &[Word] = &[
         help: "cmd.word-topics.level",
         needs: &[],
         then: Args::Words(WORD_LEVELS),
+    },
+    Word {
+        name: "discover",
+        help: "cmd.word-topics.discover",
+        needs: &[],
+        then: Args::None,
     },
 ];
 
