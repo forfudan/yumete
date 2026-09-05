@@ -269,6 +269,17 @@ pub fn run(
 
     // Enable the Kitty keyboard protocol (report modifier presses/releases) so a
     // lone-Shift tap can toggle 中/英.
+    //
+    // **`REPORT_ALL_KEYS_AS_ESCAPE_CODES` is deliberately not among them**
+    // (#271). With it on, a text key is no longer sent as text: it arrives as
+    // `CSI <key> ; <mods> ; <text> u`, and the text is in the third parameter —
+    // which crossterm 0.28 parses and throws away (its `REPORT_ASSOCIATED_TEXT`
+    // is a commented-out line in `event.rs`). For an ASCII key that costs
+    // nothing, because the key *is* the text. For the **system** input method
+    // it costs everything: 中文 committed with the space bar arrives as
+    // `KeyCode::Char(' ')` — the commit key — and the sentence is a row of
+    // spaces. The three flags left are what the Shift tap actually needs: a
+    // bare modifier reported at all, and its release told apart from its press.
     let enhanced = matches!(supports_keyboard_enhancement(), Ok(true));
     if enhanced {
         let _ = execute!(
@@ -277,7 +288,6 @@ pub fn run(
                 KeyboardEnhancementFlags::DISAMBIGUATE_ESCAPE_CODES
                     | KeyboardEnhancementFlags::REPORT_EVENT_TYPES
                     | KeyboardEnhancementFlags::REPORT_ALTERNATE_KEYS
-                    | KeyboardEnhancementFlags::REPORT_ALL_KEYS_AS_ESCAPE_CODES
             )
         );
     }
@@ -309,6 +319,11 @@ pub fn run(
         editor.set_status(said);
     }
     let mut last_mode = None;
+    // An event read ahead of its turn and handed back — see [`drain_the_flick`].
+    // The queue is the terminal's, not ours, and this is the one place anything
+    // is ever taken out of order: the rest of a wheel gesture, read early so it
+    // can be drawn once instead of once a notch.
+    let mut queued: Option<Event> = None;
 
     let result = loop {
         let mode = editor.mode();
@@ -450,7 +465,7 @@ pub fn run(
         // come back and look — produced nothing at all until a key was pressed
         // (Feature #214). Only while it is on: an editor that wakes up twice a
         // second for nobody is an editor that flattens a battery.
-        if editor.reload_auto() {
+        if editor.reload_auto() && queued.is_none() {
             match event::poll(DISK_POLL) {
                 Ok(false) => {
                     editor.disk_tick();
@@ -460,7 +475,7 @@ pub fn run(
                 Err(err) => break Err(err),
             }
         }
-        match event::read() {
+        match queued.take().map(Ok).unwrap_or_else(event::read) {
             Ok(Event::Key(key)) => {
                 // A lone-Shift tap toggles 中/英 in Insert mode; other Shift
                 // activity is swallowed so it never reaches the editor.
@@ -722,10 +737,23 @@ pub fn run(
                 editor.paste_text(&text);
             }
             Ok(Event::Mouse(mouse)) => match mouse.kind {
-                // A notch moves three 縱 — the same three lines a terminal
-                // scrolls by, counted in the unit the page is set in.
-                MouseEventKind::ScrollDown => editor.scroll(WHEEL_STEP, false),
-                MouseEventKind::ScrollUp => editor.scroll(WHEEL_STEP, true),
+                // A notch moves `[editor] wheel_step` 縱 — three by default,
+                // the three lines a terminal scrolls by, counted in the unit
+                // the page is set in and settable with `:wheel` (#222).
+                //
+                // **The whole flick is taken at once** (Feature #268). A wheel
+                // sends one event per notch and a trackpad sends hundreds per
+                // gesture; a frame drawn for each is a frame the terminal has
+                // to paint, and a fast scroll down 資治通鑑 measured 3000
+                // frames and 60 MB of escape sequences — long enough that the
+                // reader's only way out was to kill the tab. Reading the rest
+                // of the burst first turns a flick into one scroll and one
+                // frame.
+                MouseEventKind::ScrollDown | MouseEventKind::ScrollUp => {
+                    let back = mouse.kind == MouseEventKind::ScrollUp;
+                    let notches = 1 + drain_the_flick(mouse.kind, &mut queued);
+                    editor.scroll(editor.wheel_step() * notches, back);
+                }
                 // A tab is a thing you point at; the mouse is already captured
                 // for the wheel, so this costs nothing but the arithmetic.
                 MouseEventKind::Down(MouseButton::Left) => {
@@ -775,9 +803,42 @@ pub fn run(
     result
 }
 
-/// How far one notch of the wheel moves — three, as a terminal scrolls three
-/// lines, counted in whichever unit the page is set in.
-const WHEEL_STEP: usize = 3;
+/// How many notches of one gesture are taken before drawing anyway.
+///
+/// A trackpad's momentum can go on sending for seconds after the finger has
+/// left it. Without a ceiling the page would stay on the frame the flick
+/// started at until the terminal's buffer ran dry; with one, a long gesture is
+/// drawn in a handful of frames instead of a thousand.
+const WHEEL_BURST: usize = 64;
+
+/// Take the rest of a wheel gesture off the queue, and say how many more
+/// notches of the same direction it held.
+///
+/// Anything that is *not* that same scroll is put back in `queued` for the next
+/// turn of the loop: a burst ends at the first event of any other kind, so a
+/// click or a keystroke landing mid-flick is neither swallowed nor reordered.
+fn drain_the_flick(kind: MouseEventKind, queued: &mut Option<Event>) -> usize {
+    let mut more = 0;
+    while more < WHEEL_BURST {
+        // Zero, not a wait: this asks what has *already* arrived. A gesture
+        // that has paused is over as far as the page is concerned, and the
+        // next notch will draw its own frame.
+        if !matches!(event::poll(std::time::Duration::ZERO), Ok(true)) {
+            break;
+        }
+        match event::read() {
+            Ok(Event::Mouse(next)) if next.kind == kind => more += 1,
+            Ok(other) => {
+                *queued = Some(other);
+                break;
+            }
+            // A queue that cannot be read will say so again on the next
+            // `event::read`, which is where the error belongs.
+            Err(_) => break,
+        }
+    }
+    more
+}
 
 /// How long an idle `:reload auto` session waits before looking at the disk.
 ///
@@ -2242,11 +2303,17 @@ struct List<'a> {
     footer: &'a str,
     /// Whether it may spread across the window.
     columns: bool,
+    /// The name in the top-left of the ring, the way a which-key panel is
+    /// named. The author, 2026-09-05: 「command 提示面板的設計感不如快捷鍵提示
+    /// 面板。」 — a floating rectangle with no edge and no name is a thing that
+    /// appeared, not a panel that opened.
+    title: &'a str,
 }
 
 fn draw_list(
     frame: &mut Frame,
     ink: crate::theme::Palette,
+    rounded: bool,
     area: Rect,
     bottom: u16,
     list: List,
@@ -2257,6 +2324,7 @@ fn draw_list(
         highlight,
         footer,
         columns,
+        title,
     } = list;
     if items.is_empty() && footer.is_empty() {
         return;
@@ -2282,13 +2350,13 @@ fn draw_list(
     // be shown whole even at the full width falls back to what it always did:
     // as many columns as fit, and scroll.
     let (across, deep) = if columns {
-        let wide = ((area.width as usize).saturating_sub(2) / one.max(1)).max(1);
+        let wide = ((area.width as usize).saturating_sub(4) / one.max(1)).max(1);
         // The floor is what makes a menu worth opening at all on a short
         // window, but it is a floor, not a licence: on twelve rows the
         // glanceable eight plus the footer is nine, and the page behind
         // disappears. Half the window is where the floor stops.
         let share = (area.height / MENU_SHARE) as usize;
-        let half = ((area.height / 2) as usize).saturating_sub(1); // the footer
+        let half = ((area.height / 2) as usize).saturating_sub(3); // footer, rings
         let tall = share.max(MENU_ROWS).min(half).max(1);
         let across = items.len().div_ceil(tall).clamp(1, wide);
         (across, items.len().div_ceil(across).clamp(1, tall))
@@ -2298,7 +2366,8 @@ fn draw_list(
         (1, items.len().clamp(1, MENU_ROWS))
     };
     let visible = (deep * across).min(items.len());
-    let height = (deep + 1) as u16;
+    // The entries, the footer, and the ring above and below them.
+    let height = (deep + 3) as u16;
     if height > area.height || bottom < height {
         return;
     }
@@ -2308,11 +2377,30 @@ fn draw_list(
         .saturating_sub(visible.saturating_sub(1))
         .min(items.len().saturating_sub(visible));
 
-    let width = (one * across)
-        .max(yumete_cjk::str_width(footer) + 2)
-        .min(area.width as usize) as u16;
+    let inner = (one * across)
+        .max(yumete_cjk::str_width(footer) + 1)
+        .max(yumete_cjk::str_width(title) + 2);
+    let width = (inner + 2).min(area.width as usize) as u16;
     let menu = Rect::new(area.x, bottom - height, width, height);
     frame.render_widget(Clear, menu);
+    // The same ring, at the same rung, with its name in the same corner as the
+    // which-key panel's: two panels that open in the same place and do the
+    // same kind of thing should not look like two different programs.
+    frame.render_widget(
+        Block::default()
+            .borders(Borders::ALL)
+            .border_type(match rounded {
+                true => BorderType::Rounded,
+                false => BorderType::Plain,
+            })
+            .border_style(Style::default().fg(ink.rule()).bg(ink.paper()))
+            .title(Span::styled(
+                title,
+                Style::default().fg(ink.gold()).bg(ink.paper()),
+            ))
+            .style(Style::default().bg(ink.paper())),
+        menu,
+    );
 
     let ground = Style::default().bg(ink.paper());
     let text = ground.fg(ink.text());
@@ -2320,22 +2408,15 @@ fn draw_list(
     let on = Style::default().bg(ink.text()).fg(ink.paper());
 
     let buf = frame.buffer_mut();
-    for y in 0..height {
-        for x in 0..width {
-            if let Some(cell) = buf.cell_mut((menu.x + x, menu.y + y)) {
-                cell.set_symbol(" ").set_style(ground);
-            }
-        }
-    }
     for slot in 0..visible {
         let i = first + slot;
         if i >= items.len() {
             break;
         }
         let (column, row) = (slot / deep, slot % deep);
-        let x = menu.x + (column * one) as u16;
-        let end = (x + one as u16).min(menu.x + width);
-        let y = menu.y + row as u16;
+        let x = menu.x + 1 + (column * one) as u16;
+        let end = (x + one as u16).min(menu.x + width - 1);
+        let y = menu.y + 1 + row as u16;
         let picked = highlight == Some(i);
         let style = if picked { on } else { text };
         if picked {
@@ -2350,8 +2431,8 @@ fn draw_list(
     put_text(
         buf,
         menu.x + 1,
-        menu.y + deep as u16,
-        menu.x + width,
+        menu.y + 1 + deep as u16,
+        menu.x + width - 1,
         footer,
         quiet,
     );
@@ -2402,8 +2483,9 @@ fn draw_hud(
         return;
     }
     let ink = crate::theme::Palette::of(config);
-    let text = format!("╰ {typed}");
-    let width = yumete_cjk::str_width(&text) as u16;
+    // Every mark is one cell wide, so the width does not depend on which one
+    // the placement ends up choosing.
+    let width = yumete_cjk::str_width(&format!("╰ {typed}")) as u16;
     let (caret_x, caret_y) = caret;
     if width >= page.width {
         return;
@@ -2430,25 +2512,62 @@ fn draw_hud(
         }
         last
     };
-    // **Under the caret, then over it** — and never *on* it, so the character
-    // being worked on stays visible. Both rows are tried rather than only the
-    // one: a full row below used to make the HUD vanish, when the row above
-    // was empty margin. (The status line's right edge carries the same string
-    // whatever happens here, so a HUD with nowhere to go loses nothing.)
-    let below = (caret_y + 1 < page.y + page.height).then_some(caret_y + 1);
-    let above = (caret_y > page.y).then(|| caret_y - 1);
-    let mut placed = None;
-    for y in below.into_iter().chain(above) {
-        let after = after_the_writing(frame, y);
+    // **Anchor, then take the nearest — not the first that fits.**
+    //
+    // The old rule was 「the row below, else the row above」, and it went wrong
+    // exactly where it mattered: a short line being typed with a long line of
+    // prose under it put the HUD at the *far end of that prose*, half a screen
+    // from the caret, while the empty margin one row up went unused. Whether
+    // the mark landed near the eye was decided by how long somebody else's
+    // sentence happened to be.
+    //
+    // This is the placement problem every floating UI has — an anchor (the
+    // caret), a **flip** when the preferred side does not fit, a **shift**
+    // along the other axis to stay inside the page — with one addition that
+    // the usual libraries leave to the caller: the candidate sides are *scored*, and
+    // the winner is the one whose drawn corner ends up closest to the anchor.
+    // A row costs eight columns, four 漢字: a mark one row away and level with
+    // the caret beats a mark on the caret's own row thirty columns to the
+    // right.
+    //
+    // The caret's own row is a candidate now, and usually the winner: while a
+    // sentence is being typed the caret is at the end of it, so the margin
+    // immediately to its right is both empty and as near as anything can be.
+    let mut best: Option<(u16, u16, u32, char)> = None;
+    for step in [0i32, 1, -1, 2, -2] {
+        let y = caret_y as i32 + step;
+        if y < page.y as i32 || y >= (page.y + page.height) as i32 {
+            continue;
+        }
+        let y = y as u16;
+        let mut after = after_the_writing(frame, y);
+        // On the caret's own row, stay off the caret and leave it one cell of
+        // air — a mark butted against the character being typed reads as part
+        // of it.
+        if step == 0 {
+            after = after.max(caret_x + 2);
+        }
         let x = caret_x.max(after).min(right.saturating_sub(width));
-        if x >= after && x + width <= right {
-            placed = Some((x, y));
-            break;
+        if x < after || x + width > right {
+            continue;
+        }
+        let score = x.abs_diff(caret_x) as u32 + step.unsigned_abs() * 8;
+        // The mark points back at the caret: `╰` hangs down from a caret
+        // above, `╭` reaches up to one below, and on the caret's own row a
+        // plain rule just runs back to it.
+        let corner = match step.signum() {
+            1 => '╰',
+            -1 => '╭',
+            _ => '─',
+        };
+        if best.is_none_or(|(_, _, best_score, _)| score < best_score) {
+            best = Some((x, y, score, corner));
         }
     }
-    let Some((x, y)) = placed else {
+    let Some((x, y, _, corner)) = best else {
         return;
     };
+    let text = format!("{corner} {typed}");
     let style = Style::default()
         .bg(ink.at(yumete_config::rung::BAND))
         .fg(ink.gold());
@@ -2750,9 +2869,11 @@ fn draw_command_menu(
     // Spread across the window: the command list is short entries and there
     // are a couple of dozen of them, which is exactly the shape that wants
     // columns.
+    let title = say!("ui.commands");
     draw_list(
         frame,
         ink,
+        config.panel.rounded,
         area,
         status.y,
         List {
@@ -2761,6 +2882,7 @@ fn draw_command_menu(
             highlight,
             footer: &footer,
             columns: true,
+            title: &title,
         },
     );
 }
@@ -2981,10 +3103,16 @@ fn block_style(block: yumete_core::markdown::Block, ink: crate::theme::Palette) 
     // means 這裏不對.
     let band = || Some(Style::default().bg(ink.at(yumete_config::rung::BAND)));
     match block {
-        Block::Prose | Block::Heading(_) | Block::Item { .. } | Block::Table => None,
+        Block::Prose | Block::Heading(_) | Block::Item { .. } => None,
         // An aside is a block on the page because it is a block on paper.
         Block::Container(Callout::Danger) => Some(Style::default().bg(ink.wash())),
-        Block::Container(_) | Block::Quote | Block::Code => band(),
+        // **A table is a block too** (#270). It was the one thing in this list
+        // that had a shape on the page and no ground under it, so a table in a
+        // chapter read as prose that happened to have `|` in it. The same rung
+        // as the fence and the quote: 「這裏是一塊」 is the whole message, and
+        // the cell tint a grid draws (#212, #229) is patched onto this rather
+        // than instead of it.
+        Block::Container(_) | Block::Quote | Block::Code | Block::Table => band(),
         // Metadata and scene breaks are furniture, not writing.
         Block::FrontMatter | Block::Rule | Block::FootnoteDef => {
             Some(Style::default().fg(ink.furniture()))
@@ -3239,8 +3367,7 @@ fn draw_picker(frame: &mut Frame, editor: &Editor, config: &Config, area: Rect, 
     let matches = picker.matches();
     let items: Vec<String> = matches.iter().map(|i| i.label().to_string()).collect();
     let footer = format!(
-        "{}  {}/{}  {}",
-        picker.title,
+        "{}/{}  {}",
         if items.is_empty() {
             0
         } else {
@@ -3255,6 +3382,7 @@ fn draw_picker(frame: &mut Frame, editor: &Editor, config: &Config, area: Rect, 
     draw_list(
         frame,
         ink,
+        config.panel.rounded,
         area,
         status.y,
         List {
@@ -3263,6 +3391,9 @@ fn draw_picker(frame: &mut Frame, editor: &Editor, config: &Config, area: Rect, 
             highlight: Some(at),
             footer: &footer,
             columns: false,
+            // The picker already says what it is picking; now it says it in
+            // the corner of its own ring instead of at the head of the footer.
+            title: &picker.title,
         },
     );
     // The caret sits in the query, which is typed text like any other prompt.
@@ -5685,8 +5816,12 @@ mod tests {
                     .collect()
             })
             .collect();
-        // The gutter, then the candidate, and nothing else on the row.
-        assert_eq!(rows[0].trim_end(), "1 吧", "{:?}", rows[0]);
+        // The gutter, the candidate — and the code two cells on, which is
+        // where #269 put it: with the sentence empty, the nearest margin to
+        // the caret is the one on the caret's own row. It used to be at the
+        // far right of the row *below*, half a screen away, which is what the
+        // author's screenshot was of.
+        assert_eq!(rows[0].trim_end(), "1 吧   ─ b", "{:?}", rows[0]);
         // No panel: the second and third candidates are nowhere on the screen.
         assert!(
             !rows.iter().any(|r| r.contains('八') || r.contains('巴')),
@@ -5695,7 +5830,7 @@ mod tests {
         // …and the code has somewhere to be — beside the caret, and on the
         // status line's right edge.
         assert_eq!(hud_line(&editor, &ime), "b");
-        assert!(rows.iter().any(|r| r.contains("╰ b")), "{rows:#?}");
+        assert!(rows.iter().any(|r| r.contains("─ b")), "{rows:#?}");
     }
 
     /// #213: a locked buffer says so standing, not once.
@@ -6915,34 +7050,59 @@ mod tests {
         assert!(!page(&editor).contains("╰"));
     }
 
-    /// **It takes the row that has room.**
+    /// **The nearest margin, not the first row that has one** (#269).
     ///
-    /// Under the caret first, over it when that row is full — a HUD that
-    /// vanishes because the line below happens to reach the edge is a HUD you
-    /// cannot rely on, and the eye stops looking for it.
+    /// The old rule was 「the row below, else the row above」 — it asked whether
+    /// a row had room and never asked how far away the room was. So a short
+    /// line being typed on with a long line under it put the mark at the far
+    /// end of *that* line, half a screen from the caret, while the empty margin
+    /// one row up went unused.
     #[test]
-    fn the_hud_takes_whichever_row_has_room_for_it() {
-        // Above the caret: a short line with margin to spare. Below it: a line
-        // that reaches the right edge.
-        let full = "那年冬天山下起了大雪一直下到開春天氣才回暖起來了。";
-        let mut editor = editor_with(&format!("短。\n短二。\n{full}\n{full}\n"));
-        editor.on_key(Key::Char('j'));
+    fn the_hud_takes_the_nearest_margin_not_the_first_row_with_room() {
         let config = Config::default();
-        let rows = |editor: &Editor| -> Vec<String> {
-            let b = render(editor, &config, 30, 8);
-            (0..b.area.height)
-                .map(|y| (0..b.area.width).map(|x| at(&b, x, y)).collect::<String>())
-                .collect()
+        // Which row the mark landed on, and which corner it drew — the corner
+        // says where it thinks the caret is: `─` beside, `╰` below, `╭` above.
+        let mark = |editor: &Editor, w: u16, h: u16| -> (Option<(usize, String)>, Vec<String>) {
+            let b = render(editor, &config, w, h);
+            let rows: Vec<String> = (0..b.area.height)
+                .map(|y| (0..b.area.width).map(|x| at(&b, x, y)).collect())
+                .collect();
+            let found = rows.iter().enumerate().find_map(|(y, row)| {
+                ["─ 3", "╰ 3", "╭ 3"]
+                    .iter()
+                    .find(|mark| row.contains(**mark))
+                    .map(|mark| (y, mark.to_string()))
+            });
+            (found, rows)
         };
-        // Caret on the short first line: the row below is full to the edge, so
-        // the HUD goes *above* — the top row of the page is empty margin.
+
+        // One: the caret's own row is a candidate, and usually the winner.
+        // The line under it reaches the right edge, and the old rule — which
+        // could only look below and above — drew nothing at all here.
+        let full = "那年冬天山下起了大雪一直下到開春天氣才回暖起來了。";
+        let mut editor = editor_with(&format!("短。\n{full}\n"));
         editor.on_key(Key::Char('3'));
-        let drawn = rows(&editor);
-        let where_is_it = drawn
-            .iter()
-            .position(|r| r.contains('╰'))
-            .unwrap_or_else(|| panic!("the HUD had a row and did not take it: {drawn:#?}"));
-        assert_eq!(where_is_it, 0, "the row above, since the one below is full: {drawn:#?}");
+        let (found, rows) = mark(&editor, 30, 8);
+        assert_eq!(
+            found,
+            Some((0, "─ 3".to_string())),
+            "the margin on the caret's own row is the nearest there is: {rows:#?}",
+        );
+
+        // Two: when that row *is* full, it flips — to the nearer side. Both
+        // sides have room: above's margin starts four columns from the caret
+        // and below's eighteen, and the old rule took below every time, because
+        // below was simply tried first.
+        let brim = "那年冬天山下起了大雪一直下到";
+        let mut editor = editor_with(&format!("短。\n{brim}\n回暖起來了天氣才好\n"));
+        editor.on_key(Key::Char('j'));
+        editor.on_key(Key::Char('3'));
+        let (found, rows) = mark(&editor, 30, 8);
+        assert_eq!(
+            found,
+            Some((0, "╭ 3".to_string())),
+            "the short line above, not the far end of the wrapped line below: {rows:#?}",
+        );
     }
 
     /// The panel says what can finish the key you pressed, and stands on the
@@ -8097,6 +8257,32 @@ mod tests {
         assert_eq!(buffer[(0, 2)].style().bg, prose);
     }
 
+    /// **A table is a block, and blocks have a ground** (#270).
+    #[test]
+    fn a_table_in_a_chapter_has_a_ground_of_its_own() {
+        let mut editor = editor_with("那年冬天\n| 字 | 碼 |\n| --- | --- |\n| 天 | ab |\n山下起了雪");
+        let mut config = Config::default();
+        config.editor.line_numbers = LineNumbers::None;
+        config.editor.show_segmentation = false;
+        let buffer = render(&editor, &config, 40, 8);
+
+        let prose = buffer[(0, 0)].style().bg;
+        let table = buffer[(0, 1)].style().bg;
+        assert_ne!(table, prose, "a table is not prose with pipes in it");
+        // All three rows of it — the header, the rule and the row — and all
+        // the way across, the way a fence is grounded.
+        for y in 1..=3 {
+            assert_eq!(buffer[(0, y)].style().bg, table, "row {y}");
+            assert_eq!(buffer[(38, y)].style().bg, table, "row {y}, to the edge");
+        }
+        assert_eq!(buffer[(0, 4)].style().bg, prose, "and it ends where it ends");
+
+        // With the colouring off it is prose again, like every other block.
+        editor.set_render(yumete_core::editor::Render::Off);
+        let buffer = render(&editor, &config, 40, 8);
+        assert_eq!(buffer[(0, 1)].style().bg, prose);
+    }
+
     #[test]
     fn a_note_to_oneself_is_set_back_but_never_hidden() {
         let editor = editor_with("寫到這裏 %%這句再想想%%");
@@ -8446,16 +8632,41 @@ mod tests {
             .map(|x| buffer[(x, buffer.area.height - 1)].symbol())
             .collect();
         assert!(last.starts_with(":r"), "command line intact: {last:?}");
-        // Above it is the hint row, and above *that* the menu's own footer —
-        // the count and what the highlighted row means — with the rows above
-        // that again. The menu stacks upward from the whole footer, not from
-        // the command line alone, so it never covers either.
+        // Above it is the hint row, then the menu's bottom rule, and above
+        // *that* the menu's own footer — the count and what the highlighted
+        // row means — with the rows above that again. The menu stacks upward
+        // from the whole footer, not from the command line alone, so it never
+        // covers either.
         let footer: String = (0..buffer.area.width)
-            .map(|x| buffer[(x, buffer.area.height - 3)].symbol())
+            .map(|x| buffer[(x, buffer.area.height - 4)].symbol())
             .collect();
         assert!(footer.contains('/'), "a count of the matches: {footer:?}");
         let text = buffer_text(&buffer);
         assert!(text.contains("ruby") || text.contains("redo"), "{text:?}");
+    }
+
+    /// The author, 2026-09-05: 「command 提示面板的設計感不如快捷鍵提示面板。
+    /// 請你對齊一下：面板有個邊框 ＋ 左上有個「命令」文字。」
+    ///
+    /// It was a rectangle of ground with no edge and no name — a thing that
+    /// appeared beside the writing, where the which-key panel two keystrokes
+    /// away is a named ring. One panel, one idea.
+    #[test]
+    fn the_command_menu_wears_the_same_ring_as_the_which_key_panel() {
+        let mut editor = editor_with("那年冬天");
+        editor.on_key(Key::Char(':'));
+        let config = Config::default();
+        let buffer = render_with(&editor, &config, &no_ime(), 90, 24);
+        // A wide glyph covers two cells and only the first carries it.
+        let text = buffer_text(&buffer).replace(' ', "");
+        assert!(text.contains("命令"), "the panel says what it is: {text:?}");
+        // The rule runs down the left edge, beside the entries — which is
+        // where the colons are, one cell in from it.
+        let (rows, columns) = menu_shape(&buffer);
+        let top = *rows.iter().next().expect("a menu was drawn");
+        assert_eq!(*columns.iter().next().unwrap(), 2, "inside the ring");
+        assert_eq!(buffer[(0, top)].symbol(), "│", "a ring around it");
+        assert_eq!(buffer[(0, top - 1)].symbol(), "╭", "and a corner to it");
     }
 
     /// A search prompt is not a command line and gets no menu.

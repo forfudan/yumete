@@ -48,6 +48,10 @@ fn main() -> ExitCode {
     // too, and a session started to read should not go writable at the second
     // file.
     let mut readonly = false;
+    // `--new` says no to picking up where you left off. Opening the editor to
+    // jot one thing down and getting five chapters back is the same annoyance
+    // as the reverse, in the other direction.
+    let mut fresh = false;
 
     for arg in std::env::args().skip(1) {
         if want_syntax {
@@ -67,6 +71,7 @@ fn main() -> ExitCode {
             "-p" | "--preview" => force_preview = true,
             "-t" | "--table" => force_table = true,
             "-R" | "--readonly" => readonly = true,
+            "-n" | "--new" => fresh = true,
             "--timing" => timing = true,
             "--shot" => shot = Some((100, 30)),
             s if s.starts_with("--shot=") => shot = Some(parse_size(&s["--shot=".len()..])),
@@ -170,6 +175,7 @@ fn main() -> ExitCode {
             .collect(),
     );
     editor.set_autosave(config.editor.autosave);
+    editor.set_wheel_step(config.editor.wheel_step);
     // Somewhere for a buffer with no file to keep its recovery copy. Only the
     // front end knows where the data directory is.
     // Where `:word list global` writes, and where a reader's own dictionary is
@@ -211,7 +217,7 @@ fn main() -> ExitCode {
     // …and not when printing: `yumete -p` and `yumete | cat` are a look at one
     // thing, not a return to work.
     let printing = force_preview || !std::io::stdout().is_terminal();
-    let restored = if files.is_empty() && !printing {
+    let restored = if files.is_empty() && !printing && !fresh {
         editor.restore_session()
     } else {
         0
@@ -475,6 +481,8 @@ OPTIONS:
                      the config. -H / --horizontal forces the ordinary layout.
     -R, --readonly   Open locked: nothing this run opens can be typed into.
                      `:readonly off` unlocks the one you are looking at.
+    -n, --new        Start on an empty buffer instead of reopening the files
+                     that were open last time.
     -s, --syntax     Which markup these files are written in: markdown, typst
                      or text. Outranks both the extension and the config.
     -p, --preview    Print a non-interactive preview instead of the editor.
