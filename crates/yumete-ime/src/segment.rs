@@ -161,6 +161,15 @@ impl Segmenter for YumeSegmenter {
         self.bias = level.split_bias();
     }
 
+    /// The 詞頻表's own answer. The lexicon is deliberately not consulted: a
+    /// word 宇浩 knows but never counted has no rate to be measured against,
+    /// and charging it the once-seen floor the way [`Self::score`] does would
+    /// make every uncounted word look like the most surprising thing in the
+    /// chapter.
+    fn log_prob(&self, word: &str) -> Option<f64> {
+        self.unigram.log_prob(word)
+    }
+
     fn source(&self) -> String {
         format!(
             "宇浩語言模型 {} 條",

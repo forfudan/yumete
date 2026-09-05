@@ -54,6 +54,19 @@ pub trait Segmenter {
     fn source(&self) -> String {
         String::new()
     }
+
+    /// `ln P(word)` in ordinary prose, from whatever 詞頻表 this segmenter
+    /// reads — the background `:words` measures a manuscript against (#242).
+    ///
+    /// **`None` means「I have no table」, not「that word is rare」.** A
+    /// segmenter with no dictionary cannot tell 然後 from 阿甯, and `:words`
+    /// says so rather than reporting every proper noun in the chapter as a
+    /// crutch. A word the table simply does not hold is also `None`: an
+    /// unseen word has no background to be surprising against, and that
+    /// question is #239's, not this one's.
+    fn log_prob(&self, _word: &str) -> Option<f64> {
+        None
+    }
 }
 
 /// How readily a segmenter joins characters into words.
@@ -291,6 +304,12 @@ impl Segmenter for DictionarySegmenter {
         self.threshold = level.threshold();
     }
 
+    fn log_prob(&self, word: &str) -> Option<f64> {
+        self.dict
+            .get(word)
+            .map(|&weight| (weight as f64 / self.total).ln())
+    }
+
     fn source(&self) -> String {
         format!("{} 條（內置）", self.word_count())
     }
@@ -514,6 +533,12 @@ impl WithWords {
 impl Segmenter for WithWords {
     fn set_level(&mut self, level: WordLevel) {
         self.inner.set_level(level);
+    }
+
+    /// The dictionary's, never the book's own list: 阿甯 appearing four hundred
+    /// times is what this book is *about*, and a name is not a crutch word.
+    fn log_prob(&self, word: &str) -> Option<f64> {
+        self.inner.log_prob(word)
     }
 
     /// The dictionary underneath, and this book's own words on top of it.

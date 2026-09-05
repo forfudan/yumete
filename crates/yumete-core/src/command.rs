@@ -56,6 +56,9 @@ pub enum Command {
     WriteQuit(Option<String>),
     /// `:count` (alias `:wc`) — how much has been written.
     Count,
+    /// `:words` — the words this manuscript leans on, by surprisal against a
+    /// 詞頻表 rather than by count (Feature #242).
+    Words,
     /// `:check usage` — which of two spellings the manuscript settled on, and
     /// where it slipped (Feature #233).
     CheckUsage,
@@ -467,6 +470,7 @@ pub fn parse(input: &str) -> Result<Command, CommandError> {
             Some(rest.to_string())
         })),
         "count" | "wc" => Ok(Command::Count),
+        "words" => Ok(Command::Words),
         "check" => match rest {
             "usage" => Ok(Command::CheckUsage),
             "punct" => Ok(Command::CheckPunct),
@@ -2601,6 +2605,13 @@ pub const COMMANDS: &[Entry] = &[
         args: Args::Words(WORD_TOPICS),
     },
     Entry {
+        name: "words",
+        aliases: &[],
+        help: "cmd.commands.words",
+        needs: &[],
+        args: Args::None,
+    },
+    Entry {
         name: "layout",
         aliases: &["lay"],
         help: "cmd.commands.layout",
@@ -3412,7 +3423,6 @@ mod tests {
         assert!(parse(":word level 中等").is_err());
         // The two commands it replaced are gone.
         assert!(parse(":segment").is_err());
-        assert!(parse(":words").is_err());
     }
 
     #[test]
@@ -4075,6 +4085,7 @@ mod tests {
             "quit",
             "goto",
             "count",
+            "words",
             "check",
             "grep",
             "diff",

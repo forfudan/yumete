@@ -936,6 +936,14 @@ en = "words: which list, the tint, the level"
 find = "分詞 分词 詞表 词表 粒度 segmentation dictionary"
 
 [[message]]
+# : 命令選單裏 words 那一項的說明（commands 組）
+key = "cmd.commands.words"
+zht = "口頭禪：這一篇比別人多說的那些詞"
+zhs = "口头禅：这一篇比别人多说的那些词"
+en = "crutch words: what this one says far more than prose does"
+find = "口頭禪 口头禅 廢話 废话 贅詞 赘词 常用詞 常用词 crutch tic filler overused"
+
+[[message]]
 # : 命令選單裏 wq 那一項的說明（commands 組）
 key = "cmd.commands.wq"
 zht = "存好再退出"
@@ -1834,7 +1842,7 @@ zhs = "上屏方式：{0}"
 en = "commit method: {0}"
 
 
-# ── count ─────────────────────────────────────────────────────────────
+# ── convert ───────────────────────────────────────────────────────────
 
 [[message]]
 # :convert 這一趟能走的路，一行一個起點
@@ -1996,6 +2004,8 @@ key = "convert.what-it-can-do"
 zht = "convert：能走哪幾條路"
 zhs = "convert：能走哪几条路"
 en = "convert: the pairs it can do"
+
+# ── count ─────────────────────────────────────────────────────────────
 
 [[message]]
 # 字數統計的範圍：選區
@@ -5852,6 +5862,51 @@ key = "word.tint-on"
 zht = "分詞著色：開"
 zhs = "分词著色：开"
 en = "word tint: on"
+
+
+# ── words ─────────────────────────────────────────────────────────────
+
+[[message]]
+# :words 一個詞都沒有多說
+key = "words.clean"
+zht = "{0}：沒有哪個詞說得特別多"
+zhs = "{0}：没有哪个词说得特别多"
+en = "{0}: no word is leaned on"
+
+[[message]]
+# :words 結果裏的一行：這個詞說了幾次，比尋常文章多幾倍
+key = "words.crutch"
+zht = "{0}:{1}: 「{2}」{3} 次——比尋常文章多 {4} 倍"
+zhs = "{0}:{1}: 「{2}」{3} 次——比寻常文章多 {4} 倍"
+en = "{0}:{1}: 「{2}」 {3}× — {4} times more often than prose"
+
+[[message]]
+# :words 查出了幾個口頭禪
+key = "words.found"
+zht = "{0} 個詞說得特別多——gf 跳到那一行"
+zhs = "{0} 个词说得特别多——gf 跳到那一行"
+en = "{0} word(s) leaned on — gf goes to the line"
+
+[[message]]
+# :words 但手上這份分詞器沒有詞頻表，問不了「尋常文章說幾次」
+key = "words.no-table"
+zht = "這一份詞表沒有詞頻（{0}），問不了「別人說幾次」——裝上宇浩字料層再試"
+zhs = "这一份词表没有词频（{0}），问不了「别人说几次」——装上宇浩字料层再试"
+en = "this word list carries no frequencies ({0}), so there is nothing to compare against — install 宇浩's data layer"
+
+[[message]]
+# :words 的結果那一份緩衝區的名字
+key = "words.results"
+zht = "[口頭禪 {0}]"
+zhs = "[口头禅 {0}]"
+en = "[crutch words {0}]"
+
+[[message]]
+# :words 查出來的太多，只列了前面那些
+key = "words.too-many"
+zht = "{0} 個以上（只列了前 {0} 個）——gf 跳到那一行"
+zhs = "{0} 个以上（只列了前 {0} 个）——gf 跳到那一行"
+en = "{0}+ words leaned on (first {0} listed) — gf goes to the line"
 
 
 # ── wrap ──────────────────────────────────────────────────────────────

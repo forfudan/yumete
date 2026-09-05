@@ -3193,6 +3193,10 @@ impl Editor {
                 self.check_usage();
                 Ok(CommandOutcome::Continue)
             }
+            Command::Words => {
+                self.crutch_words();
+                Ok(CommandOutcome::Continue)
+            }
             Command::GotoRow(key) => {
                 self.goto_row(&key);
                 Ok(CommandOutcome::Continue)
@@ -9100,6 +9104,62 @@ impl Editor {
         self.status = match n > GREP_LIMIT {
             true => say!("check.usage-too-many", GREP_LIMIT),
             false => say!("check.usage-found", n),
+        };
+    }
+
+    /// `:words` — the words this manuscript leans on (Feature #242).
+    ///
+    /// **Sorting a word count says 的.** Every manuscript in the language gives
+    /// that answer, and a writer learns nothing from it. So the words are
+    /// ranked by how much *more* often this chapter says them than ordinary
+    /// prose does — 然後 forty-seven times where prose would have said it
+    /// eleven — which is the writer's own tic and is invisible from inside the
+    /// draft. The arithmetic, and the three things it deliberately stays quiet
+    /// about, are in [`crate::words`].
+    ///
+    /// **It needs a 詞頻表, and says so when it has none.** The fallback
+    /// segmenter gives every 漢字 a word of its own and knows no rates; asked
+    /// this question it would either say nothing or report every proper noun in
+    /// the book. The answer to 「為什麼一個字都沒有」 has to be a sentence, not
+    /// an empty listing.
+    fn crutch_words(&mut self) {
+        let name = self
+            .current_buffer()
+            .path()
+            .and_then(|p| p.file_name())
+            .map(|n| n.to_string_lossy().into_owned())
+            .unwrap_or_else(|| self.current_buffer().display_name().to_string());
+        let text = self.current_buffer().rope().to_string();
+        let segment = |line: &str| self.segmenter.segment(line);
+        let log_prob = |word: &str| self.segmenter.log_prob(word);
+        // 的 is in every table there is, so if the commonest word in the
+        // language has no rate then no word does.
+        if log_prob("的").is_none() {
+            self.status = say!("words.no-table", self.segmenter.source());
+            return;
+        }
+        let found = crate::words::crutches(&text, &segment, &log_prob);
+        if found.is_empty() {
+            self.status = say!("words.clean", name);
+            return;
+        }
+        let n = found.len();
+        let mut listing = String::new();
+        for word in found.iter().take(GREP_LIMIT) {
+            listing.push_str(&say!(
+                "words.crutch",
+                name,
+                word.line + 1,
+                word.word,
+                word.count,
+                format!("{:.1}", word.ratio)
+            ));
+            listing.push('\n');
+        }
+        self.show_listing(listing, say!("words.results", name));
+        self.status = match n > GREP_LIMIT {
+            true => say!("words.too-many", GREP_LIMIT),
+            false => say!("words.found", n),
         };
     }
 
@@ -20066,6 +20126,34 @@ mod tests {
             "{}",
             ed.status()
         );
+    }
+
+    /// `:words` ranks by surprisal, not by count — so the word every text has
+    /// is not the answer, and the word this one leans on is (#242).
+    #[test]
+    fn words_reports_what_is_said_more_than_prose_says_it_and_never_says_de() {
+        // A table where 的 is common and 然後 is not, so a text that says 然後
+        // as often as 的 has one crutch word and not two.
+        let dict = DictionarySegmenter::from_text("的\t100000\n然後\t100\n好的\t100000\n", 1);
+        let mut ed = typed("然後好的然後好的然後好的然後好的\n");
+        ed.set_segmenter(Box::new(dict));
+        assert!(ed.execute("words").is_ok());
+        let out = ed.current_buffer().text();
+        assert!(out.contains("然後"), "{out}");
+        assert!(!out.contains("好的"), "the word prose says just as often: {out}");
+        assert!(ed.status().contains('1'), "{}", ed.status());
+    }
+
+    /// The fallback segmenter has no frequencies, and the answer to
+    /// 「為什麼一個字都沒有」 has to be a sentence rather than an empty listing.
+    #[test]
+    fn words_without_a_frequency_table_says_so_instead_of_listing_nothing() {
+        let mut ed = typed("然後好的然後好的然後好的\n");
+        ed.set_segmenter(Box::new(CategorySegmenter));
+        let before = ed.current_buffer().text();
+        assert!(ed.execute("words").is_ok());
+        assert_eq!(ed.current_buffer().text(), before, "no listing buffer");
+        assert!(ed.status().contains("詞頻"), "{}", ed.status());
     }
 
     /// `:check charset` reports the character no standard carries — once,
