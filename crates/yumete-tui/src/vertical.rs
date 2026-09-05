@@ -844,6 +844,10 @@ pub fn draw(
                 .and_then(|b| crate::block_style(b, ink))
                 .unwrap_or_default();
 
+            // Whether a `==highlight==` covers this slot, so the cell ground
+            // steps around it — the horizontal page has done so since #229 and
+            // this page had not. A highlight exists *to be* a ground.
+            let mut highlighted = false;
             if show_markup {
                 let runs = match &marked {
                     Some((line, runs)) if *line == zong.line => runs,
@@ -859,6 +863,7 @@ pub fn draw(
                 // a ruby group, or a 縦中横 pair — so it takes the style of any
                 // run it overlaps.
                 for run in runs.iter().filter(|r| r.end > column && r.start < column + len) {
+                    highlighted |= run.kind == yumete_core::markdown::Kind::Highlight;
                     style = style.patch(crate::markup_style(run.kind, ink));
                 }
             }
@@ -888,7 +893,7 @@ pub fn draw(
 
             // The cell first, so the selection still goes over it.
             if let Some((from, to)) = cell {
-                if at < to && at + len > from {
+                if !highlighted && at < to && at + len > from {
                     style = style.patch(cell_style);
                 }
             }
