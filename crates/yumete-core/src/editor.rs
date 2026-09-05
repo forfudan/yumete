@@ -3519,10 +3519,17 @@ impl Editor {
                 Ok(CommandOutcome::Continue)
             }
             Command::SetTable(on) => {
-                if on {
-                    self.enter_table();
-                } else {
-                    self.leave_table();
+                // **`:table` is the door, not a surface.** Typed while the
+                // grid had the window it went in again as 畫成表格 — a silent
+                // demotion that also threw away `t q`'s way back.
+                match (on, self.table.as_ref().map(|v| v.surface)) {
+                    (true, None) => {
+                        self.enter_table();
+                    }
+                    (true, Some(Surface::Grid)) => self.status = say!("table.already-the-window"),
+                    (true, Some(Surface::Advanced)) => self.status = say!("table.already-drawn"),
+                    (true, Some(Surface::Normal)) => self.status = say!("table.already-operated"),
+                    (false, _) => self.leave_table(),
                 }
                 Ok(CommandOutcome::Continue)
             }
@@ -20823,6 +20830,24 @@ mod tests {
         press(&mut ed, "tn");
         press(&mut ed, "k");
         assert_eq!(ed.cursor_line(), 1, "{}", ed.status());
+    }
+
+    /// `:table` is the **door**, not a surface. Typed while a surface is
+    /// already up it used to walk in again as 畫成表格 — quietly demoting
+    /// 全窗表格 and losing the window `t q` would have given back.
+    #[test]
+    fn typing_table_again_does_not_demote_the_surface_it_is_already_in() {
+        let mut ed = with_md_table();
+        ed.goto_line(3);
+        press(&mut ed, "tt");
+        let before = ed.table.as_ref().map(|v| v.surface);
+        ed.execute(":table").unwrap();
+        assert_eq!(ed.table.as_ref().map(|v| v.surface), before, "{}", ed.status());
+        assert_eq!(ed.status(), say!("table.already-the-window"));
+
+        // And the door still closes.
+        ed.execute(":table off").unwrap();
+        assert!(ed.table.is_none(), "{}", ed.status());
     }
 
     /// A table with a header, a rule and nothing under them has **no rows**.
