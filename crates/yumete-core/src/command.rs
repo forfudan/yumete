@@ -277,6 +277,11 @@ pub enum Command {
         path: Option<String>,
         force: bool,
     },
+    /// `:ruby auto` — write the readings in by word; `rare` keeps only the
+    /// words holding a character outside 通用規範漢字表 (Feature #234).
+    AutoRuby {
+        rare: bool,
+    },
     /// `:ruby` — open Ruby mode on the group or selection at the cursor
     /// (Feature #65).
     Ruby,
@@ -993,6 +998,16 @@ pub fn parse(input: &str) -> Result<Command, CommandError> {
                 }),
             };
             match first {
+                // Before the dialect arm below, which would read `auto` as a
+                // dialect name and answer 「no such thing」.
+                "auto" => match second {
+                    None => Ok(Command::AutoRuby { rare: false }),
+                    Some("rare") => Ok(Command::AutoRuby { rare: true }),
+                    Some(other) => Err(CommandError::InvalidArgument {
+                        command: "ruby auto",
+                        value: other.to_string(),
+                    }),
+                },
                 "on" | "off" => Ok(Command::RenderRuby {
                     dialect: None,
                     on: first == "on",
@@ -2152,6 +2167,17 @@ const RUBY: &[Word] = &[
         help: "cmd.ruby.off",
         needs: &[],
         then: Args::None,
+    },
+    Word {
+        name: "auto",
+        help: "cmd.ruby.auto",
+        needs: &[],
+        then: Args::Words(&[Word {
+            name: "rare",
+            help: "cmd.ruby.auto.rare",
+            needs: &[],
+            then: Args::None,
+        }]),
     },
     Word {
         name: "html",
@@ -3586,6 +3612,7 @@ mod tests {
                 "ruby",
                 "ruby on",
                 "ruby off",
+                "ruby auto",
                 "ruby html",
                 "ruby typst",
                 "ruby format"
@@ -3718,7 +3745,10 @@ mod tests {
 
         // A parent command is not a mechanism of its own — its subcommands are
         // simply the words it takes, and they go as deep as they like.
-        assert_eq!(words("ruby "), ["on", "off", "html", "typst", "format"]);
+        assert_eq!(
+            words("ruby "),
+            ["on", "off", "auto", "html", "typst", "format"]
+        );
         assert_eq!(words("ruby html "), ["on", "off"]);
 
         // Where the word being completed starts, so a completion replaces it

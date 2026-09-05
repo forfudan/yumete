@@ -35,6 +35,7 @@
 
 pub mod blocks;
 pub mod grapheme;
+pub mod reading;
 pub mod segment;
 pub mod vertical;
 pub mod width;
@@ -43,6 +44,7 @@ pub mod word;
 pub use grapheme::{
     grapheme_count, graphemes, next_grapheme_boundary, nth_grapheme, prev_grapheme_boundary,
 };
+pub use reading::{NoReader, Reader};
 pub use segment::{
     CategorySegmenter, DictionarySegmenter, Segmenter, WithWords, WordLevel, WordList,
 };
@@ -54,4 +56,4 @@ pub use width::{
     ambiguous_is_wide, char_width, drawn_width, grapheme_width, set_ambiguous_wide, str_width,
     tab_width_at,
 };
-pub use word::{word_ranges, word_ranges_big};
+pub use word::{is_han, word_ranges, word_ranges_big};

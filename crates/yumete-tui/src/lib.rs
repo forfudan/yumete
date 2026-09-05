@@ -463,6 +463,9 @@ pub fn run(
                 // turned out to be.
                 editor.reload_project_words();
             }
+            // The 拆分表 arrives with that same 14 MB, so `:ruby auto` has
+            // something to say only from here on.
+            editor.set_reader(Box::new(ime.reader()));
             continue;
         }
         // **`:reload auto` needs a clock, not a keystroke.** `event::read`
@@ -710,6 +713,9 @@ pub fn run(
                     if words.is_available() {
                         editor.set_segmenter(Box::new(words));
                     }
+                    // A 自定義方案 may bring its own 拆分表, so the readings
+                    // are re-read with the scheme.
+                    editor.set_reader(Box::new(ime.reader()));
                 }
                 // `:chaifen` configures the IME, which the core cannot reach;
                 // it leaves the request here and the answer goes back, so the

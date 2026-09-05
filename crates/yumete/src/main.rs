@@ -346,6 +346,9 @@ fn main() -> ExitCode {
     // One answer, in `yumete_tui::choose_words`, so `:word list reload` cannot
     // pick a different dictionary from the one start-up picked.
     editor.set_segmenter(yumete_tui::choose_words(&ime, config.editor.word_level));
+    // …and the readings, for `:ruby auto`. Same source, different question:
+    // the segmenter asks where a word ends, the reader asks how it is read.
+    editor.set_reader(Box::new(ime.reader()));
     editor.set_word_level(config.editor.word_level);
     editor.set_segmentation_visible(config.editor.show_segmentation);
     if let Some(rules) = yumete_core::table::Rules::parse(&config.editor.table_rules) {

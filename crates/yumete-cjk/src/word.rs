@@ -22,6 +22,21 @@ pub(crate) fn is_cjk(c: char) -> bool {
     )
 }
 
+/// Whether `c` is a 漢字 — what a Chinese word count actually counts.
+///
+/// The unified blocks and their extensions, plus the compatibility ideographs
+/// and the two ideographs that live outside them: 〇 (U+3007), which is how a
+/// year is written — 二〇二五年 is five 字, not four — and 々 (U+3005), the
+/// repetition mark, which stands for a 漢字 and is counted as one.
+///
+/// Kana and punctuation are deliberately out, which is what separates this from
+/// [`is_cjk`]: a 字數 is not a character count (`:count` reports both), and a
+/// reading (#234) is something only a 漢字 has.
+pub fn is_han(c: char) -> bool {
+    matches!(c as u32,
+        0x3005 | 0x3007 | 0x3400..=0x4DBF | 0x4E00..=0x9FFF | 0xF900..=0xFAFF | 0x20000..=0x3FFFF)
+}
+
 /// Coarse character category for grouping non-CJK runs.
 #[derive(PartialEq, Eq, Clone, Copy)]
 pub(crate) enum Category {
