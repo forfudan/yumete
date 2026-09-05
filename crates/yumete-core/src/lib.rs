@@ -33,6 +33,7 @@ pub mod table;
 pub mod syntax;
 pub mod text_store;
 pub mod tutor;
+pub mod usage;
 pub mod wrap;
 pub mod zong;
 

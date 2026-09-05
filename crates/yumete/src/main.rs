@@ -248,6 +248,9 @@ fn main() -> ExitCode {
     for name in &config.editor.ruby_dialects {
         let _ = editor.execute(&format!(":ruby {name}"));
     }
+    // The reader's own 用字 groups (#233) — a novel's names, which no built-in
+    // 異體字表 can hold.
+    editor.set_usage_groups(config.editor.usage_groups.clone());
 
     // The built-in Yume IME (Feature #27): load the configured scheme's tables
     // from the data directory. When the data is absent the session is

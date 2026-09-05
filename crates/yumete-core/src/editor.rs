@@ -1169,6 +1169,12 @@ pub struct Editor {
     /// The directory the last `:grep` listing was gathered from, so `gf` on one
     /// of its lines resolves the same relative path it printed.
     grep_root: Option<PathBuf>,
+    /// The reader's own 用字 groups, from `[editor] usage_groups` (#233).
+    ///
+    /// The built-in table cannot hold a novel's own names, and a novel's own
+    /// names are what a manuscript slips on: 阿嬌 in chapter two and 阿姣 in
+    /// chapter nineteen is invisible to every checker there is.
+    usage_groups: Vec<String>,
     /// The last `:grep`: its pattern and the files it hit.
     ///
     /// What `:replace` acts on — so a project-wide change can only be made to
@@ -1385,6 +1391,7 @@ impl Editor {
             default_syntax: None,
             syntax_by_name: HashMap::new(),
             grep_root: None,
+            usage_groups: Vec::new(),
             grep_found: None,
         }
     }
@@ -3106,6 +3113,10 @@ impl Editor {
             }
             Command::CheckTable => {
                 self.check_table();
+                Ok(CommandOutcome::Continue)
+            }
+            Command::CheckUsage => {
+                self.check_usage();
                 Ok(CommandOutcome::Continue)
             }
             Command::GotoRow(key) => {
@@ -8758,6 +8769,64 @@ impl Editor {
         self.add_buffer(buffer);
         self.set_cursor(0);
         self.status = say!("table.check-problems", n);
+    }
+
+    /// The reader's own 用字 groups, from the config (#233).
+    pub fn set_usage_groups(&mut self, groups: Vec<String>) {
+        self.usage_groups = groups;
+    }
+
+    /// `:check usage` — where the manuscript wrote the other spelling (#233).
+    ///
+    /// **Not spelling, consistency.** 裏 four hundred times and 裡 three is not
+    /// three mistakes — both are correct 漢字 — it is one manuscript that has
+    /// not settled, and nothing tells the writer: Word checks 病句, Grammarly
+    /// is English, and every spell-checker there is tokenizes on spaces and
+    /// sees a chapter as one word. So the question is asked of the document
+    /// rather than of a dictionary: a group is reported only when both
+    /// spellings are written here, and the one written more is the one it
+    /// meant.
+    ///
+    /// The answer is a jumpable listing, the shape `:grep` and `:table check`
+    /// already use — three hundred slips are not a status line, and `gf` on a
+    /// row is how a reader goes and fixes one.
+    fn check_usage(&mut self) {
+        let name = self
+            .current_buffer()
+            .path()
+            .and_then(|p| p.file_name())
+            .map(|n| n.to_string_lossy().into_owned())
+            .unwrap_or_else(|| self.current_buffer().display_name().to_string());
+        let text = self.current_buffer().rope().to_string();
+        let slips = crate::usage::check(&text, &self.usage_groups);
+        if slips.is_empty() {
+            self.status = say!("check.usage-clean", name);
+            return;
+        }
+        let n = slips.len();
+        let mut listing = String::new();
+        for slip in slips.iter().take(GREP_LIMIT) {
+            listing.push_str(&say!(
+                "check.usage-slip",
+                name,
+                slip.line + 1,
+                slip.written,
+                slip.instead,
+                slip.written_count,
+                slip.instead_count
+            ));
+            listing.push('\n');
+        }
+        let mut buffer = Buffer::from_text(&listing);
+        buffer.name_as(&say!("check.usage-results", name));
+        self.grep_root = self
+            .current_buffer()
+            .path()
+            .and_then(|p| p.parent())
+            .map(Path::to_path_buf);
+        self.add_buffer(buffer);
+        self.set_cursor(0);
+        self.status = say!("check.usage-found", n);
     }
 
     /// Go to the row this table names by `key` (`:row 木`).

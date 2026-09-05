@@ -55,6 +55,9 @@ pub enum Command {
     WriteQuit(Option<String>),
     /// `:count` (alias `:wc`) — how much has been written.
     Count,
+    /// `:check usage` — which of two spellings the manuscript settled on, and
+    /// where it slipped (Feature #233).
+    CheckUsage,
     /// `:<n>` or `:goto <n>` (alias `:g`) — put the cursor on line `n`.
     GotoLine(usize),
     /// `:recover` — load the crash-recovery draft into the buffer;
@@ -445,6 +448,18 @@ pub fn parse(input: &str) -> Result<Command, CommandError> {
             Some(rest.to_string())
         })),
         "count" | "wc" => Ok(Command::Count),
+        "check" => match rest {
+            "usage" => Ok(Command::CheckUsage),
+            // `:check` on its own asks what to check rather than guessing:
+            // 用字 is the first of several, and the day 標點 lands a bare
+            // `:check` that had quietly meant one of them would change what
+            // it does under everybody who had typed it.
+            "" => Err(CommandError::MissingArgument("check")),
+            other => Err(CommandError::InvalidArgument {
+                command: "check",
+                value: other.to_string(),
+            }),
+        },
         "goto" | "g" => rest
             .parse::<usize>()
             .map(Command::GotoLine)
@@ -2235,6 +2250,18 @@ const WORD_LEVELS: &[Word] = &[
     },
 ];
 
+/// What `:check` can be asked to look over (Feature #233).
+///
+/// One word today. It is a list rather than `Args::None` because 用字 is the
+/// first of several — 標點, 空格 — and a command that took nothing at all
+/// would have to be re-shaped the day the second one lands.
+const CHECK: &[Word] = &[Word {
+    name: "usage",
+    help: "cmd.check.usage",
+    needs: &[],
+    then: Args::None,
+}];
+
 /// The one word `:reload` takes besides nothing at all.
 const RELOAD: &[Word] = &[Word {
     name: "auto",
@@ -2328,6 +2355,13 @@ pub const COMMANDS: &[Entry] = &[
         help: "cmd.commands.count",
         needs: &[],
         args: Args::None,
+    },
+    Entry {
+        name: "check",
+        aliases: &[],
+        help: "cmd.commands.check",
+        needs: &[],
+        args: Args::Words(CHECK),
     },
     Entry {
         name: "quit",
@@ -3812,6 +3846,7 @@ mod tests {
             "quit",
             "goto",
             "count",
+            "check",
             "grep",
             "toc",
             "export",
