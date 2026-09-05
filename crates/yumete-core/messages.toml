@@ -278,6 +278,36 @@ zht = "{0}:{1}: 這一行是 {2} 欄，該是 {3} 欄"
 zhs = "{0}:{1}: 这一行是 {2} 栏，该是 {3} 栏"
 en = "{0}:{1}: {2} columns here, {3} expected"
 
+# ── check ─────────────────────────────────────────────────────────────
+
+[[message]]
+# :check usage 查完，全文用字一致
+key = "check.usage-clean"
+zht = "{0}：用字一致"
+zhs = "{0}：用字一致"
+en = "{0}: one spelling throughout"
+
+[[message]]
+# :check usage 查出了不一致的用字
+key = "check.usage-found"
+zht = "{0} 處用字不一致——gf 跳到那一行"
+zhs = "{0} 处用字不一致——gf 跳到那一行"
+en = "{0} place(s) spelled the other way — gf goes to the line"
+
+[[message]]
+# :check usage 的結果那一份緩衝區的名字
+key = "check.usage-results"
+zht = "[用字 {0}]"
+zhs = "[用字 {0}]"
+en = "[usage {0}]"
+
+[[message]]
+# :check usage 結果裏的一行：這裏寫的和全文多數不一樣
+key = "check.usage-slip"
+zht = "{0}:{1}: 這裏是「{2}」{4} 次，全文多用「{3}」{5} 次"
+zhs = "{0}:{1}: 这里是「{2}」{4} 次，全文多用「{3}」{5} 次"
+en = "{0}:{1}: 「{2}」 here ({4}), 「{3}」 in the rest ({5})"
+
 
 # ── cli ───────────────────────────────────────────────────────────────
 
@@ -361,6 +391,14 @@ en = "the previous one"
 find = "上一個 上一个 前一個 prev bp"
 
 [[message]]
+# : 命令選單裏 usage 那一項的說明（check 組）
+key = "cmd.check.usage"
+zht = "查用字：全文寫了兩種寫法的（裏／裡、為／爲、你自己配的人名），列出少數那一邊"
+zhs = "查用字：全文写了两种写法的（里／裡、为／爲、你自己配的人名），列出少数那一边"
+en = "check 用字: where the manuscript wrote the other spelling of something it usually spells one way"
+find = "用字 異體字 异体字 一致 統一 统一 裏裡 為爲 校對 校对 consistency variant"
+
+[[message]]
 # : 命令選單裏 paste 那一項的說明（clipboard 組）
 key = "cmd.clipboard.paste"
 zht = "從系統剪貼簿貼進來"
@@ -399,6 +437,14 @@ zht = "開着的檔案：列出、切換、關掉"
 zhs = "开着的档案：列出、切换、关掉"
 en = "the open files: list, switch, close"
 find = "緩衝區 缓冲区 檔案 文件 分頁 標籤 tabs files switch"
+
+[[message]]
+# : 命令選單裏 check 那一項的說明（commands 組）
+key = "cmd.commands.check"
+zht = "從頭查一遍稿子：`:check usage` 查用字前後一不一致"
+zhs = "从头查一遍稿子：`:check usage` 查用字前后一不一致"
+en = "look the manuscript over: `:check usage` for spellings it has not settled on"
+find = "檢查 检查 校對 校对 查錯 查错 用字 一致 lint proofread"
 
 [[message]]
 # : 命令選單裏 clipboard 那一項的說明（commands 組）

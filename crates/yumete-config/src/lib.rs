@@ -140,6 +140,14 @@ pub struct EditorConfig {
     /// Extra ruby dialects to lay out beyond the one the file's extension
     /// implies — a document that mixes them names them all here.
     pub ruby_dialects: Vec<String>,
+    /// The reader's own 用字 groups for `:check usage` (#233), each line 「甲
+    /// 乙」 — the spellings that mean the same thing here, the one to settle
+    /// on first.
+    ///
+    /// The built-in table has 裏/裡 and 為/爲; it cannot have 阿嬌/阿姣,
+    /// because a novel's own names are in nobody's 異體字表 and are exactly
+    /// what a manuscript slips on over a year.
+    pub usage_groups: Vec<String>,
     /// Whether a pair of half-width characters shares one slot in vertical
     /// layout (縦中横). Off by default: one letter to a row, hung right.
     pub tatechuyoko: bool,
@@ -258,6 +266,7 @@ impl Default for EditorConfig {
             show_chaifen: false,
             show_ruby: false,
             ruby_dialects: Vec::new(),
+            usage_groups: Vec::new(),
             tatechuyoko: false,
             hanging_punctuation: false,
             soft_wrap: true,
@@ -1560,6 +1569,7 @@ struct RawEditor {
     show_chaifen: Option<bool>,
     show_ruby: Option<bool>,
     ruby_dialects: Option<Vec<String>>,
+    usage_groups: Option<Vec<String>>,
     tatechuyoko: Option<bool>,
     hanging_punctuation: Option<bool>,
     soft_wrap: Option<bool>,
@@ -1671,6 +1681,9 @@ impl RawConfig {
         }
         if other.editor.ruby_dialects.is_some() {
             self.editor.ruby_dialects = other.editor.ruby_dialects.clone();
+        }
+        if other.editor.usage_groups.is_some() {
+            self.editor.usage_groups = other.editor.usage_groups.clone();
         }
         if other.editor.tatechuyoko.is_some() {
             self.editor.tatechuyoko = other.editor.tatechuyoko;
@@ -1859,6 +1872,9 @@ impl RawConfig {
         }
         if let Some(dialects) = self.editor.ruby_dialects {
             config.editor.ruby_dialects = dialects;
+        }
+        if let Some(groups) = self.editor.usage_groups {
+            config.editor.usage_groups = groups;
         }
         if let Some(on) = self.editor.tatechuyoko {
             config.editor.tatechuyoko = on;
