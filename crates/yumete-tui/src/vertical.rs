@@ -34,6 +34,33 @@ use yumete_ime::ImeSession;
 /// grid is built around that, not around any particular character's width.
 const SLOT_WIDTH: u16 = 2;
 
+/// 着重號 — the mark Chinese typesetting puts beside an emphasised character
+/// (Feature #236).
+///
+/// A 漢字 cannot lean and does not want to: the Chinese setting of `<em>` is a
+/// dot beside every character of the run, which 縱書 puts in the margin to the
+/// right — the column this page already draws readings and hung 句讀 in. Which
+/// is why `*字*` **is** the markup for it rather than something new: 着重號 is
+/// what emphasis *means* here.
+///
+/// Half-width, so it sits in a one-cell margin the way a hung mark does — and
+/// the layout buys that cell for it, the way it buys one for a reading. See
+/// [`Margin`].
+const EMPHASIS: char = '·';
+
+/// What the cell to the right of one 縱 has to hold — which is what decides how
+/// far the next 縱 sits from it.
+///
+/// Both of these are read off the 縱's own text, unlike the gap and the 稿紙
+/// rule, which the page has whether or not anything wants them.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+struct Margin {
+    /// A reading or a hung 句讀 mark: `ruby_width` cells.
+    reading: bool,
+    /// A 着重號: one cell, since it is half-width.
+    dot: bool,
+}
+
 /// The screen geometry of a vertically laid-out page.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Metrics {
@@ -130,19 +157,25 @@ impl Metrics {
         }
     }
 
-    /// How wide a margin a 縱 needs on its right for a reading.
+    /// How wide a margin a 縱 needs on its right.
     ///
-    /// `ruby_width` cells, not one: a reading in 注音符號 (ㄩㄥˇ) or in kana is
-    /// full-width, and squeezing it into one cell walks every 縱 after it a
-    /// column to the left — the page comes apart into a staircase. Pinyin is
-    /// half-width and keeps the one cell it always had.
-    fn ruby_cell(&self, annotated: bool) -> u16 {
-        let reading = if annotated && (self.ruby || self.hanging) {
+    /// `ruby_width` cells for a reading, not one: a reading in 注音符號 (ㄩㄥˇ)
+    /// or in kana is full-width, and squeezing it into one cell walks every 縱
+    /// after it a column to the left — the page comes apart into a staircase.
+    /// Pinyin is half-width and keeps the one cell it always had.
+    ///
+    /// A 着重號 asks for one cell the same way, and asks whether or not the page
+    /// is showing readings: it is the text's own emphasis, not an annotation
+    /// laid over it, so `:ruby-off` has nothing to say about it.
+    fn ruby_cell(&self, margin: Margin) -> u16 {
+        let reading = if margin.reading && (self.ruby || self.hanging) {
             self.ruby_width
         } else {
             0
         };
-        reading.max(u16::from(self.ticks))
+        reading
+            .max(u16::from(self.ticks))
+            .max(u16::from(margin.dot))
     }
 
     /// How many 縱 fit across an area `width` cells wide. Only the gaps
@@ -186,7 +219,18 @@ pub fn char_at(
         .grid_with(&hidden, &folded, &ghost)
         .with_zong_len(metrics.zong_len);
     let capacity = metrics.capacity(area.width);
-    let page = layout_page(buffer.rope(), viewport, grid, &metrics, area, capacity);
+    // The same page the drawing laid out, 着重號 and all: a click lands on the
+    // character it looks like it landed on only if both agree where the 縱 are.
+    let markup = Markup::of(editor);
+    let page = layout_page(
+        buffer.rope(),
+        viewport,
+        grid,
+        &metrics,
+        area,
+        capacity,
+        &|line| markup.dotted(line),
+    );
 
     // Which band the row fell in, then which 縱 of it the column fell in — or,
     // failing that, the nearest one to its right, since a click in a gap means
@@ -234,6 +278,57 @@ fn ruby_width_of(slots: &[Vec<zong::Slot>]) -> u16 {
         .max(1)
 }
 
+/// The Markdown of the lines a page is drawn from, asked of the editor once.
+///
+/// Two callers want the same answer at two different moments: the **layout**,
+/// which has to know before it places anything whether a line's 縱 need a cell
+/// for a 着重號, and the **drawing**, which needs the runs themselves. Asking
+/// twice would walk the document from the top twice — blocks are not line-local
+/// — so the walk is done once here and both read it.
+struct Markup<'a> {
+    editor: &'a Editor,
+    blocks: std::cell::RefCell<Vec<yumete_core::markdown::Block>>,
+}
+
+impl<'a> Markup<'a> {
+    fn of(editor: &'a Editor) -> Self {
+        Markup {
+            editor,
+            blocks: std::cell::RefCell::new(Vec::new()),
+        }
+    }
+
+    /// What kind of line this is. Inside a fence or a page's metadata nothing is
+    /// markup, and colouring `**` there — let alone dotting beside it — would
+    /// misreport what the file says.
+    ///
+    /// Asked for a page's worth at a time rather than a line: the answer depends
+    /// on every line above, so one line costs the same walk as a hundred.
+    fn block(&self, line: usize) -> yumete_core::markdown::Block {
+        if self.blocks.borrow().len() <= line {
+            *self.blocks.borrow_mut() = self.editor.blocks_through(line + 256);
+        }
+        self.blocks.borrow().get(line).copied().unwrap_or_default()
+    }
+
+    /// The Markdown runs of one line — empty when the markup is not being
+    /// rendered at all, which is what `:render off` means.
+    fn runs(&self, line: usize) -> Vec<yumete_core::markdown::Span> {
+        match self.editor.markup_visible() {
+            true => self.editor.markup_line_in(line, self.block(line)),
+            false => Vec::new(),
+        }
+    }
+
+    /// Whether this line has a `*emphasis*` on it, and so needs the cell beside
+    /// its 縱 for the 着重號 (Feature #236).
+    fn dotted(&self, line: usize) -> bool {
+        self.runs(line)
+            .iter()
+            .any(|r| r.kind == yumete_core::markdown::Kind::Emphasis)
+    }
+}
+
 /// Lay out a page from `anchor`: fetch the 縱, work out their rows, and place
 /// them right to left until the width runs out.
 fn layout_page(
@@ -243,15 +338,25 @@ fn layout_page(
     metrics: &Metrics,
     area: Rect,
     capacity: usize,
+    dotted: &dyn Fn(usize) -> bool,
 ) -> Page {
     let zongs = zong::zongs_from(rope, anchor, grid, capacity);
     let slots: Vec<Vec<zong::Slot>> = zongs
         .iter()
         .map(|z| zong::zong_slots(rope, z, grid))
         .collect();
-    let annotated: Vec<bool> = slots
+    // What each 縱 needs the cell to its right for. A 着重號 is asked for by
+    // **line** rather than by 縱: a paragraph broken across three 縱 reserves the
+    // cell in all three, which costs a cell only on the rightmost 縱 of the page
+    // — every other one borrows the gap it already had — and in exchange the
+    // page does not change shape as it is scrolled through.
+    let margins: Vec<Margin> = zongs
         .iter()
-        .map(|rows| rows.iter().any(|r| r.ruby.is_some() || r.mark.is_some()))
+        .zip(&slots)
+        .map(|(z, rows)| Margin {
+            reading: rows.iter().any(|r| r.ruby.is_some() || r.mark.is_some()),
+            dot: dotted(z.line),
+        })
         .collect();
     // Measured from the page itself: one full-width reading anywhere on it
     // widens the margin for all of them.
@@ -264,7 +369,7 @@ fn layout_page(
     let mut spots: Vec<(u16, u16)> = Vec::new();
     for band in 0..metrics.bands {
         let top = area.y + band as u16 * metrics.band_height + metrics.head_rows;
-        let xs = place(&metrics, area, &annotated[spots.len().min(annotated.len())..]);
+        let xs = place(&metrics, area, &margins[spots.len().min(margins.len())..]);
         if xs.is_empty() {
             break;
         }
@@ -290,14 +395,14 @@ fn layout_page(
 /// Positions are walked rather than computed, because a 縱's width is no longer
 /// the same for all of them: with the gap set to zero, one carrying a reading
 /// takes a cell more than one that does not.
-fn place(metrics: &Metrics, area: Rect, annotated: &[bool]) -> Vec<u16> {
-    let mut xs: Vec<u16> = Vec::with_capacity(annotated.len());
-    for &annotated in annotated {
+fn place(metrics: &Metrics, area: Rect, margins: &[Margin]) -> Vec<u16> {
+    let mut xs: Vec<u16> = Vec::with_capacity(margins.len());
+    for &margin in margins {
         // A reading sits in the cell to the *right* of its own 縱, while the gap
         // sits *between* two — and they are the same cell. So one column apart
         // costs whichever is larger, and the rightmost 縱 pays for a reading
         // alone, since it has no neighbour to borrow the cell from.
-        let ruby = metrics.ruby_cell(annotated);
+        let ruby = metrics.ruby_cell(margin);
         let x = match xs.last() {
             None => (area.x + area.width).checked_sub(SLOT_WIDTH + ruby),
             Some(&previous) => previous.checked_sub(SLOT_WIDTH + metrics.gap.max(ruby)),
@@ -562,7 +667,10 @@ pub fn draw(
     // and measured again. Twice is enough: the second measurement is of the
     // page actually being drawn.
     let capacity = metrics.capacity(area.width);
-    let mut page = layout_page(rope, *viewport, grid, &metrics, area, capacity);
+    let markup = Markup::of(editor);
+    let mut page = layout_page(rope, *viewport, grid, &metrics, area, capacity, &|line| {
+        markup.dotted(line)
+    });
     let visible = page.len().max(1);
     let scrolloff = config.editor.scrolloff.min(visible.saturating_sub(1) / 2);
     let last_column = visible.saturating_sub(1);
@@ -584,7 +692,9 @@ pub fn draw(
                 _ => 0,
             });
             *viewport = zong::retreat(rope, cursor_anchor, grid, inset);
-            page = layout_page(rope, *viewport, grid, &metrics, area, capacity);
+            page = layout_page(rope, *viewport, grid, &metrics, area, capacity, &|line| {
+                markup.dotted(line)
+            });
             zong::distance(rope, *viewport, cursor_anchor, grid, page.len()).unwrap_or(0)
         }
     };
@@ -713,17 +823,6 @@ pub fn draw(
     let mut segmented: Option<(usize, Vec<(usize, usize)>)> = None;
     let mut marked: Option<(usize, Vec<yumete_core::markdown::Span>)> = None;
 
-    // Which block each line belongs to. A fence opened above decides what the
-    // lines under it mean, and there is no way to know that from a line alone —
-    // so this is walked from the top of the document down to the last line the
-    // page shows, exactly as the horizontal side does it.
-    let show_markup = editor.markup_visible();
-    let blocks = if show_markup {
-        let last = page.iter().map(|p| p.zong.line).max().unwrap_or(0);
-        editor.blocks_through(last)
-    } else {
-        Vec::new()
-    };
 
     let buf = frame.buffer_mut();
     for placed in page.iter() {
@@ -768,15 +867,43 @@ pub fn draw(
         // is already rotated.
         for (slot, row) in slots.iter().cloned().enumerate() {
             let y = text_top + slot as u16;
+            // This line's markup runs, wanted twice over: here, for the 着重號
+            // that goes in the margin, and below for the ink of the character
+            // itself. Cached per line, because consecutive 縱 share one — and
+            // inside a fence or a page's metadata nothing is markup, so the
+            // block decides before the line is scanned at all.
+            if marked.as_ref().is_none_or(|(l, _)| *l != zong.line) {
+                marked = Some((zong.line, markup.runs(zong.line)));
+            }
+            let runs: &[yumete_core::markdown::Span] = match &marked {
+                Some((l, r)) if *l == zong.line => r.as_slice(),
+                _ => &[],
+            };
+            // Whether a `*emphasis*` covers this slot. **Emphasis, not strong**:
+            // `**` is set in another weight, and doubling both marks would put
+            // dots down half a page. The cell is there — the layout reserved it
+            // for this line — but `has_margin` is still asked, because a page
+            // one 縱 wide has run out of width before it could.
+            let emphasised = has_margin
+                && !row.text.is_empty()
+                && runs.iter().any(|r| {
+                    r.kind == yumete_core::markdown::Kind::Emphasis
+                        && r.end > row.start
+                        && r.start < row.end
+                });
             // The margin to the right of the 縱 carries both a reading and a
             // hung 句讀 mark. The mark wins the cell — it belongs against the
             // character it follows, and the reading has already given way
             // upward to leave that row free — and it is tinted apart from a
-            // reading so the two are never mistaken for one another.
+            // reading so the two are never mistaken for one another. A 着重號
+            // is last of the three: it says 「this word」, which the reading and
+            // the sentence's own punctuation both outrank, and it is the only
+            // one of the three that can be read off the page without it.
             let margin = row
                 .mark
                 .map(|m| (m, mark_style))
-                .or_else(|| row.ruby.map(|r| (r, reading_style)));
+                .or_else(|| row.ruby.map(|r| (r, reading_style)))
+                .or_else(|| emphasised.then_some((EMPHASIS, mark_style)));
             // 稿紙 is ruled, and a writer estimates length by it. A tick every
             // `paper_ticks` characters down the 縱 is the vertical page's own
             // version of that, and it costs one dim cell in a margin that is
@@ -838,34 +965,18 @@ pub fn draw(
             // three, so a 縱書 draft got the markup taken off the page but
             // never coloured — half of 所見即所得.
             let column = at - line_start;
-            let mut style = blocks
-                .get(zong.line)
-                .copied()
-                .and_then(|b| crate::block_style(b, ink))
-                .unwrap_or_default();
+            let mut style = crate::block_style(markup.block(zong.line), ink).unwrap_or_default();
 
             // Whether a `==highlight==` covers this slot, so the cell ground
             // steps around it — the horizontal page has done so since #229 and
             // this page had not. A highlight exists *to be* a ground.
             let mut highlighted = false;
-            if show_markup {
-                let runs = match &marked {
-                    Some((line, runs)) if *line == zong.line => runs,
-                    _ => {
-                        // Inside a fence or a page's metadata nothing is
-                        // markup; colouring `**` there misreports the file.
-                        let block = blocks.get(zong.line).copied().unwrap_or_default();
-                        marked = Some((zong.line, editor.markup_line_in(zong.line, block)));
-                        &marked.as_ref().unwrap().1
-                    }
-                };
-                // A slot is one display unit and may hold several characters —
-                // a ruby group, or a 縦中横 pair — so it takes the style of any
-                // run it overlaps.
-                for run in runs.iter().filter(|r| r.end > column && r.start < column + len) {
-                    highlighted |= run.kind == yumete_core::markdown::Kind::Highlight;
-                    style = style.patch(crate::markup_style(run.kind, ink));
-                }
+            // A slot is one display unit and may hold several characters — a
+            // ruby group, or a 縦中横 pair — so it takes the style of any run it
+            // overlaps. `runs` is empty when markup is not being rendered.
+            for run in runs.iter().filter(|r| r.end > column && r.start < column + len) {
+                highlighted |= run.kind == yumete_core::markdown::Kind::Highlight;
+                style = style.patch(crate::markup_style(run.kind, ink));
             }
 
             if show_segmentation && !has_selection && style.bg.is_none() {

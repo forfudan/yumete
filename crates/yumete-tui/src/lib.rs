@@ -5459,6 +5459,66 @@ mod tests {
         );
     }
 
+    /// 漢字 do not lean. The Chinese setting of `<em>` is a dot beside every
+    /// character of the run, and 縱書 puts it in the margin (Feature #236).
+    #[test]
+    fn an_emphasised_word_is_dotted_down_the_margin_beside_it() {
+        let mut editor = editor_with("一*二三*四");
+        let config = vertical_config();
+        let buffer = render_vertical(&mut editor, &config, 20, 12);
+
+        // The markers are still on the page (`:render on` is the default), so
+        // the 縱 reads 一 * 二 三 * 四 and the run is the two in the middle.
+        let x = (0..20).find(|&x| at(&buffer, x, 0) == "一").unwrap();
+        assert_eq!(at(&buffer, x, 2), "二");
+        assert_eq!(at(&buffer, x, 3), "三");
+        assert_eq!(at(&buffer, x + 2, 2), "·", "着重號 beside 二");
+        assert_eq!(at(&buffer, x + 2, 3), "·", "着重號 beside 三");
+        // …and beside nothing else, the markers included.
+        for row in [0u16, 1, 4, 5] {
+            assert_eq!(at(&buffer, x + 2, row), " ", "row {row} is not emphasised");
+        }
+    }
+
+    /// `**` is a weight, not a 着重號; dotting both would put dots down half a
+    /// page. A line with no emphasis on it pays nothing for the feature — the
+    /// rightmost 縱 stays flush against the edge of the page.
+    #[test]
+    fn strong_is_a_weight_and_costs_the_page_no_margin() {
+        let mut editor = editor_with("一**二三**四");
+        let config = vertical_config();
+        let buffer = render_vertical(&mut editor, &config, 20, 12);
+        let x = (0..20).find(|&x| at(&buffer, x, 0) == "一").unwrap();
+        assert_eq!(x, 18, "flush right: nothing asked for a margin");
+    }
+
+    /// A 着重號 is bought the way a reading is: the layout pays a cell for the
+    /// 縱 that needs one. So even packed flush — `:dense`, no gap, no 稿紙 rule
+    /// — the dots are there, and they never land on the next 縱's writing.
+    #[test]
+    fn a_dense_page_still_buys_the_cell_a_dot_needs() {
+        let mut editor = editor_with("甲乙丙丁\n一*二三*四");
+        editor.set_dense(true);
+        let mut config = vertical_config();
+        config.editor.zong_gap = 0;
+        let buffer = render_vertical(&mut editor, &config, 20, 12);
+
+        // The first paragraph has no emphasis and pays nothing: flush right.
+        let first = (0..20).find(|&x| at(&buffer, x, 0) == "甲").unwrap();
+        assert_eq!(first, 18);
+        // The second does, so the page opens a cell between the two — the only
+        // thing that ever moves a 縱 on a dense page is a margin something
+        // needs.
+        let second = (0..20).find(|&x| at(&buffer, x, 0) == "一").unwrap();
+        assert_eq!(first - second, 3, "two cells of writing and one of margin");
+        assert_eq!(at(&buffer, second + 2, 2), "·", "着重號 beside 二");
+        assert_eq!(at(&buffer, second + 2, 3), "·", "着重號 beside 三");
+        // …and the 縱 to its right is untouched.
+        for (row, ch) in ["甲", "乙", "丙", "丁"].iter().enumerate() {
+            assert_eq!(at(&buffer, first, row as u16), *ch, "row {row}");
+        }
+    }
+
     #[test]
     fn a_hung_mark_does_not_paint_over_the_zong_beside_it() {
         // The margin is one cell. A full-width mark in it spills onto the 縱 to
