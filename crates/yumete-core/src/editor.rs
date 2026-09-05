@@ -3289,6 +3289,10 @@ impl Editor {
                 self.set_table_header(want);
                 Ok(CommandOutcome::Continue)
             }
+            Command::OpenTableSchema => {
+                self.open_schema();
+                Ok(CommandOutcome::Continue)
+            }
             Command::SetTableRules(rules) => {
                 if let Some(rules) = rules {
                     self.table_rules = rules;
@@ -5562,6 +5566,102 @@ impl Editor {
         };
     }
 
+    /// **The schema, in the other work area** (#218).
+    ///
+    /// A grid drawn from a file's own first row is a guess — which column is
+    /// the key, which two of the twenty-eight are empty in all 123,380 rows,
+    /// what 「一」 is actually called — and the place to correct a guess is the
+    /// schema file. `t e` puts it on screen: the one that already claims this
+    /// file, or, when none does, a starting one written next to the data
+    /// saying exactly what the grid is doing now.
+    ///
+    /// **The keys stay on the table.** The schema is opened in the *other*
+    /// half, the way `空格 w` reads a place without leaving the one you are
+    /// standing in — `空格 w` crosses over when there is something to type.
+    fn open_schema(&mut self) {
+        let Some(view) = self.table.as_ref() else {
+            self.status = say!("table.not-in-a-table");
+            return;
+        };
+        // **A schema is about a file**, and neither a `|` table in a chapter
+        // nor a block recognised where it stands is one: they are a table
+        // *inside* a document, and a `.yumete/tables/` entry claiming the
+        // chapter would claim its prose too.
+        if view.bounds != Bounds::WholeFile {
+            self.status = say!("table.schema-is-for-a-whole-file");
+            return;
+        }
+        let Some(path) = self.current_buffer().path().map(Path::to_path_buf) else {
+            self.status = say!("table.no-file-name-no-schema");
+            return;
+        };
+        let from = match view.from.as_os_str().is_empty() {
+            false => view.from.clone(),
+            true => match self.write_starting_schema(&path) {
+                Some(file) => file,
+                // `write_starting_schema` has already said why.
+                None => return,
+            },
+        };
+        // The buffer to come back to, by id: opening the schema may push a new
+        // buffer or show one already open, and either can move this one's
+        // index.
+        let table = self.current_buffer().id();
+        if let Err(why) = self.open_file(&from) {
+            self.status = say!("buffer.cannot-open", from.display(), why);
+            return;
+        }
+        let name = from
+            .file_name()
+            .map(|n| n.to_string_lossy().into_owned())
+            .unwrap_or_default();
+        // `show_in_split` tags the pane with whatever is current, which is why
+        // the schema is opened *first* and the table taken back after.
+        self.show_in_split(0, None, name.clone());
+        if let Some(index) = self.buffer_with(table) {
+            self.show_buffer(index);
+        }
+        self.status = say!("table.schema-in-the-other-area", name);
+    }
+
+    /// Write a schema next to the data that says what the grid is reading it
+    /// as, and answer with where it went.
+    ///
+    /// **Nothing that exists is written over.** A `.toml` already sitting at
+    /// that name and not claiming this file is somebody's, and the way to find
+    /// out what it says is to open it — which is what happens next.
+    fn write_starting_schema(&mut self, path: &Path) -> Option<PathBuf> {
+        let Some(view) = self.table.as_ref() else {
+            return None;
+        };
+        let name = path.file_name()?.to_string_lossy().into_owned();
+        let stem = path.file_stem()?.to_string_lossy().into_owned();
+        let tables = path
+            .parent()
+            .unwrap_or_else(|| Path::new("."))
+            .join(".yumete")
+            .join("tables");
+        let file = tables.join(format!("{stem}.toml"));
+        if file.exists() {
+            return Some(file);
+        }
+        let text = crate::table::starting_schema(&name, &view.schema, &say!("table.schema-note"));
+        if let Err(why) = std::fs::create_dir_all(&tables) {
+            self.status = say!("table.schema-cannot-write", file.display(), why);
+            return None;
+        }
+        if let Err(why) = std::fs::write(&file, text) {
+            self.status = say!("table.schema-cannot-write", file.display(), why);
+            return None;
+        }
+        // The view now has a schema file of its own, so a second `t e` opens
+        // this one rather than asking to write it again.
+        if let Some(view) = self.table.as_mut() {
+            view.from = file.clone();
+        }
+        Some(file)
+    }
+
     /// Empty the cell the cursor is in, keeping its boundaries (`d`).
     fn clear_cell(&mut self) {
         let Some((line, cell)) = self.cell_position() else {
@@ -5827,6 +5927,10 @@ impl Editor {
                 // **「第一行是欄名還是資料」** (#217) — the one question a
                 // 碼表 asks once, and `h` is the column, so the header is `H`.
                 Key::Char('H') => self.set_table_header(None),
+                // **`e` 是規格** (#218) — the file that says what these columns
+                // are, opened in the other half rather than described on the
+                // status line.
+                Key::Char('e') => self.open_schema(),
                 Key::Esc => {}
                 _ => self.status = say!("hint.table.csv-keys"),
             }
@@ -6619,6 +6723,7 @@ impl Editor {
                         ("j k", say!("hint.table.move-row")),
                         ("y p", say!("hint.table.yank-or-paste-column")),
                         ("H", say!("hint.table.first-row-is-data")),
+                        ("e", say!("hint.table.schema")),
                         ("i", say!("hint.table.detail-panel")),
                     ]),
                     _ => {}
@@ -14496,13 +14601,18 @@ mod tests {
 
     /// The guess and Tab are two spellings of one answer, so they have to
     /// spell it the same way. A deep name (#223) is answered with its whole
-    /// path — `:sch` is `yume scheme` — and the guess used to offer the leaf
-    /// alone, which as a line parses as nothing.
+    /// path — `:xing` is `yume scheme xingchen` — and the guess used to offer
+    /// the leaf alone, which as a line parses as nothing.
+    ///
+    /// It used to ask this of `:sch`, which was one answer until `:table
+    /// schema` (#218) became a second one. A prefix two commands answer to is
+    /// a fine thing for the menu and a poor thing to assert about; a leaf only
+    /// one word in the tree carries is the case this test is here for.
     #[test]
     fn the_guess_and_tab_agree_on_a_deep_name() {
         let mut ed = Editor::new();
         ed.on_key(Key::Char(':'));
-        for c in "sch".chars() {
+        for c in "xing".chars() {
             ed.on_key(Key::Char(c));
         }
         let (_, before) = ed.prompt().expect("a command line");
@@ -14511,7 +14621,7 @@ mod tests {
         ed.on_key(Key::Tab);
         let (_, tabbed) = ed.prompt().expect("a command line");
         assert_eq!(
-            tabbed, "yume scheme",
+            tabbed, "yume scheme xingchen",
             "the deep answer is the whole path",
         );
         assert!(
@@ -18712,6 +18822,58 @@ mod tests {
         ed.open_file(&prose).unwrap();
         assert!(!ed.enter_table());
         assert!(ed.table().is_none());
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn a_table_with_no_schema_gets_one_written_beside_it() {
+        // #218. The author's own 碼表 has no header and a tab between its two
+        // columns, and both facts have to survive into the file.
+        let dir = std::env::temp_dir().join(format!("yumete-schema-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let codes = dir.join("codes.txt");
+        std::fs::write(&codes, "雪\txue\n月\tyue\n語\tyu\n星\txing\n").unwrap();
+
+        let mut ed = Editor::new();
+        ed.open_file(&codes).unwrap();
+        assert!(ed.enter_table(), "a tab is a delimiter");
+        assert!(ed.table().unwrap().from.as_os_str().is_empty(), "nobody's schema yet");
+
+        // 「第一行是資料」 (#217), and then 「說出來」 (#218).
+        ed.on_key(Key::Char('t'));
+        ed.on_key(Key::Char('H'));
+        ed.on_key(Key::Char('t'));
+        ed.on_key(Key::Char('e'));
+
+        let written = dir.join(".yumete").join("tables").join("codes.toml");
+        let text = std::fs::read_to_string(&written).expect("a schema was written beside the data");
+        assert!(text.contains("file = \"codes.txt\""), "{text}");
+        assert!(text.contains("delimiter = \"\\t\""), "the tab is escaped, not typed: {text}");
+        assert!(text.contains("header = false"), "what t H just said: {text}");
+        assert_eq!(text.matches("[[table.column]]").count(), 2, "{text}");
+
+        // It is open in the other half, and the keys did not go with it.
+        let pane = ed.other_pane().expect("the schema is in the other area");
+        assert_eq!(pane.caption, "codes.toml");
+        assert_eq!(
+            ed.buffers[ed.buffer_with(pane.buffer).unwrap()].path(),
+            Some(written.as_path()),
+            "the pane names the schema"
+        );
+        assert_eq!(ed.current_buffer().path(), Some(codes.as_path()), "still on the table");
+        assert_eq!(ed.live_pane(), 0);
+
+        // And what it says is what was already on screen: reading the file
+        // again finds it and changes nothing.
+        ed.leave_table();
+        assert!(ed.enter_table());
+        let view = ed.table().unwrap();
+        assert_eq!(view.from, written, "the schema claims the file now");
+        assert!(!view.schema.header, "still 「第一行是資料」");
+        assert_eq!(view.schema.delimiter, '\t');
+        assert_eq!(view.schema.columns.len(), 2);
 
         std::fs::remove_dir_all(&dir).ok();
     }
