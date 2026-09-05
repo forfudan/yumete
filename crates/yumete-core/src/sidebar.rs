@@ -28,6 +28,13 @@ pub enum View {
     Buffers,
     /// The headings of the file being written.
     Outline,
+    /// What the 拆分表 knows about one character — Feature #215.
+    ///
+    /// **Not part of the `Tab` cycle**: the other three are always about
+    /// something (a directory, the open files, this document), and this one is
+    /// about a character somebody asked about. Cycling into it would show an
+    /// empty panel most of the time, so it is only ever entered by asking.
+    Dictionary,
 }
 
 impl View {
@@ -37,6 +44,7 @@ impl View {
             View::Explorer => View::Buffers,
             View::Buffers => View::Outline,
             View::Outline => View::Explorer,
+            View::Dictionary => View::Explorer,
         }
     }
 
@@ -46,6 +54,7 @@ impl View {
             View::Explorer => "檔案",
             View::Buffers => "緩衝區",
             View::Outline => "大綱",
+            View::Dictionary => "字典",
         }
     }
 }
@@ -89,10 +98,11 @@ pub struct Sidebar {
     open: BTreeSet<PathBuf>,
     rows: Vec<Row>,
     selected: usize,
-    /// Which view is showing, and where the highlight was in each of the other
-    /// two — so `Tab` back and forth returns to where you were, not to the top.
+    /// Which view is showing, and where the highlight was in each of the
+    /// others — so `Tab` back and forth returns to where you were, not to the
+    /// top.
     view: View,
-    kept: [usize; 3],
+    kept: [usize; 4],
     /// Whether it is opened out wide enough to read a whole title.
     ///
     /// The ordinary width is a setting, and it is narrow on purpose — columns
@@ -117,7 +127,7 @@ impl Sidebar {
             rows: Vec::new(),
             selected: 0,
             view: View::Explorer,
-            kept: [0; 3],
+            kept: [0; 4],
             wide: false,
         };
         sidebar.rebuild();
@@ -138,6 +148,17 @@ impl Sidebar {
     /// Which view is showing.
     pub fn view(&self) -> View {
         self.view
+    }
+
+    /// Show a named view, keeping the place in the one being left.
+    ///
+    /// `Tab` cannot reach 字典 ([`View::Dictionary`] is out of the cycle), so
+    /// asking about a character is the only way in, and this is how the editor
+    /// asks.
+    pub fn show(&mut self, view: View) {
+        self.kept[self.view as usize] = self.selected;
+        self.view = view;
+        self.selected = self.kept[self.view as usize];
     }
 
     /// Walk to the next view (`Tab`), keeping each one's place.
@@ -221,6 +242,9 @@ impl Sidebar {
                     Chosen::FileLine(row.path, row.depth)
                 })
             }
+            // A field is not a place to go — the panel is read, not walked
+            // into. `Esc` and `C-w` are how a reader leaves it.
+            View::Dictionary => return None,
             View::Explorer => {}
         }
         if !row.is_dir {

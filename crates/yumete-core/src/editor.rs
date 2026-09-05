@@ -234,6 +234,19 @@ pub struct Detail {
     pub links: Vec<(char, Option<usize>)>,
 }
 
+/// What `:shot` asked the front end to do once this frame is on the screen.
+///
+/// The editor decides *what* — which file, and whether the picture keeps its
+/// colours — and refuses before the frame is drawn if it cannot. The front end
+/// is the only half that holds the cells, so it does the writing.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ShotJob {
+    /// Hand the screen to the platform's own screenshot program.
+    Screen,
+    /// Write the frame here — coloured HTML unless `text`.
+    Page { target: PathBuf, text: bool },
+}
+
 /// What the row above the status line has to say.
 ///
 /// Structured rather than one string, so a key can be set apart from what it
@@ -774,7 +787,17 @@ pub struct Editor {
     /// search's `n` walks to the next hit.
     definition_preview: bool,
     /// A `:shot` waiting for the frame it is a picture of.
-    screenshot_request: bool,
+    screenshot_request: Option<ShotJob>,
+    /// A character whose 字料 the front end has not looked up yet (#215).
+    dictionary_query: Option<char>,
+    /// The character the 字典 panel is about, and the answer if one has come.
+    ///
+    /// Three states, because three things can be true. `None`: nobody has
+    /// asked. `Some(ch, None)`: asked, and the front end has not answered yet
+    /// — the panel shows the character alone. `Some(ch, Some([]))`: answered,
+    /// and the 拆分表 has nothing for it, which the panel has to say out loud
+    /// rather than draw as an empty box.
+    dictionary: Option<(char, Option<Vec<(String, String)>>)>,
     /// The other work area, when the page is split (Feature #176).
     other: Option<Pane>,
     /// Which half of the screen holds the keys — **screen order**, so
@@ -1177,7 +1200,9 @@ impl Editor {
             typewriter: false,
             ime_available: false,
             definition_preview: false,
-            screenshot_request: false,
+            screenshot_request: None,
+            dictionary_query: None,
+            dictionary: None,
             other: None,
             live_pane: 0,
             number_fill: false,
@@ -1867,6 +1892,64 @@ impl Editor {
         // Written the way a save is written: whole, or not at all.
         crate::buffer::write_file_atomically(&target, &written).map_err(EditorError::Io)?;
         self.status = say!("export.wrote", target.display());
+        Ok(CommandOutcome::Continue)
+    }
+
+    /// `:shot` — a picture of the page, drawn rather than taken (#189).
+    ///
+    /// The whole of the decision is made here, a frame early: which file, and
+    /// whether it keeps its colours. What is left is the cells, which only the
+    /// front end holds — so the answer is parked in `screenshot_request` and
+    /// [`Editor::take_screenshot_request`] hands it over **after** the next
+    /// frame is drawn, which is the one with no command line across it.
+    ///
+    /// The name follows the document with `.shot` before the extension, so a
+    /// picture never collides with what `:export` would write and a directory
+    /// of chapters keeps its pictures beside them. `.txt` asks for the
+    /// plain-text picture; anything else is the coloured one.
+    fn take_a_picture(
+        &mut self,
+        shot: crate::command::Shot,
+        force: bool,
+    ) -> Result<CommandOutcome, EditorError> {
+        let path = match shot {
+            crate::command::Shot::Screen => {
+                self.screenshot_request = Some(ShotJob::Screen);
+                return Ok(CommandOutcome::Continue);
+            }
+            crate::command::Shot::Page(path) => path,
+        };
+        let target = match path {
+            Some(path) => PathBuf::from(path),
+            None => match self.current_buffer().path() {
+                Some(source) => {
+                    let stem = source
+                        .file_stem()
+                        .map(|s| s.to_string_lossy().into_owned())
+                        .unwrap_or_default();
+                    source.with_file_name(format!("{stem}.shot.html"))
+                }
+                None => return Err(EditorError::NoFileName),
+            },
+        };
+        // The two guards every other writer in here keeps: never onto a file
+        // this editor is holding in memory, and never over one that already
+        // exists unless the bang says so.
+        if let Some(which) = self.buffer_holding(&target) {
+            self.status = match which == self.current {
+                true => say!("export.same-as-the-manuscript"),
+                false => say!("export.target-is-open", self.buffers[which].display_name()),
+            };
+            return Ok(CommandOutcome::Continue);
+        }
+        if !force && target.exists() {
+            self.status = say!("export.target-exists", target.display());
+            return Ok(CommandOutcome::Continue);
+        }
+        let text = target
+            .extension()
+            .is_some_and(|e| e.eq_ignore_ascii_case("txt"));
+        self.screenshot_request = Some(ShotJob::Page { target, text });
         Ok(CommandOutcome::Continue)
     }
 
@@ -3051,10 +3134,7 @@ impl Editor {
             // line is still open on this one, and a picture of the thing you
             // are debugging with the debugger's own prompt across it is not a
             // picture of the thing.
-            Command::Screenshot => {
-                self.screenshot_request = true;
-                Ok(CommandOutcome::Continue)
-            }
+            Command::Screenshot { shot, force } => self.take_a_picture(shot, force),
             Command::InstalledScheme => {
                 self.scheme_request = Some(String::from("~"));
                 Ok(CommandOutcome::Continue)
@@ -5241,6 +5321,12 @@ impl Editor {
             match key {
                 Key::Char('y') => self.yank_column(),
                 Key::Char('p') => self.put_column(),
+                // **The detail panel is a table key** (#215). It answered to
+                // `空格 d` for as long as the panel was the only thing that
+                // knew a row's twenty-eight fields — but `空格` is the
+                // document's menu and `t` is the table's, and a key that only
+                // ever does anything inside a table belongs in `t`.
+                Key::Char('i') => self.toggle_detail(),
                 // Each of these is an edit, and each announces an undo point
                 // of its own: without one they were folded into whatever came
                 // before, so a single `u` took back the cell you had just
@@ -5279,6 +5365,7 @@ impl Editor {
             Key::Char('l') | Key::Right => self.md_move_column(true),
             Key::Char('y') => self.yank_column(),
             Key::Char('p') => self.put_column(),
+            Key::Char('i') => self.toggle_detail(),
             Key::Char('s') => self.md_sort(false),
             Key::Char('S') => self.md_sort(true),
             Key::Char('<') => self.md_align(Align::Left),
@@ -6011,6 +6098,7 @@ impl Editor {
                     ("d", say!("hint.table.delete-row")),
                     ("j k", say!("hint.table.move-row")),
                     ("y p", say!("hint.table.yank-or-paste-column")),
+                    ("i", say!("hint.table.detail-panel")),
                 ]),
             Pending::Table => (say!("hint.table.title"), vec![
                     ("/ ?", say!("hint.table.search-columns")),
@@ -6024,6 +6112,7 @@ impl Editor {
                     ("s S", say!("hint.table.sort-by-column")),
                     ("< = >", say!("hint.table.align-column")),
                     ("t", say!("hint.table.line-it-up")),
+                    ("i", say!("hint.table.detail-panel")),
                 ]),
         };
         Some(Hint::Keys(keys.0, keys.1))
@@ -8072,8 +8161,8 @@ impl Editor {
     }
 
     /// Take a pending `:shot`, if one is waiting for a frame.
-    pub fn take_screenshot_request(&mut self) -> bool {
-        std::mem::take(&mut self.screenshot_request)
+    pub fn take_screenshot_request(&mut self) -> Option<ShotJob> {
+        self.screenshot_request.take()
     }
 
     /// Take a pending `:theme`, if one is waiting for the front end.
@@ -9956,7 +10045,7 @@ impl Editor {
         ('y', "hint.goto.copy-to-clipboard"),
         ('p', "hint.goto.paste-from-clipboard"),
         ('P', "hint.space.paste-before"),
-        ('d', "hint.goto.detail-panel"),
+        ('d', "hint.goto.dictionary"),
         ('w', "hint.goto.other-pane"),
         ('W', "hint.goto.only-this-pane"),
         ('q', "hint.goto.close-this-pane"),
@@ -9969,7 +10058,13 @@ impl Editor {
             Key::Char('e') => self.show_sidebar(crate::sidebar::View::Explorer),
             // The outline is the sidebar showing the view that has it.
             Key::Char('o') => self.show_sidebar(crate::sidebar::View::Outline),
-            Key::Char('d') => self.toggle_detail(),
+            // 定義 (#215): the 拆分表 on the character under the cursor. The
+            // table detail panel this key used to open is a table key, and now
+            // lives in the table group as `t i`.
+            Key::Char('d') => match self.char_at_cursor() {
+                Some(ch) => self.look_up(ch, true),
+                None => self.set_status(say!("ui.nothing-to-look-up")),
+            },
             Key::Char('"') => self.open_paste_picker(),
             Key::Char('f') => self.open_file_picker(),
             Key::Char('b') => self.open_buffer_picker(),
@@ -10051,9 +10146,7 @@ impl Editor {
                 self.sidebar_focus = false;
             }
             Some(sidebar) => {
-                while sidebar.view() != view {
-                    sidebar.cycle();
-                }
+                sidebar.show(view);
                 self.sidebar_focus = true;
                 self.refresh_sidebar();
             }
@@ -10072,9 +10165,7 @@ impl Editor {
     /// Show the sidebar rooted at `root`, opened on `view`.
     pub fn open_sidebar_showing(&mut self, root: &Path, view: crate::sidebar::View) {
         let mut sidebar = crate::sidebar::Sidebar::new(root);
-        while sidebar.view() != view {
-            sidebar.cycle();
-        }
+        sidebar.show(view);
         // Open on the file being written, so the tree says where you are rather
         // than making you find yourself in it.
         if let Some(path) = self.current_buffer().path() {
@@ -10142,10 +10233,124 @@ impl Editor {
                     expanded: false,
                 })
                 .collect(),
+            View::Dictionary => self.dictionary_rows(),
         };
         if let Some(sidebar) = self.sidebar.as_mut() {
             sidebar.set_rows(rows);
         }
+    }
+
+    /// The 字典 panel's rows — Feature #215.
+    ///
+    /// The names are padded to the widest of them so the values line up down a
+    /// column, and the padding is counted in **columns** rather than characters
+    /// (`拆分` is two characters and four columns wide).
+    ///
+    /// A row with no value is a heading — the character itself at the top, and
+    /// the 陸／臺／港 label above each block when the 拆分表 has more than one
+    /// answer. `is_dir` is what the sidebar draws headings with; the flat views
+    /// already spend the tree's fields on what they have instead of what a tree
+    /// has, and this is that.
+    fn dictionary_rows(&self) -> Vec<crate::sidebar::Row> {
+        use crate::sidebar::Row;
+        let heading = |name: String| Row {
+            path: PathBuf::new(),
+            name,
+            depth: 0,
+            is_dir: true,
+            expanded: false,
+        };
+        let Some((ch, answer)) = self.dictionary.as_ref() else {
+            return Vec::new();
+        };
+        let mut rows = vec![heading(ch.to_string())];
+        let Some(fields) = answer else {
+            return rows;
+        };
+        if fields.is_empty() {
+            rows.push(Row {
+                path: PathBuf::new(),
+                name: say!("ui.not-in-the-table"),
+                depth: 0,
+                is_dir: false,
+                expanded: false,
+            });
+            return rows;
+        }
+        let width = fields
+            .iter()
+            .filter(|(_, value)| !value.is_empty())
+            .map(|(name, _)| yumete_cjk::str_width(name))
+            .max()
+            .unwrap_or(0);
+        for (name, value) in fields {
+            if value.is_empty() {
+                rows.push(heading(name.clone()));
+                continue;
+            }
+            let pad = " ".repeat(width.saturating_sub(yumete_cjk::str_width(name)));
+            rows.push(Row {
+                path: PathBuf::new(),
+                name: format!("{name}{pad}  {value}"),
+                depth: 0,
+                is_dir: false,
+                expanded: false,
+            });
+        }
+        rows
+    }
+
+    /// Look this character up in the 拆分表 — `Space d`, and `Tab` on a
+    /// candidate (#215).
+    ///
+    /// The editor does not hold the table: yume does, and only the front end
+    /// has it. So the character is parked here and the panel is opened empty;
+    /// the answer arrives on the next pass through the loop, one frame later,
+    /// which is not long enough for a reader to see the gap.
+    pub fn look_up(&mut self, ch: char, focus: bool) {
+        self.dictionary_query = Some(ch);
+        // Asked, unanswered: what is showing until the answer arrives is the
+        // character alone, which is not the same panel as 「查不到」.
+        self.dictionary = Some((ch, None));
+        match self.sidebar.as_mut() {
+            Some(sidebar) => sidebar.show(crate::sidebar::View::Dictionary),
+            None => {
+                let root = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+                let mut sidebar = crate::sidebar::Sidebar::new(&root);
+                sidebar.show(crate::sidebar::View::Dictionary);
+                self.sidebar = Some(sidebar);
+            }
+        }
+        // Asked from the page, the keys go with the question. Asked while a
+        // word is being typed, they must not — the reader is mid-word, and the
+        // panel is only there to be glanced at.
+        self.sidebar_focus = focus;
+        self.refresh_sidebar();
+    }
+
+    /// The character `Space d` or `Tab` asked about, for the front end to
+    /// answer once (#215).
+    pub fn take_dictionary_query(&mut self) -> Option<char> {
+        self.dictionary_query.take()
+    }
+
+    /// The answer to [`Editor::take_dictionary_query`].
+    ///
+    /// Dropped if the reader has since asked about a different character —
+    /// the answer to last frame's question must not overwrite this frame's.
+    pub fn set_dictionary(&mut self, ch: char, fields: Vec<(String, String)>) {
+        if self.dictionary.as_ref().is_some_and(|(at, _)| *at != ch) {
+            return;
+        }
+        self.dictionary = Some((ch, Some(fields)));
+        self.refresh_sidebar();
+    }
+
+    /// The character the 字典 panel is about, and the answer if one has come.
+    pub fn dictionary(&self) -> Option<(char, Option<&[(String, String)]>)> {
+        self.dictionary
+            .as_ref()
+            .map(|(ch, answer)| (*ch, answer.as_deref()))
     }
 
     /// The sidebar, for the front end to draw.
@@ -14399,6 +14604,94 @@ mod tests {
     }
 
     #[test]
+    fn a_shot_names_a_file_and_waits_for_the_frame_it_is_a_picture_of() {
+        let dir = std::env::temp_dir().join(format!("yumete-shot-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("chapter.md");
+        std::fs::write(&path, "永和九年。\n").unwrap();
+
+        let mut ed = Editor::new();
+        ed.execute(&format!(":open {}", path.display())).unwrap();
+
+        // Nothing is written here: the picture is of the frame that has not
+        // been drawn yet, so all `:shot` may do is say which file and how.
+        ed.execute(":shot").unwrap();
+        assert_eq!(
+            ed.take_screenshot_request(),
+            Some(ShotJob::Page {
+                target: dir.join("chapter.shot.html"),
+                text: false,
+            })
+        );
+        // …and taking it takes it: one `:shot`, one picture.
+        assert_eq!(ed.take_screenshot_request(), None);
+
+        // `.shot` before the extension, so it never collides with `:export`.
+        assert!(!dir.join("chapter.html").exists());
+
+        // The name decides whether the colours come with it.
+        ed.execute(":shot page.txt").unwrap();
+        assert_eq!(
+            ed.take_screenshot_request(),
+            Some(ShotJob::Page {
+                target: PathBuf::from("page.txt"),
+                text: true,
+            })
+        );
+
+        // `screen` is the other picture entirely — the window, taken by the
+        // platform. It names no file, so no guard applies to it.
+        ed.execute(":shot screen").unwrap();
+        assert_eq!(ed.take_screenshot_request(), Some(ShotJob::Screen));
+
+        // A scratch buffer has no name to derive one from, exactly as an
+        // export has not.
+        let mut scratch = Editor::new();
+        assert!(matches!(
+            scratch.execute(":shot"),
+            Err(EditorError::NoFileName)
+        ));
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn a_shot_refuses_a_file_that_is_already_there_and_one_that_is_open() {
+        let dir = std::env::temp_dir().join(format!("yumete-shot2-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("chapter.md");
+        std::fs::write(&path, "永和九年。\n").unwrap();
+        let taken = dir.join("chapter.shot.html");
+        std::fs::write(&taken, "早就在這裏了\n").unwrap();
+
+        let mut ed = Editor::new();
+        ed.execute(&format!(":open {}", path.display())).unwrap();
+
+        // Already there: refused, and nothing is parked for the front end —
+        // otherwise the refusal would be printed and the file written anyway.
+        ed.execute(":shot").unwrap();
+        assert_eq!(ed.take_screenshot_request(), None);
+        assert!(ed.status().contains("chapter.shot.html"), "{}", ed.status());
+
+        // The bang is the answer, the same one `:export!` takes.
+        ed.execute(":shot!").unwrap();
+        assert_eq!(
+            ed.take_screenshot_request(),
+            Some(ShotJob::Page {
+                target: taken.clone(),
+                text: false,
+            })
+        );
+
+        // Never onto a file this editor is holding: the chapter itself is the
+        // one a hurried `:shot!` would otherwise overwrite with a picture.
+        ed.execute(&format!(":shot! {}", path.display())).unwrap();
+        assert_eq!(ed.take_screenshot_request(), None);
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
     fn export_names_the_file_after_the_chapter_and_carries_the_layout() {
         let dir = std::env::temp_dir().join(format!("yumete-ex-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
@@ -17730,6 +18023,82 @@ mod tests {
         );
 
         std::fs::remove_dir_all(&dir).ok();
+    }
+
+    /// `Space d` asks about the character under the cursor — Feature #215.
+    ///
+    /// The editor cannot answer: the 拆分表 lives in yume, which only the
+    /// front end holds. So what is checked here is the half the editor owns —
+    /// the question is parked, the panel is open on it, and the answer, when
+    /// it comes, is laid out in columns.
+    #[test]
+    fn the_dictionary_asks_about_the_character_under_the_cursor() {
+        let mut ed = typed("那年冬天");
+        ed.on_key(Key::Char(' '));
+        ed.on_key(Key::Char('d'));
+
+        assert_eq!(ed.sidebar().map(|s| s.view()), Some(crate::sidebar::View::Dictionary));
+        assert!(ed.sidebar_focused(), "asked from the page, the keys go along");
+        assert_eq!(ed.take_dictionary_query(), Some('那'));
+        assert_eq!(ed.take_dictionary_query(), None, "asked once, answered once");
+
+        // Until the answer arrives the panel is the character alone — not an
+        // empty panel, and not last character's answer.
+        assert_eq!(ed.sidebar().unwrap().rows().len(), 1);
+
+        ed.set_dictionary(
+            '那',
+            vec![
+                ("拆分".to_string(), "刀二阝".to_string()),
+                ("編碼".to_string(), "vfb".to_string()),
+            ],
+        );
+        let rows: Vec<String> = ed
+            .sidebar()
+            .unwrap()
+            .rows()
+            .iter()
+            .map(|r| r.name.clone())
+            .collect();
+        assert_eq!(rows[0], "那");
+        assert_eq!(rows[1], "拆分  刀二阝");
+        assert_eq!(rows[2], "編碼  vfb", "names are padded to a column");
+
+        // `Tab` cannot walk into it, and walking out of it comes back to the
+        // tree rather than to a fourth view nobody asked for.
+        let mut ed = ed;
+        ed.on_key(Key::Tab);
+        assert_eq!(ed.sidebar().map(|s| s.view()), Some(crate::sidebar::View::Explorer));
+    }
+
+    /// 「查不到」and「還沒問」are different findings.
+    #[test]
+    fn a_character_the_table_has_nothing_for_says_so() {
+        let mut ed = typed("那年冬天");
+        ed.on_key(Key::Char(' '));
+        ed.on_key(Key::Char('d'));
+        ed.take_dictionary_query();
+        ed.set_dictionary('那', Vec::new());
+        let rows = ed.sidebar().unwrap().rows();
+        assert_eq!(rows.len(), 2, "{rows:?}");
+        assert_eq!(rows[1].name, say!("ui.not-in-the-table"));
+    }
+
+    /// The answer to last frame's question must not overwrite this frame's.
+    ///
+    /// A reader walking `l l l` with the panel open asks three times before
+    /// the first answer is back; the panel has to end up showing the character
+    /// the cursor is actually on.
+    #[test]
+    fn an_answer_for_a_character_nobody_is_asking_about_now_is_dropped() {
+        let mut ed = typed("那年冬天");
+        ed.on_key(Key::Char(' '));
+        ed.on_key(Key::Char('d'));
+        ed.take_dictionary_query();
+        ed.look_up('年', true);
+        ed.set_dictionary('那', vec![("拆分".to_string(), "刀二阝".to_string())]);
+        assert_eq!(ed.dictionary().map(|(ch, _)| ch), Some('年'));
+        assert_eq!(ed.sidebar().unwrap().rows().len(), 1, "still waiting");
     }
 
     #[test]

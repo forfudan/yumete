@@ -399,7 +399,7 @@ index, and a row with no number anywhere else is a row that got lost.
 | 186 | **The detail panel shows every column**     | tui    | P2    | including the empty ones (an empty field is a finding in a 拆分表), each with its column number | Done |
 | 187 | **The detail panel is a panel**             | both   | P2    | close it, edit a value in it, change its width — it is the only surface here that can do none of those | Done |
 | 188 | **The hint row wraps**                      | tui    | P3    | more keys than a row holds; never between a key and what it does | Done |
-| 189 | **`:shot` takes the page, not the app**     | tui    | P2    | needs the window's origin *and* the display scale, neither of which the editor can get reliably — deliberately not done, see group 14 | Planned |
+| 189 | **`:shot` takes the page, not the app**     | tui    | P2    | needs the window's origin *and* the display scale, neither of which the editor can get reliably. **Done** by not taking a picture at all: `:shot` now *draws* the frame the way `--shot` does and writes it as a self-contained coloured HTML file (`.txt` for the plain-text one), so the page is all there is by construction — no chrome, no scale, and it works over ssh. The editor picks the name (`第一章.shot.html`, `.shot` so it never collides with `:export`) and keeps `:export`'s two guards a frame *early*; the front end holds the cells, so it writes after the next draw — the frame with no command line across it. `:shot screen` keeps the old shell line for reports that are about the terminal | Done |
 | 190 | **One rule for folding a blank line**       | core   | P1    | 竪排 folds with the indent off and opens one *with* it on — two behaviours that read as contradictory | Done |
 | 191 | **A stored position names its buffer**      | core   | P0    | the hit list held `n`, survived a buffer switch and an edit, and said 「第 3/78 處」 about a character that matched nothing — `d` then deleted it | Done |
 | 192 | **The preview server is a running thing**   | tui    | P1    | `:preview` on a `.typ` starts `tinymist preview` and says the address once; ask again and the address is gone, and a session that ends badly leaves the server holding a port and its memory. The address should be gettable (`:preview` while one runs), visible (a mark in the status bar), and killable on purpose and after a crash | Done |
@@ -425,8 +425,8 @@ index, and a row with no number anywhere else is a row that got lost.
 | 212 | **Every table in the file drawn as a table** | both | P1 | every `\|` table on the page is squared up as it is drawn — not only the one the cursor is in, and **not by touching the file**. It is the real fix for a markup-bearing table looking ragged: `t f` pads the *source* by display width, which is right for every other reader of it, but 所見即所得 hides `` ` `` and `**`, so each row loses a different number of cells on the way to the screen and no one source can be square in both places. So the padding is derived per frame and handed to the page as ghost text (#210): `mdtable::padding` measures the pipe-to-pipe **box** minus what that row hides, every row votes on the column width — the rule row included, since a ghost can only add — the rule row's fill is `-` and the colons of `:---:` are never written over. Memoized on `PadKey` beside `MdCache`, and merged with the candidate's runs in `ghost_on_line`. Off under `:render off`, where the page is meant to be the file, and off in vertical layout | Done |
 | 213 | **`:readonly on\|off` and `--readonly`** | core | P1 | two layers: `Buffer::insert`/`remove` refuse outright — the one place the rope moves, so no path gets round it by not knowing — and `Editor::refuse_readonly` says why, at `edit_insert`/`edit_remove`, `enter_insert`, `undo` and `redo`. `[只讀]` on the status line; `Buffer::open` reads the disk's own permission bit, which used to surface only at `:w`. `--readonly` (`-R`) locks the whole session, `:open` included | Done |
 | 214 | **`:reload`, `:reload!`, `:reload auto`** | core | P1 | `:reload` re-reads, refusing a dirty buffer; `:reload!` throws local changes away; `:reload auto on` re-reads a **clean** buffer by itself and warns once about a dirty one. `Editor::disk_tick`, throttled at 2 s the way `autosave_tick` is, called from the event loop. `:e!` and `:o!` are gone — no alias, no hint | Done |
-| 215 | **The dictionary panel, and `t i` for the table's own** | both | P2 | `Tab` on a candidate opens 字典查詢 in the sidebar, the way yume's own panel does — **under `bare` (#211) `Tab` is already spoken for**, so there it summons the panel first and opens the dictionary on the second press; `空格 d`（定義）does the same for a selection in the buffer. Data is yume-core's `AnnotationTable::annotations_for(ch)` — 拆分/編碼/分節編碼/讀音/注釋/字集/Unicode/全息拆分. `空格 d` is the table detail panel today; a table key belongs in the `t` group, so that becomes `t i` | Planned |
-| 216 | **A table recognised rather than declared** | both | P2 | `\|` is not the only grid: a run of lines split by tabs or by runs of spaces is a 碼表, and `dict.yaml` is one with a `---` preamble. Detect it and offer the grid. Test against the 宇浩 tables and the generated `dict.yaml` | Planned |
+| 215 | **The dictionary panel, and `t i` for the table's own** | both | P2 | `Tab` on a candidate opens 字典查詢 in the sidebar, the way yume's own panel does — **under `bare` (#211) `Tab` is already spoken for**, so there it summons the panel first and opens the dictionary on the second press; `空格 d`（定義）does the same for a selection in the buffer. Data is yume-core's `AnnotationTable::annotations_for(ch)` — 拆分/編碼/分節編碼/讀音/注釋/字集/Unicode/全息拆分. `空格 d` was the table detail panel; a table key belongs in the `t` group, so that is now `t i`. The panel is a fourth sidebar view, **out of the `Tab` cycle** — the other three are always about something, this one only after somebody asks. The editor parks the character and the front end answers it before the next draw, the way `:shot` (#189) parks a frame | Done |
+| 216 | **A table recognised rather than declared** | both | P2 | `\|` is not the only grid: a run of lines split by tabs or by runs of spaces is a 碼表, and `dict.yaml` is one with a `---` preamble. Detect it and offer the grid. **`Bounds::Block` is this one's** (see §「Three questions, three enums」): a block recognised where it stands, not converted. Test against the 宇浩 tables and the generated `dict.yaml` | Planned |
 | 217 | **A grid whose first row is data** | both | P3 | a 碼表 has no header. One key says so: row one becomes an ordinary row, and the columns are named by number — which #184 already draws | Planned |
 | 218 | **The schema beside the table** | both | P3 | when the file is nothing but a table, open its schema file in the other work area (`:split` already has one), and write a starting one next to the file if none exists | Planned |
 | 219 | **A Windows build** | both | P3 | `%APPDATA%\yumete` for both config and data; `same_file` by `GetFileInformationByHandle` (volume serial + file index); one `shell_command()` that knows `cmd.exe /C` as well as `$SHELL -c`; `ambiguous_width = "auto"` asked of the console API rather than of a CPR reply; the search reaches where **yume** installs its own tables, overlay first, and falls back to a flat directory; `[ime] data_dirs` lets the reader name the place outright; `scripts/build.sh` runs under Git Bash. Cross-checked against `x86_64-pc-windows-gnu` | Done |
@@ -1407,6 +1407,28 @@ decision), and `:readonly` is the way to open something you have no business
 changing. `:e!` and `:o!` retire outright: no alias and no hint, per the author's
 standing rule that a better spelling replaces the old one rather than joining it.
 
+**#215 is done** (2026-09-05). `t i` is the table detail panel, `空格 d` is
+字典查詢, and the 拆分表 answers in a fourth sidebar view. The panel is out of
+the `Tab` cycle — the other three views are always about something, this one
+only after somebody asks — so `Space d` and `Tab`-on-a-candidate are the only
+ways in, and `Tab` out of it lands on the tree.
+
+The editor cannot answer its own question: the table is yume's, and only the
+front end holds a session. So the character is parked (`take_dictionary_query`)
+and the answer comes back (`set_dictionary`) on the same pass through the loop,
+before the draw — the same shape as `screenshot_request`, one frame earlier.
+Three states, not two: 「還沒問」、「問了還沒答」and「答了，表裏沒有」are three
+different panels, which is why the answer is an `Option` inside an `Option`.
+An answer for a character nobody is asking about any more is dropped, so
+walking `l l l` with the panel open ends on the character the cursor is on.
+
+`Tab` mid-composition now means two things by what is on the screen: with no
+list up it summons one (#211), with a list up it asks the 字典 about the
+highlighted candidate. Under `full` that is the 字典 on the first press. The
+cost is #211's undo — a panel summoned by mistake can no longer be dismissed
+with a second `Tab` — and it is worth paying: the panel dies with the word
+either way, which is exactly as long as the undo ever bought.
+
 **#215 moves a key that was in the wrong group.** `空格 d` is the table detail
 panel, which is a table key living outside `t`. With `t` now the table group in
 every mode (#206) it becomes `t i`, and `空格 d`（定義）is freed for the thing a
@@ -1704,6 +1726,11 @@ writing down rather than rediscovering:
   pixels and `CSI 13 t` its position, but neither is universal and a Retina
   factor of two turns a correct-looking calculation into a picture of the wrong
   half of the screen — silently. A wrong crop is worse than an uncropped shot.
+
+  **Done on 2026-09-05, by dropping the crop rather than solving it.** The
+  renderer already produces the frame cell by cell for `--shot`; writing *that*
+  out is the page and nothing else — there is no window to find the origin of
+  and no device pixels to scale. `:shot` draws, `:shot screen` still takes.
 
 ### 14 · `:tutor` — a lesson you learn by editing
 

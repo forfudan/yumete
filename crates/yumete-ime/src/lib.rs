@@ -789,6 +789,64 @@ impl ImeSession {
             .collect()
     }
 
+    /// Everything the 拆分表 knows about one character — Feature #215.
+    ///
+    /// The candidate list can only afford one line, so what it shows is
+    /// 拆分 and a code and nothing else. This is the same knowledge with the
+    /// room to say all of it: 拆分、編碼、分節編碼、讀音、注釋、字集、統一碼碼位
+    /// and the untruncated 全息拆分, as `(名, 值)` pairs a panel can draw.
+    ///
+    /// **A character with more than one 拆法 answers more than once.** 陸、臺、
+    /// 港 disagree about a few thousand characters, and which one you are
+    /// looking at is exactly the question this panel is opened to settle — so
+    /// each source gets its own run of rows, headed by an empty value, rather
+    /// than the first one winning silently.
+    ///
+    /// Empty when the scheme has no 拆分 layer at all (拼音), or the character
+    /// is not in the table. The caller shows that as「查不到」rather than an
+    /// empty panel, because those are different findings.
+    pub fn glosses(&self, ch: char) -> Vec<(String, String)> {
+        let table = self.engine.annotations();
+        let text = ch.to_string();
+        let sources = table.sources_of(&text);
+        let found = table.annotations_for(&text);
+        let mut out = Vec::new();
+        for (i, a) in found.iter().enumerate() {
+            // The heading only earns its row when there is something to tell
+            // apart: one 拆法 is the ordinary case and a lone「陸」above it is
+            // a row spent saying nothing.
+            if found.len() > 1 {
+                let label = sources
+                    .get(i)
+                    .map(|s| s.label())
+                    .filter(|l| !l.is_empty())
+                    .unwrap_or("陸");
+                out.push((label.to_string(), String::new()));
+            }
+            for (name, value) in [
+                ("拆分", &a.decomposition),
+                ("編碼", &a.code),
+                ("分節編碼", &a.segmented),
+                ("讀音", &a.reading),
+                ("注釋", &a.note),
+                ("字集", &a.charset),
+                ("全息拆分", &a.full_decomposition),
+                ("方案拆分", &a.own_decomposition),
+            ] {
+                if !value.is_empty() {
+                    out.push((name.to_string(), value.clone()));
+                }
+            }
+            // The code point is the one field that is true of the character
+            // rather than of a 拆法, so it is written the way a reader looks
+            // it up elsewhere — `U+` and all — and only once.
+            if i + 1 == found.len() && !a.unicode.is_empty() {
+                out.push(("統一碼".to_string(), format!("U+{}", a.unicode)));
+            }
+        }
+        out
+    }
+
     /// Whether this scheme can annotate at all — 拼音 has no 拆分 layer.
     pub fn annotations_available(&self) -> bool {
         self.engine.comments_available()

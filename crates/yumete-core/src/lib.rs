@@ -37,7 +37,7 @@ pub mod zong;
 
 pub use buffer::Buffer;
 pub use command::{Command, CommandError};
-pub use editor::{CommandOutcome, Editor, EditorError, KeyOutcome};
+pub use editor::{CommandOutcome, Editor, EditorError, KeyOutcome, ShotJob};
 pub use input::{Key, Mode};
 pub use text_store::TextStore;
 
