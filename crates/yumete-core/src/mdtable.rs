@@ -796,10 +796,12 @@ pub fn unescape(cell: &str) -> String {
     let mut out = String::with_capacity(cell.len());
     let mut chars = cell.chars().peekable();
     while let Some(c) = chars.next() {
-        if c == '\\' && matches!(chars.peek(), Some('\\') | Some('|')) {
-            out.push(chars.next().unwrap_or('\\'));
-        } else {
-            out.push(c);
+        match (c, chars.peek()) {
+            ('\\', Some(&escaped @ ('\\' | '|'))) => {
+                out.push(escaped);
+                chars.next();
+            }
+            _ => out.push(c),
         }
     }
     out

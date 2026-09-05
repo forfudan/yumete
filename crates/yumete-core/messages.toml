@@ -1069,13 +1069,6 @@ zhs = "从头看一遍：重复的行名、查无此行的部件、栏数不对�
 en = "look the whole table over: repeated row names, components with no row, rows of the wrong width"
 
 [[message]]
-# : 命令選單裏 detail 那一項的說明（table 組）
-key = "cmd.table.detail"
-zht = "詳情欄：開、關，或者給個寬度"
-zhs = "详情栏：开、关，或者给个宽度"
-en = "the detail panel: on, off, or a width"
-
-[[message]]
 # : 命令選單裏 csv 那一項的說明（table 組）
 key = "cmd.table.csv"
 zht = "把游標所在的 | 表格拆成分隔文本"
@@ -1083,11 +1076,11 @@ zhs = "把游标所在的 | 表格拆成分隔文本"
 en = "turn the | table under the cursor into delimited text"
 
 [[message]]
-# : 命令選單裏 pipe 那一項的說明（table 組）
-key = "cmd.table.pipe"
-zht = "把選中的（或游標所在的）分隔文本作成 | 表格"
-zhs = "把选中的（或游标所在的）分隔文本作成 | 表格"
-en = "turn the selected — or the surrounding — delimited text into a | table"
+# : 命令選單裏 detail 那一項的說明（table 組）
+key = "cmd.table.detail"
+zht = "詳情欄：開、關，或者給個寬度"
+zhs = "详情栏：开、关，或者给个宽度"
+en = "the detail panel: on, off, or a width"
 
 [[message]]
 # : 命令選單裏 numbers 那一項的說明（table 組）
@@ -1109,6 +1102,13 @@ key = "cmd.table.on"
 zht = "按格子編輯（默認）"
 zhs = "按格子编辑（默认）"
 en = "edit it as a grid (the default)"
+
+[[message]]
+# : 命令選單裏 pipe 那一項的說明（table 組）
+key = "cmd.table.pipe"
+zht = "把選中的（或游標所在的）分隔文本作成 | 表格"
+zhs = "把选中的（或游标所在的）分隔文本作成 | 表格"
+en = "turn the selected — or the surrounding — delimited text into a | table"
 
 [[message]]
 # : 命令選單裏 rules 那一項的說明（table 組）
@@ -2705,13 +2705,6 @@ zhs = "加一行（下／上）"
 en = "add a row (below / above)"
 
 [[message]]
-# t 組：詳情欄（從前是 空格 d）
-key = "hint.table.detail-panel"
-zht = "詳情欄"
-zhs = "详情栏"
-en = "the detail panel"
-
-[[message]]
 # t 之後認得哪些鍵
 key = "hint.table.after-t"
 zht = "t 後面：t q / ? g f i s S o O n N d D j k h l y p < = > ] ["
@@ -2787,6 +2780,13 @@ key = "hint.table.delete-row-or-column"
 zht = "刪這行／這欄"
 zhs = "删这行／这栏"
 en = "delete this row / column"
+
+[[message]]
+# t 組：詳情欄（從前是 空格 d）
+key = "hint.table.detail-panel"
+zht = "詳情欄"
+zhs = "详情栏"
+en = "the detail panel"
 
 [[message]]
 # 表格提示：去某一格
@@ -4081,6 +4081,13 @@ en = "flag '{0}' (g every match on the line, i ignore case, n count only, t let 
 # ── table ─────────────────────────────────────────────────────────────
 
 [[message]]
+# :table pipe：這一段本來就是 | 表格
+key = "table.already-a-pipe-table"
+zht = "這一段本來就是 | 表格"
+zhs = "这一段本来就是 | 表格"
+en = "this is already a | table"
+
+[[message]]
 # t f 對齊，本來就是齊的
 key = "table.already-aligned"
 zht = "已經是對齊的"
@@ -4128,6 +4135,13 @@ key = "table.cell-cleared"
 zht = "清空了一格（{0} 個字）"
 zhs = "清空了一格（{0} 个字）"
 en = "cleared a cell ({0} character(s))"
+
+[[message]]
+# :table csv：某一格裏就有那個分隔符，不能拆
+key = "table.cell-holds-the-delimiter"
+zht = "第 {0} 行第 {1} 欄裏就有「{2}」——換個分隔符，或者先改那一格"
+zhs = "第 {0} 行第 {1} 栏里就有「{2}」——换个分隔符，或者先改那一格"
+en = "row {0}, column {1} holds a '{2}' of its own — pick another delimiter, or change that cell first"
 
 [[message]]
 # 要動的那一格是空的
@@ -4354,6 +4368,13 @@ zhs = "按字移动（Tab 回到按格）"
 en = "moving by character — Tab goes back to cells"
 
 [[message]]
+# :table pipe：看不出什麼在分欄
+key = "table.no-delimiter-in-sight"
+zht = "看不出什麼在分欄——寫明分隔符，例如 :table pipe , 或 :table pipe tab"
+zhs = "看不出什么在分栏——写明分隔符，例如 :table pipe , 或 :table pipe tab"
+en = "nothing here plainly separates columns — name the delimiter, as in :table pipe , or :table pipe tab"
+
+[[message]]
 # :table 用在沒有檔名的緩衝區上
 key = "table.no-file-name-no-schema"
 zht = "沒有檔名，就沒有 schema 可以照——或者把光標放到 | 表格上"
@@ -4396,6 +4417,13 @@ zhs = "表里没有「{0}」"
 en = "no '{0}' in this table"
 
 [[message]]
+# :table csv：游標不在 | 表格裏
+key = "table.not-in-a-pipe-table"
+zht = "游標不在 | 表格裏"
+zhs = "游标不在 | 表格里"
+en = "the cursor is not in a | table"
+
+[[message]]
 # 表格命令用在表格外面
 key = "table.not-in-a-table"
 zht = "不是表格——先 :table"
@@ -4408,6 +4436,27 @@ key = "table.nothing-above-the-header"
 zht = "標題行上面加不了——加在它下面了"
 zhs = "标题行上面加不了——加在它下面了"
 en = "nothing goes above the header — added it below instead"
+
+[[message]]
+# :table pipe / :table csv：手上沒有可轉的東西
+key = "table.nothing-to-convert"
+zht = "這裏沒有可以轉的行"
+zhs = "这里没有可以转的行"
+en = "no lines here to convert"
+
+[[message]]
+# :table pipe 轉好了
+key = "table.now-a-pipe-table"
+zht = "作成了 | 表格：{0} 行 {1} 欄，照「{2}」分的"
+zhs = "作成了 | 表格：{0} 行 {1} 栏，照「{2}」分的"
+en = "a | table: {0} rows, {1} columns, split on '{2}'"
+
+[[message]]
+# :table csv 轉好了
+key = "table.now-delimited"
+zht = "拆成了分隔文本：{0} 行，用「{1}」分欄"
+zhs = "拆成了分隔文本：{0} 行，用「{1}」分栏"
+en = "delimited: {0} rows, split by '{1}'"
 
 [[message]]
 # 離開表格模式
@@ -4541,55 +4590,6 @@ key = "table.schema-problems"
 zht = "schema：{0}"
 zhs = "schema：{0}"
 en = "schema: {0}"
-
-[[message]]
-# :table pipe：這一段本來就是 | 表格
-key = "table.already-a-pipe-table"
-zht = "這一段本來就是 | 表格"
-zhs = "这一段本来就是 | 表格"
-en = "this is already a | table"
-
-[[message]]
-# :table csv：某一格裏就有那個分隔符，不能拆
-key = "table.cell-holds-the-delimiter"
-zht = "第 {0} 行第 {1} 欄裏就有「{2}」——換個分隔符，或者先改那一格"
-zhs = "第 {0} 行第 {1} 栏里就有「{2}」——换个分隔符，或者先改那一格"
-en = "row {0}, column {1} holds a '{2}' of its own — pick another delimiter, or change that cell first"
-
-[[message]]
-# :table pipe：看不出什麼在分欄
-key = "table.no-delimiter-in-sight"
-zht = "看不出什麼在分欄——寫明分隔符，例如 :table pipe , 或 :table pipe tab"
-zhs = "看不出什么在分栏——写明分隔符，例如 :table pipe , 或 :table pipe tab"
-en = "nothing here plainly separates columns — name the delimiter, as in :table pipe , or :table pipe tab"
-
-[[message]]
-# :table pipe / :table csv：手上沒有可轉的東西
-key = "table.nothing-to-convert"
-zht = "這裏沒有可以轉的行"
-zhs = "这里没有可以转的行"
-en = "no lines here to convert"
-
-[[message]]
-# :table csv：游標不在 | 表格裏
-key = "table.not-in-a-pipe-table"
-zht = "游標不在 | 表格裏"
-zhs = "游标不在 | 表格里"
-en = "the cursor is not in a | table"
-
-[[message]]
-# :table csv 轉好了
-key = "table.now-delimited"
-zht = "拆成了分隔文本：{0} 行，用「{1}」分欄"
-zhs = "拆成了分隔文本：{0} 行，用「{1}」分栏"
-en = "delimited: {0} rows, split by '{1}'"
-
-[[message]]
-# :table pipe 轉好了
-key = "table.now-a-pipe-table"
-zht = "作成了 | 表格：{0} 行 {1} 欄，照「{2}」分的"
-zhs = "作成了 | 表格：{0} 行 {1} 栏，照「{2}」分的"
-en = "a | table: {0} rows, {1} columns, split on '{2}'"
 
 [[message]]
 # :sort 排好了
@@ -4765,6 +4765,13 @@ zhs = "需要 {0}，句末加 force"
 en = "needs {0}; add force at the end"
 
 [[message]]
+# 這個平台上沒有配截圖命令
+key = "ui.no-screenshot-command"
+zht = "這個平台上沒有截圖命令——`[editor] screenshot` 寫一條"
+zhs = "这个平台上没有截图命令——`[editor] screenshot` 写一条"
+en = "no screenshot command on this platform — write one at `[editor] screenshot`"
+
+[[message]]
 # 字典欄：拆分表裏沒有這個字
 key = "ui.not-in-the-table"
 zht = "拆分表裏沒有這個字"
@@ -4777,27 +4784,6 @@ key = "ui.nothing-to-look-up"
 zht = "游標下沒有字可查"
 zhs = "光标下没有字可查"
 en = "no character under the cursor to look up"
-
-[[message]]
-# `:shot` 把這一幀畫成檔案了
-key = "ui.shot-drawn"
-zht = "這一頁畫成了 {0}"
-zhs = "这一页画成了 {0}"
-en = "drew this page to {0}"
-
-[[message]]
-# `:shot` 寫不出那個檔
-key = "ui.shot-failed"
-zht = "寫不出這張圖：{0}"
-zhs = "写不出这张图：{0}"
-en = "could not write the picture: {0}"
-
-[[message]]
-# 這個平台上沒有配截圖命令
-key = "ui.no-screenshot-command"
-zht = "這個平台上沒有截圖命令——`[editor] screenshot` 寫一條"
-zhs = "这个平台上没有截图命令——`[editor] screenshot` 写一条"
-en = "no screenshot command on this platform — write one at `[editor] screenshot`"
 
 [[message]]
 # 狀態欄的位置：光標在表格裏
@@ -4833,6 +4819,20 @@ key = "ui.screenshot-taken"
 zht = "畫面已放進剪貼簿"
 zhs = "画面已放进剪贴簿"
 en = "the screen is on the clipboard"
+
+[[message]]
+# `:shot` 把這一幀畫成檔案了
+key = "ui.shot-drawn"
+zht = "這一頁畫成了 {0}"
+zhs = "这一页画成了 {0}"
+en = "drew this page to {0}"
+
+[[message]]
+# `:shot` 寫不出那個檔
+key = "ui.shot-failed"
+zht = "寫不出這張圖：{0}"
+zhs = "写不出这张图：{0}"
+en = "could not write the picture: {0}"
 
 [[message]]
 # 側欄有焦點，而提示行關着——狀態欄整條讓給側欄的按鍵

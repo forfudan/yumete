@@ -50,7 +50,8 @@ impl Format {
     }
 }
 
-/// Whether `name` is one of the delimited formats — a **table**, not a page.
+/// What separates two cells in the file `:export <name>` writes, or `None` if
+/// `name` is not one of the delimited formats — a **table**, not a page.
 ///
 /// These are deliberately not [`Format`] variants. Everything a `Format` names
 /// is a way of setting a manuscript: [`export`] is handed the whole text and
@@ -58,12 +59,10 @@ impl Format {
 /// than from a document, and a cell that holds the delimiter has to be refused
 /// out loud — three things that shape does not fit. So the editor serves them
 /// itself, from the table under the cursor, and this is the list it consults
-/// (Feature #227).
-pub fn is_delimited(name: &str) -> bool {
-    delimiter_of(name).is_some()
-}
-
-/// What separates two cells in the file `:export <name>` writes.
+/// (Feature #227). Asking for the delimiter *is* asking whether the name is
+/// one of them, so there is one question here and not two — the editor needs
+/// the answer either way, and a second predicate would only give the call site
+/// a `None` it had already ruled out to make up a default for.
 pub fn delimiter_of(name: &str) -> Option<char> {
     match name.trim().to_ascii_lowercase().as_str() {
         "csv" => Some(','),
