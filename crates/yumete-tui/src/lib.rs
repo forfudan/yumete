@@ -2117,22 +2117,31 @@ fn language_tag(editor: &Editor, ime: &ImeSession) -> String {
     }
 }
 
-/// How many rows a menu or a picker may take.
+/// How many rows a menu takes when the window is small, and how many a picker
+/// takes always.
 ///
 /// Helix caps its completion popup and scrolls it, and the reason is not screen
 /// real estate but reading: a list you have to search is not a list you can
 /// glance at. Twenty-odd commands laid out across the whole page hid the very
 /// document the command was about to act on.
+///
+/// It is a **floor** for the `:` menu, not the height: see [`MENU_SHARE`].
 const MENU_ROWS: usize = 8;
 
 /// The widest a menu gets. Past this the eye stops reading a row as one thing.
 const MENU_WIDTH: u16 = 56;
 
-/// The most columns a menu spreads across.
+/// The most of the window's height a menu spreads down to, as one part in this
+/// many.
 ///
-/// Bounded because a menu is glanced at, not read: past three or four columns
-/// the eye has to hunt, and the thing it is covering is the page.
-const MENU_COLUMNS: usize = 4;
+/// The author, 2026-09-05: 「命令提示一共 47 條，這裏只顯示了一半，但我的屏幕還
+/// 有很大的空間。」 — eight rows was a constant on a page that is not, and on a
+/// tall terminal it hid a third of the list for no reason at all. So the height
+/// is a share of the window: enough that the whole list is usually on it, and
+/// bounded so that the document the command is about to act on is still there
+/// behind it. A third is about the largest that still reads as a menu *over* a
+/// page rather than a page of its own.
+const MENU_SHARE: u16 = 3;
 
 /// Draw a compact list just above `bottom`, scrolled so `selected` is on it.
 ///
@@ -2180,15 +2189,24 @@ fn draw_list(
         .unwrap_or(0)
         .saturating_add(2)
         .min(MENU_WIDTH as usize);
-    let across = if columns {
-        let room = (area.width as usize).saturating_sub(2).max(1);
-        (room / one.max(1))
-            .clamp(1, items.len().div_ceil(MENU_ROWS).max(1))
-            .min(MENU_COLUMNS)
+    //
+    // The shape is measured off the window rather than fixed: **the fewest
+    // columns that show every entry** in the height there is room for. Fewest,
+    // because the order runs down a column — three long columns are read in
+    // three sweeps of the eye, six short ones in six — so the list is grown
+    // downwards first and widened only when it has to be. A list that cannot
+    // be shown whole even at the full width falls back to what it always did:
+    // as many columns as fit, and scroll.
+    let (across, deep) = if columns {
+        let wide = ((area.width as usize).saturating_sub(2) / one.max(1)).max(1);
+        let tall = ((area.height / MENU_SHARE) as usize).max(MENU_ROWS).max(1);
+        let across = items.len().div_ceil(tall).clamp(1, wide);
+        (across, items.len().div_ceil(across).clamp(1, tall))
     } else {
-        1
+        // A picker is paths — hundreds of them, and no arrangement shows them
+        // all — so it stays the glanceable eight and scrolls.
+        (1, items.len().clamp(1, MENU_ROWS))
     };
-    let deep = items.len().div_ceil(across).clamp(1, MENU_ROWS);
     let visible = (deep * across).min(items.len());
     let height = (deep + 1) as u16;
     if height > area.height || bottom < height {
@@ -3403,8 +3421,16 @@ fn draw_horizontal(
     // furniture, not text, so it does not eat into the measure — and the ruler
     // moves with the gutter rather than the writing moving under it.
     // A measure set with `:wrap 50` is a ruler by definition — it is the width
-    // the writer asked to write to — so it stands in for the configured one.
-    let ruler = editor.measure().unwrap_or(config.editor.ruler);
+    // the writer asked to write to — so it stands in for the configured one,
+    // **but only while it is folding rows**. `:wrap off` stops the folding and
+    // keeps the number, so that `:wrap` on its own can put it back; drawing a
+    // rule at fifty and tinting everything past it, while the rows run straight
+    // through both, names an edge the page no longer has. A ruler out of the
+    // config is a mark the reader asked for and stands either way.
+    let ruler = editor
+        .measure()
+        .filter(|_| editor.wrap_width().is_some())
+        .unwrap_or(config.editor.ruler);
 
     // Word ranges are per paragraph and consecutive rows usually share one, so
     // each paragraph the page touches is segmented once. Its Markdown runs are
@@ -5950,6 +5976,42 @@ mod tests {
         assert_eq!(at(&buffer, 20 + gutter as u16, 4), "│");
     }
 
+    /// The author, 2026-09-05: `:wrap 50` then `:wrap off` left a rule down
+    /// the middle of the page with the writing running straight through it.
+    ///
+    /// The measure is kept on purpose — `:wrap` on its own has to be able to
+    /// put it back — but a measure nothing is folded at is not a margin, and
+    /// the furniture that says 「the paper ends here」 was still being drawn.
+    #[test]
+    fn a_measure_wrapping_stopped_at_rules_nothing() {
+        let mut editor = editor_with(&"字".repeat(30));
+        let mut config = Config::default();
+        config.editor.line_numbers = LineNumbers::None;
+        config.editor.show_segmentation = false;
+        // Nothing configured: every mark on this page comes from `:wrap 20`.
+        assert_eq!(config.editor.ruler, 0);
+        let tint = Some(ink(&config).at(yumete_config::rung::BAND));
+
+        editor.execute("wrap 20").unwrap();
+        let buffer = render_wrapped(&mut editor, &config, 40, 8);
+        assert_eq!(buffer[(20, 0)].style().bg, tint, "the measure is in force");
+
+        // `:wrap off`: the rows are no longer folded at twenty, so nothing on
+        // the page may claim they are.
+        editor.execute("wrap off").unwrap();
+        let buffer = render_wrapped(&mut editor, &config, 40, 8);
+        assert_ne!(buffer[(20, 0)].style().bg, tint, "no margin past it");
+        assert!(
+            (0..8).all(|y| at(&buffer, 20, y) != "│"),
+            "and no rule at it"
+        );
+
+        // …and `:wrap` alone puts the measure — and its margin — back.
+        editor.execute("wrap").unwrap();
+        let buffer = render_wrapped(&mut editor, &config, 40, 8);
+        assert_eq!(buffer[(20, 0)].style().bg, tint, "the number was kept");
+    }
+
     #[test]
     fn the_sidebar_opens_out_to_the_length_of_its_longest_name() {
         let mut editor = editor_with("那年冬天");
@@ -8012,6 +8074,33 @@ mod tests {
         assert!(drawn <= 9, "the picker took {drawn} rows");
     }
 
+    /// Which rows a command menu covers, and where its columns start.
+    ///
+    /// Counted off the colons every entry begins with, not off the ground it is
+    /// drawn on: the menu's ground *is* the page's ground on a painted theme,
+    /// so a `bg` test either matches the whole window or — with a dark colour
+    /// written out by hand under a light default — nothing at all, and the two
+    /// assertions it was carrying had never once run.
+    fn menu_shape(
+        buffer: &ratatui::buffer::Buffer,
+    ) -> (
+        std::collections::BTreeSet<u16>,
+        std::collections::BTreeSet<u16>,
+    ) {
+        let mut colons: Vec<(u16, u16)> = (0..buffer.area.height)
+            .flat_map(|y| (0..buffer.area.width).map(move |x| (x, y)))
+            .filter(|&(x, y)| buffer[(x, y)].symbol() == ":")
+            .collect();
+        // The prompt's own colon is the lowest of them; drop that row.
+        if let Some(prompt) = colons.iter().map(|&(_, y)| y).max() {
+            colons.retain(|&(_, y)| y < prompt);
+        }
+        (
+            colons.iter().map(|&(_, y)| y).collect(),
+            colons.iter().map(|&(x, _)| x).collect(),
+        )
+    }
+
     #[test]
     fn the_command_menu_lists_and_narrows() {
         let mut editor = editor_with("那年冬天");
@@ -8029,14 +8118,11 @@ mod tests {
             text.contains(&format!("1/{total}")),
             "how much more there is"
         );
-        // The menu is a handful of rows, not the screen.
-        let drawn = (0..buffer.area.height)
-            .filter(|&y| {
-                (0..buffer.area.width)
-                    .any(|x| buffer[(x, y)].style().bg == Some(Color::Rgb(0x26, 0x2a, 0x27)))
-            })
-            .count();
-        assert!(drawn <= 9, "the menu took {drawn} rows");
+        // The menu is a handful of rows, not the screen: a 24-row window has
+        // no room to grow into, so it is the eight it always was.
+        let (rows, _) = menu_shape(&buffer);
+        assert!(!rows.is_empty(), "a menu was drawn");
+        assert!(rows.len() <= 8, "the menu took {} rows", rows.len());
 
         // Typing narrows it, and the commands that no longer match go away.
         for c in "ruby".chars() {
@@ -8059,6 +8145,38 @@ mod tests {
         assert!(squashed.contains("排出注音"), "and what each one does");
     }
 
+    /// The author, 2026-09-05: 「命令提示一共 47 條，這裏只顯示了一半，但我的
+    /// 屏幕還有很大的空間。」
+    ///
+    /// The height was a constant on a page that is not one. On a tall terminal
+    /// the menu now grows down to a third of the window — which is enough to
+    /// hold every command in three columns — and it still does not take the
+    /// page over.
+    #[test]
+    fn the_command_menu_grows_with_a_tall_window() {
+        let config = Config::default();
+        let total = yumete_core::command::COMMANDS.len();
+        let mut editor = editor_with("那年冬天");
+        editor.on_key(Key::Char(':'));
+
+        let buffer = render_with(&editor, &config, &no_ime(), 100, 60);
+        let text = buffer_text(&buffer);
+        // The far end of the list, which eight rows of four columns cut off.
+        for name in [":open", ":wrap", ":grep", ":toc", ":ruby"] {
+            assert!(text.contains(name), "{name} is on it: {text:?}");
+        }
+        assert!(text.contains(&format!("1/{total}")));
+
+        let (rows, columns) = menu_shape(&buffer);
+        assert!(rows.len() > 9, "taller than the old constant: {rows:?}");
+        assert!(
+            rows.len() <= 60 / 3 + 2,
+            "and still a menu, not a page: {rows:?}"
+        );
+        // Down first and then across: the fewest columns that hold the list.
+        assert_eq!(columns.len(), 3, "three columns: {columns:?}");
+    }
+
     #[test]
     fn the_command_menu_spreads_across_a_wide_window() {
         let config = Config::default();
@@ -8075,20 +8193,18 @@ mod tests {
         assert!(text.contains(&format!("1/{total}")), "the count is still there");
 
         // The list runs *down* first and then across, like a list of files:
-        // more than one column, and no taller than a menu is allowed to be.
-        let lit = |y: u16| {
-            (0..buffer.area.width)
-                .any(|x| buffer[(x, y)].style().bg == Some(Color::Rgb(0x26, 0x2a, 0x27)))
-        };
-        let rows = (0..buffer.area.height).filter(|&y| lit(y)).count();
-        assert!(rows <= 9, "a menu is glanced at, not read: {rows} rows");
-        let starts: Vec<u16> = (0..buffer.area.height)
-            .flat_map(|y| (0..buffer.area.width).map(move |x| (x, y)))
-            .filter(|&(x, y)| buffer[(x, y)].symbol() == ":")
-            .map(|(x, _)| x)
-            .collect();
-        let columns: std::collections::BTreeSet<u16> = starts.into_iter().collect();
+        // more than one column, and no taller than a menu is allowed to be on
+        // a window this short.
+        let (rows, columns) = menu_shape(&buffer);
+        assert!(rows.len() <= 8, "a menu is glanced at, not read: {rows:?}");
         assert!(columns.len() >= 3, "several columns: {columns:?}");
+        // Wide enough that the whole list fits without scrolling — which is
+        // the point of the columns.
+        assert!(
+            rows.len() * columns.len() >= total,
+            "all {total} of them: {} slots",
+            rows.len() * columns.len()
+        );
 
         // Narrow: one column, and the count says how much did not fit.
         let mut narrow = editor_with("那年冬天");
