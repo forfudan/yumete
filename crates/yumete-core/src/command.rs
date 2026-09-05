@@ -2864,6 +2864,23 @@ pub fn complete_at(line: &str) -> (usize, Vec<Choice>) {
     (start, choices)
 }
 
+/// Every command and every word under it, as one flat list (#224).
+///
+/// `complete` answers *what starts with this*; `::` asks *what does this*, and
+/// that question has no prefix to walk down — the reader typed 排序 and the
+/// answer is `:table sort`, which shares not one letter with it. So the search
+/// needs the whole tree at once, each row carrying the path that has to be
+/// typed to reach it, and ranks it by what it says rather than how it is
+/// spelled.
+///
+/// The top level first, then everything below it shallowest-first, so a tie in
+/// the ranking falls out as the shorter command.
+pub fn all_choices() -> Vec<Choice> {
+    let mut out = complete("");
+    out.extend(deep_from_root(""));
+    out
+}
+
 /// What the command on this line needs before it can do anything.
 ///
 /// The *deepest* word that says so: `:table rules` needs a table because
@@ -3743,6 +3760,43 @@ mod tests {
 
         // An empty prefix is not a question, and must never dump the tree.
         assert!(complete("nosuchcommandanywhere ").is_empty());
+    }
+
+    /// `::` searches the whole tree, so the whole tree has to be in the list
+    /// (#224): every command, and every word under every command, each one
+    /// carrying the path a reader would have to type to reach it.
+    #[test]
+    fn the_flat_list_holds_the_whole_tree() {
+        let all = all_choices();
+        let written: Vec<String> = all.iter().map(|c| c.written()).collect();
+        for one in [
+            "table",
+            "table sort",
+            "table new",
+            "wrap",
+            "layout vertical",
+            "yume scheme lingming",
+            "theme mogao",
+        ] {
+            assert!(
+                written.iter().any(|w| w == one),
+                "`:{one}` is not in the flat list, so `::` cannot find it:\n{written:#?}"
+            );
+        }
+        // Nothing is listed twice: a duplicate is two rows saying the same
+        // thing, which in a ranked list reads as two different answers.
+        let mut seen = std::collections::BTreeSet::new();
+        let twice: Vec<&String> = written.iter().filter(|w| !seen.insert(*w)).collect();
+        assert!(twice.is_empty(), "listed twice: {twice:?}");
+        // Every row can say what it does — the ranking has nothing to read
+        // otherwise, and the menu would draw a blank line.
+        for choice in &all {
+            assert!(
+                !choice.help.is_empty() || choice.name.is_empty(),
+                "`{}` has no help, so it cannot be found by what it does",
+                choice.written()
+            );
+        }
     }
 
     /// The other direction of `every_listed_command_parses`: a command that
