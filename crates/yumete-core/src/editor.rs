@@ -3159,6 +3159,10 @@ impl Editor {
                 let root = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
                 self.grep(&pattern, &root)
             }
+            Command::Diff(against) => {
+                self.diff_against(against.as_deref());
+                Ok(CommandOutcome::Continue)
+            }
             Command::Outline(nth) => {
                 let headings = self.outline();
                 if headings.is_empty() {
@@ -8836,6 +8840,95 @@ impl Editor {
         self.add_buffer(buffer);
         self.set_cursor(0);
         self.status = say!("check.usage-found", n);
+    }
+
+    /// `:diff [檔名]` — what changed, by 詞 (Feature #235).
+    ///
+    /// **The grain is the point.** Every diff a writer can reach is a line
+    /// diff, and a Chinese paragraph is one line: move one 的 in a 五百字 段落
+    /// and `git diff` paints the whole paragraph away and back again. The
+    /// answer is true and useless, because the one thing being asked — *which
+    /// word* — is buried in five hundred characters. So this one runs over the
+    /// 詞 the editor's own segmenter finds, the same ones `w` steps over, and
+    /// answers with the line as it stands now and `[-走了-]{+來了+}` in it.
+    ///
+    /// **What it compares against.** With no argument, the file on disk: 「這
+    /// 一坐下來我改了什麼」, which is the question with the shortest half-life.
+    /// With a path, that file — yesterday's chapter, a copy kept before a
+    /// rewrite. Not the recovery copy: [`crate::buffer::Buffer::write_swap`]
+    /// overwrites one path with the text as it stands, so it is never a base
+    /// to compare against.
+    fn diff_against(&mut self, other: Option<&str>) {
+        let here = self
+            .current_buffer()
+            .path()
+            .map(Path::to_path_buf);
+        let path = match other {
+            Some(given) => {
+                let given = Path::new(given.trim());
+                match (given.is_absolute(), here.as_ref().and_then(|p| p.parent())) {
+                    (false, Some(dir)) => dir.join(given),
+                    _ => given.to_path_buf(),
+                }
+            }
+            None => match here {
+                Some(path) => path,
+                None => {
+                    self.status = say!("diff.no-file");
+                    return;
+                }
+            },
+        };
+        let old = match std::fs::read_to_string(&path) {
+            Ok(text) => text,
+            Err(err) => {
+                self.status = say!("buffer.cannot-open", path.display(), err.to_string());
+                return;
+            }
+        };
+        let new = self.current_buffer().rope().to_string();
+        // The editor's segmenter, handed one line at a time — which is how its
+        // own cache is keyed, so most of these lines are already answered.
+        let segment = |line: &str| self.segmenter.segment(line);
+        let (a, b) = (
+            crate::diff::tokens(&old, &segment),
+            crate::diff::tokens(&new, &segment),
+        );
+        let Some(ops) = crate::diff::script(&a, &b) else {
+            self.status = say!("diff.too-far", path.display());
+            return;
+        };
+        let changes = crate::diff::line_changes(&ops);
+        let against = path
+            .file_name()
+            .map(|n| n.to_string_lossy().into_owned())
+            .unwrap_or_else(|| path.display().to_string());
+        if changes.is_empty() {
+            self.status = say!("diff.same", against);
+            return;
+        }
+        let name = self
+            .current_buffer()
+            .path()
+            .and_then(|p| p.file_name())
+            .map(|n| n.to_string_lossy().into_owned())
+            .unwrap_or_else(|| self.current_buffer().display_name().to_string());
+        let n = changes.len();
+        let mut listing = String::new();
+        for change in changes.iter().take(GREP_LIMIT) {
+            listing.push_str(&say!("diff.line", name, change.line + 1, change.marked));
+            listing.push('\n');
+        }
+        let mut buffer = Buffer::from_text(&listing);
+        buffer.name_as(&say!("diff.results", name, against));
+        self.grep_root = self
+            .current_buffer()
+            .path()
+            .and_then(|p| p.parent())
+            .map(Path::to_path_buf);
+        self.add_buffer(buffer);
+        self.set_cursor(0);
+        self.status = say!("diff.changed", n, against);
     }
 
     /// Go to the row this table names by `key` (`:row 木`).
@@ -15419,6 +15512,68 @@ mod tests {
             ed.on_key(Key::Char(c));
         }
         ed.on_key(Key::Esc);
+    }
+
+    #[test]
+    fn diff_reports_the_word_that_changed_and_gf_goes_to_it() {
+        let dir = std::env::temp_dir().join(format!("yumete-diff-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let file = dir.join("ch01.txt");
+        std::fs::write(&file, "第一行\n那年冬天，雪下得很早。\n第三行\n").unwrap();
+        let mut ed = Editor::new();
+        ed.open_file(&file).unwrap();
+
+        // Nothing typed yet: the buffer and the file agree.
+        ed.execute(":diff").unwrap();
+        assert!(ed.status().contains("一個字都不差"), "{}", ed.status());
+        assert_eq!(ed.buffer_tabs().len(), 1, "no results buffer for no changes");
+
+        // One word, in the middle of a paragraph a line diff would call wholly
+        // changed.
+        ed.goto_line(2);
+        ed.execute(":s/很早/極早/").unwrap();
+        ed.execute(":diff").unwrap();
+        let listing = ed.current_buffer().text();
+        assert_eq!(
+            listing.trim_end(),
+            "ch01.txt:2: 那年冬天，雪下得[-很-]{+極+}早。",
+            "the line as it stands now, with the one word marked — and 早 is \
+             shared, because with no dictionary loaded the words are characters"
+        );
+        // The listing is jumpable, like `:grep`'s.
+        ed.set_cursor(0);
+        press(&mut ed, "gf");
+        assert_eq!(ed.current_buffer().display_name(), "ch01.txt");
+        assert_eq!(ed.cursor_line(), 1);
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn diff_can_be_told_which_draft_to_compare_with() {
+        let dir = std::env::temp_dir().join(format!("yumete-diff2-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("ch01.txt"), "他說好。\n").unwrap();
+        std::fs::write(dir.join("昨天.txt"), "他說不好。\n").unwrap();
+        let mut ed = Editor::new();
+        ed.open_file(dir.join("ch01.txt")).unwrap();
+        // Relative to the file being read, not to wherever yumete was started.
+        ed.execute(":diff 昨天.txt").unwrap();
+        assert!(
+            ed.current_buffer().text().contains("[-不-]"),
+            "{}",
+            ed.current_buffer().text()
+        );
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn diff_needs_something_to_compare_with() {
+        let mut ed = typed("寫了一半");
+        ed.execute(":diff").unwrap();
+        assert!(ed.status().contains(":diff"), "{}", ed.status());
     }
 
     /// A reader with a handful of characters in it, so `:ruby auto` can be

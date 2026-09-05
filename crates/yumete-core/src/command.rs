@@ -270,6 +270,9 @@ pub enum Command {
     GotoRow(String),
     /// `:grep <pattern>` — search every file in the project.
     Grep(String),
+    /// `:diff [path]` — what changed, by 詞, against the file on disk or
+    /// against another draft (Feature #235).
+    Diff(Option<String>),
     /// `:export html|typst [path]`, and `:export!` over a file that is
     /// already there — write the manuscript out for a typesetter.
     Export {
@@ -953,6 +956,10 @@ pub fn parse(input: &str) -> Result<Command, CommandError> {
                 Ok(Command::Grep(rest.to_string()))
             }
         }
+        "diff" => Ok(Command::Diff(match rest.trim().is_empty() {
+            true => None,
+            false => Some(rest.trim().to_string()),
+        })),
         "wa" | "wall" => Ok(Command::WriteAll),
         "replace" | "replace!" => {
             if rest.trim().is_empty() {
@@ -2639,6 +2646,13 @@ pub const COMMANDS: &[Entry] = &[
         args: Args::Free("<正則>"),
     },
     Entry {
+        name: "diff",
+        aliases: &[],
+        help: "cmd.commands.diff",
+        needs: &[],
+        args: Args::Path,
+    },
+    Entry {
         name: "replace",
         aliases: &[],
         help: "cmd.commands.replace",
@@ -3878,6 +3892,7 @@ mod tests {
             "count",
             "check",
             "grep",
+            "diff",
             "toc",
             "export",
             "ruby",
