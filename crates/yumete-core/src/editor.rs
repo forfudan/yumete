@@ -434,6 +434,17 @@ pub struct TableView {
     pub separator: Separator,
     /// What the table is drawn on.
     pub surface: Surface,
+    /// What `t q` gives the page back to (2026-09-05).
+    ///
+    /// **`t q` is the way out of the full-screen grid, not the way out of
+    /// table mode.** 「`tq` 只在全屏表格模式下生效，退到 markdown 文件中，且回
+    /// 到此前的表格模式」 — so `t a`, `t t`, `t q` puts you back in `t a` and
+    /// not in prose. `None` is 源碼模式: it is what a CSV opened as a grid
+    /// came from, and what `t t` pressed in prose came from.
+    ///
+    /// Only [`Surface::Grid`] ever reads it; the other two are already showing
+    /// the document, and there `t o` is the way to prose.
+    pub back: Option<Surface>,
     /// Where the table starts and stops.
     pub bounds: Bounds,
     /// How far the mode reaches — this table, or every table in the file.
@@ -464,19 +475,39 @@ pub enum Separator {
 /// 的普通文本文件」 — a CSV is not a different kind of thing from a table in a
 /// document, so which of the two renderers draws it is a fact about the table,
 /// not about its splitter.
+///
+/// **Three of them since 2026-09-05**, which is the author's own list:
+///
+/// > 源碼模式 `t o`（ordinary）；保持源碼、表格接管快捷鍵 `t i`（inline）；
+/// > 正文裏畫成網格 `t a`（advanced）；csv 的全屏表格模式 `t t`（table）。
+///
+/// The fourth of those is no table at all, which is why this enum has three:
+/// 源碼模式 is `table == None`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Surface {
-    /// A page of its own, drawn by `yumete-tui`'s grid widget: the columns line
-    /// up because the renderer puts them there, the header freezes at the top,
-    /// and the file on disk is untouched. Only this surface turns a 縱書 page
-    /// horizontal — a grid is read across, and that is the one thing 縱書
-    /// cannot do.
-    Page,
-    /// Drawn as part of the document it sits in, through #212's ghost padding:
-    /// the columns line up because the text itself is padded. The paragraph
-    /// above the table does not vanish the moment the cursor lands in a cell,
-    /// and a 縱書 chapter stays 縱書.
-    InProse,
+    /// `t i` — the file is left looking exactly as it is, `|` and commas and
+    /// all, and the **keys** belong to the grid: `hjkl` walk cells, `t d`
+    /// drops a row. Nothing is drawn that the file does not contain, so a
+    /// 縱書 chapter stays 縱書.
+    Inline,
+    /// `t a` — drawn as part of the document it sits in, through #212's ghost
+    /// padding: the columns line up because the text itself is padded, and the
+    /// `|` the writer typed is drawn as the wall it is. The paragraph above
+    /// the table does not vanish the moment the cursor lands in a cell.
+    ///
+    /// **The columns are the table's**, not the screen's: the widest cell in
+    /// each column decides, once, for the whole table. That is what makes the
+    /// padding stable while you scroll — and it is the one thing [`Grid`] does
+    /// differently.
+    ///
+    /// [`Grid`]: Surface::Grid
+    Advanced,
+    /// `t t` — a page of its own, drawn by `yumete-tui`'s grid widget: the
+    /// columns are as wide as the **visible** rows need, the header freezes at
+    /// the top, and a table wider than the window scrolls by whole columns.
+    /// The file on disk is untouched, and the prose around the table is not on
+    /// the screen — `t q` gives it back.
+    Grid,
 }
 
 /// Where the table starts and stops (#261).
@@ -538,24 +569,23 @@ pub enum Reach {
 }
 
 impl TableView {
-    /// Whether this table is drawn on a page of its own.
-    pub fn is_page(&self) -> bool {
-        self.surface == Surface::Page
+    /// Whether the columns are **drawn** as columns — `t a` or `t t`.
+    ///
+    /// The question 縱書 asks: a grid is read across, and that is the one
+    /// thing a vertical page cannot do, so either of these two turns the page
+    /// horizontal. `t i` draws nothing and leaves the page alone.
+    pub fn draws_a_grid(&self) -> bool {
+        self.surface != Surface::Inline
     }
 
-    /// Whether it is drawn as part of the document it sits in.
+    /// Whether it is drawn as part of the document it sits in — `t i` or `t a`.
     pub fn in_prose(&self) -> bool {
-        self.surface == Surface::InProse
+        self.surface != Surface::Grid
     }
 
     /// Whether this table takes the whole pane — the grid widget's own case.
-    ///
-    /// **Not `is_page()`** (#275). 真表格顯示 is a surface a run of lines in the
-    /// middle of a chapter can wear now, and the widget that clears the frame
-    /// is for the table that reaches both ends of the file. Every place that
-    /// used to ask `is_page()` meaning「the whole pane is a grid」asks this.
     pub fn takes_the_pane(&self) -> bool {
-        self.surface == Surface::Page && self.bounds == Bounds::WholeFile
+        self.surface == Surface::Grid
     }
 
     /// Whether the mode belongs to the file rather than to one block (#275).
@@ -3014,7 +3044,7 @@ impl Editor {
                     Some(l) => l == Layout::Vertical,
                     None => self.layout == Layout::Horizontal,
                 };
-                if self.table.as_ref().is_some_and(|v| v.is_page()) && wants_vertical {
+                if self.table.as_ref().is_some_and(|v| v.draws_a_grid()) && wants_vertical {
                     self.status = say!("table.vertical-not-allowed");
                     return Ok(CommandOutcome::Continue);
                 }
@@ -3841,10 +3871,22 @@ impl Editor {
     /// Reports what it did, because a mode that changes what every key means
     /// must never turn itself on quietly.
     ///
-    /// **真表格顯示** — the surface `t t` asks for. `t i` asks the same door
-    /// for the other one.
+    /// **The surface is the file's own shape** (2026-09-05). A file that is
+    /// nothing but table gets the whole window — that is what a `.csv` has
+    /// always been drawn as. Three lines of a chapter are drawn where they
+    /// stand, because clearing the chapter in order to look at three of its
+    /// lines is not what `:table` was asked for. `t t` on those three lines
+    /// says so out loud, and gets the window.
     pub fn enter_table(&mut self) -> bool {
-        self.enter_table_as(Surface::Page)
+        if !self.enter_table_as(Surface::Advanced) {
+            return false;
+        }
+        if let Some(view) = self.table.as_mut() {
+            if view.bounds == Bounds::WholeFile {
+                view.surface = Surface::Grid;
+            }
+        }
+        true
     }
 
     /// The same door, told which of the two table modes was asked for (#275).
@@ -3951,6 +3993,7 @@ impl Editor {
             grain: Grain::Cell,
             separator: Separator::Delimiter(delimiter),
             surface,
+            back: None,
             // A file a schema claims, or one whose own header row is the
             // schema, says what it is by its name — so the mode is the file's
             // and stays on when the cursor walks out of a row (#275).
@@ -4071,6 +4114,7 @@ impl Editor {
                 // at three lines of it is not what was asked for — nor may a
                 // 縱書 chapter be turned sideways for them.
                 surface,
+                back: None,
                 bounds: Bounds::Block,
                 // **Guessed, so it does not outlive the cursor** (#275). The
                 // separator was inferred from a run of tab characters; the
@@ -4160,34 +4204,45 @@ impl Editor {
         most >= 2 && enough
     }
 
-    /// Switch between the two table modes without going back to prose (#275).
+    /// Switch between the three table surfaces without going back to prose.
     ///
-    /// 「三種模式…`t i` 進表格操作，`t t` 進真表格顯示」 — and the two switch
-    /// straight into one another, so pressing the other one is never the way
-    /// out. `t q` is the way out.
+    /// 「保持源碼，表格接管，快捷鍵 ti；現在的 tt 模式，快捷鍵 ta；csv 的全屏
+    /// 表格模式，tt」 — any of the three switches straight into any other, so
+    /// pressing one of the others is never the way out. `t o` is the way out.
     fn show_table_as(&mut self, want: Surface) {
         let Some(view) = self.table.as_mut() else {
             return;
         };
         if view.surface == want {
             self.status = match want {
-                Surface::Page => say!("table.already-drawn"),
-                Surface::InProse => say!("table.already-operated"),
+                Surface::Grid => say!("table.already-the-window"),
+                Surface::Advanced => say!("table.already-drawn"),
+                Surface::Inline => say!("table.already-operated"),
             };
             return;
         }
+        // **Where `t q` goes back to** is written down the moment the grid
+        // takes the window, and cleared the moment it gives the window back:
+        // a surface that is already showing the document has nothing to
+        // return to but prose, and prose is `t o`.
+        let from = view.surface;
+        view.back = (want == Surface::Grid).then_some(from);
         view.surface = want;
         match want {
-            // A grid is read across, so 真表格顯示 turns a 縱書 page horizontal
-            // — the same rule wherever the table sits, which is what the author
-            // asked for: 「照舊把整頁轉橫」.
-            Surface::Page => {
+            // A grid is read across, so both of the drawn surfaces turn a
+            // 縱書 page horizontal — the same rule wherever the table sits,
+            // which is what the author asked for: 「照舊把整頁轉橫」.
+            Surface::Grid => {
+                self.turn_for_table();
+                self.status = say!("table.given-the-window");
+            }
+            Surface::Advanced => {
                 self.turn_for_table();
                 self.status = say!("table.drawn");
             }
             // …and 表格操作 gives the page back, because the writing around the
             // table is being read as writing again.
-            Surface::InProse => {
+            Surface::Inline => {
                 if let Some(back) = self.turned_for_table.take() {
                     self.layout = back;
                     self.zong_motion = false;
@@ -4239,7 +4294,8 @@ impl Editor {
                 goal: 0,
                 grain: Grain::Cell,
                 separator: Separator::Delimiter(delimiter),
-                surface: Surface::Page,
+                surface: Surface::Grid,
+                back: None,
                 bounds: Bounds::WholeFile,
                 reach: Reach::File,
             });
@@ -4263,7 +4319,7 @@ impl Editor {
         // of it would throw away everything around them. This line always meant
         // that; it used to have to say it by naming Markdown, which made it
         // read as an exception for one kind of table.
-        if !self.table.as_ref().is_some_and(|v| v.is_page()) {
+        if !self.table.as_ref().is_some_and(|v| v.draws_a_grid()) {
             return false;
         }
         if self.layout != Layout::Vertical {
@@ -4379,6 +4435,74 @@ impl Editor {
         }
         let mut chars = rope.line(line).chars().skip_while(|c| c.is_whitespace());
         chars.next() == Some('|') && chars.any(|c| !c.is_whitespace())
+    }
+
+    /// The buffer lines this table's **data rows** occupy: the first and the
+    /// last, both inclusive.
+    ///
+    /// **The grid widget draws between these two lines and nowhere else**
+    /// (2026-09-05). It used to draw from the top of the buffer to the bottom,
+    /// which was right for the only table it was ever given — a whole `.csv` —
+    /// and became wrong the moment `t t` started handing it three lines of a
+    /// chapter. Everything the widget measures, scrolls and clicks on is
+    /// bounded by this pair.
+    ///
+    /// The header row and the `| --- |` rule are **not** rows: the header is
+    /// drawn frozen at the top out of the schema, and the rule is drawn rather
+    /// than written. Both sit at the very start of the region — the rule is
+    /// always the line under the header — so what is left is one run of lines.
+    pub fn table_row_span(&self) -> Option<(usize, usize)> {
+        let view = self.table.as_ref()?;
+        let last_line = self.current_buffer().line_count().saturating_sub(1);
+        match view.bounds {
+            Bounds::WholeFile => Some((usize::from(view.schema.header), last_line)),
+            _ => {
+                let region = self.prose_region()?;
+                let first = region.first
+                    + usize::from(view.schema.header)
+                    + usize::from(region.rule.is_some());
+                Some((first.min(region.last), region.last.min(last_line)))
+            }
+        }
+    }
+
+    /// What to write above the columns, when the grid freezes a header.
+    ///
+    /// A delimited file's headings are its schema's — one file, one header,
+    /// settled when the file was opened. A `|` table's are **this** table's:
+    /// the mode is the file's since #275, 手冊 has forty tables in it, and the
+    /// schema is the one built from whichever of them was entered first. So
+    /// the heading row is read off the page rather than remembered, and `t ]`
+    /// into the next table names that table's columns.
+    pub fn table_headings(&self) -> Vec<String> {
+        let named = || match self.table.as_ref() {
+            Some(view) => view
+                .schema
+                .columns
+                .iter()
+                .map(|c| c.heading().to_string())
+                .collect(),
+            None => Vec::new(),
+        };
+        let Some(view) = self.table.as_ref() else {
+            return Vec::new();
+        };
+        if view.bounds == Bounds::WholeFile || !view.schema.header {
+            return named();
+        }
+        let Some(region) = self.prose_region() else {
+            return named();
+        };
+        let source = self.line_text(region.first).unwrap_or_default();
+        let cells: Vec<String> = self
+            .row_cells(region.first)
+            .into_iter()
+            .map(|span| crate::table::cell_text(&source, span))
+            .collect();
+        match cells.is_empty() {
+            true => named(),
+            false => cells,
+        }
     }
 
     /// The table **inside the document** the cursor is in, of either kind —
@@ -4533,7 +4657,7 @@ impl Editor {
     /// than out of the writer's own punctuation.
     fn grid_walls(&self, line: usize) -> Option<(usize, usize, Vec<usize>)> {
         let view = self.table.as_ref()?;
-        if view.surface != Surface::Page || view.takes_the_pane() {
+        if view.surface != Surface::Advanced {
             return None;
         }
         let (first, last) = self.table_lines_at(line)?;
@@ -4764,6 +4888,7 @@ impl Editor {
             grain: Grain::Cell,
             separator: Separator::Pipe,
             surface,
+            back: None,
             bounds: Bounds::Md,
             // **A `|` table says what it is on every one of its own lines**,
             // so the mode is the file's (#275): every `|` table in the file is
@@ -5162,7 +5287,7 @@ impl Editor {
         // **表格操作, not 真表格顯示** (#275): the writer is about to fill this
         // in, and the pipes they just asked for should be on the page while
         // they do it. `t t` draws it once it has something in it.
-        self.enter_md_table_as(Surface::InProse);
+        self.enter_md_table_as(Surface::Inline);
         self.go_to_cell(heading, 0);
         self.enter_insert();
         self.status = say!("table.written", rows.to_string(), columns.to_string());
@@ -5916,7 +6041,17 @@ impl Editor {
     }
 
     /// Step one row up or down, keeping to the same column.
+    ///
+    /// A step off the end of an in-document table walks into the prose around
+    /// it (2026-09-05); [`Self::move_cell_page`] passes `false` because a page
+    /// is a count of the **grid's** rows and running out of them is where it
+    /// stops.
     fn move_cell_row(&mut self, down: bool) {
+        self.step_cell_row(down, true);
+    }
+
+    /// The same step, told whether it may walk off the end of the table.
+    fn step_cell_row(&mut self, down: bool, may_leave: bool) {
         let Some((line, _)) = self.cell_position() else {
             return;
         };
@@ -5928,6 +6063,26 @@ impl Editor {
             let goal = self.table.as_ref().map(|v| v.goal).unwrap_or(0);
             if let Some(want) = self.md_next_row(&region, line, down) {
                 self.go_to_cell(want, goal);
+                return;
+            }
+            // **The last row is not the end of the page** (2026-09-05):
+            // 「ti, ta 這兩個模式應該允許光標上下離開表格回到正文中（現在不可
+            // 以）」. The two surfaces drawn *inside* a document are part of
+            // that document, so `j` on the bottom row walks into the paragraph
+            // under the table and `k` on the header walks into the one above
+            // it — where `table_here()` is false, so `hjkl` are letters again.
+            // The full-screen grid has no prose to walk into, and there the
+            // edge still stops.
+            if !may_leave || !self.table.as_ref().is_some_and(|v| v.in_prose()) {
+                return;
+            }
+            let last = self.current_buffer().rope().len_lines().saturating_sub(1);
+            let out = match down {
+                true => (region.last < last).then_some(region.last + 1),
+                false => region.first.checked_sub(1),
+            };
+            if let Some(out) = out {
+                self.goto_line(out + 1);
             }
             return;
         }
@@ -5958,7 +6113,7 @@ impl Editor {
         let steps = ((page as f64 * fraction).round() as usize).max(1) * count;
         for _ in 0..steps {
             let before = self.cursor;
-            self.move_cell_row(down);
+            self.step_cell_row(down, false);
             if self.cursor == before {
                 break;
             }
@@ -6432,20 +6587,23 @@ impl Editor {
         // 「get me into a table」 — from prose, from another table, from the top
         // of a document whose tables are three screens down.
         match key {
-            // **The three ways to look at a table** (#275). The author's
-            // model, 2026-09-05: 「有三种模式，一种是 prose/source 模式，表格
-            // 当作普通文本。第二个是表格操作模式…用 ti 进入。第三个是真表格
-            // 显示模式，也就是完全画成表格…用 tt 进入。」
+            // **The four ways to look at a table** (#275, remade 2026-09-05).
+            // The author's own list: 「源碼模式 to (ordinary)；保持源碼，表格
+            // 接管，快捷鍵 ti (inline)；現在的 tt 模式，快捷鍵 ta (advanced)；
+            // csv 的全屏表格模式，tt (table)。」
             //
-            // `t t` draws it. `t i` leaves the pipes and the commas on the
-            // page and gives the keys to the grid. `t q` is the one way back
-            // to prose — and the two table modes switch **straight into one
-            // another**, so `t i` inside `t t` is the middle mode and not the
-            // way out.
-            Key::Char('t') | Key::Char('i') => {
+            // `t o` is the file as it is written. `t i` leaves the pipes and
+            // the commas on the page and gives the keys to the grid. `t a`
+            // draws the grid where the table stands, inside the document it
+            // belongs to. `t t` gives the table the whole window — the widget
+            // a `.csv` has always been drawn by, now reachable from three
+            // lines of a chapter. Any of them switches **straight into any
+            // other**, so none of them is the way out.
+            Key::Char('t') | Key::Char('a') | Key::Char('i') => {
                 let want = match key {
-                    Key::Char('t') => Surface::Page,
-                    _ => Surface::InProse,
+                    Key::Char('t') => Surface::Grid,
+                    Key::Char('a') => Surface::Advanced,
+                    _ => Surface::Inline,
                 };
                 // **A file-wide mode is switched from anywhere in the file**
                 // — 「可以在文件任何位置通過 ti tt 進入表格視圖」 — so this is
@@ -6453,6 +6611,7 @@ impl Editor {
                 // two tables and is the right answer for the *keys*.
                 if self.table_here() || self.table.as_ref().is_some_and(|v| v.is_file_wide()) {
                     self.show_table_as(want);
+                    self.snap_into_the_grid();
                     return;
                 }
                 if !self.enter_table_as(want) {
@@ -6460,17 +6619,42 @@ impl Editor {
                     return;
                 }
                 self.status = match want {
-                    Surface::Page => say!("table.drawn"),
-                    Surface::InProse => say!("table.operated"),
+                    Surface::Grid => say!("table.given-the-window"),
+                    Surface::Advanced => say!("table.drawn"),
+                    Surface::Inline => say!("table.operated"),
                 };
+                self.snap_into_the_grid();
                 return;
             }
-            Key::Char('q') => {
+            // `t o` — 源碼模式, the way out of all three. It used to open a
+            // row; 加行 is `t r` since 2026-09-05, which is what freed the
+            // letter that spells the mode it now names.
+            Key::Char('o') => {
                 if self.table.is_none() {
                     self.status = say!("table.already-off");
                     return;
                 }
                 self.leave_table();
+                return;
+            }
+            // `t q` — 「只在全屏表格模式下生效，退到 markdown 文件中，且回到此
+            // 前的表格模式」. So it is not a second `t o`: it gives the window
+            // back and puts the page on whichever surface the grid took it
+            // from. A `.csv` opened as a grid came from no surface at all, and
+            // there giving the window back **is** leaving table mode.
+            Key::Char('q') => {
+                let Some(view) = self.table.as_ref() else {
+                    self.status = say!("table.already-off");
+                    return;
+                };
+                if !view.takes_the_pane() {
+                    self.status = say!("table.q-is-for-the-window");
+                    return;
+                }
+                match view.back {
+                    Some(back) => self.show_table_as(back),
+                    None => self.leave_table(),
+                }
                 return;
             }
             // `t ]` / `t [` — the next table in the file, and into it. A
@@ -6581,16 +6765,16 @@ impl Editor {
                 // of its own: without one they were folded into whatever came
                 // before, so a single `u` took back the cell you had just
                 // finished as well as the row you had just opened.
-                Key::Char('o') => {
+                Key::Char('r') => {
                     self.snapshot();
                     self.open_line_below();
                 }
-                Key::Char('O') if self.on_header_row() => {
+                Key::Char('R') if self.on_header_row() => {
                     self.snapshot();
                     self.open_line_below();
                     self.status = say!("table.nothing-above-the-header");
                 }
-                Key::Char('O') => {
+                Key::Char('R') => {
                     self.snapshot();
                     self.open_line_above();
                 }
@@ -6610,10 +6794,10 @@ impl Editor {
             return;
         }
         match key {
-            Key::Char('o') => self.md_new_row(true),
-            Key::Char('O') => self.md_new_row(false),
-            Key::Char('n') => self.md_new_column(true),
-            Key::Char('N') => self.md_new_column(false),
+            Key::Char('r') => self.md_new_row(true),
+            Key::Char('R') => self.md_new_row(false),
+            Key::Char('c') => self.md_new_column(true),
+            Key::Char('C') => self.md_new_column(false),
             Key::Char('d') => self.md_drop_row(),
             Key::Char('D') => self.md_drop_column(),
             Key::Char('j') | Key::Down => self.md_move_row(true),
@@ -6640,6 +6824,38 @@ impl Editor {
             Key::Esc => {}
             _ => self.status = say!("hint.table.after-t"),
         }
+    }
+
+    /// Put the cursor in the table the full-screen grid is about to draw.
+    ///
+    /// **The grid draws one table and clears everything else** (2026-09-05).
+    /// A `|` table's mode is the whole file's since #275, so `t t` is pressed
+    /// as often from the paragraph between two tables as from inside one — and
+    /// from there the widget has nothing to draw and paints a blank window.
+    /// The two surfaces that are drawn *in* the document have no such problem,
+    /// and there the cursor stays where it was: the mode is not a jump.
+    ///
+    /// The next table, or the one before if this was the last: the reader is
+    /// asking to look at a table, and the nearest one is the answer.
+    fn snap_into_the_grid(&mut self) {
+        let Some(view) = self.table.as_ref() else {
+            return;
+        };
+        if view.surface != Surface::Grid || view.bounds == Bounds::WholeFile {
+            return;
+        }
+        if self.prose_region().is_some() {
+            return;
+        }
+        // What the surface said stands: this is a jump made on its behalf, not
+        // news of its own.
+        let said = std::mem::take(&mut self.status);
+        self.go_to_table(true);
+        if self.prose_region().is_none() {
+            self.go_to_table(false);
+        }
+        self.snap_to_cell();
+        self.status = said;
     }
 
     /// Go to the next `|` table in the file, or the previous one, and read it.
@@ -7083,7 +7299,8 @@ impl Editor {
             ("gd gw", say!("help.table.which-row-this-names")),
             ("3gd g2-5d", say!("help.table.search-in-columns")),
             ("t/ t?", say!("help.table.who-uses-this")),
-            ("t o t d", say!("help.table.add-or-drop-row")),
+            ("t o t i t a t t", say!("help.table.four-surfaces")),
+            ("t r t d", say!("help.table.add-or-drop-row")),
             ("t s t S", say!("help.table.sort-by-column")),
             ("t y t p", say!("help.table.yank-or-put-column")),
             (":table rules off", say!("help.table.no-column-rules")),
@@ -7321,9 +7538,11 @@ impl Editor {
                 // wherever the cursor is, so they head every list, and on a
                 // page with no table under the cursor they are the whole list.
                 let mut keys = vec![
-                    ("t", say!("hint.table.draw-it")),
+                    ("o", say!("hint.table.back-to-prose")),
                     ("i", say!("hint.table.operate-it")),
-                    ("q", say!("hint.table.back-to-prose")),
+                    ("a", say!("hint.table.draw-it")),
+                    ("t", say!("hint.table.whole-window")),
+                    ("q", say!("hint.table.leave-the-window")),
                     ("] [", say!("hint.table.next-or-previous")),
                 ];
                 // **Which list is a question about the cursor, not the mode.**
@@ -7339,8 +7558,8 @@ impl Editor {
                     Some(Bounds::Md) if self.md_region().is_some() => keys.extend([
                         ("/ ?", say!("hint.table.search-columns")),
                         ("g", say!("hint.table.go-to-cell")),
-                        ("o O", say!("hint.table.add-row")),
-                        ("n N", say!("hint.table.add-column")),
+                        ("r R", say!("hint.table.add-row")),
+                        ("c C", say!("hint.table.add-column")),
                         ("d D", say!("hint.table.delete-row-or-column")),
                         ("j k", say!("hint.table.move-row")),
                         ("h l", say!("hint.table.move-column")),
@@ -7357,7 +7576,7 @@ impl Editor {
                         ("/ ?", say!("hint.table.search-columns")),
                         ("g", say!("hint.table.go-to-cell")),
                         ("s S", say!("hint.table.sort-by-column")),
-                        ("o O", say!("hint.table.add-row")),
+                        ("r R", say!("hint.table.add-row")),
                         ("d", say!("hint.table.delete-row")),
                         ("j k", say!("hint.table.move-row")),
                         ("y p", say!("hint.table.yank-or-paste-column")),
@@ -9470,7 +9689,7 @@ impl Editor {
         // grid sits. 表格操作 (`t i`) leaves the pipes on the page and does not
         // ask for the turn, so it is not this case; `t i` and `t q` are what
         // give the manuscript back, and both restore the layout the grid took.
-        if layout == Layout::Vertical && self.table.as_ref().is_some_and(|v| v.is_page()) {
+        if layout == Layout::Vertical && self.table.as_ref().is_some_and(|v| v.draws_a_grid()) {
             return;
         }
         self.layout = layout;
@@ -19184,7 +19403,11 @@ mod tests {
     }
 
     #[test]
-    fn moving_down_a_column_steps_over_the_rule_and_stops_at_the_edge() {
+    fn moving_down_a_column_steps_over_the_rule_and_walks_out_the_far_side() {
+        // 「ti, ta 這兩個模式應該允許光標上下離開表格回到正文中（現在不可以）」
+        // — the author, 2026-09-05. A table drawn *in* a document is part of
+        // it, so the row after the last one is the paragraph under the table.
+        // The rule row is still stepped over: it is drawn, not written.
         let mut ed = with_md_table();
         assert!(ed.enter_table());
         ed.goto_line(2);
@@ -19192,14 +19415,33 @@ mod tests {
         press(&mut ed, "j");
         // Line 3 is the `|---|` rule, which is drawn rather than written.
         assert_eq!(ed.cell_position().map(|(l, _)| l), Some(3));
-        press(&mut ed, "jjjj");
-        assert_eq!(
-            ed.cell_position().map(|(l, _)| l),
-            Some(4),
-            "the last row is the last row, not the prose after it"
-        );
-        press(&mut ed, "kkkk");
-        assert_eq!(ed.cell_position().map(|(l, _)| l), Some(1), "and the header is the top");
+        press(&mut ed, "j");
+        assert_eq!(ed.cell_position().map(|(l, _)| l), Some(4), "the last row");
+        press(&mut ed, "j");
+        assert_eq!(ed.cursor_line(), 5, "and out into the prose under it");
+        assert!(ed.md_region().is_none(), "where the grid's rules do not apply");
+        // Back in, over the rule again, and out the top — where `hjkl` are
+        // letters again, which is what makes the mode safe to leave on.
+        press(&mut ed, "kkk");
+        assert_eq!(ed.cell_position().map(|(l, _)| l), Some(1), "the header");
+        press(&mut ed, "k");
+        assert_eq!(ed.cursor_line(), 0, "and out above it");
+        assert!(ed.md_region().is_none(), "the paragraph over the table");
+    }
+
+    #[test]
+    fn paging_a_column_stops_at_the_table_edge_even_though_a_step_does_not() {
+        // A page is a count of the **grid's** rows, so running out of them is
+        // where it stops — `j` walking out into the prose is a step the reader
+        // asked for one row at a time.
+        let mut ed = with_md_table();
+        ed.set_page(80, 40);
+        ed.goto_line(2);
+        assert!(ed.enter_table(), "{}", ed.status());
+        press(&mut ed, "J");
+        assert_eq!(ed.cell_position().map(|(l, _)| l), Some(4), "{}", ed.status());
+        press(&mut ed, "K");
+        assert_eq!(ed.cell_position().map(|(l, _)| l), Some(1), "{}", ed.status());
     }
 
     #[test]
@@ -19237,7 +19479,7 @@ mod tests {
         let mut ed = with_md_table();
         assert!(ed.enter_table());
         // A new row below this one, and the cursor goes to it.
-        press(&mut ed, "to");
+        press(&mut ed, "tr");
         assert_eq!(ed.current_buffer().line_count(), 8);
         assert_eq!(ed.cell_position().map(|(l, _)| l), Some(4));
         press(&mut ed, "td");
@@ -19246,7 +19488,7 @@ mod tests {
             "前文\n| 字 | 讀音 |\n| -- | ---- |\n| 木 | mu   |\n| 目 | mu   |\n後文\n"
         );
         // A new column to the right — of every row, and of the rule.
-        press(&mut ed, "tn");
+        press(&mut ed, "tc");
         assert_eq!(
             ed.current_buffer().text(),
             "前文\n| 字 |   | 讀音 |\n| -- | - | ---- |\n| 木 |   | mu   |\n| 目 |   | mu   |\n後文\n"
@@ -19360,7 +19602,7 @@ mod tests {
         let mut ed = with_md_table();
         assert!(ed.enter_table());
         let before = ed.current_buffer().text();
-        press(&mut ed, "tn");
+        press(&mut ed, "tc");
         assert_ne!(ed.current_buffer().text(), before);
         press(&mut ed, "u");
         assert_eq!(ed.current_buffer().text(), before);
@@ -19442,7 +19684,7 @@ mod tests {
         press(&mut ed, "td");
         assert_eq!(ed.current_buffer().text(), before);
         assert!(ed.status().contains("標題行"), "{}", ed.status());
-        press(&mut ed, "to");
+        press(&mut ed, "tr");
         assert_eq!(ed.current_buffer().line_count(), 8, "a row was opened");
         assert_eq!(ed.cell_position().map(|(l, _)| l), Some(3));
     }
@@ -19888,7 +20130,7 @@ mod tests {
         // …and back in the real table the keys work.
         ed.goto_line(1);
         assert!(ed.md_region().is_some());
-        press(&mut ed, "to");
+        press(&mut ed, "tr");
         assert_ne!(ed.current_buffer().text(), before);
     }
 
@@ -20226,20 +20468,35 @@ mod tests {
         assert!(ed.table().unwrap().in_prose(), "{}", ed.status());
         assert!(!ed.table().unwrap().takes_the_pane(), "three lines, not the pane");
 
-        // `t t` — 真表格顯示: 「照舊把整頁轉橫」, because a grid is read across.
-        press(&mut ed, "tt");
-        assert!(ed.table().unwrap().is_page(), "{}", ed.status());
+        // `t a` — 現在的 tt 模式: 「照舊把整頁轉橫」, because a grid is read
+        // across. It is still three lines of a chapter, so it does not take
+        // the window.
+        press(&mut ed, "ta");
+        assert!(ed.table().unwrap().draws_a_grid(), "{}", ed.status());
+        assert!(ed.table().unwrap().in_prose(), "still inside the document");
         assert_eq!(ed.layout(), Layout::Horizontal, "{}", ed.status());
         assert!(!ed.table().unwrap().takes_the_pane(), "still three lines of a chapter");
 
-        // And the two switch straight into one another — `t i` is the middle
-        // mode, not the way out — which is what gives the page back.
+        // `t t` — the whole window, and `t q` gives it back to whichever
+        // surface it took it from (2026-09-05): 「退到 markdown 文件中，且回到
+        // 此前的表格模式」.
+        press(&mut ed, "tt");
+        assert!(ed.table().unwrap().takes_the_pane(), "{}", ed.status());
+        press(&mut ed, "tq");
+        assert!(ed.table().unwrap().draws_a_grid(), "{}", ed.status());
+        assert!(ed.table().unwrap().in_prose(), "back on t a, not in prose");
+
+        // And any of them switches straight into any other — `t i` is a
+        // surface, not the way out — which is what gives the page back.
         press(&mut ed, "ti");
         assert!(ed.table().unwrap().in_prose(), "{}", ed.status());
         assert_eq!(ed.layout(), Layout::Vertical, "{}", ed.status());
 
-        // `t q` is the one way back to prose.
+        // `t q` is refused outside the full-screen grid, and `t o` is the one
+        // way back to prose.
         press(&mut ed, "tq");
+        assert!(ed.table().is_some(), "t q is the window's key: {}", ed.status());
+        press(&mut ed, "to");
         assert!(ed.table().is_none(), "{}", ed.status());
     }
 
@@ -20252,7 +20509,7 @@ mod tests {
         assert!(ed.grid_on_line(1).is_empty(), "the pipes stay pipes");
         assert!(ed.table_ruler_on_line(1).is_empty(), "and no ruler over them");
 
-        press(&mut ed, "tt");
+        press(&mut ed, "ta");
         let head: Vec<char> = ed.grid_on_line(1).into_iter().map(|(_, g)| g).collect();
         assert_eq!(head, vec!['┆', '┆', '┆'], "| 字 | 讀音 |");
         // The rule row is not a row — it is the line under the head, and every
@@ -23670,7 +23927,7 @@ mod tests {
         let mut ed = typed("木,AA\n目,BB\n田,CC\n");
         ed.execute(":1").unwrap();
         assert!(ed.enter_table(), "{}", ed.status());
-        press(&mut ed, "to");
+        press(&mut ed, "td");
         assert!(ed.status().contains("y p"), "{}", ed.status());
         assert_eq!(ed.current_buffer().text(), "木,AA\n目,BB\n田,CC\n");
     }

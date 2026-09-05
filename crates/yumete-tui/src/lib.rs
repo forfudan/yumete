@@ -6910,7 +6910,7 @@ mod tests {
         // 表格操作 (#275): the pipes stay on the page, which is what the
         // assertions below read. `t t` re-glyphs them into a grid instead.
         assert!(
-            editor.enter_table_as(yumete_core::editor::Surface::InProse),
+            editor.enter_table_as(yumete_core::editor::Surface::Inline),
             "{}",
             editor.status()
         );
@@ -7015,7 +7015,7 @@ mod tests {
         // 表格操作 (#275): the pipes stay on the page, which is what the
         // assertions below read. `t t` re-glyphs them into a grid instead.
         assert!(
-            editor.enter_table_as(yumete_core::editor::Surface::InProse),
+            editor.enter_table_as(yumete_core::editor::Surface::Inline),
             "{}",
             editor.status()
         );
@@ -7080,7 +7080,7 @@ mod tests {
         // 表格操作 (#275): the pipes stay on the page, which is what the
         // assertions below read. `t t` re-glyphs them into a grid instead.
         assert!(
-            editor.enter_table_as(yumete_core::editor::Surface::InProse),
+            editor.enter_table_as(yumete_core::editor::Surface::Inline),
             "{}",
             editor.status()
         );
@@ -7126,7 +7126,7 @@ mod tests {
         // 表格操作 (#275): the pipes stay on the page, which is what the
         // assertions below read. `t t` re-glyphs them into a grid instead.
         assert!(
-            editor.enter_table_as(yumete_core::editor::Surface::InProse),
+            editor.enter_table_as(yumete_core::editor::Surface::Inline),
             "{}",
             editor.status()
         );
@@ -7223,7 +7223,7 @@ mod tests {
         editor.on_key(Key::Char('h'));
         editor.on_key(Key::Char('h'));
         assert!(
-            editor.enter_table_as(yumete_core::editor::Surface::InProse),
+            editor.enter_table_as(yumete_core::editor::Surface::Inline),
             "{}",
             editor.status()
         );

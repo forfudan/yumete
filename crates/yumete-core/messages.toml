@@ -2785,6 +2785,13 @@ zhs = "把这个档案当表格读；:table off 退出"
 en = "read this file as a grid; :table off leaves"
 
 [[message]]
+# 表格幫助：四種看法
+key = "help.table.four-surfaces"
+zht = "源碼／表格操作／畫成表格／全窗表格；t q 把窗口交回去"
+zhs = "源码／表格操作／画成表格／全窗表格；t q 把窗口交回去"
+en = "source / table keys / drawn in place / the whole window; t q gives the window back"
+
+[[message]]
 # 表格幫助：格子裏下一格／上一格
 key = "help.table.next-previous-cell"
 zht = "格子裏：下一格／上一格"
@@ -3357,9 +3364,9 @@ en = "add a row (below / above)"
 [[message]]
 # t 之後認得哪些鍵
 key = "hint.table.after-t"
-zht = "t 後面：t q / ? g f i s S o O n N d D j k h l y p < = > ] ["
-zhs = "t 后面：t q / ? g f i s S o O n N d D j k h l y p < = > ] ["
-en = "after t: t q / ? g f i s S o O n N d D j k h l y p < = > ] ["
+zht = "t 後面：o i a t q / ? g f s S r R c C d D j k h l y p < = > ] ["
+zhs = "t 后面：o i a t q / ? g f s S r R c C d D j k h l y p < = > ] ["
+en = "after t: o i a t q / ? g f s S r R c C d D j k h l y p < = > ] ["
 
 [[message]]
 # 表格提示：這欄靠左／居中／靠右
@@ -3427,9 +3434,9 @@ en = "table · character"
 [[message]]
 # 非 | 表格裏 t 之後可以按的鍵
 key = "hint.table.csv-keys"
-zht = "t 後面（這種表格）：/ ? g i s S o O d j k y p"
-zhs = "t 后面（这种表格）：/ ? g i s S o O d j k y p"
-en = "after t, in this kind of table: / ? g i s S o O d j k y p"
+zht = "t 後面（這種表格）：/ ? g I s S r R d j k y p"
+zhs = "t 后面（这种表格）：/ ? g I s S r R d j k y p"
+en = "after t, in this kind of table: / ? g I s S r R d j k y p"
 
 [[message]]
 # 表格提示：刪這一行
@@ -3453,7 +3460,7 @@ zhs = "详情栏"
 en = "the detail panel"
 
 [[message]]
-# t 選單：t t 這一行
+# t 選單：t a 這一行
 key = "hint.table.draw-it"
 zht = "畫成表格"
 zhs = "画成表格"
@@ -3479,6 +3486,13 @@ key = "hint.table.in-a-cell"
 zht = "格內"
 zhs = "格内"
 en = "in a cell"
+
+[[message]]
+# t 選單：t q 這一行（只在全屏表格模式下有用）
+key = "hint.table.leave-the-window"
+zht = "交回窗口，回到剛纔那個表格模式"
+zhs = "交回窗口，回到刚才那个表格模式"
+en = "give the window back, to the surface it took"
 
 [[message]]
 # 表格提示：重排對齊
@@ -3591,6 +3605,13 @@ key = "hint.table.who-uses-this-character"
 zht = "誰用了這個字"
 zhs = "谁用了这个字"
 en = "who uses this character"
+
+[[message]]
+# t 選單：t t 這一行
+key = "hint.table.whole-window"
+zht = "整個窗口都給表格"
+zhs = "整个窗口都给表格"
+en = "give the table the whole window"
 
 [[message]]
 # 表格提示：取格／行
@@ -4835,11 +4856,11 @@ zhs = "已经是对齐的"
 en = "already lined up"
 
 [[message]]
-# t t，但這張表已經是真表格顯示
+# t a，但這張表已經畫在正文裏了
 key = "table.already-drawn"
-zht = "已經畫成表格了——t i 看原文，t q 退出"
-zhs = "已经画成表格了——t i 看原文，t q 退出"
-en = "already drawn as a grid — t i shows the source, t q leaves"
+zht = "已經畫成表格了——t t 全窗，t i 看原文，t o 退出"
+zhs = "已经画成表格了——t t 全窗，t i 看原文，t o 退出"
+en = "already drawn as a grid — t t takes the window, t i shows the source, t o leaves"
 
 [[message]]
 # :sort 但本來就是這個順序
@@ -4858,9 +4879,16 @@ en = "not reading anything as a grid"
 [[message]]
 # t i，但這張表已經在表格操作模式
 key = "table.already-operated"
-zht = "已經在表格操作模式了——t t 畫成表格，t q 退出"
-zhs = "已经在表格操作模式了——t t 画成表格，t q 退出"
-en = "already in table keys — t t draws it, t q leaves"
+zht = "已經在表格操作模式了——t a 畫成表格，t t 全窗，t o 退出"
+zhs = "已经在表格操作模式了——t a 画成表格，t t 全窗，t o 退出"
+en = "already in table keys — t a draws it, t t takes the window, t o leaves"
+
+[[message]]
+# t t，但這張表已經佔着整個窗口
+key = "table.already-the-window"
+zht = "已經是全窗表格了——t q 交回窗口，t o 退出"
+zhs = "已经是全窗表格了——t q 交回窗口，t o 退出"
+en = "already the whole window — t q gives it back, t o leaves"
 
 [[message]]
 # 竪排下進了真表格顯示，整頁跟着轉橫（接在剛說完的那句後面）
@@ -5038,11 +5066,11 @@ zhs = "格与格之间的分隔符删不掉"
 en = "the divider between cells cannot be deleted"
 
 [[message]]
-# t t：把表格畫成格子（真表格顯示）
+# t a：在正文裏把表格畫成格子
 key = "table.drawn"
-zht = "真表格顯示——t i 看原文，t q 退出"
-zhs = "真表格显示——t i 看原文，t q 退出"
-en = "drawn as a grid — t i shows the source, t q leaves"
+zht = "畫成表格——t t 全窗，t i 看原文，t o 退出"
+zhs = "画成表格——t t 全窗，t i 看原文，t o 退出"
+en = "drawn as a grid — t t takes the window, t i shows the source, t o leaves"
 
 [[message]]
 # 在格子裏按 Enter
@@ -5099,6 +5127,13 @@ key = "table.filter-changed-shape"
 zht = "命令送回來的第 {0} 行是 {1} 欄，這張表是 {2} 欄——沒有換"
 zhs = "命令送回来的第 {0} 行是 {1} 栏，这张表是 {2} 栏——没有换"
 en = "line {0} came back with {1} columns and this table has {2} — nothing replaced"
+
+[[message]]
+# t t：把整個窗口交給表格
+key = "table.given-the-window"
+zht = "全窗表格——t q 交回窗口，t o 退出"
+zhs = "全窗表格——t q 交回窗口，t o 退出"
+en = "the whole window — t q gives it back, t o leaves"
 
 [[message]]
 # 想刪掉標題行
@@ -5292,9 +5327,9 @@ en = "one column only — a table needs two, or write the |---| line first"
 [[message]]
 # t i：原文照舊，按鍵歸表格（表格操作）
 key = "table.operated"
-zht = "表格操作——原文照舊，t t 畫成表格，t q 退出"
-zhs = "表格操作——原文照旧，t t 画成表格，t q 退出"
-en = "table keys — the source stays, t t draws it, t q leaves"
+zht = "表格操作——原文照舊，t a 畫成表格，t o 退出"
+zhs = "表格操作——原文照旧，t a 画成表格，t o 退出"
+en = "table keys — the source stays, t a draws it, t o leaves"
 
 [[message]]
 # 貼進的格子比表格的欄數寬
@@ -5323,6 +5358,13 @@ key = "table.pasted-grid"
 zht = "貼進了 {0}×{1} 格"
 zhs = "贴进了 {0}×{1} 格"
 en = "pasted {0}×{1} cells"
+
+[[message]]
+# 不在全屏表格模式下按了 t q
+key = "table.q-is-for-the-window"
+zht = "t q 只在全窗表格裏交回窗口——退出表格按 t o"
+zhs = "t q 只在全窗表格里交回窗口——退出表格按 t o"
+en = "t q gives back the window, and only the window — t o leaves the table"
 
 [[message]]
 # 加了一行之後
