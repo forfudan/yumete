@@ -362,6 +362,33 @@ impl Schema {
         })
     }
 
+    /// A schema for a grid whose first row is **data**, its columns named by
+    /// number (#216).
+    ///
+    /// A 碼表 has no header — 「字⇥碼」 all the way down — so reading its first
+    /// line as the column names loses that line and calls one column 「一」.
+    /// The numbers are the names the column-number row already draws (#184),
+    /// so nothing new has to be shown for them to be usable.
+    pub fn numbered(columns: usize, delimiter: char) -> Schema {
+        Schema {
+            files: Vec::new(),
+            key: None,
+            delimiter,
+            header: false,
+            columns: (0..columns)
+                .map(|i| Column {
+                    name: format!("{}", i + 1),
+                    label: None,
+                    kind: Kind::String,
+                    hidden: false,
+                })
+                .collect(),
+            details: Vec::new(),
+            link: None,
+            ranges: HashMap::new(),
+        }
+    }
+
     /// Make a bare schema out of a file's own header row.
     ///
     /// What `yumete -t` falls back on: every CSV already says what its columns
@@ -531,6 +558,15 @@ pub fn cells(line: &str, delimiter: char) -> Vec<(usize, usize)> {
 /// a different question with a different answer (#216).
 const GUESSES: [char; 3] = ['\t', ',', ';'];
 
+/// The delimiters a **block inside a document** may be cut by (#216).
+///
+/// The three above and `&`, which is what LaTeX's `tabular` and Typst's
+/// `#table` put between cells. `&` is not among [`GUESSES`] because that list
+/// is asked of a whole *file*, where a run of lines each holding one `&` is as
+/// likely to be prose about HTML entities; asked of the few lines a person is
+/// standing in and has just pressed the key about, it is worth guessing.
+pub const BLOCK_GUESSES: [char; 4] = ['\t', ',', ';', '&'];
+
 /// Which character splits these lines into cells, if one plainly does.
 ///
 /// The test is not 「which appears most often」 but 「which appears the **same**
@@ -540,6 +576,15 @@ const GUESSES: [char; 3] = ['\t', ',', ';'];
 /// every line holds a different number of 逗號, comes back `None` rather than
 /// being cut into ragged cells.
 pub fn sniff(lines: &[String]) -> Option<char> {
+    sniff_among(lines, &GUESSES)
+}
+
+/// The same question, asked of a named set of candidates.
+///
+/// The set is the only thing that differs between a file and a block in a
+/// document (#216) — the *rule* is one rule, and keeping it in one place is
+/// what stops the two from drifting into disagreeing about what a grid is.
+pub fn sniff_among(lines: &[String], guesses: &[char]) -> Option<char> {
     let rows: Vec<&String> = lines.iter().filter(|l| !l.trim().is_empty()).collect();
     if rows.len() < 2 {
         // One line says nothing about what is regular: a single 「甲,乙」 is as
@@ -547,7 +592,7 @@ pub fn sniff(lines: &[String]) -> Option<char> {
         // evidence worth acting on.
         return None;
     }
-    GUESSES.into_iter().find(|&c| {
+    guesses.iter().copied().find(|&c| {
         let mut counts = rows.iter().map(|l| l.matches(c).count());
         let first = counts.next().unwrap_or(0);
         first > 0 && counts.all(|n| n == first)

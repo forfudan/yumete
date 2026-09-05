@@ -2719,6 +2719,13 @@ zhs = "这栏靠左／居中／靠右"
 en = "this column left / centre / right"
 
 [[message]]
+# 表格提示：文中的表格區塊，t 後面只有這幾個
+key = "hint.table.block-keys"
+zht = "t 後面（文中的表格區塊）：/ ? g y p"
+zhs = "t 后面（文中的表格区块）：/ ? g y p"
+en = "after t, in a table block: / ? g y p"
+
+[[message]]
 # 表格提示：走格
 key = "hint.table.by-cell"
 zht = "走格"
@@ -4121,6 +4128,20 @@ key = "table.backspace-would-join-cells"
 zht = "格首：再刪就把兩格併成一格了"
 zhs = "格首：再删就把两格并成一格了"
 en = "start of a cell: one more would join it to the one before"
+
+[[message]]
+# :table 在文中認出一個分隔區塊（#216）
+key = "table.block-entered"
+zht = "文中的表格區塊：{0} 欄 {1} 行，用「{2}」分欄"
+zhs = "文中的表格区块：{0} 栏 {1} 行，用「{2}」分栏"
+en = "a table block in the document: {0} columns, {1} rows, split by '{2}'"
+
+[[message]]
+# 在文中的表格區塊裏按了會重寫整個檔案的鍵
+key = "table.block-is-read-where-it-lies"
+zht = "文中的表格區塊只讀不改寫——要整理它，先 :table pipe 或 :table csv"
+zhs = "文中的表格区块只读不改写——要整理它，先 :table pipe 或 :table csv"
+en = "a table block in a document is read where it lies, never rewritten — :table pipe or :table csv converts it first"
 
 [[message]]
 # 進表格模式，照某個 schema 讀

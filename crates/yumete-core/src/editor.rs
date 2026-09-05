@@ -369,9 +369,10 @@ const JUMPS: usize = 100;
 /// The last answer [`Editor::md_region`] gave, and what it was an answer to.
 #[derive(Debug, Clone)]
 struct MdCache {
-    /// Which buffer (by id), which revision of it, and which line the cursor
-    /// was on.
-    asked: (u64, u64, usize),
+    /// Which buffer (by id), which revision of it, which line the cursor was
+    /// on — and which **kind** of region was asked for, because since #216
+    /// two of them are walked and one cache answers both.
+    asked: (u64, u64, usize, Bounds),
     region: Option<crate::mdtable::Region>,
 }
 
@@ -474,6 +475,19 @@ pub enum Bounds {
     /// Walked out from the cursor by [`crate::mdtable::region`]: up and down
     /// while the line is still a `|` row, and never into a fenced block.
     Md,
+    /// A run of delimited lines **recognised where it stands** (#216).
+    ///
+    /// A 碼表 pasted into a chapter, a `dict.yaml` whose table begins under a
+    /// `---` preamble, a LaTeX `tabular`: the file is not a table and never
+    /// becomes one, but these few lines of it are. Walked out from the cursor
+    /// the same way `Md` is — up and down while the line still holds the
+    /// separator — and stopping at a blank line, which is *a* boundary and not
+    /// the boundary, because a table often sits directly under its heading.
+    ///
+    /// **Recognised, not converted.** `:table pipe` rewrites a block so that
+    /// the file says what it is on every one of its own lines; this is the
+    /// other answer, for the block that must stay byte for byte as it is.
+    Block,
 }
 
 impl TableView {
@@ -3635,6 +3649,13 @@ impl Editor {
             return self.enter_md_table();
         }
         let Some(path) = self.current_buffer().path().map(Path::to_path_buf) else {
+            // A buffer with no name has no schema to find and no name for one
+            // to claim — but the lines under the cursor may still be a table
+            // (#216), and a 碼表 pasted into a scratch buffer is exactly where
+            // somebody wants to look at one.
+            if self.enter_block_table() {
+                return true;
+            }
             self.status = say!("table.no-file-name-no-schema");
             return false;
         };
@@ -3671,6 +3692,14 @@ impl Editor {
                 if schema.columns.len() < 2
                     || !self.looks_delimited(delimiter, schema.columns.len())
                 {
+                    // The **file** is not a table. A run of its lines still
+                    // may be (#216): a 碼表 under a heading, a `dict.yaml`
+                    // whose entries begin after a `---` preamble, a `tabular`
+                    // in the middle of a paper. That block is recognised where
+                    // it stands rather than converted.
+                    if self.enter_block_table() {
+                        return true;
+                    }
                     self.status = say!("table.file-is-not-a-grid", path.file_name().unwrap_or_default().to_string_lossy());
                     return false;
                 }
@@ -3739,6 +3768,150 @@ impl Editor {
             .map(|l| l.trim_end_matches(['\n', '\r']).to_string())
             .filter(|l| !l.trim().is_empty())
             .collect()
+    }
+
+    /// Read the run of delimited lines under the cursor as a grid (#216).
+    ///
+    /// **Recognised, not declared.** The other three doors are somebody saying
+    /// what a file is — a schema beside it, a name like `.tsv`, a `|` on every
+    /// line. This one is the editor looking at a few lines of a document and
+    /// agreeing that they are a table: a 碼表 under a heading, a `dict.yaml`
+    /// whose entries start after its `---` preamble, a `tabular` in a paper.
+    /// Nothing is rewritten and nothing is written down — the block is walked
+    /// again from wherever the cursor is, every time it is wanted.
+    ///
+    /// Answers whether it entered, and says nothing when it did not: the
+    /// caller has a better message for 「this is not a table」 than this does,
+    /// because the caller knows which door was being tried.
+    fn enter_block_table(&mut self) -> bool {
+        let rope = self.current_buffer().rope();
+        let at = rope.char_to_line(self.cursor.min(rope.len_chars()));
+        // **The walk is the test.** Each candidate is tried by walking the
+        // block out with it and asking whether what comes back is rectangular;
+        // the first that answers yes is the separator. Guessing first and
+        // walking after cannot work — the lines to guess from are the block,
+        // and the block is not known until the separator is: a 碼表 sitting
+        // directly under `## 第三章` has a heading in its own paragraph, and no
+        // count of tabs over *that* run agrees about anything.
+        for delimiter in self.separators_worth_trying() {
+            let Some(region) = self.delimited_block(at, delimiter) else {
+                continue;
+            };
+            // **Check before entering.** If the walked block's rows disagree
+            // about how many cells they have, the separator was guessed wrong,
+            // and a crooked grid drawn over somebody's prose is worse than
+            // being told no.
+            let counts: Vec<usize> = (region.first..=region.last)
+                .map(|line| {
+                    crate::table::cells(&self.line_text(line).unwrap_or_default(), delimiter)
+                        .len()
+                })
+                .collect();
+            if !Self::rows_agree(&counts) {
+                continue;
+            }
+            // The grid is as wide as its **widest** row, not as wide as the
+            // count they agreed on: the entries of a `dict.yaml` that carry a
+            // 權重 are still carrying it, and a column drawn nowhere is a
+            // column that cannot be walked into.
+            let columns = counts.iter().copied().max().unwrap_or(0);
+            let rows = counts.len();
+            self.table = Some(TableView {
+                // Its first row is **data**: a 碼表 has no header, and reading
+                // one as the column names would lose that row and call one
+                // column 「一」. The columns are named by number, which is what
+                // the column-number row already draws (#184).
+                schema: crate::table::Schema::numbered(columns, delimiter),
+                from: PathBuf::new(),
+                goal: 0,
+                grain: Grain::Cell,
+                separator: Separator::Delimiter(delimiter),
+                // Drawn as part of the document it sits in. The grid widget
+                // clears the frame, and clearing the chapter in order to look
+                // at three lines of it is not what was asked for — nor may a
+                // 縱書 chapter be turned sideways for them.
+                surface: Surface::InProse,
+                bounds: Bounds::Block,
+            });
+            self.snap_to_cell();
+            self.status = say!(
+                "table.block-entered",
+                columns,
+                rows,
+                named_delimiter(delimiter)
+            );
+            return true;
+        }
+        false
+    }
+
+    /// The separators to try on the block under the cursor, best first (#216).
+    ///
+    /// **What the cursor is standing on comes first** — `ci"`'s own idea, so
+    /// nothing has to be prompted for, and it is how a person says 「this one」
+    /// about a line that holds a tab *and* a comma. Then, if lines are
+    /// selected, whichever candidate they agree about; then the rest, in the
+    /// order [`crate::table::BLOCK_GUESSES`] puts them.
+    fn separators_worth_trying(&self) -> Vec<char> {
+        let mut order: Vec<char> = Vec::new();
+        let mut add = |c: char| {
+            if !order.contains(&c) {
+                order.push(c);
+            }
+        };
+        if let Some(c) = self
+            .char_at_cursor()
+            .filter(|c| crate::table::BLOCK_GUESSES.contains(c))
+        {
+            add(c);
+        }
+        let (from, to) = self.selection();
+        if to > from + 1 {
+            let rope = self.current_buffer().rope();
+            let first = rope.char_to_line(from.min(rope.len_chars()));
+            let last = rope.char_to_line(to.saturating_sub(1).min(rope.len_chars()));
+            let lines: Vec<String> = (first..=last)
+                .filter_map(|line| self.line_text(line))
+                .map(|line| line.trim_end_matches(['\n', '\r']).to_string())
+                .collect();
+            if let Some(c) = crate::table::sniff_among(&lines, &crate::table::BLOCK_GUESSES) {
+                add(c);
+            }
+        }
+        for c in crate::table::BLOCK_GUESSES {
+            add(c);
+        }
+        order
+    }
+
+    /// Whether a block's rows agree about how many cells they have (#216).
+    ///
+    /// **A short block must agree exactly; a long one only mostly.** With two
+    /// or three rows there is no such thing as「most of them」, and letting two
+    /// lines out of three carry it is how a paragraph of English with a comma
+    /// in it becomes a grid. Past that, the slack is real: a `dict.yaml` has a
+    /// 權重 on some entries and not on others, and refusing the whole table
+    /// over the entries that lack one would be refusing every real one.
+    fn rows_agree(counts: &[usize]) -> bool {
+        if counts.len() < 2 {
+            return false;
+        }
+        // Ties go to the wider count, so a table whose rows are half two cells
+        // and half three is read as three — the narrow rows are short, not the
+        // wide ones long.
+        let Some(most) = counts
+            .iter()
+            .copied()
+            .max_by_key(|&n| (counts.iter().filter(|&&m| m == n).count(), n))
+        else {
+            return false;
+        };
+        let agreed = counts.iter().filter(|&&n| n == most).count();
+        let enough = match counts.len() < 4 {
+            true => agreed == counts.len(),
+            false => agreed * 3 >= counts.len() * 2,
+        };
+        most >= 2 && enough
     }
 
     /// Go back to reading the file as plain text.
@@ -3831,7 +4004,11 @@ impl Editor {
     fn table_here(&self) -> bool {
         match self.table.as_ref().map(|v| v.bounds) {
             Some(Bounds::WholeFile) => true,
-            Some(Bounds::Md) => self.md_region().is_some(),
+            // Both of the in-document kinds are a grid for the lines they
+            // occupy and nowhere else, which is the same question and now one
+            // call: walk out of a 碼表 block into the paragraph under it and
+            // `hjkl` are letters again.
+            Some(Bounds::Md) | Some(Bounds::Block) => self.prose_region().is_some(),
             None => false,
         }
     }
@@ -3904,39 +4081,125 @@ impl Editor {
         chars.next() == Some('|') && chars.any(|c| !c.is_whitespace())
     }
 
-    /// The Markdown table the cursor is in — worked out afresh, never stored.
+    /// The table **inside the document** the cursor is in, of either kind —
+    /// worked out afresh, never stored.
     ///
     /// A remembered `first` is wrong the moment a row is opened above it, and
     /// the walk costs a few lines around the cursor. So the region is a
     /// question the editor asks, not a fact it keeps.
-    pub fn md_region(&self) -> Option<crate::mdtable::Region> {
-        if self.table.as_ref().map(|v| v.bounds) != Some(Bounds::Md) {
-            return None;
-        }
+    ///
+    /// Two walks answer it, one per [`Bounds`], and everything that only wants
+    /// to know **where the table stops** asks this rather than either: cell
+    /// motion, the column search and the tint the renderer draws are the same
+    /// question whether the cells are cut by pipes or by tabs.
+    pub fn prose_region(&self) -> Option<crate::mdtable::Region> {
+        let view = self.table.as_ref()?;
+        let bounds = view.bounds;
+        let separator = view.separator;
         let rope = self.current_buffer().rope();
         let line = rope.char_to_line(self.cursor.min(rope.len_chars()));
         // Keyed by the buffer's **id**, not by its index — see `blocks_through`.
-        let asked = (self.current_buffer().id(), self.current_buffer().revision(), line);
+        let asked = (
+            self.current_buffer().id(),
+            self.current_buffer().revision(),
+            line,
+            bounds,
+        );
         if let Some(cache) = self.md_cache.borrow().as_ref() {
             if cache.asked == asked {
                 return cache.region.clone();
             }
         }
-        // The fence is checked **here**, not only on the way in. Checking it at
-        // the door was not enough: `gg`, `G`, `:N` and a search all land
-        // outside the cells — the manual says so — and from a quoted example
-        // in a code block `t t` then reformatted somebody's text. The region
-        // is what everything downstream asks about, so this is where a table
-        // that is really a quotation has to stop being one.
-        let region = match self.md_row_in_a_fence() {
-            true => None,
-            false => crate::mdtable::region(|i| self.line_text(i), line),
+        let region = match (bounds, separator) {
+            // The fence is checked **here**, not only on the way in. Checking
+            // it at the door was not enough: `gg`, `G`, `:N` and a search all
+            // land outside the cells — the manual says so — and from a quoted
+            // example in a code block `t t` then reformatted somebody's text.
+            // The region is what everything downstream asks about, so this is
+            // where a table that is really a quotation has to stop being one.
+            (Bounds::Md, _) => match self.md_row_in_a_fence() {
+                true => None,
+                false => crate::mdtable::region(|i| self.line_text(i), line),
+            },
+            (Bounds::Block, Separator::Delimiter(d)) => self.delimited_block(line, d),
+            _ => None,
         };
         *self.md_cache.borrow_mut() = Some(MdCache {
             asked,
             region: region.clone(),
         });
         region
+    }
+
+    /// The `|` table the cursor is in.
+    ///
+    /// The pipe half of [`Self::prose_region`], for the things that are really
+    /// about pipes: the rule row, the reflow, `t n`/`t D` and the rest of the
+    /// Markdown surgery, none of which mean anything to a block that is being
+    /// read where it lies and never rewritten.
+    pub fn md_region(&self) -> Option<crate::mdtable::Region> {
+        match self.table.as_ref().map(|v| v.bounds) {
+            Some(Bounds::Md) => self.prose_region(),
+            _ => None,
+        }
+    }
+
+    /// The delimited block the cursor is in (#216).
+    pub fn block_region(&self) -> Option<crate::mdtable::Region> {
+        match self.table.as_ref().map(|v| v.bounds) {
+            Some(Bounds::Block) => self.prose_region(),
+            _ => None,
+        }
+    }
+
+    /// The run of lines around `at` that `d` cuts into cells (#216).
+    ///
+    /// **Up and down while the line still holds the separator**, and never
+    /// across a blank line. That is the whole rule, and it is the one a person
+    /// applies by eye: the table ends where the tabs do. A blank line stops it
+    /// as well, so a table with a blank line in the middle of it is two blocks
+    /// rather than one — the safe way round, because the other way a single
+    /// stray tab three paragraphs down would swallow the prose between.
+    ///
+    /// The columns are the **widest** row's, not the first's: a `dict.yaml`
+    /// whose entries are 「字⇥碼」 with a 權重 on some of them is still one
+    /// table, and a schema that named two columns would hide the third.
+    fn delimited_block(&self, at: usize, d: char) -> Option<crate::mdtable::Region> {
+        let holds = |line: usize| -> bool {
+            self.line_text(line).is_some_and(|text| {
+                let text = text.trim_end_matches(['\n', '\r']);
+                !text.trim().is_empty() && text.contains(d)
+            })
+        };
+        if !holds(at) {
+            return None;
+        }
+        let mut first = at;
+        while first > 0 && holds(first - 1) {
+            first -= 1;
+        }
+        let mut last = at;
+        let end = self.current_buffer().rope().len_lines();
+        while last + 1 < end && holds(last + 1) {
+            last += 1;
+        }
+        let columns = (first..=last)
+            .map(|line| {
+                crate::table::cells(&self.line_text(line).unwrap_or_default(), d).len()
+            })
+            .max()
+            .unwrap_or(0);
+        Some(crate::mdtable::Region {
+            first,
+            last,
+            // A block has no rule row and no alignments: it is somebody's data
+            // file, and the only thing being read out of it is where the cells
+            // are. `is_rule` is false for every line, which is what lets the
+            // cell motions be shared with the `|` table unchanged.
+            rule: None,
+            aligns: Vec::new(),
+            columns,
+        })
     }
 
     /// Read the `|` table under the cursor as a grid.
@@ -4191,7 +4454,7 @@ impl Editor {
         self.set_cursor(at);
         self.clamp_cursor();
         self.forget_the_document();
-        self.status = say!("table.now-delimited", rows, delimiter);
+        self.status = say!("table.now-delimited", rows, named_delimiter(delimiter));
     }
 
     /// Lay the table under the cursor out again. Returns whether it changed.
@@ -4415,9 +4678,17 @@ impl Editor {
             self.status = say!("table.not-in-a-table");
             return;
         };
-        // A table laid out **in the text** already has a sort that keeps that
-        // layout right: moving its rows means rewriting them, padding and all,
-        // where a grid's rows are moved and the renderer lays them out again.
+        // A block recognised where it stands is not rewritten (#216) — and
+        // the sort below rebuilds the file from its own lines, which for a few
+        // lines of a chapter is the whole chapter.
+        if view.bounds == Bounds::Block {
+            self.status = say!("table.block-is-read-where-it-lies");
+            return;
+        }
+        // A `|` table laid out **in the text** already has a sort that keeps
+        // that layout right: moving its rows means rewriting them, padding and
+        // all, where a grid's rows are moved and the renderer lays them out
+        // again.
         if view.in_prose() {
             let descending = keys.first().map(|&(_, d)| d).unwrap_or(false);
             if let Some((column, _)) = keys.first() {
@@ -4609,7 +4880,7 @@ impl Editor {
 
     /// The next line of the grid that holds data.
     fn next_row(&self, line: usize, down: bool) -> Option<usize> {
-        if let Some(region) = self.md_region() {
+        if let Some(region) = self.prose_region() {
             return self.md_next_row(&region, line, down);
         }
         let last = motion::last_line(self.current_buffer().rope());
@@ -4756,16 +5027,23 @@ impl Editor {
 
     /// The lines a grid's rows sit on, top to bottom.
     ///
-    /// Every line of the file, as it happens: a blank line is still a row, of
-    /// one empty cell, and a column yanked over it carries the blank along so
-    /// that putting it back puts it back where it came from. What this is for
-    /// is that `t y` and `t p` ask **one** question — they used to each walk
-    /// the lines their own way, and tightening the filter on one side alone
-    /// would have shifted every value below the blank by a row without a
-    /// single test noticing.
+    /// Every line of the file when the file *is* the table: a blank line is
+    /// still a row, of one empty cell, and a column yanked over it carries the
+    /// blank along so that putting it back puts it back where it came from.
+    /// What this is for is that `t y` and `t p` ask **one** question — they
+    /// used to each walk the lines their own way, and tightening the filter on
+    /// one side alone would have shifted every value below the blank by a row
+    /// without a single test noticing.
+    ///
+    /// **A block recognised in a document is bounded by the block** (#216).
+    /// Without that, `t p` inside a 碼表 pasted into a chapter would write the
+    /// yanked column down the whole manuscript.
     fn cell_lines(&self) -> Vec<usize> {
-        let last = motion::last_line(self.current_buffer().rope());
-        (0..=last)
+        let (first, last) = match self.block_region() {
+            Some(region) => (region.first, region.last),
+            None => (0, motion::last_line(self.current_buffer().rope())),
+        };
+        (first..=last)
             .filter(|&line| !self.row_cells(line).is_empty())
             .collect()
     }
@@ -4961,10 +5239,11 @@ impl Editor {
         let Some((line, _)) = self.cell_position() else {
             return;
         };
-        // A Markdown table is a few lines of a document, so `j` at its last
-        // row stops rather than walking out into the prose — and the rule row
-        // is drawn, not written, so nothing ever lands on it.
-        if let Some(region) = self.md_region() {
+        // A table inside a document is a few lines of it, so `j` at its last
+        // row stops rather than walking out into the prose — and the rule row,
+        // where there is one, is drawn rather than written, so nothing ever
+        // lands on it.
+        if let Some(region) = self.prose_region() {
             let goal = self.table.as_ref().map(|v| v.goal).unwrap_or(0);
             if let Some(want) = self.md_next_row(&region, line, down) {
                 self.go_to_cell(want, goal);
@@ -5355,6 +5634,28 @@ impl Editor {
                 self.status = say!("table.row-and-column", line + 1, cell + 1);
                 return;
             }
+        }
+        // **A block recognised where it stands is read, not rewritten** (#216).
+        // It is somebody's 碼表 sitting in a chapter, and every key below this
+        // point is written against a file that is nothing *but* the table: the
+        // sort rebuilds the file from its own lines, `t n` and `t D` are
+        // Markdown's column surgery, and `t o` would put a blank line through
+        // the middle of the block and end it there. What is left is what makes
+        // sense on a block — walking it, searching down its columns, and
+        // taking or writing one column of it, which `cell_lines` bounds.
+        if self.block_region().is_some() {
+            match key {
+                Key::Char('/') | Key::Char('?') => {
+                    self.definition_preview = key == Key::Char('?');
+                    let span = self.sequence_span();
+                    self.search_columns_in(span);
+                }
+                Key::Char('y') => self.yank_column(),
+                Key::Char('p') => self.put_column(),
+                Key::Esc => {}
+                _ => self.status = say!("hint.table.block-keys"),
+            }
+            return;
         }
         // `t1s` / `t1S` — sort by a column named by number. `t s` with no
         // number is the column you are standing in, which is what it has always
@@ -6155,6 +6456,13 @@ impl Editor {
             // are not offered there because they are refused there — and the
             // menu listing them was the one place the editor said a key
             // existed and then said it did not.
+            // A block is read where it lies (#216), so the keys that rewrite a
+            // file are not offered here — because they are refused here.
+            Pending::Table if self.block_region().is_some() => (say!("hint.table.title"), vec![
+                    ("/ ?", say!("hint.table.search-columns")),
+                    ("g", say!("hint.table.go-to-cell")),
+                    ("y p", say!("hint.table.yank-or-paste-column")),
+                ]),
             Pending::Table if self.md_region().is_none() => (say!("hint.table.title"), vec![
                     ("/ ?", say!("hint.table.search-columns")),
                     ("g", say!("hint.table.go-to-cell")),
@@ -6456,7 +6764,7 @@ impl Editor {
         let anchored = pattern.contains('^') || pattern.contains('$');
         let separator = view.separator;
         let first = usize::from(view.schema.header);
-        let region = self.md_region();
+        let region = self.prose_region();
         let rope = self.current_buffer().rope();
         let last = motion::last_line(rope);
         // Down the first column, then down the second: the order is the whole
@@ -13117,6 +13425,18 @@ fn listed(items: &[String]) -> String {
 ///
 /// One cell is not a block: text with no tab and no line break is what `p`
 /// has always pasted, and goes on being it.
+/// A delimiter as a person can read it on the status line.
+///
+/// A tab printed raw is a status line that says 「用「   」分欄」 — the one
+/// delimiter a reader cannot see is the one this editor's own `:export tsv`
+/// writes.
+fn named_delimiter(delimiter: char) -> String {
+    match delimiter {
+        '\t' => "Tab".to_string(),
+        d => d.to_string(),
+    }
+}
+
 fn sniff_grid(text: &str) -> Option<Vec<Vec<String>>> {
     let lines: Vec<&str> = text.lines().collect();
     if lines.is_empty() {
@@ -20675,5 +20995,140 @@ mod tests {
         // The substitution is undoable.
         ed.on_key(Key::Char('u'));
         assert_eq!(ed.current_buffer().text(), "aaa\nbaa");
+    }
+
+    // ── #216 · 文中的表格區塊 ────────────────────────────────────────────
+    //
+    // The third tier: a run of delimited lines **recognised where it stands**.
+    // Not a file that is a table (`.csv`), not a table declared with pipes —
+    // a 碼表 somebody pasted into a chapter, a `dict.yaml` under its preamble.
+
+    #[test]
+    fn a_code_table_pasted_into_a_chapter_is_read_where_it_stands() {
+        let mut ed = typed("## 第三章\n木,AA\n目,BB\n田,CC\n\n那一年的雨下得久。\n");
+        ed.execute(":2").unwrap();
+        assert!(ed.enter_table(), "{}", ed.status());
+        let region = ed.block_region().expect("standing inside the block");
+        // The heading above it is not a row of it, and neither is the prose
+        // two lines below: **a blank line is a boundary, the heading is the
+        // other one** — it holds no comma, so the walk stops there.
+        assert_eq!((region.first, region.last), (1, 3));
+        // Its first line is data, not a header: a 碼表 has no header, and
+        // reading 木 as a column name would lose the row.
+        assert_eq!(ed.cell_text(1, 0), "木");
+        assert_eq!(ed.cell_text(3, 1), "CC");
+        assert!(ed.table_here());
+        ed.execute(":6").unwrap();
+        assert!(!ed.table_here(), "the paragraph under it is prose");
+    }
+
+    #[test]
+    fn a_block_is_entered_on_the_delimiter_the_cursor_is_standing_on() {
+        // Both a tab and a comma hold every line together. Standing on the
+        // comma says which one is meant — nothing has to be prompted for.
+        let mut ed = Editor::new();
+        let dir = std::env::temp_dir().join(format!("yumete-block-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let file = dir.join("章.md");
+        std::fs::write(&file, "序\n木\tA,B\n目\tC,D\n田\tE,F\n").unwrap();
+        ed.open_file(&file).unwrap();
+        ed.execute(":2").unwrap();
+        // Column 1 by default — the tab, which BLOCK_GUESSES tries first.
+        assert!(ed.enter_table(), "{}", ed.status());
+        assert_eq!(ed.cell_text(1, 1), "A,B", "the tab, tried first");
+        ed.leave_table();
+        // Now stand on the comma and ask again.
+        ed.execute(":2").unwrap();
+        press(&mut ed, "lll");
+        assert_eq!(ed.char_at_cursor(), Some(','), "on the comma");
+        assert!(ed.enter_table(), "{}", ed.status());
+        assert_eq!(ed.cell_text(1, 0), "木\tA", "the comma, because you were on it");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_dict_under_a_preamble_keeps_the_column_only_some_rows_carry() {
+        // A generated `dict.yaml`: three dashes, a preamble, three dashes,
+        // then the entries — and a 權重 on the entries that have earned one.
+        let mut ed = typed(concat!(
+            "---\n",
+            "name: yuhao\n",
+            "---\n",
+            "木,AA\n",
+            "目,BB,100\n",
+            "田,CC\n",
+            "水,DD\n",
+        ));
+        ed.execute(":4").unwrap();
+        assert!(ed.enter_table(), "{}", ed.status());
+        let region = ed.block_region().expect("inside the entries");
+        assert_eq!((region.first, region.last), (3, 6), "the preamble is not the table");
+        // Three columns, not two: the row that carries a 權重 is still
+        // carrying it, and a column drawn nowhere cannot be walked into.
+        assert_eq!(ed.cell_text(4, 2), "100");
+    }
+
+    #[test]
+    fn prose_is_not_a_table_because_it_has_commas_in_it() {
+        let mut ed = typed("She waited, and waited.\nThen the rain, at last, came.\n");
+        assert!(!ed.enter_table(), "two lines that disagree are not a grid");
+        assert!(ed.block_region().is_none());
+    }
+
+    #[test]
+    fn two_lines_of_a_block_must_agree_exactly_but_a_long_one_may_not() {
+        // Fewer than four rows: 「most of them」 means nothing, so all of them.
+        assert!(!Editor::rows_agree(&[2, 3]));
+        assert!(Editor::rows_agree(&[2, 2]));
+        assert!(!Editor::rows_agree(&[2, 2, 3]));
+        // Past that the slack is real data: a 權重 on some entries only.
+        assert!(Editor::rows_agree(&[2, 3, 2, 2]));
+        assert!(!Editor::rows_agree(&[2, 3, 4, 2]));
+        // One cell is not a column, however many lines agree about it.
+        assert!(!Editor::rows_agree(&[1, 1, 1, 1]));
+    }
+
+    #[test]
+    fn putting_a_column_into_a_block_stops_at_the_blank_line() {
+        // `t p` walks the *file* in a `.csv`. In a block it must walk the
+        // block — otherwise a 碼表 pasted into a manuscript writes the yanked
+        // column down the rest of the chapter.
+        let mut ed = typed("木,AA\n目,BB\n田,CC\n\n他寫下,然後停筆\n");
+        ed.execute(":1").unwrap();
+        assert!(ed.enter_table(), "{}", ed.status());
+        press(&mut ed, "ty");
+        press(&mut ed, "l");
+        press(&mut ed, "tp");
+        assert_eq!(ed.cell_text(0, 1), "木");
+        assert_eq!(ed.cell_text(2, 1), "田");
+        assert_eq!(
+            ed.line_text(4).unwrap().trim_end_matches('\n'),
+            "他寫下,然後停筆",
+            "the prose under the block is not a row of it"
+        );
+    }
+
+    #[test]
+    fn a_block_is_read_where_it_lies_and_not_sorted() {
+        // Sorting rewrites the lines. In somebody else's document, the lines
+        // around the block are the document — so the answer is no, with the
+        // two commands that *would* do it named.
+        let mut ed = typed("木,AA\n目,BB\n田,CC\n");
+        ed.execute(":1").unwrap();
+        assert!(ed.enter_table(), "{}", ed.status());
+        ed.execute(":table sort 1").unwrap();
+        assert!(ed.status().contains("只讀"), "{}", ed.status());
+        assert_eq!(ed.current_buffer().text(), "木,AA\n目,BB\n田,CC\n");
+    }
+
+    #[test]
+    fn the_keys_a_block_does_not_answer_say_which_ones_it_does() {
+        let mut ed = typed("木,AA\n目,BB\n田,CC\n");
+        ed.execute(":1").unwrap();
+        assert!(ed.enter_table(), "{}", ed.status());
+        press(&mut ed, "to");
+        assert!(ed.status().contains("y p"), "{}", ed.status());
+        assert_eq!(ed.current_buffer().text(), "木,AA\n目,BB\n田,CC\n");
     }
 }
