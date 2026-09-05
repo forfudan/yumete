@@ -2541,7 +2541,19 @@ pub fn complete_at(line: &str) -> (usize, Vec<Choice>) {
                 name: e.name,
                 needs: e.needs,
                 alias: e.aliases.first().copied(),
-                short: shortest(e.name, COMMANDS.iter().map(|c| c.name)),
+                // **Among the aliases too.** `:row` has no alias of its own
+                // and no other *name* starts with `ro`, so the shortest walk
+                // over names alone offered `(ro)` — while `ro` is `:readonly`'s
+                // declared alias, and an exact alias beats a prefix in
+                // `resolve`. The menu was promising a spelling that did
+                // something else.
+                short: shortest(
+                    e.name,
+                    COMMANDS
+                        .iter()
+                        .filter(|c| c.name != e.name)
+                        .flat_map(|c| std::iter::once(c.name).chain(c.aliases.iter().copied())),
+                ),
                 help: e.help,
                 leading: ":",
                 under: String::new(),
@@ -3314,12 +3326,46 @@ mod tests {
 
         // And what the menu shows is worked out from the table it is showing,
         // so a new command that collides lengthens it in the same edit.
-        let short = |name: &'static str| shortest(name, COMMANDS.iter().map(|c| c.name));
+        //
+        // Worked out over the **names and the aliases** together, because both
+        // are things `resolve` matches: `ro` names no other command and would
+        // have been offered for `:row`, while `ro` is `:readonly`'s declared
+        // alias and an alias beats a prefix.
+        let short = |name: &'static str| {
+            shortest(
+                name,
+                COMMANDS
+                    .iter()
+                    .filter(|c| c.name != name)
+                    .flat_map(|c| std::iter::once(c.name).chain(c.aliases.iter().copied())),
+            )
+        };
         assert_eq!(short("yume"), Some("y"));
         assert_eq!(short("render"), Some("ren"), "recover and redo are in the way");
         assert_eq!(short("sh"), None, "nothing shorter than the whole word");
-        for entry in COMMANDS {
-            if let Some(short) = short(entry.name) {
+        // `r` and `ro` are both taken — the second by `:readonly`'s alias —
+        // so `:row` is offered with no short form at all, the way `:sh` is.
+        assert_eq!(short("row"), None, "`ro` is `:readonly`'s");
+        // Over what `complete` actually hands the menu, not over a second
+        // derivation of it — the menu prints `Choice::short`, so that is the
+        // string this has to hold to account.
+        for choice in complete("") {
+            let entry = COMMANDS.iter().find(|e| e.name == choice.name).unwrap();
+            assert_eq!(choice.short, short(entry.name), "one rule, not two");
+            if let Some(short) = choice.short {
+                // It resolves, **and it resolves to this one**. Checking only
+                // that it parsed let `:row (ro)` onto the menu for a year:
+                // `:ro` parses, as `:readonly`.
+                // Listed under the shape it is typed in rather than as a word:
+                // `:!` is never a word on its own, it is the mark the shell
+                // command follows.
+                let named = resolve(short);
+                assert!(
+                    entry.name == "!command" ||
+                    named == entry.name || entry.aliases.contains(&named),
+                    "the menu offers `:{short}` for `:{}`, and it names `:{named}`",
+                    entry.name
+                );
                 assert!(
                     parse(&format!(":{short}")).is_ok()
                         || matches!(
