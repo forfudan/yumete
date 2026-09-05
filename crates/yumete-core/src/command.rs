@@ -135,6 +135,10 @@ pub enum Command {
     /// `:table schema` — the schema file in the other work area, written next
     /// to the data first if none claims it yet (Feature #218).
     OpenTableSchema,
+    /// `:table new 3 4` — an empty `|` table of this shape, blank lines around
+    /// it, the cursor typing in its first heading (Feature #276). `rows`
+    /// counts the heading; the rule row is not a row.
+    NewTable { rows: usize, columns: usize },
     /// `:table detail [on|off]` — the panel; `None` toggles.
     ShowDetail(Option<bool>),
     /// `:table detail 40` — how wide it is.
@@ -749,19 +753,6 @@ pub fn parse(input: &str) -> Result<Command, CommandError> {
             "" => Err(CommandError::MissingArgument("markdown")),
             "footnote" | "fn" => Ok(Command::Markdown(MarkdownBit::Footnote)),
             "footnote inline" | "fni" => Ok(Command::Markdown(MarkdownBit::InlineNote)),
-            _ if rest.starts_with("table ") => {
-                let spec = rest["table ".len()..].trim();
-                let (cols, rows) = spec.split_once(['x', 'X', '×']).unwrap_or((spec, "2"));
-                match (cols.trim().parse::<usize>(), rows.trim().parse::<usize>()) {
-                    (Ok(c), Ok(r)) if (1..=32).contains(&c) && (1..=200).contains(&r) => {
-                        Ok(Command::Markdown(MarkdownBit::Table(c, r)))
-                    }
-                    _ => Err(CommandError::InvalidArgument {
-                        command: "markdown table",
-                        value: spec.to_string(),
-                    }),
-                }
-            }
             other => Err(CommandError::InvalidArgument {
                 command: "markdown",
                 value: other.to_string(),
@@ -843,6 +834,26 @@ pub fn parse(input: &str) -> Result<Command, CommandError> {
             // 「這張表到底是怎麼讀的」 — the answer is a file, so the
             // command opens it rather than printing it (#218).
             "schema" => Ok(Command::OpenTableSchema),
+            // 「迅速在 markdown 中插入一個三行四列表格」 (#276). Two numbers,
+            // 行 then 欄, the way the author said it and the way a word
+            // processor's「插入表格」dialog asks. **`rows` counts the heading**:
+            // the rule row underneath is punctuation, and nobody means it when
+            // they say three.
+            _ if rest == "new" || rest.starts_with("new ") => {
+                let spec = rest["new".len()..].trim();
+                let mut numbers = spec.split(['x', 'X', '×', ' ', '\t']).filter(|w| !w.is_empty());
+                let rows = numbers.next().unwrap_or("3");
+                let columns = numbers.next().unwrap_or("3");
+                match (rows.parse::<usize>(), columns.parse::<usize>()) {
+                    (Ok(r), Ok(c)) if (1..=200).contains(&r) && (1..=32).contains(&c) => {
+                        Ok(Command::NewTable { rows: r, columns: c })
+                    }
+                    _ => Err(CommandError::InvalidArgument {
+                        command: "table new",
+                        value: spec.to_string(),
+                    }),
+                }
+            }
             "header" => Ok(Command::SetTableHeader(None)),
             "header on" => Ok(Command::SetTableHeader(Some(true))),
             "header off" => Ok(Command::SetTableHeader(Some(false))),
@@ -1146,12 +1157,6 @@ const MARKDOWN_BITS: &[Word] = &[
         needs: &[],
         then: Args::Words(FOOTNOTE_KINDS),
     },
-    Word {
-        name: "table",
-        help: "cmd.markdown-bits.table",
-        needs: &[],
-        then: Args::Free("3x4"),
-    },
 ];
 
 /// …and the one word a footnote takes.
@@ -1169,8 +1174,6 @@ pub enum MarkdownBit {
     Footnote,
     /// `^[…]`, the cursor inside the brackets.
     InlineNote,
-    /// A table of this many columns and rows, with its rule row.
-    Table(usize, usize),
 }
 
 /// The sections `:help` offers.
@@ -1655,6 +1658,12 @@ const TABLE: &[Word] = &[
         help: "cmd.table.off",
         needs: &[],
         then: Args::None,
+    },
+    Word {
+        name: "new",
+        help: "cmd.table.new",
+        needs: &[],
+        then: Args::Free("<行> <欄>"),
     },
     Word {
         name: "check",

@@ -3293,6 +3293,10 @@ impl Editor {
                 self.open_schema();
                 Ok(CommandOutcome::Continue)
             }
+            Command::NewTable { rows, columns } => {
+                self.new_table(rows, columns);
+                Ok(CommandOutcome::Continue)
+            }
             Command::SetTableRules(rules) => {
                 if let Some(rules) = rules {
                     self.table_rules = rules;
@@ -4584,6 +4588,77 @@ impl Editor {
         if let Some(view) = self.table.as_mut() {
             view.goal = cell;
         }
+    }
+
+    /// Write an empty `|` table here and stand in its first heading (#276).
+    ///
+    /// The author, 2026-09-05: 「`:table new 3 4`，迅速在 markdown 中插入一個三
+    /// 行四列表格，上下有空白行，光標自動到標題欄最左的一格並進去編輯模式。」
+    ///
+    /// **`rows` counts the heading**, the way a word processor's「3 × 4」does:
+    /// `3 4` is a heading and two rows of data, four columns wide. The rule row
+    /// is not a row — it is punctuation, and nobody means it when they say
+    /// three.
+    ///
+    /// The blank line above and below is not tidiness: a `|` row welded to the
+    /// paragraph above it is a table Markdown does not see, and the reader who
+    /// asked for a table would have got a paragraph with pipes in it.
+    fn new_table(&mut self, rows: usize, columns: usize) {
+        if self.refuse_readonly() {
+            return;
+        }
+        let rows = rows.max(1);
+        let columns = columns.max(1);
+        let mut block = vec![
+            crate::mdtable::blank_row(columns),
+            crate::mdtable::rule_row(columns),
+        ];
+        for _ in 1..rows {
+            block.push(crate::mdtable::blank_row(columns));
+        }
+        let rope = self.current_buffer().rope();
+        let here = rope.char_to_line(self.cursor.min(rope.len_chars()));
+        let empty = |e: &Self, line: usize| {
+            e.line_text(line)
+                .map(|t| t.trim().is_empty())
+                .unwrap_or(true)
+        };
+        // An empty line is where the writer already made room; anywhere else
+        // the table goes *under* the line they are standing on rather than
+        // through the middle of it.
+        let at_line = match empty(self, here) {
+            true => here,
+            false => here + 1,
+        };
+        // The blank line above, when the line before is not already one.
+        let above = at_line > 0 && !empty(self, at_line - 1);
+        if above {
+            block.insert(0, String::new());
+        }
+        // …and below, when what this pushes down is not one either.
+        if !empty(self, at_line) {
+            block.push(String::new());
+        }
+        let text = block.join("\n");
+        let rope = self.current_buffer().rope();
+        let (at, text) = match at_line >= rope.len_lines() {
+            true => (rope.len_chars(), format!("\n{text}\n")),
+            false => (rope.line_to_char(at_line), format!("{text}\n")),
+        };
+        self.snapshot();
+        self.without_cell_guard(|e| e.current_buffer_mut().insert(at, &text));
+        // The heading is the first `|` line of what was just written, which is
+        // one further down when a blank line went in ahead of it.
+        let heading = at_line + usize::from(above);
+        let start = self.current_buffer().rope().line_to_char(heading);
+        self.move_head(start);
+        // Reading it as a grid is what makes ⇥ walk the cells, so the table is
+        // entered before the cursor is put in a cell — `go_to_cell` asks the
+        // view which columns are drawn.
+        self.enter_md_table();
+        self.go_to_cell(heading, 0);
+        self.enter_insert();
+        self.status = say!("table.written", rows.to_string(), columns.to_string());
     }
 
     /// Put a new row in below the cursor's (or above it).
@@ -6213,44 +6288,6 @@ impl Editor {
                 self.set_cursor(at + 2);
                 self.mode = Mode::Insert;
                 self.status = say!("md.inline-note-inserted");
-            }
-            MarkdownBit::Table(columns, rows) => {
-                let head: String = (1..=columns)
-                    .map(|n| format!(" {n} "))
-                    .collect::<Vec<_>>()
-                    .join("|");
-                let rule: String = std::iter::repeat_n(" --- ", columns)
-                    .collect::<Vec<_>>()
-                    .join("|");
-                let body: String = std::iter::repeat_n("   ", columns)
-                    .collect::<Vec<_>>()
-                    .join("|");
-                let mut table = format!("|{head}|\n|{rule}|\n");
-                for _ in 0..rows {
-                    table.push_str(&format!("|{body}|\n"));
-                }
-                // On a line of its own: a table welded onto the end of a
-                // sentence is not a table.
-                let rope = self.current_buffer().rope();
-                let line = rope.char_to_line(self.cursor.min(rope.len_chars()));
-                let at = match line + 1 < rope.len_lines() {
-                    true => rope.line_to_char(line + 1),
-                    false => rope.len_chars(),
-                };
-                let lead = match at == 0 || rope.char(at.saturating_sub(1)) == '\n' {
-                    true => String::new(),
-                    false => "\n".to_string(),
-                };
-                self.snapshot();
-                let text = format!("{lead}{table}");
-                if !self.edit_insert(at, &text) {
-                    return;
-                }
-                // In the first cell of the first row, which is where the first
-                // thing anybody types goes.
-                let first = at + lead.chars().count();
-                self.set_cursor(first + 1);
-                self.status = say!("md.table-inserted", columns, rows);
             }
         }
     }
@@ -19677,15 +19714,58 @@ mod tests {
         type_keys(&mut ed, "存疑");
         assert!(ed.current_buffer().text().starts_with("^[存疑]"), "{}", ed.current_buffer().text());
 
-        // A table of the size asked for, on a line of its own.
-        let mut ed = typed("前文。\n");
+    }
+
+    /// #276. The author, 2026-09-05: 「`:table new 3 4`，迅速在 markdown 中插入
+    /// 一個三行四列表格，上下有空白行，光標自動到標題欄最左的一格並進去編輯模
+    /// 式。」 It used to be `:markdown table 4x3` — columns first, rows meaning
+    /// *data* rows, no blank lines and no Insert mode — and that spelling is
+    /// gone rather than kept beside this one.
+    #[test]
+    fn a_new_table_is_written_with_room_around_it_and_typed_into() {
+        let mut ed = typed("前文。\n後文。\n");
         press(&mut ed, "gg");
-        ed.execute(":markdown table 3x4").unwrap();
+        ed.execute(":table new 3 4").unwrap();
         let text = ed.current_buffer().text();
-        let rows: Vec<&str> = text.lines().filter(|l| l.starts_with('|')).collect();
-        assert_eq!(rows.len(), 6, "a header, a rule and four rows: {text}");
-        assert_eq!(rows[0].matches('|').count(), 4, "three columns: {text}");
+        let lines: Vec<&str> = text.lines().collect();
+        let rows: Vec<&str> = lines.iter().copied().filter(|l| l.starts_with('|')).collect();
+        assert_eq!(rows.len(), 4, "a heading, a rule and two more rows: {text}");
+        assert_eq!(rows[0].matches('|').count(), 5, "four columns: {text}");
         assert!(rows[1].contains("---"), "{text}");
+
+        // 「上下有空白行」 — and the prose is still on both sides of it.
+        let first = lines.iter().position(|l| l.starts_with('|')).unwrap();
+        let last = lines.iter().rposition(|l| l.starts_with('|')).unwrap();
+        assert_eq!(lines[0], "前文。", "{text}");
+        assert!(lines[first - 1].trim().is_empty(), "a blank line above: {text}");
+        assert!(lines[last + 1].trim().is_empty(), "a blank line below: {text}");
+        assert!(lines.contains(&"後文。"), "the prose under it is still there: {text}");
+
+        // 「光標自動到標題欄最左的一格並進去編輯模式」
+        assert_eq!(ed.mode(), Mode::Insert, "typing goes straight in");
+        type_keys(&mut ed, "字");
+        let text = ed.current_buffer().text();
+        let heading = text.lines().find(|l| l.starts_with('|')).unwrap();
+        // The row is padded as it is typed (#212), so the cell is asked for
+        // rather than the spelling of the line.
+        let cells = crate::mdtable::split(heading);
+        assert_eq!(cells[0].trim(), "字", "the first heading took it: {heading}");
+        assert!(cells[1].trim().is_empty(), "and only it: {heading}");
+
+        // Standing on a blank line uses it rather than pushing one more in.
+        let mut ed = typed("前文。\n\n後文。\n");
+        press(&mut ed, "gg");
+        press(&mut ed, "j");
+        ed.execute(":table new 2 2").unwrap();
+        let text = ed.current_buffer().text();
+        assert!(!text.contains("\n\n\n"), "no line the writer did not ask for: {text:?}");
+
+        // Two numbers, and only sane ones.
+        let mut ed = typed("前文。\n");
+        assert!(ed.execute(":table new 0 4").is_err());
+        assert!(ed.execute(":table new 4 99").is_err());
+        // On its own it is a small one rather than an error.
+        assert!(ed.execute(":table new").is_ok());
     }
 
     #[test]
