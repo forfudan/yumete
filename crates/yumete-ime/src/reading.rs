@@ -166,9 +166,16 @@ impl Reader for YumeReader {
         // it. 古 is deliberately not among them — a character only 古籍 has is
         // exactly the one a reader stumbles on.
         const EVERYDAY: [char; 4] = ['簡', '繁', '臺', '港'];
-        let field = self.annotations.lookup(&ch.to_string()).charset;
+        let field = self.charset(ch)?;
         let tags = field.split('-').next().unwrap_or("");
         Some(!EVERYDAY.iter().any(|t| tags.contains(*t)))
+    }
+
+    fn charset(&self, ch: char) -> Option<String> {
+        if self.annotations.is_empty() {
+            return None;
+        }
+        Some(self.annotations.lookup(&ch.to_string()).charset)
     }
 
     fn available(&self) -> bool {

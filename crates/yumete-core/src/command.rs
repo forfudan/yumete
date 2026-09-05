@@ -61,6 +61,9 @@ pub enum Command {
     /// `:check punct` — half-width marks in Chinese text, `...` for ……, and
     /// the 「 nothing closes (Feature #238).
     CheckPunct,
+    /// `:check charset` — the characters no current standard carries, before
+    /// the typesetter's font finds out (Feature #240).
+    CheckCharset,
     /// `:<n>` or `:goto <n>` (alias `:g`) — put the cursor on line `n`.
     GotoLine(usize),
     /// `:recover` — load the crash-recovery draft into the buffer;
@@ -464,6 +467,7 @@ pub fn parse(input: &str) -> Result<Command, CommandError> {
         "check" => match rest {
             "usage" => Ok(Command::CheckUsage),
             "punct" => Ok(Command::CheckPunct),
+            "charset" => Ok(Command::CheckCharset),
             // `:check` on its own asks what to check rather than guessing:
             // 用字 is the first of several, and the day 標點 lands a bare
             // `:check` that had quietly meant one of them would change what
@@ -2299,13 +2303,20 @@ const WORD_LEVELS: &[Word] = &[
 
 /// What `:check` can be asked to look over (Feature #233).
 ///
-/// Two words. 空格 is the third, and the list is why adding this one cost a
-/// line: a command that had taken nothing at all would have had to be
-/// re-shaped, and every `:check` anybody had typed would have changed meaning.
+/// Three words, and 空格 is the fourth. This is why `:check` took a word list
+/// from the first day it had one word: a command that had taken nothing at all
+/// would have had to be re-shaped here, and every `:check` anybody had typed
+/// would have changed meaning under them.
 const CHECK: &[Word] = &[
     Word {
         name: "usage",
         help: "cmd.check.usage",
+        needs: &[],
+        then: Args::None,
+    },
+    Word {
+        name: "charset",
+        help: "cmd.check.charset",
         needs: &[],
         then: Args::None,
     },
