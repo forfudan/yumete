@@ -165,10 +165,17 @@ pub fn check(text: &str, extra: &[String]) -> Vec<Slip> {
     // **Longest first.** 什麼 holds a 麼, and without this the two groups both
     // fire on one word: the manuscript would be told it is inconsistent about
     // 麼 by a scan that had already counted the same character as 什麼.
-    let mut all: Vec<(usize, &str)> = words
+    //
+    // **The reader's own groups first among equals.** `sort_by_key` is stable,
+    // so whichever side is chained first wins a spelling the two share — and
+    // the built-ins winning meant a config of `裡 裏` could never be honoured:
+    // both spellings landed in the built-in group, which is written `裏 裡`, so
+    // the scan reported the opposite of what the reader had asked for. The
+    // group numbering is untouched by this; only which group claims a hit is.
+    let mut all: Vec<(usize, &str)> = owned
         .iter()
-        .map(|w| (w.group, w.text))
-        .chain(owned.iter().map(|w| (w.group, w.text.as_str())))
+        .map(|w| (w.group, w.text.as_str()))
+        .chain(words.iter().map(|w| (w.group, w.text)))
         .collect();
     all.sort_by_key(|(_, t)| std::cmp::Reverse(t.chars().count()));
 
@@ -289,6 +296,32 @@ mod tests {
         assert_eq!(slips.len(), 1, "{text}: {slips:?}");
         assert_eq!(slips[0].instead, "裏");
         assert_eq!(slips[0].written, "裡");
+    }
+
+    /// The built-in table writes 「裏 裡」. A reader who prefers 裡 says so in
+    /// the config, and *their* order is the one that must decide — with the
+    /// built-ins scanned first this was silently impossible, and the scan told
+    /// a 裡-writing manuscript to write 裏.
+    #[test]
+    fn the_readers_own_group_wins_a_spelling_the_table_also_holds() {
+        let text = "那裡。\n那裡。\n那裏。\n";
+        let slips = check(text, &["裡 裏".to_string()]);
+        assert_eq!(slips.len(), 1, "{slips:?}");
+        assert_eq!(slips[0].written, "裏");
+        assert_eq!(slips[0].instead, "裡");
+        assert_eq!(slips[0].line, 2);
+    }
+
+    /// …and a spelling only the reader's group names still lands in it, rather
+    /// than being pulled into a built-in group that shares its other half.
+    #[test]
+    fn a_readers_group_keeps_a_spelling_a_built_in_group_shares() {
+        let text = "檯燈。\n檯燈。\n台燈。\n";
+        let slips = check(text, &["檯 台".to_string()]);
+        assert_eq!(slips.len(), 1, "{slips:?}");
+        assert_eq!(slips[0].written, "台");
+        assert_eq!(slips[0].instead, "檯");
+        assert_eq!(slips[0].line, 2);
     }
 
     /// A one-word group in a config is a line somebody is still writing.

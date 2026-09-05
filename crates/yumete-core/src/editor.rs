@@ -8839,7 +8839,13 @@ impl Editor {
             .map(Path::to_path_buf);
         self.add_buffer(buffer);
         self.set_cursor(0);
-        self.status = say!("check.usage-found", n);
+        // The listing stops at `GREP_LIMIT`; the count must say so, or the
+        // status line reports 八百處 over a buffer holding five hundred and the
+        // reader believes they have seen them all. `:grep` has always said it.
+        self.status = match n > GREP_LIMIT {
+            true => say!("check.usage-too-many", GREP_LIMIT),
+            false => say!("check.usage-found", n),
+        };
     }
 
     /// `:diff [檔名]` — what changed, by 詞 (Feature #235).
@@ -13362,12 +13368,19 @@ impl Editor {
     /// is settled by the word it is in rather than by a coin toss over a
     /// dictionary entry; see [`yumete_cjk::Reader`].
     ///
+    /// **What it cannot settle: a polyphone whose readings differ only in
+    /// tone.** The 讀音表 is toneless — 認為 is stored `ren wei` — so 為 `wéi`
+    /// and 為 `wèi` ask it the same question and it gives the same answer;
+    /// 難, 好, 教 and 中 are the same shape. Those take the common reading and
+    /// may need a hand. 了, 行, 和 and 長 differ in spelling and are settled.
+    ///
     /// **`rare` is the one people actually want.** A novel with a reading over
     /// every character is a textbook, not a novel; a novel with a reading over
-    /// 饕餮 and over nothing else is a novel a reader can finish. So `:ruby auto
-    /// rare` keeps only the words holding a character outside 通用規範漢字表 —
-    /// and keeps the *word*, because 「饕」 alone read `tāo` above one character
-    /// of a two-character word is worse typography than either extreme.
+    /// the handful nobody knows is a novel a reader can finish. So `:ruby auto
+    /// rare` keeps only the words holding a character that **no** standard in
+    /// current use carries — 通用規範, 通規繁, 臺灣, 香港 — and keeps the
+    /// *word*, because one character of a two-character word read alone is
+    /// worse typography than either extreme.
     ///
     /// The markup is mono-ruby ([`crate::ruby::SPLIT`]): one group per
     /// character, which is how CJK ruby is set and what [`crate::zong`] already
@@ -19376,6 +19389,32 @@ mod tests {
         assert!(ed.status().contains("沒查出問題"), "{}", ed.status());
         assert_eq!(ed.buffer_count(), buffers, "no buffer for no findings");
         std::fs::remove_dir_all(&dir).ok();
+    }
+
+    /// `:check usage` answers as a jumpable listing, and the count in the
+    /// status line has to be a count of what the listing holds.
+    #[test]
+    fn check_usage_lists_the_slips_and_says_when_it_stopped_listing() {
+        let mut ed = typed("那裏很冷。\n他站在裏面。\n她走進屋裡。\n");
+        assert!(ed.execute("check usage").is_ok());
+        let out = ed.current_buffer().text();
+        assert!(out.contains(":3:") && out.contains('裡') && out.contains('裏'), "{out}");
+        assert!(ed.status().contains('1'), "{}", ed.status());
+
+        // Past `GREP_LIMIT` the buffer holds the first five hundred and the
+        // status line used to name a number nothing on screen could reach.
+        let mut text = "那裏。\n".repeat(GREP_LIMIT + 200);
+        text.push_str(&"那裡。\n".repeat(GREP_LIMIT + 1));
+        let mut ed = typed(&text);
+        assert!(ed.execute("check usage").is_ok());
+        let lines = ed.current_buffer().text().lines().count();
+        assert_eq!(lines, GREP_LIMIT, "the listing stops at the limit");
+        assert!(
+            ed.status().contains(&GREP_LIMIT.to_string())
+                && !ed.status().contains(&(GREP_LIMIT + 1).to_string()),
+            "{}",
+            ed.status()
+        );
     }
 
     #[test]
