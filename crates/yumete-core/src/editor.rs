@@ -15733,6 +15733,13 @@ mod tests {
         assert!(ed.execute("o!").is_err());
         assert!(ed.execute("edit!").is_err());
         assert!(ed.execute("open!").is_err());
+        // **Not even with an argument.** `e` and `o` are `open`'s own aliases,
+        // and the walk over the six commands that take a bang used to skip
+        // `open` — which takes none — and land on `export`, so `:e! 第三章.md`
+        // typed by a hand meaning「re-read it」 wrote an export over it.
+        assert!(ed.execute("e! 第三章.md").is_err());
+        assert!(ed.execute("o! 第三章.md").is_err());
+        assert!(!dir.join("第三章.md").exists(), "nothing was written");
 
         std::fs::remove_dir_all(&dir).ok();
     }
