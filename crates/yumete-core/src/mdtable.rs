@@ -461,8 +461,18 @@ impl Parts {
     /// only ordering this editor can honestly claim without a pronunciation
     /// table in front of it.
     pub fn sort_by(&mut self, column: usize, descending: bool) {
+        self.sort_by_keys(&[(column, descending)]);
+    }
+
+    /// The same, by several columns at once: 「對第一列升序，第二列降序，第八列
+    /// 升序」 (`t1a2d8as`).
+    ///
+    /// Each key is tried in the order it was typed, and the first one that
+    /// tells two rows apart decides — which is what makes a second key mean
+    /// anything at all: it only ever sees rows the first one called equal.
+    pub fn sort_by_keys(&mut self, keys: &[(usize, bool)]) {
         self.square();
-        let key = |row: &Vec<String>| -> (bool, f64, String) {
+        let key = |row: &Vec<String>, column: usize| -> (bool, f64, String) {
             let cell = row.get(column).cloned().unwrap_or_default();
             match cell.trim().parse::<f64>() {
                 Ok(n) => (false, n, String::new()),
@@ -473,17 +483,22 @@ impl Parts {
             return;
         }
         self.rows[1..].sort_by(|a, b| {
-            let (ka, kb) = (key(a), key(b));
-            let order = ka
-                .0
-                .cmp(&kb.0)
-                .then(ka.1.total_cmp(&kb.1))
-                .then_with(|| ka.2.cmp(&kb.2));
-            if descending {
-                order.reverse()
-            } else {
-                order
+            for &(column, descending) in keys {
+                let (ka, kb) = (key(a, column), key(b, column));
+                let order = ka
+                    .0
+                    .cmp(&kb.0)
+                    .then(ka.1.total_cmp(&kb.1))
+                    .then_with(|| ka.2.cmp(&kb.2));
+                let order = match descending {
+                    true => order.reverse(),
+                    false => order,
+                };
+                if order != std::cmp::Ordering::Equal {
+                    return order;
+                }
             }
+            std::cmp::Ordering::Equal
         });
     }
 

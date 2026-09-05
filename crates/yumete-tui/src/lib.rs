@@ -1686,7 +1686,7 @@ fn inline_candidate(editor: &Editor, ime: &ImeSession) -> String {
 ///
 /// In both, `bare` gives the panel back rather than showing nothing at all.
 fn page_can_hold_a_candidate(editor: &Editor) -> bool {
-    editor.prompt().is_none() && !editor.table().is_some_and(|t| t.is_page())
+    editor.prompt().is_none() && !editor.table().is_some_and(|t| t.takes_the_pane())
 }
 
 /// Switch the IME to the named scheme, and say what happened.
@@ -2069,7 +2069,7 @@ fn page_areas(editor: &Editor, config: &Config, area: Rect) -> Areas {
     let (panes, divider) = match editor.other_pane().is_some() {
         false => ([text, Rect::new(text.x, text.y, 0, 0)], None),
         true => match editor.layout() {
-            WritingLayout::Vertical if !editor.table().is_some_and(|t| t.is_page()) => {
+            WritingLayout::Vertical if !editor.table().is_some_and(|t| t.takes_the_pane()) => {
                 let half = text.width.saturating_sub(1) / 2;
                 let rule = Rect::new(text.x + half, text.y, 1.min(text.width), text.height);
                 let right = Rect::new(
@@ -2157,7 +2157,7 @@ fn draw(
             // A `|` table lives inside a page of prose and is drawn by whatever
             // draws that page — the paragraph above it must not vanish because
             // the cursor landed in a cell.
-            _ if editor.table().is_some_and(|t| t.is_page()) => {
+            _ if editor.table().is_some_and(|t| t.takes_the_pane()) => {
                 table::draw(frame, editor, config, *rect, &mut seat.table, peek)
             }
             WritingLayout::Horizontal => {
@@ -2920,7 +2920,7 @@ fn text_at(
     // the file behind them is ragged, and it scrolls sideways by whole columns
     // — so resolving a click as if the page were prose landed it somewhere
     // else on every table, off by the padding of every column to the left.
-    if editor.table().is_some_and(|t| t.is_page()) {
+    if editor.table().is_some_and(|t| t.takes_the_pane()) {
         return table::char_at(editor, config, area, &viewport.table, mouse);
     }
     match editor.layout() {
@@ -2935,11 +2935,13 @@ fn text_at(
             let fold = |line: usize| editor.line_is_folded(line);
             let ghost = |line: usize| editor.ghost_on_line(line);
             let typed = |line: usize| editor.typed_ghost_on_line(line);
+            let flat = |line: usize| editor.table_row_at(line);
             let measure = wrap::Measure::new(width, &hide)
                 .with_indent(editor.paragraph_indent())
                 .with_folds(&fold)
                 .with_ghost(&ghost)
                 .with_typed_ghost(&typed)
+                .with_unwrapped(&flat)
                 .with_open_line(editor.open_line());
             // The same walk the page was drawn with: a row with a reading
             // over it takes two screen rows, so counting rows from the top
@@ -3503,11 +3505,16 @@ fn draw_horizontal(
     let fold = |line: usize| editor.line_is_folded(line);
     let ghost = |line: usize| editor.ghost_on_line(line);
     let typed = |line: usize| editor.typed_ghost_on_line(line);
+    // **表格所在的行不再 soft wrap** (#275): a cell folded onto the next screen
+    // row is not in its column any more, so a table row is one row however long
+    // it is and what runs off the right edge is reached by scrolling sideways.
+    let flat = |line: usize| editor.table_row_at(line);
     let measure = wrap::Measure::new(width, &hide)
         .with_indent(editor.paragraph_indent())
         .with_folds(&fold)
         .with_ghost(&ghost)
         .with_typed_ghost(&typed)
+        .with_unwrapped(&flat)
         .with_open_line(editor.open_line());
 
     // A pane that is only being read has no cursor: it is drawn from the
@@ -3639,7 +3646,7 @@ fn draw_horizontal(
     // Either kind of region: a block recognised in a document (#216) stops
     // where its delimiter does, and the tint is the only thing on the page
     // that says where that is.
-    let cell = match peek.is_none() && editor.table().is_some_and(|t| t.in_prose()) {
+    let cell = match peek.is_none() && editor.table().is_some_and(|t| !t.takes_the_pane()) {
         true => editor.prose_region().and_then(|region| {
             editor
                 .cell_position()
@@ -3783,6 +3790,28 @@ fn draw_horizontal(
         // the text and is not in it, and ghost text in the text's own ink reads
         // as something that has already been written.
         let ghost_style = ground.fg(ink.quiet());
+        // **真表格顯示** (#275): 「完全画成表格」. The `|` the writer typed *is*
+        // the wall between two cells, so in this mode it is drawn as one, and
+        // the `| --- |` row as the line under the head. Every glyph is one cell
+        // wide and replaces one character, so nothing else on this page — the
+        // caret, the wrap, the click map, #212's padding — has to know.
+        let grid = editor.grid_on_line(row.line);
+        // #212's padding writes the rule row's own dashes, so a rule being
+        // *drawn* has to draw those too — otherwise the line stops where the
+        // file's dashes stopped and the rest of the row is bare.
+        let ghosts: Vec<(usize, String)> = match editor.grid_rule_row(row.line) {
+            false => ghosts,
+            true => ghosts
+                .into_iter()
+                .map(|(at, text)| (at, text.chars().map(|_| '┄').collect()))
+                .collect(),
+        };
+        let mut chars = chars;
+        for &(at, glyph) in &grid {
+            if let Some(ch) = at.checked_sub(start_in_line).and_then(|i| chars.get_mut(i)) {
+                *ch = glyph;
+            }
+        }
 
         let mut styles = vec![ground; chars.len()];
         // Where a `==highlight==` covers this row, in this row's own indices,
@@ -3819,6 +3848,18 @@ fn draw_horizontal(
                 for style in styles.iter_mut().take(b).skip(a.min(b)) {
                     *style = style.patch(markup_style(run.kind, ink));
                 }
+            }
+        }
+
+        // Furniture, not writing: a rule is the same rung as the gutter it
+        // lines up under. Set after the markup so a table inside a `::: note`
+        // keeps the container's ground and still draws its own walls.
+        for &(at, _) in &grid {
+            if let Some(style) = at
+                .checked_sub(start_in_line)
+                .and_then(|i| styles.get_mut(i))
+            {
+                *style = style.fg(ink.furniture()).remove_modifier(Modifier::BOLD);
             }
         }
 
@@ -4228,6 +4269,12 @@ fn row_has_reading(editor: &Editor, rope: &yumete_core::Rope, row: &wrap::Row) -
     if editor.loose_rows() && editor.layout() == WritingLayout::Horizontal {
         return true;
     }
+    // A table drawn among the prose (#275) takes one row above its first line
+    // for its 列號標尺 — the same mechanism, and the reason this function is
+    // the one that answers: the page already knows how to give a row two.
+    if row.starts_line() && !editor.table_ruler_on_line(row.line).is_empty() {
+        return true;
+    }
     let groups = editor.readings_on_line(row.line);
     if groups.is_empty() {
         return false;
@@ -4279,44 +4326,22 @@ struct Drawn<'a> {
     ghosts: &'a [(usize, String)],
 }
 
-/// The readings over one row, as the line that is drawn above it.
+/// Where each of a row's characters is drawn, in cells from the left edge of
+/// the page — the gutter and the paragraph's indent included — with one more
+/// entry past the end for where the row stops.
 ///
-/// Placed by *column*, not by character: a reading belongs over the base it
-/// reads, and the base may be anywhere along the row once the markup that
-/// wrote it has come off the page. Two readings that would collide are not
-/// squeezed — the second is left out, because a reading over the wrong 字 is
-/// worse than no reading at all.
-fn reading_line(
-    editor: &Editor,
-    ink: crate::theme::Palette,
-    rope: &yumete_core::Rope,
-    row: &wrap::Row,
-    drawn: Drawn,
-    lead: usize,
-) -> Option<Line<'static>> {
+/// **The one answer to「which cell is this character in」**, for everything
+/// placed above a row rather than on it: a reading over its own 字, a column
+/// number over its own column. The markup that came off the page and the ghost
+/// text that was never in the file have both moved every character after them.
+fn drawn_columns(drawn: Drawn, lead: usize) -> Vec<usize> {
     let Drawn {
         chars,
         shown,
         ghosts,
     } = drawn;
-    let groups = editor.readings_on_line(row.line);
-    if groups.is_empty() {
-        // 疏排: the row of air itself. Painted rather than skipped, so the page
-        // keeps its ground.
-        return editor
-            .loose_rows()
-            .then(|| Line::from(Span::styled("", ink.page())));
-    }
-    let line_start = rope.line_to_char(row.line);
-    let start_in_line = row.start - line_start;
-    let text: Vec<char> = yumete_core::zong::line_chars(rope, row.line);
-    // Where each of the row's characters is drawn, in cells from the left edge
-    // of the page — the gutter and the paragraph's indent included, so the
-    // reading lands over its own 字 and not two cells to the left of it.
     let mut column = Vec::with_capacity(chars.len() + 1);
     let mut at = lead;
-    // Ghost text takes cells on the row like anything else, so a reading over a
-    // base after it belongs that much further right.
     let ghost_before = |i: usize| -> usize {
         ghosts
             .iter()
@@ -4333,6 +4358,79 @@ fn reading_line(
     }
     at += ghost_before(chars.len());
     column.push(at);
+    column
+}
+
+/// The 列號標尺 along a drawn table's top edge (#275), as the line above its
+/// first row.
+///
+/// 「畫，貼在表格上緣」 — one ruler per table, numbering that table's own
+/// columns, because every numeric key in a grid (`3gd`, `t20-20g`, `t1s`) asks
+/// the reader to count columns and on a 拆分表 that is counting to seventeen by
+/// eye. Right-aligned in each column and a rung quieter than the writing, the
+/// same way the pane draws it.
+fn ruler_line(
+    cells: &[(usize, usize)],
+    ink: crate::theme::Palette,
+    drawn: Drawn,
+    lead: usize,
+    start_in_line: usize,
+) -> Option<Line<'static>> {
+    let column = drawn_columns(drawn, lead);
+    let mut out = String::new();
+    let mut col = 0usize;
+    for (i, &(_, end)) in cells.iter().enumerate() {
+        let Some(&edge) = column.get(end.saturating_sub(start_in_line)) else {
+            break;
+        };
+        let n = (i + 1).to_string();
+        // Right up against the wall it belongs to, and never on top of the
+        // number before it — a number a cell off its column is still readable,
+        // two numbers run together are not.
+        let want = edge.saturating_sub(n.chars().count()).max(col + usize::from(col > 0));
+        out.push_str(&" ".repeat(want - col));
+        out.push_str(&n);
+        col = want + n.chars().count();
+    }
+    (!out.trim().is_empty()).then(|| Line::from(Span::styled(out, ink.page().fg(ink.furniture()))))
+}
+
+/// The readings over one row, as the line that is drawn above it.
+///
+/// Placed by *column*, not by character: a reading belongs over the base it
+/// reads, and the base may be anywhere along the row once the markup that
+/// wrote it has come off the page. Two readings that would collide are not
+/// squeezed — the second is left out, because a reading over the wrong 字 is
+/// worse than no reading at all.
+fn reading_line(
+    editor: &Editor,
+    ink: crate::theme::Palette,
+    rope: &yumete_core::Rope,
+    row: &wrap::Row,
+    drawn: Drawn,
+    lead: usize,
+) -> Option<Line<'static>> {
+    let Drawn { chars, .. } = drawn;
+    // **The ruler owns the row above its table** (#275), ahead of both a reading
+    // and 疏排's row of air: it is the table's top edge, and a `|` header with
+    // ruby over it is not a thing anybody has written.
+    let ruler = editor.table_ruler_on_line(row.line);
+    if !ruler.is_empty() && row.starts_line() {
+        let start_in_line = row.start - rope.line_to_char(row.line);
+        return ruler_line(&ruler, ink, drawn, lead, start_in_line);
+    }
+    let groups = editor.readings_on_line(row.line);
+    if groups.is_empty() {
+        // 疏排: the row of air itself. Painted rather than skipped, so the page
+        // keeps its ground.
+        return editor
+            .loose_rows()
+            .then(|| Line::from(Span::styled("", ink.page())));
+    }
+    let line_start = rope.line_to_char(row.line);
+    let start_in_line = row.start - line_start;
+    let text: Vec<char> = yumete_core::zong::line_chars(rope, row.line);
+    let column = drawn_columns(drawn, lead);
     let mut out = String::new();
     let mut col = 0usize;
     for group in &groups {
@@ -6556,7 +6654,13 @@ mod tests {
         for _ in 0..3 {
             editor.on_key(Key::Char('j'));
         }
-        assert!(editor.enter_table(), "{}", editor.status());
+        // 表格操作 (#275): the pipes stay on the page, which is what the
+        // assertions below read. `t t` re-glyphs them into a grid instead.
+        assert!(
+            editor.enter_table_as(yumete_core::editor::Surface::InProse),
+            "{}",
+            editor.status()
+        );
         // …and into the second cell, which is `mu`.
         editor.on_key(Key::Char('l'));
         let (line, at) = editor.cell_position().expect("in a cell");
@@ -6655,7 +6759,13 @@ mod tests {
         editor.on_key(Key::Char('g'));
         editor.on_key(Key::Char('j'));
         editor.on_key(Key::Char('j'));
-        assert!(editor.enter_table(), "{}", editor.status());
+        // 表格操作 (#275): the pipes stay on the page, which is what the
+        // assertions below read. `t t` re-glyphs them into a grid instead.
+        assert!(
+            editor.enter_table_as(yumete_core::editor::Surface::InProse),
+            "{}",
+            editor.status()
+        );
         // Found, not counted: `G` scrolls the header off, so a hard-coded
         // screen row would be asserting about a different line of the file
         // after the motion than before it.
@@ -6714,7 +6824,13 @@ mod tests {
         editor.on_key(Key::Char('g'));
         editor.on_key(Key::Char('j'));
         editor.on_key(Key::Char('j'));
-        assert!(editor.enter_table(), "{}", editor.status());
+        // 表格操作 (#275): the pipes stay on the page, which is what the
+        // assertions below read. `t t` re-glyphs them into a grid instead.
+        assert!(
+            editor.enter_table_as(yumete_core::editor::Surface::InProse),
+            "{}",
+            editor.status()
+        );
         editor.on_key(Key::Char('l'));
         assert_eq!(editor.cell_position().map(|(_, c)| c), Some(1), "on `mu`");
         // Tab is `Grain::Char`, so `l` walks inside the cell and the selection
@@ -6754,7 +6870,13 @@ mod tests {
         editor.on_key(Key::Char('g'));
         editor.on_key(Key::Char('j'));
         editor.on_key(Key::Char('j'));
-        assert!(editor.enter_table(), "{}", editor.status());
+        // 表格操作 (#275): the pipes stay on the page, which is what the
+        // assertions below read. `t t` re-glyphs them into a grid instead.
+        assert!(
+            editor.enter_table_as(yumete_core::editor::Surface::InProse),
+            "{}",
+            editor.status()
+        );
         editor.on_key(Key::Char('l'));
         assert_eq!(editor.cell_position().map(|(_, c)| c), Some(1));
         let buf = render(&editor, &config, 30, 8);

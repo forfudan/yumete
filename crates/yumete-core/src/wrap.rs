@@ -98,12 +98,22 @@ pub struct Measure<'a> {
     /// inside the candidate. So the caret asks this, and everything else —
     /// where a row breaks, what a click means — asks `ghost`.
     typed: &'a dyn Fn(usize) -> Vec<(usize, String)>,
+    /// Which lines are **one row however long they are** (#275).
+    ///
+    /// A row of a table. The author: 「进入后，表格所在的行不再 soft wrap」 —
+    /// and the reason is the whole point of the mode: a cell that has wrapped
+    /// onto the next screen row is no longer in its column, so a table folded
+    /// to the measure is not a table any more. Part of the measure and not of
+    /// the renderer, like everything else here, because the caret, `j`, the
+    /// mouse and the page must be reading the same page.
+    unwrapped: &'a dyn Fn(usize) -> bool,
 }
 
 /// A page with nothing hidden, for callers that show the source as it is.
 const NOTHING_HIDDEN: &dyn Fn(usize) -> Vec<(usize, usize)> = &|_| Vec::new();
 
-/// A page with every line on it.
+/// A page with every line on it — and, read the other way, a page every line
+/// of which folds to the measure.
 const NOTHING_FOLDED: &dyn Fn(usize) -> bool = &|_| false;
 
 /// A page with nothing on it but the file's own characters.
@@ -120,6 +130,7 @@ impl<'a> Measure<'a> {
             open: None,
             ghost: NOTHING_GHOSTED,
             typed: NOTHING_GHOSTED,
+            unwrapped: NOTHING_FOLDED,
         }
     }
 
@@ -133,6 +144,7 @@ impl<'a> Measure<'a> {
             open: None,
             ghost: NOTHING_GHOSTED,
             typed: NOTHING_GHOSTED,
+            unwrapped: NOTHING_FOLDED,
         }
     }
 
@@ -144,6 +156,17 @@ impl<'a> Measure<'a> {
     /// The same measure, with `folded` naming the lines that are not drawn.
     pub fn with_folds(self, folded: &'a dyn Fn(usize) -> bool) -> Measure<'a> {
         Measure { folded, ..self }
+    }
+
+    /// The same measure, with `unwrapped` naming the lines that never fold
+    /// — the rows of a table (#275).
+    pub fn with_unwrapped(self, unwrapped: &'a dyn Fn(usize) -> bool) -> Measure<'a> {
+        Measure { unwrapped, ..self }
+    }
+
+    /// Whether `line` is one row however long it is.
+    pub fn unwrapped(self, line: usize) -> bool {
+        (self.unwrapped)(line)
     }
 
     /// Whether `line` is off the page altogether.
@@ -657,6 +680,14 @@ fn line_hash(rope: &Rope, line: usize) -> u64 {
 /// made an unmemoised `j` slow, and the questions a keystroke asks are all
 /// about the same handful of paragraphs.
 fn rows_of_line(rope: &Rope, line: usize, m: Measure) -> Vec<(usize, usize)> {
+    // **A table row is one row** (#275), so there is nothing to measure and
+    // nothing to remember: the whole line, whatever the measure is. Ahead of
+    // the cache, because the answer does not depend on the width and caching
+    // it under one would only make the next width ask again.
+    if m.unwrapped(line) {
+        let len = line_text(rope, line).chars().count();
+        return vec![(0, len)];
+    }
     let hidden = m.off(line);
     // The hidden runs are part of the answer, so they are part of the key: the
     // same paragraph wraps differently when the cursor opens a construct in it.
