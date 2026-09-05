@@ -1125,22 +1125,18 @@ pub fn data_set(scheme: Scheme) -> Vec<DataFile> {
         .collect()
 }
 
-/// The magic this kind of file should begin with, when yume-core exports it.
+/// The magic this kind of file should begin with, when the format has one.
 ///
-/// Only the formats that name their constant are here; the rest answer `None`
-/// and the reason stands on its own. Reading the expected value from yume-core
-/// rather than writing it down is the point — a copy would rot on exactly the
-/// day the constant changes, which is the day it matters.
+/// **The core's own answer** (`DataKind::magic`, 2026-09-05), not a table here:
+/// a copy would rot on exactly the day the constant changes, which is the day
+/// it matters — the `.ydiv` move from `YDV20260828` to `YDV20260904` showed up
+/// as the annotations silently vanishing. A text format has no head to check
+/// and answers `None`, and the reason from the loader stands on its own.
+///
+/// This used to name each format's constant one by one, which meant the two
+/// kinds that gained a magic later (a charset, a 固頂表) were never checked.
 pub fn expected_magic(kind: DataKind) -> Option<&'static [u8]> {
-    Some(match kind {
-        DataKind::Table | DataKind::Symbols => yume_core::code_table::MAGIC.as_slice(),
-        DataKind::Reading => yume_core::fluency_table::MAGIC.as_slice(),
-        DataKind::Weights => yume_core::unigram_table::MAGIC.as_slice(),
-        DataKind::Lexicon => yume_core::lexicon::MAGIC.as_slice(),
-        DataKind::Annotations => yume_core::division::MAGIC.as_slice(),
-        DataKind::Grammar => yume_core::grammar::YGRAM_MAGIC.as_slice(),
-        _ => return None,
-    })
+    Some(kind.magic().as_bytes()).filter(|m| !m.is_empty())
 }
 
 /// Compare the head of `path` against what its format expects.
