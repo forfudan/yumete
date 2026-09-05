@@ -487,6 +487,7 @@ index, and a row with no number anywhere else is a row that got lost.
 | 274 | **A search prompt that does not say what it will repeat** | core | P3 | the author, 2026-09-05: 「`/` 搜索，enter 確認，再次按下 `/` 搜索，這個時候是不是應該預填寫（灰色）上次搜索過內容，用戶可以直接 enter 繼續搜索這個，或者直接輸入新的搜索詞開始新的搜索？」 `Enter` on an empty search line has repeated `last_search` since #153 — the behaviour was already right and only the *saying* was missing, because `prompt_ghost` returned early on an empty line. It now answers with the whole of the last pattern in Search mode, so `/⏎` reads as 「再找一次這個」 and Tab writes it out. Typing narrows it as before; the first character that is not a prefix takes it away, and rubbing that character out brings it back. The `:` line is deliberately left alone: the menu under it is already showing every command there is. **small** | Done |
 | 275 | **A table in a document can only be *operated* as a grid, never *drawn* as one** | core+tui | P2 | the author, 2026-09-05: 「整页的表格视图就是 inline 表格视图的特例。」 Three modes, not two — prose／源碼, **表格操作**（`t i`, the syntax stays, the keys are the grid's, and the table's lines stop soft-wrapping）and **真表格顯示**（`t t`, drawn as a grid the way a CSV already is, ruler and all, in the middle of the prose it sits in）— and two kinds of file: one whose extension or schema *says* table turns whole (`t t` anywhere turns every table in it, and they stay turned when the cursor walks off), one where we are guessing from a run of tab characters turns only the block under the cursor and drops back the moment it leaves. What exists today is the middle mode wearing the top mode's key. Design in §5.6. **large** | Done |
 | 276 | **A new table was three keystrokes from being usable** | core | P3 | the author, 2026-09-05: 「`:table new 3 4`，迅速在 markdown 中插入一個三行四列表格，上下有空白行，光標自動到標題欄最左的一格並進去編輯模式。」 `:markdown table 3x4` had been writing the table since #198, and stopped three steps short: no blank line around it (a `|` row welded to the paragraph above is not a table at all), Normal mode when what you want is to type the first heading, and headings pre-filled with `1 2 3` for you to delete. It is `:table new <行> <欄>` now — 行 first, and **行 counts the heading**, the way a word processor's「插入表格」asks; the rule row is punctuation. The old spelling is gone rather than aliased: it read the two numbers the other way round. **small** | Done |
+| 277 | **The full-screen grid was a file format, not a way of looking** | core+tui | P2 | the author, 2026-09-05: 「我覺得可以保留現在的 tt 模式，然後加上個新的模式也就是整窗口走網格。所以我們有四個模式……另外，ti, ta 這兩個模式應該允許光標上下離開表格回到正文中（現在不可以）。」 #275 gave a table in a document a grid drawn *where it stands*; this gives it the other thing a CSV has always had — **the whole window**, the same `table.rs` widget, measured on the visible rows and scrolled by column. Four modes now: `t o` 源碼, `t i` 表格操作, `t a` 畫成表格 (the old `t t`), `t t` 全窗表格. `t q` stops being 「離開表格」 and becomes 「把窗口還回去」, returning to whichever of the three you came from. 加行 moves to `t r`／`t R` and 加欄 to `t c`／`t C`, because `t o` and `t n` were needed for the modes. And `j`／`k` off the end of an in-document table now walk **out** into the prose instead of stopping — a table in a chapter is not the end of the page. **medium** | Done |
 
 ### 5.5 · A table is a delimiter, a surface and a boundary (#261)
 
@@ -548,11 +549,11 @@ selection holds most of. Four rules the walk needs:
 - **`&` is LaTeX and Typst**, and the editor already knows Typst. Covering it as
   a third-tier separator is cheap now; `#table` may earn the second tier later.
 
-**縱書 stays as it is** (the author, 2026-09-05): only the `Page` axis forces the
-page horizontal. A `|` table inside a vertical chapter is edited in place, which
-is what `turn_for_table`'s existing Markdown exception already does — under the
-split it stops being an exception and becomes `surface == Surface::Page`, which
-is what the line always meant.
+**縱書 stays as it is** (the author, 2026-09-05): only a table that is *drawn*
+forces the page horizontal. A `|` table inside a vertical chapter is edited in
+place, which is what `turn_for_table`'s existing Markdown exception already does
+— under the split it stops being an exception and becomes 「the surface is
+`Advanced` or `Grid`」, which is what the line always meant.
 
 **Land it as one commit that changes no behaviour**, with the third tier and #227
 after it.
@@ -713,7 +714,8 @@ worst of it was fixed the same day:
   Both halves are judged before either runs, the way `r` already did it.
 - **`空格 w` carried the CSV's schema into the manuscript** — `switch_pane` set
   the buffer directly instead of going through the one door that re-asks.
-- **`t o` / `t O` were not undoable**, and folded into the edit before them.
+- **開行 (`t r` / `t R`, `t o` / `t O` at the time) were not undoable**, and
+  folded into the edit before them.
 - Geometry: the caret sat one row high for every ruby reading above it; a click
   on a reading row was dropped; `page_areas` could overflow at width 0; the
   event loop measured the whole text area rather than the pane holding the
@@ -772,7 +774,7 @@ divergences over that corpus — and nine of the thirteen safety fixes hold.
    cell gate like any other text.
 5. **`:table on` reformatted the file** — 45 lines of the docs site, `modified`
    set, and `:table off` does not undo it. Looking at a table no longer
-   rewrites it; `t t` is the tidy-up, and says so.
+   rewrites it; 對齊 (`t f` today) is the tidy-up, and says so.
 6. **`:w <path>` rebound the buffer.** It writes a copy and stays where it is,
    as in vi; `:saveas` is the one that moves house. A buffer with no name of
    its own still takes the name, because there is no manuscript for the copy to
@@ -909,7 +911,7 @@ built on rather than instance by instance:
 
 ---
 
-### 5.6 · Three ways to look at a table, and two kinds of file (#275)
+### 5.6 · Four ways to look at a table, and two kinds of file (#275, #277)
 
 **The author's model, 2026-09-05**, after I had built one of the three and
 called it the other:
@@ -928,26 +930,65 @@ A CSV file is not a different kind of thing from three lines of a chapter —
 grid widget that clears the frame is not「what a CSV gets」; it is what a table
 gets, and a CSV is the table that happens to reach both ends of the file.
 
-| | 原文 | 按鍵 | soft wrap | 進入 |
-| --- | --- | --- | --- | --- |
-| **prose／源碼** | 看得見，`\|` 就是一個字符 | 正文的 | 照舊 | `t q` |
-| **表格操作** | 看得見（pipe、逗號、制表符都在） | 格子的 | 表格那幾行**不折** | `t i` |
-| **真表格顯示** | 看不見，畫成格線 | 格子的 | 不適用 | `t t` |
+**And then a fourth**, 2026-09-05 (#277), because the author kept the third and
+asked for the thing a CSV has always had on top of it:
 
-The three switch straight into one another — `t i` inside `t t` is the middle
-mode, not the way out. `t q` is the one way back to prose.
+> 我覺得可以保留現在的 tt 模式，然後加上個新的模式也就是整窗口走網格。所以我們有
+> 四個模式：源碼模式 `to` (ordinary)；保持源碼，表格接管，快捷鍵 `ti` (inline)；
+> 現在的 tt 模式，快捷鍵 `ta` (advanced)；csv 的全屏表格模式，`tt` (table)。
+
+| | 原文 | 畫在哪 | soft wrap | 按鍵 |
+| --- | --- | --- | --- | --- |
+| **源碼模式** | 看得見，`\|` 就是一個字符 | 正文裏 | 照舊 | `t o` |
+| **表格操作** inline | 看得見（pipe、逗號、制表符都在） | 正文裏 | 表格那幾行**不折** | `t i` |
+| **畫成表格** advanced | 看不見，格線畫在正文中間 | 正文裏 | 不適用 | `t a` |
+| **全窗表格** table | 看不見，格線佔滿窗口 | **整個窗口** | 不適用 | `t t` |
+
+The four switch straight into one another; `t o` is the way back to prose from
+any of them. **`t q` is not a second `t o`** — the author was explicit:
+
+> `tq` 只在全屏表格模式下生效，退到 markdown 文件中，且回到此前的表格模式
+> （`to`,`ti`,`ta`）。
+
+So `t q` gives the *window* back, not the table: pressed in `t a`, `t t`, `t q`
+you land back in `t a`. `TableView::back` remembers which surface asked for the
+window, and it is written only on the way **into** `Grid`; a `.csv` opened as a
+grid has `None` there, which is 源碼模式, which is right. Pressed anywhere but
+the full-screen grid, `t q` says so and does nothing.
+
+**The two grids are one widget** (「這樣代碼也可以复用」). `t a` draws through the
+prose pipeline — one ratatui `Line` per screen row, alignment by #212 ghost
+padding measured over the **whole table**. `t t` hands the pane to
+`yumete-tui/src/table.rs`, the CSV widget, which clears the frame, measures its
+columns from the **visible rows only** and scrolls columns sideways. That widget
+used to assume the table was the file; it now asks `Editor::table_row_span()`
+for the first and last data row and bounds everything — measuring, scrolling,
+clicking, the header — to that pair. Which is the whole of what「csv 的表格模式
+完全嵌入 markdown 中」took.
+
+The header row is read off the page, not off the schema
+(`Editor::table_headings()`): a `.md` with forty tables in it has one schema,
+built from whichever table was entered first, and the widget must show the
+headings of the table the cursor is actually in.
+
+**The cursor may walk out** (#277): 「`ti`, `ta` 這兩個模式應該允許光標上下離開表格
+回到正文中」. `j` on the last row of an in-document table now steps to the line
+below the table rather than stopping. A *page* still stops (`J`/`K` — the split
+is `step_cell_row(down, may_leave)`), because a page that fell out of the table
+would be a page that skipped it. Neither applies to `WholeFile`: there is no
+prose to walk into.
 
 **Two kinds of file**, and this is the half that keeps the code honest:
 
 - **有明確表格語法** — the extension says so (`.csv` `.tsv` `.md`
-  `.markdown`), or a schema in `.yumete/tables/` claims the file. `t i`／`t t`
-  are then a state of **the whole file**: pressed anywhere, they turn every
-  table in it, and walking the cursor out of a table into the prose above
+  `.markdown`), or a schema in `.yumete/tables/` claims the file. `t i`／`t a`
+  ／`t t` are then a state of **the whole file**: pressed anywhere, they turn
+  every table in it, and walking the cursor out of a table into the prose above
   leaves that table drawn as a table.
 - **沒有明確表格語法** — `.txt`, `.yaml`, a run of tab-separated lines pasted
-  into a chapter. `t i`／`t t` take **the block under the cursor** and nothing
-  else, and leaving it drops straight back to prose; to see it again, press
-  again.
+  into a chapter. `t i`／`t a`／`t t` take **the block under the cursor** and
+  nothing else, and leaving it drops straight back to prose; to see it again,
+  press again.
 
 The author's reason for the split, which is also the reason it is safe: a file
 whose syntax says「table」can be turned on with confidence, and a file where we
@@ -984,13 +1025,14 @@ contains.
 
 Two more things the author fixed in the same exchange:
 
-- **縱書**: `t t` keeps turning the whole page horizontal (`turn_for_table`),
-  and `t q` turns it back. A grid is read across. **Every door has to do it**:
-  the whole-file one always did, and `t t` / `-t` on a `|` table or a guessed
-  block went in without turning — the status line said 「第 1 行 · 甲 · 格」
-  and the screen had not changed by one character, because nothing in
-  `vertical.rs` draws a grid. They go through `turn_for_table_and_say`, which
-  says 「（已轉橫排）」 after whatever the door itself said.
+- **縱書**: any door that *draws* — `t a`, `t t`, `:table`, `-t` — turns the
+  whole page horizontal (`turn_for_table`), and `t i` / `t o` turn it back. A
+  grid is read across. **Every door has to do it**: the whole-file one always
+  did, and drawing a `|` table or a guessed block went in without turning — the
+  status line said 「第 1 行 · 甲 · 格」 and the screen had not changed by one
+  character, because nothing in `vertical.rs` draws a grid. They go through
+  `turn_for_table_and_say`, which says 「（已轉橫排）」 after whatever the
+  door itself said.
 - **列號標尺**: every table draws its own, along its top edge — so a chapter
   with three tables in it shows three rulers, each numbering its own columns.
 
@@ -999,15 +1041,20 @@ the whole trick:
 
 | field | asks |
 | --- | --- |
-| `Surface` | **which of the three modes** — `Page` 真表格顯示, `InProse` 表格操作 |
+| `Surface` | **which of the four modes** is on — `Inline` 表格操作, `Advanced` 畫成表格, `Grid` 全窗表格; 源碼模式 is `table == None`, so it needs no variant |
 | `Bounds` | **which lines** this table occupies — `WholeFile`, `Md`, `Block` |
 | `Reach` | **how far the mode reaches** — `File`, or only `Cursor` |
 
-`Surface::Page` used to mean「the grid widget clears the frame」, which is why
-it could not be worn by five lines in the middle of a chapter. That meaning now
-has its own name, `TableView::takes_the_pane()` — `Page` **and** `WholeFile` —
-and every TUI seam that used to ask `is_page()` asks that instead. So
-`Surface::Page` is free to mean what the author says it means.
+The three are orthogonal, which is the point: `Grid` is no longer a synonym for
+「this file is a CSV」. `TableView::takes_the_pane()` — 「the grid widget clears
+the frame」 — is `surface == Grid` and nothing else, and every TUI seam asks
+that. A `.csv` is `Grid` + `WholeFile`; a `|` table given the window with `t t`
+is `Grid` + `Md`, and the same widget draws both because it is bounded by
+`table_row_span()` rather than by the file.
+
+`TableView::back` is the fourth field, and it belongs to `t q` alone: the
+surface `Grid` was entered *from*, so 全窗 can be given back without becoming
+源碼模式. Only `Grid` ever reads it.
 
 The「不 soft wrap」rule lives in the **measure**, not the renderer:
 `wrap::Measure::with_unwrapped(&|line| editor.table_row_at(line))`, checked

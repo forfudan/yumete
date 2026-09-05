@@ -48,24 +48,32 @@ const MAX_COLUMN: usize = 32;
 const GAP: usize = 1;
 
 /// Measure the visible rows and say how wide each column should be drawn.
-fn widths(editor: &Editor, first: usize, rows: usize) -> Vec<usize> {
+///
+/// `last` is the table's last row, not the file's: since 2026-09-05 the widget
+/// is given `|` tables that are three lines of a chapter, and measuring the
+/// chapter under them would make every column as wide as the prose.
+fn widths(editor: &Editor, first: usize, rows: usize, last: usize) -> Vec<usize> {
     let Some(view) = editor.table() else {
         return Vec::new();
     };
     // A hidden column is drawn at no width at all — which is what `hidden`
     // buys: two of the 拆分表's twenty-eight are empty in all 123,380 rows and
     // were costing eight cells each across the whole page.
+    let headings = editor.table_headings();
     let mut widths: Vec<usize> = view
         .schema
         .columns
         .iter()
-        .map(|c| match c.hidden {
+        .enumerate()
+        .map(|(i, c)| match c.hidden {
             true => 0,
-            false => yumete_cjk::str_width(c.heading()).clamp(MIN_COLUMN, MAX_COLUMN),
+            false => {
+                let text = headings.get(i).map(String::as_str).unwrap_or(c.heading());
+                yumete_cjk::str_width(text).clamp(MIN_COLUMN, MAX_COLUMN)
+            }
         })
         .collect();
-    let lines = editor.current_buffer().line_count();
-    for line in first..(first + rows).min(lines) {
+    for line in first..(first + rows).min(last + 1) {
         for (i, span) in editor.row_cells(line).into_iter().enumerate() {
             let Some(want) = widths.get_mut(i) else {
                 // A ragged row has cells the schema does not know about. They
@@ -139,6 +147,7 @@ pub fn char_at(
 ) -> Option<usize> {
     let view = editor.table()?;
     let lines = editor.current_buffer().line_count();
+    let (_, bottom) = editor.table_row_span()?;
     let head = u16::from(view.schema.header) + u16::from(editor.table_numbers());
     let rows = area.height.saturating_sub(head) as usize;
     if rows == 0 || mouse.row < area.y {
@@ -147,7 +156,9 @@ pub fn char_at(
     // The header row is not a row of the table: a click on it means the first
     // row under it, which is the one thing it could sensibly mean.
     let slot = (mouse.row.saturating_sub(area.y + head)) as usize;
-    let line = (viewport.top + slot).min(lines.saturating_sub(1));
+    // Past the last row of the table is the last row of the table — a click on
+    // the empty page under a three-line table must not land in the chapter.
+    let line = (viewport.top + slot).min(bottom);
     let rope = editor.current_buffer().rope();
     let start = rope.line_to_char(line);
     let cells = editor.row_cells(line);
@@ -155,7 +166,7 @@ pub fn char_at(
         return Some(start);
     }
     let gutter = crate::gutter_width(lines, config.editor.line_numbers) as u16;
-    let widths = widths(editor, viewport.top, rows);
+    let widths = widths(editor, viewport.top, rows, bottom);
     let right = area.x + area.width;
     // Walk the columns the way they were drawn, and stop at the one the
     // pointer is in.
@@ -202,6 +213,13 @@ pub fn draw(
         return (area.x, area.y);
     };
     let lines = editor.current_buffer().line_count();
+    // **The table's own lines, not the file's** (2026-09-05). `t t` now hands
+    // this widget a `|` table that is three lines of a chapter, and the rows
+    // below are the chapter — measured, scrolled through and clicked on, they
+    // would be the chapter drawn as a grid.
+    let Some((top_row, bottom_row)) = editor.table_row_span() else {
+        return (area.x, area.y);
+    };
     // A pane that is only being read is scrolled around the row it was opened
     // at, and marks it — it has no cursor and no cell of its own.
     let (cursor_row, cursor_cell) = match peek {
@@ -232,7 +250,7 @@ pub fn draw(
 
     // Vertical scroll: the ordinary rule, keeping the cursor's row on screen.
     let scrolloff = config.editor.scrolloff.min(rows / 2);
-    let first_data = usize::from(view.schema.header);
+    let first_data = top_row;
     // **Where the cursor sits on a page is the editor's answer**, not this
     // surface's: a row off the page is a jump and lands in the middle, a step
     // off an edge scrolls by as little as it takes, and typewriter mode keeps
@@ -245,12 +263,12 @@ pub fn draw(
     }
     viewport.top = viewport
         .top
-        .min(lines.saturating_sub(1))
-        .max(first_data.min(lines.saturating_sub(1)));
+        .min(bottom_row)
+        .max(first_data.min(bottom_row));
 
     let gutter = gutter_width(lines, config.editor.line_numbers) as u16;
     let room = area.width.saturating_sub(gutter) as usize;
-    let widths = widths(editor, viewport.top, rows);
+    let widths = widths(editor, viewport.top, rows, bottom_row);
     scroll_columns(&widths, room, cursor_cell, &mut viewport.left);
 
     let ink = match peek {
@@ -354,6 +372,7 @@ pub fn draw(
                 cell.set_symbol(" ").set_style(gutter_style);
             }
         }
+        let headings = editor.table_headings();
         let mut x = area.x + gutter;
         for (i, column) in view.schema.columns.iter().enumerate().skip(viewport.left) {
             let w = widths[i] as u16;
@@ -365,7 +384,8 @@ pub fn draw(
             } else {
                 head_style
             };
-            put_text(buf, x, head_y, (x + w).min(right), column.heading(), style);
+            let text = headings.get(i).map(String::as_str).unwrap_or(column.heading());
+            put_text(buf, x, head_y, (x + w).min(right), text, style);
             // A hidden column takes no gap either — a column of
             // nothing is not a column with a space beside it.
             x += w + if w == 0 { 0 } else { GAP as u16 };
@@ -375,7 +395,7 @@ pub fn draw(
     let mut caret = (area.x + gutter, area.y + head);
     for slot in 0..rows {
         let line = viewport.top + slot;
-        if line >= lines {
+        if line > bottom_row {
             break;
         }
         let y = area.y + head + slot as u16;
