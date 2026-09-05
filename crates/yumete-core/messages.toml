@@ -1132,6 +1132,13 @@ zhs = "栏线：栏与栏之间怎么分开"
 en = "column rules: how the columns are told apart"
 
 [[message]]
+# : 命令選單裏 schema 那一項的說明（table 組）
+key = "cmd.table.schema"
+zht = "把這張表的規格開在另一半——沒有就先寫一份"
+zhs = "把这张表的规格开在另一半——没有就先写一份"
+en = "open this table's schema in the other area — writing a starting one if there is none"
+
+[[message]]
 # : 命令選單裏 sort 那一項的說明（table 組）
 key = "cmd.table.sort"
 zht = "照這幾欄排：`sort 1 a 2 d` 是先第一欄順排、再第二欄倒排"
@@ -2901,6 +2908,13 @@ zhs = "它自己那一行"
 en = "the row it is about"
 
 [[message]]
+# 表格提示：規格檔
+key = "hint.table.schema"
+zht = "這張表的規格"
+zhs = "这张表的规格"
+en = "this table's schema"
+
+[[message]]
 # 表格提示：一欄一欄找
 key = "hint.table.search-columns"
 zht = "一欄一欄找：這邊找／那邊看（t2-10?）"
@@ -4662,11 +4676,39 @@ zhs = "分隔行是画出来的——用 t < = > 改对齐"
 en = "the rule row is drawn, not written — t < = > sets the alignment"
 
 [[message]]
+# 寫不下那份新的 schema
+key = "table.schema-cannot-write"
+zht = "寫不下「{0}」：{1}"
+zhs = "写不下「{0}」：{1}"
+en = "cannot write '{0}': {1}"
+
+[[message]]
 # 按行名跳，schema 沒說哪一欄是行名
 key = "table.schema-has-no-key-column"
 zht = "這張表沒說哪一欄是行名（schema 的 key）"
 zhs = "这张表没说哪一栏是行名（schema 的 key）"
 en = "this table does not name a key column (the schema's key)"
+
+[[message]]
+# t e：schema 開在另一半了
+key = "table.schema-in-the-other-area"
+zht = "{0} 開在另一半——空格 w 過去改"
+zhs = "{0} 开在另一半——空格 w 过去改"
+en = "{0} is open in the other area — 空格 w to go and edit it"
+
+[[message]]
+# t e 按在一份文件裏的表格上
+key = "table.schema-is-for-a-whole-file"
+zht = "schema 是給整份表格檔案的——這張表在文件裏面"
+zhs = "schema 是给整份表格档案的——这张表在文件里面"
+en = "a schema is for a file that is nothing but a table — this one lives inside a document"
+
+[[message]]
+# 新寫的 schema 檔頭一行的說明
+key = "table.schema-note"
+zht = "這份 schema 說的就是眼下看到的樣子。改完存檔，:table off 再 :table 就照新的讀。"
+zhs = "这份 schema 说的就是眼下看到的样子。改完存档，:table off 再 :table 就照新的读。"
+en = "this schema says what the grid is already doing. Edit, save, then :table off and :table again."
 
 [[message]]
 # 進表格模式時，schema 檔有毛病

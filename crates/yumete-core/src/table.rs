@@ -529,6 +529,66 @@ pub fn schema_for_reporting(path: &Path) -> (Option<(PathBuf, Schema)>, Vec<Stri
     (None, problems)
 }
 
+/// A schema file to start from, written out of what the grid is reading this
+/// file as **right now** (#218).
+///
+/// **The first thing it does is nothing.** The delimiter is the one the
+/// sniffer guessed, the header line is the one you kept or turned off (`t H`,
+/// #217), and the columns carry the names the first row gave them — so opening
+/// the file and reading it back changes not one cell of the grid. Every edit to
+/// it is then a correction to something visible, which is a far shorter way in
+/// than an empty page and a format to guess at.
+///
+/// `note` is the comment written at the top, so that the one sentence a person
+/// reads first is a message like every other and not a literal in here.
+pub fn starting_schema(file: &str, schema: &Schema, note: &str) -> String {
+    let mut out = format!("# {note}\n\n[table]\nfile = {}\n", quoted(file));
+    // Only what differs from the default is written. A starting schema that
+    // spells out every setting reads as a form to fill in; one that names the
+    // delimiter *because this file has an unusual one* teaches what the key is
+    // for.
+    if schema.delimiter != ',' {
+        out.push_str(&format!("delimiter = {}\n", quoted(&schema.delimiter.to_string())));
+    }
+    if !schema.header {
+        out.push_str("header = false\n");
+    }
+    if let Some(key) = &schema.key {
+        out.push_str(&format!("key = {}\n", quoted(key)));
+    }
+    for column in &schema.columns {
+        out.push_str(&format!("\n[[table.column]]\nname = {}\n", quoted(&column.name)));
+        if let Some(label) = &column.label {
+            out.push_str(&format!("label = {}\n", quoted(label)));
+        }
+        if column.kind != Kind::String {
+            out.push_str(&format!("type = \"{:?}\"\n", column.kind));
+        }
+        if column.hidden {
+            out.push_str("hidden = true\n");
+        }
+    }
+    out
+}
+
+/// A TOML basic string. The 拆分表's delimiter is a tab, which is exactly the
+/// character that cannot be written between two quotes as itself.
+fn quoted(text: &str) -> String {
+    let mut out = String::from("\"");
+    for c in text.chars() {
+        match c {
+            '"' => out.push_str("\\\""),
+            '\\' => out.push_str("\\\\"),
+            '\t' => out.push_str("\\t"),
+            '\n' => out.push_str("\\n"),
+            '\r' => out.push_str("\\r"),
+            c => out.push(c),
+        }
+    }
+    out.push('"');
+    out
+}
+
 /// Where each cell of a line starts and ends, in characters from the line's
 /// start.
 ///

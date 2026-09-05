@@ -132,6 +132,9 @@ pub enum Command {
     /// `:table header [on|off]` — whether the grid's first row names the
     /// columns or is a row like any other (Feature #217). `None` flips it.
     SetTableHeader(Option<bool>),
+    /// `:table schema` — the schema file in the other work area, written next
+    /// to the data first if none claims it yet (Feature #218).
+    OpenTableSchema,
     /// `:table detail [on|off]` — the panel; `None` toggles.
     ShowDetail(Option<bool>),
     /// `:table detail 40` — how wide it is.
@@ -837,6 +840,9 @@ pub fn parse(input: &str) -> Result<Command, CommandError> {
             "numbers off" => Ok(Command::SetTableNumbers(false)),
             // 「這一行是欄名還是資料」 — on its own it flips, because that is
             // the question a 碼表 asks once and never again (#217).
+            // 「這張表到底是怎麼讀的」 — the answer is a file, so the
+            // command opens it rather than printing it (#218).
+            "schema" => Ok(Command::OpenTableSchema),
             "header" => Ok(Command::SetTableHeader(None)),
             "header on" => Ok(Command::SetTableHeader(Some(true))),
             "header off" => Ok(Command::SetTableHeader(Some(false))),
@@ -1685,6 +1691,12 @@ const TABLE: &[Word] = &[
         help: "cmd.table.header",
         needs: &[Need::Table],
         then: Args::Words(ON_OFF),
+    },
+    Word {
+        name: "schema",
+        help: "cmd.table.schema",
+        needs: &[Need::Table],
+        then: Args::None,
     },
     // Neither of these needs a table to be *open*: turning a block of text into
     // one is how you get a table in the first place.
