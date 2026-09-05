@@ -5519,6 +5519,27 @@ mod tests {
         }
     }
 
+    /// The cell a 縱 blanks is the one **it** bought, not the one the widest
+    /// 縱 on the page bought. A full-width reading covers the cell after it and
+    /// has to clear it; a 着重號 in a one-cell margin must not, or it rubs out
+    /// the 縱 to its right — which on this page is the one carrying the reading.
+    #[test]
+    fn a_dot_blanks_only_the_cell_its_own_zong_bought() {
+        let mut editor = editor_with("<ruby>永<rt>ㄩㄥˇ</rt></ruby>和平\n一*二三*四");
+        let config = vertical_config();
+        let buffer = render_vertical_ruby(&mut editor, &config, 24, 12);
+
+        let on_page = |c: &str| {
+            (0..12)
+                .flat_map(|y| (0..24).map(move |x| (x, y)))
+                .any(|(x, y)| at(&buffer, x, y) == c)
+        };
+        for ch in ["永", "和", "平"] {
+            assert!(on_page(ch), "{ch} was rubbed out by the dots beside it");
+        }
+        assert!(on_page("·"), "and the dots are drawn");
+    }
+
     #[test]
     fn a_hung_mark_does_not_paint_over_the_zong_beside_it() {
         // The margin is one cell. A full-width mark in it spills onto the 縱 to
