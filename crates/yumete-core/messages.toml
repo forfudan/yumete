@@ -318,6 +318,7 @@ key = "cmd.axis.column"
 zht = "一欄一欄地找，從第一欄的頂上開始——表格裏 t/ t? 就是它"
 zhs = "一栏一栏地找，从第一栏的顶上开始——表格里 t/ t? 就是它"
 en = "column by column, from the top of the first — this is what Enter does in a table"
+find = "一欄 一栏 直向 縱 纵 column"
 
 [[message]]
 # : 命令選單裏 row 那一項的說明（axis 組）
@@ -325,6 +326,7 @@ key = "cmd.axis.row"
 zht = "一行一行地找——`/` 就是它"
 zhs = "一行一行地找——`/` 就是它"
 en = "row by row — this is what `/` does"
+find = "一行 橫 横 逐行 row"
 
 [[message]]
 # : 命令選單裏 close 那一項的說明（buffers 組）
@@ -332,6 +334,7 @@ key = "cmd.buffers.close"
 zht = "關掉這一個（`close!` 不管改動）"
 zhs = "关掉这一个（`close!` 不管改动）"
 en = "close this one (`close!` ignores changes)"
+find = "關掉 关掉 關閉 关闭 close bd"
 
 [[message]]
 # : 命令選單裏 list 那一項的說明（buffers 組）
@@ -339,6 +342,7 @@ key = "cmd.buffers.list"
 zht = "列出開着的檔案"
 zhs = "列出开着的档案"
 en = "list the open files"
+find = "列表 清單 清单 ls buffers"
 
 [[message]]
 # : 命令選單裏 next 那一項的說明（buffers 組）
@@ -346,6 +350,7 @@ key = "cmd.buffers.next"
 zht = "下一個"
 zhs = "下一个"
 en = "the next one"
+find = "下一個 下一个 next bn"
 
 [[message]]
 # : 命令選單裏 previous 那一項的說明（buffers 組）
@@ -353,6 +358,7 @@ key = "cmd.buffers.previous"
 zht = "上一個"
 zhs = "上一个"
 en = "the previous one"
+find = "上一個 上一个 前一個 prev bp"
 
 [[message]]
 # : 命令選單裏 paste 那一項的說明（clipboard 組）
@@ -360,6 +366,7 @@ key = "cmd.clipboard.paste"
 zht = "從系統剪貼簿貼進來"
 zhs = "从系统剪贴簿贴进来"
 en = "paste from the system clipboard"
+find = "貼上 粘贴 黏貼 paste put"
 
 [[message]]
 # : 命令選單裏 yank 那一項的說明（clipboard 組）
@@ -367,6 +374,7 @@ key = "cmd.clipboard.yank"
 zht = "選區送到系統剪貼簿"
 zhs = "选区送到系统剪贴簿"
 en = "put the selection on the system clipboard"
+find = "複製 复制 拷貝 拷贝 copy yank"
 
 [[message]]
 # : 命令選單裏 appearance 那一項的說明（commands 組）
@@ -374,6 +382,7 @@ key = "cmd.commands.appearance"
 zht = "深色、淺色，還是跟着終端"
 zhs = "深色、浅色，还是跟着终端"
 en = "dark, light, or whatever the terminal is"
+find = "外觀 外观 主題 深色 淺色 浅色 暗色 dark light theme mode"
 
 [[message]]
 # : 命令選單裏 bands 那一項的說明（commands 組）
@@ -381,6 +390,7 @@ key = "cmd.commands.bands"
 zht = "段組：把竪排的頁面橫着分成幾條，右上讀到左上，再右下讀到左下"
 zhs = "段组：把竖排的页面横着分成几条，右上读到左上，再右下读到左下"
 en = "bands: divide the vertical page across — top right to top left, then bottom right to bottom left"
+find = "段組 段组 分欄 分栏 bands columns"
 
 [[message]]
 # : 命令選單裏 buffer 那一項的說明（commands 組）
@@ -388,6 +398,7 @@ key = "cmd.commands.buffer"
 zht = "開着的檔案：列出、切換、關掉"
 zhs = "开着的档案：列出、切换、关掉"
 en = "the open files: list, switch, close"
+find = "緩衝區 缓冲区 檔案 文件 分頁 標籤 tabs files switch"
 
 [[message]]
 # : 命令選單裏 clipboard 那一項的說明（commands 組）
@@ -395,6 +406,7 @@ key = "cmd.commands.clipboard"
 zht = "系統剪貼簿：送出去、貼進來"
 zhs = "系统剪贴簿：送出去、贴进来"
 en = "the system clipboard: out, and back in"
+find = "剪貼簿 剪贴板 複製 复制 貼上 粘贴 copy paste yank"
 
 [[message]]
 # : 命令選單裏 count 那一項的說明（commands 組）
@@ -402,6 +414,7 @@ key = "cmd.commands.count"
 zht = "寫了多少"
 zhs = "写了多少"
 en = "how much has been written"
+find = "字數 字数 統計 统计 wordcount stats"
 
 [[message]]
 # : 命令選單裏 dense 那一項的說明（commands 組）
@@ -409,6 +422,7 @@ key = "cmd.commands.dense"
 zht = "密排／疏排：竪排是縱與縱之間，橫排是行與行之間"
 zhs = "密排／疏排：竖排是纵与纵之间，横排是行与行之间"
 en = "tight or loose: between columns in 竪排, between rows in 橫排"
+find = "疏排 密排 行距 間距 间距 spacing leading"
 
 [[message]]
 # : 命令選單裏 export 那一項的說明（commands 組）
@@ -416,6 +430,7 @@ key = "cmd.commands.export"
 zht = "導出成 html 或 typst，排版一起帶上"
 zhs = "导出成 html 或 typst，排版一起带上"
 en = "write it out as html or typst, layout and all"
+find = "導出 导出 輸出 输出 html typst 排版"
 
 [[message]]
 # : 命令選單裏 format 那一項的說明（commands 組）
@@ -423,6 +438,7 @@ key = "cmd.commands.format"
 zht = "照這種檔案在設定裏說的那樣格式化（[language.markdown] format = …）"
 zhs = "照这种档案在设定里说的那样格式化（[language.markdown] format = …）"
 en = "format this file the way the config says ([language.markdown] format = …)"
+find = "格式化 排版 整理 formatter prettier"
 
 [[message]]
 # : 命令選單裏 goto 那一項的說明（commands 組）
@@ -430,6 +446,7 @@ key = "cmd.commands.goto"
 zht = "跳到某一行（`:42` 就夠了）"
 zhs = "跳到某一行（`:42` 就够了）"
 en = "go to a line (`:42` will do)"
+find = "跳行 行號 行号 goto line jump"
 
 [[message]]
 # : 命令選單裏 grep 那一項的說明（commands 組）
@@ -437,6 +454,7 @@ key = "cmd.commands.grep"
 zht = "整個項目找一遍"
 zhs = "整个项目找一遍"
 en = "search every file in the project"
+find = "搜索 搜尋 搜寻 查找 全局 項目 项目 find search project"
 
 [[message]]
 # : 命令選單裏 hanging 那一項的說明（commands 組）
@@ -444,6 +462,7 @@ key = "cmd.commands.hanging"
 zht = "標點旁置：句讀掛在邊欄"
 zhs = "标点旁置：句读挂在边栏"
 en = "hung punctuation: 句讀 sit in the margin"
+find = "標點 标点 旁置 懸掛 悬挂 句讀 punctuation"
 
 [[message]]
 # : 命令選單裏 help 那一項的說明（commands 組）
@@ -451,6 +470,7 @@ key = "cmd.commands.help"
 zht = "鍵和命令，開成一個可以讀、可以搜的檔案"
 zhs = "键和命令，开成一个可以读、可以搜的档案"
 en = "the keys and the commands, opened as a file you can read and search"
+find = "幫助 帮助 說明 说明 手冊 手册 keys manual"
 
 [[message]]
 # : 命令選單裏 indent 那一項的說明（commands 組）
@@ -458,6 +478,7 @@ key = "cmd.commands.indent"
 zht = "首行縮進幾格（中文的段落是縮進兩格，不是空一行）；`:indent off` 不縮"
 zhs = "首行缩进几格（中文的段落是缩进两格，不是空一行）；`:indent off` 不缩"
 en = "how many squares open a paragraph (Chinese marks one with two, not a blank line); `:indent off` for none"
+find = "縮進 缩进 首行 段落 indent paragraph"
 
 [[message]]
 # : 命令選單裏 layout 那一項的說明（commands 組）
@@ -465,6 +486,7 @@ key = "cmd.commands.layout"
 zht = "橫排竪排互換"
 zhs = "横排竖排互换"
 en = "flip horizontal and vertical"
+find = "竖排 竪排 直排 縱書 纵书 橫排 横排 tategaki vertical horizontal 方向"
 
 [[message]]
 # : 命令選單裏 markdown 那一項的說明（commands 組）
@@ -472,6 +494,7 @@ key = "cmd.commands.markdown"
 zht = "寫一段 Markdown：footnote、footnote inline、table 3x4"
 zhs = "写一段 Markdown：footnote、footnote inline、table 3x4"
 en = "write a piece of Markdown: footnote, footnote inline, table 3x4"
+find = "腳注 脚注 註釋 注释 表格 footnote table"
 
 [[message]]
 # : 命令選單裏 new 那一項的說明（commands 組）
@@ -479,6 +502,7 @@ key = "cmd.commands.new"
 zht = "開一個空的緩衝區"
 zhs = "开一个空的缓冲区"
 en = "start an empty buffer"
+find = "新建 空白 新檔 新文件 empty"
 
 [[message]]
 # : 命令選單裏 numbers 那一項的說明（commands 組）
@@ -486,6 +510,7 @@ key = "cmd.commands.numbers"
 zht = "行號那一條：要不要自己的底色"
 zhs = "行号那一条：要不要自己的底色"
 en = "the line-number band: whether it has a ground of its own"
+find = "行號 行号 gutter line numbers"
 
 [[message]]
 # : 命令選單裏 open 那一項的說明（commands 組）
@@ -493,6 +518,7 @@ key = "cmd.commands.open"
 zht = "打開一個檔案"
 zhs = "打开一个档案"
 en = "open a file"
+find = "打開 打开 開檔 开档 edit file"
 
 [[message]]
 # : 命令選單裏 pipe 那一項的說明（commands 組）
@@ -500,6 +526,7 @@ key = "cmd.commands.pipe"
 zht = "把選區送給一條命令，用它的輸出換掉（`!`）"
 zhs = "把选区送给一条命令，用它的输出换掉（`!`）"
 en = "send the selection through a command and take back its output (`!`)"
+find = "管道 過濾 过滤 外部命令 filter shell"
 
 [[message]]
 # : 命令選單裏 preview 那一項的說明（commands 組）
@@ -507,6 +534,7 @@ key = "cmd.commands.preview"
 zht = "交給真正的排版器去排，在瀏覽器裏看"
 zhs = "交给真正的排版器去排，在浏览器里看"
 en = "hand it to a real typesetter and read it in a browser"
+find = "預覽 预览 瀏覽器 浏览器 排版 browser"
 
 [[message]]
 # : 命令選單裏 quit 那一項的說明（commands 組）
@@ -514,6 +542,7 @@ key = "cmd.commands.quit"
 zht = "退出；加 ! 連沒存的改動一起丟"
 zhs = "退出；加 ! 连没存的改动一起丢"
 en = "leave; with ! throw away unsaved changes too"
+find = "退出 離開 离开 關閉 关闭 exit close"
 
 [[message]]
 # : 命令選單裏 readonly 那一項的說明（commands 組）
@@ -521,6 +550,7 @@ key = "cmd.commands.readonly"
 zht = "只讀：鎖住這一份，不許改"
 zhs = "只读：锁住这一份，不许改"
 en = "read-only: lock this one against editing"
+find = "只讀 只读 鎖住 锁住 保護 保护 lock"
 
 [[message]]
 # : 命令選單裏 recover 那一項的說明（commands 組）
@@ -528,6 +558,7 @@ key = "cmd.commands.recover"
 zht = "載入搶救稿；加 ! 是丟掉它"
 zhs = "载入抢救稿；加 ! 是丢掉它"
 en = "load the recovered draft; with ! throw it away"
+find = "搶救 抢救 恢復 恢复 崩潰 崩溃 swap crash"
 
 [[message]]
 # : 命令選單裏 redo 那一項的說明（commands 組）
@@ -535,6 +566,7 @@ key = "cmd.commands.redo"
 zht = "重做"
 zhs = "重做"
 en = "redo"
+find = "重做 恢復 恢复"
 
 [[message]]
 # : 命令選單裏 reload 那一項的說明（commands 組）
@@ -542,6 +574,7 @@ key = "cmd.commands.reload"
 zht = "把檔案再讀一遍；加 ! 是丟掉你這裏的改動"
 zhs = "把档案再读一遍；加 ! 是丢掉你这里的改动"
 en = "read the file again; ! throws away what you changed here"
+find = "重載 重载 重讀 重读 刷新 revert"
 
 [[message]]
 # : 命令選單裏 render 那一項的說明（commands 組）
@@ -549,6 +582,7 @@ key = "cmd.commands.render"
 zht = "畫面上顯示多少「結果」：原文、著色、所見即所得"
 zhs = "画面上显示多少「结果」：原文、著色、所见即所得"
 en = "how much of the result the page shows: source, coloured, WYSIWYG"
+find = "著色 着色 高亮 原文 所見即所得 highlight syntax wysiwyg"
 
 [[message]]
 # : 命令選單裏 replace 那一項的說明（commands 組）
@@ -556,6 +590,7 @@ key = "cmd.commands.replace"
 zht = "把剛才 :grep 找到的那些都換掉——先看見，才改得動"
 zhs = "把刚才 :grep 找到的那些都换掉——先看见，才改得动"
 en = "change everything the last :grep found — you see it before you change it"
+find = "替換 替换 取代 全局 项目 project"
 
 [[message]]
 # : 命令選單裏 row 那一項的說明（commands 組）
@@ -563,6 +598,7 @@ key = "cmd.commands.row"
 zht = "跳到表格裏叫這個名字的那一行（`:row 木`）"
 zhs = "跳到表格里叫这个名字的那一行（`:row 木`）"
 en = "go to the row this table names (`:row 木`)"
+find = "行 表格 跳轉 跳转 goto table"
 
 [[message]]
 # : 命令選單裏 ruby 那一項的說明（commands 組）
@@ -570,6 +606,7 @@ key = "cmd.commands.ruby"
 zht = "改這裏的注音；`:ruby on|off` 是排不排"
 zhs = "改这里的注音；`:ruby on|off` 是排不排"
 en = "edit the reading here; `:ruby on|off` is whether they are laid out"
+find = "注音 拼音 振假名 旁註 旁注 furigana annotation"
 
 [[message]]
 # : 命令選單裏 run 那一項的說明（commands 組）
@@ -577,6 +614,7 @@ key = "cmd.commands.run"
 zht = "跑這種檔案在設定裏自己起名的那條命令"
 zhs = "跑这种档案在设定里自己起名的那条命令"
 en = "run the command this language names in the config"
+find = "運行 运行 執行 执行 命令 build"
 
 [[message]]
 # : 命令選單裏 saveas 那一項的說明（commands 組）
@@ -584,6 +622,7 @@ key = "cmd.commands.saveas"
 zht = "另存成新檔並改編輯它（`:w <檔名>` 只抄一份，人還在這邊）"
 zhs = "另存成新档并改编辑它（`:w <档名>` 只抄一份，人还在这边）"
 en = "save under a new name and edit that one (`:w <path>` only copies)"
+find = "另存 改名 saveas rename"
 
 [[message]]
 # : 命令選單裏 search 那一項的說明（commands 組）
@@ -591,6 +630,7 @@ key = "cmd.commands.search"
 zht = "找：`row` 一行一行（就是 `/`），`column` 一欄一欄（表格裏 t/ t? 就是它）"
 zhs = "找：`row` 一行一行（就是 `/`），`column` 一栏一栏（表格里 t/ t? 就是它）"
 en = "search: `row` runs across (that is `/`), `column` runs down (that is Enter in a table)"
+find = "查找 搜索 搜尋 搜寻 一行 一欄 一栏 direction"
 
 [[message]]
 # : 命令選單裏 sh 那一項的說明（commands 組）
@@ -598,6 +638,7 @@ key = "cmd.commands.sh"
 zht = "跑一條命令，輸出收進一個緩衝區"
 zhs = "跑一条命令，输出收进一个缓冲区"
 en = "run a command and keep its output in a buffer"
+find = "命令 終端 终端 外部 shell command output"
 
 [[message]]
 # : 命令選單裏 !command 那一項的說明（commands 組）
@@ -605,6 +646,7 @@ key = "cmd.commands.shell"
 zht = "讓出終端跑一條命令，直接看它跑（vi 的寫法）"
 zhs = "让出终端跑一条命令，直接看它跑（vi 的写法）"
 en = "hand the terminal over and watch it run (vi's spelling)"
+find = "終端 终端 外部 掛起 挂起 shell suspend"
 
 [[message]]
 # : 命令選單裏 shot 那一項的說明（commands 組）
@@ -612,6 +654,7 @@ key = "cmd.commands.shot"
 zht = "把這一頁畫成一張圖存起來；screen 則交給系統的截圖程序"
 zhs = "把这一页画成一张图存起来；screen 则交给系统的截图程序"
 en = "draw this page to a file; `screen` hands it to the platform's own"
+find = "截圖 截图 圖片 图片 存圖 存图 screenshot png"
 
 [[message]]
 # : 命令選單裏 s/pat/rep/ 那一項的說明（commands 組）
@@ -619,6 +662,7 @@ key = "cmd.commands.substitute"
 zht = "取代：選區內；`%s` 全檔、`1,40s` 指定行；旗標 g i n；分隔符可換（s#a/b#c#）"
 zhs = "取代：选区内；`%s` 全档、`1,40s` 指定行；旗标 g i n；分隔符可换（s#a/b#c#）"
 en = "substitute in the selection; `%s` the file, `1,40s` a range; flags g i n; any delimiter (s#a/b#c#)"
+find = "替換 替换 取代 正則 正则 sed regex"
 
 [[message]]
 # : 命令選單裏 syntax 那一項的說明（commands 組）
@@ -626,6 +670,7 @@ key = "cmd.commands.syntax"
 zht = "這個檔案是哪種標記（不給參數就說現在是哪個）"
 zhs = "这个档案是哪种标记（不给参数就说现在是哪个）"
 en = "which markup this file is written in (with no argument, which one it is now)"
+find = "語法 语法 標記 标记 高亮 highlight filetype"
 
 [[message]]
 # : 命令選單裏 table 那一項的說明（commands 組）
@@ -633,6 +678,7 @@ key = "cmd.commands.table"
 zht = "按格子編輯：CSV 整個檔案，或游標所在的 | 表格；`:table off` 收工"
 zhs = "按格子编辑：CSV 整个档案，或游标所在的 | 表格；`:table off` 收工"
 en = "edit as a grid: a whole CSV, or the | table under the cursor; `:table off` stops"
+find = "表格 網格 网格 格子 欄位 栏位 grid csv tsv"
 
 [[message]]
 # : 命令選單裏 theme 那一項的說明（commands 組）
@@ -640,6 +686,7 @@ key = "cmd.commands.theme"
 zht = "主題：用哪一套墨（後面可以再跟深淺）"
 zhs = "主题：用哪一套墨（后面可以再跟深浅）"
 en = "theme: which set of inks (an appearance may follow it)"
+find = "主題 主题 配色 顏色 颜色 墨 colours colors"
 
 [[message]]
 # : 命令選單裏 toc 那一項的說明（commands 組）
@@ -647,6 +694,7 @@ key = "cmd.commands.toc"
 zht = "列出標題；`:toc 3` 跳到第三條"
 zhs = "列出标题；`:toc 3` 跳到第三条"
 en = "list the headings; `:toc 3` goes to the third"
+find = "目錄 目录 標題 标题 大綱 大纲 outline headings"
 
 [[message]]
 # : 命令選單裏 tutor 那一項的說明（commands 組）
@@ -654,6 +702,7 @@ key = "cmd.commands.tutor"
 zht = "一課：把課文抄成你自己的一個檔案，邊改邊學"
 zhs = "一课：把课文抄成你自己的一个档案，边改边学"
 en = "a lesson: the text is copied into a file of your own, and you learn by editing it"
+find = "教程 課 课 入門 入门 學 学 lesson tutorial"
 
 [[message]]
 # : 命令選單裏 typewriter 那一項的說明（commands 組）
@@ -661,6 +710,7 @@ key = "cmd.commands.typewriter"
 zht = "打字機：光標那一行一直停在畫面中間，紙往上走"
 zhs = "打字机：光标那一行一直停在画面中间，纸往上走"
 en = "typewriter: the row you are writing stays in the middle and the paper moves"
+find = "打字機 打字机 居中 置中 centre center"
 
 [[message]]
 # : 命令選單裏 undo 那一項的說明（commands 組）
@@ -668,6 +718,7 @@ key = "cmd.commands.undo"
 zht = "撤銷上一次改動"
 zhs = "撤销上一次改动"
 en = "undo the last change"
+find = "撤銷 撤销 復原 复原 後悔 后悔"
 
 [[message]]
 # : 命令選單裏 wa 那一項的說明（commands 組）
@@ -675,6 +726,7 @@ key = "cmd.commands.wa"
 zht = "存下所有改過的檔案"
 zhs = "存下所有改过的档案"
 en = "save every file that changed"
+find = "全部保存 全存 save all"
 
 [[message]]
 # : 命令選單裏 wheel 那一項的說明（commands 組）
@@ -682,6 +734,7 @@ key = "cmd.commands.wheel"
 zht = "滾輪一格走幾行；`:wheel 1` 是終端自己的一格"
 zhs = "滚轮一格走几行；`:wheel 1` 是终端自己的一格"
 en = "how far one notch of the wheel moves; `:wheel 1` is the terminal's own"
+find = "滾輪 滚轮 鼠標 鼠标 捲動 滚动 scroll mouse"
 
 [[message]]
 # : 命令選單裏 word 那一項的說明（commands 組）
@@ -689,6 +742,7 @@ key = "cmd.commands.word"
 zht = "分詞：哪一份詞表、著色、粒度"
 zhs = "分词：哪一份词表、著色、粒度"
 en = "words: which list, the tint, the level"
+find = "分詞 分词 詞表 词表 粒度 segmentation dictionary"
 
 [[message]]
 # : 命令選單裏 wq 那一項的說明（commands 組）
@@ -696,6 +750,7 @@ key = "cmd.commands.wq"
 zht = "存好再退出"
 zhs = "存好再退出"
 en = "save, then leave"
+find = "存了再退 保存退出 save quit"
 
 [[message]]
 # : 命令選單裏 wrap 那一項的說明（commands 組）
@@ -703,6 +758,7 @@ key = "cmd.commands.wrap"
 zht = "長段落折到下一行；`:wrap 50` 定寬度"
 zhs = "长段落折到下一行；`:wrap 50` 定宽度"
 en = "wrap long paragraphs to the next row; `:wrap 50` sets a measure"
+find = "折行 換行 换行 自動換行 自动换行 寬度 宽度 wrap width"
 
 [[message]]
 # : 命令選單裏 write 那一項的說明（commands 組）
@@ -710,6 +766,7 @@ key = "cmd.commands.write"
 zht = "存檔；給路徑就是另存"
 zhs = "存档；给路径就是另存"
 en = "save; with a path, save as"
+find = "保存 存檔 存档 寫入 写入 save"
 
 [[message]]
 # : 命令選單裏 yume 那一項的說明（commands 組）
@@ -717,6 +774,7 @@ key = "cmd.commands.yume"
 zht = "輸入法：現在用的是哪一個；換方案、拆分注解"
 zhs = "输入法：现在用的是哪一个；换方案、拆分注解"
 en = "the IME: which one is answering, changing scheme, the 拆分 annotation"
+find = "輸入法 输入法 宇浩 方案 拆分 注解 ime scheme pinyin"
 
 [[message]]
 # : 命令選單裏 delayed 那一項的說明（commits 組）
@@ -724,6 +782,7 @@ key = "cmd.commits.delayed"
 zht = "延遲上屏（頂字）：碼成立了先等着，下一鍵拼不成碼才把前面那段頂上去"
 zhs = "延迟上屏（顶字）：码成立了先等着，下一键拼不成码才把前面那段顶上去"
 en = "延遲上屏 (頂字): a finished code waits, and goes when the next key cannot continue it"
+find = "上屏 頂字 顶字 delayed"
 
 [[message]]
 # : 命令選單裏 fluency 那一項的說明（commits 組）
@@ -731,6 +790,7 @@ key = "cmd.commits.fluency"
 zht = "整句輸入：一路打下去，空格確認整句，從不自己上屏"
 zhs = "整句输入：一路打下去，空格确认整句，从不自己上屏"
 en = "整句輸入: type on, Space confirms the sentence; nothing goes on its own"
+find = "上屏 整句 造句 sentence fluency"
 
 [[message]]
 # : 命令選單裏 unique 那一項的說明（commits 組）
@@ -738,6 +798,7 @@ key = "cmd.commits.unique"
 zht = "唯一上屏（自動、auto）：碼成立而且只有一個候選，就直接上屏"
 zhs = "唯一上屏（自动、auto）：码成立而且只有一个候选，就直接上屏"
 en = "唯一上屏 (auto): a finished code with one candidate goes straight to the page"
+find = "上屏 唯一 自動 自动 auto unique"
 
 [[message]]
 # : 命令選單裏 inline 那一項的說明（footnote-kinds 組）
@@ -752,6 +813,7 @@ key = "cmd.hints.color"
 zht = "那兩格帶一條淡底"
 zhs = "那两格带一条淡底"
 en = "a band across them"
+find = "記號 记号 提示 淡底 hint"
 
 [[message]]
 # : 命令選單裏 none 那一項的說明（hints 組）
@@ -759,6 +821,7 @@ key = "cmd.hints.none"
 zht = "什麼都不畫（默認，書上就是白的）"
 zhs = "什么都不画（默认，书上就是白的）"
 en = "nothing (the default — a book prints them white)"
+find = "記號 记号 不畫 不画 none"
 
 [[message]]
 # : 命令選單裏 symbol 那一項的說明（hints 組）
@@ -766,6 +829,7 @@ key = "cmd.hints.symbol"
 zht = "第一格畫一個記號（默認 ↵，它替掉的正是一個換行）"
 zhs = "第一格画一个记号（默认 ↵，它替掉的正是一个换行）"
 en = "a mark in the first one (↵ by default — a line break is what it replaced)"
+find = "記號 记号 換行符 换行符 symbol"
 
 [[message]]
 # : 命令選單裏 hint 那一項的說明（indent 組）
@@ -773,6 +837,7 @@ key = "cmd.indent.hint"
 zht = "縮進的那兩格上畫什麼"
 zhs = "缩进的那两格上画什么"
 en = "what is drawn in a paragraph's opening squares"
+find = "縮進 缩进 記號 记号"
 
 [[message]]
 # : 命令選單裏 off 那一項的說明（indent 組）
@@ -780,6 +845,7 @@ key = "cmd.indent.off"
 zht = "不縮進"
 zhs = "不缩进"
 en = "no indent"
+find = "縮進 缩进 不縮 不缩 off"
 
 [[message]]
 # : 命令選單裏 horizontal 那一項的說明（layouts 組）
@@ -787,6 +853,7 @@ key = "cmd.layouts.horizontal"
 zht = "橫排"
 zhs = "横排"
 en = "horizontal"
+find = "橫排 横排 橫書 横书 horizontal"
 
 [[message]]
 # : 命令選單裏 vertical 那一項的說明（layouts 組）
@@ -794,6 +861,7 @@ key = "cmd.layouts.vertical"
 zht = "竪排，縱從右往左"
 zhs = "竖排，纵从右往左"
 en = "vertical, 縱 running from the right"
+find = "竖排 竪排 直排 縱書 纵书 tategaki vertical"
 
 [[message]]
 # : 命令選單裏 footnote 那一項的說明（markdown-bits 組）
@@ -801,6 +869,7 @@ key = "cmd.markdown-bits.footnote"
 zht = "腳注：號碼自己找空的，註也一併開好"
 zhs = "脚注：号码自己找空的，注也一并开好"
 en = "a footnote: the next free number, and its note opened with it"
+find = "腳注 脚注 註釋 注释 footnote"
 
 [[message]]
 # : 命令選單裏 dark 那一項的說明（moods 組）
@@ -808,6 +877,7 @@ key = "cmd.moods.dark"
 zht = "深色"
 zhs = "深色"
 en = "dark"
+find = "深色 暗色 夜間 夜间 黑底 dark night"
 
 [[message]]
 # : 命令選單裏 light 那一項的說明（moods 組）
@@ -815,6 +885,7 @@ key = "cmd.moods.light"
 zht = "淺色"
 zhs = "浅色"
 en = "light"
+find = "淺色 浅色 白底 日間 日间 light day"
 
 [[message]]
 # : 命令選單裏 system 那一項的說明（moods 組）
@@ -822,6 +893,7 @@ key = "cmd.moods.system"
 zht = "跟終端的底色走"
 zhs = "跟终端的底色走"
 en = "follow the terminal's own background"
+find = "跟隨 跟随 系統 系统 auto system"
 
 [[message]]
 # 命令少了參數
@@ -864,6 +936,7 @@ key = "cmd.numbers.fill"
 zht = "行號那一條有沒有自己的底色（默認沒有，橫排竪排一樣）"
 zhs = "行号那一条有没有自己的底色（默认没有，横排竖排一样）"
 en = "whether the line-number band has a ground of its own (no by default, in both layouts)"
+find = "行號 行号 底色 gutter"
 
 [[message]]
 # : 命令選單裏 on 那一項的說明（on-off 組）
@@ -878,6 +951,7 @@ key = "cmd.panels.bare"
 zht = "空空如也：首選直接畫在正文裏，編碼在光標下面，Tab 召出候選框"
 zhs = "空空如也：首选直接画在正文里，编码在光标下面，Tab 召出候选框"
 en = "空空如也: the first candidate is drawn into the text, the code sits under the caret, Tab summons the list"
+find = "候選 候选 面板 行內 行内 bare inline"
 
 [[message]]
 # : 命令選單裏 full 那一項的說明（panels 組）
@@ -885,6 +959,7 @@ key = "cmd.panels.full"
 zht = "候選框：光標旁邊的那張帶框的表"
 zhs = "候选框：光标旁边的那张带框的表"
 en = "候選框: the bordered list beside the caret"
+find = "候選 候选 面板 候選框 候选框 full"
 
 [[message]]
 # : 命令選單裏 auto 那一項的說明（reload 組）
@@ -892,6 +967,7 @@ key = "cmd.reload.auto"
 zht = "檔案在外面改了就自己重讀——你這裏有改動時只提醒，不動手"
 zhs = "档案在外面改了就自己重读——你这里有改动时只提醒，不动手"
 en = "re-read by itself when the file changes outside — a warning, not a re-read, when you have changes of your own"
+find = "重載 重载 自動重讀 自动重读 auto watch"
 
 [[message]]
 # : 命令選單裏 full 那一項的說明（render 組）
@@ -899,6 +975,7 @@ key = "cmd.render.full"
 zht = "標記拿掉，只在光標那一處展開"
 zhs = "标记拿掉，只在光标那一处展开"
 en = "the markup comes off, and opens only where the cursor is"
+find = "著色 着色 展開 展开 所見即所得 wysiwyg"
 
 [[message]]
 # : 命令選單裏 off 那一項的說明（render 組）
@@ -906,6 +983,7 @@ key = "cmd.render.off"
 zht = "原文，不著色"
 zhs = "原文，不著色"
 en = "the source, uncoloured"
+find = "原文 源碼 源码 不著色 不着色 raw source"
 
 [[message]]
 # : 命令選單裏 on 那一項的說明（render 組）
@@ -913,6 +991,7 @@ key = "cmd.render.on"
 zht = "著色，標記留在畫面上（默認）"
 zhs = "著色，标记留在画面上（默认）"
 en = "coloured, the markup staying on the page (the default)"
+find = "著色 着色 高亮 highlight"
 
 [[message]]
 # : 命令選單裏 format 那一項的說明（ruby 組）
@@ -920,6 +999,7 @@ key = "cmd.ruby.format"
 zht = "把注音改寫成另一種寫法"
 zhs = "把注音改写成另一种写法"
 en = "rewrite the readings in another dialect"
+find = "注音 拼音 改寫 改写 轉換 转换 convert"
 
 [[message]]
 # : 命令選單裏 html 那一項的說明（ruby.format 組）
@@ -941,6 +1021,7 @@ key = "cmd.ruby.html"
 zht = "認 `<ruby>` 這一種"
 zhs = "认 `<ruby>` 这一种"
 en = "read `<ruby>`"
+find = "注音 拼音 html ruby"
 
 [[message]]
 # : 命令選單裏 off 那一項的說明（ruby 組）
@@ -948,6 +1029,7 @@ key = "cmd.ruby.off"
 zht = "顯示源碼"
 zhs = "显示源码"
 en = "show the source"
+find = "注音 拼音 源碼 源码 off"
 
 [[message]]
 # : 命令選單裏 on 那一項的說明（ruby 組）
@@ -955,6 +1037,7 @@ key = "cmd.ruby.on"
 zht = "排出注音"
 zhs = "排出注音"
 en = "lay the readings out"
+find = "注音 拼音 振假名 旁註 旁注 furigana"
 
 [[message]]
 # : 命令選單裏 typst 那一項的說明（ruby 組）
@@ -962,6 +1045,7 @@ key = "cmd.ruby.typst"
 zht = "認 `#ruby(…)` 這一種"
 zhs = "认 `#ruby(…)` 这一种"
 en = "read `#ruby(…)`"
+find = "注音 拼音 typst"
 
 [[message]]
 # : 命令選單裏 color 那一項的說明（rules 組）
@@ -969,6 +1053,7 @@ key = "cmd.rules.color"
 zht = "每欄一條淡底，紙從縫裏透出來"
 zhs = "每栏一条淡底，纸从缝里透出来"
 en = "a band per column, with the page showing in the seam"
+find = "欄線 栏线 分隔 淡底 rules"
 
 [[message]]
 # : 命令選單裏 line 那一項的說明（rules 組）
@@ -976,6 +1061,7 @@ key = "cmd.rules.line"
 zht = "畫一條竪線"
 zhs = "画一条竖线"
 en = "draw a vertical line"
+find = "欄線 栏线 竪線 竖线 分隔 rules line"
 
 [[message]]
 # : 命令選單裏 off 那一項的說明（rules 組）
@@ -983,6 +1069,7 @@ key = "cmd.rules.off"
 zht = "什麼都不畫，靠對齊分"
 zhs = "什么都不画，靠对齐分"
 en = "nothing drawn — the alignment tells them apart"
+find = "欄線 栏线 不畫 不画 off"
 
 [[message]]
 # : 命令選單裏 lingming 那一項的說明（schemes 組）
@@ -990,6 +1077,7 @@ key = "cmd.schemes.lingming"
 zht = "靈明"
 zhs = "灵明"
 en = "靈明"
+find = "靈明 灵明 lingming 形碼 形码"
 
 [[message]]
 # : 命令選單裏 pinyin 那一項的說明（schemes 組）
@@ -997,6 +1085,7 @@ key = "cmd.schemes.pinyin"
 zht = "拼音"
 zhs = "拼音"
 en = "拼音"
+find = "拼音 漢語拼音 汉语拼音 音碼 音码 pinyin"
 
 [[message]]
 # : 命令選單裏 qingyun 那一項的說明（schemes 組）
@@ -1004,6 +1093,7 @@ key = "cmd.schemes.qingyun"
 zht = "卿雲"
 zhs = "卿云"
 en = "卿雲"
+find = "卿雲 卿云 qingyun 形碼 形码"
 
 [[message]]
 # : 命令選單裏 riyue 那一項的說明（schemes 組）
@@ -1011,6 +1101,7 @@ key = "cmd.schemes.riyue"
 zht = "日月"
 zhs = "日月"
 en = "日月"
+find = "日月 riyue 形碼 形码"
 
 [[message]]
 # : 命令選單裏 xingchen 那一項的說明（schemes 組）
@@ -1018,6 +1109,7 @@ key = "cmd.schemes.xingchen"
 zht = "星陳"
 zhs = "星陈"
 en = "星陳"
+find = "星陳 星陈 xingchen 形碼 形码"
 
 [[message]]
 # : 命令選單裏 dash 那一項的說明（strokes 組）
@@ -1025,6 +1117,7 @@ key = "cmd.strokes.dash"
 zht = "虛線 ┆（默認）"
 zhs = "虚线 ┆（默认）"
 en = "dashed ┆ (default)"
+find = "欄線 栏线 虛線 虚线 dash"
 
 [[message]]
 # : 命令選單裏 double 那一項的說明（strokes 組）
@@ -1032,6 +1125,7 @@ key = "cmd.strokes.double"
 zht = "雙線 ║"
 zhs = "双线 ║"
 en = "double ║"
+find = "欄線 栏线 雙線 双线 double"
 
 [[message]]
 # : 命令選單裏 solid 那一項的說明（strokes 組）
@@ -1039,6 +1133,7 @@ key = "cmd.strokes.solid"
 zht = "實線 │"
 zhs = "实线 │"
 en = "solid │"
+find = "欄線 栏线 實線 实线 solid"
 
 [[message]]
 # : 命令選單裏 markdown 那一項的說明（syntaxes 組）
@@ -1046,6 +1141,7 @@ key = "cmd.syntaxes.markdown"
 zht = "`#` 標題、`**粗**`"
 zhs = "`#` 标题、`**粗**`"
 en = "`#` headings, `**bold**`"
+find = "語法 语法 標記 标记 md markdown"
 
 [[message]]
 # : 命令選單裏 text 那一項的說明（syntaxes 組）
@@ -1053,6 +1149,7 @@ key = "cmd.syntaxes.text"
 zht = "沒有標記：檔案裏的每個字符都只是它自己"
 zhs = "没有标记：档案里的每个字符都只是它自己"
 en = "no markup: every character in the file is only itself"
+find = "語法 语法 純文本 纯文本 txt plain"
 
 [[message]]
 # : 命令選單裏 typst 那一項的說明（syntaxes 組）
@@ -1060,6 +1157,7 @@ key = "cmd.syntaxes.typst"
 zht = "`=` 標題、`#import`"
 zhs = "`=` 标题、`#import`"
 en = "`=` headings, `#import`"
+find = "語法 语法 排版 typst"
 
 [[message]]
 # : 命令選單裏 check 那一項的說明（table 組）
@@ -1067,6 +1165,7 @@ key = "cmd.table.check"
 zht = "從頭看一遍：重複的行名、查無此行的部件、欄數不對的行、超出字集的字"
 zhs = "从头看一遍：重复的行名、查无此行的部件、栏数不对的行、超出字集的字"
 en = "look the whole table over: repeated row names, components with no row, rows of the wrong width"
+find = "檢查 检查 校驗 校验 查錯 查错 check lint"
 
 [[message]]
 # : 命令選單裏 csv 那一項的說明（table 組）
@@ -1074,6 +1173,7 @@ key = "cmd.table.csv"
 zht = "把游標所在的 | 表格拆成分隔文本"
 zhs = "把游标所在的 | 表格拆成分隔文本"
 en = "turn the | table under the cursor into delimited text"
+find = "分隔 逗號 逗号 制表符 csv tsv 拆開 拆开"
 
 [[message]]
 # : 命令選單裏 detail 那一項的說明（table 組）
@@ -1081,6 +1181,7 @@ key = "cmd.table.detail"
 zht = "詳情欄：開、關，或者給個寬度"
 zhs = "详情栏：开、关，或者给个宽度"
 en = "the detail panel: on, off, or a width"
+find = "詳情 详情 展開 展开 detail"
 
 [[message]]
 # : 命令選單裏 header 那一項的說明（table 組）
@@ -1088,6 +1189,7 @@ key = "cmd.table.header"
 zht = "第一行是欄名，還是跟別的行一樣是資料"
 zhs = "第一行是栏名，还是跟别的行一样是资料"
 en = "whether the first row names the columns or is a row like any other"
+find = "表頭 表头 欄名 栏名 標題行 标题行 header"
 
 [[message]]
 # : 命令選單裏 new 那一項的說明（table 組）
@@ -1095,6 +1197,7 @@ key = "cmd.table.new"
 zht = "一張空表：`new 3 4` 是三行四欄，首行是欄名"
 zhs = "一张空表：`new 3 4` 是三行四栏，首行是栏名"
 en = "an empty table: `new 3 4` is three rows by four columns, the first row the headings"
+find = "新建 插入 空表 建表 new insert"
 
 [[message]]
 # : 命令選單裏 numbers 那一項的說明（table 組）
@@ -1102,6 +1205,7 @@ key = "cmd.table.numbers"
 zht = "欄號那一行：3gd、t20-20g 用的就是它"
 zhs = "栏号那一行：3gd、t20-20g 用的就是它"
 en = "the row of column numbers — what 3gd and t20-20g count with"
+find = "欄號 栏号 標號 标号 numbers"
 
 [[message]]
 # : 命令選單裏 off 那一項的說明（table 組）
@@ -1109,6 +1213,7 @@ key = "cmd.table.off"
 zht = "當普通文字"
 zhs = "当普通文字"
 en = "as ordinary text"
+find = "表格 關掉 关掉 普通文字 off"
 
 [[message]]
 # : 命令選單裏 on 那一項的說明（table 組）
@@ -1116,6 +1221,7 @@ key = "cmd.table.on"
 zht = "按格子編輯（默認）"
 zhs = "按格子编辑（默认）"
 en = "edit it as a grid (the default)"
+find = "表格 格子 開 开 on"
 
 [[message]]
 # : 命令選單裏 pipe 那一項的說明（table 組）
@@ -1123,6 +1229,7 @@ key = "cmd.table.pipe"
 zht = "把選中的（或游標所在的）分隔文本作成 | 表格"
 zhs = "把选中的（或游标所在的）分隔文本作成 | 表格"
 en = "turn the selected — or the surrounding — delimited text into a | table"
+find = "管道 markdown 豎線 竖线 pipe 作成 合成"
 
 [[message]]
 # : 命令選單裏 rules 那一項的說明（table 組）
@@ -1130,6 +1237,7 @@ key = "cmd.table.rules"
 zht = "欄線：欄與欄之間怎麼分開"
 zhs = "栏线：栏与栏之间怎么分开"
 en = "column rules: how the columns are told apart"
+find = "欄線 栏线 分隔線 分隔线 rules"
 
 [[message]]
 # : 命令選單裏 schema 那一項的說明（table 組）
@@ -1137,6 +1245,7 @@ key = "cmd.table.schema"
 zht = "把這張表的規格開在另一半——沒有就先寫一份"
 zhs = "把这张表的规格开在另一半——没有就先写一份"
 en = "open this table's schema in the other area — writing a starting one if there is none"
+find = "規格 规格 欄位 栏位 定義 定义 schema"
 
 [[message]]
 # : 命令選單裏 sort 那一項的說明（table 組）
@@ -1144,6 +1253,7 @@ key = "cmd.table.sort"
 zht = "照這幾欄排：`sort 1 a 2 d` 是先第一欄順排、再第二欄倒排"
 zhs = "照这几栏排：`sort 1 a 2 d` 是先第一栏顺排、再第二栏倒排"
 en = "sort by these columns: `sort 1 a 2 d` is column 1 ascending, then column 2 descending"
+find = "排序 排列 順序 顺序 升序 降序 sort order"
 
 [[message]]
 # : 命令選單裏 amber 那一項的說明（themes 組）
@@ -1221,6 +1331,7 @@ key = "cmd.word-levels.balanced"
 zht = "詞表怎麼說就怎麼切"
 zhs = "词表怎么说就怎么切"
 en = "as the dictionary has it"
+find = "粒度 分詞 分词 平衡 balanced"
 
 [[message]]
 # : 命令選單裏 full 那一項的說明（word-levels 組）
@@ -1228,6 +1339,7 @@ key = "cmd.word-levels.full"
 zht = "長詞、怪詞也算"
 zhs = "长词、怪词也算"
 en = "long and odd words too"
+find = "粒度 分詞 分词 長詞 长词 full"
 
 [[message]]
 # : 命令選單裏 strict 那一項的說明（word-levels 組）
@@ -1235,6 +1347,7 @@ key = "cmd.word-levels.strict"
 zht = "只認很常見的詞——更多單字"
 zhs = "只认很常见的词——更多单字"
 en = "only words beyond argument — more single characters"
+find = "粒度 分詞 分词 單字 单字 strict"
 
 [[message]]
 # : 命令選單裏 edit 那一項的說明（word-lists 組）
@@ -1242,6 +1355,7 @@ key = "cmd.word-lists.edit"
 zht = "開本書的 .yumete/words.txt——人名、地名"
 zhs = "开本书的 .yumete/words.txt——人名、地名"
 en = "open this book's .yumete/words.txt — names of people and places"
+find = "詞表 词表 人名 地名 自定義 自定义 edit"
 
 [[message]]
 # : 命令選單裏 global 那一項的說明（word-lists 組）
@@ -1249,6 +1363,7 @@ key = "cmd.word-lists.global"
 zht = "開全域 segmentation.txt"
 zhs = "开全域 segmentation.txt"
 en = "open the global segmentation.txt"
+find = "詞表 词表 全域 全局 global"
 
 [[message]]
 # : 命令選單裏 reload 那一項的說明（word-lists 組）
@@ -1256,6 +1371,7 @@ key = "cmd.word-lists.reload"
 zht = "重讀（本書的 ＋ 全域的）"
 zhs = "重读（本书的 ＋ 全域的）"
 en = "reread (this book's and the global one)"
+find = "詞表 词表 重讀 重读 刷新 reload"
 
 [[message]]
 # : 命令選單裏 level 那一項的說明（word-topics 組）
@@ -1263,6 +1379,7 @@ key = "cmd.word-topics.level"
 zht = "分詞粒度：多少個字算一個詞"
 zhs = "分词粒度：多少个字算一个词"
 en = "word level: how readily characters join into words"
+find = "粒度 分詞 分词 level"
 
 [[message]]
 # : 命令選單裏 list 那一項的說明（word-topics 組）
@@ -1270,6 +1387,7 @@ key = "cmd.word-topics.list"
 zht = "詞表：用哪一份、重讀、編輯"
 zhs = "词表：用哪一份、重读、编辑"
 en = "the lists: which one, reread, edit"
+find = "詞表 词表 list"
 
 [[message]]
 # : 命令選單裏 show 那一項的說明（word-topics 組）
@@ -1277,6 +1395,7 @@ key = "cmd.word-topics.show"
 zht = "分詞著色"
 zhs = "分词著色"
 en = "the word tint"
+find = "分詞 分词 著色 着色 show"
 
 [[message]]
 # : 命令選單裏 0 那一項的說明（wrap 組）
@@ -1284,6 +1403,7 @@ key = "cmd.wrap.0"
 zht = "尺度用窗口寬（`:wrap 50` 是固定五十欄）"
 zhs = "尺度用窗口宽（`:wrap 50` 是固定五十栏）"
 en = "measure by the window (`:wrap 50` fixes it at fifty)"
+find = "折行 換行 换行 寬度 宽度 窗口 width"
 
 [[message]]
 # : 命令選單裏 off 那一項的說明（wrap 組）
@@ -1291,6 +1411,7 @@ key = "cmd.wrap.off"
 zht = "讓它跑出右邊"
 zhs = "让它跑出右边"
 en = "let it run off the edge"
+find = "折行 換行 换行 不折 關掉 关掉 off"
 
 [[message]]
 # : 命令選單裏 on 那一項的說明（wrap 組）
@@ -1298,6 +1419,7 @@ key = "cmd.wrap.on"
 zht = "太寬的段落折到下一行"
 zhs = "太宽的段落折到下一行"
 en = "wrap a paragraph too wide for the window"
+find = "折行 換行 换行 自動 自动 on"
 
 [[message]]
 # : 命令選單裏 builtin 那一項的說明（yume 組）
@@ -1305,6 +1427,7 @@ key = "cmd.yume.builtin"
 zht = "改用出廠自帶的靈明碼表，不管裝了什麼"
 zhs = "改用出厂自带的灵明码表，不管装了什么"
 en = "use the built-in 靈明 table, whatever else is installed"
+find = "輸入法 输入法 碼表 码表 內置 内置 出廠 出厂 builtin"
 
 [[message]]
 # : 命令選單裏 chaifen 那一項的說明（yume 組）
@@ -1312,6 +1435,7 @@ key = "cmd.yume.chaifen"
 zht = "候選旁的拆分注解"
 zhs = "候选旁的拆分注解"
 en = "the 拆分 annotation beside the candidates"
+find = "輸入法 输入法 拆分 注解 部件 chaifen"
 
 [[message]]
 # : 命令選單裏 commit 那一項的說明（yume 組）
@@ -1319,6 +1443,7 @@ key = "cmd.yume.commit"
 zht = "上屏方式：延遲（頂字）、唯一、整句"
 zhs = "上屏方式：延迟（顶字）、唯一、整句"
 en = "commit method: delayed (頂字), unique, whole-sentence"
+find = "輸入法 输入法 上屏 頂字 顶字 整句 commit"
 
 [[message]]
 # : 命令選單裏 installed 那一項的說明（yume 組）
@@ -1326,6 +1451,7 @@ key = "cmd.yume.installed"
 zht = "改用系統裝的那份碼表（builtin 的反面）"
 zhs = "改用系统装的那份码表（builtin 的反面）"
 en = "use the 碼表 the system has installed (builtin's other half)"
+find = "輸入法 输入法 碼表 码表 系統 系统 installed"
 
 [[message]]
 # : 命令選單裏 off 那一項的說明（yume 組）
@@ -1333,6 +1459,7 @@ key = "cmd.yume.off"
 zht = "回到英文"
 zhs = "回到英文"
 en = "back to English"
+find = "輸入法 输入法 關掉 关掉 英文 english off"
 
 [[message]]
 # : 命令選單裏 on 那一項的說明（yume 組）
@@ -1340,6 +1467,7 @@ key = "cmd.yume.on"
 zht = "開始打中文（碼表沒載就順手載上）"
 zhs = "开始打中文（码表没载就顺手载上）"
 en = "start typing 漢字 (loading the 碼表 if it is not loaded)"
+find = "輸入法 输入法 中文 打字 on"
 
 [[message]]
 # : 命令選單裏 panel 那一項的說明（yume 組）
@@ -1347,6 +1475,7 @@ key = "cmd.yume.panel"
 zht = "候選面板：full 是候選框，bare 是行內預覽"
 zhs = "候选面板：full 是候选框，bare 是行内预览"
 en = "candidate panel: full is the boxed list, bare is the inline preview"
+find = "輸入法 输入法 候選 候选 面板 panel"
 
 [[message]]
 # : 命令選單裏 scheme 那一項的說明（yume 組）
@@ -1354,6 +1483,7 @@ key = "cmd.yume.scheme"
 zht = "開始打字：載入一個方案（不寫名字就用配置裏那個）"
 zhs = "开始打字：载入一个方案（不写名字就用配置里那个）"
 en = "start typing: load a scheme (with no name, the configured one)"
+find = "輸入法 输入法 方案 碼表 码表 scheme"
 
 [[message]]
 # : 命令選單裏 table 那一項的說明（yume 組）
@@ -1361,6 +1491,7 @@ key = "cmd.yume.table"
 zht = "用你自己的碼表（Rime 的 .dict.yaml 也行）"
 zhs = "用你自己的码表（Rime 的 .dict.yaml 也行）"
 en = "use your own table (a Rime .dict.yaml will do)"
+find = "輸入法 输入法 碼表 码表 詞庫 词库 rime dict"
 
 [[message]]
 # : 命令選單裏 which 那一項的說明（yume 組）
@@ -1368,6 +1499,7 @@ key = "cmd.yume.which"
 zht = "現在用的是哪個方案、碼表打哪來"
 zhs = "现在用的是哪个方案、码表打哪来"
 en = "which scheme is in use, and where its 碼表 came from"
+find = "輸入法 输入法 方案 現在 现在 which"
 
 
 # ── command ───────────────────────────────────────────────────────────
@@ -4186,6 +4318,13 @@ zhs = "已经在表格操作模式了——t t 画成表格，t q 退出"
 en = "already in table keys — t t draws it, t q leaves"
 
 [[message]]
+# 竪排下進了真表格顯示，整頁跟着轉橫（接在剛說完的那句後面）
+key = "table.also-turned-horizontal"
+zht = "{0}（已轉橫排）"
+zhs = "{0}（已转横排）"
+en = "{0} — set horizontally"
+
+[[message]]
 # 在格首按退格
 key = "table.backspace-would-join-cells"
 zht = "格首：再刪就把兩格併成一格了"
@@ -4529,6 +4668,13 @@ zhs = "没有分隔行，无从对齐"
 en = "no rule row, so there is no alignment to set"
 
 [[message]]
+# t1s／:table sort 給的欄號超出這張表的欄數
+key = "table.no-such-column"
+zht = "這張表只有 {1} 欄，沒有第 {0} 欄"
+zhs = "这张表只有 {1} 栏，没有第 {0} 栏"
+en = "this table has {1} columns, so there is no column {0}"
+
+[[message]]
 # 表格裏按行名跳，表裏沒有
 key = "table.no-such-row-name"
 zht = "表裏沒有「{0}」"
@@ -4737,6 +4883,13 @@ key = "table.schema-problems"
 zht = "schema：{0}"
 zhs = "schema：{0}"
 en = "schema: {0}"
+
+[[message]]
+# t1a 之後按了 s／S／Esc 以外的鍵，排序鏈斷掉
+key = "table.sort-wants-its-action"
+zht = "排序還沒發令：`s` 順排、`S` 倒排，`Esc` 作罷"
+zhs = "排序还没发令：`s` 顺排、`S` 倒排，`Esc` 作罢"
+en = "the sort has not been asked to run yet: `s` ascending, `S` descending, `Esc` to drop it"
 
 [[message]]
 # :sort 排好了

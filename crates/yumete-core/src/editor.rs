@@ -376,6 +376,15 @@ struct MdCache {
     region: Option<crate::mdtable::Region>,
 }
 
+/// Every `|` table in the file, and which document that was true of.
+#[derive(Debug, Clone)]
+struct MdTables {
+    /// Buffer id and revision — the same key `blocks_through` uses.
+    asked: (u64, u64),
+    /// `(first, last)` of every table that parses as one, in file order.
+    rows: Vec<(usize, usize)>,
+}
+
 /// What one table's ghost padding was worked out from (Feature #212).
 ///
 /// Everything the answer depends on, so that a hit is really a hit: which
@@ -1067,6 +1076,15 @@ pub struct Editor {
     /// rows and is not cheap for a table of ten thousand, and the answer is
     /// the same all three times.
     md_cache: RefCell<Option<MdCache>>,
+    /// Every `|` table in the file, against the buffer and its revision.
+    ///
+    /// **Per document, not per line** (#275). `table_lines_at` is asked once
+    /// per visible row per frame — five or six times, through
+    /// `wrap::Measure::with_unwrapped` — and walking out from that row costs
+    /// the length of the table it lands in: a 20 000-row table took 1.9
+    /// seconds a frame, and 500 rows 55 ms, which is every keystroke. Walking
+    /// the file once per edit is O(file) and answers every row of the frame.
+    md_tables: RefCell<Option<MdTables>>,
     /// Whether Markdown is coloured at all (Feature #96).
     /// 所見即所得 (Feature #104): the markup comes off the page, except on the
     /// construct the cursor is in.
@@ -1333,6 +1351,7 @@ impl Editor {
             block_cache: RefCell::new(None),
             pad_cache: RefCell::new(None),
             md_cache: RefCell::new(None),
+            md_tables: RefCell::new(None),
             ruby_before: None,
             ghost: Vec::new(),
             ruby: Dialects::only(crate::ruby::Dialect::Html),
@@ -1628,6 +1647,7 @@ impl Editor {
         self.segment_cache.borrow_mut().clear();
         self.markup_cache.borrow_mut().clear();
         *self.md_cache.borrow_mut() = None;
+        *self.md_tables.borrow_mut() = None;
         *self.block_cache.borrow_mut() = None;
         *self.fold_cache.borrow_mut() = None;
         *self.key_index.borrow_mut() = None;
@@ -3984,6 +4004,7 @@ impl Editor {
                 rows,
                 named_delimiter(delimiter)
             );
+            self.turn_for_table_and_say();
             return true;
         }
         false
@@ -4173,6 +4194,22 @@ impl Editor {
         true
     }
 
+    /// Turn the page for a grid, and say so after whatever was just said.
+    ///
+    /// **The cold door had to say it too** (#275). `t t` on a `|` table in a
+    /// 縱書 chapter — or `-t` on the command line — set 真表格顯示 and left the
+    /// page vertical, where nothing draws a grid: the status line said 「第 1
+    /// 行 · 甲 · 格」 and the screen had not changed by one character. The
+    /// whole-file door says both things in one sentence
+    /// (`table.entered-turned-horizontal`); these two have their own first
+    /// half, so the turn is a clause on the end.
+    fn turn_for_table_and_say(&mut self) {
+        if self.turn_for_table() {
+            let said = std::mem::take(&mut self.status);
+            self.status = say!("table.also-turned-horizontal", said);
+        }
+    }
+
     // ---- Markdown tables (Feature #142) -----------------------------------
 
     /// Whether the grid's rules apply where the cursor is standing.
@@ -4313,6 +4350,51 @@ impl Editor {
         region
     }
 
+    /// Every `|` table in the file that **parses as one**, walked once per
+    /// edit (#275).
+    ///
+    /// > markdown 中，表格必須是符合 markdown 語法的，可以被正確 parse 的表格
+    /// > 才會进去普通或高级表格视图。否则代码也写不干净。
+    ///
+    /// — so a header with no `| --- |` under it and a single-column line that
+    /// merely opens with a pipe are prose, and so is a table quoted inside a
+    /// fenced block, which is *an example of* a table (the manual has
+    /// several). One walk answers both of the questions that used to ask
+    /// separately, which is why the fence check now covers the second of them
+    /// as well.
+    fn with_md_tables<T>(&self, f: impl FnOnce(&[(usize, usize)]) -> T) -> T {
+        let asked = (self.current_buffer().id(), self.current_buffer().revision());
+        if let Some(cache) = self.md_tables.borrow().as_ref() {
+            if cache.asked == asked {
+                return f(&cache.rows);
+            }
+        }
+        let lines = self.current_buffer().line_count();
+        let blocks = self.blocks_through(lines.saturating_sub(1));
+        let mut rows = Vec::new();
+        let mut line = 0;
+        while line < lines {
+            let Some(region) = crate::mdtable::region(|i| self.line_text(i), line) else {
+                line += 1;
+                continue;
+            };
+            let header = self.line_text(region.first).unwrap_or_default();
+            let parses = region.rule.is_some() && crate::mdtable::cells(&header).len() >= 2;
+            let quoted = blocks
+                .get(region.first)
+                .copied()
+                .unwrap_or_default()
+                .is_literal();
+            if parses && !quoted {
+                rows.push((region.first, region.last));
+            }
+            line = region.last.max(line) + 1;
+        }
+        let answer = f(&rows);
+        *self.md_tables.borrow_mut() = Some(MdTables { asked, rows });
+        answer
+    }
+
     /// The table `line` belongs to, if the mode that is on covers it (#275).
     ///
     /// **The one question the renderer asks**, per line: prose or table, and if
@@ -4343,25 +4425,7 @@ impl Editor {
                 (line <= last).then_some((0, last))
             }
             Bounds::Md if view.reach == Reach::File => {
-                let region = crate::mdtable::region(|i| self.line_text(i), line)?;
-                let header = self.line_text(region.first).unwrap_or_default();
-                // Parses as one, or it is prose with pipes in it.
-                if region.rule.is_none() || crate::mdtable::cells(&header).len() < 2 {
-                    return None;
-                }
-                // A table quoted inside a fenced block is *an example of* a
-                // table — the manual has several — and drawing one as a grid
-                // redraws somebody's quoted text.
-                if self
-                    .blocks_through(region.last)
-                    .get(region.first)
-                    .copied()
-                    .unwrap_or_default()
-                    .is_literal()
-                {
-                    return None;
-                }
-                Some((region.first, region.last))
+                self.with_md_tables(|rows| rows.iter().copied().find(|&(a, b)| line >= a && line <= b))
             }
             Bounds::Md | Bounds::Block => {
                 let region = self.prose_region()?;
@@ -4427,10 +4491,18 @@ impl Editor {
         // to say it. Drawn, it is that line.
         if self.grid_rule_row(line) {
             let (opens, closes) = (at.first().copied(), at.last().copied());
-            // **Every** character of it, the spaces around the dashes
+            let len = text.trim_end_matches(['\n', '\r']).chars().count();
+            // **Every** character *of the table*, the spaces around the dashes
             // included: a rule with the file's own spacing left in it is a
-            // dashed line with four gaps chewed out of it.
-            return (0..text.trim_end_matches(['\n', '\r']).chars().count())
+            // dashed line with four gaps chewed out of it — but the two spaces
+            // that indent a table inside a list item, and any space left after
+            // the closing wall, are not the table, and drawing them made the
+            // rule stick out past the rows above and below it.
+            let (from, upto) = match (opens, closes) {
+                (Some(a), Some(b)) => (a, b + 1),
+                _ => (0, len),
+            };
+            return (from..upto)
                 .map(|i| match at.contains(&i) {
                     false => (i, '┄'),
                     true => match (Some(i) == opens, Some(i) == closes) {
@@ -4477,7 +4549,15 @@ impl Editor {
         if self.table.as_ref().map(|v| v.separator) == Some(Separator::Pipe) {
             return at.windows(2).map(|w| (w[0] + 1, w[1])).collect();
         }
-        let len = self.line_text(line).unwrap_or_default().chars().count();
+        // **Without the trim the last cell is one character too wide**, the
+        // ruler asks the layout for a column that is past the end of the row,
+        // and the last column's number is silently not drawn.
+        let len = self
+            .line_text(line)
+            .unwrap_or_default()
+            .trim_end_matches(['\n', '\r'])
+            .chars()
+            .count();
         let mut cells = Vec::with_capacity(at.len() + 1);
         let mut opens = 0;
         for wall in at {
@@ -4572,26 +4652,13 @@ impl Editor {
     /// > markdown 中，表格必須是符合 markdown 語法的，可以被正確 parse 的表格
     /// > 才會进去普通或高级表格视图。否则代码也写不干净。
     ///
-    /// — so a header with no `| --- |` under it, and a single-column line that
-    /// merely opens with a pipe, are both passed over. This is the table the
-    /// file-wide mode is built from when the cursor is in the prose between
-    /// two of them; which lines each table covers is walked out again by the
-    /// renderer, one table at a time.
+    /// This is the table the file-wide mode is built from when the cursor is
+    /// in the prose between two of them. What counts as one is
+    /// [`Self::with_md_tables`]'s answer, so the door and the renderer cannot
+    /// disagree — they did: `t t` in a file whose only table was quoted inside
+    /// a fence entered a mode that then drew nothing.
     fn first_md_table_line(&self) -> Option<usize> {
-        let lines = self.current_buffer().line_count();
-        let mut line = 0;
-        while line < lines {
-            if let Some(region) = crate::mdtable::region(|i| self.line_text(i), line) {
-                let header = self.line_text(region.first).unwrap_or_default();
-                if region.rule.is_some() && crate::mdtable::cells(&header).len() >= 2 {
-                    return Some(region.first);
-                }
-                line = region.last + 1;
-                continue;
-            }
-            line += 1;
-        }
-        None
+        self.with_md_tables(|rows| rows.first().map(|&(first, _)| first))
     }
 
     /// Read the `|` table `at` this line as a grid, drawn the given way.
@@ -4662,6 +4729,7 @@ impl Editor {
             true => say!("table.entered-rule-added", columns),
             false => say!("table.entered", columns),
         };
+        self.turn_for_table_and_say();
         true
     }
 
@@ -5159,6 +5227,25 @@ impl Editor {
     ///
     /// A grid keeps its rows: sorting moves them, and moves nothing else. The
     /// header stays where it is, and every row's cells are the cells it had.
+    /// How many columns the table has, for checking a column number against.
+    ///
+    /// The widest row rather than the header: a delimited file whose header
+    /// line is short still has the columns its body rows have, and a sort by
+    /// one of them is a sort a reader can mean.
+    fn table_columns(&self) -> usize {
+        let Some(view) = self.table.as_ref() else {
+            return 0;
+        };
+        if let Some((_, parts)) = self.md_parts() {
+            return parts.columns();
+        }
+        let rope = self.current_buffer().rope();
+        (0..rope.len_lines())
+            .map(|line| view.cells(&rope.line(line).to_string()).len())
+            .max()
+            .unwrap_or(0)
+    }
+
     fn sort_table(&mut self, keys: &[(usize, bool)]) {
         let Some(view) = self.table.as_ref() else {
             self.status = say!("table.not-in-a-table");
@@ -5169,6 +5256,16 @@ impl Editor {
         // lines of a chapter is the whole chapter.
         if view.bounds == Bounds::Block {
             self.status = say!("table.block-is-read-where-it-lies");
+            return;
+        }
+        // **A column that is not there is said, not ignored.** `t99a1ds` used
+        // to sort by nothing at all — every cell of column 99 is missing, so
+        // every pair compared equal — and then report 「照『』順排」 with an
+        // empty column name; `t0s` quietly meant the first column, because
+        // the reader counts from one and `saturating_sub` floors at zero.
+        let width = self.table_columns();
+        if let Some(&(column, _)) = keys.iter().find(|&&(c, _)| c == 0 || c > width) {
+            self.status = say!("table.no-such-column", &column.to_string(), &width.to_string());
             return;
         }
         // A `|` table laid out **in the text** already has a sort that keeps
@@ -8788,9 +8885,13 @@ impl Editor {
         // One choke point for a rule with three ways in — the config, `-v`, and
         // `:vertical`: a grid is read across, so table mode is horizontal. The
         // command explains the refusal; this is what makes it true.
-        // Only a whole-file grid. A `|` table is part of a page, and a page
-        // is set the way the manuscript is set — otherwise running `:table`
-        // once locked a 縱書 manuscript horizontal for the session.
+        //
+        // **Whichever surface it is drawn on** (#275): 真表格顯示 turns the
+        // page for a table in the middle of a chapter too — 「照舊把整頁轉橫」
+        // — so while a grid is on the screen, vertical is refused wherever the
+        // grid sits. 表格操作 (`t i`) leaves the pipes on the page and does not
+        // ask for the turn, so it is not this case; `t i` and `t q` are what
+        // give the manuscript back, and both restore the layout the grid took.
         if layout == Layout::Vertical && self.table.as_ref().is_some_and(|v| v.is_page()) {
             return;
         }
@@ -10471,6 +10572,19 @@ impl Editor {
                     return;
                 }
                 self.pending = Pending::None;
+                // **A chain that has named a column ends in `s` or `S`.**
+                // Without this, every `t` verb stays live in the middle of a
+                // sort, and `d` — which is both 「降序」 and 「delete this
+                // row」, one missing digit apart — took `t1ad` as 「delete」
+                // and threw the columns away. So once a column has been
+                // named, the only ways out are the action, `Esc`, and being
+                // told what went wrong.
+                if !self.sort_keys.is_empty() && !matches!(key, Key::Char('s' | 'S') | Key::Esc) {
+                    self.sequence = None;
+                    self.sort_keys.clear();
+                    self.status = say!("table.sort-wants-its-action");
+                    return;
+                }
                 self.table_structure(key);
                 self.sequence = None;
                 self.sort_keys.clear();
@@ -11816,6 +11930,12 @@ impl Editor {
         self.anchor = pos;
         self.cursor = pos;
         self.refresh_goal_column();
+        // **The mouse leaves a guessed block too** (#275). Walking out of one
+        // with `j` drops it at the end of `on_key`; clicking out of one never
+        // went through `on_key`, so the mode stayed on until the next
+        // keystroke — the cursor was in the paragraph and `hjkl` were still
+        // walking cells.
+        self.forget_a_guessed_table();
     }
 
     /// Drag the selection's head to char index `pos`, keeping its anchor.
@@ -14099,6 +14219,7 @@ impl Editor {
         // was guarded against a table that was in another file.
         self.leave_table_quietly();
         self.md_cache.borrow_mut().take();
+        self.md_tables.borrow_mut().take();
         self.table_on_open();
         self.anchor = 0;
         self.goal_column = 0;
@@ -14106,6 +14227,13 @@ impl Editor {
         self.extend = false;
         self.pending = Pending::None;
         self.operator_count = None;
+        // A half-typed table command belonged to the buffer that is being left
+        // — `t1a` and then `:e other.md` must not leave a column named for the
+        // next file's table. From the keyboard the key that opens a buffer has
+        // already cleared these; a command line and a restored session have
+        // not.
+        self.sequence = None;
+        self.sort_keys.clear();
     }
 }
 
