@@ -24,6 +24,14 @@ pub enum Mode {
     Ruby,
     /// Choosing from a list — a file, or one of the open buffers (Feature #90).
     Picker,
+    /// Searching the commands by **what they do** (Feature #224).
+    ///
+    /// A second `:` on an empty command line opens it, and backspacing it
+    /// empty goes back there. Two modes rather than one line that tries to be
+    /// both: a merged line would have to decide, per keystroke, whether a word
+    /// is a command name or a description of one — and `vert` is both — and
+    /// its Enter would either run a guess or mean two things on one key.
+    Lookfor,
 }
 
 impl Mode {
@@ -36,6 +44,7 @@ impl Mode {
             Mode::Search => "SEARCH",
             Mode::Ruby => "RUBY",
             Mode::Picker => "PICK",
+            Mode::Lookfor => "LOOKUP",
         }
     }
 }

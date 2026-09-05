@@ -22,6 +22,7 @@ use yumete_cjk::{CategorySegmenter, Segmenter};
 use crate::buffer::Buffer;
 use crate::command::{self, Command, CommandError};
 use crate::input::{Key, Mode};
+use crate::lookfor;
 use crate::motion;
 use crate::ruby::{Dialect, Dialects};
 use crate::text_store::TextStore;
@@ -752,6 +753,13 @@ pub struct Editor {
     /// off the end of, so a typo in a long `:%s` meant backspacing through all
     /// of it.
     command_caret: usize,
+    /// Which row of the `::` search is under the highlight (Feature #224).
+    ///
+    /// Reset to the top by every keystroke that changes the query: the row
+    /// that was third for `竖` is not the row that is third for `竖排`, and
+    /// keeping the number would leave the highlight pointing at something
+    /// nobody chose.
+    lookfor_focus: usize,
     /// The `:` lines run this session, newest last.
     command_history: Vec<String>,
     /// The `/` patterns searched for this session, newest last.
@@ -1259,6 +1267,7 @@ impl Editor {
             goal_column: 0,
             command_line: String::new(),
             command_caret: 0,
+            lookfor_focus: 0,
             command_history: Vec::new(),
             search_history: Vec::new(),
             history_at: None,
@@ -3609,16 +3618,21 @@ impl Editor {
         self.command_line.chars().take(self.prompt_caret()).collect()
     }
 
-    /// The active prompt (Command or Search mode): its leading character and the
-    /// text typed so far, or `None` when no prompt is open.
-    pub fn prompt(&self) -> Option<(char, &str)> {
+    /// The active prompt (Command, Search, Ruby or `::`): what is written
+    /// before it and the text typed so far, or `None` when no prompt is open.
+    ///
+    /// A **string** rather than a character, because `::` is two of them
+    /// (#224) and a prompt that drew itself as `:` would be lying about which
+    /// of the two lines the next Enter belongs to.
+    pub fn prompt(&self) -> Option<(&'static str, &str)> {
         match self.mode {
-            Mode::Command => Some((':', &self.command_line)),
+            Mode::Command => Some((":", &self.command_line)),
+            Mode::Lookfor => Some(("::", &self.command_line)),
             Mode::Search => Some((
-                if self.search_forward { '/' } else { '?' },
+                if self.search_forward { "/" } else { "?" },
                 &self.command_line,
             )),
-            Mode::Ruby => Some(('注', &self.command_line)),
+            Mode::Ruby => Some(("注", &self.command_line)),
             _ => None,
         }
     }
@@ -10392,7 +10406,10 @@ impl Editor {
         // A `/` search or a `:` substitution is text too, and in a Chinese
         // document it is usually Chinese text. Committed characters go wherever
         // the mode is collecting them, not always into the buffer.
-        if matches!(self.mode, Mode::Command | Mode::Search | Mode::Ruby) {
+        if matches!(
+            self.mode,
+            Mode::Command | Mode::Lookfor | Mode::Search | Mode::Ruby
+        ) {
             // At the caret, not at the end. The prompt has had ← → Home End
             // since it was written, and committing 中文 into the middle of a
             // pattern that has already been typed is exactly what you go back
@@ -10464,6 +10481,10 @@ impl Editor {
                 KeyOutcome::Continue
             }
             Mode::Command => self.on_command_key(key),
+            Mode::Lookfor => {
+                self.on_lookfor_key(key);
+                KeyOutcome::Continue
+            }
             Mode::Search => {
                 self.on_search_key(key);
                 KeyOutcome::Continue
@@ -11890,7 +11911,7 @@ impl Editor {
             }
             // A prompt takes it as typing, minus the line breaks that would
             // submit it.
-            Mode::Command | Mode::Search | Mode::Ruby => {
+            Mode::Command | Mode::Lookfor | Mode::Search | Mode::Ruby => {
                 for c in text.chars().filter(|c| !c.is_control()) {
                     self.command_line.push(c);
                 }
@@ -12314,6 +12335,13 @@ impl Editor {
             self.history_at = None;
         }
         match key {
+            // A second `:` on an **empty** line opens the search over what the
+            // commands do (#224). Only on an empty one: `:s/:/：/` is a
+            // substitution with two colons in it.
+            Key::Char(':') if self.command_line.is_empty() => {
+                self.mode = Mode::Lookfor;
+                self.lookfor_focus = 0;
+            }
             Key::Tab => self.cycle_completion(1),
             Key::BackTab => self.cycle_completion(-1),
             Key::Esc => self.close_prompt(),
@@ -12334,11 +12362,73 @@ impl Editor {
         KeyOutcome::Continue
     }
 
+    /// The `::` line: searching the commands by what they **do** (#224).
+    ///
+    /// Nothing here runs anything. ⇥ — and ⏎, which is the same gesture aimed
+    /// at the same row — writes the whole command back into the `:` line and
+    /// goes back there with the caret after it, so what Enter finally runs is
+    /// always the line the reader can see. `:q!` is not undoable, and a mode
+    /// that guessed which command was meant would eventually guess that one.
+    fn on_lookfor_key(&mut self, key: Key) {
+        match key {
+            Key::Esc => self.close_prompt(),
+            // Backspacing `::` empty goes back to `:`, not out to the page:
+            // the second colon is the last thing there was to take back.
+            Key::Backspace if self.command_line.is_empty() => {
+                self.mode = Mode::Command;
+                self.lookfor_focus = 0;
+            }
+            Key::Up | Key::BackTab => {
+                self.lookfor_focus = self.lookfor_focus.saturating_sub(1)
+            }
+            Key::Down => {
+                let found = lookfor::look(&self.command_line).len();
+                if self.lookfor_focus + 1 < found {
+                    self.lookfor_focus += 1;
+                }
+            }
+            Key::Tab | Key::Enter => self.adopt_lookfor(),
+            other => {
+                self.edit_prompt(other);
+                self.lookfor_focus = 0;
+            }
+        }
+    }
+
+    /// Take the highlighted row back to the `:` line, whole.
+    fn adopt_lookfor(&mut self) {
+        let (found, focus) = self.lookfor_menu();
+        let Some(hit) = found.get(focus) else {
+            // Nothing found, so there is nothing to take. Saying so beats
+            // dropping the reader onto an empty `:` line that looks as if the
+            // search had been thrown away.
+            self.status = say!("lookfor.nothing-to-take");
+            return;
+        };
+        self.command_line = hit.choice.written();
+        self.command_caret = self.command_line.chars().count();
+        self.completion = None;
+        self.lookfor_focus = 0;
+        self.mode = Mode::Command;
+    }
+
+    /// What the `::` line has turned up, and which row is highlighted.
+    ///
+    /// Worked out afresh from the line rather than kept: 221 rows scored
+    /// against a few characters is microseconds, and a cached list is a list
+    /// that can disagree with what is on the prompt.
+    pub fn lookfor_menu(&self) -> (Vec<lookfor::Hit>, usize) {
+        let found = lookfor::look(&self.command_line);
+        let focus = self.lookfor_focus.min(found.len().saturating_sub(1));
+        (found, focus)
+    }
+
     /// Shut the prompt and forget what was on it.
     fn close_prompt(&mut self) {
         self.command_line.clear();
         self.command_caret = 0;
         self.history_at = None;
+        self.lookfor_focus = 0;
         self.mode = Mode::Normal;
     }
 
@@ -15010,7 +15100,7 @@ mod tests {
         ed.execute(":ruby typst").unwrap();
         press(&mut ed, "gg3l");
         ed.execute(":ruby").unwrap();
-        assert_eq!(ed.prompt(), Some(('注', "hàn zì")));
+        assert_eq!(ed.prompt(), Some(("注", "hàn zì")));
     }
 
     #[test]
@@ -15019,7 +15109,7 @@ mod tests {
         press(&mut ed, "gg2lv"); // select 口
         ed.execute(":ruby").unwrap();
         assert_eq!(ed.mode(), Mode::Ruby);
-        assert_eq!(ed.prompt(), Some(('注', "")), "a fresh reading");
+        assert_eq!(ed.prompt(), Some(("注", "")), "a fresh reading");
         submit_reading(&mut ed, "kǒu");
         assert_eq!(
             ed.current_buffer().text(),
@@ -15034,7 +15124,7 @@ mod tests {
         // Anywhere in the group opens it, markup included.
         press(&mut ed, "gg5l");
         ed.execute(":ruby").unwrap();
-        assert_eq!(ed.prompt(), Some(('注', "kou")), "prefilled, not blank");
+        assert_eq!(ed.prompt(), Some(("注", "kou")), "prefilled, not blank");
         // Correct it: backspace the tone-less vowel and retype.
         ed.on_key(Key::Backspace);
         ed.on_key(Key::Backspace);
@@ -15186,12 +15276,90 @@ mod tests {
         ed.on_key(Key::Char('/'));
         // What the IME commits belongs in the search pattern, not the buffer.
         ed.insert_committed("潮水");
-        assert_eq!(ed.prompt(), Some(('/', "潮水")));
+        assert_eq!(ed.prompt(), Some(("/", "潮水")));
         assert_eq!(ed.current_buffer().text(), "春江潮水連海平");
         ed.on_key(Key::Enter);
         // The match becomes the selection, so the head sits past its last
         // character and 潮水 is what an edit would act on.
         assert_eq!(ed.selection(), (2, 4), "search selected 潮水");
+    }
+
+    /// `::` is a second mode, not a longer `:` line (Feature #224).
+    #[test]
+    fn a_second_colon_opens_the_search_over_what_the_commands_do() {
+        let mut ed = Editor::new();
+        ed.on_key(Key::Char(':'));
+        assert_eq!(ed.mode(), Mode::Command);
+        ed.on_key(Key::Char(':'));
+        assert_eq!(ed.mode(), Mode::Lookfor);
+        assert_eq!(ed.prompt(), Some(("::", "")), "and it says which line it is");
+        // Backspacing it empty goes back to `:` — the second colon is the last
+        // thing there was to take back — and again from there to the page.
+        ed.on_key(Key::Backspace);
+        assert_eq!(ed.mode(), Mode::Command);
+        ed.on_key(Key::Backspace);
+        assert_eq!(ed.mode(), Mode::Normal);
+    }
+
+    /// Only on an **empty** line: `:s/:/：/` is a substitution with two colons
+    /// in it, and it used to be typed in a mode that did not exist yet.
+    #[test]
+    fn a_colon_further_along_the_line_is_only_a_colon() {
+        let mut ed = Editor::new();
+        for c in ":s/".chars() {
+            ed.on_key(Key::Char(c));
+        }
+        ed.on_key(Key::Char(':'));
+        assert_eq!(ed.mode(), Mode::Command);
+        assert_eq!(ed.prompt(), Some((":", "s/:")));
+    }
+
+    /// The whole point of the mode: the reader is thinking 「竖排」 and the
+    /// command is called `layout vertical`.
+    #[test]
+    fn a_chinese_word_on_that_line_finds_the_english_command() {
+        let mut ed = Editor::new();
+        ed.on_key(Key::Char(':'));
+        ed.on_key(Key::Char(':'));
+        ed.insert_committed("竖排");
+        assert_eq!(ed.prompt(), Some(("::", "竖排")), "committed onto the line");
+        let (found, focus) = ed.lookfor_menu();
+        let names: Vec<String> = found.iter().map(|h| h.choice.written()).collect();
+        assert_eq!(
+            names.first().map(String::as_str),
+            Some("layout vertical"),
+            "{names:?}"
+        );
+        assert_eq!(focus, 0);
+        // ⇥ writes the **whole** command back onto the `:` line and goes back
+        // there. Nothing has been run: what Enter runs is always the line the
+        // reader can see.
+        ed.on_key(Key::Tab);
+        assert_eq!(ed.mode(), Mode::Command);
+        assert_eq!(ed.prompt(), Some((":", "layout vertical")));
+        assert_eq!(ed.prompt_caret(), "layout vertical".chars().count());
+    }
+
+    /// A typed abbreviation is a subsequence, and the answer is a **subcommand**
+    /// — the flat list is the whole tree, not the two dozen top-level words.
+    #[test]
+    fn an_abbreviation_reaches_a_word_a_command_takes() {
+        let mut ed = Editor::new();
+        ed.on_key(Key::Char(':'));
+        ed.on_key(Key::Char(':'));
+        for c in "tbsort".chars() {
+            ed.on_key(Key::Char(c));
+        }
+        let (found, _) = ed.lookfor_menu();
+        let names: Vec<String> = found.iter().map(|h| h.choice.written()).collect();
+        assert!(names.iter().any(|n| n == "table sort"), "{names:?}");
+        // Down walks the list, and the next keystroke of the query puts the
+        // highlight back on top — the third row for `竖` is not the third row
+        // for `竖排`.
+        ed.on_key(Key::Down);
+        assert_eq!(ed.lookfor_menu().1, 1);
+        ed.on_key(Key::Char('x'));
+        assert_eq!(ed.lookfor_menu().1, 0);
     }
 
     #[test]
@@ -15204,14 +15372,14 @@ mod tests {
         // Tab walks the matches, writing each onto the line — `run` and `ruby`
         // both start with `ru`, in the order the table lists them.
         ed.on_key(Key::Tab);
-        assert_eq!(ed.prompt(), Some((':', "run")));
+        assert_eq!(ed.prompt(), Some((":", "run")));
         ed.on_key(Key::Tab);
-        assert_eq!(ed.prompt(), Some((':', "ruby")), "one `ruby` now, not three");
+        assert_eq!(ed.prompt(), Some((":", "ruby")), "one `ruby` now, not three");
         // …and the prefix is remembered rather than re-read from the line, so
         // walking back returns to the same one instead of starting over from
         // what Tab just wrote.
         ed.on_key(Key::BackTab);
-        assert_eq!(ed.prompt(), Some((':', "run")));
+        assert_eq!(ed.prompt(), Some((":", "run")));
 
         // Typing abandons the completion, so the next Tab starts from the line.
         ed.on_key(Key::Char('x'));
@@ -15229,7 +15397,7 @@ mod tests {
 
         // Tab takes the guess, and then there is nothing left to guess.
         ed.on_key(Key::Tab);
-        assert_eq!(ed.prompt(), Some((':', "recover")));
+        assert_eq!(ed.prompt(), Some((":", "recover")));
         assert_eq!(ed.prompt_ghost(), "", "the line is the completion now");
 
         // Nothing is guessed before anything is typed, or once arguments start.
@@ -15283,10 +15451,10 @@ mod tests {
         ed.insert_committed("海平");
         ed.on_key(Key::Home);
         ed.insert_committed("潮水");
-        assert_eq!(ed.prompt(), Some(('/', "潮水海平")));
+        assert_eq!(ed.prompt(), Some(("/", "潮水海平")));
         // …and the caret came with it, so the next commit follows on.
         ed.insert_committed("連");
-        assert_eq!(ed.prompt(), Some(('/', "潮水連海平")));
+        assert_eq!(ed.prompt(), Some(("/", "潮水連海平")));
     }
 
     #[test]
@@ -15311,7 +15479,7 @@ mod tests {
         ed.on_key(Key::Char('潮'));
         assert_eq!(ed.prompt_ghost(), "水");
         ed.on_key(Key::Tab);
-        assert_eq!(ed.prompt(), Some(('/', "潮水")));
+        assert_eq!(ed.prompt(), Some(("/", "潮水")));
         ed.on_key(Key::Enter);
         assert_eq!(ed.selection(), (2, 4), "and it runs");
 
@@ -15348,7 +15516,7 @@ mod tests {
         ed.on_key(Key::Tab);
         assert_eq!(
             ed.prompt(),
-            Some((':', "w draft")),
+            Some((":", "w draft")),
             "a file name is not a command name"
         );
     }
@@ -15360,7 +15528,7 @@ mod tests {
         ed.on_key(Key::Char('w'));
         ed.on_key(Key::Char('o'));
         ed.on_key(Key::Tab);
-        assert_eq!(ed.prompt(), Some((':', "word")));
+        assert_eq!(ed.prompt(), Some((":", "word")));
         ed.on_key(Key::Enter);
         assert!(ed.status().contains("分詞"), "{}", ed.status());
     }
@@ -19440,7 +19608,7 @@ mod tests {
         press(&mut ed, "x");
         ed.on_key(Key::Char('!'));
         assert_eq!(ed.mode(), Mode::Command);
-        assert_eq!(ed.prompt(), Some((':', "pipe ")));
+        assert_eq!(ed.prompt(), Some((":", "pipe ")));
 
         // Running it asks the front end, with the selection as the input.
         for c in "tr -d ' '".chars() {
@@ -20116,7 +20284,7 @@ mod tests {
     fn space_slash_opens_a_project_search_ready_to_be_typed_into() {
         let mut ed = Editor::new();
         type_keys(&mut ed, " /");
-        assert_eq!(ed.prompt(), Some((':', "grep ")));
+        assert_eq!(ed.prompt(), Some((":", "grep ")));
     }
 
     #[test]
@@ -20164,7 +20332,7 @@ mod tests {
         let mut ed = typed("甲乙丙");
         ed.on_key(Key::Char('/'));
         ed.paste_text("那年\n冬天");
-        assert_eq!(ed.prompt(), Some(('/', "那年冬天")));
+        assert_eq!(ed.prompt(), Some(("/", "那年冬天")));
     }
 
     #[test]
@@ -21101,12 +21269,12 @@ mod tests {
         for c in "s/x/y/".chars() {
             ed.on_key(Key::Char(c));
         }
-        assert_eq!(ed.prompt(), Some((':', "s/x/y/")));
+        assert_eq!(ed.prompt(), Some((":", "s/x/y/")));
         // Back over the closing `/`, fix the letter, and the tail is still there.
         ed.on_key(Key::Left);
         ed.on_key(Key::Backspace);
         ed.on_key(Key::Char('z'));
-        assert_eq!(ed.prompt(), Some((':', "s/x/z/")));
+        assert_eq!(ed.prompt(), Some((":", "s/x/z/")));
         assert_eq!(ed.prompt_caret(), 5, "the caret stayed where the edit was");
         ed.on_key(Key::Home);
         assert_eq!(ed.prompt_caret(), 0);
@@ -21119,9 +21287,9 @@ mod tests {
             ed.on_key(Key::Char(c));
         }
         ed.on_key(Key::Ctrl('w'));
-        assert_eq!(ed.prompt(), Some((':', "sh wc ")));
+        assert_eq!(ed.prompt(), Some((":", "sh wc ")));
         ed.on_key(Key::Ctrl('u'));
-        assert_eq!(ed.prompt(), Some((':', "")));
+        assert_eq!(ed.prompt(), Some((":", "")));
 
         // A full-width space is three bytes, and `byte index + 1` lands inside
         // it — a Chinese writer types one without thinking about it.
@@ -21131,7 +21299,7 @@ mod tests {
             ed.on_key(Key::Char(c));
         }
         ed.on_key(Key::Ctrl('w'));
-        assert_eq!(ed.prompt(), Some((':', "grep 甲　")));
+        assert_eq!(ed.prompt(), Some((":", "grep 甲　")));
     }
 
     #[test]
@@ -21146,15 +21314,15 @@ mod tests {
         }
         ed.on_key(Key::Char(':'));
         ed.on_key(Key::Up);
-        assert_eq!(ed.prompt(), Some((':', "w")), "the newest first");
+        assert_eq!(ed.prompt(), Some((":", "w")), "the newest first");
         ed.on_key(Key::Up);
-        assert_eq!(ed.prompt(), Some((':', "toc")));
+        assert_eq!(ed.prompt(), Some((":", "toc")));
         ed.on_key(Key::Up);
-        assert_eq!(ed.prompt(), Some((':', "toc")), "and it stops at the oldest");
+        assert_eq!(ed.prompt(), Some((":", "toc")), "and it stops at the oldest");
         ed.on_key(Key::Down);
-        assert_eq!(ed.prompt(), Some((':', "w")));
+        assert_eq!(ed.prompt(), Some((":", "w")));
         ed.on_key(Key::Down);
-        assert_eq!(ed.prompt(), Some((':', "")), "back to the empty line");
+        assert_eq!(ed.prompt(), Some((":", "")), "back to the empty line");
         ed.on_key(Key::Esc);
 
         // The search prompt keeps its own, because patterns and commands are
@@ -21163,7 +21331,7 @@ mod tests {
         ed.on_key(Key::Enter);
         ed.on_key(Key::Char('/'));
         ed.on_key(Key::Up);
-        assert_eq!(ed.prompt(), Some(('/', "二")));
+        assert_eq!(ed.prompt(), Some(("/", "二")));
     }
 
     #[test]
