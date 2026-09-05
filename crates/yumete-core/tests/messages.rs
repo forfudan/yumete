@@ -118,6 +118,9 @@ fn said() -> BTreeMap<String, String> {
 struct Entry {
     note: bool,
     zht: bool,
+    /// The words a reader might look the entry up by but never sees (#224):
+    /// the other script's spelling, the manual's word, the English name.
+    find: String,
 }
 
 /// The table: tag → what was written under it.
@@ -136,12 +139,23 @@ fn table() -> BTreeMap<String, Entry> {
             note = line.len() > 1;
         } else if let Some(rest) = line.strip_prefix("key = ") {
             if let Some(k) = unquote(rest) {
-                out.insert(k.clone(), Entry { note, zht: false });
+                out.insert(
+                    k.clone(),
+                    Entry {
+                        note,
+                        zht: false,
+                        find: String::new(),
+                    },
+                );
                 key = Some(k);
             }
         } else if let Some(rest) = line.strip_prefix("zht = ") {
             if let Some(entry) = key.as_ref().and_then(|k| out.get_mut(k)) {
                 entry.zht = unquote(rest).is_some_and(|v| !v.is_empty());
+            }
+        } else if let Some(rest) = line.strip_prefix("find = ") {
+            if let Some(entry) = key.as_ref().and_then(|k| out.get_mut(k)) {
+                entry.find = unquote(rest).unwrap_or_default();
             }
         }
     }
@@ -194,6 +208,59 @@ fn every_entry_says_when_it_is_said_and_has_its_traditional() {
         bad.is_empty(),
         "an entry is a `# when it is said` line, a key, and at least `zht`:\n{}",
         bad.join("\n")
+    );
+}
+
+#[test]
+fn every_command_can_be_looked_up_by_a_word_it_is_not_named_with() {
+    // #224: the `::` menu ranks a query against `find` as well as the
+    // description, so that 折行 finds `:wrap` and 竖排 finds `:layout
+    // vertical` — neither word appears in either description, and a reader
+    // who knows only one script would otherwise search and be told nothing.
+    let table = table();
+    let bare: Vec<&String> = table
+        .iter()
+        .filter(|(k, e)| k.starts_with("cmd.commands.") && e.find.is_empty())
+        .map(|(k, _)| k)
+        .collect();
+    assert!(
+        bare.is_empty(),
+        "a command with no `find` line can only be found by its own name:\n{}",
+        bare.iter()
+            .map(|m| format!("  {m}"))
+            .collect::<Vec<_>>()
+            .join("\n")
+    );
+
+    // A `find` line on anything but a command is never read.
+    let stray: Vec<&String> = table
+        .iter()
+        .filter(|(k, e)| !k.starts_with("cmd.") && !e.find.is_empty())
+        .map(|(k, _)| k)
+        .collect();
+    assert!(
+        stray.is_empty(),
+        "`find` is only searched under `cmd.`, so these lines are dead:\n{}",
+        stray
+            .iter()
+            .map(|m| format!("  {m}"))
+            .collect::<Vec<_>>()
+            .join("\n")
+    );
+
+    // A word written twice in one line is a slip, and weighs nothing extra.
+    let twice: Vec<String> = table
+        .iter()
+        .filter_map(|(k, e)| {
+            let words: Vec<&str> = e.find.split_whitespace().collect();
+            let once: BTreeSet<&str> = words.iter().copied().collect();
+            (once.len() < words.len()).then(|| format!("  {k}  — {}", e.find))
+        })
+        .collect();
+    assert!(
+        twice.is_empty(),
+        "a `find` word is written twice:\n{}",
+        twice.join("\n")
     );
 }
 

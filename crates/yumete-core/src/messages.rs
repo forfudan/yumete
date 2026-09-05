@@ -112,6 +112,15 @@ pub struct Entry {
     pub zhs: &'static str,
     /// English, or empty.
     pub en: &'static str,
+    /// Words that are **searched but never shown** — Feature #224.
+    ///
+    /// `::` finds a command by its description, and a description has to stay
+    /// short enough to read in a menu row. These are the other ways the same
+    /// thing is said: the other script's spelling (「竖排」 for a line that
+    /// says 「竪排」), the word the manual uses, the English name, the vi
+    /// command it came from. Only on the `cmd.*` entries, and empty
+    /// everywhere else.
+    pub find: &'static str,
 }
 
 impl Entry {
@@ -165,6 +174,8 @@ fn parse(text: &'static str) -> HashMap<&'static str, Entry> {
             entry.zhs = unquote(rest).unwrap_or_default();
         } else if let Some(rest) = line.strip_prefix("en = ") {
             entry.en = unquote(rest).unwrap_or_default();
+        } else if let Some(rest) = line.strip_prefix("find = ") {
+            entry.find = unquote(rest).unwrap_or_default();
         }
     }
     flush(&mut key, &mut entry, &mut out);
@@ -269,6 +280,7 @@ mod tests {
             zht: "只讀",
             zhs: "",
             en: "",
+            find: "",
         };
         assert_eq!(entry.in_language(Language::Traditional), "只讀");
         assert_eq!(entry.in_language(Language::Simplified), "只讀");
@@ -277,6 +289,7 @@ mod tests {
             zht: "只讀",
             zhs: "只读",
             en: "read-only",
+            find: "",
         };
         assert_eq!(entry.in_language(Language::Simplified), "只读");
         assert_eq!(entry.in_language(Language::English), "read-only");
