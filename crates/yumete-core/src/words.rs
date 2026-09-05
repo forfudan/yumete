@@ -12,6 +12,12 @@
 //! With `c` occurrences out of `n` words here, and `P(w)` the word's rate in
 //! ordinary prose, the rate here is `c/n` and the word is
 //!
+//! **`n` counts only the words the table holds.** `P(w)` is normalised over
+//! the table's own mass, so a `c/n` taken over *every* 漢字 token measures the
+//! two rates in different universes and deflates every 倍 by the table's
+//! coverage — the bundled 680-word list covers a quarter of a manuscript's
+//! tokens, which was a factor of four on every line of the answer.
+//!
 //! ```text
 //! 多 = (c/n) / P(w)          倍
 //! 分 = c · ln(多)            nats, the whole document's surplus
@@ -77,9 +83,11 @@ pub fn crutches(
     segment: &dyn Fn(&str) -> Vec<(usize, usize)>,
     log_prob: &dyn Fn(&str) -> Option<f64>,
 ) -> Vec<Crutch> {
-    // (count, first line). The denominator counts **every** 漢字 word,
-    // one-character ones included: `P(w)` is a rate over all of prose, so the
-    // rate it is compared against has to be over all of this text.
+    // (count, first line). The denominator counts the words **the table
+    // holds**, one-character ones included: `P(w)` is a rate within that
+    // vocabulary, so the rate it is compared against has to be one too. A
+    // manuscript's names, its coined words and everything else the table has
+    // never heard of are not part of either side of the ratio.
     let mut seen: HashMap<String, (usize, usize)> = HashMap::new();
     let mut total = 0usize;
     for (n, line) in text.lines().enumerate() {
@@ -87,6 +95,9 @@ pub fn crutches(
         for (start, end) in segment(line) {
             let word: String = chars[start..end].iter().collect();
             if word.is_empty() || !word.chars().all(is_han) {
+                continue;
+            }
+            if log_prob(&word).is_none() {
                 continue;
             }
             total += 1;
@@ -173,8 +184,25 @@ mod tests {
         assert_eq!(found.len(), 1, "{found:?}");
         assert_eq!(found[0].word, "然後");
         assert_eq!(found[0].count, 4);
-        // Four of eight words here, one in a hundred in prose: fifty times.
-        assert!((found[0].ratio - 50.0).abs() < 0.001, "{:?}", found[0].ratio);
+        // Four of the four words the table holds — 好的 is not one of them —
+        // against one in a hundred in prose: a hundred times.
+        assert!((found[0].ratio - 100.0).abs() < 0.001, "{:?}", found[0].ratio);
+    }
+
+    #[test]
+    fn what_the_table_never_heard_of_is_not_in_the_denominator() {
+        // The same 然後, and then a page of a name the table does not hold.
+        // `P(w)` is a rate within the table's vocabulary, so the answer must
+        // not move — counting every 漢字 token halved it.
+        let plain = crutches("然後好的然後好的然後好的然後好的", &by_pairs, &common);
+        let named = crutches(
+            "然後好的然後好的然後好的然後好的\n阿甯阿甯阿甯阿甯阿甯阿甯",
+            &by_pairs,
+            &common,
+        );
+        assert_eq!(plain.len(), 1, "{plain:?}");
+        assert_eq!(named.len(), 1, "{named:?}");
+        assert!((plain[0].ratio - named[0].ratio).abs() < 0.001, "{:?}", named[0].ratio);
     }
 
     #[test]
