@@ -2199,7 +2199,13 @@ fn draw_list(
     // as many columns as fit, and scroll.
     let (across, deep) = if columns {
         let wide = ((area.width as usize).saturating_sub(2) / one.max(1)).max(1);
-        let tall = ((area.height / MENU_SHARE) as usize).max(MENU_ROWS).max(1);
+        // The floor is what makes a menu worth opening at all on a short
+        // window, but it is a floor, not a licence: on twelve rows the
+        // glanceable eight plus the footer is nine, and the page behind
+        // disappears. Half the window is where the floor stops.
+        let share = (area.height / MENU_SHARE) as usize;
+        let half = ((area.height / 2) as usize).saturating_sub(1); // the footer
+        let tall = share.max(MENU_ROWS).min(half).max(1);
         let across = items.len().div_ceil(tall).clamp(1, wide);
         (across, items.len().div_ceil(across).clamp(1, tall))
     } else {
@@ -8175,6 +8181,21 @@ mod tests {
         );
         // Down first and then across: the fewest columns that hold the list.
         assert_eq!(columns.len(), 3, "three columns: {columns:?}");
+    }
+
+    #[test]
+    fn the_command_menu_leaves_a_short_window_something_to_look_at() {
+        // The eight-row floor keeps a menu worth opening on a small window,
+        // but on a twelve-row terminal eight rows and a footer is nine of the
+        // twelve — the page it is a menu *for* would be gone. Half is where
+        // the floor stops.
+        let config = Config::default();
+        let mut editor = editor_with("那年冬天");
+        editor.on_key(Key::Char(':'));
+        let buffer = render_with(&editor, &config, &no_ime(), 120, 12);
+        let (rows, _) = menu_shape(&buffer);
+        assert!(!rows.is_empty(), "a menu at all");
+        assert!(rows.len() <= 5, "at most half the window, footer and all: {rows:?}");
     }
 
     #[test]

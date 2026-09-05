@@ -6324,9 +6324,9 @@ impl Editor {
 
     /// **What divides this file into cells, whatever mode it is in.**
     ///
-    /// `(delimiter, rows_only)` — `rows_only` says that only the lines which
-    /// are `|` table rows are cells, as in a document; otherwise every line is
-    /// a row, as in a `.csv`.
+    /// A `Separator`: `Pipe` says that only the lines which are `|` table rows
+    /// are cells, as in a document; a `Delimiter` says every line is a row, as
+    /// in a `.csv`.
     ///
     /// The one answer every gate asks for. The gates used to open with
     /// `self.table.as_ref()?` and so were off whenever `:table` was — which is
