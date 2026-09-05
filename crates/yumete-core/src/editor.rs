@@ -4458,6 +4458,23 @@ impl Editor {
         chars.next() == Some('|') && chars.any(|c| !c.is_whitespace())
     }
 
+    /// Whether the whole-window grid is what the pane is showing **right now**.
+    ///
+    /// [`TableView::takes_the_pane`] says the mode was asked for; this asks
+    /// whether there is still a table under the cursor to draw. `G`, `gg` and
+    /// `:120` are file-wide motions that a grid cannot follow: they walk out of
+    /// a `|` table into the chapter around it, [`Self::table_row_span`] gives
+    /// nothing back, and a widget that draws only between those two lines drew
+    /// **nothing at all** — a blank window with a live cursor behind it.
+    ///
+    /// So the window goes back to the page, and walking into the table again
+    /// brings the grid back: the same bargain [`Self::table_here`] makes for
+    /// the keys — 「a mode scoped to the thing it is about never has to be
+    /// turned off」. `t q` still gives the window back for good.
+    pub fn grid_has_the_pane(&self) -> bool {
+        self.table.as_ref().is_some_and(|v| v.takes_the_pane()) && self.table_row_span().is_some()
+    }
+
     /// The buffer lines this table's **data rows** occupy: the first and the
     /// last, both inclusive.
     ///
@@ -4473,16 +4490,27 @@ impl Editor {
     /// than written. Both sit at the very start of the region — the rule is
     /// always the line under the header — so what is left is one run of lines.
     pub fn table_row_span(&self) -> Option<(usize, usize)> {
+        self.table_row_span_at(self.cursor_line())
+    }
+
+    /// The rows of the table **that line** is in — see [`Self::prose_region_at`].
+    pub fn table_row_span_at(&self, line: usize) -> Option<(usize, usize)> {
         let view = self.table.as_ref()?;
         let last_line = self.current_buffer().line_count().saturating_sub(1);
         match view.bounds {
             Bounds::WholeFile => Some((usize::from(view.schema.header), last_line)),
             _ => {
-                let region = self.prose_region()?;
+                let region = self.prose_region_at(line)?;
                 let first = region.first
                     + usize::from(view.schema.header)
                     + usize::from(region.rule.is_some());
-                Some((first.min(region.last), region.last.min(last_line)))
+                let last = region.last.min(last_line);
+                // **A table can have no rows at all** — a header and its
+                // `| --- |` and nothing under them yet, which is what every
+                // table looks like for the second between `t f` and the first
+                // `t r`. `first.min(last)` used to hand the rule back as if it
+                // were a row, and the grid drew the dashes as data.
+                (first <= last).then_some((first, last))
             }
         }
     }
@@ -4496,6 +4524,11 @@ impl Editor {
     /// the heading row is read off the page rather than remembered, and `t ]`
     /// into the next table names that table's columns.
     pub fn table_headings(&self) -> Vec<String> {
+        self.table_headings_at(self.cursor_line())
+    }
+
+    /// The headings of the table **that line** is in — see [`Self::prose_region_at`].
+    pub fn table_headings_at(&self, line: usize) -> Vec<String> {
         let named = || match self.table.as_ref() {
             Some(view) => view
                 .schema
@@ -4511,7 +4544,7 @@ impl Editor {
         if view.bounds == Bounds::WholeFile || !view.schema.header {
             return named();
         }
-        let Some(region) = self.prose_region() else {
+        let Some(region) = self.prose_region_at(line) else {
             return named();
         };
         let source = self.line_text(region.first).unwrap_or_default();
@@ -4523,6 +4556,32 @@ impl Editor {
         match cells.is_empty() {
             true => named(),
             false => cells,
+        }
+    }
+
+    /// How many columns **this** table has.
+    ///
+    /// Not the schema's count. The schema is built from whichever table was
+    /// entered first, and since #275 the mode belongs to the whole file: `t ]`
+    /// into the next table of 手冊 lands in a table with a different number of
+    /// columns, and counting the schema's there numbered columns that are not
+    /// on the page, left the ones that are without a heading, and called every
+    /// row of it ragged.
+    pub fn table_column_count(&self) -> usize {
+        self.table_column_count_at(self.cursor_line())
+    }
+
+    /// How many columns the table **that line** is in has.
+    pub fn table_column_count_at(&self, line: usize) -> usize {
+        let Some(view) = self.table.as_ref() else {
+            return 0;
+        };
+        match view.bounds {
+            Bounds::WholeFile => view.schema.columns.len(),
+            _ => match self.table_headings_at(line).len() {
+                0 => view.schema.columns.len(),
+                n => n,
+            },
         }
     }
 
@@ -4538,11 +4597,20 @@ impl Editor {
     /// motion, the column search and the tint the renderer draws are the same
     /// question whether the cells are cut by pipes or by tabs.
     pub fn prose_region(&self) -> Option<crate::mdtable::Region> {
+        let rope = self.current_buffer().rope();
+        self.prose_region_at(rope.char_to_line(self.cursor.min(rope.len_chars())))
+    }
+
+    /// The same question asked about a line the cursor is not on.
+    ///
+    /// The second work area is a **reader**: it is parked on a search hit or a
+    /// `空格 w` while the cursor works somewhere else, and in the full-window
+    /// grid it was drawn out of the table the *cursor* was in — its own rows,
+    /// its own headings, its own column count, all from the wrong table.
+    pub fn prose_region_at(&self, line: usize) -> Option<crate::mdtable::Region> {
         let view = self.table.as_ref()?;
         let bounds = view.bounds;
         let separator = view.separator;
-        let rope = self.current_buffer().rope();
-        let line = rope.char_to_line(self.cursor.min(rope.len_chars()));
         // Keyed by the buffer's **id**, not by its index — see `blocks_through`.
         let asked = (
             self.current_buffer().id(),
@@ -5714,6 +5782,15 @@ impl Editor {
         if region.is_rule(want) {
             want = if down { want + 1 } else { want.checked_sub(1)? };
         }
+        // **The header is not a row in the grid.** It is drawn frozen at the
+        // top out of the schema, so `k` on the first data row would put the
+        // cursor on a line the caret is nowhere near and hand every typed
+        // character to the column headings. On the two surfaces drawn in the
+        // document the header is on the page where it was written, and editing
+        // a heading there is what a writer means.
+        if self.grid_has_the_pane() && self.table_row_span().is_some_and(|(first, _)| want < first) {
+            return None;
+        }
         region.holds(want).then_some(want)
     }
 
@@ -6025,16 +6102,16 @@ impl Editor {
     /// Not an error to be refused: a table editor is the tool for *fixing*
     /// such a row, and one bad line must not lock the file.
     pub fn row_is_ragged(&self, line: usize) -> bool {
-        let Some(view) = &self.table else {
+        if self.table.is_none() {
             return false;
-        };
+        }
         let rope = self.current_buffer().rope();
         // The last line of a file that ends in a newline is empty, and an empty
         // last line is the end of the file, not a row with one blank cell.
         if line + 1 == rope.len_lines() && rope.line(line).len_chars() == 0 {
             return false;
         }
-        self.row_cells(line).len() != view.schema.columns.len()
+        self.row_cells(line).len() != self.table_column_count()
     }
 
     /// Step one cell left or right, staying on this row.
@@ -6870,18 +6947,48 @@ impl Editor {
         if view.surface != Surface::Grid || view.bounds == Bounds::WholeFile {
             return;
         }
-        if self.prose_region().is_some() {
-            return;
-        }
         // What the surface said stands: this is a jump made on its behalf, not
         // news of its own.
         let said = std::mem::take(&mut self.status);
-        self.go_to_table(true);
         if self.prose_region().is_none() {
-            self.go_to_table(false);
+            self.go_to_table(true);
+            if self.prose_region().is_none() {
+                self.go_to_table(false);
+            }
         }
+        // Even standing in the table already: `t t` is pressed from the header
+        // row as often as from anywhere else, and the grid does not draw that
+        // row where it is written.
+        self.step_off_the_frozen_header();
         self.snap_to_cell();
         self.status = said;
+    }
+
+    /// Off the header row, when the grid is the one drawing it.
+    ///
+    /// The full-window grid draws the header **frozen at the top out of the
+    /// schema** and draws the `| --- |` rule not at all — so neither line is a
+    /// row, and neither is a place to stand: the caret would be drawn on the
+    /// first data row while `x`, `c` and every typed character went into the
+    /// column headings. `go_to_table` lands on a table's first line, which is
+    /// exactly that header, so this is the step it owes.
+    ///
+    /// Only in the grid. The two surfaces drawn *in* the document keep the
+    /// header on the page where it belongs, and editing a heading there is
+    /// what a writer means.
+    fn step_off_the_frozen_header(&mut self) {
+        if !self.grid_has_the_pane() {
+            return;
+        }
+        let Some((first, _)) = self.table_row_span() else {
+            return;
+        };
+        if self.cursor_line() < first {
+            self.goto_line(first + 1);
+        }
+        // And into the cell rather than onto the `|` that opens the line — the
+        // grid draws no pipes, so a caret on one is a caret on nothing.
+        self.snap_to_cell();
     }
 
     /// Go to the next `|` table in the file, or the previous one, and read it.
@@ -6932,6 +7039,9 @@ impl Editor {
         if self.table.is_none() {
             self.enter_table();
         }
+        // A table's first line is its header, and the grid draws that frozen
+        // out of the schema — so 「the next table」 lands on its first *row*.
+        self.step_off_the_frozen_header();
         self.status = say!("table.jumped-to-line", line + 1);
     }
 
@@ -7694,12 +7804,13 @@ impl Editor {
             return None;
         }
         let (_, cell) = self.cell_position()?;
-        let name = view
-            .schema
-            .columns
+        // **This** table's headings, not the schema's: standing in the second
+        // table of a document, the status line named the first table's columns.
+        let headings = self.table_headings();
+        let name = headings
             .get(cell)
-            .map(|c| c.heading().to_string())
-            .unwrap_or_else(|| format!("+{}", cell + 1 - view.schema.columns.len()));
+            .cloned()
+            .unwrap_or_else(|| format!("+{}", cell + 1 - headings.len()));
         Some(format!("{name} · {}", view.grain.label()))
     }
 
@@ -20691,6 +20802,78 @@ mod tests {
         assert!(ed.table().is_some(), "t q is the window's key: {}", ed.status());
         press(&mut ed, "to");
         assert!(ed.table().is_none(), "{}", ed.status());
+    }
+
+    /// The frozen header is drawn, not stood on.
+    #[test]
+    fn the_grid_never_stands_on_the_header_it_draws() {
+        let mut ed = with_md_table();
+        ed.goto_line(2); // 「| 字 | 讀音 |」, the header itself
+        press(&mut ed, "tt");
+        assert_eq!(ed.cursor_line(), 3, "the first row, not the heading: {}", ed.status());
+
+        // And `k` there stops: above it is a line the grid draws out of the
+        // schema, where a caret would be a lie and a keystroke an edit to the
+        // column names.
+        press(&mut ed, "k");
+        assert_eq!(ed.cursor_line(), 3, "{}", ed.status());
+
+        // 表格操作 keeps the header on the page, so there it is a line like any
+        // other and `k` walks onto it.
+        press(&mut ed, "tn");
+        press(&mut ed, "k");
+        assert_eq!(ed.cursor_line(), 1, "{}", ed.status());
+    }
+
+    /// A table with a header, a rule and nothing under them has **no rows**.
+    #[test]
+    fn a_table_with_no_rows_yet_does_not_call_its_rule_a_row() {
+        let mut ed = typed("前文\n| 字 | 讀音 |\n| --- | --- |\n後文\n");
+        ed.goto_line(2);
+        press(&mut ed, "tt");
+        assert!(ed.table().is_some(), "{}", ed.status());
+        assert_eq!(ed.table_row_span(), None, "the rule is drawn, not written");
+        assert!(!ed.grid_has_the_pane(), "and there is nothing to give a window to");
+    }
+
+    /// `t ]` into a table of a different shape names *that* table's columns.
+    #[test]
+    fn the_next_table_is_drawn_with_its_own_columns() {
+        let mut ed = typed(
+            "| 名字 | 出場 |\n| --- | --- |\n| 阿寧 | 三 |\n\n             | 甲 | 乙 | 丙 | 丁 |\n| --- | --- | --- | --- |\n| 一 | 二 | 三 | 四 |\n",
+        );
+        ed.goto_line(3);
+        press(&mut ed, "tt");
+        assert_eq!(ed.table_column_count(), 2, "{}", ed.status());
+        assert!(!ed.row_is_ragged(2), "two cells, two columns");
+
+        press(&mut ed, "t]");
+        assert_eq!(ed.cursor_line(), 6, "the row, not the header: {}", ed.status());
+        assert_eq!(ed.table_column_count(), 4, "the schema still says two");
+        assert!(!ed.row_is_ragged(6), "four cells is not ragged in a four-column table");
+        assert_eq!(ed.table_headings(), vec!["甲", "乙", "丙", "丁"], "{}", ed.status());
+        assert!(ed.table_status().is_some_and(|s| s.starts_with('甲')), "{:?}", ed.table_status());
+    }
+
+    /// The window a grid took, given back the moment there is nothing to draw.
+    ///
+    /// `G` in 全窗表格 is a file-wide motion, and the widget draws only between
+    /// the table's first and last row — so it drew nothing at all, and the
+    /// window went blank with a live cursor behind it.
+    #[test]
+    fn the_window_comes_back_when_the_cursor_walks_out_of_the_grid() {
+        let mut ed = with_md_table();
+        press(&mut ed, "tt");
+        assert!(ed.grid_has_the_pane(), "{}", ed.status());
+
+        // 後文 — the paragraph under the table, which no grid can draw.
+        ed.goto_line(6);
+        assert!(ed.table().unwrap().takes_the_pane(), "the mode is still on");
+        assert!(!ed.grid_has_the_pane(), "and the page draws itself: {}", ed.status());
+
+        // Walking back in brings it back, unasked.
+        ed.goto_line(4);
+        assert!(ed.grid_has_the_pane(), "{}", ed.status());
     }
 
     #[test]
