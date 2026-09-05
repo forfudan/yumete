@@ -677,6 +677,13 @@ zhs = "存下所有改过的档案"
 en = "save every file that changed"
 
 [[message]]
+# : 命令選單裏 wheel 那一項的說明（commands 組）
+key = "cmd.commands.wheel"
+zht = "滾輪一格走幾行；`:wheel 1` 是終端自己的一格"
+zhs = "滚轮一格走几行；`:wheel 1` 是终端自己的一格"
+en = "how far one notch of the wheel moves; `:wheel 1` is the terminal's own"
+
+[[message]]
 # : 命令選單裏 word 那一項的說明（commands 組）
 key = "cmd.commands.word"
 zht = "分詞：哪一份詞表、著色、粒度"
@@ -1081,6 +1088,13 @@ key = "cmd.table.detail"
 zht = "詳情欄：開、關，或者給個寬度"
 zhs = "详情栏：开、关，或者给个宽度"
 en = "the detail panel: on, off, or a width"
+
+[[message]]
+# : 命令選單裏 header 那一項的說明（table 組）
+key = "cmd.table.header"
+zht = "第一行是欄名，還是跟別的行一樣是資料"
+zhs = "第一行是栏名，还是跟别的行一样是资料"
+en = "whether the first row names the columns or is a row like any other"
 
 [[message]]
 # : 命令選單裏 numbers 那一項的說明（table 組）
@@ -2796,6 +2810,13 @@ zhs = "详情栏"
 en = "the detail panel"
 
 [[message]]
+# 表格提示：第一行當欄名／當資料
+key = "hint.table.first-row-is-data"
+zht = "第一行：欄名⇄資料"
+zhs = "第一行：栏名⇄资料"
+en = "the first row: names ⇄ data"
+
+[[message]]
 # 表格提示：去某一格
 key = "hint.table.go-to-cell"
 zht = "去某一格（t20-20g）"
@@ -2808,6 +2829,13 @@ key = "hint.table.in-a-cell"
 zht = "格內"
 zhs = "格内"
 en = "in a cell"
+
+[[message]]
+# 表格提示：進表格／出表格
+key = "hint.table.in-or-out"
+zht = "進表格／出來"
+zhs = "进表格／出来"
+en = "read this as a grid / stop"
 
 [[message]]
 # 表格提示：重排對齊
@@ -2836,6 +2864,13 @@ key = "hint.table.next-cell"
 zht = "下一格"
 zhs = "下一格"
 en = "next cell"
+
+[[message]]
+# 表格提示：下一張表／上一張表
+key = "hint.table.next-or-previous"
+zht = "下一張表／上一張"
+zhs = "下一张表／上一张"
+en = "the next table / the one before"
 
 [[message]]
 # 提示：表格操作
@@ -4137,6 +4172,13 @@ zhs = "文中的表格区块：{0} 栏 {1} 行，用「{2}」分栏"
 en = "a table block in the document: {0} columns, {1} rows, split by '{2}'"
 
 [[message]]
+# t H：文中的表格區塊本來就沒有欄名行
+key = "table.block-first-row-is-data"
+zht = "文中的表格區塊：第一行本來就是資料"
+zhs = "文中的表格区块：第一行本来就是资料"
+en = "a table block in the text: its first row is data already"
+
+[[message]]
 # 在文中的表格區塊裏按了會重寫整個檔案的鍵
 key = "table.block-is-read-where-it-lies"
 zht = "文中的表格區塊只讀不改寫——要整理它，先 :table pipe 或 :table csv"
@@ -4352,6 +4394,27 @@ key = "table.header-from-first-row"
 zht = "照首行"
 zhs = "照首行"
 en = "by its own header row"
+
+[[message]]
+# t H：第一行改當資料，欄名用編號
+key = "table.header-is-data"
+zht = "第一行當資料了，{0} 欄按編號叫"
+zhs = "第一行当资料了，{0} 栏按编号叫"
+en = "the first row is data now; {0} columns, named by number"
+
+[[message]]
+# t H：第一行改當欄名
+key = "table.header-is-row-one"
+zht = "第一行當欄名了：{0} 欄"
+zhs = "第一行当栏名了：{0} 栏"
+en = "the first row names the columns now: {0} of them"
+
+[[message]]
+# t H：| 表格的欄名行是檔案自己說的
+key = "table.header-is-the-rule-row"
+zht = "| 表格的第一行就是欄名——下面那行 --- 說的"
+zhs = "| 表格的第一行就是栏名——下面那行 --- 说的"
+en = "a | table says which row is its header — the --- line under it does"
 
 [[message]]
 # 表格裏想併兩行
@@ -4758,6 +4821,13 @@ en = "this copy is yours — break it as you like (:q leaves)"
 # ── ui ────────────────────────────────────────────────────────────────
 
 [[message]]
+# `:` 命令面板的名字，畫在它那圈框的左上角
+key = "ui.commands"
+zht = "命令"
+zhs = "命令"
+en = "commands"
+
+[[message]]
 # 詳情欄關掉
 key = "ui.detail-panel-off"
 zht = "詳情欄：關"
@@ -4861,6 +4931,23 @@ key = "ui.sidebar-mode"
 zht = "-- 側欄 --  {0}"
 zhs = "-- 侧栏 --  {0}"
 en = "-- SIDEBAR --  {0}"
+
+
+# ── wheel ─────────────────────────────────────────────────────────────
+
+[[message]]
+# 滾輪一格走多遠——問的時候
+key = "wheel.is"
+zht = "滾輪：一格 {0} 行（`:wheel 1` 是終端自己的一格）"
+zhs = "滚轮：一格 {0} 行（`:wheel 1` 是终端自己的一格）"
+en = "wheel: {0} a notch (`:wheel 1` is the terminal's own)"
+
+[[message]]
+# 滾輪一格走多遠——設好了
+key = "wheel.set"
+zht = "滾輪：一格 {0} 行"
+zhs = "滚轮：一格 {0} 行"
+en = "wheel: {0} a notch"
 
 
 # ── word ──────────────────────────────────────────────────────────────

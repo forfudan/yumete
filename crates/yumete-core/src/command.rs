@@ -112,6 +112,9 @@ pub enum Command {
     /// `:wrap <n>` — write to a measure of `n` columns rather than to the
     /// window; `:wrap 0` gives the window back (Feature #113).
     SetMeasure(Option<usize>),
+    /// `:wheel <n>` — how far one notch of the mouse wheel moves, in whichever
+    /// unit the page is set in; `None` only reports (Feature #222).
+    SetWheelStep(Option<usize>),
     /// `:table` / `:table off` — read the file as a grid (Feature #118).
     SetTable(bool),
     /// `:table rules …` — how the columns are told apart (Feature #157).
@@ -126,6 +129,9 @@ pub enum Command {
     SetTypewriter(Option<bool>),
     /// `:table numbers on|off` — the row of column numbers above the header.
     SetTableNumbers(bool),
+    /// `:table header [on|off]` — whether the grid's first row names the
+    /// columns or is a row like any other (Feature #217). `None` flips it.
+    SetTableHeader(Option<bool>),
     /// `:table detail [on|off]` — the panel; `None` toggles.
     ShowDetail(Option<bool>),
     /// `:table detail 40` — how wide it is.
@@ -829,6 +835,11 @@ pub fn parse(input: &str) -> Result<Command, CommandError> {
             }
             "numbers" | "numbers on" => Ok(Command::SetTableNumbers(true)),
             "numbers off" => Ok(Command::SetTableNumbers(false)),
+            // 「這一行是欄名還是資料」 — on its own it flips, because that is
+            // the question a 碼表 asks once and never again (#217).
+            "header" => Ok(Command::SetTableHeader(None)),
+            "header on" => Ok(Command::SetTableHeader(Some(true))),
+            "header off" => Ok(Command::SetTableHeader(Some(false))),
             "rules" => Ok(Command::SetTableRules(None)),
             _ if rest.starts_with("rules ") => {
                 match crate::table::Rules::parse(rest.trim_start_matches("rules ")) {
@@ -855,6 +866,18 @@ pub fn parse(input: &str) -> Result<Command, CommandError> {
                 Ok(n) => Ok(Command::SetMeasure(Some(n))),
                 Err(_) => Err(CommandError::InvalidArgument {
                     command: "wrap",
+                    value: n.to_string(),
+                }),
+            },
+        },
+        // On its own it says what the step is; a number sets it. `0` is the
+        // terminal's own step — one unit a notch.
+        "wheel" => match rest {
+            "" => Ok(Command::SetWheelStep(None)),
+            n => match n.parse::<usize>() {
+                Ok(n) => Ok(Command::SetWheelStep(Some(n))),
+                Err(_) => Err(CommandError::InvalidArgument {
+                    command: "wheel",
                     value: n.to_string(),
                 }),
             },
@@ -1657,6 +1680,12 @@ const TABLE: &[Word] = &[
         needs: &[Need::Table],
         then: Args::Words(ON_OFF),
     },
+    Word {
+        name: "header",
+        help: "cmd.table.header",
+        needs: &[Need::Table],
+        then: Args::Words(ON_OFF),
+    },
     // Neither of these needs a table to be *open*: turning a block of text into
     // one is how you get a table in the first place.
     Word {
@@ -2443,6 +2472,13 @@ pub const COMMANDS: &[Entry] = &[
         help: "cmd.commands.wrap",
         needs: &[],
         args: Args::Words(WRAP),
+    },
+    Entry {
+        name: "wheel",
+        aliases: &[],
+        help: "cmd.commands.wheel",
+        needs: &[],
+        args: Args::Free("<格數>"),
     },
     Entry {
         name: "clipboard",
@@ -3710,6 +3746,7 @@ mod tests {
             "clipboard",
             "layout",
             "wrap",
+            "wheel",
             "table",
             "dense",
                 ] {
