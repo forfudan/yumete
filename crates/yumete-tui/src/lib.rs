@@ -6910,7 +6910,7 @@ mod tests {
         // 表格操作 (#275): the pipes stay on the page, which is what the
         // assertions below read. `t t` re-glyphs them into a grid instead.
         assert!(
-            editor.enter_table_as(yumete_core::editor::Surface::Inline),
+            editor.enter_table_as(yumete_core::editor::Surface::Normal),
             "{}",
             editor.status()
         );
@@ -7015,7 +7015,7 @@ mod tests {
         // 表格操作 (#275): the pipes stay on the page, which is what the
         // assertions below read. `t t` re-glyphs them into a grid instead.
         assert!(
-            editor.enter_table_as(yumete_core::editor::Surface::Inline),
+            editor.enter_table_as(yumete_core::editor::Surface::Normal),
             "{}",
             editor.status()
         );
@@ -7080,7 +7080,7 @@ mod tests {
         // 表格操作 (#275): the pipes stay on the page, which is what the
         // assertions below read. `t t` re-glyphs them into a grid instead.
         assert!(
-            editor.enter_table_as(yumete_core::editor::Surface::Inline),
+            editor.enter_table_as(yumete_core::editor::Surface::Normal),
             "{}",
             editor.status()
         );
@@ -7126,7 +7126,7 @@ mod tests {
         // 表格操作 (#275): the pipes stay on the page, which is what the
         // assertions below read. `t t` re-glyphs them into a grid instead.
         assert!(
-            editor.enter_table_as(yumete_core::editor::Surface::Inline),
+            editor.enter_table_as(yumete_core::editor::Surface::Normal),
             "{}",
             editor.status()
         );
@@ -7204,7 +7204,7 @@ mod tests {
 
     /// 縱書 keeps its page for **表格操作** — `turn_for_table` turns the page
     /// only for 真表格顯示, which draws a grid and cannot draw one down the
-    /// page; `t i` leaves the pipes and the commas where they are, and turning
+    /// page; `t n` leaves the pipes and the commas where they are, and turning
     /// a whole chapter sideways to mend three lines of it throws away
     /// everything around them. So the vertical page is the **only** surface
     /// that ever says which cell Insert is confined to, and #229 has to reach
@@ -7223,7 +7223,7 @@ mod tests {
         editor.on_key(Key::Char('h'));
         editor.on_key(Key::Char('h'));
         assert!(
-            editor.enter_table_as(yumete_core::editor::Surface::Inline),
+            editor.enter_table_as(yumete_core::editor::Surface::Normal),
             "{}",
             editor.status()
         );

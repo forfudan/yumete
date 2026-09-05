@@ -485,9 +485,9 @@ index, and a row with no number anywhere else is a row that got lost.
 | 272 | **The `t` menu listed a key that had moved and never the way in** | core | P2 | the author, 2026-09-05: 「tt 依舊是格式化表格而不是跳轉表格視圖，也沒有 tf 格式化表格的選項。」 Two faults in the same twelve lines, both of them the menu rather than the keys. **One**: the `\|`-table list still offered `t` for 「對齊」, which `1ffde52` had made the way *into* a table three days earlier — so the menu said `t t` formats and the code says it enters. **Two**: which list to draw was decided by `md_region().is_none()`, and that is `None` for a Markdown table nobody has opened yet — so standing in one of 手冊's own tables offered the delimited file's keys, none of which are the ones that get you in. `t` is a group in **every** mode (#206), so most presses of it come from outside a table: `t q` and `] [` now head every list and are the whole of it when there is no table under the cursor, the list is chosen by `bounds` rather than by mode, and 對齊 is offered as `f`. **small** | Done |
 | 273 | **The `:` menu was a rectangle, not a panel** | tui | P3 | the author, 2026-09-05: 「command 提示面板的設計感不如快捷鍵提示面板。請你對齊一下：面板有個邊框 ＋ 左上有個「命令」文字。」 Two panels open in the same corner of the same page, one keystroke apart, and only one of them had an edge: `draw_which_key` draws a ring at the `rule()` rung with its name in gold in the top-left, while `draw_list` painted a bare ground and let the entries run to the screen edge. `draw_list` now draws the same ring with the same corner radius (`[panel] rounded`) and takes a `title` — 「命令」 for the `:` menu, and for the picker its own name, which moves out of the head of the footer and into the corner where a panel's name belongs. **small** | Done |
 | 274 | **A search prompt that does not say what it will repeat** | core | P3 | the author, 2026-09-05: 「`/` 搜索，enter 確認，再次按下 `/` 搜索，這個時候是不是應該預填寫（灰色）上次搜索過內容，用戶可以直接 enter 繼續搜索這個，或者直接輸入新的搜索詞開始新的搜索？」 `Enter` on an empty search line has repeated `last_search` since #153 — the behaviour was already right and only the *saying* was missing, because `prompt_ghost` returned early on an empty line. It now answers with the whole of the last pattern in Search mode, so `/⏎` reads as 「再找一次這個」 and Tab writes it out. Typing narrows it as before; the first character that is not a prefix takes it away, and rubbing that character out brings it back. The `:` line is deliberately left alone: the menu under it is already showing every command there is. **small** | Done |
-| 275 | **A table in a document can only be *operated* as a grid, never *drawn* as one** | core+tui | P2 | the author, 2026-09-05: 「整页的表格视图就是 inline 表格视图的特例。」 Three modes, not two — prose／源碼, **表格操作**（`t i`, the syntax stays, the keys are the grid's, and the table's lines stop soft-wrapping）and **真表格顯示**（`t t`, drawn as a grid the way a CSV already is, ruler and all, in the middle of the prose it sits in）— and two kinds of file: one whose extension or schema *says* table turns whole (`t t` anywhere turns every table in it, and they stay turned when the cursor walks off), one where we are guessing from a run of tab characters turns only the block under the cursor and drops back the moment it leaves. What exists today is the middle mode wearing the top mode's key. Design in §5.6. **large** | Done |
+| 275 | **A table in a document can only be *operated* as a grid, never *drawn* as one** | core+tui | P2 | the author, 2026-09-05: 「整页的表格视图就是 inline 表格视图的特例。」 Three modes, not two — prose／源碼, **表格操作**（`t n`, the syntax stays, the keys are the grid's, and the table's lines stop soft-wrapping）and **真表格顯示**（`t t`, drawn as a grid the way a CSV already is, ruler and all, in the middle of the prose it sits in）— and two kinds of file: one whose extension or schema *says* table turns whole (`t t` anywhere turns every table in it, and they stay turned when the cursor walks off), one where we are guessing from a run of tab characters turns only the block under the cursor and drops back the moment it leaves. What exists today is the middle mode wearing the top mode's key. Design in §5.6. **large** | Done |
 | 276 | **A new table was three keystrokes from being usable** | core | P3 | the author, 2026-09-05: 「`:table new 3 4`，迅速在 markdown 中插入一個三行四列表格，上下有空白行，光標自動到標題欄最左的一格並進去編輯模式。」 `:markdown table 3x4` had been writing the table since #198, and stopped three steps short: no blank line around it (a `|` row welded to the paragraph above is not a table at all), Normal mode when what you want is to type the first heading, and headings pre-filled with `1 2 3` for you to delete. It is `:table new <行> <欄>` now — 行 first, and **行 counts the heading**, the way a word processor's「插入表格」asks; the rule row is punctuation. The old spelling is gone rather than aliased: it read the two numbers the other way round. **small** | Done |
-| 277 | **The full-screen grid was a file format, not a way of looking** | core+tui | P2 | the author, 2026-09-05: 「我覺得可以保留現在的 tt 模式，然後加上個新的模式也就是整窗口走網格。所以我們有四個模式……另外，ti, ta 這兩個模式應該允許光標上下離開表格回到正文中（現在不可以）。」 #275 gave a table in a document a grid drawn *where it stands*; this gives it the other thing a CSV has always had — **the whole window**, the same `table.rs` widget, measured on the visible rows and scrolled by column. Four modes now: `t o` 源碼, `t i` 表格操作, `t a` 畫成表格 (the old `t t`), `t t` 全窗表格. `t q` stops being 「離開表格」 and becomes 「把窗口還回去」, returning to whichever of the three you came from. 加行 moves to `t r`／`t R` and 加欄 to `t c`／`t C`, because `t o` and `t n` were needed for the modes. And `j`／`k` off the end of an in-document table now walk **out** into the prose instead of stopping — a table in a chapter is not the end of the page. **medium** | Done |
+| 277 | **The full-screen grid was a file format, not a way of looking** | core+tui | P2 | the author, 2026-09-05: 「我覺得可以保留現在的 tt 模式，然後加上個新的模式也就是整窗口走網格。所以我們有四個模式……另外，ti, ta 這兩個模式應該允許光標上下離開表格回到正文中（現在不可以）。」 #275 gave a table in a document a grid drawn *where it stands*; this gives it the other thing a CSV has always had — **the whole window**, the same `table.rs` widget, measured on the visible rows and scrolled by column. Four modes now: `t o` 源碼, `t n` 表格操作, `t a` 畫成表格 (the old `t t`), `t t` 全窗表格 — 表格操作 was lettered `t i` for its first day, and gave the letter back to the detail panel on 2026-09-06（作者：「還是小寫方便」）. `t q` stops being 「離開表格」 and becomes 「把窗口還回去」, returning to whichever of the three you came from. 加行 moves to `t r`／`t R` and 加欄 to `t c`／`t C`, because `t o` and `t n` were needed for the modes. And `j`／`k` off the end of an in-document table now walk **out** into the prose instead of stopping — a table in a chapter is not the end of the page. **medium** | Done |
 
 ### 5.5 · A table is a delimiter, a surface and a boundary (#261)
 
@@ -940,7 +940,7 @@ asked for the thing a CSV has always had on top of it:
 | | 原文 | 畫在哪 | soft wrap | 按鍵 |
 | --- | --- | --- | --- | --- |
 | **源碼模式** | 看得見，`\|` 就是一個字符 | 正文裏 | 照舊 | `t o` |
-| **表格操作** inline | 看得見（pipe、逗號、制表符都在） | 正文裏 | 表格那幾行**不折** | `t i` |
+| **表格操作** normal | 看得見（pipe、逗號、制表符都在） | 正文裏 | 表格那幾行**不折** | `t n` |
 | **畫成表格** advanced | 看不見，格線畫在正文中間 | 正文裏 | 不適用 | `t a` |
 | **全窗表格** table | 看不見，格線佔滿窗口 | **整個窗口** | 不適用 | `t t` |
 
@@ -981,12 +981,12 @@ prose to walk into.
 **Two kinds of file**, and this is the half that keeps the code honest:
 
 - **有明確表格語法** — the extension says so (`.csv` `.tsv` `.md`
-  `.markdown`), or a schema in `.yumete/tables/` claims the file. `t i`／`t a`
+  `.markdown`), or a schema in `.yumete/tables/` claims the file. `t n`／`t a`
   ／`t t` are then a state of **the whole file**: pressed anywhere, they turn
   every table in it, and walking the cursor out of a table into the prose above
   leaves that table drawn as a table.
 - **沒有明確表格語法** — `.txt`, `.yaml`, a run of tab-separated lines pasted
-  into a chapter. `t i`／`t a`／`t t` take **the block under the cursor** and
+  into a chapter. `t n`／`t a`／`t t` take **the block under the cursor** and
   nothing else, and leaving it drops straight back to prose; to see it again,
   press again.
 
@@ -1026,7 +1026,7 @@ contains.
 Two more things the author fixed in the same exchange:
 
 - **縱書**: any door that *draws* — `t a`, `t t`, `:table`, `-t` — turns the
-  whole page horizontal (`turn_for_table`), and `t i` / `t o` turn it back. A
+  whole page horizontal (`turn_for_table`), and `t n` / `t o` turn it back. A
   grid is read across. **Every door has to do it**: the whole-file one always
   did, and drawing a `|` table or a guessed block went in without turning — the
   status line said 「第 1 行 · 甲 · 格」 and the screen had not changed by one

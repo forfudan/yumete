@@ -3374,9 +3374,9 @@ en = "add a row (below / above)"
 [[message]]
 # t 之後認得哪些鍵
 key = "hint.table.after-t"
-zht = "t 後面：o i a t q / ? g f s S r R c C d D j k h l y p < = > ] ["
-zhs = "t 后面：o i a t q / ? g f s S r R c C d D j k h l y p < = > ] ["
-en = "after t: o i a t q / ? g f s S r R c C d D j k h l y p < = > ] ["
+zht = "t 後面：o n a t q i / ? g f s S r R c C d D j k h l y p < = > ] ["
+zhs = "t 后面：o n a t q i / ? g f s S r R c C d D j k h l y p < = > ] ["
+en = "after t: o n a t q i / ? g f s S r R c C d D j k h l y p < = > ] ["
 
 [[message]]
 # 表格提示：這欄靠左／居中／靠右
@@ -3444,9 +3444,9 @@ en = "table · character"
 [[message]]
 # 非 | 表格裏 t 之後可以按的鍵
 key = "hint.table.csv-keys"
-zht = "t 後面（這種表格）：/ ? g I s S r R d j k y p"
-zhs = "t 后面（这种表格）：/ ? g I s S r R d j k y p"
-en = "after t, in this kind of table: / ? g I s S r R d j k y p"
+zht = "t 後面（這種表格）：/ ? g i s S r R d j k y p"
+zhs = "t 后面（这种表格）：/ ? g i s S r R d j k y p"
+en = "after t, in this kind of table: / ? g i s S r R d j k y p"
 
 [[message]]
 # 表格提示：刪這一行
@@ -4887,7 +4887,7 @@ zhs = "本来就不在表格里"
 en = "not reading anything as a grid"
 
 [[message]]
-# t i，但這張表已經在表格操作模式
+# t n，但這張表已經在表格操作模式
 key = "table.already-operated"
 zht = "已經在表格操作模式了——t a 畫成表格，t t 全窗，t o 退出"
 zhs = "已经在表格操作模式了——t a 画成表格，t t 全窗，t o 退出"
@@ -5335,7 +5335,7 @@ zhs = "只有一栏——表格至少要两栏，或者先写好 |---| 那一行
 en = "one column only — a table needs two, or write the |---| line first"
 
 [[message]]
-# t i：原文照舊，按鍵歸表格（表格操作）
+# t n：原文照舊，按鍵歸表格（表格操作）
 key = "table.operated"
 zht = "表格操作——原文照舊，t a 畫成表格，t o 退出"
 zhs = "表格操作——原文照旧，t a 画成表格，t o 退出"
