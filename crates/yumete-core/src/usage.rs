@@ -137,6 +137,16 @@ fn groups_of<S: AsRef<str>>(lines: &[S]) -> Vec<Vec<String>> {
         .collect()
 }
 
+/// Does the rest of this line open with `word`?
+///
+/// Walks the two in step. Collecting `rest` into a `String` first — which is
+/// what this did — copied the tail of the line once per character per
+/// spelling, so a chapter-long line cost its own length squared.
+fn opens_with(rest: &[char], word: &str) -> bool {
+    let mut rest = rest.iter().copied();
+    word.chars().all(|w| rest.next() == Some(w))
+}
+
 /// Every place a minority spelling is written, in reading order.
 ///
 /// `extra` is the reader's own list in the same 「甲 乙」 spelling — a novel's
@@ -185,8 +195,7 @@ pub fn check(text: &str, extra: &[String]) -> Vec<Slip> {
         let chars: Vec<char> = body.chars().collect();
         let mut at = 0;
         while at < chars.len() {
-            let rest: String = chars[at..].iter().collect();
-            match all.iter().find(|(_, t)| rest.starts_with(*t)) {
+            match all.iter().find(|(_, t)| opens_with(&chars[at..], t)) {
                 Some(&(group, t)) => {
                     hits.push((line, at, group, t.to_string()));
                     at += t.chars().count();

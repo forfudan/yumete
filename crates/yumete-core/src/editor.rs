@@ -8961,7 +8961,10 @@ impl Editor {
             },
         };
         let old = match std::fs::read_to_string(&path) {
-            Ok(text) => text,
+            // Same byte-order mark `Buffer::decode` drops on the way in. Left
+            // on, it is a token of its own on line 1 and every file a Windows
+            // editor has touched reports a change it does not have.
+            Ok(text) => text.strip_prefix('\u{feff}').unwrap_or(&text).to_string(),
             Err(err) => {
                 self.status = say!("buffer.cannot-open", path.display(), err.to_string());
                 return;
@@ -9000,16 +9003,14 @@ impl Editor {
             listing.push_str(&say!("diff.line", name, change.line + 1, change.marked));
             listing.push('\n');
         }
-        let mut buffer = Buffer::from_text(&listing);
-        buffer.name_as(&say!("diff.results", name, against));
-        self.grep_root = self
-            .current_buffer()
-            .path()
-            .and_then(|p| p.parent())
-            .map(Path::to_path_buf);
-        self.add_buffer(buffer);
-        self.set_cursor(0);
-        self.status = say!("diff.changed", n, against);
+        self.show_listing(listing, say!("diff.results", name, against));
+        // The count and the listing have to agree: saying "1,200 lines differ"
+        // over a buffer holding 500 of them sends the reader looking for rows
+        // that were never written.
+        self.status = match n > GREP_LIMIT {
+            true => say!("diff.too-many", GREP_LIMIT, against),
+            false => say!("diff.changed", n, against),
+        };
     }
 
     /// Go to the row this table names by `key` (`:row 木`).
