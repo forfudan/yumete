@@ -43,9 +43,13 @@ const SLOT_WIDTH: u16 = 2;
 /// is why `*字*` **is** the markup for it rather than something new: 着重號 is
 /// what emphasis *means* here.
 ///
-/// Half-width, so it sits in a one-cell margin the way a hung mark does — and
-/// the layout buys that cell for it, the way it buys one for a reading. See
-/// [`Margin`].
+/// It sits in the margin the way a hung mark does, and the layout buys that
+/// margin for it, the way it buys one for a reading. **How wide is asked, not
+/// assumed**: `·` is East-Asian *ambiguous* — one cell in a Latin font, two in
+/// a CJK one — so [`Metrics::ruby_cell`] measures it with
+/// [`yumete_cjk::char_width`], the same call the readings go through. Reserving
+/// one cell for a glyph the terminal draws in two walks the whole row a column
+/// left. See [`Margin`].
 const EMPHASIS: char = '·';
 
 /// What the cell to the right of one 縱 has to hold — which is what decides how
@@ -57,7 +61,7 @@ const EMPHASIS: char = '·';
 struct Margin {
     /// A reading or a hung 句讀 mark: `ruby_width` cells.
     reading: bool,
-    /// A 着重號: one cell, since it is half-width.
+    /// A 着重號: as many cells as the terminal draws `·` in.
     dot: bool,
 }
 
@@ -164,18 +168,21 @@ impl Metrics {
     /// after it a column to the left — the page comes apart into a staircase.
     /// Pinyin is half-width and keeps the one cell it always had.
     ///
-    /// A 着重號 asks for one cell the same way, and asks whether or not the page
-    /// is showing readings: it is the text's own emphasis, not an annotation
-    /// laid over it, so `:ruby-off` has nothing to say about it.
+    /// A 着重號 asks the same way, and asks whether or not the page is showing
+    /// readings: it is the text's own emphasis, not an annotation laid over it,
+    /// so `:ruby off` has nothing to say about it. What it asks for is measured
+    /// rather than assumed — see [`EMPHASIS`].
     fn ruby_cell(&self, margin: Margin) -> u16 {
         let reading = if margin.reading && (self.ruby || self.hanging) {
             self.ruby_width
         } else {
             0
         };
-        reading
-            .max(u16::from(self.ticks))
-            .max(u16::from(margin.dot))
+        let dot = match margin.dot {
+            true => yumete_cjk::char_width(EMPHASIS) as u16,
+            false => 0,
+        };
+        reading.max(u16::from(self.ticks)).max(dot)
     }
 
     /// How many 縱 fit across an area `width` cells wide. Only the gaps
@@ -257,6 +264,15 @@ pub struct Placed {
     pub x: u16,
     /// The row its first slot is drawn on — which band it landed in.
     pub top: u16,
+    /// How many cells this 縱 bought to its right, from [`Metrics::ruby_cell`].
+    ///
+    /// **Carried rather than re-derived.** The renderer has to know whether the
+    /// second margin cell is its to blank, and the answer is per-縱 — a page
+    /// where one 縱 carries a 注音 reading and the next only a 着重號 buys two
+    /// cells for the first and one for the second. Asking the page instead
+    /// (「is any reading on it full-width」) blanks a cell the dotted 縱 never
+    /// bought, which is the cell the 縱 to its right is drawn in.
+    pub margin_cells: u16,
 }
 
 /// The 縱 of one page, in reading order: down a band right to left, then the
@@ -280,35 +296,29 @@ fn ruby_width_of(slots: &[Vec<zong::Slot>]) -> u16 {
 
 /// The Markdown of the lines a page is drawn from, asked of the editor once.
 ///
-/// Two callers want the same answer at two different moments: the **layout**,
-/// which has to know before it places anything whether a line's 縱 need a cell
-/// for a 着重號, and the **drawing**, which needs the runs themselves. Asking
-/// twice would walk the document from the top twice — blocks are not line-local
-/// — so the walk is done once here and both read it.
+/// Three callers want the same answers: the **layout**, which has to know
+/// before it places anything whether a line's 縱 need a cell for a 着重號, the
+/// **drawing**, which needs the runs themselves, and [`char_at`], which has to
+/// place the 縱 exactly where the drawing did or a click lands a character off.
 struct Markup<'a> {
     editor: &'a Editor,
-    blocks: std::cell::RefCell<Vec<yumete_core::markdown::Block>>,
 }
 
 impl<'a> Markup<'a> {
     fn of(editor: &'a Editor) -> Self {
-        Markup {
-            editor,
-            blocks: std::cell::RefCell::new(Vec::new()),
-        }
+        Markup { editor }
     }
 
     /// What kind of line this is. Inside a fence or a page's metadata nothing is
     /// markup, and colouring `**` there — let alone dotting beside it — would
     /// misreport what the file says.
     ///
-    /// Asked for a page's worth at a time rather than a line: the answer depends
-    /// on every line above, so one line costs the same walk as a hundred.
+    /// The editor answers this in O(1) from a cache of its own
+    /// ([`Editor::block_of`]); the page must not build a second one. Asking for
+    /// a run of lines instead — `blocks_through` — hands back a copy of every
+    /// line above as well, which is 364 µs a frame at line 19,883 of 資治通鑑.
     fn block(&self, line: usize) -> yumete_core::markdown::Block {
-        if self.blocks.borrow().len() <= line {
-            *self.blocks.borrow_mut() = self.editor.blocks_through(line + 256);
-        }
-        self.blocks.borrow().get(line).copied().unwrap_or_default()
+        self.editor.block_of(line)
     }
 
     /// The Markdown runs of one line — empty when the markup is not being
@@ -380,12 +390,14 @@ fn layout_page(
     zongs
         .into_iter()
         .zip(slots)
+        .zip(margins)
         .zip(spots)
-        .map(|((zong, slots), (x, top))| Placed {
+        .map(|(((zong, slots), margin), (x, top))| Placed {
             zong,
             slots,
             x,
             top,
+            margin_cells: metrics.ruby_cell(margin),
         })
         .collect()
 }
@@ -700,10 +712,6 @@ pub fn draw(
     };
     let visible = page.len();
 
-    // The margin the page settled on, so the renderer blanks the cell a
-    // full-width reading covers only when that cell was reserved for it.
-    let ruby_width = ruby_width_of(&page.iter().map(|p| p.slots.clone()).collect::<Vec<_>>());
-
     // Lay the number band down as a band, before anything is drawn on it. In
     // every other editor a line number is separated from the text by position —
     // a gutter column the text never enters. Here the numbers sit *above* the
@@ -919,12 +927,12 @@ pub fn draw(
             }
             if let Some((glyph, style)) = margin {
                 let mx = x + SLOT_WIDTH;
-                // A full-width reading covers the cell after it, and that cell
-                // is only ours to blank when the margin was widened for it.
+                // A full-width glyph covers the cell after it, and that cell is
+                // only ours to blank when **this 縱** widened its margin for it.
                 // With a one-cell margin the glyph leans into the gap instead —
                 // which is what a hung 句讀 has always done — and blanking there
                 // would rub out the 縱 to the right.
-                if ruby_width >= 2 {
+                if placed.margin_cells >= 2 {
                     if let Some(cell) = buf.cell_mut((mx + 1, y)) {
                         cell.set_symbol(" ").set_style(style);
                     }
