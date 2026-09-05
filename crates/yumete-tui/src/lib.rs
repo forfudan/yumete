@@ -407,6 +407,12 @@ pub fn run(
                 match shift.update(&key) {
                     ShiftResult::Toggle => {
                         if composes_here(editor) && ime.available() {
+                            // The same answer as `:yume on`, given by the hand
+                            // rather than by the command line, so it ends the
+                            // borrow the same way (#225). Without this the
+                            // restore on leaving the command line put the
+                            // language back one keystroke later, silently.
+                            borrowed = None;
                             ime.toggle_language();
                         }
                         continue;
@@ -427,6 +433,8 @@ pub fn run(
                 let control_space = mods.contains(KeyModifiers::CONTROL)
                     && matches!(code, KeyCode::Char(' ') | KeyCode::Char('\0') | KeyCode::Null);
                 if control_space && composes_here(editor) {
+                    // As above: an answer about the language ends the borrow.
+                    borrowed = None;
                     let want = if ime.is_chinese() { "-" } else { "+" };
                     let said = switch_scheme(ime, want, config);
                     editor.set_status(said);
@@ -3514,6 +3522,16 @@ fn draw_horizontal(
         let ghost_style = ground.fg(ink.quiet());
 
         let mut styles = vec![ground; chars.len()];
+        // Where a `==highlight==` covers this row, in this row's own indices,
+        // so the cell ground below can step around it.
+        //
+        // **The run, not the colour.** This used to be written as「the ground
+        // here is already `wash`」, and `wash` has three painters: a highlight,
+        // a `::: danger` container, and the current search hit. A `|` table
+        // inside a callout therefore had every character of every row already
+        // washed, so the cell ground was skipped on all of them and the mode
+        // drew nothing at all.
+        let mut highlighted: Vec<(usize, usize)> = Vec::new();
 
         if show_markup {
             let start_in_line = row.start - rope.line_to_char(row.line);
@@ -3532,6 +3550,9 @@ fn draw_horizontal(
                 let b = run.end.saturating_sub(start_in_line).min(chars.len());
                 // Patched onto the block's ground rather than replacing it, so
                 // a bold word inside a `::: warning` keeps both.
+                if run.kind == yumete_core::markdown::Kind::Highlight {
+                    highlighted.push((a.min(b), b));
+                }
                 for style in styles.iter_mut().take(b).skip(a.min(b)) {
                     *style = style.patch(markup_style(run.kind, ink));
                 }
@@ -3601,12 +3622,12 @@ fn draw_horizontal(
             if to > row.start && from < row.end {
                 let a = from.saturating_sub(row.start).min(chars.len());
                 let b = to.saturating_sub(row.start).min(chars.len());
-                for style in styles.iter_mut().take(b).skip(a) {
+                for (i, style) in styles.iter_mut().enumerate().take(b).skip(a) {
                     // Never over a `==highlight==`. The band and the word tint
                     // are quieter than the cell and give way to it, but a
                     // highlight exists *to be* a ground — the same reason the
                     // word tint above steps around it.
-                    if style.bg == Some(ink.wash()) {
+                    if highlighted.iter().any(|&(x, y)| i >= x && i < y) {
                         continue;
                     }
                     *style = style.patch(cell_style);
@@ -6184,6 +6205,55 @@ mod tests {
         assert_ne!(buf[(wood, row)].bg, want, "the other cell is not tinted");
     }
 
+    /// The cell ground survives a `::: danger`, and still gives way to a
+    /// `==highlight==`.
+    ///
+    /// The guard was written as「the ground here is already `wash`」, and three
+    /// things paint `wash`: a highlight, a danger callout, and the search hit.
+    /// A `|` table inside a callout therefore had every character already
+    /// washed and lost the ground entirely — table mode drew nothing at all.
+    #[test]
+    fn the_cell_ground_survives_a_callout_but_not_a_highlight() {
+        let mut config = Config::default();
+        config.editor.line_numbers = LineNumbers::None;
+        config.editor.show_segmentation = false;
+        let ink = ink(&config);
+        let want = ink.at(yumete_config::rung::HEAD);
+        let mut editor = Editor::new();
+        editor.current_buffer_mut().insert(
+            0,
+            "::: danger\n| 字頭 | 讀音 |\n| --- | --- |\n| 木頭 | ==mu== |\n:::\n",
+        );
+        editor.on_key(Key::Char('g'));
+        editor.on_key(Key::Char('g'));
+        for _ in 0..3 {
+            editor.on_key(Key::Char('j'));
+        }
+        assert!(editor.enter_table(), "{}", editor.status());
+        let row_with = |buf: &ratatui::buffer::Buffer, needle: &str| {
+            (0..8u16)
+                .find(|&y| row_text(buf, y).contains(needle))
+                .unwrap_or_else(|| {
+                    panic!("{needle:?}: {:?}", (0..8).map(|y| row_text(buf, y)).collect::<Vec<_>>())
+                })
+        };
+        // Inside the callout, and the ground is there. The character *beside*
+        // the cursor, because the block cursor paints its own slot last.
+        let buf = render(&editor, &config, 30, 8);
+        let y = row_with(&buf, "木頭");
+        let text = row_text(&buf, y);
+        assert_eq!(buf[(column_of(&text, "頭"), y)].bg, want, "{text:?}");
+
+        // Now into the highlighted cell. A highlighter's ground is the answer
+        // to「this is marked」and the cell must not rub it out.
+        editor.on_key(Key::Char('l'));
+        let buf = render(&editor, &config, 30, 8);
+        let y = row_with(&buf, "mu");
+        let text = row_text(&buf, y);
+        let at = column_of(&text, "mu");
+        assert_eq!(buf[(at, y)].bg, ink.wash(), "{text:?}");
+    }
+
     /// A ground that says「an edit lands here」has to be told the truth about
     /// where the cursor is. `:table` staying on is not that truth: `gg`, `G`,
     /// `:N` and a search all walk out of the table without putting it away,
@@ -6199,7 +6269,12 @@ mod tests {
         let mut editor = Editor::new();
         editor
             .current_buffer_mut()
-            .insert(0, "| 字 | 讀音 |\n| --- | --- |\n| 木 | mu |\n後文\n");
+            // **The prose line holds a `|`.** With a pipe-free line under the
+            // table `mdtable::boxes` returns nothing and the old renderer drew
+            // no ground there either — the assertion below passed on the very
+            // bug it was written to catch. A line that has a pipe but does not
+            // open with one is a paragraph, and it used to be given a cell.
+            .insert(0, "| 字 | 讀音 |\n| --- | --- |\n| 木 | mu |\n見上表 | 附註");
         editor.on_key(Key::Char('g'));
         editor.on_key(Key::Char('g'));
         editor.on_key(Key::Char('j'));
@@ -6225,10 +6300,11 @@ mod tests {
         // Out of the table altogether. `G` is not a table motion, so this is
         // the ordinary prose under it — no cell of anything.
         editor.on_key(Key::Char('G'));
+        assert_eq!(editor.cursor_line(), 3, "on the prose: {}", editor.status());
         let buf = render(&editor, &config, 30, 8);
-        let y = row_with(&buf, "後");
+        let y = row_with(&buf, "見");
         for x in 0..30u16 {
-            assert_ne!(buf[(x, y)].bg, want, "column {x} of the prose row");
+            assert_ne!(buf[(x, y)].bg, want, "column {x} of the prose row: {:?}", row_text(&buf, y));
         }
 
         // …and onto the rule. `clear_cell` refuses it and `move_cell_row`
@@ -6319,6 +6395,60 @@ mod tests {
         // counting columns off the content lands inside it.
         let bar = last_column_of(&text, "|");
         assert_ne!(buf[(bar, row)].bg, want, "and it stops at the pipe: {text:?}");
+    }
+
+    /// The 縱書 page draws the ground under the same three rules as the
+    /// horizontal one: not on prose, not on the rule row, not over a
+    /// `==highlight==`.
+    ///
+    /// The region guard landed on both pages; the highlight guard landed only
+    /// on the horizontal one, and nothing here would have said so.
+    #[test]
+    fn the_vertical_page_keeps_the_cell_to_the_table() {
+        let mut editor = editor_with(
+            "| 字 | 讀音 |\n| --- | --- |\n| 木頭 | ==mu== |\n見上表 | 附註",
+        );
+        editor.set_layout(WritingLayout::Vertical);
+        editor.on_key(Key::Char('g'));
+        editor.on_key(Key::Char('g'));
+        // `h` walks to the next 縱, which is the next line of the file.
+        editor.on_key(Key::Char('h'));
+        editor.on_key(Key::Char('h'));
+        assert!(editor.enter_table(), "{}", editor.status());
+        let config = vertical_config();
+        let ink = ink(&config);
+        let want = ink.at(yumete_config::rung::HEAD);
+        let find = |buffer: &ratatui::buffer::Buffer, ch: &str| {
+            (0..24u16)
+                .flat_map(|x| (0..14u16).map(move |y| (x, y)))
+                .find(|&(x, y)| at(buffer, x, y) == ch)
+                .unwrap_or_else(|| panic!("{ch} is on the page"))
+        };
+
+        // Into the highlighted cell — `l` walks across the row, because the
+        // motions are turned with the text. The highlighter's ground is the
+        // answer to 「this is marked」 and the cell may not rub it out.
+        editor.on_key(Key::Char('l'));
+        assert_eq!(editor.cell_position(), Some((2, 1)), "in the marked cell");
+        let buffer = render_vertical(&mut editor, &config, 24, 14);
+        let (x, y) = find(&buffer, "m");
+        assert_eq!(buffer[(x, y)].bg, ink.wash(), "the highlight keeps its ground");
+
+        // Onto the rule row: drawn, not edited.
+        editor.on_key(Key::Char(':'));
+        editor.on_key(Key::Char('2'));
+        editor.on_key(Key::Enter);
+        assert_eq!(editor.cursor_line(), 1, "on the rule: {}", editor.status());
+        let buffer = render_vertical(&mut editor, &config, 24, 14);
+        let (x, y) = find(&buffer, "-");
+        assert_ne!(buffer[(x, y)].bg, want, "the rule row is not a cell");
+
+        // And out of the table, onto a paragraph that merely holds a `|`.
+        editor.on_key(Key::Char('G'));
+        assert_eq!(editor.cursor_line(), 3, "on the prose: {}", editor.status());
+        let buffer = render_vertical(&mut editor, &config, 24, 14);
+        let (x, y) = find(&buffer, "附");
+        assert_ne!(buffer[(x, y)].bg, want, "the prose is not a cell");
     }
 
     /// 縱書 keeps its page when a `|` table is entered — `turn_for_table`
@@ -8189,6 +8319,16 @@ mod tests {
             editor.on_key(Key::Left);
         }
         assert!(!composes_here(&editor), "the caret is on the command name");
+
+        // **A bang the command does not take is not stripped.** `:o!` is a
+        // spelling this editor retired outright; offering the IME for it puts
+        // a Chinese name on a line that can only end in an error.
+        let mut editor = Editor::new();
+        editor.on_key(Key::Char(':'));
+        for c in "o! 第三章.md".chars() {
+            editor.on_key(Key::Char(c));
+        }
+        assert!(!composes_here(&editor), "`:o!` is not `:open`");
     }
 
     #[test]
