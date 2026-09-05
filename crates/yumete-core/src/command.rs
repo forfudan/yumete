@@ -1417,7 +1417,7 @@ pub fn pick<'a>(typed: &str, from: &'a [Word]) -> Option<&'a Word> {
 }
 
 /// A word offered by completion, whether a command or an argument.
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct Choice {
     pub name: &'static str,
     pub alias: Option<&'static str>,

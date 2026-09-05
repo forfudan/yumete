@@ -350,7 +350,12 @@ pub fn run(
             // the borrow only one way round: a command line opened from 英,
             // during which something turned 中 on, handed Insert a language it
             // never had.
-            if last_mode == Some(Mode::Command) {
+            // `:` and `::` are one prompt for this purpose (#224): stepping
+            // between them is not leaving the command line, and handing Insert
+            // its language back on the way *in* to `::` would put 中文 on a
+            // line that is about to be typed in 英.
+            let prompting = |m: Mode| matches!(m, Mode::Command | Mode::Lookfor);
+            if last_mode.is_some_and(prompting) && !prompting(mode) {
                 if let Some(was) = borrowed.take() {
                     if ime.available() && ime.is_chinese() != was {
                         ime.toggle_language();
@@ -363,7 +368,7 @@ pub fn run(
             // 英 whatever Insert was in** — otherwise `:layout` typed straight
             // after writing 中文 is eaten a letter at a time. Insert's own
             // state is borrowed, not overwritten; it is put back above.
-            if mode == Mode::Command && ime.available() {
+            if prompting(mode) && !last_mode.is_some_and(prompting) && ime.available() {
                 if ime.is_composing() {
                     ime.escape();
                 }
@@ -857,7 +862,14 @@ fn composes(mode: Mode) -> bool {
     // as the body text does. The `:` command line is **not** — its vocabulary
     // is ASCII command names. For the half of it that is *not* names, see
     // [`composes_here`].
-    matches!(mode, Mode::Insert | Mode::Search | Mode::Ruby)
+    // …and `::`, which is a **Chinese** query by design (#224): the whole
+    // point of it is that the reader is thinking 「竖排模式」 and the command
+    // is called `layout vertical`. 英 when the line opens, lone-Shift to 中,
+    // exactly as `/` does.
+    matches!(
+        mode,
+        Mode::Insert | Mode::Search | Mode::Ruby | Mode::Lookfor
+    )
 }
 
 /// Whether the IME may run for what is being typed **right now** (#225).
@@ -2189,6 +2201,7 @@ fn draw(
     // over the hint row.
     let footer = if hint_rows == 1 { hint_area } else { status_area };
     draw_command_menu(frame, editor, config, area, footer);
+    draw_lookfor_menu(frame, editor, config, area, footer);
     draw_picker(frame, editor, config, area, footer);
     // One panel for every half-pressed sequence, `空格` included — it used to
     // draw its own menu and every other prefix got a row.
@@ -2204,11 +2217,13 @@ fn draw(
     if editor.picker().is_some() {
         // `draw_picker` put the caret in its query, which is the prompt while a
         // picker is open.
-    } else if let Some((_, _)) = editor.prompt() {
+    } else if let Some((prefix, _)) = editor.prompt() {
         // Measured in cells, not characters: a Chinese search pattern is twice
         // as wide as it is long — and up to the **caret**, not to the end of
         // the line, now that the prompt can be edited in the middle.
-        let col = 1
+        // The prefix is measured too, because `::` is two cells wide (#224)
+        // and a hard-coded 1 put the caret inside the second colon.
+        let col = yumete_cjk::str_width(prefix)
             + yumete_cjk::str_width(&editor.prompt_before_caret())
             + yumete_cjk::str_width(&prompt_preedit(editor, ime));
         frame.set_cursor_position(Position::new(status_area.x + col as u16, status_area.y));
@@ -2229,8 +2244,8 @@ fn draw(
         // list, and one panel wearing a different skin from the other reads as a
         // different program.
         let (at_x, at_y) = match editor.prompt() {
-            Some((_, text)) => {
-                let col = 1
+            Some((prefix, text)) => {
+                let col = yumete_cjk::str_width(prefix)
                     + yumete_cjk::str_width(text)
                     + yumete_cjk::str_width(&prompt_preedit(editor, ime));
                 (status_area.x + col as u16, status_area.y)
@@ -2276,6 +2291,40 @@ const MENU_ROWS: usize = 8;
 /// The widest a menu gets. Past this the eye stops reading a row as one thing.
 const MENU_WIDTH: u16 = 56;
 
+/// The widest the `::` panel gets (Feature #224).
+///
+/// Wider than [`MENU_WIDTH`], because a row there is not a name — it is a
+/// sentence saying what the command does, and that sentence is the whole
+/// reason the panel is open. At 56 cells 「段組：把竪排的頁面橫着分成幾條，右上
+/// 讀到左上，」 stopped there, on a comma. This is about a printed line's
+/// measure: long enough for most of the corpus to land whole, short enough
+/// that the eye still comes back to the left edge without hunting.
+const LOOKFOR_WIDTH: u16 = 78;
+
+/// Cut `line` to `width` cells, marking that something was cut.
+///
+/// By display width, not by `char`s — a Chinese sentence half-cut by a `char`
+/// count overruns the panel it was measured for. The mark is one cell, so what
+/// is kept is one cell less.
+fn elide(line: &str, width: usize) -> String {
+    if yumete_cjk::str_width(line) <= width {
+        return line.to_string();
+    }
+    let room = width.saturating_sub(1);
+    let mut kept = String::new();
+    let mut wide = 0;
+    for g in yumete_cjk::graphemes(line) {
+        let w = yumete_cjk::grapheme_width(g);
+        if wide + w > room {
+            break;
+        }
+        kept.push_str(g);
+        wide += w;
+    }
+    kept.push('…');
+    kept
+}
+
 /// The most of the window's height a menu spreads down to, as one part in this
 /// many.
 ///
@@ -2308,6 +2357,11 @@ struct List<'a> {
     /// 面板。」 — a floating rectangle with no edge and no name is a thing that
     /// appeared, not a panel that opened.
     title: &'a str,
+    /// The widest one entry may be, padding and all.
+    ///
+    /// [`MENU_WIDTH`] for a list of names; [`LOOKFOR_WIDTH`] for the one list
+    /// whose rows are sentences.
+    cap: usize,
 }
 
 fn draw_list(
@@ -2325,6 +2379,7 @@ fn draw_list(
         footer,
         columns,
         title,
+        cap,
     } = list;
     if items.is_empty() && footer.is_empty() {
         return;
@@ -2340,7 +2395,7 @@ fn draw_list(
         .max()
         .unwrap_or(0)
         .saturating_add(2)
-        .min(MENU_WIDTH as usize);
+        .min(cap);
     //
     // The shape is measured off the window rather than fixed: **the fewest
     // columns that show every entry** in the height there is room for. Fewest,
@@ -2816,7 +2871,7 @@ fn draw_command_menu(
     area: Rect,
     status: Rect,
 ) {
-    let Some((':', _)) = editor.prompt() else {
+    let Some((":", _)) = editor.prompt() else {
         return;
     };
     let ink = crate::theme::Palette::of(config);
@@ -2883,6 +2938,104 @@ fn draw_command_menu(
             footer: &footer,
             columns: true,
             title: &title,
+            cap: MENU_WIDTH as usize,
+        },
+    );
+}
+
+/// The `::` search's answers (Feature #224).
+///
+/// One command a row, name first and then what it does, because *what it
+/// does* is what was asked about — a column of bare names would be the
+/// command menu again, and the reader who opened this line is the one who
+/// could not remember a name. The score is not shown: a number beside every
+/// row invites reading it as a ranking to argue with, and the order already
+/// says everything it has to say.
+fn draw_lookfor_menu(
+    frame: &mut Frame,
+    editor: &Editor,
+    config: &Config,
+    area: Rect,
+    status: Rect,
+) {
+    let Some(("::", query)) = editor.prompt() else {
+        return;
+    };
+    let ink = crate::theme::Palette::of(config);
+    let (found, focus) = editor.lookfor_menu();
+    // An empty line has nothing to answer yet, and a panel listing every
+    // command in the editor is not an answer — it is the whole table.
+    if found.is_empty() {
+        let footer = match query.is_empty() {
+            true => say!("ui.lookfor-empty"),
+            false => say!("ui.lookfor-nothing", query),
+        };
+        draw_list(
+            frame,
+            ink,
+            config.panel.rounded,
+            area,
+            status.y,
+            List {
+                items: &[],
+                focus: 0,
+                highlight: None,
+                footer: &footer,
+                columns: false,
+                title: &say!("ui.lookfor"),
+                cap: LOOKFOR_WIDTH as usize,
+            },
+        );
+        return;
+    }
+    // A row is cut with a mark rather than at the panel edge: a sentence that
+    // simply stops at the ring reads as the panel being too narrow, and 「…」
+    // says instead that the sentence goes on — which is what the reader has to
+    // know to decide whether this is the command they meant.
+    let room = (area.width as usize)
+        .saturating_sub(4)
+        .min(LOOKFOR_WIDTH as usize);
+    let items: Vec<String> = found
+        .iter()
+        .map(|hit| {
+            elide(
+                &format!(
+                    "{}{}   {}",
+                    hit.choice.leading,
+                    hit.choice.written(),
+                    yumete_core::messages::say(hit.choice.help, &[])
+                ),
+                room,
+            )
+        })
+        .collect();
+    // What ⇥ will do with the highlighted row, spelled out. The one thing a
+    // reader has to know here is that nothing on this line runs anything.
+    let footer = say!(
+        "ui.lookfor-take",
+        &format!("{}/{}", focus + 1, found.len()),
+        &format!("{}{}", found[focus].choice.leading, found[focus].choice.written())
+    );
+    let title = say!("ui.lookfor");
+    draw_list(
+        frame,
+        ink,
+        config.panel.rounded,
+        area,
+        status.y,
+        List {
+            items: &items,
+            focus,
+            // Always inked, unlike the command menu: there is no ghost on the
+            // `::` line saying what ⇥ would take, so the highlight is the only
+            // thing that says it.
+            highlight: Some(focus),
+            footer: &footer,
+            // A row is a name **and** a sentence — wide, and long lists of
+            // them read down, not across.
+            columns: false,
+            title: &title,
+            cap: room + 2,
         },
     );
 }
@@ -3396,6 +3549,7 @@ fn draw_picker(frame: &mut Frame, editor: &Editor, config: &Config, area: Rect, 
             // The picker already says what it is picking; now it says it in
             // the corner of its own ring instead of at the head of the footer.
             title: &picker.title,
+            cap: MENU_WIDTH as usize,
         },
     );
     // The caret sits in the query, which is typed text like any other prompt.
@@ -6949,11 +7103,13 @@ mod tests {
         assert_ne!(buffer[(x, y)].bg, want, "the prose is not a cell");
     }
 
-    /// 縱書 keeps its page when a `|` table is entered — `turn_for_table`
-    /// refuses to turn it, because turning a whole chapter sideways to mend
-    /// three lines throws away everything around them. So the vertical page is
-    /// the **only** surface that ever says which cell Insert is confined to,
-    /// and #229 has to reach it too.
+    /// 縱書 keeps its page for **表格操作** — `turn_for_table` turns the page
+    /// only for 真表格顯示, which draws a grid and cannot draw one down the
+    /// page; `t i` leaves the pipes and the commas where they are, and turning
+    /// a whole chapter sideways to mend three lines of it throws away
+    /// everything around them. So the vertical page is the **only** surface
+    /// that ever says which cell Insert is confined to, and #229 has to reach
+    /// it too.
     #[test]
     fn the_vertical_page_draws_the_cell_as_well() {
         // Two characters in the first cell, because the cursor's own slot is
@@ -6967,7 +7123,11 @@ mod tests {
         editor.on_key(Key::Char('g'));
         editor.on_key(Key::Char('h'));
         editor.on_key(Key::Char('h'));
-        assert!(editor.enter_table(), "{}", editor.status());
+        assert!(
+            editor.enter_table_as(yumete_core::editor::Surface::InProse),
+            "{}",
+            editor.status()
+        );
         assert_eq!(editor.layout(), WritingLayout::Vertical, "the page is not turned");
         let (line, cell) = editor.cell_position().expect("in a cell");
         assert_eq!(cell, 0, "the first cell, on 木頭");
@@ -8855,7 +9015,7 @@ mod tests {
             KeyModifiers::NONE
         ));
         assert!(ime.is_composing());
-        assert_eq!(editor.prompt(), Some(('/', "")), "nothing committed yet");
+        assert_eq!(editor.prompt(), Some(("/", "")), "nothing committed yet");
 
         // …and the committed candidate lands in the pattern, not the buffer.
         assert!(ime_handle(
@@ -8864,7 +9024,7 @@ mod tests {
             KeyCode::Char(' '),
             KeyModifiers::NONE
         ));
-        assert_eq!(editor.prompt(), Some(('/', "吧")));
+        assert_eq!(editor.prompt(), Some(("/", "吧")));
         assert_eq!(editor.current_buffer().text(), "春江潮水連海平");
     }
 

@@ -10,6 +10,7 @@ use std::io::{self, IsTerminal, Write};
 use std::process::ExitCode;
 
 use yumete_config::Layout;
+use yumete_core::input::Key;
 use yumete_core::{Editor, TextStore};
 use yumete_ime::{CommitStrategy, ImeSession, Scheme};
 
@@ -52,6 +53,11 @@ fn main() -> ExitCode {
     // jot one thing down and getting five chapters back is the same annoyance
     // as the reverse, in the other direction.
     let mut fresh = false;
+    // Keys to press before the picture is taken. A panel that only opens after
+    // three keystrokes — the `:` menu, `::`, which-key, the候選 list — could
+    // not be looked at without a terminal and a pair of hands, and 「動了前端
+    // 就出一張圖看看」 is the rule that catches what no assertion does.
+    let mut keys: Option<String> = None;
 
     for arg in std::env::args().skip(1) {
         if want_syntax {
@@ -76,6 +82,7 @@ fn main() -> ExitCode {
             "--shot" => shot = Some((100, 30)),
             s if s.starts_with("--shot=") => shot = Some(parse_size(&s["--shot=".len()..])),
             "--html" => shot_html = true,
+            s if s.starts_with("--keys=") => keys = Some(s["--keys=".len()..].to_string()),
             "-s" | "--syntax" => want_syntax = true,
             s if s.starts_with("--syntax=") => {
                 force_syntax = Some(s["--syntax=".len()..].to_string())
@@ -372,6 +379,9 @@ fn main() -> ExitCode {
     // editor — carries the build under it, so a shot in a bug report says what
     // it is a picture of.
     yumete_tui::set_build(VERSION);
+    if let Some(pressed) = &keys {
+        press(&mut editor, pressed);
+    }
     if let Some((width, height)) = shot {
         // The layout the flags asked for, before the picture is taken.
         let picture = match shot_html {
@@ -405,6 +415,34 @@ fn main() -> ExitCode {
             eprintln!("yumete: {err}");
             ExitCode::FAILURE
         }
+    }
+}
+
+/// Press `keys` on the editor, for `--keys`.
+///
+/// The escapes are the ones a keyboard has and a string does not: `\e` Esc,
+/// `\t` Tab, `\n` Enter, `\b` Backspace, `\u` `\d` `\l` `\r` the arrows,
+/// and `\\` a backslash. Everything else is the character itself — including
+/// 漢字, which arrive here the way the IME hands them over.
+fn press(editor: &mut Editor, keys: &str) {
+    let mut chars = keys.chars();
+    while let Some(c) = chars.next() {
+        let key = match c {
+            '\\' => match chars.next() {
+                Some('e') => Key::Esc,
+                Some('t') => Key::Tab,
+                Some('n') => Key::Enter,
+                Some('b') => Key::Backspace,
+                Some('u') => Key::Up,
+                Some('d') => Key::Down,
+                Some('l') => Key::Left,
+                Some('r') => Key::Right,
+                Some(other) => Key::Char(other),
+                None => break,
+            },
+            other => Key::Char(other),
+        };
+        editor.on_key(key);
     }
 }
 
@@ -490,6 +528,11 @@ OPTIONS:
                      it — to standard output and exit. 100x30 by default.
                      `:shot` inside the editor draws the same picture into a
                      file; this is it without opening the editor at all.
+        --keys=KEYS  Press these before the picture is taken, so a panel that
+                     opens on the third keystroke can be looked at:
+                     `\\e` Esc, `\\t` Tab, `\\n` Enter, `\\b` Backspace,
+                     `\\u\\d\\l\\r` the arrows. `--keys='::竖排'` opens the
+                     command search with that in it.
         --html       With --shot: the frame **with its colours**, as one
                      self-contained HTML <pre>. What a theme is judged on.
         --timing     Print how long each part of starting up took, and exit.

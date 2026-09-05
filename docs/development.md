@@ -434,7 +434,7 @@ index, and a row with no number anywhere else is a row that got lost.
 | 221 | **The page follows the caret sideways** | editor | P1 | with `:wrap off` a paragraph is one row of whatever length it happens to be, and the window only ever drew its first screenful: `gl` walked the caret off the right edge and the writing it landed in was never shown. The 縱 grid and the CSV grid both scroll on two axes already; the prose page had a vertical anchor and nothing else. `Viewport.left` counts the columns of writing that are off the left edge, settled from the caret's own column before the rows are drawn, one column at a time rather than a screenful. The gutter does not scroll — `scrolled()` cuts between the furniture and the writing — and a 漢字 the cut lands inside is drawn as air. The click map counts from the same number. 縱書 refuses `:wrap on\|off` outright and says why — a 縱 is broken by the height of the window, and the old answer 「長段落跑出右邊」 named a right edge that page does not have (`:wrap 40` still sets the 縱 length in either layout) | Done |
 | 222 | **The wheel scrolls too far, and nothing can be told otherwise** | tui | P2 | one notch was `WHEEL_STEP = 3`, a `const` nobody could reach: no config key, no command. Now `[editor] wheel_step` and `:wheel n` — read on the way in like every other editor setting, kept in the core so `:wheel` can change it while running, counted in whichever unit the page is in (縱 vertically, rows horizontally). `:wheel` on its own reports, because the number may come from a config the reader never wrote; `0` is the terminal's own step, one unit a notch, not 「do not scroll」. **The burst is answered separately and matters more** — see #268: one gesture is now one scroll and one frame, so the step is a step again and not a step times however many events the trackpad felt like sending. §6「Mouse wheel by 縱 (#71)」chose the three and did not consider the burst. **small** | Done |
 | 223 | **A half-typed word that names no command still finds one** | core | P1 | `:vert` ⇥ `:layout vertical`. When a word matches nothing at its own depth the completion walks the whole subcommand tree and offers the path, parent shown. `:help`'s own words go last — every one of them is the name of the thing it is about, so in a deep match they shadow the thing itself | Done |
-| 224 | **`::` searches the commands by what they do** | core | P2 | you cannot type a command whose name you have forgotten, and the names are English while the reader thinks 「竖排模式」. `::` opens a search over the descriptions, which already exist in three languages — the `help` tag of every command and subcommand is a `messages.toml` entry with `zht` / `zhs` / `en`, 147 of them, keyed `cmd.<parent>.<child>`, editable by hand. Three parts. **(a)** an optional `find` line per entry: words that are searched but never shown (`find = "直排 縱書 tategaki columns"`), so descriptions stay short and the search still covers every way a thing is said. **(b)** the scoring, split by script rather than one distance over the whole string: an ASCII run is an fzf-style subsequence match with bonuses for consecutive and word-start hits (so `lyt` finds `layout`), a CJK run is a bigram-set overlap with a longest-common-substring bonus (the `pg_trgm` / ES CJK-analyzer shape — the cosine of the entry, with bigrams for the vector), both weighted by IDF so 「模式」「命令」 sink and 「竖排」 carries, and by field so a name beats a `find` beats a description; a Damerau-Levenshtein ≤ 2 branch on the *name* alone for a typo. 147 entries is a full scan in microseconds — no index. **(c)** 中文 in the `::` line throughout — it is a Chinese query by design, so `composes()` admits it whole (see #225, which admits `:` only where an argument can be Chinese); 英 when the line opens, lone-Shift to 中, which needs a Kitty-protocol terminal exactly as `/` does today. **`:` and `::` are two modes, not one** (the author, 2026-09-04): a merged line would have to decide per keystroke whether a word is a name or a description — and `vert` is both — and its Enter would either run a guessed match (`:q!` is not undoable) or mean two different things on one key. Separate, they are also free to move between: a second `:` on an empty line enters `::`, backspacing `::` empty leaves it, and ⇥ on a result **writes the whole command back into the `:` line** and returns there with the caret after it, so what Enter runs is always the full line the reader can see, never the guess. Ranked descending. Not `numpy.lookfor` — that counted docstring words with no weighting, and NumPy 2.0 deleted it | Planned |
+| 224 | **`::` searches the commands by what they do** | core | P2 | you cannot type a command whose name you have forgotten, and the names are English while the reader thinks 「竖排模式」. `::` opens a search over the descriptions, which already exist in three languages — the `help` tag of every command and subcommand is a `messages.toml` entry with `zht` / `zhs` / `en`, 147 of them, keyed `cmd.<parent>.<child>`, editable by hand. Three parts. **(a)** an optional `find` line per entry: words that are searched but never shown (`find = "直排 縱書 tategaki columns"`), so descriptions stay short and the search still covers every way a thing is said. **(b)** the scoring, split by script rather than one distance over the whole string: an ASCII run is an fzf-style subsequence match with bonuses for consecutive and word-start hits (so `lyt` finds `layout`), a CJK run is a bigram-set overlap with a longest-common-substring bonus (the `pg_trgm` / ES CJK-analyzer shape — the cosine of the entry, with bigrams for the vector), both weighted by IDF so 「模式」「命令」 sink and 「竖排」 carries, and by field so a name beats a `find` beats a description; a Damerau-Levenshtein ≤ 2 branch on the *name* alone for a typo. 147 entries is a full scan in microseconds — no index. **(c)** 中文 in the `::` line throughout — it is a Chinese query by design, so `composes()` admits it whole (see #225, which admits `:` only where an argument can be Chinese); 英 when the line opens, lone-Shift to 中, which needs a Kitty-protocol terminal exactly as `/` does today. **`:` and `::` are two modes, not one** (the author, 2026-09-04): a merged line would have to decide per keystroke whether a word is a name or a description — and `vert` is both — and its Enter would either run a guessed match (`:q!` is not undoable) or mean two different things on one key. Separate, they are also free to move between: a second `:` on an empty line enters `::`, backspacing `::` empty leaves it, and ⇥ on a result **writes the whole command back into the `:` line** and returns there with the caret after it, so what Enter runs is always the full line the reader can see, never the guess. Ranked descending. Not `numpy.lookfor` — that counted docstring words with no weighting, and NumPy 2.0 deleted it | Done |
 | 225 | **`:s/照首行/照全表/` cannot be typed** | tui | P1 | the command line opens in 英 and borrows Insert's 中/英 back on the way out; lone-Shift does nothing on a command name, and starts Yume once `command::takes_text()` says the caret is past the names into `Args::Free` or `Args::Path`. Permitted, not triggered | Done |
 | 226 | **A spreadsheet pasted into a table** | core | P2 | a TSV or CSV clipboard becoming rows. The one thing that would make a writer build a table here instead of in a spreadsheet — and Tab is refused outright today, so there is not even a wrong answer. `Event::Paste` already arrives whole (`paste_text`), so the work is recognising a grid in it and widening the table to fit. Called **high** by the review of #142 | Planned |
 | 227 | **`:table` on a selection, and CSV both ways** | core | P3 | a selected block of CSV becomes a `|` table, and a `|` table exports as CSV. `export.rs` has no CSV path at all. The quoting invariant the table mode already keeps generalises from delimiters to *cells*, which is the same machinery #253 wants. **Done:** `:table pipe [分隔]` and `:table csv [分隔]` in the buffer, `:export csv` / `:export tsv` to a file. The delimiter is guessed by 「every line holds the same number of it, at least once」 — the only property of a grid visible from outside — over tab, comma, semicolon and **never a single space**; 中文 prose comes back `None`, its 「，、。」 not being among the three, and so does anything whose lines disagree — but the rule is 「the lines agree」 and not 「this is not prose」, so two lines of English holding one 半角 comma each *are* read as a table (the manual says so out loud). A cell holding the delimiter is **refused by row and column**, not quoted, which is the stance `table.rs` already takes at the keyboard. The escape is Markdown's own `\|`, which `pipes_from` already reads, and a backslash is doubled — a cell whose own text is `\|` would otherwise be written `\\|`, where the two backslashes read as one escape and the pipe that follows is bare. `Format::Csv` was deliberately **not** added: everything `Format` names is a way of setting a *manuscript*, and a CSV comes from one table, so `export::is_delimited` / `delimiter_of` name the delimited formats and the editor serves them from the region itself | Done |
@@ -1787,6 +1787,89 @@ table even on a 縱書 page**, where the rest of the editor reads `H` as onward
 because leftward is onward down there. A table is read across whatever the
 file's layout is — `h` is already the column to the left rather than the next
 縱 — so the four capitals follow the table, not the page.
+
+### 21 · `::` — finding a command by what it does (#224), 2026-09-05
+
+`:` and its completion assume the reader remembers the **verb**. Every verb in
+this editor is an English word, and the reader is thinking 「竖排模式」. A
+command you cannot spell is a command that does not exist.
+
+**`:` and `::` are two modes, not one line.** A merged line would have to
+decide, per keystroke, whether a word is a name or a description of one — and
+`vert` is both — and its Enter would either run a guessed match (`:q!` is not
+undoable) or mean two different things on one key. Separate, they are free to
+move between: a second `:` on an **empty** line opens `::` (only on an empty
+one — `:s/:/：/` has two colons in it), backspacing `::` empty goes back to
+`:`, and ⇥ on a row writes **the whole command** back onto the `:` line with
+the caret after it. So what Enter finally runs is always the line the reader
+can see, never the guess. ⏎ on the `::` line is the same gesture as ⇥, aimed
+at the same row.
+
+**The corpus is the message table**, which is already written three times over:
+the `help` tag of every command and every word one takes is a `messages.toml`
+entry with `zht` / `zhs` / `en`. All three are searched and only the one in
+force is shown, so a 繁體 build answers 「竖排」 and answers `vertical`.
+`crates/yumete-core/src/command.rs`'s `all_choices()` flattens the tree —
+`table sort` and `yume scheme lingming` are rows, not just `table` and `yume`.
+
+**A `find` line is the fourth field** (`crates/yumete-core/messages.toml`):
+words searched but never shown, so the description stays one line and 「直排
+縱書 tategaki columns」 all reach 竖排 anyway. `tests/messages.rs` holds it to
+account: every `cmd.commands.*` entry has one, nothing else does, and no word
+repeats inside a line.
+
+**Two kinds of scoring, not one distance** (`crates/yumete-core/src/lookfor.rs`).
+The query is cut into runs by script and each run is scored the way that script
+is typed:
+
+- an **ASCII** run is an abbreviation — `lyt` for `layout` — so it is fzf's
+  subsequence match with bonuses for consecutive hits and word starts, not a
+  near-spelling. With one thing fzf does not need: **the bonuses are divided by
+  how many words the match had to cross.** fzf matches paths, a few words long;
+  this matches sentences, and a sentence is long enough that six letters find
+  six different words to start in. `layout` "matched" the English 「a
+  **l**esson: the text is copied into **a** file of **you**r own, and you learn
+  by edi**t**ing it」 on word starts alone, and `:tutor` came out above
+  `:layout`. An initialism (`lv` → **l**ayout **v**ertical) crosses one word
+  per character and keeps its whole score; a scatter keeps a fraction of it;
+- a **CJK** run is typed in full and its unit is the word, which in a language
+  with no spaces means the character bigram: the overlap of the two bigram
+  sets, plus a longest-common-substring bonus. This is what `pg_trgm` and every
+  CJK analyser do.
+
+Both are weighted by **IDF** over the table itself, because 「模式」「命令」
+「the」 are in half the entries and 「竖排」 is in three, and both are two
+characters long — length cannot tell them apart and a raw overlap would let the
+common word outvote the rare one. Then by **field**: a name (3) beats a `find`
+word (2) beats a sentence that merely contains it (1). A **Damerau-Levenshtein
+≤ 2 on the name alone** catches the one thing a subsequence cannot, `laoyut`.
+It runs only when nothing in the row matched at all and only on a Latin query
+of three characters or more — 「竖排」 is two characters and *every* two-letter
+name is two edits from it, which filled the tail of a perfectly good Chinese
+search with `:sh` and `:wa`. Being one letter off a **name** is a strong signal,
+so it scores like a middling match rather than the near-zero it scored at
+first: below a row that really holds the word (7–8), above the scatter.
+
+221 rows against a few characters is a full scan in microseconds, so there is
+no index to build, keep or invalidate — only the IDF is cached, because it does
+not depend on the query.
+
+**The panel is wider than the `:` menu, and cuts with a mark.** A row there is
+not a name but a sentence, and the sentence is the whole reason the panel is
+open; 56 cells stopped 「段組：把竪排的頁面橫着分成幾條，右上讀到左上，」 on a
+comma. `LOOKFOR_WIDTH` is 78 — a printed line's measure — and what still does
+not fit ends in 「…」 rather than at the ring, because a sentence that simply
+stops at the edge reads as the panel being too narrow instead of the sentence
+going on.
+
+**中文 on that line throughout.** `composes()` admits `::` whole, the way it
+admits `/`: 英 when the line opens, lone-Shift to 中, which needs a
+Kitty-protocol terminal exactly as a search does. `:` and `::` are one prompt
+as far as the language borrow is concerned — stepping between them is not
+leaving the command line.
+
+Not `numpy.lookfor`, which counted docstring words with no weighting of any
+kind, and which NumPy 2.0 deleted.
 
 ### 18 · What the review of #223 / #225 found, 2026-09-05
 

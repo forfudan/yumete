@@ -3584,6 +3584,16 @@ zhs = "排版：竖排"
 en = "layout: vertical"
 
 
+# ── lookfor ───────────────────────────────────────────────────────────
+
+[[message]]
+# `::` 那一行按了 ⇥／⏎，可是一條都沒找着
+key = "lookfor.nothing-to-take"
+zht = "沒有找到相符的命令——換一個說法，或者退格回到 `:`"
+zhs = "没有找到相符的命令——换一个说法，或者退格回到 `:`"
+en = "no command answers that — say it another way, or backspace to `:`"
+
+
 # ── macro ─────────────────────────────────────────────────────────────
 
 [[message]]
@@ -5070,6 +5080,34 @@ key = "ui.detail-panel-width"
 zht = "詳情欄寬 {0}"
 zhs = "详情栏宽 {0}"
 en = "the detail panel is {0} wide"
+
+[[message]]
+# `::` 面板的名字
+key = "ui.lookfor"
+zht = "找命令"
+zhs = "找命令"
+en = "look for"
+
+[[message]]
+# `::` 剛打開，一個字都還沒打
+key = "ui.lookfor-empty"
+zht = "說一說它是做什麼的——「竖排」「排序」「wrap」都算"
+zhs = "说一说它是做什么的——「竖排」「排序」「wrap」都算"
+en = "say what it does — 竖排, sort and wrap all count"
+
+[[message]]
+# `::` 打了字，可是一條都沒找着
+key = "ui.lookfor-nothing"
+zht = "沒有命令答得上「{0}」"
+zhs = "没有命令答得上「{0}」"
+en = "no command answers 「{0}」"
+
+[[message]]
+# `::` 面板的頁腳：第幾條，以及 ⇥ 會把哪一條寫回 `:` 那一行
+key = "ui.lookfor-take"
+zht = "{0}　⇥ 寫回 `:` 那一行：{1}"
+zhs = "{0}　⇥ 写回 `:` 那一行：{1}"
+en = "{0}   ⇥ writes {1} back onto the `:` line"
 
 [[message]]
 # 命令面板裏那一條的前提沒開

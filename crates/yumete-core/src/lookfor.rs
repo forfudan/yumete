@@ -206,15 +206,27 @@ fn run_score(run: &Run, text: &str, idf: &Idf) -> Option<f32> {
 /// Every character of the run has to appear, in order. What is earned on top
 /// of that is where they appeared: at the start of a word (`lyt` → **l**a**y**
 /// ou**t** is worth less than `lay` → **lay**out), and next to each other.
+///
+/// **Then divided by how far it had to reach.** fzf matches paths; this
+/// matches sentences, and a sentence is long enough that six letters find six
+/// different words to start — `layout` "matched" the English 「a **l**esson:
+/// the text is copied into **a** file of **you**r own, and you learn by edi**t**ing
+/// it」 on word starts alone and put `:tutor` above `:layout` itself. So the
+/// bonuses are scaled by the run's length against the number of words it
+/// crossed: an initialism (`lv` → **l**ayout **v**ertical) crosses one word
+/// per character and keeps all of it, a scatter across a whole sentence keeps
+/// a fraction.
 fn ascii_score(word: &str, text: &str, idf: &Idf) -> Option<f32> {
     let hay: Vec<char> = text.chars().flat_map(char::to_lowercase).collect();
     let needle: Vec<char> = word.chars().collect();
     let mut at = 0usize;
     let mut earned = 0.0f32;
     let mut previous: Option<usize> = None;
+    let mut reach: Option<usize> = None;
     for &want in &needle {
         let found = (at..hay.len()).find(|&i| hay[i] == want)?;
         earned += 1.0;
+        reach.get_or_insert(found);
         if previous == Some(found.saturating_sub(1)) && found > 0 {
             earned += 0.8;
         }
@@ -229,7 +241,15 @@ fn ascii_score(word: &str, text: &str, idf: &Idf) -> Option<f32> {
     // long, then weighted by how rare the whole word is — `t` is in nearly
     // every description, `tategaki` in one.
     let full = needle.len() as f32 * 2.8;
-    Some(earned / full * idf.at(word).max(0.3))
+    let words = match (reach, previous) {
+        (Some(first), Some(last)) => (first..=last)
+            .filter(|&i| i == 0 || !hay[i - 1].is_alphanumeric())
+            .count()
+            .max(1),
+        _ => 1,
+    };
+    let dense = (needle.len() as f32 / words as f32).min(1.0);
+    Some(earned / full * dense * idf.at(word).max(0.3))
 }
 
 /// A CJK run against a text: the overlap of their bigrams, plus a bonus for
@@ -328,6 +348,114 @@ pub fn typo(query: &str, name: &str, cap: usize) -> Option<usize> {
         }
     }
     Some(grid[a.len()][b.len()]).filter(|&d| d <= cap)
+}
+
+/// One command the `::` line turned up, and how well it answered.
+#[derive(Debug, Clone)]
+pub struct Hit {
+    /// The command itself — what ⇥ writes back into the `:` line.
+    pub choice: crate::command::Choice,
+    pub score: f32,
+}
+
+/// What a typo on the name alone is worth.
+///
+/// Below a row that really holds the word — a name match runs to 7 or 8 — and
+/// above the scatter. Being one letter from a command's **name** is a strong
+/// thing to be: the branch only runs when nothing in the row matched at all,
+/// on a Latin query of three characters or more. It was 0.6 once, which put
+/// `:layout` below every sentence that happened to hold `l…a…o…y…u…t` in
+/// order — the one row the reader meant, last.
+fn typo_score(distance: usize) -> f32 {
+    3.0 - 0.8 * distance as f32
+}
+
+/// Whether a query is even the kind of thing that can be a typo of a name.
+///
+/// **Latin, and at least three characters of it.** 「竖排」 is two characters
+/// and every two-letter command name is two edits away from it, so the tail of
+/// a perfectly good Chinese search filled up with `:sh` and `:wa` — names it
+/// has nothing to do with. A Chinese query is not a misspelling of an English
+/// word; it is a different question, and the bigram scorer is the one that
+/// answers it.
+fn worth_a_typo_check(query: &str) -> bool {
+    query.chars().count() >= 3 && query.chars().all(|c| c.is_ascii() && !c.is_whitespace())
+}
+
+/// How many hits the `::` line will show.
+///
+/// The scorer will rank all 221 of them and the tail is noise — a reader who
+/// has not found it in thirty rows types another character instead of
+/// scrolling.
+pub const SHOWN: usize = 30;
+
+/// Every command and every word they take, scored against `query`, best first.
+///
+/// The whole table on every keystroke: 221 rows against a query of a few
+/// characters is microseconds, so there is no index to build, keep or
+/// invalidate. The IDF over that corpus **is** cached, because it does not
+/// depend on the query.
+pub fn look(query: &str) -> Vec<Hit> {
+    let choices = crate::command::all_choices();
+    let table = crate::messages::table();
+    // The description in all three languages, the one in force first: searched
+    // in all of them, shown in the first. A reader who types 简体 into a 繁體
+    // editor, or the English name of a thing they know in Chinese, is asking a
+    // question this table can answer.
+    let said = |tag: &'static str| -> [&'static str; 3] {
+        let Some(e) = table.get(tag) else {
+            return ["", "", ""];
+        };
+        match crate::messages::language() {
+            crate::messages::Language::Traditional => [e.zht, e.zhs, e.en],
+            crate::messages::Language::Simplified => [e.zhs, e.zht, e.en],
+            crate::messages::Language::English => [e.en, e.zht, e.zhs],
+        }
+    };
+    let names: Vec<String> = choices.iter().map(|c| c.written()).collect();
+    let rows: Vec<Row<'_>> = choices
+        .iter()
+        .zip(&names)
+        .map(|(c, name)| Row {
+            name,
+            find: table.get(c.help).map(|e| e.find).unwrap_or_default(),
+            help: said(c.help),
+        })
+        .collect();
+    let idf = idf_of(&rows);
+    let mut hits: Vec<Hit> = choices
+        .iter()
+        .zip(&rows)
+        .filter_map(|(choice, row)| {
+            let score = score(query, *row, &idf)
+                .or_else(|| match worth_a_typo_check(query) {
+                    true => typo(query, row.name, 2).map(typo_score),
+                    false => None,
+                })
+                .filter(|s| *s > 0.0)?;
+            Some(Hit { choice: choice.clone(), score })
+        })
+        .collect();
+    // Descending, and **by name** where two rows tie: a list that reshuffles
+    // itself between two keystrokes that scored the same is a list nobody can
+    // point at.
+    hits.sort_by(|a, b| {
+        b.score
+            .total_cmp(&a.score)
+            .then_with(|| a.choice.written().cmp(&b.choice.written()))
+    });
+    hits.truncate(SHOWN);
+    hits
+}
+
+/// The corpus weights, counted once.
+///
+/// The rows are the command table, which is compiled in — it cannot change
+/// while the editor runs, and counting it on every keystroke of a search is
+/// the one part of this that is not free.
+fn idf_of(rows: &[Row<'_>]) -> &'static Idf {
+    static ONCE: std::sync::OnceLock<Idf> = std::sync::OnceLock::new();
+    ONCE.get_or_init(|| Idf::of(rows.iter().copied()))
 }
 
 #[cfg(test)]
