@@ -471,6 +471,14 @@ en = "tight or loose: between columns in 竪排, between rows in 橫排"
 find = "疏排 密排 行距 間距 间距 spacing leading"
 
 [[message]]
+# : 命令選單裏 diff 那一項的說明（commands 組）
+key = "cmd.commands.diff"
+zht = "改了什麼：按詞比，不是按行"
+zhs = "改了什么：按词比，不是按行"
+en = "what changed, by word rather than by line"
+find = "比較 比较 差異 差异 改動 改动 對照 对照 diff compare changes"
+
+[[message]]
 # : 命令選單裏 export 那一項的說明（commands 組）
 key = "cmd.commands.export"
 zht = "導出成 html 或 typst，排版一起帶上"
@@ -1682,6 +1690,51 @@ key = "detail.comment"
 zht = "批注"
 zhs = "批注"
 en = "comment"
+
+
+# ── diff ──────────────────────────────────────────────────────────────
+
+[[message]]
+# :diff 找到了改動
+key = "diff.changed"
+zht = "{0} 行和《{1}》不一樣——gf 跳過去"
+zhs = "{0} 行和《{1}》不一样——gf 跳过去"
+en = "{0} line(s) differ from 《{1}》 — gf goes there"
+
+[[message]]
+# :diff 結果裏的一行：行號加上標了改動的那一行
+key = "diff.line"
+zht = "{0}:{1}: {2}"
+zhs = "{0}:{1}: {2}"
+en = "{0}:{1}: {2}"
+
+[[message]]
+# :diff 而這個緩衝區沒有檔案，也沒說要比誰
+key = "diff.no-file"
+zht = "這一份還沒有檔案，要比就說跟誰比：`:diff <檔名>`"
+zhs = "这一份还没有档案，要比就说跟谁比：`:diff <档名>`"
+en = "this buffer has no file yet — say what to compare with: `:diff <path>`"
+
+[[message]]
+# :diff 的結果那一份緩衝區的名字
+key = "diff.results"
+zht = "[改動 {0} ↔ {1}]"
+zhs = "[改动 {0} ↔ {1}]"
+en = "[changes {0} ↔ {1}]"
+
+[[message]]
+# :diff 比下來一模一樣
+key = "diff.same"
+zht = "和《{0}》一個字都不差"
+zhs = "和《{0}》一个字都不差"
+en = "not one character differs from 《{0}》"
+
+[[message]]
+# :diff 兩份差得太遠，逐詞列出來沒有意義
+key = "diff.too-far"
+zht = "和《{0}》差得太遠，逐詞比不出東西來"
+zhs = "和《{0}》差得太远，逐词比不出东西来"
+en = "too far from 《{0}》 to be worth comparing word by word"
 
 
 # ── edit ──────────────────────────────────────────────────────────────

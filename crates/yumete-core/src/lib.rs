@@ -18,6 +18,7 @@
 
 pub mod buffer;
 pub mod command;
+pub mod diff;
 pub mod editor;
 pub mod export;
 pub mod input;
