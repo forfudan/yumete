@@ -75,9 +75,11 @@ pub struct Crutch {
 /// The words `text` leans on, heaviest first.
 ///
 /// `segment` splits one line into character-index ranges (the editor's own
-/// segmenter, handed a line at a time so its cache answers most of them), and
-/// `log_prob` is the background: `ln P(word)` in ordinary prose, or `None` for
-/// a word the table does not hold.
+/// segmenter, handed a line at a time — the raw one, not the overlay's cached
+/// `segment_line`: every line here is asked for exactly once, so a cache would
+/// only grow a copy of the whole manuscript), and `log_prob` is the
+/// background: `ln P(word)` in ordinary prose, or `None` for a word the table
+/// does not hold.
 pub fn crutches(
     text: &str,
     segment: &dyn Fn(&str) -> Vec<(usize, usize)>,
@@ -116,7 +118,7 @@ pub fn crutches(
             let background = log_prob(&word)?;
             let ln_ratio = (count as f64 / total).ln() - background;
             let ratio = ln_ratio.exp();
-            (ratio >= MIN_RATIO).then(|| Crutch {
+            (ratio >= MIN_RATIO).then_some(Crutch {
                 word,
                 line,
                 count,
