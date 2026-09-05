@@ -597,6 +597,18 @@ pub fn run(
                             Ok(ran) => editor.set_status(say!("shell.left-alone", ran.why())),
                             Err(err) => editor.set_status(say!("shell.cannot-run", err)),
                         },
+                        // Same rule as `Pipe`, for the same reason and with
+                        // more riding on it: opencc exiting non-zero means the
+                        // conversion did not happen, and a manuscript is not
+                        // overwritten with an error message. Judged by the
+                        // **exit code alone** — a converter that complains on
+                        // stderr while succeeding is still a converter that
+                        // succeeded.
+                        How::Convert(input) => match run_capturing(&want.line, Some(&input)) {
+                            Ok(ran) if ran.ok => editor.provide_conversion(&ran.said),
+                            Ok(ran) => editor.set_status(say!("shell.left-alone", ran.why())),
+                            Err(err) => editor.set_status(say!("shell.cannot-run", err)),
+                        },
                     }
                 }
                 // **What a language was told to run** (Feature #197): the
@@ -9267,6 +9279,56 @@ mod tests {
     }
 
     /// `C-Space` is the first key the lesson asks a reader to press.
+    /// `:convert` from end to end, through the real `opencc` — Feature #241.
+    ///
+    /// The unit tests either side of this one check the plan and the rewrite;
+    /// what only a run can check is that the plan produces a command line a
+    /// real converter accepts, and that what comes back is what the manuscript
+    /// should say. `--shot` cannot photograph this — it draws without turning
+    /// the loop that services a shell request — so the loop's own arm is
+    /// spelled out here instead.
+    ///
+    /// Skipped where `opencc` is not installed, which is most CI machines. A
+    /// test that silently passes without the program would be worse than none.
+    #[test]
+    fn convert_runs_the_real_opencc_and_brings_back_the_manuscript() {
+        use yumete_core::editor::How;
+        let Some(_) = yumete_core::convert::opencc() else {
+            return;
+        };
+        // 通規 in, 臺灣正體 out: 説 内 吴 are 字形 opencc has never heard of,
+        // so this only works if the table was walked backwards first.
+        let mut editor = editor_with("他説内人在裏面，吴先生録了一段。\n");
+        editor.execute("convert c tw").unwrap();
+        let want = editor.take_shell_request().expect("opencc has to be run");
+        let How::Convert(input) = want.how else {
+            panic!("a conversion is piped, not handed the screen");
+        };
+        assert_eq!(input, "他說內人在裏面，吳先生錄了一段。\n", "the way back");
+        let ran = run_capturing(&want.line, Some(&input)).expect("opencc runs");
+        assert!(ran.ok, "{}", ran.why());
+        editor.provide_conversion(&ran.said);
+        assert_eq!(
+            editor.current_buffer().rope().to_string(),
+            "他說內人在裡面，吳先生錄了一段。\n"
+        );
+        // And back the other way, where the table is walked forwards over
+        // what opencc hands over.
+        let mut editor = editor_with("他说内人在里面，吴先生录了一段。\n");
+        editor.execute("convert s c").unwrap();
+        let want = editor.take_shell_request().expect("opencc has to be run");
+        let How::Convert(input) = want.how else {
+            panic!("a conversion is piped, not handed the screen");
+        };
+        let ran = run_capturing(&want.line, Some(&input)).expect("opencc runs");
+        assert!(ran.ok, "{}", ran.why());
+        editor.provide_conversion(&ran.said);
+        assert_eq!(
+            editor.current_buffer().rope().to_string(),
+            "他説内人在裏面，吴先生録了一段。\n"
+        );
+    }
+
     /// The headless picture: `--shot`, and what a reviewer sees.
     #[test]
     fn a_frame_can_be_drawn_without_a_terminal() {
