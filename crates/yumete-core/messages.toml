@@ -1659,6 +1659,14 @@ en = "reread (this book's and the global one)"
 find = "詞表 词表 重讀 重读 刷新 reload"
 
 [[message]]
+# : 命令選單裏 discover 那一項的說明（word-topics 組）
+key = "cmd.word-topics.discover"
+zht = "挖出本書自己的詞：人名地名，字典裏沒有的"
+zhs = "挖出本书自己的词：人名地名，字典里没有的"
+en = "mine this book's own words: the names no dictionary has"
+find = "新詞 新词 人名 地名 挖 discover"
+
+[[message]]
 # : 命令選單裏 level 那一項的說明（word-topics 組）
 key = "cmd.word-topics.level"
 zht = "分詞粒度：多少個字算一個詞"
@@ -5799,6 +5807,41 @@ en = "wheel: {0} a notch"
 
 
 # ── word ──────────────────────────────────────────────────────────────
+
+[[message]]
+# 挖完了，詞寫進詞表了（還沒存檔）
+key = "word.discover-found"
+zht = "找到 {0} 個本書自己的詞，寫進了 {1}——刪掉不要的，:w 存檔"
+zhs = "找到 {0} 个本书自己的词，写进了 {1}——删掉不要的，:w 存档"
+en = "{0} word(s) of this book's own, written into {1} — delete what is not a word, then :w"
+
+[[message]]
+# 寫進詞表的那一段的抬頭（這一行進的是檔案，不是狀態欄）
+key = "word.discover-heading"
+zht = "# 本書自己的詞：:word discover 掃了 {0} 個檔找出來的，刪掉不要的"
+zhs = "# 本书自己的词：:word discover 扫了 {0} 个档找出来的，删掉不要的"
+en = "# this book's own words, found by :word discover over {0} file(s); delete what is not a word"
+
+[[message]]
+# 寫進詞表的一行：詞，還有它出現了幾次
+key = "word.discover-line"
+zht = "{0}\t# {1} 次"
+zhs = "{0}\t# {1} 次"
+en = "{0}\t# {1}×"
+
+[[message]]
+# 挖了，一個字典不認得的詞都沒有
+key = "word.discover-none"
+zht = "掃了 {0} 個檔，沒有找到本書自己的詞——書裏的詞字典都認得"
+zhs = "扫了 {0} 个档，没有找到本书自己的词——书里的词字典都认得"
+en = "{0} file(s) read, and no words of this book's own — the dictionary already knows them all"
+
+[[message]]
+# 挖到的比寫進去的多，說一聲
+key = "word.discover-too-many"
+zht = "寫進了最常見的 {0} 個（一共找到 {1} 個）——刪掉不要的，:w 存檔"
+zhs = "写进了最常见的 {0} 个（一共找到 {1} 个）——删掉不要的，:w 存档"
+en = "the commonest {0} written in, of {1} found — delete what is not a word, then :w"
 
 [[message]]
 # 分詞粒度設好了

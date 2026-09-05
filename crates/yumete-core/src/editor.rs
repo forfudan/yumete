@@ -156,6 +156,22 @@ const GREP_LIMIT: usize = 500;
 /// anything above this is data that happens to live in the same directory.
 const GREP_MAX_BYTES: u64 = 4 * 1024 * 1024;
 
+/// How many mined words `:word discover` writes into the list (Feature #239).
+///
+/// Two hundred. What is being written is not a report but a *file the writer
+/// then reads line by line*, and a thousand lines of it would be deleted
+/// unread — which is worse than not offering them, because the ninety good
+/// ones go with the rest. Ranked by count, so the two hundred kept are the
+/// names that are on every page.
+const DISCOVER_LIMIT: usize = 200;
+
+/// How much of a project `:word discover` reads before it stops.
+///
+/// The three signals are ratios, so more text only sharpens them; this bound
+/// is about the seconds a writer waits, not about the statistics. A novel is
+/// one or two megabytes and never reaches it.
+const DISCOVER_MAX_BYTES: usize = 16 * 1024 * 1024;
+
 /// How many files the picker offers.
 ///
 /// A project with more than this is not one a writer is choosing a chapter
@@ -11000,6 +11016,10 @@ impl Editor {
                 Some(path) => self.open_word_list(&path)?,
                 None => self.status = say!("word.no-data-directory"),
             },
+            WordCommand::Discover => {
+                let root = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+                self.discover_words(&root)?;
+            }
             WordCommand::Level(None) => {
                 self.status = say!("word.level-set", self.word_level.name());
             }
@@ -11084,6 +11104,85 @@ impl Editor {
         if self.current_buffer().text().trim().is_empty() {
             self.status = say!("word.list-opened", path.display());
         }
+        Ok(())
+    }
+
+    /// `:word discover` — the words this book has and no dictionary does
+    /// (Feature #239).
+    ///
+    /// **The whole project, not this file.** A name earns its place in the
+    /// list by turning up in chapter after chapter, and five sightings spread
+    /// over forty files is exactly the evidence a single open buffer cannot
+    /// show. Unsaved buffers count as they stand, the way `:grep` reads them.
+    ///
+    /// **The candidates are written into the list, unsaved.** This is the same
+    /// bargain [`Self::replace_found`] strikes: the editor does the work, the
+    /// buffer holds it, `u` takes it back, and `:w` is the moment a person says
+    /// yes. A listing the writer would have to retype by hand is not an offer,
+    /// and a file quietly rewritten on disk is not a question. What lands is a
+    /// block of `詞　# 47 次` lines under a comment saying where it came from —
+    /// delete the ones that are not words and save.
+    ///
+    /// Nothing already in the list comes back on a second run: the segmenter
+    /// in force is wrapped in [`yumete_cjk::WithWords`], so a listed word is
+    /// one it already joins, and [`crate::discover`] never offers those.
+    fn discover_words(&mut self, root: &Path) -> Result<(), EditorError> {
+        let mut text = String::new();
+        let mut files = 0usize;
+        walk(root, &mut |path| {
+            if text.len() >= DISCOVER_MAX_BYTES {
+                return;
+            }
+            let open = self
+                .buffers
+                .iter()
+                .find(|b| b.path() == Some(path))
+                .map(|b| b.text());
+            let more = match open {
+                Some(text) => text,
+                None => match std::fs::read_to_string(path) {
+                    Ok(text) => text,
+                    Err(_) => return,
+                },
+            };
+            files += 1;
+            text.push_str(&more);
+            // The join, so a word cannot be found across the seam between two
+            // chapters that never touch.
+            text.push('\n');
+        });
+        let found = {
+            let joins = |word: &str| self.segmenter.segment(word).len() == 1;
+            crate::discover::words(&text, &joins)
+        };
+        if found.is_empty() {
+            self.status = say!("word.discover-none", files);
+            return Ok(());
+        }
+        let total = found.len();
+        let path = self.project_words_path();
+        self.open_word_list(&path)?;
+        let mut block = String::new();
+        let list = self.current_buffer().text();
+        if !list.is_empty() && !list.ends_with('\n') {
+            block.push('\n');
+        }
+        block.push_str(&say!("word.discover-heading", files));
+        block.push('\n');
+        for word in found.iter().take(DISCOVER_LIMIT) {
+            block.push_str(&say!("word.discover-line", word.word, word.count));
+            block.push('\n');
+        }
+        let at = self.current_buffer().char_count();
+        self.snapshot();
+        self.without_cell_guard(|e| e.current_buffer_mut().insert(at, &block));
+        self.clamp_cursor();
+        self.forget_the_text();
+        self.set_cursor(at);
+        self.status = match total > DISCOVER_LIMIT {
+            true => say!("word.discover-too-many", DISCOVER_LIMIT, total),
+            false => say!("word.discover-found", total, path.display()),
+        };
         Ok(())
     }
 
@@ -22897,6 +22996,48 @@ mod tests {
         let after = ed.segment_line(0);
         assert_eq!(after[0], (0, 2), "one word now: {after:?}");
         assert!(ed.status().contains("words.txt"), "{}", ed.status());
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn the_book_hands_the_editor_its_own_names_without_being_asked() {
+        // The same 阿寧, found rather than typed in (Feature #239). Six
+        // sightings spread over three chapters, in different company each
+        // time, and nowhere else in the language.
+        let dir = std::env::temp_dir().join(format!("yumete-discover-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        // Prose for the name to stand out against. Repeated four times, which
+        // is one short of `MIN_COUNT`, so the filler itself yields nothing.
+        let prose = "天地玄黃宇宙洪荒日月盈昃辰宿列張寒來暑往秋收冬藏閏餘成歲律呂調陽雲騰致雨露結爲霜金生麗水\n"
+            .repeat(4);
+        std::fs::write(dir.join("ch01.md"), format!("{prose}甲阿寧乙。\n丙阿寧丁。\n")).unwrap();
+        std::fs::write(dir.join("ch02.md"), "戊阿寧己。\n庚阿寧辛。\n").unwrap();
+        std::fs::write(dir.join("ch03.md"), "壬阿寧癸。\n子阿寧丑。\n").unwrap();
+
+        let mut ed = Editor::new();
+        ed.set_segmenter(Box::new(DictionarySegmenter::builtin(0)));
+        ed.open_file(&dir.join("ch01.md")).unwrap();
+        ed.discover_words(&dir).unwrap();
+
+        // Written into the list, with its count — and **not to disk**.
+        let list = ed.current_buffer().text();
+        assert!(list.contains("阿寧"), "{list:?}");
+        assert!(list.contains('6'), "the count comes with it: {list:?}");
+        assert!(
+            !dir.join(".yumete").join("words.txt").exists(),
+            "nothing reaches disk until :w"
+        );
+
+        // `:w` is the moment a person says yes, and then the name is a word.
+        assert!(ed.execute("w").is_ok(), "{}", ed.status());
+        ed.reload_project_words();
+        assert_eq!(ed.project_word_count(), 1, "{}", ed.status());
+
+        // And a second run has nothing to say: what the list holds, the
+        // segmenter now joins, and what it joins is never offered again.
+        ed.discover_words(&dir).unwrap();
+        assert!(ed.status().contains('3'), "three files read: {}", ed.status());
         std::fs::remove_dir_all(&dir).ok();
     }
 
