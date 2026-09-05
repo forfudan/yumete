@@ -356,6 +356,14 @@ pub fn parse(input: &str) -> Result<Command, CommandError> {
     let mut parts = trimmed.splitn(2, char::is_whitespace);
     let word = resolve(parts.next().unwrap());
     let rest = parts.next().unwrap_or("").trim();
+    // The prefix rule goes on past the command name. The menu prints the
+    // shortest unambiguous spelling of every word that may follow, and most of
+    // those spellings used to be lies: the arms below match whole words, so
+    // `:table check` growing a `csv` sibling turned the menu's `check (ch)`
+    // into 「不認得」 — and `:render f`, `:buffer n`, `:clipboard y`, `:help t`
+    // and a dozen more had never worked at all.
+    let spelled = spell_out(word, rest);
+    let rest = spelled.as_deref().unwrap_or(rest);
 
     match word {
         "open" | "o" | "edit" | "e" => {
@@ -1195,6 +1203,56 @@ impl Need {
     }
 }
 
+/// The words after `command`, each written out in full, or `None` if they
+/// already were.
+///
+/// Walks the same word lists the menu shows, so the abbreviation it offers is
+/// the abbreviation that parses — one rule rather than a promise the parser
+/// has to remember to keep. The walk stops the moment the list runs out (a
+/// path, free text, a delimiter, a number), so nothing a writer typed for
+/// themselves is ever rewritten: `:table pipe " "` still hands `" "` through
+/// untouched, and an unresolvable word is left exactly as it stands for the
+/// arm below to refuse by its own name.
+fn spell_out(command: &str, rest: &str) -> Option<String> {
+    let entry = COMMANDS.iter().find(|e| {
+        let named = |w: &str| e.name == w || e.aliases.contains(&w);
+        named(command) || command.strip_suffix('!').is_some_and(named)
+    })?;
+    let mut args = &entry.args;
+    let mut out = String::with_capacity(rest.len());
+    let mut left = rest;
+    let mut changed = false;
+    while let Some(list) = args.words() {
+        let head = left.trim_start();
+        if head.is_empty() {
+            break;
+        }
+        let (head, tail) = match head.split_once(char::is_whitespace) {
+            Some(split) => split,
+            None => (head, ""),
+        };
+        let Some(found) = pick(head, list) else { break };
+        changed |= found.name != head;
+        if !out.is_empty() {
+            out.push(' ');
+        }
+        out.push_str(found.name);
+        args = &found.then;
+        left = tail;
+    }
+    if !changed {
+        return None;
+    }
+    let left = left.trim_start();
+    if !left.is_empty() {
+        if !out.is_empty() {
+            out.push(' ');
+        }
+        out.push_str(left);
+    }
+    Some(out)
+}
+
 /// The command a typed word names, by prefix when it is not a whole name.
 ///
 /// **One rule, at every level**: an unambiguous prefix names the thing. It is
@@ -1266,18 +1324,6 @@ const FORCEABLE: &[&str] = &[
     "shot",
 ];
 
-/// The one word of `from` that `typed` names, exactly or by prefix.
-///
-/// `:yume s l` is `:yume scheme lingming` — because `s` is the only word there
-/// starting with `s`, and `l` the only scheme starting with `l`. An ambiguous
-/// prefix names nothing rather than guessing: `:ruby t` could be `typst` and
-/// nothing else, but if a second `t` word were ever added it would stop
-/// working, loudly, instead of quietly meaning the older one.
-/// The shortest unambiguous way to write `name`, among `others`.
-///
-/// What the menu shows in parentheses, and it is *true* — the same prefix rule
-/// resolves it when typed, at every level. Worked out rather than declared, so
-/// it cannot promise a spelling that a later word made ambiguous.
 /// The character a `<分隔>` argument names.
 ///
 /// A delimiter is one character, and most of them can simply be typed. The two
@@ -1302,22 +1348,31 @@ fn delimiter_named(word: &str) -> Option<char> {
     }
 }
 
+/// The shortest unambiguous way to write `name`, among `others`.
+///
+/// What the menu shows in parentheses, and it is *true* — the same prefix rule
+/// resolves it when typed, at every level. Worked out rather than declared, so
+/// it cannot promise a spelling that a later word made ambiguous.
 pub fn shortest(
     name: &'static str,
     among: impl Iterator<Item = &'static str>,
 ) -> Option<&'static str> {
     let others: Vec<&str> = among.filter(|&o| o != name).collect();
-    let mut end = 0;
     for (at, _) in name.char_indices().skip(1) {
-        end = at;
         if !others.iter().any(|o| o.starts_with(&name[..at])) {
             return Some(&name[..at]);
         }
     }
-    let _ = end;
     None
 }
 
+/// The one word of `from` that `typed` names, exactly or by prefix.
+///
+/// `:yume s l` is `:yume scheme lingming` — because `s` is the only word there
+/// starting with `s`, and `l` the only scheme starting with `l`. An ambiguous
+/// prefix names nothing rather than guessing: `:ruby t` could be `typst` and
+/// nothing else, but if a second `t` word were ever added it would stop
+/// working, loudly, instead of quietly meaning the older one.
 pub fn pick<'a>(typed: &str, from: &'a [Word]) -> Option<&'a Word> {
     if let Some(exact) = from.iter().find(|w| w.name == typed) {
         return Some(exact);
@@ -3255,6 +3310,50 @@ mod tests {
         // The shortest spelling the menu offers has to work.
         let short = shortest("appearance", COMMANDS.iter().map(|c| c.name));
         assert!(parse(&format!(":{} dark", short.unwrap_or("appearance"))).is_ok());
+    }
+
+    #[test]
+    fn every_short_form_the_menu_offers_actually_parses() {
+        // The menu prints `check (ch)` next to every word it offers, and that
+        // parenthesis is a promise: type those two letters and you get this.
+        // The arms of `parse` match whole words, so for a year most of those
+        // promises were broken — `:table ch`, `:render f`, `:buffer n`,
+        // `:clipboard y` — and nothing said so, because the abbreviation is
+        // worked out from the word list while the parser is written by hand.
+        //
+        // Now `spell_out` writes the words out before the arms see them, and
+        // this walks every list to hold it to account: the short spelling has
+        // to parse to **the same command** the whole word does. Only words
+        // that need no argument can be asked outright; a word that takes one
+        // is walked into instead, so `:table ru li` is covered as well.
+        fn check(prefix: &str, list: &'static [Word]) {
+            for word in list {
+                let short = shortest(word.name, list.iter().map(|o| o.name));
+                let full = format!("{prefix} {}", word.name);
+                if let Some(short) = short {
+                    let abbreviated = format!("{prefix} {short}");
+                    assert_eq!(
+                        parse(&abbreviated),
+                        parse(&full),
+                        "the menu offers `{short}` for `{}`",
+                        word.name
+                    );
+                }
+                if let Some(under) = word.then.words() {
+                    // Down the short spelling, so a lie at either level shows.
+                    let walk = match short {
+                        Some(short) => format!("{prefix} {short}"),
+                        None => full,
+                    };
+                    check(&walk, under);
+                }
+            }
+        }
+        for entry in COMMANDS {
+            if let Some(list) = entry.args.words() {
+                check(&format!(":{}", entry.name), list);
+            }
+        }
     }
 
     #[test]

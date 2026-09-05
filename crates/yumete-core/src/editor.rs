@@ -1824,6 +1824,41 @@ impl Editor {
         })
     }
 
+    /// Whether writing `target` is refused, having said why if it is.
+    ///
+    /// **Never onto a manuscript.** `:export typst` on a `.typ` chapter used
+    /// to name its own source — an export keeps 標題、段落、注音 and nothing
+    /// else, so the figures, the tables and the raw Typst were gone from the
+    /// file on disk, and the message that followed pointed at `:e!`, which
+    /// throws the good copy in memory away too.
+    ///
+    /// The guard used to compare the two paths as *strings*, while the writer
+    /// resolves them: `main.typ` against `/…/main.typ`, or a symlink against
+    /// what it points at, walked straight past it. And the chapter in danger is
+    /// not only this one — any file open in this editor is being held in memory
+    /// and will be saved from there.
+    ///
+    /// **An existing file is replaced only when you say so**, which is the rule
+    /// `:w` keeps. The exporter is the other writer, and it did not.
+    ///
+    /// Every writer that is not `:w` asks this: `:export`, `:export csv`, and
+    /// `:shot`. They used to ask it in three byte-identical copies (#227 made
+    /// the third), which is three places for the next fix to miss two of.
+    fn refuse_to_overwrite(&mut self, target: &Path, force: bool) -> bool {
+        if let Some(which) = self.buffer_holding(target) {
+            self.status = match which == self.current {
+                true => say!("export.same-as-the-manuscript"),
+                false => say!("export.target-is-open", self.buffers[which].display_name()),
+            };
+            return true;
+        }
+        if !force && target.exists() {
+            self.status = say!("export.target-exists", target.display());
+            return true;
+        }
+        false
+    }
+
     /// Write the manuscript out for somebody else to typeset (`:export`).
     ///
     /// The default name is the document's own with the extension swapped, which
@@ -1840,8 +1875,8 @@ impl Editor {
         // answered here, from the same machinery `:table csv` uses, rather than
         // by `export::export`, which is handed whole texts and answers with
         // whole texts (Feature #227).
-        if crate::export::is_delimited(format) {
-            return self.export_delimited(format, path, force);
+        if let Some(delimiter) = crate::export::delimiter_of(format) {
+            return self.export_delimited(delimiter, format, path, force);
         }
         let Some(format) = crate::export::Format::parse(format) else {
             self.status = say!("export.no-such-format", format);
@@ -1861,31 +1896,7 @@ impl Editor {
             dialects: self.ruby,
             title: self.current_buffer().display_name(),
         };
-        // **Never onto a manuscript.** `:export typst` on a `.typ` chapter used
-        // to name its own source — an export keeps 標題、段落、注音 and nothing
-        // else, so the figures, the tables and the raw Typst were gone from the
-        // file on disk, and the message that followed pointed at `:e!`, which
-        // throws the good copy in memory away too.
-        //
-        // The guard used to compare the two paths as *strings*, while the
-        // writer resolves them: `main.typ` against `/…/main.typ`, or a symlink
-        // against what it points at, walked straight past it. And the chapter
-        // in danger is not only this one — any file open in this editor is
-        // being held in memory and will be saved from there.
-        if let Some(which) = self.buffer_holding(&target) {
-            self.status = match which == self.current {
-                true => say!("export.same-as-the-manuscript"),
-                false => say!(
-                    "export.target-is-open",
-                    self.buffers[which].display_name()
-                ),
-            };
-            return Ok(CommandOutcome::Continue);
-        }
-        // An existing file is replaced only when you say so, which is the rule
-        // `:w` keeps. The exporter is the other writer, and it did not.
-        if !force && target.exists() {
-            self.status = say!("export.target-exists", target.display());
+        if self.refuse_to_overwrite(&target, force) {
             return Ok(CommandOutcome::Continue);
         }
         let written = crate::export::export(&self.current_buffer().text(), format, &style);
@@ -1932,18 +1943,7 @@ impl Editor {
                 None => return Err(EditorError::NoFileName),
             },
         };
-        // The two guards every other writer in here keeps: never onto a file
-        // this editor is holding in memory, and never over one that already
-        // exists unless the bang says so.
-        if let Some(which) = self.buffer_holding(&target) {
-            self.status = match which == self.current {
-                true => say!("export.same-as-the-manuscript"),
-                false => say!("export.target-is-open", self.buffers[which].display_name()),
-            };
-            return Ok(CommandOutcome::Continue);
-        }
-        if !force && target.exists() {
-            self.status = say!("export.target-exists", target.display());
+        if self.refuse_to_overwrite(&target, force) {
             return Ok(CommandOutcome::Continue);
         }
         let text = target
@@ -1961,11 +1961,11 @@ impl Editor {
     /// to read it.
     fn export_delimited(
         &mut self,
+        delimiter: char,
         format: &str,
         path: Option<&str>,
         force: bool,
     ) -> Result<CommandOutcome, EditorError> {
-        let delimiter = crate::export::delimiter_of(format).unwrap_or(',');
         let rope = self.current_buffer().rope();
         let line = rope.char_to_line(self.cursor.min(rope.len_chars()));
         let region = match self.md_row_in_a_fence() {
@@ -2021,17 +2021,7 @@ impl Editor {
                 None => return Err(EditorError::NoFileName),
             },
         };
-        // The same two guards a document export keeps: never onto a manuscript
-        // that is open, and never over an existing file unless told to.
-        if let Some(which) = self.buffer_holding(&target) {
-            self.status = match which == self.current {
-                true => say!("export.same-as-the-manuscript"),
-                false => say!("export.target-is-open", self.buffers[which].display_name()),
-            };
-            return Ok(CommandOutcome::Continue);
-        }
-        if !force && target.exists() {
-            self.status = say!("export.target-exists", target.display());
+        if self.refuse_to_overwrite(&target, force) {
             return Ok(CommandOutcome::Continue);
         }
         let mut written = lines.join("\n");
@@ -3668,9 +3658,19 @@ impl Editor {
             // Column names and nothing else — but that is enough to line the
             // file up and walk it by cell, which is most of what a grid is for.
             None => {
+                // **What separates the columns is guessed, not assumed.** It
+                // used to be a hard-coded comma, so `:table` on a `.tsv` split
+                // its header into a single column and was told 「不是表格」 —
+                // a file this editor's own `:export tsv` had just written.
+                // The guess is the sniffer's, over the same first lines
+                // `looks_delimited` reads, and a comma when it says nothing.
+                let lines = self.first_lines(20);
+                let delimiter = crate::table::sniff(&lines).unwrap_or(',');
                 let head = self.current_buffer().rope().line(0).to_string();
-                let schema = crate::table::Schema::from_header(&head, ',');
-                if schema.columns.len() < 2 || !self.looks_delimited(schema.columns.len()) {
+                let schema = crate::table::Schema::from_header(&head, delimiter);
+                if schema.columns.len() < 2
+                    || !self.looks_delimited(delimiter, schema.columns.len())
+                {
                     self.status = say!("table.file-is-not-a-grid", path.file_name().unwrap_or_default().to_string_lossy());
                     return false;
                 }
@@ -3719,20 +3719,26 @@ impl Editor {
     /// turned the manuscript into a two-column grid. A delimited file has the
     /// property prose never has: **every line has the same number of fields**.
     /// Twenty lines is enough to tell, and is what a person would look at.
-    fn looks_delimited(&self, columns: usize) -> bool {
+    fn looks_delimited(&self, delimiter: char, columns: usize) -> bool {
+        let lines = self.first_lines(20);
+        lines.len() >= 2
+            && lines
+                .iter()
+                .all(|l| crate::table::cells(l, delimiter).len() == columns)
+    }
+
+    /// The first `how_many` lines of the buffer that hold anything.
+    ///
+    /// What both halves of the header-row fallback look at — the sniffer's
+    /// guess and the agreement check — so they cannot be looking at different
+    /// files. Trailing newlines are off: a line is its text.
+    fn first_lines(&self, how_many: usize) -> Vec<String> {
         let rope = self.current_buffer().rope();
-        let mut seen = 0;
-        for line in 0..rope.len_lines().min(20) {
-            let text = rope.line(line).to_string();
-            if text.trim().is_empty() {
-                continue;
-            }
-            if crate::table::cells(&text, ',').len() != columns {
-                return false;
-            }
-            seen += 1;
-        }
-        seen >= 2
+        (0..rope.len_lines().min(how_many))
+            .map(|i| rope.line(i).to_string())
+            .map(|l| l.trim_end_matches(['\n', '\r']).to_string())
+            .filter(|l| !l.trim().is_empty())
+            .collect()
     }
 
     /// Go back to reading the file as plain text.
@@ -4087,6 +4093,14 @@ impl Editor {
 
     /// `:table pipe` — the delimited block under the cursor becomes a `|` table.
     fn table_to_pipe(&mut self, delimiter: Option<char>) {
+        // `Buffer::insert` would refuse anyway, but silently and far too late:
+        // by then the table has been left, the document forgotten and the grid
+        // re-entered, and the status line says 「作成了 | 表格：3 行 2 欄」 for
+        // a file that did not change a byte. Every caller that edits refuses
+        // for itself; these two are callers.
+        if self.refuse_readonly() {
+            return;
+        }
         let (first, last) = self.block_here();
         let lines: Vec<String> = (first..=last)
             .filter_map(|i| self.line_text(i))
@@ -4108,12 +4122,17 @@ impl Editor {
             return;
         };
         let out = crate::mdtable::from_delimited(&lines, delimiter);
-        if out.is_empty() {
+        // `from_delimited` writes a header, a rule row and one row per line, so
+        // with `lines` non-empty there is always a header to measure. Asking
+        // for it rather than indexing keeps a broken contract from taking the
+        // manuscript down with it; it used to be a separate emptiness check
+        // above, which read as a case that could happen and never could.
+        let Some(header) = out.first() else {
             self.status = say!("table.nothing-to-convert");
             return;
-        }
+        };
         let rows = out.len().saturating_sub(1);
-        let columns = crate::mdtable::split(&out[0]).len();
+        let columns = crate::mdtable::split(header).len();
         self.snapshot();
         self.leave_table_quietly();
         self.replace_lines(first, last, &out);
@@ -4129,6 +4148,9 @@ impl Editor {
 
     /// `:table csv` — the `|` table under the cursor becomes delimited lines.
     fn table_to_delimited(&mut self, delimiter: char) {
+        if self.refuse_readonly() {
+            return;
+        }
         let rope = self.current_buffer().rope();
         let line = rope.char_to_line(self.cursor.min(rope.len_chars()));
         let region = match self.md_row_in_a_fence() {
@@ -4154,7 +4176,11 @@ impl Editor {
                 return;
             }
         };
-        let rows = out.len().saturating_sub(1);
+        // Every line of `out` is a row: `to_delimited` writes no rule row, and
+        // there is nothing to subtract. (`table_to_pipe` *does* write one,
+        // which is where the `- 1` this used to have came from — copied across
+        // and wrong here: it said 「2 行」 for the three rows it had written.)
+        let rows = out.len();
         self.snapshot();
         self.leave_table_quietly();
         self.replace_lines(region.first, region.last, &out);
@@ -4722,10 +4748,25 @@ impl Editor {
                 .map(|row| row.get(cell).cloned().unwrap_or_default())
                 .collect();
         }
+        self.cell_lines()
+            .into_iter()
+            .map(|line| self.cell_text(line, cell))
+            .collect()
+    }
+
+    /// The lines a grid's rows sit on, top to bottom.
+    ///
+    /// Every line of the file, as it happens: a blank line is still a row, of
+    /// one empty cell, and a column yanked over it carries the blank along so
+    /// that putting it back puts it back where it came from. What this is for
+    /// is that `t y` and `t p` ask **one** question — they used to each walk
+    /// the lines their own way, and tightening the filter on one side alone
+    /// would have shifted every value below the blank by a row without a
+    /// single test noticing.
+    fn cell_lines(&self) -> Vec<usize> {
         let last = motion::last_line(self.current_buffer().rope());
         (0..=last)
             .filter(|&line| !self.row_cells(line).is_empty())
-            .map(|line| self.cell_text(line, cell))
             .collect()
     }
 
@@ -4754,7 +4795,7 @@ impl Editor {
                 let width = parts.columns().max(cell + 1);
                 let row = &mut parts.rows[r];
                 row.resize(width, String::new());
-                row[cell] = value.replace('|', "\\|");
+                row[cell] = crate::mdtable::escape(value);
             }
             self.md_reschema(&parts);
             self.md_write(&region, &parts, 0, cell);
@@ -4765,15 +4806,26 @@ impl Editor {
             return;
         };
         let d = self.table.as_ref().map(|v| v.schema.delimiter).unwrap_or(',');
+        let lines = self.cell_lines();
+        // **A value holding the delimiter is refused, not filtered.** It used
+        // to be stripped out character by character, which is the same silent
+        // damage `:table csv` refuses in the other direction: 「長, 久」 went
+        // in as 「長 久」 and nothing said so. Refused *before* the snapshot,
+        // so a refusal costs the writer nothing to undo.
+        if let Some((r, _)) = values.iter().enumerate().find(|(_, v)| v.contains(d)) {
+            let row = lines.get(r).map(|l| l + 1).unwrap_or(r + 1);
+            self.status = say!("table.cell-holds-the-delimiter", row, cell + 1, d);
+            return;
+        }
         self.snapshot();
-        for (line, value) in values.iter().enumerate() {
-            let value: String = value.chars().filter(|&c| c != d).collect();
+        for (r, value) in values.iter().enumerate() {
+            let Some(&line) = lines.get(r) else { break };
             let Some((from, to)) = self.cell_span(line, cell) else {
                 continue;
             };
             self.without_cell_guard(|e| {
                 e.current_buffer_mut().remove(from..to);
-                e.current_buffer_mut().insert(from, &value);
+                e.current_buffer_mut().insert(from, value);
             });
         }
         self.snap_to_cell();
@@ -4802,8 +4854,11 @@ impl Editor {
                         parts.insert_column(parts.columns());
                     }
                     // A pipe in a pasted cell would be a boundary the file did
-                    // not mean; it goes in as the escape the manual promises.
-                    let text = text.replace('|', "\\|");
+                    // not mean; it goes in as the escape the manual promises —
+                    // and a backslash is doubled with it, which is why this
+                    // asks `mdtable` rather than writing the one replacement
+                    // it happened to be thinking of.
+                    let text = crate::mdtable::escape(text);
                     let width = parts.columns();
                     let at = &mut parts.rows[row + r];
                     at.resize(width, String::new());
@@ -4824,6 +4879,17 @@ impl Editor {
             self.status = say!("table.paste-does-not-fit", width);
             return;
         }
+        // The same refusal `t p` makes, for the same reason: a cell holding
+        // the delimiter would come back two cells and shift every column right
+        // of it. Named by where it will land, and named before anything moves.
+        if let Some((r, c)) = grid
+            .iter()
+            .enumerate()
+            .find_map(|(r, row)| row.iter().position(|t| t.contains(d)).map(|c| (r, c)))
+        {
+            self.status = say!("table.cell-holds-the-delimiter", line + r + 1, cell + c + 1, d);
+            return;
+        }
         self.snapshot();
         for (r, values) in grid.iter().enumerate() {
             let at = line + r;
@@ -4836,13 +4902,12 @@ impl Editor {
                 });
             }
             for (c, text) in values.iter().enumerate() {
-                let text: String = text.chars().filter(|&ch| ch != d).collect();
                 let Some((from, to)) = self.cell_span(at, cell + c) else {
                     continue;
                 };
                 self.without_cell_guard(|e| {
                     e.current_buffer_mut().remove(from..to);
-                    e.current_buffer_mut().insert(from, &text);
+                    e.current_buffer_mut().insert(from, text);
                 });
             }
         }
@@ -14510,17 +14575,31 @@ mod tests {
 
     #[test]
     fn a_conversion_that_would_lose_a_cell_is_refused() {
-        let mut ed = typed("| 字 | 註 |\n| -- | -- |\n| 永 | 長, 久 |\n");
+        // Three rows and three columns, with the comma in **row 3, column 2**
+        // — a shape that tells the two numbers apart. On a 2×2 table this
+        // said 「第 2 行第 2 欄」 whichever way round the arguments went in.
+        let mut ed = typed(
+            "| 字 | 註 | 部 |\n| -- | -- | -- |\n| 永 | 水 | 丶 |\n| 之 | 長, 久 | 丿 |\n",
+        );
         ed.execute(":3").unwrap();
         let before = ed.current_buffer().text();
         ed.execute(":table csv").unwrap();
         // Named, and nothing written: the file is exactly as it was.
         assert_eq!(ed.current_buffer().text(), before);
-        assert!(ed.status.contains('2'), "row and column: {}", ed.status);
+        // Row 3 counts the header as row 1 and the rule row not at all.
+        let (row, column) = (ed.status.find('3'), ed.status.find('2'));
+        assert!(
+            matches!((row, column), (Some(r), Some(c)) if r < c),
+            "row 3 then column 2, in that order: {}",
+            ed.status
+        );
 
         // The writer picks a delimiter the data does not hold, and it goes.
         ed.execute(":table csv tab").unwrap();
-        assert_eq!(ed.current_buffer().text(), "字\t註\n永\t長, 久\n");
+        assert_eq!(
+            ed.current_buffer().text(),
+            "字\t註\t部\n永\t水\t丶\n之\t長, 久\t丿\n"
+        );
     }
 
     #[test]
@@ -14576,11 +14655,47 @@ mod tests {
         );
 
         // An existing file is not replaced unless the bang says so — the rule
-        // `:w` keeps and the document exports keep.
+        // `:w` keeps and the document exports keep. Both messages print the
+        // path, so the path is not what tells them apart: what does is the
+        // word, and whether the file on disk actually changed.
+        std::fs::write(dir.join("人物.csv"), "別動我\n").unwrap();
         ed.execute(":export csv").unwrap();
-        assert!(ed.status.contains("人物.csv"), "{}", ed.status);
+        assert!(ed.status.contains("已經有"), "{}", ed.status);
+        assert_eq!(
+            std::fs::read_to_string(dir.join("人物.csv")).unwrap(),
+            "別動我\n",
+            "refused means the file is untouched"
+        );
         ed.execute(":export! csv").unwrap();
-        assert!(ed.status.contains("人物.csv"), "{}", ed.status);
+        assert!(ed.status.contains("寫好了"), "{}", ed.status);
+        assert_eq!(
+            std::fs::read_to_string(dir.join("人物.csv")).unwrap(),
+            "名,字\n淵明,元亮\n"
+        );
+
+        // And never onto something open in the editor — this would otherwise
+        // write the table over the manuscript it came from. (A named path is
+        // resolved against the working directory, the way `:w` resolves one,
+        // so the test names it in full: `人物.md` alone would mean a file in
+        // whatever directory the editor was started in.)
+        ed.execute(&format!(":export csv {}", path.display())).unwrap();
+        assert!(ed.status.contains("這份稿子本身"), "{}", ed.status);
+        assert_eq!(ed.current_buffer().text(), before, "the manuscript stands");
+        assert_eq!(
+            std::fs::read_to_string(&path).unwrap(),
+            before,
+            "…on disk as well as in memory"
+        );
+
+        // …and not onto a *different* file that is open either.
+        let other = dir.join("地名.md");
+        std::fs::write(&other, "# 地名\n").unwrap();
+        ed.execute(&format!(":open {}", other.display())).unwrap();
+        ed.execute(&format!(":open {}", path.display())).unwrap();
+        ed.execute(":5").unwrap();
+        ed.execute(&format!(":export! csv {}", other.display())).unwrap();
+        assert!(ed.status.contains("正開着"), "{}", ed.status);
+        assert_eq!(std::fs::read_to_string(&other).unwrap(), "# 地名\n");
 
         // Away from any table there is nothing to export.
         ed.execute(":1").unwrap();
@@ -14598,6 +14713,27 @@ mod tests {
         assert_eq!(
             std::fs::read_to_string(dir.join("表.tsv")).unwrap(),
             "字\t讀音\n永\tㄩㄥˇ\n"
+        );
+
+        // …and a grid refuses the same conversion a `|` table refuses: a cell
+        // that already holds the delimiter being written would come back two
+        // cells, and every column right of it would shift. Row 3, column 2,
+        // so the two numbers are told apart.
+        let tsv = dir.join("表二.tsv");
+        std::fs::write(&tsv, "字\t讀音\n永\tㄩㄥˇ\n之\t一, 二\n").unwrap();
+        let mut ed = Editor::new();
+        ed.execute(&format!(":open {}", tsv.display())).unwrap();
+        assert!(ed.execute(":table").is_ok());
+        ed.execute(":export csv").unwrap();
+        let (row, column) = (ed.status.find('3'), ed.status.find('2'));
+        assert!(
+            matches!((row, column), (Some(r), Some(c)) if r < c),
+            "row 3 then column 2: {}",
+            ed.status
+        );
+        assert!(
+            !dir.join("表二.csv").exists(),
+            "refused means nothing was written"
         );
 
         std::fs::remove_dir_all(&dir).ok();
@@ -14890,6 +15026,111 @@ mod tests {
         assert!(ed.table().is_some());
 
         std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn a_grid_without_a_schema_is_split_on_what_its_lines_agree_about() {
+        // The header-row fallback used to split on a comma and nothing else,
+        // so a tab-separated file — which `:export tsv` in this very editor
+        // writes — came back 「不是表格」 while a page of prose whose lines
+        // happen to hold one comma each still came back a grid. Both are the
+        // sniffer's question, so both are asked of the sniffer.
+        let dir = std::env::temp_dir().join(format!("yumete-grid-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+
+        let tsv = dir.join("讀音.tsv");
+        std::fs::write(&tsv, "字\t讀音\t部\n永\tㄩㄥˇ\t水\n之\t\u{34E4}\t丿\n").unwrap();
+        let mut ed = Editor::new();
+        ed.open_file(&tsv).unwrap();
+        assert!(ed.execute(":table").is_ok());
+        assert_eq!(ed.cell_text(1, 1), "ㄩㄥˇ", "tabs, not commas");
+        assert_eq!(ed.cell_text(2, 2), "丿");
+
+        // …and semicolons, the third of the three the sniffer knows.
+        let scsv = dir.join("讀音.txt");
+        std::fs::write(&scsv, "字;讀音\n永;ㄩㄥˇ\n").unwrap();
+        let mut ed = Editor::new();
+        ed.open_file(&scsv).unwrap();
+        assert!(ed.execute(":table").is_ok());
+        assert_eq!(ed.cell_text(1, 1), "ㄩㄥˇ");
+
+        // A page of prose is still not a grid: its lines do not agree.
+        let prose = dir.join("散文.txt");
+        std::fs::write(&prose, "那年冬天，雪下得早。\n他站在門口，看了很久，沒有進去。\n").unwrap();
+        let mut ed = Editor::new();
+        ed.open_file(&prose).unwrap();
+        ed.execute(":table").unwrap();
+        assert!(ed.cell_position().is_none(), "{}", ed.status);
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn a_column_goes_back_on_the_rows_it_was_taken_from() {
+        let dir = std::env::temp_dir().join(format!("yumete-col-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let csv = dir.join("讀音.csv");
+        // A blank line inside the file. It is a row of one empty cell, so the
+        // column carries a blank of its own over it — which is what keeps the
+        // cells below it from all moving up one when the column goes back.
+        std::fs::write(&csv, "字,讀音,部\n永,ㄩㄥˇ,水\n\n之,ㄓ,丿\n").unwrap();
+
+        let mut ed = Editor::new();
+        ed.open_file(&csv).unwrap();
+        assert!(ed.execute(":table").is_ok());
+        press(&mut ed, "ty");
+        press(&mut ed, "ll");
+        press(&mut ed, "tp");
+        assert_eq!(
+            ed.current_buffer().text(),
+            "字,讀音,字\n永,ㄩㄥˇ,永\n\n之,ㄓ,之\n",
+            "{}",
+            ed.status
+        );
+
+        // A value that holds the delimiter is refused by row and column, the
+        // way `:table csv` refuses one — it used to have the commas quietly
+        // filtered out of it, and 「長, 久」 went in as 「長 久」. Refused
+        // before anything is written, so there is nothing to undo.
+        let before = ed.current_buffer().text();
+        ed.store("部\n水\n\n長, 久\n".to_string());
+        press(&mut ed, "tp");
+        assert_eq!(ed.current_buffer().text(), before, "nothing was written");
+        let (row, column) = (ed.status.find('4'), ed.status.find('3'));
+        assert!(
+            matches!((row, column), (Some(r), Some(c)) if r < c),
+            "row 4, column 3 — where it would have landed: {}",
+            ed.status
+        );
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn a_cell_pasted_into_a_pipe_table_keeps_its_backslashes() {
+        // `\|` is the escape, so a backslash is doubled with it: a cell whose
+        // own text is `C:\` written as `C:\` would read back as an escape
+        // waiting for the pipe that follows. The paste used to replace the
+        // pipe alone, which is `escape`'s job and half of it.
+        let mut ed = typed("| 字 | 註 |\n| -- | -- |\n| 永 | 水 |\n");
+        ed.execute(":3").unwrap();
+        ed.enter_table();
+        press(&mut ed, "l");
+        ed.store("註\nC:\\ 與 |\n".to_string());
+        press(&mut ed, "tp");
+        // Written escaped…
+        assert!(
+            ed.current_buffer().text().contains(r"C:\\ 與 \|"),
+            "{}",
+            ed.current_buffer().text()
+        );
+        // …and read back as itself.
+        assert_eq!(
+            crate::mdtable::unescape(ed.cell_text(2, 1).trim()),
+            r"C:\ 與 |"
+        );
     }
 
     #[test]

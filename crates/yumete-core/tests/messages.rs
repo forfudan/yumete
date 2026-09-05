@@ -249,3 +249,35 @@ fn no_message_is_handed_a_chinese_argument() {
         leaks.join("\n")
     );
 }
+
+#[test]
+fn the_table_is_in_order() {
+    // 678 entries in one file: the only way to find out whether a tag is
+    // already written is to look it up, and the only way to look it up by hand
+    // is for the file to be in order. It was, all the way through, until nine
+    // entries went in beside the ones they were *about* rather than where the
+    // alphabet puts them — `cmd.table.csv` under `cmd.table.detail` because
+    // that is where the CSV work was, and the next person to add a
+    // `cmd.table.c…` finds neither.
+    //
+    // The section rules (`# ── table ──`) are the file's own headings and stay
+    // put; this asks only that the keys read in order from top to bottom, which
+    // they do across the rules as well, the sections being alphabetical too.
+    let text = std::fs::read_to_string(root().join("crates/yumete-core/messages.toml"))
+        .expect("messages.toml");
+    let keys: Vec<&str> = text
+        .lines()
+        .filter_map(|l| l.trim().strip_prefix("key = \""))
+        .filter_map(|l| l.strip_suffix('"'))
+        .collect();
+    let out_of_order: Vec<String> = keys
+        .windows(2)
+        .filter(|pair| pair[1] < pair[0])
+        .map(|pair| format!("{} comes before {}", pair[1], pair[0]))
+        .collect();
+    assert!(
+        out_of_order.is_empty(),
+        "messages.toml is sorted by key:\n{}",
+        out_of_order.join("\n")
+    );
+}

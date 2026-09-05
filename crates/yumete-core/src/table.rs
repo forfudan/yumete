@@ -827,6 +827,11 @@ to = "char"
             of("那年冬天，雪下得早。\n他站在門口，看了很久，沒有進去。"),
             None
         );
+        // …and that is the rule doing the work, not the fact that 中文 uses
+        // 全角 marks the guesses do not include. Lines that disagree in ASCII
+        // are refused just the same — three commas then two is not a shape,
+        // however commonly the comma turns up.
+        assert_eq!(of("a,b,c\nd,e"), None);
         // A single space is never guessed at, however regular it is.
         assert_eq!(of("one two\nthree four"), None);
         // One line is not evidence of a shape.
