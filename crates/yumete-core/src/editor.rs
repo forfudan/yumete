@@ -784,6 +784,13 @@ pub struct Editor {
     /// middle of the screen and the paper moves under it, the way a typewriter
     /// works and the way every focus mode since has.
     typewriter: bool,
+    /// How far one notch of the mouse wheel moves (Feature #222), counted in
+    /// whichever unit the page is set in — 縱 vertically, rows horizontally.
+    ///
+    /// Kept here rather than read out of the config at the front end, because
+    /// `:wheel` has to be able to change it while the editor is running, and
+    /// the config is not written back.
+    wheel_step: usize,
     /// The detail panel's width, when the reader has said one (Feature #187).
     /// `None` follows the config.
     detail_width: Option<usize>,
@@ -1212,6 +1219,7 @@ impl Editor {
             table_numbers: true,
             detail_width: None,
             typewriter: false,
+            wheel_step: 3,
             ime_available: false,
             definition_preview: false,
             screenshot_request: None,
@@ -3277,6 +3285,10 @@ impl Editor {
                 };
                 Ok(CommandOutcome::Continue)
             }
+            Command::SetTableHeader(want) => {
+                self.set_table_header(want);
+                Ok(CommandOutcome::Continue)
+            }
             Command::SetTableRules(rules) => {
                 if let Some(rules) = rules {
                     self.table_rules = rules;
@@ -3289,6 +3301,18 @@ impl Editor {
                     self.enter_table();
                 } else {
                     self.leave_table();
+                }
+                Ok(CommandOutcome::Continue)
+            }
+            Command::SetWheelStep(step) => {
+                match step {
+                    // Asking is a use of its own: the number is in a config
+                    // file the reader may never have written.
+                    None => self.status = say!("wheel.is", self.wheel_step),
+                    Some(step) => {
+                        self.set_wheel_step(step);
+                        self.status = say!("wheel.set", self.wheel_step);
+                    }
                 }
                 Ok(CommandOutcome::Continue)
             }
@@ -3515,6 +3539,17 @@ impl Editor {
     pub fn prompt_ghost(&self) -> String {
         if self.completion.is_some() {
             return String::new();
+        }
+        // **An empty search prompt already guesses** (#274). The author,
+        // 2026-09-05: 「`/` 搜索，enter 確認，再次按下 `/` 搜索，這個時候是不是
+        // 應該預填寫（灰色）上次搜索過內容？」 — `Enter` on an empty line has
+        // always repeated the last pattern, and the only thing missing was
+        // *saying so*: the guess is the whole of it from the first keystroke,
+        // so `/⏎` reads as「再找一次這個」rather than as a prompt you have to
+        // remember what you last put in. Typing narrows it the way it always
+        // did, and the first character that does not match takes it away.
+        if self.mode == Mode::Search && self.command_line.is_empty() {
+            return self.last_search.clone();
         }
         // The guess completes the *word* being typed, so a line with arguments
         // on it can still be guessed at: `:yume sch` guesses `eme`.
@@ -5451,6 +5486,82 @@ impl Editor {
         rope.char_to_line(self.cursor.min(rope.len_chars())) == 0
     }
 
+    /// Whether the grid's first row **names the columns** (#217).
+    ///
+    /// A 碼表 has no header — 「字⇥碼」 all the way down — so reading its first
+    /// line as the column names loses that line to the frozen row at the top
+    /// and calls one column 「一」. `t H` and `:table header off` say so: row
+    /// one becomes an ordinary row and the columns are named by number, which
+    /// is what the row above them already draws (#184). `None` flips it,
+    /// because a file is asked this once and never again.
+    fn set_table_header(&mut self, want: Option<bool>) {
+        let Some(view) = self.table.as_ref() else {
+            self.status = say!("table.not-in-a-table");
+            return;
+        };
+        // **Only the grid that is a whole file has a first row that could be
+        // either.** A `|` table says which its header is in the file itself —
+        // the rule row under it — and a block recognised where it stands is
+        // headerless already (#216), its first line being data is the whole
+        // point of reading it where it lies.
+        match view.bounds {
+            Bounds::WholeFile => {}
+            Bounds::Md => {
+                self.status = say!("table.header-is-the-rule-row");
+                return;
+            }
+            Bounds::Block => {
+                self.status = say!("table.block-first-row-is-data");
+                return;
+            }
+        }
+        let want = want.unwrap_or(!view.schema.header);
+        // **Names a person wrote are not undone by a keystroke.** A schema file
+        // names the columns itself, so turning its first row into data changes
+        // where the rows start and nothing else; it is only the fallback
+        // schema — the one built *out of* row one — whose names are this row's.
+        let by_a_schema = !view.from.as_os_str().is_empty();
+        let delimiter = view.schema.delimiter;
+        let head = self.line_text(0).unwrap_or_default();
+        let columns = match by_a_schema {
+            true => None,
+            false => Some(match want {
+                true => crate::table::Schema::from_header(&head, delimiter).columns,
+                false => {
+                    let wide = crate::table::cells(&head, delimiter).len().max(1);
+                    crate::table::Schema::numbered(wide, delimiter).columns
+                }
+            }),
+        };
+        let Some(view) = self.table.as_mut() else {
+            return;
+        };
+        view.schema.header = want;
+        if let Some(columns) = columns {
+            view.schema.columns = columns;
+        }
+        let wide = view.schema.columns.len();
+        // 「哪一行是這個字的」 is indexed from the first **data** row, and
+        // neither the buffer nor its revision has moved, so nothing else would
+        // notice that the answer just changed by one.
+        *self.key_index.borrow_mut() = None;
+        // The header is drawn frozen at the top and refuses every edit, so a
+        // cursor left standing on it is a cursor in a cell nothing can be done
+        // to — the same landing `enter_table` makes.
+        if want && self.cursor_line() == 0 {
+            let rope = self.current_buffer().rope();
+            if rope.len_lines() > 1 {
+                let at = rope.line_to_char(1);
+                self.set_cursor(at);
+            }
+        }
+        self.snap_to_cell();
+        self.status = match want {
+            true => say!("table.header-is-row-one", wide),
+            false => say!("table.header-is-data", wide),
+        };
+    }
+
     /// Empty the cell the cursor is in, keeping its boundaries (`d`).
     fn clear_cell(&mut self) {
         let Some((line, cell)) = self.cell_position() else {
@@ -5713,6 +5824,9 @@ impl Editor {
                 Key::Char('d') => self.drop_row(),
                 Key::Char('j') | Key::Down => self.shift_row(true),
                 Key::Char('k') | Key::Up => self.shift_row(false),
+                // **「第一行是欄名還是資料」** (#217) — the one question a
+                // 碼表 asks once, and `h` is the column, so the header is `H`.
+                Key::Char('H') => self.set_table_header(None),
                 Key::Esc => {}
                 _ => self.status = say!("hint.table.csv-keys"),
             }
@@ -6458,35 +6572,59 @@ impl Editor {
             // existed and then said it did not.
             // A block is read where it lies (#216), so the keys that rewrite a
             // file are not offered here — because they are refused here.
-            Pending::Table if self.block_region().is_some() => (say!("hint.table.title"), vec![
-                    ("/ ?", say!("hint.table.search-columns")),
-                    ("g", say!("hint.table.go-to-cell")),
-                    ("y p", say!("hint.table.yank-or-paste-column")),
-                ]),
-            Pending::Table if self.md_region().is_none() => (say!("hint.table.title"), vec![
-                    ("/ ?", say!("hint.table.search-columns")),
-                    ("g", say!("hint.table.go-to-cell")),
-                    ("s S", say!("hint.table.sort-by-column")),
-                    ("o O", say!("hint.table.add-row")),
-                    ("d", say!("hint.table.delete-row")),
-                    ("j k", say!("hint.table.move-row")),
-                    ("y p", say!("hint.table.yank-or-paste-column")),
-                    ("i", say!("hint.table.detail-panel")),
-                ]),
-            Pending::Table => (say!("hint.table.title"), vec![
-                    ("/ ?", say!("hint.table.search-columns")),
-                    ("g", say!("hint.table.go-to-cell")),
-                    ("o O", say!("hint.table.add-row")),
-                    ("n N", say!("hint.table.add-column")),
-                    ("d D", say!("hint.table.delete-row-or-column")),
-                    ("j k", say!("hint.table.move-row")),
-                    ("h l", say!("hint.table.move-column")),
-                    ("y p", say!("hint.table.yank-or-paste-column")),
-                    ("s S", say!("hint.table.sort-by-column")),
-                    ("< = >", say!("hint.table.align-column")),
-                    ("t", say!("hint.table.line-it-up")),
-                    ("i", say!("hint.table.detail-panel")),
-                ]),
+            Pending::Table => {
+                // **The way in comes first.** `t` is a group in every mode
+                // (#206), so most of the time it is pressed by somebody who is
+                // *not* in a table yet — and the menu used to open with 「照這
+                // 欄順排」 and never once mention `t t`. These four work
+                // wherever the cursor is, so they head every list, and on a
+                // page with no table under the cursor they are the whole list.
+                let mut keys = vec![
+                    ("t q", say!("hint.table.in-or-out")),
+                    ("] [", say!("hint.table.next-or-previous")),
+                ];
+                // **Which list is a question about the cursor, not the mode.**
+                // It used to be `md_region().is_none()`, which is *also* true
+                // of a Markdown table nobody has opened yet — so standing in
+                // one of 手冊's own tables offered the delimited file's keys.
+                match self.table.as_ref().map(|v| v.bounds) {
+                    Some(Bounds::Block) if self.block_region().is_some() => keys.extend([
+                        ("/ ?", say!("hint.table.search-columns")),
+                        ("g", say!("hint.table.go-to-cell")),
+                        ("y p", say!("hint.table.yank-or-paste-column")),
+                    ]),
+                    Some(Bounds::Md) if self.md_region().is_some() => keys.extend([
+                        ("/ ?", say!("hint.table.search-columns")),
+                        ("g", say!("hint.table.go-to-cell")),
+                        ("o O", say!("hint.table.add-row")),
+                        ("n N", say!("hint.table.add-column")),
+                        ("d D", say!("hint.table.delete-row-or-column")),
+                        ("j k", say!("hint.table.move-row")),
+                        ("h l", say!("hint.table.move-column")),
+                        ("y p", say!("hint.table.yank-or-paste-column")),
+                        ("s S", say!("hint.table.sort-by-column")),
+                        ("< = >", say!("hint.table.align-column")),
+                        // `f`, not `t` — `t` has been the way *into* a table
+                        // since 1ffde52 and this row went on saying otherwise,
+                        // which is how 「tf 沒有這個選項」 gets reported.
+                        ("f", say!("hint.table.line-it-up")),
+                        ("i", say!("hint.table.detail-panel")),
+                    ]),
+                    Some(Bounds::WholeFile) => keys.extend([
+                        ("/ ?", say!("hint.table.search-columns")),
+                        ("g", say!("hint.table.go-to-cell")),
+                        ("s S", say!("hint.table.sort-by-column")),
+                        ("o O", say!("hint.table.add-row")),
+                        ("d", say!("hint.table.delete-row")),
+                        ("j k", say!("hint.table.move-row")),
+                        ("y p", say!("hint.table.yank-or-paste-column")),
+                        ("H", say!("hint.table.first-row-is-data")),
+                        ("i", say!("hint.table.detail-panel")),
+                    ]),
+                    _ => {}
+                }
+                (say!("hint.table.title"), keys)
+            }
         };
         Some(Hint::Keys(keys.0, keys.1))
     }
@@ -6533,6 +6671,17 @@ impl Editor {
     /// Whether the cursor's row is kept in the middle of the page.
     pub fn typewriter(&self) -> bool {
         self.typewriter
+    }
+
+    /// How far one notch of the mouse wheel moves (Feature #222).
+    pub fn wheel_step(&self) -> usize {
+        self.wheel_step
+    }
+
+    /// Set how far one notch of the wheel moves. Zero is the terminal's own
+    /// step — one unit a notch — not 「do not scroll」.
+    pub fn set_wheel_step(&mut self, step: usize) {
+        self.wheel_step = step.max(1);
     }
 
     /// How wide the detail panel should be, when it has been said.
@@ -14397,7 +14546,14 @@ mod tests {
         }
         ed.on_key(Key::Enter);
 
-        // …and the next search offers the rest of it back.
+        // …and the next search offers the whole of it back before a single
+        // key is typed (#274): `/⏎` is 「再找一次這個」, and the prompt says so
+        // instead of leaving the writer to remember what it was.
+        ed.on_key(Key::Char('/'));
+        assert_eq!(ed.prompt_ghost(), "潮水", "the whole of the last pattern");
+        ed.on_key(Key::Esc);
+
+        // …and the rest of it once a prefix has been typed.
         ed.on_key(Key::Char('/'));
         ed.on_key(Key::Char('潮'));
         assert_eq!(ed.prompt_ghost(), "水");
@@ -14409,6 +14565,23 @@ mod tests {
         // A pattern that is not a prefix of the last one is not guessed at.
         ed.on_key(Key::Char('/'));
         ed.on_key(Key::Char('海'));
+        assert_eq!(ed.prompt_ghost(), "");
+        // Rubbed out again, the guess comes back — an empty line is an empty
+        // line however it got that way.
+        ed.on_key(Key::Backspace);
+        assert_eq!(ed.prompt_ghost(), "潮水");
+        // And `Enter` on it runs the guess, which is what it always did.
+        ed.on_key(Key::Enter);
+        assert_eq!(ed.selection(), (2, 4), "round to the only 潮水 there is");
+    }
+
+    /// A command line with nothing on it guesses nothing: the `:` menu below
+    /// is already showing every command there is, and a whole command name in
+    /// grey where the writer has typed nothing reads as a line already begun.
+    #[test]
+    fn an_empty_command_line_guesses_nothing() {
+        let mut ed = Editor::new();
+        ed.on_key(Key::Char(':'));
         assert_eq!(ed.prompt_ghost(), "");
     }
 
@@ -18660,6 +18833,31 @@ mod tests {
         ed.set_dictionary('那', vec![("拆分".to_string(), "刀二阝".to_string())]);
         assert_eq!(ed.dictionary().map(|(ch, _)| ch), Some('年'));
         assert_eq!(ed.sidebar().unwrap().rows().len(), 1, "still waiting");
+    }
+
+    /// #222: how far a notch of the wheel moves is the reader's, not a
+    /// `const` in the front end that nobody can reach.
+    #[test]
+    fn the_wheel_step_can_be_said_and_asked_about() {
+        let mut ed = typed("那年冬天，山下起了大雪。");
+        assert_eq!(ed.wheel_step(), 3, "three, as a terminal scrolls three");
+
+        // Asking is a use of its own: the number may come from a config file
+        // the reader never wrote.
+        ed.execute("wheel").unwrap();
+        assert!(ed.status().contains('3'), "{}", ed.status());
+        assert_eq!(ed.wheel_step(), 3, "asking changes nothing");
+
+        ed.execute("wheel 1").unwrap();
+        assert_eq!(ed.wheel_step(), 1);
+
+        // Zero is the terminal's own step — one unit a notch — and not 「do
+        // not scroll」, which is a setting nobody wants and which would be
+        // indistinguishable from a broken mouse.
+        ed.execute("wheel 0").unwrap();
+        assert_eq!(ed.wheel_step(), 1);
+
+        assert!(ed.execute("wheel 三").is_err(), "a word is not a number");
     }
 
     #[test]
