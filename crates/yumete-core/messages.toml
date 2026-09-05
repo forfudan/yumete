@@ -1815,6 +1815,13 @@ zht = "和《{0}》差得太遠，逐詞比不出東西來"
 zhs = "和《{0}》差得太远，逐词比不出东西来"
 en = "too far from 《{0}》 to be worth comparing word by word"
 
+[[message]]
+# :diff 改動太多，只列了前面那些
+key = "diff.too-many"
+zht = "和《{1}》有 {0} 行以上不一樣（只列了前 {0} 行）——gf 跳過去"
+zhs = "和《{1}》有 {0} 行以上不一样（只列了前 {0} 行）——gf 跳过去"
+en = "{0}+ lines differ from 《{1}》 (first {0} listed) — gf goes there"
+
 
 # ── edit ──────────────────────────────────────────────────────────────
 
