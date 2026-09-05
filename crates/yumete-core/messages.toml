@@ -803,13 +803,6 @@ zhs = "脚注：号码自己找空的，注也一并开好"
 en = "a footnote: the next free number, and its note opened with it"
 
 [[message]]
-# : 命令選單裏 table 那一項的說明（markdown-bits 組）
-key = "cmd.markdown-bits.table"
-zht = "一張空表：`table 3x4` 是三欄四行"
-zhs = "一张空表：`table 3x4` 是三栏四行"
-en = "an empty table: `table 3x4` is three columns and four rows"
-
-[[message]]
 # : 命令選單裏 dark 那一項的說明（moods 組）
 key = "cmd.moods.dark"
 zht = "深色"
@@ -1095,6 +1088,13 @@ key = "cmd.table.header"
 zht = "第一行是欄名，還是跟別的行一樣是資料"
 zhs = "第一行是栏名，还是跟别的行一样是资料"
 en = "whether the first row names the columns or is a row like any other"
+
+[[message]]
+# : 命令選單裏 new 那一項的說明（table 組）
+key = "cmd.table.new"
+zht = "一張空表：`new 3 4` 是三行四欄，首行是欄名"
+zhs = "一张空表：`new 3 4` 是三行四栏，首行是栏名"
+en = "an empty table: `new 3 4` is three rows by four columns, the first row the headings"
 
 [[message]]
 # : 命令選單裏 numbers 那一項的說明（table 組）
@@ -3471,13 +3471,6 @@ zht = "行內註：打在括號裏"
 zhs = "行内注：打在括号里"
 en = "inline note: type inside the brackets"
 
-[[message]]
-# 插入了一張空表
-key = "md.table-inserted"
-zht = "{0} 欄 {1} 行的表格（:table 進去編）"
-zhs = "{0} 栏 {1} 行的表格（:table 进去编）"
-en = "a {0}-column, {1}-row table (:table to edit it)"
-
 
 # ── menu ──────────────────────────────────────────────────────────────
 
@@ -4772,6 +4765,13 @@ key = "table.vertical-not-allowed"
 zht = "表格是橫排的——先 :table off"
 zhs = "表格是横排的——先 :table off"
 en = "a table is always horizontal — :table off first"
+
+[[message]]
+# 寫下了一張空表，光標停在第一格
+key = "table.written"
+zht = "{0} 行 {1} 欄的空表——首行是欄名，⇥ 走下一格"
+zhs = "{0} 行 {1} 栏的空表——首行是栏名，⇥ 走下一格"
+en = "an empty {0}×{1} table — the first row names the columns, ⇥ for the next cell"
 
 [[message]]
 # 表格裏取了一格
