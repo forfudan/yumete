@@ -61,6 +61,14 @@ pub struct EditorConfig {
     pub line_numbers: LineNumbers,
     /// Minimum number of lines to keep above/below the cursor when scrolling.
     pub scrolloff: usize,
+    /// How far one notch of the mouse wheel moves, in whichever unit the page
+    /// is set in — 縱 vertically, rows horizontally (Feature #222).
+    ///
+    /// Three by default, which is what a terminal scrolls by. A trackpad sends
+    /// a burst of notches for one gesture, so on a trackpad this is a
+    /// multiplier on something already large: `1` is the setting for anyone
+    /// who finds the page jumps.
+    pub wheel_step: usize,
     /// Whether the line-number band carries a ground of its own.
     ///
     /// Off, and the same in both layouts: 縱書 painted its number band and
@@ -228,6 +236,7 @@ impl Default for EditorConfig {
             tab_width: 4,
             line_numbers: LineNumbers::Absolute,
             scrolloff: 3,
+            wheel_step: 3,
             line_number_fill: false,
             screenshot: match cfg!(target_os = "macos") {
                 true => "b=$(osascript -e 'tell application \"System Events\" to tell                      (first application process whose frontmost is true) to get                      {position, size} of front window' | tr -d ' ') &&                      screencapture -x -o -c -R\"$b\""
@@ -1530,6 +1539,7 @@ struct RawEditor {
     tab_width: Option<usize>,
     line_numbers: Option<String>,
     scrolloff: Option<usize>,
+    wheel_step: Option<usize>,
     line_number_fill: Option<bool>,
     screenshot: Option<String>,
     indent_hint: Option<String>,
@@ -1604,6 +1614,9 @@ impl RawConfig {
         }
         if other.editor.scrolloff.is_some() {
             self.editor.scrolloff = other.editor.scrolloff;
+        }
+        if other.editor.wheel_step.is_some() {
+            self.editor.wheel_step = other.editor.wheel_step;
         }
         if other.editor.table_rules.is_some() {
             self.editor.table_rules = other.editor.table_rules.clone();
@@ -1774,6 +1787,12 @@ impl RawConfig {
         }
         if let Some(off) = self.editor.scrolloff {
             config.editor.scrolloff = off;
+        }
+        // Zero is 「the terminal's own step」, which is one notch, one unit —
+        // not 「do not scroll」, which is a setting nobody wants and which a
+        // stuck mouse would be indistinguishable from.
+        if let Some(step) = self.editor.wheel_step {
+            config.editor.wheel_step = step.max(1);
         }
         if let Some(rules) = self.editor.table_rules {
             config.editor.table_rules = rules;
