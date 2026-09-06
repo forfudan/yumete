@@ -311,6 +311,13 @@ impl Palette {
         }
     }
 
+    /// How far a stood-back half is moved toward the page, per thousand of the
+    /// distance it still has to go.
+    ///
+    /// 260 of the writing's own 1000, which is the step this was calibrated at
+    /// when it was a fixed one.
+    const FADE: u32 = 260;
+
     /// The same palette, a rung back: the half that is only being read.
     pub fn faded(self) -> Palette {
         Palette {
@@ -325,7 +332,20 @@ impl Palette {
             // Toward the page, not toward the ink: a quiet pane is *further
             // away*, and a ground it carries (a band, a selection) goes with
             // it so the whole half recedes together.
-            true => (rung as u32 + 260).min(1000) as u16,
+            //
+            // **A fraction of what is left, not a fixed 260 rungs.** Adding
+            // ran out of ladder: everything at 740 and above landed exactly on
+            // the paper, so on a stood-back row the word tint, the tint past
+            // the measure, the search band and the colour indent squares did
+            // not recede — they vanished, which is a different statement.
+            // Scaling the *remaining* distance keeps the rungs in order and in
+            // sight, and leaves the ink end exactly where it was calibrated:
+            // the writing still fades 260 rungs, because that is all of them.
+            true => {
+                let rung = rung.min(yumete_config::rung::PAPER);
+                let room = (yumete_config::rung::PAPER - rung) as u32;
+                (rung as u32 + room * Self::FADE / 1000) as u16
+            }
             false => rung,
         };
         let (r, g, b) = self.ladder.step(rung);
@@ -512,6 +532,49 @@ mod tests {
 
     fn palette(dark: bool) -> Palette {
         Palette::in_mood(&Config::default(), dark)
+    }
+
+    /// **A stood-back half recedes; it does not disappear.**
+    ///
+    /// The fade used to add a fixed 260 rungs and clamp, so every rung from
+    /// 740 up — the word tint at 962, the tint past the measure at 940, the
+    /// 縱書 opening squares — landed exactly on the paper. 焦點模式 with
+    /// 分詞著色 on therefore did not stand the word tint back, it rubbed it
+    /// out, and the reader lost a whole overlay by asking for another.
+    #[test]
+    fn nothing_but_the_paper_fades_to_the_paper() {
+        for name in ["ink", "bw", "cyanotype", "amber", "mogao", "morandi", "meridian", "kiln"] {
+            let theme = yumete_config::ThemeConfig::named(name).expect(name);
+            for dark in [true, false] {
+                let config = Config {
+                    theme: theme.clone(),
+                    ..Config::default()
+                };
+                set_dark(dark);
+                let lit = Palette::of(&config);
+                let back = lit.faded();
+                let paper = lit.paper();
+                for rung in [
+                    yumete_config::rung::SELECTION,
+                    yumete_config::rung::HEAD,
+                    yumete_config::rung::BAND,
+                    yumete_config::rung::WORD,
+                    yumete_config::rung::CHROME,
+                ] {
+                    assert_ne!(
+                        back.at(rung),
+                        paper,
+                        "{name} dark={dark}: rung {rung} still has to be seen"
+                    );
+                    // …and it did move: receding is the other half of it.
+                    assert_ne!(
+                        back.at(rung),
+                        lit.at(rung),
+                        "{name} dark={dark}: rung {rung} stands back"
+                    );
+                }
+            }
+        }
     }
 
     /// **The grounds a reader meets on one screen are told apart.**

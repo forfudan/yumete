@@ -893,6 +893,11 @@ pub fn draw(
         // The number *band* is not one of them: it is the page's furniture and
         // stays where it is, or the dimmed 縱 would punch holes in it.
         let stands_back = focus && zong.line != cursor_line;
+        // The band is the page's furniture and its ground is painted off the
+        // lit palette above; its **digits** have to come off the same one, or
+        // a stood-back 縱's number is drawn at 1.39:1 against a band that did
+        // not move — a number that recedes from furniture that does not.
+        let band_ink = ink;
         let ink = match stands_back {
             true => stood_back,
             false => ink,
@@ -941,8 +946,8 @@ pub fn draw(
             let style = match zong.line == cursor_line {
                 // 朱 for the one you are in: the one question vertical layout
                 // strips position of, answered by the one colour off the ladder.
-                true => style.fg(ink.mark()),
-                false => style.fg(ink.furniture()),
+                true => style.fg(band_ink.mark()),
+                false => style.fg(band_ink.furniture()),
             };
             // Above its own band, not above the page.
             let band_top = text_top.saturating_sub(metrics.head_rows);
