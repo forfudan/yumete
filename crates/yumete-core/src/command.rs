@@ -22,9 +22,12 @@ use crate::zong::Layout;
 pub enum WordCommand {
     /// `:word` — which dictionary is in force, and how many words this book adds.
     Report,
-    /// `:word show on|off` — the colour under the writing that says where the
-    /// boundaries fell. `None` flips it.
+    /// `:word show on|off` — the colour that says where the boundaries fell.
+    /// `None` flips it.
     Show(Option<bool>),
+    /// `:word show tint|ink` — which of the two ways it is drawn: under the
+    /// writing, or in the writing (Feature #278). Turns the overlay on.
+    Mark(yumete_cjk::WordMark),
     /// `:word list` — the same report, from the list's side.
     List,
     /// `:word list reload` — read this book's list and the global one again.
@@ -556,6 +559,12 @@ pub fn parse(input: &str) -> Result<Command, CommandError> {
             ["show"] => Ok(Command::Word(WordCommand::Show(None))),
             ["show", "on"] => Ok(Command::Word(WordCommand::Show(Some(true)))),
             ["show", "off"] => Ok(Command::Word(WordCommand::Show(Some(false)))),
+            // `:word show 字色` is the same question as `:word show on` — how
+            // this is drawn — so it lives under the same word rather than
+            // making the writer learn a second one.
+            ["show", how] if yumete_cjk::WordMark::parse(how).is_some() => Ok(Command::Word(
+                WordCommand::Mark(yumete_cjk::WordMark::parse(how).unwrap()),
+            )),
             ["list"] => Ok(Command::Word(WordCommand::List)),
             ["list", "reload"] => Ok(Command::Word(WordCommand::Reload)),
             ["list", "edit"] => Ok(Command::Word(WordCommand::Edit)),

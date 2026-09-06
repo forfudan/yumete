@@ -447,6 +447,18 @@ impl Palette {
         self.at(yumete_config::rung::WORD)
     }
 
+    /// The other way to mark a word: the **writing** a shade back, on paper
+    /// left alone (Feature #278).
+    ///
+    /// [`yumete_config::rung::QUIET`] — 「one shade back」 is exactly what this
+    /// has to say, and it is the rung a reading beside its base already uses,
+    /// so an alternated page never has two kinds of quiet on it. It is a rung
+    /// and not a hue for the same reason [`Ink::word`] is: a boundary is
+    /// structure, not a mark somebody made.
+    pub fn word_ink(self) -> Color {
+        self.at(yumete_config::rung::QUIET)
+    }
+
 
     /// An accent, `percent` of the way to the page.
     fn washed_toward(self, accent: (u8, u8, u8), percent: i64) -> Color {

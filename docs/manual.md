@@ -2198,7 +2198,14 @@ GB18030 的舊稿會被擋下並告訴你用 `iconv` 轉，而不是丟一句 Ru
 **兩邊本來就分得開的詞不著色。** 一個詞如果左右都是空格、換行或者標點，頁面上已經把它
 斷開了，再上一層底色是把同一件事說兩遍——西文句子大半如此，中文句子也有不少：
 「今天天氣很好。」裏 `今天` 要標，`好。` 不必。剩下的正是眼睛得自己切的那幾串漢字。
-整個著色不想要就 `:segment`，或者配置裏 `show_segmentation = false`。
+整個著色不想要就 `:word show off`，或者配置裏 `show_segmentation = false`。
+
+**兩種畫法。** 出廠是**底色**：隔一個詞在紙上鋪一層極淡的色，一眼掃得過整頁。
+`:word show 字色`（`:word show ink`）換成另一種——**紙不動，換墨色**：隔一個詞的字
+本身退後一格，像注音那一級的淡。有兩種人會要它：頁面上本來就有底色的（`==標記==`、
+`::: 提示` 那一類，底色一多就分不清哪層是哪層），以及覺得字底下壓一條帶子比字本身還重
+的。`:word show 底色`（`:word show tint`）換回去，配置裏是 `word_mark = "tint"` ／
+`"ink"`。兩種都是嚴格隔一個詞，所以沒被標的那個詞永遠夾在兩個標了的中間，說的話一樣多。
 
 ---
 
@@ -2285,8 +2292,9 @@ GB18030 的舊稿會被擋下並告訴你用 `iconv` 轉，而不是丟一句 Ru
 | `:export csv`／`tsv` [*檔名*] | 游標所在的表格另存一份，稿子不動 |
 | `:search row`／`column` *模式* | 一行一行找（`/`）／一欄一欄找（表格裏的 `t/`） |
 | `:clipboard yank`／`paste` | 和系統剪貼簿交換（`空格 y`／`空格 p`） |
-| `:segment` `:seg` | 分詞著色開關 |
-| `:words` | 重讀 `.yumete/words.txt`——這本書自己的詞 |
+| `:word show`（`on`／`off`） | 分詞著色開關 |
+| `:word show 底色`／`字色` | 兩種畫法：紙上鋪淡色／換字的墨色 |
+| `:word list reload` | 重讀 `.yumete/words.txt`——這本書自己的詞（存它就自己重讀，這是手動的那一下） |
 | `:word discover` | 挖出本書自己的詞：人名地名，字典裏沒有的，寫進詞表等你過目 |
 | `:theme` | 現在是哪個主題、深色還是淺色 |
 | `:theme moxiang`（`墨香`）／`heibai`（`黑白`） | 換一套墨，後面可以再跟深淺 |
@@ -2339,8 +2347,9 @@ tab_width = 4                # `>` 加、`<` 減的列數
 line_numbers = "absolute"    # "absolute" | "relative" | "none"
 scrolloff = 3                # 光標周圍保留的行（或縱）數
 wheel_step = 3               # 滾輪一格走幾行（或幾縱）；1 = 終端自己的一格
-show_segmentation = true     # 詞語著色（`:segment` 也可以隨時開關）
-segmentation_threshold = 0
+show_segmentation = true     # 詞語著色（`:word show` 也可以隨時開關）
+word_mark = "tint"           # 怎麼畫："tint" 紙上鋪淡色 | "ink" 換字的墨色
+word_level = "balanced"      # 多容易併成詞："strict" | "balanced" | "full"
 table_rules = "line dash"    # 表格的欄線："line dash"（默認）| "line"
                              # | "line double" | "color" | "off"
 

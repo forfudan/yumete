@@ -5962,6 +5962,20 @@ zhs = "词表重读了：{0}"
 en = "word lists reread: {0}"
 
 [[message]]
+# 分詞著色改用字色：不動紙，隔一個詞換一種墨色
+key = "word.mark-ink"
+zht = "分詞著色：字色"
+zhs = "分词著色：字色"
+en = "word tint: ink"
+
+[[message]]
+# 分詞著色改用底色：隔一個詞在紙上鋪一層淡色
+key = "word.mark-tint"
+zht = "分詞著色：底色"
+zhs = "分词著色：底色"
+en = "word tint: background"
+
+[[message]]
 # 沒有資料目錄，沒有全域詞表
 key = "word.no-data-directory"
 zht = "不知道資料目錄在哪裏——這一台上沒有全域詞表"

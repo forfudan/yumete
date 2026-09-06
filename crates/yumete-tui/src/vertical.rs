@@ -24,7 +24,7 @@ use ratatui::style::{Color, Modifier, Style};
 use ratatui::widgets::{Block, BorderType, Borders, Clear, Widget};
 use ratatui::Frame;
 
-use yumete_cjk::{graphemes, str_width};
+use yumete_cjk::{graphemes, str_width, WordMark};
 use yumete_config::{Config, LineNumbers};
 use yumete_core::zong::{self, Anchor, IndentHint};
 use yumete_core::{Editor, Mode, Rope, TextStore};
@@ -804,6 +804,7 @@ pub fn draw(
     };
     let cell_style = Style::default().bg(ink.at(yumete_config::rung::HEAD));
     let show_segmentation = editor.segmentation_visible();
+    let mark = editor.word_mark();
     let cursor_line = editor.cursor_line();
     let numbers = config.editor.line_numbers;
 
@@ -987,7 +988,8 @@ pub fn draw(
                 style = style.patch(crate::markup_style(run.kind, ink));
             }
 
-            if show_segmentation && !has_selection && style.bg.is_none() {
+            if show_segmentation && !has_selection && (mark == WordMark::Ink || style.bg.is_none())
+            {
                 let ranges = match &segmented {
                     Some((line, ranges)) if *line == zong.line => ranges,
                     _ => {
@@ -1005,7 +1007,16 @@ pub fn draw(
                 // between two tinted ones and says exactly as much.
                 if let Some(word) = ranges.iter().position(|&(a, b)| column >= a && column < b) {
                     if word % 2 == 0 {
-                        style = style.bg(ink.word());
+                        // 字色 leaves the paper alone and moves the writing
+                        // instead (#278); it stands back from a run that
+                        // already carries a colour of its own.
+                        match mark {
+                            WordMark::Tint => style = style.bg(ink.word()),
+                            WordMark::Ink if style.fg.is_none() => {
+                                style = style.fg(ink.word_ink())
+                            }
+                            WordMark::Ink => {}
+                        }
                     }
                 }
             }

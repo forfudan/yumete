@@ -32,7 +32,7 @@ use ratatui::widgets::{Block, BorderType, Borders, Clear, Paragraph};
 use ratatui::Frame;
 
 use yumete_config::{Config, LineNumbers};
-use yumete_cjk::Segmenter;
+use yumete_cjk::{Segmenter, WordMark};
 use yumete_core::sidebar::View;
 use yumete_core::wrap::{self, Anchor as WrapAnchor};
 use yumete_core::zong::{Anchor, Layout as WritingLayout};
@@ -3831,6 +3831,7 @@ fn draw_horizontal(
     };
     let cell_style = Style::default().bg(ink.at(yumete_config::rung::HEAD));
     let show_segmentation = editor.segmentation_visible();
+    let mark = editor.word_mark();
     let show_markup = editor.markup_visible();
     // The measure is counted in *text*: `ruler = 80` means eighty columns of
     // writing, which is what a writer means by it. The line-number gutter is
@@ -4037,6 +4038,7 @@ fn draw_horizontal(
 
         if show_segmentation && !has_selection {
             let page_bg = ink.page().bg;
+            let page_fg = ink.page().fg;
             // Tint each word with an alternating background (Feature #24). The
             // words are the paragraph's, sliced to this row, so a word split by
             // a wrap keeps one colour across the break.
@@ -4065,15 +4067,32 @@ fn draw_horizontal(
                 let a = a.saturating_sub(start_in_line);
                 let b = (b - start_in_line).min(chars.len());
                 for style in styles.iter_mut().take(b).skip(a.min(b)) {
-                    // Only where nothing has already claimed the ground. A word
-                    // tint is the quietest of the three layers — it must not
-                    // rub out a `==highlight==`, which exists *to be* a ground,
-                    // nor a container's own colour. The page itself is not a
-                    // claim: every style on the row starts from it now that the
-                    // paper is painted, and reading that as taken would have
-                    // left the overlay with nowhere it was allowed to draw.
-                    if style.bg.is_none() || style.bg == page_bg {
-                        *style = style.bg(ink.word());
+                    match mark {
+                        // Only where nothing has already claimed the ground. A
+                        // word tint is the quietest of the three layers — it
+                        // must not rub out a `==highlight==`, which exists *to
+                        // be* a ground, nor a container's own colour. The page
+                        // itself is not a claim: every style on the row starts
+                        // from it now that the paper is painted, and reading
+                        // that as taken would have left the overlay with
+                        // nowhere it was allowed to draw.
+                        WordMark::Tint => {
+                            if style.bg.is_none() || style.bg == page_bg {
+                                *style = style.bg(ink.word());
+                            }
+                        }
+                        // The other ink asks the opposite question: the ground
+                        // is left alone, so a highlight or a container keeps
+                        // it, and what must not be rubbed out is a colour the
+                        // *writing* already carries — a heading, a link, a
+                        // `**bold**` run. Plain writing is the only place it
+                        // draws, which is where the boundaries are hard to see
+                        // anyway.
+                        WordMark::Ink => {
+                            if style.fg.is_none() || style.fg == page_fg {
+                                *style = style.fg(ink.word_ink());
+                            }
+                        }
                     }
                 }
             }
@@ -6485,6 +6504,44 @@ mod tests {
         }
         assert!(seen_a, "first word tint not rendered");
         assert!(seen_b, "second word tint not rendered");
+    }
+
+    #[test]
+    fn the_other_mark_moves_the_writing_and_leaves_the_paper_alone() {
+        // 字色 (#278): the same alternation, said with ink instead of ground —
+        // for a page that is tinted for something else already, and for a
+        // reader to whom a band under the writing is heavier than the writing.
+        let mut editor = Editor::new();
+        editor.set_segmenter(Box::new(DictionarySegmenter::builtin(0)));
+        editor.set_segmentation_visible(true);
+        editor.on_key(Key::Char('i'));
+        for c in "你好世界".chars() {
+            editor.on_key(Key::Char(c));
+        }
+        editor.on_key(Key::Esc);
+        assert!(editor.execute("word show 字色").is_ok());
+        assert_eq!(editor.word_mark(), yumete_cjk::WordMark::Ink);
+
+        let config = Config::default();
+        let buffer = render(&editor, &config, 40, 6);
+        let quiet = ink(&config).word_ink();
+        let tint = ink(&config).word();
+        let mut marked = 0;
+        let mut tinted = 0;
+        for y in 0..buffer.area.height {
+            for x in 0..buffer.area.width {
+                if buffer[(x, y)].style().fg == Some(quiet) {
+                    marked += 1;
+                }
+                if buffer[(x, y)].style().bg == Some(tint) {
+                    tinted += 1;
+                }
+            }
+        }
+        // 你好 is the first word. Two cells, not four: a 漢字 is two columns
+        // wide and the buffer carries its style on the leading one.
+        assert_eq!(marked, 2, "the first word is not in the second ink");
+        assert_eq!(tinted, 0, "the paper was painted anyway");
     }
 
     #[test]

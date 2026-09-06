@@ -107,6 +107,10 @@ pub struct EditorConfig {
     /// only the bundled list had — it said nothing to a reader and nothing at
     /// all to the language model, which most machines actually segment with.
     pub word_level: yumete_cjk::WordLevel,
+    /// How the overlay marks a word: `tint` (a hair of colour under every
+    /// other word, the default) or `ink` (the characters themselves in a
+    /// second colour, the paper untouched) — the same two `:word show` names.
+    pub word_mark: yumete_cjk::WordMark,
     /// Horizontal (default) or vertical layout (Feature #61).
     pub layout: Layout,
     /// How many characters fit in one 縱 in vertical layout.
@@ -256,6 +260,7 @@ impl Default for EditorConfig {
             table_rules: "line dash".to_string(),
             show_segmentation: true,
             word_level: yumete_cjk::WordLevel::default(),
+            word_mark: yumete_cjk::WordMark::default(),
             layout: Layout::Horizontal,
             zong_length: 0,
             indent: 0,
@@ -1556,6 +1561,7 @@ struct RawEditor {
     table_rules: Option<String>,
     show_segmentation: Option<bool>,
     word_level: Option<String>,
+    word_mark: Option<String>,
     /// Retired. Kept so a config that still sets it is *told*, rather than
     /// refused by the unknown-key check with no idea what to write instead.
     segmentation_threshold: Option<i64>,
@@ -1648,6 +1654,9 @@ impl RawConfig {
         }
         if other.editor.word_level.is_some() {
             self.editor.word_level = other.editor.word_level.clone();
+        }
+        if other.editor.word_mark.is_some() {
+            self.editor.word_mark = other.editor.word_mark.clone();
         }
         if other.editor.segmentation_threshold.is_some() {
             self.editor.segmentation_threshold = other.editor.segmentation_threshold;
@@ -1832,6 +1841,14 @@ impl RawConfig {
             .and_then(yumete_cjk::WordLevel::parse)
         {
             config.editor.word_level = level;
+        }
+        if let Some(mark) = self
+            .editor
+            .word_mark
+            .as_deref()
+            .and_then(yumete_cjk::WordMark::parse)
+        {
+            config.editor.word_mark = mark;
         }
         if let Some(layout) = self.editor.layout {
             // An unrecognised value keeps the default rather than refusing to

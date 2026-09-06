@@ -886,6 +886,7 @@ pub struct Editor {
     project_words: std::rc::Rc<RefCell<yumete_cjk::WordList>>,
     /// Whether the segmentation overlay (word background tint) is shown.
     show_segmentation: bool,
+    word_mark: yumete_cjk::WordMark,
     /// How readily characters join into words (`:word level`), kept so a
     /// segmenter installed later arrives at the level the reader chose.
     word_level: yumete_cjk::WordLevel,
@@ -1371,6 +1372,7 @@ impl Editor {
             reader: Box::new(NoReader),
             project_words: std::rc::Rc::new(RefCell::new(yumete_cjk::WordList::default())),
             show_segmentation: false,
+            word_mark: yumete_cjk::WordMark::default(),
             word_level: yumete_cjk::WordLevel::default(),
             words_request: false,
             table_rules: crate::table::Rules::default(),
@@ -11344,6 +11346,16 @@ impl Editor {
                     }
                 );
             }
+            WordCommand::Mark(mark) => {
+                // Naming a way of drawing it turns it on: nobody asks for 字色
+                // meaning「keep it hidden, but hide it differently」.
+                self.word_mark = mark;
+                self.show_segmentation = true;
+                self.status = match mark {
+                    yumete_cjk::WordMark::Tint => say!("word.mark-tint"),
+                    yumete_cjk::WordMark::Ink => say!("word.mark-ink"),
+                };
+            }
             WordCommand::Show(on) => {
                 let on = on.unwrap_or(!self.show_segmentation);
                 self.show_segmentation = on;
@@ -11708,6 +11720,17 @@ impl Editor {
 
     pub fn set_segmentation_visible(&mut self, on: bool) {
         self.show_segmentation = on;
+    }
+
+    /// How the overlay marks a word — under the writing, or in it (#278).
+    pub fn word_mark(&self) -> yumete_cjk::WordMark {
+        self.word_mark
+    }
+
+    /// Say how the overlay marks a word. The config's opening answer; after
+    /// that it is `:word show tint|ink`.
+    pub fn set_word_mark(&mut self, mark: yumete_cjk::WordMark) {
+        self.word_mark = mark;
     }
 
     /// Toggle the segmentation overlay, returning the new state.
