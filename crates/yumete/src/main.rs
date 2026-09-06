@@ -154,6 +154,7 @@ fn main() -> ExitCode {
     if config.editor.measure > 0 {
         editor.set_measure(Some(config.editor.measure));
     }
+    editor.set_paper(config.export.page.0, config.export.page.1);
     editor.set_indent_width(config.editor.tab_width);
     editor.set_tatechuyoko(config.editor.tatechuyoko);
     editor.set_hanging_punctuation(config.editor.hanging_punctuation);

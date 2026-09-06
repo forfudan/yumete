@@ -1115,6 +1115,10 @@ pub struct Editor {
     tatechuyoko: bool,
     /// Whether 句讀 hang in the margin (標點旁置).
     hanging: bool,
+    /// The paper `:export html` writes its print stylesheet for. Not a screen
+    /// setting and not a command: the trim a book is printed at is decided once
+    /// for the book, so it is read from the configuration and left alone.
+    paper: crate::export::Paper,
     /// Word ranges already worked out, per line, against a hash of that line.
     segment_cache: RefCell<SegmentCache>,
     /// Which lines are folded away, against the buffer they were worked out
@@ -1437,6 +1441,7 @@ impl Editor {
             completion: None,
             tatechuyoko: false,
             hanging: false,
+            paper: crate::export::Paper::A5,
             segment_cache: RefCell::new(SegmentCache::new()),
             fold_cache: RefCell::new(None),
             markup_cache: RefCell::new(HashMap::new()),
@@ -2305,6 +2310,7 @@ impl Editor {
             zong_len: self.zong_length,
             dialects: self.ruby,
             title: self.current_buffer().display_name(),
+            paper: self.paper,
         };
         if self.refuse_to_overwrite(&target, force) {
             return Ok(CommandOutcome::Continue);
@@ -10140,6 +10146,22 @@ impl Editor {
     /// How many graphemes fit in one 縱.
     pub fn zong_length(&self) -> usize {
         self.zong_length
+    }
+
+    /// The paper a printed copy is set on, in whole millimetres.
+    pub fn paper(&self) -> crate::export::Paper {
+        self.paper
+    }
+
+    /// Set the paper `:export html` writes its print stylesheet for.
+    ///
+    /// A degenerate trim is refused rather than clamped: it can only come from
+    /// a configuration line, and silently printing a book on paper the writer
+    /// did not ask for is worse than printing it on A5.
+    pub fn set_paper(&mut self, width: u32, height: u32) {
+        if width > 0 && height > 0 {
+            self.paper = crate::export::Paper { width, height };
+        }
     }
 
     /// Set the 縱 wrap length. The renderer calls this once the terminal size is

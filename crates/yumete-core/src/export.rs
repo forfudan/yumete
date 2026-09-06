@@ -71,6 +71,48 @@ pub fn delimiter_of(name: &str) -> Option<char> {
     }
 }
 
+/// The paper a printed copy is set on, in whole millimetres.
+///
+/// A trim and not a name: which names exist is a matter of where the book is
+/// printed — 32開 is not A5 and neither is 大32開 — and keeping the table of
+/// them out here means the export answers to a measurement rather than to a
+/// vocabulary. [`Paper::A5`] is what a Chinese novel is usually printed on.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Paper {
+    /// Across the page.
+    pub width: u32,
+    /// Down the page.
+    pub height: u32,
+}
+
+impl Paper {
+    /// 148 × 210 mm.
+    pub const A5: Paper = Paper {
+        width: 148,
+        height: 210,
+    };
+}
+
+impl Default for Paper {
+    fn default() -> Paper {
+        Paper::A5
+    }
+}
+
+/// 天頭 — the margin above the 版心, as a fraction of the page height.
+const MARGIN_TOP: f64 = 0.12;
+/// 地腳 — below it. Narrower than 天頭 on purpose: a 版心 set a little above
+/// centre is what a book looks like, and a centred one looks like it slipped.
+const MARGIN_BOTTOM: f64 = 0.09;
+/// Each of the two side margins, as a fraction of the page width.
+const MARGIN_SIDE: f64 = 0.10;
+/// How many characters a horizontal measure holds — the same 32 the screen
+/// stylesheet gives `max-width`, so the two agree about what a line is.
+const HENG_LEN: f64 = 32.0;
+/// The 行距, as a multiple of the character. One number, used both to set
+/// `line-height` and to say how many 行 the paper then holds.
+const LINE_HEIGHT: f64 = 1.8;
+
 /// How the page is set, so the export can carry it over.
 #[derive(Debug, Clone)]
 pub struct Style {
@@ -85,6 +127,8 @@ pub struct Style {
     pub dialects: Dialects,
     /// The document's title, for the HTML `<title>`.
     pub title: String,
+    /// The paper a printed copy is set on.
+    pub paper: Paper,
 }
 
 /// Write `text` out as `format`.
@@ -246,10 +290,10 @@ fn html(text: &str, style: &Style) -> String {
     out.push_str("<!doctype html>\n<html lang=\"zh\">\n<meta charset=\"utf-8\">\n");
     out.push_str(&format!("<title>{}</title>\n", escape_html(&style.title)));
     out.push_str("<style>\n");
-    out.push_str(
-        "body { font-family: \"Source Han Serif\", \"Noto Serif CJK\", serif; \
-         line-height: 1.8; margin: 4rem auto; }\n",
-    );
+    out.push_str(&format!(
+        "body {{ font-family: \"Source Han Serif\", \"Noto Serif CJK\", serif; \
+         line-height: {LINE_HEIGHT}; margin: 4rem auto; }}\n"
+    ));
     if style.vertical {
         // The one place outside a terminal where 縱書 costs a line of CSS. The
         // measure is the 縱 length, so a page here holds what a page there did.
@@ -274,6 +318,7 @@ fn html(text: &str, style: &Style) -> String {
     }
     out.push_str("p { text-indent: 2em; margin: 0; }\n");
     out.push_str("rt { font-size: 0.5em; }\n");
+    out.push_str(&print_rules(style));
     out.push_str("</style>\n");
 
     for block in blocks(text) {
@@ -291,6 +336,61 @@ fn html(text: &str, style: &Style) -> String {
             }
         }
     }
+    out
+}
+
+/// The half of the stylesheet that only a printer sees.
+///
+/// A browser is the only vertical typesetter most writers have, and `@page` is
+/// what makes it one. Without this the print is the screen page cut wherever
+/// the paper happens to end: one endless 縱, sliced.
+///
+/// **The type size is derived, not chosen.** In 縱書 the line runs *down* the
+/// page, so the 版心 is 字數 × 字身 measured down it — the writer has already
+/// said how many characters a 縱 holds, and the paper says how far that has to
+/// reach, which leaves the size of a character with nothing left to be. Ask for
+/// a long 縱 on small paper and the type is small, exactly as it would be in a
+/// book. Set horizontally the same argument runs across the page instead.
+fn print_rules(style: &Style) -> String {
+    let across = f64::from(style.paper.width) * (1.0 - 2.0 * MARGIN_SIDE);
+    let down = f64::from(style.paper.height) * (1.0 - MARGIN_TOP - MARGIN_BOTTOM);
+    let (measure, along, athwart) = if style.vertical {
+        (style.zong_len.max(1) as f64, down, across)
+    } else {
+        (HENG_LEN, across, down)
+    };
+    let size = along / measure;
+    let rows = (athwart / (size * LINE_HEIGHT)).floor().max(1.0);
+    let side = f64::from(style.paper.width) * MARGIN_SIDE;
+
+    let mut out = String::new();
+    out.push_str(&format!(
+        "\n/* Printed: 版心 {measure:.0} 字 × {rows:.0} 行. No 頁碼 and no 書眉 —\n   \
+         they would be written in the @page margin boxes, which no browser\n   \
+         implements; the print dialog's own header and footer are where a\n   \
+         page number comes from. */\n"
+    ));
+    out.push_str(&format!(
+        "@page {{ size: {w}mm {h}mm; margin: {top:.1}mm {side:.1}mm {bottom:.1}mm {side:.1}mm; }}\n",
+        w = style.paper.width,
+        h = style.paper.height,
+        top = f64::from(style.paper.height) * MARGIN_TOP,
+        bottom = f64::from(style.paper.height) * MARGIN_BOTTOM,
+    ));
+    // `block-size: auto` because the page box is the measure now: the screen
+    // rule pinned the 縱 to a length in `em`, and leaving it pinned would let
+    // it disagree with the paper by whatever the rounding came to and spill a
+    // second, nearly empty 縱 onto every page.
+    out.push_str(&format!(
+        "@media print {{\n  \
+         html, body {{ margin: 0; }}\n  \
+         body {{ font-size: {size:.2}mm; block-size: auto; max-block-size: none; }}\n  \
+         h1, h2 {{ break-before: page; }}\n  \
+         body > :first-child {{ break-before: auto; }}\n  \
+         h1, h2, h3, h4, h5, h6 {{ break-after: avoid; }}\n  \
+         p {{ orphans: 2; widows: 2; }}\n\
+         }}\n"
+    ));
     out
 }
 
@@ -349,7 +449,101 @@ mod tests {
             zong_len: 32,
             dialects: Dialects::only(Dialect::Html),
             title: "第一章".to_string(),
+            paper: Paper::A5,
         }
+    }
+
+    #[test]
+    fn the_type_size_is_what_the_paper_and_the_measure_leave_it() {
+        // A5 is 210 mm down, of which the 版心 is 79% — 165.9 mm — and the
+        // writer asked for a 縱 of 32 characters. That is 5.18 mm a character
+        // and there is nothing left to choose.
+        let mut style = style();
+        style.zong_len = 32;
+        let out = export("句", Format::Html, &style);
+        assert!(out.contains("@page { size: 148mm 210mm;"), "{out}");
+        assert!(out.contains("font-size: 5.18mm;"), "{out}");
+        // and across the 版心, 118.4 mm at 1.8 line heights: twelve 行.
+        assert!(out.contains("版心 32 字 × 12 行"), "{out}");
+    }
+
+    #[test]
+    fn a_longer_zong_on_the_same_paper_is_smaller_type() {
+        // The opposite of what a naive export does, which is to keep the type
+        // and let the 縱 run off the page.
+        let mut style = style();
+        style.zong_len = 64;
+        let out = export("句", Format::Html, &style);
+        assert!(out.contains("font-size: 2.59mm;"), "{out}");
+    }
+
+    #[test]
+    fn the_paper_the_writer_asked_for_is_the_paper() {
+        let mut style = style();
+        style.paper = Paper {
+            width: 210,
+            height: 297,
+        };
+        style.zong_len = 32;
+        let out = export("句", Format::Html, &style);
+        assert!(out.contains("@page { size: 210mm 297mm;"), "{out}");
+        // 297 × 0.79 ÷ 32.
+        assert!(out.contains("font-size: 7.33mm;"), "{out}");
+    }
+
+    #[test]
+    fn set_horizontally_it_is_the_width_that_decides() {
+        // 148 × 0.8 = 118.4 mm across, over the same 32 characters the screen
+        // stylesheet gives `max-width`.
+        let mut style = style();
+        style.vertical = false;
+        let out = export("句", Format::Html, &style);
+        assert!(out.contains("font-size: 3.70mm;"), "{out}");
+        assert!(out.contains("版心 32 字 × 24 行"), "{out}");
+    }
+
+    #[test]
+    fn a_chapter_starts_on_a_new_page_and_the_first_one_does_not() {
+        let out = export("# 第一章\n\n句\n", Format::Html, &style());
+        assert!(out.contains("h1, h2 { break-before: page; }"), "{out}");
+        assert!(
+            out.contains("body > :first-child { break-before: auto; }"),
+            "{out}"
+        );
+        // A heading stranded at the foot of a page is the one thing every
+        // typesetter fixes by hand.
+        assert!(
+            out.contains("h1, h2, h3, h4, h5, h6 { break-after: avoid; }"),
+            "{out}"
+        );
+    }
+
+    #[test]
+    fn the_measure_pinned_for_the_screen_is_let_go_of_for_the_paper() {
+        // `block-size: 32em` is how the screen page holds a 縱 of 32; on paper
+        // the page box holds it, and leaving both in disagreed by the rounding
+        // and spilled a second, nearly empty 縱 onto every page.
+        let out = export("句", Format::Html, &style());
+        assert!(out.contains("block-size: 32em;"), "{out}");
+        assert!(
+            out.contains("block-size: auto; max-block-size: none;"),
+            "{out}"
+        );
+    }
+
+    #[test]
+    fn what_is_on_the_screen_does_not_change_with_the_paper() {
+        // The print rules are an addition. A writer who never prints should
+        // not be able to tell that any of this is in the file.
+        let a5 = export("# 第一章\n\n句\n", Format::Html, &style());
+        let mut big = style();
+        big.paper = Paper {
+            width: 210,
+            height: 297,
+        };
+        let a4 = export("# 第一章\n\n句\n", Format::Html, &big);
+        let cut = |s: &str| s.split("\n/* Printed:").next().unwrap().to_string();
+        assert_eq!(cut(&a5), cut(&a4));
     }
 
     #[test]
@@ -364,6 +558,7 @@ mod tests {
             zong_len: 32,
             dialects: Dialects::NONE,
             title: "t".to_string(),
+            paper: Paper::A5,
         };
         let out = export("他**很好**，%%這裏要改%%不過還行。\n", Format::Html, &style);
         assert!(out.contains("<strong>很好</strong>"), "{out}");
@@ -386,6 +581,7 @@ mod tests {
             zong_len: 32,
             dialects: Dialects::NONE,
             title: "t".to_string(),
+            paper: Paper::A5,
         };
         let out = export("一二三\n", Format::Html, &style);
         // `upright` sets every Latin letter on its own row — a pinyin reading
