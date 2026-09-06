@@ -712,6 +712,14 @@ en = "start an empty buffer"
 find = "新建 空白 新檔 新文件 empty"
 
 [[message]]
+# : 命令選單裏 note 那一項的說明（commands 組）
+key = "cmd.commands.note"
+zht = "標點提示：半角標點與 ... 旁邊畫出該用的那一個"
+zhs = "标点提示：半角标点与 ... 旁边画出该用的那一个"
+en = "inline notes: the full-width mark a half-width one should have been"
+find = "標點 标点 半角 全角 逗號 逗号 省略號 省略号 提示 note punctuation hint"
+
+[[message]]
 # : 命令選單裏 numbers 那一項的說明（commands 組）
 key = "cmd.commands.numbers"
 zht = "行號那一條：要不要自己的底色"
@@ -4180,6 +4188,27 @@ key = "layout.meter-on"
 zht = "平仄：開（○平 ●仄 △▲韻腳）"
 zhs = "平仄：开（○平 ●仄 △▲韵脚）"
 en = "平仄: on (○ 平, ● 仄, △▲ 韻腳)"
+
+[[message]]
+# 標點提示打開了，可是 :render off 不畫任何檔案裏沒有的東西
+key = "layout.note-no-render"
+zht = "標點提示：開——可是 :render off，頁面上不畫檔案裏沒有的字"
+zhs = "标点提示：开——可是 :render off，页面上不画档案里没有的字"
+en = "notes: on — but `:render off` draws nothing the file does not hold"
+
+[[message]]
+# 標點提示關掉
+key = "layout.note-off"
+zht = "標點提示：關"
+zhs = "标点提示：关"
+en = "notes: off"
+
+[[message]]
+# 標點提示打開
+key = "layout.note-on"
+zht = "標點提示：開（半角標點與 ... 旁邊畫出該用的那一個）"
+zhs = "标点提示：开（半角标点与 ... 旁边画出该用的那一个）"
+en = "notes: on (the mark a half-width one should have been, beside it)"
 
 [[message]]
 # 密排：行貼着行

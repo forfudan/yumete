@@ -253,9 +253,9 @@ pub fn char_at(
     // editor, not worked out again here.
     let hidden = |line: usize| editor.markup_hidden_on_line(line);
     let folded = |line: usize| editor.line_is_folded(line);
-    let ghost = |line: usize| editor.ghost_on_line(line);
+    let drawn = |line: usize| editor.drawn_runs_on_line(line);
     let grid = editor
-        .grid_with(&hidden, &folded, &ghost)
+        .grid_with(&hidden, &folded, &drawn)
         .with_zong_len(metrics.zong_len);
     let capacity = metrics.capacity(area.width);
     // The same page the drawing laid out, 着重號 and all: a click lands on the
@@ -691,9 +691,9 @@ pub fn draw(
     // editor, not worked out again here.
     let hidden = |line: usize| editor.markup_hidden_on_line(line);
     let folded = |line: usize| editor.line_is_folded(line);
-    let ghost = |line: usize| editor.ghost_on_line(line);
+    let drawn = |line: usize| editor.drawn_runs_on_line(line);
     let grid = editor
-        .grid_with(&hidden, &folded, &ghost)
+        .grid_with(&hidden, &folded, &drawn)
         .with_zong_len(metrics.zong_len);
     // A pane that is only being read has no cursor: the page is laid out
     // around the place it was left at, and the hit is what it marks.
@@ -1070,6 +1070,21 @@ pub fn draw(
             }
             let at = line_start + row.start;
             let len = row.end - row.start;
+
+            // Virtual text (#248) is not the manuscript, and 縱書 is where the
+            // author reads: a note set in the writing's own ink would be read
+            // as a word of it. It takes the ink it was drawn in — a note in the
+            // marker's colour, a candidate or a table's padding in the quiet
+            // one — and none of the layers below, every one of which describes
+            // characters the file actually holds.
+            if let Some(kind) = row.ink {
+                let style = match kind {
+                    yumete_core::drawn::Ink::Note => ink.page().fg(ink.marker()),
+                    _ => ink.page().fg(ink.quiet()),
+                };
+                put_slot_right(buf, x, y, &symbol, style);
+                continue;
+            }
 
             // The same three layers the horizontal page composes, in the same
             // order: the block's ground, the inline runs patched onto it, then

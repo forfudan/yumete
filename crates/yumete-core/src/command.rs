@@ -165,6 +165,8 @@ pub enum Command {
     SetFocus(Option<bool>),
     /// `:meter [on|off]` — 平仄 and 韻腳 in the margin.
     SetMeter(Option<bool>),
+    /// `:note [on|off]` — the mark that is wrong, named on the page beside it.
+    SetNote(Option<bool>),
     /// `:table numbers on|off` — the row of column numbers above the header.
     SetTableNumbers(bool),
     /// `:table header [on|off]` — whether the grid's first row names the
@@ -913,6 +915,15 @@ pub fn parse(input: &str) -> Result<Command, CommandError> {
             "toggle" => Ok(Command::SetMeter(None)),
             other => Err(CommandError::InvalidArgument {
                 command: "meter",
+                value: other.to_string(),
+            }),
+        },
+        "note" => match rest {
+            "" | "on" => Ok(Command::SetNote(Some(true))),
+            "off" => Ok(Command::SetNote(Some(false))),
+            "toggle" => Ok(Command::SetNote(None)),
+            other => Err(CommandError::InvalidArgument {
+                command: "note",
                 value: other.to_string(),
             }),
         },
@@ -2925,6 +2936,13 @@ pub const COMMANDS: &[Entry] = &[
         name: "meter",
         aliases: &[],
         help: "cmd.commands.meter",
+        needs: &[],
+        args: Args::Words(ON_OFF),
+    },
+    Entry {
+        name: "note",
+        aliases: &[],
+        help: "cmd.commands.note",
         needs: &[],
         args: Args::Words(ON_OFF),
     },

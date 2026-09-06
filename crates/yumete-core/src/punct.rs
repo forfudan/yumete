@@ -131,6 +131,72 @@ fn beside_chinese(chars: &[char], at: usize, len: usize) -> bool {
     before.copied().is_some_and(chinese) || after.copied().is_some_and(chinese)
 }
 
+/// The marks **one line** answers for on its own: a half-width mark among
+/// 漢字, and `...` where 中文 wants `……`.
+///
+/// Told apart from the pairs below because these two are decidable from the
+/// line itself, and so can be drawn on the page as it is typed (#248's inline
+/// notes) rather than only listed after a walk of the whole manuscript. An
+/// unbalanced 「 is not: whether it is wrong depends on the paragraph after it.
+fn marks_in(chars: &[char], line: usize, slips: &mut Vec<Slip>) {
+    let mut at = 0;
+    while at < chars.len() {
+        let c = chars[at];
+        // `...` — count the whole run, so `.....` is one finding.
+        if c == '.' {
+            let run = chars[at..].iter().take_while(|&&c| c == '.').count();
+            if run >= 3 && beside_chinese(chars, at, run) {
+                slips.push(Slip {
+                    line,
+                    column: at,
+                    kind: Kind::Ellipsis,
+                    written: ".".repeat(run),
+                    wanted: "……".to_string(),
+                });
+                at += run;
+                continue;
+            }
+        }
+        if let Some(&(_, full)) = TWINS.iter().find(|(half, _)| *half == c) {
+            // A decimal point and a thousands comma are not punctuation, and
+            // both sides of them are digits.
+            let digits = matches!(c, '.' | ',')
+                && at > 0
+                && chars[at - 1].is_ascii_digit()
+                && chars.get(at + 1).is_some_and(char::is_ascii_digit);
+            if !digits && beside_chinese(chars, at, 1) {
+                slips.push(Slip {
+                    line,
+                    column: at,
+                    kind: Kind::HalfWidth,
+                    written: c.to_string(),
+                    wanted: full.to_string(),
+                });
+            }
+        }
+        at += 1;
+    }
+}
+
+/// What is wrong with the marks on **one line**, asked of that line alone.
+///
+/// The two findings a line can answer for by itself, with `line` left at zero:
+/// what `:hint` draws beside the mark as the sentence is written. The pairs —
+/// 「」（）《》 — are not here, because an opener left unclosed at the end of a
+/// paragraph is correct Chinese typesetting when the next paragraph opens the
+/// same way, and one line cannot see that. Those stay with [`check`].
+///
+/// The line is read as prose: a fenced block is the caller's business (it
+/// knows which lines are literal), but an `inline span` is blanked here the
+/// same way [`check`] blanks it.
+pub fn check_line(text: &str) -> Vec<Slip> {
+    let mut slips = Vec::new();
+    let mut in_fence = false;
+    let chars = prose(text, &mut in_fence);
+    marks_in(&chars, 0, &mut slips);
+    slips
+}
+
 /// Every mark worth a second look, in reading order.
 pub fn check(text: &str) -> Vec<Slip> {
     let mut slips = Vec::new();
@@ -140,43 +206,7 @@ pub fn check(text: &str) -> Vec<Slip> {
         .map(|l| prose(l, &mut in_fence))
         .collect::<Vec<_>>();
     for (line, chars) in lines.iter().enumerate() {
-        let mut at = 0;
-        while at < chars.len() {
-            let c = chars[at];
-            // `...` — count the whole run, so `.....` is one finding.
-            if c == '.' {
-                let run = chars[at..].iter().take_while(|&&c| c == '.').count();
-                if run >= 3 && beside_chinese(chars, at, run) {
-                    slips.push(Slip {
-                        line,
-                        column: at,
-                        kind: Kind::Ellipsis,
-                        written: ".".repeat(run),
-                        wanted: "……".to_string(),
-                    });
-                    at += run;
-                    continue;
-                }
-            }
-            if let Some(&(_, full)) = TWINS.iter().find(|(half, _)| *half == c) {
-                // A decimal point and a thousands comma are not punctuation,
-                // and both sides of them are digits.
-                let digits = matches!(c, '.' | ',')
-                    && at > 0
-                    && chars[at - 1].is_ascii_digit()
-                    && chars.get(at + 1).is_some_and(char::is_ascii_digit);
-                if !digits && beside_chinese(chars, at, 1) {
-                    slips.push(Slip {
-                        line,
-                        column: at,
-                        kind: Kind::HalfWidth,
-                        written: c.to_string(),
-                        wanted: full.to_string(),
-                    });
-                }
-            }
-            at += 1;
-        }
+        marks_in(chars, line, &mut slips);
     }
 
     // The pairs, one paragraph at a time — which here is one line, because a
@@ -331,4 +361,28 @@ mod tests {
             vec![(0, 3, Kind::Unclosed, "）".to_string())]
         );
     }
+
+    #[test]
+    fn one_line_answers_for_its_own_marks() {
+        let slips = check_line("他說,好的...");
+        assert_eq!(slips.len(), 2, "{slips:?}");
+        assert_eq!(slips[0].kind, Kind::HalfWidth);
+        assert_eq!(slips[0].column, 2);
+        assert_eq!(slips[0].wanted, "，");
+        assert_eq!(slips[1].kind, Kind::Ellipsis);
+        assert_eq!(slips[1].written, "...");
+    }
+
+    #[test]
+    fn one_line_says_nothing_about_a_quote_it_cannot_see_the_end_of() {
+        // 「 unclosed here is `check`'s question, not this one's: the next
+        // paragraph may open with 「 too, and one line cannot see it.
+        assert!(check_line("「他說").is_empty());
+    }
+
+    #[test]
+    fn one_line_leaves_code_and_english_alone() {
+        assert!(check_line("`a, b` and 3.14 in README.md").is_empty());
+    }
+
 }

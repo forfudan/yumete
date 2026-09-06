@@ -34,6 +34,9 @@ type SegmentCache = HashMap<usize, (u64, Vec<(usize, usize)>)>;
 /// A paragraph's 平仄, kept the same way and for the same reason (Feature #247).
 type MeterCache = HashMap<usize, (u64, Vec<crate::meter::Mark>)>;
 
+/// A line's inline notes, kept the same way and for the same reason (#248).
+type NoteCache = HashMap<usize, (u64, Vec<crate::drawn::Run>)>;
+
 /// The other work area: a buffer, a place in it, and what to look at there.
 ///
 /// **The editor has one cursor** (Feature #176). A split does not give it a
@@ -1133,6 +1136,14 @@ pub struct Editor {
     /// margin beside the writing and never what the writing is.
     meter: bool,
     meter_cache: RefCell<MeterCache>,
+    /// Inline notes on the marks a Chinese manuscript got wrong (#248), and
+    /// the answers already worked out.
+    ///
+    /// The first producer of [virtual text](crate::drawn) that is neither the
+    /// writer's own typing nor a table's geometry: the editor saying something
+    /// *about* the text, in the text's own place, as it is written.
+    notes: bool,
+    note_cache: RefCell<NoteCache>,
     /// Which lines are folded away, against the buffer they were worked out
     /// for. One pass over the file per edit — the answer is not line-local (a
     /// blank line inside a fence is code, not a paragraph break), and asking
@@ -1180,15 +1191,17 @@ pub struct Editor {
     /// all on, so leaving it gives back what the writer had rather than
     /// nothing.
     ruby_before: Option<Dialects>,
-    /// **Text on the page the file has no bytes for** (Feature #210), as
-    /// `(line, column, what is drawn there)`.
+    /// **The inline candidate** (Feature #211), as `(line, column, what is
+    /// drawn there)` — the one piece of [virtual text](crate::drawn) the core
+    /// is *told* rather than works out.
     ///
-    /// Held here rather than worked out here, because what goes on the page
-    /// comes from outside the core: the candidate the input method is offering
-    /// (#211), the padding that squares a table up without rewriting it (#212).
-    /// The core's job is that everything which asks where a character is —
-    /// the wrap, the caret, `j`, the mouse — asks about the same page.
-    ghost: Vec<(usize, usize, String)>,
+    /// It comes from outside: the input method is offering it and the core has
+    /// no way to know. Everything else on the page that the file has no bytes
+    /// for is derived here — a table's padding (#212), an inline note (#248) —
+    /// and all of it goes out through [`Editor::drawn_on_line`], so that
+    /// everything which asks where a character is (the wrap, the caret, `j`,
+    /// the mouse) asks about the same page.
+    candidate: Vec<(usize, usize, String)>,
     /// The command-line completion in progress: the prefix Tab started from, and
     /// which match is selected. The prefix is kept because the typed text is
     /// replaced by each candidate in turn, so the line itself can no longer say
@@ -1458,6 +1471,8 @@ impl Editor {
             segment_cache: RefCell::new(SegmentCache::new()),
             meter: false,
             meter_cache: RefCell::new(MeterCache::new()),
+            notes: false,
+            note_cache: RefCell::new(NoteCache::new()),
             fold_cache: RefCell::new(None),
             markup_cache: RefCell::new(HashMap::new()),
             block_cache: RefCell::new(None),
@@ -1465,7 +1480,7 @@ impl Editor {
             md_cache: RefCell::new(None),
             md_tables: RefCell::new(None),
             ruby_before: None,
-            ghost: Vec::new(),
+            candidate: Vec::new(),
             ruby: Dialects::only(crate::ruby::Dialect::Html),
             layout: Layout::default(),
             zong_length: DEFAULT_ZONG_LENGTH,
@@ -2648,42 +2663,114 @@ impl Editor {
         off
     }
 
-    /// The ghost text on `line`: `(column within the line, what is drawn)`.
+    /// **Everything drawn on `line` that the file has no bytes for** (#248),
+    /// in the order it is drawn.
+    ///
+    /// The mirror of [`Self::hidden_on_line`], and the general form of #210's
+    /// ghost text. Three producers stand behind it and more can: the inline
+    /// candidate the writer typed, the padding that squares a table up, and
+    /// the notes `:note` puts beside a mark that is wrong. Each run is
+    /// anchored *before* one of the file's own characters and none of them is
+    /// addressable — see [`crate::drawn`] for the invariant that makes that
+    /// safe.
+    pub fn drawn_runs_on_line(&self, line: usize) -> Vec<crate::drawn::Run> {
+        use crate::drawn::{Ink, Run};
+        let mut runs: Vec<Run> = self
+            .typed_on_line(line)
+            .into_iter()
+            .map(|(at, text)| Run::new(at, text, Ink::Typed))
+            .collect();
+        runs.extend(
+            self.table_padding_on_line(line)
+                .into_iter()
+                .map(|(at, text)| Run::new(at, text, Ink::Padding)),
+        );
+        runs.extend(self.notes_on_line(line));
+        crate::drawn::compose(runs)
+    }
+
+    /// The same page as one answer per anchor — what the wrap, the caret and
+    /// the click map ask.
     ///
     /// Ordered by column, so the renderer, the wrap and the mouse walk it the
     /// same way.
-    pub fn ghost_on_line(&self, line: usize) -> Vec<(usize, String)> {
-        let mut runs: Vec<(usize, String)> = self.typed_ghost_on_line(line);
-        runs.extend(self.table_padding_on_line(line));
-        // Stable, so that at a shared anchor the candidate keeps its place
-        // ahead of the padding.
-        runs.sort_by_key(|&(at, _)| at);
-        // **One run per anchor.** Two runs standing before the same character
-        // are two answers to "what is drawn here", and the caret, the click
-        // map and the wrap would each pick their own. The candidate is drawn
-        // first because it continues the word: the padding's job is to reach
-        // the pipe, so it belongs on the far side of what was typed.
-        runs.dedup_by(|(at, text), (kept, held)| {
-            (*at == *kept).then(|| held.push_str(text)).is_some()
-        });
-        runs
+    pub fn drawn_on_line(&self, line: usize) -> Vec<(usize, String)> {
+        crate::drawn::flat(&self.drawn_runs_on_line(line))
     }
 
-    /// The part of the ghost on `line` that the writer **typed**: the inline
-    /// candidate, and nothing derived.
+    /// The part of what is drawn on `line` that the writer **typed**: the
+    /// inline candidate, and nothing derived.
     ///
     /// The caret's own page. A run is drawn before the character it is
     /// anchored at, and a caret resting on that character stands after the
     /// candidate — you typed it — but *before* the padding that reaches from
-    /// the same anchor to the pipe. Told apart here so [`crate::wrap`] can put
-    /// the caret between them; everything else wants them as one page and
-    /// asks [`Self::ghost_on_line`].
-    pub fn typed_ghost_on_line(&self, line: usize) -> Vec<(usize, String)> {
-        self.ghost
+    /// the same anchor to the pipe, and before a note about the mark there.
+    /// Told apart here so [`crate::wrap`] can put the caret between them;
+    /// everything else wants them as one page and asks [`Self::drawn_on_line`].
+    pub fn typed_on_line(&self, line: usize) -> Vec<(usize, String)> {
+        self.candidate
             .iter()
             .filter(|&&(l, _, _)| l == line)
             .map(|(_, at, text)| (*at, text.clone()))
             .collect()
+    }
+
+    /// Whether the marks that are wrong are named on the page (#248).
+    pub fn notes(&self) -> bool {
+        self.notes
+    }
+
+    /// The notes drawn on `line`: what each mark there should have been.
+    ///
+    /// **Only what one line can answer for.** A half-width `,` among 漢字 and
+    /// an English `...` are wrong wherever they stand; an unclosed 「 may be
+    /// perfectly correct — Chinese typesetting opens it again at the head of
+    /// each paragraph of a long quotation — and no line can see that on its
+    /// own. Those stay with `:check punct`, which reads the whole manuscript.
+    /// See [`crate::punct::check_line`].
+    ///
+    /// **Nothing inside a fence**, where a `,` is code and right; and nothing
+    /// while `:render off` asks for the file exactly as it is, which is the
+    /// same rule #212's padding keeps.
+    ///
+    /// Kept against a hash of the line's own text, like the 平仄 beside it: a
+    /// note is worked out from that line and nothing else, so it can never go
+    /// stale the way a finding stored from a walk of the file does.
+    fn notes_on_line(&self, line: usize) -> Vec<crate::drawn::Run> {
+        use crate::drawn::{Ink, Run};
+        if !self.notes || !self.markup_visible() {
+            return Vec::new();
+        }
+        if self.block_of(line).is_literal() {
+            return Vec::new();
+        }
+        let Some(text) = self.line_text(line) else {
+            return Vec::new();
+        };
+        let mut hasher = DefaultHasher::new();
+        text.hash(&mut hasher);
+        let hash = hasher.finish();
+        let mut cache = self.note_cache.borrow_mut();
+        if let Some((cached, runs)) = cache.get(&line) {
+            if *cached == hash {
+                return runs.clone();
+            }
+        }
+        // The note stands **after** the mark it is about, so the page reads
+        // 「what you wrote, then what it should be」 — `他說,，` — and the mark
+        // itself keeps the column the cursor goes to.
+        let runs: Vec<Run> = crate::punct::check_line(&text)
+            .into_iter()
+            .map(|slip| {
+                let after = slip.column + slip.written.chars().count();
+                Run::new(after, slip.wanted, Ink::Note)
+            })
+            .collect();
+        if cache.len() >= SEGMENT_CACHE_LIMIT {
+            cache.clear();
+        }
+        cache.insert(line, (hash, runs.clone()));
+        runs
     }
 
     /// Whether `|` tables are squared up as the page draws them (Feature #212).
@@ -2771,15 +2858,15 @@ impl Editor {
     /// a table up became ghost too (#212): that padding is **derived**, it is
     /// on nearly every page of documentation, and no caller ever meant it.
     pub fn has_candidate(&self) -> bool {
-        !self.ghost.is_empty()
+        !self.candidate.is_empty()
     }
 
     /// Put `runs` on the page in place of whatever was there.
     ///
     /// Wholesale, never appended: the caller says what the page holds now, so
     /// a candidate that has been committed leaves nothing behind.
-    pub fn set_ghost(&mut self, runs: Vec<(usize, usize, String)>) {
-        self.ghost = runs;
+    pub fn set_candidate(&mut self, runs: Vec<(usize, usize, String)>) {
+        self.candidate = runs;
     }
 
     /// The ruby groups on `line` that are being laid out as readings.
@@ -3795,6 +3882,19 @@ impl Editor {
                     (true, false) => say!("layout.meter-no-readings"),
                     (true, true) => say!("layout.meter-on"),
                     (false, _) => say!("layout.meter-off"),
+                };
+                Ok(CommandOutcome::Continue)
+            }
+            Command::SetNote(want) => {
+                self.notes = want.unwrap_or(!self.notes);
+                self.status = match (self.notes, self.markup_visible()) {
+                    // A note is drawn on the page, and `:render off` is the one
+                    // setting that says 「draw nothing the file does not
+                    // contain」. Turning notes on under it would leave the
+                    // writer waiting for a mark that is never coming.
+                    (true, false) => say!("layout.note-no-render"),
+                    (true, true) => say!("layout.note-on"),
+                    (false, _) => say!("layout.note-off"),
                 };
                 Ok(CommandOutcome::Continue)
             }
@@ -10272,7 +10372,7 @@ impl Editor {
         &self,
         hidden: &'a dyn Fn(usize) -> Vec<(usize, usize)>,
         folded: &'a dyn Fn(usize) -> bool,
-        ghost: &'a dyn Fn(usize) -> Vec<(usize, String)>,
+        drawn: &'a dyn Fn(usize) -> Vec<crate::drawn::Run>,
     ) -> Grid<'a> {
         // Through `ruby()` and `hanging_punctuation()`, not the fields: a page
         // packed tight lays out neither, and a grid that disagreed with what is
@@ -10303,7 +10403,7 @@ impl Editor {
             .with_open_line(self.open_line())
             .with_hanging(self.hanging_punctuation())
             .with_sentences(self.sentences)
-            .with_ghost(ghost)
+            .with_drawn(drawn)
     }
 
     /// The markup that is off the page on `line`, as columns within it.
@@ -10532,8 +10632,8 @@ impl Editor {
     pub fn zong_position(&self) -> zong::Position {
         let hidden = |line: usize| self.markup_hidden_on_line(line);
         let folded = |line: usize| self.line_is_folded(line);
-        let ghost = |line: usize| self.ghost_on_line(line);
-        let grid = self.grid_with(&hidden, &folded, &ghost);
+        let drawn = |line: usize| self.drawn_runs_on_line(line);
+        let grid = self.grid_with(&hidden, &folded, &drawn);
         zong::position(self.current_buffer().rope(), self.cursor, grid)
     }
 
@@ -15162,8 +15262,8 @@ impl Editor {
             // alternative was a second answer to「which column is this」 that
             // did not know what is off the page.
             let width = self.wrap_width().unwrap_or(crate::wrap::NO_WRAP);
-            let ghost = |line: usize| self.ghost_on_line(line);
-            let typed = |line: usize| self.typed_ghost_on_line(line);
+            let ghost = |line: usize| self.drawn_on_line(line);
+            let typed = |line: usize| self.typed_on_line(line);
             // A table row is one row (#275) — and `j` has to be walking the
             // same page the renderer drew, or it steps into a row that is not
             // on the screen.
@@ -15203,8 +15303,8 @@ impl Editor {
             // this same code, so the two cases cannot answer differently about
             // what is off the page.
             let width = self.wrap_width().unwrap_or(crate::wrap::NO_WRAP);
-            let ghost = |line: usize| self.ghost_on_line(line);
-            let typed = |line: usize| self.typed_ghost_on_line(line);
+            let ghost = |line: usize| self.drawn_on_line(line);
+            let typed = |line: usize| self.typed_on_line(line);
             // A table row is one row (#275) — and `j` has to be walking the
             // same page the renderer drew, or it steps into a row that is not
             // on the screen.
@@ -15240,8 +15340,8 @@ impl Editor {
         let (goal, pos) = {
             let hidden = |line: usize| self.markup_hidden_on_line(line);
             let folded = |line: usize| self.line_is_folded(line);
-            let ghost = |line: usize| self.ghost_on_line(line);
-            let grid = self.grid_with(&hidden, &folded, &ghost);
+            let drawn = |line: usize| self.drawn_runs_on_line(line);
+            let grid = self.grid_with(&hidden, &folded, &drawn);
             let rope = self.current_buffer().rope();
             let goal = if continuing {
                 self.goal_slot
@@ -16451,27 +16551,103 @@ mod tests {
     fn ghost_runs_are_held_wholesale_and_answered_by_line() {
         let mut ed = typed("春夏\n秋冬\n");
         assert!(!ed.has_candidate(), "a page with no candidate on it pays nothing");
-        assert!(ed.ghost_on_line(0).is_empty());
+        assert!(ed.drawn_on_line(0).is_empty());
 
         // Out of order on the way in, in column order on the way out: the
         // renderer, the wrap and the mouse all walk it forwards.
-        ed.set_ghost(vec![
+        ed.set_candidate(vec![
             (0, 2, "補".to_string()),
             (1, 1, "候".to_string()),
             (0, 1, "候".to_string()),
         ]);
         assert!(ed.has_candidate());
         assert_eq!(
-            ed.ghost_on_line(0),
+            ed.drawn_on_line(0),
             vec![(1, "候".to_string()), (2, "補".to_string())]
         );
-        assert_eq!(ed.ghost_on_line(1), vec![(1, "候".to_string())]);
-        assert!(ed.ghost_on_line(2).is_empty());
+        assert_eq!(ed.drawn_on_line(1), vec![(1, "候".to_string())]);
+        assert!(ed.drawn_on_line(2).is_empty());
 
         // Wholesale, never appended — a committed candidate leaves nothing.
-        ed.set_ghost(Vec::new());
+        ed.set_candidate(Vec::new());
         assert!(!ed.has_candidate());
-        assert!(ed.ghost_on_line(0).is_empty());
+        assert!(ed.drawn_on_line(0).is_empty());
+    }
+
+    /// Feature #248. The general form: the editor's own notes on the page,
+    /// beside the mark they are about.
+    #[test]
+    fn the_mark_that_is_wrong_is_named_on_the_page() {
+        let mut ed = typed("他說,好\n");
+        // Off until it is asked for: a manuscript is not a proof sheet.
+        assert!(!ed.notes());
+        assert!(ed.drawn_on_line(0).is_empty());
+
+        ed.execute(":note on").unwrap();
+        assert!(ed.notes());
+        // 他說 , 好 — the note stands *after* the comma, at the character it
+        // should have been written as.
+        assert_eq!(ed.drawn_on_line(0), vec![(3, "，".to_string())]);
+
+        ed.execute(":note off").unwrap();
+        assert!(ed.drawn_on_line(0).is_empty());
+    }
+
+    #[test]
+    fn a_page_that_got_its_marks_right_carries_no_notes() {
+        let mut ed = typed("他說：「好。」\n");
+        ed.execute(":note on").unwrap();
+        assert!(ed.drawn_on_line(0).is_empty(), "{:?}", ed.drawn_on_line(0));
+    }
+
+    #[test]
+    fn a_note_is_a_note_and_not_a_character() {
+        // The mirror invariant (#248): the cursor may never sit on a character
+        // that is not in the file. Walking right past the mark the note is
+        // about lands on the file's own next character, and `x` deletes that.
+        let mut ed = typed("他說,好\n");
+        ed.execute(":note on").unwrap();
+        assert_eq!(ed.drawn_on_line(0), vec![(3, "，".to_string())]);
+        for _ in 0..3 {
+            ed.on_key(Key::Char('l'));
+        }
+        // Three characters right of 他 is 好 — the file's own fourth
+        // character, not the 「，」 drawn between it and the comma.
+        assert_eq!(ed.cursor_column(), 3);
+        assert_eq!(ed.current_buffer().rope().char(ed.cursor()), '好');
+    }
+
+    #[test]
+    fn a_comma_inside_a_fence_is_code_and_is_left_alone() {
+        let mut ed = typed("```rust\nlet a = (1,2);\n```\n他說,好\n");
+        ed.execute(":note on").unwrap();
+        assert!(ed.drawn_on_line(1).is_empty(), "{:?}", ed.drawn_on_line(1));
+        assert_eq!(ed.drawn_on_line(3), vec![(3, "，".to_string())]);
+    }
+
+    #[test]
+    fn render_off_asks_for_the_file_and_gets_the_file() {
+        let mut ed = typed("他說,好\n");
+        ed.execute(":note on").unwrap();
+        assert!(!ed.drawn_on_line(0).is_empty());
+        ed.execute(":render off").unwrap();
+        assert!(ed.drawn_on_line(0).is_empty(), "{:?}", ed.drawn_on_line(0));
+    }
+
+    #[test]
+    fn a_note_follows_the_line_as_it_is_written() {
+        // The cache is a hash of the line, so an edit that fixes the mark
+        // takes the note off the page without anybody clearing anything.
+        let mut ed = typed("他說,好\n");
+        ed.execute(":note on").unwrap();
+        assert_eq!(ed.drawn_on_line(0).len(), 1);
+        // Put the cursor on the comma and write the right mark over it.
+        ed.on_key(Key::Char('l'));
+        ed.on_key(Key::Char('l'));
+        ed.on_key(Key::Char('r'));
+        ed.on_key(Key::Char('，'));
+        assert_eq!(ed.line_text(0).unwrap().trim_end(), "他說，好");
+        assert!(ed.drawn_on_line(0).is_empty(), "{:?}", ed.drawn_on_line(0));
     }
 
     /// The point of #210: **one page**. A candidate the renderer alone knew
@@ -16479,7 +16655,7 @@ mod tests {
     #[test]
     fn the_caret_and_the_grid_agree_about_a_candidate() {
         let mut ed = typed("春夏秋冬\n");
-        ed.set_ghost(vec![(0, 2, "候補".to_string())]);
+        ed.set_candidate(vec![(0, 2, "候補".to_string())]);
         // Down the column: two rows of candidate between 夏 and 秋.
         ed.execute(":layout vertical").unwrap();
         assert_eq!(ed.zong_position().slot, 0);
@@ -16689,11 +16865,11 @@ mod tests {
         assert!(first > 6, "the heading is not in the span: {first}..{last}");
         let hidden = |line: usize| ed.markup_hidden_on_line(line);
         let folded = |line: usize| ed.line_is_folded(line);
-        let ghost = |line: usize| ed.ghost_on_line(line);
+        let drawn = |line: usize| ed.drawn_runs_on_line(line);
         assert!(!crate::zong::folded(
             ed.current_buffer().rope(),
             8,
-            ed.grid_with(&hidden, &folded, &ghost)
+            ed.grid_with(&hidden, &folded, &drawn)
         ));
         // And never the line the cursor is on, or you could not type into it.
         ed.execute(":2").unwrap();
@@ -18597,8 +18773,8 @@ mod tests {
                 let rope = ed.current_buffer().rope();
                 let hidden = |line: usize| ed.markup_hidden_on_line(line);
                 let folded = |line: usize| ed.line_is_folded(line);
-                let ghost = |line: usize| ed.ghost_on_line(line);
-                let grid = ed.grid_with(&hidden, &folded, &ghost);
+                let drawn = |line: usize| ed.drawn_runs_on_line(line);
+                let grid = ed.grid_with(&hidden, &folded, &drawn);
                 for line in 0..rope.len_lines() {
                     assert_eq!(
                         crate::zong::folded(rope, line, grid),
@@ -19598,7 +19774,7 @@ mod tests {
             .map(|at| yumete_cjk::char_width(chars[at]))
             .sum();
         let ghost: usize = ed
-            .ghost_on_line(line)
+            .drawn_on_line(line)
             .iter()
             .map(|(_, text)| text.chars().map(yumete_cjk::char_width).sum::<usize>())
             .sum();
@@ -19611,7 +19787,7 @@ mod tests {
         const TEXT: &str = "|甲|乙|\n|---|---|\n|一二三|四|\n";
         let mut ed = Editor::new();
         ed.add_buffer(crate::Buffer::from_text(TEXT));
-        assert!(!ed.ghost_on_line(0).is_empty(), "the header is padded");
+        assert!(!ed.drawn_on_line(0).is_empty(), "the header is padded");
         let widths: Vec<usize> = (0..3).map(|l| drawn_width(&ed, l)).collect();
         assert_eq!(widths[0], widths[1], "{widths:?}");
         assert_eq!(widths[1], widths[2], "{widths:?}");
@@ -19637,7 +19813,7 @@ mod tests {
         ed.execute("render on").unwrap();
         let source: Vec<usize> = (0..4).map(|l| drawn_width(&ed, l)).collect();
         assert!(source.iter().all(|w| *w == source[0]), "{source:?}");
-        assert!(ed.ghost_on_line(2).is_empty(), "{:?}", ed.ghost_on_line(2));
+        assert!(ed.drawn_on_line(2).is_empty(), "{:?}", ed.drawn_on_line(2));
 
         ed.execute("render full").unwrap();
         // Off the marked-up row: the construct the cursor is in is never
@@ -19649,15 +19825,15 @@ mod tests {
         // `**` twice — and six columns of padding went back on. Only there:
         // the rows that lost nothing are still exactly the file.
         assert_eq!(
-            ed.ghost_on_line(2)
+            ed.drawn_on_line(2)
                 .iter()
                 .map(|(_, text)| text.chars().count())
                 .sum::<usize>(),
             6,
             "{:?}",
-            ed.ghost_on_line(2)
+            ed.drawn_on_line(2)
         );
-        assert!(ed.ghost_on_line(3).is_empty(), "{:?}", ed.ghost_on_line(3));
+        assert!(ed.drawn_on_line(3).is_empty(), "{:?}", ed.drawn_on_line(3));
     }
 
     /// #212: every table in the document, not only the one the cursor is in.
@@ -19673,7 +19849,7 @@ mod tests {
             assert_eq!(widths[0], widths[1], "table at {table}: {widths:?}");
             assert_eq!(widths[1], widths[2], "table at {table}: {widths:?}");
         }
-        assert!(ed.ghost_on_line(4).is_empty(), "prose is not a table");
+        assert!(ed.drawn_on_line(4).is_empty(), "prose is not a table");
     }
 
     /// #212: a table in a fence is writing *about* a table.
@@ -19684,7 +19860,7 @@ mod tests {
             "```\n|甲|乙|\n|---|---|\n|一二三|四|\n```\n",
         ));
         for line in 1..4 {
-            assert!(ed.ghost_on_line(line).is_empty(), "line {line}");
+            assert!(ed.drawn_on_line(line).is_empty(), "line {line}");
         }
     }
 
@@ -19693,18 +19869,18 @@ mod tests {
     fn the_padding_goes_away_when_the_page_is_the_file() {
         let mut ed = Editor::new();
         ed.add_buffer(crate::Buffer::from_text("|甲|乙|\n|---|---|\n|一二三|四|\n"));
-        assert!(!ed.ghost_on_line(0).is_empty());
+        assert!(!ed.drawn_on_line(0).is_empty());
 
         // `:render off` is a request for the file exactly as it is.
         ed.execute("render off").unwrap();
-        assert!(ed.ghost_on_line(0).is_empty(), "{:?}", ed.ghost_on_line(0));
+        assert!(ed.drawn_on_line(0).is_empty(), "{:?}", ed.drawn_on_line(0));
         ed.execute("render on").unwrap();
-        assert!(!ed.ghost_on_line(0).is_empty());
+        assert!(!ed.drawn_on_line(0).is_empty());
 
         // Down a 縱 every character takes one cell, so display width squares
         // nothing up.
         ed.set_layout(Layout::Vertical);
-        assert!(ed.ghost_on_line(0).is_empty());
+        assert!(ed.drawn_on_line(0).is_empty());
 
         // Neither is a candidate: `has_candidate` answers only for what the
         // writer typed, and the padding is derived.
@@ -19720,9 +19896,9 @@ mod tests {
     fn a_candidate_and_the_padding_are_one_run_each() {
         let mut ed = Editor::new();
         ed.add_buffer(crate::Buffer::from_text("|甲|乙|\n|---|---|\n|一二三|四|\n"));
-        let at = ed.ghost_on_line(0).first().map(|&(at, _)| at).unwrap();
-        ed.set_ghost(vec![(0, at, "候".to_string())]);
-        let runs = ed.ghost_on_line(0);
+        let at = ed.drawn_on_line(0).first().map(|&(at, _)| at).unwrap();
+        ed.set_candidate(vec![(0, at, "候".to_string())]);
+        let runs = ed.drawn_on_line(0);
         let mut anchors: Vec<usize> = runs.iter().map(|&(at, _)| at).collect();
         anchors.dedup();
         assert_eq!(anchors.len(), runs.len(), "one run per anchor: {runs:?}");
@@ -19757,8 +19933,8 @@ mod tests {
         ed.set_cursor(2);
         let hide = |line: usize| ed.hidden_on_line(line);
         let fold = |line: usize| ed.line_is_folded(line);
-        let ghost = |line: usize| ed.ghost_on_line(line);
-        let typed = |line: usize| ed.typed_ghost_on_line(line);
+        let ghost = |line: usize| ed.drawn_on_line(line);
+        let typed = |line: usize| ed.typed_on_line(line);
         let m = crate::wrap::Measure::new(crate::wrap::NO_WRAP, &hide)
             .with_folds(&fold)
             .with_ghost(&ghost)
@@ -19766,7 +19942,7 @@ mod tests {
         let at = crate::wrap::position(ed.current_buffer().rope(), 2, m);
         // `| a` — the caret is right after the `a` it just typed, not out on
         // the pipe two cells further along.
-        assert_eq!(at.column, 3, "{:?}", ed.ghost_on_line(0));
+        assert_eq!(at.column, 3, "{:?}", ed.drawn_on_line(0));
     }
 
     /// #212: `:syntax` changes what comes off the page without touching a byte
@@ -19779,9 +19955,9 @@ mod tests {
 | cc | d |
 "));
         ed.execute("render full").unwrap();
-        let with_markup_off = ed.ghost_on_line(0);
+        let with_markup_off = ed.drawn_on_line(0);
         ed.execute("syntax text").unwrap();
-        let as_plain_text = ed.ghost_on_line(0);
+        let as_plain_text = ed.drawn_on_line(0);
         // With the backticks back on the page the first cell is two cells
         // wider, so it cannot want the same padding.
         assert_ne!(

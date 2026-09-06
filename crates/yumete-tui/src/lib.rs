@@ -1666,7 +1666,7 @@ fn data_faults(ime: &ImeSession) -> String {
 
 /// Put the candidate `bare` is offering into the text, or take it away again.
 ///
-/// Wholesale, every frame, because [`Editor::set_ghost`] is wholesale: what is
+/// Wholesale, every frame, because [`Editor::set_candidate`] is wholesale: what is
 /// on the page now is exactly what this says, so a committed candidate leaves
 /// nothing behind and a cancelled one disappears without anybody remembering
 /// to clear it.
@@ -1676,16 +1676,16 @@ fn data_faults(ime: &ImeSession) -> String {
 fn settle_inline_candidate(editor: &mut Editor, ime: &ImeSession) {
     let want = inline_candidate(editor, ime);
     // A page with no candidate on it pays nothing — and must not be marked
-    // dirty by a `set_ghost` that changes nothing, since both layout memos are
+    // dirty by a `set_candidate` that changes nothing, since both layout memos are
     // keyed on the runs.
     if want.is_empty() {
         // Cleared outright, not only when there is something to clear.
         // Setting an empty list that is already empty changes no key: both
         // memos are keyed on the runs themselves.
-        editor.set_ghost(Vec::new());
+        editor.set_candidate(Vec::new());
         return;
     }
-    editor.set_ghost(vec![(editor.cursor_line(), editor.cursor_column(), want)]);
+    editor.set_candidate(vec![(editor.cursor_line(), editor.cursor_column(), want)]);
 }
 
 /// The text `bare` draws into the sentence, or empty when it draws nothing.
@@ -3114,8 +3114,8 @@ fn text_at(
             // where a row breaks, so a click resolved without it lands `indent`
             // cells off on every paragraph's first row.
             let fold = |line: usize| editor.line_is_folded(line);
-            let ghost = |line: usize| editor.ghost_on_line(line);
-            let typed = |line: usize| editor.typed_ghost_on_line(line);
+            let ghost = |line: usize| editor.drawn_on_line(line);
+            let typed = |line: usize| editor.typed_on_line(line);
             let flat = |line: usize| editor.table_row_at(line);
             let measure = wrap::Measure::new(width, &hide)
                 .with_indent(editor.paragraph_indent())
@@ -3151,7 +3151,7 @@ fn text_at(
             // click in the gutter means the first character on the page.
             let goal = want.saturating_sub(gutter) + viewport.left;
             let hidden = editor.hidden_on_line(row.line);
-            let ghosts = editor.ghost_on_line(row.line);
+            let ghosts = editor.drawn_on_line(row.line);
             let line_start = buffer.rope().line_to_char(row.line);
             // The row starts where it was drawn: a click anywhere in a
             // paragraph's opening indent means its first character.
@@ -3685,8 +3685,8 @@ fn draw_horizontal(
     // row breaks, so the cursor and the page have to be asking about the same
     // one. Here it is only *drawn*.
     let fold = |line: usize| editor.line_is_folded(line);
-    let ghost = |line: usize| editor.ghost_on_line(line);
-    let typed = |line: usize| editor.typed_ghost_on_line(line);
+    let ghost = |line: usize| editor.drawn_on_line(line);
+    let typed = |line: usize| editor.typed_on_line(line);
     // **表格所在的行不再 soft wrap** (#275): a cell folded onto the next screen
     // row is not in its column any more, so a table row is one row however long
     // it is and what runs off the right edge is reached by scrolling sideways.
@@ -3964,7 +3964,7 @@ fn draw_horizontal(
         // *drawn*, not from the buffer — and never on the construct the cursor
         // is in, so the cursor is never inside text that is not on the screen.
         let hide = editor.hidden_on_line(row.line);
-        let ghost_runs = editor.ghost_on_line(row.line);
+        let drawn_runs = editor.drawn_runs_on_line(row.line);
         let start_in_line = row.start - rope.line_to_char(row.line);
         let shown: Vec<bool> = (0..chars.len())
             .map(|i| {
@@ -3976,19 +3976,28 @@ fn draw_horizontal(
         // candidate being typed, a table's padding. Anchored at a column and
         // drawn before the character there, which is exactly where the measure
         // charged it — so the caret, `j` and the mouse land on the same cells.
-        let ghosts: Vec<(usize, String)> = ghost_runs
+        let runs: Vec<yumete_core::drawn::Run> = drawn_runs
             .iter()
-            .filter(|&&(at, _)| {
-                at >= start_in_line
-                    && (at < start_in_line + chars.len()
-                        || (row.ends_line && at == start_in_line + chars.len()))
+            .filter(|run| {
+                run.column >= start_in_line
+                    && (run.column < start_in_line + chars.len()
+                        || (row.ends_line && run.column == start_in_line + chars.len()))
             })
-            .map(|(at, text)| (at - start_in_line, text.clone()))
+            .map(|run| yumete_core::drawn::Run {
+                column: run.column - start_in_line,
+                text: run.text.clone(),
+                ink: run.ink,
+            })
             .collect();
         // A rung back from the writing, the way a reading is set: it is *about*
         // the text and is not in it, and ghost text in the text's own ink reads
-        // as something that has already been written.
-        let ghost_style = ground.fg(ink.quiet());
+        // as something that has already been written. A note (#248) is further
+        // back still and in the marker's ink: it is not a word of the
+        // manuscript at all, it is the editor pointing at one.
+        let run_style = |kind: yumete_core::drawn::Ink| match kind {
+            yumete_core::drawn::Ink::Note => ground.fg(ink.marker()),
+            _ => ground.fg(ink.quiet()),
+        };
         // **真表格顯示** (#275): 「完全画成表格」. The `|` the writer typed *is*
         // the wall between two cells, so in this mode it is drawn as one, and
         // the `| --- |` row as the line under the head. Every glyph is one cell
@@ -3998,13 +4007,22 @@ fn draw_horizontal(
         // #212's padding writes the rule row's own dashes, so a rule being
         // *drawn* has to draw those too — otherwise the line stops where the
         // file's dashes stopped and the rest of the row is bare.
-        let ghosts: Vec<(usize, String)> = match editor.grid_rule_row(row.line) {
-            false => ghosts,
-            true => ghosts
+        let runs: Vec<yumete_core::drawn::Run> = match editor.grid_rule_row(row.line) {
+            false => runs,
+            true => runs
                 .into_iter()
-                .map(|(at, text)| (at, text.chars().map(|_| '┄').collect()))
+                .map(|run| match run.ink {
+                    yumete_core::drawn::Ink::Padding => yumete_core::drawn::Run {
+                        text: run.text.chars().map(|_| '┄').collect(),
+                        ..run
+                    },
+                    _ => run,
+                })
                 .collect(),
         };
+        // What the *measure* was told, which is one answer per anchor: the
+        // widths have to be the ones the wrap and the click map counted.
+        let ghosts: Vec<(usize, String)> = yumete_core::drawn::flat(&runs);
         let mut chars = chars;
         for &(at, glyph) in &grid {
             if let Some(ch) = at.checked_sub(start_in_line).and_then(|i| chars.get_mut(i)) {
@@ -4199,23 +4217,24 @@ fn draw_horizontal(
         let mut at = 0;
         let mut gi = 0;
         loop {
-            while gi < ghosts.len() && ghosts[gi].0 <= at {
+            while gi < runs.len() && runs[gi].column <= at {
                 // Padding inside the cell is part of the cell. Without this the
                 // tint stops at the last character the file actually holds and
                 // the column it is squaring up to stays bare — the one place
                 // the drawing is *about* alignment is the one place it would
                 // have looked ragged.
+                let base = run_style(runs[gi].ink);
                 let style = match cell {
                     Some((from, to)) => {
-                        let col = row.start + ghosts[gi].0;
+                        let col = row.start + runs[gi].column;
                         match col >= from && col <= to {
-                            true => ghost_style.patch(cell_style),
-                            false => ghost_style,
+                            true => base.patch(cell_style),
+                            false => base,
                         }
                     }
-                    None => ghost_style,
+                    None => base,
                 };
-                spans.push(Span::styled(ghosts[gi].1.clone(), style));
+                spans.push(Span::styled(runs[gi].text.clone(), style));
                 gi += 1;
             }
             if at >= chars.len() {
@@ -4226,7 +4245,7 @@ fn draw_horizontal(
             while to < chars.len()
                 && styles[to] == style
                 && shown[to] == shown[at]
-                && ghosts.get(gi).is_none_or(|&(g, _)| g != to)
+                && runs.get(gi).is_none_or(|run| run.column != to)
             {
                 to += 1;
             }
@@ -5288,7 +5307,7 @@ mod tests {
     #[test]
     fn a_candidate_is_drawn_in_the_cells_the_measure_charged_for() {
         let mut editor = editor_with("春夏秋冬");
-        editor.set_ghost(vec![(0, 2, "候補".to_string())]);
+        editor.set_candidate(vec![(0, 2, "候補".to_string())]);
         let mut config = Config::default();
         config.editor.line_numbers = LineNumbers::None;
         config.editor.show_segmentation = false;
@@ -5302,10 +5321,52 @@ mod tests {
         assert_ne!(buffer[(0, 0)].fg, quiet, "…but not 春");
     }
 
+    /// Feature #248: a note is drawn, and drawn in its own ink.
+    ///
+    /// The candidate is quiet because it is *about to be* the text; a note
+    /// never will be, so it takes the marker's colour — the rung the editor
+    /// uses when it is pointing at something rather than saying it.
+    #[test]
+    fn a_note_is_drawn_in_the_ink_of_something_pointed_at() {
+        let mut editor = editor_with("他說,好");
+        editor.execute(":note on").unwrap();
+        let mut config = Config::default();
+        config.editor.line_numbers = LineNumbers::None;
+        config.editor.show_segmentation = false;
+        let buffer = render_wrapped(&mut editor, &config, 20, 4);
+        assert_eq!(row_text(&buffer, 0).trim_end(), "他說,，好");
+
+        let column = column_of(&row_text(&buffer, 0), "，");
+        let ink = ink(&config);
+        assert_eq!(buffer[(column, 0)].fg, ink.marker(), "the note");
+        assert_ne!(buffer[(0, 0)].fg, ink.marker(), "…but not 他");
+    }
+
+    /// The same page set vertically, where the author actually reads.
+    ///
+    /// 縱書 draws every slot off the line's own style, so a note would be set
+    /// in the manuscript's ink unless the ink is carried down into the grid —
+    /// which is why [`yumete_core::drawn::Ink`] reaches `zong::Slot` at all.
+    #[test]
+    fn a_note_set_vertically_is_not_read_as_the_manuscript() {
+        let mut editor = editor_with("他說,好");
+        editor.execute(":note on").unwrap();
+        let config = vertical_config();
+        let buffer = render_vertical(&mut editor, &config, 30, 12);
+        // Down the rightmost 縱: 他 說 ␣ ︐ 好 — the half-width comma is hung
+        // in the margin (its slot is blank) and the note is rotated like any
+        // other 句讀 the 縱 carries.
+        let column: Vec<String> = (0..5).map(|y| at(&buffer, 28, y)).collect();
+        assert_eq!(column, ["他", "說", " ", "︐", "好"]);
+        let ink = ink(&config);
+        assert_eq!(buffer[(28, 3)].fg, ink.marker(), "the note");
+        assert_ne!(buffer[(28, 0)].fg, ink.marker(), "…but not 他");
+    }
+
     #[test]
     fn the_caret_lands_past_the_candidate_it_typed() {
         let mut editor = editor_with("春夏秋冬");
-        editor.set_ghost(vec![(0, 2, "候補".to_string())]);
+        editor.set_candidate(vec![(0, 2, "候補".to_string())]);
         let mut config = Config::default();
         config.editor.line_numbers = LineNumbers::None;
         config.editor.show_segmentation = false;
@@ -5460,7 +5521,7 @@ mod tests {
     #[test]
     fn a_click_on_a_candidate_means_the_character_it_stands_before() {
         let mut editor = editor_with("春夏秋冬");
-        editor.set_ghost(vec![(0, 2, "候補".to_string())]);
+        editor.set_candidate(vec![(0, 2, "候補".to_string())]);
         let mut config = Config::default();
         config.editor.line_numbers = LineNumbers::None;
         config.editor.show_segmentation = false;
@@ -5496,7 +5557,7 @@ mod tests {
     #[test]
     fn a_candidate_takes_rows_of_its_own_down_the_column() {
         let mut editor = editor_with("春夏秋冬");
-        editor.set_ghost(vec![(0, 2, "候補".to_string())]);
+        editor.set_candidate(vec![(0, 2, "候補".to_string())]);
         let config = vertical_config();
         let buffer = render_vertical(&mut editor, &config, 30, 12);
         let column: Vec<String> = (0..6).map(|y| at(&buffer, 28, y)).collect();
@@ -6254,7 +6315,7 @@ mod tests {
         // The first candidate is on the page, at the caret, though the file
         // holds not one byte of it.
         assert_eq!(editor.current_buffer().text(), "");
-        assert_eq!(editor.ghost_on_line(0), vec![(0, "吧".to_string())]);
+        assert_eq!(editor.drawn_on_line(0), vec![(0, "吧".to_string())]);
 
         let config = Config::default();
         let buffer = render_with(&editor, &config, &ime, 40, 8);
@@ -9205,7 +9266,15 @@ mod tests {
             "and still a menu, not a page: {rows:?}"
         );
         // Down first and then across: the fewest columns that hold the list.
-        assert_eq!(columns.len(), 3, "three columns: {columns:?}");
+        // Said as arithmetic rather than as a number, because the list grows
+        // every time a command is added and the *shape* is what is being
+        // asserted.
+        assert_eq!(
+            columns.len(),
+            total.div_ceil(rows.len()),
+            "the fewest columns that hold {total} in {} rows: {columns:?}",
+            rows.len()
+        );
     }
 
     #[test]

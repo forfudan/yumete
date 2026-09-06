@@ -120,8 +120,7 @@ pub struct Grid<'a> {
     /// layout, the cursor, the mouse and the caret all read the slot list, and
     /// a padding slot holds no character for the cursor to sit on.
     pub indent: usize,
-    /// **Text on the page the file has no bytes for** (Feature #210), as
-    /// `(column within the line, what is drawn there)`.
+    /// **Text on the page the file has no bytes for** ([`crate::drawn`]).
     ///
     /// The exact inverse of `hidden`, and handed in for the same reason: the
     /// horizontal page is given the same answer by [`crate::wrap::Measure`],
@@ -129,8 +128,10 @@ pub struct Grid<'a> {
     /// wrap and the mouse on three different pages.
     ///
     /// A run stands in slots of its own — no characters, so `start == end` and
-    /// the cursor steps past them exactly as it steps past the indent's.
-    ghost: &'a dyn Fn(usize) -> Vec<(usize, String)>,
+    /// the cursor steps past them exactly as it steps past the indent's. Each
+    /// carries the ink it is drawn in, so that a note (#248) is not read as a
+    /// word of the manuscript.
+    drawn: &'a dyn Fn(usize) -> Vec<crate::drawn::Run>,
 }
 
 /// A page with every character on it — for callers that show the source as it
@@ -141,7 +142,7 @@ const NOTHING_HIDDEN: &dyn Fn(usize) -> Vec<(usize, usize)> = &|_| Vec::new();
 const NOTHING_FOLDED: &dyn Fn(usize) -> bool = &|_| false;
 
 /// A page holding nothing but the file's own characters.
-const NOTHING_GHOSTED: &dyn Fn(usize) -> Vec<(usize, String)> = &|_| Vec::new();
+const NOTHING_DRAWN: &dyn Fn(usize) -> Vec<crate::drawn::Run> = &|_| Vec::new();
 
 impl<'a> Grid<'a> {
     /// The same grid, told what is off the page: the markup, by line.
@@ -150,15 +151,14 @@ impl<'a> Grid<'a> {
     }
 
     /// The same grid, told what stands on the page that the file has not got.
-    pub fn with_ghost(self, ghost: &'a dyn Fn(usize) -> Vec<(usize, String)>) -> Grid<'a> {
-        Grid { ghost, ..self }
+    pub fn with_drawn(self, drawn: &'a dyn Fn(usize) -> Vec<crate::drawn::Run>) -> Grid<'a> {
+        Grid { drawn, ..self }
     }
 
-    /// The ghost text on `line`, in column order.
-    pub fn ghost_on(self, line: usize) -> Vec<(usize, String)> {
-        let mut runs = (self.ghost)(line);
-        runs.sort_by_key(|&(at, _)| at);
-        runs
+    /// What is drawn into `line` that the file has no bytes for, in the order
+    /// it is drawn.
+    pub fn drawn_on(self, line: usize) -> Vec<crate::drawn::Run> {
+        crate::drawn::compose((self.drawn)(line))
     }
 
     /// The same grid, told which lines are off the page.
@@ -196,7 +196,7 @@ impl<'a> Grid<'a> {
             folded: NOTHING_FOLDED,
             indent: 0,
             open_line: usize::MAX,
-            ghost: NOTHING_GHOSTED,
+            drawn: NOTHING_DRAWN,
         }
     }
 
@@ -353,17 +353,21 @@ pub struct Slot {
     /// against the character it follows, so the reading is the one that gives
     /// way (see [`line_slots`]).
     pub mark: Option<char>,
+    /// The ink this row is drawn in, when it is not the file's own text
+    /// ([`crate::drawn`]) — `None` for every character the file holds, and for
+    /// the padding that opens a line.
+    pub ink: Option<crate::drawn::Ink>,
 }
 
 impl Slot {
-    /// Whether this row is [ghost text](Grid::ghost) rather than the file's own.
+    /// Whether this row is [drawn](crate::drawn) rather than the file's own
+    /// text — a candidate, a table's padding, a note.
     ///
-    /// No field of its own: a row that stands for no characters and yet draws
-    /// something is ghost by construction, and the indent's padding — which
-    /// stands for no characters and draws nothing — is the only other thing
-    /// shaped like it.
-    pub fn is_ghost(&self) -> bool {
-        self.start == self.end && !self.text.is_empty()
+    /// The ink answers it: everything the file holds has none, and so does the
+    /// padding that opens a line, which stands for no characters and draws
+    /// nothing.
+    pub fn is_drawn(&self) -> bool {
+        self.ink.is_some()
     }
 }
 
@@ -403,6 +407,7 @@ pub fn line_slots_in(text: &str, grid: Grid, hidden: &[(usize, usize)]) -> Vec<S
                 text: String::new(),
                 ruby: None,
                 mark: None,
+                ink: None,
             });
         }
     }
@@ -456,21 +461,23 @@ pub fn line_slots_in(text: &str, grid: Grid, hidden: &[(usize, usize)]) -> Vec<S
             text: String::new(),
             ruby: None,
             mark: Some(mark),
+            ink: None,
         });
     }
     slots
 }
 
-/// Put the line's ghost text into `slots`, before the character each run is
+/// Put the line's drawn text into `slots`, before the character each run is
 /// anchored at.
 ///
 /// The runs take rows of their own, standing for no characters — so the 縱's
 /// length counts them (a candidate takes room on the page like anything else)
 /// while the cursor steps straight past them onto the file's own text, which
 /// is what the indent's padding has always done.
-fn insert_ghost(slots: &mut Vec<Slot>, chars_len: usize, grid: Grid, ghost: &[(usize, String)]) {
-    for (anchor, text) in ghost.iter().rev() {
-        let anchor = (*anchor).min(chars_len);
+fn insert_drawn(slots: &mut Vec<Slot>, chars_len: usize, grid: Grid, drawn: &[crate::drawn::Run]) {
+    for run in drawn.iter().rev() {
+        let text = &run.text;
+        let anchor = run.column.min(chars_len);
         // Before the first row that holds the anchor's own character. Padding
         // is not that row — a candidate typed at the head of a paragraph
         // stands after the indent, not in front of it.
@@ -490,6 +497,7 @@ fn insert_ghost(slots: &mut Vec<Slot>, chars_len: usize, grid: Grid, ghost: &[(u
                     text: rotate(&piece),
                     ruby: None,
                     mark: None,
+                    ink: Some(run.ink),
                 },
             );
         }
@@ -582,6 +590,7 @@ fn push_plain(
                         text: String::new(),
                         ruby: None,
                         mark: Some(earlier),
+                        ink: None,
                     });
                     swallowed = None;
                     // That row covers everything from the bracket to here, the
@@ -649,6 +658,7 @@ fn push_plain(
                             text: format!("{earlier}{hung}"),
                             ruby: None,
                             mark: None,
+                            ink: None,
                         });
                         continue;
                     }
@@ -662,6 +672,7 @@ fn push_plain(
                             text: String::new(),
                             ruby: None,
                             mark: Some(hung),
+                            ink: None,
                         });
                         continue;
                     }
@@ -685,6 +696,7 @@ fn push_plain(
             text: rotate(&body),
             ruby: None,
             mark,
+            ink: None,
         });
     }
 
@@ -707,6 +719,7 @@ fn push_plain(
                 text: String::new(),
                 ruby: None,
                 mark: None,
+                ink: None,
             }),
         }
     }
@@ -812,6 +825,7 @@ fn push_ruby(
             text: rotate(&body),
             ruby: row.checked_sub(reading_top).and_then(|i| reading.get(i)).copied(),
             mark: None,
+            ink: None,
         });
     }
     // The very first row owns the whole group's markup, so a cursor stepping
@@ -1105,13 +1119,13 @@ fn line_zongs(rope: &Rope, line: usize, grid: Grid) -> Laid {
         grid.open_line == line,
     )
         .hash(&mut hasher);
-    // **The ghost text is not part of that version.** The stamp names the
+    // **What is drawn is not part of that version.** The stamp names the
     // buffer and its revision, which is why what is hidden need not be hashed;
     // a candidate changes on every keystroke while the buffer does not move at
     // all, so the memo would keep answering with the candidate before last. Asking
     // for it is a filter over a handful of runs, not a Markdown scan, so it can
     // be asked before the cache is consulted.
-    grid.ghost_on(line).hash(&mut hasher);
+    grid.drawn_on(line).hash(&mut hasher);
     let hash = hasher.finish();
     if grid.stamp == 0 {
         let hidden = (grid.hidden)(line);
@@ -1179,9 +1193,9 @@ fn line_grid_in(rope: &Rope, line: usize, grid: Grid, hidden: &[(usize, usize)])
         false => grid,
     };
     let mut slots = line_slots_in(&text, grid, hidden);
-    let ghost = grid.ghost_on(line);
-    if !ghost.is_empty() {
-        insert_ghost(&mut slots, text.chars().count(), grid, &ghost);
+    let drawn = grid.drawn_on(line);
+    if !drawn.is_empty() {
+        insert_drawn(&mut slots, text.chars().count(), grid, &drawn);
     }
     slots
 }
@@ -1652,7 +1666,7 @@ mod tests {
         tatechuyoko: false,
         hidden: NOTHING_HIDDEN,
         folded: NOTHING_FOLDED,
-        ghost: NOTHING_GHOSTED,
+        drawn: NOTHING_DRAWN,
         indent: 0,
         open_line: usize::MAX,
     };
@@ -2810,57 +2824,57 @@ mod tests {
     /// the page as anything else — while standing for no characters, so the
     /// cursor steps past it exactly as it steps past the indent's padding.
     #[test]
-    fn ghost_stands_in_rows_of_its_own() {
+    fn drawn_text_stands_in_rows_of_its_own() {
         let r = rope("春夏秋冬\n");
-        let runs = |_: usize| vec![(2usize, "候".to_string())];
-        let grid = G.with_ghost(&runs);
+        let runs = |_: usize| vec![crate::drawn::Run::new(2, "候", crate::drawn::Ink::Typed)];
+        let grid = G.with_drawn(&runs);
         let slots = line_grid_in(&r, 0, grid, &[]);
         assert_eq!(slots.len(), 5, "four 字 and the candidate");
         assert_eq!(slots[2].text, "候");
-        assert!(slots[2].is_ghost());
+        assert!(slots[2].is_drawn());
         assert_eq!((slots[2].start, slots[2].end), (2, 2), "stands for no char");
-        // …and nothing else on the 縱 is ghost, least of all the character it
+        // …and nothing else on the 縱 is drawn, least of all the character it
         // stands before.
         assert_eq!(slots[3].text, "秋");
-        assert!(!slots[3].is_ghost());
+        assert!(!slots[3].is_drawn());
     }
 
     #[test]
-    fn a_multi_character_ghost_takes_a_row_each() {
+    fn a_multi_character_run_takes_a_row_each() {
         let r = rope("春夏\n");
-        let runs = |_: usize| vec![(1usize, "候補".to_string())];
-        let slots = line_grid_in(&r, 0, G.with_ghost(&runs), &[]);
+        let runs = |_: usize| vec![crate::drawn::Run::new(1, "候補", crate::drawn::Ink::Typed)];
+        let slots = line_grid_in(&r, 0, G.with_drawn(&runs), &[]);
         let drawn: Vec<&str> = slots.iter().map(|s| s.text.as_str()).collect();
         assert_eq!(drawn, vec!["春", "候", "補", "夏"]);
     }
 
     #[test]
-    fn the_cursor_steps_past_a_ghost_row() {
+    fn the_cursor_steps_past_a_drawn_row() {
         // The candidate is drawn between 夏 and 秋, so 秋 is one row further
         // down the column — but the cursor on it is still on 秋.
         let r = rope("春夏秋冬\n");
-        let runs = |_: usize| vec![(2usize, "候".to_string())];
-        let grid = G.with_ghost(&runs);
+        let runs = |_: usize| vec![crate::drawn::Run::new(2, "候", crate::drawn::Ink::Typed)];
+        let grid = G.with_drawn(&runs);
         assert_eq!(position(&r, 1, grid).slot, 1, "夏, before the candidate");
         assert_eq!(position(&r, 2, grid).slot, 3, "秋, one row past it");
         assert_eq!(char_at(&r, 0, 0, 3, grid), 2, "and that row is 秋's");
     }
 
     #[test]
-    fn a_ghost_at_the_head_of_a_paragraph_stands_after_the_indent() {
+    fn a_candidate_at_the_head_of_a_paragraph_stands_after_the_indent() {
         // 首行縮進 is two empty squares, and a candidate typed at the head of
         // the paragraph belongs after them: the indent is the shape of the
         // paragraph, not something the candidate was typed in front of.
         let r = rope("春夏\n");
-        let runs = |_: usize| vec![(0usize, "候".to_string())];
+        let runs = |_: usize| vec![crate::drawn::Run::new(0, "候", crate::drawn::Ink::Typed)];
         let grid = Grid {
             indent: 2,
-            ..G.with_ghost(&runs)
+            ..G.with_drawn(&runs)
         };
         let slots = line_grid_in(&r, 0, grid, &[]);
         let drawn: Vec<&str> = slots.iter().map(|s| s.text.as_str()).collect();
         assert_eq!(drawn, vec!["", "", "候", "春", "夏"]);
-        assert!(!slots[1].is_ghost(), "padding draws nothing, so it is not");
+        assert!(!slots[1].is_drawn(), "padding draws nothing, so it is not");
     }
 
     #[test]
@@ -2870,15 +2884,15 @@ mod tests {
         // 縱 would keep being drawn with the candidate before last.
         let r = rope("春夏\n");
         let stamped = Grid { stamp: 7, ..G };
-        let one = |_: usize| vec![(1usize, "候".to_string())];
-        let two = |_: usize| vec![(1usize, "補".to_string())];
+        let one = |_: usize| vec![crate::drawn::Run::new(1, "候", crate::drawn::Ink::Typed)];
+        let two = |_: usize| vec![crate::drawn::Run::new(1, "補", crate::drawn::Ink::Typed)];
         let drawn = |grid: Grid| -> Vec<String> {
             line_grid_in(&r, 0, grid, &[])
                 .iter()
                 .map(|s| s.text.clone())
                 .collect()
         };
-        assert_eq!(drawn(stamped.with_ghost(&one)), ["春", "候", "夏"]);
-        assert_eq!(drawn(stamped.with_ghost(&two)), ["春", "補", "夏"]);
+        assert_eq!(drawn(stamped.with_drawn(&one)), ["春", "候", "夏"]);
+        assert_eq!(drawn(stamped.with_drawn(&two)), ["春", "補", "夏"]);
     }
 }
