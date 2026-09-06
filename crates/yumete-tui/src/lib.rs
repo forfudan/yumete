@@ -4208,7 +4208,19 @@ fn draw_horizontal(
             shown: &shown,
             ghosts: &ghosts,
         };
-        if let Some(reading) = reading_line(editor, ink, rope, &row, drawn, gutter + indent) {
+        // **Whether** the row is bought is `row_has_reading`'s answer and only
+        // its own — `rows_on_screen` spends the screen row off that same
+        // function, and the mouse, the scroll and the caret are all placed by
+        // it. `reading_line` says *what* goes in the row it bought. Asking the
+        // second one whether the row exists drifts the whole page up a row
+        // whenever the two disagree, and they disagree twice: a ruby group the
+        // wrap cut in half is drawn over the row its base **begins** on, so the
+        // tail row buys a reading nobody will draw; and 疏排's row of air is
+        // only reached when the line has no ruby at all, so `:dense off` over a
+        // line that does have some loses its air row too.
+        if row_has_reading(editor, rope, &row) {
+            let reading = reading_line(editor, ink, rope, &row, drawn, gutter + indent)
+                .unwrap_or_else(|| Line::from(Span::styled("", ink.page())));
             lines.push(scrolled(reading, gutter, left));
         }
 
@@ -4522,15 +4534,34 @@ fn row_has_reading(editor: &Editor, rope: &yumete_core::Rope, row: &wrap::Row) -
     if row.starts_line() && !editor.table_ruler_on_line(row.line).is_empty() {
         return true;
     }
-    let groups = editor.readings_on_line(row.line);
-    if groups.is_empty() {
-        // 平仄 (#247) live in that row too, when no reading has claimed it: the
-        // horizontal page's version of the margin the 縱書 page draws them in.
-        return !meter_in_row(editor, rope, row).is_empty();
+    if !readings_in_row(editor, rope, row).is_empty() {
+        return true;
     }
+    // 平仄 (#247) live in that row too, when no reading has claimed it: the
+    // horizontal page's version of the margin the 縱書 page draws them in.
+    !meter_in_row(editor, rope, row).is_empty()
+}
+
+/// The readings **drawn over** `row` — the groups whose base begins on it.
+///
+/// The one predicate both halves ask. A ruby group is drawn over the row its
+/// base *starts* on, so that is what buys the row as well: asking whether the
+/// line has any readings at all made a group on the second half of a wrapped
+/// paragraph claim the first half's row, which cost that half its 平仄 — and a
+/// group the wrap cut in half claimed a row on the tail that nothing would
+/// ever be drawn in.
+fn readings_in_row(
+    editor: &Editor,
+    rope: &yumete_core::Rope,
+    row: &wrap::Row,
+) -> Vec<yumete_core::ruby::Ruby> {
     let start = row.start - rope.line_to_char(row.line);
     let end = start + (row.end - row.start);
-    groups.iter().any(|g| g.base.1 > start && g.base.0 < end)
+    editor
+        .readings_on_line(row.line)
+        .into_iter()
+        .filter(|g| g.base.0 >= start && g.base.0 < end)
+        .collect()
 }
 
 /// The 平仄 marks that fall on `row`, as columns within the *line*.
@@ -4681,7 +4712,6 @@ fn reading_line(
     drawn: Drawn,
     lead: usize,
 ) -> Option<Line<'static>> {
-    let Drawn { chars, .. } = drawn;
     // **The ruler owns the row above its table** (#275), ahead of both a reading
     // and 疏排's row of air: it is the table's top edge, and a `|` header with
     // ruby over it is not a thing anybody has written.
@@ -4690,7 +4720,7 @@ fn reading_line(
         let start_in_line = row.start - rope.line_to_char(row.line);
         return ruler_line(&ruler, ink, drawn, lead, start_in_line);
     }
-    let groups = editor.readings_on_line(row.line);
+    let groups = readings_in_row(editor, rope, row);
     if groups.is_empty() {
         // 平仄 (#247), where no reading wants the row. A reading wins it
         // outright rather than sharing: the two would have to be interleaved
@@ -4734,14 +4764,6 @@ fn reading_line(
     let mut out = String::new();
     let mut col = 0usize;
     for group in &groups {
-        // **The row the base *begins* on owns the reading.** A group whose base
-        // starts before this row is a group the wrap cut in half, and drawing
-        // it again here put a second, complete copy of the reading over the
-        // tail — 「上海」 broken across two rows, `zaonhe` written above both.
-        // One reading, over the row the word starts on.
-        if group.base.0 < start_in_line || group.base.0 >= start_in_line + chars.len() {
-            continue;
-        }
         let i = group.base.0.saturating_sub(start_in_line);
         let Some(&want) = column.get(i) else { continue };
         // **A reading wider than its base runs on past it**, and the next one
@@ -10106,4 +10128,72 @@ mod tests {
         let at = terminal.get_cursor_position().unwrap();
         assert!(at.y < 3, "the caret stays on the page, was at row {}", at.y);
     }
+    /// 疏排 and a reading over a paragraph that wraps: the row of air is bought
+    /// for every row, and a row bought has to be a row drawn.
+    ///
+    /// `rows_on_screen` spends the screen row — the mouse, the scroll and the
+    /// caret are placed off it — while the painter used to ask `reading_line`
+    /// whether to push one. On the **tail** of a wrapped line that has ruby
+    /// somewhere on it the two disagreed: the group is drawn over the row its
+    /// base begins on, so the tail's answer was 「nothing to draw」 and its air
+    /// row was never pushed. Everything below it then sat one row higher than
+    /// the page believed, and a click landed a line off.
+    #[test]
+    fn a_loose_page_keeps_its_air_over_the_tail_of_a_read_paragraph() {
+        let mut editor =
+            editor_with("<ruby>永<rt>ㄩㄥˇ</rt></ruby>和九年歲在癸丑暮春之初\n後面一行");
+        let mut config = Config::default();
+        config.editor.line_numbers = yumete_config::LineNumbers::None;
+        config.editor.hints = false;
+        editor.execute(":dense off").unwrap();
+        let buffer = render_with_ruby(&mut editor, &config, 16, 10);
+        let rows: Vec<String> = (0..buffer.area.height)
+            .map(|y| row_text(&buffer, y).trim_end().to_string())
+            .collect();
+        assert_eq!(
+            &rows[..6],
+            [
+                "ㄩㄥˇ",
+                "永和九年歲在癸丑",
+                "",
+                "暮春之初",
+                "",
+                "後面一行",
+            ],
+            "air over the tail as well as over the head: {rows:#?}"
+        );
+        // …and the caret is placed off the same count, so a page that lost the
+        // row would put it on the wrong line of the terminal.
+        editor.on_key(Key::Char('j'));
+        editor.on_key(Key::Char('j'));
+        let (_, caret) = render_caret(&editor, &config, 16, 10);
+        assert_eq!(caret.map(|p| p.y), Some(5), "{rows:#?}");
+    }
+
+    /// A reading wins the row it is drawn in — **that** row, not the whole
+    /// paragraph.
+    ///
+    /// 平仄 and ruby share one screen row and a reading takes it outright
+    /// (interleaving them per character would leave a 詞譜 column with holes,
+    /// and a hole reads as 輕聲 rather than as 「something else is written
+    /// here」). But the question was asked of the *line*: one `<ruby>` at the
+    /// end of a paragraph deleted the 平仄 from every row of it, including the
+    /// rows the reading is nowhere near.
+    #[test]
+    fn a_reading_takes_its_own_row_from_the_meter_and_no_other() {
+        let mut editor = metered("春眠不覺曉春眠不覺曉<ruby>春<rt>ㄔㄨㄣ</rt></ruby>\n");
+        let mut config = Config::default();
+        config.editor.line_numbers = LineNumbers::None;
+        config.editor.hints = false;
+        config.editor.show_segmentation = false;
+        let buffer = render_with_ruby(&mut editor, &config, 12, 10);
+        let rows: Vec<String> = (0..buffer.area.height)
+            .map(|y| row_text(&buffer, y).trim_end().to_string())
+            .collect();
+        assert_eq!(rows[0], "○ ○ ● ○ ● ○", "the first row keeps its 平仄: {rows:#?}");
+        assert_eq!(rows[1], "春眠不覺曉春", "{rows:#?}");
+        assert!(rows[2].contains('ㄔ'), "and the second row its reading: {rows:#?}");
+        assert_eq!(rows[3], "眠不覺曉春", "{rows:#?}");
+    }
+
 }
