@@ -72,9 +72,11 @@ far, oldest first:
   right of its 縱. The markup is not yumete's own — HTML `<ruby>漢<rt>hàn</rt></ruby>`
   and Typst `#ruby("漢", "hàn")` are both read, several at once, chosen by the
   file's extension. **Ruby mode** (`:ruby`) edits the reading, which with
-  readings laid out is not on screen to move a cursor into; `:ruby on` / `:ruby
-  off` control rendering, `:ruby <dialect> [on|off]` picks which markups to
-  read, and `:ruby format <dialect>` rewrites the whole buffer into one.
+  readings laid out is not on screen to move a cursor into; `:ruby off|basic|full`
+  is how much is drawn — `basic` knows the reading without laying it out, so the
+  tags stay on the page and a word count still counts what a reader sees —
+  `:ruby <dialect> [on|off]` picks which markups to read, and `:ruby format
+  <dialect>` rewrites the whole buffer into one.
 
 - **#66 IME in the search and command lines** — `/` composes Chinese, so a
   Chinese document can actually be searched; a lone-Shift tap toggles 中/英 there
@@ -167,7 +169,7 @@ has the table, through #150):
   halves a tall page into bands read top-right to top-left and then bottom-right
   to bottom-left, the way a 文庫本 is set. 禁則處理 down the 縱 as well as
   across: a column never opens with 。 or closes with 「.
-- **Markdown that stays on the page.** `:render off|on|full` — the markup is
+- **Markdown that stays on the page.** `:render off|basic|full` — the markup is
   coloured and *shown*, because the file is the manuscript; 所見即所得 takes it
   off, except on the construct the cursor is in.
 - **Tables.** A CSV is edited as a grid — the cell is the unit of movement, a

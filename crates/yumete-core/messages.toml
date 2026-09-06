@@ -682,9 +682,9 @@ find = "幫助 帮助 說明 说明 手冊 手册 keys manual"
 [[message]]
 # : 命令選單裏 indent 那一項的說明（commands 組）
 key = "cmd.commands.indent"
-zht = "首行縮進幾格（中文的段落是縮進兩格，不是空一行）；`:indent off` 不縮"
-zhs = "首行缩进几格（中文的段落是缩进两格，不是空一行）；`:indent off` 不缩"
-en = "how many squares open a paragraph (Chinese marks one with two, not a blank line); `:indent off` for none"
+zht = "首行縮進：`off`／`basic`（縮進，空行留着）／`full`（連段間空行一起收），或幾格"
+zhs = "首行缩进：`off`／`basic`（缩进，空行留着）／`full`（连段间空行一起收），或几格"
+en = "how a paragraph opens: `off` / `basic` (indented, blank line kept) / `full` (the blank line folded too), or a width"
 find = "縮進 缩进 首行 段落 indent paragraph"
 
 [[message]]
@@ -842,9 +842,9 @@ find = "行 表格 跳轉 跳转 goto table"
 [[message]]
 # : 命令選單裏 ruby 那一項的說明（commands 組）
 key = "cmd.commands.ruby"
-zht = "改這裏的注音；`:ruby on|off` 是排不排"
-zhs = "改这里的注音；`:ruby on|off` 是排不排"
-en = "edit the reading here; `:ruby on|off` is whether they are laid out"
+zht = "改這裏的注音；`:ruby off|basic|full` 是排多少"
+zhs = "改这里的注音；`:ruby off|basic|full` 是排多少"
+en = "edit the reading here; `:ruby off|basic|full` is how much is drawn"
 find = "注音 拼音 振假名 旁註 旁注 furigana annotation"
 
 [[message]]
@@ -1143,6 +1143,22 @@ en = "a mark in the first one (↵ by default — a line break is what it replac
 find = "記號 记号 換行符 换行符 symbol"
 
 [[message]]
+# : 命令選單裏 basic 那一項的說明（indent 組）
+key = "cmd.indent.basic"
+zht = "縮進，段間的空行留着"
+zhs = "缩进，段间的空行留着"
+en = "indent, and the blank line between paragraphs stays"
+find = "縮進 缩进 空行 basic 中階 中阶"
+
+[[message]]
+# : 命令選單裏 full 那一項的說明（indent 組）
+key = "cmd.indent.full"
+zht = "縮進，段間的空行收起來"
+zhs = "缩进，段间的空行收起来"
+en = "indent, and the blank line between paragraphs comes off the page"
+find = "縮進 缩进 空行 收起 full 全"
+
+[[message]]
 # : 命令選單裏 hint 那一項的說明（indent 組）
 key = "cmd.indent.hint"
 zht = "縮進的那兩格上畫什麼"
@@ -1295,6 +1311,14 @@ en = "re-read by itself when the file changes outside — a warning, not a re-re
 find = "重載 重载 自動重讀 自动重读 auto watch"
 
 [[message]]
+# : 命令選單裏 basic 那一項的說明（render 組）
+key = "cmd.render.basic"
+zht = "基本：著色，一個字都不藏（默認）"
+zhs = "基本：著色，一个字都不藏（默认）"
+en = "basic: coloured, and not one character hidden (the default)"
+find = "著色 着色 高亮 highlight basic 中階 中阶"
+
+[[message]]
 # : 命令選單裏 full 那一項的說明（render 組）
 key = "cmd.render.full"
 zht = "標記拿掉，只在光標那一處展開"
@@ -1311,14 +1335,6 @@ en = "the source, uncoloured"
 find = "原文 源碼 源码 不著色 不着色 raw source"
 
 [[message]]
-# : 命令選單裏 basic 那一項的說明（render 組）
-key = "cmd.render.on"
-zht = "基本：著色，一個字都不藏（默認）"
-zhs = "基本：著色，一个字都不藏（默认）"
-en = "basic: coloured, and not one character hidden (the default)"
-find = "著色 着色 高亮 highlight"
-
-[[message]]
 # : 命令選單裏 auto 那一項的說明（ruby 組）
 key = "cmd.ruby.auto"
 zht = "按詞自動注音（選中的，或者整份）"
@@ -1333,6 +1349,14 @@ zht = "只注通用規範漢字表以外的那些字"
 zhs = "只注通用规范汉字表以外的那些字"
 en = "annotate only the characters outside 通用規範漢字表"
 find = "生僻 冷僻 罕見 罕见 難字 难字 字集 通用規範 通用规范 rare"
+
+[[message]]
+# : 命令選單裏 basic 那一項的說明（ruby 組）
+key = "cmd.ruby.basic"
+zht = "認得注音，但不排出來，標記留在畫面上"
+zhs = "认得注音，但不排出来，标记留在画面上"
+en = "readings are read but not laid out; the markup stays on the page"
+find = "注音 拼音 標記 标记 basic 中階 中阶"
 
 [[message]]
 # : 命令選單裏 format 那一項的說明（ruby 組）
@@ -1357,6 +1381,14 @@ zhs = "改写成 `#ruby(…)`"
 en = "rewrite as `#ruby(…)`"
 
 [[message]]
+# : 命令選單裏 full 那一項的說明（ruby 組）
+key = "cmd.ruby.full"
+zht = "排在正文旁邊，標記拿掉"
+zhs = "排在正文旁边，标记拿掉"
+en = "laid out beside the base, and the markup comes off"
+find = "注音 拼音 振假名 旁註 旁注 furigana full 全"
+
+[[message]]
 # : 命令選單裏 html 那一項的說明（ruby 組）
 key = "cmd.ruby.html"
 zht = "認 `<ruby>` 這一種"
@@ -1371,14 +1403,6 @@ zht = "顯示源碼"
 zhs = "显示源码"
 en = "show the source"
 find = "注音 拼音 源碼 源码 off"
-
-[[message]]
-# : 命令選單裏 on 那一項的說明（ruby 組）
-key = "cmd.ruby.on"
-zht = "排出注音"
-zhs = "排出注音"
-en = "lay the readings out"
-find = "注音 拼音 振假名 旁註 旁注 furigana"
 
 [[message]]
 # : 命令選單裏 typst 那一項的說明（ruby 組）
@@ -1501,6 +1525,14 @@ en = "`=` headings, `#import`"
 find = "語法 语法 排版 typst"
 
 [[message]]
+# : 命令選單裏 basic 那一項的說明（table 組）
+key = "cmd.table.basic"
+zht = "按格子編輯，一個字都不藏（默認）"
+zhs = "按格子编辑，一个字都不藏（默认）"
+en = "edit it as a grid, and not one character hidden (the default)"
+find = "表格 格子 basic 中階 中阶"
+
+[[message]]
 # : 命令選單裏 check 那一項的說明（table 組）
 key = "cmd.table.check"
 zht = "從頭看一遍：重複的行名、查無此行的部件、欄數不對的行、超出字集的字"
@@ -1523,6 +1555,14 @@ zht = "詳情欄：開、關，或者給個寬度"
 zhs = "详情栏：开、关，或者给个宽度"
 en = "the detail panel: on, off, or a width"
 find = "詳情 详情 展開 展开 detail"
+
+[[message]]
+# : 命令選單裏 full 那一項的說明（table 組）
+key = "cmd.table.full"
+zht = "畫成表格：| 畫作牆，欄尺在上頭"
+zhs = "画成表格：| 画作墙，栏尺在上头"
+en = "drawn as a table: the pipes become walls, with a column ruler above"
+find = "表格 畫成 画成 欄尺 栏尺 full 全"
 
 [[message]]
 # : 命令選單裏 header 那一項的說明（table 組）
@@ -1555,14 +1595,6 @@ zht = "當普通文字"
 zhs = "当普通文字"
 en = "as ordinary text"
 find = "表格 關掉 关掉 普通文字 off"
-
-[[message]]
-# : 命令選單裏 on 那一項的說明（table 組）
-key = "cmd.table.on"
-zht = "按格子編輯（默認）"
-zhs = "按格子编辑（默认）"
-en = "edit it as a grid (the default)"
-find = "表格 格子 開 开 on"
 
 [[message]]
 # : 命令選單裏 pipe 那一項的說明（table 組）
@@ -4198,11 +4230,18 @@ zhs = "密排：一纵两格，无注音、无旁置、无刻度"
 en = "dense: two squares to a 縱, no readings, no hung marks, no ticks"
 
 [[message]]
-# 首行縮進設成幾格
-key = "layout.first-line-indent"
-zht = "首行縮進：{0} 格"
-zhs = "首行缩进：{0} 格"
-en = "first-line indent: {0} squares"
+# :indent full — 縮進畫出來，段間的空行也收起
+key = "layout.first-line-indent-folded"
+zht = "首行縮進：{0} 格，段間空行收起"
+zhs = "首行缩进：{0} 格，段间空行收起"
+en = "first-line indent: {0} squares, and the blank lines folded away"
+
+[[message]]
+# :indent basic — 縮進畫出來，段間的空行不收
+key = "layout.first-line-indent-kept"
+zht = "首行縮進：{0} 格，段間空行留着"
+zhs = "首行缩进：{0} 格，段间空行留着"
+en = "first-line indent: {0} squares, and the blank lines stay"
 
 [[message]]
 # 首行縮進關掉
@@ -4896,11 +4935,11 @@ zhs = "著色：标记留在画面上"
 en = "coloured: the markup stays on the page"
 
 [[message]]
-# :render 不帶參數：四個維度各在哪一級
+# :render 不帶參數：它寫的三個維度各在哪一級（首行縮進不歸它管，:indent 自己報）
 key = "render.is"
-zht = "渲染 {0}·表格 {1}·讀音 {2}·首行 {3}"
-zhs = "渲染 {0}·表格 {1}·读音 {2}·首行 {3}"
-en = "render {0} · table {1} · ruby {2} · indent {3}"
+zht = "渲染 {0}·表格 {1}·讀音 {2}"
+zhs = "渲染 {0}·表格 {1}·读音 {2}"
+en = "render {0} · table {1} · ruby {2}"
 
 [[message]]
 # :markup 換了語法
@@ -4924,7 +4963,7 @@ zhs = "原文：不著色"
 en = "source: no colour"
 
 [[message]]
-# :render on，所見即所得
+# :render full，所見即所得
 key = "render.wysiwyg"
 zht = "所見即所得：標記只在光標那一處展開"
 zhs = "所见即所得：标记只在光标那一处展开"
@@ -4974,6 +5013,27 @@ key = "ruby.layout-on"
 zht = "注音：排 {0}"
 zhs = "注音：排 {0}"
 en = "readings: laying out {0}"
+
+[[message]]
+# :ruby basic — 認得注音，不排出來
+key = "ruby.level-basic"
+zht = "注音：認得，不排，標記留在畫面上"
+zhs = "注音：认得，不排，标记留在画面上"
+en = "readings: read, not laid out, and the markup stays on the page"
+
+[[message]]
+# :ruby full — 注音排在正文旁邊
+key = "ruby.level-full"
+zht = "注音：排在正文旁邊，標記拿掉"
+zhs = "注音：排在正文旁边，标记拿掉"
+en = "readings: laid out beside the base, and the markup comes off"
+
+[[message]]
+# :ruby off — 注音當普通文字，字數也照原文算
+key = "ruby.level-off"
+zht = "注音：當普通文字，不認得"
+zhs = "注音：当普通文字，不认得"
+en = "readings: ordinary text, and not read as readings"
 
 [[message]]
 # 進注音模式，光標不在注音上也沒有選中

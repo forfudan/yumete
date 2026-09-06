@@ -241,9 +241,12 @@ fn main() -> ExitCode {
     // the file's extension implies.
     editor
         .execute(if config.editor.show_ruby {
-            ":ruby on"
+            ":ruby full"
         } else {
-            ":ruby off"
+            // 中階, not `off`: a reading nobody asked to see is still a
+            // reading, so the word count knows 「錢塘」 is two 字 and the
+            // tags are none of them (#283).
+            ":ruby basic"
         })
         .ok();
     for name in &config.editor.ruby_dialects {
@@ -609,13 +612,17 @@ KEYS (Normal mode, Helix-style):
                           :%s :1,40s :.,$s :40s; flags g i, and n counts only
               :replace <new>   change what the last :grep found, everywhere
               :wa              save every file that changed
-              :indent [n|off]  first-line indent — a Chinese paragraph's mark
+              :indent off|basic|full|<n>   first-line indent — a Chinese
+                          paragraph's mark; full also folds the blank line
               :bands [n|off]   段組: divide the 縱書 page into bands
               :word list reload   reread .yumete/words.txt — this book's own names
               :word habit      口頭禪: what this one says far more than prose does
-              :table [off|check]   edit as a grid; check looks the whole over
+              :table [off|basic|full|check]   edit as a grid; check looks the
+                          whole over
               :row <char>      go to the row a table names by that character
-              :ruby [on|off|<dialect>]  lay readings out, or show the markup)
+              :ruby [off|basic|full|<dialect>]  full lays the readings out,
+                          basic keeps the markup on the page and still counts
+                          a reading as no 字, off is the source)
 
 In Insert mode C-w takes back a word and C-u the line. The `:` and `/` prompts
 are editable: arrows, Home/End, C-w, C-u, and Up/Down through what you typed
