@@ -3311,6 +3311,7 @@ fn markup_style(kind: yumete_core::markdown::Kind, ink: crate::theme::Palette) -
 /// compose — a bold word inside a `::: warning` keeps its bold and gains the
 /// container's ground.
 fn block_style(block: yumete_core::markdown::Block, ink: crate::theme::Palette) -> Option<Style> {
+    use yumete_core::conflict::Side;
     use yumete_core::markdown::{Block, Callout};
     // **A container is a container.** The four callouts used to differ by hue
     // at 1.4–2.4 ΔE from each other and from the quote and the code fence —
@@ -3335,6 +3336,18 @@ fn block_style(block: yumete_core::markdown::Block, ink: crate::theme::Palette) 
         Block::FrontMatter | Block::Rule | Block::FootnoteDef => {
             Some(Style::default().fg(ink.furniture()))
         }
+        // **A merge conflict is two grounds and a warning** (#249). The two
+        // sides have to be told apart at a glance and there are exactly two of
+        // them, so this is the one place hue is doing real work: ours on the
+        // same quiet band every other block sits on, theirs on 金 — 「這不是正
+        // 文」 — which is as far from a grey band as this palette goes without
+        // reaching for 朱. 朱 is kept for the markers themselves, because an
+        // unresolved conflict is the definition of 這裏不對. The ancestor is
+        // furniture: it is what nobody wrote, only what both sides left.
+        Block::Conflict(None) => Some(Style::default().fg(ink.mark())),
+        Block::Conflict(Some(Side::Ours)) => band(),
+        Block::Conflict(Some(Side::Theirs)) => Some(Style::default().bg(ink.wash())),
+        Block::Conflict(Some(Side::Base)) => Some(Style::default().fg(ink.furniture())),
     }
 }
 
@@ -9148,6 +9161,41 @@ mod tests {
             .map(|x| buffer[(x, 0)].style().bg)
             .find(|bg| *bg == Some(ink(&config).wash()));
         assert!(highlight.is_some(), "the word tint erased the highlight");
+    }
+
+    /// Feature #249. Two sides, told apart by the ground under them — and the
+    /// markers in 朱, because an unresolved conflict is 這裏不對.
+    #[test]
+    fn the_two_sides_of_a_merge_are_two_grounds() {
+        let mut editor = editor_with(
+            "第一段\n<<<<<<< HEAD\n我方寫的\n=======\n他方寫的\n>>>>>>> 枝\n最後一段",
+        );
+        let mut config = Config::default();
+        config.editor.line_numbers = LineNumbers::None;
+        config.editor.show_segmentation = false;
+        let buffer = render(&editor, &config, 40, 10);
+
+        let prose = buffer[(0, 0)].style().bg;
+        let ours = buffer[(0, 2)].style().bg;
+        let theirs = buffer[(0, 4)].style().bg;
+        assert_ne!(ours, prose, "our side sits on a ground of its own");
+        assert_ne!(theirs, prose, "and so does theirs");
+        assert_ne!(ours, theirs, "which is the whole point of drawing them");
+        assert_eq!(buffer[(38, 4)].style().bg, theirs, "all the way across");
+        assert_eq!(buffer[(0, 6)].style().bg, prose, "and it ends where it says");
+
+        // The markers are 朱 — the one thing on the page that says 這裏不對.
+        assert_eq!(buffer[(0, 1)].style().fg, Some(ink(&config).mark()));
+        assert_eq!(buffer[(0, 5)].style().fg, Some(ink(&config).mark()));
+
+        // Under 所見即所得 the seven brackets come off and the branch stays,
+        // the way a heading keeps its words and loses its hashes.
+        editor.execute(":render full").unwrap();
+        let buffer = render(&editor, &config, 40, 10);
+        assert_eq!(row_text(&buffer, 1).trim_end(), "HEAD");
+        assert_eq!(row_text(&buffer, 3).trim_end(), "");
+        assert_eq!(row_text(&buffer, 5).trim_end(), "枝");
+        assert_eq!(row_text(&buffer, 2).trim_end(), "我方寫的");
     }
 
     #[test]

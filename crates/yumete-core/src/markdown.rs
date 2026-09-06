@@ -89,6 +89,14 @@ pub enum Block {
     Table,
     /// `[^1]: the note itself`.
     FootnoteDef,
+    /// A line of a merge conflict (#249) — which side of it, or [`None`] for
+    /// one of the four marker lines.
+    ///
+    /// Not read by [`BlockScanner`], which walks forward and could not know
+    /// whether a `<<<<<<<` ever closes; the document's conflicts are assembled
+    /// from the markers that walk collects and laid over its answer. Everything
+    /// downstream still asks one question of one line, which is the point.
+    Conflict(Option<crate::conflict::Side>),
 }
 
 /// Which kind of aside a `:::` container is.
@@ -120,7 +128,22 @@ impl Block {
     /// is written verbatim, and colouring `**` in a code block — or worse,
     /// taking it off the page — changes what the reader believes the file says.
     pub fn is_literal(self) -> bool {
-        matches!(self, Block::Code | Block::FrontMatter)
+        // A conflict **marker** is literal; the two sides are ordinary
+        // writing. `=======` is otherwise read as a `==highlight==` that opens
+        // and never closes, which is how the divider between two halves of a
+        // merge came to be drawn as somebody's yellow pen (#249).
+        matches!(
+            self,
+            Block::Code | Block::FrontMatter | Block::Conflict(None)
+        )
+    }
+
+    /// Which side of a merge conflict this line is on, if it is in one.
+    pub fn conflict_side(self) -> Option<crate::conflict::Side> {
+        match self {
+            Block::Conflict(side) => side,
+            _ => None,
+        }
     }
 }
 
@@ -724,6 +747,10 @@ mod tests {
                 Block::Container(_) => ':',
                 Block::Table => '|',
                 Block::FootnoteDef => 'F',
+                // The scanner never says this — a conflict is laid over its
+                // answer by the editor, which is the only thing that can know
+                // whether a `<<<<<<<` ever closes.
+                Block::Conflict(_) => '!',
             })
             .collect()
     }
