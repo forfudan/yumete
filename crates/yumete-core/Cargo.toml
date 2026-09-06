@@ -13,8 +13,14 @@ toml = "0.8"
 ropey = "1.6"
 yumete-cjk = {path = "../yumete-cjk"}
 
+# `localtime_r` — the offset a dated file name is read in. Already in the lock
+# file by way of ratatui, so it costs no build.
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
 # `GetFileInformationByHandle` — the only way to ask NTFS whether two paths are
 # one file, since the standard library keeps the answer behind an unstable
-# trait. Already in the lock file by way of crossterm, so it costs no build.
+# trait — and `GetLocalTime`, which is that same offset. Already in the lock
+# file by way of crossterm, so it costs no build.
 [target.'cfg(windows)'.dependencies]
-windows-sys = {version = "0.59", features = ["Win32_Storage_FileSystem", "Win32_Foundation"]}
+windows-sys = {version = "0.59", features = ["Win32_Storage_FileSystem", "Win32_Foundation", "Win32_System_SystemInformation"]}

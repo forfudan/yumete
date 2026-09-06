@@ -17,6 +17,7 @@
 //! (currently a [`ropey`] rope) can be swapped later without touching call sites.
 
 pub mod buffer;
+pub mod clock;
 pub mod command;
 pub mod conflict;
 pub mod convert;
