@@ -269,7 +269,7 @@ pub fn char_at(
         area,
         capacity,
         &|line| markup.dotted(line),
-        editor.meter(),
+        editor.meter_drawn(),
     );
 
     // Which band the row fell in, then which 縱 of it the column fell in — or,
@@ -723,7 +723,7 @@ pub fn draw(
         area,
         capacity,
         &|line| markup.dotted(line),
-        editor.meter(),
+        editor.meter_drawn(),
     );
     let visible = page.len().max(1);
     let scrolloff = config.editor.scrolloff.min(visible.saturating_sub(1) / 2);
@@ -754,7 +754,7 @@ pub fn draw(
                 area,
                 capacity,
                 &|line| markup.dotted(line),
-                editor.meter(),
+                editor.meter_drawn(),
             );
             zong::distance(rope, *viewport, cursor_anchor, grid, page.len()).unwrap_or(0)
         }
@@ -997,7 +997,7 @@ pub fn draw(
             // page, while the dot repeats what `*` already says in the file.
             // With `:meter` off the line is never asked, so a manuscript that
             // is not a poem pays nothing.
-            let tone = match editor.meter() && !row.text.is_empty() {
+            let tone = match editor.meter_drawn() && !row.text.is_empty() {
                 false => None,
                 true => {
                     if metered.as_ref().is_none_or(|(l, _)| *l != zong.line) {
