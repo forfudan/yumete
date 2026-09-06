@@ -21,6 +21,7 @@ pub mod command;
 pub mod convert;
 pub mod diff;
 pub mod discover;
+pub mod drawn;
 pub mod editor;
 pub mod export;
 pub mod input;
