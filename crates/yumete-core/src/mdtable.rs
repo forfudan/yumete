@@ -615,9 +615,9 @@ pub fn format(lines: &[String]) -> Vec<String> {
 ///
 /// `rows` is the table's lines in order, each with the char ranges 所見即所得
 /// is taking off that line; `rule` says which of them is the `|---|` row.
-/// The answer is one list of ghost runs per row — `(the char the run stands
-/// before, what is drawn there)` — for [`crate::editor::Editor::set_ghost`]'s
-/// layer to hand to the page.
+/// The answer is one list of drawn runs per row — `(the char the run stands
+/// before, what is drawn there)` — which is what the padding producer behind
+/// [`crate::drawn`] hands to the page.
 ///
 /// **Why this cannot be done in the file.** [`compose`] pads the source by
 /// display width, and that is right for every other reader of the file. But
@@ -630,7 +630,7 @@ pub fn format(lines: &[String]) -> Vec<String> {
 /// with the file left exactly as it was typed.
 ///
 /// The width a column is padded to is the widest **visible** cell in it, the
-/// rule row included — a ghost can only add, so a column can be no narrower
+/// rule row included — a drawn can only add, so a column can be no narrower
 /// than the widest row already drawn, whichever row that is. What the rule row
 /// does not decide is what it is *made of*: `---` is drawing, not data, so its
 /// fill is dashes and it is stretched all the way across, and the colons of
@@ -665,7 +665,7 @@ pub fn padding(
         room.push(widths);
     }
     let columns = boxed.iter().map(Vec::len).max().unwrap_or(0);
-    // **Every row votes, the rule row included.** A ghost can only add, so a
+    // **Every row votes, the rule row included.** A drawn can only add, so a
     // column can be no narrower than its widest row already is — and no
     // narrower than its own alignment marker with a space each side.
     let mut target = vec![0usize; columns];
@@ -1035,7 +1035,7 @@ mod tests {
 
     // ---- Padding drawn on the page (Feature #212) -------------------------
 
-    /// What a row looks like once the ghost runs are drawn into it, which is
+    /// What a row looks like once the drawn runs are drawn into it, which is
     /// the only thing #212 is about.
     fn drawn(line: &str, hidden: &[(usize, usize)], runs: &[(usize, String)]) -> String {
         let chars: Vec<char> = line.trim_end_matches('\n').chars().collect();

@@ -410,7 +410,7 @@ pub fn run(
         // …and what the input method is offering, in the text, before anybody
         // measures the page. `draw` only holds the editor by reference, and
         // the caret, `j`, the mouse and 折行 all have to agree that the
-        // candidate is on the page — which is the whole reason #210 made ghost
+        // candidate is on the page — which is the whole reason #210 made drawn
         // text an input to the layout rather than something painted over it.
         settle_inline_candidate(editor, ime);
         // …and 字典 asked about a character (#215). The 拆分表 is yume's, not
@@ -1701,7 +1701,7 @@ fn inline_candidate(editor: &Editor, ime: &ImeSession) -> String {
     ime.inline_candidate()
 }
 
-/// Whether what is on screen is a page that ghost text can be drawn into.
+/// Whether what is on screen is a page that drawn text can be drawn into.
 ///
 /// The two gates — panel or inline — are complementary, and this is the term
 /// they share, so there can be no state that draws both and none that draws
@@ -1709,7 +1709,7 @@ fn inline_candidate(editor: &Editor, ime: &ImeSession) -> String {
 ///
 /// * a **prompt**, which composes on the status line;
 /// * a **grid**, which `table::draw` renders cell by cell out of the cells
-///   themselves and knows nothing about ghost runs. #212 did not change that:
+///   themselves and knows nothing about drawn runs. #212 did not change that:
 ///   what it squares up is a `|` table **on the text page**, where the runs
 ///   are what everything measures; a whole-file grid draws its own columns and
 ///   has nothing for a run to stand before.
@@ -2907,7 +2907,7 @@ fn draw_command_menu(
     if matches.is_empty() {
         return;
     }
-    // Tab's pick is inked; without one nothing is, because the ghost text on
+    // Tab's pick is inked; without one nothing is, because the drawn text on
     // the command line is already saying what the guess is.
     let highlight = selected.map(|i| i.min(matches.len() - 1));
     let focus = highlight.unwrap_or(0);
@@ -3054,7 +3054,7 @@ fn draw_lookfor_menu(
         List {
             items: &items,
             focus,
-            // Always inked, unlike the command menu: there is no ghost on the
+            // Always inked, unlike the command menu: there is no drawn on the
             // `::` line saying what ⇥ would take, so the highlight is the only
             // thing that says it.
             highlight: Some(focus),
@@ -3114,14 +3114,14 @@ fn text_at(
             // where a row breaks, so a click resolved without it lands `indent`
             // cells off on every paragraph's first row.
             let fold = |line: usize| editor.line_is_folded(line);
-            let ghost = |line: usize| editor.drawn_on_line(line);
+            let drawn = |line: usize| editor.drawn_on_line(line);
             let typed = |line: usize| editor.typed_on_line(line);
             let flat = |line: usize| editor.table_row_at(line);
             let measure = wrap::Measure::new(width, &hide)
                 .with_indent(editor.paragraph_indent())
                 .with_folds(&fold)
-                .with_ghost(&ghost)
-                .with_typed_ghost(&typed)
+                .with_drawn(&drawn)
+                .with_typed_drawn(&typed)
                 .with_unwrapped(&flat)
                 .with_open_line(editor.open_line());
             // The same walk the page was drawn with: a row with a reading
@@ -3151,17 +3151,17 @@ fn text_at(
             // click in the gutter means the first character on the page.
             let goal = want.saturating_sub(gutter) + viewport.left;
             let hidden = editor.hidden_on_line(row.line);
-            let ghosts = editor.drawn_on_line(row.line);
+            let runs = editor.drawn_on_line(row.line);
             let line_start = buffer.rope().line_to_char(row.line);
             // The row starts where it was drawn: a click anywhere in a
             // paragraph's opening indent means its first character.
             let mut column =
                 measure.indent_of(row.line, &buffer.rope().line(row.line).to_string(), row.index_in_line);
-            // **A click on ghost text means the character it stands before.**
+            // **A click on drawn text means the character it stands before.**
             // The cells are on the page but not in the file, so they are the
             // one thing a click cannot land *in*.
-            let ghost_width = |at: usize| -> usize {
-                ghosts
+            let drawn_width = |at: usize| -> usize {
+                runs
                     .iter()
                     .filter(|&&(g, _)| g == at)
                     .map(|(_, text)| yumete_cjk::str_width(text))
@@ -3169,7 +3169,7 @@ fn text_at(
             };
             for at in row.start..row.end {
                 let c = buffer.rope().char(at);
-                let g = ghost_width(at - line_start);
+                let g = drawn_width(at - line_start);
                 if goal < column + g {
                     return Some(at);
                 }
@@ -3685,7 +3685,7 @@ fn draw_horizontal(
     // row breaks, so the cursor and the page have to be asking about the same
     // one. Here it is only *drawn*.
     let fold = |line: usize| editor.line_is_folded(line);
-    let ghost = |line: usize| editor.drawn_on_line(line);
+    let drawn = |line: usize| editor.drawn_on_line(line);
     let typed = |line: usize| editor.typed_on_line(line);
     // **表格所在的行不再 soft wrap** (#275): a cell folded onto the next screen
     // row is not in its column any more, so a table row is one row however long
@@ -3694,8 +3694,8 @@ fn draw_horizontal(
     let measure = wrap::Measure::new(width, &hide)
         .with_indent(editor.paragraph_indent())
         .with_folds(&fold)
-        .with_ghost(&ghost)
-        .with_typed_ghost(&typed)
+        .with_drawn(&drawn)
+        .with_typed_drawn(&typed)
         .with_unwrapped(&flat)
         .with_open_line(editor.open_line());
 
@@ -4001,7 +4001,7 @@ fn draw_horizontal(
             })
             .collect();
         // A rung back from the writing, the way a reading is set: it is *about*
-        // the text and is not in it, and ghost text in the text's own ink reads
+        // the text and is not in it, and drawn text in the text's own ink reads
         // as something that has already been written. A note (#248) is further
         // back still and in the marker's ink: it is not a word of the
         // manuscript at all, it is the editor pointing at one.
@@ -4033,7 +4033,7 @@ fn draw_horizontal(
         };
         // What the *measure* was told, which is one answer per anchor: the
         // widths have to be the ones the wrap and the click map counted.
-        let ghosts: Vec<(usize, String)> = yumete_core::drawn::flat(&runs);
+        let flat: Vec<(usize, String)> = yumete_core::drawn::flat(&runs);
         let mut chars = chars;
         for &(at, glyph) in &grid {
             if let Some(ch) = at.checked_sub(start_in_line).and_then(|i| chars.get_mut(i)) {
@@ -4206,7 +4206,7 @@ fn draw_horizontal(
         let drawn = Drawn {
             chars: &chars,
             shown: &shown,
-            ghosts: &ghosts,
+            flat: &flat,
         };
         // **Whether** the row is bought is `row_has_reading`'s answer and only
         // its own — `rows_on_screen` spends the screen row off that same
@@ -4398,10 +4398,10 @@ fn draw_status(
         // 中/英 tag is pushed to the right edge, where it cannot be mistaken for
         // part of the pattern.
         let line = format!("{prefix}{text}{}", prompt_preedit(editor, ime));
-        let ghost = editor.prompt_ghost();
+        let drawn = editor.prompt_ghost();
         let tag = language_tag(editor, ime);
         let used = yumete_cjk::str_width(&line)
-            + yumete_cjk::str_width(&ghost)
+            + yumete_cjk::str_width(&drawn)
             + yumete_cjk::str_width(&tag);
         let gap = (status_area.width as usize).saturating_sub(used);
         // Rendered as three spans so the guess can be a lighter ink than what
@@ -4413,7 +4413,7 @@ fn draw_status(
         frame.render_widget(
             Paragraph::new(Line::from(vec![
                 Span::styled(line, bar),
-                Span::styled(ghost, guess),
+                Span::styled(drawn, guess),
                 Span::styled(format!("{}{tag}", " ".repeat(gap)), bar),
             ]))
             .style(bar),
@@ -4625,7 +4625,7 @@ fn rows_on_screen(
 struct Drawn<'a> {
     chars: &'a [char],
     shown: &'a [bool],
-    ghosts: &'a [(usize, String)],
+    flat: &'a [(usize, String)],
 }
 
 /// Where each of a row's characters is drawn, in cells from the left edge of
@@ -4634,31 +4634,30 @@ struct Drawn<'a> {
 ///
 /// **The one answer to「which cell is this character in」**, for everything
 /// placed above a row rather than on it: a reading over its own 字, a column
-/// number over its own column. The markup that came off the page and the ghost
+/// number over its own column. The markup that came off the page and the drawn
 /// text that was never in the file have both moved every character after them.
 fn drawn_columns(drawn: Drawn, lead: usize) -> Vec<usize> {
     let Drawn {
         chars,
         shown,
-        ghosts,
+        flat,
     } = drawn;
     let mut column = Vec::with_capacity(chars.len() + 1);
     let mut at = lead;
-    let ghost_before = |i: usize| -> usize {
-        ghosts
-            .iter()
+    let drawn_before = |i: usize| -> usize {
+        flat.iter()
             .filter(|&&(g, _)| g == i)
             .map(|(_, text)| yumete_cjk::str_width(text))
             .sum()
     };
     for (i, &c) in chars.iter().enumerate() {
-        at += ghost_before(i);
+        at += drawn_before(i);
         column.push(at);
         if shown[i] {
             at += yumete_cjk::char_width(c);
         }
     }
-    at += ghost_before(chars.len());
+    at += drawn_before(chars.len());
     column.push(at);
     column
 }
@@ -5546,7 +5545,7 @@ mod tests {
         assert_eq!(at(&buffer, 1, 0), "字", "and the whole ones follow it");
     }
 
-    /// A click on ghost text means the character it stands before.
+    /// A click on drawn text means the character it stands before.
     ///
     /// The cells are on the page but not in the file, so they are the one
     /// thing a click cannot land *in* — and the candidate's own cells belong
