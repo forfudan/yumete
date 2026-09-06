@@ -3463,6 +3463,11 @@ mod tests {
                 yumete_cjk::WordLevel::Strict
             ))))
         );
+        assert_eq!(
+            parse(":word discover"),
+            Ok(Command::Word(WordCommand::Discover))
+        );
+        assert_eq!(parse(":word habit"), Ok(Command::Word(WordCommand::Habit)));
         // A level nobody defined is refused by name, not silently taken.
         assert!(parse(":word level 中等").is_err());
         // The commands it replaced are gone — `:words` was 口頭禪 and is

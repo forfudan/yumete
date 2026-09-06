@@ -212,6 +212,35 @@ fn every_entry_says_when_it_is_said_and_has_its_traditional() {
 }
 
 #[test]
+fn an_escape_is_not_a_thing_this_file_understands() {
+    // `messages::unquote` hands back a **slice of the file** — the strings are
+    // `&'static str` cut out of the source, which is what lets the table be
+    // built once with no allocation, and which means no `\t` in it is ever
+    // decoded. `word.discover-line` was written `"{0}\t# {1} 次"` and wrote a
+    // literal backslash-t into `.yumete/words.txt`, so every word it mined read
+    // back as 「阿寧\t」 and none of them ever segmented anything. Put a real
+    // tab in the file instead.
+    let text = std::fs::read_to_string(root().join("crates/yumete-core/messages.toml"))
+        .expect("messages.toml");
+    let bad: Vec<String> = text
+        .lines()
+        .filter(|l| {
+            let l = l.trim_start();
+            ["zht = ", "zhs = ", "en = ", "find = "]
+                .iter()
+                .any(|k| l.starts_with(k))
+                && l.contains('\\')
+        })
+        .map(|l| format!("  {}", l.trim()))
+        .collect();
+    assert!(
+        bad.is_empty(),
+        "a backslash in a value reaches the reader as a backslash:\n{}",
+        bad.join("\n")
+    );
+}
+
+#[test]
 fn every_command_can_be_looked_up_by_a_word_it_is_not_named_with() {
     // #224: the `::` menu ranks a query against `find` as well as the
     // description, so that 折行 finds `:wrap` and 竖排 finds `:layout
