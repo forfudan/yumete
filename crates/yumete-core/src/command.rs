@@ -227,6 +227,8 @@ pub enum Command {
     /// `:render off|on|full` — how much of the result the page shows
     /// (Features #96 / #104).
     SetRender(crate::editor::Render),
+    /// `:render` with no argument — say which level all four dimensions are on.
+    ReportRender,
     /// `:preview` / `:preview off` — hand the file to the real typesetter and
     /// show what it makes (Feature #128).
     SetPreview(bool),
@@ -796,8 +798,14 @@ pub fn parse(input: &str) -> Result<Command, CommandError> {
                 value: other.to_string(),
             }),
         },
+        // **The bare word reports** (#283). It used to mean 中階, back when
+        // there were two levels and 「the other one」 named itself. With three
+        // — and three more dimensions taking their level from this one —
+        // 「which level am I on」 is the better use of the word, and it is the
+        // shape `:table rules` already had.
         "render" => match rest {
-            "" | "on" => Ok(Command::SetRender(crate::editor::Render::On)),
+            "" => Ok(Command::ReportRender),
+            "basic" => Ok(Command::SetRender(crate::editor::Render::Basic)),
             "off" => Ok(Command::SetRender(crate::editor::Render::Off)),
             "full" => Ok(Command::SetRender(crate::editor::Render::Full)),
             other => Err(CommandError::InvalidArgument {
@@ -1944,7 +1952,7 @@ const RENDER: &[Word] = &[
         then: Args::None,
     },
     Word {
-        name: "on",
+        name: "basic",
         help: "cmd.render.on",
         needs: &[],
         then: Args::None,
