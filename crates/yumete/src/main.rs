@@ -351,6 +351,7 @@ fn main() -> ExitCode {
     editor.set_reader(Box::new(ime.reader()));
     editor.set_word_level(config.editor.word_level);
     editor.set_segmentation_visible(config.editor.show_segmentation);
+    editor.set_word_mark(config.editor.word_mark);
     if let Some(rules) = yumete_core::table::Rules::parse(&config.editor.table_rules) {
         editor.set_table_rules(rules);
     }

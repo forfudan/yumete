@@ -69,6 +69,45 @@ pub trait Segmenter {
     }
 }
 
+/// How the overlay says where one word ended and the next began (#278).
+///
+/// **The same fact, drawn two ways.** A tint under the writing is the loudest
+/// of the two and reads at a glance across a whole page; alternating the *ink*
+/// instead leaves the paper alone, which matters to a writer who has the page
+/// tinted for something else already — a `==highlight==`, a container, a
+/// selection — and to anyone reading on a screen where a background band is
+/// heavier than the characters standing on it.
+///
+/// Both alternate strictly per word, so an unmarked word is always between two
+/// marked ones and says exactly as much as they do.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum WordMark {
+    /// A hair of colour under every other word. The default.
+    #[default]
+    Tint,
+    /// Every other word's characters in a second ink, the paper untouched.
+    Ink,
+}
+
+impl WordMark {
+    /// Parse a `:word show` argument or a `word_mark` config value.
+    pub fn parse(value: &str) -> Option<WordMark> {
+        match value.trim().to_ascii_lowercase().as_str() {
+            "tint" | "bg" | "background" | "底色" | "背景" => Some(WordMark::Tint),
+            "ink" | "fg" | "colour" | "color" | "字色" | "文字" => Some(WordMark::Ink),
+            _ => None,
+        }
+    }
+
+    /// Its name, as the config writes it.
+    pub fn name(self) -> &'static str {
+        match self {
+            WordMark::Tint => "tint",
+            WordMark::Ink => "ink",
+        }
+    }
+}
+
 /// How readily a segmenter joins characters into words.
 ///
 /// **One question asked of two different dictionaries.** The bundled list
