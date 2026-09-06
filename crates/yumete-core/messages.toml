@@ -720,6 +720,14 @@ en = "hand it to a real typesetter and read it in a browser"
 find = "預覽 预览 瀏覽器 浏览器 排版 browser"
 
 [[message]]
+# : 命令選單裏 progress 那一項的說明（commands 組）
+key = "cmd.commands.progress"
+zht = "寫作進度：今天寫了多少，離目標還有多少"
+zhs = "写作进度：今天写了多少，离目标还有多少"
+en = "how much was written today, and how far the target still is"
+find = "進度 进度 字數 字数 目標 目标 每日 progress target daily words"
+
+[[message]]
 # : 命令選單裏 quit 那一項的說明（commands 組）
 key = "cmd.commands.quit"
 zht = "退出；加 ! 連沒存的改動一起丟"
@@ -872,6 +880,14 @@ en = "edit as a grid: a whole CSV, or the | table under the cursor; `:table off`
 find = "表格 網格 网格 格子 欄位 栏位 grid csv tsv"
 
 [[message]]
+# : 命令選單裏 target 那一項的說明（commands 組）
+key = "cmd.commands.target"
+zht = "每天要寫多少字；`:target off` 不再算"
+zhs = "每天要写多少字；`:target off` 不再算"
+en = "how many 字 a day; `:target off` stops counting against one"
+find = "目標 目标 每日 進度 进度 target daily goal"
+
+[[message]]
 # : 命令選單裏 theme 那一項的說明（commands 組）
 key = "cmd.commands.theme"
 zht = "主題：用哪一套墨（後面可以再跟深淺）"
@@ -934,14 +950,6 @@ zht = "分詞：哪一份詞表、著色、粒度"
 zhs = "分词：哪一份词表、著色、粒度"
 en = "words: which list, the tint, the level"
 find = "分詞 分词 詞表 词表 粒度 segmentation dictionary"
-
-[[message]]
-# : 命令選單裏 words 那一項的說明（commands 組）
-key = "cmd.commands.words"
-zht = "口頭禪：這一篇比別人多說的那些詞"
-zhs = "口头禅：这一篇比别人多说的那些词"
-en = "crutch words: what this one says far more than prose does"
-find = "口頭禪 口头禅 廢話 废话 贅詞 赘词 常用詞 常用词 crutch tic filler overused"
 
 [[message]]
 # : 命令選單裏 wq 那一項的說明（commands 組）
@@ -1665,6 +1673,14 @@ zht = "挖出本書自己的詞：人名地名，字典裏沒有的"
 zhs = "挖出本书自己的词：人名地名，字典里没有的"
 en = "mine this book's own words: the names no dictionary has"
 find = "新詞 新词 人名 地名 挖 discover"
+
+[[message]]
+# : 命令選單裏 habit 那一項的說明（word-topics 組）
+key = "cmd.word-topics.habit"
+zht = "口頭禪：這一篇比別人多說的那些詞"
+zhs = "口头禅：这一篇比别人多说的那些词"
+en = "habit words: what this one says far more than prose does"
+find = "口頭禪 口头禅 廢話 废话 贅詞 赘词 常用詞 常用词 habit crutch tic filler overused"
 
 [[message]]
 # : 命令選單裏 level 那一項的說明（word-topics 組）
@@ -2493,6 +2509,13 @@ key = "help.chinese.first-line-indent"
 zht = "段首空兩格，段間的空行就收起來"
 zhs = "段首空两格，段间的空行就收起来"
 en = "open a paragraph two squares in, and take the blank line between them off the page"
+
+[[message]]
+# 中文幫助：口頭禪
+key = "help.chinese.habit-words"
+zht = "口頭禪：這一篇比尋常文章多說的那些詞"
+zhs = "口头禅：这一篇比寻常文章多说的那些词"
+en = "habit words: what this one says far more than prose does"
 
 [[message]]
 # 中文幫助：標點旁置
@@ -4416,6 +4439,71 @@ zhs = "预览：tinymist 起来中……"
 en = "preview: tinymist starting…"
 
 
+# ── progress ──────────────────────────────────────────────────────────
+
+[[message]]
+# :progress 但寫不進 .yumete/progress.tsv
+key = "progress.cannot-write"
+zht = "寫不進 {0}：{1}"
+zhs = "写不进 {0}：{1}"
+en = "cannot write {0}: {1}"
+
+[[message]]
+# :progress 的列表裏一天一行：日期、字數、長條
+key = "progress.day"
+zht = "{0}　{1} 字　{2}"
+zhs = "{0}　{1} 字　{2}"
+en = "{0}  {1} 字  {2}"
+
+[[message]]
+# :progress 但這一份還沒有檔名，記不進哪本書
+key = "progress.no-file"
+zht = "這一份還沒有名字，進度記不到哪本書上——先存一次"
+zhs = "这一份还没有名字，进度记不到哪本书上——先存一次"
+en = "this one has no name yet, so there is no book to record against — save it first"
+
+[[message]]
+# :progress 但 .yumete/progress.tsv 還一天都沒有
+key = "progress.nothing-yet"
+zht = "還沒有記錄：存一次檔，今天就開始算"
+zhs = "还没有记录：存一次档，今天就开始算"
+en = "nothing recorded yet: save once and today starts counting"
+
+[[message]]
+# :progress 的結果，沒有設每日目標
+key = "progress.report"
+zht = "今天 {0} 字，本書 {1} 字，連續 {2} 天"
+zhs = "今天 {0} 字，本书 {1} 字，连续 {2} 天"
+en = "{0} 字 today, {1} in the book, {2} days running"
+
+[[message]]
+# :progress 的結果，設了每日目標
+key = "progress.report-target"
+zht = "今天 {0}／{1} 字（{2}%），本書 {3} 字，連續 {4} 天"
+zhs = "今天 {0}／{1} 字（{2}%），本书 {3} 字，连续 {4} 天"
+en = "{0}/{1} 字 today ({2}%), {3} in the book, {4} days running"
+
+[[message]]
+# :progress 開出來的那一頁的標題
+key = "progress.results"
+zht = "寫作進度"
+zhs = "写作进度"
+en = "progress"
+
+[[message]]
+# :target off——不再對着目標算
+key = "progress.target-cleared"
+zht = "每日目標撤了，字還是照記"
+zhs = "每日目标撤了，字还是照记"
+en = "the daily target is off; the 字 are still counted"
+
+[[message]]
+# :target 2000
+key = "progress.target-set"
+zht = "每日目標 {0} 字，記在 {1}"
+zhs = "每日目标 {0} 字，记在 {1}"
+en = "a daily target of {0} 字, kept in {1}"
+
 # ── readonly ──────────────────────────────────────────────────────────
 
 [[message]]
@@ -5910,42 +5998,42 @@ en = "word tint: on"
 # ── words ─────────────────────────────────────────────────────────────
 
 [[message]]
-# :words 一個詞都沒有多說
+# :word habit 一個詞都沒有多說
 key = "words.clean"
 zht = "{0}：沒有哪個詞說得特別多"
 zhs = "{0}：没有哪个词说得特别多"
 en = "{0}: no word is leaned on"
 
 [[message]]
-# :words 結果裏的一行：這個詞說了幾次，比尋常文章多幾倍
-key = "words.crutch"
-zht = "{0}:{1}: 「{2}」{3} 次——比尋常文章多 {4} 倍"
-zhs = "{0}:{1}: 「{2}」{3} 次——比寻常文章多 {4} 倍"
-en = "{0}:{1}: 「{2}」 {3}× — {4} times more often than prose"
-
-[[message]]
-# :words 查出了幾個口頭禪
+# :word habit 查出了幾個口頭禪
 key = "words.found"
 zht = "{0} 個詞說得特別多——gf 跳到那一行"
 zhs = "{0} 个词说得特别多——gf 跳到那一行"
 en = "{0} word(s) leaned on — gf goes to the line"
 
 [[message]]
-# :words 但手上這份分詞器沒有詞頻表，問不了「尋常文章說幾次」
+# :word habit 結果裏的一行：這個詞說了幾次，比尋常文章多幾倍
+key = "words.habit"
+zht = "{0}:{1}: 「{2}」{3} 次——比尋常文章多 {4} 倍"
+zhs = "{0}:{1}: 「{2}」{3} 次——比寻常文章多 {4} 倍"
+en = "{0}:{1}: 「{2}」 {3}× — {4} times more often than prose"
+
+[[message]]
+# :word habit 但手上這份分詞器沒有詞頻表，問不了「尋常文章說幾次」
 key = "words.no-table"
 zht = "這一份詞表沒有詞頻（{0}），問不了「別人說幾次」——裝上宇浩字料層再試"
 zhs = "这一份词表没有词频（{0}），问不了「别人说几次」——装上宇浩字料层再试"
 en = "this word list carries no frequencies ({0}), so there is nothing to compare against — install 宇浩's data layer"
 
 [[message]]
-# :words 的結果那一份緩衝區的名字
+# :word habit 的結果那一份緩衝區的名字
 key = "words.results"
 zht = "[口頭禪 {0}]"
 zhs = "[口头禅 {0}]"
-en = "[crutch words {0}]"
+en = "[habit words {0}]"
 
 [[message]]
-# :words 查出來的太多，只列了前面那些
+# :word habit 查出來的太多，只列了前面那些
 key = "words.too-many"
 zht = "{0} 個以上（只列了前 {0} 個）——gf 跳到那一行"
 zhs = "{0} 个以上（只列了前 {0} 个）——gf 跳到那一行"

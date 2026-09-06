@@ -56,10 +56,10 @@ pub trait Segmenter {
     }
 
     /// `ln P(word)` in ordinary prose, from whatever 詞頻表 this segmenter
-    /// reads — the background `:words` measures a manuscript against (#242).
+    /// reads — the background `:word habit` measures a manuscript against (#242).
     ///
     /// **`None` means「I have no table」, not「that word is rare」.** A
-    /// segmenter with no dictionary cannot tell 然後 from 阿甯, and `:words`
+    /// segmenter with no dictionary cannot tell 然後 from 阿甯, and `:word habit`
     /// says so rather than reporting every proper noun in the chapter as a
     /// crutch. A word the table simply does not hold is also `None`: an
     /// unseen word has no background to be surprising against, and that

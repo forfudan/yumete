@@ -1327,7 +1327,7 @@ release; the git-dep switch goes in with the pipeline.
   columns follow), and `[n/m]` comes back whenever the bar is not showing all
   of them — it used to be suppressed *because* the bar was up.
 - ~~A per-project word list.~~ `.yumete/words.txt`, found by walking up from
-  the file being edited, `:words` to reload. It **layers over** whatever
+  the file being edited, and re-read by the save that writes it. It **layers over** whatever
   segmenter is in force rather than replacing it: a run of adjacent ranges that
   spells a project word becomes one, longest match first.
 - ~~`:buffer list` writes 1783 characters into a one-line status bar.~~ It
@@ -2372,7 +2372,7 @@ of them goes missing, still not scheduled: 0.1.0 first.
 9. **繁簡 conversion that shows what it guessed** — `simptrad.txt` stores the
    one-to-many sets, so ambiguity is *visible in the data*; drop the unsure ones
    in a review buffer instead of picking silently. **medium-high**
-10. **`:words`** — crutch words by **surprisal against 詞頻表**, not raw count,
+10. **`:word habit`** — crutch words by **surprisal against 詞頻表**, not raw count,
     so it says 「然後 47 次」 and not 「的」. **medium-high**
 11. **割注 — 小字雙行 inside the 縱.** InDesign J has it; nothing else does. The
     縦中横 slot packing is already the mechanism, run down a run of slots. **medium**
