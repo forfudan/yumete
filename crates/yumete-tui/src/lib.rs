@@ -421,9 +421,14 @@ pub fn run(
             let found = ime.glosses(ch);
             editor.set_dictionary(ch, found);
         }
-        if let Err(err) = terminal.draw(|frame| draw(frame, editor, config, ime, &mut viewport)) {
-            break Err(err);
-        }
+        // The frame is drawn **and kept**: `draw` hands back the buffer it just
+        // filled, and that is the only honest way to reach it — see the picture
+        // below. The copy costs one walk of the screen per drawn frame, which
+        // is what ratatui already spends diffing the two buffers.
+        let drawn = match terminal.draw(|frame| draw(frame, editor, config, ime, &mut viewport)) {
+            Ok(completed) => completed.buffer.clone(),
+            Err(err) => break Err(err),
+        };
         // …and the picture is of *this* frame, which is the one with no
         // command line across it.
         if let Some(job) = editor.take_screenshot_request() {
@@ -432,15 +437,18 @@ pub fn run(
                 // Not the frame: the same program `:shot` uses, told where to
                 // put the picture instead of filling the clipboard.
                 ShotJob::Png { target } => photograph_the_screen(config, Some(&target)),
-                // **The buffer that was just drawn**, not one drawn again: a
-                // second render would be of the state *after* this frame, and
-                // the whole point of waiting a frame is that this is the one
-                // the reader is looking at.
+                // **The buffer `draw` handed back**, not `current_buffer_mut`.
+                // ratatui swaps its two buffers at the end of every `draw` and
+                // resets the one it swaps in, so the *current* buffer here is
+                // blank paper — which is exactly what `:shot txt` wrote from
+                // #189 until this line: a page of empty rows and a footer.
+                // Drawing a second time is no answer either: that picture is of
+                // the state *after* this frame, and waiting a frame was the
+                // whole point.
                 ShotJob::Page { target, text } => {
-                    let frame = terminal.current_buffer_mut();
                     let written = match text {
-                        true => buffer_to_text(frame),
-                        false => buffer_to_html(frame),
+                        true => buffer_to_text(&drawn),
+                        false => buffer_to_html(&drawn),
                     };
                     match yumete_core::buffer::write_file_atomically(&target, &written) {
                         Ok(()) => say!("ui.shot-drawn", target.display()),
@@ -5227,6 +5235,28 @@ mod tests {
             .draw(|frame| draw(frame, editor, config, ime, &mut viewport))
             .unwrap();
         terminal.backend().buffer().clone()
+    }
+
+    /// **Which buffer a `:shot` is a picture of.** `Terminal::draw` swaps
+    /// ratatui's two buffers on its way out and resets the one it swaps in, so
+    /// `current_buffer_mut()` afterwards is blank paper, not the frame that was
+    /// just painted. `:shot html` and `:shot txt` read from there from the day
+    /// they landed (#189) until 2026-09-07, and wrote a page of empty rows with
+    /// the version footer under it — a file that looks written and says
+    /// nothing. `--shot` never showed it: that path asks the backend.
+    #[test]
+    fn a_picture_is_of_the_frame_draw_hands_back_not_the_one_it_reset() {
+        let mut terminal = Terminal::new(TestBackend::new(16, 2)).unwrap();
+        let drawn = terminal
+            .draw(|frame| {
+                frame.render_widget(ratatui::widgets::Paragraph::new("有字"), frame.area());
+            })
+            .map(|completed| completed.buffer.clone())
+            .expect("draw one frame");
+        assert!(buffer_to_text(&drawn).contains("有字"));
+        let next = buffer_to_text(terminal.current_buffer_mut());
+        let page: String = next.lines().take(2).collect();
+        assert!(page.trim().is_empty(), "the next frame's paper is blank: {page:?}");
     }
 
     /// Render with an unavailable IME (the common case for non-IME tests).
