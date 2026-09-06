@@ -3147,6 +3147,34 @@ zhs = "取消"
 en = "cancel"
 
 [[message]]
+# ` 組：轉小寫
+key = "hint.case.lower"
+zht = "轉小寫"
+zhs = "转小写"
+en = "to lowercase"
+
+[[message]]
+# ` 組：大小寫互換
+key = "hint.case.switch"
+zht = "大小寫互換"
+zhs = "大小写互换"
+en = "switch case"
+
+[[message]]
+# ` 組的標題（Helix 花三個鍵做的事，這裏收成一組）
+key = "hint.case.title"
+zht = "字形"
+zhs = "字形"
+en = "letter case"
+
+[[message]]
+# ` 組：轉大寫
+key = "hint.case.upper"
+zht = "轉大寫"
+zhs = "转大写"
+en = "to uppercase"
+
+[[message]]
 # 提示：換掉
 key = "hint.change"
 zht = "換掉"
@@ -3371,6 +3399,13 @@ zhs = "这个词还在哪里：这边找／那边看"
 en = "where else this word is: / here, ? in the other area"
 
 [[message]]
+# Normal 模式按 ~ 或 A-`（Helix 的大小寫鍵，這裏收進了 ` 組）
+key = "hint.helix.case-keys"
+zht = "大小寫在 ` 組裏：`l 小寫、`u 大寫、`` 互換"
+zhs = "大小写在 ` 组里：`l 小写、`u 大写、`` 互换"
+en = "letter case lives under `: `l lower, `u upper, `` switch"
+
+[[message]]
 # ]／[ 的選單：下一處／上一處合併衝突
 key = "hint.hop.conflict"
 zht = "合併衝突"
@@ -3565,6 +3600,13 @@ key = "hint.space.paste-before"
 zht = "從系統剪貼簿貼在前面"
 zhs = "从系统剪贴簿贴在前面"
 en = "paste before, from the system clipboard"
+
+[[message]]
+# 空格組：改這個字的注音（`:ruby` 那一支，二級鍵）
+key = "hint.space.ruby"
+zht = "改這裏的注音"
+zhs = "改这里的注音"
+en = "edit the reading here"
 
 [[message]]
 # 空格組提示的標題
@@ -3882,11 +3924,11 @@ zhs = "打一个字"
 en = "type a character"
 
 [[message]]
-# 提示：打一個字蓋掉選區
+# 提示：打一個字蓋掉選區（中文也打得，上屏什麼就換成什麼）
 key = "hint.type-a-character-to-overwrite"
-zht = "打一個字蓋掉選區"
-zhs = "打一个字盖掉选区"
-en = "type a character to write over it"
+zht = "打一個字蓋掉選區，中文也打得"
+zhs = "打一个字盖掉选区，中文也打得"
+en = "type a character to write over it — 中文 too"
 
 [[message]]
 # 提示：打要換成的那一種
@@ -3924,11 +3966,11 @@ zhs = "空格是选单键：空格 f 开档、空格 b 换缓冲区、空格 d �
 en = "Space is the menu key: Space f opens a file, Space b switches buffer, Space d the detail pane"
 
 [[message]]
-# Normal 模式按 `（vi 的記號鍵，這裏是 M 和 '）
+# ` 組的末行（vi 的 ` 是記號鍵，這裏是 M 和 '）
 key = "hint.vi.backtick"
-zht = "記號用 M 記、' 回去（`m` 在這裏是配對模式）"
-zhs = "记号用 M 记、' 回去（`m` 在这里是配对模式）"
-en = "M sets a mark and ' goes back (`m` here is match mode)"
+zht = "vi 的記號：M 記、' 回去"
+zhs = "vi 的记号：M 记、' 回去"
+en = "vi's marks: M sets, ' returns"
 
 [[message]]
 # Normal 模式按 C（vi 的改到行尾，這裏沒有）

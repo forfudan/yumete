@@ -434,9 +434,11 @@ fn main() -> ExitCode {
 /// The escapes are the ones a keyboard has and a string does not: `\e` Esc,
 /// `\t` Tab, `\n` Enter, `\b` Backspace, `\u` `\d` `\l` `\r` the arrows,
 /// and `\\` a backslash. Everything else is the character itself — including
-/// 漢字, which arrive here the way the IME hands them over.
+/// 漢字, which arrive here the way the IME hands them over: while `r` is armed
+/// a run of them is gathered and **committed**, because a commit is a string
+/// and the difference from a key is the whole of what `r` does with it.
 fn press(editor: &mut Editor, keys: &str) {
-    let mut chars = keys.chars();
+    let mut chars = keys.chars().peekable();
     while let Some(c) = chars.next() {
         let key = match c {
             '\\' => match chars.next() {
@@ -453,6 +455,24 @@ fn press(editor: &mut Editor, keys: &str) {
             },
             other => Key::Char(other),
         };
+        // A commit is not a key, and with `r` armed that difference is the
+        // whole behaviour (§5.2.3 ②): the IME hands the editor a *string*,
+        // which may be two 字 long. Gather the run and commit it, so a picture
+        // of `r` 打中文 shows what a reader would actually see.
+        if editor.replacing() {
+            if let Key::Char(c) = key {
+                let mut text = String::from(c);
+                while let Some(&next) = chars.peek() {
+                    if next.is_ascii() {
+                        break;
+                    }
+                    text.push(next);
+                    chars.next();
+                }
+                editor.insert_committed(&text);
+                continue;
+            }
+        }
         editor.on_key(key);
     }
 }
@@ -558,7 +578,8 @@ KEYS (Normal mode, Helix-style):
     gn  gp    show the next / previous open file
     gf        open the file:line named on this line (`:grep` results)
     Space     menu: e sidebar, o outline, f files, b buffers, / search,
-              d 字典 (how the character under the cursor is written), y copy
+              d 字典 (how the character under the cursor is written), y copy,
+              r 旁注 (edit the reading here)
     C-w       move between the sidebar and the text
     gh gl gs  goto line start / end / first non-blank
     {{ }}       previous / next paragraph — here a paragraph is a logical line
@@ -575,14 +596,16 @@ KEYS (Normal mode, Helix-style):
     I  A      insert at line start / end
     o  O      open a line below / above
     u  U  .   undo / redo / **repeat the last change** (r, d, c…Esc, ms(, a paste)
-    r         write the next key over every character of the selection
+    r         write the next key over every character of the selection —
+              **中文 too**: the panel opens, and what you choose is what the
+              selection becomes (a word replaces it rather than filling it)
     \"a        use register a for the next yank / delete / paste
     q  Q      record a macro / play the last one back
     A-;       flip which end of the selection the cursor is on
     C-d C-u   half a page onward / back (down the lines, or across the 縱)
     C-f C-b   a whole page
     gJ        join with the line below (no space between two 全角 characters)
-    ~  `      switch case / lowercase the selection (A-` uppercases)
+    `         letter case: `l lower, `u upper, `` switch
     >  <      indent / unindent the selected lines
     C-a C-x   increment / decrement the number at the cursor
     m         match mode: mm jump to the matching bracket; mi/ma select
