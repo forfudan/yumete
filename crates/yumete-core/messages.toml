@@ -696,6 +696,14 @@ en = "write a piece of Markdown: footnote, footnote inline, table 3x4"
 find = "腳注 脚注 註釋 注释 表格 footnote table"
 
 [[message]]
+# : 命令選單裏 meter 那一項的說明（commands 組）
+key = "cmd.commands.meter"
+zht = "平仄：每個字的平仄畫在旁邊，句末畫韻腳（今音，入聲已派入三聲）"
+zhs = "平仄：每个字的平仄画在旁边，句末画韵脚（今音，入声已派入三声）"
+en = "平仄: the tone class of every character in the margin, 韻腳 at the end of a 句"
+find = "平仄 韻腳 韵脚 押韻 押韵 詩 诗 詞 词 律詩 律诗 meter tone rhyme"
+
+[[message]]
 # : 命令選單裏 new 那一項的說明（commands 組）
 key = "cmd.commands.new"
 zht = "開一個空的緩衝區"
@@ -4151,6 +4159,27 @@ key = "layout.measure-window"
 zht = "寫到窗口寬"
 zhs = "写到窗口宽"
 en = "measure: whatever the window gives"
+
+[[message]]
+# 平仄開了，可是沒有讀音表
+key = "layout.meter-no-readings"
+zht = "平仄：開——可是沒有讀音表，旁邊會是空的"
+zhs = "平仄：开——可是没有读音表，旁边会是空的"
+en = "平仄: on — but with no reading data the margin will be empty"
+
+[[message]]
+# 平仄關掉
+key = "layout.meter-off"
+zht = "平仄：關"
+zhs = "平仄：关"
+en = "平仄: off"
+
+[[message]]
+# 平仄打開
+key = "layout.meter-on"
+zht = "平仄：開（○平 ●仄 △▲韻腳）"
+zhs = "平仄：开（○平 ●仄 △▲韵脚）"
+en = "平仄: on (○ 平, ● 仄, △▲ 韻腳)"
 
 [[message]]
 # 密排：行貼着行

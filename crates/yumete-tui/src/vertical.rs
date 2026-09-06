@@ -52,6 +52,28 @@ const SLOT_WIDTH: u16 = 2;
 /// left. See [`Margin`].
 const EMPHASIS: char = '·';
 
+/// 平仄 in the margin (Feature #247), in the 詞譜's own notation.
+///
+/// Hollow is 平 and solid is 仄, which is how every 詞譜 in print draws it; the
+/// triangles are the same two at a 韻腳 — the last character of a 句, where a
+/// rhyme falls. Four glyphs of one width, so a column of them reads as a
+/// pattern rather than as a sentence.
+const PING: char = '○';
+const ZE: char = '●';
+const PING_RHYME: char = '△';
+const ZE_RHYME: char = '▲';
+
+/// Which of the four a mark is drawn as.
+pub(crate) fn meter_glyph(mark: yumete_core::meter::Mark) -> char {
+    use yumete_core::meter::Level;
+    match (mark.level, mark.rhyme) {
+        (Level::Ping, false) => PING,
+        (Level::Ze, false) => ZE,
+        (Level::Ping, true) => PING_RHYME,
+        (Level::Ze, true) => ZE_RHYME,
+    }
+}
+
 /// What the cell to the right of one 縱 has to hold — which is what decides how
 /// far the next 縱 sits from it.
 ///
@@ -63,6 +85,12 @@ struct Margin {
     reading: bool,
     /// A 着重號: as many cells as the terminal draws `·` in.
     dot: bool,
+    /// A 平仄 mark: as many cells as the terminal draws `○` in.
+    ///
+    /// Asked of the *page* rather than of the line — `:meter` is on or it is
+    /// not — so that the 縱 do not change width as a poem scrolls past a line
+    /// with no 漢字 on it.
+    tone: bool,
 }
 
 /// The screen geometry of a vertically laid-out page.
@@ -182,7 +210,11 @@ impl Metrics {
             true => yumete_cjk::char_width(EMPHASIS) as u16,
             false => 0,
         };
-        reading.max(u16::from(self.ticks)).max(dot)
+        let tone = match margin.tone {
+            true => yumete_cjk::char_width(PING) as u16,
+            false => 0,
+        };
+        reading.max(u16::from(self.ticks)).max(dot).max(tone)
     }
 
     /// How many 縱 fit across an area `width` cells wide. Only the gaps
@@ -237,6 +269,7 @@ pub fn char_at(
         area,
         capacity,
         &|line| markup.dotted(line),
+        editor.meter(),
     );
 
     // Which band the row fell in, then which 縱 of it the column fell in — or,
@@ -349,6 +382,7 @@ fn layout_page(
     area: Rect,
     capacity: usize,
     dotted: &dyn Fn(usize) -> bool,
+    metered: bool,
 ) -> Page {
     let zongs = zong::zongs_from(rope, anchor, grid, capacity);
     let slots: Vec<Vec<zong::Slot>> = zongs
@@ -366,6 +400,7 @@ fn layout_page(
         .map(|(z, rows)| Margin {
             reading: rows.iter().any(|r| r.ruby.is_some() || r.mark.is_some()),
             dot: dotted(z.line),
+            tone: metered,
         })
         .collect();
     // Measured from the page itself: one full-width reading anywhere on it
@@ -680,9 +715,16 @@ pub fn draw(
     // page actually being drawn.
     let capacity = metrics.capacity(area.width);
     let markup = Markup::of(editor);
-    let mut page = layout_page(rope, *viewport, grid, &metrics, area, capacity, &|line| {
-        markup.dotted(line)
-    });
+    let mut page = layout_page(
+        rope,
+        *viewport,
+        grid,
+        &metrics,
+        area,
+        capacity,
+        &|line| markup.dotted(line),
+        editor.meter(),
+    );
     let visible = page.len().max(1);
     let scrolloff = config.editor.scrolloff.min(visible.saturating_sub(1) / 2);
     let last_column = visible.saturating_sub(1);
@@ -704,9 +746,16 @@ pub fn draw(
                 _ => 0,
             });
             *viewport = zong::retreat(rope, cursor_anchor, grid, inset);
-            page = layout_page(rope, *viewport, grid, &metrics, area, capacity, &|line| {
-                markup.dotted(line)
-            });
+            page = layout_page(
+                rope,
+                *viewport,
+                grid,
+                &metrics,
+                area,
+                capacity,
+                &|line| markup.dotted(line),
+                editor.meter(),
+            );
             zong::distance(rope, *viewport, cursor_anchor, grid, page.len()).unwrap_or(0)
         }
     };
@@ -831,6 +880,9 @@ pub fn draw(
     // held the same way, for the same reason.
     let mut segmented: Option<(usize, Vec<(usize, usize)>)> = None;
     let mut marked: Option<(usize, Vec<yumete_core::markdown::Span>)> = None;
+    // And its 平仄, for the same reason: the editor caches the answer per line
+    // too, but a page is forty 縱 and this saves the lookup as well as the walk.
+    let mut metered: Option<(usize, Vec<yumete_core::meter::Mark>)> = None;
 
 
     let buf = frame.buffer_mut();
@@ -858,6 +910,10 @@ pub fn draw(
         // A hung 句讀 *is* the sentence, set beside the character it follows,
         // so it keeps the writing's own colour and is told apart by position.
         let mark_style = Style::default().fg(ink.text());
+        // 平仄 are furniture, not writing: they are the editor talking about
+        // the poem, so they sit on the rung the line numbers do rather than in
+        // the reading's own shade, which belongs to something the *file* says.
+        let tone_style = Style::default().fg(ink.furniture());
         let cell_style = Style::default().bg(ink.at(yumete_config::rung::HEAD));
         // Which band this 縱 landed in decides where its first slot is drawn.
         let text_top = placed.top;
@@ -931,10 +987,34 @@ pub fn draw(
             // is last of the three: it says 「this word」, which the reading and
             // the sentence's own punctuation both outrank, and it is the only
             // one of the three that can be read off the page without it.
+            // 平仄 (#247) go in the same column, under the reading and over the
+            // 着重號: a tone is computed and can be read nowhere else on the
+            // page, while the dot repeats what `*` already says in the file.
+            // With `:meter` off the line is never asked, so a manuscript that
+            // is not a poem pays nothing.
+            let tone = match editor.meter() && !row.text.is_empty() {
+                false => None,
+                true => {
+                    if metered.as_ref().is_none_or(|(l, _)| *l != zong.line) {
+                        metered = Some((zong.line, editor.meter_on_line(zong.line)));
+                    }
+                    metered
+                        .as_ref()
+                        .filter(|(l, _)| *l == zong.line)
+                        .and_then(|(_, marks)| {
+                            // A slot may hold more than one character — a ruby
+                            // group, a 縦中横 pair — and the mark belongs to the
+                            // first of them, which is the one the reader sees.
+                            marks.iter().find(|m| m.column == row.start).copied()
+                        })
+                        .map(meter_glyph)
+                }
+            };
             let margin = row
                 .mark
                 .map(|m| (m, mark_style))
                 .or_else(|| row.ruby.map(|r| (r, reading_style)))
+                .or_else(|| tone.map(|g| (g, tone_style)))
                 .or_else(|| emphasised.then_some((EMPHASIS, mark_style)));
             // 稿紙 is ruled, and a writer estimates length by it. A tick every
             // `paper_ticks` characters down the 縱 is the vertical page's own

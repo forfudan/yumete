@@ -4494,11 +4494,35 @@ fn row_has_reading(editor: &Editor, rope: &yumete_core::Rope, row: &wrap::Row) -
     }
     let groups = editor.readings_on_line(row.line);
     if groups.is_empty() {
-        return false;
+        // 平仄 (#247) live in that row too, when no reading has claimed it: the
+        // horizontal page's version of the margin the 縱書 page draws them in.
+        return !meter_in_row(editor, rope, row).is_empty();
     }
     let start = row.start - rope.line_to_char(row.line);
     let end = start + (row.end - row.start);
     groups.iter().any(|g| g.base.1 > start && g.base.0 < end)
+}
+
+/// The 平仄 marks that fall on `row`, as columns within the *line*.
+///
+/// Asked twice — once to buy the row and once to draw in it — and both have to
+/// give the same answer or a page of poetry would gain and lose a row as it
+/// scrolls. The editor caches the line's marks, so asking twice is a lookup.
+fn meter_in_row(
+    editor: &Editor,
+    rope: &yumete_core::Rope,
+    row: &wrap::Row,
+) -> Vec<yumete_core::meter::Mark> {
+    if !editor.meter() {
+        return Vec::new();
+    }
+    let start = row.start - rope.line_to_char(row.line);
+    let end = start + (row.end - row.start);
+    editor
+        .meter_on_line(row.line)
+        .into_iter()
+        .filter(|m| m.column >= start && m.column < end)
+        .collect()
 }
 
 /// The rows a page of `height` screen rows holds, and where each is drawn.
@@ -4638,6 +4662,35 @@ fn reading_line(
     }
     let groups = editor.readings_on_line(row.line);
     if groups.is_empty() {
+        // 平仄 (#247), where no reading wants the row. A reading wins it
+        // outright rather than sharing: the two would have to be interleaved
+        // per character, and a 詞譜 column with holes in it says the wrong
+        // thing — the missing marks would read as 輕聲 rather than as
+        // 「something else is written here」.
+        let marks = meter_in_row(editor, rope, row);
+        if !marks.is_empty() {
+            let column = drawn_columns(drawn, lead);
+            let start_in_line = row.start - rope.line_to_char(row.line);
+            let mut out = String::new();
+            let mut col = 0usize;
+            for mark in marks {
+                let i = mark.column.saturating_sub(start_in_line);
+                let Some(&want) = column.get(i) else { continue };
+                if want < col {
+                    continue;
+                }
+                let glyph = crate::vertical::meter_glyph(mark);
+                out.push_str(&" ".repeat(want - col));
+                out.push(glyph);
+                col = want + yumete_cjk::char_width(glyph);
+            }
+            // Furniture, not writing, and the same rung the 縱書 margin sets
+            // them on: this is the editor talking about the poem.
+            return Some(Line::from(Span::styled(
+                out,
+                ink.page().fg(ink.furniture()),
+            )));
+        }
         // 疏排: the row of air itself. Painted rather than skipped, so the page
         // keeps its ground.
         return editor
@@ -7972,6 +8025,103 @@ mod tests {
 
         editor.execute(":dense on").unwrap();
         assert!(rows(&editor)[1].contains("雪"));
+    }
+
+    /// A reader that knows five characters of 春曉 and nothing else.
+    struct Tones;
+
+    impl yumete_cjk::Reader for Tones {
+        fn read(&self, word: &str) -> Option<Vec<String>> {
+            let mut out = Vec::new();
+            for ch in word.chars() {
+                out.push(
+                    match ch {
+                        '春' => "chūn",
+                        '眠' => "mián",
+                        '不' => "bù",
+                        '覺' => "jué",
+                        '曉' => "xiǎo",
+                        _ => return None,
+                    }
+                    .to_string(),
+                );
+            }
+            Some(out)
+        }
+
+        fn available(&self) -> bool {
+            true
+        }
+    }
+
+    fn metered(text: &str) -> yumete_core::Editor {
+        let mut editor = editor_with(text);
+        editor.set_reader(Box::new(Tones));
+        editor.execute(":meter on").unwrap();
+        editor
+    }
+
+    /// 平仄 in the 縱書 margin (#247): ○ 平, ● 仄, and a triangle at the 韻腳.
+    #[test]
+    fn the_meter_is_written_in_the_margin_beside_the_characters() {
+        let mut editor = metered("春眠不覺曉。\n");
+        let config = vertical_config();
+        let buffer = render_vertical(&mut editor, &config, 20, 10);
+        // Wherever the 縱 landed, the marks are in the cell to its right.
+        let x = (0..20u16)
+            .find(|&x| at(&buffer, x, 0) == "春")
+            .expect("the 縱 is on the page");
+        let margin: String = (0..5).map(|y| at(&buffer, x + 2, y)).collect();
+        // 春 chūn 平, 眠 mián 平, 不 bù 仄, 覺 jué 平 (入聲 in the rule — see
+        // `meter`'s own doc), 曉 xiǎo 仄 and last before 。, so a 韻腳.
+        assert_eq!(margin, "○○●○▲");
+    }
+
+    /// The same marks, set horizontally, in the row a reading would have had.
+    #[test]
+    fn set_horizontally_the_meter_goes_in_the_row_above_the_line() {
+        let mut editor = metered("春眠不覺曉。\n");
+        let mut config = Config::default();
+        config.editor.line_numbers = LineNumbers::None;
+        config.editor.hints = false;
+        config.editor.show_segmentation = false;
+        let buffer = render_wrapped(&mut editor, &config, 30, 8);
+        assert!(row_text(&buffer, 1).starts_with("春眠不覺曉。"), "{:?}", row_text(&buffer, 1));
+        // One mark per character, each over the character it belongs to — so
+        // the marks sit in the odd columns a full-width 漢字 begins at.
+        let above = row_text(&buffer, 0);
+        let marks: String = above.chars().filter(|c| !c.is_whitespace()).collect();
+        assert_eq!(marks, "○○●○▲");
+        assert_eq!(at(&buffer, 0, 0), "○", "{above:?}");
+    }
+
+    /// Turned off, the row is not bought at all — a manuscript that is not a
+    /// poem pays nothing for the mode existing.
+    #[test]
+    fn with_the_meter_off_the_page_is_the_page() {
+        let mut editor = metered("春眠不覺曉。\n");
+        let mut config = Config::default();
+        config.editor.line_numbers = LineNumbers::None;
+        config.editor.hints = false;
+        config.editor.show_segmentation = false;
+        editor.execute(":meter off").unwrap();
+        let buffer = render_wrapped(&mut editor, &config, 30, 8);
+        assert!(row_text(&buffer, 0).starts_with("春眠不覺曉。"));
+    }
+
+    /// With no reader installed there are no tones to draw, and the mode says
+    /// so rather than drawing an empty margin.
+    #[test]
+    fn without_a_reader_the_meter_has_nothing_to_say() {
+        let mut editor = editor_with("春眠不覺曉。\n");
+        editor.execute(":meter on").unwrap();
+        assert!(editor.status().contains("讀音") || editor.status().contains("reading"));
+        let mut config = Config::default();
+        config.editor.line_numbers = LineNumbers::None;
+        config.editor.hints = false;
+        config.editor.show_segmentation = false;
+        let buffer = render_wrapped(&mut editor, &config, 30, 8);
+        assert!(row_text(&buffer, 0).starts_with("春眠不覺曉。"));
     }
 
     /// 焦點模式: the 段 being written keeps the page's ink and the rest of it
