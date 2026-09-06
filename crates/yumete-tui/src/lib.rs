@@ -4543,7 +4543,7 @@ fn meter_in_row(
     rope: &yumete_core::Rope,
     row: &wrap::Row,
 ) -> Vec<yumete_core::meter::Mark> {
-    if !editor.meter() {
+    if !editor.meter_drawn() {
         return Vec::new();
     }
     let start = row.start - rope.line_to_char(row.line);
@@ -8194,6 +8194,74 @@ mod tests {
         config.editor.show_segmentation = false;
         let buffer = render_wrapped(&mut editor, &config, 30, 8);
         assert!(row_text(&buffer, 0).starts_with("春眠不覺曉。"));
+    }
+
+    /// Set vertically the margin is a **cell off every 縱**, and it is bought
+    /// before a line is asked for its marks. With nothing to fill it the page
+    /// used to reflow anyway — every 縱 paying for a column that can never
+    /// hold anything, while the status line said there was no reading table.
+    #[test]
+    fn without_a_reader_the_page_does_not_pay_for_the_margin() {
+        let config = vertical_config();
+        let mut off = editor_with("春眠不覺曉。\n");
+        let quiet = render_vertical(&mut off, &config, 20, 10);
+        let plain = (0..20u16).find(|&x| at(&quiet, x, 0) == "春");
+
+        let mut on = editor_with("春眠不覺曉。\n");
+        on.execute(":meter on").unwrap();
+        assert!(!on.meter_drawn(), "asked for, and not drawable");
+        let buffer = render_vertical(&mut on, &config, 20, 10);
+        assert_eq!(
+            (0..20u16).find(|&x| at(&buffer, x, 0) == "春"),
+            plain,
+            "the 縱 is where it was"
+        );
+    }
+
+    /// A reader that knows 了 two ways, and 為 one.
+    struct Both;
+
+    impl yumete_cjk::Reader for Both {
+        fn read(&self, word: &str) -> Option<Vec<String>> {
+            match word {
+                // 為了 is a word, and its 了 is 輕聲 — neither 平 nor 仄.
+                "為了" => Some(vec!["wèi".into(), "le".into()]),
+                "為" => Some(vec!["wèi".into()]),
+                "了" => Some(vec!["liǎo".into()]),
+                "他" => Some(vec!["tā".into()]),
+                _ => None,
+            }
+        }
+
+        fn available(&self) -> bool {
+            true
+        }
+    }
+
+    /// 平仄 are read off a **word**, so the segmenter is an input to them —
+    /// and the answers are kept against a hash of the line's *text*, which
+    /// does not change when the dictionary does.
+    ///
+    /// The trigger in the field is the ordinary one: `:meter on` before the
+    /// IME has finished loading its dictionary. Until this was fixed, the 了
+    /// in 為了 stayed marked 仄 for the rest of the session — the exact
+    /// mistake the feature exists to catch.
+    #[test]
+    fn a_new_dictionary_takes_the_meter_marks_with_it() {
+        let mut editor = editor_with("為了他。\n");
+        editor.set_reader(Box::new(Both));
+        editor.execute(":meter on").unwrap();
+        // One character at a time: 為 仄, 了 liǎo 仄, 他 平 and the 韻腳.
+        let apart = editor.meter_on_line(0);
+        assert_eq!(apart.len(), 3, "{apart:?}");
+
+        editor.set_segmenter(Box::new(yumete_cjk::DictionarySegmenter::new(
+            [("為了".to_string(), 100i64)],
+            1,
+        )));
+        // 為了 is one word now, and its 了 is 輕聲: no mark at all.
+        let joined = editor.meter_on_line(0);
+        assert_eq!(joined.len(), 2, "{joined:?}");
     }
 
     /// 焦點模式: the 段 being written keeps the page's ink and the rest of it

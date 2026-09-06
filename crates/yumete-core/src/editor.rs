@@ -8197,9 +8197,25 @@ impl Editor {
         self.focus
     }
 
-    /// Whether the 平仄 are drawn in the margin (Feature #247).
+    /// Whether `:meter` is on — the setting, which the status line reports.
+    ///
+    /// **Not the question the page asks.** A page wants
+    /// [`Self::meter_drawn`]: with the 平仄 asked for and no 拆分表 to read
+    /// them out of, the setting is on and every mark is empty.
     pub fn meter(&self) -> bool {
         self.meter
+    }
+
+    /// Whether the 平仄 will actually be drawn (Feature #247).
+    ///
+    /// The margin they go in is a **cell off every 縱 on the page**, bought
+    /// before a line is asked for its marks. Bought on the setting alone, a
+    /// `:meter on` with no 拆分表 installed reflowed the whole page to make
+    /// room for a column that can never hold anything — while the status line
+    /// was busy saying there is no reading table. The command says so
+    /// *instead* of drawing an empty margin, which is what it always claimed.
+    pub fn meter_drawn(&self) -> bool {
+        self.meter && self.reader.available()
     }
 
     /// Whether the cursor's row is kept in the middle of the page.
@@ -11511,11 +11527,26 @@ impl Editor {
 
     // ---- Word segmentation (Feature #24) ----------------------------------
 
+    /// Forget every answer that was worked out with the segmenter in force.
+    ///
+    /// Where a word ends is an input to two derived answers, not one: the
+    /// segmentation overlay **and** the 平仄 margin, which asks the reader for
+    /// a *word*'s reading (`了` is `le` in 為了 and `liǎo` in 了解). Both are
+    /// kept against a hash of the line's text, and changing the dictionary
+    /// changes neither the text nor the hash — so a `:meter` turned on before
+    /// the IME finished loading its dictionary kept marking the 了 in 為了 仄
+    /// until the line was edited, which is the exact mistake the feature
+    /// exists to catch.
+    fn forget_the_words(&mut self) {
+        self.segment_cache.borrow_mut().clear();
+        self.meter_cache.borrow_mut().clear();
+    }
+
     /// Install the word [`Segmenter`] used by `w`/`b`/`e` and the segmentation
     /// overlay. A [`yumete_cjk::DictionarySegmenter`] groups CJK characters into
     /// words; the default [`yumete_cjk::CategorySegmenter`] treats each as one.
     pub fn set_segmenter(&mut self, segmenter: Box<dyn Segmenter>) {
-        self.segment_cache.borrow_mut().clear();
+        self.forget_the_words();
         // The project's own words go on top of whatever was chosen, so the
         // book's names survive a change of dictionary.
         self.segmenter = Box::new(yumete_cjk::WithWords::new(
@@ -11618,7 +11649,7 @@ impl Editor {
     pub fn set_word_level(&mut self, level: yumete_cjk::WordLevel) {
         self.word_level = level;
         self.segmenter.set_level(level);
-        self.segment_cache.borrow_mut().clear();
+        self.forget_the_words();
     }
 
     /// What the dictionary in force calls itself, for the status line.
@@ -11770,7 +11801,7 @@ impl Editor {
                 words.add(&word.word);
             }
         }
-        self.segment_cache.borrow_mut().clear();
+        self.forget_the_words();
         self.words_request = true;
         self.status = match total > DISCOVER_LIMIT {
             true => say!("word.discover-too-many", DISCOVER_LIMIT, total),
@@ -11810,7 +11841,7 @@ impl Editor {
         };
         let n = list.len();
         *self.project_words.borrow_mut() = list;
-        self.segment_cache.borrow_mut().clear();
+        self.forget_the_words();
         self.status = match where_from {
             Some(path) => say!("word.project-words-loaded", n, path.display()),
             None => say!("word.no-project-words-file"),
