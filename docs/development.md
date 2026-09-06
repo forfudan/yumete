@@ -493,6 +493,8 @@ index, and a row with no number anywhere else is a row that got lost.
 | 280 | **Caps Lock as Esc** | — | P4 | the author, 2026-09-06: 「可以通過命令讓 caplock 代替 Esc 的所有功能。因為 Caplock 鍵好按。caplock 功能可以通過一個空格快捷鍵開啟關閉。」 **Right instinct, wrong layer — and this one should not be built.** A terminal application never sees Caps Lock: the key is swallowed by the window server, and the only way it reaches an application at all is the Kitty protocol's `REPORT_ALL_KEYS_AS_ESCAPE_CODES`, which yumete pushed once and **took back in #271** because it broke the macOS system IME. So there is no keystroke for a `:caps on` command to bind, and no state for a space-leader toggle to flip. The lever that works is one line of the operating system's, applied once: **系統設定 → 鍵盤 → 鍵盤快速鍵 → 變更鍵 → Caps Lock → Escape** (or `hidutil property --set '{"UserKeyMapping":[{"HIDKeyboardModifierMappingSrc":0x700000039,"HIDKeyboardModifierMappingDst":0x700000029}]}'` for the same thing from a script). It is then Esc in *every* application, with no delay, and yumete needs to know nothing about it. yumete could run that `hidutil` line at startup and undo it at exit — and should not: the remap is **global while yumete runs**, it outlives a crash, and `UserKeyMapping` is a whole-set property, so writing ours silently drops whatever else the writer had remapped. Recorded in the manual as a setting rather than in the code as a feature. **none** | Won't build (documented) |
 | 281 | **The other pane draws this file's text under the other file's name** | tui | P2 | found while acting on a review of #247, 2026-09-06. A split is captioned with the file it was opened on and drawn from `editor.current_buffer()` — every one of them, both halves — so the moment the live half changes documents the peek half goes on showing *your* text under *its* caption. Reproduced with two scratch buffers: split on B, `:buffer previous`, and the pane titled 「B」 is full of A. It is not a corner: **`:schema` walks straight into it** — `table_schema_in_split` opens the schema file, hands it to the split and then takes the table buffer back, which is precisely the state that misdraws, so 「schema in the other area」 has been showing the table in the other area. The fix is not local. Everything the page is drawn from — the rope, `hidden_on_line`, `line_is_folded`, `readings_on_line`, `meter_on_line`, `table_row_at`, the markup runs — reads `current_buffer()`, and three of the caches behind them (`segment_cache`, `meter_cache`, `note_cache`) are keyed by **line alone**, so drawing a second buffer would poison them as well as needing a buffer argument threaded through some thirty accessors. Two ways out to choose between first: give those accessors a buffer (correct, and the caches have to be re-keyed by `(buffer, line)` on the way), or hold the design line #176 already states — 「two panes over one buffer」 — and make a pane that names another document stop being a second half until you are back in it, which costs `switch_pane`'s cross-buffer branch and `:schema`'s whole gesture. **medium** | Open |
 | 282 | **One flick of the wheel over a table froze the window** | core | P1 | the author, 2026-09-06: 「在 tn 下，鼠标滚轮滚动会造成buffer卡死。」 Not the table mode's — **any** page with a `|` table on it, and #268's wheel work made it visible rather than caused it: a flick is collapsed into one `scroll(n)`, so the whole gesture is paid for in one frame. The bill was the padding that squares a table up (#212), whose memo was keyed on the caret. Nothing in `hidden_on_line` asks where the caret is unless `:render full` is on — under the default `:render on` the key changed on every `j` and threw away a walk down every row of the table. One flick over the 223-row table in this file: **8.26 s → 41 ms**. The key now carries the caret only when 所見即所得 is on, where the answer genuinely moves with it. **small** | Done |
+| 283 | **Four dimensions, three levels, one word for each level** | core+tui | P2 | the author, 2026-09-06: 「我的目的是能让命令和快捷键的命名尽量统一、规范，便于用户学习记忆。」 `render` / `table` / `ruby` / `indent` were four settings with four vocabularies — `:render on`, `t n`／`t a`／`t t`, a dialect set, an indent flag — so learning one taught you nothing about the next. They are now one word each at three levels, `off` / `basic` / `full`, and **the levels are linked at assignment, not at read time**: `:render <級>` *writes* the matching level into the other three and nothing re-derives afterwards, so any one of them can be moved on its own and the next `:render` re-assigns everything. The law that makes `basic` safe as the factory level: **`basic` 不藏、不摺、不替換; `full` 三件都可以做** — with nothing to draw a table on, `TableLevel::Basic` and `Off` produce the same page to the character. The enabling refactor is a split: `table_level` is the reader's standing preference and survives every open, `self.table` is the per-buffer fact of *which* table the cursor is in, and `Surface::{Normal,Advanced,Grid}` dissolves into that level plus an orthogonal `TableView.pane` (which is why `t q` needs nothing written down — the level it returns to was never touched). Keys: `t o` / `t b` / `t f` / `t t` / `t q`, 排齊 to `t F`. Design in §5.7. Two real faults fell out of it: `t d` in the paragraph *between* two tables deleted the prose line the cursor was on and reported 「已刪除一行」 (`md_region()` is `None` there, which the dispatch read as 「a delimited file」), and a lone `| 甲` had the grid's keys on it while the renderer painted it as the prose it is — `prose_region` took any run of pipe lines, `with_md_tables` took only the ones Markdown parses. One rule now (`md_table_parses`), and a `table_here()` gate above every key that edits a grid. **Still open**: deriving `self.table` on open when the level is not `off`; `indent` as the fourth dimension with `full` folding blank lines; `t w`／`t i`; forbidding bare `t s` and adding `t0as`／`t1,5,9s`; `,` for coordinates and `-` for ranges (`t20,20g`). **large** | Open |
+| 284 | **The HUD is a thread, not a panel — and in 縱書 it is nothing at all** | tui | P3 | the author, 2026-09-06: 「現在的HUD是一根線連到字母上。你覺得可不可以加個面板（有外框），並且允許HUD覆蓋其他的行的文字…允許他覆蓋其他文字可以讓他的位置更固定…然後我們可以有三個模式 `:hud off/basic/full`，默認 full。」 **The frame and the covering are one decision, not two.** Today's mark wants five cells on one row, so it can still find margin; a bordered panel wants a 3 × (寬+2) rectangle empty *near the caret*, which on a page of prose does not exist — so a frame forces covering. And the converse holds: once the HUD's glyphs sit on the same paper as the writing, nothing tells the reader which characters are not theirs, so covering forces a frame. That collapses two switches into one axis, which is what feeds the three levels. **What covering actually costs is not 「some prose」**: in Normal the HUD carries `typed_so_far()`, so pinning it two cells right of the caret paints over exactly the characters `3`, `2t` and `d3l` are counting — the object of the command. Hence the split: `off` draws nothing beside the caret (the status line's right edge stays — #193's floor), **`basic` is the factory level** and is today's scoring placement (#269) with a louder style — one row high, a 藥丸 rather than a thread, BAND ground and gold ink, **not one character hidden** — and `full` is the pinned, bordered, may-cover panel. Default `basic`, not `full`, by §5.7's own rule: the factory level must be identical to `off` in the worst case, and 醒目 is bought with style rather than with hiding. Three things to settle in the doing: **`:hud` is not #283's fifth dimension** — it is how the editor talks to you, not how the file is drawn, so `:render` must never write it and `render.is` keeps four fields; `:yume panel full` and `:hud full` are different words — the candidate panel and a pinned HUD both want `(cursor_x, cursor_y+1)` and the panel wins; and `full` loses the HUD's only collision avoidance, because `after_the_writing` reads the *buffer* back and thereby also dodges which-key, the command menu, the picker and the detail panel — 「有字」 and 「有面板」 read back identically once we cover, so the draw functions have to start returning their own `Rect`. #269's line in this table — 「`after_the_writing` is unchanged: the HUD still never paints over writing」 — is revoked by `full` and must be amended, not silently contradicted. **A separate fault found while reviewing this, and worth more than the frame**: in 縱書 the HUD is essentially never drawn. `after_the_writing` scans left→right for the last non-blank on the row, and 縱書 fills columns right-to-left, so `after` lands near the right edge whenever any 縱 on that row holds a character, every candidate fails `x < after`, and the vertical reader has only the status line. **medium** (縱書: **small**) | Open |
 
 ### 5.5 · A table is a delimiter, a surface and a boundary (#261)
 
@@ -1111,7 +1113,7 @@ asks one field and `render` never appears on that path at all.
 | --- | --- | --- | --- |
 | `render` | the file as written, one colour | style only | the parts are optimised |
 | `table` | not table's business | aligned · no wrap · keys to the grid where a table is | ＋ `\|` drawn as `┆`, the column ruler |
-| `ruby` | the tags are text | the tags stay ＋ a reading line above | the reading only |
+| `ruby` | the tags are text | the tags stay, and nothing is drawn beside the base | the reading beside the base, the tags off the page |
 | `indent` | no indent | indent (drawn spaces) | indent ＋ the blank line between two paragraphs folded away |
 
 `:render <level>` assigns all four. Each can then be overridden by its own
@@ -1120,6 +1122,32 @@ so there is no pin state anyone has to be able to see). `:render` with no
 argument **reports** all four — the shape `:table rules` already has.
 
 There is no `:render reset`: with that rule, `:render basic` is it.
+
+**All four say the three words. Settled 2026-09-06** — because #283 landed with
+only one of them saying any. `:render off|basic|full` landed with the
+design and so did the keys (`t o`/`t b`/`t f`), while the other three dimensions
+kept the dialects #283 exists to abolish: `:table on|off`, `:ruby on|off` plus
+seven more, `:indent off|hint|<數字>`. `t b` set a level the command `:table
+basic` did not recognise — the keys and the commands disagreeing at the exact
+four points the whole entry is about. So:
+
+```
+:render off | basic | full     the master — writes the other three
+:table  off | basic | full     `on` retires
+:ruby   off | basic | full     `on` retires; the dialect words stay as
+                               overrides (`:ruby html`, `:ruby auto`)
+:indent off | basic | full     `on` retires; `:indent <數字>` stays, and
+                               `hint` stays as its own override
+```
+
+`on` is deleted rather than aliased, per the standing rule. **`:render` itself
+stays at the top level** and is not folded under a page-appearance parent: it
+*writes* three other settings, and a parent that lists it beside `:dense` and
+`:focus` says they are the same kind of thing, hiding the one relationship a
+reader has to learn. Whether the remaining appearance words (`wrap`, `dense`,
+`bands`, `sentence`, `hanging`, `numbers`, `typewriter`, `focus`, `meter`,
+`note`, `preview`) get a parent is a separate question — §5.2.3 ③ — and it is
+easier to answer once none of them is a master switch.
 
 **The law that decides which level a feature belongs to.**
 
@@ -1136,8 +1164,16 @@ had been argued twice by eye; measure it instead:
 * `indent`'s blank-line fold **removes a line** → `indent full`. Before the
   law it was the one place where `:render on` quietly took a character off
   the page and nothing said so.
-* `ruby` at `basic` therefore keeps the tags on the page and draws the
-  reading above them. Stripping the tag is hiding, and hiding is `full`.
+* `ruby` at `basic` therefore keeps the tags on the page and draws **nothing**
+  beside the base. Stripping the tag is hiding, and hiding is `full` — and the
+  reading column belongs with the stripping rather than beside it, because a
+  reading laid out while its `<rt>` is still on the page is the same reading
+  twice. That was settled on 2026-09-06 against the two comments twenty lines
+  apart in `editor.rs` that had been arguing it: `set_ruby_level:2755` quoting
+  「正文不许摘 ruby 标签但可以额外在上方显示一个ruby 行」, and
+  `hidden_on_line:2775` answering that laying one out obliges taking the other
+  off. Both are right; what they disagree about is which *level* draws a
+  reading at all. `basic` does not.
 
 **A feature with two states gets two states.** The levels are a naming
 convention and a mapping, not a quota — map `basic` and `full` to the same
@@ -1155,7 +1191,7 @@ So they split, the same way `render` and `table` just did:
 
 | | what it is | who writes it | on open |
 | --- | --- | --- | --- |
-| `table_level` | off / basic / full — a preference | `:render`, `:table view` | **untouched** |
+| `table_level` | off / basic / full — a preference | `:render`, `:table <級>` | **untouched** |
 | `self.table` | which table, what schema, what bounds | derived | recomputed |
 
 Three consequences fall out, and all three are the point:
@@ -2389,6 +2425,270 @@ a different file.~~ Done: a `Buffer` now has an **id** that lasts the session,
 and both the marks and the jump list keep places by it. A jump into a buffer
 that has since been closed says so rather than opening whichever file took its
 place in the list.
+
+## 5.2.2 Four reviews, 2026-09-06
+
+Four readers went in at once, one question each: how the modes and their
+settings hang together (#283's four dimensions); whether 62 top-level commands
+are 62 subjects; whether the keys are named the way the commands are; and
+whether every key is a command's sugar. The design arguments they came back
+with are **undecided** and are in §5.2.3. What follows is only what was
+**reproduced** — by driving the editor offscreen, or by reading the two sides
+that contradict each other.
+
+Twelve. Eight of them are one copy of a name drifting from another. `COMMANDS`
+says as much about itself (`command.rs:4247`: *the table cannot be derived from
+`parse`*), and a key's name currently lives in as many as seven places — the
+handler, `pending_keys()`/`SPACE_KEYS`, `messages.toml`, `help_*()`,
+`tutor.rs`, `manual.md`, and this file. Only two of those chains are
+single-source today: `:` commands (`help_commands()` reads `COMMANDS`) and the
+`空格` group (`SPACE_KEYS` feeds the hint and the help from one table).
+
+### 1 · The menu vanishes on the abbreviation it printed itself
+
+`:table ` draws twelve words with their shortest spellings — `off (of)`,
+`new (ne)`, `rules (r)`. Type the `tab` it just showed and press space:
+
+```
+:table                                :tab
+╭命令─────────────────────────╮        5
+│ on         check  (ch) …    │
+│ off  (of)  rules  (r)  …    │        （空白）
+│1/12  按格子編輯（默認）     │
+```
+
+`:tab rules` **runs** — `resolve` expands the prefix. The menu is the one place
+that does not ask it: `complete_at:3197` is `find(|e| e.name == head ||
+e.aliases.contains(&head))`, full name or alias, no prefix, and `:3206` matches
+子命令 the same way. `resolve`'s own doc comment two hundred lines up reads
+*One rule, at every level*. Worse, the miss is a `return`, not an empty list,
+so #223's deep fallback at `:3250` is skipped too — `:dense ` offers nothing at
+all. **This is the hard blocker**: a reader meets it on the first day, and any
+folding of the command table (§5.2.3 ③) makes multi-word commands the norm.
+
+### 2 · `:hanging off` turns hanging punctuation **on**
+
+`command.rs:761` is `"hanging" => Ok(Command::ToggleHanging)` — `rest` is never
+read — while `COMMANDS` declares `args: Args::Words(ON_OFF)` (`:2785`), so the
+menu offers `on｜off` and the hint prints it. Driven: `:dense off` then
+`:hanging off` → 「標點旁置：開」; a second `:hanging off` → 「標點旁置：關」.
+`:yume chaifen off` has the same shape (`command.rs:658`, declared at `:1784`).
+
+`every_listed_command_parses` cannot catch this: `:hanging off` *parses*. It
+simply does not listen.
+
+### 3 · `:render basic` hides the ruby markup, and says so in the same frame
+
+```
+:render off        1 春に<ruby>永和<rt>えいわ</rt></ruby>と申す。   原文：不著色
+:render basic            えいわ
+                   1 春に永和と申す。                  著色：標記留在畫面上
+```
+
+§5.7's law is what makes `basic` safe as the factory level — **`basic` 不藏、
+不摺、不替換** — and `set_ruby_level` (`editor.rs:2749`) still carries, at `:2755`, the
+author's sentence 「正文不许摘 ruby 标签但可以额外在上方显示一个ruby 行」.
+The strip runs in `hidden_on_line` (`editor.rs:2772`) **outside** the
+`wysiwyg()` guard, so it happens at every level above `off`.
+
+### 4 · The markdown grid keys report success on a read-only buffer
+
+`:readonly on` → `:table` → `t r` says 「加了一行」 with the grid unchanged and
+the buffer marked `[只讀]`. The text is safe — `Buffer::insert` returns early
+(`buffer.rs:425`) — so what is lost is only the truth. `md_write`
+(`editor.rs:5985`) and `sort_table` (`:6238`) skip the `refuse_readonly` guard
+that ~28 other call sites carry, and `md_new_row` writes its message
+unconditionally (`:6087`). The `.csv` half of the same `t` menu is guarded;
+the `.md` half is not.
+
+### 5 · The built-in help teaches a command that errors
+
+`help_chinese()` prints `(":segment on", …)` (`editor.rs:8190`) and
+`README.md:51` says the same, while `command.rs:3590` asserts
+`parse(":segment").is_err()`. Driven: 「沒有「segment」這個命令」.
+
+### 6 · `:rec!` does not exist
+
+`FORCEABLE` (`command.rs:1567`) lists nine names and `recover` is not among
+them, so `resolve`'s `!` branch never finds a prefix of it. `:recover!` works,
+`:rec!` `:recov!` `:recove!` are all `Unknown` — while `:rec` without the bang
+is fine. The comment on that branch says *the bang belongs to the command, not
+to its spelling*; `recover` is the one it forgot. (The same branch also spells
+those nine names out a third time at `:1543`, which is why the fix is two lines
+and the cure — a `force: bool` on `parse` — is a refactor.)
+
+### 7 · `:export` asks for the wrong argument, and its four formats are unfindable
+
+`COMMANDS` declares `args: Args::Free("<檔名>")` (`command.rs:2984`) while
+`parse` reads the **format** first (`:1085`). Driven: `:export 第三章.md` →
+「沒有「第三章.md」這種格式——html、typst，或者 csv、tsv」. Because the
+argument is `Args::Free`, `complete_at` returns a placeholder row and
+`deep_from_root` finds nothing: `html` `typst` `csv` `tsv` are the only words
+this editor accepts that appear **nowhere** in `::`'s 221-row corpus.
+
+### 8 · `t20,20g` is taught in two places and implemented in none
+
+`take_sequence_argument` (`editor.rs:11777`) eats digits and `-`; `,` appears
+nowhere in the parser. Driven inside a table, `t20,20g` breaks at the comma and
+the rest lands as text. `messages.toml:3673` and this file (§5.7's list) teach
+`t20,20g`; `tutor.rs:157` teaches `t20-20g`, which works. §5.7 lists the comma
+under **still open** — so the documentation is teaching an unbuilt feature.
+
+### 9 · The file picker cannot type Chinese
+
+`composes()` (`yumete-tui/src/lib.rs:878`) lists `Insert | Search | Ruby |
+Lookfor`. `Mode::Picker` is absent — in fact `Mode::Picker` never appears
+anywhere in `yumete-tui`. So `空格 f` and `空格 b` filter a list of
+「第三章.md」 by ASCII only. The function's own comment already argues the
+case: *in a Chinese document it is usually Chinese text… which in a novel is
+almost nothing*. One line.
+
+### 10 · `:tutor` teaches a key that closes the table
+
+`tutor.rs:148`: 「`i` 進格子打字，`c` 換掉整格，**`t o` 加一行**，`t d` 刪一行」.
+`t o` leaves the table (`editor.rs:7437`), and that arm's own comment reads
+*It used to open a row; 加行 is `t r` since 2026-09-05*. The code and its
+comment were both updated; the lesson was not.
+`the_lesson_teaches_the_keys_it_says_it_does` (`tutor.rs:203`) cannot catch it:
+it asserts the lesson **mentions** certain keys, never that the editor **has**
+them.
+
+### 11 · The manual gives `t f` the job of `t F`
+
+`manual.md:1631`: 「**`t f` 會把表格排齊，排進檔案裏。**」 Since #283, `t f`
+is the `full` level and 排齊 is `t F` (`editor.rs:7401` vs `:7648`). The
+paragraph's argument — 原文歸原文，頁面歸頁面 — is still right; only the
+letter is old. `development.md:419` (#206) and `:485` (#272) carry the same
+stale spelling; §5.7 is the only place that agrees with the code.
+
+### 12 · Two stale names left behind by #283
+
+- `RENDER`'s middle word is `basic`, and its help key is still
+  `cmd.render.on` (`command.rs:1956`, `messages.toml:1315`).
+- `editor.rs:13208` carries a comment for Helix's `*` with no arm under it —
+  `*` was retired (§14, 2026-09-04) — while §5.1's table (`:1285`) still
+  records `*` as **Done**, and `:1236` still records `f t F T` although
+  `FindKind` (`editor.rs:150`) has only `ForwardTo`/`BackwardTo` left.
+
+### What has to be built once, not twelve times
+
+Eight of the twelve above are a name that exists twice. Before any of §5.2.3 is
+decided, two things pay for themselves:
+
+- **One table of key names**, shaped like `SPACE_KEYS` — `(leader, key, tag)` —
+  feeding `pending_keys()`, `help_*()`, `hint()` and `:tutor` from one place.
+  The `g` group has already drifted (`gn`/`gp` are in `handle_goto:13331` and
+  in `manual.md:180`, but not in the hint table at `:8433`); the `t` group
+  keeps three hand-copied key lists.
+- **A test that every backticked key sequence in `tutor.rs` and `manual.md`
+  exists**. It catches 8, 10 and 11 above, and it catches them again next time.
+
+## 5.2.3 Open, 2026-09-06 — the author's call
+
+Five. None is written into the design sections until it is decided; **§5.7
+(#283) stands as written until then**. Each is recorded with what the answer
+costs, because that is the part that is expensive to re-derive.
+
+### ① ~~Where `:render` lives~~ — decided 2026-09-06
+
+**The question turned out to be the wrong one.** Neither review had checked
+what the other three dimensions actually accept: `:table basic`, `:ruby basic`
+and `:indent basic` were all 「不認得」 while the keys `t b` and `t f` worked,
+so #283's vocabulary existed on `:render` alone and the keys and the commands
+disagreed at exactly the four points #283 is about. The answer is therefore
+**not** a new home for `:render` but the other three learning to speak: all
+four take `off|basic|full`, `on` is deleted, and `:render` stays at the top
+level as their master. Written up in §5.7; it also gives §5.2.2 fault 3 its
+fix, because the strip that `basic` performs today has a level to belong to
+(`ruby == Full`) as soon as that level exists. `:ruby basic` draws nothing
+beside the base — the second half of the decision, also in §5.7.
+
+Folding and a `z` group are **not** decided by this and stay open under ③.
+What was on the table:
+
+#283 has just made `render` / `table` / `ruby` / `indent` four top-level
+dimensions at three levels, linked at assignment. Two of the reviews want to
+move it:
+
+- **Fold it**: `:view render`, one of twelve children of a new `:view` — the
+  whole 「這一頁怎麼排」 vocabulary as one second letter (`:v d` 密排, `:v w`
+  折行, `:v h` 旁置, `:v f` 專注). Costs: #283's four-at-the-top story becomes
+  four-under-one, and §5.7 is rewritten.
+- **Give it a key**: a `z` group (`z o`/`z b`/`z f`), `z` being unbound today.
+  Costs: the four dimensions then have two homes, a group letter and a command
+  parent, that are not the same letter.
+- **Leave it.** Costs: `render` stays a top-level word next to `wrap`, `dense`,
+  `bands`, `sentence`, `hanging`, `numbers`, `typewriter`, `focus`, `meter`,
+  `note` — eleven siblings that answer the same question and do not know it.
+
+⚠️ The folding review's tree writes `:view render raw|tint|result`. That
+vocabulary is pre-#283; the code is `off|basic|full` (`command.rs:1947`). Any
+version of this that ships adopts #283's three words.
+
+### ② Whether `r` and the case keys are worth their places
+
+`r` (replace one character) cannot type a 漢字 or a full-width comma: Normal
+mode is not in `composes()`, so the IME never runs for the character it waits
+for. `` ` `` and `` A-` `` (to lower/upper case) and `~` are identity
+operations on Chinese text. Four top-level keys — one of them the unshifted
+backtick — that a novelist cannot use.
+
+- **Take them**: `r` becomes the 旁注 group (`r r` 注音, `r o`/`r b`/`r f`,
+  `r a` 自動, `r F` 寫進檔案), which is the one thing a 縱書 editor does that
+  has no key at all today. Costs: vi and Helix muscle memory, and a phrasebook
+  entry to catch the reflex.
+- **Leave them**: costs nothing, and 注音 stays a command-only feature.
+
+(Independent of the answer: `hint.vi.backtick` is dead code — `` ` `` is bound
+at `editor.rs:13205`, and phrasebook entries are only reached when a key is
+*not* bound. And `z`, `T`, `V`, `Y` are bound to nothing **and** absent from
+the phrasebook, so they are silent.)
+
+### ③ Whether to fold the command table, and when
+
+62 top-level commands; 21 of them are somebody's child. The arithmetic was
+checked and holds: `::` ranking is **bit-for-bit unchanged** by nesting
+(`ascii_score` normalises by the needle's length, and the density factor counts
+word starts only *between* the first and last hit), and shortening the top
+level shortens eleven surviving abbreviations (`tab`→`ta`, `bu`→`b`, `he`→`h`,
+`ma`→`m`, `for`→`f`, `ne`→`n`, `wri`→`wr`, `conv`→`con`, `pre`→`pr`).
+`:w :q :qa :x :o :u :g` do not move — they are aliases, and aliases do not feel
+the top level at all. Of the 21 that move, 6 cost nothing, 14 cost one
+keystroke, 1 costs two.
+
+Two things are **not** free, and they are the decision:
+
+- Whoever knows `:dense` must be sent to `:view dense`. Not an alias — a
+  signpost computed from the tree in `CommandError::Unknown` (about 20 lines),
+  so it can never go stale. Without it, and without fixing fault 1 above,
+  folding is a regression.
+- **165 places** in prose: `messages.toml` 60 (×3 languages), `docs/` 105.
+  That, not the code, is the work.
+
+The folding review's own recommendation is **fix the ground for 0.1.0, fold in
+0.1.1** — and that folding half the table is worse than not folding, because
+then no reader can tell which commands are classified. The tree's value is that
+it is complete.
+
+### ④ Whether one word may name two things under two parents
+
+If `:note` becomes `:view punct` (its help text is 「標點提示：半角標點與 ...
+旁邊畫出該用的那一個」, `messages.toml:725` — it has never been about
+footnotes), then `punct` names a standing overlay under `:view` and a one-pass
+report under `:check`. Same concept, same word, different verb from the parent —
+a rule, or a confusion. The same question decides `:conflicts` → `:check
+merge`, `:row` → `:table jump`, `:search` → `:table find`.
+
+### ⑤ How read-only refuses
+
+Today `Buffer::insert` returns early and says nothing, and ~28 call sites each
+refuse for themselves — `buffer.rs:418`'s comment states this is deliberate and
+that a new caller must do the same. Fault 4 is the third such caller to be
+missed.
+
+- **Patch the callers**: two guards, today.
+- **Move the gate into the buffer** and let it return a `Result`: the class of
+  bug cannot recur, at the price of a signature change across every edit path.
 
 ## 5.3 Releasing, and the Homebrew tap (#135, planned)
 
