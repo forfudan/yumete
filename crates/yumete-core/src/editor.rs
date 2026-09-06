@@ -89,9 +89,14 @@ type FoldMap = ((u64, u64), Vec<bool>, (usize, usize));
 /// keyed by the buffer that line is in and its number.
 type MarkupCache = HashMap<(u64, usize), (u64, Vec<crate::markdown::Span>)>;
 
-/// Every line's block, against the buffer it was worked out for and that
-/// buffer's revision — the two things that decide whether it is still true.
-type BlockCache = ((u64, u64), Vec<crate::markdown::Block>);
+/// Every line's block and every merge conflict in the document, against the
+/// buffer they were worked out for and that buffer's revision — the two things
+/// that decide whether they are still true.
+///
+/// The conflicts ride along because they come out of the same walk: the block
+/// scan already reads every line's opening, and the four markers are settled
+/// by exactly those characters (#249).
+type BlockCache = ((u64, u64), Vec<crate::markdown::Block>, Vec<crate::conflict::Conflict>);
 
 /// How many paragraphs of segmentation to remember.
 ///
@@ -143,6 +148,12 @@ enum Pending {
     Mark,
     /// `'` awaiting the letter of a place to go back to.
     Recall,
+    /// `]` or `[` — 「the next one of these」, and which way. Helix keeps the
+    /// walks between things a document *has* on the brackets, and #249's
+    /// `]c` is the first of them here.
+    Hop { forward: bool },
+    /// `空格 c` — what to keep of the merge conflict under the cursor.
+    Conflict,
 }
 
 /// The four flavours of in-line character search (`f`/`t`/`F`/`T`).
@@ -2526,7 +2537,7 @@ impl Editor {
             self.current_buffer().revision(),
         );
         match self.block_cache.borrow().as_ref() {
-            Some((cached, blocks)) if *cached == key => {
+            Some((cached, blocks, _)) if *cached == key => {
                 blocks.get(line).copied().unwrap_or_default()
             }
             _ => crate::markdown::Block::default(),
@@ -2559,7 +2570,7 @@ impl Editor {
         // where the old one did, and answer for it.
         self.scan_blocks();
         let key = (buffer.id(), buffer.revision());
-        if let Some((cached, blocks)) = self.block_cache.borrow().as_ref() {
+        if let Some((cached, blocks, _)) = self.block_cache.borrow().as_ref() {
             if *cached == key {
                 return blocks[..=last.min(blocks.len() - 1)].to_vec();
             }
@@ -2582,7 +2593,7 @@ impl Editor {
         let rope = buffer.rope();
         let lines = rope.len_lines();
         let key = (buffer.id(), buffer.revision());
-        if let Some((cached, _)) = self.block_cache.borrow().as_ref() {
+        if let Some((cached, _, _)) = self.block_cache.borrow().as_ref() {
             if *cached == key {
                 return;
             }
@@ -2591,6 +2602,9 @@ impl Editor {
         let mut markdown = crate::markdown::BlockScanner::new();
         let mut typst_scanner = crate::markdown::typst::BlockScanner::new();
         let mut blocks = Vec::with_capacity(lines);
+        // The four markers are settled by the same opening characters, so a
+        // merge conflict costs this walk nothing but the rare line it finds.
+        let mut marks = Vec::new();
         for line in 0..lines {
             // Only the line's opening is read: every decision is about that,
             // and materialising each paragraph copied the whole novel.
@@ -2604,13 +2618,88 @@ impl Editor {
                 .chars_at(start)
                 .take((end - start).min(crate::markdown::PREFIX))
                 .collect();
+            if let Some(kind) = crate::conflict::marker(&prefix) {
+                marks.push((line, kind, crate::conflict::label(&prefix)));
+            }
             blocks.push(if typst {
                 typst_scanner.feed(&prefix, end - start)
             } else {
                 markdown.feed(&prefix, end - start)
             });
         }
-        *self.block_cache.borrow_mut() = Some((key, blocks));
+        // **Laid over the answer, not woven into it.** A forward scan cannot
+        // know whether a `<<<<<<<` ever closes, and a paragraph *about* merges
+        // must not turn the rest of the chapter into somebody's side of an
+        // argument. So the conflicts are assembled first — which throws the
+        // unclosed ones away — and only then do their lines take the label.
+        let conflicts = crate::conflict::assemble(marks);
+        for found in &conflicts {
+            for line in found.lines() {
+                blocks[line] = crate::markdown::Block::Conflict(found.side_of(line));
+            }
+        }
+        *self.block_cache.borrow_mut() = Some((key, blocks, conflicts));
+    }
+
+    /// Every merge conflict in this buffer, in the order they are written
+    /// (Feature #249).
+    ///
+    /// Not gated on whether the markup is drawn: `:render off` says how the
+    /// page is *coloured*, and `]c` is a motion. A file with seven angle
+    /// brackets in it is in a state the writer needs to get out of either way.
+    pub fn conflicts(&self) -> Vec<crate::conflict::Conflict> {
+        self.scan_blocks();
+        let key = (
+            self.current_buffer().id(),
+            self.current_buffer().revision(),
+        );
+        match self.block_cache.borrow().as_ref() {
+            Some((cached, _, found)) if *cached == key => found.clone(),
+            _ => Vec::new(),
+        }
+    }
+
+    /// The conflict `line` stands in, markers included.
+    pub fn conflict_at(&self, line: usize) -> Option<crate::conflict::Conflict> {
+        self.conflicts()
+            .into_iter()
+            .find(|c| c.lines().contains(&line))
+    }
+
+    /// `:conflicts` — every conflict in this file, as a buffer to walk (#249).
+    ///
+    /// The same `路徑:行:` shape `:grep` writes, so `gf` follows a row back to
+    /// the line it names and every motion works in the list. **This file
+    /// only**: a merge conflict is a state a file is in, and the file the
+    /// writer is looking at is the one they are about to resolve.
+    fn list_conflicts(&mut self) {
+        let found = self.conflicts();
+        if found.is_empty() {
+            self.status = say!("conflict.none");
+            return;
+        }
+        let shown = self
+            .current_buffer()
+            .path()
+            .map(|p| p.display().to_string())
+            .unwrap_or_else(|| self.current_buffer().display_name());
+        let mut listing = String::new();
+        for c in &found {
+            // Wordless on purpose: the two labels are the branches git wrote
+            // into the file, and they say more than any sentence here could.
+            listing.push_str(&format!(
+                "{shown}:{}: {} ⇄ {}\n",
+                c.head + 1,
+                c.ours,
+                c.theirs
+            ));
+        }
+        let count = found.len();
+        let mut buffer = Buffer::from_text(&listing);
+        buffer.name_as("[conflicts]");
+        self.add_buffer(buffer);
+        self.set_cursor(0);
+        self.status = say!("conflict.some", count);
     }
 
     /// Whether the markup is taken off the page (所見即所得).
@@ -2655,8 +2744,20 @@ impl Editor {
             .filter(|(a, b)| b > a)
             .collect();
         if self.wysiwyg() {
+            let block = self.block_of(line);
+            // **A conflict marker is markup too** (#249): seven brackets and
+            // the space after them come off, exactly as a heading's hashes do,
+            // and what is left is the one part a reader wants — whose side this
+            // is. `=======` has no label, so its row goes empty, which is what
+            // a divider between two halves should look like.
+            if block == crate::markdown::Block::Conflict(None) {
+                let text = self.current_buffer().rope().line(line).to_string();
+                let brackets = text.chars().take(7).count();
+                let take = brackets + usize::from(text.chars().nth(7) == Some(' '));
+                off.push((0, take));
+            }
             // Inside a fence nothing is markup, so nothing comes off.
-            let spans = self.markup_line_in(line, self.block_of(line));
+            let spans = self.markup_line_in(line, block);
             off.extend(crate::markdown::hidden(&spans, self.selected_columns(line)));
             off.sort_unstable();
         }
@@ -3617,6 +3718,10 @@ impl Editor {
             Command::Grep(pattern) => {
                 let root = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
                 self.grep(&pattern, &root)
+            }
+            Command::Conflicts => {
+                self.list_conflicts();
+                Ok(CommandOutcome::Continue)
             }
             Command::Diff(against) => {
                 self.diff_against(against.as_deref());
@@ -5484,7 +5589,12 @@ impl Editor {
         // disk with two kinds of line ending in it.
         let eol = if was.contains("\r\n") { "\r\n" } else { "\n" };
         let mut text = lines.join(eol);
-        if was.ends_with('\n') || !ends_file {
+        // **No lines means no lines.** Not one blank one: a region replaced
+        // with nothing is a region taken out, and the newline that would be
+        // pushed here for a last line there is not would leave a hole where
+        // the rows used to be (#249 resolves a conflict this way when a side
+        // is empty).
+        if !lines.is_empty() && (was.ends_with('\n') || !ends_file) {
             text.push_str(eol);
         }
         // An edit that changes nothing is not an edit: it would earn an undo
@@ -7469,6 +7579,86 @@ impl Editor {
         self.status = say!("table.jumped-to-line", line + 1);
     }
 
+    /// `]c` / `[c` — the next merge conflict, and the one before (#249).
+    ///
+    /// Lands on the `<<<<<<<` line, which is where the reader has to start
+    /// reading anyway. Does **not** wrap: a file's conflicts are a list to be
+    /// worked through from the top, and a wrap turns 「that was the last one」
+    /// into a silent trip back to the first.
+    fn go_to_conflict(&mut self, forward: bool) {
+        let found = self.conflicts();
+        if found.is_empty() {
+            self.status = say!("conflict.none");
+            return;
+        }
+        let here = self.cursor_line();
+        // Out of the one the cursor stands in first, in whichever direction —
+        // otherwise 「next」 lands on the same conflict's own foot marker.
+        let standing = self.conflict_at(here);
+        let next = match forward {
+            true => {
+                let from = standing.map(|c| c.foot).unwrap_or(here);
+                found.iter().find(|c| c.head > from)
+            }
+            false => {
+                let from = standing.map(|c| c.head).unwrap_or(here);
+                found.iter().rev().find(|c| c.foot < from)
+            }
+        };
+        let Some(conflict) = next else {
+            self.status = match forward {
+                true => say!("conflict.no-next"),
+                false => say!("conflict.no-previous"),
+            };
+            return;
+        };
+        let line = conflict.head;
+        self.remember_jump();
+        self.goto_line(line + 1);
+        self.status = say!("conflict.at-line", line + 1);
+    }
+
+    /// Keep one side of the conflict the cursor stands in, markers and all the
+    /// rest thrown away (#249).
+    ///
+    /// **The markers go too.** Resolving a conflict is exactly the act of
+    /// taking the furniture off the page: a file that still has seven angle
+    /// brackets in it is one git will not let anybody commit, so a 「resolution」
+    /// that left them behind would be a lie the editor told.
+    fn resolve_conflict(&mut self, keep: crate::conflict::Keep) {
+        if self.refuse_readonly() {
+            return;
+        }
+        let Some(conflict) = self.conflict_at(self.cursor_line()) else {
+            self.status = say!("conflict.not-in-one");
+            return;
+        };
+        let kept = conflict.kept(keep);
+        if kept.is_empty() && keep == crate::conflict::Keep::Base {
+            self.status = say!("conflict.no-ancestor");
+            return;
+        }
+        let rope = self.current_buffer().rope();
+        let lines: Vec<String> = kept
+            .into_iter()
+            .flatten()
+            .map(|line| {
+                rope.line(line)
+                    .to_string()
+                    .trim_end_matches(['\n', '\r'])
+                    .to_string()
+            })
+            .collect();
+        self.snapshot();
+        // **Both sides may lose.** `Keep::Base` on a file merged without the
+        // common ancestor written down, or either side of an empty half, ends
+        // with nothing at all — and `replace_lines` with no lines is how a
+        // conflict that was only ever an addition gets taken back out.
+        self.replace_lines(conflict.head, conflict.foot, &lines);
+        self.goto_line(conflict.head + 1);
+        self.status = say!("conflict.kept", lines.len());
+    }
+
     /// Enter a cell to type in it.
     fn edit_cell(&mut self, how: CellEdit) {
         if self.md_rule_here() {
@@ -8082,6 +8272,18 @@ impl Editor {
             Pending::Surround => (say!("hint.match.surround"), vec![("", say!("hint.type-a-bracket"))]),
             Pending::SurroundFrom => (say!("hint.match.take-off"), vec![("", say!("hint.type-the-one-to-take-off"))]),
             Pending::SurroundTo(_) => (say!("hint.change-to"), vec![("", say!("hint.type-the-one-to-change-to"))]),
+            Pending::Hop { forward } => (
+                match forward {
+                    true => say!("hint.hop.next"),
+                    false => say!("hint.hop.previous"),
+                },
+                vec![("c", say!("hint.hop.conflict"))],
+            ),
+            Pending::Conflict => (say!("hint.conflict.title"), vec![
+                    ("o", say!("hint.conflict.ours")),
+                    ("t", say!("hint.conflict.theirs")),
+                    ("b", say!("hint.conflict.both")),
+                ]),
             Pending::Mark => (say!("hint.mark.set-here"), vec![("a–z", say!("hint.mark.name-it"))]),
             Pending::Recall => (say!("hint.mark.go-back"), vec![("a–z", say!("hint.register.which-one"))]),
             // **What this table can actually do**, not what tables can do.
@@ -11464,6 +11666,9 @@ impl Editor {
             Pending::Surround => "ms",
             Pending::SurroundFrom | Pending::SurroundTo(_) => "mr",
             Pending::Table => "t",
+            Pending::Hop { forward: true } => "]",
+            Pending::Hop { forward: false } => "[",
+            Pending::Conflict => "␣c",
             Pending::Mark => "M",
             Pending::Recall => "'",
         };
@@ -12267,6 +12472,23 @@ impl Editor {
                 self.sort_keys.clear();
                 return;
             }
+            Pending::Hop { forward } => {
+                self.pending = Pending::None;
+                if key == Key::Char('c') {
+                    self.go_to_conflict(forward);
+                }
+                return;
+            }
+            Pending::Conflict => {
+                self.pending = Pending::None;
+                match key {
+                    Key::Char('o') => self.resolve_conflict(crate::conflict::Keep::Ours),
+                    Key::Char('t') => self.resolve_conflict(crate::conflict::Keep::Theirs),
+                    Key::Char('b') => self.resolve_conflict(crate::conflict::Keep::Both),
+                    _ => {}
+                }
+                return;
+            }
             Pending::Mark => {
                 self.pending = Pending::None;
                 if let Key::Char(c) = key {
@@ -12561,6 +12783,9 @@ impl Editor {
             // `m` here opens match mode.
             Key::Char('M') => self.pending = Pending::Mark,
             Key::Char('\'') => self.pending = Pending::Recall,
+            // 「下一個這種東西」, which is where Helix keeps it too.
+            Key::Char(']') => self.pending = Pending::Hop { forward: true },
+            Key::Char('[') => self.pending = Pending::Hop { forward: false },
             Key::Char('W') => self.repeat(count, |e| e.select_word_forward(true)),
             Key::Char('E') => self.repeat(count, |e| {
                 let p = motion::next_word_end(
@@ -12973,6 +13198,7 @@ impl Editor {
         ('W', "hint.goto.only-this-pane"),
         ('q', "hint.goto.close-this-pane"),
         ('"', "menu.paste.title"),
+        ('c', "hint.conflict.title"),
     ];
 
     /// Run one key of a `Space` sequence.
@@ -12989,6 +13215,11 @@ impl Editor {
                 None => self.set_status(say!("ui.nothing-to-look-up")),
             },
             Key::Char('"') => self.open_paste_picker(),
+            // 衝突 (#249): the three keys that end one. Under `空格` rather
+            // than a letter of its own because every letter has one already,
+            // and because a merge conflict is a thing that happens to a file
+            // a few times a year — not a motion a writer's fingers know.
+            Key::Char('c') => self.pending = Pending::Conflict,
             Key::Char('f') => self.open_file_picker(),
             Key::Char('b') => self.open_buffer_picker(),
             // The two prompts, opened rather than run: a search wants a pattern
@@ -25128,6 +25359,151 @@ mod tests {
         ed.execute(":table sort 1").unwrap();
         assert!(ed.status().contains("只讀"), "{}", ed.status());
         assert_eq!(ed.current_buffer().text(), "木,AA\n目,BB\n田,CC\n");
+    }
+
+
+    // ---- Merge conflicts (Feature #249) ---------------------------------
+
+    /// A file in the state `git merge` leaves it in, without typing it: the
+    /// markers are seven characters that mean something to the segmenter and
+    /// to the IME, and none of that is what these tests are about.
+    fn merged(text: &str) -> Editor {
+        let mut ed = Editor::new();
+        ed.add_buffer(Buffer::from_text(text));
+        ed.execute(":1").unwrap();
+        ed
+    }
+
+    const MERGED: &str = "\
+第一段
+<<<<<<< HEAD
+我方寫的
+=======
+他方寫的
+>>>>>>> feature/枝
+最後一段
+";
+
+    #[test]
+    fn every_line_of_a_conflict_knows_which_side_it_is_on() {
+        use crate::conflict::Side;
+        use crate::markdown::Block;
+        let ed = merged(MERGED);
+        assert_eq!(ed.block_of(0), Block::Prose);
+        assert_eq!(ed.block_of(1), Block::Conflict(None));
+        assert_eq!(ed.block_of(2), Block::Conflict(Some(Side::Ours)));
+        assert_eq!(ed.block_of(3), Block::Conflict(None));
+        assert_eq!(ed.block_of(4), Block::Conflict(Some(Side::Theirs)));
+        assert_eq!(ed.block_of(5), Block::Conflict(None));
+        assert_eq!(ed.block_of(6), Block::Prose);
+    }
+
+    /// The whole reason the conflicts are assembled before the labels are laid
+    /// on: a manual that *describes* a merge is not in one.
+    #[test]
+    fn a_paragraph_about_merges_is_not_a_merge() {
+        use crate::markdown::Block;
+        let ed = merged("衝突長這樣：\n<<<<<<< HEAD\n然後就沒有然後了\n收筆\n");
+        assert!(ed.conflicts().is_empty());
+        assert_eq!(ed.block_of(2), Block::Prose);
+        assert_eq!(ed.block_of(3), Block::Prose);
+    }
+
+    #[test]
+    fn the_brackets_walk_from_one_conflict_to_the_next() {
+        let text = format!("{MERGED}{MERGED}");
+        let mut ed = merged(&text);
+        press(&mut ed, "]c");
+        assert_eq!(ed.cursor_line(), 1, "{}", ed.status());
+        // From inside the first one, 「next」 is the second — not this one's
+        // own foot marker.
+        press(&mut ed, "]c");
+        assert_eq!(ed.cursor_line(), 8, "{}", ed.status());
+        // And there is no third: it says so rather than wrapping round.
+        press(&mut ed, "]c");
+        assert_eq!(ed.cursor_line(), 8);
+        assert!(ed.status().contains("後面"), "{}", ed.status());
+        press(&mut ed, "[c");
+        assert_eq!(ed.cursor_line(), 1, "{}", ed.status());
+        press(&mut ed, "[c");
+        assert_eq!(ed.cursor_line(), 1);
+        assert!(ed.status().contains("前面"), "{}", ed.status());
+    }
+
+    #[test]
+    fn keeping_a_side_takes_the_markers_with_it() {
+        let mut ed = merged(MERGED);
+        press(&mut ed, "]c");
+        press(&mut ed, " co");
+        assert_eq!(
+            ed.current_buffer().text(),
+            "第一段\n我方寫的\n最後一段\n",
+            "{}",
+            ed.status()
+        );
+        assert!(ed.conflicts().is_empty());
+
+        let mut ed = merged(MERGED);
+        press(&mut ed, "]c");
+        press(&mut ed, " ct");
+        assert_eq!(ed.current_buffer().text(), "第一段\n他方寫的\n最後一段\n");
+
+        let mut ed = merged(MERGED);
+        press(&mut ed, "]c");
+        press(&mut ed, " cb");
+        assert_eq!(
+            ed.current_buffer().text(),
+            "第一段\n我方寫的\n他方寫的\n最後一段\n"
+        );
+    }
+
+    /// A conflict over an addition has an empty side, and keeping that side is
+    /// 「take it back out」 — not 「leave a blank line where it was」.
+    #[test]
+    fn keeping_an_empty_side_leaves_no_line_at_all() {
+        let mut ed = merged("上\n<<<<<<< HEAD\n=======\n新加的一句\n>>>>>>> 枝\n下\n");
+        press(&mut ed, "]c");
+        press(&mut ed, " co");
+        assert_eq!(ed.current_buffer().text(), "上\n下\n");
+    }
+
+    #[test]
+    fn the_three_keys_say_so_when_there_is_nothing_to_resolve() {
+        let mut ed = merged(MERGED);
+        press(&mut ed, " co");
+        assert!(ed.status().contains("不在"), "{}", ed.status());
+        assert_eq!(ed.current_buffer().text(), MERGED, "nothing was touched");
+    }
+
+    #[test]
+    fn the_listing_is_walked_back_the_way_grep_is() {
+        let text = format!("{MERGED}{MERGED}");
+        let mut ed = merged(&text);
+        ed.execute(":conflicts").unwrap();
+        let listing = ed.current_buffer().text();
+        assert!(listing.starts_with("[scratch]:2: HEAD ⇄ feature/枝\n"), "{listing}");
+        assert_eq!(listing.lines().count(), 2);
+        assert!(listing.lines().nth(1).unwrap().contains(":9: "), "{listing}");
+
+        // And a clean file says so rather than opening an empty buffer.
+        let mut ed = merged("一句話\n");
+        let before = ed.current_buffer().id();
+        ed.execute(":conflicts").unwrap();
+        assert_eq!(ed.current_buffer().id(), before, "{}", ed.status());
+        assert!(ed.status().contains("沒有"), "{}", ed.status());
+    }
+
+    /// `:render full` takes markup off the page, and the seven brackets are
+    /// markup: what is left is the one thing a reader wants from that line.
+    #[test]
+    fn the_brackets_come_off_under_render_full_and_the_branch_stays() {
+        let mut ed = merged(MERGED);
+        ed.execute(":render full").unwrap();
+        assert_eq!(ed.hidden_on_line(1), vec![(0, 8)], "「<<<<<<< 」 and nothing else");
+        assert_eq!(ed.hidden_on_line(3), vec![(0, 7)], "「=======」 leaves an empty row");
+        assert_eq!(ed.hidden_on_line(2), vec![], "nobody hides the writing");
+        ed.execute(":render on").unwrap();
+        assert_eq!(ed.hidden_on_line(1), vec![], "and with the markup shown, nothing");
     }
 
     #[test]

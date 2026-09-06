@@ -18,6 +18,7 @@
 
 pub mod buffer;
 pub mod command;
+pub mod conflict;
 pub mod convert;
 pub mod diff;
 pub mod discover;

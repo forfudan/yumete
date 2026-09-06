@@ -584,6 +584,14 @@ en = "the system clipboard: out, and back in"
 find = "剪貼簿 剪贴板 複製 复制 貼上 粘贴 copy paste yank"
 
 [[message]]
+# : 命令選單裏 conflicts 那一項的說明（commands 組）
+key = "cmd.commands.conflicts"
+zht = "列出這份文件裏的合併衝突"
+zhs = "列出这份文件里的合并冲突"
+en = "list the merge conflicts in this file"
+find = "衝突 冲突 合併 合并 merge conflict conflicts git"
+
+[[message]]
 # : 命令選單裏 convert 那一條
 key = "cmd.commands.convert"
 zht = "簡繁轉換：交給 opencc 跑，:convert 看能走哪幾條路"
@@ -1909,6 +1917,62 @@ en = "commit method: {0}"
 # ── convert ───────────────────────────────────────────────────────────
 
 [[message]]
+# ]c／[c 跳到了第 {0} 行的衝突
+key = "conflict.at-line"
+zht = "跳到第 {0} 行的衝突"
+zhs = "跳到第 {0} 行的冲突"
+en = "merge conflict at line {0}"
+
+[[message]]
+# 空格 c 之後，衝突化解，留下了 {0} 行
+key = "conflict.kept"
+zht = "化解衝突，留下 {0} 行"
+zhs = "化解冲突，留下 {0} 行"
+en = "conflict resolved, {0} lines kept"
+
+[[message]]
+# 空格 c 想回到共同祖先，但檔案裏沒有記下它（不是 diff3 樣式）
+key = "conflict.no-ancestor"
+zht = "這個衝突沒有記下共同祖先"
+zhs = "这个冲突没有记下共同祖先"
+en = "this conflict has no common ancestor written down"
+
+[[message]]
+# ]c 而後面沒有衝突了
+key = "conflict.no-next"
+zht = "後面沒有衝突了"
+zhs = "后面没有冲突了"
+en = "no conflict after this one"
+
+[[message]]
+# [c 而前面沒有衝突了
+key = "conflict.no-previous"
+zht = "前面沒有衝突了"
+zhs = "前面没有冲突了"
+en = "no conflict before this one"
+
+[[message]]
+# ]c／[c／:conflicts 而整份文件裏一處衝突都沒有
+key = "conflict.none"
+zht = "這份文件裏沒有合併衝突"
+zhs = "这份文件里没有合并冲突"
+en = "no merge conflicts in this file"
+
+[[message]]
+# 空格 c 而游標不在任何衝突裏
+key = "conflict.not-in-one"
+zht = "游標不在衝突裏"
+zhs = "光标不在冲突里"
+en = "the cursor is not in a merge conflict"
+
+[[message]]
+# :conflicts 列出了 {0} 處衝突
+key = "conflict.some"
+zht = "{0} 處合併衝突"
+zhs = "{0} 处合并冲突"
+en = "{0} merge conflicts"
+
+[[message]]
 # :convert 這一趟能走的路，一行一個起點
 key = "convert.can-go"
 zht = "  {0}  →  {1}"
@@ -3072,6 +3136,34 @@ zhs = "关"
 en = "close"
 
 [[message]]
+# 空格 c 的選單：兩方都留
+key = "hint.conflict.both"
+zht = "兩方都留"
+zhs = "两方都留"
+en = "keep both sides"
+
+[[message]]
+# 空格 c 的選單：只留我方（<<<<<<< 那一半）
+key = "hint.conflict.ours"
+zht = "只留我方"
+zhs = "只留我方"
+en = "keep ours"
+
+[[message]]
+# 空格 c 的選單：只留他方（>>>>>>> 那一半）
+key = "hint.conflict.theirs"
+zht = "只留他方"
+zhs = "只留他方"
+en = "keep theirs"
+
+[[message]]
+# 空格 c 的選單標題，也是空格選單上這一項的說明
+key = "hint.conflict.title"
+zht = "合併衝突"
+zhs = "合并冲突"
+en = "merge conflict"
+
+[[message]]
 # 提示行：數字打了一半，還沒接動作
 key = "hint.count-pending"
 zht = "{0} 次 · 接一個動作或編輯"
@@ -3245,6 +3337,27 @@ key = "hint.goto.word-elsewhere"
 zht = "這個詞還在哪裏：這邊找／那邊看"
 zhs = "这个词还在哪里：这边找／那边看"
 en = "where else this word is: / here, ? in the other area"
+
+[[message]]
+# ]／[ 的選單：下一處／上一處合併衝突
+key = "hint.hop.conflict"
+zht = "合併衝突"
+zhs = "合并冲突"
+en = "merge conflict"
+
+[[message]]
+# ] 按下之後的選單標題
+key = "hint.hop.next"
+zht = "下一個"
+zhs = "下一个"
+en = "next…"
+
+[[message]]
+# [ 按下之後的選單標題
+key = "hint.hop.previous"
+zht = "上一個"
+zhs = "上一个"
+en = "previous…"
 
 [[message]]
 # g 組：併下一行

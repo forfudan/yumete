@@ -309,6 +309,9 @@ pub enum Command {
     GotoRow(String),
     /// `:grep <pattern>` — search every file in the project.
     Grep(String),
+    /// `:conflicts` — the merge conflicts in this file, as a results buffer
+    /// (Feature #249).
+    Conflicts,
     /// `:diff [path]` — what changed, by 詞, against the file on disk or
     /// against another draft (Feature #235).
     Diff(Option<String>),
@@ -1086,6 +1089,7 @@ pub fn parse(input: &str) -> Result<Command, CommandError> {
                 force: word.ends_with('!'),
             })
         }
+        "conflicts" => Ok(Command::Conflicts),
         "grep" | "gr" => {
             if rest.is_empty() {
                 Err(CommandError::MissingArgument("grep"))
@@ -2975,6 +2979,13 @@ pub const COMMANDS: &[Entry] = &[
         args: Args::Free("<檔名>"),
     },
     Entry {
+        name: "conflicts",
+        aliases: &[],
+        help: "cmd.commands.conflicts",
+        needs: &[],
+        args: Args::None,
+    },
+    Entry {
         name: "grep",
         aliases: &["gr"],
         help: "cmd.commands.grep",
@@ -4239,6 +4250,7 @@ mod tests {
             "progress",
             "check",
             "grep",
+            "conflicts",
             "diff",
             "toc",
             "export",
