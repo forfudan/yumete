@@ -905,6 +905,9 @@ pub struct Editor {
     /// middle of the screen and the paper moves under it, the way a typewriter
     /// works and the way every focus mode since has.
     typewriter: bool,
+    /// 焦點模式: everything but the 段 being written stands back a rung
+    /// (Feature #246). A drawing setting — motion and wrapping never see it.
+    focus: bool,
     /// How far one notch of the mouse wheel moves (Feature #222), counted in
     /// whichever unit the page is set in — 縱 vertically, rows horizontally.
     ///
@@ -1383,6 +1386,7 @@ impl Editor {
             table_numbers: true,
             detail_width: None,
             typewriter: false,
+            focus: false,
             wheel_step: 3,
             ime_available: false,
             definition_preview: false,
@@ -3718,6 +3722,14 @@ impl Editor {
                 self.status = match self.typewriter {
                     true => say!("layout.typewriter-on"),
                     false => say!("layout.typewriter-off"),
+                };
+                Ok(CommandOutcome::Continue)
+            }
+            Command::SetFocus(want) => {
+                self.focus = want.unwrap_or(!self.focus);
+                self.status = match self.focus {
+                    true => say!("layout.focus-on"),
+                    false => say!("layout.focus-off"),
                 };
                 Ok(CommandOutcome::Continue)
             }
@@ -8013,6 +8025,11 @@ impl Editor {
             // middle.
             None => Some(last / 2),
         }
+    }
+
+    /// Whether everything but the 段 being written stands back (焦點模式).
+    pub fn focus(&self) -> bool {
+        self.focus
     }
 
     /// Whether the cursor's row is kept in the middle of the page.

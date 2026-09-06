@@ -802,29 +802,29 @@ pub fn draw(
         }),
         false => None,
     };
-    let cell_style = Style::default().bg(ink.at(yumete_config::rung::HEAD));
     let show_segmentation = editor.segmentation_visible();
     let mark = editor.word_mark();
     let cursor_line = editor.cursor_line();
     let numbers = config.editor.line_numbers;
 
-    // A reading is set back — **a rung, not `DIM`**. It was DIM with no colour
-    // at all, so on a terminal that ignores DIM a reading and the character it
-    // annotates were the same colour, in a two-cell margin, down a 縱. That is
-    // the flagship of this editor and its only separation was an attribute
-    // several terminals drop.
-    let reading_style = Style::default().fg(ink.quiet());
     let ticks = config.editor.paper_ticks;
-    // A rule, on the ladder's own rung for one. It used to be drawn in the
-    // ruler's *tint* — a ground colour used as a foreground — and measured
-    // 1.11:1 against the page, which is to say it has never been seen.
-    let tick_style = Style::default().fg(ink.rule());
-    // A hung 句讀 *is* the sentence, set beside the character it follows, so it
-    // keeps the writing's own colour and is told apart by position.
-    let mark_style = Style::default().fg(ink.text());
     // What marks a paragraph's opening squares, and how many there are.
     let hint = editor.indent_hint();
     let indent = editor.paragraph_indent();
+
+    // 焦點模式 (#246): every 縱 but the one being written stands back a rung —
+    // the same `faded()` a peeked pane recedes by, applied a 縱 at a time.
+    //
+    // **The 段, not the 縱.** A wrap point is not a unit of writing: stand back
+    // everything outside the cursor's own visual column and the sentence just
+    // finished — which wrapped into the 縱 to the right — goes quiet with the
+    // rest of the page. What a focus mode lights horizontally is the line, and
+    // in 縱書 the line is the 段.
+    //
+    // Not in a pane that is only being read: that half is already a rung back,
+    // and standing part of it back again would say it has a cursor.
+    let focus = peek.is_none() && editor.focus();
+    let stood_back = ink.faded();
 
     // Word ranges are per paragraph, and consecutive 縱 usually share one, so
     // segment each paragraph once as the page is walked. Its Markdown runs are
@@ -836,6 +836,29 @@ pub fn draw(
     let buf = frame.buffer_mut();
     for placed in page.iter() {
         let (zong, slots, x) = (&placed.zong, &placed.slots, placed.x);
+        // Which palette this 縱 is drawn off. Everything below asks `ink`, so
+        // 焦點模式 is one decision here rather than six dimmings further down.
+        // The number *band* is not one of them: it is the page's furniture and
+        // stays where it is, or the dimmed 縱 would punch holes in it.
+        let stands_back = focus && zong.line != cursor_line;
+        let ink = match stands_back {
+            true => stood_back,
+            false => ink,
+        };
+        // A reading is set back — **a rung, not `DIM`**. It was DIM with no
+        // colour at all, so on a terminal that ignores DIM a reading and the
+        // character it annotates were the same colour, in a two-cell margin,
+        // down a 縱. That is the flagship of this editor and its only
+        // separation was an attribute several terminals drop.
+        let reading_style = Style::default().fg(ink.quiet());
+        // A rule, on the ladder's own rung for one. It used to be drawn in the
+        // ruler's *tint* — a ground colour used as a foreground — and measured
+        // 1.11:1 against the page, which is to say it has never been seen.
+        let tick_style = Style::default().fg(ink.rule());
+        // A hung 句讀 *is* the sentence, set beside the character it follows,
+        // so it keeps the writing's own colour and is told apart by position.
+        let mark_style = Style::default().fg(ink.text());
+        let cell_style = Style::default().bg(ink.at(yumete_config::rung::HEAD));
         // Which band this 縱 landed in decides where its first slot is drawn.
         let text_top = placed.top;
         // Room for a tick: a 縱 that carries a reading or a hung mark has a
@@ -1019,6 +1042,15 @@ pub fn draw(
                         }
                     }
                 }
+            }
+
+            // The page's ground was painted off the lit palette, and a
+            // character with no colour of its own takes the colour of the cell
+            // it lands on — so a 縱 that stands back has to say its ink out
+            // loud. Only where nothing else has: markup, a 着重 run and 字色
+            // word marking all colour off this 縱's own palette already.
+            if stands_back && style.fg.is_none() {
+                style = style.fg(ink.text());
             }
 
             // The cell first, so the selection still goes over it.
