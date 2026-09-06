@@ -1283,6 +1283,76 @@ t1,5,9s      columns 1, 5 and 9            — several of one kind
 t20,20g      row 20, column 20             — two kinds
 ```
 
+**What the level promised and did not deliver — found by the author, fixed
+2026-09-06.** `TableLevel::Basic` is the factory value, and its own words are
+「the columns line up *and* the **keys** belong to the grid where a table
+is」. Only the first half ever arrived. The two halves are asked through two
+different fields:
+
+| | asked through | on open |
+| --- | --- | --- |
+| pipes aligned (#212) | `table_padding_on()` — layout **and level** | level is `Basic` → **on** |
+| `hjkl` walk cells, 表格 hint row | `table_here()` → `self.table` | `None` → **off** |
+| table rows do not soft-wrap | `table_row_at()` → `table_lines_at()` → `self.table` | `None` → **off** |
+| background colour | `:render`, a third dimension | `Basic` → on |
+
+Nothing built `self.table` except a `t` key or a schema'd file, so opening a
+`.md` gave the columns squared up with the letter keys still walking letters
+and the rows still folding *inside their own padding* — a state neither `t o`
+nor `t b` names. `t o` then 「did something」 by turning the padding off and
+leaving the wrap and the colour, which belong to `:wrap` and `:render`; `t b`
+「did something」 from a level it was already on, because what it actually did
+was build the view.
+
+The cure is the level's other half: `Editor::find_the_table_here` — the mirror
+of `forget_a_guessed_table`, called from the same two places (the end of a key,
+and `point_at`) plus `table_on_open`, which scans the whole file once because
+an open has no per-keystroke budget to keep and the table may be below the
+fold. Per key it costs nothing on a chapter with no table in it: it asks
+`md_row_at_cursor()` first, and only a cursor standing on a `|` row pays for
+`with_md_tables` — which the renderer is about to run anyway.
+
+It is deliberately narrower than `enter_table_as`, which is a door a person
+opened and may therefore write to the file:
+
+* **Only a `|` table that already parses** — `with_md_tables`'s answer, the
+  same set the renderer draws, so the two cannot disagree. A header with no
+  `| --- |` under it gets one written by `t b`; **a key may rewrite the
+  buffer, opening a file may not.**
+* **Never a `.csv`, a file a schema claims, or a guessed block**, and **never
+  the pane** — that is `t t`, a different question with its own key.
+* **Nothing is said, nothing moves, nothing is written.** No status line, no
+  `snap_to_cell`, no `turn_for_table`: this is the level being read, not a
+  command being run.
+* **Gated on `table_padding_on()`, not on the level alone**, so the two halves
+  arrive together: on a 縱書 page nothing is padded, so nothing takes the keys
+  either, and `t b` there is still the reader's own decision.
+* **Never while the buffer is being typed into.** The grid refuses a `|` in a
+  cell — right, once somebody has said 「this is a table」, and intolerable
+  before: typing `| --- | --- |` under a fresh header, the region starts
+  parsing halfway along the line and swallows the rest of the pipes. **A level
+  read off a file may not change what typing does.**
+
+Two gates elsewhere had to move with it, and both were the same shape — code
+that used 「a view exists」 to mean 「somebody asked for one」:
+
+* **`table_here()` asks `table_padding_on()` for a `Bounds::Md` view.** The
+  halves leave together as well as arrive: `t o` takes the keys back with the
+  padding, and a page turned 縱 after the view was built goes quiet without the
+  view being thrown away — turn it back and the grid is there. (This is also
+  what `t o` was *reported* as not doing.)
+* **`enter_table_as`'s 「reachable from between two tables」 branch** tested
+  `self.table.is_none()`; it now takes `None` or `Bounds::Md`. A schema'd file
+  and a 碼表 block are somebody's claim on the buffer and still win there; an
+  `Md` view is only the level being read. Left as it was, `t i` from the
+  paragraph between two tables answered 「沒有檔名，就沒有 schema」.
+
+**Still open (older than this fix).** For a `Bounds::Md` view the schema is
+read from *one* table's header, so walking out of table 1 into table 2 keeps
+table 1's column names. `t b` has always done this. A blind re-read on every
+key would also clobber `t h`, which toggles `view.schema.header` by hand.
+
+
 ---
 
 ## 5.1 Helix keybindings & IME hotkeys

@@ -7239,11 +7239,12 @@ mod tests {
             0,
             "::: danger\n| 字頭 | 讀音 |\n| --- | --- |\n| 木頭 | ==mu== |\n:::\n",
         );
-        editor.on_key(Key::Char('g'));
-        editor.on_key(Key::Char('g'));
-        for _ in 0..3 {
-            editor.on_key(Key::Char('j'));
-        }
+        // **The line, said out loud.** Since #283 the level builds the view
+        // on its own, so `j` on a table row is a step down the *column*; this
+        // setup means a line of the file.
+        editor.on_key(Key::Char(':'));
+        editor.on_key(Key::Char('4'));
+        editor.on_key(Key::Enter);
         assert!(editor.enter_table(), "{}", editor.status());
         let row_with = |buf: &ratatui::buffer::Buffer, needle: &str| {
             (0..8u16)
@@ -7290,10 +7291,12 @@ mod tests {
             // bug it was written to catch. A line that has a pipe but does not
             // open with one is a paragraph, and it used to be given a cell.
             .insert(0, "| 字 | 讀音 |\n| --- | --- |\n| 木 | mu |\n見上表 | 附註");
-        editor.on_key(Key::Char('g'));
-        editor.on_key(Key::Char('g'));
-        editor.on_key(Key::Char('j'));
-        editor.on_key(Key::Char('j'));
+        // **The line, said out loud.** Since #283 the level builds the view
+        // on its own, so `j` on a table row is a step down the *column*; this
+        // setup means a line of the file.
+        editor.on_key(Key::Char(':'));
+        editor.on_key(Key::Char('3'));
+        editor.on_key(Key::Enter);
         // 表格操作 (#275): the pipes stay on the page, which is what the
         // assertions below read. `t t` re-glyphs them into a grid instead.
         assert!(
@@ -7401,10 +7404,12 @@ mod tests {
         editor
             .current_buffer_mut()
             .insert(0, "| 字 | 讀音 |\n| --- | --- |\n| 木 | mu |\n| 目 | miao |\n");
-        editor.on_key(Key::Char('g'));
-        editor.on_key(Key::Char('g'));
-        editor.on_key(Key::Char('j'));
-        editor.on_key(Key::Char('j'));
+        // **The line, said out loud.** Since #283 the level builds the view
+        // on its own, so `j` on a table row is a step down the *column*; this
+        // setup means a line of the file.
+        editor.on_key(Key::Char(':'));
+        editor.on_key(Key::Char('3'));
+        editor.on_key(Key::Enter);
         // 表格操作 (#275): the pipes stay on the page, which is what the
         // assertions below read. `t t` re-glyphs them into a grid instead.
         assert!(
