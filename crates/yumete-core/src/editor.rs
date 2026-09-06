@@ -4675,7 +4675,15 @@ impl Editor {
         // 置通過 ti tt 進入表格視圖…對於這個文件中所有的表格都生效」. The
         // cursor is left where it is — the mode is not a jump, and `t ]` is
         // the key for going to a table.
-        if self.syntax() == crate::syntax::Syntax::Markdown && self.table.is_none() {
+        // **`None` or the level's own view** (#283). The test used to be
+        // `table.is_none()`, which was the same set until the level began
+        // building a `Bounds::Md` view on its own — after which `t i` from the
+        // paragraph between two tables answered 「沒有檔名，就沒有 schema」.
+        // A schema'd file and a 碼表 block are somebody's claim on the buffer
+        // and still win here; an `Md` view is only the level being read.
+        if self.syntax() == crate::syntax::Syntax::Markdown
+            && matches!(self.table.as_ref().map(|v| v.bounds), None | Some(Bounds::Md))
+        {
             if let Some(line) = self.first_md_table_line() {
                 if self.enter_md_table_at(line, pane) {
                     return true;
@@ -5107,6 +5115,28 @@ impl Editor {
             // that does not parse is the exception: it was meant to apply here.
             self.status = say!("table.schema-problems", listed(&problems));
         }
+        // A `.md` has no schema beside it and never took this door — so the
+        // first frame after an open was drawn with the level's padding and
+        // none of the level's keys, and stayed that way until a key was
+        // pressed. **The whole file, once**, because on an open there is no
+        // per-keystroke budget to keep and the table may be below the fold:
+        // the reader who opens a document at a table wants it drawn as one
+        // before they touch anything.
+        if self.table.is_none() && self.table_padding_on() && self.syntax() == crate::syntax::Syntax::Markdown {
+            if let Some(first) = self.first_md_table_line() {
+                let header = self.line_text(first).unwrap_or_default();
+                self.table = Some(TableView {
+                    schema: crate::mdtable::schema(&header),
+                    from: PathBuf::new(),
+                    goal: 0,
+                    grain: Grain::Cell,
+                    separator: Separator::Pipe,
+                    pane: false,
+                    bounds: Bounds::Md,
+                    reach: Reach::File,
+                });
+            }
+        }
     }
 
     /// Turn the page horizontal for a grid, remembering what it was.
@@ -5161,7 +5191,14 @@ impl Editor {
             // occupy and nowhere else, which is the same question and now one
             // call: walk out of a 碼表 block into the paragraph under it and
             // `hjkl` are letters again.
-            Some(Bounds::Md) | Some(Bounds::Block) => self.prose_region().is_some(),
+            // …and a `|` table in a manuscript is a grid only while the level
+            // says the page draws one (#283). The level is one word for two
+            // halves — the columns line up **and** the keys belong to the grid
+            // — so `t o` has to take both away, and a 縱書 page, which pads
+            // nothing, has to take both. Asked here rather than by dropping
+            // the view, so turning the page back brings the grid back with it.
+            Some(Bounds::Md) => self.table_padding_on() && self.prose_region().is_some(),
+            Some(Bounds::Block) => self.prose_region().is_some(),
             None => false,
         }
     }
@@ -12693,6 +12730,7 @@ impl Editor {
             self.finish_watching();
         }
         self.forget_a_guessed_table();
+        self.find_the_table_here();
         outcome
     }
 
@@ -12718,6 +12756,94 @@ impl Editor {
         if guessed && self.prose_region().is_none() {
             self.leave_table_quietly();
         }
+    }
+
+    /// Build the view the **level has already promised** (#283).
+    ///
+    /// `TableLevel::Basic` is the factory value, and its own words are 「the
+    /// columns line up *and* the **keys** belong to the grid where a table
+    /// is」. Only the first half was ever delivered: the padding asks the
+    /// level (`table_padding_on`), while the keys and the no-soft-wrap rule
+    /// ask [`Editor::table`] — which nothing but a `t` key ever built. So
+    /// opening a `.md` gave the columns squared up with `hjkl` still walking
+    /// letters and the rows still wrapping *inside their own padding*, a
+    /// state neither `t o` nor `t b` names. `t b` then「did something」from a
+    /// level it was already on, because what it actually did was build this.
+    ///
+    /// Deliberately narrower than [`Self::enter_table_as`], which is a door a
+    /// person opened and may therefore write to the file:
+    ///
+    /// - **Only a `|` table that already parses** — [`Self::with_md_tables`]'s
+    ///   answer, the same set the renderer draws, so the two cannot disagree.
+    ///   A header with no `| --- |` under it gets one written by `t b`; a key
+    ///   may rewrite the buffer, opening a file may not.
+    /// - **Never a `.csv`, a file a schema claims, or a guessed block.** The
+    ///   first two are a whole-file takeover with a cursor jump ([`Self::
+    ///   table_on_open`] has them already), and the third is an inference the
+    ///   author's rule says must be asked for: 「離開表格立刻回到 prose 狀
+    ///   態，如果要再進入表格狀態需要再次按 ti tt」.
+    /// - **Never the pane**, which is a different question with its own key.
+    /// - **Nothing is said, nothing moves, nothing is written.** No status, no
+    ///   `snap_to_cell`, no `turn_for_table`: this is the level being read,
+    ///   not a command being run.
+    ///
+    /// Gated on [`Self::table_padding_on`] rather than on the level alone, so
+    /// the two halves of the promise arrive together — on a 縱書 page nothing
+    /// is padded, so nothing takes the keys either, and `t b` there is still
+    /// the reader's own decision. [`Self::table_here`] asks the same question
+    /// of an `Md` view every time, so the halves also *leave* together: `t o`
+    /// takes the keys back with the padding, and a page turned 縱 after the
+    /// view was built goes quiet without the view being thrown away.
+    ///
+    /// The mirror of [`Self::forget_a_guessed_table`] and called from the same
+    /// places: a mode that forty movement functions have to switch on is a
+    /// mode that one of them will leave off.
+    fn find_the_table_here(&mut self) {
+        if self.table.is_some() || !self.table_padding_on() {
+            return;
+        }
+        // **Not while the table is being typed.** The grid refuses a `|` in a
+        // cell (`a_pipe_cannot_be_typed_into_a_cell`) — right, once a person
+        // has said 「this is a table」, and intolerable before: a writer typing
+        // `| --- | --- |` under a fresh header watches the region start
+        // parsing halfway along the line and the rest of their pipes get
+        // swallowed. A level read off a file may not change what typing does.
+        if self.mode == Mode::Insert {
+            return;
+        }
+        if self.syntax() != crate::syntax::Syntax::Markdown {
+            return;
+        }
+        // **The cursor's own line first, and it is one line.** `with_md_tables`
+        // walks the file on every edit, and this runs at the end of every key
+        // — so a chapter with no table in it must not pay for a scan to be
+        // told so. Standing on a `|` row is when the scan is worth having, and
+        // it is also when the renderer is about to run it anyway.
+        if !self.md_row_at_cursor() {
+            return;
+        }
+        let rope = self.current_buffer().rope();
+        let line = rope.char_to_line(self.cursor.min(rope.len_chars()));
+        let Some(first) =
+            self.with_md_tables(|rows| rows.iter().find(|&&(a, b)| line >= a && line <= b).map(|&(a, _)| a))
+        else {
+            return;
+        };
+        let header = self.line_text(first).unwrap_or_default();
+        self.table = Some(TableView {
+            schema: crate::mdtable::schema(&header),
+            from: PathBuf::new(),
+            goal: 0,
+            grain: Grain::Cell,
+            separator: Separator::Pipe,
+            pane: false,
+            bounds: Bounds::Md,
+            // **A `|` table says what it is on every one of its own lines**,
+            // so the view is the file's the moment it exists — which is what
+            // keeps a table three screens down from wrapping while the cursor
+            // is up here in the prose, padded and folded at once.
+            reach: Reach::File,
+        });
     }
 
     /// If the command that just ended changed the buffer, it is what `.`
@@ -14217,6 +14343,7 @@ impl Editor {
         // keystroke — the cursor was in the paragraph and `hjkl` were still
         // walking cells.
         self.forget_a_guessed_table();
+        self.find_the_table_here();
     }
 
     /// Drag the selection's head to char index `pos`, keeping its anchor.
@@ -22396,6 +22523,86 @@ mod tests {
         // The paragraph between them is still a paragraph.
         assert!(ed.grid_on_line(4).is_empty(), "中間");
         assert!(ed.table_ruler_on_line(4).is_empty());
+    }
+
+    #[test]
+    fn the_level_hands_the_keys_over_without_a_key_being_pressed() {
+        // #283's half-delivered promise: `TableLevel::Basic` is the factory
+        // value and says the columns line up **and** the keys belong to the
+        // grid — but the padding asked the level and the keys asked the view,
+        // and only a `t` key ever built a view. So a freshly opened `.md` was
+        // padded *and* soft-wrapping, with `hjkl` walking letters: a state
+        // neither `t o` nor `t b` names.
+        let mut ed = typed("散文\n\n| a | b |\n| --- | --- |\n| 1 | 2 |\n\n散文\n");
+        ed.current_buffer_mut().set_syntax(crate::syntax::Syntax::Markdown);
+        assert_eq!(ed.table_level(), TableLevel::Basic, "the factory value");
+        press(&mut ed, "2j");
+        assert!(
+            ed.table_row_at(2),
+            "a row of a table is one row, however wide: {}",
+            ed.status()
+        );
+        assert!(!ed.table_row_at(0), "the prose above it is prose");
+        // The keys are the grid's, and nothing was said to announce it.
+        assert!(ed.cell_position().is_some(), "hjkl walk cells: {}", ed.status());
+
+        // …and `t o` is still a real off switch: walking back in does not
+        // build it again, because the level is what was put down.
+        press(&mut ed, "to");
+        assert_eq!(ed.table_level(), TableLevel::Off);
+        press(&mut ed, "kj");
+        assert!(!ed.table_row_at(2), "`t o` stays off: {}", ed.status());
+        assert!(ed.cell_position().is_none());
+    }
+
+    #[test]
+    fn the_view_is_never_built_over_a_table_that_is_not_one() {
+        // The automatic door is read-only, so it may only open on tables that
+        // **already parse** — the set the renderer draws. `t b` writes a
+        // `| --- |` under a bare header, and a key may rewrite the buffer
+        // where opening a file and moving a cursor may not.
+        let mut ed = typed("| 甲 | 乙 |\n| 一 | 二 |\n\n```\n| a | b |\n| --- | --- |\n| 1 | 2 |\n```\n");
+        ed.current_buffer_mut().set_syntax(crate::syntax::Syntax::Markdown);
+        let was = ed.current_buffer().text();
+        for line in 1..=8 {
+            ed.goto_line(line);
+            press(&mut ed, "l");
+            assert!(
+                ed.cell_position().is_none(),
+                "line {line} is prose: {}",
+                ed.status()
+            );
+        }
+        assert_eq!(ed.current_buffer().text(), was, "no rule row was written");
+    }
+
+    #[test]
+    fn a_vertical_page_never_takes_the_keys_on_its_own() {
+        // The two halves of the promise arrive together or not at all: 縱書
+        // pads nothing (a grid is read across), so on its own it takes no keys
+        // either, and `t b` there stays the reader's own decision.
+        //
+        // Typed with the page **already turned**, so this is the door not
+        // opening. A view built while the page was flat is asked the same
+        // question by `table_here`, so it goes quiet on the turn too — this
+        // test is the half that never builds one at all.
+        let mut ed = Editor::new();
+        ed.current_buffer_mut().set_syntax(crate::syntax::Syntax::Markdown);
+        ed.set_layout(Layout::Vertical);
+        ed.on_key(Key::Char('i'));
+        for c in "| a | b |\n| --- | --- |\n| 1 | 2 |\n".chars() {
+            ed.on_key(if c == '\n' { Key::Enter } else { Key::Char(c) });
+        }
+        ed.on_key(Key::Esc);
+        press(&mut ed, "ggjl");
+        assert!(ed.cell_position().is_none(), "{}", ed.status());
+        assert!(!ed.table_row_at(0));
+
+        // And it is the turned page that stopped it, not the file: flatten the
+        // page and the very next key hands the keys over.
+        ed.set_layout(Layout::Horizontal);
+        press(&mut ed, "l");
+        assert!(ed.cell_position().is_some(), "{}", ed.status());
     }
 
     #[test]
