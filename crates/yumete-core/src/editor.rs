@@ -416,7 +416,7 @@ struct MdTables {
     rows: Vec<(usize, usize)>,
 }
 
-/// What one table's ghost padding was worked out from (Feature #212).
+/// What one table's drawn padding was worked out from (Feature #212).
 ///
 /// Everything the answer depends on, so that a hit is really a hit: which
 /// document and which revision of it, which lines the table occupies, and the
@@ -513,7 +513,7 @@ pub enum Surface {
     /// drops a row. Nothing is drawn that the file does not contain, so a
     /// 縱書 chapter stays 縱書.
     Normal,
-    /// `t a` — drawn as part of the document it sits in, through #212's ghost
+    /// `t a` — drawn as part of the document it sits in, through #212's drawn
     /// padding: the columns line up because the text itself is padded, and the
     /// `|` the writer typed is drawn as the wall it is. The paragraph above
     /// the table does not vanish the moment the cursor lands in a cell.
@@ -1160,7 +1160,7 @@ pub struct Editor {
     /// The block of every line, against the buffer it was worked out for and
     /// that buffer's revision.
     block_cache: RefCell<Option<BlockCache>>,
-    /// The ghost padding of the table last asked about (Feature #212).
+    /// The drawn padding of the table last asked about (Feature #212).
     ///
     /// One table at a time: the page asks per line, every line of a table
     /// needs the widths of all the others, and a document has at most a
@@ -2667,7 +2667,7 @@ impl Editor {
     /// in the order it is drawn.
     ///
     /// The mirror of [`Self::hidden_on_line`], and the general form of #210's
-    /// ghost text. Three producers stand behind it and more can: the inline
+    /// drawn text. Three producers stand behind it and more can: the inline
     /// candidate the writer typed, the padding that squares a table up, and
     /// the notes `:note` puts beside a mark that is wrong. Each run is
     /// anchored *before* one of the file's own characters and none of them is
@@ -2855,7 +2855,7 @@ impl Editor {
     ///
     /// Only the candidate. It used to be "anything the file does not contain",
     /// which stopped being a useful question the day the padding that squares
-    /// a table up became ghost too (#212): that padding is **derived**, it is
+    /// a table up became drawn too (#212): that padding is **derived**, it is
     /// on nearly every page of documentation, and no caller ever meant it.
     pub fn has_candidate(&self) -> bool {
         !self.candidate.is_empty()
@@ -4230,8 +4230,8 @@ impl Editor {
 
     /// Take the prompt's guess, if there is one.
     fn adopt_ghost(&mut self) {
-        let ghost = self.prompt_ghost();
-        self.command_line.push_str(&ghost);
+        let drawn = self.prompt_ghost();
+        self.command_line.push_str(&drawn);
         self.command_caret = self.command_line.chars().count();
     }
 
@@ -4274,7 +4274,7 @@ impl Editor {
     /// The 0-based **character** column the cursor is at within its line.
     ///
     /// Not [`Self::cursor_visual_column`], which is cells: this is the column
-    /// a ghost run is anchored at, and those are counted in characters the way
+    /// a drawn run is anchored at, and those are counted in characters the way
     /// `hidden` is (Feature #211).
     pub fn cursor_column(&self) -> usize {
         let rope = self.current_buffer().rope();
@@ -15293,7 +15293,7 @@ impl Editor {
             // alternative was a second answer to「which column is this」 that
             // did not know what is off the page.
             let width = self.wrap_width().unwrap_or(crate::wrap::NO_WRAP);
-            let ghost = |line: usize| self.drawn_on_line(line);
+            let drawn = |line: usize| self.drawn_on_line(line);
             let typed = |line: usize| self.typed_on_line(line);
             // A table row is one row (#275) — and `j` has to be walking the
             // same page the renderer drew, or it steps into a row that is not
@@ -15302,8 +15302,8 @@ impl Editor {
             let m = crate::wrap::Measure::new(width, &hide)
                 .with_indent(self.paragraph_indent())
                 .with_folds(&fold)
-                .with_ghost(&ghost)
-                .with_typed_ghost(&typed)
+                .with_drawn(&drawn)
+                .with_typed_drawn(&typed)
                 .with_unwrapped(&flat)
                 .with_open_line(self.open_line());
             crate::wrap::column_of(rope, self.cursor, m)
@@ -15334,7 +15334,7 @@ impl Editor {
             // this same code, so the two cases cannot answer differently about
             // what is off the page.
             let width = self.wrap_width().unwrap_or(crate::wrap::NO_WRAP);
-            let ghost = |line: usize| self.drawn_on_line(line);
+            let drawn = |line: usize| self.drawn_on_line(line);
             let typed = |line: usize| self.typed_on_line(line);
             // A table row is one row (#275) — and `j` has to be walking the
             // same page the renderer drew, or it steps into a row that is not
@@ -15343,8 +15343,8 @@ impl Editor {
             let m = crate::wrap::Measure::new(width, &hide)
                 .with_indent(self.paragraph_indent())
                 .with_folds(&fold)
-                .with_ghost(&ghost)
-                .with_typed_ghost(&typed)
+                .with_drawn(&drawn)
+                .with_typed_drawn(&typed)
                 .with_unwrapped(&flat)
                 .with_open_line(self.open_line());
             if up {
@@ -16579,7 +16579,7 @@ mod tests {
     /// Feature #210. The core holds the runs and hands them to whatever asks
     /// where a character is; it does not decide what they say.
     #[test]
-    fn ghost_runs_are_held_wholesale_and_answered_by_line() {
+    fn drawn_runs_are_held_wholesale_and_answered_by_line() {
         let mut ed = typed("春夏\n秋冬\n");
         assert!(!ed.has_candidate(), "a page with no candidate on it pays nothing");
         assert!(ed.drawn_on_line(0).is_empty());
@@ -19804,12 +19804,12 @@ mod tests {
             .filter(|at| !hidden.iter().any(|&(a, b)| (a..b).contains(at)))
             .map(|at| yumete_cjk::char_width(chars[at]))
             .sum();
-        let ghost: usize = ed
+        let drawn: usize = ed
             .drawn_on_line(line)
             .iter()
             .map(|(_, text)| text.chars().map(yumete_cjk::char_width).sum::<usize>())
             .sum();
-        visible + ghost
+        visible + drawn
     }
 
     /// #212: a table nobody has formatted is drawn as a table anyway.
@@ -19964,12 +19964,12 @@ mod tests {
         ed.set_cursor(2);
         let hide = |line: usize| ed.hidden_on_line(line);
         let fold = |line: usize| ed.line_is_folded(line);
-        let ghost = |line: usize| ed.drawn_on_line(line);
+        let drawn = |line: usize| ed.drawn_on_line(line);
         let typed = |line: usize| ed.typed_on_line(line);
         let m = crate::wrap::Measure::new(crate::wrap::NO_WRAP, &hide)
             .with_folds(&fold)
-            .with_ghost(&ghost)
-            .with_typed_ghost(&typed);
+            .with_drawn(&drawn)
+            .with_typed_drawn(&typed);
         let at = crate::wrap::position(ed.current_buffer().rope(), 2, m);
         // `| a` — the caret is right after the `a` it just typed, not out on
         // the pipe two cells further along.

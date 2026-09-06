@@ -414,7 +414,7 @@ pub enum PanelDisplay {
     /// The bordered list beside the caret — what yumete has always drawn.
     #[default]
     Full,
-    /// Nothing but the first candidate, drawn into the text as ghost text.
+    /// Nothing but the first candidate, drawn into the text where it will land.
     Bare,
 }
 
