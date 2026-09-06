@@ -440,8 +440,20 @@ struct PadKey {
     revision: u64,
     first: usize,
     last: usize,
-    cursor: usize,
-    selection: (usize, usize),
+    /// **Where the caret is, but only when it can change the answer.**
+    ///
+    /// 所見即所得 puts a run of markup back on the page under the selection,
+    /// so what comes off a row — and therefore how wide its cells draw —
+    /// moves with the caret. Under `:render on` it does not: nothing in
+    /// [`Editor::hidden_on_line`] asks where the caret is unless
+    /// [`Editor::wysiwyg`] is true.
+    ///
+    /// Carrying it unconditionally threw the whole table's padding away on
+    /// every `j`, and a padding is a walk down every row of the table: one
+    /// flick of a trackpad over the 223-row table in this project's own
+    /// `development.md` took 8.3 s. Asking only when the answer depends on
+    /// it: 41 ms.
+    caret: Option<(usize, usize)>,
     render: Render,
     ruby: Dialects,
     /// What comes off the page depends on how the file is being read, and
@@ -2918,8 +2930,7 @@ impl Editor {
             revision: buffer.revision(),
             first,
             last,
-            cursor: self.cursor,
-            selection: self.selection(),
+            caret: self.wysiwyg().then(|| self.selection()),
             render: self.render,
             ruby: self.ruby,
             syntax: buffer.syntax(),
@@ -25514,5 +25525,45 @@ mod tests {
         press(&mut ed, "td");
         assert!(ed.status().contains("y p"), "{}", ed.status());
         assert_eq!(ed.current_buffer().text(), "木,AA\n目,BB\n田,CC\n");
+    }
+
+    /// A table's padding is a walk down every row of it, and the caret only
+    /// changes the answer under 所見即所得 — so under `:render on` moving the
+    /// caret must not throw the walk away.
+    ///
+    /// Told by poisoning the memo: what comes back second is what was
+    /// remembered, or it was worked out again.
+    #[test]
+    fn moving_the_caret_does_not_throw_a_table_s_padding_away() {
+        let mut ed = typed("| 甲 | 乙 |\n| --- | --- |\n| 一 | 二 |\n");
+        assert!(!ed.drawn_on_line(2).is_empty(), "the short row is padded out");
+
+        let poison = |ed: &Editor| {
+            let mut held = ed.pad_cache.borrow_mut();
+            let (_, runs) = held.as_mut().expect("the walk is remembered");
+            for row in runs.iter_mut() {
+                *row = vec![(0, "毒".to_string())];
+            }
+        };
+
+        poison(&ed);
+        ed.on_key(Key::Char('j'));
+        assert_eq!(
+            ed.drawn_on_line(2),
+            vec![(0, "毒".to_string())],
+            "`:render on` hides the same runs wherever the caret is",
+        );
+
+        // 所見即所得 puts markup back under the selection, so there the answer
+        // really does move with the caret and the memo has to go.
+        ed.execute(":render full").unwrap();
+        assert!(!ed.drawn_on_line(2).is_empty());
+        poison(&ed);
+        ed.on_key(Key::Char('k'));
+        assert_ne!(
+            ed.drawn_on_line(2),
+            vec![(0, "毒".to_string())],
+            "under 所見即所得 the caret decides what comes off the row",
+        );
     }
 }
