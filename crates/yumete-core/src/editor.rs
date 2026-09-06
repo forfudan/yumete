@@ -3243,6 +3243,7 @@ impl Editor {
                 Ok(CommandOutcome::Continue)
             }
             Command::Quit { force } => self.quit(force),
+            Command::QuitAll { force } => self.quit_all(force),
             Command::Substitute {
                 pattern,
                 replacement,
@@ -13985,7 +13986,21 @@ impl Editor {
     /// *Some* buffer, not the current one: with `gn` and `gp` able to reach
     /// every open file, quitting from a clean buffer while another one is dirty
     /// would throw away work the editor never warned about.
+    /// `:q` — close **this file**; leave only when it was the last one.
+    ///
+    /// Vim's rule and helix's, and the one a writer means: `:q` on the third
+    /// of three open chapters puts you back in the second, not out on the
+    /// shell. `:qa` is the way out with files still open, and `:q` on the last
+    /// one is the same thing.
     fn quit(&mut self, force: bool) -> Result<CommandOutcome, EditorError> {
+        if self.buffers.len() > 1 {
+            return self.close_buffer(force);
+        }
+        self.quit_all(force)
+    }
+
+    /// `:qa` — leave, however many files are open.
+    fn quit_all(&mut self, force: bool) -> Result<CommandOutcome, EditorError> {
         if force {
             self.drop_recovery_copies();
             return Ok(CommandOutcome::Quit);
@@ -24332,16 +24347,32 @@ mod tests {
     }
 
     #[test]
-    fn quitting_checks_every_open_file_not_just_this_one() {
+    fn leaving_checks_every_open_file_not_just_this_one() {
         let mut ed = Editor::new();
         ed.on_key(Key::Char('i'));
         type_keys(&mut ed, "unsaved");
         ed.on_key(Key::Esc);
         // A fresh, clean buffer is current — but the first one is still dirty.
         ed.execute(":new").unwrap();
-        assert!(matches!(ed.execute(":q"), Err(EditorError::UnsavedChanges)));
+        assert!(matches!(ed.execute(":qa"), Err(EditorError::UnsavedChanges)));
         // …and the editor moves to the file that is holding the exit up.
         assert_eq!(ed.current_buffer().text(), "unsaved");
+        assert_eq!(ed.execute(":qa!").unwrap(), CommandOutcome::Quit);
+    }
+
+    #[test]
+    fn quit_closes_this_file_and_only_leaves_on_the_last_one() {
+        let mut ed = Editor::new();
+        ed.on_key(Key::Char('i'));
+        type_keys(&mut ed, "甲");
+        ed.on_key(Key::Esc);
+        ed.execute(":new").unwrap();
+        // Two files open: `:q` puts this one away and stays in the editor,
+        // even though the other one is dirty — it is not being asked to leave.
+        assert_eq!(ed.execute(":q").unwrap(), CommandOutcome::Continue);
+        assert_eq!(ed.current_buffer().text(), "甲");
+        // Now it is the last one, and `:q` means what it always meant.
+        assert!(matches!(ed.execute(":q"), Err(EditorError::UnsavedChanges)));
         assert_eq!(ed.execute(":q!").unwrap(), CommandOutcome::Quit);
     }
 

@@ -552,6 +552,14 @@ en = "bands: divide the vertical page across — top right to top left, then bot
 find = "段組 段组 分欄 分栏 bands columns"
 
 [[message]]
+# : 命令選單裏 bclose 那一項的說明（commands 組）——:buffer close 的短寫
+key = "cmd.commands.bclose"
+zht = "關掉這一個檔案，不是退出（`bclose!` 不管改動）"
+zhs = "关掉这一个档案，不是退出（`bclose!` 不管改动）"
+en = "close this file, not the editor (`bclose!` ignores changes)"
+find = "關掉 关掉 關閉 关闭 退出 close bc bd buffer"
+
+[[message]]
 # : 命令選單裏 buffer 那一項的說明（commands 組）
 key = "cmd.commands.buffer"
 zht = "開着的檔案：列出、切換、關掉"
@@ -730,10 +738,18 @@ find = "進度 进度 字數 字数 目標 目标 每日 progress target daily w
 [[message]]
 # : 命令選單裏 quit 那一項的說明（commands 組）
 key = "cmd.commands.quit"
-zht = "退出；加 ! 連沒存的改動一起丟"
-zhs = "退出；加 ! 连没存的改动一起丢"
-en = "leave; with ! throw away unsaved changes too"
-find = "退出 離開 离开 關閉 关闭 exit close"
+zht = "關掉這一個檔案；只剩一個時纔真的退出（`quit!` 不管改動）"
+zhs = "关掉这一个档案；只剩一个时才真的退出（`quit!` 不管改动）"
+en = "close this file; leave only when it was the last one (`quit!` ignores changes)"
+find = "退出 離開 离开 關閉 关闭 exit close bc"
+
+[[message]]
+# : 命令選單裏 quitall 那一項的說明（commands 組）
+key = "cmd.commands.quitall"
+zht = "全部退出，開着幾個都走（`quitall!` 不管改動）"
+zhs = "全部退出，开着几个都走（`quitall!` 不管改动）"
+en = "leave, however many files are open (`quitall!` ignores changes)"
+find = "退出 離開 离开 全部 quit all qa exit"
 
 [[message]]
 # : 命令選單裏 readonly 那一項的說明（commands 組）
