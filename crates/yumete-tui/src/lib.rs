@@ -3880,8 +3880,24 @@ fn draw_horizontal(
         .iter()
         .filter(|row| row_has_reading(editor, rope, row))
         .count();
+    // 焦點模式 (#246): every row but the paragraph being written stands back a
+    // rung — the same `faded()` a peeked pane recedes by, a row at a time.
+    // **The 段, not the row**: a wrap point is not a unit of writing, and a
+    // sentence that has just wrapped is still the sentence being written.
+    //
+    // Not in a pane that is only being read: that half is already a rung back.
+    let focus = peek.is_none() && editor.focus();
+    let stood_back = ink.faded();
     let mut lines: Vec<Line> = Vec::new();
     for (_, row) in rows_on_screen(editor, rope, measure, *viewport, height) {
+        // Which palette this row is drawn off. Everything below asks `ink`, so
+        // the whole of 焦點模式 is this one decision. The gutter goes with the
+        // row: a line number is the row's own furniture, unlike the 縱書 number
+        // band, which is the page's.
+        let ink = match focus && row.line != cursor_line {
+            true => stood_back,
+            false => ink,
+        };
         let text: String = rope.slice(row.start..row.end).to_string();
         let mut spans = Vec::new();
         if gutter > 0 {
@@ -7956,6 +7972,58 @@ mod tests {
 
         editor.execute(":dense on").unwrap();
         assert!(rows(&editor)[1].contains("雪"));
+    }
+
+    /// 焦點模式: the 段 being written keeps the page's ink and the rest of it
+    /// stands back a rung — the same recession a peeked pane is drawn at.
+    #[test]
+    fn focus_stands_the_rest_of_the_page_back_and_leaves_the_paragraph_lit() {
+        let mut editor = editor_with("第一段。\n第二段。\n第三段。\n");
+        let mut config = Config::default();
+        config.editor.line_numbers = LineNumbers::None;
+        config.editor.hints = false;
+        config.editor.show_segmentation = false;
+        editor.on_key(Key::Char('j'));
+
+        let lit = render_wrapped(&mut editor, &config, 30, 8);
+        let ink = |b: &ratatui::buffer::Buffer, y: u16| b[(0, y)].fg;
+        // Nothing is stood back until it is asked for.
+        assert_eq!(ink(&lit, 0), ink(&lit, 1), "{:?}", ink(&lit, 0));
+
+        editor.execute(":focus").unwrap();
+        let focused = render_wrapped(&mut editor, &config, 30, 8);
+        // The cursor's own 段 is drawn exactly as it was.
+        assert_eq!(ink(&focused, 1), ink(&lit, 1));
+        // The others are not, and they are the *same* other — one rung, not a
+        // gradient away from the cursor.
+        assert_ne!(ink(&focused, 0), ink(&lit, 0));
+        assert_eq!(ink(&focused, 0), ink(&focused, 2));
+
+        editor.execute(":focus off").unwrap();
+        let again = render_wrapped(&mut editor, &config, 30, 8);
+        assert_eq!(ink(&again, 0), ink(&lit, 0));
+    }
+
+    /// The same, set vertically — where the unit is the 縱 the 段 is written
+    /// down, and a paragraph that wraps keeps every 縱 it wraps into.
+    #[test]
+    fn focus_lights_the_whole_paragraph_even_where_it_wraps() {
+        // Two paragraphs, the first long enough to need two 縱 at this height.
+        let mut editor = editor_with(&format!("{}\n短。\n", "長".repeat(12)));
+        let mut config = vertical_config();
+        config.editor.hints = false;
+        editor.execute(":focus on").unwrap();
+        let buffer = render_vertical(&mut editor, &config, 20, 8);
+
+        // The cursor is in the first paragraph, which wraps: the rightmost two
+        // 縱 are both it, and both are lit.
+        let ink = |x: u16| buffer[(x, 0)].fg;
+        assert_eq!(at(&buffer, 18, 0), "長");
+        assert_eq!(at(&buffer, 15, 0), "長", "the same 段, wrapped");
+        assert_eq!(ink(18), ink(15), "a wrap point is not a unit of writing");
+        // The next paragraph is another one, and stands back.
+        assert_eq!(at(&buffer, 12, 0), "短");
+        assert_ne!(ink(12), ink(18));
     }
 
     /// Typewriter mode: the row being written stays in the middle, and the

@@ -161,6 +161,8 @@ pub enum Command {
     Markdown(MarkdownBit),
     /// `:typewriter [on|off]` — the cursor's row stays in the middle.
     SetTypewriter(Option<bool>),
+    /// `:focus [on|off]` — everything but the 段 being written stands back.
+    SetFocus(Option<bool>),
     /// `:table numbers on|off` — the row of column numbers above the header.
     SetTableNumbers(bool),
     /// `:table header [on|off]` — whether the grid's first row names the
@@ -891,6 +893,15 @@ pub fn parse(input: &str) -> Result<Command, CommandError> {
             "toggle" => Ok(Command::SetTypewriter(None)),
             other => Err(CommandError::InvalidArgument {
                 command: "typewriter",
+                value: other.to_string(),
+            }),
+        },
+        "focus" => match rest {
+            "" | "on" => Ok(Command::SetFocus(Some(true))),
+            "off" => Ok(Command::SetFocus(Some(false))),
+            "toggle" => Ok(Command::SetFocus(None)),
+            other => Err(CommandError::InvalidArgument {
+                command: "focus",
                 value: other.to_string(),
             }),
         },
@@ -2889,6 +2900,13 @@ pub const COMMANDS: &[Entry] = &[
         name: "typewriter",
         aliases: &[],
         help: "cmd.commands.typewriter",
+        needs: &[],
+        args: Args::Words(ON_OFF),
+    },
+    Entry {
+        name: "focus",
+        aliases: &[],
+        help: "cmd.commands.focus",
         needs: &[],
         args: Args::Words(ON_OFF),
     },

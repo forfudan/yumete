@@ -624,6 +624,14 @@ en = "write it out as html or typst, layout and all"
 find = "導出 导出 輸出 输出 html typst 排版"
 
 [[message]]
+# : 命令選單裏 focus 那一項的說明（commands 組）
+key = "cmd.commands.focus"
+zht = "焦點：正在寫的那一段留在紙上，其餘的退後一級"
+zhs = "焦点：正在写的那一段留在纸上，其余的退后一级"
+en = "focus: the 段 you are writing stays lit and the rest of the page stands back"
+find = "焦點 焦点 專注 专注 沉浸 focus zen"
+
+[[message]]
 # : 命令選單裏 format 那一項的說明（commands 組）
 key = "cmd.commands.format"
 zht = "照這種檔案在設定裏說的那樣格式化（[language.markdown] format = …）"
@@ -4066,6 +4074,20 @@ key = "layout.first-line-indent-off"
 zht = "首行縮進：關"
 zhs = "首行缩进：关"
 en = "first-line indent: off"
+
+[[message]]
+# 焦點模式關掉
+key = "layout.focus-off"
+zht = "焦點：關"
+zhs = "焦点：关"
+en = "focus: off"
+
+[[message]]
+# 焦點模式打開
+key = "layout.focus-on"
+zht = "焦點：開（其餘的退後一級）"
+zhs = "焦点：开（其余的退后一级）"
+en = "focus: on (the rest of the page stands back)"
 
 [[message]]
 # 排版換成橫排
