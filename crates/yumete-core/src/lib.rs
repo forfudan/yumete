@@ -30,6 +30,7 @@ pub mod messages;
 pub mod mdtable;
 pub mod motion;
 pub mod picker;
+pub mod progress;
 pub mod punct;
 pub mod ruby;
 pub mod sidebar;

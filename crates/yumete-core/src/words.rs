@@ -1,5 +1,8 @@
 //! 口頭禪 — the words this manuscript leans on (Feature #242).
 //!
+//! English writing calls these **crutch words**: the ones a writer leans on
+//! when the sentence will not come. `:word habit` is the command.
+//!
 //! **Not a word count.** Counting words and sorting by the count says 的, 了,
 //! 是, 我, and every manuscript in the language gives the same answer; a writer
 //! learns nothing from being told that Chinese has particles. The question
@@ -59,7 +62,7 @@ pub const MIN_RATIO: f64 = 2.0;
 
 /// One word the manuscript leans on.
 #[derive(Debug, Clone, PartialEq)]
-pub struct Crutch {
+pub struct Habit {
     /// The word itself.
     pub word: String,
     /// Where it is first said — what `gf` on the listing row goes to.
@@ -80,11 +83,11 @@ pub struct Crutch {
 /// only grow a copy of the whole manuscript), and `log_prob` is the
 /// background: `ln P(word)` in ordinary prose, or `None` for a word the table
 /// does not hold.
-pub fn crutches(
+pub fn habits(
     text: &str,
     segment: &dyn Fn(&str) -> Vec<(usize, usize)>,
     log_prob: &dyn Fn(&str) -> Option<f64>,
-) -> Vec<Crutch> {
+) -> Vec<Habit> {
     // (count, first line). The denominator counts the words **the table
     // holds**, one-character ones included: `P(w)` is a rate within that
     // vocabulary, so the rate it is compared against has to be one too. A
@@ -111,14 +114,14 @@ pub fn crutches(
         return Vec::new();
     }
     let total = total as f64;
-    let mut found: Vec<Crutch> = seen
+    let mut found: Vec<Habit> = seen
         .into_iter()
         .filter(|(word, (count, _))| *count >= MIN_COUNT && word.chars().count() > 1)
         .filter_map(|(word, (count, line))| {
             let background = log_prob(&word)?;
             let ln_ratio = (count as f64 / total).ln() - background;
             let ratio = ln_ratio.exp();
-            (ratio >= MIN_RATIO).then_some(Crutch {
+            (ratio >= MIN_RATIO).then_some(Habit {
                 word,
                 line,
                 count,
@@ -182,7 +185,7 @@ mod tests {
     #[test]
     fn a_word_said_far_more_often_than_prose_says_it_is_reported() {
         let text = "然後好的然後好的然後好的然後好的";
-        let found = crutches(text, &by_pairs, &common);
+        let found = habits(text, &by_pairs, &common);
         assert_eq!(found.len(), 1, "{found:?}");
         assert_eq!(found[0].word, "然後");
         assert_eq!(found[0].count, 4);
@@ -196,8 +199,8 @@ mod tests {
         // The same 然後, and then a page of a name the table does not hold.
         // `P(w)` is a rate within the table's vocabulary, so the answer must
         // not move — counting every 漢字 token halved it.
-        let plain = crutches("然後好的然後好的然後好的然後好的", &by_pairs, &common);
-        let named = crutches(
+        let plain = habits("然後好的然後好的然後好的然後好的", &by_pairs, &common);
+        let named = habits(
             "然後好的然後好的然後好的然後好的\n阿甯阿甯阿甯阿甯阿甯阿甯",
             &by_pairs,
             &common,
@@ -213,7 +216,7 @@ mod tests {
         // five times, so it *is* reported; 然後 the same count is fifty times
         // and sorts above it.
         let text = "然後的話然後的話然後的話然後的話";
-        let found = crutches(text, &by_pairs, &common);
+        let found = habits(text, &by_pairs, &common);
         assert_eq!(found.len(), 2, "{found:?}");
         assert_eq!(found[0].word, "然後");
         assert_eq!(found[1].word, "的話");
@@ -225,25 +228,25 @@ mod tests {
         // 阿甯 is a name, said as often as anything in the chapter, and has no
         // background: it is #239's question, not this one's.
         let text = "阿甯阿甯阿甯阿甯";
-        assert!(crutches(text, &by_pairs, &common).is_empty());
+        assert!(habits(text, &by_pairs, &common).is_empty());
     }
 
     #[test]
     fn twice_is_not_yet_a_habit() {
         let text = "然後好的然後好的";
-        assert!(crutches(text, &by_pairs, &common).is_empty());
+        assert!(habits(text, &by_pairs, &common).is_empty());
     }
 
     #[test]
     fn the_line_is_where_the_word_is_first_said() {
         let text = "好的好的\n好的好的\n然後然後然後";
-        let found = crutches(text, &by_pairs, &common);
+        let found = habits(text, &by_pairs, &common);
         assert_eq!(found.len(), 1, "{found:?}");
         assert_eq!(found[0].line, 2);
     }
 
     #[test]
     fn a_text_with_no_han_in_it_says_nothing() {
-        assert!(crutches("hello there\n", &by_pairs, &common).is_empty());
+        assert!(habits("hello there\n", &by_pairs, &common).is_empty());
     }
 }

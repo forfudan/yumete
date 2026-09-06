@@ -12,11 +12,12 @@ use crate::ruby::Dialect;
 use crate::say;
 use crate::zong::Layout;
 
-/// What `:word` was asked about — 分詞邊界, from three sides.
+/// What `:word` was asked about — 分詞邊界, from every side.
 ///
 /// **One subject, one command.** Where a word ends is decided by a dictionary,
-/// shown by a colour, and tuned by a level; those were `:words`, `:segment` and
-/// a config key nobody could see, and nothing said they were the same question.
+/// shown by a colour, tuned by a level, mined out of the book itself, and read
+/// back as 口頭禪; those were `:words`, `:segment` and a config key nobody could
+/// see, and nothing said they were the same question.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum WordCommand {
     /// `:word` — which dictionary is in force, and how many words this book adds.
@@ -35,6 +36,10 @@ pub enum WordCommand {
     /// `:word discover` — mine this book for the words no dictionary has, and
     /// write them into `.yumete/words.txt` unsaved (Feature #239).
     Discover,
+    /// `:word habit` — the words this manuscript leans on, by surprisal
+    /// against a 詞頻表 rather than by count (Feature #242). English writing
+    /// calls these *crutch words*; the manual calls them 口頭禪.
+    Habit,
     /// `:word level strict|balanced|full` — how readily characters join into
     /// words. `None` says which it is.
     Level(Option<yumete_cjk::WordLevel>),
@@ -59,9 +64,11 @@ pub enum Command {
     WriteQuit(Option<String>),
     /// `:count` (alias `:wc`) — how much has been written.
     Count,
-    /// `:words` — the words this manuscript leans on, by surprisal against a
-    /// 詞頻表 rather than by count (Feature #242).
-    Words,
+    /// `:progress` — 寫作進度: what was written today, and every day before
+    /// (Feature #244).
+    Progress,
+    /// `:target <字>` — how many 字 a day; `None` is `:target off`.
+    Target(Option<usize>),
     /// `:check usage` — which of two spellings the manuscript settled on, and
     /// where it slipped (Feature #233).
     CheckUsage,
@@ -111,8 +118,8 @@ pub enum Command {
     /// `:redo` (alias `:red`) — redo the last undone change.
     Redo,
     /// `:word …` — everything about **where one word ends and the next
-    /// begins**, which is one subject and used to be two commands (`:segment`
-    /// coloured the boundaries, `:words` reloaded the list that decides them).
+    /// begins**, which is one subject and used to be several commands
+    /// (`:segment` coloured the boundaries, `:words` weighed them).
     Word(WordCommand),
     /// `:layout [horizontal|vertical]` (aliases `:horizontal`, `:vertical`) —
     /// choose the layout (Feature #61). `None` toggles between the two.
@@ -473,7 +480,21 @@ pub fn parse(input: &str) -> Result<Command, CommandError> {
             Some(rest.to_string())
         })),
         "count" | "wc" => Ok(Command::Count),
-        "words" => Ok(Command::Words),
+        // A bare `:target` is the question, not half a command: somebody who
+        // types it wants to know what the target is and how far off it is, and
+        // that is what `:progress` answers.
+        "progress" | "prog" => Ok(Command::Progress),
+        "target" => match rest {
+            "" => Ok(Command::Progress),
+            "off" | "none" | "0" => Ok(Command::Target(None)),
+            n => match n.parse::<usize>() {
+                Ok(n) => Ok(Command::Target(Some(n))),
+                Err(_) => Err(CommandError::InvalidArgument {
+                    command: "target",
+                    value: n.to_string(),
+                }),
+            },
+        },
         "check" => match rest {
             "usage" => Ok(Command::CheckUsage),
             "punct" => Ok(Command::CheckPunct),
@@ -528,9 +549,8 @@ pub fn parse(input: &str) -> Result<Command, CommandError> {
         "quit!" | "q!" => Ok(Command::Quit { force: true }),
         "undo" | "u" => Ok(Command::Undo),
         "redo" | "red" => Ok(Command::Redo),
-        // 分詞邊界, from three sides — see [`Word`]. `:segment` and `:words`
-        // were the two halves of it and are gone; `retired` names the new
-        // spelling for fingers that knew the old one.
+        // 分詞邊界, from four sides — see [`Word`]. `:segment` and `:words`
+        // were two of them and are gone: one subject, one command.
         "word" | "wd" => match rest.split_whitespace().collect::<Vec<_>>().as_slice() {
             [] => Ok(Command::Word(WordCommand::Report)),
             ["show"] => Ok(Command::Word(WordCommand::Show(None))),
@@ -541,6 +561,7 @@ pub fn parse(input: &str) -> Result<Command, CommandError> {
             ["list", "edit"] => Ok(Command::Word(WordCommand::Edit)),
             ["list", "global"] => Ok(Command::Word(WordCommand::Global)),
             ["discover"] => Ok(Command::Word(WordCommand::Discover)),
+            ["habit"] => Ok(Command::Word(WordCommand::Habit)),
             ["level"] => Ok(Command::Word(WordCommand::Level(None))),
             ["level", name] => match yumete_cjk::WordLevel::parse(name) {
                 Some(level) => Ok(Command::Word(WordCommand::Level(Some(level)))),
@@ -2334,6 +2355,12 @@ const WORD_TOPICS: &[Word] = &[
         needs: &[],
         then: Args::None,
     },
+    Word {
+        name: "habit",
+        help: "cmd.word-topics.habit",
+        needs: &[],
+        then: Args::None,
+    },
 ];
 
 const WORD_LISTS: &[Word] = &[
@@ -2615,11 +2642,18 @@ pub const COMMANDS: &[Entry] = &[
         args: Args::Words(WORD_TOPICS),
     },
     Entry {
-        name: "words",
-        aliases: &[],
-        help: "cmd.commands.words",
+        name: "progress",
+        aliases: &["prog"],
+        help: "cmd.commands.progress",
         needs: &[],
         args: Args::None,
+    },
+    Entry {
+        name: "target",
+        aliases: &[],
+        help: "cmd.commands.target",
+        needs: &[],
+        args: Args::Free("<字數>｜off"),
     },
     Entry {
         name: "layout",
@@ -3431,8 +3465,10 @@ mod tests {
         );
         // A level nobody defined is refused by name, not silently taken.
         assert!(parse(":word level 中等").is_err());
-        // The two commands it replaced are gone.
+        // The commands it replaced are gone — `:words` was 口頭禪 and is
+        // `:word habit`, one subject and one command.
         assert!(parse(":segment").is_err());
+        assert!(parse(":words").is_err());
     }
 
     #[test]
@@ -3858,7 +3894,11 @@ mod tests {
         // word of a command line, not only the words after it.
         assert_eq!(parse(":y"), Ok(Command::YumeStatus));
         assert_eq!(parse(":yu"), Ok(Command::YumeStatus));
-        assert_eq!(parse(":ta"), Ok(Command::SetTable(true)));
+        // `:tab`, not `:ta`: `:target` arrived and took the two-letter
+        // prefix away, which is the rule doing its job rather than a
+        // regression — the menu lengthened what it prints in the same edit.
+        assert_eq!(parse(":tab"), Ok(Command::SetTable(true)));
+        assert_eq!(parse(":ta"), Err(CommandError::Unknown("ta".into())));
 
         // A declared alias beats the prefix rule, so the short spellings
         // people already know keep their meanings: `w` begins `write`, `wq`
@@ -4095,7 +4135,7 @@ mod tests {
             "quit",
             "goto",
             "count",
-            "words",
+            "progress",
             "check",
             "grep",
             "diff",

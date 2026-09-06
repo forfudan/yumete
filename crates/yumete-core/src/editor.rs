@@ -1243,6 +1243,15 @@ pub struct Editor {
     /// What `:replace` acts on — so a project-wide change can only be made to
     /// something the writer has **already looked at**.
     grep_found: Option<(String, Vec<PathBuf>)>,
+    /// 字 each open file held when this session opened it (Feature #244).
+    ///
+    /// What a day's writing is counted *from* when the log has no row for
+    /// today yet: a chapter first saved at four in the afternoon did not have
+    /// all of its 字 written since four. Keyed by path, because that is what a
+    /// row of the log names, and a buffer's index moves.
+    opened_with: HashMap<PathBuf, usize>,
+    /// Seconds east of UTC, asked of the system once and kept (Feature #244).
+    time_offset: Option<i64>,
     /// The last pattern, compiled. `n` and `N` ask for the same one over and
     /// over, and compiling a regex costs more than running it once.
     compiled: RefCell<Option<(String, Regex)>>,
@@ -1459,6 +1468,8 @@ impl Editor {
             grep_root: None,
             usage_groups: Vec::new(),
             grep_found: None,
+            opened_with: HashMap::new(),
+            time_offset: None,
         }
     }
 
@@ -1511,6 +1522,212 @@ impl Editor {
             out.extend_from_slice(&chars[at..]);
         }
         out
+    }
+
+    /// 字 in `text` — the publisher's count, ruby markup reduced to its base.
+    /// The same rule [`Editor::count_report`] answers with, so 進度 and `:count`
+    /// can never disagree about how long a chapter is.
+    fn han_in(&self, text: &str) -> usize {
+        self.without_markup(text)
+            .iter()
+            .filter(|&&c| is_han(c))
+            .count()
+    }
+
+    /// Today, as the writer's own calendar has it (Feature #244).
+    ///
+    /// The offset is asked of the system **once** and kept: it costs a process,
+    /// and a session that outlives a daylight-saving change is a session where
+    /// one day's rows are an hour out — which no writing log has ever cared
+    /// about.
+    fn today(&mut self) -> String {
+        let offset = match self.time_offset {
+            Some(offset) => offset,
+            None => {
+                let offset = crate::progress::local_offset();
+                self.time_offset = Some(offset);
+                offset
+            }
+        };
+        let secs = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs() as i64)
+            .unwrap_or(0);
+        crate::progress::today(secs, offset)
+    }
+
+    /// Where this book keeps its 寫作進度, whether or not it is there yet.
+    ///
+    /// The log belongs to the **book**, not to the chapter, so the search walks
+    /// up for an existing log or for the `.yumete/` a book already has — a
+    /// novel written as twenty files in one directory gets one ledger, and
+    /// `第一章.md` opened from anywhere finds it.
+    fn progress_path(&self) -> Option<PathBuf> {
+        // **The book is found from the directory, not from the buffer.** A
+        // listing this very command opened has no file name of its own, and a
+        // second `:progress` read from inside it used to answer 「這一份還沒有
+        // 名字」 about the book it had just drawn. So the search falls back to
+        // the other open buffers before it falls back to the working directory
+        // — a listing is opened *from* a manuscript, and that manuscript is
+        // still open behind it.
+        let from = std::iter::once(self.current)
+            .chain((0..self.buffers.len()).rev())
+            .filter_map(|i| self.buffers.get(i))
+            .filter_map(|b| b.path().and_then(Path::parent).map(Path::to_path_buf))
+            .find(|d| !d.as_os_str().is_empty())
+            .or_else(|| std::env::current_dir().ok())?;
+        let mut dir = Some(from.as_path());
+        while let Some(d) = dir {
+            let here = d.join(".yumete");
+            if here.join("progress.tsv").is_file() || here.is_dir() {
+                return Some(here.join("progress.tsv"));
+            }
+            dir = d.parent();
+        }
+        Some(from.join(".yumete").join("progress.tsv"))
+    }
+
+    /// This book's log as it stands on disk. Missing is empty, not an error.
+    fn progress_log(&self, path: &Path) -> crate::progress::Log {
+        std::fs::read_to_string(path)
+            .map(|text| crate::progress::Log::from_text(&text))
+            .unwrap_or_default()
+    }
+
+    /// Write the log back, answering with what went wrong.
+    fn write_progress_log(&self, path: &Path, log: &crate::progress::Log) -> std::io::Result<()> {
+        if let Some(dir) = path.parent() {
+            std::fs::create_dir_all(dir)?;
+        }
+        std::fs::write(path, log.to_text())
+    }
+
+    /// Record what this file holds now, after a save (Feature #244).
+    ///
+    /// **It is silent, and it makes nothing.** A save must not fail, or even
+    /// say anything, because a progress log could not be written — and a
+    /// manuscript is not the only thing an editor saves. A ledger appears when
+    /// the writer asks for one (`:target`, `:progress`), never because a
+    /// config file was edited in a directory that had never heard of yumete;
+    /// after that every save keeps it up to date.
+    fn note_progress(&mut self) {
+        let Some(path) = self.progress_path() else {
+            return;
+        };
+        if !path.is_file() {
+            return;
+        }
+        let Some(name) = self
+            .current_buffer()
+            .path()
+            .and_then(|p| p.file_name())
+            .map(|n| n.to_string_lossy().into_owned())
+        else {
+            return;
+        };
+        let full = self.current_buffer().path().map(Path::to_path_buf);
+        let now = self.han_in(&self.current_buffer().rope().to_string());
+        let opened = full
+            .as_ref()
+            .and_then(|p| self.opened_with.get(p).copied())
+            .unwrap_or(now);
+        let date = self.today();
+        let mut log = self.progress_log(&path);
+        log.note(&date, &name, opened, now);
+        let _ = self.write_progress_log(&path, &log);
+    }
+
+    /// `:progress` — 寫作進度: today against the target, and every day before.
+    fn progress_report(&mut self) {
+        let Some(path) = self.progress_path() else {
+            self.status = say!("progress.no-file");
+            return;
+        };
+        let mut log = self.progress_log(&path);
+        // Asking is enough to open the ledger: `:progress` on a book that has
+        // never been counted answers 「還沒有記錄」 *and* starts today's row, so
+        // that the next save has somewhere to go. Nothing else in this editor
+        // asks a writer to say 「yes, really」 twice.
+        let name = self
+            .current_buffer()
+            .path()
+            .and_then(|p| p.file_name())
+            .map(|n| n.to_string_lossy().into_owned());
+        let here = self.han_in(&self.current_buffer().rope().to_string());
+        let date = self.today();
+        if let Some(name) = name {
+            let full = self.current_buffer().path().map(Path::to_path_buf);
+            let opened = full
+                .as_ref()
+                .and_then(|p| self.opened_with.get(p).copied())
+                .unwrap_or(here);
+            log.note(&date, &name, opened, here);
+            if let Err(why) = self.write_progress_log(&path, &log) {
+                self.status = say!("progress.cannot-write", path.display(), why);
+                return;
+            }
+        }
+        let days = log.days();
+        let today = log.written_on(&date);
+        let streak = log.streak(&date);
+        if days.iter().all(|(_, written)| *written == 0) && days.len() <= 1 {
+            self.status = say!("progress.nothing-yet");
+            return;
+        }
+        // The bar is measured against the target when there is one, and against
+        // the best day there has been when there is not — a writer without a
+        // target still wants to see Tuesday next to Wednesday.
+        let scale = log
+            .target
+            .unwrap_or_else(|| days.iter().map(|(_, w)| *w).max().unwrap_or(0).max(1) as usize);
+        let mut listing = String::new();
+        for (day, written) in &days {
+            let row = say!(
+                "progress.day",
+                day,
+                written,
+                crate::progress::bar(*written, scale)
+            );
+            // A day with no bar yet would otherwise end in the 全角 space the
+            // row is spelled with, and a results buffer full of trailing
+            // whitespace is one `:w` away from being a diff.
+            listing.push_str(row.trim_end());
+            listing.push('\n');
+        }
+        // 本書 comes from the **ledger**, not from the buffer in front of the
+        // reader: `:progress` opens a listing, and a second one read from
+        // inside that listing used to report the listing's own length.
+        let book = log.book();
+        self.show_listing(listing, say!("progress.results"));
+        self.status = match log.target {
+            Some(target) => say!(
+                "progress.report-target",
+                today,
+                target,
+                today.max(0) * 100 / target.max(1) as i64,
+                book,
+                streak
+            ),
+            None => say!("progress.report", today, book, streak),
+        };
+    }
+
+    /// `:target <字>` — how many 字 a day, or `off`.
+    fn set_target(&mut self, target: Option<usize>) {
+        let Some(path) = self.progress_path() else {
+            self.status = say!("progress.no-file");
+            return;
+        };
+        let mut log = self.progress_log(&path);
+        log.target = target;
+        if let Err(why) = self.write_progress_log(&path, &log) {
+            self.status = say!("progress.cannot-write", path.display(), why);
+            return;
+        }
+        self.status = match target {
+            Some(target) => say!("progress.target-set", target, path.display()),
+            None => say!("progress.target-cleared"),
+        };
     }
 
     /// How many buffers are open, and which one is showing (both 1-based, for
@@ -3210,8 +3427,12 @@ impl Editor {
                 self.check_usage();
                 Ok(CommandOutcome::Continue)
             }
-            Command::Words => {
-                self.crutch_words();
+            Command::Progress => {
+                self.progress_report();
+                Ok(CommandOutcome::Continue)
+            }
+            Command::Target(target) => {
+                self.set_target(target);
                 Ok(CommandOutcome::Continue)
             }
             Command::GotoRow(key) => {
@@ -3653,6 +3874,11 @@ impl Editor {
         // A save that said nothing was a save you could not tell from a save
         // that did not happen — and the manual has been quoting this line as
         // its example of the hint row all along.
+        // 寫作進度 is kept from the save, not from the keystroke: what a day
+        // holds is what the writer committed to disk that day (Feature #244).
+        if matches!(saved, Ok(Wrote::Saved)) {
+            self.note_progress();
+        }
         match &saved {
             Ok(Wrote::Saved) => {
                 self.status = say!("buffer.saved", self.current_buffer().display_name())
@@ -7398,7 +7624,8 @@ impl Editor {
             (":yume chaifen on", say!("help.chinese.chaifen-under-candidates")),
             ("w b e", say!("help.chinese.word-boundaries")),
             (":segment on", say!("help.chinese.word-tint")),
-            (":words", say!("help.chinese.reload-project-words")),
+            (":word list reload", say!("help.chinese.reload-project-words")),
+            (":word habit", say!("help.chinese.habit-words")),
             (":ruby", say!("help.chinese.annotate-reading")),
             (":ruby format html", say!("help.chinese.unify-reading-spelling")),
             (":render full", say!("render.wysiwyg")),
@@ -9247,7 +9474,7 @@ impl Editor {
         };
     }
 
-    /// `:words` — the words this manuscript leans on (Feature #242).
+    /// `:word habit` — the words this manuscript leans on (Feature #242).
     ///
     /// **Sorting a word count says 的.** Every manuscript in the language gives
     /// that answer, and a writer learns nothing from it. So the words are
@@ -9262,7 +9489,7 @@ impl Editor {
     /// this question it would either say nothing or report every proper noun in
     /// the book. The answer to 「為什麼一個字都沒有」 has to be a sentence, not
     /// an empty listing.
-    fn crutch_words(&mut self) {
+    fn habit_words(&mut self) {
         let name = self
             .current_buffer()
             .path()
@@ -9278,7 +9505,7 @@ impl Editor {
             self.status = say!("words.no-table", self.segmenter.source());
             return;
         }
-        let found = crate::words::crutches(&text, &segment, &log_prob);
+        let found = crate::words::habits(&text, &segment, &log_prob);
         if found.is_empty() {
             self.status = say!("words.clean", name);
             return;
@@ -9287,7 +9514,7 @@ impl Editor {
         let mut listing = String::new();
         for word in found.iter().take(GREP_LIMIT) {
             listing.push_str(&say!(
-                "words.crutch",
+                "words.habit",
                 name,
                 word.line + 1,
                 word.word,
@@ -11134,6 +11361,9 @@ impl Editor {
                 Some(path) => self.open_word_list(&path)?,
                 None => self.status = say!("word.no-data-directory"),
             },
+            WordCommand::Habit => {
+                self.habit_words();
+            }
             WordCommand::Discover => {
                 let root = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
                 self.discover_words(&root)?;
@@ -15535,6 +15765,18 @@ impl Editor {
             self.buffers.push(buffer);
             self.current = self.buffers.len() - 1;
         }
+        // What this file held when the session first saw it, so that a day
+        // whose row is opened at four in the afternoon counts from the morning
+        // (Feature #244). Asked once per path: reopening a file that is already
+        // in the map is the same session still writing it.
+        let opened = self.buffers[self.current].path().map(Path::to_path_buf);
+        if let Some(path) = opened {
+            if !self.opened_with.contains_key(&path) {
+                let text = self.buffers[self.current].rope().to_string();
+                let han = self.han_in(&text);
+                self.opened_with.insert(path, han);
+            }
+        }
         // A freshly focused buffer starts at the top in Normal mode. The
         // segmentation cache is keyed by line number, and these are the lines
         // of a different document now.
@@ -17301,6 +17543,64 @@ mod tests {
             0,
             "the edited paragraph is segmented afresh"
         );
+    }
+
+    /// 寫作進度 — the ledger is opened by asking, kept by saving (#244).
+    #[test]
+    fn the_book_keeps_a_ledger_of_what_was_written_today() {
+        let dir = std::env::temp_dir().join(format!("yumete-progress-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let file = dir.join("第一章.md");
+        std::fs::write(&file, "春天來了。\n").unwrap();
+        let mut ed = Editor::new();
+        ed.open_file(&file).unwrap();
+        let ledger = dir.join(".yumete").join("progress.tsv");
+
+        // **Nothing is written until the writer asks for it.** A save into a
+        // directory that never heard of yumete leaves no ledger behind.
+        ed.execute(":w").unwrap();
+        assert!(!ledger.exists(), "a save alone made {}", ledger.display());
+
+        // `:target` opens it, and says where it went.
+        ed.execute(":target 2000").unwrap();
+        assert!(ledger.is_file(), "{}", ed.status());
+        assert!(ed.status().contains("2000"), "{}", ed.status());
+
+        // Four 字 written and saved: the row runs 4 → 8, because the session
+        // opened the file with four and 。 is not a 字.
+        press(&mut ed, "A河水很涼。\u{1b}");
+        ed.execute(":w").unwrap();
+        let text = std::fs::read_to_string(&ledger).unwrap();
+        let log = crate::progress::Log::from_text(&text);
+        assert_eq!(log.target, Some(2000), "{text}");
+        assert_eq!(log.rows.len(), 1, "{text}");
+        assert_eq!(log.rows[0].start, 4, "{text}");
+        assert_eq!(log.rows[0].now, 8, "{text}");
+        assert_eq!(log.rows[0].file, "第一章.md", "{text}");
+
+        // And `:progress` reports it against the target, with a listing of the
+        // days behind it.
+        ed.execute(":progress").unwrap();
+        assert!(ed.status().contains("2000"), "{}", ed.status());
+        assert!(ed.status().contains('4'), "{}", ed.status());
+        assert!(
+            ed.current_buffer().text().contains(&log.rows[0].date),
+            "{}",
+            ed.current_buffer().text()
+        );
+
+        // Read from inside that listing — which has no file name of its own —
+        // it still answers about the book.
+        ed.execute(":progress").unwrap();
+        assert!(ed.status().contains("2000"), "{}", ed.status());
+
+        // `:target off` keeps the days and drops the target.
+        ed.execute(":target off").unwrap();
+        let log = crate::progress::Log::from_text(&std::fs::read_to_string(&ledger).unwrap());
+        assert_eq!(log.target, None);
+        assert_eq!(log.rows.len(), 1);
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]
@@ -20351,16 +20651,16 @@ mod tests {
         );
     }
 
-    /// `:words` ranks by surprisal, not by count — so the word every text has
+    /// `:word habit` ranks by surprisal, not by count — so the word every text
     /// is not the answer, and the word this one leans on is (#242).
     #[test]
     fn words_reports_what_is_said_more_than_prose_says_it_and_never_says_de() {
         // A table where 的 is common and 然後 is not, so a text that says 然後
-        // as often as 的 has one crutch word and not two.
+        // as often as 的 has one habit word and not two.
         let dict = DictionarySegmenter::from_text("的\t100000\n然後\t100\n好的\t100000\n", 1);
         let mut ed = typed("然後好的然後好的然後好的然後好的\n");
         ed.set_segmenter(Box::new(dict));
-        assert!(ed.execute("words").is_ok());
+        assert!(ed.execute("word habit").is_ok());
         let out = ed.current_buffer().text();
         assert!(out.contains("然後"), "{out}");
         assert!(!out.contains("好的"), "the word prose says just as often: {out}");
@@ -20374,7 +20674,7 @@ mod tests {
         let mut ed = typed("然後好的然後好的然後好的\n");
         ed.set_segmenter(Box::new(CategorySegmenter));
         let before = ed.current_buffer().text();
-        assert!(ed.execute("words").is_ok());
+        assert!(ed.execute("word habit").is_ok());
         assert_eq!(ed.current_buffer().text(), before, "no listing buffer");
         assert!(ed.status().contains("詞頻"), "{}", ed.status());
     }
