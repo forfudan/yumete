@@ -3960,6 +3960,17 @@ fn draw_horizontal(
             true => ground.patch(ink.ground(yumete_config::rung::BAND)),
             false => ground,
         };
+        // 焦點模式 has to name its ink out loud on a page that has none of its
+        // own. With `[theme] ground = "terminal"` the page's style is empty on
+        // purpose — the reader's palette — so standing a row back by swapping
+        // palettes changed nothing that ever reached a cell, and `:focus` was
+        // a silent no-op for everybody who gave the ground back while the
+        // status line said 「焦點：開」. The 縱書 page has had this rescue since
+        // it was written (`vertical.rs`); this one had not.
+        let ground = match focus && row.line != cursor_line && ground.fg.is_none() {
+            true => ground.fg(ink.text()),
+            false => ground,
+        };
         // 所見即所得: the markup comes off the page. It is dropped from what is
         // *drawn*, not from the buffer — and never on the construct the cursor
         // is in, so the cursor is never inside text that is not on the screen.
@@ -8215,6 +8226,36 @@ mod tests {
         assert_eq!(ink(&again, 0), ink(&lit, 0));
     }
 
+    /// …and on a page whose ground the reader kept.
+    ///
+    /// `[theme] ground = "terminal"` leaves the writing with no colour of its
+    /// own, so swapping palettes moves nothing: `:focus` said 「開」 in the
+    /// status line and drew an identical page. Standing a row back has to name
+    /// the ink out loud, which is what 縱書 has always done.
+    #[test]
+    fn focus_is_not_a_no_op_on_a_page_that_kept_the_terminal_ground() {
+        let mut editor = editor_with("第一段。\n第二段。\n第三段。\n");
+        let mut config = Config::default();
+        config.theme.ground = yumete_config::Ground::Terminal;
+        config.editor.line_numbers = LineNumbers::None;
+        config.editor.hints = false;
+        config.editor.show_segmentation = false;
+        editor.on_key(Key::Char('j'));
+
+        let lit = render_wrapped(&mut editor, &config, 30, 8);
+        let ink = |b: &ratatui::buffer::Buffer, y: u16| b[(0, y)].fg;
+        // The reader's own ink, on the reader's own ground.
+        assert_eq!(ink(&lit, 0), ratatui::style::Color::Reset);
+
+        editor.execute(":focus on").unwrap();
+        let focused = render_wrapped(&mut editor, &config, 30, 8);
+        // The cursor's 段 is still the reader's ink — that is the promise the
+        // setting makes — and the rest of the page is now a colour.
+        assert_eq!(ink(&focused, 1), ratatui::style::Color::Reset);
+        assert_ne!(ink(&focused, 0), ratatui::style::Color::Reset);
+        assert_eq!(ink(&focused, 0), ink(&focused, 2), "one rung, not a gradient");
+    }
+
     /// The same, set vertically — where the unit is the 縱 the 段 is written
     /// down, and a paragraph that wraps keeps every 縱 it wraps into.
     #[test]
@@ -8235,6 +8276,43 @@ mod tests {
         // The next paragraph is another one, and stands back.
         assert_eq!(at(&buffer, 12, 0), "短");
         assert_ne!(ink(12), ink(18));
+    }
+
+    /// 焦點模式 dims the writing, not the page's furniture.
+    ///
+    /// The 縱書 number band is the page's own — it is painted before any 縱 is
+    /// drawn and stays where it is — so the digits standing on it have to stay
+    /// too. Dimmed against a band that did not move, a stood-back 縱's number
+    /// measured 1.39:1.
+    #[test]
+    fn focus_leaves_the_number_band_where_it_is_digits_and_all() {
+        let mut editor = editor_with("第一段。\n第二段。\n第三段。\n");
+        let mut config = vertical_config();
+        config.editor.line_numbers = LineNumbers::Absolute;
+        config.editor.line_number_fill = true;
+        config.editor.hints = false;
+
+        let lit = render_vertical(&mut editor, &config, 30, 12);
+        editor.execute(":focus on").unwrap();
+        let focused = render_vertical(&mut editor, &config, 30, 12);
+
+        // The band's rows are above the text; find the one carrying a digit on
+        // a 縱 that is not the cursor's.
+        let digit = |b: &ratatui::buffer::Buffer, x: u16| {
+            (0..b.area.height)
+                .find(|&y| b[(x, y)].symbol().chars().any(|c| c.is_ascii_digit()))
+                .map(|y| (b[(x, y)].fg, b[(x, y)].bg))
+        };
+        // The rightmost 縱 is the cursor's; the next 縱 leftward is not.
+        let columns: Vec<u16> =
+            (0..lit.area.width).filter(|&x| digit(&lit, x).is_some()).collect();
+        let x = columns[columns.len() - 2];
+        assert!(digit(&lit, x).is_some(), "a number is on the band");
+        assert_eq!(
+            digit(&focused, x),
+            digit(&lit, x),
+            "the band and its digits both stay"
+        );
     }
 
     /// Typewriter mode: the row being written stays in the middle, and the
