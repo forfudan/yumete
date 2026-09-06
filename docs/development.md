@@ -493,7 +493,7 @@ index, and a row with no number anywhere else is a row that got lost.
 | 280 | **Caps Lock as Esc** | — | P4 | the author, 2026-09-06: 「可以通過命令讓 caplock 代替 Esc 的所有功能。因為 Caplock 鍵好按。caplock 功能可以通過一個空格快捷鍵開啟關閉。」 **Right instinct, wrong layer — and this one should not be built.** A terminal application never sees Caps Lock: the key is swallowed by the window server, and the only way it reaches an application at all is the Kitty protocol's `REPORT_ALL_KEYS_AS_ESCAPE_CODES`, which yumete pushed once and **took back in #271** because it broke the macOS system IME. So there is no keystroke for a `:caps on` command to bind, and no state for a space-leader toggle to flip. The lever that works is one line of the operating system's, applied once: **系統設定 → 鍵盤 → 鍵盤快速鍵 → 變更鍵 → Caps Lock → Escape** (or `hidutil property --set '{"UserKeyMapping":[{"HIDKeyboardModifierMappingSrc":0x700000039,"HIDKeyboardModifierMappingDst":0x700000029}]}'` for the same thing from a script). It is then Esc in *every* application, with no delay, and yumete needs to know nothing about it. yumete could run that `hidutil` line at startup and undo it at exit — and should not: the remap is **global while yumete runs**, it outlives a crash, and `UserKeyMapping` is a whole-set property, so writing ours silently drops whatever else the writer had remapped. Recorded in the manual as a setting rather than in the code as a feature. **none** | Won't build (documented) |
 | 281 | **The other pane draws this file's text under the other file's name** | tui | P2 | found while acting on a review of #247, 2026-09-06. A split is captioned with the file it was opened on and drawn from `editor.current_buffer()` — every one of them, both halves — so the moment the live half changes documents the peek half goes on showing *your* text under *its* caption. Reproduced with two scratch buffers: split on B, `:buffer previous`, and the pane titled 「B」 is full of A. It is not a corner: **`:schema` walks straight into it** — `table_schema_in_split` opens the schema file, hands it to the split and then takes the table buffer back, which is precisely the state that misdraws, so 「schema in the other area」 has been showing the table in the other area. The fix is not local. Everything the page is drawn from — the rope, `hidden_on_line`, `line_is_folded`, `readings_on_line`, `meter_on_line`, `table_row_at`, the markup runs — reads `current_buffer()`, and three of the caches behind them (`segment_cache`, `meter_cache`, `note_cache`) are keyed by **line alone**, so drawing a second buffer would poison them as well as needing a buffer argument threaded through some thirty accessors. Two ways out to choose between first: give those accessors a buffer (correct, and the caches have to be re-keyed by `(buffer, line)` on the way), or hold the design line #176 already states — 「two panes over one buffer」 — and make a pane that names another document stop being a second half until you are back in it, which costs `switch_pane`'s cross-buffer branch and `:schema`'s whole gesture. **medium** | Open |
 | 282 | **One flick of the wheel over a table froze the window** | core | P1 | the author, 2026-09-06: 「在 tn 下，鼠标滚轮滚动会造成buffer卡死。」 Not the table mode's — **any** page with a `|` table on it, and #268's wheel work made it visible rather than caused it: a flick is collapsed into one `scroll(n)`, so the whole gesture is paid for in one frame. The bill was the padding that squares a table up (#212), whose memo was keyed on the caret. Nothing in `hidden_on_line` asks where the caret is unless `:render full` is on — under the default `:render on` the key changed on every `j` and threw away a walk down every row of the table. One flick over the 223-row table in this file: **8.26 s → 41 ms**. The key now carries the caret only when 所見即所得 is on, where the answer genuinely moves with it. **small** | Done |
-| 283 | **Four dimensions, three levels, one word for each level** | core+tui | P2 | the author, 2026-09-06: 「我的目的是能让命令和快捷键的命名尽量统一、规范，便于用户学习记忆。」 `render` / `table` / `ruby` / `indent` were four settings with four vocabularies — `:render on`, `t n`／`t a`／`t t`, a dialect set, an indent flag — so learning one taught you nothing about the next. They are now one word each at three levels, `off` / `basic` / `full`, and **the levels are linked at assignment, not at read time**: `:render <級>` *writes* the matching level into the other three and nothing re-derives afterwards, so any one of them can be moved on its own and the next `:render` re-assigns everything. The law that makes `basic` safe as the factory level: **`basic` 不藏、不摺、不替換; `full` 三件都可以做** — with nothing to draw a table on, `TableLevel::Basic` and `Off` produce the same page to the character. The enabling refactor is a split: `table_level` is the reader's standing preference and survives every open, `self.table` is the per-buffer fact of *which* table the cursor is in, and `Surface::{Normal,Advanced,Grid}` dissolves into that level plus an orthogonal `TableView.pane` (which is why `t q` needs nothing written down — the level it returns to was never touched). Keys: `t o` / `t b` / `t f` / `t t` / `t q`, 排齊 to `t F`. Design in §5.7. Two real faults fell out of it: `t d` in the paragraph *between* two tables deleted the prose line the cursor was on and reported 「已刪除一行」 (`md_region()` is `None` there, which the dispatch read as 「a delimited file」), and a lone `| 甲` had the grid's keys on it while the renderer painted it as the prose it is — `prose_region` took any run of pipe lines, `with_md_tables` took only the ones Markdown parses. One rule now (`md_table_parses`), and a `table_here()` gate above every key that edits a grid. **Still open**: deriving `self.table` on open when the level is not `off`; `indent` as the fourth dimension with `full` folding blank lines; `t w`／`t i`; forbidding bare `t s` and adding `t0as`／`t1,5,9s`; `,` for coordinates and `-` for ranges (`t20,20g`). **large** | Open |
+| 283 | **Four dimensions, three levels, one word for each level** | core+tui | P2 | the author, 2026-09-06: 「我的目的是能让命令和快捷键的命名尽量统一、规范，便于用户学习记忆。」 `render` / `table` / `ruby` / `indent` were four settings with four vocabularies — `:render on`, `t n`／`t a`／`t t`, a dialect set, an indent flag — so learning one taught you nothing about the next. They are now one word each at three levels, `off` / `basic` / `full`, and **the levels are linked at assignment, not at read time**: `:render <級>` *writes* the matching level into the other three and nothing re-derives afterwards, so any one of them can be moved on its own and the next `:render` re-assigns everything. The law that makes `basic` safe as the factory level: **`basic` 不藏、不摺、不替換; `full` 三件都可以做** — with nothing to draw a table on, `TableLevel::Basic` and `Off` produce the same page to the character. The enabling refactor is a split: `table_level` is the reader's standing preference and survives every open, `self.table` is the per-buffer fact of *which* table the cursor is in, and `Surface::{Normal,Advanced,Grid}` dissolves into that level plus an orthogonal `TableView.pane` (which is why `t q` needs nothing written down — the level it returns to was never touched). Keys: `t o` / `t b` / `t f` / `t t` / `t q`, 排齊 to `t F`. Design in §5.7. Two real faults fell out of it: `t d` in the paragraph *between* two tables deleted the prose line the cursor was on and reported 「已刪除一行」 (`md_region()` is `None` there, which the dispatch read as 「a delimited file」), and a lone `| 甲` had the grid's keys on it while the renderer painted it as the prose it is — `prose_region` took any run of pipe lines, `with_md_tables` took only the ones Markdown parses. One rule now (`md_table_parses`), and a `table_here()` gate above every key that edits a grid. `indent` is the fourth dimension and `:render` does **not** write it (author, 2026-09-06: 「indent 一般是竪排文本用的，markdown 渲染大多數是橫排用的」); the level of a dimension with a real third state is computed from the pair that holds it, never stored (`ruby_level`, `indent_level`). **Still open**: deriving `self.table` on open when the level is not `off`; `t w`／`t i`; forbidding bare `t s` and adding `t0as`／`t1,5,9s`; `,` for coordinates and `-` for ranges (`t20,20g`). **large** | Open |
 | 284 | **The HUD is a thread, not a panel — and in 縱書 it is nothing at all** | tui | P3 | the author, 2026-09-06: 「現在的HUD是一根線連到字母上。你覺得可不可以加個面板（有外框），並且允許HUD覆蓋其他的行的文字…允許他覆蓋其他文字可以讓他的位置更固定…然後我們可以有三個模式 `:hud off/basic/full`，默認 full。」 **The frame and the covering are one decision, not two.** Today's mark wants five cells on one row, so it can still find margin; a bordered panel wants a 3 × (寬+2) rectangle empty *near the caret*, which on a page of prose does not exist — so a frame forces covering. And the converse holds: once the HUD's glyphs sit on the same paper as the writing, nothing tells the reader which characters are not theirs, so covering forces a frame. That collapses two switches into one axis, which is what feeds the three levels. **What covering actually costs is not 「some prose」**: in Normal the HUD carries `typed_so_far()`, so pinning it two cells right of the caret paints over exactly the characters `3`, `2t` and `d3l` are counting — the object of the command. Hence the split: `off` draws nothing beside the caret (the status line's right edge stays — #193's floor), **`basic` is the factory level** and is today's scoring placement (#269) with a louder style — one row high, a 藥丸 rather than a thread, BAND ground and gold ink, **not one character hidden** — and `full` is the pinned, bordered, may-cover panel. Default `basic`, not `full`, by §5.7's own rule: the factory level must be identical to `off` in the worst case, and 醒目 is bought with style rather than with hiding. Three things to settle in the doing: **`:hud` is not #283's fifth dimension** — it is how the editor talks to you, not how the file is drawn, so `:render` must never write it and `render.is` keeps four fields; `:yume panel full` and `:hud full` are different words — the candidate panel and a pinned HUD both want `(cursor_x, cursor_y+1)` and the panel wins; and `full` loses the HUD's only collision avoidance, because `after_the_writing` reads the *buffer* back and thereby also dodges which-key, the command menu, the picker and the detail panel — 「有字」 and 「有面板」 read back identically once we cover, so the draw functions have to start returning their own `Rect`. #269's line in this table — 「`after_the_writing` is unchanged: the HUD still never paints over writing」 — is revoked by `full` and must be amended, not silently contradicted. **A separate fault found while reviewing this, and worth more than the frame**: in 縱書 the HUD is essentially never drawn. `after_the_writing` scans left→right for the last non-blank on the row, and 縱書 fills columns right-to-left, so `after` lands near the right edge whenever any 縱 on that row holds a character, every candidate fails `x < after`, and the vertical reader has only the status line. **medium** (縱書: **small**) | Open |
 
 ### 5.5 · A table is a delimiter, a surface and a boundary (#261)
@@ -776,10 +776,10 @@ divergences over that corpus — and nine of the thirteen safety fixes hold.
 4. **Four writers reached the rope past the cell gate.** `:replace`/`:s` and
    `gJ` now ask whether a line **is** a table row (`mdtable::row_lines`, which
    knows about fences) rather than whether `:table` is on — nobody types
-   `:table on` to fix a typo in their own documentation. `:ruby format` runs
+   `:table basic` to fix a typo in their own documentation. `:ruby format` runs
    the same grid check `:replace` runs, and a ruby reading goes through the
    cell gate like any other text.
-5. **`:table on` reformatted the file** — 45 lines of the docs site, `modified`
+5. **Looking at a table reformatted the file** (`:table on`, retired by #283) — 45 lines of the docs site, `modified`
    set, and `:table off` does not undo it. Looking at a table no longer
    rewrites it; 對齊 (`t f` today) is the tidy-up, and says so.
 6. **`:w <path>` rebound the buffer.** It writes a copy and stays where it is,
@@ -1086,7 +1086,7 @@ reads the same list, which is what stopped the door and the renderer
 disagreeing about the fence rule: `t t` in a file whose only table was quoted
 inside a fence used to enter a mode that then drew nothing.
 
-### 5.7 · Three levels, four dimensions (#283)
+### 5.7 · Three levels, three dimensions — and 縮進 on its own (#283)
 
 Settled with the author on 2026-09-06, after two reviews of the previous
 proposal found the same thing from opposite ends.
@@ -1107,7 +1107,7 @@ The cure is to link the two **when the command runs**, not when the frame is
 drawn. `:render basic` *writes* `table_level = Basic`. After that, alignment
 asks one field and `render` never appears on that path at all.
 
-**Four dimensions, three levels each.**
+**Four dimensions say the three words. `:render` writes three of them.**
 
 | | `off` | `basic` (factory) | `full` |
 | --- | --- | --- | --- |
@@ -1116,14 +1116,28 @@ asks one field and `render` never appears on that path at all.
 | `ruby` | the tags are text | the tags stay, and nothing is drawn beside the base | the reading beside the base, the tags off the page |
 | `indent` | no indent | indent (drawn spaces) | indent ＋ the blank line between two paragraphs folded away |
 
-`:render <level>` assigns all four. Each can then be overridden by its own
-command; the next `:render` washes the overrides away (there is no pinning,
-so there is no pin state anyone has to be able to see). `:render` with no
-argument **reports** all four — the shape `:table rules` already has.
+`:render <level>` assigns the **first three**. Each can then be overridden by
+its own command; the next `:render` washes the overrides away (there is no
+pinning, so there is no pin state anyone has to be able to see). `:render`
+with no argument **reports** those three — the shape `:table rules` already
+has.
 
-There is no `:render reset`: with that rule, `:render basic` is it.
+**`indent` says the same three words and `:render` does not write it. Settled
+2026-09-06**, the author: 「同意 indent 和 render 解耦。道理還有一個：indent
+一般是竪排文本用的，markdown 渲染大多數是橫排用的。」 The other three are one
+question asked of three subsystems — *how much of the markup is resolved* —
+and a master switch over them is a switch over one idea. An indent is not
+markup: it is how a Chinese paragraph opens, it belongs to 縱書, and Markdown
+is read across. Linking them would have meant `:render basic` silently
+indenting a horizontal Markdown file that had asked for nothing of the sort —
+which is exactly what three TUI tests caught the hour the link was written.
+`:indent` reports itself, for the same reason bare `:render` reports.
 
-**All four say the three words. Settled 2026-09-06** — because #283 landed with
+There is no `:render reset`: with that rule, `:render basic` is it — for the
+three it writes. `indent` is reset by naming it.
+
+**All four say the three words — three of them written by `:render`, `indent`
+by hand. Settled 2026-09-06** — because #283 landed with
 only one of them saying any. `:render off|basic|full` landed with the
 design and so did the keys (`t o`/`t b`/`t f`), while the other three dimensions
 kept the dialects #283 exists to abolish: `:table on|off`, `:ruby on|off` plus
@@ -1136,8 +1150,10 @@ four points the whole entry is about. So:
 :table  off | basic | full     `on` retires
 :ruby   off | basic | full     `on` retires; the dialect words stay as
                                overrides (`:ruby html`, `:ruby auto`)
-:indent off | basic | full     `on` retires; `:indent <數字>` stays, and
-                               `hint` stays as its own override
+:indent off | basic | full     stands alone — `:render` does not write it;
+                               `:indent <數字>` is the *width* and does not
+                               touch the fold; `hint` stays as its own
+                               override
 ```
 
 `on` is deleted rather than aliased, per the standing rule. **`:render` itself
@@ -1162,7 +1178,7 @@ had been argued twice by eye; measure it instead:
   explicit that a character is replaced, never taken off the page, so the
   columns stay the columns) → `full`.
 * `indent`'s blank-line fold **removes a line** → `indent full`. Before the
-  law it was the one place where `:render on` quietly took a character off
+  law it was the one place where the pre-#283 `:render on` quietly took a character off
   the page and nothing said so.
 * `ruby` at `basic` therefore keeps the tags on the page and draws **nothing**
   beside the base. Stripping the tag is hiding, and hiding is `full` — and the
@@ -1177,7 +1193,29 @@ had been argued twice by eye; measure it instead:
 
 **A feature with two states gets two states.** The levels are a naming
 convention and a mapping, not a quota — map `basic` and `full` to the same
-value rather than inventing a middle state nobody asked for.
+value rather than inventing a middle state nobody asked for. `table` is that
+case: with no table on the page `Basic` and `Off` are the same page to the
+character.
+
+**But two of them turned out to have a real third state, and it was already
+there — under one field.** Naming the levels is what found them:
+
+* **ruby: *recognised* vs *drawn*.** `ruby: Dialects` is which spellings count
+  as one reading — what the word count subtracts, what `:ruby` edits, what
+  `:ruby auto` writes; `ruby_drawn: bool` is whether it is laid out beside the
+  base, which is what takes the tags off the page. 中階 needs both answers at
+  once (known, not drawn) and one field could only give one, which is why
+  `:render basic` used to strip the tags while the status line said
+  「標記留在畫面上」 (§5.2.2 fault 3).
+* **indent: *drawn* vs *folded*.** `indent: usize` is the width, `indent_folds:
+  bool` is whether the blank line between paragraphs comes off the page. Adding
+  two squares is 中階; removing a line is 全.
+
+**The level is computed from the pair, never stored.** `ruby_level()` reads
+`(ruby.is_empty(), ruby_drawn)`, `indent_level()` reads `(indent == 0,
+indent_folds)`. A field naming the sum is a third copy of a two-field state and
+could only go stale — which is the same disease §5.7 opens by curing, one
+subsystem answering with another's state, seen from the other side.
 
 **The cut this needs first: a level is not a table.** `self.table` today
 answers two questions at once — 「which level does the writer want」 and
@@ -1205,7 +1243,7 @@ Three consequences fall out, and all three are the point:
 3. `manual.md`'s promise — 「頁面上的每一張表，不用你動手就是齊的，不只是光標
    所在的那一張」 — survives, because the level is file-wide.
 
-**Keys.** Words and keys agree, in all four dimensions:
+**Keys.** Words and keys agree, in every dimension:
 
 ```
 t o   off          t b   basic        t f   full         t t   the window
@@ -2491,6 +2529,13 @@ author's sentence 「正文不许摘 ruby 标签但可以额外在上方显示�
 The strip runs in `hidden_on_line` (`editor.rs:2772`) **outside** the
 `wysiwyg()` guard, so it happens at every level above `off`.
 
+**Fixed 2026-09-06** with §5.2.3 ①, and the fix was a field, not a guard: the
+strip is `ruby_drawn`'s to do, and `ruby_drawn` is `Full` only. `basic` now
+recognises the reading — so 「永和」 is two 字 to the word count and the `<rt>`
+is none of them — and draws nothing beside the base, which is what the status
+line had been claiming all along. The two comments twenty lines apart that had
+been arguing this are both kept, one under each field.
+
 ### 4 · The markdown grid keys report success on a read-only buffer
 
 `:readonly on` → `:table` → `t r` says 「加了一行」 with the grid unchanged and
@@ -2602,6 +2647,15 @@ level as their master. Written up in §5.7; it also gives §5.2.2 fault 3 its
 fix, because the strip that `basic` performs today has a level to belong to
 (`ruby == Full`) as soon as that level exists. `:ruby basic` draws nothing
 beside the base — the second half of the decision, also in §5.7.
+
+**Landed 2026-09-06**, with one change made while writing it: `indent` says the
+three words but **`:render` does not write it**. The author: 「同意 indent 和
+render 解耦。道理還有一個：indent 一般是竪排文本用的，markdown 渲染大多數是橫排
+用的。」 Found because linking it made `:render basic` indent a horizontal
+Markdown file, which three TUI tests refused. So the master writes three; the
+fourth answers to its own name. §5.7 carries the reasoning, and the two real
+third states (ruby *recognised* vs *drawn*, indent *drawn* vs *folded*) that
+naming the levels turned up.
 
 Folding and a `z` group are **not** decided by this and stay open under ③.
 What was on the table:

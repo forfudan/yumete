@@ -451,8 +451,10 @@ Typst 那邊認得 `= 標題`、`*粗*`、`_斜_`、`` `碼` ``、`$數學$`、`
 在屏幕上它還白白佔掉一整行（竪排是一整縱）。
 
 ```
-:indent 2            每段開頭縮兩格
+:indent full         每段開頭縮兩格，段間那個空行從頁面上撤掉
+:indent basic        縮進照畫，空行留着
 :indent off          不縮
+:indent 2            縮幾格是另一個問題：改寬度，不動撤不撤空行
 :indent hint none    那兩格上什麼都不畫（默認）
 :indent hint color   那兩格帶一條淡底
 :indent hint symbol  第一格畫一個記號
@@ -466,8 +468,8 @@ Typst 那邊認得 `= 標題`、`*粗*`、`_斜_`、`` `碼` ``、`$數學$`、`
 是同一個東西），所以光標永遠不會停在縮進裏，鼠標點不到那裏，也不會有一個「檔案裏沒有
 的字」出現在你可以編輯的地方。
 
-**段落之間那個空行會從頁面上撤掉**——條件是這一段已經被**別的方式**標出來了：橫排是
-縮進（`:indent 2`），**竪排永遠是**，因為換段本來就是換一縱，空行是把同一件事說第二遍，
+**`:indent full` 之下，段落之間那個空行會從頁面上撤掉**——條件是這一段已經被**別的方式**
+標出來了：橫排是縮進，**竪排永遠是**，因為換段本來就是換一縱，空行是把同一件事說第二遍，
 而在竪排說第二遍要花掉整整一縱的閱讀面積。一段話用縮進標，
 還是用空行標，排版上只能選一樣——兩樣都上是沒有人做的事。檔案照舊留着空行，行號也照舊
 是檔案自己的號，所以頁面上會看見 1、3、5：**跳號本身就是那個空行還在的憑據**。
@@ -730,10 +732,10 @@ start = true          # 啟動就載入碼表
 | 現在 | 沒有了 |
 |---|---|
 | `:yume scheme 靈明` `:yume chaifen` | `:scheme` `:chaifen` `:cf` |
-| `:ruby on/off` `:ruby html on` `:ruby format typst` | `:ruby-on` `:ruby-off` `:render-ruby-html` … |
+| `:ruby full/off` `:ruby html on` `:ruby format typst` | `:ruby-on` `:ruby-off` `:render-ruby-html` … |
 | `:layout vertical` | `:vertical` `:horizontal` |
 | `:wrap off` | `:nowrap` |
-| `:render off/on/full` | `:markup` `:md` `:wysiwyg` `:source` |
+| `:render off/basic/full` | `:markup` `:md` `:wysiwyg` `:source` |
 | `:buffer list/next/previous/close` | `:buffers` `:ls` `:bn` `:bp` `:bd` |
 | `:clipboard yank/paste` | `:clipboard-yank` `:cy` `:cp` |
 
@@ -902,7 +904,7 @@ off` 在那邊會直接告訴你這條命令只管橫排（`:wrap 40` 兩邊都�
 
 | | |
 | --- | --- |
-| `:ruby on` / `:ruby off` | 排出注音／顯示原始標記 |
+| `:ruby full` / `:ruby basic` / `:ruby off` | 排出注音／認得讀音但標記留在畫面上／源碼 |
 | `:ruby html` | 也讀 HTML 注音（`:ruby html off` 停止） |
 | `:ruby typst` | 也讀 Typst 注音（`:ruby typst off` 停止） |
 | `:ruby format html` | 把全篇注音改寫成 HTML |
@@ -2400,7 +2402,7 @@ GB18030 的舊稿會被擋下並告訴你用 `iconv` 轉，而不是丟一句 Ru
 | `:layout vertical`／`horizontal` | 直接指定 |
 | `:hanging` | 標點旁置開關 |
 | `:syntax` `:syn` [`markdown`｜`typst`｜`text`] | 這個檔案是哪種標記；`text` = 沒有標記 |
-| `:render off`／`on`／`full` | 畫面上顯示多少「結果」：原文／著色／所見即所得 |
+| `:render off`／`basic`／`full` | 畫面上顯示多少「結果」：原文／著色／所見即所得（它寫渲染、表格、讀音三項，縮進不歸它管） |
 | `:preview`（`off`） | 交給 tinymist／HTML，在瀏覽器裏看 |
 | `:sh` *命令* | 跑一條命令，輸出收進一個緩衝區 |
 | `:pipe` *命令*、`!` | 選區送給一條命令，用輸出換掉 |
@@ -2408,9 +2410,9 @@ GB18030 的舊稿會被擋下並告訴你用 `iconv` 轉，而不是丟一句 Ru
 | `:wrap`（`off`、或一個數字） | 長段落是否折到下一行（`on`／`off` 只管橫排） |
 | `:wrap 50` | 寫到五十欄寬（竪排：一縱五十字）；`:wrap 0` 還原 |
 | `:wheel`（或一個數字） | 滾輪一格走幾行（竪排：幾縱）；`:wheel 1` 是終端自己的一格 |
-| `:ruby on` `:ruby off` | 排不排注音（`:ruby` 單獨用是改這裏的注音） |
+| `:ruby off`／`basic`／`full` | 源碼／認得讀音但不排／排在正文旁邊（`:ruby` 單獨用是改這裏的注音） |
 | `:dense` `:dense off` | 竪排密排：一縱兩格，無注音、無旁置、無刻度 |
-| `:indent`（`off`、或一個數字） | 首行縮進幾格（中文的段落是縮進兩格） |
+| `:indent off`／`basic`／`full`（或一個數字） | 首行縮進；`full` 連段間空行一起收（中文的段落是縮進兩格） |
 | `:bands`（`off`、或 1–4） | 段組：把竪排頁面橫着分成幾條 |
 | `:sentence`（`off`） | 一句一縱，校對用；只是看法，文件不動（見 5.8） |
 | `:yume chaifen` | 候選旁的拆分注解（二重：拆分＋編碼） |

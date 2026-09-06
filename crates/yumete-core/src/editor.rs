@@ -28,6 +28,10 @@ use crate::ruby::{Dialect, Dialects};
 use crate::text_store::TextStore;
 use crate::zong::{self, Grid, Layout, DEFAULT_ZONG_LENGTH};
 
+/// The two squares a Chinese paragraph opens with — what a level that draws an
+/// indent draws when the reader has not named a width.
+const DEFAULT_INDENT: usize = 2;
+
 /// A paragraph's word ranges, kept against a hash of the paragraph's text.
 type SegmentCache = HashMap<usize, (u64, Vec<(usize, usize)>)>;
 
@@ -1120,6 +1124,14 @@ pub struct Editor {
     sentences: bool,
     /// How many squares open a paragraph (首行縮進), as configured.
     indent: usize,
+    /// Whether the blank line between two indented paragraphs comes off the
+    /// page — 全 only (#283).
+    ///
+    /// The indent itself is 中階: two squares *added* at the head of a
+    /// paragraph, and every character the writer typed still there. Folding
+    /// the blank line the indent stands in for is the 全 half of the same
+    /// idea, and 中階 does not fold.
+    indent_folds: bool,
     /// How many bands the vertical page is divided into (段組).
     bands: usize,
     /// What the last `Enter` search found, **and which document it found it
@@ -1235,10 +1247,19 @@ pub struct Editor {
     /// replaced by each candidate in turn, so the line itself can no longer say
     /// what was being completed.
     completion: Option<(String, usize)>,
-    /// Which ruby dialects are laid out as readings (Feature #65). Vertical
-    /// layout only — horizontal always shows the markup, since there is nowhere
-    /// sensible to put a reading in it.
+    /// Which spellings of a reading **count as one** (Feature #65) — what the
+    /// word count subtracts, what `:ruby` edits, what `:ruby auto` writes.
+    ///
+    /// Separate from [`Editor::ruby_drawn`] since #283, because the middle
+    /// level needs both answers at once: a reading is *known* at 中階 and it is
+    /// not *drawn*, so the tags stay on the page and the count is still of the
+    /// text a reader sees. One field could only say one of those.
     ruby: Dialects,
+    /// Whether a known reading is laid out beside its base — 全 only.
+    ///
+    /// Drawing it means taking the tags off the page, and that is replacing,
+    /// which 中階 does not do.
+    ruby_drawn: bool,
     /// Whether text is laid out horizontally or vertically (Feature #61).
     layout: Layout,
     /// How many graphemes fit in one 縱. The renderer lowers this when the
@@ -1486,6 +1507,7 @@ impl Editor {
             sentences: false,
             loose_rows: false,
             indent: 0,
+            indent_folds: true,
             bands: 1,
             hits: None,
             jumps: Vec::new(),
@@ -1510,6 +1532,7 @@ impl Editor {
             md_tables: RefCell::new(None),
             candidate: Vec::new(),
             ruby: Dialects::only(crate::ruby::Dialect::Html),
+            ruby_drawn: true,
             layout: Layout::default(),
             zong_length: DEFAULT_ZONG_LENGTH,
             goal_slot: 0,
@@ -2747,13 +2770,10 @@ impl Editor {
     /// the level assigned outright there is nothing to go stale, and `:ruby`
     /// afterwards is an override that stands until the next `:render`.
     fn set_ruby_level(&mut self, how: Render) {
+        // 源碼模式: the tags are text, and nothing reads them — a word count
+        // counts what is written, because that is what is on the page.
         self.ruby = match how {
-            // 源碼模式: the tags are text, like everything else.
             Render::Off => Dialects::NONE,
-            // **Basic does not hide.** The tags stay on the page and the
-            // reading is drawn *as well*, in the column beside the base —
-            // 「正文不许摘 ruby 标签但可以额外在上方显示一个ruby 行」. That is
-            // what makes the law exceptionless rather than nearly so.
             Render::Basic | Render::Full => {
                 let mut all = Dialects::NONE;
                 for dialect in crate::ruby::Dialect::ALL {
@@ -2762,6 +2782,60 @@ impl Editor {
                 all
             }
         };
+        // **中階 knows the reading and does not draw it** (settled 2026-09-06).
+        // Laying the reading out beside the base means taking the tags off the
+        // page — 「正文不许摘 ruby 标签」 — and taking something off the page is
+        // 全's business. So 中階 keeps both: the tags where the writer typed
+        // them, and a word count that knows 「錢塘」 is two 字 and `qián táng`
+        // is none.
+        //
+        // This is the level that used to lie. `:render basic` set every dialect
+        // *and* drew them, so the tags came off while the status line said
+        // 「標記留在畫面上」.
+        self.ruby_drawn = how == Render::Full;
+    }
+
+    /// Which of the three levels the reading dimension is on (#283).
+    ///
+    /// **Computed, not stored.** The state is the pair 「is a reading known」
+    /// and 「is it drawn」; a fourth field naming the sum of those could only
+    /// go stale, and every dimension in #283 exists to stop exactly that.
+    pub fn ruby_level(&self) -> Render {
+        match (self.ruby.is_empty(), self.ruby_drawn) {
+            (true, _) => Render::Off,
+            (false, false) => Render::Basic,
+            (false, true) => Render::Full,
+        }
+    }
+
+    /// `:indent off|basic|full` — how much of a paragraph's opening is drawn.
+    ///
+    /// **The three words, and not `:render`'s to write** (settled 2026-09-06).
+    /// The other three dimensions are all one question — how much of the
+    /// *markup* is resolved — and a master switch over them is a switch over
+    /// one idea. An indent is not markup: it is how a Chinese paragraph opens,
+    /// it belongs to 縱書, and Markdown is read across. So `:render` writes
+    /// three and this one stands on its own, saying the same three words.
+    ///
+    /// [`DEFAULT_INDENT`] is what a level that draws comes to when the reader
+    /// has not named a width; `:indent <數字>` is the width and leaves the
+    /// level alone, because those are two questions.
+    fn set_indent_level(&mut self, how: Render) {
+        self.indent = match how {
+            Render::Off => 0,
+            _ if self.indent > 0 => self.indent,
+            _ => DEFAULT_INDENT,
+        };
+        self.indent_folds = how == Render::Full;
+    }
+
+    /// Which of the three levels the paragraph dimension is on (#283).
+    pub fn indent_level(&self) -> Render {
+        match (self.indent == 0, self.indent_folds) {
+            (true, _) => Render::Off,
+            (false, false) => Render::Basic,
+            (false, true) => Render::Full,
+        }
     }
 
     /// The markup to take off `line`, as char ranges within it.
@@ -2964,7 +3038,7 @@ impl Editor {
             last,
             caret: self.wysiwyg().then(|| self.selection()),
             render: self.render,
-            ruby: self.ruby,
+            ruby: self.ruby(),
             syntax: buffer.syntax(),
         };
         // **The memo answers before the region is worked out.** Finding where
@@ -3599,13 +3673,7 @@ impl Editor {
                 Ok(CommandOutcome::Continue)
             }
             Command::RenderRuby { dialect, on } => {
-                match dialect {
-                    Some(d) => self.render_ruby(d, on),
-                    // Bare `:ruby-on` means the dialect this file is written in;
-                    // bare `:ruby-off` means all of them.
-                    None if on => self.ruby = Dialects::only(self.file_dialect()),
-                    None => self.ruby = Dialects::NONE,
-                }
+                self.render_ruby(dialect, on);
                 let listed_names: Vec<String> =
                     self.ruby.iter().map(|d| d.name().to_string()).collect();
                 self.status = if listed_names.is_empty() {
@@ -3950,28 +4018,23 @@ impl Editor {
                     TableLevel::Basic => say!("level.basic"),
                     TableLevel::Full => say!("level.full"),
                 };
-                let render = match self.render {
+                // **The three it writes**, not four. `:indent` reports itself
+                // — it is not `:render`'s to set, so saying its level here
+                // would read as a claim that it is. All three have three
+                // levels since 2026-09-06: ruby used to have two states and an
+                // N-to-1 mapping onto the three names, and the state it was
+                // missing is the one the law asks for — know a reading without
+                // drawing it.
+                let level = |how: Render| match how {
                     Render::Off => TableLevel::Off,
                     Render::Basic => TableLevel::Basic,
                     Render::Full => TableLevel::Full,
                 };
-                // Ruby and indent have two states each, not three — 「如果说
-                // 只有两态那就两态，我们可以 N-to-1 mapping就好了」 — so they
-                // report the level they are *at*, which is never `full`.
-                let ruby = match self.ruby.is_empty() {
-                    true => TableLevel::Off,
-                    false => TableLevel::Basic,
-                };
-                let indent = match self.indent {
-                    0 => TableLevel::Off,
-                    _ => TableLevel::Basic,
-                };
                 self.status = say!(
                     "render.is",
-                    word(render),
+                    word(level(self.render)),
                     word(self.table_level),
-                    word(ruby),
-                    word(indent)
+                    word(level(self.ruby_level()))
                 );
                 Ok(CommandOutcome::Continue)
             }
@@ -4104,21 +4167,42 @@ impl Editor {
                 self.status = say!("table.column-rules", self.table_rules.name());
                 Ok(CommandOutcome::Continue)
             }
-            Command::SetTable(on) => {
+            Command::EnterTable => {
                 // **`:table` is the door, not a surface.** Typed while the
                 // grid had the window it went in again as 畫成表格 — a silent
                 // demotion that also threw away `t q`'s way back.
-                match (on, self.table.as_ref().map(|v| v.pane)) {
-                    (true, None) => {
+                match self.table.as_ref().map(|v| v.pane) {
+                    None => {
                         self.enter_table();
                     }
-                    (true, Some(true)) => self.status = say!("table.already-the-window"),
-                    (true, Some(false)) => match self.table_level {
+                    Some(true) => self.status = say!("table.already-the-window"),
+                    Some(false) => match self.table_level {
                         TableLevel::Full => self.status = say!("table.already-drawn"),
                         _ => self.status = say!("table.already-operated"),
                     },
-                    (false, _) => self.leave_table(),
                 }
+                Ok(CommandOutcome::Continue)
+            }
+            Command::SetTableLevel(level) => {
+                self.set_table_level(level);
+                Ok(CommandOutcome::Continue)
+            }
+            Command::ReportIndent => {
+                self.status = self.indent_report();
+                Ok(CommandOutcome::Continue)
+            }
+            Command::SetIndentLevel(how) => {
+                self.set_indent_level(how);
+                self.status = self.indent_report();
+                Ok(CommandOutcome::Continue)
+            }
+            Command::SetRubyLevel(how) => {
+                self.set_ruby_level(how);
+                self.status = match self.ruby_level() {
+                    Render::Off => say!("ruby.level-off"),
+                    Render::Basic => say!("ruby.level-basic"),
+                    Render::Full => say!("ruby.level-full"),
+                };
                 Ok(CommandOutcome::Continue)
             }
             Command::SetWheelStep(step) => {
@@ -10835,7 +10919,9 @@ impl Editor {
     /// break), and anything inside a fence or a page's metadata, where a blank
     /// line is content.
     pub fn line_is_folded(&self, line: usize) -> bool {
-        if self.indent == 0 {
+        // 中階 draws the indent and keeps the blank line: adding two squares
+        // takes nothing away, folding a line does (#283).
+        if self.indent == 0 || !self.indent_folds {
             return false;
         }
         if line == self.cursor_line() {
@@ -10880,7 +10966,7 @@ impl Editor {
     /// open at a time, so crossing from one paragraph to the next closes one
     /// and opens another and the page below does not shift.
     pub fn open_line(&self) -> Option<usize> {
-        match self.indent > 0 {
+        match self.indent > 0 && self.indent_folds {
             true => Some(self.cursor_line()),
             false => None,
         }
@@ -10965,10 +11051,18 @@ impl Editor {
     /// Set the first-line indent, in squares.
     pub fn set_indent(&mut self, n: usize) {
         self.indent = n.min(8);
-        self.status = match self.indent {
-            0 => say!("layout.first-line-indent-off"),
-            n => say!("layout.first-line-indent", n),
-        };
+        self.status = self.indent_report();
+    }
+
+    /// What the reader is told about the indent — the width **and** whether the
+    /// blank line between paragraphs is folded, because those are two questions
+    /// (#283) and a report that answers one of them leaves the other to guess.
+    fn indent_report(&self) -> String {
+        match self.indent_level() {
+            Render::Off => say!("layout.first-line-indent-off"),
+            Render::Basic => say!("layout.first-line-indent-kept", self.indent),
+            Render::Full => say!("layout.first-line-indent-folded", self.indent),
+        }
     }
 
     /// Whether 句讀 hang in the margin beside the character they follow.
@@ -11004,6 +11098,9 @@ impl Editor {
         // there is one — so there is nothing for packing to win there, and
         // masking it would mean 橫排 could never show a reading at all, since
         // 密排 is the default page.
+        if !self.ruby_drawn {
+            return Dialects::NONE;
+        }
         match self.dense && self.layout == Layout::Vertical {
             true => Dialects::NONE,
             false => self.ruby,
@@ -11024,8 +11121,13 @@ impl Editor {
     pub fn render_ruby(&mut self, dialect: crate::ruby::Dialect, on: bool) {
         if on {
             self.ruby.insert(dialect);
+            // Naming a spelling is asking to see it. `:ruby typst` on a page
+            // at 中階 that then drew nothing would be a command with no effect
+            // and no complaint — the shape of bug #283 is about.
+            self.ruby_drawn = true;
         } else {
             self.ruby.remove(dialect);
+            self.ruby_drawn &= !self.ruby.is_empty();
         }
     }
 
@@ -17355,7 +17457,15 @@ mod tests {
         );
         ed.execute(":ruby off").unwrap();
         assert!(ed.ruby().is_empty());
-        ed.execute(":ruby on").unwrap();
+        // 中階 knows the reading and does not draw it, so the drawn set is
+        // empty there too — and naming a dialect is what asks to see one.
+        ed.execute(":ruby basic").unwrap();
+        assert!(ed.ruby().is_empty());
+        assert_eq!(ed.ruby_level(), Render::Basic);
+        ed.execute(":ruby full").unwrap();
+        assert!(ed.ruby().contains(Dialect::Html));
+        ed.execute(":ruby basic").unwrap();
+        ed.execute(":ruby html").unwrap();
         assert!(ed.ruby().contains(Dialect::Html));
 
         // Dialects add up rather than replacing one another: a document may mix
@@ -23410,7 +23520,7 @@ mod tests {
     /// Four writers reached the rope without passing one: `gJ`, `:replace`,
     /// `:s` and `:ruby format`. Three of the four asked `self.table` first, so
     /// they were off in exactly the state a `|` table in a manuscript is
-    /// normally edited in — nobody types `:table on` to fix a typo in their own
+    /// normally edited in — nobody types `:table basic` to fix a typo in their own
     /// documentation.
     #[test]
     fn no_writer_changes_how_many_cells_a_row_has() {

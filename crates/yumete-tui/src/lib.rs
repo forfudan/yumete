@@ -9481,9 +9481,11 @@ mod tests {
         let text = buffer_text(&buffer);
         assert!(text.contains("html"), "the words `:ruby` takes: {text:?}");
         assert!(!text.contains(":html"), "a word is not a command, so no colon");
-        // A wide glyph covers two cells and only the first carries it.
+        // A wide glyph covers two cells and only the first carries it. The
+        // help shown is the highlighted word's, and the first word `:ruby`
+        // takes is `off` (#283 put the three levels ahead of the dialects).
         let squashed = text.replace(' ', "");
-        assert!(squashed.contains("排出注音"), "and what each one does");
+        assert!(squashed.contains("顯示源碼"), "and what each one does: {squashed:?}");
     }
 
     /// The author, 2026-09-05: 「命令提示一共 47 條，這裏只顯示了一半，但我的

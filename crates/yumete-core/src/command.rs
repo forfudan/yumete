@@ -150,7 +150,10 @@ pub enum Command {
     /// unit the page is set in; `None` only reports (Feature #222).
     SetWheelStep(Option<usize>),
     /// `:table` / `:table off` — read the file as a grid (Feature #118).
-    SetTable(bool),
+    /// `:table` — the door: read the table the cursor is in.
+    EnterTable,
+    /// `:table off|basic|full` — how much of a table is drawn (#283).
+    SetTableLevel(crate::editor::TableLevel),
     /// `:table rules …` — how the columns are told apart (Feature #157).
     /// `None` only reports.
     SetTableRules(Option<crate::table::Rules>),
@@ -209,6 +212,14 @@ pub enum Command {
     },
     /// `:indent 2` — how many squares open a paragraph; `:indent off` is none.
     SetIndent(usize),
+    /// `:indent off|basic|full` — whether paragraphs are indented, and whether
+    /// the blank line the indent stands in for comes off the page (#283).
+    SetIndentLevel(crate::editor::Render),
+    /// `:indent` on its own — which of the three levels it is on.
+    ReportIndent,
+    /// `:ruby off|basic|full` — whether a reading is known, and whether it is
+    /// drawn beside its base (#283).
+    SetRubyLevel(crate::editor::Render),
     /// `:indent hint color` — what, if anything, is drawn in the opening
     /// squares.
     SetIndentHint(crate::zong::IndentHint),
@@ -332,11 +343,16 @@ pub enum Command {
     /// `:ruby` — open Ruby mode on the group or selection at the cursor
     /// (Feature #65).
     Ruby,
-    /// `:ruby-on` / `:ruby-off`, and `:render-ruby-<dialect>[-off]` — which
-    /// ruby dialects are laid out as readings. A `None` dialect means "the one
-    /// this file is written in" for `on`, and "all of them" for `off`.
+    /// `:ruby <dialect> [off]` — one spelling of a reading, added to or taken
+    /// from the set being laid out.
+    ///
+    /// **An override, not a level.** The three level words say how much of the
+    /// reading dimension is drawn; this says *which spelling*, and naming one
+    /// is asking to see it. The bare `:ruby on` / `:ruby off` this grew out of
+    /// retired with #283 — they were the two-state vocabulary the entry
+    /// exists to replace.
     RenderRuby {
-        dialect: Option<Dialect>,
+        dialect: Dialect,
         on: bool,
     },
     /// `:format-ruby-<dialect>` — rewrite every reading in the buffer into one
@@ -864,8 +880,15 @@ pub fn parse(input: &str) -> Result<Command, CommandError> {
             },
         },
         "indent" => match rest {
-            "" | "on" => Ok(Command::SetIndent(2)),
-            "off" | "0" => Ok(Command::SetIndent(0)),
+            // A number is the *width*; a word is the level. `:indent 4` on a
+            // page at 中階 widens the indent and still does not fold, because
+            // those are two questions and the reader answered one of them.
+            // The bare word reports, for the reason bare `:render` reports:
+            // with three levels, 「which one am I on」 is the better use of it.
+            "" => Ok(Command::ReportIndent),
+            "full" => Ok(Command::SetIndentLevel(crate::editor::Render::Full)),
+            "basic" => Ok(Command::SetIndentLevel(crate::editor::Render::Basic)),
+            "off" | "0" => Ok(Command::SetIndentLevel(crate::editor::Render::Off)),
             _ if rest.starts_with("hint") => {
                 match crate::zong::IndentHint::parse(rest.trim_start_matches("hint").trim()) {
                     Some(hint) => Ok(Command::SetIndentHint(hint)),
@@ -939,8 +962,15 @@ pub fn parse(input: &str) -> Result<Command, CommandError> {
             }),
         },
         "table" => match rest {
-            "" | "on" => Ok(Command::SetTable(true)),
-            "off" => Ok(Command::SetTable(false)),
+            // **The bare word is the door; a level is a level.** `:table`
+            // reads the table the cursor is in — that is what it has always
+            // meant and it is not a surface. The three words say how much of
+            // one is drawn, and `off` is both: a page with no grid on it is a
+            // page you are not in.
+            "" => Ok(Command::EnterTable),
+            "off" => Ok(Command::SetTableLevel(crate::editor::TableLevel::Off)),
+            "basic" => Ok(Command::SetTableLevel(crate::editor::TableLevel::Basic)),
+            "full" => Ok(Command::SetTableLevel(crate::editor::TableLevel::Full)),
             "check" => Ok(Command::CheckTable),
             _ if rest.starts_with("detail ") => {
                 match rest["detail ".len()..].trim() {
@@ -1164,10 +1194,9 @@ pub fn parse(input: &str) -> Result<Command, CommandError> {
                         value: other.to_string(),
                     }),
                 },
-                "on" | "off" => Ok(Command::RenderRuby {
-                    dialect: None,
-                    on: first == "on",
-                }),
+                "off" => Ok(Command::SetRubyLevel(crate::editor::Render::Off)),
+                "basic" => Ok(Command::SetRubyLevel(crate::editor::Render::Basic)),
+                "full" => Ok(Command::SetRubyLevel(crate::editor::Render::Full)),
                 "format" => {
                     let name = second.ok_or(CommandError::MissingArgument("ruby format"))?;
                     let dialect =
@@ -1184,7 +1213,7 @@ pub fn parse(input: &str) -> Result<Command, CommandError> {
                             value: name.to_string(),
                         })?;
                     Ok(Command::RenderRuby {
-                        dialect: Some(dialect),
+                        dialect,
                         on: on(second)?,
                     })
                 }
@@ -1868,14 +1897,20 @@ const AXIS: &[Word] = &[
 /// What `:table` takes.
 const TABLE: &[Word] = &[
     Word {
-        name: "on",
-        help: "cmd.table.on",
+        name: "off",
+        help: "cmd.table.off",
         needs: &[],
         then: Args::None,
     },
     Word {
-        name: "off",
-        help: "cmd.table.off",
+        name: "basic",
+        help: "cmd.table.basic",
+        needs: &[],
+        then: Args::None,
+    },
+    Word {
+        name: "full",
+        help: "cmd.table.full",
         needs: &[],
         then: Args::None,
     },
@@ -1953,7 +1988,7 @@ const RENDER: &[Word] = &[
     },
     Word {
         name: "basic",
-        help: "cmd.render.on",
+        help: "cmd.render.basic",
         needs: &[],
         then: Args::None,
     },
@@ -2217,6 +2252,18 @@ const INDENT: &[Word] = &[
         then: Args::None,
     },
     Word {
+        name: "basic",
+        help: "cmd.indent.basic",
+        needs: &[],
+        then: Args::None,
+    },
+    Word {
+        name: "full",
+        help: "cmd.indent.full",
+        needs: &[],
+        then: Args::None,
+    },
+    Word {
         name: "hint",
         help: "cmd.indent.hint",
         needs: &[],
@@ -2347,14 +2394,20 @@ const LAYOUTS: &[Word] = &[
 /// `format-ruby-*` commands, folded into the one word a reader remembers.
 const RUBY: &[Word] = &[
     Word {
-        name: "on",
-        help: "cmd.ruby.on",
+        name: "off",
+        help: "cmd.ruby.off",
         needs: &[],
         then: Args::None,
     },
     Word {
-        name: "off",
-        help: "cmd.ruby.off",
+        name: "basic",
+        help: "cmd.ruby.basic",
+        needs: &[],
+        then: Args::None,
+    },
+    Word {
+        name: "full",
+        help: "cmd.ruby.full",
         needs: &[],
         then: Args::None,
     },
@@ -3980,13 +4033,16 @@ mod tests {
         // One name, not three: `:ruby-on` and `:ruby-off` were the setting
         // wearing the verb's name, and they are now words `:ruby` takes — and
         // a finished word says what it takes, so they are listed under it.
+        // The three levels come first because they are the setting; the
+        // dialects after, because they are overrides of it (#283).
         let ruby: Vec<String> = complete("ruby").iter().map(Choice::written).collect();
         assert_eq!(
             ruby,
             [
                 "ruby",
-                "ruby on",
                 "ruby off",
+                "ruby basic",
+                "ruby full",
                 "ruby auto",
                 "ruby html",
                 "ruby typst",
@@ -4017,7 +4073,7 @@ mod tests {
         // `:tab`, not `:ta`: `:target` arrived and took the two-letter
         // prefix away, which is the rule doing its job rather than a
         // regression — the menu lengthened what it prints in the same edit.
-        assert_eq!(parse(":tab"), Ok(Command::SetTable(true)));
+        assert_eq!(parse(":tab"), Ok(Command::EnterTable));
         assert_eq!(parse(":ta"), Err(CommandError::Unknown("ta".into())));
 
         // A declared alias beats the prefix rule, so the short spellings
@@ -4126,7 +4182,7 @@ mod tests {
         // simply the words it takes, and they go as deep as they like.
         assert_eq!(
             words("ruby "),
-            ["on", "off", "auto", "html", "typst", "format"]
+            ["off", "basic", "full", "auto", "html", "typst", "format"]
         );
         assert_eq!(words("ruby html "), ["on", "off"]);
 
