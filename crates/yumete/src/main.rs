@@ -609,7 +609,8 @@ KEYS (Normal mode, Helix-style):
               :wa              save every file that changed
               :indent [n|off]  first-line indent — a Chinese paragraph's mark
               :bands [n|off]   段組: divide the 縱書 page into bands
-              :words           reload .yumete/words.txt — this book's own names
+              :word list reload   reread .yumete/words.txt — this book's own names
+              :word habit      口頭禪: what this one says far more than prose does
               :table [off|check]   edit as a grid; check looks the whole over
               :row <char>      go to the row a table names by that character
               :ruby [on|off|<dialect>]  lay readings out, or show the markup)

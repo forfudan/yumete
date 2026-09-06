@@ -3876,10 +3876,15 @@ impl Editor {
         // its example of the hint row all along.
         // 寫作進度 is kept from the save, not from the keystroke: what a day
         // holds is what the writer committed to disk that day (Feature #244).
+        let word_list = matches!(saved, Ok(Wrote::Saved)) && self.note_word_list_saved();
         if matches!(saved, Ok(Wrote::Saved)) {
             self.note_progress();
         }
         match &saved {
+            // A saved word list says so itself, and says how many words are in
+            // force now — 「存了 words.txt」 alone would leave the reader
+            // wondering whether the weeding took effect.
+            Ok(Wrote::Saved) if word_list => {}
             Ok(Wrote::Saved) => {
                 self.status = say!("buffer.saved", self.current_buffer().display_name())
             }
@@ -11527,6 +11532,20 @@ impl Editor {
         self.clamp_cursor();
         self.forget_the_text();
         self.set_cursor(at);
+        // **They segment before they are saved.** The bargain is still the
+        // same — nothing is on disk until `:w` — but a candidate list that
+        // does not affect anything until it is saved cannot be judged: the
+        // way to see whether 落霞鎮 is a word is to walk `w` over it and read
+        // the tint. So they go into the list in force now, and the save reads
+        // the file back (below), which is what drops the lines struck out.
+        {
+            let mut words = self.project_words.borrow_mut();
+            for word in found.iter().take(DISCOVER_LIMIT) {
+                words.add(&word.word);
+            }
+        }
+        self.segment_cache.borrow_mut().clear();
+        self.words_request = true;
         self.status = match total > DISCOVER_LIMIT {
             true => say!("word.discover-too-many", DISCOVER_LIMIT, total),
             false => say!("word.discover-found", total, path.display()),
@@ -11570,6 +11589,43 @@ impl Editor {
             Some(path) => say!("word.project-words-loaded", n, path.display()),
             None => say!("word.no-project-words-file"),
         };
+    }
+
+    /// Re-read the word list the save just wrote, if that is what it was.
+    ///
+    /// **A word list is data, and saving data is the same gesture as applying
+    /// it.** `:word discover` writes its candidates into the buffer already
+    /// segmenting (they have to, or there is no way to judge them), so the
+    /// save is where the writer's weeding — the lines struck out — has to
+    /// reach the segmenter; and a list edited by hand had no reason to need a
+    /// second command either. The global list is the front end's to load, so
+    /// that one is only asked for.
+    ///
+    /// Answers whether it did anything, because the caller owes the status
+    /// line a different sentence when it did.
+    fn note_word_list_saved(&mut self) -> bool {
+        let Some(path) = self.current_buffer().path().map(Path::to_path_buf) else {
+            return false;
+        };
+        let global = self.global_word_list().is_some_and(|g| g == path);
+        let project = path.file_name().is_some_and(|n| n == "words.txt")
+            && path.parent().is_some_and(|d| d.file_name().is_some_and(|n| n == ".yumete"));
+        if !project && !global {
+            return false;
+        }
+        if project {
+            self.reload_project_words();
+        }
+        self.words_request = true;
+        // The global list is the front end's to load, so its count is read off
+        // the text just saved rather than out of a segmenter that has not been
+        // handed it yet.
+        let n = match project {
+            true => self.project_word_count(),
+            false => yumete_cjk::WordList::from_text(&self.current_buffer().text()).len(),
+        };
+        self.status = say!("word.list-saved", self.current_buffer().display_name(), n);
+        true
     }
 
     /// How many project words are in force.
@@ -23537,15 +23593,50 @@ mod tests {
             "nothing reaches disk until :w"
         );
 
-        // `:w` is the moment a person says yes, and then the name is a word.
-        assert!(ed.execute("w").is_ok(), "{}", ed.status());
-        ed.reload_project_words();
+        // **It is already a word**, unsaved: the way to judge a candidate is
+        // to walk `w` over it and read the tint, and a list that does nothing
+        // until it is written cannot be judged at all.
         assert_eq!(ed.project_word_count(), 1, "{}", ed.status());
+        let words_file = dir.join(".yumete").join("words.txt");
+        ed.open_file(&dir.join("ch02.md")).unwrap();
+        assert_eq!(
+            ed.segment_line(0)[1],
+            (1, 3),
+            "戊[阿寧]己 before any save: {:?}",
+            ed.segment_line(0)
+        );
+
+        // `:w` is the moment a person says yes — and the save itself is what
+        // reads the weeded list back, so there is no second command.
+        ed.open_file(&words_file).unwrap();
+        assert!(ed.execute("w").is_ok(), "{}", ed.status());
+        assert_eq!(ed.project_word_count(), 1, "{}", ed.status());
+        assert!(ed.status().contains('1'), "how many are in force: {}", ed.status());
 
         // And a second run has nothing to say: what the list holds, the
-        // segmenter now joins, and what it joins is never offered again.
+        // segmenter now joins, and what it joins is never offered again. The
+        // list is compared before and after, because 「掃了 3 個檔，沒有找到
+        // 新詞」 and 「找到 1 個…」 both have a 3 in them and this used to be
+        // asserted with `contains('3')` — which is how the words being written
+        // with a literal `\t`, and so never reading back at all, went unseen.
+        let before = std::fs::read_to_string(&words_file).unwrap();
         ed.discover_words(&dir).unwrap();
-        assert!(ed.status().contains('3'), "three files read: {}", ed.status());
+        assert_eq!(ed.current_buffer().text(), before, "{}", ed.status());
+
+        // Striking a candidate out is the other half of the bargain, and it
+        // has to reach the segmenter the same way: blank the line, save, and
+        // 阿寧 is two characters again.
+        ed.open_file(&words_file).unwrap();
+        assert!(ed.execute("%s/阿寧.*//").is_ok(), "{}", ed.status());
+        assert!(ed.execute("w").is_ok(), "{}", ed.status());
+        assert_eq!(ed.project_word_count(), 0, "{}", ed.status());
+        ed.open_file(&dir.join("ch02.md")).unwrap();
+        assert_eq!(
+            ed.segment_line(0)[1],
+            (1, 2),
+            "戊[阿][寧]己 again: {:?}",
+            ed.segment_line(0)
+        );
         std::fs::remove_dir_all(&dir).ok();
     }
 

@@ -5899,9 +5899,9 @@ en = "wheel: {0} a notch"
 [[message]]
 # 挖完了，詞寫進詞表了（還沒存檔）
 key = "word.discover-found"
-zht = "找到 {0} 個本書自己的詞，寫進了 {1}——刪掉不要的，:w 存檔"
-zhs = "找到 {0} 个本书自己的词，写进了 {1}——删掉不要的，:w 存档"
-en = "{0} word(s) of this book's own, written into {1} — delete what is not a word, then :w"
+zht = "找到 {0} 個本書自己的詞，寫進了 {1}，已經按它們切了——刪掉不要的，:w 存檔"
+zhs = "找到 {0} 个本书自己的词，写进了 {1}，已经按它们切了——删掉不要的，:w 存档"
+en = "{0} word(s) of this book's own, written into {1} and already segmenting — delete what is not a word, then :w"
 
 [[message]]
 # 寫進詞表的那一段的抬頭（這一行進的是檔案，不是狀態欄）
@@ -5911,11 +5911,13 @@ zhs = "# 本书自己的词：:word discover 扫了 {0} 个档找出来的，删
 en = "# this book's own words, found by :word discover over {0} file(s); delete what is not a word"
 
 [[message]]
-# 寫進詞表的一行：詞，還有它出現了幾次
+# 寫進詞表的一行：詞，還有它出現了幾次。中間那一個是**真的 tab**，不是 \t——
+# : 這個檔的讀法是照原樣切一段出來（`unquote`），escape 一律不認，寫 \t 進去
+# : 詞表就讀回一個叫「阿寧\t」的詞，誰也切不出來
 key = "word.discover-line"
-zht = "{0}\t# {1} 次"
-zhs = "{0}\t# {1} 次"
-en = "{0}\t# {1}×"
+zht = "{0}	# {1} 次"
+zhs = "{0}	# {1} 次"
+en = "{0}	# {1}×"
 
 [[message]]
 # 挖了，一個字典不認得的詞都沒有
@@ -5927,9 +5929,9 @@ en = "{0} file(s) read, and no words of this book's own — the dictionary alrea
 [[message]]
 # 挖到的比寫進去的多，說一聲
 key = "word.discover-too-many"
-zht = "寫進了最常見的 {0} 個（一共找到 {1} 個）——刪掉不要的，:w 存檔"
-zhs = "写进了最常见的 {0} 个（一共找到 {1} 个）——删掉不要的，:w 存档"
-en = "the commonest {0} written in, of {1} found — delete what is not a word, then :w"
+zht = "寫進了最常見的 {0} 個（一共找到 {1} 個），已經按它們切了——刪掉不要的，:w 存檔"
+zhs = "写进了最常见的 {0} 个（一共找到 {1} 个），已经按它们切了——删掉不要的，:w 存档"
+en = "the commonest {0} written in, of {1} found, already segmenting — delete what is not a word, then :w"
 
 [[message]]
 # 分詞粒度設好了
@@ -5941,9 +5943,16 @@ en = "word level: {0}"
 [[message]]
 # 詞表開起來了，怎麼寫怎麼重讀
 key = "word.list-opened"
-zht = "{0}——一行一個詞，寫完 :w，再 :word list reload"
-zhs = "{0}——一行一个词，写完 :w，再 :word list reload"
-en = "{0} — one word per line; :w when done, then :word list reload"
+zht = "{0}——一行一個詞，:w 存下就生效"
+zhs = "{0}——一行一个词，:w 存下就生效"
+en = "{0} — one word per line; :w and they are in force"
+
+[[message]]
+# 詞表存下了，同一下就重讀進來了
+key = "word.list-saved"
+zht = "存了 {0}——{1} 個詞在用了"
+zhs = "存了 {0}——{1} 个词在用了"
+en = "saved {0} — {1} word(s) now in force"
 
 [[message]]
 # 詞表重讀完了

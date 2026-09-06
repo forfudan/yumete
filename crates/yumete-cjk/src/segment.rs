@@ -496,16 +496,26 @@ impl WordList {
     pub fn from_text(text: &str) -> WordList {
         let mut list = WordList::default();
         for line in text.lines() {
-            let word = line.split('#').next().unwrap_or("").trim();
-            // A one-character "word" is what every segmenter already produces,
-            // so listing one says nothing and cannot join anything.
-            if word.chars().count() < 2 {
-                continue;
-            }
-            list.longest = list.longest.max(word.chars().count());
-            list.words.insert(word.to_string());
+            list.add(line.split('#').next().unwrap_or("").trim());
         }
         list
+    }
+
+    /// Add one word to the list in force, as `from_text` would read it.
+    ///
+    /// This is how a word starts working **before** it is on disk: `:word
+    /// discover` writes its candidates into an unsaved buffer for the writer
+    /// to weed, and adds them here at the same time, so `w` walks 落霞鎮 in
+    /// one step while that review is going on. Saving the buffer re-reads the
+    /// file, and whatever was struck out of it stops counting then.
+    pub fn add(&mut self, word: &str) {
+        // A one-character "word" is what every segmenter already produces, so
+        // listing one says nothing and cannot join anything.
+        if word.chars().count() < 2 {
+            return;
+        }
+        self.longest = self.longest.max(word.chars().count());
+        self.words.insert(word.to_string());
     }
 
     /// How many words are in force.
