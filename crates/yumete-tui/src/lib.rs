@@ -2402,18 +2402,35 @@ fn draw_list(
     if items.is_empty() && footer.is_empty() {
         return;
     }
-    // As wide as its widest entry, and as many entries across as the window
-    // will take. Twenty-six commands down one column is three screenfuls with
-    // the rest of the page standing empty beside it; in three columns it is one
-    // glance. Column-major, so reading runs *down* and then across — the way a
-    // list of files does, and the way the numbers on it stay in order.
-    let one = items
-        .iter()
-        .map(|i| yumete_cjk::str_width(i))
-        .max()
-        .unwrap_or(0)
-        .saturating_add(2)
-        .min(cap);
+    // Twenty-six commands down one column is three screenfuls with the rest of
+    // the page standing empty beside it; in three columns it is one glance.
+    // Column-major, so reading runs *down* and then across — the way a list of
+    // files does, and the way the numbers on it stay in order.
+    //
+    // **Each column is as wide as its own longest entry**, not as the longest
+    // entry anywhere in the list. One `:conflicts  (conf)` used to widen the
+    // six columns beside it by two cells each and cost the list a whole column
+    // — the seventh, the one it needed to be shown whole.
+    let room = (area.width as usize).saturating_sub(4);
+    let lay = |deep: usize, from: usize| -> Vec<usize> {
+        let mut widths = Vec::new();
+        let mut used = 0;
+        for chunk in items[from.min(items.len())..].chunks(deep.max(1)) {
+            let one = chunk
+                .iter()
+                .map(|i| yumete_cjk::str_width(i))
+                .max()
+                .unwrap_or(0)
+                .saturating_add(2)
+                .min(cap);
+            if !widths.is_empty() && used + one > room {
+                break;
+            }
+            used += one;
+            widths.push(one);
+        }
+        widths
+    };
     //
     // The shape is measured off the window rather than fixed: **the fewest
     // columns that show every entry** in the height there is room for. Fewest,
@@ -2422,32 +2439,41 @@ fn draw_list(
     // downwards first and widened only when it has to be. A list that cannot
     // be shown whole even at the full width falls back to what it always did:
     // as many columns as fit, and scroll.
-    let (across, deep) = if columns {
-        let wide = ((area.width as usize).saturating_sub(4) / one.max(1)).max(1);
+    let (mut widths, deep) = if columns {
         // The floor is what makes a menu worth opening at all on a short
         // window, but it is a floor, not a licence: on twelve rows the
         // glanceable eight plus the footer is nine, and the page behind
         // disappears. Half the window is where the floor stops.
         let share = (area.height / MENU_SHARE) as usize;
         let half = ((area.height / 2) as usize).saturating_sub(3); // footer, rings
-        let mut tall = share.max(MENU_ROWS).min(half).max(1);
+        let floor = share.max(MENU_ROWS).min(half).max(1);
         // The share is where a list is *laid out*, not where it is cut off.
         // A list a row or two too long for it, on a window with no room for
         // another column, is better one row deeper than scrolled — but only
         // when that row is the last one it needs: growing a menu that will
         // scroll anyway costs the page behind it and buys nothing. Half the
         // window is still the ceiling, whatever the reason for growing.
-        let whole = items.len() <= half.saturating_mul(wide);
-        if whole && items.len() > tall.saturating_mul(wide) {
-            tall = items.len().div_ceil(wide).clamp(tall, half.max(tall));
+        let shown = |deep: usize, widths: &[usize]| deep * widths.len() >= items.len();
+        let mut deep = floor;
+        let mut widths = lay(deep, 0);
+        if !shown(deep, &widths) {
+            for deeper in (floor + 1)..=half.max(floor) {
+                let wider = lay(deeper, 0);
+                if shown(deeper, &wider) {
+                    deep = deeper;
+                    widths = wider;
+                    break;
+                }
+            }
         }
-        let across = items.len().div_ceil(tall).clamp(1, wide);
-        (across, items.len().div_ceil(across).clamp(1, tall))
+        (widths, deep)
     } else {
         // A picker is paths — hundreds of them, and no arrangement shows them
         // all — so it stays the glanceable eight and scrolls.
-        (1, items.len().clamp(1, MENU_ROWS))
+        let deep = items.len().clamp(1, MENU_ROWS);
+        (lay(deep, 0).into_iter().take(1).collect(), deep)
     };
+    let across = widths.len().max(1);
     let visible = (deep * across).min(items.len());
     // The entries, the footer, and the ring above and below them.
     let height = (deep + 3) as u16;
@@ -2459,8 +2485,17 @@ fn draw_list(
     let first = focus
         .saturating_sub(visible.saturating_sub(1))
         .min(items.len().saturating_sub(visible));
+    // A scrolled list is measured off the rows actually on screen, not off the
+    // ones above them: the column is as wide as what is *in* it.
+    if first > 0 {
+        widths = lay(deep, first);
+    }
+    let across = widths.len().max(1);
+    let visible = (deep * across).min(items.len() - first);
 
-    let inner = (one * across)
+    let inner = widths
+        .iter()
+        .sum::<usize>()
         .max(yumete_cjk::str_width(footer) + 1)
         .max(yumete_cjk::str_width(title) + 2);
     let width = (inner + 2).min(area.width as usize) as u16;
@@ -2497,8 +2532,8 @@ fn draw_list(
             break;
         }
         let (column, row) = (slot / deep, slot % deep);
-        let x = menu.x + 1 + (column * one) as u16;
-        let end = (x + one as u16).min(menu.x + width - 1);
+        let x = menu.x + 1 + widths[..column].iter().sum::<usize>() as u16;
+        let end = (x + widths[column] as u16).min(menu.x + width - 1);
         let y = menu.y + 1 + row as u16;
         let picked = highlight == Some(i);
         let style = if picked { on } else { text };
