@@ -904,6 +904,12 @@ fn composes_here(editor: &Editor) -> bool {
     if composes(editor.mode()) {
         return true;
     }
+    // `r` 打中文 (§5.2.3 ②): Normal mode, but the next character is *text*.
+    // One line, because every gate in this file asks this one question — the
+    // preedit, the panel, lone-Shift and C-Space all light up together.
+    if editor.replacing() {
+        return true;
+    }
     if editor.mode() != Mode::Command {
         return false;
     }
@@ -9761,6 +9767,20 @@ mod tests {
         assert!(composes(Mode::Ruby));
         assert!(!composes(Mode::Normal));
         assert!(!composes(Mode::Command));
+    }
+
+    /// Normal mode is not prose — except for the one character `r` is waiting
+    /// for (§5.2.3 ②), which in a Chinese manuscript is 中文 and needs the
+    /// engine. Every gate in this file asks `composes_here`, so this one
+    /// answer opens the preedit, the panel, lone-Shift and `C-Space` at once.
+    #[test]
+    fn a_pending_replace_composes_in_normal_mode() {
+        let mut editor = Editor::new();
+        assert!(!composes_here(&editor), "Normal mode is keys, not text");
+        editor.on_key(Key::Char('r'));
+        assert!(composes_here(&editor), "`r` is waiting for a character");
+        editor.on_key(Key::Esc);
+        assert!(!composes_here(&editor), "and it stops when `r` is answered");
     }
 
     /// The command line is half ASCII and half prose (#225): its names are

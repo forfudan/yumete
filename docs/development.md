@@ -1298,6 +1298,28 @@ deferred.
 > spelling is the one in the table: `J` is half a page because this is a book,
 > so join is `gJ`; `m` opens match mode, so a mark is `M`.
 
+**The law that says which level a key belongs to** (the author, 2026-09-06 —
+§5.2.3 ② is where it was settled):
+
+> **一級鍵是「按下去必須立刻做事」這件事本身的配額。** A key earns the top level
+> on two counts: **how often it is pressed**, and **whether it can wait for a
+> second key**. What can wait, goes down a level — into a group, or into 空格.
+>
+> **前置條件：Helix／vi 的共識鍵不動。** yumete is CJK-aware and made for
+> writing, but it is also a general editor — English and code are typed in it.
+> The consensus keys are an asset somebody else built; they are not free space.
+
+Two corollaries that have already changed decisions:
+
+* **An unbound letter is not free space.** `z` looks empty and is not: Helix's
+  `z` is the view group (`zz` centre, `zt` top, `zb` bottom), none of which
+  yumete has. It is an unpaid debt, and it is reserved.
+* **Rarity beats mnemonics.** 旁注 is what this editor has that a Latin editor
+  does not, and it still does not get a top-level key — a page carries one or
+  two, so it can wait for a second press (`空格 r`). Likewise the three case
+  keys Helix spends at the top level do an operation that is the identity on
+  漢字; they became the `` ` `` group.
+
 ### Movement
 
 | Keys                    | Action                                       | Status |
@@ -1341,8 +1363,8 @@ deferred.
 | `o` `O`     | open a line below / above              | Done   |
 | `u` `U`     | undo / redo                            | Done   |
 | `y` `p` `P` | yank / paste after / before            | Done   |
-| `r` `R`     | replace a character / with the yank    | Done   |
-| `~` `` ` `` | switch case / lowercase (`A-``` uppercases) | Done |
+| `r` `R`     | replace a character / with the yank — **`r` runs the IME**, so 中文 態 opens the candidate panel and the choice is the replacement | Done   |
+| `` `l `` `` `u `` `` `` `` | 轉小寫／轉大寫／互換 — a group, because on 漢字 these are the identity (§5.2.3 ②). Helix spends `` ` ``, `` A-` `` and `~` at the top level; here those three are unbound | Done |
 | `gJ`        | join lines (`J` is half a page — this is a book) | Done |
 | `.`         | repeat the last change                 | Done   |
 | `>` `<`     | indent / unindent                      | Done   |
@@ -1356,7 +1378,7 @@ deferred.
 | `n` `N` | next / previous match            | Done     |
 | `*`     | search for the current selection | Done     |
 | `:`     | command line (`:w` `:q` `:s` …)  | Done     |
-| `Space` | the menu — files, buffers, search, the clipboard, 詳情 | Done |
+| `Space` | the menu — files, buffers, search, the clipboard, 詳情, `空格 r` 旁注 | Done |
 | `q` `Q` | record a macro / play the last one back | Done  |
 | `\"a`    | use register `a` for the next yank / delete / paste | Done |
 | `C-a` `C-x` | increment / decrement the number at the cursor | Done |
@@ -2610,9 +2632,9 @@ stale spelling; §5.7 is the only place that agrees with the code.
 
 - `RENDER`'s middle word is `basic`, and its help key is still
   `cmd.render.on` (`command.rs:1956`, `messages.toml:1315`).
-- `editor.rs:13208` carries a comment for Helix's `*` with no arm under it —
-  `*` was retired (§14, 2026-09-04) — while §5.1's table (`:1285`) still
-  records `*` as **Done**, and `:1236` still records `f t F T` although
+- `editor.rs:13370` carries a comment for Helix's `*` with no arm under it —
+  `*` was retired (§14, 2026-09-04) — while §5.1's table (`:1379`) still
+  records `*` as **Done**, and `:1330` still records `f t F T` although
   `FindKind` (`editor.rs:150`) has only `ForwardTo`/`BackwardTo` left.
 
 ### What has to be built once, not twelve times
@@ -2679,24 +2701,94 @@ move it:
 vocabulary is pre-#283; the code is `off|basic|full` (`command.rs:1947`). Any
 version of this that ships adopts #283's three words.
 
-### ② Whether `r` and the case keys are worth their places
+### ② ~~Whether `r` and the case keys are worth their places~~ — decided 2026-09-06
 
-`r` (replace one character) cannot type a 漢字 or a full-width comma: Normal
-mode is not in `composes()`, so the IME never runs for the character it waits
-for. `` ` `` and `` A-` `` (to lower/upper case) and `~` are identity
-operations on Chinese text. Four top-level keys — one of them the unshifted
-backtick — that a novelist cannot use.
+**The author gave the rule this question needed, and the rule threw out the
+proposal that raised it.**
 
-- **Take them**: `r` becomes the 旁注 group (`r r` 注音, `r o`/`r b`/`r f`,
-  `r a` 自動, `r F` 寫進檔案), which is the one thing a 縱書 editor does that
-  has no key at all today. Costs: vi and Helix muscle memory, and a phrasebook
-  entry to catch the reflex.
-- **Leave them**: costs nothing, and 注音 stays a command-only feature.
+> **一級鍵是「按下去必須立刻做事」這件事本身的配額。** A key earns the top
+> level on two counts: **how often it is pressed**, and **whether it can wait
+> for a second key**. What can wait, goes down a level.
+>
+> **前置條件：Helix／vi 的共識鍵不動。** yumete is CJK-aware and made for
+> writing, but it is also a general editor — English and code are typed in it.
+> The consensus keys are an asset somebody else built; they are not free space.
+>
+> — the author, 2026-09-06: 「helix/vim 中比較重要、使用率最高的一級快捷鍵不要
+> 輕易更改……不需要立刻反應的功能，儘量使用多層次的快捷鍵。」
 
-(Independent of the answer: `hint.vi.backtick` is dead code — `` ` `` is bound
-at `editor.rs:13205`, and phrasebook entries are only reached when a key is
-*not* bound. And `z`, `T`, `V`, `Y` are bound to nothing **and** absent from
-the phrasebook, so they are silent.)
+The rule was already in the tree, as a one-off reason: `handle_space`'s comment
+on `空格 c` (#249) says a merge conflict belongs under 空格 「because every
+letter has one already, and because a merge conflict is a thing that happens to
+a file a few times a year — not a motion a writer's fingers know」. What was a
+justification for one key is now the law for all of them.
+
+**What it decides:**
+
+1. **`r` stays where Helix has it, and learns to type Chinese.** Replacing a
+   character is frequent and must act on one press. The fault was never the
+   key — it was that the IME did not run while it waited. The author's design:
+   「按下 r，進入一個替換模式，如果我們是在中文模式，就打中文（出現候選面板），
+   一旦選定，直接完成替換。如果我們是在英文模式，那麼按下英文字母就直接替換。
+   這個替換模式下，按 shift 可以切換中英文。」
+   It is one predicate wide: **every** IME gate in the front end goes through
+   `composes_here(editor)` — the lone-Shift toggle (`tui/lib.rs:492`), `C-Space`
+   (`:518`), who gets the key (`:526`), the inline preedit (`:1700`) and the
+   candidate panel (`:2265`, `:2294`, `:2580`). Teaching that one function about
+   `Pending::Replace` lights all five at once.
+   **A commit of more than one character replaces the selection once**; a commit
+   of exactly one keeps Helix's fill-every-character behaviour. So 選區「錢」＋
+   「銀」→ 銀, 選區「錢塘江」＋「■」→ ■■■, 選區「錢」＋「春天」→ 春天. Nothing
+   is truncated: dropping a character the writer chose is worse than `r` and `s`
+   converging in one corner.
+2. **旁注 goes to `空格 r`.** It is the one thing this editor does that a Latin
+   editor does not, and it had no key at all — but by the rule it does not want
+   a top-level one either. The author: 「ruby 的插入，可能一頁就一兩個（而且主要
+   是日語用得多）」. `空格` had `r` free.
+3. **`z` is not for 旁注 and not for the 版面 group either.** The rule bit here
+   too: in Helix `z` is the **view** group (`zz` centre, `zt` top, `zb` bottom),
+   and a sweep found yumete has **none of the three** — `z` is not an empty
+   letter, it is an unpaid debt. §5.2.3 ③ must find its 版面 group elsewhere.
+4. **The three case keys become the `` ` `` group.** In Helix — which is what
+   yumete copied, not vi — `` ` `` is 轉小寫, `` A-` `` 轉大寫, `~` 大小寫互換:
+   three top-level keys for an operation that is the identity on 漢字 (only
+   full-width Ａ↔ａ actually maps) and that a Chinese manuscript asks for a few
+   times a year. By the rule they can wait for a second key. The author:
+   「`l 的當量很低（好按）。我其實覺得 helix 一個按鍵轉小寫太浪費了。」
+
+```
+`l   轉小寫        `u   轉大寫        ``   大小寫互換
+```
+
+The group's subject is **「不改它說什麼，只改它長什麼樣」**, which is what it is
+for: `` `w `` 半形→全形 and `` `n `` 全形→半形 (neither exists yet), and a
+selection-sized 簡繁 (`:convert` today is whole-file only, #241) are the same
+kind of thing and have somewhere to live. vi's 記號 can never come back to
+`` ` ``, because vi's mark names are arbitrary letters and `` `l `` would be two
+things at once — but yumete never had them there: 記號 is `M` and `'`, and stays.
+
+**White change that falls out:** `hint.vi.backtick` (「記號用 M 記、' 回去」) has
+been dead since it was written — the phrasebook is only consulted for keys that
+are **not** bound, and `` ` `` is bound. As a group prefix it can be printed in
+the group's own menu, where a vi reader will actually meet it.
+
+(Still true and still unused: `T` and `V` do not appear in `editor.rs` at all,
+and are absent from the phrasebook, so they are silent in both senses.)
+
+**All four landed 2026-09-06.** `Pending::Case` with its own which-key menu
+(whose last row is that recovered `hint.vi.backtick`, shortened so it fits an
+80-column terminal); `~` and `` A-` `` unbound, both caught by the phrasebook and
+pointed at the group. `Editor::replacing()` is the one accessor `composes_here`
+needed; `insert_committed` branches on `Pending::Replace` and calls the new
+`replace_str`, which keeps the newline out of a multi-character replacement the
+way `replace_chars` already kept it out of a fill. **`.` needed its own thread**:
+the code letters are eaten by the IME and never reach `on_key`, so replaying an
+IME `r` replays `r` alone and would leave the pending state armed to swallow the
+reader's next key — the committed text is remembered in `last_replacement` and
+`repeat_edit` applies it after the replay. `--keys` gathers a run of non-ASCII
+into one commit while `r` is armed, so an offscreen picture shows what a reader
+would see. `空格 r` is `enter_ruby_mode`, and `SPACE_KEYS` carries it, so the
+which-key menu and `:help` both list it without being told.
 
 ### ③ Whether to fold the command table, and when
 

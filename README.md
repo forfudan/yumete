@@ -86,6 +86,13 @@ far, oldest first:
   toggles the 拆分 annotation beside candidates (off by default,
   `[editor] show_chaifen`).
 
+- **`r` composes too** — Helix's replace key waits for one character, and in a
+  Chinese manuscript that character needs the IME. Press `r` and the panel
+  opens; a one-character commit writes over every character of the selection
+  the way `r` always has, and a longer one replaces the selection once. 旁注 is
+  `空格 r`: a page carries one or two, so it can wait for a second press, while
+  a replacement cannot.
+
 - **#64 Half-width characters** — one to a row, hung against the slot's right
   edge, so Latin and digits line up as a single edge running down beside the
   漢字. Setting a pair sideways in one slot (縦中横) is available behind
@@ -117,8 +124,10 @@ far, oldest first:
 
 - **#62 Helix alignment** — a digit prefix is a count (`3w`, `10j`); `.` repeats
   the last insert and `A-.` the last `f`/`t`; `%` selects the file, `X` extends to
-  whole lines, `J` joins (with no space between two 全角 characters), `~`/`` ` ``
-  change case, `R` replaces the selection with the register, `>`/`<` indent,
+  whole lines, `J` joins (with no space between two 全角 characters), `` ` ``
+  is the case group (`` `l `` lower, `` `u `` upper, `` `` `` switch — one key
+  rather than Helix's three, because on 漢字 all three do nothing), `R`
+  replaces the selection with the register, `>`/`<` indent,
   `C-a`/`C-x` step a number, `*` searches the selection. **Match mode** (`m`)
   covers `mm` jump-to-pair, `mi`/`ma` textobjects, and `ms`/`md`/`mr` surround —
   over 「」『』（）《》【】〔〕 as well as the ASCII pairs. Holding a key now

@@ -158,6 +158,13 @@ enum Pending {
     Hop { forward: bool },
     /// `空格 c` — what to keep of the merge conflict under the cursor.
     Conflict,
+    /// `` ` `` — 「不改它說什麼，只改它長什麼樣」 (§5.2.3 ②).
+    ///
+    /// Helix spends three top-level keys here (`` ` `` 小寫, `` A-` `` 大寫,
+    /// `~` 互換) on an operation that is the **identity on 漢字** — only
+    /// full-width Ａ↔ａ actually maps. By the level law they can wait for a
+    /// second key, so they became a group and the three keys are unbound.
+    Case,
 }
 
 /// The four flavours of in-line character search (`f`/`t`/`F`/`T`).
@@ -1009,6 +1016,12 @@ pub struct Editor {
     edit_revision: (u64, u64),
     /// The last change's keys.
     last_edit_keys: Vec<Key>,
+    /// What the IME last committed into a `r` (§5.2.3 ②), so `.` can repeat it.
+    ///
+    /// The code letters are eaten by the IME and never reach [`Editor::on_key`],
+    /// so replaying the keys of an IME replace replays `r` and nothing else.
+    /// The text is remembered here and [`Editor::repeat_edit`] finishes it.
+    last_replacement: String,
     /// Places named by a letter, and reachable from any file (`M a`, `' a`).
     marks: HashMap<char, Spot>,
     /// Whether `.` is playing one back, so it cannot record itself.
@@ -1473,6 +1486,7 @@ impl Editor {
             edit_keys: Vec::new(),
             edit_revision: (0, 0),
             last_edit_keys: Vec::new(),
+            last_replacement: String::new(),
             marks: HashMap::new(),
             repeating_edit: false,
             insert_recording: String::new(),
@@ -4350,6 +4364,14 @@ impl Editor {
     /// The current editing mode.
     pub fn mode(&self) -> Mode {
         self.mode
+    }
+
+    /// Whether `r` is waiting for the character it will write (§5.2.3 ②).
+    ///
+    /// The front end asks so the IME may run for it: `r` then 中文 opens the
+    /// candidate panel, and the choice is the replacement.
+    pub fn replacing(&self) -> bool {
+        self.pending == Pending::Replace
     }
 
     /// A status-line label for the current mode, noting select (extend) mode.
@@ -8526,6 +8548,16 @@ impl Editor {
                 ]),
             Pending::Find(_) => (say!("hint.find"), vec![("", say!("hint.type-a-character"))]),
             Pending::Replace => (say!("hint.overwrite"), vec![("", say!("hint.type-a-character-to-overwrite"))]),
+            // The last row is `hint.vi.backtick`, which had never been read by
+            // anybody: the phrasebook is consulted only for keys that are *not*
+            // bound, and `` ` `` was bound to 轉小寫. As a group prefix it has a
+            // menu, and a vi reader looking for a mark meets the answer here.
+            Pending::Case => (say!("hint.case.title"), vec![
+                    ("l", say!("hint.case.lower")),
+                    ("u", say!("hint.case.upper")),
+                    ("`", say!("hint.case.switch")),
+                    ("", say!("hint.vi.backtick")),
+                ]),
             Pending::Register => (say!("hint.register.title"), vec![("a–z", say!("hint.register.which-one"))]),
             Pending::Match => (say!("hint.match.title"), vec![
                     ("m", say!("hint.match.pair")),
@@ -11954,6 +11986,7 @@ impl Editor {
             Pending::Hop { forward: true } => "]",
             Pending::Hop { forward: false } => "[",
             Pending::Conflict => "␣c",
+            Pending::Case => "`",
             Pending::Mark => "M",
             Pending::Recall => "'",
         };
@@ -12572,6 +12605,18 @@ impl Editor {
             self.command_caret += text.chars().count();
             return;
         }
+        // `r` 打中文 (§5.2.3 ②). `r` is a top-level key because a replacement
+        // has to happen the moment you ask for it — so it stays where Helix
+        // put it and learns 中文 instead: press `r`, the panel opens, and
+        // whatever you choose is what the selection becomes.
+        if self.pending == Pending::Replace {
+            self.pending = Pending::None;
+            self.replace_str(text);
+            self.last_replacement = text.to_string();
+            self.last_edit_keys = vec![Key::Char('r')];
+            self.edit_keys.clear();
+            return;
+        }
         self.snapshot();
         self.insert_recording.push_str(text);
         self.insert_str(text);
@@ -12846,6 +12891,20 @@ impl Editor {
                 self.pending = Pending::None;
                 if let Key::Char(c) = key {
                     self.replace_chars(c);
+                }
+                return;
+            }
+            Pending::Case => {
+                self.pending = Pending::None;
+                match key {
+                    Key::Char('l') => {
+                        self.map_selection(|c| c.to_lowercase().next().unwrap_or(c))
+                    }
+                    Key::Char('u') => {
+                        self.map_selection(|c| c.to_uppercase().next().unwrap_or(c))
+                    }
+                    Key::Char('`') => self.map_selection(switch_case),
+                    _ => {}
                 }
                 return;
             }
@@ -13300,12 +13359,13 @@ impl Editor {
             // Whole file, and extending the selection to whole lines.
             Key::Char('%') => self.select_all(),
             Key::Char('X') => self.extend_to_line_bounds(),
-            // Case, and replacing the selection with the register. Joining is
-            // on `gJ`: `J` turns the page, which a reader presses a hundred
-            // times for every once they join two lines.
-            Key::Char('~') => self.map_selection(switch_case),
-            Key::Char('`') => self.map_selection(|c| c.to_lowercase().next().unwrap_or(c)),
-            Key::Alt('`') => self.map_selection(|c| c.to_uppercase().next().unwrap_or(c)),
+            // 字形變換 (§5.2.3 ②): `` `l `` 小寫, `` `u `` 大寫, `` `` `` 互換.
+            // `~` and `` A-` `` are Helix's and are **unbound** here — the
+            // phrasebook catches both and points at this group.
+            Key::Char('`') => self.pending = Pending::Case,
+            // Replacing the selection with the register. Joining is on `gJ`:
+            // `J` turns the page, which a reader presses a hundred times for
+            // every once they join two lines.
             Key::Char('R') => self.replace_with_register(),
             // Search for whatever is selected (Helix `*`).
             // **`30G` goes to line 30**, and a bare `G` to the last line —
@@ -13371,6 +13431,12 @@ impl Editor {
             Key::Enter => {
                 return Some(say!("hint.vi.enter"));
             }
+            // Helix's 轉大寫. Its two companions are `~` and `` ` ``; the
+            // group took the third, so this is the only one that needs the
+            // `Alt` arm.
+            Key::Alt('`') => {
+                return Some(say!("hint.helix.case-keys"));
+            }
             _ => return None,
         };
         Some(match c {
@@ -13385,7 +13451,10 @@ impl Editor {
             '&' => say!("hint.vi.ampersand"),
             '_' | '+' | '-' => say!("hint.vi.line-motions"),
             '\\' => say!("hint.vi.backslash"),
-            '`' => say!("hint.vi.backtick"),
+            // No `` ` `` arm: it is a real binding now (the 字形 group), so the
+            // fall-through never reaches here for it. `hint.vi.backtick` moved
+            // into that group's menu, where vi's reader will see it anyway.
+            '~' => say!("hint.helix.case-keys"),
             _ => return None,
         })
     }
@@ -13479,6 +13548,7 @@ impl Editor {
         ('p', "hint.goto.paste-from-clipboard"),
         ('P', "hint.space.paste-before"),
         ('d', "hint.goto.dictionary"),
+        ('r', "hint.space.ruby"),
         ('w', "hint.goto.other-pane"),
         ('W', "hint.goto.only-this-pane"),
         ('q', "hint.goto.close-this-pane"),
@@ -13499,6 +13569,11 @@ impl Editor {
                 Some(ch) => self.look_up(ch, true),
                 None => self.set_status(say!("ui.nothing-to-look-up")),
             },
+            // 旁注 (§5.2.3 ②). A page carries one or two, and a reading is
+            // typed at leisure — so it is worth a key, and worth a second one.
+            // The levels, `auto` and `format` stay `:ruby` commands: those are
+            // said once a document, not once a word.
+            Key::Char('r') => self.enter_ruby_mode(),
             Key::Char('"') => self.open_paste_picker(),
             // 衝突 (#249): the three keys that end one. Under `空格` rather
             // than a letter of its own because every letter has one already,
@@ -15208,6 +15283,48 @@ impl Editor {
         self.clamp_cursor();
     }
 
+    /// Replace the selection with already-composed text — `r` running the IME.
+    ///
+    /// One character keeps [`Self::replace_chars`]'s promise and fills the
+    /// whole selection: 「錢塘江」 `r` ■ is ■■■, because that is what `r` has
+    /// always meant and one 字 is what `r` has always taken.
+    ///
+    /// More than one character is a different intent. 「錢」 `r` 春天 is 春天 —
+    /// there is no way to fill a three-character selection with a two-character
+    /// word, so the selection is replaced instead of written over. A trailing
+    /// line ending is still not part of it: `x r` must not run two paragraphs
+    /// together, whichever length the reader committed.
+    fn replace_str(&mut self, text: &str) {
+        let mut chars = text.chars();
+        let (first, second) = (chars.next(), chars.next());
+        if second.is_none() {
+            if let Some(c) = first {
+                self.replace_chars(c);
+            }
+            return;
+        }
+        let (start, mut end) = self.selection();
+        end = end.min(self.current_buffer().char_count());
+        let rope = self.current_buffer().rope();
+        while end > start && matches!(rope.char(end - 1), '\n' | '\r') {
+            end -= 1;
+        }
+        if start >= end {
+            return;
+        }
+        self.snapshot();
+        if !self.overwrite(start, end, text) {
+            return;
+        }
+        // The new text is the selection, the way `c` leaves what it inserted:
+        // the reader looked at a word and now looks at the word that took its
+        // place.
+        let end = start + text.chars().count();
+        self.anchor = start;
+        self.cursor = motion::prev_grapheme(self.current_buffer().rope(), end).max(start);
+        self.clamp_cursor();
+    }
+
     /// Swap which end of the selection the cursor sits on (Helix `A-;`).
     ///
     /// Only the cursor moves; the selection is the same range. It is how you
@@ -15665,6 +15782,15 @@ impl Editor {
         self.repeating_edit = true;
         for key in keys {
             self.on_key(key);
+        }
+        // An IME `r` left `Pending::Replace` armed — its answer came from the
+        // candidate panel, not from a key, so there is nothing in `keys` to
+        // supply it. Supply it here, or `.` would leave `r` waiting and eat
+        // whatever the reader pressed next.
+        if self.pending == Pending::Replace && !self.last_replacement.is_empty() {
+            self.pending = Pending::None;
+            let text = self.last_replacement.clone();
+            self.replace_str(&text);
         }
         self.repeating_edit = false;
     }
@@ -17245,6 +17371,85 @@ mod tests {
     }
 
     #[test]
+    fn the_case_keys_moved_under_one_prefix() {
+        // §5.2.3 ②: Helix spends three top-level keys on an operation that is
+        // the identity on 漢字. Here they are a group, and the three keys they
+        // used to sit on are unbound.
+        let lower = |keys: &str| {
+            let mut ed = typed("Hello World\n");
+            press(&mut ed, keys);
+            ed.current_buffer().text()
+        };
+        assert_eq!(lower("x`l"), "hello world\n");
+        assert_eq!(lower("x`u"), "HELLO WORLD\n");
+        assert_eq!(lower("x``"), "hELLO wORLD\n");
+        // …and the reader coming from Helix is told where they went, rather
+        // than pressing `~` and watching nothing happen.
+        let mut ed = typed("Hello World\n");
+        ed.on_key(Key::Char('~'));
+        assert_eq!(ed.current_buffer().text(), "Hello World\n");
+        assert!(ed.status().contains("`l"), "{}", ed.status());
+        let mut ed = typed("Hello World\n");
+        ed.on_key(Key::Alt('`'));
+        assert!(ed.status().contains("`l"), "{}", ed.status());
+    }
+
+    #[test]
+    fn r_replaces_with_what_the_ime_committed() {
+        // §5.2.3 ②: `r` keeps its top-level place and learns 中文 instead —
+        // the panel opens on `r`, and the choice is the replacement.
+        let mut ed = typed("錢塘江上\n");
+        ed.on_key(Key::Char('r'));
+        assert!(ed.replacing(), "the front end must know to run the IME");
+        ed.insert_committed("銀");
+        assert_eq!(ed.current_buffer().text(), "銀塘江上\n");
+        assert!(!ed.replacing(), "and the pending state is spent");
+
+        // One character still fills the selection, the way `r` always has…
+        let mut ed = typed("錢塘江上\n");
+        press(&mut ed, "x");
+        ed.on_key(Key::Char('r'));
+        ed.insert_committed("■");
+        assert_eq!(
+            ed.current_buffer().text(),
+            "■■■■\n",
+            "one 字 writes over every character, and not over the line ending"
+        );
+
+        // …and a word cannot fill anything, so it replaces once.
+        let mut ed = typed("錢塘江上\n");
+        press(&mut ed, "x");
+        ed.on_key(Key::Char('r'));
+        ed.insert_committed("春天");
+        assert_eq!(ed.current_buffer().text(), "春天\n");
+    }
+
+    #[test]
+    fn a_dot_repeats_an_ime_replace() {
+        // The code letters never reach `on_key`, so replaying the keys of an
+        // IME `r` replays `r` alone — which would arm the pending state and
+        // eat the reader's next key.
+        let mut ed = typed("錢錢錢\n");
+        ed.on_key(Key::Char('r'));
+        ed.insert_committed("銀");
+        press(&mut ed, "l.");
+        assert_eq!(ed.current_buffer().text(), "銀銀錢\n");
+        assert!(!ed.replacing(), "`.` must not leave `r` waiting");
+        // The next key is a key, not the answer to a question nobody asked.
+        press(&mut ed, "l.");
+        assert_eq!(ed.current_buffer().text(), "銀銀銀\n");
+    }
+
+    #[test]
+    fn space_r_opens_the_reading_prompt() {
+        // 旁注 is worth a key and worth a second one: a page carries one or
+        // two, and it is not something that has to happen the instant you ask.
+        let mut ed = typed("那年冬天。\n");
+        press(&mut ed, " r");
+        assert_eq!(ed.mode(), Mode::Ruby, "{}", ed.status());
+    }
+
+    #[test]
     fn a_column_can_be_named_either_way_round() {
         // `g3d` and `3gd` are the same question — 「in column three」 — and the
         // comment beside the code has said so all along, but the vi-order
@@ -18308,12 +18513,16 @@ mod tests {
     }
 
     #[test]
-    fn tilde_switches_case_and_leaves_han_alone() {
+    fn the_case_group_leaves_han_alone() {
+        // 漢字 is why these three stopped being top-level keys (§5.2.3 ②):
+        // whichever one you press, the manuscript is unchanged.
         let mut ed = typed("aB漢c");
-        press(&mut ed, "%~");
+        press(&mut ed, "%``");
         assert_eq!(ed.current_buffer().text(), "Ab漢C");
-        press(&mut ed, "%`");
+        press(&mut ed, "%`l");
         assert_eq!(ed.current_buffer().text(), "ab漢c");
+        press(&mut ed, "%`u");
+        assert_eq!(ed.current_buffer().text(), "AB漢C");
     }
 
     #[test]
