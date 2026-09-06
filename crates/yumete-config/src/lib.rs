@@ -1101,9 +1101,61 @@ pub struct Config {
     pub ime: ImeConfig,
     pub syntax: SyntaxConfig,
     pub keys: KeyConfig,
+    pub export: ExportConfig,
     /// What each language can be told to run, by verb: `preview`, `format`, and
     /// whatever else a reader names.
     pub language: HashMap<String, HashMap<String, Runner>>,
+}
+
+/// What `:export` cannot work out for itself.
+///
+/// One key so far, and it is here rather than in `[editor]` because it is not a
+/// screen setting: nothing about it is visible until a file is written out.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ExportConfig {
+    /// The paper a printed copy is set on, in whole millimetres — the trim the
+    /// `@media print` half of an HTML export is written for. 開本 is decided
+    /// once for a book, so this is a configuration line and not a command.
+    pub page: (u32, u32),
+}
+
+impl Default for ExportConfig {
+    fn default() -> ExportConfig {
+        ExportConfig { page: (148, 210) }
+    }
+}
+
+/// The trim a `[export] page` line names, in millimetres.
+///
+/// Names first, because a writer says 32開 and not 130 × 184; then a literal
+/// `寬x高`, because the list of names a printer uses is longer than any list
+/// kept here and a writer holding a sample copy can measure it.
+fn parse_page(value: &str) -> Option<(u32, u32)> {
+    let name = value.trim().to_ascii_lowercase();
+    let named = match name.as_str() {
+        "a4" => (210, 297),
+        "a5" => (148, 210),
+        "a6" => (105, 148),
+        "b5" => (176, 250),
+        "b6" => (125, 176),
+        "letter" => (216, 279),
+        // The 開本 a Chinese book is actually printed at. 開 is how many
+        // leaves the sheet is cut into, so a bigger number is a smaller book.
+        "16k" | "16開" | "16开" => (185, 260),
+        "32k" | "32開" | "32开" => (130, 184),
+        "d32k" | "大32開" | "大32开" => (140, 203),
+        _ => (0, 0),
+    };
+    if named != (0, 0) {
+        return Some(named);
+    }
+    let (w, h) = name.split_once(['x', '*', '×'])?;
+    let w: u32 = w.trim().parse().ok()?;
+    let h: u32 = h.trim().parse().ok()?;
+    // A page with no area is not a page. Refusing here rather than clamping
+    // leaves the default standing, which is what every other unreadable line
+    // in this file does.
+    (w > 0 && h > 0).then_some((w, h))
 }
 
 /// The 上屏方式 a config line names, in yume's own spelling — or `None` when it
@@ -1515,7 +1567,15 @@ struct RawConfig {
     #[serde(default)]
     keys: RawKeys,
     #[serde(default)]
+    export: RawExport,
+    #[serde(default)]
     language: HashMap<String, HashMap<String, RawRunner>>,
+}
+
+#[derive(Deserialize, Default)]
+#[serde(deny_unknown_fields)]
+struct RawExport {
+    page: Option<String>,
 }
 
 /// One command a language declares, as it is written in the file.
@@ -1770,6 +1830,9 @@ impl RawConfig {
         }
         if other.panel.display.is_some() {
             self.panel.display = other.panel.display;
+        }
+        if other.export.page.is_some() {
+            self.export.page = other.export.page;
         }
         if other.theme.name.is_some() {
             self.theme.name = other.theme.name.clone();
@@ -2046,6 +2109,9 @@ impl RawConfig {
         if let Some(display) = self.panel.display.as_deref().and_then(PanelDisplay::parse) {
             config.panel.display = display;
         }
+        if let Some(page) = self.export.page.as_deref().and_then(parse_page) {
+            config.export.page = page;
+        }
         for (k, v) in self.keys.normal {
             // The key on the left is one key — there is no key sequence to
             // *press* here, only one to be sent — and the right may be any
@@ -2255,6 +2321,27 @@ mod tests {
         let line = Config::describe(Path::new("config.toml"), &err);
         assert!(line.contains("zong_lenght"), "{line}");
         assert!(line.starts_with("config.toml: "), "{line}");
+    }
+
+    #[test]
+    fn the_paper_a_book_is_printed_at_can_be_named_or_measured() {
+        let c = Config::from_toml("[export]\npage = \"32開\"\n");
+        assert_eq!(c.export.page, (130, 184));
+        let c = Config::from_toml("[export]\npage = \"A4\"\n");
+        assert_eq!(c.export.page, (210, 297));
+        // A printer's own trim, which is on no list.
+        let c = Config::from_toml("[export]\npage = \"137 x 195\"\n");
+        assert_eq!(c.export.page, (137, 195));
+    }
+
+    #[test]
+    fn an_unreadable_trim_leaves_a5_standing() {
+        // The same rule the rest of the file follows: a typo must not print
+        // the book on nothing.
+        for line in ["\"quarto\"", "\"0x210\"", "\"148\""] {
+            let c = Config::from_toml(&format!("[export]\npage = {line}\n"));
+            assert_eq!(c.export.page, (148, 210), "{line}");
+        }
     }
 
     #[test]
