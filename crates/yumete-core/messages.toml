@@ -1311,11 +1311,11 @@ en = "the source, uncoloured"
 find = "原文 源碼 源码 不著色 不着色 raw source"
 
 [[message]]
-# : 命令選單裏 on 那一項的說明（render 組）
+# : 命令選單裏 basic 那一項的說明（render 組）
 key = "cmd.render.on"
-zht = "著色，標記留在畫面上（默認）"
-zhs = "著色，标记留在画面上（默认）"
-en = "coloured, the markup staying on the page (the default)"
+zht = "基本：著色，一個字都不藏（默認）"
+zhs = "基本：著色，一个字都不藏（默认）"
+en = "basic: coloured, and not one character hidden (the default)"
 find = "著色 着色 高亮 highlight"
 
 [[message]]
@@ -3654,11 +3654,11 @@ zhs = "详情栏"
 en = "the detail panel"
 
 [[message]]
-# t 選單：t a 這一行
+# t 選單：t f 這一行
 key = "hint.table.draw-it"
-zht = "畫成表格"
-zhs = "画成表格"
-en = "draw it as a grid"
+zht = "完整：畫牆與列號"
+zhs = "完整：画墙与列号"
+en = "full: the walls and the ruler"
 
 [[message]]
 # 表格提示：第一行當欄名／當資料
@@ -3670,9 +3670,9 @@ en = "the first row: names ⇄ data"
 [[message]]
 # 表格提示：去某一格
 key = "hint.table.go-to-cell"
-zht = "去某一格（t20-20g）"
-zhs = "去某一格（t20-20g）"
-en = "go to a cell (t20-20g)"
+zht = "去某一格（t20,20g）"
+zhs = "去某一格（t20,20g）"
+en = "go to a cell (t20,20g)"
 
 [[message]]
 # 表格提示：格內
@@ -3724,11 +3724,18 @@ zhs = "下一张表／上一张"
 en = "the next table / the one before"
 
 [[message]]
-# t 選單：t n 這一行
+# 表格提示：游標不在任何一張表裏，底下那些鍵沒有東西可動
+key = "hint.table.not-in-a-table"
+zht = "游標不在表格裏 —— t ] 走到下一張"
+zhs = "光标不在表格里 —— t ] 走到下一张"
+en = "the cursor is not in a table — t ] walks to the next one"
+
+[[message]]
+# t 選單：t b 這一行
 key = "hint.table.operate-it"
-zht = "原文照舊，按鍵歸表格"
-zhs = "原文照旧，按键归表格"
-en = "keep the source, take the grid's keys"
+zht = "基本：排齊，按鍵歸表格"
+zhs = "基本：排齐，按键归表格"
+en = "basic: lined up, and the grid's keys"
 
 [[message]]
 # 提示：表格操作
@@ -4355,6 +4362,27 @@ en = "layout: vertical"
 # ── lookfor ───────────────────────────────────────────────────────────
 
 [[message]]
+# 級別名：基本（出廠）
+key = "level.basic"
+zht = "基本"
+zhs = "基本"
+en = "basic"
+
+[[message]]
+# 級別名：完整
+key = "level.full"
+zht = "完整"
+zhs = "完整"
+en = "full"
+
+[[message]]
+# 級別名：關
+key = "level.off"
+zht = "關"
+zhs = "关"
+en = "off"
+
+[[message]]
 # `::` 那一行按了 ⇥／⏎，可是一條都沒找着
 key = "lookfor.nothing-to-take"
 zht = "沒有找到相符的命令——換一個說法，或者退格回到 `:`"
@@ -4868,6 +4896,13 @@ zhs = "著色：标记留在画面上"
 en = "coloured: the markup stays on the page"
 
 [[message]]
+# :render 不帶參數：四個維度各在哪一級
+key = "render.is"
+zht = "渲染 {0}·表格 {1}·讀音 {2}·首行 {3}"
+zhs = "渲染 {0}·表格 {1}·读音 {2}·首行 {3}"
+en = "render {0} · table {1} · ruby {2} · indent {3}"
+
+[[message]]
 # :markup 換了語法
 key = "render.markup-is"
 zht = "語法：{0}"
@@ -5173,9 +5208,9 @@ en = "already lined up"
 [[message]]
 # t a，但這張表已經畫在正文裏了
 key = "table.already-drawn"
-zht = "已經畫成表格了——t t 全窗，t n 看原文，t o 退出"
-zhs = "已经画成表格了——t t 全窗，t n 看原文，t o 退出"
-en = "already drawn as a grid — t t takes the window, t n shows the source, t o leaves"
+zht = "已經是完整表格了——t t 全窗，t b 基本，t o 源碼"
+zhs = "已经是完整表格了——t t 全窗，t b 基本，t o 源码"
+en = "already at the full level — t t takes the window, t b is basic, t o is the source"
 
 [[message]]
 # :sort 但本來就是這個順序
@@ -5194,9 +5229,9 @@ en = "not reading anything as a grid"
 [[message]]
 # t n，但這張表已經在表格操作模式
 key = "table.already-operated"
-zht = "已經在表格操作模式了——t a 畫成表格，t t 全窗，t o 退出"
-zhs = "已经在表格操作模式了——t a 画成表格，t t 全窗，t o 退出"
-en = "already in table keys — t a draws it, t t takes the window, t o leaves"
+zht = "已經是基本表格了——t f 完整，t t 全窗，t o 源碼"
+zhs = "已经是基本表格了——t f 完整，t t 全窗，t o 源码"
+en = "already at the basic level — t f draws the walls, t t takes the window, t o is the source"
 
 [[message]]
 # t t，但這張表已經佔着整個窗口
@@ -5383,9 +5418,9 @@ en = "the divider between cells cannot be deleted"
 [[message]]
 # t a：在正文裏把表格畫成格子
 key = "table.drawn"
-zht = "畫成表格——t t 全窗，t n 看原文，t o 退出"
-zhs = "画成表格——t t 全窗，t n 看原文，t o 退出"
-en = "drawn as a grid — t t takes the window, t n shows the source, t o leaves"
+zht = "完整表格——t t 全窗，t b 基本，t o 源碼"
+zhs = "完整表格——t t 全窗，t b 基本，t o 源码"
+en = "the full level — t t takes the window, t b is basic, t o is the source"
 
 [[message]]
 # 在格子裏按 Enter
@@ -5640,11 +5675,11 @@ zhs = "只有一栏——表格至少要两栏，或者先写好 |---| 那一行
 en = "one column only — a table needs two, or write the |---| line first"
 
 [[message]]
-# t n：原文照舊，按鍵歸表格（表格操作）
+# t b：一個字都沒藏，按鍵歸表格（基本表格）
 key = "table.operated"
-zht = "表格操作——原文照舊，t a 畫成表格，t o 退出"
-zhs = "表格操作——原文照旧，t a 画成表格，t o 退出"
-en = "table keys — the source stays, t a draws it, t o leaves"
+zht = "基本表格——一個字都沒藏，t f 畫牆，t o 源碼"
+zhs = "基本表格——一个字都没藏，t f 画墙，t o 源码"
+en = "the basic level — nothing hidden, t f draws the walls, t o is the source"
 
 [[message]]
 # 貼進的格子比表格的欄數寬
@@ -6294,4 +6329,3 @@ key = "wrap.vertical-has-no-wrap"
 zht = "縱書不折行：一縱斷在窗高上。這一項只管橫排（`:wrap 40` 兩邊都算）"
 zhs = "纵书不折行：一纵断在窗高上。这一项只管横排（`:wrap 40` 两边都算）"
 en = "vertical does not soft-wrap: a 縱 breaks at the height of the window. This is a horizontal setting (`:wrap 40` counts in both)"
-

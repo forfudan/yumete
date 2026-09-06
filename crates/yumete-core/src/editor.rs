@@ -368,15 +368,24 @@ pub enum Preview {
 /// How much of the result the page shows.
 ///
 /// One axis, not two switches: each step shows more of what the file *means*
-/// and less of how it is written.
+/// and less of how it is written — and the same three names the other three
+/// dimensions take, because it is the one that assigns them (#283).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum Render {
     /// The file exactly as it is, in one colour.
     Off,
     /// Coloured, with every marker still on the page. The default: this is a
     /// manuscript, and you have to be able to see what is in the file.
+    ///
+    /// **It adds and it does not take away** — style over the characters the
+    /// writer typed, and never a character fewer. That is the law the other
+    /// three dimensions are held to at this level as well.
+    ///
+    /// It was called `On` until #283, and `:render` with no argument used to
+    /// mean it. It reports now: there are three levels, so the bare word is
+    /// better spent saying which one you are on.
     #[default]
-    On,
+    Basic,
     /// The markers come off the page — except the ones the cursor is inside,
     /// so the cursor is never in text that is not on the screen (所見即所得).
     Full,
@@ -444,7 +453,7 @@ struct PadKey {
     ///
     /// 所見即所得 puts a run of markup back on the page under the selection,
     /// so what comes off a row — and therefore how wide its cells draw —
-    /// moves with the caret. Under `:render on` it does not: nothing in
+    /// moves with the caret. Under `:render basic` it does not: nothing in
     /// [`Editor::hidden_on_line`] asks where the caret is unless
     /// [`Editor::wysiwyg`] is true.
     ///
@@ -477,19 +486,16 @@ pub struct TableView {
     pub grain: Grain,
     /// What splits one cell from the next.
     pub separator: Separator,
-    /// What the table is drawn on.
-    pub surface: Surface,
-    /// What `t q` gives the page back to (2026-09-05).
+    /// Whether the grid widget has the whole window — `t t` (#283).
     ///
-    /// **`t q` is the way out of the full-screen grid, not the way out of
-    /// table mode.** 「`tq` 只在全屏表格模式下生效，退到 markdown 文件中，且回
-    /// 到此前的表格模式」 — so `t a`, `t t`, `t q` puts you back in `t a` and
-    /// not in prose. `None` is 源碼模式: it is what a CSV opened as a grid
-    /// came from, and what `t t` pressed in prose came from.
+    /// **Orthogonal to the level**, which is why `t q` needs nothing written
+    /// down to find its way back: it puts this to `false` and whatever
+    /// [`Editor::table_level`] was before the takeover is still there. The
+    /// field this replaced remembered the way back by hand, and had to be
+    /// cleared correctly at every exit or `t q` walked you into prose.
     ///
-    /// Only [`Surface::Grid`] ever reads it; the other two are already showing
-    /// the document, and there `t o` is the way to prose.
-    pub back: Option<Surface>,
+    /// [`Editor::table_level`]: crate::editor::Editor::table_level
+    pub pane: bool,
     /// Where the table starts and stops.
     pub bounds: Bounds,
     /// How far the mode reaches — this table, or every table in the file.
@@ -514,46 +520,43 @@ pub enum Separator {
     Pipe,
 }
 
-/// What the table is drawn on (#261).
+/// How much of a table is drawn (#283).
 ///
-/// The author's model, 2026-09-05: 「csv 文件等同于一个从第一行到最后一行都是表格
-/// 的普通文本文件」 — a CSV is not a different kind of thing from a table in a
-/// document, so which of the two renderers draws it is a fact about the table,
-/// not about its splitter.
+/// One of the four dimensions — `render`, `table`, `ruby`, `indent` — and they
+/// all take the same three values, so that a reader who learns one has learnt
+/// the others. `:render <level>` assigns this one; `t o` / `t b` / `t f` set
+/// it directly, and the next `:render` washes that override away.
 ///
-/// **Three of them since 2026-09-05**, which is the author's own list:
+/// **The law that decides which level a feature belongs to**: `Basic` does not
+/// hide, does not fold, and does not replace — it may only *add*, and what it
+/// adds is never in the file. `Full` may do all three. That is why the walls
+/// are `Full`: drawing the writer's `|` as `┆` is replacing a character.
 ///
-/// > 源碼模式 `t o`（ordinary）；保持源碼、表格接管快捷鍵 `t n`（normal）；
-/// > 正文裏畫成網格 `t a`（advanced）；csv 的全屏表格模式 `t t`（table）。
-///
-/// The fourth of those is no table at all, which is why this enum has three:
-/// 源碼模式 is `table == None`. The middle one was lettered `t i` for its
-/// first day; `t i` is the detail panel again since 2026-09-06.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Surface {
-    /// `t n` — the file is left looking exactly as it is, `|` and commas and
-    /// all, and the **keys** belong to the grid: `hjkl` walk cells, `t d`
-    /// drops a row. Nothing is drawn that the file does not contain, so a
-    /// 縱書 chapter stays 縱書.
-    Normal,
-    /// `t a` — drawn as part of the document it sits in, through #212's drawn
-    /// padding: the columns line up because the text itself is padded, and the
-    /// `|` the writer typed is drawn as the wall it is. The paragraph above
-    /// the table does not vanish the moment the cursor lands in a cell.
+/// The full-window grid is **not** a level. It is [`TableView::pane`], because
+/// it is a different question: how much of a table is drawn, and whether it
+/// has the screen to itself, are answered separately and `t q` only touches
+/// the second.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum TableLevel {
+    /// 源碼模式 `t o` — the file as it is written. `|` and commas and all,
+    /// and `hjkl` are letters: the grid is not there to take them.
+    Off,
+    /// `t b` — the columns line up because the text itself is padded (#212),
+    /// and the **keys** belong to the grid where a table is: `hjkl` walk
+    /// cells, `t d` drops a row. **Nothing is hidden, folded or replaced** —
+    /// every character the writer typed is still on the page, so a 縱書
+    /// chapter with no table in it is drawn exactly as `Off` draws it.
+    #[default]
+    Basic,
+    /// `t f` — everything `Basic` draws, and then the parts are optimised:
+    /// the `|` the writer typed is drawn as the wall `┆` it means, and the
+    /// column ruler goes above the table.
     ///
     /// **The columns are the table's**, not the screen's: the widest cell in
     /// each column decides, once, for the whole table. That is what makes the
-    /// padding stable while you scroll — and it is the one thing [`Grid`] does
+    /// padding stable while you scroll — and it is the one thing the pane does
     /// differently.
-    ///
-    /// [`Grid`]: Surface::Grid
-    Advanced,
-    /// `t t` — a page of its own, drawn by `yumete-tui`'s grid widget: the
-    /// columns are as wide as the **visible** rows need, the header freezes at
-    /// the top, and a table wider than the window scrolls by whole columns.
-    /// The file on disk is untouched, and the prose around the table is not on
-    /// the screen — `t q` gives it back.
-    Grid,
+    Full,
 }
 
 /// Where the table starts and stops (#261).
@@ -615,23 +618,14 @@ pub enum Reach {
 }
 
 impl TableView {
-    /// Whether the columns are **drawn** as columns — `t a` or `t t`.
-    ///
-    /// The question 縱書 asks: a grid is read across, and that is the one
-    /// thing a vertical page cannot do, so either of these two turns the page
-    /// horizontal. `t n` draws nothing and leaves the page alone.
-    pub fn draws_a_grid(&self) -> bool {
-        self.surface != Surface::Normal
-    }
-
-    /// Whether it is drawn as part of the document it sits in — `t n` or `t a`.
+    /// Whether it is drawn as part of the document it sits in.
     pub fn in_prose(&self) -> bool {
-        self.surface != Surface::Grid
+        !self.pane
     }
 
     /// Whether this table takes the whole pane — the grid widget's own case.
     pub fn takes_the_pane(&self) -> bool {
-        self.surface == Surface::Grid
+        self.pane
     }
 
     /// Whether the mode belongs to the file rather than to one block (#275).
@@ -1082,7 +1076,22 @@ pub struct Editor {
     ///
     /// A view, never a copy: the text stays the truth, and this only says how
     /// to find the cells in it.
+    ///
+    /// **Which table, not which level** (#283). It answers 「where are the
+    /// cells around the cursor」, and that is discovered per buffer — every
+    /// open clears it, and walking out of a guessed block clears it. What the
+    /// *reader asked for* is [`Editor::table_level`], which survives all of
+    /// that because a preference that clears itself is not a preference.
     table: Option<TableView>,
+    /// How much of a table is drawn — the reader's standing answer (#283).
+    ///
+    /// Untouched by opening a file, by walking out of a table, by there being
+    /// no table at all. `TableLevel::Basic` in a file with no table draws the
+    /// same page `Off` does, to the character, because every gate below asks
+    /// `table_here()` first — which is what makes it safe as the factory
+    /// value, and what lets `:render` assign it without knowing anything about
+    /// the file.
+    table_level: TableLevel,
     /// Whether the detail panel is wanted. It only appears where there is
     /// something to say, so this is "show it when there is", not "show it".
     show_detail: bool,
@@ -1210,10 +1219,6 @@ pub struct Editor {
     /// Whether Markdown is coloured at all (Feature #96).
     /// 所見即所得 (Feature #104): the markup comes off the page, except on the
     /// construct the cursor is in.
-    /// Which ruby dialects were being laid out before 所見即所得 turned them
-    /// all on, so leaving it gives back what the writer had rather than
-    /// nothing.
-    ruby_before: Option<Dialects>,
     /// **The inline candidate** (Feature #211), as `(line, column, what is
     /// drawn there)` — the one piece of [virtual text](crate::drawn) the core
     /// is *told* rather than works out.
@@ -1457,7 +1462,7 @@ impl Editor {
             theme_request: None,
             clipboard_request: None,
             clipboard_read: None,
-            render: Render::On,
+            render: Render::Basic,
             count_to: None,
             column_span: None,
             sequence: None,
@@ -1469,6 +1474,7 @@ impl Editor {
             shell_request: None,
             convert_patch: None,
             table: None,
+            table_level: TableLevel::default(),
             show_detail: true,
             table_bypass: std::cell::Cell::new(false),
             drafts_dir: None,
@@ -1502,7 +1508,6 @@ impl Editor {
             pad_cache: RefCell::new(None),
             md_cache: RefCell::new(None),
             md_tables: RefCell::new(None),
-            ruby_before: None,
             candidate: Vec::new(),
             ruby: Dialects::only(crate::ruby::Dialect::Html),
             layout: Layout::default(),
@@ -2516,10 +2521,21 @@ impl Editor {
     /// knew this (`wysiwyg && show_markup`); this is the knowledge moved into
     /// the type, where it cannot be got wrong.
     pub fn set_render(&mut self, how: Render) -> Render {
-        let was_full = self.render == Render::Full;
         self.render = how;
-        if was_full != (how == Render::Full) {
-            self.on_wysiwyg_change(how == Render::Full);
+        // **The link is made here, once** (#283). Every other dimension is
+        // *assigned* the matching level and then left alone: nothing anywhere
+        // else re-derives 「is a table drawn」 from 「is markup shown」, which
+        // is what kept growing holes. An override afterwards stands until the
+        // next `:render`, and there is nothing to un-pin because there is
+        // nothing pinned.
+        self.set_ruby_level(how);
+        self.table_level = match how {
+            Render::Off => TableLevel::Off,
+            Render::Basic => TableLevel::Basic,
+            Render::Full => TableLevel::Full,
+        };
+        if self.table_level == TableLevel::Off {
+            self.leave_table_quietly();
         }
         self.markup_cache.borrow_mut().clear();
         self.render
@@ -2719,24 +2735,33 @@ impl Editor {
         self.render == Render::Full
     }
 
-    /// Lay readings out with the rest of the markup, or put them back.
+    /// Lay readings out at the level `:render` was just set to (#283).
     ///
     /// A reading is markup like any other — though only the vertical page can
     /// show one, since that is the only layout with a column to put it in.
-    fn on_wysiwyg_change(&mut self, on: bool) {
-        if on {
-            // Every dialect: 所見即所得 means whatever the file is written in.
-            // What was set before is put aside, not thrown away — a writer who
-            // had `:ruby on` and glances at 所見即所得 should get it back.
-            self.ruby_before = Some(self.ruby);
-            let mut all = Dialects::NONE;
-            for dialect in crate::ruby::Dialect::ALL {
-                all.insert(dialect);
+    ///
+    /// **Assigned, not stashed.** This used to put the reader's dialects aside
+    /// on the way into 所見即所得 and hand them back on the way out, and the
+    /// stash went stale the moment `:ruby` was typed while 所見即所得 was on:
+    /// leaving it then gave back a set the reader had already replaced. With
+    /// the level assigned outright there is nothing to go stale, and `:ruby`
+    /// afterwards is an override that stands until the next `:render`.
+    fn set_ruby_level(&mut self, how: Render) {
+        self.ruby = match how {
+            // 源碼模式: the tags are text, like everything else.
+            Render::Off => Dialects::NONE,
+            // **Basic does not hide.** The tags stay on the page and the
+            // reading is drawn *as well*, in the column beside the base —
+            // 「正文不许摘 ruby 标签但可以额外在上方显示一个ruby 行」. That is
+            // what makes the law exceptionless rather than nearly so.
+            Render::Basic | Render::Full => {
+                let mut all = Dialects::NONE;
+                for dialect in crate::ruby::Dialect::ALL {
+                    all.insert(dialect);
+                }
+                all
             }
-            self.ruby = all;
-        } else {
-            self.ruby = self.ruby_before.take().unwrap_or(Dialects::NONE);
-        }
+        };
     }
 
     /// The markup to take off `line`, as char ranges within it.
@@ -2893,15 +2918,22 @@ impl Editor {
     /// width, which is what squares a table up across a page, aligns nothing
     /// there.
     ///
-    /// **Only while the markup means something.** `:render off` asks for the
-    /// file exactly as it is; drawing what it does not contain is the one
-    /// thing that setting is against.
+    /// **One field, asked once** (#283). It used to ask `markup_visible()` —
+    /// a question about `:render`, answered by reaching across into another
+    /// subsystem's state, and every proposal to extend it grew a new hole:
+    /// the `layout` term dropped, `Reach::Cursor` silently widening to the
+    /// file, `PadKey` going stale across a mode switch that moves neither
+    /// revision nor render. The link is made where the command runs instead —
+    /// `:render off` **assigns** `TableLevel::Off` — so nothing here has to
+    /// re-derive it, and nothing here can get it wrong.
     ///
     /// Whether or not `:table` was typed, though: a table in a manuscript is a
     /// table because of what it is, and the writer who most needs to see one
-    /// squared up is the one editing their own documentation.
+    /// squared up is the one editing their own documentation. That is why the
+    /// question is the *level* and not [`Editor::table`] — the level is the
+    /// file's, and holds in the paragraph between two tables.
     fn table_padding_on(&self) -> bool {
-        self.layout == Layout::Horizontal && self.markup_visible()
+        self.layout == Layout::Horizontal && self.table_level != TableLevel::Off
     }
 
     /// The padding drawn on `line` so its table lines up (Feature #212).
@@ -3542,7 +3574,7 @@ impl Editor {
                     Some(l) => l == Layout::Vertical,
                     None => self.layout == Layout::Horizontal,
                 };
-                if self.table.as_ref().is_some_and(|v| v.draws_a_grid()) && wants_vertical {
+                if self.grid_is_drawn() && wants_vertical {
                     self.status = say!("table.vertical-not-allowed");
                     return Ok(CommandOutcome::Continue);
                 }
@@ -3907,9 +3939,40 @@ impl Editor {
                 self.set_render(how);
                 self.status = match how {
                     Render::Off => say!("render.source"),
-                    Render::On => say!("render.full"),
+                    Render::Basic => say!("render.full"),
                     Render::Full => say!("render.wysiwyg"),
                 };
+                Ok(CommandOutcome::Continue)
+            }
+            Command::ReportRender => {
+                let word = |level: TableLevel| match level {
+                    TableLevel::Off => say!("level.off"),
+                    TableLevel::Basic => say!("level.basic"),
+                    TableLevel::Full => say!("level.full"),
+                };
+                let render = match self.render {
+                    Render::Off => TableLevel::Off,
+                    Render::Basic => TableLevel::Basic,
+                    Render::Full => TableLevel::Full,
+                };
+                // Ruby and indent have two states each, not three — 「如果说
+                // 只有两态那就两态，我们可以 N-to-1 mapping就好了」 — so they
+                // report the level they are *at*, which is never `full`.
+                let ruby = match self.ruby.is_empty() {
+                    true => TableLevel::Off,
+                    false => TableLevel::Basic,
+                };
+                let indent = match self.indent {
+                    0 => TableLevel::Off,
+                    _ => TableLevel::Basic,
+                };
+                self.status = say!(
+                    "render.is",
+                    word(render),
+                    word(self.table_level),
+                    word(ruby),
+                    word(indent)
+                );
                 Ok(CommandOutcome::Continue)
             }
             // A measure is only a measure if the rows honour it, so setting
@@ -4045,13 +4108,15 @@ impl Editor {
                 // **`:table` is the door, not a surface.** Typed while the
                 // grid had the window it went in again as 畫成表格 — a silent
                 // demotion that also threw away `t q`'s way back.
-                match (on, self.table.as_ref().map(|v| v.surface)) {
+                match (on, self.table.as_ref().map(|v| v.pane)) {
                     (true, None) => {
                         self.enter_table();
                     }
-                    (true, Some(Surface::Grid)) => self.status = say!("table.already-the-window"),
-                    (true, Some(Surface::Advanced)) => self.status = say!("table.already-drawn"),
-                    (true, Some(Surface::Normal)) => self.status = say!("table.already-operated"),
+                    (true, Some(true)) => self.status = say!("table.already-the-window"),
+                    (true, Some(false)) => match self.table_level {
+                        TableLevel::Full => self.status = say!("table.already-drawn"),
+                        _ => self.status = say!("table.already-operated"),
+                    },
                     (false, _) => self.leave_table(),
                 }
                 Ok(CommandOutcome::Continue)
@@ -4439,24 +4504,48 @@ impl Editor {
     /// lines is not what `:table` was asked for. `t t` on those three lines
     /// says so out loud, and gets the window.
     pub fn enter_table(&mut self) -> bool {
-        if !self.enter_table_as(Surface::Advanced) {
+        // **The level is set before the door opens**, because the door is
+        // where the page is turned: `turn_for_table` asks `grid_is_drawn`
+        // while it is building the view, and `:table` draws it whole.
+        let was = self.table_level;
+        self.table_level = TableLevel::Full;
+        if !self.enter_table_as(false) {
+            self.table_level = was;
             return false;
         }
         if let Some(view) = self.table.as_mut() {
             if view.bounds == Bounds::WholeFile {
-                view.surface = Surface::Grid;
+                view.pane = true;
             }
         }
         true
     }
 
-    /// The same door, told which of the two table modes was asked for (#275).
+    /// How much of a table is drawn, wherever the cursor is (#283).
+    pub fn table_level(&self) -> TableLevel {
+        self.table_level
+    }
+
+    /// Whether the columns are **drawn** as columns — `t f` or `t t` (#283).
     ///
-    /// The surface is now the **mode**, and the mode is chosen by the key, not
-    /// by the kind of table: `t t` draws a grid whether the table is a whole
-    /// `.csv` or three lines of a chapter, and `t n` leaves the pipes and the
-    /// commas on the page whether or not the file is nothing but table.
-    pub fn enter_table_as(&mut self, surface: Surface) -> bool {
+    /// The question 縱書 asks: a grid is read across, and that is the one
+    /// thing a vertical page cannot do, so either of these turns the page
+    /// horizontal. `t b` draws no walls and leaves the page alone.
+    pub fn grid_is_drawn(&self) -> bool {
+        match self.table.as_ref() {
+            Some(view) => view.pane || self.table_level == TableLevel::Full,
+            None => false,
+        }
+    }
+
+    /// The same door, told whether the table is to have the window (#275).
+    ///
+    /// **It finds the table; it does not choose the level** (#283). Which
+    /// table the cursor is in is a fact about the file, and every one of the
+    /// four doors below answers it the same way whatever the reader asked to
+    /// see. How much of it is drawn is [`Editor::table_level`], set by the
+    /// key that called this, and it outlives every one of these views.
+    pub fn enter_table_as(&mut self, pane: bool) -> bool {
         // A `|` table under the cursor is a table, whatever the file is called
         // and whether or not it has been saved — it says what it is on every
         // one of its own lines.
@@ -4473,7 +4562,7 @@ impl Editor {
                 self.status = say!("table.table-inside-a-code-block");
                 return false;
             }
-            return self.enter_md_table_as(surface);
+            return self.enter_md_table_as(pane);
         }
         // **A Markdown file's tables are the file's** (#275), so the mode is
         // reachable from the paragraph between two of them: 「可以在文件任何位
@@ -4482,7 +4571,7 @@ impl Editor {
         // the key for going to a table.
         if self.syntax() == crate::syntax::Syntax::Markdown && self.table.is_none() {
             if let Some(line) = self.first_md_table_line() {
-                if self.enter_md_table_at(line, surface) {
+                if self.enter_md_table_at(line, pane) {
                     return true;
                 }
             }
@@ -4492,7 +4581,7 @@ impl Editor {
             // to claim — but the lines under the cursor may still be a table
             // (#216), and a 碼表 pasted into a scratch buffer is exactly where
             // somebody wants to look at one.
-            if self.enter_block_table(surface) {
+            if self.enter_block_table(pane) {
                 return true;
             }
             self.status = say!("table.no-file-name-no-schema");
@@ -4536,7 +4625,7 @@ impl Editor {
                     // whose entries begin after a `---` preamble, a `tabular`
                     // in the middle of a paper. That block is recognised where
                     // it stands rather than converted.
-                    if self.enter_block_table(surface) {
+                    if self.enter_block_table(pane) {
                         return true;
                     }
                     self.status = say!("table.file-is-not-a-grid", path.file_name().unwrap_or_default().to_string_lossy());
@@ -4553,8 +4642,7 @@ impl Editor {
             goal: 0,
             grain: Grain::Cell,
             separator: Separator::Delimiter(delimiter),
-            surface,
-            back: None,
+            pane,
             // A file a schema claims, or one whose own header row is the
             // schema, says what it is by its name — so the mode is the file's
             // and stays on when the cursor walks out of a row (#275).
@@ -4627,7 +4715,7 @@ impl Editor {
     /// Answers whether it entered, and says nothing when it did not: the
     /// caller has a better message for 「this is not a table」 than this does,
     /// because the caller knows which door was being tried.
-    fn enter_block_table(&mut self, surface: Surface) -> bool {
+    fn enter_block_table(&mut self, pane: bool) -> bool {
         let rope = self.current_buffer().rope();
         let at = rope.char_to_line(self.cursor.min(rope.len_chars()));
         // **The walk is the test.** Each candidate is tried by walking the
@@ -4674,8 +4762,7 @@ impl Editor {
                 // clears the frame, and clearing the chapter in order to look
                 // at three lines of it is not what was asked for — nor may a
                 // 縱書 chapter be turned sideways for them.
-                surface,
-                back: None,
+                pane,
                 bounds: Bounds::Block,
                 // **Guessed, so it does not outlive the cursor** (#275). The
                 // separator was inferred from a run of tab characters; the
@@ -4765,57 +4852,101 @@ impl Editor {
         most >= 2 && enough
     }
 
-    /// Switch between the three table surfaces without going back to prose.
+    /// Say how much of a table is to be drawn (#283).
     ///
-    /// 「保持源碼，表格接管，快捷鍵 ti；現在的 tt 模式，快捷鍵 ta；csv 的全屏
-    /// 表格模式，tt」 — any of the three switches straight into any other, so
-    /// pressing one of the others is never the way out. `t o` is the way out.
-    fn show_table_as(&mut self, want: Surface) {
+    /// **Setting a level cannot fail.** It is a preference about drawing, not
+    /// a door into a place: it is legal in a file with no table, in a buffer
+    /// with no name, in prose three screens above the first table. That is
+    /// what lets `:render` assign it without asking anything about the file,
+    /// and it is why `TableLevel::Basic` is safe as the factory value — with
+    /// no table under the cursor every gate below still answers false, so the
+    /// page is the one `Off` draws, to the character.
+    fn set_table_level(&mut self, want: TableLevel) {
+        let was = self.table_level;
+        self.table_level = want;
+        if want == TableLevel::Off {
+            // 源碼模式 gives the page back as well as the keys: the layout the
+            // grid turned sideways, and the view that says where the cells are.
+            self.leave_table();
+            return;
+        }
+        // **All three levels are read inside the document.** The window is a
+        // fourth thing, asked for by its own key, so naming a level from
+        // inside it gives the document back — 「`t o` is the way to prose」
+        // stays true because this one lands in the page, not out of it.
+        let mut gave_the_window_back = false;
+        if let Some(view) = self.table.as_mut() {
+            if view.pane {
+                view.pane = false;
+                gave_the_window_back = true;
+            }
+        }
+        // A level that draws walls is read across, which is the one thing a
+        // vertical page cannot do — 「照舊把整頁轉橫」.
+        if self.grid_is_drawn() {
+            self.turn_for_table();
+        } else if let Some(back) = self.turned_for_table.take() {
+            self.layout = back;
+            self.zong_motion = false;
+        }
+        let stayed = was == want && !gave_the_window_back;
+        self.status = match (want, stayed) {
+            (TableLevel::Full, false) => say!("table.drawn"),
+            (TableLevel::Full, true) => say!("table.already-drawn"),
+            (_, false) => say!("table.operated"),
+            (_, true) => say!("table.already-operated"),
+        };
+    }
+
+    /// Give the table the whole window, or give the window back (#283).
+    ///
+    /// **`t q` needs nothing written down.** The level is untouched by the
+    /// takeover, so putting this back to `false` lands on whatever was being
+    /// drawn before — which is what the author asked for: 「`tq` 只在全屏表格
+    /// 模式下生效，退到 markdown 文件中，且回到此前的表格模式」. `t o` is
+    /// still the way to prose, and it is a different key because it is a
+    /// different question.
+    fn show_pane(&mut self, want: bool) {
         let Some(view) = self.table.as_mut() else {
             return;
         };
-        if view.surface == want {
+        if view.pane == want {
             self.status = match want {
-                Surface::Grid => say!("table.already-the-window"),
-                Surface::Advanced => say!("table.already-drawn"),
-                Surface::Normal => say!("table.already-operated"),
+                true => say!("table.already-the-window"),
+                false => say!("table.q-is-for-the-window"),
             };
             return;
         }
-        // **Where `t q` goes back to** is written down the moment the grid
-        // takes the window, and cleared the moment it gives the window back:
-        // a surface that is already showing the document has nothing to
-        // return to but prose, and prose is `t o`.
-        let from = view.surface;
-        view.back = (want == Surface::Grid).then_some(from);
-        view.surface = want;
-        match want {
-            // A grid is read across, so both of the drawn surfaces turn a
-            // 縱書 page horizontal — the same rule wherever the table sits,
-            // which is what the author asked for: 「照舊把整頁轉橫」.
-            Surface::Grid => {
-                self.turn_for_table();
-                self.status = say!("table.given-the-window");
-            }
-            Surface::Advanced => {
-                self.turn_for_table();
-                self.status = say!("table.drawn");
-            }
-            // …and 表格操作 gives the page back, because the writing around the
-            // table is being read as writing again.
-            Surface::Normal => {
-                if let Some(back) = self.turned_for_table.take() {
-                    self.layout = back;
-                    self.zong_motion = false;
-                }
-                self.status = say!("table.operated");
-            }
+        // A `.csv` opened straight into the window came from no level at all,
+        // and there giving the window back **is** leaving table mode.
+        if !want && self.table_level == TableLevel::Off {
+            self.leave_table();
+            return;
         }
+        view.pane = want;
+        if self.grid_is_drawn() {
+            self.turn_for_table();
+        } else if let Some(back) = self.turned_for_table.take() {
+            self.layout = back;
+            self.zong_motion = false;
+        }
+        self.status = match want {
+            true => say!("table.given-the-window"),
+            // What it went back to is worth saying, because it is the whole
+            // difference between `t q` and `t o`.
+            false => match self.table_level {
+                TableLevel::Full => say!("table.drawn"),
+                _ => say!("table.operated"),
+            },
+        };
     }
 
     /// Go back to reading the file as plain text.
     pub fn leave_table(&mut self) {
         let turned = self.turned_for_table.is_some();
+        // 源碼模式 is a level, and the level is what has to be put down: the
+        // view alone comes back the moment anything rebuilds it.
+        self.table_level = TableLevel::Off;
         self.leave_table_quietly();
         self.status = if turned {
             say!("table.off-back-to-vertical")
@@ -4855,8 +4986,7 @@ impl Editor {
                 goal: 0,
                 grain: Grain::Cell,
                 separator: Separator::Delimiter(delimiter),
-                surface: Surface::Grid,
-                back: None,
+                pane: true,
                 bounds: Bounds::WholeFile,
                 reach: Reach::File,
             });
@@ -4880,7 +5010,7 @@ impl Editor {
         // of it would throw away everything around them. This line always meant
         // that; it used to have to say it by naming Markdown, which made it
         // read as an exception for one kind of table.
-        if !self.table.as_ref().is_some_and(|v| v.draws_a_grid()) {
+        if !self.grid_is_drawn() {
             return false;
         }
         if self.layout != Layout::Vertical {
@@ -5170,9 +5300,16 @@ impl Editor {
             // example in a code block `t t` then reformatted somebody's text.
             // The region is what everything downstream asks about, so this is
             // where a table that is really a quotation has to stop being one.
+            // **The same question the renderer asks** (#283). It used to take
+            // any run of lines that opened with a pipe, while the renderer
+            // (`with_md_tables`) took only the ones Markdown parses — so a
+            // lone `| 甲` in a paragraph had the cells' keys on it, `hjkl`
+            // walking cells nobody had drawn, while the line was painted as
+            // the prose it is. One rule, asked in one place.
             (Bounds::Md, _) => match self.md_row_in_a_fence() {
                 true => None,
-                false => crate::mdtable::region(|i| self.line_text(i), line),
+                false => crate::mdtable::region(|i| self.line_text(i), line)
+                    .filter(|region| self.md_table_parses(region)),
             },
             (Bounds::Block, Separator::Delimiter(d)) => self.delimited_block(line, d),
             _ => None,
@@ -5182,6 +5319,20 @@ impl Editor {
             region: region.clone(),
         });
         region
+    }
+
+    /// Whether a run of pipe lines is a table **Markdown would parse**.
+    ///
+    /// > markdown 中，表格必須是符合 markdown 語法的，可以被正確 parse 的表格
+    /// > 才會进去普通或高级表格视图。
+    ///
+    /// A header with no `| --- |` under it is somebody still typing, and a
+    /// single-column line that merely opens with a pipe is prose. **One
+    /// copy** (#283): the renderer and the keys used to decide this
+    /// separately, and disagreed about exactly those two cases.
+    fn md_table_parses(&self, region: &crate::mdtable::Region) -> bool {
+        let header = self.line_text(region.first).unwrap_or_default();
+        region.rule.is_some() && crate::mdtable::cells(&header).len() >= 2
     }
 
     /// Every `|` table in the file that **parses as one**, walked once per
@@ -5212,8 +5363,7 @@ impl Editor {
                 line += 1;
                 continue;
             };
-            let header = self.line_text(region.first).unwrap_or_default();
-            let parses = region.rule.is_some() && crate::mdtable::cells(&header).len() >= 2;
+            let parses = self.md_table_parses(&region);
             let quoted = blocks
                 .get(region.first)
                 .copied()
@@ -5233,8 +5383,8 @@ impl Editor {
     ///
     /// **The one question the renderer asks**, per line: prose or table, and if
     /// table, where it starts and stops so the 列號標尺 can be drawn along its
-    /// top edge. Which of the two table modes is on it does not ask here —
-    /// that is `table().surface`.
+    /// top edge. How much of it is drawn it does not ask here —
+    /// that is [`Editor::table_level`].
     ///
     /// The two classes of file part company in this function and nowhere else:
     ///
@@ -5286,7 +5436,7 @@ impl Editor {
     /// than out of the writer's own punctuation.
     fn grid_walls(&self, line: usize) -> Option<(usize, usize, Vec<usize>)> {
         let view = self.table.as_ref()?;
-        if view.surface != Surface::Advanced {
+        if view.pane || self.table_level != TableLevel::Full {
             return None;
         }
         let (first, last) = self.table_lines_at(line)?;
@@ -5474,10 +5624,10 @@ impl Editor {
     }
 
     /// Read the `|` table under the cursor as a grid, drawn the given way.
-    fn enter_md_table_as(&mut self, surface: Surface) -> bool {
+    fn enter_md_table_as(&mut self, pane: bool) -> bool {
         let rope = self.current_buffer().rope();
         let at = rope.char_to_line(self.cursor.min(rope.len_chars()));
-        self.enter_md_table_at(at, surface)
+        self.enter_md_table_at(at, pane)
     }
 
     /// The first line of the first `|` table in the file that **parses as one**
@@ -5496,7 +5646,7 @@ impl Editor {
     }
 
     /// Read the `|` table `at` this line as a grid, drawn the given way.
-    fn enter_md_table_at(&mut self, at: usize, surface: Surface) -> bool {
+    fn enter_md_table_at(&mut self, at: usize, pane: bool) -> bool {
         let Some(region) = crate::mdtable::region(|i| self.line_text(i), at) else {
             self.status = say!("table.cursor-not-in-a-table");
             return false;
@@ -5516,8 +5666,7 @@ impl Editor {
             goal: 0,
             grain: Grain::Cell,
             separator: Separator::Pipe,
-            surface,
-            back: None,
+            pane,
             bounds: Bounds::Md,
             // **A `|` table says what it is on every one of its own lines**,
             // so the mode is the file's (#275): every `|` table in the file is
@@ -5921,7 +6070,7 @@ impl Editor {
         // **表格操作, not 真表格顯示** (#275): the writer is about to fill this
         // in, and the pipes they just asked for should be on the page while
         // they do it. `t t` draws it once it has something in it.
-        self.enter_md_table_as(Surface::Normal);
+        self.enter_md_table_as(false);
         self.go_to_cell(heading, 0);
         self.enter_insert();
         self.status = say!("table.written", rows.to_string(), columns.to_string());
@@ -7230,47 +7379,56 @@ impl Editor {
         // 「get me into a table」 — from prose, from another table, from the top
         // of a document whose tables are three screens down.
         match key {
-            // **The four ways to look at a table** (#275, remade 2026-09-05,
-            // lettered 2026-09-06). The author's own list: 「源碼模式 to
-            // (ordinary)；保持源碼，表格接管 tn (normal)；現在的 tt 模式 ta
-            // (advanced)；csv 的全屏表格模式 tt (table)。」
+            // **Three levels and a window** (#275, remade 2026-09-05, lettered
+            // 2026-09-06, levelled 2026-09-06 for #283). One naming scheme for
+            // all four dimensions — `render`, `table`, `ruby`, `indent` — so
+            // that a reader who learns `off` / `basic` / `full` once has
+            // learnt them everywhere: 「我的目的是能让命令和快捷键的命名尽量统
+            // 一、规范，便于用户学习记忆。」
             //
-            // `t o` is the file as it is written. `t n` leaves the pipes and
-            // the commas on the page and gives the keys to the grid. `t a`
-            // draws the grid where the table stands, inside the document it
-            // belongs to. `t t` gives the table the whole window — the widget
-            // a `.csv` has always been drawn by, now reachable from three
-            // lines of a chapter. Any of them switches **straight into any
-            // other**, so none of them is the way out.
+            // `t o` is the file as it is written. `t b` lines the columns up
+            // and gives the keys to the grid, hiding nothing. `t f` draws the
+            // walls and the ruler. `t t` gives the table the whole window.
             //
-            // **`n`, not `i`** (author, 2026-09-06): `t i` had been the detail
-            // panel for long enough that the hand knew it, and 「還是小寫方便」
-            // — a key a writer presses all day is not the one to move to a
-            // capital for a mode that was named after an implementation detail.
-            Key::Char('t') | Key::Char('a') | Key::Char('n') => {
+            // **`t t` is not a fourth level.** It is a different question, and
+            // that is why `t q` can undo it without anything being written
+            // down: the level it was taken from was never touched.
+            //
+            // **`f`, not `a`** (author, 2026-09-06): 排齊 gave the letter up
+            // and went to `t F`, where the capital reads as the confirmation a
+            // whole-file reformat should always have asked for.
+            Key::Char('b') | Key::Char('f') => {
                 let want = match key {
-                    Key::Char('t') => Surface::Grid,
-                    Key::Char('a') => Surface::Advanced,
-                    _ => Surface::Normal,
+                    Key::Char('f') => TableLevel::Full,
+                    _ => TableLevel::Basic,
                 };
+                // **The level is set first, and it cannot fail.** Finding the
+                // table can — a buffer with no name, a file that is not a grid
+                // — and that used to take the level down with it. It is a
+                // preference: a file with nothing to draw it on is not a
+                // reason to forget what the reader asked for.
+                self.set_table_level(want);
                 // **A file-wide mode is switched from anywhere in the file**
                 // — 「可以在文件任何位置通過 ti tt 進入表格視圖」 — so this is
                 // not `table_here()`, which is false in the paragraph between
                 // two tables and is the right answer for the *keys*.
-                if self.table_here() || self.table.as_ref().is_some_and(|v| v.is_file_wide()) {
-                    self.show_table_as(want);
-                    self.snap_into_the_grid();
+                if !(self.table_here() || self.table.as_ref().is_some_and(|v| v.is_file_wide()))
+                    && !self.enter_table_as(false)
+                {
+                    // `enter_table_as` has already said why, and the level
+                    // stands: walk into a table and it is drawn at that level.
                     return;
                 }
-                if !self.enter_table_as(want) {
-                    // `enter_table_as` has already said why.
+                self.snap_into_the_grid();
+                return;
+            }
+            Key::Char('t') => {
+                if !(self.table_here() || self.table.as_ref().is_some_and(|v| v.is_file_wide()))
+                    && !self.enter_table_as(true)
+                {
                     return;
                 }
-                self.status = match want {
-                    Surface::Grid => say!("table.given-the-window"),
-                    Surface::Advanced => say!("table.drawn"),
-                    Surface::Normal => say!("table.operated"),
-                };
+                self.show_pane(true);
                 self.snap_into_the_grid();
                 return;
             }
@@ -7278,7 +7436,7 @@ impl Editor {
             // row; 加行 is `t r` since 2026-09-05, which is what freed the
             // letter that spells the mode it now names.
             Key::Char('o') => {
-                if self.table.is_none() {
+                if self.table.is_none() && self.table_level == TableLevel::Off {
                     self.status = say!("table.already-off");
                     return;
                 }
@@ -7287,22 +7445,15 @@ impl Editor {
             }
             // `t q` — 「只在全屏表格模式下生效，退到 markdown 文件中，且回到此
             // 前的表格模式」. So it is not a second `t o`: it gives the window
-            // back and puts the page on whichever surface the grid took it
-            // from. A `.csv` opened as a grid came from no surface at all, and
-            // there giving the window back **is** leaving table mode.
+            // back, and the level it lands on is the one that was there all
+            // along. A `.csv` opened straight into the window was on no level
+            // at all, and there giving the window back **is** leaving.
             Key::Char('q') => {
-                let Some(view) = self.table.as_ref() else {
+                if self.table.is_none() {
                     self.status = say!("table.already-off");
                     return;
-                };
-                if !view.takes_the_pane() {
-                    self.status = say!("table.q-is-for-the-window");
-                    return;
                 }
-                match view.back {
-                    Some(back) => self.show_table_as(back),
-                    None => self.leave_table(),
-                }
+                self.show_pane(false);
                 return;
             }
             // `t ]` / `t [` — the next table in the file, and into it. A
@@ -7339,6 +7490,23 @@ impl Editor {
                 self.status = say!("table.row-and-column", line + 1, cell + 1);
                 return;
             }
+        }
+        // **Nothing below this line has a grid to work on unless the cursor
+        // is standing in one** (#283). A `|` table's mode is the whole
+        // *file's*, so it is on in the paragraphs between the tables too —
+        // and there `md_region()` is `None`, which the split below reads as
+        // 「a delimited file」 and hands to the delimited keys. `t d` in a
+        // paragraph of a chapter therefore deleted the line the cursor was on
+        // and reported 「已刪除一行」: prose, taken out by a table key, with a
+        // table's message. The same door lets `t j`/`t k` shuffle prose lines
+        // and `t R` open one.
+        //
+        // `t b`/`t f`/`t t`/`t o`/`t q`/`t ]`/`t [`/`t <n>g` are above it on
+        // purpose: those are how you get **into** a table, and demanding one
+        // first would be asking the reader to do what they just pressed.
+        if !self.table_here() {
+            self.status = say!("hint.table.not-in-a-table");
+            return;
         }
         // **A block recognised where it stands is read, not rewritten** (#216).
         // It is somebody's 碼表 sitting in a chapter, and every key below this
@@ -7461,7 +7629,11 @@ impl Editor {
             Key::Char('<') => self.md_align(Align::Left),
             Key::Char('=') => self.md_align(Align::Center),
             Key::Char('>') => self.md_align(Align::Right),
-            Key::Char('f') => {
+            // `t F` — 排齊, written into the file. **A capital**, because
+            // it rewrites every row of the table and the lowercase letter next
+            // to it now means 「draw it at the full level」, which rewrites
+            // nothing: 「大写有一种需要「确认」感觉，防止用户误触导致格式化」.
+            Key::Char('F') => {
                 self.snapshot();
                 self.status = if self.format_md_table() {
                     say!("table.lined-up")
@@ -7489,7 +7661,7 @@ impl Editor {
         let Some(view) = self.table.as_ref() else {
             return;
         };
-        if view.surface != Surface::Grid || view.bounds == Bounds::WholeFile {
+        if !view.pane || view.bounds == Bounds::WholeFile {
             return;
         }
         // What the surface said stands: this is a jump made on its behalf, not
@@ -8313,8 +8485,8 @@ impl Editor {
                 // page with no table under the cursor they are the whole list.
                 let mut keys = vec![
                     ("o", say!("hint.table.back-to-prose")),
-                    ("i", say!("hint.table.operate-it")),
-                    ("a", say!("hint.table.draw-it")),
+                    ("b", say!("hint.table.operate-it")),
+                    ("f", say!("hint.table.draw-it")),
                     ("t", say!("hint.table.whole-window")),
                     ("q", say!("hint.table.leave-the-window")),
                     ("] [", say!("hint.table.next-or-previous")),
@@ -8338,25 +8510,25 @@ impl Editor {
                         ("j k", say!("hint.table.move-row")),
                         ("h l", say!("hint.table.move-column")),
                         ("y p", say!("hint.table.yank-or-paste-column")),
-                        ("s S", say!("hint.table.sort-by-column")),
+                        ("1s 1S", say!("hint.table.sort-by-column")),
                         ("< = >", say!("hint.table.align-column")),
-                        // `f`, not `t` — `t` has been the way *into* a table
-                        // since 1ffde52 and this row went on saying otherwise,
-                        // which is how 「tf 沒有這個選項」 gets reported.
-                        ("f", say!("hint.table.line-it-up")),
-                        ("I", say!("hint.table.detail-panel")),
+                        // `F`, not `f` — the lowercase letter is 完整表格
+                        // since #283, and a capital is what a command that
+                        // rewrites every row of the file should have wanted.
+                        ("F", say!("hint.table.line-it-up")),
+                        ("i", say!("hint.table.detail-panel")),
                     ]),
                     Some(Bounds::WholeFile) => keys.extend([
                         ("/ ?", say!("hint.table.search-columns")),
                         ("g", say!("hint.table.go-to-cell")),
-                        ("s S", say!("hint.table.sort-by-column")),
+                        ("1s 1S", say!("hint.table.sort-by-column")),
                         ("r R", say!("hint.table.add-row")),
                         ("d", say!("hint.table.delete-row")),
                         ("j k", say!("hint.table.move-row")),
                         ("y p", say!("hint.table.yank-or-paste-column")),
                         ("H", say!("hint.table.first-row-is-data")),
                         ("e", say!("hint.table.schema")),
-                        ("I", say!("hint.table.detail-panel")),
+                        ("i", say!("hint.table.detail-panel")),
                     ]),
                     _ => {}
                 }
@@ -10546,7 +10718,7 @@ impl Editor {
         // grid sits. 表格操作 (`t n`) leaves the pipes on the page and does not
         // ask for the turn, so it is not this case; `t n` and `t q` are what
         // give the manuscript back, and both restore the layout the grid took.
-        if layout == Layout::Vertical && self.table.as_ref().is_some_and(|v| v.draws_a_grid()) {
+        if layout == Layout::Vertical && self.grid_is_drawn() {
             return;
         }
         self.layout = layout;
@@ -18991,7 +19163,7 @@ mod tests {
         // is 「它在哪裏定義的」. Keeping both on `Enter` meant a word inside a
         // footnote could not be searched for at all.
         let mut ed = typed("那年冬天[^1]，山下起了大雪。\n那年夏天。\n");
-        ed.set_render(Render::On);
+        ed.set_render(Render::Basic);
         ed.goto_line(1);
         for _ in 0..4 {
             ed.on_key(Key::Char('l'));
@@ -19189,7 +19361,7 @@ mod tests {
         let mut ed = typed(
             "那年冬天[^1]，山下起了大雪。\n\n[^1]: 據縣志，那是丁丑年。\n",
         );
-        ed.set_render(Render::On);
+        ed.set_render(Render::Basic);
         // On the reference: the panel is the note itself, which is the whole
         // point of a footnote — it is meant to be read beside the sentence.
         ed.goto_line(1);
@@ -19212,7 +19384,7 @@ mod tests {
         // A comment is the other kind of note: still on the page, but a long
         // one is easier read in a panel than in the middle of a paragraph.
         let mut ed = typed("那年冬天%%這裏要改，冬天太早了%%。\n");
-        ed.set_render(Render::On);
+        ed.set_render(Render::Basic);
         ed.goto_line(1);
         for _ in 0..5 {
             ed.on_key(Key::Char('l'));
@@ -19226,7 +19398,7 @@ mod tests {
         let mut ed = typed(
             "那年冬天[^1]，山下起了大雪。\n\n[^1]: 據縣志，那是丁丑年。\n",
         );
-        ed.set_render(Render::On);
+        ed.set_render(Render::Basic);
         ed.goto_line(1);
         for _ in 0..4 {
             ed.on_key(Key::Char('l'));
@@ -19253,7 +19425,7 @@ mod tests {
 
         // A footnote nobody defined has nothing to show, and does not pretend.
         let mut ed = typed("那年冬天[^9]。\n");
-        ed.set_render(Render::On);
+        ed.set_render(Render::Basic);
         ed.goto_line(1);
         for _ in 0..4 {
             ed.on_key(Key::Char('l'));
@@ -20083,7 +20255,7 @@ mod tests {
         // With the markup on the page the file is already square, so nothing
         // is drawn: the padding is not a second opinion about a formatted
         // table.
-        ed.execute("render on").unwrap();
+        ed.execute("render basic").unwrap();
         let source: Vec<usize> = (0..4).map(|l| drawn_width(&ed, l)).collect();
         assert!(source.iter().all(|w| *w == source[0]), "{source:?}");
         assert!(ed.drawn_on_line(2).is_empty(), "{:?}", ed.drawn_on_line(2));
@@ -20147,7 +20319,7 @@ mod tests {
         // `:render off` is a request for the file exactly as it is.
         ed.execute("render off").unwrap();
         assert!(ed.drawn_on_line(0).is_empty(), "{:?}", ed.drawn_on_line(0));
-        ed.execute("render on").unwrap();
+        ed.execute("render basic").unwrap();
         assert!(!ed.drawn_on_line(0).is_empty());
 
         // Down a 縱 every character takes one cell, so display width squares
@@ -20610,7 +20782,7 @@ mod tests {
         // `t f` is the tidy-up, said out loud: the columns line up on the
         // terminal, which is what a Markdown table is supposed to look like.
         // (`t t` is 「read this as a grid」 now — one letter, one meaning.)
-        press(&mut ed, "tf");
+        press(&mut ed, "tF");
         assert_eq!(
             ed.current_buffer().text(),
             "前文\n| 字 | 讀音 |\n| -- | ---- |\n| 木 | mu   |\n| 目 | mu   |\n後文\n"
@@ -20691,7 +20863,7 @@ mod tests {
         let mut ed = typed("| a | 甲 |\n| --- | --- |\n| bbbb | 乙丙 |\n");
         ed.goto_line(1);
         assert!(ed.enter_table());
-        press(&mut ed, "tf");
+        press(&mut ed, "tF");
         let widths: Vec<usize> = ed
             .current_buffer()
             .text()
@@ -20933,7 +21105,7 @@ mod tests {
         let mut ed = with_md_table();
         // 表格操作, so the page is still the manuscript's to set — `t t` turns
         // it horizontal on purpose (#275).
-        press(&mut ed, "tn");
+        press(&mut ed, "tb");
         ed.goto_line(6);
         // `o` in the prose below opens a line, not a row.
         press(&mut ed, "o");
@@ -21730,7 +21902,7 @@ mod tests {
         // grid's, and a 縱書 manuscript is still 縱書.
         let mut ed = with_md_table();
         ed.set_layout(Layout::Vertical);
-        press(&mut ed, "tn");
+        press(&mut ed, "tb");
         assert_eq!(ed.layout(), Layout::Vertical, "{}", ed.status());
         assert!(ed.table().unwrap().in_prose(), "{}", ed.status());
         assert!(!ed.table().unwrap().takes_the_pane(), "three lines, not the pane");
@@ -21738,8 +21910,8 @@ mod tests {
         // `t a` — 現在的 tt 模式: 「照舊把整頁轉橫」, because a grid is read
         // across. It is still three lines of a chapter, so it does not take
         // the window.
-        press(&mut ed, "ta");
-        assert!(ed.table().unwrap().draws_a_grid(), "{}", ed.status());
+        press(&mut ed, "tf");
+        assert!(ed.grid_is_drawn(), "{}", ed.status());
         assert!(ed.table().unwrap().in_prose(), "still inside the document");
         assert_eq!(ed.layout(), Layout::Horizontal, "{}", ed.status());
         assert!(!ed.table().unwrap().takes_the_pane(), "still three lines of a chapter");
@@ -21750,12 +21922,12 @@ mod tests {
         press(&mut ed, "tt");
         assert!(ed.table().unwrap().takes_the_pane(), "{}", ed.status());
         press(&mut ed, "tq");
-        assert!(ed.table().unwrap().draws_a_grid(), "{}", ed.status());
+        assert!(ed.grid_is_drawn(), "{}", ed.status());
         assert!(ed.table().unwrap().in_prose(), "back on t a, not in prose");
 
         // And any of them switches straight into any other — `t n` is a
         // surface, not the way out — which is what gives the page back.
-        press(&mut ed, "tn");
+        press(&mut ed, "tb");
         assert!(ed.table().unwrap().in_prose(), "{}", ed.status());
         assert_eq!(ed.layout(), Layout::Vertical, "{}", ed.status());
 
@@ -21783,22 +21955,27 @@ mod tests {
 
         // 表格操作 keeps the header on the page, so there it is a line like any
         // other and `k` walks onto it.
-        press(&mut ed, "tn");
+        press(&mut ed, "tb");
         press(&mut ed, "k");
         assert_eq!(ed.cursor_line(), 1, "{}", ed.status());
     }
 
-    /// `:table` is the **door**, not a surface. Typed while a surface is
-    /// already up it used to walk in again as 畫成表格 — quietly demoting
-    /// 全窗表格 and losing the window `t q` would have given back.
+    /// `:table` is the **door**, not a level. Typed while a table is already
+    /// up it used to walk in again as 畫成表格 — quietly demoting 全窗表格 and
+    /// losing the window `t q` would have given back.
     #[test]
-    fn typing_table_again_does_not_demote_the_surface_it_is_already_in() {
+    fn typing_table_again_does_not_demote_the_level_it_is_already_in() {
         let mut ed = with_md_table();
         ed.goto_line(3);
         press(&mut ed, "tt");
-        let before = ed.table.as_ref().map(|v| v.surface);
+        let before = (ed.table_level(), ed.table.as_ref().map(|v| v.pane));
         ed.execute(":table").unwrap();
-        assert_eq!(ed.table.as_ref().map(|v| v.surface), before, "{}", ed.status());
+        assert_eq!(
+            (ed.table_level(), ed.table.as_ref().map(|v| v.pane)),
+            before,
+            "{}",
+            ed.status()
+        );
         assert_eq!(ed.status(), say!("table.already-the-window"));
 
         // And the door still closes.
@@ -21862,11 +22039,11 @@ mod tests {
         // 「完全画成表格」 — and only there. 表格操作 keeps 「markdown/csv 的语法
         // 标记」 on the page, which is the whole difference between the two.
         let mut ed = with_md_table();
-        press(&mut ed, "tn");
+        press(&mut ed, "tb");
         assert!(ed.grid_on_line(1).is_empty(), "the pipes stay pipes");
         assert!(ed.table_ruler_on_line(1).is_empty(), "and no ruler over them");
 
-        press(&mut ed, "ta");
+        press(&mut ed, "tf");
         let head: Vec<char> = ed.grid_on_line(1).into_iter().map(|(_, g)| g).collect();
         assert_eq!(head, vec!['┆', '┆', '┆'], "| 字 | 讀音 |");
         // The rule row is not a row — it is the line under the head, and every
@@ -24443,7 +24620,7 @@ mod tests {
         let mut ed = typed("| 字 | 拆分 | 說明 |\n| --- | --- | --- |\n| 木 | 木 | 樹 |\n| 相 | ⿰木目 | 看 |\n| a | bb | ccc |\n");
         ed.goto_line(1);
         assert!(ed.enter_table(), "{}", ed.status());
-        press(&mut ed, "tf");
+        press(&mut ed, "tF");
         let text = ed.current_buffer().text();
         let widths: Vec<usize> = text
             .lines()
@@ -25513,7 +25690,7 @@ mod tests {
         assert_eq!(ed.hidden_on_line(1), vec![(0, 8)], "「<<<<<<< 」 and nothing else");
         assert_eq!(ed.hidden_on_line(3), vec![(0, 7)], "「=======」 leaves an empty row");
         assert_eq!(ed.hidden_on_line(2), vec![], "nobody hides the writing");
-        ed.execute(":render on").unwrap();
+        ed.execute(":render basic").unwrap();
         assert_eq!(ed.hidden_on_line(1), vec![], "and with the markup shown, nothing");
     }
 
@@ -25528,7 +25705,7 @@ mod tests {
     }
 
     /// A table's padding is a walk down every row of it, and the caret only
-    /// changes the answer under 所見即所得 — so under `:render on` moving the
+    /// changes the answer under 所見即所得 — so under `:render basic` moving the
     /// caret must not throw the walk away.
     ///
     /// Told by poisoning the memo: what comes back second is what was
@@ -25551,7 +25728,7 @@ mod tests {
         assert_eq!(
             ed.drawn_on_line(2),
             vec![(0, "毒".to_string())],
-            "`:render on` hides the same runs wherever the caret is",
+            "`:render basic` hides the same runs wherever the caret is",
         );
 
         // 所見即所得 puts markup back under the selection, so there the answer

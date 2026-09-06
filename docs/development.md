@@ -1084,6 +1084,131 @@ reads the same list, which is what stopped the door and the renderer
 disagreeing about the fence rule: `t t` in a file whose only table was quoted
 inside a fence used to enter a mode that then drew nothing.
 
+### 5.7 · Three levels, four dimensions (#283)
+
+Settled with the author on 2026-09-06, after two reviews of the previous
+proposal found the same thing from opposite ends.
+
+**What it replaces.** Whether a table is drawn aligned used to be asked as a
+predicate that reached across two subsystems: `layout == Horizontal &&
+markup_visible()`, and the proposal on the table was to grow it into
+`render != Off && (table.is_some() || render == Full)`. Four separate holes
+were found in that one line before it was ever written — it dropped `layout`,
+it had no per-line term so 「`:render full` stops wrapping」 read as the whole
+file, `Reach::Cursor` silently degraded to `Reach::File` down the new branch,
+and `PadKey` would have gone stale across a mode switch that changes neither
+revision nor render. **None of those were carelessness. A predicate that
+answers one subsystem's question by reading another subsystem's state grows a
+new hole every time either side changes.**
+
+The cure is to link the two **when the command runs**, not when the frame is
+drawn. `:render basic` *writes* `table_level = Basic`. After that, alignment
+asks one field and `render` never appears on that path at all.
+
+**Four dimensions, three levels each.**
+
+| | `off` | `basic` (factory) | `full` |
+| --- | --- | --- | --- |
+| `render` | the file as written, one colour | style only | the parts are optimised |
+| `table` | not table's business | aligned · no wrap · keys to the grid where a table is | ＋ `\|` drawn as `┆`, the column ruler |
+| `ruby` | the tags are text | the tags stay ＋ a reading line above | the reading only |
+| `indent` | no indent | indent (drawn spaces) | indent ＋ the blank line between two paragraphs folded away |
+
+`:render <level>` assigns all four. Each can then be overridden by its own
+command; the next `:render` washes the overrides away (there is no pinning,
+so there is no pin state anyone has to be able to see). `:render` with no
+argument **reports** all four — the shape `:table rules` already has.
+
+There is no `:render reset`: with that rule, `:render basic` is it.
+
+**The law that decides which level a feature belongs to.**
+
+> **`basic` does not hide, does not fold, and does not replace.** It may add —
+> drawn padding, a reading line, an indent — and what it adds is never in the
+> file. **`full` may do all three.**
+
+The law is worth more than the levels are. 「Which level does this belong to」
+had been argued twice by eye; measure it instead:
+
+* `t f`'s grid **replaces** the writer's `|` with `┆` (`grid_on_line` is
+  explicit that a character is replaced, never taken off the page, so the
+  columns stay the columns) → `full`.
+* `indent`'s blank-line fold **removes a line** → `indent full`. Before the
+  law it was the one place where `:render on` quietly took a character off
+  the page and nothing said so.
+* `ruby` at `basic` therefore keeps the tags on the page and draws the
+  reading above them. Stripping the tag is hiding, and hiding is `full`.
+
+**A feature with two states gets two states.** The levels are a naming
+convention and a mapping, not a quota — map `basic` and `full` to the same
+value rather than inventing a middle state nobody asked for.
+
+**The cut this needs first: a level is not a table.** `self.table` today
+answers two questions at once — 「which level does the writer want」 and
+「which table am I standing in, with what schema and what bounds」 — and the
+second one is discovered per buffer: `table_on_open` clears it on every open,
+`forget_a_guessed_table` clears it when the cursor walks out of a table that
+was only guessed. A level assigned once into a field that clears itself is a
+level that silently disagrees with `render` and has nowhere to show it.
+
+So they split, the same way `render` and `table` just did:
+
+| | what it is | who writes it | on open |
+| --- | --- | --- | --- |
+| `table_level` | off / basic / full — a preference | `:render`, `:table view` | **untouched** |
+| `self.table` | which table, what schema, what bounds | derived | recomputed |
+
+Three consequences fall out, and all three are the point:
+
+1. Setting a level cannot fail, so it cannot shout — `enter_table_as`'s
+   「no file name, no schema」 has nobody left to say it to.
+2. `table_level == Basic` in a file with no table is **the same page, to the
+   pixel, as `off`** — the sixteen `table_here()` gates already answer false
+   there. That was the reviewer's condition for turning tables on by default,
+   and it is met by construction rather than by care.
+3. `manual.md`'s promise — 「頁面上的每一張表，不用你動手就是齊的，不只是光標
+   所在的那一張」 — survives, because the level is file-wide.
+
+**Keys.** Words and keys agree, in all four dimensions:
+
+```
+t o   off          t b   basic        t f   full         t t   the window
+t q   give the window back, to the level it was taken from
+t F   排齊寫進檔案 — moved off `t f` for the level, and the capital is the
+      confirmation a whole-file reformat should have wanted all along
+```
+
+**`t w` — take the width cap off.** One toggle for the table you are in: the
+columns go to their natural width and run off the side of the window. What
+was truncated is not lost, because —
+
+**`t i` — the panel reads the cell.** A truncated cell is read in the detail
+panel, whole. This is the division of labour that makes a width cap
+acceptable at all: **the table is for scanning, the panel is for reading.**
+Twenty-eight columns of a 拆分表 were never meant to be read across.
+
+**Sorting asks for a column.** A bare `t s` is gone. On 123 380 rows a sort
+costs real seconds, and `u` refunds the content but not the time — so the
+gesture that starts one is never a single letter.
+
+```
+t1s          column 1, ascending      (`S` is descending)
+t1as t1ds    the direction spelled out
+t1a5a9as     several columns, each with its own direction
+t1,5,9s      several columns, all ascending
+t0as t0ds    the column you are standing in — `0` is not a column,
+             and `sort_table` already refuses it
+```
+
+**`-` is a range, `,` is a list or a pair.** `-` had been doing both, which
+would have collided the day `t2-10g` was typed:
+
+```
+t2-10/       columns 2 through 10          — a span of one kind of thing
+t1,5,9s      columns 1, 5 and 9            — several of one kind
+t20,20g      row 20, column 20             — two kinds
+```
+
 ---
 
 ## 5.1 Helix keybindings & IME hotkeys

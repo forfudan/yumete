@@ -2808,7 +2808,6 @@ fn draw_which_key(
     }
 }
 
-/// Write `text` from `x`, stopping at `limit`, one cell per column./// Write `text` from `x`, stopping at `limit`, one cell per column.
 /// A drawn buffer as one HTML `<pre>`: a span per run of same-styled cells.
 fn buffer_to_html(buffer: &ratatui::buffer::Buffer) -> String {
     use ratatui::style::Color;
@@ -5718,7 +5717,7 @@ mod tests {
         let config = vertical_config();
         let buffer = render_vertical(&mut editor, &config, 20, 12);
 
-        // The markers are still on the page (`:render on` is the default), so
+        // The markers are still on the page (`:render basic` is the default), so
         // the 縱 reads 一 * 二 三 * 四 and the run is the two in the middle.
         let x = (0..20).find(|&x| at(&buffer, x, 0) == "一").unwrap();
         assert_eq!(at(&buffer, x, 2), "二");
@@ -7187,7 +7186,7 @@ mod tests {
         // 表格操作 (#275): the pipes stay on the page, which is what the
         // assertions below read. `t t` re-glyphs them into a grid instead.
         assert!(
-            editor.enter_table_as(yumete_core::editor::Surface::Normal),
+            editor.enter_table_as(false),
             "{}",
             editor.status()
         );
@@ -7292,7 +7291,7 @@ mod tests {
         // 表格操作 (#275): the pipes stay on the page, which is what the
         // assertions below read. `t t` re-glyphs them into a grid instead.
         assert!(
-            editor.enter_table_as(yumete_core::editor::Surface::Normal),
+            editor.enter_table_as(false),
             "{}",
             editor.status()
         );
@@ -7357,7 +7356,7 @@ mod tests {
         // 表格操作 (#275): the pipes stay on the page, which is what the
         // assertions below read. `t t` re-glyphs them into a grid instead.
         assert!(
-            editor.enter_table_as(yumete_core::editor::Surface::Normal),
+            editor.enter_table_as(false),
             "{}",
             editor.status()
         );
@@ -7403,7 +7402,7 @@ mod tests {
         // 表格操作 (#275): the pipes stay on the page, which is what the
         // assertions below read. `t t` re-glyphs them into a grid instead.
         assert!(
-            editor.enter_table_as(yumete_core::editor::Surface::Normal),
+            editor.enter_table_as(false),
             "{}",
             editor.status()
         );
@@ -7500,7 +7499,7 @@ mod tests {
         editor.on_key(Key::Char('h'));
         editor.on_key(Key::Char('h'));
         assert!(
-            editor.enter_table_as(yumete_core::editor::Surface::Normal),
+            editor.enter_table_as(false),
             "{}",
             editor.status()
         );
@@ -8854,7 +8853,7 @@ mod tests {
         // `**那**` — a bold word between markers, and a heading above it.
         let mut editor = editor_with("# 卷一\n那年**冬天**，山下起了大雪。");
         let config = vertical_config();
-        editor.set_render(yumete_core::editor::Render::On);
+        editor.set_render(yumete_core::editor::Render::Basic);
         let buffer = render_vertical(&mut editor, &config, 30, 16);
 
         // Find the 縱 the sentence is set in — the second, since the heading
@@ -9068,7 +9067,7 @@ mod tests {
         assert_eq!(row_text(&buffer, 0).trim_end(), "那**年**冬天");
 
         // …and back to source on demand.
-        editor.execute(":render on").unwrap();
+        editor.execute(":render basic").unwrap();
         let buffer = render(&editor, &config, 40, 6);
         assert_eq!(row_text(&buffer, 0).trim_end(), "那**年**冬**天**");
     }
