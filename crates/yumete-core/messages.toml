@@ -898,10 +898,10 @@ find = "終端 终端 外部 掛起 挂起 shell suspend"
 [[message]]
 # : 命令選單裏 shot 那一項的說明（commands 組）
 key = "cmd.commands.shot"
-zht = "把這一頁畫成一張圖存起來；screen 則交給系統的截圖程序"
-zhs = "把这一页画成一张图存起来；screen 则交给系统的截图程序"
-en = "draw this page to a file; `screen` hands it to the platform's own"
-find = "截圖 截图 圖片 图片 存圖 存图 screenshot png"
+zht = "截圖：預設進剪貼簿，png／html／txt 則存成檔案（進下載資料夾）"
+zhs = "截图：预设进剪贴簿，png／html／txt 则存成档案（进下载资料夹）"
+en = "a picture: the clipboard by default, or a file with `png`/`html`/`txt`"
+find = "截圖 截图 圖片 图片 存圖 存图 screenshot png html 剪貼簿 剪贴簿"
 
 [[message]]
 # : 命令選單裏 s/pat/rep/ 那一項的說明（commands 組）
@@ -1477,6 +1477,38 @@ en = "星陳"
 find = "星陳 星陈 xingchen 形碼 形码"
 
 [[message]]
+# : 命令選單裏 html 那一項的說明（shot 組）
+key = "cmd.shot.html"
+zht = "把這一頁畫成彩色的 HTML"
+zhs = "把这一页画成彩色的 HTML"
+en = "draw this page as coloured HTML"
+find = "html 網頁 网页 彩色"
+
+[[message]]
+# : 命令選單裏 png 那一項的說明（shot 組）
+key = "cmd.shot.png"
+zht = "把視窗拍成 PNG 存起來"
+zhs = "把视窗拍成 PNG 存起来"
+en = "photograph the window into a PNG"
+find = "png 圖片 图片 截圖 截图"
+
+[[message]]
+# : 命令選單裏 screen 那一項的說明（shot 組）
+key = "cmd.shot.screen"
+zht = "把視窗拍下來放進剪貼簿"
+zhs = "把视窗拍下来放进剪贴簿"
+en = "photograph the window onto the clipboard"
+find = "screen 剪貼簿 剪贴簿 截圖 截图"
+
+[[message]]
+# : 命令選單裏 txt 那一項的說明（shot 組）
+key = "cmd.shot.txt"
+zht = "把這一頁畫成純文字"
+zhs = "把这一页画成纯文字"
+en = "draw this page as plain text"
+find = "txt 純文字 纯文字 文本"
+
+[[message]]
 # : 命令選單裏 dash 那一項的說明（strokes 組）
 key = "cmd.strokes.dash"
 zht = "虛線 ┆（默認）"
@@ -1627,6 +1659,13 @@ zht = "照這幾欄排：`sort 1 a 2 d` 是先第一欄順排、再第二欄倒�
 zhs = "照这几栏排：`sort 1 a 2 d` 是先第一栏顺排、再第二栏倒排"
 en = "sort by these columns: `sort 1 a 2 d` is column 1 ascending, then column 2 descending"
 find = "排序 排列 順序 顺序 升序 降序 sort order"
+
+[[message]]
+# 那個詞後面本來不跟東西，而後面跟了東西
+key = "cmd.takes-nothing-after-it"
+zht = "{0} 後面不跟東西——「{1}」多了"
+zhs = "{0} 后面不跟东西——「{1}」多了"
+en = "{0} takes nothing after it — '{1}' is extra"
 
 [[message]]
 # : 命令選單裏 amber 那一項的說明（themes 組）
@@ -5233,6 +5272,16 @@ zhs = "换好了，但它说：{0}"
 en = "replaced, but it said: {0}"
 
 
+# ── shot ──────────────────────────────────────────────────────────────
+
+[[message]]
+# `:shot!` 而後面是 screen：剪貼簿沒有東西可以蓋
+key = "shot.the-bang-is-for-a-file"
+zht = "`!` 是給存成檔案的那幾種的——剪貼簿沒有東西要蓋掉"
+zhs = "`!` 是给存成档案的那几种的——剪贴簿没有东西要盖掉"
+en = "`!` is for the forms that write a file — nothing on the clipboard to overwrite"
+
+
 # ── show ──────────────────────────────────────────────────────────────
 
 [[message]]
@@ -6148,9 +6197,9 @@ en = "needs {0}; add force at the end"
 [[message]]
 # 這個平台上沒有配截圖命令
 key = "ui.no-screenshot-command"
-zht = "這個平台上沒有截圖命令——`[editor] screenshot` 寫一條"
-zhs = "这个平台上没有截图命令——`[editor] screenshot` 写一条"
-en = "no screenshot command on this platform — write one at `[editor] screenshot`"
+zht = "這個平台上沒有截圖命令——`[editor] screenshot` 寫一條，或用 `:shot html`"
+zhs = "这个平台上没有截图命令——`[editor] screenshot` 写一条，或用 `:shot html`"
+en = "no screenshot command here — write one at `[editor] screenshot`, or `:shot html`"
 
 [[message]]
 # 字典欄：拆分表裏沒有這個字
@@ -6214,6 +6263,20 @@ key = "ui.shot-failed"
 zht = "寫不出這張圖：{0}"
 zhs = "写不出这张图：{0}"
 en = "could not write the picture: {0}"
+
+[[message]]
+# `:shot png` 的那條命令沒把圖寫成檔案
+key = "ui.shot-kept-the-clipboard"
+zht = "`[editor] screenshot` 那一條沒有理會 $YUMETE_SHOT，圖還是進了剪貼簿"
+zhs = "`[editor] screenshot` 那一条没有理会 $YUMETE_SHOT，图还是进了剪贴簿"
+en = "the `[editor] screenshot` line ignored $YUMETE_SHOT — the picture is on the clipboard"
+
+[[message]]
+# `:shot png` 把視窗拍成檔案了
+key = "ui.shot-photographed"
+zht = "視窗拍成了 {0}"
+zhs = "视窗拍成了 {0}"
+en = "photographed the window to {0}"
 
 [[message]]
 # 側欄有焦點，而提示行關着——狀態欄整條讓給側欄的按鍵

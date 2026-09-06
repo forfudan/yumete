@@ -374,6 +374,16 @@ pub enum CommandError {
         command: &'static str,
         value: String,
     },
+    /// Something followed a word that takes nothing.
+    ///
+    /// Not the same complaint as [`CommandError::InvalidArgument`], which says
+    /// 「不認得」 — a file name after `:shot screen` is a perfectly good file
+    /// name, and telling the writer it is not recognised sends them looking
+    /// for the typo in it.
+    TakesNoArgument {
+        command: &'static str,
+        value: String,
+    },
 }
 
 impl fmt::Display for CommandError {
@@ -388,6 +398,9 @@ impl fmt::Display for CommandError {
             }
             CommandError::InvalidArgument { command, value } => {
                 write!(f, "{}", crate::say!("cmd.not-one-of-its-values", command, value))
+            }
+            CommandError::TakesNoArgument { command, value } => {
+                write!(f, "{}", crate::say!("cmd.takes-nothing-after-it", command, value))
             }
         }
     }
@@ -713,10 +726,39 @@ pub fn parse(input: &str) -> Result<Command, CommandError> {
         // refusing one.
         "shot" | "shot!" => {
             let force = word.ends_with('!');
-            let shot = match rest.trim() {
-                "screen" => Shot::Screen,
-                "" => Shot::Page(None),
-                path => Shot::Page(Some(path.to_string())),
+            let rest = rest.trim();
+            // The word, then whatever is left — which is a file name and may
+            // hold spaces, so it is split once rather than by whitespace.
+            let (kind, path) = match rest.split_once(char::is_whitespace) {
+                Some((kind, path)) => (kind, path.trim()),
+                None => (rest, ""),
+            };
+            let named = (!path.is_empty()).then(|| path.to_string());
+            let file = |how| Shot::File { how, path: named };
+            let shot = match pick(kind, SHOT).map(|w| w.name) {
+                // **Bare `:shot` is the screen.** 「截圖」 means a picture you
+                // can paste; the drawn page is the specialist and says so.
+                _ if kind.is_empty() => Shot::Screen,
+                // A name after `screen` is refused rather than dropped: the
+                // clipboard has nowhere to put one, and a path that quietly
+                // does nothing is how a person comes to hunt for a file that
+                // was never written.
+                Some("screen") if !path.is_empty() => {
+                    return Err(CommandError::TakesNoArgument {
+                        command: "shot screen",
+                        value: path.to_string(),
+                    })
+                }
+                Some("screen") => Shot::Screen,
+                Some("png") => file(ShotFormat::Png),
+                Some("html") => file(ShotFormat::Html),
+                Some("txt") => file(ShotFormat::Text),
+                _ => {
+                    return Err(CommandError::InvalidArgument {
+                        command: "shot",
+                        value: kind.to_string(),
+                    })
+                }
             };
             Ok(Command::Screenshot { shot, force })
         }
@@ -1272,27 +1314,63 @@ pub struct Entry {
     pub needs: &'static [Need],
 }
 
-/// What `:shot` makes a picture **with** — Feature #189.
+/// What `:shot` makes a picture of — Feature #189.
 ///
-/// The platform's screenshot program photographs a *window*: the title bar,
-/// the tab strip, the terminal's own padding and whatever is in front of it.
-/// Cropping that down to the page needs the window's origin on screen and the
-/// display's scale factor, and the editor can get neither reliably — a wrong
-/// crop is worse than an uncropped shot.
+/// Two pictures, because there are two things a person means by 「截圖」. The
+/// platform's screenshot program photographs a *window*: the title bar, the
+/// tab strip, the terminal's own padding and whatever is in front of it. The
+/// editor's own drawing is the **page** and nothing else, by construction —
+/// no window, no scale, no chrome — because the renderer already produces the
+/// frame cell by cell for `--shot`, so it works over ssh, on a headless
+/// machine, and in a test.
 ///
-/// So the picture is drawn rather than taken. The renderer already produces
-/// the frame cell by cell for `--shot`; writing *that* out is the page and
-/// nothing else, by construction — no window, no scale, no chrome — and it
-/// works over ssh, on a headless machine, and in a test.
+/// The drawn page was the bare `:shot` for a while and should not have been
+/// (2026-09-06): what a person wants nine times out of ten is a picture they
+/// can paste, and the specialist is the one that should have to be named.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Shot {
-    /// The editor draws the page into a file. `None` names it after the
-    /// document; a name ending in `.txt` asks for the plain-text picture
-    /// instead of the coloured one.
-    Page(Option<String>),
-    /// The old way, kept because a bug report is sometimes *about* the
-    /// terminal: hand the screen to the platform's own screenshot program.
+    /// **The default.** Hand the screen to the platform's own screenshot
+    /// program, which on macOS crops to the window and fills the clipboard.
     Screen,
+    /// A picture kept as a file. [`ShotFormat`] says which kind, and `path`
+    /// says where; without one the picture is named after the document and
+    /// dated, in the downloads folder rather than beside the document.
+    ///
+    /// The format used to be read off the extension of a name that had to be
+    /// given, which made 「plain text」 something you could only ask for by
+    /// spelling out a path, and left the argument a free string with nothing
+    /// to complete: `:shot ` opened an empty menu.
+    File {
+        how: ShotFormat,
+        path: Option<String>,
+    },
+}
+
+/// The three things `:shot` can leave on disk.
+///
+/// `Png` is not drawn by the editor at all — it is the same screenshot program
+/// [`Shot::Screen`] uses, told to write a file instead of filling the
+/// clipboard. So it photographs the window, while `Html` and `Text` draw the
+/// page from the frame the reader is looking at.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ShotFormat {
+    /// The page, with its colours.
+    Html,
+    /// The page, without them.
+    Text,
+    /// The window, by the platform's own program.
+    Png,
+}
+
+impl ShotFormat {
+    /// What the file is called after the dot.
+    pub fn extension(self) -> &'static str {
+        match self {
+            ShotFormat::Html => "html",
+            ShotFormat::Text => "txt",
+            ShotFormat::Png => "png",
+        }
+    }
 }
 
 /// What may follow a command, or one of its words.
@@ -1393,6 +1471,40 @@ pub fn set_schemes(found: &[(&str, &str)]) {
 pub fn schemes() -> &'static [Word] {
     FOUND_SCHEMES.get().copied().unwrap_or(SCHEMES)
 }
+
+/// What `:shot` makes a picture of, and what it leaves behind — see [`Shot`].
+///
+/// Words rather than a free string, because a free string had nothing to
+/// offer: typing `:shot ` opened the command panel on an empty list, which is
+/// what the writer saw and asked about. `png`, `html` and `txt` each take a
+/// file name after them, and without one the picture is named after the
+/// document and dated.
+const SHOT: &[Word] = &[
+    Word {
+        name: "screen",
+        help: "cmd.shot.screen",
+        needs: &[],
+        then: Args::None,
+    },
+    Word {
+        name: "png",
+        help: "cmd.shot.png",
+        needs: &[],
+        then: Args::Path,
+    },
+    Word {
+        name: "html",
+        help: "cmd.shot.html",
+        needs: &[],
+        then: Args::Path,
+    },
+    Word {
+        name: "txt",
+        help: "cmd.shot.txt",
+        needs: &[],
+        then: Args::Path,
+    },
+];
 
 /// The pieces of Markdown `:markdown` can write.
 const MARKDOWN_BITS: &[Word] = &[
@@ -2814,7 +2926,7 @@ pub const COMMANDS: &[Entry] = &[
         aliases: &[],
         help: "cmd.commands.shot",
         needs: &[],
-        args: Args::Free("<檔名｜screen>"),
+        args: Args::Words(SHOT),
     },
     Entry {
         name: "appearance",
@@ -3916,6 +4028,48 @@ mod tests {
                 check(&format!(":{}", entry.name), list);
             }
         }
+    }
+
+    #[test]
+    fn a_shot_says_which_picture_and_the_menu_can_say_it_for_you() {
+        let shot = |line: &str| match parse(line) {
+            Ok(Command::Screenshot { shot, .. }) => shot,
+            other => panic!("{line}: {other:?}"),
+        };
+        // Bare is the clipboard, and `screen` is the same thing said aloud.
+        assert_eq!(shot(":shot"), Shot::Screen);
+        assert_eq!(shot(":shot screen"), Shot::Screen);
+        assert_eq!(shot(":shot!"), Shot::Screen, "the bang is the editor's to refuse");
+        let file = |how, path: Option<&str>| Shot::File {
+            how,
+            path: path.map(str::to_string),
+        };
+        assert_eq!(shot(":shot png"), file(ShotFormat::Png, None));
+        assert_eq!(shot(":shot html"), file(ShotFormat::Html, None));
+        assert_eq!(shot(":shot txt"), file(ShotFormat::Text, None));
+        // A name may hold spaces, so the split is once and not by whitespace.
+        assert_eq!(
+            shot(":shot html 給編輯 二稿.html"),
+            file(ShotFormat::Html, Some("給編輯 二稿.html"))
+        );
+        // A prefix is the word it starts, the way every other word list works.
+        assert_eq!(shot(":shot p"), file(ShotFormat::Png, None));
+        assert_eq!(shot(":shot h"), file(ShotFormat::Html, None));
+        // A name the clipboard cannot keep is refused, not dropped — and the
+        // refusal does not pretend the name was the problem.
+        assert!(matches!(
+            parse(":shot screen 圖.png"),
+            Err(CommandError::TakesNoArgument { value, .. }) if value == "圖.png"
+        ));
+        // …and a word that is no picture at all names itself in the refusal.
+        assert!(matches!(
+            parse(":shot jpeg"),
+            Err(CommandError::InvalidArgument { value, .. }) if value == "jpeg"
+        ));
+        // The panel the writer opens on `:shot ` — which used to be empty,
+        // because the argument was a free string (2026-09-06).
+        let words: Vec<String> = complete("shot ").iter().map(Choice::written).collect();
+        assert_eq!(words, ["screen", "png", "html", "txt"]);
     }
 
     #[test]

@@ -796,6 +796,7 @@ dependencies = [
 name = "yumete-core"
 version = "0.1.0"
 dependencies = [
+ "libc",
  "regex",
  "ropey",
  "serde",

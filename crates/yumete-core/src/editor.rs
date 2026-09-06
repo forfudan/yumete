@@ -286,8 +286,11 @@ pub struct Detail {
 /// is the only half that holds the cells, so it does the writing.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ShotJob {
-    /// Hand the screen to the platform's own screenshot program.
+    /// Hand the screen to the platform's own screenshot program, which leaves
+    /// the picture on the clipboard.
     Screen,
+    /// The same program, told to write the picture here instead.
+    Png { target: PathBuf },
     /// Write the frame here — coloured HTML unless `text`.
     Page { target: PathBuf, text: bool },
 }
@@ -763,6 +766,43 @@ fn chapter_heading(line: &str) -> Option<(usize, String)> {
         other => other,
     };
     depth(unit).map(|d| (d, format!("{}{}", same(unit), number)))
+}
+
+/// Where a picture goes when nobody said where (#189).
+///
+/// **Not beside the manuscript.** A picture is made to be sent to somebody and
+/// then forgotten about; a chapter folder that fills up with them is a folder
+/// the writer has to tidy. The downloads folder is where the rest of the
+/// machine already puts things of that kind, and every status line names the
+/// full path, so 「它到哪去了」 is answered before it is asked.
+///
+/// `XDG_DOWNLOAD_DIR` first, because a Linux desktop that has been told the
+/// folder is called something else has been told in that one place. Then
+/// `~/Downloads` if it is really there — and if it is not, home rather than a
+/// folder invented in somebody's home directory, because a picture in the
+/// wrong place can be moved and a folder that appeared by itself cannot be
+/// explained. Failing even that, wherever the editor was started.
+fn downloads_dir() -> PathBuf {
+    if let Ok(dir) = std::env::var("XDG_DOWNLOAD_DIR") {
+        if !dir.trim().is_empty() {
+            return PathBuf::from(dir);
+        }
+    }
+    let home = std::env::var("HOME")
+        .ok()
+        .filter(|h| !h.is_empty())
+        .or_else(|| std::env::var("USERPROFILE").ok().filter(|h| !h.is_empty()));
+    if let Some(home) = home {
+        let home = PathBuf::from(home);
+        let downloads = home.join("Downloads");
+        if downloads.is_dir() {
+            return downloads;
+        }
+        if home.is_dir() {
+            return home;
+        }
+    }
+    PathBuf::from(".")
 }
 
 /// Call `f` for every readable file under `root`, depth first.
@@ -2417,29 +2457,45 @@ impl Editor {
         Ok(CommandOutcome::Continue)
     }
 
-    /// `:shot` — a picture of the page, drawn rather than taken (#189).
+    /// `:shot` — a picture of the page or of the screen (#189).
     ///
     /// The whole of the decision is made here, a frame early: which file, and
-    /// whether it keeps its colours. What is left is the cells, which only the
-    /// front end holds — so the answer is parked in `screenshot_request` and
+    /// what draws it. What is left is the cells, which only the front end
+    /// holds — so the answer is parked in `screenshot_request` and
     /// [`Editor::take_screenshot_request`] hands it over **after** the next
     /// frame is drawn, which is the one with no command line across it.
     ///
-    /// The name follows the document with `.shot` before the extension, so a
-    /// picture never collides with what `:export` would write and a directory
-    /// of chapters keeps its pictures beside them. `.txt` asks for the
-    /// plain-text picture; anything else is the coloured one.
+    /// **The word says which format**, not the extension: `:shot txt` is a
+    /// picture you can ask for without spelling out a path, and
+    /// `:shot html 給編輯.md` writes the coloured one under the name it was
+    /// given rather than silently changing what was asked for.
+    ///
+    /// A name that is not given is [`downloads_dir`] plus the document's own
+    /// stem and the second it was taken —
+    /// `驚蟄_20260906143012.png`. Two reasons, both from the writer
+    /// (2026-09-06): a picture is a thing you send someone and then forget, so
+    /// it has no business landing in the folder the manuscript lives in; and a
+    /// dated name never collides, which is a better answer than asking about
+    /// overwriting. The bang is kept for the name you spell out yourself,
+    /// where a collision is still possible and still yours.
     fn take_a_picture(
         &mut self,
         shot: crate::command::Shot,
         force: bool,
     ) -> Result<CommandOutcome, EditorError> {
-        let path = match shot {
+        let (how, path) = match shot {
             crate::command::Shot::Screen => {
+                // Nothing is written, so there is nothing for the bang to
+                // force — and a bang that quietly does nothing is how a person
+                // comes to believe it did something.
+                if force {
+                    self.status = say!("shot.the-bang-is-for-a-file");
+                    return Ok(CommandOutcome::Continue);
+                }
                 self.screenshot_request = Some(ShotJob::Screen);
                 return Ok(CommandOutcome::Continue);
             }
-            crate::command::Shot::Page(path) => path,
+            crate::command::Shot::File { how, path } => (how, path),
         };
         let target = match path {
             Some(path) => PathBuf::from(path),
@@ -2449,7 +2505,8 @@ impl Editor {
                         .file_stem()
                         .map(|s| s.to_string_lossy().into_owned())
                         .unwrap_or_default();
-                    source.with_file_name(format!("{stem}.shot.html"))
+                    let when = crate::clock::stamp();
+                    downloads_dir().join(format!("{stem}_{when}.{}", how.extension()))
                 }
                 None => return Err(EditorError::NoFileName),
             },
@@ -2457,10 +2514,14 @@ impl Editor {
         if self.refuse_to_overwrite(&target, force) {
             return Ok(CommandOutcome::Continue);
         }
-        let text = target
-            .extension()
-            .is_some_and(|e| e.eq_ignore_ascii_case("txt"));
-        self.screenshot_request = Some(ShotJob::Page { target, text });
+        self.screenshot_request = Some(match how {
+            crate::command::ShotFormat::Png => ShotJob::Png { target },
+            crate::command::ShotFormat::Html => ShotJob::Page {
+                target,
+                text: false,
+            },
+            crate::command::ShotFormat::Text => ShotJob::Page { target, text: true },
+        });
         Ok(CommandOutcome::Continue)
     }
 
@@ -19148,24 +19209,58 @@ mod tests {
         let mut ed = Editor::new();
         ed.execute(&format!(":open {}", path.display())).unwrap();
 
-        // Nothing is written here: the picture is of the frame that has not
-        // been drawn yet, so all `:shot` may do is say which file and how.
+        // **Bare `:shot` is the clipboard**, which is what a person who says
+        // 「截個圖」 means. It names no file, so no guard applies to it.
         ed.execute(":shot").unwrap();
-        assert_eq!(
-            ed.take_screenshot_request(),
-            Some(ShotJob::Page {
-                target: dir.join("chapter.shot.html"),
-                text: false,
-            })
-        );
+        assert_eq!(ed.take_screenshot_request(), Some(ShotJob::Screen));
         // …and taking it takes it: one `:shot`, one picture.
         assert_eq!(ed.take_screenshot_request(), None);
+        // `screen` says the same thing out loud.
+        ed.execute(":shot screen").unwrap();
+        assert_eq!(ed.take_screenshot_request(), Some(ShotJob::Screen));
 
-        // `.shot` before the extension, so it never collides with `:export`.
-        assert!(!dir.join("chapter.html").exists());
+        // Nothing is written here either: the picture is of the frame that has
+        // not been drawn yet, so all `:shot html` may do is say which file.
+        ed.execute(":shot html").unwrap();
+        let Some(ShotJob::Page { target, text }) = ed.take_screenshot_request() else {
+            panic!("no page parked: {}", ed.status());
+        };
+        assert!(!text, "html keeps its colours");
+        // Not beside the manuscript, and dated — so it never collides.
+        assert_eq!(target.parent(), Some(downloads_dir().as_path()));
+        let name = target.file_name().unwrap().to_string_lossy().into_owned();
+        let (stem, when) = name
+            .strip_suffix(".html")
+            .and_then(|n| n.rsplit_once('_'))
+            .unwrap_or_else(|| panic!("{name} is not 章_年月日時分秒.html"));
+        assert_eq!(stem, "chapter");
+        assert_eq!(when.len(), 14, "{name}");
+        assert!(when.chars().all(|c| c.is_ascii_digit()), "{name}");
+        assert!(!dir.join("chapter.shot.html").exists());
 
-        // The name decides whether the colours come with it.
-        ed.execute(":shot page.txt").unwrap();
+        // **The word says the format**, not the extension — this is the one
+        // that used to be reachable only by spelling out a path.
+        ed.execute(":shot txt").unwrap();
+        let Some(ShotJob::Page { target, text }) = ed.take_screenshot_request() else {
+            panic!("no page parked: {}", ed.status());
+        };
+        assert!(text, "txt drops them");
+        assert!(
+            target.to_string_lossy().ends_with(".txt"),
+            "{}",
+            target.display()
+        );
+
+        // `png` is the other picture entirely — the window, taken by the
+        // platform, but kept rather than pasted.
+        ed.execute(":shot png").unwrap();
+        let Some(ShotJob::Png { target }) = ed.take_screenshot_request() else {
+            panic!("no png parked: {}", ed.status());
+        };
+        assert_eq!(target.parent(), Some(downloads_dir().as_path()));
+
+        // A name given is a name kept, wherever it points.
+        ed.execute(":shot txt page.txt").unwrap();
         assert_eq!(
             ed.take_screenshot_request(),
             Some(ShotJob::Page {
@@ -19174,18 +19269,15 @@ mod tests {
             })
         );
 
-        // `screen` is the other picture entirely — the window, taken by the
-        // platform. It names no file, so no guard applies to it.
-        ed.execute(":shot screen").unwrap();
-        assert_eq!(ed.take_screenshot_request(), Some(ShotJob::Screen));
-
         // A scratch buffer has no name to derive one from, exactly as an
-        // export has not.
+        // export has not — but it may still photograph the screen.
         let mut scratch = Editor::new();
         assert!(matches!(
-            scratch.execute(":shot"),
+            scratch.execute(":shot html"),
             Err(EditorError::NoFileName)
         ));
+        scratch.execute(":shot").unwrap();
+        assert_eq!(scratch.take_screenshot_request(), Some(ShotJob::Screen));
 
         std::fs::remove_dir_all(&dir).ok();
     }
@@ -19196,20 +19288,23 @@ mod tests {
         std::fs::create_dir_all(&dir).unwrap();
         let path = dir.join("chapter.md");
         std::fs::write(&path, "永和九年。\n").unwrap();
-        let taken = dir.join("chapter.shot.html");
+        let taken = dir.join("已經有了.html");
         std::fs::write(&taken, "早就在這裏了\n").unwrap();
 
         let mut ed = Editor::new();
         ed.execute(&format!(":open {}", path.display())).unwrap();
 
-        // Already there: refused, and nothing is parked for the front end —
-        // otherwise the refusal would be printed and the file written anyway.
-        ed.execute(":shot").unwrap();
+        // A dated name cannot collide, so the guard is only ever reached by a
+        // name the writer spelled out. Already there: refused, and nothing is
+        // parked for the front end — otherwise the refusal would be printed
+        // and the file written anyway.
+        ed.execute(&format!(":shot html {}", taken.display())).unwrap();
         assert_eq!(ed.take_screenshot_request(), None);
-        assert!(ed.status().contains("chapter.shot.html"), "{}", ed.status());
+        assert!(ed.status().contains("已經有了.html"), "{}", ed.status());
 
         // The bang is the answer, the same one `:export!` takes.
-        ed.execute(":shot!").unwrap();
+        ed.execute(&format!(":shot! html {}", taken.display()))
+            .unwrap();
         assert_eq!(
             ed.take_screenshot_request(),
             Some(ShotJob::Page {
@@ -19220,8 +19315,16 @@ mod tests {
 
         // Never onto a file this editor is holding: the chapter itself is the
         // one a hurried `:shot!` would otherwise overwrite with a picture.
-        ed.execute(&format!(":shot! {}", path.display())).unwrap();
+        ed.execute(&format!(":shot! html {}", path.display()))
+            .unwrap();
         assert_eq!(ed.take_screenshot_request(), None);
+
+        // And the bang on the clipboard is refused rather than ignored —
+        // there is nothing there to overwrite, and a `!` that does nothing is
+        // how a person comes to believe it did something.
+        ed.execute(":shot!").unwrap();
+        assert_eq!(ed.take_screenshot_request(), None);
+        assert!(ed.status().contains('!'), "{}", ed.status());
 
         std::fs::remove_dir_all(&dir).ok();
     }

@@ -399,7 +399,7 @@ index, and a row with no number anywhere else is a row that got lost.
 | 186 | **The detail panel shows every column**     | tui    | P2    | including the empty ones (an empty field is a finding in a 拆分表), each with its column number | Done |
 | 187 | **The detail panel is a panel**             | both   | P2    | close it, edit a value in it, change its width — it is the only surface here that can do none of those | Done |
 | 188 | **The hint row wraps**                      | tui    | P3    | more keys than a row holds; never between a key and what it does | Done |
-| 189 | **`:shot` takes the page, not the app**     | tui    | P2    | needs the window's origin *and* the display scale, neither of which the editor can get reliably. **Done** by not taking a picture at all: `:shot` now *draws* the frame the way `--shot` does and writes it as a self-contained coloured HTML file (`.txt` for the plain-text one), so the page is all there is by construction — no chrome, no scale, and it works over ssh. The editor picks the name (`第一章.shot.html`, `.shot` so it never collides with `:export`) and keeps `:export`'s two guards a frame *early*; the front end holds the cells, so it writes after the next draw — the frame with no command line across it. `:shot screen` keeps the old shell line for reports that are about the terminal | Done |
+| 189 | **`:shot` takes the page, not the app**     | tui    | P2    | needs the window's origin *and* the display scale, neither of which the editor can get reliably. **Done** by not taking a picture at all: `:shot html` *draws* the frame the way `--shot` does and writes it as a self-contained coloured HTML file (`txt` for the plain-text one), so the page is all there is by construction — no chrome, no scale, and it works over ssh. The front end holds the cells, so it writes after the next draw — the frame with no command line across it. **Four words** (2026-09-06): `screen` (the default, window → clipboard), `png` (window → file), `html`, `txt`. A file nobody named is `第一章_20260906143012.html` in the downloads folder — dated so it cannot collide, and away from the manuscript; the bang guards a name spelled out by hand | Done |
 | 190 | **One rule for folding a blank line**       | core   | P1    | 竪排 folds with the indent off and opens one *with* it on — two behaviours that read as contradictory | Done |
 | 191 | **A stored position names its buffer**      | core   | P0    | the hit list held `n`, survived a buffer switch and an edit, and said 「第 3/78 處」 about a character that matched nothing — `d` then deleted it | Done |
 | 192 | **The preview server is a running thing**   | tui    | P1    | `:preview` on a `.typ` starts `tinymist preview` and says the address once; ask again and the address is gone, and a session that ends badly leaves the server holding a port and its memory. The address should be gettable (`:preview` while one runs), visible (a mark in the status bar), and killable on purpose and after a crash | Done |
@@ -2351,7 +2351,44 @@ writing down rather than rediscovering:
   **Done on 2026-09-05, by dropping the crop rather than solving it.** The
   renderer already produces the frame cell by cell for `--shot`; writing *that*
   out is the page and nothing else — there is no window to find the origin of
-  and no device pixels to scale. `:shot` draws, `:shot screen` still takes.
+  and no device pixels to scale.
+
+  **Reopened and settled on 2026-09-06**, because making the drawn page the
+  *bare* `:shot` was the wrong default. What a person means by 「截個圖」 is a
+  picture they can paste; the drawn page is the specialist, and the specialist
+  is the one that should have to be named. So the first word now says what the
+  picture is and where it ends up, and there are four:
+
+  | | |
+  | --- | --- |
+  | `:shot`, `:shot screen` | the window, onto the clipboard |
+  | `:shot png` | the window, into a file |
+  | `:shot html` | the page, drawn, with its colours |
+  | `:shot txt` | the page, drawn, without them |
+
+  Three things changed with it, each from the writer using it:
+
+  - **The format is the word, not the extension.** `.txt` used to be sniffed
+    off a name that had to be spelled out, so the plain-text picture could not
+    be asked for at all without one — and the argument stayed a free string,
+    which is why `:shot ` opened an *empty* command panel. Four `Word`s fill it.
+  - **The default name is dated and goes to the downloads folder** —
+    `第一章_20260906143012.png`, not `第一章.shot.html` beside the manuscript.
+    A picture is made to be sent and then forgotten; a chapter folder that
+    fills with them is a folder somebody has to tidy, and a dated name is a
+    better answer to a collision than a question about overwriting. The bang is
+    kept for the name spelled out by hand, where a collision is still possible
+    and still the writer's. `crate::clock::stamp()` is the fourteen digits, in
+    **local** time (`localtime_r` / `GetLocalTime`), because the name is read
+    by a person looking through a folder.
+  - **`png` reuses the one config line.** `[editor] screenshot` is where the
+    window is found and cropped to, and a second line would be that same
+    `osascript` with a different tail, kept in step by hand. The destination
+    goes in the environment as `$YUMETE_SHOT`, which the shipped line spends as
+    `"${YUMETE_SHOT:--c}"` — a path when there is one, `screencapture`'s own
+    clipboard flag when there is not. A line written before `:shot png` existed
+    ignores the variable, so the file is looked for afterwards and its absence
+    is said out loud.
 
 ### 14 · `:tutor` — a lesson you learn by editing
 

@@ -428,7 +428,10 @@ pub fn run(
         // command line across it.
         if let Some(job) = editor.take_screenshot_request() {
             let said = match job {
-                ShotJob::Screen => hand_the_screen_over(config),
+                ShotJob::Screen => photograph_the_screen(config, None),
+                // Not the frame: the same program `:shot` uses, told where to
+                // put the picture instead of filling the clipboard.
+                ShotJob::Png { target } => photograph_the_screen(config, Some(&target)),
                 // **The buffer that was just drawn**, not one drawn again: a
                 // second render would be of the state *after* this frame, and
                 // the whole point of waiting a frame is that this is the one
@@ -1181,23 +1184,42 @@ fn set_theme(
     say!("theme.set", crate::theme::name(config), mood)
 }
 
-/// Put a picture of the screen on the clipboard (`:shot screen`).
+/// Photograph the screen — onto the clipboard (`:shot`), or into `dest`
+/// (`:shot png`).
 ///
 /// The window system's job, so it is a shell line in the config rather than
 /// something built in here — and it is run **without** giving up the terminal,
 /// because handing the screen over is exactly what would spoil the picture.
 ///
 /// This photographs the **window**: its title bar, its tab strip and whatever
-/// is in front of it. `:shot` on its own draws the page instead (#189), which
-/// is the one a review or a bug report usually wants; this is kept for the
-/// reports that are about the terminal rather than about the page.
-fn hand_the_screen_over(config: &Config) -> String {
+/// is in front of it. `:shot html` draws the page instead (#189), which is the
+/// one a review or a bug report about the *text* wants.
+///
+/// **One config line does both**, because they are one decision — where the
+/// window is and how to crop to it — and a second line would be the same
+/// `osascript` with a different tail, kept in step by hand. Where the picture
+/// goes is passed in the environment as `$YUMETE_SHOT`, which the shipped line
+/// spends as `"${YUMETE_SHOT:--c}"`: a path when there is one, and
+/// `screencapture`'s own 「onto the clipboard」 flag when there is not. A line
+/// somebody wrote themselves before `:shot png` existed does not know that
+/// name, so the file is looked for afterwards and its absence is said out
+/// loud rather than reported as a picture that was never written.
+fn photograph_the_screen(config: &Config, dest: Option<&std::path::Path>) -> String {
     let line = config.editor.screenshot.trim();
     if line.is_empty() {
         return say!("ui.no-screenshot-command");
     }
-    match shell_command(line).status() {
-        Ok(status) if status.success() => say!("ui.screenshot-taken"),
+    let mut command = shell_command(line);
+    match dest {
+        Some(path) => command.env("YUMETE_SHOT", path),
+        None => command.env_remove("YUMETE_SHOT"),
+    };
+    match command.status() {
+        Ok(status) if status.success() => match dest {
+            None => say!("ui.screenshot-taken"),
+            Some(path) if path.exists() => say!("ui.shot-photographed", path.display()),
+            Some(_) => say!("ui.shot-kept-the-clipboard"),
+        },
         Ok(status) => say!("ui.screenshot-failed", status),
         Err(err) => say!("ui.screenshot-failed", err),
     }

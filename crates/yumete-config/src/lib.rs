@@ -74,14 +74,20 @@ pub struct EditorConfig {
     /// Off, and the same in both layouts: 縱書 painted its number band and
     /// 橫排 did not, which is one editor with two answers to one question.
     pub line_number_fill: bool,
-    /// The shell line `:shot` runs to put a picture of the screen on the
-    /// clipboard.
+    /// The shell line `:shot` runs to photograph the screen.
     ///
     /// A command rather than a built-in: what「截圖」 means is the window
     /// system's business, not the editor's, and every desktop answers it
     /// differently (`screencapture` on macOS, `grim` on Wayland, `import` on
     /// X11). The default is macOS's, and it takes the *frontmost window* —
     /// which, while the editor is running, is the terminal it is running in.
+    ///
+    /// **`$YUMETE_SHOT` says where the picture goes.** `:shot` leaves it
+    /// unset and wants the clipboard; `:shot png` sets it to a path and wants
+    /// a file. One line answers both because they differ only in that tail —
+    /// the shipped one spends it as `"${YUMETE_SHOT:--c}"`. A line written
+    /// before `:shot png` existed still works for the clipboard, and `:shot
+    /// png` says plainly that it did not write the file.
     pub screenshot: String,
     /// What is drawn in a paragraph's opening squares: `"none"` (default),
     /// `"color"`, `"symbol"`.
@@ -251,7 +257,7 @@ impl Default for EditorConfig {
             wheel_step: 3,
             line_number_fill: false,
             screenshot: match cfg!(target_os = "macos") {
-                true => "b=$(osascript -e 'tell application \"System Events\" to tell                      (first application process whose frontmost is true) to get                      {position, size} of front window' | tr -d ' ') &&                      screencapture -x -o -c -R\"$b\""
+                true => "b=$(osascript -e 'tell application \"System Events\" to tell                      (first application process whose frontmost is true) to get                      {position, size} of front window' | tr -d ' ') &&                      screencapture -x -o -R\"$b\" \"${YUMETE_SHOT:--c}\""
                     .to_string(),
                 false => String::new(),
             },
