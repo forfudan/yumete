@@ -28,6 +28,7 @@ pub mod markdown;
 pub mod lookfor;
 pub mod messages;
 pub mod mdtable;
+pub mod meter;
 pub mod motion;
 pub mod picker;
 pub mod progress;

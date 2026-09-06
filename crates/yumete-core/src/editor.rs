@@ -31,6 +31,9 @@ use crate::zong::{self, Grid, Layout, DEFAULT_ZONG_LENGTH};
 /// A paragraph's word ranges, kept against a hash of the paragraph's text.
 type SegmentCache = HashMap<usize, (u64, Vec<(usize, usize)>)>;
 
+/// A paragraph's 平仄, kept the same way and for the same reason (Feature #247).
+type MeterCache = HashMap<usize, (u64, Vec<crate::meter::Mark>)>;
+
 /// The other work area: a buffer, a place in it, and what to look at there.
 ///
 /// **The editor has one cursor** (Feature #176). A split does not give it a
@@ -1124,6 +1127,12 @@ pub struct Editor {
     paper: crate::export::Paper,
     /// Word ranges already worked out, per line, against a hash of that line.
     segment_cache: RefCell<SegmentCache>,
+    /// 平仄 in the margin (Feature #247), and the answers already worked out.
+    ///
+    /// A drawing setting, like [`Self::focus`]: it changes what is in the
+    /// margin beside the writing and never what the writing is.
+    meter: bool,
+    meter_cache: RefCell<MeterCache>,
     /// Which lines are folded away, against the buffer they were worked out
     /// for. One pass over the file per edit — the answer is not line-local (a
     /// blank line inside a fence is code, not a paragraph break), and asking
@@ -1447,6 +1456,8 @@ impl Editor {
             hanging: false,
             paper: crate::export::Paper::A5,
             segment_cache: RefCell::new(SegmentCache::new()),
+            meter: false,
+            meter_cache: RefCell::new(MeterCache::new()),
             fold_cache: RefCell::new(None),
             markup_cache: RefCell::new(HashMap::new()),
             block_cache: RefCell::new(None),
@@ -2789,6 +2800,47 @@ impl Editor {
         crate::ruby::groups(&chars, dialects)
     }
 
+    /// The 平仄 of `line`, for the margin (Feature #247).
+    ///
+    /// Empty unless `:meter` is on **and** a reader is installed: without the
+    /// 拆分表 there are no tones to read, and a margin of guesses beside a poem
+    /// is worse than an empty one.
+    ///
+    /// The segmenter's own ranges, not [`Self::segment_line`]'s: that one hands
+    /// back only the words a reader cannot already see the edges of, which is
+    /// right for the overlay and wrong here — 「春眠」 on a line of its own is
+    /// bounded on both sides and still has two tones. The answers are cached
+    /// against a hash of the line, the way the overlay's are: a page is asked
+    /// for every visible paragraph every frame, and a reading costs a walk
+    /// through the 拆分表 per character.
+    pub fn meter_on_line(&self, line: usize) -> Vec<crate::meter::Mark> {
+        if !self.meter || !self.reader.available() {
+            return Vec::new();
+        }
+        let rope = self.current_buffer().rope();
+        if line >= rope.len_lines() {
+            return Vec::new();
+        }
+        let chars = crate::zong::line_chars(rope, line);
+        let text: String = chars.iter().collect();
+        let mut hasher = DefaultHasher::new();
+        text.hash(&mut hasher);
+        let hash = hasher.finish();
+        let mut cache = self.meter_cache.borrow_mut();
+        if let Some((cached, marks)) = cache.get(&line) {
+            if *cached == hash {
+                return marks.clone();
+            }
+        }
+        let words = self.segmenter.segment(&text);
+        let marks = crate::meter::marks(&chars, &words, &|word| self.reader.read(word));
+        if cache.len() >= SEGMENT_CACHE_LIMIT {
+            cache.clear();
+        }
+        cache.insert(line, (hash, marks.clone()));
+        marks
+    }
+
     /// The part of `line` the selection covers, as columns within it, or `None`
     /// when the selection is elsewhere.
     ///
@@ -3730,6 +3782,19 @@ impl Editor {
                 self.status = match self.focus {
                     true => say!("layout.focus-on"),
                     false => say!("layout.focus-off"),
+                };
+                Ok(CommandOutcome::Continue)
+            }
+            Command::SetMeter(want) => {
+                self.meter = want.unwrap_or(!self.meter);
+                self.status = match (self.meter, self.reader.available()) {
+                    // 平仄 come out of the 拆分表, and an editor without one
+                    // would turn the mode on and draw an empty margin. Say
+                    // which of the two it is, rather than letting the writer
+                    // conclude their poem has no tones in it.
+                    (true, false) => say!("layout.meter-no-readings"),
+                    (true, true) => say!("layout.meter-on"),
+                    (false, _) => say!("layout.meter-off"),
                 };
                 Ok(CommandOutcome::Continue)
             }
@@ -8032,6 +8097,11 @@ impl Editor {
         self.focus
     }
 
+    /// Whether the 平仄 are drawn in the margin (Feature #247).
+    pub fn meter(&self) -> bool {
+        self.meter
+    }
+
     /// Whether the cursor's row is kept in the middle of the page.
     pub fn typewriter(&self) -> bool {
         self.typewriter
@@ -11361,6 +11431,10 @@ impl Editor {
     /// editor never opens.
     pub fn set_reader(&mut self, reader: Box<dyn Reader>) {
         self.reader = reader;
+        // The 平仄 in the margin were read off the reader that has just been
+        // replaced, and nothing about the *text* changed — so the hash they are
+        // kept against would say they are still good.
+        self.meter_cache.borrow_mut().clear();
     }
 
     /// Everything `:word` asks — see [`crate::command::WordCommand`].

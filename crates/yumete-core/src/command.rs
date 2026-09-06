@@ -163,6 +163,8 @@ pub enum Command {
     SetTypewriter(Option<bool>),
     /// `:focus [on|off]` — everything but the 段 being written stands back.
     SetFocus(Option<bool>),
+    /// `:meter [on|off]` — 平仄 and 韻腳 in the margin.
+    SetMeter(Option<bool>),
     /// `:table numbers on|off` — the row of column numbers above the header.
     SetTableNumbers(bool),
     /// `:table header [on|off]` — whether the grid's first row names the
@@ -902,6 +904,15 @@ pub fn parse(input: &str) -> Result<Command, CommandError> {
             "toggle" => Ok(Command::SetFocus(None)),
             other => Err(CommandError::InvalidArgument {
                 command: "focus",
+                value: other.to_string(),
+            }),
+        },
+        "meter" => match rest {
+            "" | "on" => Ok(Command::SetMeter(Some(true))),
+            "off" => Ok(Command::SetMeter(Some(false))),
+            "toggle" => Ok(Command::SetMeter(None)),
+            other => Err(CommandError::InvalidArgument {
+                command: "meter",
                 value: other.to_string(),
             }),
         },
@@ -2907,6 +2918,13 @@ pub const COMMANDS: &[Entry] = &[
         name: "focus",
         aliases: &[],
         help: "cmd.commands.focus",
+        needs: &[],
+        args: Args::Words(ON_OFF),
+    },
+    Entry {
+        name: "meter",
+        aliases: &[],
+        help: "cmd.commands.meter",
         needs: &[],
         args: Args::Words(ON_OFF),
     },
