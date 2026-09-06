@@ -58,9 +58,15 @@ pub enum Command {
     /// `:write [path]` (alias `:w`) — save the current buffer, optionally to a
     /// new path (save-as). `None` saves to the buffer's bound file.
     Write(Option<String>),
-    /// `:quit` (alias `:q`) or `:quit!` / `:q!` — leave the editor. `force`
-    /// skips the unsaved-changes check.
+    /// `:quit` (alias `:q`) or `:quit!` / `:q!` — close **this file**, and
+    /// leave the editor only when it was the last one open. Vim's rule and
+    /// helix's. `force` skips the unsaved-changes check.
     Quit {
+        force: bool,
+    },
+    /// `:quitall` (alias `:qa`) or `:quitall!` / `:qa!` — leave, however many
+    /// files are open.
+    QuitAll {
         force: bool,
     },
     /// `:wq [path]` / `:x` — save (optionally to a new path), then leave.
@@ -548,8 +554,17 @@ pub fn parse(input: &str) -> Result<Command, CommandError> {
             .map_err(|_| CommandError::MissingArgument("goto")),
         "recover" => Ok(Command::Recover { discard: false }),
         "recover!" => Ok(Command::Recover { discard: true }),
+        // Closing *this file* rather than the editor, spelled the way helix
+        // spells it (`:bc`, `:bclose`) — see the note on [`Command::Quit`].
+        // Not `:Q`: one Shift away from `:q` and meaning something else is
+        // exactly where a hand slips, and every other command here is
+        // lowercase.
+        "bclose" | "bc" => Ok(Command::CloseBuffer { force: false }),
+        "bclose!" | "bc!" => Ok(Command::CloseBuffer { force: true }),
         "quit" | "q" => Ok(Command::Quit { force: false }),
         "quit!" | "q!" => Ok(Command::Quit { force: true }),
+        "quitall" | "qa" => Ok(Command::QuitAll { force: false }),
+        "quitall!" | "qa!" => Ok(Command::QuitAll { force: true }),
         "undo" | "u" => Ok(Command::Undo),
         "redo" | "red" => Ok(Command::Redo),
         // 分詞邊界, from four sides — see [`Word`]. `:segment` and `:words`
@@ -1482,9 +1497,11 @@ fn resolve(word: &str) -> &str {
         });
         if let (Some(only), None) = (banged.next(), banged.next()) {
             return match only {
+                "bclose" => "bclose!",
                 "write" => "write!",
                 "reload" => "reload!",
                 "quit" => "quit!",
+                "quitall" => "quitall!",
                 "export" => "export!",
                 "saveas" => "saveas!",
                 "replace" => "replace!",
@@ -1503,6 +1520,8 @@ fn resolve(word: &str) -> &str {
 
 /// The commands that take a `!`, so a prefix of one can too.
 const FORCEABLE: &[&str] = &[
+    "bclose",
+    "quitall",
     "write",
     "reload",
     "quit",
@@ -2630,6 +2649,13 @@ pub const COMMANDS: &[Entry] = &[
         args: Args::None,
     },
     Entry {
+        name: "quitall",
+        aliases: &["qa"],
+        help: "cmd.commands.quitall",
+        needs: &[],
+        args: Args::None,
+    },
+    Entry {
         name: "undo",
         aliases: &["u"],
         help: "cmd.commands.undo",
@@ -2830,6 +2856,13 @@ pub const COMMANDS: &[Entry] = &[
         help: "cmd.commands.buffer",
         needs: &[],
         args: Args::Words(BUFFERS),
+    },
+    Entry {
+        name: "bclose",
+        aliases: &["bc"],
+        help: "cmd.commands.bclose",
+        needs: &[],
+        args: Args::None,
     },
     Entry {
         name: "format",

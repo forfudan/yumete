@@ -2430,7 +2430,17 @@ fn draw_list(
         // disappears. Half the window is where the floor stops.
         let share = (area.height / MENU_SHARE) as usize;
         let half = ((area.height / 2) as usize).saturating_sub(3); // footer, rings
-        let tall = share.max(MENU_ROWS).min(half).max(1);
+        let mut tall = share.max(MENU_ROWS).min(half).max(1);
+        // The share is where a list is *laid out*, not where it is cut off.
+        // A list a row or two too long for it, on a window with no room for
+        // another column, is better one row deeper than scrolled — but only
+        // when that row is the last one it needs: growing a menu that will
+        // scroll anyway costs the page behind it and buys nothing. Half the
+        // window is still the ceiling, whatever the reason for growing.
+        let whole = items.len() <= half.saturating_mul(wide);
+        if whole && items.len() > tall.saturating_mul(wide) {
+            tall = items.len().div_ceil(wide).clamp(tall, half.max(tall));
+        }
         let across = items.len().div_ceil(tall).clamp(1, wide);
         (across, items.len().div_ceil(across).clamp(1, tall))
     } else {
@@ -9012,9 +9022,12 @@ mod tests {
 
         // The list runs *down* first and then across, like a list of files:
         // more than one column, and no taller than a menu is allowed to be on
-        // a window this short.
+        // a window this short — half of it, footer and rings included.
         let (rows, columns) = menu_shape(&buffer);
-        assert!(rows.len() <= 8, "a menu is glanced at, not read: {rows:?}");
+        assert!(
+            rows.len() <= 24 / 2 - 3,
+            "a menu is glanced at, not read: {rows:?}"
+        );
         assert!(columns.len() >= 3, "several columns: {columns:?}");
         // Wide enough that the whole list fits without scrolling — which is
         // the point of the columns.
