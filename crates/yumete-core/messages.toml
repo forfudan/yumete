@@ -680,6 +680,14 @@ en = "the keys and the commands, opened as a file you can read and search"
 find = "幫助 帮助 說明 说明 手冊 手册 keys manual"
 
 [[message]]
+# : 命令選單裏 hud 那一項的說明（commands 組）
+key = "cmd.commands.hud"
+zht = "光標旁邊那個小牌子：不畫、藥丸、帶框的面板"
+zhs = "光标旁边那个小牌子：不画、药丸、带框的面板"
+en = "the little sign beside the caret: nothing, a pill, a bordered panel"
+find = "提示 光標 光标 面板 藥丸 药丸 hud"
+
+[[message]]
 # : 命令選單裏 indent 那一項的說明（commands 組）
 key = "cmd.commands.indent"
 zht = "首行縮進：`off`／`basic`（縮進，空行留着）／`full`（連段間空行一起收），或幾格"
@@ -1169,6 +1177,27 @@ zht = "第一格畫一個記號（默認 ↵，它替掉的正是一個換行）
 zhs = "第一格画一个记号（默认 ↵，它替掉的正是一个换行）"
 en = "a mark in the first one (↵ by default — a line break is what it replaced)"
 find = "記號 记号 換行符 换行符 symbol"
+
+[[message]]
+# : 命令選單裏 basic 那一項的說明（hud 組）
+key = "cmd.hud.basic"
+zht = "藥丸：貼着光標找空白處，一個字都不蓋"
+zhs = "药丸：贴着光标找空白处，一个字都不盖"
+en = "a pill in the nearest margin — not one character hidden"
+
+[[message]]
+# : 命令選單裏 full 那一項的說明（hud 組）
+key = "cmd.hud.full"
+zht = "面板：位置固定在光標底下，會蓋住正文"
+zhs = "面板：位置固定在光标底下，会盖住正文"
+en = "a bordered panel pinned under the caret — it covers the writing"
+
+[[message]]
+# : 命令選單裏 off 那一項的說明（hud 組）
+key = "cmd.hud.off"
+zht = "光標旁邊不畫；狀態行右端還是照說"
+zhs = "光标旁边不画；状态行右端还是照说"
+en = "nothing beside the caret; the status line still says it"
 
 [[message]]
 # : 命令選單裏 basic 那一項的說明（indent 組）
@@ -4152,6 +4181,30 @@ key = "hint.word-elsewhere"
 zht = "這個詞還在哪裏"
 zhs = "这个词还在哪里"
 en = "where else this word is"
+
+
+# ── hud ───────────────────────────────────────────────────────────────
+
+[[message]]
+# :hud basic（出廠）——也是 :hud 不帶參數時的回答
+key = "hud.basic"
+zht = "光標提示：藥丸——找空白處，不蓋字"
+zhs = "光标提示：药丸——找空白处，不盖字"
+en = "caret sign: a pill — it takes margin, never writing"
+
+[[message]]
+# :hud full——也是 :hud 不帶參數時的回答
+key = "hud.full"
+zht = "光標提示：面板——位置固定，會蓋住正文"
+zhs = "光标提示：面板——位置固定，会盖住正文"
+en = "caret sign: a panel — pinned, and it covers the writing"
+
+[[message]]
+# :hud off——也是 :hud 不帶參數時的回答
+key = "hud.off"
+zht = "光標提示：關——只剩狀態行右端那一處"
+zhs = "光标提示：关——只剩状态行右端那一处"
+en = "caret sign: off — only the status line's right edge is left"
 
 
 # ── ime ───────────────────────────────────────────────────────────────

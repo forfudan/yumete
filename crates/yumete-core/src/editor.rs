@@ -426,6 +426,56 @@ pub enum Render {
     Full,
 }
 
+/// How the editor says, beside the caret, what you have typed (#284).
+///
+/// **Not a fifth dimension of [`Render`].** `:render` writes the levels of the
+/// four things that decide how the *file* is drawn; this one is how the editor
+/// talks about *itself*, and a reader who turns the markup off has said
+/// nothing about whether the count in front of `d` should be visible. So
+/// `:render` never writes it, and `render.is` keeps its four fields.
+///
+/// The three names are the shared ones, and the factory level is `Basic` for
+/// §5.7's reason: the level a window opens at must be identical to `Off` in
+/// the worst case, and 醒目 is bought with style rather than with hiding.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Hud {
+    /// Nothing beside the caret. The status line's right edge still says it —
+    /// that is #193's floor, and no level takes it away.
+    Off,
+    /// A 藥丸 in the nearest margin: gold on the band, one row high, and
+    /// **not one character of the manuscript hidden**. Where it lands is
+    /// scored against the caret (#269), so it moves as the page fills.
+    #[default]
+    Basic,
+    /// A bordered panel, pinned under the caret, over whatever is there.
+    ///
+    /// The frame and the covering are one decision, not two: a panel wants a
+    /// rectangle that a page of prose does not have, so a frame forces
+    /// covering — and once the mark sits on the same paper as the writing,
+    /// the frame is the only thing saying which characters are not yours.
+    Full,
+}
+
+/// What `:hud` says about a level, whether it was just set or only asked.
+fn hud_says(how: Hud) -> String {
+    match how {
+        Hud::Off => say!("hud.off"),
+        Hud::Basic => say!("hud.basic"),
+        Hud::Full => say!("hud.full"),
+    }
+}
+
+impl Hud {
+    /// The name it is written with, on the command line and in a report.
+    pub fn tag(self) -> &'static str {
+        match self {
+            Hud::Off => "off",
+            Hud::Basic => "basic",
+            Hud::Full => "full",
+        }
+    }
+}
+
 /// One line of a register's contents, for a list to show.
 ///
 /// A yank is often a paragraph and sometimes a chapter; what tells two of them
@@ -1089,6 +1139,9 @@ pub struct Editor {
     /// Whether the segmentation overlay (word background tint) is shown.
     show_segmentation: bool,
     word_mark: yumete_cjk::WordMark,
+    /// How loudly the editor says what you have typed, beside the caret
+    /// (Feature #284).
+    hud: Hud,
     /// How readily characters join into words (`:word level`), kept so a
     /// segmenter installed later arrives at the level the reader chose.
     word_level: yumete_cjk::WordLevel,
@@ -1646,6 +1699,7 @@ impl Editor {
             project_words: std::rc::Rc::new(RefCell::new(yumete_cjk::WordList::default())),
             show_segmentation: false,
             word_mark: yumete_cjk::WordMark::default(),
+            hud: Hud::default(),
             word_level: yumete_cjk::WordLevel::default(),
             words_request: false,
             table_rules: crate::table::Rules::default(),
@@ -4508,6 +4562,18 @@ impl Editor {
                     word(self.table_level),
                     word(level(self.ruby_level()))
                 );
+                Ok(CommandOutcome::Continue)
+            }
+            // `:hud` sets and reports with the same three sentences: what the
+            // level *is* and what it was just changed to are the same fact,
+            // and two wordings of it would be two things to keep true.
+            Command::SetHud(how) => {
+                self.hud = how;
+                self.status = hud_says(how);
+                Ok(CommandOutcome::Continue)
+            }
+            Command::ReportHud => {
+                self.status = hud_says(self.hud);
                 Ok(CommandOutcome::Continue)
             }
             // A measure is only a measure if the rows honour it, so setting
@@ -13131,6 +13197,17 @@ impl Editor {
     /// that it is `:word show tint|ink`.
     pub fn set_word_mark(&mut self, mark: yumete_cjk::WordMark) {
         self.word_mark = mark;
+    }
+
+    /// How loudly the editor draws what you have typed, beside the caret.
+    pub fn hud(&self) -> Hud {
+        self.hud
+    }
+
+    /// Say how loudly. `:hud off|basic|full`, and nothing else writes it —
+    /// least of all `:render`, which is about the file (#284).
+    pub fn set_hud(&mut self, how: Hud) {
+        self.hud = how;
     }
 
     /// Toggle the segmentation overlay, returning the new state.
