@@ -416,7 +416,7 @@ index, and a row with no number anywhere else is a row that got lost.
 | 203 | **Ten themes, and an ASCII name for each** | config | P2 | 藍曬 琥珀 莫高 莫蘭迪 夜螢 明度階 陶窯 靛橘 beside 墨香 and 黑白. A command may not be typed in Chinese, so the name is English (`ink`, `bw`, `cyan`…), the pinyin is the alias (`moxiang`, `heibai`), and the 中文名 lives in the comment. Each is exactly 8 hexes — ink and paper per mood, plus 金 and 朱 | Done |
 | 204 | **`--shot --html`** | cli | P2 | the same frame with its colours, for a review that has to *see* the theme. The shot settles the mood first, or every picture is the light one | Done |
 | 205 | **A sidebar you can page through** | tui | P2 | `J`/`K` by 12, `g`/`G` to the ends. And an outline that leaves the 目錄 out: a heading with fewer than three non-blank lines under it, or a duplicate of the one before it, is a table-of-contents line, not a chapter — 資治通鑑 862 → 295, 紅樓夢 240 → 121 | Done |
-| 206 | **`t` is the table group in every mode** | core | P1 | in source mode `t` used to be 「till the next letter」, which on Chinese prose is a key that does nothing worth a key. Now `t t` enters the grid, `t q` leaves it, `t f` aligns, `t ]` / `t [` walk to the next table. `f`/`F` stay; till retires outright | Done |
+| 206 | **`t` is the table group in every mode** | core | P1 | in source mode `t` used to be 「till the next letter」, which on Chinese prose is a key that does nothing worth a key. Now `t t` enters the grid, `t q` leaves it, `t F` aligns, `t ]` / `t [` walk to the next table. `f`/`F` stay; till retires outright | Done |
 | 207 | **The HUD takes whichever row has room** | tui | P2 | beside the caret means the row below it, unless the caret is on the last row — then the row above, the way the command panel already chooses | Done |
 | 208 | **A word boundary is not a highlighter** | tui | P1 | both were 朱, 78% and 91% washed — 1.23:1 apart, which is to say indistinguishable. The word tint is a neutral rung (WORD 962) and `==highlight==` is 金 washed to a contrast target. The quiet end of the ladder was re-spaced with it: SELECTION 700, HEAD 815, chosen by search so 莫蘭迪 still keeps 4.5:1 text on a selection | Done |
 | 209 | **`:yume commit delayed\|unique\|fluency`** | ime | P2 | the three are yume's own (延遲/頂字, 唯一, 整句), merged in yume's own core as the **user layer** of `CommitOverrides`, so what is chosen here means the same in the input method's panel everywhere else. `auto` is 唯一 under the name the habit uses. It survives a scheme switch (it is the writer's, not the scheme's) and never overrules 拼音, which has no 碼表 to look a segment up in and says so. `[ime] commit` is the same setting; `:yume` says which one is answering. `:yume c` is now ambiguous — `ch` / `co` | Done |
@@ -482,7 +482,7 @@ index, and a row with no number anywhere else is a row that got lost.
 | 269 | **The HUD went to the first row that fitted, not the nearest** | tui | P2 | the author, 2026-09-05, with two screenshots: on an empty line the typing HUD landed at the far end of the *next* line — half a screen from the caret — and once the sentence grew long enough to crowd that line out, it moved above the caret and was suddenly closer. The rule was 「below, else above, first that fits」, which asks whether a row has room and never asks how far away the room is. It now scores candidates — the caret's own row first, then one below, one above, two below, two above — by `\|Δcolumn\| + 8·\|Δrow\|`, and takes the best. The corner glyph follows the row it ended on (`─` beside, `╰` below, `╭` above). `after_the_writing` is unchanged: the HUD still never paints over writing. **small** | Done |
 | 270 | **A table has no ground of its own** | tui | P3 | the author, 2026-09-05: 「能不能將 markdown 中合法的表格渲染一個背景顏色，就像代碼塊、vitepress 塊一樣，有個背景底色。這樣一看就知道這裏有個表格。」 The block grounds were already there — `block_style` washes a quote, a fence and a `:::` container with the same `BAND` rung, and `Block::Table` was the one block in the list that returned `None`, so a table on the page looked like prose that happened to have `\|` in it. It is now banded like the other three, which is also the answer to 「哪幾行屬於這張表」 that the `t ]` walk gives by keystroke. The cell tint (#212, #229) is patched *onto* that ground rather than replacing it, so a table read as a grid keeps both. **small** | Done |
 | 271 | **The system input method typed nothing but spaces** | tui | P1 | the author, 2026-09-05: 「系統的輸入法（不是內置的 yume）無法在 insert 模式打字，上屏後都是空格（這個空格應該是上屏鍵的那個空格）。」 `REPORT_ALL_KEYS_AS_ESCAPE_CODES` was among the Kitty-protocol flags pushed at startup. With it on, a text key stops being sent as text and arrives as `CSI <key> ; <mods> ; <text> u` — and crossterm 0.28 parses that third parameter and throws it away (`REPORT_ASSOCIATED_TEXT` is a commented-out line in its `event.rs`). For an ASCII key that costs nothing, the key being the text; for macOS's own IME it costs the whole sentence, which commits with the space bar and therefore arrives as a row of `Char(' ')`. The flag is gone; the three left are what the Shift tap needs — a bare modifier reported at all, and its release told apart from its press. **The 內置 IME never saw this** because it reads the ASCII keys itself, which is why it went unnoticed for as long as it did. **small** | Done |
-| 272 | **The `t` menu listed a key that had moved and never the way in** | core | P2 | the author, 2026-09-05: 「tt 依舊是格式化表格而不是跳轉表格視圖，也沒有 tf 格式化表格的選項。」 Two faults in the same twelve lines, both of them the menu rather than the keys. **One**: the `\|`-table list still offered `t` for 「對齊」, which `1ffde52` had made the way *into* a table three days earlier — so the menu said `t t` formats and the code says it enters. **Two**: which list to draw was decided by `md_region().is_none()`, and that is `None` for a Markdown table nobody has opened yet — so standing in one of 手冊's own tables offered the delimited file's keys, none of which are the ones that get you in. `t` is a group in **every** mode (#206), so most presses of it come from outside a table: `t q` and `] [` now head every list and are the whole of it when there is no table under the cursor, the list is chosen by `bounds` rather than by mode, and 對齊 is offered as `f`. **small** | Done |
+| 272 | **The `t` menu listed a key that had moved and never the way in** | core | P2 | the author, 2026-09-05: 「tt 依舊是格式化表格而不是跳轉表格視圖，也沒有 tf 格式化表格的選項。」 Two faults in the same twelve lines, both of them the menu rather than the keys. **One**: the `\|`-table list still offered `t` for 「對齊」, which `1ffde52` had made the way *into* a table three days earlier — so the menu said `t t` formats and the code says it enters. **Two**: which list to draw was decided by `md_region().is_none()`, and that is `None` for a Markdown table nobody has opened yet — so standing in one of 手冊's own tables offered the delimited file's keys, none of which are the ones that get you in. `t` is a group in **every** mode (#206), so most presses of it come from outside a table: `t q` and `] [` now head every list and are the whole of it when there is no table under the cursor, the list is chosen by `bounds` rather than by mode, and 對齊 is offered as `F` (`f` is the `full` level since #283). **small** | Done |
 | 273 | **The `:` menu was a rectangle, not a panel** | tui | P3 | the author, 2026-09-05: 「command 提示面板的設計感不如快捷鍵提示面板。請你對齊一下：面板有個邊框 ＋ 左上有個「命令」文字。」 Two panels open in the same corner of the same page, one keystroke apart, and only one of them had an edge: `draw_which_key` draws a ring at the `rule()` rung with its name in gold in the top-left, while `draw_list` painted a bare ground and let the entries run to the screen edge. `draw_list` now draws the same ring with the same corner radius (`[panel] rounded`) and takes a `title` — 「命令」 for the `:` menu, and for the picker its own name, which moves out of the head of the footer and into the corner where a panel's name belongs. **small** | Done |
 | 274 | **A search prompt that does not say what it will repeat** | core | P3 | the author, 2026-09-05: 「`/` 搜索，enter 確認，再次按下 `/` 搜索，這個時候是不是應該預填寫（灰色）上次搜索過內容，用戶可以直接 enter 繼續搜索這個，或者直接輸入新的搜索詞開始新的搜索？」 `Enter` on an empty search line has repeated `last_search` since #153 — the behaviour was already right and only the *saying* was missing, because `prompt_ghost` returned early on an empty line. It now answers with the whole of the last pattern in Search mode, so `/⏎` reads as 「再找一次這個」 and Tab writes it out. Typing narrows it as before; the first character that is not a prefix takes it away, and rubbing that character out brings it back. The `:` line is deliberately left alone: the menu under it is already showing every command there is. **small** | Done |
 | 275 | **A table in a document can only be *operated* as a grid, never *drawn* as one** | core+tui | P2 | the author, 2026-09-05: 「整页的表格视图就是 inline 表格视图的特例。」 Three modes, not two — prose／源碼, **表格操作**（`t n`, the syntax stays, the keys are the grid's, and the table's lines stop soft-wrapping）and **真表格顯示**（`t t`, drawn as a grid the way a CSV already is, ruler and all, in the middle of the prose it sits in）— and two kinds of file: one whose extension or schema *says* table turns whole (`t t` anywhere turns every table in it, and they stay turned when the cursor walks off), one where we are guessing from a run of tab characters turns only the block under the cursor and drops back the moment it leaves. What exists today is the middle mode wearing the top mode's key. Design in §5.6. **large** | Done |
@@ -1523,7 +1523,7 @@ Two corollaries that have already changed decisions:
 | `h` `j` `k` `l`, arrows | left / down / up / right (grapheme-aware)    | Done   |
 | `w` `b` `e`             | next / prev word start, word end (CJK words) | Done   |
 | `W` `B` `E`             | WORD variants (whitespace-delimited)         | Done   |
-| `f` `t` `F` `T` + char  | find / till a character, forward / backward  | Done   |
+| `f` `F` + char          | find a character, forward / backward         | Done   |
 | `Home` `End`            | line start / end                             | Done   |
 | `gg`                    | goto file start (or line N with a count)     | Done   |
 | `ge`                    | goto last line                               | Done   |
@@ -1572,7 +1572,7 @@ Two corollaries that have already changed decisions:
 | ------- | -------------------------------- | -------- |
 | `/` `?` | search forward / backward        | Done     |
 | `n` `N` | next / previous match            | Done     |
-| `*`     | search for the current selection | Done     |
+| `g/` `g?` | search for the current selection — here, or in the other work area | Done |
 | `:`     | command line (`:w` `:q` `:s` …)  | Done     |
 | `Space` | the menu — files, buffers, search, the clipboard, 詳情, `空格 r` 旁注 | Done |
 | `q` `Q` | record a macro / play the last one back | Done  |
@@ -2805,7 +2805,7 @@ the one that parses. It finds eleven today. Driven end to end in
 `Need::Loose`, and on a 橫排 page it refuses and changes nothing — every
 assertion would have passed for the wrong reason.
 
-### 3 · `:render basic` hides the ruby markup, and says so in the same frame
+### 3 · `:render basic` hides the ruby markup, and says so in the same frame — **fixed 2026-09-06**
 
 ```
 :render off        1 春に<ruby>永和<rt>えいわ</rt></ruby>と申す。   原文：不著色
@@ -2954,17 +2954,26 @@ them.
 `manual.md:1631`: 「**`t f` 會把表格排齊，排進檔案裏。**」 Since #283, `t f`
 is the `full` level and 排齊 is `t F` (`editor.rs:7401` vs `:7648`). The
 paragraph's argument — 原文歸原文，頁面歸頁面 — is still right; only the
-letter is old. `development.md:419` (#206) and `:485` (#272) carry the same
-stale spelling; §5.7 is the only place that agrees with the code.
+letter is old. §5.2's own rows #206 and #272 carried the same stale spelling
+and were corrected with fault 12.
 
-### 12 · Two stale names left behind by #283
+### 12 · Stale names left behind by #283 — **fixed 2026-09-07**
 
-- `RENDER`'s middle word is `basic`, and its help key is still
-  `cmd.render.on` (`command.rs:1956`, `messages.toml:1315`).
-- `editor.rs:13370` carries a comment for Helix's `*` with no arm under it —
-  `*` was retired (§14, 2026-09-04) — while §5.1's table (`:1379`) still
-  records `*` as **Done**, and `:1330` still records `f t F T` although
-  `FindKind` (`editor.rs:150`) has only `ForwardTo`/`BackwardTo` left.
+- `RENDER`'s middle word is `basic` and its help key was still
+  `cmd.render.on` — corrected with faults 4–9, so `messages.toml` now holds
+  `cmd.render.basic`.
+- A test comment still narrated `*`, retired in §14 (2026-09-04); the keys it
+  drives are `g/` and `g?`, and it says so.
+- **`FindKind` was two variants under four names.** `ForwardTo`/`BackwardTo`
+  are the *till* spellings — and till is exactly the half that retired when
+  `t` became the table group. They are `Forward`/`Backward`, and the enum's
+  doc says which two keys are left and why.
+- §5.1's table recorded `*` as Done and listed `f t F T`; it now lists
+  `f F` and `g/ g?`, which is what the editor has.
+
+**The class this belongs to** is stated under §5.2.2's heading: a key's name
+lives in as many as seven places. Nothing here was found by a test, and the
+one that would have found all four is already named below.
 
 ### What has to be built once, not twelve times
 

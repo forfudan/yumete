@@ -1959,7 +1959,6 @@ fn deep_from_root(typed: &str) -> Vec<Choice> {
     out
 }
 
-/// The two words every switch takes.
 /// `:yume` and what may follow it — the input method's own commands, under
 /// the one word a reader would think of when looking for them.
 const YUME: &[Word] = &[
@@ -2825,6 +2824,7 @@ fn switch(command: &'static str, word: &str) -> Result<bool, CommandError> {
     }
 }
 
+/// The two words every switch takes — read back by [`switch`].
 const ON_OFF: &[Word] = &[
     Word {
         name: "on",
