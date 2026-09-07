@@ -167,11 +167,16 @@ enum Pending {
     Case,
 }
 
-/// The four flavours of in-line character search (`f`/`t`/`F`/`T`).
+/// Which way an in-line character search runs.
+///
+/// **Two, not four** — `t`/`T` (till) were retired when `t` became the table
+/// group (§14, 2026-09-04), and the `…To` in the old names was the till half
+/// saying so. 「走到下一個某字母的前面」 has nothing to land on in a Chinese
+/// manuscript; `f`/`F` stayed because 「走到下一個某字母」 still does.
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum FindKind {
-    ForwardTo,
-    BackwardTo,
+    Forward,
+    Backward,
 }
 
 /// How many hits `:grep` gathers before it stops looking.
@@ -12535,8 +12540,8 @@ impl Editor {
             Pending::None => "",
             Pending::Goto => "g",
             Pending::Space => "␣",
-            Pending::Find(FindKind::ForwardTo) => "f",
-            Pending::Find(FindKind::BackwardTo) => "F",
+            Pending::Find(FindKind::Forward) => "f",
+            Pending::Find(FindKind::Backward) => "F",
             Pending::Replace => "r",
             Pending::Register => "\"",
             Pending::Match => "m",
@@ -13821,8 +13826,8 @@ impl Editor {
             // find and no more.
             Key::Char('f') | Key::Char('F') => {
                 self.pending = Pending::Find(match key {
-                    Key::Char('f') => FindKind::ForwardTo,
-                    _ => FindKind::BackwardTo,
+                    Key::Char('f') => FindKind::Forward,
+                    _ => FindKind::Backward,
                 });
                 self.operator_count = operator_count;
             }
@@ -15077,7 +15082,7 @@ impl Editor {
         }
         let chars: Vec<char> = text.chars().collect();
 
-        let forward = kind == FindKind::ForwardTo;
+        let forward = kind == FindKind::Forward;
         let found = if forward {
             (col + 1..chars.len()).find(|&i| chars[i] == target)
         } else {
@@ -15089,7 +15094,7 @@ impl Editor {
             return;
         };
         let head = match kind {
-            FindKind::ForwardTo | FindKind::BackwardTo => line_start + idx,
+            FindKind::Forward | FindKind::Backward => line_start + idx,
         };
 
         let old = self.cursor;
@@ -26782,8 +26787,9 @@ mod tests {
         ed.on_key(Key::Char('n'));
         assert_eq!(ed.selection(), (0, 3));
 
-        // `*` searches for the *text* selected, so its punctuation is literal:
-        // the second （甲） is found, and shown in the other work area.
+        // `g?` searches for the *text* selected, so its punctuation is
+        // literal: the second （甲） is found, and shown in the other work
+        // area. (This was `*`, which the editor retired — §14.)
         let mut ed = typed("（甲）乙（甲）\n");
         press(&mut ed, "ggvll");
         press(&mut ed, "g?");
