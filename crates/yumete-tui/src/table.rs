@@ -542,8 +542,19 @@ pub fn draw(
                 false => x + w,
             };
             put_text(buf, x, y, stop.min(right), &content, style);
+            // 金 and bold, the ink the prose page gives it: the furniture's
+            // grey is the colour of the rules and the line numbers, which set
+            // the one mark on the grid that is *not* furniture back further
+            // than the writing it stands after.
             if cut && stop < right {
-                put_text(buf, stop, y, (x + w).min(right), mark, style.fg(ink.furniture()));
+                put_text(
+                    buf,
+                    stop,
+                    y,
+                    (x + w).min(right),
+                    mark,
+                    style.fg(ink.gold()).add_modifier(Modifier::BOLD),
+                );
             }
             if here {
                 // Where typing would land — which is *inside* the cell, not at

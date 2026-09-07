@@ -33,6 +33,19 @@ pub enum Ink {
     /// Worked out from the text and standing in for nothing that was typed:
     /// the padding that squares a table up (#212).
     Padding,
+    /// 「後面還有」 — the mark that stands where a cell's tail was folded
+    /// away ([`crate::mdtable::FOLD_MARK`]).
+    ///
+    /// It was a [`Note`](Ink::Note) until 2026-09-07, and a note is set in
+    /// the markup's own grey — so the one thing on the page whose whole job
+    /// is to say 「this is not what the writer typed」 was drawn in the
+    /// colour of what the writer typed. The mark is ASCII `>` for a reason
+    /// the width table settles and the ink cannot change, so the ink is
+    /// where the difference has to be said (author, 2026-09-07).
+    ///
+    /// Never at the same anchor as the padding beside it: this one stands at
+    /// the first character it hides, and the padding at the end of the cell.
+    Fold,
     /// The editor saying something *about* the text beside it: a mark that
     /// should have been full-width, an ellipsis written with three dots.
     ///
