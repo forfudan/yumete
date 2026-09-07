@@ -1798,6 +1798,33 @@ pub fn pick<'a>(typed: &str, from: &'a [Word]) -> Option<&'a Word> {
     }
 }
 
+/// The command a head word names — **by the parser's rule, not a stricter one**.
+///
+/// `resolve` for the prefix, `forceable` for the bang, and only then the
+/// table. Four readers of `COMMANDS` had spelled this walk out by hand and two
+/// of them stopped at the exact name, so `:tab rules` **ran** while `:tab `
+/// drew nothing: the menu vanished on the abbreviation it had printed itself
+/// (§5.2.2 fault 1).
+///
+/// The bang belongs to the command, not to its spelling — without the strip,
+/// the line where a path is *most* likely to be Chinese, `:w! 第三章.md`, the
+/// one you type because the file is already there, was the one line that
+/// refused the IME. **Only where the bang is really this command's**:
+/// `resolve` hands back a `…!` spelling for the ten that take one and leaves
+/// every other bang where it found it, so stripping unconditionally
+/// resurrected a command the parser refuses — `:o! 第三章.md` became `open`
+/// and was offered the IME for a line that can only end in an error.
+fn entry_named(head: &str) -> Option<&'static Entry> {
+    let head = resolve(head);
+    let head = match head.strip_suffix('!') {
+        Some(stem) if forceable(stem).is_some() => stem,
+        _ => head,
+    };
+    COMMANDS
+        .iter()
+        .find(|e| e.name == head || e.aliases.contains(&head))
+}
+
 /// A word offered by completion, whether a command or an argument.
 #[derive(Debug, Clone)]
 pub struct Choice {
@@ -3305,25 +3332,7 @@ pub fn takes_text(line: &str) -> bool {
         // Still naming the command. `:層` names nothing and never will.
         return false;
     };
-    let head = resolve(head);
-    // `resolve` answers `write!` for `:w!`, and the table lists `write`: the
-    // bang belongs to the command, not to its name. Without this the line
-    // where a path is *most* likely to be Chinese — `:w! 第三章.md`, the one
-    // you type because the file is already there — was the one line that
-    // refused the IME.
-    // Only where the bang is really this command's: `resolve` hands back a
-    // `…!` spelling for the six that take one and leaves every other bang
-    // where it found it, so stripping unconditionally resurrected a command
-    // the parser refuses — `:o! 第三章.md` became `open` and was offered the
-    // IME for a line that can only end in an error.
-    let head = match head.strip_suffix('!') {
-        Some(stem) if forceable(stem).is_some() => stem,
-        _ => head,
-    };
-    let Some(entry) = COMMANDS
-        .iter()
-        .find(|e| e.name == head || e.aliases.contains(&head))
-    else {
+    let Some(entry) = entry_named(head) else {
         return false;
     };
     let mut args = &entry.args;
@@ -3405,24 +3414,16 @@ pub fn complete_at(line: &str) -> (usize, Vec<Choice>) {
                 under: String::new(),
             })
             .collect(),
-        Some(&(_, head)) => {
-            let Some(entry) = COMMANDS
-                .iter()
-                .find(|e| e.name == head || e.aliases.contains(&head))
-            else {
-                return (start, Vec::new());
-            };
-            let mut args = &entry.args;
-            for &(_, word) in &words[1..] {
-                match args.words() {
-                    Some(list) => match list.iter().find(|w| w.name == word) {
-                        Some(found) => args = &found.then,
-                        None => return (start, Vec::new()),
-                    },
-                    None => return (start, Vec::new()),
-                }
-            }
-            match args.words() {
+        // **The same walk the parser walks** (§5.2.2 fault 1): `walk` resolves
+        // the head by prefix and picks each word below it the same way, so the
+        // menu answers `:tab ` exactly as it answers `:table `.
+        //
+        // And a miss is an empty list rather than a `return`, because the
+        // fallback below is what answers a word this level does not know — the
+        // early return took `:vert` and #223's deep search out with it.
+        Some(_) => match walk(&words) {
+            None => Vec::new(),
+            Some(args) => match args.words() {
                 Some(list) => list
                     .iter()
                     .filter(|w| w.name.starts_with(typed))
@@ -3436,23 +3437,23 @@ pub fn complete_at(line: &str) -> (usize, Vec<Choice>) {
                         under: String::new(),
                     })
                     .collect(),
-                None => match args {
                 // A path or free text is the caller's business; there is
                 // nothing here to offer but the placeholder, which is help
                 // rather than a completion.
-                Args::Free(what) => vec![Choice {
-                    name: "",
-                    needs: &[],
-                    alias: None,
-                    short: None,
-                    help: what,
-                    leading: "",
-                    under: String::new(),
-                }],
+                None => match args {
+                    Args::Free(what) => vec![Choice {
+                        name: "",
+                        needs: &[],
+                        alias: None,
+                        short: None,
+                        help: what,
+                        leading: "",
+                        under: String::new(),
+                    }],
                     _ => Vec::new(),
                 },
-            }
-        }
+            },
+        },
     };
     // Nothing at this depth knows that word — so look for it deeper (#223).
     // `:vert` is answered with `:layout vertical`, and `:yume ling` with
@@ -3536,11 +3537,7 @@ pub fn needs_of(line: &str) -> &'static [Need] {
     };
     // The same prefix rule the parser uses, so `:h on` is answered about
     // `hanging` and not about nothing.
-    let head = resolve(head);
-    let Some(entry) = COMMANDS
-        .iter()
-        .find(|e| e.name == head || e.aliases.contains(&head))
-    else {
+    let Some(entry) = entry_named(head) else {
         return &[];
     };
     let mut needs = entry.needs;
@@ -3560,13 +3557,13 @@ pub fn needs_of(line: &str) -> &'static [Need] {
 /// nothing.
 fn walk(words: &[(usize, &str)]) -> Option<&'static Args> {
     let (_, head) = words.first()?;
-    let entry = COMMANDS
-        .iter()
-        .find(|e| e.name == *head || e.aliases.contains(head))?;
+    let entry = entry_named(head)?;
     let mut args = &entry.args;
     for &(_, word) in &words[1..] {
         match args.words() {
-            Some(list) => args = &list.iter().find(|w| w.name == word)?.then,
+            // `pick`, not an exact match — one rule, at every level. `:tab r`
+            // *runs* as `:table rules`, so it has to be answerable too.
+            Some(list) => args = &pick(word, list)?.then,
             None => return None,
         }
     }
@@ -3816,6 +3813,70 @@ mod tests {
                 entry.name
             );
         }
+    }
+
+    /// §5.2.2 fault 1: the menu answers the abbreviation it printed itself.
+    ///
+    /// `:table ` draws twelve words with their shortest spellings — `off
+    /// (of)`, `rules (r)` — and `:tab rules` **runs**, because `resolve`
+    /// expands the prefix. The menu was the one reader of `COMMANDS` that did
+    /// not ask it: `complete_at` looked the head up by exact name or alias and
+    /// matched each word below it the same way, so the shortest spelling it
+    /// had just printed drew a blank panel.
+    ///
+    /// Asked of every command at once, and of every word under it, because
+    /// `shortest` is what the menu prints — so the two can only disagree here
+    /// if they disagree in front of a reader.
+    #[test]
+    fn the_menu_answers_the_abbreviation_it_printed() {
+        let every = || {
+            COMMANDS
+                .iter()
+                .flat_map(|c| std::iter::once(c.name).chain(c.aliases.iter().copied()))
+        };
+        let names = |line: &str| -> Vec<&'static str> {
+            complete_at(line).1.iter().map(|c| c.name).collect()
+        };
+        let mut asked = 0;
+        for entry in COMMANDS {
+            let Some(short) = shortest(entry.name, every()) else {
+                continue;
+            };
+            let full = names(&format!("{} ", entry.name));
+            if full.is_empty() {
+                continue;
+            }
+            assert_eq!(
+                names(&format!("{short} ")),
+                full,
+                "`:{short} ` is the spelling the menu prints for `:{}`",
+                entry.name
+            );
+            asked += 1;
+
+            // …and one level down, where the same rule has to hold.
+            let Some(list) = entry.args.words() else {
+                continue;
+            };
+            for word in list {
+                let Some(inner) = shortest(word.name, list.iter().map(|o| o.name)) else {
+                    continue;
+                };
+                let deep = names(&format!("{} {} ", entry.name, word.name));
+                if deep.is_empty() {
+                    continue;
+                }
+                assert_eq!(
+                    names(&format!("{short} {inner} ")),
+                    deep,
+                    "`:{short} {inner} ` is `:{} {}`",
+                    entry.name,
+                    word.name
+                );
+                asked += 1;
+            }
+        }
+        assert!(asked > 20, "the walk found almost nothing: {asked}");
     }
 
     /// Every place the menu prints 「on｜off」, asked whether the parser reads
