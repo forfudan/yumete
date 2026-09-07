@@ -2720,6 +2720,50 @@ digits of them. `Args::Schemes` in the command table is the one argument whose
 words are not written in the table, and every reader of a word list goes through
 `Args::words()` so that a `match` arm on `Args::Words` cannot silently skip it.
 
+**And the other half: the schemes the writer imported, 2026-09-08.** After
+yume's 方案管理 landed there are two kinds of scheme and they are found two
+ways. A factory scheme is a `schemes/<tag>.toml` the scan above reads. A
+自定義方案 is a **slot** — `…/Yume/installed/<八位十六進制>/`, holding
+`custom.ytab` (碼表), `custom.yzg` (字根表), `custom.ycdv` (this scheme's own
+derived 拆分) and `custom.yscm` (its parameters) — and nothing about it is in
+any TOML, in any manifest, or on any factory list. Scanning only the first kind
+is why a machine with 冰雪清韻 and 天碼 imported listed neither.
+
+`discover_slots` is the second scan. It asks `yume_core::scheme_slots::list`
+under each of `installed/`, `data/custom/` (Windows) and a bare `custom/` (an
+install older than 方案管理), which is the core's own answer to 「哪些槽位裝得
+起來」 — a half-written import stays invisible rather than showing as a nameless
+row. Three things then have to come from the slot rather than the manifest,
+because the manifest is the *factory* data set and answers empty for a slot's
+tag, correctly:
+
+- **Its files.** `slot_data_set` names them by **absolute** path — a slot is not
+  under a data directory and no relative name would find it — so `find_file`
+  returns an absolute name unchanged. `custom.ytab` is the 碼表;
+  `data/chaifen.ydiv` is taken from the shared set exactly as a factory scheme
+  takes it (讀音・字義・字集 are the language's, not the scheme's); `custom.yzg`
+  rides as that entry's `aux` so the 拆分 beside a candidate is written in
+  **this** scheme's roots.
+- **Its 拆分.** A scheme not written in 宇浩's roots has its divisions in a
+  `.ycdv` beside its `.yzg`, under the same stem, and no manifest entry — the
+  root ids in it index the inventory that `.yzg` was built from and mean nothing
+  anywhere else. So the annotation loader picks it up by name, the way yume's
+  own loader does, and `attach_custom_divisions` lays it over the shared table.
+- **Its parameters.** `set_scheme_by_tag` would answer `false` for a tag that is
+  on no factory list and leave the engine on 靈明's 最大碼長 and 終止鍵 — a
+  scheme nobody has. `custom_scheme::load_manifest` reads `custom.yscm` instead
+  and `set_scheme(manifest.schema())` applies it, plus `code_space_for` when the
+  compile recorded a 段界 the 碼表 can be read for. That is what yume's own
+  frontends do on 方案切換.
+
+The tag is `custom.<八位>`, from `scheme_slots::tag_for`, so `:yume scheme
+custom.6947b838` and `[ime] scheme` both work; the menu name is the 方案名 in
+`custom.yscm`, and unlike a factory scheme's it is **not** optional — falling
+back to the tag would show the writer eight hex digits. Slots are appended after
+the factory schemes rather than merged into them, the order yume's own ⌃⇧N
+cycle uses, because the two halves sort by different keys: a factory scheme's
+place is its author's 系列 and index, a slot's is when it was created.
+
 ### 17 · Paging in a table drifted across the columns, 2026-09-05
 
 Reported by the author: 「in the table view, `HJKL` moves several rows, which is

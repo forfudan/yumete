@@ -706,6 +706,20 @@ yume 的資料裏有兩樣東西，它們該有不同的待遇。
 裝了 yume 的 macOS 上因此不用配置任何東西：`:yume scheme` 直接就有那五個方案。（在
 2026-09-07 之前它只認 Linux 那一套路徑，於是一台裝好裝滿的 Mac 一個方案都找不到。）
 
+**自己造的方案也一樣掃得到。** 出廠那幾個方案是 `schemes/<名字>.toml` 一個檔一個；使用者
+自己裝的則各佔一個**槽位**——`…/Yume/installed/<八位十六進制>/`，一格一個方案，裏面是
+`custom.ytab`（碼表）、`custom.yzg`（字根）、`custom.ycdv`（這個方案自己的拆分）和
+`custom.yscm`（這個方案自己的設置）。掃到一格就多一個方案，名字是方案作者寫在
+`custom.yscm` 裏的那個：
+
+```
+:yume scheme custom.6947b838      冰雪清韻
+:yume scheme custom.cc2d1290      天碼
+```
+
+碼長、選重鍵、頂不頂功**不猜**——照 `custom.yscm` 辦，跟輸入法裏是同一份。槽位另外兩個
+位置也認（Windows 的 `data/custom/`、方案管理之前的裸 `custom/`），同一格只算一次。
+
 **問一句現在用的是哪一個：**
 
 ```
@@ -1181,7 +1195,8 @@ Alacritty、Konsole。Apple Terminal 報不出單獨的 Shift。
 **換方案**用 `:yume scheme lingming|xingchen|qingyun|riyue|pinyin`，或者配置檔的
 `[ime] scheme`。yumete 自帶靈明（編進二進制）；其餘四個方案的碼表跟 yume 一樣，從
 yuhao-assess-data 下載後裝進資料目錄（yume 的 `scripts/build.sh` 會裝）。碼表不在機器
-上時它會說清楚是「沒裝」而不是「沒這個方案」，並且留在原來能用的方案上。
+上時它會說清楚是「沒裝」而不是「沒這個方案」，並且留在原來能用的方案上。使用者自己裝進
+yume 的方案跟着一起列出來，名字是 `custom.<八位>`（見上面「自己造的方案也一樣掃得到」）。
 
 **用你自己的碼表**：
 
