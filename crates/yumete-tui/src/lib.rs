@@ -2597,6 +2597,11 @@ fn draw_list(
     let width = (inner + 2).min(area.width as usize) as u16;
     let menu = Rect::new(area.x, bottom - height, width, height);
     frame.render_widget(Clear, menu);
+    // **A 漢字 cannot be covered by halves.** It owns two cells, and the
+    // renderer skips whatever a wide glyph covers — so a border written into
+    // the second of them is stored and then never emitted, and the panel opens
+    // with its whole left wall missing. Blank the glyph; the wall gets a cell.
+    vertical::clear_wide_left_edge(frame.buffer_mut(), menu);
     // The same ring, at the same rung, with its name in the same corner as the
     // which-key panel's: two panels that open in the same place and do the
     // same kind of thing should not look like two different programs.
@@ -2929,21 +2934,13 @@ fn draw_hud_panel(
         // with a hole punched in it is worse than one mark fewer.
         return;
     };
-    // **Start on a whole glyph.** A 漢字 owns two cells and the second reads
-    // back empty; a ring whose left edge lands in that second cell is written
-    // into the middle of somebody's character and never reaches the terminal —
-    // the `╭` simply vanishes and the panel opens with a gap. One cell left is
-    // always enough, because no glyph is wider than two.
-    let cut = (y..y + 3).any(|row| {
-        x > page.x
-            && frame
-                .buffer_mut()
-                .cell((x - 1, row))
-                .is_some_and(|c| yumete_cjk::str_width(c.symbol()) > 1)
-    });
-    let x = if cut { x - 1 } else { x };
     let panel = Rect::new(x, y, width, 3);
     frame.render_widget(Clear, panel);
+    // **A 漢字 cannot be covered by halves.** It owns two cells, and the
+    // renderer skips whatever a wide glyph covers — so a border written into
+    // the second of them is stored and then never emitted, and the panel opens
+    // with its whole left wall missing. Blank the glyph; the wall gets a cell.
+    vertical::clear_wide_left_edge(frame.buffer_mut(), panel);
     frame.render_widget(
         Block::default()
             .borders(Borders::ALL)
@@ -3046,6 +3043,11 @@ fn draw_which_key(
     };
     let panel = Rect::new(x, bottom - height, width, height);
     frame.render_widget(Clear, panel);
+    // **A 漢字 cannot be covered by halves.** It owns two cells, and the
+    // renderer skips whatever a wide glyph covers — so a border written into
+    // the second of them is stored and then never emitted, and the panel opens
+    // with its whole left wall missing. Blank the glyph; the wall gets a cell.
+    vertical::clear_wide_left_edge(frame.buffer_mut(), panel);
     frame.render_widget(
         Block::default()
             .borders(Borders::ALL)
@@ -3795,6 +3797,11 @@ fn draw_sidebar(frame: &mut Frame, editor: &Editor, config: &Config, area: Rect)
     };
 
     frame.render_widget(Clear, area);
+    // **A 漢字 cannot be covered by halves.** It owns two cells, and the
+    // renderer skips whatever a wide glyph covers — so a border written into
+    // the second of them is stored and then never emitted, and the panel opens
+    // with its whole left wall missing. Blank the glyph; the wall gets a cell.
+    vertical::clear_wide_left_edge(frame.buffer_mut(), area);
     let rule = area.x + area.width - 1;
     let buf = frame.buffer_mut();
     for y in area.y..area.y + area.height {
@@ -10148,9 +10155,60 @@ mod tests {
         );
     }
 
-    /// A two-cell glyph in the column left of a panel covers the panel's border
-    /// cell, and the renderer skips what a wide glyph covers — so the border
-    /// would never be drawn.
+    /// #286: a panel places itself from its own width, so its left edge lands
+    /// on an odd column for half of all terminal widths — and over 漢字 prose
+    /// that is the second cell of somebody's character. The whole left wall
+    /// (`╭`, every `│`, `╰`) was computed, stored, and never emitted; the
+    /// reader saw the prose behind it showing through the gap.
+    #[test]
+    fn no_panel_wall_stands_in_the_second_half_of_a_漢字() {
+        // Every row full of 漢字 — a page with blank rows under the panel
+        // cannot show the fault, because there is no glyph to straddle.
+        let line = "春夏秋冬花開花落又一年，江水東流不復回。".repeat(8);
+        let prose = vec![line; 24].join("\n");
+        let config = Config::default();
+        // **Look for the corner that is missing, not for the one that is
+        // wrong.** A wall written into the second half of a 漢字 never reaches
+        // the terminal at all — `render_with` returns the backend's buffer,
+        // which ratatui fills through `Buffer::diff`, and `diff` skips whatever
+        // a wide glyph covers. So the broken frame holds no wall to inspect:
+        // the only trace is a right corner whose left corner never arrived.
+        for width in 70..110u16 {
+            let mut editor = editor_with(&prose);
+            editor.on_key(Key::Char('t'));
+            let buffer = render_with(&editor, &config, &no_ime(), width, 16);
+            let mut tops = 0;
+            let mut bottoms = 0;
+            for y in 0..buffer.area.height {
+                let row: Vec<&str> = (0..buffer.area.width)
+                    .map(|x| buffer[(x, y)].symbol())
+                    .collect();
+                let has = |s: &str| row.contains(&s);
+                if has("╮") || has("┐") {
+                    tops += 1;
+                    assert!(
+                        has("╭") || has("┌"),
+                        "width {width}, row {y}: the panel's top-right corner is \
+                         on the page and its top-left corner is not"
+                    );
+                }
+                if has("╯") || has("┘") {
+                    bottoms += 1;
+                    assert!(
+                        has("╰") || has("└"),
+                        "width {width}, row {y}: the panel's bottom-right corner \
+                         is on the page and its bottom-left corner is not"
+                    );
+                }
+            }
+            assert!(
+                tops == 1 && bottoms == 1,
+                "width {width}: expected exactly one panel on the page, \
+                 found {tops} top edges and {bottoms} bottom edges"
+            );
+        }
+    }
+
     #[test]
     fn a_panel_cuts_back_the_wide_glyph_on_its_left_edge() {
         use ratatui::layout::Rect;
