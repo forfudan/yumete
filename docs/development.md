@@ -497,7 +497,7 @@ index, and a row with no number anywhere else is a row that got lost.
 | 284 | **The HUD is a thread, not a panel — and in 縱書 it is nothing at all** | tui | P3 | the author, 2026-09-06: 「現在的HUD是一根線連到字母上。你覺得可不可以加個面板（有外框），並且允許HUD覆蓋其他的行的文字…允許他覆蓋其他文字可以讓他的位置更固定…然後我們可以有三個模式 `:hud off/basic/full`，默認 full。」 **The frame and the covering are one decision, not two.** Today's mark wants five cells on one row, so it can still find margin; a bordered panel wants a 3 × (寬+2) rectangle empty *near the caret*, which on a page of prose does not exist — so a frame forces covering. And the converse holds: once the HUD's glyphs sit on the same paper as the writing, nothing tells the reader which characters are not theirs, so covering forces a frame. That collapses two switches into one axis, which is what feeds the three levels. **What covering actually costs is not 「some prose」**: in Normal the HUD carries `typed_so_far()`, so pinning it two cells right of the caret paints over exactly the characters `3`, `2t` and `d3l` are counting — the object of the command. Hence the split: `off` draws nothing beside the caret (the status line's right edge stays — #193's floor), **`basic` is the factory level** and is today's scoring placement (#269) with a louder style — one row high, a 藥丸 rather than a thread, BAND ground and gold ink, **not one character hidden** — and `full` is the pinned, bordered, may-cover panel. Default `basic`, not `full`, by §5.7's own rule: the factory level must be identical to `off` in the worst case, and 醒目 is bought with style rather than with hiding. Three things to settle in the doing: **`:hud` is not #283's fifth dimension** — it is how the editor talks to you, not how the file is drawn, so `:render` must never write it and `render.is` keeps four fields; `:yume panel full` and `:hud full` are different words — the candidate panel and a pinned HUD both want `(cursor_x, cursor_y+1)` and the panel wins; and `full` loses the HUD's only collision avoidance, because `after_the_writing` reads the *buffer* back and thereby also dodges which-key, the command menu, the picker and the detail panel — 「有字」 and 「有面板」 read back identically once we cover, so the draw functions have to start returning their own `Rect`. #269's line in this table — 「`after_the_writing` is unchanged: the HUD still never paints over writing」 — is revoked by `full` and must be amended, not silently contradicted. **A separate fault found while reviewing this, and worth more than the frame**: in 縱書 the HUD is essentially never drawn. `after_the_writing` scans left→right for the last non-blank on the row, and 縱書 fills columns right-to-left, so `after` lands near the right edge whenever any 縱 on that row holds a character, every candidate fails `x < after`, and the vertical reader has only the status line. **medium** (縱書: **small**) **Built 2026-09-07**, both halves, and the 縱書 fault is the one that changed a reader's day. 「Margin」 is now a **run of blank cells** rather than the column after the last glyph: runs are the same answer in both writing directions, and they also find the gap between two short 縱 that a left-to-right scan walks straight past. The mark hangs from whichever end faces the caret (`╯`／`╮` when the margin turned out to be on the left, which in 縱書 it nearly always is) — a corner pointing away from the caret is worse than no corner at all. The three levels went in as designed, with `basic` the factory level and the 藥丸 bought by closing the far end of the mark with a cell of ground rather than by a louder colour. Two things the design did not foresee: a panel that starts in the **second cell of a 漢字** is written into the middle of somebody's character and never reaches the terminal — the `╭` vanishes and the ring opens with a gap — so `full` nudges one cell left when the cell before it holds a wide glyph (**revoked by #286**: the nudge landed on the same glyph and only moved the wound; every panel now blanks the straddling 漢字 instead); and 「the candidate panel wins」 is decided *before* `draw_hud` rather than after, by hoisting the `panel && composing` question above it, because the candidate panel is drawn last and could otherwise only win by painting over a ring that was already there. `draw_list`, `draw_which_key`, `draw_command_menu`, `draw_lookfor_menu` and `draw_picker` now return their own `Rect`, which is what `full` keeps off. | Done |
 | 285 | **A Markdown link is something to follow, not only to read** | core+tui | P3 | the author, 2026-09-06: 「markdown 文档中的超链接能不能用命令和鼠标点击（或者 ctrl 点击）而打开浏览器？本地的位置也能不能用窗口打开？这个 priority 不用太高。」 Three parts, and the third is the one with a design question in it. **A command** — `gx` is where Helix and vim both keep 「follow the thing under the cursor」, and the editor already knows where every link is: `crate::markdown` spans a `[text](url)` and 所見即所得 hides the `(url)` half, so the target is in hand without any new parsing. **A click** — the mouse map already turns a cell into a buffer position (#248's `drawn` walk), so the whole cost is deciding the gesture: a bare click has to keep placing the caret, so it is ⌘/Ctrl-click or nothing, and `⌘` chords are the terminal's (see 別再踩) — Ctrl-click is the one that actually arrives. **Where it opens** is the design question: an `https:` target goes to the system browser (`open` on macOS, `xdg-open` elsewhere) and that is uncontroversial, but a **local** path 「用窗口打开」 means the editor's own window — a `.md` beside this one should open as a buffer, and `[[wikilink]]` already means exactly that. So the rule wants to be: a scheme we do not handle goes to the OS; a path that resolves inside the project opens as a buffer in the other pane; anything else asks. **A refusal to build in**: never hand a URL to a shell. `open`/`xdg-open` take the target as one argument and nothing goes through `sh -c`. **small** **Built 2026-09-07**, with one rule deliberately *narrowed*: 「a scheme we do not handle goes to the OS」 is exactly backwards for a manuscript, which is a file that arrives by email — `open` starts whatever program claims a scheme, so `mailto:`/`obsidian:`/anything else is named and refused, and only `http`/`https` are handed over. An absolute path is refused for the same reason: `/etc/passwd` is not the name of a chapter. A relative path is read from the folder the link is *written* in (a chapter's neighbours are its neighbours on the disk), and `[[第三章]]` is a page name, so the suffix is the manuscript's — this file's extension first, then `.md`. `crate::markdown::link_at` answers from anywhere inside the construct, brackets and hidden target included, and reads the spans **backwards** because a heading's span covers its whole line. It opens in **this** pane, not the other one, until #281 is fixed. | Done |
 | 286 | **A panel whose left edge lands inside a 漢字 loses its whole left wall** | tui | P2 | found while answering the author on #284, 2026-09-07. A 漢字 owns two cells and the terminal draws it from the first; the second reads back empty but is not *free* — anything written there is inside somebody else's glyph and never reaches the screen. `Clear` does not help, because the offending glyph starts one cell **outside** the panel. #284 met this and fixed it **locally**: `draw_hud_panel` nudges one cell left when `cell(x-1)` is wide. **Nothing else does**, and the author's guess that the HUD panel would settle it is the one thing to correct — the nudge is eight lines inside one draw function and every other panel computes its own `x`. `draw_which_key` puts itself at `area.x + area.width - width` (「the corner the cursor is not in」), a width that comes from the *content*, so on **half of all terminal widths** it lands on an odd column against a page of 漢字. Reproduced with `--shot=78x16 --keys=t` on a page of 一二三四…: the `╭`, all four `│` and the `╰` are gone, the ring is open down its whole left side, and the writing behind it (五, 八, 一) shows through the gap. Every even width from 78 to 100 does it. The same arithmetic reaches `draw_command_menu`, `draw_lookfor_menu`, `draw_picker` and `draw_list` wherever their `x` is not the page's own edge. Fixed 2026-09-07, and the author picked the strategy: **blank the straddling glyph**. A 漢字 cannot be covered by halves — it is either whole or gone — so cutting it back to a space hands its second cell to the wall and leaves every panel exactly where its layout put it. The helper already existed for the candidate panel (`vertical::clear_wide_left_edge`); the fix is that the other five now pass through it too — `draw_list` (which is the command menu, the lookfor menu and the picker), `draw_which_key`, `draw_sidebar`, `draw_hud_panel`. #284's nudge is **deleted**: moving one cell left overwrote the same glyph anyway, and one law beats two. Guarded by `no_panel_wall_stands_in_the_second_half_of_a_漢字`, which renders every width from 70 to 110 over 漢字 prose. **It looks for the corner that is missing, not for the one that is wrong**, and that distinction cost an evening: the first version of the test asserted 「no wall character stands in the second cell of a wide glyph」 and passed on the broken code, because on the broken code there is no wall character to find. A probe inside `draw_which_key` showed the `╭` sitting in the frame's buffer at (4, 8) exactly as drawn; it is gone from the buffer a test reads back, which is the **backend's**, filled through `Buffer::diff` — and `diff` sets `to_skip` from the width of the glyph it just emitted, so the cell a 漢字 covers is never sent and never stored. The only trace the fault leaves is therefore an absence: a `╮` on a row whose `╭` never arrived. The test asserts the corners come in pairs, and one panel per frame; with the call in `draw_which_key` removed it fails at width 78. | Fixed |
-| 287 | **作品百科 — 一本書自己的百科** | core+tui | P3 | the author, 2026-09-07: 「我想在 yumete 中加一個「作品百科」功能……wiki 的所有詞條加入分詞、都使用虛線下劃線、光標移到這個詞上則會在右側信息欄顯示它的詞條內容……然後可以有個命令來編輯 wiki 文件，比如 `:wiki edit`。」 A `.yumete/wiki.md` whose `##`-and-below headings are 詞條: their names join the segmenter, they are marked in the prose, and standing on one shows the entry — its own text, its sub-sections, and a breadcrumb of the headings above it — in the panel down the right. **Almost none of this is new machinery**, which is the argument for building it: `.yumete/words.txt` (#239) is already found by walking up from the file being edited, `WithWords` (#144) already layers a per-book `WordList` over whatever dictionary is in force, `outline()` already reads `#` with no parser, and `note_detail` → `Detail` → `split_detail` (#283) is already a panel that follows the cursor with no key pressed and knows a tall thing goes down the right. The entry names go into a **second** `WordList` beside the book's own — `words.txt` says 「這是一個詞」, the wiki says 「這是一個詞**而且有一頁**」, and only the second is drawn — and the mark is computed off the segmentation already cached per line, so 中國人 inside 中國人民 is not marked without a rule of its own. Two entries can never be marked and `:wiki` must say so rather than stay silent: a **one-character** entry (`WordList::add` refuses anything shorter than two, and rightly) and one the segmenter will not cut out (`## 他為什麼要走`). **The one real design question is the ink**, and the author named the fallback himself (「如果無法做到，就用背景色等」) — which is the one option the house style has already ruled out. 虛線 cannot be drawn: ratatui 0.29 has exactly one underline (`UNDERLINED` = SGR 4) and no dotted/dashed/curly variant, and a ground on this page is the **reader's** mark (the selection, the 朱 wash, the cursor's band) — the very argument that settled the fold mark the night before. 金 is wrong too: 金 means 這不是正文, and a wiki term *is* 正文. So: **an underline, because a wiki term is a link** — the same `UNDERLINED` `Kind::Link` already carries, with `underline_color` (SGR 58, on by default in ratatui, drawn by kitty/WezTerm/foot/Ghostty/iTerm2 and silently ignored by Apple Terminal) one rung back at `rung::QUIET`, which is the honest reading of 「虛線」: fainter than a link, not a different shape — and degrading to 「looks like a link」 on a terminal without SGR 58 is the correct failure, because it is one. **縱書 must not copy that answer**: an underline in a vertical column is a stack of two-cell dashes *between* the glyphs and reads as separators, so it is either a 側線 in the margin (contended — a reading, a hung 句讀, a 着重號 and a 平仄 mark all want that cell) or `WordMark::Ink`'s axis, which costs no column and collides with nothing. The risk to look at through `--shot` before calling it settled: **the page turns to lace** — 阿寧 is on every page, and forty names means an underline under every third word — hence `:wiki show on|off` on the `:word show` pattern. The panel needs one field (`DetailKind {Row, Note, Wiki}`) so the breadcrumb and the re-levelled sub-headings can be set apart; depths are **re-levelled** (the entry is `#` whatever it is in the file), duplicates are drawn one after another in `(depth, file order)` with the breadcrumb telling them apart, and precedence is row → note/comment → wiki, because recognition never displaces something the writer typed. `:wiki` / `:wiki edit` / `:wiki reload` / `:wiki show` follow `:word`'s 「one subject, one command」, saving the file re-segments the way `words.txt` already does, and **no new key is needed**: `gd`/`gw` already mean 「follow the note under the cursor」. **「直接切入信息欄進行編輯」 is blocked on #281** — an editable panel is a view of another buffer, and that is exactly the open fault where everything reads `current_buffer()` and three caches are keyed by line alone; `gw` into `wiki.md` at the entry's heading is the near thing, and it is arguably better (the file, the outline, `:s`, undo). Design and the five open questions in §5.8. **large**, and it divides: parse ＋ segmenter is one sitting and already makes `w` walk the names. | Proposed |
+| 287 | **作品百科 — 一本書自己的百科** | core+tui | P3 | the author, 2026-09-07: 「我想在 yumete 中加一個「作品百科」功能……wiki 的所有詞條加入分詞、都使用虛線下劃線、光標移到這個詞上則會在右側信息欄顯示它的詞條內容……然後可以有個命令來編輯 wiki 文件，比如 `:wiki edit`。」 A `.yumete/wiki.md` whose `##`-and-below headings are 詞條: their names join the segmenter, they are marked in the prose, and standing on one shows the entry — its own text, its sub-sections, and a breadcrumb of the headings above it — in the panel down the right. **Almost none of this is new machinery**, which is the argument for building it: `.yumete/words.txt` (#239) is already found by walking up from the file being edited, `WithWords` (#144) already layers a per-book `WordList` over whatever dictionary is in force, `outline()` already reads `#` with no parser, and `note_detail` → `Detail` → `split_detail` (#283) is already a panel that follows the cursor with no key pressed and knows a tall thing goes down the right. The entry names go into a **second** `WordList` beside the book's own — `words.txt` says 「這是一個詞」, the wiki says 「這是一個詞**而且有一頁**」, and only the second is drawn — and the mark is computed off the segmentation already cached per line, so 中國人 inside 中國人民 is not marked without a rule of its own. Two entries can never be marked and `:wiki` must say so rather than stay silent: a **one-character** entry (`WordList::add` refuses anything shorter than two, and rightly) and one the segmenter will not cut out (`## 他為什麼要走`). **The one real design question was the ink**, and both surfaces are now settled (§5.8.4). 虛線 is not in ratatui — 0.29 has exactly one underline (`UNDERLINED` = SGR 4), no dotted/dashed/curly — but the author asked for it anyway with the right reason (「这样和 markdown 的下划线语法可以分开」), and he is right: a chapter really can contain `[[第三章\|那一夜]]`, and the difference must be **shape**, not value, because a faint `underline_color` is the first thing a dark theme eats — while SGR 58 and SGR `4:4` came into terminals together, so the value axis buys no portability either. **Horizontal therefore takes a dotted underline**, and the cost is honest: a `Backend` of our own (~120 lines owning crossterm's `draw()` and the SGR modifier diff, plus raw mode / alt screen / panic hook by hand) and a **custom `Modifier` bit** — `Modifier` is a `u16` with bits 0–8 spoken for, `from_bits_retain` carries bit 9, and `CrosstermBackend` silently ignores bits it does not know, so `--shot` and every `TestBackend` test are unaffected. The fallback is free and ⚠️ **must not be tidied away**: emit `CSI 4 m` then `CSI 4:4 m`, so a terminal that cannot parse the colon form drops it and keeps the solid underline — worst case 「looks like a link」, never nothing. **縱書 must not copy that answer** (an underline in a column is a stack of two-cell dashes *between* the glyphs and reads as separators, and the margin is contended by a reading, a hung 句讀, a 着重號 and a 平仄 mark), and the author's own steer settled it: 「不要太 invasive 但也不要太 low-profile」. The quiet ink (`word_ink` = `rung::QUIET`) is *less* conspicuous, so it is the low-profile end he ruled out; a ground **is** allowed, because `Palette::word` says a word boundary is 「structure, not a mark somebody made」 — that rule governs SELECTION/HEAD/BAND and the 朱 wash, not the paper end — but not `WORD` (962) or `BAND` (940), which are already compressed into each other. So 縱書 takes **one cell of `rung::HEAD` (815) ground with the ink untouched**: 1.27:1 clear of BAND so it is seen, a rung short of SELECTION so a selection still wins over it, and punctuation, 着重號, 平仄 and the cursor all unchanged. With `:word show` on, the wiki ground beats the 分詞 tint. The risk to look at through `--shot` before calling it settled: **the page turns to lace** — 阿寧 is on every page, and forty names means a mark under every third word — hence `:wiki show on\|off` on the `:word show` pattern, **on out of the box** by the author's choice; ⚠️ `--shot` renders the `Buffer`, not the escapes, so it can measure the lace and can never tell you whether a terminal draws `4:4` (a `theme.wiki_underline = "dotted" \| "solid"` key covers the terminal we guess wrong about). The panel needs one field (`DetailKind {Row, Note, Wiki}`) so the breadcrumb and the re-levelled sub-headings can be set apart; depths are **re-levelled** (the entry is `#` whatever it is in the file), duplicates are drawn one after another in `(depth, file order)` with the breadcrumb telling them apart, and precedence is row → note/comment → wiki, because recognition never displaces something the writer typed. `:wiki` / `:wiki edit` / `:wiki reload` / `:wiki show` follow `:word`'s 「one subject, one command」, saving the file re-segments the way `words.txt` already does, and **no new key is needed**: `gd`/`gw` already mean 「follow the note under the cursor」. **「直接切入信息欄進行編輯」 is blocked on #281** — an editable panel is a view of another buffer, and that is exactly the open fault where everything reads `current_buffer()` and three caches are keyed by line alone; `gw` into `wiki.md` at the entry's heading is the near thing, and it is arguably better (the file, the outline, `:s`, undo). Global and local are **both** read, book first, a rule between them and the global part under a 金 「全局」 (the author: 「这样用户就不会混淆了」); `wiki.txt` is read too, opened with Markdown forced on, while `:wiki edit` creates `wiki.md`. Design in §5.8; all five questions answered in §5.8.8. **large**, and it divides: parse ＋ segmenter is one sitting and already makes `w` walk the names. | Proposed |
 
 
 ### 5.5 · A table is a delimiter, a surface and a boundary (#261)
@@ -1541,12 +1541,21 @@ anything), but `wiki.md` is what `:wiki edit` creates when neither exists, and
 a `wiki.txt` is opened with Markdown forced on, the way `:syntax markdown`
 does it.
 
-**Both files are read, and the book's own comes first.** The global wiki is
-世界觀共通設定 across a series; the local one is this book's. Requirement 5
-already says two entries of the same name are both shown, sorted by level —
-so a name in both files is not a conflict to resolve, it is two entries, and
-the book's is the one a reader is asking about. (This is the first open
-question: see §5.8.8.)
+**Both files are read, the book's own comes first, and the global part is
+labelled.** The global wiki is 世界觀共通設定 across a series; the local one is
+this book's. Requirement 5 already says two entries of the same name are both
+shown, sorted by level — so a name in both files is not a conflict to resolve,
+it is two entries, and the book's is the one a reader is asking about.
+
+The author settled it and added the part that makes it readable (2026-09-07):
+「本书排前面，然后本书和全局之间有个分界线，并且全局的部份注上“全局”两个字。这样
+用户就不会混淆了。」 So the panel draws the book's entries, then a rule, then the
+global ones under a 金 「全局」 — 金 because that word is the panel speaking
+about the text rather than being text (§5.4's 這不是正文), and a rule because
+「一本書的設定」 and 「一套書的設定」 are two different authorities and the
+reader must never have to guess which one he is reading. The rule and the label
+appear **only when both files contributed** to this entry; a term that exists in
+one place is drawn with neither.
 
 #### 5.8.2 What counts as an entry
 
@@ -1604,55 +1613,120 @@ than assuming.
 
 **What the terminal layer can actually express.** ratatui 0.29's `Modifier`
 has exactly one underline (`UNDERLINED` = SGR 4). There is no dotted, dashed
-or curly variant — those are SGR `4:4`, `4:5`, `4:3`, and the backend has no
-way to emit them short of writing escape bytes past ratatui's own diff.
-`Style::underline_color` **is** available (the `underline-color` feature is on
-by default) and emits SGR 58; kitty, WezTerm, foot, Ghostty and iTerm2 draw
-it, Apple Terminal ignores it silently.
+or curly variant — those are SGR `4:4`, `4:5`, `4:3`, and nothing in the crate
+emits them. `Style::underline_color` **is** available (the `underline-color`
+feature is on by default) and emits SGR 58; kitty, WezTerm, foot, Ghostty and
+iTerm2 draw it, Apple Terminal ignores it silently.
 
-**Why a ground is the wrong fallback**, even though it always works: on this
-page a ground is the **reader's** mark — the selection, the 朱 wash of the hit
-you are standing on, the band under the cursor's row. That is the same
-argument that settled the fold mark one night earlier (#283): 「an ink rather
-than a ground, because a ground here is the reader's mark and the fold mark is
-the editor's」. A wiki term is the editor's finding too, and putting it on a
-ground would make forty character names compete with the highlighter.
+**Why a ground is not automatically available**, even though it always works:
+on this page a ground is usually the **reader's** mark — the selection
+(`rung::SELECTION`), the 朱 wash of the hit you are standing on, the band under
+the cursor's row. That is the argument that settled the fold mark one night
+earlier (#283): 「an ink rather than a ground, because a ground here is the
+reader's mark and the fold mark is the editor's」. But that rule governs the
+loud three and not the ladder's paper end: `Palette::word` (`rung::WORD`, 962)
+is documented as 「the quietest ground there is … a word boundary is
+**structure, not a mark somebody made**」. A ground *is* on the table, so long
+as it is one of the structural rungs.
 
-**Why 金 is also wrong.** 金 is this theme's word for 這不是正文. A wiki term
-*is* 正文 — it is the writer's own writing, with something behind it.
+**Why 金 is wrong.** 金 is this theme's word for 這不是正文. A wiki term *is*
+正文 — it is the writer's own writing, with something behind it. 金 belongs to
+the panel's own furniture (the breadcrumb, the 「全局」 label), not to the term
+on the page.
 
-**What it should be, then: an underline, because a wiki term is a link.**
-`Kind::Link | Kind::WikiLink` are already drawn `UNDERLINED`, and a wiki term
-is the same thing with the brackets left out — a word in the prose that points
-somewhere else. Where the terminal supports SGR 58 it takes `underline_color`
-one rung back from the writing (`rung::QUIET`, the same shade a reading takes
-beside its base), which is the honest reading of 「虛線」: *fainter than a
-link, not a different shape*. Where it does not, it degrades to a plain
-underline — and degrading into 「looks like a link」 is the correct failure,
-because it is one.
+##### Horizontal: a **dotted** underline, with a solid fallback that costs nothing
 
-**縱書 is a different problem and must not copy the answer.** Underline in a
-vertical column is drawn under each *cell*, so a 縱 of underlined characters
-comes out as a stack of two-cell dashes between the glyphs — it reads as
-separators, not as a 側線. The margin column is the right place, and it is
-already contended: a reading, a hung 句讀 mark, a 着重號 and a 平仄 mark all
-want it (`vertical::Margin`). Two ways, and the author should pick:
+Settled with the author 2026-09-07. He asked the right question — 「横排能不能
+用虚线下划线？这样和 markdown 的下划线语法可以分开」 — and the answer is yes,
+for a reason better than looks:
 
-* **A 側線 in the margin** (`︙` or `｜`), yielding to reading / 着重號 / 平仄
-  when they want the same cell — correct-looking, and silently absent on
-  exactly the lines that are most annotated.
-* **`WordMark::Ink`'s axis instead** — the term set one rung back
-  (`word_ink`), costing no column and colliding with nothing. Not a line, but
-  it is the one axis 縱書 has free.
+* A wiki term and a Markdown link must be **told apart**, because
+  `Kind::Link | Kind::WikiLink` are already drawn `UNDERLINED` and a chapter
+  really can contain `[[第三章|那一夜]]`. Two axes are available for the
+  difference: **shape** (dotted vs solid) and **value** (`underline_color` one
+  rung back). Shape is the better axis — it survives a dark theme, a coloured
+  ground and a low-contrast palette, where a value difference is the first
+  thing to be eaten.
+* The two are **not** a safe-vs-risky choice. SGR 58 and SGR `4:4` came into
+  terminals together (kitty introduced them in one go), so the set of terminals
+  that draws the faint underline is very nearly the set that draws the dotted
+  one. Picking the value axis buys no portability.
 
-**And a risk worth stating before it is built: the page turns to lace.** 阿寧
-is on every page; forty names, three sects and a province means a paragraph
-with an underline under every third word. So the mark is a switch on the
-`:word show` pattern — `:wiki show on|off` — and my recommendation is **on out
-of the box**, because the whole point is that the reader learns which words
-have pages, with the off switch one command away for the writer who finds it
-noisy. This is worth looking at through `--shot` on a real chapter before
-calling it settled.
+**The cost is a backend.** ratatui cannot emit `4:4`, and writing escape bytes
+past its diff would desynchronise its model of the screen from the screen. The
+honest way is a **`Backend` of our own** wrapping the same `Stdout`:
+`ratatui::init()` (lib.rs:269) hands back a `CrosstermBackend`, and replacing it
+means owning crossterm's `draw()` — the cursor moves and the SGR modifier diff —
+about 120 lines in one file, plus raw mode / alternate screen / panic hook by
+hand (`ratatui::init` does those three). The term's dotted-ness rides on a
+**custom `Modifier` bit**: `Modifier` is a `u16` with bits 0–8 spoken for, and
+`Modifier::from_bits_retain` will carry bit 9. Two things make that safe —
+`CrosstermBackend` silently ignores bits it does not know (so the `--shot` and
+`TestBackend` paths are unaffected and the tests keep passing), and the bit
+travels in `Style`, so it goes through `Buffer`, the diff and the theme without
+a parallel channel. What we take on in exchange is that a ratatui upgrade can
+change modifier-diff semantics under us.
+
+**The fallback is free, and must not be tidied away.** Emit `CSI 4 m` and then
+`CSI 4:4 m`, in that order, for a dotted cell. A terminal that parses colon
+sub-parameters upgrades to the dotted line; a terminal that does not **drops the
+sequence it cannot parse and keeps the solid underline it was already given**.
+So the worst case is 「looks like a link」 and never 「nothing at all」.
+⚠️ That leading `CSI 4 m` looks redundant to anyone reading the emitter later.
+It is the entire fallback. Leave it, and leave this paragraph beside it.
+
+##### 縱書: one cell of `rung::HEAD` ground, ink untouched
+
+縱書 must not copy the horizontal answer. An underline in a vertical column is
+drawn under each *cell*, so a 縱 of underlined characters comes out as a stack
+of two-cell dashes **between** the glyphs — it reads as separators, not as a
+側線. The margin column is the other obvious place and it is already contended:
+a reading, a hung 句讀 mark, a 着重號 and a 平仄 mark all want it
+(`vertical::Margin`), so a 側線 would be silently absent on exactly the lines
+that are most annotated.
+
+Put to the author as 「側線 in the contended margin, or the quiet ink」, he chose
+the ink and then asked the question that undid it: 「淡一级是更明显还是更不明显？
+能不能配合背景色？我希望不要太 invasive 但也不要太 low-profile」. The answers
+decide it:
+
+* **淡一級是更不明顯.** `word_ink` is `rung::QUIET` (300), the rung of a reading
+  beside its base and a 拆分 annotation — its meaning is 這一項次要. Literal
+  Option 2 therefore says the opposite of what a wiki term means, and lands
+  exactly on the low-profile end he ruled out.
+* **A ground is available**, per `Palette::word` above — but not `WORD` (962) or
+  `BAND` (940) for this: those two are already compressed at the paper end
+  (§5.4 measures 880 against 940 at 1.11–1.20:1, which is not a visible
+  difference), so a wiki ground on either would melt into the 分詞 tint the
+  moment `:word show` is on.
+
+**So: `rung::HEAD` (815), one cell wide, behind the term, with the ink
+untouched.** That rung is written for precisely this case — 「a band that must
+be **seen**, because position is not separating it from the text」 (it carries
+縱書's paragraph-number band and the lit tab). It sits 1.27:1 clear of `BAND` so
+it reads at a glance, one rung short of `SELECTION` (700) so a selection drawn
+over it still wins, and because it changes only the ground, the term's
+punctuation, 着重號, 平仄 marks and the cursor are all untouched. Not invasive;
+not low-profile.
+
+**The `:word show` collision rule.** With both on, the 分詞 tint (`WORD`, 962)
+and the wiki ground (`HEAD`, 815) are two grounds on the same cells, and the
+wiki one wins — it is the one that must be seen, and the word tint's whole
+character is that it is a hair off the paper. A wiki term therefore does not
+also take the word tint; it takes the wiki ground instead.
+
+**And a risk worth stating before it is built: the page turns to lace.** 阿寧 is
+on every page; forty names, three sects and a province means a paragraph with a
+mark under every third word. So the mark is a switch on the `:word show`
+pattern — `:wiki show on|off` — and the author chose **on out of the box**
+(2026-09-07), because the whole point is that the reader learns which words have
+pages, with the off switch one command away for the writer who finds it noisy.
+Still worth looking at through `--shot` on a real chapter before calling it
+settled — ⚠️ but note what `--shot` **cannot** check: it renders the `Buffer`,
+not the escape sequences, so it can show how much of a paragraph is marked and
+can never show whether a given terminal draws the dotted line. That one needs a
+real terminal, and a `theme.wiki_underline = "dotted" | "solid"` key so a reader
+on a terminal we guessed wrong about is one line from a fix.
 
 #### 5.8.5 The panel
 
@@ -1707,7 +1781,9 @@ rows.
 
 Several entries of the same name are drawn one after another in the one panel,
 in `(depth, file order)` — the author's requirement 5, and it needs no
-disambiguation UI because the breadcrumb already says which is which.
+disambiguation UI because the breadcrumb already says which is which. Across the
+two files the order is **book first, then a rule, then the global ones under a
+金 「全局」** (§5.8.1); within each file, `(depth, file order)` as above.
 
 #### 5.8.6 The commands, and no new keys
 
@@ -1746,15 +1822,30 @@ undo, the whole editor, rather than a text box in a panel. Once #281 is fixed,
 「編輯 in the other pane while the chapter stays in this one」 is the same
 gesture with a split, and that is the version worth waiting for.
 
-#### 5.8.8 Open questions
+#### 5.8.8 What the author decided (2026-09-07)
 
-1. **The entry's own paragraph** — in or out? (The sketch omits it, the prose
-   includes it; proposal: in.)
-2. **Global + local**: both read, book first (proposed) — or does a local
-   entry of the same name *replace* the global one?
-3. **縱書**: 側線 in the contended margin, or the quiet ink?
-4. **Factory default for the mark**: on (proposed) or off?
-5. `wiki.txt` — read it, or make `wiki.md` the only spelling?
+All five went to him and all five came back. Recorded in his words so that a
+later reader does not reopen them:
+
+1. **The entry's own paragraph is in.** The sketch in requirement 4 omits it and
+   the prose beside it includes it; the prose is right — an entry whose body is
+   one paragraph would otherwise show an empty panel.
+2. **Global + local: both read.** 「本书排前面，然后本书和全局之间有个分界线，并且
+   全局的部份注上“全局”两个字。这样用户就不会混淆了。」 Neither replaces the other
+   (§5.8.1, §5.8.5).
+3. **縱書: a `rung::HEAD` ground, one cell, ink untouched** — he asked for
+   「不要太 invasive 但也不要太 low-profile」 and the quiet ink was the
+   low-profile end (§5.8.4).
+4. **The mark is on out of the box.** 「開（推薦）」
+5. **Both spellings are read**, `wiki.txt` opened with Markdown forced on;
+   `wiki.md` is what `:wiki edit` creates (§5.8.1).
+
+And one he raised himself: **horizontal takes a dotted underline**, not a faint
+one — 「这样和 markdown 的下划线语法可以分开」 — which buys a custom `Backend`
+and pays for it in a difference that survives any theme (§5.8.4).
+
+Nothing here is open. What is still unknown is empirical, not a decision: how
+much of a real chapter ends up marked, and which terminals draw `4:4`.
 
 #### 5.8.9 Sizing
 
@@ -1763,7 +1854,8 @@ gesture with a split, and that is the version worth waiting for.
 | parse `wiki.md`, entries, ancestors, duplicate names | small |
 | second `WordList` into `WithWords`; `:wiki` commands; save-reload | small |
 | the mark on the horizontal page (`wiki_marks_on_line`, style, `:wiki show`) | medium |
-| the mark in 縱書 (margin contention, or the ink) | medium |
+| the dotted underline: our own `Backend`, a custom `Modifier` bit, the solid fallback | medium |
+| the mark in 縱書 (`rung::HEAD` ground, the `:word show` precedence) | small |
 | `wiki_detail` + `DetailKind` + re-levelling + breadcrumb + duplicates | medium |
 | `gw` into the wiki file | small |
 | editing **in** the panel | blocked on #281 |
