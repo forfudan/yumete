@@ -677,15 +677,22 @@ impl ThemeConfig {
     /// rung worked out from them — so a theme is eight colours and no more.
     /// **A theme's name is ASCII**, because a command line is: `:theme ink`
     /// has to be typeable with the IME off, which is where a reader who has
-    /// just opened the editor is. The pinyin is an alias for the hand that
-    /// thinks in the Chinese name, and the Chinese name itself lives in the
-    /// comment beside it, which is where a name that cannot be typed belongs.
+    /// just opened the editor is, and the pinyin is an alias for the hand that
+    /// thinks in the Chinese one.
+    ///
+    /// **The Chinese name is accepted here too**, because this is a file and
+    /// not the command line: the IME is kept out of `:` on purpose, so 墨香
+    /// cannot be typed *there* and `ink` is the name the menu offers — but
+    /// `[theme] name = "黑白"` is written in an editor, by a writer who has an
+    /// IME, and the manual has always said it works. It fell through to the
+    /// branch that keeps the default colours under the new *label*, so the page
+    /// stayed 墨香 and called itself 黑白.
     pub fn named(name: &str) -> Option<ThemeConfig> {
         match name.trim().to_ascii_lowercase().as_str() {
             // 墨香 — warm ink on a deep ground.
-            "ink" | "moxiang" => Some(ThemeConfig::default()),
+            "ink" | "moxiang" | "墨香" => Some(ThemeConfig::default()),
             // 黑白 — the same design with every colour taken away.
-            "bw" | "heibai" | "mono" => Some(ThemeConfig {
+            "bw" | "heibai" | "mono" | "黑白" => Some(ThemeConfig {
                 name: "bw".to_string(),
                 // A true neutral, and no accident of temperature anywhere: the
                 // ink is off-white so it does not glare, the ground is off-
@@ -710,7 +717,7 @@ impl ThemeConfig {
                 ..ThemeConfig::default()
             }),
             // 藍曬 — 普魯士藍的地、白線的字——八套裏唯一底色真帶飽和色的一套。暗是氰版藍曬，明是重氮曬圖。
-            "cyanotype" | "lanshai" => Some(ThemeConfig {
+            "cyanotype" | "lanshai" | "藍曬" | "蓝晒" => Some(ThemeConfig {
                 name: "cyanotype".to_string(),
                 dark: Ladder {
                     ink: (0xEA, 0xF2, 0xFB),
@@ -727,7 +734,7 @@ impl ThemeConfig {
                 ..ThemeConfig::default()
             }),
             // 琥珀 — 整頁只有一種顏色。正文本身就是磷光，金是同一個琥珀燒得更亮，不是第二個色相。
-            "amber" | "hupo" => Some(ThemeConfig {
+            "amber" | "hupo" | "琥珀" => Some(ThemeConfig {
                 name: "amber".to_string(),
                 dark: Ladder {
                     ink: (0xFF, 0xB1, 0x00),
@@ -744,7 +751,7 @@ impl ThemeConfig {
                 ..ThemeConfig::default()
             }),
             // 莫高 — 墨是壁畫氧化之後真正變成的褐黑；金不是金色，是石綠——洞窟自己的礦物。
-            "mogao" => Some(ThemeConfig {
+            "mogao" | "莫高" => Some(ThemeConfig {
                 name: "mogao".to_string(),
                 dark: Ladder {
                     ink: (0xE6, 0xDA, 0xB8),
@@ -761,7 +768,7 @@ impl ThemeConfig {
                 ..ThemeConfig::default()
             }),
             // 莫蘭迪 — 八套裏最低的正文對比、最灰的地。長夜寫作最不刺眼的一套，朱也降成塵土般的磚紅。
-            "morandi" | "molandi" => Some(ThemeConfig {
+            "morandi" | "molandi" | "莫蘭迪" | "莫兰迪" => Some(ThemeConfig {
                 name: "morandi".to_string(),
                 dark: Ladder {
                     ink: (0xC8, 0xC1, 0xB6),
@@ -778,7 +785,7 @@ impl ThemeConfig {
                 ..ThemeConfig::default()
             }),
             // 夜螢 — 近乎全黑的地，字是冷灰，唯一的暖處是那點黃金——螢火不是霓虹，一頁上只該有幾點。
-            "firefly" | "yeying" => Some(ThemeConfig {
+            "firefly" | "yeying" | "夜螢" | "夜萤" => Some(ThemeConfig {
                 name: "firefly".to_string(),
                 dark: Ladder {
                     ink: (0xC9, 0xCF, 0xC4),
@@ -795,7 +802,7 @@ impl ThemeConfig {
                 ..ThemeConfig::default()
             }),
             // 明度階 — 朱不是紅的，是藍的：紅綠色盲也分得開。金與朱在色相和明度上各自分開了兩次。
-            "meridian" | "mingdujie" => Some(ThemeConfig {
+            "meridian" | "mingdujie" | "明度階" | "明度阶" => Some(ThemeConfig {
                 name: "meridian".to_string(),
                 dark: Ladder {
                     ink: (0xEE, 0xF1, 0xF5),
@@ -812,7 +819,7 @@ impl ThemeConfig {
                 ..ThemeConfig::default()
             }),
             // 陶窯 — 灰釉炻器：地是窯灰，金是草木灰的青綠。橘色只留給錯誤——那是窯裏的火。
-            "kiln" | "taoyao" => Some(ThemeConfig {
+            "kiln" | "taoyao" | "陶窯" | "陶窑" => Some(ThemeConfig {
                 name: "kiln".to_string(),
                 dark: Ladder {
                     ink: (0xE8, 0xE1, 0xD3),
@@ -829,7 +836,7 @@ impl ThemeConfig {
                 ..ThemeConfig::default()
             }),
             // 靛橘 — 顏色只活在底色裏，正文永遠是中性灰。唯一破例的是朱，它用紫，故意違反自己這條規矩。
-            "complement" | "dianju" => Some(ThemeConfig {
+            "complement" | "dianju" | "靛橘" => Some(ThemeConfig {
                 name: "complement".to_string(),
                 dark: Ladder {
                     ink: (0xE9, 0xE9, 0xEC),
