@@ -3069,9 +3069,9 @@ en = "add a row / drop this row; t j and t k move it"
 [[message]]
 # 表格幫助：側欄與摺格子
 key = "help.table.detail-and-folds"
-zht = "這一行攤開來讀／過寬的格子收起尾巴（全）"
-zhs = "这一行摊开来读／过宽的格子收起尾巴（全）"
-en = "read this row laid out / fold the tails of over-wide cells (全)"
+zht = "這一行攤開來讀／過寬的格子收起尾巴"
+zhs = "这一行摊开来读／过宽的格子收起尾巴"
+en = "read this row laid out / fold the tails of over-wide cells"
 
 [[message]]
 # 表格幫助：把檔案當表格讀
@@ -5822,11 +5822,11 @@ zhs = "命令送回来的第 {0} 行是 {1} 栏，这张表是 {2} 栏——没�
 en = "line {0} came back with {1} columns and this table has {2} — nothing replaced"
 
 [[message]]
-# t w 在「基本」或源碼模式下按到
-key = "table.folds-need-full"
-zht = "摺格子是「全」纔做的事——先 tf"
-zhs = "折格子是「全」才做的事——先 tf"
-en = "folding cells is a 全 thing — press tf first"
+# t w 在源碼模式下按到：那裏的表格照原樣畫，沒有排齊的欄可摺
+key = "table.folds-need-a-drawn-table"
+zht = "沒有排齊的表格可摺——先 tb 或 tf"
+zhs = "没有排齐的表格可折——先 tb 或 tf"
+en = "nothing squared up to fold — press tb or tf first"
 
 [[message]]
 # t w 把過寬的格子收起尾巴

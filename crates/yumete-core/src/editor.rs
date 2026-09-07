@@ -1371,15 +1371,21 @@ pub struct Editor {
     /// idea, and 中階 does not fold.
     indent_folds: bool,
     /// Whether a cell wider than [`crate::mdtable::MAX_COLUMN`] has its tail
-    /// folded away — 全 only, and `t w` is the switch (#283).
+    /// folded away — `t w` is the switch (#283).
     ///
-    /// The law the levels keep: **`basic` 不藏、不摺、不替換; `full` 三件都可
-    /// 以做**. Folding a cell is all three at once, so it belongs to 全 and to
-    /// nothing below it. Off, the columns go to their natural width and run
-    /// off the side of the window — which is what the reader asks for when a
-    /// cell is the thing being read rather than scanned, and is the reason
-    /// this is a switch and not a constant.
-    cell_folds: bool,
+    /// Off, the columns go to their natural width and run off the side of the
+    /// window, which is what the reader asks for when a cell is the thing
+    /// being read rather than scanned — the reason this is a switch and not a
+    /// constant.
+    ///
+    /// **`None` is 「nobody has said」**, and the place answers for itself:
+    /// the 全 page folds, 基本 does not (「`basic` 不藏、不摺、不替換」), and
+    /// the `t t` grid caps at its own width wherever it is opened from. `t w`
+    /// writes a `Some`, and from then on the reader's answer travels with them
+    /// — a bare `bool` could not hold both 「基本 folds nothing unasked」 and
+    /// 「基本 folds when asked」, which is the whole of the author's question
+    /// (2026-09-07: 「虽然 tb 在默认状态下不折叠，但能不能在按下 tw 之后折叠？」).
+    cell_folds: Option<bool>,
     /// How many bands the vertical page is divided into (段組).
     bands: usize,
     /// What the last `Enter` search found, **and which document it found it
@@ -1759,7 +1765,7 @@ impl Editor {
             loose_rows: false,
             indent: 0,
             indent_folds: true,
-            cell_folds: true,
+            cell_folds: None,
             bands: 1,
             hits: None,
             jumps: Vec::new(),
@@ -3434,12 +3440,17 @@ impl Editor {
 
     /// `t w` — fold the over-wide cells away, or give them back (#283).
     ///
-    /// **It refuses below 全** rather than quietly turning 全 on. `t f` is one
-    /// keystroke away and it says what it does; a width key that silently
-    /// draws walls and a ruler would be a second way to change the level, and
-    /// the reader would have no way to tell which of the two they had asked
-    /// for. The switch is still *set* — walk up to 全 and the answer is the
-    /// one that was asked for.
+    /// **It asks for a table that has been squared up, not for 全.** The law
+    /// 「`basic` 不藏、不摺、不替換」 says what a *level* does on its own, and
+    /// `t w` is the reader's own key — asking for it at 基本 is not the editor
+    /// hiding anything behind anybody's back (author, 2026-09-07: 「虽然 tb 在
+    /// 默认状态下不折叠，但能不能在按下 tw 之后折叠？」). What folding really
+    /// needs is a column to fold *against*, and 基本 squares one up exactly as
+    /// 全 does. Only 源碼 has none, and there the answer is still a refusal
+    /// rather than a level quietly raised: a width key that also drew walls
+    /// and a ruler would be a second way to change the level, and the reader
+    /// could not tell which of the two they had asked for. The switch is
+    /// still *set* — walk up a level and the answer is the one asked for.
     ///
     /// **The pane is not below 全 — it is beside it.** `t t` draws its own
     /// grid at its own cap, so the switch means there exactly what it means
@@ -3447,50 +3458,63 @@ impl Editor {
     /// that could not be opened by any key at all (author, 2026-09-07:
     /// 「tw 功能无法在 tt 模式下使用……长单元格被折叠的信息永远无法读取」).
     fn toggle_cell_folds(&mut self) {
-        self.cell_folds = !self.cell_folds;
+        let folds = !self.folds_now();
+        self.cell_folds = Some(folds);
         self.pad_cache.borrow_mut().take();
         let cap = crate::mdtable::MAX_COLUMN.to_string();
-        self.status = match (self.cell_folds, self.folds_can_bite()) {
-            (_, false) => say!("table.folds-need-full"),
+        self.status = match (folds, self.folds_can_bite()) {
+            (_, false) => say!("table.folds-need-a-drawn-table"),
             (true, _) => say!("table.folds-on", cap, crate::mdtable::FOLD_MARK),
             (false, _) => say!("table.folds-off", cap),
         };
     }
 
     /// Whether `t w` has anywhere to bite from where the reader is standing —
-    /// the 全 page, or the grid the pane draws for itself.
+    /// a page that squares its tables up, or the grid the pane draws for
+    /// itself. 源碼 is the one place with nothing to fold against.
     fn folds_can_bite(&self) -> bool {
-        self.table_level == TableLevel::Full
+        self.table_level != TableLevel::Off
             || self.table.as_ref().is_some_and(|view| view.takes_the_pane())
     }
 
-    /// Whether `t w` is asking for over-wide cells to be folded (#283).
+    /// The answer that holds where the reader is standing — theirs if they
+    /// have given one, and otherwise the place's own (#283).
     ///
-    /// The switch itself, with no question about *where*: the prose page asks
-    /// [`Self::cells_fold_here`], and the grid — which caps and scrolls by its
-    /// own rules — asks this.
+    /// The two places have different defaults and both are right: the `t t`
+    /// grid draws its own columns and caps them however it was opened, while
+    /// the prose page folds only at 全, because below 全 hiding is something
+    /// the level may not do unasked.
+    fn folds_now(&self) -> bool {
+        let pane = self.table.as_ref().is_some_and(|view| view.takes_the_pane());
+        self.cell_folds.unwrap_or(pane || self.table_level == TableLevel::Full)
+    }
+
+    /// Whether over-wide cells are folded (#283) — the switch, with no
+    /// question about *where* the table is drawn.
+    ///
+    /// The prose page asks [`Self::cells_fold_here`], which adds the terms
+    /// that only prose has; the grid — which caps and scrolls by its own
+    /// rules — asks this.
     pub fn cell_folds(&self) -> bool {
-        self.cell_folds
+        self.folds_now()
     }
 
     /// Whether an over-wide cell has its tail folded away on this page (#283).
     ///
-    /// Three terms, and each one is the law rather than a preference:
+    /// Two terms, and each one is the law rather than a preference:
     ///
-    /// * **全 only.** 「`basic` 不藏、不摺、不替換; `full` 三件都可以做」——
-    ///   folding is all three at once, so it cannot live below 全.
+    /// * **Wherever the table is squared up.** A fold is measured in display
+    ///   width against a squared-up column, so `table_padding_on` is the whole
+    ///   of the question — 基本 squares up and 源碼 does not. 「`basic` 不藏、
+    ///   不摺、不替換」 governs what the *level* does unasked; `t w` is asked.
     /// * **In prose only.** The pane draws its own grid, and folds it by
     ///   drawing its columns narrow rather than by hiding characters of a
     ///   line — [`Self::cell_folds`] is the switch it reads.
-    /// * **What `table_padding_on` already answers.** A fold is measured in
-    ///   display width against a squared-up column; where nothing is squared
-    ///   up there is nothing to fold against.
     ///
     /// [`Editor::cell_folds`] is the writer's switch over the top — `t w`.
     fn cells_fold_here(&self) -> bool {
-        self.cell_folds
+        self.folds_now()
             && self.table_padding_on()
-            && self.table_level == TableLevel::Full
             && !self.table.as_ref().is_some_and(|view| view.pane)
     }
 
@@ -22530,17 +22554,58 @@ mod tests {
         );
     }
 
-    /// 「`basic` 不藏、不摺、不替換」. Folding is all three, so it waits for 全
-    /// — and says so rather than turning 全 on behind the reader's back.
+    /// 「`basic` 不藏、不摺、不替換」 is a law about what a *level* does with
+    /// nobody asking. `t w` is the reader asking (author, 2026-09-07: 「虽然
+    /// tb 在默认状态下不折叠，但能不能在按下 tw 之后折叠？」), and 基本 squares
+    /// its columns up exactly as 全 does — so there is something to fold
+    /// against, and folding it is the reader's call and not the level's.
     #[test]
-    fn folding_is_a_全_thing_and_基本_says_so() {
+    fn 基本_folds_nothing_unasked_and_folds_when_asked() {
         let mut ed = with_two_md_tables();
         ed.goto_line(9);
         press(&mut ed, "tb");
-        assert!(ed.hidden_on_line(8).is_empty(), "基本 hides nothing");
+        assert!(ed.hidden_on_line(8).is_empty(), "基本 hides nothing unasked");
         press(&mut ed, "tw");
         assert_eq!(ed.table_level(), TableLevel::Basic, "and stays 基本");
-        assert!(ed.status().contains("tf"), "it points at the key: {}", ed.status());
+        assert!(
+            !ed.hidden_on_line(8).is_empty(),
+            "asked, it folds without raising the level: {}",
+            ed.status()
+        );
+        press(&mut ed, "tw");
+        assert!(ed.hidden_on_line(8).is_empty(), "and gives it back: {}", ed.status());
+    }
+
+    /// 源碼 draws the file as it is written, so no column has been squared up
+    /// and there is nothing to measure a fold against. The refusal names the
+    /// two keys that square one up rather than raising a level behind the
+    /// reader's back.
+    #[test]
+    fn 源碼_has_no_squared_up_column_to_fold_and_says_so() {
+        let mut ed = with_two_md_tables();
+        ed.goto_line(9);
+        press(&mut ed, "to");
+        press(&mut ed, "tw");
+        assert_eq!(ed.table_level(), TableLevel::Off, "and stays 源碼");
+        assert!(ed.hidden_on_line(8).is_empty(), "nothing folded");
+        assert!(ed.status().contains("tb"), "it points at the keys: {}", ed.status());
+    }
+
+    /// The level supplies the default and the reader's own answer outlives it:
+    /// a `t w` pressed at 基本 is still the answer at 全, and the other way
+    /// round. Otherwise walking between levels would keep undoing the reader.
+    #[test]
+    fn the_answer_t_w_gave_travels_between_the_levels() {
+        let mut ed = with_two_md_tables();
+        ed.goto_line(9);
+        press(&mut ed, "tf");
+        assert!(!ed.hidden_on_line(8).is_empty(), "全 folds to begin with");
+        press(&mut ed, "tw");
+        assert!(ed.hidden_on_line(8).is_empty(), "and `t w` opens it: {}", ed.status());
+        press(&mut ed, "tb");
+        assert!(ed.hidden_on_line(8).is_empty(), "基本 does not fold it back");
+        press(&mut ed, "tf");
+        assert!(ed.hidden_on_line(8).is_empty(), "nor does walking back up to 全");
     }
 
     /// #283, the author off his own `development.md` (2026-09-07): 「tw 功能无
@@ -22560,8 +22625,8 @@ mod tests {
         press(&mut ed, "tw");
         assert!(!ed.cell_folds(), "and `t w` is heard: {}", ed.status());
         assert!(
-            !ed.status().contains("tf"),
-            "no 「先 tf」 in a window that has no level to raise: {}",
+            !ed.status().contains("tb"),
+            "no refusal in a window that squares its own columns up: {}",
             ed.status()
         );
         press(&mut ed, "tw");
