@@ -1806,23 +1806,32 @@ pub fn pick<'a>(typed: &str, from: &'a [Word]) -> Option<&'a Word> {
 /// drew nothing: the menu vanished on the abbreviation it had printed itself
 /// (§5.2.2 fault 1).
 ///
-/// The bang belongs to the command, not to its spelling — without the strip,
-/// the line where a path is *most* likely to be Chinese, `:w! 第三章.md`, the
-/// one you type because the file is already there, was the one line that
-/// refused the IME. **Only where the bang is really this command's**:
-/// `resolve` hands back a `…!` spelling for the ten that take one and leaves
-/// every other bang where it found it, so stripping unconditionally
-/// resurrected a command the parser refuses — `:o! 第三章.md` became `open`
-/// and was offered the IME for a line that can only end in an error.
+/// The bang belongs to the command, not to its spelling — without it, the line
+/// where a path is *most* likely to be Chinese, `:w! 第三章.md`, the one you
+/// type because the file is already there, was the one line that refused the
+/// IME. How far the bang is followed is the comment below.
 fn entry_named(head: &str) -> Option<&'static Entry> {
-    let head = resolve(head);
-    let head = match head.strip_suffix('!') {
-        Some(stem) if forceable(stem).is_some() => stem,
-        _ => head,
+    let spelled = |word: &str| {
+        COMMANDS
+            .iter()
+            .find(|e| e.name == word || e.aliases.contains(&word))
     };
-    COMMANDS
-        .iter()
-        .find(|e| e.name == head || e.aliases.contains(&head))
+    let head = resolve(head);
+    if let Some(entry) = spelled(head) {
+        return Some(entry);
+    }
+    // A banged spelling `resolve` could not settle on its own. It hands back
+    // `write!` for `:w!`, but leaves `:q!` exactly as it found it, because two
+    // commands begin with `q` and only their **banged** spellings tell them
+    // apart — which is what `parse` matches on and what a hand meaning「不存了」
+    // actually types. So the stem is resolved in its own right.
+    //
+    // **Only where the bang is really this command's**: `:o!` and `:e!` are
+    // retired outright, and an unconditional strip resurrected them — `:o!
+    // 第三章.md` became `open` and was offered the IME for a line that can only
+    // end in an error.
+    let entry = spelled(resolve(head.strip_suffix('!')?))?;
+    forceable(entry.name).map(|_| entry)
 }
 
 /// A word offered by completion, whether a command or an argument.
@@ -2620,7 +2629,7 @@ const WORD_TOPICS: &[Word] = &[
         name: "show",
         help: "cmd.word-topics.show",
         needs: &[],
-        then: Args::Words(ON_OFF),
+        then: Args::Words(WORD_SHOW),
     },
     Word {
         name: "list",
@@ -2643,6 +2652,40 @@ const WORD_TOPICS: &[Word] = &[
     Word {
         name: "habit",
         help: "cmd.word-topics.habit",
+        needs: &[],
+        then: Args::None,
+    },
+];
+
+/// What `:word show` may be given — **four words, not two**.
+///
+/// The parser has always taken `tint` and `ink` here (and 底色／字色, which
+/// `WordMark::parse` reads), while the table declared `ON_OFF`: so the two
+/// drawings ran, and the menu that exists to say what may follow `show` never
+/// mentioned them. Same shape as §5.2.2 fault 7 — a word the editor accepts
+/// and no reader can find is a word only its author has.
+const WORD_SHOW: &[Word] = &[
+    Word {
+        name: "on",
+        help: "cmd.on-off.on",
+        needs: &[],
+        then: Args::None,
+    },
+    Word {
+        name: "off",
+        help: "hint.close",
+        needs: &[],
+        then: Args::None,
+    },
+    Word {
+        name: "tint",
+        help: "cmd.word-show.tint",
+        needs: &[],
+        then: Args::None,
+    },
+    Word {
+        name: "ink",
+        help: "cmd.word-show.ink",
         needs: &[],
         then: Args::None,
     },
@@ -3568,6 +3611,45 @@ fn walk(words: &[(usize, &str)]) -> Option<&'static Args> {
         }
     }
     Some(args)
+}
+
+/// Does a line the **documents** print name something the editor has?
+///
+/// Not `parse`: no argument is evaluated and nothing is run, so a line that is
+/// merely impossible at this moment — `:w` with no file, `:table rules` with no
+/// table — still answers yes. It settles the one question a manual can get
+/// wrong all by itself, 「有沒有這條命令，它收不收後面這幾個字」, by walking
+/// the same `resolve` / `pick` rule the parser walks.
+///
+/// The **first word it cannot place** comes back, so a document that has gone
+/// stale names the word rather than the line. Walking stops where the words
+/// stop: under a path or free text what follows is the writer's own text, not
+/// this table's vocabulary.
+pub fn names_something(line: &str) -> Result<(), String> {
+    let line = line.strip_prefix(':').unwrap_or(line);
+    let mut words = line.split_whitespace();
+    let Some(head) = words.next() else {
+        return Err(String::from(":"));
+    };
+    // The two the parser reaches **before** the name split, and so the two the
+    // table cannot hold under a word: `:!make` takes the whole rest of the line,
+    // and the substitution's entry is named for its shape, `s/pat/rep/`. The
+    // documents call the second one `:s`, which is what a reader types.
+    if head == "s" || head.starts_with("s/") || head.starts_with('!') {
+        return Ok(());
+    }
+    let Some(entry) = entry_named(head) else {
+        return Err(head.to_string());
+    };
+    let mut args = &entry.args;
+    for word in words {
+        let Some(list) = args.words() else { return Ok(()) };
+        let Some(found) = pick(word, list) else {
+            return Err(word.to_string());
+        };
+        args = &found.then;
+    }
+    Ok(())
 }
 
 /// Which way a search runs.

@@ -1814,6 +1814,22 @@ en = "reread (this book's and the global one)"
 find = "詞表 词表 重讀 重读 刷新 reload"
 
 [[message]]
+# : 命令選單裏 ink 那一項的說明（word-show 組）
+key = "cmd.word-show.ink"
+zht = "換墨色：紙不動，隔一個詞的字本身退後一格"
+zhs = "换墨色：纸不动，隔一个词的字本身退后一格"
+en = "mark by ink: the paper stays, every other word steps back"
+find = "分詞 分词 著色 着色 字色 文字 ink"
+
+[[message]]
+# : 命令選單裏 tint 那一項的說明（word-show 組）
+key = "cmd.word-show.tint"
+zht = "鋪底色：隔一個詞在紙上一層極淡的色（出廠）"
+zhs = "铺底色：隔一个词在纸上一层极淡的色（出厂）"
+en = "mark by tint: a very faint ground under every other word (the default)"
+find = "分詞 分词 著色 着色 底色 背景 tint"
+
+[[message]]
 # : 命令選單裏 discover 那一項的說明（word-topics 組）
 key = "cmd.word-topics.discover"
 zht = "挖出本書自己的詞：人名地名，字典裏沒有的"
