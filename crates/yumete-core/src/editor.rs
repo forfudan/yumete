@@ -23118,10 +23118,16 @@ mod tests {
         press(&mut ed, "ta");
         assert!(ed.cell_wrap(), "{}", ed.status());
         assert!(ed.cell_folds(), "the cap is what 折行 wraps at: {}", ed.status());
-        // …and 摺起 takes it back off.
+        // …and `t w` takes it back off — to 攤平, not to 摺起 (author,
+        // 2026-09-08). Both keys name a way of *not* showing a cell whole, so
+        // the way back from either of them is the whole cell; answering 折行
+        // with 摺起 handed the reader the one state they had not named.
         press(&mut ed, "tw");
-        assert!(ed.cell_folds() && !ed.cell_wrap(), "{}", ed.status());
-        // Each is still a toggle of its own: pressed twice, neither is on.
+        assert!(!ed.cell_folds() && !ed.cell_wrap(), "攤平: {}", ed.status());
+        // Each is still a toggle of its own: from 攤平 it folds, and again
+        // from 摺起 it opens back out.
+        press(&mut ed, "tw");
+        assert!(ed.cell_folds() && !ed.cell_wrap(), "摺起: {}", ed.status());
         press(&mut ed, "tw");
         assert!(!ed.cell_folds() && !ed.cell_wrap(), "攤平: {}", ed.status());
         press(&mut ed, "ta");
