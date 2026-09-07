@@ -241,6 +241,11 @@ pub enum Command {
     SetRender(crate::editor::Render),
     /// `:render` with no argument — say which level all four dimensions are on.
     ReportRender,
+    /// `:hud off|basic|full` — how loudly the editor says, beside the caret,
+    /// what you have typed (Feature #284).
+    SetHud(crate::editor::Hud),
+    /// `:hud` with no argument — say which of the three it is on.
+    ReportHud,
     /// `:preview` / `:preview off` — hand the file to the real typesetter and
     /// show what it makes (Feature #128).
     SetPreview(bool),
@@ -866,6 +871,19 @@ pub fn parse(input: &str) -> Result<Command, CommandError> {
             "full" => Ok(Command::SetRender(crate::editor::Render::Full)),
             other => Err(CommandError::InvalidArgument {
                 command: "render",
+                value: other.to_string(),
+            }),
+        },
+        // The bare word reports, the same shape `:render` has — and for the
+        // same reason: with three levels, 「which one am I on」 is a better use
+        // of the word than a fourth spelling of the middle one.
+        "hud" => match rest {
+            "" => Ok(Command::ReportHud),
+            "off" => Ok(Command::SetHud(crate::editor::Hud::Off)),
+            "basic" => Ok(Command::SetHud(crate::editor::Hud::Basic)),
+            "full" => Ok(Command::SetHud(crate::editor::Hud::Full)),
+            other => Err(CommandError::InvalidArgument {
+                command: "hud",
                 value: other.to_string(),
             }),
         },
@@ -2147,6 +2165,28 @@ const TABLE: &[Word] = &[
 ];
 
 /// How much of the result the page shows.
+/// How loudly the editor talks beside the caret (Feature #284).
+const HUD: &[Word] = &[
+    Word {
+        name: "off",
+        help: "cmd.hud.off",
+        needs: &[],
+        then: Args::None,
+    },
+    Word {
+        name: "basic",
+        help: "cmd.hud.basic",
+        needs: &[],
+        then: Args::None,
+    },
+    Word {
+        name: "full",
+        help: "cmd.hud.full",
+        needs: &[],
+        then: Args::None,
+    },
+];
+
 const RENDER: &[Word] = &[
     Word {
         name: "off",
@@ -3107,6 +3147,13 @@ pub const COMMANDS: &[Entry] = &[
         help: "cmd.commands.render",
         needs: &[],
         args: Args::Words(RENDER),
+    },
+    Entry {
+        name: "hud",
+        aliases: &[],
+        help: "cmd.commands.hud",
+        needs: &[],
+        args: Args::Words(HUD),
     },
     Entry {
         name: "search",

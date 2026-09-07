@@ -33,6 +33,7 @@ use ratatui::Frame;
 
 use yumete_config::{Config, LineNumbers};
 use yumete_cjk::{Segmenter, WordMark};
+use yumete_core::editor::Hud;
 use yumete_core::sidebar::View;
 use yumete_core::wrap::{self, Anchor as WrapAnchor};
 use yumete_core::zong::{Anchor, Layout as WritingLayout};
@@ -2261,8 +2262,14 @@ fn draw(
     }
     let (cursor_x, cursor_y) = cursor;
 
+    // **Where every panel put itself**, gathered as it is drawn. `:hud full`
+    // covers writing on purpose and so cannot tell 「有字」 from 「有面板」 by
+    // reading the buffer back the way `:hud basic` does; a panel it covered
+    // would be a panel with a hole in it.
+    let mut panels: Vec<Rect> = Vec::new();
     if let Some(panel) = detail {
         table::draw_detail(frame, editor, config, panel);
+        panels.push(panel);
     }
 
     if hint_rows == 1 {
@@ -2273,19 +2280,44 @@ fn draw(
     // two rows deep — anchored to the status line alone they would be drawn
     // over the hint row.
     let footer = if hint_rows == 1 { hint_area } else { status_area };
-    draw_command_menu(frame, editor, config, area, footer);
-    draw_lookfor_menu(frame, editor, config, area, footer);
+    panels.extend(draw_command_menu(frame, editor, config, area, footer));
+    panels.extend(draw_lookfor_menu(frame, editor, config, area, footer));
     // Where the picker put its caret, so the candidate panel can stand under
     // the query instead of over the page the list is already covering.
-    let picker_caret = draw_picker(frame, editor, config, ime, area, footer);
+    let picker = draw_picker(frame, editor, config, ime, area, footer);
+    let picker_caret = picker.map(|(caret, _)| caret);
+    panels.extend(picker.and_then(|(_, list)| list));
     // One panel for every half-pressed sequence, `空格` included — it used to
     // draw its own menu and every other prefix got a row.
     // **The page's rectangle, not the frame's**: a menu drawn from the frame
     // covers the sidebar, which is a list the reader may be in the middle of
     // using.
-    draw_which_key(frame, editor, config, text_area, footer.y, cursor_x);
+    panels.extend(draw_which_key(
+        frame, editor, config, text_area, footer.y, cursor_x,
+    ));
+    // `bare` draws no panel — the candidate is already in the sentence and the
+    // code is under the caret. Unless there is no sentence to draw it into:
+    // see `page_can_hold_a_candidate`.
+    // A picker always gets the panel: its list is drawn over the page, so
+    // there is no sentence left down there to put a bare candidate into.
+    //
+    // Asked here rather than at the panel's own call further down, because
+    // `:hud full` wants the same cell — 「候選面板和釘住的 HUD 都要
+    // (cursor_x, cursor_y+1)」 — and the candidate panel is the one that wins.
+    let panel =
+        ime.panel_is_full() || picker_caret.is_some() || !page_can_hold_a_candidate(editor);
+    let candidate_panel = panel && composes_here(editor) && ime.available() && ime.is_composing();
     // …and the same string beside the caret, where the eyes are.
-    draw_hud(frame, editor, config, ime, text_area, (cursor_x, cursor_y));
+    draw_hud(
+        frame,
+        editor,
+        config,
+        ime,
+        text_area,
+        (cursor_x, cursor_y),
+        &panels,
+        candidate_panel,
+    );
 
     // In vertical layout the cursor is a block drawn into the page: a hardware
     // cursor is one cell wide and would sit lopsided inside a two-cell 縱.
@@ -2309,14 +2341,7 @@ fn draw(
         frame.set_cursor_position(Position::new(cursor_x, cursor_y));
     }
 
-    // `bare` draws no panel — the candidate is already in the sentence and the
-    // code is under the caret. Unless there is no sentence to draw it into:
-    // see `page_can_hold_a_candidate`.
-    // A picker always gets the panel: its list is drawn over the page, so
-    // there is no sentence left down there to put a bare candidate into.
-    let panel =
-        ime.panel_is_full() || picker_caret.is_some() || !page_can_hold_a_candidate(editor);
-    if panel && composes_here(editor) && ime.available() && ime.is_composing() {
+    if candidate_panel {
         // The panel follows the page, not the prompt: a `/` search in a
         // vertically set document still picks its candidates out of a vertical
         // list, and one panel wearing a different skin from the other reads as a
@@ -2446,6 +2471,13 @@ struct List<'a> {
     cap: usize,
 }
 
+/// Returns the rectangle it covered, so a pinned HUD can keep off it (#284).
+///
+/// Reading the drawn buffer back used to answer 「is anything there」 for every
+/// kind of thing at once — writing, this menu, the picker, a panel's ring —
+/// and that was the whole of the HUD's collision avoidance. `:hud full` covers
+/// writing on purpose, so 「有字」 and 「有面板」 stop reading alike and every
+/// panel has to say where it put itself.
 fn draw_list(
     frame: &mut Frame,
     ink: crate::theme::Palette,
@@ -2453,7 +2485,7 @@ fn draw_list(
     area: Rect,
     bottom: u16,
     list: List,
-) {
+) -> Option<Rect> {
     let List {
         items,
         focus,
@@ -2464,7 +2496,7 @@ fn draw_list(
         cap,
     } = list;
     if items.is_empty() && footer.is_empty() {
-        return;
+        return None;
     }
     // Twenty-six commands down one column is three screenfuls with the rest of
     // the page standing empty beside it; in three columns it is one glance.
@@ -2542,7 +2574,7 @@ fn draw_list(
     // The entries, the footer, and the ring above and below them.
     let height = (deep + 3) as u16;
     if height > area.height || bottom < height {
-        return;
+        return None;
     }
     // Scrolled just enough: the selection stays on the list, and a list that
     // fits never scrolls at all.
@@ -2618,6 +2650,7 @@ fn draw_list(
         footer,
         quiet,
     );
+    Some(menu)
 }
 
 /// What the mark under the caret says: a half-typed command, or a half-typed
@@ -2652,6 +2685,7 @@ fn hud_line(editor: &Editor, ime: &ImeSession) -> String {
 /// twenty rows from where the eyes are. So it is drawn twice: there, and here,
 /// one row under the caret — small, 金 on the band, and gone the moment the
 /// command completes. What it says is [`hud_line`]'s to decide.
+#[allow(clippy::too_many_arguments)]
 fn draw_hud(
     frame: &mut Frame,
     editor: &Editor,
@@ -2659,16 +2693,38 @@ fn draw_hud(
     ime: &ImeSession,
     page: Rect,
     caret: (u16, u16),
+    panels: &[Rect],
+    candidate_panel: bool,
 ) {
+    let how = editor.hud();
+    if how == Hud::Off {
+        return;
+    }
     let typed = hud_line(editor, ime);
     if typed.is_empty() || page.height < 2 {
         return;
     }
     let ink = crate::theme::Palette::of(config);
-    // Every mark is one cell wide, so the width does not depend on which one
-    // the placement ends up choosing.
-    let width = yumete_cjk::str_width(&format!("╰ {typed}")) as u16;
     let (caret_x, caret_y) = caret;
+    if how == Hud::Full {
+        draw_hud_panel(
+            frame,
+            config,
+            ink,
+            page,
+            caret,
+            &typed,
+            panels,
+            candidate_panel,
+        );
+        return;
+    }
+    // A 藥丸, not a thread (#284): the corner still points back at the caret,
+    // and a cell of ground closes the other end, so what is drawn reads as one
+    // small object rather than as a line trailing off the writing. Every mark
+    // is one cell wide, so the width does not depend on which corner the
+    // placement ends up choosing.
+    let width = yumete_cjk::str_width(&typed) as u16 + 3;
     if width >= page.width {
         return;
     }
@@ -2676,23 +2732,52 @@ fn draw_hud(
     // **Never over the writing.** It used to start at the caret's own column
     // and paint over whatever was on the row below — 整整 covered by `╰ 30`,
     // and in 縱書 over a live 縱, with the leading `╰` swallowed by a wide
-    // glyph's second cell. So it goes *after* what is drawn on that row: the
-    // margin is the only part of a page that is not somebody's writing.
-    let after_the_writing = |frame: &mut Frame, y: u16| -> u16 {
-        let buf = frame.buffer_mut();
-        let mut last = page.x;
-        for x in page.x..page.x + page.width {
-            let Some(cell) = buf.cell((x, y)) else { continue };
-            let symbol = cell.symbol();
-            if symbol.trim().is_empty() {
+    // glyph's second cell. So it goes where nothing is drawn: the margin is the
+    // only part of a page that is not somebody's writing.
+    //
+    // **And margin is a run of blank cells, not the column after the last
+    // glyph.** It used to be the latter, which is the margin only on a page
+    // that fills left to right. 縱書 fills right to left, so on every row that
+    // held any writing at all that column landed hard against the right edge,
+    // no candidate could fit, and **the HUD was never drawn for a vertical
+    // reader at all**. Runs are the same answer in both directions, and they
+    // also find the gap between two short 縱 that a scan for the last glyph
+    // walks straight past.
+    let free_runs = |frame: &mut Frame, y: u16| -> Vec<(u16, u16)> {
+        let mut free = vec![true; page.width as usize];
+        {
+            let buf = frame.buffer_mut();
+            for i in 0..page.width {
+                let Some(cell) = buf.cell((page.x + i, y)) else { continue };
+                let symbol = cell.symbol();
+                if symbol.trim().is_empty() {
+                    continue;
+                }
+                // **The whole glyph, not the cell it starts in.** A wide
+                // character's second cell reads back empty, and writing into it
+                // is writing into the middle of a 漢字: the terminal never
+                // receives it, so the mark simply vanishes.
+                for k in 0..yumete_cjk::str_width(symbol).max(1) as u16 {
+                    if let Some(slot) = free.get_mut((i + k) as usize) {
+                        *slot = false;
+                    }
+                }
+            }
+        }
+        let mut runs = Vec::new();
+        let mut i = 0usize;
+        while i < free.len() {
+            if !free[i] {
+                i += 1;
                 continue;
             }
-            // **Past the whole glyph.** A wide character's second cell reads
-            // back empty, and writing into it is writing into the middle of a
-            // 漢字: the terminal never receives it, so the mark simply vanishes.
-            last = x + yumete_cjk::str_width(symbol).max(1) as u16;
+            let start = i;
+            while i < free.len() && free[i] {
+                i += 1;
+            }
+            runs.push((page.x + start as u16, page.x + i as u16));
         }
-        last
+        runs
     };
     // **Anchor, then take the nearest — not the first that fits.**
     //
@@ -2706,54 +2791,181 @@ fn draw_hud(
     // This is the placement problem every floating UI has — an anchor (the
     // caret), a **flip** when the preferred side does not fit, a **shift**
     // along the other axis to stay inside the page — with one addition that
-    // the usual libraries leave to the caller: the candidate sides are *scored*, and
+    // the usual libraries leave to the caller: the candidates are *scored*, and
     // the winner is the one whose drawn corner ends up closest to the anchor.
     // A row costs eight columns, four 漢字: a mark one row away and level with
     // the caret beats a mark on the caret's own row thirty columns to the
     // right.
     //
-    // The caret's own row is a candidate now, and usually the winner: while a
-    // sentence is being typed the caret is at the end of it, so the margin
-    // immediately to its right is both empty and as near as anything can be.
-    let mut best: Option<(u16, u16, u32, char)> = None;
+    // The caret's own row is a candidate too, and in 橫排 usually the winner:
+    // while a sentence is being typed the caret is at the end of it, so the
+    // margin immediately to its right is both empty and as near as anything
+    // can be.
+    let mut best: Option<(u16, u16, u32, String)> = None;
     for step in [0i32, 1, -1, 2, -2] {
         let y = caret_y as i32 + step;
         if y < page.y as i32 || y >= (page.y + page.height) as i32 {
             continue;
         }
         let y = y as u16;
-        let mut after = after_the_writing(frame, y);
-        // On the caret's own row, stay off the caret and leave it one cell of
-        // air — a mark butted against the character being typed reads as part
-        // of it.
-        if step == 0 {
-            after = after.max(caret_x + 2);
-        }
-        let x = caret_x.max(after).min(right.saturating_sub(width));
-        if x < after || x + width > right {
-            continue;
-        }
-        let score = x.abs_diff(caret_x) as u32 + step.unsigned_abs() * 8;
-        // The mark points back at the caret: `╰` hangs down from a caret
-        // above, `╭` reaches up to one below, and on the caret's own row a
-        // plain rule just runs back to it.
-        let corner = match step.signum() {
-            1 => '╰',
-            -1 => '╭',
-            _ => '─',
-        };
-        if best.is_none_or(|(_, _, best_score, _)| score < best_score) {
-            best = Some((x, y, score, corner));
+        for (lo, hi) in free_runs(frame, y) {
+            // On the caret's own row, stay off the caret and leave it one cell
+            // of air on whichever side the mark lands — a mark butted against
+            // the character being typed reads as part of it. The caret may be
+            // sitting on a wide glyph, so its own cell is two, and the run is
+            // cut into the piece before it and the piece after.
+            let mut spans = Vec::new();
+            if step == 0 {
+                let shut = caret_x.saturating_sub(1);
+                if lo < shut {
+                    spans.push((lo, hi.min(shut)));
+                }
+                if hi > caret_x + 2 {
+                    spans.push((lo.max(caret_x + 2), hi));
+                }
+            } else {
+                spans.push((lo, hi));
+            }
+            for (lo, hi) in spans {
+                if hi.saturating_sub(lo) < width {
+                    continue;
+                }
+                let x = caret_x.clamp(lo, hi - width);
+                // The mark points back at the caret, and which end it hangs
+                // from depends on which side of the caret the margin turned out
+                // to be: in 橫排 nearly always the right, in 縱書 nearly always
+                // the left. A corner pointing away from the caret is worse than
+                // no corner at all.
+                let leftward = x + width <= caret_x;
+                let near = if leftward { x + width - 1 } else { x };
+                let score = near.abs_diff(caret_x) as u32 + step.unsigned_abs() * 8;
+                let corner = match (step.signum(), leftward) {
+                    (1, false) => '╰',
+                    (1, true) => '╯',
+                    (-1, false) => '╭',
+                    (-1, true) => '╮',
+                    _ => '─',
+                };
+                let text = if leftward {
+                    format!(" {typed} {corner}")
+                } else {
+                    format!("{corner} {typed} ")
+                };
+                if best.as_ref().is_none_or(|(_, _, was, _)| score < *was) {
+                    best = Some((x, y, score, text));
+                }
+            }
         }
     }
-    let Some((x, y, _, corner)) = best else {
+    let Some((x, y, _, text)) = best else {
         return;
     };
-    let text = format!("{corner} {typed}");
     let style = Style::default()
         .bg(ink.at(yumete_config::rung::BAND))
         .fg(ink.gold());
     put_text(frame.buffer_mut(), x, y, right, &text, style);
+}
+
+/// `:hud full`: the same string in a **bordered panel, pinned under the
+/// caret** — and over whatever is written there (#284).
+///
+/// The frame and the covering are one decision. A 藥丸 needs five blank cells
+/// on one row and can nearly always find them; a panel needs a 3 × (寬+2)
+/// rectangle *near the caret*, which a page of prose does not have — so the
+/// frame forces the covering. And the converse: once the mark stands on the
+/// same paper as the manuscript, nothing but the ring says which characters
+/// are not the writer's.
+///
+/// What that costs is not 「some prose」. In Normal the HUD carries
+/// [`Editor::typed_so_far`], so a panel two rows under the caret hides exactly
+/// the characters `3`, `2t` and `d3l` are counting. That is the whole reason
+/// `basic` is the factory level and this one is asked for by name.
+///
+/// It keeps off the other panels, which it can no longer see: reading the
+/// buffer back cannot tell a drawn 漢字 from a drawn ring, and this level
+/// covers 漢字 on purpose. So every panel says where it went (`panels`), and
+/// the candidate panel — which wants this same cell and is drawn after — wins
+/// outright.
+#[allow(clippy::too_many_arguments)]
+fn draw_hud_panel(
+    frame: &mut Frame,
+    config: &Config,
+    ink: crate::theme::Palette,
+    page: Rect,
+    caret: (u16, u16),
+    typed: &str,
+    panels: &[Rect],
+    candidate_panel: bool,
+) {
+    if candidate_panel {
+        return;
+    }
+    let (caret_x, caret_y) = caret;
+    let width = yumete_cjk::str_width(typed) as u16 + 2;
+    if width > page.width || page.height < 3 {
+        return;
+    }
+    // Pinned: the column is the caret's, shifted only as far as the page edge
+    // makes it. 位置更固定 is what was asked for — a mark that moves with the
+    // shape of somebody else's sentence is one the eye has to look for.
+    let x = caret_x.min(page.x + page.width - width);
+    // Under the caret, and above it when there is no room below. Never *on*
+    // it: the character being typed is the one thing the panel must not hide.
+    let below = caret_y + 1;
+    let above = caret_y.saturating_sub(3);
+    let fits = |y: u16| {
+        y >= page.y
+            && y + 3 <= page.y + page.height
+            && !panels.iter().any(|p| {
+                p.x < x + width && x < p.x + p.width && p.y < y + 3 && y < p.y + p.height
+            })
+    };
+    let y = if fits(below) {
+        below
+    } else if caret_y >= page.y + 3 && fits(above) {
+        above
+    } else {
+        // Every place it could stand is somebody else's panel, and a panel
+        // with a hole punched in it is worse than one mark fewer.
+        return;
+    };
+    // **Start on a whole glyph.** A 漢字 owns two cells and the second reads
+    // back empty; a ring whose left edge lands in that second cell is written
+    // into the middle of somebody's character and never reaches the terminal —
+    // the `╭` simply vanishes and the panel opens with a gap. One cell left is
+    // always enough, because no glyph is wider than two.
+    let cut = (y..y + 3).any(|row| {
+        x > page.x
+            && frame
+                .buffer_mut()
+                .cell((x - 1, row))
+                .is_some_and(|c| yumete_cjk::str_width(c.symbol()) > 1)
+    });
+    let x = if cut { x - 1 } else { x };
+    let panel = Rect::new(x, y, width, 3);
+    frame.render_widget(Clear, panel);
+    frame.render_widget(
+        Block::default()
+            .borders(Borders::ALL)
+            .border_type(match config.panel.rounded {
+                true => BorderType::Rounded,
+                false => BorderType::Plain,
+            })
+            // The same ring at the same rung as every other panel on the
+            // screen: what separates a panel from the page is its rule and its
+            // 金墨, not a lighter ground.
+            .border_style(Style::default().fg(ink.rule()).bg(ink.paper()))
+            .style(Style::default().bg(ink.paper())),
+        panel,
+    );
+    put_text(
+        frame.buffer_mut(),
+        panel.x + 1,
+        panel.y + 1,
+        panel.x + width - 1,
+        typed,
+        Style::default().bg(ink.paper()).fg(ink.gold()),
+    );
 }
 
 /// The **which-key panel**: what the half-pressed key can be finished with.
@@ -2774,12 +2986,10 @@ fn draw_which_key(
     area: Rect,
     bottom: u16,
     caret_x: u16,
-) {
-    let Some((title, keys)) = editor.pending_menu() else {
-        return;
-    };
+) -> Option<Rect> {
+    let (title, keys) = editor.pending_menu()?;
     if keys.is_empty() {
-        return;
+        return None;
     }
     let ink = crate::theme::Palette::of(config);
     // The keys line up, so the meanings do: a ragged left edge on a list of
@@ -2823,7 +3033,7 @@ fn draw_which_key(
     // page something: at a very small window there is nowhere to put a menu,
     // and covering the manuscript with one is worse than not drawing it.
     if height > area.height / 2 + 1 || bottom < height || width < 8 {
-        return;
+        return None;
     }
     // **The corner the cursor is not in.** A fixed corner is right half the
     // time and covers what you are working on the other half; the panel goes to
@@ -2870,6 +3080,7 @@ fn draw_which_key(
             ground.fg(ink.text()),
         );
     }
+    Some(panel)
 }
 
 /// A drawn buffer as one HTML `<pre>`: a span per run of same-styled cells.
@@ -2996,14 +3207,14 @@ fn draw_command_menu(
     config: &Config,
     area: Rect,
     status: Rect,
-) {
+) -> Option<Rect> {
     let Some((":", _)) = editor.prompt() else {
-        return;
+        return None;
     };
     let ink = crate::theme::Palette::of(config);
     let (matches, selected) = editor.command_menu();
     if matches.is_empty() {
-        return;
+        return None;
     }
     // Tab's pick is inked; without one nothing is, because the drawn text on
     // the command line is already saying what the guess is.
@@ -3066,7 +3277,7 @@ fn draw_command_menu(
             title: &title,
             cap: MENU_WIDTH as usize,
         },
-    );
+    )
 }
 
 /// The `::` search's answers (Feature #224).
@@ -3083,9 +3294,9 @@ fn draw_lookfor_menu(
     config: &Config,
     area: Rect,
     status: Rect,
-) {
+) -> Option<Rect> {
     let Some(("::", query)) = editor.prompt() else {
-        return;
+        return None;
     };
     let ink = crate::theme::Palette::of(config);
     let (found, focus) = editor.lookfor_menu();
@@ -3112,7 +3323,7 @@ fn draw_lookfor_menu(
                 cap: LOOKFOR_WIDTH as usize,
             },
         );
-        return;
+        return None;
     }
     // A row is cut with a mark rather than at the panel edge: a sentence that
     // simply stops at the ring reads as the panel being too narrow, and 「…」
@@ -3163,7 +3374,7 @@ fn draw_lookfor_menu(
             title: &title,
             cap: room + 2,
         },
-    );
+    )
 }
 
 /// Which character of the buffer a click landed on, if it landed on the page.
@@ -3660,7 +3871,7 @@ fn draw_picker(
     ime: &ImeSession,
     area: Rect,
     status: Rect,
-) -> Option<Position> {
+) -> Option<(Position, Option<Rect>)> {
     let picker = editor.picker()?;
     let ink = crate::theme::Palette::of(config);
     let matches = picker.matches();
@@ -3682,7 +3893,7 @@ fn draw_picker(
     let at = picker.selected();
     // One column: these are paths, long and of every length, and columns of
     // ragged paths are harder to read down than a single list.
-    draw_list(
+    let list = draw_list(
         frame,
         ink,
         config.panel.rounded,
@@ -3709,7 +3920,7 @@ fn draw_picker(
         + yumete_cjk::str_width(&preedit);
     let caret = Position::new(status.x + 1 + col as u16, status.y);
     frame.set_cursor_position(caret);
-    Some(caret)
+    Some((caret, list))
 }
 
 /// The composition in progress, when a `/` or `:` prompt — or a picker's
@@ -7880,6 +8091,131 @@ mod tests {
             Some((0, "╭ 3".to_string())),
             "the short line above, not the far end of the wrapped line below: {rows:#?}",
         );
+    }
+
+    /// **Three levels, and the middle one is what a window opens at** (#284).
+    ///
+    /// 「不畫、藥丸、面板」. `off` leaves the status line's right edge and
+    /// nothing else — #193's floor, which no level takes away. `full` is the
+    /// one that was asked for by name: a ring, pinned under the caret, over
+    /// whatever is written there. Its cost is exactly what makes `basic` the
+    /// factory level — in Normal the HUD carries the *count*, so the panel
+    /// hides the characters that `3` is counting.
+    #[test]
+    fn the_hud_has_three_levels_and_only_the_loud_one_covers_the_writing() {
+        let config = Config::default();
+        // A wide glyph reads back as its own cell and an empty one beside it,
+        // so the spaces are dropped before anything is looked for — every
+        // 漢字 on the page would otherwise have one inside it.
+        let rows = |editor: &Editor| -> Vec<String> {
+            let b = render(editor, &config, 60, 10);
+            (0..b.area.height)
+                .map(|y| {
+                    (0..b.area.width)
+                        .map(|x| at(&b, x, y))
+                        .collect::<String>()
+                        .replace(' ', "")
+                })
+                .collect()
+        };
+        let mut editor = editor_with("那年冬天，山下起了大雪。\n短。\n回暖起來了天氣才好。\n");
+        editor.on_key(Key::Char('3'));
+
+        // 出廠: a 藥丸 in the margin, and the writing under it untouched.
+        assert_eq!(editor.hud(), Hud::Basic);
+        let page = rows(&editor).concat();
+        assert!(page.contains("╰3"), "beside the caret: {page}");
+        assert!(page.contains("回暖起來了天氣才好。"), "{page}");
+
+        // `off`: only the corner of the status line is left.
+        editor.set_hud(Hud::Off);
+        let drawn = rows(&editor);
+        assert!(
+            !drawn.concat().contains("╰ 3"),
+            "nothing beside the caret: {drawn:#?}",
+        );
+        assert!(
+            drawn.last().is_some_and(|line| line.ends_with('3')),
+            "and the status line still says it: {drawn:#?}",
+        );
+
+        // `full`: a ring under the caret, and it is over the writing — which
+        // is the whole reason it is not the factory level.
+        editor.set_hud(Hud::Full);
+        let drawn = rows(&editor);
+        let page = drawn.concat();
+        assert!(page.contains("│3│"), "a bordered panel: {drawn:#?}");
+        assert!(
+            !page.contains("回暖起來了天氣才好。"),
+            "and it covers what was there: {drawn:#?}",
+        );
+    }
+
+    /// **A pinned HUD can no longer see what it would land on** (#284).
+    ///
+    /// `basic` reads the drawn buffer back, and that one question — 「is
+    /// anything here」 — kept it off the writing *and* off the which-key panel,
+    /// the command menu, the picker and the detail panel at the same time.
+    /// `full` covers writing on purpose, so 「有字」 and 「有面板」 read alike
+    /// and the answer stops working. Every panel now says where it went.
+    #[test]
+    fn the_pinned_hud_still_keeps_off_the_other_panels() {
+        let config = Config::default();
+        // Short enough that the which-key panel is right under the caret.
+        let lines: String = (1..=12).map(|i| format!("第{i}行的字。\n")).collect();
+        let mut editor = editor_with(&lines);
+        editor.set_hud(Hud::Full);
+        // The last line, so the pinned place — one row under the caret — is
+        // inside the menu that is about to open.
+        editor.on_key(Key::Char('G'));
+        editor.on_key(Key::Char('3'));
+        editor.on_key(Key::Char('t'));
+        let b = render(&editor, &config, 46, 18);
+        let drawn: Vec<String> = (0..b.area.height)
+            .map(|y| (0..b.area.width).map(|x| at(&b, x, y)).collect())
+            .collect();
+        assert!(
+            drawn.concat().contains("│3t│"),
+            "the panel is drawn: {drawn:#?}",
+        );
+        // Every row of the menu still ends in its own right edge — a HUD
+        // pinned over it would have taken one out.
+        let ring = drawn
+            .iter()
+            .filter(|row| row.trim_end().ends_with('│'))
+            .count();
+        assert!(ring >= 7, "the menu's rows are whole: {drawn:#?}");
+    }
+
+    /// **The vertical reader had no HUD at all** (#284).
+    ///
+    /// 「margin」 was the column after the last glyph drawn on the row, which is
+    /// the margin only on a page that fills left to right. 縱書 fills right to
+    /// left, so on every row carrying any writing that column sat hard against
+    /// the right edge, every candidate failed to fit, and what you had typed
+    /// was never drawn beside the caret — a whole writing direction with only
+    /// the status line. Blank *runs* are the same answer in both directions.
+    #[test]
+    fn the_vertical_page_gets_the_hud_too() {
+        let mut editor = editor_with("那年冬天，山下起了大雪。\n短。\n回暖起來了天氣才好。\n");
+        editor.on_key(Key::Char('3'));
+        let config = vertical_config();
+        let buffer = render_vertical(&mut editor, &config, 40, 16);
+        let rows: Vec<String> = (0..buffer.area.height)
+            .map(|y| (0..buffer.area.width).map(|x| at(&buffer, x, y)).collect())
+            .collect();
+        // 縱書 puts the margin on the caret's *left*, so the corner hangs off
+        // the far end and points back — `╰ 3` would point away from the caret.
+        assert!(
+            rows.iter().any(|row| row.contains("3 ─")),
+            "what was typed is beside the caret: {rows:#?}",
+        );
+        // And it is still never over the writing: the 縱 it sits beside keeps
+        // every one of its characters.
+        let page: String = rows.concat();
+        for ch in "那年冬天山下起了大雪短回暖來天氣才好".chars() {
+            assert!(page.contains(ch), "{ch} was painted over: {rows:#?}");
+        }
     }
 
     /// The panel says what can finish the key you pressed, and stands on the
