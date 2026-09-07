@@ -863,7 +863,8 @@ off` 在那邊會直接告訴你這條命令只管橫排（`:wrap 40` 兩邊都�
 
 ### 5.3 標點旁置
 
-`:hanging`，或配置裡 `hanging_punctuation = true`。
+`:hanging`（單寫是反過來，`:hanging on`／`:hanging off` 是說死），或配置裡
+`hanging_punctuation = true`。
 
 古籍的排法裡，。，、？！：；「」 不佔一格，而是掛在它所屬的字旁邊，正文一路連下去
 不斷——這樣一頁對話才不會看起來有一半是空的。
@@ -1119,7 +1120,8 @@ Alacritty、Konsole。Apple Terminal 報不出單獨的 Shift。
 下另有用處，見下面「空空如也」。打了一串死碼時候選框**不會消失**，裏面就剩你打的那
 幾個字母——不然你不知道要退幾格。
 
-`:yume chaifen` 打開高亮候選的**二重注解**（拆分＋編碼）。
+`:yume chaifen` 打開高亮候選的**二重注解**（拆分＋編碼）；單寫是反過來，
+`:yume chaifen on`／`off` 是說死。
 
 **上屏方式**用 `:yume commit delayed|unique|fluency`（不寫模式就是問現在是哪一個）：
 

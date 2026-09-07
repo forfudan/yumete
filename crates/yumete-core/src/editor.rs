@@ -4197,8 +4197,8 @@ impl Editor {
                 self.open_buffer_picker();
                 Ok(CommandOutcome::Continue)
             }
-            Command::ToggleHanging => {
-                let on = !self.hanging;
+            Command::SetHanging(want) => {
+                let on = want.unwrap_or(!self.hanging);
                 self.set_hanging_punctuation(on);
                 self.status = if on {
                     say!("layout.hung-punctuation-on")
@@ -4569,8 +4569,8 @@ impl Editor {
                 self.scheme_request = Some(tag);
                 Ok(CommandOutcome::Continue)
             }
-            Command::ToggleChaifen => {
-                self.chaifen = !self.chaifen;
+            Command::SetChaifen(want) => {
+                self.chaifen = want.unwrap_or(!self.chaifen);
                 self.chaifen_request = Some(self.chaifen);
                 Ok(CommandOutcome::Continue)
             }
@@ -21650,6 +21650,37 @@ mod tests {
     /// rope — so what the writer lost was only the truth: 「加了一行」 over a
     /// grid that had not changed, while the `.csv` half of the same `t` menu
     /// refused properly.
+    /// §5.2.2 fault 2, driven: the switch the menu offers, twice in a row.
+    ///
+    /// `:hanging` declared `Args::Words(ON_OFF)` and ignored the word, so the
+    /// second `:hanging off` turned 標點旁置 **on** — and the status line said
+    /// so, which is how it survived: it was never silent, only wrong.
+    #[test]
+    fn hanging_punctuation_listens_to_the_word_it_is_given() {
+        let mut ed = typed("「春」。\n");
+        // 旁置 is a 竪排 word and says so (`Need::Vertical`, `Need::Loose`);
+        // asked on a 橫排 page it answers 「還不行，需要：竪排」 and changes
+        // nothing, which would make every assertion below pass for the wrong
+        // reason.
+        assert!(ed.execute("layout vertical").is_ok());
+        assert!(ed.execute("dense off").is_ok());
+        for _ in 0..2 {
+            assert!(ed.execute("hanging off").is_ok());
+            assert!(!ed.hanging, "`:hanging off` turned it on: {}", ed.status());
+        }
+        for _ in 0..2 {
+            assert!(ed.execute("hanging on").is_ok());
+            assert!(ed.hanging, "`:hanging on` turned it off: {}", ed.status());
+        }
+        // The bare word still means 「the other one」, and `of` is `off`'s
+        // shortest spelling — the one the menu prints.
+        assert!(ed.execute("hanging").is_ok());
+        assert!(!ed.hanging);
+        assert!(ed.execute("hanging on").is_ok());
+        assert!(ed.execute("hanging of").is_ok());
+        assert!(!ed.hanging, "`:hanging of` is what the menu offers");
+    }
+
     #[test]
     fn the_markdown_grid_keys_say_so_on_a_locked_file() {
         let mut ed = typed("| 甲 | 乙 |\n| --- | --- |\n| 一 | 二 |\n");

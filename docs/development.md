@@ -2759,16 +2759,36 @@ so #223's deep fallback at `:3250` is skipped too — `:dense ` offers nothing a
 all. **This is the hard blocker**: a reader meets it on the first day, and any
 folding of the command table (§5.2.3 ③) makes multi-word commands the norm.
 
-### 2 · `:hanging off` turns hanging punctuation **on**
+### 2 · `:hanging off` turns hanging punctuation **on** — **fixed 2026-09-07**
 
-`command.rs:761` is `"hanging" => Ok(Command::ToggleHanging)` — `rest` is never
+`command.rs:761` was `"hanging" => Ok(Command::ToggleHanging)` — `rest` never
 read — while `COMMANDS` declares `args: Args::Words(ON_OFF)` (`:2785`), so the
 menu offers `on｜off` and the hint prints it. Driven: `:dense off` then
 `:hanging off` → 「標點旁置：開」; a second `:hanging off` → 「標點旁置：關」.
-`:yume chaifen off` has the same shape (`command.rs:658`, declared at `:1784`).
+`:yume chaifen off` had the same shape (`command.rs:658`, declared at `:1784`).
 
 `every_listed_command_parses` cannot catch this: `:hanging off` *parses*. It
 simply does not listen.
+
+**The reading is the half that goes stale.** Ten arms had written 「on｜off」
+out by hand and the eleventh forgot, so the fix is one function — `switch()`,
+which asks `pick` rather than testing equality, because the menu prints `of` as
+`off`'s shortest spelling and `of` therefore has to mean it. **What a missing
+word means stays with the caller**: `:readonly` alone toggles, `:dense` alone
+is 密排, `:preview` alone opens it, and none of that is `switch`'s to decide —
+so `ToggleHanging`/`ToggleChaifen` became `SetHanging(Option<bool>)` and
+`SetChaifen(Option<bool>)`, `None` meaning the bare word.
+
+Guarded as a class, not as a line: `a_command_that_offers_on_and_off_reads_them
+_back` walks `COMMANDS` to any depth, finds every `Args` whose word list *is*
+「on｜off」 — asked by what it holds, so a second hand-rolled pair is caught
+too — and requires of each path that `on` and `off` both parse, that they parse
+to **different** commands, and that the abbreviation the menu shows (`of`) is
+the one that parses. It finds eleven today. Driven end to end in
+`hanging_punctuation_listens_to_the_word_it_is_given`, which must open with
+`:layout vertical` and `:dense off`: 旁置 declares `Need::Vertical` and
+`Need::Loose`, and on a 橫排 page it refuses and changes nothing — every
+assertion would have passed for the wrong reason.
 
 ### 3 · `:render basic` hides the ruby markup, and says so in the same frame
 
