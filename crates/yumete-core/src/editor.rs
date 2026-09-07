@@ -3483,11 +3483,17 @@ impl Editor {
         // 2026-09-07). A three-way cycle on `t w` was the other way to spell
         // this, and it would have made the same key mean a toggle in prose
         // and a cycle in the window; a reader learns 「`t w` 摺不摺」 once and
--        // it has to hold everywhere. So `t w` answers 摺／不摺 and pulls the
--        // table out of 折行 on the way, exactly as `t a` pulls it out of 摺起.
+        // it has to hold everywhere. So `t w` answers 摺／不摺, and either
+        // key pulls the table out of whatever the other one had done.
+        //
+        // From 折行, `t w` **opens the table out** rather than folding it
+        // (author, 2026-09-08). Both keys name a way of not showing a cell
+        // whole, so the way back from either of them is the whole cell: from
+        // 折行 the reader who presses the other key is asking to stop wrapping,
+        // and answering with 摺起 hands them the one state they did not name.
         let want = match self.cell_width_now() {
--            CellWidth::Fold => CellWidth::Whole,
--            CellWidth::Whole | CellWidth::Wrap => CellWidth::Fold,
+            CellWidth::Fold | CellWidth::Wrap => CellWidth::Whole,
+            CellWidth::Whole => CellWidth::Fold,
         };
         self.set_cell_width(want);
         let cap = crate::mdtable::MAX_COLUMN.to_string();
@@ -28449,5 +28455,37 @@ mod tests {
             ed.on_key(Key::Char('h'));
         }
         assert_eq!(ed.cursor, 0, "the top of the file is where it stops");
+    }
+
+    /// `t w` and `t a` are two switches over one axis, and **either of them,
+    /// pressed while the other is on, opens the table out** (author,
+    /// 2026-09-08). Answering `t w` from 折行 with 摺起 handed the reader the
+    /// one state they had not named — a second way of hiding, when what they
+    /// asked for was to stop hiding.
+    #[test]
+    fn either_cell_switch_opens_the_table_out_from_the_other() {
+        let mut ed = typed("| a | b |\n| - | - |\n| c | d |\n");
+        ed.set_cell_width(CellWidth::Whole);
+
+        ed.toggle_cell_folds();
+        assert_eq!(ed.cell_width_now(), CellWidth::Fold, "t w 摺起");
+        ed.toggle_cell_wrap();
+        assert_eq!(ed.cell_width_now(), CellWidth::Wrap, "t a walks in from 摺起");
+        ed.toggle_cell_folds();
+        assert_eq!(
+            ed.cell_width_now(),
+            CellWidth::Whole,
+            "and t w out of 折行 is 全部攤開, not 摺起"
+        );
+
+        // The other way round is the pair it always was: each key, pressed
+        // twice, is where it started.
+        ed.toggle_cell_wrap();
+        assert_eq!(ed.cell_width_now(), CellWidth::Wrap);
+        ed.toggle_cell_wrap();
+        assert_eq!(ed.cell_width_now(), CellWidth::Whole);
+        ed.toggle_cell_folds();
+        ed.toggle_cell_folds();
+        assert_eq!(ed.cell_width_now(), CellWidth::Whole);
     }
 }
