@@ -524,15 +524,20 @@ const DETAIL_WIDTH: u16 = 30;
 
 /// Split the panel off the right of an area, if there is one and it fits.
 ///
-/// A table's panel goes down the *right*, because a row has twenty-eight
-/// fields and that is a tall thing. Prose gets the same panel along the
-/// **bottom** instead: a footnote is one short paragraph, and taking thirty
-/// columns off a page of writing to show it would be paying the wrong price.
+/// A **row's** panel goes down the *right*, because a row has twenty-eight
+/// fields and that is a tall thing — and it is a tall thing in a Markdown
+/// document as much as in a `.csv`. A **note's** goes along the bottom
+/// instead: a footnote is one short paragraph, and taking thirty columns off
+/// a page of writing to show it would be paying the wrong price.
+///
+/// **The panel's shape follows what it holds, not what the file is** (#283).
+/// It used to follow whether the table had taken the window, which gave a row
+/// in prose the note's four lines: two fields of five, two of twenty-eight.
 pub fn split_detail(editor: &Editor, config: &Config, area: Rect) -> (Rect, Option<Rect>) {
     if !editor.detail_visible() {
         return (area, None);
     }
-    if editor.table().is_some_and(|t| t.takes_the_pane()) {
+    if editor.detail_shows_a_row() || editor.table().is_some_and(|t| t.takes_the_pane()) {
         if area.width < DETAIL_WIDTH {
             return (area, None);
         }

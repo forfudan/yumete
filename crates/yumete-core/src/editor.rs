@@ -8431,7 +8431,11 @@ impl Editor {
     /// Whether any line of `text` would not be a row of this grid.
     fn rows_break_the_grid(&self, text: &str) -> Option<String> {
         let view = self.table.as_ref()?;
-        let want = view.schema.columns.len();
+        // **The table the cursor is in, not the one it was entered in** (#283):
+        // a document holds as many tables as somebody typed, and filtering the
+        // five-column one through `sort` while the view still carried the
+        // two-column one's schema refused every row it was handed.
+        let want = self.table_column_count_at(self.cursor_line());
         for (i, line) in text.lines().enumerate() {
             if line.trim().is_empty() {
                 continue;
@@ -9819,12 +9823,13 @@ impl Editor {
         if !self.table_here() {
             return String::new();
         }
+        // The width is **this** table's (#283) — `o` in the second table of a
+        // document was opening a row as wide as the first one.
+        let columns = self.table_column_count_at(self.cursor_line());
         match &self.table {
             Some(view) => match view.separator {
-                Separator::Pipe => crate::mdtable::blank_row(view.schema.columns.len()),
-                Separator::Delimiter(d) => {
-                    d.to_string().repeat(view.schema.columns.len().saturating_sub(1))
-                }
+                Separator::Pipe => crate::mdtable::blank_row(columns),
+                Separator::Delimiter(d) => d.to_string().repeat(columns.saturating_sub(1)),
             },
             None => String::new(),
         }
@@ -9878,6 +9883,18 @@ impl Editor {
         }
     }
 
+    /// Whether the panel is about to show a **row** rather than a note.
+    ///
+    /// The two want different shapes, and the shape used to be picked from
+    /// whether the table had taken the window (#283): a row in a Markdown
+    /// document got the note's four-line strip along the bottom, so a
+    /// five-column row showed two of its fields and a 拆分表 row showed two
+    /// of twenty-eight. What decides is what the panel *holds* — a row is a
+    /// tall thing wherever it is written.
+    pub fn detail_shows_a_row(&self) -> bool {
+        self.in_a_table_row() && self.row_detail().is_some()
+    }
+
     /// Whether the cursor is standing in a row a table panel can read.
     ///
     /// Not the header and not the `|---|` — neither is a row, and both would
@@ -9910,12 +9927,18 @@ impl Editor {
         use std::borrow::Cow;
         let view = self.table.as_ref()?;
         match view.bounds {
-            Bounds::WholeFile => Some(Cow::Borrowed(&view.schema)),
-            _ => {
+            // **Only a `|` table has a header to read back.** A guessed block
+            // is walked out afresh every time the cursor enters one
+            // (`Reach::Cursor`), so the view's numbered schema is already this
+            // block's — while reading its first line as a Markdown header
+            // split a tab-delimited row on pipes and called the whole thing one
+            // column, which is what emptied the panel over a 碼表.
+            Bounds::Md => {
                 let region = self.prose_region()?;
                 let header = self.line_text(region.first)?;
                 Some(Cow::Owned(crate::mdtable::schema(&header)))
             }
+            _ => Some(Cow::Borrowed(&view.schema)),
         }
     }
 
@@ -10060,7 +10083,13 @@ impl Editor {
         let Some(view) = self.table.as_ref() else {
             return;
         };
-        let columns = view.schema.columns.len().max(1);
+        // **How many columns this table has** (#283): `3gd` in the wider of two
+        // tables was clamped to the narrower one's count.
+        let columns = self
+            .schema_here()
+            .map(|s| s.columns.len())
+            .unwrap_or_default()
+            .max(1);
         // What is being looked up: the selection when there is one, else what
         // the cursor is on — by character or by cell, following `Tab`, which is
         // the same unit `hjkl` move by.
@@ -10474,8 +10503,26 @@ impl Editor {
             self.status = say!("table.not-in-a-table");
             return;
         };
-        let schema = view.schema.clone();
         let separator = view.separator;
+        // **The table the cursor is in** (#283). A `.csv` is one table and the
+        // file's bounds are its bounds; a document is as many tables as
+        // somebody typed, and checking the file meant reading every paragraph
+        // in it as a row 「寬度不對」. The schema comes from the same place as
+        // the bounds do, so the two can never disagree.
+        let (first_line, last_line) = match view.bounds {
+            Bounds::WholeFile => (0, motion::last_line(self.current_buffer().rope())),
+            _ => match self.prose_region() {
+                Some(region) => (region.first, region.last),
+                None => {
+                    self.status = say!("table.not-in-a-table");
+                    return;
+                }
+            },
+        };
+        let Some(schema) = self.schema_here().map(|s| s.into_owned()) else {
+            self.status = say!("table.not-in-a-table");
+            return;
+        };
         let name = self
             .current_buffer()
             .path()
@@ -10490,8 +10537,14 @@ impl Editor {
             .unwrap_or_default();
         let want = schema.columns.len();
         let rope = self.current_buffer().rope();
-        let last = motion::last_line(rope);
-        let first = usize::from(schema.header);
+        // The rule row is punctuation, not a row — it is the one line in a
+        // Markdown table that is *meant* to hold nothing but dashes.
+        let rule = self.table.as_ref().and_then(|v| match v.bounds {
+            Bounds::WholeFile => None,
+            _ => self.prose_region().and_then(|r| r.rule),
+        });
+        let last = last_line;
+        let first = first_line + usize::from(schema.header);
         let mut found: Vec<String> = Vec::new();
         let mut seen: HashMap<String, usize> = HashMap::new();
         let mut keys: Vec<String> = Vec::new();
@@ -10501,7 +10554,7 @@ impl Editor {
                 Separator::Pipe => crate::mdtable::cells(&text),
                 Separator::Delimiter(d) => crate::table::cells(&text, d),
             };
-            if text.trim().is_empty() {
+            if text.trim().is_empty() || Some(line) == rule {
                 continue;
             }
             let cell = |i: usize| {
@@ -10546,6 +10599,9 @@ impl Editor {
             })
             .collect();
         for line in first..=last {
+            if Some(line) == rule {
+                continue;
+            }
             let text = rope.line(line).to_string();
             let spans = match separator {
                 Separator::Pipe => crate::mdtable::cells(&text),
@@ -10570,7 +10626,10 @@ impl Editor {
             }
         }
         if found.is_empty() {
-            self.status = say!("table.check-clean", name, last + 1 - first);
+            // The rule row was walked past, so it is not one of the rows the
+            // count reports either.
+            let rows = last + 1 - first - usize::from(rule.is_some());
+            self.status = say!("table.check-clean", name, rows);
             return;
         }
         found.sort_by_key(|l| {
@@ -21901,6 +21960,62 @@ mod tests {
         assert!(ed.detail().is_none_or(|d| d.rows.is_empty()), "the header names columns");
         ed.goto_line(8);
         assert!(ed.detail().is_none_or(|d| d.rows.is_empty()), "the rule is the shape");
+    }
+
+    /// A document whose two tables are **different widths** — the case that
+    /// tells a stale schema from a fresh one.
+    fn with_a_narrow_and_a_wide_table() -> Editor {
+        typed(
+            "第一張，兩欄。\n\n| 甲 | 乙 |\n| --- | --- |\n| 一 | 二 |\n\n\
+             第二張，五欄。\n\n| A | B | C | D | E |\n| --- | --- | --- | --- | --- |\n\
+             | 木 | 一 | 木 | 四 | 五 |\n| 林 | 二 | 木木 | 四 | 五 |\n",
+        )
+    }
+
+    /// #283, the last of it. Everything that counts columns counts **this**
+    /// table's: the view carries the schema of whichever table was entered,
+    /// and walking to a wider one used to leave every question answered by the
+    /// narrower one.
+    #[test]
+    fn the_second_table_is_measured_by_its_own_width() {
+        let mut ed = with_a_narrow_and_a_wide_table();
+        ed.goto_line(11);
+        press(&mut ed, "tf");
+
+        // The panel: five fields, not the first table's two.
+        let panel = ed.detail().expect("a row of the wide table answers");
+        assert_eq!(panel.rows.len(), 5, "{:?}", panel.rows);
+        assert!(panel.rows[4].0.ends_with('E'), "{:?}", panel.rows[4]);
+
+        // `3gd` looks in the third column. Clamped to the narrow table's two,
+        // it looked in the second and named it in the answer, which is the
+        // shape of the bug that is hardest to disbelieve: a wrong answer with
+        // a column name on it.
+        press(&mut ed, "3gd");
+        assert!(ed.status().contains('C'), "{}", ed.status());
+        assert!(!ed.status().contains('B'), "{}", ed.status());
+
+        // `:table check` reads the table the cursor is in — not the file, in
+        // which every paragraph is a line 「寬度不對」.
+        assert!(ed.execute("table check").is_ok());
+        assert!(
+            ed.status().contains('2'),
+            "two rows, rule and header excluded: {}",
+            ed.status()
+        );
+    }
+
+    /// A guessed block is not a `|` table, and reading its first line as a
+    /// Markdown header split a tab-delimited row on pipes: one column, and a
+    /// panel with nothing in it over a 碼表.
+    #[test]
+    fn a_block_table_reads_by_its_own_numbered_columns() {
+        let mut ed = typed("一段話。\n\n木\tmu\t一\n林\tlin\t二\n森\tsen\t三\n");
+        ed.goto_line(4);
+        press(&mut ed, "tf");
+        let panel = ed.detail().expect("a row of a block table answers");
+        assert_eq!(panel.rows.len(), 3, "{:?}", panel.rows);
+        assert_eq!(panel.rows[1].1.as_deref(), Some("lin"), "{:?}", panel.rows);
     }
 
     /// The first table's columns are not the second table's. `t y` reported

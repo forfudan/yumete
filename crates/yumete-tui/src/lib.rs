@@ -5402,6 +5402,24 @@ mod tests {
     ///
     /// A wide glyph occupies two cells and ratatui blanks the second, so the
     /// row is walked by display width rather than by cell.
+    /// #283. The panel's shape follows what it **holds**. A row of a Markdown
+    /// table used to get the note's four-line strip along the bottom, because
+    /// the shape was picked from whether the table had taken the window — so a
+    /// five-column row showed two of its fields with no sign there were more.
+    #[test]
+    fn a_row_panel_goes_down_the_right_in_prose_too() {
+        let mut editor = editor_with(
+            "一段話。\n\n| A | B | C | D | E |\n| --- | --- | --- | --- | --- |\n| 1 | 2 | 3 | 4 | 5 |",
+        );
+        for key in ['4', 'j', 't', 'f'] {
+            editor.on_key(Key::Char(key));
+        }
+        let config = Config::default();
+        let frame = render(&editor, &config, 76, 24);
+        let page: String = (0..24).map(|y| row_text(&frame, y)).collect::<Vec<_>>().join("\n");
+        assert!(page.contains(" 5 E"), "every field is there:\n{page}");
+    }
+
     fn row_text(buffer: &ratatui::buffer::Buffer, y: u16) -> String {
         let mut out = String::new();
         let mut x = 0;
