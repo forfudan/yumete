@@ -5752,6 +5752,44 @@ mod tests {
         assert!(page.contains('黃'), "the tail is readable in the panel:\n{page}");
     }
 
+    /// #283. The ruler and the names used to stop one column before the rows
+    /// did: they broke on 「does the whole column fit」 and the rows break on
+    /// 「does this column start inside the window」. The 32-cell cap kept most
+    /// columns well inside the window and hid it; `t w` makes a column wider
+    /// than the room left over the ordinary case — and the column it beheaded
+    /// was the one the reader had just asked to see whole.
+    #[test]
+    fn the_ruler_and_the_names_stop_where_the_rows_stop() {
+        let long = "甲乙丙丁戊己庚辛壬癸子丑寅卯辰巳午未申酉戌亥天地玄黃宇宙洪荒日月盈昃";
+        let mut editor = editor_with(&format!(
+            "| 地名 | 小傳 |\n| --- | --- |\n| 洛陽 | {long} |"
+        ));
+        for key in ['j', 'j', 't', 't', 't', 'w'] {
+            editor.on_key(Key::Char(key));
+        }
+        let config = Config::default();
+        // The grid alone: the panel down the right names every field, so
+        // reading the two together would let the panel answer for the ruler.
+        let frame = render(&editor, &config, 96, 10);
+        let grid: Vec<String> = (0..10)
+            .map(|y| row_text(&frame, y).split('│').next().unwrap_or("").to_string())
+            .collect();
+        let heading = grid
+            .iter()
+            .position(|row| row.contains("地名"))
+            .unwrap_or_else(|| panic!("a heading row:\n{}", grid.join("\n")));
+        assert!(
+            grid[heading].contains("小傳"),
+            "the second column keeps its name:\n{}",
+            grid.join("\n")
+        );
+        assert!(
+            grid[heading - 1].contains('2'),
+            "and its number:\n{}",
+            grid.join("\n")
+        );
+    }
+
     fn row_text(buffer: &ratatui::buffer::Buffer, y: u16) -> String {
         let mut out = String::new();
         let mut x = 0;
