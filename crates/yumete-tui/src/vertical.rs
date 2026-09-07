@@ -1084,6 +1084,10 @@ pub fn draw(
             // characters the file actually holds.
             if let Some(kind) = row.ink {
                 let style = match kind {
+                    // 金 and bold, the same as across the page: 這不是正文.
+                    yumete_core::drawn::Ink::Fold => {
+                        ink.page().fg(ink.gold()).add_modifier(Modifier::BOLD)
+                    }
                     yumete_core::drawn::Ink::Note => ink.page().fg(ink.marker()),
                     _ => ink.page().fg(ink.quiet()),
                 };

@@ -3600,15 +3600,16 @@ impl Editor {
 
     /// The fold marks drawn on `line` — one per cell whose tail came off.
     ///
-    /// [`crate::drawn::Ink::Note`], because that is what it is: the page
-    /// telling the reader something the file does not say. It is anchored at
-    /// the first character of the folded tail, so it stands exactly where the
-    /// writing stopped.
+    /// [`crate::drawn::Ink::Fold`], which is its own ink and not the note's:
+    /// a note is *about* what is written and takes the markup's grey, and a
+    /// grey `>` beside grey writing is a `>` the reader takes for the
+    /// writer's own. It is anchored at the first character of the folded
+    /// tail, so it stands exactly where the writing stopped.
     fn fold_marks_on_line(&self, line: usize) -> Vec<crate::drawn::Run> {
         use crate::drawn::{Ink, Run};
         self.cell_folds_on_line(line)
             .into_iter()
-            .map(|(at, _)| Run::new(at, crate::mdtable::FOLD_MARK.to_string(), Ink::Note))
+            .map(|(at, _)| Run::new(at, crate::mdtable::FOLD_MARK.to_string(), Ink::Fold))
             .collect()
     }
 
@@ -22488,8 +22489,10 @@ mod tests {
         assert!(!folded.is_empty(), "the wide cell is folded: {folded:?}");
         let marks = ed.drawn_runs_on_line(8);
         assert!(
-            marks.iter().any(|r| r.text == crate::mdtable::FOLD_MARK),
-            "and says so on the page: {marks:?}"
+            marks
+                .iter()
+                .any(|r| r.text == crate::mdtable::FOLD_MARK && r.ink == crate::drawn::Ink::Fold),
+            "and says so on the page, in an ink of its own: {marks:?}"
         );
         // What is left is the cap, mark included — never one cell more.
         let text = ed.line_text(8).unwrap();

@@ -4345,7 +4345,14 @@ fn draw_horizontal(
         // as something that has already been written. A note (#248) is further
         // back still and in the marker's ink: it is not a word of the
         // manuscript at all, it is the editor pointing at one.
+        // The fold mark is neither: it is 金 and it is bold, the page's own
+        // way of saying 這不是正文. Grey said it too quietly — the page is a
+        // run of greys on purpose, so a grey `>` at the end of a cell is a
+        // `>` the writer typed. Ink and weight rather than a ground, because
+        // a ground on this page is the *reader's* mark (the selection, the
+        // 朱 wash, the cursor's band) and the fold mark is the editor's.
         let run_style = |kind: yumete_core::drawn::Ink| match kind {
+            yumete_core::drawn::Ink::Fold => ground.fg(ink.gold()).add_modifier(Modifier::BOLD),
             yumete_core::drawn::Ink::Note => ground.fg(ink.marker()),
             _ => ground.fg(ink.quiet()),
         };
@@ -5653,6 +5660,51 @@ mod tests {
     /// The symbol at a cell, for grid assertions.
     fn at(buffer: &ratatui::buffer::Buffer, x: u16, y: u16) -> String {
         buffer[(x, y)].symbol().to_string()
+    }
+
+    /// #283. 「折叠标志要不要加个下划线背景色什么的突出一下避免用户当作它是个
+    /// 普通的 `>`」 (author, 2026-09-07). The glyph itself cannot change — every
+    /// ellipsis Unicode has is East Asian *Ambiguous*, and a table is where the
+    /// two width tables must agree to the cell — so the ink carries it: 金, and
+    /// bold, on a page that is otherwise a run of greys.
+    #[test]
+    fn the_fold_mark_is_not_in_the_ink_of_the_writing_it_stands_after() {
+        let long = "甲乙丙丁戊己庚辛壬癸子丑寅卯辰巳午未申酉戌亥天地玄黃宇宙洪荒日月盈昃";
+        let source = format!("| 地名 | 小傳 |\n| --- | --- |\n| 洛陽 | {long} |");
+        let config = Config::default();
+        // Both surfaces the mark is drawn on: the prose page, which folds
+        // against the columns it squares up once `t w` asks it to, and the
+        // pane, which draws its own grid and caps it unasked.
+        for keys in [vec!['j', 'j', 't', 'b', 't', 'w'], vec!['j', 'j', 't', 't']] {
+            let mut editor = editor_with(&source);
+            for key in keys.iter().copied() {
+                editor.on_key(Key::Char(key));
+            }
+            let how: String = keys.iter().collect();
+            let frame = render(&editor, &config, 96, 10);
+            // The grid alone: the pane's panel prints the whole cell down the
+            // right, and the mark is never drawn in it.
+            let rows: Vec<String> = (0..10)
+                .map(|y| row_text(&frame, y).split('│').next().unwrap_or("").to_string())
+                .collect();
+            let y = rows
+                .iter()
+                .position(|row| row.contains("洛陽"))
+                .unwrap_or_else(|| panic!("the row is on the page ({how}):\n{}", rows.join("\n")))
+                as u16;
+            let text = &rows[y as usize];
+            let mark = frame[(column_of(text, ">"), y)].style();
+            let word = frame[(column_of(text, "甲"), y)].style();
+            assert!(
+                mark.add_modifier.contains(Modifier::BOLD),
+                "the mark is bold ({how}): {mark:?}"
+            );
+            assert!(
+                !word.add_modifier.contains(Modifier::BOLD),
+                "and the writing beside it is not ({how}): {word:?}"
+            );
+            assert_ne!(mark.fg, word.fg, "and it is not in the writing's ink ({how})");
+        }
     }
 
     /// One rendered row, as the reader sees it.
