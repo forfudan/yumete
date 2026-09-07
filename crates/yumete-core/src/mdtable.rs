@@ -859,7 +859,27 @@ pub fn padding(
                     let (from, to) = spans[i][c];
                     let lead = usize::from(from == start);
                     let trail = usize::from(to == end && closes(&chars[i], end));
-                    visible_width(&chars[i], (start, end), hidden) + lead + trail
+                    // **The mark is counted where it is really drawn.**
+                    // `marks` is the *measure's* list — every cell folded,
+                    // the open one included, because the column's width is
+                    // measured closed. On the page the open cell has no mark,
+                    // and every other cell still has one. Dropping the term
+                    // altogether made every folded cell one wall too wide the
+                    // moment `i` was pressed anywhere in the table, which is
+                    // exactly the alignment this parameter exists to keep.
+                    let drawn: usize = marks
+                        .get(i)
+                        .map(|m| {
+                            m.iter()
+                                .filter(|&&(at, _)| {
+                                    (start..end).contains(&at)
+                                        && hidden.iter().any(|&(a, b)| (a..b).contains(&at))
+                                })
+                                .map(|&(_, w)| w)
+                                .sum()
+                        })
+                        .unwrap_or(0);
+                    visible_width(&chars[i], (start, end), hidden) + lead + trail + drawn
                 })
                 .collect(),
         })
@@ -1282,36 +1302,68 @@ mod tests {
     /// thing that actually goes wrong — a column squared up as though the mark
     /// were not there.
     fn folded(text: &str, cap: usize, open: Option<(usize, usize)>) -> Vec<String> {
+        folded_told(text, cap, open, false)
+    }
+
+    /// The same pipeline, with `tell` saying whether the page owns up to what
+    /// it really hides — which is what the editor does the moment a cell is
+    /// opened for writing, and what `padding`'s fourth argument is for.
+    fn folded_told(
+        text: &str,
+        cap: usize,
+        open: Option<(usize, usize)>,
+        tell: bool,
+    ) -> Vec<String> {
         let rows: Vec<String> = lines(text);
         let rule = rows.get(1).and_then(|l| rule_of(l)).map(|_| 1);
-        let cuts: Vec<Vec<(usize, usize)>> = rows
-            .iter()
-            .enumerate()
-            .map(|(i, l)| match Some(i) == rule {
-                true => Vec::new(),
-                false => folds(l, &[], cap, open.filter(|_| i == 2)),
-            })
-            .collect();
         let width = yumete_cjk::str_width(FOLD_MARK);
-        let marks: Vec<Vec<(usize, usize)>> = cuts
-            .iter()
-            .map(|f| f.iter().map(|&(at, _)| (at, width)).collect())
-            .collect();
-        // The tail is not the only thing that comes off a row: the padding the
-        // file already holds goes with it, or the column the mark just saved
-        // is drawn straight back out to the file's width.
-        let with: Vec<(String, Vec<(usize, usize)>)> = rows
-            .iter()
-            .zip(&cuts)
-            .enumerate()
-            .map(|(i, (l, f))| {
-                let mut off = f.clone();
-                off.extend(slack(l, &[], cap, open.filter(|_| i == 2)));
-                off.sort_unstable();
-                (l.clone(), off)
-            })
-            .collect();
-        padding(&with, rule, &marks, &[])
+        // One pass of the pipeline. `caret` is what it knows of the caret: the
+        // **measure** knows nothing, so its columns are the widths a closed
+        // table has, and that is what keeps the walls still when a cell opens.
+        let pass = |caret: Option<(usize, usize)>| {
+            let cuts: Vec<Vec<(usize, usize)>> = rows
+                .iter()
+                .enumerate()
+                .map(|(i, l)| match Some(i) == rule {
+                    true => Vec::new(),
+                    false => folds(l, &[], cap, caret.filter(|_| i == 2)),
+                })
+                .collect();
+            // The tail is not the only thing that comes off a row: the padding
+            // the file already holds goes with it, or the column the mark just
+            // saved is drawn straight back out to the file's width.
+            let with: Vec<(String, Vec<(usize, usize)>)> = rows
+                .iter()
+                .zip(&cuts)
+                .enumerate()
+                .map(|(i, (l, f))| {
+                    let mut off = f.clone();
+                    off.extend(slack(l, &[], cap, caret.filter(|_| i == 2)));
+                    off.sort_unstable();
+                    (l.clone(), off)
+                })
+                .collect();
+            let marks: Vec<Vec<(usize, usize)>> = cuts
+                .iter()
+                .map(|f| f.iter().map(|&(at, _)| (at, width)).collect())
+                .collect();
+            (cuts, with, marks)
+        };
+        let (cuts, with, marks) = pass(open);
+        // Told: the columns come from the measure, which never saw the caret,
+        // and only `shown` says which of those marks the page really draws.
+        let (measure, told) = match tell {
+            false => (None, Vec::new()),
+            true => (
+                Some(pass(None)),
+                with.iter().map(|(_, off)| off.clone()).collect(),
+            ),
+        };
+        let (rows_in, marks_in) = match &measure {
+            None => (&with, &marks),
+            Some((_, w, m)) => (w, m),
+        };
+        padding(rows_in, rule, marks_in, &told)
             .iter()
             .enumerate()
             .map(|(i, runs)| {
@@ -1323,45 +1375,21 @@ mod tests {
             .collect()
     }
 
-    /// #283. The cap is on what is **drawn**, and the mark is one cell of it:
-    /// a column that folds is exactly `cap` wide, not `cap + 1`.
+    /// #288. Once the page owns up to what it really hides, the open cell juts
+    /// out past its own wall and **nothing else moves**. The row the caret is
+    /// not on is still folded, still one mark wide, and still exactly where it
+    /// stood a keystroke ago — otherwise pressing `i` anywhere in a table
+    /// nudges every folded wall in it one cell to the right, which is a whole
+    /// table redrawing itself for a caret that never touched it.
     #[test]
-    fn a_cell_past_the_cap_keeps_its_head_and_shows_that_there_is_more() {
-        let out = folded("| a | b |\n| - | - |\n| 一二三四五 | d |\n", 6, None);
-        assert_eq!(
-            out,
-            vec!["| a     | b |", "| ----- | - |", "| 一二> | d |"],
-            "five cells of writing and the mark, in a six-cell column"
-        );
-        // And the walls line up, which is the only thing a reader checks.
-        let width = |s: &str| yumete_cjk::str_width(s);
-        assert_eq!(width(&out[0]), width(&out[2]), "{out:?}");
-        assert_eq!(width(&out[1]), width(&out[2]), "{out:?}");
-    }
-
-    /// A cell that fits is not touched, and neither is the rule row — the
-    /// caller keeps it out, because `---|:---:|---` is the shape of the table
-    /// rather than writing in it.
-    #[test]
-    fn a_cell_within_the_cap_is_left_whole() {
-        let out = folded("| a | b |\n| - | - |\n| cc | d |\n", 8, None);
-        assert_eq!(out, vec!["| a  | b |", "| -- | - |", "| cc | d |"]);
-    }
-
-    /// The cell the caret is in opens, and the column widens to hold it —
-    /// which is what makes a folded table an editable one.
-    #[test]
-    fn the_cell_the_caret_is_in_is_not_folded() {
-        let whole = "| a | b |\n| - | - |\n| 一二三四五 | d |\n";
+    fn opening_one_cell_leaves_every_other_row_where_it_stood() {
+        let whole = "| a | b |\n| - | - |\n| 一二三四五 | d |\n| 一二三四五 | e |\n";
         let shut = folded(whole, 6, None);
-        let open = folded(whole, 6, Some((3, 3)));
-        assert_eq!(shut[2], "| 一二> | d |");
+        let open = folded_told(whole, 6, Some((3, 3)), true);
         assert_eq!(open[2], "| 一二三四五 | d |", "walked into, so whole");
-        assert_eq!(
-            yumete_cjk::str_width(&open[0]),
-            yumete_cjk::str_width(&open[2]),
-            "and the whole table squares up around it: {open:?}"
-        );
+        assert_eq!(open[3], shut[3], "and the row below did not budge");
+        assert_eq!(open[0], shut[0], "nor the head");
+        assert_eq!(open[1], shut[1], "nor the rule");
     }
 
     /// The bug the author reported off `development.md`: 「the long cells are
