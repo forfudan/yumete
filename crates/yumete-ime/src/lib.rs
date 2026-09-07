@@ -29,11 +29,13 @@ use std::sync::Arc;
 use yume_core::commit_strategy::CommitOverrides;
 use yume_core::data_manifest;
 use yume_core::division::DivisionTable;
+use yume_core::division_infer::CustomDivisions;
 use yume_core::key_bindings::{FuncKey, KeyAction};
 use yume_core::lexicon::Lexicon;
 use yume_core::zigen::ZigenTable;
 use yume_core::{
-    AnnotationTable, Charset, CodeTable, Engine, FluencyTable, UnigramTable, NAMED_CHARSETS,
+    custom_scheme, scheme_slots, AnnotationTable, Charset, CodeTable, Engine, FluencyTable,
+    UnigramTable, NAMED_CHARSETS,
 };
 
 pub use reading::YumeReader;
@@ -64,6 +66,57 @@ pub struct Scheme(&'static str);
 /// every install today and also stands. Only a non-empty find replaces them.
 static FOUND: std::sync::OnceLock<Vec<(&'static str, String)>> = std::sync::OnceLock::new();
 
+/// One 自定義方案 the writer imported into yume, as [`discover_slots`] found it.
+///
+/// **Not a scheme file, and no manifest names it.** A 自定義方案 is compiled by
+/// yume into a slot directory of its own — `custom.ytab`, `custom.yzg`, the
+/// derived `custom.ycdv`, and `custom.yscm` for its parameters — and
+/// `yume_core::data_manifest` answers nothing about it on purpose: the manifest
+/// is the *factory* data set, and a slot is the writer's. So the tables are
+/// named by absolute path (see [`slot_data_set`]) and the parameters come from
+/// the slot's own manifest, the way yume's own frontends read them.
+#[derive(Clone, Debug)]
+struct Slot {
+    /// `custom.a1b2c3d4` — `yume_core::scheme_slots::tag_for` decides the shape.
+    tag: &'static str,
+    /// The 方案名 the writer gave it, which is the only name it has: the tag is
+    /// eight hex digits nobody chose.
+    name: String,
+    /// The slot directory, holding the four compiled artifacts.
+    dir: PathBuf,
+    /// The parameters `custom.yscm` holds — 最大碼長, 終止鍵, 反查引導鍵, the
+    /// two 隱藏 ticks, and the rest. Kept from the scan rather than read again
+    /// at load time: `scheme_slots::list` would not have reported the slot at
+    /// all if this had not parsed, so a second read can only agree, and a
+    /// scheme whose parameters went missing between the two would silently
+    /// fall back to the engine's defaults — a 最大碼長 of the wrong length is
+    /// not a thing a writer would ever guess at.
+    manifest: custom_scheme::Manifest,
+}
+
+/// The 自定義方案 found, or `None` while nothing has looked.
+static SLOTS: std::sync::OnceLock<Vec<Slot>> = std::sync::OnceLock::new();
+
+/// Under a data directory, where yume keeps its slots.
+///
+/// Three, because yume has moved them: macOS puts them in `installed/` today,
+/// Windows still writes `data/custom/`, and an installation older than 方案管理
+/// has a bare `custom/` holding one scheme with no slot directory at all (that
+/// last is `scheme_slots::migrate`'s business, and it is listed here only so a
+/// yumete that meets it before yume does still finds nothing rather than
+/// finding the wrong thing).
+const SLOT_ROOTS: [&str; 3] = ["installed", "data/custom", "custom"];
+
+/// The slots found, or an empty list while nothing has looked.
+fn slots() -> &'static [Slot] {
+    SLOTS.get().map(Vec::as_slice).unwrap_or(&[])
+}
+
+/// The slot a scheme names, if it is one.
+fn slot_of(scheme: Scheme) -> Option<&'static Slot> {
+    slots().iter().find(|s| s.tag == scheme.0)
+}
+
 /// The schemes a build knows when no scheme file has been found.
 const BUILT_IN: [Scheme; 5] = [
     Scheme::LINGMING,
@@ -85,12 +138,21 @@ impl Scheme {
     /// 拼音 — the phonetic, fluency-only scheme.
     pub const PINYIN: Scheme = Scheme("pinyin");
 
-    /// Every scheme, in menu order.
+    /// Every scheme, in menu order: what was shipped, then what the writer
+    /// imported.
+    ///
+    /// **自定義方案 come last, always**, however many there are — the same order
+    /// yume's own ⌃⇧N cycle uses. They are appended rather than merged because
+    /// they are found a different way and sorted by a different key: a factory
+    /// scheme's place is its author's 系列 and index, a slot's is the moment it
+    /// was created.
     pub fn all() -> Vec<Scheme> {
-        match FOUND.get() {
+        let mut all: Vec<Scheme> = match FOUND.get() {
             Some(found) if !found.is_empty() => found.iter().map(|(tag, _)| Scheme(tag)).collect(),
             _ => BUILT_IN.to_vec(),
-        }
+        };
+        all.extend(slots().iter().map(|s| Scheme(s.tag)));
+        all
     }
 
     /// The canonical scheme tag understood by `yume-core`.
@@ -104,6 +166,12 @@ impl Scheme {
     /// its tables are loaded ([`ImeSession::scheme_name`]), which is a better
     /// answer than any table here because it is the one the panel shows.
     pub fn found_name(self) -> &'static str {
+        // A slot's name is **not** optional the way a built-in's is: its tag is
+        // eight hex digits, so a menu that falls back to the tag shows the
+        // writer a row they cannot read.
+        if let Some(slot) = slot_of(self) {
+            return slot.name.as_str();
+        }
         FOUND
             .get()
             .into_iter()
@@ -195,7 +263,7 @@ impl Scheme {
 /// were taken.
 pub fn discover(dirs: &[PathBuf]) -> usize {
     if FOUND.get().is_some() {
-        return FOUND.get().map(Vec::len).unwrap_or(0);
+        return FOUND.get().map(Vec::len).unwrap_or(0) + slots().len();
     }
     let mut files: Vec<PathBuf> = Vec::new();
     // Last directory first: `add_factory_scheme` lets a later file win, and the
@@ -244,6 +312,58 @@ pub fn discover(dirs: &[PathBuf]) -> usize {
     }
     let len = list.len();
     let _ = FOUND.set(list);
+    len + discover_slots(dirs)
+}
+
+/// Scan `dirs` for the 自定義方案 the writer imported into yume, and make what
+/// is there part of the scheme list. Answers how many were found.
+///
+/// **A slot is not a scheme file, so the scan above cannot see it.** yume
+/// compiles an imported 碼表 into a directory named by eight hex digits, under
+/// one of [`SLOT_ROOTS`], and writes its parameters into a `custom.yscm` beside
+/// the tables — not a `schemes/<tag>.toml`, and not in a form
+/// `data_manifest::add_factory_scheme` would parse. So the two halves of yume's
+/// scheme list are found two ways, and this is the second: `scheme_slots::list`
+/// is the core's own answer to 「哪些槽位裝得起來」, including the test that a
+/// half-written import stays invisible rather than showing as a nameless row.
+///
+/// Nothing is registered with yume-core. A slot's tag is deliberately *not* on
+/// any factory list — `data_manifest::for_scheme` answers empty for it, which is
+/// correct — and everything that would have come off the manifest comes off the
+/// slot instead: its files from [`slot_data_set`], its parameters from its own
+/// manifest at load time.
+fn discover_slots(dirs: &[PathBuf]) -> usize {
+    if SLOTS.get().is_some() {
+        return slots().len();
+    }
+    let mut found: Vec<Slot> = Vec::new();
+    for dir in dirs {
+        for root in SLOT_ROOTS {
+            let mut path = dir.clone();
+            for part in root.split('/') {
+                path.push(part);
+            }
+            for slot in scheme_slots::list(&path) {
+                let tag = slot.tag();
+                // The same slot reached twice — two data directories that are
+                // the same place by different names, which `data_search_dirs`
+                // already warns about — is one scheme, and the first way in
+                // wins, because the search order runs from the most specific
+                // directory to the least.
+                if found.iter().any(|s| s.tag == tag) {
+                    continue;
+                }
+                found.push(Slot {
+                    tag: Box::leak(tag.into_boxed_str()),
+                    name: slot.manifest.name.clone(),
+                    dir: slot.dir,
+                    manifest: slot.manifest,
+                });
+            }
+        }
+    }
+    let len = found.len();
+    let _ = SLOTS.set(found);
     len
 }
 
@@ -427,9 +547,10 @@ impl ImeSession {
                 None => "出廠自帶".to_string(),
             };
         }
-        // The manifest knows which file this scheme's 碼表 is; asking it beats
-        // guessing at the name.
-        data_manifest::for_scheme(self.scheme.tag())
+        // The manifest knows which file this scheme's 碼表 is — and for a
+        // 自定義方案, which the manifest says nothing about, the slot does.
+        // Either way, asking beats guessing at the name.
+        own_data_set(self.scheme)
             .into_iter()
             .find(|f| f.kind == DataKind::Table)
             .and_then(|f| find_file(&self.data_dirs, &f.file))
@@ -1006,6 +1127,14 @@ impl ImeSession {
 /// Resolve one manifest entry's relative path (`charsets/common.ycs`) against
 /// the search path, first directory wins.
 fn find_file(dirs: &[PathBuf], relative: &str) -> Option<PathBuf> {
+    // **An absolute name is already the answer.** A 自定義方案's tables are not
+    // in the manifest and not under any data directory — they sit in the slot
+    // yume allocated for them, wherever that is — so [`slot_data_set`] names
+    // them in full, and there is nothing here to resolve.
+    let named = Path::new(relative);
+    if named.is_absolute() {
+        return named.is_file().then(|| named.to_path_buf());
+    }
     for dir in dirs {
         let mut path = dir.clone();
         // Manifest paths always use forward slashes, whatever the host.
@@ -1185,7 +1314,7 @@ pub fn data_set(scheme: Scheme) -> Vec<DataFile> {
     let mut seen: Vec<(DataKind, String, String, i32)> = Vec::new();
     data_manifest::shared()
         .into_iter()
-        .chain(data_manifest::for_scheme(scheme.tag()))
+        .chain(own_data_set(scheme))
         .filter(|f| {
             let key = (f.kind, f.file.clone(), f.aux.clone(), f.slot);
             let fresh = !seen.contains(&key);
@@ -1195,6 +1324,64 @@ pub fn data_set(scheme: Scheme) -> Vec<DataFile> {
             fresh
         })
         .collect()
+}
+
+/// The files that are **this scheme's own**, as against the shared ones.
+///
+/// Two answers behind one question, because a scheme is found two ways: the
+/// manifest for one yume shipped, the slot directory for one the writer
+/// imported. Everything downstream — [`data_set`], [`build_engine`]'s test for
+/// which file makes this scheme typable, `:yume` reporting where it looked —
+/// asks here and never has to know which kind it is holding.
+fn own_data_set(scheme: Scheme) -> Vec<DataFile> {
+    match slot_of(scheme) {
+        Some(slot) => slot_data_set(slot),
+        None => data_manifest::for_scheme(scheme.tag()),
+    }
+}
+
+/// A 自定義方案's own files, named the way the manifest names a factory
+/// scheme's — kind by kind, so one loader serves both.
+///
+/// The paths are **absolute** (see [`find_file`]): a slot is not under a data
+/// directory and there is no relative name that would find it. The three that
+/// matter are yume's own three, in yume's own order:
+///
+/// * `custom.ytab` — the 碼表 the writer's table compiled to. Without it the
+///   scheme cannot be typed, which is what makes it the essential file here.
+/// * `data/chaifen.ydiv` — the shared 字料層, exactly as every factory scheme
+///   takes it: 讀音・字義・字集 are the language's, not the scheme's.
+/// * `custom.yzg` — this scheme's 字根表, as the annotation entry's `aux`, so
+///   the 拆分 drawn beside a candidate is written in **this** scheme's roots
+///   rather than 靈明's. Its derived `custom.ycdv`, when the compile produced
+///   one, travels with it by name — see the annotation arm of
+///   [`load_data_file`].
+///
+/// No reading table is named, so `with_reading`'s factory rule — a scheme that
+/// names none reads 拼音's — holds here too by way of the shared set.
+fn slot_data_set(slot: &Slot) -> Vec<DataFile> {
+    let file = |ext: &str| {
+        slot.dir
+            .join(format!("{}.{ext}", custom_scheme::STEM))
+            .to_string_lossy()
+            .into_owned()
+    };
+    vec![
+        DataFile {
+            kind: DataKind::Table,
+            file: file("ytab"),
+            aux: String::new(),
+            slot: -1,
+            required: true,
+        },
+        DataFile {
+            kind: DataKind::Annotations,
+            file: "data/chaifen.ydiv".to_string(),
+            aux: file("yzg"),
+            slot: -1,
+            required: true,
+        },
+    ]
 }
 
 /// The magic this kind of file should begin with, when the format has one.
@@ -1322,8 +1509,9 @@ fn load_data_file(
             // and only 編碼 comes off the 字根表. So the annotations go in
             // either way, and a refused 字根表 is reported afterwards.
             let divisions = Arc::new(divisions);
-            let zigen = match find_file(dirs, &file.aux) {
-                Some(aux) => match std::fs::read(&aux) {
+            let zigen_path = find_file(dirs, &file.aux);
+            let zigen = match zigen_path.as_ref() {
+                Some(aux) => match std::fs::read(aux) {
                     // The 字根表 has no exported magic of its own, so the
                     // core's sentence is the whole answer here.
                     Ok(bytes) => ZigenTable::from_binary(&bytes).map_err(|e| {
@@ -1343,7 +1531,23 @@ fn load_data_file(
                 Ok(zigen) => (zigen, None),
                 Err(problem) => (ZigenTable::default(), Some(problem)),
             };
-            engine.set_annotations(AnnotationTable::with_tables(divisions, zigen));
+            let mut table = AnnotationTable::with_tables(divisions, zigen);
+            // **A 拆分 of its own travels with the 字根表, by name.** A scheme
+            // that is not written in 宇浩's roots — every 自定義方案 compiled
+            // with 部分注解, and any factory scheme that ships one — has its
+            // derived divisions in a `.ycdv` beside its `.yzg`, under the same
+            // stem, because the root ids in it index the inventory that `.yzg`
+            // was built from and it is meaningless anywhere else. So it has no
+            // manifest entry of its own and is picked up here, exactly as
+            // yume's own loader picks it up.
+            if let Some(derived) = zigen_path.as_ref().map(|p| p.with_extension("ycdv")) {
+                if derived.is_file() {
+                    if let Ok(d) = CustomDivisions::load_binary(&derived.to_string_lossy()) {
+                        table.attach_custom_divisions(d);
+                    }
+                }
+            }
+            engine.set_annotations(table);
             if let Some(problem) = problem {
                 return Err(problem);
             }
@@ -1425,7 +1629,7 @@ fn build_engine(scheme: Scheme, dirs: &[PathBuf]) -> (Engine, bool, Vec<DataProb
     // own is meant to work. So the file is in `own`, `is_own` is true, and the
     // scheme is typable, which is the right answer. 拼音 itself loses nothing
     // either: its manifest names that very file.
-    let own = data_manifest::for_scheme(scheme.tag());
+    let own = own_data_set(scheme);
     let is_own = |f: &DataFile| own.iter().any(|o| o.kind == f.kind && o.file == f.file);
 
     for file in data_set(scheme) {
@@ -1443,7 +1647,32 @@ fn build_engine(scheme: Scheme, dirs: &[PathBuf]) -> (Engine, bool, Vec<DataProb
 
     // Selecting the scheme sets fluency-only input and the commit strategy for
     // pinyin, so it comes after its tables are in place.
-    engine.set_scheme_by_tag(scheme.tag());
+    match slot_of(scheme) {
+        // **A slot is not on any factory list**, deliberately, so asking by tag
+        // would answer `false` and leave the engine on the default 靈明 shape —
+        // an imported scheme would type with 靈明's 最大碼長 and 終止鍵, which
+        // is not a scheme anybody has. Its parameters come off its own manifest
+        // instead, which is exactly what yume's own frontends do on 方案切換.
+        Some(slot) => {
+            let table = Arc::clone(&engine.table);
+            // The compiled 碼表 is handed over so a manifest written before the
+            // 反查引導鍵 was recorded can fill it in; it is already loaded, so
+            // this costs a clone of an `Arc` and no read.
+            let manifest = custom_scheme::load_manifest(&slot.dir, &table)
+                .unwrap_or_else(|_| slot.manifest.clone());
+            engine.set_scheme(manifest.schema());
+            // 段界的裁判: `set_scheme` has just derived one from the 最大碼長
+            // and the self-segmenting letters, and the 碼表's own answer — the
+            // only one a 頂功 scheme can be read off — replaces it when the
+            // compile learned one.
+            if let Some(space) = manifest.code_space_for(&table) {
+                engine.set_code_space(space);
+            }
+        }
+        None => {
+            engine.set_scheme_by_tag(scheme.tag());
+        }
+    }
 
     (engine, dictionary, problems)
 }
