@@ -414,12 +414,20 @@ pub fn draw(
         let mut x = area.x + gutter;
         for i in viewport.left..widths.len() {
             let w = widths[i] as u16;
-            if x + w > right {
+            // **Stop where the rows stop**, not one column earlier. A column
+            // wider than the room left over is still drawn — the rows clip it
+            // and `t w` makes that the ordinary case — so breaking on
+            // `x + w > right` took the ruler and the name off the one column
+            // the reader had just asked to see whole.
+            if x >= right {
                 break;
             }
             if w > 0 {
                 let n = (i + 1).to_string();
-                let at = x + w.saturating_sub(n.chars().count() as u16);
+                let wide = n.chars().count() as u16;
+                // Right-aligned in the column, or at the edge of what is left
+                // of it: a number past the window is no number at all.
+                let at = (x + w.saturating_sub(wide)).min(right.saturating_sub(wide)).max(x);
                 let style = match i == cursor_cell {
                     true => quiet.fg(ink.gold()),
                     false => quiet,
@@ -443,7 +451,8 @@ pub fn draw(
         let mut x = area.x + gutter;
         for i in viewport.left..widths.len() {
             let w = widths[i] as u16;
-            if x + w > right {
+            // The rows' own stop, for the reason on the number row above.
+            if x >= right {
                 break;
             }
             let style = if i == cursor_cell {
