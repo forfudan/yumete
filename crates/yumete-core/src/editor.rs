@@ -6396,10 +6396,31 @@ impl Editor {
 
     /// Take the table apart, so a structural edit can work on rows and columns
     /// rather than on characters.
+    ///
+    /// **Reading only.** Anything that goes on to write the parts back asks
+    /// [`Editor::md_parts_to_edit`] instead.
     fn md_parts(&self) -> Option<(crate::mdtable::Region, crate::mdtable::Parts)> {
         let region = self.md_region()?;
         let parts = crate::mdtable::parse(&self.md_lines(&region));
         Some((region, parts))
+    }
+
+    /// The same, for a caller that means to write the parts back — and the one
+    /// place the `.md` grid keys are told the manuscript is locked (#213).
+    ///
+    /// `:readonly on` → `t r` used to say 「加了一行」 with the grid unchanged:
+    /// the text was safe, because `Buffer::insert` does not move a locked rope,
+    /// so what was lost was only the truth. Eight of these functions each ended
+    /// in a `self.status = say!(…)` that had no way to know. The guard belongs
+    /// on the **door they all come through**, not on eight of their tails,
+    /// because the ninth was always going to be written without one — and the
+    /// `.csv` half of the same `t` menu already refused properly, so the two
+    /// halves of one menu disagreed.
+    fn md_parts_to_edit(&mut self) -> Option<(crate::mdtable::Region, crate::mdtable::Parts)> {
+        if self.refuse_readonly() {
+            return None;
+        }
+        self.md_parts()
     }
 
     /// Which row of `parts` and which column the cursor is on.
@@ -6526,7 +6547,7 @@ impl Editor {
 
     /// Put a new row in below the cursor's (or above it).
     fn md_new_row(&mut self, below: bool) {
-        let Some((region, mut parts)) = self.md_parts() else {
+        let Some((region, mut parts)) = self.md_parts_to_edit() else {
             return;
         };
         let (row, cell) = self.md_at(&region);
@@ -6537,7 +6558,7 @@ impl Editor {
 
     /// Take the cursor's row out.
     fn md_drop_row(&mut self) {
-        let Some((region, mut parts)) = self.md_parts() else {
+        let Some((region, mut parts)) = self.md_parts_to_edit() else {
             return;
         };
         let (row, cell) = self.md_at(&region);
@@ -6552,7 +6573,7 @@ impl Editor {
 
     /// Move the cursor's row down (or up), taking the cursor with it.
     fn md_move_row(&mut self, down: bool) {
-        let Some((region, mut parts)) = self.md_parts() else {
+        let Some((region, mut parts)) = self.md_parts_to_edit() else {
             return;
         };
         let (row, cell) = self.md_at(&region);
@@ -6570,7 +6591,7 @@ impl Editor {
 
     /// Put a new column in after the cursor's (or before it).
     fn md_new_column(&mut self, after: bool) {
-        let Some((region, mut parts)) = self.md_parts() else {
+        let Some((region, mut parts)) = self.md_parts_to_edit() else {
             return;
         };
         let (row, cell) = self.md_at(&region);
@@ -6582,7 +6603,7 @@ impl Editor {
 
     /// Take the cursor's column out of every row.
     fn md_drop_column(&mut self) {
-        let Some((region, mut parts)) = self.md_parts() else {
+        let Some((region, mut parts)) = self.md_parts_to_edit() else {
             return;
         };
         let (row, cell) = self.md_at(&region);
@@ -6598,7 +6619,7 @@ impl Editor {
 
     /// Move the cursor's column right (or left), taking the cursor with it.
     fn md_move_column(&mut self, right: bool) {
-        let Some((region, mut parts)) = self.md_parts() else {
+        let Some((region, mut parts)) = self.md_parts_to_edit() else {
             return;
         };
         let (row, cell) = self.md_at(&region);
@@ -6618,7 +6639,7 @@ impl Editor {
     /// Put the rows in order by the columns `t1a2d8as` named — counted from
     /// one, and empty for「the column the cursor is in」.
     fn md_sort_by(&mut self, keys: &[(usize, bool)], descending: bool) {
-        let Some((region, mut parts)) = self.md_parts() else {
+        let Some((region, mut parts)) = self.md_parts_to_edit() else {
             return;
         };
         let (_, cell) = self.md_at(&region);
@@ -6698,6 +6719,12 @@ impl Editor {
     }
 
     fn sort_table(&mut self, keys: &[(usize, bool)]) {
+        // The `|` half of the sort comes through `md_parts_to_edit`, which
+        // refuses for itself; a delimited file's half rewrites the whole rope
+        // from its own lines and has to be told here (#213).
+        if self.refuse_readonly() {
+            return;
+        }
         let Some(view) = self.table.as_ref() else {
             self.status = say!("table.not-in-a-table");
             return;
@@ -6826,7 +6853,7 @@ impl Editor {
 
     /// Change which way this column's cells are set.
     fn md_align(&mut self, align: crate::mdtable::Align) {
-        let Some((region, mut parts)) = self.md_parts() else {
+        let Some((region, mut parts)) = self.md_parts_to_edit() else {
             return;
         };
         let (row, cell) = self.md_at(&region);
@@ -7166,7 +7193,7 @@ impl Editor {
             return;
         }
         let (rows, columns) = (grid.len(), grid.iter().map(Vec::len).max().unwrap_or(0));
-        if let Some((region, mut parts)) = self.md_parts() {
+        if let Some((region, mut parts)) = self.md_parts_to_edit() {
             let (row, cell) = self.md_at(&region);
             for (r, line) in grid.iter().enumerate() {
                 while row + r >= parts.rows.len() {
@@ -8675,7 +8702,7 @@ impl Editor {
             (":yume scheme", say!("help.chinese.switch-scheme")),
             (":yume chaifen on", say!("help.chinese.chaifen-under-candidates")),
             ("w b e", say!("help.chinese.word-boundaries")),
-            (":segment on", say!("help.chinese.word-tint")),
+            (":word show on", say!("help.chinese.word-tint")),
             (":word list reload", say!("help.chinese.reload-project-words")),
             (":word habit", say!("help.chinese.habit-words")),
             (":ruby", say!("help.chinese.annotate-reading")),
@@ -13128,6 +13155,20 @@ impl Editor {
                 .unwrap_or(self.command_line.len());
             self.command_line.insert_str(at, text);
             self.command_caret += text.chars().count();
+            return;
+        }
+        // **A picker's query is typed text too** (§5.2.2 fault 9). `空格 f`
+        // offers a list of 「第三章.md」 and `空格 b` a list of open chapters,
+        // and until this line they could be filtered by what a keyboard puts
+        // out as ASCII — which in a Chinese manuscript is the extension and
+        // nothing else. `score` was already Unicode-clean; only the text was
+        // never arriving.
+        if self.mode == Mode::Picker {
+            if let Some(picker) = self.picker.as_mut() {
+                for c in text.chars() {
+                    picker.push(c);
+                }
+            }
             return;
         }
         // `r` 打中文 (§5.2.3 ②). `r` is a top-level key because a replacement
@@ -21603,6 +21644,33 @@ mod tests {
         );
     }
 
+    /// §5.2.2 fault 4: the `.md` grid keys reported success on a locked file.
+    ///
+    /// The text was never in danger — `Buffer::insert` does not move a locked
+    /// rope — so what the writer lost was only the truth: 「加了一行」 over a
+    /// grid that had not changed, while the `.csv` half of the same `t` menu
+    /// refused properly.
+    #[test]
+    fn the_markdown_grid_keys_say_so_on_a_locked_file() {
+        let mut ed = typed("| 甲 | 乙 |\n| --- | --- |\n| 一 | 二 |\n");
+        press(&mut ed, "tf");
+        ed.goto_line(3);
+        assert!(ed.execute("readonly on").is_ok());
+        let before = ed.current_buffer().text();
+        for keys in ["tr", "td", "tR", "tc", "tD"] {
+            press(&mut ed, keys);
+            assert_eq!(
+                ed.current_buffer().text(),
+                before,
+                "`{keys}` moved a locked grid"
+            );
+            assert!(ed.status().contains("只讀"), "`{keys}`: {}", ed.status());
+        }
+        assert!(ed.execute("table sort").is_ok());
+        assert_eq!(ed.current_buffer().text(), before, "`:table sort` moved it");
+        assert!(ed.status().contains("只讀"), "{}", ed.status());
+    }
+
     /// #213: `o` on a file whose last line has no newline of its own.
     ///
     /// The refusal returns early, so everything the caller worked out about
@@ -24965,6 +25033,38 @@ mod tests {
         // A section that does not exist says which ones do.
         ed.execute(":help 火星文").unwrap();
         assert!(ed.status().contains("chinese"), "{}", ed.status());
+    }
+
+    /// §5.2.2 fault 5: the built-in help taught a command that errors.
+    ///
+    /// `:segment on` had been in `:help chinese` since before 分詞 became one
+    /// subject under `:word`, and the parser has asserted `parse(":segment")`
+    /// is an error the whole time — the two files simply never met. Every `:`
+    /// the help writes out is now read back by the parser that has to run it.
+    #[test]
+    fn the_help_teaches_no_command_the_parser_refuses() {
+        for page in [
+            Editor::new().help_common(),
+            Editor::help_chinese(),
+            Editor::help_vertical(),
+            Editor::new().help_table(),
+        ] {
+            for line in page.lines() {
+                // The pages are lists of `` `keys` — 說明 ``; only the rows
+                // whose keys start with `:` are commands.
+                let Some(rest) = line.strip_prefix("- `:") else {
+                    continue;
+                };
+                let Some(command) = rest.split('`').next() else {
+                    continue;
+                };
+                assert!(
+                    crate::command::parse(&format!(":{command}")).is_ok(),
+                    "`:help` teaches `:{command}`, which the parser refuses: {:?}",
+                    crate::command::parse(&format!(":{command}"))
+                );
+            }
+        }
     }
 
     #[test]

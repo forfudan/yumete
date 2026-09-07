@@ -48,7 +48,7 @@ far, oldest first:
 - **#24 Dictionary word segmentation** — a `Segmenter` trait with a jieba-style
   `DictionarySegmenter` (DAG + maximum-probability over a `word → weight` graph,
   with a weight threshold). A compact common-word dictionary is bundled, so
-  `w`/`b`/`e` step by CJK *word* out of the box; `:segment` toggles a word-tint
+  `w`/`b`/`e` step by CJK *word* out of the box; `:word show` toggles a word-tint
   overlay (on by default).
 - **#27 / #32 Built-in Yume IME session** — [`yumete-ime`](crates/yumete-ime)
   embeds the `yume-core` engine directly (no FFI) as an `ImeSession`: per-keystroke

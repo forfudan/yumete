@@ -1541,7 +1541,7 @@ const HELP_SECTIONS: &[Word] = &[
     Word { name: "commands", help: "help.common.every-command", then: Args::None, needs: &[] },
 ];
 
-/// One word a command accepts, and what may follow *it*./// One word a command accepts, and what may follow *it*.
+/// One word a command accepts, and what may follow *it*.
 pub struct Word {
     pub name: &'static str,
     pub help: &'static str,
@@ -1673,27 +1673,16 @@ fn resolve(word: &str) -> &str {
         // over the chapter.
         if COMMANDS
             .iter()
-            .any(|e| (e.name == stem || e.aliases.contains(&stem)) && !FORCEABLE.contains(&e.name))
+            .any(|e| (e.name == stem || e.aliases.contains(&stem)) && forceable(e.name).is_none())
         {
             return word;
         }
         let mut banged = COMMANDS.iter().filter_map(|e| {
             let named = e.name.starts_with(stem) || e.aliases.iter().any(|a| a.starts_with(stem));
-            (named && FORCEABLE.contains(&e.name)).then_some(e.name)
+            named.then(|| forceable(e.name)).flatten()
         });
         if let (Some(only), None) = (banged.next(), banged.next()) {
-            return match only {
-                "bclose" => "bclose!",
-                "write" => "write!",
-                "reload" => "reload!",
-                "quit" => "quit!",
-                "quitall" => "quitall!",
-                "export" => "export!",
-                "saveas" => "saveas!",
-                "replace" => "replace!",
-                "shot" => "shot!",
-                other => other,
-            };
+            return only;
         }
         return word;
     }
@@ -1704,18 +1693,76 @@ fn resolve(word: &str) -> &str {
     }
 }
 
-/// The commands that take a `!`, so a prefix of one can too.
-const FORCEABLE: &[&str] = &[
-    "bclose",
-    "quitall",
-    "write",
-    "reload",
-    "quit",
-    "export",
-    "saveas",
-    "replace",
-    "shot",
+/// What `:export` writes, and what follows the format — **the file name comes
+/// second** (§5.2.2 fault 7).
+///
+/// The table used to declare `Args::Free("<檔名>")` while `parse` read the
+/// format first, so `:export 第三章.md` was answered 「沒有『第三章.md』這種
+/// 格式」 by a prompt that had just asked for a file name. And because a free
+/// argument has no words in it, `html` `typst` `csv` `tsv` were the only words
+/// this editor accepts that appeared nowhere in `::`'s corpus: four names you
+/// had to already know to find.
+const EXPORT_FORMATS: &[Word] = &[
+    Word {
+        name: "html",
+        help: "cmd.export.html",
+        needs: &[],
+        then: Args::Free("<檔名>"),
+    },
+    Word {
+        name: "typst",
+        help: "cmd.export.typst",
+        needs: &[],
+        then: Args::Free("<檔名>"),
+    },
+    // A grid, not a page: these come from the table under the cursor. See
+    // [`crate::export::delimiter_of`] for why they are not `Format` variants.
+    //
+    // **No `Need::Table`**, although one would parse: away from a table the
+    // export already answers with the row it wanted and the `|` it was looking
+    // for, and a prerequisite would replace that with 「需要：表格模式——句末加
+    // force 一併打開」 — an offer to *open* a table where there is none.
+    Word {
+        name: "csv",
+        help: "cmd.export.csv",
+        needs: &[],
+        then: Args::Free("<檔名>"),
+    },
+    Word {
+        name: "tsv",
+        help: "cmd.export.tsv",
+        needs: &[],
+        then: Args::Free("<檔名>"),
+    },
 ];
+
+/// The commands that take a `!`, so a prefix of one can too — spelled the way
+/// `parse` reads them back, because that spelling is the other half of the
+/// answer and a second list of it goes stale.
+///
+/// It did: `recover` was in neither, so `:recover!` worked and `:rec!`
+/// `:recov!` `:recove!` were all 「沒有這個命令」 while `:rec` was fine. One
+/// list cannot drift from itself.
+const FORCEABLE: &[&str] = &[
+    "bclose!",
+    "quitall!",
+    "write!",
+    "reload!",
+    "quit!",
+    "export!",
+    "saveas!",
+    "replace!",
+    "recover!",
+    "shot!",
+];
+
+/// The banged spelling of `name`, if the command takes a bang at all.
+fn forceable(name: &str) -> Option<&'static str> {
+    FORCEABLE
+        .iter()
+        .copied()
+        .find(|banged| banged.strip_suffix('!') == Some(name))
+}
 
 /// The character a `<分隔>` argument names.
 ///
@@ -3149,7 +3196,7 @@ pub const COMMANDS: &[Entry] = &[
         aliases: &["ex"],
         help: "cmd.commands.export",
         needs: &[],
-        args: Args::Free("<檔名>"),
+        args: Args::Words(EXPORT_FORMATS),
     },
     Entry {
         name: "conflicts",
@@ -3270,7 +3317,7 @@ pub fn takes_text(line: &str) -> bool {
     // the parser refuses — `:o! 第三章.md` became `open` and was offered the
     // IME for a line that can only end in an error.
     let head = match head.strip_suffix('!') {
-        Some(stem) if FORCEABLE.contains(&stem) => stem,
+        Some(stem) if forceable(stem).is_some() => stem,
         _ => head,
     };
     let Some(entry) = COMMANDS
@@ -3715,6 +3762,60 @@ mod tests {
         assert_eq!(parse("quit"), Ok(Command::Quit { force: false }));
         assert_eq!(parse(":q!"), Ok(Command::Quit { force: true }));
         assert_eq!(parse(":quit!"), Ok(Command::Quit { force: true }));
+    }
+
+    /// §5.2.2 fault 6: a bang has to survive every prefix that resolves
+    /// without one.
+    ///
+    /// `:rec` was `recover` and `:rec!` was 「沒有『rec』這個命令」, because
+    /// the name lived in one of the two lists that had to agree and not the
+    /// other. There is one list now; this walks it so a tenth forceable
+    /// command cannot arrive half-registered.
+    #[test]
+    fn a_forceable_command_takes_its_bang_on_every_prefix() {
+        for banged in FORCEABLE {
+            let name = banged.strip_suffix('!').expect("spelled with its bang");
+            for cut in 1..=name.len() {
+                let stem = &name[..cut];
+                // Only where the short spelling is this command's to begin
+                // with: `:q` is `quit`'s, `:qu` is not `quitall`'s.
+                if resolve(stem) != name {
+                    continue;
+                }
+                assert_eq!(
+                    resolve(&format!("{stem}!")),
+                    *banged,
+                    "`:{stem}` is `{name}` but `:{stem}!` is not `{banged}`"
+                );
+            }
+        }
+        assert_eq!(parse(":rec!"), Ok(Command::Recover { discard: true }));
+        assert_eq!(parse(":recover"), Ok(Command::Recover { discard: false }));
+
+        // …and the other direction, which is the one that actually failed:
+        // `parse` reads `recover!` by its whole name whatever `FORCEABLE`
+        // says, so a command can accept a bang and never be registered as
+        // taking one. Spelled in full, a command that takes no bang is the
+        // only one that comes back 「不認得」.
+        for entry in COMMANDS {
+            // Two entries are spelled as the line they match rather than as a
+            // word — `!<命令>` hands the rest to a shell and `s/pat/rep/` is
+            // its own syntax — so a `!` glued to the end of them lands in an
+            // argument, not on the command.
+            if !entry.name.chars().all(|c| c.is_ascii_alphabetic()) {
+                continue;
+            }
+            let takes_one = !matches!(
+                parse(&format!(":{}!", entry.name)),
+                Err(CommandError::Unknown(_))
+            );
+            assert_eq!(
+                takes_one,
+                forceable(entry.name).is_some(),
+                "`:{}!` parses={takes_one} but FORCEABLE says otherwise",
+                entry.name
+            );
+        }
     }
 
     #[test]

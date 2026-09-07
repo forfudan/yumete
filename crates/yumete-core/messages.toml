@@ -1112,6 +1112,34 @@ zhs = "台湾正体（說 為 內 吳 裡 髮 臺）"
 en = "臺灣正體"
 
 [[message]]
+# : 命令選單裏 csv 那一項的說明（export 組）
+key = "cmd.export.csv"
+zht = "游標下那張表，逗號分隔"
+zhs = "游标下那张表，逗号分隔"
+en = "the table under the cursor, comma separated"
+
+[[message]]
+# : 命令選單裏 html 那一項的說明（export 組）
+key = "cmd.export.html"
+zht = "一頁 HTML，直排的稿子出來還是直排"
+zhs = "一页 HTML，直排的稿子出来还是直排"
+en = "one HTML page, still vertical if the manuscript is"
+
+[[message]]
+# : 命令選單裏 tsv 那一項的說明（export 組）
+key = "cmd.export.tsv"
+zht = "游標下那張表，Tab 分隔"
+zhs = "游标下那张表，Tab 分隔"
+en = "the table under the cursor, tab separated"
+
+[[message]]
+# : 命令選單裏 typst 那一項的說明（export 組）
+key = "cmd.export.typst"
+zht = "Typst 源碼，橫排，拿去排版印書"
+zhs = "Typst 源码，横排，拿去排版印书"
+en = "Typst source, horizontal, for setting a printed book"
+
+[[message]]
 # : 命令選單裏 inline 那一項的說明（footnote-kinds 組）
 key = "cmd.footnote-kinds.inline"
 zht = "行內註 ^[…]，不去文末"
