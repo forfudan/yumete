@@ -5677,6 +5677,81 @@ mod tests {
         assert!(page.contains(" 5 E"), "every field is there:\n{page}");
     }
 
+    /// #283, the author off his own `development.md` (2026-09-07): in the
+    /// window the grid cut every over-wide cell at 32 cells, said nothing
+    /// about having done it, and had no key to give the tail back — 「长单元格
+    /// 被折叠的信息永远无法读取」.
+    ///
+    /// Three answers, and this is all three: the cut is marked, `t w` lifts
+    /// the cap, and the cell the caret stands in is drawn whole either way.
+    #[test]
+    fn the_grid_marks_a_cut_cell_t_w_lifts_the_cap_and_the_caret_reads_whole() {
+        let long = "甲乙丙丁戊己庚辛壬癸子丑寅卯辰巳午未申酉戌亥天地玄黃";
+        let mut editor = editor_with(&format!(
+            "| 地名 | 備註 |\n| --- | --- |\n| 洛陽 | {long} |"
+        ));
+        for key in ['j', 'j', 't', 't'] {
+            editor.on_key(Key::Char(key));
+        }
+        assert!(editor.grid_has_the_pane(), "{}", editor.status());
+        let config = Config::default();
+        // **The grid, not the window**: the panel down the right is showing
+        // the same cell whole, which is its job, and reading the two together
+        // would let the panel answer for the grid.
+        let page = |editor: &Editor| -> String {
+            let frame = render(editor, &config, 120, 10);
+            (0..10)
+                .map(|y| row_text(&frame, y).split('│').next().unwrap_or("").to_string())
+                .collect::<Vec<_>>()
+                .join("\n")
+        };
+
+        // The caret is in 地名, so 備註 is cut — and says so.
+        let folded = page(&editor);
+        assert!(!folded.contains("玄黃"), "the tail is off the grid:\n{folded}");
+        assert!(
+            folded.contains(&format!("{} >", "甲乙丙丁戊己庚辛壬癸子丑寅卯辰")),
+            "and a mark stands where it stopped:\n{folded}"
+        );
+
+        // `t w` — the whole cell, the way it does in prose.
+        editor.on_key(Key::Char('t'));
+        editor.on_key(Key::Char('w'));
+        let whole = page(&editor);
+        assert!(whole.contains(long), "every character of it:\n{whole}");
+        assert!(!whole.contains('>'), "and nothing left to unfold:\n{whole}");
+
+        // Folded again, and read by walking into it: the caret's own cell is
+        // never the one that is folded away.
+        editor.on_key(Key::Char('t'));
+        editor.on_key(Key::Char('w'));
+        editor.on_key(Key::Char('l'));
+        assert_eq!(editor.cell_position().map(|(_, c)| c), Some(1));
+        let stood_in = page(&editor);
+        assert!(stood_in.contains(long), "the cell you are in is whole:\n{stood_in}");
+    }
+
+    /// The other half of the same complaint: 「信息面板也没有换行功能来显示这个
+    /// 单元格的全部信息」. The panel is what the grid's cap points *at*, so a
+    /// panel that cuts the value at its own edge leaves the reader nowhere to
+    /// go at all.
+    #[test]
+    fn the_detail_panel_wraps_a_value_too_long_for_its_width() {
+        let long = "甲乙丙丁戊己庚辛壬癸子丑寅卯辰巳午未申酉戌亥天地玄黃";
+        let mut editor = editor_with(&format!(
+            "| 地名 | 備註 |\n| --- | --- |\n| 洛陽 | {long} |"
+        ));
+        for key in ['j', 'j', 't', 't'] {
+            editor.on_key(Key::Char(key));
+        }
+        let config = Config::default();
+        let frame = render(&editor, &config, 120, 12);
+        let page: String = (0..12).map(|y| row_text(&frame, y)).collect::<Vec<_>>().join("\n");
+        // The caret is in 地名, so the grid has cut 備註 — the last character
+        // of it can only be on the page because the panel wrapped to it.
+        assert!(page.contains('黃'), "the tail is readable in the panel:\n{page}");
+    }
+
     fn row_text(buffer: &ratatui::buffer::Buffer, y: u16) -> String {
         let mut out = String::new();
         let mut x = 0;
@@ -7573,6 +7648,14 @@ mod tests {
         editor.on_key(Key::Char('4'));
         editor.on_key(Key::Enter);
         assert!(editor.enter_table(), "{}", editor.status());
+        // **The page, and only the page.** `t i`'s panel is showing the same
+        // row down the right, and since 2026-09-07 it *wraps* a value too long
+        // for its width — so 「==mu==」 lands there in pieces, one of which is
+        // on the rule row, and a search for `mu` across the whole window
+        // answers with a row of `┄` rather than with the cell.
+        editor.on_key(Key::Char('t'));
+        editor.on_key(Key::Char('i'));
+        assert!(!editor.detail_visible(), "{}", editor.status());
         let row_with = |buf: &ratatui::buffer::Buffer, needle: &str| {
             (0..8u16)
                 .find(|&y| row_text(buf, y).contains(needle))

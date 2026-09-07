@@ -41,6 +41,15 @@ pub struct Viewport {
 /// A floor because a column of one character still needs its heading to be
 /// recognisable; a ceiling because one long cell must not push every column
 /// after it off the window.
+///
+/// **The ceiling is `t w`'s to lift** (#283, 2026-09-07). It used to be the
+/// law here, with no key against it: a cell wider than 32 was cut off with
+/// nothing to say it had been, no width the reader could ask for, and — since
+/// the grid draws a cell and not a line — no way to walk into the tail even in
+/// Insert. So the cap is what folding *means* in the grid, `t w` turns it off,
+/// and the cell the caret stands in is measured whole whichever way the switch
+/// is set. That is [`yumete_core::editor::Editor::cell_folds`]'s other half:
+/// the prose page folds by hiding characters, the grid by drawing narrow.
 const MIN_COLUMN: usize = 3;
 const MAX_COLUMN: usize = 32;
 
@@ -52,9 +61,25 @@ const GAP: usize = 1;
 /// `last` is the table's last row, not the file's: since 2026-09-05 the widget
 /// is given `|` tables that are three lines of a chapter, and measuring the
 /// chapter under them would make every column as wide as the prose.
-fn widths(editor: &Editor, anchor: usize, first: usize, rows: usize, last: usize) -> Vec<usize> {
+fn widths(
+    editor: &Editor,
+    anchor: usize,
+    first: usize,
+    rows: usize,
+    last: usize,
+    room: usize,
+    caret: (usize, usize),
+) -> Vec<usize> {
     let Some(view) = editor.table() else {
         return Vec::new();
+    };
+    // How wide a column may be drawn. Folding on, that is the cap; folding
+    // off, it is the window — a column wider than the window buys nothing,
+    // since the grid scrolls by whole columns and the rest could never be
+    // reached.
+    let ceiling = match editor.cell_folds() {
+        true => MAX_COLUMN,
+        false => room.max(MIN_COLUMN),
     };
     // A hidden column is drawn at no width at all — which is what `hidden`
     // buys: two of the 拆分表's twenty-eight are empty in all 123,380 rows and
@@ -68,7 +93,7 @@ fn widths(editor: &Editor, anchor: usize, first: usize, rows: usize, last: usize
             false => {
                 let named = view.schema.columns.get(i).map(|c| c.heading());
                 let text = headings.get(i).map(String::as_str).or(named).unwrap_or("");
-                yumete_cjk::str_width(text).clamp(MIN_COLUMN, MAX_COLUMN)
+                yumete_cjk::str_width(text).clamp(MIN_COLUMN, ceiling)
             }
         })
         .collect();
@@ -84,7 +109,17 @@ fn widths(editor: &Editor, anchor: usize, first: usize, rows: usize, last: usize
             }
             let text = editor.current_buffer().rope().line(line).to_string();
             let cell = yumete_core::table::cell_text(&text, span);
-            *want = (*want).max(yumete_cjk::str_width(&cell).min(MAX_COLUMN));
+            // **The cell the caret is standing in is never folded** — the
+            // prose page's own rule (`walking_into_a_folded_cell_opens_it`),
+            // kept here by measuring that one cell against the window instead
+            // of the cap. Without it the reader could stand in a cell and
+            // still not be shown what was in it, in Insert as much as in
+            // Normal, which is the fault this whole switch answers.
+            let ceiling = match (line, i) == caret {
+                true => room.max(MIN_COLUMN),
+                false => ceiling,
+            };
+            *want = (*want).max(yumete_cjk::str_width(&cell).min(ceiling));
         }
     }
     widths
@@ -165,7 +200,19 @@ pub fn char_at(
         return Some(start);
     }
     let gutter = crate::gutter_width(lines, config.editor.line_numbers) as u16;
-    let widths = widths(editor, editor.cursor_line(), viewport.top, rows, bottom);
+    // The same numbers `draw` measured with, the caret's own cell included:
+    // that cell is drawn whole whatever the cap says, so a hit test that did
+    // not know it lands one column out for every column to its right.
+    let room = area.width.saturating_sub(gutter) as usize;
+    let widths = widths(
+        editor,
+        editor.cursor_line(),
+        viewport.top,
+        rows,
+        bottom,
+        room,
+        editor.cell_position().unwrap_or((0, 0)),
+    );
     let right = area.x + area.width;
     // Walk the columns the way they were drawn, and stop at the one the
     // pointer is in.
@@ -277,7 +324,15 @@ pub fn draw(
 
     let gutter = gutter_width(lines, config.editor.line_numbers) as u16;
     let room = area.width.saturating_sub(gutter) as usize;
-    let widths = widths(editor, anchor, viewport.top, rows, bottom_row);
+    let widths = widths(
+        editor,
+        anchor,
+        viewport.top,
+        rows,
+        bottom_row,
+        room,
+        (cursor_row, cursor_cell),
+    );
     // How many columns this table has — what a row is measured against when
     // asking whether it is ragged, and where the drawn extras start.
     let columns = editor.table_column_count_at(anchor);
@@ -466,7 +521,21 @@ pub fn draw(
                 }
             }
             let content = yumete_core::table::cell_text(&source, *span);
-            put_text(buf, x, y, (x + w).min(right), &content, style);
+            // **A cut cell says so**, in the same `>` the prose page marks a
+            // folded tail with — one symbol, one meaning, whichever surface
+            // the table is drawn on. Without it the grid drew a cell that
+            // simply stopped, and there was no way to tell 「這格就這麼長」
+            // from 「後面還有」 (author, 2026-09-07).
+            let mark = yumete_core::mdtable::FOLD_MARK;
+            let cut = w > 0 && yumete_cjk::str_width(&content) > w as usize;
+            let stop = match cut {
+                true => (x + w).saturating_sub(yumete_cjk::str_width(mark) as u16),
+                false => x + w,
+            };
+            put_text(buf, x, y, stop.min(right), &content, style);
+            if cut && stop < right {
+                put_text(buf, stop, y, (x + w).min(right), mark, style.fg(ink.furniture()));
+            }
             if here {
                 // Where typing would land — which is *inside* the cell, not at
                 // its start. Reading by character (`Tab`), and typing in Insert,
@@ -680,7 +749,10 @@ pub fn draw_detail(frame: &mut Frame, editor: &Editor, config: &Config, area: Re
         .iter()
         .position(|(field, _)| *field == detail.here)
         .unwrap_or(0);
-    let first = at.saturating_sub(room.saturating_sub(1));
+    // **The values line up past the longest name**, rather than at a fixed
+    // ten cells: the names carry their column number now (「12 pinyin」),
+    // and a name longer than the guess ran straight into its own value.
+    // Capped, so one long name does not push every value off the panel.
     let column = detail
         .rows
         .iter()
@@ -688,7 +760,34 @@ pub fn draw_detail(frame: &mut Frame, editor: &Editor, config: &Config, area: Re
         .max()
         .unwrap_or(10)
         .clamp(10, 20);
-    for (field, text) in detail.rows.iter().skip(first) {
+    let indent = left + column;
+    // **A value too long for the panel is wrapped, not cut** (#283,
+    // 2026-09-07). This panel is the way to read a cell the grid folded, so a
+    // panel that folds it again answers nothing: 「信息面板也没有换行功能来显
+    // 示这个单元格的全部信息」. Wrapped by the editor's own line breaker, so
+    // 禁則 holds here as it does on the page.
+    let width = right.saturating_sub(indent) as usize;
+    let drawn: Vec<Vec<String>> = detail
+        .rows
+        .iter()
+        .map(|(_, text)| match text {
+            Some(text) => wrapped(text, width),
+            None => vec!["⟨缺⟩".to_string()],
+        })
+        .collect();
+    // Far enough up that the *last* row of the field the cursor is in is still
+    // on the panel — the fields above it are as many as the rest of the room
+    // holds, counted in drawn rows rather than in fields.
+    // A field takes at least its own row, even when there is no room beside
+    // the name to draw a value in.
+    let height = |i: usize| drawn.get(i).map_or(1, |rows: &Vec<String>| rows.len().max(1));
+    let mut first = at;
+    let mut used = height(at);
+    while first > 0 && used + height(first - 1) <= room {
+        first -= 1;
+        used += height(first);
+    }
+    for (i, (field, text)) in detail.rows.iter().enumerate().skip(first) {
         if y >= area.y + area.height {
             return;
         }
@@ -698,18 +797,37 @@ pub fn draw_detail(frame: &mut Frame, editor: &Editor, config: &Config, area: Re
         // here used to mean either 「this cell is empty」 or 「this row is short
         // by twenty-four columns」, and telling those apart is most of what
         // this panel is for.
-        let (text, style) = match text {
-            Some(text) => (text.as_str(), if *field == detail.here { here } else { value }),
-            None => ("⟨缺⟩", missing),
+        let style = match (text.is_some(), *field == detail.here) {
+            (false, _) => missing,
+            (true, true) => here,
+            (true, false) => value,
         };
-        // **The values line up past the longest name**, rather than at a fixed
-        // ten cells: the names carry their column number now (「12 pinyin」),
-        // and a name longer than the guess ran straight into its own value.
-        // Capped, so one long name does not push every value off the panel.
-        let indent = left + column;
         if indent < right {
-            put_text(buf, indent, y, right, text, style);
+            for line in &drawn[i] {
+                if y >= area.y + area.height {
+                    return;
+                }
+                put_text(buf, indent, y, right, line, style);
+                y += 1;
+            }
+        } else {
+            y += 1;
         }
-        y += 1;
     }
+}
+
+/// A value broken across `width` cells, as the rows it is drawn on.
+///
+/// [`yumete_core::wrap::line_rows`] is the page's own breaker — the one that
+/// keeps 禁則 and does not split a Latin word — so a wrapped cell reads the
+/// way the same words would read in the document they came from.
+fn wrapped(text: &str, width: usize) -> Vec<String> {
+    if width == 0 {
+        return Vec::new();
+    }
+    let chars: Vec<char> = text.chars().collect();
+    yumete_core::wrap::line_rows(text, width)
+        .into_iter()
+        .map(|(from, to)| chars[from.min(chars.len())..to.min(chars.len())].iter().collect())
+        .collect()
 }

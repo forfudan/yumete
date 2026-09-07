@@ -3440,15 +3440,37 @@ impl Editor {
     /// the reader would have no way to tell which of the two they had asked
     /// for. The switch is still *set* — walk up to 全 and the answer is the
     /// one that was asked for.
+    ///
+    /// **The pane is not below 全 — it is beside it.** `t t` draws its own
+    /// grid at its own cap, so the switch means there exactly what it means
+    /// in prose, and refusing it there left the author with over-wide cells
+    /// that could not be opened by any key at all (author, 2026-09-07:
+    /// 「tw 功能无法在 tt 模式下使用……长单元格被折叠的信息永远无法读取」).
     fn toggle_cell_folds(&mut self) {
         self.cell_folds = !self.cell_folds;
         self.pad_cache.borrow_mut().take();
         let cap = crate::mdtable::MAX_COLUMN.to_string();
-        self.status = match (self.cell_folds, self.table_level == TableLevel::Full) {
+        self.status = match (self.cell_folds, self.folds_can_bite()) {
             (_, false) => say!("table.folds-need-full"),
             (true, _) => say!("table.folds-on", cap, crate::mdtable::FOLD_MARK),
             (false, _) => say!("table.folds-off", cap),
         };
+    }
+
+    /// Whether `t w` has anywhere to bite from where the reader is standing —
+    /// the 全 page, or the grid the pane draws for itself.
+    fn folds_can_bite(&self) -> bool {
+        self.table_level == TableLevel::Full
+            || self.table.as_ref().is_some_and(|view| view.takes_the_pane())
+    }
+
+    /// Whether `t w` is asking for over-wide cells to be folded (#283).
+    ///
+    /// The switch itself, with no question about *where*: the prose page asks
+    /// [`Self::cells_fold_here`], and the grid — which caps and scrolls by its
+    /// own rules — asks this.
+    pub fn cell_folds(&self) -> bool {
+        self.cell_folds
     }
 
     /// Whether an over-wide cell has its tail folded away on this page (#283).
@@ -3457,8 +3479,9 @@ impl Editor {
     ///
     /// * **全 only.** 「`basic` 不藏、不摺、不替換; `full` 三件都可以做」——
     ///   folding is all three at once, so it cannot live below 全.
-    /// * **In prose only.** The pane draws its own grid, with its own cap
-    ///   ([`crate::table::MAX_COLUMN`]), and two caps on one table would fight.
+    /// * **In prose only.** The pane draws its own grid, and folds it by
+    ///   drawing its columns narrow rather than by hiding characters of a
+    ///   line — [`Self::cell_folds`] is the switch it reads.
     /// * **What `table_padding_on` already answers.** A fold is measured in
     ///   display width against a squared-up column; where nothing is squared
     ///   up there is nothing to fold against.
@@ -22518,6 +22541,31 @@ mod tests {
         press(&mut ed, "tw");
         assert_eq!(ed.table_level(), TableLevel::Basic, "and stays 基本");
         assert!(ed.status().contains("tf"), "it points at the key: {}", ed.status());
+    }
+
+    /// #283, the author off his own `development.md` (2026-09-07): 「tw 功能无
+    /// 法在 tt 模式下使用，导致所有的长单元格都是保持折叠状态且没有折叠符号…
+    /// 因此我永远没有办法读取完整内容」.
+    ///
+    /// The refusal asked for 全 and the pane is not a level, so it fired on
+    /// every press inside the window the author reads his tables in — and the
+    /// grid's own 32-cell cap had no other key against it.
+    #[test]
+    fn t_w_is_answered_in_the_pane_which_is_not_below_全() {
+        let mut ed = with_two_md_tables();
+        ed.goto_line(9);
+        press(&mut ed, "tt");
+        assert!(ed.table().unwrap().takes_the_pane(), "{}", ed.status());
+        assert!(ed.cell_folds(), "the grid folds to its cap to begin with");
+        press(&mut ed, "tw");
+        assert!(!ed.cell_folds(), "and `t w` is heard: {}", ed.status());
+        assert!(
+            !ed.status().contains("tf"),
+            "no 「先 tf」 in a window that has no level to raise: {}",
+            ed.status()
+        );
+        press(&mut ed, "tw");
+        assert!(ed.cell_folds(), "and back again: {}", ed.status());
     }
 
     /// The cell the caret is standing in is never folded, so a folded table is
