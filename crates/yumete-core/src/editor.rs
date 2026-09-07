@@ -479,6 +479,11 @@ struct PadKey {
     caret: Option<(usize, usize)>,
     render: Render,
     ruby: Dialects,
+    /// **Whether cells are folded** (#283). `t f` and `t w` move neither the
+    /// revision nor `:render`, and a folded cell is a *narrower* cell — so
+    /// without this the level a table was first drawn at was the level it kept
+    /// until somebody typed in it, and `t w` did nothing at all.
+    folds: bool,
     /// What comes off the page depends on how the file is being read, and
     /// `:syntax` changes that without touching a byte of it — so a table drawn
     /// with the backticks hidden stayed drawn that way after `:syntax text`
@@ -571,6 +576,108 @@ pub enum TableLevel {
     /// padding stable while you scroll — and it is the one thing the pane does
     /// differently.
     Full,
+}
+
+/// The numbers a `t` or `g` sequence has been given, and how they were joined.
+///
+/// **`-` is a range, `,` is a list or a pair** (§5.7). One key had been doing
+/// both jobs, and the day `t20,20g` was typed the two readings collided: row
+/// 20 *and* column 20 is two kinds of thing, where `t2-10/` is a span of one
+/// kind. They are different keys now, and one sequence is one of them or the
+/// other — never both, because nothing has been agreed about what a mixture
+/// would mean.
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct Sequence {
+    /// In the order typed, never empty — the one being typed is the last.
+    numbers: Vec<usize>,
+    /// `None` until a second number has been asked for.
+    joint: Option<Joint>,
+}
+
+/// What the key between two of a [`Sequence`]'s numbers meant.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Joint {
+    /// `2-10` — the first, the last, and everything between them.
+    Span,
+    /// `1,5,9` — these and no others; with exactly two of them, a pair.
+    List,
+}
+
+impl Sequence {
+    /// A sequence just begun: one number, still being typed.
+    fn started() -> Self {
+        Self { numbers: vec![0], joint: None }
+    }
+
+    /// The number being typed — always the last one.
+    fn last(&mut self) -> &mut usize {
+        self.numbers.last_mut().expect("never empty")
+    }
+
+    /// The single number this is, if it is a single number.
+    ///
+    /// What `a`/`d` close over: `t1a` is one column, and `t2-5a` is not a
+    /// sort key at all.
+    fn one(&self) -> Option<usize> {
+        match self.numbers.as_slice() {
+            [n] => Some(*n),
+            _ => None,
+        }
+    }
+
+    /// The two numbers this names, if it names exactly two of them.
+    ///
+    /// `t20,20g` — row and column, and the comma is what says so.
+    fn pair(&self) -> Option<(usize, usize)> {
+        match (self.joint, self.numbers.as_slice()) {
+            (Some(Joint::List), [a, b]) => Some((*a, *b)),
+            _ => None,
+        }
+    }
+
+    /// The span this names, for the keys that read one — `g2-5d`.
+    fn span(&self) -> Option<(usize, usize)> {
+        match (self.joint, self.numbers.as_slice()) {
+            (None, [n]) => Some((*n, *n)),
+            (Some(Joint::Span), [a, b]) => Some((*a, *b)),
+            _ => None,
+        }
+    }
+
+    /// Every column this names, 1-based and in the reader's order.
+    ///
+    /// The one reading both joints answer: `t3/` is one column, `t2-10/` is
+    /// nine, `t1,5,9s` is three.
+    fn columns(&self) -> Vec<usize> {
+        match (self.joint, self.numbers.as_slice()) {
+            (Some(Joint::Span), [a, b]) => {
+                let (a, b) = (a.min(b), a.max(b));
+                (*a..=*b).collect()
+            }
+            _ => self.numbers.clone(),
+        }
+    }
+
+    /// What has been typed, read back for the HUD — `2-10`, `1,5,9`, `20`.
+    fn spelled(&self) -> String {
+        let joint = match self.joint {
+            Some(Joint::Span) => "-",
+            _ => ",",
+        };
+        // A number still at zero because only the joint has been typed is not
+        // written out: `t2-` reads as `t2-`, not as `t2-0`.
+        let mut out = String::new();
+        for (at, n) in self.numbers.iter().enumerate() {
+            if at > 0 {
+                out.push_str(joint);
+                if *n == 0 && at + 1 == self.numbers.len() {
+                    break;
+                }
+            }
+            out.push_str(&n.to_string());
+        }
+        out
+    }
 }
 
 /// Where the table starts and stops (#261).
@@ -994,7 +1101,7 @@ pub struct Editor {
     detail_width: Option<usize>,
     /// Whether a row of column numbers is drawn above the header.
     ///
-    /// **The keys need it.** `3gd`, `t20-20g`, `t1a2d8as` all name a column by
+    /// **The keys need it.** `3gd`, `t20,20g`, `t1a2d8as` all name a column by
     /// number, and a 28-column 拆分表 gives no way to count to 17 except by
     /// counting. One row, and the numeric keys become usable.
     table_numbers: bool,
@@ -1098,8 +1205,8 @@ pub struct Editor {
     /// The columns `gd` was asked about this time: `(first, last)`, 1-based.
     column_span: Option<(usize, usize)>,
     /// The numeric argument of the sequence being typed — `g3d`'s 3, `g2-5d`'s
-    /// 2 and 5. `(first, Some(last))` once a `-` has been typed.
-    sequence: Option<(usize, Option<usize>)>,
+    /// 2 and 5, `t1,5,9s`'s three columns. See [`Sequence`].
+    sequence: Option<Sequence>,
     /// The columns a sort has been told about so far, 1-based, `true` for
     /// descending — `t1a2d8a` is three of them, waiting for its `s`.
     ///
@@ -1185,6 +1292,16 @@ pub struct Editor {
     /// the blank line the indent stands in for is the 全 half of the same
     /// idea, and 中階 does not fold.
     indent_folds: bool,
+    /// Whether a cell wider than [`crate::mdtable::MAX_COLUMN`] has its tail
+    /// folded away — 全 only, and `t w` is the switch (#283).
+    ///
+    /// The law the levels keep: **`basic` 不藏、不摺、不替換; `full` 三件都可
+    /// 以做**. Folding a cell is all three at once, so it belongs to 全 and to
+    /// nothing below it. Off, the columns go to their natural width and run
+    /// off the side of the window — which is what the reader asks for when a
+    /// cell is the thing being read rather than scanned, and is the reason
+    /// this is a switch and not a constant.
+    cell_folds: bool,
     /// How many bands the vertical page is divided into (段組).
     bands: usize,
     /// What the last `Enter` search found, **and which document it found it
@@ -1562,6 +1679,7 @@ impl Editor {
             loose_rows: false,
             indent: 0,
             indent_folds: true,
+            cell_folds: true,
             bands: 1,
             hits: None,
             jumps: Vec::new(),
@@ -2919,6 +3037,27 @@ impl Editor {
     /// hidden, so the cursor is never inside text that is not on the screen —
     /// which is what makes every motion and every edit act on what can be seen.
     pub fn hidden_on_line(&self, line: usize) -> Vec<(usize, usize)> {
+        let mut off = self.markup_off_line(line);
+        // **A folded cell tail is off the page by the same door** (#283), and
+        // it has to be: the width the padding squares up, the columns the wrap
+        // counts and the cell the mouse lands in all read this one list. Give
+        // the fold its own channel and the three would disagree — the page
+        // would draw a short cell and the caret would walk a long one.
+        //
+        // The markup is handed on rather than asked for again: this is called
+        // once per line of every frame, and a fold is measured against exactly
+        // the list that was just built.
+        let folded = self.cell_folds_against(line, &off);
+        off.extend(folded);
+        off.sort_unstable();
+        off
+    }
+
+    /// [`Self::hidden_on_line`] without the folds — the markup alone.
+    ///
+    /// Separate because a fold is *measured* against this: how wide a cell is
+    /// drawn is how wide it is with its markup already off.
+    fn markup_off_line(&self, line: usize) -> Vec<(usize, usize)> {
         // A reading that is being *laid out* is drawn beside the base, so its
         // markup comes off the page whatever `:render` says — leaving the tags
         // on would be showing the same reading twice. This is what the 縱書
@@ -2972,6 +3111,7 @@ impl Editor {
                 .into_iter()
                 .map(|(at, text)| Run::new(at, text, Ink::Padding)),
         );
+        runs.extend(self.fold_marks_on_line(line));
         runs.extend(self.notes_on_line(line));
         crate::drawn::compose(runs)
     }
@@ -3085,6 +3225,93 @@ impl Editor {
         self.layout == Layout::Horizontal && self.table_level != TableLevel::Off
     }
 
+    /// `t w` — fold the over-wide cells away, or give them back (#283).
+    ///
+    /// **It refuses below 全** rather than quietly turning 全 on. `t f` is one
+    /// keystroke away and it says what it does; a width key that silently
+    /// draws walls and a ruler would be a second way to change the level, and
+    /// the reader would have no way to tell which of the two they had asked
+    /// for. The switch is still *set* — walk up to 全 and the answer is the
+    /// one that was asked for.
+    fn toggle_cell_folds(&mut self) {
+        self.cell_folds = !self.cell_folds;
+        self.pad_cache.borrow_mut().take();
+        let cap = crate::mdtable::MAX_COLUMN.to_string();
+        self.status = match (self.cell_folds, self.table_level == TableLevel::Full) {
+            (_, false) => say!("table.folds-need-full"),
+            (true, _) => say!("table.folds-on", cap, crate::mdtable::FOLD_MARK),
+            (false, _) => say!("table.folds-off", cap),
+        };
+    }
+
+    /// Whether an over-wide cell has its tail folded away on this page (#283).
+    ///
+    /// Three terms, and each one is the law rather than a preference:
+    ///
+    /// * **全 only.** 「`basic` 不藏、不摺、不替換; `full` 三件都可以做」——
+    ///   folding is all three at once, so it cannot live below 全.
+    /// * **In prose only.** The pane draws its own grid, with its own cap
+    ///   ([`crate::table::MAX_COLUMN`]), and two caps on one table would fight.
+    /// * **What `table_padding_on` already answers.** A fold is measured in
+    ///   display width against a squared-up column; where nothing is squared
+    ///   up there is nothing to fold against.
+    ///
+    /// [`Editor::cell_folds`] is the writer's switch over the top — `t w`.
+    fn cells_fold_here(&self) -> bool {
+        self.cell_folds
+            && self.table_padding_on()
+            && self.table_level == TableLevel::Full
+            && !self.table.as_ref().is_some_and(|view| view.pane)
+    }
+
+    /// The cell tails folded away on `line`, as char ranges within it (#283).
+    ///
+    /// Empty on the rule row: `---|:---:|---` is not writing, it is the shape
+    /// of the table, and folding it would hide the alignment the row exists to
+    /// declare.
+    fn cell_folds_on_line(&self, line: usize) -> Vec<(usize, usize)> {
+        if !self.cells_fold_here() {
+            return Vec::new();
+        }
+        self.cell_folds_against(line, &self.markup_off_line(line))
+    }
+
+    /// [`Self::cell_folds_on_line`] with the markup already worked out.
+    fn cell_folds_against(&self, line: usize, markup: &[(usize, usize)]) -> Vec<(usize, usize)> {
+        if !self.cells_fold_here() {
+            return Vec::new();
+        }
+        if !self.opens_a_row(line) || self.block_of(line).is_literal() {
+            return Vec::new();
+        }
+        let Some(text) = self.line_text(line) else {
+            return Vec::new();
+        };
+        if crate::mdtable::rule_of(&text).is_some() {
+            return Vec::new();
+        }
+        crate::mdtable::folds(
+            &text,
+            markup,
+            crate::mdtable::MAX_COLUMN,
+            self.selected_columns(line),
+        )
+    }
+
+    /// The fold marks drawn on `line` — one per cell whose tail came off.
+    ///
+    /// [`crate::drawn::Ink::Note`], because that is what it is: the page
+    /// telling the reader something the file does not say. It is anchored at
+    /// the first character of the folded tail, so it stands exactly where the
+    /// writing stopped.
+    fn fold_marks_on_line(&self, line: usize) -> Vec<crate::drawn::Run> {
+        use crate::drawn::{Ink, Run};
+        self.cell_folds_on_line(line)
+            .into_iter()
+            .map(|(at, _)| Run::new(at, crate::mdtable::FOLD_MARK.to_string(), Ink::Note))
+            .collect()
+    }
+
     /// The padding drawn on `line` so its table lines up (Feature #212).
     ///
     /// Empty unless the line really is a row of a `|` table — a quoted one
@@ -3111,10 +3338,14 @@ impl Editor {
             revision: buffer.revision(),
             first,
             last,
-            caret: self.wysiwyg().then(|| self.selection()),
+            // **Folding asks where the caret is too**, whatever `:render`
+            // says: the cell it stands in is left whole, so the answer moves
+            // when it moves.
+            caret: (self.wysiwyg() || self.cells_fold_here()).then(|| self.selection()),
             render: self.render,
             ruby: self.ruby(),
             syntax: buffer.syntax(),
+            folds: self.cells_fold_here(),
         };
         // **The memo answers before the region is worked out.** Finding where
         // the table starts and ends is a walk to both ends of it, and this is
@@ -3138,7 +3369,20 @@ impl Editor {
         let rows: Vec<(String, Vec<(usize, usize)>)> = (region.first..=region.last)
             .map(|i| (self.line_text(i).unwrap_or_default(), self.hidden_on_line(i)))
             .collect();
-        let runs = crate::mdtable::padding(&rows, region.rule.map(|at| at - region.first));
+        // **The fold mark is one cell of its column.** It is drawn, not
+        // written, so `visible_width` cannot see it — and a column padded as
+        // though it were not there comes out one cell narrow on every row that
+        // folds, which is every row the cap bites.
+        let width = yumete_cjk::str_width(crate::mdtable::FOLD_MARK);
+        let marks: Vec<Vec<(usize, usize)>> = (region.first..=region.last)
+            .map(|i| {
+                self.cell_folds_on_line(i)
+                    .into_iter()
+                    .map(|(at, _)| (at, width))
+                    .collect()
+            })
+            .collect();
+        let runs = crate::mdtable::padding(&rows, region.rule.map(|at| at - region.first), &marks);
         let answer = runs.get(line - region.first).cloned().unwrap_or_default();
         *self.pad_cache.borrow_mut() = Some((key, runs));
         answer
@@ -6371,13 +6615,8 @@ impl Editor {
         }
     }
 
-    /// Put the rows in order by the cursor's column.
-    fn md_sort(&mut self, descending: bool) {
-        self.md_sort_by(&[], descending)
-    }
-
-    /// The same, by the columns `t1a2d8as` named — counted from one, and empty
-    /// for「the column the cursor is in」.
+    /// Put the rows in order by the columns `t1a2d8as` named — counted from
+    /// one, and empty for「the column the cursor is in」.
     fn md_sort_by(&mut self, keys: &[(usize, bool)], descending: bool) {
         let Some((region, mut parts)) = self.md_parts() else {
             return;
@@ -6394,20 +6633,39 @@ impl Editor {
         };
         parts.sort_by_keys(&keys);
         let cell = keys.first().map(|&(c, _)| c).unwrap_or(cell);
-        let descending = keys.first().map(|&(_, d)| d).unwrap_or(descending);
-        let name = parts
-            .rows
-            .first()
-            .and_then(|r| r.get(cell))
-            .cloned()
-            .unwrap_or_default();
+        let heading = |c: usize| -> String {
+            parts
+                .rows
+                .first()
+                .and_then(|r| r.get(c))
+                .cloned()
+                .filter(|name| !name.is_empty())
+                .unwrap_or_else(|| (c + 1).to_string())
+        };
+        // **One column is described; several are listed.** The long sentence
+        // explains how cells are compared, which is worth saying once — but
+        // `t2,1s` sorts by two and saying only the first would hide the
+        // tiebreaker that decided every row where the first column ties. The
+        // delimited path already listed them (`table.sorted`); the Markdown
+        // path was written before a keyboard sequence could name two columns.
+        let status = match keys.as_slice() {
+            [(c, false)] => say!("table.sorted-ascending", heading(*c)),
+            [(c, true)] => say!("table.sorted-descending", heading(*c)),
+            many => {
+                let named: Vec<String> = many
+                    .iter()
+                    .map(|&(c, d)| match d {
+                        true => say!("label.sort-descending", heading(c)),
+                        false => say!("label.sort-ascending", heading(c)),
+                    })
+                    .collect();
+                say!("table.sorted", named.join(" "))
+            }
+        };
         // Back to the header, because the row you were standing on is now
         // somewhere else and pretending otherwise would be a lie.
         self.md_write(&region, &parts, 0, cell);
-        self.status = match descending {
-            true => say!("table.sorted-descending", name),
-            false => say!("table.sorted-ascending", name),
-        };
+        self.status = status;
     }
 
     /// **Put the rows in order** by one column or several.
@@ -6554,10 +6812,8 @@ impl Editor {
             .iter()
             .map(|&(c, d)| {
                 let name = self
-                    .table
-                    .as_ref()
-                    .and_then(|v| v.schema.columns.get(c))
-                    .map(|col| col.heading().to_string())
+                    .schema_here()
+                    .and_then(|s| s.columns.get(c).map(|col| col.heading().to_string()))
                     .unwrap_or_else(|| (c + 1).to_string());
                 match d {
                     true => say!("label.sort-descending", name),
@@ -6788,11 +7044,13 @@ impl Editor {
         }
         let n = values.len();
         self.store(format!("{}\n", values.join("\n")));
+        // **The table the cursor is in names it** (#283) — see
+        // [`Self::schema_here`]. It used to be the view's schema, which in a
+        // Markdown document is the *first* table's: `t y` in the second table
+        // of a file reported the first table's column, and was believed.
         let name = self
-            .table
-            .as_ref()
-            .and_then(|v| v.schema.columns.get(cell))
-            .map(|c| c.heading().to_string())
+            .schema_here()
+            .and_then(|s| s.columns.get(cell).map(|c| c.heading().to_string()))
             .unwrap_or_default();
         self.status = say!("table.yanked-column", name, n);
     }
@@ -7626,6 +7884,11 @@ impl Editor {
                 self.snap_into_the_grid();
                 return;
             }
+            // `t w` — 寬. Whether a cell wider than the cap keeps its tail on
+            // the page or folds it away behind a `>`. A preference about how
+            // the page is *drawn*, so it sits beside `t b` / `t f` and asks
+            // nothing about where the cursor is standing.
+            Key::Char('w') => return self.toggle_cell_folds(),
             Key::Char('t') => {
                 if !(self.table_here() || self.table.as_ref().is_some_and(|v| v.is_file_wide()))
                     && !self.enter_table_as(true)
@@ -7675,16 +7938,31 @@ impl Editor {
         // Which columns: the sequence's own argument — `t1/` is the first, and
         // `t2-10?` is the second through the tenth — or, with no argument, the
         // ones a schema's `[table.link] from` names.
-        // **`t20-20g` goes to a cell**: row 20, column 20. `t20g` is row 20 in
+        // **`t20,20g` goes to a cell**: row 20, column 20. `t20g` is row 20 in
         // the column you are standing in — the row number is the one a reader
         // has in front of them, from the gutter, and the column number is the
         // one drawn above the header.
+        //
+        // **The comma, not the dash** (§5.7). A row and a column are two kinds
+        // of thing and `,` is the key that pairs two kinds; `-` spans one kind,
+        // which is what `t2-10/` asks for. The dash used to do both, and a
+        // reader who typed `t2-10g` got row 2, column 10 — a plausible answer
+        // to a question nobody asked.
         if key == Key::Char('g') {
-            if let Some((row, column)) = self.sequence_span() {
-                let had = self.sequence.and_then(|(_, to)| to).is_some();
-                let cell = match had {
-                    true => column.saturating_sub(1),
-                    false => self.cell_position().map(|(_, c)| c).unwrap_or(0),
+            if let Some(sequence) = self.sequence.clone() {
+                if sequence.joint == Some(Joint::Span) {
+                    self.status = say!("table.cell-wants-a-comma");
+                    return;
+                }
+                let (row, cell) = match sequence.pair() {
+                    Some((row, column)) => (row, column.saturating_sub(1)),
+                    None => {
+                        let Some(row) = sequence.one() else {
+                            self.status = say!("table.cell-wants-a-comma");
+                            return;
+                        };
+                        (row, self.cell_position().map(|(_, c)| c).unwrap_or(0))
+                    }
                 };
                 let lines = self.current_buffer().line_count();
                 let line = row.clamp(1, lines).saturating_sub(1);
@@ -7724,8 +8002,8 @@ impl Editor {
             match key {
                 Key::Char('/') | Key::Char('?') => {
                     self.definition_preview = key == Key::Char('?');
-                    let span = self.sequence_span();
-                    self.search_columns_in(span);
+                    let columns = self.sequence_columns();
+                    self.search_columns_in(columns);
                 }
                 Key::Char('y') => self.yank_column(),
                 Key::Char('p') => self.put_column(),
@@ -7734,35 +8012,39 @@ impl Editor {
             }
             return;
         }
-        // `t1s` / `t1S` — sort by a column named by number. `t s` with no
-        // number is the column you are standing in, which is what it has always
-        // been.
+        // **A sort names the column it sorts by** (§5.7). A bare `t s` is
+        // gone: on 123 380 rows a sort costs real seconds, and `u` refunds the
+        // content but not the time — so the gesture that starts one is never a
+        // single letter. `t0s` is 「the column I am standing in」, spelled out;
+        // `0` is not a column, which is what left it free to mean that.
+        //
+        // `S` is descending wherever it is written. A delimited file used to
+        // sort *up* either way when no column was named, silently, which is
+        // the worst way there is to disagree with a keystroke.
         if matches!(key, Key::Char('s') | Key::Char('S')) {
             let down = key == Key::Char('S');
-            // Every column `a`/`d` closed, and then the one still being typed:
-            // `t1a2d8as` ends on a bare `s`, `t1s` is a single column with its
-            // direction in the verb, and `t1a2ds` is both spellings at once.
+            // Every column `a`/`d` closed, and then the ones still being
+            // typed: `t1a2d8as` ends on a bare `s`, `t1s` is a single column
+            // with its direction in the verb, `t1,5,9s` is three of them at
+            // once, and `t1a2d5,9s` is both spellings in one command.
             let mut named = self.sort_keys.clone();
-            if let Some((column, _)) = self.sequence_span() {
-                named.push((column, down));
-            }
-            if !named.is_empty() {
-                self.sort_table(&named);
+            named.extend(self.sequence_columns().into_iter().flatten().map(|c| (c, down)));
+            if named.is_empty() {
+                self.status = say!("table.sort-wants-a-column");
                 return;
             }
-            // No number: the column the cursor is standing in. `S` means
-            // *down* here too — a delimited file used to sort up either way,
-            // silently, which is the worst way to disagree with a keystroke.
-            if self.md_region().is_none() {
-                let here = self.cell_position().map(|(_, c)| c).unwrap_or(0);
-                self.sort_table(&[(here + 1, down)]);
-                return;
-            }
+            let here = self.cell_position().map(|(_, c)| c + 1).unwrap_or(1);
+            let named: Vec<(usize, bool)> = named
+                .into_iter()
+                .map(|(column, down)| (if column == 0 { here } else { column }, down))
+                .collect();
+            self.sort_table(&named);
+            return;
         }
         if matches!(key, Key::Char('/') | Key::Char('?')) {
             self.definition_preview = key == Key::Char('?');
-            let span = self.sequence_span();
-            self.search_columns_in(span);
+            let columns = self.sequence_columns();
+            self.search_columns_in(columns);
             return;
         }
         // A delimited file's columns are its schema's, and 123,380 rows do not
@@ -7828,8 +8110,6 @@ impl Editor {
             Key::Char('p') => self.put_column(),
             // `t i` — see the note on the delimited file's copy of this key.
             Key::Char('i') => self.toggle_detail(),
-            Key::Char('s') => self.md_sort(false),
-            Key::Char('S') => self.md_sort(true),
             Key::Char('<') => self.md_align(Align::Left),
             Key::Char('=') => self.md_align(Align::Center),
             Key::Char('>') => self.md_align(Align::Right),
@@ -8437,7 +8717,8 @@ impl Editor {
             ("gd gw", say!("help.table.which-row-this-names")),
             ("3gd g2-5d", say!("help.table.search-in-columns")),
             ("t/ t?", say!("help.table.who-uses-this")),
-            ("t o t i t a t t", say!("help.table.four-surfaces")),
+            ("t o t b t f t t", say!("help.table.four-surfaces")),
+            ("t i t w", say!("help.table.detail-and-folds")),
             ("t r t d", say!("help.table.add-or-drop-row")),
             ("t s t S", say!("help.table.sort-by-column")),
             ("t y t p", say!("help.table.yank-or-put-column")),
@@ -8985,7 +9266,7 @@ impl Editor {
     /// 卵 is a component of dozens of characters, and which of them you wanted
     /// is not a question the editor can answer. `n` and `N` walk the answers,
     /// as they walk the answers to `/`.
-    fn search_columns_in(&mut self, span: Option<(usize, usize)>) {
+    fn search_columns_in(&mut self, columns: Option<Vec<usize>>) {
         let needle = self.what_is_here();
         if needle.trim().is_empty() {
             self.status = say!("table.cell-is-empty");
@@ -8993,7 +9274,7 @@ impl Editor {
         }
         // The text, not a pattern — the same rule a search of the selection
         // follows.
-        self.search_columns_within(&regex::escape(&needle), span);
+        self.search_columns_within(&regex::escape(&needle), columns);
     }
 
     /// The question a table key is asking: the selection, or what the cursor is
@@ -9029,7 +9310,7 @@ impl Editor {
     }
 
     /// The same, over the columns the sequence named — `t2-10?`.
-    fn search_columns_within(&mut self, pattern: &str, span: Option<(usize, usize)>) {
+    fn search_columns_within(&mut self, pattern: &str, named: Option<Vec<usize>>) {
         if !self.table_here() {
             self.status = say!("table.not-in-a-table");
             return;
@@ -9041,6 +9322,16 @@ impl Editor {
                 return;
             }
         };
+        // **A column that is not there is said, not ignored** — `sort_table`'s
+        // rule, and this key had the other habit: the span was clamped to the
+        // width, so `t99/` searched the last column and answered as though
+        // that were what had been asked for.
+        let width = self.table_columns();
+        if let Some(&n) = named.iter().flatten().find(|&&n| n == 0 || n > width) {
+            self.status = say!("table.no-such-column", &n.to_string(), &width.to_string());
+            return;
+        }
+        let asked = named.clone();
         let view = self.table.as_ref().expect("table_here");
         let declared: Option<Vec<usize>> = view.schema.link.as_ref().map(|link| {
             link.from
@@ -9049,11 +9340,12 @@ impl Editor {
                 .collect()
         });
         let total = view.schema.columns.len();
-        let columns: Vec<usize> = match span {
+        let columns: Vec<usize> = match named {
             // Said outright: 1-based, as the reader counts them.
-            Some((a, b)) => {
-                let (a, b) = (a.min(b).max(1), a.max(b).max(1));
-                (a.min(total)..=b.min(total)).map(|n| n - 1).collect()
+            Some(named) => {
+                let mut columns: Vec<usize> = named.into_iter().map(|n| n - 1).collect();
+                columns.dedup();
+                columns
             }
             None => match &declared {
                 Some(named) if !named.is_empty() => named.clone(),
@@ -9149,17 +9441,24 @@ impl Editor {
         // or the number the reader just typed. `t2-10/` *is* saying so, and
         // being told 「你沒說範圍，從第一欄找起」 about the range you named is
         // the editor disagreeing with what it just did.
-        match (declared.is_none(), span) {
+        match (declared.is_none(), asked.as_deref()) {
             (true, None) => {
                 self.status = say!(
                     "search.no-jump-scope",
                     found
                 );
             }
-            (_, Some((a, b))) if a != b => {
-                self.status = say!("search.hit-in-column-range", a.min(b), a.max(b), found);
+            (_, Some([n])) => self.status = say!("search.hit-in-column", *n, found),
+            // A run and a handful of columns are different things and are said
+            // differently: `t2-10/` names a range, `t1,5,9/` names three.
+            (_, Some(named)) if !named.is_empty() && named.windows(2).all(|w| w[1] == w[0] + 1) => {
+                let (a, b) = (named[0], named[named.len() - 1]);
+                self.status = say!("search.hit-in-column-range", a, b, found);
             }
-            (_, Some((a, _))) => self.status = say!("search.hit-in-column", a, found),
+            (_, Some(named)) => {
+                let listed: Vec<String> = named.iter().map(usize::to_string).collect();
+                self.status = say!("search.hit-in-columns", listed.join(&say!("label.comma")), found);
+            }
             (false, None) => {}
         }
     }
@@ -9562,13 +9861,61 @@ impl Editor {
     /// answer with theirs. The editor works out *what* to say; the front end
     /// decides where to put it.
     pub fn detail(&self) -> Option<Detail> {
-        // A Markdown table is a page of a document: the question the panel
-        // answers there is the document's question — what is this footnote,
-        // what does this comment say — not "what are this row's twenty-eight
-        // fields", which a two-column table does not have.
-        match self.table.as_ref().is_some_and(|v| v.bounds == Bounds::WholeFile) {
-            true => self.row_detail(),
+        // **Whatever the cursor is standing in answers** (#283). It used to
+        // be whatever the *file* was: a `Bounds::Md` view sent every question
+        // to the note panel, so `t i` inside a Markdown table — a table key,
+        // pressed in a table — answered 「這裏沒有註」 and the row panel could
+        // only ever be reached by opening a `.csv`.
+        //
+        // The old reasoning was that a Markdown table is a page of a document
+        // and the document's question is the one worth asking. That is right
+        // in the *paragraph*, which is why the note panel still answers there
+        // — and wrong in the row, the more so since a cell wide enough to be
+        // folded away is one this panel is now the way to read whole.
+        match self.in_a_table_row() {
+            true => self.row_detail().or_else(|| self.note_detail()),
             false => self.note_detail(),
+        }
+    }
+
+    /// Whether the cursor is standing in a row a table panel can read.
+    ///
+    /// Not the header and not the `|---|` — neither is a row, and both would
+    /// otherwise be shown as one with every field empty.
+    fn in_a_table_row(&self) -> bool {
+        let Some(view) = self.table.as_ref() else {
+            return false;
+        };
+        let line = self.cursor_line();
+        match view.bounds {
+            Bounds::WholeFile => true,
+            _ => match self.prose_region() {
+                Some(region) => {
+                    region.holds(line) && line != region.first && Some(line) != region.rule
+                }
+                None => false,
+            },
+        }
+    }
+
+    /// The schema of the table the cursor is **in**, not the file's (#283).
+    ///
+    /// A `.csv` has one schema and it is the view's. A Markdown document has
+    /// as many tables as somebody typed, each with its own header, and the
+    /// view carries the *first* one's — that is what made `t y` in the second
+    /// table of a file report the first table's column name. Every question
+    /// about columns asks this instead, and it is worked out from the header
+    /// row that is actually above the cursor.
+    fn schema_here(&self) -> Option<std::borrow::Cow<'_, crate::table::Schema>> {
+        use std::borrow::Cow;
+        let view = self.table.as_ref()?;
+        match view.bounds {
+            Bounds::WholeFile => Some(Cow::Borrowed(&view.schema)),
+            _ => {
+                let region = self.prose_region()?;
+                let header = self.line_text(region.first)?;
+                Some(Cow::Owned(crate::mdtable::schema(&header)))
+            }
         }
     }
 
@@ -9764,8 +10111,13 @@ impl Editor {
             }
         };
         let (first, last) = (first.clamp(1, columns) - 1, last.clamp(1, columns) - 1);
+        let here = self.schema_here();
         let named: Vec<String> = (first..=last)
-            .filter_map(|c| view.schema.columns.get(c).map(|col| col.name.clone()))
+            .filter_map(|c| {
+                here.as_ref()
+                    .and_then(|s| s.columns.get(c))
+                    .map(|col| col.name.clone())
+            })
             .collect();
         let rows = self.current_buffer().line_count();
         let mut found = Vec::new();
@@ -9979,9 +10331,17 @@ impl Editor {
     /// What a table row is, field by field.
     fn row_detail(&self) -> Option<Detail> {
         let view = self.table.as_ref()?;
+        let schema = self.schema_here()?;
         let (line, cell) = self.cell_position()?;
         // The header names the columns; it is not a row and has no fields.
-        if view.schema.header && line == 0 {
+        // In prose the header is wherever the table starts, and the `|---|`
+        // under it is not a row either — [`Self::in_a_table_row`] knows both,
+        // and it is the same question.
+        if view.bounds == Bounds::WholeFile {
+            if schema.header && line == 0 {
+                return None;
+            }
+        } else if !self.in_a_table_row() {
             return None;
         }
         // Nor is the empty line a file ending in a newline leaves behind — the
@@ -9991,16 +10351,21 @@ impl Editor {
             return None;
         }
         let text = self.current_buffer().rope().line(line).to_string();
-        let spans = crate::table::cells(&text, view.schema.delimiter);
+        // **The view splits the row, not the delimiter** (#283). A `|` row
+        // begins and ends with the separator, so splitting it on the character
+        // gives an empty cell at each end — and the panel then answered every
+        // question one column to the left, while `cell_position`, which asks
+        // the view, was pointing one column to the right.
+        let spans = self.row_cells(line);
         let value = |name: &str| -> String {
-            view.schema
+            schema
                 .index_of(name)
                 .and_then(|i| spans.get(i))
                 .map(|&s| crate::table::cell_text(&text, s))
                 .unwrap_or_default()
         };
         // Titled by the row's key, since that is what a person calls the row.
-        let title = match &view.schema.key {
+        let title = match &schema.key {
             Some(key) => value(key),
             None => format!("{}", line + 1),
         };
@@ -10010,14 +10375,12 @@ impl Editor {
         // the field the cursor is in: it compared 「unicode」 against 「 9
         // unicode」, never matched, and so never scrolled to it and never lit
         // it — both of the things it promises.
-        let here_name = view
-            .schema
+        let here_name = schema
             .columns
             .get(cell)
             .map(|c| format!("{:>2} {}", cell + 1, c.heading()))
             .unwrap_or_default();
-        let mut rows: Vec<(String, Option<String>)> = view
-            .schema
+        let mut rows: Vec<(String, Option<String>)> = schema
             .columns
             .iter()
             .enumerate()
@@ -10028,7 +10391,7 @@ impl Editor {
                 // `Some("")`, and they are different answers to 「這一格有什麼」.
                 let text = spans.get(i).map(|&s| crate::table::cell_text(&text, s));
                 // **Numbered**, because the keys count columns: `3gd` looks in
-                // the third, `t20-20g` goes to a cell by number, and the panel
+                // the third, `t20,20g` goes to a cell by number, and the panel
                 // is where a reader finds out which number a field is without
                 // counting along the header.
                 (format!("{:>2} {}", i + 1, column.heading()), text)
@@ -10038,16 +10401,16 @@ impl Editor {
             // that cannot answer 「這一格是不是空的」. They were hidden because
             // twenty-three blanks pushed the 部件 list off the bottom; the
             // panel scrolls to the field the cursor is in, so there is
-            // somewhere for them to go — and `t20-20g` reaches any of them by
+            // somewhere for them to go — and `t20,20g` reaches any of them by
             // number, which is what the numbers are for.
             .collect();
         // Worked out, not stored — and marked as such, so nobody goes looking
         // for a column that is not in the file.
-        for detail in &view.schema.details {
+        for detail in &schema.details {
             let from = value(detail.compute.column());
             rows.push((
                 format!("{}*", detail.name),
-                Some(detail.compute.apply(&from, &view.schema.ranges)),
+                Some(detail.compute.apply(&from, &schema.ranges)),
             ));
         }
         Some(Detail {
@@ -12011,18 +12374,29 @@ impl Editor {
             return false;
         };
         if let Some(digit) = c.to_digit(10) {
-            let (from, to) = self.sequence.get_or_insert((0, None));
-            let at = match to {
-                Some(n) => n,
-                None => from,
-            };
+            let at = self.sequence.get_or_insert_with(Sequence::started).last();
             *at = at.saturating_mul(10).saturating_add(digit as usize).min(1_000_000);
             return true;
         }
-        // `2-5`: the far end of a span. Only after a number, so `-` is free.
-        if c == '-' {
-            if let Some((_, to @ None)) = self.sequence.as_mut() {
-                *to = Some(0);
+        // **`-` is a range and `,` is a list** (§5.7), and a sequence is one or
+        // the other. Both only ever follow a number, so neither key is taken
+        // away from anything: `t-` and `t,` are still whatever they were.
+        let joint = match c {
+            '-' => Joint::Span,
+            ',' => Joint::List,
+            _ => return false,
+        };
+        if let Some(sequence) = self.sequence.as_mut() {
+            // A span has exactly two ends, so a second `-` is not part of it;
+            // a list goes on as long as commas do.
+            let room = match sequence.joint {
+                None => true,
+                Some(Joint::List) => joint == Joint::List,
+                Some(Joint::Span) => false,
+            };
+            if room {
+                sequence.joint = Some(joint);
+                sequence.numbers.push(0);
                 return true;
             }
         }
@@ -12041,7 +12415,7 @@ impl Editor {
         let Key::Char(c @ ('a' | 'd')) = key else {
             return false;
         };
-        let Some((column, None)) = self.sequence else {
+        let Some(column) = self.sequence.as_ref().and_then(Sequence::one) else {
             return false;
         };
         self.sort_keys.push((column, c == 'd'));
@@ -12051,8 +12425,12 @@ impl Editor {
 
     /// The sequence's argument as a span, if it was given one.
     fn sequence_span(&self) -> Option<(usize, usize)> {
-        let (from, to) = self.sequence?;
-        Some((from, to.unwrap_or(from)))
+        self.sequence.as_ref()?.span()
+    }
+
+    /// Every column the sequence names, 1-based — `t3`, `t2-10`, `t1,5,9`.
+    fn sequence_columns(&self) -> Option<Vec<usize>> {
+        Some(self.sequence.as_ref()?.columns())
     }
 
     /// **The command as far as it has been typed** — `3`, `3-5`, `g`, `2t`.
@@ -12104,18 +12482,8 @@ impl Editor {
                     false => 'a',
                 });
             }
-            match self.sequence {
-                Some((from, to)) => {
-                    out.push_str(&from.to_string());
-                    if let Some(n) = to {
-                        out.push('-');
-                        if n > 0 {
-                            out.push_str(&n.to_string());
-                        }
-                    }
-                }
-                // A count typed the other way round is still part of what was
-                // typed: `3gd` says `3g` here, not `g`.
+            match self.sequence.as_ref() {
+                Some(sequence) => out.push_str(&sequence.spelled()),
                 // A count typed the other way round is still part of what was
                 // typed: `3gd` says `3g` here, not `g`. **In the order it was
                 // typed** — `2-5g`, not `-52g`, which is what two inserts at
@@ -12961,7 +13329,7 @@ impl Editor {
         // A pending multi-key operator consumes this key.
         match self.pending {
             Pending::Table => {
-                // 命令＋選擇＋動作: `t20-20g` is 「table · row 20, column 20 ·
+                // 命令＋選擇＋動作: `t20,20g` is 「table · row 20, column 20 ·
                 // go」, and the sequence stays open while the digits arrive.
                 //
                 // A sort names as many columns as it likes before it acts
@@ -13024,7 +13392,7 @@ impl Editor {
                 // **命令＋選擇＋動作.** Inside a sequence the digits are its
                 // *argument*, not a repetition: `g3d` is 「goto · column 3 ·
                 // definition」 and `g2-5d` names a span of columns, the way
-                // `t20-20g` names a cell and `t1a2d8as` names three columns to
+                // `t20,20g` names a cell and `t1a2d8as` names three columns to
                 // sort by. The verb ends the sequence, so no separator and no
                 // space is needed — and the sequence stays open while digits
                 // are being typed.
@@ -17660,6 +18028,9 @@ mod tests {
         // `t S` sorted *up* on a delimited file: the branch that handles a
         // bare `s`/`S` never looked at which of the two had been pressed, so
         // the editor did the opposite of the key and said nothing.
+        //
+        // The bare spelling is gone (§5.7) and `t0s` is what asks for 「the
+        // column I am standing in」 — the same question, said out loud.
         let dir = std::env::temp_dir().join(format!("yumete-sortS-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
@@ -17674,8 +18045,8 @@ mod tests {
         };
         // By code point, which is what the sort promises for anything that is
         // not a number: 丙 U+4E19, 乙 U+4E59, 甲 U+7532.
-        assert_eq!(sorted("up.csv", "ts"), "字,序\n丙,3\n乙,2\n甲,1\n");
-        assert_eq!(sorted("down.csv", "tS"), "字,序\n甲,1\n乙,2\n丙,3\n");
+        assert_eq!(sorted("up.csv", "t0s"), "字,序\n丙,3\n乙,2\n甲,1\n");
+        assert_eq!(sorted("down.csv", "t0S"), "字,序\n甲,1\n乙,2\n丙,3\n");
         let _ = std::fs::remove_dir_all(&dir);
     }
 
@@ -19997,7 +20368,7 @@ mod tests {
         assert_eq!(d.here, " 1 字", "and it says which field you are in");
         assert!(d.rows.iter().any(|(name, _)| *name == d.here), "and it is one of them");
         // **Numbered, and all of them** — the keys count columns (`3gd`,
-        // `t20-20g`), and an empty field is a finding in a 拆分表, not a thing
+        // `t20,20g`), and an empty field is a finding in a 拆分表, not a thing
         // to hide.
         assert_eq!(
             d.rows,
@@ -20145,6 +20516,107 @@ mod tests {
         assert_eq!(rows(&ed), ["丁,A,1", "丙,B,2", "乙,B,9"], "{}", ed.status());
 
         std::fs::remove_dir_all(&dir).ok();
+    }
+
+    /// **`-` is a range, `,` is a list or a pair** (§5.7).
+    ///
+    /// One key had been doing both jobs. A row *and* a column is two kinds of
+    /// thing where columns two through ten are a span of one kind, so the day
+    /// `t20,20g` was written down the two readings collided — and `t2-10g`
+    /// answered it with row 2, column 10: a plausible answer to a question
+    /// nobody had asked.
+    #[test]
+    fn a_dash_spans_and_a_comma_pairs() {
+        let mut ed = typed(
+            "| a | b | c |\n| --- | --- | --- |\n| 1 | 2 | 3 |\n| 4 | 5 | 6 |\n| 7 | 8 | 9 |\n",
+        );
+        ed.goto_line(1);
+        assert!(ed.enter_table(), "{}", ed.status());
+
+        // What has been typed reads back as what was typed, joint and all.
+        press(&mut ed, "t2-3");
+        assert_eq!(ed.typed_so_far(), "t2-3");
+        ed.on_key(Key::Esc);
+        press(&mut ed, "t1,3");
+        assert_eq!(ed.typed_so_far(), "t1,3");
+        ed.on_key(Key::Esc);
+        // A span has exactly two ends; a list goes on as long as commas do.
+        press(&mut ed, "t1,3,2");
+        assert_eq!(ed.typed_so_far(), "t1,3,2");
+        ed.on_key(Key::Esc);
+        press(&mut ed, "t1-3");
+        ed.on_key(Key::Char('-'));
+        assert_eq!(ed.typed_so_far(), "", "a second dash is not part of a span");
+        ed.on_key(Key::Esc);
+        // The joint alone is not a zero: `t2-` reads back as `t2-`.
+        press(&mut ed, "t2-");
+        assert_eq!(ed.typed_so_far(), "t2-");
+        ed.on_key(Key::Esc);
+
+        // `t3,2g` — row 3, column 2. Two numbers, two kinds of thing.
+        press(&mut ed, "t3,2g");
+        assert_eq!(ed.cursor_line(), 2, "{}", ed.status());
+        assert_eq!(ed.cell_position().map(|(_, c)| c), Some(1), "{}", ed.status());
+        // One number is the row, in the column you are already in.
+        press(&mut ed, "t5g");
+        assert_eq!(ed.cursor_line(), 4, "{}", ed.status());
+        assert_eq!(ed.cell_position().map(|(_, c)| c), Some(1), "{}", ed.status());
+        // And the dash is not the pair: it says so rather than guessing.
+        let where_it_was = ed.cursor_line();
+        press(&mut ed, "t2-3g");
+        assert_eq!(ed.cursor_line(), where_it_was, "{}", ed.status());
+        assert!(ed.status().contains("t20,20g"), "{}", ed.status());
+    }
+
+    /// **A sort names the column it sorts by** (§5.7).
+    ///
+    /// The bare letter is gone: on 123 380 rows a sort costs real seconds and
+    /// `u` refunds the content but not the time. `0` is not a column, so it
+    /// was free to mean 「the one I am standing in」 — said out loud.
+    #[test]
+    fn a_sort_names_the_column_it_sorts_by() {
+        let years = |ed: &Editor| -> Vec<String> {
+            ed.current_buffer()
+                .text()
+                .lines()
+                .skip(2)
+                .filter_map(|l| l.split('|').nth(1))
+                .map(|c| c.trim().to_string())
+                .collect()
+        };
+        let mut ed =
+            typed("| 年 | 事 |\n| --- | --- |\n| 1900 | 丙 |\n| 19 | 甲 |\n| 200 | 乙 |\n");
+        ed.goto_line(1);
+        assert!(ed.enter_table(), "{}", ed.status());
+
+        // A bare `t s` does nothing at all, and says what to type instead.
+        let before = ed.current_buffer().text();
+        press(&mut ed, "ts");
+        assert_eq!(ed.current_buffer().text(), before, "nothing was sorted");
+        assert!(ed.status().contains("t0s"), "{}", ed.status());
+
+        // `t1,5,9s` — several columns at once, all ascending. Here the table
+        // has two, so it is 事 first and 年 inside it: 丙 U+4E19, 乙 U+4E59,
+        // 甲 U+7532.
+        press(&mut ed, "t2,1s");
+        assert_eq!(years(&ed), ["1900", "200", "19"], "{}", ed.status());
+        // **Both columns are named.** A sort by two columns that reported only
+        // the first would hide the tiebreaker that decided every row where the
+        // first ties — and the Markdown path used to, because it was written
+        // before a keyboard sequence could name two.
+        assert!(ed.status().contains('事'), "{}", ed.status());
+        assert!(ed.status().contains('年'), "{}", ed.status());
+        // One column keeps the long sentence, which is where the comparison
+        // rule is written down.
+        press(&mut ed, "t1s");
+        assert!(ed.status().contains('年'), "{}", ed.status());
+        assert!(!ed.status().contains('事'), "{}", ed.status());
+
+        // A column that is not there is said, not ignored — the same rule the
+        // sort has always followed, now that `/` follows it too.
+        press(&mut ed, "t9/");
+        assert!(ed.status().contains('9'), "{}", ed.status());
+        assert!(!ed.status().is_empty());
     }
 
     /// Sorting a table does not put the table away.
@@ -21319,6 +21791,131 @@ mod tests {
         ed
     }
 
+    /// A document whose second table has a cell far wider than the cap, and a
+    /// first table with different columns — so a test can tell the two apart.
+    fn with_two_md_tables() -> Editor {
+        let long = "一二三四五六七八九十一二三四五六七八九十一二三四五";
+        typed(&format!(
+            "| 姓名 | 年紀 |\n| --- | --- |\n| 甲 | 三十 |\n\n段落\n\n\
+             | 地名 | 備註 |\n| --- | --- |\n| 洛陽 | {long} |\n"
+        ))
+    }
+
+    /// #283. 「markdown中的表格在 tf 模式下都没办法通过 tw 来缩小单元格宽度」——
+    /// there was no `t w`, and no cap in prose at all: a 80-cell cell pushed
+    /// every column after it off the side, which is what the author's own
+    /// `development.md` looked like.
+    #[test]
+    fn t_w_folds_a_cell_too_wide_to_scan_and_gives_it_back() {
+        let mut ed = with_two_md_tables();
+        ed.goto_line(9);
+        press(&mut ed, "tf");
+        // Row 9's 備註 is 25 characters — 50 cells — so its tail comes off.
+        let folded = ed.hidden_on_line(8);
+        assert!(!folded.is_empty(), "the wide cell is folded: {folded:?}");
+        let marks = ed.drawn_runs_on_line(8);
+        assert!(
+            marks.iter().any(|r| r.text == crate::mdtable::FOLD_MARK),
+            "and says so on the page: {marks:?}"
+        );
+        // What is left is the cap, mark included — never one cell more.
+        let text = ed.line_text(8).unwrap();
+        let chars: Vec<char> = text.trim_end().chars().collect();
+        let shown: String = (0..chars.len())
+            .filter(|at| !folded.iter().any(|&(a, b)| (a..b).contains(at)))
+            .map(|at| chars[at])
+            .collect();
+        let cell = shown.split('|').nth(2).unwrap_or_default().trim().to_string();
+        assert!(
+            yumete_cjk::str_width(&cell) + yumete_cjk::str_width(crate::mdtable::FOLD_MARK)
+                <= crate::mdtable::MAX_COLUMN,
+            "「{cell}」 and the mark fit in {}",
+            crate::mdtable::MAX_COLUMN
+        );
+
+        // `t w` gives the whole cell back — the reader who came to *read* it.
+        press(&mut ed, "tw");
+        assert!(ed.hidden_on_line(8).is_empty(), "nothing off the page now");
+        press(&mut ed, "tw");
+        assert!(!ed.hidden_on_line(8).is_empty(), "and folded again");
+    }
+
+    /// 「`basic` 不藏、不摺、不替換」. Folding is all three, so it waits for 全
+    /// — and says so rather than turning 全 on behind the reader's back.
+    #[test]
+    fn folding_is_a_全_thing_and_基本_says_so() {
+        let mut ed = with_two_md_tables();
+        ed.goto_line(9);
+        press(&mut ed, "tb");
+        assert!(ed.hidden_on_line(8).is_empty(), "基本 hides nothing");
+        press(&mut ed, "tw");
+        assert_eq!(ed.table_level(), TableLevel::Basic, "and stays 基本");
+        assert!(ed.status().contains("tf"), "it points at the key: {}", ed.status());
+    }
+
+    /// The cell the caret is standing in is never folded, so a folded table is
+    /// still one you can read and edit a cell of.
+    #[test]
+    fn walking_into_a_folded_cell_opens_it() {
+        let mut ed = with_two_md_tables();
+        ed.goto_line(9);
+        press(&mut ed, "tf");
+        assert!(!ed.hidden_on_line(8).is_empty());
+        // Into the 備註 cell — the last one on the row.
+        while ed.cell_position().map(|(_, c)| c) != Some(1) {
+            ed.on_key(Key::Char('l'));
+        }
+        assert!(
+            ed.hidden_on_line(8).is_empty(),
+            "the cell the caret is in is whole"
+        );
+    }
+
+    /// #283. 「markdown中的表格没办法用ti打开信息侧栏」—— `detail()` asked what
+    /// the *file* was and sent every Markdown question to the note panel, so
+    /// the row panel could only ever be reached by opening a `.csv`.
+    #[test]
+    fn t_i_reads_a_markdown_row_by_the_columns_of_its_own_table() {
+        let mut ed = with_two_md_tables();
+        ed.goto_line(9);
+        press(&mut ed, "tf");
+        assert!(ed.detail_visible(), "the panel is on out of the box");
+        let panel = ed.detail().expect("a row of a Markdown table answers");
+        let names: Vec<String> = panel.rows.iter().map(|(n, _)| n.clone()).collect();
+        assert!(names[0].ends_with("地名"), "the second table's own: {names:?}");
+        assert_eq!(
+            panel.rows[0].1.as_deref(),
+            Some("洛陽"),
+            "and the value beside its own name, not one column over: {:?}",
+            panel.rows
+        );
+        // The folded cell is read whole here — 「表格用來掃，側欄用來讀」.
+        assert!(
+            panel.rows[1].1.as_deref().unwrap_or_default().chars().count() == 25,
+            "the panel is where the tail went: {:?}",
+            panel.rows[1]
+        );
+
+        // The header is not a row, and neither is the `|---|`.
+        ed.goto_line(7);
+        assert!(ed.detail().is_none_or(|d| d.rows.is_empty()), "the header names columns");
+        ed.goto_line(8);
+        assert!(ed.detail().is_none_or(|d| d.rows.is_empty()), "the rule is the shape");
+    }
+
+    /// The first table's columns are not the second table's. `t y` reported
+    /// the first table's name from anywhere in the file and was believed.
+    #[test]
+    fn a_column_is_named_by_the_table_the_cursor_is_in() {
+        let mut ed = with_two_md_tables();
+        ed.goto_line(3);
+        press(&mut ed, "tfty");
+        assert!(ed.status().contains("姓名"), "{}", ed.status());
+        ed.goto_line(9);
+        press(&mut ed, "ty");
+        assert!(ed.status().contains("地名"), "{}", ed.status());
+    }
+
     #[test]
     fn a_pipe_table_is_a_grid_wherever_it_is() {
         let mut ed = with_md_table();
@@ -21756,11 +22353,13 @@ mod tests {
 
     #[test]
     fn t_s_puts_the_rows_in_order_by_this_column() {
-        // The first thing anyone does to a 年表 or a 人物表.
+        // The first thing anyone does to a 年表 or a 人物表. **`t0s`**, since
+        // §5.7 took the bare letter away: `0` is not a column, so it was free
+        // to mean 「the one I am standing in」.
         let mut ed = typed("| 年 | 事 |\n| --- | --- |\n| 1900 | 丙 |\n| 19 | 甲 |\n| 200 | 乙 |\n");
         ed.goto_line(1);
         assert!(ed.enter_table(), "{}", ed.status());
-        press(&mut ed, "ts");
+        press(&mut ed, "t0s");
         let text = ed.current_buffer().text();
         let years: Vec<&str> = text
             .lines()
@@ -21769,7 +22368,7 @@ mod tests {
             .map(str::trim)
             .collect();
         assert_eq!(years, ["19", "200", "1900"], "numbers compare as numbers");
-        press(&mut ed, "tS");
+        press(&mut ed, "t0S");
         let text = ed.current_buffer().text();
         let years: Vec<&str> = text
             .lines()

@@ -1615,9 +1615,9 @@ find = "新建 插入 空表 建表 new insert"
 [[message]]
 # : 命令選單裏 numbers 那一項的說明（table 組）
 key = "cmd.table.numbers"
-zht = "欄號那一行：3gd、t20-20g 用的就是它"
-zhs = "栏号那一行：3gd、t20-20g 用的就是它"
-en = "the row of column numbers — what 3gd and t20-20g count with"
+zht = "欄號那一行：3gd、t20,20g 用的就是它"
+zhs = "栏号那一行：3gd、t20,20g 用的就是它"
+en = "the row of column numbers — what 3gd and t20,20g count with"
 find = "欄號 栏号 標號 标号 numbers"
 
 [[message]]
@@ -2992,6 +2992,13 @@ key = "help.table.add-or-drop-row"
 zht = "加一行／刪一行；t j t k 上下移"
 zhs = "加一行／删一行；t j t k 上下移"
 en = "add a row / drop this row; t j and t k move it"
+
+[[message]]
+# 表格幫助：側欄與摺格子
+key = "help.table.detail-and-folds"
+zht = "這一行攤開來讀／過寬的格子收起尾巴（全）"
+zhs = "这一行摊开来读／过宽的格子收起尾巴（全）"
+en = "read this row laid out / fold the tails of over-wide cells (全)"
 
 [[message]]
 # 表格幫助：把檔案當表格讀
@@ -5179,6 +5186,13 @@ zhs = "第 {0}–{1} 栏：第 1/{2} 处"
 en = "columns {0}–{1}: hit 1/{2}"
 
 [[message]]
+# t1,5,9/ ——逐欄點名，不是一段範圍
+key = "search.hit-in-columns"
+zht = "第 {0} 欄：第 1/{1} 處"
+zhs = "第 {0} 栏：第 1/{1} 处"
+en = "columns {0}: hit 1/{1}"
+
+[[message]]
 # 搜到第幾處，共幾處
 key = "search.hit-n-of-m"
 zht = "第 {0}/{1} 處（n N 走）"
@@ -5462,6 +5476,13 @@ zhs = "换掉了一格"
 en = "replaced the cell"
 
 [[message]]
+# tg 給的不是「行,欄」兩個數
+key = "table.cell-wants-a-comma"
+zht = "去某一格要兩個數：`t20,20g` 第 20 行第 20 欄。`-` 是範圍，`t2-10/` 那樣用"
+zhs = "去某一格要两个数：`t20,20g` 第 20 行第 20 栏。`-` 是范围，`t2-10/` 那样用"
+en = "a cell takes two numbers: `t20,20g` is row 20, column 20. `-` is a range, as in `t2-10/`"
+
+[[message]]
 # :check 查完表格，沒有問題
 key = "table.check-clean"
 zht = "{0}：{1} 行，沒查出問題"
@@ -5628,6 +5649,27 @@ key = "table.filter-changed-shape"
 zht = "命令送回來的第 {0} 行是 {1} 欄，這張表是 {2} 欄——沒有換"
 zhs = "命令送回来的第 {0} 行是 {1} 栏，这张表是 {2} 栏——没有换"
 en = "line {0} came back with {1} columns and this table has {2} — nothing replaced"
+
+[[message]]
+# t w 在「基本」或源碼模式下按到
+key = "table.folds-need-full"
+zht = "摺格子是「全」纔做的事——先 tf"
+zhs = "折格子是「全」才做的事——先 tf"
+en = "folding cells is a 全 thing — press tf first"
+
+[[message]]
+# t w 把過寬的格子收起尾巴
+key = "table.folds-off"
+zht = "格子：全文（超過 {0} 格的欄跑出畫面）"
+zhs = "格子：全文（超过 {0} 格的栏跑出画面）"
+en = "cells: whole (columns past {0} run off the page)"
+
+[[message]]
+# t w 把過寬的格子收起尾巴
+key = "table.folds-on"
+zht = "格子：最寬 {0} 格，尾巴收起（{1}）"
+zhs = "格子：最宽 {0} 格，尾巴收起（{1}）"
+en = "cells: {0} wide at most, tails folded ({1})"
 
 [[message]]
 # t t：把整個窗口交給表格
@@ -5971,6 +6013,13 @@ key = "table.schema-problems"
 zht = "schema：{0}"
 zhs = "schema：{0}"
 en = "schema: {0}"
+
+[[message]]
+# 光按 ts／tS，沒說照哪一欄
+key = "table.sort-wants-a-column"
+zht = "排序要指明欄：`t1s` 第一欄、`t0s` 你站的這一欄、`t1,5,9s` 好幾欄"
+zhs = "排序要指明栏：`t1s` 第一栏、`t0s` 你站的这一栏、`t1,5,9s` 好几栏"
+en = "a sort names its column: `t1s` the first, `t0s` the one you are in, `t1,5,9s` several"
 
 [[message]]
 # t1a 之後按了 s／S／Esc 以外的鍵，排序鏈斷掉

@@ -635,9 +635,97 @@ pub fn format(lines: &[String]) -> Vec<String> {
 /// does not decide is what it is *made of*: `---` is drawing, not data, so its
 /// fill is dashes and it is stretched all the way across, and the colons of
 /// `:---:` are the alignment and are never written over.
+///
+/// `marks` is what somebody **else** draws inside these rows, as
+/// `(anchor, display width)` — today the one mark [`folds`] leaves standing
+/// where a cell's tail was taken off. It is not drawn here; it is only
+/// counted, because a cell whose width is partly somebody else's is still one
+/// cell of the column.
+/// The widest a column is **drawn** before its tail is folded away (#283).
+///
+/// The same number the full-window grid caps at, because a reader who has met
+/// one of them has learnt the other. `t w` takes it off: 「the columns go to
+/// their natural width and run off the side of the window」, and what was
+/// folded away is read whole in `t i`'s panel. That division of labour is what
+/// makes a cap acceptable at all — **the table is for scanning, the panel is
+/// for reading** — and it is why the cap is the factory answer.
+pub const MAX_COLUMN: usize = 32;
+
+/// The mark that stands where a cell's tail was folded away.
+///
+/// **ASCII on purpose.** Every ellipsis Unicode offers — `…`, `⋯`, `‥` — is
+/// East Asian *Ambiguous*, and a table is the one place on the page where the
+/// editor's width and the renderer's have to agree to the cell: one mark
+/// measured two ways puts every column after it one cell out, on every row
+/// that folds. `>` is what `less` and `vi` put at the edge of a line that
+/// carries on, and it is one cell in every terminal there is.
+pub const FOLD_MARK: &str = ">";
+
+/// The tail of each cell of `line` that is drawn wider than `cap`.
+///
+/// Spans of the **file's own characters**, to be hidden — the same currency
+/// [`padding`] measures in, so a folded column squares up at the cap without
+/// anybody having to tell it. `hidden` is what is already off the page there
+/// (所見即所得's markup, a reading's tags): a cell is folded by what it
+/// *shows*, not by what it holds, or `**很長的一句**` would fold four
+/// characters early.
+///
+/// `open` is the span of the line the selection covers, if any: a cell it
+/// touches is left whole. Walk into a cell and it opens; walk out and it
+/// closes — the same law the markup keeps, and what makes a folded table
+/// still an editable one.
+///
+/// **Per cell, not per column.** The two come to the same width — a column is
+/// as wide as its widest cell, and no cell may pass `cap` — and per cell asks
+/// nothing of the rows above it, so no row has to be drawn twice.
+pub fn folds(
+    line: &str,
+    hidden: &[(usize, usize)],
+    cap: usize,
+    open: Option<(usize, usize)>,
+) -> Vec<(usize, usize)> {
+    // The mark is the last cell of the column, so the writing gets one less.
+    let keep = cap.saturating_sub(yumete_cjk::str_width(FOLD_MARK));
+    let chars: Vec<char> = line.trim_end_matches(['\n', '\r']).chars().collect();
+    let mut out = Vec::new();
+    for (from, to) in cells(line) {
+        let to = to.min(chars.len());
+        let from = from.min(to);
+        // **The cell the caret is in is never folded.** It is the same law the
+        // markup keeps — what the cursor is inside stays on the page — and it
+        // is what makes a folded table still editable: walk into a cell and it
+        // opens; walk out and it closes again. `to` is inclusive here because
+        // the caret sits *after* the last character when you are appending.
+        if open.is_some_and(|(a, b)| a <= to && b >= from) {
+            continue;
+        }
+        let text: String = chars[from..to].iter().collect();
+        let mut width = 0usize;
+        let mut at = from;
+        for g in yumete_cjk::graphemes(&text) {
+            let n = g.chars().count();
+            if !hidden.iter().any(|&(a, b)| (a..b).contains(&at)) {
+                let w = yumete_cjk::grapheme_width(g);
+                // Cut **before** the grapheme that would pass the cap, so what
+                // is kept is never wider than it — and a cut is only ever made
+                // at a character that shows, which is what makes the mark
+                // honest: there is something behind it.
+                if width + w > keep {
+                    out.push((at, to));
+                    break;
+                }
+                width += w;
+            }
+            at += n;
+        }
+    }
+    out
+}
+
 pub fn padding(
     rows: &[(String, Vec<(usize, usize)>)],
     rule: Option<usize>,
+    marks: &[Vec<(usize, usize)>],
 ) -> Vec<Vec<(usize, String)>> {
     let chars: Vec<Vec<char>> = rows
         .iter()
@@ -660,7 +748,20 @@ pub fn padding(
             let (from, to) = spans[i][c];
             let lead = usize::from(from == start);
             let trail = usize::from(to == end && closes(&chars[i], end));
-            widths.push(visible_width(&chars[i], (start, end), &rows[i].1) + lead + trail);
+            // **What somebody else draws inside this cell counts too**: the
+            // mark that stands where a folded tail was is one cell of the
+            // column, and a column padded as though it were not there is one
+            // cell narrow on every row that folds.
+            let drawn: usize = marks
+                .get(i)
+                .map(|m| {
+                    m.iter()
+                        .filter(|&&(at, _)| (start..end).contains(&at))
+                        .map(|&(_, w)| w)
+                        .sum()
+                })
+                .unwrap_or(0);
+            widths.push(visible_width(&chars[i], (start, end), &rows[i].1) + lead + trail + drawn);
         }
         room.push(widths);
     }
@@ -1066,11 +1167,103 @@ mod tests {
             })
             .collect();
         let rule = rows.get(1).and_then(|l| rule_of(l)).map(|_| 1);
-        padding(&with, rule)
+        padding(&with, rule, &[])
             .iter()
             .enumerate()
             .map(|(i, runs)| drawn(&rows[i], with[i].1.as_slice(), runs))
             .collect()
+    }
+
+    /// The whole fold pipeline the editor runs, in one place: work out each
+    /// row's folds, hide them, tell `padding` how wide the marks are, and draw
+    /// what comes out. A test of the parts alone would not have caught the one
+    /// thing that actually goes wrong — a column squared up as though the mark
+    /// were not there.
+    fn folded(text: &str, cap: usize, open: Option<(usize, usize)>) -> Vec<String> {
+        let rows: Vec<String> = lines(text);
+        let rule = rows.get(1).and_then(|l| rule_of(l)).map(|_| 1);
+        let cuts: Vec<Vec<(usize, usize)>> = rows
+            .iter()
+            .enumerate()
+            .map(|(i, l)| match Some(i) == rule {
+                true => Vec::new(),
+                false => folds(l, &[], cap, open.filter(|_| i == 2)),
+            })
+            .collect();
+        let width = yumete_cjk::str_width(FOLD_MARK);
+        let marks: Vec<Vec<(usize, usize)>> = cuts
+            .iter()
+            .map(|f| f.iter().map(|&(at, _)| (at, width)).collect())
+            .collect();
+        let with: Vec<(String, Vec<(usize, usize)>)> = rows
+            .iter()
+            .zip(&cuts)
+            .map(|(l, f)| (l.clone(), f.clone()))
+            .collect();
+        padding(&with, rule, &marks)
+            .iter()
+            .enumerate()
+            .map(|(i, runs)| {
+                let mut all: Vec<(usize, String)> = runs.clone();
+                all.extend(cuts[i].iter().map(|&(at, _)| (at, FOLD_MARK.to_string())));
+                all.sort_by_key(|&(at, _)| at);
+                drawn(&rows[i], with[i].1.as_slice(), &all)
+            })
+            .collect()
+    }
+
+    /// #283. The cap is on what is **drawn**, and the mark is one cell of it:
+    /// a column that folds is exactly `cap` wide, not `cap + 1`.
+    #[test]
+    fn a_cell_past_the_cap_keeps_its_head_and_shows_that_there_is_more() {
+        let out = folded("| a | b |\n| - | - |\n| 一二三四五 | d |\n", 6, None);
+        assert_eq!(
+            out,
+            vec!["| a     | b |", "| ----- | - |", "| 一二> | d |"],
+            "five cells of writing and the mark, in a six-cell column"
+        );
+        // And the walls line up, which is the only thing a reader checks.
+        let width = |s: &str| yumete_cjk::str_width(s);
+        assert_eq!(width(&out[0]), width(&out[2]), "{out:?}");
+        assert_eq!(width(&out[1]), width(&out[2]), "{out:?}");
+    }
+
+    /// A cell that fits is not touched, and neither is the rule row — the
+    /// caller keeps it out, because `---|:---:|---` is the shape of the table
+    /// rather than writing in it.
+    #[test]
+    fn a_cell_within_the_cap_is_left_whole() {
+        let out = folded("| a | b |\n| - | - |\n| cc | d |\n", 8, None);
+        assert_eq!(out, vec!["| a  | b |", "| -- | - |", "| cc | d |"]);
+    }
+
+    /// The cell the caret is in opens, and the column widens to hold it —
+    /// which is what makes a folded table an editable one.
+    #[test]
+    fn the_cell_the_caret_is_in_is_not_folded() {
+        let whole = "| a | b |\n| - | - |\n| 一二三四五 | d |\n";
+        let shut = folded(whole, 6, None);
+        let open = folded(whole, 6, Some((3, 3)));
+        assert_eq!(shut[2], "| 一二> | d |");
+        assert_eq!(open[2], "| 一二三四五 | d |", "walked into, so whole");
+        assert_eq!(
+            yumete_cjk::str_width(&open[0]),
+            yumete_cjk::str_width(&open[2]),
+            "and the whole table squares up around it: {open:?}"
+        );
+    }
+
+    /// A fold is measured in what the cell **shows**: 所見即所得 has already
+    /// taken `**` off, and counting the stars would fold four characters early.
+    #[test]
+    fn a_fold_counts_the_writing_and_not_the_markup() {
+        let line = "| **一二三四五** | d |";
+        let bare = folds(line, &[], 6, None);
+        let seen = folds(line, &[(2, 4), (9, 11)], 6, None);
+        assert_ne!(bare, seen, "the markup moved the cut");
+        // Two characters and the mark fit in six cells; the stars are not
+        // there to be counted.
+        assert_eq!(seen.first().map(|&(at, _)| at), Some(6), "cut after 一二");
     }
 
     #[test]
@@ -1110,7 +1303,7 @@ mod tests {
         let with: Vec<(String, Vec<(usize, usize)>)> =
             lines(text).into_iter().map(|l| (l, Vec::new())).collect();
         assert!(
-            padding(&with, Some(1)).iter().all(|r| r.is_empty()),
+            padding(&with, Some(1), &[]).iter().all(|r| r.is_empty()),
             "nothing to draw, so nothing is drawn"
         );
     }

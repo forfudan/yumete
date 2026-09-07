@@ -493,8 +493,9 @@ index, and a row with no number anywhere else is a row that got lost.
 | 280 | **Caps Lock as Esc** | — | P4 | the author, 2026-09-06: 「可以通過命令讓 caplock 代替 Esc 的所有功能。因為 Caplock 鍵好按。caplock 功能可以通過一個空格快捷鍵開啟關閉。」 **Right instinct, wrong layer — and this one should not be built.** A terminal application never sees Caps Lock: the key is swallowed by the window server, and the only way it reaches an application at all is the Kitty protocol's `REPORT_ALL_KEYS_AS_ESCAPE_CODES`, which yumete pushed once and **took back in #271** because it broke the macOS system IME. So there is no keystroke for a `:caps on` command to bind, and no state for a space-leader toggle to flip. The lever that works is one line of the operating system's, applied once: **系統設定 → 鍵盤 → 鍵盤快速鍵 → 變更鍵 → Caps Lock → Escape** (or `hidutil property --set '{"UserKeyMapping":[{"HIDKeyboardModifierMappingSrc":0x700000039,"HIDKeyboardModifierMappingDst":0x700000029}]}'` for the same thing from a script). It is then Esc in *every* application, with no delay, and yumete needs to know nothing about it. yumete could run that `hidutil` line at startup and undo it at exit — and should not: the remap is **global while yumete runs**, it outlives a crash, and `UserKeyMapping` is a whole-set property, so writing ours silently drops whatever else the writer had remapped. Recorded in the manual as a setting rather than in the code as a feature. **none** | Won't build (documented) |
 | 281 | **The other pane draws this file's text under the other file's name** | tui | P2 | found while acting on a review of #247, 2026-09-06. A split is captioned with the file it was opened on and drawn from `editor.current_buffer()` — every one of them, both halves — so the moment the live half changes documents the peek half goes on showing *your* text under *its* caption. Reproduced with two scratch buffers: split on B, `:buffer previous`, and the pane titled 「B」 is full of A. It is not a corner: **`:schema` walks straight into it** — `table_schema_in_split` opens the schema file, hands it to the split and then takes the table buffer back, which is precisely the state that misdraws, so 「schema in the other area」 has been showing the table in the other area. The fix is not local. Everything the page is drawn from — the rope, `hidden_on_line`, `line_is_folded`, `readings_on_line`, `meter_on_line`, `table_row_at`, the markup runs — reads `current_buffer()`, and three of the caches behind them (`segment_cache`, `meter_cache`, `note_cache`) are keyed by **line alone**, so drawing a second buffer would poison them as well as needing a buffer argument threaded through some thirty accessors. Two ways out to choose between first: give those accessors a buffer (correct, and the caches have to be re-keyed by `(buffer, line)` on the way), or hold the design line #176 already states — 「two panes over one buffer」 — and make a pane that names another document stop being a second half until you are back in it, which costs `switch_pane`'s cross-buffer branch and `:schema`'s whole gesture. **medium** | Open |
 | 282 | **One flick of the wheel over a table froze the window** | core | P1 | the author, 2026-09-06: 「在 tn 下，鼠标滚轮滚动会造成buffer卡死。」 Not the table mode's — **any** page with a `|` table on it, and #268's wheel work made it visible rather than caused it: a flick is collapsed into one `scroll(n)`, so the whole gesture is paid for in one frame. The bill was the padding that squares a table up (#212), whose memo was keyed on the caret. Nothing in `hidden_on_line` asks where the caret is unless `:render full` is on — under the default `:render on` the key changed on every `j` and threw away a walk down every row of the table. One flick over the 223-row table in this file: **8.26 s → 41 ms**. The key now carries the caret only when 所見即所得 is on, where the answer genuinely moves with it. **small** | Done |
-| 283 | **Four dimensions, three levels, one word for each level** | core+tui | P2 | the author, 2026-09-06: 「我的目的是能让命令和快捷键的命名尽量统一、规范，便于用户学习记忆。」 `render` / `table` / `ruby` / `indent` were four settings with four vocabularies — `:render on`, `t n`／`t a`／`t t`, a dialect set, an indent flag — so learning one taught you nothing about the next. They are now one word each at three levels, `off` / `basic` / `full`, and **the levels are linked at assignment, not at read time**: `:render <級>` *writes* the matching level into the other three and nothing re-derives afterwards, so any one of them can be moved on its own and the next `:render` re-assigns everything. The law that makes `basic` safe as the factory level: **`basic` 不藏、不摺、不替換; `full` 三件都可以做** — with nothing to draw a table on, `TableLevel::Basic` and `Off` produce the same page to the character. The enabling refactor is a split: `table_level` is the reader's standing preference and survives every open, `self.table` is the per-buffer fact of *which* table the cursor is in, and `Surface::{Normal,Advanced,Grid}` dissolves into that level plus an orthogonal `TableView.pane` (which is why `t q` needs nothing written down — the level it returns to was never touched). Keys: `t o` / `t b` / `t f` / `t t` / `t q`, 排齊 to `t F`. Design in §5.7. Two real faults fell out of it: `t d` in the paragraph *between* two tables deleted the prose line the cursor was on and reported 「已刪除一行」 (`md_region()` is `None` there, which the dispatch read as 「a delimited file」), and a lone `| 甲` had the grid's keys on it while the renderer painted it as the prose it is — `prose_region` took any run of pipe lines, `with_md_tables` took only the ones Markdown parses. One rule now (`md_table_parses`), and a `table_here()` gate above every key that edits a grid. `indent` is the fourth dimension and `:render` does **not** write it (author, 2026-09-06: 「indent 一般是竪排文本用的，markdown 渲染大多數是橫排用的」); the level of a dimension with a real third state is computed from the pair that holds it, never stored (`ruby_level`, `indent_level`). **Still open**: deriving `self.table` on open when the level is not `off`; `t w`／`t i`; forbidding bare `t s` and adding `t0as`／`t1,5,9s`; `,` for coordinates and `-` for ranges (`t20,20g`). **large** | Open |
+| 283 | **Four dimensions, three levels, one word for each level** | core+tui | P2 | the author, 2026-09-06: 「我的目的是能让命令和快捷键的命名尽量统一、规范，便于用户学习记忆。」 `render` / `table` / `ruby` / `indent` were four settings with four vocabularies — `:render on`, `t n`／`t a`／`t t`, a dialect set, an indent flag — so learning one taught you nothing about the next. They are now one word each at three levels, `off` / `basic` / `full`, and **the levels are linked at assignment, not at read time**: `:render <級>` *writes* the matching level into the other three and nothing re-derives afterwards, so any one of them can be moved on its own and the next `:render` re-assigns everything. The law that makes `basic` safe as the factory level: **`basic` 不藏、不摺、不替換; `full` 三件都可以做** — with nothing to draw a table on, `TableLevel::Basic` and `Off` produce the same page to the character. The enabling refactor is a split: `table_level` is the reader's standing preference and survives every open, `self.table` is the per-buffer fact of *which* table the cursor is in, and `Surface::{Normal,Advanced,Grid}` dissolves into that level plus an orthogonal `TableView.pane` (which is why `t q` needs nothing written down — the level it returns to was never touched). Keys: `t o` / `t b` / `t f` / `t t` / `t q`, 排齊 to `t F`. Design in §5.7. Two real faults fell out of it: `t d` in the paragraph *between* two tables deleted the prose line the cursor was on and reported 「已刪除一行」 (`md_region()` is `None` there, which the dispatch read as 「a delimited file」), and a lone `| 甲` had the grid's keys on it while the renderer painted it as the prose it is — `prose_region` took any run of pipe lines, `with_md_tables` took only the ones Markdown parses. One rule now (`md_table_parses`), and a `table_here()` gate above every key that edits a grid. `indent` is the fourth dimension and `:render` does **not** write it (author, 2026-09-06: 「indent 一般是竪排文本用的，markdown 渲染大多數是橫排用的」); the level of a dimension with a real third state is computed from the pair that holds it, never stored (`ruby_level`, `indent_level`). **`t w` and `t i` landed 2026-09-07** (author: 「markdown中的表格没办法用ti打开信息侧栏…在 tf 模式下都没办法通过 tw 来缩小单元格宽度」). `t w` folds the tail of any cell drawn wider than `mdtable::MAX_COLUMN` = 32 and stands a `>` where the writing stopped — **ASCII on purpose**, because every ellipsis Unicode offers is East Asian *Ambiguous* and would put every column after it one cell out on exactly the rows that fold. The tail goes off the page through `hidden_on_line`, the one list the padding, the wrap and the mouse all read, so a folded column squares up at the cap without anybody telling it — `padding` only had to be told how wide the drawn mark is (`marks`), or every folding column came out one cell narrow. 全 only, per this row's own law, and it **refuses** below 全 rather than turning 全 on behind the reader. The cell the caret is in is never folded, which is what keeps a folded table editable and is why `PadKey` now carries the caret whenever folding is on, not only under 所見即所得. `t i` was a half-build: the key was wired to `toggle_detail` but `detail()` asked what the *file* was — `bounds == WholeFile` — and sent every Markdown question to the note panel, so the row panel could only be reached by opening a `.csv`. It now asks what the **cursor** is in. Two faults came out with it: `row_detail` split the row on `schema.delimiter`, which for a `|` row gives an empty cell at each end and answered one column to the left of where `cell_position` was pointing; and the `Bounds::Md` schema is built from the **first** table in the file, so `t y` in the second table reported the first table's column name and was believed. `schema_here()` derives it from the header above the cursor, and `t y`／`t s`／`t/` ask it. **The sequence grammar landed 2026-09-07 with them**: `Sequence { numbers, joint }` replaces 「a number and maybe a second one」, a bare `t s` is refused outright (a sort of 123 380 rows costs real seconds and `u` refunds the content but not the time), `t0s` is the column you are standing in — `0` was free to mean that because it is not a column — and **`-` is a range where `,` is a list or a pair**: `t2-10/`, `t1,5,9s`, `t20,20g`. One key had been doing both jobs, so `t2-10g` used to answer 「row 2, column 10」, a plausible answer to a question nobody asked. Each verb asks for the shape it can use and reports when handed another, which is also how `search_columns_within` stopped clamping `t99/` to the last column and pretending that was the request. **Still open**: the rest of `TableView.schema` under `Bounds::Md` — `key`, `link`, `details`, `shows`/hidden, `rows_break_the_grid`, blank-row width and paste width still read the view's. **large** | Open |
 | 284 | **The HUD is a thread, not a panel — and in 縱書 it is nothing at all** | tui | P3 | the author, 2026-09-06: 「現在的HUD是一根線連到字母上。你覺得可不可以加個面板（有外框），並且允許HUD覆蓋其他的行的文字…允許他覆蓋其他文字可以讓他的位置更固定…然後我們可以有三個模式 `:hud off/basic/full`，默認 full。」 **The frame and the covering are one decision, not two.** Today's mark wants five cells on one row, so it can still find margin; a bordered panel wants a 3 × (寬+2) rectangle empty *near the caret*, which on a page of prose does not exist — so a frame forces covering. And the converse holds: once the HUD's glyphs sit on the same paper as the writing, nothing tells the reader which characters are not theirs, so covering forces a frame. That collapses two switches into one axis, which is what feeds the three levels. **What covering actually costs is not 「some prose」**: in Normal the HUD carries `typed_so_far()`, so pinning it two cells right of the caret paints over exactly the characters `3`, `2t` and `d3l` are counting — the object of the command. Hence the split: `off` draws nothing beside the caret (the status line's right edge stays — #193's floor), **`basic` is the factory level** and is today's scoring placement (#269) with a louder style — one row high, a 藥丸 rather than a thread, BAND ground and gold ink, **not one character hidden** — and `full` is the pinned, bordered, may-cover panel. Default `basic`, not `full`, by §5.7's own rule: the factory level must be identical to `off` in the worst case, and 醒目 is bought with style rather than with hiding. Three things to settle in the doing: **`:hud` is not #283's fifth dimension** — it is how the editor talks to you, not how the file is drawn, so `:render` must never write it and `render.is` keeps four fields; `:yume panel full` and `:hud full` are different words — the candidate panel and a pinned HUD both want `(cursor_x, cursor_y+1)` and the panel wins; and `full` loses the HUD's only collision avoidance, because `after_the_writing` reads the *buffer* back and thereby also dodges which-key, the command menu, the picker and the detail panel — 「有字」 and 「有面板」 read back identically once we cover, so the draw functions have to start returning their own `Rect`. #269's line in this table — 「`after_the_writing` is unchanged: the HUD still never paints over writing」 — is revoked by `full` and must be amended, not silently contradicted. **A separate fault found while reviewing this, and worth more than the frame**: in 縱書 the HUD is essentially never drawn. `after_the_writing` scans left→right for the last non-blank on the row, and 縱書 fills columns right-to-left, so `after` lands near the right edge whenever any 縱 on that row holds a character, every candidate fails `x < after`, and the vertical reader has only the status line. **medium** (縱書: **small**) | Open |
+| 285 | **A Markdown link is something to follow, not only to read** | core+tui | P3 | the author, 2026-09-06: 「markdown 文档中的超链接能不能用命令和鼠标点击（或者 ctrl 点击）而打开浏览器？本地的位置也能不能用窗口打开？这个 priority 不用太高。」 Three parts, and the third is the one with a design question in it. **A command** — `gx` is where Helix and vim both keep 「follow the thing under the cursor」, and the editor already knows where every link is: `crate::markdown` spans a `[text](url)` and 所見即所得 hides the `(url)` half, so the target is in hand without any new parsing. **A click** — the mouse map already turns a cell into a buffer position (#248's `drawn` walk), so the whole cost is deciding the gesture: a bare click has to keep placing the caret, so it is ⌘/Ctrl-click or nothing, and `⌘` chords are the terminal's (see 別再踩) — Ctrl-click is the one that actually arrives. **Where it opens** is the design question: an `https:` target goes to the system browser (`open` on macOS, `xdg-open` elsewhere) and that is uncontroversial, but a **local** path 「用窗口打开」 means the editor's own window — a `.md` beside this one should open as a buffer, and `[[wikilink]]` already means exactly that. So the rule wants to be: a scheme we do not handle goes to the OS; a path that resolves inside the project opens as a buffer in the other pane; anything else asks. **A refusal to build in**: never hand a URL to a shell. `open`/`xdg-open` take the target as one argument and nothing goes through `sh -c`. **small** | Open |
 
 ### 5.5 · A table is a delimiter, a surface and a boundary (#261)
 
@@ -1252,14 +1253,60 @@ t F   排齊寫進檔案 — moved off `t f` for the level, and the capital is t
       confirmation a whole-file reformat should have wanted all along
 ```
 
-**`t w` — take the width cap off.** One toggle for the table you are in: the
-columns go to their natural width and run off the side of the window. What
-was truncated is not lost, because —
+**`t w` — take the width cap off.** One toggle for the page: the columns go
+to their natural width and run off the side of the window. What was folded
+away is not lost, because —
 
-**`t i` — the panel reads the cell.** A truncated cell is read in the detail
+**`t i` — the panel reads the cell.** A folded cell is read in the detail
 panel, whole. This is the division of labour that makes a width cap
 acceptable at all: **the table is for scanning, the panel is for reading.**
 Twenty-eight columns of a 拆分表 were never meant to be read across.
+
+**Both were built 2026-09-07**, after the author found neither working:
+「markdown中的表格没办法用ti打开信息侧栏…在 tf 模式下都没办法通过 tw 来缩小单元格
+宽度」. What the doing settled:
+
+- **The cap is `mdtable::MAX_COLUMN` = 32 and it bites per *cell*, not per
+  column.** The two come to the same width — a column is as wide as its
+  widest cell, and no cell may pass the cap — and per cell asks nothing of
+  the rows above, so no row is drawn twice.
+- **The mark is ASCII `>`.** Every ellipsis Unicode offers — `…`, `⋯`, `‥` —
+  is East Asian *Ambiguous*, and a table is the one place on the page where
+  the editor's width and the terminal's have to agree to the cell: one mark
+  measured two ways puts every column after it one cell out, on exactly the
+  rows that fold. `>` is what `less` and `vi` put at the edge of a line that
+  carries on.
+- **The tail goes off the page through `hidden_on_line`.** That is the one
+  list the padding, the wrap and the mouse all read, so a folded column
+  squares up at the cap by itself. `padding` only had to be told how wide the
+  *drawn* mark is — a third argument, `marks` — because `visible_width`
+  cannot see something the file has no bytes for, and without it every
+  folding column came out one cell narrow.
+- **The cell the caret is in is never folded**, the same law the markup
+  keeps. Walk in and it opens, walk out and it closes; that is what keeps a
+  folded table an editable one, and it is why `PadKey` carries the caret
+  whenever folding is on rather than only under 所見即所得.
+- **全 only, and it refuses below it.** 「`basic` 不藏、不摺、不替換」——
+  folding is all three at once. `t w` at 基本 says 「先 tf」 rather than
+  turning 全 on behind the reader: a width key that also changed the level
+  would be a second way to change it, and no reader could tell which of the
+  two they had asked for.
+- **`t i` was a half-build.** The key was wired to `toggle_detail`, but
+  `detail()` asked what the *file* was — `bounds == WholeFile` — so every
+  Markdown question went to the note panel and the row panel could only be
+  reached by opening a `.csv`. It asks what the **cursor** is in now; the
+  note panel still answers in the paragraph, which was the half of the old
+  reasoning that was right.
+- **Two faults came out with it.** `row_detail` split the row on
+  `schema.delimiter`, and a `|` row begins and ends with the separator — so
+  it answered one column to the left of where `cell_position`, which asks the
+  *view*, was pointing. And the `Bounds::Md` schema is built once from the
+  **first** table in the file: `t y` in the second table of a document
+  reported the first table's column name, and was believed.
+  `schema_here()` derives it from the header above the cursor instead, and
+  `t y`／`t s`／`t/` ask it. Still on the view, still first-table: `key`,
+  `link`, `details`, `shows`/hidden, `rows_break_the_grid`, and the widths a
+  blank row or a paste is made to.
 
 **Sorting asks for a column.** A bare `t s` is gone. On 123 380 rows a sort
 costs real seconds, and `u` refunds the content but not the time — so the
@@ -1282,6 +1329,43 @@ t2-10/       columns 2 through 10          — a span of one kind of thing
 t1,5,9s      columns 1, 5 and 9            — several of one kind
 t20,20g      row 20, column 20             — two kinds
 ```
+
+**Both were built 2026-09-07.** `sequence: Option<(usize, Option<usize>)>` — a
+first number and a second one, joined by the only key there was — becomes
+`Sequence { numbers: Vec<usize>, joint: Option<Joint> }`, and one sequence is a
+span or a list, never both: nothing has been agreed about what a mixture would
+mean, so a second `-` simply is not part of a span and falls through to whatever
+`-` was. Each verb then asks the shape it can use, and says so when it is handed
+another: `s` takes `columns()` (a single number, a span, or a list — all three
+are 「which columns」), `g` takes `pair()` and refuses a span outright rather
+than reading row-and-column out of one, and `/` takes `columns()` too, which is
+what makes `t1,5,9/` mean what it looks like. Three things fell out of the doing:
+
+* **`search_columns_within` took a span and clamped it to the table's width**,
+  so `t99/` searched the last column and answered as though that were what had
+  been asked for. It takes the list now, and reports `table.no-such-column` —
+  the rule `sort_table` had already been following alone.
+* **A list and a run are reported differently** (`search.hit-in-columns` beside
+  `search.hit-in-column-range`), because 「第 1、5、9 欄」 and 「第 1–9 欄」 are
+  not the same claim and the status line is where the reader checks what the
+  editor thought they said.
+* **`md_sort` — the no-column sort — is gone**, not kept as the fallback under
+  a new name. It was reachable only from the bare `t s` this section retires,
+  and a second door into the gesture we just took away is exactly the kind of
+  alias #283 exists to abolish. `t0s` reaches the same sort by saying which
+  column it is.
+* **A fourth, found by looking at the picture rather than at the tests.**
+  `t2,1s` sorted by two columns and reported one: the delimited path lists them
+  all (`table.sorted`, 「排好了：事↑ 年↑」) while the Markdown path had a single
+  name in it (`table.sorted-ascending`), having been written when nothing on
+  the keyboard could name two columns. Both list now — and one column keeps the
+  long sentence, because 「數字當數字比，其餘按碼位」 is the comparison rule and
+  is worth saying once. Nothing was red: the sort itself was right both ways,
+  and the report is only visible in a shot.
+
+`tutor.rs:157` taught `t20-20g` and `messages.toml` taught `t20,20g`; §8's
+finding — 「taught in two places and implemented in none」 — is closed by the
+comma existing and the tutor being corrected.
 
 **What the level promised and did not deliver — found by the author, fixed
 2026-09-06.** `TableLevel::Basic` is the factory value, and its own words are
@@ -1347,10 +1431,15 @@ that used 「a view exists」 to mean 「somebody asked for one」:
   `Md` view is only the level being read. Left as it was, `t i` from the
   paragraph between two tables answered 「沒有檔名，就沒有 schema」.
 
-**Still open (older than this fix).** For a `Bounds::Md` view the schema is
-read from *one* table's header, so walking out of table 1 into table 2 keeps
-table 1's column names. `t b` has always done this. A blind re-read on every
-key would also clobber `t h`, which toggles `view.schema.header` by hand.
+**Mostly closed 2026-09-07.** For a `Bounds::Md` view the schema was read from
+*one* table's header, so walking out of table 1 into table 2 kept table 1's
+column names — and `t y` there named the wrong column and was believed.
+`schema_here()` derives the schema from the header **above the cursor** for
+every `Bounds::Md` question, and `t i`／`t y`／`t s`／`t/` ask it; the view's
+own copy is left alone, so `t h` still toggles what the reader toggled. What is
+still the view's, and therefore still the first table's: `key`, `link`,
+`details`, `shows`/hidden, `rows_break_the_grid`, and the widths a blank row or
+a paste is made to.
 
 
 ---
@@ -1742,7 +1831,7 @@ was done — the numbered entries in §5.2 carry the detail:
 
 **The keys became one grammar.** 命令 ＋ 選擇 ＋ 動作: inside a sequence the
 digits are its *argument* and the verb ends it — `g3d`, `g2-5d`, `g30g`,
-`t20-20g`, `t1a2d8as`, `t2-10?` — while a count before a plain key is still a
+`t20,20g`, `t1a2d8as`, `t2-10?` — while a count before a plain key is still a
 repetition, as in vi (`3w`, `30G`). `Enter` and `*` were retired: `Enter` is the
 key a writer presses by accident, and one keystroke too many in Normal mode used
 to make the page jump. What they did is now `g/` (find the selection, here) and
@@ -1761,7 +1850,7 @@ the keys do — and `:tutor`, which copies a lesson into a file of the reader's
 own, where `u` is lesson one and every destructive key is safe.
 
 **A grid became usable by number.** A row of column numbers above the header,
-because every numeric key counts columns; `t20-20g` to a cell; `:table sort 1 a
+because every numeric key counts columns; `t20,20g` to a cell; `:table sort 1 a
 2 d` over any grid (and `t1a2d8as` from the keyboard) with the rows kept
 exactly; the detail panel showing **every** column — an empty field is a finding
 in a 拆分表 — numbered, scrolled to the field the cursor is in, and resizable.
@@ -2700,13 +2789,13 @@ argument is `Args::Free`, `complete_at` returns a placeholder row and
 `deep_from_root` finds nothing: `html` `typst` `csv` `tsv` are the only words
 this editor accepts that appear **nowhere** in `::`'s 221-row corpus.
 
-### 8 · `t20,20g` is taught in two places and implemented in none
+### 8 · `t20,20g` is taught in two places and implemented in none — **fixed 2026-09-07**
 
-`take_sequence_argument` (`editor.rs:11777`) eats digits and `-`; `,` appears
-nowhere in the parser. Driven inside a table, `t20,20g` breaks at the comma and
-the rest lands as text. `messages.toml:3673` and this file (§5.7's list) teach
-`t20,20g`; `tutor.rs:157` teaches `t20-20g`, which works. §5.7 lists the comma
-under **still open** — so the documentation is teaching an unbuilt feature.
+`take_sequence_argument` ate digits and `-`; `,` appeared nowhere in the parser,
+so inside a table `t20,20g` broke at the comma and the rest landed as text.
+`messages.toml` and §5.7 taught `t20,20g`; `tutor.rs:157` taught `t20-20g`,
+which worked. The comma is a joint now (§5.7), `g` refuses a span, and the
+tutor says what the editor does.
 
 ### 9 · The file picker cannot type Chinese
 
@@ -2717,7 +2806,7 @@ anywhere in `yumete-tui`. So `空格 f` and `空格 b` filter a list of
 case: *in a Chinese document it is usually Chinese text… which in a novel is
 almost nothing*. One line.
 
-### 10 · `:tutor` teaches a key that closes the table
+### 10 · `:tutor` teaches a key that closes the table — **fixed 2026-09-07**
 
 `tutor.rs:148`: 「`i` 進格子打字，`c` 換掉整格，**`t o` 加一行**，`t d` 刪一行」.
 `t o` leaves the table (`editor.rs:7437`), and that arm's own comment reads
@@ -2727,7 +2816,7 @@ comment were both updated; the lesson was not.
 it asserts the lesson **mentions** certain keys, never that the editor **has**
 them.
 
-### 11 · The manual gives `t f` the job of `t F`
+### 11 · The manual gives `t f` the job of `t F` — **fixed 2026-09-07**
 
 `manual.md:1631`: 「**`t f` 會把表格排齊，排進檔案裏。**」 Since #283, `t f`
 is the `full` level and 排齊 is `t F` (`editor.rs:7401` vs `:7648`). The
