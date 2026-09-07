@@ -133,13 +133,14 @@ pub enum Command {
     /// `:layout [horizontal|vertical]` (aliases `:horizontal`, `:vertical`) —
     /// choose the layout (Feature #61). `None` toggles between the two.
     SetLayout(Option<Layout>),
-    /// `:chaifen` (alias `:cf`) — toggle the 拆分 annotation beside candidates
-    /// (Feature #66).
-    ToggleChaifen,
+    /// `:yume chaifen [on|off]` — the 拆分 annotation beside candidates
+    /// (Feature #66). `None` is the bare word, which toggles.
+    SetChaifen(Option<bool>),
     /// `:scheme <tag>` — switch the input scheme (Feature #86).
     SetScheme(String),
-    /// `:hanging` — 句讀 in the margin rather than a square each (Feature #70).
-    ToggleHanging,
+    /// `:hanging [on|off]` — 句讀 in the margin rather than a square each
+    /// (Feature #70). `None` is the bare word, which toggles.
+    SetHanging(Option<bool>),
     /// `:wrap` / `:nowrap` — whether a paragraph too wide for the terminal
     /// continues on the next screen row (Feature #77).
     SetSoftWrap(bool),
@@ -498,15 +499,10 @@ pub fn parse(input: &str) -> Result<Command, CommandError> {
             }
         }
         // 只讀 (Feature #213).
-        "readonly" | "ro" => match rest {
-            "" => Ok(Command::SetReadonly(None)),
-            "on" => Ok(Command::SetReadonly(Some(true))),
-            "off" => Ok(Command::SetReadonly(Some(false))),
-            other => Err(CommandError::InvalidArgument {
-                command: "readonly",
-                value: other.to_string(),
-            }),
-        },
+        "readonly" | "ro" => Ok(Command::SetReadonly(match rest {
+            "" => None,
+            word => Some(switch("readonly", word)?),
+        })),
         // Rebinding, said out loud. `:w <path>` is a copy.
         "saveas" | "sav" | "saveas!" | "sav!" => {
             if rest.is_empty() {
@@ -684,7 +680,10 @@ pub fn parse(input: &str) -> Result<Command, CommandError> {
                         .unwrap_or("")
                         .to_string(),
                 )),
-                Some("chaifen") => Ok(Command::ToggleChaifen),
+                Some("chaifen") => Ok(Command::SetChaifen(match parts.next() {
+                    None => None,
+                    Some(word) => Some(switch("chaifen", word)?),
+                })),
                 // On its own it is the question — which of the three is
                 // answering — the same as a bare `:yume`.
                 Some("commit") => match parts.next() {
@@ -816,7 +815,10 @@ pub fn parse(input: &str) -> Result<Command, CommandError> {
             Ok(Command::Theme { name, mood })
         }
 
-        "hanging" => Ok(Command::ToggleHanging),
+        "hanging" => Ok(Command::SetHanging(match rest {
+            "" => None,
+            word => Some(switch("hanging", word)?),
+        })),
         "clipboard" => match rest {
             "yank" => Ok(Command::Clipboard { yank: true }),
             "paste" => Ok(Command::Clipboard { yank: false }),
@@ -848,14 +850,10 @@ pub fn parse(input: &str) -> Result<Command, CommandError> {
                 })
             }
         }
-        "preview" => match rest {
-            "" | "on" => Ok(Command::SetPreview(true)),
-            "off" => Ok(Command::SetPreview(false)),
-            other => Err(CommandError::InvalidArgument {
-                command: "preview",
-                value: other.to_string(),
-            }),
-        },
+        "preview" => Ok(Command::SetPreview(match rest {
+            "" => true,
+            word => switch("preview", word)?,
+        })),
         // **The bare word reports** (#283). It used to mean 中階, back when
         // there were two levels and 「the other one」 named itself. With three
         // — and three more dimensions taking their level from this one —
@@ -873,22 +871,14 @@ pub fn parse(input: &str) -> Result<Command, CommandError> {
         },
         // `:wrap` on its own still means what it always meant — turn wrapping
         // on — and leaves the measure alone; a number sets the measure.
-        "dense" => match rest {
-            "" | "on" => Ok(Command::SetDense(true)),
-            "off" => Ok(Command::SetDense(false)),
-            other => Err(CommandError::InvalidArgument {
-                command: "dense",
-                value: other.to_string(),
-            }),
-        },
-        "sentence" => match rest {
-            "" | "on" => Ok(Command::SetSentences(true)),
-            "off" => Ok(Command::SetSentences(false)),
-            other => Err(CommandError::InvalidArgument {
-                command: "sentence",
-                value: other.to_string(),
-            }),
-        },
+        "dense" => Ok(Command::SetDense(match rest {
+            "" => true,
+            word => switch("dense", word)?,
+        })),
+        "sentence" => Ok(Command::SetSentences(match rest {
+            "" => true,
+            word => switch("sentence", word)?,
+        })),
         "search" => {
             // `:search <pattern>` with no direction is a row search, because
             // that is what a search is anywhere but a table.
@@ -967,42 +957,26 @@ pub fn parse(input: &str) -> Result<Command, CommandError> {
                 value: other.to_string(),
             }),
         },
-        "typewriter" => match rest {
-            "" | "on" => Ok(Command::SetTypewriter(Some(true))),
-            "off" => Ok(Command::SetTypewriter(Some(false))),
-            "toggle" => Ok(Command::SetTypewriter(None)),
-            other => Err(CommandError::InvalidArgument {
-                command: "typewriter",
-                value: other.to_string(),
-            }),
-        },
-        "focus" => match rest {
-            "" | "on" => Ok(Command::SetFocus(Some(true))),
-            "off" => Ok(Command::SetFocus(Some(false))),
-            "toggle" => Ok(Command::SetFocus(None)),
-            other => Err(CommandError::InvalidArgument {
-                command: "focus",
-                value: other.to_string(),
-            }),
-        },
-        "meter" => match rest {
-            "" | "on" => Ok(Command::SetMeter(Some(true))),
-            "off" => Ok(Command::SetMeter(Some(false))),
-            "toggle" => Ok(Command::SetMeter(None)),
-            other => Err(CommandError::InvalidArgument {
-                command: "meter",
-                value: other.to_string(),
-            }),
-        },
-        "note" => match rest {
-            "" | "on" => Ok(Command::SetNote(Some(true))),
-            "off" => Ok(Command::SetNote(Some(false))),
-            "toggle" => Ok(Command::SetNote(None)),
-            other => Err(CommandError::InvalidArgument {
-                command: "note",
-                value: other.to_string(),
-            }),
-        },
+        "typewriter" => Ok(Command::SetTypewriter(match rest {
+            "" => Some(true),
+            "toggle" => None,
+            word => Some(switch("typewriter", word)?),
+        })),
+        "focus" => Ok(Command::SetFocus(match rest {
+            "" => Some(true),
+            "toggle" => None,
+            word => Some(switch("focus", word)?),
+        })),
+        "meter" => Ok(Command::SetMeter(match rest {
+            "" => Some(true),
+            "toggle" => None,
+            word => Some(switch("meter", word)?),
+        })),
+        "note" => Ok(Command::SetNote(match rest {
+            "" => Some(true),
+            "toggle" => None,
+            word => Some(switch("note", word)?),
+        })),
         "table" => match rest {
             // **The bare word is the door; a level is a level.** `:table`
             // reads the table the cursor is in — that is what it has always
@@ -2798,6 +2772,32 @@ const RELOAD: &[Word] = &[Word {
     then: Args::Words(ON_OFF),
 }];
 
+/// What a word means to a command that offers 「on｜off」.
+///
+/// A function, because **the reading is the half that goes stale**. Ten arms
+/// had written it out by hand and the eleventh forgot: `:hanging` declares
+/// `Args::Words(ON_OFF)`, the hint prints `on｜off`, the menu offers both —
+/// and `parse` was `"hanging" => Ok(Command::ToggleHanging)` with `rest` never
+/// read, so `:hanging off` turned hanging punctuation **on** (§5.2.2 fault 2).
+/// `every_listed_command_parses` could not see it: `:hanging off` *parses*. It
+/// simply did not listen.
+///
+/// `pick` rather than an equality test, because that is the rule everywhere
+/// else — the menu shows `of` as `off`'s shortest spelling, so `of` has to
+/// mean it. **What a missing word means stays with the caller**: `:readonly`
+/// on its own toggles, `:dense` on its own is 密排, and neither is this
+/// function's to decide.
+fn switch(command: &'static str, word: &str) -> Result<bool, CommandError> {
+    match pick(word, ON_OFF).map(|w| w.name) {
+        Some("on") => Ok(true),
+        Some("off") => Ok(false),
+        _ => Err(CommandError::InvalidArgument {
+            command,
+            value: word.to_string(),
+        }),
+    }
+}
+
 const ON_OFF: &[Word] = &[
     Word {
         name: "on",
@@ -3818,6 +3818,57 @@ mod tests {
         }
     }
 
+    /// Every place the menu prints 「on｜off」, asked whether the parser reads
+    /// it back (§5.2.2 fault 2).
+    ///
+    /// The declaration and the arm that answers it sit two thousand lines
+    /// apart, so nothing but a walk of the table can tell they disagree.
+    /// `:hanging off` turned hanging punctuation **on**: `COMMANDS` declared
+    /// `Args::Words(ON_OFF)`, the hint printed it, the menu offered it, and
+    /// `parse` was `"hanging" => Ok(Command::ToggleHanging)` with `rest`
+    /// never read. `every_listed_command_parses` cannot see it — `:hanging
+    /// off` *parses* — so the question has to be whether the two answers
+    /// differ.
+    #[test]
+    fn a_command_that_offers_on_and_off_reads_them_back() {
+        /// The list is 「on｜off」 — asked by what it holds rather than by
+        /// which constant it is, so a second, hand-rolled pair is caught too.
+        fn is_a_switch(args: &Args) -> bool {
+            matches!(args.words(), Some(list)
+                if list.len() == 2 && list[0].name == "on" && list[1].name == "off")
+        }
+        fn walk_down(args: &'static Args, path: &str, out: &mut Vec<String>) {
+            if is_a_switch(args) {
+                out.push(path.to_string());
+                return;
+            }
+            for word in args.words().unwrap_or_default() {
+                walk_down(&word.then, &format!("{path} {}", word.name), out);
+            }
+        }
+        let mut paths = Vec::new();
+        for entry in COMMANDS {
+            walk_down(&entry.args, entry.name, &mut paths);
+        }
+        assert!(paths.len() > 8, "the walk found almost nothing: {paths:?}");
+
+        for path in &paths {
+            let on = parse(&format!(":{path} on"));
+            let off = parse(&format!(":{path} off"));
+            assert!(on.is_ok(), "`:{path} on` is offered and refused: {on:?}");
+            assert!(off.is_ok(), "`:{path} off` is offered and refused: {off:?}");
+            assert_ne!(
+                on, off,
+                "`:{path} on` and `:{path} off` are the same command — the \
+                 menu offers a switch the parser never reads"
+            );
+            // …and the abbreviation the menu shows is the one that parses.
+            // `pick` is the rule everywhere else; an equality test here would
+            // make `:hanging of` an error under a menu that prints `of`.
+            assert_eq!(parse(&format!(":{path} of")), off, "`:{path} of`");
+        }
+    }
+
     #[test]
     fn parses_undo_and_redo() {
         assert_eq!(parse(":undo"), Ok(Command::Undo));
@@ -3881,7 +3932,7 @@ mod tests {
 
     #[test]
     fn the_input_method_lives_under_one_word() {
-        assert_eq!(parse(":yume chaifen"), Ok(Command::ToggleChaifen));
+        assert_eq!(parse(":yume chaifen"), Ok(Command::SetChaifen(None)));
         assert_eq!(
             parse(":yume scheme lingming"),
             Ok(Command::SetScheme("lingming".into()))
@@ -4407,7 +4458,7 @@ mod tests {
         assert_eq!(parse(":yume scheme ling"), Ok(Command::SetScheme("lingming".into())));
         // `chaifen` and `commit` both start with `c`, so `c` alone names
         // neither — the menu on `:yume c` shows both, which is the answer.
-        assert_eq!(parse(":yume ch"), Ok(Command::ToggleChaifen));
+        assert_eq!(parse(":yume ch"), Ok(Command::SetChaifen(None)));
         assert!(matches!(
             parse(":yume c"),
             Err(CommandError::InvalidArgument { .. })
