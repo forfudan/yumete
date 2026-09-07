@@ -2737,7 +2737,7 @@ handler, `pending_keys()`/`SPACE_KEYS`, `messages.toml`, `help_*()`,
 single-source today: `:` commands (`help_commands()` reads `COMMANDS`) and the
 `空格` group (`SPACE_KEYS` feeds the hint and the help from one table).
 
-### 1 · The menu vanishes on the abbreviation it printed itself
+### 1 · The menu vanishes on the abbreviation it printed itself — **fixed 2026-09-07**
 
 `:table ` draws twelve words with their shortest spellings — `off (of)`,
 `new (ne)`, `rules (r)`. Type the `tab` it just showed and press space:
@@ -2750,14 +2750,29 @@ single-source today: `:` commands (`help_commands()` reads `COMMANDS`) and the
 │1/12  按格子編輯（默認）     │
 ```
 
-`:tab rules` **runs** — `resolve` expands the prefix. The menu is the one place
-that does not ask it: `complete_at:3197` is `find(|e| e.name == head ||
-e.aliases.contains(&head))`, full name or alias, no prefix, and `:3206` matches
+`:tab rules` **runs** — `resolve` expands the prefix. The menu was the one
+place that did not ask it: `complete_at:3197` was `find(|e| e.name == head ||
+e.aliases.contains(&head))`, full name or alias, no prefix, and `:3206` matched
 子命令 the same way. `resolve`'s own doc comment two hundred lines up reads
-*One rule, at every level*. Worse, the miss is a `return`, not an empty list,
-so #223's deep fallback at `:3250` is skipped too — `:dense ` offers nothing at
-all. **This is the hard blocker**: a reader meets it on the first day, and any
-folding of the command table (§5.2.3 ③) makes multi-word commands the norm.
+*One rule, at every level*. **This is the hard blocker**: a reader meets it on
+the first day, and any folding of the command table (§5.2.3 ③) makes multi-word
+commands the norm.
+
+Four readers of `COMMANDS` had spelled that lookup out by hand — `composes`,
+`needs_of`, `complete_at` and `walk` — and only two of them resolved. So the
+fix is one function, `entry_named`, carrying `resolve` and the bang strip
+together; `walk` uses it and `pick`s each word below it, and `complete_at` now
+*is* that walk rather than a second copy of it. Its miss became an empty list
+rather than a `return`, so #223's deep fallback below can still answer.
+
+Driven by `the_menu_answers_the_abbreviation_it_printed`, which asks it of the
+whole table at once: for every command, and every word under it, the spelling
+`shortest` **prints** must draw what the full name draws. That is the pairing
+that can only break in front of a reader.
+
+One correction to the report above: `:dense ` was never empty — `dense` is a
+command's whole name. It was `:den ` that drew nothing, which is the same
+fault seen from the abbreviation's side.
 
 ### 2 · `:hanging off` turns hanging punctuation **on** — **fixed 2026-09-07**
 
