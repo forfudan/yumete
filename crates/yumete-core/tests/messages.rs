@@ -89,7 +89,11 @@ fn literals(text: &str, opener: &str) -> BTreeSet<String> {
 /// leftover Chinese sentence at one of these openers is not tag-shaped, and
 /// falls out here rather than being reported as a missing entry.
 fn is_tag(literal: &str) -> bool {
-    literal.contains('.')
+    // A tag is `group.what-it-says`, so it never opens with the dot — which is
+    // what tells it from a file suffix (`.docx`, `.epub`), the one other thing
+    // written as the second half of a pair of strings.
+    !literal.starts_with('.')
+        && literal.contains('.')
         && literal
             .chars()
             .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '.' || c == '-')
@@ -102,10 +106,12 @@ fn said() -> BTreeMap<String, String> {
         let text = source(file);
         let mut tags = literals(&text, "say!(");
         // A command's `help` is a tag too: the `:` menu translates it as it
-        // draws it. So is the label beside a key in the space menu, which is
-        // declared as the second half of a pair.
+        // draws it. So is the label beside a key in a key table, which is
+        // declared as the second half of a pair — `('c', "…")` in `SPACE_KEYS`,
+        // and `("g", "…")` in the eight tables that now sit beside it.
         tags.extend(literals(&text, "help:"));
         tags.extend(literals(&text, "', "));
+        tags.extend(literals(&text, "\", "));
         for tag in tags.into_iter().filter(|t| is_tag(t)) {
             out.entry(tag).or_insert_with(|| file.to_string());
         }

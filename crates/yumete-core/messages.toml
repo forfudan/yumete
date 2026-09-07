@@ -3412,6 +3412,13 @@ zhs = "行首／行尾"
 en = "line start / end"
 
 [[message]]
+# g 組：切到下一個／上一個打開的檔案
+key = "hint.goto.next-or-previous-file"
+zht = "下一個／上一個打開的檔案"
+zhs = "下一个／上一个打开的档案"
+en = "the next / previous open file"
+
+[[message]]
 # g 組：只留這一個工作區
 key = "hint.goto.only-this-pane"
 zht = "只留這一個工作區"
@@ -3830,6 +3837,13 @@ key = "hint.table.first-row-is-data"
 zht = "第一行：欄名⇄資料"
 zhs = "第一行：栏名⇄资料"
 en = "the first row: names ⇄ data"
+
+[[message]]
+# t 選單：t w 這一行
+key = "hint.table.fold-wide-cells"
+zht = "太寬的格子：摺起／攤開"
+zhs = "太宽的格子：折起／摊开"
+en = "over-wide cells: fold the tail away / lay it back out"
 
 [[message]]
 # 表格提示：去某一格
