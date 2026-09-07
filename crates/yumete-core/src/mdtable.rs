@@ -722,6 +722,75 @@ pub fn folds(
     out
 }
 
+/// The padding **the file already holds** in `line`, beyond what the cap
+/// leaves room for — spans to take off the page, like a folded tail.
+///
+/// **Without this the cap buys nothing on a table that is square in the
+/// file.** [`padding`] measures the **box**, pipe to pipe, because that is
+/// what lines two rows up; [`folds`] cuts inside the **content**. So in a
+/// table [`compose`] has squared up — which is every table in this project's
+/// own docs — each cell carries its spaces out to the file's column width,
+/// and a cell whose writing was just cut to 32 is padded straight back out to
+/// 43. The reader sees the mark stand where the writing stopped, and then a
+/// field of nothing all the way to the pipe: the fold saved no room at all.
+///
+/// **Only down to the cap, and never below it.** #212's law is that a drawn
+/// can only *add*, and it holds everywhere the cap does not bite: a cell that
+/// fits is left exactly as the file wrote it, so a table under the cap is
+/// drawn today's width to the character. What comes off, in this order, is
+/// whatever a cell holds that is not writing — its padding down to one space
+/// against each pipe, and then, on a rule row, its dashes down to one, since
+/// `----------` is not writing but drawing and [`padding`] redraws it to the
+/// column's width anyway. The colons are the alignment and are never touched.
+///
+/// **The run the selection stands in is left whole**, and only that run — not
+/// the whole cell [`folds`] opens. The law is the same one (the caret is
+/// never inside text that is not on the page), but a cell is the wrong unit
+/// for it here: a cell's padding is as wide as the column, so opening the
+/// cell to walk into its *writing* would swell the column under the reader's
+/// hands at every step of `l`. Standing in the spaces is the only reason to
+/// see them.
+pub fn slack(
+    line: &str,
+    hidden: &[(usize, usize)],
+    cap: usize,
+    open: Option<(usize, usize)>,
+) -> Vec<(usize, usize)> {
+    let chars: Vec<char> = line.trim_end_matches(['\n', '\r']).chars().collect();
+    let ruled = rule_of(line).is_some();
+    // The cap is what a cell may *show*; the two spaces against the pipes are
+    // the table's own, and every other cell has them too.
+    let room = cap + 2;
+    let mut out = Vec::new();
+    for ((start, end), (from, to)) in boxes(line).into_iter().zip(cells(line)) {
+        let end = end.min(chars.len());
+        let mut over = visible_width(&chars, (start, end), hidden).saturating_sub(room);
+        // Spans of padding this cell could give up, nearest the pipe first,
+        // each keeping the one space (or the one dash) that has to stay.
+        let mut spare = vec![(to + 1, end), (start + 1, from)];
+        if ruled {
+            let lead = usize::from(chars.get(from) == Some(&':'));
+            let trail = usize::from(to > from && chars.get(to - 1) == Some(&':'));
+            spare.push((from + lead + 1, to.saturating_sub(trail)));
+        }
+        for (a, b) in spare {
+            if over == 0 {
+                break;
+            }
+            if a >= b || open.is_some_and(|(x, y)| x <= b && y >= a) {
+                continue;
+            }
+            // Padding and dashes are one column each, so the count of
+            // characters taken is the count of columns saved.
+            let take = over.min(b - a);
+            out.push((b - take, b));
+            over -= take;
+        }
+    }
+    out.sort_unstable();
+    out
+}
+
 pub fn padding(
     rows: &[(String, Vec<(usize, usize)>)],
     rule: Option<usize>,
@@ -1195,10 +1264,19 @@ mod tests {
             .iter()
             .map(|f| f.iter().map(|&(at, _)| (at, width)).collect())
             .collect();
+        // The tail is not the only thing that comes off a row: the padding the
+        // file already holds goes with it, or the column the mark just saved
+        // is drawn straight back out to the file's width.
         let with: Vec<(String, Vec<(usize, usize)>)> = rows
             .iter()
             .zip(&cuts)
-            .map(|(l, f)| (l.clone(), f.clone()))
+            .enumerate()
+            .map(|(i, (l, f))| {
+                let mut off = f.clone();
+                off.extend(slack(l, &[], cap, open.filter(|_| i == 2)));
+                off.sort_unstable();
+                (l.clone(), off)
+            })
             .collect();
         padding(&with, rule, &marks)
             .iter()
@@ -1250,6 +1328,55 @@ mod tests {
             yumete_cjk::str_width(&open[0]),
             yumete_cjk::str_width(&open[2]),
             "and the whole table squares up around it: {open:?}"
+        );
+    }
+
+    /// The bug the author reported off `development.md`: 「the long cells are
+    /// trimmed with a `>` symbol. However, the width of the cell are still
+    /// padded with white spaces at the tail.」 A table squared up in the file
+    /// carries its padding *inside* every cell, and the padding is measured
+    /// pipe to pipe — so the mark stood where the writing stopped and the
+    /// column went on being drawn to the file's width, a field of nothing.
+    #[test]
+    fn a_table_squared_up_in_the_file_folds_to_the_cap_and_not_back_out() {
+        let whole = "| a          | b |\n| ---------- | - |\n| 一二三四五 | d |\n";
+        let out = folded(whole, 6, None);
+        // Two spaces, not one: the cap is 6 and a 漢字 is two cells wide, so
+        // `一二>` stops one cell short of it and the drawn padding squares
+        // that up. One cell of ragged edge is what any cap costs; a field of
+        // fourteen was the bug.
+        assert_eq!(out[2], "| 一二>  | d |", "the mark, then the pipe");
+        let widths: Vec<usize> = out.iter().map(|l| yumete_cjk::str_width(l)).collect();
+        assert!(widths.iter().all(|w| *w == widths[0]), "square: {out:?}");
+        assert!(
+            widths[0] < yumete_cjk::str_width(&lines(whole)[0]),
+            "and narrower than the file it came from: {out:?}"
+        );
+    }
+
+    /// **Only down to the cap.** #212's law — a drawn can only add — holds
+    /// wherever the cap does not bite, so a formatted table that fits is
+    /// drawn exactly as the file wrote it, alignment and all.
+    #[test]
+    fn a_table_that_fits_keeps_every_space_the_file_gave_it() {
+        let whole = "| a    | b    |\n| :--- | ---: |\n| 一二 | 三   |\n";
+        assert_eq!(folded(whole, 32, None), lines(whole), "left as written");
+    }
+
+    /// The rule row is drawing, not writing: [`padding`] redraws it to the
+    /// column's width, so its dashes are the page's to spend — down to one,
+    /// and never over the colons that declare the alignment.
+    #[test]
+    fn the_rule_row_gives_its_dashes_up_before_a_column_stays_wide() {
+        let whole = "| a | b |\n| :--------: | - |\n| c | d |\n";
+        let out = folded(whole, 4, None);
+        assert!(out[1].starts_with("| :"), "the colons stand: {out:?}");
+        assert!(out[1].contains(":|") || out[1].contains(": |"), "{out:?}");
+        let widths: Vec<usize> = out.iter().map(|l| yumete_cjk::str_width(l)).collect();
+        assert!(widths.iter().all(|w| *w == widths[0]), "square: {out:?}");
+        assert!(
+            widths[0] < yumete_cjk::str_width(&lines(whole)[1]),
+            "and the row of dashes no longer decides the width: {out:?}"
         );
     }
 

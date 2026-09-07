@@ -3480,11 +3480,57 @@ impl Editor {
         if !self.cells_fold_here() {
             return Vec::new();
         }
-        self.cell_folds_against(line, &self.markup_off_line(line))
+        self.cell_tails_against(line, &self.markup_off_line(line))
     }
 
-    /// [`Self::cell_folds_on_line`] with the markup already worked out.
+    /// Everything a row keeps off the page for the table's sake: the tails,
+    /// and **the padding the file itself holds** with them.
+    ///
+    /// The two are one list here because one list is what the width, the wrap
+    /// and the mouse all read — and they are two functions because only the
+    /// tail leaves a mark. A `>` over the spaces between a cell and its pipe
+    /// would say something was folded away there, and nothing was.
     fn cell_folds_against(&self, line: usize, markup: &[(usize, usize)]) -> Vec<(usize, usize)> {
+        let mut out = self.cell_tails_against(line, markup);
+        out.extend(self.cell_slack_against(line, markup));
+        out.sort_unstable();
+        out
+    }
+
+    /// The padding the file holds in this row, when folding is on.
+    ///
+    /// **Without this the cap buys nothing on a squared-up table.** The width
+    /// a column is drawn to is the widest *box* in it, pipe to pipe, and a
+    /// table that has been formatted in the file — `:table rules`, and every
+    /// table in this project's own docs — pads every cell out to the column's
+    /// natural width. Fold the writing to 32 and the spaces behind it still
+    /// vote 43: the mark lands where the writing stopped and a field of empty
+    /// cells follows it to the pipe. The file's padding is the page's to
+    /// spend, so under `t f` it comes off — **down to the cap and no
+    /// further**, which is what keeps #212's law (a drawn can only add) true
+    /// everywhere the cap does not bite: a table that fits is drawn exactly
+    /// as the file wrote it.
+    fn cell_slack_against(&self, line: usize, markup: &[(usize, usize)]) -> Vec<(usize, usize)> {
+        if !self.cells_fold_here() {
+            return Vec::new();
+        }
+        if !self.opens_a_row(line) || self.block_of(line).is_literal() {
+            return Vec::new();
+        }
+        let Some(text) = self.line_text(line) else {
+            return Vec::new();
+        };
+        crate::mdtable::slack(
+            &text,
+            markup,
+            crate::mdtable::MAX_COLUMN,
+            self.selected_columns(line),
+        )
+    }
+
+    /// The cell tails folded away on `line`, with the markup already worked
+    /// out — the spans that get a mark.
+    fn cell_tails_against(&self, line: usize, markup: &[(usize, usize)]) -> Vec<(usize, usize)> {
         if !self.cells_fold_here() {
             return Vec::new();
         }
@@ -22418,6 +22464,47 @@ mod tests {
         assert!(ed.hidden_on_line(8).is_empty(), "nothing off the page now");
         press(&mut ed, "tw");
         assert!(!ed.hidden_on_line(8).is_empty(), "and folded again");
+    }
+
+    /// The author, off his own `development.md`: 「the long cells are trimmed
+    /// with a `>` symbol. However, the width of the cell are still padded
+    /// with white spaces at the tail.」
+    ///
+    /// A table squared up **in the file** carries the column's whole width
+    /// inside every cell, as spaces; the padding is measured pipe to pipe, so
+    /// each of those cells went on voting 50 cells wide however short its
+    /// writing was. The mark stood where the writing stopped and a field of
+    /// nothing ran from there to the pipe — the cap saved no room at all.
+    #[test]
+    fn a_table_squared_up_in_the_file_is_still_folded_to_the_cap() {
+        let long = "一二三四五六七八九十一二三四五六七八九十一二三四五";
+        let rows: Vec<String> = format!("| 姓名 | 備註 |\n| --- | --- |\n| 甲 | {long} |")
+            .lines()
+            .map(str::to_string)
+            .collect();
+        let square = crate::mdtable::format(&rows);
+        let file: Vec<usize> = square.iter().map(|l| yumete_cjk::str_width(l)).collect();
+        let mut ed = typed(&format!("{}\n", square.join("\n")));
+        ed.goto_line(3);
+        press(&mut ed, "tf");
+
+        assert!(
+            !ed.hidden_on_line(0).is_empty(),
+            "the short row gives its padding up too, or the column stays wide"
+        );
+        let page: Vec<usize> = (0..3).map(|l| drawn_width(&ed, l)).collect();
+        assert!(
+            page.iter().zip(&file).all(|(drawn, wrote)| drawn < wrote),
+            "every row is drawn narrower than the file wrote it: {page:?} of {file:?}"
+        );
+        // And they still square up: the mark stands in the cell it saved, so
+        // no row is more than the one cell it costs from any other.
+        let (low, high) = (page.iter().min().unwrap(), page.iter().max().unwrap());
+        assert!(high - low <= 1, "square within the mark's own cell: {page:?}");
+        assert!(
+            *high <= crate::mdtable::MAX_COLUMN + yumete_cjk::str_width("| 姓名 |") + 3,
+            "and the wide column is drawn at the cap, not at the file's width: {page:?}"
+        );
     }
 
     /// 「`basic` 不藏、不摺、不替換」. Folding is all three, so it waits for 全
