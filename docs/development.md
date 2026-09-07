@@ -2975,18 +2975,90 @@ and were corrected with fault 12.
 lives in as many as seven places. Nothing here was found by a test, and the
 one that would have found all four is already named below.
 
-### What has to be built once, not twelve times
+### ~~What has to be built once, not twelve times~~ — built 2026-09-07
 
-Eight of the twelve above are a name that exists twice. Before any of §5.2.3 is
-decided, two things pay for themselves:
+Eight of the twelve above are a name that exists twice, so before any of §5.2.3
+was decided, two things paid for themselves — **one table of key names**, and
+**a test that every backticked key sequence in `tutor.rs` and `manual.md`
+exists**. Both are done, and the section below is what they turned out to be;
+the reason they are one piece of work and not two is written there. The `g`
+drift this section named (`gn`／`gp` bound and documented and in no menu) was
+the first thing the pair caught.
 
-- **One table of key names**, shaped like `SPACE_KEYS` — `(leader, key, tag)` —
-  feeding `pending_keys()`, `help_*()`, `hint()` and `:tutor` from one place.
-  The `g` group has already drifted (`gn`/`gp` are in `handle_goto:13331` and
-  in `manual.md:180`, but not in the hint table at `:8433`); the `t` group
-  keeps three hand-copied key lists.
-- **A test that every backticked key sequence in `tutor.rs` and `manual.md`
-  exists**. It catches 8, 10 and 11 above, and it catches them again next time.
+### The documents read as source — 2026-09-07
+
+`crates/yumete-core/tests/documented_keys.rs`. Every `` `:命令` `` the manual or
+the lesson prints is walked down `COMMANDS` by the parser's own rule
+(`command::names_something`, which resolves and picks and evaluates nothing),
+and every `` `空格 f` ``, `` `t o` ``, `` `gd` `` is looked up in
+`Editor::keys_after`. 424 command lines and 214 key sequences, read out of the
+two files at test time.
+
+**Both halves of §5.2.2's recommendation are one piece of work**, and this is
+why: the test needed something to ask, so the key menus first had to become
+tables. `GOTO_KEYS`, `MATCH_KEYS`, `CASE_KEYS`, `HOP_KEYS`, `CONFLICT_KEYS` and
+the four `TABLE_KEYS*` now sit beside `SPACE_KEYS` as `(keys, message id)`, and
+`pending_keys` reads them through one `said()`. **The menus stay
+context-sensitive** — `t` inside a Markdown table offers what a Markdown table
+can do, a delimited file offers what a schema can, and flattening that away
+would have lost information the reader needs — so `keys_after` is their
+**union**, and it is the union a document is checked against. A leader with no
+list (`f`, `r`, `"`, `M`) takes any character and is skipped.
+
+One consequence worth knowing: `messages.rs` finds the tags the editor says by
+scanning for the openers they are written at, and a tag in a `(key, tag)` table
+is not at one of them. `SPACE_KEYS` was already covered by the opener `', ` (a
+char, a comma, a string); the eight new tables needed `", ` as well, and with it
+`is_tag` needed to stop calling `.docx` a tag. Add a key table and its lines are
+seen; forget this and thirty entries are reported as orphans in one go.
+
+A document may also print a name **in order to say it is gone** — 「`:re` 同時是
+`recover`、`redo`、`render` 的前綴，所以它報不認識」, the 「沒有了」 column, `:yume
+c`. Those are a `DISOWNED` list of eighteen, `DISOWNED_KEYS` holds four more
+(`gt`／`gc`／`gb`, `t s`), and a second test of each asserts they really are
+missing, so neither list can become the place a stale name hides. Three
+two-letter words are dropped outright as `NOT_A_SEQUENCE`: `md` is a file
+suffix, `tw` is OpenCC's 臺灣正體, `[]` is a pair of brackets being shown.
+
+Four faults on the first run, and one of them was not in the documents:
+
+- **`:word show tint｜ink` were undeclared.** `parse` has always taken all four
+  words (and 底色／字色 through `WordMark::parse`); the table said
+  `Args::Words(ON_OFF)`. So two drawings ran that the menu could not name and
+  `::` could not find — §5.2.2 fault 7's shape exactly. `WORD_SHOW` now holds
+  the four.
+- **`entry_named` could not read `:q!`.** `resolve` hands back `write!` for
+  `:w!` but leaves `:q!` alone, because `quit` and `quitall` both begin with `q`
+  and only their banged spellings tell them apart — which is what `parse`
+  matches on. The stem is now resolved in its own right, with the same guard:
+  the bang is dropped only where the command really takes one, so `:o!` and
+  `:e!` stay retired.
+- **`[theme] name = "黑白"` changed the label and not the colours.**
+  `ThemeConfig::named` took `bw｜heibai｜mono` and no 漢字, so the Chinese name
+  the manual has always taught fell through to 「an unknown name is a custom
+  one」: 墨香's ladder under 黑白's name. All ten Chinese names are accepted now
+  — a config file is written *in an editor*, by a writer who has an IME, which
+  is exactly why `:` keeps the IME out and this does not.
+- **The manual taught `:theme moxiang`, the menu offered `ink`.** One set of ink
+  under two spellings, one of them unfindable. The manual now leads with the
+  name the menu prints; the pinyin is still accepted. Same for `:md`, listed
+  under 「沒有了」 while it is `markdown`'s live alias.
+
+And three more when the key groups joined it:
+
+- **`t w` was in no menu at all.** 摺格子 is bound, documented and works from
+  anywhere, and none of the four `t` lists had ever offered it — in the group
+  whose entire purpose is to say what `t` can be finished with. It now heads the
+  list beside `t b` / `t f`, which is where its own source comment already said
+  it belonged.
+- **The manual still said `t n` and `t a` — ten times.** 表格操作 has been `t b`
+  and 畫成表格 has been `t f` since 2026-09-06 (「**`f`, not `a`**」 is written
+  into `table_structure` itself), and the key table further down the same page
+  already said so — but the four-levels table at the head of the chapter, the
+  one a reader meets first, still taught both old letters, and so did four
+  paragraphs under it. §5.2.2 faults 10 and 11 were this same fault twice; a
+  hand search found two of these and the test found the other eight, which is
+  the whole argument for having it.
 
 ## 5.2.3 Open, 2026-09-06 — the author's call
 
