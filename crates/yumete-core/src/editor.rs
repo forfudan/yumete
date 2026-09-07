@@ -3483,11 +3483,11 @@ impl Editor {
         // 2026-09-07). A three-way cycle on `t w` was the other way to spell
         // this, and it would have made the same key mean a toggle in prose
         // and a cycle in the window; a reader learns 「`t w` 摺不摺」 once and
-        // it has to hold everywhere. So `t w` answers 摺／不摺 and pulls the
-        // table out of 折行 on the way, exactly as `t a` pulls it out of 摺起.
+-        // it has to hold everywhere. So `t w` answers 摺／不摺 and pulls the
+-        // table out of 折行 on the way, exactly as `t a` pulls it out of 摺起.
         let want = match self.cell_width_now() {
-            CellWidth::Fold => CellWidth::Whole,
-            CellWidth::Whole | CellWidth::Wrap => CellWidth::Fold,
+-            CellWidth::Fold => CellWidth::Whole,
+-            CellWidth::Whole | CellWidth::Wrap => CellWidth::Fold,
         };
         self.set_cell_width(want);
         let cap = crate::mdtable::MAX_COLUMN.to_string();
@@ -10283,9 +10283,42 @@ impl Editor {
         }
     }
 
+    /// Whether a cut over `range` reaches into a grid at all.
+    ///
+    /// **Not `self.table.is_some()`.** A `.md` holding one table anywhere is
+    /// opened with a grid view so its columns are drawn straight away
+    /// (`table_on_open`), and asking only whether that view exists made every
+    /// paragraph in the file refuse to give up its line break: `d` at the end
+    /// of a sentence answered 「格與格之間的分隔符刪不掉」 about prose that has
+    /// no cells in it. **A grid guards the lines it occupies and no others** —
+    /// the same law `table_here()` states for the keys and
+    /// `cell_refuses_text_at` already kept for the other half of the edit.
+    ///
+    /// The two ends are what is asked, not every line between them: only a row
+    /// cut *part* way can lose a delimiter, and a cut that swallows whole rows
+    /// takes their delimiters with them and leaves every surviving row intact.
+    fn cut_reaches_a_grid(&self, range: &std::ops::Range<usize>) -> bool {
+        match self.table.as_ref().map(|v| v.bounds) {
+            None => false,
+            Some(Bounds::WholeFile) => true,
+            // The level is one word for two halves — see `table_here()`.
+            Some(Bounds::Md) if !self.table_padding_on() => false,
+            Some(_) => {
+                let rope = self.current_buffer().rope();
+                let last = rope.len_chars();
+                let head = rope.char_to_line(range.start.min(last));
+                // The end is exclusive: a cut that stops at the head of a row
+                // has not touched that row.
+                let tail = rope
+                    .char_to_line(range.end.saturating_sub(1).max(range.start).min(last));
+                self.prose_region_at(head).is_some() || self.prose_region_at(tail).is_some()
+            }
+        }
+    }
+
     /// The reason this range may not be cut out, if there is one.
     fn cell_refuses_cut(&self, range: std::ops::Range<usize>) -> Option<String> {
-        if self.table.is_none() || self.table_bypass.get() {
+        if self.table_bypass.get() || !self.cut_reaches_a_grid(&range) {
             return None;
         }
         if self.md_rule_here() {
@@ -14294,8 +14327,16 @@ impl Editor {
         }
 
         match key {
-            Key::Char('h') | Key::Left => self.repeat(count, |e| e.move_horizontal(motion::left)),
-            Key::Char('l') | Key::Right => self.repeat(count, |e| e.move_horizontal(motion::right)),
+            // **Across the break.** A line is not a wall: `l` off the end of
+            // one sentence lands on the start of the next, and `h` walks back
+            // over the break the same way. The line-bound pair is still what
+            // measures a line; it is not what a reader walking a page wants.
+            Key::Char('h') | Key::Left => {
+                self.repeat(count, |e| e.move_horizontal(motion::prev_grapheme))
+            }
+            Key::Char('l') | Key::Right => {
+                self.repeat(count, |e| e.move_horizontal(motion::next_grapheme))
+            }
             Key::Char('k') | Key::Up => self.repeat(count, |e| e.move_vertical(true)),
             Key::Char('j') | Key::Down => self.repeat(count, |e| e.move_vertical(false)),
             Key::Home => {
@@ -15956,8 +15997,10 @@ impl Editor {
             // back a 詞 the candidate list got wrong meant holding Backspace down.
             Key::Ctrl('w') => self.delete_word_before_cursor(),
             Key::Ctrl('u') => self.delete_to_line_start(),
-            Key::Left => self.move_horizontal(motion::left),
-            Key::Right => self.move_horizontal(motion::right),
+            // Across the break, as in 常模 — outside a cell, where the two
+            // arms above hold the arrows to the cell they are writing in.
+            Key::Left => self.move_horizontal(motion::prev_grapheme),
+            Key::Right => self.move_horizontal(motion::next_grapheme),
             Key::Up => self.move_vertical(true),
             Key::Down => self.move_vertical(false),
             // A page at a time, while typing: the same motion Normal makes,
@@ -28342,5 +28385,69 @@ mod tests {
             vec![(0, "毒".to_string())],
             "under 所見即所得 the caret decides what comes off the row",
         );
+    }
+
+    /// A `.md` that holds a table anywhere is opened with a grid view over it,
+    /// so that its columns are drawn without anyone asking. The guard on the
+    /// other half — what may be cut — read that view as 「this file is a grid」
+    /// and refused the line break at the end of every paragraph in the book:
+    /// `d` on prose answered 「格與格之間的分隔符刪不掉」 about cells that were
+    /// nowhere near it. **A grid guards the lines it occupies and no others.**
+    #[test]
+    fn prose_beside_a_table_still_gives_up_its_line_break() {
+        let dir = std::env::temp_dir().join(format!("yumete-cut-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("beside.md");
+        std::fs::write(&path, "甲乙\n丙丁\n\n| a | b |\n| - | - |\n| c | d |\n").unwrap();
+        let mut ed = Editor::new();
+        ed.open_file(&path).unwrap();
+        assert!(ed.table.is_some(), "the file is drawn as a grid");
+
+        // To the end of the first paragraph line, on the break itself, and cut.
+        ed.on_key(Key::Char('l'));
+        ed.on_key(Key::Char('l'));
+        ed.on_key(Key::Char('d'));
+        assert!(
+            ed.current_buffer().text().starts_with("甲乙丙丁\n"),
+            "the two lines joined: {:?} — {}",
+            ed.current_buffer().text().lines().next(),
+            ed.status,
+        );
+
+        // And the row's own delimiter is still untouchable.
+        let before = ed.current_buffer().text();
+        ed.execute(":4").unwrap();
+        for _ in 0..3 {
+            ed.on_key(Key::Char('l'));
+        }
+        ed.on_key(Key::Char('d'));
+        assert_eq!(ed.current_buffer().text(), before, "a row keeps its walls");
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    /// `h` and `l` walk the **page**, not the line: off the end of one line is
+    /// the start of the next, and back again. A reader proof-reading a novel
+    /// steps character by character through a paragraph, and a line break is
+    /// not a wall they asked for.
+    #[test]
+    fn stepping_sideways_crosses_the_line_break() {
+        let mut ed = typed("甲乙\n丙丁\n");
+        let line = |e: &Editor| {
+            let rope = e.current_buffer().rope();
+            rope.char_to_line(e.cursor)
+        };
+        assert_eq!(line(&ed), 0);
+        for _ in 0..3 {
+            ed.on_key(Key::Char('l'));
+        }
+        assert_eq!(line(&ed), 1, "three steps off a two-character line");
+        assert_eq!(ed.cursor, ed.current_buffer().rope().line_to_char(1));
+
+        ed.on_key(Key::Char('h'));
+        assert_eq!(line(&ed), 0, "and back over the break");
+        for _ in 0..3 {
+            ed.on_key(Key::Char('h'));
+        }
+        assert_eq!(ed.cursor, 0, "the top of the file is where it stops");
     }
 }

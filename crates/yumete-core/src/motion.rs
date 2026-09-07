@@ -91,10 +91,11 @@ pub fn right(rope: &Rope, pos: usize) -> usize {
 /// One grapheme to the right **in the buffer**, stepping over a line break
 /// onto the next line.
 ///
-/// [`right`] stops at the end of a line, because that is what `l` should do.
-/// The selection needs the other one: the grapheme the cursor sits on is inside
-/// the selection, and on the last character of a line that grapheme's far edge
-/// is on the next line.
+/// [`right`] stops at the end of a line, because a line's own measurements —
+/// where a cell ends, how far a row reaches — must not walk off it. Everything
+/// a *reader* moves with is this one: `l`, the right arrow, and the selection,
+/// whose grapheme under the cursor has its far edge on the next line when the
+/// cursor is on the last character of this one.
 pub fn next_grapheme(rope: &Rope, pos: usize) -> usize {
     let stepped = right(rope, pos);
     if stepped != pos {
