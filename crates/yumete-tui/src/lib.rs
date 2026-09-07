@@ -629,6 +629,13 @@ pub fn run(
                     let said = run_for_language(editor, config, &want);
                     editor.set_status(said);
                 }
+                // **A link the reader followed** (Feature #285). The editor
+                // has already decided this is `http` or `https` and refused
+                // everything else; all that is left is handing it over, as one
+                // argument, with no shell anywhere in the path.
+                if let Some(url) = editor.take_open_request() {
+                    show(&url);
+                }
                 if let Some(want) = editor.take_preview_request() {
                     // Already running: hand back the address and open the page
                     // again. Killing it and starting another is a fresh compile
@@ -797,6 +804,15 @@ pub fn run(
                         text_at(editor, config, terminal.size().ok(), &viewport, mouse)
                     {
                         editor.point_at(at);
+                        // **Ctrl-click follows a link** (Feature #285) — the
+                        // gesture every other editor already means by it, and
+                        // the one modifier that survives a terminal. A bare
+                        // click stays a bare click: a manuscript is clicked in
+                        // all day, and a link that opened on one would open by
+                        // accident all day.
+                        if mouse.modifiers.contains(KeyModifiers::CONTROL) {
+                            editor.follow_link_here();
+                        }
                     }
                 }
                 // Dragging picks out a range — the thing the terminal's own

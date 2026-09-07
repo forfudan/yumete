@@ -225,6 +225,22 @@ fn quoted_path(line: &str) -> Option<String> {
     (!path.is_empty()).then(|| path.to_string())
 }
 
+/// The scheme a link's destination opens with, lowercased, if it has one.
+///
+/// `https://…` has one, `fu.md` and `第三章` do not, and `mailto:` does — which
+/// is the whole point: what is not named here is not handed to the machine.
+/// Spelled the way RFC 3986 spells it, except that a single letter is never a
+/// scheme, so a Windows path keeps its drive.
+fn link_scheme(target: &str) -> Option<String> {
+    let (before, _) = target.split_once(':')?;
+    let mut chars = before.chars();
+    let first = chars.next()?;
+    (before.len() > 1
+        && first.is_ascii_alphabetic()
+        && chars.all(|c| c.is_ascii_alphanumeric() || matches!(c, '+' | '-' | '.')))
+    .then(|| before.to_ascii_lowercase())
+}
+
 /// The `=` headings of a Typst source, as `(line, level, title)`.
 fn typst_headings(text: &str) -> Vec<(usize, usize, String)> {
     text.lines()
@@ -1237,6 +1253,10 @@ pub struct Editor {
     /// there so it can say so on the status bar, hand the address back when
     /// asked, and refuse to start a second one.
     preview_at: Option<String>,
+    /// A link the reader followed to a page on the web (`gx`), waiting for
+    /// the front end — only it can hand a URL to the machine, and only ever as
+    /// one argument to `open`/`xdg-open`.
+    open_request: Option<String>,
     /// A pending `:sh` or `:!`, waiting for the front end.
     shell_request: Option<Shell>,
     /// The 字形 table waiting for opencc to come back (Feature #241).
@@ -1667,6 +1687,7 @@ impl Editor {
             jumped: false,
             language_run: None,
             preview_request: None,
+            open_request: None,
             preview_at: None,
             shell_request: None,
             convert_patch: None,
@@ -2471,6 +2492,133 @@ impl Editor {
         }
         if let Some(n) = at {
             self.goto_line(n);
+        }
+    }
+
+    /// Follow the link under the cursor (`gx`) — Feature #285.
+    ///
+    /// A link in a manuscript points at one of three things, and they are not
+    /// opened the same way:
+    ///
+    /// - **A page on the web** goes to whatever the reader browses with. Only
+    ///   `http` and `https` do. The row this was built from said 「a scheme we
+    ///   do not handle goes to the OS」, and that is the rule this deliberately
+    ///   does **not** follow: handing an unknown scheme to `open` hands a file
+    ///   in the manuscript the power to start any program registered for any
+    ///   scheme on the machine, and a manuscript is a file that arrives by
+    ///   email. What is not `http` or `https` is named and refused.
+    /// - **Another file of the book** — `[附錄](fu.md)`, `[[第三章]]` — opens
+    ///   as a buffer, which is 「用窗口打开」 answered by the window already
+    ///   here. Read where the link is written from: a chapter names its
+    ///   neighbours the way it sits beside them on the disk. An absolute path
+    ///   is refused for the same reason as an unknown scheme — `/etc/…` is not
+    ///   the name of a chapter.
+    /// - **A place in a page** — the `#雪` half — is a heading, looked up in
+    ///   the outline after the file it belongs to is open.
+    ///
+    /// Nothing here goes through a shell. `open`/`xdg-open` are handed the URL
+    /// as one argument by the front end (see `yumete_tui::show`), and this side
+    /// never builds a command line at all.
+    fn follow_link(&mut self) {
+        let rope = self.current_buffer().rope();
+        let line = rope.char_to_line(self.cursor);
+        let at = self.cursor - rope.line_to_char(line);
+        let text = rope.line(line).to_string();
+        let text = text.trim_end_matches(['\n', '\r']);
+        // Only Markdown writes links this way; Typst spells them `#link(…)`,
+        // which is code and is read as code.
+        let found = match self.current_buffer().syntax() {
+            crate::syntax::Syntax::Markdown => crate::markdown::link_at(text, at),
+            _ => None,
+        };
+        let Some(link) = found else {
+            self.status = say!("link.none-here");
+            return;
+        };
+        match link_scheme(&link.target).as_deref() {
+            Some("http") | Some("https") => {
+                // The fragment is the page's own business, so it goes back on.
+                let url = match &link.anchor {
+                    Some(a) => format!("{}#{a}", link.target),
+                    None => link.target.clone(),
+                };
+                self.status = say!("link.opening", url);
+                self.open_request = Some(url);
+                return;
+            }
+            Some(other) => {
+                self.status = say!("link.scheme-refused", other.to_string());
+                return;
+            }
+            None => {}
+        }
+        // `[雪](#雪)` — a place in this same file, so nothing is opened.
+        if link.target.is_empty() {
+            let Some(anchor) = link.anchor else {
+                self.status = say!("link.none-here");
+                return;
+            };
+            return self.goto_heading_named(&anchor);
+        }
+        let named = Path::new(&link.target);
+        if named.is_absolute() || link.target.starts_with('~') {
+            self.status = say!("link.not-a-chapter", link.target);
+            return;
+        }
+        let here = self
+            .current_buffer()
+            .path()
+            .and_then(|p| p.parent().map(Path::to_path_buf))
+            .unwrap_or_else(|| PathBuf::from("."));
+        // A `[[wiki]]` names a page, it does not spell a file: the suffix is
+        // this manuscript's, not the writer's to type again.
+        let mut tries = vec![here.join(named)];
+        if link.wiki {
+            let suffix = self
+                .current_buffer()
+                .path()
+                .and_then(|p| p.extension().map(|e| e.to_string_lossy().into_owned()))
+                .unwrap_or_else(|| "md".to_string());
+            tries.insert(0, here.join(format!("{}.{suffix}", link.target)));
+            tries.insert(1, here.join(format!("{}.md", link.target)));
+        }
+        let Some(full) = tries.into_iter().find(|p| p.is_file()) else {
+            self.status = say!("link.no-such-file", link.target);
+            return;
+        };
+        if let Err(err) = self.open_included_file(&full) {
+            self.status = say!("buffer.cannot-open", link.target, err);
+            return;
+        }
+        match link.anchor {
+            Some(anchor) => self.goto_heading_named(&anchor),
+            None => self.status = say!("link.opened", link.target),
+        }
+    }
+
+    /// Follow the link the cursor is on, for a front end that has just put the
+    /// cursor there — Ctrl-click (Feature #285).
+    ///
+    /// The same answer `gx` gives, because it is the same question: the mouse
+    /// only decides *where*, and where is already the cursor by the time this
+    /// is called.
+    pub fn follow_link_here(&mut self) {
+        self.follow_link();
+    }
+
+    /// Go to the heading a link's `#雪` names, in the file now shown.
+    fn goto_heading_named(&mut self, anchor: &str) {
+        // An anchor is written two ways and means one thing: the web spells
+        // 「The Snow」 as `the-snow`, and a manuscript in 漢字 spells 雪 as 雪.
+        // Comparing what is left after the punctuation an anchor drops reads
+        // both without having to know which one this file was written for.
+        let key = |title: &str| -> String {
+            title.to_lowercase().chars().filter(|c| c.is_alphanumeric()).collect()
+        };
+        let want = key(anchor);
+        match self.outline().into_iter().find(|(_, _, t)| key(t) == want) {
+            Some((line, _, _)) => self.goto_line(line + 1),
+            None => self.status = say!("link.no-such-heading", anchor.to_string()),
         }
     }
 
@@ -8840,6 +8988,11 @@ impl Editor {
         self.preview_request.take()
     }
 
+    /// The web page `gx` was pressed on, once.
+    pub fn take_open_request(&mut self) -> Option<String> {
+        self.open_request.take()
+    }
+
     /// What the row above the status line should say.
     ///
     /// The two rows answer two different questions and that is the whole
@@ -14088,6 +14241,10 @@ impl Editor {
             // Open the file named on this line — a `:grep` hit, or a line
             // pasted in from any other tool that prints `path:line:`.
             Key::Char('f') => return self.goto_file_under_cursor(),
+            // **`gx` follows what is written here.** vim and Helix both keep
+            // 「open the thing under the cursor」 on this key, and in a
+            // manuscript the thing under the cursor is a link.
+            Key::Char('x') => return self.follow_link(),
             // **`gd` goes, `gw` shows.** The pair every editor has: `gd` is
             // *go to definition* — on a footnote that is the note, in a 拆分
             // column the row the component names — and `gw` is the same
@@ -14145,6 +14302,7 @@ impl Editor {
         ("h l", "hint.goto.line-start-or-end"),
         ("s", "hint.goto.first-non-blank"),
         ("f", "hint.goto.open-this-file"),
+        ("x", "hint.goto.follow-link"),
         ("n p", "hint.goto.next-or-previous-file"),
         ("d w", "hint.goto.follow-note"),
         ("/ ?", "hint.goto.word-elsewhere"),
@@ -18111,6 +18269,93 @@ mod tests {
             ed.on_key(Key::Char(c));
         }
         ed.on_key(Key::Enter);
+    }
+
+    /// A Markdown buffer holding `text`, cursor at the top.
+    fn markdown(text: &str) -> Editor {
+        let mut ed = typed(text);
+        ed.execute(":syntax markdown").unwrap();
+        ed
+    }
+
+    #[test]
+    fn a_link_to_the_web_is_handed_over_and_nothing_else_is() {
+        // Feature #285. The cursor starts on the `[`, which is markup the
+        // reader can see; the destination it opens is the half 所見即所得 does
+        // not draw at all.
+        let mut ed = markdown("[雪](https://example.com/一)\n");
+        press(&mut ed, "gx");
+        assert_eq!(
+            ed.take_open_request().as_deref(),
+            Some("https://example.com/一")
+        );
+        // Asked for once, not once per frame.
+        assert_eq!(ed.take_open_request(), None);
+    }
+
+    #[test]
+    fn a_scheme_the_editor_does_not_know_is_named_and_refused() {
+        // **The security decision, in one test.** A manuscript is a file that
+        // arrives by email, and `open` will start whatever program claims a
+        // scheme. So the list is two long, and everything else is said out
+        // loud rather than run.
+        for line in ["[寫信](mailto:a@b.c)\n", "[開](x-anything:do-it)\n"] {
+            let mut ed = markdown(line);
+            press(&mut ed, "gx");
+            assert_eq!(ed.take_open_request(), None, "{line}");
+            assert!(
+                ed.status().contains("http"),
+                "it says which two are followed: {}",
+                ed.status()
+            );
+        }
+    }
+
+    #[test]
+    fn a_link_into_this_same_file_is_a_heading_not_a_file() {
+        let mut ed = markdown("[雪](#雪)\n\n## 雪\n那一夜。\n");
+        press(&mut ed, "gx");
+        assert_eq!(ed.take_open_request(), None);
+        // `## 雪` is the third line, and its first non-blank is the `#`.
+        assert_eq!(ed.cursor(), 9, "{}", ed.status());
+        // A heading that is not there is said, not guessed at.
+        let mut ed = markdown("[夏](#夏)\n\n## 雪\n");
+        press(&mut ed, "gx");
+        assert!(ed.status().contains('夏'), "{}", ed.status());
+    }
+
+    #[test]
+    fn a_link_to_another_chapter_opens_it_where_it_sits() {
+        let dir = std::env::temp_dir().join(format!("yumete-link-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("二.md"), "## 雪\n那一夜。\n").unwrap();
+        let one = dir.join("一.md");
+        std::fs::write(&one, "見[下一章](二.md)。\n見[[二#雪]]。\n").unwrap();
+
+        // Spelled out, with the suffix.
+        let mut ed = Editor::new();
+        ed.open_file(&one).unwrap();
+        press(&mut ed, "lgx");
+        assert_eq!(ed.current_buffer().display_name(), "二.md", "{}", ed.status());
+
+        // And named, without one — `[[二]]` is a page of this manuscript, and
+        // the suffix is the manuscript's to know. The `#雪` goes to the
+        // heading once the file is open.
+        let mut ed = Editor::new();
+        ed.open_file(&one).unwrap();
+        press(&mut ed, "jlgx");
+        assert_eq!(ed.current_buffer().display_name(), "二.md", "{}", ed.status());
+        assert_eq!(ed.cursor(), 0, "the heading is the first line");
+
+        // An absolute path is not the name of a chapter.
+        std::fs::write(&one, "見[密](/etc/passwd)。\n").unwrap();
+        let mut ed = Editor::new();
+        ed.open_file(&one).unwrap();
+        press(&mut ed, "lgx");
+        assert_eq!(ed.buffer_count(), 1, "{}", ed.status());
+        assert!(ed.status().contains("/etc/passwd"), "{}", ed.status());
+
+        std::fs::remove_dir_all(&dir).ok();
     }
 
     #[test]

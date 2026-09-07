@@ -3398,6 +3398,13 @@ zhs = "首个非空白"
 en = "first non-blank"
 
 [[message]]
+# g 組：跟着連結走
+key = "hint.goto.follow-link"
+zht = "跟着連結走"
+zhs = "跟着链接走"
+en = "follow the link"
+
+[[message]]
 # g 組：去／看它指的地方
 key = "hint.goto.follow-note"
 zht = "去／看它指的地方"
@@ -4566,6 +4573,59 @@ key = "level.off"
 zht = "關"
 zhs = "关"
 en = "off"
+
+
+# ── link ──────────────────────────────────────────────────────────────
+
+[[message]]
+# gx：連結指的檔案不在
+key = "link.no-such-file"
+zht = "找不到 {0}——連結是照它所在的那個目錄算的"
+zhs = "找不到 {0}——链接是照它所在的那个目录算的"
+en = "no {0} — a link is read from the folder it is written in"
+
+[[message]]
+# gx：檔案開了，可是那個 #標題 不在裏面
+key = "link.no-such-heading"
+zht = "這一篇裏沒有標題叫「{0}」"
+zhs = "这一篇里没有标题叫「{0}」"
+en = "no heading here is called 「{0}」"
+
+[[message]]
+# gx 按在了沒有連結的地方
+key = "link.none-here"
+zht = "游標下面沒有連結"
+zhs = "游标下面没有链接"
+en = "there is no link under the cursor"
+
+[[message]]
+# gx：連結指着絕對路徑，不是這本書裏的一篇
+key = "link.not-a-chapter"
+zht = "{0} 不是這本書裏的一篇——絕對路徑不跟"
+zhs = "{0} 不是这本书里的一篇——绝对路径不跟"
+en = "{0} is not a chapter of this book — an absolute path is not followed"
+
+[[message]]
+# gx 打開了本書的另一篇
+key = "link.opened"
+zht = "開了 {0}"
+zhs = "开了 {0}"
+en = "opened {0}"
+
+[[message]]
+# gx 把網址交給了瀏覽器
+key = "link.opening"
+zht = "交給瀏覽器：{0}"
+zhs = "交给浏览器：{0}"
+en = "handed to the browser: {0}"
+
+[[message]]
+# gx：http 與 https 以外的協議一律不交給系統
+key = "link.scheme-refused"
+zht = "{0}: 這種連結不交給系統——只有 http 與 https 跟"
+zhs = "{0}: 这种链接不交给系统——只有 http 与 https 跟"
+en = "{0}: this kind of link is not handed to the machine — only http and https are followed"
+
 
 [[message]]
 # `::` 那一行按了 ⇥／⏎，可是一條都沒找着

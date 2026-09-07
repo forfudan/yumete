@@ -504,6 +504,74 @@ pub fn spans(line: &str) -> Vec<Span> {
     out
 }
 
+/// Where a link points, and how it was written.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Link {
+    /// What was written as the destination — a URL, a path, or a page name.
+    /// Empty when the link points inside this same file (`[雪](#雪)`).
+    pub target: String,
+    /// The `#雪` half, without the `#`.
+    pub anchor: Option<String>,
+    /// `[[第三章]]`, which names a page in this manuscript rather than a place
+    /// on the machine, and so is looked for by name and not by path.
+    pub wiki: bool,
+}
+
+/// The link the character at `at` stands in, destination and all.
+///
+/// [`spans`] says where a link's *text* is, because that is what has to be
+/// drawn. This says where the link *goes* — the half 所見即所得 hides — and it
+/// answers anywhere inside the whole construct, brackets and hidden target
+/// included: a reader who cannot see the target cannot be asked to stand on it.
+pub fn link_at(line: &str, at: usize) -> Option<Link> {
+    let all = spans(line);
+    // Which construct the cursor is in, and only if that construct is a link:
+    // the emphasis two words earlier shares the line, not the destination.
+    // Backwards, because a heading's span covers its whole line and the link
+    // inside it is marked afterwards — later spans win, as they do when the
+    // line is drawn.
+    let here = all.iter().rev().find(|s| (s.start..s.end).contains(&at))?;
+    let construct = all
+        .iter()
+        .any(|s| s.construct == here.construct && matches!(s.kind, Kind::Link | Kind::WikiLink))
+        .then_some(here.construct)?;
+    let mine = || all.iter().filter(|s| s.construct == construct);
+    let start = mine().map(|s| s.start).min()?;
+    let end = mine().map(|s| s.end).max()?;
+    let chars: Vec<char> = line.chars().collect();
+    let whole: String = chars.get(start..end)?.iter().collect();
+
+    let (written, wiki) = match whole.strip_prefix("[[").and_then(|b| b.strip_suffix("]]")) {
+        // `[[第三章|那一夜]]` — the alias is what the reader reads, so the
+        // destination is the half before the bar.
+        Some(body) => (body.split('|').next().unwrap_or(body).to_string(), true),
+        None => {
+            let shut = whole.rfind("](")?;
+            let inside = whole.get(shut + 2..whole.len().checked_sub(1)?)?.trim();
+            // `[甲](url "說明")` — the title is for a reader, not for whatever
+            // opens the link. `<…>` is how a destination with a space in it is
+            // written, and unwrapping it is the only way that one works.
+            let bare = match inside.strip_prefix('<').and_then(|r| r.strip_suffix('>')) {
+                Some(angled) => angled.to_string(),
+                None => inside.split_whitespace().next().unwrap_or("").to_string(),
+            };
+            (bare, false)
+        }
+    };
+    // A `#` inside a URL opens its fragment, which is the same thing one line
+    // down and not this editor's business — but splitting it off costs nothing
+    // and an anchor nobody uses is dropped, not obeyed.
+    let (target, anchor) = match written.split_once('#') {
+        Some((before, after)) => (before.to_string(), Some(after.to_string())),
+        None => (written, None),
+    };
+    Some(Link {
+        target,
+        anchor: anchor.filter(|a| !a.is_empty()),
+        wiki,
+    })
+}
+
 /// How many delimiter characters start at `at`, or `None` when none do.
 ///
 /// An underscore only opens where a word does not: `snake_case` is a name, not
@@ -704,6 +772,61 @@ mod tests {
     #[test]
     fn a_link_shows_its_text_and_sets_its_target_back() {
         assert_eq!(shape("見[附錄](a.md)"), " .LL.......");
+    }
+
+    #[test]
+    fn a_link_says_where_it_goes_from_anywhere_inside_it() {
+        let line = "見[附錄](a.md)";
+        // The text, the brackets, and the target 所見即所得 hides — all of it
+        // is the link, because standing on the half you cannot see is not
+        // something a reader can be asked to do.
+        for at in 1..line.chars().count() {
+            let link = link_at(line, at).unwrap_or_else(|| panic!("nothing at {at}"));
+            assert_eq!(link.target, "a.md");
+            assert!(!link.wiki);
+        }
+        // And the 見 before it is prose.
+        assert_eq!(link_at(line, 0), None);
+    }
+
+    #[test]
+    fn what_a_link_names_is_read_off_the_way_it_was_written() {
+        let target = |line: &str| link_at(line, 3).map(|l| (l.target, l.anchor, l.wiki));
+        // A bar means an alias, and the destination is the other half.
+        assert_eq!(
+            target("見[[第三章|那一夜]]"),
+            Some(("第三章".into(), None, true))
+        );
+        // A place *within* a page, and a place within this one.
+        assert_eq!(
+            target("見[[第三章#雪]]"),
+            Some(("第三章".into(), Some("雪".into()), true))
+        );
+        assert_eq!(target("見[雪](#雪)"), Some((String::new(), Some("雪".into()), false)));
+        // A title is written for a reader, not for whatever opens the link;
+        // and angle brackets are how a destination with a space in it is
+        // written, which is the only way that one works at all.
+        assert_eq!(
+            target("見[附錄](a.md \"說明\")"),
+            Some(("a.md".into(), None, false))
+        );
+        assert_eq!(
+            target("見[附錄](<第 三 章.md>)"),
+            Some(("第 三 章.md".into(), None, false))
+        );
+        // A footnote is not a link, and neither is the emphasis beside one.
+        assert_eq!(target("見[^1]。"), None);
+        assert_eq!(target("那**年**天"), None);
+    }
+
+    #[test]
+    fn a_link_inside_a_heading_is_still_a_link() {
+        // The heading's span covers the whole line, so whichever span is
+        // consulted last has to be the one that decides.
+        assert_eq!(
+            link_at("# 見[附錄](a.md)", 5).map(|l| l.target),
+            Some("a.md".into())
+        );
     }
 
     #[test]
