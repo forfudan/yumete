@@ -1375,7 +1375,7 @@ mod tests {
             .collect()
     }
 
-    /// #288. Once the page owns up to what it really hides, the open cell juts
+    /// #283. Once the page owns up to what it really hides, the open cell juts
     /// out past its own wall and **nothing else moves**. The row the caret is
     /// not on is still folded, still one mark wide, and still exactly where it
     /// stood a keystroke ago — otherwise pressing `i` anywhere in a table
