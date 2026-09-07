@@ -791,10 +791,20 @@ pub fn slack(
     out
 }
 
+/// The drawn padding that squares a table up, row by row.
+///
+/// **Measured and drawn are two lists** (#283, 2026-09-07). `rows` carries
+/// what each row hides when the table is *measured* — every cell folded — and
+/// `shown` what it hides as the page really draws it, which differs on at most
+/// one row and only while it is being typed in. The column's width therefore
+/// never moves when a cell opens: the open cell simply runs past its own wall,
+/// and every other row keeps the alignment it had. Pass `shown` empty to say
+/// 「the same as measured」.
 pub fn padding(
     rows: &[(String, Vec<(usize, usize)>)],
     rule: Option<usize>,
     marks: &[Vec<(usize, usize)>],
+    shown: &[Vec<(usize, usize)>],
 ) -> Vec<Vec<(usize, String)>> {
     let chars: Vec<Vec<char>> = rows
         .iter()
@@ -834,6 +844,26 @@ pub fn padding(
         }
         room.push(widths);
     }
+    // What each cell really takes on the page, which is what the padding after
+    // it has to start from. The same numbers as `room` except on a row whose
+    // cell is open.
+    let drawn_room: Vec<Vec<usize>> = boxed
+        .iter()
+        .enumerate()
+        .map(|(i, cs)| match shown.get(i) {
+            None => room[i].clone(),
+            Some(hidden) => cs
+                .iter()
+                .enumerate()
+                .map(|(c, &(start, end))| {
+                    let (from, to) = spans[i][c];
+                    let lead = usize::from(from == start);
+                    let trail = usize::from(to == end && closes(&chars[i], end));
+                    visible_width(&chars[i], (start, end), hidden) + lead + trail
+                })
+                .collect(),
+        })
+        .collect();
     let columns = boxed.iter().map(Vec::len).max().unwrap_or(0);
     // **Every row votes, the rule row included.** A drawn can only add, so a
     // column can be no narrower than its widest row already is — and no
@@ -870,7 +900,10 @@ pub fn padding(
             if !closes(line, end) {
                 continue;
             }
-            let short = target[c] - room[i][c];
+            // **Saturating**, because an open cell is wider than the column
+            // it is measured at: it takes no padding at all and the rest of
+            // its row moves right by however far it juts out.
+            let short = target[c].saturating_sub(drawn_room[i][c]);
             // The colons of `:---:` are the alignment: the dashes grow between
             // them, never over them.
             let (at_lead, at_trail) = match ruled {
@@ -1236,7 +1269,7 @@ mod tests {
             })
             .collect();
         let rule = rows.get(1).and_then(|l| rule_of(l)).map(|_| 1);
-        padding(&with, rule, &[])
+        padding(&with, rule, &[], &[])
             .iter()
             .enumerate()
             .map(|(i, runs)| drawn(&rows[i], with[i].1.as_slice(), runs))
@@ -1278,7 +1311,7 @@ mod tests {
                 (l.clone(), off)
             })
             .collect();
-        padding(&with, rule, &marks)
+        padding(&with, rule, &marks, &[])
             .iter()
             .enumerate()
             .map(|(i, runs)| {
@@ -1430,7 +1463,7 @@ mod tests {
         let with: Vec<(String, Vec<(usize, usize)>)> =
             lines(text).into_iter().map(|l| (l, Vec::new())).collect();
         assert!(
-            padding(&with, Some(1), &[]).iter().all(|r| r.is_empty()),
+            padding(&with, Some(1), &[], &[]).iter().all(|r| r.is_empty()),
             "nothing to draw, so nothing is drawn"
         );
     }

@@ -626,6 +626,18 @@ pub enum Separator {
 /// it is a different question: how much of a table is drawn, and whether it
 /// has the screen to itself, are answered separately and `t q` only touches
 /// the second.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CellWidth {
+    /// The cap bites: what is past it comes off, and a `>` says so.
+    Fold,
+    /// Every cell as wide as it is, running off the side of the window.
+    Whole,
+    /// The cap bites and **the rest is drawn underneath**, inside the cell's
+    /// own column — the grid's answer only, since the prose page's rows come
+    /// from the shared wrap layer and it has no hanging indent to give.
+    Wrap,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum TableLevel {
     /// 源碼模式 `t o` — the file as it is written. `|` and commas and all,
@@ -1385,7 +1397,15 @@ pub struct Editor {
     /// — a bare `bool` could not hold both 「基本 folds nothing unasked」 and
     /// 「基本 folds when asked」, which is the whole of the author's question
     /// (2026-09-07: 「虽然 tb 在默认状态下不折叠，但能不能在按下 tw 之后折叠？」).
-    cell_folds: Option<bool>,
+    cell_folds: Option<CellWidth>,
+    /// Whether this key **meant** to go to another table — `t ]` and `t [`.
+    ///
+    /// 全窗表格 holds the cursor to the table it is showing
+    /// ([`Editor::hold_the_pane`]), and the two keys whose whole job is to
+    /// leave for the next one would otherwise be held with everything else.
+    /// A one-shot, cleared at the end of every key: 「this move was asked
+    /// for」 is about the key that is being handled, not about the editor.
+    crossed_tables: bool,
     /// How many bands the vertical page is divided into (段組).
     bands: usize,
     /// What the last `Enter` search found, **and which document it found it
@@ -1766,6 +1786,7 @@ impl Editor {
             indent: 0,
             indent_folds: true,
             cell_folds: None,
+            crossed_tables: false,
             bands: 1,
             hits: None,
             jumps: Vec::new(),
@@ -3458,15 +3479,56 @@ impl Editor {
     /// that could not be opened by any key at all (author, 2026-09-07:
     /// 「tw 功能无法在 tt 模式下使用……长单元格被折叠的信息永远无法读取」).
     fn toggle_cell_folds(&mut self) {
-        let folds = !self.folds_now();
-        self.cell_folds = Some(folds);
-        self.pad_cache.borrow_mut().take();
-        let cap = crate::mdtable::MAX_COLUMN.to_string();
-        self.status = match (folds, self.folds_can_bite()) {
-            (_, false) => say!("table.folds-need-a-drawn-table"),
-            (true, _) => say!("table.folds-on", cap, crate::mdtable::FOLD_MARK),
-            (false, _) => say!("table.folds-off", cap),
+        // **Two toggles over one axis, and they cannot both be on** (author,
+        // 2026-09-07). A three-way cycle on `t w` was the other way to spell
+        // this, and it would have made the same key mean a toggle in prose
+        // and a cycle in the window; a reader learns 「`t w` 摺不摺」 once and
+        // it has to hold everywhere. So `t w` answers 摺／不摺 and pulls the
+        // table out of 折行 on the way, exactly as `t a` pulls it out of 摺起.
+        let want = match self.cell_width_now() {
+            CellWidth::Fold => CellWidth::Whole,
+            CellWidth::Whole | CellWidth::Wrap => CellWidth::Fold,
         };
+        self.set_cell_width(want);
+        let cap = crate::mdtable::MAX_COLUMN.to_string();
+        self.status = match (want, self.folds_can_bite()) {
+            (_, false) => say!("table.folds-need-a-drawn-table"),
+            (CellWidth::Fold, _) => say!("table.folds-on", cap, crate::mdtable::FOLD_MARK),
+            _ => say!("table.folds-off", cap),
+        };
+    }
+
+    /// `t a` — 格內折行: the tail is drawn **under** the cell, in its own
+    /// column, rather than taken off the page (author, 2026-09-07: 「把所有超
+    /// 长的单元格都在单元格下方的空行中 soft wrap」).
+    ///
+    /// **The grid's answer, and only the grid's.** The prose page's rows come
+    /// from [`crate::wrap`], which every motion, the mouse, 縱書 and the split
+    /// panes read, and it has no hanging indent: a row wrapped there would
+    /// carry on at the left margin with the rest of its cells trailing after
+    /// the wrapped text, which is not what anybody means by 折行. So in prose
+    /// the key says where it works — and still **sets the switch**, so the
+    /// answer is waiting when the reader presses `t t`.
+    fn toggle_cell_wrap(&mut self) {
+        let want = match self.cell_width_now() {
+            CellWidth::Wrap => CellWidth::Whole,
+            CellWidth::Fold | CellWidth::Whole => CellWidth::Wrap,
+        };
+        self.set_cell_width(want);
+        let pane = self.table.as_ref().is_some_and(|view| view.takes_the_pane());
+        let cap = crate::mdtable::MAX_COLUMN.to_string();
+        self.status = match (want, pane) {
+            (CellWidth::Wrap, false) => say!("table.wrap-needs-the-window"),
+            (CellWidth::Wrap, true) => say!("table.wrap-on", cap),
+            (_, _) => say!("table.folds-off", cap),
+        };
+    }
+
+    /// Write the reader's own answer to 「太寬的格子怎麼辦」 and forget what
+    /// was drawn under the old one.
+    fn set_cell_width(&mut self, want: CellWidth) {
+        self.cell_folds = Some(want);
+        self.pad_cache.borrow_mut().take();
     }
 
     /// Whether `t w` has anywhere to bite from where the reader is standing —
@@ -3484,9 +3546,21 @@ impl Editor {
     /// grid draws its own columns and caps them however it was opened, while
     /// the prose page folds only at 全, because below 全 hiding is something
     /// the level may not do unasked.
-    fn folds_now(&self) -> bool {
+    fn cell_width_now(&self) -> CellWidth {
         let pane = self.table.as_ref().is_some_and(|view| view.takes_the_pane());
-        self.cell_folds.unwrap_or(pane || self.table_level == TableLevel::Full)
+        self.cell_folds.unwrap_or(match pane || self.table_level == TableLevel::Full {
+            true => CellWidth::Fold,
+            false => CellWidth::Whole,
+        })
+    }
+
+    /// Whether the cap bites where the reader is standing.
+    ///
+    /// **折行 folds too.** 「Wrap」 is 「fold, and draw the tail underneath」,
+    /// and only the grid can draw the second half — so on the prose page, and
+    /// everywhere else that asks this question, it is the cap that answers.
+    fn folds_now(&self) -> bool {
+        self.cell_width_now() != CellWidth::Whole
     }
 
     /// Whether over-wide cells are folded (#283) — the switch, with no
@@ -3497,6 +3571,13 @@ impl Editor {
     /// rules — asks this.
     pub fn cell_folds(&self) -> bool {
         self.folds_now()
+    }
+
+    /// Whether an over-wide cell is drawn **wrapped under itself** — `t a`.
+    ///
+    /// The grid asks; nothing else can answer it. See [`Self::toggle_cell_wrap`].
+    pub fn cell_wrap(&self) -> bool {
+        self.cell_width_now() == CellWidth::Wrap
     }
 
     /// Whether an over-wide cell has its tail folded away on this page (#283).
@@ -3527,7 +3608,20 @@ impl Editor {
         if !self.cells_fold_here() {
             return Vec::new();
         }
-        self.cell_tails_against(line, &self.markup_off_line(line))
+        let markup = self.markup_off_line(line);
+        self.cell_tails_against(line, &markup, self.folds_open_at(line))
+    }
+
+    /// The tails as the **measure** reads them: every cell folded, the one
+    /// being typed in included — see [`Self::cell_folds_measured`]. The mark
+    /// is one cell of its column, and the column is measured closed, so the
+    /// mark is counted on the open row too.
+    fn cell_folds_measured_on_line(&self, line: usize) -> Vec<(usize, usize)> {
+        if !self.cells_fold_here() {
+            return Vec::new();
+        }
+        let markup = self.markup_off_line(line);
+        self.cell_tails_against(line, &markup, None)
     }
 
     /// Everything a row keeps off the page for the table's sake: the tails,
@@ -3538,10 +3632,38 @@ impl Editor {
     /// tail leaves a mark. A `>` over the spaces between a cell and its pipe
     /// would say something was folded away there, and nothing was.
     fn cell_folds_against(&self, line: usize, markup: &[(usize, usize)]) -> Vec<(usize, usize)> {
-        let mut out = self.cell_tails_against(line, markup);
-        out.extend(self.cell_slack_against(line, markup));
+        let open = self.folds_open_at(line);
+        let mut out = self.cell_tails_against(line, markup, open);
+        out.extend(self.cell_slack_against(line, markup, open));
         out.sort_unstable();
         out
+    }
+
+    /// The same list, **as the table is measured** rather than as it is drawn.
+    ///
+    /// The two differ on one row at most, and only while somebody is typing
+    /// in it: the cell being edited has its tail back on the page, and a
+    /// column that grew to hold it would swell and shrink under the reader's
+    /// hands — every other row shifting sideways because one cell is open.
+    /// So the column is measured as though every cell were folded, the open
+    /// cell juts out past its own wall, and the table's geometry stops
+    /// depending on the caret altogether. That is what makes the layout
+    /// worth remembering across a keystroke.
+    fn cell_folds_measured(&self, line: usize, markup: &[(usize, usize)]) -> Vec<(usize, usize)> {
+        let mut out = self.cell_tails_against(line, markup, None);
+        out.extend(self.cell_slack_against(line, markup, None));
+        out.sort_unstable();
+        out
+    }
+
+    /// [`Self::hidden_on_line`] as the **measure** reads it — see
+    /// [`Self::cell_folds_measured`].
+    fn hidden_measured_on_line(&self, line: usize) -> Vec<(usize, usize)> {
+        let mut off = self.markup_off_line(line);
+        let folded = self.cell_folds_measured(line, &off);
+        off.extend(folded);
+        off.sort_unstable();
+        off
     }
 
     /// The padding the file holds in this row, when folding is on.
@@ -3557,7 +3679,12 @@ impl Editor {
     /// further**, which is what keeps #212's law (a drawn can only add) true
     /// everywhere the cap does not bite: a table that fits is drawn exactly
     /// as the file wrote it.
-    fn cell_slack_against(&self, line: usize, markup: &[(usize, usize)]) -> Vec<(usize, usize)> {
+    fn cell_slack_against(
+        &self,
+        line: usize,
+        markup: &[(usize, usize)],
+        open: Option<(usize, usize)>,
+    ) -> Vec<(usize, usize)> {
         if !self.cells_fold_here() {
             return Vec::new();
         }
@@ -3571,13 +3698,45 @@ impl Editor {
             &text,
             markup,
             crate::mdtable::MAX_COLUMN,
-            self.selected_columns(line),
+            open,
         )
+    }
+
+    /// **Where the caret opens a folded cell — and it is not by standing in
+    /// it** (#283, remade 2026-09-07).
+    ///
+    /// It used to be `selected_columns`: walk into a cell and its tail came
+    /// back. That is one line of code and it cost the table its whole layout
+    /// on **every** keystroke, because a caret in the key is a caret in the
+    /// key whether or not the cell it moved to was ever folded — a `j` down
+    /// the `#` column of this project's own `development.md` rebuilt 286 rows
+    /// and took 15 ms, in a column two characters wide (author, 2026-09-07:
+    /// 「不是说撑开的时候卡，而是不撑开的单元格也卡」).
+    ///
+    /// So reading and editing are told apart. **Reading** does not need the
+    /// tail on the page — `t i`'s panel holds the whole cell, wrapped, which
+    /// is what that panel is for — and in exchange the page's layout stops
+    /// depending on where the caret is at all: it is worked out once per
+    /// edit, and a cursor moving over a folded table costs nothing.
+    /// **Editing** does need it, and there is no argument: the caret may
+    /// never sit inside characters the page does not draw, or every motion,
+    /// the mouse and the caret's own column disagree with what is on screen.
+    /// So the cell opens on `i`/`a`/`c` and closes again on `Esc`.
+    fn folds_open_at(&self, line: usize) -> Option<(usize, usize)> {
+        match self.mode {
+            Mode::Insert => self.selected_columns(line),
+            _ => None,
+        }
     }
 
     /// The cell tails folded away on `line`, with the markup already worked
     /// out — the spans that get a mark.
-    fn cell_tails_against(&self, line: usize, markup: &[(usize, usize)]) -> Vec<(usize, usize)> {
+    fn cell_tails_against(
+        &self,
+        line: usize,
+        markup: &[(usize, usize)],
+        open: Option<(usize, usize)>,
+    ) -> Vec<(usize, usize)> {
         if !self.cells_fold_here() {
             return Vec::new();
         }
@@ -3594,7 +3753,7 @@ impl Editor {
             &text,
             markup,
             crate::mdtable::MAX_COLUMN,
-            self.selected_columns(line),
+            open,
         )
     }
 
@@ -3642,7 +3801,8 @@ impl Editor {
             // **Folding asks where the caret is too**, whatever `:render`
             // says: the cell it stands in is left whole, so the answer moves
             // when it moves.
-            caret: (self.wysiwyg() || self.cells_fold_here()).then(|| self.selection()),
+            caret: (self.wysiwyg() || (self.cells_fold_here() && self.mode == Mode::Insert))
+                .then(|| self.selection()),
             render: self.render,
             ruby: self.ruby(),
             syntax: buffer.syntax(),
@@ -3668,8 +3828,21 @@ impl Editor {
         // widest cell in each column, so there is no such thing as one row's
         // answer on its own.
         let rows: Vec<(String, Vec<(usize, usize)>)> = (region.first..=region.last)
-            .map(|i| (self.line_text(i).unwrap_or_default(), self.hidden_on_line(i)))
+            .map(|i| {
+                (
+                    self.line_text(i).unwrap_or_default(),
+                    self.hidden_measured_on_line(i),
+                )
+            })
             .collect();
+        // What the page really hides, which is the same list on every row but
+        // the one being typed in — see [`Self::cell_folds_measured`].
+        let shown: Vec<Vec<(usize, usize)>> = match self.mode == Mode::Insert {
+            false => Vec::new(),
+            true => (region.first..=region.last)
+                .map(|i| self.hidden_on_line(i))
+                .collect(),
+        };
         // **The fold mark is one cell of its column.** It is drawn, not
         // written, so `visible_width` cannot see it — and a column padded as
         // though it were not there comes out one cell narrow on every row that
@@ -3677,13 +3850,18 @@ impl Editor {
         let width = yumete_cjk::str_width(crate::mdtable::FOLD_MARK);
         let marks: Vec<Vec<(usize, usize)>> = (region.first..=region.last)
             .map(|i| {
-                self.cell_folds_on_line(i)
+                self.cell_folds_measured_on_line(i)
                     .into_iter()
                     .map(|(at, _)| (at, width))
                     .collect()
             })
             .collect();
-        let runs = crate::mdtable::padding(&rows, region.rule.map(|at| at - region.first), &marks);
+        let runs = crate::mdtable::padding(
+            &rows,
+            region.rule.map(|at| at - region.first),
+            &marks,
+            &shown,
+        );
         let answer = runs.get(line - region.first).cloned().unwrap_or_default();
         *self.pad_cache.borrow_mut() = Some((key, runs));
         answer
@@ -5944,6 +6122,28 @@ impl Editor {
                 (first <= last).then_some((first, last))
             }
         }
+    }
+
+    /// **Where the window starts counting rows** (author, 2026-09-07: 「她的
+    /// 行號用自己的行號而不是全文的行號」).
+    ///
+    /// 全窗表格 is a window onto one table and nothing walks out of it
+    /// ([`Self::hold_the_pane`]), so inside it the useful number is which row
+    /// of *this table* you are on — the gutter, the status line and `t20g`
+    /// all mean that one number. Everywhere else the number is the file's
+    /// line, because everywhere else the file is what you are looking at.
+    ///
+    /// Zero outside the window, so a caller can subtract it either way.
+    pub fn table_row_base(&self) -> usize {
+        match self.table.as_ref().is_some_and(|view| view.takes_the_pane()) {
+            true => self.table_row_span().map(|(first, _)| first).unwrap_or(0),
+            false => 0,
+        }
+    }
+
+    /// Which row the cursor is on, **numbered the way the page numbers it**.
+    pub fn table_row_number(&self) -> usize {
+        self.cursor_line().saturating_sub(self.table_row_base()) + 1
     }
 
     /// What to write above the columns, when the grid freezes a header.
@@ -8229,6 +8429,10 @@ impl Editor {
             // the page is *drawn*, so it sits beside `t b` / `t f` and asks
             // nothing about where the cursor is standing.
             Key::Char('w') => return self.toggle_cell_folds(),
+            // `t a` — 折行, the other answer to the same question. It is a
+            // toggle of its own rather than a third stop on `t w`'s cycle, so
+            // that `t w` means one thing in every mode.
+            Key::Char('a') => return self.toggle_cell_wrap(),
             Key::Char('t') => {
                 if !(self.table_here() || self.table.as_ref().is_some_and(|v| v.is_file_wide()))
                     && !self.enter_table_as(true)
@@ -8304,12 +8508,40 @@ impl Editor {
                         (row, self.cell_position().map(|(_, c)| c).unwrap_or(0))
                     }
                 };
+                // **Clamped into the table you are standing in** (author,
+                // 2026-09-07: 「markdown 表格中按 t1g，会跑到整个文档的第一行
+                // 而不是表格的第一行」). The number is still the one in the
+                // gutter — that is what makes `t238g` mean the row a reader
+                // can see the number of, in a `.csv` and in a chapter alike —
+                // but a number outside this table used to walk the cursor out
+                // of the grid altogether, and a *table* key has no business
+                // landing in the prose three screens up. Outside a table
+                // there is nothing to clamp to and the file is the answer:
+                // `t <n>g` is also one of the ways **in**.
+                // **The number is the one in the gutter.** In prose that is
+                // the file's line, clamped into the table so a table key
+                // cannot walk out of it; in the window the gutter numbers
+                // this table's own rows, so `t1g` is its first row and `t20g`
+                // its twentieth.
                 let lines = self.current_buffer().line_count();
-                let line = row.clamp(1, lines).saturating_sub(1);
+                let base = self.table_row_base();
+                let line = match self.table_row_span() {
+                    Some((first, last)) if base > 0 => {
+                        (first + row.saturating_sub(1)).clamp(first, last)
+                    }
+                    Some((first, last)) => row.clamp(first + 1, last + 1).saturating_sub(1),
+                    None => row.clamp(1, lines).saturating_sub(1),
+                };
                 self.remember_jump();
                 self.goto_line(line + 1);
                 self.go_to_cell(line, cell);
-                self.status = say!("table.row-and-column", line + 1, cell + 1);
+                // Said in the numbers the reader can see: the window's own
+                // rows inside it, the file's lines outside.
+                self.status = say!(
+                    "table.row-and-column",
+                    line + 1 - base.min(line),
+                    cell + 1
+                );
                 return;
             }
         }
@@ -8583,6 +8815,8 @@ impl Editor {
         // A table's first line is its header, and the grid draws that frozen
         // out of the schema — so 「the next table」 lands on its first *row*.
         self.step_off_the_frozen_header();
+        // The window may follow this one: it is the way to the next table.
+        self.crossed_tables = true;
         self.status = say!("table.jumped-to-line", line + 1);
     }
 
@@ -12137,12 +12371,28 @@ impl Editor {
     /// where you wanted to be anyway.
     pub fn scroll(&mut self, amount: usize, back: bool) {
         let vertical = self.layout == Layout::Vertical;
+        // **A flick does not leave 全窗表格 either** — it is a window onto one
+        // table, and the wheel is a movement like any other (see
+        // [`Self::hold_the_pane`], which cannot see this one: scrolling comes
+        // in as a mouse event rather than as a key).
+        let held = self
+            .table
+            .as_ref()
+            .is_some_and(|view| view.takes_the_pane())
+            .then(|| self.table_row_span())
+            .flatten();
         for _ in 0..amount.max(1) {
             let before = self.cursor;
             if vertical {
                 self.move_zong_from(!back, true);
             } else {
                 self.move_vertical(back);
+            }
+            if let Some((first, last)) = held {
+                if !(first..=last).contains(&self.cursor_line()) {
+                    self.cursor = before;
+                    break;
+                }
             }
             if self.cursor == before {
                 break;
@@ -13479,6 +13729,13 @@ impl Editor {
             }
             self.edit_keys.push(key);
         }
+        // Where the pane's window was pointed before this key — see
+        // [`Self::hold_the_pane`].
+        let held = self
+            .table
+            .as_ref()
+            .is_some_and(|view| view.takes_the_pane())
+            .then(|| (self.current_buffer().id(), self.cursor));
         let outcome = match self.mode {
             Mode::Normal => {
                 self.on_normal_key(key);
@@ -13510,8 +13767,71 @@ impl Editor {
             self.finish_watching();
         }
         self.forget_a_guessed_table();
+        self.hold_the_pane(held);
         self.find_the_table_here();
         outcome
+    }
+
+    /// **全窗表格 is a window onto one table, and nothing walks out of it**
+    /// (author, 2026-09-07: 「理論上不能通過鼠標滾動或者 hjkl 前往正文……衹能
+    /// 通過 tq/tf/tb 離開回到其他模式，或者 t[ t] 去下一個表格」).
+    ///
+    /// The pane used to be a leaky mode: `gg`, `G`, `:120` and a search hit
+    /// are file-wide, they walked the cursor into the chapter, and the widget
+    /// — which draws between the table's first and last row and nowhere else
+    /// — then had nothing to draw. The old bargain was to hand the window
+    /// back to the prose page, so 全窗表格 could end without anybody asking
+    /// for it. Bounding it deletes that whole class of case, and it is what
+    /// lets the gutter number the table's **own** rows: inside the window
+    /// every number means the same thing.
+    ///
+    /// One place, at the end of every key, for the reason
+    /// [`Self::forget_a_guessed_table`] gives: a rule kept by forty movement
+    /// functions is a rule one of them will break.
+    ///
+    /// It holds only what it is sure of — the same buffer, the pane still
+    /// asked for — so `t o`, `t q`, `:e` and a buffer switch are none of its
+    /// business.
+    fn hold_the_pane(&mut self, held: Option<(u64, usize)>) {
+        // `t ]` and `t [` are the way *to* another table, so they are never
+        // held — and the flag is this key's, cleared however this ends.
+        let crossed = std::mem::take(&mut self.crossed_tables);
+        let Some((buffer, was)) = held else {
+            return;
+        };
+        if crossed {
+            return;
+        }
+        if !self.table.as_ref().is_some_and(|view| view.takes_the_pane()) {
+            return;
+        }
+        if self.current_buffer().id() != buffer {
+            return;
+        }
+        // **Only what this key moved.** A cursor that was already off the rows
+        // — parked on a header row, which only an internal call can do — is
+        // not something to drag anywhere: holding it there would move the
+        // caret under keys that never asked, and `t d` on the header would
+        // delete the row below instead of saying 「標題行不能刪」.
+        let line = self.cursor_line();
+        let rope = self.current_buffer().rope();
+        let home = rope.char_to_line(was.min(rope.len_chars()));
+        let Some((first, last)) = self.table_row_span_at(home) else {
+            return;
+        };
+        if !(first..=last).contains(&home) {
+            return;
+        }
+        // Still on a row of **this** table — the table the window is showing.
+        // A `G` that lands on a row of the *next* table in the document is
+        // the window being walked out of just as much as one that lands in
+        // the prose between them; `t ]` is the key that means to do that.
+        if (first..=last).contains(&line) {
+            return;
+        }
+        self.goto_line(line.clamp(first, last) + 1);
+        self.snap_into_the_grid();
+        self.status = say!("table.window-holds-you");
     }
 
     /// Drop a table mode that was **guessed**, once the cursor has left it.
@@ -14529,6 +14849,9 @@ impl Editor {
         // been offered by any of the four lists, in the group whose whole
         // purpose is to say what `t` can be finished with.
         ("w", "hint.table.fold-wide-cells"),
+        // 折行 stands beside 摺起 because it answers the same question — and
+        // a key offered nowhere is a key nobody finds.
+        ("a", "hint.table.wrap-wide-cells"),
         ("t", "hint.table.whole-window"),
         ("q", "hint.table.leave-the-window"),
         ("] [", "hint.table.next-or-previous"),
@@ -21184,6 +21507,39 @@ mod tests {
         assert!(ed.status().contains("t20,20g"), "{}", ed.status());
     }
 
+    /// A row number a table does not have lands **in the table anyway**
+    /// (author, 2026-09-07: 「markdown 表格中按 t1g，会跑到整个文档的第一行而
+    /// 不是表格的第一行」).
+    ///
+    /// The number is the gutter's, which is what makes it the same key in a
+    /// `.csv` and in a chapter — but a table key that walks the cursor three
+    /// screens up into the prose has left the thing it was pressed on.
+    #[test]
+    fn a_row_number_outside_the_table_is_clamped_into_it() {
+        let mut ed = typed(
+            "前文一
+前文二
+前文三
+
+| a | b |
+| --- | --- |
+| 1 | 2 |
+| 3 | 4 |
+",
+        );
+        ed.goto_line(7);
+        assert!(ed.enter_table(), "{}", ed.status());
+        // The table's rows are lines 7 and 8; `t1g` is the first of them.
+        press(&mut ed, "t1g");
+        assert_eq!(ed.cursor_line(), 6, "the table's first row: {}", ed.status());
+        // And a number past the end is its last row, not the file's.
+        press(&mut ed, "t99g");
+        assert_eq!(ed.cursor_line(), 7, "the table's last row: {}", ed.status());
+        // A number the table does have is still that line, gutter and all.
+        press(&mut ed, "t8g");
+        assert_eq!(ed.cursor_line(), 7, "{}", ed.status());
+    }
+
     /// **A sort names the column it sorts by** (§5.7).
     ///
     /// The bare letter is gone: on 123 380 rows a sort costs real seconds and
@@ -22636,10 +22992,122 @@ mod tests {
         assert!(ed.cell_folds(), "and back again: {}", ed.status());
     }
 
-    /// The cell the caret is standing in is never folded, so a folded table is
-    /// still one you can read and edit a cell of.
+    /// **全窗表格 is bounded**: `gg`, `G` and `:120` do not walk out of it
+    /// (author, 2026-09-07: 「衹能通過 tq/tf/tb 離開回到其他模式，或者 t[ t]
+    /// 去下一個表格」), and the gutter numbers this table's own rows, so
+    /// `t1g` is its first row.
     #[test]
-    fn walking_into_a_folded_cell_opens_it() {
+    fn the_window_holds_the_table_it_was_opened_on() {
+        let mut ed = typed(
+            "前文一
+前文二
+
+| a | b |
+| --- | --- |
+| 1 | 2 |
+| 3 | 4 |
+| 5 | 6 |
+
+後文
+
+| c | d |
+| --- | --- |
+| 7 | 8 |
+",
+        );
+        ed.goto_line(6);
+        press(&mut ed, "tt");
+        let (first, last) = ed.table_row_span().expect("a table under the cursor");
+        assert_eq!((first, last), (5, 7), "rows are lines 6, 7 and 8");
+        assert_eq!(ed.table_row_base(), first, "the window counts from its first row");
+
+        // `gg` is the table's first row, not the file's first line.
+        press(&mut ed, "gg");
+        assert_eq!(ed.cursor_line(), first, "{}", ed.status());
+        assert_eq!(ed.table_row_number(), 1, "and it is row 1 in the window");
+        assert!(ed.status().contains("t q"), "it says so: {}", ed.status());
+        // `G` is its last row, not the file's last line.
+        press(&mut ed, "G");
+        assert_eq!(ed.cursor_line(), last, "{}", ed.status());
+        assert_eq!(ed.table_row_number(), 3);
+        // `t<n>g` counts the same rows the gutter draws.
+        press(&mut ed, "t1g");
+        assert_eq!(ed.cursor_line(), first, "{}", ed.status());
+        press(&mut ed, "t2g");
+        assert_eq!(ed.cursor_line(), first + 1, "{}", ed.status());
+        press(&mut ed, "t99g");
+        assert_eq!(ed.cursor_line(), last, "past the end is the last row");
+
+        // `t ]` is the way to the next table, and it is never held.
+        press(&mut ed, "t]");
+        assert!(ed.cursor_line() > last, "into the next table: {}", ed.status());
+        press(&mut ed, "t[");
+        assert!(ed.cursor_line() <= last, "and back: {}", ed.status());
+
+        // And the way out is a key that says so: `t q` gives the window back
+        // and `gg` is the file's again.
+        press(&mut ed, "tq");
+        press(&mut ed, "gg");
+        assert_eq!(ed.cursor_line(), 0, "{}", ed.status());
+    }
+
+    /// `t w` and `t a` are two toggles over **one** axis: 摺起, 攤平, 折行,
+    /// and never two of them at once (author, 2026-09-07: 「ta on 和 tw on 两
+    /// 者不会叠在一起」).
+    ///
+    /// A three-way cycle on `t w` was the other way to spell it, and it would
+    /// have made one key a toggle in prose and a cycle in the window.
+    #[test]
+    fn t_w_and_t_a_are_two_toggles_over_one_axis() {
+        let mut ed = with_two_md_tables();
+        ed.goto_line(9);
+        press(&mut ed, "tt");
+        assert!(ed.cell_folds() && !ed.cell_wrap(), "the grid opens folded");
+        // 折行 takes over from 摺起. **The cap still bites** — 折行 *is* 摺起
+        // plus 「and draw the rest underneath」, which is why the prose page,
+        // where the second half cannot be drawn, still folds.
+        press(&mut ed, "ta");
+        assert!(ed.cell_wrap(), "{}", ed.status());
+        assert!(ed.cell_folds(), "the cap is what 折行 wraps at: {}", ed.status());
+        // …and 摺起 takes it back off.
+        press(&mut ed, "tw");
+        assert!(ed.cell_folds() && !ed.cell_wrap(), "{}", ed.status());
+        // Each is still a toggle of its own: pressed twice, neither is on.
+        press(&mut ed, "tw");
+        assert!(!ed.cell_folds() && !ed.cell_wrap(), "攤平: {}", ed.status());
+        press(&mut ed, "ta");
+        assert!(ed.cell_wrap(), "{}", ed.status());
+        press(&mut ed, "ta");
+        assert!(!ed.cell_wrap() && !ed.cell_folds(), "攤平 again: {}", ed.status());
+    }
+
+    /// 折行 is the grid's answer and says so where it cannot be drawn — but it
+    /// **sets the switch**, so `t t` finds the answer already given.
+    #[test]
+    fn t_a_says_where_it_works_and_still_remembers() {
+        let mut ed = with_two_md_tables();
+        ed.goto_line(9);
+        press(&mut ed, "tf");
+        press(&mut ed, "ta");
+        assert!(ed.status().contains("tt"), "it points at the window: {}", ed.status());
+        assert!(ed.cell_wrap(), "and the switch is set: {}", ed.status());
+        // In prose the cap still bites — 折行 is 摺起 plus a second half that
+        // only the grid can draw.
+        assert!(!ed.hidden_on_line(8).is_empty(), "the tail is still folded away");
+    }
+
+    /// **Reading does not open a cell; typing in one does** (#283, remade
+    /// 2026-09-07).
+    ///
+    /// Walking in used to open it, and that one line put the caret into the
+    /// table's layout: the page's geometry then changed on every keystroke,
+    /// and a `j` down a two-character column rebuilt 286 rows. Reading is
+    /// what `t i`'s panel is for — it holds the whole cell, wrapped — so the
+    /// page keeps its columns still, and the tail comes back exactly when
+    /// somebody needs to type in it, because a caret may never sit inside
+    /// characters the page does not draw.
+    #[test]
+    fn a_folded_cell_opens_to_be_typed_in_and_not_to_be_walked_over() {
         let mut ed = with_two_md_tables();
         ed.goto_line(9);
         press(&mut ed, "tf");
@@ -22649,8 +23117,40 @@ mod tests {
             ed.on_key(Key::Char('l'));
         }
         assert!(
+            !ed.hidden_on_line(8).is_empty(),
+            "standing in it leaves it folded — the panel is where it is read"
+        );
+        // `i` is the other half: what is being typed in is on the page.
+        ed.on_key(Key::Char('i'));
+        assert!(
             ed.hidden_on_line(8).is_empty(),
-            "the cell the caret is in is whole"
+            "the cell being typed in is whole: {}",
+            ed.status()
+        );
+        ed.on_key(Key::Esc);
+        assert!(!ed.hidden_on_line(8).is_empty(), "and folds again on Esc");
+    }
+
+    /// The other half of the same law: **an open cell does not move the
+    /// column**. It juts out past its own wall, and every other row keeps the
+    /// alignment it had — which is what lets the layout be worked out once
+    /// per edit instead of once per keystroke.
+    #[test]
+    fn a_cell_being_typed_in_juts_out_rather_than_widening_its_column() {
+        let mut ed = with_two_md_tables();
+        ed.goto_line(9);
+        press(&mut ed, "tf");
+        while ed.cell_position().map(|(_, c)| c) != Some(1) {
+            ed.on_key(Key::Char('l'));
+        }
+        // The header row of that table is drawn at the folded width…
+        let shut = drawn_width(&ed, 6);
+        ed.on_key(Key::Char('i'));
+        assert!(ed.hidden_on_line(8).is_empty(), "the cell is open");
+        assert_eq!(
+            drawn_width(&ed, 6),
+            shut,
+            "…and the rows around it are drawn exactly as wide as before"
         );
     }
 

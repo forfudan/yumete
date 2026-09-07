@@ -22,7 +22,6 @@ use ratatui::Frame;
 use yumete_config::Config;
 use yumete_core::editor::Editor;
 use yumete_core::table::Rules;
-use yumete_core::TextStore;
 
 use crate::{gutter_width, put_text};
 
@@ -110,12 +109,16 @@ fn widths(
             let text = editor.current_buffer().rope().line(line).to_string();
             let cell = yumete_core::table::cell_text(&text, span);
             // **The cell the caret is standing in is never folded** — the
-            // prose page's own rule (`walking_into_a_folded_cell_opens_it`),
-            // kept here by measuring that one cell against the window instead
-            // of the cap. Without it the reader could stand in a cell and
-            // still not be shown what was in it, in Insert as much as in
-            // Normal, which is the fault this whole switch answers.
-            let ceiling = match (line, i) == caret {
+            // prose page's own rule, kept here by measuring that one cell
+            // against the window instead of the cap. Without it the reader
+            // could stand in a cell and still not be shown what was in it, in
+            // Insert as much as in Normal, which is the fault this whole
+            // switch answers.
+            //
+            // **Except under 折行**, where nothing is cut in the first place:
+            // widening the caret's column there would swell it to the whole
+            // window to show what the lines underneath are already showing.
+            let ceiling = match (line, i) == caret && !editor.cell_wrap() {
                 true => room.max(MIN_COLUMN),
                 false => ceiling,
             };
@@ -180,26 +183,16 @@ pub fn char_at(
     mouse: ratatui::crossterm::event::MouseEvent,
 ) -> Option<usize> {
     let view = editor.table()?;
-    let lines = editor.current_buffer().line_count();
     let (_, bottom) = editor.table_row_span()?;
     let head = u16::from(view.schema.header) + u16::from(editor.table_numbers());
     let rows = area.height.saturating_sub(head) as usize;
     if rows == 0 || mouse.row < area.y {
         return None;
     }
-    // The header row is not a row of the table: a click on it means the first
-    // row under it, which is the one thing it could sensibly mean.
-    let slot = (mouse.row.saturating_sub(area.y + head)) as usize;
-    // Past the last row of the table is the last row of the table — a click on
-    // the empty page under a three-line table must not land in the chapter.
-    let line = (viewport.top + slot).min(bottom);
-    let rope = editor.current_buffer().rope();
-    let start = rope.line_to_char(line);
-    let cells = editor.row_cells(line);
-    if cells.is_empty() {
-        return Some(start);
-    }
-    let gutter = crate::gutter_width(lines, config.editor.line_numbers) as u16;
+    let gutter = crate::gutter_width(
+        bottom.saturating_sub(editor.table_row_base()) + 1,
+        config.editor.line_numbers,
+    ) as u16;
     // The same numbers `draw` measured with, the caret's own cell included:
     // that cell is drawn whole whatever the cap says, so a hit test that did
     // not know it lands one column out for every column to its right.
@@ -214,6 +207,67 @@ pub fn char_at(
         editor.cell_position().unwrap_or((0, 0)),
     );
     let right = area.x + area.width;
+    let rope = editor.current_buffer().rope();
+    // **Which row, counting the lines each one is drawn on** (`t a`). Under
+    // 折行 a row of the file is as many rows of the window as its tallest
+    // cell needs, so a click resolved by dividing the page into equal rows
+    // lands further and further off with every wrapped row above it.
+    let wrap = editor.cell_wrap();
+    let lines_of = |line: usize| -> Vec<Vec<String>> {
+        let source = rope.line(line).to_string();
+        editor
+            .row_cells(line)
+            .iter()
+            .enumerate()
+            .map(|(i, span)| {
+                let w = widths.get(i).copied().unwrap_or(MIN_COLUMN);
+                let text = yumete_core::table::cell_text(&source, *span);
+                match wrap && w > 0 {
+                    true => wrapped(text.trim_end(), w),
+                    false => vec![text],
+                }
+            })
+            .collect()
+    };
+    let tall_of = |parts: &[Vec<String>]| -> usize {
+        if !wrap {
+            return 1;
+        }
+        let mut x = area.x + gutter;
+        let mut tall = 1;
+        for (i, part) in parts.iter().enumerate().skip(viewport.left) {
+            if x >= right {
+                break;
+            }
+            tall = tall.max(part.len());
+            let w = widths.get(i).copied().unwrap_or(MIN_COLUMN) as u16;
+            x += w + if w == 0 { 0 } else { GAP as u16 };
+        }
+        tall
+    };
+    // The header row is not a row of the table: a click on it means the first
+    // row under it, which is the one thing it could sensibly mean. Past the
+    // last row of the table is the last row of the table — a click on the
+    // empty page under a three-line table must not land in the chapter.
+    let mut line = viewport.top;
+    let mut top = area.y + head;
+    let mut parts = lines_of(line);
+    let mut on = 0usize;
+    while line < bottom {
+        let tall = tall_of(&parts) as u16;
+        if mouse.row < top + tall {
+            on = mouse.row.saturating_sub(top) as usize;
+            break;
+        }
+        top += tall;
+        line += 1;
+        parts = lines_of(line);
+    }
+    let start = rope.line_to_char(line);
+    let cells = editor.row_cells(line);
+    if cells.is_empty() {
+        return Some(start);
+    }
     // Walk the columns the way they were drawn, and stop at the one the
     // pointer is in.
     let mut x = area.x + gutter;
@@ -225,10 +279,20 @@ pub fn char_at(
         let end = (x + w).min(right);
         if mouse.column < end || i + 1 == cells.len() {
             // Which character of the cell — counted in cells of the terminal,
-            // because that is what was drawn.
+            // because that is what was drawn, and from the line of the cell
+            // the pointer is on rather than from its first.
             let want = mouse.column.saturating_sub(x) as usize;
+            let held = parts.get(i).cloned().unwrap_or_default();
+            let before: usize = held.iter().take(on).map(|l| l.chars().count()).sum();
+            let from = span.0 + before;
+            let to = match held.get(on) {
+                Some(text) => (from + text.chars().count()).min(span.1),
+                // A cell with nothing on this line: the click means where its
+                // writing stopped.
+                None => span.1,
+            };
             let mut column = 0;
-            for at in span.0..span.1 {
+            for at in from..to {
                 let c = rope.char(start + at);
                 let cw = yumete_cjk::char_width(c);
                 if want < column + cw {
@@ -239,7 +303,7 @@ pub fn char_at(
             // Past the text: the cell's last character, or its start when the
             // cell is empty — and never past the end of the document, which the
             // last cell of the last line is one character short of.
-            let at = start + span.1.saturating_sub(1).max(span.0);
+            let at = start + to.saturating_sub(1).max(span.0);
             return Some(at.min(rope.len_chars().saturating_sub(1)));
         }
         x = end + if w == 0 { 0 } else { GAP as u16 };
@@ -258,7 +322,6 @@ pub fn draw(
     let Some(view) = editor.table() else {
         return (area.x, area.y);
     };
-    let lines = editor.current_buffer().line_count();
     // **The table's own lines, not the file's** (2026-09-05). `t t` now hands
     // this widget a `|` table that is three lines of a chapter, and the rows
     // below are the chapter — measured, scrolled through and clicked on, they
@@ -322,7 +385,11 @@ pub fn draw(
         .min(bottom_row)
         .max(first_data.min(bottom_row));
 
-    let gutter = gutter_width(lines, config.editor.line_numbers) as u16;
+    // **The gutter numbers this table's rows**, not the file's lines: the
+    // window is bounded (`Editor::hold_the_pane`), so inside it every number
+    // — the gutter's, the status line's, `t20g`'s — means the same thing.
+    let base = editor.table_row_base();
+    let gutter = gutter_width(bottom_row.saturating_sub(base) + 1, config.editor.line_numbers) as u16;
     let room = area.width.saturating_sub(gutter) as usize;
     let widths = widths(
         editor,
@@ -469,138 +536,230 @@ pub fn draw(
         }
     }
 
-    let mut caret = (area.x + gutter, area.y + head);
-    for slot in 0..rows {
-        let line = viewport.top + slot;
-        if line > bottom_row {
-            break;
-        }
-        let y = area.y + head + slot as u16;
-        let ragged = editor.row_is_ragged(line);
-
-        // The row number, frozen at the left: with the columns scrolled away
-        // it is the only thing left that says which row this is.
-        if gutter > 0 {
-            let n = crate::gutter_text(line, cursor_row, gutter as usize, config.editor.line_numbers);
-            let style = match (ragged, peek.is_some() && line == cursor_row) {
-                (true, _) => gutter_style.patch(torn),
-                // The row the hit is on, so 「在哪一行」 is answered before the
-                // eye has found the cell.
-                (false, true) => gutter_style.fg(ink.mark()).add_modifier(Modifier::BOLD),
-                (false, false) => gutter_style,
-            };
-            for x in area.x..area.x + gutter {
-                if let Some(cell) = buf.cell_mut((x, y)) {
-                    cell.set_symbol(" ").set_style(style);
-                }
-            }
-            put_text(buf, area.x, y, area.x + gutter, &n, style);
-        }
-
+    // **A row is as tall as its tallest cell** (`t a`, 2026-09-07). 摺起 takes
+    // the tail off the page and stands a `>` where it stopped; 折行 draws it
+    // **underneath**, inside the cell's own column, so a row grows downwards
+    // and the rows under it move down with it. Only the grid can offer this:
+    // the prose page's rows come from the shared wrap layer, which has no
+    // hanging indent to draw a cell's second line under the cell.
+    let wrap = editor.cell_wrap();
+    // One row's cells, each as the lines it is drawn on — one line each
+    // unless 折行 is on.
+    let lines_of = |line: usize| -> (Vec<(usize, usize)>, Vec<Vec<String>>) {
         let source = editor.current_buffer().rope().line(line).to_string();
         let cells = editor.row_cells(line);
+        let parts = cells
+            .iter()
+            .enumerate()
+            .map(|(i, span)| {
+                let w = widths.get(i).copied().unwrap_or(MIN_COLUMN);
+                let text = yumete_core::table::cell_text(&source, *span);
+                match wrap && w > 0 {
+                    // **Trailing spaces do not buy a line.** A cell of a table
+                    // squared up in the file carries its column's whole width
+                    // as padding, so `短` plus thirty spaces is thirty-three
+                    // cells wide and wrapped to a second line holding nothing.
+                    true => wrapped(text.trim_end(), w),
+                    false => vec![text],
+                }
+            })
+            .collect();
+        (cells, parts)
+    };
+    // How tall a row is drawn — counting only the columns that are on screen,
+    // since a cell scrolled off the right edge must not buy rows nobody sees.
+    let height_of = |parts: &[Vec<String>]| -> usize {
+        if !wrap {
+            return 1;
+        }
         let mut x = area.x + gutter;
-        for (i, span) in cells.iter().enumerate().skip(viewport.left) {
-            let w = widths.get(i).copied().unwrap_or(MIN_COLUMN) as u16;
+        let mut tall = 1;
+        for (i, part) in parts.iter().enumerate().skip(viewport.left) {
             if x >= right {
                 break;
             }
-            // The cell the cursor is in — or, in a pane that is only being
-            // read, the cell the hit is in. A grid marked *nothing* when it
-            // was the one showing a search hit, which is the one case the
-            // second work area exists for.
-            let here = line == cursor_row && i == cursor_cell;
-            let style = if here {
-                match peek {
-                    None => on,
-                    // 朱's own wash, the same mark the prose page gives the
-                    // hit you are standing on.
-                    Some(_) => Style::default().bg(ink.wash()),
+            tall = tall.max(part.len());
+            let w = widths.get(i).copied().unwrap_or(MIN_COLUMN) as u16;
+            x += w + if w == 0 { 0 } else { GAP as u16 };
+        }
+        tall
+    };
+    // **The cursor's row is kept whole on the page.** The ordinary scroll rule
+    // counts rows of the file; with 折行 on, one row of the file can be five
+    // rows of the window, so the page starts low enough that the row the
+    // cursor is in — all of it — still fits.
+    if wrap {
+        while viewport.top < cursor_row {
+            let mut used = 0usize;
+            let mut line = viewport.top;
+            let fits = loop {
+                if line > bottom_row {
+                    break true;
                 }
-            } else if ragged && i >= columns {
-                band_if(line == cursor_row, band, text).patch(torn)
-            } else {
-                band_if(line == cursor_row, band, text)
+                let (_, parts) = lines_of(line);
+                let tall = height_of(&parts);
+                if line == cursor_row {
+                    break used + tall <= rows;
+                }
+                used += tall;
+                if used >= rows {
+                    break false;
+                }
+                line += 1;
             };
-            // The cell's ground runs the column's full width, so the highlight
-            // is a *cell* — a box you are inside — and not just its letters.
-            for cx in x..(x + w).min(right) {
+            if fits {
+                break;
+            }
+            viewport.top += 1;
+        }
+    }
+
+    let mut caret = (area.x + gutter, area.y + head);
+    let floor = area.y + area.height;
+    let mut y = area.y + head;
+    let mut line = viewport.top;
+    while y < floor && line <= bottom_row {
+        let ragged = editor.row_is_ragged(line);
+        let (cells, parts) = lines_of(line);
+        let tall = height_of(&parts).min((floor - y) as usize).max(1);
+        for k in 0..tall {
+            let y = y + k as u16;
+            // The row number, frozen at the left: with the columns scrolled
+            // away it is the only thing left that says which row this is. A
+            // wrapped row is numbered **once**, on the line it starts on —
+            // the lines under it are the same row, and a second number there
+            // would say they were not.
+            if gutter > 0 {
+                let n = match k {
+                    0 => crate::gutter_text(
+                        line - base.min(line),
+                        cursor_row.saturating_sub(base),
+                        gutter as usize,
+                        config.editor.line_numbers,
+                    ),
+                    _ => String::new(),
+                };
+                let style = match (ragged, peek.is_some() && line == cursor_row) {
+                    (true, _) => gutter_style.patch(torn),
+                    // The row the hit is on, so 「在哪一行」 is answered before
+                    // the eye has found the cell.
+                    (false, true) => gutter_style.fg(ink.mark()).add_modifier(Modifier::BOLD),
+                    (false, false) => gutter_style,
+                };
+                for x in area.x..area.x + gutter {
+                    if let Some(cell) = buf.cell_mut((x, y)) {
+                        cell.set_symbol(" ").set_style(style);
+                    }
+                }
+                put_text(buf, area.x, y, area.x + gutter, &n, style);
+            }
+
+            let mut x = area.x + gutter;
+            for (i, _) in cells.iter().enumerate().skip(viewport.left) {
+                let w = widths.get(i).copied().unwrap_or(MIN_COLUMN) as u16;
+                if x >= right {
+                    break;
+                }
+                // The cell the cursor is in — or, in a pane that is only being
+                // read, the cell the hit is in. A grid marked *nothing* when it
+                // was the one showing a search hit, which is the one case the
+                // second work area exists for.
+                let here = line == cursor_row && i == cursor_cell;
+                let style = if here {
+                    match peek {
+                        None => on,
+                        // 朱's own wash, the same mark the prose page gives the
+                        // hit you are standing on.
+                        Some(_) => Style::default().bg(ink.wash()),
+                    }
+                } else if ragged && i >= columns {
+                    band_if(line == cursor_row, band, text).patch(torn)
+                } else {
+                    band_if(line == cursor_row, band, text)
+                };
+                // The cell's ground runs the column's full width, so the
+                // highlight is a *cell* — a box you are inside — and not just
+                // its letters. Every line of it, when it is drawn on several.
+                for cx in x..(x + w).min(right) {
+                    if let Some(cell) = buf.cell_mut((cx, y)) {
+                        cell.set_symbol(" ").set_style(style);
+                    }
+                }
+                let content = parts[i].get(k).map(String::as_str).unwrap_or("");
+                // **A cut cell says so**, in the same `>` the prose page marks
+                // a folded tail with — one symbol, one meaning, whichever
+                // surface the table is drawn on. Nothing is cut under 折行:
+                // what would have been folded away is on the lines below.
+                let mark = yumete_core::mdtable::FOLD_MARK;
+                let cut = w > 0 && yumete_cjk::str_width(content) > w as usize;
+                let stop = match cut {
+                    true => (x + w).saturating_sub(yumete_cjk::str_width(mark) as u16),
+                    false => x + w,
+                };
+                put_text(buf, x, y, stop.min(right), content, style);
+                if cut && stop < right {
+                    // 金 and bold, the ink the prose page gives it: the
+                    // furniture's grey is the colour of the rules and the
+                    // line numbers, which set the one mark on the grid that
+                    // is *not* furniture back further than the writing it
+                    // stands after.
+                    put_text(
+                        buf,
+                        stop,
+                        y,
+                        (x + w).min(right),
+                        mark,
+                        style.fg(ink.gold()).add_modifier(Modifier::BOLD),
+                    );
+                }
+                if here {
+                    // Where typing would land — which is *inside* the cell, not
+                    // at its start. Reading by character (`Tab`), and typing in
+                    // Insert, both move the cursor within the cell, and a caret
+                    // pinned to the cell's first 字 says they did not. Under
+                    // 折行 it is on the line the caret's own character is on.
+                    let from = editor
+                        .cell_span(line, i)
+                        .map(|(a, _)| a)
+                        .unwrap_or(usize::MAX);
+                    let into = editor.cursor().saturating_sub(from);
+                    let (at, step) = caret_in(&parts[i], into);
+                    if at == k {
+                        caret = ((x + (step as u16).min(w)).min(right.saturating_sub(1)), y);
+                    }
+                }
+                // The seam after the cell: the page's own ground, except on the
+                // row the cursor is on, where the band runs unbroken so the row
+                // reads as one thing. A drawn rule goes in it — and keeps the
+                // row's ground, so the cursor's band is not cut into pieces.
+                let seam = if w == 0 { 0 } else { GAP as u16 };
+                let ground = band_if(line == cursor_row, band, page);
+                for cx in (x + w)..(x + w + seam).min(right) {
+                    if let Some(cell) = buf.cell_mut((cx, y)) {
+                        match stroke {
+                            Some((glyph, rule)) => cell.set_symbol(glyph).set_style(ground.fg(rule)),
+                            None => cell.set_symbol(" ").set_style(ground),
+                        };
+                    }
+                }
+                // A hidden column takes no gap either — a column of
+                // nothing is not a column with a space beside it.
+                x += w + seam;
+            }
+            // A row with fewer cells than the schema says leaves the rest blank
+            // rather than drawing columns that are not there.
+            for cx in x.min(right)..right {
                 if let Some(cell) = buf.cell_mut((cx, y)) {
-                    cell.set_symbol(" ").set_style(style);
+                    cell.set_symbol(" ")
+                        .set_style(band_if(line == cursor_row, band, page));
                 }
             }
-            let content = yumete_core::table::cell_text(&source, *span);
-            // **A cut cell says so**, in the same `>` the prose page marks a
-            // folded tail with — one symbol, one meaning, whichever surface
-            // the table is drawn on. Without it the grid drew a cell that
-            // simply stopped, and there was no way to tell 「這格就這麼長」
-            // from 「後面還有」 (author, 2026-09-07).
-            let mark = yumete_core::mdtable::FOLD_MARK;
-            let cut = w > 0 && yumete_cjk::str_width(&content) > w as usize;
-            let stop = match cut {
-                true => (x + w).saturating_sub(yumete_cjk::str_width(mark) as u16),
-                false => x + w,
-            };
-            put_text(buf, x, y, stop.min(right), &content, style);
-            // 金 and bold, the ink the prose page gives it: the furniture's
-            // grey is the colour of the rules and the line numbers, which set
-            // the one mark on the grid that is *not* furniture back further
-            // than the writing it stands after.
-            if cut && stop < right {
-                put_text(
-                    buf,
-                    stop,
-                    y,
-                    (x + w).min(right),
-                    mark,
-                    style.fg(ink.gold()).add_modifier(Modifier::BOLD),
-                );
-            }
-            if here {
-                // Where typing would land — which is *inside* the cell, not at
-                // its start. Reading by character (`Tab`), and typing in Insert,
-                // both move the cursor within the cell, and a caret pinned to
-                // the cell's first 字 says they did not.
-                let from = editor
-                    .cell_span(line, i)
-                    .map(|(a, _)| a)
-                    .unwrap_or(usize::MAX);
-                let into: String = content
-                    .chars()
-                    .take(editor.cursor().saturating_sub(from))
-                    .collect();
-                let step = (yumete_cjk::str_width(&into) as u16).min(w);
-                caret = ((x + step).min(right.saturating_sub(1)), y);
-            }
-            // The seam after the cell: the page's own ground, except on the
-            // row the cursor is on, where the band runs unbroken so the row
-            // reads as one thing. A drawn rule goes in it — and keeps the
-            // row's ground, so the cursor's band is not cut into pieces.
-            let seam = if w == 0 { 0 } else { GAP as u16 };
-            let ground = band_if(line == cursor_row, band, page);
-            for cx in (x + w)..(x + w + seam).min(right) {
-                if let Some(cell) = buf.cell_mut((cx, y)) {
-                    match stroke {
-                        Some((glyph, rule)) => cell.set_symbol(glyph).set_style(ground.fg(rule)),
-                        None => cell.set_symbol(" ").set_style(ground),
-                    };
-                }
-            }
-            // A hidden column takes no gap either — a column of
-            // nothing is not a column with a space beside it.
-            x += w + seam;
-        }
-        // A row with fewer cells than the schema says leaves the rest blank
-        // rather than drawing columns that are not there.
-        for cx in x.min(right)..right {
-            if let Some(cell) = buf.cell_mut((cx, y)) {
-                cell.set_symbol(" ")
-                    .set_style(band_if(line == cursor_row, band, page));
+            if ragged && cells.len() < columns && k == 0 {
+                put_text(buf, x.min(right), y, right, "⟨缺⟩", quiet.patch(torn));
             }
         }
-        if ragged && cells.len() < columns {
-            put_text(buf, x.min(right), y, right, "⟨缺⟩", quiet.patch(torn));
-        }
+        y += tall as u16;
+        line += 1;
     }
     caret
 }
@@ -836,6 +995,23 @@ pub fn draw_detail(frame: &mut Frame, editor: &Editor, config: &Config, area: Re
     }
 }
 
+/// Which line of a wrapped cell the caret is on, and how far into it.
+///
+/// `into` counts the cell's own characters. A cell drawn on one line answers
+/// `(0, …)`, which is what every un-wrapped grid asks for.
+fn caret_in(parts: &[String], into: usize) -> (usize, usize) {
+    let mut seen = 0;
+    for (k, part) in parts.iter().enumerate() {
+        let held = part.chars().count();
+        if into < seen + held || k + 1 == parts.len() {
+            let text: String = part.chars().take(into.saturating_sub(seen)).collect();
+            return (k, yumete_cjk::str_width(&text));
+        }
+        seen += held;
+    }
+    (0, 0)
+}
+
 /// A value broken across `width` cells, as the rows it is drawn on.
 ///
 /// [`yumete_core::wrap::line_rows`] is the page's own breaker — the one that
@@ -846,8 +1022,16 @@ fn wrapped(text: &str, width: usize) -> Vec<String> {
         return Vec::new();
     }
     let chars: Vec<char> = text.chars().collect();
-    yumete_core::wrap::line_rows(text, width)
+    let mut out: Vec<String> = yumete_core::wrap::line_rows(text, width)
         .into_iter()
         .map(|(from, to)| chars[from.min(chars.len())..to.min(chars.len())].iter().collect())
-        .collect()
+        .collect();
+    // **A row that ends exactly on the measure leaves an empty one after it**
+    // — the page wants somewhere to put the caret when a line fills its width
+    // to the cell. Nothing is drawn there, so a cell would be a line taller
+    // than it has anything to show, and every row under it would move down.
+    while out.len() > 1 && out.last().is_some_and(String::is_empty) {
+        out.pop();
+    }
+    out
 }

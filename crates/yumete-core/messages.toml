@@ -4029,6 +4029,13 @@ zhs = "整个窗口都给表格"
 en = "give the table the whole window"
 
 [[message]]
+# t 選單：t a 這一行
+key = "hint.table.wrap-wide-cells"
+zht = "太寬的格子：折到下面幾行（全窗）"
+zhs = "太宽的格子：折到下面几行（全窗）"
+en = "over-wide cells: wrap them onto the lines below (whole-window)"
+
+[[message]]
 # 表格提示：取格／行
 key = "hint.table.yank-cell-or-row"
 zht = "取格／行"
@@ -6254,6 +6261,27 @@ key = "table.vertical-not-allowed"
 zht = "表格是橫排的——先 :table off"
 zhs = "表格是横排的——先 :table off"
 en = "a table is always horizontal — :table off first"
+
+[[message]]
+# 全窗表格裏，gg／G／:120／搜尋想走到表外
+key = "table.window-holds-you"
+zht = "全窗表格只走這張表——t q 交回窗口，t ] 去下一張"
+zhs = "全窗表格只走这张表——t q 交回窗口，t ] 去下一张"
+en = "the whole-window table holds this table — t q gives the window back, t ] goes to the next"
+
+[[message]]
+# t a 在正文頁面上按到——那裏的行是共用的折行層算的
+key = "table.wrap-needs-the-window"
+zht = "格內折行只在全窗表格裏——先 tt（設定已記下）"
+zhs = "格内折行只在全窗表格里——先 tt（设定已记下）"
+en = "cells wrap in the whole-window table — press tt first (the switch is set)"
+
+[[message]]
+# t a 在全窗表格裏把過寬的格子折到下面幾行
+key = "table.wrap-on"
+zht = "格子：折行（超過 {0} 格的接着往下一行寫）"
+zhs = "格子：折行（超过 {0} 格的接着往下一行写）"
+en = "cells: wrapped (past {0} the rest is drawn underneath)"
 
 [[message]]
 # 寫下了一張空表，光標停在第一格
