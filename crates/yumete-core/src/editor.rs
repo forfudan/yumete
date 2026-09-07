@@ -8951,37 +8951,12 @@ impl Editor {
                     })
                     .collect(),
             ),
-            Pending::Goto => (say!("hint.goto.title"), vec![
-                    ("g", say!("hint.goto.start-of-file")),
-                    ("e", say!("hint.goto.end-of-file")),
-                    ("h l", say!("hint.goto.line-start-or-end")),
-                    ("s", say!("hint.goto.first-non-blank")),
-                    ("f", say!("hint.goto.open-this-file")),
-                    ("d w", say!("hint.goto.follow-note")),
-                    ("/ ?", say!("hint.goto.word-elsewhere")),
-                    ("J", say!("hint.join-with-line-below")),
-                ]),
+            Pending::Goto => (say!("hint.goto.title"), Self::said(Self::GOTO_KEYS.iter().copied())),
             Pending::Find(_) => (say!("hint.find"), vec![("", say!("hint.type-a-character"))]),
             Pending::Replace => (say!("hint.overwrite"), vec![("", say!("hint.type-a-character-to-overwrite"))]),
-            // The last row is `hint.vi.backtick`, which had never been read by
-            // anybody: the phrasebook is consulted only for keys that are *not*
-            // bound, and `` ` `` was bound to 轉小寫. As a group prefix it has a
-            // menu, and a vi reader looking for a mark meets the answer here.
-            Pending::Case => (say!("hint.case.title"), vec![
-                    ("l", say!("hint.case.lower")),
-                    ("u", say!("hint.case.upper")),
-                    ("`", say!("hint.case.switch")),
-                    ("", say!("hint.vi.backtick")),
-                ]),
+            Pending::Case => (say!("hint.case.title"), Self::said(Self::CASE_KEYS.iter().copied())),
             Pending::Register => (say!("hint.register.title"), vec![("a–z", say!("hint.register.which-one"))]),
-            Pending::Match => (say!("hint.match.title"), vec![
-                    ("m", say!("hint.match.pair")),
-                    ("i", say!("hint.match.inside")),
-                    ("a", say!("hint.match.around")),
-                    ("s", say!("hint.match.surround")),
-                    ("d", say!("hint.match.take-off")),
-                    ("r", say!("hint.change")),
-                ]),
+            Pending::Match => (say!("hint.match.title"), Self::said(Self::MATCH_KEYS.iter().copied())),
             Pending::MatchPair { .. } => (say!("hint.bracket"), vec![("", say!("hint.type-a-bracket-or-quote"))]),
             Pending::Surround => (say!("hint.match.surround"), vec![("", say!("hint.type-a-bracket"))]),
             Pending::SurroundFrom => (say!("hint.match.take-off"), vec![("", say!("hint.type-the-one-to-take-off"))]),
@@ -8991,79 +8966,26 @@ impl Editor {
                     true => say!("hint.hop.next"),
                     false => say!("hint.hop.previous"),
                 },
-                vec![("c", say!("hint.hop.conflict"))],
+                Self::said(Self::HOP_KEYS.iter().copied()),
             ),
-            Pending::Conflict => (say!("hint.conflict.title"), vec![
-                    ("o", say!("hint.conflict.ours")),
-                    ("t", say!("hint.conflict.theirs")),
-                    ("b", say!("hint.conflict.both")),
-                ]),
+            Pending::Conflict => (
+                say!("hint.conflict.title"),
+                Self::said(Self::CONFLICT_KEYS.iter().copied()),
+            ),
             Pending::Mark => (say!("hint.mark.set-here"), vec![("a–z", say!("hint.mark.name-it"))]),
             Pending::Recall => (say!("hint.mark.go-back"), vec![("a–z", say!("hint.register.which-one"))]),
-            // **What this table can actually do**, not what tables can do.
-            // A delimited file's columns are its schema's — `n`/`D`/`h`/`l`
-            // are not offered there because they are refused there — and the
-            // menu listing them was the one place the editor said a key
-            // existed and then said it did not.
-            // A block is read where it lies (#216), so the keys that rewrite a
-            // file are not offered here — because they are refused here.
+            // **Which list is a question about the cursor, not the mode.** It
+            // used to be `md_region().is_none()`, which is *also* true of a
+            // Markdown table nobody has opened yet — so standing in one of
+            // 手冊's own tables offered the delimited file's keys.
             Pending::Table => {
-                // **The way in comes first.** `t` is a group in every mode
-                // (#206), so most of the time it is pressed by somebody who is
-                // *not* in a table yet — and the menu used to open with 「照這
-                // 欄順排」 and never once mention `t t`. These four work
-                // wherever the cursor is, so they head every list, and on a
-                // page with no table under the cursor they are the whole list.
-                let mut keys = vec![
-                    ("o", say!("hint.table.back-to-prose")),
-                    ("b", say!("hint.table.operate-it")),
-                    ("f", say!("hint.table.draw-it")),
-                    ("t", say!("hint.table.whole-window")),
-                    ("q", say!("hint.table.leave-the-window")),
-                    ("] [", say!("hint.table.next-or-previous")),
-                ];
-                // **Which list is a question about the cursor, not the mode.**
-                // It used to be `md_region().is_none()`, which is *also* true
-                // of a Markdown table nobody has opened yet — so standing in
-                // one of 手冊's own tables offered the delimited file's keys.
-                match self.table.as_ref().map(|v| v.bounds) {
-                    Some(Bounds::Block) if self.block_region().is_some() => keys.extend([
-                        ("/ ?", say!("hint.table.search-columns")),
-                        ("g", say!("hint.table.go-to-cell")),
-                        ("y p", say!("hint.table.yank-or-paste-column")),
-                    ]),
-                    Some(Bounds::Md) if self.md_region().is_some() => keys.extend([
-                        ("/ ?", say!("hint.table.search-columns")),
-                        ("g", say!("hint.table.go-to-cell")),
-                        ("r R", say!("hint.table.add-row")),
-                        ("c C", say!("hint.table.add-column")),
-                        ("d D", say!("hint.table.delete-row-or-column")),
-                        ("j k", say!("hint.table.move-row")),
-                        ("h l", say!("hint.table.move-column")),
-                        ("y p", say!("hint.table.yank-or-paste-column")),
-                        ("1s 1S", say!("hint.table.sort-by-column")),
-                        ("< = >", say!("hint.table.align-column")),
-                        // `F`, not `f` — the lowercase letter is 完整表格
-                        // since #283, and a capital is what a command that
-                        // rewrites every row of the file should have wanted.
-                        ("F", say!("hint.table.line-it-up")),
-                        ("i", say!("hint.table.detail-panel")),
-                    ]),
-                    Some(Bounds::WholeFile) => keys.extend([
-                        ("/ ?", say!("hint.table.search-columns")),
-                        ("g", say!("hint.table.go-to-cell")),
-                        ("1s 1S", say!("hint.table.sort-by-column")),
-                        ("r R", say!("hint.table.add-row")),
-                        ("d", say!("hint.table.delete-row")),
-                        ("j k", say!("hint.table.move-row")),
-                        ("y p", say!("hint.table.yank-or-paste-column")),
-                        ("H", say!("hint.table.first-row-is-data")),
-                        ("e", say!("hint.table.schema")),
-                        ("i", say!("hint.table.detail-panel")),
-                    ]),
-                    _ => {}
-                }
-                (say!("hint.table.title"), keys)
+                let inside = match self.table.as_ref().map(|v| v.bounds) {
+                    Some(Bounds::Block) if self.block_region().is_some() => Some(Bounds::Block),
+                    Some(Bounds::Md) if self.md_region().is_some() => Some(Bounds::Md),
+                    Some(Bounds::WholeFile) => Some(Bounds::WholeFile),
+                    _ => None,
+                };
+                (say!("hint.table.title"), Self::said(Self::table_keys(inside)))
             }
         };
         Some(Hint::Keys(keys.0, keys.1))
@@ -14215,6 +14137,179 @@ impl Editor {
         ('"', "menu.paste.title"),
         ('c', "hint.conflict.title"),
     ];
+
+    /// What `g` may be finished with.
+    const GOTO_KEYS: &'static [(&'static str, &'static str)] = &[
+        ("g", "hint.goto.start-of-file"),
+        ("e", "hint.goto.end-of-file"),
+        ("h l", "hint.goto.line-start-or-end"),
+        ("s", "hint.goto.first-non-blank"),
+        ("f", "hint.goto.open-this-file"),
+        ("n p", "hint.goto.next-or-previous-file"),
+        ("d w", "hint.goto.follow-note"),
+        ("/ ?", "hint.goto.word-elsewhere"),
+        ("J", "hint.join-with-line-below"),
+    ];
+
+    /// What `m` may be finished with — 「這一對」，以及拿它做什麼.
+    const MATCH_KEYS: &'static [(&'static str, &'static str)] = &[
+        ("m", "hint.match.pair"),
+        ("i", "hint.match.inside"),
+        ("a", "hint.match.around"),
+        ("s", "hint.match.surround"),
+        ("d", "hint.match.take-off"),
+        ("r", "hint.change"),
+    ];
+
+    /// What `` ` `` may be finished with.
+    ///
+    /// The last row is `hint.vi.backtick`, which had never been read by
+    /// anybody: the phrasebook is consulted only for keys that are *not*
+    /// bound, and `` ` `` was bound to 轉小寫. As a group prefix it has a menu,
+    /// and a vi reader looking for a mark meets the answer here.
+    const CASE_KEYS: &'static [(&'static str, &'static str)] = &[
+        ("l", "hint.case.lower"),
+        ("u", "hint.case.upper"),
+        ("`", "hint.case.switch"),
+        ("", "hint.vi.backtick"),
+    ];
+
+    /// What `]` and `[` may be finished with — 「下一個這種東西」.
+    const HOP_KEYS: &'static [(&'static str, &'static str)] = &[("c", "hint.hop.conflict")];
+
+    /// What `空格 c` may be finished with — which side of the conflict to keep.
+    const CONFLICT_KEYS: &'static [(&'static str, &'static str)] = &[
+        ("o", "hint.conflict.ours"),
+        ("t", "hint.conflict.theirs"),
+        ("b", "hint.conflict.both"),
+    ];
+
+    /// What `t` offers **wherever the cursor is**.
+    ///
+    /// **The way in comes first.** `t` is a group in every mode (#206), so most
+    /// of the time it is pressed by somebody who is *not* in a table yet — and
+    /// the menu used to open with 「照這欄順排」 and never once mention `t t`.
+    /// These six work anywhere, so they head every list, and on a page with no
+    /// table under the cursor they are the whole list.
+    const TABLE_KEYS: &'static [(&'static str, &'static str)] = &[
+        ("o", "hint.table.back-to-prose"),
+        ("b", "hint.table.operate-it"),
+        ("f", "hint.table.draw-it"),
+        // 摺格子 asks nothing about where the cursor is standing either — it is
+        // a preference about how the page is *drawn* — and it had never once
+        // been offered by any of the four lists, in the group whose whole
+        // purpose is to say what `t` can be finished with.
+        ("w", "hint.table.fold-wide-cells"),
+        ("t", "hint.table.whole-window"),
+        ("q", "hint.table.leave-the-window"),
+        ("] [", "hint.table.next-or-previous"),
+    ];
+
+    /// What `t` adds inside a fenced block. A block is read where it lies
+    /// (#216), so the keys that rewrite a file are not offered — because they
+    /// are refused.
+    const TABLE_KEYS_BLOCK: &'static [(&'static str, &'static str)] = &[
+        ("/ ?", "hint.table.search-columns"),
+        ("g", "hint.table.go-to-cell"),
+        ("y p", "hint.table.yank-or-paste-column"),
+    ];
+
+    /// What `t` adds inside a Markdown table.
+    const TABLE_KEYS_MD: &'static [(&'static str, &'static str)] = &[
+        ("/ ?", "hint.table.search-columns"),
+        ("g", "hint.table.go-to-cell"),
+        ("r R", "hint.table.add-row"),
+        ("c C", "hint.table.add-column"),
+        ("d D", "hint.table.delete-row-or-column"),
+        ("j k", "hint.table.move-row"),
+        ("h l", "hint.table.move-column"),
+        ("y p", "hint.table.yank-or-paste-column"),
+        ("1s 1S", "hint.table.sort-by-column"),
+        ("< = >", "hint.table.align-column"),
+        // `F`, not `f` — the lowercase letter is 完整表格 since #283, and a
+        // capital is what a command that rewrites every row of the file should
+        // have wanted.
+        ("F", "hint.table.line-it-up"),
+        ("i", "hint.table.detail-panel"),
+    ];
+
+    /// What `t` adds in a delimited file, where the columns are the schema's.
+    ///
+    /// **What this table can actually do**, not what tables can do: `n`/`D`/
+    /// `h`/`l` are not offered here because they are refused here, and the menu
+    /// that listed them was the one place the editor said a key existed and
+    /// then said it did not.
+    const TABLE_KEYS_FILE: &'static [(&'static str, &'static str)] = &[
+        ("/ ?", "hint.table.search-columns"),
+        ("g", "hint.table.go-to-cell"),
+        ("1s 1S", "hint.table.sort-by-column"),
+        ("r R", "hint.table.add-row"),
+        ("d", "hint.table.delete-row"),
+        ("j k", "hint.table.move-row"),
+        ("y p", "hint.table.yank-or-paste-column"),
+        ("H", "hint.table.first-row-is-data"),
+        ("e", "hint.table.schema"),
+        ("i", "hint.table.detail-panel"),
+    ];
+
+    /// A table of key names read out in the reader's language.
+    fn said(
+        rows: impl IntoIterator<Item = (&'static str, &'static str)>,
+    ) -> Vec<(&'static str, String)> {
+        rows.into_iter()
+            .map(|(key, what)| (key, crate::messages::say(what, &[])))
+            .collect()
+    }
+
+    /// The keys `t` offers, given what the cursor is standing in.
+    fn table_keys(inside: Option<Bounds>) -> Vec<(&'static str, &'static str)> {
+        let mut keys = Self::TABLE_KEYS.to_vec();
+        keys.extend(
+            match inside {
+                Some(Bounds::Block) => Self::TABLE_KEYS_BLOCK,
+                Some(Bounds::Md) => Self::TABLE_KEYS_MD,
+                Some(Bounds::WholeFile) => Self::TABLE_KEYS_FILE,
+                None => &[],
+            }
+            .iter()
+            .copied(),
+        );
+        keys
+    }
+
+    /// Every key that may follow `leader`, in **any** context.
+    ///
+    /// The menus themselves stay context-sensitive on purpose — `t` inside a
+    /// Markdown table offers what a Markdown table can do, and a delimited file
+    /// offers what a schema can — so this does not replace them. It is their
+    /// union, and it has one reader: the test that asks whether a key sequence
+    /// the documents print is a key sequence the editor has. §5.2.2 found the
+    /// same name wrong in two places eight times over; this is the second place
+    /// made answerable.
+    ///
+    /// `None` means **any character follows**: `f`, `r`, `"`, `M`, `'` and the
+    /// `mi`/`ma`/`ms`/`mr` pairs take a letter or a bracket the writer chooses,
+    /// so there is no list for a document to be checked against.
+    pub fn keys_after(leader: char) -> Option<Vec<String>> {
+        let spell = |rows: &[(&'static str, &'static str)]| -> Vec<String> {
+            rows.iter()
+                .flat_map(|(keys, _)| keys.split_whitespace().map(str::to_string))
+                .collect()
+        };
+        Some(match leader {
+            // 空 is the first character of how the documents spell it: `空格 f`.
+            ' ' | '空' => Self::SPACE_KEYS.iter().map(|(k, _)| k.to_string()).collect(),
+            'g' => spell(Self::GOTO_KEYS),
+            'm' => spell(Self::MATCH_KEYS),
+            '`' => spell(Self::CASE_KEYS),
+            ']' | '[' => spell(Self::HOP_KEYS),
+            't' => [None, Some(Bounds::Block), Some(Bounds::Md), Some(Bounds::WholeFile)]
+                .into_iter()
+                .flat_map(|inside| spell(&Self::table_keys(inside)))
+                .collect(),
+            _ => return None,
+        })
+    }
 
     /// Run one key of a `Space` sequence.
     fn handle_space(&mut self, key: Key) {
