@@ -5288,7 +5288,10 @@ fn draw_hints(frame: &mut Frame, editor: &Editor, config: &Config, area: Rect) {
 /// *which column* — "column 143" of a line of 拆分 means nothing to anybody.
 fn position_of(editor: &Editor) -> String {
     if let Some(where_) = editor.table_status() {
-        return say!("ui.position-in-table", editor.cursor_line() + 1, where_);
+        // **The number the gutter shows.** In the window that is this
+        // table's own row; in prose it is the file's line, which is what the
+        // gutter draws there.
+        return say!("ui.position-in-table", editor.table_row_number(), where_);
     }
     if editor.layout() == WritingLayout::Vertical {
         let at = editor.zong_position();
@@ -5781,6 +5784,69 @@ mod tests {
         assert_eq!(editor.cell_position().map(|(_, c)| c), Some(1));
         let stood_in = page(&editor);
         assert!(stood_in.contains(long), "the cell you are in is whole:\n{stood_in}");
+    }
+
+    /// `t a` — 格內折行 (author, 2026-09-07: 「把所有超长的单元格都在单元格下方
+    /// 的空行中 soft wrap」). The grid can do this and the prose page cannot:
+    /// it owns its own layout, so a row is as tall as its tallest cell and the
+    /// rows under it move down.
+    #[test]
+    fn t_a_wraps_a_long_cell_under_itself_and_moves_the_rows_below_down() {
+        let long = "甲乙丙丁戊己庚辛壬癸子丑寅卯辰巳午未申酉戌亥天地玄黃";
+        let mut editor = editor_with(&format!(
+            "| 地名 | 備註 |\n| --- | --- |\n| 洛陽 | {long} |\n| 長安 | 短 |"
+        ));
+        for key in ['j', 'j', 't', 't'] {
+            editor.on_key(Key::Char(key));
+        }
+        let config = Config::default();
+        let page = |editor: &Editor| -> Vec<String> {
+            let frame = render(editor, &config, 120, 12);
+            (0..12)
+                .map(|y| row_text(&frame, y).split('│').next().unwrap_or("").to_string())
+                .collect()
+        };
+
+        // Folded: one row each, and the tail is off the grid behind a `>`.
+        let folded = page(&editor);
+        let row_of = |page: &[String], needle: &str| {
+            page.iter()
+                .position(|line| line.contains(needle))
+                .unwrap_or_else(|| panic!("{needle} is on the page: {page:?}"))
+        };
+        assert_eq!(
+            row_of(&folded, "長安"),
+            row_of(&folded, "洛陽") + 1,
+            "one row each:\n{}",
+            folded.join("\n")
+        );
+
+        // `t a`: the tail is drawn underneath, in its own column.
+        editor.on_key(Key::Char('t'));
+        editor.on_key(Key::Char('a'));
+        let wrapped = page(&editor);
+        assert!(
+            !wrapped.iter().any(|line| line.contains('>')),
+            "nothing is cut any more:\n{}",
+            wrapped.join("\n")
+        );
+        assert!(
+            wrapped.iter().any(|line| line.contains("玄黃")),
+            "every character of the cell is on the page:\n{}",
+            wrapped.join("\n")
+        );
+        let below = row_of(&wrapped, "長安");
+        assert!(
+            below > row_of(&wrapped, "洛陽") + 1,
+            "and the row under it has moved down:\n{}",
+            wrapped.join("\n")
+        );
+        // The row is numbered once: the lines under it are the same row.
+        let carried = &wrapped[row_of(&wrapped, "洛陽") + 1];
+        assert!(
+            carried.trim_start().starts_with(|c: char| !c.is_ascii_digit()),
+            "no second row number on the wrapped line: {carried:?}"
+        );
     }
 
     /// The other half of the same complaint: 「信息面板也没有换行功能来显示这个
@@ -8132,9 +8198,12 @@ mod tests {
         // and take the row's own number, drawn in the gutter, as the truth
         // about which line that is.
         let rope = editor.current_buffer().rope();
+        // **The gutter numbers the window's own rows** since 2026-09-07, so a
+        // row number is read back through where the table starts.
+        let base = editor.table_row_base();
         let numbered = |y: u16| -> Option<usize> {
             let n: String = (0..6).map(|x| at(&buffer, x, y)).collect();
-            n.trim().parse::<usize>().ok().map(|n| n - 1)
+            n.trim().parse::<usize>().ok().map(|n| base + n - 1)
         };
         // The two frozen rows — the column numbers and the header — are not
         // rows of the table, and the numbers row is all digits.
@@ -8350,7 +8419,10 @@ mod tests {
         editor.on_key(Key::Char('G'));
         editor.on_key(Key::Char('3'));
         editor.on_key(Key::Char('t'));
-        let b = render(&editor, &config, 46, 18);
+        // One row per key in the `t` menu, and the menu has grown since (`t a`,
+        // 2026-09-07) — so the window is sized to hold the menu **and** leave
+        // the pinned HUD somewhere to stand, which is what this is testing.
+        let b = render(&editor, &config, 46, 20);
         let drawn: Vec<String> = (0..b.area.height)
             .map(|y| (0..b.area.width).map(|x| at(&b, x, y)).collect())
             .collect();

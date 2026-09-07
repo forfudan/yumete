@@ -1470,6 +1470,21 @@ fn env_data_dirs() -> Vec<PathBuf> {
 /// yume's own locations, in yume's own order — the **overlay first**, because
 /// that is where a freshly recompiled table lands and the one under it is then
 /// the stale copy.
+///
+/// **Every platform's own places, not one platform's** (2026-09-07). This had
+/// a Windows arm and an XDG arm, and macOS fell through the XDG one — which
+/// is nowhere a Mac keeps anything: yume on macOS installs as an **input
+/// method bundle** (`~/Library/Input Methods/Yume.app`, or the same path under
+/// `/Library` when it was installed for everyone) and keeps what it compiles
+/// and what the writer installed under `~/Library/Application Support/Yume`.
+/// So a Mac with five schemes installed and working answered 「沒有裝」 to
+/// every question yumete could ask (author, 2026-09-07: 「我安装了 yume 并且
+/// 有五个方案，但是 :yume installed 没有办法检测到他们」).
+///
+/// The bundle's `Contents/Resources` is handed over **as a data directory**
+/// rather than as a special case: yume lays its files out there in the same
+/// `data/` and `schemes/` the manifest already names, so every one of them
+/// resolves by the ordinary rule.
 pub fn yume_data_dirs() -> Vec<PathBuf> {
     let mut dirs = Vec::new();
     if let Ok(dir) = env::var("YUME_DATA_DIR") {
@@ -1493,6 +1508,19 @@ pub fn yume_data_dirs() -> Vec<PathBuf> {
             }
         }
     }
+    // macOS, in yume's own order: what it compiled at runtime, then what the
+    // writer installed, then the app bundle it shipped with — a user-level
+    // install shadowing the system-wide one, the way macOS itself reads them.
+    #[cfg(target_os = "macos")]
+    {
+        if let Some(home) = home_dir() {
+            let support = home.join("Library").join("Application Support").join("Yume");
+            dirs.push(support.join("data").join("compiled"));
+            dirs.push(support);
+            dirs.push(mac_bundle(&home.join("Library")));
+        }
+        dirs.push(mac_bundle(Path::new("/Library")));
+    }
     #[cfg(not(windows))]
     {
         let base = match env::var("XDG_DATA_HOME") {
@@ -1515,6 +1543,20 @@ pub fn yume_data_dirs() -> Vec<PathBuf> {
         }
     }
     dirs
+}
+
+/// Where an input method bundle keeps its data, under one `Library`.
+///
+/// macOS installs an input method as an app in `Library/Input Methods/`, and
+/// everything read-only it ships — `schemes/*.toml`, `data/*` — lives in that
+/// bundle's `Contents/Resources`.
+#[cfg(target_os = "macos")]
+fn mac_bundle(library: &Path) -> PathBuf {
+    library
+        .join("Input Methods")
+        .join("Yume.app")
+        .join("Contents")
+        .join("Resources")
 }
 
 /// The ordered list of directories to search for IME data (first found wins).
@@ -2476,6 +2518,40 @@ mod tests {
             dirs.iter().all(|d| seen.insert(d.clone())),
             "a directory is searched twice: {dirs:?}"
         );
+    }
+
+    /// #169. A Mac with yume installed found **nothing**: the search path had
+    /// a Windows arm and an XDG arm, and macOS fell through the XDG one —
+    /// `~/.local/share/yume`, which is nowhere a Mac keeps anything.
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn a_mac_looks_where_yume_actually_installs_itself() {
+        let dirs = yume_data_dirs();
+        let named = |what: &str| dirs.iter().any(|d| d.to_string_lossy().contains(what));
+        assert!(
+            named("Library/Input Methods/Yume.app/Contents/Resources"),
+            "the input method bundle is a data directory: {dirs:?}"
+        );
+        assert!(
+            dirs.iter()
+                .any(|d| d.starts_with("/Library/Input Methods")),
+            "installed for everyone, too: {dirs:?}"
+        );
+        assert!(
+            named("Application Support/Yume"),
+            "and what it compiled at runtime: {dirs:?}"
+        );
+        // The overlay is read **before** the bundle it shadows: a freshly
+        // recompiled table is the one the writer meant.
+        let overlay = dirs
+            .iter()
+            .position(|d| d.ends_with("Yume/data/compiled"))
+            .expect("the overlay is in the list");
+        let bundle = dirs
+            .iter()
+            .position(|d| d.to_string_lossy().contains("Yume.app"))
+            .expect("the bundle is in the list");
+        assert!(overlay < bundle, "the overlay comes first: {dirs:?}");
     }
 
     #[test]
