@@ -895,9 +895,12 @@ fn composes(mode: Mode) -> bool {
     // point of it is that the reader is thinking 「竖排模式」 and the command
     // is called `layout vertical`. 英 when the line opens, lone-Shift to 中,
     // exactly as `/` does.
+    // …and the picker (§5.2.2 fault 9). `空格 f` filters a list of
+    // 「第三章.md」 and `空格 b` a list of open chapters; without this the
+    // only part of either name a reader could type is the extension.
     matches!(
         mode,
-        Mode::Insert | Mode::Search | Mode::Ruby | Mode::Lookfor
+        Mode::Insert | Mode::Search | Mode::Ruby | Mode::Lookfor | Mode::Picker
     )
 }
 
@@ -2256,7 +2259,9 @@ fn draw(
     let footer = if hint_rows == 1 { hint_area } else { status_area };
     draw_command_menu(frame, editor, config, area, footer);
     draw_lookfor_menu(frame, editor, config, area, footer);
-    draw_picker(frame, editor, config, area, footer);
+    // Where the picker put its caret, so the candidate panel can stand under
+    // the query instead of over the page the list is already covering.
+    let picker_caret = draw_picker(frame, editor, config, ime, area, footer);
     // One panel for every half-pressed sequence, `空格` included — it used to
     // draw its own menu and every other prefix got a row.
     // **The page's rectangle, not the frame's**: a menu drawn from the frame
@@ -2291,13 +2296,20 @@ fn draw(
     // `bare` draws no panel — the candidate is already in the sentence and the
     // code is under the caret. Unless there is no sentence to draw it into:
     // see `page_can_hold_a_candidate`.
-    let panel = ime.panel_is_full() || !page_can_hold_a_candidate(editor);
+    // A picker always gets the panel: its list is drawn over the page, so
+    // there is no sentence left down there to put a bare candidate into.
+    let panel =
+        ime.panel_is_full() || picker_caret.is_some() || !page_can_hold_a_candidate(editor);
     if panel && composes_here(editor) && ime.available() && ime.is_composing() {
         // The panel follows the page, not the prompt: a `/` search in a
         // vertically set document still picks its candidates out of a vertical
         // list, and one panel wearing a different skin from the other reads as a
         // different program.
         let (at_x, at_y) = match editor.prompt() {
+            _ if picker_caret.is_some() => {
+                let at = picker_caret.expect("just checked");
+                (at.x, at.y)
+            }
             Some((prefix, text)) => {
                 let col = yumete_cjk::str_width(prefix)
                     + yumete_cjk::str_width(text)
@@ -3625,22 +3637,31 @@ fn draw_sidebar(frame: &mut Frame, editor: &Editor, config: &Config, area: Rect)
 }
 
 /// The `Space f` / `Space b` picker.
-fn draw_picker(frame: &mut Frame, editor: &Editor, config: &Config, area: Rect, status: Rect) {
-    let Some(picker) = editor.picker() else {
-        return;
-    };
+fn draw_picker(
+    frame: &mut Frame,
+    editor: &Editor,
+    config: &Config,
+    ime: &ImeSession,
+    area: Rect,
+    status: Rect,
+) -> Option<Position> {
+    let picker = editor.picker()?;
     let ink = crate::theme::Palette::of(config);
     let matches = picker.matches();
     let items: Vec<String> = matches.iter().map(|i| i.label().to_string()).collect();
+    // The code being composed shows in the query, where a `/` search shows it
+    // too: the reader has to see 「di3」 turn into 「第」 before choosing.
+    let preedit = prompt_preedit(editor, ime);
     let footer = format!(
-        "{}/{}  {}",
+        "{}/{}  {}{}",
         if items.is_empty() {
             0
         } else {
             picker.selected() + 1
         },
         picker.total(),
-        picker.query()
+        picker.query(),
+        preedit
     );
     let at = picker.selected();
     // One column: these are paths, long and of every length, and columns of
@@ -3666,18 +3687,20 @@ fn draw_picker(frame: &mut Frame, editor: &Editor, config: &Config, area: Rect, 
     // The caret sits in the query, which is typed text like any other prompt.
     // The footer is `title  n/total  query`, so the query begins as far in as
     // everything before it is wide.
-    let before = footer.len() - picker.query().len();
+    let before = footer.len() - picker.query().len() - preedit.len();
     let col = yumete_cjk::str_width(&footer[..before])
-        + yumete_cjk::str_width(&picker.before_caret());
-    frame.set_cursor_position(Position::new(
-        status.x + 1 + col as u16,
-        status.y,
-    ));
+        + yumete_cjk::str_width(&picker.before_caret())
+        + yumete_cjk::str_width(&preedit);
+    let caret = Position::new(status.x + 1 + col as u16, status.y);
+    frame.set_cursor_position(caret);
+    Some(caret)
 }
 
-/// The composition in progress, when a `/` or `:` prompt is open.
+/// The composition in progress, when a `/` or `:` prompt — or a picker's
+/// query, which is the same thing wearing a list — is open.
 fn prompt_preedit(editor: &Editor, ime: &ImeSession) -> String {
-    if editor.prompt().is_some() && ime.available() && ime.is_composing() {
+    let typing = editor.prompt().is_some() || editor.picker().is_some();
+    if typing && ime.available() && ime.is_composing() {
         ime.display_buffer()
     } else {
         String::new()

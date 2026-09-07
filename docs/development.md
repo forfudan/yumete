@@ -2791,40 +2791,90 @@ is none of them — and draws nothing beside the base, which is what the status
 line had been claiming all along. The two comments twenty lines apart that had
 been arguing this are both kept, one under each field.
 
-### 4 · The markdown grid keys report success on a read-only buffer
+### 4 · The markdown grid keys report success on a read-only buffer — **fixed 2026-09-07**
 
 `:readonly on` → `:table` → `t r` says 「加了一行」 with the grid unchanged and
-the buffer marked `[只讀]`. The text is safe — `Buffer::insert` returns early
-(`buffer.rs:425`) — so what is lost is only the truth. `md_write`
-(`editor.rs:5985`) and `sort_table` (`:6238`) skip the `refuse_readonly` guard
-that ~28 other call sites carry, and `md_new_row` writes its message
-unconditionally (`:6087`). The `.csv` half of the same `t` menu is guarded;
-the `.md` half is not.
+the buffer marked `[只讀]`. The text is safe — `Buffer::insert` returns early —
+so what is lost is only the truth. `md_write` and `sort_table` skipped the
+`refuse_readonly` guard that ~28 other call sites carry, and `md_new_row` wrote
+its message unconditionally. The `.csv` half of the same `t` menu was guarded;
+the `.md` half was not.
 
-### 5 · The built-in help teaches a command that errors
+**The fix is a door, not eight guards** — §5.2.3 ⑤ answered locally rather than
+across every edit path. `md_parts` was the one thing all nine of the `.md`
+structural edits called first, and it is `&self`, so it could not refuse and
+could not say anything. It is now two functions: `md_parts` still reads, and
+`md_parts_to_edit(&mut self)` refuses read-only and says so. Nine call sites
+moved to it (`md_new_row`, `md_drop_row`, `md_move_row`, `md_new_column`,
+`md_drop_column`, `md_move_column`, `md_sort_by`, `md_align`, `paste_grid`); the
+two that only inspect the parts (`table_columns`, `column_values`) kept the
+reading door, and `put_column`/`put_cell` already guarded themselves.
+`sort_table`'s delimited half — which rewrites the whole rope from its own
+lines and never touches `md_parts` — got the guard directly.
 
-`help_chinese()` prints `(":segment on", …)` (`editor.rs:8190`) and
-`README.md:51` says the same, while `command.rs:3590` asserts
-`parse(":segment").is_err()`. Driven: 「沒有「segment」這個命令」.
+**Why the door and not the tails**: the nine tails each end in a
+`self.status = say!(…)` that has no way to know, and the tenth was always going
+to be written without one. `the_markdown_grid_keys_say_so_on_a_locked_file`
+walks `t r` `t d` `t R` `t c` `t D` and `:table sort` over a locked grid and
+asserts the text does not move *and* that 只讀 is said.
 
-### 6 · `:rec!` does not exist
+### 5 · The built-in help teaches a command that errors — **fixed 2026-09-07**
 
-`FORCEABLE` (`command.rs:1567`) lists nine names and `recover` is not among
-them, so `resolve`'s `!` branch never finds a prefix of it. `:recover!` works,
-`:rec!` `:recov!` `:recove!` are all `Unknown` — while `:rec` without the bang
-is fine. The comment on that branch says *the bang belongs to the command, not
-to its spelling*; `recover` is the one it forgot. (The same branch also spells
-those nine names out a third time at `:1543`, which is why the fix is two lines
-and the cure — a `force: bool` on `parse` — is a refactor.)
+`help_chinese()` printed `(":segment on", …)` and `README.md:51` said the same,
+while `command.rs` asserted `parse(":segment").is_err()`. Driven: 「沒有
+「segment」這個命令」. 分詞 became one subject under `:word`; the help never
+heard. Both now say `:word show on`.
 
-### 7 · `:export` asks for the wrong argument, and its four formats are unfindable
+**The cure is the test, not the line.** `the_help_teaches_no_command_the_parser_refuses`
+reads all four pages back — `help_common`, `help_chinese`, `help_vertical`,
+`help_table` — pulls every row whose keys begin with `:`, and hands each to
+`command::parse`. The two files could not meet before; now the help is read by
+the parser that has to run it.
 
-`COMMANDS` declares `args: Args::Free("<檔名>")` (`command.rs:2984`) while
-`parse` reads the **format** first (`:1085`). Driven: `:export 第三章.md` →
-「沒有「第三章.md」這種格式——html、typst，或者 csv、tsv」. Because the
-argument is `Args::Free`, `complete_at` returns a placeholder row and
-`deep_from_root` finds nothing: `html` `typst` `csv` `tsv` are the only words
-this editor accepts that appear **nowhere** in `::`'s 221-row corpus.
+### 6 · `:rec!` does not exist — **fixed 2026-09-07**
+
+`FORCEABLE` listed nine names and `recover` was not among them, so `resolve`'s
+`!` branch never found a prefix of it. `:recover!` worked, `:rec!` `:recov!`
+`:recove!` were all `Unknown` — while `:rec` without the bang was fine. The
+comment on that branch says *the bang belongs to the command, not to its
+spelling*; `recover` is the one it forgot.
+
+**One list, because there were two.** `FORCEABLE` held the plain names and a
+`match` arm twenty lines down held their banged spellings, and a name had to be
+in both. It now holds the **banged** spellings — `"recover!"` — and
+`forceable(name)` finds a command's bang by stripping it, which is the whole of
+the `match` arm. The list cannot drift from itself.
+
+**Two tests, in both directions.**
+`a_forceable_command_takes_its_bang_on_every_prefix` walks the list and asserts
+that wherever `resolve(stem)` names the command, `resolve(stem!)` names its
+banged spelling. That is not the direction that failed, though — the direction
+that failed is *a command that accepts a bang and is not in the list*, and
+`parse` reads `recover!` by its whole name whatever the list says. So the same
+test walks `COMMANDS` and asserts `parse(":<name>!")` comes back `Unknown`
+exactly when `forceable` says it takes none. (Two entries are skipped: `!<命令>`
+and `s/pat/rep/` are spelled as the line they match, so a `!` glued to the end
+lands in an argument.)
+
+### 7 · `:export` asks for the wrong argument, and its four formats are unfindable — **fixed 2026-09-07**
+
+`COMMANDS` declared `args: Args::Free("<檔名>")` while `parse` read the
+**format** first. Driven: `:export 第三章.md` → 「沒有「第三章.md」這種格式
+——html、typst，或者 csv、tsv」, from a prompt that had just asked for a file
+name. Because the argument was `Args::Free`, `complete_at` returned a
+placeholder row and `deep_from_root` found nothing: `html` `typst` `csv` `tsv`
+were the only words this editor accepts that appeared **nowhere** in `::`'s
+221-row corpus.
+
+`EXPORT_FORMATS` is now four `Word`s, each with `then: Args::Free("<檔名>")` —
+the file name comes second, which is what the parser was doing all along. Tab
+completes them, `::` finds them, and `composes_here` now offers the IME for the
+path after a format instead of for the format itself. **No `Need::Table` on
+`csv`/`tsv`**, although one parses: away from a table the export already answers
+with the row it wanted and the `|` it was looking for, and a prerequisite would
+replace that with an offer to *open* a table where there is none
+(`a_table_exports_as_a_file_without_being_converted_in_place` caught exactly
+that when it was tried).
 
 ### 8 · `t20,20g` is taught in two places and implemented in none — **fixed 2026-09-07**
 
@@ -2834,14 +2884,25 @@ so inside a table `t20,20g` broke at the comma and the rest landed as text.
 which worked. The comma is a joint now (§5.7), `g` refuses a span, and the
 tutor says what the editor does.
 
-### 9 · The file picker cannot type Chinese
+### 9 · The file picker cannot type Chinese — **fixed 2026-09-07**
 
-`composes()` (`yumete-tui/src/lib.rs:878`) lists `Insert | Search | Ruby |
-Lookfor`. `Mode::Picker` is absent — in fact `Mode::Picker` never appears
-anywhere in `yumete-tui`. So `空格 f` and `空格 b` filter a list of
-「第三章.md」 by ASCII only. The function's own comment already argues the
-case: *in a Chinese document it is usually Chinese text… which in a novel is
-almost nothing*. One line.
+`composes()` listed `Insert | Search | Ruby | Lookfor`. `Mode::Picker` was
+absent — in fact `Mode::Picker` never appeared anywhere in `yumete-tui`. So
+`空格 f` and `空格 b` filtered a list of 「第三章.md」 by ASCII only, which in
+a Chinese manuscript is the extension and nothing else.
+
+**It was four lines, not one**, because the key opening the IME is only the
+first of them and the rest is where the text goes and where the panel stands:
+
+| where | what |
+| --- | --- |
+| `composes` | `Mode::Picker` added — the gate that lights the preedit, the panel, lone-Shift and `C-Space` together |
+| `insert_committed` | a `Mode::Picker` arm that pushes the committed characters into the picker's query; without it the IME ran and the text went nowhere |
+| `prompt_preedit` | now answers for a picker as well as for a `/` or `:` prompt, and `draw_picker` writes it after the query and steps the caret past it |
+| `draw_picker` | returns its caret, so the candidate panel stands under the query — and a picker always takes the panel, because its list covers the page a bare candidate would go into |
+
+`picker::score` was already Unicode-clean (`to_lowercase` over `char`s, and
+`'　'` is in its segment-start set): only the text was never arriving.
 
 ### 10 · `:tutor` teaches a key that closes the table — **fixed 2026-09-07**
 
@@ -3068,6 +3129,14 @@ missed.
 - **Patch the callers**: two guards, today.
 - **Move the gate into the buffer** and let it return a `Result`: the class of
   bug cannot recur, at the price of a signature change across every edit path.
+
+**Fault 4 was answered locally on 2026-09-07, and the local answer is a third
+option worth naming: put the gate on the door a family of callers already comes
+through.** The nine `.md` structural edits all called `md_parts` first, so
+`md_parts_to_edit` refuses once for all nine and a tenth cannot be written
+without it. That works because the family had a door; the ~28 remaining call
+sites do not share one, which is exactly what makes ⑤ still a question. See
+§5.2.2 fault 4.
 
 ## 5.3 Releasing, and the Homebrew tap (#135, planned)
 
@@ -3368,9 +3437,11 @@ the same review wanted and did not get:
 - Users may have a different opinion on what is a "word" in CJK, so the segmentation
   of CJK words can be visualized by means of different background colors (not too
   intrusive, two or three colors are enough) and users can toggle the segmentation
-  visualization on/off. **Done:** `:segment` (alias `:seg`) toggles an overlay that
+  visualization on/off. **Done:** `:word show` toggles an overlay that
   tints each word with two alternating, subtle backgrounds (configurable under
   `[theme] segmentation`; on by default via `[editor] show_segmentation`).
+  (Written here as `:segment`, which is what it was called until 分詞 became
+  one subject under `:word`.)
 - Jieba is a good reference for the segmentation algorithm. We evaluated the
   `jieba-rs` crate directly: it is MIT-licensed and well maintained, but its value
   (an embedded Simplified-Chinese dictionary and HMM model) is what we replace with
