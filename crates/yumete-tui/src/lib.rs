@@ -33,6 +33,7 @@ use ratatui::Frame;
 
 use yumete_config::{Config, LineNumbers};
 use yumete_cjk::{Segmenter, WordMark};
+use yumete_core::command::Engagement;
 use yumete_core::editor::Hud;
 use yumete_core::sidebar::View;
 use yumete_core::wrap::{self, Anchor as WrapAnchor};
@@ -268,19 +269,26 @@ pub fn run(
     crate::theme::settle_at_startup(config);
     let mut terminal = ratatui::init();
 
-    // Enable the Kitty keyboard protocol (report modifier presses/releases) so a
-    // lone-Shift tap can toggle 中/英.
+    // Enable the Kitty keyboard protocol — the base level, which every session
+    // holds: unambiguous escape codes, and press told from release.
     //
-    // **`REPORT_ALL_KEYS_AS_ESCAPE_CODES` is deliberately not among them**
-    // (#271). With it on, a text key is no longer sent as text: it arrives as
+    // **`REPORT_ALL_KEYS_AS_ESCAPE_CODES` is not in the base level** (#271).
+    // With it on, a text key is no longer sent as text: it arrives as
     // `CSI <key> ; <mods> ; <text> u`, and the text is in the third parameter —
-    // which crossterm 0.28 parses and throws away (its `REPORT_ASSOCIATED_TEXT`
-    // is a commented-out line in `event.rs`). For an ASCII key that costs
-    // nothing, because the key *is* the text. For the **system** input method
-    // it costs everything: 中文 committed with the space bar arrives as
-    // `KeyCode::Char(' ')` — the commit key — and the sentence is a row of
-    // spaces. The three flags left are what the Shift tap actually needs: a
-    // bare modifier reported at all, and its release told apart from its press.
+    // which crossterm parses and throws away (`REPORT_ASSOCIATED_TEXT` is a
+    // commented-out line in its `event.rs`, in 0.28 and 0.29 alike, and its
+    // `KeyCode::Char` could not carry a two-character commit anyway). For an
+    // ASCII key that costs nothing, because the key *is* the text. For the
+    // **system** input method it costs everything: 中文 committed with the
+    // space bar arrives as `KeyCode::Char(' ')` — the commit key — and the
+    // sentence is a row of spaces.
+    //
+    // **And it is the only flag that reports a bare Shift** ("Additionally,
+    // with this mode, events for pressing modifier keys are reported" — the
+    // protocol says it of that flag and of no other), so leaving it out cost
+    // the lone-Shift tap, silently, from #271 until #290. It is now pushed and
+    // popped in the loop, held exactly while yume has the keyboard, which is
+    // exactly when the system's input method is not composing anyway.
     let enhanced = matches!(supports_keyboard_enhancement(), Ok(true));
     if enhanced {
         let _ = execute!(
@@ -307,12 +315,18 @@ pub fn run(
 
     let mut viewport = Seats::default();
     let mut shift = ShiftTap::default();
+    // Whether the extra enhancement level — the one with
+    // `REPORT_ALL_KEYS_AS_ESCAPE_CODES` in it — is on the terminal's stack.
+    // Pushed and popped as the input method takes and gives back the keyboard,
+    // so it has to be counted: popping one that was never pushed takes the
+    // base level away with it.
+    let mut all_keys = false;
     // What Insert's 中/英 was when the command line borrowed it, and so what
     // it owes back on the way out (#225). `None` means nothing is owed —
     // either the command line is not open, or a command typed on it said what
     // the language should be and that answer is not a state to put back.
     let mut borrowed: Option<bool> = None;
-    // A typesetter started with `:preview`, if one is running — and one left
+    // A typesetter started with `:view preview`, if one is running — and one left
     // behind by a session that ended badly, which is stopped before this one
     // can start another.
     let mut job: Option<Job> = None;
@@ -485,6 +499,30 @@ pub fn run(
         // come back and look — produced nothing at all until a key was pressed
         // (Feature #214). Only while it is on: an editor that wakes up twice a
         // second for nobody is an editor that flattens a battery.
+        // **The flag that reports a bare Shift is held exactly while yume has
+        // the keyboard** (#290). It is the same flag that stops the *system's*
+        // input method from composing (#271), so it cannot simply stay on; and
+        // a lone Shift is invisible without it, so it cannot simply stay off.
+        // Engagement is the line between those two, which is the whole reason
+        // 「ABC」 and 「關」 are two states and not one.
+        if enhanced {
+            let want = ime.available() && ime.engaged();
+            if want != all_keys {
+                let _ = match want {
+                    true => execute!(
+                        stdout(),
+                        PushKeyboardEnhancementFlags(
+                            KeyboardEnhancementFlags::DISAMBIGUATE_ESCAPE_CODES
+                                | KeyboardEnhancementFlags::REPORT_EVENT_TYPES
+                                | KeyboardEnhancementFlags::REPORT_ALTERNATE_KEYS
+                                | KeyboardEnhancementFlags::REPORT_ALL_KEYS_AS_ESCAPE_CODES
+                        )
+                    ),
+                    false => execute!(stdout(), PopKeyboardEnhancementFlags),
+                };
+                all_keys = want;
+            }
+        }
         if editor.reload_auto() && queued.is_none() {
             match event::poll(DISK_POLL) {
                 Ok(false) => {
@@ -501,7 +539,7 @@ pub fn run(
                 // activity is swallowed so it never reaches the editor.
                 match shift.update(&key) {
                     ShiftResult::Toggle => {
-                        if composes_here(editor) && ime.available() {
+                        if composes_here(editor) && ime.available() && ime.engaged() {
                             // The same answer as `:yume on`, given by the hand
                             // rather than by the command line, so it ends the
                             // borrow the same way (#225). Without this the
@@ -519,24 +557,36 @@ pub fn run(
                     continue;
                 }
                 let (code, mods) = normalize_shift(key.code, key.modifiers);
-                // **`C-Space` 開／關輸入法.** The lesson opens with it, `:help`
-                // lists it, and nothing implemented it: the key fell through to
-                // the editor as an unbound `Ctrl(' ')` and was ignored, so the
-                // first thing this editor asks a new reader to press did
-                // nothing at all. A terminal that cannot tell Ctrl+Space from
-                // NUL sends `Char('\0')`; both spellings arrive here.
-                let control_space = mods.contains(KeyModifiers::CONTROL)
-                    && matches!(code, KeyCode::Char(' ') | KeyCode::Char('\0') | KeyCode::Null);
-                if control_space && composes_here(editor) {
+                // **`Shift+Space` 開／關輸入法** (#290) — the outer switch,
+                // above the lone-Shift tap's 中/ABC.
+                //
+                // It was `C-Space`, which macOS spends twice over (Spotlight,
+                // and switching input source) and which therefore never
+                // reached the terminal on the machine this is written on.
+                // `Shift+Space` costs nothing anywhere and, unlike a `空格`
+                // leader binding, is a key **Insert mode can press** — which is
+                // where the question 「這一下要不要 yume 接」 is asked.
+                //
+                // It needs only `DISAMBIGUATE_ESCAPE_CODES` to be told from a
+                // plain space (`CSI 32;2u`), not the flag that reports a bare
+                // modifier; on a terminal that reports neither it is a space,
+                // and `:yume on|abc|off` is the way in.
+                let shift_space =
+                    mods.contains(KeyModifiers::SHIFT) && matches!(code, KeyCode::Char(' '));
+                if shift_space && composes_here(editor) {
                     // As above: an answer about the language ends the borrow.
                     borrowed = None;
-                    let want = if ime.is_chinese() { "-" } else { "+" };
-                    let said = switch_scheme(ime, want, config);
+                    let want = match ime.engaged() {
+                        true => Engagement::Off,
+                        false => Engagement::Chinese,
+                    };
+                    let said = engage(ime, want, config);
                     editor.set_status(said);
                     continue;
                 }
                 let consumed = composes_here(editor)
                     && ime.available()
+                    && ime.engaged()
                     && ime_handle(ime, editor, code, mods);
                 if !consumed {
                     if let Some(k) = map_key(code, mods) {
@@ -848,6 +898,9 @@ pub fn run(
         SetCursorStyle::DefaultUserShape
     );
     if enhanced {
+        if all_keys {
+            let _ = execute!(stdout(), PopKeyboardEnhancementFlags);
+        }
         let _ = execute!(stdout(), PopKeyboardEnhancementFlags);
     }
     ratatui::restore();
@@ -937,7 +990,7 @@ fn composes_here(editor: &Editor) -> bool {
     }
     // `r` 打中文 (§5.2.3 ②): Normal mode, but the next character is *text*.
     // One line, because every gate in this file asks this one question — the
-    // preedit, the panel, lone-Shift and C-Space all light up together.
+    // preedit, the panel, lone-Shift and Shift+Space all light up together.
     if editor.replacing() {
         return true;
     }
@@ -1782,6 +1835,34 @@ fn page_can_hold_a_candidate(editor: &Editor) -> bool {
 /// yuhao-assess-data into the data directory — and a 碼表 of one's own goes in
 /// `.yumete/` beside the manuscript. So the failure worth naming is not "no
 /// such scheme" but "that scheme's tables are not on this machine".
+/// Put the input method into one of its three states, and say which (#290).
+///
+/// **Loading is part of `Chinese`**: turning it on with no 碼表 loaded is
+/// 「開始打中文」, and nobody who asked for that wanted to be told they are not
+/// ready. The other two need nothing loaded — handing the keyboard back is
+/// something a session with no table can do just as well.
+///
+/// Handing it back leaves 中/ABC alone, so coming back comes back to what you
+/// were typing in.
+fn engage(ime: &mut ImeSession, want: Engagement, config: &Config) -> String {
+    if want == Engagement::Chinese && !ime.available() {
+        let loaded = switch_scheme(ime, "", config);
+        if !ime.available() {
+            return loaded;
+        }
+    }
+    ime.set_engaged(want != Engagement::Off);
+    let chinese = want == Engagement::Chinese;
+    if want != Engagement::Off && ime.is_chinese() != chinese {
+        ime.toggle_language();
+    }
+    match want {
+        Engagement::Chinese => say!("ime.chinese", ime.scheme_name()),
+        Engagement::Ascii => say!("ime.abc"),
+        Engagement::Off => say!("ime.off"),
+    }
+}
+
 fn switch_scheme(ime: &mut ImeSession, tag: &str, config: &Config) -> String {
     // Two questions ride the same request, because both are about the session
     // the front end holds and neither is worth a second channel.
@@ -1837,26 +1918,16 @@ fn switch_scheme(ime: &mut ImeSession, tag: &str, config: &Config) -> String {
             Err(why) => why,
         };
     }
-    // 中/英, by name. The lone-Shift tap is the same switch; this is for the
-    // hand that is already on `:`.
-    if tag == "+" || tag == "-" {
-        let want = tag == "+";
-        // Turning it *on* with no 碼表 loaded is「開始打中文」, which means
-        // loading one — nobody who typed this wanted to be told they are not
-        // ready.
-        if want && !ime.available() {
-            let loaded = switch_scheme(ime, "", config);
-            if !ime.available() {
-                return loaded;
-            }
-        }
-        if ime.is_chinese() != want {
-            ime.toggle_language();
-        }
-        return match ime.is_chinese() {
-            true => say!("ime.chinese", ime.scheme_name()),
-            false => say!("ime.english"),
+    // The three states, by name (#290). The lone-Shift tap is the switch
+    // between the first two and `Shift+Space` the switch to the third; this is
+    // for the hand that is already on `:`.
+    if let Some(want) = tag.strip_prefix("lang:") {
+        let want = match want {
+            "chinese" => Engagement::Chinese,
+            "abc" => Engagement::Ascii,
+            _ => Engagement::Off,
         };
+        return engage(ime, want, config);
     }
     // The 碼表 the system has — `builtin`'s other half.
     if tag == "~" {
@@ -2374,7 +2445,7 @@ fn draw(
 /// composing there is that the pattern is Chinese, and without the tag there is
 /// no way to tell why letters are or are not turning into 漢字.
 fn language_tag(editor: &Editor, ime: &ImeSession) -> String {
-    if !composes_here(editor) || !ime.available() {
+    if !composes_here(editor) || !ime.available() || !ime.engaged() {
         return String::new();
     }
     if ime.is_chinese() {
@@ -10531,7 +10602,7 @@ mod tests {
     /// Normal mode is not prose — except for the one character `r` is waiting
     /// for (§5.2.3 ②), which in a Chinese manuscript is 中文 and needs the
     /// engine. Every gate in this file asks `composes_here`, so this one
-    /// answer opens the preedit, the panel, lone-Shift and `C-Space` at once.
+    /// answer opens the preedit, the panel, lone-Shift and `Shift+Space` at once.
     #[test]
     fn a_pending_replace_composes_in_normal_mode() {
         let mut editor = Editor::new();
@@ -10665,7 +10736,7 @@ mod tests {
         assert_eq!(editor.current_buffer().text(), "八");
     }
 
-    /// `C-Space` is the first key the lesson asks a reader to press.
+    /// `Shift+Space` is the first key the lesson asks a reader to press.
     /// `:convert` from end to end, through the real `opencc` — Feature #241.
     ///
     /// The unit tests either side of this one check the plan and the rewrite;
@@ -10732,19 +10803,58 @@ mod tests {
         assert_eq!(shot.lines().count(), 8, "one line per row: {shot}");
     }
 
+    /// The three states (#290), and the two switches that reach them.
+    ///
+    /// **ABC and 關 are not the same state**, although the keyboard behaves
+    /// the same way in both: only one of them is yume holding the keys, and
+    /// the front end holds the terminal flag that reports a bare Shift for
+    /// exactly as long as that is true.
     #[test]
-    fn control_space_turns_the_ime_on_and_off() {
-        // The switch itself, spelled the way the main loop spells it. It went
-        // unimplemented for as long as the lesson has taught it: `Ctrl(' ')`
-        // reached the editor, which has no binding for it, and nothing
-        // happened or was said.
+    fn the_input_method_has_three_states_not_two() {
         let config = Config::default();
         let mut ime = ImeSession::from_table_text(Scheme::LINGMING, "b 吧 八\n");
         assert!(ime.is_chinese(), "a loaded table starts in Chinese");
-        let said = switch_scheme(&mut ime, "-", &config);
+        assert!(ime.engaged(), "…and holding the keyboard");
+
+        // Inner switch: 中文 ⇄ ABC, which is what a lone Shift tap does. yume
+        // still has the keys.
+        let said = engage(&mut ime, Engagement::Ascii, &config);
         assert!(!ime.is_chinese(), "{said}");
-        let said = switch_scheme(&mut ime, "+", &config);
+        assert!(ime.engaged(), "ABC is still yume holding the keyboard: {said}");
+
+        // Outer switch: hand it back. The language is left alone on the way
+        // out, so coming back comes back to what you were typing in.
+        let said = engage(&mut ime, Engagement::Off, &config);
+        assert!(!ime.engaged(), "{said}");
+        assert!(!ime.is_chinese(), "handing it back is not a language answer");
+
+        // …and `Shift+Space` from there is 中文, not ABC: the way back in is
+        // the way you meant to type.
+        let said = engage(&mut ime, Engagement::Chinese, &config);
+        assert!(ime.engaged(), "{said}");
         assert!(ime.is_chinese(), "{said}");
+    }
+
+    /// What the status line says about each of the three (#290).
+    #[test]
+    fn the_language_tag_goes_quiet_when_yume_has_handed_the_keyboard_back() {
+        let config = Config::default();
+        let mut editor = Editor::new();
+        editor.on_key(Key::Char('i'));
+        let mut ime = ImeSession::from_table_text(Scheme::LINGMING, "b 吧 八\n");
+
+        assert!(
+            language_tag(&editor, &ime).contains("靈明"),
+            "中文 names the scheme"
+        );
+        engage(&mut ime, Engagement::Ascii, &config);
+        assert_eq!(language_tag(&editor, &ime), "[ABC]");
+        engage(&mut ime, Engagement::Off, &config);
+        assert_eq!(
+            language_tag(&editor, &ime),
+            "",
+            "nothing to say about a keyboard yume does not have"
+        );
     }
 
     #[test]
