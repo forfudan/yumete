@@ -511,7 +511,7 @@ index, and a row with no number anywhere else is a row that got lost.
 | 286 | **A panel whose left edge lands inside a 漢字 loses its whole left wall** | tui | P2 | the second cell of a 漢字 is not free [^286] | Fixed |
 | 287 | **作品百科 — 一本書自己的百科** | core+tui | P3 | `.yumete/wiki.md` headings become 詞條 [^287] | Proposed |
 | 288 | **A multi-line `<!-- … -->` is drawn half-lit** | core+tui | P3 | an unclosed `<!--` runs to the end of the *line* [^288] | Proposed |
-| 289 | **`t a` 攤開時，找視窗頂那一步每滾一行重算一次折行** | tui | P2 | the top-of-page search re-measures a windowful per row [^289] | Planned |
+| 289 | **`t a` 攤開時，找視窗頂那一步每滾一行重算一次折行** | tui | P4 | 量了：折行一幀只多 0.04–2.9 ms，先不修 [^289] | Planned |
 | 290 | **A lone Shift stopped switching 中/英, and nothing said so** | tui+ime | P1 | the Kitty flag #271 removed was the one reporting it [^290] | Done |
 | 291 | **A list of hexadecimal names is a list you have to Tab through to read** | core+tui | P3 | `Choice` grows a grey note beside the name [^291] | Done |
 | 292 | **Lining up a table whose widest cell is a paragraph writes megabytes of spaces** | core | P2 | a column wider than 400 leaves the table alone; see §5.6 [^292] | Done |
@@ -519,6 +519,7 @@ index, and a row with no number anywhere else is a row that got lost.
 | 294 | **腳註那條四行橫條，是全樹最後一個還是矩形的東西** | tui | P3 | the last rectangle left after #273 [^294] | Planned |
 | 295 | **一存之下檔案翻了幾倍，先問一句** | core+tui | P2 | 又翻倍、又多 256 KB 纔問；`:write` 一處 [^295] | Done |
 | 296 | **`editor.rs` 拆成模組** | core | P2 | 一萬行測試先出去，再按主題逐段搬 [^296] | Done |
+| 297 | **格狀面板在大表上以秒計，而那與折行無關** | core+tui | P3 | `100j` 0.67 秒、一幀 13 ms，摺起折行一模一樣 [^297] | Proposed |
 
 ### 5.5 · A table is a delimiter, a surface and a boundary (#261)
 
@@ -6697,20 +6698,27 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     than inside it.
 
 [^289]: found while reviewing #283's 折行, 2026-09-08. Finding the top of the
-    page under 折行 (`table.rs:591`) pushes `viewport.top` down one row at a
+    page under 折行 (`table.rs:592`) pushes `viewport.top` down one row at a
     time, and **each push re-measures a windowful from scratch** — the inner
     loop asks `lines_of` for every row from the new top until the cursor's row
-    either fits or does not. **每一幀的上限是一個視窗高乘一個視窗高**——普通捲動
+    either fits or does not. 每一幀的上限是**一個視窗高乘一個視窗高**：普通捲動
     規則在這個迴圈之前就把 `viewport.top` 放到了 `cursor_row - inset`
     （`table.rs:381`，`page_inset` 跳遠時回中間），所以推的次數不是跳了多遠，而是
-    至多一個視窗高；量到的是 **~8,600 次折行、一次按鍵裏 0.17 秒**。The
-    answer is right, it is asked too often — the fix is to **carry the running
-    height** (accumulate as the view moves, invalidate on an edit, a width
-    change or a 摺／攤 switch) instead of recomputing the prefix every frame. 摺
-    起 and 攤平 do not pay it: there a row is one line and the walk is
-    arithmetic. **範圍只有 `t t` 那個滿版格狀面板 ＋ `t a` 開着**：`if wrap` 是這段
-    迴圈唯一的閘（`table.rs:592`），而 `t a` 在正文頁只設開關、不改畫法。
-    2026-09-08 重讀，`table.rs` 自這條記下來之後一行沒動，這段仍在。**medium**
+    至多一個視窗高。範圍也只有 `t t` 那個滿版格狀面板：`if wrap` 是這段迴圈唯一
+    的閘，而 `t a` 在正文頁只設開關、不改畫法。
+    **量過了，比記下來時以為的小兩個數量級。** release、200×50 視窗、
+    `yumete-tui` 的 `the_cost_of_drawing_a_grid`（`#[ignore]`，見那支的註釋）：
+    路線表（296 行）畫一幀，摺起 0.90 ms、折行 0.94 ms；把備註換成一格 7,000 字
+    （300 行，也就是 #296 把長備註挪進腳註**之前**的路線表）畫一幀，摺起 13.7 ms、
+    折行 16.5 ms。**折行的加價是 +0.04 ms 到 +2.9 ms**，不是原先記在這裏的
+    「一次按鍵 0.17 秒」——那個數字多半量的是舊表，而且沒有把按鍵與畫面分開計。
+    所以修法（carry the running height，編輯、改寬、摺／攤切換時作廢）**是對的，
+    但先不做**：真文件上買不回 0.05 ms，卻要在畫面代碼裏多一份得維護的緩存。
+    等哪份文件真畫得慢了再說。
+    ⚠️ **同一趟量出來的兩件事都與折行無關，而且都貴得多**：① 一次帶數字的移動
+    在路線表上 27 ms，在一格 7,000 字的表上 **0.67 秒**——那是一百次移動、每次
+    O(一整行)，摺起折行一模一樣；② 那張表**光畫一幀就 13 ms**，折不折都一樣。
+    真要提速是這兩處。**small**
 
 [^290]: 2026-09-08：「目前无法通过 shift 键切换 yume 的中英文模式，只能通过 yume
     on/off 命令切换中英文。」 `ShiftTap` was fine and its unit test green; the
@@ -6876,3 +6884,12 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     ④ **`cargo build` 綠了不算搬完。** 測試是 `editor` 的另一個子模組，兄弟之間看不見
     對方的私有項，而 `cargo build` 根本不編它——每一刀之後還要 `cargo test --no-run`
     再開一輪。同一族還有**關聯常量**：`Self::GOTO_KEYS` 這種也吃 E0624，不是只有方法。
+
+[^297]: 量 #289 的時候順帶量出來的（2026-09-08，release，200×50，
+    `the_cost_of_drawing_a_grid`）。一張 300 行、一格 7,000 字的表：**一次
+    `100j` 要 0.67 秒**，而一幀畫面要 **13 ms**——摺起、折行、正文頁的開關全都
+    不影響，所以兩件都不在 #289 那段迴圈裏。第一件是一百次移動、每次 O(一整行)：
+    `repeat` 一步一步走，每一步的動作自己去量那一行。第二件是畫面：一幀裏每一格
+    都重新取一次 `cell_text` 並量寬。真路線表上這兩個數是 27 ms 與 0.9 ms，還沒
+    到看得見的地步，所以先只是記下來——**要動之前先把這支 stopwatch 跑一遍**，
+    別照這條的描述改。**medium**
