@@ -2521,7 +2521,7 @@ const MENU_SHARE: u16 = 3;
 /// the highlighted row means. Both the `:` menu and the pickers use it, so they
 /// look like one idea rather than two.
 struct List<'a> {
-    items: &'a [String],
+    items: &'a [Row],
     /// Which entry has to stay on screen.
     focus: usize,
     /// Which entry is inked, if any.
@@ -2542,11 +2542,40 @@ struct List<'a> {
     cap: usize,
 }
 
+/// One line of a list panel: what to type, and — for the rows that need it —
+/// a word beside it in the quiet ink (#291).
+///
+/// **The note is dropped before the text is.** It explains the row; it is not
+/// the row, and a column too narrow for both has to keep the half you would
+/// type.
+struct Row {
+    text: String,
+    note: Option<String>,
+}
+
+impl Row {
+    fn plain(text: String) -> Self {
+        Row { text, note: None }
+    }
+
+    /// How wide the row wants to be, note and all.
+    fn width(&self) -> usize {
+        let mut w = yumete_cjk::str_width(&self.text);
+        if let Some(note) = &self.note {
+            w += NOTE_GAP + yumete_cjk::str_width(note);
+        }
+        w
+    }
+}
+
+/// The air between a row's name and its note.
+const NOTE_GAP: usize = 2;
+
 /// Returns the rectangle it covered, so a pinned HUD can keep off it (#284).
 ///
 /// Reading the drawn buffer back used to answer 「is anything there」 for every
 /// kind of thing at once — writing, this menu, the picker, a panel's ring —
-/// and that was the whole of the HUD's collision avoidance. `:hud full` covers
+/// and that was the whole of the HUD's collision avoidance. `:view hud full` covers
 /// writing on purpose, so 「有字」 and 「有面板」 stop reading alike and every
 /// panel has to say where it put itself.
 fn draw_list(
@@ -2585,7 +2614,7 @@ fn draw_list(
         for chunk in items[from.min(items.len())..].chunks(deep.max(1)) {
             let one = chunk
                 .iter()
-                .map(|i| yumete_cjk::str_width(i))
+                .map(|i| i.width())
                 .max()
                 .unwrap_or(0)
                 .saturating_add(2)
@@ -2716,7 +2745,16 @@ fn draw_list(
                 }
             }
         }
-        put_text(buf, x + 1, y, end, &items[i], style);
+        let after = put_text(buf, x + 1, y, end, &items[i].text, style);
+        // The note in the quiet ink — except on the inked row, where the whole
+        // line is one ground and a second colour on it reads as a mistake.
+        if let Some(note) = &items[i].note {
+            let at = after + NOTE_GAP as u16;
+            if at < end {
+                let note_style = if picked { style } else { quiet };
+                put_text(buf, at, y, end, note, note_style);
+            }
+        }
     }
     put_text(
         buf,
@@ -3244,6 +3282,9 @@ fn drawable(text: &str) -> std::borrow::Cow<'_, str> {
     }
 }
 
+///
+/// Returns the first cell it did **not** write, so a caller can put something
+/// after it — a note beside a row (#291) — without measuring the text twice.
 fn put_text(
     buf: &mut ratatui::buffer::Buffer,
     x: u16,
@@ -3294,14 +3335,19 @@ fn draw_command_menu(
     // the command line is already saying what the guess is.
     let highlight = selected.map(|i| i.min(matches.len() - 1));
     let focus = highlight.unwrap_or(0);
-    let items: Vec<String> = matches
+    let items: Vec<Row> = matches
         .iter()
         // The short way to write it, when there is one. An explicit alias wins
         // over the derived prefix: `:w` is `write` because it was declared so,
         // even though `w` is a prefix of three commands.
-        .map(|e| match e.alias.or(e.short) {
-            Some(short) => format!("{}{}  ({short})", e.leading, e.written()),
-            None => format!("{}{}", e.leading, e.written()),
+        .map(|e| Row {
+            text: match e.alias.or(e.short) {
+                Some(short) => format!("{}{}  ({short})", e.leading, e.written()),
+                None => format!("{}{}", e.leading, e.written()),
+            },
+            // 「冰雪清韻」 beside `custom.6947b838`, for the rows whose name is
+            // an identifier and not a word (#291).
+            note: e.note.map(str::to_string),
         })
         .collect();
     // Only the highlighted command's help, on one line. Every command's help at
@@ -3406,10 +3452,10 @@ fn draw_lookfor_menu(
     let room = (area.width as usize)
         .saturating_sub(4)
         .min(LOOKFOR_WIDTH as usize);
-    let items: Vec<String> = found
+    let items: Vec<Row> = found
         .iter()
         .map(|hit| {
-            elide(
+            Row::plain(elide(
                 &format!(
                     "{}{}   {}",
                     hit.choice.leading,
@@ -3417,7 +3463,7 @@ fn draw_lookfor_menu(
                     yumete_core::messages::say(hit.choice.help, &[])
                 ),
                 room,
-            )
+            ))
         })
         .collect();
     // What ⇥ will do with the highlighted row, spelled out. The one thing a
@@ -3954,7 +4000,10 @@ fn draw_picker(
     let picker = editor.picker()?;
     let ink = crate::theme::Palette::of(config);
     let matches = picker.matches();
-    let items: Vec<String> = matches.iter().map(|i| i.label().to_string()).collect();
+    let items: Vec<Row> = matches
+        .iter()
+        .map(|i| Row::plain(i.label().to_string()))
+        .collect();
     // The code being composed shows in the query, where a `/` search shows it
     // too: the reader has to see 「di3」 turn into 「第」 before choosing.
     let preedit = prompt_preedit(editor, ime);
