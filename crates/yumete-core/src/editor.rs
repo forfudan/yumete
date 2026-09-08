@@ -498,9 +498,11 @@ pub enum Render {
 /// nothing about whether the count in front of `d` should be visible. So
 /// `:render` never writes it, and `render.is` keeps its four fields.
 ///
-/// The three names are the shared ones, and the factory level is `Basic` for
-/// §5.7's reason: the level a window opens at must be identical to `Off` in
-/// the worst case, and 醒目 is bought with style rather than with hiding.
+/// The three names are the shared ones. The factory level is `Full`
+/// (2026-09-08): a mark that has to be looked for is not a mark, and the
+/// characters it covers come back with one move of the caret. `Basic` is
+/// §5.7's answer — identical to `Off` in the worst case — and stays one word
+/// away for anyone who would rather not have prose covered.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum Hud {
     /// Nothing beside the caret. The status line's right edge still says it —
@@ -509,7 +511,6 @@ pub enum Hud {
     /// A 藥丸 in the nearest margin: gold on the band, one row high, and
     /// **not one character of the manuscript hidden**. Where it lands is
     /// scored against the caret (#269), so it moves as the page fills.
-    #[default]
     Basic,
     /// A bordered panel, pinned under the caret, over whatever is there.
     ///
@@ -517,6 +518,7 @@ pub enum Hud {
     /// rectangle that a page of prose does not have, so a frame forces
     /// covering — and once the mark sits on the same paper as the writing,
     /// the frame is the only thing saying which characters are not yours.
+    #[default]
     Full,
 }
 

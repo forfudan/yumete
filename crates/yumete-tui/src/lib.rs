@@ -7257,6 +7257,8 @@ mod tests {
     #[test]
     fn bare_puts_the_candidate_in_the_text_and_draws_no_panel() {
         let mut editor = Editor::new();
+        // 出廠是 `full` since 2026-09-08, and this asks about the candidate.
+        editor.set_hud(Hud::Basic);
         editor.on_key(Key::Char('i'));
         let mut ime = ImeSession::from_table_text(Scheme::LINGMING, "b 吧 八 巴
 ");
@@ -8567,6 +8569,8 @@ mod tests {
     #[test]
     fn what_has_been_typed_shows_beside_the_caret_and_in_the_corner() {
         let mut editor = editor_with("那年冬天，山下起了大雪。\n雪一直下到開春。\n");
+        // 出廠是 `full` since 2026-09-08; this one is about the 藥丸.
+        editor.set_hud(Hud::Basic);
         let config = Config::default();
         let page = |editor: &Editor| -> String {
             let b = render(editor, &config, 60, 10);
@@ -8631,6 +8635,8 @@ mod tests {
         // could only look below and above — drew nothing at all here.
         let full = "那年冬天山下起了大雪一直下到開春天氣才回暖起來了。";
         let mut editor = editor_with(&format!("短。\n{full}\n"));
+        // 出廠是 `full` since 2026-09-08; this one is about the 藥丸's margin.
+        editor.set_hud(Hud::Basic);
         editor.on_key(Key::Char('3'));
         let (found, rows) = mark(&editor, 30, 8);
         assert_eq!(
@@ -8645,6 +8651,7 @@ mod tests {
         // below was simply tried first.
         let brim = "那年冬天山下起了大雪一直下到";
         let mut editor = editor_with(&format!("短。\n{brim}\n回暖起來了天氣才好\n"));
+        editor.set_hud(Hud::Basic);
         editor.on_key(Key::Char('j'));
         editor.on_key(Key::Char('3'));
         let (found, rows) = mark(&editor, 30, 8);
@@ -8655,14 +8662,15 @@ mod tests {
         );
     }
 
-    /// **Three levels, and the middle one is what a window opens at** (#284).
+    /// **Three levels, and the loud one is what a window opens at** (#284).
     ///
     /// 「不畫、藥丸、面板」. `off` leaves the status line's right edge and
     /// nothing else — #193's floor, which no level takes away. `full` is the
-    /// one that was asked for by name: a ring, pinned under the caret, over
-    /// whatever is written there. Its cost is exactly what makes `basic` the
-    /// factory level — in Normal the HUD carries the *count*, so the panel
-    /// hides the characters that `3` is counting.
+    /// one that was asked for by name, and since 2026-09-08 the one a window
+    /// opens at: a ring, pinned under the caret, over whatever is written
+    /// there. It does cover writing — in Normal the HUD carries the *count*,
+    /// so the panel hides some of what `3` is counting — and `basic` is one
+    /// word away for anyone who would rather keep the prose.
     #[test]
     fn the_hud_has_three_levels_and_only_the_loud_one_covers_the_writing() {
         let config = Config::default();
@@ -8683,8 +8691,10 @@ mod tests {
         let mut editor = editor_with("那年冬天，山下起了大雪。\n短。\n回暖起來了天氣才好。\n");
         editor.on_key(Key::Char('3'));
 
-        // 出廠: a 藥丸 in the margin, and the writing under it untouched.
-        assert_eq!(editor.hud(), Hud::Basic);
+        // 出廠 is the loud one since 2026-09-08. Ask for the 藥丸 first: it
+        // sits in the margin and leaves the writing under it untouched.
+        assert_eq!(editor.hud(), Hud::Full);
+        editor.set_hud(Hud::Basic);
         let page = rows(&editor).concat();
         assert!(page.contains("╰3"), "beside the caret: {page}");
         assert!(page.contains("回暖起來了天氣才好。"), "{page}");
@@ -8764,6 +8774,8 @@ mod tests {
     fn the_vertical_page_gets_the_hud_too() {
         let mut editor = editor_with("那年冬天，山下起了大雪。\n短。\n回暖起來了天氣才好。\n");
         editor.on_key(Key::Char('3'));
+        // 出廠是 `full` since 2026-09-08; this one is about the 藥丸.
+        editor.set_hud(Hud::Basic);
         let config = vertical_config();
         let buffer = render_vertical(&mut editor, &config, 40, 16);
         let rows: Vec<String> = (0..buffer.area.height)
@@ -8788,6 +8800,8 @@ mod tests {
     #[test]
     fn the_panel_lists_what_would_finish_the_sequence() {
         let mut editor = editor_with("那年冬天，山下起了大雪。\n");
+        // 出廠是 `full` since 2026-09-08; this one is about the 藥丸.
+        editor.set_hud(Hud::Basic);
         let config = Config::default();
         // A wide glyph leaves its second cell empty, so the spaces come out.
         let drawn = |editor: &Editor| -> Vec<String> {
@@ -10834,6 +10848,8 @@ mod tests {
         // the only trace is a right corner whose left corner never arrived.
         for width in 70..110u16 {
             let mut editor = editor_with(&prose);
+            // 出廠是 `full` since 2026-09-08; the panel under test is `t`'s.
+            editor.set_hud(Hud::Basic);
             editor.on_key(Key::Char('t'));
             let buffer = render_with(&editor, &config, &no_ime(), width, 16);
             let mut tops = 0;
