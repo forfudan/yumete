@@ -23,7 +23,7 @@ use crate::zong::Layout;
 ///
 /// The lone-Shift tap crosses between [`Self::Chinese`] and [`Self::Ascii`];
 /// [`Self::Off`] is reached by `:yume off` and left by `:yume on` — no key
-/// of its own, by the author's call (#290). The way out of [`Self::Off`] has
+    /// of its own, settled (#290). The way out of [`Self::Off`] has
 /// to be pressable while a *system* input method holds the keyboard, and the
 /// two chords tried (`C-Space`, `Shift+Space`) are both spent there already.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -1103,7 +1103,7 @@ pub fn parse(input: &str) -> Result<Command, CommandError> {
             // command opens it rather than printing it (#218).
             "schema" => Ok(Command::OpenTableSchema),
             // 「迅速在 markdown 中插入一個三行四列表格」 (#276). Two numbers,
-            // 行 then 欄, the way the author said it and the way a word
+            // 行 then 欄, the way it was asked for and the way a word
             // processor's「插入表格」dialog asks. **`rows` counts the heading**:
             // the rule row underneath is punctuation, and nobody means it when
             // they say three.

@@ -313,7 +313,7 @@ fn main() -> ExitCode {
         ime.set_page_size(page_size);
         let said = match start_scheme {
             // …unless the config says this is a session for writing 漢字,
-            // which for the author of an input method it usually is.
+            // which for anybody who writes an input method it usually is.
             true => switch_scheme_at_startup(ime, wanted, (page_size, chaifen)),
             false => String::new(),
         };

@@ -252,7 +252,7 @@ impl Scheme {
 /// A scheme file is `<dir>/schemes/<tag>.toml`. Each is handed to yume-core,
 /// which parses it, keeps the last one under a given tag (so a user directory
 /// shadows the shipped file, the old Rime rule) and sorts the result into menu
-/// order — 系列 first, then the author's own index, then the name.
+/// order — 系列 first, then the scheme’s own index, then the name.
 ///
 /// **Nothing found leaves everything alone**, deliberately: `factory_lists()`
 /// in yume-core answers `Some(false)` for a tag that is *not* on a list that

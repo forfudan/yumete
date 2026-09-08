@@ -17,7 +17,7 @@
 # condition. It is not a paraphrase of the sentence.
 #
 # Three languages: `zhs` 简体, `zht` 繁體, `en`. **Write `zhs` first** — in
-# 大陆用语, the author's own register — and convert it to `zht`; that is the
+# 大陆用语 — and convert it to `zht`; that is the
 # author's rule of 2026-09-08, and the reason for it is that 簡體 is not only
 # different characters, it is sometimes a different word (檔案／文件,
 # 預設／默认, 程式／程序, 游標／光标), and a sentence composed in the second

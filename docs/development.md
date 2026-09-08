@@ -18,30 +18,31 @@ to grow into a full editor.
 
 ## 1. Vision & scope
 
-yumete is a modal terminal editor (Normal / Insert / Command, like Helix and Vim).
-Its distinguishing features are:
+yumete is a modal terminal editor (Normal / Insert / Command, like Helix and
+Vim). Its distinguishing features are:
 
 1. **First-class CJK.** Correct display width and a font-fallback approach
-   inherited from Yume (the terminal renders glyphs, but yumete never assumes one
-   character equals one cell), plus word-aware motions driven by a segmentation
-   dictionary — so `w`/`b`/`e` move by Chinese/Japanese words rather than by the
-   whitespace-delimited tokens that barely exist in CJK text.
-2. **Built-in Yume IME.** The `yume-core` engine from the sibling yume repository
-   is embedded directly. An in-terminal candidate panel lets users type CJK in
-   Insert mode, and a lone Shift tap toggles 中/英 (漢字 ⇄ ABC), mirroring the GUI
-   frontends. This also leaves room for user-supplied 碼表 (code tables) later.
-3. **Writer-focused.** Only the editing features a novelist needs now: navigation,
-   search, replace, save, quit, undo/redo, and basic selection. Coding features
-   (language LSPs, debugging, git, multiple windows) are deferred, but the
-   architecture leaves room for them.
+   inherited from Yume (the terminal renders glyphs, but yumete never assumes
+   one character equals one cell), plus word-aware motions driven by a
+   segmentation dictionary — so `w`/`b`/`e` move by Chinese/Japanese words
+   rather than by the whitespace-delimited tokens that barely exist in CJK text.
+2. **Built-in Yume IME.** The `yume-core` engine from the sibling yume
+   repository is embedded directly. An in-terminal candidate panel lets users
+   type CJK in Insert mode, and a lone Shift tap toggles 中/英 (漢字 ⇄ ABC),
+   mirroring the GUI frontends. This also leaves room for user-supplied 碼表
+   (code tables) later.
+3. **Writer-focused.** Only the editing features a novelist needs now:
+   navigation, search, replace, save, quit, undo/redo, and basic selection.
+   Coding features (language LSPs, debugging, git, multiple windows) are
+   deferred, but the architecture leaves room for them.
 4. **Outline sidebar.** A foldable heading bar for fast document navigation,
    powered by a Markdown/Typst LSP that recognizes headings.
 5. **Global + local settings.** A global configuration folder and a per-project
    local override, following the XDG convention.
 
 Non-goals for the first release: programming-language syntax highlighting, code
-autocompletion, split windows, a plugin runtime, and collaborative editing. These
-are planned (see §7) but not built first.
+autocompletion, split windows, a plugin runtime, and collaborative editing.
+These are planned (see §7) but not built first.
 
 ---
 
@@ -55,47 +56,51 @@ editor inexpensive to reach.
   (`helix-view`), the TUI (`helix-tui`/`helix-term`), and LSP (`helix-lsp`).
   yumete copies this layering from day one, even while most crates stay thin.
 - **Do not reinvent the wheel.** Text width, grapheme segmentation, and terminal
-  handling come from mature crates — `unicode-width`, `unicode-segmentation`, and
-  `ratatui`/`crossterm` — the same building blocks Helix uses. Where Helix's own
-  crates help (rope and transaction primitives), reuse them too. Everything stays
-  behind our trait boundaries so implementations can be swapped later; see §8.2 for
-  the licensing implications.
+  handling come from mature crates — `unicode-width`, `unicode-segmentation`,
+  and `ratatui`/`crossterm` — the same building blocks Helix uses. Where Helix's
+  own crates help (rope and transaction primitives), reuse them too. Everything
+  stays behind our trait boundaries so implementations can be swapped later; see
+  §8.2 for the licensing implications.
 - **Decouple aggressively.** Every subsystem sits behind a trait — `TextStore`,
-  `Motion`, `Segmenter` (word dictionary), `InputMethod` (Yume), `Renderer` (TUI),
-  `LanguageServer`, `ConfigProvider`, `Keymap`. The core depends on traits, not
-  concrete types, following the same discipline as `yume-core`.
-- **Advanced project structure early.** A Cargo workspace of small crates from the
-  start (see §4), so features land in the right layer and never entangle the core
-  with the TUI or the IME.
-- **Data-driven, not hard-coded.** Keymaps, themes, motions, and CJK behavior are
-  configured through data (TOML and tables) rather than scattered branches,
-  mirroring the yume repository's `ui_strings.toml`, `PUNCT_MAP`, and schema-flag
-  approach.
-- **CJK correctness is a cross-cutting invariant.** All motion, width, rendering,
-  and cursor math goes through grapheme-cluster and East-Asian-width helpers. No
-  code counts `char`s where it should count display cells or graphemes.
+  `Motion`, `Segmenter` (word dictionary), `InputMethod` (Yume), `Renderer`
+  (TUI), `LanguageServer`, `ConfigProvider`, `Keymap`. The core depends on
+  traits, not concrete types, following the same discipline as `yume-core`.
+- **Advanced project structure early.** A Cargo workspace of small crates from
+  the start (see §4), so features land in the right layer and never entangle the
+  core with the TUI or the IME.
+- **Data-driven, not hard-coded.** Keymaps, themes, motions, and CJK behavior
+  are configured through data (TOML and tables) rather than scattered branches,
+  mirroring the yume repository's `ui_strings.toml`, `PUNCT_MAP`, and
+  schema-flag approach.
+- **CJK correctness is a cross-cutting invariant.** All motion, width,
+  rendering, and cursor math goes through grapheme-cluster and East-Asian-width
+  helpers. No code counts `char`s where it should count display cells or
+  graphemes.
 - **Test the core, snapshot the TUI.** Pure logic (motions, segmentation, edits)
   gets unit tests; the TUI gets snapshot tests; the IME reuses the existing
   `yume-core` test suite.
-- **Reuse Yume's build practices.** Bundled CJK fonts, single-source configuration
-  codegen, and reproducible scripts where relevant.
+- **Reuse Yume's build practices.** Bundled CJK fonts, single-source
+  configuration codegen, and reproducible scripts where relevant.
 
 ---
 
 ## 3. Embedding the Yume IME
 
-`yume-core` is pure Rust with a C ABI (`include/yume.h`). Because yumete is itself
-a Rust program, it depends on `yume-core` directly, with no FFI layer:
+`yume-core` is pure Rust with a C ABI (`include/yume.h`). Because yumete is
+itself a Rust program, it depends on `yume-core` directly, with no FFI layer:
 
-- One `Engine` per editor (per buffer is a possible refinement) drives Insert-mode
-  CJK input.
-- Insert-mode keystrokes are fed to `engine.input(codepoint)`; `space()`, `enter()`,
-  `escape()`, `backspace()`, and `select_in_page()` map to the candidate panel.
-- The candidate panel is drawn as a floating overlay near the cursor (a `Renderer`
-  responsibility), reusing the same display data as the GUI panels:
+- One `Engine` per editor (per buffer is a possible refinement) drives
+  Insert-mode CJK input.
+- Insert-mode keystrokes are fed to `engine.input(codepoint)`; `space()`,
+  `enter()`, `escape()`, `backspace()`, and `select_in_page()` map to the
+  candidate panel.
+- The candidate panel is drawn as a floating overlay near the cursor (a
+  `Renderer` responsibility), reusing the same display data as the GUI panels:
   `page_candidates()`, `page_completions()`, `page_simp_codes()`,
-  `page_source_tags()`, `page_comments()`, `highlight()`, and `display_buffer()`.
-- A lone Shift tap toggles 中/英 via `toggle_language()`, matching the web frontend.
+  `page_source_tags()`, `page_comments()`, `highlight()`, and
+  `display_buffer()`.
+- A lone Shift tap toggles 中/英 via `toggle_language()`, matching the web
+  frontend.
 - Number mode, special `/` commands, and reverse lookup (`z`) come directly from
   the core.
 - Data tables are loaded from yumete's data directory, reusing the compiled
@@ -110,10 +115,11 @@ a Rust program, it depends on `yume-core` directly, with no FFI layer:
   and the failure is silent — worse candidates, or a scheme that will not
   switch.
 - Custom 碼表 upload follows naturally: scheme tables are just files loaded at
-  runtime, so a user can drop a custom `.ytab` and `.ydiv` into the data directory
-  and register a new scheme.
+  runtime, so a user can drop a custom `.ytab` and `.ydiv` into the data
+  directory and register a new scheme.
 
-Prototype input panel and candidate panel (lay over the text buffer) goes as follows.
+Prototype input panel and candidate panel (lay over the text buffer) goes as
+follows.
 
 When annotation is disabled:
 
@@ -151,11 +157,17 @@ When annotation is enabled:
   ╚══════════════╧════════════╝
 ```
 
-Besides the borders, we can also use directly the terminal's background color to distinguish the panel from the text buffer. It will be more compact and less intrusive. Maybe we can have two modes and use a command to switch between them.
+Besides the borders, we can also use directly the terminal's background color to
+distinguish the panel from the text buffer. It will be more compact and less
+intrusive. Maybe we can have two modes and use a command to switch between them.
 
-The panel is drawn at the cursor's current position, but it should not overlap the current line of the cursor. It usually appears at the right-below of the cursor. We can use the autocompletion panels's positioning logic of Helix.
+The panel is drawn at the cursor's current position, but it should not overlap
+the current line of the cursor. It usually appears at the right-below of the
+cursor. We can use the autocompletion panels's positioning logic of Helix.
 
-Another option is the horizontal layout where you just add a temporary line below the cursor line, and draw the panel there. The input and each candidate shall have different background colors to distinguish them.
+Another option is the horizontal layout where you just add a temporary line
+below the cursor line, and draw the panel there. The input and each candidate
+shall have different background colors to distinguish them.
 
 ```txt
 inputtext  1. 候選 =abc  2. 候選 b  3. 候選 c臺
@@ -194,8 +206,8 @@ Dependency direction (no cycles): `yumete` → {view, tui, lsp, config} →
 
 Phases are ordered by priority, most writer-critical first:
 
-- **P1 — MVP writer editor** (must-have now): open/edit/save/quit, modal editing,
-  basic motions, search/replace, undo, CJK width correctness.
+- **P1 — MVP writer editor** (must-have now): open/edit/save/quit, modal
+  editing, basic motions, search/replace, undo, CJK width correctness.
 - **P2 — CJK words + Yume IME**: dictionary word motions, in-terminal IME panel,
   Shift 中/英, config folder.
 - **P3 — Outline + Markdown/Typst**: foldable outline sidebar via LSP headings.
@@ -209,57 +221,57 @@ and the three typographic judgements of §5.2 15 are #230–#232. The prose
 sections keep the reasoning that does not fit a Notes column; the table is the
 index, and a row with no number anywhere else is a row that got lost.
 
-| #   | Feature                                   | Area   | Phase | Notes                               | Status |
-| --- | ----------------------------------------- | ------ | ----- | ----------------------------------- | ------ |
-| 1   | Open file / new buffer                    | core   | P1    | args + `:open`                      | Done   |
-| 2   | Save / save-as (`:w`)                     | core   | P1    | atomic write                        | Done   |
-| 3   | Quit / force-quit (`:q` / `:q!`)          | core   | P1    | dirty-check prompt                  | Done   |
-| 4   | Rope-backed text store                    | core   | P1    | ropey / helix rope                  | Done   |
-| 5   | Modal editing: Normal / Insert / Command  | view   | P1    | Helix/Vim-like                      | Done   |
-| 6   | Cursor motions h/j/k/l                    | core   | P1    | grapheme-aware                      | Done   |
-| 7   | Line / goto motions gh/gl/gs/gg/ge        | core   | P1    | Helix goto mode                     | Done   |
-| 8   | Char search f/F/t/T                       | core   | P1    | CJK-aware                           | Done   |
-| 9   | Insert i/a/I/A/o/O                        | view   | P1    | Helix insert                        | Done   |
-| 10  | Delete / change d / c (selection)         | core   | P1    | Helix d/c, grapheme-safe            | Done   |
-| 11  | Undo / redo                               | core   | P1    | snapshot-based                      | Done   |
-| 12  | Visual/selection mode (basic)             | view   | P1    | Helix selection (x + anchor)        | Done   |
-| 13  | Yank / paste (registers, minimal)         | core   | P1    | single register                     | Done   |
-| 14  | Incremental search `/` `?` `n` `N`        | core   | P1    | CJK substring                       | Done   |
-| 15  | Search & replace `:s///`                  | core   | P1    | substring `:s` / `:%s`              | Done   |
-| 16  | East-Asian width rendering                | cjk    | P1    | 2-cell wide glyphs                  | Done   |
-| 17  | Grapheme-cluster cursor math              | cjk    | P1    | IVS / combining safe                | Done   |
-| 18  | CJK font-fallback guidance (docs)         | cjk    | P1    | terminal-dependent                  | Done   |
-| 19  | Status line (mode / file / pos)           | tui    | P1    |                                     | Done   |
-| 20  | Line numbers (abs/rel toggle)             | tui    | P1    |                                     | Done   |
-| 21  | Config: global file + folder              | config | P1    | XDG `~/.config/yumete/`             | Done   |
-| 22  | Config: per-project local override        | config | P2    | `.yumete/` walk-up                  | Done   |
-| 23  | Keymap from TOML (data-driven)            | config | P2    | key aliases                         | Done   |
-| 24  | **Dictionary word segmentation**          | cjk    | P2    | jieba-style DAG; weight table later | Done   |
-| 25  | **Word motions w/b/e (CJK words)**        | core   | P2    | via `Segmenter`                     | Done   |
-| 26  | Word delete/change (`dw`/`cw`)            | core   | P2    | `w`/`b`/`e` + `d`/`c`               | Done   |
-| 27  | **Built-in Yume IME session**             | ime    | P2    | embeds yume-core                    | Done   |
-| 28  | In-terminal candidate panel               | tui    | P2    | floating overlay near caret         | Done   |
-| 29  | Shift toggles 中/英 in Insert             | ime    | P2    | lone-Shift tap (Kitty kbd protocol) | Done   |
-| 30  | IME: number mode / `/`-cmds / `z` reverse | ime    | P2    | via engine input routing            | Done   |
+| # | Feature | Area | Phase | Notes | Status |
+| --- | --------------------------------------------------------------------------------- | -------- | ----- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1 | Open file / new buffer | core | P1 | args + `:open` | Done |
+| 2 | Save / save-as (`:w`) | core | P1 | atomic write | Done |
+| 3 | Quit / force-quit (`:q` / `:q!`) | core | P1 | dirty-check prompt | Done |
+| 4 | Rope-backed text store | core | P1 | ropey / helix rope | Done |
+| 5 | Modal editing: Normal / Insert / Command | view | P1 | Helix/Vim-like | Done |
+| 6 | Cursor motions h/j/k/l | core | P1 | grapheme-aware | Done |
+| 7 | Line / goto motions gh/gl/gs/gg/ge | core | P1 | Helix goto mode | Done |
+| 8 | Char search f/F/t/T | core | P1 | CJK-aware | Done |
+| 9 | Insert i/a/I/A/o/O | view | P1 | Helix insert | Done |
+| 10 | Delete / change d / c (selection) | core | P1 | Helix d/c, grapheme-safe | Done |
+| 11 | Undo / redo | core | P1 | snapshot-based | Done |
+| 12 | Visual/selection mode (basic) | view | P1 | Helix selection (x + anchor) | Done |
+| 13 | Yank / paste (registers, minimal) | core | P1 | single register | Done |
+| 14 | Incremental search `/` `?` `n` `N` | core | P1 | CJK substring | Done |
+| 15 | Search & replace `:s///` | core | P1 | substring `:s` / `:%s` | Done |
+| 16 | East-Asian width rendering | cjk | P1 | 2-cell wide glyphs | Done |
+| 17 | Grapheme-cluster cursor math | cjk | P1 | IVS / combining safe | Done |
+| 18 | CJK font-fallback guidance (docs) | cjk | P1 | terminal-dependent | Done |
+| 19 | Status line (mode / file / pos) | tui | P1 |  | Done |
+| 20 | Line numbers (abs/rel toggle) | tui | P1 |  | Done |
+| 21 | Config: global file + folder | config | P1 | XDG `~/.config/yumete/` | Done |
+| 22 | Config: per-project local override | config | P2 | `.yumete/` walk-up | Done |
+| 23 | Keymap from TOML (data-driven) | config | P2 | key aliases | Done |
+| 24 | **Dictionary word segmentation** | cjk | P2 | jieba-style DAG; weight table later | Done |
+| 25 | **Word motions w/b/e (CJK words)** | core | P2 | via `Segmenter` | Done |
+| 26 | Word delete/change (`dw`/`cw`) | core | P2 | `w`/`b`/`e` + `d`/`c` | Done |
+| 27 | **Built-in Yume IME session** | ime | P2 | embeds yume-core | Done |
+| 28 | In-terminal candidate panel | tui | P2 | floating overlay near caret | Done |
+| 29 | Shift toggles 中/英 in Insert | ime | P2 | lone-Shift tap (Kitty kbd protocol) | Done |
+| 30 | IME: number mode / `/`-cmds / `z` reverse | ime | P2 | via engine input routing | Done |
 | 31 | Scheme switch (靈明/星陳/卿雲/日月/拼音) | ime | P2 | load tables at runtime — superseded by #169 (found rather than listed) and `:yume scheme` | Done |
-| 32  | IME data dir + bundled font guidance      | ime    | P2    | reuse compiled tables               | Done   |
+| 32 | IME data dir + bundled font guidance | ime | P2 | reuse compiled tables | Done |
 | 33 | **Outline sidebar (foldable)** | tui | P3 | right-hand panel, toggle — #94／#97; the folding half is #37 | Done |
 | 34 | **Markdown LSP → headings** | lsp | P3 | **Dropped**: headings come from `markdown.rs` (#96／#114), not from a language server | Dropped |
 | 35 | **Typst LSP → headings** | lsp | P3 | **Dropped**: same — `syntax.rs` and #106 read Typst's own headings | Dropped |
 | 36 | Jump to outline entry | view | P3 | click/keys — #97's 大綱 view, and `:toc 3` | Done |
 | 37 | Fold/unfold outline | tui | P3 | the outline lists; it does not fold. `collapse()` is the explorer's, for directories | Planned |
 | 38 | Space (Normal) → hotkey/help overlay | tui | P3 | which-key style — #91 | Done |
-| 39  | Command palette (`:` completions)         | tui    | P4    | `:` menu, Tab completion            | Done   |
+| 39 | Command palette (`:` completions) | tui | P4 | `:` menu, Tab completion | Done |
 | 40 | Themes (TOML, CJK-friendly) | config | P4 | incl. segmentation overlay polish — #156／#164／#203 | Done |
-| 41  | Soft-wrap for prose                       | tui    | P4    | width-aware wrap; see #77           | Done   |
-| 42  | Auto-save / crash recovery                | core   | P4    | swap file; see #79                  | Done   |
+| 41 | Soft-wrap for prose | tui | P4 | width-aware wrap; see #77 | Done |
+| 42 | Auto-save / crash recovery | core | P4 | swap file; see #79 | Done |
 | 43 | Sessions (reopen last files) | view | P4 | #149 | Done |
-| 44  | Multiple buffers + `:bn`/`:bp`            | view   | P4    | no splits yet; see #76              | Done   |
+| 44 | Multiple buffers + `:bn`/`:bp` | view | P4 | no splits yet; see #76 | Done |
 | 45 | Marks / jumplist | core | P4 | #149 (marks), #120 (jump list) | Done |
-| 46  | Count prefixes (e.g. `3w`)                | core   | P4    | `3w`, `10j`, `10gg`                 | Done   |
-| 47  | Macros (record/replay)                    | core   | P4    | `q` / `Q`                           | Done   |
+| 46 | Count prefixes (e.g. `3w`) | core | P4 | `3w`, `10j`, `10gg` | Done |
+| 47 | Macros (record/replay) | core | P4 | `q` / `Q` | Done |
 | 48 | Spell/grammar hooks (CJK-aware) | lsp | P4 | **Dropped**: `:check usage`／`標點`／`字集` (#233／#238／#240) do this in the editor's own process; there is no Chinese-prose language server to hook, and an optional one would be the same rules written twice | Dropped |
-| 49  | Word-count / reading-time (prose)         | view   | P4    | `:count`; 字 and 字符 differ        | Done   |
+| 49 | Word-count / reading-time (prose) | view | P4 | `:count`; 字 and 字符 differ | Done |
 | 50 | Custom 碼表 upload / register | ime | P4 | user `txt` (code table only) — #136 `:yume table` | Done |
 | 51 | Bracket/quote auto-pair (CJK-aware) | core | P4 | 「」『』（） | Planned |
 | 52 | Syntax highlight (tree-sitter) | tui | P5 | Markdown and Typst are already coloured without it (#96／#116／#162); what is left is *code* | Planned |
@@ -268,150 +280,150 @@ index, and a row with no number anywhere else is a row that got lost.
 | 55 | Git gutter / blame | vcs | P5 |  | Planned |
 | 56 | Splits / multiple windows | tui | P5 | #176 split work areas | Done |
 | 57 | Debugging (DAP) | dap | P6 | far future | Planned |
-| 58  | Plugin runtime (scripting) | plugin | P6 | Lua/WASM. **Dropped, 2026-09-03**: both 0.2.0 reviews said the same thing — 「every editor grows one and it becomes the product」. Also declined with it: an embedded terminal pane, a git UI (lazygit is one `:!` away), and tree-sitter/LSP at 0.2, whose parse-the-whole-document model fights the per-paragraph cached invariant that made this editor good | Dropped |
+| 58 | Plugin runtime (scripting) | plugin | P6 | Lua/WASM. **Dropped, 2026-09-03**: both 0.2.0 reviews said the same thing — 「every editor grows one and it becomes the product」. Also declined with it: an embedded terminal pane, a git UI (lazygit is one `:!` away), and tree-sitter/LSP at 0.2, whose parse-the-whole-document model fights the per-paragraph cached invariant that made this editor good | Dropped |
 | 59 | Remote / SSH editing | net | P6 |  | Planned |
 | 60 | Collaborative editing | net | P6 |  | Planned |
-| 61  | **Vertical layout (縱書)**                | tui    | P2    | 縱 model + rotated punctuation      | Done   |
-| 62  | **Helix alignment (counts, match mode)**  | core   | P2    | tutorial verbs; no multi-cursor yet | Done   |
-| 63  | **Segmentation from Yume's language model** | ime  | P2    | 詞頻表 + 詞彙表 drive `w`/`b`/`e`   | Done   |
-| 64  | **縦中横 in the vertical page**            | core   | P2    | half-width pairs share one slot     | Done   |
-| 65  | **振假名 (ruby)**                          | tui    | P3    | HTML + Typst dialects, Ruby mode    | Done   |
-| 66  | **IME in the `/` and `:` lines**           | tui    | P2    | + `:chaifen` annotation toggle      | Done   |
-| 67  | **Command hints + Tab completion**         | tui    | P4    | `:` lists, narrows, Tab cycles       | Done   |
+| 61 | **Vertical layout (縱書)** | tui | P2 | 縱 model + rotated punctuation | Done |
+| 62 | **Helix alignment (counts, match mode)** | core | P2 | tutorial verbs; no multi-cursor yet | Done |
+| 63 | **Segmentation from Yume's language model** | ime | P2 | 詞頻表 + 詞彙表 drive `w`/`b`/`e` | Done |
+| 64 | **縦中横 in the vertical page** | core | P2 | half-width pairs share one slot | Done |
+| 65 | **振假名 (ruby)** | tui | P3 | HTML + Typst dialects, Ruby mode | Done |
+| 66 | **IME in the `/` and `:` lines** | tui | P2 | + `:chaifen` annotation toggle | Done |
+| 67 | **Command hints + Tab completion** | tui | P4 | `:` lists, narrows, Tab cycles | Done |
 | 68 | 圏点 (emphasis dots) | tui | P5 | mid-term; markup still open — #236 draws them in the 標點旁置 margin | Done |
-| 69  | **Novel-scale performance**                | core   | P2    | word motion, overlay, search        | Done   |
-| 70  | **標點旁置 (punctuation in the margin)**   | tui    | P3    | 古文 style; `:hanging`              | Done   |
-| 71  | **Mouse wheel scrolls by 縱**              | tui    | P4    | captures the mouse, as Helix does   | Done   |
-| 72  | **The prompt's guess**                     | tui    | P4    | ghost text in `:` and `/`, Tab takes | Done   |
-| 73  | **Gap and reading column separated**       | tui    | P3    | `zong_gap = 0` still allows ruby    | Done   |
-| 74  | **Helix tutorial, second pass**            | core   | P2    | `r`, `A-;`, registers, macros, pages | Done   |
-| 75  | **Panel skin in TOML**                     | config | P4    | two colours, not a table of shades  | Done   |
-| 76  | **Switching between open buffers**         | core   | P2    | `gn`/`gp`, `:bn`/`:bp`; was a hole  | Done   |
-| 77  | **Soft wrap in horizontal layout**         | both   | P1    | A paragraph is one line; it must not run off the edge | Done   |
-| 78  | **Goto line**                              | core   | P3    | `10gg`, `:42`, `:goto` — a reader's page reference | Done   |
-| 79  | **Crash recovery**                         | both   | P1    | A dotfile beside the document; `:recover` | Done   |
-| 80  | **Report a broken config**                 | config | P2    | A typo was silently dropped before  | Done   |
-| 81  | **East-Asian ambiguous width**             | cjk    | P1    | `—` `…` `“”` shifted every line     | Done   |
-| 82  | **Files a writer actually has**            | core   | P2    | BOM, non-UTF-8, a closed pipe       | Done   |
-| 83  | **The selection covers the cursor's 字**   | core   | P1    | Helix's model; `f。d` took no 。    | Done   |
-| 84  | **Regular expressions**                    | core   | P1    | `/` and `:s`; half of revising     | Done   |
-| 85  | **A novel is many files**                  | core   | P1    | `:grep`, `gf`, `:toc`, `:bd`, `:ls` | Done   |
-| 86  | **The scheme's own key bindings**          | ime    | P1    | `;`/`'` 選二三, `:scheme`, 二重注解 | Done   |
-| 87  | **Full-width readings**                    | tui    | P1    | 注音符號 and kana; the page was a staircase | Done |
-| 88  | **Export**                                 | core   | P2    | `:export html` keeps 縱書; typst is honest about not | Done |
-| 89  | **The number band is a gutter**            | tui    | P3    | colour, since position cannot separate it | Done |
-| 90  | **Hanging marks in their narrow forms**    | cjk    | P1    | a full-width mark hid the 縱 beside it | Done |
-| 91  | **Space menu and pickers**                 | both   | P1    | `Space f`/`b`/`/`/`?`/`y`; which-key | Done   |
-| 92  | **The `:` menu is a popup, not a wall**    | tui    | P2    | capped and scrolled, as Helix caps its | Done  |
-| 93  | **Turning the page without a chord**       | core   | P2    | `J`/`K` half, `L`/`H` whole; join → `gJ` | Done |
-| 94  | **The file sidebar**                       | both   | P2    | `Space e`; the tree is the book's shape | Done |
-| 95  | **A tab bar for the open files**           | tui    | P3    | like a terminal's; clickable        | Done   |
-| 96  | **Markdown colouring, markup kept**        | core   | P2    | per paragraph and cached; not CommonMark | Done |
-| 97  | **Three views in the sidebar**             | both   | P2    | `Tab`: tree / buffers / outline; `Space o` | Done |
-| 98  | **One rule for opening the sidebar**       | core   | P3    | open / switch / focus / close       | Done   |
-| 99  | **The Insert caret over a half-width 字**  | tui    | P1    | it painted a typed digit out        | Done   |
-| 100 | **`C-w` between the panes**                | both   | P2    | and the status line says so         | Done   |
-| 101 | **A measure to write to**                  | tui    | P3    | tint past it; the line only unwrapped | Done |
-| 102 | **稿紙 ticks down the 縱**                 | tui    | P3    | the vertical page is already a grid | Done   |
-| 103 | **Extended Markdown**                      | core   | P2    | `==`, `[^1]`, `[[…]]`, `%%…%%`, `:::`, blocks | Done |
-| 104 | **所見即所得**                             | both   | P1    | markup off the page but the cursor's construct | Done |
-| 105 | **What a review found in #103/#104**       | both   | P1    | the invariant did not hold vertically at all | Done |
-| 106 | **Markdown or Typst, and which**           | core   | P2    | sniffed for `.txt`; Typst's own syntax | Done |
-| 107 | **A row measured in what is drawn**        | core   | P1    | wysiwyg wrapped in source and left blank rows | Done |
-| 108 | **Bracketed paste**                        | both   | P1    | a paste in Normal used to run as commands | Done |
-| 109 | **The system clipboard, and the mouse**    | both   | P1    | `Space y`/`p`, drag to select       | Done   |
-| 110 | **⌘ chords are the terminal's**            | tui    | P0    | ⌘C read as `c` deleted the selection | Done  |
-| 111 | **Syntax by extension or name**            | config | P2    | a project's word on its own files   | Done   |
-| 112 | The evaluated outline of a book            | both   | —     | `typst eval`; dropped for #114, which needs no compiler | Dropped |
-| 113 | **A measure to write to**                  | both   | P2    | `:wrap 50`; folds the rows, tints the margin | Done |
-| 114 | **The outline follows `#include`**         | core   | P2    | read the chapters; no compiler      | Done   |
-| 115 | **`w` opens the sidebar out**              | both   | P3    | as wide as its longest name         | Done   |
-| 116 | **Markdown colouring set vertically**      | tui    | P1    | 所見即所得 was half-done down the 縱 | Done   |
-| 117 | **The 字 under the cursor, named**         | both   | P2    | code point + Unicode block; feeds the table mode | Done |
-| 118 | **Table editing mode**                     | both   | P1    | declarative schema; cells, detail panel, jump | Done |
-| 119 | **A note read beside its sentence**        | both   | P2    | the same panel; Enter there and back | Done  |
-| 120 | **A jump list**                            | core   | P2    | `C-o`/`C-i`; every far motion leaves a way back | Done |
-| 121 | **`:dense` — the packed 縱書 page**        | both   | P3    | one 縱 is two cells; restores what it took | Done |
-| 122 | **A hint row above the status line**       | both   | P2    | what happened, and what finishes a sequence | Done |
-| 123 | **`Enter` asks "who uses this?"**          | core   | P2    | a column-scoped search, walked with `n`/`N` | Done |
-| 124 | **Argument completion, and grouping**      | core   | P2    | a parent is an argument whose values are verbs | Done |
-| 125 | **The window is the default measure**      | both   | P2    | `zong_length = 0`; a fixed count is `:wrap n` | Done |
-| 126 | **A value is not a command name**          | core   | P2    | 42 commands → 26; the flat spellings deleted | Done |
-| 127 | **`:render off/on/full`**                  | core   | P2    | one axis; `:wysiwyg`+`:markup` were two switches | Done |
-| 128 | **`:preview` — the real typesetter**       | both   | P2    | tinymist for Typst, HTML for Markdown; a job, not a pane | Done |
-| 129 | **`:sh` captures, `:!` hands over**        | both   | P2    | two situations, two answers; no PTY emulator | Done |
-| 130 | **`!` filters the selection**              | both   | P2    | vi's `!`, on a selection; one undo | Done   |
-| 131 | **A failed filter leaves the text alone**  | tui    | P1    | an error message is not an edit     | Done   |
-| 132 | **The menu spreads across the window**     | tui    | P3    | 26 commands at a glance, column-major | Done |
-| 133 | **The language model yes, the 碼表 no**    | both   | P2    | 27 ms for everyone; `:yume scheme` for the rest | Done |
-| 134 | **靈明 embedded at build time**            | ime    | P2    | never committed; `:yume` says which one answers | Done |
-| 135 | **Release pipeline + Homebrew tap**        | ci     | P2    | see §5.3; deferred until ready to release | Planned |
-| 136 | **`:yume table` — any code table**         | ime    | P2    | Rime `.dict.yaml` as it comes; 五筆/倉頡/粵拼 | Done |
+| 69 | **Novel-scale performance** | core | P2 | word motion, overlay, search | Done |
+| 70 | **標點旁置 (punctuation in the margin)** | tui | P3 | 古文 style; `:hanging` | Done |
+| 71 | **Mouse wheel scrolls by 縱** | tui | P4 | captures the mouse, as Helix does | Done |
+| 72 | **The prompt's guess** | tui | P4 | ghost text in `:` and `/`, Tab takes | Done |
+| 73 | **Gap and reading column separated** | tui | P3 | `zong_gap = 0` still allows ruby | Done |
+| 74 | **Helix tutorial, second pass** | core | P2 | `r`, `A-;`, registers, macros, pages | Done |
+| 75 | **Panel skin in TOML** | config | P4 | two colours, not a table of shades | Done |
+| 76 | **Switching between open buffers** | core | P2 | `gn`/`gp`, `:bn`/`:bp`; was a hole | Done |
+| 77 | **Soft wrap in horizontal layout** | both | P1 | A paragraph is one line; it must not run off the edge | Done |
+| 78 | **Goto line** | core | P3 | `10gg`, `:42`, `:goto` — a reader's page reference | Done |
+| 79 | **Crash recovery** | both | P1 | A dotfile beside the document; `:recover` | Done |
+| 80 | **Report a broken config** | config | P2 | A typo was silently dropped before | Done |
+| 81 | **East-Asian ambiguous width** | cjk | P1 | `—` `…` `“”` shifted every line | Done |
+| 82 | **Files a writer actually has** | core | P2 | BOM, non-UTF-8, a closed pipe | Done |
+| 83 | **The selection covers the cursor's 字** | core | P1 | Helix's model; `f。d` took no 。 | Done |
+| 84 | **Regular expressions** | core | P1 | `/` and `:s`; half of revising | Done |
+| 85 | **A novel is many files** | core | P1 | `:grep`, `gf`, `:toc`, `:bd`, `:ls` | Done |
+| 86 | **The scheme's own key bindings** | ime | P1 | `;`/`'` 選二三, `:scheme`, 二重注解 | Done |
+| 87 | **Full-width readings** | tui | P1 | 注音符號 and kana; the page was a staircase | Done |
+| 88 | **Export** | core | P2 | `:export html` keeps 縱書; typst is honest about not | Done |
+| 89 | **The number band is a gutter** | tui | P3 | colour, since position cannot separate it | Done |
+| 90 | **Hanging marks in their narrow forms** | cjk | P1 | a full-width mark hid the 縱 beside it | Done |
+| 91 | **Space menu and pickers** | both | P1 | `Space f`/`b`/`/`/`?`/`y`; which-key | Done |
+| 92 | **The `:` menu is a popup, not a wall** | tui | P2 | capped and scrolled, as Helix caps its | Done |
+| 93 | **Turning the page without a chord** | core | P2 | `J`/`K` half, `L`/`H` whole; join → `gJ` | Done |
+| 94 | **The file sidebar** | both | P2 | `Space e`; the tree is the book's shape | Done |
+| 95 | **A tab bar for the open files** | tui | P3 | like a terminal's; clickable | Done |
+| 96 | **Markdown colouring, markup kept** | core | P2 | per paragraph and cached; not CommonMark | Done |
+| 97 | **Three views in the sidebar** | both | P2 | `Tab`: tree / buffers / outline; `Space o` | Done |
+| 98 | **One rule for opening the sidebar** | core | P3 | open / switch / focus / close | Done |
+| 99 | **The Insert caret over a half-width 字** | tui | P1 | it painted a typed digit out | Done |
+| 100 | **`C-w` between the panes** | both | P2 | and the status line says so | Done |
+| 101 | **A measure to write to** | tui | P3 | tint past it; the line only unwrapped | Done |
+| 102 | **稿紙 ticks down the 縱** | tui | P3 | the vertical page is already a grid | Done |
+| 103 | **Extended Markdown** | core | P2 | `==`, `[^1]`, `[[…]]`, `%%…%%`, `:::`, blocks | Done |
+| 104 | **所見即所得** | both | P1 | markup off the page but the cursor's construct | Done |
+| 105 | **What a review found in #103/#104** | both | P1 | the invariant did not hold vertically at all | Done |
+| 106 | **Markdown or Typst, and which** | core | P2 | sniffed for `.txt`; Typst's own syntax | Done |
+| 107 | **A row measured in what is drawn** | core | P1 | wysiwyg wrapped in source and left blank rows | Done |
+| 108 | **Bracketed paste** | both | P1 | a paste in Normal used to run as commands | Done |
+| 109 | **The system clipboard, and the mouse** | both | P1 | `Space y`/`p`, drag to select | Done |
+| 110 | **⌘ chords are the terminal's** | tui | P0 | ⌘C read as `c` deleted the selection | Done |
+| 111 | **Syntax by extension or name** | config | P2 | a project's word on its own files | Done |
+| 112 | The evaluated outline of a book | both | — | `typst eval`; dropped for #114, which needs no compiler | Dropped |
+| 113 | **A measure to write to** | both | P2 | `:wrap 50`; folds the rows, tints the margin | Done |
+| 114 | **The outline follows `#include`** | core | P2 | read the chapters; no compiler | Done |
+| 115 | **`w` opens the sidebar out** | both | P3 | as wide as its longest name | Done |
+| 116 | **Markdown colouring set vertically** | tui | P1 | 所見即所得 was half-done down the 縱 | Done |
+| 117 | **The 字 under the cursor, named** | both | P2 | code point + Unicode block; feeds the table mode | Done |
+| 118 | **Table editing mode** | both | P1 | declarative schema; cells, detail panel, jump | Done |
+| 119 | **A note read beside its sentence** | both | P2 | the same panel; Enter there and back | Done |
+| 120 | **A jump list** | core | P2 | `C-o`/`C-i`; every far motion leaves a way back | Done |
+| 121 | **`:dense` — the packed 縱書 page** | both | P3 | one 縱 is two cells; restores what it took | Done |
+| 122 | **A hint row above the status line** | both | P2 | what happened, and what finishes a sequence | Done |
+| 123 | **`Enter` asks "who uses this?"** | core | P2 | a column-scoped search, walked with `n`/`N` | Done |
+| 124 | **Argument completion, and grouping** | core | P2 | a parent is an argument whose values are verbs | Done |
+| 125 | **The window is the default measure** | both | P2 | `zong_length = 0`; a fixed count is `:wrap n` | Done |
+| 126 | **A value is not a command name** | core | P2 | 42 commands → 26; the flat spellings deleted | Done |
+| 127 | **`:render off/on/full`** | core | P2 | one axis; `:wysiwyg`+`:markup` were two switches | Done |
+| 128 | **`:preview` — the real typesetter** | both | P2 | tinymist for Typst, HTML for Markdown; a job, not a pane | Done |
+| 129 | **`:sh` captures, `:!` hands over** | both | P2 | two situations, two answers; no PTY emulator | Done |
+| 130 | **`!` filters the selection** | both | P2 | vi's `!`, on a selection; one undo | Done |
+| 131 | **A failed filter leaves the text alone** | tui | P1 | an error message is not an edit | Done |
+| 132 | **The menu spreads across the window** | tui | P3 | 26 commands at a glance, column-major | Done |
+| 133 | **The language model yes, the 碼表 no** | both | P2 | 27 ms for everyone; `:yume scheme` for the rest | Done |
+| 134 | **靈明 embedded at build time** | ime | P2 | never committed; `:yume` says which one answers | Done |
+| 135 | **Release pipeline + Homebrew tap** | ci | P2 | see §5.3; deferred until ready to release | Planned |
+| 136 | **`:yume table` — any code table** | ime | P2 | Rime `.dict.yaml` as it comes; 五筆/倉頡/粵拼 | Done |
 | 137 | **A file changed on disk is not written over** | core | P0 | `:w!`/`:e!`; a hash so it never cries wolf | Done |
-| 138 | **A macro keeps its operands**             | core   | P1    | `fq` recorded as `f` and ate the next key | Done |
-| 139 | **A ring of what was yanked**              | core   | P2    | `Space \"`; the last 16, plus the named ones | Done |
-| 140 | **An undo point has to be earned**         | core   | P1    | announced on `snapshot`, kept on the first edit | Done |
-| 141 | **A crash copy for a buffer with no file**  | both   | P2    | in the data dir; `:recover` is what finds them | Done |
-| 142 | **Markdown `\|` tables as a grid**           | both   | P1    | the cell model over a *region*; aligned by East-Asian width, in the file | Done |
-| 143 | **Paragraph and sentence motions**          | core   | P1    | `{}`/`()`; a paragraph is a logical line, and `j` walks rows | Done |
-| 144 | **This book's own words**                   | both   | P1    | `.yumete/words.txt`, layered over whatever segmenter is in force | Done |
-| 145 | **首行縮進 as a view**                      | both   | P1    | padding slots down the 縱, a narrower first row across; the file keeps its blank lines | Done |
-| 146 | **段組 — bands down the 縱書 page**         | tui    | P2    | each band is a short page of its own; equal by construction | Done |
-| 147 | **`.` repeats the last change**             | core   | P1    | the editor watches; a command that changed the buffer *was* a change | Done |
-| 148 | **A phrasebook for keys we do not bind**    | core   | P2    | `$` says 「行尾是 gl」; it never does the thing | Done |
-| 149 | **The session, and marks**                  | both   | P2    | what was open, where the cursor was; `M a` / `' a` across files | Done |
-| 150 | **Project-wide replace**                    | core   | P1    | `:grep` then `:replace`: nothing changed that was not on the screen, nothing on disk until `:wa` | Done |
-| 151 | **Three languages**                         | core   | P1    | an English tag is the key; `messages.toml` holds 繁/简/en; `language = "zh"\|"zhs"\|"en"` | Done |
-| 152 | **【墨香】 as a computed theme**             | both   | P1    | three anchors in the config, every other shade a rung on the ladder; see §5.2 group 13 | Done |
-| 153 | **Search has two directions**               | core   | P1    | `/` is `:search row`, `Enter` is `:search col` — down one column, then the next | Done |
-| 154 | **`:tutor` — a lesson you edit**            | both   | P1    | vimtutor's idea, on Chinese prose, where `w` and 縱書 can actually be taught | Done |
-| 155 | **A finished command says what it takes**   | core   | P2    | `:yume` lists `yume scheme`, `yume chaifen`… beside itself; Tab writes the whole sentence | Done |
-| 156 | **`:theme`**                                | both   | P2    | which theme, and dark/light/system, without editing the config | Done |
-| 157 | **`:table rules`**                          | both   | P2    | a dashed line (default), solid, double, a band, or nothing | Done |
-| 158 | **Tint only the words that need it**        | core   | P2    | a word bounded by space or 標點 on both sides is already cut; tinting it says it twice | Done |
-| 159 | **The indent takes the blank line off the page** | both | P1  | one paragraph mark, not two; the file keeps its blank line and the numbers show it | Done |
-| 160 | **`:yume on` / `off` / `which` / `installed`** | both | P2  | the 中/英 switch and the 碼表's provenance, by name | Done |
-| 161 | **`--timing`**                              | cli    | P2    | a whole launch, phase by phase | Done |
-| 162 | **`:syntax text` and `--syntax`**           | both   | P2    | a file with no markup, and this run's answer about these files | Done |
-| 163 | **`:indent hint`**                          | both   | P3    | white by default; a band or a `↵` while a draft is being edited | Done |
-| 164 | **【黑白】, a second theme**                 | both   | P2    | greys only: what warmth said in 墨香, position says here | Done |
-| 165 | **Readings on the horizontal page**         | tui    | P1    | the row above, over the 字 it reads; only a row that has one costs one | Done |
-| 166 | **Typewriter / focus mode**                 | tui    | P2    | the cursor's row stays in the middle of the screen | Done |
-| 167 | **`:help`**                                 | both   | P1    | the keys worth knowing, in the editor; `:help chinese`, `:help vertical` | Done |
-| 168 | **The page before the dictionary**          | cli    | P1    | 14 MB of language data read after the first frame, not before it | Done |
-| 169 | **Schemes found rather than listed**        | both   | P2    | `schemes/*.toml` under any data directory is a scheme. Launch scans, hands each to yume-core, and `:yume scheme` offers what was found; nothing found leaves the built-in five standing  **macOS was never in the search path, fixed 2026-09-07** (author: 「我安装了 yume 并且有五个方案，但是 :yume installed 没有办法检测到他们」). `yume_data_dirs` had a Windows arm and an XDG arm, and macOS fell through the XDG one — `~/.local/share/yume/`, which is nowhere a Mac keeps anything. yume on macOS installs as an input-method bundle (`~/Library/Input Methods/Yume.app`, or the same path under `/Library` when installed for everyone) and keeps what it compiles and what the writer installed under `~/Library/Application Support/Yume`. All five are in the list now, in yume's own order (the runtime overlay first, the bundle last), and the bundle's `Contents/Resources` is handed over as an ordinary data directory because that is exactly what it is — `data/` and `schemes/`, the manifest's own layout. On the author's machine: 0 schemes and 靈明 unavailable before, 5 schemes and available after. | Done |
-| 170 | **A command says what it is waiting for**   | both   | P1    | prerequisites declared beside the command, shown in the menu, said when it is run, and `force` satisfies them | Done |
-| 171 | **`:appearance`, apart from `:theme`**      | both   | P2    | which inks and which way round are two questions | Done |
-| 172 | **`:numbers fill`**                         | both   | P3    | the number band's ground, off by default and the same in both layouts | Done |
-| 173 | **`:shot`**                                 | both   | P3    | the screen as a picture, on the clipboard, taken after the menu closes | Done |
-| 174 | **段組 for the horizontal page**             | tui    | P2    | two columns side by side, the way 縱書 has two bands — deliberately not done, see group 14 | Planned |
-| 175 | **Two marks running share a square**        | core   | P2    | JLREQ §3.1.4① / clreq §6.3.2.2 — `。」` is one em, half each, and does not hang | Done |
-| 176 | **Split work areas**                        | both   | P1    | two panes over one buffer, cut across the direction the text runs; `Enter` shows rather than goes | Done |
-| 177 | **The half being read is a rung back**      | tui    | P1    | which half holds the keys, by weight — tmux's answer, on 墨香's own ladder | Done |
-| 178 | **The hit you are standing on**             | tui    | P2    | 朱's wash on the match, a band on its row, 朱 on its number — the number kept, not replaced | Done |
-| 179 | **The keys a keyboard has**                 | both   | P2    | PageUp/PageDown reached the editor as nothing; `C-a`/`C-e` were swallowed by Insert | Done |
-| 180 | **`gd` / `gw` beside `Enter`**              | core   | P1    | references, definition, and definition-without-leaving; a footnote no longer holds `Enter` hostage, and either key writes the note it cannot find | Done |
-| 181 | **`:dense off` for the horizontal page**    | tui    | P2    | 密排 is a 縱書 word; horizontally the same idea is the reading row and the margin the page does not otherwise pay for | Done |
-| 182 | **A search hit lands in the middle**        | tui    | P1    | today a jump lands `scrolloff` from whichever edge it came in by — 4th row or 4th from the bottom, unpredictably. A *far* motion should centre; a near one should not | Done |
-| 183 | **`t s` sorts a delimited grid**            | core   | P2    | `:table sort 1 a 2 d 4 a` over any grid, and `t1a2d8as` from the keyboard — `a`/`d` name a column each and `s` is the action, so the chord has the terminator #199's spelling lacked. `t1s` / `t1S` stay for one column | Done |
-| 184 | **Column numbers above the header**         | tui    | P2    | one row of indices, so a column can be named by number — the thing every other key here wants | Done |
-| 185 | **`t g` goes to a cell**                    | both   | P2    | `:table goto 20 20`, and `t20-20g` for it — see #199 | Done |
-| 186 | **The detail panel shows every column**     | tui    | P2    | including the empty ones (an empty field is a finding in a 拆分表), each with its column number | Done |
-| 187 | **The detail panel is a panel**             | both   | P2    | close it, edit a value in it, change its width — it is the only surface here that can do none of those | Done |
-| 188 | **The hint row wraps**                      | tui    | P3    | more keys than a row holds; never between a key and what it does | Done |
-| 189 | **`:shot` takes the page, not the app**     | tui    | P2    | needs the window's origin *and* the display scale, neither of which the editor can get reliably. **Done** by not taking a picture at all: `:shot html` *draws* the frame the way `--shot` does and writes it as a self-contained coloured HTML file (`txt` for the plain-text one), so the page is all there is by construction — no chrome, no scale, and it works over ssh. The front end holds the cells, so it writes after the next draw — the frame with no command line across it. **Four words** (2026-09-06): `screen` (the default, window → clipboard), `png` (window → file), `html`, `txt`. A file nobody named is `第一章_20260906143012.html` in the downloads folder — dated so it cannot collide, and away from the manuscript; the bang guards a name spelled out by hand | Done |
-| 190 | **One rule for folding a blank line**       | core   | P1    | 竪排 folds with the indent off and opens one *with* it on — two behaviours that read as contradictory | Done |
-| 191 | **A stored position names its buffer**      | core   | P0    | the hit list held `n`, survived a buffer switch and an edit, and said 「第 3/78 處」 about a character that matched nothing — `d` then deleted it | Done |
-| 192 | **The preview server is a running thing**   | tui    | P1    | `:preview` on a `.typ` starts `tinymist preview` and says the address once; ask again and the address is gone, and a session that ends badly leaves the server holding a port and its memory. The address should be gettable (`:preview` while one runs), visible (a mark in the status bar), and killable on purpose and after a crash | Done |
-| 193 | **What you have typed is on the screen**    | both   | P1    | pressing `3` changed nothing at all, so `30d` and `3d` were told apart by memory. `showcmd` at the status line's right edge, a HUD beside the caret, and the which-key panel — one string, three surfaces, none of them guessing | Done |
-| 194 | **`30G` goes to line 30**                   | core   | P2    | the binding vim and Helix both have, on a key that was unbound | Done |
-| 195 | **`gd` in a grid is one question**          | core   | P1    | which row is named by what is here, in **one** column — the key column, `3gd` for column three, `2-5gd` for a span. It used to be two questions decided by which column the cursor was in; 「誰用了它」 is `Enter` | Done |
-| 196 | **A click in a grid lands where it points** | tui    | P0    | the click map had a prose branch and a 縱書 branch and no grid branch, so a table resolved a click as if its padded columns were characters of the line — off by the padding of every column to the left, which looks random | Done |
-| 197 | **What a language can be told to run**      | config | P1    | `tinymist preview` is written into the front end in Rust. It belongs in config: `[language.typst] preview = { run = "tinymist preview --no-open {file}", kind = "server" }`, `[language.markdown] format = { run = "rumdl check --fix {file}" }`. The verbs stay language-independent — `:preview`, `:format`, `:run <name>` — so one key means one thing in every file. **A project may define them**, and the safety is in *how* they run: no shell (so `;` and `$( )` are not syntax), placeholders substituted as whole arguments (so a file name cannot become a second command), and the config is checked at load — unbalanced quotes, an unknown `{placeholder}`, or a shell metacharacter is a config error that names the file and line rather than a command that quietly does something else | Done |
+| 138 | **A macro keeps its operands** | core | P1 | `fq` recorded as `f` and ate the next key | Done |
+| 139 | **A ring of what was yanked** | core | P2 | `Space \"`; the last 16, plus the named ones | Done |
+| 140 | **An undo point has to be earned** | core | P1 | announced on `snapshot`, kept on the first edit | Done |
+| 141 | **A crash copy for a buffer with no file** | both | P2 | in the data dir; `:recover` is what finds them | Done |
+| 142 | **Markdown `\|` tables as a grid** | both | P1 | the cell model over a *region*; aligned by East-Asian width, in the file | Done |
+| 143 | **Paragraph and sentence motions** | core | P1 | `{}`/`()`; a paragraph is a logical line, and `j` walks rows | Done |
+| 144 | **This book's own words** | both | P1 | `.yumete/words.txt`, layered over whatever segmenter is in force | Done |
+| 145 | **首行縮進 as a view** | both | P1 | padding slots down the 縱, a narrower first row across; the file keeps its blank lines | Done |
+| 146 | **段組 — bands down the 縱書 page** | tui | P2 | each band is a short page of its own; equal by construction | Done |
+| 147 | **`.` repeats the last change** | core | P1 | the editor watches; a command that changed the buffer *was* a change | Done |
+| 148 | **A phrasebook for keys we do not bind** | core | P2 | `$` says 「行尾是 gl」; it never does the thing | Done |
+| 149 | **The session, and marks** | both | P2 | what was open, where the cursor was; `M a` / `' a` across files | Done |
+| 150 | **Project-wide replace** | core | P1 | `:grep` then `:replace`: nothing changed that was not on the screen, nothing on disk until `:wa` | Done |
+| 151 | **Three languages** | core | P1 | an English tag is the key; `messages.toml` holds 繁/简/en; `language = "zh"\|"zhs"\|"en"` | Done |
+| 152 | **【墨香】 as a computed theme** | both | P1 | three anchors in the config, every other shade a rung on the ladder; see §5.2 group 13 | Done |
+| 153 | **Search has two directions** | core | P1 | `/` is `:search row`, `Enter` is `:search col` — down one column, then the next | Done |
+| 154 | **`:tutor` — a lesson you edit** | both | P1 | vimtutor's idea, on Chinese prose, where `w` and 縱書 can actually be taught | Done |
+| 155 | **A finished command says what it takes** | core | P2 | `:yume` lists `yume scheme`, `yume chaifen`… beside itself; Tab writes the whole sentence | Done |
+| 156 | **`:theme`** | both | P2 | which theme, and dark/light/system, without editing the config | Done |
+| 157 | **`:table rules`** | both | P2 | a dashed line (default), solid, double, a band, or nothing | Done |
+| 158 | **Tint only the words that need it** | core | P2 | a word bounded by space or 標點 on both sides is already cut; tinting it says it twice | Done |
+| 159 | **The indent takes the blank line off the page** | both | P1 | one paragraph mark, not two; the file keeps its blank line and the numbers show it | Done |
+| 160 | **`:yume on` / `off` / `which` / `installed`** | both | P2 | the 中/英 switch and the 碼表's provenance, by name | Done |
+| 161 | **`--timing`** | cli | P2 | a whole launch, phase by phase | Done |
+| 162 | **`:syntax text` and `--syntax`** | both | P2 | a file with no markup, and this run's answer about these files | Done |
+| 163 | **`:indent hint`** | both | P3 | white by default; a band or a `↵` while a draft is being edited | Done |
+| 164 | **【黑白】, a second theme** | both | P2 | greys only: what warmth said in 墨香, position says here | Done |
+| 165 | **Readings on the horizontal page** | tui | P1 | the row above, over the 字 it reads; only a row that has one costs one | Done |
+| 166 | **Typewriter / focus mode** | tui | P2 | the cursor's row stays in the middle of the screen | Done |
+| 167 | **`:help`** | both | P1 | the keys worth knowing, in the editor; `:help chinese`, `:help vertical` | Done |
+| 168 | **The page before the dictionary** | cli | P1 | 14 MB of language data read after the first frame, not before it | Done |
+| 169 | **Schemes found rather than listed** | both | P2 | `schemes/*.toml` under any data directory is a scheme. Launch scans, hands each to yume-core, and `:yume scheme` offers what was found; nothing found leaves the built-in five standing  **macOS was never in the search path, fixed 2026-09-07** (「我安装了 yume 并且有五个方案，但是 :yume installed 没有办法检测到他们」). `yume_data_dirs` had a Windows arm and an XDG arm, and macOS fell through the XDG one — `~/.local/share/yume/`, which is nowhere a Mac keeps anything. yume on macOS installs as an input-method bundle (`~/Library/Input Methods/Yume.app`, or the same path under `/Library` when installed for everyone) and keeps what it compiles and what the writer installed under `~/Library/Application Support/Yume`. All five are in the list now, in yume's own order (the runtime overlay first, the bundle last), and the bundle's `Contents/Resources` is handed over as an ordinary data directory because that is exactly what it is — `data/` and `schemes/`, the manifest's own layout. On this machine: 0 schemes and 靈明 unavailable before, 5 schemes and available after. | Done |
+| 170 | **A command says what it is waiting for** | both | P1 | prerequisites declared beside the command, shown in the menu, said when it is run, and `force` satisfies them | Done |
+| 171 | **`:appearance`, apart from `:theme`** | both | P2 | which inks and which way round are two questions | Done |
+| 172 | **`:numbers fill`** | both | P3 | the number band's ground, off by default and the same in both layouts | Done |
+| 173 | **`:shot`** | both | P3 | the screen as a picture, on the clipboard, taken after the menu closes | Done |
+| 174 | **段組 for the horizontal page** | tui | P2 | two columns side by side, the way 縱書 has two bands — deliberately not done, see group 14 | Planned |
+| 175 | **Two marks running share a square** | core | P2 | JLREQ §3.1.4① / clreq §6.3.2.2 — `。」` is one em, half each, and does not hang | Done |
+| 176 | **Split work areas** | both | P1 | two panes over one buffer, cut across the direction the text runs; `Enter` shows rather than goes | Done |
+| 177 | **The half being read is a rung back** | tui | P1 | which half holds the keys, by weight — tmux's answer, on 墨香's own ladder | Done |
+| 178 | **The hit you are standing on** | tui | P2 | 朱's wash on the match, a band on its row, 朱 on its number — the number kept, not replaced | Done |
+| 179 | **The keys a keyboard has** | both | P2 | PageUp/PageDown reached the editor as nothing; `C-a`/`C-e` were swallowed by Insert | Done |
+| 180 | **`gd` / `gw` beside `Enter`** | core | P1 | references, definition, and definition-without-leaving; a footnote no longer holds `Enter` hostage, and either key writes the note it cannot find | Done |
+| 181 | **`:dense off` for the horizontal page** | tui | P2 | 密排 is a 縱書 word; horizontally the same idea is the reading row and the margin the page does not otherwise pay for | Done |
+| 182 | **A search hit lands in the middle** | tui | P1 | today a jump lands `scrolloff` from whichever edge it came in by — 4th row or 4th from the bottom, unpredictably. A *far* motion should centre; a near one should not | Done |
+| 183 | **`t s` sorts a delimited grid** | core | P2 | `:table sort 1 a 2 d 4 a` over any grid, and `t1a2d8as` from the keyboard — `a`/`d` name a column each and `s` is the action, so the chord has the terminator #199's spelling lacked. `t1s` / `t1S` stay for one column | Done |
+| 184 | **Column numbers above the header** | tui | P2 | one row of indices, so a column can be named by number — the thing every other key here wants | Done |
+| 185 | **`t g` goes to a cell** | both | P2 | `:table goto 20 20`, and `t20-20g` for it — see #199 | Done |
+| 186 | **The detail panel shows every column** | tui | P2 | including the empty ones (an empty field is a finding in a 拆分表), each with its column number | Done |
+| 187 | **The detail panel is a panel** | both | P2 | close it, edit a value in it, change its width — it is the only surface here that can do none of those | Done |
+| 188 | **The hint row wraps** | tui | P3 | more keys than a row holds; never between a key and what it does | Done |
+| 189 | **`:shot` takes the page, not the app** | tui | P2 | needs the window's origin *and* the display scale, neither of which the editor can get reliably. **Done** by not taking a picture at all: `:shot html` *draws* the frame the way `--shot` does and writes it as a self-contained coloured HTML file (`txt` for the plain-text one), so the page is all there is by construction — no chrome, no scale, and it works over ssh. The front end holds the cells, so it writes after the next draw — the frame with no command line across it. **Four words** (2026-09-06): `screen` (the default, window → clipboard), `png` (window → file), `html`, `txt`. A file nobody named is `第一章_20260906143012.html` in the downloads folder — dated so it cannot collide, and away from the manuscript; the bang guards a name spelled out by hand | Done |
+| 190 | **One rule for folding a blank line** | core | P1 | 竪排 folds with the indent off and opens one *with* it on — two behaviours that read as contradictory | Done |
+| 191 | **A stored position names its buffer** | core | P0 | the hit list held `n`, survived a buffer switch and an edit, and said 「第 3/78 處」 about a character that matched nothing — `d` then deleted it | Done |
+| 192 | **The preview server is a running thing** | tui | P1 | `:preview` on a `.typ` starts `tinymist preview` and says the address once; ask again and the address is gone, and a session that ends badly leaves the server holding a port and its memory. The address should be gettable (`:preview` while one runs), visible (a mark in the status bar), and killable on purpose and after a crash | Done |
+| 193 | **What you have typed is on the screen** | both | P1 | pressing `3` changed nothing at all, so `30d` and `3d` were told apart by memory. `showcmd` at the status line's right edge, a HUD beside the caret, and the which-key panel — one string, three surfaces, none of them guessing | Done |
+| 194 | **`30G` goes to line 30** | core | P2 | the binding vim and Helix both have, on a key that was unbound | Done |
+| 195 | **`gd` in a grid is one question** | core | P1 | which row is named by what is here, in **one** column — the key column, `3gd` for column three, `2-5gd` for a span. It used to be two questions decided by which column the cursor was in; 「誰用了它」 is `Enter` | Done |
+| 196 | **A click in a grid lands where it points** | tui | P0 | the click map had a prose branch and a 縱書 branch and no grid branch, so a table resolved a click as if its padded columns were characters of the line — off by the padding of every column to the left, which looks random | Done |
+| 197 | **What a language can be told to run** | config | P1 | `tinymist preview` is written into the front end in Rust. It belongs in config: `[language.typst] preview = { run = "tinymist preview --no-open {file}", kind = "server" }`, `[language.markdown] format = { run = "rumdl check --fix {file}" }`. The verbs stay language-independent — `:preview`, `:format`, `:run <name>` — so one key means one thing in every file. **A project may define them**, and the safety is in *how* they run: no shell (so `;` and `$( )` are not syntax), placeholders substituted as whole arguments (so a file name cannot become a second command), and the config is checked at load — unbalanced quotes, an unknown `{placeholder}`, or a shell metacharacter is a config error that names the file and line rather than a command that quietly does something else | Done |
 | 198 | **`:markdown` writes what Markdown is made of** | core | P2 | `:markdown footnote` inserts `[^n]` with the next free number, opens `[^n]: ` at the foot, and leaves the cursor in the note — the numbering and the stub are `write_note`'s already. `:markdown footnote inline` writes `^[]`. Then a table: `:markdown table 3x4`. All of them 「插一段模板」, which is what a manuscript keeps needing and what nobody wants to type | Done |
-| 199 | **The action goes last, after the numbers** | core   | P2    | the author's rule for the table sugars: `t20-20g` goes to cell 20,20 and `t1a2d8as` sorts by column 1 ascending, 2 descending, 8 ascending — the digits are the argument and the verb ends the sequence, so no separator and no space is needed. The author respelled the sort chord on 2026-09-05: 「原来的设计用的是 t1s2S8s 这样的命令，这个会在 t1s 直接生效（因为他是前綴碼的指令）」, so the direction moved onto `a`/`d`, which do not act, and `s` alone acts. Supersedes the spellings in #183 and #185 | Done |
-| 200 | **The terminal is asked how wide `—` is**   | tui    | P0    | `ambiguous_width` was a setting nobody could get right: `wide` while the terminal drew narrow put the caret two cells past the character on every line with `——` in it, and stopped a fenced row's ground short by one cell per `▓`. `auto` prints one and reads back the column | Done |
-| 201 | **Esc shuts the window, not the search**    | core   | P1    | after Esc on a preview, `n` fell through to `/`'s repeat — answering about an older pattern, or doing nothing and saying nothing. The hit list outlives the pane, and `n` brings it back | Done |
+| 199 | **The action goes last, after the numbers** | core | P2 | the rule for the table sugars: `t20-20g` goes to cell 20,20 and `t1a2d8as` sorts by column 1 ascending, 2 descending, 8 ascending — the digits are the argument and the verb ends the sequence, so no separator and no space is needed. The author respelled the sort chord on 2026-09-05: 「原来的设计用的是 t1s2S8s 这样的命令，这个会在 t1s 直接生效（因为他是前綴碼的指令）」, so the direction moved onto `a`/`d`, which do not act, and `s` alone acts. Supersedes the spellings in #183 and #185 | Done |
+| 200 | **The terminal is asked how wide `—` is** | tui | P0 | `ambiguous_width` was a setting nobody could get right: `wide` while the terminal drew narrow put the caret two cells past the character on every line with `——` in it, and stopped a fenced row's ground short by one cell per `▓`. `auto` prints one and reads back the column | Done |
+| 201 | **Esc shuts the window, not the search** | core | P1 | after Esc on a preview, `n` fell through to `/`'s repeat — answering about an older pattern, or doing nothing and saying nothing. The hit list outlives the pane, and `n` brings it back | Done |
 | 202 | **`:word` — one command for where a word ends** | both | P1 | `words` and `segment` were two names for one question. `:word segment on\|off`, `:word show`, `:word list reload\|edit\|global`, `:word level less\|more\|full` — the level reaches **both** dictionaries: a threshold for the bundled one, a per-word bonus (+2.0 / 0 / −1.5 nats, measured) for Yume's model. Replaces `segmentation_threshold` in the config | Done |
 | 203 | **Ten themes, and an ASCII name for each** | config | P2 | 藍曬 琥珀 莫高 莫蘭迪 夜螢 明度階 陶窯 靛橘 beside 墨香 and 黑白. A command may not be typed in Chinese, so the name is English (`ink`, `bw`, `cyan`…), the pinyin is the alias (`moxiang`, `heibai`), and the 中文名 lives in the comment. Each is exactly 8 hexes — ink and paper per mood, plus 金 and 朱 | Done |
 | 204 | **`--shot --html`** | cli | P2 | the same frame with its colours, for a review that has to *see* the theme. The shot settles the mood first, or every picture is the light one | Done |
@@ -434,13 +446,13 @@ index, and a row with no number anywhere else is a row that got lost.
 | 221 | **The page follows the caret sideways** | editor | P1 | with `:wrap off` a paragraph is one row of whatever length it happens to be, and the window only ever drew its first screenful: `gl` walked the caret off the right edge and the writing it landed in was never shown. The 縱 grid and the CSV grid both scroll on two axes already; the prose page had a vertical anchor and nothing else. `Viewport.left` counts the columns of writing that are off the left edge, settled from the caret's own column before the rows are drawn, one column at a time rather than a screenful. The gutter does not scroll — `scrolled()` cuts between the furniture and the writing — and a 漢字 the cut lands inside is drawn as air. The click map counts from the same number. 縱書 refuses `:wrap on\|off` outright and says why — a 縱 is broken by the height of the window, and the old answer 「長段落跑出右邊」 named a right edge that page does not have (`:wrap 40` still sets the 縱 length in either layout) | Done |
 | 222 | **The wheel scrolls too far, and nothing can be told otherwise** | tui | P2 | one notch was `WHEEL_STEP = 3`, a `const` nobody could reach: no config key, no command. Now `[editor] wheel_step` and `:wheel n` — read on the way in like every other editor setting, kept in the core so `:wheel` can change it while running, counted in whichever unit the page is in (縱 vertically, rows horizontally). `:wheel` on its own reports, because the number may come from a config the reader never wrote; `0` is the terminal's own step, one unit a notch, not 「do not scroll」. **The burst is answered separately and matters more** — see #268: one gesture is now one scroll and one frame, so the step is a step again and not a step times however many events the trackpad felt like sending. §6「Mouse wheel by 縱 (#71)」chose the three and did not consider the burst. **small** | Done |
 | 223 | **A half-typed word that names no command still finds one** | core | P1 | `:vert` ⇥ `:layout vertical`. When a word matches nothing at its own depth the completion walks the whole subcommand tree and offers the path, parent shown. `:help`'s own words go last — every one of them is the name of the thing it is about, so in a deep match they shadow the thing itself | Done |
-| 224 | **`::` searches the commands by what they do** | core | P2 | you cannot type a command whose name you have forgotten, and the names are English while the reader thinks 「竖排模式」. `::` opens a search over the descriptions, which already exist in three languages — the `help` tag of every command and subcommand is a `messages.toml` entry with `zht` / `zhs` / `en`, 147 of them, keyed `cmd.<parent>.<child>`, editable by hand. Three parts. **(a)** an optional `find` line per entry: words that are searched but never shown (`find = "直排 縱書 tategaki columns"`), so descriptions stay short and the search still covers every way a thing is said. **(b)** the scoring, split by script rather than one distance over the whole string: an ASCII run is an fzf-style subsequence match with bonuses for consecutive and word-start hits (so `lyt` finds `layout`), a CJK run is a bigram-set overlap with a longest-common-substring bonus (the `pg_trgm` / ES CJK-analyzer shape — the cosine of the entry, with bigrams for the vector), both weighted by IDF so 「模式」「命令」 sink and 「竖排」 carries, and by field so a name beats a `find` beats a description; a Damerau-Levenshtein ≤ 2 branch on the *name* alone for a typo. 147 entries is a full scan in microseconds — no index. **(c)** 中文 in the `::` line throughout — it is a Chinese query by design, so `composes()` admits it whole (see #225, which admits `:` only where an argument can be Chinese); 英 when the line opens, lone-Shift to 中, which needs a Kitty-protocol terminal exactly as `/` does today. **`:` and `::` are two modes, not one** (the author, 2026-09-04): a merged line would have to decide per keystroke whether a word is a name or a description — and `vert` is both — and its Enter would either run a guessed match (`:q!` is not undoable) or mean two different things on one key. Separate, they are also free to move between: a second `:` on an empty line enters `::`, backspacing `::` empty leaves it, and ⇥ on a result **writes the whole command back into the `:` line** and returns there with the caret after it, so what Enter runs is always the full line the reader can see, never the guess. Ranked descending. Not `numpy.lookfor` — that counted docstring words with no weighting, and NumPy 2.0 deleted it | Done |
+| 224 | **`::` searches the commands by what they do** | core | P2 | you cannot type a command whose name you have forgotten, and the names are English while the reader thinks 「竖排模式」. `::` opens a search over the descriptions, which already exist in three languages — the `help` tag of every command and subcommand is a `messages.toml` entry with `zht` / `zhs` / `en`, 147 of them, keyed `cmd.<parent>.<child>`, editable by hand. Three parts. **(a)** an optional `find` line per entry: words that are searched but never shown (`find = "直排 縱書 tategaki columns"`), so descriptions stay short and the search still covers every way a thing is said. **(b)** the scoring, split by script rather than one distance over the whole string: an ASCII run is an fzf-style subsequence match with bonuses for consecutive and word-start hits (so `lyt` finds `layout`), a CJK run is a bigram-set overlap with a longest-common-substring bonus (the `pg_trgm` / ES CJK-analyzer shape — the cosine of the entry, with bigrams for the vector), both weighted by IDF so 「模式」「命令」 sink and 「竖排」 carries, and by field so a name beats a `find` beats a description; a Damerau-Levenshtein ≤ 2 branch on the *name* alone for a typo. 147 entries is a full scan in microseconds — no index. **(c)** 中文 in the `::` line throughout — it is a Chinese query by design, so `composes()` admits it whole (see #225, which admits `:` only where an argument can be Chinese); 英 when the line opens, lone-Shift to 中, which needs a Kitty-protocol terminal exactly as `/` does today. **`:` and `::` are two modes, not one** (2026-09-04）: a merged line would have to decide per keystroke whether a word is a name or a description — and `vert` is both — and its Enter would either run a guessed match (`:q!` is not undoable) or mean two different things on one key. Separate, they are also free to move between: a second `:` on an empty line enters `::`, backspacing `::` empty leaves it, and ⇥ on a result **writes the whole command back into the `:` line** and returns there with the caret after it, so what Enter runs is always the full line the reader can see, never the guess. Ranked descending. Not `numpy.lookfor` — that counted docstring words with no weighting, and NumPy 2.0 deleted it | Done |
 | 225 | **`:s/照首行/照全表/` cannot be typed** | tui | P1 | the command line opens in 英 and borrows Insert's 中/英 back on the way out; lone-Shift does nothing on a command name, and starts Yume once `command::takes_text()` says the caret is past the names into `Args::Free` or `Args::Path`. Permitted, not triggered | Done |
 | 226 | **A spreadsheet pasted into a table** | core | P2 | a TSV or CSV clipboard becoming rows. The one thing that would make a writer build a table here instead of in a spreadsheet — and Tab is refused outright today, so there is not even a wrong answer. `Event::Paste` already arrives whole (`paste_text`), so the work is recognising a grid in it and widening the table to fit. Called **high** by the review of #142. **Done:** the block reader (`sniff_grid`) and the writer (`paste_grid`) were already there for `t p` — what was missing was the other door. A bracketed paste went through `cell_refuses_text`, which saw a tab and said 「格子裏不能有 Tab」: ⌘V from Excel was refused outright, and the one paste a table editor exists to accept was the one it would not take. `paste_text` now asks the same question `t p` asks, before the refusal and in Insert as well as Normal, and a block lands the same way by either door. Wiring it up found a real bug in the writer: rows past the end of the table were appended at `len_chars()`, which in a file ending in a newline is *behind the empty last line* — a two-row paste into 「字,說明 / 木,樹」 came back as 「甲,乙 / 丙 / ,」, the second row's cells written into the empty line and the row meant to hold them left blank at the bottom. The new row is now written at its own line. **Widening is Markdown's only**: a `\|` table grows columns (`insert_column`, which the rule row follows), a delimited one names the refusal — a CSV has no 「add a column」 anywhere in the editor, its width is what the schema says, and half of one here would be the only place a file's shape changed without being asked | Done |
-| 227 | **`:table` on a selection, and CSV both ways** | core | P3 | a selected block of CSV becomes a `\|` table, and a `\|` table exports as CSV. `export.rs` has no CSV path at all. The quoting invariant the table mode already keeps generalises from delimiters to *cells*, which is the same machinery #253 wants. **Done:** `:table pipe [分隔]` and `:table csv [分隔]` in the buffer, `:export csv` / `:export tsv` to a file. The delimiter is guessed by 「every line holds the same number of it, at least once」 — the only property of a grid visible from outside — over tab, comma, semicolon and **never a single space**; 中文 prose comes back `None`, its 「，、。」 not being among the three, and so does anything whose lines disagree — but the rule is 「the lines agree」 and not 「this is not prose」, so two lines of English holding one 半角 comma each *are* read as a table (the manual says so out loud). A cell holding the delimiter is **refused by row and column**, not quoted, which is the stance `table.rs` already takes at the keyboard. The escape is Markdown's own `\|`, which `pipes_from` already reads, and a backslash is doubled — a cell whose own text is `\|` would otherwise be written `\\|`, where the two backslashes read as one escape and the pipe that follows is bare. `Format::Csv` was deliberately **not** added: everything `Format` names is a way of setting a *manuscript*, and a CSV comes from one table, so `export::is_delimited` / `delimiter_of` name the delimited formats and the editor serves them from the region itself | Done |
+| 227 | **`:table` on a selection, and CSV both ways** | core | P3 | a selected block of CSV becomes a `\|` table, and a `\|` table exports as CSV. `export.rs` has no CSV path at all. The quoting invariant the table mode already keeps generalises from delimiters to *cells*, which is the same machinery #253 wants. **Done:** `:table pipe [分隔]` and `:table csv [分隔]` in the buffer, `:export csv` / `:export tsv` to a file. The delimiter is guessed by 「every line holds the same number of it, at least once」 — the only property of a grid visible from outside — over tab, comma, semicolon and **never a single space**; 中文 prose comes back `None`, its 「，、。」 not being among the three, and so does anything whose lines disagree — but the rule is 「the lines agree」 and not 「this is not prose」, so two lines of English holding one 半角 comma each *are* read as a table (the manual says so out loud). A cell holding the delimiter is **refused by row and column**, not quoted, which is the stance `table.rs` already takes at the keyboard. The escape is Markdown's own `\|`, which `pipes_from` already reads, and a backslash is doubled — a cell whose own text is `\|` would otherwise be written `\\ | `, where the two backslashes read as one escape and the pipe that follows is bare. `Format::Csv` was deliberately **not** added: everything `Format` names is a way of setting a *manuscript*, and a CSV comes from one table, so `export::is_delimited` / `delimiter_of` name the delimited formats and the editor serves them from the region itself | Done |
 | 228 | **`t y` / `t p` for a whole column** | core | P3 | rows have `Y`; a column can only be moved one step at a time with `t <` / `t >`, so reordering four columns is twelve keystrokes and a mistake. Same shape as the row yank already written. **Done** — `yank_column` / `put_column`, in both the delimited and the `\|` branch of `table_structure`, and in the which-key panel. The keys were written and then never reached the manual, which is why this row stayed open longer than the work did | Done |
 | 229 | **The current cell is not drawn** | tui | P3 | Insert *is* constrained to the cell, but the prose renderer knows nothing about cells, so the only feedback that you are inside one is the column name in the status line. Since #212 the padding is drawn as ghost text, which is where a cell tint would also live | Done |
-| 230 | **`？」` and `！」` squeezed into one square** | tui | P3 | treated like `。」`, but clreq §6.3.2 treats the full-width 問號/嘆號 differently from the 句號 group. Which way a terminal should follow is a typographic judgement, not a bug fix — wanted: the author's call, then a line in `zong.rs` | Planned |
+| 230 | **`？」` and `！」` squeezed into one square** | tui | P3 | treated like `。」`, but clreq §6.3.2 treats the full-width 問號/嘆號 differently from the 句號 group. Which way a terminal should follow is a typographic judgement, not a bug fix — wanted: a decision, then a line in `zong.rs` | Planned |
 | 231 | **The 「hole」 branch in `zong.rs`** | tui | P3 | a third consecutive mark that finds both the margin and the pair-square taken still keeps a margin row with an empty text square beside it. Rare. What print does with three marks in a row is worth asking a typesetter rather than guessing | Planned |
 | 232 | **The column-number row's contrast** | tui | P3 | raised as a review finding on the chrome ground. Measuring it properly means measuring the whole ladder — a theme review rather than a patch, and 【墨香】 (§5.2 13) is the ladder it would measure | Planned |
 | 233 | **`:check usage`** | core | P4 | 裡 412 / 裏 3, 為/爲, 台/臺, 着/著, and the project's own names, as a jumpable buffer. **Nobody has this**: Word checks 病句, Grammarly is English, and a spell-checker tokenizes on spaces and sees one word. Called **high** by the writer's review, 2026-09-03. Done 2026-09-05 in `crates/yumete-core/src/usage.rs`: 61 built-in groups, plus `[editor] usage_groups` for the manuscript's own names (阿嬌/阿姣 is in nobody's 異體字表 and is exactly what slips over a year). **The question is asked of the document, not of a dictionary** — a group is reported only when *both* spellings are written here, and the one written more is the one it meant, so a manuscript that only ever writes 裡 is never bothered. Spellings sort longest-first so 什麼 takes the character 麼 would otherwise claim. 面/麵, 谷/穀, 困/睏, 仿/彷 are deliberately left out: different meanings, not a choice of spelling, and reporting them is noise. Named `usage` rather than the row's literal `用字` because every command name in `command.rs` is ASCII; `::用字` finds it through the #224 `find` line. **Two things the review of 2026-09-05 caught and this now does:** the reader's own groups are chained *before* the built-ins so a stable longest-first sort lets them win a spelling the two share — with them second, `usage_groups = ["裡 裏"]` was silently swallowed by the built-in `裏 裡` and the scan reported the opposite of what was configured; and the status line says `check.usage-too-many` when the listing hits `GREP_LIMIT`, instead of naming a count the buffer does not hold. | Done |
@@ -449,11 +461,11 @@ index, and a row with no number anywhere else is a row that got lost.
 | 236 | **圈點 in the margin the 標點旁置 column draws** | tui | P4 | and the open markup question answers itself: `*字*` **is** it, because the Chinese rendering of `<em>` is 着重號. 1–2 days — `Slot` already carries the channel #70 built. **high** Done 2026-09-05, and it cost no core change at all: the renderer already fetches the line's Markdown runs to ink the characters, so the run fetch was hoisted above the margin block and a `Kind::Emphasis` run now also puts `·` (`vertical::EMPHASIS`, half-width so it fits the one-cell margin the way a hung 句讀 does) in the column. **Priority in that column is mark → reading → 着重號**: the first two carry something unreadable off the page, the dot repeats what `*` already says in the file. `Kind::Strong` deliberately gets none — `**` is a weight, and dotting both puts dots down half a page. **The dot buys its own column, the way a reading does.** Drawing it into whatever cell happened to be free was the first cut and it was wrong twice over: the rightmost 縱 of a page sits flush against the edge and has no free cell, so the first column the reader looks at was the one column that never got dots, and `:dense` lost them everywhere. So `place` now takes a `Margin { reading, dot }` per 縱 instead of a bare `annotated`, and `ruby_cell` answers `max(reading, ticks, dot)`. The `dot` is asked **by line, not by 縱** — a paragraph broken across three 縱 reserves in all three — so that the page does not change shape as it is scrolled through; it costs a cell only on the rightmost 縱, since every other one borrows the gap it already had. That means the layout has to know the Markdown *before* it places anything, which is what `vertical::Markup` is: one `blocks_through` walk and the per-line `markup_line` cache, shared by the layout, by `hit` (both must agree where the 縱 are or a click lands a character off) and by the ink pass, which used to do that walk itself. | Done |
 | 237 | **`:sentence`** | core | P4 | one 句 to a 縱, as a view, no edit. The manual already teaches `:%s/。/。\n/g` for proofreading; this is that, non-destructively — and it hands the `(`/`)` sentence motion its boundaries. **high** Done 2026-09-05. `Grid` grew a `sentences: bool` (through `with_sentences`, in the paragraph memo hash) and `zong_breaks` — the one place a 縱 boundary is decided — now takes the sentence cuts as *preferred* breaks: before measuring out a full 縱 it looks for the next cut at or within `zong_len` and takes it, so a short 句 gets a 縱 of its own and a long one still wraps by the ordinary rule (禁則 retreat and ruby groups untouched) with the *next* 句 starting fresh. The cuts come from `motion::sentence_starts`, made `pub(crate)` for exactly this: the boundary you see must be the boundary `(`/`)` jump between, and it already knows a closing quote belongs to the sentence it closes (`「你回來了。」` is one 縱, not one 縱 plus a stray `」`). No edit, no undo entry — it is a view like `:dense`, and the manual's `:%s/。/。\n/g` recipe now has a non-destructive answer. | Done |
 | 238 | **`:check 標點`** | core | P4 | half-width marks in Chinese text, `...` for ……, and **unbalanced 「」（）《》 across a paragraph**, which silently inverts every quote after it and is invisible in prose. **high** Done 2026-09-05 as `:check punct`, in `crates/yumete-core/src/punct.rs`, answering in the `檔名:行號:` listing `:grep` and `:check usage` already use (both now go through `Editor::show_listing`). **The whole design is 「only where it is Chinese」**: `3.14`, `1,000`, `README.md`, `../path` and an English sentence are all full of half-width marks and every one of them is correct, so a mark is reported only when the nearest non-space neighbour on one side is 漢字 or a CJK mark — plus a digit guard for decimals and thousands, and code (fenced blocks and inline spans) blanked to spaces rather than removed, so the columns reported are still the columns the cursor goes to. **The pair check earns the feature**, and it has one subtlety worth keeping: a 「 left open at the end of a paragraph is *correct* when a quotation runs over several paragraphs, because Chinese typesetting re-opens 「 at the head of each and closes it only in the last — so an unclosed quote is reported only when the next non-blank paragraph does not open with the same mark. Brackets get no such grace. A closer with nothing open is always wrong, and `「（好」` reports the （ (the stack pops to the opener the closer matches, and everything opened after it is unclosed by construction). | Done |
-| 239 | **This book's own words** | core | P4 | `:word discover` mines the project for repeated OOV n-grams and writes them into the `.yumete/words.txt` buffer, so 阿寧 walks as one word and — once saved — types as one. `crates/yumete-core/src/discover.rs`: Apriori counting by length (1..=4, `MIN_COUNT` 5), then 內聚度 = min PMI over every binary split (`MIN_COHESION` 3.0), then min(左熵, 右熵) with a run boundary counting as a neighbour of its own (`MIN_ENTROPY` 0.6). The cheap filters run first because the last test is the expensive one: a candidate the segmenter already joins is dropped, which — the installed segmenter being wrapped in `WithWords` — also means a second run never repeats what the first one saved. Two prunes for nested candidates: 阿寧說 goes because 阿寧 is `CROWDED_OUT`× commoner, 王語 goes because 王語嫣 absorbs `ABSORBED` of it. Results land in the word-list buffer **unsaved** (`replace_found`'s bargain: `u` takes it back, `:w` is consent) **and in the segmenter at once** — the author, 2026-09-06: 「word discover 发现的文章中的词，能不能自动用来给词 segment（允许w？）」. Waiting for `:w` to install them meant the writer had to read a list of 阿寧 and 王語嫣 and *trust* it, when the thing that shows whether a candidate is a word is `w` walking over it in the chapter. Saving now only makes the same list outlive the session (`note_word_list_saved`), and `u` still puts the segmenter back where it was. Ranked by count, `DISCOVER_LIMIT` 200 of them — 天龍八部, 1.22 M chars, yields 6004 candidates in 320 ms. **high** | Done |
+| 239 | **This book's own words** | core | P4 | `:word discover` mines the project for repeated OOV n-grams and writes them into the `.yumete/words.txt` buffer, so 阿寧 walks as one word and — once saved — types as one. `crates/yumete-core/src/discover.rs`: Apriori counting by length (1..=4, `MIN_COUNT` 5), then 內聚度 = min PMI over every binary split (`MIN_COHESION` 3.0), then min(左熵, 右熵) with a run boundary counting as a neighbour of its own (`MIN_ENTROPY` 0.6). The cheap filters run first because the last test is the expensive one: a candidate the segmenter already joins is dropped, which — the installed segmenter being wrapped in `WithWords` — also means a second run never repeats what the first one saved. Two prunes for nested candidates: 阿寧說 goes because 阿寧 is `CROWDED_OUT`× commoner, 王語 goes because 王語嫣 absorbs `ABSORBED` of it. Results land in the word-list buffer **unsaved** (`replace_found`'s bargain: `u` takes it back, `:w` is consent) **and in the segmenter at once** — 2026-09-06：「word discover 发现的文章中的词，能不能自动用来给词 segment（允许w？）」. Waiting for `:w` to install them meant the writer had to read a list of 阿寧 and 王語嫣 and *trust* it, when the thing that shows whether a candidate is a word is `w` walking over it in the chapter. Saving now only makes the same list outlive the session (`note_word_list_saved`), and `u` still puts the segmenter back where it was. Ranked by count, `DISCOVER_LIMIT` 200 of them — 天龍八部, 1.22 M chars, yields 6004 candidates in 320 ms. **high** | Done |
 | 240 | **`:check 字集`** | core | P4 | every character outside 通用规范／臺灣／香港／古籍, before the typesetter finds out. The seven `.ycs` sets are loaded at startup already; two days. The writer's review called it the **best value-per-day on either list**. **high** Done 2026-09-05 as `:check charset`, off the 字集 column of the 拆分表 rather than the `.ycs` sets — the column is already in `AnnotationTable`, arrives with `:yume scheme`, and carries the Unicode block beside the standards, which the sets do not. `Reader` grew one method, `charset(ch) -> Option<String>`, handing the field over **unsplit** (`簡古臺-CJK`): the two halves answer two different questions, and this check needs the block name — 「CJK擴展B」 is the part that predicts whether a font will have it. `YumeReader::is_rare` now goes through it, so there is one place the column is read. **One line per character, not per occurrence**: a 名字 with a rare 字 in it appears four hundred times and is *one* decision, and four hundred rows would bury the other three characters that are the finding; each row gives the first place, the count and the block. 古-only characters are deliberately **not** reported — 古籍 is a standard, a font will usually have them, and they are `:ruby auto rare`'s business (#234). No data is said (`check.charset-no-data`) rather than answered 「clean」. | Done |
 | 241 | **簡繁 conversion** | core | P4 | `:convert s t`, `:convert s c`, and the other pairs. **medium-high** Done 2026-09-05, and the design is 「do not write a converter」. The row used to plan one — read the one-to-many sets out of `simptrad.txt` and drop the ambiguous ones into a review buffer — and that is a worse OpenCC with extra steps: 发 is 髮 in 头发 and 發 in 发现, which needs a phrase dictionary and the 分詞 to use it, and [OpenCC](https://github.com/BYVoid/OpenCC) has been getting that right for fifteen years. So `:convert` **runs `opencc`** — `crates/yumete-core/src/convert.rs` plans the route, `yumete-tui` spawns it through the same `run_capturing` `:!` uses, and a non-zero exit leaves the manuscript alone (judged by the exit code alone; a converter that grumbles on stderr while succeeding still succeeded). Not installed is a message saying how to install it, and `:convert opencc install` runs `brew install opencc` on macOS and only *prints* the line elsewhere, because that needs sudo. **The one part that is ours is 字形.** OpenCC's 繁體 is 港臺 (爲 説 裏 for `s2t`, 為 裡 著 for `s2tw`) and neither is 大陸通規繁體 — what a mainland publisher sets a 繁體 book in, and what 宇浩's own 字料 is written in. That difference is glyph shape and not word choice, ~90 characters each a straight swap, so it is **data**: `glyphs_c.txt` / `glyphs_g.txt`, copied from [GujiCC](https://github.com/forFudan/GujiCC) (Apache-2.0) and walked over what opencc hands back, one character out for every character in. Checked against GujiCC's own `s2c` over 4003 简体 字頭 (3 characters apart, all of them entries opencc's `s2t` does not have at all) and over 66k characters of `docs/manual.md` (10 characters, 2 kinds). **Leaving 通規 reads the same table backwards**, because opencc's configs cannot read those 字形 — `t2s` happens to know 説 内 吴, but `t2tw` walks straight past them and hands back 臺灣正體 with mainland glyphs still in it — so `:convert c tw` is 「table backwards → `t2tw`」. Backwards is not total: 通規 *merges* (蝨 into 虱, 嶽 into 岳), and a merged 字形 has no unique 源. Those rows are named in the data file's own tail as one-field lines, derived by decompiling opencc's `STCharacters`/`STPhrases` (`opencc_dict -f ocd2 -t text`) and asking whether its 繁體 side emits that 字形 — 6 for `c`, 4 for `g` — and going back leaves them alone rather than guessing. The `p` configs (`s2twp`: 内存 → 記憶體) change the character count and do not reverse, so they are behind `force`. | Done |
 | 242 | **`:word habit`** | core | P4 | crutch words by **surprisal against 詞頻表**, not raw count, so it says 「然後 47 次」 and not 「的」. Ranked by `c·ln(多)` — the whole document's surplus — rather than by the ratio, so a word said three times at 3× stays out of the way of 然後 at 4× over forty-seven. Three deliberate silences: a word the table does not hold is skipped (阿甯 is a name, and mining a book's own vocabulary is #239), single characters are skipped (they are the segmenter's leftovers), and fewer than three sightings is not yet a habit. `n` counts only the tokens the table holds, so both rates are measured in the same vocabulary — over every 漢字 token instead, the bundled list's 24.6 % coverage deflated every 倍 by four. The background comes off a new `Segmenter::log_prob`, so the answer is as good as the table installed — 宇浩's 125 萬條 when the data layer is there, the bundled 680 when it is not, and a sentence rather than an empty listing when there is no table at all. **medium-high** | Done |
-| 243 | **割注 — 小字雙行 inside the 縱** | tui | P4 | InDesign J has it; nothing else does. The 縦中横 slot packing is already the mechanism — run it down a run of slots instead of one. **待作者定形**：一個格位是兩個單元格，而漢字佔滿兩個——終端裏沒有半號漢字，所以「小字」這一半做不到。三條路：(a) 割注只受半角文字，真半寬雙行，漢字夾注做不了；(b) 帶割注的那一縱整條加寬到四個單元格（右行先讀，再左行），漢字可以，代價是游標／滑鼠／換行都要知道有些格位是四格寬；(c) 割注自己佔兩縱，正文從它左邊接着走，斷縱那一套要重寫。**medium** | Planned |
+| 243 | **割注 — 小字雙行 inside the 縱** | tui | P4 | InDesign J has it; nothing else does. The 縦中横 slot packing is already the mechanism — run it down a run of slots instead of one. **待定形**：一個格位是兩個單元格，而漢字佔滿兩個——終端裏沒有半號漢字，所以「小字」這一半做不到。三條路：(a) 割注只受半角文字，真半寬雙行，漢字夾注做不了；(b) 帶割注的那一縱整條加寬到四個單元格（右行先讀，再左行），漢字可以，代價是游標／滑鼠／換行都要知道有些格位是四格寬；(c) 割注自己佔兩縱，正文從它左邊接着走，斷縱那一套要重寫。**medium** | Planned |
 | 244 | **寫作進度** | core | P4 | Scrivener's targets, but counting 字 correctly. **medium** Done 2026-09-06 as `:progress` / `:target <字>`, off a ledger the writer can edit: `.yumete/progress.tsv`, one row per **day per file** (`日期 ⇥ 檔名 ⇥ 起 ⇥ 現`) plus a `目標` line, found by walking up from the manuscript the way `words.txt` and the table schemas are. `crates/yumete-core/src/progress.rs` is the whole model and knows nothing of the editor: `Log::from_text` skips a line it cannot read rather than failing the file (this is a text file people will hand-edit and merge between machines), `note` records 起 as `opened_with.min(now)` so a chapter cut before its first save of the day does not report a day of writing, and 本書 is the latest 現 per file summed — a second `:progress` read from inside the results buffer used to report the listing's own length. 字 is `:count`'s 字, not characters. **Two decisions worth keeping.** (1) *The day turns at local midnight*, and the standard library has no local time and this workspace has no date crate: `date +%z` is asked once a session (cached in `Editor::time_offset`) and the arithmetic is a pure `today(now_secs, offset_secs)` over hand-rolled civil-from-days, so midnight is testable without waiting for one; Windows has no `date +%z` on the PATH and falls back to UTC. (2) *The ledger is opt-in*: `note_progress` returns early unless the file already exists, so saving a document in some unrelated directory never litters it — `:target` and the first `:progress` are what create it, and `:target off` clears the target. The bar is 12 cells against the target, or against the best day there has been when there is no target; a day of cutting is `－`, because 「wrote −1200 字」 is still a day of work and does not draw. | Done |
 | 245 | **A print-ready 直排 HTML export** | core | P4 | `@media print` in the same file `:export html` already wrote — `@page` trim from `[export] page` (a5, 32開, or `137x195`), 天 12%／地 9%／側 10%, chapters on a new page, headings not stranded. The type size is **derived**: 版心 = 字數 × 字身, so `zong_len` and the paper leave it nothing to be. No 頁碼: browsers implement no `@page` margin box, and the file says so | Done |
 | 246 | **焦點模式** | tui | P4 | `:focus [on\|off]`. Everything but the **段** being written stands back a rung — the same `faded()` a peeked pane recedes by, applied a 縱 (or a row) at a time. The 段 and not the 縱: a wrap point is not a unit of writing, and what a focus mode lights horizontally is the line, which for prose is the paragraph. Both layouts; the number band and the selection stay where they are, and a peeked pane is left alone (it is already a rung back). | Done |
@@ -471,46 +483,47 @@ index, and a row with no number anywhere else is a row that got lost.
 | 258 | **Files with 40 MB single lines** | core | P4 | the per-paragraph caches are keyed by revision and sized by what is on screen, so the budget is already the right shape; nothing has tested it against one line that is the whole file. **medium** | Planned |
 | 259 | **A live prose tint for English** | tui | P4 | the same per-frame budget the CJK work spends, aimed at the other language. **medium** | Planned |
 | 260 | **Macros as editable text** | core | P4 | record, then *read and fix* what was recorded. **medium** | Planned |
-| 261 | **A table is a delimiter, a surface and a boundary** | core | P2 | the author's model, 2026-09-05: a CSV file is the special case of a table whose boundary is the whole file, so `Shape::{Delimited,Markdown}` should split into two independent axes — **separator** (`Delimiter(c)` / `Pipe`) and **surface** (`Page` / `InProse`) — plus a `Boundary` that is recomputed, never stored (`md_region()`'s own rule). Three tiers fall out: a CSV/TSV/schema'd file is `Delimiter` × `Page` over the whole file; a `\|` table is `Pipe` × `InProse` over `md_region()`; and **the third cell does not exist today** — a block of TSV or `&` pasted into a chapter, entered by standing on the delimiter (or selecting the lines) and walked out while the line still holds it. `turn_for_table` then asks `surface == Page` instead of `shape != Markdown`, which is what it always meant. Enables #227 (one rewriter instead of two) and #142's 「cell model over a region」. See §5.5. **The two axes and the boundary landed 2026-09-05, behaviour unchanged; the third tier is #227.** | Done |
+| 261 | **A table is a delimiter, a surface and a boundary** | core | P2 | 2026-09-05： a CSV file is the special case of a table whose boundary is the whole file, so `Shape::{Delimited,Markdown}` should split into two independent axes — **separator** (`Delimiter(c)` / `Pipe`) and **surface** (`Page` / `InProse`) — plus a `Boundary` that is recomputed, never stored (`md_region()`'s own rule). Three tiers fall out: a CSV/TSV/schema'd file is `Delimiter` × `Page` over the whole file; a `\|` table is `Pipe` × `InProse` over `md_region()`; and **the third cell does not exist today** — a block of TSV or `&` pasted into a chapter, entered by standing on the delimiter (or selecting the lines) and walked out while the line still holds it. `turn_for_table` then asks `surface == Page` instead of `shape != Markdown`, which is what it always meant. Enables #227 (one rewriter instead of two) and #142's 「cell model over a region」. See §5.5. **The two axes and the boundary landed 2026-09-05, behaviour unchanged; the third tier is #227.** | Done |
 | 262 | **Ship the scheme files, not just the built-in five** | build | P3 | #169 scans `schemes/*.toml` and nothing ever puts one there, so every yumete install still runs on yume-core's five compiled-in schemes. `../yume/frontends/schemes/*.toml` are the source; `scripts/build.sh` already writes `schemes/ling.ytab` and friends beside where they would go. **Copy only a scheme whose tables this build actually compiled** — a menu line a writer can pick but that has no code table behind it is worse than a missing line, because switching to it leaves a writer with no candidates at all. 冰雪 needs data yumete does not compile, so it stays out until it does. Not a chore: the files carry `[[word]]`, `fixed`, `abbrev`, `select_keys` and the 頂功 rules, so taking them changes how typing behaves. Raised by 輸入法Mac, 2026-09-05. **large** | Planned |
-| 263 | **A measure nothing folds at is not a margin** | tui | P2 | the author, 2026-09-05: `:wrap 50` then `:wrap off` left a rule down the middle of the page with the writing running straight through it. The measure is kept on purpose — `:wrap` on its own has to put it back — but the renderer took it as a ruler unconditionally, so the page went on claiming an edge it no longer had. It now stands in for the configured ruler only while it is folding rows. **small** | Done |
-| 264 | **The menu's height is a share of the window, not a constant** | tui | P3 | the author, 2026-09-05: 「命令提示一共 47 條，這裏只顯示了一半，但我的屏幕還有很大的空間。」 `MENU_ROWS = 8` and `MENU_COLUMNS = 4` hid a third of the list on a terminal with room for all of it. The shape is now measured: at most a third of the window's height (so the page it is about to act on is still behind it), and **the fewest columns that show every entry** in that height — grown downwards first, because the order runs down a column. Falls back to the old eight-and-scroll when even the full width cannot hold the list. **small** | Done |
-| 265 | **A page narrower than the window, centred** | tui | P4 | the author, 2026-09-05: 「`:editor width` 可以修改可編輯區的寬度。如果小於 terminal 寬度，那麼編輯區就是跑到了中間，兩側變黑或者變灰，不可以編輯。」 A soft page inside the terminal, the way a word processor sets paper on a desk. **Not the same thing as the measure**: `:view wrap 50` folds rows at fifty and leaves them against the left edge with one margin to the right of them (#263); this puts the writing in the middle with a dead margin on both sides. The implementation is almost certainly *the rect, not the renderer* — inset `text_area` from both sides in the layout and paint the two strips with a rung, after which the gutter, `set_wrap_width`, the caret, `text_at`'s click mapping, the panels and the sidebar all follow, because every one of them already measures off that rect. Three things to settle first: whether it insets the 縱書 page top-and-bottom instead (the same idea on the other axis), whether it is a command, a config key, or both — there is no `:editor` command today, and `[editor] ruler` / `[editor] measure` are the neighbours it would sit beside — and what it does to a window too narrow to hold it. **medium** | Planned |
+| 263 | **A measure nothing folds at is not a margin** | tui | P2 | 2026-09-05：`:wrap 50` then `:wrap off` left a rule down the middle of the page with the writing running straight through it. The measure is kept on purpose — `:wrap` on its own has to put it back — but the renderer took it as a ruler unconditionally, so the page went on claiming an edge it no longer had. It now stands in for the configured ruler only while it is folding rows. **small** | Done |
+| 264 | **The menu's height is a share of the window, not a constant** | tui | P3 | 2026-09-05：「命令提示一共 47 條，這裏只顯示了一半，但我的屏幕還有很大的空間。」 `MENU_ROWS = 8` and `MENU_COLUMNS = 4` hid a third of the list on a terminal with room for all of it. The shape is now measured: at most a third of the window's height (so the page it is about to act on is still behind it), and **the fewest columns that show every entry** in that height — grown downwards first, because the order runs down a column. Falls back to the old eight-and-scroll when even the full width cannot hold the list. **small** | Done |
+| 265 | **A page narrower than the window, centred** | tui | P4 | 2026-09-05：「`:editor width` 可以修改可編輯區的寬度。如果小於 terminal 寬度，那麼編輯區就是跑到了中間，兩側變黑或者變灰，不可以編輯。」 A soft page inside the terminal, the way a word processor sets paper on a desk. **Not the same thing as the measure**: `:view wrap 50` folds rows at fifty and leaves them against the left edge with one margin to the right of them (#263); this puts the writing in the middle with a dead margin on both sides. The implementation is almost certainly *the rect, not the renderer* — inset `text_area` from both sides in the layout and paint the two strips with a rung, after which the gutter, `set_wrap_width`, the caret, `text_at`'s click mapping, the panels and the sidebar all follow, because every one of them already measures off that rect. Three things to settle first: whether it insets the 縱書 page top-and-bottom instead (the same idea on the other axis), whether it is a command, a config key, or both — there is no `:editor` command today, and `[editor] ruler` / `[editor] measure` are the neighbours it would sit beside — and what it does to a window too narrow to hold it. **medium** | Planned |
 | 266 | **`:row (ro)` was a spelling that meant `:readonly`** | core | P2 | found by showing the whole list at once (#264). `shortest()` walked the command **names** only, so `:row` — which no other name is a prefix of — was offered as `(ro)`, while `ro` is `:readonly`'s declared alias and an exact alias beats a prefix in `resolve`. It now walks names and aliases together, and `:row` is offered with no short form, the way `:sh` is. The test that was supposed to catch this only checked that the short form *parsed*, and `:ro` parses; it now checks that it resolves to **that** command, and reads `Choice::short` out of `complete()` rather than deriving it a second time. **small** | Done |
-| 267 | **`-n` starts on nothing** | cli | P3 | the author, 2026-09-05: 「`yumete` 理論上應該是建立一個新的 buffer，但是它會打開最近的文件。」 It is doing what §「接着上次」 promises — bare `yumete` reopens last session (#43) — but there was no way to say *no* without naming a file. `-n, --new` (別名 `--fresh` 不設，一個拼法就夠) skips the restore and opens the empty buffer. Off the same flag as `--shot`: a run that is printing never restored a session either. **small** | Done |
-| 268 | **A fast wheel scroll locked the terminal up** | tui | P1 | the author, 2026-09-05: 「長文檔，向下滾動鼠標，快速滾動後，文章整個卡死，必須強制關閉 terminal tab 才可以。」 Not a hang in the editor — a flood at the terminal. One frame was drawn per notch, and a trackpad sends hundreds of notches per gesture: measured against 資治通鑑 through a pty, 3000 notches produced 3000 frames and **59.5 MB** of escape sequences. The editor answered every one of them promptly; the terminal was still painting minutes later, which from the reader's chair is a freeze with no way out but the tab. The wheel branch now reads the rest of the burst off the queue before drawing (`drain_the_flick`), so a flick is one scroll and one frame: the same 3000 notches now cost **1.1 MB**, and 400 notches 3.95 MB → 187 KB. Capped at 64 notches a frame so a long momentum scroll still draws on the way, and the first event that is *not* that same scroll is put back rather than swallowed. **small** | Done |
-| 269 | **The HUD went to the first row that fitted, not the nearest** | tui | P2 | the author, 2026-09-05, with two screenshots: on an empty line the typing HUD landed at the far end of the *next* line — half a screen from the caret — and once the sentence grew long enough to crowd that line out, it moved above the caret and was suddenly closer. The rule was 「below, else above, first that fits」, which asks whether a row has room and never asks how far away the room is. It now scores candidates — the caret's own row first, then one below, one above, two below, two above — by `\|Δcolumn\| + 8·\|Δrow\|`, and takes the best. The corner glyph follows the row it ended on (`─` beside, `╰` below, `╭` above). `after_the_writing` is unchanged: the HUD still never paints over writing — **amended 2026-09-07 by #284**: that holds at `:hud off` and `:hud basic`, which is where a window opens; `:hud full` covers on purpose, and covering is the whole of what it is asked for. **small** | Done |
-| 270 | **A table has no ground of its own** | tui | P3 | the author, 2026-09-05: 「能不能將 markdown 中合法的表格渲染一個背景顏色，就像代碼塊、vitepress 塊一樣，有個背景底色。這樣一看就知道這裏有個表格。」 The block grounds were already there — `block_style` washes a quote, a fence and a `:::` container with the same `BAND` rung, and `Block::Table` was the one block in the list that returned `None`, so a table on the page looked like prose that happened to have `\|` in it. It is now banded like the other three, which is also the answer to 「哪幾行屬於這張表」 that the `t ]` walk gives by keystroke. The cell tint (#212, #229) is patched *onto* that ground rather than replacing it, so a table read as a grid keeps both. **small** | Done |
-| 271 | **The system input method typed nothing but spaces** | tui | P1 | the author, 2026-09-05: 「系統的輸入法（不是內置的 yume）無法在 insert 模式打字，上屏後都是空格（這個空格應該是上屏鍵的那個空格）。」 `REPORT_ALL_KEYS_AS_ESCAPE_CODES` was among the Kitty-protocol flags pushed at startup. With it on, a text key stops being sent as text and arrives as `CSI <key> ; <mods> ; <text> u` — and crossterm 0.28 parses that third parameter and throws it away (`REPORT_ASSOCIATED_TEXT` is a commented-out line in its `event.rs`). For an ASCII key that costs nothing, the key being the text; for macOS's own IME it costs the whole sentence, which commits with the space bar and therefore arrives as a row of `Char(' ')`. The flag is gone — **and the lone-Shift tap went with it, silently**: the protocol reports a bare modifier under that flag and under no other (「Additionally, with this mode, events for pressing modifier keys are reported」), so what was left could tell a release from a press but had nothing to tell it about. This entry said the opposite for three days; #280, two rows down, said it right. Corrected in **#290**, which holds the flag exactly while yume has the keyboard. **The 內置 IME never saw this** because it reads the ASCII keys itself, which is why it went unnoticed for as long as it did. **small** | Done |
-| 272 | **The `t` menu listed a key that had moved and never the way in** | core | P2 | the author, 2026-09-05: 「tt 依舊是格式化表格而不是跳轉表格視圖，也沒有 tf 格式化表格的選項。」 Two faults in the same twelve lines, both of them the menu rather than the keys. **One**: the `\|`-table list still offered `t` for 「對齊」, which `1ffde52` had made the way *into* a table three days earlier — so the menu said `t t` formats and the code says it enters. **Two**: which list to draw was decided by `md_region().is_none()`, and that is `None` for a Markdown table nobody has opened yet — so standing in one of 手冊's own tables offered the delimited file's keys, none of which are the ones that get you in. `t` is a group in **every** mode (#206), so most presses of it come from outside a table: `t q` and `] [` now head every list and are the whole of it when there is no table under the cursor, the list is chosen by `bounds` rather than by mode, and 對齊 is offered as `F` (`f` is the `full` level since #283). **small** | Done |
-| 273 | **The `:` menu was a rectangle, not a panel** | tui | P3 | the author, 2026-09-05: 「command 提示面板的設計感不如快捷鍵提示面板。請你對齊一下：面板有個邊框 ＋ 左上有個「命令」文字。」 Two panels open in the same corner of the same page, one keystroke apart, and only one of them had an edge: `draw_which_key` draws a ring at the `rule()` rung with its name in gold in the top-left, while `draw_list` painted a bare ground and let the entries run to the screen edge. `draw_list` now draws the same ring with the same corner radius (`[panel] rounded`) and takes a `title` — 「命令」 for the `:` menu, and for the picker its own name, which moves out of the head of the footer and into the corner where a panel's name belongs. **small** | Done |
-| 274 | **A search prompt that does not say what it will repeat** | core | P3 | the author, 2026-09-05: 「`/` 搜索，enter 確認，再次按下 `/` 搜索，這個時候是不是應該預填寫（灰色）上次搜索過內容，用戶可以直接 enter 繼續搜索這個，或者直接輸入新的搜索詞開始新的搜索？」 `Enter` on an empty search line has repeated `last_search` since #153 — the behaviour was already right and only the *saying* was missing, because `prompt_ghost` returned early on an empty line. It now answers with the whole of the last pattern in Search mode, so `/⏎` reads as 「再找一次這個」 and Tab writes it out. Typing narrows it as before; the first character that is not a prefix takes it away, and rubbing that character out brings it back. The `:` line is deliberately left alone: the menu under it is already showing every command there is. **small** | Done |
-| 275 | **A table in a document can only be *operated* as a grid, never *drawn* as one** | core+tui | P2 | the author, 2026-09-05: 「整页的表格视图就是 inline 表格视图的特例。」 Three modes, not two — prose／源碼, **表格操作**（`t n`, the syntax stays, the keys are the grid's, and the table's lines stop soft-wrapping）and **真表格顯示**（`t t`, drawn as a grid the way a CSV already is, ruler and all, in the middle of the prose it sits in）— and two kinds of file: one whose extension or schema *says* table turns whole (`t t` anywhere turns every table in it, and they stay turned when the cursor walks off), one where we are guessing from a run of tab characters turns only the block under the cursor and drops back the moment it leaves. What exists today is the middle mode wearing the top mode's key. Design in §5.6. **large** | Done |
-| 276 | **A new table was three keystrokes from being usable** | core | P3 | the author, 2026-09-05: 「`:table new 3 4`，迅速在 markdown 中插入一個三行四列表格，上下有空白行，光標自動到標題欄最左的一格並進去編輯模式。」 `:markdown table 3x4` had been writing the table since #198, and stopped three steps short: no blank line around it (a `\|` row welded to the paragraph above is not a table at all), Normal mode when what you want is to type the first heading, and headings pre-filled with `1 2 3` for you to delete. It is `:table new <行> <欄>` now — 行 first, and **行 counts the heading**, the way a word processor's「插入表格」asks; the rule row is punctuation. The old spelling is gone rather than aliased: it read the two numbers the other way round. **small** | Done |
-| 277 | **The full-screen grid was a file format, not a way of looking** | core+tui | P2 | the author, 2026-09-05: 「我覺得可以保留現在的 tt 模式，然後加上個新的模式也就是整窗口走網格。所以我們有四個模式……另外，ti, ta 這兩個模式應該允許光標上下離開表格回到正文中（現在不可以）。」 #275 gave a table in a document a grid drawn *where it stands*; this gives it the other thing a CSV has always had — **the whole window**, the same `table.rs` widget, measured on the visible rows and scrolled by column. Four modes now: `t o` 源碼, `t n` 表格操作, `t a` 畫成表格 (the old `t t`), `t t` 全窗表格 — 表格操作 was lettered `t i` for its first day, and gave the letter back to the detail panel on 2026-09-06（作者：「還是小寫方便」）. `t q` stops being 「離開表格」 and becomes 「把窗口還回去」, returning to whichever of the three you came from. 加行 moves to `t r`／`t R` and 加欄 to `t c`／`t C`, because `t o` and `t n` were needed for the modes. And `j`／`k` off the end of an in-document table now walk **out** into the prose instead of stopping — a table in a chapter is not the end of the page. **medium** | Done |
-| 278 | **A word boundary drawn two ways** | tui | P3 | the author, 2026-09-06: 「中文的 segment 標記除了 背景color 外，還可以用空半格（一個半角cell）的方式。還能用不同顏色的字色（不是背景色）的方式。」 The tint (#208) is one answer to 「where did that word end」, and on a dark ground at 962 it is a hair — deliberately, because a highlighter over every other word is unreadable. **字色 is the other answer, and it is now built**: `:word show 字色` puts every other word's *writing* at the QUIET rung (300) and leaves the paper alone, `:word show 底色` goes back to the tint, and `word_mark = "tint"\|"ink"` says which one a new window opens with. Naming a drawing turns the overlay on — nobody asks for 字色 meaning 「keep it hidden, but hide it differently」. Both painters carry it (`lib.rs` per char, `vertical.rs` per column), and a selection still wins over either. **The half-width gap is not built.** It is not a colour but a *measurement*: a cell inserted between words moves every wrap point, every cursor↔column mapping, the selection rectangle and the mouse hit-test, in both layouts — that is `wrap.rs`'s `Measure`, not the painter, and it is a day rather than an hour. Recorded here so it is not mistaken for an oversight. **small** (gap: **medium**) | Done (gap: Open) |
-| 279 | **`:q` meant 「leave」 when three files were open** | core | P2 | the author, 2026-09-06: 「關閉當前 buffer，不是退出 yumete，能不能設個 `:Q` 的命令來作為 buffer close 的 alias？我想聽聽最佳實踐的做法。」 The field is unanimous on the *alias*: Vim has `:bd`, Helix `:bc`／`:buffer-close`, Kakoune `:db`, and **not one of them uses an uppercase twin** — `:Q` differs from `:q` by a Shift, which is exactly the key the hand slips on, and the two would mean different things. So the short spelling is Helix's: **`:bc`／`:bc!`／`:bclose`**. The author then took the larger half (「Option 2 同時加上 qa。我們還沒發佈，所以沒有破壞性改動這個擔憂」): **`:q` now closes this file and leaves only when it was the last one**, and **`:qa`／`:qa!`** leaves however many are open. That is Vim's arrangement and the reason it is Vim's — the common case is 「done with this chapter」, and an editor that exits on it throws away the other five files' cursors. `:qa` is still the one that checks *every* buffer for unsaved changes and walks you to the one holding it up. **small** | Done |
-| 280 | **Caps Lock as Esc** | — | P4 | the author, 2026-09-06: 「可以通過命令讓 caplock 代替 Esc 的所有功能。因為 Caplock 鍵好按。caplock 功能可以通過一個空格快捷鍵開啟關閉。」 **Right instinct, wrong layer — and this one should not be built.** A terminal application never sees Caps Lock: the key is swallowed by the window server, and the only way it reaches an application at all is the Kitty protocol's `REPORT_ALL_KEYS_AS_ESCAPE_CODES`, which yumete pushed once and **took back in #271** because it broke the macOS system IME. So there is no keystroke for a `:caps on` command to bind, and no state for a space-leader toggle to flip. The lever that works is one line of the operating system's, applied once: **系統設定 → 鍵盤 → 鍵盤快速鍵 → 變更鍵 → Caps Lock → Escape** (or `hidutil property --set '{"UserKeyMapping":[{"HIDKeyboardModifierMappingSrc":0x700000039,"HIDKeyboardModifierMappingDst":0x700000029}]}'` for the same thing from a script). It is then Esc in *every* application, with no delay, and yumete needs to know nothing about it. yumete could run that `hidutil` line at startup and undo it at exit — and should not: the remap is **global while yumete runs**, it outlives a crash, and `UserKeyMapping` is a whole-set property, so writing ours silently drops whatever else the writer had remapped. Recorded in the manual as a setting rather than in the code as a feature. **none** | Won't build (documented) |
+| 267 | **`-n` starts on nothing** | cli | P3 | 2026-09-05：「`yumete` 理論上應該是建立一個新的 buffer，但是它會打開最近的文件。」 It is doing what §「接着上次」 promises — bare `yumete` reopens last session (#43) — but there was no way to say *no* without naming a file. `-n, --new` (別名 `--fresh` 不設，一個拼法就夠) skips the restore and opens the empty buffer. Off the same flag as `--shot`: a run that is printing never restored a session either. **small** | Done |
+| 268 | **A fast wheel scroll locked the terminal up** | tui | P1 | 2026-09-05：「長文檔，向下滾動鼠標，快速滾動後，文章整個卡死，必須強制關閉 terminal tab 才可以。」 Not a hang in the editor — a flood at the terminal. One frame was drawn per notch, and a trackpad sends hundreds of notches per gesture: measured against 資治通鑑 through a pty, 3000 notches produced 3000 frames and **59.5 MB** of escape sequences. The editor answered every one of them promptly; the terminal was still painting minutes later, which from the reader's chair is a freeze with no way out but the tab. The wheel branch now reads the rest of the burst off the queue before drawing (`drain_the_flick`), so a flick is one scroll and one frame: the same 3000 notches now cost **1.1 MB**, and 400 notches 3.95 MB → 187 KB. Capped at 64 notches a frame so a long momentum scroll still draws on the way, and the first event that is *not* that same scroll is put back rather than swallowed. **small** | Done |
+| 269 | **The HUD went to the first row that fitted, not the nearest** | tui | P2 | 2026-09-05，兩張截圖：on an empty line the typing HUD landed at the far end of the *next* line — half a screen from the caret — and once the sentence grew long enough to crowd that line out, it moved above the caret and was suddenly closer. The rule was 「below, else above, first that fits」, which asks whether a row has room and never asks how far away the room is. It now scores candidates — the caret's own row first, then one below, one above, two below, two above — by `\|Δcolumn\| + 8·\|Δrow\|`, and takes the best. The corner glyph follows the row it ended on (`─` beside, `╰` below, `╭` above). `after_the_writing` is unchanged: the HUD still never paints over writing — **amended 2026-09-07 by #284**: that holds at `:hud off` and `:hud basic`, which is where a window opens; `:hud full` covers on purpose, and covering is the whole of what it is asked for. **small** | Done |
+| 270 | **A table has no ground of its own** | tui | P3 | 2026-09-05：「能不能將 markdown 中合法的表格渲染一個背景顏色，就像代碼塊、vitepress 塊一樣，有個背景底色。這樣一看就知道這裏有個表格。」 The block grounds were already there — `block_style` washes a quote, a fence and a `:::` container with the same `BAND` rung, and `Block::Table` was the one block in the list that returned `None`, so a table on the page looked like prose that happened to have `\|` in it. It is now banded like the other three, which is also the answer to 「哪幾行屬於這張表」 that the `t ]` walk gives by keystroke. The cell tint (#212, #229) is patched *onto* that ground rather than replacing it, so a table read as a grid keeps both. **small** | Done |
+| 271 | **The system input method typed nothing but spaces** | tui | P1 | 2026-09-05：「系統的輸入法（不是內置的 yume）無法在 insert 模式打字，上屏後都是空格（這個空格應該是上屏鍵的那個空格）。」 `REPORT_ALL_KEYS_AS_ESCAPE_CODES` was among the Kitty-protocol flags pushed at startup. With it on, a text key stops being sent as text and arrives as `CSI <key> ; <mods> ; <text> u` — and crossterm 0.28 parses that third parameter and throws it away (`REPORT_ASSOCIATED_TEXT` is a commented-out line in its `event.rs`). For an ASCII key that costs nothing, the key being the text; for macOS's own IME it costs the whole sentence, which commits with the space bar and therefore arrives as a row of `Char(' ')`. The flag is gone — **and the lone-Shift tap went with it, silently**: the protocol reports a bare modifier under that flag and under no other (「Additionally, with this mode, events for pressing modifier keys are reported」), so what was left could tell a release from a press but had nothing to tell it about. This entry said the opposite for three days; #280, two rows down, said it right. Corrected in **#290**, which holds the flag exactly while yume has the keyboard. **The 內置 IME never saw this** because it reads the ASCII keys itself, which is why it went unnoticed for as long as it did. **small** | Done |
+| 272 | **The `t` menu listed a key that had moved and never the way in** | core | P2 | 2026-09-05：「tt 依舊是格式化表格而不是跳轉表格視圖，也沒有 tf 格式化表格的選項。」 Two faults in the same twelve lines, both of them the menu rather than the keys. **One**: the `\|`-table list still offered `t` for 「對齊」, which `1ffde52` had made the way *into* a table three days earlier — so the menu said `t t` formats and the code says it enters. **Two**: which list to draw was decided by `md_region().is_none()`, and that is `None` for a Markdown table nobody has opened yet — so standing in one of 手冊's own tables offered the delimited file's keys, none of which are the ones that get you in. `t` is a group in **every** mode (#206), so most presses of it come from outside a table: `t q` and `] [` now head every list and are the whole of it when there is no table under the cursor, the list is chosen by `bounds` rather than by mode, and 對齊 is offered as `F` (`f` is the `full` level since #283). **small** | Done |
+| 273 | **The `:` menu was a rectangle, not a panel** | tui | P3 | 2026-09-05：「command 提示面板的設計感不如快捷鍵提示面板。請你對齊一下：面板有個邊框 ＋ 左上有個「命令」文字。」 Two panels open in the same corner of the same page, one keystroke apart, and only one of them had an edge: `draw_which_key` draws a ring at the `rule()` rung with its name in gold in the top-left, while `draw_list` painted a bare ground and let the entries run to the screen edge. `draw_list` now draws the same ring with the same corner radius (`[panel] rounded`) and takes a `title` — 「命令」 for the `:` menu, and for the picker its own name, which moves out of the head of the footer and into the corner where a panel's name belongs. **small** | Done |
+| 274 | **A search prompt that does not say what it will repeat** | core | P3 | 2026-09-05：「`/` 搜索，enter 確認，再次按下 `/` 搜索，這個時候是不是應該預填寫（灰色）上次搜索過內容，用戶可以直接 enter 繼續搜索這個，或者直接輸入新的搜索詞開始新的搜索？」 `Enter` on an empty search line has repeated `last_search` since #153 — the behaviour was already right and only the *saying* was missing, because `prompt_ghost` returned early on an empty line. It now answers with the whole of the last pattern in Search mode, so `/⏎` reads as 「再找一次這個」 and Tab writes it out. Typing narrows it as before; the first character that is not a prefix takes it away, and rubbing that character out brings it back. The `:` line is deliberately left alone: the menu under it is already showing every command there is. **small** | Done |
+| 275 | **A table in a document can only be *operated* as a grid, never *drawn* as one** | core+tui | P2 | 2026-09-05：「整页的表格视图就是 inline 表格视图的特例。」 Three modes, not two — prose／源碼, **表格操作**（`t n`, the syntax stays, the keys are the grid's, and the table's lines stop soft-wrapping）and **真表格顯示**（`t t`, drawn as a grid the way a CSV already is, ruler and all, in the middle of the prose it sits in）— and two kinds of file: one whose extension or schema *says* table turns whole (`t t` anywhere turns every table in it, and they stay turned when the cursor walks off), one where we are guessing from a run of tab characters turns only the block under the cursor and drops back the moment it leaves. What exists today is the middle mode wearing the top mode's key. Design in §5.6. **large** | Done |
+| 276 | **A new table was three keystrokes from being usable** | core | P3 | 2026-09-05：「`:table new 3 4`，迅速在 markdown 中插入一個三行四列表格，上下有空白行，光標自動到標題欄最左的一格並進去編輯模式。」 `:markdown table 3x4` had been writing the table since #198, and stopped three steps short: no blank line around it (a `\|` row welded to the paragraph above is not a table at all), Normal mode when what you want is to type the first heading, and headings pre-filled with `1 2 3` for you to delete. It is `:table new <行> <欄>` now — 行 first, and **行 counts the heading**, the way a word processor's「插入表格」asks; the rule row is punctuation. The old spelling is gone rather than aliased: it read the two numbers the other way round. **small** | Done |
+| 277 | **The full-screen grid was a file format, not a way of looking** | core+tui | P2 | 2026-09-05：「我覺得可以保留現在的 tt 模式，然後加上個新的模式也就是整窗口走網格。所以我們有四個模式……另外，ti, ta 這兩個模式應該允許光標上下離開表格回到正文中（現在不可以）。」 #275 gave a table in a document a grid drawn *where it stands*; this gives it the other thing a CSV has always had — **the whole window**, the same `table.rs` widget, measured on the visible rows and scrolled by column. Four modes now: `t o` 源碼, `t n` 表格操作, `t a` 畫成表格 (the old `t t`), `t t` 全窗表格 — 表格操作 was lettered `t i` for its first day, and gave the letter back to the detail panel on 2026-09-06（「還是小寫方便」）. `t q` stops being 「離開表格」 and becomes 「把窗口還回去」, returning to whichever of the three you came from. 加行 moves to `t r`／`t R` and 加欄 to `t c`／`t C`, because `t o` and `t n` were needed for the modes. And `j`／`k` off the end of an in-document table now walk **out** into the prose instead of stopping — a table in a chapter is not the end of the page. **medium** | Done |
+| 278 | **A word boundary drawn two ways** | tui | P3 | 2026-09-06：「中文的 segment 標記除了 背景color 外，還可以用空半格（一個半角cell）的方式。還能用不同顏色的字色（不是背景色）的方式。」 The tint (#208) is one answer to 「where did that word end」, and on a dark ground at 962 it is a hair — deliberately, because a highlighter over every other word is unreadable. **字色 is the other answer, and it is now built**: `:word show 字色` puts every other word's *writing* at the QUIET rung (300) and leaves the paper alone, `:word show 底色` goes back to the tint, and `word_mark = "tint"\|"ink"` says which one a new window opens with. Naming a drawing turns the overlay on — nobody asks for 字色 meaning 「keep it hidden, but hide it differently」. Both painters carry it (`lib.rs` per char, `vertical.rs` per column), and a selection still wins over either. **The half-width gap is not built.** It is not a colour but a *measurement*: a cell inserted between words moves every wrap point, every cursor↔column mapping, the selection rectangle and the mouse hit-test, in both layouts — that is `wrap.rs`'s `Measure`, not the painter, and it is a day rather than an hour. Recorded here so it is not mistaken for an oversight. **small** (gap: **medium**) | Done (gap: Open) |
+| 279 | **`:q` meant 「leave」 when three files were open** | core | P2 | 2026-09-06：「關閉當前 buffer，不是退出 yumete，能不能設個 `:Q` 的命令來作為 buffer close 的 alias？我想聽聽最佳實踐的做法。」 The field is unanimous on the *alias*: Vim has `:bd`, Helix `:bc`／`:buffer-close`, Kakoune `:db`, and **not one of them uses an uppercase twin** — `:Q` differs from `:q` by a Shift, which is exactly the key the hand slips on, and the two would mean different things. So the short spelling is Helix's: **`:bc`／`:bc!`／`:bclose`**. The author then took the larger half (「Option 2 同時加上 qa。我們還沒發佈，所以沒有破壞性改動這個擔憂」): **`:q` now closes this file and leaves only when it was the last one**, and **`:qa`／`:qa!`** leaves however many are open. That is Vim's arrangement and the reason it is Vim's — the common case is 「done with this chapter」, and an editor that exits on it throws away the other five files' cursors. `:qa` is still the one that checks *every* buffer for unsaved changes and walks you to the one holding it up. **small** | Done |
+| 280 | **Caps Lock as Esc** | — | P4 | 2026-09-06：「可以通過命令讓 caplock 代替 Esc 的所有功能。因為 Caplock 鍵好按。caplock 功能可以通過一個空格快捷鍵開啟關閉。」 **Right instinct, wrong layer — and this one should not be built.** A terminal application never sees Caps Lock: the key is swallowed by the window server, and the only way it reaches an application at all is the Kitty protocol's `REPORT_ALL_KEYS_AS_ESCAPE_CODES`, which yumete pushed once and **took back in #271** because it broke the macOS system IME. So there is no keystroke for a `:caps on` command to bind, and no state for a space-leader toggle to flip. The lever that works is one line of the operating system's, applied once: **系統設定 → 鍵盤 → 鍵盤快速鍵 → 變更鍵 → Caps Lock → Escape** (or `hidutil property --set '{"UserKeyMapping":[{"HIDKeyboardModifierMappingSrc":0x700000039,"HIDKeyboardModifierMappingDst":0x700000029}]}'` for the same thing from a script). It is then Esc in *every* application, with no delay, and yumete needs to know nothing about it. yumete could run that `hidutil` line at startup and undo it at exit — and should not: the remap is **global while yumete runs**, it outlives a crash, and `UserKeyMapping` is a whole-set property, so writing ours silently drops whatever else the writer had remapped. Recorded in the manual as a setting rather than in the code as a feature. **none** | Won't build (documented) |
 | 281 | **The other pane draws this file's text under the other file's name** | tui | P2 | the peek half was drawn from `current_buffer()`, so it showed the live file under the other file's caption — `:table schema` walked straight into it. Fixed 2026-09-08 by `Editor::view_pane`; see §5.5. **medium** | Done |
-| 282 | **One flick of the wheel over a table froze the window** | core | P1 | the author, 2026-09-06: 「在 tn 下，鼠标滚轮滚动会造成buffer卡死。」 Not the table mode's — **any** page with a `|` table on it, and #268's wheel work made it visible rather than caused it: a flick is collapsed into one `scroll(n)`, so the whole gesture is paid for in one frame. The bill was the padding that squares a table up (#212), whose memo was keyed on the caret. Nothing in `hidden_on_line` asks where the caret is unless `:render full` is on — under the default `:render on` the key changed on every `j` and threw away a walk down every row of the table. One flick over the 223-row table in this file: **8.26 s → 41 ms**. The key now carries the caret only when 所見即所得 is on, where the answer genuinely moves with it. **small** | Done |
-| 283 | **Four dimensions, three levels, one word for each level** | core+tui | P2 | the author, 2026-09-06: 「我的目的是能让命令和快捷键的命名尽量统一、规范，便于用户学习记忆。」 `render` / `table` / `ruby` / `indent` were four settings with four vocabularies — `:render on`, `t n`／`t a`／`t t`, a dialect set, an indent flag — so learning one taught you nothing about the next. They are now one word each at three levels, `off` / `basic` / `full`, and **the levels are linked at assignment, not at read time**: `:render <級>` *writes* the matching level into the other three and nothing re-derives afterwards, so any one of them can be moved on its own and the next `:render` re-assigns everything. The law that makes `basic` safe as the factory level: **`basic` 不藏、不摺、不替換; `full` 三件都可以做** — with nothing to draw a table on, `TableLevel::Basic` and `Off` produce the same page to the character. The enabling refactor is a split: `table_level` is the reader's standing preference and survives every open, `self.table` is the per-buffer fact of *which* table the cursor is in, and `Surface::{Normal,Advanced,Grid}` dissolves into that level plus an orthogonal `TableView.pane` (which is why `t q` needs nothing written down — the level it returns to was never touched). Keys: `t o` / `t b` / `t f` / `t t` / `t q`, 排齊 to `t F`. Design in §5.7. Two real faults fell out of it: `t d` in the paragraph *between* two tables deleted the prose line the cursor was on and reported 「已刪除一行」 (`md_region()` is `None` there, which the dispatch read as 「a delimited file」), and a lone `| 甲` had the grid's keys on it while the renderer painted it as the prose it is — `prose_region` took any run of pipe lines, `with_md_tables` took only the ones Markdown parses. One rule now (`md_table_parses`), and a `table_here()` gate above every key that edits a grid. `indent` is the fourth dimension and `:render` does **not** write it (author, 2026-09-06: 「indent 一般是竪排文本用的，markdown 渲染大多數是橫排用的」); the level of a dimension with a real third state is computed from the pair that holds it, never stored (`ruby_level`, `indent_level`). **`t w` and `t i` landed 2026-09-07** (author: 「markdown中的表格没办法用ti打开信息侧栏…在 tf 模式下都没办法通过 tw 来缩小单元格宽度」). `t w` folds the tail of any cell drawn wider than `mdtable::MAX_COLUMN` = 32 and stands a `>` where the writing stopped — **ASCII on purpose**, because every ellipsis Unicode offers is East Asian *Ambiguous* and would put every column after it one cell out on exactly the rows that fold. The tail goes off the page through `hidden_on_line`, the one list the padding, the wrap and the mouse all read, so a folded column squares up at the cap without anybody telling it — `padding` only had to be told how wide the drawn mark is (`marks`), or every folding column came out one cell narrow. It refuses only where there is no squared-up column to fold against. The cell the caret is in is never folded, which is what keeps a folded table editable and is why `PadKey` now carries the caret whenever folding is on, not only under 所見即所得. `t i` was a half-build: the key was wired to `toggle_detail` but `detail()` asked what the *file* was — `bounds == WholeFile` — and sent every Markdown question to the note panel, so the row panel could only be reached by opening a `.csv`. It now asks what the **cursor** is in. Two faults came out with it: `row_detail` split the row on `schema.delimiter`, which for a `|` row gives an empty cell at each end and answered one column to the left of where `cell_position` was pointing; and the `Bounds::Md` schema is built from the **first** table in the file, so `t y` in the second table reported the first table's column name and was believed. `schema_here()` derives it from the header above the cursor, and `t y`／`t s`／`t/` ask it. **The sequence grammar landed 2026-09-07 with them**: `Sequence { numbers, joint }` replaces 「a number and maybe a second one」, a bare `t s` is refused outright (a sort of 123 380 rows costs real seconds and `u` refunds the content but not the time), `t0s` is the column you are standing in — `0` was free to mean that because it is not a column — and **`-` is a range where `,` is a list or a pair**: `t2-10/`, `t1,5,9s`, `t20,20g`. One key had been doing both jobs, so `t2-10g` used to answer 「row 2, column 10」, a plausible answer to a question nobody asked. Each verb asks for the shape it can use and reports when handed another, which is also how `search_columns_within` stopped clamping `t99/` to the last column and pretending that was the request. **The rest of `TableView.schema` under `Bounds::Md` was swept 2026-09-07** and closes the row. `key`, `link` and `details` turned out to be nothing to do: they can only come from a schema TOML, which only a whole-file table has, so under `Bounds::Md` they are `None` either way — and `shows`/hidden the same. What was real was every place that counted **columns**: `rows_break_the_grid` refused every row of the wider table when the filter was run in it, `blank_row` opened a row as wide as the table you entered, `go_to_the_row_named` clamped `3gd` to the narrower table's two columns and then *named the column it had landed in*, and `:table check` read the whole file — every paragraph a row 「寬度不對」 — and is now the region the cursor is in, rule row excluded from both the walk and the count. Paste width was already safe (the Markdown path returns before it). Two more came out of the sweep, both found by looking rather than by testing: **the panel's shape was picked from the wrong question** — `split_detail` asked whether the table had taken the window, so a row in prose got the note's four-line strip and a five-column row showed two of its fields (a 拆分表 row, two of twenty-eight) with nothing to say there were more; it now asks what the panel *holds*, and a row is a tall thing wherever it is written. And **`schema_here` was reading a guessed block as a Markdown header**: a tab-delimited 碼表 split on pipes is one column, which emptied the panel outright. A block is walked out afresh every time the cursor enters one (`Reach::Cursor`), so its view schema is already the right one — only `|` tables need the header read back. **The cap was buying nothing on a squared-up table, fixed 2026-09-07** (author, off this very table: 「the long cells are trimmed with a `>` symbol. However, the width of the cell are still padded with white spaces at the tail」). `folds` cuts inside the cell's **content**; the width a column is drawn to is the widest **box** in it, pipe to pipe. A table [`compose`] has squared up — `:table rules`, and every table in these docs — carries the whole column width inside every cell as spaces, so each short cell went on voting 43 however little it held: the mark stood where the writing stopped and a field of fourteen empty cells ran from there to the pipe. `mdtable::slack` takes the file's own padding off the page by the same door as the tail (`hidden_on_line`, the one list the width, the wrap and the mouse all read), and `cell_folds_against` is now the two of them together while `cell_tails_against` stays the half that gets a `>` — a mark over the spaces would say something was folded away there, and nothing was. Two limits keep it honest: **only down to the cap**, so #212's law that a drawn can only *add* still holds everywhere the cap does not bite and a table that fits is drawn exactly as the file wrote it, alignment and all; and the run the selection stands in is left whole — **the run, not the whole cell `folds` opens**, because a cell's padding is as wide as the column and opening the cell to walk into its writing would swell the column under the reader's hands at every step of `l`. A rule row's dashes are slack too (they are drawing, and `padding` redraws them), down to one and never over the colons. **The pane had none of this until 2026-09-07** (author, off the `t t` window he reads this very table in: 「tw 功能无法在 tt 模式下使用，导致所有的长单元格都是保持折叠状态且没有折叠符号，光标进入该单元格后不会自动展开……进入 insert 模式后，也无法导航到被折叠的部分」). Three faults, one sentence apart: the grid's own 32-cell ceiling was a constant in the widget with **no key against it**, `t w` answered 「先 tf」 because the refusal asked for the *level* and the pane is not one, a cut cell was drawn with **no mark**, and the caret's cell was measured like any other — so the tail was unreachable in Normal, in Insert, and in the panel alike, which is 「永遠讀不到」 and not a preference. The fix is the same three rules the prose page already keeps, said in the grid's own terms: **the cap is what folding *means* here** (`Editor::cell_folds` is read by `widths`, and `t w` lifts it to the window rather than to infinity — a column wider than the window can never be scrolled into, since the grid scrolls by whole columns); **a cut cell stands a `>`** in the same place and the same ink as the prose page's, drawn in the column's last cell so nothing else moves; and **the caret's own cell is measured against the window, not the cap**, which is `walking_into_a_folded_cell_opens_it` transposed — the one rule that keeps a folded table editable. `char_at` is handed the same caret so a click still lands where the cell was drawn. **And the panel that the cap points *at* was cutting the value at its own edge**: `draw_detail` wraps every value through `wrap::line_rows` now (禁則 and all), and scrolls by **drawn rows** rather than by fields, so the field the caret is in keeps its last wrapped row on the panel. **One fault came in with that fix and was caught the same night**: the number row and the heading row broke on 「does the whole column fit」 while the data rows break on 「does this column start inside the window」, so the rightmost column drew its content with no name and no number over it. The 32-cell cap had kept most columns well inside the window and hidden it; `t w` makes a column wider than the room left over the ordinary case, and the one it beheaded was the column the reader had just asked to see whole. All three rows stop in the same place now, and the number stays right-aligned to the end of its column or to the edge of the window, whichever comes first — a number past the edge is no number. **`t w` reached 基本 the same night** (author: 「虽然 tb 在默认状态下不折叠，但能不能在按下 tw 之后折叠？这个应该不违反我们之前说的 render -> table 链条吧」) — and he is right that it does not, because `t w` writes nothing into `table_level`. 「`basic` 不藏、不摺、不替換」 is a law about what a **level** does with nobody asking, and it was being read as a law about what the reader may ask for. What folding needs is a column squared up to fold against, and `table_padding_on` — 基本 and 全 alike — is the whole of that question; 源碼 is the one level with nothing squared up, and there the refusal stands, now naming `t b` as well as `t f`. The switch had to become `Option<bool>` to say it: a bare `bool` defaulting to `true` cannot hold both 「基本 folds nothing unasked」 and 「基本 folds when asked」. `None` lets the place answer — 全 folds, 基本 does not, the `t t` grid caps at its own width however it was opened — and a `Some` written by `t w` travels with the reader across every level, which is also what keeps `t b`／`t f`／`t t`／`t q` from quietly undoing an answer the reader gave.  **The layout stopped depending on the caret, 2026-09-07** (author: 「不是说撑开的时候卡，而是不撑开的单元格也卡」). `t w` put the caret back into `PadKey` — the very trap that key's own doc records from before folding existed — so **any** cursor move inside a folded table threw the whole table's drawn layout away and rebuilt it: measured at **15.4 ms a keystroke** on this file's 286-row table, and identical in a two-cell column and in a two-hundred-cell one, which is what told the author it was not about opening anything. The fix splits reading from editing. **Reading no longer opens a cell** — `t i`'s panel is where a folded cell is read whole, and it wraps now — so the caret is out of the key; **editing still does**, on `i`/`a`/`c`, because the caret may never sit inside characters the page does not draw. And **an open cell no longer widens its column**: `mdtable::padding` takes two lists now, what a row hides when the table is *measured* (every cell folded) and what it hides as drawn, so the open cell juts out past its own wall — with its space and wall still drawn, per the author — while every other row keeps its alignment. 2.6 ms a keystroke against 基本's 1.9 ms, so folding is nearly free. **`t a` — 格內折行 — landed with it**: in the pane an over-wide cell is drawn on as many lines as it needs, inside its own column, the row numbered once and the rows below moved down; `t w` and `t a` are two toggles over one axis (`CellWidth::{Fold,Whole,Wrap}`) that are never both on, rather than a three-way cycle on `t w`, so `t w` means the same thing in prose and in the window (author's call). Prose cannot have it: its rows come from `wrap`, which every motion, the mouse, 縱書 and the split panes read, and it has no hanging indent — so the key says so and still sets the switch. **And the pane became bounded**: `gg`, `G`, `g30g`, `:120` and a search hit are all clamped into the table with a word (`hold_the_pane`, one place at the end of every key, plus `scroll` which arrives as a mouse event), the only ways out being `t q`, `t o`/`t b`/`t f` and `t ]`/`t [`. That deletes the old leak where a file-wide motion walked out, `table_row_span()` answered nothing and the window handed itself back to the prose page unasked — and it is what lets the gutter number the table's **own** rows (`table_row_base`), with the status line and `t<n>g` counting the same numbers: inside the window every number means one thing. **The mark itself was in the wrong ink, and that was the last thing fixed that night** (author: 「折叠标志要不要加个下划线背景色什么的突出一下避免用户当作它是个普通的 `>`」). The glyph cannot move — the width table settles that, for the reason above — so the ink has to carry it. The prose page drew the mark as a `Note`, which is the markup's own grey, and the grid drew it in the furniture's, a rung fainter still than the writing it stands after; on a page that is a run of greys on purpose, a grey `>` at the end of a cell is a `>` the writer typed. It is 金 and bold on both surfaces now — 金 is this theme's word for 這不是正文 — and an **ink rather than a ground**, because a ground here is the *reader's* mark (the selection, the 朱 wash, the cursor's band) and the fold mark is the editor's. `Ink::Fold` exists to say it: a note is *about* what is written, and this one is about what is not on the page at all. **large** | Done |
-| 284 | **The HUD is a thread, not a panel — and in 縱書 it is nothing at all** | tui | P3 | the author, 2026-09-06: 「現在的HUD是一根線連到字母上。你覺得可不可以加個面板（有外框），並且允許HUD覆蓋其他的行的文字…允許他覆蓋其他文字可以讓他的位置更固定…然後我們可以有三個模式 `:hud off/basic/full`，默認 full。」 **The frame and the covering are one decision, not two.** Today's mark wants five cells on one row, so it can still find margin; a bordered panel wants a 3 × (寬+2) rectangle empty *near the caret*, which on a page of prose does not exist — so a frame forces covering. And the converse holds: once the HUD's glyphs sit on the same paper as the writing, nothing tells the reader which characters are not theirs, so covering forces a frame. That collapses two switches into one axis, which is what feeds the three levels. **What covering actually costs is not 「some prose」**: in Normal the HUD carries `typed_so_far()`, so pinning it two cells right of the caret paints over exactly the characters `3`, `2t` and `d3l` are counting — the object of the command. Hence the split: `off` draws nothing beside the caret (the status line's right edge stays — #193's floor), **`basic` is the factory level** and is today's scoring placement (#269) with a louder style — one row high, a 藥丸 rather than a thread, BAND ground and gold ink, **not one character hidden** — and `full` is the pinned, bordered, may-cover panel. Default `basic`, not `full`, by §5.7's own rule: the factory level must be identical to `off` in the worst case, and 醒目 is bought with style rather than with hiding. Three things to settle in the doing: **`:hud` is not #283's fifth dimension** — it is how the editor talks to you, not how the file is drawn, so `:render` must never write it and `render.is` keeps four fields; `:yume panel full` and `:hud full` are different words — the candidate panel and a pinned HUD both want `(cursor_x, cursor_y+1)` and the panel wins; and `full` loses the HUD's only collision avoidance, because `after_the_writing` reads the *buffer* back and thereby also dodges which-key, the command menu, the picker and the detail panel — 「有字」 and 「有面板」 read back identically once we cover, so the draw functions have to start returning their own `Rect`. #269's line in this table — 「`after_the_writing` is unchanged: the HUD still never paints over writing」 — is revoked by `full` and must be amended, not silently contradicted. **A separate fault found while reviewing this, and worth more than the frame**: in 縱書 the HUD is essentially never drawn. `after_the_writing` scans left→right for the last non-blank on the row, and 縱書 fills columns right-to-left, so `after` lands near the right edge whenever any 縱 on that row holds a character, every candidate fails `x < after`, and the vertical reader has only the status line. **medium** (縱書: **small**) **Built 2026-09-07**, both halves, and the 縱書 fault is the one that changed a reader's day. 「Margin」 is now a **run of blank cells** rather than the column after the last glyph: runs are the same answer in both writing directions, and they also find the gap between two short 縱 that a left-to-right scan walks straight past. The mark hangs from whichever end faces the caret (`╯`／`╮` when the margin turned out to be on the left, which in 縱書 it nearly always is) — a corner pointing away from the caret is worse than no corner at all. The three levels went in as designed, with `basic` the factory level and the 藥丸 bought by closing the far end of the mark with a cell of ground rather than by a louder colour. Two things the design did not foresee: a panel that starts in the **second cell of a 漢字** is written into the middle of somebody's character and never reaches the terminal — the `╭` vanishes and the ring opens with a gap — so `full` nudges one cell left when the cell before it holds a wide glyph (**revoked by #286**: the nudge landed on the same glyph and only moved the wound; every panel now blanks the straddling 漢字 instead); and 「the candidate panel wins」 is decided *before* `draw_hud` rather than after, by hoisting the `panel && composing` question above it, because the candidate panel is drawn last and could otherwise only win by painting over a ring that was already there. `draw_list`, `draw_which_key`, `draw_command_menu`, `draw_lookfor_menu` and `draw_picker` now return their own `Rect`, which is what `full` keeps off. | Done |
-| 285 | **A Markdown link is something to follow, not only to read** | core+tui | P3 | the author, 2026-09-06: 「markdown 文档中的超链接能不能用命令和鼠标点击（或者 ctrl 点击）而打开浏览器？本地的位置也能不能用窗口打开？这个 priority 不用太高。」 Three parts, and the third is the one with a design question in it. **A command** — `gx` is where Helix and vim both keep 「follow the thing under the cursor」, and the editor already knows where every link is: `crate::markdown` spans a `[text](url)` and 所見即所得 hides the `(url)` half, so the target is in hand without any new parsing. **A click** — the mouse map already turns a cell into a buffer position (#248's `drawn` walk), so the whole cost is deciding the gesture: a bare click has to keep placing the caret, so it is ⌘/Ctrl-click or nothing, and `⌘` chords are the terminal's (see 別再踩) — Ctrl-click is the one that actually arrives. **Where it opens** is the design question: an `https:` target goes to the system browser (`open` on macOS, `xdg-open` elsewhere) and that is uncontroversial, but a **local** path 「用窗口打开」 means the editor's own window — a `.md` beside this one should open as a buffer, and `[[wikilink]]` already means exactly that. So the rule wants to be: a scheme we do not handle goes to the OS; a path that resolves inside the project opens as a buffer in the other pane; anything else asks. **A refusal to build in**: never hand a URL to a shell. `open`/`xdg-open` take the target as one argument and nothing goes through `sh -c`. **small** **Built 2026-09-07**, with one rule deliberately *narrowed*: 「a scheme we do not handle goes to the OS」 is exactly backwards for a manuscript, which is a file that arrives by email — `open` starts whatever program claims a scheme, so `mailto:`/`obsidian:`/anything else is named and refused, and only `http`/`https` are handed over. An absolute path is refused for the same reason: `/etc/passwd` is not the name of a chapter. A relative path is read from the folder the link is *written* in (a chapter's neighbours are its neighbours on the disk), and `[[第三章]]` is a page name, so the suffix is the manuscript's — this file's extension first, then `.md`. `crate::markdown::link_at` answers from anywhere inside the construct, brackets and hidden target included, and reads the spans **backwards** because a heading's span covers its whole line. It opens in **this** pane, not the other one, until #281 is fixed. | Done |
-| 286 | **A panel whose left edge lands inside a 漢字 loses its whole left wall** | tui | P2 | found while answering the author on #284, 2026-09-07. A 漢字 owns two cells and the terminal draws it from the first; the second reads back empty but is not *free* — anything written there is inside somebody else's glyph and never reaches the screen. `Clear` does not help, because the offending glyph starts one cell **outside** the panel. #284 met this and fixed it **locally**: `draw_hud_panel` nudges one cell left when `cell(x-1)` is wide. **Nothing else does**, and the author's guess that the HUD panel would settle it is the one thing to correct — the nudge is eight lines inside one draw function and every other panel computes its own `x`. `draw_which_key` puts itself at `area.x + area.width - width` (「the corner the cursor is not in」), a width that comes from the *content*, so on **half of all terminal widths** it lands on an odd column against a page of 漢字. Reproduced with `--shot=78x16 --keys=t` on a page of 一二三四…: the `╭`, all four `│` and the `╰` are gone, the ring is open down its whole left side, and the writing behind it (五, 八, 一) shows through the gap. Every even width from 78 to 100 does it. The same arithmetic reaches `draw_command_menu`, `draw_lookfor_menu`, `draw_picker` and `draw_list` wherever their `x` is not the page's own edge. Fixed 2026-09-07, and the author picked the strategy: **blank the straddling glyph**. A 漢字 cannot be covered by halves — it is either whole or gone — so cutting it back to a space hands its second cell to the wall and leaves every panel exactly where its layout put it. The helper already existed for the candidate panel (`vertical::clear_wide_left_edge`); the fix is that the other five now pass through it too — `draw_list` (which is the command menu, the lookfor menu and the picker), `draw_which_key`, `draw_sidebar`, `draw_hud_panel`. #284's nudge is **deleted**: moving one cell left overwrote the same glyph anyway, and one law beats two. Guarded by `no_panel_wall_stands_in_the_second_half_of_a_漢字`, which renders every width from 70 to 110 over 漢字 prose. **It looks for the corner that is missing, not for the one that is wrong**, and that distinction cost an evening: the first version of the test asserted 「no wall character stands in the second cell of a wide glyph」 and passed on the broken code, because on the broken code there is no wall character to find. A probe inside `draw_which_key` showed the `╭` sitting in the frame's buffer at (4, 8) exactly as drawn; it is gone from the buffer a test reads back, which is the **backend's**, filled through `Buffer::diff` — and `diff` sets `to_skip` from the width of the glyph it just emitted, so the cell a 漢字 covers is never sent and never stored. The only trace the fault leaves is therefore an absence: a `╮` on a row whose `╭` never arrived. The test asserts the corners come in pairs, and one panel per frame; with the call in `draw_which_key` removed it fails at width 78. | Fixed |
-| 287 | **作品百科 — 一本書自己的百科** | core+tui | P3 | the author, 2026-09-07: 「我想在 yumete 中加一個「作品百科」功能……wiki 的所有詞條加入分詞、都使用虛線下劃線、光標移到這個詞上則會在右側信息欄顯示它的詞條內容……然後可以有個命令來編輯 wiki 文件，比如 `:wiki edit`。」 A `.yumete/wiki.md` whose `##`-and-below headings are 詞條: their names join the segmenter, they are marked in the prose, and standing on one shows the entry — its own text, its sub-sections, and a breadcrumb of the headings above it — in the panel down the right. **Almost none of this is new machinery**, which is the argument for building it: `.yumete/words.txt` (#239) is already found by walking up from the file being edited, `WithWords` (#144) already layers a per-book `WordList` over whatever dictionary is in force, `outline()` already reads `#` with no parser, and `note_detail` → `Detail` → `split_detail` (#283) is already a panel that follows the cursor with no key pressed and knows a tall thing goes down the right. The entry names go into a **second** `WordList` beside the book's own — `words.txt` says 「這是一個詞」, the wiki says 「這是一個詞**而且有一頁**」, and only the second is drawn — and the mark is computed off the segmentation already cached per line, so 中國人 inside 中國人民 is not marked without a rule of its own. Two entries can never be marked and `:wiki` must say so rather than stay silent: a **one-character** entry (`WordList::add` refuses anything shorter than two, and rightly) and one the segmenter will not cut out (`## 他為什麼要走`). **The one real design question was the ink**, and both surfaces are now settled (§5.8.4). 虛線 is not in ratatui — 0.29 has exactly one underline (`UNDERLINED` = SGR 4), no dotted/dashed/curly — but the author asked for it anyway with the right reason (「这样和 markdown 的下划线语法可以分开」), and he is right: a chapter really can contain `[[第三章\|那一夜]]`, and the difference must be **shape**, not value, because a faint `underline_color` is the first thing a dark theme eats — while SGR 58 and SGR `4:4` came into terminals together, so the value axis buys no portability either. **Horizontal therefore takes a dotted underline**, and the cost is honest: a `Backend` of our own (~120 lines owning crossterm's `draw()` and the SGR modifier diff, plus raw mode / alt screen / panic hook by hand) and a **custom `Modifier` bit** — `Modifier` is a `u16` with bits 0–8 spoken for, `from_bits_retain` carries bit 9, and `CrosstermBackend` silently ignores bits it does not know, so `--shot` and every `TestBackend` test are unaffected. The fallback is free and ⚠️ **must not be tidied away**: emit `CSI 4 m` then `CSI 4:4 m`, so a terminal that cannot parse the colon form drops it and keeps the solid underline — worst case 「looks like a link」, never nothing. **縱書 must not copy that answer** (an underline in a column is a stack of two-cell dashes *between* the glyphs and reads as separators, and the margin is contended by a reading, a hung 句讀, a 着重號 and a 平仄 mark), and the author's own steer settled it: 「不要太 invasive 但也不要太 low-profile」. The quiet ink (`word_ink` = `rung::QUIET`) is *less* conspicuous, so it is the low-profile end he ruled out; a ground **is** allowed, because `Palette::word` says a word boundary is 「structure, not a mark somebody made」 — that rule governs SELECTION/HEAD/BAND and the 朱 wash, not the paper end — but not `WORD` (962) or `BAND` (940), which are already compressed into each other. So 縱書 takes **one cell of `rung::HEAD` (815) ground with the ink untouched**: 1.27:1 clear of BAND so it is seen, a rung short of SELECTION so a selection still wins over it, and punctuation, 着重號, 平仄 and the cursor all unchanged. With `:word show` on, the wiki ground beats the 分詞 tint. The risk to look at through `--shot` before calling it settled: **the page turns to lace** — 阿寧 is on every page, and forty names means a mark under every third word — hence `:wiki show on\|off` on the `:word show` pattern, **on out of the box** by the author's choice; ⚠️ `--shot` renders the `Buffer`, not the escapes, so it can measure the lace and can never tell you whether a terminal draws `4:4` (a `theme.wiki_underline = "dotted" \| "solid"` key covers the terminal we guess wrong about). The panel needs one field (`DetailKind {Row, Note, Wiki}`) so the breadcrumb and the re-levelled sub-headings can be set apart; depths are **re-levelled** (the entry is `#` whatever it is in the file), duplicates are drawn one after another in `(depth, file order)` with the breadcrumb telling them apart, and precedence is row → note/comment → wiki, because recognition never displaces something the writer typed. `:wiki` / `:wiki edit` / `:wiki reload` / `:wiki show` follow `:word`'s 「one subject, one command」, saving the file re-segments the way `words.txt` already does, and **no new key is needed**: `gd`/`gw` already mean 「follow the note under the cursor」. **「直接切入信息欄進行編輯」 is blocked on #281** — an editable panel is a view of another buffer, and that is exactly the open fault where everything reads `current_buffer()` and three caches are keyed by line alone; `gw` into `wiki.md` at the entry's heading is the near thing, and it is arguably better (the file, the outline, `:s`, undo). Global and local are **both** read, book first, a rule between them and the global part under a 金 「全局」 (the author: 「这样用户就不会混淆了」); `wiki.txt` is read too, opened with Markdown forced on, while `:wiki edit` creates `wiki.md`. **A wiki grows past one file** (the author, same day): a line `[yumete] 檔名` inside a comment names another file and splices it in **where the directive stands** — so ancestors, breadcrumbs and the same-name sort all follow the rules already written, and `# 人物` above the directive becomes the breadcrumb of everything in 人物.md. It is nearly free because `markdown::Kind::Comment` already covers **both** `%%…%%` and `<!-- … -->`, so scanning the `Comment` spans rather than raw lines means a `[yumete]` in a code fence is not a directive with no rule written for it. Entries carry `(source, line)` so `gw` opens the right file; a visited set of canonical paths, a depth cap and a file cap stop a cycle; paths are **held inside the book** (the author, 安全第一 — relative to the file carrying the directive, absolute refused, canonicalised and required to stay under the directory holding this `.yumete/`; cross-series material goes in the global wiki), and every refusal, every file that contributed zero entries and every repeat is **named by `:wiki`** — a wiki that ignores half of itself in silence is worse than one that fails. ⚠️ One directive per comment, one comment per line, because `markdown::spans()` is per-line (markdown.rs:626) and a multi-line `<!-- ⏎ … ⏎ -->` block is drawn with only its first line in comment ink; the block form becomes correct for free once **#288** lands. Design in §5.8; the author's decisions in §5.8.8. **large**, and it divides: parse ＋ segmenter is one sitting and already makes `w` walk the names. | Proposed |
+| 282 | **One flick of the wheel over a table froze the window** | core | P1 | 2026-09-06：「在 tn 下，鼠标滚轮滚动会造成buffer卡死。」 Not the table mode's — **any** page with a ` | ` table on it, and #268's wheel work made it visible rather than caused it: a flick is collapsed into one `scroll(n)`, so the whole gesture is paid for in one frame. The bill was the padding that squares a table up (#212), whose memo was keyed on the caret. Nothing in `hidden_on_line` asks where the caret is unless `:render full` is on — under the default `:render on` the key changed on every `j` and threw away a walk down every row of the table. One flick over the 223-row table in this file: **8.26 s → 41 ms**. The key now carries the caret only when 所見即所得 is on, where the answer genuinely moves with it. **small** | Done |
+| 283 | **Four dimensions, three levels, one word for each level** | core+tui | P2 | 2026-09-06：「我的目的是能让命令和快捷键的命名尽量统一、规范，便于用户学习记忆。」 `render` / `table` / `ruby` / `indent` were four settings with four vocabularies — `:render on`, `t n`／`t a`／`t t`, a dialect set, an indent flag — so learning one taught you nothing about the next. They are now one word each at three levels, `off` / `basic` / `full`, and **the levels are linked at assignment, not at read time**: `:render <級>` *writes* the matching level into the other three and nothing re-derives afterwards, so any one of them can be moved on its own and the next `:render` re-assigns everything. The law that makes `basic` safe as the factory level: **`basic` 不藏、不摺、不替換; `full` 三件都可以做** — with nothing to draw a table on, `TableLevel::Basic` and `Off` produce the same page to the character. The enabling refactor is a split: `table_level` is the reader's standing preference and survives every open, `self.table` is the per-buffer fact of *which* table the cursor is in, and `Surface::{Normal,Advanced,Grid}` dissolves into that level plus an orthogonal `TableView.pane` (which is why `t q` needs nothing written down — the level it returns to was never touched). Keys: `t o` / `t b` / `t f` / `t t` / `t q`, 排齊 to `t F`. Design in §5.7. Two real faults fell out of it: `t d` in the paragraph *between* two tables deleted the prose line the cursor was on and reported 「已刪除一行」 (`md_region()` is `None` there, which the dispatch read as 「a delimited file」), and a lone ` | 甲` had the grid's keys on it while the renderer painted it as the prose it is — `prose_region` took any run of pipe lines, `with_md_tables` took only the ones Markdown parses. One rule now (`md_table_parses`), and a `table_here()` gate above every key that edits a grid. `indent` is the fourth dimension and `:render` does **not** write it (author, 2026-09-06: 「indent 一般是竪排文本用的，markdown 渲染大多數是橫排用的」); the level of a dimension with a real third state is computed from the pair that holds it, never stored (`ruby_level`, `indent_level`). **`t w` and `t i` landed 2026-09-07** (「markdown中的表格没办法用ti打开信息侧栏…在 tf 模式下都没办法通过 tw 来缩小单元格宽度」). `t w` folds the tail of any cell drawn wider than `mdtable::MAX_COLUMN` = 32 and stands a `>` where the writing stopped — **ASCII on purpose**, because every ellipsis Unicode offers is East Asian *Ambiguous* and would put every column after it one cell out on exactly the rows that fold. The tail goes off the page through `hidden_on_line`, the one list the padding, the wrap and the mouse all read, so a folded column squares up at the cap without anybody telling it — `padding` only had to be told how wide the drawn mark is (`marks`), or every folding column came out one cell narrow. It refuses only where there is no squared-up column to fold against. The cell the caret is in is never folded, which is what keeps a folded table editable and is why `PadKey` now carries the caret whenever folding is on, not only under 所見即所得. `t i` was a half-build: the key was wired to `toggle_detail` but `detail()` asked what the *file* was — `bounds == WholeFile` — and sent every Markdown question to the note panel, so the row panel could only be reached by opening a `.csv`. It now asks what the **cursor** is in. Two faults came out with it: `row_detail` split the row on `schema.delimiter`, which for a ` | ` row gives an empty cell at each end and answered one column to the left of where `cell_position` was pointing; and the `Bounds::Md` schema is built from the **first** table in the file, so `t y` in the second table reported the first table's column name and was believed. `schema_here()` derives it from the header above the cursor, and `t y`／`t s`／`t/` ask it. **The sequence grammar landed 2026-09-07 with them**: `Sequence { numbers, joint }` replaces 「a number and maybe a second one」, a bare `t s` is refused outright (a sort of 123 380 rows costs real seconds and `u` refunds the content but not the time), `t0s` is the column you are standing in — `0` was free to mean that because it is not a column — and **`-` is a range where `,` is a list or a pair**: `t2-10/`, `t1,5,9s`, `t20,20g`. One key had been doing both jobs, so `t2-10g` used to answer 「row 2, column 10」, a plausible answer to a question nobody asked. Each verb asks for the shape it can use and reports when handed another, which is also how `search_columns_within` stopped clamping `t99/` to the last column and pretending that was the request. **The rest of `TableView.schema` under `Bounds::Md` was swept 2026-09-07** and closes the row. `key`, `link` and `details` turned out to be nothing to do: they can only come from a schema TOML, which only a whole-file table has, so under `Bounds::Md` they are `None` either way — and `shows`/hidden the same. What was real was every place that counted **columns**: `rows_break_the_grid` refused every row of the wider table when the filter was run in it, `blank_row` opened a row as wide as the table you entered, `go_to_the_row_named` clamped `3gd` to the narrower table's two columns and then *named the column it had landed in*, and `:table check` read the whole file — every paragraph a row 「寬度不對」 — and is now the region the cursor is in, rule row excluded from both the walk and the count. Paste width was already safe (the Markdown path returns before it). Two more came out of the sweep, both found by looking rather than by testing: **the panel's shape was picked from the wrong question** — `split_detail` asked whether the table had taken the window, so a row in prose got the note's four-line strip and a five-column row showed two of its fields (a 拆分表 row, two of twenty-eight) with nothing to say there were more; it now asks what the panel *holds*, and a row is a tall thing wherever it is written. And **`schema_here` was reading a guessed block as a Markdown header**: a tab-delimited 碼表 split on pipes is one column, which emptied the panel outright. A block is walked out afresh every time the cursor enters one (`Reach::Cursor`), so its view schema is already the right one — only ` | ` tables need the header read back. **The cap was buying nothing on a squared-up table, fixed 2026-09-07** (author, off this very table: 「the long cells are trimmed with a `>` symbol. However, the width of the cell are still padded with white spaces at the tail」). `folds` cuts inside the cell's **content**; the width a column is drawn to is the widest **box** in it, pipe to pipe. A table [`compose`] has squared up — `:table rules`, and every table in these docs — carries the whole column width inside every cell as spaces, so each short cell went on voting 43 however little it held: the mark stood where the writing stopped and a field of fourteen empty cells ran from there to the pipe. `mdtable::slack` takes the file's own padding off the page by the same door as the tail (`hidden_on_line`, the one list the width, the wrap and the mouse all read), and `cell_folds_against` is now the two of them together while `cell_tails_against` stays the half that gets a `>` — a mark over the spaces would say something was folded away there, and nothing was. Two limits keep it honest: **only down to the cap**, so #212's law that a drawn can only *add* still holds everywhere the cap does not bite and a table that fits is drawn exactly as the file wrote it, alignment and all; and the run the selection stands in is left whole — **the run, not the whole cell `folds` opens**, because a cell's padding is as wide as the column and opening the cell to walk into its writing would swell the column under the reader's hands at every step of `l`. A rule row's dashes are slack too (they are drawing, and `padding` redraws them), down to one and never over the colons. **The pane had none of this until 2026-09-07** (author, off the `t t` window he reads this very table in: 「tw 功能无法在 tt 模式下使用，导致所有的长单元格都是保持折叠状态且没有折叠符号，光标进入该单元格后不会自动展开……进入 insert 模式后，也无法导航到被折叠的部分」). Three faults, one sentence apart: the grid's own 32-cell ceiling was a constant in the widget with **no key against it**, `t w` answered 「先 tf」 because the refusal asked for the *level* and the pane is not one, a cut cell was drawn with **no mark**, and the caret's cell was measured like any other — so the tail was unreachable in Normal, in Insert, and in the panel alike, which is 「永遠讀不到」 and not a preference. The fix is the same three rules the prose page already keeps, said in the grid's own terms: **the cap is what folding *means* here** (`Editor::cell_folds` is read by `widths`, and `t w` lifts it to the window rather than to infinity — a column wider than the window can never be scrolled into, since the grid scrolls by whole columns); **a cut cell stands a `>`** in the same place and the same ink as the prose page's, drawn in the column's last cell so nothing else moves; and **the caret's own cell is measured against the window, not the cap**, which is `walking_into_a_folded_cell_opens_it` transposed — the one rule that keeps a folded table editable. `char_at` is handed the same caret so a click still lands where the cell was drawn. **And the panel that the cap points *at* was cutting the value at its own edge**: `draw_detail` wraps every value through `wrap::line_rows` now (禁則 and all), and scrolls by **drawn rows** rather than by fields, so the field the caret is in keeps its last wrapped row on the panel. **One fault came in with that fix and was caught the same night**: the number row and the heading row broke on 「does the whole column fit」 while the data rows break on 「does this column start inside the window」, so the rightmost column drew its content with no name and no number over it. The 32-cell cap had kept most columns well inside the window and hidden it; `t w` makes a column wider than the room left over the ordinary case, and the one it beheaded was the column the reader had just asked to see whole. All three rows stop in the same place now, and the number stays right-aligned to the end of its column or to the edge of the window, whichever comes first — a number past the edge is no number. **`t w` reached 基本 the same night** (「虽然 tb 在默认状态下不折叠，但能不能在按下 tw 之后折叠？这个应该不违反我们之前说的 render -> table 链条吧」) — and he is right that it does not, because `t w` writes nothing into `table_level`. 「`basic` 不藏、不摺、不替換」 is a law about what a **level** does with nobody asking, and it was being read as a law about what the reader may ask for. What folding needs is a column squared up to fold against, and `table_padding_on` — 基本 and 全 alike — is the whole of that question; 源碼 is the one level with nothing squared up, and there the refusal stands, now naming `t b` as well as `t f`. The switch had to become `Option<bool>` to say it: a bare `bool` defaulting to `true` cannot hold both 「基本 folds nothing unasked」 and 「基本 folds when asked」. `None` lets the place answer — 全 folds, 基本 does not, the `t t` grid caps at its own width however it was opened — and a `Some` written by `t w` travels with the reader across every level, which is also what keeps `t b`／`t f`／`t t`／`t q` from quietly undoing an answer the reader gave.  **The layout stopped depending on the caret, 2026-09-07** (「不是说撑开的时候卡，而是不撑开的单元格也卡」). `t w` put the caret back into `PadKey` — the very trap that key's own doc records from before folding existed — so **any** cursor move inside a folded table threw the whole table's drawn layout away and rebuilt it: measured at **15.4 ms a keystroke** on this file's 286-row table, and identical in a two-cell column and in a two-hundred-cell one, which is what said it was not about opening anything. The fix splits reading from editing. **Reading no longer opens a cell** — `t i`'s panel is where a folded cell is read whole, and it wraps now — so the caret is out of the key; **editing still does**, on `i`/`a`/`c`, because the caret may never sit inside characters the page does not draw. And **an open cell no longer widens its column**: `mdtable::padding` takes two lists now, what a row hides when the table is *measured* (every cell folded) and what it hides as drawn, so the open cell juts out past its own wall — with its space and wall still drawn, as decided — while every other row keeps its alignment. 2.6 ms a keystroke against 基本's 1.9 ms, so folding is nearly free. **`t a` — 格內折行 — landed with it**: in the pane an over-wide cell is drawn on as many lines as it needs, inside its own column, the row numbered once and the rows below moved down; `t w` and `t a` are two toggles over one axis (`CellWidth::{Fold,Whole,Wrap}`) that are never both on, rather than a three-way cycle on `t w`, so `t w` means the same thing in prose and in the window (author's call). Prose cannot have it: its rows come from `wrap`, which every motion, the mouse, 縱書 and the split panes read, and it has no hanging indent — so the key says so and still sets the switch. **And the pane became bounded**: `gg`, `G`, `g30g`, `:120` and a search hit are all clamped into the table with a word (`hold_the_pane`, one place at the end of every key, plus `scroll` which arrives as a mouse event), the only ways out being `t q`, `t o`/`t b`/`t f` and `t ]`/`t [`. That deletes the old leak where a file-wide motion walked out, `table_row_span()` answered nothing and the window handed itself back to the prose page unasked — and it is what lets the gutter number the table's **own** rows (`table_row_base`), with the status line and `t<n>g` counting the same numbers: inside the window every number means one thing. **The mark itself was in the wrong ink, and that was the last thing fixed that night** (「折叠标志要不要加个下划线背景色什么的突出一下避免用户当作它是个普通的 `>`」). The glyph cannot move — the width table settles that, for the reason above — so the ink has to carry it. The prose page drew the mark as a `Note`, which is the markup's own grey, and the grid drew it in the furniture's, a rung fainter still than the writing it stands after; on a page that is a run of greys on purpose, a grey `>` at the end of a cell is a `>` the writer typed. It is 金 and bold on both surfaces now — 金 is this theme's word for 這不是正文 — and an **ink rather than a ground**, because a ground here is the *reader's* mark (the selection, the 朱 wash, the cursor's band) and the fold mark is the editor's. `Ink::Fold` exists to say it: a note is *about* what is written, and this one is about what is not on the page at all. **large** | Done |
+| 284 | **The HUD is a thread, not a panel — and in 縱書 it is nothing at all** | tui | P3 | 2026-09-06：「現在的HUD是一根線連到字母上。你覺得可不可以加個面板（有外框），並且允許HUD覆蓋其他的行的文字…允許他覆蓋其他文字可以讓他的位置更固定…然後我們可以有三個模式 `:hud off/basic/full`，默認 full。」 **The frame and the covering are one decision, not two.** Today's mark wants five cells on one row, so it can still find margin; a bordered panel wants a 3 × (寬+2) rectangle empty *near the caret*, which on a page of prose does not exist — so a frame forces covering. And the converse holds: once the HUD's glyphs sit on the same paper as the writing, nothing tells the reader which characters are not theirs, so covering forces a frame. That collapses two switches into one axis, which is what feeds the three levels. **What covering actually costs is not 「some prose」**: in Normal the HUD carries `typed_so_far()`, so pinning it two cells right of the caret paints over exactly the characters `3`, `2t` and `d3l` are counting — the object of the command. Hence the split: `off` draws nothing beside the caret (the status line's right edge stays — #193's floor), **`basic` is the factory level** and is today's scoring placement (#269) with a louder style — one row high, a 藥丸 rather than a thread, BAND ground and gold ink, **not one character hidden** — and `full` is the pinned, bordered, may-cover panel. Default `basic`, not `full`, by §5.7's own rule: the factory level must be identical to `off` in the worst case, and 醒目 is bought with style rather than with hiding. Three things to settle in the doing: **`:hud` is not #283's fifth dimension** — it is how the editor talks to you, not how the file is drawn, so `:render` must never write it and `render.is` keeps four fields; `:yume panel full` and `:hud full` are different words — the candidate panel and a pinned HUD both want `(cursor_x, cursor_y+1)` and the panel wins; and `full` loses the HUD's only collision avoidance, because `after_the_writing` reads the *buffer* back and thereby also dodges which-key, the command menu, the picker and the detail panel — 「有字」 and 「有面板」 read back identically once we cover, so the draw functions have to start returning their own `Rect`. #269's line in this table — 「`after_the_writing` is unchanged: the HUD still never paints over writing」 — is revoked by `full` and must be amended, not silently contradicted. **A separate fault found while reviewing this, and worth more than the frame**: in 縱書 the HUD is essentially never drawn. `after_the_writing` scans left→right for the last non-blank on the row, and 縱書 fills columns right-to-left, so `after` lands near the right edge whenever any 縱 on that row holds a character, every candidate fails `x < after`, and the vertical reader has only the status line. **medium** (縱書: **small**) **Built 2026-09-07**, both halves, and the 縱書 fault is the one that changed a reader's day. 「Margin」 is now a **run of blank cells** rather than the column after the last glyph: runs are the same answer in both writing directions, and they also find the gap between two short 縱 that a left-to-right scan walks straight past. The mark hangs from whichever end faces the caret (`╯`／`╮` when the margin turned out to be on the left, which in 縱書 it nearly always is) — a corner pointing away from the caret is worse than no corner at all. The three levels went in as designed, with `basic` the factory level and the 藥丸 bought by closing the far end of the mark with a cell of ground rather than by a louder colour. Two things the design did not foresee: a panel that starts in the **second cell of a 漢字** is written into the middle of somebody's character and never reaches the terminal — the `╭` vanishes and the ring opens with a gap — so `full` nudges one cell left when the cell before it holds a wide glyph (**revoked by #286**: the nudge landed on the same glyph and only moved the wound; every panel now blanks the straddling 漢字 instead); and 「the candidate panel wins」 is decided *before* `draw_hud` rather than after, by hoisting the `panel && composing` question above it, because the candidate panel is drawn last and could otherwise only win by painting over a ring that was already there. `draw_list`, `draw_which_key`, `draw_command_menu`, `draw_lookfor_menu` and `draw_picker` now return their own `Rect`, which is what `full` keeps off. | Done |
+| 285 | **A Markdown link is something to follow, not only to read** | core+tui | P3 | 2026-09-06：「markdown 文档中的超链接能不能用命令和鼠标点击（或者 ctrl 点击）而打开浏览器？本地的位置也能不能用窗口打开？这个 priority 不用太高。」 Three parts, and the third is the one with a design question in it. **A command** — `gx` is where Helix and vim both keep 「follow the thing under the cursor」, and the editor already knows where every link is: `crate::markdown` spans a `[text](url)` and 所見即所得 hides the `(url)` half, so the target is in hand without any new parsing. **A click** — the mouse map already turns a cell into a buffer position (#248's `drawn` walk), so the whole cost is deciding the gesture: a bare click has to keep placing the caret, so it is ⌘/Ctrl-click or nothing, and `⌘` chords are the terminal's (see 別再踩) — Ctrl-click is the one that actually arrives. **Where it opens** is the design question: an `https:` target goes to the system browser (`open` on macOS, `xdg-open` elsewhere) and that is uncontroversial, but a **local** path 「用窗口打开」 means the editor's own window — a `.md` beside this one should open as a buffer, and `[[wikilink]]` already means exactly that. So the rule wants to be: a scheme we do not handle goes to the OS; a path that resolves inside the project opens as a buffer in the other pane; anything else asks. **A refusal to build in**: never hand a URL to a shell. `open`/`xdg-open` take the target as one argument and nothing goes through `sh -c`. **small** **Built 2026-09-07**, with one rule deliberately *narrowed*: 「a scheme we do not handle goes to the OS」 is exactly backwards for a manuscript, which is a file that arrives by email — `open` starts whatever program claims a scheme, so `mailto:`/`obsidian:`/anything else is named and refused, and only `http`/`https` are handed over. An absolute path is refused for the same reason: `/etc/passwd` is not the name of a chapter. A relative path is read from the folder the link is *written* in (a chapter's neighbours are its neighbours on the disk), and `[[第三章]]` is a page name, so the suffix is the manuscript's — this file's extension first, then `.md`. `crate::markdown::link_at` answers from anywhere inside the construct, brackets and hidden target included, and reads the spans **backwards** because a heading's span covers its whole line. It opens in **this** pane, not the other one, until #281 is fixed. | Done |
+| 286 | **A panel whose left edge lands inside a 漢字 loses its whole left wall** | tui | P2 | found while answering #284, 2026-09-07. A 漢字 owns two cells and the terminal draws it from the first; the second reads back empty but is not *free* — anything written there is inside somebody else's glyph and never reaches the screen. `Clear` does not help, because the offending glyph starts one cell **outside** the panel. #284 met this and fixed it **locally**: `draw_hud_panel` nudges one cell left when `cell(x-1)` is wide. **Nothing else does**, and the guess that the HUD panel would settle it is the one thing to correct — the nudge is eight lines inside one draw function and every other panel computes its own `x`. `draw_which_key` puts itself at `area.x + area.width - width` (「the corner the cursor is not in」), a width that comes from the *content*, so on **half of all terminal widths** it lands on an odd column against a page of 漢字. Reproduced with `--shot=78x16 --keys=t` on a page of 一二三四…: the `╭`, all four `│` and the `╰` are gone, the ring is open down its whole left side, and the writing behind it (五, 八, 一) shows through the gap. Every even width from 78 to 100 does it. The same arithmetic reaches `draw_command_menu`, `draw_lookfor_menu`, `draw_picker` and `draw_list` wherever their `x` is not the page's own edge. Fixed 2026-09-07, and the strategy picked was: **blank the straddling glyph**. A 漢字 cannot be covered by halves — it is either whole or gone — so cutting it back to a space hands its second cell to the wall and leaves every panel exactly where its layout put it. The helper already existed for the candidate panel (`vertical::clear_wide_left_edge`); the fix is that the other five now pass through it too — `draw_list` (which is the command menu, the lookfor menu and the picker), `draw_which_key`, `draw_sidebar`, `draw_hud_panel`. #284's nudge is **deleted**: moving one cell left overwrote the same glyph anyway, and one law beats two. Guarded by `no_panel_wall_stands_in_the_second_half_of_a_漢字`, which renders every width from 70 to 110 over 漢字 prose. **It looks for the corner that is missing, not for the one that is wrong**, and that distinction cost an evening: the first version of the test asserted 「no wall character stands in the second cell of a wide glyph」 and passed on the broken code, because on the broken code there is no wall character to find. A probe inside `draw_which_key` showed the `╭` sitting in the frame's buffer at (4, 8) exactly as drawn; it is gone from the buffer a test reads back, which is the **backend's**, filled through `Buffer::diff` — and `diff` sets `to_skip` from the width of the glyph it just emitted, so the cell a 漢字 covers is never sent and never stored. The only trace the fault leaves is therefore an absence: a `╮` on a row whose `╭` never arrived. The test asserts the corners come in pairs, and one panel per frame; with the call in `draw_which_key` removed it fails at width 78. | Fixed |
+| 287 | **作品百科 — 一本書自己的百科** | core+tui | P3 | 2026-09-07：「我想在 yumete 中加一個「作品百科」功能……wiki 的所有詞條加入分詞、都使用虛線下劃線、光標移到這個詞上則會在右側信息欄顯示它的詞條內容……然後可以有個命令來編輯 wiki 文件，比如 `:wiki edit`。」 A `.yumete/wiki.md` whose `##`-and-below headings are 詞條: their names join the segmenter, they are marked in the prose, and standing on one shows the entry — its own text, its sub-sections, and a breadcrumb of the headings above it — in the panel down the right. **Almost none of this is new machinery**, which is the argument for building it: `.yumete/words.txt` (#239) is already found by walking up from the file being edited, `WithWords` (#144) already layers a per-book `WordList` over whatever dictionary is in force, `outline()` already reads `#` with no parser, and `note_detail` → `Detail` → `split_detail` (#283) is already a panel that follows the cursor with no key pressed and knows a tall thing goes down the right. The entry names go into a **second** `WordList` beside the book's own — `words.txt` says 「這是一個詞」, the wiki says 「這是一個詞**而且有一頁**」, and only the second is drawn — and the mark is computed off the segmentation already cached per line, so 中國人 inside 中國人民 is not marked without a rule of its own. Two entries can never be marked and `:wiki` must say so rather than stay silent: a **one-character** entry (`WordList::add` refuses anything shorter than two, and rightly) and one the segmenter will not cut out (`## 他為什麼要走`). **The one real design question was the ink**, and both surfaces are now settled (§5.8.4). 虛線 is not in ratatui — 0.29 has exactly one underline (`UNDERLINED` = SGR 4), no dotted/dashed/curly — but it was asked for anyway with the right reason (「这样和 markdown 的下划线语法可以分开」), and he is right: a chapter really can contain `[[第三章\|那一夜]]`, and the difference must be **shape**, not value, because a faint `underline_color` is the first thing a dark theme eats — while SGR 58 and SGR `4:4` came into terminals together, so the value axis buys no portability either. **Horizontal therefore takes a dotted underline**, and the cost is honest: a `Backend` of our own (~120 lines owning crossterm's `draw()` and the SGR modifier diff, plus raw mode / alt screen / panic hook by hand) and a **custom `Modifier` bit** — `Modifier` is a `u16` with bits 0–8 spoken for, `from_bits_retain` carries bit 9, and `CrosstermBackend` silently ignores bits it does not know, so `--shot` and every `TestBackend` test are unaffected. The fallback is free and ⚠️ **must not be tidied away**: emit `CSI 4 m` then `CSI 4:4 m`, so a terminal that cannot parse the colon form drops it and keeps the solid underline — worst case 「looks like a link」, never nothing. **縱書 must not copy that answer** (an underline in a column is a stack of two-cell dashes *between* the glyphs and reads as separators, and the margin is contended by a reading, a hung 句讀, a 着重號 and a 平仄 mark), and one steer settled it: 「不要太 invasive 但也不要太 low-profile」. The quiet ink (`word_ink` = `rung::QUIET`) is *less* conspicuous, so it is the low-profile end he ruled out; a ground **is** allowed, because `Palette::word` says a word boundary is 「structure, not a mark somebody made」 — that rule governs SELECTION/HEAD/BAND and the 朱 wash, not the paper end — but not `WORD` (962) or `BAND` (940), which are already compressed into each other. So 縱書 takes **one cell of `rung::HEAD` (815) ground with the ink untouched**: 1.27:1 clear of BAND so it is seen, a rung short of SELECTION so a selection still wins over it, and punctuation, 着重號, 平仄 and the cursor all unchanged. With `:word show` on, the wiki ground beats the 分詞 tint. The risk to look at through `--shot` before calling it settled: **the page turns to lace** — 阿寧 is on every page, and forty names means a mark under every third word — hence `:wiki show on\|off` on the `:word show` pattern, **on out of the box** by choice; ⚠️ `--shot` renders the `Buffer`, not the escapes, so it can measure the lace and can never tell you whether a terminal draws `4:4` (a `theme.wiki_underline = "dotted" \| "solid"` key covers the terminal we guess wrong about). The panel needs one field (`DetailKind {Row, Note, Wiki}`) so the breadcrumb and the re-levelled sub-headings can be set apart; depths are **re-levelled** (the entry is `#` whatever it is in the file), duplicates are drawn one after another in `(depth, file order)` with the breadcrumb telling them apart, and precedence is row → note/comment → wiki, because recognition never displaces something the writer typed. `:wiki` / `:wiki edit` / `:wiki reload` / `:wiki show` follow `:word`'s 「one subject, one command」, saving the file re-segments the way `words.txt` already does, and **no new key is needed**: `gd`/`gw` already mean 「follow the note under the cursor」. **「直接切入信息欄進行編輯」 is blocked on #281** — an editable panel is a view of another buffer, and that is exactly the open fault where everything reads `current_buffer()` and three caches are keyed by line alone; `gw` into `wiki.md` at the entry's heading is the near thing, and it is arguably better (the file, the outline, `:s`, undo). Global and local are **both** read, book first, a rule between them and the global part under a 金 「全局」 (「这样用户就不会混淆了」); `wiki.txt` is read too, opened with Markdown forced on, while `:wiki edit` creates `wiki.md`. **A wiki grows past one file** （同日）: a line `[yumete] 檔名` inside a comment names another file and splices it in **where the directive stands** — so ancestors, breadcrumbs and the same-name sort all follow the rules already written, and `# 人物` above the directive becomes the breadcrumb of everything in 人物.md. It is nearly free because `markdown::Kind::Comment` already covers **both** `%%…%%` and `<!-- … -->`, so scanning the `Comment` spans rather than raw lines means a `[yumete]` in a code fence is not a directive with no rule written for it. Entries carry `(source, line)` so `gw` opens the right file; a visited set of canonical paths, a depth cap and a file cap stop a cycle; paths are **held inside the book** （安全第一 — relative to the file carrying the directive, absolute refused, canonicalised and required to stay under the directory holding this `.yumete/`; cross-series material goes in the global wiki), and every refusal, every file that contributed zero entries and every repeat is **named by `:wiki`** — a wiki that ignores half of itself in silence is worse than one that fails. ⚠️ One directive per comment, one comment per line, because `markdown::spans()` is per-line (markdown.rs:626) and a multi-line `<!-- ⏎ … ⏎ -->` block is drawn with only its first line in comment ink; the block form becomes correct for free once **#288** lands. Design in §5.8; the decisions in §5.8.8. **large**, and it divides: parse ＋ segmenter is one sitting and already makes `w` walk the names. | Proposed |
 | 288 | **A multi-line `<!-- … -->` is drawn half-lit** | core+tui | P3 | found while designing #287's `[yumete]` includes, 2026-09-07. `markdown::spans()` takes **one line** and an unclosed comment 「runs to the end of the line, because a half-typed note is still a note」 (markdown.rs:626). That is right for a half-typed note and wrong for a finished block: write `<!--` on its own line, two lines of notes, then `-->`, and yumete draws the first line in comment ink, the two notes in **body ink**, and the closing `-->` in body ink too — a comment the writer can see is a comment, rendered as if it were the book. It is also silently wrong in 所見即所得 (a comment is dropped by `:export` but these lines would survive) and in the 分詞 layer (prose is segmented; a comment is not). The fix is cross-line state: `spans()` grows a 「did the previous line leave a comment open」 input, which the caller already has line by line — ⚠️ but that input has to reach the **caches**, because `segment_cache` / `meter_cache` / `note_cache` are keyed by line alone (the same fault as #281 in miniature): editing line 3's `<!--` must repaint lines 4–9, so the invalidation is no longer one line. `--shot` and every span test feed single lines and would all stay green through a wrong fix. Unblocks the multi-line `[yumete]` block form in #287, which is why it exists as its own row rather than inside it. | Proposed |
 | 289 | **`t a` 攤開時，找視窗頂那一步每滾一行重算一次折行** | tui | P2 | found while reviewing #283's 折行, 2026-09-08. Finding the top of the page under 折行 (`table.rs:591`) pushes `viewport.top` down one row at a time, and **each push re-measures a windowful from scratch** — the inner loop asks `lines_of` for every row from the new top until the cursor's row either fits or does not. So a scroll costs rows-in-window × rows-scrolled 折行: a big jump measured **~8,600 wraps and 0.17 s inside one keypress**. The answer is right, it is asked too often — the fix is to **carry the running height** (accumulate as the view moves, invalidate on an edit, a width change or a 摺／攤 switch) instead of recomputing the prefix every frame. 摺起 and 攤平 do not pay it: there a row is one line and the walk is arithmetic. **medium** | Planned |
-| 290 | **A lone Shift stopped switching 中/英, and nothing said so** | tui+ime | P1 | the author, 2026-09-08: 「目前无法通过 shift 键切换 yume 的中英文模式，只能通过 yume on/off 命令切换中英文。」 `ShiftTap` was fine and its unit test green; the terminal was simply never asked for the event. The Kitty protocol reports a **bare** modifier under `REPORT_ALL_KEYS_AS_ESCAPE_CODES` and under no other flag, and #271 had removed that flag to save the macOS system input method — so the tap died on 2026-09-05, three days before anyone typed it. **The two wants are the same bit**, and no crossterm release rescues them: `REPORT_ASSOCIATED_TEXT` is a commented-out line in 0.28 *and* 0.29, and `KeyCode::Char` could not carry a two-character commit if it were not. The way out was a state, not a flag: the author, asked, answered 「shift只是讓yume進入abc狀態，不是off。yume off的意思是完全關閉」 — and yumete had **two** states where his model has three, `:yume off`, `C-Space` and the Shift tap all calling the same `toggle_language()`. So 中文 and ABC are now both *yume holding the keyboard* (`ImeSession::engaged`), 關 is the third, `REPORT_ALL_KEYS_AS_ESCAPE_CODES` is pushed and popped with engagement, and the system's input method has the keys back in exactly the state it wants them. `C-Space` is gone with it — macOS spends it twice over (Spotlight, and switching input source) so it never reached the terminal. **The outer switch ended the day with no key at all.** `Shift+Space` replaced `C-Space` for half of it and was taken back out: it is 全／半角 in most input methods, and the input method holding the keyboard while yume is 關 is exactly a system one — so the single direction that matters most, 關→開, is the one it could not be relied on for. ⚠️ The general shape, worth keeping: **a chord that wakes a feature up must not be one the thing currently holding the keyboard eats**, and it is the 關→開 direction that has to be tried, because 開→關 always works and proves nothing. The `空格` leader was the author's next thought and then his own objection — 「空格快捷键太宝贵了，特别是 空格+i。我建议还是做成command，比如 yume shift，不要给快捷键了（或者以后再说）。」 — and it fails on its own terms anyway: a leader key is Normal-mode only, while 「這一下要不要 yume 接」 is asked in Insert. Nor did a new command get added, since `:yume on｜abc｜off` **already was** that command and a second spelling of it is the alias this project does not keep. What is left is the honest division: the switch a writer touches a hundred times a day (中⇄ABC) is a gesture and costs no key; the one touched once a week is typed. **medium** | Done |
-| 291 | **A list of hexadecimal names is a list you have to Tab through to read** | core+tui | P3 | the author, 2026-09-08: 「這裏 custom 方案名能不能有更好的方法提示他們的方案名？現在是 Unique ID，不夠直觀……比如命令提示面板中，子命令後面允許用灰色的字體顯示這個命令的備注。我們不是每個子命令都需要備注的。」 `:yume scheme` lists what the front end found, and yume's own installed schemes are named by slot: `custom.6947b838`, `custom.cc2d1290`. `Choice` grows a `note: Option<&'static str>`, drawn after the row in the quiet ink and **dropped before the row is** when the column will not hold both. Three decisions are worth writing down. ① **The note is a property of where the words came from, not of the words** — `note_for(args, word)` answers only for `Args::Schemes`, and only once `set_schemes` has run, because the built-in five fall back to a list whose `help` is a message *key* and a raw key beside a row is worse than no note. That is also why `deep()` now recurses on `&w.then` rather than on the list inside it: it has to be able to ask. ② **The tag stays the value.** Names change and collide; a slot id does neither, and a command history full of names that no longer resolve is a worse trade than two extra words on screen. ③ **The note is searched** (the author's call): 「四拼」 is not a prefix of `snow-sipin` and not in it at all, and it is what the reader knows the scheme as — so the filter is *name-prefix or note-contains*. Typing it needs 中文 on the command line, which a Shift tap gives (#290). `Word` was **not** given the field: it would have cost every one of the ~200 literals in the table an extra line to serve one list. **small** | Done |
-| 292 | **Lining up a table whose widest cell is a paragraph writes megabytes of spaces** | core | P2 | found 2026-09-08, on this very file. The author moved the `area` column of the roadmap table in front of the title, and `docs/development.md` went from **425,694 bytes to 2,945,642** — seven times — in one keystroke; he restored it (「我改错了」). Nothing misbehaved: `mdtable::compose` pads every cell to its column's widest, this table's 備註 column holds 7,000-character paragraphs, and 298 rows × that width is 2.5 MB of trailing spaces. The 32-column ceiling was **deliberately** removed (mdtable.rs:546) with an argument that still holds — 「a ceiling and alignment are the same knob」, and a table with a ragged right edge is not lined up. What that argument did not price is the case where the alignment **cannot be seen by anyone**: no terminal is 7,000 columns wide, no reader ever sees that edge, and git keeps the spaces for good. So the width where padding stops being alignment and becomes only bytes is not 32 and is not infinity. The proposal is to **refuse rather than ragged**: when a column's widest cell is wider than the pane can ever show, say so and leave the table alone — the command's promise is 「line this up so I can read it」, and it cannot be kept for a column no window will hold. Two smaller catches worth the same sitting: `:write` has no opinion about a save that multiplies a file's size, and the table commands are the one family that can rewrite a whole file without the writer touching a character of it. **small** | Proposed |
-| 293 | **兩個側欄：左邊看，右邊改** | core+tui | P2 | 作者的設計，2026-09-08：「文檔可以有兩個側欄，左側欄是文件、目錄等信息（不需要編輯的）；右側欄是表格、字典、百科等（用户可以編輯的）。」左邊歸 `空格 s`（side bar），右邊歸 `空格 i`（information bar），各自**隱藏／顯示／操作**三態。⚠️ 三態**今天已經存在，只是沒有名字**：`show_sidebar` 那條四段規則裏「側欄開着、鍵在正文」就是顯示（editor.rs:15134）。新的是把狀態從「命名視圖的鍵」上剝下來交給一個統一鍵——隱藏或顯示按一下進操作，操作按一下進隱藏。**四個具名鍵留着**（作者定）：`空格 e` 檔案、`空格 o` 大綱、`空格 d` 字典、`t i` 表格詳情；統一鍵說「哪個側欄、什麼狀態」，具名鍵說「哪個視圖」，兩件事而不是別名，`空格 s` 開在上次那個視圖。**`Tab`／`Shift+Tab` 各輪自己那三格，輪到空的畫「這裏沒有」**（作者定）——這**推翻**了 `View::Dictionary` 不進輪換的現行規矩（sidebar.rs:33「Cycling into it would show an empty panel most of the time」），而且推翻得對：跳過空的會讓同一個鍵在不同處境下去到不同地方，那正是 #272 的形狀。**`q` 回正文，`Esc` 在側欄層面什麼都不做**（作者定，理由是他想到而我沒想到的：右欄能編輯之後 `Esc` 是退插入模式的鍵，多按一下就收掉面板是真會發生的事）；今天 `q` 是「直接關掉」（editor.rs:15465），關掉改由 `空格 s`／`空格 i` 負責。⚠️ `Esc` 是所有人的「出去」鍵，卡住的人一定會按它——`hint.sidebar.back-to-text` 現在寫的是 `C-w`，必須改寫成 `q`，「拿走鍵的那一半有義務說清楚怎麼還」這條規矩在這裏是安全網而不是禮貌。**`C-w` ≡ `空格 w`，只管工作區**（作者定）：今天它有兩個主人——正文裏切分屏（editor.rs:14627），側欄裏回正文（:15464）——第二個側欄一來，一個鍵說不清三個地方；等價之後 `C-w` 也會「沒開就開」，那本來就是 `空格 w` 的意思。**`w` 量寬度**：無對側時不過終端的一半，有對側時不過三分之一。⚠️ 縱書下側欄的寬度**按三取整**（一縱三格，sidebar.rs 模組文檔），兩個上限都要往下取到整縱，否則邊界落在半個漢字上（#286 那一族）。**右欄的 `i` 進編輯——表格改在格子裏、百科 `w` 存回檔案——硬擋在 #281 上**：能編輯的面板就是另一個 buffer 的視圖，而那正是「什麼都讀 `current_buffer()`、三個快取只按行號作鍵」的那個坑。**所以這一條分兩半**：兩個側欄＋三態＋`Tab`＋寬度是一半，現在可以做；編輯態是另一半，跟在 #281 後面。**出廠時右欄只有兩格是真的**：表格詳情（`t i` 今天那副右豎條的面孔）與字典（從左邊搬過來）；百科是 #287。**large**，分兩次坐下。 | Planned |
-| 294 | **腳註那條四行橫條，是全樹最後一個還是矩形的東西** | tui | P3 | 作者，2026-09-08：「如果真的要更好看，我覺得可以使用快捷鍵提示的那個面板風格，位置根據光標要麼在右下角要麼在左下角，有個外框更加醒目。」他先否掉了把它收進右側欄（#293）的提案，理由對：「腳註是 render markdown 的一部分，所以它應該是 inline render 比較好」，而且一張表裏同時有腳註時兩者並不打架——一個在下面，一個在右邊。留下的是形狀：`split_detail`（tui/table.rs）給腳註與註釋一條**通欄四行**的橫條，而 #273 已經把 `:` 選單從「一個矩形」改成「一個面板」（邊框 ＋ 左上角金色標題），這條橫條是那次沒掃到的最後一個。一條腳註一兩行字，通欄四行既浪費寬度，又無條件從頁面上拿走四行。三條實現約束：① 角落取**光標的對角**，而且光標落在最下面幾行時改用上方的角落，否則面板蓋住你正站着的那一行；② 左邊界必須落在字符邊界上（#286：一個漢字佔兩格，邊框落在後半格上，整條左牆就沒了）；③ **縱書另外定**——`:hud` 在縱書裏乾脆不存在（#284）是現成的先例，而「右下角」在一頁從右往左讀的紙上也不是同一個意思。更遠的一步是作者說的 inline：`:render full` 下用虛字（#210）把腳註正文直接攤在原地，那要先問過折行與測量，不在這一條裏。**small**（inline 那一步 **medium**） | Planned |
+| 290 | **A lone Shift stopped switching 中/英, and nothing said so** | tui+ime | P1 | 2026-09-08：「目前无法通过 shift 键切换 yume 的中英文模式，只能通过 yume on/off 命令切换中英文。」 `ShiftTap` was fine and its unit test green; the terminal was simply never asked for the event. The Kitty protocol reports a **bare** modifier under `REPORT_ALL_KEYS_AS_ESCAPE_CODES` and under no other flag, and #271 had removed that flag to save the macOS system input method — so the tap died on 2026-09-05, three days before anyone typed it. **The two wants are the same bit**, and no crossterm release rescues them: `REPORT_ASSOCIATED_TEXT` is a commented-out line in 0.28 *and* 0.29, and `KeyCode::Char` could not carry a two-character commit if it were not. The way out was a state, not a flag: the answer was 「shift只是讓yume進入abc狀態，不是off。yume off的意思是完全關閉」 — and yumete had **two** states where his model has three, `:yume off`, `C-Space` and the Shift tap all calling the same `toggle_language()`. So 中文 and ABC are now both *yume holding the keyboard* (`ImeSession::engaged`), 關 is the third, `REPORT_ALL_KEYS_AS_ESCAPE_CODES` is pushed and popped with engagement, and the system's input method has the keys back in exactly the state it wants them. `C-Space` is gone with it — macOS spends it twice over (Spotlight, and switching input source) so it never reached the terminal. **The outer switch ended the day with no key at all.** `Shift+Space` replaced `C-Space` for half of it and was taken back out: it is 全／半角 in most input methods, and the input method holding the keyboard while yume is 關 is exactly a system one — so the single direction that matters most, 關→開, is the one it could not be relied on for. ⚠️ The general shape, worth keeping: **a chord that wakes a feature up must not be one the thing currently holding the keyboard eats**, and it is the 關→開 direction that has to be tried, because 開→關 always works and proves nothing. The `空格` leader was the next thought, and then its own objection — 「空格快捷键太宝贵了，特别是 空格+i。我建议还是做成command，比如 yume shift，不要给快捷键了（或者以后再说）。」 — and it fails on its own terms anyway: a leader key is Normal-mode only, while 「這一下要不要 yume 接」 is asked in Insert. Nor did a new command get added, since `:yume on｜abc｜off` **already was** that command and a second spelling of it is the alias this project does not keep. What is left is the honest division: the switch a writer touches a hundred times a day (中⇄ABC) is a gesture and costs no key; the one touched once a week is typed. **medium** | Done |
+| 291 | **A list of hexadecimal names is a list you have to Tab through to read** | core+tui | P3 | 2026-09-08：「這裏 custom 方案名能不能有更好的方法提示他們的方案名？現在是 Unique ID，不夠直觀……比如命令提示面板中，子命令後面允許用灰色的字體顯示這個命令的備注。我們不是每個子命令都需要備注的。」 `:yume scheme` lists what the front end found, and yume's own installed schemes are named by slot: `custom.6947b838`, `custom.cc2d1290`. `Choice` grows a `note: Option<&'static str>`, drawn after the row in the quiet ink and **dropped before the row is** when the column will not hold both. Three decisions are worth writing down. ① **The note is a property of where the words came from, not of the words** — `note_for(args, word)` answers only for `Args::Schemes`, and only once `set_schemes` has run, because the built-in five fall back to a list whose `help` is a message *key* and a raw key beside a row is worse than no note. That is also why `deep()` now recurses on `&w.then` rather than on the list inside it: it has to be able to ask. ② **The tag stays the value.** Names change and collide; a slot id does neither, and a command history full of names that no longer resolve is a worse trade than two extra words on screen. ③ **The note is searched** (settled): 「四拼」 is not a prefix of `snow-sipin` and not in it at all, and it is what the reader knows the scheme as — so the filter is *name-prefix or note-contains*. Typing it needs 中文 on the command line, which a Shift tap gives (#290). `Word` was **not** given the field: it would have cost every one of the ~200 literals in the table an extra line to serve one list. **small** | Done |
+| 292 | **Lining up a table whose widest cell is a paragraph writes megabytes of spaces** | core | P2 | one keystroke took this file from 425,694 bytes to 2,945,642 — 298 rows padded out to a 7,000-square 備註 cell. Fixed 2026-09-08: a column wider than `WIDEST_COLUMN` (400) leaves the table untouched; see §5.6. **small** | Done |
+| 293 | **兩個側欄：左邊看，右邊改** | core+tui | P2 | 2026-09-08 的設計：「文檔可以有兩個側欄，左側欄是文件、目錄等信息（不需要編輯的）；右側欄是表格、字典、百科等（用户可以編輯的）。」左邊歸 `空格 s`（side bar），右邊歸 `空格 i`（information bar），各自**隱藏／顯示／操作**三態。⚠️ 三態**今天已經存在，只是沒有名字**：`show_sidebar` 那條四段規則裏「側欄開着、鍵在正文」就是顯示（editor.rs:15134）。新的是把狀態從「命名視圖的鍵」上剝下來交給一個統一鍵——隱藏或顯示按一下進操作，操作按一下進隱藏。**四個具名鍵留着**（已定）：`空格 e` 檔案、`空格 o` 大綱、`空格 d` 字典、`t i` 表格詳情；統一鍵說「哪個側欄、什麼狀態」，具名鍵說「哪個視圖」，兩件事而不是別名，`空格 s` 開在上次那個視圖。**`Tab`／`Shift+Tab` 各輪自己那三格，輪到空的畫「這裏沒有」**（已定）——這**推翻**了 `View::Dictionary` 不進輪換的現行規矩（sidebar.rs:33「Cycling into it would show an empty panel most of the time」），而且推翻得對：跳過空的會讓同一個鍵在不同處境下去到不同地方，那正是 #272 的形狀。**`q` 回正文，`Esc` 在側欄層面什麼都不做**（已定，理由是我沒想到的那一層：右欄能編輯之後 `Esc` 是退插入模式的鍵，多按一下就收掉面板是真會發生的事）；今天 `q` 是「直接關掉」（editor.rs:15465），關掉改由 `空格 s`／`空格 i` 負責。⚠️ `Esc` 是所有人的「出去」鍵，卡住的人一定會按它——`hint.sidebar.back-to-text` 現在寫的是 `C-w`，必須改寫成 `q`，「拿走鍵的那一半有義務說清楚怎麼還」這條規矩在這裏是安全網而不是禮貌。**`C-w` ≡ `空格 w`，只管工作區**（已定）：今天它有兩個主人——正文裏切分屏（editor.rs:14627），側欄裏回正文（:15464）——第二個側欄一來，一個鍵說不清三個地方；等價之後 `C-w` 也會「沒開就開」，那本來就是 `空格 w` 的意思。**`w` 量寬度**：無對側時不過終端的一半，有對側時不過三分之一。⚠️ 縱書下側欄的寬度**按三取整**（一縱三格，sidebar.rs 模組文檔），兩個上限都要往下取到整縱，否則邊界落在半個漢字上（#286 那一族）。**右欄的 `i` 進編輯——表格改在格子裏、百科 `w` 存回檔案——硬擋在 #281 上**：能編輯的面板就是另一個 buffer 的視圖，而那正是「什麼都讀 `current_buffer()`、三個快取只按行號作鍵」的那個坑。**所以這一條分兩半**：兩個側欄＋三態＋`Tab`＋寬度是一半，現在可以做；編輯態是另一半，跟在 #281 後面。**出廠時右欄只有兩格是真的**：表格詳情（`t i` 今天那副右豎條的面孔）與字典（從左邊搬過來）；百科是 #287。**large**，分兩次坐下。 | Planned |
+| 294 | **腳註那條四行橫條，是全樹最後一個還是矩形的東西** | tui | P3 | 2026-09-08：「如果真的要更好看，我覺得可以使用快捷鍵提示的那個面板風格，位置根據光標要麼在右下角要麼在左下角，有個外框更加醒目。」先否掉了把它收進右側欄（#293）的提案，理由對：「腳註是 render markdown 的一部分，所以它應該是 inline render 比較好」，而且一張表裏同時有腳註時兩者並不打架——一個在下面，一個在右邊。留下的是形狀：`split_detail`（tui/table.rs）給腳註與註釋一條**通欄四行**的橫條，而 #273 已經把 `:` 選單從「一個矩形」改成「一個面板」（邊框 ＋ 左上角金色標題），這條橫條是那次沒掃到的最後一個。一條腳註一兩行字，通欄四行既浪費寬度，又無條件從頁面上拿走四行。三條實現約束：① 角落取**光標的對角**，而且光標落在最下面幾行時改用上方的角落，否則面板蓋住你正站着的那一行；② 左邊界必須落在字符邊界上（#286：一個漢字佔兩格，邊框落在後半格上，整條左牆就沒了）；③ **縱書另外定**——`:hud` 在縱書裏乾脆不存在（#284）是現成的先例，而「右下角」在一頁從右往左讀的紙上也不是同一個意思。更遠的一步是說過的 inline：`:render full` 下用虛字（#210）把腳註正文直接攤在原地，那要先問過折行與測量，不在這一條裏。**small**（inline 那一步 **medium**） | Planned |
 
 ### 5.5 · A table is a delimiter, a surface and a boundary (#261)
 
-**The author's model, 2026-09-05:** 「csv 文件等同于一个从第一行到最后一行都是表格
-的普通文本文件」 — a CSV file is not a different kind of thing from a table inside a
-document, it is the case where the boundary happens to be the whole file.
+**The author's model, 2026-09-05:** 「csv
+文件等同于一个从第一行到最后一行都是表格 的普通文本文件」 — a CSV file is not a
+different kind of thing from a table inside a document, it is the case where the
+boundary happens to be the whole file.
 
 That is right, and it says where the current type is wrong. `TableView` was
 already built around one cell model and two surfaces — `cell_position`,
@@ -523,11 +536,11 @@ line)`, while `Shape::Delimited` has **no boundary at all** — it is implicitly
 rather than the absence of one.
 
 But `Shape` cannot collapse to one dimension, because it is currently saying two
-things at once: *the separator is a comma* **and** *this is drawn by
-`yumete-tui/src/table.rs`*, a separate grid widget that clears the frame and
-freezes a header. A delimited block inside a chapter cannot use that widget —
-the paragraph above it would vanish — so it has to draw through #212's ghost-text
-padding, like a `|` table. Two independent axes:
+things at once: *the separator is a comma* **and**
+*this is drawn by `yumete-tui/src/table.rs`*, a separate grid widget that clears
+the frame and freezes a header. A delimited block inside a chapter cannot use
+that widget — the paragraph above it would vanish — so it has to draw through
+#212's ghost-text padding, like a `|` table. Two independent axes:
 
 ```
 Separator: Delimiter(char) | Pipe
@@ -535,52 +548,53 @@ Surface:   Page | InProse
 Boundary:  WholeFile | Md | Block { … }      ← recomputed, never stored
 ```
 
-| | separator | surface | boundary |
-| --- | --- | --- | --- |
+|  | separator | surface | boundary |
+| ----------------------------------- | -------------- | --------- | ---------------------- |
 | CSV / TSV / a file a schema claims | `Delimiter(c)` | `Page` | the whole file |
 | a `\|` table in a document | `Pipe` | `InProse` | `md_region()` |
 | **a block in a chapter — new** | `Delimiter(c)` | `InProse` | walked from the cursor |
 | a `\|` file with nothing else in it | `Pipe` | `Page` | the whole file |
 
-This is the decoupling: `editor.rs` holds about twenty `shape == Shape::Markdown`
-tests, and they are not all asking the same question — some mean 「which splitter」
-and some mean 「is this inside prose」. Mixed into one enum, every new kind of
-table makes all twenty need rereading.
+This is the decoupling: `editor.rs` holds about twenty
+`shape == Shape::Markdown` tests, and they are not all asking the same question
+— some mean 「which splitter」 and some mean 「is this inside prose」. Mixed
+into one enum, every new kind of table makes all twenty need rereading.
 
 **Entering the third tier.** Stand on the delimiter and press the key: what is
-under the cursor names the separator, so nothing has to be prompted for — `ci"`'s
-own idea. Or select the lines, and the separator is inferred from what the
-selection holds most of. Four rules the walk needs:
+under the cursor names the separator, so nothing has to be prompted for —
+`ci"`'s own idea. Or select the lines, and the separator is inferred from what
+the selection holds most of. Four rules the walk needs:
 
 - **A single space is never a delimiter.** A paragraph of 中文 with an English
   word in it has one; 中文 that really is aligned is padded with runs of spaces
-  or 全角空格. Two or more, or nothing — which is how `column -t` and awk read it
-  too.
+  or 全角空格. Two or more, or nothing — which is how `column -t` and awk read
+  it too.
 - **A blank line is not the boundary, it is *a* boundary.** A table often sits
-  directly under `## 第三章` with no blank line, and may hold a blank line of its
-  own. Walk up and down while the line still contains the separator; stop at a
-  blank line as well.
-- **Check before entering.** If the walked block's rows disagree wildly about how
-  many cells they have, the separator was guessed wrong: say so on the status
-  line rather than draw a crooked grid. `looks_delimited()` is that test already.
+  directly under `## 第三章` with no blank line, and may hold a blank line of
+  its own. Walk up and down while the line still contains the separator; stop at
+  a blank line as well.
+- **Check before entering.** If the walked block's rows disagree wildly about
+  how many cells they have, the separator was guessed wrong: say so on the
+  status line rather than draw a crooked grid. `looks_delimited()` is that test
+  already.
 - **`&` is LaTeX and Typst**, and the editor already knows Typst. Covering it as
   a third-tier separator is cheap now; `#table` may earn the second tier later.
 
-**縱書 stays as it is** (the author, 2026-09-05): only a table that is *drawn*
+**縱書 stays as it is** (2026-09-05）: only a table that is *drawn*
 forces the page horizontal. A `|` table inside a vertical chapter is edited in
 place, which is what `turn_for_table`'s existing Markdown exception already does
 — under the split it stops being an exception and becomes 「the surface is
 `Advanced` or `Grid`」, which is what the line always meant.
 
-**Land it as one commit that changes no behaviour**, with the third tier and #227
-after it.
+**Land it as one commit that changes no behaviour**, with the third tier and
+#227 after it.
 
 **What landed, 2026-09-05.** The three axes are in `editor.rs`, `Shape` and
 `is_grid()` are gone, and the two tiers that exist keep every bit of their old
 behaviour:
 
-| | `separator` | `surface` | `bounds` |
-| --- | --- | --- | --- |
+|  | `separator` | `surface` | `bounds` |
+| -------------------------------------- | -------------- | --------- | ----------- |
 | a file a schema claims, `.csv`, `.tsv` | `Delimiter(c)` | `Page` | `WholeFile` |
 | a `\|` table in a document | `Pipe` | `InProse` | `Md` |
 
@@ -598,9 +612,9 @@ The twenty tests split roughly evenly, which was the point:
 - **which splitter** → `separator`, and mostly not even that: `TableView::cells`
   and `TableView::boxes` answer it once, so `row_cells`, `row_cell_boxes` and
   `rows_break_the_grid` no longer match on anything. `grid_shape_here` returns a
-  `Separator` instead of `(char, bool)`, so the bool named `rows_only` that meant
-  「the separator is a pipe」 stopped being a return value; its two callers say
-  `separator == Separator::Pipe` where they stand.
+  `Separator` instead of `(char, bool)`, so the bool named `rows_only` that
+  meant 「the separator is a pipe」 stopped being a return value; its two
+  callers say `separator == Separator::Pipe` where they stand.
 - **is this drawn on its own page** → `surface`. All eight `is_grid()` calls in
   `yumete-tui` were this question, and `turn_for_table`'s Markdown exception
   became `in_prose()` — the same line, finally saying what it meant.
@@ -611,8 +625,8 @@ The twenty tests split roughly evenly, which was the point:
 constructed: a run of delimited lines **recognised where it stands**, in a file
 that is not a table and never becomes one.
 
-| | `separator` | `surface` | `bounds` |
-| --- | --- | --- | --- |
+|  | `separator` | `surface` | `bounds` |
+| -------------------------------------------------------------------- | -------------- | --------- | -------- |
 | a 碼表 pasted into a chapter, a `dict.yaml` under its `---` preamble | `Delimiter(c)` | `InProse` | `Block` |
 
 Four things decide it, and the order matters:
@@ -670,7 +684,7 @@ Two things were deliberately left out:
 ### 14 · What four reviews of the code found, 2026-09-03
 
 Two of the four are in as this is written. They agree on the shape of the
-problem, and it is the author's own diagnosis: **there is no object for "the
+problem, and it is the diagnosis: **there is no object for "the
 page" or for "a place in a document", so every such thing is loose fields on
 `Editor`, and each layout builds its own out of them.** Every finding is one of
 two shapes — *the same rule derived twice from loose primitives*, or *a stored
@@ -789,9 +803,10 @@ divergences over that corpus — and nine of the thirteen safety fixes hold.
    `:table basic` to fix a typo in their own documentation. `:ruby format` runs
    the same grid check `:replace` runs, and a ruby reading goes through the
    cell gate like any other text.
-5. **Looking at a table reformatted the file** (`:table on`, retired by #283) — 45 lines of the docs site, `modified`
-   set, and `:table off` does not undo it. Looking at a table no longer
-   rewrites it; 對齊 (`t f` today) is the tidy-up, and says so.
+5. **Looking at a table reformatted the file** (`:table on`, retired by #283) —
+   45 lines of the docs site, `modified` set, and `:table off` does not undo it.
+   Looking at a table no longer rewrites it; 對齊 (`t f` today) is the tidy-up,
+   and says so.
 6. **`:w <path>` rebound the buffer.** It writes a copy and stays where it is,
    as in vi; `:saveas` is the one that moves house. A buffer with no name of
    its own still takes the name, because there is no manuscript for the copy to
@@ -823,9 +838,9 @@ divergences over that corpus — and nine of the thirteen safety fixes hold.
 13. **標點旁置 stopped working next to hidden markup** — turning one setting on
     changed what another did. The swallowed run joins whichever slot the mark
     joins.
-14. `Grid::new` defaulted to「nothing is hidden」where `Measure::new` requires an
-    answer. It is `Grid::plain` now, like `Measure::plain`, and `line_slots` is
-    `line_slots_plain`: a call site that shows a different document from the
+14. `Grid::new` defaulted to「nothing is hidden」where `Measure::new` requires
+    an answer. It is `Grid::plain` now, like `Measure::plain`, and `line_slots`
+    is `line_slots_plain`: a call site that shows a different document from the
     one on the screen has to say so.
 15. **`block_of` cost O(lines above)** — it went through `blocks_through`,
     which copies every line above the one asked about: 11 ns near the top of
@@ -947,22 +962,21 @@ A CSV file is not a different kind of thing from three lines of a chapter —
 grid widget that clears the frame is not「what a CSV gets」; it is what a table
 gets, and a CSV is the table that happens to reach both ends of the file.
 
-**And then a fourth**, 2026-09-05 (#277), because the author kept the third and
-asked for the thing a CSV has always had on top of it:
+**And then a fourth**, 2026-09-05 (#277), because the third was kept, and what was asked for was the thing a CSV has always had on top of it:
 
 > 我覺得可以保留現在的 tt 模式，然後加上個新的模式也就是整窗口走網格。所以我們有
 > 四個模式：源碼模式 `to` (ordinary)；保持源碼，表格接管，快捷鍵 `ti` (inline)；
 > 現在的 tt 模式，快捷鍵 `ta` (advanced)；csv 的全屏表格模式，`tt` (table)。
 
-| | 原文 | 畫在哪 | soft wrap | 按鍵 |
-| --- | --- | --- | --- | --- |
+|  | 原文 | 畫在哪 | soft wrap | 按鍵 |
+| --------------------- | -------------------------------- | ------------ | ------------------ | ----- |
 | **源碼模式** | 看得見，`\|` 就是一個字符 | 正文裏 | 照舊 | `t o` |
 | **表格操作** normal | 看得見（pipe、逗號、制表符都在） | 正文裏 | 表格那幾行**不折** | `t n` |
 | **畫成表格** advanced | 看不見，格線畫在正文中間 | 正文裏 | 不適用 | `t a` |
 | **全窗表格** table | 看不見，格線佔滿窗口 | **整個窗口** | 不適用 | `t t` |
 
 The four switch straight into one another; `t o` is the way back to prose from
-any of them. **`t q` is not a second `t o`** — the author was explicit:
+any of them. **`t q` is not a second `t o`** — this was explicit:
 
 > `tq` 只在全屏表格模式下生效，退到 markdown 文件中，且回到此前的表格模式
 > （`to`,`ti`,`ta`）。
@@ -973,8 +987,8 @@ window, and it is written only on the way **into** `Grid`; a `.csv` opened as a
 grid has `None` there, which is 源碼模式, which is right. Pressed anywhere but
 the full-screen grid, `t q` says so and does nothing.
 
-**The two grids are one widget** (「這樣代碼也可以复用」). `t a` draws through the
-prose pipeline — one ratatui `Line` per screen row, alignment by #212 ghost
+**The two grids are one widget** (「這樣代碼也可以复用」). `t a` draws through
+the prose pipeline — one ratatui `Line` per screen row, alignment by #212 ghost
 padding measured over the **whole table**. `t t` hands the pane to
 `yumete-tui/src/table.rs`, the CSV widget, which clears the frame, measures its
 columns from the **visible rows only** and scrolls columns sideways. That widget
@@ -988,12 +1002,12 @@ The header row is read off the page, not off the schema
 built from whichever table was entered first, and the widget must show the
 headings of the table the cursor is actually in.
 
-**The cursor may walk out** (#277): 「`ti`, `ta` 這兩個模式應該允許光標上下離開表格
-回到正文中」. `j` on the last row of an in-document table now steps to the line
-below the table rather than stopping. A *page* still stops (`J`/`K` — the split
-is `step_cell_row(down, may_leave)`), because a page that fell out of the table
-would be a page that skipped it. Neither applies to `WholeFile`: there is no
-prose to walk into.
+**The cursor may walk out** (#277): 「`ti`, `ta`
+這兩個模式應該允許光標上下離開表格 回到正文中」. `j` on the last row of an
+in-document table now steps to the line below the table rather than stopping. A
+*page* still stops (`J`/`K` — the split is `step_cell_row(down, may_leave)`),
+because a page that fell out of the table would be a page that skipped it.
+Neither applies to `WholeFile`: there is no prose to walk into.
 
 **Two kinds of file**, and this is the half that keeps the code honest:
 
@@ -1019,7 +1033,7 @@ sitting in a `.txt`, or in a buffer that has never been saved. So the two kinds
 above are really:
 
 | what is under the cursor | how far the mode reaches |
-| --- | --- |
+| ------------------------------------------------------ | ------------------------------ |
 | a `\|` table that parses, wherever it sits | the file （`Reach::File`） |
 | a file a schema or an extension claims whole | the file |
 | a block **guessed** from tabs or runs of spaces (#216) | the cursor （`Reach::Cursor`） |
@@ -1040,7 +1054,7 @@ once: the `|` table follows the file, the 碼表 follows the cursor. That is not
 an inconsistency to paper over — it is the two kinds of table the file actually
 contains.
 
-Two more things the author fixed in the same exchange:
+Two more things fixed in the same exchange:
 
 - **縱書**: any door that *draws* — `t a`, `t t`, `:table`, `-t` — turns the
   whole page horizontal (`turn_for_table`), and `t n` / `t o` turn it back. A
@@ -1057,7 +1071,7 @@ Two more things the author fixed in the same exchange:
 the whole trick:
 
 | field | asks |
-| --- | --- |
+| --------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `Surface` | **which of the four modes** is on — `Inline` 表格操作, `Advanced` 畫成表格, `Grid` 全窗表格; 源碼模式 is `table == None`, so it needs no variant |
 | `Bounds` | **which lines** this table occupies — `WholeFile`, `Md`, `Block` |
 | `Reach` | **how far the mode reaches** — `File`, or only `Cursor` |
@@ -1098,7 +1112,7 @@ inside a fence used to enter a mode that then drew nothing.
 
 ### 5.7 · Three levels, three dimensions — and 縮進 on its own (#283)
 
-Settled with the author on 2026-09-06, after two reviews of the previous
+Settled 2026-09-06, after two reviews of the previous
 proposal found the same thing from opposite ends.
 
 **What it replaces.** Whether a table is drawn aligned used to be asked as a
@@ -1119,8 +1133,8 @@ asks one field and `render` never appears on that path at all.
 
 **Four dimensions say the three words. `:render` writes three of them.**
 
-| | `off` | `basic` (factory) | `full` |
-| --- | --- | --- | --- |
+|  | `off` | `basic` (factory) | `full` |
+| -------- | ------------------------------- | ----------------------------------------------------- | ----------------------------------------------------------- |
 | `render` | the file as written, one colour | style only | the parts are optimised |
 | `table` | not table's business | aligned · no wrap · keys to the grid where a table is | ＋ `\|` drawn as `┆`, the column ruler |
 | `ruby` | the tags are text | the tags stay, and nothing is drawn beside the base | the reading beside the base, the tags off the page |
@@ -1133,7 +1147,7 @@ with no argument **reports** those three — the shape `:table rules` already
 has.
 
 **`indent` says the same three words and `:render` does not write it. Settled
-2026-09-06**, the author: 「同意 indent 和 render 解耦。道理還有一個：indent
+2026-09-06**, 「同意 indent 和 render 解耦。道理還有一個：indent
 一般是竪排文本用的，markdown 渲染大多數是橫排用的。」 The other three are one
 question asked of three subsystems — *how much of the markup is resolved* —
 and a master switch over them is a switch over one idea. An indent is not
@@ -1185,13 +1199,13 @@ they are `:view`**, and `:render` is still not one of them (§5.2.4).
 The law is worth more than the levels are. 「Which level does this belong to」
 had been argued twice by eye; measure it instead:
 
-* `t f`'s grid **replaces** the writer's `|` with `┆` (`grid_on_line` is
+- `t f`'s grid **replaces** the writer's `|` with `┆` (`grid_on_line` is
   explicit that a character is replaced, never taken off the page, so the
   columns stay the columns) → `full`.
-* `indent`'s blank-line fold **removes a line** → `indent full`. Before the
-  law it was the one place where the pre-#283 `:render on` quietly took a character off
-  the page and nothing said so.
-* `ruby` at `basic` therefore keeps the tags on the page and draws **nothing**
+- `indent`'s blank-line fold **removes a line** → `indent full`. Before the law
+  it was the one place where the pre-#283 `:render on` quietly took a character
+  off the page and nothing said so.
+- `ruby` at `basic` therefore keeps the tags on the page and draws **nothing**
   beside the base. Stripping the tag is hiding, and hiding is `full` — and the
   reading column belongs with the stripping rather than beside it, because a
   reading laid out while its `<rt>` is still on the page is the same reading
@@ -1211,14 +1225,14 @@ character.
 **But two of them turned out to have a real third state, and it was already
 there — under one field.** Naming the levels is what found them:
 
-* **ruby: *recognised* vs *drawn*.** `ruby: Dialects` is which spellings count
+- **ruby: *recognised* vs *drawn*.** `ruby: Dialects` is which spellings count
   as one reading — what the word count subtracts, what `:ruby` edits, what
   `:ruby auto` writes; `ruby_drawn: bool` is whether it is laid out beside the
   base, which is what takes the tags off the page. 中階 needs both answers at
   once (known, not drawn) and one field could only give one, which is why
   `:render basic` used to strip the tags while the status line said
   「標記留在畫面上」 (§5.2.2 fault 3).
-* **indent: *drawn* vs *folded*.** `indent: usize` is the width, `indent_folds:
+- **indent: *drawn* vs *folded*.** `indent: usize` is the width, `indent_folds:
   bool` is whether the blank line between paragraphs comes off the page. Adding
   two squares is 中階; removing a line is 全.
 
@@ -1238,8 +1252,8 @@ level that silently disagrees with `render` and has nowhere to show it.
 
 So they split, the same way `render` and `table` just did:
 
-| | what it is | who writes it | on open |
-| --- | --- | --- | --- |
+|  | what it is | who writes it | on open |
+| ------------- | ------------------------------------- | ------------------------ | ------------- |
 | `table_level` | off / basic / full — a preference | `:render`, `:table <級>` | **untouched** |
 | `self.table` | which table, what schema, what bounds | derived | recomputed |
 
@@ -1272,9 +1286,9 @@ panel, whole. This is the division of labour that makes a width cap
 acceptable at all: **the table is for scanning, the panel is for reading.**
 Twenty-eight columns of a 拆分表 were never meant to be read across.
 
-**Both were built 2026-09-07**, after the author found neither working:
-「markdown中的表格没办法用ti打开信息侧栏…在 tf 模式下都没办法通过 tw 来缩小单元格
-宽度」. What the doing settled:
+**Both were built 2026-09-07**, after neither turned out to work:
+「markdown中的表格没办法用ti打开信息侧栏…在 tf 模式下都没办法通过 tw
+来缩小单元格 宽度」. What the doing settled:
 
 - **The cap is `mdtable::MAX_COLUMN` = 32 and it bites per *cell*, not per
   column.** The two come to the same width — a column is as wide as its
@@ -1313,7 +1327,7 @@ Twenty-eight columns of a 拆分表 were never meant to be read across.
 - **The mark speaks in ink, not in a ground.** `>` cannot change — every
   Unicode ellipsis is East Asian *Ambiguous*, and this is the one place the
   editor's width table and the terminal's must agree to the cell — so the
-  ink is where 「這不是作者打的」 gets said: 金 and bold, on both surfaces
+  ink is where 「這不是打出來的」 gets said: 金 and bold, on both surfaces
   ([`Ink::Fold`], which the prose page used to draw as a note's grey and the
   grid as furniture's). A ground would have said it louder and said the
   wrong thing: on this page a ground is the **reader's** mark — the
@@ -1367,22 +1381,23 @@ mean, so a second `-` simply is not part of a span and falls through to whatever
 another: `s` takes `columns()` (a single number, a span, or a list — all three
 are 「which columns」), `g` takes `pair()` and refuses a span outright rather
 than reading row-and-column out of one, and `/` takes `columns()` too, which is
-what makes `t1,5,9/` mean what it looks like. Three things fell out of the doing:
+what makes `t1,5,9/` mean what it looks like. Three things fell out of the
+doing:
 
-* **`search_columns_within` took a span and clamped it to the table's width**,
+- **`search_columns_within` took a span and clamped it to the table's width**,
   so `t99/` searched the last column and answered as though that were what had
   been asked for. It takes the list now, and reports `table.no-such-column` —
   the rule `sort_table` had already been following alone.
-* **A list and a run are reported differently** (`search.hit-in-columns` beside
+- **A list and a run are reported differently** (`search.hit-in-columns` beside
   `search.hit-in-column-range`), because 「第 1、5、9 欄」 and 「第 1–9 欄」 are
   not the same claim and the status line is where the reader checks what the
   editor thought they said.
-* **`md_sort` — the no-column sort — is gone**, not kept as the fallback under
+- **`md_sort` — the no-column sort — is gone**, not kept as the fallback under
   a new name. It was reachable only from the bare `t s` this section retires,
   and a second door into the gesture we just took away is exactly the kind of
   alias #283 exists to abolish. `t0s` reaches the same sort by saying which
   column it is.
-* **A fourth, found by looking at the picture rather than at the tests.**
+- **A fourth, found by looking at the picture rather than at the tests.**
   `t2,1s` sorted by two columns and reported one: the delimited path lists them
   all (`table.sorted`, 「排好了：事↑ 年↑」) while the Markdown path had a single
   name in it (`table.sorted-ascending`), having been written when nothing on
@@ -1399,8 +1414,8 @@ anything derived afresh. What was real was every place that counts **columns**,
 because the view carries the schema of whichever table was *entered* and a
 document holds as many tables as somebody typed:
 
-| | did | now |
-| --- | --- | --- |
+|  | did | now |
+| --------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------- |
 | `rows_break_the_grid` | refused every row when the filter ran in the wider table | `table_column_count_at(cursor_line)` |
 | `blank_row` | `o` opened a row as wide as the table you came from | the same |
 | `go_to_the_row_named` | `3gd` clamped to the narrower table's two columns — **and named the column it landed in**, which is the hardest kind of wrong answer to disbelieve | `schema_here()` |
@@ -1419,8 +1434,7 @@ came out of the sweep, and neither was ever going to be red:
   box and `table_on_open` builds `self.table` for any `.md` with a table in it,
   so standing on a table row in a document now takes thirty columns off the
   page at the *factory* level — where it used to take four rows off the bottom.
-  Neither is free and the panel was never free; if the author finds the
-  narrowing worse than the four rows, the lever is `show_detail`'s default, not
+  Neither is free and the panel was never free; if the narrowing turns out worse than the four rows, the lever is `show_detail`'s default, not
   the shape (the shape is what made five fields read as two).
 - **`schema_here` read a guessed block as a Markdown header.** A tab-delimited
   碼表 split on pipes is one column, which emptied the panel outright. Only `|`
@@ -1432,14 +1446,13 @@ came out of the sweep, and neither was ever going to be red:
 finding — 「taught in two places and implemented in none」 — is closed by the
 comma existing and the tutor being corrected.
 
-**What the level promised and did not deliver — found by the author, fixed
-2026-09-06.** `TableLevel::Basic` is the factory value, and its own words are
+**What the level promised and did not deliver — found and fixed 2026-09-06.** `TableLevel::Basic` is the factory value, and its own words are
 「the columns line up *and* the **keys** belong to the grid where a table
 is」. Only the first half ever arrived. The two halves are asked through two
 different fields:
 
-| | asked through | on open |
-| --- | --- | --- |
+|  | asked through | on open |
+| -------------------------------- | ---------------------------------------------------- | ------------------------- |
 | pipes aligned (#212) | `table_padding_on()` — layout **and level** | level is `Basic` → **on** |
 | `hjkl` walk cells, 表格 hint row | `table_here()` → `self.table` | `None` → **off** |
 | table rows do not soft-wrap | `table_row_at()` → `table_lines_at()` → `self.table` | `None` → **off** |
@@ -1464,19 +1477,19 @@ fold. Per key it costs nothing on a chapter with no table in it: it asks
 It is deliberately narrower than `enter_table_as`, which is a door a person
 opened and may therefore write to the file:
 
-* **Only a `|` table that already parses** — `with_md_tables`'s answer, the
+- **Only a `|` table that already parses** — `with_md_tables`'s answer, the
   same set the renderer draws, so the two cannot disagree. A header with no
   `| --- |` under it gets one written by `t b`; **a key may rewrite the
   buffer, opening a file may not.**
-* **Never a `.csv`, a file a schema claims, or a guessed block**, and **never
+- **Never a `.csv`, a file a schema claims, or a guessed block**, and **never
   the pane** — that is `t t`, a different question with its own key.
-* **Nothing is said, nothing moves, nothing is written.** No status line, no
+- **Nothing is said, nothing moves, nothing is written.** No status line, no
   `snap_to_cell`, no `turn_for_table`: this is the level being read, not a
   command being run.
-* **Gated on `table_padding_on()`, not on the level alone**, so the two halves
+- **Gated on `table_padding_on()`, not on the level alone**, so the two halves
   arrive together: on a 縱書 page nothing is padded, so nothing takes the keys
   either, and `t b` there is still the reader's own decision.
-* **Never while the buffer is being typed into.** The grid refuses a `|` in a
+- **Never while the buffer is being typed into.** The grid refuses a `|` in a
   cell — right, once somebody has said 「this is a table」, and intolerable
   before: typing `| --- | --- |` under a fresh header, the region starts
   parsing halfway along the line and swallows the rest of the pipes. **A level
@@ -1485,12 +1498,12 @@ opened and may therefore write to the file:
 Two gates elsewhere had to move with it, and both were the same shape — code
 that used 「a view exists」 to mean 「somebody asked for one」:
 
-* **`table_here()` asks `table_padding_on()` for a `Bounds::Md` view.** The
+- **`table_here()` asks `table_padding_on()` for a `Bounds::Md` view.** The
   halves leave together as well as arrive: `t o` takes the keys back with the
   padding, and a page turned 縱 after the view was built goes quiet without the
   view being thrown away — turn it back and the grid is there. (This is also
   what `t o` was *reported* as not doing.)
-* **`enter_table_as`'s 「reachable from between two tables」 branch** tested
+- **`enter_table_as`'s 「reachable from between two tables」 branch** tested
   `self.table.is_none()`; it now takes `None` or `Bounds::Md`. A schema'd file
   and a 碼表 block are somebody's claim on the buffer and still win there; an
   `Md` view is only the level being read. Left as it was, `t i` from the
@@ -1506,12 +1519,12 @@ still the view's, and therefore still the first table's: `key`, `link`,
 `details`, `shows`/hidden, `rows_break_the_grid`, and the widths a blank row or
 a paste is made to.
 
-
 ---
 
 ### 5.8 · 作品百科 — 一本書自己的百科 (#287)
 
-The author, 2026-09-07: 「我想在 yumete 中加一個「作品百科」功能……wiki 的所有詞條加入分詞、都使用虛線下劃線、光標移到這個詞上則會在右側信息欄顯示它的詞條內容……你覺得這個想法怎麼樣呢？」
+The author, 2026-09-07: 「我想在 yumete 中加一個「作品百科」功能……wiki
+的所有詞條加入分詞、都使用虛線下劃線、光標移到這個詞上則會在右側信息欄顯示它的詞條內容……你覺得這個想法怎麼樣呢？」
 
 **The idea is right, and most of it is already built.** A novel with forty
 characters, three sects and a province of invented place-names is exactly the
@@ -1519,7 +1532,7 @@ manuscript this editor was written for, and every one of the five mechanisms
 this feature needs is already standing:
 
 | what the wiki needs | what already does it |
-| --- | --- |
+| --------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
 | a per-book file the editor reads | `.yumete/words.txt` (#239), found by walking **up** from the file being edited |
 | its names in the segmenter | `yumete_cjk::WithWords` merges a shared `WordList` over whatever dictionary is in force (#144) |
 | headings parsed out of Markdown | `Editor::outline` — `(line, depth, title)`, no parser, no tree-sitter |
@@ -1556,8 +1569,8 @@ it is two entries, and the book's is the one a reader is asking about.
 
 The author settled it and added the part that makes it readable (2026-09-07):
 「本书排前面，然后本书和全局之间有个分界线，并且全局的部份注上“全局”两个字。这样
-用户就不会混淆了。」 So the panel draws the book's entries, then a rule, then the
-global ones under a 金 「全局」 — 金 because that word is the panel speaking
+用户就不会混淆了。」 So the panel draws the book's entries, then a rule, then
+the global ones under a 金 「全局」 — 金 because that word is the panel speaking
 about the text rather than being text (§5.4's 這不是正文), and a rule because
 「一本書的設定」 and 「一套書的設定」 are two different authorities and the
 reader must never have to guess which one he is reading. The rule and the label
@@ -1567,9 +1580,9 @@ one place is drawn with neither.
 ##### `[yumete] 檔名` — one wiki, many files
 
 The author, 2026-09-07: 「wiki.md 的注释中如果有 `[yumete] filename` 就说明它指
-向 local 路径中的一个文件，他也被认作是 wiki 来源。如果写多行 `[yumete] filename`
-就是多个来源。」 A wiki that is worth having outgrows one file — 人物, 地理,
-門派, 年表 — and this is the cheapest possible way to say so.
+向 local 路径中的一个文件，他也被认作是 wiki 来源。如果写多行
+`[yumete] filename` 就是多个来源。」 A wiki that is worth having outgrows one
+file — 人物, 地理, 門派, 年表 — and this is the cheapest possible way to say so.
 
 **It costs almost nothing, because the comment is already parsed.**
 `markdown::Kind::Comment` (markdown.rs:45) covers **both** spellings a
@@ -1616,7 +1629,7 @@ at most once; a second inclusion is **reported by `:wiki`**, not silently
 dropped. A depth cap (8) and a file cap (64) besides, so a bad edit cannot
 stall the editor while it walks a tree.
 
-**Paths: inside the book only** (the author, 2026-09-07, on 安全第一).
+**Paths: inside the book only** (2026-09-07，on 安全第一).
 Resolved relative to the directory of the file **carrying** the directive;
 absolute paths refused; canonicalised and then required to be still under the
 directory that contains this `.yumete/` — which blocks `../../..` and a
@@ -1679,11 +1692,11 @@ in file)`. Requirement 5 falls straight out of that sort.
 
 **Two entries can never be marked, and the reader has to be told which:**
 
-* **A one-character entry.** `WordList::add` refuses anything shorter than two
+- **A one-character entry.** `WordList::add` refuses anything shorter than two
   characters, because a one-character 「word」 is what every segmenter already
   produces and listing one joins nothing. 「墨」 can be an entry and can be
   reached by `:wiki`, but it cannot be underlined in the prose.
-* **An entry the segmenter will not cut out.** The mark is drawn on
+- **An entry the segmenter will not cut out.** The mark is drawn on
   *segmented* ranges (§5.8.3), so a heading that is a whole sentence — `##
   他為什麼要走` — is an entry with no occurrences.
 
@@ -1740,18 +1753,18 @@ on the page.
 
 ##### Horizontal: a **dotted** underline, with a solid fallback that costs nothing
 
-Settled with the author 2026-09-07. He asked the right question — 「横排能不能
+Settled 2026-09-07. The right question — 「横排能不能
 用虚线下划线？这样和 markdown 的下划线语法可以分开」 — and the answer is yes,
 for a reason better than looks:
 
-* A wiki term and a Markdown link must be **told apart**, because
+- A wiki term and a Markdown link must be **told apart**, because
   `Kind::Link | Kind::WikiLink` are already drawn `UNDERLINED` and a chapter
   really can contain `[[第三章|那一夜]]`. Two axes are available for the
   difference: **shape** (dotted vs solid) and **value** (`underline_color` one
   rung back). Shape is the better axis — it survives a dark theme, a coloured
   ground and a low-contrast palette, where a value difference is the first
   thing to be eaten.
-* The two are **not** a safe-vs-risky choice. SGR 58 and SGR `4:4` came into
+- The two are **not** a safe-vs-risky choice. SGR 58 and SGR `4:4` came into
   terminals together (kitty introduced them in one go), so the set of terminals
   that draws the faint underline is very nearly the set that draws the dotted
   one. Picking the value axis buys no portability.
@@ -1789,16 +1802,16 @@ a reading, a hung 句讀 mark, a 着重號 and a 平仄 mark all want it
 (`vertical::Margin`), so a 側線 would be silently absent on exactly the lines
 that are most annotated.
 
-Put to the author as 「側線 in the contended margin, or the quiet ink」, he chose
-the ink and then asked the question that undid it: 「淡一级是更明显还是更不明显？
-能不能配合背景色？我希望不要太 invasive 但也不要太 low-profile」. The answers
-decide it:
+Put as 「側線 in the contended margin, or the quiet ink」, he
+chose the ink and then asked the question that undid it:
+「淡一级是更明显还是更不明显？ 能不能配合背景色？我希望不要太 invasive
+但也不要太 low-profile」. The answers decide it:
 
-* **淡一級是更不明顯.** `word_ink` is `rung::QUIET` (300), the rung of a reading
+- **淡一級是更不明顯.** `word_ink` is `rung::QUIET` (300), the rung of a reading
   beside its base and a 拆分 annotation — its meaning is 這一項次要. Literal
   Option 2 therefore says the opposite of what a wiki term means, and lands
   exactly on the low-profile end he ruled out.
-* **A ground is available**, per `Palette::word` above — but not `WORD` (962) or
+- **A ground is available**, per `Palette::word` above — but not `WORD` (962) or
   `BAND` (940) for this: those two are already compressed at the paper end
   (§5.4 measures 880 against 940 at 1.11–1.20:1, which is not a visible
   difference), so a wiki ground on either would melt into the 分詞 tint the
@@ -1822,7 +1835,7 @@ also take the word tint; it takes the wiki ground instead.
 **And a risk worth stating before it is built: the page turns to lace.** 阿寧 is
 on every page; forty names, three sects and a province means a paragraph with a
 mark under every third word. So the mark is a switch on the `:word show`
-pattern — `:wiki show on|off` — and the author chose **on out of the box**
+pattern — `:wiki show on|off` — and **on out of the box** was chosen
 (2026-09-07), because the whole point is that the reader learns which words have
 pages, with the off switch one command away for the writer who finds it noisy.
 Still worth looking at through `--shot` on a real chapter before calling it
@@ -1844,7 +1857,7 @@ wins** (you are in a grid, editing cells), then **a footnote or a comment**
 (an explicit construct the writer typed), then the wiki term (something the
 editor recognised). Recognition never displaces something typed.
 
-**What it shows** is the author's requirement 4, and two details in his
+**What it shows** is requirement 4, and two details in his
 example are worth naming because they are what make it read well:
 
 ```
@@ -1867,13 +1880,13 @@ standing on 亞洲人 gives
 中國人是東亞的一個人羣。
 ```
 
-* **The depths are re-levelled.** The entry is drawn as `#` whatever it is in
+- **The depths are re-levelled.** The entry is drawn as `#` whatever it is in
   the file, and its children shift with it — `####` becomes `##`. The panel is
   about *this* entry; the file's absolute depth is the file's business.
-* **The breadcrumb is the ancestor chain**, drawn under the title, and it is
+- **The breadcrumb is the ancestor chain**, drawn under the title, and it is
   the h1 dividers' one job — `人物 › 亞洲人` tells a reader which of two
   同名詞條 they are looking at before they read a word of it.
-* (The author's sketch omits 亞洲人's own paragraph from the output. His prose
+- (The author's sketch omits 亞洲人's own paragraph from the output. His prose
   says 「顯示這個詞條下方所有內容」, so the paragraph is in — read as a slip in
   the sketch, not as a rule. Flagged in §5.8.8.)
 
@@ -1884,7 +1897,7 @@ Wiki}` — so `draw_detail` can set the breadcrumb back and the sub-headings in
 rows.
 
 Several entries of the same name are drawn one after another in the one panel,
-in `(depth, file order)` — the author's requirement 5, and it needs no
+in `(depth, file order)` — requirement 5, and it needs no
 disambiguation UI because the breadcrumb already says which is which. Across the
 two files the order is **book first, then a rule, then the global ones under a
 金 「全局」** (§5.8.1); within each file, `(depth, file order)` as above.
@@ -1925,13 +1938,13 @@ because everything the page is drawn from reads `current_buffer()` and three
 caches are keyed by line alone. In-panel editing cannot be built honestly
 before that is fixed.
 
-What can be built now, and is arguably what the author wants anyway: **`gw`
+What can be built now, and is arguably what is wanted anyway: **`gw`
 opens `wiki.md` at that entry's heading** — the file, the outline, `w`, `:s`,
 undo, the whole editor, rather than a text box in a panel. Once #281 is fixed,
 「編輯 in the other pane while the chapter stays in this one」 is the same
 gesture with a split, and that is the version worth waiting for.
 
-#### 5.8.8 What the author decided (2026-09-07)
+#### 5.8.8 What was decided (2026-09-07)
 
 All five went to him and all five came back. Recorded in his words so that a
 later reader does not reopen them:
@@ -1939,9 +1952,10 @@ later reader does not reopen them:
 1. **The entry's own paragraph is in.** The sketch in requirement 4 omits it and
    the prose beside it includes it; the prose is right — an entry whose body is
    one paragraph would otherwise show an empty panel.
-2. **Global + local: both read.** 「本书排前面，然后本书和全局之间有个分界线，并且
-   全局的部份注上“全局”两个字。这样用户就不会混淆了。」 Neither replaces the other
-   (§5.8.1, §5.8.5).
+2. **Global + local: both read.**
+   「本书排前面，然后本书和全局之间有个分界线，并且
+   全局的部份注上“全局”两个字。这样用户就不会混淆了。」 Neither replaces the
+   other (§5.8.1, §5.8.5).
 3. **縱書: a `rung::HEAD` ground, one cell, ink untouched** — he asked for
    「不要太 invasive 但也不要太 low-profile」 and the quiet ink was the
    low-profile end (§5.8.4).
@@ -1959,7 +1973,7 @@ much of a real chapter ends up marked, and which terminals draw `4:4`.
 #### 5.8.9 Sizing
 
 | part | cost |
-| --- | --- |
+| ----------------------------------------------------------------------------------------------- | --------------- |
 | parse `wiki.md`, entries, ancestors, duplicate names | small |
 | `[yumete]` includes: comment scan, splice, `(source, line)`, cycles, path guard, `:wiki` report | small |
 | second `WordList` into `WithWords`; `:wiki` commands; save-reload | small |
@@ -1979,8 +1993,8 @@ already make `w` walk the names, which is worth having on its own.
 
 A per-key view of the Helix Normal-mode keymap (plus yumete's own IME hotkeys)
 and how far each is implemented. Not everything is needed yet; this is the map
-for prioritizing. **Done** = implemented; **Pn** = planned in that phase; **—** =
-deferred.
+for prioritizing. **Done** = implemented; **Pn** = planned in that phase;
+**—** = deferred.
 
 > Brought up to date 2026-09-03. It had a dozen keys marked `P4` that had been
 > shipped for weeks — which is how a reviewer comes to believe an editor is
@@ -1988,8 +2002,7 @@ deferred.
 > spelling is the one in the table: `J` is half a page because this is a book,
 > so join is `gJ`; `m` opens match mode, so a mark is `M`.
 
-**The law that says which level a key belongs to** (the author, 2026-09-06 —
-§5.2.3 ② is where it was settled):
+**The law that says which level a key belongs to** （2026-09-06 — §5.2.3 ② is where it was settled）:
 
 > **一級鍵是「按下去必須立刻做事」這件事本身的配額。** A key earns the top level
 > on two counts: **how often it is pressed**, and **whether it can wait for a
@@ -2001,10 +2014,10 @@ deferred.
 
 Two corollaries that have already changed decisions:
 
-* **An unbound letter is not free space.** `z` looks empty and is not: Helix's
+- **An unbound letter is not free space.** `z` looks empty and is not: Helix's
   `z` is the view group (`zz` centre, `zt` top, `zb` bottom), none of which
   yumete has. It is an unpaid debt, and it is reserved.
-* **Rarity beats mnemonics.** 旁注 is what this editor has that a Latin editor
+- **Rarity beats mnemonics.** 旁注 is what this editor has that a Latin editor
   does not, and it still does not get a top-level key — a page carries one or
   two, so it can wait for a second press (`空格 r`). Likewise the three case
   keys Helix spends at the top level do an operation that is the identity on
@@ -2012,85 +2025,85 @@ Two corollaries that have already changed decisions:
 
 ### Movement
 
-| Keys                    | Action                                       | Status |
+| Keys | Action | Status |
 | ----------------------- | -------------------------------------------- | ------ |
-| `h` `j` `k` `l`, arrows | left / down / up / right (grapheme-aware)    | Done   |
-| `w` `b` `e`             | next / prev word start, word end (CJK words) | Done   |
-| `W` `B` `E`             | WORD variants (whitespace-delimited)         | Done   |
-| `f` `F` + char          | find a character, forward / backward         | Done   |
-| `Home` `End`            | line start / end                             | Done   |
-| `gg`                    | goto file start (or line N with a count)     | Done   |
-| `ge`                    | goto last line                               | Done   |
-| `gh` `gl`               | goto line start / end                        | Done   |
-| `gs`                    | goto first non-blank character               | Done   |
-| `gt` `gc` `gb`          | goto screen top / center / bottom            | —      |
-| `Ctrl-u` `Ctrl-d`       | scroll half a page up / down                 | Done   |
-| `Ctrl-b` `Ctrl-f`       | page up / down                               | Done   |
-| `mm`                    | match / select the bracket pair (`m` mode)   | Done   |
-| `{` `}` `(` `)`         | paragraph / sentence — yumete's own          | Done   |
-| `M` `'`                 | set a mark / go to it — `m` is match mode    | Done   |
+| `h` `j` `k` `l`, arrows | left / down / up / right (grapheme-aware) | Done |
+| `w` `b` `e` | next / prev word start, word end (CJK words) | Done |
+| `W` `B` `E` | WORD variants (whitespace-delimited) | Done |
+| `f` `F` + char | find a character, forward / backward | Done |
+| `Home` `End` | line start / end | Done |
+| `gg` | goto file start (or line N with a count) | Done |
+| `ge` | goto last line | Done |
+| `gh` `gl` | goto line start / end | Done |
+| `gs` | goto first non-blank character | Done |
+| `gt` `gc` `gb` | goto screen top / center / bottom | — |
+| `Ctrl-u` `Ctrl-d` | scroll half a page up / down | Done |
+| `Ctrl-b` `Ctrl-f` | page up / down | Done |
+| `mm` | match / select the bracket pair (`m` mode) | Done |
+| `{` `}` `(` `)` | paragraph / sentence — yumete's own | Done |
+| `M` `'` | set a mark / go to it — `m` is match mode | Done |
 
 ### Selection
 
-| Keys    | Action                                     | Status |
-| ------- | ------------------------------------------ | ------ |
-| `x`     | select the current line (extend on repeat) | Done   |
-| `v`     | enter select (extend) mode                 | Done   |
-| `;`     | collapse the selection to the cursor       | Done   |
-| `,`     | keep only the primary selection            | —      |
-| `Alt-;` | flip the selection's anchor and head       | Done   |
-| `%`     | select the whole file                      | Done   |
+| Keys | Action | Status |
+| ------- | ------------------------------------------ | ---------------------- |
+| `x` | select the current line (extend on repeat) | Done |
+| `v` | enter select (extend) mode | Done |
+| `;` | collapse the selection to the cursor | Done |
+| `,` | keep only the primary selection | — |
+| `Alt-;` | flip the selection's anchor and head | Done |
+| `%` | select the whole file | Done |
 | `s` `S` | select / split on a regex within selection | — (needs multi-cursor) |
 
 ### Changes
 
-| Keys        | Action                                 | Status |
-| ----------- | -------------------------------------- | ------ |
-| `d`         | delete the selection                   | Done   |
-| `c`         | change the selection (delete + insert) | Done   |
-| `i` `a`     | insert before / after the selection    | Done   |
-| `I` `A`     | insert at line start / end             | Done   |
-| `o` `O`     | open a line below / above              | Done   |
-| `u` `U`     | undo / redo                            | Done   |
-| `y` `p` `P` | yank / paste after / before            | Done   |
-| `r` `R`     | replace a character / with the yank — **`r` runs the IME**, so 中文 態 opens the candidate panel and the choice is the replacement | Done   |
-| `` `l `` `` `u `` `` `` `` | 轉小寫／轉大寫／互換 — a group, because on 漢字 these are the identity (§5.2.3 ②). Helix spends `` ` ``, `` A-` `` and `~` at the top level; here those three are unbound | Done |
-| `gJ`        | join lines (`J` is half a page — this is a book) | Done |
-| `.`         | repeat the last change                 | Done   |
-| `>` `<`     | indent / unindent                      | Done   |
-| `=`         | format                                 | —      |
+| Keys | Action | Status |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------- | ------ |
+| `d` | delete the selection | Done |
+| `c` | change the selection (delete + insert) | Done |
+| `i` `a` | insert before / after the selection | Done |
+| `I` `A` | insert at line start / end | Done |
+| `o` `O` | open a line below / above | Done |
+| `u` `U` | undo / redo | Done |
+| `y` `p` `P` | yank / paste after / before | Done |
+| `r` `R` | replace a character / with the yank — **`r` runs the IME**, so 中文 態 opens the candidate panel and the choice is the replacement | Done |
+| `` `l `` `` `u `` `` `` `` | 轉小寫／轉大寫／互換 — a group, because on 漢字 these are the identity (§5.2.3 ②). Helix spends `` ` ``, `` A-` `` and `~` at the top level; here those three are unbound | Done |  |
+| `gJ` | join lines (`J` is half a page — this is a book) | Done |
+| `.` | repeat the last change | Done |
+| `>` `<` | indent / unindent | Done |
+| `=` | format | — |
 
 ### Search & command
 
-| Keys    | Action                           | Status   |
-| ------- | -------------------------------- | -------- |
-| `/` `?` | search forward / backward        | Done     |
-| `n` `N` | next / previous match            | Done     |
+| Keys | Action | Status |
+| ----------- | --------------------------------------------------------------------- | ------ |
+| `/` `?` | search forward / backward | Done |
+| `n` `N` | next / previous match | Done |
 | `g/` `g?` | search for the current selection — here, or in the other work area | Done |
-| `:`     | command line (`:w` `:q` `:s` …)  | Done     |
+| `:` | command line (`:w` `:q` `:s` …) | Done |
 | `Space` | the menu — files, buffers, search, the clipboard, 詳情, `空格 r` 旁注 | Done |
-| `q` `Q` | record a macro / play the last one back | Done  |
-| `\"a`    | use register `a` for the next yank / delete / paste | Done |
+| `q` `Q` | record a macro / play the last one back | Done |
+| `\"a` | use register `a` for the next yank / delete / paste | Done |
 | `C-a` `C-x` | increment / decrement the number at the cursor | Done |
-| `C-o` `C-i` | the jump list, back and forward  | Done     |
+| `C-o` `C-i` | the jump list, back and forward | Done |
 
 ### CJK IME hotkeys (yumete-specific — not in Helix)
 
 Active only in Insert mode while the built-in Yume IME is engaged; Normal-mode
 keys are unaffected.
 
-| Keys                          | Action                                                  | Status       |
+| Keys | Action | Status |
 | ----------------------------- | ------------------------------------------------------- | ------------ |
-| `Shift` (tap)                 | toggle 中 / 英 (Chinese to ASCII) in insert/search mode | P2 (#29)     |
-| letters (composing)           | drive the Yume candidate panel in insert/search mode    | P2 (#27/#28) |
-| `Space` / `Enter` (composing) | commit the highlighted candidate / raw code             | P2           |
-| `1`–`9` (composing)           | select a candidate by index                             | P2           |
-| `-` `=` (composing)           | previous / next candidate page                          | P2           |
-| `Backspace` (composing)       | delete the last code letter                             | P2           |
-| `:`-led commands              | switch scheme (Ling / Xing / Qing / …)                  | P2 (#31)     |
-| `:`-led commands              | other Yume settings                                     |              |
-| `/`-led (composing)           | special commands (punctuation, symbols)                 | P2 (#30)     |
-| `z` (composing)               | reverse lookup                                          | P2 (#30)     |
+| `Shift` (tap) | toggle 中 / 英 (Chinese to ASCII) in insert/search mode | P2 (#29) |
+| letters (composing) | drive the Yume candidate panel in insert/search mode | P2 (#27/#28) |
+| `Space` / `Enter` (composing) | commit the highlighted candidate / raw code | P2 |
+| `1`–`9` (composing) | select a candidate by index | P2 |
+| `-` `=` (composing) | previous / next candidate page | P2 |
+| `Backspace` (composing) | delete the last code letter | P2 |
+| `:`-led commands | switch scheme (Ling / Xing / Qing / …) | P2 (#31) |
+| `:`-led commands | other Yume settings |  |
+| `/`-led (composing) | special commands (punctuation, symbols) | P2 (#30) |
+| `z` (composing) | reverse lookup | P2 (#30) |
 
 ---
 
@@ -2242,10 +2255,10 @@ release; the git-dep switch goes in with the pipeline.
   to the file you are in (widening leftward from it, the rule the table's
   columns follow), and `[n/m]` comes back whenever the bar is not showing all
   of them — it used to be suppressed *because* the bar was up.
-- ~~A per-project word list.~~ `.yumete/words.txt`, found by walking up from
-  the file being edited, and re-read by the save that writes it. It **layers over** whatever
-  segmenter is in force rather than replacing it: a run of adjacent ranges that
-  spells a project word becomes one, longest match first.
+- ~~A per-project word list.~~ `.yumete/words.txt`, found by walking up from the
+  file being edited, and re-read by the save that writes it. It **layers over**
+  whatever segmenter is in force rather than replacing it: a run of adjacent
+  ranges that spells a project word becomes one, longest match first.
 - ~~`:buffer list` writes 1783 characters into a one-line status bar.~~ It
   opens the picker, which is the same list and searchable.
 - ~~`:grep` searches your own build output.~~ `.html`, `.pdf`, `.epub`, `.docx`
@@ -2271,50 +2284,54 @@ release; the git-dep switch goes in with the pipeline.
 
 ### 9 · The manual is out of date with the editor (×3) — **done**
 
-- ~~Commands that no longer exist are still documented~~ · ~~`:w` sets no
-  status~~ · ~~`zong_length = 32` stated as the default~~ · ~~`--help` binds `J`
-  twice~~ · ~~`main.rs` opens every file twice~~ · ~~`-t`, `:table`,
-  `:clipboard` in no reference list~~ — done. `docs/manual.md` also gained a
-  proper §七 (the whole run from the status bar down was nested under 六、輸入法,
-  and 「表格模式」 was a stray top-level `## 5.5` colliding with 「5.5 Ruby 模式」).
-- ~~**Messages are half English and half Chinese.**~~ Done, 2026-09-03 — and
-  not the way this entry sketched it.
+- ~~Commands that no longer exist are still documented~~ ·
+  ~~`:w` sets no status~~ · ~~`zong_length = 32` stated as the default~~ ·
+  ~~`--help` binds `J` twice~~ · ~~`main.rs` opens every file twice~~ ·
+  ~~`-t`, `:table`, `:clipboard` in no reference list~~ — done. `docs/manual.md`
+  also gained a proper §七 (the whole run from the status bar down was nested
+  under 六、輸入法, and 「表格模式」 was a stray top-level `## 5.5` colliding
+  with 「5.5 Ruby 模式」).
+- ~~**Messages are half English and half Chinese.**~~ Done, 2026-09-03 — and not
+  the way this entry sketched it.
 
-  It was built twice. The first build made **the Chinese sentence itself the
-  key** — `say!("關了 {0}——現在是 {1}", …)` where it is said, the pair in
-  `crates/yumete-core/messages.toml`. Nothing had to be invented and nothing
-  could be got wrong, and it was still the wrong key, for one decisive reason
-  the author put plainly: **the sentence is the part that changes.** Improving a
-  word of the Chinese silently unhooked its English, and the table could not be
-  edited at all — changing 「只讀」 there changed nothing on the screen, because
-  the screen was reading the literal in the code. 緣木求魚.
+  It was built twice. The first build made
+  **the Chinese sentence itself the key** — `say!("關了 {0}——現在是 {1}", …)`
+  where it is said, the pair in `crates/yumete-core/messages.toml`. Nothing had
+  to be invented and nothing could be got wrong, and it was still the wrong key,
+  for one decisive reason, put plainly:
+  **the sentence is the part that changes.** Improving a word of the Chinese
+  silently unhooked its English, and the table could not be edited at all —
+  changing 「只讀」 there changed nothing on the screen, because the screen was
+  reading the literal in the code. 緣木求魚.
 
-  So, 2026-09-04, the second build: the key is an **English tag naming the
-  condition** — `readonly.refused`, `reload.refused-dirty`,
-  `table.column-out-of-range`. `area.condition`, lower case, dots between
-  segments and hyphens inside one. Under each `[[message]]` is a `#` line saying
-  *when* it is said, which is what a translator needs and cannot get from the
-  sentence. Three languages under that: `zht` 繁體 (always filled in), `zhs`
-  简体, `en`, each falling back to `zht`. 597 messages: every status line, every
-  error, the hint row, the space menu's labels and the `:` menu's own
-  descriptions. The holes stay numbered (`{0}`, `{1}`) so a translation may put
-  them in the other order. A tag with no entry is said **as itself**, so a typo
-  reads `readonly.refuzed` on the status line rather than vanishing.
+  So, 2026-09-04, the second build: the key is an
+  **English tag naming the condition** — `readonly.refused`,
+  `reload.refused-dirty`, `table.column-out-of-range`. `area.condition`, lower
+  case, dots between segments and hyphens inside one. Under each `[[message]]`
+  is a `#` line saying *when* it is said, which is what a translator needs and
+  cannot get from the sentence. Three languages under that: `zht` 繁體 (always
+  filled in), `zhs` 简体, `en`, each falling back to `zht`. 597 messages: every
+  status line, every error, the hint row, the space menu's labels and the `:`
+  menu's own descriptions. The holes stay numbered (`{0}`, `{1}`) so a
+  translation may put them in the other order. A tag with no entry is said
+  **as itself**, so a typo reads `readonly.refuzed` on the status line rather
+  than vanishing.
 
-  The 简体 was converted mechanically (opencc `t2s`) and is marked in the
-  header as wanting a read-over: 简体 is not only different characters, it is
-  sometimes a different word.
+  The 简体 was converted mechanically (opencc `t2s`) and is marked in the header
+  as wanting a read-over: 简体 is not only different characters, it is sometimes
+  a different word.
 
   Two reviews of the file — a novelist on the Chinese, a terminal user on the
-  English — found the same class of defect independently, and **neither found it
-  by reading the file**: a Chinese literal handed to a message as an *argument*
-  (`倒`/`順`, `照首行`, `（已轉橫排）`, `join("、")`) stays Chinese in an English
-  session, so the line reads 「table: 6 columns, 照首行（已轉橫排）」. The table
-  cannot show that, because the table is right. `crates/yumete-core/tests/
-  messages.rs` reads the source instead, and fails on that, on any tag with no
-  entry, on any entry no tag names, and on an entry with no `#` line.
+  English — found the same class of defect independently, and
+  **neither found it by reading the file**: a Chinese literal handed to a
+  message as an *argument* (`倒`/`順`, `照首行`, `（已轉橫排）`, `join("、")`)
+  stays Chinese in an English session, so the line reads 「table: 6 columns,
+  照首行（已轉橫排）」. The table cannot show that, because the table is right.
+  `crates/yumete-core/tests/ messages.rs` reads the source instead, and fails on
+  that, on any tag with no entry, on any entry no tag names, and on an entry
+  with no `#` line.
 
-### 10 · Two the author asked for — **done**
+### 10 · Two that were asked for — **done**
 
 - ~~**First-line indent instead of a blank line.**~~ Done, as a **view**: the
   file keeps the blank line Markdown needs, so it still exports as the
@@ -2345,15 +2362,16 @@ four are done; the outcomes are noted here rather than in a second list.
   two tables. The manual is Chinese and so is the writer; an English-only user
   meeting 「語法：markdown」 in the status bar concludes, correctly, that the
   editor is not for them.
-- **`yume-core` stays a path dependency for now.** — *standing.* Pinning a git rev needs that
-  commit pushed to a private repo and CI auth; getting it wrong costs a whole
-  session's ability to build. It goes in with the release pipeline (§5.3).
-- **A key alias may name a key *sequence*.** — *done.* `[keys.normal] "J" = "gJ"` puts
-  join back. The defaults do not change — `J`/`K`/`H`/`L` as paging is the right
-  call for a book — but somebody who disagrees spends a config line instead of
-  leaving.
-- **Group 10 (first-line indent, 段組) is 0.1.0, not 0.2.0.** — *done: #145, #146.* They are the point
-  of a 縱書 editor.
+- **`yume-core` stays a path dependency for now.** — *standing.* Pinning a git
+  rev needs that commit pushed to a private repo and CI auth; getting it wrong
+  costs a whole session's ability to build. It goes in with the release pipeline
+  (§5.3).
+- **A key alias may name a key *sequence*.** — *done.*
+  `[keys.normal] "J" = "gJ"` puts join back. The defaults do not change —
+  `J`/`K`/`H`/`L` as paging is the right call for a book — but somebody who
+  disagrees spends a config line instead of leaving.
+- **Group 10 (first-line indent, 段組) is 0.1.0, not 0.2.0.** —
+  *done: #145, #146.* They are the point of a 縱書 editor.
 
 ### 14 · One night's work, 2026-09-04
 
@@ -2408,8 +2426,7 @@ it, in the order a reader meets the damage.
 
 **`w`/`b`/`e` stepped one 字 at a time through 繁體 prose — on a machine with
 no Yume data.** The list *bundled in the binary* was simplified-only: 抬頭、
-已經、時候、什麼 were all absent. **Not the whole story, and the author caught
-the overstatement**: with the data installed the editor segments with Yume's own
+已經、時候、什麼 were all absent. **Not the whole story, and the overstatement was caught**: with the data installed the editor segments with Yume's own
 language model, which reads both scripts and always did:
 of its 1.1M entries, 131,159 hold traditional-only characters and 126,870
 simplified-only — near halves, not a simplified table with traditional
@@ -2424,10 +2441,10 @@ simplified twin: 古語 and 成語 that never occur in simplified corpora, 異�
 old forms, and the one-to-many characters (於/于, 著/着) that fold wrong. So no
 future 「fold to the other script and look it up again」 fallback: it would miss
 that 1.3% and mis-fold the rest, which is exactly the machinery that produced
-大家傢 and 别彆人 on this file's first attempt. The list now carries both, derived where the 簡繁
-mapping is one-to-one and written out by hand where it is not: conversion is
-what produced 大家傢 and 别彆人 on the first attempt, and a word nobody writes
-is worse than a word missing.
+大家傢 and 别彆人 on this file's first attempt. The list now carries both,
+derived where the 簡繁 mapping is one-to-one and written out by hand where it is
+not: conversion is what produced 大家傢 and 别彆人 on the first attempt, and a
+word nobody writes is worse than a word missing.
 
 **`)` and `}` ate the first character of the next sentence.** Every forward
 motion that lands on *the start of the next thing* has to stop one character
@@ -2439,9 +2456,9 @@ sentence after the one it deleted.
 ignored** — the comment beside it had promised vi's order for a year.
 
 **`t` was unreachable in the character grain**, which is exactly where the
-lesson tells the reader to press `t/`; **`t S` sorted a delimited file upwards**,
-silently doing the opposite of the key; and the `t` menus and fallbacks were
-missing half the keys they had.
+lesson tells the reader to press `t/`;
+**`t S` sorted a delimited file upwards**, silently doing the opposite of the
+key; and the `t` menus and fallbacks were missing half the keys they had.
 
 **Keys that did nothing said nothing**: `p` with an empty register, `R`, `Q`
 with no macro. And the two keys *this editor itself retired* — `Enter` and `*` —
@@ -2498,21 +2515,22 @@ they are here and not done.
 
 ### 16 · The queue, 2026-09-04
 
-Everything below was agreed with the author, in this order. The table entries
+Everything below was agreed in this order. The table entries
 are #209–#219; this is the detail that does not fit in a Notes column.
 
-**#210 was the keystone, and it is in.** The page already took *removal* as data:
-`wrap::Measure` and `zong::Grid` both carry `hidden: &dyn Fn(usize) -> Vec<(usize,
-usize)>` and `folded: &dyn Fn(usize) -> bool`, so 所見即所得 and folding are layout
-inputs rather than special cases in five places. What was missing was the inverse
-— **text the file does not contain and the page must draw**. Two separate
-features need exactly that, and neither was buildable without it:
+**#210 was the keystone, and it is in.** The page already took *removal* as
+data: `wrap::Measure` and `zong::Grid` both carry
+`hidden: &dyn Fn(usize) -> Vec<(usize, usize)>` and
+`folded: &dyn Fn(usize) -> bool`, so 所見即所得 and folding are layout inputs
+rather than special cases in five places. What was missing was the inverse —
+**text the file does not contain and the page must draw**. Two separate features
+need exactly that, and neither was buildable without it:
 
 - the IME's inline preview (#211) draws the first candidate *in the sentence*,
   where the caret has to sit at its end and a click has to resolve past it;
-- a table drawn as a table (#212) pads cells **on the screen**, which is the only
-  place the padding can be right when 所見即所得 has already eaten a different
-  number of markup cells from every row.
+- a table drawn as a table (#212) pads cells **on the screen**, which is the
+  only place the padding can be right when 所見即所得 has already eaten a
+  different number of markup cells from every row.
 
 So: one layer, `ghost: &dyn Fn(usize) -> Vec<(usize, String)>`, with the caret,
 the click map, wrapping, 縱 breaks and 禁則 all reading it — the same discipline
@@ -2551,8 +2569,8 @@ writing happens. Two visual modes, then: `full` is today's panel, `bare` draws
 nothing but the first candidate as ghost text, with the code in the HUD below
 the caret's row (the status line when there is no room below it), and `Tab`
 summons the full panel for the one word that needs it. This is independent of
-**how** a word commits — that is #209, three modes (延遲, 唯一, 整句), which yume
-already implements behind `CommitOverrides { preset }`. **#209 is done**:
+**how** a word commits — that is #209, three modes (延遲, 唯一, 整句), which
+yume already implements behind `CommitOverrides { preset }`. **#209 is done**:
 `:yume commit`, `[ime] commit`, and the mode in `:yume`.
 
 **#213 and #214 are one worry with two answers.** A file open in the editor and
@@ -2562,8 +2580,9 @@ moment, after an hour of typing into a stale buffer. `:reload` is the way back,
 `:reload auto on` is the way to not need it (a **clean** buffer re-reads itself;
 a dirty one is warned about and left alone, because merging is not the editor's
 decision), and `:readonly` is the way to open something you have no business
-changing. `:e!` and `:o!` retire outright: no alias and no hint, per the author's
-standing rule that a better spelling replaces the old one rather than joining it.
+changing. `:e!` and `:o!` retire outright: no alias and no hint, per the
+author's standing rule that a better spelling replaces the old one rather than
+joining it.
 
 **#215 is done** (2026-09-05). `t i` is the table detail panel, `空格 d` is
 字典查詢, and the 拆分表 answers in a fourth sidebar view. The panel is out of
@@ -2590,9 +2609,9 @@ either way, which is exactly as long as the undo ever bought.
 **#215 moves a key that was in the wrong group.** `空格 d` is the table detail
 panel, which is a table key living outside `t`. With `t` now the table group in
 every mode (#206) it becomes `t i`, and `空格 d`（定義）is freed for the thing a
-reader of Chinese actually wants a definition key for: 字典查詢 on the selection,
-the same panel `Tab` opens on a candidate. The data is already there —
-`AnnotationTable::annotations_for(ch)` gives 拆分, 編碼, 分節編碼, 讀音, 注釋,
+reader of Chinese actually wants a definition key for: 字典查詢 on the
+selection, the same panel `Tab` opens on a candidate. The data is already there
+— `AnnotationTable::annotations_for(ch)` gives 拆分, 編碼, 分節編碼, 讀音, 注釋,
 字集, Unicode and 全息拆分.
 
 **#216–#218 are the 碼表 as a first-class document.** A 拆分表 is a table whose
@@ -2681,8 +2700,8 @@ its own, and if it turns out to be the right shape it is the specification the
 core adopts later (a feature-gated `data_paths` module, so wasm does not take a
 dependency on `dirs`).
 
-| | 出廠資源 | 使用者資料 |
-| --- | --- | --- |
+|  | 出廠資源 | 使用者資料 |
+| ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
 | **Windows** | the directory of the running module (`GetModuleFileNameW`) + `\Resources\`; installed by `install_windows.ps1` to `C:\Program Files\Yume\Resources\` | `%APPDATA%\Yume\` (Roaming, not Local); a reader's own tables in `data\custom\`, and a run-time overlay searched **first** at `data\compiled\` |
 | **Linux** | a search order, first hit wins: `$YUME_DATA_DIR`, `$XDG_DATA_HOME/yume/data/compiled`, `$XDG_DATA_HOME/yume`, the compiled-in `YUME_DATADIR`, then each of `$XDG_DATA_DIRS` + `/yume` | `$XDG_DATA_HOME/yume` (`~/.local/share/yume`) — the same directory as the third search step |
 
@@ -2718,7 +2737,8 @@ this repo. Two things make that safe:
 - **The scan runs before argument dispatch.** `--shot` and `--timing` both run
   the whole launch and then exit inside dispatch; scanning after it would draw a
   menu of schemes the build does not have, and the picture would look perfectly
-  normal. (The same trap caught macOS — `../local/claude_yumete.md`, 2026-09-03.)
+  normal. (The same trap caught macOS — `../local/claude_yumete.md`,
+  2026-09-03.)
 
 `Scheme` is therefore a tag (`Scheme(&'static str)`) rather than one variant per
 scheme: the found tags are leaked once, at discovery, and there are single
@@ -2772,7 +2792,7 @@ place is its author's 系列 and index, a slot's is when it was created.
 
 ### 17 · Paging in a table drifted across the columns, 2026-09-05
 
-Reported by the author: 「in the table view, `HJKL` moves several rows, which is
+Reported by 「in the table view, `HJKL` moves several rows, which is
 right — but it swings between columns. In column 5, press `J`, land in column
 10.」
 
@@ -2825,9 +2845,9 @@ words searched but never shown, so the description stays one line and 「直排
 account: every `cmd.commands.*` entry has one, nothing else does, and no word
 repeats inside a line.
 
-**Two kinds of scoring, not one distance** (`crates/yumete-core/src/lookfor.rs`).
-The query is cut into runs by script and each run is scored the way that script
-is typed:
+**Two kinds of scoring, not one distance**
+(`crates/yumete-core/src/lookfor.rs`). The query is cut into runs by script and
+each run is scored the way that script is typed:
 
 - an **ASCII** run is an abbreviation — `lyt` for `layout` — so it is fzf's
   subsequence match with bonuses for consecutive hits and word starts, not a
@@ -2920,8 +2940,8 @@ prefix.
 ### 20 · What the second review of those three commits found, 2026-09-05
 
 The first fix for「never over a `==highlight==`」was written as「the ground here
-is already `wash`」, and `wash` has **three** painters. All four findings are in;
-the two that changed behaviour are the first two.
+is already `wash`」, and `wash` has **three** painters. All four findings are
+in; the two that changed behaviour are the first two.
 
 - **The cell ground vanished inside a `::: danger`.** A container paints the
   whole row `wash`, so the colour test skipped every character and table mode
@@ -3004,7 +3024,7 @@ writing down rather than rediscovering:
   click map and the scroll all move to (band, row) coordinates, which is
   exactly the shape 縱書's bands took. Half of that is worse than none of it:
   the failure mode is a caret that lands in the wrong column on the surface
-  where all the writing happens. Worth doing with the author awake.
+  where all the writing happens. Worth doing with a clear head.
 - **#189 `:shot` takes the page, not the app.** Cropping needs two numbers this
   editor cannot get on its own: the terminal window's **origin on screen** and
   the display's **scale factor**. `CSI 14 t` gives the text area's size in
@@ -3023,8 +3043,8 @@ writing down rather than rediscovering:
   is the one that should have to be named. So the first word now says what the
   picture is and where it ends up, and there are four:
 
-  | | |
-  | --- | --- |
+  |  |  |
+  | ----------------------- | --------------------------------- |
   | `:shot`, `:shot screen` | the window, onto the clipboard |
   | `:shot png` | the window, into a file |
   | `:shot html` | the page, drawn, with its colours |
@@ -3103,13 +3123,13 @@ four different files, with no relationship to the panel or to each other.
 
 So:
 
-1. **A theme is a few anchors in the config**, not a table of every colour.
-   Ink and paper at least; probably an accent (the one warm colour that says
+1. **A theme is a few anchors in the config**, not a table of every colour. Ink
+   and paper at least; probably an accent (the one warm colour that says
    「這裏」 — the cursor's row, the lit tab, the chosen candidate) and a mark
    colour (the one that says 「這裏不對」 — a torn row, a component with no row,
-   an unbalanced quote). Everything else is a rung: `step(0)` is ink, `step(1000)`
-   is paper, and the parts of the editor are placed along it by *how far back*
-   they should read.
+   an unbalanced quote). Everything else is a rung: `step(0)` is ink,
+   `step(1000)` is paper, and the parts of the editor are placed along it by
+   *how far back* they should read.
 2. **It is called 【墨香】 / `moxiang`**, and both spellings work in
    `[theme] name = …`. It is the default, so a fresh install already looks like
    this. `Skin::step` is the mechanism; it moves out of the vertical renderer
@@ -3144,7 +3164,8 @@ pale to write on. `border()` at `step(750)` is a *ground* rung used as a
 foreground and measures 1.81:1; `Kind::Comment` sits at ≈`step(606)` and
 measures 2.54:1. (The good news: sRGB mixing was the right call and the comment
 defending it is right for a better reason than it gives — ΔL\* across the ramp
-is 5.84–7.38, against 3.22–16.81 for linear light. **Do not touch `Skin::step`.**)
+is 5.84–7.38, against 3.22–16.81 for linear light.
+**Do not touch `Skin::step`.**)
 
 **Invisible today, all three for the same reason** — a *tint* colour used as a
 *rule* colour: the ruler line is drawn in exactly its own background (**1.00:1**
@@ -3180,7 +3201,7 @@ different grammars for "here" inside one widget.
 
 #### What shipped, 2026-09-03
 
-**Three anchors, and the author picked them by picking the theme**: 墨, 紙, 朱,
+**Three anchors, picked by picking the theme**: 墨, 紙, 朱,
 in `ThemeConfig` — a `Ladder` per mood, 朱 per mood, and nothing else. There is
 no 青: the cool family the terminal designer found was ten accidents, and every
 one of them is now a rung.
@@ -3351,11 +3372,11 @@ assertion would have passed for the wrong reason.
                    1 春に永和と申す。                  著色：標記留在畫面上
 ```
 
-§5.7's law is what makes `basic` safe as the factory level — **`basic` 不藏、
-不摺、不替換** — and `set_ruby_level` (`editor.rs:2749`) still carries, at `:2755`, the
-author's sentence 「正文不许摘 ruby 标签但可以额外在上方显示一个ruby 行」.
-The strip runs in `hidden_on_line` (`editor.rs:2772`) **outside** the
-`wysiwyg()` guard, so it happens at every level above `off`.
+§5.7's law is what makes `basic` safe as the factory level —
+**`basic` 不藏、 不摺、不替換** — and `set_ruby_level` (`editor.rs:2749`) still
+carries, at `:2755`, 「正文不许摘 ruby 标签但可以额外在上方显示一个ruby 行」. The strip runs in `hidden_on_line`
+(`editor.rs:2772`) **outside** the `wysiwyg()` guard, so it happens at every
+level above `off`.
 
 **Fixed 2026-09-06** with §5.2.3 ①, and the fix was a field, not a guard: the
 strip is `ruby_drawn`'s to do, and `ruby_drawn` is `Full` only. `basic` now
@@ -3371,8 +3392,8 @@ the buffer marked `[只讀]`. The text is safe — `Buffer::insert` returns earl
 so what is lost is only the truth. `md_write` and `sort_table` skipped the
 `refuse_readonly` guard that ~28 other call sites carry, and `md_new_row` wrote
 its message unconditionally. (The 「returns early」 half of that sentence is
-history as of 2026-09-08: it returns an `Err` now — §5.2.3 ⑤.) The `.csv` half of the same `t` menu was guarded;
-the `.md` half was not.
+history as of 2026-09-08: it returns an `Err` now — §5.2.3 ⑤.) The `.csv` half
+of the same `t` menu was guarded; the `.md` half was not.
 
 **The fix is a door, not eight guards** — §5.2.3 ⑤ answered locally rather than
 across every edit path. `md_parts` was the one thing all nine of the `.md`
@@ -3399,11 +3420,11 @@ while `command.rs` asserted `parse(":segment").is_err()`. Driven: 「沒有
 「segment」這個命令」. 分詞 became one subject under `:word`; the help never
 heard. Both now say `:word show on`.
 
-**The cure is the test, not the line.** `the_help_teaches_no_command_the_parser_refuses`
-reads all four pages back — `help_common`, `help_chinese`, `help_vertical`,
-`help_table` — pulls every row whose keys begin with `:`, and hands each to
-`command::parse`. The two files could not meet before; now the help is read by
-the parser that has to run it.
+**The cure is the test, not the line.**
+`the_help_teaches_no_command_the_parser_refuses` reads all four pages back —
+`help_common`, `help_chinese`, `help_vertical`, `help_table` — pulls every row
+whose keys begin with `:`, and hands each to `command::parse`. The two files
+could not meet before; now the help is read by the parser that has to run it.
 
 ### 6 · `:rec!` does not exist — **fixed 2026-09-07**
 
@@ -3469,7 +3490,7 @@ a Chinese manuscript is the extension and nothing else.
 first of them and the rest is where the text goes and where the panel stands:
 
 | where | what |
-| --- | --- |
+| ------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `composes` | `Mode::Picker` added — the gate that lights the preedit, the panel and the lone-Shift tap together |
 | `insert_committed` | a `Mode::Picker` arm that pushes the committed characters into the picker's query; without it the IME ran and the text went nowhere |
 | `prompt_preedit` | now answers for a picker as well as for a `/` or `:` prompt, and `draw_picker` writes it after the query and steps the caret past it |
@@ -3480,9 +3501,9 @@ first of them and the rest is where the text goes and where the panel stands:
 
 ### 10 · `:tutor` teaches a key that closes the table — **fixed 2026-09-07**
 
-`tutor.rs:148`: 「`i` 進格子打字，`c` 換掉整格，**`t o` 加一行**，`t d` 刪一行」.
-`t o` leaves the table (`editor.rs:7437`), and that arm's own comment reads
-*It used to open a row; 加行 is `t r` since 2026-09-05*. The code and its
+`tutor.rs:148`: 「`i` 進格子打字，`c` 換掉整格，**`t o` 加一行**，`t d`
+刪一行」. `t o` leaves the table (`editor.rs:7437`), and that arm's own comment
+reads *It used to open a row; 加行 is `t r` since 2026-09-05*. The code and its
 comment were both updated; the lesson was not.
 `the_lesson_teaches_the_keys_it_says_it_does` (`tutor.rs:203`) cannot catch it:
 it asserts the lesson **mentions** certain keys, never that the editor **has**
@@ -3552,10 +3573,10 @@ char, a comma, a string); the eight new tables needed `", ` as well, and with it
 seen; forget this and thirty entries are reported as orphans in one go.
 
 A document may also print a name **in order to say it is gone** — 「`:re` 同時是
-`recover`、`redo`、`render` 的前綴，所以它報不認識」, the 「沒有了」 column, `:yume
-c`. Those are a `DISOWNED` list of eighteen, `DISOWNED_KEYS` holds four more
-(`gt`／`gc`／`gb`, `t s`), and a second test of each asserts they really are
-missing, so neither list can become the place a stale name hides. Three
+`recover`、`redo`、`render` 的前綴，所以它報不認識」, the 「沒有了」 column,
+`:yume c`. Those are a `DISOWNED` list of eighteen, `DISOWNED_KEYS` holds four
+more (`gt`／`gc`／`gb`, `t s`), and a second test of each asserts they really
+are missing, so neither list can become the place a stale name hides. Three
 two-letter words are dropped outright as `NOT_A_SEQUENCE`: `md` is a file
 suffix, `tw` is OpenCC's 臺灣正體, `[]` is a pair of brackets being shown.
 
@@ -3599,7 +3620,7 @@ And three more when the key groups joined it:
   hand search found two of these and the test found the other eight, which is
   the whole argument for having it.
 
-## 5.2.3 Decided, 2026-09-06 and 2026-09-08 — the author's call
+## 5.2.3 Decided, 2026-09-06 and 2026-09-08 — settled
 
 Five, all five now answered — ① and ② on 2026-09-06, ③ ④ ⑤ on 2026-09-08. The
 hold on §5.7 is lifted with them. Each is recorded with what the answer cost,
@@ -3622,7 +3643,7 @@ fix, because the strip that `basic` performs today has a level to belong to
 beside the base — the second half of the decision, also in §5.7.
 
 **Landed 2026-09-06**, with one change made while writing it: `indent` says the
-three words but **`:render` does not write it**. The author: 「同意 indent 和
+three words but **`:render` does not write it**. 「同意 indent 和
 render 解耦。道理還有一個：indent 一般是竪排文本用的，markdown 渲染大多數是橫排
 用的。」 Found because linking it made `:render basic` indent a horizontal
 Markdown file, which three TUI tests refused. So the master writes three; the
@@ -3665,7 +3686,7 @@ proposal that raised it.**
 > writing, but it is also a general editor — English and code are typed in it.
 > The consensus keys are an asset somebody else built; they are not free space.
 >
-> — the author, 2026-09-06: 「helix/vim 中比較重要、使用率最高的一級快捷鍵不要
+> — 2026-09-06：「helix/vim 中比較重要、使用率最高的一級快捷鍵不要
 > 輕易更改……不需要立刻反應的功能，儘量使用多層次的快捷鍵。」
 
 The rule was already in the tree, as a one-off reason: `handle_space`'s comment
@@ -3694,7 +3715,7 @@ justification for one key is now the law for all of them.
    converging in one corner.
 2. **旁注 goes to `空格 r`.** It is the one thing this editor does that a Latin
    editor does not, and it had no key at all — but by the rule it does not want
-   a top-level one either. The author: 「ruby 的插入，可能一頁就一兩個（而且主要
+   a top-level one either. 「ruby 的插入，可能一頁就一兩個（而且主要
    是日語用得多）」. `空格` had `r` free.
 3. **`z` is not for 旁注 and not for the 版面 group either.** The rule bit here
    too: in Helix `z` is the **view** group (`zz` centre, `zt` top, `zb` bottom),
@@ -3705,8 +3726,7 @@ justification for one key is now the law for all of them.
    yumete copied, not vi — `` ` `` is 轉小寫, `` A-` `` 轉大寫, `~` 大小寫互換:
    three top-level keys for an operation that is the identity on 漢字 (only
    full-width Ａ↔ａ actually maps) and that a Chinese manuscript asks for a few
-   times a year. By the rule they can wait for a second key. The author:
-   「`l 的當量很低（好按）。我其實覺得 helix 一個按鍵轉小寫太浪費了。」
+   times a year. By the rule they can wait for a second key. 「`l 的當量很低（好按）。我其實覺得 helix 一個按鍵轉小寫太浪費了。」
 
 ```
 `l   轉小寫        `u   轉大寫        ``   大小寫互換
@@ -3717,46 +3737,48 @@ for: `` `w `` 半形→全形 and `` `n `` 全形→半形 (neither exists yet),
 selection-sized 簡繁 (`:convert` today is whole-file only, #241) are the same
 kind of thing and have somewhere to live. vi's 記號 can never come back to
 `` ` ``, because vi's mark names are arbitrary letters and `` `l `` would be two
-things at once — but yumete never had them there: 記號 is `M` and `'`, and stays.
+things at once — but yumete never had them there: 記號 is `M` and `'`, and
+stays.
 
-**White change that falls out:** `hint.vi.backtick` (「記號用 M 記、' 回去」) has
-been dead since it was written — the phrasebook is only consulted for keys that
-are **not** bound, and `` ` `` is bound. As a group prefix it can be printed in
-the group's own menu, where a vi reader will actually meet it.
+**White change that falls out:** `hint.vi.backtick` (「記號用 M 記、' 回去」)
+has been dead since it was written — the phrasebook is only consulted for keys
+that are **not** bound, and `` ` `` is bound. As a group prefix it can be
+printed in the group's own menu, where a vi reader will actually meet it.
 
 (Still true and still unused: `T` and `V` do not appear in `editor.rs` at all,
 and are absent from the phrasebook, so they are silent in both senses.)
 
 **All four landed 2026-09-06.** `Pending::Case` with its own which-key menu
 (whose last row is that recovered `hint.vi.backtick`, shortened so it fits an
-80-column terminal); `~` and `` A-` `` unbound, both caught by the phrasebook and
-pointed at the group. `Editor::replacing()` is the one accessor `composes_here`
-needed; `insert_committed` branches on `Pending::Replace` and calls the new
-`replace_str`, which keeps the newline out of a multi-character replacement the
-way `replace_chars` already kept it out of a fill. **`.` needed its own thread**:
-the code letters are eaten by the IME and never reach `on_key`, so replaying an
-IME `r` replays `r` alone and would leave the pending state armed to swallow the
-reader's next key — the committed text is remembered in `last_replacement` and
-`repeat_edit` applies it after the replay. `--keys` gathers a run of non-ASCII
-into one commit while `r` is armed, so an offscreen picture shows what a reader
-would see. `空格 r` is `enter_ruby_mode`, and `SPACE_KEYS` carries it, so the
-which-key menu and `:help` both list it without being told.
+80-column terminal); `~` and `` A-` `` unbound, both caught by the phrasebook
+and pointed at the group. `Editor::replacing()` is the one accessor
+`composes_here` needed; `insert_committed` branches on `Pending::Replace` and
+calls the new `replace_str`, which keeps the newline out of a multi-character
+replacement the way `replace_chars` already kept it out of a fill.
+**`.` needed its own thread**: the code letters are eaten by the IME and never
+reach `on_key`, so replaying an IME `r` replays `r` alone and would leave the
+pending state armed to swallow the reader's next key — the committed text is
+remembered in `last_replacement` and `repeat_edit` applies it after the replay.
+`--keys` gathers a run of non-ASCII into one commit while `r` is armed, so an
+offscreen picture shows what a reader would see. `空格 r` is `enter_ruby_mode`,
+and `SPACE_KEYS` carries it, so the which-key menu and `:help` both list it
+without being told.
 
 ### ③ ~~Whether to fold the command table, and when~~ — decided 2026-09-08
 
-**一次摺完.** The author, asked to choose between folding now and the review's own
-「fix the ground for 0.1.0, fold in 0.1.1」: 「現在就摺，一次摺完」. The reason the
-review gave for waiting is the reason for not waiting: a half-folded table is
-worse than an unfolded one, and every month the table stays flat is another
-month of prose written against names that are going to move. 0.1.0 has not
-shipped, so the 165 prose sites are the only cost, and they are cheapest now.
+**一次摺完.** The author, asked to choose between folding now and the review's
+own 「fix the ground for 0.1.0, fold in 0.1.1」: 「現在就摺，一次摺完」. The
+reason the review gave for waiting is the reason for not waiting: a half-folded
+table is worse than an unfolded one, and every month the table stays flat is
+another month of prose written against names that are going to move. 0.1.0 has
+not shipped, so the 165 prose sites are the only cost, and they are cheapest
+now.
 
 **Landed 2026-09-08 — see §5.2.4** for the tree as built, the measured cost and
 what the prose actually came to. 63 rows, 61 of them named commands, is what the
 table held when the fold started; the estimate below said 62 and counted heads.
 
 What was on the table:
-
 
 62 top-level commands; 21 of them are somebody's child. The arithmetic was
 checked and holds: `::` ranking is **bit-for-bit unchanged** by nesting
@@ -3784,7 +3806,7 @@ it is complete.
 
 ### ④ ~~Whether one word may name two things under two parents~~ — decided 2026-09-08
 
-**Yes — and the parent supplies the verb.** The author: 「可以，父親給動詞」.
+**Yes — and the parent supplies the verb.** 「可以，父親給動詞」.
 So `punct` names the subject and `:view` / `:check` name what is done to it,
 which is what a tree is for; a word that had to be unique across the whole tree
 would be a flat table wearing a tree's shape. The rule is written down once, in
@@ -3798,7 +3820,6 @@ rule applied to a parent that was already a verb. The rule is written down in
 the manual beside the tree, and `RENAMED` — the table of what a computed
 signpost cannot know — is held honest from both sides by a test.
 
-
 If `:note` becomes `:view punct` (its help text is 「標點提示：半角標點與 ...
 旁邊畫出該用的那一個」, `messages.toml:725` — it has never been about
 footnotes), then `punct` names a standing overlay under `:view` and a one-pass
@@ -3808,13 +3829,12 @@ merge`, `:row` → `:table jump`, `:search` → `:table find`.
 
 ### ⑤ ~~How read-only refuses~~ — decided 2026-09-08
 
-**The gate moves into `Buffer` and every edit path returns a `Result`.** The
-author: 「閘搬進 Buffer，回 Result」, which is their standing 「安全第一」 applied
-to this: the expensive half of a signature change is one afternoon, and the
-class of bug it closes is one that has now been missed three times. What the
-two cheaper answers buy is that afternoon, and they buy it by leaving the
-fourth miss available. The `md_parts_to_edit` door stays — it is the same
-answer at family scale and is compatible with the buffer-level gate.
+**The gate moves into `Buffer` and every edit path returns a `Result`.** 「閘搬進 Buffer，回 Result」 — the standing 「安全第一」
+applied to this: the expensive half of a signature change is one afternoon, and
+the class of bug it closes is one that has now been missed three times. What the
+two cheaper answers buy is that afternoon, and they buy it by leaving the fourth
+miss available. The `md_parts_to_edit` door stays — it is the same answer at
+family scale and is compatible with the buffer-level gate.
 
 **Landed 2026-09-08.** `Buffer::insert` and `Buffer::remove` return
 `Edit = Result<(), ReadOnly>`, both `#[must_use]`, and the compiler then found
@@ -3845,7 +3865,6 @@ Three things fell out of doing it:
 The `md_parts_to_edit` door stays exactly as it was — it refuses one level up,
 with a better message than 只讀, and the buffer's answer is now underneath it.
 
-
 Today `Buffer::insert` returns early and says nothing, and ~28 call sites each
 refuse for themselves — `buffer.rs:418`'s comment states this is deliberate and
 that a new caller must do the same. Fault 4 is the third such caller to be
@@ -3866,8 +3885,8 @@ sites do not share one, which is exactly what makes ⑤ still a question. See
 ## 5.2.4 The command tree, folded — 2026-09-08 (③ ＋ ④ landed)
 
 61 named commands stood at the top level and 21 of them were somebody's child.
-The author's two calls — 「現在就摺，一次摺完」 (③) and 「可以，父親給動詞」 (④) —
-are one change, because ④'s renames only exist inside ③'s tree. This is the
+The author's two calls — 「現在就摺，一次摺完」 (③) and 「可以，父親給動詞」 (④)
+— are one change, because ④'s renames only exist inside ③'s tree. This is the
 tree, the rule that built it, and what it actually cost, measured.
 
 **The rule ④ gives, stated once.** *A word names the subject; the parent names
@@ -3907,30 +3926,30 @@ tree would be a flat table wearing a tree's shape.
 **Seven of the 21 are renamed by their parent**, which is ④ doing its work:
 
 | was | is | why the word changed |
-| --- | --- | --- |
+| ------------ | --------------- | ---------------------------------------------------------------------- |
 | `:note` | `:view punct` | it was never about footnotes — its help has always read 標點提示 |
 | `:conflicts` | `:check merge` | the subject is a merge; `:check` already is the verb |
 | `:search` | `:table find` | its two words *are* the axis: `:table find row｜column` |
 | `:row` | `:table jump` | `row` under `:table` would have meant that axis |
 | `:bclose` | `:buffer close` | the word was already in the list; the top-level name was the duplicate |
-| `:wa` | `:write all` | |
-| `:saveas` | `:write as` | |
+| `:wa` | `:write all` |  |
+| `:saveas` | `:write as` |  |
 
 **`:render`, `:indent`, `:ruby` and `:table` do not move**, and the reason is
 §5.7: they are the four dimensions, and `:render` writes three of them. A parent
-that listed `:ruby` beside `:dense` would say the two are the same kind of thing,
-which is the one relationship §5.7 exists to make visible.
+that listed `:ruby` beside `:dense` would say the two are the same kind of
+thing, which is the one relationship §5.7 exists to make visible.
 
 **What it cost, measured.** Keystrokes of the shortest spelling that parses to
 the same `Command` — computed by walking every prefix of every word through
 `parse`, not counted by hand, and the old side computed the same way against
 `git show HEAD:command.rs`:
 
-| | | |
-| --- | --- | --- |
-| **free** (4) | `wra 50`→`v w 50`, `sen on`→`v s on`, `foc on`→`v f on`, `conf`→`ch m` | |
-| **＋1** (9) | dense `de`→`v d`, bands, numbers, typewriter, meter, preview, row `row`→`ta j`, bclose `bc`→`b c`, appearance `a`→`th` | |
-| **＋2** (8) | hanging `ha`→`v ha`, note `no`→`v pu`, hud, search `sea`→`ta fi`, progress `pro`→`cou p`, target, wa `wa`→`w al`, saveas `sa`→`w as` | |
+|  |  |  |
+| ------------ | ------------------------------------------------------------------------------------------------------------------------------------ | --- |
+| **free** (4) | `wra 50`→`v w 50`, `sen on`→`v s on`, `foc on`→`v f on`, `conf`→`ch m` |  |
+| **＋1** (9) | dense `de`→`v d`, bands, numbers, typewriter, meter, preview, row `row`→`ta j`, bclose `bc`→`b c`, appearance `a`→`th` |  |
+| **＋2** (8) | hanging `ha`→`v ha`, note `no`→`v pu`, hud, search `sea`→`ta fi`, progress `pro`→`cou p`, target, wa `wa`→`w al`, saveas `sa`→`w as` |  |
 
 §5.2.3 ③ recorded 「6 cost nothing, 14 cost one, 1 costs two」 from the folding
 review. That count was of **head words**; this one is of whole lines with the
@@ -3939,14 +3958,14 @@ argument in place, which is what a hand types.
 Ten surviving commands got **shorter**, because the top level did — and one
 arrived already short:
 
-| | 摺前 | 摺後 | | 摺前 | 摺後 |
-| --- | --- | --- | --- | --- | --- |
+|  | 摺前 | 摺後 |  | 摺前 | 摺後 |
+| ---------- | ------ | ----- | ----------- | ----- | ---- |
 | `:buffer` | `bu` | `b` | `:markdown` | `ma` | `m` |
 | `:convert` | `conv` | `con` | `:new` | `ne` | `n` |
 | `:diff` | `di` | `d` | `:pipe` | `pi` | `p` |
 | `:format` | `for` | `f` | `:table` | `tab` | `ta` |
 | `:help` | `he` | `h` | `:write` | `wri` | `wr` |
-| | | | `:view` | — | `v` |
+|  |  |  | `:view` | — | `v` |
 
 `:w :q :qa :x :o :u :g` do not move: they are declared aliases, and an exact
 alias wins over the prefix rule, so they never felt the top level at all.
@@ -3992,16 +4011,18 @@ is where a reader of an old entry finds the map.
 
 **A word that moves under a parent inherits nothing from it.** `find` was given
 `Need::Table` on the way in, because it now stands under `:table` — and
-`:table find 第55行` then answered 「需要：表格模式」 and searched nothing, which
-`:search` had never done. The parse arm says why it must not: with no direction
-it is a row search, and a row search away from a table is an ordinary search.
-`:export csv` had already written the same rule down (「**No `Need::Table`**,
-although one would parse」); the fold is where it had to be read twice.
+`:table find 第55行` then answered 「需要：表格模式」 and searched nothing,
+which `:search` had never done. The parse arm says why it must not: with no
+direction it is a row search, and a row search away from a table is an ordinary
+search. `:export csv` had already written the same rule down
+(「**No `Need::Table`**, although one would parse」); the fold is where it had
+to be read twice.
 
-One thing more the fold found on its way through: a bang belongs to a **line**, not
-to a head. `:bclose!` used to be one word and `FORCEABLE` held it as one; `:buffer
-close!` is two, so `FORCEABLE` now holds the whole line and `names_something`
-walks the bang along with the words. `:buffer list!` is still not a command.
+One thing more the fold found on its way through: a bang belongs to a **line**,
+not to a head. `:bclose!` used to be one word and `FORCEABLE` held it as one;
+`:buffer close!` is two, so `FORCEABLE` now holds the whole line and
+`names_something` walks the bang along with the words. `:buffer list!` is still
+not a command.
 
 ## 5.3 Releasing, and the Homebrew tap (#135, planned)
 
@@ -4021,8 +4042,7 @@ first need that path turned into a git dependency.
 
 **Where the 宇浩 data comes from.** Not from this repository (a compiled 碼表 is
 3.7 MB and does not delta) and not from `yume/data/`, which is gitignored — 102
-MB generated from the assets repository and present only on the author's
-machine. It comes from **`forfudan/yume-release`**, whose releases carry the
+MB generated from the assets repository and present only on this machine. It comes from **`forfudan/yume-release`**, whose releases carry the
 compiled tables for every platform. The Linux asset is the one to use:
 
 ```
@@ -4081,25 +4101,26 @@ of them goes missing, still not scheduled: 0.1.0 first.
   anything shipping. **Helix has no conceal and no virtual text at all.**
 - **Results are text.** `:grep` and `:sh` make `path:line:` buffers and `gf`
   parses them, so the quickfix list already exists and nobody noticed.
-- A **per-frame budget**: 64-char prefixes, per-paragraph hashes, caches keyed by
-  revision. O(what is on screen) with O(edit) invalidation — the substrate a
+- A **per-frame budget**: 64-char prefixes, per-paragraph hashes, caches keyed
+  by revision. O(what is on screen) with O(edit) invalidation — the substrate a
   live overlay needs and the thing Vim's `synmaxcol` is an apology for.
 
 ### From the writer — spend the language model on the manuscript
 
-1. **`:check 用字`** — 裡 412 / 裏 3, 為/爲, 台/臺, 着/著, and project names, as a
-   jumpable buffer. *Nobody has this.* Word checks 病句; Grammarly is English;
+1. **`:check 用字`** — 裡 412 / 裏 3, 為/爲, 台/臺, 着/著, and project names, as
+   a jumpable buffer. *Nobody has this.* Word checks 病句; Grammarly is English;
    spell-checkers tokenize on spaces and see one word. **high**
 2. **`:ruby auto`, and `:ruby auto rare`** — generate readings by word so 了 is
-   `le`, and annotate **only** characters outside 通用规范汉字表. Word's 拼音指南
-   guesses per character and detaches on edit; no editor generates readings from
-   a language model and none can then set them vertically. **high**
+   `le`, and annotate **only** characters outside 通用规范汉字表. Word's
+   拼音指南 guesses per character and detaches on edit; no editor generates
+   readings from a language model and none can then set them vertically.
+   **high**
 3. **`:diff` at 詞 grain, over the autosave snapshots already written** — every
-   line-based diff reports a 500-字 paragraph as wholly changed when one 的 moved.
-   The snapshots are being thrown away today. **high**
-4. **圈點 in the margin the 標點旁置 column already draws** — and the open markup
-   question answers itself: `*字*` *is* it, because the Chinese rendering of
-   `<em>` is 着重號. 1–2 days; `Slot` already carries the channel. **high**
+   line-based diff reports a 500-字 paragraph as wholly changed when one 的
+   moved. The snapshots are being thrown away today. **high**
+4. **圈點 in the margin the 標點旁置 column already draws** — and the open
+   markup question answers itself: `*字*` *is* it, because the Chinese rendering
+   of `<em>` is 着重號. 1–2 days; `Slot` already carries the channel. **high**
 5. **`:sentence`** — one 句 to a 縱, as a view, no edit. The manual already
    teaches `:%s/。/。\n/g` for proofreading; this is that, non-destructively —
    and it hands the `(`/`)` sentence motion its boundaries. **high**
@@ -4109,26 +4130,28 @@ of them goes missing, still not scheduled: 0.1.0 first.
 7. **This book's own words** — mine repeated OOV n-grams from the project, feed
    them to *both* the segmenter and the IME, so 阿甯 walks as one word and types
    as one. `yume-lm/src/discover.rs` already implements the signals. **high**
-8. **`:check 字集`** — every character outside 通用规范/臺灣/香港/古籍, before the
-   typesetter finds out. The seven `.ycs` sets are already loaded; two days.
+8. **`:check 字集`** — every character outside 通用规范/臺灣/香港/古籍, before
+   the typesetter finds out. The seven `.ycs` sets are already loaded; two days.
    Best value-per-day on either list. **high**
 9. **繁簡 conversion that shows what it guessed** — `simptrad.txt` stores the
    one-to-many sets, so ambiguity is *visible in the data*; drop the unsure ones
    in a review buffer instead of picking silently. **medium-high**
-10. **`:word habit`** — crutch words by **surprisal against 詞頻表**, not raw count,
-    so it says 「然後 47 次」 and not 「的」. **medium-high**
+10. **`:word habit`** — crutch words by **surprisal against 詞頻表**, not raw
+    count, so it says 「然後 47 次」 and not 「的」. **medium-high**
 11. **割注 — 小字雙行 inside the 縱.** InDesign J has it; nothing else does. The
-    縦中横 slot packing is already the mechanism, run down a run of slots. **medium**
+    縦中横 slot packing is already the mechanism, run down a run of slots.
+    **medium**
 12. 寫作進度 (Scrivener's targets, but counting 字 correctly) · a print-ready
     直排 HTML export (browsers are the only free vertical typesetter and no
-    editor drives one) · 焦點模式 vertically · 平仄/韻腳 in the margin. **medium**
+    editor drives one) · 焦點模式 vertically · 平仄/韻腳 in the margin.
+    **medium**
 
 ### From the programmer — spend the display layer on everyone else
 
 1. **Virtual text — the mirror of `hidden_on_line`.** `drawn_on_line` with the
    mirror invariant: *the cursor may never sit on a character that is not in the
    file*. Downstream: inline diagnostics, blame, inlay hints, fold markers,
-   `↵`/`·`, and the author's own first-line indent and 圈點. Only Neovim has
+   `↵`/`·`, and this editor’s own first-line indent and 圈點. Only Neovim has
    anything like it; Helix has nothing. **high**
 2. **Merge conflicts as a `Block` kind.** `<<<<<<<` is exactly the shape
    `BlockScanner` was built for; tint the two sides, hide the markers under
@@ -4141,16 +4164,18 @@ of them goes missing, still not scheduled: 0.1.0 first.
    quickfix list, no `errorformat`, no problem matcher** — Vim's quickfix is the
    right idea under a mini-language. **high**
 4. **Table mode over any delimited text** — quoting (the invariant generalises
-   from delimiters to *cells*), TSV/`|`/`;`, the header fallback as a first-class
-   path, and `:sh ps aux` landing in a grid. `csv.vim` colours, VisiData is not
-   an editor and will not hand back a byte-identical 8 MB file. **high**
+   from delimiters to *cells*), TSV/`|`/`;`, the header fallback as a
+   first-class path, and `:sh ps aux` landing in a grid. `csv.vim` colours,
+   VisiData is not an editor and will not hand back a byte-identical 8 MB file.
+   **high**
 5. **The Unicode alarm** — tint invisibles, bidi controls (Trojan Source) and
    ASCII homoglyphs, plus `describe-char` in the `Detail` panel. VS Code's
    `unicodeHighlight` is the only implementation anywhere and it is a GUI;
    Emacs has the panel and no alarm. **high**
 6. **`yumete -p` as a pager and an `fzf --preview`** — the same renderer, so it
    can never disagree with the editor. `bat` highlights syntax and renders a CSV
-   as commas; `glow` deletes the markup. Distribution precedes adoption. **high**
+   as commas; `glow` deletes the markup. Distribution precedes adoption.
+   **high**
 7. **The phrasebook** — an unbound key names its local spelling (`$` → `gl`,
    `G` → `ge`, `ciw` → `miwc`), dialect-configurable. Not a compatibility layer:
    it never *does* the thing. which-key tells you what is available, never what
@@ -4163,11 +4188,11 @@ of them goes missing, still not scheduled: 0.1.0 first.
 
 ### Four they would not build
 
-**#58 is marked Dropped in §5 for all four.** A plugin runtime (#58) — "every editor grows one and it becomes the product";
-an embedded terminal pane (already argued); a git UI (lazygit is one `:!` away);
-and **tree-sitter/LSP at 0.2**, because its parse-the-whole-document model
-fights the per-paragraph, cached, markup-stays-on-the-page invariant that made
-this editor good.
+**#58 is marked Dropped in §5 for all four.** A plugin runtime (#58) — "every
+editor grows one and it becomes the product"; an embedded terminal pane (already
+argued); a git UI (lazygit is one `:!` away); and **tree-sitter/LSP at 0.2**,
+because its parse-the-whole-document model fights the per-paragraph, cached,
+markup-stays-on-the-page invariant that made this editor good.
 
 ### Their honest answers
 
@@ -4222,24 +4247,26 @@ the same review wanted and did not get:
 
 ## 5.5 修好之後才知道的事
 
-停在這裏的是**做完之後才看清楚的那一層**——一行 notes 裝不下，也不該裝：表格是拿來
-掃的。
+停在這裏的是**做完之後才看清楚的那一層**——一行 notes
+裝不下，也不該裝：表格是拿來 掃的。
 
 ### #281 另一半畫的是這半邊的字（2026-09-08 修好）
 
-那一行原本開了兩條路二選一：把 buffer 參數穿過三十個訪問器，或者乾脆不許跨檔分屏。
+那一行原本開了兩條路二選一：把 buffer
+參數穿過三十個訪問器，或者乾脆不許跨檔分屏。
 **兩條都不必走，因為它們共同的前提是錯的。**
 
 它說 `segment_cache`、`meter_cache`、`note_cache` 三個「只按行號做鍵」的緩存會被
 另一個 buffer 污染。它們不會：值裏帶着**那一行文字自己的哈希**，命中只可能發生在
 文字逐字相同的時候，而那時答案本來就是對的——`segment_line` 自己的註釋早寫明了
-「a matching hash is a correct answer whatever else in the document has moved」。
-其餘的備忘則**早就按 buffer 做了鍵**：`FoldMap` 與 `BlockCache` 是 `(id, revision)`，
-`MarkupCache` 是 `(buffer, line)`，`PadKey` 自帶一個 `buffer` 欄位。所以沒有一個緩存
-要重做鍵，也沒有一個參數要穿線。
+「a matching hash is a correct answer whatever else in the document has
+moved」。 其餘的備忘則**早就按 buffer 做了鍵**：`FoldMap` 與 `BlockCache` 是
+`(id, revision)`， `MarkupCache` 是 `(buffer, line)`，`PadKey` 自帶一個 `buffer`
+欄位。所以沒有一個緩存 要重做鍵，也沒有一個參數要穿線。
 
-實際做的是一道**作用域內的只讀改道**：`Editor::view_pane(pane)` 交回一個守衛，它活着
-的時候 `current_buffer()` 與光標改答**那一半**的檔案與位置；`current_buffer_mut()`
+實際做的是一道**作用域內的只讀改道**：`Editor::view_pane(pane)`
+交回一個守衛，它活着 的時候 `current_buffer()`
+與光標改答**那一半**的檔案與位置；`current_buffer_mut()`
 故意不認它。守衛握的是編輯器的**共享**借用——所以「只讀」不是一條要記住的規矩，而是
 唯一編得過的程序。渲染器那頭只加一行，包住整個分派：一半用橫排還是縱排、格狀有沒有
 佔住它，問的也是那一半的文檔。
@@ -4248,19 +4275,61 @@ the same review wanted and did not get:
 `caret()`／`mark()`，而那個偏移**在進門處 clamp 一次**——另一半隨時可能已經把你站着
 的那段文字刪了，把陳舊的偏移丟進 rope 是崩潰，不是畫錯。
 
-代價量過：一頁兩本二十萬字的書，每幀 365.81 µs → **516.76 µs**（`what_a_frame_costs`，
-release）。整檔的備忘雖然都是單槽，兩個文檔輪流進出並沒有把它們拍成 #282 那個形狀，
-所以**沒有給它們加第二個槽**。⚠️ 量的是兩本沒有表格的散文；兩邊各壓着一張大表沒有量過。
+代價量過：一頁兩本二十萬字的書，每幀 365.81 µs →
+**516.76 µs**（`what_a_frame_costs`，
+release）。整檔的備忘雖然都是單槽，兩個文檔輪流進出並沒有把它們拍成 #282
+那個形狀， 所以**沒有給它們加第二個槽**。⚠️
+量的是兩本沒有表格的散文；兩邊各壓着一張大表沒有量過。
+
+## 5.6 表格對齊為什麼會拒絕（#292，2026-09-08）
+
+把 roadmap 的 `area` 一欄挪到標題前面，`docs/development.md` 一個動作從
+**425,694 漲到 2,945,642 字節**——七倍。沒有任何東西出錯：`mdtable::compose`
+把每一格 補到該欄最寬，而那張表的 備註 欄裝着七千格寬的段落，298 行乘上去就是
+2.5 MB 的尾隨 空格，git 從此替你收着。
+
+⚠️ **它不是一條命令幹的。** `format_md_table`
+掛在五個門上，其中四個是自動的——貼上、 清格、`Tab`
+走格、從格子裏退出插入。所以「別按那個鍵」防不住它。
+
+### 為什麼是「拒絕」，不是「封頂」
+
+從前真有一道 32
+格的天花板，拆掉的理由到今天仍然成立：**天花板與對齊是同一個旋鈕**
+——超過天花板的格子就不補了，它的收尾 `|`
+落在自己文字結束的地方，於是整張表右邊參差。
+一張右邊參差的表不叫對齊，而對齊是這個函數存在的唯一理由。
+
+所以這次不是把天花板裝回去。超過上限的表**原封不動**，一個字節都不改，寫的人給它什麼
+樣子它就是什麼樣子。四個自動門因此靜靜地什麼也不做；`t F`
+那個明著要求的門會說出原因
+——說「已經是對齊的」是撒謊，那張表沒有對齊，也不打算對齊了。
+
+### 400 是怎麼來的
+
+兩條理由，一條講道理一條講事實。
+
+講道理：對齊是眼睛做的事——兩個收尾 `|` 落在同一個屏幕欄位上，看着纔是一條直邊。
+一欄八千格寬根本沒有那條邊，沒有窗口裝得下，沒有讀者見得着它在哪裏結束。
+
+講事實：這個倉庫自己量得出那道空隙。`docs/` 底下六十張 `|`
+表，**最寬的正經欄位是 181 格**，緊接着的下一個數就是 roadmap 備註欄的
+8,567。200 到 1000 之間隨便取一個數，
+挑出來的都是同一張病表，別的一張不碰——所以這個數具體是幾並不要緊，也不值得做成設置。
+
+守着它的是
+`no_table_in_the_docs_can_be_lined_up_into_megabytes`：把上限調開，那一張表 會漲
+**5,892,713 字節**；上限在，漲 0。
 
 ## 6. Phase-by-phase deliverables
 
-> **Current status.** The Cargo workspace is initialized with `crates/yumete-core`,
-> `crates/yumete-cjk`, `crates/yumete-tui`, and the `yumete` binary (with `ropey`
-> behind the `TextStore` trait). yumete is now an interactive modal editor. Done
-> so far:
+> **Current status.** The Cargo workspace is initialized with
+> `crates/yumete-core`, `crates/yumete-cjk`, `crates/yumete-tui`, and the
+> `yumete` binary (with `ropey` behind the `TextStore` trait). yumete is now an
+> interactive modal editor. Done so far:
 >
-> - **#1 Open file / new buffer** — command-line arguments plus `:open` / `:new`;
->   a `Buffer` type and an `Editor` that owns the open buffers.
+> - **#1 Open file / new buffer** — command-line arguments plus `:open` /
+>   `:new`; a `Buffer` type and an `Editor` that owns the open buffers.
 > - **#2 Save / save-as (`:w`)** — atomic write (temp file + rename).
 > - **#3 Quit / force-quit (`:q` / `:q!`)** — dirty-check with `:q!` override.
 > - **#5 Modal editing** — Normal / Insert / Command modes, driven by a
@@ -4273,40 +4342,41 @@ release）。整檔的備忘雖然都是單槽，兩個文檔輪流進出並沒�
 > - **#8 Char search** — `f`/`t`/`F`/`T` find/till a character on the line.
 > - **#13 Yank / paste** — `y` yanks the selection, `p`/`P` paste after/before.
 > - **#11 Undo / redo** — snapshot-based, grouped per edit (`u` / `U`).
-> - **#14 Incremental search** — `/`, `?`, `n`, `N` over CJK substrings, with wrap.
+> - **#14 Incremental search** — `/`, `?`, `n`, `N` over CJK substrings, with
+>   wrap.
 > - **#15 Search & replace** — `:s/pat/rep/[g]` and `:%s/...` (undoable).
 > - **#16 / #17 CJK metrics** — East-Asian width and grapheme clusters in
 >   `yumete-cjk` (with `grapheme_width` / `tab_width_at`).
-> - **#19 / #20 TUI** — `yumete-tui` renders the buffer with a line-number gutter
->   and a status line over `ratatui` + `crossterm`.
-> - **#21 / #22 / #23 Config** — `yumete-config` loads a global TOML config plus a
->   per-project `.yumete/config.toml` override (line numbers, scrolloff, selection
->   colour, and Normal-mode key aliases).
-> - **#25 / #26 Word motions** — `w`/`b`/`e` and `dw`/`cw` step by word, with each
->   CJK character its own word by default.
-> - **#24 Dictionary word segmentation** — a `Segmenter` trait with a jieba-style
->   `DictionarySegmenter` (DAG + maximum-probability over a `word → weight` graph,
->   with a weight threshold). A compact common-word dictionary is bundled, so
->   `w`/`b`/`e` step by CJK *word* out of the box, and a `:segment` overlay (on by
->   default) tints each word.
+> - **#19 / #20 TUI** — `yumete-tui` renders the buffer with a line-number
+>   gutter and a status line over `ratatui` + `crossterm`.
+> - **#21 / #22 / #23 Config** — `yumete-config` loads a global TOML config plus
+>   a per-project `.yumete/config.toml` override (line numbers, scrolloff,
+>   selection colour, and Normal-mode key aliases).
+> - **#25 / #26 Word motions** — `w`/`b`/`e` and `dw`/`cw` step by word, with
+>   each CJK character its own word by default.
+> - **#24 Dictionary word segmentation** — a `Segmenter` trait with a
+>   jieba-style `DictionarySegmenter` (DAG + maximum-probability over a
+>   `word → weight` graph, with a weight threshold). A compact common-word
+>   dictionary is bundled, so `w`/`b`/`e` step by CJK *word* out of the box, and
+>   a `:segment` overlay (on by default) tints each word.
 > - **#27 / #32 Built-in Yume IME session** — `yumete-ime` embeds `yume-core`
 >   directly (no FFI) as an `ImeSession`: per-keystroke input, candidate/preedit
->   getters, scheme switching, and 中/英 toggle, loading a scheme's compiled data
->   tables enumerated by `yume_core::data_manifest`
->   from the data directory.
+>   getters, scheme switching, and 中/英 toggle, loading a scheme's compiled
+>   data tables enumerated by `yume_core::data_manifest` from the data
+>   directory.
 > - **#28 / #29 / #30 IME in Insert mode** — while composing in Insert mode, the
 >   TUI routes keys to the IME and draws a floating candidate panel below the
 >   cursor (code to see candidates; Space/1–9 to select; `-`/`=` to page;
 >   Backspace/Esc to edit/cancel). A **lone-Shift tap** toggles 中/英 (via the
 >   Kitty keyboard protocol, so it needs a compatible terminal — kitty, WezTerm,
->   foot, Ghostty, Alacritty, Konsole, recent iTerm2; not Apple Terminal). Number
->   mode, `/`-commands, and `z` reverse lookup come through the engine's input
->   routing. `scripts/build.sh` compiles and installs the IME tables into
+>   foot, Ghostty, Alacritty, Konsole, recent iTerm2; not Apple Terminal).
+>   Number mode, `/`-commands, and `z` reverse lookup come through the engine's
+>   input routing. `scripts/build.sh` compiles and installs the IME tables into
 >   `~/.local/share/yumete`.
 >
-> The binary launches the interactive editor when stdout is a terminal, and falls
-> back to a non-interactive preview otherwise (or with `--preview`). Phase 1 is
-> complete; Phase 2 is nearly done — CJK typing works in Insert mode; the
+> The binary launches the interactive editor when stdout is a terminal, and
+> falls back to a non-interactive preview otherwise (or with `--preview`). Phase
+> 1 is complete; Phase 2 is nearly done — CJK typing works in Insert mode; the
 > remaining piece is a scheme-switch command (#31).
 
 ### Phase 1 — MVP writer editor
@@ -4317,43 +4387,44 @@ release）。整檔的備忘雖然都是單槽，兩個文檔輪流進出並沒�
   search `/`, replace `:s`, save/quit.
 - **CJK width + grapheme correctness everywhere** (the invariant).
 - Global config file + folder.
-- Exit criteria: can write and edit a novel `.md`/`.txt` comfortably; wide glyphs
-  align; undo works; `:w`/`:q` safe.
+- Exit criteria: can write and edit a novel `.md`/`.txt` comfortably; wide
+  glyphs align; undo works; `:w`/`:q` safe.
 
 ### Phase 2 — CJK words + Yume IME
 
-- `Segmenter` trait + dictionary-backed word segmentation (reuse Yume 分詞 assets).
-  **Done:** the trait and a jieba-style `DictionarySegmenter` (DAG +
-  maximum-probability over a `word → weight` graph) ship in `yumete-cjk`; feeding
-  Yume's compiled weight table into it is deferred to the IME work below.
-- Word segmentation should be balanced: Only very common words in the weight table
-  are segmented by default (weight threshold); the algorithm should also respect
-  the weights, e.g, `ABC` -> `AB C` or `A BC` depending on the weights. **Done:**
-  the maximum-probability path respects weights, and a weight threshold keeps rare
-  words split into single characters.
-- Users may have a different opinion on what is a "word" in CJK, so the segmentation
-  of CJK words can be visualized by means of different background colors (not too
-  intrusive, two or three colors are enough) and users can toggle the segmentation
-  visualization on/off. **Done:** `:word show` toggles an overlay that
-  tints each word with two alternating, subtle backgrounds (configurable under
-  `[theme] segmentation`; on by default via `[editor] show_segmentation`).
-  (Written here as `:segment`, which is what it was called until 分詞 became
-  one subject under `:word`.)
+- `Segmenter` trait + dictionary-backed word segmentation (reuse Yume 分詞
+  assets). **Done:** the trait and a jieba-style `DictionarySegmenter` (DAG +
+  maximum-probability over a `word → weight` graph) ship in `yumete-cjk`;
+  feeding Yume's compiled weight table into it is deferred to the IME work
+  below.
+- Word segmentation should be balanced: Only very common words in the weight
+  table are segmented by default (weight threshold); the algorithm should also
+  respect the weights, e.g, `ABC` -> `AB C` or `A BC` depending on the weights.
+  **Done:** the maximum-probability path respects weights, and a weight
+  threshold keeps rare words split into single characters.
+- Users may have a different opinion on what is a "word" in CJK, so the
+  segmentation of CJK words can be visualized by means of different background
+  colors (not too intrusive, two or three colors are enough) and users can
+  toggle the segmentation visualization on/off. **Done:** `:word show` toggles
+  an overlay that tints each word with two alternating, subtle backgrounds
+  (configurable under `[theme] segmentation`; on by default via
+  `[editor] show_segmentation`). (Written here as `:segment`, which is what it
+  was called until 分詞 became one subject under `:word`.)
 - Jieba is a good reference for the segmentation algorithm. We evaluated the
-  `jieba-rs` crate directly: it is MIT-licensed and well maintained, but its value
-  (an embedded Simplified-Chinese dictionary and HMM model) is what we replace with
-  Yume's weight table, and depending on it would pull heavy transitive crates for a
-  DAG we can write ourselves — so we implemented the same algorithm directly and
-  kept `yumete-cjk` dependency-light. See §7.
-- Word motions `w`/`b`/`e`, `dw`/`cw` respect **Chinese/Japanese word boundaries**.
-  **Done** (via the segmenter above).
+  `jieba-rs` crate directly: it is MIT-licensed and well maintained, but its
+  value (an embedded Simplified-Chinese dictionary and HMM model) is what we
+  replace with Yume's weight table, and depending on it would pull heavy
+  transitive crates for a DAG we can write ourselves — so we implemented the
+  same algorithm directly and kept `yumete-cjk` dependency-light. See §7.
+- Word motions `w`/`b`/`e`, `dw`/`cw` respect
+  **Chinese/Japanese word boundaries**. **Done** (via the segmenter above).
 - Embed `yume-core`; in-terminal candidate panel; Shift 中/英; scheme switching;
   number/`/`/`z` modes; per-project local config. **Mostly done:** `yumete-ime`
   embeds `yume-core` as an `ImeSession`; Insert mode routes keys to the IME and
-  draws a floating candidate panel; a lone-Shift tap toggles 中/英 (via the Kitty
-  keyboard protocol); number/`/`/`z` modes come through the engine;
-  `scripts/build.sh` installs the compiled tables.
-  The remaining piece is a scheme-switch command/keybinding in the editor (#31).
+  draws a floating candidate panel; a lone-Shift tap toggles 中/英 (via the
+  Kitty keyboard protocol); number/`/`/`z` modes come through the engine;
+  `scripts/build.sh` installs the compiled tables. The remaining piece is a
+  scheme-switch command/keybinding in the editor (#31).
 - Exit criteria: type CJK inside the editor via Yume; `w` moves by word, not
   sentence; switch schemes; local config overrides global.
 
@@ -4371,7 +4442,6 @@ layout = "vertical"   # "horizontal" (default) | "vertical"
 zong_length = 0       # graphemes per 縱; 0 = whatever the window gives (#125)
 zong_gap = 1          # half-width cells between two 縱; 0–4
 ```
-
 
 A novel written in Chinese is set vertically, and the terminal grid turns out to
 suit that almost exactly: a cell is about 1:2, so a full-width character — two
@@ -4446,14 +4516,15 @@ the left of the column.
 **縦中横 is available and off.** The 縱 model was "one grapheme, one slot";
 making it "one **slot**, which is usually one grapheme but may be a pair of
 half-width alphanumerics" was a change in exactly one function, `slot_offsets`,
-because every other question the module answers — how long is a 縱, which slot is
-the cursor in, where does a 縱 wrap, what does the renderer draw — is already
+because every other question the module answers — how long is a 縱, which slot
+is the cursor in, where does a 縱 wrap, what does the renderer draw — is already
 expressed in those offsets. It is `[editor] tatechuyoko`, default off: turned
-sideways, `yume` reads as `yu` over `me`, two syllables that are not in the word.
-A two-digit year is the case that earns it, which is why the machinery stayed.
+sideways, `yume` reads as `yu` over `me`, two syllables that are not in the
+word. A two-digit year is the case that earns it, which is why the machinery
+stayed.
 
-Two characters is the hard limit either way: a slot is two cells and a half-width
-character is one, so `1985` packs as `19` over `85` and no further.
+Two characters is the hard limit either way: a slot is two cells and a
+half-width character is one, so `1985` packs as `19` over `85` and no further.
 
 Two bugs this uncovered, both of the same shape — a setting known to one half of
 the system and not the other:
@@ -4469,9 +4540,9 @@ the system and not the other:
 ### Ruby (#65)
 
 **The markup is not yumete's.** A reading has to be written into the file, and
-how is a property of the document: a Markdown file wants HTML ruby, which is what
-the Yuhao documentation already uses and what a browser renders unchanged; a
-Typst file wants Typst's own call, which its compiler will typeset. So it is a
+how is a property of the document: a Markdown file wants HTML ruby, which is
+what the Yuhao documentation already uses and what a browser renders unchanged;
+a Typst file wants Typst's own call, which its compiler will typeset. So it is a
 `Dialect`, several can be read at once (a document may mix them), and the set
 starts from the file's extension. `:format-ruby-<dialect>` rewrites a whole
 buffer from one into another.
@@ -4487,11 +4558,11 @@ one cell at the right edge so the first 縱 has one too.
 out the `<rt>` is not on screen at all, so a cursor cannot be moved into it.
 `:ruby` opens a prompt in the status bar — the IME available, since readings are
 kana or 拼音 — loaded with the current reading where there is one and empty over
-a selection. Submitting an empty reading is how an annotation comes off, which is
-why backspacing to empty does *not* leave the mode the way it does in a search
-prompt: the empty state has to be reachable.
+a selection. Submitting an empty reading is how an annotation comes off, which
+is why backspacing to empty does *not* leave the mode the way it does in a
+search prompt: the empty state has to be reachable.
 
-**Granularity is the author's.** HTML ruby already expresses both — one group
+**Granularity is the writer’s.** HTML ruby already expresses both — one group
 over a word, or one per character side by side — so only the *command* had to
 choose. A reading split by `|` into as many parts as the base has characters
 writes one group per character; anything else stays one group. A space cannot do
@@ -4502,29 +4573,30 @@ to put a reading in it.
 
 ### 標點旁置 — punctuation beside the character (#70)
 
-Set in the classical manner, 。，、？！：；「」 do not take a square of their own:
-they hang in the margin beside the character they belong to, and the text column
-carries nothing but text. `:hanging`, or `[editor] hanging_punctuation`.
+Set in the classical manner, 。，、？！：；「」 do not take a square of their
+own: they hang in the margin beside the character they belong to, and the text
+column carries nothing but text. `:hanging`, or `[editor] hanging_punctuation`.
 
 **A mark stops being a slot** and joins a character's, so the wrap length, the
-cursor and every motion agree that 「文。」 is one row — the same change of shape
-ruby made, in the same function.
+cursor and every motion agree that 「文。」 is one row — the same change of
+shape ruby made, in the same function.
 
 **Which character it joins depends on which way the mark faces.** An opening
-bracket introduces what follows it, so 「 hangs beside 學, not beside the 曰 that
-ended the sentence before it. Everything else — stops, commas, closing brackets —
-belongs to what came before. Getting this backwards is not a rounding error: it
-attaches the quotation mark to the wrong sentence.
+bracket introduces what follows it, so 「 hangs beside 學, not beside the 曰
+that ended the sentence before it. Everything else — stops, commas, closing
+brackets — belongs to what came before. Getting this backwards is not a rounding
+error: it attaches the quotation mark to the wrong sentence.
 
 **A second mark running keeps the text column clean.** 「？」」 ends a quoted
 question and is common; the closer takes a row of its own, but in the *margin*,
-leaving the text column empty there rather than putting punctuation back into it.
+leaving the text column empty there rather than putting punctuation back into
+it.
 
 **Against a reading the mark wins the cell, and the reading gives way upward.**
-Both want the one column right of the 縱, and the mark belongs on its character's
-own row. So where marks hang, a reading no longer brackets its base — it takes
-the rows *above* outright, opening a gap between that character and the one
-before:
+Both want the one column right of the 縱, and the mark belongs on its
+character's own row. So where marks hang, a reading no longer brackets its base
+— it takes the rows *above* outright, opening a gap between that character and
+the one before:
 
 ```
    z
@@ -4544,19 +4616,18 @@ ignored mouse events, so in the alternate screen the terminal translated the
 wheel into Up/Down arrows — and vertically those are the screen-direction keys,
 one character each. A page took as many notches as it had characters on it.
 
-The mouse is now captured and a notch moves three 縱 — the three lines a terminal
-scrolls, counted in the unit the page is set in. **The cost, paid knowingly:**
-capture takes click-and-drag selection away from the terminal, so copying with
-the mouse needs whatever modifier that terminal reserves for it (Option, on
-macOS). Helix makes the same trade.
+The mouse is now captured and a notch moves three 縱 — the three lines a
+terminal scrolls, counted in the unit the page is set in.
+**The cost, paid knowingly:** capture takes click-and-drag selection away from
+the terminal, so copying with the mouse needs whatever modifier that terminal
+reserves for it (Option, on macOS). Helix makes the same trade.
 
 It moves the **cursor**, not only the view. A view scrolled on its own would be
 pulled straight back the moment the cursor had to stay on screen — the two would
 fight every frame — so the cursor travels with the page, which in a modal editor
 is where you were heading anyway.
 
-**The three was chosen for a wheel and met a trackpad** (#222, the author,
-2026-09-04: 「一次20行上下」). `WHEEL_STEP` is a `const` in
+**The three was chosen for a wheel and met a trackpad** （#222，2026-09-04：「一次20行上下」）. `WHEEL_STEP` is a `const` in
 `crates/yumete-tui/src/lib.rs` — no config key, no command, nothing a reader can
 say. And the number that lands on the page is not three: one trackpad gesture
 sends a **burst** of `ScrollDown` events, each of which moves three, so a flick
@@ -4576,22 +4647,22 @@ that it did.
 
 **The cursor is per buffer**, not per editor. Coming back to a file you were
 halfway through and being dropped at the top of it is the difference between two
-files being usable together and not. It is saved on the way out, including when a
-new buffer is *added* rather than switched to, and clamped on the way back in
+files being usable together and not. It is saved on the way out, including when
+a new buffer is *added* rather than switched to, and clamped on the way back in
 since the buffer it came from may have been longer.
 
 ### The panel's skin, in two numbers (#75)
 
-`[panel]` configures the candidate panel: the characters it numbers with, its two
-colours, the page size, and whether the ring is rounded.
+`[panel]` configures the candidate panel: the characters it numbers with, its
+two colours, the page size, and whether the ring is rounded.
 
 **Two colours, not thirteen.** Yume's own themes are defined by an ink and a
 paper, with every other shade interpolated along a ladder between them
 (`yume_core::themes::ink_ladder`). yumete reproduces the ladder rather than
-storing the shades it produces, which is what lets a skin be changed by editing a
-pair of values: the relationships between border, helper text and highlight stay
-right by construction, and the panel is the *same skin* as the GUI frontends'
-whenever the endpoints match.
+storing the shades it produces, which is what lets a skin be changed by editing
+a pair of values: the relationships between border, helper text and highlight
+stay right by construction, and the panel is the *same skin* as the GUI
+frontends' whenever the endpoints match.
 
 **The markers have to be full-width.** The circled Chinese numerals ㊀㊁㊂ are;
 the circled Arabic ①②③ are East-Asian *ambiguous*, so a terminal may draw them
@@ -4607,45 +4678,48 @@ the best-matching name; in a search it is the rest of the last pattern, so
 repeating a search is one keystroke rather than retyping it.
 
 The guess disappears once it would be a lie: after Tab has picked something (the
-line *is* the completion then), once arguments have started (a file name is not a
-command name), and when what has been typed is not a prefix of anything.
+line *is* the completion then), once arguments have started (a file name is not
+a command name), and when what has been typed is not a prefix of anything.
 
 ### The 縱 gap, and what pays for it (#73)
 
 A reading sits in the cell to the **right** of its own 縱; the gap sits
-**between** two of them. Those are the same cell, which is why a gap of one gives
-readings a home for free — and why a gap of zero used to mean no readings at all.
+**between** two of them. Those are the same cell, which is why a gap of one
+gives readings a home for free — and why a gap of zero used to mean no readings
+at all.
 
 They are now separate questions. One column to the next costs
-`max(gap, reading ? 1 : 0)`, so with `zong_gap = 0` a 縱 carrying a reading takes
-its cell and every other 縱 sits flush against its neighbour. The rightmost 縱
-pays for its own reading, having no neighbour to borrow the cell from.
+`max(gap, reading ? 1 : 0)`, so with `zong_gap = 0` a 縱 carrying a reading
+takes its cell and every other 縱 sits flush against its neighbour. The
+rightmost 縱 pays for its own reading, having no neighbour to borrow the cell
+from.
 
-The consequence, which is the price of asking for it: column positions now depend
-on *which* 縱 are annotated, so they are walked rather than computed, and the page
-is measured, scrolled, and measured again — twice, because the second measurement
-is of the page actually being drawn.
+The consequence, which is the price of asking for it: column positions now
+depend on *which* 縱 are annotated, so they are walked rather than computed, and
+the page is measured, scrolled, and measured again — twice, because the second
+measurement is of the page actually being drawn.
 
 ### Command hints (#67)
 
 `:` on its own lists every command; each keystroke narrows it, and **Tab** walks
 the matches, writing each onto the line. The prefix Tab started from is kept
-rather than re-read from the line — after the first Tab the line says `ruby`, and
-re-reading it would narrow the list under the user's feet. The list sits above
-the command line in as many aligned columns as fit, filled down each column so an
-alphabetical list still reads alphabetically, with Tab's pick inked.
+rather than re-read from the line — after the first Tab the line says `ruby`,
+and re-reading it would narrow the list under the user's feet. The list sits
+above the command line in as many aligned columns as fit, filled down each
+column so an alphabetical list still reads alphabetically, with Tab's pick
+inked.
 
 The `:` line does **not** run the IME. Its whole vocabulary is ASCII command
 names, so composing there would only mean toggling out of it before every
 command; `/` keeps the IME, because a search pattern in a Chinese document is
 Chinese.
 
-The table of names is a second copy of the ones in `parse`, which is a `match` on
-string literals and cannot be enumerated. That is the trade: adding a command is
-two edits, and in exchange the table is the one place that says what each command
-is *for* — which is what is being read when the name cannot be remembered. A test
-parses every listed name, so the menu can never offer a command that does not
-exist.
+The table of names is a second copy of the ones in `parse`, which is a `match`
+on string literals and cannot be enumerated. That is the trade: adding a command
+is two edits, and in exchange the table is the one place that says what each
+command is *for* — which is what is being read when the name cannot be
+remembered. A test parses every listed name, so the menu can never offer a
+command that does not exist.
 
 ### Two things that were reading the whole document (#69)
 
@@ -4658,17 +4732,17 @@ open.
 800k characters with Yume's 1.25M-entry model that is **1130 ms a press**, so
 holding `w` filled the key queue and kept walking for seconds after the key was
 released — which is exactly what it looked like. Word boundaries never cross a
-line break (a newline separates words for the whitespace rule and breaks a run of
-漢字 for the dictionary), so a motion only ever needs the line it is on and, at
-worst, the next. **1130 ms → 0.05 ms.**
+line break (a newline separates words for the whitespace rule and breaks a run
+of 漢字 for the dictionary), so a motion only ever needs the line it is on and,
+at worst, the next. **1130 ms → 0.05 ms.**
 
 **The overlay re-segmented every visible paragraph, per frame** — 2.4 ms for
 forty of them, recomputed even when nothing had changed. It is now cached per
 paragraph against a **hash of that paragraph's text** rather than a buffer
 revision: a revision would invalidate all forty on every keystroke, while the
 hash invalidates only the paragraph being typed into. Ranges are relative to
-their line, so a matching hash is a correct answer however far the line has moved
-in the document. **2.4 ms → 0.03 ms.**
+their line, so a matching hash is a correct answer however far the line has
+moved in the document. **2.4 ms → 0.03 ms.**
 
 Both are guarded by tests that count calls rather than measure time, so they
 cannot rot back without failing.
@@ -4692,11 +4766,11 @@ Two things are deliberate:
   as if seen once (`−ln Σw`), jieba's rule. A fixed constant would be right for
   one corpus and nonsense for the next, and it gives an uncounted *word* a large
   edge over the same span of uncounted characters for free.
-- **A flat bonus per word** (3 nats) biases toward more, shorter words. The 詞頻表
-  counts phrases as well as words, so an unbiased split swallows 「我們的」 and
-  「正在改變」 whole and `w` jumps further than a writer means. At 3 those come
-  apart while 那年冬天, 人工智能 and 生活方式 stay whole; below 2 the particles
-  stay glued on, above 4 real words start splitting.
+- **A flat bonus per word** (3 nats) biases toward more, shorter words. The
+  詞頻表 counts phrases as well as words, so an unbiased split swallows
+  「我們的」 and 「正在改變」 whole and `w` jumps further than a writer means.
+  At 3 those come apart while 那年冬天, 人工智能 and 生活方式 stay whole; below
+  2 the particles stay glued on, above 4 real words start splitting.
 
 Cost is 0.042 ms for a 43-character line, and the renderer segments each
 paragraph once per frame, so the overlay is free at prose sizes.
@@ -4717,7 +4791,7 @@ pair, so `mi「` and `mi」` mean the same thing.
 
 **`J` does not always insert a space.** Helix always does; yumete omits it
 between two full-width characters, because a line break in CJK prose carries no
-space and joining two 漢字 with one inserts text the author never typed. Latin
+space and joining two 漢字 with one inserts text nobody typed. Latin
 words still get theirs.
 
 **Key repeat.** Under the Kitty keyboard protocol a held key arrives as one
@@ -4725,14 +4799,14 @@ words still get theirs.
 moved once — the reason `ffff` was needed where `f` held down should have done.
 Terminals without the protocol send plain presses and were never affected.
 
-**Cursor shape.** A block in Normal and a bar in Insert, via `DECSCUSR`. Laid out
-vertically the editor draws its own: the block covers the whole two-cell slot,
-and the Insert bar — turned a quarter turn with the text — becomes a rule lying
-across the 縱 at the boundary the next character will be pushed into.
+**Cursor shape.** A block in Normal and a bar in Insert, via `DECSCUSR`. Laid
+out vertically the editor draws its own: the block covers the whole two-cell
+slot, and the Insert bar — turned a quarter turn with the text — becomes a rule
+lying across the 縱 at the boundary the next character will be pushed into.
 
 **A second pass (#74)** added the rest of the tutorial that one selection can
-carry: `r` writes a character over the whole selection, `A-;` flips which end the
-cursor is on, `"a` names a register, `q`/`Q` record and replay a macro, and
+carry: `r` writes a character over the whole selection, `A-;` flips which end
+the cursor is on, `"a` names a register, `q`/`Q` record and replay a macro, and
 `C-d`/`C-u`/`C-f`/`C-b` move by page.
 
 Three details worth keeping:
@@ -4743,17 +4817,17 @@ Three details worth keeping:
   macro that skipped every other character.
 - **Deleting yanks**, as in Helix, so `d` then `p` moves text rather than losing
   it.
-- **A macro records in `on_key`**, not in the Normal-mode handler, so it captures
-  the text typed in Insert and the pattern typed at a prompt. A macro that can
-  only move is not much of one. `Q` inside a macro is a no-op rather than a
-  recursion.
+- **A macro records in `on_key`**, not in the Normal-mode handler, so it
+  captures the text typed in Insert and the pattern typed at a prompt. A macro
+  that can only move is not much of one. `Q` inside a macro is a no-op rather
+  than a recursion.
 
 **Still not done: multiple cursors.** `C`, `s`, `S` and the rest of Helix's
 multi-selection model need the core to carry a *set* of ranges rather than one
 anchor/cursor pair. That is a real change to `Editor`, not an addition to it, so
-it is deliberately left out rather than half-built. `gt`/`gc`/`gb` are missing for
-a smaller version of the same reason: the scroll position lives in the renderer,
-not the editor.
+it is deliberately left out rather than half-built. `gt`/`gc`/`gb` are missing
+for a smaller version of the same reason: the scroll position lives in the
+renderer, not the editor.
 
 ### Phase 4 — Polish & QoL
 
@@ -4763,11 +4837,11 @@ not the editor.
   (Feature #24) has two rough edges to fix once the theme system lands: (1) the
   word background does not always fully cover wide (two-cell) CJK glyphs, so the
   tint looks narrower than the word; this happens only in Warp but is fine in
-  Kitty and built-in terminal. So it is not a problem. (2) the two default tints are
-  too close to tell adjacent words apart. When theming arrives, give the overlay proper,
-  clearly distinct, theme-driven colours (Helix-style, e.g. a purple accent).
-  Maybe we can also use just one color to tint the words, and that is sufficiently
-  clear to distinguish the words.
+  Kitty and built-in terminal. So it is not a problem. (2) the two default tints
+  are too close to tell adjacent words apart. When theming arrives, give the
+  overlay proper, clearly distinct, theme-driven colours (Helix-style, e.g. a
+  purple accent). Maybe we can also use just one color to tint the words, and
+  that is sufficiently clear to distinguish the words.
 
 ### Phase 5+ — Future / advanced
 
@@ -4782,48 +4856,52 @@ not the editor.
   behind the `TextStore` trait, so a Helix-style rope and transaction layer can
   replace it later.
 - **Text width & graphemes.** Do not reimplement Unicode. Character and string
-  display width come from `unicode-width` (Unicode Annex #11), and grapheme-cluster
-  boundaries from `unicode-segmentation` (Annex #29) — the same crates Helix uses.
-  yumete adds only thin, editor-specific helpers in `yumete-cjk`: `grapheme_width`
-  (ASCII and ill-formed clusters floor at one cell, so everything stays editable)
-  and `tab_width_at` (tab stops). Rope-aware cursor navigation will use
-  `unicode-segmentation`'s incremental `GraphemeCursor` directly over `RopeSlice`
-  chunks, as Helix does, rather than materializing whole lines. `unicode-width` is
-  still imperfect for some emoji ZWJ sequences — a known upstream limitation.
+  display width come from `unicode-width` (Unicode Annex #11), and
+  grapheme-cluster boundaries from `unicode-segmentation` (Annex #29) — the same
+  crates Helix uses. yumete adds only thin, editor-specific helpers in
+  `yumete-cjk`: `grapheme_width` (ASCII and ill-formed clusters floor at one
+  cell, so everything stays editable) and `tab_width_at` (tab stops). Rope-aware
+  cursor navigation will use `unicode-segmentation`'s incremental
+  `GraphemeCursor` directly over `RopeSlice` chunks, as Helix does, rather than
+  materializing whole lines. `unicode-width` is still imperfect for some emoji
+  ZWJ sequences — a known upstream limitation.
 - **Terminal backend.** Do not hand-roll ANSI escapes. Use `crossterm` for the
-  cross-platform terminal backend and `ratatui` (the maintained fork of `tui-rs`)
-  for the buffer and widget layer, behind the `Renderer` trait. This mirrors Helix,
-  which pairs its own `tui-rs` fork (`helix-tui`) with a terminal backend. Keeping
-  it behind `Renderer` leaves the choice swappable.
+  cross-platform terminal backend and `ratatui` (the maintained fork of
+  `tui-rs`) for the buffer and widget layer, behind the `Renderer` trait. This
+  mirrors Helix, which pairs its own `tui-rs` fork (`helix-tui`) with a terminal
+  backend. Keeping it behind `Renderer` leaves the choice swappable.
 - **IME scope.** One engine per editor, rather than per buffer.
-- **Segmentation dictionary.** A `Segmenter` trait in `yumete-cjk` drives `w`/`b`/`e`
-  and the segmentation overlay. The default `CategorySegmenter` needs no dictionary
-  (each CJK character is its own word); `DictionarySegmenter` groups CJK runs into
-  words along the maximum-probability path through a `word → weight` graph, with a
-  weight threshold so only sufficiently common words are joined. The `jieba-rs`
-  crate was evaluated as a dependency: it is MIT-licensed (compatible with our
-  Apache-2.0) and well maintained, but its value is an embedded Simplified-Chinese
-  dictionary plus an HMM model — exactly what we replace with Yume's own weight
-  table — so using it would mean disabling its dictionary yet still pulling heavy
-  transitive dependencies (`regex`, `cedarwood`, a proc-macro crate, `phf`) for a
-  DAG we can write in a few dozen lines. yumete therefore implements the same
+- **Segmentation dictionary.** A `Segmenter` trait in `yumete-cjk` drives
+  `w`/`b`/`e` and the segmentation overlay. The default `CategorySegmenter`
+  needs no dictionary (each CJK character is its own word);
+  `DictionarySegmenter` groups CJK runs into words along the maximum-probability
+  path through a `word → weight` graph, with a weight threshold so only
+  sufficiently common words are joined. The `jieba-rs` crate was evaluated as a
+  dependency: it is MIT-licensed (compatible with our Apache-2.0) and well
+  maintained, but its value is an embedded Simplified-Chinese dictionary plus an
+  HMM model — exactly what we replace with Yume's own weight table — so using it
+  would mean disabling its dictionary yet still pulling heavy transitive
+  dependencies (`regex`, `cedarwood`, a proc-macro crate, `phf`) for a DAG we
+  can write in a few dozen lines. yumete therefore implements the same
   jieba-style DAG + maximum-probability algorithm directly, keeping `yumete-cjk`
-  dependency-light. A compact common-word dictionary is bundled with `yumete-cjk`
-  (`DictionarySegmenter::builtin`) so word motions and the overlay work with no
-  setup; a user may override it with a richer `word<TAB>weight` `segmentation.txt`
-  in the data directory, and feeding Yume's compiled weight table into the
-  dictionary belongs to the IME milestone.
+  dependency-light. A compact common-word dictionary is bundled with
+  `yumete-cjk` (`DictionarySegmenter::builtin`) so word motions and the overlay
+  work with no setup; a user may override it with a richer `word<TAB>weight`
+  `segmentation.txt` in the data directory, and feeding Yume's compiled weight
+  table into the dictionary belongs to the IME milestone.
 - **Config format.** TOML, consistent with the yume repository.
-- **Helix reuse boundary.** Depend on Helix crates only through our own traits, so
-  the project is never locked in and can grow or replace pieces incrementally.
+- **Helix reuse boundary.** Depend on Helix crates only through our own traits,
+  so the project is never locked in and can grow or replace pieces
+  incrementally.
 
 ---
 
 ## 8. Relationship to the yume repository, location, and licensing
 
-- `yume-core` is the IME engine that yumete embeds; it needs no changes for Phase 1.
-- Phase 2 may add small `yume-core` conveniences (such as a compact session helper)
-  but should avoid coupling the engine to any editor concept.
+- `yume-core` is the IME engine that yumete embeds; it needs no changes for
+  Phase 1.
+- Phase 2 may add small `yume-core` conveniences (such as a compact session
+  helper) but should avoid coupling the engine to any editor concept.
 - The compiled data tables and the bundled `Yuniversus.ttf` are reused as-is.
 
 ### 8.1 Project location
@@ -4835,26 +4913,29 @@ not the editor.
   yume does not track it as an embedded repository or accidental submodule. That
   ignore line can be dropped once yumete moves out.
 - yumete depends on `yume-core` through a path or git dependency in its own
-  `Cargo.toml` — for example `yume-core = { path = "../crates/yume-core" }` while
-  nested, switching to a git or versioned dependency after it moves out.
+  `Cargo.toml` — for example `yume-core = { path = "../crates/yume-core" }`
+  while nested, switching to a git or versioned dependency after it moves out.
 
 ### 8.2 Licensing & Helix reuse
 
 - Both **yume** and **yumete** are licensed under the **Apache License 2.0**.
-  - **yume**: `Cargo.toml` declares `license = "Apache-2.0"` with a root `LICENSE`.
-  - **yumete**: workspace `Cargo.toml` declares `license = "Apache-2.0"` with a root
+  - **yume**: `Cargo.toml` declares `license = "Apache-2.0"` with a root
     `LICENSE`.
-- **Helix is MPL-2.0** (Mozilla Public License 2.0) — a file-level (weak) copyleft.
-  Depending on Helix crates is license-compatible: MPL-2.0 permits combining MPL
-  code into a "Larger Work" under any license and does not relicense yumete's own
-  files, so yumete stays Apache-2.0 while depending on MPL Helix crates.
-- **Reuse.** Depend on Helix crates unmodified as normal Cargo dependencies, keep
-  Helix's `LICENSE` and attribution, and wrap its rope, transaction, and grapheme
-  helpers behind the `TextStore` and `Motion` traits (§2). yumete's own files stay
-  Apache-2.0 with no per-file MPL headers, and the MPL surface stays small.
-- **Files:** a single `LICENSE` (Apache-2.0) in each project (done for both). Add a
-  `THIRD_PARTY.md`/`NOTICE` listing MPL-2.0 (Helix) + other deps once they are
-  pulled in.
+  - **yumete**: workspace `Cargo.toml` declares `license = "Apache-2.0"` with a
+    root `LICENSE`.
+- **Helix is MPL-2.0** (Mozilla Public License 2.0) — a file-level (weak)
+  copyleft. Depending on Helix crates is license-compatible: MPL-2.0 permits
+  combining MPL code into a "Larger Work" under any license and does not
+  relicense yumete's own files, so yumete stays Apache-2.0 while depending on
+  MPL Helix crates.
+- **Reuse.** Depend on Helix crates unmodified as normal Cargo dependencies,
+  keep Helix's `LICENSE` and attribution, and wrap its rope, transaction, and
+  grapheme helpers behind the `TextStore` and `Motion` traits (§2). yumete's own
+  files stay Apache-2.0 with no per-file MPL headers, and the MPL surface stays
+  small.
+- **Files:** a single `LICENSE` (Apache-2.0) in each project (done for both).
+  Add a `THIRD_PARTY.md`/`NOTICE` listing MPL-2.0 (Helix) + other deps once they
+  are pulled in.
 - Note: not all Helix crates are published to crates.io yet; if a needed crate
   isn't published, a git dependency pinned to a commit is fine (still MPL, same
   rules).
@@ -4870,15 +4951,15 @@ small **configuration** (text settings) and, once the IME lands, large
 ### 9.1 Configuration vs. data
 
 - **Configuration** — small TOML, edited by the user. Global at
-  `$XDG_CONFIG_HOME/yumete/config.toml` (or `~/.config/yumete/config.toml`), with
-  an optional per-project `.yumete/config.toml` override (§5.1). Implemented in
-  `yumete-config` (`config_dir()`).
+  `$XDG_CONFIG_HOME/yumete/config.toml` (or `~/.config/yumete/config.toml`),
+  with an optional per-project `.yumete/config.toml` override (§5.1).
+  Implemented in `yumete-config` (`config_dir()`).
 - **Dictionary data** — the compiled IME artifacts reused from the yume build
-  (`.ytab`, `.yflb`, `.ywtb`, `.ywl`, `.ydiv`, `.yzg`, `.ycs`, `.ywrd`, `.ygram`)
-  plus the bundled `Yuniversus.ttf`. The list itself comes from
-  `yume_core::data_manifest`, never from a copy kept here.
-  These are **not embedded in the binary** — they are large (the Lingming table
-  alone is hundreds of thousands of entries), and baking them in would bloat the
+  (`.ytab`, `.yflb`, `.ywtb`, `.ywl`, `.ydiv`, `.yzg`, `.ycs`, `.ywrd`,
+  `.ygram`) plus the bundled `Yuniversus.ttf`. The list itself comes from
+  `yume_core::data_manifest`, never from a copy kept here. These are
+  **not embedded in the binary** — they are large (the Lingming table alone is
+  hundreds of thousands of entries), and baking them in would bloat the
   executable and force a rebuild for every data update.
 
 ### 9.2 Where the data lives, and the resolution order
@@ -4889,8 +4970,8 @@ Data is looked up in this order, first match wins (`yumete-config`'s
 1. **User data dir** — `$XDG_DATA_HOME/yumete/` (or `~/.local/share/yumete/`).
    Holds user-added schemes and custom 碼表 (#50); never touched by upgrades.
 2. **Install-prefix data dir** — `<prefix>/share/yumete/`, resolved from the
-   executable (`<prefix>/bin/yumete` → `<prefix>/share/yumete`). Holds the schemes
-   that ship with a release.
+   executable (`<prefix>/bin/yumete` → `<prefix>/share/yumete`). Holds the
+   schemes that ship with a release.
 
 So the shipped data sits **in the same install tree as the binary**, under
 `share/`, with per-scheme subfolders:
@@ -4915,9 +4996,9 @@ A user who adds their own scheme mirrors this layout under
 
 ### 9.3 Installing and updating with a Homebrew tap
 
-A single `brew install` places the binary and its data under the **same prefix**,
-so subfolders under `share/yumete/` are exactly what the resolver expects. With a
-tap (e.g. `forfudan/tap`):
+A single `brew install` places the binary and its data under the
+**same prefix**, so subfolders under `share/yumete/` are exactly what the
+resolver expects. With a tap (e.g. `forfudan/tap`):
 
 ```bash
 brew install forfudan/tap/yumete   # installs bin/yumete + share/yumete/…
@@ -4948,16 +5029,16 @@ end
   `.ytab`/`.yflb`/…), then stages the compiled artifacts and fonts into
   `share/yumete/` (or a `data/` tarball the formula installs). A future
   `scripts/build_data.sh` will automate this.
-- Ship a `share/yumete/VERSION` (or reuse the yume build timestamp) so the binary
-  can warn on a format mismatch. yumete reads the same on-disk formats
+- Ship a `share/yumete/VERSION` (or reuse the yume build timestamp) so the
+  binary can warn on a format mismatch. yumete reads the same on-disk formats
   (`YTB1`/`YFL1`/`YWT1`/`YANN`/…) that `yume-compile` writes.
 - Optional non-brew path: a `yumete --update-data` command could download a
-  versioned data archive from the yume release repository into the user data dir,
-  mirroring Yume's in-app updater. This is deferred; `brew upgrade` covers the
-  common case.
+  versioned data archive from the yume release repository into the user data
+  dir, mirroring Yume's in-app updater. This is deferred; `brew upgrade` covers
+  the common case.
 
-Until the IME is integrated (P2, #27), no dictionary data is required — the editor
-runs on the binary alone. This section is the plan for when it is.
+Until the IME is integrated (P2, #27), no dictionary data is required — the
+editor runs on the binary alone. This section is the plan for when it is.
 
 ---
 
@@ -4973,7 +5054,8 @@ actually being built.
 
 The code lives in the yume repository (`yume/frontends/web/`), because it shares
 the engine, the candidate panel, and the settings drawer with the Web IME — see
-`yume/docs/development.md` §4.7. Only the editor-specific design is recorded here.
+`yume/docs/development.md` §4.7. Only the editor-specific design is recorded
+here.
 
 ### 10.1 Why the terminal was abandoned
 
@@ -4990,8 +5072,8 @@ Every blocker is at the terminal boundary; none of them is about the engine.
   characters and cell-aligned text; positioning, layering, and styling (rounded
   corners, subscripts, an annotation column) all fight the character grid.
 - **One key stream, three consumers.** Modal editing, IME composition, and the
-  candidate panel compete for the same byte stream, and a terminal gives far less
-  structure than a GUI event model.
+  candidate panel compete for the same byte stream, and a terminal gives far
+  less structure than a GUI event model.
 
 ### 10.2 What the browser gives back
 
@@ -5000,25 +5082,26 @@ The Web IME (`crates/yume-wasm` + `frontends/web`) already proved each of these:
 - **Drawing, fonts, and the candidate panel are the browser's problem** — web
   fonts, a rounded DOM panel, cursor-following placement.
 - **Segmentation is free**: `Intl.Segmenter` does dictionary-grade CJK word
-  segmentation, so `w`/`b`/`e` need no segmenter of our own (a weight-table-driven
-  variant stays possible later).
+  segmentation, so `w`/`b`/`e` need no segmenter of our own (a
+  weight-table-driven variant stays possible later).
 - **A mature editor core exists**: CodeMirror 6 — light, modular, handles IME
   composition natively, virtualizes large files, soft-wraps, and has a Vim mode
   that can be bent into Helix.
-- **Cross-platform for free**, and themes plus an outline sidebar are ordinary DOM.
+- **Cross-platform for free**, and themes plus an outline sidebar are ordinary
+  DOM.
 
 ### 10.3 Architecture options
 
-| Option                  | File access                                | Distribution                | Verdict                                                                                        |
-| ----------------------- | ------------------------------------------ | --------------------------- | ---------------------------------------------------------------------------------------------- |
-| Static web page         | File System Access API (Chromium only)     | Zero install, a URL         | Best for "try it / write on a tablet"; not every browser can edit locally                      |
-| **Tauri desktop (rec.)**| **Native filesystem**                      | Small native package        | **Links `yume-core` directly (pure Rust, no FFI/WASM)**; same path on mac/win/linux             |
-| Electron                | Native                                     | Bundles Chromium, heavy     | Not worth it unless the Node ecosystem is needed                                                |
-| VS Code extension       | Provided by VS Code                        | Extension                   | VS Code is Electron; real composition hits the same host-key problems as the macOS IME          |
+| Option | File access | Distribution | Verdict |
+| ------------------------ | -------------------------------------- | ----------------------- | -------------------------------------------------------------------------------------- |
+| Static web page | File System Access API (Chromium only) | Zero install, a URL | Best for "try it / write on a tablet"; not every browser can edit locally |
+| **Tauri desktop (rec.)** | **Native filesystem** | Small native package | **Links `yume-core` directly (pure Rust, no FFI/WASM)**; same path on mac/win/linux |
+| Electron | Native | Bundles Chromium, heavy | Not worth it unless the Node ecosystem is needed |
+| VS Code extension | Provided by VS Code | Extension | VS Code is Electron; real composition hits the same host-key problems as the macOS IME |
 
 **The shape**: one `frontends/web` frontend, published twice — (a) as the
-`yume.shurufa.app` web demo, and (b) loaded by a Tauri shell as a desktop app with
-native file access and a direct `yume-core` link.
+`yume.shurufa.app` web demo, and (b) loaded by a Tauri shell as a desktop app
+with native file access and a direct `yume-core` link.
 
 ### 10.4 Reuse vs rewrite
 
@@ -5029,18 +5112,18 @@ native file access and a direct `yume-core` link.
   rendering, soft wrap, search, and undo — which **replaces most of
   `yumete-core`'s rope / selection / motion / history**, leaving a CJK-IME glue
   layer and the Helix keymap.
-- **Rewrite in the web layer**: modal editing (a Helix-flavoured CodeMirror keymap,
-  or `@replit/codemirror-vim` bent into shape), the outline sidebar (parse
-  Markdown/Typst headings in JS or WASM), and settings (Tauri config directory,
-  mirroring the web build's `localStorage`).
+- **Rewrite in the web layer**: modal editing (a Helix-flavoured CodeMirror
+  keymap, or `@replit/codemirror-vim` bent into shape), the outline sidebar
+  (parse Markdown/Typst headings in JS or WASM), and settings (Tauri config
+  directory, mirroring the web build's `localStorage`).
 - **Now optional**: CJK width/grapheme arithmetic (the browser lays out) and a
   jieba-style segmenter (only if weight-table boundaries are wanted).
 
 ### 10.5 What is lost
 
 - **The "terminal editor" niche.** The web/Tauri build cannot be used over bare
-  SSH, in tmux, or on a headless server. If that is ever needed, the TUI stays as
-  a secondary target (§1–§9).
+  SSH, in tmux, or on a headless server. If that is ever needed, the TUI stays
+  as a secondary target (§1–§9).
 - **Distribution changes** from a single static binary plus Homebrew to a Tauri
   package (still small) or a hosted page.
 
@@ -5049,50 +5132,51 @@ native file access and a direct `yume-core` link.
 **P1** web editor MVP (CodeMirror + IME + open/save) → **P2** CJK words + Helix
 keymap → **P3** outline + Tauri packaging → **P4** polish.
 
-| #   | Feature                                            | Layer      | Phase | Notes                                                       | Status  |
-| --- | -------------------------------------------------- | ---------- | ----- | ----------------------------------------------------------- | ------- |
-| 11  | CodeMirror 6 skeleton (buffer/selection/undo/find) | web        | P1    | Needs a bundler; `<textarea>` stands in for now              | Deferred |
-| 12  | Open / save local files                            | web/tauri  | P1    | Web: File System Access API; Tauri: native fs                | Web ✓   |
-| 13  | Embedded Yume IME (engine + candidate panel)       | web/ime    | P1    | Web: `yume-wasm`; Tauri: direct `yume-core`                  | Web ✓   |
-| 14  | Lone Shift toggles 中/英                           | web/ime    | P1    | The browser reports Shift reliably; the terminal cannot      | Web ✓   |
-| 15  | Selection / paging / subscripts / annotations      | web/ime    | P1    | Lifted from the Web IME panel                                | Web ✓   |
-| 16  | Scheme switching + settings drawer                 | web/ime    | P1    | Reuses the Web IME drawer                                    | Web ✓   |
-| 21  | CJK word motions `w`/`b`/`e`                       | web/cjk    | P2    | `Intl.Segmenter`                                             | Web ✓   |
-| 22  | Modal editing (Normal/Insert/…)                    | web        | P2    | Overlay on the textarea, toggleable; IME only in Insert      | Web ✓   |
-| 23  | Word delete/change, selection operators            | web        | P2    | `v` selection + `d`/`c`/`y`, `dw`/`dd`, `p`                  | Web ✓   |
-| 24  | Search / replace, char search `f`/`t`              | web        | P2    | `/` bar + `n`/`N`; `f`/`t`/`F`/`T` + `;`/`,`                 | Web ✓   |
-| 25  | Number mode, `/` commands, `z` reverse lookup      | web/ime    | P2    | Engine has it; frontend wiring only                          | —       |
-| 31  | Adaptive type for Markdown / Typst                 | web/lsp    | P3    | Bold/italic/colour under the relevant syntax                 | Web ✓   |
-| 32  | Outline sidebar (Markdown/Typst headings)          | web/lsp    | P3    | Parse headings in JS or WASM                                 | —       |
-| 33  | Theme + font cascade (single Helix-purple theme)   | web/config | P3    | One theme, no dark toggle; purple word-boundary marks        | Web ✓   |
-| 34  | Tauri packaging (mac/win/linux)                    | tauri      | P3    | `frontends/desktop`, links `yume-core` directly              | —       |
-| 35  | Deploy `yume.shurufa.app`                          | web        | P3    | Reuses `build_website.sh` → the website repo                 | Web ✓   |
-| 41  | Global/project settings, custom 碼表 upload        | web/config | P4    | Mirrors §9 and the Web IME                                   | —       |
-| 42  | Word count, writing QoL, autosave                  | web        | P4    | Prose-writing oriented                                       | —       |
+| # | Feature | Layer | Phase | Notes | Status |
+| --- | -------------------------------------------------- | ---------- | ----- | ------------------------------------------------------- | -------- |
+| 11 | CodeMirror 6 skeleton (buffer/selection/undo/find) | web | P1 | Needs a bundler; `<textarea>` stands in for now | Deferred |
+| 12 | Open / save local files | web/tauri | P1 | Web: File System Access API; Tauri: native fs | Web ✓ |
+| 13 | Embedded Yume IME (engine + candidate panel) | web/ime | P1 | Web: `yume-wasm`; Tauri: direct `yume-core` | Web ✓ |
+| 14 | Lone Shift toggles 中/英 | web/ime | P1 | The browser reports Shift reliably; the terminal cannot | Web ✓ |
+| 15 | Selection / paging / subscripts / annotations | web/ime | P1 | Lifted from the Web IME panel | Web ✓ |
+| 16 | Scheme switching + settings drawer | web/ime | P1 | Reuses the Web IME drawer | Web ✓ |
+| 21 | CJK word motions `w`/`b`/`e` | web/cjk | P2 | `Intl.Segmenter` | Web ✓ |
+| 22 | Modal editing (Normal/Insert/…) | web | P2 | Overlay on the textarea, toggleable; IME only in Insert | Web ✓ |
+| 23 | Word delete/change, selection operators | web | P2 | `v` selection + `d`/`c`/`y`, `dw`/`dd`, `p` | Web ✓ |
+| 24 | Search / replace, char search `f`/`t` | web | P2 | `/` bar + `n`/`N`; `f`/`t`/`F`/`T` + `;`/`,` | Web ✓ |
+| 25 | Number mode, `/` commands, `z` reverse lookup | web/ime | P2 | Engine has it; frontend wiring only | — |
+| 31 | Adaptive type for Markdown / Typst | web/lsp | P3 | Bold/italic/colour under the relevant syntax | Web ✓ |
+| 32 | Outline sidebar (Markdown/Typst headings) | web/lsp | P3 | Parse headings in JS or WASM | — |
+| 33 | Theme + font cascade (single Helix-purple theme) | web/config | P3 | One theme, no dark toggle; purple word-boundary marks | Web ✓ |
+| 34 | Tauri packaging (mac/win/linux) | tauri | P3 | `frontends/desktop`, links `yume-core` directly | — |
+| 35 | Deploy `yume.shurufa.app` | web | P3 | Reuses `build_website.sh` → the website repo | Web ✓ |
+| 41 | Global/project settings, custom 碼表 upload | web/config | P4 | Mirrors §9 and the Web IME | — |
+| 42 | Word count, writing QoL, autosave | web | P4 | Prose-writing oriented | — |
 
 > **#11 is deferred deliberately.** CodeMirror 6 means introducing a JS bundler
 > (turning a zero-build static page into a build project) and re-attaching IME
-> composition to CodeMirror's composition API. That is a substrate upgrade, not a
-> missing feature — `<textarea>` carries the current build fine.
+> composition to CodeMirror's composition API. That is a substrate upgrade, not
+> a missing feature — `<textarea>` carries the current build fine.
 
 ### 10.7 Web vs PWA vs Tauri: does the user install anything?
 
-| Form                     | How it is obtained                              | File access                                          | Offline           | Feels like                          |
-| ------------------------ | ----------------------------------------------- | ---------------------------------------------------- | ----------------- | ----------------------------------- |
-| **Web** (`yume.shurufa.app`) | **Open the URL, zero install**              | Browser sandbox; File System Access API (Chromium)   | Needs caching     | A browser tab                       |
-| **PWA**                  | "Install to desktop" from the browser           | Same as web; File System Access is enough day to day | Yes (service worker) | Own window, no browser chrome, an icon |
-| **Tauri desktop**        | **Download and install** (`.dmg`/`.msi`/`.deb`) | **Native filesystem**                                | Yes               | A real native app                   |
+| Form | How it is obtained | File access | Offline | Feels like |
+| ---------------------------- | ----------------------------------------------- | ---------------------------------------------------- | -------------------- | -------------------------------------- |
+| **Web** (`yume.shurufa.app`) | **Open the URL, zero install** | Browser sandbox; File System Access API (Chromium) | Needs caching | A browser tab |
+| **PWA** | "Install to desktop" from the browser | Same as web; File System Access is enough day to day | Yes (service worker) | Own window, no browser chrome, an icon |
+| **Tauri desktop** | **Download and install** (`.dmg`/`.msi`/`.deb`) | **Native filesystem** | Yes | A real native app |
 
-To settle the recurring question — **opening `yume.shurufa.app` does not launch a
-desktop app.** A URL cannot start a native program; the Tauri build must be
-installed once first (after which a custom URL scheme could hand off to it, but
-only if installed). Inside, a Tauri app is a system WebView plus a thin Rust shell
-loading **the same `frontends/web` bundle**, either packaged locally or pointed at
-the live site. What Tauri adds is the native filesystem, a system menu, offline
-use, no browser chrome, and a **direct `yume-core` link (no WASM marshalling)**.
-It does not bundle Chromium — it uses the OS WebView (WebKit / WebView2 /
+To settle the recurring question —
+**opening `yume.shurufa.app` does not launch a desktop app.** A URL cannot start
+a native program; the Tauri build must be installed once first (after which a
+custom URL scheme could hand off to it, but only if installed). Inside, a Tauri
+app is a system WebView plus a thin Rust shell loading
+**the same `frontends/web` bundle**, either packaged locally or pointed at the
+live site. What Tauri adds is the native filesystem, a system menu, offline use,
+no browser chrome, and a **direct `yume-core` link (no WASM marshalling)**. It
+does not bundle Chromium — it uses the OS WebView (WebKit / WebView2 /
 WebKitGTK), which is why the installer is a few MB rather than Electron-sized.
 
-**Shipping plan**: `yume.shurufa.app` offers both the web/PWA build (zero install,
-tablets included) and a desktop download (Tauri, native files and offline), from
-one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
+**Shipping plan**: `yume.shurufa.app` offers both the web/PWA build (zero
+install, tablets included) and a desktop download (Tauri, native files and
+offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.

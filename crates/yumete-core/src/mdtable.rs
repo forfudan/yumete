@@ -157,7 +157,7 @@ pub fn is_row(line: &str) -> bool {
 ///
 /// **Whether or not `:table` was typed.** A table in a manuscript is a table
 /// because of what it is; the guards that asked `self.table` first were off
-/// exactly when the author was editing their own documentation, which is the
+/// exactly when this project's own `development.md` was being edited, which is the
 /// state a `|` table is normally in.
 ///
 /// A row inside a fence is not one: `| a | b |` quoted in a code block is
@@ -1454,7 +1454,7 @@ mod tests {
         assert_eq!(open[1], shut[1], "nor the rule");
     }
 
-    /// The bug the author reported off `development.md`: 「the long cells are
+    /// The bug reported off `development.md`: 「the long cells are
     /// trimmed with a `>` symbol. However, the width of the cell are still
     /// padded with white spaces at the tail.」 A table squared up in the file
     /// carries its padding *inside* every cell, and the padding is measured

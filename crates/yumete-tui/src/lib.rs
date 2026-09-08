@@ -506,7 +506,7 @@ pub fn run(
         // Engagement is the line between those two, which is the whole reason
         // 「ABC」 and 「關」 are two states and not one.
         //
-        // **Crossing that line is a command, not a gesture** — the author,
+        // **Crossing that line is a command, not a gesture** — settled
         // 2026-09-08: 「空格快捷键太宝贵了……我建议还是做成 command。」 A chord
         // was tried and taken back out: `C-Space` is spent twice over by
         // macOS, and `Shift+Space` is 全／半角 in most system input methods,
@@ -5840,7 +5840,7 @@ mod tests {
         assert!(page.contains(" 5 E"), "every field is there:\n{page}");
     }
 
-    /// #283, the author off his own `development.md` (2026-09-07): in the
+    /// #283, off `development.md` itself (2026-09-07): in the
     /// window the grid cut every over-wide cell at 32 cells, said nothing
     /// about having done it, and had no key to give the tail back — 「长单元格
     /// 被折叠的信息永远无法读取」.
@@ -6093,7 +6093,7 @@ mod tests {
         assert_ne!(buffer[(0, 0)].fg, ink.marker(), "…but not 他");
     }
 
-    /// The same page set vertically, where the author actually reads.
+    /// The same page set vertically, where these pages are actually read.
     ///
     /// 縱書 draws every slot off the line's own style, so a note would be set
     /// in the manuscript's ink unless the ink is carried down into the grid —
