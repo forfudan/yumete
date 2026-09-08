@@ -6077,8 +6077,9 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     takes the best. The corner glyph follows the row it ended on (`─` beside,
     `╰` below, `╭` above). `after_the_writing` is unchanged: the HUD still never
     paints over writing — **amended 2026-09-07 by #284**: that holds at
-    `:hud off` and `:hud basic`, which is where a window opens; `:hud full`
-    covers on purpose, and covering is the whole of what it is asked for.
+    `:hud off` and `:hud basic`; `:hud full` — which is where a window
+    opens since 2026-09-08 — covers on purpose, and covering is the whole of
+    what it is asked for.
     **small**
 
 [^270]: 2026-09-05：「能不能將 markdown 中合法的表格渲染一個背景顏色，就像代碼
@@ -6465,10 +6466,15 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     line's right edge stays — #193's floor), **`basic` is the factory level**
     and is today's scoring placement (#269) with a louder style — one row high,
     a 藥丸 rather than a thread, BAND ground and gold ink, **not one character
-    hidden** — and `full` is the pinned, bordered, may-cover panel. Default
-    `basic`, not `full`, by §5.7's own rule: the factory level must be identical
-    to `off` in the worst case, and 醒目 is bought with style rather than with
-    hiding. Three things to settle in the doing: **`:hud` is not #283's fifth
+    hidden** — and `full` is the pinned, bordered, may-cover panel. It shipped
+    at `basic` by §5.7's own rule — the factory level must be identical to `off`
+    in the worst case, and 醒目 is bought with style rather than with hiding —
+    and that was **reversed on 2026-09-08**: 「HUD 默認形態就可以是 full」, which
+    is what the request above asked for in the first place. A mark that has to
+    be looked for is not a mark, and what `full` covers comes back with one move
+    of the caret; `basic` stays one word away. §5.7's rule still governs
+    `:render` and `:table`, where the level hides **the file's own characters**
+    rather than the editor's own talk. Three things to settle in the doing: **`:hud` is not #283's fifth
     dimension** — it is how the editor talks to you, not how the file is drawn,
     so `:render` must never write it and `render.is` keeps four fields;
     `:yume panel full` and `:hud full` are different words — the candidate panel
