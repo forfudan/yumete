@@ -3593,11 +3593,13 @@ And three more when the key groups joined it:
   hand search found two of these and the test found the other eight, which is
   the whole argument for having it.
 
-## 5.2.3 Open, 2026-09-06 — the author's call
+## 5.2.3 Decided, 2026-09-06 and 2026-09-08 — the author's call
 
-Five. None is written into the design sections until it is decided; **§5.7
-(#283) stands as written until then**. Each is recorded with what the answer
-costs, because that is the part that is expensive to re-derive.
+Five, all five now answered — ① and ② on 2026-09-06, ③ ④ ⑤ on 2026-09-08. The
+hold on §5.7 is lifted with them. Each is recorded with what the answer cost,
+because that is the part that is expensive to re-derive, and each question is
+kept whole under its struck-through heading: what a decision *rejected* is the
+half that gets re-argued.
 
 ### ① ~~Where `:render` lives~~ — decided 2026-09-06
 
@@ -3733,7 +3735,17 @@ into one commit while `r` is armed, so an offscreen picture shows what a reader
 would see. `空格 r` is `enter_ruby_mode`, and `SPACE_KEYS` carries it, so the
 which-key menu and `:help` both list it without being told.
 
-### ③ Whether to fold the command table, and when
+### ③ ~~Whether to fold the command table, and when~~ — decided 2026-09-08
+
+**一次摺完.** The author, asked to choose between folding now and the review's own
+「fix the ground for 0.1.0, fold in 0.1.1」: 「現在就摺，一次摺完」. The reason the
+review gave for waiting is the reason for not waiting: a half-folded table is
+worse than an unfolded one, and every month the table stays flat is another
+month of prose written against names that are going to move. 0.1.0 has not
+shipped, so the 165 prose sites are the only cost, and they are cheapest now.
+
+What was on the table:
+
 
 62 top-level commands; 21 of them are somebody's child. The arithmetic was
 checked and holds: `::` ranking is **bit-for-bit unchanged** by nesting
@@ -3759,7 +3771,16 @@ The folding review's own recommendation is **fix the ground for 0.1.0, fold in
 then no reader can tell which commands are classified. The tree's value is that
 it is complete.
 
-### ④ Whether one word may name two things under two parents
+### ④ ~~Whether one word may name two things under two parents~~ — decided 2026-09-08
+
+**Yes — and the parent supplies the verb.** The author: 「可以，父親給動詞」.
+So `punct` names the subject and `:view` / `:check` name what is done to it,
+which is what a tree is for; a word that had to be unique across the whole tree
+would be a flat table wearing a tree's shape. The rule is written down once, in
+the manual beside the tree and in §5.7, so the next pair does not re-argue it.
+It decides `:note` → `:view punct`, `:conflicts` → `:check merge`, `:row` →
+`:table jump`, `:search` → `:table find` — all four fold under ③.
+
 
 If `:note` becomes `:view punct` (its help text is 「標點提示：半角標點與 ...
 旁邊畫出該用的那一個」, `messages.toml:725` — it has never been about
@@ -3768,7 +3789,16 @@ report under `:check`. Same concept, same word, different verb from the parent �
 a rule, or a confusion. The same question decides `:conflicts` → `:check
 merge`, `:row` → `:table jump`, `:search` → `:table find`.
 
-### ⑤ How read-only refuses
+### ⑤ ~~How read-only refuses~~ — decided 2026-09-08
+
+**The gate moves into `Buffer` and every edit path returns a `Result`.** The
+author: 「閘搬進 Buffer，回 Result」, which is their standing 「安全第一」 applied
+to this: the expensive half of a signature change is one afternoon, and the
+class of bug it closes is one that has now been missed three times. What the
+two cheaper answers buy is that afternoon, and they buy it by leaving the
+fourth miss available. The `md_parts_to_edit` door stays — it is the same
+answer at family scale and is compatible with the buffer-level gate.
+
 
 Today `Buffer::insert` returns early and says nothing, and ~28 call sites each
 refuse for themselves — `buffer.rs:418`'s comment states this is deliberate and
