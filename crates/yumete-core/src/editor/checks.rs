@@ -2,9 +2,10 @@
 //!
 //! Moved out of `editor.rs` whole on 2026-09-08. Five commands that all do the
 //! same thing in five subjects: walk the whole document, and hand back a
-//! **results buffer** in the shape `gf` already reads — the 拆分表 (#127), the
-//! writing habits (#160), the repeated words (#209), the punctuation nothing
-//! closes (#288), and the characters a typesetter will not have (#289).
+//! **results buffer** in the shape `gf` already reads — the 拆分表
+//! (`:table check`), the 用詞 groups (#233), the crutch words (`:word habit`,
+//! #242), the 標點 nothing closes (#238), and the 字集 a typesetter will not
+//! have (#240).
 //!
 //! A child module of `editor`, so `Editor`'s private fields and the free
 //! functions beside it are as reachable here as they were where this code used
