@@ -1334,7 +1334,7 @@ pub struct Editor {
     /// The columns a sort has been told about so far, 1-based, `true` for
     /// descending — `t1a2d8a` is three of them, waiting for its `s`.
     ///
-    /// **A prefix-free grammar** (the author, 2026-09-05): the old spelling was
+    /// **A prefix-free grammar** (2026-09-05): the old spelling was
     /// `t1s2S8s`, where the very first `s` is already a whole command, so a
     /// multi-column sort could not be typed at all. `a`／`d` close a column
     /// without asking for anything to happen, and `s` is the one key that acts.
@@ -1433,7 +1433,7 @@ pub struct Editor {
     /// the `t t` grid caps at its own width wherever it is opened from. `t w`
     /// writes a `Some`, and from then on the reader's answer travels with them
     /// — a bare `bool` could not hold both 「基本 folds nothing unasked」 and
-    /// 「基本 folds when asked」, which is the whole of the author's question
+    /// 「基本 folds when asked」, which is the whole of the question
     /// (2026-09-07: 「虽然 tb 在默认状态下不折叠，但能不能在按下 tw 之后折叠？」).
     cell_folds: Option<CellWidth>,
     /// Whether this key **meant** to go to another table — `t ]` and `t [`.
@@ -2395,8 +2395,8 @@ impl Editor {
     /// lines — and **only** that half. Calling the whole thing after a sort put
     /// the grid away: `forget_the_document` ends by asking the file what table
     /// it is, and a `.csv` with no schema beside it is not one, so `t1s` sorted
-    /// the rows and dropped the reader back into the source (the author,
-    /// 2026-09-05: 「表格排序 t1s 會直接回到源碼視圖」).
+    /// the rows and dropped the reader back into the source
+    /// (2026-09-05：「表格排序 t1s 會直接回到源碼視圖」).
     fn forget_the_text(&mut self) {
         self.segment_cache.borrow_mut().clear();
         self.markup_cache.borrow_mut().clear();
@@ -3564,7 +3564,7 @@ impl Editor {
     ///
     /// **The pane is not below 全 — it is beside it.** `t t` draws its own
     /// grid at its own cap, so the switch means there exactly what it means
-    /// in prose, and refusing it there left the author with over-wide cells
+    /// in prose, and refusing it there left over-wide cells
     /// that could not be opened by any key at all (author, 2026-09-07:
     /// 「tw 功能无法在 tt 模式下使用……长单元格被折叠的信息永远无法读取」).
     fn toggle_cell_folds(&mut self) {
@@ -5915,7 +5915,7 @@ impl Editor {
     ///
     /// **`t q` needs nothing written down.** The level is untouched by the
     /// takeover, so putting this back to `false` lands on whatever was being
-    /// drawn before — which is what the author asked for: 「`tq` 只在全屏表格
+    /// drawn before — which is what was asked for: 「`tq` 只在全屏表格
     /// 模式下生效，退到 markdown 文件中，且回到此前的表格模式」. `t o` is
     /// still the way to prose, and it is a different key because it is a
     /// different question.
@@ -6107,7 +6107,7 @@ impl Editor {
     ///
     /// **Not `table_here()`.** That asks whether `:table` is on, and a `|`
     /// table in a manuscript is a grid whether or not anybody said so — which
-    /// is the state the author's own documentation is edited in. It is also
+    /// is the state this project's own `development.md` is edited in. It is also
     /// true one line *above* a table: joining a paragraph onto the header row
     /// gives that row the paragraph's zero cells.
     fn joining_welds_a_grid(&self) -> bool {
@@ -6578,7 +6578,7 @@ impl Editor {
     /// The cells of `line`, when it is the **first** line of a table drawn as a
     /// grid among the prose (#275) — otherwise empty.
     ///
-    /// The 列號標尺 the author asked for: 「畫，貼在表格上緣」. One per table, so
+    /// The 列號標尺 asked for: 「畫，貼在表格上緣」. One per table, so
     /// a chapter with three tables in it shows three rulers, each numbering its
     /// own columns. Given as character spans rather than as screen columns
     /// because the page is the only one who knows where a character is drawn —
@@ -6770,7 +6770,7 @@ impl Editor {
             .map(|v| v.schema.columns.len())
             .unwrap_or(0);
         // **Looking at a table does not rewrite it.** Entering used to lay the
-        // whole region out again — 45 lines of the author's own documentation,
+        // whole region out again — 45 lines of this project's own `development.md`,
         // `modified` set, and `:table off` does not undo it. The padding is
         // this editor's, not theirs, and `:write all` was one keystroke from
         // committing a diff nobody typed. The layout is kept up *after an
@@ -16761,7 +16761,7 @@ impl Editor {
     ///
     /// Helix always inserts a space; yumete does not put one between two
     /// full-width characters, because in CJK prose a line break carries no
-    /// space and joining two 漢字 with one would insert text the author never
+    /// space and joining two 漢字 with one would insert text nobody ever
     /// typed. Between Latin words the space is kept.
     fn join_lines(&mut self) {
         if self.refuse_readonly() {
@@ -17769,7 +17769,7 @@ impl Editor {
         // **A table is a table whether or not `:table` was typed.** This check
         // used to open with `self.table.as_ref()?`, so `:replace` — which
         // reaches every file `:grep` found, including files never opened — went
-        // through 13 rows of the author's own documentation and broke them.
+        // through 13 rows of this project's own `development.md` and broke them.
         let separator = self.grid_shape_here()?;
         let rows_only = separator == Separator::Pipe;
         // A delimited file is all cells. A document is not: only its table
@@ -23091,7 +23091,7 @@ mod tests {
 
     /// #283. 「markdown中的表格在 tf 模式下都没办法通过 tw 来缩小单元格宽度」——
     /// there was no `t w`, and no cap in prose at all: a 80-cell cell pushed
-    /// every column after it off the side, which is what the author's own
+    /// every column after it off the side, which is what this project's own
     /// `development.md` looked like.
     #[test]
     fn t_w_folds_a_cell_too_wide_to_scan_and_gives_it_back() {
@@ -23225,12 +23225,12 @@ mod tests {
         assert!(ed.hidden_on_line(8).is_empty(), "nor does walking back up to 全");
     }
 
-    /// #283, the author off his own `development.md` (2026-09-07): 「tw 功能无
+    /// #283, off `development.md` itself (2026-09-07): 「tw 功能无
     /// 法在 tt 模式下使用，导致所有的长单元格都是保持折叠状态且没有折叠符号…
     /// 因此我永远没有办法读取完整内容」.
     ///
     /// The refusal asked for 全 and the pane is not a level, so it fired on
-    /// every press inside the window the author reads his tables in — and the
+    /// every press inside the window these tables are read in — and the
     /// grid's own 32-cell cap had no other key against it.
     #[test]
     fn t_w_is_answered_in_the_pane_which_is_not_below_全() {
@@ -23526,7 +23526,7 @@ mod tests {
         assert!(ed.enter_table(), "{}", ed.status());
         // **Looking does not rewrite.** Entering used to lay the whole region
         // out, which marks a file modified for having been read — 45 lines of
-        // the author's own documentation, and `:table off` does not undo it.
+        // this project's own `development.md`, and `:table off` does not undo it.
         assert_eq!(ed.current_buffer().text(), before, "entering changed nothing");
         // `t f` is the tidy-up, said out loud: the columns line up on the
         // terminal, which is what a Markdown table is supposed to look like.
@@ -23565,7 +23565,7 @@ mod tests {
     #[test]
     fn moving_down_a_column_steps_over_the_rule_and_walks_out_the_far_side() {
         // 「ti, ta 這兩個模式應該允許光標上下離開表格回到正文中（現在不可以）」
-        // — the author, 2026-09-05. A table drawn *in* a document is part of
+        // — 2026-09-05. A table drawn *in* a document is part of
         // it, so the row after the last one is the paragraph under the table.
         // The rule row is still stepped over: it is drawn, not written.
         let mut ed = with_md_table();
@@ -24644,7 +24644,7 @@ mod tests {
 
     /// #275. This used to assert that a `|` table is **never** drawn as a
     /// grid — 「a document keeps its layout and its page」 — which was the
-    /// editor having only two of the author's three modes and giving the
+    /// editor having only two of the three modes asked for and giving the
     /// middle one the top one's key. Both are true now, and which one you get
     /// is which key you pressed.
     #[test]

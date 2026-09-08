@@ -100,7 +100,7 @@ pub struct Measure<'a> {
     typed: &'a dyn Fn(usize) -> Vec<(usize, String)>,
     /// Which lines are **one row however long they are** (#275).
     ///
-    /// A row of a table. The author: 「进入后，表格所在的行不再 soft wrap」 —
+    /// A row of a table. 「进入后，表格所在的行不再 soft wrap」 —
     /// and the reason is the whole point of the mode: a cell that has wrapped
     /// onto the next screen row is no longer in its column, so a table folded
     /// to the measure is not a table any more. Part of the measure and not of
@@ -546,7 +546,7 @@ fn adjusted_break(
     // **The character the reader sees.** A grapheme that is not drawn has no
     // width, and 禁則 is about what stands at a row's head and foot — so a
     // retreat onto a hidden `` ` `` used to stop there, having moved nothing,
-    // and the row after it opened with 。 in the author's own documentation.
+    // and the row after it opened with 。 in `development.md` itself.
     // The vertical page was taught this; this is the same rule, on the other
     // side, asked the same way.
     let seen = |i: usize| -> Option<char> {

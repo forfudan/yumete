@@ -321,7 +321,7 @@ mod tests {
     fn grapheme_form_keeps_variation_sequences() {
         // A lone stop is substituted...
         assert_eq!(vertical_grapheme("。"), Some('︒'));
-        // ...but a cluster carrying an IVS is left as the author wrote it.
+        // ...but a cluster carrying an IVS is left exactly as it was written.
         assert_eq!(vertical_grapheme("葛\u{E0100}"), None);
     }
 }
