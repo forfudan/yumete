@@ -5772,6 +5772,13 @@ zhs = "栏线：{0}"
 en = "column rules: {0}"
 
 [[message]]
+# t F，但有一欄寬到沒有窗口裝得下——對齊它只是在寫空格
+key = "table.column-too-wide"
+zht = "第 {0} 欄寬 {1} 格，沒有窗口裝得下——對齊它只會寫出一大片空格。表沒有動"
+zhs = "第 {0} 栏宽 {1} 格，没有窗口装得下——对齐它只会写出一大片空格。表没有动"
+en = "column {0} is {1} squares wide — no window holds it, and lining it up would write nothing but spaces. The table is untouched"
+
+[[message]]
 # 進 | 表格模式，光標不在表格裏
 key = "table.cursor-not-in-a-table"
 zht = "光標不在表格裏"

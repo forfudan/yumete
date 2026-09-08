@@ -6976,6 +6976,17 @@ impl Editor {
         self.status = say!("table.now-delimited", rows, named_delimiter(delimiter));
     }
 
+    /// The column of the table under the cursor that no window will hold, if
+    /// there is one — its index and its width (#292).
+    ///
+    /// [`crate::mdtable::format`] refuses on its own, so the four automatic
+    /// doors need not ask. This is for the one door that has to *say* what
+    /// happened.
+    fn md_table_runaway(&self) -> Option<(usize, usize)> {
+        let region = self.md_region()?;
+        crate::mdtable::runaway(&crate::mdtable::parse(&self.md_lines(&region)))
+    }
+
     /// Lay the table under the cursor out again. Returns whether it changed.
     ///
     /// Run after every edit that could have changed a column's width, which is
@@ -8800,10 +8811,14 @@ impl Editor {
             // nothing: 「大写有一种需要「确认」感觉，防止用户误触导致格式化」.
             Key::Char('F') => {
                 self.snapshot();
-                self.status = if self.format_md_table() {
-                    say!("table.lined-up")
-                } else {
-                    say!("table.already-aligned")
+                // **Asked before, so the answer can be honest** (#292). A table
+                // with a runaway column is left exactly as it was, and
+                // 「already lined up」 would be a lie about a table that is not
+                // lined up and is not going to be.
+                self.status = match self.md_table_runaway() {
+                    Some((column, width)) => say!("table.column-too-wide", column + 1, width),
+                    None if self.format_md_table() => say!("table.lined-up"),
+                    None => say!("table.already-aligned"),
                 };
             }
             Key::Esc => {}
