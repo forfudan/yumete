@@ -7,7 +7,7 @@
 //! terminal.
 
 use crate::say;
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::collections::hash_map::DefaultHasher;
 use std::collections::HashMap;
 use std::fmt;
@@ -69,6 +69,44 @@ impl Pane {
     /// Where the pane is looking.
     pub fn cursor(&self) -> usize {
         self.cursor
+    }
+}
+
+/// What a read-only draw is looking at instead of the live work area (#281).
+///
+/// The renderer asks the editor forty questions a frame — what is on line 12,
+/// what is hidden there, where the caret is — and every one of them answers
+/// about the **current** buffer. The other half of a split is a different
+/// buffer, so all forty came back about the wrong file while the divider above
+/// them printed the right file's name.
+#[derive(Debug, Clone, Copy)]
+struct Viewing {
+    /// Into `buffers`, resolved once at the door: the pane keeps an id, and
+    /// resolving it per question would be a scan per line of every frame.
+    buffer: usize,
+    /// The pane's place in that buffer, **clamped there**. The live cursor is
+    /// an offset into another file and would index off the end of this one.
+    at: usize,
+}
+
+/// Holds [`Editor::view_pane`] open, and closes it however the draw ends.
+///
+/// A guard rather than a closure because the renderer draws through a
+/// `&mut Frame` it already holds, and because an override left standing after
+/// a panic would put the keys in the wrong file.
+///
+/// It holds a **shared** borrow of the editor, so nothing can take a mutable
+/// one while the override is open: 「reading only」 is not a rule anybody has
+/// to remember here, it is the only program that compiles.
+#[must_use = "the override lasts as long as this guard"]
+pub struct Viewed<'a> {
+    editor: &'a Editor,
+    previous: Option<Viewing>,
+}
+
+impl Drop for Viewed<'_> {
+    fn drop(&mut self) {
+        self.editor.viewing.set(self.previous);
     }
 }
 
@@ -1446,6 +1484,8 @@ pub struct Editor {
     /// setting and not a command: the trim a book is printed at is decided once
     /// for the book, so it is read from the configuration and left alone.
     paper: crate::export::Paper,
+    /// The other work area, while it is being drawn (#281). See [`Viewing`].
+    viewing: Cell<Option<Viewing>>,
     /// Word ranges already worked out, per line, against a hash of that line.
     segment_cache: RefCell<SegmentCache>,
     /// 平仄 in the margin (Feature #247), and the answers already worked out.
@@ -1798,6 +1838,7 @@ impl Editor {
             tatechuyoko: false,
             hanging: false,
             paper: crate::export::Paper::A5,
+            viewing: Cell::new(None),
             segment_cache: RefCell::new(SegmentCache::new()),
             meter: false,
             meter_cache: RefCell::new(MeterCache::new()),
@@ -2161,14 +2202,61 @@ impl Editor {
         self.refresh_sidebar();
     }
 
-    /// The active buffer.
+    /// The active buffer — or, while the other half of a split is being drawn,
+    /// the buffer *that* half is showing (#281).
     pub fn current_buffer(&self) -> &Buffer {
-        &self.buffers[self.current]
+        &self.buffers[self.viewing.get().map_or(self.current, |v| v.buffer)]
     }
 
     /// The active buffer, mutably.
+    ///
+    /// **Never the peeked one.** [`Self::view_pane`] is a reading override and
+    /// this is the one door that ignores it: the keys belong to the live half,
+    /// and an edit that landed in the half you were only looking at would be a
+    /// worse bug than the misdraw the override is there to fix.
     pub fn current_buffer_mut(&mut self) -> &mut Buffer {
         &mut self.buffers[self.current]
+    }
+
+    /// Answer every question about `pane`'s file and place until the guard is
+    /// dropped (#281).
+    ///
+    /// The other half of a split keeps a buffer id and a cursor of its own, and
+    /// the divider above it prints that buffer's name — but the renderer reads
+    /// the *current* buffer, so the half captioned 「第二章」 drew whatever
+    /// chapter the keys were in. One scope around the draw puts all of it —
+    /// text, folds, markup, tables, the caret the wrap is measured from — on
+    /// the file the caption names.
+    ///
+    /// Reading only: see [`Self::current_buffer_mut`]. A pane whose buffer has
+    /// been closed overrides nothing and the live half is drawn twice, which is
+    /// what the page did before this existed.
+    pub fn view_pane(&self, pane: &Pane) -> Viewed<'_> {
+        let previous = self.viewing.get();
+        if let Some(buffer) = self.buffers.iter().position(|b| b.id() == pane.buffer) {
+            // Clamped **here**, once: the live half can have deleted the text
+            // the pane was left standing in, and a stale offset walked into a
+            // rope is a panic, not a misdraw.
+            let at = pane.cursor().min(self.buffers[buffer].rope().len_chars());
+            self.viewing.set(Some(Viewing { buffer, at }));
+        }
+        Viewed { editor: self, previous }
+    }
+
+    /// Where the caret is for the purpose of *drawing* — the pane's own place
+    /// while [`Self::view_pane`] is open, and the live cursor otherwise.
+    ///
+    /// Every immutable reader of the caret goes through this. The mutable ones
+    /// read the field, because an override is only ever open during a draw.
+    fn caret(&self) -> usize {
+        self.viewing.get().map_or(self.cursor, |v| v.at)
+    }
+
+    /// The other end of the selection, by the same rule. A peeked pane has no
+    /// selection of its own — what it marks is the hit it was opened to show —
+    /// so both ends are its caret and [`Self::has_selection`] is false there.
+    fn mark(&self) -> usize {
+        self.viewing.get().map_or(self.anchor, |v| v.at)
     }
 
     /// The number of open buffers.
@@ -5201,7 +5289,7 @@ impl Editor {
 
     /// The cursor position in the active buffer, as a character index.
     pub fn cursor(&self) -> usize {
-        self.cursor
+        self.caret()
     }
 
     /// The current selection as a character range `(start, end)` with
@@ -5209,7 +5297,7 @@ impl Editor {
     /// cursor). Helix treats the cursor as a one-wide selection, so `d` still
     /// deletes the grapheme under a collapsed cursor.
     pub fn selection(&self) -> (usize, usize) {
-        let (start, end) = (self.anchor.min(self.cursor), self.anchor.max(self.cursor));
+        let (start, end) = (self.mark().min(self.caret()), self.mark().max(self.caret()));
         // The grapheme the cursor sits on is *inside* the selection, as it is
         // in Helix. Without this the block cursor covers a character that an
         // edit would not touch — `f。d` left the 。 behind, `e` never reached
@@ -5229,7 +5317,7 @@ impl Editor {
     /// The half-open range the cursor and anchor literally span, before the
     /// cursor's own grapheme is added. What motions and the caret work in.
     fn span(&self) -> (usize, usize) {
-        (self.anchor.min(self.cursor), self.anchor.max(self.cursor))
+        (self.mark().min(self.caret()), self.mark().max(self.caret()))
     }
 
     /// Whether the writer has actually selected a range, rather than merely
@@ -5239,7 +5327,7 @@ impl Editor {
     /// in it — so it cannot answer this. The renderer needs the difference: a
     /// bare cursor is drawn as a cursor, not as a one-character highlight.
     pub fn has_selection(&self) -> bool {
-        self.anchor != self.cursor
+        self.mark() != self.caret()
     }
 
     /// The text typed so far in Command mode (without the leading `:`).
@@ -5366,7 +5454,7 @@ impl Editor {
 
     /// The 0-based line the cursor is on.
     pub fn cursor_line(&self) -> usize {
-        self.current_buffer().rope().char_to_line(self.cursor)
+        self.current_buffer().rope().char_to_line(self.caret())
     }
 
     /// The 0-based **character** column the cursor is at within its line.
@@ -5376,13 +5464,13 @@ impl Editor {
     /// `hidden` is (Feature #211).
     pub fn cursor_column(&self) -> usize {
         let rope = self.current_buffer().rope();
-        let at = self.cursor.min(rope.len_chars());
+        let at = self.caret().min(rope.len_chars());
         at - rope.line_to_char(rope.char_to_line(at))
     }
 
     /// The cursor's visual column (summed display width within its line).
     pub fn cursor_visual_column(&self) -> usize {
-        motion::visual_column(self.current_buffer().rope(), self.cursor)
+        motion::visual_column(self.current_buffer().rope(), self.caret())
     }
 
     /// The character under the cursor, for the status line to name.
@@ -5393,11 +5481,11 @@ impl Editor {
     /// and having just typed it counts as looking at it.
     pub fn char_at_cursor(&self) -> Option<char> {
         let rope = self.current_buffer().rope();
-        let here = (self.cursor < rope.len_chars()).then(|| rope.char(self.cursor));
+        let here = (self.caret() < rope.len_chars()).then(|| rope.char(self.caret()));
         match here {
             Some(c) if c != '\n' && c != '\r' => Some(c),
-            _ => (self.cursor > 0)
-                .then(|| rope.char(self.cursor - 1))
+            _ => (self.caret() > 0)
+                .then(|| rope.char(self.caret() - 1))
                 .filter(|&c| c != '\n' && c != '\r'),
         }
     }
@@ -6027,7 +6115,7 @@ impl Editor {
             return true;
         }
         let rope = self.current_buffer().rope();
-        let line = rope.char_to_line(self.cursor.min(rope.len_chars()));
+        let line = rope.char_to_line(self.caret().min(rope.len_chars()));
         if line + 1 >= rope.len_lines() {
             return false;
         }
@@ -6040,14 +6128,14 @@ impl Editor {
     /// Whether the cursor's own line is a row of a `|` table.
     fn md_row_at_cursor(&self) -> bool {
         let rope = self.current_buffer().rope();
-        let line = rope.char_to_line(self.cursor.min(rope.len_chars()));
+        let line = rope.char_to_line(self.caret().min(rope.len_chars()));
         crate::mdtable::is_row(&rope.line(line).to_string())
     }
 
     /// Whether the cursor's line looks like a table row but is inside a fence.
     fn md_row_in_a_fence(&self) -> bool {
         let rope = self.current_buffer().rope();
-        let at = rope.char_to_line(self.cursor.min(rope.len_chars()));
+        let at = rope.char_to_line(self.caret().min(rope.len_chars()));
         if !self.line_text(at).is_some_and(|l| crate::mdtable::is_row(&l)) {
             return false;
         }
@@ -6244,7 +6332,7 @@ impl Editor {
     /// question whether the cells are cut by pipes or by tabs.
     pub fn prose_region(&self) -> Option<crate::mdtable::Region> {
         let rope = self.current_buffer().rope();
-        self.prose_region_at(rope.char_to_line(self.cursor.min(rope.len_chars())))
+        self.prose_region_at(rope.char_to_line(self.caret().min(rope.len_chars())))
     }
 
     /// The same question asked about a line the cursor is not on.
@@ -6958,7 +7046,7 @@ impl Editor {
     /// further down than its index whenever the cursor is past the rule.
     fn md_at(&self, region: &crate::mdtable::Region) -> (usize, usize) {
         let rope = self.current_buffer().rope();
-        let line = rope.char_to_line(self.cursor.min(rope.len_chars()));
+        let line = rope.char_to_line(self.caret().min(rope.len_chars()));
         // Cell motion steps over the rule, but `gg`, `G`, `:N` and a search
         // all land on it. Standing there means standing on the header the rule
         // belongs to — so `t d` refuses (it is the column names) and `t o`
@@ -7557,8 +7645,8 @@ impl Editor {
     pub fn cell_position(&self) -> Option<(usize, usize)> {
         self.table.as_ref()?;
         let rope = self.current_buffer().rope();
-        let line = rope.char_to_line(self.cursor.min(rope.len_chars()));
-        let within = self.cursor - rope.line_to_char(line);
+        let line = rope.char_to_line(self.caret().min(rope.len_chars()));
+        let within = self.caret() - rope.line_to_char(line);
         let cells = self.row_cells(line);
         // Delimited cells are contiguous, so one of them always holds the
         // cursor. A Markdown row has padding between its cells and around its
@@ -8096,7 +8184,7 @@ impl Editor {
             return false;
         }
         let rope = self.current_buffer().rope();
-        rope.char_to_line(self.cursor.min(rope.len_chars())) == 0
+        rope.char_to_line(self.caret().min(rope.len_chars())) == 0
     }
 
     /// Whether the grid's first row **names the columns** (#217).
@@ -10138,7 +10226,7 @@ impl Editor {
     /// Whether the cursor sits at the first character of its cell.
     fn at_cell_start(&self) -> bool {
         match self.cell_position() {
-            Some((line, cell)) => self.cell_span(line, cell).map(|(a, _)| a) == Some(self.cursor),
+            Some((line, cell)) => self.cell_span(line, cell).map(|(a, _)| a) == Some(self.caret()),
             None => false,
         }
     }
@@ -10250,7 +10338,7 @@ impl Editor {
             return false;
         };
         let rope = self.current_buffer().rope();
-        region.is_rule(rope.char_to_line(self.cursor.min(rope.len_chars())))
+        region.is_rule(rope.char_to_line(self.caret().min(rope.len_chars())))
     }
 
     /// The first reason this text may not go into a cell, if there is one.
@@ -10517,7 +10605,7 @@ impl Editor {
         }
         let rope = self.current_buffer().rope();
         let line = self.cursor_line();
-        let within = self.cursor - rope.line_to_char(line);
+        let within = self.caret() - rope.line_to_char(line);
         // Which block the line is in decides whether its `[^1]` is a footnote
         // at all — inside a fence it is four characters of code.
         let block = self
@@ -10813,7 +10901,7 @@ impl Editor {
         }
         let rope = self.current_buffer().rope();
         let line = self.cursor_line();
-        let within = self.cursor - rope.line_to_char(line);
+        let within = self.caret() - rope.line_to_char(line);
         let block = self.blocks_through(line).get(line).copied().unwrap_or_default();
         let runs = self.markup_line_in(line, block);
         let span = runs.iter().find(|s| {
@@ -12249,7 +12337,7 @@ impl Editor {
         let folded = |line: usize| self.line_is_folded(line);
         let drawn = |line: usize| self.drawn_runs_on_line(line);
         let grid = self.grid_with(&hidden, &folded, &drawn);
-        zong::position(self.current_buffer().rope(), self.cursor, grid)
+        zong::position(self.current_buffer().rope(), self.caret(), grid)
     }
 
     /// Install Normal-mode single-key aliases (from the config keymap).
@@ -16558,7 +16646,7 @@ impl Editor {
         let last_line = motion::last_line(rope);
         let resolve = |b: Bound| match b {
             Bound::Line(n) => n.saturating_sub(1).min(last_line),
-            Bound::Cursor => rope.char_to_line(self.cursor.min(rope.len_chars())),
+            Bound::Cursor => rope.char_to_line(self.caret().min(rope.len_chars())),
             Bound::Last => last_line,
         };
         match rows {
@@ -17412,7 +17500,7 @@ impl Editor {
         let rope = self.current_buffer().rope();
         PAIRS
             .iter()
-            .filter_map(|&(open, close)| surrounding(rope, self.cursor, open, close))
+            .filter_map(|&(open, close)| surrounding(rope, self.caret(), open, close))
             .max_by_key(|&(start, _)| start)
     }
 
@@ -17920,7 +18008,7 @@ impl Editor {
     fn insert_floor(&self) -> usize {
         match self.insert_bounds() {
             Some((start, _)) => start,
-            None => motion::line_start(self.current_buffer().rope(), self.cursor),
+            None => motion::line_start(self.current_buffer().rope(), self.caret()),
         }
     }
 

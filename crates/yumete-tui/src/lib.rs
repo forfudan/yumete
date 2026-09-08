@@ -2290,6 +2290,11 @@ fn draw(
         }
         let seat = &mut viewport[which];
         let peek = (which != live).then(|| editor.other_pane()).flatten();
+        // **Everything below reads the file the caption names** (#281). The
+        // whole dispatch is inside the scope, not only the drawing: which
+        // layout a half is drawn in, and whether a grid has it, are questions
+        // about *that* half's document and place.
+        let _viewing = peek.map(|pane| editor.view_pane(pane));
         let at = match editor.layout() {
             // A grid is not prose and is not drawn as prose: no wrapping, no
             // markup, one row per line, columns that line up.
@@ -8860,6 +8865,29 @@ mod tests {
         println!("…segmented: {:.2?} a frame", frame(&mut editor, 200));
         editor.set_indent(2);
         println!("…indented:  {:.2?} a frame", frame(&mut editor, 200));
+
+        // **兩半各一本書** (#281): the peek half draws its own document now, and
+        // every whole-file memo behind it — `block_cache`, `md_tables`,
+        // `pad_cache`, `fold_cache` — is a single slot keyed by buffer. Two
+        // documents on one page could therefore mean two full walks a frame,
+        // which is the shape #282 cost 8.26 s. This is the line that says
+        // whether they need a second slot.
+        let dir = std::env::temp_dir().join(format!("yumete-split-cost-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let other = dir.join("other.md");
+        std::fs::write(&other, a_book_of(20_000)).unwrap();
+        let mut editor = Editor::new();
+        editor
+            .current_buffer_mut()
+            .insert(0, &a_book_of(20_000))
+            .expect("the fixture buffer is writable");
+        editor.execute(&format!(":open {}", other.display())).unwrap();
+        editor.on_key(Key::Char(' '));
+        editor.on_key(Key::Char('w'));
+        println!("split, one book:  {:.2?} a frame", frame(&mut editor, 100));
+        editor.execute(":buffer previous").unwrap();
+        println!("split, two books: {:.2?} a frame", frame(&mut editor, 100));
+        std::fs::remove_dir_all(&dir).ok();
     }
 
     #[test]
@@ -9420,6 +9448,46 @@ mod tests {
             }
         }
         let _ = ink;
+    }
+
+    #[test]
+    fn the_other_half_draws_the_file_its_caption_names() {
+        // #281. The other work area keeps a *buffer id*, and the caption on the
+        // divider prints that buffer's name — but the text under it came off
+        // whichever file the keys happen to be in. Open the split on 乙, walk
+        // the live half back to 甲, and the page said 甲 twice under two
+        // different names.
+        let dir = std::env::temp_dir().join(format!("yumete-281-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("jia.md"), "甲甲甲\n").unwrap();
+        std::fs::write(dir.join("yi.md"), "乙乙乙\n").unwrap();
+        let mut editor = Editor::new();
+        editor.execute(&format!(":open {}", dir.join("jia.md").display())).unwrap();
+        editor.execute(&format!(":open {}", dir.join("yi.md").display())).unwrap();
+        let mut config = Config::default();
+        config.editor.line_numbers = yumete_config::LineNumbers::None;
+
+        // The split opens where you are standing: on 乙.
+        editor.on_key(Key::Char(' '));
+        editor.on_key(Key::Char('w'));
+        assert!(editor.other_pane().is_some(), "the page is split");
+
+        // …and then the live half goes back to 甲, leaving the other half
+        // looking at a file that is no longer the current one.
+        editor.execute(":buffer previous").expect("two buffers to walk between");
+        assert_eq!(editor.current_buffer().text(), "甲甲甲\n");
+
+        let buffer = render(&editor, &config, 40, 9);
+        let rows: Vec<String> = (0..9).map(|y| row_text(&buffer, y).trim_end().to_string()).collect();
+        let divider = rows.iter().position(|r| r.starts_with('─')).expect("a rule between them");
+        assert!(rows[divider].contains("yi.md"), "the caption still names 乙 的檔: {:?}", rows[divider]);
+        assert!(
+            rows[..divider].iter().any(|r| r == "甲甲甲"),
+            "the live half is where the keys are: {rows:?}"
+        );
+        assert_eq!(rows[divider + 1], "乙乙乙", "and the other half is what it says it is: {rows:?}");
+
+        std::fs::remove_dir_all(&dir).ok();
     }
 
     #[test]
