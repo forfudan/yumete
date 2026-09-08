@@ -5879,6 +5879,96 @@ mod tests {
         editor
     }
 
+    /// **A stopwatch on the grid**, not a test — it is `#[ignore]`d because it
+    /// asserts nothing about time; it prints what the clock said.
+    ///
+    /// ```text
+    /// cargo test -p yumete-tui --release the_cost_of_drawing_a_grid \
+    ///     -- --ignored --nocapture
+    /// ```
+    ///
+    /// It walks the roadmap table in `docs/development.md` and a synthetic one
+    /// whose 備註 column is 7,000 characters wide — the shape the roadmap had
+    /// before #296's footnotes — twice each: one row at a time, and in jumps of
+    /// a hundred. Keys and drawing are timed apart, because they answer
+    /// different questions: the draw is what #289 is about, the keys are what a
+    /// counted motion costs.
+    #[test]
+    #[ignore]
+    fn the_cost_of_drawing_a_grid() {
+        use std::time::Instant;
+        let ime = no_ime();
+        let config = Config::default();
+        let (w, h) = (200u16, 50u16);
+
+        let fat = std::env::temp_dir().join("yumete-bench-fat-cells.md");
+        {
+            let mut text = String::from("| # | 名 | 備註 |\n| --- | --- | --- |\n");
+            let para = "這一格是一整段話，長到沒有任何視窗裝得下它，所以折行會把它攤成很多行。"
+                .repeat(200);
+            for i in 0..300 {
+                text.push_str(&format!("| {i} | 第 {i} 條 | {para} |\n"));
+            }
+            std::fs::write(&fat, text).unwrap();
+        }
+
+        let run = |file: &str, wrap: bool, jump: bool| -> (f64, f64) {
+            let mut editor = Editor::new();
+            editor.open_file(file).expect("a table to walk");
+            for c in ":20".chars() {
+                editor.on_key(Key::Char(c));
+            }
+            editor.on_key(Key::Enter);
+            editor.on_key(Key::Char('t'));
+            editor.on_key(Key::Char('t'));
+            assert!(editor.grid_has_the_pane(), "t t did not hand the grid the pane");
+            if wrap {
+                editor.on_key(Key::Char('t'));
+                editor.on_key(Key::Char('a'));
+                assert!(editor.cell_wrap(), "t a did not turn 折行 on");
+            }
+            let _ = render_with(&editor, &config, &ime, w, h);
+            let steps = 100;
+            let (mut keys, mut drawn) = (0u128, 0u128);
+            for i in 0..steps {
+                let began = Instant::now();
+                if jump {
+                    // Off the page every time, so the scroll rule drops the top
+                    // to cursor − half a window and the 折行 loop pushes from
+                    // there — the case #289 is about.
+                    for c in "100".chars() {
+                        editor.on_key(Key::Char(c));
+                    }
+                    editor.on_key(Key::Char(if i % 2 == 0 { 'j' } else { 'k' }));
+                } else {
+                    editor.on_key(Key::Char('j'));
+                }
+                keys += began.elapsed().as_micros();
+                let began = Instant::now();
+                let _ = render_with(&editor, &config, &ime, w, h);
+                drawn += began.elapsed().as_micros();
+            }
+            let per = |t: u128| t as f64 / steps as f64 / 1000.0;
+            (per(keys), per(drawn))
+        };
+
+        let fat = fat.to_string_lossy().to_string();
+        println!("\n{:<20}{:>12}{:>12}{:>12}", "", "keys", "draw 摺", "draw 折行");
+        for (name, file) in [("roadmap", "../../docs/development.md"), ("7,000 字一格", fat.as_str())] {
+            for jump in [false, true] {
+                let off = run(file, false, jump);
+                let on = run(file, true, jump);
+                println!(
+                    "{:<20}{:>9.3} ms{:>9.3} ms{:>9.3} ms",
+                    format!("{name}  {}", if jump { "100j" } else { "j" }),
+                    off.0,
+                    off.1,
+                    on.1
+                );
+            }
+        }
+    }
+
     /// The symbol at a cell, for grid assertions.
     fn at(buffer: &ratatui::buffer::Buffer, x: u16, y: u16) -> String {
         buffer[(x, y)].symbol().to_string()
