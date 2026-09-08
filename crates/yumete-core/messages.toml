@@ -1929,6 +1929,14 @@ en = "save under a new name and edit that one (`:w <path>` only copies)"
 find = "另存 改名 saveas rename"
 
 [[message]]
+# : 命令選單裏 abc 那一項的說明（yume 組）
+key = "cmd.yume.abc"
+zht = "ABC：yume 還接着鍵盤，按鍵直通英文（Shift 點一下也是這個）"
+zhs = "ABC：yume 还接着键盘，按键直通英文（Shift 点一下也是这个）"
+en = "ABC: yume still holds the keyboard, the keys type what they say"
+find = "英文 english abc 直通 shift"
+
+[[message]]
 # : 命令選單裏 builtin 那一項的說明（yume 組）
 key = "cmd.yume.builtin"
 zht = "改用出廠自帶的靈明碼表，不管裝了什麼"
@@ -1963,10 +1971,10 @@ find = "輸入法 输入法 碼表 码表 系統 系统 installed"
 [[message]]
 # : 命令選單裏 off 那一項的說明（yume 組）
 key = "cmd.yume.off"
-zht = "回到英文"
-zhs = "回到英文"
-en = "back to English"
-find = "輸入法 输入法 關掉 关掉 英文 english off"
+zht = "把鍵盤交還給系統（系統輸入法從此能用）"
+zhs = "把键盘交还给系统（系统输入法从此能用）"
+en = "hand the keyboard back to the system (its own input method works again)"
+find = "輸入法 输入法 關掉 关掉 交還 交还 system off"
 
 [[message]]
 # : 命令選單裏 on 那一項的說明（yume 組）
@@ -2808,9 +2816,9 @@ en = "Chinese"
 [[message]]
 # 中文幫助：開／關輸入法
 key = "help.chinese.toggle-ime"
-zht = "開／關輸入法；單獨按一下 Shift 切中英"
-zhs = "开／关输入法；单独按一下 Shift 切中英"
-en = "turn the IME on/off; a lone Shift tap switches 中/英"
+zht = "接管鍵盤／交還給系統；接管着的時候，單獨按一下 Shift 切 中／ABC"
+zhs = "接管键盘／交还给系统；接管着的时候，单独按一下 Shift 切 中／ABC"
+en = "take the keyboard, or hand it back; a lone Shift tap then switches 中/ABC"
 
 [[message]]
 # 中文幫助：注音寫法統一
@@ -4222,6 +4230,13 @@ en = "caret sign: off — only the status line's right edge is left"
 # ── ime ───────────────────────────────────────────────────────────────
 
 [[message]]
+# Shift 點一下切到 ABC：yume 還接着鍵盤，按鍵直通
+key = "ime.abc"
+zht = "ABC：按鍵直通，Shift 點一下回中文"
+zhs = "ABC：按键直通，Shift 点一下回中文"
+en = "ABC — the keys type what they say; a Shift tap goes back to 中文"
+
+[[message]]
 # :yume ! 切到編進二進制的那一份靈明
 key = "ime.builtin-lingming"
 zht = "方案：靈明（出廠自帶的碼表）"
@@ -4241,13 +4256,6 @@ key = "ime.chinese-tag"
 zht = "[中 {0}]"
 zhs = "[中 {0}]"
 en = "[中 {0}]"
-
-[[message]]
-# 輸入法切回英文
-key = "ime.english"
-zht = "英文"
-zhs = "英文"
-en = "English"
 
 [[message]]
 # :yume ! 要出廠碼表，而這個二進制沒編進去
@@ -4276,6 +4284,13 @@ key = "ime.not-started-no-builtin"
 zht = "還沒開始打字，而且這個二進制不帶碼表——先裝資料"
 zhs = "还没开始打字，而且这个二进制不带码表——先装资料"
 en = "not typing yet, and this build carries no 碼表 — install the data first"
+
+[[message]]
+# Shift+空格 把鍵盤整個交還給系統（第三個狀態，不是 ABC）
+key = "ime.off"
+zht = "輸入法交還給系統了（Shift+空格 拿回來）"
+zhs = "输入法交还给系统了（Shift+空格 拿回来）"
+en = "the keyboard is the system's again (Shift+Space takes it back)"
 
 [[message]]
 # 換到系統裝的那份碼表

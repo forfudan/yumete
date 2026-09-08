@@ -56,9 +56,10 @@ far, oldest first:
   scheme's compiled data tables from the data directory.
 - **#28 / #29 / #30 IME in Insert mode** — while composing in Insert mode, keys are
   routed to the IME and a floating candidate panel is drawn below the cursor
-  (Space / 1–9 select, `-`/`=` page, Backspace/Esc edit/cancel); a **lone-Shift
-  tap** toggles 中/英 (via the Kitty keyboard protocol — needs a compatible
-  terminal such as kitty, WezTerm, Ghostty, or recent iTerm2, not Apple Terminal);
+  (Space / 1–9 select, `-`/`=` page, Backspace/Esc edit/cancel); **`Shift+Space`**
+  takes the keyboard and hands it back, and a **lone-Shift tap** toggles 中/ABC
+  while yume holds it (the tap needs the Kitty keyboard protocol — kitty, WezTerm,
+  Ghostty, foot, Alacritty, Konsole, recent iTerm2; not Apple Terminal);
   number mode, `/`-commands, and `z` reverse come from the engine.
 
 - **#67 Command hints** — `:` on its own lists every command above the command
@@ -79,7 +80,7 @@ far, oldest first:
   <dialect>` rewrites the whole buffer into one.
 
 - **#66 IME in the search and command lines** — `/` composes Chinese, so a
-  Chinese document can actually be searched; a lone-Shift tap toggles 中/英 there
+  Chinese document can actually be searched; a lone-Shift tap toggles 中/ABC there
   too, the preedit shows inline and the candidate panel floats above the prompt.
   `:` gets the same, so `:s/中文/中文/` works — but drops to 英 on the way in and
   hands 中 back on the way out, because command *names* are ASCII. `:yume chaifen`

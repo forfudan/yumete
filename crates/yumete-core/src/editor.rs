@@ -4751,11 +4751,19 @@ impl Editor {
                 self.scheme_request = Some(String::from("~"));
                 Ok(CommandOutcome::Continue)
             }
-            Command::YumeLanguage(on) => {
-                self.scheme_request = Some(String::from(match on {
-                    true => "+",
-                    false => "-",
-                }));
+            Command::YumeLanguage(want) => {
+                // `lang:` for the same reason `commit:` and `panel:` have a
+                // prefix: the front end holds the session, and this is one
+                // more question about it — asked by name now that there are
+                // three answers and not two (#290).
+                self.scheme_request = Some(format!(
+                    "lang:{}",
+                    match want {
+                        command::Engagement::Chinese => "chinese",
+                        command::Engagement::Ascii => "abc",
+                        command::Engagement::Off => "off",
+                    }
+                ));
                 Ok(CommandOutcome::Continue)
             }
             Command::UserTable(path) => {
@@ -9258,7 +9266,7 @@ impl Editor {
     fn help_chinese() -> String {
         let mut out = format!("# {}\n\n", say!("help.chinese.title"));
         for (keys, what) in [
-            ("C-Space", say!("help.chinese.toggle-ime")),
+            ("Shift+Space", say!("help.chinese.toggle-ime")),
             (":yume scheme", say!("help.chinese.switch-scheme")),
             (":yume chaifen on", say!("help.chinese.chaifen-under-candidates")),
             ("w b e", say!("help.chinese.word-boundaries")),

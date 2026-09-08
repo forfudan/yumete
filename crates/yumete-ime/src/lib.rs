@@ -409,6 +409,17 @@ pub struct ImeSession {
     /// same question as [`Self::page_size`] — how this session offers what it
     /// has found — and the front end asks it once per frame.
     display: PanelDisplay,
+    /// Whether yume has the keyboard at all — the **outer** switch, above
+    /// 中/ABC (#290).
+    ///
+    /// 中文 and ABC are both yume holding the keys: one composes, the other
+    /// passes ASCII through, and a lone-Shift tap crosses between them. This is
+    /// the third state, where yume holds nothing and the keystrokes belong to
+    /// whatever the system has — its own input method, most of all. The front
+    /// end needs the distinction because the terminal flag that makes a bare
+    /// Shift visible is the same flag that stops macOS's input method from
+    /// composing: it can be held exactly while this is true.
+    engaged: bool,
     /// Whether `Tab` has summoned the full panel for the composition in hand.
     ///
     /// It dies with that composition: [`Self::input`] clears it when a new one
@@ -445,6 +456,7 @@ impl ImeSession {
             problems,
             display: PanelDisplay::default(),
             summoned: false,
+            engaged: true,
         }
     }
 
@@ -490,6 +502,7 @@ impl ImeSession {
             problems,
             display: PanelDisplay::default(),
             summoned: false,
+            engaged: true,
         })
     }
 
@@ -525,6 +538,7 @@ impl ImeSession {
             problems,
             display: PanelDisplay::default(),
             summoned: false,
+            engaged: true,
         }
     }
 
@@ -593,6 +607,7 @@ impl ImeSession {
             problems,
             display: PanelDisplay::default(),
             summoned: false,
+            engaged: true,
         }
     }
 
@@ -614,6 +629,7 @@ impl ImeSession {
             problems: Vec::new(),
             display: PanelDisplay::default(),
             summoned: false,
+            engaged: true,
         }
     }
 
@@ -631,6 +647,7 @@ impl ImeSession {
             problems: Vec::new(),
             display: PanelDisplay::default(),
             summoned: false,
+            engaged: true,
         }
     }
 
@@ -653,6 +670,7 @@ impl ImeSession {
             problems: Vec::new(),
             display: PanelDisplay::default(),
             summoned: false,
+            engaged: true,
         }
     }
 
@@ -666,6 +684,21 @@ impl ImeSession {
     /// [`DataProblem::is_loud`] for the part worth showing.
     pub fn problems(&self) -> &[DataProblem] {
         &self.problems
+    }
+
+    /// Whether yume has the keyboard — see [`Self::engaged`] for the three
+    /// states this is the outer half of.
+    pub fn engaged(&self) -> bool {
+        self.engaged
+    }
+
+    /// Take the keyboard, or hand it back.
+    ///
+    /// Handing it back does **not** change 中/ABC: coming back should come
+    /// back to what you were typing in, and the language is what `:yume abc`
+    /// and the lone-Shift tap are for.
+    pub fn set_engaged(&mut self, engaged: bool) {
+        self.engaged = engaged;
     }
 
     /// Whether the scheme's data tables loaded successfully.

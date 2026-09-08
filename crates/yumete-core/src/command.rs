@@ -12,6 +12,29 @@ use crate::ruby::Dialect;
 use crate::say;
 use crate::zong::Layout;
 
+/// Which of the three states the input method is in (#290).
+///
+/// **`Ascii` and `Off` look identical at the keyboard** — the keys type what
+/// they say, either way — and they are still two states, because only one of
+/// them is yume holding the keyboard. The front end may hold the terminal flag
+/// that reports a bare Shift only while yume does; that same flag stops the
+/// *system's* input method from composing, so ASCII-because-yume-is-passing-
+/// it-through and ASCII-because-yume-is-gone have to be told apart.
+///
+/// The lone-Shift tap crosses between [`Self::Chinese`] and [`Self::Ascii`];
+/// `Shift+Space` crosses to and from [`Self::Off`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Engagement {
+    /// 中文: yume has the keyboard and composes with it.
+    Chinese,
+    /// ABC: yume has the keyboard and passes what the keys say straight
+    /// through — a lone Shift tap is a keystroke away from 中文.
+    Ascii,
+    /// 關: yume has handed the keyboard back. Whatever the system does with a
+    /// keystroke — its own input method, most of all — it does again.
+    Off,
+}
+
 /// What `:word` was asked about — 分詞邊界, from every side.
 ///
 /// **One subject, one command.** Where a word ends is decided by a dictionary,
@@ -276,13 +299,16 @@ pub enum Command {
     /// page and **where** you read the candidate are two questions, and the
     /// nine combinations are all sensible (Feature #211).
     YumePanel(Option<String>),
-    /// `:yume on` / `:yume off` — type 漢字, or type what the keys say.
+    /// `:yume on` / `:yume abc` / `:yume off` — which of the three states the
+    /// input method is in (#290).
     ///
-    /// The 中/英 switch already exists as a lone Shift tap; this is the same
-    /// switch with a name, for a hand that is already on `:` — and `on` also
-    /// loads the 碼表 when it has not been loaded, which is the whole of
-    /// starting to write in Chinese.
-    YumeLanguage(bool),
+    /// **Two of them are yume holding the keyboard** and one is not, and the
+    /// difference is not cosmetic: the terminal flag that makes a bare Shift
+    /// visible is the same flag that stops the *system's* input method from
+    /// composing, so it can be held exactly while yume has the keys.
+    /// `on` also loads the 碼表 when it has not been loaded, which is the
+    /// whole of starting to write in Chinese.
+    YumeLanguage(Engagement),
     /// `:yume installed` — the 碼表 the *system* has, which is `builtin`'s
     /// other half: one binary, two tables, and a way back from either.
     InstalledScheme,
@@ -675,8 +701,9 @@ pub fn parse(input: &str) -> Result<Command, CommandError> {
             };
             match pick(word, YUME).map(|w| w.name) {
                 Some("which") => Ok(Command::YumeStatus),
-                Some("on") => Ok(Command::YumeLanguage(true)),
-                Some("off") => Ok(Command::YumeLanguage(false)),
+                Some("on") => Ok(Command::YumeLanguage(Engagement::Chinese)),
+                Some("abc") => Ok(Command::YumeLanguage(Engagement::Ascii)),
+                Some("off") => Ok(Command::YumeLanguage(Engagement::Off)),
                 Some("installed") => Ok(Command::InstalledScheme),
                 Some("builtin") => Ok(Command::BuiltinScheme),
                 Some("table") => match parts.next() {
@@ -2053,6 +2080,12 @@ const YUME: &[Word] = &[
     Word {
         name: "on",
         help: "cmd.yume.on",
+        needs: &[],
+        then: Args::None,
+    },
+    Word {
+        name: "abc",
+        help: "cmd.yume.abc",
         needs: &[],
         then: Args::None,
     },
@@ -4274,8 +4307,15 @@ mod tests {
         // mistake — a parent command should say where you are.
         assert_eq!(parse(":yume"), Ok(Command::YumeStatus));
         assert_eq!(parse(":yume which"), Ok(Command::YumeStatus));
-        assert_eq!(parse(":yume on"), Ok(Command::YumeLanguage(true)));
-        assert_eq!(parse(":yume off"), Ok(Command::YumeLanguage(false)));
+        assert_eq!(
+            parse(":yume on"),
+            Ok(Command::YumeLanguage(Engagement::Chinese))
+        );
+        assert_eq!(
+            parse(":yume abc"),
+            Ok(Command::YumeLanguage(Engagement::Ascii))
+        );
+        assert_eq!(parse(":yume off"), Ok(Command::YumeLanguage(Engagement::Off)));
         assert_eq!(parse(":yume installed"), Ok(Command::InstalledScheme));
         assert_eq!(parse(":yume builtin"), Ok(Command::BuiltinScheme));
         assert_eq!(parse(":yume b"), Ok(Command::BuiltinScheme));
