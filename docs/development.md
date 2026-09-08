@@ -518,7 +518,7 @@ index, and a row with no number anywhere else is a row that got lost.
 | 293 | **兩個側欄：左邊看，右邊改** | core+tui | P2 | 左邊看，右邊改，各自三態 [^293] | Planned |
 | 294 | **腳註那條四行橫條，是全樹最後一個還是矩形的東西** | tui | P3 | the last rectangle left after #273 [^294] | Planned |
 | 295 | **一存之下檔案翻了幾倍，先問一句** | core+tui | P2 | 又翻倍、又多 256 KB 纔問；`:write` 一處 [^295] | Done |
-| 296 | **`editor.rs` 拆成模組** | core | P2 | 一萬行測試先出去，再按主題逐段搬 [^296] | Doing |
+| 296 | **`editor.rs` 拆成模組** | core | P2 | 一萬行測試先出去，再按主題逐段搬 [^296] | Done |
 
 ### 5.5 · A table is a delimiter, a surface and a boundary (#261)
 
@@ -6843,9 +6843,17 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     語義風險為零（子模組看得見父模組的私有欄位）。第二刀是表格三節
     （`#118` 表格模式、`#142` markdown 表格、`#227` 分隔文字）3,565 行進
     `editor/tables.rs`。第三刀是 `:check` 那五條（拆分表 #127、寫作習慣 #160、
-    重複用詞 #209、標點 #288、字集 #289）433 行進 `editor/checks.rs`——它們做的是
-    同一件事：走一遍全文，交回一個 `gf` 讀得懂的結果緩衝區。`editor.rs` 從 28,887 行
-    掉到 15,033。
+    重複用詞 #209、標點 #288、字集 #289）進 `editor/checks.rs`——它們做的是同一件事：
+    走一遍全文，交回一個 `gf` 讀得懂的結果緩衝區。此後按主題一路切完，共 **26 個模組**：
+    `keys`（1,383，`on_key` 那一扇門與它下面的分派）、`render`（1,248）、
+    `files`（1,172）、`commands`（1,018，`execute` 那一個 800 行的 `match`）、
+    `edits`（703）、`detail`（657）、`sidebar`（649）、`words`（610）、`page`（573）、
+    `session`（494）、`checks`（449）、`prompt`（381）、`matching`（362）、
+    `verbs`（356）、`ruby`（354）、`wrap`（303）、`modes`（237）、`help`（234）、
+    `search`（200）、`convert`（184）、`shell`（179）、`jumps`（173）、`hint`（170）、
+    `conflicts`（154）、`undo`（102），加上先前的 `tables`（4,380）與
+    `tests`（10,014）。**`editor.rs` 從 28,887 行掉到 2,563**——剩下的是型別、欄位、
+    建構子與自由函數，也就是所有子模組共用的那一份。
     ⚠️ **兩件搬家時纔看得見的事。** ① 搬進子模組的私有方法，父模組**看不見了**
     （E0624）——它們原本的可見範圍是「`editor` 之內」，對應的正是 `pub(super)`，
     不是 `pub(crate)`。先全開成 `pub(super)`，再把只在本模組用的 45 個收回 private，
@@ -6860,3 +6868,6 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     的 `["a.csv", "b.csv"]` 被當成 tag；現在先把註釋整行濾掉。切測試那一刀也改成
     **只認頂格的 `#[cfg(test)]`**——`editor.rs` 的 `impl` 裏有三個 `#[cfg(test)]`
     的測試專用方法，切在第一個上會把大半個檔案當成測試扔掉。
+    ④ **`cargo build` 綠了不算搬完。** 測試是 `editor` 的另一個子模組，兄弟之間看不見
+    對方的私有項，而 `cargo build` 根本不編它——每一刀之後還要 `cargo test --no-run`
+    再開一輪。同一族還有**關聯常量**：`Self::GOTO_KEYS` 這種也吃 E0624，不是只有方法。

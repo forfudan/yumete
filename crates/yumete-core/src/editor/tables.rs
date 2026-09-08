@@ -3498,4 +3498,883 @@ impl Editor {
         }
         self.enter_insert();
     }
+
+
+    // ---- The cell, and what it refuses (Features #118 / #142) -------------
+
+    /// Take a copy of the cell the cursor is in.
+    #[cfg(test)]
+    pub(super) fn set_register_for_test(&mut self, text: &str) {
+        self.register = text.to_string();
+    }
+
+    fn yank_cell(&mut self) {
+        let Some((line, cell)) = self.cell_position() else {
+            return;
+        };
+        let text = self.cell_text(line, cell);
+        let n = text.chars().count();
+        self.store(text);
+        self.status = say!("table.yanked-cell", n);
+    }
+
+    /// Take a copy of the whole row.
+    fn yank_row(&mut self) {
+        let rope = self.current_buffer().rope();
+        let line = rope.char_to_line(self.cursor.min(rope.len_chars()));
+        let text = rope
+            .line(line)
+            .to_string()
+            .trim_end_matches(['\n', '\r'])
+            .to_string();
+        self.store(text);
+        self.status = say!("table.yanked-row");
+    }
+
+    /// Put the register into the cell — or, if it is a whole row, below this one.
+    ///
+    /// Two things are worth pasting in a grid and they are told apart by what
+    /// is in the register, not by a second key: a cell's worth of text replaces
+    /// the cell, and a row's worth becomes a new row. Anything else — half a
+    /// row, two cells — is refused, because there is no honest place to put it.
+    fn put_cell(&mut self) {
+        if self.refuse_readonly() {
+            return;
+        }
+        let text = self.recall();
+        if text.is_empty() {
+            self.status = say!("edit.nothing-yanked-yet");
+            return;
+        }
+        let Some((line, cell)) = self.cell_position() else {
+            return;
+        };
+        let Some(view) = &self.table else { return };
+        let (separator, columns) = (view.separator, view.schema.columns.len());
+        let body = text.trim_end_matches(['\n', '\r']);
+        // A block of cells — what a spreadsheet puts on the clipboard. It goes
+        // in **at the cursor's cell**, filling right and down from there, which
+        // is what every grid does with a pasted block and what a writer means
+        // by it.
+        if let Some(grid) = sniff_grid(body) {
+            self.paste_grid(grid);
+            return;
+        }
+        // A row: the right number of cells, and no line break left inside it.
+        // A Markdown row says what it is by its own pipes, so it is recognised
+        // by the same test that finds a table in the first place.
+        let is_row = !body.contains(['\n', '\r'])
+            && match separator {
+                Separator::Pipe => crate::mdtable::is_row(body),
+                Separator::Delimiter(d) => {
+                    body.chars().filter(|&c| c == d).count() + 1 == columns && columns > 1
+                }
+            };
+        if is_row {
+            let body = body.to_string();
+            // A Markdown table goes through its own parts, so a row pasted
+            // while standing on the header lands *under the rule* rather than
+            // between the rule and the names it draws — which produced a
+            // three-line "header" that no renderer reads as a table, and that
+            // the reflow then made permanent by re-composing it ruleless.
+            if let Some((region, mut parts)) = self.md_parts() {
+                let (row, cell) = self.md_at(&region);
+                let at = parts.insert_row(row + 1);
+                parts.rows[at] = crate::mdtable::split(&body);
+                self.md_write(&region, &parts, at, cell);
+                self.status = say!("table.pasted-as-new-row");
+                return;
+            }
+            self.snapshot();
+            let rope = self.current_buffer().rope();
+            let at = motion::line_end(rope, self.cursor);
+            let done =
+                self.without_cell_guard(|e| e.current_buffer_mut().insert(at, &format!("\n{body}")));
+            if !self.applied(done) {
+                return;
+            }
+            self.set_cursor(at + 1);
+            self.status = say!("table.pasted-as-new-row");
+            return;
+        }
+        if let Some(why) = self.cell_refuses_text(body) {
+            self.status = why;
+            return;
+        }
+        let Some((start, end)) = self.cell_span(line, cell) else {
+            return;
+        };
+        self.snapshot();
+        if self.overwrite(start, end, body) {
+            self.set_cursor(start);
+            self.status = say!("table.cell-replaced");
+        }
+    }
+
+    /// The bounds of the cell the cursor is in, for clamping Insert to it.
+    pub(super) fn insert_bounds(&self) -> Option<(usize, usize)> {
+        if !self.table_here() {
+            return None;
+        }
+        let (line, cell) = self.cell_position()?;
+        self.cell_span(line, cell)
+    }
+    /// Find every row whose 拆分 uses what is under the cursor.
+    ///
+    /// A search rather than a jump, because the answer is usually many rows:
+    /// 卵 is a component of dozens of characters, and which of them you wanted
+    /// is not a question the editor can answer. `n` and `N` walk the answers,
+    /// as they walk the answers to `/`.
+    fn search_columns_in(&mut self, columns: Option<Vec<usize>>) {
+        let needle = self.what_is_here();
+        if needle.trim().is_empty() {
+            self.status = say!("table.cell-is-empty");
+            return;
+        }
+        // The text, not a pattern — the same rule a search of the selection
+        // follows.
+        self.search_columns_within(&regex::escape(&needle), columns);
+    }
+
+    /// The question a table key is asking: the selection, or what the cursor is
+    /// on by whichever unit `Tab` last chose.
+    fn what_is_here(&self) -> String {
+        let (from, to) = self.selection();
+        if to > from + 1 {
+            let rope = self.current_buffer().rope();
+            return rope.slice(from..to.min(rope.len_chars())).to_string();
+        }
+        match self.table.as_ref().map(|v| v.grain) {
+            Some(Grain::Char) => self.char_at_cursor().map(String::from).unwrap_or_default(),
+            _ => self
+                .cell_position()
+                .map(|(line, cell)| self.cell_text(line, cell))
+                .unwrap_or_default(),
+        }
+    }
+    /// Search **down one column, then the next** (`:table find column`, `Enter`).
+    ///
+    /// The other axis of the same verb, and *only* the axis: a hit is a match,
+    /// the match becomes the selection, `n` and `N` walk them, the pattern is a
+    /// regular expression, and it wraps at the end. All of that is what `/`
+    /// does. The one thing that differs is the order the page is read in —
+    /// across a line and down, or down a column and across.
+    ///
+    /// Which columns: the ones a `[table.link] from` names, in the order it
+    /// names them — that is what a schema is *for*, and on a 28-column table it
+    /// is two columns instead of twenty-eight. With none named, all of them,
+    /// from the first.
+    pub(super) fn search_columns(&mut self, pattern: &str) {
+        self.search_columns_within(pattern, None)
+    }
+
+    /// The same, over the columns the sequence named — `t2-10?`.
+    fn search_columns_within(&mut self, pattern: &str, named: Option<Vec<usize>>) {
+        if !self.table_here() {
+            self.status = say!("table.not-in-a-table");
+            return;
+        }
+        let re = match self.compile(pattern) {
+            Ok(re) => re,
+            Err(message) => {
+                self.status = message;
+                return;
+            }
+        };
+        // **A column that is not there is said, not ignored** — `sort_table`'s
+        // rule, and this key had the other habit: the span was clamped to the
+        // width, so `t99/` searched the last column and answered as though
+        // that were what had been asked for.
+        let width = self.table_columns();
+        if let Some(&n) = named.iter().flatten().find(|&&n| n == 0 || n > width) {
+            self.status = say!("table.no-such-column", &n.to_string(), &width.to_string());
+            return;
+        }
+        let asked = named.clone();
+        let view = self.table.as_ref().expect("table_here");
+        let declared: Option<Vec<usize>> = view.schema.link.as_ref().map(|link| {
+            link.from
+                .iter()
+                .filter_map(|name| view.schema.index_of(name))
+                .collect()
+        });
+        let total = view.schema.columns.len();
+        let columns: Vec<usize> = match named {
+            // Said outright: 1-based, as the reader counts them.
+            Some(named) => {
+                let mut columns: Vec<usize> = named.into_iter().map(|n| n - 1).collect();
+                columns.dedup();
+                columns
+            }
+            None => match &declared {
+                Some(named) if !named.is_empty() => named.clone(),
+                _ => (0..total).collect(),
+            },
+        };
+        let anchored = pattern.contains('^') || pattern.contains('$');
+        let separator = view.separator;
+        let first = usize::from(view.schema.header);
+        let region = self.prose_region();
+        let rope = self.current_buffer().rope();
+        let last = motion::last_line(rope);
+        // Down the first column, then down the second: the order is the whole
+        // point. It is **not** the loop order, though — reading the file once
+        // per column meant splitting all 123,380 rows of a 拆分表 twenty-eight
+        // times over, which is three seconds of the same work. The rows are
+        // read once and the hits are filed by column, which is where the order
+        // actually comes from.
+        let mut by_column: Vec<Vec<(usize, usize)>> = vec![Vec::new(); columns.len()];
+        // Walked with the rope's own iterator, carrying the character offset
+        // along: `line(n)` and `line_to_char(n)` are each a descent of the
+        // tree, and a search that asks them 123,380 times has read the file
+        // twice before it looks at anything.
+        let mut line_start = rope.line_to_char(first);
+        for (nth_line, slice) in rope.lines_at(first).enumerate() {
+            let line = first + nth_line;
+            if line > last {
+                break;
+            }
+            let here = line_start;
+            line_start += slice.len_chars();
+            if region.as_ref().is_some_and(|r| !r.holds(line) || r.is_rule(line)) {
+                continue;
+            }
+            // Borrowed while the rope keeps the row in one piece, which is the
+            // ordinary case; copied only when it straddles a chunk boundary.
+            let owned;
+            let text: &str = match slice.as_str() {
+                Some(text) => text,
+                None => {
+                    owned = slice.to_string();
+                    &owned
+                }
+            };
+            // A row with nothing in it anywhere has nothing in any of its
+            // cells, and that is almost every row — so the row is only cut
+            // into cells when it might pay. Not when the pattern is anchored:
+            // `^木` asks about the start of a *cell*, and the row it sits in
+            // need not start with it.
+            if !anchored && !re.is_match(text) {
+                continue;
+            }
+            let spans = match separator {
+                Separator::Pipe => crate::mdtable::cells(text),
+                Separator::Delimiter(d) => crate::table::cells(text, d),
+            };
+            let line_start = here;
+            // The row's characters, once. `cell_text` walks the row from the
+            // start for each cell it cuts, which over twenty-eight columns is
+            // the row read twenty-eight times.
+            let chars: Vec<char> = text.trim_end_matches(['\n', '\r']).chars().collect();
+            for (nth, &column) in columns.iter().enumerate() {
+                let Some(&span) = spans.get(column) else {
+                    continue;
+                };
+                let cell: String = chars[span.0.min(chars.len())..span.1.min(chars.len())]
+                    .iter()
+                    .collect();
+                let start = line_start + span.0;
+                // Every match inside the cell, not one per cell: two hits on
+                // one line are two hits for `/` too.
+                for m in re.find_iter(&cell) {
+                    let before = cell[..m.start()].chars().count();
+                    let length = cell[m.start()..m.end()].chars().count();
+                    by_column[nth].push((start + before, start + before + length));
+                }
+            }
+        }
+        let spans: Vec<(usize, usize)> = by_column.into_iter().flatten().collect();
+        if spans.is_empty() {
+            self.status = say!("find.not-found", pattern);
+            self.hits = None;
+            return;
+        }
+        self.last_search = pattern.to_string();
+        let found = spans.len();
+        // From the first column's first hit, whatever column you were standing
+        // in: `Enter` on 卵 gives the same route through the table every time,
+        // which is what 「把所有用到它的地方過一遍」 means.
+        self.remember_hits(spans, 0);
+        self.show_table_hit();
+        // Only when nobody said which columns: a schema's `[table.link] from`,
+        // or the number the reader just typed. `t2-10/` *is* saying so, and
+        // being told 「你沒說範圍，從第一欄找起」 about the range you named is
+        // the editor disagreeing with what it just did.
+        match (declared.is_none(), asked.as_deref()) {
+            (true, None) => {
+                self.status = say!(
+                    "search.no-jump-scope",
+                    found
+                );
+            }
+            (_, Some([n])) => self.status = say!("search.hit-in-column", *n, found),
+            // A run and a handful of columns are different things and are said
+            // differently: `t2-10/` names a range, `t1,5,9/` names three.
+            (_, Some(named)) if !named.is_empty() && named.windows(2).all(|w| w[1] == w[0] + 1) => {
+                let (a, b) = (named[0], named[named.len() - 1]);
+                self.status = say!("search.hit-in-column-range", a, b, found);
+            }
+            (_, Some(named)) => {
+                let listed: Vec<String> = named.iter().map(usize::to_string).collect();
+                self.status = say!("search.hit-in-columns", listed.join(&say!("label.comma")), found);
+            }
+            (false, None) => {}
+        }
+    }
+
+    /// Remember what a search found, and which document it found it in.
+    pub(super) fn remember_hits(&mut self, spans: Vec<(usize, usize)>, at: usize) {
+        let buffer = self.current_buffer();
+        self.hits = Some(Hits {
+            buffer: buffer.id(),
+            revision: buffer.revision(),
+            spans,
+            at,
+        });
+    }
+
+    /// The hits, if they are still about the document in front of you.
+    ///
+    /// **The one gate.** A list found in another file, or before an edit, is
+    /// not a shorter answer — it is a wrong one, and it used to be given
+    /// confidently: 「第 3/78 處」 about a character that matched nothing, in a
+    /// chapter that was never searched.
+    fn live_hits(&self) -> Option<&Hits> {
+        let buffer = self.current_buffer();
+        self.hits
+            .as_ref()
+            .filter(|h| h.buffer == buffer.id() && h.revision == buffer.revision())
+    }
+
+    /// Whether `n` and `N` belong to a hit list rather than to `/`.
+    pub(super) fn walking_hits(&self) -> bool {
+        self.live_hits().is_some_and(|h| !h.spans.is_empty())
+    }
+
+    /// Step to the next or previous match the column search found.
+    pub(super) fn walk_table_hits(&mut self, forward: bool) -> bool {
+        let Some(hits) = self.live_hits() else {
+            return false;
+        };
+        let n = hits.spans.len();
+        if n == 0 {
+            return false;
+        }
+        let at = match forward {
+            true => (hits.at + 1) % n,
+            false => (hits.at + n - 1) % n,
+        };
+        if let Some(hits) = self.hits.as_mut() {
+            hits.at = at;
+        }
+        self.show_table_hit();
+        true
+    }
+
+    /// Select the match the column search is pointing at, and say which it is.
+    pub(super) fn show_table_hit(&mut self) {
+        let Some(hits) = self.live_hits() else {
+            return;
+        };
+        let (at, found) = (hits.at, hits.spans.len());
+        let Some(&(from, to)) = hits.spans.get(at) else {
+            return;
+        };
+        let rope = self.current_buffer().rope();
+        let len = rope.len_chars();
+        let to = to.min(len);
+        let from = from.min(len);
+        let head = motion::prev_grapheme(rope, to).max(from);
+        let which = say!("search.hit-n-of-m", at + 1, found);
+        // **Shown, not jumped to** (Feature #176). 卵's own row and a row that
+        // uses 卵 are two places, and the question 「誰用了卵」 is about both
+        // of them at once — so the hit opens in the other work area and the
+        // cursor stays where it was standing. Nothing is remembered in the
+        // jump list, because nothing was left.
+        //
+        // Except when the keys are already in the other pane: there the hits
+        // are being walked by hand, and「給你看」 means moving the cursor.
+        //
+        // …and except when the reader asked for the other answer: `/` finds it
+        // **here**, `?` shows it over there. One pair of letters, in the goto
+        // family and the table family alike.
+        if self.definition_preview && self.live_pane == 0 {
+            let line = rope.char_to_line(from);
+            let caption = say!(
+                "show.table-hit",
+                self.current_buffer().display_name(),
+                line + 1,
+                which
+            );
+            self.show_in_split(from, Some((from, to)), caption);
+            self.status = which;
+            return;
+        }
+        // The match itself becomes the selection, exactly as `/` leaves it —
+        // on its last grapheme, not one past it.
+        self.anchor = from;
+        self.cursor = head;
+        self.extend = false;
+        self.refresh_goal_column();
+        self.status = which;
+    }
+
+    /// Land on `line` — in the other work area, or here.
+    ///
+    /// **`gd` goes and `gw` shows**, which is the pair every editor has: `gd`
+    /// is *go to definition* everywhere, and the peek is the second command
+    /// (VS Code's Peek Definition, vim's `C-w }`). Going leaves a jump behind,
+    /// so `C-o` comes back; showing leaves nothing, because nothing was left.
+    pub(super) fn land_on_row(&mut self, line: usize, preview: bool) {
+        match preview {
+            true => self.show_row(line),
+            false => {
+                self.remember_jump();
+                self.goto_line(line + 1);
+            }
+        }
+    }
+
+    /// Show `line` in the other work area.
+    pub(super) fn show_row(&mut self, line: usize) {
+        let rope = self.current_buffer().rope();
+        let at = rope.line_to_char(line.min(rope.len_lines().saturating_sub(1)));
+        let end = at + crate::zong::line_chars(rope, line).len();
+        let caption = say!(
+            "show.row-in-file",
+            self.current_buffer().display_name(),
+            line + 1
+        );
+        self.show_in_split(at, Some((at, end)), caption);
+        self.status = say!("show.row", line + 1);
+    }
+
+    /// The hit the search is standing on, if there is one.
+    ///
+    /// What the renderer marks louder than the rest: on a long line a hit in
+    /// the ordinary selection ground is easy to miss, and every editor's
+    /// answer to that is to give the **current** match a mark of its own.
+    pub fn current_hit(&self) -> Option<(usize, usize)> {
+        let hits = self.live_hits()?;
+        hits.spans.get(hits.at).copied()
+    }
+
+    /// Which line the other work area is showing, for tests and for the
+    /// status line.
+    pub fn peeked_line(&self) -> Option<usize> {
+        let pane = self.other.as_ref()?;
+        Some(self.current_buffer().rope().char_to_line(pane.cursor))
+    }
+
+    /// Whether the cursor sits at the first character of its cell.
+    pub(super) fn at_cell_start(&self) -> bool {
+        match self.cell_position() {
+            Some((line, cell)) => self.cell_span(line, cell).map(|(a, _)| a) == Some(self.caret()),
+            None => false,
+        }
+    }
+
+    /// **What divides this file into cells, whatever mode it is in.**
+    ///
+    /// A `Separator`: `Pipe` says that only the lines which are `|` table rows
+    /// are cells, as in a document; a `Delimiter` says every line is a row, as
+    /// in a `.csv`.
+    ///
+    /// The one answer every gate asks for. The gates used to open with
+    /// `self.table.as_ref()?` and so were off whenever `:table` was — which is
+    /// the state a table in a manuscript is normally edited in, and the state
+    /// the 拆分表 is in whenever the project has no schema file. A `.csv` is a
+    /// grid because of its own name; a `|` table is a grid because of what is
+    /// written there.
+    pub(super) fn grid_shape_here(&self) -> Option<Separator> {
+        if let Some(view) = self.table.as_ref() {
+            return Some(view.separator);
+        }
+        let extension = self
+            .current_buffer()
+            .path()
+            .and_then(|p| p.extension())
+            .and_then(|e| e.to_str())
+            .unwrap_or_default()
+            .to_ascii_lowercase();
+        match extension.as_str() {
+            "csv" => Some(Separator::Delimiter(',')),
+            "tsv" | "tab" => Some(Separator::Delimiter('\t')),
+            _ => Some(Separator::Pipe),
+        }
+    }
+
+    /// Whether putting `text` where `span` is would change how many cells that
+    /// row has.
+    ///
+    /// For the writers that replace a range outright rather than typing into
+    /// it — a ruby reading is the one that reaches the rope past every gate —
+    /// and, like every bulk check, it does not ask whether `:table` is on.
+    pub(super) fn replacement_reshapes_the_grid(
+        &self,
+        span: (usize, usize),
+        text: &str,
+    ) -> Option<String> {
+        let separator = self.grid_shape_here()?;
+        let rows_only = separator == Separator::Pipe;
+        let rope = self.current_buffer().rope();
+        let line = rope.char_to_line(span.0.min(rope.len_chars()));
+        if rows_only {
+            let here = self.line_text(line).unwrap_or_default();
+            // A row inside a fence is writing *about* a table.
+            if !crate::mdtable::is_row(&here) || self.block_of(line).is_literal() {
+                return None;
+            }
+        }
+        let was = rope
+            .slice(span.0.min(rope.len_chars())..span.1.min(rope.len_chars()))
+            .to_string();
+        let cells = |s: &str| -> usize {
+            match separator {
+                Separator::Pipe => crate::mdtable::pipes_from(s, false).len(),
+                Separator::Delimiter(d) => s.chars().filter(|&c| c == d).count(),
+            }
+        };
+        let (before, after) = (cells(&was), cells(text));
+        (before != after).then(|| {
+            say!(
+                "table.row-would-change-width",
+                line + 1,
+                before + 1,
+                after + 1
+            )
+        })
+    }
+
+    /// Whether typing `c` into a cell would break the file.
+    ///
+    /// With no quoting, a delimiter inside a cell is not a delimiter inside a
+    /// cell — it is one more column, and every column right of it shifts. The
+    /// generator that reads this file back would take the damage silently, so
+    /// the key is refused here, where it can still be explained.
+    fn cell_refuses(&self, c: char) -> Option<String> {
+        // The **view**, deliberately: typing a `|` is how a table is written in
+        // the first place, so a document is a grid to this gate only once the
+        // writer has said so. What is *rewritten in bulk* — `:s`, `:replace`,
+        // `:ruby format`, `gJ` — asks [`Self::grid_shape_here`] instead, which
+        // does not care whether `:table` is on.
+        let view = self.table.as_ref()?;
+        if !self.table_here() {
+            return None;
+        }
+        if c == view.schema.delimiter {
+            return Some(say!("cell.refuses-delimiter", c));
+        }
+        // A line break would cut the row in two; a tab is not a thing a cell of
+        // this kind holds, and it is the one other character that a paste from
+        // a spreadsheet brings along.
+        self.cell_refuses_shape(c)
+    }
+
+    /// Whether the cursor is standing on a table's `|---|` line.
+    ///
+    /// It is not a row of the table: it is the *drawing* of the alignments,
+    /// remade from the schema every time the table is laid out. Typing into it
+    /// destroyed the table and the reflow on the way out did not notice.
+    fn md_rule_here(&self) -> bool {
+        let Some(region) = self.md_region() else {
+            return false;
+        };
+        let rope = self.current_buffer().rope();
+        region.is_rule(rope.char_to_line(self.caret().min(rope.len_chars())))
+    }
+
+    /// The first reason this text may not go into a cell, if there is one.
+    pub(super) fn cell_refuses_text(&self, text: &str) -> Option<String> {
+        self.cell_refuses_text_at(None, text)
+    }
+
+    /// The same, knowing where the text is going.
+    ///
+    /// Which matters for exactly one thing: a Markdown table has an escape —
+    /// `\|` — and whether the `|` about to be typed is escaped depends on the
+    /// backslash that is *already in the buffer*, not on the text being
+    /// inserted. Without the position the editor forbade the one spelling its
+    /// own manual told a writer to use.
+    pub(super) fn cell_refuses_text_at(&self, at: Option<usize>, text: &str) -> Option<String> {
+        let view = self.table.as_ref()?;
+        if self.table_bypass.get() || !self.table_here() {
+            return None;
+        }
+        if self.md_rule_here() {
+            return Some("分隔行是畫出來的——用 t < = > 改對齊".to_string());
+        }
+        if view.separator == Separator::Pipe {
+            let escaped = at.is_some_and(|a| self.backslash_before(a));
+            if crate::mdtable::has_bare_pipe(text, escaped) {
+                return Some("'|' 分隔格子——格子裏要寫，寫成 \\|".to_string());
+            }
+            return text.chars().find_map(|c| self.cell_refuses_shape(c));
+        }
+        text.chars().find_map(|c| self.cell_refuses(c))
+    }
+
+    /// Whether an odd run of backslashes sits immediately before `at`, so the
+    /// next character is escaped.
+    fn backslash_before(&self, at: usize) -> bool {
+        let rope = self.current_buffer().rope();
+        let mut run = 0;
+        let mut i = at;
+        while i > 0 && rope.char(i - 1) == '\\' {
+            run += 1;
+            i -= 1;
+        }
+        run % 2 == 1
+    }
+
+    /// The reasons that hold whatever the delimiter is: a row is one line, and
+    /// a tab is not a thing a cell of any of these kinds holds.
+    fn cell_refuses_shape(&self, c: char) -> Option<String> {
+        match c {
+            '\n' | '\r' => Some(say!("cell.refuses-newline")),
+            '\t' => Some(say!("cell.refuses-tab")),
+            _ => None,
+        }
+    }
+
+    /// Whether a cut over `range` reaches into a grid at all.
+    ///
+    /// **Not `self.table.is_some()`.** A `.md` holding one table anywhere is
+    /// opened with a grid view so its columns are drawn straight away
+    /// (`table_on_open`), and asking only whether that view exists made every
+    /// paragraph in the file refuse to give up its line break: `d` at the end
+    /// of a sentence answered 「格與格之間的分隔符刪不掉」 about prose that has
+    /// no cells in it. **A grid guards the lines it occupies and no others** —
+    /// the same law `table_here()` states for the keys and
+    /// `cell_refuses_text_at` already kept for the other half of the edit.
+    ///
+    /// The two ends are what is asked, not every line between them: only a row
+    /// cut *part* way can lose a delimiter, and a cut that swallows whole rows
+    /// takes their delimiters with them and leaves every surviving row intact.
+    fn cut_reaches_a_grid(&self, range: &std::ops::Range<usize>) -> bool {
+        match self.table.as_ref().map(|v| v.bounds) {
+            None => false,
+            Some(Bounds::WholeFile) => true,
+            // The level is one word for two halves — see `table_here()`.
+            Some(Bounds::Md) if !self.table_padding_on() => false,
+            Some(_) => {
+                let rope = self.current_buffer().rope();
+                let last = rope.len_chars();
+                let head = rope.char_to_line(range.start.min(last));
+                // The end is exclusive: a cut that stops at the head of a row
+                // has not touched that row.
+                let tail = rope
+                    .char_to_line(range.end.saturating_sub(1).max(range.start).min(last));
+                self.prose_region_at(head).is_some() || self.prose_region_at(tail).is_some()
+            }
+        }
+    }
+
+    /// The reason this range may not be cut out, if there is one.
+    pub(super) fn cell_refuses_cut(&self, range: std::ops::Range<usize>) -> Option<String> {
+        if self.table_bypass.get() || !self.cut_reaches_a_grid(&range) {
+            return None;
+        }
+        if self.md_rule_here() {
+            return Some("分隔行是畫出來的——用 t < = > 改對齊".to_string());
+        }
+        let rope = self.current_buffer().rope();
+        let range = range.start.min(rope.len_chars())..range.end.min(rope.len_chars());
+        if range.is_empty() {
+            return None;
+        }
+        // The escape again: `\|` inside a cell is not a boundary, so taking it
+        // out is not taking a boundary out.
+        if self.table.as_ref().map(|v| v.separator) == Some(Separator::Pipe) {
+            let escaped = self.backslash_before(range.start);
+            let text = rope.slice(range).to_string();
+            return (crate::mdtable::has_bare_pipe(&text, escaped)
+                || text.contains(['\n', '\r']))
+            .then(|| "格與格之間的分隔符刪不掉".to_string());
+        }
+        rope.slice(range)
+            .chars()
+            .find_map(|c| self.cell_refuses(c))
+            .map(|_| "格與格之間的分隔符刪不掉".to_string())
+    }
+
+    /// An empty row of this table: every delimiter, and nothing between them.
+    ///
+    /// `o` in a grid means "a new row", and a bare newline is not one — it is a
+    /// row with one cell where the schema says twenty-eight, which the editor
+    /// would then have to mark as damaged the moment it appeared. Opening a
+    /// line therefore opens a *row*.
+    pub(super) fn blank_row(&self) -> String {
+        // Only where the grid's rules apply. `o` on the paragraph below a
+        // Markdown table was opening `|  |  |` — the mode leaking out of the
+        // thing it is about, which is the one promise it makes.
+        if !self.table_here() {
+            return String::new();
+        }
+        // The width is **this** table's (#283) — `o` in the second table of a
+        // document was opening a row as wide as the first one.
+        let columns = self.table_column_count_at(self.cursor_line());
+        match &self.table {
+            Some(view) => match view.separator {
+                Separator::Pipe => crate::mdtable::blank_row(columns),
+                Separator::Delimiter(d) => d.to_string().repeat(columns.saturating_sub(1)),
+            },
+            None => String::new(),
+        }
+    }
+
+    /// Run `f` with the grid's guard lifted — for the one operation that is
+    /// *about* the structure: opening a whole new row.
+    pub(super) fn without_cell_guard<T>(&mut self, f: impl FnOnce(&mut Self) -> T) -> T {
+        self.table_bypass.set(true);
+        let out = f(self);
+        self.table_bypass.set(false);
+        out
+    }
+
+
+    // ---- Finding a row by its key (Feature #127) --------------------------
+
+    /// Go to the row this table names by `key` (`:table jump 木`).
+    ///
+    /// The index behind it has always been built and has always answered in
+    /// about 300 ns; until now nothing let a person ask it. Finding 木 in a
+    /// 123,380-row table meant `/^木,` and hoping no other row started that
+    /// way.
+    pub(super) fn goto_row(&mut self, key: &str) {
+        let Some(view) = self.table.as_ref() else {
+            self.status = say!("table.not-in-a-table");
+            return;
+        };
+        if view.schema.link.is_none() && view.schema.key.is_none() {
+            self.status = say!("table.schema-has-no-key-column");
+            return;
+        }
+        let mut chars = key.chars();
+        let (Some(c), None) = (chars.next(), chars.next()) else {
+            self.status = say!("table.row-name-not-one-char", key);
+            return;
+        };
+        match self.row_named(c) {
+            Some(line) => {
+                self.remember_jump();
+                self.move_to_line(line + 1);
+                self.snap_to_cell();
+                self.status = say!("table.row-found-at-line", c, line + 1);
+            }
+            None => self.status = say!("table.no-such-row-name", c),
+        }
+    }
+
+    /// Which buffer holds this id, if any is still open.
+    pub(super) fn buffer_with(&self, id: u64) -> Option<usize> {
+        self.buffers.iter().position(|b| b.id() == id)
+    }
+
+    /// Which line holds the row whose key is this character.
+    ///
+    /// The index behind it is always true: it was tempting to let the panel
+    /// draw from a stale one to save the rebuild after an edit, but a panel
+    /// that says a component has no row when it has — or has one when it does
+    /// not — is worse than a frame that takes nine milliseconds, and a 拆分表
+    /// is edited far less often than it is read.
+    pub fn row_named(&self, key: char) -> Option<usize> {
+        self.with_key_index(|index| index.get(&key).copied())
+            .flatten()
+    }
+
+    /// Run `f` over the key index, building it first if the document has moved.
+    ///
+    /// Every key is one character — a row of a 拆分表 is *about* a character —
+    /// so the index is a map from that character to its line, and reading it
+    /// needs no allocation at all.
+    fn with_key_index<T>(
+        &self,
+        f: impl FnOnce(&HashMap<char, usize>) -> T,
+    ) -> Option<T> {
+        let view = self.table.as_ref()?;
+        let link = view.schema.link.as_ref()?;
+        let at = view.schema.index_of(&link.to)?;
+        let rope_lines = self.current_buffer().line_count();
+        let want = (
+            self.current_buffer().id(),
+            self.current_buffer().revision(),
+            rope_lines,
+        );
+        // Typing inside a cell cannot move a row or rename another one: table
+        // mode refuses Enter, so the line count is fixed, and the only key that
+        // could change is this row's own — which is only in play when the
+        // cursor is *in* the key column. Everywhere else the index built a
+        // keystroke ago is still exactly true, and rebuilding it would cost ten
+        // milliseconds on every character typed.
+        let typing_elsewhere = self.mode == Mode::Insert && !self.cursor_in_key_column();
+        let fresh = matches!(
+            self.key_index.borrow().as_ref(),
+            Some(index)
+                if index.of == want
+                    || (typing_elsewhere && index.of.0 == want.0 && index.of.2 == want.2)
+        );
+        if !fresh {
+            let rope = self.current_buffer().rope();
+            let first = usize::from(view.schema.header);
+            let mut index = HashMap::with_capacity(rope.len_lines());
+            // `lines()`, not `line(i)`: the iterator walks the rope once, while
+            // asking for each line by number seeks from the root every time —
+            // over a hundred thousand rows that is the whole cost.
+            for (line, row) in rope.lines().enumerate().skip(first) {
+                // Only as far along the row as the key column, and only as far
+                // into that cell as the second character — a key is one
+                // character, so anything longer is not one and the rest of the
+                // line need never be read.
+                let mut field = 0;
+                let mut key = None;
+                let mut count = 0;
+                for c in row.chars() {
+                    if c == view.schema.delimiter {
+                        if field == at {
+                            break;
+                        }
+                        field += 1;
+                        continue;
+                    }
+                    if c == '\n' || c == '\r' {
+                        break;
+                    }
+                    if field == at {
+                        count += 1;
+                        if count > 1 {
+                            key = None;
+                            break;
+                        }
+                        key = Some(c);
+                    }
+                }
+                if let Some(key) = key {
+                    // The first row wins: a table with the same key twice is a
+                    // fault to be found, not a reason to jump to the later one.
+                    index.entry(key).or_insert(line);
+                }
+            }
+            *self.key_index.borrow_mut() = Some(KeyIndex {
+                of: want,
+                keys: index,
+            });
+        }
+        let held = self.key_index.borrow();
+        held.as_ref().map(|index| f(&index.keys))
+    }
+
+    /// Whether the cursor is in the column whose values are the row keys.
+    fn cursor_in_key_column(&self) -> bool {
+        let Some(view) = &self.table else {
+            return false;
+        };
+        let Some(link) = &view.schema.link else {
+            return false;
+        };
+        match (self.cell_position(), view.schema.index_of(&link.to)) {
+            (Some((_, cell)), Some(key)) => cell == key,
+            _ => false,
+        }
+    }
 }
