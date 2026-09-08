@@ -87,4 +87,68 @@ impl Editor {
         self.goto_line(conflict.head + 1);
         self.status = say!("conflict.kept", lines.len());
     }
+
+
+    // ---- Where the conflicts are (Feature #249) ---------------------------
+
+    /// Every merge conflict in this buffer, in the order they are written
+    /// (Feature #249).
+    ///
+    /// Not gated on whether the markup is drawn: `:render off` says how the
+    /// page is *coloured*, and `]c` is a motion. A file with seven angle
+    /// brackets in it is in a state the writer needs to get out of either way.
+    pub fn conflicts(&self) -> Vec<crate::conflict::Conflict> {
+        self.scan_blocks();
+        let key = (
+            self.current_buffer().id(),
+            self.current_buffer().revision(),
+        );
+        match self.block_cache.borrow().as_ref() {
+            Some((cached, _, found)) if *cached == key => found.clone(),
+            _ => Vec::new(),
+        }
+    }
+
+    /// The conflict `line` stands in, markers included.
+    pub fn conflict_at(&self, line: usize) -> Option<crate::conflict::Conflict> {
+        self.conflicts()
+            .into_iter()
+            .find(|c| c.lines().contains(&line))
+    }
+
+    /// `:check merge` — every conflict in this file, as a buffer to walk (#249).
+    ///
+    /// The same `路徑:行:` shape `:grep` writes, so `gf` follows a row back to
+    /// the line it names and every motion works in the list. **This file
+    /// only**: a merge conflict is a state a file is in, and the file the
+    /// writer is looking at is the one they are about to resolve.
+    pub(super) fn list_conflicts(&mut self) {
+        let found = self.conflicts();
+        if found.is_empty() {
+            self.status = say!("conflict.none");
+            return;
+        }
+        let shown = self
+            .current_buffer()
+            .path()
+            .map(|p| p.display().to_string())
+            .unwrap_or_else(|| self.current_buffer().display_name());
+        let mut listing = String::new();
+        for c in &found {
+            // Wordless on purpose: the two labels are the branches git wrote
+            // into the file, and they say more than any sentence here could.
+            listing.push_str(&format!(
+                "{shown}:{}: {} ⇄ {}\n",
+                c.head + 1,
+                c.ours,
+                c.theirs
+            ));
+        }
+        let count = found.len();
+        let mut buffer = Buffer::from_text(&listing);
+        buffer.name_as("[conflicts]");
+        self.add_buffer(buffer);
+        self.set_cursor(0);
+        self.status = say!("conflict.some", count);
+    }
 }
