@@ -6700,13 +6700,17 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     page under 折行 (`table.rs:591`) pushes `viewport.top` down one row at a
     time, and **each push re-measures a windowful from scratch** — the inner
     loop asks `lines_of` for every row from the new top until the cursor's row
-    either fits or does not. So a scroll costs rows-in-window × rows-scrolled 折
-    行: a big jump measured **~8,600 wraps and 0.17 s inside one keypress**. The
+    either fits or does not. **每一幀的上限是一個視窗高乘一個視窗高**——普通捲動
+    規則在這個迴圈之前就把 `viewport.top` 放到了 `cursor_row - inset`
+    （`table.rs:381`，`page_inset` 跳遠時回中間），所以推的次數不是跳了多遠，而是
+    至多一個視窗高；量到的是 **~8,600 次折行、一次按鍵裏 0.17 秒**。The
     answer is right, it is asked too often — the fix is to **carry the running
     height** (accumulate as the view moves, invalidate on an edit, a width
     change or a 摺／攤 switch) instead of recomputing the prefix every frame. 摺
     起 and 攤平 do not pay it: there a row is one line and the walk is
-    arithmetic. **medium**
+    arithmetic. **範圍只有 `t t` 那個滿版格狀面板 ＋ `t a` 開着**：`if wrap` 是這段
+    迴圈唯一的閘（`table.rs:592`），而 `t a` 在正文頁只設開關、不改畫法。
+    2026-09-08 重讀，`table.rs` 自這條記下來之後一行沒動，這段仍在。**medium**
 
 [^290]: 2026-09-08：「目前无法通过 shift 键切换 yume 的中英文模式，只能通过 yume
     on/off 命令切换中英文。」 `ShiftTap` was fine and its unit test green; the
