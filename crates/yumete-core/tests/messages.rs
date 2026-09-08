@@ -27,24 +27,77 @@ fn root() -> PathBuf {
         .to_path_buf()
 }
 
-/// Every file that says anything.
-const SPEAKERS: &[&str] = &[
-    "crates/yumete-core/src/buffer.rs",
-    "crates/yumete-core/src/editor.rs",
-    "crates/yumete-core/src/command.rs",
-    "crates/yumete-tui/src/lib.rs",
-    "crates/yumete/src/main.rs",
-];
+/// Every file that says anything: **every `.rs` under `crates/*/src/`**.
+///
+/// It used to be a list of five paths, and a list is exactly the wrong shape
+/// for this. 2026-09-08, splitting `editor.rs` into modules moved five tags
+/// into `editor/tables.rs` and this test reported them as 「in the table, said
+/// by nothing」 — the entries were fine, the *list* had gone stale, and the way
+/// that reads is 「delete these five messages」. A walk cannot go stale.
+///
+/// A file whose name is `tests.rs` is skipped whole, and an inline
+/// `#[cfg(test)] mod tests` is cut off by [`source`]: a tag a test makes up is
+/// an example, not something the editor says.
+fn speakers() -> Vec<String> {
+    fn walk(dir: &std::path::Path, into: &mut Vec<PathBuf>) {
+        let Ok(entries) = std::fs::read_dir(dir) else { return };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_dir() {
+                walk(&path, into);
+            } else if path.extension().is_some_and(|e| e == "rs")
+                && path.file_name().is_some_and(|n| n != "tests.rs")
+            {
+                into.push(path);
+            }
+        }
+    }
+    let root = root();
+    let mut found = Vec::new();
+    for crate_dir in std::fs::read_dir(root.join("crates")).expect("crates/").flatten() {
+        walk(&crate_dir.path().join("src"), &mut found);
+    }
+    assert!(found.len() > 5, "the walk found almost nothing: {found:?}");
+    found.sort();
+    found
+        .into_iter()
+        .map(|p| {
+            p.strip_prefix(&root)
+                .expect("under the root")
+                .display()
+                .to_string()
+        })
+        .collect()
+}
 
-/// A source file, with its test module cut off — a test's tags are examples,
-/// not something the editor says.
+/// A source file as this test reads it: **no tests, and no comments**.
+///
+/// Two cuts, and each one is a place the openers below would otherwise find a
+/// tag nobody says.
+///
+/// **Tests** go at the first `#[cfg(test)]` **in column zero**, not at
+/// `#[cfg(test)] mod tests`: `yumete-config` calls one of its two test modules
+/// `runner_tests`, and a tag invented inside it is an example exactly like one
+/// from a module that took the usual name. The column matters — `editor.rs`
+/// carries three `#[cfg(test)]` helper *methods* inside `impl Editor`, and
+/// cutting at the first of those would drop most of the file and report every
+/// message it says as unused.
+///
+/// **Comments** go because one of the openers is `", "`, which is how a key
+/// table declares 「the key, and what it does」 — and is also how a doc comment
+/// writes `["a.csv", "b.csv"]`. The editor says none of its comments, so
+/// dropping them costs nothing and stops the heuristic from reading prose.
 fn source(relative: &str) -> String {
     let text = std::fs::read_to_string(root().join(relative))
         .unwrap_or_else(|e| panic!("{relative}: {e}"));
-    match text.find("#[cfg(test)]\nmod tests") {
-        Some(at) => text[..at].to_string(),
-        None => text,
-    }
+    let text = match text.find("\n#[cfg(test)]") {
+        Some(at) => &text[..at],
+        None => &text[..],
+    };
+    text.lines()
+        .filter(|l| !l.trim_start().starts_with("//"))
+        .collect::<Vec<_>>()
+        .join("\n")
 }
 
 /// Every string literal `opener` is applied to, in `text`.
@@ -102,7 +155,7 @@ fn is_tag(literal: &str) -> bool {
 /// Every tag the editor says, and where it says it.
 fn said() -> BTreeMap<String, String> {
     let mut out = BTreeMap::new();
-    for file in SPEAKERS {
+    for file in &speakers() {
         let text = source(file);
         let mut tags = literals(&text, "say!(");
         // A command's `help` is a tag too: the `:` menu translates it as it
@@ -305,7 +358,7 @@ fn no_message_is_handed_a_chinese_argument() {
     // sentence that is half translated: the template switches language and the
     // value does not.
     let mut leaks = Vec::new();
-    for file in SPEAKERS {
+    for file in &speakers() {
         let text = source(file);
         let mut at = 0;
         while let Some(found) = text[at..].find("say!(") {
