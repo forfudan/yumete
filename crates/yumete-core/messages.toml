@@ -2816,9 +2816,9 @@ en = "Chinese"
 [[message]]
 # 中文幫助：開／關輸入法
 key = "help.chinese.toggle-ime"
-zht = "接管鍵盤／交還給系統；接管着的時候，單獨按一下 Shift 切 中／ABC"
-zhs = "接管键盘／交还给系统；接管着的时候，单独按一下 Shift 切 中／ABC"
-en = "take the keyboard, or hand it back; a lone Shift tap then switches 中/ABC"
+zht = "接管鍵盤（`:yume off` 交還給系統）；接管着的時候，單獨按一下 Shift 切 中／ABC"
+zhs = "接管键盘（`:yume off` 交还给系统）；接管着的时候，单独按一下 Shift 切 中／ABC"
+en = "take the keyboard (`:yume off` hands it back); a lone Shift tap switches 中/ABC"
 
 [[message]]
 # 中文幫助：注音寫法統一
@@ -4286,11 +4286,11 @@ zhs = "还没开始打字，而且这个二进制不带码表——先装资料"
 en = "not typing yet, and this build carries no 碼表 — install the data first"
 
 [[message]]
-# Shift+空格 把鍵盤整個交還給系統（第三個狀態，不是 ABC）
+# :yume off 把鍵盤整個交還給系統（第三個狀態，不是 ABC）
 key = "ime.off"
-zht = "輸入法交還給系統了（Shift+空格 拿回來）"
-zhs = "输入法交还给系统了（Shift+空格 拿回来）"
-en = "the keyboard is the system's again (Shift+Space takes it back)"
+zht = "輸入法交還給系統了（`:yume on` 拿回來）"
+zhs = "输入法交还给系统了（`:yume on` 拿回来）"
+en = "the keyboard is the system's again (`:yume on` takes it back)"
 
 [[message]]
 # 換到系統裝的那份碼表

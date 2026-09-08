@@ -9266,7 +9266,7 @@ impl Editor {
     fn help_chinese() -> String {
         let mut out = format!("# {}\n\n", say!("help.chinese.title"));
         for (keys, what) in [
-            ("Shift+Space", say!("help.chinese.toggle-ime")),
+            (":yume on", say!("help.chinese.toggle-ime")),
             (":yume scheme", say!("help.chinese.switch-scheme")),
             (":yume chaifen on", say!("help.chinese.chaifen-under-candidates")),
             ("w b e", say!("help.chinese.word-boundaries")),

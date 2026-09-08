@@ -56,10 +56,11 @@ far, oldest first:
   scheme's compiled data tables from the data directory.
 - **#28 / #29 / #30 IME in Insert mode** — while composing in Insert mode, keys are
   routed to the IME and a floating candidate panel is drawn below the cursor
-  (Space / 1–9 select, `-`/`=` page, Backspace/Esc edit/cancel); **`Shift+Space`**
-  takes the keyboard and hands it back, and a **lone-Shift tap** toggles 中/ABC
-  while yume holds it (the tap needs the Kitty keyboard protocol — kitty, WezTerm,
-  Ghostty, foot, Alacritty, Konsole, recent iTerm2; not Apple Terminal);
+  (Space / 1–9 select, `-`/`=` page, Backspace/Esc edit/cancel); **`:yume
+  on|abc|off`** takes the keyboard and hands it back, and a **lone-Shift tap**
+  toggles 中/ABC while yume holds it (the tap needs the Kitty keyboard protocol —
+  kitty, WezTerm, Ghostty, foot, Alacritty, Konsole, recent iTerm2; not Apple
+  Terminal);
   number mode, `/`-commands, and `z` reverse come from the engine.
 
 - **#67 Command hints** — `:` on its own lists every command above the command
