@@ -1153,6 +1153,36 @@ fn committed_text_lands_at_the_prompt_caret() {
     assert_eq!(ed.prompt(), Some(("/", "潮水連海平")));
 }
 
+/// **A capital is how you ask for the case** (#301).
+///
+/// A pattern with none in it ignores case; one with a capital does not. The
+/// rule earns its keep on a manuscript: 漢字 has no case, so nearly every
+/// search here takes the first branch for free, while `TODO` — a mark, not a
+/// word — still finds only the mark.
+#[test]
+fn a_pattern_with_no_capital_in_it_ignores_case() {
+    // 一0 段1 ␠2 T3 O4 D5 O6 ␠7 二8 段9 ␠10 t11 o12 d13 o14
+    let mut ed = typed("一段 TODO 二段 todo 三段。");
+    let mut find = |ed: &mut Editor, pattern: &str| {
+        ed.set_cursor(0);
+        ed.on_key(Key::Char('/'));
+        for c in pattern.chars() {
+            ed.on_key(Key::Char(c));
+        }
+        ed.on_key(Key::Enter);
+        ed.selection()
+    };
+    // No capital: either one will do, so the nearer one wins.
+    assert_eq!(find(&mut ed, "todo"), (3, 7), "lower case takes either");
+    // A capital: the mark, and only the mark.
+    assert_eq!(find(&mut ed, "TODO"), (3, 7));
+    // `(?-i)` is the one-off way to mean lower case and nothing else…
+    assert_eq!(find(&mut ed, "(?-i)todo"), (11, 15), "the lower-case one");
+    // …and the setting is the standing one.
+    ed.set_smart_case(false);
+    assert_eq!(find(&mut ed, "todo"), (11, 15), "off: lower case means lower");
+}
+
 #[test]
 fn a_search_guesses_the_last_pattern() {
     let mut ed = typed("春江潮水連海平，海上明月共潮生");

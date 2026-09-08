@@ -202,6 +202,13 @@ pub struct EditorConfig {
     /// this" and "this is the wrong character"; for a 拆分表 it is the whole
     /// question. Given way to, right end first, when the line is crowded.
     pub char_info: bool,
+    /// Whether a search pattern with no capital in it ignores case (#301).
+    ///
+    /// On: a manuscript is 漢字, which has no case, so nearly every search
+    /// takes the insensitive branch for nothing; the 西文 in one is mostly
+    /// names and initialisms, and typing the capital is how you ask for those
+    /// to be matched exactly. `(?-i)` says it for one pattern.
+    pub smart_case: bool,
     /// Whether a hint row sits above the status line (Feature #122).
     ///
     /// It costs one row of the window always — set vertically that is one 字
@@ -289,6 +296,7 @@ impl Default for EditorConfig {
             measure: 0,
             char_info: true,
             hints: true,
+            smart_case: true,
             dense: true,
             paper_ticks: 0,
             tabs: Tabs::default(),
@@ -1704,6 +1712,7 @@ struct RawEditor {
     measure: Option<usize>,
     char_info: Option<bool>,
     hints: Option<bool>,
+    smart_case: Option<bool>,
     dense: Option<bool>,
     paper_ticks: Option<usize>,
 }
@@ -1844,6 +1853,9 @@ impl RawConfig {
         }
         if other.editor.hints.is_some() {
             self.editor.hints = other.editor.hints;
+        }
+        if other.editor.smart_case.is_some() {
+            self.editor.smart_case = other.editor.smart_case;
         }
         if other.editor.dense.is_some() {
             self.editor.dense = other.editor.dense;
@@ -2034,6 +2046,9 @@ impl RawConfig {
         }
         if let Some(on) = self.editor.hints {
             config.editor.hints = on;
+        }
+        if let Some(on) = self.editor.smart_case {
+            config.editor.smart_case = on;
         }
         if let Some(on) = self.editor.dense {
             config.editor.dense = on;

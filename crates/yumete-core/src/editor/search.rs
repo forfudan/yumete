@@ -15,6 +15,10 @@ impl Editor {
     /// `n` and `N` ask for the same pattern over and over, so the compiled form
     /// is kept until the pattern changes.
     pub(super) fn compile(&self, pattern: &str) -> Result<Regex, String> {
+        let pattern = &self.smart_cased(pattern);
+        // **Keyed on the pattern that is actually compiled**, not on what was
+        // typed: `(?i)` is part of it, so `/todo` and `/TODO` are two entries
+        // and never hand each other their answer.
         if let Some((cached, re)) = self.compiled.borrow().as_ref() {
             if cached == pattern {
                 return Ok(re.clone());
@@ -33,6 +37,27 @@ impl Editor {
                 err.to_string().lines().last().unwrap_or("").trim()
             )),
         }
+    }
+
+    /// Smart case (#301): a pattern with no capital in it ignores case.
+    ///
+    /// Typing a capital is how you ask for the case to matter — nothing else
+    /// has to be turned on or off, and the whole rule is one line to explain.
+    /// `(?-i)` in front of the pattern is the way to say 「lower case, and mean
+    /// it」; `[editor] smart_case = false` turns the rule off for good.
+    fn smart_cased(&self, pattern: &str) -> String {
+        match self.smart_case && !pattern.chars().any(char::is_uppercase) {
+            true => format!("(?i){pattern}"),
+            false => pattern.to_string(),
+        }
+    }
+
+    /// Turn smart case off (or back on) — `[editor] smart_case`.
+    pub fn set_smart_case(&mut self, on: bool) {
+        self.smart_case = on;
+        // The cache is keyed on the compiled pattern, and the rule that builds
+        // it has just changed underneath it.
+        *self.compiled.borrow_mut() = None;
     }
 
     /// Search for [`Self::last_search`] in `forward` direction and move there.
