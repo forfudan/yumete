@@ -525,7 +525,7 @@ index, and a row with no number anywhere else is a row that got lost.
 | 300 | **可診斷性：一次失敗要自己說清楚** | core+tui | P3 | 診斷落在失敗路徑與按需查詢，不進熱路徑 [^300] | Proposed |
 | 301 | **`/` 分大小寫，而 helix 不分** | core | P3 | smart case：全小寫就不分，帶大寫纔分 [^301] | Proposed |
 | 302 | **命令行該不該自己佔一行** | tui | P4 | helix 加在狀態列**下面**；我們是搶狀態列 [^302] | Proposed |
-| 303 | **一個 `#set` 把後面整份稿子染成代碼** | core | P2 | 括號落在第 64 字之後，`depth` 再也回不到 0 [^303] | Proposed |
+| 303 | **一個 `#set` 把後面整份稿子染成代碼** | core | P2 | 沒看全的一行不許開塊，空行清零 [^303] | Done |
 
 ### 5.5 · A table is a delimiter, a surface and a boundary (#261)
 
@@ -7034,3 +7034,9 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     跨空行的代碼塊，值得。
     **驗的方法**：`yumete --shot=110,20 --html <檔>` 出一張帶底色的圖，數
     `background:` —— 這條就是 #300 說的「讓二進制能被問問題」，五分鐘定的位。
+    **2026-09-08 做完了**：`whole = len <= PREFIX` 那道閘加上了，順帶那道空行保險絲；
+    兩條回歸測試餵的是**截斷過的前綴**（`a_line_too_long_to_be_seen_whole_may_not_open_a_code_block`／
+    `a_multi_line_body_is_code_until_the_brackets_close_or_a_blank_line`）——
+    ⚠️ 舊測試餵的是整行（`l.chars().count()`），所以**它們永遠碰不到這個 bug**，
+    這正是 #300 說的那一類：測試綠着，而真正的呼叫方餵的是另一種東西。
+    上面那兩條同族的（字串裏的括號）還開着。

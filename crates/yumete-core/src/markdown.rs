@@ -1095,7 +1095,7 @@ pub mod typst {
             BlockScanner::default()
         }
 
-        pub fn feed(&mut self, prefix: &str, _len: usize) -> Block {
+        pub fn feed(&mut self, prefix: &str, len: usize) -> Block {
             let line = prefix.trim_end_matches(['\n', '\r']);
             let trimmed = line.trim_start();
             if trimmed.starts_with("```") {
@@ -1108,7 +1108,26 @@ pub mod typst {
             }
             // Inside a code body that opened on an earlier line.
             let was_open = self.depth > 0;
-            if was_open || trimmed.starts_with('#') {
+            // **A blank line closes it.** The bracket count is a guess, and a
+            // guess that has gone wrong must not run to the end of the file —
+            // one line used to be able to tint an entire manuscript. The cost
+            // is a `#show` body with a blank line in it, which loses its shade
+            // from there on: a shade, against a whole novel.
+            if trimmed.is_empty() {
+                self.depth = 0;
+                return Block::Prose;
+            }
+            // **Only a line seen whole may be counted.** The caller hands over
+            // the first [`PREFIX`] characters, not the line — so
+            // `#set par(first-line-indent: (amount: 2em, all: true), …)` had
+            // its closing `)` cut off, left `depth` at 1, and made every line
+            // after it code, blank ones included (2026-09-08). Markdown's
+            // scanner asks the same question one field along; this one took
+            // the length and threw it away. A body whose opening line is
+            // longer than that simply never opens: one block loses its shade,
+            // where miscounting lost the rest of the manuscript.
+            let whole = len <= super::PREFIX;
+            if whole && (was_open || trimmed.starts_with('#')) {
                 for c in line.chars() {
                     match c {
                         '{' | '(' | '[' => self.depth += 1,
@@ -1287,5 +1306,54 @@ mod typst_tests {
             })
             .collect();
         assert_eq!(walk, "1.```-");
+    }
+
+    /// **One `#set` used to tint everything under it** (#303).
+    ///
+    /// The scanner is fed a line's first `PREFIX` characters, not the line.
+    /// A `#set par(…)` long enough to have its closing `)` cut off left the
+    /// bracket count at 1, and every line after it — prose, blank lines, the
+    /// whole rest of the manuscript — came back `Code`.
+    #[test]
+    fn a_line_too_long_to_be_seen_whole_may_not_open_a_code_block() {
+        let long = "#set par(first-line-indent: (amount: 2em, all: true), leading: 1em, justify: true)";
+        assert!(long.chars().count() > crate::markdown::PREFIX, "the case is the truncation");
+        let text = format!("{long}\n#set text(size: 10pt)\n= 第一章\n那年冬天雪下得早。\n");
+
+        let mut scanner = BlockScanner::new();
+        let walk: String = text
+            .lines()
+            .map(|line| {
+                let len = line.chars().count();
+                let prefix: String = line.chars().take(crate::markdown::PREFIX).collect();
+                match scanner.feed(&prefix, len) {
+                    Block::Heading(n) => char::from_digit(n as u32, 10).unwrap_or('#'),
+                    Block::Code => '`',
+                    _ => '.',
+                }
+            })
+            .collect();
+        // The heading is still a heading and the prose is still prose.
+        assert_eq!(walk, "..1.", "one long line tinted the rest of the file");
+    }
+
+    /// A body that really does run over several lines still shades them, and
+    /// a blank line is the fuse that stops a wrong guess from running away.
+    #[test]
+    fn a_multi_line_body_is_code_until_the_brackets_close_or_a_blank_line() {
+        let mut scanner = BlockScanner::new();
+        let walk: String = "#show heading: it => block({\n  it\n})\n那年\n#let f(x) = {\n\n那年"
+            .lines()
+            .map(|line| {
+                let len = line.chars().count();
+                let prefix: String = line.chars().take(crate::markdown::PREFIX).collect();
+                match scanner.feed(&prefix, len) {
+                    Block::Code => '`',
+                    Block::Prose => '.',
+                    _ => '?',
+                }
+            })
+            .collect();
+        assert_eq!(walk, ".``....", "{walk}");
     }
 }
