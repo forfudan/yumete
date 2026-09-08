@@ -423,7 +423,7 @@ index, and a row with no number anywhere else is a row that got lost.
 | 210 | **Ghost text — what the file does not have and the page must draw** | both | P1 | the inverse of `hidden`/`folded`, which the page already takes as data. `ghost: &dyn Fn(usize) -> Vec<(usize, String)>` on both `wrap::Measure` and `zong::Grid`, held in the editor (`set_ghost` / `ghost_on_line` / `has_ghost`) because what goes on the page comes from outside the core. A run stands **before** the character it is anchored at and is never split from it; the caret on that character has already passed it; a click on it means it; down the column it takes rows of its own (`Slot::is_ghost()`). Both memos take the runs into their key — a candidate moves while the buffer does not. Two things needed it and neither was doable without it: #211 and #212 | Done |
 | 211 | **`:yume panel full\|bare` and the inline preview** | ime | P1 | 空空如也: the first candidate is drawn **in the text**, as ghost text (#210), with the caret at its end and the code in the HUD below the caret's row (the status line when there is no room). `Tab` summons the full panel for the one word that needs it, and it leaves with that word. Settled on `&mut Editor` in the event loop, before the draw, so the caret, `j`, the mouse, 折行 and 禁則 all measure the same page. A `/` prompt keeps its panel — it composes on the status line, which has no page to draw into. `[panel] display`; `ImeSession::panel_is_full` is the one question a renderer asks. Two visual modes, three commit modes (#209), and they are independent | Done |
 | 212 | **Every table in the file drawn as a table** | both | P1 | every `\|` table on the page is squared up as it is drawn — not only the one the cursor is in, and **not by touching the file**. It is the real fix for a markup-bearing table looking ragged: `t f` pads the *source* by display width, which is right for every other reader of it, but 所見即所得 hides `` ` `` and `**`, so each row loses a different number of cells on the way to the screen and no one source can be square in both places. So the padding is derived per frame and handed to the page as ghost text (#210): `mdtable::padding` measures the pipe-to-pipe **box** minus what that row hides, every row votes on the column width — the rule row included, since a ghost can only add — the rule row's fill is `-` and the colons of `:---:` are never written over. Memoized on `PadKey` beside `MdCache`, and merged with the candidate's runs in `ghost_on_line`. Off under `:render off`, where the page is meant to be the file, and off in vertical layout | Done |
-| 213 | **`:readonly on\|off` and `--readonly`** | core | P1 | two layers: `Buffer::insert`/`remove` refuse outright — the one place the rope moves, so no path gets round it by not knowing — and `Editor::refuse_readonly` says why, at `edit_insert`/`edit_remove`, `enter_insert`, `undo` and `redo`. `[只讀]` on the status line; `Buffer::open` reads the disk's own permission bit, which used to surface only at `:w`. `--readonly` (`-R`) locks the whole session, `:open` included | Done |
+| 213 | **`:readonly on\|off` and `--readonly`** | core | P1 | two layers: `Buffer::insert`/`remove`/`replace` refuse outright and **say so** — `Edit = Result<(), ReadOnly>`, `#[must_use]`, so a caller cannot receive a refusal and walk on (§5.2.3 ⑤, 2026-09-08; it is the one place the rope moves, so no path gets round it by not knowing) — and `Editor::refuse_readonly` says why, at `edit_insert`/`edit_remove`, `enter_insert`, `undo` and `redo`. `[只讀]` on the status line; `Buffer::open` reads the disk's own permission bit, which used to surface only at `:w`. `--readonly` (`-R`) locks the whole session, `:open` included | Done |
 | 214 | **`:reload`, `:reload!`, `:reload auto`** | core | P1 | `:reload` re-reads, refusing a dirty buffer; `:reload!` throws local changes away; `:reload auto on` re-reads a **clean** buffer by itself and warns once about a dirty one. `Editor::disk_tick`, throttled at 2 s the way `autosave_tick` is, called from the event loop. `:e!` and `:o!` are gone — no alias, no hint | Done |
 | 215 | **The dictionary panel, and `t i` for the table's own** | both | P2 | `Tab` on a candidate opens 字典查詢 in the sidebar, the way yume's own panel does — **under `bare` (#211) `Tab` is already spoken for**, so there it summons the panel first and opens the dictionary on the second press; `空格 d`（定義）does the same for a selection in the buffer. Data is yume-core's `AnnotationTable::annotations_for(ch)` — 拆分/編碼/分節編碼/讀音/注釋/字集/Unicode/全息拆分. `空格 d` was the table detail panel; a table key belongs in the `t` group, so that is now `t i`. The panel is a fourth sidebar view, **out of the `Tab` cycle** — the other three are always about something, this one only after somebody asks. The editor parks the character and the front end answers it before the next draw, the way `:shot` (#189) parks a frame | Done |
 | 216 | **A table recognised rather than declared** | both | P2 | `\|` is not the only grid: a run of lines split by tabs or by runs of spaces is a 碼表, and `dict.yaml` is one with a `---` preamble. Detect it and offer the grid. **`Bounds::Block` is this one's** (see §「Three questions, three enums」): a block recognised where it stands, not converted. Test against the 宇浩 tables and the generated `dict.yaml`. **Landed 2026-09-05: the walk is the test, the block is read where it lies, `Separator::Spaces` deferred — see §5.5** | Done |
@@ -3365,7 +3365,8 @@ been arguing this are both kept, one under each field.
 the buffer marked `[只讀]`. The text is safe — `Buffer::insert` returns early —
 so what is lost is only the truth. `md_write` and `sort_table` skipped the
 `refuse_readonly` guard that ~28 other call sites carry, and `md_new_row` wrote
-its message unconditionally. The `.csv` half of the same `t` menu was guarded;
+its message unconditionally. (The 「returns early」 half of that sentence is
+history as of 2026-09-08: it returns an `Err` now — §5.2.3 ⑤.) The `.csv` half of the same `t` menu was guarded;
 the `.md` half was not.
 
 **The fix is a door, not eight guards** — §5.2.3 ⑤ answered locally rather than
@@ -3798,6 +3799,35 @@ class of bug it closes is one that has now been missed three times. What the
 two cheaper answers buy is that afternoon, and they buy it by leaving the
 fourth miss available. The `md_parts_to_edit` door stays — it is the same
 answer at family scale and is compatible with the buffer-level gate.
+
+**Landed 2026-09-08.** `Buffer::insert` and `Buffer::remove` return
+`Edit = Result<(), ReadOnly>`, both `#[must_use]`, and the compiler then found
+**31 call sites my own `grep` had missed** — every one written as
+`e.current_buffer_mut().…` inside a `without_cell_guard` closure, which is
+exactly the shape a search for `buffer.insert(` does not see. That is the
+argument for the expensive answer, made by the change itself: the two cheap
+ones both start by listing the callers.
+
+Three things fell out of doing it:
+
+- **`Buffer::replace(range, text)` is new**, because eleven of those sites were
+  `remove` then `insert` over the same span — two answers where the caller can
+  only act on one, and half an edit if it acts wrongly. One call, one gate, one
+  revision.
+- **`Editor::applied(edit) -> bool`** is the single place the refusal becomes a
+  sentence, and `#[must_use]` on *it* is what makes 「refuse and then move the
+  cursor anyway」 not compile. Most callers reach it behind `refuse_readonly`,
+  where the `Err` arm is unreachable; that is the intent — the guard is the
+  message, this is the proof.
+- **Two paths had no guard at all**, and the compiler named them:
+  `Editor::overwrite`, which six callers reach, and `delete_selection`, which
+  collapsed the selection onto its start over text that was still there. `d` on
+  a locked buffer lost the reader their selection and said nothing. That is
+  fault 4's class, third instance, and it is the last one:
+  `a_refused_delete_leaves_the_selection_where_it_was` pins it.
+
+The `md_parts_to_edit` door stays exactly as it was — it refuses one level up,
+with a better message than 只讀, and the buffer's answer is now underneath it.
 
 
 Today `Buffer::insert` returns early and says nothing, and ~28 call sites each
