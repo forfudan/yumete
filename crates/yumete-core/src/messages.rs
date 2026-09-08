@@ -31,9 +31,17 @@
 //!
 //! ## The languages
 //!
-//! `zht` 繁體, `zhs` 简体, `en`. Traditional is the default and the one that is
-//! always filled in; the other two fall back to it when they are empty, so a
-//! missing translation is a missing *translation*, never a missing message.
+//! `zhs` 简体, `zht` 繁體, `en`. Traditional is what the editor shows by
+//! default and the one that is always filled in; the other two fall back to it
+//! when they are empty, so a missing translation is a missing *translation*,
+//! never a missing message.
+//!
+//! **But it is not where a message is written.** Since 2026-09-08 a new
+//! message is composed in `zhs`, in 大陆用语, and converted into `zht` — the
+//! author's rule, and the reason is vocabulary rather than characters: 檔案 and
+//! 文件 are the same file, 預設 and 默认 the same default, and a sentence
+//! drafted in 繁體 quietly picks the 港臺 word for both. Converting runs one
+//! way only, over the characters; the words have to be chosen first.
 //!
 //! ## The placeholders are numbered
 //!
@@ -303,6 +311,21 @@ mod tests {
         assert_eq!(fill("{{0}}", &["x"]), "{0}");
         // A hole with no argument stays visible, so a typo can be seen.
         assert_eq!(fill("{7}", &["x"]), "{7}");
+    }
+
+    #[test]
+    fn every_message_is_written_in_the_simplified_first() {
+        // The rule of 2026-09-08: a message is composed in `zhs` and converted
+        // into `zht`. `zht` cannot be checked here because the parser already
+        // drops a block without it; `zhs` can, and a missing one is now the
+        // shape of the mistake — a message drafted in the second language.
+        let table = parse(TABLE);
+        let missing: Vec<&str> = table
+            .iter()
+            .filter(|(_, entry)| entry.zhs.is_empty())
+            .map(|(key, _)| *key)
+            .collect();
+        assert!(missing.is_empty(), "no 简体 written for: {missing:?}");
     }
 
     #[test]

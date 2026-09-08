@@ -16,11 +16,18 @@
 # somebody translating who cannot see the code: the mode, the key, the
 # condition. It is not a paraphrase of the sentence.
 #
-# Three languages: `zht` 繁體, `zhs` 简体, `en`. `zht` is the original and must
-# be filled in; the other two fall back to it when empty, so an untranslated
-# message is still a message. The `zhs` here was converted mechanically and is
-# meant to be read over — 簡體 is not only different characters, it is sometimes
-# a different word.
+# Three languages: `zhs` 简体, `zht` 繁體, `en`. **Write `zhs` first** — in
+# 大陆用语, the author's own register — and convert it to `zht`; that is the
+# author's rule of 2026-09-08, and the reason for it is that 簡體 is not only
+# different characters, it is sometimes a different word (檔案／文件,
+# 預設／默认, 程式／程序, 游標／光标), and a sentence composed in the second
+# language picks the second language's vocabulary without meaning to.
+#
+# `zht` must still be filled in, because it is what the editor shows by default
+# and what the other two fall back to when empty, so an untranslated message is
+# still a message. The `zhs` of the ~900 messages written before that rule was
+# converted mechanically the other way and still carries 港臺 vocabulary in
+# simplified characters; it is meant to be read over, and has not been.
 #
 # `{0}` `{1}` are the values the message is handed, **numbered** so a
 # translation may put them in the other order: 「{0} 個檔案裏都沒有「{1}」」 is
