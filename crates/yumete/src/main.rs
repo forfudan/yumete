@@ -183,6 +183,7 @@ fn main() -> ExitCode {
             .collect(),
     );
     editor.set_autosave(config.editor.autosave);
+    editor.set_smart_case(config.editor.smart_case);
     editor.set_wheel_step(config.editor.wheel_step);
     // Somewhere for a buffer with no file to keep its recovery copy. Only the
     // front end knows where the data directory is.

@@ -1678,6 +1678,14 @@ pub struct Editor {
     /// The last pattern, compiled. `n` and `N` ask for the same one over and
     /// over, and compiling a regex costs more than running it once.
     compiled: RefCell<Option<(String, Regex)>>,
+    /// Whether a pattern with no capital in it ignores case (#301).
+    ///
+    /// On, because of what this editor is for: a manuscript is 漢字, which has
+    /// no case at all, so almost every search takes the insensitive branch for
+    /// free. The 西文 that is in a manuscript is mostly names and initialisms —
+    /// `TODO`, `ISBN`, 人名 — and those are exactly the searches that *want*
+    /// the case, which is what typing a capital asks for.
+    smart_case: bool,
     /// The text width the renderer is wrapping at, in cells. `None` until the
     /// terminal size is known; motion falls back to logical lines then.
     wrap_width: Option<usize>,
@@ -1945,6 +1953,7 @@ impl Editor {
             last_disk_check: None,
             reload_warned: false,
             compiled: RefCell::new(None),
+            smart_case: true,
             picker: None,
             sidebar: None,
             sidebar_focus: false,
