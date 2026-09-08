@@ -6842,7 +6842,10 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     `#[cfg(test)] mod tests` 整個一萬行搬進 `editor/tests.rs`，佔全檔 34%，
     語義風險為零（子模組看得見父模組的私有欄位）。第二刀是表格三節
     （`#118` 表格模式、`#142` markdown 表格、`#227` 分隔文字）3,565 行進
-    `editor/tables.rs`；`editor.rs` 從 28,887 行掉到 15,466。
+    `editor/tables.rs`。第三刀是 `:check` 那五條（拆分表 #127、寫作習慣 #160、
+    重複用詞 #209、標點 #288、字集 #289）433 行進 `editor/checks.rs`——它們做的是
+    同一件事：走一遍全文，交回一個 `gf` 讀得懂的結果緩衝區。`editor.rs` 從 28,887 行
+    掉到 15,033。
     ⚠️ **兩件搬家時纔看得見的事。** ① 搬進子模組的私有方法，父模組**看不見了**
     （E0624）——它們原本的可見範圍是「`editor` 之內」，對應的正是 `pub(super)`，
     不是 `pub(crate)`。先全開成 `pub(super)`，再把只在本模組用的 45 個收回 private，
