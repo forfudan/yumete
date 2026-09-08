@@ -460,7 +460,7 @@ index, and a row with no number anywhere else is a row that got lost.
 | 247 | **平仄／韻腳 in the margin** | tui | P4 | `:meter [on\|off]`, in the 詞譜's own notation — `○` 平, `●` 仄, `△`/`▲` at a 韻腳. `crates/yumete-core/src/meter.rs` reads the tone off the 帶調 reading (both spellings of a diacritic, precomposed and combining) and asks the **word** for it, not the character, so 了 is `le` in 為了; a word the reader has never heard of is skipped in silence rather than guessed at. **⚠️ It is 今音平仄 and 入聲 is where it lies**: 入派三聲 puts 竹/白/石 in the 平 column, and there is no 中古音 field in the 拆分表 to recover it from — correct for 中華新韻, a first pass for 平水韻, and said out loud in the module doc, in the manual §5.9 and in a test. Vertically it is #70's margin column, priority mark → reading → 平仄 → 着重號 (a tone can be read nowhere else on the page; the dot repeats what `*` already says), and the margin is bought by the **page** rather than by the line so the 縱 do not change width as a poem scrolls. Horizontally it takes the row a reading would have had, and a reading wins that row outright — interleaving the two per character would leave holes that read as 輕聲. Marks are cached per line against a hash of it, the way the segmentation overlay's are, and the cache is cleared when the reader is replaced. With no 拆分表 installed the command says so instead of drawing an empty margin. | Done |
 | 248 | **Virtual text — the mirror of `hidden_on_line`** | core | P4 | `drawn_on_line`, with the mirror invariant: *the cursor may never sit on a character that is not in the file*. Downstream of it: inline diagnostics, blame, inlay hints, fold markers, `↵`/`·`, first-line indent and 圈點. #212's ghost text is the first half, built for one case; this is the general one. Only Neovim has anything like it; **Helix has none**. **high** | Done — `core::drawn` (`Ink`, `Run`, `compose`, `flat`); the three producers are the IME's candidate, a table's padding and `:note`, which sets the mark that should have been written beside the one that was (`punct::check_line`, the two kinds one line can decide). The ink reaches `zong::Slot`, so 縱書 draws a note apart from the manuscript. |
 | 249 | **Merge conflicts as a `Block` kind** | core | P4 | `<<<<<<<` is exactly the shape `BlockScanner` was built for: tint the two sides, hide the markers under `:render full`, three keys, `]c`/`[c`, `:conflicts` as a results buffer. Emacs `smerge-mode` is the only good prior art and nobody knows it exists. The programmer's review called it the **cheapest high-value item on either list** | Done — `core::conflict`: a marker is **exactly seven** of its character followed by a space or the line's end, and `diff3`'s ancestor section is a third side. The conflicts are **laid over** the block scan rather than woven into `BlockScanner` — a forward-only scanner cannot know whether a `<<<<<<<` ever closes, so a paragraph *about* merges would have been swallowed by one. A marker line is `is_literal`, else `=======` reads as a `==highlight==` that opens and never closes. `]c`/`[c` walk (`Pending::Hop`, no wrap — the group #250's `]q` will join); `空格 c` then `o`/`t`/`b` keeps a side; `:conflicts` is a results buffer `gf` walks back the way `:grep`'s is. Under `:render full` the seven brackets come off and the branch name stays. |
-| 250 | **Jobs, and `]q`/`[q` over a results buffer** | core | P4 | `:preview` already models a supervised child correctly; generalise it, and walk `path:line:` lines without leaving the file. That is a complete build-error loop with **no quickfix list, no `errorformat`, no problem matcher** — `:grep` and `:sh` already make the buffers and `gf` already parses them. **high** | Planned |
+| 250 | **Jobs, and `]q`/`[q` over a results buffer** | core | P4 | `:view preview` already models a supervised child correctly; generalise it, and walk `path:line:` lines without leaving the file. That is a complete build-error loop with **no quickfix list, no `errorformat`, no problem matcher** — `:grep` and `:sh` already make the buffers and `gf` already parses them. **high** | Planned |
 | 251 | **Table mode over any delimited text** | core | P4 | quoting (the invariant generalises from delimiters to *cells*), TSV／`\|`／`;`, the header fallback as a first-class path, and `:sh ps aux` landing in a grid. `csv.vim` colours; VisiData is not an editor and will not hand back a byte-identical 8 MB file. Overlaps #216–#218 and #227. **high** | Planned |
 | 252 | **The Unicode alarm** | tui | P4 | tint invisibles, bidi controls (Trojan Source) and ASCII homoglyphs, plus `describe-char` in the `Detail` panel. VS Code's `unicodeHighlight` is the only implementation anywhere and it is a GUI; Emacs has the panel and no alarm. **high** | Planned |
 | 253 | **`yumete -p` as a pager, and an `fzf --preview`** | cli | P4 | the same renderer, so it can never disagree with the editor. `bat` highlights syntax and renders a CSV as commas; `glow` deletes the markup. Distribution precedes adoption. **high** | Planned |
@@ -1168,8 +1168,9 @@ stays at the top level** and is not folded under a page-appearance parent: it
 `:focus` says they are the same kind of thing, hiding the one relationship a
 reader has to learn. Whether the remaining appearance words (`wrap`, `dense`,
 `bands`, `sentence`, `hanging`, `numbers`, `typewriter`, `focus`, `meter`,
-`note`, `preview`) get a parent is a separate question — §5.2.3 ③ — and it is
-easier to answer once none of them is a master switch.
+`note`, `preview`) get a parent was a separate question — §5.2.3 ③ — and it was
+easier to answer once none of them was a master switch. **Answered 2026-09-08:
+they are `:view`**, and `:render` is still not one of them (§5.2.4).
 
 **The law that decides which level a feature belongs to.**
 
@@ -3694,7 +3695,8 @@ justification for one key is now the law for all of them.
 3. **`z` is not for 旁注 and not for the 版面 group either.** The rule bit here
    too: in Helix `z` is the **view** group (`zz` centre, `zt` top, `zb` bottom),
    and a sweep found yumete has **none of the three** — `z` is not an empty
-   letter, it is an unpaid debt. §5.2.3 ③ must find its 版面 group elsewhere.
+   letter, it is an unpaid debt. §5.2.3 ③ found its 版面 group elsewhere — the
+   command `:view`, not a key (§5.2.4).
 4. **The three case keys become the `` ` `` group.** In Helix — which is what
    yumete copied, not vi — `` ` `` is 轉小寫, `` A-` `` 轉大寫, `~` 大小寫互換:
    three top-level keys for an operation that is the identity on 漢字 (only
@@ -3745,6 +3747,10 @@ worse than an unfolded one, and every month the table stays flat is another
 month of prose written against names that are going to move. 0.1.0 has not
 shipped, so the 165 prose sites are the only cost, and they are cheapest now.
 
+**Landed 2026-09-08 — see §5.2.4** for the tree as built, the measured cost and
+what the prose actually came to. 63 rows, 61 of them named commands, is what the
+table held when the fold started; the estimate below said 62 and counted heads.
+
 What was on the table:
 
 
@@ -3781,6 +3787,12 @@ would be a flat table wearing a tree's shape. The rule is written down once, in
 the manual beside the tree and in §5.7, so the next pair does not re-argue it.
 It decides `:note` → `:view punct`, `:conflicts` → `:check merge`, `:row` →
 `:table jump`, `:search` → `:table find` — all four fold under ③.
+
+**Landed 2026-09-08 (§5.2.4).** Seven renames in the end, not four: `:bclose` →
+`:buffer close`, `:wa` → `:write all` and `:saveas` → `:write as` are the same
+rule applied to a parent that was already a verb. The rule is written down in
+the manual beside the tree, and `RENAMED` — the table of what a computed
+signpost cannot know — is held honest from both sides by a test.
 
 
 If `:note` becomes `:view punct` (its help text is 「標點提示：半角標點與 ...
@@ -3846,6 +3858,146 @@ through.** The nine `.md` structural edits all called `md_parts` first, so
 without it. That works because the family had a door; the ~28 remaining call
 sites do not share one, which is exactly what makes ⑤ still a question. See
 §5.2.2 fault 4.
+
+## 5.2.4 The command tree, folded — 2026-09-08 (③ ＋ ④ landed)
+
+61 named commands stood at the top level and 21 of them were somebody's child.
+The author's two calls — 「現在就摺，一次摺完」 (③) and 「可以，父親給動詞」 (④) —
+are one change, because ④'s renames only exist inside ③'s tree. This is the
+tree, the rule that built it, and what it actually cost, measured.
+
+**The rule ④ gives, stated once.** *A word names the subject; the parent names
+what is done to it.* So `punct` stands under two parents and means two things
+without being two names:
+
+```
+:view punct     the standing overlay — 半角標點與 ... 旁邊畫出該用的那一個
+:check punct    the one-pass report — every one of them, listed, with a line
+```
+
+`numbers` was already this shape before ④ was asked (`:view numbers` is the 行號
+column, `:table numbers` the grid's own row numbers), which is the argument for
+the rule rather than against it. A word that had to be unique across the whole
+tree would be a flat table wearing a tree's shape.
+
+**The tree.** Seven parents took the 21:
+
+```
+:view       版面 — how the page is looked at; none of it touches the file
+            wrap dense bands sentence hanging numbers typewriter
+            focus meter punct hud preview                        ← 12, new parent
+:check      查稿 — one pass, a list at the end
+            usage punct charset ＋ merge
+:table      按格子編輯
+            … ＋ jump find
+:buffer     開着的檔案
+            list next previous close      (`:bclose` was a duplicate of this)
+:count      字數
+            (bare) ＋ progress target
+:write      存檔
+            (bare) ＋ all as <path>
+:theme      用哪一套墨
+            ink bw … ＋ system dark light
+```
+
+**Seven of the 21 are renamed by their parent**, which is ④ doing its work:
+
+| was | is | why the word changed |
+| --- | --- | --- |
+| `:note` | `:view punct` | it was never about footnotes — its help has always read 標點提示 |
+| `:conflicts` | `:check merge` | the subject is a merge; `:check` already is the verb |
+| `:search` | `:table find` | its two words *are* the axis: `:table find row｜column` |
+| `:row` | `:table jump` | `row` under `:table` would have meant that axis |
+| `:bclose` | `:buffer close` | the word was already in the list; the top-level name was the duplicate |
+| `:wa` | `:write all` | |
+| `:saveas` | `:write as` | |
+
+**`:render`, `:indent`, `:ruby` and `:table` do not move**, and the reason is
+§5.7: they are the four dimensions, and `:render` writes three of them. A parent
+that listed `:ruby` beside `:dense` would say the two are the same kind of thing,
+which is the one relationship §5.7 exists to make visible.
+
+**What it cost, measured.** Keystrokes of the shortest spelling that parses to
+the same `Command` — computed by walking every prefix of every word through
+`parse`, not counted by hand, and the old side computed the same way against
+`git show HEAD:command.rs`:
+
+| | | |
+| --- | --- | --- |
+| **free** (4) | `wra 50`→`v w 50`, `sen on`→`v s on`, `foc on`→`v f on`, `conf`→`ch m` | |
+| **＋1** (9) | dense `de`→`v d`, bands, numbers, typewriter, meter, preview, row `row`→`ta j`, bclose `bc`→`b c`, appearance `a`→`th` | |
+| **＋2** (8) | hanging `ha`→`v ha`, note `no`→`v pu`, hud, search `sea`→`ta fi`, progress `pro`→`cou p`, target, wa `wa`→`w al`, saveas `sa`→`w as` | |
+
+§5.2.3 ③ recorded 「6 cost nothing, 14 cost one, 1 costs two」 from the folding
+review. That count was of **head words**; this one is of whole lines with the
+argument in place, which is what a hand types.
+
+Ten surviving commands got **shorter**, because the top level did — and one
+arrived already short:
+
+| | 摺前 | 摺後 | | 摺前 | 摺後 |
+| --- | --- | --- | --- | --- | --- |
+| `:buffer` | `bu` | `b` | `:markdown` | `ma` | `m` |
+| `:convert` | `conv` | `con` | `:new` | `ne` | `n` |
+| `:diff` | `di` | `d` | `:pipe` | `pi` | `p` |
+| `:format` | `for` | `f` | `:table` | `tab` | `ta` |
+| `:help` | `he` | `h` | `:write` | `wri` | `wr` |
+| | | | `:view` | — | `v` |
+
+`:w :q :qa :x :o :u :g` do not move: they are declared aliases, and an exact
+alias wins over the prefix rule, so they never felt the top level at all.
+
+**`::` ranking is bit-for-bit unchanged** by the nesting — `ascii_score`
+normalises by the needle's length, and the density factor counts word starts
+only *between* the first and last hit.
+
+**The signpost is the half that was not free.** Whoever knows `:dense` has to be
+sent to `:view dense`, or the fold is a regression; and an alias would be a
+second name for the thing the fold exists to stop having two of. So
+`CommandError::Unknown` **computes** the answer — it walks the word list of
+every command, and if the unrecognised word stands under three parents or fewer
+it says where:
+
+```
+:dense      沒有「dense」這個命令；你要的是 `:view dense`
+:punct      沒有「punct」這個命令；你要的是 `:check punct` `:view punct`
+```
+
+Nothing is written down for that, so it cannot go stale: move a word again and
+the signpost moves with it. The **renames** cannot be computed — nothing
+in the tree remembers that `punct` used to be `note` — so those are a table,
+`RENAMED`: the seven above plus `:appearance`→`:theme`, eleven rows in all
+because three of the eight carried an alias (`bc` `sav` `wall`), and
+`the_signpost_names_a_command_that_exists_and_one_that_does_not` holds both
+halves honest: every left-hand side must fail to parse, every right-hand side
+must parse.
+
+**The prose was the work, as ③ said it would be.** `messages.toml` 19 keys
+renamed, 2 deleted, 2 added, and the whole `cmd` section re-sorted (the table is
+checked for alphabetical order, and renaming in place breaks it in 18 places);
+then the spelling itself, everywhere it is taught or explained: `docs/manual.md`
+119 lines, `editor.rs` 107, `yumete-tui/src/lib.rs` 58, `CHANGELOG.md` a new
+entry and 20 spellings, `command.rs`'s own doc comments, the `--help` block in
+`main.rs`, `README.md` 5, `tutor.rs` 2, and a line each in nine more files.
+A comment that says what a command **was** keeps the old spelling — 「Was
+`:row`」 is the record, and rewriting it would erase the only place the old name
+still means something. `docs/development.md` is deliberately **not** rewritten
+either (five lines aside: two forward references this section answers, and two
+roadmap rows): it is a record of what was true when it was written, and §5.2.4
+is where a reader of an old entry finds the map.
+
+**A word that moves under a parent inherits nothing from it.** `find` was given
+`Need::Table` on the way in, because it now stands under `:table` — and
+`:table find 第55行` then answered 「需要：表格模式」 and searched nothing, which
+`:search` had never done. The parse arm says why it must not: with no direction
+it is a row search, and a row search away from a table is an ordinary search.
+`:export csv` had already written the same rule down (「**No `Need::Table`**,
+although one would parse」); the fold is where it had to be read twice.
+
+One thing more the fold found on its way through: a bang belongs to a **line**, not
+to a head. `:bclose!` used to be one word and `FORCEABLE` held it as one; `:buffer
+close!` is two, so `FORCEABLE` now holds the whole line and `names_something`
+walks the bang along with the words. `:buffer list!` is still not a command.
 
 ## 5.3 Releasing, and the Homebrew tap (#135, planned)
 

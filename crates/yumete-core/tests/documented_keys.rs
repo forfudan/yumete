@@ -114,6 +114,37 @@ const DISOWNED: &[&str] = &[
     ":bd",
     ":cy",
     ":cp",
+    // 2026-09-08's fold: 21 names that moved under a parent. Same rule — the
+    // old spelling is gone, and §「沒有了」 prints it beside the new one.
+    ":wrap",
+    ":dense",
+    ":bands",
+    ":sentence",
+    ":hanging",
+    ":numbers",
+    ":typewriter",
+    ":focus",
+    ":meter",
+    ":note",
+    ":hud",
+    ":preview",
+    ":progress",
+    ":prog",
+    ":target",
+    ":wa",
+    ":wall",
+    ":saveas",
+    ":sav",
+    ":row",
+    ":search",
+    ":conflicts",
+    ":bclose",
+    ":bc",
+    ":appearance",
+    // Two spellings the manual prints to explain why the fold renamed the
+    // child: 「`:table search` 讀起來是『表格搜索』」, 「`:view note` 更糟」.
+    ":table search",
+    ":view note",
 ];
 
 #[test]
@@ -139,7 +170,7 @@ fn every_command_the_documents_print_is_a_command_the_editor_has() {
                 continue;
             }
             // The words below the head are checked only as far as they are
-            // written out. `:ruby full/off`, `:wrap 24`, `:e 第三章.md` and
+            // written out. `:ruby full/off`, `:view wrap 24`, `:e 第三章.md` and
             // `:run <名字>` all say「一個什麼」rather than naming one, and a
             // placeholder is not a word this table could ever know.
             let mut line_to_ask = String::from(head);

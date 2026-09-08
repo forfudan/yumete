@@ -659,7 +659,7 @@ impl Buffer {
     /// This is what `:w <path>` has always claimed to do and did not: it called
     /// [`Buffer::save_as`], which rebinds, so a writer who took a copy of a
     /// chapter found every later `:w` going to the copy while the chapter sat
-    /// frozen at the version before it. Rebinding is `:saveas`, which says so.
+    /// frozen at the version before it. Rebinding is `:write as`, which says so.
     ///
     /// The buffer's own state — its path, its stamps, its recovery copy, and
     /// whether it is modified — is untouched, because none of it is about this

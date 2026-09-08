@@ -125,8 +125,8 @@ pub const LESSON: &str = r#"# 宇喆課
   ⇒ 按 `:layout`，Enter。
 
 現在是**竪排**。`h` `l` 換縱（縱是往左疊的），`j` `k` 沿着這一縱走。
-`:wrap 24` 定一縱多少字，`:bands 2` 把一頁分成上下兩段。
-`:hanging on` 讓句讀掛到字旁邊去，像排印的書。
+`:view wrap 24` 定一縱多少字，`:view bands 2` 把一頁分成上下兩段。
+`:view hanging on` 讓句讀掛到字旁邊去，像排印的書。
 再按一次 `:layout` 回橫排。
 
   ⇒ 按 `:indent full`，Enter。段首空了兩格，段間那些空行收起來了——

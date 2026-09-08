@@ -108,7 +108,7 @@ far, oldest first:
   早`. Falls back to `segmentation.txt` or the bundled list when the IME data is
   absent.
 
-- **#70 標點旁置** — `:hanging` puts 。，、？！：；「」 in the margin beside the
+- **#70 標點旁置** — `:view hanging` puts 。，、？！：；「」 in the margin beside the
   character they belong to, the way a 古籍 is punctuated, so the text column
   carries nothing but text. An opening bracket hangs beside the character it
   *introduces*; everything else beside the one it follows. Where a mark and a
@@ -138,7 +138,7 @@ far, oldest first:
   matters here more than in a code editor: a Chinese paragraph is one line of
   several hundred characters. Latin words are kept whole and 禁則處理 is applied
   (no 。、」）at the head of a row, no 「（ at the end of one). `j` and `k` walk
-  the rows the reader sees. `:wrap off` turns it off; `[editor] soft_wrap`.
+  the rows the reader sees. `:view wrap off` turns it off; `[editor] soft_wrap`.
 
 - **#79 Crash recovery** — while a document has unsaved changes, a copy is kept
   beside it (`chapter.md` → `.chapter.md.yumete`), rewritten every few seconds
@@ -157,7 +157,7 @@ far, oldest first:
 - **#61 Vertical layout (縱書)** — text can be set the way a Chinese novel is:
   running top to bottom in **縱** (*zong*) that stack from the right edge
   leftward, one paragraph soft-wrapping into as many 縱 as the window allows —
-  or as many as `zong_length` / `:wrap n` says, when the writer has made that
+  or as many as `zong_length` / `:view wrap n` says, when the writer has made that
   decision themselves. `h j k l` keep their screen meaning — `j`/`k` read down and up
   a 縱, `h`/`l` step to the 縱 on the left and on the right. CJK punctuation is
   drawn in its vertical form (`。`→`︒`, `「」`→`﹁﹂`) on screen only, so the file
@@ -172,7 +172,7 @@ The rest, by what it is for rather than one line per number (`docs/development.m
 has the table, through #150):
 
 - **The page a Chinese book is set on.** 標點旁置 (hung punctuation), 縦中横,
-  ruby laid out beside the base, 稿紙 ticks, `:dense` for a page that spends
+  ruby laid out beside the base, 稿紙 ticks, `:view dense` for a page that spends
   every column on writing, **首行縮進** (a paragraph opens two squares in — as a
   *view*, so the file keeps the blank line Markdown needs), and **段組**, which
   halves a tall page into bands read top-right to top-left and then bottom-right
@@ -188,7 +188,7 @@ has the table, through #150):
   every other formatter gets wrong for Chinese.
 - **A hundred chapters.** `:grep` and `:toc` make results that are *text*, so
   `gf` walks them; `:grep` then `:replace` renames a character across the whole
-  book without touching disk until `:wa`; a session reopens what was open; `M a`
+  book without touching disk until `:write all`; a session reopens what was open; `M a`
   and `' a` name a place and come back to it.
 - **Not losing work.** A file changed on disk is not written over; a crash copy
   is kept for every buffer, including the ones with no name; an undo point has

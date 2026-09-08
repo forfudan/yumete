@@ -149,7 +149,7 @@ fn main() -> ExitCode {
     if config.editor.zong_length > 0 {
         editor.set_zong_length(config.editor.zong_length);
     }
-    // The measure a project writes to, if it has said one; `:wrap n` is the
+    // The measure a project writes to, if it has said one; `:view wrap n` is the
     // same setting for one session.
     if config.editor.measure > 0 {
         editor.set_measure(Some(config.editor.measure));
@@ -619,14 +619,14 @@ KEYS (Normal mode, Helix-style):
               (:w  :w <path>  :q  :q!  :o <path>  :new
               :segment  :wq  :count
               :yume scheme <tag>   {schemes}
-              :wrap [on|off|<n>]   soft-wrap; a number is a fixed measure
+              :view wrap [on|off|<n>]  soft-wrap; a number is a fixed measure
               :wq [path]       save (optionally save-as) and quit
               :42  :goto n    put the cursor on a line
               :recover[!]      load (or drop) a crash-recovery draft
               :buffer list|next|previous|close   the open files (gn / gp)
               :grep <re>  :toc      across the project / this file's headings
               :export html|typst    write it out for a typesetter
-              :layout [horizontal|vertical]      :dense [on|off]
+              :layout [horizontal|vertical]      :view dense [on|off]
               :yume chaifen   the 拆分 annotation beside candidates
               :ruby       edit the reading at the cursor, or annotate the
                           selection — opens Ruby mode in the status line
@@ -634,15 +634,15 @@ KEYS (Normal mode, Helix-style):
                           is whatever follows the s (:s#a/b#c#); ranges are
                           :%s :1,40s :.,$s :40s; flags g i, and n counts only
               :replace <new>   change what the last :grep found, everywhere
-              :wa              save every file that changed
+              :write all       save every file that changed
               :indent off|basic|full|<n>   first-line indent — a Chinese
                           paragraph's mark; full also folds the blank line
-              :bands [n|off]   段組: divide the 縱書 page into bands
+              :view bands [n|off]   段組: divide the 縱書 page into bands
               :word list reload   reread .yumete/words.txt — this book's own names
               :word habit      口頭禪: what this one says far more than prose does
               :table [off|basic|full|check]   edit as a grid; check looks the
                           whole over
-              :row <char>      go to the row a table names by that character
+              :table jump <char>  the row a table names by that character
               :ruby [off|basic|full|<dialect>]  full lays the readings out,
                           basic keeps the markup on the page and still counts
                           a reading as no 字, off is the source)

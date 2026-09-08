@@ -310,7 +310,7 @@ fn html(text: &str, style: &Style) -> String {
         out.push_str("body { max-width: 32em; }\n");
     }
     if style.hanging {
-        // What `:hanging` means, said in the way a browser understands it.
+        // What `:view hanging` means, said in the way a browser understands it.
         // `allow-end`, not `allow-end last`: `last` narrows it to the final
         // line of the block, which is not what 標點旁置 means — a stop hangs
         // wherever it lands at the end of a 縱.

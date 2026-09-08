@@ -7,7 +7,7 @@
 //! of thing an editor can do without being asked twice — the 拆分表 already
 //! carries a 帶調 reading for every character on the page.
 //!
-//! So `:meter` puts the 詞譜's own notation in the margin the readings and the
+//! So `:view meter` puts the 詞譜's own notation in the margin the readings and the
 //! 着重號 share: `○` 平, `●` 仄, and at the end of a 句 the hollow and solid
 //! **triangles** that mark a 韻腳.
 //!
