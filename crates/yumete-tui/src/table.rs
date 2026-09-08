@@ -374,7 +374,7 @@ pub fn draw(
     // surface's: a row off the page is a jump and lands in the middle, a step
     // off an edge scrolls by as little as it takes, and typewriter mode keeps
     // the row in the middle whatever it was. This used to be a third copy of
-    // that rule, and it was the copy that never heard of `:typewriter`.
+    // that rule, and it was the copy that never heard of `:view typewriter`.
     let distance = (cursor_row >= viewport.top && cursor_row < viewport.top + rows)
         .then(|| cursor_row - viewport.top);
     if let Some(inset) = editor.page_inset(distance, rows.saturating_sub(1), scrolloff) {

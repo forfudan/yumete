@@ -57,7 +57,7 @@ impl Row {
 /// A book's `.yumete/progress.tsv`.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Log {
-    /// 每日目標, in 字. `None` until `:target` sets one.
+    /// 每日目標, in 字. `None` until `:count target` sets one.
     pub target: Option<usize>,
     /// Every day's rows, oldest first.
     pub rows: Vec<Row>,

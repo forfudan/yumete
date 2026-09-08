@@ -575,7 +575,7 @@ pub fn run(
                         ),
                     }
                 }
-                        // `:preview` — the real typesetter, in the background. Its
+                        // `:view preview` — the real typesetter, in the background. Its
                 // address arrives on a later turn of the loop.
                 // `:sh` brings the answer back; `:!` hands over the screen.
                 if let Some(want) = editor.take_shell_request() {
@@ -699,7 +699,7 @@ pub fn run(
                                 // there, which is right for a manuscript and
                                 // wrong for the scratch page this rewrites
                                 // every time. Without the `!` the *second*
-                                // `:preview` of a Markdown file failed, and
+                                // `:view preview` of a Markdown file failed, and
                                 // said so in the language of a command the
                                 // reader had not typed.
                                 match editor.execute(&format!("export! html {}", out.display())) {
@@ -981,7 +981,7 @@ struct Viewport {
     top: WrapAnchor,
     /// How many columns of writing are off the **left** edge, in horizontal
     /// layout. Zero whenever the rows fit, which with soft wrap on is always;
-    /// with `:wrap off` a paragraph is one row of any length, and without this
+    /// with `:view wrap off` a paragraph is one row of any length, and without this
     /// the page could only ever show its first screenful (Feature #221).
     left: usize,
     /// The paragraph and piece the rightmost visible 縱 sits at, in vertical
@@ -1527,7 +1527,7 @@ fn run_for_language(
                 Err(err) => say!("language.cannot-run", err),
             }
         }
-        // A server is a life of its own; `:preview` owns that path.
+        // A server is a life of its own; `:view preview` owns that path.
         yumete_config::RunKind::Server => {
             say!("language.is-a-server", want.verb)
         }
@@ -2262,9 +2262,9 @@ fn draw(
     }
     let (cursor_x, cursor_y) = cursor;
 
-    // **Where every panel put itself**, gathered as it is drawn. `:hud full`
+    // **Where every panel put itself**, gathered as it is drawn. `:view hud full`
     // covers writing on purpose and so cannot tell 「有字」 from 「有面板」 by
-    // reading the buffer back the way `:hud basic` does; a panel it covered
+    // reading the buffer back the way `:view hud basic` does; a panel it covered
     // would be a panel with a hole in it.
     let mut panels: Vec<Rect> = Vec::new();
     if let Some(panel) = detail {
@@ -2302,7 +2302,7 @@ fn draw(
     // there is no sentence left down there to put a bare candidate into.
     //
     // Asked here rather than at the panel's own call further down, because
-    // `:hud full` wants the same cell — 「候選面板和釘住的 HUD 都要
+    // `:view hud full` wants the same cell — 「候選面板和釘住的 HUD 都要
     // (cursor_x, cursor_y+1)」 — and the candidate panel is the one that wins.
     let panel =
         ime.panel_is_full() || picker_caret.is_some() || !page_can_hold_a_candidate(editor);
@@ -2504,7 +2504,7 @@ fn draw_list(
     // files does, and the way the numbers on it stay in order.
     //
     // **Each column is as wide as its own longest entry**, not as the longest
-    // entry anywhere in the list. One `:conflicts  (conf)` used to widen the
+    // entry anywhere in the list. One long entry used to widen the
     // six columns beside it by two cells each and cost the list a whole column
     // — the seventh, the one it needed to be shown whole.
     let room = (area.width as usize).saturating_sub(4);
@@ -2871,7 +2871,7 @@ fn draw_hud(
     put_text(frame.buffer_mut(), x, y, right, &text, style);
 }
 
-/// `:hud full`: the same string in a **bordered panel, pinned under the
+/// `:view hud full`: the same string in a **bordered panel, pinned under the
 /// caret** — and over whatever is written there (#284).
 ///
 /// The frame and the covering are one decision. A 藥丸 needs five blank cells
@@ -3180,7 +3180,7 @@ fn put_text(
     limit: u16,
     text: &str,
     style: Style,
-) {
+) -> u16 {
     let mut at = x;
     let text = drawable(text);
     for g in yumete_cjk::graphemes(&text) {
@@ -3200,6 +3200,7 @@ fn put_text(
         }
         at += w;
     }
+    at
 }
 
 /// The `:` command menu — Helix's completion popup, not a wall.
@@ -3238,7 +3239,7 @@ fn draw_command_menu(
     // same as every other thing this editor says.
     // …and what it is waiting for, when it is waiting for something. A
     // prerequisite belongs *here*, before the command is run: the writer who
-    // typed `:hanging` on a horizontal page found out by pressing Enter and
+    // typed `:view hanging` on a horizontal page found out by pressing Enter and
     // watching nothing happen.
     let unmet: Vec<String> = editor
         .unmet_needs(matches[focus].needs)
@@ -4049,7 +4050,7 @@ fn draw_horizontal(
     // …and sideways, by the same promise: **the caret is on the page**. With
     // soft wrap on this never moves — a row is folded before it can reach the
     // right edge, so the column is always inside the window and `left` settles
-    // back to zero. With `:wrap off` a paragraph is one row of whatever length
+    // back to zero. With `:view wrap off` a paragraph is one row of whatever length
     // it happens to be, and until this was here the window showed its first
     // screenful and nothing else: `gl` walked the cursor off the right edge and
     // the writing it landed in was never drawn (Feature #221).
@@ -4187,10 +4188,10 @@ fn draw_horizontal(
     // writing, which is what a writer means by it. The line-number gutter is
     // furniture, not text, so it does not eat into the measure — and the ruler
     // moves with the gutter rather than the writing moving under it.
-    // A measure set with `:wrap 50` is a ruler by definition — it is the width
+    // A measure set with `:view wrap 50` is a ruler by definition — it is the width
     // the writer asked to write to — so it stands in for the configured one,
-    // **but only while it is folding rows**. `:wrap off` stops the folding and
-    // keeps the number, so that `:wrap` on its own can put it back; drawing a
+    // **but only while it is folding rows**. `:view wrap off` stops the folding and
+    // keeps the number, so that `:view wrap` on its own can put it back; drawing a
     // rule at fifty and tinting everything past it, while the rows run straight
     // through both, names an edge the page no longer has. A ruler out of the
     // config is a mark the reader asked for and stands either way.
@@ -4303,7 +4304,7 @@ fn draw_horizontal(
         // 焦點模式 has to name its ink out loud on a page that has none of its
         // own. With `[theme] ground = "terminal"` the page's style is empty on
         // purpose — the reader's palette — so standing a row back by swapping
-        // palettes changed nothing that ever reached a cell, and `:focus` was
+        // palettes changed nothing that ever reached a cell, and `:view focus` was
         // a silent no-op for everybody who gave the ground back while the
         // status line said 「焦點：開」. The 縱書 page has had this rescue since
         // it was written (`vertical.rs`); this one had not.
@@ -4563,7 +4564,7 @@ fn draw_horizontal(
         // whenever the two disagree, and they disagree twice: a ruby group the
         // wrap cut in half is drawn over the row its base **begins** on, so the
         // tail row buys a reading nobody will draw; and 疏排's row of air is
-        // only reached when the line has no ruby at all, so `:dense off` over a
+        // only reached when the line has no ruby at all, so `:view dense off` over a
         // line that does have some loses its air row too.
         if row_has_reading(editor, rope, &row) {
             let reading = reading_line(editor, ink, rope, &row, drawn, gutter + indent)
@@ -4655,7 +4656,7 @@ fn draw_horizontal(
 
     // The margin: everything past the measure, whether or not there is writing
     // in it. Tinting only the characters that run past says nothing at all
-    // when nothing does — which is exactly the case under `:wrap 50`, where
+    // when nothing does — which is exactly the case under `:view wrap 50`, where
     // the rows are folded before they can reach it. A region is what a writer
     // means by a measure: this is the paper, that is the edge of it.
     //
@@ -4865,7 +4866,7 @@ fn draw_status(
 
 /// Whether `row` has any reading over it — which costs it a screen row.
 fn row_has_reading(editor: &Editor, rope: &yumete_core::Rope, row: &wrap::Row) -> bool {
-    // **疏排 (`:dense off`) on the horizontal page** is line spacing: a row of
+    // **疏排 (`:view dense off`) on the horizontal page** is line spacing: a row of
     // air above every row. 密排 is a 縱書 word for the same thing — there it is
     // the gap between columns — and this is the other axis of it.
     //
@@ -5972,7 +5973,7 @@ mod tests {
     #[test]
     fn a_note_is_drawn_in_the_ink_of_something_pointed_at() {
         let mut editor = editor_with("他說,好");
-        editor.execute(":note on").unwrap();
+        editor.execute(":view punct on").unwrap();
         let mut config = Config::default();
         config.editor.line_numbers = LineNumbers::None;
         config.editor.show_segmentation = false;
@@ -5993,7 +5994,7 @@ mod tests {
     #[test]
     fn a_note_set_vertically_is_not_read_as_the_manuscript() {
         let mut editor = editor_with("他說,好");
-        editor.execute(":note on").unwrap();
+        editor.execute(":view punct on").unwrap();
         let config = vertical_config();
         let buffer = render_vertical(&mut editor, &config, 30, 12);
         // Down the rightmost 縱: 他 說 ␣ ︐ 好 — the half-width comma is hung
@@ -6033,7 +6034,7 @@ mod tests {
         config
     }
 
-    /// With `:wrap off` the page follows the caret off the right edge
+    /// With `:view wrap off` the page follows the caret off the right edge
     /// (Feature #221).
     ///
     /// A paragraph is then one row of whatever length it happens to be, and
@@ -6307,7 +6308,7 @@ mod tests {
     }
 
     /// A 着重號 is bought the way a reading is: the layout pays a cell for the
-    /// 縱 that needs one. So even packed flush — `:dense`, no gap, no 稿紙 rule
+    /// 縱 that needs one. So even packed flush — `:view dense`, no gap, no 稿紙 rule
     /// — the dots are there, and they never land on the next 縱's writing.
     #[test]
     fn a_dense_page_still_buys_the_cell_a_dot_needs() {
@@ -7481,10 +7482,10 @@ mod tests {
         assert_eq!(at(&buffer, 20 + gutter as u16, 4), "│");
     }
 
-    /// The author, 2026-09-05: `:wrap 50` then `:wrap off` left a rule down
+    /// The author, 2026-09-05: `:view wrap 50` then `:view wrap off` left a rule down
     /// the middle of the page with the writing running straight through it.
     ///
-    /// The measure is kept on purpose — `:wrap` on its own has to be able to
+    /// The measure is kept on purpose — `:view wrap` on its own has to be able to
     /// put it back — but a measure nothing is folded at is not a margin, and
     /// the furniture that says 「the paper ends here」 was still being drawn.
     #[test]
@@ -7493,17 +7494,17 @@ mod tests {
         let mut config = Config::default();
         config.editor.line_numbers = LineNumbers::None;
         config.editor.show_segmentation = false;
-        // Nothing configured: every mark on this page comes from `:wrap 20`.
+        // Nothing configured: every mark on this page comes from `:view wrap 20`.
         assert_eq!(config.editor.ruler, 0);
         let tint = Some(ink(&config).at(yumete_config::rung::BAND));
 
-        editor.execute("wrap 20").unwrap();
+        editor.execute("view wrap 20").unwrap();
         let buffer = render_wrapped(&mut editor, &config, 40, 8);
         assert_eq!(buffer[(20, 0)].style().bg, tint, "the measure is in force");
 
-        // `:wrap off`: the rows are no longer folded at twenty, so nothing on
+        // `:view wrap off`: the rows are no longer folded at twenty, so nothing on
         // the page may claim they are.
-        editor.execute("wrap off").unwrap();
+        editor.execute("view wrap off").unwrap();
         let buffer = render_wrapped(&mut editor, &config, 40, 8);
         assert_ne!(buffer[(20, 0)].style().bg, tint, "no margin past it");
         assert!(
@@ -7511,8 +7512,8 @@ mod tests {
             "and no rule at it"
         );
 
-        // …and `:wrap` alone puts the measure — and its margin — back.
-        editor.execute("wrap").unwrap();
+        // …and `:view wrap` alone puts the measure — and its margin — back.
+        editor.execute("view wrap").unwrap();
         let buffer = render_wrapped(&mut editor, &config, 40, 8);
         assert_eq!(buffer[(20, 0)].style().bg, tint, "the number was kept");
     }
@@ -7569,7 +7570,7 @@ mod tests {
         // page ends.
         assert_eq!(config.editor.ruler, 0);
 
-        editor.execute("wrap 20").unwrap();
+        editor.execute("view wrap 20").unwrap();
         let buffer = render_wrapped(&mut editor, &config, 40, 8);
 
         // Twenty columns is ten 字, so the eleventh is on the second row.
@@ -7584,7 +7585,7 @@ mod tests {
         assert_eq!(buffer[(20, 5)].style().bg, tint, "and down the empty rows");
 
         // Giving the window back takes the margin with it.
-        editor.execute("wrap 0").unwrap();
+        editor.execute("view wrap 0").unwrap();
         let buffer = render_wrapped(&mut editor, &config, 40, 8);
         assert_ne!(buffer[(20, 0)].style().bg, tint);
         assert_eq!(at(&buffer, 20, 0), "字", "the row runs the full width");
@@ -8864,7 +8865,7 @@ mod tests {
         // Packed: the rows are against each other.
         assert!(rows(&editor)[1].contains("雪"), "{:?}", rows(&editor));
 
-        editor.execute(":dense off").unwrap();
+        editor.execute(":view dense off").unwrap();
         let loose = rows(&editor);
         assert!(loose[0].trim().is_empty(), "a row of air first: {loose:?}");
         assert!(loose[1].contains("那"), "{loose:?}");
@@ -8876,7 +8877,7 @@ mod tests {
         let (_, caret) = render_caret(&editor, &config, 30, 10);
         assert_eq!(caret.map(|p| p.y), Some(3), "the second row is drawn at 3");
 
-        editor.execute(":dense on").unwrap();
+        editor.execute(":view dense on").unwrap();
         assert!(rows(&editor)[1].contains("雪"));
     }
 
@@ -8910,7 +8911,7 @@ mod tests {
     fn metered(text: &str) -> yumete_core::Editor {
         let mut editor = editor_with(text);
         editor.set_reader(Box::new(Tones));
-        editor.execute(":meter on").unwrap();
+        editor.execute(":view meter on").unwrap();
         editor
     }
 
@@ -8957,7 +8958,7 @@ mod tests {
         config.editor.line_numbers = LineNumbers::None;
         config.editor.hints = false;
         config.editor.show_segmentation = false;
-        editor.execute(":meter off").unwrap();
+        editor.execute(":view meter off").unwrap();
         let buffer = render_wrapped(&mut editor, &config, 30, 8);
         assert!(row_text(&buffer, 0).starts_with("春眠不覺曉。"));
     }
@@ -8967,7 +8968,7 @@ mod tests {
     #[test]
     fn without_a_reader_the_meter_has_nothing_to_say() {
         let mut editor = editor_with("春眠不覺曉。\n");
-        editor.execute(":meter on").unwrap();
+        editor.execute(":view meter on").unwrap();
         assert!(editor.status().contains("讀音") || editor.status().contains("reading"));
         let mut config = Config::default();
         config.editor.line_numbers = LineNumbers::None;
@@ -8989,7 +8990,7 @@ mod tests {
         let plain = (0..20u16).find(|&x| at(&quiet, x, 0) == "春");
 
         let mut on = editor_with("春眠不覺曉。\n");
-        on.execute(":meter on").unwrap();
+        on.execute(":view meter on").unwrap();
         assert!(!on.meter_drawn(), "asked for, and not drawable");
         let buffer = render_vertical(&mut on, &config, 20, 10);
         assert_eq!(
@@ -9023,7 +9024,7 @@ mod tests {
     /// and the answers are kept against a hash of the line's *text*, which
     /// does not change when the dictionary does.
     ///
-    /// The trigger in the field is the ordinary one: `:meter on` before the
+    /// The trigger in the field is the ordinary one: `:view meter on` before the
     /// IME has finished loading its dictionary. Until this was fixed, the 了
     /// in 為了 stayed marked 仄 for the rest of the session — the exact
     /// mistake the feature exists to catch.
@@ -9031,7 +9032,7 @@ mod tests {
     fn a_new_dictionary_takes_the_meter_marks_with_it() {
         let mut editor = editor_with("為了他。\n");
         editor.set_reader(Box::new(Both));
-        editor.execute(":meter on").unwrap();
+        editor.execute(":view meter on").unwrap();
         // One character at a time: 為 仄, 了 liǎo 仄, 他 平 and the 韻腳.
         let apart = editor.meter_on_line(0);
         assert_eq!(apart.len(), 3, "{apart:?}");
@@ -9061,7 +9062,7 @@ mod tests {
         // Nothing is stood back until it is asked for.
         assert_eq!(ink(&lit, 0), ink(&lit, 1), "{:?}", ink(&lit, 0));
 
-        editor.execute(":focus").unwrap();
+        editor.execute(":view focus").unwrap();
         let focused = render_wrapped(&mut editor, &config, 30, 8);
         // The cursor's own 段 is drawn exactly as it was.
         assert_eq!(ink(&focused, 1), ink(&lit, 1));
@@ -9070,7 +9071,7 @@ mod tests {
         assert_ne!(ink(&focused, 0), ink(&lit, 0));
         assert_eq!(ink(&focused, 0), ink(&focused, 2));
 
-        editor.execute(":focus off").unwrap();
+        editor.execute(":view focus off").unwrap();
         let again = render_wrapped(&mut editor, &config, 30, 8);
         assert_eq!(ink(&again, 0), ink(&lit, 0));
     }
@@ -9078,7 +9079,7 @@ mod tests {
     /// …and on a page whose ground the reader kept.
     ///
     /// `[theme] ground = "terminal"` leaves the writing with no colour of its
-    /// own, so swapping palettes moves nothing: `:focus` said 「開」 in the
+    /// own, so swapping palettes moves nothing: `:view focus` said 「開」 in the
     /// status line and drew an identical page. Standing a row back has to name
     /// the ink out loud, which is what 縱書 has always done.
     #[test]
@@ -9096,7 +9097,7 @@ mod tests {
         // The reader's own ink, on the reader's own ground.
         assert_eq!(ink(&lit, 0), ratatui::style::Color::Reset);
 
-        editor.execute(":focus on").unwrap();
+        editor.execute(":view focus on").unwrap();
         let focused = render_wrapped(&mut editor, &config, 30, 8);
         // The cursor's 段 is still the reader's ink — that is the promise the
         // setting makes — and the rest of the page is now a colour.
@@ -9113,7 +9114,7 @@ mod tests {
         let mut editor = editor_with(&format!("{}\n短。\n", "長".repeat(12)));
         let mut config = vertical_config();
         config.editor.hints = false;
-        editor.execute(":focus on").unwrap();
+        editor.execute(":view focus on").unwrap();
         let buffer = render_vertical(&mut editor, &config, 20, 8);
 
         // The cursor is in the first paragraph, which wraps: the rightmost two
@@ -9142,7 +9143,7 @@ mod tests {
         config.editor.hints = false;
 
         let lit = render_vertical(&mut editor, &config, 30, 12);
-        editor.execute(":focus on").unwrap();
+        editor.execute(":view focus on").unwrap();
         let focused = render_vertical(&mut editor, &config, 30, 12);
 
         // The band's rows are above the text; find the one carrying a digit on
@@ -9176,7 +9177,7 @@ mod tests {
         let middle = 5;
         let mut seats = Seats::default();
 
-        editor.execute(":typewriter").unwrap();
+        editor.execute(":view typewriter").unwrap();
         editor.execute(":20").unwrap();
         assert_eq!(
             caret_over_time(&editor, &config, &mut seats, 30, rows).map(|p| p.y),
@@ -9192,7 +9193,7 @@ mod tests {
             );
         }
         // Off again, and a step is a step.
-        editor.execute(":typewriter off").unwrap();
+        editor.execute(":view typewriter off").unwrap();
         editor.on_key(Key::Char('j'));
         assert_eq!(
             caret_over_time(&editor, &config, &mut seats, 30, rows).map(|p| p.y),
@@ -9248,10 +9249,10 @@ mod tests {
         assert_eq!(caret.map(|p| p.y), Some(middle + 1), "a step nudges");
 
         // …and a search hit is a jump, whichever direction it was found in.
-        editor.execute(":search 第55行").unwrap();
+        editor.execute(":table find 第55行").unwrap();
         let caret = caret_over_time(&editor, &config, &mut seats, 30, rows);
         assert_eq!(caret.map(|p| p.y), Some(middle), "forwards");
-        editor.execute(":search 第9行").unwrap();
+        editor.execute(":table find 第9行").unwrap();
         let caret = caret_over_time(&editor, &config, &mut seats, 30, rows);
         assert_eq!(caret.map(|p| p.y), Some(middle), "and backwards");
     }
@@ -9264,7 +9265,7 @@ mod tests {
     /// widths and has no CJK setting. The fill used to be sized by subtracting
     /// the editor's width from the page's, so a fenced line with eleven `▓` in
     /// it stopped its ground eleven cells short of the right edge — visible in
-    /// the manual's own `:wrap` example.
+    /// the manual's own `:view wrap` example.
     #[test]
     fn a_blocks_ground_reaches_the_edge_whatever_the_widths_say() {
         let editor = editor_with("前一段。\n\n```\n那年冬天。   ▓▓▓▓▓▓\n雪——一直下。\n```\n");
@@ -9631,7 +9632,7 @@ mod tests {
         let before = fits(&loose);
 
         // Packed, a 縱 is two cells — one 漢字 — and nothing else is spent.
-        editor.execute("dense").unwrap();
+        editor.execute("view dense").unwrap();
         let tight = render_vertical(&mut editor, &config, 40, 14);
         assert!(
             fits(&tight) > before,
@@ -9646,7 +9647,7 @@ mod tests {
         );
 
         // …and it comes back, because a toggle that does not is not one.
-        editor.execute("dense off").unwrap();
+        editor.execute("view dense off").unwrap();
         let loose = render_vertical(&mut editor, &config, 40, 14);
         assert_eq!(fits(&loose), before, "back to where it was");
     }
@@ -9667,7 +9668,7 @@ mod tests {
         editor.on_key(Key::Esc);
         let mut config = vertical_config();
         config.editor.line_numbers = LineNumbers::Absolute;
-        editor.execute("dense").unwrap();
+        editor.execute("view dense").unwrap();
         editor.execute("1").unwrap();
         let buffer = render_vertical(&mut editor, &config, 40, 16);
 
@@ -10218,7 +10219,7 @@ mod tests {
         let buffer = render_with(&editor, &config, &no_ime(), 100, 60);
         let text = buffer_text(&buffer);
         // The far end of the list, which eight rows of four columns cut off.
-        for name in [":open", ":wrap", ":grep", ":toc", ":ruby"] {
+        for name in [":open", ":view", ":grep", ":toc", ":ruby"] {
             assert!(text.contains(name), "{name} is on it: {text:?}");
         }
         assert!(text.contains(&format!("1/{total}")));
@@ -11006,7 +11007,7 @@ mod tests {
         let mut config = Config::default();
         config.editor.line_numbers = yumete_config::LineNumbers::None;
         config.editor.hints = false;
-        editor.execute(":dense off").unwrap();
+        editor.execute(":view dense off").unwrap();
         let buffer = render_with_ruby(&mut editor, &config, 16, 10);
         let rows: Vec<String> = (0..buffer.area.height)
             .map(|y| row_text(&buffer, y).trim_end().to_string())

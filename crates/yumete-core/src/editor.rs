@@ -456,7 +456,7 @@ pub enum Hud {
     Full,
 }
 
-/// What `:hud` says about a level, whether it was just set or only asked.
+/// What `:view hud` says about a level, whether it was just set or only asked.
 fn hud_says(how: Hud) -> String {
     match how {
         Hud::Off => say!("hud.off"),
@@ -1308,7 +1308,7 @@ pub struct Editor {
     /// editor knows *what* was asked for and the front end knows how to run a
     /// program.
     language_run: Option<LanguageRun>,
-    /// A pending `:preview`, waiting for the front end — starting a typesetter
+    /// A pending `:view preview`, waiting for the front end — starting a typesetter
     /// is running a program, which only the front end can do.
     preview_request: Option<Preview>,
     /// Where the typesetter that **is running** put its page.
@@ -1365,12 +1365,12 @@ pub struct Editor {
     /// A gap between 縱 set at runtime, overriding the config's.
     ///
     /// The one piece of the dense arrangement that was a startup-only setting
-    /// while the other three were live toggles — which is why `:dense` had to
+    /// while the other three were live toggles — which is why `:view dense` had to
     /// exist rather than being three keys anybody could find.
     zong_gap: Option<usize>,
     /// Whether the dense arrangement is on, so the ticks know to stay away.
     dense: bool,
-    /// Whether every 句 opens a 縱 of its own (`:sentence`, Feature #237).
+    /// Whether every 句 opens a 縱 of its own (`:view sentence`, Feature #237).
     sentences: bool,
     /// How many squares open a paragraph (首行縮進), as configured.
     indent: usize,
@@ -1974,7 +1974,7 @@ impl Editor {
     /// **It is silent, and it makes nothing.** A save must not fail, or even
     /// say anything, because a progress log could not be written — and a
     /// manuscript is not the only thing an editor saves. A ledger appears when
-    /// the writer asks for one (`:target`, `:progress`), never because a
+    /// the writer asks for one (`:count target`, `:count progress`), never because a
     /// config file was edited in a directory that had never heard of yumete;
     /// after that every save keeps it up to date.
     fn note_progress(&mut self) {
@@ -2004,14 +2004,14 @@ impl Editor {
         let _ = self.write_progress_log(&path, &log);
     }
 
-    /// `:progress` — 寫作進度: today against the target, and every day before.
+    /// `:count progress` — 寫作進度: today against the target, and every day before.
     fn progress_report(&mut self) {
         let Some(path) = self.progress_path() else {
             self.status = say!("progress.no-file");
             return;
         };
         let mut log = self.progress_log(&path);
-        // Asking is enough to open the ledger: `:progress` on a book that has
+        // Asking is enough to open the ledger: `:count progress` on a book that has
         // never been counted answers 「還沒有記錄」 *and* starts today's row, so
         // that the next save has somewhere to go. Nothing else in this editor
         // asks a writer to say 「yes, really」 twice.
@@ -2062,7 +2062,7 @@ impl Editor {
             listing.push('\n');
         }
         // 本書 comes from the **ledger**, not from the buffer in front of the
-        // reader: `:progress` opens a listing, and a second one read from
+        // reader: `:count progress` opens a listing, and a second one read from
         // inside that listing used to report the listing's own length.
         let book = log.book();
         self.show_listing(listing, say!("progress.results"));
@@ -2079,7 +2079,7 @@ impl Editor {
         };
     }
 
-    /// `:target <字>` — how many 字 a day, or `off`.
+    /// `:count target <字>` — how many 字 a day, or `off`.
     fn set_target(&mut self, target: Option<usize>) {
         let Some(path) = self.progress_path() else {
             self.status = say!("progress.no-file");
@@ -2419,7 +2419,7 @@ impl Editor {
     ///
     /// And nothing reaches disk. Every file with a hit is *opened as a buffer*
     /// and changed there, so `u` takes any one of them back, `gn` walks them,
-    /// and `:wa` is the moment a person says yes. Writing 120 files from a
+    /// and `:write all` is the moment a person says yes. Writing 120 files from a
     /// command line with no undo is the kind of thing an editor should not
     /// make easy.
     fn replace_found(&mut self, text: &str, reshape: bool) {
@@ -2503,7 +2503,7 @@ impl Editor {
         };
     }
 
-    /// Save every buffer that has changed (`:wa`).
+    /// Save every buffer that has changed (`:write all`).
     fn write_all(&mut self) -> Result<CommandOutcome, EditorError> {
         let was = self.current;
         let mut saved = 0usize;
@@ -3145,7 +3145,7 @@ impl Editor {
             .find(|c| c.lines().contains(&line))
     }
 
-    /// `:conflicts` — every conflict in this file, as a buffer to walk (#249).
+    /// `:check merge` — every conflict in this file, as a buffer to walk (#249).
     ///
     /// The same `路徑:行:` shape `:grep` writes, so `gf` follows a row back to
     /// the line it names and every motion works in the list. **This file
@@ -3330,7 +3330,7 @@ impl Editor {
     /// The mirror of [`Self::hidden_on_line`], and the general form of #210's
     /// drawn text. Three producers stand behind it and more can: the inline
     /// candidate the writer typed, the padding that squares a table up, and
-    /// the notes `:note` puts beside a mark that is wrong. Each run is
+    /// the notes `:view punct` puts beside a mark that is wrong. Each run is
     /// anchored *before* one of the file's own characters and none of them is
     /// addressable — see [`crate::drawn`] for the invariant that makes that
     /// safe.
@@ -3912,7 +3912,7 @@ impl Editor {
 
     /// The 平仄 of `line`, for the margin (Feature #247).
     ///
-    /// Empty unless `:meter` is on **and** a reader is installed: without the
+    /// Empty unless `:view meter` is on **and** a reader is installed: without the
     /// 拆分表 there are no tones to read, and a margin of guesses beside a poem
     /// is worse than an empty one.
     ///
@@ -4272,7 +4272,7 @@ impl Editor {
         self.status.clear();
         // What this command needs before it can mean anything (Feature #170).
         // A setting whose prerequisite is missing used to be *set* and then
-        // read by nobody: `:hanging on` on a horizontal page turned a flag on,
+        // read by nobody: `:view hanging on` on a horizontal page turned a flag on,
         // changed nothing, and said 「標點旁置：開」, which is three kinds of
         // wrong at once.
         let (line, force) = match line.trim_end().strip_suffix(" force") {
@@ -4501,7 +4501,7 @@ impl Editor {
                 // `:w <path>` it wrote a *copy* and then refused to quit,
                 // because the chapter itself was still unsaved — and a writer
                 // with vi's muscle memory reads that refusal and reaches for
-                // `:q!`. So it rebinds, exactly as `:saveas` does, and the file
+                // `:q!`. So it rebinds, exactly as `:write as` does, and the file
                 // that is saved is the one the name says.
                 match path.as_deref() {
                     Some(path) => {
@@ -4843,7 +4843,7 @@ impl Editor {
                 );
                 Ok(CommandOutcome::Continue)
             }
-            // `:hud` sets and reports with the same three sentences: what the
+            // `:view hud` sets and reports with the same three sentences: what the
             // level *is* and what it was just changed to are the same fact,
             // and two wordings of it would be two things to keep true.
             Command::SetHud(how) => {
@@ -4856,7 +4856,7 @@ impl Editor {
                 Ok(CommandOutcome::Continue)
             }
             // A measure is only a measure if the rows honour it, so setting
-            // one turns wrapping on: `:wrap 50` says "write to fifty", and
+            // one turns wrapping on: `:view wrap 50` says "write to fifty", and
             // fifty columns of text running off the edge is not that.
             Command::SetDense(on) => {
                 self.set_dense(on);
@@ -5045,7 +5045,7 @@ impl Editor {
             Command::SetSoftWrap(on) => {
                 // **縱書 has nothing to turn off.** A 縱 is broken by the
                 // height of the window, and that is not the writer's to set —
-                // `:wrap 40` does set the 縱 length, in either layout, but
+                // `:view wrap 40` does set the 縱 length, in either layout, but
                 // 開／關 does not reach it. Taking it anyway and answering
                 // 「長段落跑出右邊」 named a right edge this page does not
                 // have, and left the reader looking for a change that had not
@@ -5093,7 +5093,7 @@ impl Editor {
         let saved: Result<Wrote, EditorError> = match path {
             // `:w path` writes a **copy** and stays here; `:w! path` writes it
             // over whatever is already there. Rebinding this buffer to another
-            // name is `:saveas`, which says so — `:w chapter-copy.md` used to
+            // name is `:write as`, which says so — `:w chapter-copy.md` used to
             // rebind silently, and every save after it went to the copy while
             // the chapter itself stayed at the version before.
             Some(p) => {
@@ -6676,7 +6676,7 @@ impl Editor {
         // **Looking at a table does not rewrite it.** Entering used to lay the
         // whole region out again — 45 lines of the author's own documentation,
         // `modified` set, and `:table off` does not undo it. The padding is
-        // this editor's, not theirs, and `:wa` was one keystroke from
+        // this editor's, not theirs, and `:write all` was one keystroke from
         // committing a diff nobody typed. The layout is kept up *after an
         // edit*, which is where it came from and where it belongs.
         self.snap_to_cell();
@@ -9269,7 +9269,7 @@ impl Editor {
             (":ruby format html", say!("help.chinese.unify-reading-spelling")),
             (":render full", say!("render.wysiwyg")),
             (":indent 2", say!("help.chinese.first-line-indent")),
-            (":hanging on", say!("help.chinese.hung-punctuation")),
+            (":view hanging on", say!("help.chinese.hung-punctuation")),
             (":count", say!("help.chinese.count")),
         ] {
             out.push_str(&format!("- `{keys}` — {what}
@@ -9284,11 +9284,11 @@ impl Editor {
             (":layout vertical", say!("help.vertical.turn-vertical")),
             ("h l", say!("help.vertical.previous-next-column")),
             ("j k", say!("help.vertical.down-up-column")),
-            (":wrap 24", say!("help.vertical.column-length")),
-            (":bands 2", say!("help.vertical.bands")),
-            (":hanging on", say!("help.vertical.hung-punctuation")),
-            (":dense off", say!("help.vertical.loose")),
-            (":sentence", say!("help.vertical.sentence")),
+            (":view wrap 24", say!("help.vertical.column-length")),
+            (":view bands 2", say!("help.vertical.bands")),
+            (":view hanging on", say!("help.vertical.hung-punctuation")),
+            (":view dense off", say!("help.vertical.loose")),
+            (":view sentence", say!("help.vertical.sentence")),
             (":indent 2", say!("help.vertical.first-line-indent")),
             (":render full", say!("help.vertical.wysiwyg")),
         ] {
@@ -9386,7 +9386,7 @@ impl Editor {
         self.preview_at = url;
     }
 
-    /// The running typesetter's address, for the status bar and for `:preview`.
+    /// The running typesetter's address, for the status bar and for `:view preview`.
     pub fn preview_at(&self) -> Option<&str> {
         self.preview_at.as_deref()
     }
@@ -9595,7 +9595,7 @@ impl Editor {
         self.focus
     }
 
-    /// Whether `:meter` is on — the setting, which the status line reports.
+    /// Whether `:view meter` is on — the setting, which the status line reports.
     ///
     /// **Not the question the page asks.** A page wants
     /// [`Self::meter_drawn`]: with the 平仄 asked for and no 拆分表 to read
@@ -9608,7 +9608,7 @@ impl Editor {
     ///
     /// The margin they go in is a **cell off every 縱 on the page**, bought
     /// before a line is asked for its marks. Bought on the setting alone, a
-    /// `:meter on` with no 拆分表 installed reflowed the whole page to make
+    /// `:view meter on` with no 拆分表 installed reflowed the whole page to make
     /// room for a column that can never hold anything — while the status line
     /// was busy saying there is no reading table. The command says so
     /// *instead* of drawing an empty margin, which is what it always claimed.
@@ -9813,7 +9813,7 @@ impl Editor {
                 .unwrap_or_default(),
         }
     }
-    /// Search **down one column, then the next** (`:search column`, `Enter`).
+    /// Search **down one column, then the next** (`:table find column`, `Enter`).
     ///
     /// The other axis of the same verb, and *only* the axis: a hit is a match,
     /// the match becomes the selection, `n` and `N` walk them, the pattern is a
@@ -11745,7 +11745,7 @@ impl Editor {
         };
     }
 
-    /// Go to the row this table names by `key` (`:row 木`).
+    /// Go to the row this table names by `key` (`:table jump 木`).
     ///
     /// The index behind it has always been built and has always answered in
     /// about 300 ns; until now nothing let a person ask it. Finding 木 in a
@@ -12128,8 +12128,8 @@ impl Editor {
 
     /// How many squares open a paragraph, as the page is drawn.
     ///
-    /// **Not** masked by `:dense`, unlike the readings, the hung 句讀 and the
-    /// ticks. Those three each cost a *column* — the width `:dense` exists to
+    /// **Not** masked by `:view dense`, unlike the readings, the hung 句讀 and the
+    /// ticks. Those three each cost a *column* — the width `:view dense` exists to
     /// win back. The indent costs two squares at the head of a paragraph, and
     /// it is the one thing on a packed page that says where a paragraph
     /// begins: it is what replaces the blank line, which costs a whole 縱.
@@ -12187,13 +12187,13 @@ impl Editor {
 
     /// Which ruby dialects are being laid out **on the page as it is drawn**.
     ///
-    /// Masked by `:dense`, the same way [`Self::hanging_punctuation`] is and
+    /// Masked by `:view dense`, the same way [`Self::hanging_punctuation`] is and
     /// for the same reason: packing the page *suppresses* the reading column,
-    /// it does not turn readings off. `:dense` said it dropped the column in
+    /// it does not turn readings off. `:view dense` said it dropped the column in
     /// its own doc comment and in the manual's table, and did not — so a
     /// packed page kept paying two cells a 縱 for readings it was not drawing.
     ///
-    /// The configured set — what `:ruby` reports and what `:dense off` gives
+    /// The configured set — what `:ruby` reports and what `:view dense off` gives
     /// back — is [`Self::ruby_configured`].
     pub fn ruby(&self) -> Dialects {
         // …and only where 密排 costs anything. It packs the *縱書* page: the
@@ -12864,7 +12864,7 @@ impl Editor {
     /// Tell the editor how much room the renderer has, so `j` and `k` walk the
     /// same rows the reader sees. The renderer calls this once per frame.
     ///
-    /// A measure the writer has set wins, but only downwards: `:wrap 50` on a
+    /// A measure the writer has set wins, but only downwards: `:view wrap 50` on a
     /// 40-column terminal still has to wrap at 40, because rows that do not fit
     /// cannot be read.
     pub fn set_wrap_width(&mut self, available: usize) {
@@ -12893,10 +12893,10 @@ impl Editor {
         // A view, not a change of settings. Packing the page *suppresses* the
         // readings, the hung 句讀 and the ticks; it does not turn them off,
         // because they are choices about the book and this is a choice about
-        // the window. So `:dense off` needs nothing remembered — what was
+        // the window. So `:view dense off` needs nothing remembered — what was
         // configured was never touched, and simply applies again.
         self.dense = on;
-        // 橫排 has no columns to pack, so `:dense` means the other axis there:
+        // 橫排 has no columns to pack, so `:view dense` means the other axis there:
         // the row of air above every row.
         if self.layout == Layout::Horizontal {
             self.loose_rows = !on;
@@ -12914,7 +12914,7 @@ impl Editor {
         self.dense
     }
 
-    /// One 句 to a 縱 (`:sentence`, Feature #237).
+    /// One 句 to a 縱 (`:view sentence`, Feature #237).
     ///
     /// **A view, and the point is that it is one.** The manual has taught
     /// `:%s/。/。\n/g` for reading a draft back one sentence at a time since the
@@ -13150,7 +13150,7 @@ impl Editor {
     /// segmentation overlay **and** the 平仄 margin, which asks the reader for
     /// a *word*'s reading (`了` is `le` in 為了 and `liǎo` in 了解). Both are
     /// kept against a hash of the line's text, and changing the dictionary
-    /// changes neither the text nor the hash — so a `:meter` turned on before
+    /// changes neither the text nor the hash — so a `:view meter` turned on before
     /// the IME finished loading its dictionary kept marking the 了 in 為了 仄
     /// until the line was edited, which is the exact mistake the feature
     /// exists to catch.
@@ -13603,7 +13603,7 @@ impl Editor {
         self.hud
     }
 
-    /// Say how loudly. `:hud off|basic|full`, and nothing else writes it —
+    /// Say how loudly. `:view hud off|basic|full`, and nothing else writes it —
     /// least of all `:render`, which is about the file (#284).
     pub fn set_hud(&mut self, how: Hud) {
         self.hud = how;
@@ -15735,7 +15735,7 @@ impl Editor {
 
     /// The same, without noting a jump.
     ///
-    /// For the callers that have already noted one — a mark, `:row` — where a
+    /// For the callers that have already noted one — a mark, `:table jump` — where a
     /// second note would be of the place *after* the file switch, and `C-o`
     /// would then take you to the file you had just arrived in.
     fn move_to_line(&mut self, n: usize) {
@@ -18789,20 +18789,20 @@ mod tests {
         assert!(!ed.notes());
         assert!(ed.drawn_on_line(0).is_empty());
 
-        ed.execute(":note on").unwrap();
+        ed.execute(":view punct on").unwrap();
         assert!(ed.notes());
         // 他說 , 好 — the note stands *after* the comma, at the character it
         // should have been written as.
         assert_eq!(ed.drawn_on_line(0), vec![(3, "，".to_string())]);
 
-        ed.execute(":note off").unwrap();
+        ed.execute(":view punct off").unwrap();
         assert!(ed.drawn_on_line(0).is_empty());
     }
 
     #[test]
     fn a_page_that_got_its_marks_right_carries_no_notes() {
         let mut ed = typed("他說：「好。」\n");
-        ed.execute(":note on").unwrap();
+        ed.execute(":view punct on").unwrap();
         assert!(ed.drawn_on_line(0).is_empty(), "{:?}", ed.drawn_on_line(0));
     }
 
@@ -18812,7 +18812,7 @@ mod tests {
         // that is not in the file. Walking right past the mark the note is
         // about lands on the file's own next character, and `x` deletes that.
         let mut ed = typed("他說,好\n");
-        ed.execute(":note on").unwrap();
+        ed.execute(":view punct on").unwrap();
         assert_eq!(ed.drawn_on_line(0), vec![(3, "，".to_string())]);
         for _ in 0..3 {
             ed.on_key(Key::Char('l'));
@@ -18826,7 +18826,7 @@ mod tests {
     #[test]
     fn a_comma_inside_a_fence_is_code_and_is_left_alone() {
         let mut ed = typed("```rust\nlet a = (1,2);\n```\n他說,好\n");
-        ed.execute(":note on").unwrap();
+        ed.execute(":view punct on").unwrap();
         assert!(ed.drawn_on_line(1).is_empty(), "{:?}", ed.drawn_on_line(1));
         assert_eq!(ed.drawn_on_line(3), vec![(3, "，".to_string())]);
     }
@@ -18834,7 +18834,7 @@ mod tests {
     #[test]
     fn render_off_asks_for_the_file_and_gets_the_file() {
         let mut ed = typed("他說,好\n");
-        ed.execute(":note on").unwrap();
+        ed.execute(":view punct on").unwrap();
         assert!(!ed.drawn_on_line(0).is_empty());
         ed.execute(":render off").unwrap();
         assert!(ed.drawn_on_line(0).is_empty(), "{:?}", ed.drawn_on_line(0));
@@ -18845,7 +18845,7 @@ mod tests {
         // The cache is a hash of the line, so an edit that fixes the mark
         // takes the note off the page without anybody clearing anything.
         let mut ed = typed("他說,好\n");
-        ed.execute(":note on").unwrap();
+        ed.execute(":view punct on").unwrap();
         assert_eq!(ed.drawn_on_line(0).len(), 1);
         // Put the cursor on the comma and write the right mark over it.
         ed.on_key(Key::Char('l'));
@@ -19198,8 +19198,8 @@ mod tests {
 
     #[test]
     fn a_packed_page_still_says_where_a_paragraph_begins() {
-        // `:dense` is the default page, so masking the indent under it made
-        // 首行縮進 invisible out of the box. The three things `:dense` drops
+        // `:view dense` is the default page, so masking the indent under it made
+        // 首行縮進 invisible out of the box. The three things `:view dense` drops
         // each cost a *column*; the indent costs two squares, and it is what
         // replaces the blank line — which costs a whole 縱.
         let mut ed = Editor::new();
@@ -19255,7 +19255,7 @@ mod tests {
 
     #[test]
     fn a_packed_page_does_not_pay_for_a_reading_column() {
-        // `:dense` says in its own doc comment, and in the manual's table,
+        // `:view dense` says in its own doc comment, and in the manual's table,
         // that it drops the reading column. It did not: the mask was on the
         // hung 句讀 and not on the readings, so a packed page still reserved
         // two cells a 縱 for a column it was not drawing.
@@ -19271,7 +19271,7 @@ mod tests {
         ed.set_layout(crate::zong::Layout::Vertical);
         assert!(
             !ed.ruby_configured().is_empty(),
-            "but nothing was turned off — `:dense off` gives them back"
+            "but nothing was turned off — `:view dense off` gives them back"
         );
         ed.set_dense(false);
         assert!(!ed.ruby().is_empty());
@@ -19632,20 +19632,20 @@ mod tests {
         // there was nowhere to find out why.
         let mut ed = Editor::new();
         ed.set_dense(true);
-        ed.execute(":hanging on").unwrap();
+        ed.execute(":view hanging on").unwrap();
         assert!(!ed.hanging_punctuation(), "{}", ed.status());
         let said = ed.status().to_string();
         assert!(said.contains("竪排") && said.contains("密排關"), "{said}");
         assert!(said.contains("force"), "{said}");
 
         // …and `force` brings the prerequisites about, in one line.
-        ed.execute(":hanging on force").unwrap();
+        ed.execute(":view hanging on force").unwrap();
         assert_eq!(ed.layout(), crate::zong::Layout::Vertical);
         assert!(!ed.dense());
         assert!(ed.hanging_punctuation(), "{}", ed.status());
 
         // A command whose needs are met says nothing about them.
-        ed.execute(":hanging off").unwrap();
+        ed.execute(":view hanging off").unwrap();
         assert!(!ed.hanging_punctuation());
         assert!(!ed.status().contains("需要"), "{}", ed.status());
     }
@@ -20333,8 +20333,8 @@ mod tests {
         ed.execute(":w").unwrap();
         assert!(!ledger.exists(), "a save alone made {}", ledger.display());
 
-        // `:target` opens it, and says where it went.
-        ed.execute(":target 2000").unwrap();
+        // `:count target` opens it, and says where it went.
+        ed.execute(":count target 2000").unwrap();
         assert!(ledger.is_file(), "{}", ed.status());
         assert!(ed.status().contains("2000"), "{}", ed.status());
 
@@ -20350,9 +20350,9 @@ mod tests {
         assert_eq!(log.rows[0].now, 8, "{text}");
         assert_eq!(log.rows[0].file, "第一章.md", "{text}");
 
-        // And `:progress` reports it against the target, with a listing of the
+        // And `:count progress` reports it against the target, with a listing of the
         // days behind it.
-        ed.execute(":progress").unwrap();
+        ed.execute(":count progress").unwrap();
         assert!(ed.status().contains("2000"), "{}", ed.status());
         assert!(ed.status().contains('4'), "{}", ed.status());
         assert!(
@@ -20363,11 +20363,11 @@ mod tests {
 
         // Read from inside that listing — which has no file name of its own —
         // it still answers about the book.
-        ed.execute(":progress").unwrap();
+        ed.execute(":count progress").unwrap();
         assert!(ed.status().contains("2000"), "{}", ed.status());
 
-        // `:target off` keeps the days and drops the target.
-        ed.execute(":target off").unwrap();
+        // `:count target off` keeps the days and drops the target.
+        ed.execute(":count target off").unwrap();
         let log = crate::progress::Log::from_text(&std::fs::read_to_string(&ledger).unwrap());
         assert_eq!(log.target, None);
         assert_eq!(log.rows.len(), 1);
@@ -22651,8 +22651,8 @@ mod tests {
     /// refused properly.
     /// §5.2.2 fault 2, driven: the switch the menu offers, twice in a row.
     ///
-    /// `:hanging` declared `Args::Words(ON_OFF)` and ignored the word, so the
-    /// second `:hanging off` turned 標點旁置 **on** — and the status line said
+    /// `:view hanging` declared `Args::Words(ON_OFF)` and ignored the word, so the
+    /// second `:view hanging off` turned 標點旁置 **on** — and the status line said
     /// so, which is how it survived: it was never silent, only wrong.
     #[test]
     fn hanging_punctuation_listens_to_the_word_it_is_given() {
@@ -22662,22 +22662,22 @@ mod tests {
         // nothing, which would make every assertion below pass for the wrong
         // reason.
         assert!(ed.execute("layout vertical").is_ok());
-        assert!(ed.execute("dense off").is_ok());
+        assert!(ed.execute("view dense off").is_ok());
         for _ in 0..2 {
-            assert!(ed.execute("hanging off").is_ok());
-            assert!(!ed.hanging, "`:hanging off` turned it on: {}", ed.status());
+            assert!(ed.execute("view hanging off").is_ok());
+            assert!(!ed.hanging, "`:view hanging off` turned it on: {}", ed.status());
         }
         for _ in 0..2 {
-            assert!(ed.execute("hanging on").is_ok());
-            assert!(ed.hanging, "`:hanging on` turned it off: {}", ed.status());
+            assert!(ed.execute("view hanging on").is_ok());
+            assert!(ed.hanging, "`:view hanging on` turned it off: {}", ed.status());
         }
         // The bare word still means 「the other one」, and `of` is `off`'s
         // shortest spelling — the one the menu prints.
-        assert!(ed.execute("hanging").is_ok());
+        assert!(ed.execute("view hanging").is_ok());
         assert!(!ed.hanging);
-        assert!(ed.execute("hanging on").is_ok());
-        assert!(ed.execute("hanging of").is_ok());
-        assert!(!ed.hanging, "`:hanging of` is what the menu offers");
+        assert!(ed.execute("view hanging on").is_ok());
+        assert!(ed.execute("view hanging of").is_ok());
+        assert!(!ed.hanging, "`:view hanging of` is what the menu offers");
     }
 
     #[test]
@@ -23957,12 +23957,12 @@ mod tests {
         std::fs::write(&csv, "char,ids_y\n相,⿰木目\n木,木\n目,目\n").unwrap();
         let mut ed = Editor::new();
         ed.open_file(&csv).unwrap();
-        assert!(ed.execute("row 目").is_ok());
+        assert!(ed.execute("table jump 目").is_ok());
         assert_eq!(ed.cursor_line(), 3, "{}", ed.status());
-        assert!(ed.execute("row 卵").is_ok());
+        assert!(ed.execute("table jump 卵").is_ok());
         assert!(ed.status().contains("沒有"), "{}", ed.status());
         // …and `C-o` comes back, because a jump is a jump.
-        assert!(ed.execute("row 木").is_ok());
+        assert!(ed.execute("table jump 木").is_ok());
         assert_eq!(ed.cursor_line(), 2);
         std::fs::remove_dir_all(&dir).ok();
     }
@@ -24365,7 +24365,7 @@ mod tests {
         ed.open_file(&csv).unwrap();
         assert!(ed.enter_table(), "{}", ed.status());
 
-        assert!(ed.execute("search column 甲").is_ok(), "{}", ed.status());
+        assert!(ed.execute("table find column 甲").is_ok(), "{}", ed.status());
         assert!(ed.status().contains("1/4"), "{}", ed.status());
         // The hits are *shown* in the other work area; the cursor stays where
         // it was standing, which is the point of the split (Feature #176).
@@ -24393,14 +24393,14 @@ mod tests {
         assert_eq!(where_am_i(&ed), (1, 0), "and it wraps");
 
         // A row search is `/`, and reads the other way.
-        assert!(ed.execute("search row 甲").is_ok());
+        assert!(ed.execute("table find row 甲").is_ok());
         assert_eq!(ed.cursor_line(), 1);
 
         // No direction means row, because that is what a search is anywhere
         // but a table.
-        assert!(ed.execute("search 甲").is_ok());
+        assert!(ed.execute("table find 甲").is_ok());
         // A pattern is a pattern in both directions.
-        assert!(ed.execute("search column 甲[一三]").is_ok());
+        assert!(ed.execute("table find column 甲[一三]").is_ok());
         assert!(ed.status().contains("1/2"), "{}", ed.status());
         std::fs::remove_dir_all(&dir).ok();
     }
@@ -25616,8 +25616,8 @@ mod tests {
         ed.set_wrap_width(120);
         assert_eq!(ed.wrap_width(), Some(120), "the window, to begin with");
 
-        // `:wrap 50` is a measure: rows fold at fifty however wide the window.
-        ed.execute("wrap 50").unwrap();
+        // `:view wrap 50` is a measure: rows fold at fifty however wide the window.
+        ed.execute("view wrap 50").unwrap();
         assert_eq!(ed.measure(), Some(50));
         ed.set_wrap_width(120);
         assert_eq!(ed.wrap_width(), Some(50));
@@ -25630,24 +25630,24 @@ mod tests {
         // Setting one turns wrapping on, because fifty columns of text running
         // off the edge is not writing to a measure of fifty.
         ed.set_soft_wrap(false);
-        ed.execute("wrap 40").unwrap();
+        ed.execute("view wrap 40").unwrap();
         assert!(ed.soft_wrap());
 
         // Vertically the measure is the length of a 縱.
         ed.execute("layout vertical").unwrap();
-        ed.execute("wrap 12").unwrap();
+        ed.execute("view wrap 12").unwrap();
         assert_eq!(ed.zong_length(), 12);
 
-        // `:wrap 0` gives the window back; plain `:wrap` still just turns
+        // `:view wrap 0` gives the window back; plain `:view wrap` still just turns
         // wrapping on, and leaves the measure where it was.
-        ed.execute("wrap").unwrap();
-        assert_eq!(ed.measure(), Some(12), "`:wrap` is not `:wrap 0`");
-        ed.execute("wrap 0").unwrap();
+        ed.execute("view wrap").unwrap();
+        assert_eq!(ed.measure(), Some(12), "`:view wrap` is not `:view wrap 0`");
+        ed.execute("view wrap 0").unwrap();
         assert_eq!(ed.measure(), None);
         ed.set_wrap_width(120);
         assert_eq!(ed.wrap_width(), None, "vertical does not wrap");
 
-        assert!(ed.execute("wrap wide").is_err(), "not a width");
+        assert!(ed.execute("view wrap wide").is_err(), "not a width");
     }
 
     /// 縱書 has no 折行 to turn off, and says so.
@@ -25661,17 +25661,17 @@ mod tests {
         ed.execute("layout vertical").unwrap();
         assert!(ed.soft_wrap(), "on, as it always is");
 
-        ed.execute("wrap off").unwrap();
+        ed.execute("view wrap off").unwrap();
         assert!(ed.soft_wrap(), "…and untouched: there was nothing to turn");
         assert!(ed.status().contains("縱書不折行"), "{}", ed.status());
 
         // The measure is a different question, and it *is* answered here.
-        ed.execute("wrap 12").unwrap();
+        ed.execute("view wrap 12").unwrap();
         assert_eq!(ed.zong_length(), 12);
 
         // Horizontally it works as it always did.
         ed.execute("layout horizontal").unwrap();
-        ed.execute("wrap off").unwrap();
+        ed.execute("view wrap off").unwrap();
         assert!(!ed.soft_wrap());
     }
 
@@ -26236,7 +26236,7 @@ mod tests {
         assert_eq!(ed.picker().map(|p| p.caret()), Some(0));
     }
 
-    /// A preview server is a running thing: `:preview` while one is up asks
+    /// A preview server is a running thing: `:view preview` while one is up asks
     /// *where* it is, not for a second one.
     /// `:help` is written from what the editor actually runs on.
     /// `:markdown` writes the pieces a manuscript keeps needing.
@@ -26386,7 +26386,7 @@ mod tests {
 
         let mut ed = Editor::new();
         ed.open_file(&book).unwrap();
-        ed.execute(":preview").unwrap();
+        ed.execute(":view preview").unwrap();
         assert!(
             matches!(ed.take_preview_request(), Some(Preview::Start { .. })),
             "the first one starts a typesetter"
@@ -26395,13 +26395,13 @@ mod tests {
         ed.set_preview_at(Some("http://127.0.0.1:23625".to_string()));
         assert_eq!(ed.preview_at(), Some("http://127.0.0.1:23625"));
 
-        ed.execute(":preview").unwrap();
+        ed.execute(":view preview").unwrap();
         assert!(
             matches!(ed.take_preview_request(), Some(Preview::Show)),
             "the second one asks for the address, not for another server"
         );
 
-        ed.execute(":preview off").unwrap();
+        ed.execute(":view preview off").unwrap();
         assert!(matches!(ed.take_preview_request(), Some(Preview::Stop)));
         std::fs::remove_dir_all(&dir).ok();
     }
@@ -26654,7 +26654,7 @@ mod tests {
         std::fs::remove_dir_all(&dir).ok();
     }
 
-    /// `:w <path>` copies and stays; `:saveas <path>` rebinds and says so.
+    /// `:w <path>` copies and stays; `:write as <path>` rebinds and says so.
     #[test]
     fn writing_a_copy_does_not_move_the_manuscript() {
         let dir = std::env::temp_dir().join(format!("yumete-copy-{}", std::process::id()));
@@ -26684,9 +26684,9 @@ mod tests {
         assert!(ed.execute(&format!(":w {}", copy.display())).is_err());
         assert!(!std::fs::read_to_string(&copy).unwrap().contains('又'));
 
-        // `:saveas` is the one that moves house.
+        // `:write as` is the one that moves house.
         let renamed = dir.join("ch1-final.md");
-        ed.execute(&format!(":saveas {}", renamed.display())).unwrap();
+        ed.execute(&format!(":write as {}", renamed.display())).unwrap();
         assert_eq!(ed.current_buffer().path(), Some(renamed.as_path()));
         assert!(std::fs::read_to_string(&renamed).unwrap().contains('又'));
 
@@ -27049,7 +27049,7 @@ mod tests {
             std::fs::read_to_string(dir.join("ch01.md")).unwrap(),
             "阿甯走進來。\n阿甯坐下。\n"
         );
-        assert!(ed.execute("wa").is_ok());
+        assert!(ed.execute("write all").is_ok());
         assert_eq!(
             std::fs::read_to_string(dir.join("ch01.md")).unwrap(),
             "阿寧走進來。\n阿寧坐下。\n"
@@ -28108,10 +28108,10 @@ mod tests {
         println!("enter table:   {:.1?}", t.elapsed());
 
         let t = Instant::now();
-        ed.execute(":search column 龜").ok();
+        ed.execute(":table find column 龜").ok();
         println!("search column: {:.1?}  ({})", t.elapsed(), ed.status());
         let t = Instant::now();
-        ed.execute(":search row 龜").ok();
+        ed.execute(":table find row 龜").ok();
         println!("search row:    {:.1?}  ({})", t.elapsed(), ed.status());
         std::fs::remove_dir_all(&dir).ok();
     }
@@ -28422,7 +28422,7 @@ mod tests {
     fn the_listing_is_walked_back_the_way_grep_is() {
         let text = format!("{MERGED}{MERGED}");
         let mut ed = merged(&text);
-        ed.execute(":conflicts").unwrap();
+        ed.execute(":check merge").unwrap();
         let listing = ed.current_buffer().text();
         assert!(listing.starts_with("[scratch]:2: HEAD ⇄ feature/枝\n"), "{listing}");
         assert_eq!(listing.lines().count(), 2);
@@ -28431,7 +28431,7 @@ mod tests {
         // And a clean file says so rather than opening an empty buffer.
         let mut ed = merged("一句話\n");
         let before = ed.current_buffer().id();
-        ed.execute(":conflicts").unwrap();
+        ed.execute(":check merge").unwrap();
         assert_eq!(ed.current_buffer().id(), before, "{}", ed.status());
         assert!(ed.status().contains("沒有"), "{}", ed.status());
     }

@@ -73,10 +73,10 @@ pub enum Command {
     WriteQuit(Option<String>),
     /// `:count` (alias `:wc`) — how much has been written.
     Count,
-    /// `:progress` — 寫作進度: what was written today, and every day before
+    /// `:count progress` — 寫作進度: what was written today, and every day before
     /// (Feature #244).
     Progress,
-    /// `:target <字>` — how many 字 a day; `None` is `:target off`.
+    /// `:count target <字>` — how many 字 a day; `None` is `:count target off`.
     Target(Option<usize>),
     /// `:check usage` — which of two spellings the manuscript settled on, and
     /// where it slipped (Feature #233).
@@ -120,7 +120,7 @@ pub enum Command {
     /// found it. The pattern is the one you already looked at. `:replace!`
     /// goes through even where it changes how many cells a row has.
     ReplaceFound(String, bool),
-    /// `:wa` — save every buffer that has changed.
+    /// `:write all` — save every buffer that has changed.
     WriteAll,
     /// `:undo` (alias `:u`) — undo the last change.
     Undo,
@@ -138,14 +138,14 @@ pub enum Command {
     SetChaifen(Option<bool>),
     /// `:scheme <tag>` — switch the input scheme (Feature #86).
     SetScheme(String),
-    /// `:hanging [on|off]` — 句讀 in the margin rather than a square each
+    /// `:view hanging [on|off]` — 句讀 in the margin rather than a square each
     /// (Feature #70). `None` is the bare word, which toggles.
     SetHanging(Option<bool>),
-    /// `:wrap` / `:nowrap` — whether a paragraph too wide for the terminal
+    /// `:view wrap` / `:view wrap off` — whether a paragraph too wide for the terminal
     /// continues on the next screen row (Feature #77).
     SetSoftWrap(bool),
-    /// `:wrap <n>` — write to a measure of `n` columns rather than to the
-    /// window; `:wrap 0` gives the window back (Feature #113).
+    /// `:view wrap <n>` — write to a measure of `n` columns rather than to the
+    /// window; `:view wrap 0` gives the window back (Feature #113).
     SetMeasure(Option<usize>),
     /// `:wheel <n>` — how far one notch of the mouse wheel moves, in whichever
     /// unit the page is set in; `None` only reports (Feature #222).
@@ -163,13 +163,13 @@ pub enum Command {
     Language(String),
     /// `:markdown …` — write a piece of Markdown at the cursor.
     Markdown(MarkdownBit),
-    /// `:typewriter [on|off]` — the cursor's row stays in the middle.
+    /// `:view typewriter [on|off]` — the cursor's row stays in the middle.
     SetTypewriter(Option<bool>),
-    /// `:focus [on|off]` — everything but the 段 being written stands back.
+    /// `:view focus [on|off]` — everything but the 段 being written stands back.
     SetFocus(Option<bool>),
-    /// `:meter [on|off]` — 平仄 and 韻腳 in the margin.
+    /// `:view meter [on|off]` — 平仄 and 韻腳 in the margin.
     SetMeter(Option<bool>),
-    /// `:note [on|off]` — the mark that is wrong, named on the page beside it.
+    /// `:view punct [on|off]` — the mark that is wrong, named on the page beside it.
     SetNote(Option<bool>),
     /// `:table numbers on|off` — the row of column numbers above the header.
     SetTableNumbers(bool),
@@ -196,7 +196,7 @@ pub enum Command {
     /// `:table csv [分隔]` — the `|` table under the cursor becomes delimited
     /// lines (Feature #227). The delimiter defaults to a comma.
     TableToDelimited(char),
-    /// `:numbers fill` — whether the line-number band has a ground of its
+    /// `:view numbers fill` — whether the line-number band has a ground of its
     /// own. `None` toggles.
     SetNumberFill(Option<bool>),
     /// `:shot` — a picture of the page, drawn by the editor itself (#189).
@@ -224,14 +224,14 @@ pub enum Command {
     /// `:indent hint color` — what, if anything, is drawn in the opening
     /// squares.
     SetIndentHint(crate::zong::IndentHint),
-    /// `:bands 2` — how many bands the 縱書 page is divided into (段組).
+    /// `:view bands 2` — how many bands the 縱書 page is divided into (段組).
     SetBands(usize),
 
-    /// `:search row|column <pattern>` — the two directions a search can run.
+    /// `:table find row|column <pattern>` — the two directions a search can run.
     Search { pattern: String, by: Axis },
     /// `:table check` — look the whole table over and list what is wrong.
     CheckTable,
-    /// `:dense` / `:dense off` — pack the 縱書 page as tight as a terminal can
+    /// `:view dense` / `:view dense off` — pack the 縱書 page as tight as a terminal can
     /// (Feature #120).
     SetDense(bool),
     /// One 句 to a 縱 — a view of the page, not a change to the file.
@@ -241,12 +241,12 @@ pub enum Command {
     SetRender(crate::editor::Render),
     /// `:render` with no argument — say which level all four dimensions are on.
     ReportRender,
-    /// `:hud off|basic|full` — how loudly the editor says, beside the caret,
+    /// `:view hud off|basic|full` — how loudly the editor says, beside the caret,
     /// what you have typed (Feature #284).
     SetHud(crate::editor::Hud),
-    /// `:hud` with no argument — say which of the three it is on.
+    /// `:view hud` with no argument — say which of the three it is on.
     ReportHud,
-    /// `:preview` / `:preview off` — hand the file to the real typesetter and
+    /// `:view preview` / `:view preview off` — hand the file to the real typesetter and
     /// show what it makes (Feature #128).
     SetPreview(bool),
     /// `:w!` — write over a file that changed on disk since it was read.
@@ -301,7 +301,7 @@ pub enum Command {
     /// `:syntax [markdown|typst]` — which markup this file is in
     /// (Feature #106). No argument says what it was guessed to be.
     SetSyntax(Option<String>),
-    /// `:saveas <path>` (and `:saveas!`) — write this buffer to another file
+    /// `:write as <path>` (and `:write as!`) — write this buffer to another file
     /// **and go on editing that one**. `:w <path>` is the other half: a copy,
     /// leaving the buffer where it is.
     SaveAs {
@@ -324,11 +324,11 @@ pub enum Command {
     Tutor,
     /// `:toc [n]` — list the headings, or go to the nth.
     Outline(Option<usize>),
-    /// `:row 木` — go to the row this table names by that character.
+    /// `:table jump 木` — go to the row this table names by that character.
     GotoRow(String),
     /// `:grep <pattern>` — search every file in the project.
     Grep(String),
-    /// `:conflicts` — the merge conflicts in this file, as a results buffer
+    /// `:check merge` — the merge conflicts in this file, as a results buffer
     /// (Feature #249).
     Conflicts,
     /// `:diff [path]` — what changed, by 詞, against the file on disk or
@@ -396,9 +396,10 @@ impl fmt::Display for CommandError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             CommandError::Empty => write!(f, "{}", crate::say!("cmd.no-command-typed")),
-            CommandError::Unknown(word) => {
-                write!(f, "{}", crate::say!("cmd.no-such-command", word))
-            }
+            CommandError::Unknown(word) => match moved_to(word) {
+                Some(now) => write!(f, "{}", crate::say!("cmd.no-such-command-but", word, now)),
+                None => write!(f, "{}", crate::say!("cmd.no-such-command", word)),
+            },
             CommandError::MissingArgument(what) => {
                 write!(f, "{}", crate::say!("cmd.needs-an-argument", what))
             }
@@ -478,11 +479,15 @@ pub fn parse(input: &str) -> Result<Command, CommandError> {
         }
         "new" | "enew" => Ok(Command::NewBuffer),
         // `!` is "I know, and mine wins" — over a file that changed on disk.
-        "write!" | "w!" => Ok(Command::WriteForce(if rest.is_empty() {
-            None
-        } else {
-            Some(rest.to_string())
-        })),
+        "write!" | "w!" => match rest {
+            "as" => Err(CommandError::MissingArgument("write as")),
+            _ if rest.starts_with("as ") => Ok(Command::SaveAs {
+                path: rest["as ".len()..].trim().to_string(),
+                force: true,
+            }),
+            "" => Ok(Command::WriteForce(None)),
+            path => Ok(Command::WriteForce(Some(path.to_string()))),
+        },
         // The other half of `:w!`: take what is on disk and lose what is here.
         // `:e!` and `:o!` used to say this; they are gone, with no alias and no
         // hint, because `open!` reads as 「open, but harder」 and what it
@@ -508,47 +513,56 @@ pub fn parse(input: &str) -> Result<Command, CommandError> {
             "" => None,
             word => Some(switch("readonly", word)?),
         })),
-        // Rebinding, said out loud. `:w <path>` is a copy.
-        "saveas" | "sav" | "saveas!" | "sav!" => {
-            if rest.is_empty() {
-                Err(CommandError::MissingArgument("saveas"))
-            } else {
-                Ok(Command::SaveAs {
-                    path: rest.to_string(),
-                    force: word.ends_with('!'),
-                })
-            }
-        }
-        "write" | "w" => Ok(Command::Write(if rest.is_empty() {
-            None
-        } else {
-            Some(rest.to_string())
-        })),
+        // `all` and `as` are what `:wa` and `:saveas` were (§5.2.3 ③).
+        // Anything else after `:write` is still a file name, and `:w <path>`
+        // is still a copy — `as` is the one that rebinds.
+        "write" | "w" => match rest {
+            "" => Ok(Command::Write(None)),
+            "all" => Ok(Command::WriteAll),
+            "as" => Err(CommandError::MissingArgument("write as")),
+            _ if rest.starts_with("as ") => Ok(Command::SaveAs {
+                path: rest["as ".len()..].trim().to_string(),
+                force: false,
+            }),
+            path => Ok(Command::Write(Some(path.to_string()))),
+        },
         "wq" | "x" => Ok(Command::WriteQuit(if rest.is_empty() {
             None
         } else {
             Some(rest.to_string())
         })),
-        "count" | "wc" => Ok(Command::Count),
-        // A bare `:target` is the question, not half a command: somebody who
-        // types it wants to know what the target is and how far off it is, and
-        // that is what `:progress` answers.
-        "progress" | "prog" => Ok(Command::Progress),
-        "target" => match rest {
-            "" => Ok(Command::Progress),
-            "off" | "none" | "0" => Ok(Command::Target(None)),
-            n => match n.parse::<usize>() {
-                Ok(n) => Ok(Command::Target(Some(n))),
-                Err(_) => Err(CommandError::InvalidArgument {
-                    command: "target",
-                    value: n.to_string(),
-                }),
+        "count" | "wc" => match rest {
+            "" => Ok(Command::Count),
+            // 字數 is one subject: how much there is, how much today, and how
+            // much was asked for. These were `:count`, `:progress` and
+            // `:target` (§5.2.3 ③).
+            "progress" => Ok(Command::Progress),
+            // A bare `:count target` is the question, not half a command:
+            // somebody who types it wants to know what the target is and how
+            // far off it is, and that is what `progress` answers.
+            "target" => Ok(Command::Progress),
+            _ if rest.starts_with("target ") => match rest["target ".len()..].trim() {
+                "off" | "none" | "0" => Ok(Command::Target(None)),
+                n => match n.parse::<usize>() {
+                    Ok(n) => Ok(Command::Target(Some(n))),
+                    Err(_) => Err(CommandError::InvalidArgument {
+                        command: "count target",
+                        value: n.to_string(),
+                    }),
+                },
             },
+            other => Err(CommandError::InvalidArgument {
+                command: "count",
+                value: other.to_string(),
+            }),
         },
         "check" => match rest {
             "usage" => Ok(Command::CheckUsage),
             "punct" => Ok(Command::CheckPunct),
             "charset" => Ok(Command::CheckCharset),
+            // Was `:conflicts` — the subject is a merge, `:check` is the verb
+            // (§5.2.3 ④).
+            "merge" => Ok(Command::Conflicts),
             // `:check` on its own asks what to check rather than guessing:
             // 用字 is the first of several, and the day 標點 lands a bare
             // `:check` that had quietly meant one of them would change what
@@ -595,13 +609,6 @@ pub fn parse(input: &str) -> Result<Command, CommandError> {
             .map_err(|_| CommandError::MissingArgument("goto")),
         "recover" => Ok(Command::Recover { discard: false }),
         "recover!" => Ok(Command::Recover { discard: true }),
-        // Closing *this file* rather than the editor, spelled the way helix
-        // spells it (`:bc`, `:bclose`) — see the note on [`Command::Quit`].
-        // Not `:Q`: one Shift away from `:q` and meaning something else is
-        // exactly where a hand slips, and every other command here is
-        // lowercase.
-        "bclose" | "bc" => Ok(Command::CloseBuffer { force: false }),
-        "bclose!" | "bc!" => Ok(Command::CloseBuffer { force: true }),
         "quit" | "q" => Ok(Command::Quit { force: false }),
         "quit!" | "q!" => Ok(Command::Quit { force: true }),
         "quitall" | "qa" => Ok(Command::QuitAll { force: false }),
@@ -766,36 +773,6 @@ pub fn parse(input: &str) -> Result<Command, CommandError> {
             };
             Ok(Command::Screenshot { shot, force })
         }
-        "numbers" => match rest {
-            // On its own it says nothing about *what* of the numbers, so it
-            // asks rather than guessing.
-            "" => Err(CommandError::MissingArgument("numbers")),
-            "fill" => Ok(Command::SetNumberFill(None)),
-            "fill on" => Ok(Command::SetNumberFill(Some(true))),
-            "fill off" => Ok(Command::SetNumberFill(Some(false))),
-            other => Err(CommandError::InvalidArgument {
-                command: "numbers",
-                value: other.to_string(),
-            }),
-        },
-        // The appearance on its own: which way round the theme's inks go.
-        "appearance" => {
-            let mut mood = None;
-            for word in rest.split_whitespace() {
-                match pick(word, MOODS).map(|w| w.name) {
-                    Some("system") => mood = Some(Mood::System),
-                    Some("dark") => mood = Some(Mood::Dark),
-                    Some("light") => mood = Some(Mood::Light),
-                    _ => {
-                        return Err(CommandError::InvalidArgument {
-                            command: "appearance",
-                            value: word.to_string(),
-                        })
-                    }
-                }
-            }
-            Ok(Command::Theme { name: None, mood })
-        }
 
         "theme" => {
             let mut name = None;
@@ -820,10 +797,6 @@ pub fn parse(input: &str) -> Result<Command, CommandError> {
             Ok(Command::Theme { name, mood })
         }
 
-        "hanging" => Ok(Command::SetHanging(match rest {
-            "" => None,
-            word => Some(switch("hanging", word)?),
-        })),
         "clipboard" => match rest {
             "yank" => Ok(Command::Clipboard { yank: true }),
             "paste" => Ok(Command::Clipboard { yank: false }),
@@ -855,10 +828,115 @@ pub fn parse(input: &str) -> Result<Command, CommandError> {
                 })
             }
         }
-        "preview" => Ok(Command::SetPreview(match rest {
-            "" => true,
-            word => switch("preview", word)?,
-        })),
+        // 版面 (§5.2.3 ③): how the page is *looked at*, and nothing that
+        // changes the file. Every word below stood at the top level until
+        // 2026-09-08. **The parent is transparent** — what may follow a word
+        // is what always followed the command — so these are the arms they
+        // were, one level deeper.
+        "view" => {
+            let (head, rest) = match rest.split_once(char::is_whitespace) {
+                Some((head, rest)) => (head, rest.trim()),
+                None => (rest, ""),
+            };
+            match head {
+                // On its own it says nothing about *which* of the twelve, so
+                // it asks rather than picking one.
+                "" => Err(CommandError::MissingArgument("view")),
+                // On its own it turns wrapping on and leaves the measure
+                // alone; a number sets the measure; `0` gives the window
+                // back; `off` stops wrapping altogether.
+                "wrap" => match rest {
+                    "" | "on" => Ok(Command::SetSoftWrap(true)),
+                    "off" => Ok(Command::SetSoftWrap(false)),
+                    "0" => Ok(Command::SetMeasure(None)),
+                    n => match n.parse::<usize>() {
+                        Ok(n) => Ok(Command::SetMeasure(Some(n))),
+                        Err(_) => Err(CommandError::InvalidArgument {
+                            command: "view wrap",
+                            value: n.to_string(),
+                        }),
+                    },
+                },
+                "dense" => Ok(Command::SetDense(match rest {
+                    "" => true,
+                    word => switch("view dense", word)?,
+                })),
+                "bands" => match rest {
+                    "" | "on" | "2" => Ok(Command::SetBands(2)),
+                    "off" | "1" => Ok(Command::SetBands(1)),
+                    n => match n.parse::<usize>() {
+                        Ok(n) if (1..=4).contains(&n) => Ok(Command::SetBands(n)),
+                        _ => Err(CommandError::InvalidArgument {
+                            command: "view bands",
+                            value: n.to_string(),
+                        }),
+                    },
+                },
+                "sentence" => Ok(Command::SetSentences(match rest {
+                    "" => true,
+                    word => switch("view sentence", word)?,
+                })),
+                "hanging" => Ok(Command::SetHanging(match rest {
+                    "" => None,
+                    word => Some(switch("view hanging", word)?),
+                })),
+                "numbers" => match rest {
+                    // On its own it says nothing about *what* of the
+                    // numbers, so it asks rather than guessing.
+                    "" => Err(CommandError::MissingArgument("view numbers")),
+                    "fill" => Ok(Command::SetNumberFill(None)),
+                    "fill on" => Ok(Command::SetNumberFill(Some(true))),
+                    "fill off" => Ok(Command::SetNumberFill(Some(false))),
+                    other => Err(CommandError::InvalidArgument {
+                        command: "view numbers",
+                        value: other.to_string(),
+                    }),
+                },
+                "typewriter" => Ok(Command::SetTypewriter(match rest {
+                    "" => Some(true),
+                    "toggle" => None,
+                    word => Some(switch("view typewriter", word)?),
+                })),
+                "focus" => Ok(Command::SetFocus(match rest {
+                    "" => Some(true),
+                    "toggle" => None,
+                    word => Some(switch("view focus", word)?),
+                })),
+                "meter" => Ok(Command::SetMeter(match rest {
+                    "" => Some(true),
+                    "toggle" => None,
+                    word => Some(switch("view meter", word)?),
+                })),
+                // Was `:note`, which was never about footnotes (§5.2.3 ④).
+                "punct" => Ok(Command::SetNote(match rest {
+                    "" => Some(true),
+                    "toggle" => None,
+                    word => Some(switch("view punct", word)?),
+                })),
+                // The bare word reports, the same shape `:render` has — and
+                // for the same reason: with three levels, 「which one am I
+                // on」 is a better use of the word than a fourth spelling of
+                // the middle one.
+                "hud" => match rest {
+                    "" => Ok(Command::ReportHud),
+                    "off" => Ok(Command::SetHud(crate::editor::Hud::Off)),
+                    "basic" => Ok(Command::SetHud(crate::editor::Hud::Basic)),
+                    "full" => Ok(Command::SetHud(crate::editor::Hud::Full)),
+                    other => Err(CommandError::InvalidArgument {
+                        command: "view hud",
+                        value: other.to_string(),
+                    }),
+                },
+                "preview" => Ok(Command::SetPreview(match rest {
+                    "" => true,
+                    word => switch("view preview", word)?,
+                })),
+                other => Err(CommandError::InvalidArgument {
+                    command: "view",
+                    value: other.to_string(),
+                }),
+            }
+        }
         // **The bare word reports** (#283). It used to mean 中階, back when
         // there were two levels and 「the other one」 named itself. With three
         // — and three more dimensions taking their level from this one —
@@ -873,61 +951,6 @@ pub fn parse(input: &str) -> Result<Command, CommandError> {
                 command: "render",
                 value: other.to_string(),
             }),
-        },
-        // The bare word reports, the same shape `:render` has — and for the
-        // same reason: with three levels, 「which one am I on」 is a better use
-        // of the word than a fourth spelling of the middle one.
-        "hud" => match rest {
-            "" => Ok(Command::ReportHud),
-            "off" => Ok(Command::SetHud(crate::editor::Hud::Off)),
-            "basic" => Ok(Command::SetHud(crate::editor::Hud::Basic)),
-            "full" => Ok(Command::SetHud(crate::editor::Hud::Full)),
-            other => Err(CommandError::InvalidArgument {
-                command: "hud",
-                value: other.to_string(),
-            }),
-        },
-        // `:wrap` on its own still means what it always meant — turn wrapping
-        // on — and leaves the measure alone; a number sets the measure.
-        "dense" => Ok(Command::SetDense(match rest {
-            "" => true,
-            word => switch("dense", word)?,
-        })),
-        "sentence" => Ok(Command::SetSentences(match rest {
-            "" => true,
-            word => switch("sentence", word)?,
-        })),
-        "search" => {
-            // `:search <pattern>` with no direction is a row search, because
-            // that is what a search is anywhere but a table.
-            let (by, pattern) = match rest.split_once(char::is_whitespace) {
-                Some((word, rest)) if pick(word, AXIS).map(|w| w.name) == Some("column") => {
-                    (Axis::Column, rest.trim())
-                }
-                Some((word, rest)) if pick(word, AXIS).map(|w| w.name) == Some("row") => {
-                    (Axis::Row, rest.trim())
-                }
-                _ => (Axis::Row, rest),
-            };
-            if pattern.is_empty() {
-                Err(CommandError::MissingArgument("search"))
-            } else {
-                Ok(Command::Search {
-                    pattern: pattern.to_string(),
-                    by,
-                })
-            }
-        }
-        "bands" => match rest {
-            "" | "on" | "2" => Ok(Command::SetBands(2)),
-            "off" | "1" => Ok(Command::SetBands(1)),
-            n => match n.parse::<usize>() {
-                Ok(n) if (1..=4).contains(&n) => Ok(Command::SetBands(n)),
-                _ => Err(CommandError::InvalidArgument {
-                    command: "bands",
-                    value: n.to_string(),
-                }),
-            },
         },
         "indent" => match rest {
             // A number is the *width*; a word is the level. `:indent 4` on a
@@ -975,26 +998,6 @@ pub fn parse(input: &str) -> Result<Command, CommandError> {
                 value: other.to_string(),
             }),
         },
-        "typewriter" => Ok(Command::SetTypewriter(match rest {
-            "" => Some(true),
-            "toggle" => None,
-            word => Some(switch("typewriter", word)?),
-        })),
-        "focus" => Ok(Command::SetFocus(match rest {
-            "" => Some(true),
-            "toggle" => None,
-            word => Some(switch("focus", word)?),
-        })),
-        "meter" => Ok(Command::SetMeter(match rest {
-            "" => Some(true),
-            "toggle" => None,
-            word => Some(switch("meter", word)?),
-        })),
-        "note" => Ok(Command::SetNote(match rest {
-            "" => Some(true),
-            "toggle" => None,
-            word => Some(switch("note", word)?),
-        })),
         "table" => match rest {
             // **The bare word is the door; a level is a level.** `:table`
             // reads the table the cursor is in — that is what it has always
@@ -1102,25 +1105,43 @@ pub fn parse(input: &str) -> Result<Command, CommandError> {
                     }),
                 }
             }
+            // Was `:row` (§5.2.3 ④): `row` under `:table` would have meant
+            // the axis, and the axis is what `find` takes.
+            _ if rest == "jump" || rest.starts_with("jump ") => {
+                let name = rest["jump".len()..].trim();
+                if name.is_empty() {
+                    Err(CommandError::MissingArgument("table jump"))
+                } else {
+                    Ok(Command::GotoRow(name.to_string()))
+                }
+            }
+            // Was `:search`, whose two words *are* the axis (§5.2.3 ④). With
+            // no direction it is a row search, because that is what a search
+            // is anywhere but a table.
+            _ if rest == "find" || rest.starts_with("find ") => {
+                let rest = rest["find".len()..].trim();
+                let (by, pattern) = match rest.split_once(char::is_whitespace) {
+                    Some((word, rest)) if pick(word, AXIS).map(|w| w.name) == Some("column") => {
+                        (Axis::Column, rest.trim())
+                    }
+                    Some((word, rest)) if pick(word, AXIS).map(|w| w.name) == Some("row") => {
+                        (Axis::Row, rest.trim())
+                    }
+                    _ => (Axis::Row, rest),
+                };
+                if pattern.is_empty() {
+                    Err(CommandError::MissingArgument("table find"))
+                } else {
+                    Ok(Command::Search {
+                        pattern: pattern.to_string(),
+                        by,
+                    })
+                }
+            }
             other => Err(CommandError::InvalidArgument {
                 command: "table",
                 value: other.to_string(),
             }),
-        },
-        // On its own it turns wrapping on and leaves the measure alone; a
-        // number sets the measure; `0` gives the window back; `off` stops
-        // wrapping altogether.
-        "wrap" => match rest {
-            "" | "on" => Ok(Command::SetSoftWrap(true)),
-            "off" => Ok(Command::SetSoftWrap(false)),
-            "0" => Ok(Command::SetMeasure(None)),
-            n => match n.parse::<usize>() {
-                Ok(n) => Ok(Command::SetMeasure(Some(n))),
-                Err(_) => Err(CommandError::InvalidArgument {
-                    command: "wrap",
-                    value: n.to_string(),
-                }),
-            },
         },
         // On its own it says what the step is; a number sets it. `0` is the
         // terminal's own step — one unit a notch.
@@ -1161,7 +1182,6 @@ pub fn parse(input: &str) -> Result<Command, CommandError> {
                 force: word.ends_with('!'),
             })
         }
-        "conflicts" => Ok(Command::Conflicts),
         "grep" | "gr" => {
             if rest.is_empty() {
                 Err(CommandError::MissingArgument("grep"))
@@ -1173,19 +1193,11 @@ pub fn parse(input: &str) -> Result<Command, CommandError> {
             true => None,
             false => Some(rest.trim().to_string()),
         })),
-        "wa" | "wall" => Ok(Command::WriteAll),
         "replace" | "replace!" => {
             if rest.trim().is_empty() {
                 Err(CommandError::MissingArgument("replace"))
             } else {
                 Ok(Command::ReplaceFound(rest.to_string(), word.ends_with('!')))
-            }
-        }
-        "row" => {
-            if rest.is_empty() {
-                Err(CommandError::MissingArgument("row"))
-            } else {
-                Ok(Command::GotoRow(rest.to_string()))
             }
         }
         "tutor" => Ok(Command::Tutor),
@@ -1380,6 +1392,13 @@ pub enum Args {
     Words(&'static [Word]),
     /// A path, completed from the file system by the caller.
     Path,
+    /// A path **or** one of these words — `:write`, and so far only `:write`.
+    ///
+    /// Not a mixture for its own sake: `:write all` and `:write as` had to
+    /// join `:write` (§5.2.3 ③) without `:w 第三章.md` ceasing to be a path,
+    /// and a word list that swallowed the path would have taken 中文 file
+    /// names away from the one command that most needs them (#225).
+    PathOr(&'static [Word]),
     /// Anything at all; the string is the placeholder to show while typing.
     Free(&'static str),
     /// One of the input schemes — **whichever ones are installed** (#169).
@@ -1403,7 +1422,7 @@ impl Args {
     /// accessor so there is one place to be right.
     pub fn words(&self) -> Option<&'static [Word]> {
         match self {
-            Args::Words(list) => Some(list),
+            Args::Words(list) | Args::PathOr(list) => Some(list),
             Args::Schemes => Some(schemes()),
             _ => None,
         }
@@ -1412,6 +1431,16 @@ impl Args {
     /// What may follow the command, for a listing: `<檔名>`, `on|off`, or
     /// nothing at all.
     pub fn hint(&self) -> String {
+        // A path beside its words reads as both, in that order: the file name
+        // is what `:write` is for, and `all`｜`as` are the two exceptions.
+        if let Args::PathOr(words) = self {
+            let mut out = say!("cmd.arg.path");
+            for w in *words {
+                out.push('｜');
+                out.push_str(w.name);
+            }
+            return out;
+        }
         match self.words() {
             Some(words) => words
                 .iter()
@@ -1577,7 +1606,7 @@ impl Need {
     pub fn how(self) -> &'static str {
         match self {
             Need::Vertical => ":layout vertical",
-            Need::Loose => ":dense off",
+            Need::Loose => ":view dense off",
             Need::Table => ":table",
             Need::Scheme => ":yume scheme",
         }
@@ -1736,13 +1765,15 @@ const EXPORT_FORMATS: &[Word] = &[
 /// `:recov!` `:recove!` were all 「沒有這個命令」 while `:rec` was fine. One
 /// list cannot drift from itself.
 const FORCEABLE: &[&str] = &[
-    "bclose!",
+    // Spelled as a whole line, because the fold moved this bang off the head
+    // and onto a word: `:bclose!` is now `:buffer close!`, and a bang belongs
+    // to the line it ends, not to `buffer`.
+    "buffer close!",
     "quitall!",
     "write!",
     "reload!",
     "quit!",
     "export!",
-    "saveas!",
     "replace!",
     "recover!",
     "shot!",
@@ -2150,6 +2181,27 @@ const TABLE: &[Word] = &[
     },
     // Neither of these needs a table to be *open*: turning a block of text into
     // one is how you get a table in the first place.
+    // Was `:row` — under `:table`, `row` would have meant the axis, and the
+    // axis is what `find` takes (§5.2.3 ④).
+    Word {
+        name: "jump",
+        help: "cmd.table.jump",
+        needs: &[Need::Table],
+        then: Args::Free("<那一行的名字>"),
+    },
+    // Was `:search`, whose two words *are* the axis (§5.2.3 ④).
+    //
+    // **No `Need::Table`**, for the reason the parse arm gives: with no
+    // direction this is a row search, and a row search away from a table is an
+    // ordinary search — which is all `:search` ever was. Standing under
+    // `:table` does not make it need one; asking for one here made
+    // `:table find 第55行` answer 「需要：表格模式」 and search nothing.
+    Word {
+        name: "find",
+        help: "cmd.table.find",
+        needs: &[],
+        then: Args::Words(AXIS),
+    },
     Word {
         name: "pipe",
         help: "cmd.table.pipe",
@@ -2252,7 +2304,7 @@ const BUFFERS: &[Word] = &[
     },
 ];
 
-/// What `:wrap` takes.
+/// What `:view wrap` takes.
 const WRAP: &[Word] = &[
     Word {
         name: "on",
@@ -2379,6 +2431,26 @@ const SYNTAXES: &[Word] = &[
 /// dark` are both sentences — the theme's name is worth saying and worth
 /// leaving out, and neither should be a special case.
 const THEMES: &[Word] = &[
+    // Was `:appearance` (§5.2.3 ③). The `theme` arm has always accepted these
+    // three; only the listing did not know them.
+    Word {
+        name: "system",
+        help: "cmd.moods.system",
+        needs: &[],
+        then: Args::None,
+    },
+    Word {
+        name: "dark",
+        help: "cmd.moods.dark",
+        needs: &[],
+        then: Args::None,
+    },
+    Word {
+        name: "light",
+        help: "cmd.moods.light",
+        needs: &[],
+        then: Args::None,
+    },
     Word {
         // 墨香
         name: "ink",
@@ -2501,7 +2573,7 @@ const HINTS: &[Word] = &[
     },
 ];
 
-/// `:numbers` and what may follow it.
+/// `:view numbers` and what may follow it.
 const NUMBERS: &[Word] = &[
     Word {
         name: "fill",
@@ -2560,7 +2632,7 @@ const STROKES: &[Word] = &[
 /// **A theme and an appearance are two questions**, and mixing them in one
 /// list made `:theme` offer 「moxiang、heibai、system、dark、light」 as though
 /// they were five of a kind. They are not: one says which set of inks, the
-/// other says which way round they go. `:appearance` asks the second on its
+/// other says which way round they go. `:theme` asks the second on its
 /// own, and `:theme moxiang dark` still asks both in one line.
 const MOODS: &[Word] = &[
     Word {
@@ -2792,6 +2864,14 @@ const CHECK: &[Word] = &[
         needs: &[],
         then: Args::None,
     },
+    // Was `:conflicts`. The subject is a merge; `:check` is what one does to
+    // it (§5.2.3 ④).
+    Word {
+        name: "merge",
+        help: "cmd.check.merge",
+        needs: &[],
+        then: Args::None,
+    },
     Word {
         name: "punct",
         help: "cmd.check.punct",
@@ -2884,17 +2964,17 @@ const RELOAD: &[Word] = &[Word {
 /// What a word means to a command that offers 「on｜off」.
 ///
 /// A function, because **the reading is the half that goes stale**. Ten arms
-/// had written it out by hand and the eleventh forgot: `:hanging` declares
+/// had written it out by hand and the eleventh forgot: `:view hanging` declares
 /// `Args::Words(ON_OFF)`, the hint prints `on｜off`, the menu offers both —
 /// and `parse` was `"hanging" => Ok(Command::ToggleHanging)` with `rest` never
-/// read, so `:hanging off` turned hanging punctuation **on** (§5.2.2 fault 2).
+/// read, so `:view hanging off` turned hanging punctuation **on** (§5.2.2 fault 2).
 /// `every_listed_command_parses` could not see it: `:hanging off` *parses*. It
 /// simply did not listen.
 ///
 /// `pick` rather than an equality test, because that is the rule everywhere
 /// else — the menu shows `of` as `off`'s shortest spelling, so `of` has to
 /// mean it. **What a missing word means stays with the caller**: `:readonly`
-/// on its own toggles, `:dense` on its own is 密排, and neither is this
+/// on its own toggles, `:view dense` on its own is 密排, and neither is this
 /// function's to decide.
 fn switch(command: &'static str, word: &str) -> Result<bool, CommandError> {
     match pick(word, ON_OFF).map(|w| w.name) {
@@ -2906,6 +2986,134 @@ fn switch(command: &'static str, word: &str) -> Result<bool, CommandError> {
         }),
     }
 }
+
+/// 字數 — what `:count` can be asked (§5.2.3 ③).
+///
+/// One subject, three questions: how much there is, how much today, and how
+/// much was asked for. They were `:count`, `:progress` and `:target`.
+pub const COUNT: &[Word] = &[
+    Word {
+        name: "progress",
+        help: "cmd.count.progress",
+        needs: &[],
+        then: Args::None,
+    },
+    Word {
+        name: "target",
+        help: "cmd.count.target",
+        needs: &[],
+        then: Args::Free("<字數>｜off"),
+    },
+];
+
+/// The two words `:write` takes that are not a file name (§5.2.3 ③).
+///
+/// `:write all` was `:wa`, `:write as <檔名>` was `:saveas`. Everything else
+/// after `:write` is still a path, which is why the argument is
+/// [`Args::PathOr`] and not a plain word list.
+pub const WRITE: &[Word] = &[
+    Word {
+        name: "all",
+        help: "cmd.write.all",
+        needs: &[],
+        then: Args::None,
+    },
+    Word {
+        name: "as",
+        help: "cmd.write.as",
+        needs: &[],
+        then: Args::Path,
+    },
+];
+
+/// 版面 — the twelve words of `:view` (§5.2.3 ③).
+///
+/// **Nothing here changes the file.** That is the whole membership test, and
+/// it is why `:render`, `:indent`, `:ruby` and `:table` stayed at the top
+/// level: those four are the dimensions the page is *written* in (§5.7), and
+/// `:render` sets three of them at once. These twelve say how the page is
+/// looked at, and every one of them stood at the top level until 2026-09-08.
+///
+/// **The parent is transparent.** What may follow a word here is exactly what
+/// followed the command it was — `:view bands 3` is `:bands 3`, needs and all
+/// — so the fold cost the words nothing but the four keystrokes of `:v `.
+pub const VIEW: &[Word] = &[
+    Word {
+        name: "wrap",
+        help: "cmd.view.wrap",
+        needs: &[],
+        then: Args::Words(WRAP),
+    },
+    Word {
+        name: "dense",
+        help: "cmd.view.dense",
+        needs: &[],
+        then: Args::Words(ON_OFF),
+    },
+    Word {
+        name: "bands",
+        help: "cmd.view.bands",
+        needs: &[Need::Vertical],
+        then: Args::Free("<幾條，1–4；不寫就是 2>"),
+    },
+    Word {
+        name: "sentence",
+        help: "cmd.view.sentence",
+        needs: &[Need::Vertical],
+        then: Args::Words(ON_OFF),
+    },
+    Word {
+        name: "hanging",
+        help: "cmd.view.hanging",
+        needs: &[Need::Vertical, Need::Loose],
+        then: Args::Words(ON_OFF),
+    },
+    Word {
+        name: "numbers",
+        help: "cmd.view.numbers",
+        needs: &[],
+        then: Args::Words(NUMBERS),
+    },
+    Word {
+        name: "typewriter",
+        help: "cmd.view.typewriter",
+        needs: &[],
+        then: Args::Words(ON_OFF),
+    },
+    Word {
+        name: "focus",
+        help: "cmd.view.focus",
+        needs: &[],
+        then: Args::Words(ON_OFF),
+    },
+    Word {
+        name: "meter",
+        help: "cmd.view.meter",
+        needs: &[],
+        then: Args::Words(ON_OFF),
+    },
+    // Was `:note`, and `:note` never named what it did (§5.2.3 ④): it draws
+    // 標點 in the margin, and a reader who guessed at the name guessed
+    // footnotes every time.
+    Word {
+        name: "punct",
+        help: "cmd.view.punct",
+        needs: &[],
+        then: Args::Words(ON_OFF),
+    },
+    Word {
+        name: "hud",
+        help: "cmd.view.hud",
+        needs: &[],
+        then: Args::Words(HUD),
+    },
+    Word {
+        name: "preview",
+        help: "cmd.view.preview",
+        needs: &[],
+        then: Args::Words(ON_OFF),
+    },
+];
 
 /// The two words every switch takes — read back by [`switch`].
 const ON_OFF: &[Word] = &[
@@ -2950,7 +3158,7 @@ pub const COMMANDS: &[Entry] = &[
         aliases: &["w"],
         help: "cmd.commands.write",
         needs: &[],
-        args: Args::Path,
+        args: Args::PathOr(WRITE),
     },
     Entry {
         name: "wq",
@@ -2992,7 +3200,7 @@ pub const COMMANDS: &[Entry] = &[
         aliases: &["wc"],
         help: "cmd.commands.count",
         needs: &[],
-        args: Args::None,
+        args: Args::Words(COUNT),
     },
     Entry {
         name: "check",
@@ -3044,20 +3252,6 @@ pub const COMMANDS: &[Entry] = &[
         args: Args::Words(WORD_TOPICS),
     },
     Entry {
-        name: "progress",
-        aliases: &["prog"],
-        help: "cmd.commands.progress",
-        needs: &[],
-        args: Args::None,
-    },
-    Entry {
-        name: "target",
-        aliases: &[],
-        help: "cmd.commands.target",
-        needs: &[],
-        args: Args::Free("<字數>｜off"),
-    },
-    Entry {
         name: "layout",
         aliases: &["lay"],
         help: "cmd.commands.layout",
@@ -3072,13 +3266,6 @@ pub const COMMANDS: &[Entry] = &[
         args: Args::Words(THEMES),
     },
     Entry {
-        name: "numbers",
-        aliases: &[],
-        help: "cmd.commands.numbers",
-        needs: &[],
-        args: Args::Words(NUMBERS),
-    },
-    Entry {
         name: "shot",
         aliases: &[],
         help: "cmd.commands.shot",
@@ -3086,25 +3273,11 @@ pub const COMMANDS: &[Entry] = &[
         args: Args::Words(SHOT),
     },
     Entry {
-        name: "appearance",
-        aliases: &[],
-        help: "cmd.commands.appearance",
-        needs: &[],
-        args: Args::Words(MOODS),
-    },
-    Entry {
         name: "yume",
         aliases: &[],
         help: "cmd.commands.yume",
         needs: &[],
         args: Args::Words(YUME),
-    },
-    Entry {
-        name: "hanging",
-        aliases: &[],
-        help: "cmd.commands.hanging",
-        needs: &[Need::Vertical, Need::Loose],
-        args: Args::Words(ON_OFF),
     },
     Entry {
         name: "syntax",
@@ -3135,11 +3308,11 @@ pub const COMMANDS: &[Entry] = &[
         args: Args::None,
     },
     Entry {
-        name: "preview",
+        name: "view",
         aliases: &[],
-        help: "cmd.commands.preview",
+        help: "cmd.commands.view",
         needs: &[],
-        args: Args::Words(ON_OFF),
+        args: Args::Words(VIEW),
     },
     Entry {
         name: "render",
@@ -3149,36 +3322,6 @@ pub const COMMANDS: &[Entry] = &[
         args: Args::Words(RENDER),
     },
     Entry {
-        name: "hud",
-        aliases: &[],
-        help: "cmd.commands.hud",
-        needs: &[],
-        args: Args::Words(HUD),
-    },
-    Entry {
-        name: "search",
-        aliases: &[],
-        help: "cmd.commands.search",
-        needs: &[],
-        args: Args::Words(AXIS),
-    },
-    Entry {
-        name: "bands",
-        aliases: &[],
-        help: "cmd.commands.bands",
-        needs: &[Need::Vertical],
-        args: Args::Free("<幾條，1–4；不寫就是 2>"),
-    },
-    Entry {
-        name: "sentence",
-        aliases: &[],
-        help: "cmd.commands.sentence",
-        // 竪排 only: a 句 gets a 縱 of its own, and 橫排 has no 縱. `:sentence!`
-        // turns the page for you rather than refusing.
-        needs: &[Need::Vertical],
-        args: Args::Words(ON_OFF),
-    },
-    Entry {
         name: "indent",
         aliases: &[],
         help: "cmd.commands.indent",
@@ -3186,29 +3329,11 @@ pub const COMMANDS: &[Entry] = &[
         args: Args::Words(INDENT),
     },
     Entry {
-        name: "dense",
-        aliases: &[],
-        help: "cmd.commands.dense",
-        // **Both layouts**: 密排 packs a 縱書 page by taking the gap between
-        // 縱 away, and packs a 橫排 page by taking the row between rows away.
-        // It used to need 竪排, which made 「疏排」 unsayable on the page most
-        // writing is done on.
-        needs: &[],
-        args: Args::Words(ON_OFF),
-    },
-    Entry {
         name: "table",
         aliases: &[],
         help: "cmd.commands.table",
         needs: &[],
         args: Args::Words(TABLE),
-    },
-    Entry {
-        name: "wrap",
-        aliases: &[],
-        help: "cmd.commands.wrap",
-        needs: &[],
-        args: Args::Words(WRAP),
     },
     Entry {
         name: "wheel",
@@ -3232,13 +3357,6 @@ pub const COMMANDS: &[Entry] = &[
         args: Args::Words(BUFFERS),
     },
     Entry {
-        name: "bclose",
-        aliases: &["bc"],
-        help: "cmd.commands.bclose",
-        needs: &[],
-        args: Args::None,
-    },
-    Entry {
         name: "format",
         aliases: &["fmt"],
         help: "cmd.commands.format",
@@ -3260,34 +3378,6 @@ pub const COMMANDS: &[Entry] = &[
         args: Args::Words(MARKDOWN_BITS),
     },
     Entry {
-        name: "typewriter",
-        aliases: &[],
-        help: "cmd.commands.typewriter",
-        needs: &[],
-        args: Args::Words(ON_OFF),
-    },
-    Entry {
-        name: "focus",
-        aliases: &[],
-        help: "cmd.commands.focus",
-        needs: &[],
-        args: Args::Words(ON_OFF),
-    },
-    Entry {
-        name: "meter",
-        aliases: &[],
-        help: "cmd.commands.meter",
-        needs: &[],
-        args: Args::Words(ON_OFF),
-    },
-    Entry {
-        name: "note",
-        aliases: &[],
-        help: "cmd.commands.note",
-        needs: &[],
-        args: Args::Words(ON_OFF),
-    },
-    Entry {
         name: "tutor",
         aliases: &[],
         help: "cmd.commands.tutor",
@@ -3302,25 +3392,11 @@ pub const COMMANDS: &[Entry] = &[
         args: Args::Words(HELP_SECTIONS),
     },
     Entry {
-        name: "saveas",
-        aliases: &["sav"],
-        help: "cmd.commands.saveas",
-        needs: &[],
-        args: Args::Free("<檔名>"),
-    },
-    Entry {
         name: "export",
         aliases: &["ex"],
         help: "cmd.commands.export",
         needs: &[],
         args: Args::Words(EXPORT_FORMATS),
-    },
-    Entry {
-        name: "conflicts",
-        aliases: &[],
-        help: "cmd.commands.conflicts",
-        needs: &[],
-        args: Args::None,
     },
     Entry {
         name: "grep",
@@ -3342,20 +3418,6 @@ pub const COMMANDS: &[Entry] = &[
         help: "cmd.commands.replace",
         needs: &[],
         args: Args::Free("<換成什麼>"),
-    },
-    Entry {
-        name: "wa",
-        aliases: &["wall"],
-        help: "cmd.commands.wa",
-        needs: &[],
-        args: Args::None,
-    },
-    Entry {
-        name: "row",
-        aliases: &[],
-        help: "cmd.commands.row",
-        needs: &[Need::Table],
-        args: Args::Free("<那一行的名字>"),
     },
     Entry {
         name: "toc",
@@ -3433,12 +3495,76 @@ pub fn takes_text(line: &str) -> bool {
             // tab 詞庫.txt` runs, so it has to compose too.
             Some(list) => match pick(word, list) {
                 Some(found) => args = &found.then,
-                None => return false,
+                // `:w 第三章` is a path, not a misspelt `all` — a word list
+                // that stands beside a path lets the unmatched word through.
+                None => return matches!(args, Args::PathOr(_)),
             },
-            None => return matches!(args, Args::Free(_) | Args::Path),
+            None => return matches!(args, Args::Free(_) | Args::Path | Args::PathOr(_)),
         }
     }
-    matches!(args, Args::Free(_) | Args::Path)
+    matches!(args, Args::Free(_) | Args::Path | Args::PathOr(_))
+}
+
+/// The seven commands the fold **renamed**, and where they went (§5.2.3 ④).
+///
+/// Only seven, and only because these seven could not be computed. A command
+/// that merely moved under a parent kept its spelling, so [`moved_to`] finds
+/// it by looking — and goes on finding it if it moves again. `:conflicts` did
+/// not keep its spelling: it became `:check merge`, because the subject is a
+/// merge and `:check` is the verb, and no amount of looking turns one string
+/// into the other. Aliases are listed beside their names for the same reason
+/// the names are: `:bc` was a real thing to type and stopped being one.
+const RENAMED: &[(&str, &str)] = &[
+    ("appearance", "theme"),
+    ("bc", "buffer close"),
+    ("bclose", "buffer close"),
+    ("conflicts", "check merge"),
+    ("note", "view punct"),
+    ("row", "table jump"),
+    ("sav", "write as"),
+    ("saveas", "write as"),
+    ("search", "table find"),
+    ("wa", "write all"),
+    ("wall", "write all"),
+];
+
+/// Where a word that is no longer a command went, if it went anywhere (#283).
+///
+/// **The point of folding a table into a tree is that the leaves keep their
+/// names**, so most of this is a search rather than a record: `dense` is still
+/// spelled `dense`, one level down, and the way to find that out is to look
+/// for it. What cannot be looked up is a rename, and those are in [`RENAMED`].
+///
+/// A prefix is tried only when nothing matches whole — `:prog` was a real
+/// spelling of a real command until the fold, and answering it with
+/// `:count progress` is the difference between a signpost and a shrug. Three
+/// answers at most: past that the word is too vague to be pointing anywhere.
+fn moved_to(word: &str) -> Option<String> {
+    if let Some((_, to)) = RENAMED.iter().find(|(from, _)| *from == word) {
+        return Some(format!("`:{to}`"));
+    }
+    let under = |matches: fn(&str, &str) -> bool| -> Vec<String> {
+        let mut found = Vec::new();
+        for entry in COMMANDS {
+            let Some(list) = entry.args.words() else {
+                continue;
+            };
+            for w in list {
+                if matches(w.name, word) {
+                    found.push(format!("`:{} {}`", entry.name, w.name));
+                }
+            }
+        }
+        found
+    };
+    let mut found = under(|name, word| name == word);
+    if found.is_empty() {
+        found = under(|name, word| name.starts_with(word));
+    }
+    if found.is_empty() || found.len() > 3 {
+        return None;
+    }
+    Some(found.join(" "))
 }
 
 /// The commands whose name or alias starts with what has been typed.
@@ -3486,7 +3612,7 @@ pub fn complete_at(line: &str) -> (usize, Vec<Choice>) {
                 name: e.name,
                 needs: e.needs,
                 alias: e.aliases.first().copied(),
-                // **Among the aliases too.** `:row` has no alias of its own
+                // **Among the aliases too.** `:table jump` has no alias of its own
                 // and no other *name* starts with `ro`, so the shortest walk
                 // over names alone offered `(ro)` — while `ro` is `:readonly`'s
                 // declared alias, and an exact alias beats a prefix in
@@ -3689,11 +3815,24 @@ pub fn names_something(line: &str) -> Result<(), String> {
         return Err(head.to_string());
     };
     let mut args = &entry.args;
+    let mut path = String::from(entry.name);
     for word in words {
         let Some(list) = args.words() else { return Ok(()) };
+        // A bang ends a **line**, not a word, so it is looked for where the
+        // line is spelled out: `:buffer close!` is in `FORCEABLE` and
+        // `:buffer list!` is not.
+        let (word, banged) = match word.strip_suffix('!') {
+            Some(stem) => (stem, true),
+            None => (word, false),
+        };
         let Some(found) = pick(word, list) else {
             return Err(word.to_string());
         };
+        path.push(' ');
+        path.push_str(found.name);
+        if banged && !FORCEABLE.contains(&format!("{path}!").as_str()) {
+            return Err(format!("{word}!"));
+        }
         args = &found.then;
     }
     Ok(())
@@ -4013,7 +4152,7 @@ mod tests {
     ///
     /// The declaration and the arm that answers it sit two thousand lines
     /// apart, so nothing but a walk of the table can tell they disagree.
-    /// `:hanging off` turned hanging punctuation **on**: `COMMANDS` declared
+    /// `:view hanging off` turned hanging punctuation **on**: `COMMANDS` declared
     /// `Args::Words(ON_OFF)`, the hint printed it, the menu offered it, and
     /// `parse` was `"hanging" => Ok(Command::ToggleHanging)` with `rest`
     /// never read. `every_listed_command_parses` cannot see it — `:hanging
@@ -4054,7 +4193,7 @@ mod tests {
             );
             // …and the abbreviation the menu shows is the one that parses.
             // `pick` is the rule everywhere else; an equality test here would
-            // make `:hanging of` an error under a menu that prints `of`.
+            // make `:view hanging of` an error under a menu that prints `of`.
             assert_eq!(parse(&format!(":{path} of")), off, "`:{path} of`");
         }
     }
@@ -4287,15 +4426,17 @@ mod tests {
     }
 
     #[test]
-    fn a_theme_and_an_appearance_are_two_questions() {
+    fn a_theme_and_a_mood_are_two_questions() {
         use Mood::*;
-        // `:theme` names the inks; `:appearance` says which way round they go.
+        // `:theme` names the inks; the mood says which way round they go. It
+        // was `:appearance` until the fold (§5.2.3 ③) — one word, and `:theme`
+        // already took it.
         assert_eq!(
             parse(":theme heibai"),
             Ok(Command::Theme { name: Some("heibai".into()), mood: None })
         );
         assert_eq!(
-            parse(":appearance light"),
+            parse(":theme light"),
             Ok(Command::Theme { name: None, mood: Some(Light) })
         );
         // …and one line may still ask both.
@@ -4308,6 +4449,9 @@ mod tests {
         assert_eq!(
             themes,
             [
+                "system",
+                "dark",
+                "light",
                 "ink",
                 "bw",
                 "cyanotype",
@@ -4321,11 +4465,17 @@ mod tests {
             ],
             "the menu lists what can be typed — ASCII, with the pinyin as an alias"
         );
-        let moods: Vec<String> = complete("appearance ").iter().map(Choice::written).collect();
-        assert_eq!(moods, ["system", "dark", "light"]);
+        // The moods sit at both levels, so the menu offers them at both.
+        let deeper: Vec<String> = complete("theme mogao ").iter().map(Choice::written).collect();
+        assert_eq!(deeper, ["system", "dark", "light"]);
         // The shortest spelling the menu offers has to work.
-        let short = shortest("appearance", COMMANDS.iter().map(|c| c.name));
-        assert!(parse(&format!(":{} dark", short.unwrap_or("appearance"))).is_ok());
+        let short = shortest("theme", COMMANDS.iter().map(|c| c.name));
+        assert!(parse(&format!(":{} dark", short.unwrap_or("theme"))).is_ok());
+        // And the name it lost is a signpost now, not a silence.
+        assert_eq!(
+            CommandError::Unknown("appearance".into()).to_string(),
+            crate::say!("cmd.no-such-command-but", "appearance", "`:theme`")
+        );
     }
 
     #[test]
@@ -4566,15 +4716,15 @@ mod tests {
         // word of a command line, not only the words after it.
         assert_eq!(parse(":y"), Ok(Command::YumeStatus));
         assert_eq!(parse(":yu"), Ok(Command::YumeStatus));
-        // `:tab`, not `:ta`: `:target` arrived and took the two-letter
-        // prefix away, which is the rule doing its job rather than a
-        // regression — the menu lengthened what it prints in the same edit.
+        // `:ta` again: `:target` took the two-letter prefix away when it
+        // arrived, and gave it back when the fold put it under `:count`
+        // (§5.2.3 ③). Ten abbreviations got shorter that way.
         assert_eq!(parse(":tab"), Ok(Command::EnterTable));
-        assert_eq!(parse(":ta"), Err(CommandError::Unknown("ta".into())));
+        assert_eq!(parse(":ta"), Ok(Command::EnterTable));
 
         // A declared alias beats the prefix rule, so the short spellings
-        // people already know keep their meanings: `w` begins `write`, `wq`
-        // and `wrap`, and it is still `write`.
+        // people already know keep their meanings: `w` begins `write`, `wq`,
+        // `word` and `wheel`, and it is still `write`.
         assert_eq!(parse(":w"), Ok(Command::Write(None)));
         assert_eq!(parse(":e a.md"), Ok(Command::Open("a.md".into())));
 
@@ -4587,7 +4737,7 @@ mod tests {
         //
         // Worked out over the **names and the aliases** together, because both
         // are things `resolve` matches: `ro` names no other command and would
-        // have been offered for `:row`, while `ro` is `:readonly`'s declared
+        // have been offered for `:table jump`, while `ro` is `:readonly`'s declared
         // alias and an alias beats a prefix.
         let short = |name: &'static str| {
             shortest(
@@ -4602,7 +4752,7 @@ mod tests {
         assert_eq!(short("render"), Some("ren"), "recover and redo are in the way");
         assert_eq!(short("sh"), None, "nothing shorter than the whole word");
         // `r` and `ro` are both taken — the second by `:readonly`'s alias —
-        // so `:row` is offered with no short form at all, the way `:sh` is.
+        // so `:table jump` is offered with no short form at all, the way `:sh` is.
         assert_eq!(short("row"), None, "`ro` is `:readonly`'s");
         // Over what `complete` actually hands the menu, not over a second
         // derivation of it — the menu prints `Choice::short`, so that is the
@@ -4666,11 +4816,11 @@ mod tests {
     #[test]
     fn a_space_offers_what_may_follow_the_command() {
         // The point of the whole arrangement: nobody has to remember an
-        // argument, only a verb. `:dense ` says what may come next.
+        // argument, only a verb. `:view dense ` says what may come next.
         let words = |line: &str| -> Vec<&str> { complete(line).iter().map(|c| c.name).collect() };
-        assert_eq!(words("dense "), ["on", "off"]);
-        assert_eq!(words("dense o"), ["on", "off"]);
-        assert_eq!(words("dense of"), ["off"]);
+        assert_eq!(words("view dense "), ["on", "off"]);
+        assert_eq!(words("view dense o"), ["on", "off"]);
+        assert_eq!(words("view dense of"), ["off"]);
         assert_eq!(words("syntax "), ["markdown", "typst", "text"]);
         assert_eq!(words("layout v"), ["vertical"]);
 
@@ -4686,7 +4836,7 @@ mod tests {
         // and not the whole line.
         assert_eq!(complete_at("ruby ht").0, 5);
         assert_eq!(complete_at("ruby html o").0, 10);
-        assert_eq!(complete_at("dense").0, 0);
+        assert_eq!(complete_at("view dense").0, 5);
 
         // A command that takes free text says what it wants rather than
         // offering a list it does not have.
@@ -4768,7 +4918,7 @@ mod tests {
             "table",
             "table sort",
             "table new",
-            "wrap",
+            "view wrap",
             "layout vertical",
             "yume scheme lingming",
             "theme mogao",
@@ -4807,10 +4957,8 @@ mod tests {
             "quit",
             "goto",
             "count",
-            "progress",
             "check",
             "grep",
-            "conflicts",
             "diff",
             "toc",
             "export",
@@ -4819,11 +4967,10 @@ mod tests {
             "buffer",
             "clipboard",
             "layout",
-            "wrap",
+            "view",
             "wheel",
             "table",
-            "dense",
-                ] {
+        ] {
             assert!(
                 COMMANDS.iter().any(|e| e.name == name),
                 "`:{name}` works but is not in the command list, so nothing shows it"
@@ -4848,7 +4995,7 @@ mod tests {
                     sample(&format!("{path} {}", list[0].name), &list[0].then)
                 }
                 Args::None | Args::Words(_) | Args::Schemes => path.to_string(),
-                Args::Path => format!("{path} a.md"),
+                Args::Path | Args::PathOr(_) => format!("{path} a.md"),
                 // A word only this command knows the shape of.
                 Args::Free(_) => {
                     let word = match path {
@@ -4893,7 +5040,6 @@ mod tests {
                     "g" => ":g 1".to_string(),
                     "gr" => ":gr x".to_string(),
                     "ex" => ":ex html".to_string(),
-                    "sav" => ":sav a.md".to_string(),
                     "md" => ":md footnote".to_string(),
                     alias => format!(":{alias}"),
                 };
@@ -4908,4 +5054,56 @@ mod tests {
         assert_eq!(parse(":open"), Err(CommandError::MissingArgument("open")));
         assert_eq!(parse(":bogus"), Err(CommandError::Unknown("bogus".into())));
     }
+    /// §5.2.3 ④: the signpost tells the truth on both sides.
+    ///
+    /// `RENAMED` is the one part of `moved_to` that is written down rather
+    /// than computed — nothing in the tree remembers that `punct` used to be
+    /// `note` — so it is the one part that can go stale. Both halves are
+    /// checked: the name it disowns must really be gone, and the line it
+    /// sends the reader to must really run.
+    #[test]
+    fn the_signpost_names_a_command_that_exists_and_one_that_does_not() {
+        for (was, is) in RENAMED {
+            assert!(
+                matches!(parse(&format!(":{was}")), Err(CommandError::Unknown(_))),
+                "`:{was}` still parses, so the signpost is pointing away from a live command"
+            );
+            assert!(
+                names_something(is).is_ok(),
+                "the signpost sends `:{was}` to `:{is}`, which is not a command"
+            );
+            assert_eq!(
+                moved_to(was).as_deref(),
+                Some(format!("`:{is}`").as_str()),
+                "`{was}` should be answered from RENAMED, not by the walk"
+            );
+        }
+    }
+
+    /// The other half of the signpost, the half that cannot go stale.
+    ///
+    /// Every word the fold moved is reachable by its own name from the parent
+    /// it moved under, so a reader who types the old top-level spelling is
+    /// told where it went without anyone having written it down.
+    #[test]
+    fn a_word_that_moved_under_a_parent_says_where_it_went() {
+        for (word, sent_to) in [
+            ("dense", "`:view dense`"),
+            ("hanging", "`:view hanging`"),
+            ("preview", "`:view preview`"),
+            ("progress", "`:count progress`"),
+            ("merge", "`:check merge`"),
+        ] {
+            assert_eq!(moved_to(word).as_deref(), Some(sent_to));
+        }
+        // Two parents, two answers — ④'s rule, said out loud.
+        assert_eq!(
+            moved_to("punct").as_deref(),
+            Some("`:check punct` `:view punct`")
+        );
+        // A word nothing owns is not answered at all: a wrong signpost is
+        // worse than none.
+        assert_eq!(moved_to("zzz"), None);
+    }
+
 }

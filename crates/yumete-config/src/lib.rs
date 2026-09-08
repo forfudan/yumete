@@ -124,7 +124,7 @@ pub struct EditorConfig {
     /// `0` — the default — means **as many as the window allows**, which is the
     /// same rule the horizontal `measure` follows: how long a column should be
     /// is a decision about the book, and the editor has no business making one
-    /// for you. A number here (or `:wrap n`) is that decision; it is clamped to
+    /// for you. A number here (or `:view wrap n`) is that decision; it is clamped to
     /// 4–64, and the renderer lowers it further when the terminal is short.
     pub zong_length: usize,
     /// How many squares open a paragraph (首行縮進). 0 is none.
@@ -162,7 +162,7 @@ pub struct EditorConfig {
     /// layout (縦中横). Off by default: one letter to a row, hung right.
     pub tatechuyoko: bool,
     /// Whether 句讀 hang in the margin beside the character they follow rather
-    /// than taking a square each (標點旁置). Off by default; `:hanging` toggles.
+    /// than taking a square each (標點旁置). Off by default; `:view hanging` toggles.
     pub hanging_punctuation: bool,
     /// Whether a paragraph too wide for the terminal continues on the next
     /// screen row (Feature #77). On by default: a Chinese paragraph is one long
@@ -192,7 +192,7 @@ pub struct EditorConfig {
     ///
     /// A measure rather than a mark: unlike `ruler`, which only says where the
     /// line is, this folds the rows there and leaves the rest of the window as
-    /// margin. `:wrap 50` sets it for one session (Feature #113).
+    /// margin. `:view wrap 50` sets it for one session (Feature #113).
     pub measure: usize,
     /// Whether the status line names the character under the cursor
     /// (Feature #117).
@@ -212,7 +212,7 @@ pub struct EditorConfig {
     ///
     /// On by default: a terminal has few enough columns as it is, and the gap,
     /// the reading column, the hung margin and the ticks together cost about a
-    /// third of them. `:dense off` gives them back for as long as you want
+    /// third of them. `:view dense off` gives them back for as long as you want
     /// them — it suppresses those things, it does not turn them off, so what
     /// the config says about readings and 句讀 is still what it says.
     pub dense: bool,
@@ -957,7 +957,7 @@ pub struct KeyConfig {
 /// format = { run = "rumdl check --fix {file}" }
 /// ```
 ///
-/// **The verbs are language-independent** — `:preview`, `:format` — so one key
+/// **The verbs are language-independent** — `:view preview`, `:format` — so one key
 /// means one thing in every file and the config says how it is done here.
 ///
 /// **A project may define these**, and the safety is in *how* they run: no

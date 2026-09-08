@@ -374,7 +374,7 @@ fn typo_score(distance: usize) -> f32 {
 ///
 /// **Latin, and at least three characters of it.** 「竖排」 is two characters
 /// and every two-letter command name is two edits away from it, so the tail of
-/// a perfectly good Chinese search filled up with `:sh` and `:wa` — names it
+/// a perfectly good Chinese search filled up with `:sh` and `:wq` — names it
 /// has nothing to do with. A Chinese query is not a misspelling of an English
 /// word; it is a different question, and the bigram scorer is the one that
 /// answers it.
