@@ -277,7 +277,7 @@ index, and a row with no number anywhere else is a row that got lost.
 | 52 | Syntax highlight (tree-sitter) | tui | P5 | Markdown and Typst are already coloured without it (#96／#116／#162); what is left is *code* | Planned |
 | 53 | Coding LSP (Rust/Python/…) | lsp | P5 | reuse helix-lsp | Planned |
 | 54 | Diagnostics / code actions | lsp | P5 |  | Planned |
-| 55 | Git gutter / blame | vcs | P5 |  | Planned |
+| 55 | Git gutter / blame | vcs | P3 | 那條豎線的第二個來源（#298）；blame 另算 | Planned |
 | 56 | Splits / multiple windows | tui | P5 | #176 split work areas | Done |
 | 57 | Debugging (DAP) | dap | P6 | far future | Planned |
 | 58 | Plugin runtime (scripting) | plugin | P6 | Lua/WASM — and, with it, a terminal, a git UI, tree-sitter [^58] | Dropped |
@@ -520,6 +520,8 @@ index, and a row with no number anywhere else is a row that got lost.
 | 295 | **一存之下檔案翻了幾倍，先問一句** | core+tui | P2 | 又翻倍、又多 256 KB 纔問；`:write` 一處 [^295] | Done |
 | 296 | **`editor.rs` 拆成模組** | core | P2 | 一萬行測試先出去，再按主題逐段搬 [^296] | Done |
 | 297 | **格狀面板在大表上以秒計，而那與折行無關** | core+tui | P3 | `100j` 0.67 秒、一幀 13 ms，摺起折行一模一樣 [^297] | Proposed |
+| 298 | **行號與正文之間立一條豎線，並讓它說哪幾行動過** | tui | P2 | 一豎兼作改動標記；比磁碟或比 git（#55）[^298] | Proposed |
+| 299 | **提示行浮動化，四種面板收成一個** | tui | P2 | 空的也佔一行、又與正文同色；#294 併進來 [^299] | Proposed |
 
 ### 5.5 · A table is a delimiter, a surface and a boundary (#261)
 
@@ -6893,3 +6895,40 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     都重新取一次 `cell_text` 並量寬。真路線表上這兩個數是 27 ms 與 0.9 ms，還沒
     到看得見的地步，所以先只是記下來——**要動之前先把這支 stopwatch 跑一遍**，
     別照這條的描述改。**medium**
+
+[^298]: 2026-09-08：「helix 的行号和正文间有一个橘黄色的竖线（好像是背景色）可以起到
+    分隔作用。我觉得这个很好，我们横排竖排都能搞。而且它还有个好处，就是可以用不同
+    颜色和线条提示这里有什么修改。比如绿色蓝色红色的背景色，或者是实线虚线。这样就
+    不要 diff 也能知道那些地方被更改了。我们还能支持 git diff 来显示 git 那边追踪的
+    更改。也就是说用户可以选择看 buffer 和文件的区别，也可以看当前 buffer 和 git 的
+    区别。」
+    **它是一欄底色，不是一個字符**——所以它在 `--shot` 的純文字裏也留得住形狀，而且
+    縱書照樣有：那裏它是號碼帶旁邊的一條橫帶，方向轉九十度，規矩不變。#89 已經把號碼
+    帶做成了 gutter（顏色分隔，因為位置分不開），這一條是在它和正文之間再立一豎。
+    **兩件事共用一欄**：不改的行是靜的furniture 色，改過的行按狀態上色。分三步走：
+    ① 光是那一豎（無狀態），tui 一處，small；② 跟**磁碟上那一份**比的逐行標記——
+    `:diff`（#235）已經算得出來，但它是詞粒度、按需算的，逐行標記要的是行粒度、常駐
+    的，所以真正要定的是**什麼時候算**：一鍵一次太貴（一部長篇），跟着 autosave 的
+    快照走或閒下來再算纔對；③ 跟 **git** 比，那是 #55，要麼引一個 git 庫，要麼喊
+    `git diff -U0`，這件事本身要先定。
+    **兩個沒定的**：顏色與線型是兩個軸（綠藍紅 × 實線虛線），一個軸給
+    「增／改／刪」，另一個軸給誰？——給「比磁碟還是比 git」最自然，但那樣同時開兩個來源就畫不出；
+    以及 `:` 開關叫什麼，它該不該跟着 `[editor] line_numbers` 一起關。**medium**
+
+[^299]: 2026-09-08：「目前底部我们有一行状态栏，上面还有一个信息栏（提示栏）。
+    但我发现消息栏即使空的也会占据一行，但背景色和正文一样。这样的问题一是常常浪费了一行，
+    还容易和正文无法分辨。既然我们已经把脚注浮动面板化了（和空格快捷键提示很像），
+    我们索性把这个信息栏（提示栏）也浮动面板化。这样我们的浮动面板就可以被复用，
+    参数可以是标题、正文、快捷键提示、位置（左下、右下、文本区中央），这样快捷键
+    提示、脚注、保存确认等都可以统一模块化，便于维护和解耦。」
+    屬實：`page_areas`（`lib.rs:2180`）只要 `[editor] hints` 開着就永遠扣掉那一行，
+    空不空都扣，而它畫在正文的底色上，所以一則訊息看起來像作者自己打的一行字。
+    **四個東西已經是同一個形狀**，只是各寫各的：`空格` 的 which-key（#273 從矩形改成
+    面板）、腳註／註釋那條橫條（#294）、`:write` 的安全核驗（#295），和這條提示行。
+    收成一個之後參數就是**標題、正文、鍵提示、位置**（左下／右下／正文區中央），
+    #294 從一條「要做的事」變成一個參數。
+    **三件要定的**：① 狀態列不動——它答的是「我在哪」，永遠在，那是它值一行的理由；
+    ② 面板落在光標的對角，而光標在最下面幾行時改用上方角落（#294 已經定了這條，
+    連同左邊界必須落在字符邊界上，#286）；③ 縱書另算——`:hud` 在縱書裏乾脆不存在
+    （#284）是先例，這裏要麼同樣不畫，要麼把「角落」按縱書的方向重新定義。
+    做完白拿一行正文，而且訊息一眼看得出不是稿子。**medium**
