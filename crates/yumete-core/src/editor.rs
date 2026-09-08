@@ -221,6 +221,17 @@ enum FindKind {
 ///
 /// A listing longer than this is not an answer, it is the manuscript again;
 /// the writer wants a narrower pattern, and being told so beats waiting.
+/// How much bigger a `:write` has to be than the file on disk before it stops
+/// to ask (Feature #295).
+///
+/// **Both bounds, not either.** 翻倍 alone fires on a 3 KB draft that grew to
+/// 7 KB, which is a morning's writing; +256 KB alone fires on a long book
+/// gaining a chapter. Together they describe the accident this exists for —
+/// an alignment, a paste, a generated block — where the file *multiplies* and
+/// the amount is more than a person types in a day. 2026-09-08 measured the
+/// case that prompted it: 425,694 bytes to 2,945,642, on one keystroke.
+const OVERSIZE_JUMP: u64 = 256 * 1024;
+
 const GREP_LIMIT: usize = 500;
 
 /// The largest file `:grep` will read. A manuscript chapter is kilobytes;
@@ -248,6 +259,21 @@ const DISCOVER_MAX_BYTES: usize = 16 * 1024 * 1024;
 /// A project with more than this is not one a writer is choosing a chapter
 /// from, and gathering all of it would make `Space f` pause before it drew.
 const PICKER_LIMIT: usize = 4000;
+
+/// A byte count the way a person says it: `425 KB`, `2.9 MB`.
+///
+/// Rounded on purpose. The question this feeds (#295) is 「did the file just
+/// multiply」, and eight digits of a number nobody counts in makes that harder
+/// to see, not easier — the multiple is said beside it and carries the answer.
+fn human_size(bytes: u64) -> String {
+    const K: f64 = 1024.0;
+    let n = bytes as f64;
+    match bytes {
+        0..=1023 => format!("{bytes} B"),
+        1024..=1_048_575 => format!("{:.0} KB", n / K),
+        _ => format!("{:.1} MB", n / (K * K)),
+    }
+}
 
 /// The path a Typst `#import` or `#include` names, if the line is one.
 ///
@@ -1486,6 +1512,8 @@ pub struct Editor {
     paper: crate::export::Paper,
     /// The other work area, while it is being drawn (#281). See [`Viewing`].
     viewing: Cell<Option<Viewing>>,
+    /// The question the editor has stopped to ask, if it has (#295).
+    query: Option<Query>,
     /// Word ranges already worked out, per line, against a hash of that line.
     segment_cache: RefCell<SegmentCache>,
     /// 平仄 in the margin (Feature #247), and the answers already worked out.
@@ -1689,6 +1717,52 @@ enum Wrote {
     Copied(PathBuf),
 }
 
+/// A question the editor has stopped to ask before doing something it cannot
+/// take back, and the answers it will take (Feature #295).
+///
+/// **The editor is stopped while one stands**: every key goes to the answer
+/// until one of the choices is taken, so there is no state in which the
+/// question is on the screen and the keys are still editing the manuscript
+/// behind it. That is the whole safety of it — a modal question that can be
+/// typed past is a status line with a border.
+///
+/// The body says **numbers**, never 「幅度較大」: what is being weighed is how
+/// much bigger the file gets, and an adjective is exactly the part the writer
+/// cannot check. One question at a time; there is no queue, because a second
+/// question would be about a command the first one has not answered yet.
+pub struct Query {
+    /// The name in the panel's top-left corner.
+    pub title: String,
+    /// What is being asked, in numbers.
+    pub body: String,
+    /// The answers, in the order they are drawn.
+    pub choices: Vec<Answer>,
+    /// What the question is about, and so what each answer does.
+    what: Asking,
+}
+
+/// One answer to a [`Query`]: the key that takes it, and what it says.
+pub struct Answer {
+    /// The key, lowercase. `Esc` is always the last choice as well.
+    pub key: char,
+    /// What it does, as the panel draws it.
+    pub label: String,
+}
+
+/// What a [`Query`] is about.
+///
+/// One arm today. It is an enum and not a `bool` because the interface is the
+/// point: the next thing that needs to stop and ask adds an arm and a match
+/// branch, and inherits the panel, the key routing and the 「Esc is no」 rule
+/// without touching any of them.
+enum Asking {
+    /// `:write` about to make the file on disk very much bigger.
+    OversizeWrite {
+        /// The path `:write` was given, if it was given one.
+        path: Option<String>,
+    },
+}
+
 /// An error from running an editor command.
 #[derive(Debug)]
 pub enum EditorError {
@@ -1839,6 +1913,7 @@ impl Editor {
             hanging: false,
             paper: crate::export::Paper::A5,
             viewing: Cell::new(None),
+            query: None,
             segment_cache: RefCell::new(SegmentCache::new()),
             meter: false,
             meter_cache: RefCell::new(MeterCache::new()),
@@ -4424,6 +4499,15 @@ impl Editor {
                 Ok(CommandOutcome::Continue)
             }
             Command::Write(path) => {
+                // **`:write` alone.** `:w!`, `:wq` and `:wa` are deliberately
+                // not gated yet (2026-09-08): `:w!` already spells out 「over
+                // whatever is there」, and the other two are one line each when
+                // the shape of the question has been lived with. What is built
+                // here is the interface, not the one caller.
+                if let Some(ask) = self.oversize_query(path.as_deref()) {
+                    self.query = Some(ask);
+                    return Ok(CommandOutcome::Continue);
+                }
                 self.write_current(path.as_deref())?;
                 Ok(CommandOutcome::Continue)
             }
@@ -5170,6 +5254,92 @@ impl Editor {
             }
 
         }
+    }
+
+    /// The question the editor has stopped to ask, if it has (#295).
+    ///
+    /// The front end draws it and stops drawing everything that answers keys.
+    pub fn query(&self) -> Option<&Query> {
+        self.query.as_ref()
+    }
+
+    /// Answer the open question. Every key comes here while one stands.
+    ///
+    /// A key that is not one of the choices **leaves the question standing**
+    /// rather than falling through to the manuscript: the one thing a modal
+    /// question may never do is let a stray keystroke edit the file behind it.
+    /// `Esc` is 「no」 — the same answer the last choice spells out, because a
+    /// reader who wants out of a dialog reaches for `Esc` before reading it.
+    fn answer_query(&mut self, key: Key) {
+        let Some(asked) = self.query.take() else { return };
+        let answer = match key {
+            Key::Esc => 'n',
+            Key::Char(c) => c.to_ascii_lowercase(),
+            _ => {
+                self.query = Some(asked);
+                return;
+            }
+        };
+        if !asked.choices.iter().any(|a| a.key == answer) {
+            self.query = Some(asked);
+            return;
+        }
+        match asked.what {
+            Asking::OversizeWrite { path } => match answer {
+                // Yes: the same save, with the gate already answered.
+                'y' => {
+                    let _ = self.write_forcing(path.as_deref(), false);
+                }
+                // 檢視區別 **abandons the save**. Nothing is written, and the
+                // buffer is left exactly as it was — which is the point: the
+                // reader is going to look at what changed and decide again.
+                'd' => self.diff_against(None),
+                _ => self.status = say!("write.oversize-stopped"),
+            },
+        }
+    }
+
+    /// Whether this `:write` would make the file on disk very much bigger, and
+    /// the two sizes if it would (Feature #295).
+    ///
+    /// **Never on a first save.** A file that is not there yet has no size to
+    /// have multiplied, and a writer saving a new chapter is the one person
+    /// this must not stop. The buffer is measured in bytes off the rope rather
+    /// than by rendering it: the question is about an order of magnitude, and
+    /// a line-ending pass would cost a copy of the manuscript to sharpen a
+    /// number that is about to be rounded to 「MB」 anyway.
+    fn oversize_write(&self, path: Option<&str>) -> Option<(u64, u64)> {
+        let target = match path {
+            Some(p) => PathBuf::from(p),
+            None => self.current_buffer().path()?.to_path_buf(),
+        };
+        let was = std::fs::metadata(&target).ok()?.len();
+        let now = self.current_buffer().rope().len_bytes() as u64;
+        let doubled = was > 0 && now / 2 >= was;
+        let jumped = now >= was.saturating_add(OVERSIZE_JUMP);
+        (doubled && jumped).then_some((was, now))
+    }
+
+    /// The question `:write` asks when [`Self::oversize_write`] says to.
+    fn oversize_query(&self, path: Option<&str>) -> Option<Query> {
+        let (was, now) = self.oversize_write(path)?;
+        let times = now as f64 / was as f64;
+        Some(Query {
+            title: say!("write.oversize-title"),
+            body: say!(
+                "write.oversize-what",
+                self.current_buffer().display_name(),
+                human_size(was),
+                human_size(now),
+                format!("{times:.1}")
+            ),
+            choices: vec![
+                Answer { key: 'y', label: say!("write.oversize-go") },
+                Answer { key: 'd', label: say!("write.oversize-look") },
+                Answer { key: 'n', label: say!("write.oversize-no") },
+            ],
+            what: Asking::OversizeWrite { path: path.map(str::to_string) },
+        })
     }
 
     /// Save the active buffer, optionally to a new `path` (save-as).
@@ -13857,6 +14027,15 @@ impl Editor {
 
     /// Handle a single key press according to the current mode.
     pub fn on_key(&mut self, key: Key) -> KeyOutcome {
+        // **A question standing takes every key** (#295), before recording and
+        // before the sidebar: while one is on the screen there is no keystroke
+        // that reaches the manuscript, and none that a macro should capture —
+        // the answer is about this file at this moment, not about the sequence
+        // being recorded.
+        if self.query.is_some() {
+            self.answer_query(key);
+            return KeyOutcome::Continue;
+        }
         // Recording happens here rather than in Normal mode's handler, so a
         // macro captures the text typed in Insert and the pattern typed at a
         // prompt too — a macro that can only move is not much of one.
@@ -26583,6 +26762,148 @@ mod tests {
         assert_eq!(ed.write_forcing(None, false).unwrap(), Wrote::Saved);
         assert!(ed.status().contains("ch1.md"), "{}", ed.status());
         assert!(!ed.current_buffer().is_modified());
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    /// A save that would multiply the file stops and asks first (#295).
+    ///
+    /// The accident it is built for is one keystroke away in this very editor:
+    /// `t F` on a table with a paragraph in a cell took `development.md` from
+    /// 425,694 bytes to 2,945,642 (#292). The alignment is fixed; the *class*
+    /// of accident is not, and the last thing between a manuscript and a
+    /// generated file is the save.
+    #[test]
+    fn a_save_that_multiplies_the_file_stops_to_ask() {
+        let dir = std::env::temp_dir().join(format!("yumete-oversize-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let chapter = dir.join("ch1.md");
+        let first = "第一稿。\n".repeat(2_000);           // ~26 KB
+        std::fs::write(&chapter, &first).unwrap();
+        let was = std::fs::metadata(&chapter).unwrap().len();
+
+        let mut ed = Editor::new();
+        ed.open_file(&chapter).unwrap();
+        // Two bounds, so the block has to clear both: more than double, and
+        // more than 256 KB more.
+        let flood = "甲乙丙丁戊己庚辛。\n".repeat(40_000); // ~1.1 MB
+        ed.current_buffer_mut().insert(0, &flood).unwrap();
+
+        ed.execute(":w").unwrap();
+        let asked = ed.query().expect("a save this much bigger asks first");
+        assert_eq!(asked.title, say!("write.oversize-title"));
+        assert_eq!(asked.choices.len(), 3, "繼續／檢視／取消");
+        // **The body says numbers.** An adjective is the part a writer cannot
+        // check, and checking is the whole of what this panel is for.
+        assert!(asked.body.contains("MB"), "{}", asked.body);
+        assert_eq!(
+            std::fs::metadata(&chapter).unwrap().len(),
+            was,
+            "nothing is written while the question stands"
+        );
+
+        // 取消儲存 — and Esc means the same thing.
+        ed.on_key(Key::Char('n'));
+        assert!(ed.query().is_none());
+        assert_eq!(std::fs::metadata(&chapter).unwrap().len(), was);
+        assert!(ed.current_buffer().is_modified());
+
+        // 檢視區別 abandons the save too: it is 「let me look first」.
+        ed.execute(":w").unwrap();
+        assert!(ed.query().is_some());
+        ed.on_key(Key::Char('d'));
+        assert!(ed.query().is_none());
+        assert_eq!(std::fs::metadata(&chapter).unwrap().len(), was);
+
+        // 繼續儲存 writes it.
+        ed.execute(":w").unwrap();
+        assert!(ed.query().is_some());
+        ed.on_key(Key::Char('y'));
+        assert!(ed.query().is_none());
+        assert!(std::fs::metadata(&chapter).unwrap().len() > was * 2);
+        assert!(!ed.current_buffer().is_modified());
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    /// …and every save that is not that one is not asked about.
+    ///
+    /// Three silences, and each of them is a writer this must never stop: a
+    /// morning's work on a short draft (doubled, but tiny), a chapter added to
+    /// a long book (a lot, but nowhere near double), and a **first** save,
+    /// which has no size on disk to have multiplied.
+    #[test]
+    fn an_ordinary_save_is_never_asked_about() {
+        let dir = std::env::temp_dir().join(format!("yumete-ordinary-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+
+        // ① A short draft that tripled overnight. 翻倍 alone would stop it.
+        let small = dir.join("draft.md");
+        std::fs::write(&small, "起。\n".repeat(100)).unwrap();
+        let mut ed = Editor::new();
+        ed.open_file(&small).unwrap();
+        ed.current_buffer_mut()
+            .insert(0, &"承轉合。\n".repeat(1_000))
+            .unwrap();
+        ed.execute(":w").unwrap();
+        assert!(ed.query().is_none(), "a morning's writing is not an accident");
+
+        // ② A long book gaining a chapter. +256 KB alone would stop it.
+        let book = dir.join("book.md");
+        std::fs::write(&book, "第一稿。\n".repeat(80_000)).unwrap();
+        ed.open_file(&book).unwrap();
+        ed.current_buffer_mut()
+            .insert(0, &"新的一章。\n".repeat(30_000))
+            .unwrap();
+        ed.execute(":w").unwrap();
+        assert!(ed.query().is_none(), "a chapter is not an accident either");
+
+        // ③ The first save of a new file: there is no 「from」 to multiply.
+        let fresh = dir.join("new.md");
+        ed.new_buffer();
+        ed.current_buffer_mut()
+            .insert(0, &"甲乙丙丁。\n".repeat(40_000))
+            .unwrap();
+        ed.execute(&format!(":w {}", fresh.display())).unwrap();
+        assert!(ed.query().is_none(), "a first save has nothing to compare with");
+        assert!(fresh.exists());
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    /// A key that is not one of the answers leaves the question standing.
+    ///
+    /// The one thing a modal question may never do is let a stray keystroke
+    /// through to the manuscript behind it — `x` here used to be a deletion.
+    #[test]
+    fn a_stray_key_does_not_get_past_the_question() {
+        let dir = std::env::temp_dir().join(format!("yumete-stray-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let chapter = dir.join("ch1.md");
+        std::fs::write(&chapter, "第一稿。\n".repeat(2_000)).unwrap();
+
+        let mut ed = Editor::new();
+        ed.open_file(&chapter).unwrap();
+        ed.current_buffer_mut()
+            .insert(0, &"甲乙丙丁戊己庚辛。\n".repeat(40_000))
+            .unwrap();
+        let before = ed.current_buffer().rope().len_chars();
+        ed.execute(":w").unwrap();
+        assert!(ed.query().is_some());
+
+        for key in [Key::Char('x'), Key::Char('u'), Key::Enter, Key::Char('j')] {
+            ed.on_key(key);
+            assert!(ed.query().is_some(), "{key:?} left the question standing");
+        }
+        assert_eq!(ed.current_buffer().rope().len_chars(), before, "nothing edited");
+
+        // Esc is 「no」 — the answer the last choice spells out.
+        ed.on_key(Key::Esc);
+        assert!(ed.query().is_none());
+        assert!(ed.current_buffer().is_modified());
 
         std::fs::remove_dir_all(&dir).ok();
     }

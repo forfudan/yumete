@@ -2424,6 +2424,117 @@ fn draw(
             }
         }
     }
+    // Last, and over everything: the editor is stopped behind it (#295).
+    draw_query(frame, editor, config, area);
+}
+
+/// The **question panel**: the editor has stopped, and this is what it asked.
+///
+/// Drawn last and in the middle, which is the opposite of every other panel
+/// here — the which-key menu, the candidate list and the command menu all dodge
+/// the caret, because they are things you read *while* you write. This one is
+/// not: the editor is stopped behind it (`Editor::on_key` gives it every key),
+/// and a modal question that hides in a corner is one a writer answers without
+/// reading. Centre, border, name in gold — #273's panel, at the middle.
+fn draw_query(frame: &mut Frame, editor: &Editor, config: &Config, area: Rect) {
+    let Some(asked) = editor.query() else { return };
+    let ink = crate::theme::Palette::of(config);
+    // Wide enough to read a sentence on, narrow enough to read as a panel: the
+    // body is the only thing here that wraps, so it decides the width.
+    let want = 56usize.min(area.width.saturating_sub(6) as usize);
+    let body = wrap_to(&asked.body, want.max(16));
+    let keys: Vec<String> = asked
+        .choices
+        .iter()
+        .map(|a| format!("{}  {}", a.key, a.label))
+        .collect();
+    let inner = body
+        .iter()
+        .chain(keys.iter())
+        .map(|l| yumete_cjk::str_width(l))
+        .max()
+        .unwrap_or(0)
+        .max(yumete_cjk::str_width(&asked.title) + 2);
+    let width = (inner + 4).min(area.width as usize) as u16;
+    let height = (body.len() + keys.len() + 3) as u16;
+    // Nowhere to put it is not a reason to answer for the writer: the question
+    // stays open and the status line still carries the command that asked it.
+    if width < 12 || height + 2 > area.height {
+        return;
+    }
+    let panel = Rect::new(
+        area.x + (area.width - width) / 2,
+        area.y + (area.height - height) / 2,
+        width,
+        height,
+    );
+    frame.render_widget(Clear, panel);
+    // The same 漢字 half-cell rule every other panel here obeys (#286).
+    vertical::clear_wide_left_edge(frame.buffer_mut(), panel);
+    frame.render_widget(
+        Block::default()
+            .borders(Borders::ALL)
+            .border_type(if config.panel.rounded {
+                BorderType::Rounded
+            } else {
+                BorderType::Plain
+            })
+            .border_style(Style::default().fg(ink.rule()).bg(ink.paper()))
+            .title(Span::styled(
+                asked.title.clone(),
+                Style::default().fg(ink.gold()).bg(ink.paper()),
+            ))
+            .style(Style::default().bg(ink.paper())),
+        panel,
+    );
+    let ground = Style::default().bg(ink.paper());
+    let limit = panel.x + width - 1;
+    let buf = frame.buffer_mut();
+    let mut y = panel.y + 1;
+    for line in &body {
+        put_text(buf, panel.x + 2, y, limit, line, ground.fg(ink.text()));
+        y += 1;
+    }
+    y += 1;
+    for (a, row) in asked.choices.iter().zip(&keys) {
+        // The key is gold and what it does is text: the same two rungs the
+        // which-key panel uses, so one glance reads the same way in both.
+        put_text(buf, panel.x + 2, y, limit, &a.key.to_string(), ground.fg(ink.gold()));
+        put_text(
+            buf,
+            panel.x + 5,
+            y,
+            limit,
+            row.split_at(3).1,
+            ground.fg(ink.text()),
+        );
+        y += 1;
+    }
+}
+
+/// Fold `text` into lines no wider than `width` terminal columns.
+///
+/// Breaks between 漢字 and at ASCII spaces, and never leaves a closing mark at
+/// the head of a line — the same 禁則 the page itself keeps, in the one place
+/// a panel has running prose in it.
+fn wrap_to(text: &str, width: usize) -> Vec<String> {
+    const NO_START: &str = "。，、；：！？」』）〕】》〉…·";
+    let mut lines: Vec<String> = Vec::new();
+    let mut line = String::new();
+    let mut wide = 0usize;
+    for ch in text.chars() {
+        let w = yumete_cjk::str_width(&ch.to_string());
+        if wide + w > width && !line.is_empty() && !NO_START.contains(ch) {
+            lines.push(std::mem::take(&mut line));
+            wide = 0;
+        }
+        line.push(ch);
+        wide += w;
+    }
+    if !line.is_empty() {
+        lines.push(line);
+    }
+    lines
 }
 
 /// The 中/英 indicator, or empty when the IME is not engaged in this mode.
@@ -9486,6 +9597,43 @@ mod tests {
             "the live half is where the keys are: {rows:?}"
         );
         assert_eq!(rows[divider + 1], "乙乙乙", "and the other half is what it says it is: {rows:?}");
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn the_question_is_drawn_in_the_middle_with_its_three_answers() {
+        // #295. Every other panel here dodges the caret; this one does not,
+        // because the editor is stopped behind it. Centre, border, name in
+        // gold — and the numbers on the page, so the answer can be checked.
+        let dir = std::env::temp_dir().join(format!("yumete-295-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let chapter = dir.join("ch1.md");
+        std::fs::write(&chapter, "第一稿。\n".repeat(2_000)).unwrap();
+
+        let mut editor = Editor::new();
+        editor.execute(&format!(":open {}", chapter.display())).unwrap();
+        editor.paste_text(&"甲乙丙丁戊己庚辛。\n".repeat(40_000));
+        editor.execute(":w").unwrap();
+        assert!(editor.query().is_some(), "the save stopped to ask");
+
+        let mut config = Config::default();
+        config.editor.line_numbers = yumete_config::LineNumbers::None;
+        let buffer = render(&editor, &config, 72, 20);
+        let rows: Vec<String> =
+            (0..20).map(|y| row_text(&buffer, y).trim_end().to_string()).collect();
+        let page = rows.join("\n");
+
+        assert!(page.contains("安全核驗"), "the panel is named: {page}");
+        for answer in ["繼續儲存", "檢視區別", "取消儲存"] {
+            assert!(page.contains(answer), "{answer} is offered: {page}");
+        }
+        assert!(page.contains("MB"), "the sizes are on the page: {page}");
+        // Middle, not a corner: the top and bottom rows of the window are the
+        // manuscript's, and the ring is somewhere between them.
+        let ring = rows.iter().position(|r| r.contains('─')).expect("a border");
+        assert!(ring > 1 && ring < 18, "the panel is in the middle, at row {ring}: {page}");
 
         std::fs::remove_dir_all(&dir).ok();
     }

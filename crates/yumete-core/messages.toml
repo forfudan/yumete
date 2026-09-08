@@ -6769,3 +6769,45 @@ key = "wrap.vertical-has-no-wrap"
 zht = "縱書不折行：一縱斷在窗高上。這一項只管橫排（`:view wrap 40` 兩邊都算）"
 zhs = "纵书不折行：一纵断在窗高上。这一项只管横排（`:view wrap 40` 两边都算）"
 en = "vertical does not soft-wrap: a 縱 breaks at the height of the window. This is a horizontal setting (`:view wrap 40` counts in both)"
+
+[[message]]
+# 安全核驗的第一個選項：照存
+key = "write.oversize-go"
+zht = "繼續儲存"
+zhs = "继续储存"
+en = "save it"
+
+[[message]]
+# 安全核驗的第二個選項：先看改了什麼（＝ :diff），這一存不做
+key = "write.oversize-look"
+zht = "檢視區別"
+zhs = "检视区别"
+en = "see what changed"
+
+[[message]]
+# 安全核驗的第三個選項：不存
+key = "write.oversize-no"
+zht = "取消儲存"
+zhs = "取消储存"
+en = "cancel"
+
+[[message]]
+# 安全核驗答了「取消儲存」（或按 Esc）之後說的話
+key = "write.oversize-stopped"
+zht = "沒存——磁碟上那一份原封不動"
+zhs = "没存——磁盘上那一份原封不动"
+en = "not saved — the file on disk is untouched"
+
+[[message]]
+# 安全核驗那扇窗的標題（:write 發現這一存把檔案撐大了很多）
+key = "write.oversize-title"
+zht = "安全核驗"
+zhs = "安全核验"
+en = "safety check"
+
+[[message]]
+# 安全核驗的正文：說數字，不說「幅度較大」
+key = "write.oversize-what"
+zht = "這一存會把《{0}》從 {1} 變成 {2}，{3} 倍。"
+zhs = "这一存会把《{0}》从 {1} 变成 {2}，{3} 倍。"
+en = "saving would take 《{0}》 from {1} to {2} — {3}× as big."

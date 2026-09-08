@@ -517,6 +517,7 @@ index, and a row with no number anywhere else is a row that got lost.
 | 292 | **Lining up a table whose widest cell is a paragraph writes megabytes of spaces** | core | P2 | a column wider than 400 leaves the table alone; see §5.6 [^292] | Done |
 | 293 | **兩個側欄：左邊看，右邊改** | core+tui | P2 | 左邊看，右邊改，各自三態 [^293] | Planned |
 | 294 | **腳註那條四行橫條，是全樹最後一個還是矩形的東西** | tui | P3 | the last rectangle left after #273 [^294] | Planned |
+| 295 | **一存之下檔案翻了幾倍，先問一句** | core+tui | P2 | 又翻倍、又多 256 KB 纔問；`:write` 一處 [^295] | Done |
 
 ### 5.5 · A table is a delimiter, a surface and a boundary (#261)
 
@@ -6813,3 +6814,19 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     「右下角」在一頁從右往左讀的紙上也不是同一個意思。更遠的一步是說過的
     inline：`:render full` 下用虛字（#210）把腳註正文直接攤在原地，那要先問過折
     行與測量，不在這一條裏。**small**（inline 那一步 **medium**）
+
+[^295]: 一個鍵可以把一份稿子變成三份那麼大：`t F` 對齊一張表，最寬那一格是一整段，
+    於是每一行都補到那麼寬——這份檔案就一鍵從 425,694 字節變成過 2,945,642（#292）。
+    那一次修在對齊上；這一類事沒有修完的一天，而稿子和磁盤之間最後一道門是存檔。
+    `:write` 現在遇到**又翻倍、又多出 `OVERSIZE_JUMP`（256 KB）以上**的時候，在螢幕
+    中央開一扇「安全核驗」：`y` 繼續儲存、`d` 檢視區別（就是 `:diff`，**這一存不做**）、
+    `n` 取消儲存，`Esc` 同 `n`。**正文說數字**（「從 25 KB 變成 1.1 MB，44.1 倍」），
+    不說「幅度較大」——形容詞正好是寫的人沒法覆核的那一半。**兩個界限缺一不可**：只
+    看翻倍，3 KB 草稿寫成 7 KB 就要停，那是一個早上的活；只看多 256 KB，長篇加一章就
+    要停。兩個一起纔說得出這件事的形狀——檔案**成倍**地大，而多出來的量**不是人打得出
+    來的**。**新檔案第一次存永遠不問**：磁盤上沒有那一份，沒有「從多少」可言。問題開
+    着的時候 `on_key` 第一件事就是把鍵交給它，在錄製與側欄之前——不是那三個答案的鍵一
+    個都到不了底下的稿子，也一個都不進宏（答案是關於此刻這個檔案的，不是關於那一串按
+    鍵的）。`Asking` 是 enum 而不是 bool，那纔是「接口留好」的意思：下一件要停下來問的
+    事加一個分支，面板、鍵路由、`Esc` 即「否」三樣白拿。今天只裝在 `:write` 上——`:w!`
+    自己就寫着「蓋過去」，`:wq` 與 `:wa` 各差一行，等這個問法用順手了再說。
