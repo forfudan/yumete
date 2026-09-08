@@ -6990,7 +6990,7 @@ mod tests {
     #[test]
     fn a_locked_buffer_wears_it_on_the_status_line() {
         let mut editor = Editor::new();
-        editor.current_buffer_mut().insert(0, "讀一讀\n");
+        editor.current_buffer_mut().insert(0, "讀一讀\n").expect("the fixture buffer is writable");
         let config = Config::default();
 
         let rows = |editor: &Editor| -> String {
@@ -7740,7 +7740,8 @@ mod tests {
         let mut editor = Editor::new();
         editor
             .current_buffer_mut()
-            .insert(0, "前文\n| 字 | 讀音 |\n| --- | --- |\n| 木 | mu |\n");
+            .insert(0, "前文\n| 字 | 讀音 |\n| --- | --- |\n| 木 | mu |\n")
+                .expect("the fixture buffer is writable");
         // Onto the `木` row: `gg` then three `j`.
         editor.on_key(Key::Char('g'));
         editor.on_key(Key::Char('g'));
@@ -7796,7 +7797,7 @@ mod tests {
         editor.current_buffer_mut().insert(
             0,
             "::: danger\n| 字頭 | 讀音 |\n| --- | --- |\n| 木頭 | ==mu== |\n:::\n",
-        );
+        ).expect("the fixture buffer is writable");
         // **The line, said out loud.** Since #283 the level builds the view
         // on its own, so `j` on a table row is a step down the *column*; this
         // setup means a line of the file.
@@ -7856,7 +7857,8 @@ mod tests {
             // no ground there either — the assertion below passed on the very
             // bug it was written to catch. A line that has a pipe but does not
             // open with one is a paragraph, and it used to be given a cell.
-            .insert(0, "| 字 | 讀音 |\n| --- | --- |\n| 木 | mu |\n見上表 | 附註");
+            .insert(0, "| 字 | 讀音 |\n| --- | --- |\n| 木 | mu |\n見上表 | 附註")
+                .expect("the fixture buffer is writable");
         // **The line, said out loud.** Since #283 the level builds the view
         // on its own, so `j` on a table row is a step down the *column*; this
         // setup means a line of the file.
@@ -7923,7 +7925,8 @@ mod tests {
         let mut editor = Editor::new();
         editor
             .current_buffer_mut()
-            .insert(0, "| 字 | 讀音 |\n| --- | --- |\n| 木 | mu |\n");
+            .insert(0, "| 字 | 讀音 |\n| --- | --- |\n| 木 | mu |\n")
+                .expect("the fixture buffer is writable");
         editor.on_key(Key::Char('g'));
         editor.on_key(Key::Char('g'));
         editor.on_key(Key::Char('j'));
@@ -7969,7 +7972,8 @@ mod tests {
         // padded by two columns the file does not hold.
         editor
             .current_buffer_mut()
-            .insert(0, "| 字 | 讀音 |\n| --- | --- |\n| 木 | mu |\n| 目 | miao |\n");
+            .insert(0, "| 字 | 讀音 |\n| --- | --- |\n| 木 | mu |\n| 目 | miao |\n")
+                .expect("the fixture buffer is writable");
         // **The line, said out loud.** Since #283 the level builds the view
         // on its own, so `j` on a table row is a step down the *column*; this
         // setup means a line of the file.
@@ -8746,7 +8750,8 @@ mod tests {
         let mut editor = editor_with("那年冬天");
         println!("empty page: {:.2?} a frame", frame(&mut editor, 200));
         let mut editor = Editor::new();
-        editor.current_buffer_mut().insert(0, &a_book_of(20_000));
+        editor.current_buffer_mut().insert(0, &a_book_of(20_000))
+            .expect("the fixture buffer is writable");
         println!("a book:     {:.2?} a frame", frame(&mut editor, 200));
         editor.set_segmentation_visible(true);
         println!("…segmented: {:.2?} a frame", frame(&mut editor, 200));
@@ -10007,9 +10012,9 @@ mod tests {
     #[test]
     fn the_tabs_name_the_open_files_and_light_the_one_being_written() {
         let mut editor = Editor::new();
-        editor.current_buffer_mut().insert(0, "第一篇");
+        editor.current_buffer_mut().insert(0, "第一篇").expect("the fixture buffer is writable");
         editor.execute(":new").unwrap();
-        editor.current_buffer_mut().insert(0, "第二篇");
+        editor.current_buffer_mut().insert(0, "第二篇").expect("the fixture buffer is writable");
         assert_eq!(editor.buffer_count(), 2);
         let mut config = Config::default();
         config.editor.line_numbers = LineNumbers::None;
@@ -10032,7 +10037,7 @@ mod tests {
 
         // …and with one file open the bar costs nothing.
         let mut alone = Editor::new();
-        alone.current_buffer_mut().insert(0, "第一篇");
+        alone.current_buffer_mut().insert(0, "第一篇").expect("the fixture buffer is writable");
         let buffer = render_with(&alone, &config, &no_ime(), 40, 8);
         assert_eq!(at(&buffer, 0, 0), "第", "no bar for a single file");
     }
@@ -10857,7 +10862,7 @@ mod tests {
         let mut editor = Editor::new();
         editor
             .current_buffer_mut()
-            .insert(0, "春夏秋冬春夏秋冬春夏");
+            .insert(0, "春夏秋冬春夏秋冬春夏").expect("the fixture buffer is writable");
         let buf = render_wrapped(&mut editor, &wrap_config(), 8, 5);
         assert_eq!(row_text(&buf, 0), "春夏秋冬");
         assert_eq!(row_text(&buf, 1), "春夏秋冬");
@@ -10869,7 +10874,7 @@ mod tests {
         let mut editor = Editor::new();
         editor
             .current_buffer_mut()
-            .insert(0, "春夏秋冬春夏秋冬春夏");
+            .insert(0, "春夏秋冬春夏秋冬春夏").expect("the fixture buffer is writable");
         editor.set_soft_wrap(false);
         let buf = render_wrapped(&mut editor, &wrap_config(), 8, 5);
         assert_eq!(row_text(&buf, 0), "春夏秋冬");
@@ -10879,7 +10884,7 @@ mod tests {
     #[test]
     fn a_continuation_row_carries_no_line_number() {
         let mut editor = Editor::new();
-        editor.current_buffer_mut().insert(0, "春夏秋冬春夏");
+        editor.current_buffer_mut().insert(0, "春夏秋冬春夏").expect("the fixture buffer is writable");
         let mut config = wrap_config();
         config.editor.line_numbers = LineNumbers::Absolute;
         let buf = render_wrapped(&mut editor, &config, 12, 5);
@@ -10896,7 +10901,7 @@ mod tests {
     #[test]
     fn j_walks_the_rows_the_reader_sees() {
         let mut editor = Editor::new();
-        editor.current_buffer_mut().insert(0, "春夏秋冬春夏秋冬");
+        editor.current_buffer_mut().insert(0, "春夏秋冬春夏秋冬").expect("the fixture buffer is writable");
         let config = wrap_config();
         render_wrapped(&mut editor, &config, 8, 5);
         // One paragraph, two rows: `j` from the first character lands under it
@@ -10910,7 +10915,7 @@ mod tests {
     #[test]
     fn the_caret_follows_the_cursor_onto_the_second_row() {
         let mut editor = Editor::new();
-        editor.current_buffer_mut().insert(0, "春夏秋冬春夏秋冬");
+        editor.current_buffer_mut().insert(0, "春夏秋冬春夏秋冬").expect("the fixture buffer is writable");
         let config = wrap_config();
         render_wrapped(&mut editor, &config, 8, 5);
         editor.on_key(Key::Char('j'));
@@ -10930,7 +10935,7 @@ mod tests {
             "那年 10\n冬天 10\n下雪 10\n以後 10\n",
             0,
         )));
-        editor.current_buffer_mut().insert(0, "那年冬天下雪以後");
+        editor.current_buffer_mut().insert(0, "那年冬天下雪以後").expect("the fixture buffer is writable");
         editor.set_segmentation_visible(true);
         let mut config = wrap_config();
         config.editor.show_segmentation = true;
@@ -10947,7 +10952,7 @@ mod tests {
     #[test]
     fn a_selection_shows_the_line_break_it_covers() {
         let mut editor = Editor::new();
-        editor.current_buffer_mut().insert(0, "甲\n\n乙\n");
+        editor.current_buffer_mut().insert(0, "甲\n\n乙\n").expect("the fixture buffer is writable");
         let config = wrap_config();
         // Select the whole file: the blank paragraph in the middle is inside
         // the selection and must look like it.
@@ -10966,7 +10971,7 @@ mod tests {
         // One paragraph of forty 漢字: five rows at width sixteen, in a
         // terminal that can show three of them.
         let text: String = "春夏秋冬".repeat(10);
-        editor.current_buffer_mut().insert(0, &text);
+        editor.current_buffer_mut().insert(0, &text).expect("the fixture buffer is writable");
         let config = wrap_config();
         for _ in 0..8 {
             editor.on_key(Key::Char('j'));

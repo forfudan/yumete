@@ -35,6 +35,17 @@ fn digest(text: &str) -> u64 {
     hasher.finish()
 }
 
+/// A buffer that will not be written to (Feature #213).
+///
+/// The whole error: there is one reason an edit is refused at this level, and
+/// naming it is the point — a `bool` would have made every caller re-derive
+/// what a `false` meant.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ReadOnly;
+
+/// What an edit answers: it happened, or the buffer is locked.
+pub type Edit = Result<(), ReadOnly>;
+
 /// A single editable document.
 ///
 /// The text is held in a [`ropey`] rope (behind [`TextStore`]); `path` records
@@ -410,37 +421,67 @@ impl Buffer {
     ///
     /// Indices are counted in `char`s (Unicode scalar values), consistent with
     /// [`TextStore::char_count`]. Panics if `char_idx` is out of bounds.
-    /// A read-only buffer is not moved (Feature #213). This is the *backstop*,
-    /// not the message: [`Editor`](crate::editor::Editor) refuses earlier and
-    /// says why. It lives here because this is the one place the rope moves,
-    /// so no path — a table reflow, `:s`, a filter, a feature written next
-    /// year — can change the **text** without knowing about it.
     ///
-    /// **It does not protect the state around the text**, and cannot: a caller
-    /// that inserts and then moves the cursor past what it inserted has moved
-    /// the cursor past nothing. That is why each of those callers refuses for
-    /// itself as well, and why a new one must.
-    pub fn insert(&mut self, char_idx: usize, text: &str) {
+    /// A read-only buffer is not moved, and **says so** (Feature #213): the
+    /// answer is an [`Edit`], and `#[must_use]` means a caller cannot receive
+    /// one and walk on. It lives here because this is the one place the rope
+    /// moves, so no path — a table reflow, `:s`, a filter, a feature written
+    /// next year — can change the text without meeting the lock.
+    ///
+    /// It used to return in silence, on the grounds that the editor refuses
+    /// earlier and says why. Three separate edit paths were then written that
+    /// did not refuse earlier: they moved the cursor past text that had not
+    /// been inserted, and the screen and the rope disagreed until something
+    /// redrew. **The state around the text is exactly what a silent refusal
+    /// cannot protect**, and the `Err` is what lets a caller protect it — see
+    /// [`Buffer::replace`] for the two-step case, where half an edit is the
+    /// hazard. The author's call, 2026-09-08: 「閘搬進 Buffer，回 Result」.
+    #[must_use = "a read-only buffer refuses the edit; the caller has to say so"]
+    pub fn insert(&mut self, char_idx: usize, text: &str) -> Edit {
         if self.readonly {
-            return;
+            return Err(ReadOnly);
         }
         self.earn_snapshot();
         self.rope.insert(char_idx, text);
         self.modified = true;
         self.revision += 1;
+        Ok(())
     }
 
     /// Remove the characters in `range` (a half-open range of `char` indices),
     /// marking the buffer modified. Panics if the range is out of bounds.
-    /// A read-only buffer is not moved; see [`Buffer::insert`].
-    pub fn remove(&mut self, range: Range<usize>) {
+    /// A read-only buffer is not moved and says so; see [`Buffer::insert`].
+    #[must_use = "a read-only buffer refuses the edit; the caller has to say so"]
+    pub fn remove(&mut self, range: Range<usize>) -> Edit {
         if self.readonly {
-            return;
+            return Err(ReadOnly);
         }
         self.earn_snapshot();
         self.rope.remove(range);
         self.modified = true;
         self.revision += 1;
+        Ok(())
+    }
+
+    /// Write `text` over `range`, in one step.
+    ///
+    /// The reason it exists rather than being spelled `remove` then `insert`:
+    /// **those two can refuse independently, and a caller that checks only the
+    /// first can leave the range gone and the text unwritten.** Nothing here
+    /// can, because the lock is asked once, before either half runs. Eleven
+    /// places in the editor were that pair; they are this now.
+    #[must_use = "a read-only buffer refuses the edit; the caller has to say so"]
+    pub fn replace(&mut self, range: Range<usize>, text: &str) -> Edit {
+        if self.readonly {
+            return Err(ReadOnly);
+        }
+        let start = range.start;
+        self.earn_snapshot();
+        self.rope.remove(range);
+        self.rope.insert(start, text);
+        self.modified = true;
+        self.revision += 1;
+        Ok(())
     }
 
     // ---- Crash recovery (Feature #79) -------------------------------------
@@ -993,6 +1034,34 @@ mod tests {
     /// A file the writer marked read-only is not replaced, and no temporary
     /// file is left beside it.
     #[cfg(unix)]
+    /// §5.2.3 ⑤: the lock answers rather than returning in silence.
+    #[test]
+    fn a_locked_buffer_says_no_instead_of_saying_nothing() {
+        let mut b = Buffer::from_text("原文");
+        b.set_readonly(true);
+        assert_eq!(b.insert(0, "改"), Err(ReadOnly));
+        assert_eq!(b.remove(0..1), Err(ReadOnly));
+        assert_eq!(b.replace(0..2, "全換"), Err(ReadOnly));
+        assert_eq!(b.text(), "原文");
+        assert!(!b.is_modified(), "a refused edit is not a change");
+        // And unlocking it makes every one of them go through again.
+        b.set_readonly(false);
+        assert_eq!(b.replace(0..2, "改寫"), Ok(()));
+        assert_eq!(b.text(), "改寫");
+    }
+
+    /// The reason `replace` exists: `remove` then `insert` are two answers, and
+    /// a caller that reads only the first can leave the range gone and the
+    /// text unwritten. One call, one answer, both halves or neither.
+    #[test]
+    fn replace_is_one_edit_and_not_two() {
+        let mut b = Buffer::from_text("第一行\n第二行\n");
+        let was = b.revision();
+        assert_eq!(b.replace(4..7, "改過的"), Ok(()));
+        assert_eq!(b.text(), "第一行\n改過的\n");
+        assert_eq!(b.revision(), was + 1, "one edit, one revision");
+    }
+
     #[test]
     fn a_read_only_manuscript_is_not_written_over() {
         use std::os::unix::fs::PermissionsExt;
@@ -1073,12 +1142,12 @@ mod tests {
         assert!(!b.is_modified());
 
         // Insert "，" (a char) after "你好" (index 2, in chars).
-        b.insert(2, "，");
+        b.insert(2, "，").expect("the fixture buffer is writable");
         assert_eq!(b.text(), "你好，世界");
         assert!(b.is_modified());
 
         // Remove the inserted comma again.
-        b.remove(2..3);
+        b.remove(2..3).expect("the fixture buffer is writable");
         assert_eq!(b.text(), "你好世界");
     }
 
@@ -1088,7 +1157,7 @@ mod tests {
         path.push(format!("yumete-buf-save-{}.txt", std::process::id()));
 
         let mut b = Buffer::open(&path).expect("open (creates empty buffer)");
-        b.insert(0, "草稿\n");
+        b.insert(0, "草稿\n").expect("the fixture buffer is writable");
         assert!(b.is_modified());
 
         b.save().expect("save");
@@ -1106,7 +1175,7 @@ mod tests {
         fs::write(&path, "第一稿\n").unwrap();
 
         let mut b = Buffer::open(&path).unwrap();
-        b.insert(0, "改了：");
+        b.insert(0, "改了：").expect("the fixture buffer is writable");
         b.write_swap().unwrap();
         let swap = b.swap_path().unwrap();
         assert_eq!(swap.file_name().unwrap(), ".chapter.md.yumete");

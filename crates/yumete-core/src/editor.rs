@@ -2470,10 +2470,11 @@ impl Editor {
             }
             self.snapshot();
             let len = self.current_buffer().char_count();
-            self.without_cell_guard(|e| {
-                e.current_buffer_mut().remove(0..len);
-                e.current_buffer_mut().insert(0, &rebuilt);
-            });
+            let done = self.without_cell_guard(|e| e.current_buffer_mut().replace(0..len, &rebuilt));
+            if done.is_err() {
+                refused.push(say!("readonly.replace-refused", self.buffer_name()));
+                continue;
+            }
             self.clamp_cursor();
             self.anchor = self.cursor;
             hits += here;
@@ -6662,7 +6663,10 @@ impl Editor {
             } else {
                 (rope.line_to_char(region.first + 1), format!("{row}\n"))
             };
-            self.without_cell_guard(|e| e.current_buffer_mut().insert(at, &text));
+            let done = self.without_cell_guard(|e| e.current_buffer_mut().insert(at, &text));
+            if !self.applied(done) {
+                return false;
+            }
         }
         let columns = self
             .table
@@ -6729,10 +6733,8 @@ impl Editor {
         if was == text {
             return;
         }
-        self.without_cell_guard(|e| {
-            e.current_buffer_mut().remove(start..end);
-            e.current_buffer_mut().insert(start, &text);
-        });
+        let done = self.without_cell_guard(|e| e.current_buffer_mut().replace(start..end, &text));
+        let _ = self.applied(done);
     }
 
     // ---- Delimited text and `|` tables, both ways (Feature #227) ----------
@@ -7045,7 +7047,10 @@ impl Editor {
             false => (rope.line_to_char(at_line), format!("{text}\n")),
         };
         self.snapshot();
-        self.without_cell_guard(|e| e.current_buffer_mut().insert(at, &text));
+        let done = self.without_cell_guard(|e| e.current_buffer_mut().insert(at, &text));
+        if !self.applied(done) {
+            return;
+        }
         // The heading is the first `|` line of what was just written, which is
         // one further down when a blank line went in ahead of it.
         let heading = at_line + usize::from(above);
@@ -7346,10 +7351,10 @@ impl Editor {
         }
         self.snapshot();
         let len = self.current_buffer().char_count();
-        self.without_cell_guard(|e| {
-            e.current_buffer_mut().remove(0..len);
-            e.current_buffer_mut().insert(0, &rebuilt);
-        });
+        let done = self.without_cell_guard(|e| e.current_buffer_mut().replace(0..len, &rebuilt));
+        if !self.applied(done) {
+            return;
+        }
         self.clamp_cursor();
         // The *text*, not the document: the table is still this table, and
         // asking the file what it is again would put the grid away.
@@ -7692,10 +7697,10 @@ impl Editor {
             let Some((from, to)) = self.cell_span(line, cell) else {
                 continue;
             };
-            self.without_cell_guard(|e| {
-                e.current_buffer_mut().remove(from..to);
-                e.current_buffer_mut().insert(from, value);
-            });
+            let done = self.without_cell_guard(|e| e.current_buffer_mut().replace(from..to, value));
+            if !self.applied(done) {
+                return;
+            }
         }
         self.snap_to_cell();
         self.status = say!("table.pasted-column", n);
@@ -7773,26 +7778,25 @@ impl Editor {
             let lines = self.current_buffer().line_count();
             if at >= lines || self.row_cells(at).len() != width {
                 let row = self.blank_row();
-                if at < lines {
+                let done = if at < lines {
                     let head = self.current_buffer().rope().line_to_char(at);
-                    self.without_cell_guard(|e| {
-                        e.current_buffer_mut().insert(head, &format!("{row}\n"))
-                    });
+                    self.without_cell_guard(|e| e.current_buffer_mut().insert(head, &format!("{row}\n")))
                 } else {
                     let end = self.current_buffer().rope().len_chars();
-                    self.without_cell_guard(|e| {
-                        e.current_buffer_mut().insert(end, &format!("\n{row}"))
-                    });
+                    self.without_cell_guard(|e| e.current_buffer_mut().insert(end, &format!("\n{row}")))
+                };
+                if !self.applied(done) {
+                    return;
                 }
             }
             for (c, text) in values.iter().enumerate() {
                 let Some((from, to)) = self.cell_span(at, cell + c) else {
                     continue;
                 };
-                self.without_cell_guard(|e| {
-                    e.current_buffer_mut().remove(from..to);
-                    e.current_buffer_mut().insert(from, text);
-                });
+                let done = self.without_cell_guard(|e| e.current_buffer_mut().replace(from..to, text));
+                if !self.applied(done) {
+                    return;
+                }
             }
         }
         self.go_to_cell(line, cell);
@@ -8316,7 +8320,10 @@ impl Editor {
         }
         self.snapshot();
         self.store(text);
-        self.without_cell_guard(|e| e.current_buffer_mut().remove(start..end));
+        let done = self.without_cell_guard(|e| e.current_buffer_mut().remove(start..end));
+        if !self.applied(done) {
+            return;
+        }
         self.set_cursor(start.min(self.current_buffer().rope().len_chars()));
         self.snap_to_cell();
         self.status = say!("table.row-deleted");
@@ -8362,10 +8369,10 @@ impl Editor {
         let (body_b, tail_b) = split(&text_b);
         let swapped = format!("{body_b}{tail_a}{body_a}{tail_b}");
         self.snapshot();
-        self.without_cell_guard(|e| {
-            e.current_buffer_mut().remove(start..end);
-            e.current_buffer_mut().insert(start, &swapped);
-        });
+        let done = self.without_cell_guard(|e| e.current_buffer_mut().replace(start..end, &swapped));
+        if !self.applied(done) {
+            return;
+        }
         let landed = self.current_buffer().rope().line_to_char(other.min(last));
         self.set_cursor(landed);
         self.snap_to_cell();
@@ -9357,10 +9364,10 @@ impl Editor {
         let at = self.cursor;
         self.snapshot();
         let len = self.current_buffer().char_count();
-        self.without_cell_guard(|e| {
-            e.current_buffer_mut().remove(0..len);
-            e.current_buffer_mut().insert(0, text);
-        });
+        let done = self.without_cell_guard(|e| e.current_buffer_mut().replace(0..len, text));
+        if !self.applied(done) {
+            return false;
+        }
         self.set_cursor(at.min(self.current_buffer().char_count()));
         self.clamp_cursor();
         self.forget_the_document();
@@ -9742,9 +9749,11 @@ impl Editor {
             self.snapshot();
             let rope = self.current_buffer().rope();
             let at = motion::line_end(rope, self.cursor);
-            self.without_cell_guard(|e| {
-                e.current_buffer_mut().insert(at, &format!("\n{body}"));
-            });
+            let done =
+                self.without_cell_guard(|e| e.current_buffer_mut().insert(at, &format!("\n{body}")));
+            if !self.applied(done) {
+                return;
+            }
             self.set_cursor(at + 1);
             self.status = say!("table.pasted-as-new-row");
             return;
@@ -10857,7 +10866,10 @@ impl Editor {
             return;
         }
         let at = end;
-        self.current_buffer_mut().insert(at, note);
+        let done = self.current_buffer_mut().insert(at, note);
+        if !self.applied(done) {
+            return;
+        }
         // The other area is opened **at the end of the stub**, not at the head
         // of its line: 空格 w lands where the note is going to be typed, which
         // is the only place anybody is going next.
@@ -11620,10 +11632,10 @@ impl Editor {
         }
         self.snapshot();
         let len = self.current_buffer().char_count();
-        self.without_cell_guard(|e| {
-            e.current_buffer_mut().remove(0..len);
-            e.current_buffer_mut().insert(0, text);
-        });
+        let done = self.without_cell_guard(|e| e.current_buffer_mut().replace(0..len, text));
+        if !self.applied(done) {
+            return;
+        }
         self.clamp_cursor();
         self.forget_the_text();
         let (was, now) = (before.chars().count(), text.chars().count());
@@ -12822,9 +12834,10 @@ impl Editor {
         }
         self.snapshot();
         let len = self.current_buffer().char_count();
-        let buffer = self.current_buffer_mut();
-        buffer.remove(0..len);
-        buffer.insert(0, &draft);
+        let done = self.current_buffer_mut().replace(0..len, &draft);
+        if !self.applied(done) {
+            return Ok(CommandOutcome::Continue);
+        }
         self.current_buffer_mut().adopt_draft();
         self.clamp_cursor();
         self.status = say!("recover.draft-opened");
@@ -13389,7 +13402,10 @@ impl Editor {
         }
         let at = self.current_buffer().char_count();
         self.snapshot();
-        self.without_cell_guard(|e| e.current_buffer_mut().insert(at, &block));
+        let done = self.without_cell_guard(|e| e.current_buffer_mut().insert(at, &block));
+        if !self.applied(done) {
+            return Ok(());
+        }
         self.clamp_cursor();
         self.forget_the_text();
         self.set_cursor(at);
@@ -16516,10 +16532,10 @@ impl Editor {
         if count > 0 {
             self.snapshot();
             let len = self.current_buffer().char_count();
-            self.without_cell_guard(|e| {
-                e.current_buffer_mut().remove(0..len);
-                e.current_buffer_mut().insert(0, &rebuilt);
-            });
+            let done = self.without_cell_guard(|e| e.current_buffer_mut().replace(0..len, &rebuilt));
+            if !self.applied(done) {
+                return;
+            }
             self.clamp_cursor();
             self.anchor = self.cursor;
             self.refresh_goal_column();
@@ -16664,10 +16680,9 @@ impl Editor {
             _ => " ",
         };
         self.snapshot();
-        let buffer = self.current_buffer_mut();
-        buffer.remove(end..next);
-        if !glue.is_empty() {
-            buffer.insert(end, glue);
+        let done = self.current_buffer_mut().replace(end..next, glue);
+        if !self.applied(done) {
+            return;
         }
         self.cursor = end;
         self.anchor = end;
@@ -16898,9 +16913,12 @@ impl Editor {
         };
 
         self.snapshot();
-        let buffer = self.current_buffer_mut();
-        buffer.remove(line_start + start..line_start + end);
-        buffer.insert(line_start + start, &text);
+        let done = self
+            .current_buffer_mut()
+            .replace(line_start + start..line_start + end, &text);
+        if !self.applied(done) {
+            return;
+        }
         self.cursor = line_start + start;
         self.anchor = self.cursor;
         self.clamp_cursor();
@@ -17033,9 +17051,10 @@ impl Editor {
         }
         self.snapshot();
         let len = self.current_buffer().char_count();
-        let buffer = self.current_buffer_mut();
-        buffer.remove(0..len);
-        buffer.insert(0, &rebuilt);
+        let done = self.current_buffer_mut().replace(0..len, &rebuilt);
+        if !self.applied(done) {
+            return;
+        }
         self.clamp_cursor();
         self.status = say!("ruby.auto-added", n);
     }
@@ -17060,9 +17079,10 @@ impl Editor {
         }
         self.snapshot();
         let len = self.current_buffer().char_count();
-        let buffer = self.current_buffer_mut();
-        buffer.remove(0..len);
-        buffer.insert(0, &formatted);
+        let done = self.current_buffer_mut().replace(0..len, &formatted);
+        if !self.applied(done) {
+            return;
+        }
         self.clamp_cursor();
         self.status = say!("ruby.rewritten-as", dialect.name());
     }
@@ -17201,9 +17221,10 @@ impl Editor {
             return;
         }
         self.snapshot();
-        let buffer = self.current_buffer_mut();
-        buffer.remove(span.0..span.1);
-        buffer.insert(span.0, &text);
+        let done = self.current_buffer_mut().replace(span.0..span.1, &text);
+        if !self.applied(done) {
+            return;
+        }
         self.anchor = span.0;
         self.cursor = span.0;
         self.clamp_cursor();
@@ -17306,9 +17327,16 @@ impl Editor {
         let (start, end) = self.selection();
         let end = end.max(start);
         self.snapshot();
-        let buffer = self.current_buffer_mut();
-        buffer.insert(end, &close.to_string());
-        buffer.insert(start, &open.to_string());
+        let done = {
+            let buffer = self.current_buffer_mut();
+            // The closer first, so writing it cannot shift the opener.
+            buffer
+                .insert(end, &close.to_string())
+                .and_then(|()| buffer.insert(start, &open.to_string()))
+        };
+        if !self.applied(done) {
+            return;
+        }
         self.anchor = start;
         // The wrapped text plus its two marks runs `start ..= end + 1`, and the
         // head sits on the last grapheme of it — not one past. At `end + 2` the
@@ -17328,10 +17356,16 @@ impl Editor {
             return;
         };
         self.snapshot();
-        let buffer = self.current_buffer_mut();
-        // The closer first, so removing it cannot shift the opener.
-        buffer.remove(end..end + 1);
-        buffer.remove(start..start + 1);
+        let done = {
+            let buffer = self.current_buffer_mut();
+            // The closer first, so removing it cannot shift the opener.
+            buffer
+                .remove(end..end + 1)
+                .and_then(|()| buffer.remove(start..start + 1))
+        };
+        if !self.applied(done) {
+            return;
+        }
         self.cursor = self.cursor.saturating_sub(1);
         self.anchor = self.cursor;
         self.clamp_cursor();
@@ -17352,11 +17386,16 @@ impl Editor {
             return;
         };
         self.snapshot();
-        let buffer = self.current_buffer_mut();
-        buffer.remove(end..end + 1);
-        buffer.insert(end, &new_close.to_string());
-        buffer.remove(start..start + 1);
-        buffer.insert(start, &new_open.to_string());
+        let done = {
+            let buffer = self.current_buffer_mut();
+            // The closer first, so replacing it cannot shift the opener.
+            buffer
+                .replace(end..end + 1, &new_close.to_string())
+                .and_then(|()| buffer.replace(start..start + 1, &new_open.to_string()))
+        };
+        if !self.applied(done) {
+            return;
+        }
         self.clamp_cursor();
     }
 
@@ -17605,8 +17644,8 @@ impl Editor {
             self.status = why;
             return false;
         }
-        self.current_buffer_mut().insert(at, text);
-        true
+        let done = self.current_buffer_mut().insert(at, text);
+        self.applied(done)
     }
 
     /// Whether a rewritten document would change any row's shape.
@@ -17684,10 +17723,12 @@ impl Editor {
             self.status = why;
             return false;
         }
-        let buffer = self.current_buffer_mut();
-        buffer.remove(start..end);
-        buffer.insert(start, text);
-        true
+        // **This is the one that had no gate of its own** (§5.2.3 ⑤): six
+        // callers reach it, and the ones that did not refuse first wrote
+        // nothing and then moved the cursor over it. It asks the buffer now,
+        // and the buffer answers.
+        let done = self.current_buffer_mut().replace(start..end, text);
+        self.applied(done)
     }
 
     /// Take a range out of the buffer, unless it would take a cell boundary
@@ -17705,8 +17746,30 @@ impl Editor {
             self.status = why;
             return false;
         }
-        self.current_buffer_mut().remove(range);
-        true
+        let done = self.current_buffer_mut().remove(range);
+        self.applied(done)
+    }
+
+    /// Take the buffer's answer to an edit, and say so if it refused.
+    ///
+    /// `true` means the text moved and the caller may move the state around it
+    /// — the cursor, the anchor, the status line. `false` means the buffer is
+    /// read-only, the status line already says so, and **the caller must not
+    /// touch any of that**: moving a cursor over text that was never written
+    /// is the whole fault this returns a value to prevent (§5.2.3 ⑤).
+    ///
+    /// Most callers reach it after [`Editor::refuse_readonly`] has already
+    /// turned them back, so the `Err` arm is unreachable there. That is the
+    /// intent: the guard is the message, this is the proof.
+    #[must_use]
+    fn applied(&mut self, done: crate::buffer::Edit) -> bool {
+        match done {
+            Ok(()) => true,
+            Err(crate::buffer::ReadOnly) => {
+                self.status = say!("readonly.refused");
+                false
+            }
+        }
     }
 
     /// Say why nothing happened, when the buffer is locked (Feature #213).
@@ -17769,7 +17832,10 @@ impl Editor {
         }
         let end = motion::line_end(self.current_buffer().rope(), self.cursor);
         let row = self.blank_row();
-        self.without_cell_guard(|e| e.current_buffer_mut().insert(end, &format!("\n{row}")));
+        let done = self.without_cell_guard(|e| e.current_buffer_mut().insert(end, &format!("\n{row}")));
+        if !self.applied(done) {
+            return;
+        }
         self.cursor = end + 1;
         self.anchor = self.cursor;
         self.enter_insert();
@@ -17782,7 +17848,11 @@ impl Editor {
         }
         let start = motion::line_start(self.current_buffer().rope(), self.cursor);
         let row = self.blank_row();
-        self.without_cell_guard(|e| e.current_buffer_mut().insert(start, &format!("{row}\n")));
+        let done =
+            self.without_cell_guard(|e| e.current_buffer_mut().insert(start, &format!("{row}\n")));
+        if !self.applied(done) {
+            return;
+        }
         self.cursor = start;
         self.anchor = self.cursor;
         self.enter_insert();
@@ -17902,7 +17972,13 @@ impl Editor {
             }
             let text = self.current_buffer().rope().slice(start..end).to_string();
             self.store(text);
-            self.current_buffer_mut().remove(start..end);
+            // **Nothing below this line may run on a refusal**: collapsing the
+            // selection onto `start` over text that is still there is the
+            // fault §5.2.3 ⑤ was decided to close, and this is where it was.
+            let done = self.current_buffer_mut().remove(start..end);
+            if !self.applied(done) {
+                return;
+            }
         }
         self.cursor = start;
         self.anchor = start;
@@ -19145,7 +19221,8 @@ mod tests {
         // no typesetter does.
         let mut ed = Editor::new();
         ed.current_buffer_mut()
-            .insert(0, "第一段\n\n第二段\n\n\n第三段\n# 標題\n\n```\n\n```\n");
+            .insert(0, "第一段\n\n第二段\n\n\n第三段\n# 標題\n\n```\n\n```\n")
+                .expect("the fixture buffer is writable");
         assert!(!ed.line_is_folded(1), "nothing folds until there is an indent");
         ed.set_indent(2);
         assert!(ed.line_is_folded(1), "the one between two paragraphs");
@@ -21119,7 +21196,8 @@ mod tests {
         ] {
             for indent in [0usize, 2] {
                 let mut ed = Editor::new();
-                ed.current_buffer_mut().insert(0, document);
+                ed.current_buffer_mut().insert(0, document)
+                    .expect("the fixture buffer is writable");
                 ed.set_default_syntax(Some(syntax));
                 ed.set_indent(indent);
                 ed.set_render(Render::Full);
@@ -21188,7 +21266,7 @@ mod tests {
 
         // Another file: the hits do not follow, and `n` goes back to `/`.
         ed.execute("new").unwrap();
-        ed.current_buffer_mut().insert(0, "完全不相干的一行。\n");
+        ed.current_buffer_mut().insert(0, "完全不相干的一行。\n").expect("the fixture buffer is writable");
         assert_eq!(ed.current_hit(), None, "another document, no hits");
         let before = ed.cursor();
         ed.on_key(Key::Char('n'));
@@ -22699,6 +22777,26 @@ mod tests {
         assert!(ed.status().contains("on"), "{}", ed.status());
         // A word that is neither is a mistake, not a toggle.
         assert!(ed.execute("readonly 也許").is_err());
+    }
+
+    /// §5.2.3 ⑤: a refused edit does not move the state around the text.
+    ///
+    /// `d` on a locked buffer used to collapse the selection onto its start —
+    /// the rope was untouched, the highlight was gone, and the reader had lost
+    /// their selection to an edit that never happened. The silent early return
+    /// in `Buffer::remove` could not prevent that, and is why the gate now
+    /// answers.
+    #[test]
+    fn a_refused_delete_leaves_the_selection_where_it_was() {
+        let mut ed = Editor::new();
+        ed.add_buffer(crate::Buffer::from_text("一二三四五"));
+        ed.anchor = 1;
+        ed.cursor = 3;
+        ed.current_buffer_mut().set_readonly(true);
+        press(&mut ed, "d");
+        assert_eq!(ed.current_buffer().text(), "一二三四五", "the text stayed");
+        assert_eq!((ed.anchor, ed.cursor), (1, 3), "so did the selection");
+        assert!(ed.status().contains("只讀"), "and it said so: {}", ed.status());
     }
 
     /// #213: `--readonly` locks the ones already open *and* the next one.
@@ -24365,7 +24463,7 @@ mod tests {
             text.push_str(&format!("| {} | b{i} | c{i} |\n", "x".repeat(1 + i * 4)));
         }
         text.push_str("\n後文\n");
-        ed.current_buffer_mut().insert(0, &text);
+        ed.current_buffer_mut().insert(0, &text).expect("the fixture buffer is writable");
         ed.set_page(8, 8);
         ed.goto_line(5);
         assert!(ed.enter_table(), "{}", ed.status());
@@ -25742,11 +25840,11 @@ mod tests {
     #[test]
     fn space_b_picks_a_buffer_by_name() {
         let mut ed = Editor::new();
-        ed.current_buffer_mut().insert(0, "第一篇");
+        ed.current_buffer_mut().insert(0, "第一篇").expect("the fixture buffer is writable");
         ed.execute(":new").unwrap();
-        ed.current_buffer_mut().insert(0, "第二篇");
+        ed.current_buffer_mut().insert(0, "第二篇").expect("the fixture buffer is writable");
         ed.execute(":new").unwrap();
-        ed.current_buffer_mut().insert(0, "第三篇");
+        ed.current_buffer_mut().insert(0, "第三篇").expect("the fixture buffer is writable");
 
         // Space opens the menu; `b` opens the picker over the open files.
         type_keys(&mut ed, " b");
@@ -25878,9 +25976,9 @@ mod tests {
     #[test]
     fn a_buffer_can_be_closed_and_the_last_one_is_emptied() {
         let mut ed = Editor::new();
-        ed.current_buffer_mut().insert(0, "甲");
+        ed.current_buffer_mut().insert(0, "甲").expect("the fixture buffer is writable");
         ed.execute(":new").unwrap();
-        ed.current_buffer_mut().insert(0, "乙");
+        ed.current_buffer_mut().insert(0, "乙").expect("the fixture buffer is writable");
         assert_eq!(ed.buffer_count(), 2);
 
         // Unsaved work is not closed away silently.
@@ -26601,7 +26699,7 @@ mod tests {
         path.push(format!("yumete-editor-write-{}.md", std::process::id()));
 
         let mut ed = Editor::new();
-        ed.current_buffer_mut().insert(0, "初稿");
+        ed.current_buffer_mut().insert(0, "初稿").expect("the fixture buffer is writable");
         assert!(ed.current_buffer().is_modified());
 
         // :w to a fresh path (save-as), then the buffer is clean and :q proceeds.
@@ -26620,14 +26718,14 @@ mod tests {
     #[test]
     fn write_without_a_name_reports_no_file_name() {
         let mut ed = Editor::new();
-        ed.current_buffer_mut().insert(0, "x");
+        ed.current_buffer_mut().insert(0, "x").expect("the fixture buffer is writable");
         assert!(matches!(ed.execute(":w"), Err(EditorError::NoFileName)));
     }
 
     #[test]
     fn quit_is_blocked_by_unsaved_changes_but_force_quit_overrides() {
         let mut ed = Editor::new();
-        ed.current_buffer_mut().insert(0, "未存");
+        ed.current_buffer_mut().insert(0, "未存").expect("the fixture buffer is writable");
 
         assert!(matches!(ed.execute(":q"), Err(EditorError::UnsavedChanges)));
         assert_eq!(ed.execute(":q!").unwrap(), CommandOutcome::Quit);
@@ -27680,7 +27778,7 @@ mod tests {
     #[test]
     fn a_count_before_f_finds_the_nth_occurrence() {
         let mut ed = Editor::new();
-        ed.current_buffer_mut().insert(0, "a.b.c.d");
+        ed.current_buffer_mut().insert(0, "a.b.c.d").expect("the fixture buffer is writable");
         // `3f.` is the third dot, not the first — the count belongs to the `f`,
         // which has already spent it by the time the target arrives.
         type_keys(&mut ed, "3f.");
@@ -27693,7 +27791,8 @@ mod tests {
     #[test]
     fn a_count_before_gg_is_a_line_number() {
         let mut ed = Editor::new();
-        ed.current_buffer_mut().insert(0, "一\n二\n  三\n四\n");
+        ed.current_buffer_mut().insert(0, "一\n二\n  三\n四\n")
+            .expect("the fixture buffer is writable");
         // `3gg` lands on the first non-blank of line 3, past its indent.
         type_keys(&mut ed, "3gg");
         assert_eq!(ed.cursor_line(), 2);
@@ -27709,7 +27808,7 @@ mod tests {
     #[test]
     fn a_bare_number_on_the_command_line_is_a_line_number() {
         let mut ed = Editor::new();
-        ed.current_buffer_mut().insert(0, "一\n二\n三\n");
+        ed.current_buffer_mut().insert(0, "一\n二\n三\n").expect("the fixture buffer is writable");
         ed.execute(":2").unwrap();
         assert_eq!(ed.cursor_line(), 1);
         ed.execute(":goto 3").unwrap();
@@ -27719,7 +27818,7 @@ mod tests {
     #[test]
     fn undo_belongs_to_the_buffer_it_was_taken_in() {
         let mut ed = Editor::new();
-        ed.current_buffer_mut().insert(0, "甲");
+        ed.current_buffer_mut().insert(0, "甲").expect("the fixture buffer is writable");
         ed.execute(":new").unwrap();
         ed.on_key(Key::Char('i'));
         type_keys(&mut ed, "乙");
@@ -27860,7 +27959,8 @@ mod tests {
     fn ruby_markup_is_not_counted_as_writing() {
         let mut ed = Editor::new();
         ed.current_buffer_mut()
-            .insert(0, "<ruby>永和<rt>えいわ</rt></ruby>九年，歲在癸丑。");
+            .insert(0, "<ruby>永和<rt>えいわ</rt></ruby>九年，歲在癸丑。")
+                .expect("the fixture buffer is writable");
         ed.execute(":count").unwrap();
         let report = ed.status().to_string();
         // 永和九年歲在癸丑 is eight 字; the tags are not writing.
@@ -27871,7 +27971,7 @@ mod tests {
     #[test]
     fn the_two_ideographs_outside_the_unified_blocks_count_as_字() {
         let mut ed = Editor::new();
-        ed.current_buffer_mut().insert(0, "二〇二五年");
+        ed.current_buffer_mut().insert(0, "二〇二五年").expect("the fixture buffer is writable");
         ed.execute(":count").unwrap();
         let report = ed.status().to_string();
         assert!(report.contains("漢字 5"), "{report}");
@@ -28022,7 +28122,7 @@ mod tests {
         // the table that turns a terminal's keys into the editor's, so it fell
         // off the end in every mode.
         let mut ed = Editor::new();
-        ed.current_buffer_mut().insert(0, "那年冬天\n下雪");
+        ed.current_buffer_mut().insert(0, "那年冬天\n下雪").expect("the fixture buffer is writable");
         ed.on_key(Key::Char('i'));
         ed.on_key(Key::Delete);
         assert_eq!(ed.current_buffer().text(), "年冬天\n下雪");
