@@ -1520,6 +1520,23 @@ pub fn schemes() -> &'static [Word] {
     FOUND_SCHEMES.get().copied().unwrap_or(SCHEMES)
 }
 
+/// The note that goes beside a word of `args`, when there is one (#291).
+///
+/// **Only the scheme registry answers**, and only when it has been filled: the
+/// rows [`set_schemes`] builds keep the scheme's *name* in `help` — a name and
+/// not a message key — because the front end was handed both and a tag says
+/// nothing on its own. The built-in five fall back to `SCHEMES`, whose `help`
+/// **is** a key, and a raw key beside a row is worse than no note at all.
+///
+/// Everything else in the tree is a word that says what it is, and a note
+/// repeating it would be noise on every row to save one.
+fn note_for(args: &Args, word: &Word) -> Option<&'static str> {
+    match matches!(args, Args::Schemes) && FOUND_SCHEMES.get().is_some() {
+        true => Some(word.help),
+        false => None,
+    }
+}
+
 /// What `:shot` makes a picture of, and what it leaves behind — see [`Shot`].
 ///
 /// Words rather than a free string, because a free string had nothing to
@@ -1938,6 +1955,17 @@ pub struct Choice {
     pub under: String,
     /// What has to be true before it does anything.
     pub needs: &'static [Need],
+    /// A word beside the name, for the rows whose name does not say what they
+    /// are (#291).
+    ///
+    /// **Not every row wants one** — 「on」 beside 「on」 is noise, and the
+    /// footer already explains whatever is highlighted. The row that needs one
+    /// is the row whose name is an *identifier*: a scheme somebody installed
+    /// is `custom.6947b838` on the line and 「冰雪清韻」 in their head, and a
+    /// list of eight hexadecimal names is a list you have to Tab through to
+    /// read. The tag stays the value — it is stable and it cannot collide —
+    /// and the name comes along beside it, in the quiet ink.
+    pub note: Option<&'static str>,
 }
 
 impl Choice {
@@ -1974,6 +2002,7 @@ fn children(under: &'static str, args: &Args) -> Vec<Choice> {
                 help: w.help,
                 leading: "",
                 under: under.to_string(),
+                note: note_for(args, w),
             })
             .collect(),
         _ => Vec::new(),
@@ -1992,14 +2021,21 @@ fn children(under: &'static str, args: &Args) -> Vec<Choice> {
 /// `:table`, and answering it with a dozen grandchildren called `top` and
 /// `tight` would bury the answer under the guesses.
 fn deep(
-    list: &'static [Word],
+    args: &'static Args,
     path: &[&'static str],
     typed: &str,
     leading: &'static str,
     out: &mut Vec<Choice>,
 ) {
+    // The `Args` rather than the list it holds, because a note is a property of
+    // *where the words came from* and not of the words (#291) — `note_for` has
+    // to be able to ask.
+    let Some(list) = args.words() else {
+        return;
+    };
     for w in list {
-        if w.name.starts_with(typed) {
+        let note = note_for(args, w);
+        if w.name.starts_with(typed) || note.is_some_and(|n| n.contains(typed)) {
             out.push(Choice {
                 name: w.name,
                 needs: w.needs,
@@ -2010,13 +2046,12 @@ fn deep(
                 help: w.help,
                 leading,
                 under: path.join(" "),
+                note,
             });
         }
-        if let Some(inner) = w.then.words() {
-            let mut below = path.to_vec();
-            below.push(w.name);
-            deep(inner, &below, typed, leading, out);
-        }
+        let mut below = path.to_vec();
+        below.push(w.name);
+        deep(&w.then, &below, typed, leading, out);
     }
 }
 
@@ -2032,9 +2067,7 @@ fn deep(
 fn deep_from_root(typed: &str) -> Vec<Choice> {
     let mut out = Vec::new();
     for e in COMMANDS {
-        if let Some(list) = e.args.words() {
-            deep(list, &[e.name], typed, ":", &mut out);
-        }
+        deep(&e.args, &[e.name], typed, ":", &mut out);
     }
     let about = |c: &Choice| c.under.starts_with("help");
     out.sort_by(|a, b| {
@@ -3661,6 +3694,7 @@ pub fn complete_at(line: &str) -> (usize, Vec<Choice>) {
                 help: e.help,
                 leading: ":",
                 under: String::new(),
+                note: None,
             })
             .collect(),
         // **The same walk the parser walks** (§5.2.2 fault 1): `walk` resolves
@@ -3675,7 +3709,13 @@ pub fn complete_at(line: &str) -> (usize, Vec<Choice>) {
             Some(args) => match args.words() {
                 Some(list) => list
                     .iter()
-                    .filter(|w| w.name.starts_with(typed))
+                    // **The note is searched too** (#291): the tag is what gets
+                    // written, and 「冰雪」 is what the reader knows. Typing it
+                    // needs 中文 on the command line, which a Shift tap gives.
+                    .filter(|w| {
+                        w.name.starts_with(typed)
+                            || note_for(&args, w).is_some_and(|n| n.contains(typed))
+                    })
                     .map(|w| Choice {
                         name: w.name,
                         needs: w.needs,
@@ -3684,6 +3724,7 @@ pub fn complete_at(line: &str) -> (usize, Vec<Choice>) {
                         help: w.help,
                         leading: "",
                         under: String::new(),
+                        note: note_for(&args, w),
                     })
                     .collect(),
                 // A path or free text is the caller's business; there is
@@ -3698,6 +3739,7 @@ pub fn complete_at(line: &str) -> (usize, Vec<Choice>) {
                         help: what,
                         leading: "",
                         under: String::new(),
+                        note: None,
                     }],
                     _ => Vec::new(),
                 },
@@ -3718,9 +3760,7 @@ pub fn complete_at(line: &str) -> (usize, Vec<Choice>) {
                 Some(args) if args.words().is_some() => {
                     let mut out = Vec::new();
                     for w in args.words().unwrap_or_default() {
-                        if let Some(inner) = w.then.words() {
-                            deep(inner, &[w.name], typed, "", &mut out);
-                        }
+                        deep(&w.then, &[w.name], typed, "", &mut out);
                     }
                     out
                 }
