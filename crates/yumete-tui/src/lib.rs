@@ -505,6 +505,16 @@ pub fn run(
         // a lone Shift is invisible without it, so it cannot simply stay off.
         // Engagement is the line between those two, which is the whole reason
         // 「ABC」 and 「關」 are two states and not one.
+        //
+        // **Crossing that line is a command, not a gesture** — the author,
+        // 2026-09-08: 「空格快捷键太宝贵了……我建议还是做成 command。」 A chord
+        // was tried and taken back out: `C-Space` is spent twice over by
+        // macOS, and `Shift+Space` is 全／半角 in most system input methods,
+        // which are the ones holding the keyboard while yume is 關 —
+        // so the one direction that matters most is the one it could not
+        // be relied on for. `:yume on|abc|off` says it, and the lone-Shift
+        // tap — the switch a writer actually reaches for — needs no key of
+        // its own at all.
         if enhanced {
             let want = ime.available() && ime.engaged();
             if want != all_keys {
@@ -557,33 +567,6 @@ pub fn run(
                     continue;
                 }
                 let (code, mods) = normalize_shift(key.code, key.modifiers);
-                // **`Shift+Space` 開／關輸入法** (#290) — the outer switch,
-                // above the lone-Shift tap's 中/ABC.
-                //
-                // It was `C-Space`, which macOS spends twice over (Spotlight,
-                // and switching input source) and which therefore never
-                // reached the terminal on the machine this is written on.
-                // `Shift+Space` costs nothing anywhere and, unlike a `空格`
-                // leader binding, is a key **Insert mode can press** — which is
-                // where the question 「這一下要不要 yume 接」 is asked.
-                //
-                // It needs only `DISAMBIGUATE_ESCAPE_CODES` to be told from a
-                // plain space (`CSI 32;2u`), not the flag that reports a bare
-                // modifier; on a terminal that reports neither it is a space,
-                // and `:yume on|abc|off` is the way in.
-                let shift_space =
-                    mods.contains(KeyModifiers::SHIFT) && matches!(code, KeyCode::Char(' '));
-                if shift_space && composes_here(editor) {
-                    // As above: an answer about the language ends the borrow.
-                    borrowed = None;
-                    let want = match ime.engaged() {
-                        true => Engagement::Off,
-                        false => Engagement::Chinese,
-                    };
-                    let said = engage(ime, want, config);
-                    editor.set_status(said);
-                    continue;
-                }
                 let consumed = composes_here(editor)
                     && ime.available()
                     && ime.engaged()
@@ -990,7 +973,7 @@ fn composes_here(editor: &Editor) -> bool {
     }
     // `r` 打中文 (§5.2.3 ②): Normal mode, but the next character is *text*.
     // One line, because every gate in this file asks this one question — the
-    // preedit, the panel, lone-Shift and Shift+Space all light up together.
+    // preedit, the panel and the lone-Shift tap all light up together.
     if editor.replacing() {
         return true;
     }
@@ -1918,9 +1901,8 @@ fn switch_scheme(ime: &mut ImeSession, tag: &str, config: &Config) -> String {
             Err(why) => why,
         };
     }
-    // The three states, by name (#290). The lone-Shift tap is the switch
-    // between the first two and `Shift+Space` the switch to the third; this is
-    // for the hand that is already on `:`.
+    // The three states, by name (#290). The lone-Shift tap crosses between
+    // the first two; the third is reached from here and nowhere else.
     if let Some(want) = tag.strip_prefix("lang:") {
         let want = match want {
             "chinese" => Engagement::Chinese,
@@ -10651,7 +10633,7 @@ mod tests {
     /// Normal mode is not prose — except for the one character `r` is waiting
     /// for (§5.2.3 ②), which in a Chinese manuscript is 中文 and needs the
     /// engine. Every gate in this file asks `composes_here`, so this one
-    /// answer opens the preedit, the panel, lone-Shift and `Shift+Space` at once.
+    /// answer opens the preedit, the panel and the lone-Shift tap at once.
     #[test]
     fn a_pending_replace_composes_in_normal_mode() {
         let mut editor = Editor::new();
@@ -10785,7 +10767,6 @@ mod tests {
         assert_eq!(editor.current_buffer().text(), "八");
     }
 
-    /// `Shift+Space` is the first key the lesson asks a reader to press.
     /// `:convert` from end to end, through the real `opencc` — Feature #241.
     ///
     /// The unit tests either side of this one check the plan and the rewrite;
@@ -10877,7 +10858,7 @@ mod tests {
         assert!(!ime.engaged(), "{said}");
         assert!(!ime.is_chinese(), "handing it back is not a language answer");
 
-        // …and `Shift+Space` from there is 中文, not ABC: the way back in is
+        // …and `:yume on` from there is 中文, not ABC: the way back in is
         // the way you meant to type.
         let said = engage(&mut ime, Engagement::Chinese, &config);
         assert!(ime.engaged(), "{said}");

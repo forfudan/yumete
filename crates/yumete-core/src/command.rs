@@ -22,7 +22,10 @@ use crate::zong::Layout;
 /// it-through and ASCII-because-yume-is-gone have to be told apart.
 ///
 /// The lone-Shift tap crosses between [`Self::Chinese`] and [`Self::Ascii`];
-/// `Shift+Space` crosses to and from [`Self::Off`].
+/// [`Self::Off`] is reached by `:yume off` and left by `:yume on` — no key
+/// of its own, by the author's call (#290). The way out of [`Self::Off`] has
+/// to be pressable while a *system* input method holds the keyboard, and the
+/// two chords tried (`C-Space`, `Shift+Space`) are both spent there already.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Engagement {
     /// 中文: yume has the keyboard and composes with it.
