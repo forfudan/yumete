@@ -538,6 +538,48 @@ pub fn parse(lines: &[String]) -> Parts {
     }
 }
 
+/// How wide a column may be padded to (#292).
+///
+/// **Not a taste — a bound on what padding can buy.** Alignment is a thing the
+/// eye does: two closing `|` in the same screen column read as a straight
+/// edge. A column 8,000 squares wide has no such edge — no window holds it,
+/// no reader ever sees where it ends — and padding every row out to it writes
+/// megabytes of spaces that git then keeps for good. `docs/development.md`
+/// went from 425,694 bytes to 2,945,642 in one keystroke this way.
+///
+/// The old ceiling was 32 and was removed for a good reason that still holds:
+/// 「a ceiling and alignment are the same knob」 — a cell over the ceiling
+/// stops being padded and the table's right edge goes ragged, which is the one
+/// thing this module exists to prevent. This is not that ceiling. Nothing is
+/// left ragged: over this width the table is **left exactly as it was**.
+///
+/// Where 400 comes from: no terminal is that wide, so a column past it can
+/// never be shown whole, whatever the window. It also lands in a gap that the
+/// repository itself measures out — of the 60 `|` tables in `docs/`, the
+/// widest legitimate column is **181**, and the next number after it is the
+/// 8,567 of the roadmap's own 備註 column. Any bound between the two picks out
+/// exactly the pathological table, which is why the exact number does not
+/// matter and is not worth a setting.
+pub const WIDEST_COLUMN: usize = 400;
+
+/// The column no window will hold, if the table has one: its index and how
+/// wide it is (#292).
+///
+/// Asked *before* laying a table out. [`format`] refuses when this is `Some`,
+/// and the table keeps the shape its writer gave it.
+pub fn runaway(parts: &Parts) -> Option<(usize, usize)> {
+    let mut widths: Vec<usize> = vec![0; parts.columns()];
+    for row in &parts.rows {
+        for (i, cell) in row.iter().enumerate() {
+            widths[i] = widths[i].max(yumete_cjk::str_width(cell));
+        }
+    }
+    widths
+        .into_iter()
+        .enumerate()
+        .find(|&(_, width)| width > WIDEST_COLUMN)
+}
+
 /// Write a table back out, with its columns lined up on the terminal.
 ///
 /// A column is as wide as its widest cell **measured in terminal columns**, so
@@ -569,6 +611,17 @@ pub fn compose(parts: &Parts) -> Vec<String> {
         for (i, cell) in row.iter().enumerate() {
             widths[i] = widths[i].max(yumete_cjk::str_width(cell));
         }
+    }
+    // **Nothing is padded out to a width no window holds** (#292). [`format`]
+    // refuses before it ever reaches here, so a table already in a file keeps
+    // the spacing its writer gave it. What comes through this door instead is
+    // a *conversion* — [`from_delimited`] turning a `.csv` into a table — and
+    // there refusing would mean not converting at all. So the runaway column
+    // is simply not padded: `pad` only ever adds, so its cells come out whole
+    // and it is the columns after it that go ragged. A ragged edge nobody can
+    // see beats a megabyte of spaces nobody can see either.
+    for width in &mut widths {
+        *width = (*width).min(WIDEST_COLUMN);
     }
     let empty = String::new();
     let mut out = Vec::with_capacity(parts.rows.len() + 1);
@@ -603,7 +656,16 @@ pub fn format(lines: &[String]) -> Vec<String> {
     if lines.is_empty() {
         return Vec::new();
     }
-    let out = compose(&parse(lines));
+    let parts = parse(lines);
+    // **A column no window will hold is left alone** (#292). Not ragged —
+    // untouched: the writer's own spacing, every byte of it, because the
+    // alternative is a wall of spaces nobody will ever see the far side of.
+    // Every door into this module passes here, the four automatic ones
+    // included, so the guard cannot be walked around by an edit.
+    if runaway(&parts).is_some() {
+        return lines.to_vec();
+    }
+    let out = compose(&parts);
     if out.is_empty() {
         lines.to_vec()
     } else {
@@ -1593,10 +1655,131 @@ mod tests {
     }
 
     #[test]
+    fn a_column_no_window_holds_is_left_exactly_as_it_was() {
+        // #292, on the shape that actually bit: the roadmap table in this
+        // project's own `docs/development.md`, whose 備註 column holds
+        // paragraphs. Lining it up padded 298 rows out to the widest of them
+        // and took the file from 425,694 bytes to 2,945,642 — 2.5 MB of
+        // trailing spaces, in one keystroke, with nothing to show for it.
+        let paragraph = "說".repeat(WIDEST_COLUMN); // 2 squares each: twice over
+        let table = lines(&format!(
+            "| 甲 | 備註 |\n| --- | --- |\n| 一 | {paragraph} |\n| 二 | 短 |\n"
+        ));
+        assert_eq!(format(&table), table, "not one byte moves");
+
+        // **Not a ceiling.** A wide column that a window can still hold is
+        // padded as it always was — the whole point of removing the old
+        // 32-square limit.
+        let wide = "說".repeat(WIDEST_COLUMN / 2 - 1);
+        let ordinary = lines(&format!("| 甲 | 乙 |\n| --- | --- |\n| {wide} | 短 |\n"));
+        let out = format(&ordinary);
+        assert_ne!(out, ordinary, "a column a window holds is still lined up");
+        assert_eq!(
+            yumete_cjk::str_width(&out[0]),
+            yumete_cjk::str_width(&out[2]),
+            "…and the header is padded out to meet it"
+        );
+    }
+
+    #[test]
+    fn converting_a_csv_with_a_runaway_cell_converts_it_without_the_spaces() {
+        // A conversion has no source spacing to preserve, so refusing would
+        // mean refusing to convert. The runaway column is left unpadded and
+        // everything else still lines up.
+        let long = "x".repeat(WIDEST_COLUMN * 3);
+        let out = from_delimited(&lines(&format!("甲,乙\n一,{long}\n二,短\n")), ',');
+        let widest = out.iter().map(|l| yumete_cjk::str_width(l)).max().unwrap();
+        assert!(
+            widest < WIDEST_COLUMN * 3 + 20,
+            "no column is padded past the bound: {widest}"
+        );
+        assert!(out[2].contains(&long), "…and no cell is truncated");
+        // The first column still lines up: 甲 / 一 / 二 are all one square, so
+        // the second pipe stands in the same place on every row.
+        let pipe = |row: &str| row.char_indices().filter(|(_, c)| *c == '|').nth(1).map(|(i, _)| i);
+        assert_eq!(pipe(&out[0]), pipe(&out[2]), "the columns before it still line up");
+    }
+
+    #[test]
+    fn the_runaway_column_is_named_by_index_and_width() {
+        let parts = parse(&lines(&format!(
+            "| 甲 | 乙 |\n| --- | --- |\n| 短 | {} |\n",
+            "x".repeat(WIDEST_COLUMN + 1)
+        )));
+        assert_eq!(runaway(&parts), Some((1, WIDEST_COLUMN + 1)));
+        // The bound is 「wider than」, not 「as wide as」: a column exactly at it
+        // still lines up.
+        let edge = parse(&lines(&format!(
+            "| 甲 |\n| --- |\n| {} |\n",
+            "x".repeat(WIDEST_COLUMN)
+        )));
+        assert_eq!(runaway(&edge), None);
+    }
+
+    #[test]
     fn the_header_names_the_columns() {
         let s = schema("| 字 | 讀音 |");
         assert_eq!(s.delimiter, '|');
         assert_eq!(s.columns.len(), 2);
         assert_eq!(s.columns[0].name, "字");
+    }
+}
+
+#[cfg(test)]
+mod proof_292 {
+    use super::*;
+
+    /// **No table in this project's own docs can be lined up into megabytes**
+    /// (#292).
+    ///
+    /// The file that did it is the one this test reads. Its roadmap table's
+    /// 備註 column held 7,000-square paragraphs, and squaring 298 rows up to
+    /// the widest of them took `docs/development.md` from 425,694 bytes to
+    /// 2,945,642 — **2.5 MB of trailing spaces**, in one keystroke, with
+    /// nothing on any screen to show for it.
+    ///
+    /// The bound is not zero on purpose. Lining a table up is *supposed* to
+    /// add spaces, and this file holds sixty tables that have never been
+    /// squared up; the last measurement was 1,946 bytes over all of them.
+    /// What must never come back is the order of magnitude.
+    #[test]
+    fn no_table_in_the_docs_can_be_lined_up_into_megabytes() {
+        let docs = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../docs");
+        let mut worst: (usize, String) = (0, String::new());
+        let mut total = 0usize;
+        for entry in std::fs::read_dir(&docs).expect("the docs are in the tree") {
+            let path = entry.expect("a readable directory entry").path();
+            if path.extension().and_then(|e| e.to_str()) != Some("md") {
+                continue;
+            }
+            let text = std::fs::read_to_string(&path).expect("a readable document");
+            let all: Vec<String> = text.lines().map(str::to_string).collect();
+            let mut i = 0;
+            while i < all.len() {
+                if !all[i].trim_start().starts_with('|') {
+                    i += 1;
+                    continue;
+                }
+                let first = i;
+                while i < all.len() && all[i].trim_start().starts_with('|') {
+                    i += 1;
+                }
+                let table = &all[first..i];
+                let before: usize = table.iter().map(String::len).sum();
+                let after: usize = format(table).iter().map(String::len).sum();
+                let grew = after.saturating_sub(before);
+                total += grew;
+                if grew > worst.0 {
+                    worst = (grew, format!("{} line {}", path.display(), first + 1));
+                }
+            }
+        }
+        assert!(
+            worst.0 < 100_000,
+            "one table would grow by {} bytes: {}",
+            worst.0,
+            worst.1
+        );
+        assert!(total < 200_000, "every table together would add {total} bytes");
     }
 }
