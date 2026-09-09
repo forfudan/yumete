@@ -343,6 +343,9 @@ pub fn run(
     // is ever taken out of order: the rest of a wheel gesture, read early so it
     // can be drawn once instead of once a notch.
     let mut queued: Option<Event> = None;
+    let mut painted = std::time::Instant::now();
+    // The frame `:shot` will photograph, kept only when one was asked for.
+    let mut drawn: Option<ratatui::buffer::Buffer> = None;
 
     let result = loop {
         let mode = editor.mode();
@@ -444,13 +447,36 @@ pub fn run(
         // filled, and that is the only honest way to reach it — see the picture
         // below. The copy costs one walk of the screen per drawn frame, which
         // is what ratatui already spends diffing the two buffers.
-        let drawn = match terminal.draw(|frame| draw(frame, editor, config, ime, &mut viewport)) {
-            Ok(completed) => completed.buffer.clone(),
-            Err(err) => break Err(err),
-        };
+        //
+        // **A frame per queued keystroke is a frame nobody sees** (#314). The
+        // wheel has coalesced its notches since #282 (`drain_the_flick`, below);
+        // keys never did, so once a keystroke costs more than the interval
+        // between repeats the redraws queue up behind the finger and the cursor
+        // goes on moving after it lifts. Nothing here is dropped — the events
+        // are still read and still handled — it is only the *picture* between
+        // two of them that nobody was going to see. `FRAME_FLOOR` keeps a held
+        // key from holding the page still.
+        let waiting = queued.is_some() || matches!(event::poll(std::time::Duration::ZERO), Ok(true));
+        // The picture is wanted only when somebody asked for one, and the copy
+        // is a walk of the whole screen: 24 µs at 120×40, 94 µs at 400×100,
+        // every frame, for a `:shot` almost nobody presses. Asked before the
+        // draw and used after it — the request was made a keystroke ago, so
+        // this frame is the one it means either way.
+        let wants_picture = editor.take_screenshot_request();
+        // A frame somebody is about to photograph is never the frame to skip:
+        // skipping it hands `:shot` a blank page.
+        if wants_picture.is_some() || !waiting || painted.elapsed() >= FRAME_FLOOR {
+            let completed = match terminal.draw(|frame| draw(frame, editor, config, ime, &mut viewport)) {
+                Ok(completed) => completed,
+                Err(err) => break Err(err),
+            };
+            painted = std::time::Instant::now();
+            drawn = wants_picture.is_some().then(|| completed.buffer.clone());
+        }
         // …and the picture is of *this* frame, which is the one with no
         // command line across it.
-        if let Some(job) = editor.take_screenshot_request() {
+        if let Some(job) = wants_picture {
+            let drawn = drawn.take().unwrap_or_default();
             let said = match job {
                 ShotJob::Screen => photograph_the_screen(config, None),
                 // Not the frame: the same program `:shot` uses, told where to
@@ -949,6 +975,14 @@ fn drain_the_flick(kind: MouseEventKind, queued: &mut Option<Event>) -> usize {
 /// not beat against each other: one look per wake, and no wake at all while
 /// the setting is off.
 const DISK_POLL: std::time::Duration = std::time::Duration::from_secs(2);
+
+/// The longest the page may go unrefreshed while keys are still arriving (#314).
+///
+/// Skipping a frame when input is already waiting is what stops a held key from
+/// queueing one full redraw per repeat — but skipping *every* frame would hold
+/// the screen still for as long as the finger is down. This is the floor: at
+/// worst the reader sees the page ten times a second while a key repeats.
+const FRAME_FLOOR: std::time::Duration = std::time::Duration::from_millis(100);
 
 /// Whether a mode collects text the IME should compose into.
 ///
@@ -5999,6 +6033,40 @@ mod tests {
                     off.1,
                     on.1
                 );
+            }
+        }
+    }
+
+    /// `cargo test -p yumete-tui --release the_cost_of_a_flick -- --ignored --nocapture`
+    #[test]
+    #[ignore]
+    fn the_cost_of_a_flick() {
+        use std::time::Instant;
+        let doc = concat!(env!("CARGO_MANIFEST_DIR"), "/../../docs/development.md");
+        let ime = no_ime();
+        let config = Config::default();
+        let (w, h) = (200u16, 50u16);
+        for target in [500usize, 3000, 6000] {
+            for notches in [64usize, 256, 1024] {
+                for back in [false, true] {
+                    let mut ed = Editor::new();
+                    ed.open_file(doc).unwrap();
+                    ed.set_wrap_width(w as usize);
+                    ed.set_page(h as usize, w as usize);
+                    ed.execute(&format!(":{target}")).unwrap();
+                    let _ = render_with(&ed, &config, &ime, w, h);
+                    let began = Instant::now();
+                    ed.scroll(3 * notches, back);
+                    let flick = began.elapsed().as_secs_f64() * 1000.0;
+                    let began = Instant::now();
+                    let _ = render_with(&ed, &config, &ime, w, h);
+                    println!(
+                        "line {target:>5}  {:>4} notches {}  scroll {flick:>9.1}  draw {:>7.1}  (ms)",
+                        notches,
+                        if back { "up  " } else { "down" },
+                        began.elapsed().as_secs_f64() * 1000.0
+                    );
+                }
             }
         }
     }
@@ -11332,6 +11400,19 @@ mod tests {
             tap.update(&key(shift(), KeyEventKind::Release)),
             ShiftResult::Tap(FuncKey::ShiftL)
         ));
+    }
+
+    #[test]
+    fn a_frame_is_skipped_only_when_nobody_would_have_seen_it() {
+        // The rule the loop applies, stated where it can be checked (#314).
+        // Three things override the skip: a picture was asked for, the floor
+        // has been reached, or nothing is waiting.
+        let skip = |waiting: bool, stale: bool, shot: bool| !(shot || !waiting || stale);
+
+        assert!(skip(true, false, false), "input waiting and the page is fresh");
+        assert!(!skip(false, false, false), "nothing waiting — draw");
+        assert!(!skip(true, true, false), "the floor keeps a held key visible");
+        assert!(!skip(true, false, true), ":shot must never photograph a skipped frame");
     }
 
     #[test]

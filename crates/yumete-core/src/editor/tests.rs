@@ -255,15 +255,25 @@ fn a_link_to_another_chapter_opens_it_where_it_sits() {
 
 #[test]
 fn the_retired_keys_say_what_replaced_them() {
-    // `Enter` and `*` did something here until they were retired, so the
-    // reader pressing one is coming from *last week*, not from vi. The
-    // phrasebook exists for exactly that reader.
-    let mut ed = typed("那年冬天。\n");
-    ed.on_key(Key::Enter);
-    assert!(ed.status().contains("g/"), "{}", ed.status());
+    // `*` did something here until it was retired, so the reader pressing it
+    // is coming from vi and the phrasebook exists for exactly that reader.
     let mut ed = typed("那年冬天。\n");
     ed.on_key(Key::Char('*'));
     assert!(ed.status().contains("g/"), "{}", ed.status());
+
+    // **`Enter` is silent** (#353). It kept a note of its own while it was
+    // freshly retired — 「it did something here until last week」 — and that
+    // week is over. Standing on a footnote the panel names the key that
+    // follows it, which is where a reader looking for one now looks.
+    let mut ed = typed("那年冬天。\n");
+    ed.on_key(Key::Enter);
+    assert!(ed.status().is_empty(), "{}", ed.status());
+
+    // `gw` moved to `gD` on the same day (#355), and the fingers that learned
+    // it are the author's own — so it says where it went rather than nothing.
+    let mut ed = typed("那年冬天。\n");
+    press(&mut ed, "gw");
+    assert!(ed.status().contains("gD"), "{}", ed.status());
 }
 
 #[test]
@@ -2699,9 +2709,9 @@ fn a_footnote_reads_beside_the_sentence_it_belongs_to() {
     // **`gd`**, not `Enter`: 「它指着哪裏」 and 「還在哪裏」 are two
     // questions, and `Enter` is the second one everywhere — otherwise a
     // word *inside* a note could never be asked about.
-    // `gw` shows it beside the sentence; `gd` goes to it, and `C-o` comes
+    // `gD` shows it beside the sentence; `gd` goes to it, and `C-o` comes
     // back — the pair every editor has.
-    press(&mut ed, "gw");
+    press(&mut ed, "gD");
     assert_eq!(ed.peeked_line(), Some(2), "the note, beside the sentence");
     assert_eq!(ed.cursor(), was, "and the sentence is still under the cursor");
     press(&mut ed, "gd");
@@ -3210,7 +3220,7 @@ fn a_component_leads_to_its_own_row() {
     // **By cell** — which is how a grid is read until `Tab` says otherwise
     // — the whole cell is the question, and no row is called ⿰木目. It says
     // so rather than guessing which third of it you meant.
-    press(&mut ed, "gw");
+    press(&mut ed, "gD");
     assert!(ed.status().contains("⿰木目"), "{}", ed.status());
     assert_eq!(ed.mode(), Mode::Normal, "no picker: one question, one answer");
 
@@ -3218,15 +3228,15 @@ fn a_component_leads_to_its_own_row() {
     // decides what 「here」 means for every other key too.
     ed.on_key(Key::Tab);
     assert_eq!(ed.char_at_cursor(), Some('⿰'));
-    press(&mut ed, "gw");
+    press(&mut ed, "gD");
     assert!(ed.status().contains("結構符"), "{}", ed.status());
     press(&mut ed, "l");
     assert_eq!(ed.char_at_cursor(), Some('木'));
-    press(&mut ed, "gw");
+    press(&mut ed, "gD");
     assert_eq!(ed.peeked_line(), Some(2), "木's own row: {}", ed.status());
     assert_eq!(ed.cursor_line(), here, "…and the cursor did not move");
     press(&mut ed, "l");
-    press(&mut ed, "gw");
+    press(&mut ed, "gD");
     assert_eq!(ed.peeked_line(), Some(3), "and 目's, one character along");
     ed.on_key(Key::Tab);
 
@@ -3396,9 +3406,9 @@ fn tab_says_whether_a_step_is_a_cell_or_a_character() {
     press(&mut ed, "l");
     assert_eq!(ed.char_at_cursor(), Some('目'));
 
-    // Standing on one component, `gw` shows *that* row — nothing to ask
+    // Standing on one component, `gD` shows *that* row — nothing to ask
     // about, because the cursor already said which.
-    press(&mut ed, "gw");
+    press(&mut ed, "gD");
     assert_eq!(ed.peeked_line(), Some(3), "目's own row");
     assert_eq!(ed.mode(), Mode::Normal, "no picker");
 
@@ -3407,7 +3417,7 @@ fn tab_says_whether_a_step_is_a_cell_or_a_character() {
     ed.goto_line(2);
     press(&mut ed, "ll");
     assert_eq!(ed.char_at_cursor(), Some('⿰'));
-    press(&mut ed, "gw");
+    press(&mut ed, "gD");
     assert!(ed.status().contains("結構符"), "{}", ed.status());
 
     // Tab back, and the cursor snaps to cells again.
@@ -3552,7 +3562,7 @@ fn enter_asks_who_uses_this_when_the_cell_is_not_a_link() {
     ed.on_key(Key::Tab);
     press(&mut ed, "ll");
     assert_eq!(ed.char_at_cursor(), Some('目'));
-    press(&mut ed, "gw");
+    press(&mut ed, "gD");
     assert_eq!(ed.peeked_line(), Some(4), "目's own row");
 
     // …and the reverse question again, from a different row.
@@ -6404,12 +6414,12 @@ fn every_far_jump_leaves_a_way_back() {
     ed.execute("2").unwrap();
     press(&mut ed, "l");
 
-    // `gd` goes and leaves a way back; `gw` shows and leaves nothing,
+    // `gd` goes and leaves a way back; `gD` shows and leaves nothing,
     // because nothing was left.
     ed.on_key(Key::Tab);
     press(&mut ed, "l");
     let was = ed.cursor();
-    press(&mut ed, "gw");
+    press(&mut ed, "gD");
     assert_eq!(ed.cursor(), was, "gw does not move you");
     press(&mut ed, "gd");
     assert_eq!(ed.cursor_line(), 2, "木's own row");
@@ -7843,6 +7853,75 @@ fn a_save_that_multiplies_the_file_stops_to_ask() {
     std::fs::remove_dir_all(&dir).ok();
 }
 
+/// **Every writer passes the gate, not just `:write`** (#306).
+///
+/// #295 built the question and wired it to one arm of the command match,
+/// on the reasoning that `:w!` already says 「over whatever is there」 and
+/// that the other two were a line each. But the keystroke that multiplies
+/// a manuscript is `t F`, and the key a writer reaches for after finishing
+/// a table is `:wq` — so the one save that skipped the gate was the one
+/// most likely to need it. A bang answers a different question: it says
+/// overwrite *this file*, not 「a 17× file is what I meant」.
+#[test]
+fn every_writer_passes_the_oversize_gate() {
+    let dir = std::env::temp_dir().join(format!("yumete-gate-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let chapter = dir.join("ch1.md");
+    std::fs::write(&chapter, "第一稿。\n".repeat(2_000)).unwrap();
+    let was = std::fs::metadata(&chapter).unwrap().len();
+    let flood = "甲乙丙丁戊己庚辛。\n".repeat(40_000);
+
+    let swollen = |ed: &mut Editor| {
+        ed.current_buffer_mut().insert(0, &flood).unwrap();
+    };
+
+    // `:wq` — and **it must not quit**: taking the manuscript off the screen
+    // with the question still standing is worse than the save it skipped.
+    let mut ed = Editor::new();
+    ed.open_file(&chapter).unwrap();
+    swollen(&mut ed);
+    assert_eq!(
+        ed.execute(":wq").unwrap(),
+        CommandOutcome::Continue,
+        "a question standing is not a save, and not a reason to leave"
+    );
+    assert!(ed.query().is_some(), ":wq asks");
+    assert_eq!(std::fs::metadata(&chapter).unwrap().len(), was);
+
+    // `:w!` — the bang is about the file on disk, not about the size.
+    let mut ed = Editor::new();
+    ed.open_file(&chapter).unwrap();
+    swollen(&mut ed);
+    ed.execute(":w!").unwrap();
+    assert!(ed.query().is_some(), ":w! asks");
+    assert_eq!(std::fs::metadata(&chapter).unwrap().len(), was);
+
+    // `:write all` — the command a book-wide `:replace` ends with. It stops
+    // **on the buffer that asked**, because the question names one file.
+    let mut ed = Editor::new();
+    ed.open_file(&chapter).unwrap();
+    swollen(&mut ed);
+    ed.execute(":write all").unwrap();
+    assert!(ed.query().is_some(), ":write all asks");
+    assert_eq!(std::fs::metadata(&chapter).unwrap().len(), was);
+
+    // And 「yes」 still writes exactly once: the pass is spent on that save,
+    // not left standing for the next one.
+    ed.on_key(Key::Char('y'));
+    assert!(ed.query().is_none());
+    assert!(std::fs::metadata(&chapter).unwrap().len() > was * 2);
+    // Three floods, not one: the file on disk is now the swollen one, so
+    // doubling *it* takes more than the same insert again.
+    for _ in 0..3 {
+        ed.current_buffer_mut().insert(0, &flood).unwrap();
+    }
+    ed.execute(":w").unwrap();
+    assert!(ed.query().is_some(), "the next save is a new question");
+
+    std::fs::remove_dir_all(&dir).ok();
+}
+
 /// …and every save that is not that one is not asked about.
 ///
 /// Three silences, and each of them is a writer this must never stop: a
@@ -8341,6 +8420,42 @@ fn extend_mode_keeps_the_anchor_while_moving() {
     ed.on_key(Key::Char('d'));
     assert_eq!(ed.current_buffer().text(), "def");
     assert!(!ed.is_extending());
+}
+
+#[test]
+fn a_counted_edit_is_one_undo_point() {
+    // **`100p` is one command in the hand, so it is one press of `u`** (#323).
+    // `repeat` ran the action a hundred times and each announced a point of its
+    // own, so taking back one keystroke took a hundred — which nobody reads as
+    // 「precise」, they read it as 「undo is broken」.
+    let mut ed = Editor::new();
+    ed.on_key(Key::Char('i'));
+    type_keys(&mut ed, "ab");
+    ed.on_key(Key::Esc);
+    ed.on_key(Key::Char('g'));
+    ed.on_key(Key::Char('g'));
+    ed.on_key(Key::Char('v'));
+    ed.on_key(Key::Char('l'));
+    ed.on_key(Key::Char('y'));
+    let before = ed.current_buffer().text();
+
+    type_keys(&mut ed, "10");
+    ed.on_key(Key::Char('p'));
+    let after = ed.current_buffer().text();
+    assert_ne!(after, before, "ten pastes changed the text");
+    assert!(after.len() > before.len() + 15, "all ten landed: {after:?}");
+
+    ed.on_key(Key::Char('u'));
+    assert_eq!(
+        ed.current_buffer().text(),
+        before,
+        "one `u` takes back the whole count"
+    );
+
+    // …and it is still *one* point, not a group that swallowed what came
+    // before: redo puts it back, and a second undo goes past it.
+    ed.on_key(Key::Char('U'));
+    assert_eq!(ed.current_buffer().text(), after, "redo restores the run");
 }
 
 #[test]
@@ -10041,4 +10156,29 @@ fn either_cell_switch_opens_the_table_out_from_the_other() {
     ed.toggle_cell_folds();
     ed.toggle_cell_folds();
     assert_eq!(ed.cell_width_now(), CellWidth::Whole);
+}
+
+/// **A stopwatch on the wheel**, not a test — `#[ignore]`d, prints what the
+/// clock said. `cargo test -p yumete-core --release the_cost_of_a_flick -- --ignored --nocapture`
+#[test]
+#[ignore]
+fn the_cost_of_a_flick() {
+    use std::time::Instant;
+    let doc = concat!(env!("CARGO_MANIFEST_DIR"), "/../../docs/development.md");
+    let mut ed = Editor::new();
+    ed.open_file(doc).expect("the roadmap");
+    ed.set_wrap_width(100);
+    ed.set_page(50, 100);
+
+    for target in [40usize, 300, 500, 520] {
+        let mut ed2 = Editor::new();
+        ed2.open_file(doc).unwrap();
+        ed2.set_wrap_width(100);
+        ed2.set_page(50, 100);
+        ed2.goto_line(target);
+        // One hard flick: 64 notches coalesced × 3 縱 each.
+        let began = Instant::now();
+        ed2.scroll(192, false);
+        println!("line {target:>5}  one flick = {:>8.1} ms", began.elapsed().as_secs_f64() * 1000.0);
+    }
 }

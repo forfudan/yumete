@@ -527,8 +527,8 @@ index, and a row with no number anywhere else is a row that got lost.
 | 302 | **命令行該不該自己佔一行** | tui | P4 | helix 加在狀態列**下面**；我們是搶狀態列 [^302] | Proposed |
 | 303 | **一個 `#set` 把後面整份稿子染成代碼** | core | P2 | 沒看全的一行不許開塊，空行清零 [^303] | Done |
 | 304 | **`e` 把上一個詞的尾巴和標點一起圈進來** | core | P2 | 規格定了：`w` 取詞、`e` 取句；只有錨點要改 [^304] | Planned |
-| 305 | **留下的草稿讓這一輪整輪不寫草稿** | core | P1 | `write_swap` 空轉一整輪；第二個進程也蓋得掉 [^305] | Open |
-| 306 | **撐大檔案的護欄只擋 `:write`，autosave 一道也沒有** | core | P1 | #295 的界限沒接到 `:wq`／`:w!`／`:wa`，也沒接到 swap [^306] | Open |
+| 305 | **留下的草稿讓這一輪整輪不寫草稿** | core | P1 | 這一輪寫到自己名下 `.名.yumete.<pid>` [^305] | Fixed 2026-09-09 |
+| 306 | **撐大檔案的護欄只擋 `:write`** | core | P1 | 移進 `write_forcing`，四個入口一起繼承 [^306] | Fixed 2026-09-09 |
 | 307 | **帶引號的 CSV 欄位，改隔壁一格就毀掉** | core | P1 | 一個 `"a, b"` 就夠；改完整份不再解析得出來 [^307] | Open |
 | 308 | **`:grep` 截在 500 條，`:replace` 照樣報成功** | core | P2 | 只改得到截斷以內，訊息卻說全改了 [^308] | Open |
 | 309 | **CRLF 檔案按 Enter 插進來的是一個 `\n`** | core | P2 | 純讀寫往返是對的，一編輯就混行尾 [^309] | Open |
@@ -536,7 +536,7 @@ index, and a row with no number anywhere else is a row that got lost.
 | 311 | **`:export tsv` 把帶引號的欄位劈開** | core | P3 | 導出自己按分隔符切，沒走 `table.rs` 的解析 [^311] | Open |
 | 312 | **`:w` 斷開硬連結** | core | P4 | rename 換掉 inode；xattr 與屬主一併掉 [^312] | Open |
 | 313 | **每一鍵重掃全篇塊結構** | core | P1 | 3.5 MB 稿子每字 38 ms，九成八的採樣在 `scan_blocks` [^313] | Open |
-| 314 | **按鍵事件不合併，一個重複事件就是一幀** | tui | P1 | 滾輪合併 64 格，按鍵一格都不合 [^314] | Open |
+| 314 | **按鍵事件不合併，一個重複事件就是一幀** | tui | P1 | 有輸入排隊就跳過這一幀，`FRAME_FLOOR` 兜底 [^314] | Fixed 2026-09-09 |
 | 315 | **折行備忘錄的 key 本身是 O(段長)** | core | P2 | 命中也要把整段 hash 一遍，再 clone 一份 [^315] | Open |
 | 316 | **表格裏每一鍵重算整表補白** | core | P2 | `caret` 進了 key，Insert 中每鍵必然 miss [^316] | Open |
 | 317 | **全書 replace 之後，autosave 每五秒凍一秒六** | core | P2 | 一百個 buffer 全量序列化 ＋ 兩百次 fsync，在輸入線程 [^317] | Open |
@@ -545,7 +545,7 @@ index, and a row with no number anywhere else is a row that got lost.
 | 320 | **表格裏的 `j` 是 O(rows)** | core | P3 | 一萬行一次 27.8 ms；CSV 格子不受影響 [^320] | Open |
 | 321 | **`w`／`b`／`e` 每一次都重新分詞** | core | P3 | 整行複製 ＋ Viterbi，`segment_cache` 沒接上 [^321] | Open |
 | 322 | **`blocks_through` 每幀 clone 一整條** | core | P3 | 六萬個元素，只為索引一次 [^322] | Open |
-| 323 | **帶 count 的編輯留下 N 個 undo 點** | core | P1 | `100p` 要按一百次 `u` 纔退得回去 [^323] | Open |
+| 323 | **帶 count 的編輯留下 N 個 undo 點** | core | P1 | 第一趟宣告，其餘抑制：一趟一個點 [^323] | Fixed 2026-09-09 |
 | 324 | **`r` 作用在多碼位字素上成倍寫出** | core | P2 | `rZ` 對着一個 ZWJ emoji 寫出五個 Z [^324] | Open |
 | 325 | **大小寫算子靜默刪字符** | core | P3 | `.to_uppercase().next()` 只取第一個 [^325] | Open |
 | 326 | **`gJ` 把行尾空白留着，又加一個空格** | core | P4 | 接縫的規則是從 `_ => " "` 掉出來的 [^326] | Open |
@@ -575,6 +575,11 @@ index, and a row with no number anywhere else is a row that got lost.
 | 350 | **護欄放在必經之路上，不放在呼叫點** | core | P2 | 掛在一個 match 分支上的規矩，另外三個入口不認 [^350] | Open |
 | 351 | **按性質提問，不按模式列舉** | core+tui | P3 | `matches!(m, A \| B)` 之外的模式就這麼掉出去了 [^351] | Open |
 | 352 | **TUI 設定面板走 `settings_ui` 的兩半事實** | tui+ime | P4 | 第五個前端不必再手抄一份布爾表達式 [^352] | Proposed |
+| 353 | **兩條過時的提示，其中一條還沒走 `messages.toml`** | tui+core | P3 | 面板改說 `gd` 並進了表；Enter 從此沉默 [^353] | Fixed 2026-09-09 |
+| 354 | **表格視窗下的搜索搜的是全文，而光標出不去** | core | P2 | 搜到表外的命中，卻永遠跳不過去 [^354] | Open |
+| 355 | **`gw` 改成 `gD`** | core | P3 | 同一個鍵，大寫就是「不離開這裏」 [^355] | Fixed 2026-09-09 |
+| 356 | **表格預設按字，`Tab` 走格，`T` 切粒度** | core | P2 | 格視圖用得並不多，預設卻是它 [^356] | Open |
+| 357 | **表格視窗裏 `j`／`k` 不按看得見的欄走** | core+tui | P2 | 光標按源碼位置算，而畫面是格子排的 [^357] | Open |
 
 ### 5.5 · A table is a delimiter, a surface and a boundary (#261)
 
@@ -2066,9 +2071,13 @@ for prioritizing. **Done** = implemented; **Pn** = planned in that phase;
 > on two counts: **how often it is pressed**, and **whether it can wait for a
 > second key**. What can wait, goes down a level — into a group, or into 空格.
 >
-> **前置條件：Helix／vi 的共識鍵不動。** yumete is CJK-aware and made for
-> writing, but it is also a general editor — English and code are typed in it.
-> The consensus keys are an asset somebody else built; they are not free space.
+> **前置條件：Helix／vi 的共識鍵不動——爲的是遷移**（2026-09-09 說清楚）。
+> yumete is CJK-aware and made for writing, but it is also a general editor,
+> and **作者自己有一半時間在寫英文、讀代碼**。共識鍵是別人建好的資產，不是空地。
+> 判準因此不是「我按不按它」，而是「**大多數 vi／helix 使用者從來不碰**」——那樣的
+> 鍵纔可以換給中文的功能。代理有三個：vi 與 helix 的交集、cheatsheet 的第一頁、
+> **helix 自己的 `tutor`**（一份教程只教得下幾十個鍵，選哪幾十個就是那個社羣調查的
+> 答案）。見 §5.2.3 ②。
 
 Two corollaries that have already changed decisions:
 
@@ -3743,6 +3752,34 @@ proposal that raised it.**
 > **前置條件：Helix／vi 的共識鍵不動。** yumete is CJK-aware and made for
 > writing, but it is also a general editor — English and code are typed in it.
 > The consensus keys are an asset somebody else built; they are not free space.
+
+**前置條件說清楚了，2026-09-09**：共識鍵不動，**爲的是遷移**——不是因爲作者按得多。
+
+> 判準不是「我按不按它」，而是「**一個從 vi／helix 過來的人，會不會因爲它不在而覺得
+> 這編輯器壞了**」。所以讓得出去的，是**大多數 vi／helix 使用者從來不碰**的那些。
+
+這是一個關於**別人**的問題，於是有兩個後果。
+
+**一、不量，用判斷。** 這一半問的是一整個社羣，作者一個人的頻次答不了它；外面也沒有
+數可抄——helix 不收任何遙測，vim 那邊的問卷與 vimgolf 記錄遷移不到 helix 的選擇優先
+模型。所以靠的是**「它在不在 vi 與 helix 的交集裏，在不在每份 cheatsheet 的第一頁，
+在不在 tutor 裏」加上常識**，而不是靠統計。一個要量兩週纔敢動的鍵，本來也不值得動。
+
+**`tutor` 是這三個代理裏最好的一個**：一份教程只教得下幾十個鍵，而選哪幾十個，是
+helix 自己對「一個新人非學不可的是什麼」的回答——它替我們把那個社羣調查做完了。
+在 tutor 裏的鍵，遷移過來的人一定按過；不在的，多半一輩子沒碰。
+
+**二、按「中文稿子上按不按」列的降級名單作廢。** `f`／`F` 與 `>`／`<` 撤回：作者一半
+時間在寫英文、讀代碼，那半邊它們天天按。`%`、`q`／`Q`、`R`、`"` 也移出候選——都是第一
+頁的東西，正是遷移會絆倒的地方。
+
+**真正安全的儲備是多數人從來不碰的那些**：`A-` 整族（`A-s` `A-,` `A-_` `A-C` `A-K`
+`A-;`…）、`&`／`_`（對齊、修剪選區）、`K`／`A-K`（保留、剔除匹配的選區）、`C`／`A-C`
+（向下複製選區）、`Z`（粘滯視圖）。連同 `s`／`S`／`,` 那三個——多光標三件套，而
+**yumete 根本沒有多光標**，遷移過來的人在這裏本來就用不了。
+
+`t`／`T` 當初讓給表格，走的正是這個形狀的論證：不是「till 用得少」，而是**在這個編輯器
+的語法下 till 本來就不承擔重量**（動詞在最後，`t，d` 不是 `dt，`）。
 >
 > — 2026-09-06：「helix/vim 中比較重要、使用率最高的一級快捷鍵不要
 > 輕易更改……不需要立刻反應的功能，儘量使用多層次的快捷鍵。」
@@ -7366,7 +7403,19 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     仍與崩潰那次逐位元組相同；`:q!` 之後還在。同一段狀態也解釋了兩個 yumete 開同一個
     檔案時互相蓋草稿——A 寫 `sharedAAA`、B 蓋成 `sharedBBB`、B 的 `:w` 再把它刪掉，
     因為所有權是進程内的欄位，第二個進程看不見。做法：草稿路徑帶 `<pid>`，
-    `:recover` 把找到的每一份都列出來、說明來源。**medium**
+    `:recover` 把找到的每一份都列出來、說明來源。
+
+    **2026-09-09 落地。** `session_swap_path()` 決定這一輪寫到哪裏：正常就是那個規範名
+    字，而**旁邊已經躺着一份沒人認領的草稿時，就寫到自己名下**（`.ch1.md.yumete.4321`）。
+    於是 `write_swap` 再也不空轉。所有權也不再只是一個進程内的 bool：`wrote_at` 記着這
+    一輪自己寫在哪，`clear_swap` 只刪那一個，別人那份留着。`read_draft` 跟着要多看一眼
+    ——**如果崩的是第二個 session，它那份帶 pid 的纔是它全部的工作**——所以除了規範名字，
+    還掃同目錄下 `.名.yumete.<純數字>`，取最新的一份offer；後綴不是純數字的（`.bak`）
+    不算，免得把作者自己放在旁邊的檔案當成草稿。`adopt_draft` 認領之後把自己那份 pid
+    副本收掉，兩個名字不留給同一個 buffer。
+
+    `docs/.development.md.yumete` 那 4.3 MB 同日刪除：它比正文舊，`read_draft` 的
+    `stamped >= saved` 本來就永遠不會再 offer 它，留着只是一塊死數據。**medium**
 
 [^306]: #295 的界限今天只掛在 `commands.rs:89` 的 `Command::Write` 上，那一段註釋
     自己寫着 `:w!`／`:wq`／`:wa` 是故意先不接的。實際用起來 `:wq` 纔是對齊完一張表
@@ -7376,8 +7425,21 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     4,373,368：行數更少（4,328 對 6,873）而位元組是十倍，因為路線表第 447–500 行每行
     14,385–14,698 位元組，其中一行 4,857 個空格，正是對齊器把每格補到最寬那一格的樣子
     （#292、#295 記過同一件事：425,694 → 2,945,642）。它又觸發 #305，所以一直沒被清掉。
-    做法：`oversize_query` 從 `Command::Write` 移進 `write_forcing`，`write_swap`
-    加同一道尺寸檢查。**small**
+    做法：`oversize_query` 從 `Command::Write` 移進 `write_forcing`。
+
+    **2026-09-09 落地，並且推翻了這一條原先的後半句。** 寫盤那一半照做了：閘門移進
+    `write_forcing`，於是 `:w`／`:w!`／`:wq`／`:write all` 一起繼承；`save_as` 不走那個
+    漏斗，所以 `:wq <名字>` 那一支另外問一次。`Wrote` 多一個 `Asked`，**由型別逼着每個
+    呼叫端表態**——`:wq` 因此不會在問題還立着的時候把稿子從螢幕上拿走，`:write all` 停在
+    問的那一個 buffer 上（問題點名的是一個檔案，讀的人得正看着它）。`:w!` 也照問：那一個
+    驚嘆號答的是「蓋過磁盤上這一份」，不是「十七倍就是我要的」。放行只管這一次存檔，
+    下一次是另一個問題。
+
+    **`write_swap` 那一半不做，而且不該做。** 草稿的職責是**照實鏡射緩衝**：緩衝真有
+    4.3 MB，就該有一份 4.3 MB 的草稿。加一道尺寸閘門等於拿「磁盤上多一個大檔案」去換
+    「這一輪沒有崩潰保護」——後者纔是真正丟東西的那一邊。4.3 MB 那份的成因也不在鏡射：
+    撐大是 `t F` 幹的（#292／#295 管），而它**一直留着**是 #305 幹的。#305 修好，這一類
+    殘留自己就沒了。**small**
 
 [^307]: 不是刻意構造的檔案：五千行乾淨資料 ＋ 一個 `2500,"Smith, John",note` 照樣按
     整份 grid 打開。把光標放到表頭叫 `note` 的那一格改一個字，寫回去是
@@ -7429,7 +7491,15 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     從「有點慢」變成「不能用」的那一步。做法：`terminal.draw` 之前照 `:913` 補一句
     poll，還有事件排隊就跳過這一幀。順帶把 `:443` 那個無條件的 `buffer.clone()` 收進
     `take_screenshot_request()` 為 `Some` 的分支（120×50 一幀 24 µs、400×100 94 µs，
-    只為一個沒人按的 `:shot`）。**small**
+    只為一個沒人按的 `:shot`）。
+
+    **2026-09-09 落地。** `terminal.draw` 之前先問一句「手上還有沒有事件」（`queued`
+    或 `event::poll(ZERO)`），有就不畫這一幀——**事件一個都沒丟**，讀還是照讀、處理還是
+    照處理，省掉的只是兩個按鍵之間那張沒人看得到的畫面。加了 `FRAME_FLOOR`（100 ms）
+    兜底：一直跳過會讓長按時整個畫面定住，這條保證最差也還有每秒十幀。順帶把那個無條件
+    的 `buffer.clone()` 收進「真有人按了 `:shot`」的分支——**而且有截圖請求時絕不跳過
+    這一幀**，跳了就等於遞給 `:shot` 一張白紙（我第一版就是這麼錯的，測試釘住了）。
+    **small**
 
 [^315]: rows 是快取住的，可**取快取本身**是 O(段長)：`wrap.rs:668` 的 `line_hash` 把整段
     每一塊 hash 一遍，命中之後又 clone 整個 `Vec`。光標在首行、rows 已經在快取裏時量：
@@ -7488,7 +7558,16 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     `100p`／`100>` 在使用者眼裏是一條命令，在 undo 裏是一百個點。量過：`100p` 要按
     整整一百次 `u`，`100>` 一樣；`100\`u` 不走 `repeat`，正確地只要一次。使用者只會
     理解成「undo 壞了」，而那是第一天就會撞上的印象。做法：`snapshot` 提到迴圈外，
-    或第 2..n 次不再 snapshot。**small**
+    或第 2..n 次不再 snapshot。
+
+    **2026-09-09 落地，做法比「提到迴圈外」更貼合這裏的機制。** 這個倉的 undo 點是
+    **宣告 ＋ 兌現**兩步：`snapshot()` 只是把一個點掛在 `history.pending` 上，等文本真的
+    動了 `earn_snapshot()` 纔兌現（那條註釋寫得好：「一個有時什麼都不做的 undo，是讓人
+    最快不再信任編輯器的辦法」）。所以不必去搬 `snapshot` 的位置，只要**在第一趟之後
+    別再宣告**：`History` 多一個 `grouping`，`begin_undo_group` 開、`end_undo_group` 關，
+    開的時候把舊值換回來，於是巢狀的 `repeat` 仍然只是一個組。第一趟之外的 `snapshot()`
+    直接返回，後面幾趟的編輯兌現不到任何東西，整趟就只有一個點——而那個點存的正是第一趟
+    **之前**的樣子。測試釘的是 `10p` 之後一次 `u` 回到原樣、一次 `U` 再回去。**small**
 
 [^324]: `verbs.rs:154` 的 `replace_chars` 對 `chars()` 映射，而不是對字素。於是 `rZ`
     對着一個 ZWJ 家庭 emoji 寫出 **`ZZZZZ`**；分解式的 `か`（か+U+3099）寫出 `ZZ`；
@@ -7701,3 +7780,56 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     謂詞一律肯定式，取反由呼叫端加 `!`，配 `frontends/settings_layout.toml`。
     yumete 是**第五個前端**：將來那個 TUI 設定面板只要填 `UiFacts`，條件邏輯一行都不必
     再寫。先決條件是 #347——按鍵那一層先走通，設定面板改的東西纔有地方生效。**medium**
+
+
+
+[^353]: 兩條，性質不同。`yumete-tui/src/table.rs:892` 是一句**硬編碼的中文字面量**
+    `"部件（Enter 跟過去）"`——沒走 `messages.toml`，所以簡體與英文都沒有，是本地化漏
+    掉的一處，順手補回表裏。另一條是 `messages.toml` 的 `hint.vi.enter`，由
+    `keys.rs:994` 的 phrasebook 在 Normal 按 Enter 時說出來。兩條合起來正是使用者遇到
+    的矛盾：**面板教你按 Enter 跟過去，按下去卻說 Enter 不做事**。跟過去的鍵早就是
+    `gd`（見 #355 之後是 `gd`／`gD`）。做法：面板那句進 `messages.toml` 並改說 `gd`；
+    `hint.vi.enter` 整條刪掉，Enter 在 Normal 保持沉默——那條註釋說它是給「上週還在按
+    Enter 的人」的過渡提示，過渡期已經過了。
+
+    **2026-09-09 落地。** 面板那句成了 `detail.components`，簡繁英三份都有，內容改說
+    `gd`。順帶發現 `messages.toml` 裏還有**一條既有的無效 TOML**——`en` 的字串裏嵌了
+    沒轉義的雙引號（`…g is "go where")"`）——一併改成單引號。這個倉的訊息表是自己解析
+    的，寬鬆到沒報錯，所以它一直躺在那裏；換一個嚴格的解析器就會炸。**small**
+
+[^354]: `editor/search.rs` **完全沒有表格意識**（整個檔案裏唯一提到 grid 的是 `:s` 的
+    護欄），所以 `t t` 的整窗格視圖下 `/` 搜的是整份文件；而 `tables.rs:3165` 又把光標
+    clamp 回表格裏。兩件事單獨看都對，湊在一起就是死局：**搜得到表外的命中，卻永遠跳
+    不過去，於是 `n` 在表裏轉不動**。做法：格視圖下把搜索的範圍收到這張表的行段內
+    （`table_row_span()` 已經知道邊界），`/` `?`、`g/` `g?`、`t/` `t?` 一律如此，`n`／`N`
+    在表內迴繞。**只在格視圖下收窄**——光標在文件裏的表格上時沒有 clamp，全文搜索仍是
+    對的。**medium**
+
+[^355]: goto 組現在是 `gd` 去、`gw` 在另一個工作區看。`w` 沒有理據，而同一個倉裏
+    「在旁邊看」已經有兩對寫法：`g/`／`g?`、`t/`／`t?`。改成 `gd`／`gD`：**同一個鍵，
+    大寫就是在旁邊看**。`handle_goto` 裏 `D` 是空的，而 goto 組本來就用了大寫（`gJ`）。
+    退役的 `gw` 照這個倉的規矩留一條 phrasebook（見 `CASE_KEYS` 末行那條的做法）。
+    順帶：`GOTO_KEYS` 那一行 `("d w", …)` 與手冊第 177–178 行一起改。
+
+    **2026-09-09 落地。** `gD` 接手，`gw` 留一句 `hint.goto.w-moved` 說它去了哪裏——
+    這個倉對退役鍵一向如此（`~`、`*`、`t`／`T` 都有），而這一次學會舊鍵的手指是作者
+    自己的。手冊三處、測試九處一起改。**small**
+
+[^356]: 今天 `Grain::Cell` 是預設（`keys.rs:265`、`tables.rs:179/295/523/554` 四處），
+    `Tab` 用來切粒度。實際用下來格視圖用得並不多，而**按字纔是寫東西時的常態**。
+    2026-09-09 定的做法：**`Grain::Char` 成為預設，markdown 表格與 CSV 整窗格視圖都是**；
+    `Tab` 改成往右走一格（走到最右就落到下一列最左），`S-Tab` 反向；上下靠 `j`／`k`
+    的普通行移動就夠。粒度切換移到 **`T`**——`keys.rs:722` 的註釋寫着「`t` 與 `T` 都退役
+    了，`t` 在每個模式下都是表格組」，所以 `T` 是那個組空着的大寫孿生鍵，不是將就。
+    ⚠️ **這一條動的是預設值、肌肉記憶、手冊與 `:tutor`，面比它自己大**；而且它**要
+    #357 先落地**：預設按字之後，`j`／`k` 走不走得對就從次要變成核心。**medium**
+
+[^357]: `refresh_goal_column`（`editor/matching.rs:151`）算的是**源碼**上的顯示列——
+    它已經接了 `with_drawn(&drawn)`，而 `drawn_on_line` 裏含 `table_padding_on_line`，
+    所以**文件裏那張對齊過的表**是對的。格視圖不是：`t b`／`t f`／`t t` 的畫面由
+    `yumete-tui/src/table.rs` 自己排欄寬，那套寬度核心一無所知，於是 `j`／`k` 照文件的
+    列走、畫面照格子的列排，兩邊對不上——**光標在欄與欄之間漂**。這是 #349 那一族的
+    第四個：同一個「這一格在第幾欄」有兩套算法，平時看不見，對不上的那天纔看得見。
+    做法：格視圖的欄寬要成為核心問得到的東西（像 `drawn` 那樣遞進去），或者把格視圖的
+    垂直移動改成走格子的行而不是文件的行。**medium**
+

@@ -87,15 +87,6 @@ impl Editor {
                 Ok(CommandOutcome::Continue)
             }
             Command::Write(path) => {
-                // **`:write` alone.** `:w!`, `:wq` and `:wa` are deliberately
-                // not gated yet (2026-09-08): `:w!` already spells out 「over
-                // whatever is there」, and the other two are one line each when
-                // the shape of the question has been lived with. What is built
-                // here is the interface, not the one caller.
-                if let Some(ask) = self.oversize_query(path.as_deref()) {
-                    self.query = Some(ask);
-                    return Ok(CommandOutcome::Continue);
-                }
                 self.write_current(path.as_deref())?;
                 Ok(CommandOutcome::Continue)
             }
@@ -274,13 +265,27 @@ impl Editor {
                                 return Ok(CommandOutcome::Continue);
                             }
                         }
+                        // `save_as` does not go through the funnel, so the gate
+                        // is asked for here too — `:wq 第二章.md` over an
+                        // existing chapter multiplies it exactly as `:wq` does.
+                        if !self.oversize_answered {
+                            if let Some(ask) = self.oversize_query(Some(path)) {
+                                self.query = Some(ask);
+                                return Ok(CommandOutcome::Continue);
+                            }
+                        }
                         self.current_buffer_mut()
                             .save_as(target, false)
                             .map_err(EditorError::Io)?;
                         self.status = say!("buffer.saved", self.current_buffer().display_name());
                     }
                     None => {
-                        self.write_current(None)?;
+                        // A question standing is not a save, and `:wq` on a
+                        // save that did not happen would take the manuscript
+                        // off the screen with the answer still unanswered.
+                        if matches!(self.write_current(None)?, Wrote::Asked) {
+                            return Ok(CommandOutcome::Continue);
+                        }
                     }
                 }
                 // Saving *this* buffer is not saving the session: another open
@@ -876,7 +881,12 @@ impl Editor {
             Asking::OversizeWrite { path } => match answer {
                 // Yes: the same save, with the gate already answered.
                 'y' => {
+                    // One write, with the gate already answered. Scoped to this
+                    // call: leaving it set would wave through the *next* save
+                    // too, and the next save is a different question.
+                    self.oversize_answered = true;
                     let _ = self.write_forcing(path.as_deref(), false);
+                    self.oversize_answered = false;
                 }
                 // 檢視區別 **abandons the save**. Nothing is written, and the
                 // buffer is left exactly as it was — which is the point: the
@@ -931,8 +941,8 @@ impl Editor {
     }
 
     /// Save the active buffer, optionally to a new `path` (save-as).
-    pub(super) fn write_current(&mut self, path: Option<&str>) -> Result<(), EditorError> {
-        self.write_forcing(path, false).map(|_| ())
+    pub(super) fn write_current(&mut self, path: Option<&str>) -> Result<Wrote, EditorError> {
+        self.write_forcing(path, false)
     }
 
     /// The same, and `force` writes over a file that changed on disk (`:w!`).
@@ -944,6 +954,19 @@ impl Editor {
     /// been saved, and in Chinese left a stale 「抄了一份」 standing over a save
     /// that had happened.
     pub(super) fn write_forcing(&mut self, path: Option<&str>, force: bool) -> Result<Wrote, EditorError> {
+        // **The gate belongs on the path every write takes**, not on one arm of
+        // the command match (#306). It was built on `:write` alone and left
+        // there deliberately — `:w!` already says 「over whatever is there」 and
+        // the other two were 「one line each」 — but the line that multiplies a
+        // manuscript is `t F`, and the key a writer reaches for after it is
+        // `:wq`. A bang answers a different question anyway: it says overwrite
+        // *this file*, not 「a 17× file is what I meant」.
+        if !self.oversize_answered {
+            if let Some(ask) = self.oversize_query(path) {
+                self.query = Some(ask);
+                return Ok(Wrote::Asked);
+            }
+        }
         let saved: Result<Wrote, EditorError> = match path {
             // `:w path` writes a **copy** and stays here; `:w! path` writes it
             // over whatever is already there. Rebinding this buffer to another
@@ -1011,6 +1034,10 @@ impl Editor {
                 self.status = say!("buffer.saved", self.current_buffer().display_name())
             }
             Ok(Wrote::Copied(to)) => self.status = say!("buffer.copied-to", to.display()),
+            // Unreachable — the gate returns before anything is written — and
+            // spelled out rather than lumped in with `Err` so that adding a
+            // second question later cannot make this quietly claim a save.
+            Ok(Wrote::Asked) => {}
             Err(_) => {}
         }
         saved

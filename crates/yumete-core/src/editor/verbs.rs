@@ -35,6 +35,11 @@ impl Editor {
     /// edit. Stops early once the action stops moving the cursor, so `999j` at
     /// the end of the buffer costs one step rather than a thousand.
     pub(super) fn repeat(&mut self, n: usize, mut action: impl FnMut(&mut Self)) {
+        // **A count is one command.** The first pass announces the undo point
+        // the whole run goes back to; the rest are the same command still
+        // running, so their announcements are suppressed (#323). Without this
+        // `100p` took a hundred presses of `u` to take back one keystroke.
+        let mut group: Option<bool> = None;
         for _ in 0..n {
             let (before, anchor) = (self.cursor, self.anchor);
             let revision = self.current_buffer().char_count();
@@ -45,6 +50,10 @@ impl Editor {
             {
                 break;
             }
+            group.get_or_insert_with(|| self.current_buffer_mut().begin_undo_group());
+        }
+        if let Some(was) = group {
+            self.current_buffer_mut().end_undo_group(was);
         }
     }
 

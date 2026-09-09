@@ -1516,6 +1516,9 @@ pub struct Editor {
     viewing: Cell<Option<Viewing>>,
     /// The question the editor has stopped to ask, if it has (#295).
     query: Option<Query>,
+    /// One write may go through with the oversize gate already answered (#306).
+    /// Set only for the duration of the write the reader said 「yes」 to.
+    oversize_answered: bool,
     /// Word ranges already worked out, per line, against a hash of that line.
     segment_cache: RefCell<SegmentCache>,
     /// 平仄 in the margin (Feature #247), and the answers already worked out.
@@ -1725,6 +1728,12 @@ enum Wrote {
     Saved,
     /// A copy went elsewhere; the buffer is still where it was, still modified.
     Copied(PathBuf),
+    /// **Nothing was written**: the save would multiply the file, so the
+    /// question of #295 is now standing and the answer decides (#306). Callers
+    /// that go on to do something after a save — quit, or move to the next
+    /// buffer — have to stop here, which is why this is a variant rather than
+    /// a silent `Ok`.
+    Asked,
 }
 
 /// A question the editor has stopped to ask before doing something it cannot
@@ -1924,6 +1933,7 @@ impl Editor {
             paper: crate::export::Paper::A5,
             viewing: Cell::new(None),
             query: None,
+            oversize_answered: false,
             segment_cache: RefCell::new(SegmentCache::new()),
             meter: false,
             meter_cache: RefCell::new(MeterCache::new()),

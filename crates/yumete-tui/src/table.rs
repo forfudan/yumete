@@ -21,6 +21,7 @@ use ratatui::widgets::Clear;
 use ratatui::Frame;
 use yumete_config::Config;
 use yumete_core::editor::Editor;
+use yumete_core::say;
 use yumete_core::table::Rules;
 
 use crate::{gutter_width, put_text};
@@ -889,7 +890,7 @@ pub fn draw_detail(frame: &mut Frame, editor: &Editor, config: &Config, area: Re
     // used to be drawn last, under twenty-eight mostly-blank fields, which on
     // any real window meant not drawn at all.
     if !detail.links.is_empty() {
-        put_text(buf, left, y, right, "部件（Enter 跟過去）", name);
+        put_text(buf, left, y, right, &say!("detail.components"), name);
         y += 1;
         let mut x = left;
         for (c, line) in &detail.links {

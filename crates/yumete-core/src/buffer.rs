@@ -76,6 +76,13 @@ pub struct Buffer {
     /// `:recover` — read once, because the status line asks about it every
     /// frame and the answer cannot change under us.
     pending_draft: Option<String>,
+    /// Where that draft was found. Kept because it is no longer always the
+    /// canonical name: a second session, or a session that reopened a file
+    /// after a crash, keeps its own copy beside it (#305).
+    pending_swap: Option<PathBuf>,
+    /// Where *this* session last wrote its recovery copy — the only one it may
+    /// remove. A copy it did not write is somebody's unrecovered work.
+    wrote_at: Option<PathBuf>,
     /// Whether the recovery copy on disk is *this session's*.
     ///
     /// Until this session writes one, the copy beside the document belongs to
@@ -152,6 +159,16 @@ struct History {
     /// trusting an editor. So the point waits here until the text actually
     /// moves, which is exactly when it becomes worth going back to.
     pending: Option<EditSnapshot>,
+    /// **One command, one undo point** (#323). While this is set, an
+    /// announcement is ignored: the point announced before the group opened is
+    /// the one the whole run goes back to.
+    ///
+    /// A count is one command in the reader's hand — `100p` is 「paste this a
+    /// hundred times」, not a hundred pastes — and `repeat` runs the action a
+    /// hundred times, each announcing a point of its own. So `u` had to be
+    /// pressed a hundred times to take back one keystroke, which reads as an
+    /// undo that is broken rather than one that is precise.
+    grouping: bool,
 }
 
 /// Hands out a fresh buffer id.
@@ -190,6 +207,8 @@ impl Buffer {
             syntax: crate::syntax::Syntax::default(),
             syntax_guessed: true,
             pending_draft: None,
+            pending_swap: None,
+            wrote_at: None,
             owns_swap: false,
             seen: None,
             read_as: None,
@@ -221,6 +240,8 @@ impl Buffer {
             syntax: crate::syntax::Syntax::default(),
             syntax_guessed: true,
             pending_draft: None,
+            pending_swap: None,
+            wrote_at: None,
             owns_swap: false,
             seen: None,
             read_as: None,
@@ -252,7 +273,10 @@ impl Buffer {
         };
         // Whether a crash left a draft here is decided once, now: the status
         // line asks every frame, and the answer cannot change under us.
-        let pending_draft = read_draft(path, &rope);
+        let (pending_draft, pending_swap) = match read_draft(path, &rope) {
+            Some((text, at)) => (Some(text), Some(at)),
+            None => (None, None),
+        };
         // …and so is which markup it is written in. The name says, when it
         // says; otherwise the file itself does.
         let name = path.file_name().map(|n| n.to_string_lossy().into_owned());
@@ -268,6 +292,8 @@ impl Buffer {
             history: History::default(),
             revision: 0,
             pending_draft,
+            pending_swap,
+            wrote_at: None,
             owns_swap: false,
             syntax,
             syntax_guessed: named.is_none(),
@@ -517,22 +543,39 @@ impl Buffer {
         self.scratch_swap.as_deref()
     }
 
-    /// Write the recovery copy, unless a draft this session has not taken over
-    /// is sitting there.
+    /// Where *this* session writes its recovery copy.
+    ///
+    /// The canonical name, unless a draft nobody has taken over is already
+    /// sitting there — then a name of this session's own, `.ch1.md.yumete.4321`.
+    ///
+    /// **This is the whole of #305.** Refusing to overwrite an un-taken draft
+    /// was right; refusing to write *at all* was the accident, and it made the
+    /// one session that most needs a recovery copy — the one that just reopened
+    /// a file after a crash — the one session that had none. It also had two
+    /// yumetes on one chapter writing over each other, because ownership was a
+    /// field in a process and the other process cannot see a field.
+    fn session_swap_path(&self) -> Option<PathBuf> {
+        let swap = self.swap_path()?;
+        if self.pending_draft.is_some() && !self.owns_swap {
+            let name = swap.file_name()?.to_string_lossy().into_owned();
+            return Some(swap.with_file_name(format!("{name}.{}", std::process::id())));
+        }
+        Some(swap)
+    }
+
+    /// Write the recovery copy.
     ///
     /// Written atomically like a save, so a crash *during* the recovery write
-    /// cannot destroy the copy the last one left. Refusing to write over an
-    /// un-taken draft is what keeps one keystroke in a reopened file from
-    /// erasing the hour of work the crash left behind.
+    /// cannot destroy the copy the last one left.
     pub fn write_swap(&mut self) -> io::Result<()> {
-        if self.pending_draft.is_some() && !self.owns_swap {
-            return Ok(());
-        }
-        let Some(swap) = self.swap_path() else {
+        let Some(swap) = self.session_swap_path() else {
             return Ok(());
         };
         self.write_atomically(&swap)?;
-        self.owns_swap = true;
+        self.wrote_at = Some(swap);
+        // Only true of the canonical name: writing beside somebody's draft
+        // does not make it ours to remove.
+        self.owns_swap = self.pending_draft.is_none();
         Ok(())
     }
 
@@ -542,18 +585,28 @@ impl Buffer {
     /// crashed session's, or a second yumete's — and quitting is not a reason
     /// to throw it away. `:recover!` is the one thing that says so on purpose.
     pub fn clear_swap(&mut self) {
+        // This session's own copy, wherever it put it — never the draft it
+        // found on arrival, which belongs to whoever has not recovered it yet.
+        if let Some(mine) = self.wrote_at.take() {
+            let _ = fs::remove_file(mine);
+        }
         if self.owns_swap {
-            self.discard_swap();
+            self.pending_draft = None;
+            self.pending_swap = None;
         }
     }
 
     /// Remove the recovery copy whoever wrote it — the writer said to.
     pub fn discard_swap(&mut self) {
-        if let Some(swap) = self.swap_path() {
-            let _ = fs::remove_file(swap);
+        for gone in [self.pending_swap.take(), self.wrote_at.take(), self.swap_path()]
+            .into_iter()
+            .flatten()
+        {
+            let _ = fs::remove_file(gone);
         }
         self.pending_draft = None;
-        // Nothing is out there now, so this session writes the next one.
+        // Nothing is out there now, so this session writes the next one, and
+        // writes it under the canonical name again.
         self.owns_swap = true;
     }
 
@@ -565,7 +618,16 @@ impl Buffer {
     /// Take the draft over: this session's text is what the copy should hold
     /// from now on. Called once the writer has loaded it.
     pub fn adopt_draft(&mut self) {
+        // Taken over: the canonical name is this session's from here on, so the
+        // copy kept beside it while it was somebody else's is now two names for
+        // one buffer.
+        if let Some(mine) = self.wrote_at.take() {
+            if Some(&mine) != self.swap_path().as_ref() {
+                let _ = fs::remove_file(mine);
+            }
+        }
         self.pending_draft = None;
+        self.pending_swap = None;
         self.owns_swap = true;
     }
 
@@ -710,6 +772,11 @@ impl Buffer {
     /// `ropey` clones are shallow (reference-counted nodes), so snapshotting the
     /// whole document per undo group is inexpensive.
     pub fn snapshot(&mut self, cursor: usize) {
+        // Inside a group the first announcement is the only one: everything
+        // after it is the same command still running.
+        if self.history.grouping {
+            return;
+        }
         // Cheap to hold: a ropey clone shares its structure, so an announced
         // point that is never earned costs a pointer.
         self.history.pending = Some(EditSnapshot {
@@ -717,6 +784,17 @@ impl Buffer {
             cursor,
             modified: self.modified,
         });
+    }
+
+    /// Stop announcing undo points until [`Self::end_undo_group`], and say what
+    /// the setting was — a group opened inside a group is still one group.
+    pub fn begin_undo_group(&mut self) -> bool {
+        std::mem::replace(&mut self.history.grouping, true)
+    }
+
+    /// Put back what [`Self::begin_undo_group`] answered.
+    pub fn end_undo_group(&mut self, was: bool) {
+        self.history.grouping = was;
     }
 
     /// Turn an announced undo point into a real one, now that the text has
@@ -818,18 +896,52 @@ fn swap_path_for(path: &Path) -> Option<PathBuf> {
 /// give a copy and the save that followed it the same time, and being offered a
 /// draft one does not need costs nothing, while not being offered one costs the
 /// work.
-fn read_draft(path: &Path, rope: &Rope) -> Option<String> {
+fn read_draft(path: &Path, rope: &Rope) -> Option<(String, PathBuf)> {
     let swap = swap_path_for(path)?;
-    let draft = fs::read_to_string(&swap).ok()?;
-    if rope == &draft[..] {
-        return None;
+    // The canonical name, and any copy a session kept beside it under a name of
+    // its own (`.ch1.md.yumete.4321`, see [`Buffer::session_swap_path`]). Those
+    // are left by a session that reopened a file while somebody's draft was
+    // still there — and if *that* session is the one that crashed, its copy is
+    // the only place its work is.
+    let mut found: Vec<(std::time::SystemTime, String, PathBuf)> = Vec::new();
+    let mut consider = |at: PathBuf| {
+        let Ok(draft) = fs::read_to_string(&at) else { return };
+        if rope == &draft[..] {
+            return;
+        }
+        let Ok(stamped) = fs::metadata(&at).and_then(|m| m.modified()) else { return };
+        let worth = match fs::metadata(path).and_then(|m| m.modified()) {
+            Ok(saved) => stamped >= saved,
+            // No document on disk at all: everything in the copy is unrecovered.
+            Err(_) => true,
+        };
+        if worth {
+            found.push((stamped, draft, at));
+        }
+    };
+    let name = swap.file_name()?.to_string_lossy().into_owned();
+    consider(swap.clone());
+    if let Some(dir) = swap.parent() {
+        if let Ok(entries) = fs::read_dir(dir) {
+            for entry in entries.flatten() {
+                let this = entry.file_name();
+                let this = this.to_string_lossy();
+                // `.ch1.md.yumete.4321` and nothing else: a suffix of digits,
+                // so a file the writer happens to keep beside the chapter is
+                // never mistaken for a recovery copy.
+                let digits = this
+                    .strip_prefix(&format!("{name}."))
+                    .is_some_and(|tail| !tail.is_empty() && tail.chars().all(|c| c.is_ascii_digit()));
+                if digits {
+                    consider(entry.path());
+                }
+            }
+        }
     }
-    let stamped = fs::metadata(&swap).and_then(|m| m.modified()).ok()?;
-    match fs::metadata(path).and_then(|m| m.modified()) {
-        Ok(saved) => (stamped >= saved).then_some(draft),
-        // No document on disk at all: everything in the copy is unrecovered.
-        Err(_) => Some(draft),
-    }
+    // The newest, when a crash left more than one: it is the one with the most
+    // in it, and the others stay on disk to be found rather than being spent.
+    found.sort_by_key(|(when, _, _)| *when);
+    found.pop().map(|(_, draft, at)| (draft, at))
 }
 
 impl TextStore for Buffer {
@@ -1188,6 +1300,102 @@ mod tests {
         // Saving makes the document the draft, so nothing is left to recover.
         b.save().unwrap();
         assert!(!swap.exists());
+        assert!(Buffer::open(&path).unwrap().recovered_draft().is_none());
+
+        fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn the_session_after_a_crash_still_keeps_a_draft() {
+        // **The run that most needs a recovery copy used to be the one without
+        // one** (#305). Refusing to write over a draft nobody had recovered was
+        // right; refusing to write at all was not, and it meant: crash once,
+        // reopen, work all day, crash again — and the day is gone.
+        let dir = std::env::temp_dir().join(format!("yumete-after-crash-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("chapter.md");
+        fs::write(&path, "第一稿\n").unwrap();
+
+        // A crash left this behind, newer than the document.
+        let left = dir.join(".chapter.md.yumete");
+        std::thread::sleep(std::time::Duration::from_millis(20));
+        fs::write(&left, "崩潰前寫的\n").unwrap();
+
+        let mut b = Buffer::open(&path).unwrap();
+        assert_eq!(b.recovered_draft(), Some("崩潰前寫的\n"));
+        b.insert(0, "今天的：").expect("writable");
+        b.write_swap().unwrap();
+
+        // The crashed session's work is untouched…
+        assert_eq!(fs::read_to_string(&left).unwrap(), "崩潰前寫的\n");
+        // …and this session's is on disk too, under a name of its own.
+        let mine = dir.join(format!(".chapter.md.yumete.{}", std::process::id()));
+        assert!(mine.exists(), "this session keeps a draft of its own");
+        assert_eq!(fs::read_to_string(&mine).unwrap(), "今天的：第一稿\n");
+
+        // A save clears only what this session wrote.
+        b.save().unwrap();
+        assert!(!mine.exists());
+        assert!(left.exists(), "somebody else's unrecovered work stays");
+
+        fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn two_sessions_on_one_chapter_do_not_overwrite_each_others_drafts() {
+        // Ownership was a `bool` inside a process, and the second process
+        // cannot see a field: both wrote the same path, and whichever ticked
+        // last won (#305).
+        let dir = std::env::temp_dir().join(format!("yumete-two-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("shared.md");
+        fs::write(&path, "底稿\n").unwrap();
+
+        let mut a = Buffer::open(&path).unwrap();
+        a.insert(0, "甲").expect("writable");
+        a.write_swap().unwrap();
+
+        // B opens while A's draft is already there.
+        let mut b = Buffer::open(&path).unwrap();
+        b.insert(0, "乙").expect("writable");
+        b.write_swap().unwrap();
+
+        assert_eq!(
+            fs::read_to_string(dir.join(".shared.md.yumete")).unwrap(),
+            "甲底稿\n",
+            "A's draft is still A's"
+        );
+        assert_eq!(
+            fs::read_to_string(dir.join(format!(".shared.md.yumete.{}", std::process::id())))
+                .unwrap(),
+            "乙底稿\n"
+        );
+
+        fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn a_draft_kept_under_a_name_of_its_own_is_still_found() {
+        // If the *second* session is the one that crashes, its copy is the only
+        // place its work is — so recovery has to look past the canonical name.
+        let dir = std::env::temp_dir().join(format!("yumete-pid-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("ch.md");
+        fs::write(&path, "底稿\n").unwrap();
+        std::thread::sleep(std::time::Duration::from_millis(20));
+        fs::write(dir.join(".ch.md.yumete.9999"), "第二個 session 的\n").unwrap();
+
+        assert_eq!(
+            Buffer::open(&path).unwrap().recovered_draft(),
+            Some("第二個 session 的\n")
+        );
+
+        // A neighbour whose suffix is not a process id is not a recovery copy.
+        fs::remove_file(dir.join(".ch.md.yumete.9999")).unwrap();
+        fs::write(dir.join(".ch.md.yumete.bak"), "手裏留的一份\n").unwrap();
         assert!(Buffer::open(&path).unwrap().recovered_draft().is_none());
 
         fs::remove_dir_all(&dir).ok();
