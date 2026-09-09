@@ -2584,6 +2584,13 @@ zhs = "{0} 处，{1} 个档案——gf 开游标下那一条，:replace 全换"
 en = "{0} hit(s) in {1} file(s) — gf opens the one under the cursor, :replace changes them all"
 
 [[message]]
+# 同上，另有幾個檔案因為太大被跳過（#308）
+key = "find.grep-hits-skipped"
+zht = "{0} 處，{1} 個檔案（另有 {2} 個太大，沒搜）——gf 開游標下那一條，:replace 全部都換"
+zhs = "{0} 处，{1} 个档案（另有 {2} 个太大，没搜）——gf 开游标下那一条，:replace 全部都换"
+en = "{0} hit(s) in {1} file(s) ({2} too big to search) — gf opens the one under the cursor, :replace changes every one of them"
+
+[[message]]
 # :grep 一處都沒找到
 key = "find.grep-no-hits"
 zht = "{0} 個檔案裏都沒有「{1}」"
@@ -2593,9 +2600,16 @@ en = "no '{1}' in {0} file(s)"
 [[message]]
 # :grep 命中太多，停止計數
 key = "find.grep-too-many"
-zht = "{0} 處以上（不數了）——gf 開游標下那一條，:replace 全換"
-zhs = "{0} 处以上（不数了）——gf 开游标下那一条，:replace 全换"
-en = "{0}+ hits (stopped counting) — gf opens the one under the cursor, :replace changes them all"
+zht = "列出前 {0} 處，共 {1} 處、{2} 個檔案——gf 開游標下那一條，:replace 全部都換"
+zhs = "列出前 {0} 处，共 {1} 处、{2} 个档案——gf 开游标下那一条，:replace 全部都换"
+en = "listing the first {0} of {1} hit(s) in {2} file(s) — gf opens the one under the cursor, :replace changes every one of them"
+
+[[message]]
+# 同上，另有幾個檔案因為太大被跳過（#308）
+key = "find.grep-too-many-skipped"
+zht = "列出前 {0} 處，共 {1} 處、{2} 個檔案（另有 {3} 個太大，沒搜）——:replace 全部都換"
+zhs = "列出前 {0} 处，共 {1} 处、{2} 个档案（另有 {3} 个太大，没搜）——:replace 全部都换"
+en = "listing the first {0} of {1} hit(s) in {2} file(s) ({3} too big to search) — :replace changes every one of them"
 
 [[message]]
 # f/F 在本行找不到那個字
@@ -2610,6 +2624,13 @@ key = "find.not-found"
 zht = "找不到：{0}"
 zhs = "找不到：{0}"
 en = "not found: {0}"
+
+[[message]]
+# 格視圖下搜不到：說清楚只搜了這張表（#354）
+key = "find.not-in-table"
+zht = "這張表裏沒有「{0}」——`t q` 出去再搜全文"
+zhs = "这张表里没有「{0}」——`t q` 出去再搜全文"
+en = "「{0}」 is not in this table — t q leaves the grid to search the rest"
 
 [[message]]
 # 在本頁找，光標下沒有字
@@ -6127,6 +6148,13 @@ key = "table.q-is-for-the-window"
 zht = "t q 只在全窗表格裏交回窗口——退出表格按 t o"
 zhs = "t q 只在全窗表格里交回窗口——退出表格按 t o"
 en = "t q gives back the window, and only the window — t o leaves the table"
+
+[[message]]
+# 這一行有帶引號的欄位，按格編輯會把它改壞（#307）
+key = "table.quoted-row"
+zht = "這一行有帶引號的欄位，按格改會把它拆散——`t o` 回原文改"
+zhs = "这一行有带引号的字段，按格改会把它拆散——`t o` 回原文改"
+en = "this row has a quoted field; editing it by cell would pull it apart — t o back to the text"
 
 [[message]]
 # 加了一行之後

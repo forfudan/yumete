@@ -184,6 +184,34 @@ impl Editor {
         self.goal_column = column;
     }
 
+    /// `j`/`k` inside a grid, by cell rather than by screen column.
+    ///
+    /// Answers whether it took the step: only in a table, only while `hjkl`
+    /// are walking characters (by cell is [`Self::move_cell_row`]'s job), and
+    /// only when there is a row that way to go to — at the edges the ordinary
+    /// path takes over, so walking out of a table into the prose still works.
+    fn step_grid_row(&mut self, up: bool) -> bool {
+        let grain = self.table.as_ref().map(|view| view.grain);
+        if !self.table_here() || grain != Some(Grain::Char) {
+            return false;
+        }
+        let Some((line, cell)) = self.cell_position() else {
+            return false;
+        };
+        let Some((from, _)) = self.cell_span(line, cell) else {
+            return false;
+        };
+        let into = self.caret().saturating_sub(from);
+        let Some(want) = self.next_row(line, !up) else {
+            return false;
+        };
+        let Some((a, b)) = self.cell_span(want, cell) else {
+            return false;
+        };
+        self.move_head((a + into).min(b));
+        true
+    }
+
     /// Apply a horizontal motion, moving the head (extending if in select mode).
     pub(super) fn move_horizontal(&mut self, motion: fn(&ropey::Rope, usize) -> usize) {
         let pos = motion(self.current_buffer().rope(), self.cursor);
@@ -197,6 +225,17 @@ impl Editor {
     /// where a paragraph is one line of several hundred characters, a logical
     /// `j` would jump a whole screen at a time.
     pub(super) fn move_vertical(&mut self, up: bool) {
+        // **In a grid, the column is the cell** (#357). The goal column is
+        // worked out from the *document* — the text and the padding a `|`
+        // table carries in it — while `t f` and `t t` draw a grid of their own
+        // whose widths this side never sees. So `j` walked the document's
+        // columns under a page laid out to different ones, and the caret
+        // drifted between columns as it went down. Asked as 「the same cell,
+        // the same way into it」 the question needs no widths at all, and it is
+        // what a grid means by 「down」 anyway.
+        if self.step_grid_row(up) {
+            return;
+        }
         let pos = {
             let hide = |line: usize| self.hidden_on_line(line);
             let fold = |line: usize| self.line_is_folded(line);
