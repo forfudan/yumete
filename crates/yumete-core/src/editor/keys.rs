@@ -985,14 +985,6 @@ impl Editor {
     fn phrasebook(key: Key) -> Option<String> {
         let c = match key {
             Key::Char(c) => c,
-            // **The two keys this editor itself retired.** They did something
-            // here until recently, and `Enter` still does in every other
-            // editor — so the reader who presses one is not coming from vi,
-            // they are coming from last week, and silence is the one answer
-            // that teaches nothing.
-            Key::Enter => {
-                return Some(say!("hint.vi.enter"));
-            }
             // Helix's 轉大寫. Its two companions are `~` and `` ` ``; the
             // group took the third, so this is the only one that needs the
             // `Alt` arm.
@@ -1072,12 +1064,23 @@ impl Editor {
             // 「open the thing under the cursor」 on this key, and in a
             // manuscript the thing under the cursor is a link.
             Key::Char('x') => return self.follow_link(),
-            // **`gd` goes, `gw` shows.** The pair every editor has: `gd` is
+            // **`gd` goes, `gD` shows.** The pair every editor has: `gd` is
             // *go to definition* — on a footnote that is the note, in a 拆分
-            // column the row the component names — and `gw` is the same
+            // column the row the component names — and `gD` is the same
             // question answered in the other work area, without leaving.
+            //
+            // The capital is the whole rule: this editor already says 「the
+            // same question, shown over there」 twice (`g/`／`g?`, `t/`／`t?`),
+            // and `w` said nothing at all. One letter, and the shift key means
+            // 「without leaving」.
             Key::Char('d') => return self.show_definition(false),
-            Key::Char('w') => return self.show_definition(true),
+            Key::Char('D') => return self.show_definition(true),
+            // It was `gw` until 2026-09-09, and the fingers that learned it
+            // are the author's own.
+            Key::Char('w') => {
+                self.status = say!("hint.goto.w-moved");
+                return;
+            }
             // **`/` here, `?` over there.** 「這個詞還在哪裏」 — the selection,
             // or what the cursor is on — searched across the whole document.
             // `g/` is the sugar `/` has always wanted: search for *this*,
@@ -1131,7 +1134,7 @@ impl Editor {
         ("f", "hint.goto.open-this-file"),
         ("x", "hint.goto.follow-link"),
         ("n p", "hint.goto.next-or-previous-file"),
-        ("d w", "hint.goto.follow-note"),
+        ("d D", "hint.goto.follow-note"),
         ("/ ?", "hint.goto.word-elsewhere"),
         ("J", "hint.join-with-line-below"),
     ];

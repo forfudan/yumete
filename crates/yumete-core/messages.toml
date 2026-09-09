@@ -2354,6 +2354,13 @@ zht = "批注"
 zhs = "批注"
 en = "comment"
 
+[[message]]
+# 詳情欄裏那張部件表的抬頭，並說跟過去的鍵是哪一個
+key = "detail.components"
+zht = "部件（gd 跟過去）"
+zhs = "部件（gd 跟过去）"
+en = "components (gd follows one)"
+
 
 # ── diff ──────────────────────────────────────────────────────────────
 
@@ -3539,6 +3546,13 @@ en = "g"
 
 [[message]]
 # g 組：這個詞還在哪裏
+key = "hint.goto.w-moved"
+zht = "在另一個工作區看是 gD 了——同一個鍵，大寫就是「不離開這裏」"
+zhs = "在另一个工作区看是 gD 了——同一个键，大写就是「不离开这里」"
+en = "showing it over there is gD now — the same key, capitalised, means 'without leaving'"
+
+[[message]]
+# 這一句是 g/ g? 的說明
 key = "hint.goto.word-elsewhere"
 zht = "這個詞還在哪裏：這邊找／那邊看"
 zhs = "这个词还在哪里：这边找／那边看"
@@ -4158,14 +4172,7 @@ en = "to delete to end of line, select with gl then d"
 key = "hint.vi.dollar"
 zht = "行尾是 gl（g 開頭的都是「去哪裏」）"
 zhs = "行尾是 gl（g 开头的都是「去哪里」）"
-en = "end of line is gl (everything starting with g is "go where")"
-
-[[message]]
-# Normal 模式按 Enter（它退場了，這一條說接手的是誰）
-key = "hint.vi.enter"
-zht = "Enter 在 Normal 不做事了——找選中的是 g/（那邊看是 g?）；表格一欄一欄找是 t/ t?"
-zhs = "Enter 在 Normal 不做事了——找选中的是 g/（那边看是 g?）；表格一栏一栏找是 t/ t?"
-en = "Enter does nothing in Normal now — g/ finds the selection (g? shows it beside), t/ t? go column by column in a table"
+en = "end of line is gl (everything starting with g is 'go where')"
 
 [[message]]
 # Normal 模式按 _ + 或 -（vi 的行間移動，這裏是 j k）

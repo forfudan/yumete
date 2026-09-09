@@ -721,6 +721,7 @@ impl Editor {
     pub(super) fn write_all(&mut self) -> Result<CommandOutcome, EditorError> {
         let was = self.current;
         let mut saved = 0usize;
+        let mut asked = false;
         let mut failed: Vec<String> = Vec::new();
         for i in 0..self.buffers.len() {
             if !self.buffers[i].is_modified() {
@@ -728,9 +729,20 @@ impl Editor {
             }
             self.current = i;
             match self.write_current(None) {
-                Ok(()) => saved += 1,
+                Ok(Wrote::Asked) => {
+                    // **Stop on the file that asked, standing on it.** The
+                    // question names one buffer, so the reader has to be
+                    // looking at that one; carrying on through the rest would
+                    // put the answer against whichever file the loop reached.
+                    asked = true;
+                    break;
+                }
+                Ok(_) => saved += 1,
                 Err(err) => failed.push(err.to_string()),
             }
+        }
+        if asked {
+            return Ok(CommandOutcome::Continue);
         }
         self.current = was.min(self.buffers.len().saturating_sub(1));
         self.status = if failed.is_empty() {
