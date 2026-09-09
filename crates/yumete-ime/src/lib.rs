@@ -30,7 +30,7 @@ use yume_core::commit_strategy::CommitOverrides;
 use yume_core::data_manifest;
 use yume_core::division::DivisionTable;
 use yume_core::division_infer::CustomDivisions;
-use yume_core::key_bindings::{FuncKey, KeyAction};
+use yume_core::key_bindings::KeyAction;
 use yume_core::lexicon::Lexicon;
 use yume_core::zigen::ZigenTable;
 use yume_core::{
@@ -46,6 +46,9 @@ pub use yumete_config::PanelDisplay;
 pub use yume_core::data_manifest::{DataFile, DataKind};
 pub use yume_core::DisplayMode;
 pub use yume_core::CommitStrategy;
+// The key table and the lone-tap detector are yume's. Re-exported rather than
+// re-modelled so the TUI drives the same state machine the other frontends do.
+pub use yume_core::key_bindings::{FuncKey, ModifierTap};
 
 /// One input scheme (方案), named by its tag.
 ///
@@ -777,6 +780,25 @@ impl ImeSession {
     /// Select the candidate at index `i` within the current page.
     pub fn select_in_page(&mut self, i: usize) {
         self.engine.select_in_page(i);
+    }
+
+    /// Press a modifier the user has bound — a lone Shift tap, today — and say
+    /// whether the engine took it.
+    ///
+    /// The same two steps as [`Self::press_func`], and for the same reason:
+    /// ask yume what the key *means* here, then let yume *do* it. Shift is not
+    /// one thing. On an empty buffer its factory value is 中/英 toggle; while
+    /// composing it is 「commit the raw code, then go English」, because the
+    /// reason to reach for Shift mid-code is that this stretch is English —
+    /// and the code already typed is text the writer meant. yumete used to
+    /// call `set_chinese(false)` straight, whose job is to *clear* the buffer:
+    /// a half-typed 拆分 disappeared with no commit and no undo entry.
+    ///
+    /// `false` means the action is the frontend's to do (a panel to open, or a
+    /// key whose own character the action needs — a modifier has none).
+    pub fn press_modifier(&mut self, key: FuncKey) -> bool {
+        let action = self.engine.key_action(key);
+        self.engine.perform(action)
     }
 
     /// Press one of the keys the scheme binds to a function — `;` `'` `-` `=`

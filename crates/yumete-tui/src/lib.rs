@@ -18,7 +18,8 @@ use std::io::{self, stdout, Write as _};
 
 use ratatui::crossterm::cursor::SetCursorStyle;
 use ratatui::crossterm::event::{
-    self, DisableBracketedPaste, DisableMouseCapture, EnableBracketedPaste, EnableMouseCapture,
+    self, DisableBracketedPaste, DisableFocusChange, DisableMouseCapture, EnableBracketedPaste,
+    EnableFocusChange, EnableMouseCapture,
     Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers, KeyboardEnhancementFlags,
     ModifierKeyCode, MouseButton, MouseEventKind, PopKeyboardEnhancementFlags,
     PushKeyboardEnhancementFlags,
@@ -39,7 +40,10 @@ use yumete_core::sidebar::View;
 use yumete_core::wrap::{self, Anchor as WrapAnchor};
 use yumete_core::zong::{Anchor, Layout as WritingLayout};
 use yumete_core::{say, Editor, Key, KeyOutcome, Mode, ShotJob, TextStore};
-use yumete_ime::{CommitStrategy, DataFault, DataProblem, ImeSession, PanelDisplay, Scheme};
+use yumete_ime::{
+    CommitStrategy, DataFault, DataProblem, FuncKey, ImeSession, ModifierTap, PanelDisplay,
+    Scheme,
+};
 
 /// Run the interactive editor until the user quits.
 ///
@@ -548,7 +552,7 @@ pub fn run(
                 // A lone-Shift tap toggles 中/英 in Insert mode; other Shift
                 // activity is swallowed so it never reaches the editor.
                 match shift.update(&key) {
-                    ShiftResult::Toggle => {
+                    ShiftResult::Tap(tapped) => {
                         if composes_here(editor) && ime.available() && ime.engaged() {
                             // The same answer as `:yume on`, given by the hand
                             // rather than by the command line, so it ends the
@@ -556,7 +560,15 @@ pub fn run(
                             // restore on leaving the command line put the
                             // language back one keystroke later, silently.
                             borrowed = None;
-                            ime.toggle_language();
+                            // **What Shift means here is yume's to say.** On an
+                            // empty buffer the factory value is the 中/英
+                            // toggle; mid-code it commits the raw code first,
+                            // so a half-typed 拆分 lands in the manuscript
+                            // instead of vanishing. Rebind it in yume and this
+                            // follows, because nothing here decides it.
+                            if ime.press_modifier(tapped) {
+                                editor.insert_committed(&ime.take_committed());
+                            }
                         }
                         continue;
                     }
@@ -861,6 +873,10 @@ pub fn run(
                 }
                 _ => {}
             },
+            // The release is not coming: whatever was held when focus left is
+            // not a tap any more. Upstream keeps a `reset` for exactly this,
+            // and without calling it the *next* genuine tap is eaten.
+            Ok(Event::FocusLost) => shift.reset(),
             Ok(_) => {}
             Err(err) => break Err(err),
         }
@@ -1049,58 +1065,64 @@ impl std::ops::IndexMut<usize> for Seats {
 
 /// The result of feeding a key event to the lone-Shift-tap tracker.
 enum ShiftResult {
-    /// A lone Shift tap completed — toggle the language.
-    Toggle,
+    /// A lone tap of this modifier completed — ask yume what it means.
+    Tap(FuncKey),
     /// A Shift key event that isn't a completed tap; swallow it.
     Consumed,
     /// Not a Shift key event; handle it normally.
     Pass,
 }
 
-/// Detects a *lone* Shift tap (press then release with no other key in between),
-/// used to toggle 中/英. Requires the Kitty keyboard protocol so bare modifier
-/// presses/releases are reported.
+/// Detects a *lone* Shift tap (press then release with no other key in between).
+///
+/// **The state machine is yume's** ([`ModifierTap`]), not a fourth copy of it.
+/// This is only the part that is genuinely terminal: turning crossterm's
+/// `KeyEvent` into the three questions upstream asks — which modifier, down or
+/// up, and were any *other* real modifiers held at that moment. Two things fell
+/// out of adopting it: left and right Shift are tracked apart (one shared
+/// `down` flag let `LeftShift↓ RightShift↓ RightShift↑` fire a toggle with the
+/// left one still held), and losing a release — ⌘-Tab away with Shift down —
+/// is recoverable, because upstream gives a [`ModifierTap::reset`] for exactly
+/// that and the loop calls it on `FocusLost`.
+///
+/// Requires the Kitty keyboard protocol so bare modifier presses and releases
+/// are reported at all.
 #[derive(Default)]
-struct ShiftTap {
-    down: bool,
-    clean: bool,
-}
+struct ShiftTap(ModifierTap);
 
 impl ShiftTap {
     fn update(&mut self, key: &KeyEvent) -> ShiftResult {
-        let is_shift = matches!(
-            key.code,
-            KeyCode::Modifier(ModifierKeyCode::LeftShift)
-                | KeyCode::Modifier(ModifierKeyCode::RightShift)
-        );
-        match key.kind {
-            KeyEventKind::Press if is_shift => {
-                if !self.down {
-                    self.down = true;
-                    self.clean = true;
-                }
+        let shift = match key.code {
+            KeyCode::Modifier(ModifierKeyCode::LeftShift) => Some(FuncKey::ShiftL),
+            KeyCode::Modifier(ModifierKeyCode::RightShift) => Some(FuncKey::ShiftR),
+            _ => None,
+        };
+        // 「Any *other* real modifier held right now」 — Shift itself does not
+        // count, and crossterm reports it on the Shift event's own modifiers.
+        let others = key
+            .modifiers
+            .intersects(KeyModifiers::CONTROL | KeyModifiers::ALT | KeyModifiers::SUPER);
+        match (shift, key.kind) {
+            (Some(key), KeyEventKind::Press | KeyEventKind::Repeat) => {
+                self.0.modifier(key, true, others);
                 ShiftResult::Consumed
             }
-            KeyEventKind::Repeat if is_shift => ShiftResult::Consumed,
-            KeyEventKind::Release if is_shift => {
-                let toggled = self.down && self.clean;
-                self.down = false;
-                self.clean = false;
-                if toggled {
-                    ShiftResult::Toggle
-                } else {
-                    ShiftResult::Consumed
-                }
-            }
+            (Some(key), KeyEventKind::Release) => match self.0.modifier(key, false, others) {
+                Some(tapped) => ShiftResult::Tap(tapped),
+                None => ShiftResult::Consumed,
+            },
             // Any other key press while Shift is held taints the tap.
-            KeyEventKind::Press | KeyEventKind::Repeat => {
-                if self.down {
-                    self.clean = false;
-                }
+            (None, KeyEventKind::Press | KeyEventKind::Repeat) => {
+                self.0.other_key();
                 ShiftResult::Pass
             }
-            KeyEventKind::Release => ShiftResult::Pass,
+            (None, KeyEventKind::Release) => ShiftResult::Pass,
         }
+    }
+
+    /// The release is not coming — the terminal lost focus while a key was down.
+    fn reset(&mut self) {
+        self.0.reset();
     }
 }
 
@@ -1178,7 +1200,12 @@ fn hand_over<B: ratatui::backend::Backend + io::Write>(
     terminal: &mut ratatui::Terminal<B>,
     line: &str,
 ) -> io::Result<()> {
-    let _ = execute!(stdout(), DisableMouseCapture, DisableBracketedPaste);
+    let _ = execute!(
+        stdout(),
+        DisableMouseCapture,
+        DisableBracketedPaste,
+        DisableFocusChange
+    );
     ratatui::crossterm::terminal::disable_raw_mode()?;
     execute!(
         terminal.backend_mut(),
@@ -1206,7 +1233,14 @@ fn hand_over<B: ratatui::backend::Backend + io::Write>(
         terminal.backend_mut(),
         ratatui::crossterm::terminal::EnterAlternateScreen
     )?;
-    let _ = execute!(stdout(), EnableMouseCapture, EnableBracketedPaste);
+    let _ = execute!(
+        stdout(),
+        EnableMouseCapture,
+        EnableBracketedPaste,
+        // Asked for so a lost Shift release can be noticed: ⌘-Tab away with a
+        // modifier down and the release never arrives (see `ShiftTap`).
+        EnableFocusChange
+    );
     terminal.clear()?;
     status.map(|_| ())
 }
@@ -11233,7 +11267,7 @@ mod tests {
     fn lone_shift_tap_toggles_but_shift_chords_do_not() {
         let shift = || KeyCode::Modifier(ModifierKeyCode::LeftShift);
 
-        // Press then release Shift with nothing in between → a toggle.
+        // Press then release Shift with nothing in between → a tap.
         let mut tap = ShiftTap::default();
         assert!(matches!(
             tap.update(&key(shift(), KeyEventKind::Press)),
@@ -11241,7 +11275,7 @@ mod tests {
         ));
         assert!(matches!(
             tap.update(&key(shift(), KeyEventKind::Release)),
-            ShiftResult::Toggle
+            ShiftResult::Tap(FuncKey::ShiftL)
         ));
 
         // Shift + a letter (a chord) must NOT toggle.
@@ -11254,6 +11288,49 @@ mod tests {
         assert!(matches!(
             tap.update(&key(shift(), KeyEventKind::Release)),
             ShiftResult::Consumed
+        ));
+    }
+
+    #[test]
+    fn the_two_shifts_are_tracked_apart() {
+        // One shared `down` flag made this fire a toggle while the *left*
+        // Shift was still held: the right one's release ended a tap nobody
+        // started. Upstream watches one key at a time, so pressing the other
+        // one re-targets and the stale half is dropped on the spot.
+        let (l, r) = (
+            KeyCode::Modifier(ModifierKeyCode::LeftShift),
+            KeyCode::Modifier(ModifierKeyCode::RightShift),
+        );
+        let mut tap = ShiftTap::default();
+        tap.update(&key(l, KeyEventKind::Press));
+        tap.update(&key(r, KeyEventKind::Press));
+        assert!(
+            matches!(
+                tap.update(&key(r, KeyEventKind::Release)),
+                ShiftResult::Tap(FuncKey::ShiftR)
+            ),
+            "the release that ends a tap is the key that was being watched"
+        );
+    }
+
+    #[test]
+    fn a_lost_release_does_not_eat_the_next_tap() {
+        // ⌘-Tab away with Shift held and the release never arrives; the next
+        // ordinary key then taints a tap that is no longer being made. Without
+        // the reset on FocusLost, the *following* genuine tap answered
+        // `Consumed` — the writer presses Shift, nothing happens, and the next
+        // word goes in in the wrong language.
+        let shift = || KeyCode::Modifier(ModifierKeyCode::LeftShift);
+        let mut tap = ShiftTap::default();
+        tap.update(&key(shift(), KeyEventKind::Press));
+        // …focus leaves, the release is lost, and the loop says so.
+        tap.reset();
+        tap.update(&key(KeyCode::Char('n'), KeyEventKind::Press));
+
+        tap.update(&key(shift(), KeyEventKind::Press));
+        assert!(matches!(
+            tap.update(&key(shift(), KeyEventKind::Release)),
+            ShiftResult::Tap(FuncKey::ShiftL)
         ));
     }
 
