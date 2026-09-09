@@ -527,6 +527,54 @@ index, and a row with no number anywhere else is a row that got lost.
 | 302 | **命令行該不該自己佔一行** | tui | P4 | helix 加在狀態列**下面**；我們是搶狀態列 [^302] | Proposed |
 | 303 | **一個 `#set` 把後面整份稿子染成代碼** | core | P2 | 沒看全的一行不許開塊，空行清零 [^303] | Done |
 | 304 | **`e` 把上一個詞的尾巴和標點一起圈進來** | core | P2 | 規格定了：`w` 取詞、`e` 取句；只有錨點要改 [^304] | Planned |
+| 305 | **留下的草稿讓這一輪整輪不寫草稿** | core | P1 | `write_swap` 空轉一整輪；第二個進程也蓋得掉 [^305] | Open |
+| 306 | **撐大檔案的護欄只擋 `:write`，autosave 一道也沒有** | core | P1 | #295 的界限沒接到 `:wq`／`:w!`／`:wa`，也沒接到 swap [^306] | Open |
+| 307 | **帶引號的 CSV 欄位，改隔壁一格就毀掉** | core | P1 | 一個 `"a, b"` 就夠；改完整份不再解析得出來 [^307] | Open |
+| 308 | **`:grep` 截在 500 條，`:replace` 照樣報成功** | core | P2 | 只改得到截斷以內，訊息卻說全改了 [^308] | Open |
+| 309 | **CRLF 檔案按 Enter 插進來的是一個 `\n`** | core | P2 | 純讀寫往返是對的，一編輯就混行尾 [^309] | Open |
+| 310 | **BOM 存檔即丟** | core | P3 | 散文無所謂，`.csv` 那三個位元組是功能性的 [^310] | Open |
+| 311 | **`:export tsv` 把帶引號的欄位劈開** | core | P3 | 導出自己按分隔符切，沒走 `table.rs` 的解析 [^311] | Open |
+| 312 | **`:w` 斷開硬連結** | core | P4 | rename 換掉 inode；xattr 與屬主一併掉 [^312] | Open |
+| 313 | **每一鍵重掃全篇塊結構** | core | P1 | 3.5 MB 稿子每字 38 ms，九成八的採樣在 `scan_blocks` [^313] | Open |
+| 314 | **按鍵事件不合併，一個重複事件就是一幀** | tui | P1 | 滾輪合併 64 格，按鍵一格都不合 [^314] | Open |
+| 315 | **折行備忘錄的 key 本身是 O(段長)** | core | P2 | 命中也要把整段 hash 一遍，再 clone 一份 [^315] | Open |
+| 316 | **表格裏每一鍵重算整表補白** | core | P2 | `caret` 進了 key，Insert 中每鍵必然 miss [^316] | Open |
+| 317 | **全書 replace 之後，autosave 每五秒凍一秒六** | core | P2 | 一百個 buffer 全量序列化 ＋ 兩百次 fsync，在輸入線程 [^317] | Open |
+| 318 | **count 既沒有上限，也沒有提前退出** | core | P2 | `1000000p` 跑不完，`10000fZ` 要 317 ms [^318] | Open |
+| 319 | **`N` 每次從第 0 行重掃** | core | P3 | 正向全掃再取前一個；`n` 17 µs、`N` 1.01 ms [^319] | Open |
+| 320 | **表格裏的 `j` 是 O(rows)** | core | P3 | 一萬行一次 27.8 ms；CSV 格子不受影響 [^320] | Open |
+| 321 | **`w`／`b`／`e` 每一次都重新分詞** | core | P3 | 整行複製 ＋ Viterbi，`segment_cache` 沒接上 [^321] | Open |
+| 322 | **`blocks_through` 每幀 clone 一整條** | core | P3 | 六萬個元素，只為索引一次 [^322] | Open |
+| 323 | **帶 count 的編輯留下 N 個 undo 點** | core | P1 | `100p` 要按一百次 `u` 纔退得回去 [^323] | Open |
+| 324 | **`r` 作用在多碼位字素上成倍寫出** | core | P2 | `rZ` 對着一個 ZWJ emoji 寫出五個 Z [^324] | Open |
+| 325 | **大小寫算子靜默刪字符** | core | P3 | `.to_uppercase().next()` 只取第一個 [^325] | Open |
+| 326 | **`gJ` 把行尾空白留着，又加一個空格** | core | P4 | 接縫的規則是從 `_ => " "` 掉出來的 [^326] | Open |
+| 327 | **Ambiguous 寬度讓存檔位元組跟着終端走** | core | P2 | 同一張表，兩個終端存出兩份 [^327] | Open |
+| 328 | **code span 裏的 `\|` 永久改變表格** | core | P2 | 三欄變四欄，其餘每行多一個空格 [^328] | Open |
+| 329 | **改一格重排全表** | core | P3 | 兩個字的編輯換來五千行 diff [^329] | Open |
+| 330 | **熟語振假名整篇改壞** | core | P2 | 第二個基字連着標籤一起被吞進讀音 [^330] | Open |
+| 331 | **三種 HTML ruby 寫法看不見** | core | P3 | `<rp>`、帶屬性、大寫；說改完了，其實沒有 [^331] | Open |
+| 332 | **寫進 Typst 的 ruby 不轉義** | core | P3 | 一句帶引號的注釋就編譯不過 [^332] | Open |
+| 333 | **`:ruby format` 改寫代碼圍欄裏的 ruby** | core | P3 | 講 ruby 的書，自己的例子被改掉 [^333] | Open |
+| 334 | **單擊 Shift 丟棄正在組字的編碼** | tui+ime | P1 | `set_chinese(false)` 只清空，不上屏 [^334] | Open |
+| 335 | **丟失一次 Shift 釋放，下一次單擊就失效** | tui | P2 | `Press` 只在 `!down` 時置 `clean`；左右 Shift 還共用一份 [^335] | Open |
+| 336 | **組字中點鼠標，詞上屏到另一個檔案** | tui+ime | P2 | `Event::Mouse` 不問 `is_composing()` [^336] | Open |
+| 337 | **中／ABC 全局，而 Normal 模式看不見它** | tui+ime | P2 | 按 `i` 之前不知道會掉進哪一種 [^337] | Open |
+| 338 | **`:` 行敲 Shift，中文洩漏回 Insert** | tui+ime | P3 | 切換先把 `borrowed` 清成 `None` [^338] | Open |
+| 339 | **沒有 Kitty 協議就沒有切換，也沒有一句話** | tui+ime | P2 | Apple Terminal 上這個手勢什麼都不做，而且不說 [^339] | Open |
+| 340 | **`/` 既不結束組字，也不交還語言** | tui+ime | P3 | `prompting` 只算 `Command` 與 `Lookfor` [^340] | Open |
+| 341 | **`:yume on` 阻塞事件迴圈 135 ms** | ime | P3 | 在按鍵處理裏同步造一個 `ImeSession` [^341] | Open |
+| 342 | **上屏之後那一段 ASCII 不掙 undo 點** | core+ime | P4 | 上屏後 `history.pending` 是 `None` [^342] | Open |
+| 343 | **`note_progress` 每次存檔轉一遍整個 rope** | core | P4 | 有進度日誌就多一次 8 MB 拷貝 [^343] | Open |
+| 344 | **`:yume table` 載入非碼表檔案會 panic** | ime | P1 | 上游 yume-core：碼長沒有 clamp，整個編輯器帶走 [^344] | Open (upstream) |
+| 345 | **候選列表無上限物化** | ime | P2 | 上游：為顯示九個，走完四萬八千條 [^345] | Open (upstream) |
+| 346 | **超過 255 位元組的候選截成空白一行** | ime | P4 | 上游：在非字符邊界切，`unwrap_or("")` 吃掉 [^346] | Open (upstream) |
+| 347 | **中英切換交回 yume 的綁定表** | tui+ime | P1 | `KeyBindings` 在這個倉裏一次都沒被建起來 [^347] | Open |
+| 348 | **九個手寫快取收成一套按行記憶** | core | P2 | 每個自己決定 key 放什麼，於是各有各的必然失效 [^348] | Open |
+| 349 | **一個概念一處權威：字素、寬度、分詞** | core | P2 | 同一件事兩三套實現，對不上的時候纔看得見 [^349] | Open |
+| 350 | **護欄放在必經之路上，不放在呼叫點** | core | P2 | 掛在一個 match 分支上的規矩，另外三個入口不認 [^350] | Open |
+| 351 | **按性質提問，不按模式列舉** | core+tui | P3 | `matches!(m, A \| B)` 之外的模式就這麼掉出去了 [^351] | Open |
+| 352 | **TUI 設定面板走 `settings_ui` 的兩半事實** | tui+ime | P4 | 第五個前端不必再手抄一份布爾表達式 [^352] | Proposed |
 
 ### 5.5 · A table is a delimiter, a surface and a boundary (#261)
 
@@ -4034,6 +4082,200 @@ not to a head. `:bclose!` used to be one word and `FORCEABLE` held it as one;
 `names_something` walks the bang along with the words. `:buffer list!` is still
 not a command.
 
+## 5.2.5 發佈前的通盤檢查 — 2026-09-09（#305–#346）
+
+0.1.0 之前把四條路各走了一遍：**改檔案的路**（存檔、崩潰草稿、編碼往返、`:grep`／
+`:replace`）、**按鍵的路**（模式、count、undo、宏、長按重複）、**表格與標記的路**
+（CSV 格子、Markdown 表格、ruby）、**輸入法的路**（組字狀態、中／英邊界、碼表）。
+只收兩種東西：**會靜默改壞或丟掉檔案的**，和**會讓一次按鍵停下來的**。設計意見不收。
+
+四十二條記在 #305–#346。能量的都量了：數字寫在腳註裏，量法一併寫着，**動手之前先照
+那個量法跑一遍**——這份檔案裏已經有過一次「照描述改，改錯了地方」（#297）。
+
+### 三件事比其餘的都急
+
+**一、崩潰保護會自己關掉（#305）。** `write_swap` 開頭那一句
+`if self.pending_draft.is_some() && !self.owns_swap { return Ok(()) }` 是有道理的：
+別人沒認領的草稿不許蓋。可它的另一半是——**這一輪就再也不寫草稿了**。於是順序變成：
+崩潰一次、重開、寫一整天、再崩潰，這一天沒有任何草稿。偏偏「剛崩潰過」正是最需要草稿
+的時候。意圖要留，落法要改：寫到自己名下的路徑（`.ch07.md.yumete.<pid>`），`:recover`
+兩份都列出來。同一個改動把「兩個 yumete 開同一個檔案，互相蓋掉草稿」一起解決。
+
+**二、撐大檔案的護欄只裝在一個門上（#306）。** #295 的界限（又翻倍、又多 256 KB）
+今天只在 `Command::Write` 那一支，而 [^295] 自己寫着「`:wq` 與 `:wa` 各差一行，等這個
+問法用順手了再說」。用順手了：`:wq` 是對齊完一張表最順手的收尾，`:write all` 是全書
+`:replace` 的收尾。**更要緊的是 swap 那一路一道也沒有**——`write_swap` → `write_atomically`
+不問尺寸，於是被撐大的 buffer 五秒內原樣落盤。`docs/.development.md.yumete` 那份 4.3 MB
+就是這麼來的（正文從沒超過 448,400 位元組），而它又觸發 #305，於是一直留在那裏。
+
+**三、`:yume table` 載入一個不是碼表的檔案，會把整個編輯器帶走（#344）。**
+`emit_entry` 把碼長寫成 `(c.len() - shared) as u8` 而沒有 clamp，blob 錯位，
+`rebuild_index` 越界。yumete 沒有裝 panic hook，所以連同**所有沒存的 buffer**。
+這一條在上游 yume-core，改動是一行；旁邊 #346 的候選截斷是同一個函數。
+
+### 按鍵停下來的，多半是同一種形狀
+
+每一鍵做一次 O(整份文件) 的活，而備忘錄的 key 每一鍵都變：
+
+- **#313** `scan_blocks` 的 key 是 `(buffer, revision)`，`revision` 每編輯一次就動，
+  所以「每次編輯掃一遍」＝每一鍵掃一遍全部行。3.5 MB、62,938 行時每字 37.8 ms，
+  九成八的採樣落在這裏。**這正是中英混排的常態**：英文段落硬折成很多短行；同樣的
+  位元組換成長中文行（約六百行）只要 1.2 ms。`:render off` 降到 0.4 ms。
+- **#316** `PadKey` 裏有 `caret`，而那不是疏忽——折行要把光標所在那一格留整，答案本來
+  就跟着它走。可代價是 Insert 中每一鍵必然 miss，五千行 86.7 ms、一萬行 405 ms。
+  **所以不能簡單地把 `caret` 拿掉**，要拿掉的是「因為光標動了就整表重算」：不折行的
+  補白算一次，光標那一格的例外逐行套。
+- **#315** 折行的 rows 是快取住的，可**取快取這件事本身**就是 O(段長)：`line_hash`
+  把整段每一塊 hash 一遍，再 clone 整個 `Vec`。二十萬字一次 240 µs，於是一百萬字沒有
+  換行的 `.txt` 每個 `j` 17.3 ms。
+
+**#314 是這幾條的乘數。** 滾輪一撥可以合併 64 格（`:913` 的 `event::poll(ZERO)`），
+按鍵一格都不合：每個排隊的重複事件都畫一整幀。一旦每鍵成本超過重複間隔，就開始積壓，
+**鬆手之後光標還在走**。反過來說，`terminal.draw` 前照 `:913` 補一句 poll，是這一節裏
+最便宜的一個改動，而它讓上面每一條都好受一截。
+
+### 三處「不是疏忽，是還沒接上」
+
+寫下來免得下次當成新發現：
+
+- #306 的 `:w!`／`:wq`／`:wa`，[^295] 裏白紙黑字寫着是**故意先不接**的。新的部分只有
+  兩點：`:wq` 是那條路的常態，以及 swap 從一開始就不在那個決定的範圍裏。
+- #316 的 `caret` 是**載重的**，見上。
+- #289（`t a` 折行找視窗頂）與 #297（格狀面板一次 `100j` 0.67 秒）早就記在表上，
+  #320 是同一族的第三個，只是換到文件裏的表格上量。
+
+### 檢查過、沒有問題的
+
+同樣要記，免得再走一遍：`write_bytes_atomically` 沿符號連結 canonicalize（臨時檔案
+永遠同一個裝置）、寫前拒絕只讀目標、複製權限、**檔案與目錄都 fsync**、每條錯誤路徑都
+清掉臨時檔案、ENOSPC 在 `sync_all` 處露出來而原檔案不動。**Shift-JIS／EUC-JP 在開檔
+時明確拒絕，不做有損解碼**。CSV 原樣往返在帶引號、CRLF、純 CR、缺末尾換行、參差行、
+重複表頭、中英混排上逐位元組相同。undo 點是掙來的，`u` 不會退過頭。跨 ASCII↔漢字↔全角
+的字素步進與 `j`／`k` 的目標列雙向精確；`w`／`b` 在文種交界不產生零寬步進。`:render`
+嚴格只是視圖。圍欄內與引用塊內的表格不被當成表格。輸入法**關着的時候每鍵開銷為零**
+（`ime_handle` 首行就返回），組字**不觸發整篇重排**（兩處備忘錄都按行為 key），所以
+#345 的 12 ms 是**加**在 #313／#316 上，不是乘。
+
+### 順序
+
+按「不修的代價 ÷ 改動的大小」，並把同源的併成一次：
+
+1. **#305 ＋ #306** —— swap／write 那一層一次改完（草稿帶 pid、護欄移到 `write_forcing`、
+   `write_swap` 加尺寸檢查）。`docs/` 裏那份 4.3 MB 順帶清掉。
+2. **#344 ＋ #335** —— 兩處各一行：`emit_entry` 的 clamp，和 `Press` 無條件置 `clean`。
+3. **#314** —— 一句 poll，換來上面每一條性能項都好受一截。
+4. **#323** —— `snapshot` 提到 `repeat` 的迴圈外；「undo 壞了」是第一天就會撞上的印象。
+5. **#307 ＋ #308** —— 兩條靜默的資料損壞，都是「認出來就拒絕」型的改動。
+6. **#316 → #315 → #313** —— 三個備忘錄，由小到大。
+7. **#334／#338／#339／#337** —— 中英邊界一次理乾淨。
+8. 其餘按 Phase 走。
+
+## 5.2.6 這四十二條裏，哪些是同一件事 — 2026-09-09（#347–#352）
+
+#305–#346 是**症狀**。照着一條一條修，會把同一個結構問題在五個地方各補一次。這一節
+把它們按**來源**重新歸一次組，六條結構性的工作記在 #347–#352。
+
+### 一、繞過了 yume 的綁定層（#347 → #334、#335、#337、#339）
+
+yume-core 早就有一張三態按鍵表——空碼／組字中／有候選——而出廠值寫得清清楚楚：
+
+```rust
+// 組字中按 Shift ＝ 上屏原碼並留在英文，不是臨時英文。
+(FuncKey::ShiftL, [A::ToggleChinese, A::CommitRawEnglish, A::CommitRawEnglish]),
+```
+
+旁邊還有 `resolve(key, state, candidates)`、`KeyState::of(buffer_empty, candidates)`，
+以及**單擊偵測的狀態機** `modifier(key, down, other_mods)`／`other_key()`／`reset()`。
+
+這個倉裏 `KeyBindings` **一次都沒有被建起來**。`yumete-tui` 自己寫了一個
+`ShiftTap { down, clean }`，然後直接叫 `set_chinese(false)`。於是：
+
+- **#334** 丟棄正在組字的編碼——因為 `set_chinese(false)` 的職責就是清空，而「組字中
+  按 Shift 要先上屏」那條規矩在綁定表裏，沒人去問。
+- **#335** 丟失一次釋放就失效，左右 Shift 共用一份狀態——因為單擊偵測重寫了一遍，
+  而上游那份是四個前端用了很久的。
+- **#337** 中／ABC 全局——語言狀態本來就是引擎的，前端要做的是**顯示**它，不是自己存一份。
+- **#339** 沒有 Kitty 協議就沒有切換——前端該做的只是如實報告自己收不收得到 modifier。
+
+**這條原則已經寫在這個倉裏了，只是只覆蓋四個鍵。** `press_func` 的註釋：*「The binding
+table is yume's, not yumete's: 靈明 puts 選二 on `;` and 選三 on `'`… yumete used to
+send them straight to the engine's punctuation path — committing the first candidate and
+dropping a `；` into the manuscript.」* `;` `'` `-` `=` 上踩過一次，Shift 沒跟上。
+
+所以 #334 的修法**不是**在 yumete 裏補一句 `ime.space()`——那是在錯的層上再寫一份策略。
+是把 Shift 交給 `key_action`，出廠值自己會做對，而且使用者在設定面板改了綁定，這裏立刻
+跟着變。
+
+### 二、九個手寫快取，各有各的 key 規矩（#348 → #313、#315、#316、#321、#322）
+
+`Editor` 上八個——`segment_cache`、`meter_cache`、`note_cache`、`fold_cache`、
+`markup_cache`、`block_cache`、`pad_cache`、`md_cache`——`wrap.rs` 裏還有第九個
+（thread-local `ROWS`，拿 `Vec` 線性掃當 LRU）。每一個自己決定 key 裏放什麼，於是：
+
+- `block_cache` 放了 `revision`（每鍵必失效）→ **#313**
+- `pad_cache` 放了 `caret`（Insert 中每鍵必失效）→ **#316**
+- `ROWS` 的 key **本身**是 O(段長)（`line_hash` 走完整段）→ **#315**
+- `blocks_through` 回傳整條而不是一格 → **#322**
+
+而 **#321 最說明問題**：`segment_cache` 就在那裏，`editor/words.rs` 用了它，
+`motion.rs` 的 `w`／`b`／`e` 每按一次還是從頭分一遍。**快取有，熱路徑沒接。**
+
+缺的是一件東西：一套「按 `(buffer, revision, line)` 記住一行的答案」的設施，九處共用
+同一條失效規則。這件事不做，每加一個新的視圖層就多一個自己寫 key 的快取。
+
+### 三、護欄掛在呼叫點，不在必經之路（#350 → #305、#306、#308）
+
+- **#306** `oversize_query` 掛在 `Command::Write` 那一個 match 分支上，
+  `:wq`／`:w!`／`:wa` 與 swap 四個入口都不認。
+- **#305** 草稿的所有權是一個**進程内的 bool**，所以第二個進程看不見。
+- **#308** `:grep` 截斷只是「少了幾條」，沒有一個型別說「這個結果集不完整」，
+  於是 `:replace` 照常執行、照常報成功。
+
+共性：規矩寫在**某一條命令裏**，而不是寫在**所有人都得走的那道門上**。#295 的
+`Asking` enum 已經是對的做法（「接口留好」），只是接口留在了 `Command::Write` 這一側。
+
+### 四、同一個概念兩套實現（#349 → #324、#325、#327）
+
+| 概念 | 兩套 | 對不上的時候 |
+|---|---|---|
+| 字符 | `h`／`l` 按字素走，`r` 對 `chars()` 映射 | #324：`rZ` 對着一個 ZWJ emoji 寫出五個 Z |
+| 大小寫 | `.to_uppercase().next()` 只取一對多的第一個 | #325：`ﬁ` → `F`，`i` 沒了 |
+| 顯示寬度 | 寫盤一套、畫面一套，ambiguous 預設 `auto` | #327：同一張表在兩個終端存出兩份 |
+| 分詞 | `yumete-cjk/segment.rs` 641 行 ＋ `yumete-ime/segment.rs` 317 行，而上游有 `segmentor.rs` | 三份分詞的概念 |
+
+兩個 `width.rs`（`yumete-cjk` 與 `yumete-tui`，各 187 行）其實是互補的——一個是寬度表，
+一個是問終端——可是「誰說了算」沒有寫在名字上，#327 就是這件事露出來的地方。
+
+### 五、按模式列舉，不按性質提問（#351 → #336、#340、#318）
+
+`let prompting = |m: Mode| matches!(m, Mode::Command | Mode::Lookfor);`
+——`Mode::Search`、`Ruby`、`Picker` 就這麼掉出去了（#340）。同一個形狀：
+`Event::Mouse` 不問 `is_composing()` 而 `Event::Key` 問（#336）；三個 count 站點
+各寫各的「不再前進就退出」，沒有一處共用的判斷（#318）。
+
+### 六、第五個前端（#352）
+
+`settings_ui.rs` 的模組註釋把這一節的論點寫過一遍了：*「從前這個問題在四個地方各答
+一遍——macOS 的 `YumeInputController`、Windows 的 `LangBar.cpp` 與 `KeyHandler.cpp`、
+便攜版的 `YumeServer.cpp`——四份手抄的布爾表達式，改一處就得記得改另外三處。這裏收成
+一份。」* 事實已經拆成兩半：`SchemeFacts` 引擎自己填，`UiFacts` 前端遞進來，配
+`frontends/settings_layout.toml`。**yumete 是第五個前端**，將來那個 TUI 設定面板只要
+填 `UiFacts`，條件邏輯一行都不必再寫。
+
+### 這改變了順序
+
+按根因合併之後，先做的不再是「最嚴重的那一條」，而是**一次關掉最多條的那一件**：
+
+1. **#347**——Shift 走綁定表。一次覆蓋 #334、#335、#337、#339，並且正好驗一驗
+   「yumete 只做 TUI」這條邊界立不立得住。
+2. **#350 的第一半**——護欄移進 `write_forcing`，`write_swap` 加尺寸檢查（#306），
+   草稿路徑帶 pid（#305）。
+3. **#314**——一句 poll（它不屬於任何根因，就是漏了）。
+4. **#348**——九個快取收成一套，然後 #313／#315／#316／#321 一起掉下來。
+5. 其餘按 §5.2.5 的順序。
+
+**#344／#345／#346 反過來**：那三條在上游 yume-core 裏，這個倉只是受害者。
+
 ## 5.3 Releasing, and the Homebrew tap (#135, planned)
 
 Deferred until there is something to release. The investigation is written down
@@ -7114,3 +7356,334 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     ⚠️ **量它的時候**：`--shot` 沒有終端機的光標，而分詞疊色（一深一淺）畫在選區上面，
     所以**只有一個字的選區在圖上看不見**。可靠的辦法是**按完再按 `d`，把選區刪出來**，
     比對前後兩行文字。**small**
+
+
+
+[^305]: `buffer.rs:527` 那一句 `if self.pending_draft.is_some() && !self.owns_swap
+    { return Ok(()) }` 護的是別人沒認領的草稿，可代價是**這一輪整輪不寫草稿**：
+    `:w` 之後 `clear_swap` 也是空轉（`owns_swap` 是 false），只有 `:recover`／
+    `:recover!` 會把它翻過來。量過：`:w` ＋ 六秒輸入 ＋ 三十個 tick 之後，磁盤上那份
+    仍與崩潰那次逐位元組相同；`:q!` 之後還在。同一段狀態也解釋了兩個 yumete 開同一個
+    檔案時互相蓋草稿——A 寫 `sharedAAA`、B 蓋成 `sharedBBB`、B 的 `:w` 再把它刪掉，
+    因為所有權是進程内的欄位，第二個進程看不見。做法：草稿路徑帶 `<pid>`，
+    `:recover` 把找到的每一份都列出來、說明來源。**medium**
+
+[^306]: #295 的界限今天只掛在 `commands.rs:89` 的 `Command::Write` 上，那一段註釋
+    自己寫着 `:w!`／`:wq`／`:wa` 是故意先不接的。實際用起來 `:wq` 纔是對齊完一張表
+    最順手的收尾，`:write all` 是全書 `:replace` 的收尾。**而 swap 那一路從一開始就
+    不在那個決定裏**：`write_swap` → `write_atomically` 不問尺寸。`docs/.development.md.yumete`
+    4.3 MB 就是這麼來的——正文二十個版本裏從沒超過 448,400 位元組，那份草稿卻是
+    4,373,368：行數更少（4,328 對 6,873）而位元組是十倍，因為路線表第 447–500 行每行
+    14,385–14,698 位元組，其中一行 4,857 個空格，正是對齊器把每格補到最寬那一格的樣子
+    （#292、#295 記過同一件事：425,694 → 2,945,642）。它又觸發 #305，所以一直沒被清掉。
+    做法：`oversize_query` 從 `Command::Write` 移進 `write_forcing`，`write_swap`
+    加同一道尺寸檢查。**small**
+
+[^307]: 不是刻意構造的檔案：五千行乾淨資料 ＋ 一個 `2500,"Smith, John",note` 照樣按
+    整份 grid 打開。把光標放到表頭叫 `note` 的那一格改一個字，寫回去是
+    `2500,"Smith,ZZ,note`——姓名欄沒了，整份不再解析得出來，全程沒有一句話。
+    `table.rs:598` 的 `cells` 按分隔符切，不認引號。拒絕**輸入**逗號救不了已經在檔案
+    裏的那一個。做法：`enter_table` 先掃一遍，欄位起頭有 `"`、或哪一行的格數與表頭
+    不同，就不以 grid 編輯（或只讀地開）。「只支持沒有引號的檔案」站得住，**默默地**
+    這麼做纔是問題。**small**
+
+[^308]: `editor.rs:235` `GREP_LIMIT = 500`。一百章裏搜一個人名超過五百條，`hit_files`
+    在走的中途就不再長了，`:replace` 只改得到那些檔案，訊息卻是「replaced across 20
+    files, 500 hits」。旁邊 `GREP_MAX_BYTES = 4 MB`（`:239`）跳過大檔案時同樣不說，
+    而且不計進「搜了幾個檔案」的數字，所以連數字都看不出漏了。做法：截斷時把結果集
+    標成不完整，`:replace` 在不完整的結果上直接拒絕（或要求 `!`），跳過的檔案列出來。
+    **small**
+
+[^309]: 純讀寫往返是對的——CRLF、缺末尾換行、混行尾都逐位元組保住。**一編輯就破**：
+    `editor/edits.rs` 插的是字面 `"\n"`，於是 `"line one\r\nline two\r\n"` 經
+    `A`、Enter、打字、`:w` 變成 `"line one\nnew 新\r\nline two\r\n"`。日文與 Windows
+    來源的稿子常是 CRLF。做法：開檔時認出主導行尾記在 buffer 上，插換行時用它。
+    **small**
+
+[^310]: `bom.md` 24 → 21 位元組、`bom_crlf.md` 26 → 23，**一個字都沒改**：開檔、`:w`，
+    三個位元組沒了。對散文是有意為之；對 `.csv` 那三個位元組是功能性的——Excel 靠它
+    認 UTF-8，丟掉之後下游的「田中」變亂碼。做法：開檔時記住有沒有 BOM，存檔原樣寫回，
+    至少 `.csv`／`.tsv` 要如此。**small**
+
+[^311]: `editor/files.rs:1101` 導出時自己按分隔符切，於是 `2500,"Smith, John",note`
+    出來是 `2500⇥"Smith⇥ John"⇥note`——三欄變四欄，引號還留着。參差行多的檔案上它
+    反而對着一個 `.csv` 回「游標不在 \| 表格裏」。做法：導出改用 `table.rs` 的解析，
+    順帶把那句錯訊息修對。**small**
+
+[^312]: `buffer.rs:974` 的 rename 換掉 inode，硬連結的一章於是靜默變成獨立檔案；
+    `set_permissions` 只複製 mode，屬主、ACL、xattr（Finder 標籤、quarantine、
+    Dropbox 的元資料）都不跟過去。做法：`st_nlink > 1` 時改成就地寫，或至少說一句；
+    xattr 用 `copyfile` 一族。**medium**
+
+[^313]: 快取的 key 是 `(buffer.id(), revision)`，而 `revision` 每編輯一次就動，所以
+    「每次編輯掃一遍」＝**每一鍵掃一遍全部行**。量（2026-09-09，release）：6,293 行
+    4.3 ms／15,734 行 10.2／31,469 行 20.0／62,938 行 **37.8 ms**，線性，約 0.6 µs 一行；
+    `sample` 6,503/6,600（98.5%）落在 `scan_blocks`。`:render off` → **0.4 ms**，
+    單獨 `:detail off` 沒用。橫排竪排一樣。**中英混排纔是這一條的常態**：英文段落硬折成
+    很多短行，同樣的位元組換成長中文行（約六百行）只要 1.2 ms。做法：塊狀態是前向 fold，
+    從最後一個沒動過的行往下增量掃。**large**
+
+[^314]: `:913` 已經有 `event::poll(ZERO)`——那是滾輪的（`WHEEL_BURST` 一撥合併 64 格）。
+    按鍵那一路沒有：`:343` 每個排隊的重複事件都走一次 `terminal.draw`。一旦每鍵成本
+    超過自動重複的間隔就開始積壓，**鬆手之後光標還在走**，而這正是 #313／#315／#316
+    從「有點慢」變成「不能用」的那一步。做法：`terminal.draw` 之前照 `:913` 補一句
+    poll，還有事件排隊就跳過這一幀。順帶把 `:443` 那個無條件的 `buffer.clone()` 收進
+    `take_screenshot_request()` 為 `Some` 的分支（120×50 一幀 24 µs、400×100 94 µs，
+    只為一個沒人按的 `:shot`）。**small**
+
+[^315]: rows 是快取住的，可**取快取本身**是 O(段長)：`wrap.rs:668` 的 `line_hash` 把整段
+    每一塊 hash 一遍，命中之後又 clone 整個 `Vec`。光標在首行、rows 已經在快取裏時量：
+    200 字 2.7 µs → 2 萬字 27.5 µs → **20 萬字 240 µs**。於是一百萬字沒有換行的 `.txt`
+    （純文字導出、日誌、貼進來的一塊）每個 `l` 8.2 ms、`j` **17.3 ms**、Insert 每字
+    **33.8 ms**。`hidden.iter().any(..)` 每個字素跑一次，是 O(字數 × 區間數)。做法：
+    key 換成 `(buffer id, revision, line, width, …)`——`block_cache` 已經是這麼做的——
+    並回傳切片而不是 clone。**medium**
+
+[^316]: `PadKey` 裏有 `caret`，**而那是載重的**：折行要把光標所在那一格留整（`render.rs:797`
+    的註釋寫着），答案本來就跟着光標走。代價是 Insert 中每一鍵必然 miss，而 miss 一次
+    要把整個表格區域走三到四遍。量（在 `on_key` 裏頭，不含畫面）：500 行 7.4 ms／
+    2,000 行 29.9／5,000 行 **86.7**／10,000 行 **405 ms**；中英混排更差（97–105 ms）。
+    **所以不是把 `caret` 拿掉**：要拿掉的是「光標動了就整表重算」——不折行的補白算一次
+    收着，光標那一格的例外逐行套上去；三四遍併成一遍；由被改那一行的新舊寬度增量重算。
+    與 #297（格狀面板）、#289（`t a` 折行）是同一族的三個。**large**
+
+[^317]: `editor/session.rs:27` 走的是**所有** buffer，而它由 `yumete-tui/src/lib.rs:789`
+    在按鍵處理裏叫。量：一百個章節 buffer × 70 KB 全部 dirty（正是全書 `:replace`
+    之後的樣子），**一次 `autosave_tick` 1.593 秒**，下一次 1.367，磁盤上一百份草稿。
+    一百次全量序列化 ＋ 兩百次 fsync（`buffer.rs:974` 檔案與目錄各一次），都在輸入線程。
+    真實章節 90 KB–600 KB，還要差幾倍；放在 Dropbox 裏更糟。做法：一個 tick 只寫當前
+    buffer，其餘輪着來；或整個移出輸入線程。**medium**
+
+[^318]: `repeat`（`verbs.rs:37`）本身有提前退出，可它比的是光標與 `char_count`，而每一次
+    貼上都真的改了 buffer，所以貼上這一路永遠不會早退。量：`200000p` 1.78 秒、一百萬字
+    漲到四千一百萬；`1000000p` 一百一十秒沒跑完（殺掉），同時壓進一百萬個 `EditSnapshot`。
+    另外兩處根本沒有早退：`keys.rs:429` 的 `Pending::Find` —— `find_char` 每次把整行
+    複製成 `String` 再建一個 `Vec<char>`，兩萬字的行上找不到時 `100fZ` 3.4 ms →
+    `10000fZ` **317 ms** → 百萬級約 **32 秒**；`edits.rs:430` 的 `replay_macro` ——
+    `100000Q` 配一個在檔尾按 `j` 的空宏也要 216 ms。手指壓在數字鍵上就夠了。做法：
+    編輯類的 count 上限遠低於 `keys.rs:552` 那個一百萬，另外兩處各加一句「這一輪
+    既沒動光標也沒動 revision 就 break」。**small**
+
+[^319]: `editor.rs:2365` 的 `search_backward` 是正向全掃一遍再取前一個，所以每按一次
+    都從第 0 行開始。1.8 MB 上 `n` 17 µs、`N` **1.01 ms**（六十倍）；十 MB 的稿子
+    約 6 ms 一次，按住 `N` 就頓。做法：真的往回掃。**medium**
+
+[^320]: `editor/tables.rs:2488`。每次 `j`：500 行 0.42 ms／5,000 行 **4.0**／10,000 行
+    **27.8 ms**。照自動重複 30/s 算，是一個核的 12% 到 83%。`l` 沒事（16 µs），CSV
+    格狀面板也沒事——那邊快取了每行的起始位移，照搬即可。**small**
+
+[^321]: `motion.rs:234` 每按一次就整行複製成 `String`，對每個 CJK 段跑一遍 Viterbi
+    （`yumete-cjk/src/segment.rs:292`），再線性 `.find()`；編輯器自己的 `segment_cache`
+    在這條路上沒接。量：兩千段的中英混排行上五十次 `w` 11.9 ms。交界處的**正確性**沒
+    問題（不會產生零寬步進），純粹是開銷。做法：接上 `segment_cache`，key 用
+    `(line, revision)`。**small**
+
+[^322]: `render.rs:86` 的 `blocks_through(last)` 回傳從第 0 行到 `last` 的一整條
+    `Vec<Block>`，而 `editor/detail.rs` 的 `note_detail` 每幀拿它只索引一個元素——
+    六萬三千個元素的分配換一次索引；`markup_visible()` 為假時還多一個
+    `vec![Prose; last+1]`。`block_of` 自己的註釋（`render.rs:52`）把這個反模式記成
+    「在這裏已經修掉了」，`note_detail` 沒跟上。**small**
+
+[^323]: `repeat`（`verbs.rs:37`）把動作跑 n 遍，而 `snapshot()` 在動作**裏面**，於是
+    `100p`／`100>` 在使用者眼裏是一條命令，在 undo 裏是一百個點。量過：`100p` 要按
+    整整一百次 `u`，`100>` 一樣；`100\`u` 不走 `repeat`，正確地只要一次。使用者只會
+    理解成「undo 壞了」，而那是第一天就會撞上的印象。做法：`snapshot` 提到迴圈外，
+    或第 2..n 次不再 snapshot。**small**
+
+[^324]: `verbs.rs:154` 的 `replace_chars` 對 `chars()` 映射，而不是對字素。於是 `rZ`
+    對着一個 ZWJ 家庭 emoji 寫出 **`ZZZZZ`**；分解式的 `か`（か+U+3099）寫出 `ZZ`；
+    `e+U+0301`、半角 `ｶ+ﾞ` 同理。`h`／`l` **是**按字素走的（驗過），所以使用者選中
+    一個字形、`r` 寫出五個字符。NFD 的日文與 emoji 在中英混排裏很平常。做法：換成
+    字素簇迭代，`yumete-cjk` 已經有。**small**
+
+[^325]: `keys.rs:455` 用 `.to_uppercase().next()`，只取一對多展開的第一個。`%` 之後
+    `` `u ``：`aβ漢ＡＢＣﬁßİ x` → `AΒ漢ＡＢＣFSİ X`——`ﬁ` 變 `F`（`i` 沒了）、
+    `ß` 變 `S`（少一個 `S`）；`` `` `` 把 `İ` 變成 `i`。全角與漢字都對。範圍窄，可是
+    無聲：從 PDF 貼進來的連字與德文 `ß` 在英文稿子裏很平常。**small**
+
+[^326]: `verbs.rs:85`。`"  \n漢字"` 併成 `"   漢字"`——行尾的空白留着，又加了一個空格。
+    全角接全角不加空格的規則本身是對的；ASCII 接漢字給出 `"hello 漢字"` 也說得過去，
+    只是它是從 `_ => " "` 那一支掉出來的，不是一個決定。做法：併之前先裁掉行尾空白，
+    把交界寫成明白的一支。**small**
+
+[^327]: `yumete-cjk/src/width.rs:30` 的 ambiguous 預設是 `auto`（探測終端），而
+    `mdtable.rs:602` 對齊時用的就是它。於是同一張表、同一次 `t F`，只因終端不同存出
+    **582 對 578 位元組**。`→ ± ※ ① — “ ”` 都是 ambiguous，所以這在以英文為主的檔案上
+    照樣發生：兩個人協作、或 ssh 與本地交替，git 裏整張表無休止地 churn。做法：**寫入**
+    用一個明白的預設（建議 narrow），`auto` 只管**畫面**；或要求專案在 `.yumete/config.toml`
+    裏寫死。**small**
+
+[^328]: `mdtable.rs:193/225/277` 切格子時不認 inline code span，於是一行裏 `` `a|b` ``
+    被當成兩格：三欄變四欄，code span 攔腰斷開，`t F` 一寫下去**其餘每一行都多一個空格**。
+    轉義的 `\|` 與 inline HTML 都沒事，所以缺的只是「切之前先跳過 code span」這一步。
+    **small**
+
+[^329]: `editor/prompt.rs:95` → `editor/tables.rs:1518`：改一格就把整張表重排。
+    `plain.md` 141,716 → 150,065 位元組，五千行全部重新補空格——兩個字的編輯換來
+    五千行 diff。做法：只在欄寬真的變了時重排，且只重排受影響的那一欄；或者把對齊
+    變成明白的命令（`:table align never`），不做存檔的副作用。**medium**
+
+[^330]: `ruby.rs:60` 是照字面找 `</rt></ruby>` 的，所以一個 `<ruby>` 裏有兩組
+    「基字 ＋ `<rt>`」時就錯位：`<ruby>漢<rt>かん</rt>字<rt>じ</rt></ruby>` 出來是
+    `#ruby("漢", "かん</rt>字<rt>じ")`——**第二個基字連着標籤一起被吞進讀音**，
+    Typst 會把 `かん</rt>字<rt>じ` 整個排成振假名。一條命令、整篇文件、沒有一句警告。
+    做法：換成真的分組解析（一個 `<ruby>` 內允許多組），轉換前先 dry-run 校一遍，
+    有一組解不出就整篇拒絕並報位置。嵌套 ruby 一併在這裏擋掉。**medium**
+
+[^331]: `ruby.rs:60` 只認小寫、無屬性的標籤，於是三種常見寫法完全看不見：**W3C 建議的
+    `<rp>` 退化寫法** `<ruby>東京<rp>(</rp><rt>とうきょう</rt><rp>)</rp></ruby>`、
+    `<ruby lang="ja">`、大寫 `<RUBY>`。它們不會被改壞，可是在混排的檔案裏
+    `:ruby format typst` 把別的組轉了、把這些原樣留成 HTML，同時報告「已改寫為 typst」。
+    它們也永遠排不到頁面上。做法：標籤匹配改成大小寫不敏感 ＋ 允許屬性，`<rp>` 的內容
+    解析時丟掉。與 #330 一起改。**small**
+
+[^332]: `ruby.rs:70` 的 `Dialect::write` 是裸 `format!`：`<ruby>桜<rt>say "hi"</rt></ruby>`
+    出來是 `#ruby("桜", "say "hi"")`，`<ruby>"x"<rt>くお</rt></ruby>` 出來是
+    `#ruby(""x"", "くお")`——兩個都編譯不過，再讀回來還會切錯。一句帶引號的英文注釋
+    就夠了。做法：寫出前對基字與讀音做 Typst 字串轉義（至少 `"` 與 `\`）。**small**
+
+[^333]: `editor/ruby.rs` 的 `reformat` 是純文字掃描，不看塊結構，所以 ```` ```html ````
+    圍欄裏的 `<ruby>桜<rt>さくら</rt></ruby>` 也會被改成 `#ruby(...)`——一本講 ruby
+    標記的書，自己的例子被改掉。做法：用 `scan_blocks` 的塊資訊跳過圍欄與縮進代碼塊
+    （#313 增量化之後這件事更便宜）。**small**
+
+[^334]: `yume-core/src/engine.rs:6113` 的 `set_chinese(false)` 做的是 `buffer.clear()`，
+    **不上屏**；`yumete-tui/src/lib.rs:552` 就這麼叫它。跑過：Insert 中文下按 `b` `c`
+    再敲 Shift → `is_chinese=false, composing=false, buffer="", committed=""`。兩個鍵
+    的編碼憑空不見——沒上屏、沒有 undo 記錄、沒有一句話，切回去也回不來。**以英文為主
+    的人，一天裏按得最多的就是這個鍵。** 做法：`toggle_language` 遇到還在組字的時候，
+    先 `ime.space()` 上屏、插進去，再切。**small**
+
+[^335]: `lib.rs:1077` 的 `Press` 只在 `if !self.down` 時把 `clean` 置 true。按住 Shift
+    時 ⌘-Tab 切走，`down` 就卡在 true；下一個鍵污染 `clean`；再下一次真正的單擊回
+    `toggled=false`。模擬 `Shift↓ ⟨丟失⟩ n Shift↓ Shift↑ Shift↓ Shift↑` 只切一次而不是
+    兩次——使用者敲一下沒反應，下一個詞就用錯語言打出去了。做法：`Press` 時**無條件**
+    `clean = true`，字面上一個詞。旁邊 `:1064` 左右 Shift 共用一份 `down`／`clean`
+    （`LeftShift↓ RightShift↓ RightShift↑` 會在左 Shift 還按着時觸發切換），一併分開。
+    **small**
+
+[^336]: `lib.rs:814` 的 `Event::Mouse` 與 `Event::Key` 是平級的分支，**從不問
+    `ime.is_composing()`**。拆分打到一半去點另一個標籤，`show_buffer_at(i)` 換了 buffer，
+    preedit 還活着、在**新檔案**的光標處重畫，下一個空格就在那裏上屏。`:811` 的
+    `Event::Paste` 同理。對照 `ime_handle`（`:2029`）正是為了這個纔吞掉方向鍵。
+    做法：兩個分支進來先問一句，要麼先上屏，要麼吞掉。**small**
+
+[^337]: 一個進程一個 `ImeSession`（`lib.rs:264`），所以在第三章切到中文、`gn` 到第四章
+    還是中文。而 `[靈明]`／`[ABC]` 只在 `composes_here` 為真的地方畫，**Normal 模式下
+    根本看不到**——按 `i` 之前不知道會掉進哪一種，只能靠打錯纔發現。做法：先做便宜的
+    一半，狀態列任何模式都顯示中／ABC；語言掛到 buffer 上再說（連同 session 恢復）。
+    **medium**
+
+[^338]: `lib.rs:552` 的切換先把 `borrowed` 清成 `None`，於是借出去的語言再也回不來。
+    複現：正寫英文（`[ABC]`），按 `:`、打 `e `、敲 Shift、打 `第三章.md`、回車 →
+    **Insert 變成中文**；再按 `i` 打 `the` 會被當拆分吃掉。做法：在 prompt 裏觸發的
+    切換只改這一行的語言，不動 `borrowed`。**small**
+
+[^339]: `lib.rs:292` 沒有 enhanced 就不推 `REPORT_ALL_KEYS_AS_ESCAPE_CODES`，
+    `KeyCode::Modifier` 於是永遠不來，`ShiftTap` 永遠不觸發（#271／#290 的另一面）。
+    Apple Terminal 上只剩 `:yume abc`／`:yume on`，一趟八個鍵，一小時要走幾十趟。
+    **而且什麼都不說**：啟動沒有訊息，指示器也看不出差別，這個手勢就是默默不動。
+    做法：啟動時認出 `enhanced=false` 就明說一次，狀態列標一下，並給一個可綁定的備用鍵。
+    **small**
+
+[^340]: `lib.rs:371` 的 `prompting` 只算 `Command` 與 `Lookfor`，而 `/` 是 `Mode::Search`
+    （`editor/keys.rs:846`）。`:` 進去轉英、出來交還語言；`/` 沿用當下的狀態，既不結束
+    組字也不恢復。剛打完一個中文名就搜英文字，出來的是候選。`Ruby` 與 `Picker` 同缺。
+    做法：把這三個也算進 `prompting`。注意 `/` **要留中文**（得搜得了中文），所以只補
+    「進去先結束組字、出來交還」，不要照抄 `:` 的強制轉英。**small**
+
+[^341]: `yumete/src/main.rs:496` 的 `switch_scheme` 在按鍵處理裏同步造一個
+    `ImeSession`。量：`load_binary_bytes` 134.7 ms（125 萬條）、`from_table_text`
+    546.1 ms。啟動本身是對的——`config.ime.start` 預設 false，`language_only` 排在首幀
+    之後——代價只是挪到了 `:yume on`，而對以英文為主的人那不是一次性的。做法：後台
+    執行緒載入 ＋ 載入中給狀態；或首次載入後常駐，`:yume off` 只解除接管。**medium**
+
+[^342]: `editor/words.rs:606` 與 `editor/prompt.rs:131`：普通 ASCII 的一段輸入是一個
+    undo 單位，而每次上屏各自 `snapshot()`，所以上屏之後 `history.pending` 是 `None`，
+    **接在後面打的 ASCII 不再掙一個點**：`i`、組「你好」、切 ABC、打 `abc`、`Esc`、`u`
+    → 兩段一起不見（redo 拿得回來）。做法：上屏之後重新開一段 insert session。
+    **small**
+
+[^343]: `editor/files.rs:147`：有進度日誌時，每次存檔把整個 rope 轉成 `String` 再數
+    漢字——八 MB 的稿子就是每存一次多一次八 MB 的拷貝。做法：在 rope 上流式數。
+    **small**
+
+[^344]: 上游 `yume-core/src/code_table.rs:95`：`out.push((c.len() - shared) as u8)`
+    沒有 clamp（上一行的 `shared` 倒是有），碼長溢位之後寫進去的後綴位元組數對不上，
+    `YTB` blob 錯位，`rebuild_index`（`:81`）走出界。複現過：一個以 256 個 `a` 開頭、
+    再加十六行的檔案，`:yume table` 指過去 →
+    `panicked at code_table.rs:81: index out of bounds: the len is 765 but the index is 799`。
+    **yumete 沒有裝 panic hook**，所以進程直接死，帶走每一個沒存的 buffer；本該走的是
+    旁邊那句 `Err("讀不出碼表")`。做法：超過 255 位元組的條目跳過或一致地截斷。
+    另外值得單獨裝一個 panic hook，崩之前把 dirty buffer 落盤。**small**
+
+[^345]: 上游 `yume-core/src/engine.rs:2495`：`normal_candidates` 傳的是
+    `normal_candidates_capped(code, usize::MAX)`，於是每一個前綴匹配都被物化——125 萬條
+    的表上一個鍵約四萬八千條、每條三個 `String`，接着 `filter`／`dedup`／`with_adaptive`／
+    `with_pinned` 再各走一遍，而面板只畫五到九個。佐證：45.7 萬條的表、前綴 `a` →
+    `page_count 1953` × 9 = 17,577，正好是全部。量到每個詞的第一鍵 12.0 ms（中位數），
+    第三、四鍵 0.08 ms——成本跟前綴匹配數走，不跟表大小走。做法：傳一個真的上限，
+    `normal_candidates_capped` 本來就在，只是只有 `:3720` 用過一次。
+    ⚠️ **這些數字跑在合成的 125 萬條碼表上**（機器上沒有編譯好的 `.ytab`／`.ywl`，
+    `builtin.rs` 是 `BUILTIN_TABLE: None`），詞庫與整句層沒壓到，真實延遲最好也就是這樣。
+    **small**
+
+[^346]: 上游 `yume-core/src/code_table.rs:97`：`let n = text.len().min(0xFF)` 之後
+    `&text[..n]` 是在**位元組**上切，落在字符中間時 `read_text` 的
+    `from_utf8(..).unwrap_or("")` 把它整個吃成空字串——使用者 `.dict.yaml` 裏一個長詞組
+    於是變成一行空白的候選，還選得中、上得了屏。不 panic，所以與 #344 是同一個函數的
+    兩件事。順帶：`:109` 的註釋寫的是 `textLen:u16-LE`，而 `:98` 寫的是一個 `u8`。
+    做法：在字符邊界截（`floor_char_boundary`），或整條跳過並計進警告。**small**
+
+
+
+[^347]: 上游 `yume-core/src/key_bindings.rs` 有一張三態表（`KeyState::of(buffer_empty,
+    candidates)` → 空碼／組字中／有候選），`resolve(key, state, candidates)` 查它，
+    出廠值裏 `ShiftL`／`ShiftR` 是 `[ToggleChinese, CommitRawEnglish, CommitRawEnglish]`
+    ——**組字中按 Shift 是「上屏原碼並留在英文」**，`:462` 的註釋連為什麼不選臨時英文
+    都寫了。單擊偵測也在上游：`modifier(key, down, other_mods)`／`other_key()`／
+    `reset()`（`:730`）。這個倉裏 `KeyBindings` 一次都沒被建起來，`yumete-tui/src/lib.rs:1064`
+    自己寫了 `ShiftTap { down, clean }`，`:552` 直接叫 `set_chinese(false)`。於是
+    #334（清空不上屏）、#335（丟失釋放、左右共用）、#337（語言狀態自己存一份）、
+    #339（收不到 modifier 就什麼都不說）四條都從這一處來。做法：Shift 交給
+    `key_action(FuncKey::ShiftL)`，照 `press_func` 已經走通的那條路——它的註釋寫着
+    「The binding table is yume's, not yumete's」，只是當時只接了 `;` `'` `-` `=`。
+    **medium**
+
+[^348]: `Editor` 上八個快取（`segment_cache`／`meter_cache`／`note_cache`／`fold_cache`／
+    `markup_cache`／`block_cache`／`pad_cache`／`md_cache`），`wrap.rs` 裏還有第九個
+    （thread-local `ROWS`，`Vec` 線性掃當 LRU）。九處各自決定 key 裏放什麼，於是各有
+    各的「必然失效」：`revision`（#313）、`caret`（#316）、key 本身 O(段長)（#315）。
+    最能說明的是 #321——`segment_cache` 有，`editor/words.rs` 用了，`motion.rs` 沒接。
+    做法：一套「按 `(buffer, revision, line)` 記一行」的設施，九處共用一條失效規則；
+    不做的話，每多一個視圖層就多一個自己寫 key 的快取。**large**
+
+[^349]: 同一個概念的兩套實現，平時看不出來，對不上的那天纔看得見：字素（`h`／`l` 按
+    字素，`r` 對 `chars()` 映射 → #324）、大小寫（`.to_uppercase().next()` → #325）、
+    顯示寬度（寫盤與畫面各一套，ambiguous 預設 `auto` → #327）、分詞
+    （`yumete-cjk/segment.rs` 641 行 ＋ `yumete-ime/segment.rs` 317 行 ＋ 上游
+    `segmentor.rs`）。兩個 `width.rs` 各 187 行**是互補的**——一個是寬度表、一個是問
+    終端——但「誰說了算」沒寫在名字上。做法：一個概念指定一處權威，其餘的叫它。
+    **medium**
+
+[^350]: #295 的 `Asking` enum 本來就是對的做法（「接口留好」），只是接口留在
+    `Command::Write` 那一側：`oversize_query` 掛在一個 match 分支上，`:wq`／`:w!`／
+    `:wa` 與 swap 四個入口都不認（#306）。同一個形狀還有兩處：草稿所有權是進程内的
+    bool，第二個進程看不見（#305）；`:grep` 的截斷沒有型別表達「這個結果集不完整」，
+    於是 `:replace` 照常跑、照常報成功（#308）。做法：規矩放在所有人必經的那道門上
+    ——寫盤走 `write_forcing`，不完整的結果集自己帶着那個事實。**medium**
+
+[^351]: `yumete-tui/src/lib.rs:371` 的
+    `let prompting = |m: Mode| matches!(m, Mode::Command | Mode::Lookfor);`
+    ——`Search`／`Ruby`／`Picker` 就這麼掉出去了（#340）。同一個形狀：`Event::Mouse`
+    不問 `is_composing()` 而 `Event::Key` 問（#336）；`repeat`、`Pending::Find`、
+    `replay_macro` 三處各寫各的「不再前進就退出」，沒有一處共用（#318）。做法：問
+    「這個模式是不是一條提示行」「這個事件是不是該讓組字先結清」，而不是列舉是哪幾個。
+    **small**
+
+[^352]: 上游 `settings_ui.rs` 的模組註釋已經把這件事說完了：同一個判斷從前在 macOS、
+    Windows、便攜版各答一遍，「四份手抄的布爾表達式」，後來收成一份。事實拆成兩半——
+    `SchemeFacts` 引擎自己填，`UiFacts` 前端遞進來（字集軌開沒開、候選佈局哪一檔……），
+    謂詞一律肯定式，取反由呼叫端加 `!`，配 `frontends/settings_layout.toml`。
+    yumete 是**第五個前端**：將來那個 TUI 設定面板只要填 `UiFacts`，條件邏輯一行都不必
+    再寫。先決條件是 #347——按鍵那一層先走通，設定面板改的東西纔有地方生效。**medium**
