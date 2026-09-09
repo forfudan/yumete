@@ -21,6 +21,7 @@ pub mod clock;
 pub mod command;
 pub mod conflict;
 pub mod convert;
+pub mod diag;
 pub mod diff;
 pub mod discover;
 pub mod drawn;

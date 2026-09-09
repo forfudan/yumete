@@ -424,6 +424,13 @@ en = "{0}+ places spelled the other way (first {0} listed) — gf goes to the li
 # ── cli ───────────────────────────────────────────────────────────────
 
 [[message]]
+# 崩潰之後，在正常螢幕上留的那一句：救回幾份草稿、日誌在哪
+key = "cli.crashed"
+zht = "yumete 崩潰了。已保住 {0} 份草稿（`:recover` 取回）；詳情見 {1}"
+zhs = "yumete 崩溃了。已保住 {0} 份草稿（`:recover` 取回）；详情见 {1}"
+en = "yumete crashed. {0} draft(s) kept — :recover takes them back; details in {1}"
+
+[[message]]
 # 啓動時接着上次的檔案
 key = "cli.picked-up-where-you-left-off"
 zht = "接着上次：開了 {0} 個檔案"
