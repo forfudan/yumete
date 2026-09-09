@@ -19,4 +19,8 @@ version = "0.1.0"
 codegen-units = 1
 lto = true
 opt-level = 3
-strip = true
+# **A crash report nobody can read is half a feature** (#300). `strip = true`
+# takes the symbol table with it, and the backtrace in `yumete.log` comes out
+# as a column of `__mh_execute_header`. Dropping only the debug info keeps the
+# names — nothing about the generated code changes.
+strip = "debuginfo"

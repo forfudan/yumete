@@ -24,6 +24,25 @@ impl Editor {
     /// Called by the front end after each key. Tied to keystrokes rather than
     /// to a clock on purpose: nothing is being written while nothing is being
     /// typed, so there is nothing to insure.
+    /// Write a recovery copy for **every** buffer that has unsaved changes, and
+    /// say how many landed.
+    ///
+    /// The path with no time to ask: a panic. `autosave_tick` is throttled and
+    /// asks whether autosave is even on; this asks neither, because the next
+    /// thing that happens is the process ending. Failures are counted rather
+    /// than reported — there is nowhere left to report them to, and the ones
+    /// that did land are what matters.
+    pub fn rescue_drafts(&mut self) -> usize {
+        self.name_scratch_drafts();
+        let mut saved = 0;
+        for buffer in &mut self.buffers {
+            if buffer.is_modified() && buffer.write_swap().is_ok() {
+                saved += 1;
+            }
+        }
+        saved
+    }
+
     pub fn autosave_tick(&mut self) {
         if !self.autosave {
             return;

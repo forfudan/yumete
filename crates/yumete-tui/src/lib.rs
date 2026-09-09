@@ -39,7 +39,7 @@ use yumete_core::editor::Hud;
 use yumete_core::sidebar::View;
 use yumete_core::wrap::{self, Anchor as WrapAnchor};
 use yumete_core::zong::{Anchor, Layout as WritingLayout};
-use yumete_core::{say, Editor, Key, KeyOutcome, Mode, ShotJob, TextStore};
+use yumete_core::{diag, say, Editor, Key, KeyOutcome, Mode, ShotJob, TextStore};
 use yumete_ime::{
     CommitStrategy, DataFault, DataProblem, FuncKey, ImeSession, ModifierTap, PanelDisplay,
     Scheme,
@@ -342,8 +342,12 @@ pub fn run(
     // The queue is the terminal's, not ours, and this is the one place anything
     // is ever taken out of order: the rest of a wheel gesture, read early so it
     // can be drawn once instead of once a notch.
-    let mut queued: Option<Event> = None;
+    // **Read on a thread of its own** (#360). See `spawn_reader`.
+    let events = spawn_reader();
+    let mut inbox: std::collections::VecDeque<Event> = std::collections::VecDeque::new();
     let mut painted = std::time::Instant::now();
+    // What the last frame cost — the terminal's answer to how fast it can be fed.
+    let mut last_frame = std::time::Duration::ZERO;
     // The frame `:shot` will photograph, kept only when one was asked for.
     let mut drawn: Option<ratatui::buffer::Buffer> = None;
 
@@ -401,6 +405,8 @@ pub fn run(
             }
             last_mode = Some(mode);
         }
+        // Where the loop is, for the watchdog (#359). Two relaxed stores.
+        diag::beat(diag::Stage::Measuring, 0);
         // The 縱 wrap length depends on the terminal height, and the motions
         // that cross 縱 run before the next draw, so settle it up front.
         if let Ok(size) = terminal.size() {
@@ -456,7 +462,8 @@ pub fn run(
         // are still read and still handled — it is only the *picture* between
         // two of them that nobody was going to see. `FRAME_FLOOR` keeps a held
         // key from holding the page still.
-        let waiting = queued.is_some() || matches!(event::poll(std::time::Duration::ZERO), Ok(true));
+        take_what_arrived(&events, &mut inbox);
+        let waiting = !inbox.is_empty();
         // The picture is wanted only when somebody asked for one, and the copy
         // is a walk of the whole screen: 24 µs at 120×40, 94 µs at 400×100,
         // every frame, for a `:shot` almost nobody presses. Asked before the
@@ -465,11 +472,19 @@ pub fn run(
         let wants_picture = editor.take_screenshot_request();
         // A frame somebody is about to photograph is never the frame to skip:
         // skipping it hands `:shot` a blank page.
-        if wants_picture.is_some() || !waiting || painted.elapsed() >= FRAME_FLOOR {
+        // What the last frame cost, and how long that buys the backlog.
+        let floor = (last_frame * FRAME_SLACK).clamp(FRAME_FLOOR, FRAME_CEILING);
+        if wants_picture.is_some() || !waiting || painted.elapsed() >= floor {
+            // The detail is the last frame's cost in milliseconds: if the loop
+            // stalls here, the stall line says whether drawing was already
+            // expensive before it stopped (#359).
+            diag::beat(diag::Stage::Drawing, last_frame.as_millis() as u64);
+            let began = std::time::Instant::now();
             let completed = match terminal.draw(|frame| draw(frame, editor, config, ime, &mut viewport)) {
                 Ok(completed) => completed,
                 Err(err) => break Err(err),
             };
+            last_frame = began.elapsed();
             painted = std::time::Instant::now();
             drawn = wants_picture.is_some().then(|| completed.buffer.clone());
         }
@@ -563,17 +578,27 @@ pub fn run(
                 all_keys = want;
             }
         }
-        if editor.reload_auto() && queued.is_none() {
-            match event::poll(DISK_POLL) {
-                Ok(false) => {
+        if editor.reload_auto() && inbox.is_empty() {
+            match events.recv_timeout(DISK_POLL) {
+                Ok(Ok(event)) => inbox.push_back(event),
+                Ok(Err(err)) => break Err(err),
+                Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
                     editor.disk_tick();
                     continue;
                 }
-                Ok(true) => {}
-                Err(err) => break Err(err),
+                Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => break Ok(()),
             }
         }
-        match queued.take().map(Ok).unwrap_or_else(event::read) {
+        diag::beat(diag::Stage::Reading, 0);
+        let arrived = match inbox.pop_front() {
+            Some(event) => Ok(event),
+            None => match events.recv() {
+                Ok(outcome) => outcome,
+                // The reader is gone, which is the terminal saying it is done.
+                Err(_) => break Ok(()),
+            },
+        };
+        match arrived {
             Ok(Event::Key(key)) => {
                 // A lone-Shift tap toggles 中/英 in Insert mode; other Shift
                 // activity is swallowed so it never reaches the editor.
@@ -611,6 +636,10 @@ pub fn run(
                     && ime_handle(ime, editor, code, mods);
                 if !consumed {
                     if let Some(k) = map_key(code, mods) {
+                        // Kept for the crash report, and for nothing else: a
+                        // push of a `Copy` enum into a ring of 64 (#300).
+                        diag::note_key(k);
+                        diag::beat(diag::Stage::Key, 0);
                         if editor.on_key(k) == KeyOutcome::Quit {
                             break Ok(());
                         }
@@ -652,7 +681,7 @@ pub fn run(
                 if let Some(want) = editor.take_shell_request() {
                     use yumete_core::editor::How;
                     match want.how {
-                        How::Terminal => match hand_over(&mut terminal, &want.line) {
+                        How::Terminal => match hand_over(&mut terminal, &want.line, &events) {
                             Ok(()) => editor.set_status(say!("shell.finished", want.line)),
                             Err(err) => editor.set_status(say!("shell.cannot-run", err)),
                         },
@@ -864,7 +893,9 @@ pub fn run(
                 // frame.
                 MouseEventKind::ScrollDown | MouseEventKind::ScrollUp => {
                     let back = mouse.kind == MouseEventKind::ScrollUp;
-                    let notches = 1 + drain_the_flick(mouse.kind, &mut queued);
+                    diag::beat(diag::Stage::Wheel, 0);
+                    let notches = 1 + drain_the_flick(mouse.kind, &events, &mut inbox);
+                    diag::beat(diag::Stage::Scrolling, notches as u64);
                     editor.scroll(editor.wheel_step() * notches, back);
                 }
                 // A tab is a thing you point at; the mouse is already captured
@@ -932,38 +963,110 @@ pub fn run(
     result
 }
 
-/// How many notches of one gesture are taken before drawing anyway.
+/// Put the terminal back after a panic tore the loop down (#300).
+///
+/// `run`'s own teardown is at the end of `run`, which a panic goes straight
+/// past — so the reader would be left in raw mode, inside the alternate
+/// screen, with the mouse captured. Every step is best effort and none of them
+/// mind being done twice.
+pub fn restore_terminal() {
+    let _ = execute!(
+        stdout(),
+        DisableMouseCapture,
+        DisableBracketedPaste,
+        DisableFocusChange,
+        PopKeyboardEnhancementFlags
+    );
+    ratatui::restore();
+}
+
+/// How long one gesture is swallowed before the page is drawn anyway.
 ///
 /// A trackpad's momentum can go on sending for seconds after the finger has
 /// left it. Without a ceiling the page would stay on the frame the flick
-/// started at until the terminal's buffer ran dry; with one, a long gesture is
-/// drawn in a handful of frames instead of a thousand.
-const WHEEL_BURST: usize = 64;
+/// started at until the terminal's buffer ran dry.
+///
+/// **A count was the wrong unit** (2026-09-09). The ceiling used to be 64
+/// notches, and a notch costs about 20 µs — so it bounded the work at 1.3 ms
+/// while a hard flick queues *thousands* of events, which came back as three
+/// hundred turns of the loop, each drawing a frame, long after the finger had
+/// stopped. Measured on this project's own roadmap (`the_cost_of_a_flick`):
+/// 1,024 notches is 20 ms of scrolling and 2 ms of drawing, so the work was
+/// never the problem — the number of frames was. A time box bounds what
+/// matters instead: spend at most this long swallowing what has arrived, then
+/// act on all of it at once. Events are unbounded, latency is not.
+const WHEEL_DRAIN: std::time::Duration = std::time::Duration::from_millis(12);
+
+/// Read the terminal on a thread of its own, and hand the events over.
+///
+/// **The deadlock this breaks** (#360). `terminal.draw` *writes* — while
+/// scrolling, every row changes, so the diff is the whole screen and that is a
+/// hundred thousand characters of escape sequence. A terminal that has fallen
+/// behind stops reading it, and the write blocks. Meanwhile the same terminal
+/// is trying to write *to us*: a hard trackpad flick sends thousands of mouse
+/// reports, and with nobody reading them that write blocks too — so it stops
+/// reading ours, and both sides wait for the other. It takes a few gestures to
+/// fill both buffers, which is exactly what 「it freezes on the fourth flick」
+/// looked like, with the heartbeat stopped in `drawing` after a frame that had
+/// cost 8 ms.
+///
+/// A reader that never draws cannot be blocked by drawing. The channel is
+/// unbounded, so the terminal's write to us always completes and it goes on
+/// consuming what we send.
+fn spawn_reader() -> std::sync::mpsc::Receiver<io::Result<Event>> {
+    let (tx, rx) = std::sync::mpsc::channel();
+    std::thread::spawn(move || loop {
+        let outcome = event::read();
+        let failed = outcome.is_err();
+        // A send that fails means the loop has gone; so does an error, and it
+        // is delivered first so the loop can say why.
+        if tx.send(outcome).is_err() || failed {
+            break;
+        }
+    });
+    rx
+}
+
+/// Move everything the reader has ready into the inbox, without waiting.
+fn take_what_arrived(
+    events: &std::sync::mpsc::Receiver<io::Result<Event>>,
+    inbox: &mut std::collections::VecDeque<Event>,
+) {
+    while let Ok(Ok(event)) = events.try_recv() {
+        inbox.push_back(event);
+    }
+}
 
 /// Take the rest of a wheel gesture off the queue, and say how many more
 /// notches of the same direction it held.
 ///
-/// Anything that is *not* that same scroll is put back in `queued` for the next
-/// turn of the loop: a burst ends at the first event of any other kind, so a
-/// click or a keystroke landing mid-flick is neither swallowed nor reordered.
-fn drain_the_flick(kind: MouseEventKind, queued: &mut Option<Event>) -> usize {
+/// Anything that is *not* that same scroll is left at the front of the inbox
+/// for the next turn of the loop: a burst ends at the first event of any other
+/// kind, so a click or a keystroke landing mid-flick is neither swallowed nor
+/// reordered.
+fn drain_the_flick(
+    kind: MouseEventKind,
+    events: &std::sync::mpsc::Receiver<io::Result<Event>>,
+    inbox: &mut std::collections::VecDeque<Event>,
+) -> usize {
+    let began = std::time::Instant::now();
     let mut more = 0;
-    while more < WHEEL_BURST {
-        // Zero, not a wait: this asks what has *already* arrived. A gesture
-        // that has paused is over as far as the page is concerned, and the
-        // next notch will draw its own frame.
-        if !matches!(event::poll(std::time::Duration::ZERO), Ok(true)) {
+    loop {
+        take_what_arrived(events, inbox);
+        // However much has arrived, only this long is spent taking it. The
+        // scroll that follows stops itself at the end of the buffer, so a
+        // gesture nobody could have meant costs one document, not one queue.
+        if began.elapsed() >= WHEEL_DRAIN {
             break;
         }
-        match event::read() {
-            Ok(Event::Mouse(next)) if next.kind == kind => more += 1,
-            Ok(other) => {
-                *queued = Some(other);
-                break;
+        match inbox.front() {
+            Some(Event::Mouse(next)) if next.kind == kind => {
+                inbox.pop_front();
+                more += 1;
             }
-            // A queue that cannot be read will say so again on the next
-            // `event::read`, which is where the error belongs.
-            Err(_) => break,
+            // Nothing waiting, or something that is not this gesture: a
+            // gesture that has paused is over as far as the page is concerned.
+            _ => break,
         }
     }
     more
@@ -976,13 +1079,39 @@ fn drain_the_flick(kind: MouseEventKind, queued: &mut Option<Event>) -> usize {
 /// the setting is off.
 const DISK_POLL: std::time::Duration = std::time::Duration::from_secs(2);
 
-/// The longest the page may go unrefreshed while keys are still arriving (#314).
+/// The longest the page may go unrefreshed while input is still arriving (#314).
 ///
 /// Skipping a frame when input is already waiting is what stops a held key from
 /// queueing one full redraw per repeat — but skipping *every* frame would hold
 /// the screen still for as long as the finger is down. This is the floor: at
 /// worst the reader sees the page ten times a second while a key repeats.
+///
+/// **It is a floor, not the rule** (#360). A frame is not free and it is not
+/// even mostly ours: `terminal.draw` computes the page in a millisecond or two
+/// and then *writes it to a terminal*, and while scrolling every row changes,
+/// so the diff is the whole screen — a hundred thousand characters of escape
+/// sequence. If the emulator falls behind, that write **blocks**, and a fixed
+/// floor then does exactly the wrong thing: forcing a frame every 100 ms when
+/// one costs 200 ms spends the whole loop drawing and never drains the
+/// gesture. So the real floor is whichever is longer, this or a multiple of
+/// what the last frame actually cost — the page gives way to the backlog when
+/// the terminal says it cannot keep up.
 const FRAME_FLOOR: std::time::Duration = std::time::Duration::from_millis(100);
+
+/// How many times the last frame's cost must pass before another is forced.
+///
+/// Four, so at most a quarter of a congested loop goes on drawing and the rest
+/// goes on catching up with what the reader is still doing.
+const FRAME_SLACK: u32 = 4;
+
+/// …and however slow a frame was, no longer than this between two of them.
+///
+/// The other half of the same mistake: a frame that blocked for two seconds
+/// would buy eight seconds of not drawing, and eight seconds of a page that
+/// does not move is 「frozen」 whatever the loop is doing underneath. Half a
+/// second is long enough to drain a gesture and short enough to still read as
+/// a screen that is alive.
+const FRAME_CEILING: std::time::Duration = std::time::Duration::from_millis(500);
 
 /// Whether a mode collects text the IME should compose into.
 ///
@@ -1233,6 +1362,7 @@ impl Ran {
 fn hand_over<B: ratatui::backend::Backend + io::Write>(
     terminal: &mut ratatui::Terminal<B>,
     line: &str,
+    events: &std::sync::mpsc::Receiver<io::Result<Event>>,
 ) -> io::Result<()> {
     let _ = execute!(
         stdout(),
@@ -1256,11 +1386,18 @@ fn hand_over<B: ratatui::backend::Backend + io::Write>(
     let _ = io::Write::flush(&mut stdout());
     ratatui::crossterm::terminal::enable_raw_mode()?;
     // Anything at all: this is "I have read it", not a command.
+    //
+    // **From the reader, not from the terminal.** Since #360 a thread of its
+    // own is the only thing reading stdin, so a second reader here would race
+    // it for the key — and lose, because the thread is already blocked in
+    // `read`. This waited forever the first time it was tried.
     loop {
-        if let Ok(Event::Key(key)) = event::read() {
-            if is_actionable(key.kind) {
-                break;
-            }
+        match events.recv() {
+            Ok(Ok(Event::Key(key))) if is_actionable(key.kind) => break,
+            Ok(Ok(_)) => {}
+            // The terminal has nothing more to say; do not wait for a key that
+            // is not coming.
+            Ok(Err(_)) | Err(_) => break,
         }
     }
     execute!(
@@ -6038,6 +6175,14 @@ mod tests {
     }
 
     /// `cargo test -p yumete-tui --release the_cost_of_a_flick -- --ignored --nocapture`
+    ///
+    /// ⚠️ **This measures the page being computed, not the page being shown.**
+    /// `render_with` draws into a `TestBackend`, which is memory: no diff into
+    /// escape sequences, no write, no terminal. The numbers here came out at
+    /// one to three milliseconds and were read as 「scrolling is cheap」, while
+    /// the thing that actually stalled — `terminal.draw` blocking on a tty that
+    /// had fallen behind — is not in them at all (#360). Trust it about the
+    /// layout and about nothing else.
     #[test]
     #[ignore]
     fn the_cost_of_a_flick() {
@@ -11413,6 +11558,23 @@ mod tests {
         assert!(!skip(false, false, false), "nothing waiting — draw");
         assert!(!skip(true, true, false), "the floor keeps a held key visible");
         assert!(!skip(true, false, true), ":shot must never photograph a skipped frame");
+    }
+
+    #[test]
+    fn the_floor_gives_way_to_a_terminal_that_cannot_keep_up() {
+        // #360: a frame is mostly *writing to a terminal*, and that write
+        // blocks when the emulator falls behind. A fixed floor then does the
+        // wrong thing twice over — it forces frames a congested loop cannot
+        // afford, and after a very slow one it would wait so long that the
+        // page reads as frozen. So: at least the floor, at most the ceiling,
+        // and in between a multiple of what the last frame actually cost.
+        let floor = |last: std::time::Duration| {
+            (last * FRAME_SLACK).clamp(FRAME_FLOOR, FRAME_CEILING)
+        };
+        use std::time::Duration;
+        assert_eq!(floor(Duration::from_millis(1)), FRAME_FLOOR, "a cheap frame keeps 10 fps");
+        assert_eq!(floor(Duration::from_millis(50)), Duration::from_millis(200), "a dear one backs off");
+        assert_eq!(floor(Duration::from_secs(2)), FRAME_CEILING, "and never backs off out of sight");
     }
 
     #[test]

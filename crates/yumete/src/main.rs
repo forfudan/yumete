@@ -417,7 +417,38 @@ fn main() -> ExitCode {
     // Only the editor has one; the preview prints its own notice instead.
     editor.announce_recovery();
 
-    let outcome = yumete_tui::run(&mut editor, &config, &mut ime, deferred);
+    // **Somewhere to say what went wrong** (#300). The log lives beside the
+    // drafts and the sessions in the data directory, not in `~/.config`: that
+    // one holds what the reader writes for the program, this is what the
+    // program writes for the reader.
+    yumete_core::diag::log_to(yumete_config::data_dir().join("yumete.log"));
+    yumete_core::diag::install_panic_hook();
+    // **A hang leaves nothing behind** — no panic, no message, and the reader
+    // can only say 「it froze」. A thread watching the loop's heartbeat turns
+    // that into a line naming the stage it stopped in.
+    yumete_core::diag::watch(std::time::Duration::from_secs(2));
+    // **A panic must not be the end of the manuscript.** Caught here rather
+    // than left to unwind out of `main`, because on this side of the call the
+    // editor is reachable again: the screen goes back to normal, every dirty
+    // buffer gets a recovery copy, and the reader is told where to look
+    // instead of watching a backtrace scroll through an alternate screen that
+    // is being torn down under it.
+    let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        yumete_tui::run(&mut editor, &config, &mut ime, deferred)
+    }));
+    let outcome = match outcome {
+        Ok(outcome) => outcome,
+        Err(_) => {
+            yumete_tui::restore_terminal();
+            let saved = editor.rescue_drafts();
+            editor.save_session();
+            let log = yumete_core::diag::path()
+                .map(|p| p.display().to_string())
+                .unwrap_or_default();
+            eprintln!("{}", yumete_core::say!("cli.crashed", saved, log));
+            return ExitCode::from(101);
+        }
+    };
     // Written on the way out, whichever way out it was: an editor that only
     // remembered a clean exit would forget the session you most wanted back.
     editor.save_session();

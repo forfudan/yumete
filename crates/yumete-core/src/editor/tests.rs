@@ -10157,28 +10157,3 @@ fn either_cell_switch_opens_the_table_out_from_the_other() {
     ed.toggle_cell_folds();
     assert_eq!(ed.cell_width_now(), CellWidth::Whole);
 }
-
-/// **A stopwatch on the wheel**, not a test — `#[ignore]`d, prints what the
-/// clock said. `cargo test -p yumete-core --release the_cost_of_a_flick -- --ignored --nocapture`
-#[test]
-#[ignore]
-fn the_cost_of_a_flick() {
-    use std::time::Instant;
-    let doc = concat!(env!("CARGO_MANIFEST_DIR"), "/../../docs/development.md");
-    let mut ed = Editor::new();
-    ed.open_file(doc).expect("the roadmap");
-    ed.set_wrap_width(100);
-    ed.set_page(50, 100);
-
-    for target in [40usize, 300, 500, 520] {
-        let mut ed2 = Editor::new();
-        ed2.open_file(doc).unwrap();
-        ed2.set_wrap_width(100);
-        ed2.set_page(50, 100);
-        ed2.goto_line(target);
-        // One hard flick: 64 notches coalesced × 3 縱 each.
-        let began = Instant::now();
-        ed2.scroll(192, false);
-        println!("line {target:>5}  one flick = {:>8.1} ms", began.elapsed().as_secs_f64() * 1000.0);
-    }
-}
