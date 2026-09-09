@@ -556,8 +556,8 @@ index, and a row with no number anywhere else is a row that got lost.
 | 331 | **三種 HTML ruby 寫法看不見** | core | P3 | `<rp>`、帶屬性、大寫；說改完了，其實沒有 [^331] | Open |
 | 332 | **寫進 Typst 的 ruby 不轉義** | core | P3 | 一句帶引號的注釋就編譯不過 [^332] | Open |
 | 333 | **`:ruby format` 改寫代碼圍欄裏的 ruby** | core | P3 | 講 ruby 的書，自己的例子被改掉 [^333] | Open |
-| 334 | **單擊 Shift 丟棄正在組字的編碼** | tui+ime | P1 | `set_chinese(false)` 只清空，不上屏 [^334] | Open |
-| 335 | **丟失一次 Shift 釋放，下一次單擊就失效** | tui | P2 | `Press` 只在 `!down` 時置 `clean`；左右 Shift 還共用一份 [^335] | Open |
+| 334 | **單擊 Shift 丟棄正在組字的編碼** | tui+ime | P1 | 交給綁定表之後，組字中的 Shift 先上屏再切英文 [^334] | Fixed 2026-09-09 |
+| 335 | **丟失一次 Shift 釋放，下一次單擊就失效** | tui | P2 | 改用上游的 `ModifierTap`，失焦時 `reset` [^335] | Fixed 2026-09-09 |
 | 336 | **組字中點鼠標，詞上屏到另一個檔案** | tui+ime | P2 | `Event::Mouse` 不問 `is_composing()` [^336] | Open |
 | 337 | **中／ABC 全局，而 Normal 模式看不見它** | tui+ime | P2 | 按 `i` 之前不知道會掉進哪一種 [^337] | Open |
 | 338 | **`:` 行敲 Shift，中文洩漏回 Insert** | tui+ime | P3 | 切換先把 `borrowed` 清成 `None` [^338] | Open |
@@ -569,7 +569,7 @@ index, and a row with no number anywhere else is a row that got lost.
 | 344 | **`:yume table` 載入非碼表檔案會 panic** | ime | P1 | 上游 yume-core：碼長沒有 clamp，整個編輯器帶走 [^344] | Open (upstream) |
 | 345 | **候選列表無上限物化** | ime | P2 | 上游：為顯示九個，走完四萬八千條 [^345] | Open (upstream) |
 | 346 | **超過 255 位元組的候選截成空白一行** | ime | P4 | 上游：在非字符邊界切，`unwrap_or("")` 吃掉 [^346] | Open (upstream) |
-| 347 | **中英切換交回 yume 的綁定表** | tui+ime | P1 | `KeyBindings` 在這個倉裏一次都沒被建起來 [^347] | Open |
+| 347 | **中英切換交回 yume 的綁定表** | tui+ime | P1 | Shift 走 `key_action` ＋ 上游新增的 `Engine::perform` [^347] | Fixed 2026-09-09 |
 | 348 | **九個手寫快取收成一套按行記憶** | core | P2 | 每個自己決定 key 放什麼，於是各有各的必然失效 [^348] | Open |
 | 349 | **一個概念一處權威：字素、寬度、分詞** | core | P2 | 同一件事兩三套實現，對不上的時候纔看得見 [^349] | Open |
 | 350 | **護欄放在必經之路上，不放在呼叫點** | core | P2 | 掛在一個 match 分支上的規矩，另外三個入口不認 [^350] | Open |
@@ -7547,7 +7547,7 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     標記的書，自己的例子被改掉。做法：用 `scan_blocks` 的塊資訊跳過圍欄與縮進代碼塊
     （#313 增量化之後這件事更便宜）。**small**
 
-[^334]: `yume-core/src/engine.rs:6113` 的 `set_chinese(false)` 做的是 `buffer.clear()`，
+[^334]: `yume-core/src/engine.rs:6193` 的 `set_chinese(false)` 做的是 `buffer.clear()`，
     **不上屏**；`yumete-tui/src/lib.rs:552` 就這麼叫它。跑過：Insert 中文下按 `b` `c`
     再敲 Shift → `is_chinese=false, composing=false, buffer="", committed=""`。兩個鍵
     的編碼憑空不見——沒上屏、沒有 undo 記錄、沒有一句話，切回去也回不來。**以英文為主
@@ -7560,7 +7560,13 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     兩次——使用者敲一下沒反應，下一個詞就用錯語言打出去了。做法：`Press` 時**無條件**
     `clean = true`，字面上一個詞。旁邊 `:1064` 左右 Shift 共用一份 `down`／`clean`
     （`LeftShift↓ RightShift↓ RightShift↑` 會在左 Shift 還按着時觸發切換），一併分開。
-    **small**
+
+    **2026-09-09 修好，而且不是照上面那句改的。** 上游的 `ModifierTap` 追的是
+    `watching: Option<FuncKey>`——哪一個鍵，不是「有沒有按下」——所以左右分開是白拿的。
+    丟失釋放那一半上游留的是 `reset()`（類型文檔寫着「失焦、暫停、切走輸入法」），
+    所以真正缺的是**終端這一側沒有要焦點事件**：加上 `EnableFocusChange`，
+    `Event::FocusLost` 叫一次 `reset`。無條件把 `clean` 置 true 會順帶把「按住 Shift
+    打一串大寫」也算成單擊，那正是上游註釋裏說「弄髒而不是清空」要避開的。**small**
 
 [^336]: `lib.rs:814` 的 `Event::Mouse` 與 `Event::Key` 是平級的分支，**從不問
     `ime.is_composing()`**。拆分打到一半去點另一個標籤，`show_buffer_at(i)` 換了 buffer，
@@ -7617,7 +7623,7 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     旁邊那句 `Err("讀不出碼表")`。做法：超過 255 位元組的條目跳過或一致地截斷。
     另外值得單獨裝一個 panic hook，崩之前把 dirty buffer 落盤。**small**
 
-[^345]: 上游 `yume-core/src/engine.rs:2495`：`normal_candidates` 傳的是
+[^345]: 上游 `yume-core/src/engine.rs:2594`：`normal_candidates` 傳的是
     `normal_candidates_capped(code, usize::MAX)`，於是每一個前綴匹配都被物化——125 萬條
     的表上一個鍵約四萬八千條、每條三個 `String`，接着 `filter`／`dedup`／`with_adaptive`／
     `with_pinned` 再各走一遍，而面板只畫五到九個。佐證：45.7 萬條的表、前綴 `a` →
@@ -7648,6 +7654,14 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     #339（收不到 modifier 就什麼都不說）四條都從這一處來。做法：Shift 交給
     `key_action(FuncKey::ShiftL)`，照 `press_func` 已經走通的那條路——它的註釋寫着
     「The binding table is yume's, not yumete's」，只是當時只接了 `;` `'` `-` `=`。
+
+    **2026-09-09 落地。** 上游缺的其實是後一半：`key_action` 說鍵是什麼意思，卻沒有
+    一處**把那個意思做掉**——三端各自照着 `KeyAction` 寫一遍 switch，而第四端乾脆繞開。
+    所以先在 yume-core 加了 `Engine::perform(KeyAction) -> bool`（開窗那幾檔、要靠本鍵
+    字符的那幾檔答 `false`，呼叫端照舊走自己的路，與 `press_func` 的 `_ => input(ch)`
+    同形），yumete 這側只剩兩句：`press_modifier` 問一次、做一次。自己寫的 `ShiftTap`
+    換成上游的 `ModifierTap`，只留「crossterm 的 `KeyEvent` 怎麼變成上游要的三個問題」
+    那一層。#334 與 #335 一起掉下來；#337、#339 是另外兩件事，仍開着。
     **medium**
 
 [^348]: `Editor` 上八個快取（`segment_cache`／`meter_cache`／`note_cache`／`fold_cache`／
