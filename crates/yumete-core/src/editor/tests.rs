@@ -8085,6 +8085,215 @@ fn a_pasted_spreadsheet_becomes_rows() {
 /// The same paste into a CSV — the block lands, and one too wide is
 /// refused rather than shifting every column right of it (#226).
 #[test]
+fn j_and_k_in_a_grid_keep_the_cell_they_are_in() {
+    // **In a grid the column is the cell** (#357). The goal column is worked
+    // out from the document — text plus the padding a `|` table carries — and
+    // `t f`/`t t` draw a grid of their own to different widths, so `j` walked
+    // one set of columns under a page laid out to another and the caret
+    // drifted sideways as it went down. Two rows whose cells are wildly
+    // different widths make the two answers disagree on purpose.
+    let dir = std::env::temp_dir().join(format!("yumete-gridjk-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let doc = dir.join("book.md");
+    std::fs::write(
+        &doc,
+        "| 名 | 註 |\n| --- | --- |\n| 甲 | 這是很長的一格 |\n| 乙乙乙乙乙乙乙 | 丁丁丁 |\n| 丙 | 戊 |\n",
+    )
+    .unwrap();
+
+    let mut ed = Editor::new();
+    ed.open_file(&doc).unwrap();
+    ed.execute(":3").unwrap();
+    assert!(ed.enter_table_as(true), "{}", ed.status());
+    // `hjkl` by character, which is where the drift showed.
+    ed.on_key(Key::Tab);
+
+    // Stand in the second cell of the first data row, two characters in.
+    let (line, _) = ed.cell_position().unwrap();
+    let (from, _) = ed.cell_span(line, 1).unwrap();
+    ed.set_cursor(from + 2);
+    assert_eq!(ed.cell_position().map(|(_, c)| c), Some(1));
+
+    // Down: the same cell, the same way into it — not whichever cell the
+    // document's own column happens to land in on a much wider row.
+    ed.on_key(Key::Char('j'));
+    let (below, cell) = ed.cell_position().unwrap();
+    assert_eq!(cell, 1, "j kept the cell it was in");
+    assert_eq!(below, line + 1, "and went one row down");
+    let (a, _) = ed.cell_span(below, 1).unwrap();
+    assert_eq!(ed.cursor(), a + 2, "and the same way into it");
+
+    // …and back up again lands where it started.
+    ed.on_key(Key::Char('k'));
+    assert_eq!(ed.cursor(), from + 2, "k comes back");
+
+    // Into a cell too narrow to hold that offset, the caret stops at the
+    // cell's end rather than spilling into the one after it.
+    ed.on_key(Key::Char('j'));
+    ed.on_key(Key::Char('j'));
+    let (last, cell) = ed.cell_position().unwrap();
+    assert_eq!(cell, 1, "still the same cell");
+    let (a, b) = ed.cell_span(last, 1).unwrap();
+    assert_eq!(ed.cursor(), (a + 2).min(b), "clamped, not spilled");
+
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn a_search_in_the_grid_stays_in_the_table() {
+    // **A hit the caret cannot reach is worse than no hit** (#354). With the
+    // grid holding the pane the caret is held inside the table, while `/`
+    // searched the whole document: it found 甲 in the prose, the clamp dragged
+    // the caret back to the table's edge — **onto no match at all** — and the
+    // next `n` searched from there and found the same unreachable hit again.
+    // So `n` stopped going round the table, which is the one thing it is for.
+    let dir = std::env::temp_dir().join(format!("yumete-gridfind-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let doc = dir.join("book.md");
+    std::fs::write(
+        &doc,
+        "甲在上面這段散文裏。\n\n| 名 | 註 |\n| --- | --- |\n| 乙 | 甲 |\n| 丙 | 甲 |\n\n甲也在下面。\n",
+    )
+    .unwrap();
+
+    let mut ed = Editor::new();
+    ed.open_file(&doc).unwrap();
+    ed.execute(":5").unwrap();
+    // **The pane**, which is where the caret is held (`t t`) — the clamp and
+    // this scope are tied to the same question, `takes_the_pane`.
+    assert!(ed.enter_table_as(true), "{}", ed.status());
+    let (first, last) = ed.table_row_span().expect("a table under the cursor");
+
+    let selected = |ed: &Editor| {
+        let (a, b) = ed.selection();
+        ed.current_buffer().rope().slice(a..b).to_string()
+    };
+
+    ed.on_key(Key::Char('/'));
+    ed.insert_committed("甲");
+    ed.on_key(Key::Enter);
+
+    // Six presses over two in-table hits: every one of them must land **on a
+    // 甲**, and every one inside the table.
+    let mut seen = std::collections::BTreeSet::new();
+    for i in 0..6 {
+        assert_eq!(selected(&ed), "甲", "press {i} left the caret off the hit");
+        let line = ed.cursor_line();
+        assert!(
+            (first..=last).contains(&line),
+            "press {i} landed on line {line}, outside {first}..={last}"
+        );
+        seen.insert(line);
+        ed.on_key(Key::Char('n'));
+    }
+    assert_eq!(seen.len(), 2, "it went round both rows, not stuck on one");
+
+    // …and a word only the prose says is reported as absent, rather than found
+    // where the caret cannot follow.
+    ed.on_key(Key::Char('/'));
+    ed.insert_committed("散文");
+    ed.on_key(Key::Enter);
+    assert!(!ed.status().is_empty(), "it says the table does not hold it");
+    assert_eq!(selected(&ed), "甲", "and nothing moved");
+
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn a_rename_reaches_past_the_end_of_the_listing() {
+    // **The cap belongs to the listing, not to the answer** (#308). `:grep`
+    // stops writing lines at 500 because a page of results longer than that is
+    // the manuscript again — but it used to stop *walking* there too, and the
+    // file list `:replace` reads went with it. So a rename across a book
+    // stopped at whichever chapter held the five hundredth hit and reported
+    // 「replaced across N files」 as though it were finished. The status line
+    // even promised 「:replace changes them all」.
+    let dir = std::env::temp_dir().join(format!("yumete-grepcap-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    // Sixty chapters, ten mentions each: six hundred, well past the cap.
+    for i in 0..60 {
+        let text = "那年冬天，甲說。\n".repeat(10);
+        std::fs::write(dir.join(format!("ch{i:02}.md")), text).unwrap();
+    }
+    let last = dir.join("ch59.md");
+
+    let mut ed = Editor::new();
+    ed.open_file(dir.join("ch00.md")).unwrap();
+    // Straight at `grep`, so the root is this directory and not whatever
+    // `current_dir` happens to be while the suite runs.
+    ed.grep("甲", &dir).unwrap();
+    let said = ed.status().to_string();
+    assert!(said.contains("600"), "the count is the real one: {said}");
+    assert!(said.contains("500"), "and it says how many are listed: {said}");
+
+    ed.execute(":replace 乙").unwrap();
+    ed.execute(":write all").unwrap();
+
+    let after = std::fs::read_to_string(&last).unwrap();
+    assert!(
+        !after.contains('甲') && after.contains('乙'),
+        "the last chapter is renamed too, not just the first twenty: {after:?}"
+    );
+    let first = std::fs::read_to_string(dir.join("ch00.md")).unwrap();
+    assert!(!first.contains('甲'), "and so is the first");
+
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn a_quoted_field_is_not_edited_out_from_under_its_neighbour() {
+    // **One quoted comma is enough, and the file need not be strange** (#307):
+    // clean rows, and somewhere among them `2500,"Smith, John",note`. `cells`
+    // splits and nothing more — which is what makes a grid over 8 MB
+    // affordable — so to it that row has four fields, and an edit to the one
+    // *beside* the name wrote the row back from the wrong pieces:
+    // `2500,"Smith,ZZ,note`. The name gone, the file no longer parseable, and
+    // nothing said.
+    let dir = std::env::temp_dir().join(format!("yumete-quoted-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let csv = dir.join("people.csv");
+    let text = "id,name,note\n1,佐藤,甲\n2500,\"Smith, John\",note\n3,鈴木,丙\n";
+    std::fs::write(&csv, text).unwrap();
+
+    let mut ed = Editor::new();
+    ed.open_file(&csv).unwrap();
+    assert!(ed.enter_table(), "{}", ed.status());
+
+    // Stand on the quoted row and change a cell.
+    ed.execute(":3").unwrap();
+    press(&mut ed, "c");
+    assert!(!ed.status().is_empty(), "it says why, before anything is typed");
+    press(&mut ed, "ZZ");
+    ed.on_key(Key::Esc);
+    assert_eq!(
+        ed.current_buffer().text(),
+        text,
+        "the row is left exactly as it was"
+    );
+
+    // Clearing it is the same answer, and so is a paste.
+    press(&mut ed, "d");
+    assert_eq!(ed.current_buffer().text(), text, "`d` too");
+
+    // **The rows around it are still editable** — the refusal is per row, not
+    // per file, or a single quoted comma would close a hundred thousand rows.
+    ed.execute(":2").unwrap();
+    press(&mut ed, "cZZ");
+    ed.on_key(Key::Esc);
+    assert!(
+        ed.current_buffer().text().contains("ZZ"),
+        "a clean row still edits: {:?}",
+        ed.current_buffer().text()
+    );
+
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
 fn a_pasted_spreadsheet_lands_in_a_csv_too() {
     let dir = std::env::temp_dir().join(format!("yumete-paste-grid-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);

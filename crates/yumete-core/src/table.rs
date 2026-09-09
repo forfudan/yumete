@@ -609,6 +609,34 @@ pub fn cells(line: &str, delimiter: char) -> Vec<(usize, usize)> {
     out
 }
 
+/// Whether any field on this line **opens with a quote** — the one shape
+/// [`cells`] cannot read (#307).
+///
+/// `cells` splits and nothing more, which is what makes a grid over an 8 MB
+/// file affordable. The price is that `"Smith, John"` is two fields to it, and
+/// so an edit to the field *beside* it writes back a row rebuilt from the wrong
+/// pieces: `2500,"Smith, John",note` becomes `2500,"Smith,ZZ,note` — the name
+/// gone, the file no longer parseable, and nothing said.
+///
+/// **A field's own quote, not any quote.** `he said "hi"` holds no delimiter
+/// and splits correctly; a writer that had to protect a comma would have
+/// quoted the whole field, and that is what this looks for — at the start of
+/// the line or just after a delimiter, spaces allowed before it because real
+/// files have them.
+pub fn quoted_field(line: &str, delimiter: char) -> bool {
+    let line = line.trim_end_matches(['\n', '\r']);
+    let mut fresh = true;
+    for c in line.chars() {
+        match c {
+            _ if c == delimiter => fresh = true,
+            '"' if fresh => return true,
+            ' ' | '\t' => {}
+            _ => fresh = false,
+        }
+    }
+    false
+}
+
 /// The delimiters worth guessing at, best first.
 ///
 /// **A single space is not among them, and never will be.** A run of spaces

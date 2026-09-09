@@ -220,7 +220,7 @@ impl Editor {
     pub(super) fn discover_words(&mut self, root: &Path) -> Result<(), EditorError> {
         let mut text = String::new();
         let mut files = 0usize;
-        walk(root, &mut |path| {
+        walk(root, &mut 0, &mut |path| {
             if text.len() >= DISCOVER_MAX_BYTES {
                 return;
             }

@@ -1061,12 +1061,17 @@ fn downloads_dir() -> PathBuf {
     PathBuf::from(".")
 }
 
-/// Call `f` for every readable file under `root`, depth first.
+/// Call `f` for every readable file under `root`, depth first, counting the
+/// ones stepped over for being too big.
 ///
 /// Skips what a manuscript directory holds but a writer never searches: hidden
 /// directories (`.git`, `.yumete`), build output, and files too big to be prose.
 /// Symlinked directories are not followed, so a loop cannot hang the editor.
-fn walk(root: &Path, f: &mut impl FnMut(&Path)) {
+///
+/// **`skipped` is counted because it used to be silent** (#308): a chapter over
+/// [`GREP_MAX_BYTES`] was passed over and left out of 「searched N files」 as
+/// well, so the number looked right and the answer was short.
+fn walk(root: &Path, skipped: &mut usize, f: &mut impl FnMut(&Path)) {
     let Ok(entries) = std::fs::read_dir(root) else {
         return;
     };
@@ -1097,12 +1102,15 @@ fn walk(root: &Path, f: &mut impl FnMut(&Path)) {
     dirs.sort();
     for path in files {
         let small = std::fs::metadata(&path).is_ok_and(|m| m.len() <= GREP_MAX_BYTES);
+        if !small {
+            *skipped += 1;
+        }
         if small {
             f(&path);
         }
     }
     for dir in dirs {
-        walk(&dir, f);
+        walk(&dir, skipped, f);
     }
 }
 
@@ -2333,12 +2341,22 @@ fn unescape_replacement(replacement: &str) -> String {
 /// rope's own line iterator costs one step per line instead of a fresh descent
 /// of the tree. Materialising the whole document instead — which is what this
 /// used to do — copies 800 KB for every press of `n`.
-fn search_forward(rope: &Rope, pattern: &Regex, from: usize) -> Option<(usize, usize)> {
-    let start_line = rope.char_to_line(from.min(rope.len_chars()));
+fn search_forward(
+    rope: &Rope,
+    pattern: &Regex,
+    from: usize,
+    within: std::ops::Range<usize>,
+) -> Option<(usize, usize)> {
+    let start_line = rope
+        .char_to_line(from.min(rope.len_chars()))
+        .clamp(within.start, within.end.saturating_sub(1));
     // From the cursor to the end, then from the top back to the cursor's line,
-    // so the wrap covers the part of that line before the cursor too.
-    scan(rope, pattern, start_line, rope.len_lines(), from)
-        .or_else(|| scan(rope, pattern, 0, start_line + 1, 0))
+    // so the wrap covers the part of that line before the cursor too — where
+    // 「the end」 and 「the top」 are the ends of `within`, which is the whole
+    // buffer unless a table holds the pane (#354).
+    scan(rope, pattern, start_line, within.end, from).or_else(|| {
+        scan(rope, pattern, within.start, start_line + 1, rope.line_to_char(within.start))
+    })
 }
 
 /// The first match at or after `from` within `lines`, searching forward, as a
@@ -2383,10 +2401,18 @@ fn byte_of_char(text: &str, n: usize) -> usize {
 ///
 /// One forward pass, keeping the best answer: the last match before `from`, or —
 /// when there is none — the last match anywhere, which is where a wrap lands.
-fn search_backward(rope: &Rope, pattern: &Regex, from: usize) -> Option<(usize, usize)> {
+fn search_backward(
+    rope: &Rope,
+    pattern: &Regex,
+    from: usize,
+    within: std::ops::Range<usize>,
+) -> Option<(usize, usize)> {
     let (mut before, mut last) = (None, None);
-    let mut at = 0usize;
-    for slice in rope.lines() {
+    let mut at = rope.line_to_char(within.start.min(rope.len_lines()));
+    for slice in rope
+        .lines_at(within.start.min(rope.len_lines()))
+        .take(within.end.saturating_sub(within.start))
+    {
         let owned;
         let text: &str = match slice.as_str() {
             Some(text) => text,

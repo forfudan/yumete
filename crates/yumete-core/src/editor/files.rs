@@ -556,10 +556,16 @@ impl Editor {
         let mut hits = Vec::new();
         let mut hit_files: Vec<PathBuf> = Vec::new();
         let mut files = 0usize;
-        walk(root, &mut |path| {
-            if hits.len() >= GREP_LIMIT {
-                return;
-            }
+        // **Every hit, not every listed hit** (#308). The cap belongs to the
+        // listing — a page of results longer than this is the manuscript
+        // again, not an answer — and it used to stop the *walk*, which took
+        // `hit_files` with it. `:replace` reads that list, so a rename across a
+        // book stopped at whichever chapter held the five hundredth hit and
+        // said 「replaced across 20 files」 as though it were done. The status
+        // line even promised 「`:replace` changes them all」.
+        let mut found = 0usize;
+        let mut skipped = 0usize;
+        walk(root, &mut skipped, &mut |path| {
             // Unsaved work counts: a buffer open in this session is searched as
             // it stands, not as it was last written.
             let open = self
@@ -582,14 +588,14 @@ impl Editor {
                 .display()
                 .to_string();
             for (n, line) in text.lines().enumerate() {
-                if hits.len() >= GREP_LIMIT {
-                    return;
-                }
                 if re.is_match(line) {
+                    found += 1;
                     if hit_files.last().map(PathBuf::as_path) != Some(path) {
                         hit_files.push(path.to_path_buf());
                     }
-                    hits.push(format!("{shown}:{}: {}", n + 1, line.trim()));
+                    if hits.len() < GREP_LIMIT {
+                        hits.push(format!("{shown}:{}: {}", n + 1, line.trim()));
+                    }
                 }
             }
         });
@@ -598,7 +604,7 @@ impl Editor {
             self.status = say!("find.grep-no-hits", files, pattern);
             return Ok(CommandOutcome::Continue);
         }
-        let found = hits.len();
+        let shown = hits.len();
         let mut listing = String::new();
         for hit in hits {
             listing.push_str(&hit);
@@ -610,10 +616,11 @@ impl Editor {
         self.grep_found = Some((pattern.to_string(), hit_files));
         self.add_buffer(buffer);
         self.set_cursor(0);
-        self.status = if found >= GREP_LIMIT {
-            say!("find.grep-too-many", found)
-        } else {
-            say!("find.grep-hits", found, files)
+        self.status = match (found > shown, skipped) {
+            (true, 0) => say!("find.grep-too-many", shown, found, files),
+            (true, n) => say!("find.grep-too-many-skipped", shown, found, files, n),
+            (false, 0) => say!("find.grep-hits", found, files),
+            (false, n) => say!("find.grep-hits-skipped", found, files, n),
         };
         Ok(CommandOutcome::Continue)
     }

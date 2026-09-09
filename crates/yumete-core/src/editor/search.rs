@@ -61,6 +61,19 @@ impl Editor {
     }
 
     /// Search for [`Self::last_search`] in `forward` direction and move there.
+    /// The lines a search may land in: the table's own rows while the grid
+    /// holds the pane, and the whole buffer otherwise (#354).
+    fn search_rows(&self) -> std::ops::Range<usize> {
+        let all = 0..self.current_buffer().rope().len_lines();
+        if !self.table.as_ref().is_some_and(|view| view.takes_the_pane()) {
+            return all;
+        }
+        match self.table_row_span() {
+            Some((first, last)) => first..last + 1,
+            None => all,
+        }
+    }
+
     pub(super) fn repeat_search(&mut self, forward: bool) {
         // `n` with nothing to repeat used to do nothing and say nothing, which
         // reads as a key that is broken rather than one with no answer yet.
@@ -86,10 +99,18 @@ impl Editor {
         // newline (Enter submits the prompt), so a match never straddles a line
         // break, and materialising the document for every `n` costs an 800 KB
         // copy on a novel.
+        // **Where a hit is allowed to be** (#354). With the grid holding the
+        // pane the cursor is held inside the table (`tables.rs`), so a hit
+        // outside it is one `n` can never reach — the reader watches the
+        // search find something and the cursor refuse to go, and `n` stops
+        // going round. The rows of the table are the whole document as far as
+        // this search is concerned.
+        let within = self.search_rows();
+        let scoped = within != (0..rope.len_lines());
         let found = if forward {
-            search_forward(rope, &re, (self.cursor + 1).min(len))
+            search_forward(rope, &re, (self.cursor + 1).min(len), within)
         } else {
-            search_backward(rope, &re, self.cursor)
+            search_backward(rope, &re, self.cursor, within)
         };
 
         match found {
@@ -107,6 +128,7 @@ impl Editor {
                 self.extend = false;
                 self.refresh_goal_column();
             }
+            None if scoped => self.status = say!("find.not-in-table", pattern),
             None => self.status = say!("find.not-found", pattern),
         }
     }

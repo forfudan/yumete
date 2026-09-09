@@ -369,7 +369,7 @@ impl Editor {
     pub(super) fn open_file_picker(&mut self) {
         let root = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
         let mut items = Vec::new();
-        walk(&root, &mut |path| {
+        walk(&root, &mut 0, &mut |path| {
             if items.len() < PICKER_LIMIT {
                 let shown = path.strip_prefix(&root).unwrap_or(path);
                 items.push(crate::picker::Item::File(shown.display().to_string()));

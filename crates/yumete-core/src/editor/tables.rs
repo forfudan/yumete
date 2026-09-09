@@ -2201,6 +2201,36 @@ impl Editor {
         Some((start + a, start + b))
     }
 
+    /// The buffer range one cell covers, **for something that is about to
+    /// change it** — `None`, with a reason on the status line, when writing
+    /// this row back would break it (#307).
+    ///
+    /// Reading a quoted row as a grid is fine and worth having: the columns
+    /// line up on screen and an 8 MB file is still walkable. It is only
+    /// *writing* that cannot be done from the pieces `cells` cut, so only the
+    /// five operations that write go through this door.
+    fn cell_span_to_edit(&mut self, line: usize, cell: usize) -> Option<(usize, usize)> {
+        if self.row_would_break(line) {
+            self.status = say!("table.quoted-row");
+            return None;
+        }
+        self.cell_span(line, cell)
+    }
+
+    /// Whether writing this row back from its cells would change what it says.
+    fn row_would_break(&self, line: usize) -> bool {
+        // A `|` table is not delimiter-separated data — its cells are trimmed
+        // and re-spaced by design, and a quote in one is just a quote. Only a
+        // file cut by a delimiter can be broken this way.
+        let Some(Separator::Delimiter(delimiter)) = self.table.as_ref().map(|view| view.separator)
+        else {
+            return false;
+        };
+        self.current_buffer()
+            .line(line)
+            .is_some_and(|text| crate::table::quoted_field(&text, delimiter))
+    }
+
     /// The text of one cell.
     pub fn cell_text(&self, line: usize, cell: usize) -> String {
         match self.cell_span(line, cell) {
@@ -2324,7 +2354,7 @@ impl Editor {
         self.snapshot();
         for (r, value) in values.iter().enumerate() {
             let Some(&line) = lines.get(r) else { break };
-            let Some((from, to)) = self.cell_span(line, cell) else {
+            let Some((from, to)) = self.cell_span_to_edit(line, cell) else {
                 continue;
             };
             let done = self.without_cell_guard(|e| e.current_buffer_mut().replace(from..to, value));
@@ -2420,7 +2450,7 @@ impl Editor {
                 }
             }
             for (c, text) in values.iter().enumerate() {
-                let Some((from, to)) = self.cell_span(at, cell + c) else {
+                let Some((from, to)) = self.cell_span_to_edit(at, cell + c) else {
                     continue;
                 };
                 let done = self.without_cell_guard(|e| e.current_buffer_mut().replace(from..to, text));
@@ -2902,7 +2932,7 @@ impl Editor {
             self.status = say!("table.rule-row-is-drawn");
             return;
         }
-        let Some((start, end)) = self.cell_span(line, cell) else {
+        let Some((start, end)) = self.cell_span_to_edit(line, cell) else {
             return;
         };
         if end <= start {
@@ -3476,7 +3506,7 @@ impl Editor {
         let Some((line, cell)) = self.cell_position() else {
             return;
         };
-        let Some((start, end)) = self.cell_span(line, cell) else {
+        let Some((start, end)) = self.cell_span_to_edit(line, cell) else {
             return;
         };
         self.snapshot();
@@ -3601,7 +3631,7 @@ impl Editor {
             self.status = why;
             return;
         }
-        let Some((start, end)) = self.cell_span(line, cell) else {
+        let Some((start, end)) = self.cell_span_to_edit(line, cell) else {
             return;
         };
         self.snapshot();
