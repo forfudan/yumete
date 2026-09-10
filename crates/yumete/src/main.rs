@@ -161,7 +161,8 @@ fn main() -> ExitCode {
         editor.set_measure(Some(config.editor.measure));
     }
     editor.set_paper(config.export.page.0, config.export.page.1);
-    editor.set_indent_width(config.editor.tab_width);
+    editor.set_indent_width(config.editor.indent_width);
+    editor.set_tab_stop(config.editor.tab_width);
     editor.set_tatechuyoko(config.editor.tatechuyoko);
     editor.set_hanging_punctuation(config.editor.hanging_punctuation);
     editor.set_soft_wrap(config.editor.soft_wrap);

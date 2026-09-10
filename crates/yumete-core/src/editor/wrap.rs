@@ -143,6 +143,16 @@ impl Editor {
     }
 
     /// Set how many columns `>` adds and `<` removes.
+    /// How far a TAB advances — to the next multiple of `stop` (#374).
+    pub fn set_tab_stop(&mut self, stop: usize) {
+        self.tab_stop = stop.max(1);
+    }
+
+    /// The same, for whoever is drawing.
+    pub fn tab_stop(&self) -> usize {
+        self.tab_stop
+    }
+
     pub fn set_indent_width(&mut self, width: usize) {
         self.indent_width = width.max(1);
     }

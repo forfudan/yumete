@@ -2923,7 +2923,8 @@ GB18030 的舊稿會被擋下並告訴你用 `iconv` 轉，而不是丟一句 Ru
 
 ```toml
 [editor]
-tab_width = 4                # `>` 加、`<` 減的列數
+indent_width = 4             # `>` 加、`<` 減的列數
+tab_width = 8                # 一個 TAB 推進到幾的倍數（碼表就是靠它對齊的）
 line_numbers = "absolute"    # "absolute" | "relative" | "none"
 scrolloff = 3                # 光標周圍保留的行（或縱）數
 wheel_step = 3               # 滾輪一格走幾行（或幾縱）；1 = 終端自己的一格

@@ -214,8 +214,27 @@ impl Editor {
     }
 
     /// The cursor's visual column (summed display width within its line).
+    ///
+    /// **The page's column, not the text's** (#374). What is drawn before the
+    /// caret is part of where the caret *is*: the space a tab advances over,
+    /// the padding that squares a table up. Counting only the characters put
+    /// the readout at 3 while the screen had the caret at 8 — and a caret
+    /// standing in a column the page does not have is the one thing #212 says
+    /// may never happen.
     pub fn cursor_visual_column(&self) -> usize {
-        motion::visual_column(self.current_buffer().rope(), self.caret())
+        let text = motion::visual_column(self.current_buffer().rope(), self.caret());
+        let line = self.cursor_line();
+        let col = self.cursor_column();
+        let drawn: usize = self
+            .drawn_runs_on_line(line)
+            .iter()
+            // A run at the caret's own anchor is the one case that splits:
+            // what the writer **typed** stands before the caret, and what is
+            // derived — the padding reaching on to the pipe — stands after it.
+            .filter(|run| run.column < col || (run.column == col && run.ink == crate::drawn::Ink::Typed))
+            .map(|run| yumete_cjk::str_width(&run.text))
+            .sum();
+        text + drawn
     }
 
     /// The character under the cursor, for the status line to name.

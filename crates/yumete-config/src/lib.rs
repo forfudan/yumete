@@ -55,8 +55,22 @@ pub enum Ambiguity {
 /// Editor behaviour settings.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct EditorConfig {
-    /// Tab stop width in cells.
+    /// Tab stop width in cells — a TAB advances to the next multiple of this.
+    ///
+    /// **Eight**, which is the terminal's own answer and every other tool's.
+    /// Four is the indent a person types; eight is where a tab has landed
+    /// since teletypes, and a file written elsewhere is written to it. On a
+    /// 碼表 the difference is the whole point: codes of three and four letters
+    /// land in two different columns at four, and in one column at eight
+    /// (#374).
     pub tab_width: usize,
+    /// How far `>` and `<` shift a line, in cells.
+    ///
+    /// **Not the tab stop**, though one setting used to be both (#374). A tab
+    /// lands where a tab has landed since teletypes and a file written
+    /// elsewhere is written to it; how far *this* editor shifts a line when
+    /// asked is a preference, and four is the one nearly everybody has.
+    pub indent_width: usize,
     /// Line-number display mode.
     pub line_numbers: LineNumbers,
     /// Minimum number of lines to keep above/below the cursor when scrolling.
@@ -258,7 +272,8 @@ pub struct EditorConfig {
 impl Default for EditorConfig {
     fn default() -> Self {
         EditorConfig {
-            tab_width: 4,
+            tab_width: 8,
+            indent_width: 4,
             line_numbers: LineNumbers::Absolute,
             scrolloff: 3,
             wheel_step: 3,
@@ -1674,6 +1689,7 @@ struct RawPanel {
 #[serde(deny_unknown_fields)]
 struct RawEditor {
     tab_width: Option<usize>,
+    indent_width: Option<usize>,
     line_numbers: Option<String>,
     scrolloff: Option<usize>,
     wheel_step: Option<usize>,
@@ -1746,6 +1762,9 @@ struct RawKeys {
 impl RawConfig {
     /// Overlay `other` onto `self`, field by field (later wins; keymaps extend).
     fn merge(&mut self, other: RawConfig) {
+        if other.editor.indent_width.is_some() {
+            self.editor.indent_width = other.editor.indent_width;
+        }
         if other.editor.tab_width.is_some() {
             self.editor.tab_width = other.editor.tab_width;
         }
@@ -1931,6 +1950,9 @@ impl RawConfig {
 
     fn into_config(self) -> Config {
         let mut config = Config::default();
+        if let Some(width) = self.editor.indent_width {
+            config.editor.indent_width = width.max(1);
+        }
         if let Some(tab) = self.editor.tab_width {
             config.editor.tab_width = tab.max(1);
         }
@@ -2273,7 +2295,8 @@ mod tests {
     #[test]
     fn defaults_when_empty() {
         let c = Config::from_toml("");
-        assert_eq!(c.editor.tab_width, 4);
+        // Eight, the terminal's own tab stop and every other tool's (#374).
+        assert_eq!(c.editor.tab_width, 8);
         assert_eq!(c.editor.line_numbers, LineNumbers::Absolute);
         assert_eq!(c.editor.scrolloff, 3);
         assert_eq!(c.theme.name, "ink", "the name is ASCII; 墨香 is what it means");

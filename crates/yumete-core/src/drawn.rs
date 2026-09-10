@@ -51,6 +51,15 @@ pub enum Ink {
     ///
     /// Last at its anchor, so a note is never read as part of the writing.
     Note,
+    /// The space a TAB advances over, drawn as a ground rather than a glyph
+    /// (#374).
+    ///
+    /// **No character at all**, because a marker's width is a question the
+    /// terminal answers and a tab already has enough of those. What says
+    /// 「this is a tab and not spaces」 is the ground under it — quiet, the
+    /// rung a table's own bands sit on. The author's call, 2026-09-10:
+    /// 「tab 不用符号，但可以用一个背景色」.
+    Tab,
 }
 
 /// One run of text on the page that the file does not contain.
