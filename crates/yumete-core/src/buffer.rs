@@ -65,6 +65,22 @@ pub struct Buffer {
     /// A name for a buffer that is not a file — a results listing, say. Shown
     /// on the status line in place of `[scratch]`.
     label: Option<String>,
+    /// Whether the file arrived with a byte-order mark, so that it can leave
+    /// with one (#310).
+    ///
+    /// Stripped from the text — a BOM in the middle of a rope is a character
+    /// the writer never typed and would have to step over — and remembered
+    /// here instead. For prose it is three bytes nobody misses; for a `.csv`
+    /// it is how the next program decides the file is UTF-8.
+    marked: bool,
+    /// The line ending this file is written with, for the ones this editor
+    /// adds to it (#309).
+    ///
+    /// The rope keeps whatever bytes were read, mixed endings included, and
+    /// that is what makes a read-and-write round trip exact. What was not
+    /// exact was *editing*: a literal `"\n"` went into a CRLF file, and one
+    /// `A`-Enter left a manuscript with two kinds of line in it.
+    ending: &'static str,
     /// Where the cursor was when this buffer was last left.
     ///
     /// Kept per buffer rather than per editor so that switching away and back
@@ -202,6 +218,8 @@ impl Buffer {
             modified: false,
             cursor: 0,
             label: None,
+            marked: false,
+            ending: "\n",
             history: History::default(),
             revision: 0,
             syntax: crate::syntax::Syntax::default(),
@@ -235,6 +253,8 @@ impl Buffer {
             modified: false,
             cursor: 0,
             label: None,
+            marked: false,
+            ending: "\n",
             history: History::default(),
             revision: 0,
             syntax: crate::syntax::Syntax::default(),
@@ -259,12 +279,15 @@ impl Buffer {
     pub fn open<P: AsRef<Path>>(path: P) -> io::Result<Self> {
         let path = path.as_ref();
         let mut read_as = None;
+        // **What the file was, to be written back as** (#309, #310).
+        let mut marked = false;
         // Before the read, not after it — see [`Buffer::reread`] for why a
         // stamp taken afterwards can pin a half-written file down as current.
         let seen = stamp_of(path);
         let rope = match fs::read(path) {
             Ok(bytes) => {
                 let text = decode(&bytes, path)?;
+                marked = bytes.starts_with(BOM.as_bytes());
                 read_as = Some(digest(&text));
                 Rope::from_str(text.as_ref())
             }
@@ -284,11 +307,13 @@ impl Buffer {
         let syntax = named.unwrap_or_else(|| crate::syntax::sniff(&rope.to_string()));
         Ok(Buffer {
             id: next_id(),
+            ending: dominant_ending(&rope),
             rope,
             path: Some(path.to_path_buf()),
             modified: false,
             cursor: 0,
             label: None,
+            marked,
             history: History::default(),
             revision: 0,
             pending_draft,
@@ -736,6 +761,15 @@ impl Buffer {
     /// Write the rope to `path` atomically via a temporary file + rename.
     fn write_atomically(&self, path: &Path) -> io::Result<()> {
         write_bytes_atomically(path, |file| {
+            // **The mark the file arrived with goes back on** (#310). Three
+            // bytes, and for prose nobody would miss them — but a `.csv` is
+            // read by somebody else's program, and Excel takes their absence
+            // to mean the file is not UTF-8, which turns 田中 into mojibake in
+            // a file the writer never touched. Opening a file and saving it is
+            // not an edit, and it should not be one on disk either.
+            if self.marked {
+                file.write_all(BOM.as_bytes())?;
+            }
             for chunk in self.rope.chunks() {
                 file.write_all(chunk.as_bytes())?;
             }
@@ -743,6 +777,17 @@ impl Buffer {
         })
     }
 
+
+    /// The line ending this file is written with (#309).
+    ///
+    /// What the editor uses when it adds a line of its own, so that one `o` in
+    /// a CRLF manuscript does not leave it with two kinds of line in it. What
+    /// was already in the file is never rewritten: the rope holds the bytes
+    /// that were read, mixed endings and all, and that is what makes reading
+    /// and writing a file back an exact round trip.
+    pub fn ending(&self) -> &'static str {
+        self.ending
+    }
 
     /// A short, human-readable name for status lines: the file name, or
     /// `[scratch]` for an unnamed buffer.
@@ -853,6 +898,33 @@ impl Buffer {
 /// character of the first paragraph — `gg` parks the cursor on a character that
 /// is not there, and it takes a 縱 slot of its own on the vertical page.
 const BOM: &str = "\u{feff}";
+
+/// Which line ending this text is written with — the one the editor adds when
+/// it adds a line (#309).
+///
+/// **The commonest one wins, and a tie goes to CRLF.** A file is nearly always
+/// all of one kind; where it is not, somebody's tool has already mixed them
+/// and the question is only which to join. Counted over the whole text rather
+/// than off the first line, because a manuscript whose first paragraph came
+/// from somewhere else is exactly the case this is for.
+fn dominant_ending(rope: &Rope) -> &'static str {
+    let mut crlf = 0usize;
+    let mut lf = 0usize;
+    let mut last = ' ';
+    for c in rope.chars() {
+        if c == '\n' {
+            match last == '\r' {
+                true => crlf += 1,
+                false => lf += 1,
+            }
+        }
+        last = c;
+    }
+    match crlf >= lf && crlf > 0 {
+        true => "\r\n",
+        false => "\n",
+    }
+}
 
 /// Read `bytes` as the text of `path`, or say — in words a writer can act on —
 /// why it could not be read.

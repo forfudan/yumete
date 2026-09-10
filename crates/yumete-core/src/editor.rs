@@ -2542,13 +2542,16 @@ fn opening_of(c: char) -> Option<char> {
 }
 
 /// Swap the case of `c`, leaving anything caseless (every 漢字) alone.
-fn switch_case(c: char) -> char {
+fn switch_case(c: char) -> String {
+    // **Whole expansions, not their first character** (#325): `ß` turns into
+    // `SS` and `ﬁ` into `FI`, and a signature that could only hand back one
+    // character threw the rest away without saying anything.
     if c.is_lowercase() {
-        c.to_uppercase().next().unwrap_or(c)
+        c.to_uppercase().collect()
     } else if c.is_uppercase() {
-        c.to_lowercase().next().unwrap_or(c)
+        c.to_lowercase().collect()
     } else {
-        c
+        c.to_string()
     }
 }
 

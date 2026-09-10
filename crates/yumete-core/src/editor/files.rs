@@ -1138,26 +1138,26 @@ impl Editor {
                 let from = self.table.as_ref().map(|v| v.schema.delimiter).unwrap_or(',');
                 let text = self.current_buffer().text();
                 let mut out = Vec::new();
-                let mut bad = None;
-                for (r, source) in text.lines().enumerate() {
-                    let mut row = Vec::new();
-                    for (c, span) in crate::table::cells(source, from).into_iter().enumerate() {
-                        let cell = crate::table::cell_text(source, span);
-                        if from != delimiter && cell.contains(delimiter) {
-                            bad = bad.or(Some((r, c)));
-                        }
-                        row.push(cell);
-                    }
+                for source in text.lines() {
+                    let row: Vec<String> = crate::table::cells(source, from)
+                        .into_iter()
+                        // **Read it out of the file's quoting and back into
+                        // the target's.** A comma inside a field needs quotes
+                        // in a `.csv` and none in a `.tsv`; carrying the
+                        // quotes across would hand the next program a value
+                        // with quotation marks in its name.
+                        .map(|span| {
+                            let value = crate::table::unquote(&crate::table::cell_text(source, span));
+                            crate::table::quote_for(&value, delimiter)
+                        })
+                        .collect();
                     out.push(row.join(&delimiter.to_string()));
                 }
-                match bad {
-                    Some(at) => Err(at),
-                    None => Ok(out),
-                }
+                Ok(out)
             }
             None => {
                 self.status = say!("table.not-in-a-pipe-table");
-                return Ok(CommandOutcome::Continue);
+                                return Ok(CommandOutcome::Continue);
             }
         };
         let lines = match lines {

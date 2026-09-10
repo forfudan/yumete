@@ -215,11 +215,14 @@ impl Editor {
         }
         let end = motion::line_end(self.current_buffer().rope(), self.cursor);
         let row = self.blank_row();
-        let done = self.without_cell_guard(|e| e.current_buffer_mut().insert(end, &format!("\n{row}")));
+        // **The file's own line ending** (#309), not a literal `\n`.
+        let ending = self.current_buffer().ending();
+        let done =
+            self.without_cell_guard(|e| e.current_buffer_mut().insert(end, &format!("{ending}{row}")));
         if !self.applied(done) {
             return;
         }
-        self.cursor = end + 1;
+        self.cursor = end + ending.chars().count();
         self.anchor = self.cursor;
         self.enter_insert();
     }
@@ -231,8 +234,9 @@ impl Editor {
         }
         let start = motion::line_start(self.current_buffer().rope(), self.cursor);
         let row = self.blank_row();
-        let done =
-            self.without_cell_guard(|e| e.current_buffer_mut().insert(start, &format!("{row}\n")));
+        let ending = self.current_buffer().ending();
+        let done = self
+            .without_cell_guard(|e| e.current_buffer_mut().insert(start, &format!("{row}{ending}")));
         if !self.applied(done) {
             return;
         }

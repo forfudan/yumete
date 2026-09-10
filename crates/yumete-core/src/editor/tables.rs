@@ -164,7 +164,19 @@ impl Editor {
                     if self.enter_block_table(pane) {
                         return true;
                     }
-                    self.status = say!("table.file-is-not-a-grid", path.file_name().unwrap_or_default().to_string_lossy());
+                    // **Say which of the two it is** (#311). A field holding
+                    // a line break makes a record that is two lines, and this
+                    // grid is a line all the way up; 「not a grid」 is true of
+                    // it and tells its writer nothing.
+                    let name = path.file_name().unwrap_or_default().to_string_lossy();
+                    self.status = match self
+                        .first_lines(20)
+                        .iter()
+                        .any(|l| crate::table::field_runs_on(l, delimiter))
+                    {
+                        true => say!("table.field-runs-on", name),
+                        false => say!("table.file-is-not-a-grid", name),
+                    };
                     return false;
                 }
                 (PathBuf::new(), schema, say!("table.header-from-first-row"))
@@ -242,7 +254,7 @@ impl Editor {
     /// What both halves of the header-row fallback look at — the sniffer's
     /// guess and the agreement check — so they cannot be looking at different
     /// files. Trailing newlines are off: a line is its text.
-    fn first_lines(&self, how_many: usize) -> Vec<String> {
+    pub(super) fn first_lines(&self, how_many: usize) -> Vec<String> {
         let rope = self.current_buffer().rope();
         (0..rope.len_lines().min(how_many))
             .map(|i| rope.line(i).to_string())
@@ -2230,25 +2242,12 @@ impl Editor {
     /// *writing* that cannot be done from the pieces `cells` cut, so only the
     /// five operations that write go through this door.
     fn cell_span_to_edit(&mut self, line: usize, cell: usize) -> Option<(usize, usize)> {
-        if self.row_would_break(line) {
-            self.status = say!("table.quoted-row");
-            return None;
-        }
+        // The guard that used to stand here is gone with the reason for it
+        // (#311): `cells` reads the quotes now, so the pieces a row comes
+        // apart into are the right ones and writing it back from them says
+        // what it said. What still guards the row is what guards every other
+        // one — a delimiter typed into a cell is turned away where it is typed.
         self.cell_span(line, cell)
-    }
-
-    /// Whether writing this row back from its cells would change what it says.
-    fn row_would_break(&self, line: usize) -> bool {
-        // A `|` table is not delimiter-separated data — its cells are trimmed
-        // and re-spaced by design, and a quote in one is just a quote. Only a
-        // file cut by a delimiter can be broken this way.
-        let Some(Separator::Delimiter(delimiter)) = self.table.as_ref().map(|view| view.separator)
-        else {
-            return false;
-        };
-        self.current_buffer()
-            .line(line)
-            .is_some_and(|text| crate::table::quoted_field(&text, delimiter))
     }
 
     /// The text of one cell.
