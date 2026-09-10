@@ -550,8 +550,7 @@ mod tests {
                     theme: theme.clone(),
                     ..Config::default()
                 };
-                set_dark(dark);
-                let lit = Palette::of(&config);
+                let lit = Palette::in_mood(&config, dark);
                 let back = lit.faded();
                 let paper = lit.paper();
                 for rung in [
@@ -592,8 +591,7 @@ mod tests {
                     theme: theme.clone(),
                     ..Config::default()
                 };
-                set_dark(dark);
-                let ink = Palette::of(&config);
+                let ink = Palette::in_mood(&config, dark);
                 // The three that stack inside a table: the column band, the
                 // cursor's row, and a selection within it.
                 let pairs = [
@@ -632,8 +630,7 @@ mod tests {
                     theme: theme.clone(),
                     ..Config::default()
                 };
-                set_dark(dark);
-                let ink = Palette::of(&config);
+                let ink = Palette::in_mood(&config, dark);
                 let (paper, tint, wash) = (ink.paper(), ink.word(), ink.wash());
                 // Each is a *ground*, so they are compared to the page and to
                 // each other by contrast, the way the eye compares them.

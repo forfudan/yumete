@@ -1026,7 +1026,7 @@ scheme lingming          靈明
   - `close` — 關掉這一個（`close!` 不管改動）
 - `:format`（fmt） — 照這種檔案在設定裏說的那樣格式化（[language.markdown] format = …）
 - `:run` — 跑這種檔案在設定裏自己起名的那條命令
-- `:markdown-footnote`（fn） ｜ `inline` — 腳注：號碼自己找空的，註也一併開好
+- `:markdown-footnote` ｜ `inline` — 腳注：號碼自己找空的，註也一併開好
 - `:tutor` — 一課：把課文抄成你自己的一個檔案，邊改邊學
 - `:help` — 鍵和命令，開成一個可以讀、可以搜的檔案
   - `chinese` — 漢字、標點、注音、輸入法

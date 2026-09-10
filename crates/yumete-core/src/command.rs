@@ -1274,16 +1274,52 @@ impl Choice {
         }
     }
 
-    /// The same, **as a menu shows it** — with what is folded behind it (#369).
+    /// The **other** spellings worth printing beside this one, if any.
     ///
-    /// Told apart from [`Choice::written`] because Tab writes one of these
-    /// onto the command line and a menu draws the other: a row reading
-    /// `ruby…  +4` says what is there, and is not something anybody can type.
-    pub fn shown(&self) -> String {
-        match self.family {
-            Some(more) => format!("{}…  +{more}", self.written()),
-            None => self.written(),
+    /// Not all of them (author, 2026-09-10): a menu is read, and a column of
+    /// parentheses holding `(rec)` `(rel)` `(red)` `(lay)` `(sho)` is a column
+    /// of noise. Two rules, and between them they keep only what a reader
+    /// could not have worked out:
+    ///
+    /// * **Two characters or fewer** is worth knowing however it was arrived
+    ///   at — `(w)` `(q)` `(th)` — because nobody wants to type the other
+    ///   five letters and nothing else says they need not.
+    /// * **A different word** is worth knowing at any length: `wc` is 「word
+    ///   count」, `ro` is not how `readonly` begins, `outline` is what `:toc`
+    ///   is called elsewhere, and `fmt` is a contraction somebody chose. None
+    ///   of these could be guessed from the name.
+    ///
+    /// What that leaves out is a **clipped name** longer than two — `syn`,
+    /// `red`, `rel` — which says only 「the first three letters work」, and the
+    /// prefix rule already says that about every command.
+    pub fn spelt(&self) -> Option<String> {
+        let worth = |spelling: &str| spelling.chars().count() <= 2 || !self.name.starts_with(spelling);
+        let declared: Vec<&str> = self
+            .alias
+            .iter()
+            .flat_map(|all| all.split(' '))
+            .filter(|a| worth(a))
+            .collect();
+        match declared.is_empty() {
+            false => Some(declared.join(" ")),
+            true => self.short.filter(|s| worth(s)).map(str::to_string),
         }
+    }
+
+    /// The whole row, **as a menu draws it** (#369).
+    ///
+    /// Told apart from [`Choice::written`] because Tab writes one of those
+    /// onto the command line and a menu draws one of these: `:table  (ta) +12`
+    /// says what is there, and is not something anybody can type.
+    pub fn shown(&self) -> String {
+        let mut out = self.written();
+        if let Some(spelt) = self.spelt() {
+            out.push_str(&format!(" ({spelt})"));
+        }
+        if let Some(more) = self.family {
+            out.push_str(&format!(" +{more}"));
+        }
+        out
     }
 }
 
@@ -3148,7 +3184,7 @@ pub const COMMANDS: &[Entry] = &[
     },
     Entry {
         name: "markdown-footnote",
-        aliases: &["fn"],
+        aliases: &[],
         help: "cmd.markdown-bits.footnote",
         needs: &[],
         params: &[Param::Words { of: FOOTNOTE_KINDS, default: None }],
@@ -3517,6 +3553,11 @@ fn complete_within(line: &str, folding: bool) -> (usize, Vec<Choice>) {
         fn head_of(name: &str) -> &str {
             name.split('-').next().unwrap_or(name)
         }
+        fn child_of(head: &str, name: &str) -> bool {
+            name.len() > head.len() + 1
+                && name.starts_with(head)
+                && name.as_bytes()[head.len()] == b'-'
+        }
         // **Only the names at the top level.** What the deep fallback finds
         // is a *word* under some command — `:vert` reaches `layout vertical`
         // and `help vertical`, two different things that happen to share a
@@ -3534,9 +3575,19 @@ fn complete_within(line: &str, folding: bool) -> (usize, Vec<Choice>) {
         // has narrowed the list to one of them there is nothing left to
         // choose, so `:b` opens `buffer-…` rather than making a reader type
         // the other five letters to see what they already know is there.
+        //
+        // **A stem with one command under it is still a stem** (author,
+        // 2026-09-10: 「未來 markdown 肯定還有別的命令」). `markdown-` names a
+        // group whether or not it has grown one yet, and a list that spelled
+        // it out today would change shape the day it does.
+        let a_family = |head: &str, n: usize| {
+            // **A family member is `head-…`, not merely a name that begins
+            // the same way**: `shot` starts with `sh` and is no relation.
+            n > 1 || COMMANDS.iter().any(|e| child_of(head, e.name))
+        };
         let folded: Vec<&str> = counted
             .iter()
-            .filter(|(head, n)| *n > 1 && counted.len() > 1 && !typed.starts_with(*head))
+            .filter(|(head, n)| a_family(head, *n) && counted.len() > 1 && !typed.starts_with(*head))
             .map(|(head, _)| *head)
             .collect();
         if folded.is_empty() {
@@ -3581,11 +3632,65 @@ fn complete_within(line: &str, folding: bool) -> (usize, Vec<Choice>) {
                     out.push(Choice {
                         name: &c.name[..head.len() + 1],
                         family: Some(under),
+                        // **A stem is nobody's name**, so it carries nobody's
+                        // spellings: `view-w` is `view-wrap`'s shortest, and
+                        // printing it beside `view-` would offer it for the
+                        // twelve.
+                        alias: None,
+                        short: None,
                         ..c
                     });
                 }
             }
         }
+        // **A folded family still shows the spellings worth reaching for**
+        // (author, 2026-09-10: 「wq, bc 這種重要的別名可以單開一行」). An alias
+        // is another name for the command, not a shortcut to it, so it belongs
+        // in the list beside the names — and once its command is folded away,
+        // this row is the only place it can be seen. Named by the first of
+        // them, since that is what a reader would type.
+        let mut with_aliases: Vec<(&str, Choice)> = Vec::new();
+        for row in &out {
+            let head = head_of(row.name);
+            if row.family.is_none() || !folded.contains(&head) {
+                continue;
+            }
+            for e in COMMANDS.iter().filter(|e| head_of(e.name) == head) {
+                let Some((first, rest)) = e.aliases.split_first() else {
+                    continue;
+                };
+                // The row standing for the family is not folded away.
+                if e.name == row.name {
+                    continue;
+                }
+                with_aliases.push((head, Choice {
+                    name: first,
+                    family: None,
+                    needs: e.needs,
+                    alias: (!rest.is_empty()).then(|| rest.join(" ")),
+                    short: None,
+                    help: e.help,
+                    leading: ":",
+                    under: String::new(),
+                    note: None,
+                }));
+            }
+        }
+        // Each one under the family it belongs to, which is where a reader
+        // looking at that family will find it. **Placed by that family and not
+        // by its own name**: `wa` begins with a `w` and belongs to `write`
+        // because of what it is short for, not because of how it is spelled.
+        let mut placed: Vec<Choice> = Vec::with_capacity(out.len() + with_aliases.len());
+        for row in out.drain(..) {
+            let head = head_of(row.name);
+            placed.push(row);
+            for (of, alias) in with_aliases.iter() {
+                if *of == head {
+                    placed.push(alias.clone());
+                }
+            }
+        }
+        let out = placed;
         out
     }
 
@@ -4666,6 +4771,73 @@ mod tests {
         );
     }
 
+    /// What a menu row says, and what it leaves out (author, 2026-09-10).
+    ///
+    /// Three rules, and every one of them is about what a reader could not
+    /// have worked out for themselves. A column of `(rec)` `(rel)` `(red)`
+    /// `(lay)` `(sho)` says only 「the first three letters work」, which the
+    /// prefix rule already says about every command in the list.
+    #[test]
+    fn a_row_prints_the_spellings_a_reader_could_not_have_guessed() {
+        let row = |typed: &str, name: &str| -> String {
+            complete(typed)
+                .into_iter()
+                .find(|c| c.name == name)
+                .map(|c| format!("{}{}", c.leading, c.shown()))
+                .unwrap_or_else(|| panic!("`{name}` is not in the list for `{typed}`"))
+        };
+
+        // A head, its declared short spelling, and how many stand behind it —
+        // the count last, where it reads as a remark about the row rather than
+        // part of the name.
+        assert_eq!(row("", "write"), ":write (w) +3");
+        // A family with no head of its own keeps the hyphen, which is what
+        // says it is a family and not a command, and nothing else: `view-w` is
+        // `view-wrap`'s spelling, not the twelve's.
+        assert_eq!(row("", "view-"), ":view- +12");
+        assert_eq!(row("", "check-"), ":check- +4");
+        // …and one command under a stem is still a stem: `markdown-` names a
+        // group whether or not it has grown a second one yet.
+        assert_eq!(row("", "markdown-"), ":markdown- +1");
+        // …while a name that merely begins the same way is no relation:
+        // `shot` starts with `sh` and belongs to nobody.
+        assert_eq!(row("", "sh"), ":sh");
+        // **A clipped name longer than two is left out**, declared or not:
+        // `red` is `:redo`'s own alias and says nothing `:re` did not.
+        assert_eq!(row("", "redo"), ":redo");
+        assert_eq!(row("", "recover"), ":recover");
+        // …and two characters is worth knowing however it was arrived at.
+        assert_eq!(row("", "theme"), ":theme (th)");
+        assert_eq!(row("", "quit"), ":quit (q) +1");
+        // A **different word** is worth knowing at any length: none of these
+        // could be read off the name.
+        assert_eq!(row("", "open"), ":open (o e edit)");
+        assert_eq!(row("", "toc"), ":toc (outline)");
+        assert_eq!(row("", "count"), ":count (wc) +2");
+        assert_eq!(row("", "format"), ":format (fmt)");
+        // A folded command with a name of its own gets a row of it, under the
+        // family it came from — otherwise the fold would have hidden the one
+        // spelling anybody types.
+        assert_eq!(row("", "wq"), ":wq (x)");
+        assert_eq!(row("", "bc"), ":bc");
+        let listed: Vec<&str> = complete("").iter().map(|c| c.name).collect();
+        let write = listed.iter().position(|n| *n == "write").unwrap();
+        assert_eq!(
+            &listed[write..write + 3],
+            ["write", "wa", "wq"],
+            "each one under the family it belongs to"
+        );
+    }
+
+    /// Print the menu the way it is drawn, for looking at.
+    #[test]
+    #[ignore = "a listing, not a test"]
+    fn the_menu_as_it_is_drawn() {
+        for c in complete("") {
+            println!("{}{}", c.leading, c.shown());
+        }
+    }
+
     #[test]
     fn completion_narrows_as_the_command_is_typed() {
         // **Every command, and every spelling that is one** (#363). An alias
@@ -4798,10 +4970,22 @@ mod tests {
             if choice.name.ends_with('-') {
                 continue;
             }
-            let entry = COMMANDS
-                .iter()
-                .find(|e| e.name == choice.name)
-                .unwrap_or_else(|| panic!("`{}` is in the list and is not a command", choice.name));
+            // A folded family is a prefix rather than a command (#369), and a
+            // row named for a folded command's alias is that command under
+            // another of its names — neither has a spelling of its own to be
+            // held to account for.
+            if choice.name.ends_with('-') {
+                continue;
+            }
+            let Some(entry) = COMMANDS.iter().find(|e| e.name == choice.name) else {
+                assert!(
+                    COMMANDS.iter().any(|e| e.aliases.contains(&choice.name)),
+                    "`{}` is in the list and is neither a command nor one's alias",
+                    choice.name
+                );
+                assert_eq!(parse(&format!(":{}", choice.name)).is_ok(), true);
+                continue;
+            };
             assert_eq!(choice.short, short(entry.name), "one rule, not two");
             if let Some(short) = choice.short {
                 // It resolves, **and it resolves to this one**. Checking only
