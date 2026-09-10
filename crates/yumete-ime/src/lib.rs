@@ -237,7 +237,7 @@ impl Scheme {
 
     /// The next scheme, cycling in menu order.
     ///
-    /// A scheme that is not on the list — the one a `:yume scheme` held across
+    /// A scheme that is not on the list — the one a `:yume-scheme` held across
     /// a directory that stopped shipping it — starts the cycle rather than
     /// continuing it, so ⌃⇧N lands on the first installed scheme instead of
     /// the second.

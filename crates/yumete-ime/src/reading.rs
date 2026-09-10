@@ -1,6 +1,6 @@
 //! Readings over Yume's own tables — Feature #234.
 //!
-//! `:ruby auto` needs an answer to 「how is this read」, and yumete has none of
+//! `:ruby-auto` needs an answer to 「how is this read」, and yumete has none of
 //! its own: the readings live in 宇浩's 全息拆分表 (`chaifen.ydiv`, one 讀音
 //! column per character, 帶調, 多音 separated by `_`) and the disambiguation
 //! lives in the 讀音表 (`pinyin.yflb`, 2.17M 讀音-詞 pairs with the weight the

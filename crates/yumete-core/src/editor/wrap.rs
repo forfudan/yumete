@@ -23,7 +23,7 @@ impl Editor {
     /// Tell the editor how much room the renderer has, so `j` and `k` walk the
     /// same rows the reader sees. The renderer calls this once per frame.
     ///
-    /// A measure the writer has set wins, but only downwards: `:view wrap 50` on a
+    /// A measure the writer has set wins, but only downwards: `:view-wrap 50` on a
     /// 40-column terminal still has to wrap at 40, because rows that do not fit
     /// cannot be read.
     pub fn set_wrap_width(&mut self, available: usize) {
@@ -52,10 +52,10 @@ impl Editor {
         // A view, not a change of settings. Packing the page *suppresses* the
         // readings, the hung 句讀 and the ticks; it does not turn them off,
         // because they are choices about the book and this is a choice about
-        // the window. So `:view dense off` needs nothing remembered — what was
+        // the window. So `:view-dense off` needs nothing remembered — what was
         // configured was never touched, and simply applies again.
         self.dense = on;
-        // 橫排 has no columns to pack, so `:view dense` means the other axis there:
+        // 橫排 has no columns to pack, so `:view-dense` means the other axis there:
         // the row of air above every row.
         if self.layout == Layout::Horizontal {
             self.loose_rows = !on;
@@ -73,7 +73,7 @@ impl Editor {
         self.dense
     }
 
-    /// One 句 to a 縱 (`:view sentence`, Feature #237).
+    /// One 句 to a 縱 (`:view-sentence`, Feature #237).
     ///
     /// **A view, and the point is that it is one.** The manual has taught
     /// `:%s/。/。\n/g` for reading a draft back one sentence at a time since the

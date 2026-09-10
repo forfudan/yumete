@@ -251,14 +251,14 @@ zhs = "{0} 里没有「{1}」"
 en = "no row in {0} is named 「{1}」"
 
 [[message]]
-# :yume chaifen off ——關了
+# :yume-chaifen off ——關了
 key = "chaifen.off"
 zht = "拆分 off"
 zhs = "拆分 off"
 en = "chaifen off"
 
 [[message]]
-# :yume chaifen on ——候選後面掛拆分注解，開了
+# :yume-chaifen on ——候選後面掛拆分注解，開了
 key = "chaifen.on"
 zht = "拆分 on"
 zhs = "拆分 on"
@@ -272,7 +272,7 @@ zhs = "{0}：{1}（{2} 处，第一处）"
 en = "{0}: {1} ({2} rows; the first)"
 
 [[message]]
-# :yume chaifen on，但這個方案沒有拆分表
+# :yume-chaifen on，但這個方案沒有拆分表
 key = "chaifen.unavailable"
 zht = "拆分 unavailable for this scheme"
 zhs = "拆分 unavailable for this scheme"
@@ -288,133 +288,133 @@ en = "{0}:{1}: {2} columns here, {3} expected"
 # ── check ─────────────────────────────────────────────────────────────
 
 [[message]]
-# :check charset 查完，每個字都在某個字集裏
+# :check-charset 查完，每個字都在某個字集裏
 key = "check.charset-clean"
 zht = "{0}：每個字都在字集裏"
 zhs = "{0}：每个字都在字集里"
 en = "{0}: every character is in a standard"
 
 [[message]]
-# :check charset 查出了不在任何字集裏的字
+# :check-charset 查出了不在任何字集裏的字
 key = "check.charset-found"
 zht = "{0} 個字不在任何字集裏——gf 跳到那一行"
 zhs = "{0} 个字不在任何字集里——gf 跳到那一行"
 en = "{0} character(s) in no standard — gf goes to the line"
 
 [[message]]
-# :check charset 沒有字集資料可問（碼表沒載）
+# :check-charset 沒有字集資料可問（碼表沒載）
 key = "check.charset-no-data"
-zht = "沒有字集資料——先 :yume scheme 載一個方案"
-zhs = "没有字集资料——先 :yume scheme 载一个方案"
-en = "no 字集 data — load a scheme first with :yume scheme"
+zht = "沒有字集資料——先 :yume-scheme 載一個方案"
+zhs = "没有字集资料——先 :yume-scheme 载一个方案"
+en = "no 字集 data — load a scheme first with :yume-scheme"
 
 [[message]]
-# :check charset 結果裏的一行：這個字不在任何字集裏
+# :check-charset 結果裏的一行：這個字不在任何字集裏
 key = "check.charset-outside"
 zht = "{0}:{1}: 「{2}」不在任何字集裏（{3}），全文 {4} 處"
 zhs = "{0}:{1}: 「{2}」不在任何字集里（{3}），全文 {4} 处"
 en = "{0}:{1}: 「{2}」 is in no standard ({3}), {4} time(s) in all"
 
 [[message]]
-# :check charset 的結果那一份緩衝區的名字
+# :check-charset 的結果那一份緩衝區的名字
 key = "check.charset-results"
 zht = "[字集 {0}]"
 zhs = "[字集 {0}]"
 en = "[charset {0}]"
 
 [[message]]
-# :check charset 查出來的太多，只列了前面那些
+# :check-charset 查出來的太多，只列了前面那些
 key = "check.charset-too-many"
 zht = "{0} 個以上（只列了前 {0} 個）——gf 跳到那一行"
 zhs = "{0} 个以上（只列了前 {0} 个）——gf 跳到那一行"
 en = "{0}+ characters in no standard (first {0} listed) — gf goes to the line"
 
 [[message]]
-# :check punct 查完，標點沒有問題
+# :check-punct 查完，標點沒有問題
 key = "check.punct-clean"
 zht = "{0}：標點沒有問題"
 zhs = "{0}：标点没有问题"
 en = "{0}: punctuation is clean"
 
 [[message]]
-# :check punct 結果裏的一行：半角的三點該是六點省略號
+# :check-punct 結果裏的一行：半角的三點該是六點省略號
 key = "check.punct-ellipsis"
 zht = "{0}:{1}: 「{2}」該是「……」"
 zhs = "{0}:{1}: 「{2}」该是「……」"
 en = "{0}:{1}: 「{2}」 should be 「……」"
 
 [[message]]
-# :check punct 查出了要看一眼的標點
+# :check-punct 查出了要看一眼的標點
 key = "check.punct-found"
 zht = "{0} 處標點要看一眼——gf 跳到那一行"
 zhs = "{0} 处标点要看一眼——gf 跳到那一行"
 en = "{0} mark(s) to look at again — gf goes to the line"
 
 [[message]]
-# :check punct 結果裏的一行：中文裏的半角標點
+# :check-punct 結果裏的一行：中文裏的半角標點
 key = "check.punct-half"
 zht = "{0}:{1}: 半角「{2}」該是「{3}」"
 zhs = "{0}:{1}: 半角「{2}」该是「{3}」"
 en = "{0}:{1}: half-width 「{2}」 should be 「{3}」"
 
 [[message]]
-# :check punct 的結果那一份緩衝區的名字
+# :check-punct 的結果那一份緩衝區的名字
 key = "check.punct-results"
 zht = "[標點 {0}]"
 zhs = "[标点 {0}]"
 en = "[punctuation {0}]"
 
 [[message]]
-# :check punct 查出來的太多，只列了前面那些
+# :check-punct 查出來的太多，只列了前面那些
 key = "check.punct-too-many"
 zht = "{0} 處以上（只列了前 {0} 處）——gf 跳到那一行"
 zhs = "{0} 处以上（只列了前 {0} 处）——gf 跳到那一行"
 en = "{0}+ marks to look at (first {0} listed) — gf goes to the line"
 
 [[message]]
-# :check punct 結果裏的一行：開了口沒有收尾的引號或括號
+# :check-punct 結果裏的一行：開了口沒有收尾的引號或括號
 key = "check.punct-unclosed"
 zht = "{0}:{1}: 「{2}」沒有收尾的「{3}」"
 zhs = "{0}:{1}: 「{2}」没有收尾的「{3}」"
 en = "{0}:{1}: 「{2}」 is never closed by 「{3}」"
 
 [[message]]
-# :check punct 結果裏的一行：收尾的標點前面沒有開口
+# :check-punct 結果裏的一行：收尾的標點前面沒有開口
 key = "check.punct-unopened"
 zht = "{0}:{1}: 「{2}」前面沒有「{3}」"
 zhs = "{0}:{1}: 「{2}」前面没有「{3}」"
 en = "{0}:{1}: 「{2}」 with no 「{3}」 before it"
 
 [[message]]
-# :check usage 查完，全文用字一致
+# :check-usage 查完，全文用字一致
 key = "check.usage-clean"
 zht = "{0}：用字一致"
 zhs = "{0}：用字一致"
 en = "{0}: one spelling throughout"
 
 [[message]]
-# :check usage 查出了不一致的用字
+# :check-usage 查出了不一致的用字
 key = "check.usage-found"
 zht = "{0} 處用字不一致——gf 跳到那一行"
 zhs = "{0} 处用字不一致——gf 跳到那一行"
 en = "{0} place(s) spelled the other way — gf goes to the line"
 
 [[message]]
-# :check usage 的結果那一份緩衝區的名字
+# :check-usage 的結果那一份緩衝區的名字
 key = "check.usage-results"
 zht = "[用字 {0}]"
 zhs = "[用字 {0}]"
 en = "[usage {0}]"
 
 [[message]]
-# :check usage 結果裏的一行：這裏寫的和全文多數不一樣
+# :check-usage 結果裏的一行：這裏寫的和全文多數不一樣
 key = "check.usage-slip"
 zht = "{0}:{1}: 這裏是「{2}」{4} 次，全文多用「{3}」{5} 次"
 zhs = "{0}:{1}: 这里是「{2}」{4} 次，全文多用「{3}」{5} 次"
 en = "{0}:{1}: 「{2}」 here ({4}), 「{3}」 in the rest ({5})"
 
 [[message]]
-# :check usage 查出來的太多，只列了前面那些
+# :check-usage 查出來的太多，只列了前面那些
 key = "check.usage-too-many"
 zht = "{0} 處以上（只列了前 {0} 處）——gf 跳到那一行"
 zhs = "{0} 处以上（只列了前 {0} 处）——gf 跳到那一行"
@@ -447,9 +447,9 @@ en = "scheme: {0}"
 [[message]]
 # 啓動時要換的方案沒有碼表
 key = "cli.scheme-table-not-installed"
-zht = "{0} 的碼表沒有裝——:yume scheme 換一個"
-zhs = "{0} 的码表没有装——:yume scheme 换一个"
-en = "{0}'s table is not installed — :yume scheme picks another"
+zht = "{0} 的碼表沒有裝——:yume-scheme 換一個"
+zhs = "{0} 的码表没有装——:yume-scheme 换一个"
+en = "{0}'s table is not installed — :yume-scheme picks another"
 
 
 # ── cmd ───────────────────────────────────────────────────────────────
@@ -484,14 +484,6 @@ zht = "關掉這一個（`close!` 不管改動）"
 zhs = "关掉这一个（`close!` 不管改动）"
 en = "close this one (`close!` ignores changes)"
 find = "關掉 关掉 關閉 关闭 close bd"
-
-[[message]]
-# : 命令選單裏 list 那一項的說明（buffers 組）
-key = "cmd.buffers.list"
-zht = "列出開着的檔案"
-zhs = "列出开着的档案"
-en = "list the open files"
-find = "列表 清單 清单 ls buffers"
 
 [[message]]
 # : 命令選單裏 next 那一項的說明（buffers 組）
@@ -547,7 +539,7 @@ key = "cmd.clipboard.paste"
 zht = "從系統剪貼簿貼進來"
 zhs = "从系统剪贴簿贴进来"
 en = "paste from the system clipboard"
-find = "貼上 粘贴 黏貼 paste put"
+find = "貼上 粘贴 黏貼 paste put 剪貼簿 剪贴板 複製 复制 copy yank"
 
 [[message]]
 # : 命令選單裏 yank 那一項的說明（clipboard 組）
@@ -555,7 +547,7 @@ key = "cmd.clipboard.yank"
 zht = "選區送到系統剪貼簿"
 zhs = "选区送到系统剪贴簿"
 en = "put the selection on the system clipboard"
-find = "複製 复制 拷貝 拷贝 copy yank"
+find = "複製 复制 拷貝 拷贝 copy yank 剪貼簿 剪贴板 貼上 粘贴 paste"
 
 [[message]]
 # : 命令選單裏 buffer 那一項的說明（commands 組）
@@ -564,22 +556,6 @@ zht = "開着的檔案：列出、切換、關掉"
 zhs = "开着的档案：列出、切换、关掉"
 en = "the open files: list, switch, close"
 find = "緩衝區 缓冲区 檔案 文件 分頁 標籤 tabs files switch bn bp bc"
-
-[[message]]
-# : 命令選單裏 check 那一項的說明（commands 組）
-key = "cmd.commands.check"
-zht = "從頭查一遍稿子：`:check usage` 查用字前後一不一致"
-zhs = "从头查一遍稿子：`:check usage` 查用字前后一不一致"
-en = "look the manuscript over: `:check usage` for spellings it has not settled on"
-find = "檢查 检查 校對 校对 查錯 查错 用字 一致 lint proofread"
-
-[[message]]
-# : 命令選單裏 clipboard 那一項的說明（commands 組）
-key = "cmd.commands.clipboard"
-zht = "系統剪貼簿：送出去、貼進來"
-zhs = "系统剪贴簿：送出去、贴进来"
-en = "the system clipboard: out, and back in"
-find = "剪貼簿 剪贴板 複製 复制 貼上 粘贴 copy paste yank"
 
 [[message]]
 # : 命令選單裏 convert 那一條
@@ -660,14 +636,6 @@ zht = "橫排竪排互換"
 zhs = "横排竖排互换"
 en = "flip horizontal and vertical"
 find = "竖排 竪排 直排 縱書 纵书 橫排 横排 tategaki vertical horizontal 方向"
-
-[[message]]
-# : 命令選單裏 markdown 那一項的說明（commands 組）
-key = "cmd.commands.markdown"
-zht = "寫一段 Markdown：footnote、footnote inline、table 3x4"
-zhs = "写一段 Markdown：footnote、footnote inline、table 3x4"
-en = "write a piece of Markdown: footnote, footnote inline, table 3x4"
-find = "腳注 脚注 註釋 注释 表格 footnote table"
 
 [[message]]
 # : 命令選單裏 new 那一項的說明（commands 組）
@@ -846,14 +814,6 @@ en = "undo the last change"
 find = "撤銷 撤销 復原 复原 後悔 后悔"
 
 [[message]]
-# : 命令選單裏 view 那一項的說明（commands 組）
-key = "cmd.commands.view"
-zht = "版面：怎麼看這一頁，一個字都不動"
-zhs = "版面：怎么看这一页，一个字都不动"
-en = "the page as it is looked at — none of it touches the file"
-find = "版面 版式 顯示 显示 外觀 外观 頁面 页面 view display appearance"
-
-[[message]]
 # : 命令選單裏 wheel 那一項的說明（commands 組）
 key = "cmd.commands.wheel"
 zht = "滾輪一格走幾行；`:wheel 1` 是終端自己的一格"
@@ -925,6 +885,14 @@ zhs = "大陆通规繁体（説 爲 内 吴 裏 髮 臺）"
 en = "大陸通規繁體"
 
 [[message]]
+# : 命令選單裏 force 那一項的說明（convert 組）
+key = "cmd.convert.force"
+zht = "整份轉，不管本來寫的是哪一種"
+zhs = "整份转，不管本来写的是哪一种"
+en = "convert the whole file, whatever it was written in"
+find = "強制 强制 force 全部"
+
+[[message]]
 # : 命令選單裏 g 那一項（convert 組），是稿子現在的樣子，也是要變成的樣子
 key = "cmd.convert.g"
 zht = "古籍通規繁體（説 爲 内 吳 裏 髮 臺）"
@@ -984,9 +952,9 @@ find = "進度 进度 字數 字数 目標 目标 每日 progress target daily w
 [[message]]
 # : 命令選單裏 target 那一項的說明（count 組）
 key = "cmd.count.target"
-zht = "每天要寫多少字；`:count target off` 不再算"
-zhs = "每天要写多少字；`:count target off` 不再算"
-en = "how many 字 a day; `:count target off` stops counting against one"
+zht = "每天要寫多少字；`:count-target off` 不再算"
+zhs = "每天要写多少字；`:count-target off` 不再算"
+en = "how many 字 a day; `:count-target off` stops counting against one"
 find = "目標 目标 每日 進度 进度 target daily goal"
 
 [[message]]
@@ -1178,7 +1146,7 @@ zhs = "没有「{0}」这个命令"
 en = "no such command as '{0}'"
 
 [[message]]
-# 打了一個不存在的命令，而那個名字現在住在別的命令下面（`:dense` 之於 `:view dense`）
+# 打了一個不存在的命令，而那個名字現在住在別的命令下面（`:dense` 之於 `:view-dense`）
 key = "cmd.no-such-command-but"
 zht = "沒有「{0}」這個命令；你要的是 {1}"
 zhs = "没有「{0}」这个命令；你要的是 {1}"
@@ -1206,6 +1174,13 @@ zht = "開"
 zhs = "开"
 en = "on"
 
+[[message]]
+# : 命令選單裏 toggle 那一項的說明——不說開或關，只說「反過來」
+key = "cmd.on-off.toggle"
+zht = "反過來：開着就關，關着就開"
+zhs = "反过来：开着就关，关着就开"
+en = "the other way: on if it was off"
+find = "切換 切换 反轉 反转 toggle flip"
 [[message]]
 # : 命令選單裏 install 那一項（convert opencc 組）
 key = "cmd.opencc.install"
@@ -1237,7 +1212,7 @@ en = "候選框: the bordered list beside the caret"
 find = "候選 候选 面板 候選框 候选框 full"
 
 [[message]]
-# :quit all —— 全部關掉再走；短寫 :qa
+# :quit-all —— 全部關掉再走；短寫 :qa
 key = "cmd.quit.all"
 zht = "每個開着的檔案都關掉，然後離開（短寫 `:qa`）"
 zhs = "每个开着的档案都关掉，然后离开（短写 `:qa`）"
@@ -1557,9 +1532,9 @@ find = "表頭 表头 欄名 栏名 標題行 标题行 header"
 [[message]]
 # : 命令選單裏 jump 那一項的說明（table 組）
 key = "cmd.table.jump"
-zht = "跳到表格裏叫這個名字的那一行（`:table jump 木`）"
-zhs = "跳到表格里叫这个名字的那一行（`:table jump 木`）"
-en = "go to the row this table names (`:table jump 木`)"
+zht = "跳到表格裏叫這個名字的那一行（`:table-jump 木`）"
+zhs = "跳到表格里叫这个名字的那一行（`:table-jump 木`）"
+en = "go to the row this table names (`:table-jump 木`)"
 find = "行 表格 跳轉 跳转 goto table"
 
 [[message]]
@@ -1744,14 +1719,6 @@ en = "平仄: the tone class of every character in the margin, 韻腳 at the end
 find = "平仄 韻腳 韵脚 押韻 押韵 詩 诗 詞 词 律詩 律诗 meter tone rhyme"
 
 [[message]]
-# : 命令選單裏 numbers 那一項的說明（view 組）
-key = "cmd.view.numbers"
-zht = "行號那一條：要不要自己的底色"
-zhs = "行号那一条：要不要自己的底色"
-en = "the line-number band: whether it has a ground of its own"
-find = "行號 行号 gutter line numbers"
-
-[[message]]
 # : 命令選單裏 preview 那一項的說明（view 組）
 key = "cmd.view.preview"
 zht = "交給真正的排版器去排，在瀏覽器裏看"
@@ -1786,9 +1753,9 @@ find = "打字機 打字机 居中 置中 centre center"
 [[message]]
 # : 命令選單裏 wrap 那一項的說明（view 組）
 key = "cmd.view.wrap"
-zht = "長段落折到下一行；`:view wrap 50` 定寬度"
-zhs = "长段落折到下一行；`:view wrap 50` 定宽度"
-en = "wrap long paragraphs to the next row; `:view wrap 50` sets a measure"
+zht = "長段落折到下一行；`:view-wrap 50` 定寬度"
+zhs = "长段落折到下一行；`:view-wrap 50` 定宽度"
+en = "wrap long paragraphs to the next row; `:view-wrap 50` sets a measure"
 find = "折行 換行 换行 自動換行 自动换行 寬度 宽度 wrap width"
 
 [[message]]
@@ -1898,9 +1865,9 @@ find = "分詞 分词 著色 着色 show"
 [[message]]
 # : 命令選單裏 0 那一項的說明（wrap 組）
 key = "cmd.wrap.0"
-zht = "尺度用窗口寬（`:view wrap 50` 是固定五十欄）"
-zhs = "尺度用窗口宽（`:view wrap 50` 是固定五十栏）"
-en = "measure by the window (`:view wrap 50` fixes it at fifty)"
+zht = "尺度用窗口寬（`:view-wrap 50` 是固定五十欄）"
+zhs = "尺度用窗口宽（`:view-wrap 50` 是固定五十栏）"
+en = "measure by the window (`:view-wrap 50` fixes it at fifty)"
 find = "折行 換行 换行 寬度 宽度 窗口 width"
 
 [[message]]
@@ -2116,7 +2083,7 @@ zhs = "前面没有冲突了"
 en = "no conflict before this one"
 
 [[message]]
-# ]c／[c／:check merge 而整份文件裏一處衝突都沒有
+# ]c／[c／:check-merge 而整份文件裏一處衝突都沒有
 key = "conflict.none"
 zht = "這份文件裏沒有合併衝突"
 zhs = "这份文件里没有合并冲突"
@@ -2130,7 +2097,7 @@ zhs = "光标不在冲突里"
 en = "the cursor is not in a merge conflict"
 
 [[message]]
-# :check merge 列出了 {0} 處衝突
+# :check-merge 列出了 {0} 處衝突
 key = "conflict.some"
 zht = "{0} 處合併衝突"
 zhs = "{0} 处合并冲突"
@@ -3222,9 +3189,9 @@ en = "bands: two per page, one above the other, as a newspaper sets them"
 [[message]]
 # 竪排幫助：一縱多少字
 key = "help.vertical.column-length"
-zht = "一縱多少字；:view wrap 0 跟着窗高走"
-zhs = "一纵多少字；:view wrap 0 跟着窗高走"
-en = "how many characters a column holds; :view wrap 0 follows the window"
+zht = "一縱多少字；:view-wrap 0 跟着窗高走"
+zhs = "一纵多少字；:view-wrap 0 跟着窗高走"
+en = "how many characters a column holds; :view-wrap 0 follows the window"
 
 [[message]]
 # 竪排幫助：沿着這一縱往下／往上
@@ -4241,21 +4208,21 @@ en = "where else this word is"
 # ── hud ───────────────────────────────────────────────────────────────
 
 [[message]]
-# :view hud basic（出廠）——也是 :view hud 不帶參數時的回答
+# :view-hud basic（出廠）——也是 :view-hud 不帶參數時的回答
 key = "hud.basic"
 zht = "光標提示：藥丸——找空白處，不蓋字"
 zhs = "光标提示：药丸——找空白处，不盖字"
 en = "caret sign: a pill — it takes margin, never writing"
 
 [[message]]
-# :view hud full——也是 :view hud 不帶參數時的回答
+# :view-hud full——也是 :view-hud 不帶參數時的回答
 key = "hud.full"
 zht = "光標提示：面板——位置固定，會蓋住正文"
 zhs = "光标提示：面板——位置固定，会盖住正文"
 en = "caret sign: a panel — pinned, and it covers the writing"
 
 [[message]]
-# :view hud off——也是 :view hud 不帶參數時的回答
+# :view-hud off——也是 :view-hud 不帶參數時的回答
 key = "hud.off"
 zht = "光標提示：關——只剩狀態行右端那一處"
 zhs = "光标提示：关——只剩状态行右端那一处"
@@ -4309,9 +4276,9 @@ en = "no 碼表 for {0} is installed"
 [[message]]
 # :yume ?，而這一次還沒有載過碼表
 key = "ime.not-started"
-zht = "還沒開始打字——`:yume scheme` 載入碼表"
-zhs = "还没开始打字——`:yume scheme` 载入码表"
-en = "not typing yet — `:yume scheme` loads a 碼表"
+zht = "還沒開始打字——`:yume-scheme` 載入碼表"
+zhs = "还没开始打字——`:yume-scheme` 载入码表"
+en = "not typing yet — `:yume-scheme` loads a 碼表"
 
 [[message]]
 # :yume ?，而這個二進制連出廠碼表都沒編進去
@@ -4335,7 +4302,7 @@ zhs = "方案：{0}（系统装的码表）"
 en = "scheme: {0} (the system's own 碼表)"
 
 [[message]]
-# :yume scheme 換好了方案
+# :yume-scheme 換好了方案
 key = "ime.scheme-now"
 zht = "方案：{0}"
 zhs = "方案：{0}"
@@ -4349,7 +4316,7 @@ zhs = "{0} · 码表 {1} · 拆分 {2} · 上屏 {3}"
 en = "{0} · 碼表 {1} · chaifen {2} · commit {3}"
 
 [[message]]
-# :yume table 直接指一個碼表檔，裝上了
+# :yume-table 直接指一個碼表檔，裝上了
 key = "ime.table-loaded"
 zht = "碼表：{0}"
 zhs = "码表：{0}"
@@ -4434,9 +4401,9 @@ en = "{0}: done"
 [[message]]
 # 設定裏那條命令其實是伺服器
 key = "language.is-a-server"
-zht = "{0} 是個伺服器——用 :view preview 開它"
-zhs = "{0} 是个伺服器——用 :view preview 开它"
-en = "{0} is a server — :view preview starts it"
+zht = "{0} 是個伺服器——用 :view-preview 開它"
+zhs = "{0} 是个伺服器——用 :view-preview 开它"
+en = "{0} is a server — :view-preview starts it"
 
 [[message]]
 # 設定裏沒說這種檔要跑什麼
@@ -4973,21 +4940,21 @@ en = "paste"
 # ── preview ───────────────────────────────────────────────────────────
 
 [[message]]
-# :view preview 做不出那一頁
+# :view-preview 做不出那一頁
 key = "preview.failed"
 zht = "預覽：{0}"
 zhs = "预览：{0}"
 en = "preview: {0}"
 
 [[message]]
-# :view preview 一份 Markdown 稿子，導出的那一頁交給瀏覽器了
+# :view-preview 一份 Markdown 稿子，導出的那一頁交給瀏覽器了
 key = "preview.made"
 zht = "預覽：{0}"
 zhs = "预览：{0}"
 en = "preview: {0}"
 
 [[message]]
-# :view preview 用在沒有標記語法的檔案上
+# :view-preview 用在沒有標記語法的檔案上
 key = "preview.nothing-to-preview"
 zht = "這個檔案沒有標記，沒有什麼可以預覽的"
 zhs = "这个档案没有标记，没有什么可以预览的"
@@ -5003,12 +4970,12 @@ en = "stopped the preview server left over from last time ({0})"
 [[message]]
 # 預覽伺服器起來了
 key = "preview.running"
-zht = "預覽：{0}（`:view preview off` 停）"
-zhs = "预览：{0}（`:view preview off` 停）"
-en = "preview: {0} (`:view preview off` stops it)"
+zht = "預覽：{0}（`:view-preview off` 停）"
+zhs = "预览：{0}（`:view-preview off` 停）"
+en = "preview: {0} (`:view-preview off` stops it)"
 
 [[message]]
-# :view preview 用在沒存過的緩衝區上
+# :view-preview 用在沒存過的緩衝區上
 key = "preview.save-first"
 zht = "先存檔——排版器讀的是檔案"
 zhs = "先存档——排版器读的是档案"
@@ -5029,7 +4996,7 @@ zhs = "预览：{0} 已停"
 en = "preview: {0} stopped"
 
 [[message]]
-# :view preview 一份 Typst 稿子，排版器正在起來
+# :view-preview 一份 Typst 稿子，排版器正在起來
 key = "preview.typst-starting"
 zht = "預覽：tinymist 起來中……"
 zhs = "预览：tinymist 起来中……"
@@ -5039,63 +5006,63 @@ en = "preview: tinymist starting…"
 # ── progress ──────────────────────────────────────────────────────────
 
 [[message]]
-# :count progress 但寫不進 .yumete/progress.tsv
+# :count-progress 但寫不進 .yumete/progress.tsv
 key = "progress.cannot-write"
 zht = "寫不進 {0}：{1}"
 zhs = "写不进 {0}：{1}"
 en = "cannot write {0}: {1}"
 
 [[message]]
-# :count progress 的列表裏一天一行：日期、字數、長條
+# :count-progress 的列表裏一天一行：日期、字數、長條
 key = "progress.day"
 zht = "{0}　{1} 字　{2}"
 zhs = "{0}　{1} 字　{2}"
 en = "{0}  {1} 字  {2}"
 
 [[message]]
-# :count progress 但這一份還沒有檔名，記不進哪本書
+# :count-progress 但這一份還沒有檔名，記不進哪本書
 key = "progress.no-file"
 zht = "這一份還沒有名字，進度記不到哪本書上——先存一次"
 zhs = "这一份还没有名字，进度记不到哪本书上——先存一次"
 en = "this one has no name yet, so there is no book to record against — save it first"
 
 [[message]]
-# :count progress 但 .yumete/progress.tsv 還一天都沒有
+# :count-progress 但 .yumete/progress.tsv 還一天都沒有
 key = "progress.nothing-yet"
 zht = "還沒有記錄：存一次檔，今天就開始算"
 zhs = "还没有记录：存一次档，今天就开始算"
 en = "nothing recorded yet: save once and today starts counting"
 
 [[message]]
-# :count progress 的結果，沒有設每日目標
+# :count-progress 的結果，沒有設每日目標
 key = "progress.report"
 zht = "今天 {0} 字，本書 {1} 字，連續 {2} 天"
 zhs = "今天 {0} 字，本书 {1} 字，连续 {2} 天"
 en = "{0} 字 today, {1} in the book, {2} days running"
 
 [[message]]
-# :count progress 的結果，設了每日目標
+# :count-progress 的結果，設了每日目標
 key = "progress.report-target"
 zht = "今天 {0}／{1} 字（{2}%），本書 {3} 字，連續 {4} 天"
 zhs = "今天 {0}／{1} 字（{2}%），本书 {3} 字，连续 {4} 天"
 en = "{0}/{1} 字 today ({2}%), {3} in the book, {4} days running"
 
 [[message]]
-# :count progress 開出來的那一頁的標題
+# :count-progress 開出來的那一頁的標題
 key = "progress.results"
 zht = "寫作進度"
 zhs = "写作进度"
 en = "progress"
 
 [[message]]
-# :count target off——不再對着目標算
+# :count-target off——不再對着目標算
 key = "progress.target-cleared"
 zht = "每日目標撤了，字還是照記"
 zhs = "每日目标撤了，字还是照记"
 en = "the daily target is off; the 字 are still counted"
 
 [[message]]
-# :count target 2000
+# :count-target 2000
 key = "progress.target-set"
 zht = "每日目標 {0} 字，記在 {1}"
 zhs = "每日目标 {0} 字，记在 {1}"
@@ -5301,21 +5268,21 @@ zhs = "已经是 {0} 的注音了"
 en = "the readings are already {0}"
 
 [[message]]
-# :ruby auto 寫進去了幾條注音
+# :ruby-auto 寫進去了幾條注音
 key = "ruby.auto-added"
 zht = "注了 {0} 個詞——不要就 u"
 zhs = "注了 {0} 个词——不要就 u"
 en = "{0} words annotated — `u` takes it back"
 
 [[message]]
-# :ruby auto，但字料層沒裝，讀音無從查起
+# :ruby-auto，但字料層沒裝，讀音無從查起
 key = "ruby.auto-no-readings"
-zht = "查不到讀音：拆分表沒裝（`:yume scheme` 載一次）"
-zhs = "查不到读音：拆分表没装（`:yume scheme` 载一次）"
-en = "no readings here: the 拆分表 is not loaded (`:yume scheme` loads it)"
+zht = "查不到讀音：拆分表沒裝（`:yume-scheme` 載一次）"
+zhs = "查不到读音：拆分表没装（`:yume-scheme` 载一次）"
+en = "no readings here: the 拆分表 is not loaded (`:yume-scheme` loads it)"
 
 [[message]]
-# :ruby auto，範圍裏沒有一個字要注
+# :ruby-auto，範圍裏沒有一個字要注
 key = "ruby.auto-none"
 zht = "沒有要注的字"
 zhs = "没有要注的字"
@@ -5453,18 +5420,18 @@ en = "collapsed to one character — v is still on, so the next move grows it ag
 # ── sentence ──────────────────────────────────────────────────────────
 
 [[message]]
-# :view sentence off——回到滿縱排
+# :view-sentence off——回到滿縱排
 key = "sentence.off"
 zht = "回到滿縱——一縱寫到底"
 zhs = "回到满纵——一纵写到底"
 en = "back to full columns"
 
 [[message]]
-# :view sentence——一句一縱
+# :view-sentence——一句一縱
 key = "sentence.on"
-zht = "一句一縱——文件沒有動，:view sentence off 回去"
-zhs = "一句一纵——文件没有动，:view sentence off 回去"
-en = "one 句 to a column — the file is untouched; :view sentence off goes back"
+zht = "一句一縱——文件沒有動，:view-sentence off 回去"
+zhs = "一句一纵——文件没有动，:view-sentence off 回去"
+en = "one 句 to a column — the file is untouched; :view-sentence off goes back"
 
 
 # ── shell ─────────────────────────────────────────────────────────────
@@ -5590,7 +5557,7 @@ en = "flag '{0}' (g every match on the line, i ignore case, n count only, t let 
 # ── table ─────────────────────────────────────────────────────────────
 
 [[message]]
-# :table pipe：這一段本來就是 | 表格
+# :table-pipe：這一段本來就是 | 表格
 key = "table.already-a-pipe-table"
 zht = "這一段本來就是 | 表格"
 zhs = "这一段本来就是 | 表格"
@@ -5669,9 +5636,9 @@ en = "a table block in the text: its first row is data already"
 [[message]]
 # 在文中的表格區塊裏按了會重寫整個檔案的鍵
 key = "table.block-is-read-where-it-lies"
-zht = "文中的表格區塊只讀不改寫——要整理它，先 :table pipe 或 :table csv"
-zhs = "文中的表格区块只读不改写——要整理它，先 :table pipe 或 :table csv"
-en = "a table block in a document is read where it lies, never rewritten — :table pipe or :table csv converts it first"
+zht = "文中的表格區塊只讀不改寫——要整理它，先 :table-pipe 或 :table-csv"
+zhs = "文中的表格区块只读不改写——要整理它，先 :table-pipe 或 :table-csv"
+en = "a table block in a document is read where it lies, never rewritten — :table-pipe or :table-csv converts it first"
 
 [[message]]
 # 進表格模式，照某個 schema 讀
@@ -5688,7 +5655,7 @@ zhs = "清空了一格（{0} 个字）"
 en = "cleared a cell ({0} character(s))"
 
 [[message]]
-# :table csv：某一格裏就有那個分隔符，不能拆
+# :table-csv：某一格裏就有那個分隔符，不能拆
 key = "table.cell-holds-the-delimiter"
 zht = "第 {0} 行第 {1} 欄裏就有「{2}」——換個分隔符，或者先改那一格"
 zhs = "第 {0} 行第 {1} 栏里就有「{2}」——换个分隔符，或者先改那一格"
@@ -5989,11 +5956,11 @@ zhs = "按字移动（Tab 回到按格）"
 en = "moving by character — Tab goes back to cells"
 
 [[message]]
-# :table pipe：看不出什麼在分欄
+# :table-pipe：看不出什麼在分欄
 key = "table.no-delimiter-in-sight"
-zht = "看不出什麼在分欄——寫明分隔符，例如 :table pipe , 或 :table pipe tab"
-zhs = "看不出什么在分栏——写明分隔符，例如 :table pipe , 或 :table pipe tab"
-en = "nothing here plainly separates columns — name the delimiter, as in :table pipe , or :table pipe tab"
+zht = "看不出什麼在分欄——寫明分隔符，例如 :table-pipe , 或 :table-pipe tab"
+zhs = "看不出什么在分栏——写明分隔符，例如 :table-pipe , 或 :table-pipe tab"
+en = "nothing here plainly separates columns — name the delimiter, as in :table-pipe , or :table-pipe tab"
 
 [[message]]
 # :table 用在沒有檔名的緩衝區上
@@ -6031,7 +5998,7 @@ zhs = "没有分隔行，无从对齐"
 en = "no rule row, so there is no alignment to set"
 
 [[message]]
-# t1s／:table sort 給的欄號超出這張表的欄數
+# t1s／:table-sort 給的欄號超出這張表的欄數
 key = "table.no-such-column"
 zht = "這張表只有 {1} 欄，沒有第 {0} 欄"
 zhs = "这张表只有 {1} 栏，没有第 {0} 栏"
@@ -6045,7 +6012,7 @@ zhs = "表里没有「{0}」"
 en = "no '{0}' in this table"
 
 [[message]]
-# :table csv：游標不在 | 表格裏
+# :table-csv：游標不在 | 表格裏
 key = "table.not-in-a-pipe-table"
 zht = "游標不在 | 表格裏"
 zhs = "游标不在 | 表格里"
@@ -6066,21 +6033,21 @@ zhs = "标题行上面加不了——加在它下面了"
 en = "nothing goes above the header — added it below instead"
 
 [[message]]
-# :table pipe / :table csv：手上沒有可轉的東西
+# :table-pipe / :table-csv：手上沒有可轉的東西
 key = "table.nothing-to-convert"
 zht = "這裏沒有可以轉的行"
 zhs = "这里没有可以转的行"
 en = "no lines here to convert"
 
 [[message]]
-# :table pipe 轉好了
+# :table-pipe 轉好了
 key = "table.now-a-pipe-table"
 zht = "作成了 | 表格：{0} 行 {1} 欄，照「{2}」分的"
 zhs = "作成了 | 表格：{0} 行 {1} 栏，照「{2}」分的"
 en = "a | table: {0} rows, {1} columns, split on '{2}'"
 
 [[message]]
-# :table csv 轉好了
+# :table-csv 轉好了
 key = "table.now-delimited"
 zht = "拆成了分隔文本：{0} 行，用「{1}」分欄"
 zhs = "拆成了分隔文本：{0} 行，用「{1}」分栏"
@@ -6632,9 +6599,9 @@ en = "{0} word(s) of this book's own, written into {1} and already segmenting �
 [[message]]
 # 寫進詞表的那一段的抬頭（這一行進的是檔案，不是狀態欄）
 key = "word.discover-heading"
-zht = "# 本書自己的詞：:word discover 掃了 {0} 個檔找出來的，刪掉不要的"
-zhs = "# 本书自己的词：:word discover 扫了 {0} 个档找出来的，删掉不要的"
-en = "# this book's own words, found by :word discover over {0} file(s); delete what is not a word"
+zht = "# 本書自己的詞：:word-discover 掃了 {0} 個檔找出來的，刪掉不要的"
+zhs = "# 本书自己的词：:word-discover 扫了 {0} 个档找出来的，删掉不要的"
+en = "# this book's own words, found by :word-discover over {0} file(s); delete what is not a word"
 
 [[message]]
 # 寫進詞表的一行：詞，還有它出現了幾次。中間那一個是**真的 tab**，不是 \t——
@@ -6747,42 +6714,42 @@ en = "word tint: on"
 # ── words ─────────────────────────────────────────────────────────────
 
 [[message]]
-# :word habit 一個詞都沒有多說
+# :word-habit 一個詞都沒有多說
 key = "words.clean"
 zht = "{0}：沒有哪個詞說得特別多"
 zhs = "{0}：没有哪个词说得特别多"
 en = "{0}: no word is leaned on"
 
 [[message]]
-# :word habit 查出了幾個口頭禪
+# :word-habit 查出了幾個口頭禪
 key = "words.found"
 zht = "{0} 個詞說得特別多——gf 跳到那一行"
 zhs = "{0} 个词说得特别多——gf 跳到那一行"
 en = "{0} word(s) leaned on — gf goes to the line"
 
 [[message]]
-# :word habit 結果裏的一行：這個詞說了幾次，比尋常文章多幾倍
+# :word-habit 結果裏的一行：這個詞說了幾次，比尋常文章多幾倍
 key = "words.habit"
 zht = "{0}:{1}: 「{2}」{3} 次——比尋常文章多 {4} 倍"
 zhs = "{0}:{1}: 「{2}」{3} 次——比寻常文章多 {4} 倍"
 en = "{0}:{1}: 「{2}」 {3}× — {4} times more often than prose"
 
 [[message]]
-# :word habit 但手上這份分詞器沒有詞頻表，問不了「尋常文章說幾次」
+# :word-habit 但手上這份分詞器沒有詞頻表，問不了「尋常文章說幾次」
 key = "words.no-table"
 zht = "這一份詞表沒有詞頻（{0}），問不了「別人說幾次」——裝上宇浩字料層再試"
 zhs = "这一份词表没有词频（{0}），问不了「别人说几次」——装上宇浩字料层再试"
 en = "this word list carries no frequencies ({0}), so there is nothing to compare against — install 宇浩's data layer"
 
 [[message]]
-# :word habit 的結果那一份緩衝區的名字
+# :word-habit 的結果那一份緩衝區的名字
 key = "words.results"
 zht = "[口頭禪 {0}]"
 zhs = "[口头禅 {0}]"
 en = "[habit words {0}]"
 
 [[message]]
-# :word habit 查出來的太多，只列了前面那些
+# :word-habit 查出來的太多，只列了前面那些
 key = "words.too-many"
 zht = "{0} 個以上（只列了前 {0} 個）——gf 跳到那一行"
 zhs = "{0} 个以上（只列了前 {0} 个）——gf 跳到那一行"
@@ -6806,11 +6773,11 @@ zhs = "折行：开"
 en = "soft wrap: on"
 
 [[message]]
-# :view wrap on/off 用在竪排下
+# :view-wrap on/off 用在竪排下
 key = "wrap.vertical-has-no-wrap"
-zht = "縱書不折行：一縱斷在窗高上。這一項只管橫排（`:view wrap 40` 兩邊都算）"
-zhs = "纵书不折行：一纵断在窗高上。这一项只管横排（`:view wrap 40` 两边都算）"
-en = "vertical does not soft-wrap: a 縱 breaks at the height of the window. This is a horizontal setting (`:view wrap 40` counts in both)"
+zht = "縱書不折行：一縱斷在窗高上。這一項只管橫排（`:view-wrap 40` 兩邊都算）"
+zhs = "纵书不折行：一纵断在窗高上。这一项只管横排（`:view-wrap 40` 两边都算）"
+en = "vertical does not soft-wrap: a 縱 breaks at the height of the window. This is a horizontal setting (`:view-wrap 40` counts in both)"
 
 [[message]]
 # 安全核驗的第一個選項：照存

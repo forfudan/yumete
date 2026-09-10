@@ -116,7 +116,7 @@ impl Editor {
             .find(|c| c.lines().contains(&line))
     }
 
-    /// `:check merge` — every conflict in this file, as a buffer to walk (#249).
+    /// `:check-merge` — every conflict in this file, as a buffer to walk (#249).
     ///
     /// The same `路徑:行:` shape `:grep` writes, so `gf` follows a row back to
     /// the line it names and every motion works in the list. **This file

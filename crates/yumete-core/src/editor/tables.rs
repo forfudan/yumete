@@ -1308,7 +1308,7 @@ impl Editor {
         // **Looking at a table does not rewrite it.** Entering used to lay the
         // whole region out again — 45 lines of this project's own `development.md`,
         // `modified` set, and `:table off` does not undo it. The padding is
-        // this editor's, not theirs, and `:write all` was one keystroke from
+        // this editor's, not theirs, and `:write-all` was one keystroke from
         // committing a diff nobody typed. The layout is kept up *after an
         // edit*, which is where it came from and where it belongs.
         self.snap_to_cell();
@@ -1409,7 +1409,7 @@ impl Editor {
         (first, last)
     }
 
-    /// `:table pipe` — the delimited block under the cursor becomes a `|` table.
+    /// `:table-pipe` — the delimited block under the cursor becomes a `|` table.
     pub(super) fn table_to_pipe(&mut self, delimiter: Option<char>) {
         // `Buffer::insert` would refuse anyway, but silently and far too late:
         // by then the table has been left, the document forgotten and the grid
@@ -1429,7 +1429,7 @@ impl Editor {
             self.status = say!("table.nothing-to-convert");
             return;
         }
-        // Already a table: `:table pipe` on one would split every cell again on
+        // Already a table: `:table-pipe` on one would split every cell again on
         // whatever the sniffer guessed and hand back a wider, wrong table.
         if lines.iter().all(|l| crate::mdtable::is_row(l)) {
             self.status = say!("table.already-a-pipe-table");
@@ -1464,7 +1464,7 @@ impl Editor {
         self.status = say!("table.now-a-pipe-table", rows, columns, delimiter);
     }
 
-    /// `:table csv` — the `|` table under the cursor becomes delimited lines.
+    /// `:table-csv` — the `|` table under the cursor becomes delimited lines.
     pub(super) fn table_to_delimited(&mut self, delimiter: char) {
         if self.refuse_readonly() {
             return;
@@ -1636,7 +1636,7 @@ impl Editor {
 
     /// Write an empty `|` table here and stand in its first heading (#276).
     ///
-    /// The author, 2026-09-05: 「`:table new 3 4`，迅速在 markdown 中插入一個三
+    /// The author, 2026-09-05: 「`:table-new 3 4`，迅速在 markdown 中插入一個三
     /// 行四列表格，上下有空白行，光標自動到標題欄最左的一格並進去編輯模式。」
     ///
     /// **`rows` counts the heading**, the way a word processor's「3 × 4」does:
@@ -1858,7 +1858,7 @@ impl Editor {
 
     /// **Put the rows in order** by one column or several.
     ///
-    /// `:table sort 1 a 2 d 4 a` — first column ascending, then second
+    /// `:table-sort 1 a 2 d 4 a` — first column ascending, then second
     /// descending, then fourth ascending — `t1a2d4as` is the same thing from
     /// the keyboard, and `t1s` / `t1S` the short spelling for one column
     /// from the keyboard. With no columns named it sorts by the one the cursor
@@ -2356,7 +2356,7 @@ impl Editor {
         let lines = self.cell_lines();
         // **A value holding the delimiter is refused, not filtered.** It used
         // to be stripped out character by character, which is the same silent
-        // damage `:table csv` refuses in the other direction: 「長, 久」 went
+        // damage `:table-csv` refuses in the other direction: 「長, 久」 went
         // in as 「長 久」 and nothing said so. Refused *before* the snapshot,
         // so a refusal costs the writer nothing to undo.
         if let Some((r, _)) = values.iter().enumerate().find(|(_, v)| v.contains(d)) {
@@ -2784,7 +2784,7 @@ impl Editor {
     ///
     /// A 碼表 has no header — 「字⇥碼」 all the way down — so reading its first
     /// line as the column names loses that line to the frozen row at the top
-    /// and calls one column 「一」. `t H` and `:table header off` say so: row
+    /// and calls one column 「一」. `t H` and `:table-header off` say so: row
     /// one becomes an ordinary row and the columns are named by number, which
     /// is what the row above them already draws (#184). `None` flips it,
     /// because a file is asked this once and never again.
@@ -3711,7 +3711,7 @@ impl Editor {
                 .unwrap_or_default(),
         }
     }
-    /// Search **down one column, then the next** (`:table find column`, `Enter`).
+    /// Search **down one column, then the next** (`:table-find column`, `Enter`).
     ///
     /// The other axis of the same verb, and *only* the axis: a hit is a match,
     /// the match becomes the selection, `n` and `N` walk them, the pattern is a
@@ -4115,7 +4115,7 @@ impl Editor {
         // The **view**, deliberately: typing a `|` is how a table is written in
         // the first place, so a document is a grid to this gate only once the
         // writer has said so. What is *rewritten in bulk* — `:s`, `:replace`,
-        // `:ruby format`, `gJ` — asks [`Self::grid_shape_here`] instead, which
+        // `:ruby-format`, `gJ` — asks [`Self::grid_shape_here`] instead, which
         // does not care whether `:table` is on.
         let view = self.table.as_ref()?;
         if !self.table_here() {
@@ -4294,7 +4294,7 @@ impl Editor {
 
     // ---- Finding a row by its key (Feature #127) --------------------------
 
-    /// Go to the row this table names by `key` (`:table jump 木`).
+    /// Go to the row this table names by `key` (`:table-jump 木`).
     ///
     /// The index behind it has always been built and has always answered in
     /// about 300 ns; until now nothing let a person ask it. Finding 木 in a

@@ -48,28 +48,28 @@ pub enum Engagement {
 pub enum WordCommand {
     /// `:word` — which dictionary is in force, and how many words this book adds.
     Report,
-    /// `:word show on|off` — the colour that says where the boundaries fell.
+    /// `:word-show on|off` — the colour that says where the boundaries fell.
     /// `None` flips it.
     Show(Option<bool>),
-    /// `:word show tint|ink` — which of the two ways it is drawn: under the
+    /// `:word-show tint|ink` — which of the two ways it is drawn: under the
     /// writing, or in the writing (Feature #278). Turns the overlay on.
     Mark(yumete_cjk::WordMark),
-    /// `:word list` — the same report, from the list's side.
+    /// `:word-list` — the same report, from the list's side.
     List,
-    /// `:word list reload` — read this book's list and the global one again.
+    /// `:word-list reload` — read this book's list and the global one again.
     Reload,
-    /// `:word list edit` — open this book's `.yumete/words.txt`, existing or not.
+    /// `:word-list edit` — open this book's `.yumete/words.txt`, existing or not.
     Edit,
-    /// `:word list global` — open the global `segmentation.txt`, existing or not.
+    /// `:word-list global` — open the global `segmentation.txt`, existing or not.
     Global,
-    /// `:word discover` — mine this book for the words no dictionary has, and
+    /// `:word-discover` — mine this book for the words no dictionary has, and
     /// write them into `.yumete/words.txt` unsaved (Feature #239).
     Discover,
-    /// `:word habit` — the words this manuscript leans on, by surprisal
+    /// `:word-habit` — the words this manuscript leans on, by surprisal
     /// against a 詞頻表 rather than by count (Feature #242). English writing
     /// calls these *crutch words*; the manual calls them 口頭禪.
     Habit,
-    /// `:word level strict|balanced|full` — how readily characters join into
+    /// `:word-level strict|balanced|full` — how readily characters join into
     /// words. `None` says which it is.
     Level(Option<yumete_cjk::WordLevel>),
 }
@@ -99,18 +99,18 @@ pub enum Command {
     WriteQuit(Option<String>),
     /// `:count` (alias `:wc`) — how much has been written.
     Count,
-    /// `:count progress` — 寫作進度: what was written today, and every day before
+    /// `:count-progress` — 寫作進度: what was written today, and every day before
     /// (Feature #244).
     Progress,
-    /// `:count target <字>` — how many 字 a day; `None` is `:count target off`.
+    /// `:count-target <字>` — how many 字 a day; `None` is `:count-target off`.
     Target(Option<usize>),
-    /// `:check usage` — which of two spellings the manuscript settled on, and
+    /// `:check-usage` — which of two spellings the manuscript settled on, and
     /// where it slipped (Feature #233).
     CheckUsage,
-    /// `:check punct` — half-width marks in Chinese text, `...` for ……, and
+    /// `:check-punct` — half-width marks in Chinese text, `...` for ……, and
     /// the 「 nothing closes (Feature #238).
     CheckPunct,
-    /// `:check charset` — the characters no current standard carries, before
+    /// `:check-charset` — the characters no current standard carries, before
     /// the typesetter's font finds out (Feature #240).
     CheckCharset,
     /// `:convert …` — 簡繁, run through opencc (Feature #241).
@@ -146,7 +146,7 @@ pub enum Command {
     /// found it. The pattern is the one you already looked at. `:replace!`
     /// goes through even where it changes how many cells a row has.
     ReplaceFound(String, bool),
-    /// `:write all` — save every buffer that has changed.
+    /// `:write-all` — save every buffer that has changed.
     WriteAll,
     /// `:undo` (alias `:u`) — undo the last change.
     Undo,
@@ -159,19 +159,19 @@ pub enum Command {
     /// `:layout [horizontal|vertical]` (aliases `:horizontal`, `:vertical`) —
     /// choose the layout (Feature #61). `None` toggles between the two.
     SetLayout(Option<Layout>),
-    /// `:yume chaifen [on|off]` — the 拆分 annotation beside candidates
+    /// `:yume-chaifen [on|off]` — the 拆分 annotation beside candidates
     /// (Feature #66). `None` is the bare word, which toggles.
     SetChaifen(Option<bool>),
     /// `:scheme <tag>` — switch the input scheme (Feature #86).
     SetScheme(String),
-    /// `:view hanging [on|off]` — 句讀 in the margin rather than a square each
+    /// `:view-hanging [on|off]` — 句讀 in the margin rather than a square each
     /// (Feature #70). `None` is the bare word, which toggles.
     SetHanging(Option<bool>),
-    /// `:view wrap` / `:view wrap off` — whether a paragraph too wide for the terminal
+    /// `:view-wrap` / `:view-wrap off` — whether a paragraph too wide for the terminal
     /// continues on the next screen row (Feature #77).
     SetSoftWrap(bool),
-    /// `:view wrap <n>` — write to a measure of `n` columns rather than to the
-    /// window; `:view wrap 0` gives the window back (Feature #113).
+    /// `:view-wrap <n>` — write to a measure of `n` columns rather than to the
+    /// window; `:view-wrap 0` gives the window back (Feature #113).
     SetMeasure(Option<usize>),
     /// `:wheel <n>` — how far one notch of the mouse wheel moves, in whichever
     /// unit the page is set in; `None` only reports (Feature #222).
@@ -181,7 +181,7 @@ pub enum Command {
     EnterTable,
     /// `:table off|basic|full` — how much of a table is drawn (#283).
     SetTableLevel(crate::editor::TableLevel),
-    /// `:table rules …` — how the columns are told apart (Feature #157).
+    /// `:table-rules …` — how the columns are told apart (Feature #157).
     /// `None` only reports.
     SetTableRules(Option<crate::table::Rules>),
     /// `:format`, `:run <名字>` — a command this language declares in the
@@ -189,40 +189,40 @@ pub enum Command {
     Language(String),
     /// `:markdown …` — write a piece of Markdown at the cursor.
     Markdown(MarkdownBit),
-    /// `:view typewriter [on|off]` — the cursor's row stays in the middle.
+    /// `:view-typewriter [on|off]` — the cursor's row stays in the middle.
     SetTypewriter(Option<bool>),
-    /// `:view focus [on|off]` — everything but the 段 being written stands back.
+    /// `:view-focus [on|off]` — everything but the 段 being written stands back.
     SetFocus(Option<bool>),
-    /// `:view meter [on|off]` — 平仄 and 韻腳 in the margin.
+    /// `:view-meter [on|off]` — 平仄 and 韻腳 in the margin.
     SetMeter(Option<bool>),
-    /// `:view punct [on|off]` — the mark that is wrong, named on the page beside it.
+    /// `:view-punct [on|off]` — the mark that is wrong, named on the page beside it.
     SetNote(Option<bool>),
-    /// `:table numbers on|off` — the row of column numbers above the header.
+    /// `:table-numbers on|off` — the row of column numbers above the header.
     SetTableNumbers(bool),
-    /// `:table header [on|off]` — whether the grid's first row names the
+    /// `:table-header [on|off]` — whether the grid's first row names the
     /// columns or is a row like any other (Feature #217). `None` flips it.
     SetTableHeader(Option<bool>),
-    /// `:table schema` — the schema file in the other work area, written next
+    /// `:table-schema` — the schema file in the other work area, written next
     /// to the data first if none claims it yet (Feature #218).
     OpenTableSchema,
-    /// `:table new 3 4` — an empty `|` table of this shape, blank lines around
+    /// `:table-new 3 4` — an empty `|` table of this shape, blank lines around
     /// it, the cursor typing in its first heading (Feature #276). `rows`
     /// counts the heading; the rule row is not a row.
     NewTable { rows: usize, columns: usize },
-    /// `:table detail [on|off]` — the panel; `None` toggles.
+    /// `:table-detail [on|off]` — the panel; `None` toggles.
     ShowDetail(Option<bool>),
-    /// `:table detail 40` — how wide it is.
+    /// `:table-detail 40` — how wide it is.
     SetDetailWidth(usize),
-    /// `:table sort 1 a 2 d` — put the rows in order by these columns, in this
+    /// `:table-sort 1 a 2 d` — put the rows in order by these columns, in this
     /// order. Empty sorts by the column the cursor is in.
     SortTable(Vec<(usize, bool)>),
-    /// `:table pipe [分隔]` — the delimited block under the cursor becomes a
+    /// `:table-pipe [分隔]` — the delimited block under the cursor becomes a
     /// `|` table (Feature #227). `None` guesses the delimiter.
     TableToPipe(Option<char>),
-    /// `:table csv [分隔]` — the `|` table under the cursor becomes delimited
+    /// `:table-csv [分隔]` — the `|` table under the cursor becomes delimited
     /// lines (Feature #227). The delimiter defaults to a comma.
     TableToDelimited(char),
-    /// `:view numbers fill` — whether the line-number band has a ground of its
+    /// `:view-numbers-fill` — whether the line-number band has a ground of its
     /// own. `None` toggles.
     SetNumberFill(Option<bool>),
     /// `:shot` — a picture of the page, drawn by the editor itself (#189).
@@ -247,17 +247,17 @@ pub enum Command {
     /// `:ruby off|basic|full` — whether a reading is known, and whether it is
     /// drawn beside its base (#283).
     SetRubyLevel(crate::editor::Render),
-    /// `:indent hint color` — what, if anything, is drawn in the opening
+    /// `:indent-hint color` — what, if anything, is drawn in the opening
     /// squares.
     SetIndentHint(crate::zong::IndentHint),
-    /// `:view bands 2` — how many bands the 縱書 page is divided into (段組).
+    /// `:view-bands 2` — how many bands the 縱書 page is divided into (段組).
     SetBands(usize),
 
-    /// `:table find row|column <pattern>` — the two directions a search can run.
+    /// `:table-find row|column <pattern>` — the two directions a search can run.
     Search { pattern: String, by: Axis },
-    /// `:table check` — look the whole table over and list what is wrong.
+    /// `:table-check` — look the whole table over and list what is wrong.
     CheckTable,
-    /// `:view dense` / `:view dense off` — pack the 縱書 page as tight as a terminal can
+    /// `:view-dense` / `:view-dense off` — pack the 縱書 page as tight as a terminal can
     /// (Feature #120).
     SetDense(bool),
     /// One 句 to a 縱 — a view of the page, not a change to the file.
@@ -267,12 +267,12 @@ pub enum Command {
     SetRender(crate::editor::Render),
     /// `:render` with no argument — say which level all four dimensions are on.
     ReportRender,
-    /// `:view hud off|basic|full` — how loudly the editor says, beside the caret,
+    /// `:view-hud off|basic|full` — how loudly the editor says, beside the caret,
     /// what you have typed (Feature #284).
     SetHud(crate::editor::Hud),
-    /// `:view hud` with no argument — say which of the three it is on.
+    /// `:view-hud` with no argument — say which of the three it is on.
     ReportHud,
-    /// `:view preview` / `:view preview off` — hand the file to the real typesetter and
+    /// `:view-preview` / `:view-preview off` — hand the file to the real typesetter and
     /// show what it makes (Feature #128).
     SetPreview(bool),
     /// `:w!` — write over a file that changed on disk since it was read.
@@ -280,22 +280,22 @@ pub enum Command {
     /// `:reload` / `:reload!` — read the file again. The `!` throws away
     /// unsaved changes; without it a dirty buffer is refused (Feature #214).
     Reload { force: bool },
-    /// `:reload auto on|off` — re-read a **clean** buffer by itself when the
+    /// `:reload-auto on|off` — re-read a **clean** buffer by itself when the
     /// file changes on disk. `None` asks which it is (Feature #214).
     ReloadAuto(Option<bool>),
     /// `:readonly on|off` — lock this buffer against editing. `None` asks
     /// (Feature #213).
     SetReadonly(Option<bool>),
-    /// `:yume builtin` — use the 碼表 in the binary, whatever is installed.
+    /// `:yume-builtin` — use the 碼表 in the binary, whatever is installed.
     BuiltinScheme,
-    /// `:yume table <path>` — type with a code table of your own.
+    /// `:yume-table <path>` — type with a code table of your own.
     UserTable(String),
     /// `:yume` on its own — say what the input method is doing.
     YumeStatus,
-    /// `:yume commit delayed|unique|fluency` — 上屏方式: when a finished code
+    /// `:yume-commit delayed|unique|fluency` — 上屏方式: when a finished code
     /// goes to the page. `None` asks which one is in force (Feature #209).
     YumeCommit(Option<String>),
-    /// `:yume panel full|bare` — 候選面板: the bordered list, or the first
+    /// `:yume-panel full|bare` — 候選面板: the bordered list, or the first
     /// candidate drawn into the sentence. `None` asks which one is in force.
     ///
     /// Independent of [`Command::YumeCommit`]: **when** a word lands on the
@@ -312,7 +312,7 @@ pub enum Command {
     /// `on` also loads the 碼表 when it has not been loaded, which is the
     /// whole of starting to write in Chinese.
     YumeLanguage(Engagement),
-    /// `:yume installed` — the 碼表 the *system* has, which is `builtin`'s
+    /// `:yume-installed` — the 碼表 the *system* has, which is `builtin`'s
     /// other half: one binary, two tables, and a way back from either.
     InstalledScheme,
     /// `:sh <cmd>` — run it and bring the output back into a buffer, or
@@ -330,7 +330,7 @@ pub enum Command {
     /// `:syntax [markdown|typst]` — which markup this file is in
     /// (Feature #106). No argument says what it was guessed to be.
     SetSyntax(Option<String>),
-    /// `:write as <path>` (and `:write as!`) — write this buffer to another file
+    /// `:write-as <path>` (and `:write-as!`) — write this buffer to another file
     /// **and go on editing that one**. `:w <path>` is the other half: a copy,
     /// leaving the buffer where it is.
     SaveAs {
@@ -353,11 +353,11 @@ pub enum Command {
     Tutor,
     /// `:toc [n]` — list the headings, or go to the nth.
     Outline(Option<usize>),
-    /// `:table jump 木` — go to the row this table names by that character.
+    /// `:table-jump 木` — go to the row this table names by that character.
     GotoRow(String),
     /// `:grep <pattern>` — search every file in the project.
     Grep(String),
-    /// `:check merge` — the merge conflicts in this file, as a results buffer
+    /// `:check-merge` — the merge conflicts in this file, as a results buffer
     /// (Feature #249).
     Conflicts,
     /// `:diff [path]` — what changed, by 詞, against the file on disk or
@@ -370,7 +370,7 @@ pub enum Command {
         path: Option<String>,
         force: bool,
     },
-    /// `:ruby auto` — write the readings in by word; `rare` keeps only the
+    /// `:ruby-auto` — write the readings in by word; `rare` keeps only the
     /// words holding a character outside 通用規範漢字表 (Feature #234).
     AutoRuby {
         rare: bool,
@@ -460,11 +460,6 @@ pub fn parse(input: &str) -> Result<Command, CommandError> {
         return Err(CommandError::Empty);
     }
 
-    // **A short spelling is the long one, said quickly** (#363). Expanded
-    // here, before anything else looks at the line, so there is exactly one
-    // definition of what `:bc` does and it is `:buffer close`.
-    let trimmed = &expand_shorthand(trimmed);
-
     // Substitution (`s/.../.../` or `%s/.../.../`) is recognised before the
     // whitespace split, since its argument contains no spaces to split on.
     if let Some(cmd) = parse_substitution(trimmed) {
@@ -497,837 +492,26 @@ pub fn parse(input: &str) -> Result<Command, CommandError> {
     // The prefix rule goes on past the command name. The menu prints the
     // shortest unambiguous spelling of every word that may follow, and most of
     // those spellings used to be lies: the arms below match whole words, so
-    // `:table check` growing a `csv` sibling turned the menu's `check (ch)`
+    // `:table-check` growing a `csv` sibling turned the menu's `check (ch)`
     // into 「不認得」 — and `:render f`, `:buffer n`, `:clipboard y`, `:help t`
     // and a dozen more had never worked at all.
-    let spelled = spell_out(word, rest);
-    let rest = spelled.as_deref().unwrap_or(rest);
-
-    match word {
-        "open" | "o" | "edit" | "e" => {
-            if rest.is_empty() {
-                Err(CommandError::MissingArgument("open"))
-            } else {
-                Ok(Command::Open(rest.to_string()))
-            }
+    // **The table first** (#368). A command that declares what it takes is
+    // read by the one walk every other one is read by; what is left below is
+    // the families that have not been moved over yet.
+    if let Some(entry) = entry_named(word) {
+        if let Some(answer) = read_params(entry, rest, word.ends_with('!')) {
+            return answer;
         }
-        "new" | "enew" => Ok(Command::NewBuffer),
-        // `!` is "I know, and mine wins" — over a file that changed on disk.
-        "write!" | "w!" => match rest {
-            "as" => Err(CommandError::MissingArgument("write as")),
-            _ if rest.starts_with("as ") => Ok(Command::SaveAs {
-                path: rest["as ".len()..].trim().to_string(),
-                force: true,
-            }),
-            "" => Ok(Command::WriteForce(None)),
-            path => Ok(Command::WriteForce(Some(path.to_string()))),
-        },
-        // The other half of `:w!`: take what is on disk and lose what is here.
-        // `:e!` and `:o!` used to say this; they are gone, with no alias and no
-        // hint, because `open!` reads as 「open, but harder」 and what it
-        // actually does is discard the afternoon.
-        "reload" | "reload!" => {
-            let force = word.ends_with('!');
-            // The bang answers 「throw this buffer's changes away」, which is
-            // not a question `auto` asks — so `:reload! auto on` is a typo,
-            // not a setting, and saying so beats obeying half of it.
-            match (force, rest) {
-                (_, "") => Ok(Command::Reload { force }),
-                (false, "auto") => Ok(Command::ReloadAuto(None)),
-                (false, "auto on") => Ok(Command::ReloadAuto(Some(true))),
-                (false, "auto off") => Ok(Command::ReloadAuto(Some(false))),
-                (_, other) => Err(CommandError::InvalidArgument {
-                    command: "reload",
-                    value: other.to_string(),
-                }),
-            }
-        }
-        // 只讀 (Feature #213).
-        "readonly" | "ro" => Ok(Command::SetReadonly(match rest {
-            "" => None,
-            word => Some(switch("readonly", word)?),
-        })),
-        // `all` and `as` are what `:wa` and `:saveas` were (§5.2.3 ③).
-        // Anything else after `:write` is still a file name, and `:w <path>`
-        // is still a copy — `as` is the one that rebinds.
-        "write" | "w" => match rest {
-            "" => Ok(Command::Write(None)),
-            "all" => Ok(Command::WriteAll),
-            "as" => Err(CommandError::MissingArgument("write as")),
-            _ if rest.starts_with("quit ") => {
-                Ok(Command::WriteQuit(Some(rest["quit ".len()..].trim().to_string())))
-            }
-            _ if rest.starts_with("as ") => Ok(Command::SaveAs {
-                path: rest["as ".len()..].trim().to_string(),
-                force: false,
-            }),
-            path => Ok(Command::Write(Some(path.to_string()))),
-        },
-        "count" | "wc" => match rest {
-            "" => Ok(Command::Count),
-            // 字數 is one subject: how much there is, how much today, and how
-            // much was asked for. These were `:count`, `:progress` and
-            // `:target` (§5.2.3 ③).
-            "progress" => Ok(Command::Progress),
-            // A bare `:count target` is the question, not half a command:
-            // somebody who types it wants to know what the target is and how
-            // far off it is, and that is what `progress` answers.
-            "target" => Ok(Command::Progress),
-            _ if rest.starts_with("target ") => match rest["target ".len()..].trim() {
-                "off" | "none" | "0" => Ok(Command::Target(None)),
-                n => match n.parse::<usize>() {
-                    Ok(n) => Ok(Command::Target(Some(n))),
-                    Err(_) => Err(CommandError::InvalidArgument {
-                        command: "count target",
-                        value: n.to_string(),
-                    }),
-                },
-            },
-            other => Err(CommandError::InvalidArgument {
-                command: "count",
-                value: other.to_string(),
-            }),
-        },
-        "check" => match rest {
-            "usage" => Ok(Command::CheckUsage),
-            "punct" => Ok(Command::CheckPunct),
-            "charset" => Ok(Command::CheckCharset),
-            // Was `:conflicts` — the subject is a merge, `:check` is the verb
-            // (§5.2.3 ④).
-            "merge" => Ok(Command::Conflicts),
-            // `:check` on its own asks what to check rather than guessing:
-            // 用字 is the first of several, and the day 標點 lands a bare
-            // `:check` that had quietly meant one of them would change what
-            // it does under everybody who had typed it.
-            "" => Err(CommandError::MissingArgument("check")),
-            other => Err(CommandError::InvalidArgument {
-                command: "check",
-                value: other.to_string(),
-            }),
-        },
-        // 簡繁 (Feature #241). Two words and an optional `force`: the pair
-        // names an opencc config (`s tw` is `s2tw`), so what the editor runs is
-        // readable from what was typed.
-        "convert" => match rest.split_whitespace().collect::<Vec<_>>().as_slice() {
-            [] | ["opencc"] => Ok(Command::Convert(ConvertAsk::Explain)),
-            ["opencc", "install"] => Ok(Command::Convert(ConvertAsk::Opencc { update: false })),
-            ["opencc", "update"] => Ok(Command::Convert(ConvertAsk::Opencc { update: true })),
-            [from, to] | [from, to, "force"] => {
-                let force = rest.split_whitespace().count() == 3;
-                match (Side::parse(from), Side::parse(to)) {
-                    (Some(from), Some(to)) => Ok(Command::Convert(ConvertAsk::Run {
-                        from,
-                        to,
-                        force,
-                    })),
-                    (None, _) => Err(CommandError::InvalidArgument {
-                        command: "convert",
-                        value: (*from).to_string(),
-                    }),
-                    (_, None) => Err(CommandError::InvalidArgument {
-                        command: "convert",
-                        value: (*to).to_string(),
-                    }),
-                }
-            }
-            other => Err(CommandError::InvalidArgument {
-                command: "convert",
-                value: other.join(" "),
-            }),
-        },
-        "goto" | "g" => rest
-            .parse::<usize>()
-            .map(Command::GotoLine)
-            .map_err(|_| CommandError::MissingArgument("goto")),
-        "recover" => Ok(Command::Recover { discard: false }),
-        "recover!" => Ok(Command::Recover { discard: true }),
-        // **`all` is a kind of quitting**, so it is a word under `quit` and
-        // the fold's own rule applies: `:quitall` was the half-long,
-        // half-short shape that rule exists to remove (#364). `:qa` is its
-        // initials and stays.
-        "quit" | "q" => match rest {
-            "" => Ok(Command::Quit { force: false }),
-            "all" => Ok(Command::QuitAll { force: false }),
-            "all!" => Ok(Command::QuitAll { force: true }),
-            other => Err(CommandError::InvalidArgument {
-                command: "quit",
-                value: other.to_string(),
-            }),
-        },
-        "quit!" | "q!" => Ok(Command::Quit { force: true }),
-        "undo" | "u" => Ok(Command::Undo),
-        "redo" | "red" => Ok(Command::Redo),
-        // 分詞邊界, from four sides — see [`Word`]. `:segment` and `:words`
-        // were two of them and are gone: one subject, one command.
-        "word" | "wd" => match rest.split_whitespace().collect::<Vec<_>>().as_slice() {
-            [] => Ok(Command::Word(WordCommand::Report)),
-            ["show"] => Ok(Command::Word(WordCommand::Show(None))),
-            ["show", "on"] => Ok(Command::Word(WordCommand::Show(Some(true)))),
-            ["show", "off"] => Ok(Command::Word(WordCommand::Show(Some(false)))),
-            // `:word show 字色` is the same question as `:word show on` — how
-            // this is drawn — so it lives under the same word rather than
-            // making the writer learn a second one.
-            ["show", how] if yumete_cjk::WordMark::parse(how).is_some() => Ok(Command::Word(
-                WordCommand::Mark(yumete_cjk::WordMark::parse(how).unwrap()),
-            )),
-            ["list"] => Ok(Command::Word(WordCommand::List)),
-            ["list", "reload"] => Ok(Command::Word(WordCommand::Reload)),
-            ["list", "edit"] => Ok(Command::Word(WordCommand::Edit)),
-            ["list", "global"] => Ok(Command::Word(WordCommand::Global)),
-            ["discover"] => Ok(Command::Word(WordCommand::Discover)),
-            ["habit"] => Ok(Command::Word(WordCommand::Habit)),
-            ["level"] => Ok(Command::Word(WordCommand::Level(None))),
-            ["level", name] => match yumete_cjk::WordLevel::parse(name) {
-                Some(level) => Ok(Command::Word(WordCommand::Level(Some(level)))),
-                None => Err(CommandError::InvalidArgument {
-                    command: "word level",
-                    value: (*name).to_string(),
-                }),
-            },
-            other => Err(CommandError::InvalidArgument {
-                command: "word",
-                value: other.join(" "),
-            }),
-        },
-        // Layout (Feature #61): `:layout` alone flips it, the two long forms
-        // name the layout outright.
-        "layout" | "lay" => {
-            if rest.is_empty() {
-                Ok(Command::SetLayout(None))
-            } else {
-                Layout::parse(rest)
-                    .map(|l| Command::SetLayout(Some(l)))
-                    .ok_or_else(|| CommandError::InvalidArgument {
-                        command: "layout",
-                        value: rest.to_string(),
-                    })
-            }
-        }
-        // Everything about the input method under one word. `:scheme` and
-        // `:chaifen` still work — a spelling somebody has learned is not worth
-        // taking away — but there is now one word to remember instead of two,
-        // and it lists what it takes.
-        "yume" => {
-            let mut parts = rest.split_whitespace();
-            // On its own it is the question, not a mistake: *which* 靈明 is
-            // answering, and where did it come from. A parent command with
-            // nothing after it should say where you are.
-            let Some(word) = parts.next() else {
-                return Ok(Command::YumeStatus);
-            };
-            match pick(word, YUME).map(|w| w.name) {
-                Some("which") => Ok(Command::YumeStatus),
-                Some("on") => Ok(Command::YumeLanguage(Engagement::Chinese)),
-                Some("abc") => Ok(Command::YumeLanguage(Engagement::Ascii)),
-                Some("off") => Ok(Command::YumeLanguage(Engagement::Off)),
-                Some("installed") => Ok(Command::InstalledScheme),
-                Some("builtin") => Ok(Command::BuiltinScheme),
-                Some("table") => match parts.next() {
-                    Some(path) => Ok(Command::UserTable(path.to_string())),
-                    None => Err(CommandError::MissingArgument("table")),
-                },
-                // No name is "the one the config asked for" — `:yume s` is the
-                // whole of starting to type.
-                Some("scheme") => Ok(Command::SetScheme(
-                    parts
-                        .next()
-                        .and_then(|tag| pick(tag, schemes()).map(|w| w.name))
-                        .unwrap_or("")
-                        .to_string(),
-                )),
-                Some("chaifen") => Ok(Command::SetChaifen(match parts.next() {
-                    None => None,
-                    Some(word) => Some(switch("chaifen", word)?),
-                })),
-                // On its own it is the question — which of the three is
-                // answering — the same as a bare `:yume`.
-                Some("commit") => match parts.next() {
-                    None => Ok(Command::YumeCommit(None)),
-                    // `auto` is 唯一 under the name people use for it; every
-                    // other spelling is picked by prefix, so `d` `u` `f` work.
-                    Some("auto") => Ok(Command::YumeCommit(Some("unique".to_string()))),
-                    Some(word) => match pick(word, COMMITS).map(|w| w.name) {
-                        Some(name) => Ok(Command::YumeCommit(Some(name.to_string()))),
-                        None => Err(CommandError::InvalidArgument {
-                            command: "yume commit",
-                            value: word.to_string(),
-                        }),
-                    },
-                },
-                // Likewise a question on its own — and one word for both
-                // halves of it, because「面板」is what a reader calls the
-                // thing whether it is drawn or not.
-                Some("panel") => match parts.next() {
-                    None => Ok(Command::YumePanel(None)),
-                    Some(word) => match pick(word, PANELS).map(|w| w.name) {
-                        Some(name) => Ok(Command::YumePanel(Some(name.to_string()))),
-                        None => Err(CommandError::InvalidArgument {
-                            command: "yume panel",
-                            value: word.to_string(),
-                        }),
-                    },
-                },
-                _ => Err(CommandError::InvalidArgument {
-                    command: "yume",
-                    value: word.to_string(),
-                }),
-            }
-        }
-
-        // 「墨香」 and `moxiang` are the same word, and a mood may be written
-        // with or without the theme's name: every combination of the two
-        // halves is a sentence, because there is nothing to be gained by
-        // refusing one.
-        "shot" | "shot!" => {
-            let force = word.ends_with('!');
-            let rest = rest.trim();
-            // The word, then whatever is left — which is a file name and may
-            // hold spaces, so it is split once rather than by whitespace.
-            let (kind, path) = match rest.split_once(char::is_whitespace) {
-                Some((kind, path)) => (kind, path.trim()),
-                None => (rest, ""),
-            };
-            let named = (!path.is_empty()).then(|| path.to_string());
-            let file = |how| Shot::File { how, path: named };
-            let shot = match pick(kind, SHOT).map(|w| w.name) {
-                // **Bare `:shot` is the screen.** 「截圖」 means a picture you
-                // can paste; the drawn page is the specialist and says so.
-                _ if kind.is_empty() => Shot::Screen,
-                // A name after `screen` is refused rather than dropped: the
-                // clipboard has nowhere to put one, and a path that quietly
-                // does nothing is how a person comes to hunt for a file that
-                // was never written.
-                Some("screen") if !path.is_empty() => {
-                    return Err(CommandError::TakesNoArgument {
-                        command: "shot screen",
-                        value: path.to_string(),
-                    })
-                }
-                Some("screen") => Shot::Screen,
-                Some("png") => file(ShotFormat::Png),
-                Some("html") => file(ShotFormat::Html),
-                Some("txt") => file(ShotFormat::Text),
-                _ => {
-                    return Err(CommandError::InvalidArgument {
-                        command: "shot",
-                        value: kind.to_string(),
-                    })
-                }
-            };
-            Ok(Command::Screenshot { shot, force })
-        }
-
-        "theme" => {
-            let mut name = None;
-            let mut mood = None;
-            for word in rest.split_whitespace() {
-                match pick(word, MOODS).map(|w| w.name) {
-                    Some("system") => mood = Some(Mood::System),
-                    Some("dark") => mood = Some(Mood::Dark),
-                    Some("light") => mood = Some(Mood::Light),
-                    // Anything else is a theme's name. Which names exist is
-                    // the front end's business — it is the one holding the
-                    // colours — so an unknown one is answered there, in a
-                    // sentence, rather than refused here as a syntax error.
-                    _ => {
-                        name = Some(match pick(word, THEMES).map(|w| w.name) {
-                            Some(known) => known.to_string(),
-                            None => word.to_string(),
-                        })
-                    }
-                }
-            }
-            Ok(Command::Theme { name, mood })
-        }
-
-        "clipboard" => match rest {
-            "yank" => Ok(Command::Clipboard { yank: true }),
-            "paste" => Ok(Command::Clipboard { yank: false }),
-            "" => Err(CommandError::MissingArgument("clipboard")),
-            other => Err(CommandError::InvalidArgument {
-                command: "clipboard",
-                value: other.to_string(),
-            }),
-        },
-        "syntax" | "syn" => Ok(Command::SetSyntax(if rest.is_empty() {
-            None
-        } else {
-            Some(rest.to_string())
-        })),
-        "pipe" => {
-            if rest.is_empty() {
-                Err(CommandError::MissingArgument("pipe"))
-            } else {
-                Ok(Command::Pipe(rest.to_string()))
-            }
-        }
-        "sh" => {
-            if rest.is_empty() {
-                Err(CommandError::MissingArgument("sh"))
-            } else {
-                Ok(Command::Shell {
-                    line: rest.to_string(),
-                    interactive: false,
-                })
-            }
-        }
-        // 版面 (§5.2.3 ③): how the page is *looked at*, and nothing that
-        // changes the file. Every word below stood at the top level until
-        // 2026-09-08. **The parent is transparent** — what may follow a word
-        // is what always followed the command — so these are the arms they
-        // were, one level deeper.
-        "view" => {
-            let (head, rest) = match rest.split_once(char::is_whitespace) {
-                Some((head, rest)) => (head, rest.trim()),
-                None => (rest, ""),
-            };
-            match head {
-                // On its own it says nothing about *which* of the twelve, so
-                // it asks rather than picking one.
-                "" => Err(CommandError::MissingArgument("view")),
-                // On its own it turns wrapping on and leaves the measure
-                // alone; a number sets the measure; `0` gives the window
-                // back; `off` stops wrapping altogether.
-                "wrap" => match rest {
-                    "" | "on" => Ok(Command::SetSoftWrap(true)),
-                    "off" => Ok(Command::SetSoftWrap(false)),
-                    "0" => Ok(Command::SetMeasure(None)),
-                    n => match n.parse::<usize>() {
-                        Ok(n) => Ok(Command::SetMeasure(Some(n))),
-                        Err(_) => Err(CommandError::InvalidArgument {
-                            command: "view wrap",
-                            value: n.to_string(),
-                        }),
-                    },
-                },
-                "dense" => Ok(Command::SetDense(match rest {
-                    "" => true,
-                    word => switch("view dense", word)?,
-                })),
-                "bands" => match rest {
-                    "" | "on" | "2" => Ok(Command::SetBands(2)),
-                    "off" | "1" => Ok(Command::SetBands(1)),
-                    n => match n.parse::<usize>() {
-                        Ok(n) if (1..=4).contains(&n) => Ok(Command::SetBands(n)),
-                        _ => Err(CommandError::InvalidArgument {
-                            command: "view bands",
-                            value: n.to_string(),
-                        }),
-                    },
-                },
-                "sentence" => Ok(Command::SetSentences(match rest {
-                    "" => true,
-                    word => switch("view sentence", word)?,
-                })),
-                "hanging" => Ok(Command::SetHanging(match rest {
-                    "" => None,
-                    word => Some(switch("view hanging", word)?),
-                })),
-                "numbers" => match rest {
-                    // On its own it says nothing about *what* of the
-                    // numbers, so it asks rather than guessing.
-                    "" => Err(CommandError::MissingArgument("view numbers")),
-                    "fill" => Ok(Command::SetNumberFill(None)),
-                    "fill on" => Ok(Command::SetNumberFill(Some(true))),
-                    "fill off" => Ok(Command::SetNumberFill(Some(false))),
-                    other => Err(CommandError::InvalidArgument {
-                        command: "view numbers",
-                        value: other.to_string(),
-                    }),
-                },
-                "typewriter" => Ok(Command::SetTypewriter(match rest {
-                    "" => Some(true),
-                    "toggle" => None,
-                    word => Some(switch("view typewriter", word)?),
-                })),
-                "focus" => Ok(Command::SetFocus(match rest {
-                    "" => Some(true),
-                    "toggle" => None,
-                    word => Some(switch("view focus", word)?),
-                })),
-                "meter" => Ok(Command::SetMeter(match rest {
-                    "" => Some(true),
-                    "toggle" => None,
-                    word => Some(switch("view meter", word)?),
-                })),
-                // Was `:note`, which was never about footnotes (§5.2.3 ④).
-                "punct" => Ok(Command::SetNote(match rest {
-                    "" => Some(true),
-                    "toggle" => None,
-                    word => Some(switch("view punct", word)?),
-                })),
-                // The bare word reports, the same shape `:render` has — and
-                // for the same reason: with three levels, 「which one am I
-                // on」 is a better use of the word than a fourth spelling of
-                // the middle one.
-                "hud" => match rest {
-                    "" => Ok(Command::ReportHud),
-                    "off" => Ok(Command::SetHud(crate::editor::Hud::Off)),
-                    "basic" => Ok(Command::SetHud(crate::editor::Hud::Basic)),
-                    "full" => Ok(Command::SetHud(crate::editor::Hud::Full)),
-                    other => Err(CommandError::InvalidArgument {
-                        command: "view hud",
-                        value: other.to_string(),
-                    }),
-                },
-                "preview" => Ok(Command::SetPreview(match rest {
-                    "" => true,
-                    word => switch("view preview", word)?,
-                })),
-                other => Err(CommandError::InvalidArgument {
-                    command: "view",
-                    value: other.to_string(),
-                }),
-            }
-        }
-        // **The bare word reports** (#283). It used to mean 中階, back when
-        // there were two levels and 「the other one」 named itself. With three
-        // — and three more dimensions taking their level from this one —
-        // 「which level am I on」 is the better use of the word, and it is the
-        // shape `:table rules` already had.
-        "render" => match rest {
-            "" => Ok(Command::ReportRender),
-            "basic" => Ok(Command::SetRender(crate::editor::Render::Basic)),
-            "off" => Ok(Command::SetRender(crate::editor::Render::Off)),
-            "full" => Ok(Command::SetRender(crate::editor::Render::Full)),
-            other => Err(CommandError::InvalidArgument {
-                command: "render",
-                value: other.to_string(),
-            }),
-        },
-        "indent" => match rest {
-            // A number is the *width*; a word is the level. `:indent 4` on a
-            // page at 中階 widens the indent and still does not fold, because
-            // those are two questions and the reader answered one of them.
-            // The bare word reports, for the reason bare `:render` reports:
-            // with three levels, 「which one am I on」 is the better use of it.
-            "" => Ok(Command::ReportIndent),
-            "full" => Ok(Command::SetIndentLevel(crate::editor::Render::Full)),
-            "basic" => Ok(Command::SetIndentLevel(crate::editor::Render::Basic)),
-            "off" | "0" => Ok(Command::SetIndentLevel(crate::editor::Render::Off)),
-            _ if rest.starts_with("hint") => {
-                match crate::zong::IndentHint::parse(rest.trim_start_matches("hint").trim()) {
-                    Some(hint) => Ok(Command::SetIndentHint(hint)),
-                    None => Err(CommandError::InvalidArgument {
-                        command: "indent hint",
-                        value: rest.trim_start_matches("hint").trim().to_string(),
-                    }),
-                }
-            }
-            n => match n.parse::<usize>() {
-                Ok(n) if n <= 8 => Ok(Command::SetIndent(n)),
-                _ => Err(CommandError::InvalidArgument {
-                    command: "indent",
-                    value: n.to_string(),
-                }),
-            },
-        },
-        // `:markdown footnote` and friends — what Markdown is *made of*,
-        // written for you. The verb is the language's, because these are things
-        // only a Markdown file has.
-        // **The verb is the same in every file; the config says how.** See
-        // `yumete_config::Runner`.
-        "format" | "fmt" => Ok(Command::Language("format".to_string())),
-        "run" => match rest.is_empty() {
-            true => Err(CommandError::MissingArgument("run")),
-            false => Ok(Command::Language(rest.to_string())),
-        },
-        "markdown" | "md" => match rest {
-            "" => Err(CommandError::MissingArgument("markdown")),
-            "footnote" | "fn" => Ok(Command::Markdown(MarkdownBit::Footnote)),
-            "footnote inline" | "fni" => Ok(Command::Markdown(MarkdownBit::InlineNote)),
-            other => Err(CommandError::InvalidArgument {
-                command: "markdown",
-                value: other.to_string(),
-            }),
-        },
-        "table" => match rest {
-            // **The bare word is the door; a level is a level.** `:table`
-            // reads the table the cursor is in — that is what it has always
-            // meant and it is not a surface. The three words say how much of
-            // one is drawn, and `off` is both: a page with no grid on it is a
-            // page you are not in.
-            "" => Ok(Command::EnterTable),
-            "off" => Ok(Command::SetTableLevel(crate::editor::TableLevel::Off)),
-            "basic" => Ok(Command::SetTableLevel(crate::editor::TableLevel::Basic)),
-            "full" => Ok(Command::SetTableLevel(crate::editor::TableLevel::Full)),
-            "check" => Ok(Command::CheckTable),
-            _ if rest.starts_with("detail ") => {
-                match rest["detail ".len()..].trim() {
-                    "off" => Ok(Command::ShowDetail(Some(false))),
-                    "on" => Ok(Command::ShowDetail(Some(true))),
-                    n => match n.parse::<usize>() {
-                        Ok(n) => Ok(Command::SetDetailWidth(n)),
-                        Err(_) => Err(CommandError::InvalidArgument {
-                            command: "table detail",
-                            value: n.to_string(),
-                        }),
-                    },
-                }
-            }
-            "detail" => Ok(Command::ShowDetail(None)),
-            _ if rest.starts_with("sort") => {
-                // `:table sort 1 a 2 d 4 a` — column, direction, column,
-                // direction. Nothing at all sorts by the column you are in.
-                let mut keys = Vec::new();
-                let mut words = rest["sort".len()..].split_whitespace();
-                while let Some(word) = words.next() {
-                    let Ok(column) = word.parse::<usize>() else {
-                        return Err(CommandError::InvalidArgument {
-                            command: "table sort",
-                            value: word.to_string(),
-                        });
-                    };
-                    let down = match words.next() {
-                        None | Some("a") | Some("asc") => false,
-                        Some("d") | Some("desc") => true,
-                        Some(other) => {
-                            return Err(CommandError::InvalidArgument {
-                                command: "table sort",
-                                value: other.to_string(),
-                            })
-                        }
-                    };
-                    keys.push((column, down));
-                }
-                Ok(Command::SortTable(keys))
-            }
-            "pipe" => Ok(Command::TableToPipe(None)),
-            "csv" => Ok(Command::TableToDelimited(',')),
-            _ if rest.starts_with("pipe ") || rest.starts_with("csv ") => {
-                let (word, arg) = rest.split_once(' ').unwrap_or((rest, ""));
-                match delimiter_named(arg.trim()) {
-                    Some(c) if word == "pipe" => Ok(Command::TableToPipe(Some(c))),
-                    Some(c) => Ok(Command::TableToDelimited(c)),
-                    None => Err(CommandError::InvalidArgument {
-                        command: match word {
-                            "pipe" => "table pipe",
-                            _ => "table csv",
-                        },
-                        value: arg.trim().to_string(),
-                    }),
-                }
-            }
-            "numbers" | "numbers on" => Ok(Command::SetTableNumbers(true)),
-            "numbers off" => Ok(Command::SetTableNumbers(false)),
-            // 「這一行是欄名還是資料」 — on its own it flips, because that is
-            // the question a 碼表 asks once and never again (#217).
-            // 「這張表到底是怎麼讀的」 — the answer is a file, so the
-            // command opens it rather than printing it (#218).
-            "schema" => Ok(Command::OpenTableSchema),
-            // 「迅速在 markdown 中插入一個三行四列表格」 (#276). Two numbers,
-            // 行 then 欄, the way it was asked for and the way a word
-            // processor's「插入表格」dialog asks. **`rows` counts the heading**:
-            // the rule row underneath is punctuation, and nobody means it when
-            // they say three.
-            _ if rest == "new" || rest.starts_with("new ") => {
-                let spec = rest["new".len()..].trim();
-                let mut numbers = spec.split(['x', 'X', '×', ' ', '\t']).filter(|w| !w.is_empty());
-                let rows = numbers.next().unwrap_or("3");
-                let columns = numbers.next().unwrap_or("3");
-                match (rows.parse::<usize>(), columns.parse::<usize>()) {
-                    (Ok(r), Ok(c)) if (1..=200).contains(&r) && (1..=32).contains(&c) => {
-                        Ok(Command::NewTable { rows: r, columns: c })
-                    }
-                    _ => Err(CommandError::InvalidArgument {
-                        command: "table new",
-                        value: spec.to_string(),
-                    }),
-                }
-            }
-            "header" => Ok(Command::SetTableHeader(None)),
-            "header on" => Ok(Command::SetTableHeader(Some(true))),
-            "header off" => Ok(Command::SetTableHeader(Some(false))),
-            "rules" => Ok(Command::SetTableRules(None)),
-            _ if rest.starts_with("rules ") => {
-                match crate::table::Rules::parse(rest.trim_start_matches("rules ")) {
-                    Some(rules) => Ok(Command::SetTableRules(Some(rules))),
-                    None => Err(CommandError::InvalidArgument {
-                        command: "table rules",
-                        value: rest["rules ".len()..].to_string(),
-                    }),
-                }
-            }
-            // Was `:row` (§5.2.3 ④): `row` under `:table` would have meant
-            // the axis, and the axis is what `find` takes.
-            _ if rest == "jump" || rest.starts_with("jump ") => {
-                let name = rest["jump".len()..].trim();
-                if name.is_empty() {
-                    Err(CommandError::MissingArgument("table jump"))
-                } else {
-                    Ok(Command::GotoRow(name.to_string()))
-                }
-            }
-            // Was `:search`, whose two words *are* the axis (§5.2.3 ④). With
-            // no direction it is a row search, because that is what a search
-            // is anywhere but a table.
-            _ if rest == "find" || rest.starts_with("find ") => {
-                let rest = rest["find".len()..].trim();
-                let (by, pattern) = match rest.split_once(char::is_whitespace) {
-                    Some((word, rest)) if pick(word, AXIS).map(|w| w.name) == Some("column") => {
-                        (Axis::Column, rest.trim())
-                    }
-                    Some((word, rest)) if pick(word, AXIS).map(|w| w.name) == Some("row") => {
-                        (Axis::Row, rest.trim())
-                    }
-                    _ => (Axis::Row, rest),
-                };
-                if pattern.is_empty() {
-                    Err(CommandError::MissingArgument("table find"))
-                } else {
-                    Ok(Command::Search {
-                        pattern: pattern.to_string(),
-                        by,
-                    })
-                }
-            }
-            other => Err(CommandError::InvalidArgument {
-                command: "table",
-                value: other.to_string(),
-            }),
-        },
-        // On its own it says what the step is; a number sets it. `0` is the
-        // terminal's own step — one unit a notch.
-        "wheel" => match rest {
-            "" => Ok(Command::SetWheelStep(None)),
-            n => match n.parse::<usize>() {
-                Ok(n) => Ok(Command::SetWheelStep(Some(n))),
-                Err(_) => Err(CommandError::InvalidArgument {
-                    command: "wheel",
-                    value: n.to_string(),
-                }),
-            },
-        },
-        // **A hyphen, because these are two actions and not a subject and its
-        // kind** (2026-09-10). `:buffer close` is a *kind of* buffer command
-        // and `:write all` a *kind of* write, so the tree spells them with a
-        // space and the menu drills into them. 「Write **and** quit」 is not a
-        // kind of writing — it is two verbs — and it earns the hyphen that
-        // says so. It also settles the ambiguity that spelling cost: `write`
-        // takes a path, so `:write quit` had to be read as either a word or a
-        // file called `quit`, and `:write quit!` as a file called `quit!`.
-        // One token, and there is nothing to disambiguate.
-        "write-quit" | "wq" | "x" => Ok(Command::WriteQuit(if rest.is_empty() {
-            None
-        } else {
-            Some(rest.to_string())
-        })),
-        "buffer" => match rest {
-            "next" => Ok(Command::NextBuffer),
-            "previous" => Ok(Command::PreviousBuffer),
-            "close" => Ok(Command::CloseBuffer { force: false }),
-            "close!" => Ok(Command::CloseBuffer { force: true }),
-            "list" | "" => Ok(Command::ListBuffers),
-            other => Err(CommandError::InvalidArgument {
-                command: "buffer",
-                value: other.to_string(),
-            }),
-        },
-        "export" | "ex" | "export!" | "ex!" => {
-            let mut parts = rest.splitn(2, char::is_whitespace);
-            let format = parts.next().unwrap_or("").trim();
-            if format.is_empty() {
-                return Err(CommandError::MissingArgument("export"));
-            }
-            let path = parts
-                .next()
-                .map(|p| p.trim().to_string())
-                .filter(|p| !p.is_empty());
-            Ok(Command::Export {
-                format: format.to_string(),
-                path,
-                force: word.ends_with('!'),
-            })
-        }
-        "grep" | "gr" => {
-            if rest.is_empty() {
-                Err(CommandError::MissingArgument("grep"))
-            } else {
-                Ok(Command::Grep(rest.to_string()))
-            }
-        }
-        "diff" => Ok(Command::Diff(match rest.trim().is_empty() {
-            true => None,
-            false => Some(rest.trim().to_string()),
-        })),
-        "replace" | "replace!" => {
-            if rest.trim().is_empty() {
-                Err(CommandError::MissingArgument("replace"))
-            } else {
-                Ok(Command::ReplaceFound(rest.to_string(), word.ends_with('!')))
-            }
-        }
-        "tutor" => Ok(Command::Tutor),
-        "help" => Ok(Command::Help(match rest.is_empty() {
-            true => None,
-            false => Some(rest.to_string()),
-        })),
-        "toc" | "outline" => Ok(Command::Outline(if rest.is_empty() {
-            None
-        } else {
-            match rest.parse::<usize>() {
-                Ok(n) => Some(n),
-                Err(_) => return Err(CommandError::MissingArgument("toc")),
-            }
-        })),
-        // `:ruby` on its own is the verb — edit the reading here. With a word
-        // after it, it is the setting: whether readings are laid out at all,
-        // and which spellings of them count.
-        "ruby" if rest.is_empty() => Ok(Command::Ruby),
-        "ruby" => {
-            let mut parts = rest.split_whitespace();
-            let first = parts.next().unwrap_or("");
-            let second = parts.next();
-            let on = |word: Option<&str>| match word {
-                None | Some("on") => Ok(true),
-                Some("off") => Ok(false),
-                Some(other) => Err(CommandError::InvalidArgument {
-                    command: "ruby",
-                    value: other.to_string(),
-                }),
-            };
-            match first {
-                // Before the dialect arm below, which would read `auto` as a
-                // dialect name and answer 「no such thing」.
-                "auto" => match second {
-                    None => Ok(Command::AutoRuby { rare: false }),
-                    Some("rare") => Ok(Command::AutoRuby { rare: true }),
-                    Some(other) => Err(CommandError::InvalidArgument {
-                        command: "ruby auto",
-                        value: other.to_string(),
-                    }),
-                },
-                "off" => Ok(Command::SetRubyLevel(crate::editor::Render::Off)),
-                "basic" => Ok(Command::SetRubyLevel(crate::editor::Render::Basic)),
-                "full" => Ok(Command::SetRubyLevel(crate::editor::Render::Full)),
-                "format" => {
-                    let name = second.ok_or(CommandError::MissingArgument("ruby format"))?;
-                    let dialect =
-                        Dialect::parse_name(name).ok_or_else(|| CommandError::InvalidArgument {
-                            command: "ruby",
-                            value: name.to_string(),
-                        })?;
-                    Ok(Command::FormatRuby(dialect))
-                }
-                name => {
-                    let dialect =
-                        Dialect::parse_name(name).ok_or_else(|| CommandError::InvalidArgument {
-                            command: "ruby",
-                            value: name.to_string(),
-                        })?;
-                    Ok(Command::RenderRuby {
-                        dialect,
-                        on: on(second)?,
-                    })
-                }
-            }
-        }
-
-        other => Err(CommandError::Unknown(other.to_string())),
     }
+
+    // **Nothing is left below** (#368). Every command is read by the one
+    // walk, from its own declaration; what stands here is the answer for a
+    // word that names none of them.
+    Err(CommandError::Unknown(word.to_string()))
 }
 
 /// One entry of the command list: what to type, and what it does.
+
 /// What was asked of `:convert`.
 ///
 /// Three shapes rather than one because they are three different questions:
@@ -1352,7 +536,7 @@ pub enum ConvertAsk {
         /// not bring it back.
         force: bool,
     },
-    /// `:convert opencc install` / `:convert opencc update`.
+    /// `:convert-opencc install` / `:convert-opencc update`.
     Opencc {
         update: bool,
     },
@@ -1369,8 +553,14 @@ pub struct Entry {
     pub aliases: &'static [&'static str],
     /// One line saying what it does — short enough to sit beside the name.
     pub help: &'static str,
-    /// What may follow it.
-    pub args: Args,
+    /// What may follow it, in the order it is typed (#368).
+    pub params: &'static [Param],
+    /// **What it means** — the one place a command's meaning is written down.
+    ///
+    /// `None` while a family still goes through the hand-written arms of
+    /// [`parse`]; when the last one is gone, so is the `Option` and so are
+    /// they.
+    pub build: Option<fn(&Parsed) -> Result<Command, CommandError>>,
     /// What has to be true before it does anything.
     pub needs: &'static [Need],
 }
@@ -1434,68 +624,83 @@ impl ShotFormat {
     }
 }
 
-/// What may follow a command, or one of its words.
+/// One parameter a command takes, in the order it is typed (#368).
 ///
-/// **A parent command is not a mechanism of its own.** `:yume scheme` is a
-/// command whose argument happens to be a verb, and that is the whole of it:
-/// implement completing an *argument* and grouping falls out for nothing, with
-/// no second code path to keep honest and no second thing for a reader to
-/// learn. It also means a group can be one level deep or three without the
-/// completion knowing the difference.
-pub enum Args {
-    /// Nothing follows.
-    None,
-    /// One of these words — subcommands are exactly this.
-    Words(&'static [Word]),
+/// **A command's name is one word and its parameters follow it**, the way a
+/// function's name is one word and its arguments follow it — `:view-wrap on`
+/// is `view_wrap(on)`. The tree this replaced could not say that: `:view-wrap`
+/// and `:write-all` were the same shape as `:write 第三章.md`, so a word list
+/// that swallowed a path had to be spelled `Args::PathOr` and 中文 file names
+/// were nearly lost to it (#225).
+#[derive(Clone, Copy)]
+pub enum Param {
+    /// One of these words.
+    ///
+    /// `default` is what the command means with the parameter left off, and
+    /// **a value list should nearly always have one**: a setting that cannot
+    /// answer 「which am I now」 is a setting with a hole in it. `None` makes
+    /// the parameter required, which is right for `:open`'s path and wrong for
+    /// `:render`'s level.
+    Words {
+        of: &'static [Word],
+        default: Option<&'static str>,
+    },
+    /// One of these words, **or anything else** — `or` is the placeholder to
+    /// show for the anything.
+    ///
+    /// Not a mixture for its own sake: `:view-wrap` takes `on｜off｜0` and it
+    /// also takes a measure, and a reader who cannot see the three words has
+    /// to be told them. This is what `Args::PathOr` was, said once for every
+    /// command that needs it rather than once for `:write`.
+    WordsOr {
+        of: &'static [Word],
+        default: Option<&'static str>,
+        or: &'static str,
+    },
     /// A path, completed from the file system by the caller.
     Path,
-    /// A path **or** one of these words — `:write`, and so far only `:write`.
-    ///
-    /// Not a mixture for its own sake: `:write all` and `:write as` had to
-    /// join `:write` (§5.2.3 ③) without `:w 第三章.md` ceasing to be a path,
-    /// and a word list that swallowed the path would have taken 中文 file
-    /// names away from the one command that most needs them (#225).
-    PathOr(&'static [Word]),
-    /// Anything at all; the string is the placeholder to show while typing.
-    Free(&'static str),
     /// One of the input schemes — **whichever ones are installed** (#169).
-    ///
-    /// The one argument in the table that is not written in the table. Every
-    /// other list here is a closed set the editor defines (`on｜off`,
-    /// `markdown｜typst｜text`); the schemes are a directory. A build that ships
-    /// only 冰雪 should offer only 冰雪, and one that ships none of them falls
-    /// back to the five this crate knows, which is what [`schemes`] answers.
     Schemes,
+    /// Anything at all; the string is the placeholder to show while typing.
+    /// Takes the whole of what is left, so it may hold spaces.
+    Free(&'static str),
 }
 
-impl Args {
-    /// The words this argument may be, as they stand now — `None` when it is
+impl Param {
+    /// The words this parameter may be, as they stand now — `None` when it is
     /// not a word list at all.
     ///
     /// **Every reader of a word list goes through here**, and that is the point
-    /// rather than a convenience: `Args::Schemes` is answered from a registry
-    /// that a `match` arm on `Args::Words` would silently skip, and skipping it
-    /// means a scheme that is installed does not appear. Written as one
-    /// accessor so there is one place to be right.
+    /// rather than a convenience: `Param::Schemes` is answered from a registry
+    /// that a `match` arm on `Param::Words` would silently skip, and skipping
+    /// it means a scheme that is installed does not appear.
     pub fn words(&self) -> Option<&'static [Word]> {
         match self {
-            Args::Words(list) | Args::PathOr(list) => Some(list),
-            Args::Schemes => Some(schemes()),
+            Param::Words { of, .. } | Param::WordsOr { of, .. } => Some(of),
+            Param::Schemes => Some(schemes()),
             _ => None,
         }
     }
 
-    /// What may follow the command, for a listing: `<檔名>`, `on|off`, or
-    /// nothing at all.
+    /// What this parameter defaults to when it is left off, if anything.
+    pub fn default(&self) -> Option<&'static str> {
+        match self {
+            Param::Words { default, .. } | Param::WordsOr { default, .. } => *default,
+            _ => None,
+        }
+    }
+
+    /// Whether it takes the whole of what is left rather than one word.
+    fn takes_the_rest(&self) -> bool {
+        matches!(self, Param::Path | Param::Free(_))
+    }
+
+    /// What may follow, for a listing: `<檔名>`, `on|off`, or a placeholder.
     pub fn hint(&self) -> String {
-        // A path beside its words reads as both, in that order: the file name
-        // is what `:write` is for, and `all`｜`as` are the two exceptions.
-        if let Args::PathOr(words) = self {
-            let mut out = say!("cmd.arg.path");
-            for w in *words {
-                out.push('｜');
-                out.push_str(w.name);
-            }
+        if let Param::WordsOr { of, or, .. } = self {
+            let mut out: String = of.iter().map(|w| w.name).collect::<Vec<_>>().join("｜");
+            out.push('｜');
+            out.push_str(or);
             return out;
         }
         match self.words() {
@@ -1505,11 +710,52 @@ impl Args {
                 .collect::<Vec<_>>()
                 .join("｜"),
             None => match self {
-                Args::Path => say!("cmd.arg.path"),
-                Args::Free(what) => (*what).to_string(),
+                Param::Path => say!("cmd.arg.path"),
+                Param::Free(what) => (*what).to_string(),
                 _ => String::new(),
             },
         }
+    }
+}
+
+/// A command line after the walk has read it: which command, and what stood in
+/// each of its declared parameters.
+///
+/// Handed to [`Entry::build`], which is the **only** place a command's meaning
+/// is written down. What a parameter may be is declared once, checked once,
+/// and refused once — so `:view-wrap sideways` is answered in the same words
+/// as `:render sideways`, which forty-four hand-written arms never managed.
+pub struct Parsed<'a> {
+    /// The command's own name, as the table spells it.
+    pub name: &'static str,
+    /// Whether a `!` was typed after the name.
+    pub force: bool,
+    /// One entry per declared parameter, written out in full — a word list's
+    /// own spelling, or the text as it was typed.
+    args: Vec<&'a str>,
+    /// Whatever was left when the declared parameters ran out. Empty for
+    /// every regular command; the irregular few read it themselves.
+    pub rest: &'a str,
+}
+
+impl<'a> Parsed<'a> {
+    /// What stood in parameter `i`, or `None` if it was left off.
+    pub fn arg(&self, i: usize) -> Option<&'a str> {
+        self.args.get(i).copied().filter(|a| !a.is_empty())
+    }
+
+    /// What stood in parameter `i`, refusing to guess if it was left off.
+    pub fn need(&self, i: usize) -> Result<&'a str, CommandError> {
+        self.arg(i).ok_or(CommandError::MissingArgument(self.name))
+    }
+
+    /// Parameter `i` as a number, in the command's own name if it is not one.
+    pub fn number(&self, i: usize) -> Result<usize, CommandError> {
+        let text = self.need(i)?;
+        text.parse().map_err(|_| CommandError::InvalidArgument {
+            command: self.name,
+            value: text.to_string(),
+        })
     }
 }
 
@@ -1539,13 +785,12 @@ pub fn set_schemes(found: &[(&str, &str)]) {
             name: Box::leak(tag.to_string().into_boxed_str()),
             help: Box::leak(name.to_string().into_boxed_str()),
             needs: &[],
-            then: Args::None,
         })
         .collect();
     let _ = FOUND_SCHEMES.set(Box::leak(words.into_boxed_slice()));
 }
 
-/// The schemes `:yume scheme` offers: what was found, else the built-in five.
+/// The schemes `:yume-scheme` offers: what was found, else the built-in five.
 pub fn schemes() -> &'static [Word] {
     FOUND_SCHEMES.get().copied().unwrap_or(SCHEMES)
 }
@@ -1560,8 +805,8 @@ pub fn schemes() -> &'static [Word] {
 ///
 /// Everything else in the tree is a word that says what it is, and a note
 /// repeating it would be noise on every row to save one.
-fn note_for(args: &Args, word: &Word) -> Option<&'static str> {
-    match matches!(args, Args::Schemes) && FOUND_SCHEMES.get().is_some() {
+fn note_for(param: &Param, word: &Word) -> Option<&'static str> {
+    match matches!(param, Param::Schemes) && FOUND_SCHEMES.get().is_some() {
         true => Some(word.help),
         false => None,
     }
@@ -1579,35 +824,21 @@ const SHOT: &[Word] = &[
         name: "screen",
         help: "cmd.shot.screen",
         needs: &[],
-        then: Args::None,
     },
     Word {
         name: "png",
         help: "cmd.shot.png",
         needs: &[],
-        then: Args::Path,
     },
     Word {
         name: "html",
         help: "cmd.shot.html",
         needs: &[],
-        then: Args::Path,
     },
     Word {
         name: "txt",
         help: "cmd.shot.txt",
         needs: &[],
-        then: Args::Path,
-    },
-];
-
-/// The pieces of Markdown `:markdown` can write.
-const MARKDOWN_BITS: &[Word] = &[
-    Word {
-        name: "footnote",
-        help: "cmd.markdown-bits.footnote",
-        needs: &[],
-        then: Args::Words(FOOTNOTE_KINDS),
     },
 ];
 
@@ -1616,7 +847,6 @@ const FOOTNOTE_KINDS: &[Word] = &[Word {
     name: "inline",
     help: "cmd.footnote-kinds.inline",
     needs: &[],
-    then: Args::None,
 }];
 
 /// A piece of Markdown the editor can write for you.
@@ -1630,17 +860,16 @@ pub enum MarkdownBit {
 
 /// The sections `:help` offers.
 const HELP_SECTIONS: &[Word] = &[
-    Word { name: "chinese", help: "help.chinese.section-summary", then: Args::None, needs: &[] },
-    Word { name: "vertical", help: "help.vertical.title", then: Args::None, needs: &[] },
-    Word { name: "table", help: "help.table.section-summary", then: Args::None, needs: &[] },
-    Word { name: "commands", help: "help.common.every-command", then: Args::None, needs: &[] },
+    Word { name: "chinese", help: "help.chinese.section-summary", needs: &[] },
+    Word { name: "vertical", help: "help.vertical.title", needs: &[] },
+    Word { name: "table", help: "help.table.section-summary", needs: &[] },
+    Word { name: "commands", help: "help.common.every-command", needs: &[] },
 ];
 
 /// One word a command accepts, and what may follow *it*.
 pub struct Word {
     pub name: &'static str,
     pub help: &'static str,
-    pub then: Args,
     /// What has to be true before this word does anything (Feature #170).
     pub needs: &'static [Need],
 }
@@ -1680,62 +909,84 @@ impl Need {
     pub fn how(self) -> &'static str {
         match self {
             Need::Vertical => ":layout vertical",
-            Need::Loose => ":view dense off",
+            Need::Loose => ":view-dense off",
             Need::Table => ":table",
-            Need::Scheme => ":yume scheme",
+            Need::Scheme => ":yume-scheme",
         }
     }
 }
 
-/// The words after `command`, each written out in full, or `None` if they
-/// already were.
+/// Read a line against what its command says it takes (#368).
 ///
-/// Walks the same word lists the menu shows, so the abbreviation it offers is
-/// the abbreviation that parses — one rule rather than a promise the parser
-/// has to remember to keep. The walk stops the moment the list runs out (a
-/// path, free text, a delimiter, a number), so nothing a writer typed for
-/// themselves is ever rewritten: `:table pipe " "` still hands `" "` through
-/// untouched, and an unresolvable word is left exactly as it stands for the
-/// arm below to refuse by its own name.
-fn spell_out(command: &str, rest: &str) -> Option<String> {
-    let entry = COMMANDS.iter().find(|e| {
-        let named = |w: &str| e.name == w || e.aliases.contains(&w);
-        named(command) || command.strip_suffix('!').is_some_and(named)
-    })?;
-    let mut args = &entry.args;
-    let mut out = String::with_capacity(rest.len());
-    let mut left = rest;
-    let mut changed = false;
-    while let Some(list) = args.words() {
-        let head = left.trim_start();
-        if head.is_empty() {
-            break;
+/// **One walk for every command**, so that what a parameter may be is declared
+/// once, checked once and refused once. Forty-four hand-written arms each
+/// invented their own answer to 「that is not one of the words」, and each one
+/// was a place the table could drift away from without anybody noticing — the
+/// menu printed `check (ch)` beside words `:table ch` did not accept, and had
+/// done for a year.
+///
+/// `None` when the command has not been moved over yet.
+/// `on｜off｜toggle` as the editor's own `Option<bool>`: **the other way** is
+/// 「I am not saying which, turn it round」, which is `None`.
+fn switched(p: &Parsed) -> Result<Option<bool>, CommandError> {
+    Ok(match p.need(0)? {
+        "toggle" => None,
+        word => Some(word == "on"),
+    })
+}
+
+fn read_params(
+    entry: &'static Entry,
+    rest: &str,
+    force: bool,
+) -> Option<Result<Command, CommandError>> {
+    let build = entry.build?;
+    let mut left = rest.trim();
+    let mut args: Vec<&str> = Vec::with_capacity(entry.params.len());
+    for param in entry.params {
+        // **The last kind of parameter eats the line.** A path may hold
+        // spaces, and so may the text of a `:grep`; a word never does.
+        if param.takes_the_rest() {
+            args.push(left);
+            left = "";
+            continue;
         }
-        let (head, tail) = match head.split_once(char::is_whitespace) {
-            Some(split) => split,
-            None => (head, ""),
+        let (head, tail) = match left.split_once(char::is_whitespace) {
+            Some((head, tail)) => (head, tail.trim_start()),
+            None => (left, ""),
         };
-        let Some(found) = pick(head, list) else { break };
-        changed |= found.name != head;
-        if !out.is_empty() {
-            out.push(' ');
+        if head.is_empty() {
+            // Left off: the default if it has one, and otherwise nothing —
+            // `build` decides whether it could do without it.
+            args.push(param.default().unwrap_or(""));
+            continue;
         }
-        out.push_str(found.name);
-        args = &found.then;
+        match (param.words(), matches!(param, Param::WordsOr { .. })) {
+            // **The prefix rule is the walk's, not the parser's.** The menu
+            // prints the shortest unambiguous spelling of every word; that
+            // parenthesis is a promise, and this is where it is kept.
+            (Some(list), open) => match pick(head, list) {
+                Some(word) => args.push(word.name),
+                None if open => args.push(head),
+                None => {
+                    return Some(Err(CommandError::InvalidArgument {
+                        command: entry.name,
+                        value: head.to_string(),
+                    }))
+                }
+            },
+            (None, _) => args.push(head),
+        }
         left = tail;
     }
-    if !changed {
-        return None;
-    }
-    let left = left.trim_start();
-    if !left.is_empty() {
-        if !out.is_empty() {
-            out.push(' ');
-        }
-        out.push_str(left);
-    }
-    Some(out)
+    Some(build(&Parsed {
+        name: entry.name,
+        force,
+        args,
+        rest: left,
+    }))
 }
+
 
 /// The command a typed word names, by prefix when it is not a whole name.
 ///
@@ -1772,65 +1023,55 @@ fn resolve(word: &str) -> &str {
         {
             return word;
         }
-        let mut banged = COMMANDS.iter().filter_map(|e| {
-            let named = e.name.starts_with(stem) || e.aliases.iter().any(|a| a.starts_with(stem));
-            named.then(|| forceable(e.name)).flatten()
-        });
-        if let (Some(only), None) = (banged.next(), banged.next()) {
-            return only;
+        let banged: Vec<&Entry> = COMMANDS
+            .iter()
+            .filter(|e| {
+                (e.name.starts_with(stem) || e.aliases.iter().any(|a| a.starts_with(stem)))
+                    && forceable(e.name).is_some()
+            })
+            .collect();
+        if let [only] = banged.as_slice() {
+            return forceable(only.name).unwrap_or(word);
+        }
+        // **And the head wins here too** (#368): `:qu!` reaches `quit!` and
+        // `quit-all!`, and the same hierarchy settles it — a spelling that
+        // reaches a family's head reaches the head.
+        if let Some(head) = banged.iter().find(|e| {
+            banged.iter().all(|o| {
+                o.name == e.name
+                    || (o.name.len() > e.name.len() + 1
+                        && o.name.starts_with(e.name)
+                        && o.name.as_bytes()[e.name.len()] == b'-')
+            })
+        }) {
+            return forceable(head.name).unwrap_or(word);
         }
         return word;
     }
-    let mut hits = COMMANDS.iter().filter(|e| e.name.starts_with(word));
-    match (hits.next(), hits.next()) {
-        (Some(only), None) => only.name,
-        _ => word,
+    let hits: Vec<&Entry> = COMMANDS.iter().filter(|e| e.name.starts_with(word)).collect();
+    if let [only] = hits.as_slice() {
+        return only.name;
+    }
+    // **A head is not ambiguous with its own family** (#368). `:tab` matches
+    // `table` and the twelve `table-…` beside it, and it has always meant the
+    // first of them: the hyphen says the others are *under* it — 「命令雖然
+    // 現在變成了 hyphen 連接的詞，但本質上還是有級別的」 (author, 2026-09-10)
+    // — so a spelling that reaches the head reaches the head.
+    let child_of = |head: &str, name: &str| {
+        name.len() > head.len() + 1 && name.starts_with(head) && name.as_bytes()[head.len()] == b'-'
+    };
+    match hits
+        .iter()
+        .find(|e| hits.iter().all(|o| o.name == e.name || child_of(e.name, o.name)))
+    {
+        Some(stem) => stem.name,
+        None => word,
     }
 }
 
 /// What `:export` writes, and what follows the format — **the file name comes
 /// second** (§5.2.2 fault 7).
 ///
-/// The table used to declare `Args::Free("<檔名>")` while `parse` read the
-/// format first, so `:export 第三章.md` was answered 「沒有『第三章.md』這種
-/// 格式」 by a prompt that had just asked for a file name. And because a free
-/// argument has no words in it, `html` `typst` `csv` `tsv` were the only words
-/// this editor accepts that appeared nowhere in `::`'s corpus: four names you
-/// had to already know to find.
-const EXPORT_FORMATS: &[Word] = &[
-    Word {
-        name: "html",
-        help: "cmd.export.html",
-        needs: &[],
-        then: Args::Free("<檔名>"),
-    },
-    Word {
-        name: "typst",
-        help: "cmd.export.typst",
-        needs: &[],
-        then: Args::Free("<檔名>"),
-    },
-    // A grid, not a page: these come from the table under the cursor. See
-    // [`crate::export::delimiter_of`] for why they are not `Format` variants.
-    //
-    // **No `Need::Table`**, although one would parse: away from a table the
-    // export already answers with the row it wanted and the `|` it was looking
-    // for, and a prerequisite would replace that with 「需要：表格模式——句末加
-    // force 一併打開」 — an offer to *open* a table where there is none.
-    Word {
-        name: "csv",
-        help: "cmd.export.csv",
-        needs: &[],
-        then: Args::Free("<檔名>"),
-    },
-    Word {
-        name: "tsv",
-        help: "cmd.export.tsv",
-        needs: &[],
-        then: Args::Free("<檔名>"),
-    },
-];
-
 /// The commands that take a `!`, so a prefix of one can too — spelled the way
 /// `parse` reads them back, because that spelling is the other half of the
 /// answer and a second list of it goes stale.
@@ -1840,11 +1081,11 @@ const EXPORT_FORMATS: &[Word] = &[
 /// list cannot drift from itself.
 const FORCEABLE: &[&str] = &[
     // Spelled as a whole line, because the fold moved this bang off the head
-    // and onto a word: `:bclose!` is now `:buffer close!`, and a bang belongs
+    // and onto a word: `:bclose!` is now `:buffer-close!`, and a bang belongs
     // to the line it ends, not to `buffer`.
-    "buffer close!",
-    "quit all!",
+    "buffer-close!",
     "write!",
+    "quit-all!",
     "reload!",
     "quit!",
     "export!",
@@ -1867,7 +1108,7 @@ fn forceable(name: &str) -> Option<&'static str> {
 /// that cannot are the tab — which the command line would never see, because
 /// `Tab` completes — and the space, which is spelled out for the same reason
 /// and is accepted here even though the sniffer will never guess it: a writer
-/// who says `:table pipe " "` has looked at their data and decided.
+/// who says `:table-pipe " "` has looked at their data and decided.
 fn delimiter_named(word: &str) -> Option<char> {
     match word {
         "tab" | "\\t" => Some('\t'),
@@ -1894,7 +1135,15 @@ pub fn shortest(
     name: &'static str,
     among: impl Iterator<Item = &'static str>,
 ) -> Option<&'static str> {
-    let others: Vec<&str> = among.filter(|&o| o != name).collect();
+    // **A name's own family is not competition** (#368). `y` reaches `yume`
+    // and the eight `yume-…` under it, and `resolve` settles that the same way
+    // a reader would: a spelling that reaches the head reaches the head. So
+    // the shortest spelling is measured against everything *except* what is
+    // beneath this name.
+    let others: Vec<&str> = among
+        .filter(|&o| o != name)
+        .filter(|o| !(o.len() > name.len() + 1 && o.starts_with(name) && o.as_bytes()[name.len()] == b'-'))
+        .collect();
     for (at, _) in name.char_indices().skip(1) {
         if !others.iter().any(|o| o.starts_with(&name[..at])) {
             return Some(&name[..at]);
@@ -1905,7 +1154,7 @@ pub fn shortest(
 
 /// The one word of `from` that `typed` names, exactly or by prefix.
 ///
-/// `:yume s l` is `:yume scheme lingming` — because `s` is the only word there
+/// `:yume s l` is `:yume-scheme lingming` — because `s` is the only word there
 /// starting with `s`, and `l` the only scheme starting with `l`. An ambiguous
 /// prefix names nothing rather than guessing: `:ruby t` could be `typst` and
 /// nothing else, but if a second `t` word were ever added it would stop
@@ -1960,6 +1209,15 @@ fn entry_named(head: &str) -> Option<&'static Entry> {
 /// A word offered by completion, whether a command or an argument.
 #[derive(Debug, Clone)]
 pub struct Choice {
+    /// How many commands stand **under** this one, folded away (#369).
+    ///
+    /// `Some(12)` on the row that stands for the whole `view-…` family while
+    /// nothing has narrowed it. The hyphen says a name has levels — 「`view-aaaa`
+    /// 就是 `view` 的二級命令」 — and a menu is glanced at rather than read, so
+    /// the levels are what it folds along. Nothing is *declared* for this: it
+    /// is read off the names, which is why there is still one place a command
+    /// says what it is called.
+    pub family: Option<usize>,
     pub name: &'static str,
     /// The other spellings of this same command, joined for the brackets.
     ///
@@ -2008,11 +1266,23 @@ impl Choice {
     /// What Tab writes for this choice, and what the menu shows.
     ///
     /// A promoted child carries its parent with it: picking `scheme` out of
-    /// `:yume`'s list has to leave `:yume scheme` on the line, not `:scheme`.
+    /// `:yume`'s list has to leave `:yume-scheme` on the line, not `:scheme`.
     pub fn written(&self) -> String {
         match self.under.is_empty() {
             true => self.name.to_string(),
             false => format!("{} {}", self.under, self.name),
+        }
+    }
+
+    /// The same, **as a menu shows it** — with what is folded behind it (#369).
+    ///
+    /// Told apart from [`Choice::written`] because Tab writes one of these
+    /// onto the command line and a menu draws the other: a row reading
+    /// `ruby…  +4` says what is there, and is not something anybody can type.
+    pub fn shown(&self) -> String {
+        match self.family {
+            Some(more) => format!("{}…  +{more}", self.written()),
+            None => self.written(),
         }
     }
 }
@@ -2023,12 +1293,13 @@ impl Choice {
 /// no way to find out from there that the input method's whole set of commands
 /// lives under that word. The list says so: the command, and then everything
 /// it takes, spelled the way you would type it.
-fn children(under: &'static str, args: &Args) -> Vec<Choice> {
-    match args.words() {
+fn children(under: &'static str, param: &Param) -> Vec<Choice> {
+    match param.words() {
         Some(list) => list
             .iter()
             .map(|w| Choice {
                 name: w.name,
+                family: None,
                 needs: w.needs,
                 alias: None,
                 // The short form of a word is only short beside its siblings;
@@ -2038,7 +1309,7 @@ fn children(under: &'static str, args: &Args) -> Vec<Choice> {
                 help: w.help,
                 leading: "",
                 under: under.to_string(),
-                note: note_for(args, w),
+                note: note_for(param, w),
             })
             .collect(),
         _ => Vec::new(),
@@ -2057,23 +1328,24 @@ fn children(under: &'static str, args: &Args) -> Vec<Choice> {
 /// `:table`, and answering it with a dozen grandchildren called `top` and
 /// `tight` would bury the answer under the guesses.
 fn deep(
-    args: &'static Args,
+    param: &'static Param,
     path: &[&'static str],
     typed: &str,
     leading: &'static str,
     out: &mut Vec<Choice>,
 ) {
-    // The `Args` rather than the list it holds, because a note is a property of
-    // *where the words came from* and not of the words (#291) — `note_for` has
-    // to be able to ask.
-    let Some(list) = args.words() else {
+    // The `Param` rather than the list it holds, because a note is a property
+    // of *where the words came from* and not of the words (#291) — `note_for`
+    // has to be able to ask.
+    let Some(list) = param.words() else {
         return;
     };
     for w in list {
-        let note = note_for(args, w);
+        let note = note_for(param, w);
         if w.name.starts_with(typed) || note.is_some_and(|n| n.contains(typed)) {
             out.push(Choice {
                 name: w.name,
+                family: None,
                 needs: w.needs,
                 alias: None,
                 // Same reason as `children`: a short form is only short beside
@@ -2085,9 +1357,6 @@ fn deep(
                 note,
             });
         }
-        let mut below = path.to_vec();
-        below.push(w.name);
-        deep(&w.then, &below, typed, leading, out);
     }
 }
 
@@ -2103,7 +1372,29 @@ fn deep(
 fn deep_from_root(typed: &str) -> Vec<Choice> {
     let mut out = Vec::new();
     for e in COMMANDS {
-        deep(&e.args, &[e.name], typed, ":", &mut out);
+        // **Every parameter, not only the first.** `:vert` reaches
+        // `:layout vertical` because `vertical` is what `:layout`'s one
+        // parameter may be; a mood is what `:theme`'s *second* may be, and a
+        // reader typing `dark` means that just as plainly.
+        let before = out.len();
+        for param in e.params {
+            deep(param, &[e.name], typed, ":", &mut out);
+        }
+        // `:convert` reads a side into both of its slots, so the same word
+        // stands in two of them — and it is still one word.
+        let mut seen: Vec<&str> = Vec::new();
+        let tail: Vec<Choice> = out
+            .split_off(before)
+            .into_iter()
+            .filter(|c| match seen.contains(&c.name) {
+                true => false,
+                false => {
+                    seen.push(c.name);
+                    true
+                }
+            })
+            .collect();
+        out.extend(tail);
     }
     let about = |c: &Choice| c.under.starts_with("help");
     out.sort_by(|a, b| {
@@ -2112,77 +1403,6 @@ fn deep_from_root(typed: &str) -> Vec<Choice> {
     });
     out
 }
-
-/// `:yume` and what may follow it — the input method's own commands, under
-/// the one word a reader would think of when looking for them.
-const YUME: &[Word] = &[
-    Word {
-        name: "scheme",
-        help: "cmd.yume.scheme",
-        needs: &[],
-        then: Args::Schemes,
-    },
-    Word {
-        name: "chaifen",
-        help: "cmd.yume.chaifen",
-        needs: &[Need::Scheme],
-        then: Args::Words(ON_OFF),
-    },
-    Word {
-        name: "commit",
-        help: "cmd.yume.commit",
-        needs: &[Need::Scheme],
-        then: Args::Words(COMMITS),
-    },
-    Word {
-        name: "panel",
-        help: "cmd.yume.panel",
-        needs: &[Need::Scheme],
-        then: Args::Words(PANELS),
-    },
-    Word {
-        name: "which",
-        help: "cmd.yume.which",
-        needs: &[],
-        then: Args::None,
-    },
-    Word {
-        name: "on",
-        help: "cmd.yume.on",
-        needs: &[],
-        then: Args::None,
-    },
-    Word {
-        name: "abc",
-        help: "cmd.yume.abc",
-        needs: &[],
-        then: Args::None,
-    },
-    Word {
-        name: "off",
-        help: "cmd.yume.off",
-        needs: &[],
-        then: Args::None,
-    },
-    Word {
-        name: "installed",
-        help: "cmd.yume.installed",
-        needs: &[],
-        then: Args::None,
-    },
-    Word {
-        name: "builtin",
-        help: "cmd.yume.builtin",
-        needs: &[],
-        then: Args::None,
-    },
-    Word {
-        name: "table",
-        help: "cmd.yume.table",
-        needs: &[],
-        then: Args::Path,
-    },
-];
 
 /// Dark, light, or whichever the terminal is.
 ///
@@ -2203,118 +1423,11 @@ const AXIS: &[Word] = &[
         name: "row",
         help: "cmd.axis.row",
         needs: &[],
-        then: Args::Free("<正則>"),
     },
     Word {
         name: "column",
         help: "cmd.axis.column",
         needs: &[],
-        then: Args::Free("<正則>"),
-    },
-];
-
-/// What `:table` takes.
-const TABLE: &[Word] = &[
-    Word {
-        name: "off",
-        help: "cmd.table.off",
-        needs: &[],
-        then: Args::None,
-    },
-    Word {
-        name: "basic",
-        help: "cmd.table.basic",
-        needs: &[],
-        then: Args::None,
-    },
-    Word {
-        name: "full",
-        help: "cmd.table.full",
-        needs: &[],
-        then: Args::None,
-    },
-    Word {
-        name: "new",
-        help: "cmd.table.new",
-        needs: &[],
-        then: Args::Free("<行> <欄>"),
-    },
-    Word {
-        name: "check",
-        help: "cmd.table.check",
-        needs: &[Need::Table],
-        then: Args::None,
-    },
-    Word {
-        name: "rules",
-        help: "cmd.table.rules",
-        needs: &[Need::Table],
-        then: Args::Words(RULES),
-    },
-    Word {
-        name: "sort",
-        help: "cmd.table.sort",
-        needs: &[Need::Table],
-        then: Args::Free("<欄> a｜d …"),
-    },
-    Word {
-        name: "detail",
-        help: "cmd.table.detail",
-        needs: &[Need::Table],
-        then: Args::Free("on｜off｜<寬度>"),
-    },
-    Word {
-        name: "numbers",
-        help: "cmd.table.numbers",
-        needs: &[Need::Table],
-        then: Args::Words(ON_OFF),
-    },
-    Word {
-        name: "header",
-        help: "cmd.table.header",
-        needs: &[Need::Table],
-        then: Args::Words(ON_OFF),
-    },
-    Word {
-        name: "schema",
-        help: "cmd.table.schema",
-        needs: &[Need::Table],
-        then: Args::None,
-    },
-    // Neither of these needs a table to be *open*: turning a block of text into
-    // one is how you get a table in the first place.
-    // Was `:row` — under `:table`, `row` would have meant the axis, and the
-    // axis is what `find` takes (§5.2.3 ④).
-    Word {
-        name: "jump",
-        help: "cmd.table.jump",
-        needs: &[Need::Table],
-        then: Args::Free("<那一行的名字>"),
-    },
-    // Was `:search`, whose two words *are* the axis (§5.2.3 ④).
-    //
-    // **No `Need::Table`**, for the reason the parse arm gives: with no
-    // direction this is a row search, and a row search away from a table is an
-    // ordinary search — which is all `:search` ever was. Standing under
-    // `:table` does not make it need one; asking for one here made
-    // `:table find 第55行` answer 「需要：表格模式」 and search nothing.
-    Word {
-        name: "find",
-        help: "cmd.table.find",
-        needs: &[],
-        then: Args::Words(AXIS),
-    },
-    Word {
-        name: "pipe",
-        help: "cmd.table.pipe",
-        needs: &[],
-        then: Args::Free("<分隔>"),
-    },
-    Word {
-        name: "csv",
-        help: "cmd.table.csv",
-        needs: &[],
-        then: Args::Free("<分隔>"),
     },
 ];
 
@@ -2325,19 +1438,16 @@ const HUD: &[Word] = &[
         name: "off",
         help: "cmd.hud.off",
         needs: &[],
-        then: Args::None,
     },
     Word {
         name: "basic",
         help: "cmd.hud.basic",
         needs: &[],
-        then: Args::None,
     },
     Word {
         name: "full",
         help: "cmd.hud.full",
         needs: &[],
-        then: Args::None,
     },
 ];
 
@@ -2346,85 +1456,35 @@ const RENDER: &[Word] = &[
         name: "off",
         help: "cmd.render.off",
         needs: &[],
-        then: Args::None,
     },
     Word {
         name: "basic",
         help: "cmd.render.basic",
         needs: &[],
-        then: Args::None,
     },
     Word {
         name: "full",
         help: "cmd.render.full",
         needs: &[],
-        then: Args::None,
     },
 ];
 
-/// What `:clipboard` does — the system one, not a register.
-const CLIPBOARD: &[Word] = &[
-    Word {
-        name: "yank",
-        help: "cmd.clipboard.yank",
-        needs: &[],
-        then: Args::None,
-    },
-    Word {
-        name: "paste",
-        help: "cmd.clipboard.paste",
-        needs: &[],
-        then: Args::None,
-    },
-];
-
-/// What `:buffer` does.
-const BUFFERS: &[Word] = &[
-    Word {
-        name: "list",
-        help: "cmd.buffers.list",
-        needs: &[],
-        then: Args::None,
-    },
-    Word {
-        name: "next",
-        help: "cmd.buffers.next",
-        needs: &[],
-        then: Args::None,
-    },
-    Word {
-        name: "previous",
-        help: "cmd.buffers.previous",
-        needs: &[],
-        then: Args::None,
-    },
-    Word {
-        name: "close",
-        help: "cmd.buffers.close",
-        needs: &[],
-        then: Args::None,
-    },
-];
-
-/// What `:view wrap` takes.
+/// What `:view-wrap` takes.
 const WRAP: &[Word] = &[
     Word {
         name: "on",
         help: "cmd.wrap.on",
         needs: &[],
-        then: Args::None,
     },
     Word {
         name: "off",
         help: "cmd.wrap.off",
         needs: &[],
-        then: Args::None,
     },
     Word {
         name: "0",
         help: "cmd.wrap.0",
         needs: &[],
-        then: Args::None,
     },
 ];
 
@@ -2435,24 +1495,28 @@ const WRAP: &[Word] = &[
 /// setting written here means the same thing in the input method's own panel
 /// on macOS and Windows. `auto` is taken as 唯一 because that is what the
 /// habit calls it — 自動上屏.
+/// How much of 靈明 is answering — `:yume` on its own means the first of them.
+const ENGAGEMENT: &[Word] = &[
+    Word { name: "on", help: "cmd.yume.on", needs: &[] },
+    Word { name: "abc", help: "cmd.yume.abc", needs: &[] },
+    Word { name: "off", help: "cmd.yume.off", needs: &[] },
+];
+
 const COMMITS: &[Word] = &[
     Word {
         name: "delayed",
         help: "cmd.commits.delayed",
         needs: &[],
-        then: Args::None,
     },
     Word {
         name: "unique",
         help: "cmd.commits.unique",
         needs: &[],
-        then: Args::None,
     },
     Word {
         name: "fluency",
         help: "cmd.commits.fluency",
         needs: &[],
-        then: Args::None,
     },
 ];
 
@@ -2461,13 +1525,11 @@ const PANELS: &[Word] = &[
         name: "full",
         help: "cmd.panels.full",
         needs: &[],
-        then: Args::None,
     },
     Word {
         name: "bare",
         help: "cmd.panels.bare",
         needs: &[],
-        then: Args::None,
     },
 ];
 
@@ -2476,31 +1538,26 @@ const SCHEMES: &[Word] = &[
         name: "lingming",
         help: "cmd.schemes.lingming",
         needs: &[],
-        then: Args::None,
     },
     Word {
         name: "xingchen",
         help: "cmd.schemes.xingchen",
         needs: &[],
-        then: Args::None,
     },
     Word {
         name: "qingyun",
         help: "cmd.schemes.qingyun",
         needs: &[],
-        then: Args::None,
     },
     Word {
         name: "riyue",
         help: "cmd.schemes.riyue",
         needs: &[],
-        then: Args::None,
     },
     Word {
         name: "pinyin",
         help: "cmd.schemes.pinyin",
         needs: &[],
-        then: Args::None,
     },
 ];
 
@@ -2510,222 +1567,91 @@ const SYNTAXES: &[Word] = &[
         name: "markdown",
         help: "cmd.syntaxes.markdown",
         needs: &[],
-        then: Args::None,
     },
     Word {
         name: "typst",
         help: "cmd.syntaxes.typst",
         needs: &[],
-        then: Args::None,
     },
     Word {
         name: "text",
         help: "cmd.syntaxes.text",
         needs: &[],
-        then: Args::None,
     },
 ];
 
 /// Which way the page runs.
 /// `:theme` and what may follow it.
 ///
-/// The mood words sit at both levels, so `:theme dark` and `:theme moxiang
-/// dark` are both sentences — the theme's name is worth saying and worth
-/// leaving out, and neither should be a special case.
-const THEMES: &[Word] = &[
-    // Was `:appearance` (§5.2.3 ③). The `theme` arm has always accepted these
-    // three; only the listing did not know them.
-    Word {
-        name: "system",
-        help: "cmd.moods.system",
-        needs: &[],
-        then: Args::None,
-    },
-    Word {
-        name: "dark",
-        help: "cmd.moods.dark",
-        needs: &[],
-        then: Args::None,
-    },
-    Word {
-        name: "light",
-        help: "cmd.moods.light",
-        needs: &[],
-        then: Args::None,
-    },
-    Word {
-        // 墨香
-        name: "ink",
-        help: "cmd.themes.ink",
-        needs: &[],
-        then: Args::Words(MOODS),
-    },
-    Word {
-        // 黑白
-        name: "bw",
-        help: "cmd.themes.bw",
-        needs: &[],
-        then: Args::Words(MOODS),
-    },
-    Word {
-        // 藍曬
-        name: "cyanotype",
-        help: "cmd.themes.cyanotype",
-        needs: &[],
-        then: Args::Words(MOODS),
-    },
-    Word {
-        // 琥珀
-        name: "amber",
-        help: "cmd.themes.amber",
-        needs: &[],
-        then: Args::Words(MOODS),
-    },
-    Word {
-        // 莫高
-        name: "mogao",
-        help: "cmd.themes.mogao",
-        needs: &[],
-        then: Args::Words(MOODS),
-    },
-    Word {
-        // 莫蘭迪
-        name: "morandi",
-        help: "cmd.themes.morandi",
-        needs: &[],
-        then: Args::Words(MOODS),
-    },
-    Word {
-        // 夜螢
-        name: "firefly",
-        help: "cmd.themes.firefly",
-        needs: &[],
-        then: Args::Words(MOODS),
-    },
-    Word {
-        // 明度階
-        name: "meridian",
-        help: "cmd.themes.meridian",
-        needs: &[],
-        then: Args::Words(MOODS),
-    },
-    Word {
-        // 陶窯
-        name: "kiln",
-        help: "cmd.themes.kiln",
-        needs: &[],
-        then: Args::Words(MOODS),
-    },
-    Word {
-        // 靛橘
-        name: "complement",
-        help: "cmd.themes.complement",
-        needs: &[],
-        then: Args::Words(MOODS),
-    },
-];
-
-/// `:indent` and what may follow it.
-const INDENT: &[Word] = &[
-    Word {
-        name: "off",
-        help: "cmd.indent.off",
-        needs: &[],
-        then: Args::None,
-    },
-    Word {
-        name: "basic",
-        help: "cmd.indent.basic",
-        needs: &[],
-        then: Args::None,
-    },
-    Word {
-        name: "full",
-        help: "cmd.indent.full",
-        needs: &[],
-        then: Args::None,
-    },
-    Word {
-        name: "hint",
-        help: "cmd.indent.hint",
-        needs: &[],
-        then: Args::Words(HINTS),
-    },
-];
-
 /// What is drawn in a paragraph's opening squares.
+/// How much 首行縮進 is drawn — the same three levels `:render` has.
+const INDENT_LEVELS: &[Word] = &[
+    Word { name: "off", help: "cmd.indent.off", needs: &[] },
+    Word { name: "basic", help: "cmd.indent.basic", needs: &[] },
+    Word { name: "full", help: "cmd.indent.full", needs: &[] },
+];
+
 const HINTS: &[Word] = &[
     Word {
         name: "none",
         help: "cmd.hints.none",
         needs: &[],
-        then: Args::None,
     },
     Word {
         name: "color",
         help: "cmd.hints.color",
         needs: &[],
-        then: Args::None,
     },
     Word {
         name: "symbol",
         help: "cmd.hints.symbol",
         needs: &[],
-        then: Args::None,
-    },
-];
-
-/// `:view numbers` and what may follow it.
-const NUMBERS: &[Word] = &[
-    Word {
-        name: "fill",
-        help: "cmd.numbers.fill",
-        needs: &[],
-        then: Args::Words(ON_OFF),
     },
 ];
 
 /// How a table's columns are told apart.
+/// How much of a `|` table is drawn — the same three levels `:render` has,
+/// in this dimension's own words.
+const TABLE_LEVELS: &[Word] = &[
+    Word { name: "off", help: "cmd.table.off", needs: &[] },
+    Word { name: "basic", help: "cmd.table.basic", needs: &[] },
+    Word { name: "full", help: "cmd.table.full", needs: &[] },
+];
+
 const RULES: &[Word] = &[
     Word {
         name: "off",
         help: "cmd.rules.off",
         needs: &[],
-        then: Args::None,
     },
     Word {
         name: "color",
         help: "cmd.rules.color",
         needs: &[],
-        then: Args::None,
     },
     Word {
         name: "line",
         help: "cmd.rules.line",
         needs: &[],
-        then: Args::Words(STROKES),
     },
 ];
 
-/// Which line `:table rules line` draws.
+/// Which line `:table-rules line` draws.
 const STROKES: &[Word] = &[
     Word {
         name: "solid",
         help: "cmd.strokes.solid",
         needs: &[],
-        then: Args::None,
     },
     Word {
         name: "dash",
         help: "cmd.strokes.dash",
         needs: &[],
-        then: Args::None,
     },
     Word {
         name: "double",
         help: "cmd.strokes.double",
         needs: &[],
-        then: Args::None,
     },
 ];
 
@@ -2736,24 +1662,140 @@ const STROKES: &[Word] = &[
 /// they were five of a kind. They are not: one says which set of inks, the
 /// other says which way round they go. `:theme` asks the second on its
 /// own, and `:theme moxiang dark` still asks both in one line.
-const MOODS: &[Word] = &[
+/// The mood words sit at both levels, so `:theme dark` and `:theme moxiang
+/// dark` are both sentences — the theme's name is worth saying and worth
+/// leaving out, and neither should be a special case.
+const THEMES: &[Word] = &[
+    // Was `:appearance` (§5.2.3 ③). The `theme` arm has always accepted these
+    // three; only the listing did not know them.
     Word {
         name: "system",
         help: "cmd.moods.system",
         needs: &[],
-        then: Args::None,
     },
     Word {
         name: "dark",
         help: "cmd.moods.dark",
         needs: &[],
-        then: Args::None,
     },
     Word {
         name: "light",
         help: "cmd.moods.light",
         needs: &[],
-        then: Args::None,
+    },
+    Word {
+        // 墨香
+        name: "ink",
+        help: "cmd.themes.ink",
+        needs: &[],
+    },
+    Word {
+        // 黑白
+        name: "bw",
+        help: "cmd.themes.bw",
+        needs: &[],
+    },
+    Word {
+        // 藍曬
+        name: "cyanotype",
+        help: "cmd.themes.cyanotype",
+        needs: &[],
+    },
+    Word {
+        // 琥珀
+        name: "amber",
+        help: "cmd.themes.amber",
+        needs: &[],
+    },
+    Word {
+        // 莫高
+        name: "mogao",
+        help: "cmd.themes.mogao",
+        needs: &[],
+    },
+    Word {
+        // 莫蘭迪
+        name: "morandi",
+        help: "cmd.themes.morandi",
+        needs: &[],
+    },
+    Word {
+        // 夜螢
+        name: "firefly",
+        help: "cmd.themes.firefly",
+        needs: &[],
+    },
+    Word {
+        // 明度階
+        name: "meridian",
+        help: "cmd.themes.meridian",
+        needs: &[],
+    },
+    Word {
+        // 陶窯
+        name: "kiln",
+        help: "cmd.themes.kiln",
+        needs: &[],
+    },
+    Word {
+        // 靛橘
+        name: "complement",
+        help: "cmd.themes.complement",
+        needs: &[],
+    },
+];
+
+/// The table used to declare `Args::Free("<檔名>")` while `parse` read the
+/// format first, so `:export 第三章.md` was answered 「沒有『第三章.md』這種
+/// 格式」 by a prompt that had just asked for a file name. And because a free
+/// argument has no words in it, `html` `typst` `csv` `tsv` were the only words
+/// this editor accepts that appeared nowhere in `::`'s corpus: four names you
+/// had to already know to find.
+const EXPORT_FORMATS: &[Word] = &[
+    Word {
+        name: "html",
+        help: "cmd.export.html",
+        needs: &[],
+    },
+    Word {
+        name: "typst",
+        help: "cmd.export.typst",
+        needs: &[],
+    },
+    // A grid, not a page: these come from the table under the cursor. See
+    // [`crate::export::delimiter_of`] for why they are not `Format` variants.
+    //
+    // **No `Need::Table`**, although one would parse: away from a table the
+    // export already answers with the row it wanted and the `|` it was looking
+    // for, and a prerequisite would replace that with 「需要：表格模式——句末加
+    // force 一併打開」 — an offer to *open* a table where there is none.
+    Word {
+        name: "csv",
+        help: "cmd.export.csv",
+        needs: &[],
+    },
+    Word {
+        name: "tsv",
+        help: "cmd.export.tsv",
+        needs: &[],
+    },
+];
+
+const MOODS: &[Word] = &[
+    Word {
+        name: "system",
+        help: "cmd.moods.system",
+        needs: &[],
+    },
+    Word {
+        name: "dark",
+        help: "cmd.moods.dark",
+        needs: &[],
+    },
+    Word {
+        name: "light",
+        help: "cmd.moods.light",
+        needs: &[],
     },
 ];
 
@@ -2762,146 +1804,59 @@ const LAYOUTS: &[Word] = &[
         name: "vertical",
         help: "cmd.layouts.vertical",
         needs: &[],
-        then: Args::None,
     },
     Word {
         name: "horizontal",
         help: "cmd.layouts.horizontal",
         needs: &[],
-        then: Args::None,
     },
 ];
 
-/// `:ruby` and what may follow it — the four `render-ruby-*` and
-/// `format-ruby-*` commands, folded into the one word a reader remembers.
-const RUBY: &[Word] = &[
-    Word {
-        name: "off",
-        help: "cmd.ruby.off",
-        needs: &[],
-        then: Args::None,
-    },
-    Word {
-        name: "basic",
-        help: "cmd.ruby.basic",
-        needs: &[],
-        then: Args::None,
-    },
-    Word {
-        name: "full",
-        help: "cmd.ruby.full",
-        needs: &[],
-        then: Args::None,
-    },
-    Word {
-        name: "auto",
-        help: "cmd.ruby.auto",
-        needs: &[],
-        then: Args::Words(&[Word {
-            name: "rare",
-            help: "cmd.ruby.auto.rare",
-            needs: &[],
-            then: Args::None,
-        }]),
-    },
-    Word {
-        name: "html",
-        help: "cmd.ruby.html",
-        needs: &[],
-        then: Args::Words(ON_OFF),
-    },
-    Word {
-        name: "typst",
-        help: "cmd.ruby.typst",
-        needs: &[],
-        then: Args::Words(ON_OFF),
-    },
-    Word {
-        name: "format",
-        help: "cmd.ruby.format",
-        needs: &[],
-        then: Args::Words(&[
-            Word {
-                name: "html",
-                help: "cmd.ruby.format.html",
-                needs: &[],
-        then: Args::None,
-            },
-            Word {
-                name: "typst",
-                help: "cmd.ruby.format.typst",
-                needs: &[],
-        then: Args::None,
-            },
-        ]),
-    },
-];
-
-/// `:word` — one subject, three sides of it.
-const WORD_TOPICS: &[Word] = &[
-    Word {
-        name: "show",
-        help: "cmd.word-topics.show",
-        needs: &[],
-        then: Args::Words(WORD_SHOW),
-    },
-    Word {
-        name: "list",
-        help: "cmd.word-topics.list",
-        needs: &[],
-        then: Args::Words(WORD_LISTS),
-    },
-    Word {
-        name: "level",
-        help: "cmd.word-topics.level",
-        needs: &[],
-        then: Args::Words(WORD_LEVELS),
-    },
-    Word {
-        name: "discover",
-        help: "cmd.word-topics.discover",
-        needs: &[],
-        then: Args::None,
-    },
-    Word {
-        name: "habit",
-        help: "cmd.word-topics.habit",
-        needs: &[],
-        then: Args::None,
-    },
-];
-
-/// What `:word show` may be given — **four words, not two**.
+/// What `:word-show` may be given — **four words, not two**.
 ///
 /// The parser has always taken `tint` and `ink` here (and 底色／字色, which
 /// `WordMark::parse` reads), while the table declared `ON_OFF`: so the two
 /// drawings ran, and the menu that exists to say what may follow `show` never
 /// mentioned them. Same shape as §5.2.2 fault 7 — a word the editor accepts
 /// and no reader can find is a word only its author has.
+/// How much of a reading is drawn — the same three levels `:render` has.
+const RUBY_LEVELS: &[Word] = &[
+    Word { name: "off", help: "cmd.ruby.off", needs: &[] },
+    Word { name: "basic", help: "cmd.ruby.basic", needs: &[] },
+    Word { name: "full", help: "cmd.ruby.full", needs: &[] },
+];
+
+/// What `:ruby-auto` may be asked for beyond the common readings.
+const RARE: &[Word] = &[
+    Word { name: "rare", help: "cmd.ruby.auto.rare", needs: &[] },
+];
+
+/// The dialects `:ruby-format` writes every reading into.
+const DIALECTS: &[Word] = &[
+    Word { name: "html", help: "cmd.ruby.format.html", needs: &[] },
+    Word { name: "typst", help: "cmd.ruby.format.typst", needs: &[] },
+];
+
 const WORD_SHOW: &[Word] = &[
     Word {
         name: "on",
         help: "cmd.on-off.on",
         needs: &[],
-        then: Args::None,
     },
     Word {
         name: "off",
         help: "hint.close",
         needs: &[],
-        then: Args::None,
     },
     Word {
         name: "tint",
         help: "cmd.word-show.tint",
         needs: &[],
-        then: Args::None,
     },
     Word {
         name: "ink",
         help: "cmd.word-show.ink",
         needs: &[],
-        then: Args::None,
     },
 ];
 
@@ -2910,19 +1865,16 @@ const WORD_LISTS: &[Word] = &[
         name: "reload",
         help: "cmd.word-lists.reload",
         needs: &[],
-        then: Args::None,
     },
     Word {
         name: "edit",
         help: "cmd.word-lists.edit",
         needs: &[],
-        then: Args::None,
     },
     Word {
         name: "global",
         help: "cmd.word-lists.global",
         needs: &[],
-        then: Args::None,
     },
 ];
 
@@ -2931,299 +1883,72 @@ const WORD_LEVELS: &[Word] = &[
         name: "strict",
         help: "cmd.word-levels.strict",
         needs: &[],
-        then: Args::None,
     },
     Word {
         name: "balanced",
         help: "cmd.word-levels.balanced",
         needs: &[],
-        then: Args::None,
     },
     Word {
         name: "full",
         help: "cmd.word-levels.full",
         needs: &[],
-        then: Args::None,
     },
 ];
 
 /// What `:check` can be asked to look over (Feature #233).
 ///
-/// Three words, and 空格 is the fourth. This is why `:check` took a word list
-/// from the first day it had one word: a command that had taken nothing at all
-/// would have had to be re-shaped here, and every `:check` anybody had typed
-/// would have changed meaning under them.
-const CHECK: &[Word] = &[
-    Word {
-        name: "usage",
-        help: "cmd.check.usage",
-        needs: &[],
-        then: Args::None,
-    },
-    Word {
-        name: "charset",
-        help: "cmd.check.charset",
-        needs: &[],
-        then: Args::None,
-    },
-    // Was `:conflicts`. The subject is a merge; `:check` is what one does to
-    // it (§5.2.3 ④).
-    Word {
-        name: "merge",
-        help: "cmd.check.merge",
-        needs: &[],
-        then: Args::None,
-    },
-    Word {
-        name: "punct",
-        help: "cmd.check.punct",
-        needs: &[],
-        then: Args::None,
-    },
+/// What `:convert-opencc` can be asked to do.
+/// The two halves of a 簡繁 conversion — which writing it is now, and which
+/// it should become.
+const SIDES: &[Word] = &[
+    Word { name: "s", help: "cmd.convert.s", needs: &[] },
+    Word { name: "t", help: "cmd.convert.t", needs: &[] },
+    Word { name: "tw", help: "cmd.convert.tw", needs: &[] },
+    Word { name: "hk", help: "cmd.convert.hk", needs: &[] },
+    Word { name: "jp", help: "cmd.convert.jp", needs: &[] },
+    Word { name: "c", help: "cmd.convert.c", needs: &[] },
+    Word { name: "g", help: "cmd.convert.g", needs: &[] },
 ];
 
-/// What `:convert opencc` can be asked to do.
+/// The word that says 「yes, the whole file, I mean it」.
+const FORCE: &[Word] = &[
+    Word { name: "force", help: "cmd.convert.force", needs: &[] },
+];
+
 const OPENCC: &[Word] = &[
     Word {
         name: "install",
         help: "cmd.opencc.install",
         needs: &[],
-        then: Args::None,
     },
     Word {
         name: "update",
         help: "cmd.opencc.update",
         needs: &[],
-        then: Args::None,
     },
 ];
 
 /// The side `:convert` starts from.
 ///
-/// The placeholder after each one lists **that side's** destinations rather
-/// than all seven: opencc has `s2tw` and `tw2s` but no `tw2hk`, and a menu that
-/// offered every pair would be offering combinations that fail at the command
-/// line. 日本新字体 only goes back to 繁體, so it says so.
-const CONVERT: &[Word] = &[
+/// `on｜off`, and **the other way** — which the parser has always accepted
+/// and no word list ever said (#368). A word the menu cannot show is a word
+/// only the code knows about, which is the drift this table exists to stop.
+const SWITCH: &[Word] = &[
     Word {
-        name: "s",
-        help: "cmd.convert.s",
+        name: "on",
+        help: "cmd.on-off.on",
         needs: &[],
-        then: Args::Free("t｜tw｜hk｜c｜g [force]"),
     },
     Word {
-        name: "t",
-        help: "cmd.convert.t",
+        name: "off",
+        help: "hint.close",
         needs: &[],
-        then: Args::Free("s｜tw｜hk｜jp｜c｜g"),
     },
     Word {
-        name: "tw",
-        help: "cmd.convert.tw",
+        name: "toggle",
+        help: "cmd.on-off.toggle",
         needs: &[],
-        then: Args::Free("s｜t｜c｜g [force]"),
-    },
-    Word {
-        name: "hk",
-        help: "cmd.convert.hk",
-        needs: &[],
-        then: Args::Free("s｜t｜c｜g [force]"),
-    },
-    Word {
-        name: "jp",
-        help: "cmd.convert.jp",
-        needs: &[],
-        then: Args::Free("t｜c｜g"),
-    },
-    Word {
-        name: "c",
-        help: "cmd.convert.c",
-        needs: &[],
-        then: Args::Free("s｜t｜tw｜hk｜jp｜g"),
-    },
-    Word {
-        name: "g",
-        help: "cmd.convert.g",
-        needs: &[],
-        then: Args::Free("s｜t｜tw｜hk｜jp｜c"),
-    },
-    Word {
-        name: "opencc",
-        help: "cmd.convert.opencc",
-        needs: &[],
-        then: Args::Words(OPENCC),
-    },
-];
-
-/// The one word `:reload` takes besides nothing at all.
-const RELOAD: &[Word] = &[Word {
-    name: "auto",
-    help: "cmd.reload.auto",
-    needs: &[],
-    then: Args::Words(ON_OFF),
-}];
-
-/// What a word means to a command that offers 「on｜off」.
-///
-/// A function, because **the reading is the half that goes stale**. Ten arms
-/// had written it out by hand and the eleventh forgot: `:view hanging` declares
-/// `Args::Words(ON_OFF)`, the hint prints `on｜off`, the menu offers both —
-/// and `parse` was `"hanging" => Ok(Command::ToggleHanging)` with `rest` never
-/// read, so `:view hanging off` turned hanging punctuation **on** (§5.2.2 fault 2).
-/// `every_listed_command_parses` could not see it: `:hanging off` *parses*. It
-/// simply did not listen.
-///
-/// `pick` rather than an equality test, because that is the rule everywhere
-/// else — the menu shows `of` as `off`'s shortest spelling, so `of` has to
-/// mean it. **What a missing word means stays with the caller**: `:readonly`
-/// on its own toggles, `:view dense` on its own is 密排, and neither is this
-/// function's to decide.
-fn switch(command: &'static str, word: &str) -> Result<bool, CommandError> {
-    match pick(word, ON_OFF).map(|w| w.name) {
-        Some("on") => Ok(true),
-        Some("off") => Ok(false),
-        _ => Err(CommandError::InvalidArgument {
-            command,
-            value: word.to_string(),
-        }),
-    }
-}
-
-/// 字數 — what `:count` can be asked (§5.2.3 ③).
-///
-/// One subject, three questions: how much there is, how much today, and how
-/// much was asked for. They were `:count`, `:progress` and `:target`.
-pub const COUNT: &[Word] = &[
-    Word {
-        name: "progress",
-        help: "cmd.count.progress",
-        needs: &[],
-        then: Args::None,
-    },
-    Word {
-        name: "target",
-        help: "cmd.count.target",
-        needs: &[],
-        then: Args::Free("<字數>｜off"),
-    },
-];
-
-/// The two words `:write` takes that are not a file name (§5.2.3 ③).
-///
-/// `:write all` was `:wa`, `:write as <檔名>` was `:saveas`. Everything else
-/// after `:write` is still a path, which is why the argument is
-/// [`Args::PathOr`] and not a plain word list.
-/// What `:quit` may be finished with.
-pub const QUIT: &[Word] = &[
-    Word {
-        name: "all",
-        help: "cmd.quit.all",
-        needs: &[],
-        then: Args::None,
-    },
-];
-
-pub const WRITE: &[Word] = &[
-    Word {
-        name: "all",
-        help: "cmd.write.all",
-        needs: &[],
-        then: Args::None,
-    },
-    Word {
-        name: "as",
-        help: "cmd.write.as",
-        needs: &[],
-        then: Args::Path,
-    },
-];
-
-/// 版面 — the twelve words of `:view` (§5.2.3 ③).
-///
-/// **Nothing here changes the file.** That is the whole membership test, and
-/// it is why `:render`, `:indent`, `:ruby` and `:table` stayed at the top
-/// level: those four are the dimensions the page is *written* in (§5.7), and
-/// `:render` sets three of them at once. These twelve say how the page is
-/// looked at, and every one of them stood at the top level until 2026-09-08.
-///
-/// **The parent is transparent.** What may follow a word here is exactly what
-/// followed the command it was — `:view bands 3` is `:bands 3`, needs and all
-/// — so the fold cost the words nothing but the four keystrokes of `:v `.
-pub const VIEW: &[Word] = &[
-    Word {
-        name: "wrap",
-        help: "cmd.view.wrap",
-        needs: &[],
-        then: Args::Words(WRAP),
-    },
-    Word {
-        name: "dense",
-        help: "cmd.view.dense",
-        needs: &[],
-        then: Args::Words(ON_OFF),
-    },
-    Word {
-        name: "bands",
-        help: "cmd.view.bands",
-        needs: &[Need::Vertical],
-        then: Args::Free("<幾條，1–4；不寫就是 2>"),
-    },
-    Word {
-        name: "sentence",
-        help: "cmd.view.sentence",
-        needs: &[Need::Vertical],
-        then: Args::Words(ON_OFF),
-    },
-    Word {
-        name: "hanging",
-        help: "cmd.view.hanging",
-        needs: &[Need::Vertical, Need::Loose],
-        then: Args::Words(ON_OFF),
-    },
-    Word {
-        name: "numbers",
-        help: "cmd.view.numbers",
-        needs: &[],
-        then: Args::Words(NUMBERS),
-    },
-    Word {
-        name: "typewriter",
-        help: "cmd.view.typewriter",
-        needs: &[],
-        then: Args::Words(ON_OFF),
-    },
-    Word {
-        name: "focus",
-        help: "cmd.view.focus",
-        needs: &[],
-        then: Args::Words(ON_OFF),
-    },
-    Word {
-        name: "meter",
-        help: "cmd.view.meter",
-        needs: &[],
-        then: Args::Words(ON_OFF),
-    },
-    // Was `:note`, and `:note` never named what it did (§5.2.3 ④): it draws
-    // 標點 in the margin, and a reader who guessed at the name guessed
-    // footnotes every time.
-    Word {
-        name: "punct",
-        help: "cmd.view.punct",
-        needs: &[],
-        then: Args::Words(ON_OFF),
-    },
-    Word {
-        name: "hud",
-        help: "cmd.view.hud",
-        needs: &[],
-        then: Args::Words(HUD),
-    },
-    Word {
-        name: "preview",
-        help: "cmd.view.preview",
-        needs: &[],
-        then: Args::Words(ON_OFF),
     },
 ];
 
@@ -3233,13 +1958,11 @@ const ON_OFF: &[Word] = &[
         name: "on",
         help: "cmd.on-off.on",
         needs: &[],
-        then: Args::None,
     },
     Word {
         name: "off",
         help: "hint.close",
         needs: &[],
-        then: Args::None,
     },
 ];
 
@@ -3250,90 +1973,275 @@ const ON_OFF: &[Word] = &[
 /// the list here rather than deriving it means adding a command is two edits —
 /// the price of the table being the one place that says what each one is *for*,
 /// which is what the user is reading when they cannot remember the name.
+/// What `:write` takes besides a path — the two that had to join it without
+/// `:w 第三章.md` ceasing to be a path (#225).
+pub const WRITE: &[Word] = &[
+    Word {
+        name: "all",
+        help: "cmd.write.all",
+        needs: &[],
+    },
+    Word {
+        name: "as",
+        help: "cmd.write.as",
+        needs: &[],
+    },
+];
+
 pub const COMMANDS: &[Entry] = &[
     Entry {
         name: "open",
         aliases: &["o", "e", "edit"],
         help: "cmd.commands.open",
         needs: &[],
-        args: Args::Path,
+        params: &[Param::Path],
+        build: Some(|p| Ok(Command::Open(p.need(0)?.to_string()))),
     },
     Entry {
         name: "new",
         aliases: &["enew"],
         help: "cmd.commands.new",
         needs: &[],
-        args: Args::Path,
+        params: &[],
+        build: Some(|_| Ok(Command::NewBuffer)),
     },
     Entry {
         name: "write",
         aliases: &["w"],
         help: "cmd.commands.write",
         needs: &[],
-        args: Args::PathOr(WRITE),
+        params: &[Param::Path],
+        build: Some(|p| {
+            // **A path, full stop** (#368). `Args::PathOr` existed only so
+            // that `:write-all` could sit beside `:write 第三章.md`, and a
+            // word list that swallowed a path nearly took 中文 file names away
+            // from the one command that most needs them (#225). With `all`
+            // and `as` commands of their own, the ambiguity is gone and so is
+            // the shape that carried it.
+            Ok(match p.force {
+                true => Command::WriteForce(p.arg(0).map(|s| s.to_string())),
+                false => Command::Write(p.arg(0).map(|s| s.to_string())),
+            })
+        }),
+    },
+    Entry {
+        name: "write-all",
+        aliases: &["wa"],
+        help: "cmd.write.all",
+        needs: &[],
+        params: &[],
+        build: Some(|_| Ok(Command::WriteAll)),
+    },
+    Entry {
+        name: "write-as",
+        aliases: &[],
+        help: "cmd.write.as",
+        needs: &[],
+        params: &[Param::Path],
+        build: Some(|p| {
+            Ok(Command::SaveAs {
+                path: p.need(0)?.to_string(),
+                force: p.force,
+            })
+        }),
     },
     Entry {
         name: "recover",
         aliases: &[],
         help: "cmd.commands.recover",
         needs: &[],
-        args: Args::None,
+        params: &[],
+        build: Some(|p| Ok(Command::Recover { discard: p.force })),
     },
     Entry {
         name: "reload",
         aliases: &[],
         help: "cmd.commands.reload",
         needs: &[],
-        args: Args::Words(RELOAD),
+        params: &[],
+        build: Some(|p| Ok(Command::Reload { force: p.force })),
     },
     Entry {
+        name: "reload-auto",
+        aliases: &[],
+        help: "cmd.reload.auto",
+        needs: &[],
+        params: &[Param::Words { of: ON_OFF, default: None }],
+        build: Some(|p| {
+            // The bang answers 「throw this buffer's changes away」, which is
+            // not a question `auto` asks — so `:reload-auto! on` is a typo,
+            // not a setting, and saying so beats obeying half of it.
+            match p.force {
+                true => Err(CommandError::InvalidArgument {
+                    command: "reload-auto",
+                    value: "!".to_string(),
+                }),
+                false => Ok(Command::ReloadAuto(p.arg(0).map(|w| w == "on"))),
+            }
+        }),
+    },
+    Entry {
+        // 只讀 (Feature #213).
         name: "readonly",
         aliases: &["ro"],
         help: "cmd.commands.readonly",
         needs: &[],
-        args: Args::Words(ON_OFF),
+        params: &[Param::Words {
+            of: ON_OFF,
+            default: None,
+        }],
+        build: Some(|p| Ok(Command::SetReadonly(p.arg(0).map(|w| w == "on")))),
     },
     Entry {
         name: "goto",
         aliases: &["g"],
         help: "cmd.commands.goto",
         needs: &[],
-        args: Args::Free("<行號>"),
+        params: &[Param::Free("<行號>")],
+        build: Some(|p| {
+            p.arg(0)
+                .and_then(|n| n.parse().ok())
+                .map(Command::GotoLine)
+                .ok_or(CommandError::MissingArgument("goto"))
+        }),
     },
     Entry {
         name: "count",
         aliases: &["wc"],
         help: "cmd.commands.count",
         needs: &[],
-        args: Args::Words(COUNT),
+        params: &[],
+        build: Some(|_| Ok(Command::Count)),
     },
     Entry {
-        name: "check",
+        name: "count-progress",
         aliases: &[],
-        help: "cmd.commands.check",
+        help: "cmd.count.progress",
         needs: &[],
-        args: Args::Words(CHECK),
+        params: &[],
+        build: Some(|_| Ok(Command::Progress)),
+    },
+    Entry {
+        name: "count-target",
+        aliases: &[],
+        help: "cmd.count.target",
+        needs: &[],
+        params: &[Param::Free("<字數>｜off")],
+        build: Some(|p| {
+            // A bare `:count-target` is the question, not half a command:
+            // somebody who types it wants to know what the target is and how
+            // far off it is, and that is what `progress` answers.
+            match p.arg(0) {
+                None => Ok(Command::Progress),
+                Some("off" | "none" | "0") => Ok(Command::Target(None)),
+                Some(_) => Ok(Command::Target(Some(p.number(0)?))),
+            }
+        }),
+    },
+    Entry {
+        name: "check-usage",
+        aliases: &[],
+        help: "cmd.check.usage",
+        needs: &[],
+        params: &[],
+        build: Some(|_| Ok(Command::CheckUsage)),
+    },
+    Entry {
+        name: "check-charset",
+        aliases: &[],
+        help: "cmd.check.charset",
+        needs: &[],
+        params: &[],
+        build: Some(|_| Ok(Command::CheckCharset)),
+    },
+    Entry {
+        name: "check-merge",
+        aliases: &[],
+        help: "cmd.check.merge",
+        needs: &[],
+        params: &[],
+        build: Some(|_| {
+            // Was `:conflicts` — the subject is a merge, `:check` is the verb
+            // (§5.2.3 ④).
+            Ok(Command::Conflicts)
+        }),
+    },
+    Entry {
+        name: "check-punct",
+        aliases: &[],
+        help: "cmd.check.punct",
+        needs: &[],
+        params: &[],
+        build: Some(|_| Ok(Command::CheckPunct)),
     },
     Entry {
         name: "convert",
         aliases: &[],
         help: "cmd.commands.convert",
         needs: &[],
-        args: Args::Words(CONVERT),
+        params: &[Param::Words { of: SIDES, default: None }, Param::Words { of: SIDES, default: None }, Param::Words { of: FORCE, default: None }],
+        build: Some(|p| {
+            // 簡繁 (Feature #241). Two sides and an optional `force`: the pair
+            // names an opencc config (`s tw` is `s2tw`), so what the editor
+            // runs is readable from what was typed. With neither, it explains
+            // which ways it can go.
+            let (Some(from), Some(to)) = (p.arg(0), p.arg(1)) else {
+                return Ok(Command::Convert(ConvertAsk::Explain));
+            };
+            match (Side::parse(from), Side::parse(to)) {
+                (Some(from), Some(to)) => Ok(Command::Convert(ConvertAsk::Run {
+                    from,
+                    to,
+                    force: p.arg(2).is_some(),
+                })),
+                (None, _) => Err(CommandError::InvalidArgument {
+                    command: "convert",
+                    value: from.to_string(),
+                }),
+                (_, None) => Err(CommandError::InvalidArgument {
+                    command: "convert",
+                    value: to.to_string(),
+                }),
+            }
+        }),
+    },
+    Entry {
+        name: "convert-opencc",
+        aliases: &[],
+        help: "cmd.convert.opencc",
+        needs: &[],
+        params: &[Param::Words { of: OPENCC, default: None }],
+        build: Some(|p| {
+            Ok(Command::Convert(match p.arg(0) {
+                None => ConvertAsk::Explain,
+                Some("install") => ConvertAsk::Opencc { update: false },
+                _ => ConvertAsk::Opencc { update: true },
+            }))
+        }),
     },
     Entry {
         name: "quit",
         aliases: &["q"],
         help: "cmd.commands.quit",
         needs: &[],
-        args: Args::Words(QUIT),
+        params: &[],
+        build: Some(|p| Ok(Command::Quit { force: p.force })),
+    },
+    Entry {
+        name: "quit-all",
+        aliases: &["qa"],
+        help: "cmd.quit.all",
+        needs: &[],
+        params: &[],
+        build: Some(|p| Ok(Command::QuitAll { force: p.force })),
     },
     Entry {
         name: "write-quit",
         aliases: &["wq", "x"],
         help: "cmd.commands.write-quit",
         needs: &[],
-        args: Args::Path,
+        params: &[Param::Path],
+        build: Some(|p| Ok(Command::WriteQuit(p.arg(0).map(|s| s.to_string())))),
     },
 
     Entry {
@@ -3341,210 +2249,1068 @@ pub const COMMANDS: &[Entry] = &[
         aliases: &["u"],
         help: "cmd.commands.undo",
         needs: &[],
-        args: Args::None,
+        params: &[],
+        build: Some(|_| Ok(Command::Undo)),
     },
     Entry {
         name: "redo",
         aliases: &["red"],
         help: "cmd.commands.redo",
         needs: &[],
-        args: Args::None,
+        params: &[],
+        build: Some(|_| Ok(Command::Redo)),
     },
     Entry {
         name: "word",
         aliases: &["wd"],
         help: "cmd.commands.word",
         needs: &[],
-        args: Args::Words(WORD_TOPICS),
+        params: &[],
+        build: Some(|_| Ok(Command::Word(WordCommand::Report))),
+    },
+    Entry {
+        name: "word-show",
+        aliases: &[],
+        help: "cmd.word-topics.show",
+        needs: &[],
+        params: &[Param::WordsOr {
+            of: WORD_SHOW,
+            default: None,
+            or: "字色｜墨色",
+        }],
+        build: Some(|p| {
+            // `:word-show 字色` is the same question as `:word-show on` — how
+            // this is drawn — so it lives under the same command rather than
+            // making the writer learn a second one.
+            Ok(Command::Word(match p.arg(0) {
+                None => WordCommand::Show(None),
+                Some("on") => WordCommand::Show(Some(true)),
+                Some("off") => WordCommand::Show(Some(false)),
+                Some(how) => match yumete_cjk::WordMark::parse(how) {
+                    Some(mark) => WordCommand::Mark(mark),
+                    None => {
+                        return Err(CommandError::InvalidArgument {
+                            command: "word-show",
+                            value: how.to_string(),
+                        })
+                    }
+                },
+            }))
+        }),
+    },
+    Entry {
+        name: "word-list",
+        aliases: &[],
+        help: "cmd.word-topics.list",
+        needs: &[],
+        params: &[Param::Words { of: WORD_LISTS, default: None }],
+        build: Some(|p| {
+            Ok(Command::Word(match p.arg(0) {
+                None => WordCommand::List,
+                Some("reload") => WordCommand::Reload,
+                Some("edit") => WordCommand::Edit,
+                _ => WordCommand::Global,
+            }))
+        }),
+    },
+    Entry {
+        name: "word-level",
+        aliases: &[],
+        help: "cmd.word-topics.level",
+        needs: &[],
+        params: &[Param::Words { of: WORD_LEVELS, default: None }],
+        build: Some(|p| {
+            Ok(Command::Word(WordCommand::Level(match p.arg(0) {
+                None => None,
+                Some(name) => match yumete_cjk::WordLevel::parse(name) {
+                    Some(level) => Some(level),
+                    None => {
+                        return Err(CommandError::InvalidArgument {
+                            command: "word-level",
+                            value: name.to_string(),
+                        })
+                    }
+                },
+            })))
+        }),
+    },
+    Entry {
+        name: "word-discover",
+        aliases: &[],
+        help: "cmd.word-topics.discover",
+        needs: &[],
+        params: &[],
+        build: Some(|_| Ok(Command::Word(WordCommand::Discover))),
+    },
+    Entry {
+        name: "word-habit",
+        aliases: &[],
+        help: "cmd.word-topics.habit",
+        needs: &[],
+        params: &[],
+        build: Some(|_| Ok(Command::Word(WordCommand::Habit))),
     },
     Entry {
         name: "layout",
         aliases: &["lay"],
         help: "cmd.commands.layout",
         needs: &[],
-        args: Args::Words(LAYOUTS),
+        params: &[Param::WordsOr { of: LAYOUTS, default: None, or: "<竪排｜横排>" }],
+        build: Some(|p| {
+            // `:layout` alone flips it; the two long forms name the layout
+            // outright, in either language.
+            match p.arg(0) {
+                None => Ok(Command::SetLayout(None)),
+                Some(word) => Layout::parse(word)
+                    .map(|l| Command::SetLayout(Some(l)))
+                    .ok_or_else(|| CommandError::InvalidArgument {
+                        command: "layout",
+                        value: word.to_string(),
+                    }),
+            }
+        }),
     },
     Entry {
         name: "theme",
         aliases: &[],
         help: "cmd.commands.theme",
         needs: &[],
-        args: Args::Words(THEMES),
+        params: &[Param::WordsOr { of: THEMES, default: None, or: "<主題名>" }, Param::Words { of: MOODS, default: None }],
+        build: Some(|p| {
+            // 「墨香」 and `moxiang` are the same word, and a mood may be
+            // written with or without the theme's name: every combination of
+            // the two halves is a sentence, because there is nothing to be
+            // gained by refusing one. Which names exist is the front end's
+            // business — it is the one holding the colours — so an unknown one
+            // is answered there, in a sentence, rather than refused here.
+            let said = |word: &str| match word {
+                "system" => Some(Mood::System),
+                "dark" => Some(Mood::Dark),
+                "light" => Some(Mood::Light),
+                _ => None,
+            };
+            let mut name = p.arg(0).map(|w| w.to_string());
+            let mut mood = p.arg(1).and_then(said);
+            // The mood may stand alone, and then the first word is it.
+            if mood.is_none() {
+                if let Some(only) = p.arg(0).and_then(said) {
+                    mood = Some(only);
+                    name = None;
+                }
+            }
+            Ok(Command::Theme { name, mood })
+        }),
     },
     Entry {
         name: "shot",
         aliases: &[],
         help: "cmd.commands.shot",
         needs: &[],
-        args: Args::Words(SHOT),
+        params: &[
+            Param::Words {
+                of: SHOT,
+                default: None,
+            },
+            Param::Path,
+        ],
+        build: Some(|p| {
+            let named = p.arg(1).map(|path| path.to_string());
+            let file = |how| Shot::File { how, path: named };
+            let shot = match p.arg(0) {
+                // **Bare `:shot` is the screen.** 「截圖」 means a picture you
+                // can paste; the drawn page is the specialist and says so.
+                None => Shot::Screen,
+                // A name after `screen` is refused rather than dropped: the
+                // clipboard has nowhere to put one, and a path that quietly
+                // did nothing would be worse than a sentence saying so.
+                Some("screen") => match p.arg(1) {
+                    None => Shot::Screen,
+                    Some(path) => {
+                        return Err(CommandError::TakesNoArgument {
+                            command: "shot screen",
+                            value: path.to_string(),
+                        })
+                    }
+                },
+                Some("png") => file(ShotFormat::Png),
+                Some("html") => file(ShotFormat::Html),
+                _ => file(ShotFormat::Text),
+            };
+            Ok(Command::Screenshot {
+                shot,
+                force: p.force,
+            })
+        }),
     },
     Entry {
         name: "yume",
         aliases: &[],
         help: "cmd.commands.yume",
         needs: &[],
-        args: Args::Words(YUME),
+        params: &[Param::Words { of: ENGAGEMENT, default: Some("on") }],
+        build: Some(|p| {
+            // **The bare word turns it on** (#368). It used to report which
+            // 靈明 was answering, which `:yume-which` says better; 「開中文」
+            // is what a hand reaching for this command nearly always means,
+            // and `:y` is then the whole of it.
+            Ok(Command::YumeLanguage(match p.need(0)? {
+                "on" => Engagement::Chinese,
+                "abc" => Engagement::Ascii,
+                _ => Engagement::Off,
+            }))
+        }),
+    },
+    Entry {
+        name: "yume-which",
+        aliases: &[],
+        help: "cmd.yume.which",
+        needs: &[],
+        params: &[],
+        build: Some(|_| Ok(Command::YumeStatus)),
+    },
+    Entry {
+        name: "yume-scheme",
+        aliases: &[],
+        help: "cmd.yume.scheme",
+        needs: &[],
+        params: &[Param::Schemes],
+        build: Some(|p| {
+            // No name is 「the one the config asked for」 — `:yume-scheme s`
+            // is the whole of starting to type.
+            Ok(Command::SetScheme(p.arg(0).unwrap_or("").to_string()))
+        }),
+    },
+    Entry {
+        name: "yume-chaifen",
+        aliases: &[],
+        help: "cmd.yume.chaifen",
+        needs: &[Need::Scheme],
+        params: &[Param::Words { of: ON_OFF, default: None }],
+        build: Some(|p| Ok(Command::SetChaifen(p.arg(0).map(|w| w == "on")))),
+    },
+    Entry {
+        name: "yume-commit",
+        aliases: &[],
+        help: "cmd.yume.commit",
+        needs: &[Need::Scheme],
+        params: &[Param::WordsOr {
+            of: COMMITS,
+            default: None,
+            or: "auto",
+        }],
+        build: Some(|p| {
+            // On its own it is the question — which of the three is answering.
+            // `auto` is 唯一 under the name people use for it — declared, so
+            // the menu can show it, rather than known only to the parser.
+            Ok(Command::YumeCommit(match p.arg(0) {
+                None => None,
+                Some("auto") => Some("unique".to_string()),
+                Some(name) if COMMITS.iter().any(|w| w.name == name) => Some(name.to_string()),
+                Some(other) => {
+                    return Err(CommandError::InvalidArgument {
+                        command: "yume-commit",
+                        value: other.to_string(),
+                    })
+                }
+            }))
+        }),
+    },
+    Entry {
+        name: "yume-panel",
+        aliases: &[],
+        help: "cmd.yume.panel",
+        needs: &[Need::Scheme],
+        params: &[Param::Words { of: PANELS, default: None }],
+        build: Some(|p| {
+            // Likewise a question on its own — and one word for both halves of
+            // it, because「面板」is what a reader calls the thing whether it is
+            // drawn or not.
+            Ok(Command::YumePanel(p.arg(0).map(|w| w.to_string())))
+        }),
+    },
+    Entry {
+        name: "yume-installed",
+        aliases: &[],
+        help: "cmd.yume.installed",
+        needs: &[],
+        params: &[],
+        build: Some(|_| Ok(Command::InstalledScheme)),
+    },
+    Entry {
+        name: "yume-builtin",
+        aliases: &[],
+        help: "cmd.yume.builtin",
+        needs: &[],
+        params: &[],
+        build: Some(|_| Ok(Command::BuiltinScheme)),
+    },
+    Entry {
+        name: "yume-table",
+        aliases: &[],
+        help: "cmd.yume.table",
+        needs: &[],
+        params: &[Param::Path],
+        build: Some(|p| Ok(Command::UserTable(p.need(0)?.to_string()))),
     },
     Entry {
         name: "syntax",
         aliases: &["syn"],
         help: "cmd.commands.syntax",
         needs: &[],
-        args: Args::Words(SYNTAXES),
+        params: &[Param::WordsOr { of: SYNTAXES, default: None, or: "<語法>" }],
+        build: Some(|p| Ok(Command::SetSyntax(p.arg(0).map(|w| w.to_string())))),
     },
     Entry {
         name: "pipe",
         aliases: &[],
         help: "cmd.commands.pipe",
         needs: &[],
-        args: Args::Free("<命令>"),
+        params: &[Param::Free("<命令>")],
+        build: Some(|p| {
+            match p.arg(0) {
+                None => Err(CommandError::MissingArgument("pipe")),
+                Some(line) => Ok(Command::Pipe(line.to_string())),
+            }
+        }),
     },
     Entry {
         name: "sh",
         aliases: &[],
         help: "cmd.commands.sh",
         needs: &[],
-        args: Args::Free("<命令>"),
+        params: &[Param::Free("<命令>")],
+        build: Some(|p| {
+            match p.arg(0) {
+                None => Err(CommandError::MissingArgument("sh")),
+                Some(line) => Ok(Command::Shell {
+                    line: line.to_string(),
+                    interactive: false,
+                }),
+            }
+        }),
     },
     Entry {
         name: "!command",
         aliases: &[],
         help: "cmd.commands.shell",
         needs: &[],
-        args: Args::None,
+        params: &[],
+        build: None,
     },
     Entry {
-        name: "view",
+        name: "view-wrap",
         aliases: &[],
-        help: "cmd.commands.view",
+        help: "cmd.view.wrap",
         needs: &[],
-        args: Args::Words(VIEW),
+        params: &[Param::WordsOr {
+            of: WRAP,
+            default: Some("on"),
+            or: "<幾欄>",
+        }],
+        build: Some(|p| match p.need(0)? {
+            "on" => Ok(Command::SetSoftWrap(true)),
+            "off" => Ok(Command::SetSoftWrap(false)),
+            "0" => Ok(Command::SetMeasure(None)),
+            _ => Ok(Command::SetMeasure(Some(p.number(0)?))),
+        }),
+    },
+    Entry {
+        name: "view-dense",
+        aliases: &[],
+        help: "cmd.view.dense",
+        needs: &[],
+        params: &[Param::Words {
+            of: ON_OFF,
+            default: Some("on"),
+        }],
+        build: Some(|p| Ok(Command::SetDense(p.need(0)? == "on"))),
+    },
+    Entry {
+        name: "view-bands",
+        aliases: &[],
+        help: "cmd.view.bands",
+        needs: &[Need::Vertical],
+        params: &[Param::WordsOr {
+            of: ON_OFF,
+            default: Some("on"),
+            or: "<幾條，1–4>",
+        }],
+        build: Some(|p| match p.need(0)? {
+            "on" => Ok(Command::SetBands(2)),
+            "off" => Ok(Command::SetBands(1)),
+            _ => match p.number(0)? {
+                n @ 1..=4 => Ok(Command::SetBands(n)),
+                n => Err(CommandError::InvalidArgument {
+                    command: "view-bands",
+                    value: n.to_string(),
+                }),
+            },
+        }),
+    },
+    Entry {
+        name: "view-sentence",
+        aliases: &[],
+        help: "cmd.view.sentence",
+        needs: &[Need::Vertical],
+        params: &[Param::Words {
+            of: ON_OFF,
+            default: Some("on"),
+        }],
+        build: Some(|p| Ok(Command::SetSentences(p.need(0)? == "on"))),
+    },
+    Entry {
+        name: "view-hanging",
+        aliases: &[],
+        help: "cmd.view.hanging",
+        needs: &[Need::Vertical, Need::Loose],
+        params: &[Param::Words {
+            of: ON_OFF,
+            default: None,
+        }],
+        build: Some(|p| Ok(Command::SetHanging(p.arg(0).map(|w| w == "on")))),
+    },
+    Entry {
+        // `:view-numbers-fill` on its own said nothing about *what* of the numbers
+        // and refused; there was only ever one thing, so it is the command.
+        name: "view-numbers-fill",
+        aliases: &[],
+        help: "cmd.numbers.fill",
+        needs: &[],
+        params: &[Param::Words {
+            of: ON_OFF,
+            default: None,
+        }],
+        build: Some(|p| Ok(Command::SetNumberFill(p.arg(0).map(|w| w == "on")))),
+    },
+    Entry {
+        name: "view-typewriter",
+        aliases: &[],
+        help: "cmd.view.typewriter",
+        needs: &[],
+        params: &[Param::Words {
+            of: SWITCH,
+            default: Some("on"),
+        }],
+        build: Some(|p| Ok(Command::SetTypewriter(switched(p)?))),
+    },
+    Entry {
+        name: "view-focus",
+        aliases: &[],
+        help: "cmd.view.focus",
+        needs: &[],
+        params: &[Param::Words {
+            of: SWITCH,
+            default: Some("on"),
+        }],
+        build: Some(|p| Ok(Command::SetFocus(switched(p)?))),
+    },
+    Entry {
+        name: "view-meter",
+        aliases: &[],
+        help: "cmd.view.meter",
+        needs: &[],
+        params: &[Param::Words {
+            of: SWITCH,
+            default: Some("on"),
+        }],
+        build: Some(|p| Ok(Command::SetMeter(switched(p)?))),
+    },
+    Entry {
+        // Was `:note`, which was never about footnotes (§5.2.3 ④).
+        name: "view-punct",
+        aliases: &[],
+        help: "cmd.view.punct",
+        needs: &[],
+        params: &[Param::Words {
+            of: SWITCH,
+            default: Some("on"),
+        }],
+        build: Some(|p| Ok(Command::SetNote(switched(p)?))),
+    },
+    Entry {
+        // The bare word reports, the same shape `:render` has: with three
+        // levels, 「which one am I on」 is a better use of the word than a
+        // fourth spelling of the middle one.
+        name: "view-hud",
+        aliases: &[],
+        help: "cmd.view.hud",
+        needs: &[],
+        params: &[Param::Words {
+            of: HUD,
+            default: None,
+        }],
+        build: Some(|p| {
+            Ok(match p.arg(0) {
+                None => Command::ReportHud,
+                Some("off") => Command::SetHud(crate::editor::Hud::Off),
+                Some("basic") => Command::SetHud(crate::editor::Hud::Basic),
+                _ => Command::SetHud(crate::editor::Hud::Full),
+            })
+        }),
+    },
+    Entry {
+        name: "view-preview",
+        aliases: &[],
+        help: "cmd.view.preview",
+        needs: &[],
+        params: &[Param::Words {
+            of: ON_OFF,
+            default: Some("on"),
+        }],
+        build: Some(|p| Ok(Command::SetPreview(p.need(0)? == "on"))),
     },
     Entry {
         name: "render",
         aliases: &[],
         help: "cmd.commands.render",
         needs: &[],
-        args: Args::Words(RENDER),
+        params: &[Param::Words { of: RENDER, default: None }],
+        build: Some(|p| {
+            // **The bare word reports** (#283): with three levels — and three
+            // more dimensions taking their level from this one — 「which level
+            // am I on」 is the better use of the word.
+            Ok(match p.arg(0) {
+                None => Command::ReportRender,
+                Some("off") => Command::SetRender(crate::editor::Render::Off),
+                Some("basic") => Command::SetRender(crate::editor::Render::Basic),
+                _ => Command::SetRender(crate::editor::Render::Full),
+            })
+        }),
     },
     Entry {
         name: "indent",
         aliases: &[],
         help: "cmd.commands.indent",
         needs: &[],
-        args: Args::Words(INDENT),
+        params: &[Param::WordsOr { of: INDENT_LEVELS, default: None, or: "<幾格，至多 8>" }],
+        build: Some(|p| {
+            // A number is the *width*; a word is the level. `:indent 4` on a
+            // page at 中階 widens the indent and still does not fold, because
+            // those are two questions and the reader answered one of them.
+            // The bare word reports, for the reason bare `:render` reports.
+            Ok(match p.arg(0) {
+                None => Command::ReportIndent,
+                Some("full") => Command::SetIndentLevel(crate::editor::Render::Full),
+                Some("basic") => Command::SetIndentLevel(crate::editor::Render::Basic),
+                Some("off" | "0") => Command::SetIndentLevel(crate::editor::Render::Off),
+                Some(_) => match p.number(0)? {
+                    n @ 0..=8 => Command::SetIndent(n),
+                    n => {
+                        return Err(CommandError::InvalidArgument {
+                            command: "indent",
+                            value: n.to_string(),
+                        })
+                    }
+                },
+            })
+        }),
+    },
+    Entry {
+        name: "indent-hint",
+        aliases: &[],
+        help: "cmd.indent.hint",
+        needs: &[],
+        params: &[Param::Words { of: HINTS, default: None }],
+        build: Some(|p| {
+            match crate::zong::IndentHint::parse(p.arg(0).unwrap_or("")) {
+                Some(hint) => Ok(Command::SetIndentHint(hint)),
+                None => Err(CommandError::InvalidArgument {
+                    command: "indent-hint",
+                    value: p.arg(0).unwrap_or("").to_string(),
+                }),
+            }
+        }),
     },
     Entry {
         name: "table",
         aliases: &[],
         help: "cmd.commands.table",
         needs: &[],
-        args: Args::Words(TABLE),
+        params: &[Param::Words { of: TABLE_LEVELS, default: None }],
+        build: Some(|p| {
+            Ok(match p.arg(0) {
+                // **The bare word is the door; a level is a level.** `:table`
+                // reads the table the cursor is in — that is what it has
+                // always meant and it is not a surface.
+                None => Command::EnterTable,
+                Some("off") => Command::SetTableLevel(crate::editor::TableLevel::Off),
+                Some("basic") => Command::SetTableLevel(crate::editor::TableLevel::Basic),
+                _ => Command::SetTableLevel(crate::editor::TableLevel::Full),
+            })
+        }),
+    },
+    Entry {
+        name: "table-new",
+        aliases: &[],
+        help: "cmd.table.new",
+        needs: &[],
+        params: &[Param::Free("<行>x<欄>")],
+        build: Some(|p| {
+            // 「迅速在 markdown 中插入一個三行四列表格」 (#276). Two numbers,
+            // 行 then 欄. **`rows` counts the heading**: the rule row
+            // underneath is punctuation, and nobody means it when they say
+            // three.
+            let spec = p.arg(0).unwrap_or("");
+            let mut numbers = spec.split(['x', 'X', '×', ' ', '\t']).filter(|w| !w.is_empty());
+            let rows = numbers.next().unwrap_or("3");
+            let columns = numbers.next().unwrap_or("3");
+            match (rows.parse::<usize>(), columns.parse::<usize>()) {
+                (Ok(r), Ok(c)) if (1..=200).contains(&r) && (1..=32).contains(&c) => {
+                    Ok(Command::NewTable { rows: r, columns: c })
+                }
+                _ => Err(CommandError::InvalidArgument {
+                    command: "table-new",
+                    value: spec.to_string(),
+                }),
+            }
+        }),
+    },
+    Entry {
+        name: "table-check",
+        aliases: &[],
+        help: "cmd.table.check",
+        needs: &[Need::Table],
+        params: &[],
+        build: Some(|_| Ok(Command::CheckTable)),
+    },
+    Entry {
+        name: "table-rules",
+        aliases: &[],
+        help: "cmd.table.rules",
+        needs: &[Need::Table],
+        params: &[
+            Param::WordsOr {
+                of: RULES,
+                default: None,
+                or: "<樣式>",
+            },
+            Param::Words {
+                of: STROKES,
+                default: None,
+            },
+        ],
+        build: Some(|p| {
+            let Some(first) = p.arg(0) else {
+                return Ok(Command::SetTableRules(None));
+            };
+            let said = match p.arg(1) {
+                Some(stroke) => format!("{first} {stroke}"),
+                None => first.to_string(),
+            };
+            match crate::table::Rules::parse(&said) {
+                Some(rules) => Ok(Command::SetTableRules(Some(rules))),
+                None => Err(CommandError::InvalidArgument {
+                    command: "table-rules",
+                    value: said,
+                }),
+            }
+        }),
+    },
+    Entry {
+        name: "table-sort",
+        aliases: &[],
+        help: "cmd.table.sort",
+        needs: &[Need::Table],
+        params: &[Param::Free("<欄> a｜d …")],
+        build: Some(|p| {
+            // `:table-sort 1 a 2 d 4 a` — column, direction, column,
+            // direction. Nothing at all sorts by the column you are in.
+            let mut keys = Vec::new();
+            let mut words = p.arg(0).unwrap_or("").split_whitespace();
+            while let Some(word) = words.next() {
+                let Ok(column) = word.parse::<usize>() else {
+                    return Err(CommandError::InvalidArgument {
+                        command: "table-sort",
+                        value: word.to_string(),
+                    });
+                };
+                let down = match words.next() {
+                    None | Some("a") | Some("asc") => false,
+                    Some("d") | Some("desc") => true,
+                    Some(other) => {
+                        return Err(CommandError::InvalidArgument {
+                            command: "table-sort",
+                            value: other.to_string(),
+                        })
+                    }
+                };
+                keys.push((column, down));
+            }
+            Ok(Command::SortTable(keys))
+        }),
+    },
+    Entry {
+        name: "table-detail",
+        aliases: &[],
+        help: "cmd.table.detail",
+        needs: &[Need::Table],
+        params: &[Param::WordsOr { of: ON_OFF, default: None, or: "<寬>" }],
+        build: Some(|p| {
+            Ok(match p.arg(0) {
+                None => Command::ShowDetail(None),
+                Some("on") => Command::ShowDetail(Some(true)),
+                Some("off") => Command::ShowDetail(Some(false)),
+                _ => Command::SetDetailWidth(p.number(0)?),
+            })
+        }),
+    },
+    Entry {
+        name: "table-numbers",
+        aliases: &[],
+        help: "cmd.table.numbers",
+        needs: &[Need::Table],
+        params: &[Param::Words { of: ON_OFF, default: Some("on") }],
+        build: Some(|p| Ok(Command::SetTableNumbers(p.need(0)? == "on"))),
+    },
+    Entry {
+        name: "table-header",
+        aliases: &[],
+        help: "cmd.table.header",
+        needs: &[Need::Table],
+        params: &[Param::Words { of: ON_OFF, default: None }],
+        build: Some(|p| {
+            // 「這一行是欄名還是資料」 — on its own it flips, because that is
+            // the question a 碼表 asks once and never again (#217).
+            Ok(Command::SetTableHeader(p.arg(0).map(|w| w == "on")))
+        }),
+    },
+    Entry {
+        name: "table-schema",
+        aliases: &[],
+        help: "cmd.table.schema",
+        needs: &[Need::Table],
+        params: &[],
+        build: Some(|_| {
+            // 「這張表到底是怎麼讀的」 — the answer is a file, so the command
+            // opens it rather than printing it (#218).
+            Ok(Command::OpenTableSchema)
+        }),
+    },
+    Entry {
+        name: "table-jump",
+        aliases: &[],
+        help: "cmd.table.jump",
+        needs: &[Need::Table],
+        params: &[Param::Free("<列名>")],
+        build: Some(|p| {
+            // Was `:row` (§5.2.3 ④): `row` under `:table` would have meant
+            // the axis, and the axis is what `find` takes.
+            Ok(Command::GotoRow(p.need(0)?.to_string()))
+        }),
+    },
+    Entry {
+        name: "table-find",
+        aliases: &[],
+        help: "cmd.table.find",
+        needs: &[],
+        params: &[
+            Param::WordsOr {
+                of: AXIS,
+                default: None,
+                or: "<字串>",
+            },
+            Param::Free("<字串>"),
+        ],
+        build: Some(|p| {
+            // Was `:search`, whose two words *are* the axis (§5.2.3 ④). With
+            // no direction it is a row search, because that is what a search
+            // is anywhere but a table.
+            let (by, pattern) = match (p.arg(0), p.arg(1)) {
+                (Some("column"), rest) => (Axis::Column, rest.unwrap_or("").to_string()),
+                (Some("row"), rest) => (Axis::Row, rest.unwrap_or("").to_string()),
+                (Some(word), Some(rest)) => (Axis::Row, format!("{word} {rest}")),
+                (Some(word), None) => (Axis::Row, word.to_string()),
+                (None, _) => (Axis::Row, String::new()),
+            };
+            match pattern.is_empty() {
+                true => Err(CommandError::MissingArgument("table-find")),
+                false => Ok(Command::Search { pattern, by }),
+            }
+        }),
+    },
+    Entry {
+        name: "table-pipe",
+        aliases: &[],
+        help: "cmd.table.pipe",
+        needs: &[],
+        params: &[Param::Free("<分隔>")],
+        build: Some(|p| match p.arg(0) {
+            None => Ok(Command::TableToPipe(None)),
+            Some(word) => match delimiter_named(word) {
+                Some(c) => Ok(Command::TableToPipe(Some(c))),
+                None => Err(CommandError::InvalidArgument {
+                    command: "table-pipe",
+                    value: word.to_string(),
+                }),
+            },
+        }),
+    },
+    Entry {
+        name: "table-csv",
+        aliases: &[],
+        help: "cmd.table.csv",
+        needs: &[],
+        params: &[Param::Free("<分隔>")],
+        build: Some(|p| match p.arg(0) {
+            None => Ok(Command::TableToDelimited(',')),
+            Some(word) => match delimiter_named(word) {
+                Some(c) => Ok(Command::TableToDelimited(c)),
+                None => Err(CommandError::InvalidArgument {
+                    command: "table-csv",
+                    value: word.to_string(),
+                }),
+            },
+        }),
     },
     Entry {
         name: "wheel",
         aliases: &[],
         help: "cmd.commands.wheel",
         needs: &[],
-        args: Args::Free("<格數>"),
+        params: &[Param::Free("<幾行>")],
+        build: Some(|p| {
+            Ok(Command::SetWheelStep(match p.arg(0) {
+                None => None,
+                Some(_) => Some(p.number(0)?),
+            }))
+        }),
     },
     Entry {
-        name: "clipboard",
+        name: "clipboard-yank",
         aliases: &[],
-        help: "cmd.commands.clipboard",
+        help: "cmd.clipboard.yank",
         needs: &[],
-        args: Args::Words(CLIPBOARD),
+        params: &[],
+        build: Some(|_| Ok(Command::Clipboard { yank: true })),
     },
     Entry {
+        name: "clipboard-paste",
+        aliases: &[],
+        help: "cmd.clipboard.paste",
+        needs: &[],
+        params: &[],
+        build: Some(|_| Ok(Command::Clipboard { yank: false })),
+    },
+    Entry {
+        // The bare word lists them, which is what `:buffer` was: a
+        // command whose own meaning is the useful one needs no word after it.
         name: "buffer",
         aliases: &[],
         help: "cmd.commands.buffer",
         needs: &[],
-        args: Args::Words(BUFFERS),
+        params: &[],
+        build: Some(|_| Ok(Command::ListBuffers)),
+    },
+    Entry {
+        name: "buffer-next",
+        aliases: &["bn"],
+        help: "cmd.buffers.next",
+        needs: &[],
+        params: &[],
+        build: Some(|_| Ok(Command::NextBuffer)),
+    },
+    Entry {
+        name: "buffer-previous",
+        aliases: &["bp"],
+        help: "cmd.buffers.previous",
+        needs: &[],
+        params: &[],
+        build: Some(|_| Ok(Command::PreviousBuffer)),
+    },
+    Entry {
+        name: "buffer-close",
+        aliases: &["bc"],
+        help: "cmd.buffers.close",
+        needs: &[],
+        params: &[],
+        build: Some(|p| Ok(Command::CloseBuffer { force: p.force })),
     },
     Entry {
         name: "format",
         aliases: &["fmt"],
         help: "cmd.commands.format",
         needs: &[],
-        args: Args::None,
+        params: &[],
+        build: Some(|_| Ok(Command::Language("format".to_string()))),
     },
     Entry {
         name: "run",
         aliases: &[],
         help: "cmd.commands.run",
         needs: &[],
-        args: Args::Free("<名字>"),
+        params: &[Param::Free("<名字>")],
+        build: Some(|p| {
+            match p.arg(0) {
+                None => Err(CommandError::MissingArgument("run")),
+                Some(name) => Ok(Command::Language(name.to_string())),
+            }
+        }),
     },
     Entry {
-        name: "markdown",
-        aliases: &["md"],
-        help: "cmd.commands.markdown",
+        name: "markdown-footnote",
+        aliases: &["fn"],
+        help: "cmd.markdown-bits.footnote",
         needs: &[],
-        args: Args::Words(MARKDOWN_BITS),
+        params: &[Param::Words { of: FOOTNOTE_KINDS, default: None }],
+        build: Some(|p| {
+            Ok(Command::Markdown(match p.arg(0) {
+                None => MarkdownBit::Footnote,
+                _ => MarkdownBit::InlineNote,
+            }))
+        }),
     },
     Entry {
         name: "tutor",
         aliases: &[],
         help: "cmd.commands.tutor",
         needs: &[],
-        args: Args::None,
+        params: &[],
+        build: Some(|_| Ok(Command::Tutor)),
     },
     Entry {
         name: "help",
         aliases: &[],
         help: "cmd.commands.help",
         needs: &[],
-        args: Args::Words(HELP_SECTIONS),
+        params: &[Param::WordsOr { of: HELP_SECTIONS, default: None, or: "<題目>" }],
+        build: Some(|p| Ok(Command::Help(p.arg(0).map(|w| w.to_string())))),
     },
     Entry {
         name: "export",
         aliases: &["ex"],
         help: "cmd.commands.export",
         needs: &[],
-        args: Args::Words(EXPORT_FORMATS),
+        params: &[Param::Words { of: EXPORT_FORMATS, default: None }, Param::Path],
+        build: Some(|p| {
+            Ok(Command::Export {
+                format: p.need(0)?.to_string(),
+                path: p.arg(1).map(|s| s.to_string()),
+                force: p.force,
+            })
+        }),
     },
     Entry {
         name: "grep",
         aliases: &["gr"],
         help: "cmd.commands.grep",
         needs: &[],
-        args: Args::Free("<正則>"),
+        params: &[Param::Free("<字串>")],
+        build: Some(|p| {
+            match p.arg(0) {
+                None => Err(CommandError::MissingArgument("grep")),
+                Some(what) => Ok(Command::Grep(what.to_string())),
+            }
+        }),
     },
     Entry {
         name: "diff",
         aliases: &[],
         help: "cmd.commands.diff",
         needs: &[],
-        args: Args::Path,
+        params: &[Param::Path],
+        build: Some(|p| Ok(Command::Diff(p.arg(0).map(|s| s.to_string())))),
     },
     Entry {
         name: "replace",
         aliases: &[],
         help: "cmd.commands.replace",
         needs: &[],
-        args: Args::Free("<換成什麼>"),
+        params: &[Param::Free("<換成什麽>")],
+        build: Some(|p| {
+            match p.arg(0) {
+                None => Err(CommandError::MissingArgument("replace")),
+                Some(with) => Ok(Command::ReplaceFound(with.to_string(), p.force)),
+            }
+        }),
     },
     Entry {
         name: "toc",
         aliases: &["outline"],
         help: "cmd.commands.toc",
         needs: &[],
-        args: Args::Free("<第幾條，不寫就列出來>"),
+        params: &[Param::Free("<幾級>")],
+        build: Some(|p| {
+            Ok(Command::Outline(match p.arg(0) {
+                None => None,
+                Some(_) => Some(p.number(0).map_err(|_| CommandError::MissingArgument("toc"))?),
+            }))
+        }),
     },
     Entry {
         name: "ruby",
         aliases: &[],
         help: "cmd.commands.ruby",
         needs: &[],
-        args: Args::Words(RUBY),
+        params: &[Param::Words { of: RUBY_LEVELS, default: None }],
+        build: Some(|p| {
+            // **The bare word annotates the selection.** It is the one level
+            // setting whose own name is also a verb — 注音 is something you
+            // *do* to a word — and that reading of it wins, which is why
+            // `:ruby` alone does not report the way `:render` does.
+            Ok(match p.arg(0) {
+                None => Command::Ruby,
+                Some("off") => Command::SetRubyLevel(crate::editor::Render::Off),
+                Some("basic") => Command::SetRubyLevel(crate::editor::Render::Basic),
+                _ => Command::SetRubyLevel(crate::editor::Render::Full),
+            })
+        }),
+    },
+    Entry {
+        name: "ruby-auto",
+        aliases: &[],
+        help: "cmd.ruby.auto",
+        needs: &[],
+        params: &[Param::Words { of: RARE, default: None }],
+        build: Some(|p| Ok(Command::AutoRuby { rare: p.arg(0).is_some() })),
+    },
+    Entry {
+        name: "ruby-html",
+        aliases: &[],
+        help: "cmd.ruby.html",
+        needs: &[],
+        params: &[Param::Words { of: ON_OFF, default: Some("on") }],
+        build: Some(|p| {
+            Ok(Command::RenderRuby {
+                dialect: Dialect::Html,
+                on: p.need(0)? == "on",
+            })
+        }),
+    },
+    Entry {
+        name: "ruby-typst",
+        aliases: &[],
+        help: "cmd.ruby.typst",
+        needs: &[],
+        params: &[Param::Words { of: ON_OFF, default: Some("on") }],
+        build: Some(|p| {
+            Ok(Command::RenderRuby {
+                dialect: Dialect::Typst,
+                on: p.need(0)? == "on",
+            })
+        }),
+    },
+    Entry {
+        name: "ruby-format",
+        aliases: &[],
+        help: "cmd.ruby.format",
+        needs: &[],
+        params: &[Param::Words { of: DIALECTS, default: None }],
+        build: Some(|p| {
+            let name = p.need(0)?;
+            let dialect = Dialect::parse_name(name).ok_or(CommandError::InvalidArgument {
+                command: "ruby-format",
+                value: name.to_string(),
+            })?;
+            Ok(Command::FormatRuby(dialect))
+        }),
     },
     Entry {
         name: "s/pat/rep/",
         aliases: &[],
         help: "cmd.commands.substitute",
         needs: &[],
-        args: Args::None,
+        params: &[],
+        build: None,
     },
 ];
 
@@ -3593,22 +3359,13 @@ pub fn takes_text(line: &str) -> bool {
     let Some(entry) = entry_named(head) else {
         return false;
     };
-    let mut args = &entry.args;
-    for word in &words[1..] {
-        match args.words() {
-            // `pick`, not an exact match: it is the rule the parser walks by,
-            // and a rule that only half applies is worse than either. `:yume
-            // tab 詞庫.txt` runs, so it has to compose too.
-            Some(list) => match pick(word, list) {
-                Some(found) => args = &found.then,
-                // `:w 第三章` is a path, not a misspelt `all` — a word list
-                // that stands beside a path lets the unmatched word through.
-                None => return matches!(args, Args::PathOr(_)),
-            },
-            None => return matches!(args, Args::Free(_) | Args::Path | Args::PathOr(_)),
-        }
-    }
-    matches!(args, Args::Free(_) | Args::Path | Args::PathOr(_))
+    // **Which slot is being typed into**, which is all this has to know now:
+    // a parameter that takes a path or free text may hold 中文, and one that
+    // takes a word from a list never does.
+    matches!(
+        entry.params.get(words.len().saturating_sub(1)),
+        Some(Param::Path) | Some(Param::Free(_))
+    )
 }
 
 /// The seven commands the fold **renamed**, and where they went (§5.2.3 ④).
@@ -3616,99 +3373,31 @@ pub fn takes_text(line: &str) -> bool {
 /// Only seven, and only because these seven could not be computed. A command
 /// that merely moved under a parent kept its spelling, so [`moved_to`] finds
 /// it by looking — and goes on finding it if it moves again. `:conflicts` did
-/// not keep its spelling: it became `:check merge`, because the subject is a
+/// not keep its spelling: it became `:check-merge`, because the subject is a
 /// merge and `:check` is the verb, and no amount of looking turns one string
 /// into the other. Aliases are listed beside their names for the same reason
 /// the names are: `:bc` was a real thing to type and stopped being one.
 /// A short spelling, and the whole line it stands for (#363).
 ///
 /// **The rule the author gave**: a full command is folded and says what it does
-/// — `:buffer close`, `:write quit` — and a shorthand is **its initials**,
+/// — `:buffer-close`, `:write-quit` — and a shorthand is **its initials**,
 /// nothing else. So `:bc` yes, `:bclose` no: a half-short, half-long spelling
 /// is neither one thing nor the other, and it is the shape the fold of §5.2.4
 /// went to the trouble of removing.
 ///
 /// Kept as an expansion rather than as six more arms in `parse`, so a
 /// shorthand cannot drift from the command it is short for: there is one
-/// definition of what `:bc` does, and it is `:buffer close`. The bang comes
-/// along for free (`:bc!` is `:buffer close!`), and so does anything the long
+/// definition of what `:bc` does, and it is `:buffer-close`. The bang comes
+/// along for free (`:bc!` is `:buffer-close!`), and so does anything the long
 /// form ever grows.
 ///
 /// **Only the ones that name a *line*.** A short spelling of a one-word
 /// command is what `Entry::aliases` is for — `:wq` and `:x` are `write-quit`'s
 /// aliases and shown in its brackets like every other alias. This table is for
 /// the ones that stand for two words, which no alias can express.
-pub const SHORTHANDS: &[(&str, &str)] = &[
-    ("bc", "buffer close"),
-    ("bn", "buffer next"),
-    ("bp", "buffer previous"),
-    ("wa", "write all"),
-    ("qa", "quit all"),
-    // The one vi never had: 「open the file and start typing Chinese」.
-    ("yo", "yume on"),
-];
 
-/// The shorthands that name a two-word line, as entries of the list (#363).
-///
-/// **An alias is not a shortcut**: it is another name for the command, so it
-/// belongs in the list beside the names, carries the same help, and narrows on
-/// the same prefix rule. A reader who types `:b` sees `:buffer` and `:bc`
-/// `:bn` `:bp`, and nothing tells them one of those is spelled differently
-/// underneath — because for the purpose of using it, it is not.
-///
-/// The one-word commands need nothing here: `:wq` and `:x` are `write-quit`'s
-/// declared aliases and the list already shows them.
-fn shorthand_choices(typed: &str) -> impl Iterator<Item = Choice> + '_ {
-    SHORTHANDS
-        .iter()
-        .filter(move |(short, _)| short.starts_with(typed))
-        .filter_map(|(short, long)| {
-            Some(Choice {
-                name: short,
-                needs: &[],
-                alias: None,
-                // Already the short spelling; there is nothing shorter to show.
-                short: None,
-                help: help_of(long)?,
-                leading: ":",
-                under: String::new(),
-                note: None,
-            })
-        })
-}
 
-/// What a whole line's help is, by the walk `names_something` walks.
-fn help_of(line: &str) -> Option<&'static str> {
-    let mut words = line.split_whitespace();
-    let entry = entry_named(words.next()?)?;
-    let mut args = &entry.args;
-    let mut help = entry.help;
-    for word in words {
-        let found = pick(word, args.words()?)?;
-        help = found.help;
-        args = &found.then;
-    }
-    Some(help)
-}
 
-/// Put the long line back, if the first word is a short spelling of one.
-fn expand_shorthand(line: &str) -> String {
-    let (head, rest) = match line.split_once(char::is_whitespace) {
-        Some((head, rest)) => (head, rest.trim_start()),
-        None => (line, ""),
-    };
-    let (word, bang) = match head.strip_suffix('!') {
-        Some(word) => (word, "!"),
-        None => (head, ""),
-    };
-    let Some((_, long)) = SHORTHANDS.iter().find(|(short, _)| *short == word) else {
-        return line.to_string();
-    };
-    match rest.is_empty() {
-        true => format!("{long}{bang}"),
-        false => format!("{long}{bang} {rest}"),
-    }
-}
 
 /// **`bc` and `wa` came back** (2026-09-10). The fold retired them along with
 /// `bclose` and `wall`, on the rule that a leaf keeps its name and the tree
@@ -3718,14 +3407,14 @@ fn expand_shorthand(line: &str) -> String {
 /// — these are a second way in, not a rename back.
 const RENAMED: &[(&str, &str)] = &[
     ("appearance", "theme"),
-    ("bclose", "buffer close"),
-    ("conflicts", "check merge"),
-    ("note", "view punct"),
-    ("row", "table jump"),
-    ("sav", "write as"),
-    ("saveas", "write as"),
-    ("search", "table find"),
-    ("wall", "write all"),
+    ("bclose", "buffer-close"),
+    ("conflicts", "check-merge"),
+    ("note", "view-punct"),
+    ("row", "table-jump"),
+    ("sav", "write-as"),
+    ("saveas", "write-as"),
+    ("search", "table-find"),
+    ("wall", "write-all"),
 ];
 
 /// Where a word that is no longer a command went, if it went anywhere (#283).
@@ -3737,7 +3426,7 @@ const RENAMED: &[(&str, &str)] = &[
 ///
 /// A prefix is tried only when nothing matches whole — `:prog` was a real
 /// spelling of a real command until the fold, and answering it with
-/// `:count progress` is the difference between a signpost and a shrug. Three
+/// `:count-progress` is the difference between a signpost and a shrug. Three
 /// answers at most: past that the word is too vague to be pointing anywhere.
 fn moved_to(word: &str) -> Option<String> {
     if let Some((_, to)) = RENAMED.iter().find(|(from, _)| *from == word) {
@@ -3746,12 +3435,19 @@ fn moved_to(word: &str) -> Option<String> {
     let under = |matches: fn(&str, &str) -> bool| -> Vec<String> {
         let mut found = Vec::new();
         for entry in COMMANDS {
-            let Some(list) = entry.args.words() else {
+            // **A name's own segments are looked in too** (#368). `dense` is
+            // not a word after a command any more, it is half of one —
+            // `:view-dense` — and 「where did `:dense` go」 is the same
+            // question it always was.
+            if entry.name.split('-').skip(1).any(|part| matches(part, word)) {
+                found.push(format!("`:{}`", entry.name));
                 continue;
-            };
-            for w in list {
-                if matches(w.name, word) {
-                    found.push(format!("`:{} {}`", entry.name, w.name));
+            }
+            for param in entry.params {
+                for w in param.words().unwrap_or_default() {
+                    if matches(w.name, word) {
+                        found.push(format!("`:{} {}`", entry.name, w.name));
+                    }
                 }
             }
         }
@@ -3779,8 +3475,18 @@ pub fn complete(prefix: &str) -> Vec<Choice> {
 /// The same, and where in the line the offered word would go.
 ///
 /// The offset is what lets a completion replace **the word being typed** rather
-/// than the whole line: `:yume sch` has to become `:yume scheme`, not `scheme`.
+/// than the whole line: `:yume sch` has to become `:yume-scheme`, not `scheme`.
 pub fn complete_at(line: &str) -> (usize, Vec<Choice>) {
+    complete_within(line, true)
+}
+
+/// The same, saying whether the families are folded (#369).
+///
+/// **The menu folds and the search does not.** `::` looks for a word anywhere
+/// in the list, and a list that had hidden eleven of twelve `view-…` behind
+/// their head would answer 「沒有『密排』這種東西」 about a command that is
+/// three keystrokes away.
+fn complete_within(line: &str, folding: bool) -> (usize, Vec<Choice>) {
     let line = line.strip_prefix(':').unwrap_or(line);
     // Where each word starts, and the word itself. A line ending in a space is
     // asking about a *new* word, not still about the last one.
@@ -3799,6 +3505,90 @@ pub fn complete_at(line: &str) -> (usize, Vec<Choice>) {
         words.pop().unwrap_or((0, ""))
     };
 
+    // Fold each family into its head until something has narrowed it (#369).
+    //
+    // **Derived, never declared.** A command's name says which family it is
+    // in — `view-dense` is under `view` because that is how it is spelled —
+    // so the menu reads the levels off the names and there is still exactly
+    // one place a command says what it is called. Typing as far as a family's
+    // head opens it; `:view-dense` typed straight through never sees a fold
+    // at all, because nothing about parsing changes.
+    fn fold(typed: &str, mut choices: Vec<Choice>) -> Vec<Choice> {
+        fn head_of(name: &str) -> &str {
+            name.split('-').next().unwrap_or(name)
+        }
+        // **Only the names at the top level.** What the deep fallback finds
+        // is a *word* under some command — `:vert` reaches `layout vertical`
+        // and `help vertical`, two different things that happen to share a
+        // spelling — and folding those together would answer one question
+        // with the other.
+        let mut counted: Vec<(&str, usize)> = Vec::new();
+        for c in choices.iter().filter(|c| c.under.is_empty()) {
+            let head = head_of(c.name);
+            match counted.iter_mut().find(|(h, _)| *h == head) {
+                Some((_, n)) => *n += 1,
+                None => counted.push((head, 1)),
+            }
+        }
+        // **A fold is for choosing between families.** Once what is typed
+        // has narrowed the list to one of them there is nothing left to
+        // choose, so `:b` opens `buffer-…` rather than making a reader type
+        // the other five letters to see what they already know is there.
+        let folded: Vec<&str> = counted
+            .iter()
+            .filter(|(head, n)| *n > 1 && counted.len() > 1 && !typed.starts_with(*head))
+            .map(|(head, _)| *head)
+            .collect();
+        if folded.is_empty() {
+            return choices;
+        }
+        // Which families have a head that is a command in its own right —
+        // asked before the walk, because it decides how the row is spelled.
+        let heads: Vec<&str> = choices
+            .iter()
+            .filter(|c| c.under.is_empty() && folded.contains(&head_of(c.name)) && c.name == head_of(c.name))
+            .map(|c| c.name)
+            .collect();
+        let mut out: Vec<Choice> = Vec::with_capacity(choices.len());
+        let mut standing: Vec<&str> = Vec::new();
+        for c in choices.drain(..) {
+            let head = head_of(c.name);
+            if !c.under.is_empty() || !folded.contains(&head) {
+                out.push(c);
+                continue;
+            }
+            if standing.contains(&head) {
+                continue;
+            }
+            let under = counted.iter().find(|(h, _)| *h == head).map_or(0, |(_, n)| *n);
+            // **A family whose head is a command of its own stands as itself**:
+            // `:table` is a command, and a row saying 「and twelve more」 beside
+            // it is more use than one that says only 「twelve」. A head that is
+            // merely a prefix keeps its hyphen, because `view` alone is not
+            // something anybody can type.
+            let its_own = heads.contains(&head);
+            match c.name == head {
+                true => {
+                    standing.push(head);
+                    out.push(Choice {
+                        family: Some(under - 1),
+                        ..c
+                    });
+                }
+                false if its_own => out.push(c),
+                false => {
+                    standing.push(head);
+                    out.push(Choice {
+                        name: &c.name[..head.len() + 1],
+                        family: Some(under),
+                        ..c
+                    });
+                }
+            }
+        }
+        out
+    }
+
     // The first word names a command; every word after it walks down what that
     // command says may follow — which is the same walk whether those words are
     // arguments or subcommands, because they are the same thing.
@@ -3810,9 +3600,10 @@ pub fn complete_at(line: &str) -> (usize, Vec<Choice>) {
             })
             .map(|e| Choice {
                 name: e.name,
+                family: None,
                 needs: e.needs,
                 alias: (!e.aliases.is_empty()).then(|| e.aliases.join(" ")),
-                // **Among the aliases too.** `:table jump` has no alias of its own
+                // **Among the aliases too.** `:table-jump` has no alias of its own
                 // and no other *name* starts with `ro`, so the shortest walk
                 // over names alone offered `(ro)` — while `ro` is `:readonly`'s
                 // declared alias, and an exact alias beats a prefix in
@@ -3830,7 +3621,6 @@ pub fn complete_at(line: &str) -> (usize, Vec<Choice>) {
                 under: String::new(),
                 note: None,
             })
-            .chain(shorthand_choices(typed))
             .collect(),
         // **The same walk the parser walks** (§5.2.2 fault 1): `walk` resolves
         // the head by prefix and picks each word below it the same way, so the
@@ -3841,7 +3631,7 @@ pub fn complete_at(line: &str) -> (usize, Vec<Choice>) {
         // early return took `:vert` and #223's deep search out with it.
         Some(_) => match walk(&words) {
             None => Vec::new(),
-            Some(args) => match args.words() {
+            Some(param) => match param.words() {
                 Some(list) => list
                     .iter()
                     // **The note is searched too** (#291): the tag is what gets
@@ -3849,25 +3639,27 @@ pub fn complete_at(line: &str) -> (usize, Vec<Choice>) {
                     // needs 中文 on the command line, which a Shift tap gives.
                     .filter(|w| {
                         w.name.starts_with(typed)
-                            || note_for(&args, w).is_some_and(|n| n.contains(typed))
+                            || note_for(param, w).is_some_and(|n| n.contains(typed))
                     })
                     .map(|w| Choice {
                         name: w.name,
+                        family: None,
                         needs: w.needs,
                         alias: None,
                         short: shortest(w.name, list.iter().map(|o| o.name)),
                         help: w.help,
                         leading: "",
                         under: String::new(),
-                        note: note_for(&args, w),
+                        note: note_for(param, w),
                     })
                     .collect(),
                 // A path or free text is the caller's business; there is
                 // nothing here to offer but the placeholder, which is help
                 // rather than a completion.
-                None => match args {
-                    Args::Free(what) => vec![Choice {
+                None => match param {
+                    Param::Free(what) => vec![Choice {
                         name: "",
+                        family: None,
                         needs: &[],
                         alias: None,
                         short: None,
@@ -3889,18 +3681,11 @@ pub fn complete_at(line: &str) -> (usize, Vec<Choice>) {
     if choices.is_empty() && !typed.is_empty() {
         choices = match words.first() {
             None => deep_from_root(typed),
-            Some(_) => match walk(&words) {
-                // The path already typed is the prefix the reader does not
-                // have to type again, so the offer starts below it.
-                Some(args) if args.words().is_some() => {
-                    let mut out = Vec::new();
-                    for w in args.words().unwrap_or_default() {
-                        deep(&w.then, &[w.name], typed, "", &mut out);
-                    }
-                    out
-                }
-                _ => Vec::new(),
-            },
+            // **A command's own parameters are all there is below it.** The
+            // levels that used to hang here are in the names now, so what
+            // `:vert` reaches from inside a command is that command's words
+            // and nothing further down (#368).
+            Some(_) => Vec::new(),
         };
     }
 
@@ -3913,19 +3698,17 @@ pub fn complete_at(line: &str) -> (usize, Vec<Choice>) {
             None => COMMANDS
                 .iter()
                 .find(|e| e.name == typed || e.aliases.contains(&typed))
-                .map(|e| children(e.name, &e.args)),
-            Some(_) => choices
-                .iter()
-                .find(|c| c.name == typed && c.under.is_empty())
-                .and_then(|c| walk(&words).map(|args| (c.name, args)))
-                .and_then(|(name, args)| {
-                    args.words()?
-                        .iter()
-                        .find(|w| w.name == name)
-                        .map(|w| children(w.name, &w.then))
-                }),
+                .and_then(|e| e.params.first().map(|p| children(e.name, p))),
+            // **A word is a value now, and a value has nothing under it.**
+            // The levels a finished word used to open are in the names.
+            Some(_) => None,
         };
         choices.extend(below.unwrap_or_default());
+    }
+    // Only the top level folds: below it the walk is already inside one
+    // command, and what it offers is that command's own words.
+    if folding && words.first().is_none() {
+        choices = fold(typed, choices);
     }
     (start, choices)
 }
@@ -3934,7 +3717,7 @@ pub fn complete_at(line: &str) -> (usize, Vec<Choice>) {
 ///
 /// `complete` answers *what starts with this*; `::` asks *what does this*, and
 /// that question has no prefix to walk down — the reader typed 排序 and the
-/// answer is `:table sort`, which shares not one letter with it. So the search
+/// answer is `:table-sort`, which shares not one letter with it. So the search
 /// needs the whole tree at once, each row carrying the path that has to be
 /// typed to reach it, and ranks it by what it says rather than how it is
 /// spelled.
@@ -3942,15 +3725,15 @@ pub fn complete_at(line: &str) -> (usize, Vec<Choice>) {
 /// The top level first, then everything below it shallowest-first, so a tie in
 /// the ranking falls out as the shorter command.
 pub fn all_choices() -> Vec<Choice> {
-    let mut out = complete("");
+    let mut out = complete_within("", false).1;
     out.extend(deep_from_root(""));
     out
 }
 
 /// What the command on this line needs before it can do anything.
 ///
-/// The *deepest* word that says so: `:table rules` needs a table because
-/// `rules` says it, and `:yume chaifen` needs a 碼表 because `chaifen` does.
+/// The *deepest* word that says so: `:table-rules` needs a table because
+/// `rules` says it, and `:yume-chaifen` needs a 碼表 because `chaifen` does.
 /// Walked from the same table the completion walks, so a prerequisite is
 /// declared once and shown, said and satisfied from the one declaration.
 pub fn needs_of(line: &str) -> &'static [Need] {
@@ -3965,39 +3748,36 @@ pub fn needs_of(line: &str) -> &'static [Need] {
         return &[];
     };
     let mut needs = entry.needs;
-    let mut args = &entry.args;
-    for word in &words[1..] {
-        let Some(list) = args.words() else { break };
+    // The **deepest** word that says so, which is now a parameter's rather
+    // than a subcommand's: `:table-rules` needs a table because the command
+    // says it, and a value may add one of its own.
+    for (at, word) in words[1..].iter().enumerate() {
+        let Some(list) = entry.params.get(at).and_then(Param::words) else {
+            break;
+        };
         let Some(found) = pick(word, list) else { break };
         if !found.needs.is_empty() {
             needs = found.needs;
         }
-        args = &found.then;
     }
     needs
 }
 
 /// What may follow the words already on the line, or `None` if they name
 /// nothing.
-fn walk(words: &[(usize, &str)]) -> Option<&'static Args> {
+fn walk(words: &[(usize, &str)]) -> Option<&'static Param> {
     let (_, head) = words.first()?;
     let entry = entry_named(head)?;
-    let mut args = &entry.args;
-    for &(_, word) in &words[1..] {
-        match args.words() {
-            // `pick`, not an exact match — one rule, at every level. `:tab r`
-            // *runs* as `:table rules`, so it has to be answerable too.
-            Some(list) => args = &pick(word, list)?.then,
-            None => return None,
-        }
-    }
-    Some(args)
+    // **A command's parameters are read by position** (#368): the words after
+    // `:theme` are its first and its second, not a path down a tree, so what
+    // may stand in the next slot is what the next slot declares.
+    entry.params.get(words.len() - 1)
 }
 
 /// Does a line the **documents** print name something the editor has?
 ///
 /// Not `parse`: no argument is evaluated and nothing is run, so a line that is
-/// merely impossible at this moment — `:w` with no file, `:table rules` with no
+/// merely impossible at this moment — `:w` with no file, `:table-rules` with no
 /// table — still answers yes. It settles the one question a manual can get
 /// wrong all by itself, 「有沒有這條命令，它收不收後面這幾個字」, by walking
 /// the same `resolve` / `pick` rule the parser walks.
@@ -4008,10 +3788,6 @@ fn walk(words: &[(usize, &str)]) -> Option<&'static Args> {
 /// this table's vocabulary.
 pub fn names_something(line: &str) -> Result<(), String> {
     let line = line.strip_prefix(':').unwrap_or(line);
-    // A shorthand names the line it stands for (#363), so the documents may
-    // teach `:wq` — what it names is `write quit`.
-    let expanded = expand_shorthand(line);
-    let line = expanded.as_str();
     let mut words = line.split_whitespace();
     let Some(head) = words.next() else {
         return Err(String::from(":"));
@@ -4026,26 +3802,29 @@ pub fn names_something(line: &str) -> Result<(), String> {
     let Some(entry) = entry_named(head) else {
         return Err(head.to_string());
     };
-    let mut args = &entry.args;
-    let mut path = String::from(entry.name);
-    for word in words {
-        let Some(list) = args.words() else { return Ok(()) };
+    for (at, word) in words.enumerate() {
+        let Some(list) = entry.params.get(at).and_then(Param::words) else {
+            return Ok(());
+        };
         // A bang ends a **line**, not a word, so it is looked for where the
-        // line is spelled out: `:buffer close!` is in `FORCEABLE` and
-        // `:buffer list!` is not.
+        // line is spelled out: `:buffer-close!` is in `FORCEABLE` and
+        // `:buffer!` is not.
         let (word, banged) = match word.strip_suffix('!') {
             Some(stem) => (stem, true),
             None => (word, false),
         };
-        let Some(found) = pick(word, list) else {
-            return Err(word.to_string());
-        };
-        path.push(' ');
-        path.push_str(found.name);
-        if banged && !FORCEABLE.contains(&format!("{path}!").as_str()) {
+        if pick(word, list).is_none() {
+            // A parameter that also takes anything lets its own text through:
+            // `:theme 墨香` names a theme this table has never heard of, and
+            // the front end is the one holding the colours.
+            return match matches!(entry.params.get(at), Some(Param::WordsOr { .. })) {
+                true => Ok(()),
+                false => Err(word.to_string()),
+            };
+        }
+        if banged && !FORCEABLE.contains(&format!("{}!", entry.name).as_str()) {
             return Err(format!("{word}!"));
         }
-        args = &found.then;
     }
     Ok(())
 }
@@ -4335,7 +4114,7 @@ mod tests {
             asked += 1;
 
             // …and one level down, where the same rule has to hold.
-            let Some(list) = entry.args.words() else {
+            let Some(list) = entry.params.first().and_then(Param::words) else {
                 continue;
             };
             for word in list {
@@ -4364,7 +4143,7 @@ mod tests {
     ///
     /// The declaration and the arm that answers it sit two thousand lines
     /// apart, so nothing but a walk of the table can tell they disagree.
-    /// `:view hanging off` turned hanging punctuation **on**: `COMMANDS` declared
+    /// `:view-hanging off` turned hanging punctuation **on**: `COMMANDS` declared
     /// `Args::Words(ON_OFF)`, the hint printed it, the menu offered it, and
     /// `parse` was `"hanging" => Ok(Command::ToggleHanging)` with `rest`
     /// never read. `every_listed_command_parses` cannot see it — `:hanging
@@ -4374,22 +4153,15 @@ mod tests {
     fn a_command_that_offers_on_and_off_reads_them_back() {
         /// The list is 「on｜off」 — asked by what it holds rather than by
         /// which constant it is, so a second, hand-rolled pair is caught too.
-        fn is_a_switch(args: &Args) -> bool {
-            matches!(args.words(), Some(list)
-                if list.len() == 2 && list[0].name == "on" && list[1].name == "off")
-        }
-        fn walk_down(args: &'static Args, path: &str, out: &mut Vec<String>) {
-            if is_a_switch(args) {
-                out.push(path.to_string());
-                return;
-            }
-            for word in args.words().unwrap_or_default() {
-                walk_down(&word.then, &format!("{path} {}", word.name), out);
-            }
+        fn is_a_switch(param: &Param) -> bool {
+            matches!(param.words(), Some(list)
+                if list.len() >= 2 && list[0].name == "on" && list[1].name == "off")
         }
         let mut paths = Vec::new();
         for entry in COMMANDS {
-            walk_down(&entry.args, entry.name, &mut paths);
+            if entry.params.first().is_some_and(is_a_switch) {
+                paths.push(entry.name.to_string());
+            }
         }
         assert!(paths.len() > 8, "the walk found almost nothing: {paths:?}");
 
@@ -4405,7 +4177,7 @@ mod tests {
             );
             // …and the abbreviation the menu shows is the one that parses.
             // `pick` is the rule everywhere else; an equality test here would
-            // make `:view hanging of` an error under a menu that prints `of`.
+            // make `:view-hanging of` an error under a menu that prints `of`.
             assert_eq!(parse(&format!(":{path} of")), off, "`:{path} of`");
         }
     }
@@ -4422,29 +4194,29 @@ mod tests {
         // 分詞邊界 is one subject and one command now.
         assert_eq!(parse(":word"), Ok(Command::Word(WordCommand::Report)));
         assert_eq!(
-            parse(":word show on"),
+            parse(":word-show on"),
             Ok(Command::Word(WordCommand::Show(Some(true))))
         );
-        assert_eq!(parse(":word list"), Ok(Command::Word(WordCommand::List)));
+        assert_eq!(parse(":word-list"), Ok(Command::Word(WordCommand::List)));
         assert_eq!(
-            parse(":word list reload"),
+            parse(":word-list reload"),
             Ok(Command::Word(WordCommand::Reload))
         );
         assert_eq!(
-            parse(":word level strict"),
+            parse(":word-level strict"),
             Ok(Command::Word(WordCommand::Level(Some(
                 yumete_cjk::WordLevel::Strict
             ))))
         );
         assert_eq!(
-            parse(":word discover"),
+            parse(":word-discover"),
             Ok(Command::Word(WordCommand::Discover))
         );
-        assert_eq!(parse(":word habit"), Ok(Command::Word(WordCommand::Habit)));
+        assert_eq!(parse(":word-habit"), Ok(Command::Word(WordCommand::Habit)));
         // A level nobody defined is refused by name, not silently taken.
-        assert!(parse(":word level 中等").is_err());
+        assert!(parse(":word-level 中等").is_err());
         // The commands it replaced are gone — `:words` was 口頭禪 and is
-        // `:word habit`, one subject and one command.
+        // `:word-habit`, one subject and one command.
         assert!(parse(":segment").is_err());
         assert!(parse(":words").is_err());
     }
@@ -4473,19 +4245,23 @@ mod tests {
 
     #[test]
     fn the_input_method_lives_under_one_word() {
-        assert_eq!(parse(":yume chaifen"), Ok(Command::SetChaifen(None)));
+        assert_eq!(parse(":yume-chaifen"), Ok(Command::SetChaifen(None)));
         assert_eq!(
-            parse(":yume scheme lingming"),
+            parse(":yume-scheme lingming"),
             Ok(Command::SetScheme("lingming".into()))
         );
         // The flat spellings are gone: `:chaifen` said nothing about which of
         // the editor's many parts it belonged to, and `:scheme` even less.
         assert_eq!(parse(":chaifen"), Err(CommandError::Unknown("chaifen".into())));
         assert_eq!(parse(":scheme x"), Err(CommandError::Unknown("scheme".into())));
-        // On its own it is the question "which one is answering", not a
-        // mistake — a parent command should say where you are.
-        assert_eq!(parse(":yume"), Ok(Command::YumeStatus));
-        assert_eq!(parse(":yume which"), Ok(Command::YumeStatus));
+        // **On its own it turns it on** (#368). It used to be the question
+        // 「which one is answering」, which `:yume-which` asks better; 「開中文」
+        // is what a hand reaching for this command nearly always means.
+        assert_eq!(
+            parse(":yume"),
+            Ok(Command::YumeLanguage(Engagement::Chinese))
+        );
+        assert_eq!(parse(":yume-which"), Ok(Command::YumeStatus));
         assert_eq!(
             parse(":yume on"),
             Ok(Command::YumeLanguage(Engagement::Chinese))
@@ -4495,48 +4271,48 @@ mod tests {
             Ok(Command::YumeLanguage(Engagement::Ascii))
         );
         assert_eq!(parse(":yume off"), Ok(Command::YumeLanguage(Engagement::Off)));
-        assert_eq!(parse(":yume installed"), Ok(Command::InstalledScheme));
-        assert_eq!(parse(":yume builtin"), Ok(Command::BuiltinScheme));
-        assert_eq!(parse(":yume b"), Ok(Command::BuiltinScheme));
+        assert_eq!(parse(":yume-installed"), Ok(Command::InstalledScheme));
+        assert_eq!(parse(":yume-builtin"), Ok(Command::BuiltinScheme));
+        assert_eq!(parse(":yume-b"), Ok(Command::BuiltinScheme));
         // 上屏方式 (Feature #209): the three are yume's own tags, `auto` is
         // 唯一 under the name the habit uses, and no argument is the question.
-        assert_eq!(parse(":yume commit"), Ok(Command::YumeCommit(None)));
+        assert_eq!(parse(":yume-commit"), Ok(Command::YumeCommit(None)));
         assert_eq!(
-            parse(":yume commit delayed"),
+            parse(":yume-commit delayed"),
             Ok(Command::YumeCommit(Some("delayed".into())))
         );
         assert_eq!(
-            parse(":yume commit u"),
+            parse(":yume-commit u"),
             Ok(Command::YumeCommit(Some("unique".into())))
         );
         assert_eq!(
-            parse(":yume commit auto"),
+            parse(":yume-commit auto"),
             Ok(Command::YumeCommit(Some("unique".into())))
         );
         assert_eq!(
-            parse(":yume commit fluency"),
+            parse(":yume-commit fluency"),
             Ok(Command::YumeCommit(Some("fluency".into())))
         );
         // #211: 候選面板 is the other axis, and it parses by prefix too.
-        assert_eq!(parse(":yume panel"), Ok(Command::YumePanel(None)));
+        assert_eq!(parse(":yume-panel"), Ok(Command::YumePanel(None)));
         assert_eq!(
-            parse(":yume panel bare"),
+            parse(":yume-panel bare"),
             Ok(Command::YumePanel(Some("bare".into())))
         );
         assert_eq!(
-            parse(":yume p f"),
+            parse(":yume-p f"),
             Ok(Command::YumePanel(Some("full".into())))
         );
         assert!(matches!(
-            parse(":yume panel invisible"),
+            parse(":yume-panel invisible"),
             Err(CommandError::InvalidArgument {
-                command: "yume panel",
+                command: "yume-panel",
                 ..
             })
         ));
         // Not silently the first of the three.
         assert!(matches!(
-            parse(":yume commit slow"),
+            parse(":yume-commit slow"),
             Err(CommandError::InvalidArgument { .. })
         ));
     }
@@ -4724,19 +4500,21 @@ mod tests {
                         word.name
                     );
                 }
-                if let Some(under) = word.then.words() {
-                    // Down the short spelling, so a lie at either level shows.
-                    let walk = match short {
-                        Some(short) => format!("{prefix} {short}"),
-                        None => full,
-                    };
-                    check(&walk, under);
-                }
             }
         }
         for entry in COMMANDS {
-            if let Some(list) = entry.args.words() {
-                check(&format!(":{}", entry.name), list);
+            // Every parameter, at the position it stands in: the words of the
+            // second slot are reached by writing something in the first.
+            for (at, param) in entry.params.iter().enumerate() {
+                let Some(list) = param.words() else { continue };
+                let ahead: String = entry.params[..at]
+                    .iter()
+                    .map(|p| match p.words().and_then(|l| l.first()) {
+                        Some(w) => format!(" {}", w.name),
+                        None => " x".to_string(),
+                    })
+                    .collect();
+                check(&format!(":{}{ahead}", entry.name), list);
             }
         }
     }
@@ -4790,21 +4568,21 @@ mod tests {
             Ok(Command::SetTableRules(r)) => r,
             other => panic!("{line}: {other:?}"),
         };
-        assert_eq!(rules(":table rules"), None, "bare, it only reports");
-        assert_eq!(rules(":table rules off"), Some(Rules::Off));
-        assert_eq!(rules(":table rules color"), Some(Rules::Colour));
-        assert_eq!(rules(":table rules colour"), Some(Rules::Colour));
-        for line in [":table rules line", ":table rules line solid"] {
+        assert_eq!(rules(":table-rules"), None, "bare, it only reports");
+        assert_eq!(rules(":table-rules off"), Some(Rules::Off));
+        assert_eq!(rules(":table-rules color"), Some(Rules::Colour));
+        assert_eq!(rules(":table-rules colour"), Some(Rules::Colour));
+        for line in [":table-rules line", ":table-rules line solid"] {
             assert_eq!(rules(line), Some(Rules::Line(Stroke::Solid)), "{line}");
         }
-        assert_eq!(rules(":table rules line dash"), Some(Rules::Line(Stroke::Dash)));
+        assert_eq!(rules(":table-rules line dash"), Some(Rules::Line(Stroke::Dash)));
         assert_eq!(
-            rules(":table rules line double"),
+            rules(":table-rules line double"),
             Some(Rules::Line(Stroke::Double))
         );
-        assert!(parse(":table rules squiggly").is_err());
+        assert!(parse(":table-rules squiggly").is_err());
         // …and the menu lists them, the way a finished word does.
-        let words: Vec<String> = complete("table rules ").iter().map(Choice::written).collect();
+        let words: Vec<String> = complete("table-rules ").iter().map(Choice::written).collect();
         assert_eq!(words, ["off", "color", "line"]);
     }
 
@@ -4893,10 +4671,26 @@ mod tests {
         // **Every command, and every spelling that is one** (#363). An alias
         // that names a whole line is in the list beside the names, because an
         // alias is another name for the command and not a shortcut to it.
+        // **Folded into families** (#369). `:` alone is glanced at rather
+        // than read, so the twelve `view-…` stand as one row until something
+        // narrows them — and the whole list is still there for `::` to search.
+        assert!(
+            complete("").len() < COMMANDS.len(),
+            "`:` alone folds the families: {}",
+            complete("").len()
+        );
+        assert!(
+            complete("view").len() >= 12,
+            "typing the head opens the family: {}",
+            complete("view").len()
+        );
         assert_eq!(
-            complete("").len(),
-            COMMANDS.len() + SHORTHANDS.len(),
-            "`:` alone lists them all"
+            all_choices()
+                .iter()
+                .filter(|c| c.under.is_empty() && c.family.is_none())
+                .count(),
+            COMMANDS.len(),
+            "and every one of them is still findable"
         );
         // One name, not three: `:ruby-on` and `:ruby-off` were the setting
         // wearing the verb's name, and they are now words `:ruby` takes — and
@@ -4908,40 +4702,42 @@ mod tests {
             ruby,
             [
                 "ruby",
+                "ruby-auto",
+                "ruby-html",
+                "ruby-typst",
+                "ruby-format",
                 "ruby off",
                 "ruby basic",
                 "ruby full",
-                "ruby auto",
-                "ruby html",
-                "ruby typst",
-                "ruby format"
             ]
         );
-        // Half a word is still a question about which command.
+        // Half a word narrows to the one family, and a family with nothing
+        // to choose against opens (#369).
         let rub: Vec<String> = complete("rub").iter().map(Choice::written).collect();
-        assert_eq!(rub, ["ruby"]);
-        // Two levels down, the same rule and the same spelling.
-        let format: Vec<String> = complete("ruby format").iter().map(Choice::written).collect();
-        assert_eq!(format, ["format", "format html", "format typst"]);
-        // **A shorthand completes into what it is short for** (#363): `:wq`
-        // is `:write quit`, so that is the word offered — the reader who typed
-        // the short spelling is shown the long one, which is the only spelling
-        // that says what it does.
-        // **An alias is another name, not a shortcut** (#363): `:wq` is
-        // `write-quit`'s declared alias and finds the entry; `:bc` names a
-        // whole line and is in the list as itself.
+        assert_eq!(
+            rub,
+            ["ruby", "ruby-auto", "ruby-html", "ruby-typst", "ruby-format"]
+        );
+        // The words a finished command takes, under the command itself.
+        let format: Vec<String> = complete("ruby-format").iter().map(Choice::written).collect();
+        assert_eq!(format, ["ruby-format", "ruby-format html", "ruby-format typst"]);
+        // **An alias is another name, not a shortcut** (#363) — and once a
+        // command's name is one word, that is all a short spelling has to be
+        // (#368): `bc` is `buffer-close`'s declared alias, exactly as `wq` is
+        // `write-quit`'s, and the table that used to hold the two-word lines
+        // separately is gone.
         assert_eq!(
             complete("wq").iter().map(|e| e.name).collect::<Vec<_>>(),
             ["write-quit"]
         );
         assert_eq!(
             complete("bc").iter().map(|e| e.name).collect::<Vec<_>>(),
-            ["bc"]
+            ["buffer-close"]
         );
-        // …and `:b` keeps the command and its lines' spellings together.
+        // …and `:b` keeps the family together.
         let under_b: Vec<&str> = complete("b").iter().map(|e| e.name).collect();
-        for want in ["buffer", "bc", "bn", "bp"] {
-            assert!(under_b.contains(&want), "{want} missing from {under_b:?}");
+        for want in ["buffer", "buffer-close", "buffer-next", "buffer-previous"] {
+            assert!(want == "buffer" || under_b.contains(&want), "{want} missing from {under_b:?}");
         }
         assert!(complete("zzz").is_empty());
     }
@@ -4950,9 +4746,11 @@ mod tests {
     fn the_short_form_the_menu_shows_is_one_that_works() {
         // The menu prints `:yume (y)`. That has to be true, or it is teaching
         // a spelling that fails — so the same prefix rule resolves the first
-        // word of a command line, not only the words after it.
-        assert_eq!(parse(":y"), Ok(Command::YumeStatus));
-        assert_eq!(parse(":yu"), Ok(Command::YumeStatus));
+        // word of a command line, not only the words after it. And with the
+        // family flattened, `y` still reaches the head rather than being torn
+        // between it and the eight `yume-…` beside it (#368).
+        assert_eq!(parse(":y"), Ok(Command::YumeLanguage(Engagement::Chinese)));
+        assert_eq!(parse(":yu"), Ok(Command::YumeLanguage(Engagement::Chinese)));
         // `:ta` again: `:target` took the two-letter prefix away when it
         // arrived, and gave it back when the fold put it under `:count`
         // (§5.2.3 ③). Ten abbreviations got shorter that way.
@@ -4974,7 +4772,7 @@ mod tests {
         //
         // Worked out over the **names and the aliases** together, because both
         // are things `resolve` matches: `ro` names no other command and would
-        // have been offered for `:table jump`, while `ro` is `:readonly`'s declared
+        // have been offered for `:table-jump`, while `ro` is `:readonly`'s declared
         // alias and an alias beats a prefix.
         let short = |name: &'static str| {
             shortest(
@@ -4989,23 +4787,21 @@ mod tests {
         assert_eq!(short("render"), Some("ren"), "recover and redo are in the way");
         assert_eq!(short("sh"), None, "nothing shorter than the whole word");
         // `r` and `ro` are both taken — the second by `:readonly`'s alias —
-        // so `:table jump` is offered with no short form at all, the way `:sh` is.
+        // so `:table-jump` is offered with no short form at all, the way `:sh` is.
         assert_eq!(short("row"), None, "`ro` is `:readonly`'s");
         // Over what `complete` actually hands the menu, not over a second
         // derivation of it — the menu prints `Choice::short`, so that is the
         // string this has to hold to account.
         for choice in complete("") {
-            // A shorthand names a whole line rather than an entry (#363), and
-            // shows no short form of its own — it *is* the short form.
-            let Some(entry) = COMMANDS.iter().find(|e| e.name == choice.name) else {
-                assert!(
-                    SHORTHANDS.iter().any(|(short, _)| *short == choice.name),
-                    "`{}` is in the list and is neither a command nor a shorthand",
-                    choice.name
-                );
-                assert_eq!(choice.short, None, "a shorthand has nothing shorter");
+            // A folded family is not an entry and has no spelling of its own
+            // (#369) — it stands for the twelve behind it.
+            if choice.name.ends_with('-') {
                 continue;
-            };
+            }
+            let entry = COMMANDS
+                .iter()
+                .find(|e| e.name == choice.name)
+                .unwrap_or_else(|| panic!("`{}` is in the list and is not a command", choice.name));
             assert_eq!(choice.short, short(entry.name), "one rule, not two");
             if let Some(short) = choice.short {
                 // It resolves, **and it resolves to this one**. Checking only
@@ -5036,38 +4832,32 @@ mod tests {
 
     #[test]
     fn an_unambiguous_prefix_is_the_word_it_starts() {
-        // `:yume s l` is the whole of starting to type — `s` is the only word
-        // `:yume` takes that starts with `s`, and `l` the only scheme.
+        // `:yume-s l` is the whole of starting to type — `yume-s` names only
+        // `yume-scheme`, and `l` only 靈明.
         assert_eq!(
-            parse(":yume s l"),
+            parse(":yume-s l"),
             Ok(Command::SetScheme("lingming".into()))
         );
-        assert_eq!(parse(":yume scheme ling"), Ok(Command::SetScheme("lingming".into())));
-        // `chaifen` and `commit` both start with `c`, so `c` alone names
-        // neither — the menu on `:yume c` shows both, which is the answer.
-        assert_eq!(parse(":yume ch"), Ok(Command::SetChaifen(None)));
-        assert!(matches!(
-            parse(":yume c"),
-            Err(CommandError::InvalidArgument { .. })
-        ));
+        assert_eq!(parse(":yume-scheme ling"), Ok(Command::SetScheme("lingming".into())));
+        // `chaifen` and `commit` both start with `c`, so `yume-c` alone names
+        // neither — the menu shows both, which is the answer.
+        assert_eq!(parse(":yume-ch"), Ok(Command::SetChaifen(None)));
+        assert!(matches!(parse(":yume-c"), Err(CommandError::Unknown(_))));
         // No name at all means the one the config asked for.
-        assert_eq!(parse(":yume s"), Ok(Command::SetScheme(String::new())));
+        assert_eq!(parse(":yume-s"), Ok(Command::SetScheme(String::new())));
         // A prefix that names two words names neither, loudly, rather than
         // quietly meaning whichever was written first.
-        assert!(matches!(
-            parse(":yume x"),
-            Err(CommandError::InvalidArgument { .. })
-        ));
+        assert!(matches!(parse(":yume-x"), Err(CommandError::Unknown(_))));
     }
 
     #[test]
     fn a_space_offers_what_may_follow_the_command() {
         // The point of the whole arrangement: nobody has to remember an
-        // argument, only a verb. `:view dense ` says what may come next.
+        // argument, only a verb. `:view-dense ` says what may come next.
         let words = |line: &str| -> Vec<&str> { complete(line).iter().map(|c| c.name).collect() };
-        assert_eq!(words("view dense "), ["on", "off"]);
-        assert_eq!(words("view dense o"), ["on", "off"]);
-        assert_eq!(words("view dense of"), ["off"]);
+        assert_eq!(words("view-dense "), ["on", "off"]);
+        assert_eq!(words("view-dense o"), ["on", "off"]);
+        assert_eq!(words("view-dense of"), ["off"]);
         assert_eq!(words("syntax "), ["markdown", "typst", "text"]);
         assert_eq!(words("layout v"), ["vertical"]);
 
@@ -5075,15 +4865,16 @@ mod tests {
         // simply the words it takes, and they go as deep as they like.
         assert_eq!(
             words("ruby "),
-            ["off", "basic", "full", "auto", "html", "typst", "format"]
+            ["off", "basic", "full"]
         );
-        assert_eq!(words("ruby html "), ["on", "off"]);
+        assert_eq!(words("ruby-html "), ["on", "off"]);
 
         // Where the word being completed starts, so a completion replaces it
         // and not the whole line.
         assert_eq!(complete_at("ruby ht").0, 5);
-        assert_eq!(complete_at("ruby html o").0, 10);
-        assert_eq!(complete_at("view dense").0, 5);
+        assert_eq!(complete_at("ruby-html o").0, 10);
+        // One word now, so the completion replaces the whole of it (#368).
+        assert_eq!(complete_at("view-dense").0, 0);
 
         // A command that takes free text says what it wants rather than
         // offering a list it does not have.
@@ -5095,23 +4886,24 @@ mod tests {
         // A path is the caller's business, and a word nothing accepts is
         // nothing rather than the whole list again.
         assert!(complete("write draft.md ").is_empty());
-        // …and `:quit ` offers the one word it has, since #364 folded
-        // `:quitall` into it.
+        // …and `:quit` takes nothing at all now: 「全部關掉」 is a command of
+        // its own (#368), so what `:quit` offers is the family beside it.
+        assert!(complete("quit ").is_empty());
         assert_eq!(
-            complete("quit ").iter().map(|e| e.name).collect::<Vec<_>>(),
-            ["all"]
+            complete("quit").iter().map(|e| e.name).collect::<Vec<_>>(),
+            ["quit", "quit-all"]
         );
         // **`:qa` is in the list as itself** (#363): an alias is another name
         // for the command, not a shortcut to it, so it narrows like a name.
         assert_eq!(
             complete("qa").iter().map(|e| e.name).collect::<Vec<_>>(),
-            ["qa"]
+            ["quit-all"]
         );
-        // …and `:q` keeps them together: the command and the two spellings
-        // that stand for lines beginning with it.
+        // …and `:q` keeps the family together — `qa` being `quit-all`'s
+        // declared alias rather than a line of its own (#368).
         let under_q: Vec<&str> = complete("q").iter().map(|e| e.name).collect();
         assert!(under_q.contains(&"quit"), "{under_q:?}");
-        assert!(under_q.contains(&"qa"), "{under_q:?}");
+        assert!(under_q.contains(&"quit-all"), "{under_q:?}");
     }
 
     /// A word that names nothing at the depth it was typed at is looked for
@@ -5138,7 +4930,7 @@ mod tests {
         // And the fallback reaches past the first level: a scheme's name is
         // two words below `:yume`.
         assert!(
-            written("lingming").contains(&"yume scheme lingming".to_string()),
+            written("lingming").contains(&"yume-scheme lingming".to_string()),
             "a leaf three deep is still reachable by its own name"
         );
 
@@ -5151,18 +4943,22 @@ mod tests {
         // it is answered about those and not buried under every grandchild of
         // the tree that happens to start with a `t`.
         let shallow = written("t");
-        assert!(shallow.iter().all(|w| !w.contains(' ')), "{shallow:?}");
+        assert!(
+            shallow.iter().all(|w| !w.trim_end_matches(|c: char| !c.is_whitespace()).contains(' ')
+                || w.contains('…')),
+            "{shallow:?}"
+        );
         assert!(shallow.len() > 1, "several commands start with t");
 
         // Deeper down it works the same way: `:yume` knows no word `ling`, so
         // the offer comes from below it — and carries only the part still
         // missing, because `yume ` is already on the line.
-        let under_yume: Vec<String> = complete("yume ling")
+        let under_yume: Vec<String> = complete("yume-scheme ling")
             .iter()
             .map(|c| c.written())
             .collect();
         assert!(
-            under_yume.contains(&"scheme lingming".to_string()),
+            under_yume.contains(&"lingming".to_string()),
             "{under_yume:?}"
         );
 
@@ -5179,11 +4975,11 @@ mod tests {
         let written: Vec<String> = all.iter().map(|c| c.written()).collect();
         for one in [
             "table",
-            "table sort",
-            "table new",
-            "view wrap",
+            "table-sort",
+            "table-new",
+            "view-wrap",
             "layout vertical",
-            "yume scheme lingming",
+            "yume-scheme lingming",
             "theme mogao",
         ] {
             assert!(
@@ -5220,7 +5016,7 @@ mod tests {
             "quit",
             "goto",
             "count",
-            "check",
+            "check-usage",
             "grep",
             "diff",
             "toc",
@@ -5228,9 +5024,9 @@ mod tests {
             "ruby",
             "yume",
             "buffer",
-            "clipboard",
+            "clipboard-yank",
             "layout",
-            "view",
+            "view-wrap",
             "wheel",
             "table",
         ] {
@@ -5251,30 +5047,37 @@ mod tests {
         /// checked without anybody remembering to add it here too — and so a
         /// subcommand that the parser does not actually accept is caught the
         /// moment it is offered by completion.
-        fn sample(path: &str, args: &Args) -> String {
-            match args {
-                _ if args.words().is_some_and(|l| !l.is_empty()) => {
-                    let list = args.words().unwrap_or_default();
-                    sample(&format!("{path} {}", list[0].name), &list[0].then)
-                }
-                Args::None | Args::Words(_) | Args::Schemes => path.to_string(),
-                Args::Path | Args::PathOr(_) => format!("{path} a.md"),
-                // A word only this command knows the shape of.
-                Args::Free(_) => {
-                    let word = match path {
-                        p if p.ends_with("scheme") => "lingming",
-                        ":export" => "html",
-                        ":grep" => "x",
-                        // Both words are sides, and the pair has to be a
-                        // conversion someone could actually ask for: a side
-                        // converted to itself is refused on purpose.
-                        ":convert t" => "s",
-                        p if p.starts_with(":convert ") => "t",
+        fn sample(name: &str, params: &[Param]) -> String {
+            let mut line = format!(":{name}");
+            for param in params {
+                let word = match param {
+                    _ if param.words().is_some_and(|l| !l.is_empty()) => {
+                        let list = param.words().unwrap_or_default();
+                        // `screen` refuses a file name on purpose, so the
+                        // sample takes the one that wants one.
+                        match name == "shot" {
+                            true => "png".to_string(),
+                            false => list[0].name.to_string(),
+                        }
+                    }
+                    Param::Path => "a.md".to_string(),
+                    Param::Schemes => "lingming".to_string(),
+                    // A word only this command knows the shape of.
+                    Param::Free(_) => match name {
+                        "grep" | "run" | "pipe" | "sh" | "replace" => "x",
+                        "table-new" => "3x4",
                         _ => "1",
-                    };
-                    format!("{path} {word}")
+                    }
+                    .to_string(),
+                    Param::Words { .. } | Param::WordsOr { .. } => String::new(),
+                };
+                if word.is_empty() {
+                    break;
                 }
+                line.push(' ');
+                line.push_str(&word);
             }
+            line
         }
 
         for entry in COMMANDS {
@@ -5282,17 +5085,29 @@ mod tests {
                 "s/pat/rep/" => ":s/a/b/".to_string(),
                 // Listed under the shape it is typed in, not as a word.
                 "!command" => ":!echo hi".to_string(),
-                name => sample(&format!(":{name}"), &entry.args),
+                name => sample(name, entry.params),
             };
             assert!(parse(&line).is_ok(), "{line} does not parse");
             // Every *word* a command offers has to parse too, not only the
             // first — completion offering a word the parser rejects is the
             // exact drift this table exists to catch.
-            if let Some(list) = entry.args.words() {
-                for word in list {
-                    let line = sample(&format!(":{} {}", entry.name, word.name), &word.then);
-                    assert!(parse(&line).is_ok(), "{line} does not parse");
-                }
+            for word in entry.params.first().and_then(Param::words).unwrap_or_default() {
+                // **Either shape, because a value may have rules of its own.**
+                // `:table-find row` is a search with nothing to search for and
+                // `:shot screen a.md` is a picture the clipboard has nowhere to
+                // put — each is refused, and each has a sibling spelling that
+                // is not. What this holds the table to is that every word it
+                // offers stands in *some* line the parser accepts.
+                let filled = sample(entry.name, &entry.params[1..]);
+                let tail = filled
+                    .strip_prefix(&format!(":{}", entry.name))
+                    .unwrap_or("");
+                let bare = format!(":{} {}", entry.name, word.name);
+                let whole = format!("{bare}{tail}");
+                assert!(
+                    parse(&bare).is_ok() || parse(&whole).is_ok(),
+                    "neither `{bare}` nor `{whole}` parses"
+                );
             }
             // Every spelling the table declares, not just the first: a table
             // that says `:e` opens a file and a parser that exports one is
@@ -5351,18 +5166,18 @@ mod tests {
     #[test]
     fn a_word_that_moved_under_a_parent_says_where_it_went() {
         for (word, sent_to) in [
-            ("dense", "`:view dense`"),
-            ("hanging", "`:view hanging`"),
-            ("preview", "`:view preview`"),
-            ("progress", "`:count progress`"),
-            ("merge", "`:check merge`"),
+            ("dense", "`:view-dense`"),
+            ("hanging", "`:view-hanging`"),
+            ("preview", "`:view-preview`"),
+            ("progress", "`:count-progress`"),
+            ("merge", "`:check-merge`"),
         ] {
             assert_eq!(moved_to(word).as_deref(), Some(sent_to));
         }
         // Two parents, two answers — ④'s rule, said out loud.
         assert_eq!(
             moved_to("punct").as_deref(),
-            Some("`:check punct` `:view punct`")
+            Some("`:check-punct` `:view-punct`")
         );
         // A word nothing owns is not answered at all: a wrong signpost is
         // worse than none.

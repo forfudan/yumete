@@ -455,7 +455,7 @@ impl Editor {
         };
         let note = format!("{lead}{tag}: ");
         // The same gate every other writer passes: a note appended to a grid
-        // gives it two one-column rows. `:markdown footnote` reaches this from
+        // gives it two one-column rows. `:markdown-footnote` reaches this from
         // a key now, so「表格裏不寫註」 has to be said here rather than assumed.
         if let Some(why) = self.replacement_reshapes_the_grid((end, end), &note) {
             self.status = why;
@@ -471,7 +471,7 @@ impl Editor {
 
     /// The note itself, with the undo point already taken.
     ///
-    /// **One edit, one `u`.** `:markdown footnote` writes the tag *and* the
+    /// **One edit, one `u`.** `:markdown-footnote` writes the tag *and* the
     /// note, and two snapshots left a `[^1]` pointing at nothing after a single
     /// undo — so the caller takes the one snapshot that covers both.
     pub(super) fn write_the_note(&mut self, end: usize, note: &str, tag: &str) {

@@ -150,17 +150,17 @@ impl Editor {
         let mut out = format!("# {}\n\n", say!("help.chinese.title"));
         for (keys, what) in [
             (":yume on", say!("help.chinese.toggle-ime")),
-            (":yume scheme", say!("help.chinese.switch-scheme")),
-            (":yume chaifen on", say!("help.chinese.chaifen-under-candidates")),
+            (":yume-scheme", say!("help.chinese.switch-scheme")),
+            (":yume-chaifen on", say!("help.chinese.chaifen-under-candidates")),
             ("w b e", say!("help.chinese.word-boundaries")),
-            (":word show on", say!("help.chinese.word-tint")),
-            (":word list reload", say!("help.chinese.reload-project-words")),
-            (":word habit", say!("help.chinese.habit-words")),
+            (":word-show on", say!("help.chinese.word-tint")),
+            (":word-list reload", say!("help.chinese.reload-project-words")),
+            (":word-habit", say!("help.chinese.habit-words")),
             (":ruby", say!("help.chinese.annotate-reading")),
-            (":ruby format html", say!("help.chinese.unify-reading-spelling")),
+            (":ruby-format html", say!("help.chinese.unify-reading-spelling")),
             (":render full", say!("render.wysiwyg")),
             (":indent 2", say!("help.chinese.first-line-indent")),
-            (":view hanging on", say!("help.chinese.hung-punctuation")),
+            (":view-hanging on", say!("help.chinese.hung-punctuation")),
             (":count", say!("help.chinese.count")),
         ] {
             out.push_str(&format!("- `{keys}` — {what}
@@ -175,11 +175,11 @@ impl Editor {
             (":layout vertical", say!("help.vertical.turn-vertical")),
             ("h l", say!("help.vertical.previous-next-column")),
             ("j k", say!("help.vertical.down-up-column")),
-            (":view wrap 24", say!("help.vertical.column-length")),
-            (":view bands 2", say!("help.vertical.bands")),
-            (":view hanging on", say!("help.vertical.hung-punctuation")),
-            (":view dense off", say!("help.vertical.loose")),
-            (":view sentence", say!("help.vertical.sentence")),
+            (":view-wrap 24", say!("help.vertical.column-length")),
+            (":view-bands 2", say!("help.vertical.bands")),
+            (":view-hanging on", say!("help.vertical.hung-punctuation")),
+            (":view-dense off", say!("help.vertical.loose")),
+            (":view-sentence", say!("help.vertical.sentence")),
             (":indent 2", say!("help.vertical.first-line-indent")),
             (":render full", say!("help.vertical.wysiwyg")),
         ] {
@@ -204,7 +204,7 @@ impl Editor {
             ("t r t d", say!("help.table.add-or-drop-row")),
             ("t s t S", say!("help.table.sort-by-column")),
             ("t y t p", say!("help.table.yank-or-put-column")),
-            (":table rules off", say!("help.table.no-column-rules")),
+            (":table-rules off", say!("help.table.no-column-rules")),
         ] {
             out.push_str(&format!("- `{keys}` — {what}
 "));
@@ -225,7 +225,12 @@ impl Editor {
 ",
                 entry.name,
                 aliases,
-                entry.args.hint(),
+                entry
+                    .params
+                    .iter()
+                    .map(crate::command::Param::hint)
+                    .collect::<Vec<_>>()
+                    .join(" "),
                 crate::messages::say(entry.help, &[])
             ));
         }

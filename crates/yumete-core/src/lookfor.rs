@@ -466,8 +466,8 @@ mod tests {
         vec![
             Row { name: "layout vertical", find: "直排 縱書 tategaki columns", help: ["把整頁轉成竖排模式，一行一行從右往左", "", ""] },
             Row { name: "layout horizontal", find: "橫排 yokogaki", help: ["橫排模式，照舊從左往右", "", ""] },
-            Row { name: "table sort", find: "排序 order", help: ["照這幾欄排；t1a2d8as 是鍵盤上的同一件事", "", ""] },
-            Row { name: "table new", find: "", help: ["寫一張空表，首行是欄名", "", ""] },
+            Row { name: "table-sort", find: "排序 order", help: ["照這幾欄排；t1a2d8as 是鍵盤上的同一件事", "", ""] },
+            Row { name: "table-new", find: "", help: ["寫一張空表，首行是欄名", "", ""] },
             Row { name: "wheel", find: "滾輪", help: ["滾輪一格走多遠", "", ""] },
             Row { name: "quit", find: "", help: ["關掉這一個", "", ""] },
         ]
@@ -512,7 +512,7 @@ mod tests {
             ranked.first().map(|r| r.1).unwrap_or("—")
         };
         assert_eq!(best("lyt"), "layout vertical");
-        assert_eq!(best("tbsrt"), "table sort");
+        assert_eq!(best("tbsrt"), "table-sort");
     }
 
     #[test]

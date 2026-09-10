@@ -4,7 +4,7 @@
 //! screen is torn down, whatever the default hook printed scrolls past inside
 //! a raw-mode terminal, and the reader is left with a shell prompt and no idea
 //! what they pressed. Until now yumete had **no panic hook at all** — the one
-//! upstream crash this project has reproduced (#344, `:yume table` on a file
+//! upstream crash this project has reproduced (#344, `:yume-table` on a file
 //! that is not a code table) would have ended exactly that way, taking every
 //! unsaved buffer with it and saying nothing.
 //!

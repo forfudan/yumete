@@ -43,7 +43,7 @@ pub trait Segmenter {
     /// Segment `s` into word ranges (character indices, whitespace skipped).
     fn segment(&self, s: &str) -> Vec<(usize, usize)>;
 
-    /// How readily this segmenter joins characters into words (`:word level`).
+    /// How readily this segmenter joins characters into words (`:word-level`).
     ///
     /// A default that does nothing, because a segmenter with no dictionary has
     /// no scale to be strict about: [`CategorySegmenter`] gives every 漢字 a
@@ -56,10 +56,10 @@ pub trait Segmenter {
     }
 
     /// `ln P(word)` in ordinary prose, from whatever 詞頻表 this segmenter
-    /// reads — the background `:word habit` measures a manuscript against (#242).
+    /// reads — the background `:word-habit` measures a manuscript against (#242).
     ///
     /// **`None` means「I have no table」, not「that word is rare」.** A
-    /// segmenter with no dictionary cannot tell 然後 from 阿甯, and `:word habit`
+    /// segmenter with no dictionary cannot tell 然後 from 阿甯, and `:word-habit`
     /// says so rather than reporting every proper noun in the chapter as a
     /// crutch. A word the table simply does not hold is also `None`: an
     /// unseen word has no background to be surprising against, and that
@@ -90,7 +90,7 @@ pub enum WordMark {
 }
 
 impl WordMark {
-    /// Parse a `:word show` argument or a `word_mark` config value.
+    /// Parse a `:word-show` argument or a `word_mark` config value.
     pub fn parse(value: &str) -> Option<WordMark> {
         match value.trim().to_ascii_lowercase().as_str() {
             "tint" | "bg" | "background" | "底色" | "背景" => Some(WordMark::Tint),
@@ -133,7 +133,7 @@ pub enum WordLevel {
 }
 
 impl WordLevel {
-    /// Parse a `:word level` argument or a `word_level` config value.
+    /// Parse a `:word-level` argument or a `word_level` config value.
     pub fn parse(value: &str) -> Option<WordLevel> {
         match value.trim().to_ascii_lowercase().as_str() {
             "strict" | "few" | "少" | "嚴" => Some(WordLevel::Strict),

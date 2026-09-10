@@ -107,7 +107,7 @@ impl Editor {
         if let Err(err) = self.current_buffer_mut().reread() {
             self.status = say!("reload.failed", err.to_string());
             // **Latched, or it says it every two seconds.** A file that was
-            // moved or deleted out from under a `:reload auto` session
+            // moved or deleted out from under a `:reload-auto` session
             // answers `changed_underneath` yes for ever, and the failure
             // would stamp over whatever the reader is actually reading.
             self.reload_warned = true;
@@ -120,7 +120,7 @@ impl Editor {
         self.forget_the_document();
     }
 
-    /// Notice a file that changed underneath, if `:reload auto on` (Feature
+    /// Notice a file that changed underneath, if `:reload-auto on` (Feature
     /// #214).
     ///
     /// Throttled the way [`Editor::autosave_tick`] is, so this is a clock check

@@ -11,3 +11,7 @@
 
 # The editor's own crash copies, written beside the file being edited.
 .*.yumete
+
+# Working notes and tables reviewed in the editor itself, not part of the
+# project's record.
+/local/

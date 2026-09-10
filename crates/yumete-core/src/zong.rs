@@ -87,7 +87,7 @@ pub struct Grid<'a> {
     /// Whether 句讀 hang in the margin rather than taking a square each
     /// (標點旁置).
     pub hanging: bool,
-    /// Whether every 句 opens a 縱 of its own (`:view sentence`, Feature #237).
+    /// Whether every 句 opens a 縱 of its own (`:view-sentence`, Feature #237).
     ///
     /// A **view**: the file is not touched, which is the whole point — the
     /// manual has taught `:%s/。/。\n/g` for proofreading since the beginning,
@@ -975,7 +975,7 @@ fn zong_breaks(
             .find(|g| at > g.start && at < g.end)
             .map(|g| slots.partition_point(|s| s.start < g.start))
     };
-    // Where each 句 opens, in slots (`:view sentence`, Feature #237). The
+    // Where each 句 opens, in slots (`:view-sentence`, Feature #237). The
     // boundaries are `motion`'s, so the page breaks where `(` and `)` jump; the
     // *character* index they come back as is turned into a slot index here,
     // because a slot may have swallowed hidden markup or a ruby group and the
@@ -2489,7 +2489,7 @@ mod tests {
         }
     }
 
-    /// `:view sentence` (Feature #237): a 縱 ends where the 句 does — and the file
+    /// `:view-sentence` (Feature #237): a 縱 ends where the 句 does — and the file
     /// is not touched, which is what the manual's `:%s/。/。\n/g` could never
     /// say.
     #[test]

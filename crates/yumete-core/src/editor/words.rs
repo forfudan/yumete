@@ -14,7 +14,7 @@ impl Editor {
     /// segmentation overlay **and** the 平仄 margin, which asks the reader for
     /// a *word*'s reading (`了` is `le` in 為了 and `liǎo` in 了解). Both are
     /// kept against a hash of the line's text, and changing the dictionary
-    /// changes neither the text nor the hash — so a `:view meter` turned on before
+    /// changes neither the text nor the hash — so a `:view-meter` turned on before
     /// the IME finished loading its dictionary kept marking the 了 in 為了 仄
     /// until the line was edited, which is the exact mistake the feature
     /// exists to catch.
@@ -36,7 +36,7 @@ impl Editor {
         ));
     }
 
-    /// Install the [`Reader`] `:ruby auto` generates readings from (#234).
+    /// Install the [`Reader`] `:ruby-auto` generates readings from (#234).
     ///
     /// The same shape as [`set_segmenter`](Self::set_segmenter) and for the same
     /// reason: the knowledge is 宇浩's tables, which the front end owns and the
@@ -122,10 +122,10 @@ impl Editor {
         Ok(CommandOutcome::Continue)
     }
 
-    /// How readily characters join into words (`:word level`).
+    /// How readily characters join into words (`:word-level`).
     ///
     /// Kept here as well as pushed into the segmenter, because a segmenter
-    /// installed later — the IME finishing its load, `:word list reload` — has
+    /// installed later — the IME finishing its load, `:word-list reload` — has
     /// to arrive at the level the reader chose rather than at the default.
     pub fn set_word_level(&mut self, level: yumete_cjk::WordLevel) {
         self.word_level = level;
@@ -198,7 +198,7 @@ impl Editor {
         Ok(())
     }
 
-    /// `:word discover` — the words this book has and no dictionary does
+    /// `:word-discover` — the words this book has and no dictionary does
     /// (Feature #239).
     ///
     /// **The whole project, not this file.** A name earns its place in the
@@ -335,7 +335,7 @@ impl Editor {
     /// Re-read the word list the save just wrote, if that is what it was.
     ///
     /// **A word list is data, and saving data is the same gesture as applying
-    /// it.** `:word discover` writes its candidates into the buffer already
+    /// it.** `:word-discover` writes its candidates into the buffer already
     /// segmenting (they have to, or there is no way to judge them), so the
     /// save is where the writer's weeding — the lines struck out — has to
     /// reach the segmenter; and a list edited by hand had no reason to need a
@@ -457,7 +457,7 @@ impl Editor {
     }
 
     /// Say how the overlay marks a word. The config's opening answer; after
-    /// that it is `:word show tint|ink`.
+    /// that it is `:word-show tint|ink`.
     pub fn set_word_mark(&mut self, mark: yumete_cjk::WordMark) {
         self.word_mark = mark;
     }
@@ -467,7 +467,7 @@ impl Editor {
         self.hud
     }
 
-    /// Say how loudly. `:view hud off|basic|full`, and nothing else writes it —
+    /// Say how loudly. `:view-hud off|basic|full`, and nothing else writes it —
     /// least of all `:render`, which is about the file (#284).
     pub fn set_hud(&mut self, how: Hud) {
         self.hud = how;

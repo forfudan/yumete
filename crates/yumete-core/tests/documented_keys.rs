@@ -100,6 +100,7 @@ const DISOWNED: &[&str] = &[
     // Ambiguous one level down, and printed for the same reason: `chaifen` and
     // `commit` both begin with `c`.
     ":yume c",
+    ":yume-c",
     // §「沒有了」 — the names deleted when a group was made, printed beside the
     // spelling that replaced each of them. 舊名字直接刪掉 is the philosophy the
     // table is there to state, so every one of these has to stay missing.
@@ -115,10 +116,17 @@ const DISOWNED: &[&str] = &[
     // Hyphenated spellings the fold retired. They read as names now that a
     // hyphen is part of one (`:write-quit`), so they have to be listed as
     // gone rather than silently skipped for their shape.
+    //
+    // `:clipboard-yank` came back (#368): the fold retired it because a
+    // hyphen was not how a command was spelled, and now it is.
     ":ruby-on",
     ":ruby-off",
     ":render-ruby-html",
-    ":clipboard-yank",
+    // The parents the flattening dissolved (#368): the CHANGELOG prints them
+    // as the tables of the day they were made, and they are names now only in
+    // the sense that `:view-wrap` begins with one.
+    ":view",
+    ":clipboard",
     ":buffers",
     ":ls",
     ":bd",
@@ -178,7 +186,7 @@ fn every_command_the_documents_print_is_a_command_the_editor_has() {
                 continue;
             }
             // The words below the head are checked only as far as they are
-            // written out. `:ruby full/off`, `:view wrap 24`, `:e 第三章.md` and
+            // written out. `:ruby full/off`, `:view-wrap 24`, `:e 第三章.md` and
             // `:run <名字>` all say「一個什麼」rather than naming one, and a
             // placeholder is not a word this table could ever know.
             let mut line_to_ask = String::from(head);

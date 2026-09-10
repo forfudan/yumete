@@ -242,7 +242,7 @@ const GREP_LIMIT: usize = 500;
 /// anything above this is data that happens to live in the same directory.
 const GREP_MAX_BYTES: u64 = 4 * 1024 * 1024;
 
-/// How many mined words `:word discover` writes into the list (Feature #239).
+/// How many mined words `:word-discover` writes into the list (Feature #239).
 ///
 /// Two hundred. What is being written is not a report but a *file the writer
 /// then reads line by line*, and a thousand lines of it would be deleted
@@ -251,7 +251,7 @@ const GREP_MAX_BYTES: u64 = 4 * 1024 * 1024;
 /// names that are on every page.
 const DISCOVER_LIMIT: usize = 200;
 
-/// How much of a project `:word discover` reads before it stops.
+/// How much of a project `:word-discover` reads before it stops.
 ///
 /// The three signals are ratios, so more text only sharpens them; this bound
 /// is about the seconds a writer waits, not about the statistics. A novel is
@@ -526,7 +526,7 @@ pub enum Hud {
     Full,
 }
 
-/// What `:view hud` says about a level, whether it was just set or only asked.
+/// What `:view-hud` says about a level, whether it was just set or only asked.
 fn hud_says(how: Hud) -> String {
     match how {
         Hud::Off => say!("hud.off"),
@@ -899,7 +899,7 @@ pub enum Bounds {
     /// separator — and stopping at a blank line, which is *a* boundary and not
     /// the boundary, because a table often sits directly under its heading.
     ///
-    /// **Recognised, not converted.** `:table pipe` rewrites a block so that
+    /// **Recognised, not converted.** `:table-pipe` rewrites a block so that
     /// the file says what it is on every one of its own lines; this is the
     /// other answer, for the block that must stay byte for byte as it is.
     Block,
@@ -1166,7 +1166,7 @@ fn walk(root: &Path, skipped: &mut usize, f: &mut impl FnMut(&Path)) {
 /// chunks, so it costs nothing at prose speed.
 const SWAP_INTERVAL: std::time::Duration = std::time::Duration::from_secs(5);
 
-/// How often the disk is asked whether the file moved, under `:reload auto on`
+/// How often the disk is asked whether the file moved, under `:reload-auto on`
 /// (Feature #214).
 ///
 /// Two seconds, not five: this one answers a question the writer is *waiting*
@@ -1259,7 +1259,7 @@ pub struct Editor {
     /// (Feature #24). Defaults to [`CategorySegmenter`]; a dictionary segmenter
     /// can be installed via [`Editor::set_segmenter`].
     segmenter: Box<dyn Segmenter>,
-    /// Where readings come from for `:ruby auto` (Feature #234). Defaults to
+    /// Where readings come from for `:ruby-auto` (Feature #234). Defaults to
     /// [`NoReader`], which knows nothing; the front end installs a reader over
     /// 宇浩's 字料層 once the data is loaded, exactly as it does the segmenter.
     reader: Box<dyn Reader>,
@@ -1273,10 +1273,10 @@ pub struct Editor {
     /// How loudly the editor says what you have typed, beside the caret
     /// (Feature #284).
     hud: Hud,
-    /// How readily characters join into words (`:word level`), kept so a
+    /// How readily characters join into words (`:word-level`), kept so a
     /// segmenter installed later arrives at the level the reader chose.
     word_level: yumete_cjk::WordLevel,
-    /// `:word list reload` asking the front end to build the dictionary again
+    /// `:word-list reload` asking the front end to build the dictionary again
     /// — it owns the IME and the data directory; the editor owns neither.
     words_request: bool,
     /// How a table's columns are told apart (Feature #157).
@@ -1427,7 +1427,7 @@ pub struct Editor {
     /// editor knows *what* was asked for and the front end knows how to run a
     /// program.
     language_run: Option<LanguageRun>,
-    /// A pending `:view preview`, waiting for the front end — starting a typesetter
+    /// A pending `:view-preview`, waiting for the front end — starting a typesetter
     /// is running a program, which only the front end can do.
     preview_request: Option<Preview>,
     /// Where the typesetter that **is running** put its page.
@@ -1484,12 +1484,12 @@ pub struct Editor {
     /// A gap between 縱 set at runtime, overriding the config's.
     ///
     /// The one piece of the dense arrangement that was a startup-only setting
-    /// while the other three were live toggles — which is why `:view dense` had to
+    /// while the other three were live toggles — which is why `:view-dense` had to
     /// exist rather than being three keys anybody could find.
     zong_gap: Option<usize>,
     /// Whether the dense arrangement is on, so the ticks know to stay away.
     dense: bool,
-    /// Whether every 句 opens a 縱 of its own (`:view sentence`, Feature #237).
+    /// Whether every 句 opens a 縱 of its own (`:view-sentence`, Feature #237).
     sentences: bool,
     /// How many squares open a paragraph (首行縮進), as configured.
     indent: usize,
@@ -1657,7 +1657,7 @@ pub struct Editor {
     /// what was being completed.
     completion: Option<(String, usize)>,
     /// Which spellings of a reading **count as one** (Feature #65) — what the
-    /// word count subtracts, what `:ruby` edits, what `:ruby auto` writes.
+    /// word count subtracts, what `:ruby` edits, what `:ruby-auto` writes.
     ///
     /// Separate from [`Editor::ruby_drawn`] since #283, because the middle
     /// level needs both answers at once: a reading is *known* at 中階 and it is
@@ -1698,7 +1698,7 @@ pub struct Editor {
     /// file.
     readonly_default: bool,
     /// Whether a clean buffer re-reads itself when the file changes on disk
-    /// (Feature #214). `:reload auto on`.
+    /// (Feature #214). `:reload-auto on`.
     reload_auto: bool,
     /// When the disk was last asked about it, so a held-down `j` does not
     /// `stat` the file a thousand times.
@@ -2088,7 +2088,7 @@ impl Editor {
         self.preview_at = url;
     }
 
-    /// The running typesetter's address, for the status bar and for `:view preview`.
+    /// The running typesetter's address, for the status bar and for `:view-preview`.
     pub fn preview_at(&self) -> Option<&str> {
         self.preview_at.as_deref()
     }
@@ -2134,7 +2134,7 @@ impl Editor {
         self.focus
     }
 
-    /// Whether `:view meter` is on — the setting, which the status line reports.
+    /// Whether `:view-meter` is on — the setting, which the status line reports.
     ///
     /// **Not the question the page asks.** A page wants
     /// [`Self::meter_drawn`]: with the 平仄 asked for and no 拆分表 to read
@@ -2147,7 +2147,7 @@ impl Editor {
     ///
     /// The margin they go in is a **cell off every 縱 on the page**, bought
     /// before a line is asked for its marks. Bought on the setting alone, a
-    /// `:view meter on` with no 拆分表 installed reflowed the whole page to make
+    /// `:view-meter on` with no 拆分表 installed reflowed the whole page to make
     /// room for a column that can never hold anything — while the status line
     /// was busy saying there is no reading table. The command says so
     /// *instead* of drawing an empty margin, which is what it always claimed.

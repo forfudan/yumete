@@ -3,7 +3,7 @@
 //! **The one word a manuscript needs most is the one no table holds.** 阿寧 is
 //! on every page and in no 詞頻表, so the segmenter splits it as `[阿][寧]`: `w`
 //! steps through the name a character at a time, the tint draws it as two
-//! words, `:word habit` cannot weigh it, and the IME never offers it. `.yumete/
+//! words, `:word-habit` cannot weigh it, and the IME never offers it. `.yumete/
 //! words.txt` fixes all of that — [`yumete_cjk::WithWords`] merges whatever is
 //! listed there — but only for the names somebody remembered to type in, and a
 //! novel with forty characters, three sects and a province of invented

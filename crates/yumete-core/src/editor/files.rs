@@ -141,7 +141,7 @@ impl Editor {
     /// **It is silent, and it makes nothing.** A save must not fail, or even
     /// say anything, because a progress log could not be written — and a
     /// manuscript is not the only thing an editor saves. A ledger appears when
-    /// the writer asks for one (`:count target`, `:count progress`), never because a
+    /// the writer asks for one (`:count-target`, `:count-progress`), never because a
     /// config file was edited in a directory that had never heard of yumete;
     /// after that every save keeps it up to date.
     pub(super) fn note_progress(&mut self) {
@@ -171,14 +171,14 @@ impl Editor {
         let _ = self.write_progress_log(&path, &log);
     }
 
-    /// `:count progress` — 寫作進度: today against the target, and every day before.
+    /// `:count-progress` — 寫作進度: today against the target, and every day before.
     pub(super) fn progress_report(&mut self) {
         let Some(path) = self.progress_path() else {
             self.status = say!("progress.no-file");
             return;
         };
         let mut log = self.progress_log(&path);
-        // Asking is enough to open the ledger: `:count progress` on a book that has
+        // Asking is enough to open the ledger: `:count-progress` on a book that has
         // never been counted answers 「還沒有記錄」 *and* starts today's row, so
         // that the next save has somewhere to go. Nothing else in this editor
         // asks a writer to say 「yes, really」 twice.
@@ -229,7 +229,7 @@ impl Editor {
             listing.push('\n');
         }
         // 本書 comes from the **ledger**, not from the buffer in front of the
-        // reader: `:count progress` opens a listing, and a second one read from
+        // reader: `:count-progress` opens a listing, and a second one read from
         // inside that listing used to report the listing's own length.
         let book = log.book();
         self.show_listing(listing, say!("progress.results"));
@@ -246,7 +246,7 @@ impl Editor {
         };
     }
 
-    /// `:count target <字>` — how many 字 a day, or `off`.
+    /// `:count-target <字>` — how many 字 a day, or `off`.
     pub(super) fn set_target(&mut self, target: Option<usize>) {
         let Some(path) = self.progress_path() else {
             self.status = say!("progress.no-file");
@@ -640,7 +640,7 @@ impl Editor {
     ///
     /// And nothing reaches disk. Every file with a hit is *opened as a buffer*
     /// and changed there, so `u` takes any one of them back, `gn` walks them,
-    /// and `:write all` is the moment a person says yes. Writing 120 files from a
+    /// and `:write-all` is the moment a person says yes. Writing 120 files from a
     /// command line with no undo is the kind of thing an editor should not
     /// make easy.
     pub(super) fn replace_found(&mut self, text: &str, reshape: bool) {
@@ -724,7 +724,7 @@ impl Editor {
         };
     }
 
-    /// Save every buffer that has changed (`:write all`).
+    /// Save every buffer that has changed (`:write-all`).
     pub(super) fn write_all(&mut self) -> Result<CommandOutcome, EditorError> {
         let was = self.current;
         let mut saved = 0usize;
@@ -1008,7 +1008,7 @@ impl Editor {
     ) -> Result<CommandOutcome, EditorError> {
         // **`csv` is the one export that is a region, not the document.** A
         // manuscript has no rows; the table under the cursor does. So it is
-        // answered here, from the same machinery `:table csv` uses, rather than
+        // answered here, from the same machinery `:table-csv` uses, rather than
         // by `export::export`, which is handed whole texts and answers with
         // whole texts (Feature #227).
         if let Some(delimiter) = crate::export::delimiter_of(format) {
@@ -1113,7 +1113,7 @@ impl Editor {
 
     /// `:export csv` / `:export tsv` — the table under the cursor, as a file.
     ///
-    /// The buffer is not touched: this is the difference between `:table csv`,
+    /// The buffer is not touched: this is the difference between `:table-csv`,
     /// which converts the table in place because that is what the writer wants
     /// to go on editing, and this, which hands a copy to whatever else is going
     /// to read it.

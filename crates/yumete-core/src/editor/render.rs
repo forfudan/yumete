@@ -334,7 +334,7 @@ impl Editor {
     /// The mirror of [`Self::hidden_on_line`], and the general form of #210's
     /// drawn text. Three producers stand behind it and more can: the inline
     /// candidate the writer typed, the padding that squares a table up, and
-    /// the notes `:view punct` puts beside a mark that is wrong. Each run is
+    /// the notes `:view-punct` puts beside a mark that is wrong. Each run is
     /// anchored *before* one of the file's own characters and none of them is
     /// addressable — see [`crate::drawn`] for the invariant that makes that
     /// safe.
@@ -392,7 +392,7 @@ impl Editor {
     /// an English `...` are wrong wherever they stand; an unclosed 「 may be
     /// perfectly correct — Chinese typesetting opens it again at the head of
     /// each paragraph of a long quotation — and no line can see that on its
-    /// own. Those stay with `:check punct`, which reads the whole manuscript.
+    /// own. Those stay with `:check-punct`, which reads the whole manuscript.
     /// See [`crate::punct::check_line`].
     ///
     /// **Nothing inside a fence**, where a `,` is code and right; and nothing
@@ -672,7 +672,7 @@ impl Editor {
     ///
     /// **Without this the cap buys nothing on a squared-up table.** The width
     /// a column is drawn to is the widest *box* in it, pipe to pipe, and a
-    /// table that has been formatted in the file — `:table rules`, and every
+    /// table that has been formatted in the file — `:table-rules`, and every
     /// table in this project's own docs — pads every cell out to the column's
     /// natural width. Fold the writing to 32 and the spaces behind it still
     /// vote 43: the mark lands where the writing stopped and a field of empty
@@ -950,7 +950,7 @@ impl Editor {
 
     /// The 平仄 of `line`, for the margin (Feature #247).
     ///
-    /// Empty unless `:view meter` is on **and** a reader is installed: without the
+    /// Empty unless `:view-meter` is on **and** a reader is installed: without the
     /// 拆分表 there are no tones to read, and a margin of guesses beside a poem
     /// is worse than an empty one.
     ///

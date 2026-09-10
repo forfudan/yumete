@@ -104,10 +104,10 @@ pub struct EditorConfig {
     pub table_rules: String,
     /// Whether the word-segmentation overlay is shown at start-up (Feature #24).
     /// On by default so the CJK word grouping is visible; toggle with
-    /// `:word show off` or set `show_segmentation = false`.
+    /// `:word-show off` or set `show_segmentation = false`.
     pub show_segmentation: bool,
     /// How readily characters join into words: `strict`, `balanced`, `full`
-    /// (Feature #24), the same three `:word level` names.
+    /// (Feature #24), the same three `:word-level` names.
     ///
     /// **Replaces `segmentation_threshold`**, which was a raw weight on a scale
     /// only the bundled list had — it said nothing to a reader and nothing at
@@ -115,7 +115,7 @@ pub struct EditorConfig {
     pub word_level: yumete_cjk::WordLevel,
     /// How the overlay marks a word: `tint` (a hair of colour under every
     /// other word, the default) or `ink` (the characters themselves in a
-    /// second colour, the paper untouched) — the same two `:word show` names.
+    /// second colour, the paper untouched) — the same two `:word-show` names.
     pub word_mark: yumete_cjk::WordMark,
     /// Horizontal (default) or vertical layout (Feature #61).
     pub layout: Layout,
@@ -124,7 +124,7 @@ pub struct EditorConfig {
     /// `0` — the default — means **as many as the window allows**, which is the
     /// same rule the horizontal `measure` follows: how long a column should be
     /// is a decision about the book, and the editor has no business making one
-    /// for you. A number here (or `:view wrap n`) is that decision; it is clamped to
+    /// for you. A number here (or `:view-wrap n`) is that decision; it is clamped to
     /// 4–64, and the renderer lowers it further when the terminal is short.
     pub zong_length: usize,
     /// How many squares open a paragraph (首行縮進). 0 is none.
@@ -150,7 +150,7 @@ pub struct EditorConfig {
     /// Extra ruby dialects to lay out beyond the one the file's extension
     /// implies — a document that mixes them names them all here.
     pub ruby_dialects: Vec<String>,
-    /// The reader's own 用字 groups for `:check usage` (#233), each line 「甲
+    /// The reader's own 用字 groups for `:check-usage` (#233), each line 「甲
     /// 乙」 — the spellings that mean the same thing here, the one to settle
     /// on first.
     ///
@@ -162,7 +162,7 @@ pub struct EditorConfig {
     /// layout (縦中横). Off by default: one letter to a row, hung right.
     pub tatechuyoko: bool,
     /// Whether 句讀 hang in the margin beside the character they follow rather
-    /// than taking a square each (標點旁置). Off by default; `:view hanging` toggles.
+    /// than taking a square each (標點旁置). Off by default; `:view-hanging` toggles.
     pub hanging_punctuation: bool,
     /// Whether a paragraph too wide for the terminal continues on the next
     /// screen row (Feature #77). On by default: a Chinese paragraph is one long
@@ -192,7 +192,7 @@ pub struct EditorConfig {
     ///
     /// A measure rather than a mark: unlike `ruler`, which only says where the
     /// line is, this folds the rows there and leaves the rest of the window as
-    /// margin. `:view wrap 50` sets it for one session (Feature #113).
+    /// margin. `:view-wrap 50` sets it for one session (Feature #113).
     pub measure: usize,
     /// Whether the status line names the character under the cursor
     /// (Feature #117).
@@ -219,7 +219,7 @@ pub struct EditorConfig {
     ///
     /// On by default: a terminal has few enough columns as it is, and the gap,
     /// the reading column, the hung margin and the ticks together cost about a
-    /// third of them. `:view dense off` gives them back for as long as you want
+    /// third of them. `:view-dense off` gives them back for as long as you want
     /// them — it suppresses those things, it does not turn them off, so what
     /// the config says about readings and 句讀 is still what it says.
     pub dense: bool,
@@ -351,7 +351,7 @@ pub struct ImeConfig {
     /// Off by default. The 碼表 is a hundred milliseconds and is of use only to
     /// somebody who came to type 宇浩; the *language model* behind `w` and `b`
     /// is loaded either way, because that is about the words and not about how
-    /// they are typed. `:yume scheme` starts typing whenever you want it.
+    /// they are typed. `:yume-scheme` starts typing whenever you want it.
     pub start: bool,
     /// 上屏方式 — **when** a finished code goes to the page: `"delayed"`
     /// (延遲／頂字), `"unique"` (唯一, also written `auto`), `"fluency"` (整句).
@@ -965,7 +965,7 @@ pub struct KeyConfig {
 /// format = { run = "rumdl check --fix {file}" }
 /// ```
 ///
-/// **The verbs are language-independent** — `:view preview`, `:format` — so one key
+/// **The verbs are language-independent** — `:view-preview`, `:format` — so one key
 /// means one thing in every file and the config says how it is done here.
 ///
 /// **A project may define these**, and the safety is in *how* they run: no
@@ -1487,7 +1487,7 @@ fn env_data_dirs() -> Vec<PathBuf> {
 /// and what the writer installed under `~/Library/Application Support/Yume`.
 /// So a Mac with five schemes installed and working answered 「沒有裝」 to
 /// every question yumete could ask (author, 2026-09-07: 「我安装了 yume 并且
-/// 有五个方案，但是 :yume installed 没有办法检测到他们」).
+/// 有五个方案，但是 :yume-installed 没有办法检测到他们」).
 ///
 /// The bundle's `Contents/Resources` is handed over **as a data directory**
 /// rather than as a special case: yume lays its files out there in the same
