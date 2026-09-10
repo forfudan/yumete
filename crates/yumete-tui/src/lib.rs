@@ -4722,7 +4722,17 @@ fn draw_horizontal(
         // selection lost its bold and a heading lost its colour the moment the
         // overlay came on.
         let row_len = row.end - row.start;
-        let chars: Vec<char> = text.chars().collect();
+        // **A tab is drawn as the cell it occupies** (#374). The editor counts
+        // a tab as one cell — `grapheme_width` gives every ASCII byte one, and
+        // the space it advances over is drawn beside it — but `unicode-width`
+        // answers `None` for a control character, so ratatui laid the tab out
+        // in *no* cell at all and the row came up one short of the column the
+        // caret was told it was in. Replaced, never taken off: one character,
+        // one cell, exactly as the grid replaces a wall below.
+        let chars: Vec<char> = text.chars().map(|c| match c {
+            '\t' => ' ',
+            _ => c,
+        }).collect();
         // The block grounds the whole row; the inline runs are patched onto it.
         // **The page is painted.** Until this line, the manuscript itself was
         // drawn with no colour at all — the terminal's own ink on the
@@ -4797,6 +4807,9 @@ fn draw_horizontal(
         let run_style = |kind: yumete_core::drawn::Ink| match kind {
             yumete_core::drawn::Ink::Fold => ground.fg(ink.gold()).add_modifier(Modifier::BOLD),
             yumete_core::drawn::Ink::Note => ground.fg(ink.marker()),
+            // A tab is the one drawn thing with nothing written in it: what
+            // shows it is the ground (#374).
+            yumete_core::drawn::Ink::Tab => ground.bg(ink.at(yumete_config::rung::BAND)),
             _ => ground.fg(ink.quiet()),
         };
         // **真表格顯示** (#275): 「完全画成表格」. The `|` the writer typed *is*
@@ -6108,6 +6121,30 @@ mod tests {
         editor.on_key(Key::Char('g'));
         editor.on_key(Key::Char('g'));
         editor
+    }
+
+    /// #374, on the **drawn frame** rather than on the run list: a 碼表 lines
+    /// its characters up in one column whatever the code before them is.
+    ///
+    /// The run list said so all along and the page still did not, because the
+    /// tab kept its cell in every width the editor asks and lost it in
+    /// ratatui: `unicode-width` answers `None` for a control character, so the
+    /// row came out one cell short of the column the caret was told it stood
+    /// in. Only a rendered frame catches that.
+    #[test]
+    fn a_code_table_puts_every_character_in_the_same_column() {
+        let editor = editor_with("ch\t錐\nbkd\t蜘\nfvtf\t裘\n");
+        let buffer = render_with(&editor, &Config::default(), &no_ime(), 40, 6);
+        let at: Vec<u16> = ["錐", "蜘", "裘"]
+            .iter()
+            .enumerate()
+            .map(|(y, ch)| column_of(&row_text(&buffer, y as u16), ch))
+            .collect();
+        assert_eq!(at[0], at[1], "two letters and three reach the same stop");
+        assert_eq!(at[1], at[2], "and four, which needs a whole stop of its own");
+        // The stop is eight, and the gutter is furniture in front of it.
+        let gutter = column_of(&row_text(&buffer, 0), "c");
+        assert_eq!(at[0] - gutter, 8, "{:?}", row_text(&buffer, 0));
     }
 
     /// **A stopwatch on the grid**, not a test — it is `#[ignore]`d because it
@@ -10985,6 +11022,35 @@ mod tests {
         let (rows, _) = menu_shape(&buffer);
         assert!(!rows.is_empty(), "a menu at all");
         assert!(rows.len() <= 5, "at most half the window, footer and all: {rows:?}");
+    }
+
+    /// A real 碼表 in each table mode, for looking at (#374).
+    #[test]
+    #[ignore = "a picture, not a test"]
+    fn the_code_table_in_every_mode() {
+        let dir = std::env::temp_dir().join(format!("yumete-mabiao-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("m.txt");
+        std::fs::write(
+            &path,
+            "ch\t錐\ndl\t叭\nsbi\t埭\nsbfr\t壚\nsbjj\t埈\nfvtf\t裘\n",
+        )
+        .unwrap();
+        let config = Config::default();
+        for keys in ["", "tf", "tb", "tt", "to"] {
+            let mut ed = Editor::new();
+            ed.open_file(&path).unwrap();
+            for c in keys.chars() {
+                ed.on_key(Key::Char(c));
+            }
+            let buffer = render_with(&ed, &config, &no_ime(), 40, 12);
+            println!("=== `{keys}` ===");
+            for y in 0..8 {
+                println!("|{}|", row_text(&buffer, y).trim_end());
+            }
+        }
+        std::fs::remove_dir_all(&dir).ok();
     }
 
     /// Draw the `:` menu narrowed by typing, for looking at.

@@ -1754,6 +1754,14 @@ pub struct Editor {
     /// The text width the renderer is wrapping at, in cells. `None` until the
     /// terminal size is known; motion falls back to logical lines then.
     wrap_width: Option<usize>,
+    /// How far a TAB advances: to the next multiple of this (#374).
+    ///
+    /// A stop rather than a width, and the difference is the whole point on a
+    /// 碼表: `dl` and `bkd` are two and three cells, and a tab of a fixed four
+    /// puts their second column at six and seven — not lined up, which is all
+    /// a tab-separated file is for. To the next multiple of eight they both
+    /// land on eight — 「既然是 Unix 老默认就用他」 (author, 2026-09-10).
+    tab_stop: usize,
     /// The width the *writer* wants to write to, if they have said one.
     ///
     /// A measure, in the typesetter's sense: not how wide the terminal is, but
@@ -2017,6 +2025,7 @@ impl Editor {
             zong_motion: false,
             soft_wrap: true,
             wrap_width: None,
+            tab_stop: 8,
             measure: None,
             autosave: true,
             last_swap: None,

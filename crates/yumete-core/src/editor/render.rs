@@ -338,6 +338,71 @@ impl Editor {
     /// anchored *before* one of the file's own characters and none of them is
     /// addressable — see [`crate::drawn`] for the invariant that makes that
     /// safe.
+    /// The space each TAB on `line` advances over (#374).
+    ///
+    /// **A tab is drawn, not measured.** Its width depends on where it stands
+    /// — it advances to the next stop — and every width this editor asks for
+    /// is asked of a grapheme on its own, with no column in hand. So rather
+    /// than teach the width table a question it cannot be asked, the advance
+    /// is produced here as *drawn* text: the same door #212's padding comes
+    /// through, and the caret, the wrap and the click map already read that
+    /// door. They agree about a tab for free.
+    ///
+    /// It used to be nothing at all: `UnicodeWidthChar::width('\t')` is
+    /// `None`, so a tab was zero cells and no glyph, and `dl<TAB>叭` drew as
+    /// `dl叭` — a 碼表, which is what this editor is *for*, came out with its
+    /// columns collapsed and the caret standing on a column the page did not
+    /// have.
+    fn tab_stops_on_line(&self, line: usize) -> Vec<crate::drawn::Run> {
+        let Some(text) = self.line_text(line) else {
+            return Vec::new();
+        };
+        if !text.contains('\t') {
+            return Vec::new();
+        }
+        let stop = self.tab_stop();
+        let hidden = self.hidden_on_line(line);
+        // A tab a table has taken over as its separator is not indentation
+        // (see [`Self::wall_columns`]) — it keeps its own single cell, exactly
+        // as a `|` or a `,` does, and nothing is drawn beside it.
+        let walls = self.wall_columns(line);
+        let mut out = Vec::new();
+        let mut at = 0usize;
+        let mut column = 0usize;
+        for g in yumete_cjk::graphemes(&text) {
+            let off = hidden.iter().any(|&(a, b)| (a..b).contains(&at));
+            match g {
+                "\t" if !off && walls.contains(&at) => column += 1,
+                "\t" if !off => {
+                    // **The tab keeps its own cell and the drawing makes up
+                    // the rest.** Every other width in this editor counts a
+                    // tab as one, and the grid *replaces* a separator with a
+                    // one-cell glyph, so a tab that measured nought would
+                    // leave that glyph nowhere to stand. Drawing `room - 1`
+                    // leaves the character where it was and squares the
+                    // column up all the same.
+                    //
+                    // Anchored at the tab, so it is drawn *before* it: a caret
+                    // resting on a tab stands at the left edge of the space it
+                    // opens, which is where every editor puts it, and a caret
+                    // on the character after has the whole advance behind it.
+                    let room = yumete_cjk::tab_width_at(column, stop);
+                    if room > 1 {
+                        out.push(crate::drawn::Run::new(
+                            at,
+                            " ".repeat(room - 1),
+                            crate::drawn::Ink::Tab,
+                        ));
+                    }
+                    column += room;
+                }
+                _ => column += if off { 0 } else { yumete_cjk::grapheme_width(g) },
+            }
+            at += g.chars().count();
+        }
+        out
+    }
+
     pub fn drawn_runs_on_line(&self, line: usize) -> Vec<crate::drawn::Run> {
         use crate::drawn::{Ink, Run};
         let mut runs: Vec<Run> = self
@@ -350,6 +415,7 @@ impl Editor {
                 .into_iter()
                 .map(|(at, text)| Run::new(at, text, Ink::Padding)),
         );
+        runs.extend(self.tab_stops_on_line(line));
         runs.extend(self.fold_marks_on_line(line));
         runs.extend(self.notes_on_line(line));
         crate::drawn::compose(runs)

@@ -1047,13 +1047,42 @@ impl Editor {
     /// own — there the grid is drawn by `crate::table` out of the schema rather
     /// than out of the writer's own punctuation.
     fn grid_walls(&self, line: usize) -> Option<(usize, usize, Vec<usize>)> {
-        let view = self.table.as_ref()?;
-        if view.pane || self.table_level != TableLevel::Full {
+        if self.table_level != TableLevel::Full {
             return None;
         }
         let (first, last) = self.table_lines_at(line)?;
-        let text = self.line_text(line)?;
-        let at = match view.separator {
+        Some((first, last, self.wall_columns(line)))
+    }
+
+    /// Where the table's own separator stands on `line`, as character indices.
+    ///
+    /// **One question, every kind of table.** A `|` in Markdown, a `,` in a
+    /// CSV, a `;` in what Excel writes and a TAB in a 碼表 are the same thing
+    /// wearing different punctuation, so they are found the same way and the
+    /// separator is a value the view carries — never a branch per file type.
+    ///
+    /// A wall is the table's punctuation and not the line's content, which is
+    /// what makes it worth asking: 全 draws a rule over it
+    /// ([`Self::grid_on_line`]) and 基本 leaves it as the writer typed it, and
+    /// either way it is *one cell* of separator. That is why a TAB standing
+    /// here is not advanced to its stop (#374): a separator is not
+    /// indentation, and expanding one would push every column right of it out
+    /// of line with the rows above — which is exactly what a table view is
+    /// for. In 源碼 there is no table, so a tab there is a tab.
+    pub(super) fn wall_columns(&self, line: usize) -> Vec<usize> {
+        let Some(view) = self.table.as_ref() else {
+            return Vec::new();
+        };
+        if view.pane || self.table_level == TableLevel::Off {
+            return Vec::new();
+        }
+        if self.table_lines_at(line).is_none() {
+            return Vec::new();
+        }
+        let Some(text) = self.line_text(line) else {
+            return Vec::new();
+        };
+        match view.separator {
             // `\|` inside a cell is a pipe the cell holds, not a wall. The
             // flag is「the character *before* this text was a live backslash」,
             // and there is no character before the start of a line — passing
@@ -1065,8 +1094,7 @@ impl Editor {
                 .filter(|&(_, ch)| ch == c)
                 .map(|(i, _)| i)
                 .collect(),
-        };
-        Some((first, last, at))
+        }
     }
 
     /// The grid drawn over `line`, as `(character, glyph)` (#275).
