@@ -451,12 +451,8 @@ impl Editor {
             Pending::Case => {
                 self.pending = Pending::None;
                 match key {
-                    Key::Char('l') => {
-                        self.map_selection(|c| c.to_lowercase().next().unwrap_or(c))
-                    }
-                    Key::Char('u') => {
-                        self.map_selection(|c| c.to_uppercase().next().unwrap_or(c))
-                    }
+                    Key::Char('l') => self.map_selection(|c| c.to_lowercase().collect()),
+                    Key::Char('u') => self.map_selection(|c| c.to_uppercase().collect()),
                     Key::Char('`') => self.map_selection(switch_case),
                     _ => {}
                 }

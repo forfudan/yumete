@@ -95,8 +95,11 @@ impl Editor {
                 self.format_md_table();
             }
             Key::Enter => {
-                self.insert_recording.push('\n');
-                self.insert_str("\n");
+                // The file's own line ending, so that one keystroke does not
+                // leave a CRLF manuscript with two kinds of line in it (#309).
+                let ending = self.current_buffer().ending();
+                self.insert_recording.push_str(ending);
+                self.insert_str(ending);
             }
             Key::Backspace => {
                 self.insert_recording.pop();

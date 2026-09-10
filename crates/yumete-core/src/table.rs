@@ -599,14 +599,103 @@ pub fn cells(line: &str, delimiter: char) -> Vec<(usize, usize)> {
     let line = line.trim_end_matches(['\n', '\r']);
     let mut out = Vec::new();
     let mut start = 0;
-    for (i, c) in line.chars().enumerate() {
-        if c == delimiter {
-            out.push((start, i));
-            start = i + 1;
+    // Where a field may **open** with a quote: at the start of the line or
+    // just after a delimiter, spaces allowed before it because real files have
+    // them. A quote anywhere else — `he said "hi"` — is a character like any
+    // other, and a writer who needed to protect a delimiter would have quoted
+    // the whole field.
+    let mut fresh = true;
+    let mut inside = false;
+    let chars: Vec<char> = line.chars().collect();
+    let mut i = 0;
+    while i < chars.len() {
+        let c = chars[i];
+        match c {
+            '"' if inside => match chars.get(i + 1) {
+                // `""` inside a quoted field is one quote, not the end of it
+                // (RFC 4180). Stepping over both is the whole of reading it.
+                Some('"') => i += 1,
+                _ => inside = false,
+            },
+            '"' if fresh => {
+                inside = true;
+                fresh = false;
+            }
+            _ if c == delimiter && !inside => {
+                out.push((start, i));
+                start = i + 1;
+                fresh = true;
+            }
+            ' ' | '\t' if fresh => {}
+            _ => fresh = false,
         }
+        i += 1;
     }
-    out.push((start, line.chars().count()));
+    out.push((start, chars.len()));
     out
+}
+
+/// Whether this line ends **inside** a quoted field — a record that runs on
+/// into the next line (#311).
+///
+/// The one shape of RFC 4180 this editor does not read, and it is not the
+/// splitter that cannot: the grid is a line and a record is a line, all the
+/// way up through the cursor, the cell spans and the row operations. A field
+/// holding a line break is a record that is two lines, and nothing about
+/// reading the delimiter more cleverly would change that.
+///
+/// So it is recognised and said rather than half-read. Left to itself the
+/// symptom is only that the rows disagree about how many fields they have,
+/// and the file 「is not a grid」 — true, and no help at all.
+pub fn field_runs_on(line: &str, delimiter: char) -> bool {
+    let line = line.trim_end_matches(['\n', '\r']);
+    let mut fresh = true;
+    let mut inside = false;
+    let chars: Vec<char> = line.chars().collect();
+    let mut i = 0;
+    while i < chars.len() {
+        match chars[i] {
+            '"' if inside => match chars.get(i + 1) {
+                Some('"') => i += 1,
+                _ => inside = false,
+            },
+            '"' if fresh => {
+                inside = true;
+                fresh = false;
+            }
+            c if c == delimiter && !inside => fresh = true,
+            ' ' | '\t' if fresh => {}
+            _ => fresh = false,
+        }
+        i += 1;
+    }
+    inside
+}
+
+/// A field's value, with the quotes a delimited file wraps it in taken off.
+///
+/// The span [`cells`] hands back **includes** the quotes, because they are in
+/// the file and the writer is looking at the file. This is for the other end:
+/// handing the value to something that is going to quote it again its own way
+/// — an export, a copied column, a schema check.
+pub fn unquote(text: &str) -> String {
+    let trimmed = text.trim();
+    match trimmed.len() >= 2 && trimmed.starts_with('"') && trimmed.ends_with('"') {
+        false => text.to_string(),
+        true => trimmed[1..trimmed.len() - 1].replace("\"\"", "\""),
+    }
+}
+
+/// A value written so that a reader cut by `delimiter` gets it back whole.
+///
+/// Quoted only when it has to be — a delimiter, a quote or a line break in it
+/// — because quoting a value that does not need it changes a file for nothing,
+/// and this editor's promise is that it changes what it was asked to.
+pub fn quote_for(value: &str, delimiter: char) -> String {
+    match value.contains([delimiter, '"', '\n', '\r']) {
+        false => value.to_string(),
+        true => format!("\"{}\"", value.replace('"', "\"\"")),
+    }
 }
 
 /// Whether any field on this line **opens with a quote** — the one shape

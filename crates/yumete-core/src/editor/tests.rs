@@ -1928,26 +1928,18 @@ fn a_table_exports_as_a_file_without_being_converted_in_place() {
         "字\t讀音\n永\tㄩㄥˇ\n"
     );
 
-    // …and a grid refuses the same conversion a `|` table refuses: a cell
-    // that already holds the delimiter being written would come back two
-    // cells, and every column right of it would shift. Row 3, column 2,
-    // so the two numbers are told apart.
+    // …and a cell that already holds the delimiter being written is
+    // **quoted**, not refused (#311). It used to be refused, because the
+    // reader could not have read the quotes back — now it can, so the
+    // conversion is one a `.csv` reader gets right.
     let tsv = dir.join("表二.tsv");
     std::fs::write(&tsv, "字\t讀音\n永\tㄩㄥˇ\n之\t一, 二\n").unwrap();
     let mut ed = Editor::new();
     ed.execute(&format!(":open {}", tsv.display())).unwrap();
     assert!(ed.execute(":table").is_ok());
     ed.execute(":export csv").unwrap();
-    let (row, column) = (ed.status.find('3'), ed.status.find('2'));
-    assert!(
-        matches!((row, column), (Some(r), Some(c)) if r < c),
-        "row 3 then column 2: {}",
-        ed.status
-    );
-    assert!(
-        !dir.join("表二.csv").exists(),
-        "refused means nothing was written"
-    );
+    let out = std::fs::read_to_string(dir.join("表二.csv")).expect("written");
+    assert_eq!(out.lines().last(), Some("之,\"一, 二\""), "{out:?}");
 
     std::fs::remove_dir_all(&dir).ok();
 }
@@ -8276,14 +8268,14 @@ fn a_rename_reaches_past_the_end_of_the_listing() {
 }
 
 #[test]
-fn a_quoted_field_is_not_edited_out_from_under_its_neighbour() {
-    // **One quoted comma is enough, and the file need not be strange** (#307):
-    // clean rows, and somewhere among them `2500,"Smith, John",note`. `cells`
-    // splits and nothing more — which is what makes a grid over 8 MB
-    // affordable — so to it that row has four fields, and an edit to the one
-    // *beside* the name wrote the row back from the wrong pieces:
-    // `2500,"Smith,ZZ,note`. The name gone, the file no longer parseable, and
-    // nothing said.
+fn a_quoted_field_is_read_as_the_one_field_it_is() {
+    // **One quoted comma is enough, and the file need not be strange** (#307,
+    // #311): clean rows, and somewhere among them `2500,"Smith, John",note`.
+    // `cells` used to split on the delimiter and nothing more, so to it that
+    // row had four fields — an edit to the one *beside* the name wrote the row
+    // back from the wrong pieces (`2500,"Smith,ZZ,note`), and the answer for a
+    // while was to refuse the row outright. It reads the quotes now, so there
+    // is nothing to refuse: the row is a row and its cells are its cells.
     let dir = std::env::temp_dir().join(format!("yumete-quoted-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
@@ -8296,31 +8288,22 @@ fn a_quoted_field_is_not_edited_out_from_under_its_neighbour() {
     assert!(ed.enter_table(), "{}", ed.status());
     press(&mut ed, "T"); // #356: 這一條測的是格
 
-    // Stand on the quoted row and change a cell.
+    // Three cells on the quoted row, and the middle one is the whole name.
+    assert_eq!(ed.cell_text(2, 1), "\"Smith, John\"");
+    assert_eq!(ed.cell_text(2, 2), "note");
+
+    // Changing the cell *beside* the name leaves the name alone — which is
+    // the whole of what went wrong.
     ed.execute(":3").unwrap();
-    press(&mut ed, "c");
-    assert!(!ed.status().is_empty(), "it says why, before anything is typed");
-    press(&mut ed, "ZZ");
+    ed.on_key(Key::Tab);
+    ed.on_key(Key::Tab);
+    press(&mut ed, "cZZ");
     ed.on_key(Key::Esc);
     assert_eq!(
         ed.current_buffer().text(),
-        text,
-        "the row is left exactly as it was"
-    );
-
-    // Clearing it is the same answer, and so is a paste.
-    press(&mut ed, "d");
-    assert_eq!(ed.current_buffer().text(), text, "`d` too");
-
-    // **The rows around it are still editable** — the refusal is per row, not
-    // per file, or a single quoted comma would close a hundred thousand rows.
-    ed.execute(":2").unwrap();
-    press(&mut ed, "cZZ");
-    ed.on_key(Key::Esc);
-    assert!(
-        ed.current_buffer().text().contains("ZZ"),
-        "a clean row still edits: {:?}",
-        ed.current_buffer().text()
+        "id,name,note\n1,佐藤,甲\n2500,\"Smith, John\",ZZ\n3,鈴木,丙\n",
+        "{}",
+        ed.status()
     );
 
     let _ = std::fs::remove_dir_all(&dir);

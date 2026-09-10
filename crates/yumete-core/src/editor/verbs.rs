@@ -129,7 +129,7 @@ impl Editor {
     }
 
     /// Rewrite every character of the selection through `f` (`~`, `` ` ``).
-    pub(super) fn map_selection(&mut self, f: impl Fn(char) -> char) {
+    pub(super) fn map_selection(&mut self, f: impl Fn(char) -> String) {
         let (start, selected) = self.selection();
         let collapsed = selected == start;
         let end = if collapsed {
@@ -141,6 +141,12 @@ impl Editor {
         if start >= end {
             return;
         }
+        // **A case change may be more than one character** (#325). `ﬁ`
+        // upper-cases to `FI`, `ß` to `SS`, and taking only the first of them
+        // — which is what a `char -> char` signature forces — deleted the
+        // rest, silently: `ﬁ` came back `F` and `ß` came back `S`. Ligatures
+        // pasted out of a PDF and German `ß` are ordinary in an English
+        // manuscript.
         let text: String = self
             .current_buffer()
             .rope()
@@ -152,6 +158,9 @@ impl Editor {
         if !self.overwrite(start, end, &text) {
             return;
         }
+        // …so the selection is measured off what was written, not off what
+        // was there.
+        let end = start + text.chars().count();
         // The head sits on the selection's last grapheme, not one past it: the
         // selection covers the cursor's own grapheme, so a head at `end` would
         // put the *next* character inside the highlight — and the next edit
@@ -175,12 +184,21 @@ impl Editor {
         // character you meant to write over. `x` selects a line including its
         // newline, so `x r Z` used to run the line into the next one — a lost
         // paragraph, silently, from two keys that mean "blank this out".
-        let text: String = self
-            .current_buffer()
-            .rope()
-            .slice(start..end)
-            .chars()
-            .map(|had| if had == '\n' || had == '\r' { had } else { c })
+        // **One grapheme in, one out** (#324). Over `chars()` this wrote a
+        // `Z` per *code point*, so `r Z` on a ZWJ family emoji laid down five
+        // of them, and on a decomposed か (か + U+3099) two. `h` and `l` walk
+        // by grapheme, so what a writer selected was one glyph and what they
+        // got back was however many code points happened to be inside it —
+        // and NFD Japanese and emoji are ordinary in a mixed manuscript.
+        let slice = self.current_buffer().rope().slice(start..end).to_string();
+        let text: String = yumete_cjk::graphemes(&slice)
+            .map(|had| match had.starts_with(['\n', '\r']) {
+                // A line ending is not a character anybody meant to write
+                // over: `x` selects a line including its newline, and `x r Z`
+                // used to run the line into the next one.
+                true => had.to_string(),
+                false => c.to_string(),
+            })
             .collect();
         self.snapshot();
         if !self.overwrite(start, end, &text) {

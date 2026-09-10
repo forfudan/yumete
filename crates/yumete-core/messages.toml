@@ -5851,6 +5851,13 @@ zhs = "一格之内：先 Esc 再换行"
 en = "inside a cell: Esc first, then move up or down"
 
 [[message]]
+# 表格模式：某一欄的引號裏包着換行，於是一條記錄佔了兩行——這一種讀不了
+key = "table.field-runs-on"
+zht = "{0} 有跨行的欄位（引號裏包着換行），表格模式一行就是一條記錄，讀不了這一種"
+zhs = "{0} 有跨行的栏位（引号里包着换行），表格模式一行就是一条记录，读不了这一种"
+en = "{0} has a field that runs onto the next line; this grid is one record to a line and cannot read that"
+
+[[message]]
 # :table 用在一個每行欄數不一樣的檔案上
 key = "table.file-is-not-a-grid"
 zht = "「{0}」不像表格——每行要有同樣多的欄，或者把光標放到 | 表格上"
@@ -6122,13 +6129,6 @@ key = "table.q-is-for-the-window"
 zht = "t q 只在全窗表格裏交回窗口——退出表格按 t o"
 zhs = "t q 只在全窗表格里交回窗口——退出表格按 t o"
 en = "t q gives back the window, and only the window — t o leaves the table"
-
-[[message]]
-# 這一行有帶引號的欄位，按格編輯會把它改壞（#307）
-key = "table.quoted-row"
-zht = "這一行有帶引號的欄位，按格改會把它拆散——`t o` 回原文改"
-zhs = "这一行有带引号的字段，按格改会把它拆散——`t o` 回原文改"
-en = "this row has a quoted field; editing it by cell would pull it apart — t o back to the text"
 
 [[message]]
 # 加了一行之後
