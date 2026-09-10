@@ -107,6 +107,22 @@ pub struct Measure<'a> {
     /// the renderer, like everything else here, because the caret, `j`, the
     /// mouse and the page must be reading the same page.
     unwrapped: &'a dyn Fn(usize) -> bool,
+    /// **Which document this rope is, and which version of it** — the buffer's
+    /// id and revision, when the caller has them.
+    ///
+    /// Only ever a cache key (#315). The rows a paragraph wraps into are
+    /// remembered, and without this the memo is taken by hashing the
+    /// paragraph's own text — a walk down the whole paragraph, two to five
+    /// times a keystroke, on exactly the paragraphs where that hurts: a
+    /// chapter written as one 1,000,000-character line spent 2.5 ms of every
+    /// `j` in hashing alone. A revision moves on every edit, so it says the
+    /// same thing for less.
+    ///
+    /// `None` for a caller with no buffer behind its rope, which then pays the
+    /// hash. **The rope handed to these functions must be the one this names**
+    /// — that is the whole of the contract, and it is why it is set beside the
+    /// rope it describes rather than anywhere else.
+    version: Option<(u64, u64)>,
 }
 
 /// A page with nothing hidden, for callers that show the source as it is.
@@ -131,6 +147,7 @@ impl<'a> Measure<'a> {
             drawn: NOTHING_DRAWN,
             typed: NOTHING_DRAWN,
             unwrapped: NOTHING_FOLDED,
+            version: None,
         }
     }
 
@@ -145,6 +162,7 @@ impl<'a> Measure<'a> {
             drawn: NOTHING_DRAWN,
             typed: NOTHING_DRAWN,
             unwrapped: NOTHING_FOLDED,
+            version: None,
         }
     }
 
@@ -162,6 +180,16 @@ impl<'a> Measure<'a> {
     /// — the rows of a table (#275).
     pub fn with_unwrapped(self, unwrapped: &'a dyn Fn(usize) -> bool) -> Measure<'a> {
         Measure { unwrapped, ..self }
+    }
+
+    /// Say which buffer this rope is and which revision it is at, so that a
+    /// remembered paragraph can be found without reading it — see
+    /// [`Measure::version`]. The rope must be that buffer's.
+    pub fn with_version(self, buffer: u64, revision: u64) -> Measure<'a> {
+        Measure {
+            version: Some((buffer, revision)),
+            ..self
+        }
     }
 
     /// Whether `line` is one row however long it is.
@@ -692,7 +720,12 @@ fn rows_of_line(rope: &Rope, line: usize, m: Measure) -> Vec<(usize, usize)> {
     // The hidden runs are part of the answer, so they are part of the key: the
     // same paragraph wraps differently when the cursor opens a construct in it.
     let mut hasher = DefaultHasher::new();
-    line_hash(rope, line).hash(&mut hasher);
+    // **Which version of the document, not what it says** (#315), whenever the
+    // caller could say — see [`Measure::version`].
+    match m.version {
+        Some(version) => (version, line).hash(&mut hasher),
+        None => line_hash(rope, line).hash(&mut hasher),
+    }
     hidden.hash(&mut hasher);
     // The indent changes where a row breaks, so it is part of the key too.
     m.indent_on(line).hash(&mut hasher);
@@ -1059,6 +1092,43 @@ mod tests {
         reset_wrap_count();
         let _ = position(&edited, 0, width);
         assert_eq!(wrap_count(), 1, "an edited paragraph was not re-wrapped");
+    }
+
+    /// …and a caller that can say **which version of which document** this
+    /// rope is need not have its paragraph read at all to find the memo
+    /// (#315): the hash that took it was a walk down the whole paragraph, two
+    /// to five times a keystroke.
+    #[test]
+    fn a_stamped_paragraph_is_found_without_being_read() {
+        let one: String = "春夏秋冬".repeat(2_500);
+        let two: String = "梅蘭竹菊".repeat(1_000);
+        let rope = Rope::from_str(&format!("{one}\n{two}"));
+        let at = |buffer, revision| Measure::plain(80).with_version(buffer, revision);
+
+        reset_wrap_count();
+        let p = position(&rope, 5_000, at(1, 7));
+        let _ = column_of(&rope, 5_000, at(1, 7));
+        let _ = rows_from(&rope, Anchor::from(p), at(1, 7), 40);
+        assert_eq!(wrap_count(), 1, "one paragraph, one keystroke, one pass");
+
+        // The line is part of what a stamp names: two paragraphs of one
+        // document at one revision are two paragraphs.
+        reset_wrap_count();
+        let _ = position(&rope, one.chars().count() + 3, at(1, 7));
+        assert_eq!(wrap_count(), 1, "the second paragraph is not the first");
+
+        // A revision moves on every edit, so it says 「read this again」…
+        let mut edited = rope.clone();
+        edited.insert(0, "新");
+        reset_wrap_count();
+        let _ = position(&edited, 0, at(1, 8));
+        assert_eq!(wrap_count(), 1, "an edited paragraph was not re-wrapped");
+
+        // …and so does the buffer, which is why it is in the stamp: the same
+        // words at the same line of another document are another document's.
+        reset_wrap_count();
+        let _ = position(&rope, 5_000, at(2, 7));
+        assert_eq!(wrap_count(), 1, "another buffer's line 0 is another line");
     }
 
     #[test]

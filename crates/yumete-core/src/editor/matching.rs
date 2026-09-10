@@ -178,6 +178,7 @@ impl Editor {
                 .with_drawn(&drawn)
                 .with_typed_drawn(&typed)
                 .with_unwrapped(&flat)
+                .with_version(self.current_buffer().id(), self.current_buffer().revision())
                 .with_open_line(self.open_line());
             crate::wrap::column_of(rope, self.cursor, m)
         };
@@ -258,6 +259,7 @@ impl Editor {
                 .with_drawn(&drawn)
                 .with_typed_drawn(&typed)
                 .with_unwrapped(&flat)
+                .with_version(self.current_buffer().id(), self.current_buffer().revision())
                 .with_open_line(self.open_line());
             if up {
                 crate::wrap::prev_row(rope, self.cursor, m, self.goal_column)

@@ -131,6 +131,10 @@ type FoldMap = ((u64, u64), Vec<bool>, (usize, usize));
 /// keyed by the buffer that line is in and its number.
 type MarkupCache = HashMap<(u64, usize), (u64, Vec<crate::markdown::Span>)>;
 
+/// One line's 注音 groups, against the revision and the dialects they were read
+/// with, keyed the same way and for the same reason.
+type RubyCache = HashMap<(u64, usize), (u64, Vec<crate::ruby::Ruby>)>;
+
 /// Every line's block and every merge conflict in the document, against the
 /// buffer they were worked out for and that buffer's revision — the two things
 /// that decide whether they are still true.
@@ -626,6 +630,47 @@ struct PadKey {
     /// with the backticks hidden stayed drawn that way after `:syntax text`
     /// put them back, one cell ragged per hidden character.
     syntax: crate::syntax::Syntax,
+}
+
+impl PadKey {
+    /// Whether two keys ask the same table the same way — everything but
+    /// **what the caret is doing and which edit this is**.
+    ///
+    /// Those two are what a keystroke changes, and they change one row of the
+    /// table between them: the row that was typed in. A key that matches here
+    /// says the rest of the rows are being asked exactly what they were asked
+    /// last time, so their answers still stand — see [`PadWork`].
+    fn same_shape(&self, other: &PadKey) -> bool {
+        self.buffer == other.buffer
+            && self.first == other.first
+            && self.last == other.last
+            && self.render == other.render
+            && self.ruby == other.ruby
+            && self.syntax == other.syntax
+            && self.folds == other.folds
+    }
+}
+
+/// A table's padding, **and what it was worked out from**.
+///
+/// The padding itself is one walk down every row, and it is thrown away on
+/// every edit because a revision is a revision. But an edit is one row: the
+/// other 4,999 rows of a long table are the same text being asked the same
+/// question, and re-deriving their answers cost 40 ms of every keystroke
+/// (#316). So the inputs are kept beside the output, and a rebuild copies
+/// forward every row whose text — and whose place under the caret — has not
+/// moved.
+struct PadWork {
+    /// Each row's text, and the spans the **measure** takes off it.
+    rows: Vec<(String, Vec<(usize, usize)>)>,
+    /// Where each row's fold marks are drawn.
+    marks: Vec<Vec<(usize, usize)>>,
+    /// The columns the selection covered on each row when this was worked
+    /// out, under 所見即所得 — where the markup came back onto the page.
+    /// `None` everywhere else, since nothing then asks.
+    cols: Vec<Option<(usize, usize)>>,
+    /// What the page draws: the padding on each row.
+    runs: Vec<Vec<(usize, String)>>,
 }
 
 /// A file being read as a grid.
@@ -1556,6 +1601,15 @@ pub struct Editor {
     /// so `*強調*` in a Markdown chapter came back as emphasis in a `:syntax
     /// text` manuscript that happened to hold the same words.
     markup_cache: RefCell<MarkupCache>,
+    /// The readings laid out on each paragraph, cached the same way.
+    ///
+    /// **Everything that draws a page asks this, and so does the wrap** — a
+    /// reading comes off the page where it is laid out, so it decides where a
+    /// row breaks, and `crate::wrap` asks it two to five times a keystroke.
+    /// Reading it costs the paragraph materialised into characters and walked
+    /// once, which on a chapter written as one 1,000,000-character paragraph
+    /// was 2.6 ms an ask and 13 ms of every `j` (#315).
+    ruby_cache: RefCell<RubyCache>,
     /// The block of every line, against the buffer it was worked out for and
     /// that buffer's revision.
     block_cache: RefCell<Option<BlockCache>>,
@@ -1564,7 +1618,7 @@ pub struct Editor {
     /// One table at a time: the page asks per line, every line of a table
     /// needs the widths of all the others, and a document has at most a
     /// screenful of table on it at once.
-    pad_cache: RefCell<Option<(PadKey, Vec<Vec<(usize, String)>>)>>,
+    pad_cache: RefCell<Option<(PadKey, PadWork)>>,
     /// Which `|` table the cursor is in, against the buffer, its revision and
     /// the line the answer was worked out for.
     ///
@@ -1949,6 +2003,7 @@ impl Editor {
             note_cache: RefCell::new(NoteCache::new()),
             fold_cache: RefCell::new(None),
             markup_cache: RefCell::new(HashMap::new()),
+            ruby_cache: RefCell::new(HashMap::new()),
             block_cache: RefCell::new(None),
             pad_cache: RefCell::new(None),
             md_cache: RefCell::new(None),

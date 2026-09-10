@@ -3855,6 +3855,7 @@ fn text_at(
                 .with_drawn(&drawn)
                 .with_typed_drawn(&typed)
                 .with_unwrapped(&flat)
+                .with_version(editor.current_buffer().id(), editor.current_buffer().revision())
                 .with_open_line(editor.open_line());
             // The same walk the page was drawn with: a row with a reading
             // over it takes two screen rows, so counting rows from the top
@@ -4461,6 +4462,7 @@ fn draw_horizontal(
         .with_drawn(&drawn)
         .with_typed_drawn(&typed)
         .with_unwrapped(&flat)
+        .with_version(editor.current_buffer().id(), editor.current_buffer().revision())
         .with_open_line(editor.open_line());
 
     // A pane that is only being read has no cursor: it is drawn from the

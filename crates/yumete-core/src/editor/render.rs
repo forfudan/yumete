@@ -135,26 +135,40 @@ impl Editor {
         // The four markers are settled by the same opening characters, so a
         // merge conflict costs this walk nothing but the rare line it finds.
         let mut marks = Vec::new();
-        for line in 0..lines {
+        // **Walked, not indexed** (#313). Asking the rope where line `i` starts
+        // is a descent of its tree, and this asked twice a line — half the cost
+        // of the whole scan, to find lines that were about to be handed over in
+        // order anyway. One buffer for the openings, too: the allocation behind
+        // a fresh `String` a line was the other half.
+        let mut prefix = String::with_capacity(crate::markdown::PREFIX * 4);
+        for (line, text) in rope.lines().enumerate() {
             // Only the line's opening is read: every decision is about that,
             // and materialising each paragraph copied the whole novel.
-            let start = rope.line_to_char(line);
-            let end = if line + 1 < lines {
-                rope.line_to_char(line + 1)
-            } else {
-                rope.len_chars()
+            let len = text.len_chars();
+            // **A short line that lies in one of the rope's own chunks is read
+            // where it lies**, with no copy at all: it is shorter than the
+            // opening this reads, so it *is* that opening, character for
+            // character. Everything else — a long paragraph, a line that
+            // straddles two chunks — is copied into the one buffer.
+            let head = match text.chunks().next() {
+                Some(chunk)
+                    if len <= crate::markdown::PREFIX && chunk.len() == text.len_bytes() =>
+                {
+                    chunk
+                }
+                _ => {
+                    prefix.clear();
+                    prefix.extend(text.chars().take(crate::markdown::PREFIX));
+                    prefix.as_str()
+                }
             };
-            let prefix: String = rope
-                .chars_at(start)
-                .take((end - start).min(crate::markdown::PREFIX))
-                .collect();
-            if let Some(kind) = crate::conflict::marker(&prefix) {
-                marks.push((line, kind, crate::conflict::label(&prefix)));
+            if let Some(kind) = crate::conflict::marker(head) {
+                marks.push((line, kind, crate::conflict::label(head)));
             }
             blocks.push(if typst {
-                typst_scanner.feed(&prefix, end - start)
+                typst_scanner.feed(head, len)
             } else {
-                markdown.feed(&prefix, end - start)
+                markdown.feed(head, len)
             });
         }
         // **Laid over the answer, not woven into it.** A forward scan cannot
@@ -609,18 +623,6 @@ impl Editor {
         self.cell_tails_against(line, &markup, self.folds_open_at(line))
     }
 
-    /// The tails as the **measure** reads them: every cell folded, the one
-    /// being typed in included — see [`Self::cell_folds_measured`]. The mark
-    /// is one cell of its column, and the column is measured closed, so the
-    /// mark is counted on the open row too.
-    fn cell_folds_measured_on_line(&self, line: usize) -> Vec<(usize, usize)> {
-        if !self.cells_fold_here() {
-            return Vec::new();
-        }
-        let markup = self.markup_off_line(line);
-        self.cell_tails_against(line, &markup, None)
-    }
-
     /// Everything a row keeps off the page for the table's sake: the tails,
     /// and **the padding the file itself holds** with them.
     ///
@@ -636,31 +638,34 @@ impl Editor {
         out
     }
 
-    /// The same list, **as the table is measured** rather than as it is drawn.
+    /// What the **measure** takes off `line`, and the tails that get a mark
+    /// — the two lists a row owes its table's padding, off one parse.
     ///
-    /// The two differ on one row at most, and only while somebody is typing
-    /// in it: the cell being edited has its tail back on the page, and a
-    /// column that grew to hold it would swell and shrink under the reader's
-    /// hands — every other row shifting sideways because one cell is open.
-    /// So the column is measured as though every cell were folded, the open
-    /// cell juts out past its own wall, and the table's geometry stops
-    /// depending on the caret altogether. That is what makes the layout
-    /// worth remembering across a keystroke.
-    fn cell_folds_measured(&self, line: usize, markup: &[(usize, usize)]) -> Vec<(usize, usize)> {
-        let mut out = self.cell_tails_against(line, markup, None);
-        out.extend(self.cell_slack_against(line, markup, None));
-        out.sort_unstable();
-        out
-    }
-
-    /// [`Self::hidden_on_line`] as the **measure** reads it — see
-    /// [`Self::cell_folds_measured`].
-    fn hidden_measured_on_line(&self, line: usize) -> Vec<(usize, usize)> {
-        let mut off = self.markup_off_line(line);
-        let folded = self.cell_folds_measured(line, &off);
-        off.extend(folded);
+    /// **As the table is measured rather than as it is drawn.** The page's
+    /// list and this one differ on one row at most, and only while somebody
+    /// is typing in it: the cell being edited has its tail back on the page,
+    /// and a column that grew to hold it would swell and shrink under the
+    /// reader's hands — every other row shifting sideways because one cell is
+    /// open. So the column is measured as though every cell were folded, the
+    /// open cell juts out past its own wall, and the table's geometry stops
+    /// depending on the caret altogether. That is what makes the layout worth
+    /// remembering across a keystroke.
+    ///
+    /// **Two answers, one walk** (#316). The marks name tails the measure has
+    /// already found, and both are read off the same markup. Asked for one at
+    /// a time — as three separate questions, which is how this began — each
+    /// rebuilt the row's markup and its cells from scratch, and a 5,000-row
+    /// table spent 50 ms of every keystroke deriving twice over what the line
+    /// before had just worked out.
+    fn measured_on_line(&self, line: usize) -> (Vec<(usize, usize)>, Vec<(usize, usize)>) {
+        let markup = self.markup_off_line(line);
+        let tails = self.cell_tails_against(line, &markup, None);
+        let slack = self.cell_slack_against(line, &markup, None);
+        let mut off = markup;
+        off.extend(tails.iter().copied());
+        off.extend(slack);
         off.sort_unstable();
-        off
+        (off, tails)
     }
 
     /// The padding the file holds in this row, when folding is on.
@@ -811,48 +816,73 @@ impl Editor {
         // 223-row table in this project's own `development.md` that walk alone
         // was 15 ms a frame. A line inside the remembered region needs no walk
         // — that is what the region *is*.
-        if let Some((cached, runs)) = self.pad_cache.borrow().as_ref() {
+        if let Some((cached, work)) = self.pad_cache.borrow().as_ref() {
             if cached.first <= line && line <= cached.last && *cached == key(cached.first, cached.last)
             {
-                return runs.get(line - cached.first).cloned().unwrap_or_default();
+                return work.runs.get(line - cached.first).cloned().unwrap_or_default();
             }
         }
+        // **Taken, not borrowed**: the walk below asks the rest of the editor
+        // questions, and the answer is written back here at the end.
+        let last_time = self.pad_cache.borrow_mut().take();
         let Some(region) = crate::mdtable::region(|i| self.line_text(i), line) else {
             return Vec::new();
         };
         let key = key(region.first, region.last);
+        let typing = self.mode == Mode::Insert;
         // The whole table at once: every row's padding is decided by the
         // widest cell in each column, so there is no such thing as one row's
         // answer on its own.
-        let rows: Vec<(String, Vec<(usize, usize)>)> = (region.first..=region.last)
-            .map(|i| {
-                (
-                    self.line_text(i).unwrap_or_default(),
-                    self.hidden_measured_on_line(i),
-                )
-            })
-            .collect();
-        // What the page really hides, which is the same list on every row but
-        // the one being typed in — see [`Self::cell_folds_measured`].
-        let shown: Vec<Vec<(usize, usize)>> = match self.mode == Mode::Insert {
-            false => Vec::new(),
-            true => (region.first..=region.last)
-                .map(|i| self.hidden_on_line(i))
-                .collect(),
-        };
-        // **The fold mark is one cell of its column.** It is drawn, not
-        // written, so `visible_width` cannot see it — and a column padded as
-        // though it were not there comes out one cell narrow on every row that
-        // folds, which is every row the cap bites.
+        // Last time's answers, if the same table is being asked the same
+        // question — the rows that did not change are the rows that need no
+        // second thought (#316).
+        let last_time = last_time
+            .filter(|(had, _)| had.same_shape(&key))
+            .map(|(_, work)| work);
         let width = yumete_cjk::str_width(crate::mdtable::FOLD_MARK);
-        let marks: Vec<Vec<(usize, usize)>> = (region.first..=region.last)
-            .map(|i| {
-                self.cell_folds_measured_on_line(i)
-                    .into_iter()
-                    .map(|(at, _)| (at, width))
-                    .collect()
-            })
-            .collect();
+        let height = region.last + 1 - region.first;
+        let mut rows: Vec<(String, Vec<(usize, usize)>)> = Vec::with_capacity(height);
+        let mut marks: Vec<Vec<(usize, usize)>> = Vec::with_capacity(height);
+        let mut cols: Vec<Option<(usize, usize)>> = Vec::with_capacity(height);
+        let mut shown: Vec<Vec<(usize, usize)>> = Vec::with_capacity(match typing {
+            true => height,
+            false => 0,
+        });
+        for i in region.first..=region.last {
+            let text = self.line_text(i).unwrap_or_default();
+            let k = i - region.first;
+            // **Where the caret stands on this row**, and only when that can
+            // change what comes off it: 所見即所得 puts the markup back under
+            // the selection, and nothing else asks.
+            let here = self.wysiwyg().then(|| self.selected_columns(i)).flatten();
+            let kept = last_time.as_ref().and_then(|was| {
+                let same = was.rows.get(k).is_some_and(|(had, _)| *had == text)
+                    && was.cols.get(k).is_some_and(|had| *had == here);
+                same.then(|| (was.rows[k].1.clone(), was.marks[k].clone()))
+            });
+            let (measured, mark) = kept.unwrap_or_else(|| {
+                let (measured, tails) = self.measured_on_line(i);
+                // **The fold mark is one cell of its column.** It is drawn,
+                // not written, so `visible_width` cannot see it — and a
+                // column padded as though it were not there comes out one
+                // cell narrow on every row that folds, which is every row the
+                // cap bites.
+                (measured, tails.iter().map(|&(at, _)| (at, width)).collect())
+            });
+            // What the page really hides, which is the same list on every row
+            // but the one being typed in — see [`Self::measured_on_line`].
+            // `folds_open_at` is that row or nothing, so this is one row's
+            // extra work and not the table's.
+            if typing {
+                shown.push(match self.folds_open_at(i).is_some() {
+                    false => measured.clone(),
+                    true => self.hidden_on_line(i),
+                });
+            }
+            marks.push(mark);
+            cols.push(here);
+            rows.push((text, measured));
+        }
         let runs = crate::mdtable::padding(
             &rows,
             region.rule.map(|at| at - region.first),
@@ -860,7 +890,7 @@ impl Editor {
             &shown,
         );
         let answer = runs.get(line - region.first).cloned().unwrap_or_default();
-        *self.pad_cache.borrow_mut() = Some((key, runs));
+        *self.pad_cache.borrow_mut() = Some((key, PadWork { rows, marks, cols, runs }));
         answer
     }
 
@@ -896,8 +926,26 @@ impl Editor {
         if line >= rope.len_lines() {
             return Vec::new();
         }
+        // **Which version of the document, not what it says** — the same
+        // bargain `markup_line` struck, and for the same reason: reading the
+        // paragraph to find out whether it had changed cost more than it
+        // saved. A revision moves on every edit, so an edit anywhere costs the
+        // visible paragraphs one pass, which is what they would have cost
+        // anyway. The dialects are in it because `:ruby` is one keystroke away.
+        let mut hasher = DefaultHasher::new();
+        (self.current_buffer().revision(), dialects.bits()).hash(&mut hasher);
+        let hash = hasher.finish();
+        let key = (self.current_buffer().id(), line);
+        let mut cache = self.ruby_cache.borrow_mut();
+        if let Some((cached, groups)) = cache.get(&key) {
+            if *cached == hash {
+                return groups.clone();
+            }
+        }
         let chars = crate::zong::line_chars(rope, line);
-        crate::ruby::groups(&chars, dialects)
+        let groups = crate::ruby::groups(&chars, dialects);
+        cache.insert(key, (hash, groups.clone()));
+        groups
     }
 
     /// The 平仄 of `line`, for the margin (Feature #247).
