@@ -176,7 +176,7 @@ impl Editor {
             schema,
             from,
             goal: 0,
-            grain: Grain::Cell,
+            grain: Grain::Char,
             separator: Separator::Delimiter(delimiter),
             pane,
             // A file a schema claims, or one whose own header row is the
@@ -197,6 +197,19 @@ impl Editor {
             let rope = self.current_buffer().rope();
             if rope.len_lines() > 1 {
                 let at = rope.line_to_char(1);
+                self.set_cursor(at);
+            }
+        }
+        // **Entering a table has to land you inside it** (#356). 按格 pulled
+        // the caret to a cell and so always did; 按字 does not pull, and
+        // entering from the blank line under a table left the caret on a line
+        // that is not a row — where `table_here()` is false and *every* table
+        // key does nothing, `T` included. A table you have entered and cannot
+        // use is worse than one you have not entered.
+        if let Some((first, last)) = self.table_row_span() {
+            let line = self.cursor_line();
+            if !(first..=last).contains(&line) {
+                let at = self.current_buffer().rope().line_to_char(first);
                 self.set_cursor(at);
             }
         }
@@ -292,7 +305,7 @@ impl Editor {
                 schema: crate::table::Schema::numbered(columns, delimiter),
                 from: PathBuf::new(),
                 goal: 0,
-                grain: Grain::Cell,
+                grain: Grain::Char,
                 separator: Separator::Delimiter(delimiter),
                 // Drawn as part of the document it sits in. The grid widget
                 // clears the frame, and clearing the chapter in order to look
@@ -520,7 +533,7 @@ impl Editor {
                 schema,
                 from,
                 goal: 0,
-                grain: Grain::Cell,
+                grain: Grain::Char,
                 separator: Separator::Delimiter(delimiter),
                 pane: true,
                 bounds: Bounds::WholeFile,
@@ -551,7 +564,7 @@ impl Editor {
                     schema: crate::mdtable::schema(&header),
                     from: PathBuf::new(),
                     goal: 0,
-                    grain: Grain::Cell,
+                    grain: Grain::Char,
                     separator: Separator::Pipe,
                     pane: false,
                     bounds: Bounds::Md,
@@ -1251,7 +1264,7 @@ impl Editor {
             schema,
             from: PathBuf::new(),
             goal: 0,
-            grain: Grain::Cell,
+            grain: Grain::Char,
             separator: Separator::Pipe,
             pane,
             bounds: Bounds::Md,
@@ -2632,12 +2645,16 @@ impl Editor {
     /// paging, `gg`, search, the operators — is about lines and text, and a
     /// grid does not change what those mean.
     pub(super) fn table_motion(&mut self, key: Key, count: usize) -> bool {
-        // Tab is what says which unit a step is. It is the one key here that
-        // works in both, because it is the way out of either.
-        if key == Key::Tab {
+        // **`T` says which unit a step is** (#356). It used to be `Tab`, back
+        // when the grid was the default way to stand in a table; but the cell
+        // is not what a writer mostly wants — the characters in it are — so
+        // the default became 按字 and `Tab` was wanted for the thing every
+        // spreadsheet means by it. `T` is the table group's own capital, free
+        // since `t`/`T` were retired as till-keys.
+        if key == Key::Char('T') {
             let grain = match self.table.as_ref().map(|v| v.grain) {
-                Some(Grain::Cell) => Grain::Char,
-                _ => Grain::Cell,
+                Some(Grain::Char) => Grain::Cell,
+                _ => Grain::Char,
             };
             if let Some(view) = self.table.as_mut() {
                 view.grain = grain;
@@ -2646,6 +2663,18 @@ impl Editor {
                 Grain::Cell => say!("table.moving-by-cell"),
                 Grain::Char => say!("table.moving-by-character"),
             };
+            return true;
+        }
+        // **`Tab` walks the grid, in either grain** — right along the row and
+        // on to the first cell of the next when it runs out, `S-Tab` back the
+        // way it came. What every spreadsheet means by the key, and what it
+        // already meant inside a cell in Insert mode; now it means the same
+        // from Normal, which is where the writer usually is.
+        if key == Key::Tab || key == Key::BackTab {
+            let forward = key == Key::Tab;
+            self.repeat(count, |e| {
+                e.step_cell(forward);
+            });
             return true;
         }
         // Reading by character, this is an ordinary file that happens to be

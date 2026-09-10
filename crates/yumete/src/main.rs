@@ -53,6 +53,7 @@ fn main() -> ExitCode {
     // jot one thing down and getting five chapters back is the same annoyance
     // as the reverse, in the other direction.
     let mut fresh = false;
+    let mut tutor = false;
     // Keys to press before the picture is taken. A panel that only opens after
     // three keystrokes — the `:` menu, `::`, which-key, the候選 list — could
     // not be looked at without a terminal and a pair of hands, and 「動了前端
@@ -78,6 +79,11 @@ fn main() -> ExitCode {
             "-t" | "--table" => force_table = true,
             "-R" | "--readonly" => readonly = true,
             "-n" | "--new" => fresh = true,
+            // **`-t` is already the table**, so this one is long only. Worth a
+            // flag at all because the lesson is what a first run wants, and
+            // 「open the editor, then find out how to ask for the lesson」 is
+            // the loop it exists to break.
+            "--tutor" => tutor = true,
             "--timing" => timing = true,
             "--shot" => shot = Some((100, 30)),
             s if s.starts_with("--shot=") => shot = Some(parse_size(&s["--shot=".len()..])),
@@ -394,6 +400,10 @@ fn main() -> ExitCode {
     if let Some(pressed) = &keys {
         press(&mut editor, pressed);
     }
+    // Asked for on the command line, and run the same way `:tutor` runs it.
+    if tutor {
+        let _ = editor.execute(":tutor");
+    }
     if let Some((width, height)) = shot {
         // The layout the flags asked for, before the picture is taken.
         let picture = match shot_html {
@@ -584,6 +594,7 @@ OPTIONS:
                      `:readonly off` unlocks the one you are looking at.
     -n, --new        Start on an empty buffer instead of reopening the files
                      that were open last time.
+        --tutor      Open the lesson (the same as `:tutor` inside the editor).
     -s, --syntax     Which markup these files are written in: markdown, typst
                      or text. Outranks both the extension and the config.
     -p, --preview    Print a non-interactive preview instead of the editor.

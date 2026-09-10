@@ -59,9 +59,14 @@ fn quoted(text: &str) -> Vec<(usize, String)> {
 /// test must not demand.
 fn is_a_name(word: &str) -> bool {
     let word = word.strip_suffix('!').unwrap_or(word);
+    // A hyphen is part of a name, not a break in one: it joins two coordinate
+    // verbs (`:write-quit` — write *and* quit), where a space would have meant
+    // 「a kind of write」 and would have collided with the path `:write` takes.
     !word.is_empty()
         && word.starts_with(|c: char| c.is_ascii_lowercase())
-        && word.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit())
+        && word
+            .chars()
+            .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
 }
 
 #[test]
@@ -107,10 +112,15 @@ const DISOWNED: &[&str] = &[
     ":markup",
     ":wysiwyg",
     ":source",
+    // Hyphenated spellings the fold retired. They read as names now that a
+    // hyphen is part of one (`:write-quit`), so they have to be listed as
+    // gone rather than silently skipped for their shape.
+    ":ruby-on",
+    ":ruby-off",
+    ":render-ruby-html",
+    ":clipboard-yank",
     ":buffers",
     ":ls",
-    ":bn",
-    ":bp",
     ":bd",
     ":cy",
     ":cp",
@@ -131,7 +141,6 @@ const DISOWNED: &[&str] = &[
     ":progress",
     ":prog",
     ":target",
-    ":wa",
     ":wall",
     ":saveas",
     ":sav",
@@ -139,7 +148,6 @@ const DISOWNED: &[&str] = &[
     ":search",
     ":conflicts",
     ":bclose",
-    ":bc",
     ":appearance",
     // Two spellings the manual prints to explain why the fold renamed the
     // child: 「`:table search` 讀起來是『表格搜索』」, 「`:view note` 更糟」.

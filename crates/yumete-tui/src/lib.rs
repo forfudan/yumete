@@ -3644,7 +3644,7 @@ fn draw_command_menu(
         // over the derived prefix: `:w` is `write` because it was declared so,
         // even though `w` is a prefix of three commands.
         .map(|e| Row {
-            text: match e.alias.or(e.short) {
+            text: match e.alias.clone().or_else(|| e.short.map(str::to_string)) {
                 Some(short) => format!("{}{}  ({short})", e.leading, e.written()),
                 None => format!("{}{}", e.leading, e.written()),
             },
@@ -6304,6 +6304,7 @@ mod tests {
         for key in ['j', 'j', 't', 't'] {
             editor.on_key(Key::Char(key));
         }
+        editor.on_key(Key::Char('T')); // #356: 這一條測的是格
         assert!(editor.grid_has_the_pane(), "{}", editor.status());
         let config = Config::default();
         // **The grid, not the window**: the panel down the right is showing
@@ -8178,6 +8179,7 @@ mod tests {
         let mut config = Config::default();
         config.editor.line_numbers = LineNumbers::None;
         editor.execute("2").unwrap();
+        editor.on_key(Key::Char('T')); // #356: 這一條測的是格
         editor.on_key(Key::Char('l'));
 
         let caret = |e: &Editor, c: &Config| render_caret(e, c, 60, 10).1.unwrap().x;
@@ -8185,7 +8187,7 @@ mod tests {
 
         // Reading by character, the caret has to move with the cursor — pinned
         // to the cell's first 字 it would say the cursor had not moved at all.
-        editor.on_key(Key::Tab);
+        editor.on_key(Key::Char('T'));
         editor.on_key(Key::Char('l'));
         let one = caret(&editor, &config);
         assert_eq!(one, at_start + 2, "one 漢字 further along the cell");
@@ -8195,7 +8197,7 @@ mod tests {
         assert_eq!(caret(&editor, &config), one, "and back");
 
         // The same in Insert, where it decides where the next 字 lands.
-        editor.on_key(Key::Tab);
+        editor.on_key(Key::Char('T'));
         editor.on_key(Key::Char('i'));
         assert_eq!(caret(&editor, &config), at_start, "`i` is the cell's start");
         editor.on_key(Key::Right);
@@ -8247,6 +8249,7 @@ mod tests {
         let mut editor = Editor::new();
         editor.open_file(&csv).unwrap();
         editor.execute("2").unwrap();
+        editor.on_key(Key::Char('T')); // #356: 這一條測的是格
         editor.on_key(Key::Char('l'));
         let mut config = Config::default();
         config.editor.line_numbers = LineNumbers::None;
@@ -8300,12 +8303,10 @@ mod tests {
             .current_buffer_mut()
             .insert(0, "前文\n| 字 | 讀音 |\n| --- | --- |\n| 木 | mu |\n")
                 .expect("the fixture buffer is writable");
-        // Onto the `木` row: `gg` then three `j`.
-        editor.on_key(Key::Char('g'));
-        editor.on_key(Key::Char('g'));
-        for _ in 0..3 {
-            editor.on_key(Key::Char('j'));
-        }
+        // Onto the `木` row. By line number, not by counting `j`: which rows a
+        // `j` steps over depends on the grain (#356), and this test is about
+        // how a cell is drawn.
+        editor.execute("4").unwrap();
         // 表格操作 (#275): the pipes stay on the page, which is what the
         // assertions below read. `t t` re-glyphs them into a grid instead.
         assert!(
@@ -8313,6 +8314,7 @@ mod tests {
             "{}",
             editor.status()
         );
+        editor.on_key(Key::Char('T')); // #356: 這一條測的是格
         // …and into the second cell, which is `mu`.
         editor.on_key(Key::Char('l'));
         let (line, at) = editor.cell_position().expect("in a cell");
@@ -8485,10 +8487,9 @@ mod tests {
             .current_buffer_mut()
             .insert(0, "| 字 | 讀音 |\n| --- | --- |\n| 木 | mu |\n")
                 .expect("the fixture buffer is writable");
-        editor.on_key(Key::Char('g'));
-        editor.on_key(Key::Char('g'));
-        editor.on_key(Key::Char('j'));
-        editor.on_key(Key::Char('j'));
+        // Onto the `木` row by line number: which rows a `j` steps over depends
+        // on the grain (#356), and this test is about how a cell is drawn.
+        editor.execute("3").unwrap();
         // 表格操作 (#275): the pipes stay on the page, which is what the
         // assertions below read. `t t` re-glyphs them into a grid instead.
         assert!(
@@ -8496,13 +8497,14 @@ mod tests {
             "{}",
             editor.status()
         );
+        editor.on_key(Key::Char('T')); // #356: 這一條測的是格
         editor.on_key(Key::Char('l'));
         assert_eq!(editor.cell_position().map(|(_, c)| c), Some(1), "on `mu`");
-        // Tab is `Grain::Char`, so `l` walks inside the cell and the selection
+        // `T` is `Grain::Char`, so `l` walks inside the cell and the selection
         // covers two characters. It has to: the block cursor is painted over
         // its own slot last of all, so the column that answers this question is
         // the one **beside** the cursor.
-        editor.on_key(Key::Tab);
+        editor.on_key(Key::Char('T'));
         editor.on_key(Key::Char('v'));
         editor.on_key(Key::Char('l'));
         let buf = render(&editor, &config, 30, 8);
@@ -8545,6 +8547,7 @@ mod tests {
             "{}",
             editor.status()
         );
+        editor.on_key(Key::Char('T')); // #356: 這一條測的是格
         editor.on_key(Key::Char('l'));
         assert_eq!(editor.cell_position().map(|(_, c)| c), Some(1));
         let buf = render(&editor, &config, 30, 8);
@@ -8581,6 +8584,7 @@ mod tests {
         editor.on_key(Key::Char('h'));
         editor.on_key(Key::Char('h'));
         assert!(editor.enter_table(), "{}", editor.status());
+        editor.on_key(Key::Char('T')); // #356: 這一條測的是格
         let config = vertical_config();
         let ink = ink(&config);
         let want = ink.at(yumete_config::rung::HEAD);
@@ -10837,7 +10841,9 @@ mod tests {
         let buffer = render_with(&editor, &config, &no_ime(), 90, 24);
         let text = buffer_text(&buffer);
         assert!(text.contains(":open"), "menu should list commands: absent");
-        let total = yumete_core::command::COMMANDS.len();
+        // The commands, and the aliases that name a whole line (#363) — they
+        // are in the list beside the names, so they are in the count.
+        let total = yumete_core::command::COMMANDS.len() + yumete_core::command::SHORTHANDS.len();
         assert!(
             text.contains(&format!("1/{total}")),
             "how much more there is"
@@ -10881,7 +10887,9 @@ mod tests {
     #[test]
     fn the_command_menu_grows_with_a_tall_window() {
         let config = Config::default();
-        let total = yumete_core::command::COMMANDS.len();
+        // The commands, and the aliases that name a whole line (#363) — they
+        // are in the list beside the names, so they are in the count.
+        let total = yumete_core::command::COMMANDS.len() + yumete_core::command::SHORTHANDS.len();
         let mut editor = editor_with("那年冬天");
         editor.on_key(Key::Char(':'));
 
@@ -10929,7 +10937,9 @@ mod tests {
     #[test]
     fn the_command_menu_spreads_across_a_wide_window() {
         let config = Config::default();
-        let total = yumete_core::command::COMMANDS.len();
+        // The commands, and the aliases that name a whole line (#363) — they
+        // are in the list beside the names, so they are in the count.
+        let total = yumete_core::command::COMMANDS.len() + yumete_core::command::SHORTHANDS.len();
 
         // Wide: every command at once, in columns, rather than a third of them
         // with the rest of the page standing empty beside it.
