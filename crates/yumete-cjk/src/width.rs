@@ -52,6 +52,23 @@ pub fn char_width(c: char) -> usize {
     }
 }
 
+/// The width of `s` **as it will be stored**, which the terminal has no say in
+/// (#327).
+///
+/// East-Asian Ambiguous — `→ ± ※ ① — “ ”` — is one cell in some terminals and
+/// two in others, and [`ambiguous_is_wide`] follows whichever this one said.
+/// That is right for drawing and wrong for writing: a table lined up with
+/// those characters in it came out **582 bytes on one terminal and 578 on
+/// another**, so two people editing one file, or one person moving between
+/// ssh and home, made git churn a whole table between them for nothing. And
+/// it is not a 中文 problem — those characters are all over English prose.
+///
+/// So the file gets the narrow answer, always. The screen squares itself up at
+/// the other end, when the table is drawn, by padding what it hid.
+pub fn stored_width(s: &str) -> usize {
+    UnicodeWidthStr::width(s)
+}
+
 /// The number of terminal cells the string `s` occupies, summed over its
 /// characters (control characters contribute `0`).
 pub fn str_width(s: &str) -> usize {

@@ -1518,6 +1518,13 @@ impl Editor {
     /// [`crate::mdtable::format`] refuses on its own, so the four automatic
     /// doors need not ask. This is for the one door that has to *say* what
     /// happened.
+    /// A row of the table the cursor is in with more cells than its heading
+    /// (#328) — see [`crate::mdtable::torn`].
+    fn md_table_torn(&self) -> Option<(usize, usize, usize)> {
+        let region = self.md_region()?;
+        crate::mdtable::torn(&crate::mdtable::parse(&self.md_lines(&region)))
+    }
+
     fn md_table_runaway(&self) -> Option<(usize, usize)> {
         let region = self.md_region()?;
         crate::mdtable::runaway(&crate::mdtable::parse(&self.md_lines(&region)))
@@ -3399,6 +3406,10 @@ impl Editor {
                 // lined up and is not going to be.
                 self.status = match self.md_table_runaway() {
                     Some((column, width)) => say!("table.column-too-wide", column + 1, width),
+                    None if self.md_table_torn().is_some() => {
+                        let (row, has, heading) = self.md_table_torn().unwrap_or_default();
+                        say!("table.row-torn", row + 1, has, heading)
+                    }
                     None if self.format_md_table() => say!("table.lined-up"),
                     None => say!("table.already-aligned"),
                 };

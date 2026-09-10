@@ -3697,35 +3697,36 @@ fn complete_within(line: &str, folding: bool) -> (usize, Vec<Choice>) {
     // The first word names a command; every word after it walks down what that
     // command says may follow — which is the same walk whether those words are
     // arguments or subcommands, because they are the same thing.
+    // One row of the top level, however it was reached.
+    let row = |e: &'static Entry| Choice {
+        name: e.name,
+        family: None,
+        needs: e.needs,
+        alias: (!e.aliases.is_empty()).then(|| e.aliases.join(" ")),
+        // **Among the aliases too.** `:table-jump` has no alias of its own and
+        // no other *name* starts with `ro`, so the shortest walk over names
+        // alone offered `(ro)` — while `ro` is `:readonly`'s declared alias,
+        // and an exact alias beats a prefix in `resolve`. The menu was
+        // promising a spelling that did something else.
+        short: shortest(
+            e.name,
+            COMMANDS
+                .iter()
+                .filter(|c| c.name != e.name)
+                .flat_map(|c| std::iter::once(c.name).chain(c.aliases.iter().copied())),
+        ),
+        help: e.help,
+        leading: ":",
+        under: String::new(),
+        note: None,
+    };
     let mut choices: Vec<Choice> = match words.first() {
         None => COMMANDS
             .iter()
             .filter(|e| {
                 e.name.starts_with(typed) || e.aliases.iter().any(|a| a.starts_with(typed))
             })
-            .map(|e| Choice {
-                name: e.name,
-                family: None,
-                needs: e.needs,
-                alias: (!e.aliases.is_empty()).then(|| e.aliases.join(" ")),
-                // **Among the aliases too.** `:table-jump` has no alias of its own
-                // and no other *name* starts with `ro`, so the shortest walk
-                // over names alone offered `(ro)` — while `ro` is `:readonly`'s
-                // declared alias, and an exact alias beats a prefix in
-                // `resolve`. The menu was promising a spelling that did
-                // something else.
-                short: shortest(
-                    e.name,
-                    COMMANDS
-                        .iter()
-                        .filter(|c| c.name != e.name)
-                        .flat_map(|c| std::iter::once(c.name).chain(c.aliases.iter().copied())),
-                ),
-                help: e.help,
-                leading: ":",
-                under: String::new(),
-                note: None,
-            })
+            .map(row)
             .collect(),
         // **The same walk the parser walks** (§5.2.2 fault 1): `walk` resolves
         // the head by prefix and picks each word below it the same way, so the
@@ -3783,9 +3784,29 @@ fn complete_within(line: &str, folding: bool) -> (usize, Vec<Choice>) {
     // `scheme lingming`, because in both the reader named the leaf and not the
     // path. Guarded on an empty result rather than merged into it: a word that
     // *does* name something here has been answered already.
-    if choices.is_empty() && !typed.is_empty() {
+    let reached_for = choices.is_empty() && !typed.is_empty();
+    if reached_for {
         choices = match words.first() {
-            None => deep_from_root(typed),
+            None => {
+                // **A name's later segments are looked in too** (#373).
+                // `discover` is not a word after a command any more, it is the
+                // second half of one — `:word-discover` — and the reader who
+                // typed it named the thing just as plainly as when it was a
+                // word. Flattening the tree (#368) moved most of what this
+                // fallback used to find into names, and took it out of reach.
+                let mut out: Vec<Choice> = COMMANDS
+                    .iter()
+                    .filter(|e| {
+                        e.name
+                            .split('-')
+                            .skip(1)
+                            .any(|part| part.starts_with(typed))
+                    })
+                    .map(row)
+                    .collect();
+                out.extend(deep_from_root(typed));
+                out
+            }
             // **A command's own parameters are all there is below it.** The
             // levels that used to hang here are in the names now, so what
             // `:vert` reaches from inside a command is that command's words
@@ -3812,7 +3833,11 @@ fn complete_within(line: &str, folding: bool) -> (usize, Vec<Choice>) {
     }
     // Only the top level folds: below it the walk is already inside one
     // command, and what it offers is that command's own words.
-    if folding && words.first().is_none() {
+    // **What the fallback found is not a family listing** (#373): `:punct`
+    // reaches `check-punct` and `view-punct`, two particular commands that
+    // happen to share a word, and folding them into `check-` and `view-` would
+    // answer the question with the two families they came from.
+    if folding && !reached_for && words.first().is_none() {
         choices = fold(typed, choices);
     }
     (start, choices)
@@ -4827,6 +4852,33 @@ mod tests {
             ["write", "wa", "wq"],
             "each one under the family it belongs to"
         );
+    }
+
+    /// **Half a name still finds the command** (#373). A reader who remembers
+    /// 「discover」 and not 「word」 has named the thing, and the menu owes them
+    /// the thing — the same debt #223 paid when `discover` was a word under
+    /// `:word` rather than the second half of `:word-discover`.
+    ///
+    /// Only when nothing matched at the top level, which is what keeps `:d`
+    /// about `:diff` rather than about every command with a `d` in it.
+    #[test]
+    fn half_a_name_finds_the_command_it_is_half_of() {
+        let found = |typed: &str| -> Vec<String> {
+            complete(typed).iter().map(|c| c.written()).collect()
+        };
+        assert_eq!(found("discover"), ["word-discover"]);
+        assert_eq!(found("close"), ["buffer-close"]);
+        assert_eq!(found("footnote"), ["markdown-footnote"]);
+        // Two commands can share a word, and then both are the answer —
+        // **not** the two families they came from, which is what a fold would
+        // have made of them.
+        assert_eq!(found("punct"), ["check-punct", "view-punct"]);
+        // A word that is still a word — a parameter — is reached the way it
+        // always was.
+        assert_eq!(found("vert"), ["layout vertical", "help vertical"]);
+        // …and a prefix that names something at the top level is answered
+        // about that, with nothing dredged up from below it.
+        assert_eq!(found("diff"), ["diff"]);
     }
 
     /// Print the menu the way it is drawn, for looking at.

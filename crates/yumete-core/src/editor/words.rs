@@ -218,6 +218,12 @@ impl Editor {
     /// in force is wrapped in [`yumete_cjk::WithWords`], so a listed word is
     /// one it already joins, and [`crate::discover`] never offers those.
     pub(super) fn discover_words(&mut self, root: &Path) -> Result<(), EditorError> {
+        // **Where the writer was**, to be put back there (#367). The offer is
+        // written into the list either way — it has to be somewhere it can be
+        // read, edited and refused — but 「用户就是单纯想要在显示词，并不想看
+        // 那个文件」 (author, 2026-09-10), and the words segment the moment
+        // they are found, so there is nothing to look at unless you want to.
+        let was = self.current;
         let mut text = String::new();
         let mut files = 0usize;
         walk(root, &mut 0, &mut |path| {
@@ -287,6 +293,9 @@ impl Editor {
         }
         self.forget_the_words();
         self.words_request = true;
+        // Back to the chapter. The list keeps the block, unsaved, and says so
+        // in a sentence rather than by taking the screen.
+        self.show_buffer(was);
         self.status = match total > DISCOVER_LIMIT {
             true => say!("word.discover-too-many", DISCOVER_LIMIT, total),
             false => say!("word.discover-found", total, path.display()),

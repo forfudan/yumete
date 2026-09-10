@@ -28,8 +28,12 @@
 //! Which is the reason this exists at all. Every table formatter in every
 //! editor pads to a character count, so a column of 漢字 comes out ragged and
 //! a column mixing 漢字 with Latin comes out badly ragged. Here a column is as
-//! wide as its widest cell **on the terminal** — [`yumete_cjk::str_width`] —
-//! and a table of Chinese lines up.
+//! wide as its widest cell **in display columns** —
+//! [`yumete_cjk::stored_width`] — and a table of Chinese lines up.
+//!
+//! Stored width, not this terminal's: East-Asian Ambiguous is one cell in some
+//! terminals and two in others, and a byte on disk cannot be allowed to depend
+//! on that (#327).
 //!
 //! ## What it costs
 //!
@@ -92,7 +96,7 @@ impl Align {
     /// alignment being *visible in the source*, which is the only place a
     /// person editing the file can see it.
     fn pad(self, text: &str, width: usize) -> String {
-        let room = width.saturating_sub(yumete_cjk::str_width(text));
+        let room = width.saturating_sub(yumete_cjk::stored_width(text));
         match self {
             Align::Plain | Align::Left => format!("{text}{}", " ".repeat(room)),
             Align::Right => format!("{}{text}", " ".repeat(room)),
@@ -571,7 +575,7 @@ pub fn runaway(parts: &Parts) -> Option<(usize, usize)> {
     let mut widths: Vec<usize> = vec![0; parts.columns()];
     for row in &parts.rows {
         for (i, cell) in row.iter().enumerate() {
-            widths[i] = widths[i].max(yumete_cjk::str_width(cell));
+            widths[i] = widths[i].max(yumete_cjk::stored_width(cell));
         }
     }
     widths
@@ -580,11 +584,44 @@ pub fn runaway(parts: &Parts) -> Option<(usize, usize)> {
         .find(|&(_, width)| width > WIDEST_COLUMN)
 }
 
-/// Write a table back out, with its columns lined up on the terminal.
+/// A row with **more cells than the heading has**, if the table has one: which
+/// row, how many it has, and how many the heading has (#328).
 ///
-/// A column is as wide as its widest cell **measured in terminal columns**, so
-/// a column of 漢字 lines up. Every other formatter counts characters, which
-/// is why every other formatter leaves Chinese ragged.
+/// Asked *before* laying a table out, the way [`runaway`] is, and refused the
+/// same way — because laying this one out does not tidy it, it **changes what
+/// the other rows say**. A three-column table with one four-cell row comes
+/// back four columns wide, and every other row of it has grown an empty cell
+/// it did not have.
+///
+/// Nearly always one thing: a `|` inside a cell that was not written `\|`.
+/// A code span is no shelter — GFM splits the row into cells before it looks
+/// for inline anything, which is why `\|` is 「the one escape a Markdown table
+/// has」 up in [`pipes`] and why the editor refuses a bare `|` typed into a
+/// cell. So the split is right and the table really is torn; what was wrong
+/// was tidying it into a shape its writer did not ask for, in silence.
+///
+/// A row with *fewer* cells is not torn: the empty ones are filled in, which
+/// is what every reader of Markdown does with a short row.
+pub fn torn(parts: &Parts) -> Option<(usize, usize, usize)> {
+    let heading = parts.rows.first()?.len();
+    parts
+        .rows
+        .iter()
+        .enumerate()
+        .skip(1)
+        .find(|(_, row)| row.len() > heading)
+        .map(|(at, row)| (at + 1, row.len(), heading))
+}
+
+/// Write a table back out, with its columns lined up.
+///
+/// A column is as wide as its widest cell **measured in columns**, so a column
+/// of 漢字 lines up. Every other formatter counts characters, which is why
+/// every other formatter leaves Chinese ragged.
+///
+/// **Measured the way the file is stored, not the way this terminal draws**
+/// (#327) — see [`yumete_cjk::stored_width`]. Ambiguous width is a property of
+/// the terminal, and a byte on disk is not.
 ///
 /// There is no ceiling on that width. There used to be one — 32 columns, so
 /// that a single long 備註 sentence could not make every line of a 人物表 as
@@ -609,7 +646,7 @@ pub fn compose(parts: &Parts) -> Vec<String> {
     let mut widths: Vec<usize> = aligns.iter().map(|a| a.min()).collect();
     for row in &parts.rows {
         for (i, cell) in row.iter().enumerate() {
-            widths[i] = widths[i].max(yumete_cjk::str_width(cell));
+            widths[i] = widths[i].max(yumete_cjk::stored_width(cell));
         }
     }
     // **Nothing is padded out to a width no window holds** (#292). [`format`]
@@ -663,6 +700,11 @@ pub fn format(lines: &[String]) -> Vec<String> {
     // Every door into this module passes here, the four automatic ones
     // included, so the guard cannot be walked around by an edit.
     if runaway(&parts).is_some() {
+        return lines.to_vec();
+    }
+    // **A torn row is left alone too** (#328), and for a nearer reason: laying
+    // it out would rewrite the rows that are *not* torn.
+    if torn(&parts).is_some() {
         return lines.to_vec();
     }
     let out = compose(&parts);

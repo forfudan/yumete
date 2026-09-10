@@ -70,16 +70,109 @@ impl Dialect {
         format!("{open}{base}{mid}{reading}{close}")
     }
 
-    /// The first group of this dialect at or after `from`.
-    fn next(self, chars: &[char], from: usize) -> Option<Ruby> {
+    /// Every group of the **next element** of this dialect at or after `from`.
+    ///
+    /// A list, because one `<ruby>` may hold more than one: 熟語振假名 writes a
+    /// compound with a reading per character —
+    /// `<ruby>漢<rt>かん</rt>字<rt>じ</rt></ruby>` — and that is the shape the
+    /// standard recommends for exactly the words a Japanese manuscript is
+    /// full of. Read as one base and one reading, the second character and
+    /// the tags around it were swallowed into the first's reading, and
+    /// `:ruby-format typst` wrote `#ruby("漢", "かん</rt>字<rt>じ")`: 字 stopped
+    /// being text at all (#330).
+    fn element(self, chars: &[char], from: usize) -> Vec<Ruby> {
+        match self {
+            Dialect::Html => self.html_element(chars, from),
+            Dialect::Typst => self.call(chars, from).into_iter().collect(),
+        }
+    }
+
+    /// One `<ruby>…</ruby>`, as the pairs inside it.
+    ///
+    /// **The tags are matched loosely and the text strictly.** `<RUBY>`,
+    /// `<ruby lang="ja">` and the `<rp>(</rp>` fallback the W3C recommends are
+    /// all ordinary HTML that a manuscript may well arrive with, and a reader
+    /// that cannot see them leaves them in the file while reporting that the
+    /// file was converted (#331). What it will not do is guess: a `<ruby>`
+    /// inside a `<ruby>`, or one that never closes, yields nothing at all
+    /// rather than a group with somebody else's text in it.
+    fn html_element(self, chars: &[char], from: usize) -> Vec<Ruby> {
+        let mut at = from;
+        while let Some(open) = tag(chars, "ruby", at) {
+            let Some(close) = tag(chars, "/ruby", open.1) else {
+                return Vec::new();
+            };
+            // A second `<ruby>` before this one closes is markup nobody can
+            // read; start again there, so it costs only itself.
+            if let Some(inner) = tag(chars, "ruby", open.1) {
+                if inner.0 < close.0 {
+                    at = inner.0;
+                    continue;
+                }
+            }
+            let mut out: Vec<Ruby> = Vec::new();
+            let mut i = open.1;
+            let mut base = open.1;
+            let mut began = open.0;
+            while i < close.0 {
+                let Some(rt) = tag(chars, "rt", i) else { break };
+                if rt.0 >= close.0 {
+                    break;
+                }
+                let Some(shut) = tag(chars, "/rt", rt.1) else {
+                    return Vec::new();
+                };
+                // **The base ends where the annotation begins**, and that may
+                // be an `<rp>` rather than the `<rt>`: the parenthesis a
+                // reader without ruby support falls back to is neither base
+                // nor reading, and dropping it is the whole of reading it.
+                let ends = match tag(chars, "rp", i) {
+                    Some(rp) if rp.0 < rt.0 => rp.0,
+                    _ => rt.0,
+                };
+                out.push(Ruby {
+                    dialect: self,
+                    start: began,
+                    end: shut.1,
+                    base: (base, ends),
+                    reading: (rt.1, shut.0),
+                });
+                // …and the closing parenthesis, if the writer left one.
+                let mut after = shut.1;
+                if let Some(rp) = tag(chars, "rp", after) {
+                    if rp.0 == after {
+                        if let Some(shut) = tag(chars, "/rp", rp.1) {
+                            after = shut.1;
+                        }
+                    }
+                }
+                i = after;
+                began = after;
+                base = after;
+            }
+            match out.last_mut() {
+                // The last pair carries the closing tag, so that everything
+                // between the bases is off the page and nothing is left over.
+                Some(last) => {
+                    last.end = close.1;
+                    return out;
+                }
+                None => at = open.1,
+            }
+        }
+        Vec::new()
+    }
+
+    /// One `#ruby("base", "reading")`, which is a function call and is read
+    /// as one.
+    fn call(self, chars: &[char], from: usize) -> Option<Ruby> {
         let (open, mid, close) = self.parts();
         let mut i = from;
         while i < chars.len() {
             let start = find(chars, open, i)?;
             let base_start = start + open.chars().count();
-            // A second opening tag before the separator means the first was
-            // never closed; restart there rather than letting the base swallow
-            // it, so unterminated markup costs only itself.
+            // A second opening before the separator means the first was never
+            // closed; restart there rather than letting the base swallow it.
             if let Some(inner) = find(chars, open, base_start) {
                 if find(chars, mid, base_start).is_none_or(|m| inner < m) {
                     i = inner;
@@ -104,6 +197,38 @@ impl Dialect {
         }
         None
     }
+
+}
+
+/// Where the HTML tag `name` opens and closes, at or after `from`: the index
+/// of its `<` and one past its `>`.
+///
+/// **Loose about the tag and exact about the name** (#331): the case is
+/// ignored, because `<RUBY>` is the same element; attributes are allowed,
+/// because `<ruby lang="ja">` is ordinary and a reader that cannot see it
+/// leaves it in the file while reporting the file converted; and the name has
+/// to end where the tag does, so `<rtc>` is not an `<rt>`.
+fn tag(chars: &[char], name: &str, from: usize) -> Option<(usize, usize)> {
+    let want: Vec<char> = name.chars().flat_map(char::to_lowercase).collect();
+    let mut i = from;
+    while i < chars.len() {
+        if chars[i] != '<' {
+            i += 1;
+            continue;
+        }
+        let after = i + 1;
+        let same = want
+            .iter()
+            .enumerate()
+            .all(|(k, w)| chars.get(after + k).is_some_and(|c| c.to_ascii_lowercase() == *w));
+        let ends = chars.get(after + want.len());
+        if same && matches!(ends, Some('>' | ' ' | '\t' | '/')) {
+            let close = (after + want.len()..chars.len()).find(|&k| chars[k] == '>')?;
+            return Some((i, close + 1));
+        }
+        i += 1;
+    }
+    None
 }
 
 /// The set of dialects being rendered.
@@ -199,17 +324,61 @@ pub fn groups(chars: &[char], dialects: Dialects) -> Vec<Ruby> {
     while at < chars.len() {
         // Whichever dialect matches earliest from here wins the next group; a
         // file that mixes them is read in document order, not dialect order.
+        // Whole elements, because one of them may hold several groups.
         let Some(next) = dialects
             .iter()
-            .filter_map(|d| d.next(chars, at))
-            .min_by_key(|g| g.start)
+            .map(|d| d.element(chars, at))
+            .filter(|e| !e.is_empty())
+            .min_by_key(|e| e[0].start)
         else {
             break;
         };
-        at = next.end;
-        found.push(next);
+        at = next.last().map_or(at + 1, |g| g.end);
+        found.extend(next);
     }
     found
+}
+
+/// How many annotations of **another** dialect are still in `text` that this
+/// module could not read (#331).
+///
+/// Asked after a rewrite, so that 「已改寫為 typst」 is only said about a file
+/// that really is. What is counted is an opening tag of the other dialect that
+/// no group covers: a `<ruby>` inside a `<ruby>`, one that never closes, an
+/// `<rtc>`'s second annotation. Those are left exactly as they stand — the
+/// right answer, since guessing at them is how #330 wrote 字 into a reading —
+/// and this is the sentence that says so.
+pub fn unread(text: &str, into: Dialect) -> usize {
+    let other = match into {
+        Dialect::Html => Dialect::Typst,
+        Dialect::Typst => Dialect::Html,
+    };
+    let chars: Vec<char> = text.chars().collect();
+    let read = groups(&chars, Dialects::only(other));
+    let opens = match other {
+        Dialect::Html => {
+            let mut at = 0;
+            let mut found = Vec::new();
+            while let Some((start, after)) = tag(&chars, "ruby", at) {
+                found.push(start);
+                at = after;
+            }
+            found
+        }
+        Dialect::Typst => {
+            let mut at = 0;
+            let mut found = Vec::new();
+            while let Some(start) = find(&chars, "#ruby(\"", at) {
+                found.push(start);
+                at = start + 1;
+            }
+            found
+        }
+    };
+    opens
+        .into_iter()
+        .filter(|&at| !read.iter().any(|g| g.start <= at && at < g.end))
+        .count()
 }
 
 /// The group covering `col`, if the cursor is inside one.
