@@ -48,7 +48,7 @@ far, oldest first:
 - **#24 Dictionary word segmentation** — a `Segmenter` trait with a jieba-style
   `DictionarySegmenter` (DAG + maximum-probability over a `word → weight` graph,
   with a weight threshold). A compact common-word dictionary is bundled, so
-  `w`/`b`/`e` step by CJK *word* out of the box; `:word show` toggles a word-tint
+  `w`/`b`/`e` step by CJK *word* out of the box; `:word-show` toggles a word-tint
   overlay (on by default).
 - **#27 / #32 Built-in Yume IME session** — [`yumete-ime`](crates/yumete-ime)
   embeds the `yume-core` engine directly (no FFI) as an `ImeSession`: per-keystroke
@@ -77,14 +77,14 @@ far, oldest first:
   readings laid out is not on screen to move a cursor into; `:ruby off|basic|full`
   is how much is drawn — `basic` knows the reading without laying it out, so the
   tags stay on the page and a word count still counts what a reader sees —
-  `:ruby <dialect> [on|off]` picks which markups to read, and `:ruby format
+  `:ruby <dialect> [on|off]` picks which markups to read, and `:ruby-format
   <dialect>` rewrites the whole buffer into one.
 
 - **#66 IME in the search and command lines** — `/` composes Chinese, so a
   Chinese document can actually be searched; a lone-Shift tap toggles 中/ABC there
   too, the preedit shows inline and the candidate panel floats above the prompt.
   `:` gets the same, so `:s/中文/中文/` works — but drops to 英 on the way in and
-  hands 中 back on the way out, because command *names* are ASCII. `:yume chaifen`
+  hands 中 back on the way out, because command *names* are ASCII. `:yume-chaifen`
   toggles the 拆分 annotation beside candidates (off by default,
   `[editor] show_chaifen`).
 
@@ -110,7 +110,7 @@ far, oldest first:
   早`. Falls back to `segmentation.txt` or the bundled list when the IME data is
   absent.
 
-- **#70 標點旁置** — `:view hanging` puts 。，、？！：；「」 in the margin beside the
+- **#70 標點旁置** — `:view-hanging` puts 。，、？！：；「」 in the margin beside the
   character they belong to, the way a 古籍 is punctuated, so the text column
   carries nothing but text. An opening bracket hangs beside the character it
   *introduces*; everything else beside the one it follows. Where a mark and a
@@ -140,7 +140,7 @@ far, oldest first:
   matters here more than in a code editor: a Chinese paragraph is one line of
   several hundred characters. Latin words are kept whole and 禁則處理 is applied
   (no 。、」）at the head of a row, no 「（ at the end of one). `j` and `k` walk
-  the rows the reader sees. `:view wrap off` turns it off; `[editor] soft_wrap`.
+  the rows the reader sees. `:view-wrap off` turns it off; `[editor] soft_wrap`.
 
 - **#79 Crash recovery** — while a document has unsaved changes, a copy is kept
   beside it (`chapter.md` → `.chapter.md.yumete`), rewritten every few seconds
@@ -150,7 +150,7 @@ far, oldest first:
   how a writer loses track of which version they are reading.
 
 - **#76 / #78 / #80 Getting around, and getting told** — `gn`/`gp` and
-  `:buffer next`/`previous` switch between the open files, each keeping its own
+  `:buffer-next`/`previous` switch between the open files, each keeping its own
   cursor and its own undo history; `10gg`, `:42` and `:goto` go to a line; `:count` reports 字,
   字符 and 段 (a selection counts the selection); `:wq` saves and quits, checking
   *every* open file for unsaved changes. A config file that does not parse now
@@ -159,7 +159,7 @@ far, oldest first:
 - **#61 Vertical layout (縱書)** — text can be set the way a Chinese novel is:
   running top to bottom in **縱** (*zong*) that stack from the right edge
   leftward, one paragraph soft-wrapping into as many 縱 as the window allows —
-  or as many as `zong_length` / `:view wrap n` says, when the writer has made that
+  or as many as `zong_length` / `:view-wrap n` says, when the writer has made that
   decision themselves. `h j k l` keep their screen meaning — `j`/`k` read down and up
   a 縱, `h`/`l` step to the 縱 on the left and on the right. CJK punctuation is
   drawn in its vertical form (`。`→`︒`, `「」`→`﹁﹂`) on screen only, so the file
@@ -174,7 +174,7 @@ The rest, by what it is for rather than one line per number (`docs/development.m
 has the table, through #150):
 
 - **The page a Chinese book is set on.** 標點旁置 (hung punctuation), 縦中横,
-  ruby laid out beside the base, 稿紙 ticks, `:view dense` for a page that spends
+  ruby laid out beside the base, 稿紙 ticks, `:view-dense` for a page that spends
   every column on writing, **首行縮進** (a paragraph opens two squares in — as a
   *view*, so the file keeps the blank line Markdown needs), and **段組**, which
   halves a tall page into bands read top-right to top-left and then bottom-right
@@ -190,13 +190,13 @@ has the table, through #150):
   every other formatter gets wrong for Chinese.
 - **A hundred chapters.** `:grep` and `:toc` make results that are *text*, so
   `gf` walks them; `:grep` then `:replace` renames a character across the whole
-  book without touching disk until `:write all`; a session reopens what was open; `M a`
+  book without touching disk until `:write-all`; a session reopens what was open; `M a`
   and `' a` name a place and come back to it.
 - **Not losing work.** A file changed on disk is not written over; a crash copy
   is kept for every buffer, including the ones with no name; an undo point has
   to be *earned*; a macro keeps its operands.
 - **The IME.** Yume's engine built in: 靈明 embedded in the binary so a fresh
-  install can type Chinese, any Rime `.dict.yaml` loadable with `:yume table`,
+  install can type Chinese, any Rime `.dict.yaml` loadable with `:yume-table`,
   and 拆分 shown beside every candidate.
 - **Prose the editor understands.** Word segmentation from Yume's language
   model drives `w`/`b`/`e`; `.yumete/words.txt` teaches it the names in *this*

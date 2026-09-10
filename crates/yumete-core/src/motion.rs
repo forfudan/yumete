@@ -530,7 +530,7 @@ fn closes_a_quote(c: char) -> bool {
 
 /// Where every sentence of a line begins.
 ///
-/// `pub(crate)` because `:view sentence` (Feature #237) lays a 縱書 page out one 句
+/// `pub(crate)` because `:view-sentence` (Feature #237) lays a 縱書 page out one 句
 /// to a 縱, and the boundaries it breaks at have to be the same ones `(` and `)`
 /// jump between — two answers would mean the cursor walks to a place the page
 /// does not break at.

@@ -635,7 +635,7 @@ impl Editor {
 
     /// The same, without noting a jump.
     ///
-    /// For the callers that have already noted one — a mark, `:table jump` — where a
+    /// For the callers that have already noted one — a mark, `:table-jump` — where a
     /// second note would be of the place *after* the file switch, and `C-o`
     /// would then take you to the file you had just arrived in.
     pub(super) fn move_to_line(&mut self, n: usize) {

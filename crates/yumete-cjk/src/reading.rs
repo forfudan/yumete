@@ -1,6 +1,6 @@
 //! Where a reading comes from — Feature #234.
 //!
-//! `:ruby auto` writes 注音 into the text, and to do that it has to know how the
+//! `:ruby-auto` writes 注音 into the text, and to do that it has to know how the
 //! text is *read*. That knowledge is not in this crate and never will be: it is
 //! a 拆分表 and a 讀音表, tens of megabytes of data a writer installs, and it
 //! reaches the editor the same way word segmentation does — as a trait the
@@ -29,7 +29,7 @@ pub trait Reader {
     /// answer is `None` — a reading that covers half a word is not a reading.
     fn read(&self, word: &str) -> Option<Vec<String>>;
 
-    /// Whether `ch` is outside 通用規範漢字表 — the question `:ruby auto rare`
+    /// Whether `ch` is outside 通用規範漢字表 — the question `:ruby-auto rare`
     /// asks of every character.
     ///
     /// `None` means the 字集 data is not loaded, which is a different finding

@@ -64,7 +64,7 @@ const WORD_BONUS: f64 = 3.0;
 pub struct YumeSegmenter {
     unigram: Arc<UnigramTable>,
     lexicon: Arc<Lexicon>,
-    /// `:word level`, as an adjustment to [`WORD_BONUS`] — see
+    /// `:word-level`, as an adjustment to [`WORD_BONUS`] — see
     /// [`yumete_cjk::WordLevel::split_bias`].
     ///
     /// **The tables are shared and never touched.** This lives on the

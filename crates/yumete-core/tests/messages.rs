@@ -302,7 +302,7 @@ fn an_escape_is_not_a_thing_this_file_understands() {
 #[test]
 fn every_command_can_be_looked_up_by_a_word_it_is_not_named_with() {
     // #224: the `::` menu ranks a query against `find` as well as the
-    // description, so that 折行 finds `:view wrap` and 竖排 finds `:layout
+    // description, so that 折行 finds `:view-wrap` and 竖排 finds `:layout
     // vertical` — neither word appears in either description, and a reader
     // who knows only one script would otherwise search and be told nothing.
     let table = table();

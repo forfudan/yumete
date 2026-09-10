@@ -1,7 +1,7 @@
 //! 口頭禪 — the words this manuscript leans on (Feature #242).
 //!
 //! English writing calls these **crutch words**: the ones a writer leans on
-//! when the sentence will not come. `:word habit` is the command.
+//! when the sentence will not come. `:word-habit` is the command.
 //!
 //! **Not a word count.** Counting words and sorting by the count says 的, 了,
 //! 是, 我, and every manuscript in the language gives the same answer; a writer

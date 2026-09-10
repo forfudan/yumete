@@ -87,7 +87,7 @@ struct Margin {
     dot: bool,
     /// A 平仄 mark: as many cells as the terminal draws `○` in.
     ///
-    /// Asked of the *page* rather than of the line — `:view meter` is on or it is
+    /// Asked of the *page* rather than of the line — `:view-meter` is on or it is
     /// not — so that the 縱 do not change width as a poem scrolls past a line
     /// with no 漢字 on it.
     tone: bool,
@@ -164,7 +164,7 @@ impl Metrics {
         // A 縱 is as long as the writer said, or — by default — as long as the
         // window allows. The window is the default in both directions and for
         // the same reason: a fixed count is a decision about the *book*, and
-        // the editor has no business making one on the writer's behalf. `:view wrap
+        // the editor has no business making one on the writer's behalf. `:view-wrap
         // 40` is that decision, in either layout, and vertically the measure
         // *is* the length of a column.
         let want = measure
@@ -468,7 +468,7 @@ pub(crate) fn number_rows(mode: LineNumbers, total_lines: usize) -> u16 {
     match mode {
         LineNumbers::None => 0,
         // One row per digit. Two digits to a row packed twice as short, but
-        // with the 縱 packed tight (`:view dense`) there is no gap between them and
+        // with the 縱 packed tight (`:view-dense`) there is no gap between them and
         // 「119」「118」 ran together into 「11」「11」 over 「9」「8」 — a wall of
         // digits nobody can read a line number out of. One digit to a row
         // cannot merge with its neighbour, because there is nothing beside it.
@@ -510,7 +510,7 @@ pub struct Look {
 
 impl Look {
     /// Ask the editor. The flags come from *it*, not from the config: `:ruby-off`,
-    /// `:view hanging` and `:view dense` change them at runtime, and a page laid out from
+    /// `:view-hanging` and `:view-dense` change them at runtime, and a page laid out from
     /// the config would disagree with the grid the cursor moves on.
     pub fn of(editor: &Editor) -> Look {
         Look {
@@ -673,7 +673,7 @@ pub fn draw(
     let buffer = editor.current_buffer();
     let total_lines = buffer.line_count();
     // Both flags come from the **editor**, not the config: `:ruby-off` and
-    // `:view hanging` change them at runtime, and a page laid out from the config
+    // `:view-hanging` change them at runtime, and a page laid out from the config
     // would disagree with the grid the cursor moves on.
     let metrics = Metrics::new(
         config,
@@ -730,7 +730,7 @@ pub fn draw(
     let last_column = visible.saturating_sub(1);
     // **Where the cursor sits on a page is the editor's answer** — the same
     // one the horizontal page and the grid ask, so a jump lands in the middle
-    // whichever way the text runs and `:view typewriter` means something here too.
+    // whichever way the text runs and `:view-typewriter` means something here too.
     // This used to be a second copy of that rule, and it was the copy that had
     // never heard of typewriter mode.
     //
@@ -995,7 +995,7 @@ pub fn draw(
             // 平仄 (#247) go in the same column, under the reading and over the
             // 着重號: a tone is computed and can be read nowhere else on the
             // page, while the dot repeats what `*` already says in the file.
-            // With `:view meter` off the line is never asked, so a manuscript that
+            // With `:view-meter` off the line is never asked, so a manuscript that
             // is not a poem pays nothing.
             let tone = match editor.meter_drawn() && !row.text.is_empty() {
                 false => None,

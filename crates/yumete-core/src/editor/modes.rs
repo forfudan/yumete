@@ -145,7 +145,7 @@ impl Editor {
             // match carries its parent — `:sch` is answered with `yume scheme`
             // — and offering the bare `name` guessed `:scheme`, a line that
             // does not parse, while Tab on the same keystroke wrote
-            // `:yume scheme`. Where the parent is not what was typed the guess
+            // `:yume-scheme`. Where the parent is not what was typed the guess
             // is now simply not offered, and Tab still says the whole thing.
             Mode::Command => command::complete(&self.command_line)
                 .first()

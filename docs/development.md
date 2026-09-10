@@ -253,7 +253,7 @@ index, and a row with no number anywhere else is a row that got lost.
 | 28 | In-terminal candidate panel | tui | P2 | floating overlay near caret | Done |
 | 29 | Shift toggles 中/英 in Insert | ime | P2 | lone-Shift tap (Kitty kbd protocol) | Done |
 | 30 | IME: number mode / `/`-cmds / `z` reverse | ime | P2 | via engine input routing | Done |
-| 31 | Scheme switch (靈明/星陳/卿雲/日月/拼音) | ime | P2 | load tables at runtime — superseded by #169 (found rather than listed) and `:yume scheme` | Done |
+| 31 | Scheme switch (靈明/星陳/卿雲/日月/拼音) | ime | P2 | load tables at runtime — superseded by #169 (found rather than listed) and `:yume-scheme` | Done |
 | 32 | IME data dir + bundled font guidance | ime | P2 | reuse compiled tables | Done |
 | 33 | **Outline sidebar (foldable)** | tui | P3 | right-hand panel, toggle — #94／#97; the folding half is #37 | Done |
 | 34 | **Markdown LSP → headings** | lsp | P3 | **Dropped**: headings come from `markdown.rs` (#96／#114), not from a language server | Dropped |
@@ -270,9 +270,9 @@ index, and a row with no number anywhere else is a row that got lost.
 | 45 | Marks / jumplist | core | P4 | #149 (marks), #120 (jump list) | Done |
 | 46 | Count prefixes (e.g. `3w`) | core | P4 | `3w`, `10j`, `10gg` | Done |
 | 47 | Macros (record/replay) | core | P4 | `q` / `Q` | Done |
-| 48 | Spell/grammar hooks (CJK-aware) | lsp | P4 | `:check usage`／`標點`／`字集` are the editor's own [^48] | Dropped |
+| 48 | Spell/grammar hooks (CJK-aware) | lsp | P4 | `:check-usage`／`標點`／`字集` are the editor's own [^48] | Dropped |
 | 49 | Word-count / reading-time (prose) | view | P4 | `:count`; 字 and 字符 differ | Done |
-| 50 | Custom 碼表 upload / register | ime | P4 | user `txt` (code table only) — #136 `:yume table` | Done |
+| 50 | Custom 碼表 upload / register | ime | P4 | user `txt` (code table only) — #136 `:yume-table` | Done |
 | 51 | Bracket/quote auto-pair (CJK-aware) | core | P4 | 「」『』（） | Planned |
 | 52 | Syntax highlight (tree-sitter) | tui | P5 | Markdown and Typst are already coloured without it (#96／#116／#162); what is left is *code* | Planned |
 | 53 | Coding LSP (Rust/Python/…) | lsp | P5 | reuse helix-lsp | Planned |
@@ -355,10 +355,10 @@ index, and a row with no number anywhere else is a row that got lost.
 | 130 | **`!` filters the selection** | both | P2 | vi's `!`, on a selection; one undo | Done |
 | 131 | **A failed filter leaves the text alone** | tui | P1 | an error message is not an edit | Done |
 | 132 | **The menu spreads across the window** | tui | P3 | 26 commands at a glance, column-major | Done |
-| 133 | **The language model yes, the 碼表 no** | both | P2 | 27 ms for everyone; `:yume scheme` for the rest | Done |
+| 133 | **The language model yes, the 碼表 no** | both | P2 | 27 ms for everyone; `:yume-scheme` for the rest | Done |
 | 134 | **靈明 embedded at build time** | ime | P2 | never committed; `:yume` says which one answers | Done |
 | 135 | **Release pipeline + Homebrew tap** | ci | P2 | see §5.3; deferred until ready to release | Planned |
-| 136 | **`:yume table` — any code table** | ime | P2 | Rime `.dict.yaml` as it comes; 五筆/倉頡/粵拼 | Done |
+| 136 | **`:yume-table` — any code table** | ime | P2 | Rime `.dict.yaml` as it comes; 五筆/倉頡/粵拼 | Done |
 | 137 | **A file changed on disk is not written over** | core | P0 | `:w!`/`:e!`; a hash so it never cries wolf | Done |
 | 138 | **A macro keeps its operands** | core | P1 | `fq` recorded as `f` and ate the next key | Done |
 | 139 | **A ring of what was yanked** | core | P2 | `Space \"`; the last 16, plus the named ones | Done |
@@ -379,13 +379,13 @@ index, and a row with no number anywhere else is a row that got lost.
 | 154 | **`:tutor` — a lesson you edit** | both | P1 | vimtutor's idea, on Chinese prose, where `w` and 縱書 can actually be taught | Done |
 | 155 | **A finished command says what it takes** | core | P2 | `:yume` lists `yume scheme`, `yume chaifen`… beside itself; Tab writes the whole sentence | Done |
 | 156 | **`:theme`** | both | P2 | which theme, and dark/light/system, without editing the config | Done |
-| 157 | **`:table rules`** | both | P2 | a dashed line (default), solid, double, a band, or nothing | Done |
+| 157 | **`:table-rules`** | both | P2 | a dashed line (default), solid, double, a band, or nothing | Done |
 | 158 | **Tint only the words that need it** | core | P2 | a word bounded by space or 標點 on both sides is already cut; tinting it says it twice | Done |
 | 159 | **The indent takes the blank line off the page** | both | P1 | one paragraph mark, not two; the file keeps its blank line and the numbers show it | Done |
 | 160 | **`:yume on` / `off` / `which` / `installed`** | both | P2 | the 中/英 switch and the 碼表's provenance, by name | Done |
 | 161 | **`--timing`** | cli | P2 | a whole launch, phase by phase | Done |
 | 162 | **`:syntax text` and `--syntax`** | both | P2 | a file with no markup, and this run's answer about these files | Done |
-| 163 | **`:indent hint`** | both | P3 | white by default; a band or a `↵` while a draft is being edited | Done |
+| 163 | **`:indent-hint`** | both | P3 | white by default; a band or a `↵` while a draft is being edited | Done |
 | 164 | **【黑白】, a second theme** | both | P2 | greys only: what warmth said in 墨香, position says here | Done |
 | 165 | **Readings on the horizontal page** | tui | P1 | the row above, over the 字 it reads; only a row that has one costs one | Done |
 | 166 | **Typewriter / focus mode** | tui | P2 | the cursor's row stays in the middle of the screen | Done |
@@ -420,7 +420,7 @@ index, and a row with no number anywhere else is a row that got lost.
 | 195 | **`gd` in a grid is one question** | core | P1 | one column named, one question asked [^195] | Done |
 | 196 | **A click in a grid lands where it points** | tui | P0 | the click map had no grid branch [^196] | Done |
 | 197 | **What a language can be told to run** | config | P1 | `preview`／`format`／`run` per language, run without a shell [^197] | Done |
-| 198 | **`:markdown` writes what Markdown is made of** | core | P2 | `:markdown footnote`／`table` insert the template [^198] | Done |
+| 198 | **`:markdown` writes what Markdown is made of** | core | P2 | `:markdown-footnote`／`table` insert the template [^198] | Done |
 | 199 | **The action goes last, after the numbers** | core | P2 | the digits are the argument, the verb ends the chord [^199] | Done |
 | 200 | **The terminal is asked how wide `—` is** | tui | P0 | `auto` prints one `—` and reads the column back [^200] | Done |
 | 201 | **Esc shuts the window, not the search** | core | P1 | Esc closes the pane; `n` still means the hit list [^201] | Done |
@@ -431,12 +431,12 @@ index, and a row with no number anywhere else is a row that got lost.
 | 206 | **`t` is the table group in every mode** | core | P1 | `t` is the table group in every mode; till retires [^206] | Done |
 | 207 | **The HUD takes whichever row has room** | tui | P2 | the row below the caret, above it on the last row [^207] | Done |
 | 208 | **A word boundary is not a highlighter** | tui | P1 | two 朱 tints 1.23:1 apart, re-spaced by search [^208] | Done |
-| 209 | **`:yume commit delayed\|unique\|fluency`** | ime | P2 | the three commit modes, as yume's own user layer [^209] | Done |
+| 209 | **`:yume-commit delayed\|unique\|fluency`** | ime | P2 | the three commit modes, as yume's own user layer [^209] | Done |
 | 210 | **Ghost text — what the file does not have and the page must draw** | both | P1 | what the file does not have and the page must draw [^210] | Done |
-| 211 | **`:yume panel full\|bare` and the inline preview** | ime | P1 | the first candidate drawn in the text; `Tab` summons the panel [^211] | Done |
+| 211 | **`:yume-panel full\|bare` and the inline preview** | ime | P1 | the first candidate drawn in the text; `Tab` summons the panel [^211] | Done |
 | 212 | **Every table in the file drawn as a table** | both | P1 | every table on the page squared up without touching the file [^212] | Done |
 | 213 | **`:readonly on\|off` and `--readonly`** | core | P1 | `Edit = Result<(), ReadOnly>`, refused at the rope [^213] | Done |
-| 214 | **`:reload`, `:reload!`, `:reload auto`** | core | P1 | `:reload`, `:reload!`, `:reload auto`; `:e!` is gone [^214] | Done |
+| 214 | **`:reload`, `:reload!`, `:reload-auto`** | core | P1 | `:reload`, `:reload!`, `:reload-auto`; `:e!` is gone [^214] | Done |
 | 215 | **The dictionary panel, and `t i` for the table's own** | both | P2 | `Tab` on a candidate, `空格 d` on a selection, `t i` on a cell [^215] | Done |
 | 216 | **A table recognised rather than declared** | both | P2 | a run of tabs or spaces is a 碼表, recognised where it stands [^216] | Done |
 | 217 | **A grid whose first row is data** | both | P3 | one key says row one is data, not names [^217] | Done |
@@ -449,22 +449,22 @@ index, and a row with no number anywhere else is a row that got lost.
 | 224 | **`::` searches the commands by what they do** | core | P2 | `::` searches the 147 descriptions, in 中文 [^224] | Done |
 | 225 | **`:s/照首行/照全表/` cannot be typed** | tui | P1 | lone-Shift once the caret is past the command name [^225] | Done |
 | 226 | **A spreadsheet pasted into a table** | core | P2 | ⌘V from Excel is the one paste a table editor must take [^226] | Done |
-| 227 | **`:table` on a selection, and CSV both ways** | core | P3 | `:table pipe`／`csv` in the buffer, `:export csv` to a file [^227] | Done |
+| 227 | **`:table` on a selection, and CSV both ways** | core | P3 | `:table-pipe`／`csv` in the buffer, `:export csv` to a file [^227] | Done |
 | 228 | **`t y` / `t p` for a whole column** | core | P3 | `yank_column`／`put_column`, in both branches [^228] | Done |
 | 229 | **The current cell is not drawn** | tui | P3 | the only feedback is the column name in the status line [^229] | Done |
 | 230 | **`？」` and `！」` squeezed into one square** | tui | P3 | clreq §6.3.2 splits them from `。」` — wanted: a decision [^230] | Planned |
 | 231 | **The 「hole」 branch in `zong.rs`** | tui | P3 | a third mark still keeps an empty margin square [^231] | Planned |
 | 232 | **The column-number row's contrast** | tui | P3 | measuring it means measuring the whole ladder [^232] | Planned |
-| 233 | **`:check usage`** | core | P4 | 61 groups, asked of the document rather than a dictionary [^233] | Done |
-| 234 | **`:ruby auto`, and `:ruby auto rare`** | core | P4 | readings by word, marked only where no standard has the 字 [^234] | Done |
+| 233 | **`:check-usage`** | core | P4 | 61 groups, asked of the document rather than a dictionary [^233] | Done |
+| 234 | **`:ruby-auto`, and `:ruby-auto rare`** | core | P4 | readings by word, marked only where no standard has the 字 [^234] | Done |
 | 235 | **`:diff` at 詞 grain, over the autosave snapshots** | core | P4 | Myers over the segmenter's words, against the file on disk [^235] | Done |
 | 236 | **圈點 in the margin the 標點旁置 column draws** | tui | P4 | `*字*` **is** 着重號, drawn in the 標點旁置 margin [^236] | Done |
 | 237 | **`:sentence`** | core | P4 | one 句 to a 縱, as a view; nothing is edited [^237] | Done |
 | 238 | **`:check 標點`** | core | P4 | reported only where the neighbours are Chinese [^238] | Done |
-| 239 | **This book's own words** | core | P4 | `:word discover` mines the project's own repeated n-grams [^239] | Done |
+| 239 | **This book's own words** | core | P4 | `:word-discover` mines the project's own repeated n-grams [^239] | Done |
 | 240 | **`:check 字集`** | core | P4 | off the 拆分表's 字集 column, not the `.ycs` sets [^240] | Done |
 | 241 | **簡繁 conversion** | core | P4 | `:convert` runs opencc; do not write a converter [^241] | Done |
-| 242 | **`:word habit`** | core | P4 | crutch words by surprisal against 詞頻表, not raw count [^242] | Done |
+| 242 | **`:word-habit`** | core | P4 | crutch words by surprisal against 詞頻表, not raw count [^242] | Done |
 | 243 | **割注 — 小字雙行 inside the 縱** | tui | P4 | 終端裏沒有半號漢字，三條路各有代價 [^243] | Planned |
 | 244 | **寫作進度** | core | P4 | `:progress`／`:target`, off a ledger the writer can edit [^244] | Done |
 | 245 | **A print-ready 直排 HTML export** | core | P4 | `@page` trim from `[export] page`; the type size is derived [^245] | Done |
@@ -472,7 +472,7 @@ index, and a row with no number anywhere else is a row that got lost.
 | 247 | **平仄／韻腳 in the margin** | tui | P4 | `○`／`●`／`△` in the margin — 今音平仄, said out loud [^247] | Done |
 | 248 | **Virtual text — the mirror of `hidden_on_line`** | core | P4 | the mirror of `hidden_on_line`; the caret never sits on it [^248] | Done |
 | 249 | **Merge conflicts as a `Block` kind** | core | P4 | seven characters exactly, laid over the block scan [^249] | Done |
-| 250 | **Jobs, and `]q`/`[q` over a results buffer** | core | P4 | `:view preview` generalised; `path:line:` without leaving [^250] | Planned |
+| 250 | **Jobs, and `]q`/`[q` over a results buffer** | core | P4 | `:view-preview` generalised; `path:line:` without leaving [^250] | Planned |
 | 251 | **Table mode over any delimited text** | core | P4 | quoting generalises from delimiters to cells [^251] | Planned |
 | 252 | **The Unicode alarm** | tui | P4 | invisibles, bidi controls, ASCII homoglyphs [^252] | Planned |
 | 253 | **`yumete -p` as a pager, and an `fzf --preview`** | cli | P4 | the same renderer, so it cannot disagree with the editor [^253] | Planned |
@@ -555,7 +555,7 @@ index, and a row with no number anywhere else is a row that got lost.
 | 330 | **熟語振假名整篇改壞** | core | P2 | 第二個基字連着標籤一起被吞進讀音 [^330] | Open |
 | 331 | **三種 HTML ruby 寫法看不見** | core | P3 | `<rp>`、帶屬性、大寫；說改完了，其實沒有 [^331] | Open |
 | 332 | **寫進 Typst 的 ruby 不轉義** | core | P3 | 一句帶引號的注釋就編譯不過 [^332] | Open |
-| 333 | **`:ruby format` 改寫代碼圍欄裏的 ruby** | core | P3 | 講 ruby 的書，自己的例子被改掉 [^333] | Open |
+| 333 | **`:ruby-format` 改寫代碼圍欄裏的 ruby** | core | P3 | 講 ruby 的書，自己的例子被改掉 [^333] | Open |
 | 334 | **單擊 Shift 丟棄正在組字的編碼** | tui+ime | P1 | 交給綁定表之後，組字中的 Shift 先上屏再切英文 [^334] | Fixed 2026-09-09 |
 | 335 | **丟失一次 Shift 釋放，下一次單擊就失效** | tui | P2 | 改用上游的 `ModifierTap`，失焦時 `reset` [^335] | Fixed 2026-09-09 |
 | 336 | **組字中點鼠標，詞上屏到另一個檔案** | tui+ime | P2 | `Event::Mouse` 不問 `is_composing()` [^336] | Open |
@@ -566,7 +566,7 @@ index, and a row with no number anywhere else is a row that got lost.
 | 341 | **`:yume on` 阻塞事件迴圈 135 ms** | ime | P3 | 在按鍵處理裏同步造一個 `ImeSession` [^341] | Open |
 | 342 | **上屏之後那一段 ASCII 不掙 undo 點** | core+ime | P4 | 上屏後 `history.pending` 是 `None` [^342] | Open |
 | 343 | **`note_progress` 每次存檔轉一遍整個 rope** | core | P4 | 有進度日誌就多一次 8 MB 拷貝 [^343] | Open |
-| 344 | **`:yume table` 載入非碼表檔案會 panic** | ime | P1 | 上游 yume-core：碼長沒有 clamp，整個編輯器帶走 [^344] | Open (upstream) |
+| 344 | **`:yume-table` 載入非碼表檔案會 panic** | ime | P1 | 上游 yume-core：碼長沒有 clamp，整個編輯器帶走 [^344] | Open (upstream) |
 | 345 | **候選列表無上限物化** | ime | P2 | 上游：為顯示九個，走完四萬八千條 [^345] | Open (upstream) |
 | 346 | **超過 255 位元組的候選截成空白一行** | ime | P4 | 上游：在非字符邊界切，`unwrap_or("")` 吃掉 [^346] | Open (upstream) |
 | 347 | **中英切換交回 yume 的綁定表** | tui+ime | P1 | Shift 走 `key_action` ＋ 上游新增的 `Engine::perform` [^347] | Fixed 2026-09-09 |
@@ -586,9 +586,12 @@ index, and a row with no number anywhere else is a row that got lost.
 | 361 | **`:grep` 搜的是 cwd，不是這本書** | core | P2 | 從檔案往上找 `.yumete`／`.git`，cwd 只作末路 [^361] | Open |
 | 362 | **目錄遍歷換 ripgrep 的 `ignore`** | core | P3 | 忽略規則是永遠補不完的那一種 [^362] | Open |
 | 363 | **短寫：完整命令的首字母，別的都不是** | core | P3 | `:bc` 有，`:bclose` 沒有 [^363] | Fixed 2026-09-10 |
-| 364 | **`:quitall` 摺成 `:quit all`** | core | P3 | 半長半短的最後一個 [^364] | Fixed 2026-09-10 |
+| 364 | **`:quitall` 摺成 `:quit-all`** | core | P3 | 半長半短的最後一個 [^364] | Fixed 2026-09-10 |
 | 365 | **兩條測試搶同一個 `OnceLock`，紅得沒有規律** | core | P3 | 一個進程只設得了一次，兩條測試不可能都成立 [^365] | Fixed 2026-09-10 |
 | 366 | **一段長文，每打一字重折整段** | core | P2 | 折行從改動處往後續，別從段首來 [^366] | Open |
+| 367 | **`:word-discover` 把人從正文裏拽走** | core | P3 | 提議照舊寫進詞表 buffer，但不切過去 [^367] | Open |
+| 368 | **命令名是一個詞，參數跟在後面** | core | P1 | 樹折成平表，一條命令一處聲明 [^368] | Fixed 2026-09-10 |
+| 369 | **一級命令近九十條，裸 `:` 一屏放不下** | core | P2 | 菜單按名字自己的分段折起來：`view-…` 一行 [^369] | Fixed 2026-09-10 |
 
 ### 5.5 · A table is a delimiter, a surface and a boundary (#261)
 
@@ -673,7 +676,7 @@ behaviour:
 `Bounds::Block` is deliberately **not** written yet — an enum with a variant
 nothing constructs is a promise. It was #227's, and #227 turned out not to need
 it: 「a block of delimited text in a document」 is answered by **converting** it
-(`:table pipe`, 2026-09-05), which leaves the file saying what it is on every
+(`:table-pipe`, 2026-09-05), which leaves the file saying what it is on every
 one of its own lines, rather than by a mode that reads a block one way while the
 file reads it another. The variant now belongs to **#216**, where the block is
 recognised and left as it stands — a 碼表 is not a thing to rewrite — and the
@@ -734,8 +737,8 @@ somebody's data and the prose around it is somebody's chapter; a block will not
 rewrite either. Inside `Bounds::Block` the keys that walk work, `t g`, `t / ?`
 and `t y` / `t p` work — and every key that rewrites whole lines
 (`t s S o O d D n N j k h l`) answers `hint.table.block-keys` instead.
-`:table sort` says `table.block-is-read-where-it-lies` and names the two
-commands that *would* do it: `:table pipe` and `:table csv`, which convert, and
+`:table-sort` says `table.block-is-read-where-it-lies` and names the two
+commands that *would* do it: `:table-pipe` and `:table-csv`, which convert, and
 then the file says what it is on every one of its own lines.
 
 `cell_lines()` is bounded by the block for the same reason — without it `t p`
@@ -872,7 +875,7 @@ divergences over that corpus — and nine of the thirteen safety fixes hold.
 4. **Four writers reached the rope past the cell gate.** `:replace`/`:s` and
    `gJ` now ask whether a line **is** a table row (`mdtable::row_lines`, which
    knows about fences) rather than whether `:table` is on — nobody types
-   `:table basic` to fix a typo in their own documentation. `:ruby format` runs
+   `:table basic` to fix a typo in their own documentation. `:ruby-format` runs
    the same grid check `:replace` runs, and a ruby reading goes through the
    cell gate like any other text.
 5. **Looking at a table reformatted the file** (`:table on`, retired by #283) —
@@ -939,7 +942,7 @@ divergences over that corpus — and nine of the thirteen safety fixes hold.
 real files and found five more — all fixed:
 
 - **The grid guard was `|`-only when there was no schema.** With no
-  `.yumete/tables` file, `:%s` and `:ruby format` on the real 拆分表 shifted
+  `.yumete/tables` file, `:%s` and `:ruby-format` on the real 拆分表 shifted
   columns silently: the fallback assumed a document. `Editor::grid_shape_here`
   is the one answer now — the view if there is one, else the file's own name
   (`.csv`, `.tsv`), else `|` rows. Typing is still judged by the *view*,
@@ -1215,7 +1218,7 @@ asks one field and `render` never appears on that path at all.
 `:render <level>` assigns the **first three**. Each can then be overridden by
 its own command; the next `:render` washes the overrides away (there is no
 pinning, so there is no pin state anyone has to be able to see). `:render`
-with no argument **reports** those three — the shape `:table rules` already
+with no argument **reports** those three — the shape `:table-rules` already
 has.
 
 **`indent` says the same three words and `:render` does not write it. Settled
@@ -1245,7 +1248,7 @@ four points the whole entry is about. So:
 :render off | basic | full     the master — writes the other three
 :table  off | basic | full     `on` retires
 :ruby   off | basic | full     `on` retires; the dialect words stay as
-                               overrides (`:ruby html`, `:ruby auto`)
+                               overrides (`:ruby-html`, `:ruby-auto`)
 :indent off | basic | full     stands alone — `:render` does not write it;
                                `:indent <數字>` is the *width* and does not
                                touch the fold; `hint` stays as its own
@@ -1299,7 +1302,7 @@ there — under one field.** Naming the levels is what found them:
 
 - **ruby: *recognised* vs *drawn*.** `ruby: Dialects` is which spellings count
   as one reading — what the word count subtracts, what `:ruby` edits, what
-  `:ruby auto` writes; `ruby_drawn: bool` is whether it is laid out beside the
+  `:ruby-auto` writes; `ruby_drawn: bool` is whether it is laid out beside the
   base, which is what takes the tags off the page. 中階 needs both answers at
   once (known, not drawn) and one field could only give one, which is why
   `:render basic` used to strip the tags while the status line said
@@ -1782,7 +1785,7 @@ the book's own words already go through. The two lists stay apart on purpose:
 is a page about it」, and only the second is drawn.
 
 That gives requirement 1 for nothing — `w` walks 落霞鎮 in one step, the tint
-draws it as one word, `:word habit` can weigh it, and the IME offers it — and
+draws it as one word, `:word-habit` can weigh it, and the IME offers it — and
 it gives requirement 2 its anchor: **a wiki term is marked exactly where the
 segmenter cut one out.** Which means the mark can be computed from the
 segmentation already cached per line (`segment_cache`), intersected with a
@@ -1887,7 +1890,7 @@ chose the ink and then asked the question that undid it:
   `BAND` (940) for this: those two are already compressed at the paper end
   (§5.4 measures 880 against 940 at 1.11–1.20:1, which is not a visible
   difference), so a wiki ground on either would melt into the 分詞 tint the
-  moment `:word show` is on.
+  moment `:word-show` is on.
 
 **So: `rung::HEAD` (815), one cell wide, behind the term, with the ink
 untouched.** That rung is written for precisely this case — 「a band that must
@@ -1898,7 +1901,7 @@ over it still wins, and because it changes only the ground, the term's
 punctuation, 着重號, 平仄 marks and the cursor are all untouched. Not invasive;
 not low-profile.
 
-**The `:word show` collision rule.** With both on, the 分詞 tint (`WORD`, 962)
+**The `:word-show` collision rule.** With both on, the 分詞 tint (`WORD`, 962)
 and the wiki ground (`HEAD`, 815) are two grounds on the same cells, and the
 wiki one wins — it is the one that must be seen, and the word tint's whole
 character is that it is a hair off the paper. A wiki term therefore does not
@@ -1906,7 +1909,7 @@ also take the word tint; it takes the wiki ground instead.
 
 **And a risk worth stating before it is built: the page turns to lace.** 阿寧 is
 on every page; forty names, three sects and a province means a paragraph with a
-mark under every third word. So the mark is a switch on the `:word show`
+mark under every third word. So the mark is a switch on the `:word-show`
 pattern — `:wiki show on|off` — and **on out of the box** was chosen
 (2026-09-07), because the whole point is that the reader learns which words have
 pages, with the off switch one command away for the writer who finds it noisy.
@@ -1981,7 +1984,7 @@ two files the order is **book first, then a rule, then the global ones under a
 ```
 :wiki                every source file, its entry count, what could not be marked,
                      what was refused (out of bounds, missing, already included)
-:wiki edit           open .yumete/wiki.md, existing or not — the `:word list edit` bargain
+:wiki edit           open .yumete/wiki.md, existing or not — the `:word-list edit` bargain
 :wiki edit global    the global one
 :wiki reload         read the whole graph again
 :wiki show on|off    the mark on the page
@@ -2051,7 +2054,7 @@ much of a real chapter ends up marked, and which terminals draw `4:4`.
 | second `WordList` into `WithWords`; `:wiki` commands; save-reload | small |
 | the mark on the horizontal page (`wiki_marks_on_line`, style, `:wiki show`) | medium |
 | the dotted underline: our own `Backend`, a custom `Modifier` bit, the solid fallback | medium |
-| the mark in 縱書 (`rung::HEAD` ground, the `:word show` precedence) | small |
+| the mark in 縱書 (`rung::HEAD` ground, the `:word-show` precedence) | small |
 | `wiki_detail` + `DetailKind` + re-levelling + breadcrumb + duplicates | medium |
 | `gw` into the wiki file | small |
 | editing **in** the panel | blocked on #281 |
@@ -2305,7 +2308,7 @@ release; the git-dep switch goes in with the pipeline.
   only~~ — every candidate carries its own, set back. (That extra column was
   also shifting every candidate one place right of the number the style code
   thought it was, so with annotations on the highlight was off by one.)
-- ~~`:table check`~~ — duplicate row names, components with no row, ragged
+- ~~`:table-check`~~ — duplicate row names, components with no row, ragged
   rows, in a `gf`-shaped results buffer.
 
 ### 6 · `:s`, and the command line — **done**
@@ -2335,7 +2338,7 @@ release; the git-dep switch goes in with the pipeline.
   file being edited, and re-read by the save that writes it. It **layers over**
   whatever segmenter is in force rather than replacing it: a run of adjacent
   ranges that spells a project word becomes one, longest match first.
-- ~~`:buffer list` writes 1783 characters into a one-line status bar.~~ It
+- ~~`:buffer` writes 1783 characters into a one-line status bar.~~ It
   opens the picker, which is the same list and searchable.
 - ~~`:grep` searches your own build output.~~ `.html`, `.pdf`, `.epub`, `.docx`
   are skipped: the manuscript's own words are *in* the export, so every hit was
@@ -2475,7 +2478,7 @@ the keys do — and `:tutor`, which copies a lesson into a file of the reader's
 own, where `u` is lesson one and every destructive key is safe.
 
 **A grid became usable by number.** A row of column numbers above the header,
-because every numeric key counts columns; `t20,20g` to a cell; `:table sort 1 a
+because every numeric key counts columns; `t20,20g` to a cell; `:table-sort 1 a
 2 d` over any grid (and `t1a2d8as` from the keyboard) with the rows kept
 exactly; the detail panel showing **every** column — an empty field is a finding
 in a 拆分表 — numbered, scrolled to the field the cursor is in, and resizable.
@@ -2647,13 +2650,13 @@ the caret's row (the status line when there is no room below it), and `Tab`
 summons the full panel for the one word that needs it. This is independent of
 **how** a word commits — that is #209, three modes (延遲, 唯一, 整句), which
 yume already implements behind `CommitOverrides { preset }`. **#209 is done**:
-`:yume commit`, `[ime] commit`, and the mode in `:yume`.
+`:yume-commit`, `[ime] commit`, and the mode in `:yume`.
 
 **#213 and #214 are one worry with two answers.** A file open in the editor and
 changed by something else is noticed today at `:w` and nowhere else — the hash
 check that stops the overwrite is right, but it fires at the *last* possible
 moment, after an hour of typing into a stale buffer. `:reload` is the way back,
-`:reload auto on` is the way to not need it (a **clean** buffer re-reads itself;
+`:reload-auto on` is the way to not need it (a **clean** buffer re-reads itself;
 a dirty one is warned about and left alone, because merging is not the editor's
 decision), and `:readonly` is the way to open something you have no business
 changing. `:e!` and `:o!` retire outright: no alias and no hint, per the
@@ -2800,7 +2803,7 @@ platform anyway.
 
 **What is installed is what the editor offers, 2026-09-04 (#169).** Launch scans
 `schemes/*.toml` under every data directory and hands each file to yume-core's
-`add_factory_scheme`; `:yume scheme` then offers `shipped_schemes()` in the
+`add_factory_scheme`; `:yume-scheme` then offers `shipped_schemes()` in the
 core's own menu order (系列 → index → name) rather than a list compiled into
 this repo. Two things make that safe:
 
@@ -2858,7 +2861,7 @@ tag, correctly:
   compile recorded a 段界 the 碼表 can be read for. That is what yume's own
   frontends do on 方案切換.
 
-The tag is `custom.<八位>`, from `scheme_slots::tag_for`, so `:yume scheme
+The tag is `custom.<八位>`, from `scheme_slots::tag_for`, so `:yume-scheme
 custom.6947b838` and `[ime] scheme` both work; the menu name is the 方案名 in
 `custom.yscm`, and unlike a factory scheme's it is **not** optional — falling
 back to the tag would show the writer eight hex digits. Slots are appended after
@@ -3001,7 +3004,7 @@ answers it in the wrong place.**
   onto the command name of `:e 第三章.md` and the tail still said「a path」.
 - **The guess and Tab disagreed about a deep name.** #223 answers `:sch` with
   the whole path `yume scheme`; the guess offered the leaf, so Tab wrote
-  `:yume scheme` and the guess wrote `:scheme`, which parses as nothing. Both
+  `:yume-scheme` and the guess wrote `:scheme`, which parses as nothing. Both
   read `written()` now — where the parent was not typed there is simply no
   guess, and Tab still says the whole thing.
 - **Committed text ignored the prompt's caret.** The prompt has had ← → Home
@@ -3415,7 +3418,7 @@ fault seen from the abbreviation's side.
 read — while `COMMANDS` declares `args: Args::Words(ON_OFF)` (`:2785`), so the
 menu offers `on｜off` and the hint prints it. Driven: `:dense off` then
 `:hanging off` → 「標點旁置：開」; a second `:hanging off` → 「標點旁置：關」.
-`:yume chaifen off` had the same shape (`command.rs:658`, declared at `:1784`).
+`:yume-chaifen off` had the same shape (`command.rs:658`, declared at `:1784`).
 
 `every_listed_command_parses` cannot catch this: `:hanging off` *parses*. It
 simply does not listen.
@@ -3486,7 +3489,7 @@ lines and never touches `md_parts` — got the guard directly.
 **Why the door and not the tails**: the nine tails each end in a
 `self.status = say!(…)` that has no way to know, and the tenth was always going
 to be written without one. `the_markdown_grid_keys_say_so_on_a_locked_file`
-walks `t r` `t d` `t R` `t c` `t D` and `:table sort` over a locked grid and
+walks `t r` `t d` `t R` `t c` `t D` and `:table-sort` over a locked grid and
 asserts the text does not move *and* that 只讀 is said.
 
 ### 5 · The built-in help teaches a command that errors — **fixed 2026-09-07**
@@ -3494,7 +3497,7 @@ asserts the text does not move *and* that 只讀 is said.
 `help_chinese()` printed `(":segment on", …)` and `README.md:51` said the same,
 while `command.rs` asserted `parse(":segment").is_err()`. Driven: 「沒有
 「segment」這個命令」. 分詞 became one subject under `:word`; the help never
-heard. Both now say `:word show on`.
+heard. Both now say `:word-show on`.
 
 **The cure is the test, not the line.**
 `the_help_teaches_no_command_the_parser_refuses` reads all four pages back —
@@ -3658,7 +3661,7 @@ suffix, `tw` is OpenCC's 臺灣正體, `[]` is a pair of brackets being shown.
 
 Four faults on the first run, and one of them was not in the documents:
 
-- **`:word show tint｜ink` were undeclared.** `parse` has always taken all four
+- **`:word-show tint｜ink` were undeclared.** `parse` has always taken all four
   words (and 底色／字色 through `WordMark::parse`); the table said
   `Args::Words(ON_OFF)`. So two drawings ran that the menu could not name and
   `::` could not find — §5.2.2 fault 7's shape exactly. `WORD_SHOW` now holds
@@ -3896,7 +3899,7 @@ keystroke, 1 costs two.
 
 Two things are **not** free, and they are the decision:
 
-- Whoever knows `:dense` must be sent to `:view dense`. Not an alias — a
+- Whoever knows `:dense` must be sent to `:view-dense`. Not an alias — a
   signpost computed from the tree in `CommandError::Unknown` (about 20 lines),
   so it can never go stale. Without it, and without fixing fault 1 above,
   folding is a regression.
@@ -3915,21 +3918,21 @@ So `punct` names the subject and `:view` / `:check` name what is done to it,
 which is what a tree is for; a word that had to be unique across the whole tree
 would be a flat table wearing a tree's shape. The rule is written down once, in
 the manual beside the tree and in §5.7, so the next pair does not re-argue it.
-It decides `:note` → `:view punct`, `:conflicts` → `:check merge`, `:row` →
-`:table jump`, `:search` → `:table find` — all four fold under ③.
+It decides `:note` → `:view-punct`, `:conflicts` → `:check-merge`, `:row` →
+`:table-jump`, `:search` → `:table-find` — all four fold under ③.
 
 **Landed 2026-09-08 (§5.2.4).** Seven renames in the end, not four: `:bclose` →
-`:buffer close`, `:wa` → `:write all` and `:saveas` → `:write as` are the same
+`:buffer-close`, `:wa` → `:write-all` and `:saveas` → `:write-as` are the same
 rule applied to a parent that was already a verb. The rule is written down in
 the manual beside the tree, and `RENAMED` — the table of what a computed
 signpost cannot know — is held honest from both sides by a test.
 
-If `:note` becomes `:view punct` (its help text is 「標點提示：半角標點與 ...
+If `:note` becomes `:view-punct` (its help text is 「標點提示：半角標點與 ...
 旁邊畫出該用的那一個」, `messages.toml:725` — it has never been about
 footnotes), then `punct` names a standing overlay under `:view` and a one-pass
 report under `:check`. Same concept, same word, different verb from the parent —
 a rule, or a confusion. The same question decides `:conflicts` → `:check
-merge`, `:row` → `:table jump`, `:search` → `:table find`.
+merge`, `:row` → `:table-jump`, `:search` → `:table-find`.
 
 ### ⑤ ~~How read-only refuses~~ — decided 2026-09-08
 
@@ -3998,12 +4001,12 @@ what is done to it.* So `punct` stands under two parents and means two things
 without being two names:
 
 ```
-:view punct     the standing overlay — 半角標點與 ... 旁邊畫出該用的那一個
-:check punct    the one-pass report — every one of them, listed, with a line
+:view-punct     the standing overlay — 半角標點與 ... 旁邊畫出該用的那一個
+:check-punct    the one-pass report — every one of them, listed, with a line
 ```
 
-`numbers` was already this shape before ④ was asked (`:view numbers` is the 行號
-column, `:table numbers` the grid's own row numbers), which is the argument for
+`numbers` was already this shape before ④ was asked (`:view-numbers-fill` is the 行號
+column, `:table-numbers` the grid's own row numbers), which is the argument for
 the rule rather than against it. A word that had to be unique across the whole
 tree would be a flat table wearing a tree's shape.
 
@@ -4031,13 +4034,13 @@ tree would be a flat table wearing a tree's shape.
 
 | was | is | why the word changed |
 | ------------ | --------------- | ---------------------------------------------------------------------- |
-| `:note` | `:view punct` | it was never about footnotes — its help has always read 標點提示 |
-| `:conflicts` | `:check merge` | the subject is a merge; `:check` already is the verb |
-| `:search` | `:table find` | its two words *are* the axis: `:table find row｜column` |
-| `:row` | `:table jump` | `row` under `:table` would have meant that axis |
-| `:bclose` | `:buffer close` | the word was already in the list; the top-level name was the duplicate |
-| `:wa` | `:write all` |  |
-| `:saveas` | `:write as` |  |
+| `:note` | `:view-punct` | it was never about footnotes — its help has always read 標點提示 |
+| `:conflicts` | `:check-merge` | the subject is a merge; `:check` already is the verb |
+| `:search` | `:table-find` | its two words *are* the axis: `:table-find row｜column` |
+| `:row` | `:table-jump` | `row` under `:table` would have meant that axis |
+| `:bclose` | `:buffer-close` | the word was already in the list; the top-level name was the duplicate |
+| `:wa` | `:write-all` |  |
+| `:saveas` | `:write-as` |  |
 
 **`:render`, `:indent`, `:ruby` and `:table` do not move**, and the reason is
 §5.7: they are the four dimensions, and `:render` writes three of them. A parent
@@ -4079,15 +4082,15 @@ normalises by the needle's length, and the density factor counts word starts
 only *between* the first and last hit.
 
 **The signpost is the half that was not free.** Whoever knows `:dense` has to be
-sent to `:view dense`, or the fold is a regression; and an alias would be a
+sent to `:view-dense`, or the fold is a regression; and an alias would be a
 second name for the thing the fold exists to stop having two of. So
 `CommandError::Unknown` **computes** the answer — it walks the word list of
 every command, and if the unrecognised word stands under three parents or fewer
 it says where:
 
 ```
-:dense      沒有「dense」這個命令；你要的是 `:view dense`
-:punct      沒有「punct」這個命令；你要的是 `:check punct` `:view punct`
+:dense      沒有「dense」這個命令；你要的是 `:view-dense`
+:punct      沒有「punct」這個命令；你要的是 `:check-punct` `:view-punct`
 ```
 
 Nothing is written down for that, so it cannot go stale: move a word again and
@@ -4115,7 +4118,7 @@ is where a reader of an old entry finds the map.
 
 **A word that moves under a parent inherits nothing from it.** `find` was given
 `Need::Table` on the way in, because it now stands under `:table` — and
-`:table find 第55行` then answered 「需要：表格模式」 and searched nothing,
+`:table-find 第55行` then answered 「需要：表格模式」 and searched nothing,
 which `:search` had never done. The parse arm says why it must not: with no
 direction it is a row search, and a row search away from a table is an ordinary
 search. `:export csv` had already written the same rule down
@@ -4124,8 +4127,8 @@ to be read twice.
 
 One thing more the fold found on its way through: a bang belongs to a **line**,
 not to a head. `:bclose!` used to be one word and `FORCEABLE` held it as one;
-`:buffer close!` is two, so `FORCEABLE` now holds the whole line and
-`names_something` walks the bang along with the words. `:buffer list!` is still
+`:buffer-close!` is two, so `FORCEABLE` now holds the whole line and
+`names_something` walks the bang along with the words. `:buffer!` is still
 not a command.
 
 ## 5.2.5 發佈前的通盤檢查 — 2026-09-09（#305–#346）
@@ -4149,12 +4152,12 @@ not a command.
 
 **二、撐大檔案的護欄只裝在一個門上（#306）。** #295 的界限（又翻倍、又多 256 KB）
 今天只在 `Command::Write` 那一支，而 [^295] 自己寫着「`:wq` 與 `:wa` 各差一行，等這個
-問法用順手了再說」。用順手了：`:wq` 是對齊完一張表最順手的收尾，`:write all` 是全書
+問法用順手了再說」。用順手了：`:wq` 是對齊完一張表最順手的收尾，`:write-all` 是全書
 `:replace` 的收尾。**更要緊的是 swap 那一路一道也沒有**——`write_swap` → `write_atomically`
 不問尺寸，於是被撐大的 buffer 五秒內原樣落盤。`docs/.development.md.yumete` 那份 4.3 MB
 就是這麼來的（正文從沒超過 448,400 位元組），而它又觸發 #305，於是一直留在那裏。
 
-**三、`:yume table` 載入一個不是碼表的檔案，會把整個編輯器帶走（#344）。**
+**三、`:yume-table` 載入一個不是碼表的檔案，會把整個編輯器帶走（#344）。**
 `emit_entry` 把碼長寫成 `(c.len() - shared) as u8` 而沒有 clamp，blob 錯位，
 `rebuild_index` 越界。yumete 沒有裝 panic hook，所以連同**所有沒存的 buffer**。
 這一條在上游 yume-core，改動是一行；旁邊 #346 的候選截斷是同一個函數。
@@ -4408,7 +4411,7 @@ of them goes missing, still not scheduled: 0.1.0 first.
 1. **`:check 用字`** — 裡 412 / 裏 3, 為/爲, 台/臺, 着/著, and project names, as
    a jumpable buffer. *Nobody has this.* Word checks 病句; Grammarly is English;
    spell-checkers tokenize on spaces and see one word. **high**
-2. **`:ruby auto`, and `:ruby auto rare`** — generate readings by word so 了 is
+2. **`:ruby-auto`, and `:ruby-auto rare`** — generate readings by word so 了 is
    `le`, and annotate **only** characters outside 通用规范汉字表. Word's
    拼音指南 guesses per character and detaches on edit; no editor generates
    readings from a language model and none can then set them vertically.
@@ -4434,7 +4437,7 @@ of them goes missing, still not scheduled: 0.1.0 first.
 9. **繁簡 conversion that shows what it guessed** — `simptrad.txt` stores the
    one-to-many sets, so ambiguity is *visible in the data*; drop the unsure ones
    in a review buffer instead of picking silently. **medium-high**
-10. **`:word habit`** — crutch words by **surprisal against 詞頻表**, not raw
+10. **`:word-habit`** — crutch words by **surprisal against 詞頻表**, not raw
     count, so it says 「然後 47 次」 and not 「的」. **medium-high**
 11. **割注 — 小字雙行 inside the 縱.** InDesign J has it; nothing else does. The
     縦中横 slot packing is already the mechanism, run down a run of slots.
@@ -4703,7 +4706,7 @@ release）。整檔的備忘雖然都是單槽，兩個文檔輪流進出並沒�
 - Users may have a different opinion on what is a "word" in CJK, so the
   segmentation of CJK words can be visualized by means of different background
   colors (not too intrusive, two or three colors are enough) and users can
-  toggle the segmentation visualization on/off. **Done:** `:word show` toggles
+  toggle the segmentation visualization on/off. **Done:** `:word-show` toggles
   an overlay that tints each word with two alternating, subtle backgrounds
   (configurable under `[theme] segmentation`; on by default via
   `[editor] show_segmentation`). (Written here as `:segment`, which is what it
@@ -5483,7 +5486,7 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
 
 每一條的原文，按條目編號。表格裏留的是一句話，這裏是那一條為什麼這樣做。
 
-[^48]: **Dropped**: `:check usage`／`標點`／`字集` (#233／#238／#240) do this in
+[^48]: **Dropped**: `:check-usage`／`標點`／`字集` (#233／#238／#240) do this in
     the editor's own process; there is no Chinese-prose language server to
     hook, and an optional one would be the same rules written twice
 
@@ -5494,7 +5497,7 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     per-paragraph cached invariant that made this editor good
 
 [^169]: `schemes/*.toml` under any data directory is a scheme. Launch scans,
-    hands each to yume-core, and `:yume scheme` offers what was found; nothing
+    hands each to yume-core, and `:yume-scheme` offers what was found; nothing
     found leaves the built-in five standing  **macOS was never in the search
     path, fixed 2026-09-07** (「我安装了 yume 并且有五个方案，但是 :yume
     installed 没有办法检测到他们」). `yume_data_dirs` had a Windows arm and an
@@ -5522,7 +5525,7 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     row or 4th from the bottom, unpredictably. A *far* motion should centre; a
     near one should not
 
-[^183]: `:table sort 1 a 2 d 4 a` over any grid, and `t1a2d8as` from the
+[^183]: `:table-sort 1 a 2 d 4 a` over any grid, and `t1a2d8as` from the
     keyboard — `a`/`d` name a column each and `s` is the action, so the chord
     has the terminator #199's spelling lacked. `t1s` / `t1S` stay for one column
 
@@ -5579,9 +5582,9 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     error that names the file and line rather than a command that quietly does
     something else
 
-[^198]: `:markdown footnote` inserts `[^n]` with the next free number, opens
+[^198]: `:markdown-footnote` inserts `[^n]` with the next free number, opens
     `[^n]: ` at the foot, and leaves the cursor in the note — the numbering and
-    the stub are `write_note`'s already. `:markdown footnote inline` writes
+    the stub are `write_note`'s already. `:markdown-footnote inline` writes
     `^[]`. Then a table: `:markdown table 3x4`. All of them 「插一段模板」,
     which is what a manuscript keeps needing and what nobody wants to type
 
@@ -5603,8 +5606,8 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     outlives the pane, and `n` brings it back
 
 [^202]: `words` and `segment` were two names for one question.
-    `:word segment on|off`, `:word show`, `:word list reload|edit|global`,
-    `:word level less|more|full` — the level reaches **both** dictionaries: a
+    `:word segment on|off`, `:word-show`, `:word-list reload|edit|global`,
+    `:word-level less|more|full` — the level reaches **both** dictionaries: a
     threshold for the bundled one, a per-word bonus (+2.0 / 0 / −1.5 nats,
     measured) for Yume's model. Replaces `segmentation_threshold` in the config
 
@@ -5691,7 +5694,7 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     only at `:w`. `--readonly` (`-R`) locks the whole session, `:open` included
 
 [^214]: `:reload` re-reads, refusing a dirty buffer; `:reload!` throws local
-    changes away; `:reload auto on` re-reads a **clean** buffer by itself and
+    changes away; `:reload-auto on` re-reads a **clean** buffer by itself and
     warns once about a dirty one. `Editor::disk_tick`, throttled at 2 s the way
     `autosave_tick` is, called from the event loop. `:e!` and `:o!` are gone —
     no alias, no hint
@@ -5718,7 +5721,7 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
 
 [^217]: a 碼表 has no header. One key says so: row one becomes an ordinary row,
     and the columns are named by number — which #184 already draws. `t H` and
-    `:table header [on|off]`, on their own flipping it, because a file is asked
+    `:table-header [on|off]`, on their own flipping it, because a file is asked
     this once and never again. **Names a person wrote are not undone by a
     keystroke**: a schema file names the columns itself, so there the flip moves
     where the rows start and nothing else; it is only the fallback schema — the
@@ -5729,7 +5732,7 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     的」 counts from the first **data** row, and neither the buffer nor its
     revision moved. **small**
 
-[^218]: `t e` / `:table schema` opens the `.toml` that says what these columns
+[^218]: `t e` / `:table-schema` opens the `.toml` that says what these columns
     are in the **other** work area — the keys stay on the data, the way `空格 w`
     reads a place without leaving the one you are standing in. When nothing
     claims the file, one is written first, into `.yumete/tables/<名>.toml`
@@ -5862,8 +5865,8 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
 [^227]: a selected block of CSV becomes a `|` table, and a `|` table exports as
     CSV. `export.rs` has no CSV path at all. The quoting invariant the table
     mode already keeps generalises from delimiters to *cells*, which is the same
-    machinery #253 wants. **Done:** `:table pipe [分隔]` and
-    `:table csv [分隔]` in the buffer, `:export csv` / `:export tsv` to a file.
+    machinery #253 wants. **Done:** `:table-pipe [分隔]` and
+    `:table-csv [分隔]` in the buffer, `:export csv` / `:export tsv` to a file.
     The delimiter is guessed by 「every line holds the same number of it, at
     least once」 — the only property of a grid visible from outside — over tab,
     comma, semicolon and **never a single space**; 中文 prose comes back `None`,
@@ -6035,9 +6038,9 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
 
 [^238]: half-width marks in Chinese text, `...` for ……, and **unbalanced 「」
     （）《》 across a paragraph**, which silently inverts every quote after it
-    and is invisible in prose. **high** Done 2026-09-05 as `:check punct`, in
+    and is invisible in prose. **high** Done 2026-09-05 as `:check-punct`, in
     `crates/yumete-core/src/punct.rs`, answering in the `檔名:行號:` listing
-    `:grep` and `:check usage` already use (both now go through
+    `:grep` and `:check-usage` already use (both now go through
     `Editor::show_listing`). **The whole design is 「only where it is Chinese」
     **: `3.14`, `1,000`, `README.md`, `../path` and an English sentence are all
     full of half-width marks and every one of them is correct, so a mark is
@@ -6054,7 +6057,7 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     reports the （ (the stack pops to the opener the closer matches, and
     everything opened after it is unclosed by construction).
 
-[^239]: `:word discover` mines the project for repeated OOV n-grams and writes
+[^239]: `:word-discover` mines the project for repeated OOV n-grams and writes
     them into the `.yumete/words.txt` buffer, so 阿寧 walks as one word and —
     once saved — types as one. `crates/yumete-core/src/discover.rs`: Apriori
     counting by length (1..=4, `MIN_COUNT` 5), then 內聚度 = min PMI over every
@@ -6079,9 +6082,9 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
 [^240]: every character outside 通用规范／臺灣／香港／古籍, before the
     typesetter finds out. The seven `.ycs` sets are loaded at startup already;
     two days. The writer's review called it the **best value-per-day on either
-    list**. **high** Done 2026-09-05 as `:check charset`, off the 字集 column of
+    list**. **high** Done 2026-09-05 as `:check-charset`, off the 字集 column of
     the 拆分表 rather than the `.ycs` sets — the column is already in
-    `AnnotationTable`, arrives with `:yume scheme`, and carries the Unicode
+    `AnnotationTable`, arrives with `:yume-scheme`, and carries the Unicode
     block beside the standards, which the sets do not. `Reader` grew one method,
     `charset(ch) -> Option<String>`, handing the field over **unsplit**
     (`簡古臺-CJK`): the two halves answer two different questions, and this
@@ -6092,7 +6095,7 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     *one* decision, and four hundred rows would bury the other three characters
     that are the finding; each row gives the first place, the count and the
     block. 古-only characters are deliberately **not** reported — 古籍 is a
-    standard, a font will usually have them, and they are `:ruby auto rare`'s
+    standard, a font will usually have them, and they are `:ruby-auto rare`'s
     business (#234). No data is said (`check.charset-no-data`) rather than
     answered 「clean」.
 
@@ -6108,7 +6111,7 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     through the same `run_capturing` `:!` uses, and a non-zero exit leaves the
     manuscript alone (judged by the exit code alone; a converter that grumbles
     on stderr while succeeding still succeeded). Not installed is a message
-    saying how to install it, and `:convert opencc install` runs
+    saying how to install it, and `:convert-opencc install` runs
     `brew install opencc` on macOS and only *prints* the line elsewhere, because
     that needs sudo. **The one part that is ours is 字形.** OpenCC's 繁體 is 港
     臺 (爲 説 裏 for `s2t`, 為 裡 著 for `s2tw`) and neither is 大陸通規繁體 —
@@ -6240,7 +6243,7 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     results buffer `gf` walks back the way `:grep`'s is. Under `:render full`
     the seven brackets come off and the branch name stays.
 
-[^250]: `:view preview` already models a supervised child correctly; generalise
+[^250]: `:view-preview` already models a supervised child correctly; generalise
     it, and walk `path:line:` lines without leaving the file. That is a complete
     build-error loop with **no quickfix list, no `errorformat`, no problem
     matcher** — `:grep` and `:sh` already make the buffers and `gf` already
@@ -6315,7 +6318,7 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
 [^265]: 2026-09-05：「`:editor width` 可以修改可編輯區的寬度。如果小於 terminal
     寬度，那麼編輯區就是跑到了中間，兩側變黑或者變灰，不可以編輯。」 A soft page
     inside the terminal, the way a word processor sets paper on a desk. **Not
-    the same thing as the measure**: `:view wrap 50` folds rows at fifty and
+    the same thing as the measure**: `:view-wrap 50` folds rows at fifty and
     leaves them against the left edge with one margin to the right of them
     (#263); this puts the writing in the middle with a dead margin on both
     sides. The implementation is almost certainly *the rect, not the renderer* —
@@ -6449,13 +6452,13 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     back the moment it leaves. What exists today is the middle mode wearing the
     top mode's key. Design in §5.6. **large**
 
-[^276]: 2026-09-05：「`:table new 3 4`，迅速在 markdown 中插入一個三行四列表格，
+[^276]: 2026-09-05：「`:table-new 3 4`，迅速在 markdown 中插入一個三行四列表格，
     上下有空白行，光標自動到標題欄最左的一格並進去編輯模式。」
     `:markdown table 3x4` had been writing the table since #198, and stopped
     three steps short: no blank line around it (a `|` row welded to the
     paragraph above is not a table at all), Normal mode when what you want is to
     type the first heading, and headings pre-filled with `1 2 3` for you to
-    delete. It is `:table new <行> <欄>` now — 行 first, and **行 counts the
+    delete. It is `:table-new <行> <欄>` now — 行 first, and **行 counts the
     heading**, the way a word processor's「插入表格」asks; the rule row is
     punctuation. The old spelling is gone rather than aliased: it read the two
     numbers the other way round. **small**
@@ -6480,8 +6483,8 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     (#208) is one answer to 「where did that word end」, and on a dark ground at
     962 it is a hair — deliberately, because a highlighter over every other
     word is unreadable. **字色 is the other answer, and it is now built**:
-    `:word show 字色` puts every other word's *writing* at the QUIET rung (300)
-    and leaves the paper alone, `:word show 底色` goes back to the tint, and
+    `:word-show 字色` puts every other word's *writing* at the QUIET rung (300)
+    and leaves the paper alone, `:word-show 底色` goes back to the tint, and
     `word_mark = "tint"|"ink"` says which one a new window opens with. Naming a
     drawing turns the overlay on — nobody asks for 字色 meaning 「keep it
     hidden, but hide it differently」. Both painters carry it (`lib.rs` per
@@ -6528,7 +6531,7 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     rather than in the code as a feature. **none**
 
 [^281]: the peek half was drawn from `current_buffer()`, so it showed the live
-    file under the other file's caption — `:table schema` walked straight into
+    file under the other file's caption — `:table-schema` walked straight into
     it. Fixed 2026-09-08 by `Editor::view_pane`; see §5.5. **medium**
 
 [^282]: 2026-09-06：「在 tn 下，鼠标滚轮滚动会造成buffer卡死。」 Not the table
@@ -6612,7 +6615,7 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     the wider table when the filter was run in it, `blank_row` opened a row as
     wide as the table you entered, `go_to_the_row_named` clamped `3gd` to the
     narrower table's two columns and then *named the column it had landed in*,
-    and `:table check` read the whole file — every paragraph a row 「寬度不對」
+    and `:table-check` read the whole file — every paragraph a row 「寬度不對」
     — and is now the region the cursor is in, rule row excluded from both the
     walk and the count. Paste width was already safe (the Markdown path returns
     before it). Two more came out of the sweep, both found by looking rather
@@ -6631,7 +6634,7 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     the cell are still padded with white spaces at the tail」). `folds` cuts
     inside the cell's **content**; the width a column is drawn to is the widest
     **box** in it, pipe to pipe. A table [`compose`] has squared up —
-    `:table rules`, and every table in these docs — carries the whole column
+    `:table-rules`, and every table in these docs — carries the whole column
     width inside every cell as spaces, so each short cell went on voting 43
     however little it held: the mark stood where the writing stopped and a field
     of fourteen empty cells ran from there to the pipe. `mdtable::slack` takes
@@ -6770,7 +6773,7 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     rather than the editor's own talk. Three things to settle in the doing: **`:hud` is not #283's fifth
     dimension** — it is how the editor talks to you, not how the file is drawn,
     so `:render` must never write it and `render.is` keeps four fields;
-    `:yume panel full` and `:hud full` are different words — the candidate panel
+    `:yume-panel full` and `:hud full` are different words — the candidate panel
     and a pinned HUD both want `(cursor_x, cursor_y+1)` and the panel wins; and
     `full` loses the HUD's only collision avoidance, because
     `after_the_writing` reads the *buffer* back and thereby also dodges
@@ -6931,11 +6934,11 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     already compressed into each other. So 縱書 takes **one cell of `rung::HEAD`
     (815) ground with the ink untouched**: 1.27:1 clear of BAND so it is seen,
     a rung short of SELECTION so a selection still wins over it, and
-    punctuation, 着重號, 平仄 and the cursor all unchanged. With `:word show`
+    punctuation, 着重號, 平仄 and the cursor all unchanged. With `:word-show`
     on, the wiki ground beats the 分詞 tint. The risk to look at through
     `--shot` before calling it settled: **the page turns to lace** — 阿寧 is on
     every page, and forty names means a mark under every third word — hence
-    `:wiki show on|off` on the `:word show` pattern, **on out of the box** by
+    `:wiki show on|off` on the `:word-show` pattern, **on out of the box** by
     choice; ⚠️ `--shot` renders the `Buffer`, not the escapes, so it can measure
     the lace and can never tell you whether a terminal draws `4:4` (a
     `theme.wiki_underline = "dotted" | "solid"` key covers the terminal we guess
@@ -7059,7 +7062,7 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
 
 [^291]: 2026-09-08：「這裏 custom 方案名能不能有更好的方法提示他們的方案名？現在
     是 Unique ID，不夠直觀……比如命令提示面板中，子命令後面允許用灰色的字體顯示這
-    個命令的備注。我們不是每個子命令都需要備注的。」 `:yume scheme` lists what
+    個命令的備注。我們不是每個子命令都需要備注的。」 `:yume-scheme` lists what
     the front end found, and yume's own installed schemes are named by slot:
     `custom.6947b838`, `custom.cc2d1290`. `Choice` grows a
     `note: Option<&'static str>`, drawn after the row in the quiet ink and
@@ -7155,8 +7158,8 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     `#[cfg(test)] mod tests` 整個一萬行搬進 `editor/tests.rs`，佔全檔 34%，
     語義風險為零（子模組看得見父模組的私有欄位）。第二刀是表格三節
     （`#118` 表格模式、`#142` markdown 表格、`#227` 分隔文字）3,565 行進
-    `editor/tables.rs`。第三刀是那五條檢查（`:table check`、用詞 #233、
-    `:word habit` #242、標點 #238、字集 #240）進 `editor/checks.rs`——它們做的是
+    `editor/tables.rs`。第三刀是那五條檢查（`:table-check`、用詞 #233、
+    `:word-habit` #242、標點 #238、字集 #240）進 `editor/checks.rs`——它們做的是
     同一件事：走一遍全文，交回一個 `gf` 讀得懂的結果緩衝區。此後按主題一路切完，
     共 **26 個模組**：
     `keys`（1,383，`on_key` 那一扇門與它下面的分派）、`render`（1,248）、
@@ -7428,7 +7431,7 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
 
 [^306]: #295 的界限今天只掛在 `commands.rs:89` 的 `Command::Write` 上，那一段註釋
     自己寫着 `:w!`／`:wq`／`:wa` 是故意先不接的。實際用起來 `:wq` 纔是對齊完一張表
-    最順手的收尾，`:write all` 是全書 `:replace` 的收尾。**而 swap 那一路從一開始就
+    最順手的收尾，`:write-all` 是全書 `:replace` 的收尾。**而 swap 那一路從一開始就
     不在那個決定裏**：`write_swap` → `write_atomically` 不問尺寸。`docs/.development.md.yumete`
     4.3 MB 就是這麼來的——正文二十個版本裏從沒超過 448,400 位元組，那份草稿卻是
     4,373,368：行數更少（4,328 對 6,873）而位元組是十倍，因為路線表第 447–500 行每行
@@ -7437,9 +7440,9 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     做法：`oversize_query` 從 `Command::Write` 移進 `write_forcing`。
 
     **2026-09-09 落地，並且推翻了這一條原先的後半句。** 寫盤那一半照做了：閘門移進
-    `write_forcing`，於是 `:w`／`:w!`／`:wq`／`:write all` 一起繼承；`save_as` 不走那個
+    `write_forcing`，於是 `:w`／`:w!`／`:wq`／`:write-all` 一起繼承；`save_as` 不走那個
     漏斗，所以 `:wq <名字>` 那一支另外問一次。`Wrote` 多一個 `Asked`，**由型別逼着每個
-    呼叫端表態**——`:wq` 因此不會在問題還立着的時候把稿子從螢幕上拿走，`:write all` 停在
+    呼叫端表態**——`:wq` 因此不會在問題還立着的時候把稿子從螢幕上拿走，`:write-all` 停在
     問的那一個 buffer 上（問題點名的是一個檔案，讀的人得正看着它）。`:w!` 也照問：那一個
     驚嘆號答的是「蓋過磁盤上這一份」，不是「十七倍就是我要的」。放行只管這一次存檔，
     下一次是另一個問題。
@@ -7685,7 +7688,7 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
 [^331]: `ruby.rs:60` 只認小寫、無屬性的標籤，於是三種常見寫法完全看不見：**W3C 建議的
     `<rp>` 退化寫法** `<ruby>東京<rp>(</rp><rt>とうきょう</rt><rp>)</rp></ruby>`、
     `<ruby lang="ja">`、大寫 `<RUBY>`。它們不會被改壞，可是在混排的檔案裏
-    `:ruby format typst` 把別的組轉了、把這些原樣留成 HTML，同時報告「已改寫為 typst」。
+    `:ruby-format typst` 把別的組轉了、把這些原樣留成 HTML，同時報告「已改寫為 typst」。
     它們也永遠排不到頁面上。做法：標籤匹配改成大小寫不敏感 ＋ 允許屬性，`<rp>` 的內容
     解析時丟掉。與 #330 一起改。**small**
 
@@ -7769,7 +7772,7 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
 [^344]: 上游 `yume-core/src/code_table.rs:95`：`out.push((c.len() - shared) as u8)`
     沒有 clamp（上一行的 `shared` 倒是有），碼長溢位之後寫進去的後綴位元組數對不上，
     `YTB` blob 錯位，`rebuild_index`（`:81`）走出界。複現過：一個以 256 個 `a` 開頭、
-    再加十六行的檔案，`:yume table` 指過去 →
+    再加十六行的檔案，`:yume-table` 指過去 →
     `panicked at code_table.rs:81: index out of bounds: the len is 765 but the index is 799`。
     **yumete 沒有裝 panic hook**，所以進程直接死，帶走每一個沒存的 buffer；本該走的是
     旁邊那句 `Err("讀不出碼表")`。做法：超過 255 位元組的條目跳過或一致地截斷。
@@ -8063,11 +8066,11 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     **medium**
 
 [^363]: 2026-09-10 作者定的規矩：**完整命令一律摺疊，短寫可以有，而短寫一定是那條完整
-    命令的首字母**。`:buffer close` 有，`:bc` 有，`:bclose` 沒有——半長半短的拼法既不是
+    命令的首字母**。`:buffer-close` 有，`:bc` 有，`:bclose` 沒有——半長半短的拼法既不是
     名字也不是首字母，正是 §5.2.4 那次摺疊要去掉的形狀。
     做成一張展開表（`SHORTHANDS`）而不是六個 `parse` 分支：短寫因此**不可能**與它所短
-    的命令走散——`:bc` 是什麼只有一處說法，就是 `:buffer close`。驚嘆號白拿
-    （`:bc!` ＝ `:buffer close!`），長命令以後長出什麼短寫一樣拿得到。補全也走同一張表：
+    的命令走散——`:bc` 是什麼只有一處說法，就是 `:buffer-close`。驚嘆號白拿
+    （`:bc!` ＝ `:buffer-close!`），長命令以後長出什麼短寫一樣拿得到。補全也走同一張表：
     打 `:wq` 提示的是 `write quit`，**因為那纔是說得出意思的那個拼法**。
     `wq` 因此不再是 `COMMANDS` 裏的一個條目——它是短寫，完整命令是 `:write-quit`。
     `x` 是唯一的例外：它不是任何東西的首字母，可是五十年的手指都這麼打。
@@ -8085,15 +8088,15 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     `:wq!` 展開成兩個詞加一個驚嘆號，而 `write` 那一支收的是**路徑**——沒攔住的話，稿子
     會被寫進一個叫 `./quit!` 的檔案。作者看穿了形狀：**`quit` 根本不是 `write` 的一種**。
 
-    **空格是樹，連字號是並列。** `:buffer close` 是 buffer 的一種、`:write all` 是寫的
+    **空格是樹，連字號是並列。** `:buffer-close` 是 buffer 的一種、`:write-all` 是寫的
     一種，選單一層層點得進去；`:write-quit` 是「寫，然後退」，兩個動詞，本來就不該掛在
     `write` 底下。改成一個 token 之後，歧義自己沒了——`:write` 後面跟的仍然只是路徑，
     而 `write-quit` 沒有第二種讀法。`is_a_name` 也跟着認連字號了。
-    這條規矩往回照，`quitall` 也是半長半短的形狀（該是 `:quit all` ＋ `:qa`），見 #364。
+    這條規矩往回照，`quitall` 也是半長半短的形狀（該是 `:quit-all` ＋ `:qa`），見 #364。
     **small**
 
 [^364]: #363 的規矩往回照出來的：`quitall` 融成一個詞，既不是完整的名字（那該是
-    `:quit all`——`all` 是**一種**退出，父子關係，所以用空格），也不是首字母（那是 `:qa`）。
+    `:quit-all`——`all` 是**一種**退出，父子關係，所以用空格），也不是首字母（那是 `:qa`）。
     和 `:bclose` 完全同形，只是躲過了那次摺疊。
     改完之後 `:quit` 有了自己的詞表，`:quit ` 會提示 `all`，`:qa` 補全成 `quit all`，
     `FORCEABLE` 裏 `quitall!` 換成 `quit all!`。
@@ -8118,3 +8121,39 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     一整塊）每打一個字 **25.6 ms**，二十萬字 4.9 ms，兩萬字 0.99 ms——沿段長線性。改動點
     之前的每一行都不會變，所以該做的是從改動處那一行往後續折、前面照抄；若後半的行首落回
     原來的位置，更可以就地收手。`the_cost_of_a_key_in_one_paragraph` 已經在量它。**large**
+
+[^367]: 作者，2026-09-10：「如果用户就是单纯想要在显示词，并不想看那个文件的话，该怎么办？」
+    查下來，分詞**已經立刻生效**了——`discover_words` 把找到的詞直接加進在用的分詞器，
+    不必存盤（`words.rs:278` 的註釋：「They segment before they are saved」）。所以嫌的
+    不是那份文件存在，是它把人從正文裏拽走。做法：統計塊照舊寫進詞表 buffer——那份
+    「可刪可改可撤銷、`:w` 纔算答應」的提議是刻意的設計，不能換成「只活在這次會話裏」
+    的記憶態，那樣既重啓即失、又無處否決其中某一個——但**不切換過去**，狀態行說
+    「找到 N 個詞，已加入分詞；`:word-list edit` 查看取捨」。零新命令。代價是多一個未存盤
+    的後台 buffer 在退出時提醒，而那本來就是真的。**small**
+
+[^368]: 作者，2026-09-10：「如果把它類比為函數：你覺得它應該在括號裏面的，就當作參數
+    （空格分隔）；你覺得它應該是函數名的一部分，就用 hyphen。」逐條判定見
+    `local/command-names.md`：213 條路徑，129 條改名。框架同時併攏——`Param` 說一條命令
+    收什麼、缺省是什麼，`Parsed` 交給每條命令唯一的 `build`，一趟走表讀所有的線。
+    原先是 44 個手寫 `match` 臂各自發明「這不是那些詞之一」的答法，而那正是命令表能
+    悄悄漂走的地方：菜單在 `check (ch)` 旁邊印了一年 `:table ch` 並不接受的短寫。
+    順帶消掉的東西：`SHORTHANDS`（`bc`/`bn`/`bp` 需要自己一張表，只因為它們指的是
+    「兩個詞的一行」；名字扁平之後就是普通 alias）、`Args::PathOr`（只為了 `:write-all`
+    與 `:write 第三章.md` 並存而存在，#225 差點因此丟掉中文檔名）。**large**
+
+[^369]: #368 把一級命令從 42 條變成近九十條，而 `the_command_menu_spreads_across_a_wide_window`
+    量的正是「140×24 的窗口裏一屏放得下全部」——現在放不下了。菜單是**瞥一眼**的東西，
+    不是讀的。
+
+    作者定，2026-09-10：**列出每一族的頭**，`view-` 這些折在一起。「命令雖然現在變成了
+    hyphen 連接的詞，但本質上還是有級別的。`view-aaaa` 就是 `view` 的二級命令。」
+
+    要緊的是**這個級別不必再聲明一次**——它已經寫在名字裏了。菜單從名字自己的分段推導
+    分組（`view-…` 折成一行，打了字就展開），所以仍然只有一處真理來源，而且
+    `:view-dense` 一口氣打進去照樣成立：解析不關心菜單怎麼收。
+
+    做法：`complete_at` 在最上一層把同族折成一行——有自己的頭的（`:table`）就顯示為
+    自己，後面帶 `+12`；只是個前綴的（`view` 不是命令）顯示 `view-…`。**折疊只為在幾族
+    之間挑選**，所以一旦打的字把列表收窄到只剩一族就直接展開：`:b` 就看見四條 `buffer-…`，
+    不必打滿六個字母。菜單折，`::` 的搜索不折——否則「密排」會被答成沒有這種東西，而它
+    離得只有三個鍵。**medium**

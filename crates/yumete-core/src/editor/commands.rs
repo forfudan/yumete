@@ -23,7 +23,7 @@ impl Editor {
         self.status.clear();
         // What this command needs before it can mean anything (Feature #170).
         // A setting whose prerequisite is missing used to be *set* and then
-        // read by nobody: `:view hanging on` on a horizontal page turned a flag on,
+        // read by nobody: `:view-hanging on` on a horizontal page turned a flag on,
         // changed nothing, and said 「標點旁置：開」, which is three kinds of
         // wrong at once.
         let (line, force) = match line.trim_end().strip_suffix(" force") {
@@ -252,7 +252,7 @@ impl Editor {
                 // `:w <path>` it wrote a *copy* and then refused to quit,
                 // because the chapter itself was still unsaved — and a writer
                 // with vi's muscle memory reads that refusal and reaches for
-                // `:q!`. So it rebinds, exactly as `:write as` does, and the file
+                // `:q!`. So it rebinds, exactly as `:write-as` does, and the file
                 // that is saved is the one the name says.
                 match path.as_deref() {
                     Some(path) => {
@@ -484,7 +484,7 @@ impl Editor {
                 Ok(CommandOutcome::Continue)
             }
             // Both are questions only the front end can answer — it is the one
-            // holding the IME — so they go out as requests, like `:yume scheme`.
+            // holding the IME — so they go out as requests, like `:yume-scheme`.
             Command::YumeStatus => {
                 self.scheme_request = Some(String::from("?"));
                 Ok(CommandOutcome::Continue)
@@ -616,7 +616,7 @@ impl Editor {
                 );
                 Ok(CommandOutcome::Continue)
             }
-            // `:view hud` sets and reports with the same three sentences: what the
+            // `:view-hud` sets and reports with the same three sentences: what the
             // level *is* and what it was just changed to are the same fact,
             // and two wordings of it would be two things to keep true.
             Command::SetHud(how) => {
@@ -629,7 +629,7 @@ impl Editor {
                 Ok(CommandOutcome::Continue)
             }
             // A measure is only a measure if the rows honour it, so setting
-            // one turns wrapping on: `:view wrap 50` says "write to fifty", and
+            // one turns wrapping on: `:view-wrap 50` says "write to fifty", and
             // fifty columns of text running off the edge is not that.
             Command::SetDense(on) => {
                 self.set_dense(on);
@@ -641,7 +641,7 @@ impl Editor {
             }
             // The palette lives in the front end — the core does not know a
             // colour exists — so the request is left here and answered there,
-            // the same way `:yume scheme` reaches the input method.
+            // the same way `:yume-scheme` reaches the input method.
             Command::Theme { name, mood } => {
                 self.theme_request = Some((name, mood));
                 Ok(CommandOutcome::Continue)
@@ -818,7 +818,7 @@ impl Editor {
             Command::SetSoftWrap(on) => {
                 // **縱書 has nothing to turn off.** A 縱 is broken by the
                 // height of the window, and that is not the writer's to set —
-                // `:view wrap 40` does set the 縱 length, in either layout, but
+                // `:view-wrap 40` does set the 縱 length, in either layout, but
                 // 開／關 does not reach it. Taking it anyway and answering
                 // 「長段落跑出右邊」 named a right edge this page does not
                 // have, and left the reader looking for a change that had not
@@ -970,7 +970,7 @@ impl Editor {
         let saved: Result<Wrote, EditorError> = match path {
             // `:w path` writes a **copy** and stays here; `:w! path` writes it
             // over whatever is already there. Rebinding this buffer to another
-            // name is `:write as`, which says so — `:w chapter-copy.md` used to
+            // name is `:write-as`, which says so — `:w chapter-copy.md` used to
             // rebind silently, and every save after it went to the copy while
             // the chapter itself stayed at the version before.
             Some(p) => {

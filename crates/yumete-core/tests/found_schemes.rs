@@ -1,10 +1,10 @@
-//! `Args::Schemes` is answered from what the frontend found (#169).
+//! `Param::Schemes` is answered from what the frontend found (#169).
 //!
 //! Its own test binary: [`command::set_schemes`] writes a process-wide
 //! `OnceLock`, so a test that calls it inside the crate's own test binary
-//! would change what every other test there sees `:yume scheme` offer.
+//! would change what every other test there sees `:yume-scheme` offer.
 
-use yumete_core::command::{self, complete, Args};
+use yumete_core::command::{self, complete, Param};
 
 #[test]
 fn the_command_table_offers_the_schemes_that_were_found() {
@@ -19,17 +19,17 @@ fn the_command_table_offers_the_schemes_that_were_found() {
     assert_eq!(now, ["snow-sipin", "snow-sanpin"], "found replaces built-in");
 
     // The completion, the hint and the deep match (#223) all read the same
-    // list — the point of routing every reader through `Args::words()`.
-    let offered: Vec<String> = complete(":yume scheme ")
+    // list — the point of routing every reader through `Param::words()`.
+    let offered: Vec<String> = complete(":yume-scheme ")
         .iter()
         .map(|c| c.name.to_string())
         .collect();
     assert_eq!(offered, ["snow-sipin", "snow-sanpin"]);
-    assert_eq!(Args::Schemes.hint(), "snow-sipin｜snow-sanpin");
+    assert_eq!(Param::Schemes.hint(), "snow-sipin｜snow-sanpin");
     assert!(
         complete(":snow-si")
             .iter()
-            .any(|c| c.written() == "yume scheme snow-sipin"),
+            .any(|c| c.written() == "yume-scheme snow-sipin"),
         "a found scheme is findable by its own name alone"
     );
 
@@ -49,13 +49,13 @@ fn the_command_table_offers_the_schemes_that_were_found() {
     // race itself.
 
 
-    let offered = complete(":yume scheme ");
+    let offered = complete(":yume-scheme ");
     let notes: Vec<Option<&str>> = offered.iter().map(|c| c.note).collect();
     assert_eq!(notes, [Some("冰雪四拼"), Some("冰雪三拼")]);
 
     // Searchable by the note: 「四拼」 is not a prefix of `snow-sipin` and not
     // in it at all, and it is what the reader knows the scheme as.
-    let by_name: Vec<&str> = complete(":yume scheme 四拼")
+    let by_name: Vec<&str> = complete(":yume-scheme 四拼")
         .iter()
         .map(|c| c.name)
         .collect();
@@ -63,7 +63,7 @@ fn the_command_table_offers_the_schemes_that_were_found() {
 
     // …and what Tab writes is still the tag.
     assert_eq!(
-        complete(":yume scheme 四拼")[0].written(),
+        complete(":yume-scheme 四拼")[0].written(),
         "snow-sipin",
         "the note is how you find it, not what you type"
     );

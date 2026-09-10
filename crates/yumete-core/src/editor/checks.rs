@@ -3,7 +3,7 @@
 //! Moved out of `editor.rs` whole on 2026-09-08. Five commands that all do the
 //! same thing in five subjects: walk the whole document, and hand back a
 //! **results buffer** in the shape `gf` already reads — the 拆分表
-//! (`:table check`), the 用詞 groups (#233), the crutch words (`:word habit`,
+//! (`:table-check`), the 用詞 groups (#233), the crutch words (`:word-habit`,
 //! #242), the 標點 nothing closes (#238), and the 字集 a typesetter will not
 //! have (#240).
 //!
@@ -14,7 +14,7 @@
 use super::*;
 
 impl Editor {
-    /// Look the whole table over and list what is wrong (`:table check`).
+    /// Look the whole table over and list what is wrong (`:table-check`).
     ///
     /// Four questions a person asks of a 拆分表 and cannot answer by eye at
     /// 123,380 rows: is any row's name used twice, does every component named
@@ -185,7 +185,7 @@ impl Editor {
         self.usage_groups = groups;
     }
 
-    /// `:check usage` — where the manuscript wrote the other spelling (#233).
+    /// `:check-usage` — where the manuscript wrote the other spelling (#233).
     ///
     /// **Not spelling, consistency.** 裏 four hundred times and 裡 three is not
     /// three mistakes — both are correct 漢字 — it is one manuscript that has
@@ -196,7 +196,7 @@ impl Editor {
     /// spellings are written here, and the one written more is the one it
     /// meant.
     ///
-    /// The answer is a jumpable listing, the shape `:grep` and `:table check`
+    /// The answer is a jumpable listing, the shape `:grep` and `:table-check`
     /// already use — three hundred slips are not a status line, and `gf` on a
     /// row is how a reader goes and fixes one.
     pub(super) fn check_usage(&mut self) {
@@ -236,7 +236,7 @@ impl Editor {
         };
     }
 
-    /// `:word habit` — the words this manuscript leans on (Feature #242).
+    /// `:word-habit` — the words this manuscript leans on (Feature #242).
     ///
     /// **Sorting a word count says 的.** Every manuscript in the language gives
     /// that answer, and a writer learns nothing from it. So the words are
@@ -294,7 +294,7 @@ impl Editor {
 
     /// Put a `檔名:行號: …` listing in a buffer of its own and go to it.
     ///
-    /// The shape `:grep`, `:table check` and both `:check` share: `gf` on a row
+    /// The shape `:grep`, `:table-check` and both `:check` share: `gf` on a row
     /// is how a reader goes and fixes one, and that needs `grep_root` to be the
     /// directory the file it was run on lives in.
     pub(super) fn show_listing(&mut self, listing: String, name: String) {
@@ -309,7 +309,7 @@ impl Editor {
         self.set_cursor(0);
     }
 
-    /// `:check punct` — the marks a manuscript cannot see (Feature #238).
+    /// `:check-punct` — the marks a manuscript cannot see (Feature #238).
     ///
     /// **The one that matters is the third.** A half-width comma is ugly and a
     /// `...` is wrong, and both are caught by a careful read. A 「 that never
@@ -363,7 +363,7 @@ impl Editor {
         };
     }
 
-    /// `:check charset` — the characters that are in no standard (#240).
+    /// `:check-charset` — the characters that are in no standard (#240).
     ///
     /// **The failure this exists to prevent happens after the manuscript
     /// leaves.** A character outside 通用規範／臺灣／香港／古籍 reads perfectly
@@ -372,7 +372,7 @@ impl Editor {
     /// substituted glyph in a face that does not match, three weeks later and
     /// once per printing. Nothing in the writing tools asks the question, and
     /// the data to answer it — the 字集 column of the 拆分表 — has been sitting
-    /// in the editor since `:yume scheme`.
+    /// in the editor since `:yume-scheme`.
     ///
     /// **One line per character, not per occurrence.** A 名字 with a rare 字 in
     /// it appears four hundred times and is *one* decision: keep it, or change

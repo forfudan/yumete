@@ -390,7 +390,7 @@ pub fn command_line(program: &std::path::Path, config: &str) -> String {
 
 /// The command that installs opencc on this machine.
 ///
-/// macOS gets Homebrew, which `:convert opencc install` can actually run.
+/// macOS gets Homebrew, which `:convert-opencc install` can actually run.
 /// Linux gets whichever package manager is there, printed rather than run: it
 /// needs `sudo`, and a full-screen terminal application is the wrong place to
 /// be asked for a password.
@@ -404,7 +404,7 @@ pub fn install_line() -> &'static str {
     }
 }
 
-/// Whether `:convert opencc install` may run the install itself.
+/// Whether `:convert-opencc install` may run the install itself.
 pub fn install_runs_here() -> bool {
     cfg!(target_os = "macos")
 }

@@ -118,7 +118,7 @@ fn the_yume_model_segments_both_scripts() {
     joins("他说道：这里没有人。", "说道");
 }
 
-/// `:word level` on the real model: the knob moves the boundaries, and it moves
+/// `:word-level` on the real model: the knob moves the boundaries, and it moves
 /// them in the direction its name promises.
 #[test]
 fn the_word_level_changes_how_readily_words_join() {
@@ -157,7 +157,7 @@ fn the_word_level_changes_how_readily_words_join() {
     assert!(strict.iter().any(|w| w.chars().count() > 1), "{strict:?}");
 }
 
-/// `:ruby auto rare` asked the 字集 column for the 簡 tag alone, and 簡 is
+/// `:ruby-auto rare` asked the 字集 column for the 簡 tag alone, and 簡 is
 /// 通用規範漢字表 — a list of *simplified* standard forms. So on the 繁體 a
 /// novel is written in it answered 「生僻」 for 說, 為, 這, 裏, 學 and 國, which
 /// is every second character: the mode that exists to keep a novel from

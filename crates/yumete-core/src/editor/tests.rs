@@ -65,20 +65,20 @@ fn the_mark_that_is_wrong_is_named_on_the_page() {
     assert!(!ed.notes());
     assert!(ed.drawn_on_line(0).is_empty());
 
-    ed.execute(":view punct on").unwrap();
+    ed.execute(":view-punct on").unwrap();
     assert!(ed.notes());
     // 他說 , 好 — the note stands *after* the comma, at the character it
     // should have been written as.
     assert_eq!(ed.drawn_on_line(0), vec![(3, "，".to_string())]);
 
-    ed.execute(":view punct off").unwrap();
+    ed.execute(":view-punct off").unwrap();
     assert!(ed.drawn_on_line(0).is_empty());
 }
 
 #[test]
 fn a_page_that_got_its_marks_right_carries_no_notes() {
     let mut ed = typed("他說：「好。」\n");
-    ed.execute(":view punct on").unwrap();
+    ed.execute(":view-punct on").unwrap();
     assert!(ed.drawn_on_line(0).is_empty(), "{:?}", ed.drawn_on_line(0));
 }
 
@@ -88,7 +88,7 @@ fn a_note_is_a_note_and_not_a_character() {
     // that is not in the file. Walking right past the mark the note is
     // about lands on the file's own next character, and `x` deletes that.
     let mut ed = typed("他說,好\n");
-    ed.execute(":view punct on").unwrap();
+    ed.execute(":view-punct on").unwrap();
     assert_eq!(ed.drawn_on_line(0), vec![(3, "，".to_string())]);
     for _ in 0..3 {
         ed.on_key(Key::Char('l'));
@@ -102,7 +102,7 @@ fn a_note_is_a_note_and_not_a_character() {
 #[test]
 fn a_comma_inside_a_fence_is_code_and_is_left_alone() {
     let mut ed = typed("```rust\nlet a = (1,2);\n```\n他說,好\n");
-    ed.execute(":view punct on").unwrap();
+    ed.execute(":view-punct on").unwrap();
     assert!(ed.drawn_on_line(1).is_empty(), "{:?}", ed.drawn_on_line(1));
     assert_eq!(ed.drawn_on_line(3), vec![(3, "，".to_string())]);
 }
@@ -110,7 +110,7 @@ fn a_comma_inside_a_fence_is_code_and_is_left_alone() {
 #[test]
 fn render_off_asks_for_the_file_and_gets_the_file() {
     let mut ed = typed("他說,好\n");
-    ed.execute(":view punct on").unwrap();
+    ed.execute(":view-punct on").unwrap();
     assert!(!ed.drawn_on_line(0).is_empty());
     ed.execute(":render off").unwrap();
     assert!(ed.drawn_on_line(0).is_empty(), "{:?}", ed.drawn_on_line(0));
@@ -121,7 +121,7 @@ fn a_note_follows_the_line_as_it_is_written() {
     // The cache is a hash of the line, so an edit that fixes the mark
     // takes the note off the page without anybody clearing anything.
     let mut ed = typed("他說,好\n");
-    ed.execute(":view punct on").unwrap();
+    ed.execute(":view-punct on").unwrap();
     assert_eq!(ed.drawn_on_line(0).len(), 1);
     // Put the cursor on the comma and write the right mark over it.
     ed.on_key(Key::Char('l'));
@@ -485,8 +485,8 @@ fn taking_back_a_word_stays_inside_its_cell() {
 
 #[test]
 fn a_packed_page_still_says_where_a_paragraph_begins() {
-    // `:view dense` is the default page, so masking the indent under it made
-    // 首行縮進 invisible out of the box. The three things `:view dense` drops
+    // `:view-dense` is the default page, so masking the indent under it made
+    // 首行縮進 invisible out of the box. The three things `:view-dense` drops
     // each cost a *column*; the indent costs two squares, and it is what
     // replaces the blank line — which costs a whole 縱.
     let mut ed = Editor::new();
@@ -542,7 +542,7 @@ fn the_blank_line_an_indent_replaces_comes_off_the_page() {
 
 #[test]
 fn a_packed_page_does_not_pay_for_a_reading_column() {
-    // `:view dense` says in its own doc comment, and in the manual's table,
+    // `:view-dense` says in its own doc comment, and in the manual's table,
     // that it drops the reading column. It did not: the mask was on the
     // hung 句讀 and not on the readings, so a packed page still reserved
     // two cells a 縱 for a column it was not drawing.
@@ -558,7 +558,7 @@ fn a_packed_page_does_not_pay_for_a_reading_column() {
     ed.set_layout(crate::zong::Layout::Vertical);
     assert!(
         !ed.ruby_configured().is_empty(),
-        "but nothing was turned off — `:view dense off` gives them back"
+        "but nothing was turned off — `:view-dense off` gives them back"
     );
     ed.set_dense(false);
     assert!(!ed.ruby().is_empty());
@@ -581,15 +581,15 @@ fn ruby_rendering_is_set_per_dialect() {
     ed.execute(":ruby full").unwrap();
     assert!(ed.ruby().contains(Dialect::Html));
     ed.execute(":ruby basic").unwrap();
-    ed.execute(":ruby html").unwrap();
+    ed.execute(":ruby-html").unwrap();
     assert!(ed.ruby().contains(Dialect::Html));
 
     // Dialects add up rather than replacing one another: a document may mix
     // them, so `:render-ruby-typst` does not turn HTML off.
-    ed.execute(":ruby typst").unwrap();
+    ed.execute(":ruby-typst").unwrap();
     assert!(ed.ruby().contains(Dialect::Typst));
     assert!(ed.ruby().contains(Dialect::Html));
-    ed.execute(":ruby html off").unwrap();
+    ed.execute(":ruby-html off").unwrap();
     assert!(!ed.ruby().contains(Dialect::Html));
     assert!(ed.ruby().contains(Dialect::Typst));
 }
@@ -597,16 +597,16 @@ fn ruby_rendering_is_set_per_dialect() {
 #[test]
 fn format_ruby_rewrites_every_reading_into_one_dialect() {
     let mut ed = typed("讀<ruby>漢<rt>hàn</rt></ruby>和#ruby(\"字\", \"zì\")");
-    ed.execute(":ruby format typst").unwrap();
+    ed.execute(":ruby-format typst").unwrap();
     assert_eq!(
         ed.current_buffer().text(),
         "讀#ruby(\"漢\", \"hàn\")和#ruby(\"字\", \"zì\")"
     );
     // Already uniform: nothing to do, and no undo step spent on it.
-    ed.execute(":ruby format typst").unwrap();
+    ed.execute(":ruby-format typst").unwrap();
     assert!(ed.status().contains("已經是"), "{}", ed.status());
 
-    ed.execute(":ruby format html").unwrap();
+    ed.execute(":ruby-format html").unwrap();
     assert_eq!(
         ed.current_buffer().text(),
         "讀<ruby>漢<rt>hàn</rt></ruby>和<ruby>字<rt>zì</rt></ruby>"
@@ -786,7 +786,7 @@ fn diff_needs_something_to_compare_with() {
     assert!(ed.status().contains(":diff"), "{}", ed.status());
 }
 
-/// A reader with a handful of characters in it, so `:ruby auto` can be
+/// A reader with a handful of characters in it, so `:ruby-auto` can be
 /// tested without the 14 MB the real one comes from.
 struct Toy;
 
@@ -834,7 +834,7 @@ fn with_toy_reader(text: &str) -> Editor {
 #[test]
 fn auto_ruby_annotates_a_word_per_character() {
     let mut ed = with_toy_reader("漢字");
-    ed.execute(":ruby auto").unwrap();
+    ed.execute(":ruby-auto").unwrap();
     assert_eq!(
         ed.current_buffer().text(),
         "<ruby>漢<rt>hàn</rt></ruby><ruby>字<rt>zì</rt></ruby>"
@@ -847,7 +847,7 @@ fn auto_ruby_annotates_a_word_per_character() {
 #[test]
 fn auto_ruby_leaves_a_reading_the_writer_already_corrected() {
     let mut ed = with_toy_reader("<ruby>漢<rt>hon</rt></ruby>字");
-    ed.execute(":ruby auto").unwrap();
+    ed.execute(":ruby-auto").unwrap();
     assert!(
         ed.current_buffer().text().contains("<rt>hon</rt>"),
         "{}",
@@ -859,7 +859,7 @@ fn auto_ruby_leaves_a_reading_the_writer_already_corrected() {
 #[test]
 fn auto_ruby_says_so_when_there_is_nothing_to_annotate() {
     let mut ed = with_toy_reader("abc、。");
-    ed.execute(":ruby auto").unwrap();
+    ed.execute(":ruby-auto").unwrap();
     assert_eq!(ed.current_buffer().text(), "abc、。");
     assert!(ed.status().contains("沒有"), "{}", ed.status());
 }
@@ -867,7 +867,7 @@ fn auto_ruby_says_so_when_there_is_nothing_to_annotate() {
 #[test]
 fn auto_ruby_without_a_reader_says_where_readings_come_from() {
     let mut ed = typed("漢字");
-    ed.execute(":ruby auto").unwrap();
+    ed.execute(":ruby-auto").unwrap();
     assert_eq!(ed.current_buffer().text(), "漢字");
     assert!(ed.status().contains("拆分表"), "{}", ed.status());
 }
@@ -875,7 +875,7 @@ fn auto_ruby_without_a_reader_says_where_readings_come_from() {
 #[test]
 fn auto_ruby_rare_annotates_only_what_a_reader_would_stumble_on() {
     let mut ed = with_toy_reader("漢龘字");
-    ed.execute(":ruby auto rare").unwrap();
+    ed.execute(":ruby-auto rare").unwrap();
     assert_eq!(
         ed.current_buffer().text(),
         "漢<ruby>龘<rt>dá</rt></ruby>字"
@@ -886,7 +886,7 @@ fn auto_ruby_rare_annotates_only_what_a_reader_would_stumble_on() {
 fn auto_ruby_annotates_the_selection_and_nothing_outside_it() {
     let mut ed = with_toy_reader("漢字很難");
     press(&mut ed, "ggvl"); // 漢字
-    ed.execute(":ruby auto").unwrap();
+    ed.execute(":ruby-auto").unwrap();
     assert_eq!(
         ed.current_buffer().text(),
         "<ruby>漢<rt>hàn</rt></ruby><ruby>字<rt>zì</rt></ruby>很難"
@@ -904,7 +904,7 @@ fn auto_ruby_writes_the_dialect_the_file_is_written_in() {
     ed.open_file(&file).unwrap();
     ed.set_reader(Box::new(Toy));
     ed.set_segmenter(Box::new(CategorySegmenter));
-    ed.execute(":ruby auto").unwrap();
+    ed.execute(":ruby-auto").unwrap();
     assert_eq!(
         ed.current_buffer().text(),
         "#ruby(\"漢\", \"hàn\")#ruby(\"字\", \"zì\")\n"
@@ -919,20 +919,20 @@ fn a_command_says_what_it_is_waiting_for() {
     // there was nowhere to find out why.
     let mut ed = Editor::new();
     ed.set_dense(true);
-    ed.execute(":view hanging on").unwrap();
+    ed.execute(":view-hanging on").unwrap();
     assert!(!ed.hanging_punctuation(), "{}", ed.status());
     let said = ed.status().to_string();
     assert!(said.contains("竪排") && said.contains("密排關"), "{said}");
     assert!(said.contains("force"), "{said}");
 
     // …and `force` brings the prerequisites about, in one line.
-    ed.execute(":view hanging on force").unwrap();
+    ed.execute(":view-hanging on force").unwrap();
     assert_eq!(ed.layout(), crate::zong::Layout::Vertical);
     assert!(!ed.dense());
     assert!(ed.hanging_punctuation(), "{}", ed.status());
 
     // A command whose needs are met says nothing about them.
-    ed.execute(":view hanging off").unwrap();
+    ed.execute(":view-hanging off").unwrap();
     assert!(!ed.hanging_punctuation());
     assert!(!ed.status().contains("需要"), "{}", ed.status());
 }
@@ -940,18 +940,18 @@ fn a_command_says_what_it_is_waiting_for() {
 #[test]
 fn the_commit_method_rides_the_same_channel_as_the_scheme() {
     // 上屏方式 belongs to the engine, which the core does not hold, so
-    // `:yume commit` leaves a request the front end answers (Feature #209).
+    // `:yume-commit` leaves a request the front end answers (Feature #209).
     let mut ed = Editor::new();
     ed.set_ime_available(true);
-    ed.execute(":yume commit").unwrap();
+    ed.execute(":yume-commit").unwrap();
     assert_eq!(ed.take_scheme_request().as_deref(), Some("commit:"));
-    ed.execute(":yume commit auto").unwrap();
+    ed.execute(":yume-commit auto").unwrap();
     assert_eq!(ed.take_scheme_request().as_deref(), Some("commit:unique"));
     assert_eq!(ed.take_scheme_request(), None, "taken once only");
     // It is about typing 漢字, so with no 碼表 it says so rather than
     // leaving a request nobody can answer.
     let mut cold = Editor::new();
-    cold.execute(":yume commit fluency").unwrap();
+    cold.execute(":yume-commit fluency").unwrap();
     assert_eq!(cold.take_scheme_request(), None, "{}", cold.status());
     assert!(cold.status().contains("碼表"), "{}", cold.status());
 }
@@ -962,18 +962,18 @@ fn chaifen_command_leaves_a_request_for_the_ime() {
     assert_eq!(ed.take_chaifen_request(), None);
     // 拆分 annotates *candidates*, so it needs a 碼表 — and says so, with
     // nothing loaded, instead of leaving a request nobody can answer.
-    ed.execute(":yume chaifen").unwrap();
+    ed.execute(":yume-chaifen").unwrap();
     assert_eq!(ed.take_chaifen_request(), None, "{}", ed.status());
     assert!(ed.status().contains("碼表"), "{}", ed.status());
     ed.set_ime_available(true);
-    ed.execute(":yume chaifen").unwrap();
+    ed.execute(":yume-chaifen").unwrap();
     assert_eq!(ed.take_chaifen_request(), Some(true));
     assert_eq!(ed.take_chaifen_request(), None, "taken once only");
     // The toggle follows what the IME actually settled on, not the request:
     // a scheme with no 拆分 layer refuses, and the next `:chaifen` still
     // asks for "on" rather than flipping to "off".
     ed.set_chaifen(false);
-    ed.execute(":yume chaifen").unwrap();
+    ed.execute(":yume-chaifen").unwrap();
     assert_eq!(ed.take_chaifen_request(), Some(true));
 }
 
@@ -1059,7 +1059,7 @@ fn an_abbreviation_reaches_a_word_a_command_takes() {
     }
     let (found, _) = ed.lookfor_menu();
     let names: Vec<String> = found.iter().map(|h| h.choice.written()).collect();
-    assert!(names.iter().any(|n| n == "table sort"), "{names:?}");
+    assert!(names.iter().any(|n| n == "table-sort"), "{names:?}");
     // Down walks the list, and the next keystroke of the query puts the
     // highlight back on top — the third row for `竖` is not the third row
     // for `竖排`.
@@ -1081,7 +1081,7 @@ fn tab_cycles_the_command_completion() {
     ed.on_key(Key::Tab);
     assert_eq!(ed.prompt(), Some((":", "run")));
     ed.on_key(Key::Tab);
-    assert_eq!(ed.prompt(), Some((":", "ruby")), "one `ruby` now, not three");
+    assert_eq!(ed.prompt(), Some((":", "ruby")), "one `ruby` family now, folded (#369)");
     // …and the prefix is remembered rather than re-read from the line, so
     // walking back returns to the same one instead of starting over from
     // what Tab just wrote.
@@ -1139,7 +1139,7 @@ fn the_guess_and_tab_agree_on_a_deep_name() {
     ed.on_key(Key::Tab);
     let (_, tabbed) = ed.prompt().expect("a command line");
     assert_eq!(
-        tabbed, "yume scheme xingchen",
+        tabbed, "yume-scheme xingchen",
         "the deep answer is the whole path",
     );
     assert!(
@@ -1650,8 +1650,8 @@ fn the_book_keeps_a_ledger_of_what_was_written_today() {
     ed.execute(":w").unwrap();
     assert!(!ledger.exists(), "a save alone made {}", ledger.display());
 
-    // `:count target` opens it, and says where it went.
-    ed.execute(":count target 2000").unwrap();
+    // `:count-target` opens it, and says where it went.
+    ed.execute(":count-target 2000").unwrap();
     assert!(ledger.is_file(), "{}", ed.status());
     assert!(ed.status().contains("2000"), "{}", ed.status());
 
@@ -1667,9 +1667,9 @@ fn the_book_keeps_a_ledger_of_what_was_written_today() {
     assert_eq!(log.rows[0].now, 8, "{text}");
     assert_eq!(log.rows[0].file, "第一章.md", "{text}");
 
-    // And `:count progress` reports it against the target, with a listing of the
+    // And `:count-progress` reports it against the target, with a listing of the
     // days behind it.
-    ed.execute(":count progress").unwrap();
+    ed.execute(":count-progress").unwrap();
     assert!(ed.status().contains("2000"), "{}", ed.status());
     assert!(ed.status().contains('4'), "{}", ed.status());
     assert!(
@@ -1680,11 +1680,11 @@ fn the_book_keeps_a_ledger_of_what_was_written_today() {
 
     // Read from inside that listing — which has no file name of its own —
     // it still answers about the book.
-    ed.execute(":count progress").unwrap();
+    ed.execute(":count-progress").unwrap();
     assert!(ed.status().contains("2000"), "{}", ed.status());
 
-    // `:count target off` keeps the days and drops the target.
-    ed.execute(":count target off").unwrap();
+    // `:count-target off` keeps the days and drops the target.
+    ed.execute(":count-target off").unwrap();
     let log = crate::progress::Log::from_text(&std::fs::read_to_string(&ledger).unwrap());
     assert_eq!(log.target, None);
     assert_eq!(log.rows.len(), 1);
@@ -1749,7 +1749,7 @@ fn grep_finds_a_name_across_the_chapters_and_gf_opens_one() {
 fn a_block_of_delimited_text_becomes_a_table_and_goes_back() {
     let mut ed = typed("那年冬天。\n\n字,讀音\n永,ㄩㄥˇ\n和,ㄏㄜˊ\n\n雪下得早。\n");
     ed.execute(":3").unwrap();
-    ed.execute(":table pipe").unwrap();
+    ed.execute(":table-pipe").unwrap();
     assert_eq!(
         ed.current_buffer().text(),
         "那年冬天。\n\n| 字 | 讀音  |\n| -- | ----- |\n| 永 | ㄩㄥˇ |\n| 和 | ㄏㄜˊ |\n\n雪下得早。\n"
@@ -1762,7 +1762,7 @@ fn a_block_of_delimited_text_becomes_a_table_and_goes_back() {
 
     // Back the other way, from anywhere inside it.
     ed.execute(":5").unwrap();
-    ed.execute(":table csv").unwrap();
+    ed.execute(":table-csv").unwrap();
     assert_eq!(
         ed.current_buffer().text(),
         "那年冬天。\n\n字,讀音\n永,ㄩㄥˇ\n和,ㄏㄜˊ\n\n雪下得早。\n"
@@ -1780,7 +1780,7 @@ fn a_selection_says_which_lines_the_table_is_made_of() {
     let mut ed = typed("# 人物\n甲,乙\n丙,丁\n那年冬天。\n");
     ed.execute(":2").unwrap();
     press(&mut ed, "xx"); // the two data rows, and only those
-    ed.execute(":table pipe").unwrap();
+    ed.execute(":table-pipe").unwrap();
     let text = ed.current_buffer().text();
     assert!(text.starts_with("# 人物\n| 甲 | 乙 |\n"), "{text:?}");
     assert!(text.ends_with("| 丙 | 丁 |\n那年冬天。\n"), "{text:?}");
@@ -1796,7 +1796,7 @@ fn a_conversion_that_would_lose_a_cell_is_refused() {
     );
     ed.execute(":3").unwrap();
     let before = ed.current_buffer().text();
-    ed.execute(":table csv").unwrap();
+    ed.execute(":table-csv").unwrap();
     // Named, and nothing written: the file is exactly as it was.
     assert_eq!(ed.current_buffer().text(), before);
     // Row 3 counts the header as row 1 and the rule row not at all.
@@ -1808,7 +1808,7 @@ fn a_conversion_that_would_lose_a_cell_is_refused() {
     );
 
     // The writer picks a delimiter the data does not hold, and it goes.
-    ed.execute(":table csv tab").unwrap();
+    ed.execute(":table-csv tab").unwrap();
     assert_eq!(
         ed.current_buffer().text(),
         "字\t註\t部\n永\t水\t丶\n之\t長, 久\t丿\n"
@@ -1819,7 +1819,7 @@ fn a_conversion_that_would_lose_a_cell_is_refused() {
 fn a_paragraph_is_not_quietly_cut_into_columns() {
     let mut ed = typed("那年冬天，雪下得早。\n他站在門口，看了很久，沒有進去。\n");
     let before = ed.current_buffer().text();
-    ed.execute(":table pipe").unwrap();
+    ed.execute(":table-pipe").unwrap();
     // Nothing regular separates these lines, so nothing is guessed at.
     assert_eq!(ed.current_buffer().text(), before);
     assert!(ed.status.contains("tab") || ed.status.contains("分隔"), "{}", ed.status);
@@ -1827,16 +1827,16 @@ fn a_paragraph_is_not_quietly_cut_into_columns() {
     // …but a writer who says what the delimiter is gets what they asked
     // for, even a 、 — they have looked at their data.
     let mut ed = typed("甲、乙\n丙、丁\n");
-    ed.execute(":table pipe 、").unwrap();
+    ed.execute(":table-pipe 、").unwrap();
     assert_eq!(
         ed.current_buffer().text(),
         "| 甲 | 乙 |\n| -- | -- |\n| 丙 | 丁 |\n"
     );
 
-    // And `:table pipe` on a table already made is a no-op, not a table
+    // And `:table-pipe` on a table already made is a no-op, not a table
     // twice as wide.
     let before = ed.current_buffer().text();
-    ed.execute(":table pipe").unwrap();
+    ed.execute(":table-pipe").unwrap();
     assert_eq!(ed.current_buffer().text(), before);
 }
 
@@ -2277,7 +2277,7 @@ fn a_file_a_schema_names_is_read_as_a_grid() {
     ed.open_file(&other).unwrap();
     assert!(ed.table().is_none(), "a chapter is not a table");
     // …and coming back to the table reads it as one again.
-    ed.execute("buffer previous").unwrap();
+    ed.execute("buffer-previous").unwrap();
     assert!(ed.table().is_some());
 
     std::fs::remove_dir_all(&dir).ok();
@@ -2347,7 +2347,7 @@ fn a_column_goes_back_on_the_rows_it_was_taken_from() {
     );
 
     // A value that holds the delimiter is refused by row and column, the
-    // way `:table csv` refuses one — it used to have the commas quietly
+    // way `:table-csv` refuses one — it used to have the commas quietly
     // filtered out of it, and 「長, 久」 went in as 「長 久」. Refused
     // before anything is written, so there is nothing to undo.
     let before = ed.current_buffer().text();
@@ -2596,7 +2596,7 @@ fn a_hit_list_belongs_to_the_document_it_was_found_in() {
 
     // …and an edit retires them rather than moving them: an offset into
     // the text as it was is not a shorter answer, it is a wrong one.
-    ed.execute("buffer previous").unwrap();
+    ed.execute("buffer-previous").unwrap();
     assert!(ed.current_hit().is_some(), "back where they were found");
     ed.on_key(Key::Char('i'));
     ed.on_key(Key::Char('甲'));
@@ -2803,16 +2803,16 @@ fn a_grid_sorts_by_the_columns_it_is_told() {
     };
 
     // By the first column, ascending — the header stays put.
-    ed.execute(":table sort 1 a").unwrap();
+    ed.execute(":table-sort 1 a").unwrap();
     assert!(ed.current_buffer().text().starts_with("char,block,n\n"), "{}", ed.status());
     assert_eq!(rows(&ed), ["丁,A,1", "丙,B,2", "乙,B,9", "甲,A,10"], "{}", ed.status());
 
     // **Numbers as numbers**: 10 after 9, not before it.
-    ed.execute(":table sort 3 a").unwrap();
+    ed.execute(":table-sort 3 a").unwrap();
     assert_eq!(rows(&ed), ["丁,A,1", "丙,B,2", "乙,B,9", "甲,A,10"]);
 
     // Two columns: block ascending, then n descending inside each block.
-    ed.execute(":table sort 2 a 3 d").unwrap();
+    ed.execute(":table-sort 2 a 3 d").unwrap();
     assert_eq!(rows(&ed), ["甲,A,10", "丁,A,1", "乙,B,9", "丙,B,2"], "{}", ed.status());
 
     // The rows are the same rows: nothing gained, nothing lost.
@@ -3981,8 +3981,8 @@ fn a_locked_buffer_refuses_every_way_in() {
 /// refused properly.
 /// §5.2.2 fault 2, driven: the switch the menu offers, twice in a row.
 ///
-/// `:view hanging` declared `Args::Words(ON_OFF)` and ignored the word, so the
-/// second `:view hanging off` turned 標點旁置 **on** — and the status line said
+/// `:view-hanging` declared `Args::Words(ON_OFF)` and ignored the word, so the
+/// second `:view-hanging off` turned 標點旁置 **on** — and the status line said
 /// so, which is how it survived: it was never silent, only wrong.
 #[test]
 fn hanging_punctuation_listens_to_the_word_it_is_given() {
@@ -3992,22 +3992,22 @@ fn hanging_punctuation_listens_to_the_word_it_is_given() {
     // nothing, which would make every assertion below pass for the wrong
     // reason.
     assert!(ed.execute("layout vertical").is_ok());
-    assert!(ed.execute("view dense off").is_ok());
+    assert!(ed.execute("view-dense off").is_ok());
     for _ in 0..2 {
-        assert!(ed.execute("view hanging off").is_ok());
-        assert!(!ed.hanging, "`:view hanging off` turned it on: {}", ed.status());
+        assert!(ed.execute("view-hanging off").is_ok());
+        assert!(!ed.hanging, "`:view-hanging off` turned it on: {}", ed.status());
     }
     for _ in 0..2 {
-        assert!(ed.execute("view hanging on").is_ok());
-        assert!(ed.hanging, "`:view hanging on` turned it off: {}", ed.status());
+        assert!(ed.execute("view-hanging on").is_ok());
+        assert!(ed.hanging, "`:view-hanging on` turned it off: {}", ed.status());
     }
     // The bare word still means 「the other one」, and `of` is `off`'s
     // shortest spelling — the one the menu prints.
-    assert!(ed.execute("view hanging").is_ok());
+    assert!(ed.execute("view-hanging").is_ok());
     assert!(!ed.hanging);
-    assert!(ed.execute("view hanging on").is_ok());
-    assert!(ed.execute("view hanging of").is_ok());
-    assert!(!ed.hanging, "`:view hanging of` is what the menu offers");
+    assert!(ed.execute("view-hanging on").is_ok());
+    assert!(ed.execute("view-hanging of").is_ok());
+    assert!(!ed.hanging, "`:view-hanging of` is what the menu offers");
 }
 
 #[test]
@@ -4026,8 +4026,8 @@ fn the_markdown_grid_keys_say_so_on_a_locked_file() {
         );
         assert!(ed.status().contains("只讀"), "`{keys}`: {}", ed.status());
     }
-    assert!(ed.execute("table sort").is_ok());
-    assert_eq!(ed.current_buffer().text(), before, "`:table sort` moved it");
+    assert!(ed.execute("table-sort").is_ok());
+    assert_eq!(ed.current_buffer().text(), before, "`:table-sort` moved it");
     assert!(ed.status().contains("只讀"), "{}", ed.status());
 }
 
@@ -4257,7 +4257,7 @@ fn auto_reload_takes_a_clean_buffer_and_only_warns_about_a_dirty_one() {
     ed.disk_tick();
     assert_eq!(ed.current_buffer().text(), "第一版\n", "off by default");
 
-    assert!(ed.execute("reload auto on").is_ok());
+    assert!(ed.execute("reload-auto on").is_ok());
     ed.disk_tick();
     assert_eq!(ed.current_buffer().text(), "第二版\n", "clean, so it reads");
     assert!(ed.status().contains("外面改了"), "{}", ed.status());
@@ -4269,7 +4269,7 @@ fn auto_reload_takes_a_clean_buffer_and_only_warns_about_a_dirty_one() {
     std::fs::write(&file, "第三版\n").unwrap();
     // Re-asking for the setting also resets the clock, which is what a
     // writer who just turned it on means by turning it on.
-    assert!(ed.execute("reload auto on").is_ok());
+    assert!(ed.execute("reload-auto on").is_ok());
     ed.disk_tick();
     assert!(
         ed.current_buffer().text().contains('我'),
@@ -4281,9 +4281,9 @@ fn auto_reload_takes_a_clean_buffer_and_only_warns_about_a_dirty_one() {
     // that is the same in all of them.
     assert!(ed.status().contains(":reload!"), "{}", ed.status());
 
-    assert!(ed.execute("reload auto off").is_ok());
+    assert!(ed.execute("reload-auto off").is_ok());
     assert!(!ed.reload_auto());
-    assert!(ed.execute("reload auto").is_ok());
+    assert!(ed.execute("reload-auto").is_ok());
     assert!(ed.status().contains("off"), "{}", ed.status());
 
     std::fs::remove_dir_all(&dir).ok();
@@ -4702,9 +4702,9 @@ fn the_second_table_is_measured_by_its_own_width() {
     assert!(ed.status().contains('C'), "{}", ed.status());
     assert!(!ed.status().contains('B'), "{}", ed.status());
 
-    // `:table check` reads the table the cursor is in — not the file, in
+    // `:table-check` reads the table the cursor is in — not the file, in
     // which every paragraph is a line 「寬度不對」.
-    assert!(ed.execute("table check").is_ok());
+    assert!(ed.execute("table-check").is_ok());
     assert!(
         ed.status().contains('2'),
         "two rows, rule and header excluded: {}",
@@ -5295,12 +5295,12 @@ fn row_goes_straight_to_the_row_a_character_names() {
     std::fs::write(&csv, "char,ids_y\n相,⿰木目\n木,木\n目,目\n").unwrap();
     let mut ed = Editor::new();
     ed.open_file(&csv).unwrap();
-    assert!(ed.execute("table jump 目").is_ok());
+    assert!(ed.execute("table-jump 目").is_ok());
     assert_eq!(ed.cursor_line(), 3, "{}", ed.status());
-    assert!(ed.execute("table jump 卵").is_ok());
+    assert!(ed.execute("table-jump 卵").is_ok());
     assert!(ed.status().contains("沒有"), "{}", ed.status());
     // …and `C-o` comes back, because a jump is a jump.
-    assert!(ed.execute("table jump 木").is_ok());
+    assert!(ed.execute("table-jump 木").is_ok());
     assert_eq!(ed.cursor_line(), 2);
     std::fs::remove_dir_all(&dir).ok();
 }
@@ -5414,7 +5414,7 @@ fn table_check_answers_the_four_questions_nobody_can_answer_by_eye() {
     .unwrap();
     let mut ed = Editor::new();
     ed.open_file(&csv).unwrap();
-    assert!(ed.execute("table check").is_ok());
+    assert!(ed.execute("table-check").is_ok());
     let out = ed.current_buffer().text();
     assert!(out.contains("c.csv:2:") && out.contains("卵"), "{out}");
     assert!(out.contains("c.csv:3:") && out.contains("欄"), "{out}");
@@ -5426,18 +5426,18 @@ fn table_check_answers_the_four_questions_nobody_can_answer_by_eye() {
     ed.open_file(&csv).unwrap();
     ed.execute("reload!").ok();
     let buffers = ed.buffer_count();
-    assert!(ed.execute("table check").is_ok());
+    assert!(ed.execute("table-check").is_ok());
     assert!(ed.status().contains("沒查出問題"), "{}", ed.status());
     assert_eq!(ed.buffer_count(), buffers, "no buffer for no findings");
     std::fs::remove_dir_all(&dir).ok();
 }
 
-/// `:check usage` answers as a jumpable listing, and the count in the
+/// `:check-usage` answers as a jumpable listing, and the count in the
 /// status line has to be a count of what the listing holds.
 #[test]
 fn check_usage_lists_the_slips_and_says_when_it_stopped_listing() {
     let mut ed = typed("那裏很冷。\n他站在裏面。\n她走進屋裡。\n");
-    assert!(ed.execute("check usage").is_ok());
+    assert!(ed.execute("check-usage").is_ok());
     let out = ed.current_buffer().text();
     assert!(out.contains(":3:") && out.contains('裡') && out.contains('裏'), "{out}");
     assert!(ed.status().contains('1'), "{}", ed.status());
@@ -5447,7 +5447,7 @@ fn check_usage_lists_the_slips_and_says_when_it_stopped_listing() {
     let mut text = "那裏。\n".repeat(GREP_LIMIT + 200);
     text.push_str(&"那裡。\n".repeat(GREP_LIMIT + 1));
     let mut ed = typed(&text);
-    assert!(ed.execute("check usage").is_ok());
+    assert!(ed.execute("check-usage").is_ok());
     let lines = ed.current_buffer().text().lines().count();
     assert_eq!(lines, GREP_LIMIT, "the listing stops at the limit");
     assert!(
@@ -5458,7 +5458,7 @@ fn check_usage_lists_the_slips_and_says_when_it_stopped_listing() {
     );
 }
 
-/// `:word habit` ranks by surprisal, not by count — so the word every text
+/// `:word-habit` ranks by surprisal, not by count — so the word every text
 /// is not the answer, and the word this one leans on is (#242).
 #[test]
 fn words_reports_what_is_said_more_than_prose_says_it_and_never_says_de() {
@@ -5467,7 +5467,7 @@ fn words_reports_what_is_said_more_than_prose_says_it_and_never_says_de() {
     let dict = DictionarySegmenter::from_text("的\t100000\n然後\t100\n好的\t100000\n", 1);
     let mut ed = typed("然後好的然後好的然後好的然後好的\n");
     ed.set_segmenter(Box::new(dict));
-    assert!(ed.execute("word habit").is_ok());
+    assert!(ed.execute("word-habit").is_ok());
     let out = ed.current_buffer().text();
     assert!(out.contains("然後"), "{out}");
     assert!(!out.contains("好的"), "the word prose says just as often: {out}");
@@ -5481,36 +5481,36 @@ fn words_without_a_frequency_table_says_so_instead_of_listing_nothing() {
     let mut ed = typed("然後好的然後好的然後好的\n");
     ed.set_segmenter(Box::new(CategorySegmenter));
     let before = ed.current_buffer().text();
-    assert!(ed.execute("word habit").is_ok());
+    assert!(ed.execute("word-habit").is_ok());
     assert_eq!(ed.current_buffer().text(), before, "no listing buffer");
     assert!(ed.status().contains("詞頻"), "{}", ed.status());
 }
 
-/// `:check charset` reports the character no standard carries — once,
+/// `:check-charset` reports the character no standard carries — once,
 /// however many times it was written (#240).
 #[test]
 fn check_charset_reports_each_character_once() {
     let mut ed = with_toy_reader("漢字龘\n𠮷很難𠮷\n");
-    assert!(ed.execute("check charset").is_ok());
+    assert!(ed.execute("check-charset").is_ok());
     let out = ed.current_buffer().text();
     assert_eq!(out.lines().count(), 1, "one line per character: {out}");
     assert!(out.contains('𠮷') && out.contains(":2:"), "{out}");
     assert!(out.contains('2'), "how many times, not just where: {out}");
-    // 龘 is rare — `:ruby auto rare` annotates it — but 古籍 is a standard
+    // 龘 is rare — `:ruby-auto rare` annotates it — but 古籍 is a standard
     // and carries it, so it is not this command's finding.
     assert!(!out.contains('龘'), "{out}");
 
     let mut ed = typed("漢字");
-    assert!(ed.execute("check charset").is_ok());
+    assert!(ed.execute("check-charset").is_ok());
     assert!(!ed.status().is_empty(), "no 字集 data is worth saying");
 }
 
-/// `:check punct` answers in the same jumpable shape, and the finding that
+/// `:check-punct` answers in the same jumpable shape, and the finding that
 /// matters — the 「 nothing closes — is the one no eye finds (#238).
 #[test]
 fn check_punct_finds_the_quote_that_never_closes() {
     let mut ed = typed("他說,好。\n她問：「你回來了。\n這一行沒事。\n");
-    assert!(ed.execute("check punct").is_ok());
+    assert!(ed.execute("check-punct").is_ok());
     let out = ed.current_buffer().text();
     assert!(out.contains(":1:") && out.contains('，'), "{out}");
     assert!(out.contains(":2:") && out.contains('」'), "{out}");
@@ -5519,7 +5519,7 @@ fn check_punct_finds_the_quote_that_never_closes() {
     // Nothing to say is said, rather than an empty buffer being opened.
     let mut ed = typed("他說：「好。」\n圓周率是 3.14。\n");
     let before = ed.buffer_count();
-    assert!(ed.execute("check punct").is_ok());
+    assert!(ed.execute("check-punct").is_ok());
     assert_eq!(ed.buffer_count(), before, "clean: no listing");
 }
 
@@ -5708,7 +5708,7 @@ fn a_column_search_reads_down_before_across() {
     ed.open_file(&csv).unwrap();
     assert!(ed.enter_table(), "{}", ed.status());
 
-    assert!(ed.execute("table find column 甲").is_ok(), "{}", ed.status());
+    assert!(ed.execute("table-find column 甲").is_ok(), "{}", ed.status());
     assert!(ed.status().contains("1/4"), "{}", ed.status());
     // The hits are *shown* in the other work area; the cursor stays where
     // it was standing, which is the point of the split (Feature #176).
@@ -5736,14 +5736,14 @@ fn a_column_search_reads_down_before_across() {
     assert_eq!(where_am_i(&ed), (1, 0), "and it wraps");
 
     // A row search is `/`, and reads the other way.
-    assert!(ed.execute("table find row 甲").is_ok());
+    assert!(ed.execute("table-find row 甲").is_ok());
     assert_eq!(ed.cursor_line(), 1);
 
     // No direction means row, because that is what a search is anywhere
     // but a table.
-    assert!(ed.execute("table find 甲").is_ok());
+    assert!(ed.execute("table-find 甲").is_ok());
     // A pattern is a pattern in both directions.
-    assert!(ed.execute("table find column 甲[一三]").is_ok());
+    assert!(ed.execute("table-find column 甲[一三]").is_ok());
     assert!(ed.status().contains("1/2"), "{}", ed.status());
     std::fs::remove_dir_all(&dir).ok();
 }
@@ -6964,8 +6964,8 @@ fn a_measure_is_a_width_to_write_to_in_either_layout() {
     ed.set_wrap_width(120);
     assert_eq!(ed.wrap_width(), Some(120), "the window, to begin with");
 
-    // `:view wrap 50` is a measure: rows fold at fifty however wide the window.
-    ed.execute("view wrap 50").unwrap();
+    // `:view-wrap 50` is a measure: rows fold at fifty however wide the window.
+    ed.execute("view-wrap 50").unwrap();
     assert_eq!(ed.measure(), Some(50));
     ed.set_wrap_width(120);
     assert_eq!(ed.wrap_width(), Some(50));
@@ -6978,24 +6978,24 @@ fn a_measure_is_a_width_to_write_to_in_either_layout() {
     // Setting one turns wrapping on, because fifty columns of text running
     // off the edge is not writing to a measure of fifty.
     ed.set_soft_wrap(false);
-    ed.execute("view wrap 40").unwrap();
+    ed.execute("view-wrap 40").unwrap();
     assert!(ed.soft_wrap());
 
     // Vertically the measure is the length of a 縱.
     ed.execute("layout vertical").unwrap();
-    ed.execute("view wrap 12").unwrap();
+    ed.execute("view-wrap 12").unwrap();
     assert_eq!(ed.zong_length(), 12);
 
-    // `:view wrap 0` gives the window back; plain `:view wrap` still just turns
+    // `:view-wrap 0` gives the window back; plain `:view-wrap` still just turns
     // wrapping on, and leaves the measure where it was.
-    ed.execute("view wrap").unwrap();
-    assert_eq!(ed.measure(), Some(12), "`:view wrap` is not `:view wrap 0`");
-    ed.execute("view wrap 0").unwrap();
+    ed.execute("view-wrap").unwrap();
+    assert_eq!(ed.measure(), Some(12), "`:view-wrap` is not `:view-wrap 0`");
+    ed.execute("view-wrap 0").unwrap();
     assert_eq!(ed.measure(), None);
     ed.set_wrap_width(120);
     assert_eq!(ed.wrap_width(), None, "vertical does not wrap");
 
-    assert!(ed.execute("view wrap wide").is_err(), "not a width");
+    assert!(ed.execute("view-wrap wide").is_err(), "not a width");
 }
 
 /// 縱書 has no 折行 to turn off, and says so.
@@ -7009,17 +7009,17 @@ fn wrap_on_and_off_are_refused_in_vertical_and_say_why() {
     ed.execute("layout vertical").unwrap();
     assert!(ed.soft_wrap(), "on, as it always is");
 
-    ed.execute("view wrap off").unwrap();
+    ed.execute("view-wrap off").unwrap();
     assert!(ed.soft_wrap(), "…and untouched: there was nothing to turn");
     assert!(ed.status().contains("縱書不折行"), "{}", ed.status());
 
     // The measure is a different question, and it *is* answered here.
-    ed.execute("view wrap 12").unwrap();
+    ed.execute("view-wrap 12").unwrap();
     assert_eq!(ed.zong_length(), 12);
 
     // Horizontally it works as it always did.
     ed.execute("layout horizontal").unwrap();
-    ed.execute("view wrap off").unwrap();
+    ed.execute("view-wrap off").unwrap();
     assert!(!ed.soft_wrap());
 }
 
@@ -7233,10 +7233,10 @@ fn space_slash_opens_a_project_search_ready_to_be_typed_into() {
 fn the_system_clipboard_goes_both_ways() {
     let mut ed = typed("那年冬天");
     press(&mut ed, "ggvl");
-    // `Space y`, or `:clipboard yank`.
+    // `Space y`, or `:clipboard-yank`.
     type_keys(&mut ed, " y");
     assert_eq!(ed.take_clipboard_request().as_deref(), Some("那年"));
-    ed.execute(":clipboard yank").unwrap();
+    ed.execute(":clipboard-yank").unwrap();
     assert_eq!(ed.take_clipboard_request().as_deref(), Some("那年"));
 
     // Reading needs the platform, so the core asks and the front end
@@ -7331,22 +7331,22 @@ fn a_buffer_can_be_closed_and_the_last_one_is_emptied() {
 
     // Unsaved work is not closed away silently.
     assert!(matches!(
-        ed.execute(":buffer close"),
+        ed.execute(":buffer-close"),
         Err(EditorError::UnsavedChanges)
     ));
-    ed.execute(":buffer close!").unwrap();
+    ed.execute(":buffer-close!").unwrap();
     assert_eq!(ed.buffer_count(), 1);
     assert_eq!(ed.current_buffer().text(), "甲");
 
     // The last buffer is emptied rather than closed: the editor always has
     // somewhere to put the cursor.
-    ed.execute(":buffer close!").unwrap();
+    ed.execute(":buffer-close!").unwrap();
     assert_eq!(ed.buffer_count(), 1);
     assert_eq!(ed.current_buffer().text(), "");
 
-    // `:buffer list` opens the picker: with 122 chapters open the list is
+    // `:buffer` opens the picker: with 122 chapters open the list is
     // 1,783 characters and the status line is one row.
-    ed.execute(":buffer list").unwrap();
+    ed.execute(":buffer").unwrap();
     assert_eq!(ed.mode(), Mode::Picker);
 }
 
@@ -7372,13 +7372,13 @@ fn buffers_can_be_switched_and_keep_their_place() {
 
     // Back to the first, and the cursor is where it was left.
     press(&mut ed, "gg");
-    ed.execute(":buffer previous").unwrap();
+    ed.execute(":buffer-previous").unwrap();
     assert_eq!(ed.buffer_position(), (1, 2));
     assert_eq!(ed.current_buffer().text(), "第一篇的內容");
     assert_eq!(ed.cursor(), left_at, "back where it was left");
 
     // …and forward again, to where *that* one was left.
-    ed.execute(":buffer next").unwrap();
+    ed.execute(":buffer-next").unwrap();
     assert_eq!(ed.current_buffer().text(), "第二篇");
     assert_eq!(ed.cursor(), 0, "gg had moved it to the top");
 }
@@ -7412,8 +7412,8 @@ fn switching_clamps_a_cursor_past_the_end() {
     ed.on_key(Key::Char('i'));
     ed.on_key(Key::Char('短'));
     ed.on_key(Key::Esc);
-    ed.execute(":buffer previous").unwrap();
-    ed.execute(":buffer next").unwrap();
+    ed.execute(":buffer-previous").unwrap();
+    ed.execute(":buffer-next").unwrap();
     assert!(
         ed.cursor() <= ed.current_buffer().char_count(),
         "a cursor from a longer buffer must not point past this one"
@@ -7476,7 +7476,7 @@ fn unknown_command_is_reported() {
 /// **A row's cell count does not change**, and not only at the gate.
 ///
 /// Four writers reached the rope without passing one: `gJ`, `:replace`,
-/// `:s` and `:ruby format`. Three of the four asked `self.table` first, so
+/// `:s` and `:ruby-format`. Three of the four asked `self.table` first, so
 /// they were off in exactly the state a `|` table in a manuscript is
 /// normally edited in — nobody types `:table basic` to fix a typo in their own
 /// documentation.
@@ -7520,7 +7520,7 @@ fn no_writer_changes_how_many_cells_a_row_has() {
     assert!(ed.current_buffer().text().contains("冬 | 天"), "{}", ed.status());
 }
 
-/// `:ruby format` rewrites as much text as `:replace` and kept none of its
+/// `:ruby-format` rewrites as much text as `:replace` and kept none of its
 /// rules: `#ruby("永", "ㄩㄥˇ")` carries a comma into every cell it touches.
 #[test]
 fn reformatting_the_readings_does_not_reshape_a_grid() {
@@ -7539,7 +7539,7 @@ fn reformatting_the_readings_does_not_reshape_a_grid() {
 
     let mut ed = Editor::new();
     ed.open_file(&csv).unwrap();
-    ed.execute(":ruby format typst").unwrap();
+    ed.execute(":ruby-format typst").unwrap();
     assert!(ed.status().contains("格"), "{}", ed.status());
     assert_eq!(ed.current_buffer().text(), source, "the grid is untouched");
 
@@ -7584,7 +7584,7 @@ fn every_prompt_has_a_caret() {
     assert_eq!(ed.picker().map(|p| p.caret()), Some(0));
 }
 
-/// A preview server is a running thing: `:view preview` while one is up asks
+/// A preview server is a running thing: `:view-preview` while one is up asks
 /// *where* it is, not for a second one.
 /// `:help` is written from what the editor actually runs on.
 /// `:markdown` writes the pieces a manuscript keeps needing.
@@ -7595,7 +7595,7 @@ fn markdown_writes_a_footnote_and_a_table() {
     press(&mut ed, "llll");
 
     // **The next free number**, not one more than the last: 2 is taken.
-    ed.execute(":markdown footnote").unwrap();
+    ed.execute(":markdown-footnote").unwrap();
     let text = ed.current_buffer().text();
     assert!(text.contains("[^1]"), "{text}");
     assert!(text.contains("[^1]: "), "and its note is opened: {text}");
@@ -7608,14 +7608,14 @@ fn markdown_writes_a_footnote_and_a_table() {
     // An inline note leaves the cursor between the brackets.
     let mut ed = typed("那年冬天。\n");
     press(&mut ed, "gg");
-    ed.execute(":markdown footnote inline").unwrap();
+    ed.execute(":markdown-footnote inline").unwrap();
     assert_eq!(ed.mode(), Mode::Insert);
     type_keys(&mut ed, "存疑");
     assert!(ed.current_buffer().text().starts_with("^[存疑]"), "{}", ed.current_buffer().text());
 
 }
 
-/// #276. The author, 2026-09-05: 「`:table new 3 4`，迅速在 markdown 中插入
+/// #276. The author, 2026-09-05: 「`:table-new 3 4`，迅速在 markdown 中插入
 /// 一個三行四列表格，上下有空白行，光標自動到標題欄最左的一格並進去編輯模
 /// 式。」 It used to be `:markdown table 4x3` — columns first, rows meaning
 /// *data* rows, no blank lines and no Insert mode — and that spelling is
@@ -7624,7 +7624,7 @@ fn markdown_writes_a_footnote_and_a_table() {
 fn a_new_table_is_written_with_room_around_it_and_typed_into() {
     let mut ed = typed("前文。\n後文。\n");
     press(&mut ed, "gg");
-    ed.execute(":table new 3 4").unwrap();
+    ed.execute(":table-new 3 4").unwrap();
     let text = ed.current_buffer().text();
     let lines: Vec<&str> = text.lines().collect();
     let rows: Vec<&str> = lines.iter().copied().filter(|l| l.starts_with('|')).collect();
@@ -7655,16 +7655,16 @@ fn a_new_table_is_written_with_room_around_it_and_typed_into() {
     let mut ed = typed("前文。\n\n後文。\n");
     press(&mut ed, "gg");
     press(&mut ed, "j");
-    ed.execute(":table new 2 2").unwrap();
+    ed.execute(":table-new 2 2").unwrap();
     let text = ed.current_buffer().text();
     assert!(!text.contains("\n\n\n"), "no line the writer did not ask for: {text:?}");
 
     // Two numbers, and only sane ones.
     let mut ed = typed("前文。\n");
-    assert!(ed.execute(":table new 0 4").is_err());
-    assert!(ed.execute(":table new 4 99").is_err());
+    assert!(ed.execute(":table-new 0 4").is_err());
+    assert!(ed.execute(":table-new 4 99").is_err());
     // On its own it is a small one rather than an error.
-    assert!(ed.execute(":table new").is_ok());
+    assert!(ed.execute(":table-new").is_ok());
 }
 
 #[test]
@@ -7734,7 +7734,7 @@ fn a_second_preview_asks_where_the_first_one_is() {
 
     let mut ed = Editor::new();
     ed.open_file(&book).unwrap();
-    ed.execute(":view preview").unwrap();
+    ed.execute(":view-preview").unwrap();
     assert!(
         matches!(ed.take_preview_request(), Some(Preview::Start { .. })),
         "the first one starts a typesetter"
@@ -7743,13 +7743,13 @@ fn a_second_preview_asks_where_the_first_one_is() {
     ed.set_preview_at(Some("http://127.0.0.1:23625".to_string()));
     assert_eq!(ed.preview_at(), Some("http://127.0.0.1:23625"));
 
-    ed.execute(":view preview").unwrap();
+    ed.execute(":view-preview").unwrap();
     assert!(
         matches!(ed.take_preview_request(), Some(Preview::Show)),
         "the second one asks for the address, not for another server"
     );
 
-    ed.execute(":view preview off").unwrap();
+    ed.execute(":view-preview off").unwrap();
     assert!(matches!(ed.take_preview_request(), Some(Preview::Stop)));
     std::fs::remove_dir_all(&dir).ok();
 }
@@ -7929,13 +7929,13 @@ fn every_writer_passes_the_oversize_gate() {
     assert!(ed.query().is_some(), ":w! asks");
     assert_eq!(std::fs::metadata(&chapter).unwrap().len(), was);
 
-    // `:write all` — the command a book-wide `:replace` ends with. It stops
+    // `:write-all` — the command a book-wide `:replace` ends with. It stops
     // **on the buffer that asked**, because the question names one file.
     let mut ed = Editor::new();
     ed.open_file(&chapter).unwrap();
     swollen(&mut ed);
-    ed.execute(":write all").unwrap();
-    assert!(ed.query().is_some(), ":write all asks");
+    ed.execute(":write-all").unwrap();
+    assert!(ed.query().is_some(), ":write-all asks");
     assert_eq!(std::fs::metadata(&chapter).unwrap().len(), was);
 
     // And 「yes」 still writes exactly once: the pass is spent on that save,
@@ -8262,7 +8262,7 @@ fn a_rename_reaches_past_the_end_of_the_listing() {
     assert!(said.contains("500"), "and it says how many are listed: {said}");
 
     ed.execute(":replace 乙").unwrap();
-    ed.execute(":write all").unwrap();
+    ed.execute(":write-all").unwrap();
 
     let after = std::fs::read_to_string(&last).unwrap();
     assert!(
@@ -8423,7 +8423,7 @@ fn no_writer_replaces_a_file_the_editor_is_holding() {
     std::fs::remove_dir_all(&dir).ok();
 }
 
-/// `:w <path>` copies and stays; `:write as <path>` rebinds and says so.
+/// `:w <path>` copies and stays; `:write-as <path>` rebinds and says so.
 #[test]
 fn writing_a_copy_does_not_move_the_manuscript() {
     let dir = std::env::temp_dir().join(format!("yumete-copy-{}", std::process::id()));
@@ -8453,9 +8453,9 @@ fn writing_a_copy_does_not_move_the_manuscript() {
     assert!(ed.execute(&format!(":w {}", copy.display())).is_err());
     assert!(!std::fs::read_to_string(&copy).unwrap().contains('又'));
 
-    // `:write as` is the one that moves house.
+    // `:write-as` is the one that moves house.
     let renamed = dir.join("ch1-final.md");
-    ed.execute(&format!(":write as {}", renamed.display())).unwrap();
+    ed.execute(&format!(":write-as {}", renamed.display())).unwrap();
     assert_eq!(ed.current_buffer().path(), Some(renamed.as_path()));
     assert!(std::fs::read_to_string(&renamed).unwrap().contains('又'));
 
@@ -8854,7 +8854,7 @@ fn replace_changes_what_grep_already_showed_you() {
         std::fs::read_to_string(dir.join("ch01.md")).unwrap(),
         "阿甯走進來。\n阿甯坐下。\n"
     );
-    assert!(ed.execute("write all").is_ok());
+    assert!(ed.execute("write-all").is_ok());
     assert_eq!(
         std::fs::read_to_string(dir.join("ch01.md")).unwrap(),
         "阿寧走進來。\n阿寧坐下。\n"
@@ -9075,7 +9075,7 @@ fn closing_a_file_does_not_send_a_jump_into_a_different_one() {
     ed.on_key(Key::Char('a'));
     // Close b — every buffer after it used to shift down by one.
     ed.open_file(&b).unwrap();
-    ed.execute("buffer close!").unwrap();
+    ed.execute("buffer-close!").unwrap();
     ed.open_file(&a).unwrap();
     ed.goto_line(2);
     // The mark still means c.
@@ -9194,15 +9194,15 @@ fn the_word_command_is_one_subject_from_three_sides() {
     let mut ed = Editor::new();
     // 著色: named on and off, and flipped when neither is said.
     assert!(!ed.segmentation_visible());
-    ed.execute(":word show on").unwrap();
+    ed.execute(":word-show on").unwrap();
     assert!(ed.segmentation_visible());
-    ed.execute(":word show").unwrap();
+    ed.execute(":word-show").unwrap();
     assert!(!ed.segmentation_visible());
 
     // 粒度: it says which, and it takes which.
-    ed.execute(":word level").unwrap();
+    ed.execute(":word-level").unwrap();
     assert!(ed.status().contains("balanced"), "{}", ed.status());
-    ed.execute(":word level strict").unwrap();
+    ed.execute(":word-level strict").unwrap();
     assert_eq!(ed.word_level(), yumete_cjk::WordLevel::Strict);
     assert!(ed.status().contains("strict"), "{}", ed.status());
 
@@ -9211,7 +9211,7 @@ fn the_word_command_is_one_subject_from_three_sides() {
     assert!(ed.status().contains("分詞"), "{}", ed.status());
 
     // …and reload is a question for the front end, which owns the IME.
-    ed.execute(":word list reload").unwrap();
+    ed.execute(":word-list reload").unwrap();
     assert!(ed.take_words_request(), "the front end is asked to rebuild");
 }
 
@@ -9913,10 +9913,10 @@ fn searching_a_big_table() {
     println!("enter table:   {:.1?}", t.elapsed());
 
     let t = Instant::now();
-    ed.execute(":table find column 龜").ok();
+    ed.execute(":table-find column 龜").ok();
     println!("search column: {:.1?}  ({})", t.elapsed(), ed.status());
     let t = Instant::now();
-    ed.execute(":table find row 龜").ok();
+    ed.execute(":table-find row 龜").ok();
     println!("search row:    {:.1?}  ({})", t.elapsed(), ed.status());
     std::fs::remove_dir_all(&dir).ok();
 }
@@ -10105,7 +10105,7 @@ fn a_block_is_read_where_it_lies_and_not_sorted() {
     let mut ed = typed("木,AA\n目,BB\n田,CC\n");
     ed.execute(":1").unwrap();
     assert!(ed.enter_table(), "{}", ed.status());
-    ed.execute(":table sort 1").unwrap();
+    ed.execute(":table-sort 1").unwrap();
     assert!(ed.status().contains("只讀"), "{}", ed.status());
     assert_eq!(ed.current_buffer().text(), "木,AA\n目,BB\n田,CC\n");
 }
@@ -10228,7 +10228,7 @@ fn the_three_keys_say_so_when_there_is_nothing_to_resolve() {
 fn the_listing_is_walked_back_the_way_grep_is() {
     let text = format!("{MERGED}{MERGED}");
     let mut ed = merged(&text);
-    ed.execute(":check merge").unwrap();
+    ed.execute(":check-merge").unwrap();
     let listing = ed.current_buffer().text();
     assert!(listing.starts_with("[scratch]:2: HEAD ⇄ feature/枝\n"), "{listing}");
     assert_eq!(listing.lines().count(), 2);
@@ -10237,7 +10237,7 @@ fn the_listing_is_walked_back_the_way_grep_is() {
     // And a clean file says so rather than opening an empty buffer.
     let mut ed = merged("一句話\n");
     let before = ed.current_buffer().id();
-    ed.execute(":check merge").unwrap();
+    ed.execute(":check-merge").unwrap();
     assert_eq!(ed.current_buffer().id(), before, "{}", ed.status());
     assert!(ed.status().contains("沒有"), "{}", ed.status());
 }

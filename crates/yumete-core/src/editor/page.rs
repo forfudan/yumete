@@ -248,8 +248,8 @@ impl Editor {
 
     /// How many squares open a paragraph, as the page is drawn.
     ///
-    /// **Not** masked by `:view dense`, unlike the readings, the hung 句讀 and the
-    /// ticks. Those three each cost a *column* — the width `:view dense` exists to
+    /// **Not** masked by `:view-dense`, unlike the readings, the hung 句讀 and the
+    /// ticks. Those three each cost a *column* — the width `:view-dense` exists to
     /// win back. The indent costs two squares at the head of a paragraph, and
     /// it is the one thing on a packed page that says where a paragraph
     /// begins: it is what replaces the blank line, which costs a whole 縱.
@@ -307,13 +307,13 @@ impl Editor {
 
     /// Which ruby dialects are being laid out **on the page as it is drawn**.
     ///
-    /// Masked by `:view dense`, the same way [`Self::hanging_punctuation`] is and
+    /// Masked by `:view-dense`, the same way [`Self::hanging_punctuation`] is and
     /// for the same reason: packing the page *suppresses* the reading column,
-    /// it does not turn readings off. `:view dense` said it dropped the column in
+    /// it does not turn readings off. `:view-dense` said it dropped the column in
     /// its own doc comment and in the manual's table, and did not — so a
     /// packed page kept paying two cells a 縱 for readings it was not drawing.
     ///
-    /// The configured set — what `:ruby` reports and what `:view dense off` gives
+    /// The configured set — what `:ruby` reports and what `:view-dense off` gives
     /// back — is [`Self::ruby_configured`].
     pub fn ruby(&self) -> Dialects {
         // …and only where 密排 costs anything. It packs the *縱書* page: the
@@ -345,7 +345,7 @@ impl Editor {
     pub fn render_ruby(&mut self, dialect: crate::ruby::Dialect, on: bool) {
         if on {
             self.ruby.insert(dialect);
-            // Naming a spelling is asking to see it. `:ruby typst` on a page
+            // Naming a spelling is asking to see it. `:ruby-typst` on a page
             // at 中階 that then drew nothing would be a command with no effect
             // and no complaint — the shape of bug #283 is about.
             self.ruby_drawn = true;

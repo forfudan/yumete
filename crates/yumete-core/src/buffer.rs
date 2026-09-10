@@ -54,7 +54,7 @@ pub type Edit = Result<(), ReadOnly>;
 pub struct Buffer {
     /// Which buffer this is, for as long as the session lasts.
     ///
-    /// Not its position in the list: `:buffer close` removes one and every
+    /// Not its position in the list: `:buffer-close` removes one and every
     /// later buffer shifts down, so an index that named a chapter this morning
     /// names a different one this afternoon — and the jump list and the marks
     /// both keep places by buffer.
@@ -721,7 +721,7 @@ impl Buffer {
     /// This is what `:w <path>` has always claimed to do and did not: it called
     /// [`Buffer::save_as`], which rebinds, so a writer who took a copy of a
     /// chapter found every later `:w` going to the copy while the chapter sat
-    /// frozen at the version before it. Rebinding is `:write as`, which says so.
+    /// frozen at the version before it. Rebinding is `:write-as`, which says so.
     ///
     /// The buffer's own state — its path, its stamps, its recovery copy, and
     /// whether it is modified — is untouched, because none of it is about this

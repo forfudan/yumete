@@ -375,7 +375,7 @@ pub fn draw(
     // surface's: a row off the page is a jump and lands in the middle, a step
     // off an edge scrolls by as little as it takes, and typewriter mode keeps
     // the row in the middle whatever it was. This used to be a third copy of
-    // that rule, and it was the copy that never heard of `:view typewriter`.
+    // that rule, and it was the copy that never heard of `:view-typewriter`.
     let distance = (cursor_row >= viewport.top && cursor_row < viewport.top + rows)
         .then(|| cursor_row - viewport.top);
     if let Some(inset) = editor.page_inset(distance, rows.saturating_sub(1), scrolloff) {
@@ -422,7 +422,7 @@ pub fn draw(
     // the page itself, one cell wide, and that is the whole of the ruling.
     // Twenty-eight columns of one or two characters need it to read as a grid;
     // six wide ones do not, and there the seams are noise between the words —
-    // so `:table rules off` gives every cell the page and the columns run
+    // so `:table-rules off` gives every cell the page and the columns run
     // together.
     let rules = editor.table_rules();
     let text = match rules {

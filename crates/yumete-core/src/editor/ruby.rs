@@ -15,7 +15,7 @@ impl Editor {
             .unwrap_or(Dialect::Html)
     }
 
-    /// `:ruby auto` — write the readings in, by word (Feature #234).
+    /// `:ruby-auto` — write the readings in, by word (Feature #234).
     ///
     /// **Why a word and not a character.** 了 is `le` in 為了 and `liǎo` in
     /// 了解, and every tool that annotates 拼音 one character at a time gets one
@@ -32,7 +32,7 @@ impl Editor {
     ///
     /// **`rare` is the one people actually want.** A novel with a reading over
     /// every character is a textbook, not a novel; a novel with a reading over
-    /// the handful nobody knows is a novel a reader can finish. So `:ruby auto
+    /// the handful nobody knows is a novel a reader can finish. So `:ruby-auto
     /// rare` keeps only the words holding a character that **no** standard in
     /// current use carries — 通用規範, 通規繁, 臺灣, 香港 — and keeps the
     /// *word*, because one character of a two-character word read alone is
@@ -189,13 +189,13 @@ impl Editor {
             None => n - 1,
         } as usize;
         // Replace the word being completed, not the whole line: `:yume sch`
-        // has to become `:yume scheme`, not `scheme`.
+        // has to become `:yume-scheme`, not `scheme`.
         let (start, _) = command::complete_at(&prefix);
         if matches[next].name.is_empty() {
             return;
         }
         // A word promoted out of its parent's list writes the parent too:
-        // picking `scheme` out of what `:yume` takes leaves `:yume scheme`.
+        // picking `scheme` out of what `:yume` takes leaves `:yume-scheme`.
         let chosen = matches[next].written();
         self.command_line = format!("{}{chosen}", &prefix[..start.min(prefix.len())]);
         self.command_caret = self.command_line.chars().count();
