@@ -40,21 +40,14 @@ fn the_command_table_offers_the_schemes_that_were_found() {
     // Set once. A second call is ignored rather than half-applied.
     command::set_schemes(&[("lingming", "靈明")]);
     assert_eq!(command::schemes()[0].name, "snow-sipin");
-}
 
-/// A scheme's **name** rides beside its tag, and the list can be searched by it
-/// (#291).
-///
-/// The author, 2026-09-08: 「這裏 custom 方案名能不能有更好的方法提示他們的方案
-/// 名？現在是 Unique ID，不夠直觀。」 A tag like `custom.6947b838` is stable and
-/// cannot collide, which is why it stays the value; it also says nothing, which
-/// is why the name goes beside it.
-///
-/// **Same binary as the test above** — it has already filled the registry, and
-/// filling it is a once-per-process act.
-#[test]
-fn a_scheme_carries_its_name_beside_its_tag() {
-    command::set_schemes(&[("snow-sipin", "冰雪四拼"), ("snow-sanpin", "冰雪三拼")]);
+    // **And what a scheme is called, in the same test.** `set_schemes` is a
+    // `OnceLock`: a process can be told once, so two tests in one binary cannot
+    // both hold — the one that ran second found the list already replaced, and
+    // the failure landed on whichever lost the race rather than on the cause.
+    // Three intermittent reds before that was chased down; one test cannot
+    // race itself.
+
 
     let offered = complete(":yume scheme ");
     let notes: Vec<Option<&str>> = offered.iter().map(|c| c.note).collect();

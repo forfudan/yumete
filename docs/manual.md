@@ -820,14 +820,14 @@ scheme lingming          靈明
 | `:layout vertical` | `:vertical` `:horizontal` |
 | `:view wrap off` | `:nowrap` |
 | `:render off/basic/full` | `:markup` `:wysiwyg` `:source` |
-| `:buffer list/next/previous/close` | `:buffers` `:ls` `:bn` `:bp` `:bd` |
+| `:buffer list/next/previous/close` | `:buffers` `:ls` `:bd` |
 | `:clipboard yank/paste` | `:clipboard-yank` `:cy` `:cp` |
 | `:view wrap/dense/bands/sentence/hanging/numbers/typewriter/focus/meter/punct/hud/preview` | `:wrap` `:dense` `:bands` `:sentence` `:hanging` `:numbers` `:typewriter` `:focus` `:meter` `:note` `:hud` `:preview` |
 | `:count progress` `:count target 3000` | `:progress` `:prog` `:target` |
-| `:write all` `:write as 新名.md` | `:wa` `:wall` `:saveas` `:sav` |
+| `:write all` `:write as 新名.md` | `:wall` `:saveas` `:sav` |
 | `:table jump 木` `:table find column 甲` | `:row` `:search` |
 | `:check merge` | `:conflicts` |
-| `:buffer close` | `:bclose` `:bc` |
+| `:buffer close` | `:bclose` |
 | `:theme system/dark/light` | `:appearance` |
 
 判斷的標準是一句話：**這個名字是「一件事」，還是「某件事的一個取值」？** `vertical` 是
@@ -856,8 +856,30 @@ scheme lingming          靈明
 
 這句話是**算出來的**——掃一遍命令樹，找名字對得上的孩子。所以以後再摺一次，指路的話
 自己就對了，不用有人記得回來改。算不出來的只有「改了名」的那幾條——上表四條，
-加上 `:bclose`→`:buffer close`、`:wa`→`:write all`、`:saveas`→`:write as`、
+加上 `:bclose`→`:buffer close`、`:wall`→`:write all`、`:saveas`→`:write as`、
 `:appearance`→`:theme`——因為 `conflicts` 這個詞在樹裏已經不存在了，另記一張表。
+
+### 短寫
+
+完整命令是摺過的，說得出它做什麼；**短寫是它的首字母，別的都不是**——`:bc` 有，
+`:bclose` 沒有，因為那既不是完整的名字也不是首字母，正是摺疊要去掉的那種拼法。
+
+**空格與連字號分工**：空格是**樹**——`:buffer close` 是 buffer 的一種、`:write all` 是
+寫的一種，選單一層層點得進去。連字號是**並列**——`:write-quit` 不是「一種寫法」，是
+「寫，然後退」，兩個動詞。這不只是讀起來的事：`:write` 後面跟的是**路徑**，所以
+寫成 `:write` 加一個 `quit`，就只能在「一個詞」和「一個叫 quit 的檔案」之間猜；
+`:write-quit` 是一個詞，沒有可猜的。
+
+| 短寫 | 就是 |
+| --- | --- |
+| `:bc` `:bn` `:bp` | `:buffer close` `:buffer next` `:buffer previous` |
+| `:qa` | `:quit all` |
+| `:wa` | `:write all` |
+| `:wq`（也認 vi 的 `:x`） | `:write-quit` |
+| `:yo` | `:yume on` — 開檔就打中文，三個鍵 |
+
+短寫只是**展開**：`:bc!` 就是 `:buffer close!`，長命令以後長出什麼，短寫一樣拿得到。
+補全也照這條走——打 `:wq` 提示的是 `write quit`，因為那纔是說得出意思的那個拼法。
 
 **`:wysiwyg` 這個詞也沒了。** 它和 `:markup` 本來就是同一根軸上的三檔——代碼裏
 `wysiwyg && show_markup` 早就承認了這一點：不著色的時候「把標記藏起來」沒有意義，那不是
@@ -914,7 +936,7 @@ scheme lingming          靈明
   - `g` s｜t｜tw｜hk｜jp｜c — 古籍通規繁體（説 爲 内 吳 裏 髮 臺）
   - `opencc` ｜ `install` `update` — opencc 本身：沒裝就裝，裝了就升級
 - `:quit`（q） — 關掉這一個檔案；只剩一個時纔真的退出（`quit!` 不管改動）
-- `:quitall`（qa） — 全部退出，開着幾個都走（`quitall!` 不管改動）
+- `:quit all`（`:qa`） — 全部退出，開着幾個都走（`:quit all!` 不管改動）
 - `:undo`（u） — 撤銷上一次改動
 - `:redo`（red） — 重做
 - `:word`（wd） — 分詞：哪一份詞表、著色、粒度
@@ -2807,7 +2829,7 @@ GB18030 的舊稿會被擋下並告訴你用 `iconv` 轉，而不是丟一句 Ru
 | `:write` `:w` [*路徑*] | 保存；給了路徑是**抄一份**過去，人還在原稿這邊 |
 | `:write as` *路徑* | 另存成新檔，並且**改編輯那一份** |
 | `:quit` `:q`（`:q!`） | 關掉這個檔案；只剩一個時纔真的退出。`!` 丟棄改動 |
-| `:quitall` `:qa`（`:qa!`） | 全部退出，開着幾個都走 |
+| `:quit all` `:qa`（`:qa!`） | 全部退出，開着幾個都走 |
 | `:w!` | 檔案在外面被改過時，用你的蓋掉 |
 | `:reload`（`:reload!`） | 重讀檔案；`!` 丟掉這裏的改動 |
 | `:reload auto on`｜`off` | 檔案在外面改了就自己重讀——你這裏有改動時只提醒 |

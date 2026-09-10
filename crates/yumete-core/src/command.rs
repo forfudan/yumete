@@ -460,6 +460,11 @@ pub fn parse(input: &str) -> Result<Command, CommandError> {
         return Err(CommandError::Empty);
     }
 
+    // **A short spelling is the long one, said quickly** (#363). Expanded
+    // here, before anything else looks at the line, so there is exactly one
+    // definition of what `:bc` does and it is `:buffer close`.
+    let trimmed = &expand_shorthand(trimmed);
+
     // Substitution (`s/.../.../` or `%s/.../.../`) is recognised before the
     // whitespace split, since its argument contains no spaces to split on.
     if let Some(cmd) = parse_substitution(trimmed) {
@@ -549,17 +554,15 @@ pub fn parse(input: &str) -> Result<Command, CommandError> {
             "" => Ok(Command::Write(None)),
             "all" => Ok(Command::WriteAll),
             "as" => Err(CommandError::MissingArgument("write as")),
+            _ if rest.starts_with("quit ") => {
+                Ok(Command::WriteQuit(Some(rest["quit ".len()..].trim().to_string())))
+            }
             _ if rest.starts_with("as ") => Ok(Command::SaveAs {
                 path: rest["as ".len()..].trim().to_string(),
                 force: false,
             }),
             path => Ok(Command::Write(Some(path.to_string()))),
         },
-        "wq" | "x" => Ok(Command::WriteQuit(if rest.is_empty() {
-            None
-        } else {
-            Some(rest.to_string())
-        })),
         "count" | "wc" => match rest {
             "" => Ok(Command::Count),
             // 字數 is one subject: how much there is, how much today, and how
@@ -638,10 +641,20 @@ pub fn parse(input: &str) -> Result<Command, CommandError> {
             .map_err(|_| CommandError::MissingArgument("goto")),
         "recover" => Ok(Command::Recover { discard: false }),
         "recover!" => Ok(Command::Recover { discard: true }),
-        "quit" | "q" => Ok(Command::Quit { force: false }),
+        // **`all` is a kind of quitting**, so it is a word under `quit` and
+        // the fold's own rule applies: `:quitall` was the half-long,
+        // half-short shape that rule exists to remove (#364). `:qa` is its
+        // initials and stays.
+        "quit" | "q" => match rest {
+            "" => Ok(Command::Quit { force: false }),
+            "all" => Ok(Command::QuitAll { force: false }),
+            "all!" => Ok(Command::QuitAll { force: true }),
+            other => Err(CommandError::InvalidArgument {
+                command: "quit",
+                value: other.to_string(),
+            }),
+        },
         "quit!" | "q!" => Ok(Command::Quit { force: true }),
-        "quitall" | "qa" => Ok(Command::QuitAll { force: false }),
-        "quitall!" | "qa!" => Ok(Command::QuitAll { force: true }),
         "undo" | "u" => Ok(Command::Undo),
         "redo" | "red" => Ok(Command::Redo),
         // 分詞邊界, from four sides — see [`Word`]. `:segment` and `:words`
@@ -1185,6 +1198,20 @@ pub fn parse(input: &str) -> Result<Command, CommandError> {
                 }),
             },
         },
+        // **A hyphen, because these are two actions and not a subject and its
+        // kind** (2026-09-10). `:buffer close` is a *kind of* buffer command
+        // and `:write all` a *kind of* write, so the tree spells them with a
+        // space and the menu drills into them. 「Write **and** quit」 is not a
+        // kind of writing — it is two verbs — and it earns the hyphen that
+        // says so. It also settles the ambiguity that spelling cost: `write`
+        // takes a path, so `:write quit` had to be read as either a word or a
+        // file called `quit`, and `:write quit!` as a file called `quit!`.
+        // One token, and there is nothing to disambiguate.
+        "write-quit" | "wq" | "x" => Ok(Command::WriteQuit(if rest.is_empty() {
+            None
+        } else {
+            Some(rest.to_string())
+        })),
         "buffer" => match rest {
             "next" => Ok(Command::NextBuffer),
             "previous" => Ok(Command::PreviousBuffer),
@@ -1816,7 +1843,7 @@ const FORCEABLE: &[&str] = &[
     // and onto a word: `:bclose!` is now `:buffer close!`, and a bang belongs
     // to the line it ends, not to `buffer`.
     "buffer close!",
-    "quitall!",
+    "quit all!",
     "write!",
     "reload!",
     "quit!",
@@ -1934,7 +1961,13 @@ fn entry_named(head: &str) -> Option<&'static Entry> {
 #[derive(Debug, Clone)]
 pub struct Choice {
     pub name: &'static str,
-    pub alias: Option<&'static str>,
+    /// The other spellings of this same command, joined for the brackets.
+    ///
+    /// **All of them, not the first.** `write-quit` answers to `:wq` and to
+    /// vi's `:x`, and `x` appears nowhere else in the menu — it is an alias of
+    /// an entry rather than a line of its own — so a bracket showing only the
+    /// first would be the only place it could have been found, showing half.
+    pub alias: Option<String>,
     /// The shortest prefix that names this and nothing else beside it, when
     /// that is shorter than the whole word.
     ///
@@ -3080,6 +3113,16 @@ pub const COUNT: &[Word] = &[
 /// `:write all` was `:wa`, `:write as <檔名>` was `:saveas`. Everything else
 /// after `:write` is still a path, which is why the argument is
 /// [`Args::PathOr`] and not a plain word list.
+/// What `:quit` may be finished with.
+pub const QUIT: &[Word] = &[
+    Word {
+        name: "all",
+        help: "cmd.quit.all",
+        needs: &[],
+        then: Args::None,
+    },
+];
+
 pub const WRITE: &[Word] = &[
     Word {
         name: "all",
@@ -3230,13 +3273,6 @@ pub const COMMANDS: &[Entry] = &[
         args: Args::PathOr(WRITE),
     },
     Entry {
-        name: "wq",
-        aliases: &["x"],
-        help: "cmd.commands.wq",
-        needs: &[],
-        args: Args::Path,
-    },
-    Entry {
         name: "recover",
         aliases: &[],
         help: "cmd.commands.recover",
@@ -3290,15 +3326,16 @@ pub const COMMANDS: &[Entry] = &[
         aliases: &["q"],
         help: "cmd.commands.quit",
         needs: &[],
-        args: Args::None,
+        args: Args::Words(QUIT),
     },
     Entry {
-        name: "quitall",
-        aliases: &["qa"],
-        help: "cmd.commands.quitall",
+        name: "write-quit",
+        aliases: &["wq", "x"],
+        help: "cmd.commands.write-quit",
         needs: &[],
-        args: Args::None,
+        args: Args::Path,
     },
+
     Entry {
         name: "undo",
         aliases: &["u"],
@@ -3583,9 +3620,104 @@ pub fn takes_text(line: &str) -> bool {
 /// merge and `:check` is the verb, and no amount of looking turns one string
 /// into the other. Aliases are listed beside their names for the same reason
 /// the names are: `:bc` was a real thing to type and stopped being one.
+/// A short spelling, and the whole line it stands for (#363).
+///
+/// **The rule the author gave**: a full command is folded and says what it does
+/// — `:buffer close`, `:write quit` — and a shorthand is **its initials**,
+/// nothing else. So `:bc` yes, `:bclose` no: a half-short, half-long spelling
+/// is neither one thing nor the other, and it is the shape the fold of §5.2.4
+/// went to the trouble of removing.
+///
+/// Kept as an expansion rather than as six more arms in `parse`, so a
+/// shorthand cannot drift from the command it is short for: there is one
+/// definition of what `:bc` does, and it is `:buffer close`. The bang comes
+/// along for free (`:bc!` is `:buffer close!`), and so does anything the long
+/// form ever grows.
+///
+/// **Only the ones that name a *line*.** A short spelling of a one-word
+/// command is what `Entry::aliases` is for — `:wq` and `:x` are `write-quit`'s
+/// aliases and shown in its brackets like every other alias. This table is for
+/// the ones that stand for two words, which no alias can express.
+pub const SHORTHANDS: &[(&str, &str)] = &[
+    ("bc", "buffer close"),
+    ("bn", "buffer next"),
+    ("bp", "buffer previous"),
+    ("wa", "write all"),
+    ("qa", "quit all"),
+    // The one vi never had: 「open the file and start typing Chinese」.
+    ("yo", "yume on"),
+];
+
+/// The shorthands that name a two-word line, as entries of the list (#363).
+///
+/// **An alias is not a shortcut**: it is another name for the command, so it
+/// belongs in the list beside the names, carries the same help, and narrows on
+/// the same prefix rule. A reader who types `:b` sees `:buffer` and `:bc`
+/// `:bn` `:bp`, and nothing tells them one of those is spelled differently
+/// underneath — because for the purpose of using it, it is not.
+///
+/// The one-word commands need nothing here: `:wq` and `:x` are `write-quit`'s
+/// declared aliases and the list already shows them.
+fn shorthand_choices(typed: &str) -> impl Iterator<Item = Choice> + '_ {
+    SHORTHANDS
+        .iter()
+        .filter(move |(short, _)| short.starts_with(typed))
+        .filter_map(|(short, long)| {
+            Some(Choice {
+                name: short,
+                needs: &[],
+                alias: None,
+                // Already the short spelling; there is nothing shorter to show.
+                short: None,
+                help: help_of(long)?,
+                leading: ":",
+                under: String::new(),
+                note: None,
+            })
+        })
+}
+
+/// What a whole line's help is, by the walk `names_something` walks.
+fn help_of(line: &str) -> Option<&'static str> {
+    let mut words = line.split_whitespace();
+    let entry = entry_named(words.next()?)?;
+    let mut args = &entry.args;
+    let mut help = entry.help;
+    for word in words {
+        let found = pick(word, args.words()?)?;
+        help = found.help;
+        args = &found.then;
+    }
+    Some(help)
+}
+
+/// Put the long line back, if the first word is a short spelling of one.
+fn expand_shorthand(line: &str) -> String {
+    let (head, rest) = match line.split_once(char::is_whitespace) {
+        Some((head, rest)) => (head, rest.trim_start()),
+        None => (line, ""),
+    };
+    let (word, bang) = match head.strip_suffix('!') {
+        Some(word) => (word, "!"),
+        None => (head, ""),
+    };
+    let Some((_, long)) = SHORTHANDS.iter().find(|(short, _)| *short == word) else {
+        return line.to_string();
+    };
+    match rest.is_empty() {
+        true => format!("{long}{bang}"),
+        false => format!("{long}{bang} {rest}"),
+    }
+}
+
+/// **`bc` and `wa` came back** (2026-09-10). The fold retired them along with
+/// `bclose` and `wall`, on the rule that a leaf keeps its name and the tree
+/// says the rest. That is right for the twenty commands a reader meets once;
+/// it was wrong for the four typed all day, whose short spellings are in every
+/// vi user's fingers. The long spellings still work and still say what they do
+/// — these are a second way in, not a rename back.
 const RENAMED: &[(&str, &str)] = &[
     ("appearance", "theme"),
-    ("bc", "buffer close"),
     ("bclose", "buffer close"),
     ("conflicts", "check merge"),
     ("note", "view punct"),
@@ -3593,7 +3725,6 @@ const RENAMED: &[(&str, &str)] = &[
     ("sav", "write as"),
     ("saveas", "write as"),
     ("search", "table find"),
-    ("wa", "write all"),
     ("wall", "write all"),
 ];
 
@@ -3680,7 +3811,7 @@ pub fn complete_at(line: &str) -> (usize, Vec<Choice>) {
             .map(|e| Choice {
                 name: e.name,
                 needs: e.needs,
-                alias: e.aliases.first().copied(),
+                alias: (!e.aliases.is_empty()).then(|| e.aliases.join(" ")),
                 // **Among the aliases too.** `:table jump` has no alias of its own
                 // and no other *name* starts with `ro`, so the shortest walk
                 // over names alone offered `(ro)` — while `ro` is `:readonly`'s
@@ -3699,6 +3830,7 @@ pub fn complete_at(line: &str) -> (usize, Vec<Choice>) {
                 under: String::new(),
                 note: None,
             })
+            .chain(shorthand_choices(typed))
             .collect(),
         // **The same walk the parser walks** (§5.2.2 fault 1): `walk` resolves
         // the head by prefix and picks each word below it the same way, so the
@@ -3876,6 +4008,10 @@ fn walk(words: &[(usize, &str)]) -> Option<&'static Args> {
 /// this table's vocabulary.
 pub fn names_something(line: &str) -> Result<(), String> {
     let line = line.strip_prefix(':').unwrap_or(line);
+    // A shorthand names the line it stands for (#363), so the documents may
+    // teach `:wq` — what it names is `write quit`.
+    let expanded = expand_shorthand(line);
+    let line = expanded.as_str();
     let mut words = line.split_whitespace();
     let Some(head) = words.next() else {
         return Err(String::from(":"));
@@ -4754,9 +4890,12 @@ mod tests {
 
     #[test]
     fn completion_narrows_as_the_command_is_typed() {
+        // **Every command, and every spelling that is one** (#363). An alias
+        // that names a whole line is in the list beside the names, because an
+        // alias is another name for the command and not a shortcut to it.
         assert_eq!(
             complete("").len(),
-            COMMANDS.len(),
+            COMMANDS.len() + SHORTHANDS.len(),
             "`:` alone lists them all"
         );
         // One name, not three: `:ruby-on` and `:ruby-off` were the setting
@@ -4784,11 +4923,26 @@ mod tests {
         // Two levels down, the same rule and the same spelling.
         let format: Vec<String> = complete("ruby format").iter().map(Choice::written).collect();
         assert_eq!(format, ["format", "format html", "format typst"]);
-        // Aliases match too, so `:w` finds the command it is short for.
+        // **A shorthand completes into what it is short for** (#363): `:wq`
+        // is `:write quit`, so that is the word offered — the reader who typed
+        // the short spelling is shown the long one, which is the only spelling
+        // that says what it does.
+        // **An alias is another name, not a shortcut** (#363): `:wq` is
+        // `write-quit`'s declared alias and finds the entry; `:bc` names a
+        // whole line and is in the list as itself.
         assert_eq!(
             complete("wq").iter().map(|e| e.name).collect::<Vec<_>>(),
-            ["wq"]
+            ["write-quit"]
         );
+        assert_eq!(
+            complete("bc").iter().map(|e| e.name).collect::<Vec<_>>(),
+            ["bc"]
+        );
+        // …and `:b` keeps the command and its lines' spellings together.
+        let under_b: Vec<&str> = complete("b").iter().map(|e| e.name).collect();
+        for want in ["buffer", "bc", "bn", "bp"] {
+            assert!(under_b.contains(&want), "{want} missing from {under_b:?}");
+        }
         assert!(complete("zzz").is_empty());
     }
 
@@ -4841,7 +4995,17 @@ mod tests {
         // derivation of it — the menu prints `Choice::short`, so that is the
         // string this has to hold to account.
         for choice in complete("") {
-            let entry = COMMANDS.iter().find(|e| e.name == choice.name).unwrap();
+            // A shorthand names a whole line rather than an entry (#363), and
+            // shows no short form of its own — it *is* the short form.
+            let Some(entry) = COMMANDS.iter().find(|e| e.name == choice.name) else {
+                assert!(
+                    SHORTHANDS.iter().any(|(short, _)| *short == choice.name),
+                    "`{}` is in the list and is neither a command nor a shorthand",
+                    choice.name
+                );
+                assert_eq!(choice.short, None, "a shorthand has nothing shorter");
+                continue;
+            };
             assert_eq!(choice.short, short(entry.name), "one rule, not two");
             if let Some(short) = choice.short {
                 // It resolves, **and it resolves to this one**. Checking only
@@ -4931,7 +5095,23 @@ mod tests {
         // A path is the caller's business, and a word nothing accepts is
         // nothing rather than the whole list again.
         assert!(complete("write draft.md ").is_empty());
-        assert!(complete("quit ").is_empty());
+        // …and `:quit ` offers the one word it has, since #364 folded
+        // `:quitall` into it.
+        assert_eq!(
+            complete("quit ").iter().map(|e| e.name).collect::<Vec<_>>(),
+            ["all"]
+        );
+        // **`:qa` is in the list as itself** (#363): an alias is another name
+        // for the command, not a shortcut to it, so it narrows like a name.
+        assert_eq!(
+            complete("qa").iter().map(|e| e.name).collect::<Vec<_>>(),
+            ["qa"]
+        );
+        // …and `:q` keeps them together: the command and the two spellings
+        // that stand for lines beginning with it.
+        let under_q: Vec<&str> = complete("q").iter().map(|e| e.name).collect();
+        assert!(under_q.contains(&"quit"), "{under_q:?}");
+        assert!(under_q.contains(&"qa"), "{under_q:?}");
     }
 
     /// A word that names nothing at the depth it was typed at is looked for

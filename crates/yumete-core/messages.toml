@@ -563,7 +563,7 @@ key = "cmd.commands.buffer"
 zht = "開着的檔案：列出、切換、關掉"
 zhs = "开着的档案：列出、切换、关掉"
 en = "the open files: list, switch, close"
-find = "緩衝區 缓冲区 檔案 文件 分頁 標籤 tabs files switch"
+find = "緩衝區 缓冲区 檔案 文件 分頁 標籤 tabs files switch bn bp bc"
 
 [[message]]
 # : 命令選單裏 check 那一項的說明（commands 組）
@@ -700,14 +700,6 @@ zht = "關掉這一個檔案；只剩一個時纔真的退出（`quit!` 不管�
 zhs = "关掉这一个档案；只剩一个时才真的退出（`quit!` 不管改动）"
 en = "close this file; leave only when it was the last one (`quit!` ignores changes)"
 find = "退出 離開 离开 關閉 关闭 exit close bc"
-
-[[message]]
-# : 命令選單裏 quitall 那一項的說明（commands 組）
-key = "cmd.commands.quitall"
-zht = "全部退出，開着幾個都走（`quitall!` 不管改動）"
-zhs = "全部退出，开着几个都走（`quitall!` 不管改动）"
-en = "leave, however many files are open (`quitall!` ignores changes)"
-find = "退出 離開 离开 全部 quit all qa exit"
 
 [[message]]
 # : 命令選單裏 readonly 那一項的說明（commands 組）
@@ -878,20 +870,20 @@ en = "words: which list, the tint, the level"
 find = "分詞 分词 詞表 词表 粒度 segmentation dictionary"
 
 [[message]]
-# : 命令選單裏 wq 那一項的說明（commands 組）
-key = "cmd.commands.wq"
-zht = "存好再退出"
-zhs = "存好再退出"
-en = "save, then leave"
-find = "存了再退 保存退出 save quit"
-
-[[message]]
 # : 命令選單裏 write 那一項的說明（commands 組）
 key = "cmd.commands.write"
 zht = "存檔；給路徑存一份副本，`:write as` 纔換過去"
 zhs = "存档；给路径存一份副本，`:write as` 才换过去"
 en = "save; a path writes a copy, `:write as` moves to it"
-find = "保存 存檔 存档 寫入 写入 save"
+find = "保存 存檔 存档 寫入 写入 save wa"
+
+[[message]]
+# 存好再退出。連字號：這是兩個並列的動作，不是 write 的一種
+key = "cmd.commands.write-quit"
+zht = "存好再退出（短寫 `:wq`，也認 vi 的 `:x`）"
+zhs = "存好再退出（短写 `:wq`，也认 vi 的 `:x`）"
+en = "save, then leave (short: :wq, and vi's :x)"
+find = "存了再退 保存退出 write and quit exit wq x"
 
 [[message]]
 # : 命令選單裏 yume 那一項的說明（commands 組）
@@ -899,7 +891,7 @@ key = "cmd.commands.yume"
 zht = "輸入法：現在用的是哪一個；換方案、拆分注解"
 zhs = "输入法：现在用的是哪一个；换方案、拆分注解"
 en = "the IME: which one is answering, changing scheme, the 拆分 annotation"
-find = "輸入法 输入法 宇浩 方案 拆分 注解 ime scheme pinyin"
+find = "輸入法 输入法 宇浩 方案 拆分 注解 ime scheme pinyin yo"
 
 [[message]]
 # : 命令選單裏 delayed 那一項的說明（commits 組）
@@ -1243,6 +1235,14 @@ zht = "候選框：光標旁邊的那張帶框的表"
 zhs = "候选框：光标旁边的那张带框的表"
 en = "候選框: the bordered list beside the caret"
 find = "候選 候选 面板 候選框 候选框 full"
+
+[[message]]
+# :quit all —— 全部關掉再走；短寫 :qa
+key = "cmd.quit.all"
+zht = "每個開着的檔案都關掉，然後離開（短寫 `:qa`）"
+zhs = "每个开着的档案都关掉，然后离开（短写 `:qa`）"
+en = "close every open file, then leave (short: :qa)"
+find = "全部退出 全關 退出全部 quit all close everything qa"
 
 [[message]]
 # : 命令選單裏 auto 那一項的說明（reload 組）
