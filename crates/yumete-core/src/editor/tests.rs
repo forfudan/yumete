@@ -616,7 +616,7 @@ fn format_ruby_rewrites_every_reading_into_one_dialect() {
 #[test]
 fn a_typst_reading_is_read_too() {
     let mut ed = typed("讀#ruby(\"漢字\", \"hàn zì\")");
-    ed.execute(":ruby typst").unwrap();
+    ed.set_ruby(crate::ruby::Dialects::only(crate::ruby::Dialect::Typst));
     press(&mut ed, "gg3l");
     ed.execute(":ruby").unwrap();
     assert_eq!(ed.prompt(), Some(("注", "hàn zì")));
@@ -10279,7 +10279,7 @@ fn moving_the_caret_does_not_throw_a_table_s_padding_away() {
     let poison = |ed: &Editor| {
         let mut held = ed.pad_cache.borrow_mut();
         let (_, runs) = held.as_mut().expect("the walk is remembered");
-        for row in runs.iter_mut() {
+        for row in runs.runs.iter_mut() {
             *row = vec![(0, "毒".to_string())];
         }
     };
@@ -10303,6 +10303,128 @@ fn moving_the_caret_does_not_throw_a_table_s_padding_away() {
         vec![(0, "毒".to_string())],
         "under 所見即所得 the caret decides what comes off the row",
     );
+}
+
+/// The readings laid out on a paragraph are worked out once per revision and
+/// remembered (#315): everything that draws a page asks, and so does the wrap
+/// — two to five times a keystroke — and reading them costs the paragraph
+/// materialised into characters and walked.
+///
+/// So the memo has to see an edit, and it has to see `:ruby` too.
+#[test]
+fn a_paragraph_s_readings_are_read_again_when_it_changes() {
+    let mut ed = typed("讀<ruby>漢<rt>hàn</rt></ruby>字");
+    let reading = |ed: &Editor| {
+        ed.readings_on_line(0)
+            .into_iter()
+            .map(|g| (g.start, g.end))
+            .collect::<Vec<_>>()
+    };
+    let first = reading(&ed);
+    assert_eq!(first.len(), 1, "one group: {first:?}");
+    assert_eq!(reading(&ed), first, "asked twice, answered the same");
+
+    // An edit ahead of the group moves it, and the revision is what says so.
+    ed.execute(":0").unwrap();
+    ed.on_key(Key::Char('i'));
+    ed.on_key(Key::Char('新'));
+    ed.on_key(Key::Esc);
+    assert_eq!(
+        reading(&ed),
+        first.iter().map(|&(a, b)| (a + 1, b + 1)).collect::<Vec<_>>(),
+        "the group moved one character along with the text",
+    );
+
+    // …and so does `:ruby`, at a revision that never moved: `<ruby>` is not
+    // Typst's spelling, so read as Typst alone the line lays out nothing.
+    ed.set_ruby(crate::ruby::Dialects::only(crate::ruby::Dialect::Typst));
+    assert!(
+        reading(&ed).is_empty(),
+        "read as Typst, the HTML group is just text: {:?}",
+        reading(&ed),
+    );
+}
+
+/// A row nobody touched keeps last time's lists (#316), so what the memo
+/// hands back has to be **what a cold walk would have said** — the column a
+/// reused row sits in belongs to the whole table, and one cell growing moves
+/// every other row.
+///
+/// Told by asking twice: once with the memo warm from the keystroke that
+/// just landed, and once with it thrown away.
+#[test]
+fn a_reused_row_says_what_a_cold_walk_would_have_said() {
+    // Sixteen 漢字 is 32 columns — the cap — so the first cell folds, and its
+    // fold moves with every character typed into it.
+    let mut ed = typed("| 甲乙丙丁戊己庚辛壬癸子丑寅卯辰巳 | 乙 |\n| --- | --- |\n| 丙 | 丁 |\n");
+    ed.execute(":render full").unwrap();
+    assert!(ed.cell_folds(), "the cap is what makes a row's list worth reusing");
+
+    // Into the *first* row's first cell, which the last row never reads —
+    // except through the width of the column they share.
+    ed.on_key(Key::Char('l'));
+    ed.on_key(Key::Char('l'));
+    ed.on_key(Key::Char('i'));
+    for c in "戊己庚".chars() {
+        ed.on_key(Key::Char(c));
+    }
+    let agrees = |ed: &Editor, when: &str| {
+        let warm: Vec<_> = (0..3).map(|i| ed.drawn_on_line(i)).collect();
+        ed.pad_cache.borrow_mut().take();
+        let cold: Vec<_> = (0..3).map(|i| ed.drawn_on_line(i)).collect();
+        assert_eq!(warm, cold, "{when}");
+    };
+    // Between keystrokes the other rows' text has not moved at all.
+    assert_eq!(
+        ed.line_text(2).as_deref(),
+        Some("| 丙 | 丁 |\n"),
+        "the last row's own text never moved",
+    );
+    agrees(&ed, "the rows carried forward still fit a cell being typed in");
+
+    // And `Esc` squares the table up in the *file*: now every row's text has
+    // moved, with the caret on none of them, which is the other way a
+    // carried-forward answer could go stale.
+    ed.on_key(Key::Char('辛'));
+    ed.on_key(Key::Esc);
+    assert_ne!(
+        ed.line_text(2).as_deref(),
+        Some("| 丙 | 丁 |\n"),
+        "the last row was padded out in the file",
+    );
+    agrees(&ed, "the rows carried forward still fit a table that squared up");
+}
+
+/// The other way a carried-forward row goes stale (#316): 所見即所得 puts a
+/// construct's markup back on the page under the caret, so a row's own list
+/// moves when the caret walks on or off it — with the text never touched.
+#[test]
+fn a_caret_walking_off_a_row_puts_its_markup_back_away() {
+    let mut ed = typed("| 甲乙丙丁戊己庚辛壬癸子丑寅卯辰巳 | 乙 |\n| --- | --- |\n| **丙** | 丁 |\n");
+    ed.execute(":render full").unwrap();
+    let agrees = |ed: &Editor, when: &str| {
+        let warm: Vec<_> = (0..3).map(|i| ed.drawn_on_line(i)).collect();
+        ed.pad_cache.borrow_mut().take();
+        let cold: Vec<_> = (0..3).map(|i| ed.drawn_on_line(i)).collect();
+        assert_eq!(warm, cold, "{when}");
+    };
+
+    // Onto the 丙, which is inside `**丙**` — so that row keeps its stars.
+    ed.execute(":3").unwrap();
+    ed.on_key(Key::Char('l'));
+    ed.on_key(Key::Char('l'));
+    assert!(
+        ed.hidden_on_line(2).is_empty(),
+        "the caret's own construct is never hidden: {:?}",
+        ed.hidden_on_line(2),
+    );
+    agrees(&ed, "the row under the caret is drawn with its markup on");
+
+    // Off it again, and the stars go back off the page — two columns
+    // narrower, on a row whose text never moved.
+    ed.on_key(Key::Char('k'));
+    assert!(!ed.hidden_on_line(2).is_empty(), "the stars are off the page again");
+    agrees(&ed, "a row the caret walked off is worked out again");
 }
 
 /// A `.md` that holds a table anywhere is opened with a grid view over it,
@@ -10399,4 +10521,213 @@ fn either_cell_switch_opens_the_table_out_from_the_other() {
     ed.toggle_cell_folds();
     ed.toggle_cell_folds();
     assert_eq!(ed.cell_width_now(), CellWidth::Whole);
+}
+
+/// The block scan reads each line's opening **where the rope keeps it** when
+/// it can (#313), rather than copying it out — so the answer must not depend
+/// on where the rope happens to have divided the document into chunks.
+///
+/// Told against the specification: the first [`crate::markdown::PREFIX`]
+/// characters of every line, fed to a scanner of its own.
+#[test]
+fn the_block_scan_reads_the_same_document_however_the_rope_holds_it() {
+    // Big enough to span many of the rope's chunks, so lines fall on both
+    // sides of a boundary — including lines longer than the opening that is
+    // read, which are the ones that must still be copied.
+    // The metadata key runs past the opening that is read, and its colon with
+    // it: read as far as the contract says and this is not `key: value` at
+    // all, so the front matter ends here. Read whole, it would not — which is
+    // the difference a borrowed line must never make.
+    let mut text = String::from("---\n");
+    text.push_str(&format!("{}: 卷一\n", "k".repeat(70)));
+    text.push_str("---\n\n");
+    for i in 0..3_000 {
+        text.push_str(&format!("## 第{i}節\n\n"));
+        text.push_str("The morning was clear and the road ran east, and he did not look back once.\n");
+        text.push_str("他站在門口。\n\n");
+        text.push_str("```rust\nlet x = 1;\n```\n\n");
+        text.push_str("> 引用一行\n\n");
+    }
+    let dir = std::env::temp_dir().join(format!("yumete-scanshape-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let doc = dir.join("shape.md");
+    std::fs::write(&doc, &text).unwrap();
+    let mut ed = Editor::new();
+    ed.open_file(&doc).unwrap();
+
+    let rope = ed.current_buffer().rope();
+    let mut want = Vec::with_capacity(rope.len_lines());
+    let mut scanner = crate::markdown::BlockScanner::new();
+    for line in 0..rope.len_lines() {
+        let whole = rope.line(line);
+        let opening: String = whole.chars().take(crate::markdown::PREFIX).collect();
+        want.push(scanner.feed(&opening, whole.len_chars()));
+    }
+    assert_eq!(
+        ed.blocks_through(rope.len_lines() - 1),
+        want,
+        "the scan read a different document from the one the rope holds",
+    );
+
+    // And again one character in, since an edit is what throws the scan away.
+    ed.execute(":2").unwrap();
+    ed.on_key(Key::Char('i'));
+    ed.on_key(Key::Char('甲'));
+    let rope = ed.current_buffer().rope();
+    let mut want = Vec::with_capacity(rope.len_lines());
+    let mut scanner = crate::markdown::BlockScanner::new();
+    for line in 0..rope.len_lines() {
+        let whole = rope.line(line);
+        let opening: String = whole.chars().take(crate::markdown::PREFIX).collect();
+        want.push(scanner.feed(&opening, whole.len_chars()));
+    }
+    assert_eq!(ed.blocks_through(rope.len_lines() - 1), want, "after an edit");
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+/// What a key costs in a **long manuscript** (#313) — the block every line
+/// belongs to is a forward fold from the top of the document, and it is
+/// re-folded on every edit.
+///
+/// Mixed English and Chinese, which is the ordinary case and the bad one:
+/// English prose breaks into many short lines, and this walk is per line.
+/// Run with `cargo test --release -- --ignored the_cost_of_a_key_in_a_long_file
+/// --nocapture`.
+#[test]
+#[ignore = "a benchmark, not a test"]
+fn the_cost_of_a_key_in_a_long_file() {
+    use std::time::Instant;
+    for paragraphs in [500usize, 2_000, 8_000] {
+        let mut text = String::from("# 卷一\n\n");
+        for i in 0..paragraphs {
+            text.push_str(&format!("## 第{i}節\n\n"));
+            text.push_str("The morning was clear and the road ran east.\n");
+            text.push_str("他站在門口，看着那條路一直伸到山那邊去。\n");
+            text.push_str("She said nothing for a long while.\n\n");
+            text.push_str("```\nlet x = 1;\n```\n\n");
+        }
+        let dir = std::env::temp_dir().join(format!("yumete-blockbench-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let doc = dir.join(format!("m{paragraphs}.md"));
+        std::fs::write(&doc, &text).unwrap();
+
+        let mut ed = Editor::new();
+        ed.open_file(&doc).unwrap();
+        ed.set_wrap_width(80);
+        ed.set_page(50, 80);
+        let lines = ed.current_buffer().line_count();
+        ed.execute(":2").unwrap();
+        ed.on_key(Key::Char('i'));
+        // A key is only half of it: the page is what asks which block each
+        // line is in, so the frame after the key is part of the cost.
+        let draw = |ed: &Editor| {
+            // What a frame asks: which block each line down to the bottom of
+            // this page belongs to. A fence opened above decides what the
+            // lines below it mean, so it is a walk from the top.
+            let _ = ed.blocks_through(ed.cursor_line() + 50);
+        };
+        for _ in 0..3 {
+            ed.on_key(Key::Char('甲'));
+            draw(&ed);
+        }
+
+        let began = Instant::now();
+        let n = 20;
+        for _ in 0..n {
+            ed.on_key(Key::Char('乙'));
+            draw(&ed);
+        }
+        println!(
+            "{lines:>7} lines  {:>8.3} ms a key",
+            began.elapsed().as_secs_f64() * 1000.0 / n as f64,
+        );
+        ed.on_key(Key::Esc);
+        std::fs::remove_dir_all(&dir).ok();
+    }
+}
+
+/// What a key costs in **one very long paragraph** (#315) — a plain-text
+/// export, a log, a chapter pasted in as one line.
+///
+/// The rows a paragraph wraps into are remembered, but taking the memo is
+/// itself a walk down the whole paragraph: its text is hashed to make the
+/// key, and the answer is cloned on the way out. Run with
+/// `cargo test --release -- --ignored the_cost_of_a_key_in_one_paragraph
+/// --nocapture`.
+#[test]
+#[ignore = "a benchmark, not a test"]
+fn the_cost_of_a_key_in_one_paragraph() {
+    use std::time::Instant;
+    for chars in [20_000usize, 200_000, 1_000_000] {
+        let dir = std::env::temp_dir().join(format!("yumete-wrapbench-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let doc = dir.join(format!("p{chars}.txt"));
+        std::fs::write(&doc, "甲乙丙丁戊己庚辛".repeat(chars / 8)).unwrap();
+
+        let mut ed = Editor::new();
+        ed.open_file(&doc).unwrap();
+        ed.set_wrap_width(80);
+        ed.set_page(50, 80);
+
+        let mut cost = |what: &str, key: Key, ed: &mut Editor| {
+            for _ in 0..3 {
+                ed.on_key(key.clone());
+            }
+            let began = Instant::now();
+            let n = 20;
+            for _ in 0..n {
+                ed.on_key(key.clone());
+            }
+            let ms = began.elapsed().as_secs_f64() * 1000.0 / n as f64;
+            println!("{chars:>9} chars  {what:<8} {ms:>8.3} ms a key");
+        };
+        cost("l", Key::Char('l'), &mut ed);
+        cost("j", Key::Char('j'), &mut ed);
+        ed.on_key(Key::Char('i'));
+        cost("insert", Key::Char('乙'), &mut ed);
+        ed.on_key(Key::Esc);
+        std::fs::remove_dir_all(&dir).ok();
+    }
+}
+
+/// **A stopwatch on typing in a table** (#316) — `#[ignore]`d; it prints.
+///
+/// `cargo test -p yumete-core --release the_cost_of_a_key_in_a_table -- --ignored --nocapture`
+#[test]
+#[ignore]
+fn the_cost_of_a_key_in_a_table() {
+    use std::time::Instant;
+    for rows in [500usize, 2000, 5000] {
+        let mut text = String::from("| 名 | 註 |\n| --- | --- |\n");
+        for i in 0..rows {
+            text.push_str(&format!("| 第{i}行 | 甲乙丙丁 |\n"));
+        }
+        let dir = std::env::temp_dir().join(format!("yumete-padbench-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let doc = dir.join(format!("t{rows}.md"));
+        std::fs::write(&doc, &text).unwrap();
+
+        let mut ed = Editor::new();
+        ed.open_file(&doc).unwrap();
+        ed.set_wrap_width(120);
+        ed.set_page(50, 120);
+        ed.execute(":20").unwrap();
+        // The padding only exists when the page squares the table up.
+        assert!(ed.enter_table(), "{}", ed.status());
+        assert!(ed.table_padding_on(), "the padding is what this measures");
+        ed.on_key(Key::Char('i'));
+        // Warm whatever wants warming.
+        ed.on_key(Key::Char('甲'));
+
+        let began = Instant::now();
+        let n = 20;
+        for _ in 0..n {
+            ed.on_key(Key::Char('乙'));
+        }
+        println!(
+            "{rows:>6} rows   {:>8.2} ms a key",
+            began.elapsed().as_secs_f64() * 1000.0 / n as f64
+        );
+        std::fs::remove_dir_all(&dir).ok();
+    }
 }
