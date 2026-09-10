@@ -163,7 +163,17 @@ impl Editor {
             return;
         }
         self.clamp_cursor();
-        self.status = say!("ruby.rewritten-as", dialect.name());
+        // **What it could not read, it says so about** (#331). A `<ruby>` this
+        // parser cannot make sense of — one inside another, one that never
+        // closes, `<rtc>`'s second annotation — is left exactly as it stands,
+        // which is right; reporting the file converted while some of it was
+        // not is what left the writer with a document in two dialects and no
+        // way to know.
+        let left = crate::ruby::unread(&formatted, dialect);
+        self.status = match left {
+            0 => say!("ruby.rewritten-as", dialect.name()),
+            n => say!("ruby.rewritten-but-some-left", dialect.name(), n),
+        };
     }
 
     /// Step Tab's completion through the matching commands, writing each onto

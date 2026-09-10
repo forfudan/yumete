@@ -5345,6 +5345,13 @@ zhs = "注音改写成 {0} 了"
 en = "rewrote the readings as {0}"
 
 [[message]]
+# :ruby-format：改寫完了，但有幾組讀不懂、原樣留着——不能只報「已改寫」
+key = "ruby.rewritten-but-some-left"
+zht = "已改寫為 {0}，但有 {1} 組讀不出來，原樣留着"
+zhs = "已改写为 {0}，但有 {1} 组读不出来，原样留着"
+en = "rewritten as {0}, and {1} left as they were — those could not be read"
+
+[[message]]
 # 給選中的字寫上注音
 key = "ruby.set"
 zht = "注音：{0}"
@@ -6173,6 +6180,13 @@ zhs = "「{0}」不是一个字——行名是一个字"
 en = "'{0}' is not one character — a row is named by one"
 
 [[message]]
+# t F：某一行的格子比標題多，整張表原樣不動，並說出是哪一行
+key = "table.row-torn"
+zht = "第 {0} 行有 {1} 格，標題只有 {2} 格——整張表原樣留着。多半是某一格裏的 | 沒有轉義"
+zhs = "第 {0} 行有 {1} 格，标题只有 {2} 格——整张表原样留着。多半是某一格里的 | 没有转义"
+en = "row {0} has {1} cells and the heading has {2} — the table is left as it is, most often an unescaped | in a cell"
+
+[[message]]
 # 替換會改掉某一行的欄數
 key = "table.row-would-change-width"
 zht = "第 {0} 行會從 {1} 格變成 {2} 格"
@@ -6592,9 +6606,9 @@ en = "wheel: {0} a notch"
 [[message]]
 # 挖完了，詞寫進詞表了（還沒存檔）
 key = "word.discover-found"
-zht = "找到 {0} 個本書自己的詞，寫進了 {1}，已經按它們切了——刪掉不要的，:w 存檔"
-zhs = "找到 {0} 个本书自己的词，写进了 {1}，已经按它们切了——删掉不要的，:w 存档"
-en = "{0} word(s) of this book's own, written into {1} and already segmenting — delete what is not a word, then :w"
+zht = "找到 {0} 個本書自己的詞，已經按它們切了；寫進了 {1}——`:word-list edit` 去取捨"
+zhs = "找到 {0} 个本书自己的词，已经按它们切了；写进了 {1}——`:word-list edit` 去取舍"
+en = "{0} word(s) of this book's own, segmenting already; written into {1} — `:word-list edit` to keep or cut"
 
 [[message]]
 # 寫進詞表的那一段的抬頭（這一行進的是檔案，不是狀態欄）
@@ -6622,9 +6636,9 @@ en = "{0} file(s) read, and no words of this book's own — the dictionary alrea
 [[message]]
 # 挖到的比寫進去的多，說一聲
 key = "word.discover-too-many"
-zht = "寫進了最常見的 {0} 個（一共找到 {1} 個），已經按它們切了——刪掉不要的，:w 存檔"
-zhs = "写进了最常见的 {0} 个（一共找到 {1} 个），已经按它们切了——删掉不要的，:w 存档"
-en = "the commonest {0} written in, of {1} found, already segmenting — delete what is not a word, then :w"
+zht = "最常見的 {0} 個（一共 {1} 個），已經按它們切了；`:word-list edit` 去取捨"
+zhs = "最常见的 {0} 个（一共 {1} 个），已经按它们切了；`:word-list edit` 去取舍"
+en = "the commonest {0} of {1}, segmenting already; `:word-list edit` to keep or cut"
 
 [[message]]
 # 分詞粒度設好了

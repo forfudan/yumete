@@ -8918,8 +8918,21 @@ fn the_book_hands_the_editor_its_own_names_without_being_asked() {
     ed.open_file(&dir.join("ch01.md")).unwrap();
     ed.discover_words(&dir).unwrap();
 
+    // **The chapter is still what is on the screen** (#367): the offer is
+    // written, not shown. 「用户就是单纯想要在显示词，并不想看那个文件。」
+    assert_eq!(
+        ed.current_buffer().path(),
+        Some(dir.join("ch01.md").as_path()),
+        "the writer was left where they were: {}",
+        ed.status()
+    );
     // Written into the list, with its count — and **not to disk**.
-    let list = ed.current_buffer().text();
+    let list = ed
+        .buffers
+        .iter()
+        .find(|b| b.path().is_some_and(|p| p.ends_with("words.txt")))
+        .map(|b| b.text())
+        .expect("the word list is open behind it");
     assert!(list.contains("阿寧"), "{list:?}");
     assert!(list.contains('6'), "the count comes with it: {list:?}");
     assert!(
