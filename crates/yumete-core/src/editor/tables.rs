@@ -1069,6 +1069,18 @@ impl Editor {
     /// indentation, and expanding one would push every column right of it out
     /// of line with the rows above — which is exactly what a table view is
     /// for. In 源碼 there is no table, so a tab there is a tab.
+    /// Which punctuation the table being read is told apart by (#378).
+    ///
+    /// The one place that turns a view's [`Separator`] into a
+    /// [`Wall`](crate::mdtable::Wall), so the padding, the walls and the ruler
+    /// cannot come to disagree about what a cell is.
+    pub(super) fn wall_of_view(&self) -> Option<crate::mdtable::Wall> {
+        match self.table.as_ref()?.separator {
+            Separator::Pipe => Some(crate::mdtable::Wall::Pipe),
+            Separator::Delimiter(c) => Some(crate::mdtable::Wall::Between(c)),
+        }
+    }
+
     pub fn wall_columns(&self, line: usize) -> Vec<usize> {
         let Some(view) = self.table.as_ref() else {
             return Vec::new();
@@ -1161,35 +1173,86 @@ impl Editor {
     /// the markup that came off it and the padding that squared it up have both
     /// moved it.
     pub fn table_ruler_on_line(&self, line: usize) -> Vec<(usize, usize)> {
-        let Some((first, _, at)) = self.grid_walls(line) else {
+        // **基本 gets it too** (#379). It used to ask `grid_walls`, which
+        // answers only at 全, and the author asked for the numbers at 基本 as
+        // well — which its own law allows: 「tb 的原则是只能多字（标注）不能
+        // 少字」, and a strip above the table adds a row of annotation without
+        // hiding, folding or replacing a single character. 源碼 keeps none:
+        // there the file is drawn as it is written.
+        if self.table_level == TableLevel::Off {
+            return Vec::new();
+        }
+        let Some((first, _)) = self.table_lines_at(line) else {
             return Vec::new();
         };
         if line != first {
             return Vec::new();
         }
-        // A `|` row is walled on both sides, so its cells are the gaps between
-        // the walls. A delimited row's walls stand *between* cells, so its first
-        // cell opens at the start of the line and its last runs to the end.
-        if self.table.as_ref().map(|v| v.separator) == Some(Separator::Pipe) {
-            return at.windows(2).map(|w| (w[0] + 1, w[1])).collect();
+        // **Where the cells are is asked, not worked out again.** This used to
+        // derive it: the gaps between the walls for a `|` row, and for a
+        // delimited one a walk that had to remember to trim the newline off
+        // the end or the last column's number was silently dropped. That is
+        // `boxes_of`'s job and it was already doing it for the padding — two
+        // derivations of one rule, and a table would have squared its columns
+        // up against a set of cells the ruler above it did not agree with.
+        self.table_cells_on_line(line)
+    }
+
+    /// Where `line`'s cells begin and end, for **any** row of the table being
+    /// read — not only the one the ruler sits on (#379).
+    ///
+    /// The bar at the top of the page numbers the columns of a table whose own
+    /// head has scrolled away, and it has to number them where they are drawn
+    /// *on the row below it*, not where they were drawn on a row nobody can
+    /// see. Same question, same answer, one derivation.
+    pub fn table_cells_on_line(&self, line: usize) -> Vec<(usize, usize)> {
+        if self.table_level == TableLevel::Off {
+            return Vec::new();
         }
-        // **Without the trim the last cell is one character too wide**, the
-        // ruler asks the layout for a column that is past the end of the row,
-        // and the last column's number is silently not drawn.
-        let len = self
-            .line_text(line)
-            .unwrap_or_default()
-            .trim_end_matches(['\n', '\r'])
-            .chars()
-            .count();
-        let mut cells = Vec::with_capacity(at.len() + 1);
-        let mut opens = 0;
-        for wall in at {
-            cells.push((opens, wall));
-            opens = wall + 1;
+        let (Some(wall), Some(text)) = (self.wall_of_view(), self.line_text(line)) else {
+            return Vec::new();
+        };
+        crate::mdtable::boxes_of(&text, wall)
+    }
+
+    /// Whether the head of the table being read is **off the page**, so the
+    /// reader is in its middle with nothing naming the columns (#379).
+    ///
+    /// The author, 2026-09-11：「在顶部预留一个信息栏（两行：列号+列名）。这个
+    /// 平常不显示，只是在下方是表格中间部分的时候显示。这样它是独立的，也就不
+    /// 会侵扰文本的区域了。」The region is what makes it buildable — the page
+    /// is simply two rows shorter, which is the arithmetic the hint bar and the
+    /// tab bar already do, where a row drawn *over* the text would have been a
+    /// screen row that does not belong to the line it sits on, and the wrap,
+    /// the caret and the click map would each have had to learn what that is.
+    ///
+    /// **The first answer was too coarse**: 「is this table taller than the
+    /// page」, which put the bar up the moment the cursor entered a long table
+    /// even with its head in plain view two rows above. The author, 2026-09-11:
+    /// 「光标进入表格但是表格头部还没出屏幕，顶上的表头就开始显示了。」
+    ///
+    /// Reserving rows changes how many lines the page shows, which is the
+    /// thing being asked about — so the test is written against `page_lines`,
+    /// the page's *whole* height, and cannot chase its own tail.
+    pub fn table_head_is_off_the_page(&self, top: usize) -> bool {
+        if self.table_level == TableLevel::Off || !self.table_here() {
+            return false;
         }
-        cells.push((opens, len));
-        cells
+        self.table_lines_at(self.cursor_line())
+            .is_some_and(|(first, _)| {
+                // **Last frame's scroll, and this frame's cursor.** The first
+                // is the real question — the head is off the page when the
+                // page starts below it — but it is settled *while* drawing,
+                // so before the page is divided only last frame's answer
+                // exists, and on the frame you scroll past a head it is one
+                // short. The second closes that: the cursor is always on the
+                // page and the page is `page_lines` tall, so a cursor that far
+                // below the head means the head cannot be on the page
+                // whatever the scroll did. Together they are never late, and
+                // at worst one frame early after scrolling back up — which is
+                // a frame, not a keystroke.
+                top > first || self.cursor_line().saturating_sub(first) >= self.page_lines
+            })
     }
 
     /// The `|` table the cursor is in.

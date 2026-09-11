@@ -171,3 +171,61 @@ fn the_levels_leave_hjkl_alone() {
         assert_eq!(walk, vec![0, 1, 2, 3], "{level} walks characters");
     }
 }
+
+/// A step the reader cannot see is not a step (#379).
+///
+/// Under `t f` the file's own padding comes off the page, so `l` through a
+/// cell's trailing spaces moved the caret and moved nothing on the screen —
+/// the author, 2026-09-11：「如果我一直按 l，光标是定住不动的，然后突然跳到右
+/// 边一格……既然没有显示，就应该允许用户直接跳过去。」
+#[test]
+fn the_caret_steps_over_what_a_table_keeps_off_the_page() {
+    let long = "甲乙丙丁戊己庚辛壬癸子丑寅卯辰巳午未申酉戌亥天地玄黃宇宙洪荒日月盈昃";
+    let text = format!(
+        "| 名 | 傳 |\n| --- | --- |\n| 洛陽 | {long} |\n| 甲 | 乙                                    |\n"
+    );
+    let mut ed = typed(&text);
+    ed.execute(":syntax markdown").unwrap();
+    ed.execute("4").unwrap();
+    press(&mut ed, "tf");
+    let hidden = ed.cell_hidden_on_line(3);
+    assert!(!hidden.is_empty(), "the file's padding is off the page: {hidden:?}");
+    let (from, upto) = hidden[0];
+
+    // Walk to the last character before the hidden run…
+    ed.execute("4").unwrap();
+    let start = ed.cursor();
+    for _ in 0..from - 1 {
+        ed.on_key(Key::Char('l'));
+    }
+    assert_eq!(ed.cursor() - start, from - 1, "at the last visible character");
+    let before = ed.cursor_visual_column();
+
+    // …and one more press clears the whole run rather than walking it blind.
+    ed.on_key(Key::Char('l'));
+    assert_eq!(ed.cursor() - start, upto, "one press, the whole run: {hidden:?}");
+    assert!(
+        ed.cursor_visual_column() > before,
+        "and the page moved with it: {before} -> {}",
+        ed.cursor_visual_column()
+    );
+
+    // Back the same way.
+    ed.on_key(Key::Char('h'));
+    assert_eq!(ed.cursor() - start, from - 1, "and back over it in one");
+}
+
+/// Markup is the other half of what is hidden and it is **not** skipped: it
+/// comes back the moment the caret is in it, which is what 所見即所得 means.
+#[test]
+fn the_caret_still_walks_into_markup_that_opens_for_it() {
+    let mut ed = typed("前文 **重點** 後文\n");
+    ed.execute(":syntax markdown").unwrap();
+    ed.execute(":render full").unwrap();
+    ed.execute("1").unwrap();
+    let start = ed.cursor();
+    for _ in 0..4 {
+        ed.on_key(Key::Char('l'));
+    }
+    assert_eq!(ed.cursor() - start, 4, "one press, one character, into the `**`");
+}
