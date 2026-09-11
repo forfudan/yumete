@@ -7907,9 +7907,15 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     `YTB` blob 錯位，`rebuild_index`（`:81`）走出界。複現過：一個以 256 個 `a` 開頭、
     再加十六行的檔案，`:yume-table` 指過去 →
     `panicked at code_table.rs:81: index out of bounds: the len is 765 but the index is 799`。
-    **yumete 沒有裝 panic hook**，所以進程直接死，帶走每一個沒存的 buffer；本該走的是
-    旁邊那句 `Err("讀不出碼表")`。做法：超過 255 位元組的條目跳過或一致地截斷。
-    另外值得單獨裝一個 panic hook，崩之前把 dirty buffer 落盤。**small**
+    本該走的是旁邊那句 `Err("讀不出碼表")`。做法：超過 255 位元組的條目跳過或一致地截斷。
+    ⚠️ **這一段原本寫着「yumete 沒有裝 panic hook，所以進程直接死，帶走每一個沒存的
+    buffer」——2026-09-11 覆核，那是立項時的狀態，早就不成立了。** `main.rs:507` 裝了
+    hook，`:518` 用 `catch_unwind` 把整個 `run` 包住，崩了會**恢復終端 → 給每個髒
+    buffer 寫救回稿（`rescue_drafts`）→ 存 session → 印出日誌位置 → exit 101**。
+    所以這一條**不再是丟稿子的等級**：它仍然是一個崩潰，該修，但它已經不會帶走誰的字。
+    #300 第四條的又一例：**一句過期的斷言會把一件事的輕重整個說反。**
+    上游那一行 clamp 仍然要補（`yume-core/src/code_table.rs:95`），yumete 這一側也可以
+    在把檔案交出去之前先看一眼有沒有超過 255 位元組的條目——**不必等上游**。**small**
 
 [^345]: 上游 `yume-core/src/engine.rs:2594`：`normal_candidates` 傳的是
     `normal_candidates_capped(code, usize::MAX)`，於是每一個前綴匹配都被物化——125 萬條
