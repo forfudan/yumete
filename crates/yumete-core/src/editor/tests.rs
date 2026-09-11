@@ -6018,7 +6018,17 @@ fn only_the_drawn_mode_draws_the_grid() {
     let mut ed = with_md_table();
     press(&mut ed, "tb");
     assert!(ed.grid_on_line(1).is_empty(), "the pipes stay pipes");
-    assert!(ed.table_ruler_on_line(1).is_empty(), "and no ruler over them");
+    // **The ruler is not part of the drawing** (#379). It used to be — it came
+    // through `grid_walls`, which answers only at 全 — and the author asked
+    // for the numbers at 基本 too, 2026-09-11：「tb 模式可不可以也标注列号」.
+    // Which 基本's own law allows: 「tb 的原则是只能多字（标注）不能少字」, and
+    // a strip above the table adds a row of annotation without hiding, folding
+    // or replacing one character of what the writer typed.
+    assert!(
+        !ed.table_ruler_on_line(1).is_empty(),
+        "基本 numbers the columns: {}",
+        ed.status()
+    );
 
     press(&mut ed, "tf");
     let head: Vec<char> = ed.grid_on_line(1).into_iter().map(|(_, g)| g).collect();
@@ -10727,6 +10737,10 @@ fn the_cost_of_a_key_in_a_table() {
         std::fs::remove_dir_all(&dir).ok();
     }
 }
+
+
+
+
 
 
 

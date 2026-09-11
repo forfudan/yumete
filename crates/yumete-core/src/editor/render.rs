@@ -696,6 +696,22 @@ impl Editor {
     /// and the mouse all read — and they are two functions because only the
     /// tail leaves a mark. A `>` over the spaces between a cell and its pipe
     /// would say something was folded away there, and nothing was.
+    /// What a table keeps off `line` and **will not give back for the caret**
+    /// (#379): the folded tails and the file's own padding.
+    ///
+    /// The other half of [`Self::hidden_on_line`] — the markup — comes back
+    /// the moment the caret is in it, which is what 所見即所得 means, so the
+    /// caret is welcome to walk into it. This half does not: `t w` opens a
+    /// fold and nothing at all opens the slack. The author, 2026-09-11：
+    /// 「tf tt 模式下这种 padding 的空格既然没有显示，就应该允许用户直接跳过
+    /// 去，而不是把光标定在那里但后台还是在过空格。」Which is #212's own law
+    /// read from the other end: if the caret may never stand in a column the
+    /// page does not have, then a motion may not leave it there either.
+    pub fn cell_hidden_on_line(&self, line: usize) -> Vec<(usize, usize)> {
+        let markup = self.markup_off_line(line);
+        self.cell_folds_against(line, &markup)
+    }
+
     fn cell_folds_against(&self, line: usize, markup: &[(usize, usize)]) -> Vec<(usize, usize)> {
         let open = self.folds_open_at(line);
         let mut out = self.cell_tails_against(line, markup, open);

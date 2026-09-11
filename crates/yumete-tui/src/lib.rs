@@ -176,7 +176,7 @@ fn frame_to(
     // not of the page: without the wrap width a paragraph runs off the right
     // edge and the shot shows a book with no second line in it. The 縱 length
     // is the same question asked the other way round.
-    let areas = page_areas(editor, config, Rect::new(0, 0, width, height));
+    let areas = page_areas(editor, config, Rect::new(0, 0, width, height), 0);
     let page = areas.panes[editor.live_pane().min(1)];
     let lines = editor.current_buffer().line_count();
     if editor.layout() == WritingLayout::Vertical {
@@ -416,7 +416,7 @@ pub fn run(
             // …and the half of it the **keys** are in: with a split open the
             // whole text area is twice the page, so `C-f` turned two pages and
             // `C-d` moved a whole pane instead of half of one.
-            let areas = page_areas(editor, config, Rect::new(0, 0, size.width, size.height));
+            let areas = page_areas(editor, config, Rect::new(0, 0, size.width, size.height), 0);
             let page = areas.panes[editor.live_pane().min(1)];
             let lines = editor.current_buffer().line_count();
             if editor.layout() == WritingLayout::Vertical {
@@ -2367,6 +2367,13 @@ struct Areas {
     /// The rule between them, when there are two.
     divider: Option<Rect>,
     tabs: Rect,
+    /// **Two rows at the top of the page, or none** (#379): the column numbers
+    /// and names of a table whose own head has scrolled away.
+    ///
+    /// A region rather than an overlay, which is the whole of why it exists at
+    /// all — the page is two rows shorter and nothing else changes, the same
+    /// arithmetic the tab bar and the hint bar already do.
+    head: Rect,
     /// What the page itself is drawn into, the detail panel already taken off.
     text: Rect,
     detail: Option<Rect>,
@@ -2376,7 +2383,7 @@ struct Areas {
 
 /// Divide `area` up. Pure: it draws nothing and depends only on what the
 /// editor and the config say.
-fn page_areas(editor: &Editor, config: &Config, area: Rect) -> Areas {
+fn page_areas(editor: &Editor, config: &Config, area: Rect, head_rows: u16) -> Areas {
     // Two rows at the foot, answering two questions. The bottom one is *where
     // am I* and never changes shape; the one above it is *what just happened,
     // and what can I press*, and is blank when there is neither. Splitting them
@@ -2403,6 +2410,11 @@ fn page_areas(editor: &Editor, config: &Config, area: Rect) -> Areas {
         ),
         false => (Rect::new(body.x, body.y, body.width, 0), body),
     };
+    // …and the column bar takes its rows off what the tab bar left, for the
+    // same reason and by the same arithmetic.
+    let head_rows = head_rows.min(page.height.saturating_sub(1));
+    let head = Rect::new(page.x, page.y, page.width, head_rows);
+    let page = Rect::new(page.x, page.y + head_rows, page.width, page.height - head_rows);
     let (text, detail) = table::split_detail(editor, config, page);
     // 工作區 (Feature #176). **The cut runs across the direction the text
     // advances in**: 橫排 advances downward, so the panes are 上下; 縱書
@@ -2444,6 +2456,7 @@ fn page_areas(editor: &Editor, config: &Config, area: Rect) -> Areas {
     Areas {
         sidebar,
         tabs,
+        head,
         text,
         panes,
         divider,
@@ -2461,12 +2474,19 @@ fn draw(
     viewport: &mut Seats,
 ) {
     let area = frame.area();
-    let areas = page_areas(editor, config, area);
+    // **Two rows for a table's columns, and only once its own head has gone**
+    // (#379). Asked before the page is divided, because the answer is how tall
+    // the page is, and answered from last frame's scroll together with this
+    // frame's cursor — see `table_head_is_off_the_page`.
+    let top = viewport[editor.live_pane().min(1)].top.line;
+    let head_rows = 2 * u16::from(editor.table_head_is_off_the_page(top));
+    let areas = page_areas(editor, config, area, head_rows);
     let Areas {
         sidebar,
         panes,
         divider,
         tabs: tab_area,
+        head: head_area,
         text: text_area,
         detail,
         hint: hint_area,
@@ -2510,7 +2530,18 @@ fn draw(
                 table::draw(frame, editor, config, *rect, &mut seat.table, peek)
             }
             WritingLayout::Horizontal => {
-                draw_horizontal(frame, editor, config, *rect, &mut seat.top, &mut seat.left, peek)
+                draw_horizontal(
+                    frame,
+                    editor,
+                    config,
+                    *rect,
+                    &mut seat.top,
+                    &mut seat.left,
+                    peek,
+                    // Only the pane the keys are in gets the bar, and only in
+                    // the layout that reserved it.
+                    (which == editor.live_pane().min(1)).then_some(head_area),
+                )
             }
             WritingLayout::Vertical => {
                 vertical::draw(frame, editor, config, *rect, &mut seat.zong, peek)
@@ -3875,7 +3906,7 @@ fn text_at(
     // how a click came to land a row or two from where it was pointed.
     // …and the work area it landed in, which with two of them is the one
     // question a click has to answer before any of the others.
-    let areas = page_areas(editor, config, Rect::new(0, 0, size.width, size.height));
+    let areas = page_areas(editor, config, Rect::new(0, 0, size.width, size.height), 0);
     let live = editor.live_pane().min(1);
     let area = areas.panes[live];
     if mouse.column < area.x
@@ -3996,7 +4027,7 @@ fn tab_at(
     mouse: ratatui::crossterm::event::MouseEvent,
 ) -> Option<usize> {
     let size = size?;
-    let area = page_areas(editor, config, Rect::new(0, 0, size.width, size.height)).tabs;
+    let area = page_areas(editor, config, Rect::new(0, 0, size.width, size.height), 0).tabs;
     if area.height == 0 || mouse.row != area.y {
         return None;
     }
@@ -4481,6 +4512,7 @@ fn draw_horizontal(
     viewport: &mut WrapAnchor,
     left: &mut usize,
     peek: Option<&yumete_core::editor::Pane>,
+    head: Option<Rect>,
 ) -> (u16, u16) {
     let buffer = editor.current_buffer();
     let total_lines = buffer.line_count();
@@ -4713,6 +4745,9 @@ fn draw_horizontal(
     let focus = peek.is_none() && editor.focus();
     let stood_back = ink.faded();
     let mut lines: Vec<Line> = Vec::new();
+    // What the bar at the top of the page will hold, taken from the first row
+    // of the table this page shows (#379).
+    let mut bar_lines: Option<(Option<Line<'static>>, Option<Line<'static>>)> = None;
     for (_, row) in rows_on_screen(editor, rope, measure, *viewport, height) {
         // Which palette this row is drawn off. Everything below asks `ink`, so
         // the whole of 焦點模式 is this one decision. The gutter goes with the
@@ -5052,6 +5087,30 @@ fn draw_horizontal(
             shown: &shown,
             flat: &flat,
         };
+        // **The bar at the top of the page** (#379), filled from the *first*
+        // row of the table the page is showing — the numbers and the names have
+        // to stand over the columns as that row draws them, so they are placed
+        // by the same `Drawn` and the same lead the row itself is placed by.
+        // Anything else and the bar names one column while pointing at another.
+        if head.is_some_and(|bar| bar.height > 0) && bar_lines.is_none() {
+            let cells = editor.table_cells_on_line(row.line);
+            if !cells.is_empty() {
+                let start_in_line = row.start - rope.line_to_char(row.line);
+                let lead = gutter + indent;
+                let names = editor.table_headings();
+                bar_lines = Some((
+                    labels_line(&cells, |i| (i + 1).to_string(), ink, drawn, lead, start_in_line),
+                    labels_line(
+                        &cells,
+                        |i| names.get(i).cloned().unwrap_or_default(),
+                        ink,
+                        drawn,
+                        lead,
+                        start_in_line,
+                    ),
+                ));
+            }
+        }
         // **Whether** the row is bought is `row_has_reading`'s answer and only
         // its own — `rows_on_screen` spends the screen row off that same
         // function, and the mouse, the scroll and the caret are all placed by
@@ -5149,6 +5208,30 @@ fn draw_horizontal(
     // on: past the last line of a short file the page is still the page, and
     // 墨香's light page on a dark terminal made that half of the window black.
     frame.render_widget(Paragraph::new(lines).style(ink.page()), text_area);
+
+    // **The bar, into its own region** (#379). The author's design, and the
+    // reason this is buildable at all — 2026-09-11：「在顶部预留一个信息栏
+    // （两行：列号+列名）……这样它是独立的，也就不会侵扰文本的区域了。」A row
+    // drawn *over* the text would be a screen row that does not belong to the
+    // line it sits on, and the wrap, the caret and the click map would each
+    // have had to learn what that means. A region is just a region: the page
+    // is two rows shorter, which is arithmetic this file already does twice.
+    if let Some(bar) = head.filter(|bar| bar.height > 0) {
+        let (numbers, names) = bar_lines.unwrap_or((None, None));
+        let blank = || Line::from(Span::styled("", ink.page()));
+        // **The order the table's own top has**: the 列號標尺 above the head
+        // row, and the head row's names under it. The bar is those two rows
+        // brought up the page, so seeing it and seeing the table's real top
+        // are the same sight. Drawn the other way round until the author
+        // caught it, 2026-09-11：「你的序號是不是跑到列名的下面了」— it was,
+        // because I had compared the bar to the ruler alone and forgotten what
+        // the ruler sits above.
+        let rows = vec![
+            scrolled(numbers.unwrap_or_else(blank), gutter, left),
+            scrolled(names.unwrap_or_else(blank), gutter, left),
+        ];
+        frame.render_widget(Paragraph::new(rows).style(ink.page()), bar);
+    }
 
     // The margin: everything past the measure, whether or not there is writing
     // in it. Tinting only the characters that run past says nothing at all
@@ -5522,6 +5605,24 @@ fn ruler_line(
     lead: usize,
     start_in_line: usize,
 ) -> Option<Line<'static>> {
+    labels_line(cells, |i| (i + 1).to_string(), ink, drawn, lead, start_in_line)
+}
+
+/// The same, with something other than a number over each column (#379).
+///
+/// The bar at the top of the page wants two of these — the numbers and the
+/// names — and they are the same placement problem: a label right up against
+/// the wall its column ends at, never on top of the one before it. Written
+/// once, because a name a cell off its column and a number a cell off its
+/// column are the same mistake.
+fn labels_line(
+    cells: &[(usize, usize)],
+    label: impl Fn(usize) -> String,
+    ink: crate::theme::Palette,
+    drawn: Drawn,
+    lead: usize,
+    start_in_line: usize,
+) -> Option<Line<'static>> {
     let column = drawn_columns(drawn, lead);
     let mut out = String::new();
     let mut col = 0usize;
@@ -5529,14 +5630,18 @@ fn ruler_line(
         let Some(&edge) = column.get(end.saturating_sub(start_in_line)) else {
             break;
         };
-        let n = (i + 1).to_string();
+        let n = label(i);
+        if n.is_empty() {
+            continue;
+        }
         // Right up against the wall it belongs to, and never on top of the
         // number before it — a number a cell off its column is still readable,
         // two numbers run together are not.
-        let want = edge.saturating_sub(n.chars().count()).max(col + usize::from(col > 0));
+        let wide = yumete_cjk::str_width(&n);
+        let want = edge.saturating_sub(wide).max(col + usize::from(col > 0));
         out.push_str(&" ".repeat(want - col));
         out.push_str(&n);
-        col = want + n.chars().count();
+        col = want + wide;
     }
     (!out.trim().is_empty()).then(|| Line::from(Span::styled(out, ink.page().fg(ink.furniture()))))
 }
@@ -6147,7 +6252,7 @@ mod tests {
         let look = vertical::Look::of(editor);
         // From the page's own rectangle, exactly as the event loop does it —
         // otherwise these tests would be asking about a page nobody draws.
-        let page = page_areas(editor, config, Rect::new(0, 0, w, h)).text;
+        let page = page_areas(editor, config, Rect::new(0, 0, w, h), 0).text;
         editor.set_zong_length(vertical::zong_length_for(config, page.height, lines, look));
         render_with(editor, config, ime, w, h)
     }
@@ -6302,6 +6407,149 @@ mod tests {
         let buffer = render_with(&editor, &Config::default(), &no_ime(), 80, 8);
         let row = row_text(&buffer, 7);
         assert!(row.contains("錐 U+9310"), "{row:?}");
+    }
+
+    /// #379, the author's design: 「在顶部预留一个信息栏（两行：列号+列名）。
+    /// 这个平常不显示，只是在下方是表格中间部分的时候显示。这样它是独立的，
+    /// 也就不会侵扰文本的区域了。」
+    ///
+    /// The assertion that matters is not that the bar is *there* — it is that
+    /// the names and numbers stand over the columns **as the row below them is
+    /// drawn**, which is why they are placed by that row's own `Drawn` and not
+    /// worked out again. A bar that names one column while pointing at another
+    /// is worse than no bar.
+    #[test]
+    fn a_table_scrolled_past_its_head_is_given_a_bar_over_its_columns() {
+        let mut source = String::from("| 地名 | 小傳 | 年代 |\n| --- | --- | --- |\n");
+        for i in 0..40 {
+            source.push_str(&format!("| 城{i} | 記事{i} | 年{i} |\n"));
+        }
+        let mut editor = editor_with(&source);
+        for c in "tb".chars() {
+            editor.on_key(Key::Char(c));
+        }
+        editor.execute("30").unwrap();
+        let buffer = render_with(&editor, &Config::default(), &no_ime(), 44, 12);
+        let numbers = row_text(&buffer, 0);
+        let names = row_text(&buffer, 1);
+        let row = row_text(&buffer, 2);
+        assert!(names.contains("地名") && names.contains("年代"), "{names:?}");
+        assert!(numbers.contains('1') && numbers.contains('3'), "{numbers:?}");
+
+        // Each label ends where its column does, on the row under the bar.
+        // The row opens with a wall of its own, so column 1 ends at the
+        // *second* pipe — counted in screen cells, not in bytes.
+        let mut walls = Vec::new();
+        let mut at = 0u16;
+        for c in row.chars() {
+            if c == '|' {
+                walls.push(at);
+            }
+            at += yumete_cjk::char_width(c) as u16;
+        }
+        assert!(walls.len() >= 2, "the row has its walls: {row:?}");
+        assert_eq!(
+            column_of(&numbers, "1") + 1,
+            walls[1],
+            "the number stands against its own wall: {numbers:?} over {row:?}"
+        );
+        assert_eq!(
+            column_of(&names, "地名") + yumete_cjk::str_width("地名") as u16,
+            walls[1],
+            "and so does the name: {names:?} over {row:?}"
+        );
+    }
+
+    /// The bar is the table's own top two rows brought up the page: the ruler
+    /// above, the names under it, exactly as they stand when the head is in
+    /// view. Drawn the other way round until the author caught it.
+    #[test]
+    fn the_bar_is_ordered_the_way_the_table_top_is() {
+        let mut source = String::from("| 地名 | 年代 |\n| --- | --- |\n");
+        for i in 0..40 {
+            source.push_str(&format!("| 城{i} | 年{i} |\n"));
+        }
+        let mut editor = editor_with(&source);
+        for c in "tf".chars() {
+            editor.on_key(Key::Char(c));
+        }
+        editor.execute("36").unwrap();
+        let buffer = render_with(&editor, &Config::default(), &no_ime(), 44, 12);
+        let (upper, lower) = (row_text(&buffer, 0), row_text(&buffer, 1));
+        assert!(upper.contains('1') && !upper.contains("地名"), "numbers above: {upper:?}");
+        assert!(lower.contains("地名"), "names under them: {lower:?}");
+    }
+
+    /// **Not while the head is in view.** Entering a long table puts the
+    /// cursor a few rows below its head, and a bar naming columns that are
+    /// named two rows above it is two rows spent saying nothing.
+    #[test]
+    fn a_table_whose_head_is_still_in_view_is_given_no_bar() {
+        let mut source = String::from("| 地名 | 小傳 | 年代 |\n| --- | --- | --- |\n");
+        for i in 0..40 {
+            source.push_str(&format!("| 城{i} | 記事{i} | 年{i} |\n"));
+        }
+        let mut editor = editor_with(&source);
+        for c in "tb".chars() {
+            editor.on_key(Key::Char(c));
+        }
+        // Three rows into a forty-row table, with the page thirty tall: the
+        // head is right there.
+        editor.set_page(30, 100);
+        editor.execute("5").unwrap();
+        assert!(
+            !editor.table_head_is_off_the_page(0),
+            "the head is on the page, so no bar"
+        );
+        // …and once the cursor is further down than the page is tall, it
+        // cannot be, whatever the scroll did.
+        editor.execute("36").unwrap();
+        assert!(editor.table_head_is_off_the_page(0), "now it cannot be");
+    }
+
+    /// 平常不显示: a table the page can show whole has its own head in view, so
+    /// two rows spent repeating it would be two rows wasted.
+    #[test]
+    fn a_table_that_fits_is_given_no_bar() {
+        let mut editor = editor_with("前文\n\n| 地名 | 年代 |\n| --- | --- |\n| 洛陽 | 春秋 |\n");
+        for c in "tb".chars() {
+            editor.on_key(Key::Char(c));
+        }
+        editor.execute("5").unwrap();
+        assert!(!editor.table_head_is_off_the_page(0), "its head is in view");
+        let buffer = render_with(&editor, &Config::default(), &no_ime(), 44, 12);
+        assert!(
+            row_text(&buffer, 0).contains("前文"),
+            "the page starts at the file: {:?}",
+            row_text(&buffer, 0)
+        );
+    }
+
+    /// #379: 基本 numbers the columns too.    /// #379: 基本 numbers the columns too.
+    ///
+    /// The author, 2026-09-11：「tb 模式可不可以也标注列号（和 tf 模式一样）」，
+    /// which 基本's own law allows — 「tb 的原则是只能多字（标注）不能少字」 —
+    /// because a strip above the table adds a row and hides nothing. 源碼 gets
+    /// none: there the file is drawn as it is written.
+    #[test]
+    fn 基本_numbers_the_columns_and_源碼_does_not() {
+        let strip = |level: &str| -> String {
+            let mut editor = editor_with("ch\t錐\nlongcode\t蜘\n");
+            for c in level.chars() {
+                editor.on_key(Key::Char(c));
+            }
+            let buffer = render_with(&editor, &Config::default(), &no_ime(), 40, 8);
+            row_text(&buffer, 0).trim_end().to_string()
+        };
+        // The numbers stand over their columns, so they are the row's whole
+        // content — nothing of the file is on it.
+        let basic = strip("tb");
+        assert!(basic.contains('1') && basic.contains('2'), "基本: {basic:?}");
+        assert!(!basic.contains("ch"), "and it is not the table's first row: {basic:?}");
+        let full = strip("tf");
+        assert_eq!(basic, full, "基本 numbers them exactly as 全 does");
+        let source = strip("to");
+        assert!(source.contains("ch"), "源碼 starts at the file: {source:?}");
     }
 
     /// #378 on the drawn frame: a TSV read as a table squares its columns up
@@ -6520,7 +6768,14 @@ mod tests {
                 .collect();
             let y = rows
                 .iter()
-                .position(|row| row.contains("洛陽"))
+                // **The row this test is about**: the one that has the name
+                // *and* a fold mark on it. A bare `洛陽` is on the page twice
+                // — the panel beside the prose page lists the cells too — and
+                // it matched the rule row's half of it. Asking for both is
+                // also the only needle that works in either drawing, since the
+                // pane re-glyphs the pipes away. (#379 moved the column strip
+                // down a level, which is what turned this up.)
+                .position(|row| row.contains("洛陽") && row.contains('>'))
                 .unwrap_or_else(|| panic!("the row is on the page ({how}):\n{}", rows.join("\n")))
                 as u16;
             let text = &rows[y as usize];
@@ -6746,6 +7001,20 @@ mod tests {
             x += grapheme_width(symbol).max(1) as u16;
         }
         out
+    }
+
+    /// Which screen row holds `needle`.
+    ///
+    /// **Not a number written down.** How many screen rows a file line is
+    /// drawn at depends on what else the page puts above it — a reading, a row
+    /// of air, and since #379 the strip that numbers a table's columns at 基本
+    /// as well as at 全. Five tests said 「row 3 is the fourth line of the
+    /// file」 and all five broke the day the strip moved a level, which is a
+    /// test failing for something it was not about.
+    fn row_holding(buffer: &ratatui::buffer::Buffer, needle: &str) -> u16 {
+        (0..buffer.area.height)
+            .find(|&y| row_text(buffer, y).contains(needle))
+            .unwrap_or_else(|| panic!("{needle:?} is on the page"))
     }
 
     /// Which **screen column** a row's text holds `needle` at.
@@ -8593,8 +8862,9 @@ mod tests {
         assert_eq!(at, 1, "the second cell");
         let buf = render(&editor, &config, 30, 8);
         let want = ink.at(yumete_config::rung::HEAD);
-        // Row 3 on screen is the fourth line of the file.
-        let row = 3;
+        // By the row's own text, not by a number: the pane on the right
+        // lists the cells, so  appears twice on the page.
+        let row = row_holding(&buf, "| 木");
         let text = row_text(&buf, row);
         let mu = column_of(&text, "mu");
         for x in mu..mu + 2 {
@@ -8717,7 +8987,9 @@ mod tests {
         // Standing in the table, the ground is there — otherwise the two
         // assertions below would pass on a renderer that never draws it.
         let buf = render(&editor, &config, 30, 8);
-        let y = row_with(&buf, "木");
+        // With its pipe: the pane lists the cells, so a bare `木` is on the
+        // page twice and the first one is not in the table.
+        let y = row_with(&buf, "| 木");
         let text = row_text(&buf, y);
         assert_eq!(buf[(column_of(&text, "木"), y)].bg, want, "{text:?}");
 
@@ -8780,10 +9052,14 @@ mod tests {
         editor.on_key(Key::Char('v'));
         editor.on_key(Key::Char('l'));
         let buf = render(&editor, &config, 30, 8);
-        let text = row_text(&buf, 2);
+        // By the row's own text: the pane beside it lists the cells, so `mu`
+        // is on the page twice, and what stands above the table is the page's
+        // to decide (#379).
+        let row = row_holding(&buf, "| 木");
+        let text = row_text(&buf, row);
         let mu = column_of(&text, "mu");
         assert_eq!(
-            buf[(mu, 2)].bg,
+            buf[(mu, row)].bg,
             ink.at(yumete_config::rung::SELECTION),
             "the selection, not the cell, at column {mu} of {text:?}",
         );
@@ -8824,7 +9100,7 @@ mod tests {
         assert_eq!(editor.cell_position().map(|(_, c)| c), Some(1));
         let buf = render(&editor, &config, 30, 8);
         let want = ink.at(yumete_config::rung::HEAD);
-        let row = 2;
+        let row = row_holding(&buf, "| 木");
         let text = row_text(&buf, row);
         let mu = column_of(&text, "mu");
         // `mu` itself, then the two columns of padding after it, all one cell.
@@ -9447,7 +9723,7 @@ mod tests {
         editor.set_layout(WritingLayout::Vertical);
         let config = vertical_config();
         let area = Rect::new(0, 0, 40, 20);
-        let page = page_areas(&editor, &config, area).text;
+        let page = page_areas(&editor, &config, area, 0).text;
         // Twenty rows, less the status line and the hint row.
         assert_eq!(page.height, 18, "the page is not the terminal");
         let look = vertical::Look::of(&editor);

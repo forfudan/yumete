@@ -216,7 +216,45 @@ impl Editor {
     /// Apply a horizontal motion, moving the head (extending if in select mode).
     pub(super) fn move_horizontal(&mut self, motion: fn(&ropey::Rope, usize) -> usize) {
         let pos = motion(self.current_buffer().rope(), self.cursor);
+        let pos = self.past_what_a_table_keeps_off(pos, pos > self.cursor);
         self.move_head(pos);
+    }
+
+    /// Step `at` clear of anything a table is keeping off the page, in the
+    /// direction of travel (#379).
+    ///
+    /// **A step the reader cannot see is not a step.** Under `t f` the file's
+    /// own padding comes off the page (`cell_slack_against`), so `l` through a
+    /// cell's trailing spaces moved the caret and moved nothing on the screen:
+    /// it sat still for four presses and then jumped a column. The author,
+    /// 2026-09-11：「既然没有显示，就应该允许用户直接跳过去。」
+    ///
+    /// Only what a table keeps — see [`Editor::cell_hidden_on_line`]. Markup
+    /// hidden by 所見即所得 comes back for the caret, so walking into it is
+    /// the point rather than a mistake.
+    fn past_what_a_table_keeps_off(&self, at: usize, forward: bool) -> usize {
+        let rope = self.current_buffer().rope();
+        let line = rope.char_to_line(at.min(rope.len_chars()));
+        let start = rope.line_to_char(line);
+        let hidden = self.cell_hidden_on_line(line);
+        if hidden.is_empty() {
+            return at;
+        }
+        // Spans do not overlap and there are a handful of them, so walking
+        // them is a loop over the row's cells at worst.
+        let mut at = at;
+        while let Some(&(from, upto)) = hidden
+            .iter()
+            .find(|&&(from, upto)| (from..upto).contains(&(at - start)))
+        {
+            match forward {
+                true => at = start + upto,
+                // The character *before* the span: its first is still hidden.
+                false if from == 0 => return start,
+                false => at = start + from - 1,
+            }
+        }
+        at
     }
 
     /// Apply a vertical motion, preserving the goal column and moving the head.
