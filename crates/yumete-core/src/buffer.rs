@@ -121,6 +121,20 @@ pub struct Buffer {
     /// What lets an answer *about the whole document* — which line is inside a
     /// code fence, say — be worked out once per edit instead of once per frame.
     revision: u64,
+    /// **Where the last change was, and how much longer it made the text**
+    /// (#366) — `None` when the whole rope was replaced.
+    ///
+    /// A revision says *that* the text changed; this says *where*, which is
+    /// the difference between re-wrapping a paragraph and continuing the wrap
+    /// it already had. Typing one character into a paragraph of a million cost
+    /// 25.4 ms a key, all of it re-deciding row breaks that could not have
+    /// moved, because every row before the caret was settled by text nobody
+    /// touched.
+    ///
+    /// Set by the edits that change one stretch of the rope; cleared by the
+    /// ones that swap the whole thing (a re-read, an undo, a redo), where
+    /// nothing about the old answer can be trusted.
+    edit: Option<(usize, isize)>,
     /// This buffer's own edit history.
     ///
     /// Per buffer, not per editor: a single shared stack means `u` in one file
@@ -222,6 +236,7 @@ impl Buffer {
             ending: "\n",
             history: History::default(),
             revision: 0,
+            edit: None,
             syntax: crate::syntax::Syntax::default(),
             syntax_guessed: true,
             pending_draft: None,
@@ -257,6 +272,7 @@ impl Buffer {
             ending: "\n",
             history: History::default(),
             revision: 0,
+            edit: None,
             syntax: crate::syntax::Syntax::default(),
             syntax_guessed: true,
             pending_draft: None,
@@ -316,6 +332,7 @@ impl Buffer {
             marked,
             history: History::default(),
             revision: 0,
+            edit: None,
             pending_draft,
             pending_swap,
             wrote_at: None,
@@ -422,6 +439,7 @@ impl Buffer {
         self.seen = seen;
         self.modified = false;
         self.revision = self.revision.wrapping_add(1);
+        self.edit = None;
         self.cursor = self.cursor.min(self.rope.len_chars());
         // A fresh read is a fresh start: the undo stack described a document
         // that is no longer here.
@@ -463,6 +481,12 @@ impl Buffer {
         self.revision
     }
 
+    /// Where the last change was, and how much longer it made the text —
+    /// `None` when the whole rope was replaced. See the field.
+    pub fn edit(&self) -> Option<(usize, isize)> {
+        self.edit
+    }
+
     /// Whether the buffer has unsaved modifications.
     pub fn is_modified(&self) -> bool {
         self.modified
@@ -496,6 +520,7 @@ impl Buffer {
         self.rope.insert(char_idx, text);
         self.modified = true;
         self.revision += 1;
+        self.edit = Some((char_idx, text.chars().count() as isize));
         Ok(())
     }
 
@@ -507,10 +532,13 @@ impl Buffer {
         if self.readonly {
             return Err(ReadOnly);
         }
+        let taken = range.end - range.start;
         self.earn_snapshot();
+        let at = range.start;
         self.rope.remove(range);
         self.modified = true;
         self.revision += 1;
+        self.edit = Some((at, -(taken as isize)));
         Ok(())
     }
 
@@ -527,11 +555,13 @@ impl Buffer {
             return Err(ReadOnly);
         }
         let start = range.start;
+        let taken = range.end - range.start;
         self.earn_snapshot();
         self.rope.remove(range);
         self.rope.insert(start, text);
         self.modified = true;
         self.revision += 1;
+        self.edit = Some((start, text.chars().count() as isize - taken as isize));
         Ok(())
     }
 
@@ -864,6 +894,7 @@ impl Buffer {
         let prev = self.history.undo.pop()?;
         self.history.redo.push(self.here(cursor));
         self.revision += 1;
+        self.edit = None;
         self.rope = prev.rope;
         self.modified = prev.modified;
         Some(prev.cursor.min(self.rope.len_chars()))
@@ -877,6 +908,7 @@ impl Buffer {
         let next = self.history.redo.pop()?;
         self.history.undo.push(self.here(cursor));
         self.revision += 1;
+        self.edit = None;
         self.rope = next.rope;
         self.modified = next.modified;
         Some(next.cursor.min(self.rope.len_chars()))
