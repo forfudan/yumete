@@ -5427,26 +5427,71 @@ fn draw_status(
             true => " [preview]",
             false => "",
         };
-        let left = format!(
-            "-- {} --  {}{}{}{}{}{}{}",
-            editor.mode_label(),
-            ime_tag,
-            buffer.display_name(),
-            dirty,
-            locked,
-            draft,
-            preview,
-            which
-        );
         // Where you are, and nothing else. What just happened is the row
         // above's question — and with no hint row it comes back here, because
         // a message nobody can see is not a message.
         let where_ = position_of(editor);
-        if config.editor.hints || editor.status().is_empty() {
-            format!("{left}   {where_}")
-        } else {
-            format!("{left}   {}   {where_}", editor.status())
-        }
+        // **Whole fields give way, in order — the line is never cut through a
+        // word.** It used to be one `format!`, and a narrow window simply
+        // sliced the end off it: at twenty columns `long.csv   Ln 1, Col 1`
+        // came out `long.c`, so the first thing lost was the position — the one
+        // thing the status line exists to answer (#394). The order below is
+        // what a writer needs in a tmux sliver, from the last to go to the
+        // first: the mode, then where the caret is, then that there is unsaved
+        // work, then which file, then everything else.
+        //
+        // ⚠️ **`[n/total]` outranks the file name**, which looks backwards until
+        // you notice when it is drawn at all: only when the tab bar could not
+        // show every file — and the bar does carry the name of the one you are
+        // in. So the name is the duplicate here and the fraction is the only
+        // copy of what it says.
+        let pieces: [(String, u8); 7] = [
+            (format!("-- {} --  ", editor.mode_label()), 0),
+            (ime_tag, 5),
+            (buffer.display_name(), 4),
+            (dirty.to_string(), 1),
+            (format!("{locked}{draft}"), 2),
+            (preview.to_string(), 6),
+            (which, 3),
+        ];
+        let message = match config.editor.hints || editor.status().is_empty() {
+            true => String::new(),
+            false => format!("   {}", editor.status()),
+        };
+        let room = status_area.width as usize;
+        let build = |give: u8, gap: usize| -> String {
+            let left: String = pieces
+                .iter()
+                .filter(|(_, rank)| *rank == 0 || *rank < give)
+                .map(|(text, _)| text.as_str())
+                .collect::<Vec<_>>()
+                .concat();
+            let gap = " ".repeat(gap);
+            format!("{}{message}{gap}{where_}", left.trim_end())
+        };
+        // **The gap goes before the writing does.** One column over is not a
+        // reason to lose `[20/20]` whole: the three spaces between the name and
+        // the position are the cheapest thing on the line, so they are spent
+        // first, and only then does a field give way.
+        let mut give = 7u8;
+        let mut gap = 3usize;
+        let line = loop {
+            let line = build(give, gap);
+            if yumete_cjk::str_width(&line) <= room {
+                break line;
+            }
+            if gap > 1 {
+                gap = 1;
+                continue;
+            }
+            // The mode and the position are the floor; below that the terminal
+            // is too narrow for anything and the renderer's own cut answers.
+            if give == 0 {
+                break line;
+            }
+            give -= 1;
+        };
+        line
     };
 
     // What the 字 under the cursor *is*, pushed to the right edge so it never
@@ -8065,6 +8110,39 @@ mod tests {
         );
     }
 
+    /// **Whole fields give way; the line is never cut through a word** (#394).
+    ///
+    /// The left half used to be one `format!` with the comment 「the left side
+    /// is never squeezed」 — so a narrow window simply sliced the end off it,
+    /// and the first thing lost was the position, the one thing the status
+    /// line exists to answer.
+    #[test]
+    fn a_narrow_status_line_drops_fields_rather_than_cutting_one() {
+        let mut editor = editor_with("第一段。\n");
+        editor.current_buffer_mut().name_as("long.csv");
+        let config = Config::default();
+        let status = |w: u16| {
+            let buffer = render(&editor, &config, w, 6);
+            row_text(&buffer, 5).trim_end().to_string()
+        };
+
+        // Wide: everything, and the three-space gaps.
+        let wide = status(70);
+        assert!(wide.contains("long.csv"), "{wide:?}");
+        assert!(wide.contains("Ln 1, Col 1"), "{wide:?}");
+
+        // Narrow: **the position outlives the file name**, and what is left is
+        // whole — no `Ln 1, C`, no `long.c`.
+        let narrow = status(28);
+        assert!(narrow.contains("Ln 1, Col 1"), "the position stays: {narrow:?}");
+        assert!(!narrow.contains("long.csv"), "the name gave way: {narrow:?}");
+        assert!(narrow.contains("NORMAL"), "{narrow:?}");
+        assert!(
+            yumete_cjk::str_width(&narrow) <= 28,
+            "and it fits: {narrow:?}"
+        );
+    }
+
     /// **The panel stops above the status line** (#387).
     ///
     /// It was sized and placed against `frame.area()` — the whole window — so
@@ -10455,8 +10533,13 @@ mod tests {
 
         // The band's rows are above the text; find the one carrying a digit on
         // a 縱 that is not the cursor's.
+        // ⚠️ **Not the last row.** The status line carries digits too
+        // (`Ln 1, Col 1`), and this used to scan the whole frame — so which
+        // columns it found depended on how the status line happened to be laid
+        // out, and #394 (whole fields giving way on a narrow window) moved them
+        // and broke a test that has nothing to do with the status line.
         let digit = |b: &ratatui::buffer::Buffer, x: u16| {
-            (0..b.area.height)
+            (0..b.area.height.saturating_sub(1))
                 .find(|&y| b[(x, y)].symbol().chars().any(|c| c.is_ascii_digit()))
                 .map(|y| (b[(x, y)].fg, b[(x, y)].bg))
         };
