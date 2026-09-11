@@ -255,11 +255,11 @@ fn a_link_to_another_chapter_opens_it_where_it_sits() {
 
 #[test]
 fn the_retired_keys_say_what_replaced_them() {
-    // `*` did something here until it was retired, so the reader pressing it
-    // is coming from vi and the phrasebook exists for exactly that reader.
-    let mut ed = typed("那年冬天。\n");
-    ed.on_key(Key::Char('*'));
-    assert!(ed.status().contains("g/"), "{}", ed.status());
+    // ⚠️ `*` **used to be** one of these, pointing at `g/`. Since 2026-09-11
+    // it simply *is* `g/` (#404): a key spelled the same in vi, in Helix and
+    // here, doing the same thing, does not need a phrasebook entry — a hint
+    // that could have done the job costs a keystroke and teaches nothing.
+    // The phrasebook is for the keys we deliberately spell differently.
 
     // **`Enter` is silent** (#353). It kept a note of its own while it was
     // freshly retired — 「it did something here until last week」 — and that
@@ -289,12 +289,15 @@ fn the_case_keys_moved_under_one_prefix() {
     assert_eq!(lower("x`l"), "hello world\n");
     assert_eq!(lower("x`u"), "HELLO WORLD\n");
     assert_eq!(lower("x``"), "hELLO wORLD\n");
-    // …and the reader coming from Helix is told where they went, rather
-    // than pressing `~` and watching nothing happen.
+    // ⚠️ **`~` is the third member, not a hint about the group** (#404,
+    // 2026-09-11). It used to say 「大小寫在 ` 組裏」 and do nothing; it now
+    // does what it does in vi and in Helix — switch the case of the selection
+    // — which is exactly `` ` `` `` ` ``. The group keeps the other two.
     let mut ed = typed("Hello World\n");
-    ed.on_key(Key::Char('~'));
-    assert_eq!(ed.current_buffer().text(), "Hello World\n");
-    assert!(ed.status().contains("`l"), "{}", ed.status());
+    press(&mut ed, "x~");
+    assert_eq!(ed.current_buffer().text(), "hELLO wORLD\n");
+    // Helix's 轉大寫 is `Alt-\``, which we do **not** have — that one is still
+    // a hint, because the answer really is spelled differently here.
     let mut ed = typed("Hello World\n");
     ed.on_key(Key::Alt('`'));
     assert!(ed.status().contains("`l"), "{}", ed.status());
