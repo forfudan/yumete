@@ -373,6 +373,54 @@ fn a_column_can_be_named_either_way_round() {
     assert_eq!(start("gd"), 2, "no number is the key column, which is here");
 }
 
+/// **A file that ends in a newline has no row after its last one** (#384).
+///
+/// `ropey` reports a trailing empty line for every file that ends in a newline
+/// — which is nearly every file — and the grid drew a row there: all cells
+/// blank, and the caret could walk into it and type. What reached the disk was
+/// the byte typed, welded to the end of the file with no separator and with the
+/// trailing newline gone. `row_is_ragged` had the guard from the beginning; the
+/// drawing, the caret and the write path each asked `line_count()` instead.
+#[test]
+fn a_grid_puts_no_row_after_the_last_line_of_the_file() {
+    let dir = std::env::temp_dir().join(format!("yumete-phantom-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let open = |name: &str, text: &str| {
+        let csv = dir.join(name);
+        std::fs::write(&csv, text).unwrap();
+        let mut ed = Editor::new();
+        ed.open_file(&csv).unwrap();
+        assert!(ed.enter_table(), "{}", ed.status());
+        ed
+    };
+
+    // Two rows under a header, and the file ends in a newline.
+    let ed = open("trail.csv", "a,b\n1,2\n3,4\n");
+    assert_eq!(ed.table_row_span(), Some((1, 2)), "rows 1 and 2, and no third");
+
+    // The same data without the trailing newline reads the same. It always
+    // did — which is what made the bug look like a property of the data.
+    let ed = open("bare.csv", "a,b\n1,2\n3,4");
+    assert_eq!(ed.table_row_span(), Some((1, 2)));
+
+    // `j` on the bottom row stays there. It used to step onto the phantom.
+    let mut ed = open("walk.csv", "a,b\n1,2\n3,4\n");
+    press(&mut ed, "jjjjjj");
+    assert_eq!(ed.cursor_line(), 2, "the last row of writing, not past it");
+
+    // And what a keystroke there writes lands in a cell, not on the end of
+    // the file: typing used to produce `a,b\n1,2\n3,4\nx` — no separator, no
+    // line break, and the file's own trailing newline eaten.
+    press(&mut ed, "ix\u{1b}");
+    assert!(
+        ed.current_buffer().text().ends_with('\n'),
+        "the trailing newline survives: {:?}",
+        ed.current_buffer().text()
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 #[test]
 fn a_capital_s_sorts_a_delimited_file_downwards() {
     // `t S` sorted *up* on a delimited file: the branch that handles a
@@ -1174,7 +1222,7 @@ fn committed_text_lands_at_the_prompt_caret() {
 fn a_pattern_with_no_capital_in_it_ignores_case() {
     // 一0 段1 ␠2 T3 O4 D5 O6 ␠7 二8 段9 ␠10 t11 o12 d13 o14
     let mut ed = typed("一段 TODO 二段 todo 三段。");
-    let mut find = |ed: &mut Editor, pattern: &str| {
+    let find = |ed: &mut Editor, pattern: &str| {
         ed.set_cursor(0);
         ed.on_key(Key::Char('/'));
         for c in pattern.chars() {
@@ -10736,7 +10784,7 @@ fn the_cost_of_a_key_in_one_paragraph() {
         ed.set_wrap_width(80);
         ed.set_page(50, 80);
 
-        let mut cost = |what: &str, key: Key, ed: &mut Editor| {
+        let cost = |what: &str, key: Key, ed: &mut Editor| {
             for _ in 0..3 {
                 ed.on_key(key.clone());
             }

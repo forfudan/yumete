@@ -753,10 +753,25 @@ impl Editor {
         self.table_row_span_at(self.cursor_line())
     }
 
+    /// The last line a grid may put a row on.
+    ///
+    /// **Not `line_count() - 1`.** `ropey` reports a trailing empty line for
+    /// every file that ends in a newline — which is nearly every file — and a
+    /// grid that believes it draws a row there draws one: an all-empty row the
+    /// writer can walk into, type in, and save. What lands on disk is the byte
+    /// they typed welded to the end of the file with no separator and no line
+    /// break, and the trailing newline gone (#384).
+    ///
+    /// `row_is_ragged` had this guard for itself since the beginning; the
+    /// drawing, the caret and the write path did not. One place, four callers.
+    pub(super) fn grid_last_line(&self) -> usize {
+        crate::motion::last_line(self.current_buffer().rope())
+    }
+
     /// The rows of the table **that line** is in — see [`Self::prose_region_at`].
     pub fn table_row_span_at(&self, line: usize) -> Option<(usize, usize)> {
         let view = self.table.as_ref()?;
-        let last_line = self.current_buffer().line_count().saturating_sub(1);
+        let last_line = self.grid_last_line();
         match view.bounds {
             Bounds::WholeFile => Some((usize::from(view.schema.header), last_line)),
             _ => {
@@ -1017,7 +1032,7 @@ impl Editor {
         match view.bounds {
             // 「csv 文件等同于一个从第一行到最后一行都是表格的普通文本文件」.
             Bounds::WholeFile => {
-                let last = self.current_buffer().line_count().saturating_sub(1);
+                let last = self.grid_last_line();
                 (line <= last).then_some((0, last))
             }
             Bounds::Md if view.reach == Reach::File => {
@@ -2581,10 +2596,9 @@ impl Editor {
         if self.table.is_none() {
             return false;
         }
-        let rope = self.current_buffer().rope();
         // The last line of a file that ends in a newline is empty, and an empty
         // last line is the end of the file, not a row with one blank cell.
-        if line + 1 == rope.len_lines() && rope.line(line).len_chars() == 0 {
+        if line > self.grid_last_line() {
             return false;
         }
         self.row_cells(line).len() != self.table_column_count()
@@ -2650,7 +2664,7 @@ impl Editor {
             if !may_leave || !self.table.as_ref().is_some_and(|v| v.in_prose()) {
                 return;
             }
-            let last = self.current_buffer().rope().len_lines().saturating_sub(1);
+            let last = self.grid_last_line();
             let out = match down {
                 true => (region.last < last).then_some(region.last + 1),
                 false => region.first.checked_sub(1),
@@ -2660,7 +2674,7 @@ impl Editor {
             }
             return;
         }
-        let last = self.current_buffer().rope().len_lines().saturating_sub(1);
+        let last = self.grid_last_line();
         let want = if down {
             (line + 1).min(last)
         } else {
