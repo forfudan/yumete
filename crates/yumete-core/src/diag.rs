@@ -125,11 +125,18 @@ pub fn install_panic_hook() {
 /// What the hook writes, apart from the timestamp — kept out of the hook so it
 /// can be read by a test without installing a hook the whole process shares.
 fn report(what: &str) -> String {
-    format!(
-        "{what}\nkeys: {}\n{}",
-        recent_keys(),
-        std::backtrace::Backtrace::force_capture()
-    )
+    // **Captured here and nowhere else.** Symbolising a backtrace walks the
+    // binary's debug info, which on a debug build of this crate is ten to
+    // fifteen seconds — fine once, in the instant something has already gone
+    // wrong, and ruinous anywhere a test would reach it. So the capture is the
+    // only thing this function does that [`compose`] does not, and the test
+    // reads `compose` (#300: the cost belongs on the failure path).
+    compose(what, &std::backtrace::Backtrace::force_capture().to_string())
+}
+
+/// The report's shape, with the backtrace handed in rather than captured.
+fn compose(what: &str, backtrace: &str) -> String {
+    format!("{what}\nkeys: {}\n{backtrace}", recent_keys())
 }
 
 /// Where the loop was when it last said anything.
@@ -252,11 +259,18 @@ mod tests {
         assert!(said.starts_with("0 1 2"), "{said}");
     }
 
+    /// **The shape of the report, not the capture** (#300).
+    ///
+    /// This used to call `report`, which captures a real backtrace — 14.6
+    /// seconds of symbolising, in a lib suite that is otherwise 2. One test
+    /// turned the fast lane into the slow one. `compose` is everything the
+    /// hook writes except the capture, which is the one line nothing here
+    /// could have asserted about anyway.
     #[test]
     fn a_report_says_what_was_pressed() {
         note_key(Key::Char('往'));
         note_key(Key::Esc);
-        let said = report("panicked at 'index out of bounds'");
+        let said = compose("panicked at 'index out of bounds'", "  0: yumete::main");
         assert!(said.contains("index out of bounds"), "{said}");
         assert!(said.contains("往"), "the keys are in it: {said}");
         assert!(said.contains("<Esc>"), "and the named ones too: {said}");
