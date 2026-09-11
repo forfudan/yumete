@@ -109,17 +109,25 @@ fn widths(
             }
             let text = editor.current_buffer().rope().line(line).to_string();
             let cell = yumete_core::table::cell_text(&text, span);
-            // **The cell the caret is standing in is never folded** — the
-            // prose page's own rule, kept here by measuring that one cell
-            // against the window instead of the cap. Without it the reader
-            // could stand in a cell and still not be shown what was in it, in
-            // Insert as much as in Normal, which is the fault this whole
-            // switch answers.
+            // **The cell being typed in is not folded** — the prose page's own
+            // rule (`folds_open_at`), and now kept the same way here: measure
+            // that one cell against the window instead of the cap.
             //
-            // **Except under 折行**, where nothing is cut in the first place:
-            // widening the caret's column there would swell it to the whole
-            // window to show what the lines underneath are already showing.
-            let ceiling = match (line, i) == caret && !editor.cell_wrap() {
+            // It used to open for the caret in Normal too, and that was the
+            // page's rule read one word too widely. The author, 2026-09-11:
+            // 「我觉得这个有一个问题就是列宽容易跳。所以我建议这个和 tf 保持
+            // 一致（光标不自动展开，insert 模式展开这个格子），这样我们的逻辑
+            // 更简洁、一致，而且不用每个单元格都重算这一列的列宽。」Right on
+            // all three counts: every `l` across a row of long cells was a new
+            // width for that column, so the grid shifted sideways under a key
+            // that only meant 「next cell」 — and reading a cell whole is what
+            // the panel down the right is for, which needs no width at all.
+            //
+            // **And not under 折行** even then, where nothing is cut in the
+            // first place: widening the column would swell it to the window to
+            // show what the rows underneath already show.
+            let typing = editor.mode() == yumete_core::input::Mode::Insert;
+            let ceiling = match typing && (line, i) == caret && !editor.cell_wrap() {
                 true => room.max(MIN_COLUMN),
                 false => ceiling,
             };

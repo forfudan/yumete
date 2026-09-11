@@ -127,26 +127,33 @@ fn only_the_pipe_is_written_with_a_space_off_it() {
     );
 }
 
-/// A column is measured over the rows **on screen**, because a delimited
-/// file's table *is* the file: the 碼表 this editor exists for is 124,083
-/// rows, and measuring them all took 160 ms on every keystroke. One page
-/// either side of the row asked about covers the page whichever end the
-/// renderer starts from, and the memo keeps that answer for the rest of it.
+/// A column is measured over **the rows on the page** — because a delimited
+/// file's table *is* the file: the 碼表 this editor exists for is 124,083 rows,
+/// and measuring them all took 160 ms on every keystroke.
+///
+/// The window was one page either side of the row being asked about until the
+/// author asked why, 2026-09-11：「可以都只量屏幕上的吗？」It can, and it
+/// should: the wider window let a cell a page below the screen widen every
+/// column in view with nothing visible to say why.
 #[test]
-fn a_table_is_measured_over_what_can_be_seen() {
+fn a_table_is_measured_over_what_is_on_the_page() {
     use yumete_core::mdtable::measured_window;
-    // A table shorter than the window is measured whole, ends included.
-    assert_eq!(measured_window(10, 40, 20, 40), (10, 40));
-    // A file-sized one is measured a page either side of the cursor…
-    assert_eq!(measured_window(0, 124_082, 60_000, 40), (59_960, 60_040));
+    // A table shorter than the page is measured whole.
+    assert_eq!(measured_window(10, 40, 20, 0, 60), (10, 40));
+    // A file-sized one is measured over the page and no more.
+    assert_eq!(measured_window(0, 124_082, 60_000, 59_990, 40), (59_990, 60_030));
     // …and never past the table it is measuring.
-    assert_eq!(measured_window(0, 124_082, 10, 40), (0, 50));
-    assert_eq!(measured_window(0, 124_082, 124_080, 40), (124_040, 124_082));
-    // The row asked about is always in it, which is what makes the answer an
-    // answer at all.
-    for at in [0, 1, 500, 124_082] {
-        let (first, last) = measured_window(0, 124_082, at, 40);
-        assert!(first <= at && at <= last, "{at}: {first}..={last}");
+    assert_eq!(measured_window(0, 124_082, 10, 0, 40), (0, 40));
+    assert_eq!(measured_window(0, 100, 90, 80, 40), (80, 100));
+    // A row asked about from off the page is taken in rather than refused, so
+    // a `:shot` or a caret readout after a jump still gets an answer.
+    let (first, last) = measured_window(0, 124_082, 5, 60_000, 40);
+    assert!(first <= 5 && 5 <= last, "{first}..={last}");
+    // The row asked about is always in the window, which is what makes the
+    // answer an answer at all.
+    for (at, top) in [(0, 0), (1, 0), (500, 480), (124_082, 124_050)] {
+        let (first, last) = measured_window(0, 124_082, at, top, 40);
+        assert!(first <= at && at <= last, "{at} from {top}: {first}..={last}");
     }
 }
 

@@ -1261,6 +1261,8 @@ pub struct Editor {
     /// renderer, which is the only part that knows, so `C-d` can mean "half of
     /// what you can see" rather than a fixed number.
     page_lines: usize,
+    /// Which line the page starts at — see [`Editor::set_page_top`].
+    page_top: usize,
     page_columns: usize,
     /// Undo and redo stacks of buffer snapshots (Feature #11).
     /// The last search pattern and direction (Feature #14).
@@ -1482,9 +1484,20 @@ pub struct Editor {
     /// value, and what lets `:render` assign it without knowing anything about
     /// the file.
     table_level: TableLevel,
-    /// Whether the detail panel is wanted. It only appears where there is
-    /// something to say, so this is "show it when there is", not "show it".
-    show_detail: bool,
+    /// Whether the detail panel is wanted — **`None` until somebody says**.
+    ///
+    /// It only appears where there is something to say, so this is "show it
+    /// when there is", not "show it". And where it opens unasked depends on
+    /// where the reader is standing: a level that folds cells away (全, 全窗)
+    /// needs it, because it is then the way to read one whole; 基本 folds
+    /// nothing, so the panel would be repeating what is already on the page
+    /// while taking a fifth of the width to do it (author, 2026-09-11:
+    /// 「tb 模式（basic）默认不用打开 information panel」).
+    ///
+    /// `t i` writes an answer here and that answer outlives the level — the
+    /// same bargain `t w` makes about folding: what the reader asked for is
+    /// not something a change of level may quietly undo.
+    show_detail: Option<bool>,
     /// Whether the grid's edit guard is lifted for the operation in hand.
     table_bypass: std::cell::Cell<bool>,
     /// Where buffers with no file keep their recovery copies.
@@ -1935,6 +1948,7 @@ impl Editor {
             macro_keys: Vec::new(),
             replaying: false,
             page_lines: 20,
+            page_top: 0,
             page_columns: 10,
             last_search: String::new(),
             search_forward: true,
@@ -1993,7 +2007,7 @@ impl Editor {
             convert_patch: None,
             table: None,
             table_level: TableLevel::default(),
-            show_detail: true,
+            show_detail: None,
             table_bypass: std::cell::Cell::new(false),
             drafts_dir: None,
             data_dir: None,

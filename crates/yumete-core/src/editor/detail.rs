@@ -8,13 +8,27 @@ use super::*;
 impl Editor {
     /// Whether the detail panel is showing.
     pub fn detail_visible(&self) -> bool {
-        self.show_detail && self.detail().is_some()
+        self.detail().is_some() && self.show_detail.unwrap_or_else(|| self.detail_opens_here())
+    }
+
+    /// Whether the panel opens **without being asked**, where the cursor is.
+    ///
+    /// Where a level folds cells away, the panel is how one is read whole, so
+    /// it opens; 基本 folds nothing, so it would be saying again what the page
+    /// is already saying, and charging a fifth of the width for it. A note in
+    /// prose is not a row and is not affected: there is nothing on the page
+    /// that says what a footnote holds.
+    fn detail_opens_here(&self) -> bool {
+        !(self.detail_shows_a_row()
+            && self.table_level == TableLevel::Basic
+            && !self.table.as_ref().is_some_and(|view| view.pane))
     }
 
     /// Show or hide the detail panel.
     pub fn toggle_detail(&mut self) {
-        self.show_detail = !self.show_detail;
-        self.status = if self.show_detail {
+        let want = !self.detail_visible();
+        self.show_detail = Some(want);
+        self.status = if want {
             say!("ui.detail-panel-on")
         } else {
             say!("ui.detail-panel-off")

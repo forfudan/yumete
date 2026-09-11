@@ -142,6 +142,19 @@ impl Editor {
         self.page_columns = columns.max(1);
     }
 
+    /// Say which line the page starts at (#378).
+    ///
+    /// The front end settles this while it draws, so what arrives here is last
+    /// frame's answer — which is the only one there is before the page is
+    /// divided, and a frame's lag on a column's width is not a thing anybody
+    /// can see. What it buys is that a table's columns are measured against
+    /// **the rows on the screen** and no others: a long cell a page below the
+    /// window used to widen every column around it, with nothing visible to
+    /// say why.
+    pub fn set_page_top(&mut self, line: usize) {
+        self.page_top = line;
+    }
+
     /// Set how many columns `>` adds and `<` removes.
     /// How far a TAB advances — to the next multiple of `stop` (#374).
     pub fn set_tab_stop(&mut self, stop: usize) {
