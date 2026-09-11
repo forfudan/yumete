@@ -4192,13 +4192,6 @@ zhs = "没有多光标——见手册「还没有的」"
 en = "no multiple cursors — see the manual, 「還沒有的」"
 
 [[message]]
-# Normal 模式按 * （它退場了）
-key = "hint.vi.star"
-zht = "找選中的是 g/（那邊看是 g?）；表格裏一欄一欄找是 t/ t?"
-zhs = "找选中的是 g/（那边看是 g?）；表格里一栏一栏找是 t/ t?"
-en = "g/ finds the selection (g? shows it beside); t/ t? go column by column in a table"
-
-[[message]]
 # Normal 模式按 Z（vi 的 ZZ，這裏沒有）
 key = "hint.vi.z-upper"
 zht = "存檔是 :w，存了就走是 :wq"

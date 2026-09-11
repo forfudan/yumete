@@ -942,6 +942,22 @@ impl Editor {
             // `~` and `` A-` `` are Helix's and are **unbound** here — the
             // phrasebook catches both and points at this group.
             Key::Char('`') => self.pending = Pending::Case,
+            // **`~` is `` ` `` `` ` ``, and `*` is `g/`** (#404, 2026-09-11).
+            // Both were hints pointing at where the thing had moved to, which
+            // is the right answer for a key we deliberately spell differently
+            // — but these two are not spelled differently, they are the *same*
+            // action under the name vi and Helix both give it. A hint that
+            // could have just done it is a hint that costs a keystroke and
+            // teaches nothing.
+            //
+            // ⚠️ `~` maps to the group's **third** member, not to the group:
+            // `` ` `` opens 「小寫／大寫／互換」, and `~` has always meant the
+            // last of those on its own.
+            Key::Char('~') => self.map_selection(switch_case),
+            Key::Char('*') => {
+                self.definition_preview = false;
+                self.search_the_page();
+            }
             // Replacing the selection with the register. Joining is on `gJ`:
             // `J` turns the page, which a reader presses a hundred times for
             // every once they join two lines.
@@ -1011,7 +1027,6 @@ impl Editor {
             _ => return None,
         };
         Some(match c {
-            '*' => say!("hint.vi.star"),
             '$' => say!("hint.vi.dollar"),
             '^' => say!("hint.vi.caret"),
             'D' => say!("hint.vi.d-upper"),
@@ -1025,7 +1040,6 @@ impl Editor {
             // No `` ` `` arm: it is a real binding now (the 字形 group), so the
             // fall-through never reaches here for it. `hint.vi.backtick` moved
             // into that group's menu, where vi's reader will see it anyway.
-            '~' => say!("hint.helix.case-keys"),
             _ => return None,
         })
     }
