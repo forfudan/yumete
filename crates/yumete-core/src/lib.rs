@@ -1,4 +1,5 @@
-//! `yumete-core` — the editor core for **yumete** (the Yuhao IME text editor).
+//! `yumete-core` — the editor core for **yumete** (Yume + TE, the terminal
+//! editor with the Yume IME in it).
 //!
 //! This crate holds the pure, UI-independent editing logic, mirroring Helix's
 //! separation of a rope/selection/transaction core from the TUI. It has no

@@ -1,4 +1,4 @@
-# yumete — 宇浩終端文字編輯器 · 開發規劃 (Development Plan)
+# yumete — 宇夢終端編輯器 · 開發規劃 (Development Plan)
 
 > **yumete** = **Yu**hao IME **t**ext **e**ditor — a lightweight, Helix-like,
 > CJK-aware terminal editor with a built-in Yume IME, aimed first at prose
@@ -622,8 +622,8 @@ index, and a row with no number anywhere else is a row that got lost.
 | 397 | **空格選單那張表漏收兩項，一項文案不符** | docs | P3 | `P`／`c`，以及「空格 d」那一行 [^397] | Open |
 | 398 | **NUL 在頁面上一點痕跡都沒有** | tui | P3 | 看起來就是那裏什麼都沒有 [^398] | Open |
 | 399 | **`Tab` 換了粒度，狀態列不說換了沒有** | tui | P3 | 按字還是按格，看不出來 [^399] | Open |
-| 400 | **中文名定為「宇夢終端編輯器」** | docs | P3 | 名字要自己解釋自己 [^400] | Planned |
-| 401 | **`ye`：像 helix 的 `hx` 一樣給一個簡稱** | build | P3 | 首字母加尾字母，`build.sh` 多做一個連結 [^401] | Planned |
+| 400 | **中文名定為「宇夢終端編輯器」** | docs | P3 | `yumete` ＝ `Yume` ＋ `TE` [^400] | Fixed 2026-09-11 |
+| 401 | **`ye`：像 helix 的 `hx` 一樣給一個簡稱** | build | P3 | 一個二進制，兩個名字 [^401] | Fixed 2026-09-11 |
 
 ### 5.5 · A table is a delimiter, a surface and a boundary (#261)
 
@@ -9046,8 +9046,11 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     何況**嵌進來的確實是宇夢引擎**——宇浩是方案家族（光華、星陳、日月、冰雪），
     一個編輯器不是一個方案。
     砍掉「文字／文本」兩個字是因為「終端編輯器」已經說清楚了，九個字那是介紹不是名字。
-    ⚠️ 要改的地方：`README.md:1`、`docs/manual.md:3`，以及全樹其他出現處。
     ⚠️ **繁體界面用「宇夢」，簡體對話用「宇梦」。** **small**
+    **2026-09-11 做完了**，四處：`README.md:1` 的標題與它下面那句拆法、
+    `docs/manual.md:3`、`docs/development.md:1`、`crates/yumete-core/src/lib.rs:1`
+    的 crate 說明。全樹再 grep「宇浩終端」與「Yuhao IME text editor」已經沒有了
+    （除了這條腳注自己引用舊名的地方）。
 
 [^401]: 2026-09-11 定的：像 helix 的 `hx` 一樣給一個簡稱 **`ye`**。
     `ye` ＝ **y**ume **e**ditor，和 #400 那個拆法是同一條線：`yumete` ＝ `Yume` ＋
@@ -9056,5 +9059,12 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     YouTube；`ym` 手感不好。）
     ⚠️ **不改 Cargo 的 bin 名**：`[[bin]] name = "yumete"` 留着，`scripts/build.sh` 的
     `link_globally()` 多做一個 `ye` 的連結（同一個二進制，兩個名字），文檔一行都不用改。
-    以後真的人人都打 `ye`，再把它扶正。
-    這台機器上 `ye` `ym` `yt` `yu` 都是空閒的，沒有衝突。**small**
+    以後真的人人都打 `ye`，再把它扶正。**small**
+    **2026-09-11 做完了**：`scripts/build.sh` 的 `link_globally()` 拆出一支
+    `link_one()`，同一個二進制連兩次。⚠️ **那條「已經有一個真檔案就不動」的守衛
+    對 `ye` 比對 `yumete` 要緊得多**——短名字撞上別人裝的東西的機會大，所以守衛也
+    跟着搬進 `link_one`，兩個名字各查各的。Windows 那一支照舊是拷貝（符號連結要
+    Developer Mode），也是兩份。
+    實測：`ye --version` 與 `yumete --version` 同一個版本號。
+    ⚠️ **不影響全稱**：Cargo 的 bin 名還是 `yumete`，`ye` 只是同一個二進制的第二個
+    名字，文檔裏的 `yumete` 一個字都不用改。

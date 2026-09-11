@@ -8,8 +8,9 @@
 # user data directory (~/.local/share/yumete) so CJK input works in the editor.
 # Pass --no-data (or set YUMETE_SKIP_DATA=1) to build only the binary.
 #
-# Finally it points ~/.local/bin/yumete at the binary it just built, so `yumete`
-# typed in any directory is this build. Set YUMETE_BIN_DIR to link elsewhere, or
+# Finally it points ~/.local/bin/yumete — and ~/.local/bin/ye, the short name —
+# at the binary it just built, so `yumete` (or `ye`) typed in any directory is
+# this build. Set YUMETE_BIN_DIR to link elsewhere, or
 # --no-link to leave the global command alone.
 #
 # On Windows, run this under **Git Bash** (or MSYS2): it is the same script,
@@ -230,32 +231,49 @@ fi
 # is somebody else's install (a tap, a manual copy), and silently replacing a
 # binary the user installed on purpose is exactly the kind of thing a build
 # script must not do.
-link_globally() {
-  local bin_dir="${YUMETE_BIN_DIR:-$HOME/.local/bin}"
-  local link="$bin_dir/yumete"
+# Put one name in the bin directory, pointing at the binary just built.
+#
+# Called twice: `yumete`, the name the binary is built under and the one every
+# document uses, and `ye` — **y**ume **e**ditor, the one that gets typed, the
+# way nobody types `helix`. One binary, two names; the short one is a
+# convenience, not a rename (#401).
+link_one() {
+  local bin_dir="$1"
+  local name="$2"
+  local link="$bin_dir/$name"
 
-  mkdir -p "$bin_dir"
   # On Windows a symlink needs Developer Mode or an elevated shell, and a build
   # script must not need either — so the global command is a **copy**, and the
   # cost is that it is only as new as the last build that ran this step.
   if [[ "$WINDOWS" == "1" ]]; then
     cp "$YUMETE_ROOT/yumete$EXE" "$link$EXE"
-    echo "==> global yumete: $link$EXE (a copy: a symlink needs Developer Mode)"
-  else
-    if [[ -e "$link" && ! -L "$link" ]]; then
-      echo "==> global yumete: skipped ($link is a real file, not ours — remove it or set YUMETE_BIN_DIR)"
-      return 0
-    fi
-    ln -sfn "$YUMETE_ROOT/yumete" "$link"
-    echo "==> global yumete: $link -> $YUMETE_ROOT/yumete"
+    echo "==> global $name: $link$EXE (a copy: a symlink needs Developer Mode)"
+    return 0
   fi
+  # Somebody else's program of that name, or their own script: not ours to
+  # replace. `ye` is a short name, so this matters more for it than for
+  # `yumete`.
+  if [[ -e "$link" && ! -L "$link" ]]; then
+    echo "==> global $name: skipped ($link is a real file, not ours — remove it or set YUMETE_BIN_DIR)"
+    return 0
+  fi
+  ln -sfn "$YUMETE_ROOT/yumete" "$link"
+  echo "==> global $name: $link -> $YUMETE_ROOT/yumete"
+}
+
+link_globally() {
+  local bin_dir="${YUMETE_BIN_DIR:-$HOME/.local/bin}"
+
+  mkdir -p "$bin_dir"
+  link_one "$bin_dir" "yumete"
+  link_one "$bin_dir" "ye"
 
   # A link nothing can reach is not an install. `command -v` would find the one
   # we just made even if the directory is absent from PATH — via the shell's
   # own lookup of an absolute path — so ask PATH itself.
   case ":$PATH:" in
     *":$bin_dir:"*) ;;
-    *) echo "!! $bin_dir is not on PATH — add it, or 'yumete' from another directory is still the old one" >&2 ;;
+    *) echo "!! $bin_dir is not on PATH — add it, or 'yumete' (and 'ye') from another directory is still the old one" >&2 ;;
   esac
 }
 

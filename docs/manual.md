@@ -1,6 +1,8 @@
 # yumete 使用手冊
 
-**yumete**（宇浩終端文字編輯器）是一個寫中文散文用的終端編輯器，內置宇夢輸入法。
+**yumete**（宇夢終端編輯器）是一個寫中文散文用的終端編輯器，內置宇夢輸入法。
+名字就是這麼拼的：`yumete` ＝ `Yume` ＋ `TE`（Text Editor／Terminal Editor）。
+裝好之後兩個名字都能用——`yumete` 是全名，`ye` 是實際會打的那個。
 本手冊記錄目前能用的功能，隨開發持續更新。想知道某個設計為什麼這麼做，見
 [development.md](development.md)。
 
@@ -42,15 +44,18 @@ Vim 一脈的編輯器是「動詞 + 賓語」——`dw` 是「刪一個詞」�
 ## 二、上手
 
 ```sh
-scripts/build.sh             # 編譯出 ./yumete，安裝輸入法數據，並接上全局的 yumete
+scripts/build.sh             # 編譯出 ./yumete，安裝輸入法數據，並接上全局的 yumete 與 ye
 scripts/build.sh --no-data   # 只編譯二進制
 scripts/build.sh --no-link   # 不動全局那一條命令
 ```
 
-最後一步是把 `~/.local/bin/yumete` 指到剛編出來的那個二進制上，所以在任何目錄裏
-打 `yumete` 用的都是這一次的編譯。想放到別處：`YUMETE_BIN_DIR=/usr/local/bin`。
-那個位置上如果已經有一個**真的檔案**（不是我們建的連結），它不動——別人裝的東西
-不該被一個編譯腳本悄悄換掉。
+最後一步是把 `~/.local/bin/yumete` **和 `~/.local/bin/ye`** 都指到剛編出來的那個
+二進制上，所以在任何目錄裏打 `yumete` 或 `ye` 用的都是這一次的編譯。
+**`ye` 是同一個程序的短名字**，不是另一個程序——就像 helix 裝出來叫 `hx`。
+（`ye` ＝ **y**ume **e**ditor，和 `yumete` ＝ `Yume` ＋ `TE` 是同一條線。）
+想放到別處：`YUMETE_BIN_DIR=/usr/local/bin`。
+那兩個位置上如果已經有一個**真的檔案**（不是我們建的連結），它不動——別人裝的東西
+不該被一個編譯腳本悄悄換掉。`ye` 短，所以這一條對它比對 `yumete` 更要緊。
 
 **第一次用**：進去之後打 `:tutor` ——它會把一課抄成**你自己的一個檔案**，
 邊改邊學，裏面每一個會破壞東西的鍵都可以放心按（`u` 是第一課）。
