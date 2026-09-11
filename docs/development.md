@@ -625,6 +625,7 @@ index, and a row with no number anywhere else is a row that got lost.
 | 400 | **中文名定為「宇夢終端編輯器」** | docs | P3 | `yumete` ＝ `Yume` ＋ `TE` [^400] | Fixed 2026-09-11 |
 | 401 | **`ye`：像 helix 的 `hx` 一樣給一個簡稱** | build | P3 | 一個二進制，兩個名字 [^401] | Fixed 2026-09-11 |
 | 402 | **三國演義和天龍八部根本沒有大綱** | core | P2 | 一本只認出「序」，一本只認出「后记」 [^402] | Open |
+| 403 | **Insert 模式認一套 Windows 的鍵** | tui | P4 | nice to have；⌘ 那半邊已經有結論 [^403] | Proposed |
 
 ### 5.5 · A table is a delimiter, a surface and a boundary (#261)
 
@@ -9277,3 +9278,24 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     `chapter_heading` 認的兩種拼法裏，也可能是 `WRITING_UNDER_A_CHAPTER` 那道閘在這兩本
     書的排版下全不通過。動手之前先把上面這張表當基準跑一遍——**#390 的教訓就是只看一本
     書調參數會把另一本書打死**。
+
+[^403]: 2026-09-11：「insert mode 下我們也要考慮一些 win/mac 快捷鍵兼容。這樣用戶在
+    insert 模式下可以當作非 modal editor 用基礎功能，比如 cmd/ctrl S 保存，
+    cmd/ctrl C 複製這種。」同日定為 **nice to have，不是重點**。記在這裏是因為查的時候
+    挖出了幾件下一個人一定會重新踩的事。
+    ⚠️ **⌘ 那半邊已經有結論了，別再走一遍**：`lib.rs` 的
+    `command_key_chords_are_the_terminals_not_ours` 釘着——「With the Kitty protocol on,
+    ⌘C really does arrive. Read as a bare letter it is `c` — *change* — so asking for a
+    copy deleted the selection.」所以現在是**一律忽略**，而那是對的：⌘C／⌘V 在終端裏本來
+    就是**終端自己的**複製粘貼，搶過來會讓「選中終端文字複製」失靈。
+    能做的只有 Ctrl 那半邊，而 Windows／Linux 使用者按的本來也是 Ctrl。
+    **Insert 現在佔了四個 Ctrl，而且是 readline／emacs 那一套**：`C-w` 刪前一個詞、
+    `C-u` 刪到行首、`C-a` 行首、`C-e` 行尾；其餘 `Ctrl(_)` 一律**無聲吞掉**。
+    ⚠️ `C-a` 在 Windows 是「全選」，在這裏是「行首」——**已經衝突了，而且不吭聲**。
+    三個最想要的各有一個坑：`C-s` 是終端的 **XOFF**（raw mode 關掉 `IXON` 纔行，要驗）；
+    `C-c` 是 **SIGINT**，搶走它使用者就失去「怎麼都能出來」那一下；`C-z` 是 **SIGTSTP**，
+    而且與 helix 那套挂起處理打架（作者的 `.zshrc` 裏有一整段在處理它）。
+    另外 `C-i`＝Tab、`C-m`＝Enter、`C-h`＝Backspace、`C-[`＝Esc，在老終端裏**分不開**，
+    只有 Kitty 協議能分——那又連着 #339。
+    ⚠️ **做之前先等 tutor 審計（#404）**：「Insert 模式該暴露多少」是同一個問題的另一面。
+    **medium**
