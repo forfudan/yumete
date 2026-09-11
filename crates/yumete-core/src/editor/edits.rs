@@ -253,7 +253,7 @@ impl Editor {
     pub(super) fn delete_word_before_cursor(&mut self) {
         let at = self.cursor;
         let rope = self.current_buffer().rope();
-        let mut from = motion::prev_word_start(rope, at, false, self.segmenter.as_ref());
+        let mut from = motion::prev_word_start(rope, at, self.word_grain(), self.segmenter.as_ref());
         // At the start of a word, the word to take back is the one before it.
         if from >= at {
             from = motion::line_start(rope, at);

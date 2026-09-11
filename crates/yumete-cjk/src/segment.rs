@@ -120,6 +120,12 @@ impl WordMark {
 /// 整句 go through the IME engine, which never sees this.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum WordLevel {
+    /// **No dictionary at all: a 漢字 is a letter.** 「我們都是apple」 is one
+    /// word, the way helix reads it — and the way `e` always reads it, whatever
+    /// this is set to (#304). For somebody who would rather `w` behaved the
+    /// same in Chinese as it does in English, and for a file where the
+    /// dictionary is guessing badly.
+    Off,
     /// Only words common enough to be beyond argument. 「山路」 stays two
     /// characters, which is what a proofreader stepping character by character
     /// actually wants.
@@ -137,6 +143,7 @@ impl WordLevel {
     pub fn parse(value: &str) -> Option<WordLevel> {
         match value.trim().to_ascii_lowercase().as_str() {
             "strict" | "few" | "少" | "嚴" => Some(WordLevel::Strict),
+            "off" | "none" | "關" | "关" => Some(WordLevel::Off),
             "balanced" | "normal" | "平衡" => Some(WordLevel::Balanced),
             "full" | "all" | "全" => Some(WordLevel::Full),
             _ => None,
@@ -146,6 +153,7 @@ impl WordLevel {
     /// Its name, as the config writes it and the status line says it.
     pub fn name(self) -> &'static str {
         match self {
+            WordLevel::Off => "off",
             WordLevel::Strict => "strict",
             WordLevel::Balanced => "balanced",
             WordLevel::Full => "full",
@@ -162,6 +170,10 @@ impl WordLevel {
     /// admits everything the list holds, and the list holds nothing absurd.
     pub fn threshold(self) -> i64 {
         match self {
+            // Unreachable in practice — `Off` never reaches a dictionary at
+            // all — but a threshold nothing meets is the honest answer for a
+            // level whose whole point is that no word ever joins.
+            WordLevel::Off => i64::MAX,
             WordLevel::Strict => 12_000,
             WordLevel::Balanced | WordLevel::Full => 0,
         }
@@ -190,10 +202,26 @@ impl WordLevel {
     /// and further down changes nothing — the plateau starts at about −0.5.
     pub fn split_bias(self) -> f64 {
         match self {
+            WordLevel::Off => 0.0,
             WordLevel::Strict => 2.0,
             WordLevel::Balanced => 0.0,
             WordLevel::Full => -1.5,
         }
+    }
+}
+
+/// **No dictionary and no single-character rule: a 漢字 is a letter** (#304).
+///
+/// What [`WordLevel::Off`] gives `w`, and what `e` reads by whatever the level
+/// says. Distinct from [`CategorySegmenter`], which is also dictionary-free but
+/// puts every 漢字 in a word of its own — that is a third behaviour, and the
+/// one nobody asked for.
+#[derive(Debug, Default, Clone, Copy)]
+pub struct CoarseSegmenter;
+
+impl Segmenter for CoarseSegmenter {
+    fn segment(&self, s: &str) -> Vec<(usize, usize)> {
+        crate::word_ranges_coarse(s)
     }
 }
 

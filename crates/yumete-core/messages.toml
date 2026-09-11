@@ -1775,6 +1775,14 @@ en = "long and odd words too"
 find = "粒度 分詞 分词 長詞 长词 full"
 
 [[message]]
+# : 命令選單裏 off 那一項的說明（word-levels 組）
+key = "cmd.word-levels.off"
+zht = "不查詞典——漢字當字母，`我們都是apple` 是一個詞"
+zhs = "不查词典——汉字当字母，`我们都是apple` 是一个词"
+en = "no dictionary — a 漢字 is a letter, so 我們都是apple is one word"
+find = "粒度 分詞 分词 關 关 off none helix"
+
+[[message]]
 # : 命令選單裏 strict 那一項的說明（word-levels 組）
 key = "cmd.word-levels.strict"
 zht = "只認很常見的詞——更多單字"

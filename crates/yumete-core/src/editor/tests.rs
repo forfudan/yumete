@@ -1295,6 +1295,85 @@ fn a_pattern_with_no_capital_in_it_ignores_case() {
     assert_eq!(find(&mut ed, "todo"), (11, 15), "off: lower case means lower");
 }
 
+/// **`w` takes a word, `e` takes a clause** (#304).
+///
+/// The spec was settled against helix a cell at a time. Its two halves:
+/// **`w` counts the whitespace after a word as part of it, `e` counts the
+/// whitespace before one as part of *that* one** — and `e` never consults the
+/// dictionary, because Chinese has no spaces and an `e` that did would do
+/// nearly what `w` does. Left coarse it runs to the punctuation instead.
+///
+/// The rows below are lifted from the measured table in `[^304]`; the sentence
+/// carries 全角 punctuation, a quoted exclamation, Latin, and spaces on both
+/// sides of it.
+#[test]
+fn w_takes_a_word_and_e_takes_a_clause() {
+    // 他0 抬1 頭2 看3 了4 看5 那6 片7 天8 ，9 山10 …了17 。18 「19 走20 吧21
+    // ！22 」23 他24 說25 ␠26 O27 K28 ␠29 了30 。31
+    let text = "他抬頭看了看那片天，山路已經看不見了。「走吧！」他說 OK 了。\n";
+    let at = |n: usize, key: char| {
+        let mut ed = typed(text);
+        for _ in 0..n {
+            ed.on_key(Key::Char('l'));
+        }
+        ed.on_key(Key::Char(key));
+        let (a, b) = ed.selection();
+        ed.current_buffer().text().chars().skip(a).take(b - a).collect::<String>()
+    };
+
+    // `e` — coarse, and the space belongs to the word in front of it.
+    assert_eq!(at(0, 'e'), "他抬頭看了看那片天", "a whole run of 漢字 is one word");
+    assert_eq!(at(8, 'e'), "，", "standing on a word's last cell, take the next");
+    assert_eq!(at(17, 'e'), "。「", "a run of punctuation is a word too");
+    assert_eq!(at(23, 'e'), "他說", "…and it does not drag 」 along");
+    assert_eq!(at(25, 'e'), " OK", "the space in front comes with the word");
+    assert_eq!(at(27, 'e'), "OK", "…but not when the caret is already inside it");
+    assert_eq!(at(28, 'e'), " 了");
+
+    // `w` — a word at a time, with the space *after* each one. (No dictionary
+    // is installed in a bare `Editor`, so a 漢字 is a word here; what matters
+    // for this test is the whitespace side, which is the same either way.)
+    assert_eq!(at(8, 'w'), "，");
+    assert_eq!(at(23, 'w'), "他");
+    assert_eq!(at(26, 'w'), "OK ", "and `w` keeps the trailing space");
+}
+
+/// **`:word-level off` reads a 漢字 as a letter** (#304).
+///
+/// Not a fourth setting of the dictionary but the absence of one, the way
+/// helix reads Chinese — and the same grain `e` uses at every level. One
+/// authority answers it (`Editor::word_grain`), because the level can change
+/// under `:word-level` and a second mechanism would disagree the moment it did.
+#[test]
+fn the_dictionary_can_be_switched_off_and_then_w_reads_letters() {
+    let text = "他抬頭看了看那片天，山路已經看不見了。\n";
+    let take = |off: bool, n: usize| {
+        let mut ed = typed(text);
+        // A bare `Editor` has no dictionary, so give it one word to have an
+        // opinion about — otherwise 「on」 and 「off」 differ only in theory.
+        ed.set_segmenter(Box::new(crate::DictionarySegmenter::new(
+            [("抬頭".to_string(), 100)],
+            1,
+        )));
+        if off {
+            ed.execute(":word-level off").expect("off is a level");
+        }
+        for _ in 0..n {
+            ed.on_key(Key::Char('l'));
+        }
+        ed.on_key(Key::Char('w'));
+        let (a, b) = ed.selection();
+        ed.current_buffer().text().chars().skip(a).take(b - a).collect::<String>()
+    };
+    // On: the dictionary has an opinion about where 抬頭 ends.
+    assert_eq!(take(false, 0), "抬頭");
+    // Off: 漢字 are letters, so the whole run to the 、is one word.
+    assert_eq!(take(true, 0), "他抬頭看了看那片天");
+    // Punctuation is still its own word, both ways.
+    assert_eq!(take(true, 8), "，");
+    assert_eq!(take(false, 8), "，");
+}
+
 /// **The end of a line is its last character, not the break after it** (#382).
 ///
 /// `motion::line_end` is the *insert* point, and `A` is right to ask for it.

@@ -250,16 +250,37 @@ pub fn buffer_end(rope: &Rope, _pos: usize) -> usize {
 /// most of a second and leaves the key queue running long after the key is let
 /// go.
 ///
-/// "WORDS" (`big`) split on whitespace only and need no dictionary; "words"
-/// (small) are produced by `seg`, so a dictionary segmenter can group CJK
-/// characters into words while the default splits each into its own word.
-fn line_words(rope: &Rope, line: usize, big: bool, seg: &dyn Segmenter) -> Vec<(usize, usize)> {
+/// Three grains, because three keys mean three different things (#304):
+///
+/// | | what a word is | who asks |
+/// | --- | --- | --- |
+/// | [`Grain::Big`] | a run of non-whitespace | `W` `B` `E` |
+/// | [`Grain::Word`] | whatever `seg` says | `w` `b` |
+/// | [`Grain::Coarse`] | a run of one category, 漢字 as letters | `e` |
+///
+/// `Coarse` is not a third opinion for its own sake. Chinese has no spaces, so
+/// a `w` and an `e` that both consult the dictionary do nearly the same thing;
+/// left coarse, `e` runs to the next punctuation. **`w` takes a word, `e` takes
+/// a clause.** It is also what `w` itself falls back to when the dictionary is
+/// switched off ([`WordLevel::Off`](yumete_cjk::WordLevel::Off)) — one grain,
+/// two callers.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Grain {
+    /// `W` `B` `E`: split on whitespace and nothing else.
+    Big,
+    /// `w` `b`: whatever the segmenter says.
+    Word,
+    /// `e`: one category at a time, with a 漢字 counting as a letter.
+    Coarse,
+}
+
+fn line_words(rope: &Rope, line: usize, grain: Grain, seg: &dyn Segmenter) -> Vec<(usize, usize)> {
     let start = rope.line_to_char(line);
     let text = line_text(rope, line);
-    let ranges = if big {
-        yumete_cjk::word_ranges_big(&text)
-    } else {
-        seg.segment(&text)
+    let ranges = match grain {
+        Grain::Big => yumete_cjk::word_ranges_big(&text),
+        Grain::Coarse => yumete_cjk::word_ranges_coarse(&text),
+        Grain::Word => seg.segment(&text),
     };
     ranges
         .into_iter()
@@ -273,9 +294,9 @@ fn line_of(rope: &Rope, pos: usize) -> usize {
 }
 
 /// The start of the next word after `pos` (`w` / `W`).
-pub fn next_word_start(rope: &Rope, pos: usize, big: bool, seg: &dyn Segmenter) -> usize {
+pub fn next_word_start(rope: &Rope, pos: usize, grain: Grain, seg: &dyn Segmenter) -> usize {
     for line in line_of(rope, pos)..rope.len_lines() {
-        if let Some(start) = line_words(rope, line, big, seg)
+        if let Some(start) = line_words(rope, line, grain, seg)
             .into_iter()
             .map(|(start, _)| start)
             .find(|&start| start > pos)
@@ -287,24 +308,36 @@ pub fn next_word_start(rope: &Rope, pos: usize, big: bool, seg: &dyn Segmenter) 
 }
 
 /// The end (last character) of the next word after `pos` (`e` / `E`).
-pub fn next_word_end(rope: &Rope, pos: usize, big: bool, seg: &dyn Segmenter) -> usize {
+pub fn next_word_end(rope: &Rope, pos: usize, grain: Grain, seg: &dyn Segmenter) -> (usize, usize) {
     for line in line_of(rope, pos)..rope.len_lines() {
-        if let Some(last) = line_words(rope, line, big, seg)
-            .into_iter()
-            .map(|(_, end)| end.saturating_sub(1))
-            .find(|&last| last > pos)
-        {
-            return last;
+        let words = line_words(rope, line, grain, seg);
+        for (k, &(_, end)) in words.iter().enumerate() {
+            let last = end.saturating_sub(1);
+            if last <= pos {
+                continue;
+            }
+            // **A word owns the whitespace in front of it** — that is the half
+            // of the boundary `e` takes, and `w` takes the other (#304). So the
+            // selection starts at the end of the word before, not at the start
+            // of this one, and `類` + `e` gives `␠你也是人類` rather than
+            // dropping the space on the floor.
+            let leading = match k {
+                0 => rope.line_to_char(line),
+                _ => words[k - 1].1,
+            };
+            // …but never *behind* the caret: when the caret is already inside
+            // this word, `e` takes the rest of it and nothing before.
+            return (pos.max(leading), last);
         }
     }
-    pos
+    (pos, pos)
 }
 
 /// The start of the previous word before `pos` (`b` / `B`).
-pub fn prev_word_start(rope: &Rope, pos: usize, big: bool, seg: &dyn Segmenter) -> usize {
+pub fn prev_word_start(rope: &Rope, pos: usize, grain: Grain, seg: &dyn Segmenter) -> usize {
     let mut line = line_of(rope, pos);
     loop {
-        if let Some(start) = line_words(rope, line, big, seg)
+        if let Some(start) = line_words(rope, line, grain, seg)
             .into_iter()
             .rev()
             .map(|(start, _)| start)
@@ -355,7 +388,7 @@ mod tests {
         let r = rope(&text);
         let seg = Counting::default();
 
-        next_word_start(&r, 0, false, &seg);
+        next_word_start(&r, 0, Grain::Word, &seg);
         let read = seg.0.get();
         assert!(read > 0, "it has to read something");
         assert!(
@@ -365,7 +398,7 @@ mod tests {
 
         // Backwards, from the far end, is bounded the same way.
         let seg = Counting::default();
-        prev_word_start(&r, r.len_chars() - 1, false, &seg);
+        prev_word_start(&r, r.len_chars() - 1, Grain::Word, &seg);
         assert!(seg.0.get() <= 24, "read {} going back", seg.0.get());
     }
 
@@ -374,8 +407,8 @@ mod tests {
         let r = rope("春江\n潮水");
         let seg = CategorySegmenter;
         // Off the end of the first line, onto the start of the second.
-        assert_eq!(next_word_start(&r, 1, false, &seg), 3);
-        assert_eq!(prev_word_start(&r, 3, false, &seg), 1);
+        assert_eq!(next_word_start(&r, 1, Grain::Word, &seg), 3);
+        assert_eq!(prev_word_start(&r, 3, Grain::Word, &seg), 1);
     }
 
     #[test]
@@ -439,13 +472,16 @@ mod tests {
         let seg = yumete_cjk::CategorySegmenter;
         let r = rope("foo bar 你好");
         // Chars: f0 o1 o2 ' '3 b4 a5 r6 ' '7 你8 好9.
-        assert_eq!(next_word_start(&r, 0, false, &seg), 4); // → "bar"
-        assert_eq!(next_word_start(&r, 4, false, &seg), 8); // → "你"
-        assert_eq!(next_word_start(&r, 8, false, &seg), 9); // → "好" (each CJK is a word)
-        assert_eq!(next_word_end(&r, 0, false, &seg), 2); // end of "foo"
-        assert_eq!(next_word_end(&r, 2, false, &seg), 6); // end of "bar"
-        assert_eq!(prev_word_start(&r, 9, false, &seg), 8); // back to "你"
-        assert_eq!(prev_word_start(&r, 6, false, &seg), 4); // back to start of "bar"
+        assert_eq!(next_word_start(&r, 0, Grain::Word, &seg), 4); // → "bar"
+        assert_eq!(next_word_start(&r, 4, Grain::Word, &seg), 8); // → "你"
+        assert_eq!(next_word_start(&r, 8, Grain::Word, &seg), 9); // → "好" (each CJK is a word)
+        // `e` answers with both ends now (#304): where the selection starts
+        // and where the caret lands. Inside a word it starts where the caret
+        // is; stepping out of one it starts at the whitespace before the next.
+        assert_eq!(next_word_end(&r, 0, Grain::Coarse, &seg), (0, 2)); // "foo"
+        assert_eq!(next_word_end(&r, 2, Grain::Coarse, &seg), (3, 6)); // " bar"
+        assert_eq!(prev_word_start(&r, 9, Grain::Word, &seg), 8); // back to "你"
+        assert_eq!(prev_word_start(&r, 6, Grain::Word, &seg), 4); // back to start of "bar"
     }
 
     #[test]
@@ -453,8 +489,8 @@ mod tests {
         let seg = yumete_cjk::CategorySegmenter;
         let r = rope("a.b cd");
         // Small `w` stops at the punctuation; big `W` skips to "cd".
-        assert_eq!(next_word_start(&r, 0, false, &seg), 1); // "." is its own word
-        assert_eq!(next_word_start(&r, 0, true, &seg), 4); // WORD → "cd"
+        assert_eq!(next_word_start(&r, 0, Grain::Word, &seg), 1); // "." is its own word
+        assert_eq!(next_word_start(&r, 0, Grain::Big, &seg), 4); // WORD → "cd"
     }
 
     #[test]
@@ -464,9 +500,12 @@ mod tests {
         let seg = yumete_cjk::DictionarySegmenter::new([("你好".to_string(), 100)], 1);
         let r = rope("foo 你好 bar");
         // Chars: f0 o1 o2 ' '3 你4 好5 ' '6 b7 a8 r9.
-        assert_eq!(next_word_start(&r, 0, false, &seg), 4); // → 你好
-        assert_eq!(next_word_start(&r, 4, false, &seg), 7); // → "bar" (skips 好)
-        assert_eq!(next_word_end(&r, 3, false, &seg), 5); // end of 你好 is 好
+        assert_eq!(next_word_start(&r, 0, Grain::Word, &seg), 4); // → 你好
+        assert_eq!(next_word_start(&r, 4, Grain::Word, &seg), 7); // → "bar" (skips 好)
+        // ⚠️ `e` does **not** consult the dictionary (#304): coarse, 你好 is
+        // one run of letters either way, and the caret on the space before it
+        // takes the space with it.
+        assert_eq!(next_word_end(&r, 3, Grain::Coarse, &seg), (3, 5));
     }
 }
 

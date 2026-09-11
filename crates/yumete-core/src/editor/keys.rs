@@ -640,20 +640,29 @@ impl Editor {
             }
             // Word motions (Helix `w`/`b`/`e`, and WORD `W`/`B`/`E`).
             Key::Char('w') => self.repeat(count, |e| e.select_word_forward(false)),
+            // **`e` is coarse whatever the dictionary says** (#304). Chinese
+            // has no spaces, so an `e` that consulted the dictionary would do
+            // very nearly what `w` does; left coarse it runs to the next
+            // punctuation instead — `w` takes a word, `e` takes a clause.
+            //
+            // And it sets **both** ends: `select_to` leaves the anchor where
+            // the caret was, so standing on a word's last character used to
+            // give 「that character ＋ the next word」 — the punctuation between
+            // them riding along in both directions.
             Key::Char('e') => self.repeat(count, |e| {
-                let p = motion::next_word_end(
+                let (from, to) = motion::next_word_end(
                     e.current_buffer().rope(),
                     e.cursor,
-                    false,
+                    motion::Grain::Coarse,
                     e.segmenter.as_ref(),
                 );
-                e.select_to(p);
+                e.select_span(from, to);
             }),
             Key::Char('b') => self.repeat(count, |e| {
                 let p = motion::prev_word_start(
                     e.current_buffer().rope(),
                     e.cursor,
-                    false,
+                    e.word_grain(),
                     e.segmenter.as_ref(),
                 );
                 e.select_to(p);
@@ -690,19 +699,19 @@ impl Editor {
             Key::Char('[') => self.pending = Pending::Hop { forward: false },
             Key::Char('W') => self.repeat(count, |e| e.select_word_forward(true)),
             Key::Char('E') => self.repeat(count, |e| {
-                let p = motion::next_word_end(
+                let (from, to) = motion::next_word_end(
                     e.current_buffer().rope(),
                     e.cursor,
-                    true,
+                    motion::Grain::Big,
                     e.segmenter.as_ref(),
                 );
-                e.select_to(p);
+                e.select_span(from, to);
             }),
             Key::Char('B') => self.repeat(count, |e| {
                 let p = motion::prev_word_start(
                     e.current_buffer().rope(),
                     e.cursor,
-                    true,
+                    motion::Grain::Big,
                     e.segmenter.as_ref(),
                 );
                 e.select_to(p);

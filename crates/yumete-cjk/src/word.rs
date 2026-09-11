@@ -83,6 +83,39 @@ pub fn word_ranges(s: &str) -> Vec<(usize, usize)> {
     ranges
 }
 
+/// **Coarse words: a 漢字 is a letter.**
+///
+/// Runs of one category — alphanumerics (plus `_`) or punctuation — with no
+/// special case for CJK, so 「我們都是apple」 is one word and 「。，」 is
+/// another. This is what helix does with Chinese, having no dictionary to do
+/// anything else with it, and it is two things here:
+///
+/// * what `w` walks by when the dictionary is switched off
+///   ([`WordLevel::Off`](crate::WordLevel::Off)), and
+/// * what `e` **always** walks by — because Chinese has no spaces, so if both
+///   keys respected the dictionary the two would do nearly the same thing.
+///   Left coarse, `e` runs to the next punctuation instead: **`w` takes a word,
+///   `e` takes a clause** (#304).
+pub fn word_ranges_coarse(s: &str) -> Vec<(usize, usize)> {
+    let chars: Vec<char> = s.chars().collect();
+    let mut ranges = Vec::new();
+    let mut i = 0;
+    while i < chars.len() {
+        if chars[i].is_whitespace() {
+            i += 1;
+            continue;
+        }
+        let cat = category(chars[i]);
+        let start = i;
+        i += 1;
+        while i < chars.len() && !chars[i].is_whitespace() && category(chars[i]) == cat {
+            i += 1;
+        }
+        ranges.push((start, i));
+    }
+    ranges
+}
+
 /// WORD ranges: maximal runs of non-whitespace characters.
 pub fn word_ranges_big(s: &str) -> Vec<(usize, usize)> {
     let chars: Vec<char> = s.chars().collect();
