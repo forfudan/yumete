@@ -558,7 +558,7 @@ index, and a row with no number anywhere else is a row that got lost.
 | 333 | **`:ruby-format` 改寫代碼圍欄裏的 ruby** | core | P3 | 講 ruby 的書，自己的例子被改掉 [^333] | Open |
 | 334 | **單擊 Shift 丟棄正在組字的編碼** | tui+ime | P1 | 交給綁定表之後，組字中的 Shift 先上屏再切英文 [^334] | Fixed 2026-09-09 |
 | 335 | **丟失一次 Shift 釋放，下一次單擊就失效** | tui | P2 | 改用上游的 `ModifierTap`，失焦時 `reset` [^335] | Fixed 2026-09-09 |
-| 336 | **組字中點鼠標，詞上屏到另一個檔案** | tui+ime | P2 | `Event::Mouse` 不問 `is_composing()` [^336] | Open |
+| 336 | **組字中點鼠標，詞上屏到另一個檔案** | tui+ime | P1 | 字進了錯的檔案；兩個分支先問一句 [^336] | Open |
 | 337 | **中／ABC 全局，而 Normal 模式看不見它** | tui+ime | P2 | 按 `i` 之前不知道會掉進哪一種 [^337] | Open |
 | 338 | **`:` 行敲 Shift，中文洩漏回 Insert** | tui+ime | P3 | 切換先把 `borrowed` 清成 `None` [^338] | Open |
 | 339 | **沒有 Kitty 協議就沒有切換，也沒有一句話** | tui+ime | P2 | Apple Terminal 上這個手勢什麼都不做，而且不說 [^339] | Open |
@@ -7861,6 +7861,9 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     preedit 還活着、在**新檔案**的光標處重畫，下一個空格就在那裏上屏。`:811` 的
     `Event::Paste` 同理。對照 `ime_handle`（`:2029`）正是為了這個纔吞掉方向鍵。
     做法：兩個分支進來先問一句，要麼先上屏，要麼吞掉。**small**
+    ⚠️ **2026-09-11 從 P2 提到 P1。** 按 0.1.0 的發布閘——「帶着它發會讓使用者丟東西或
+    失去信任」——**字進了錯的檔案**是這一條的正中間：那不是畫歪了，是一份稿子裏多了幾個
+    不屬於它的字，而且寫的人多半不會當場發現。成本又只是 small。
 
 [^337]: 一個進程一個 `ImeSession`（`lib.rs:264`），所以在第三章切到中文、`gn` 到第四章
     還是中文。而 `[靈明]`／`[ABC]` 只在 `composes_here` 為真的地方畫，**Normal 模式下
