@@ -583,6 +583,19 @@ fn press(editor: &mut Editor, keys: &str) {
                         }
                         name.push(c);
                     }
+                    // `\{alt-d}` for the Meta chords. helix's tutor leans on
+                    // them — `Alt-d` `Alt-c` `Alt-s` `Alt-.` `Alt-,` `Alt-;`
+                    // `Alt-\`` — and without this none of that family could be
+                    // pressed offscreen (2026-09-11).
+                    if let Some(rest) = name.strip_prefix("alt-") {
+                        match rest.chars().next() {
+                            Some(c) if rest.chars().count() == 1 => Key::Alt(c),
+                            _ => {
+                                eprintln!("yumete: --keys: alt- wants one character, got {rest:?}");
+                                break;
+                            }
+                        }
+                    } else {
                     match name.as_str() {
                         "home" => Key::Home,
                         "end" => Key::End,
@@ -596,6 +609,7 @@ fn press(editor: &mut Editor, keys: &str) {
                             eprintln!("yumete: --keys: no key called {other:?}");
                             break;
                         }
+                    }
                     }
                 }
                 Some(other) => Key::Char(other),
@@ -737,7 +751,7 @@ OPTIONS:
                      opens on the third keystroke can be looked at:
                      `\\e` Esc, `\\t` Tab, `\\n` Enter, `\\b` Backspace,
                      `\\^x` Control-x, `\\{{home}}` `\\{{end}}` `\\{{pgup}}`
-                     `\\{{pgdn}}` `\\{{del}}` `\\{{backtab}}`,
+                     `\\{{pgdn}}` `\\{{del}}` `\\{{backtab}}` `\\{{alt-d}}`,
                      `\\u\\d\\l\\r` the arrows. `--keys='::竖排'` opens the
                      command search with that in it.
         --html       With --shot: the frame **with its colours**, as one
