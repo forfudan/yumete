@@ -658,11 +658,23 @@ impl Editor {
                 );
                 e.select_span(from, to);
             }),
+            // **`b` is `e`'s partner, not `w`'s** (#304). helix's tutor teaches
+            // 「to select the word under cursor, combine `e` and `b`」, and the
+            // two only compose if they read the same grain. Ours are coarse, so
+            // the pair takes a **clause** — which is the more useful unit here:
+            // an English word is many letters, a Chinese word is two and a half
+            // characters, and the thing a writer wants to grab is the run
+            // between two 標點.
+            //
+            // The cost, taken deliberately: **there is no 「back one word」**.
+            // `w` is the only key on the dictionary's grain, and it only goes
+            // forward. `C-w` in Insert still deletes a *word* — it says why in
+            // its own doc, and deleting a clause there would be brutal.
             Key::Char('b') => self.repeat(count, |e| {
                 let p = motion::prev_word_start(
                     e.current_buffer().rope(),
                     e.cursor,
-                    e.word_grain(),
+                    motion::Grain::Coarse,
                     e.segmenter.as_ref(),
                 );
                 e.select_to(p);
