@@ -133,6 +133,26 @@ impl Editor {
         self.forget_the_words();
     }
 
+    /// **Which grain `w` and `b` walk by** — the one place that answers it.
+    ///
+    /// `WordLevel::Off` is not a setting of the dictionary, it is the absence
+    /// of one: a 漢字 read as a letter, so 「我們都是apple」 is one word, the way
+    /// helix reads it (#304). Answered here rather than by swapping the
+    /// segmenter at start-up, because the level can also change under `:word-level`
+    /// and two mechanisms would have disagreed the moment it did — which is
+    /// #350's pattern and this repository's most-repeated bug.
+    ///
+    /// ⚠️ **`e` does not ask.** It is coarse whatever this says: Chinese has no
+    /// spaces, so an `e` that respected the dictionary would do very nearly
+    /// what `w` does. Left coarse it runs to the next punctuation — `w` takes a
+    /// word, `e` takes a clause.
+    pub(super) fn word_grain(&self) -> crate::motion::Grain {
+        match self.word_level {
+            yumete_cjk::WordLevel::Off => crate::motion::Grain::Coarse,
+            _ => crate::motion::Grain::Word,
+        }
+    }
+
     /// What the dictionary in force calls itself, for the status line.
     pub fn words_in_force(&self) -> String {
         self.segmenter.source()

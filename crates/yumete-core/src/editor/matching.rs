@@ -358,6 +358,22 @@ impl Editor {
         self.refresh_goal_column();
     }
 
+    /// Put **both** ends where a motion says, unless it is extending.
+    ///
+    /// [`Self::select_to`] leaves the anchor where the caret was, which is
+    /// right for a motion that means 「take everything from here to there」 and
+    /// wrong for one that knows what it is taking. `e` is the second kind: the
+    /// word it lands on begins somewhere, and beginning the selection at the
+    /// old caret instead dragged the previous word's last character — and the
+    /// punctuation between them — along with it (#304).
+    pub(super) fn select_span(&mut self, from: usize, to: usize) {
+        if !self.extend {
+            self.anchor = from;
+        }
+        self.cursor = to;
+        self.refresh_goal_column();
+    }
+
     /// Move the head to `pos`, selecting from the old position (unless already
     /// extending). Used by word and find motions that select what they cross.
     pub(super) fn select_to(&mut self, pos: usize) {
@@ -404,12 +420,16 @@ impl Editor {
     pub(super) fn select_word_forward(&mut self, big: bool) {
         let rope = self.current_buffer().rope();
         let from = self.cursor;
-        let next = motion::next_word_start(rope, from, big, self.segmenter.as_ref());
+        let grain = match big {
+            true => motion::Grain::Big,
+            false => self.word_grain(),
+        };
+        let next = motion::next_word_start(rope, from, grain, self.segmenter.as_ref());
         let head = motion::prev_grapheme(rope, next);
         let (anchor, cursor) = if head > from {
             (from, head)
         } else if next > from {
-            let after = motion::next_word_start(rope, next, big, self.segmenter.as_ref());
+            let after = motion::next_word_start(rope, next, grain, self.segmenter.as_ref());
             (next, motion::prev_grapheme(rope, after).max(next))
         } else {
             // Nothing further in the buffer.

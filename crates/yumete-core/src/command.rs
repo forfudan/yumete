@@ -69,7 +69,7 @@ pub enum WordCommand {
     /// against a 詞頻表 rather than by count (Feature #242). English writing
     /// calls these *crutch words*; the manual calls them 口頭禪.
     Habit,
-    /// `:word-level strict|balanced|full` — how readily characters join into
+    /// `:word-level off|strict|balanced|full` — how readily characters join into
     /// words. `None` says which it is.
     Level(Option<yumete_cjk::WordLevel>),
 }
@@ -1915,6 +1915,11 @@ const WORD_LISTS: &[Word] = &[
 ];
 
 const WORD_LEVELS: &[Word] = &[
+    Word {
+        name: "off",
+        help: "cmd.word-levels.off",
+        needs: &[],
+    },
     Word {
         name: "strict",
         help: "cmd.word-levels.strict",
