@@ -423,6 +423,60 @@ fn main() -> ExitCode {
         let _ = editor.execute(":tutor");
     }
     if let Some((width, height)) = shot {
+        // **Say what this picture cannot show.** `--keys` presses into the core
+        // (`press` calls `editor.on_key`), and the IME lives one crate up in
+        // the front end: composing, the candidate panel, and every `:yume`
+        // command are handled by the interactive loop, which `--shot` never
+        // enters. A `:yume …` leaves its request on the editor for that loop to
+        // pick up — so a request still sitting here is one nobody will ever
+        // act on, and the frame below is of a session where the command did
+        // nothing at all. It used to be drawn without a word, which is how a
+        // reviewer comes away certain the input method is simply blank (#385).
+        //
+        // Standard error, not standard out: the picture itself stays a picture.
+        //
+        // And it is a **family**, not one case: the core answers nine kinds of
+        // request by leaving them on the editor for the front end, and this
+        // path picks up none of them. Naming the ones actually left is cheap
+        // and does not go stale — a tenth added tomorrow shows up here the day
+        // somebody uses it.
+        let mut unheard: Vec<String> = Vec::new();
+        if let Some(asked) = editor.take_scheme_request() {
+            unheard.push(format!(":yume {asked}"));
+        }
+        if editor.take_chaifen_request().is_some() {
+            unheard.push(":chaifen".into());
+        }
+        if editor.take_theme_request().is_some() {
+            unheard.push(":theme".into());
+        }
+        if editor.take_preview_request().is_some() {
+            unheard.push(":preview".into());
+        }
+        if editor.take_open_request().is_some() {
+            unheard.push("gx".into());
+        }
+        if editor.take_shell_request().is_some() {
+            unheard.push("a shell command".into());
+        }
+        if editor.take_clipboard_request().is_some() {
+            unheard.push("the system clipboard".into());
+        }
+        if editor.take_screenshot_request().is_some() {
+            unheard.push(":shot".into());
+        }
+        if !unheard.is_empty() {
+            eprintln!(
+                "yumete: --shot draws one frame and never enters the editor's loop, so {} did nothing here.",
+                unheard.join(", ")
+            );
+            eprintln!(
+                "        The input method in particular is the front end's: composing and the"
+            );
+            eprintln!(
+                "        candidate panel need a real terminal (a pty), not this."
+            );
+        }
         // The layout the flags asked for, before the picture is taken.
         let picture = match shot_html {
             true => yumete_tui::frame_to_html(&mut editor, &config, &ime, width, height),
