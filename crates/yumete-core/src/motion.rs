@@ -42,7 +42,7 @@ fn col_of_byte(s: &str, byte: usize) -> usize {
 }
 
 /// The number of characters on `line` (excluding the trailing line break).
-fn line_char_len(rope: &Rope, line: usize) -> usize {
+pub(crate) fn line_char_len(rope: &Rope, line: usize) -> usize {
     line_text(rope, line).chars().count()
 }
 
