@@ -99,6 +99,11 @@ pub struct Buffer {
     /// Where *this* session last wrote its recovery copy — the only one it may
     /// remove. A copy it did not write is somebody's unrecovered work.
     wrote_at: Option<PathBuf>,
+    /// The revision the last recovery copy was written from (#383).
+    ///
+    /// What [`Buffer::draft_is_stale`] compares against, so the editor can ask
+    /// 「is there anything a crash would take?」 without writing to find out.
+    swapped_at: Option<u64>,
     /// Whether the recovery copy on disk is *this session's*.
     ///
     /// Until this session writes one, the copy beside the document belongs to
@@ -242,6 +247,7 @@ impl Buffer {
             pending_draft: None,
             pending_swap: None,
             wrote_at: None,
+            swapped_at: None,
             owns_swap: false,
             seen: None,
             read_as: None,
@@ -278,6 +284,7 @@ impl Buffer {
             pending_draft: None,
             pending_swap: None,
             wrote_at: None,
+            swapped_at: None,
             owns_swap: false,
             seen: None,
             read_as: None,
@@ -336,6 +343,7 @@ impl Buffer {
             pending_draft,
             pending_swap,
             wrote_at: None,
+            swapped_at: None,
             owns_swap: false,
             syntax,
             syntax_guessed: named.is_none(),
@@ -624,14 +632,30 @@ impl Buffer {
     /// cannot destroy the copy the last one left.
     pub fn write_swap(&mut self) -> io::Result<()> {
         let Some(swap) = self.session_swap_path() else {
+            // Nowhere to write is nothing owed. Without this the idle wake-up
+            // (#383) would fire every interval for the rest of the session on a
+            // buffer that can never have a copy kept beside it.
+            self.swapped_at = Some(self.revision);
             return Ok(());
         };
         self.write_atomically(&swap)?;
         self.wrote_at = Some(swap);
+        self.swapped_at = Some(self.revision);
         // Only true of the canonical name: writing beside somebody's draft
         // does not make it ours to remove.
         self.owns_swap = self.pending_draft.is_none();
         Ok(())
+    }
+
+    /// Whether a crash right now would take something the recovery copy does
+    /// not have (#383).
+    ///
+    /// `is_modified` is about the **document**: it stays true from the first
+    /// keystroke until `:w`. This is about the **copy**: it goes false the
+    /// moment one is written and true again on the next edit, which is what
+    /// lets the loop stop waking up when there is nothing left to insure.
+    pub fn draft_is_stale(&self) -> bool {
+        self.is_modified() && self.swapped_at != Some(self.revision)
     }
 
     /// Remove the recovery copy, if it is this session's to remove.

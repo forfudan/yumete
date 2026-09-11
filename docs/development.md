@@ -605,7 +605,7 @@ index, and a row with no number anywhere else is a row that got lost.
 | 380 | **一眼就是 TSV 的 .txt，打開卻不當表格** | core | P2 | 認出來就進 基本，並且說一句；`t o` 要記住 [^380] | Open |
 | 381 | **光標在看不見的補白裏空走** | core | P2 | 表格扣下的字，動作要跨過去 [^381] | Fixed 2026-09-11 |
 | 382 | **`gl` 與 `End` 把光標停在換行符上** | core | P0 | `motion::line_last`：站在最後一個字上 [^382] | Fixed 2026-09-11 |
-| 383 | **自動救回只在按鍵時觸發，停筆即失效** | core+tui | P0 | 停下來想情節的那幾分鐘正好沒有網 [^383] | Open |
+| 383 | **自動救回只在按鍵時觸發，停筆即失效** | core+tui | P0 | 節流補上後沿：欠着就帶期限地等 [^383] | Fixed 2026-09-11 |
 | 384 | **分隔符表格末尾那一行幽靈，寫進去就壞檔** | core | P0 | `grid_last_line()`：一處問，四處用 [^384] | Fixed 2026-09-11 |
 | 385 | **`--shot`／`--keys` 完全繞過輸入法** | cli+tui | P1 | `:yume` 執行了、不生效、不報錯 [^385] | Open |
 | 386 | **`:export typst` 吃掉圍欄的兩個反引號** | core | P1 | verbatim 裏還誤轉義 `_` [^386] | Open |
@@ -8811,6 +8811,24 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     修法：事件迴圈上掛一個時鐘（vim 的 `updatetime`／`CursorHold` 是同一個形狀），
     或者讓 `recv()` 帶超時。⚠️ 動的是事件迴圈，**三條 P0 裏風險最高的一條**，改完要
     連 `:reload-auto` 開着與關着兩種情形一起驗。**medium**
+    **2026-09-11 做完了。** 病名說準了就好修：**這是一個少了後沿（trailing edge）的
+    節流**，不是「時鐘壞了」。修法三小塊：
+    ① `Buffer::draft_is_stale()`——`is_modified` 說的是**文檔**（從第一次按鍵到 `:w`
+    一直是真），這一支說的是**副本**（寫下去就假，下一次編輯又真）。靠 `swapped_at`
+    記住副本是從哪個 revision 寫的。
+    ② `Editor::autosave_due_in() -> Option<Duration>`——沒有一個緩衝欠着就回 `None`。
+    ③ 事件迴圈（`tui/src/lib.rs`）在 `None` 時照舊無限等，在 `Some(d)` 時
+    `recv_timeout(d)`，超時就 `autosave_tick()` 再 `continue`。
+    ⚠️ **`continue` 會重畫一幀**（迴圈在 488 行就畫了），但**只有一幀**：寫完副本
+    `draft_is_stale` 就假了，下一圈又回到無限等。閒着且沒有未存改動的編輯器一次都不醒。
+    ⚠️ **一個差點踩到的空轉**：沒有存盤路徑的暫存緩衝，`write_swap` 提前 return，
+    `swapped_at` 不更新 → 永遠「欠着」→ 每五秒醒一次重畫一次，一輩子。現在那條提前
+    return 也記上 `swapped_at`——**沒地方寫就是不欠**。
+    實測（`expect` 起真 pty，`kill -9`）：停 7 秒、停 12 秒都拿得到完整草稿；
+    **停 3 秒拿不到，那是對的**——節流間隔就是 5 秒。區別在於暴露窗口從「永遠」變成
+    「最多 5 秒」。手冊 `manual.md:2774` 那一段補了一句說明這件事。
+    回歸測試 `the_editor_says_when_a_recovery_copy_is_owed` 蓋住 `None`→`ZERO`→寫完
+    `None`→再編輯是 `Some(>0 且 ≤5s)`→關掉 autosave 又是 `None` 這一整條。
 
 [^384]: 2026-09-11 的六路審閱，模態編輯器那一路報的。`ropey` 的 `len_lines()` 對
     **以換行收尾**的文本會多算一行空行，而分隔符表格把那一行也畫成了一格一格的行，

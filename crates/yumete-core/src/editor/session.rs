@@ -18,12 +18,37 @@ impl Editor {
         self.autosave = on;
     }
 
+    /// How long until a recovery copy is due, if one is (#383).
+    ///
+    /// `None` means there is nothing a crash could take — autosave off, or
+    /// every buffer's copy already holds what the buffer holds — and the event
+    /// loop may then wait for a key with no timeout at all. `Some(d)` is how
+    /// long the throttle still has to run; `Some(ZERO)` means now.
+    ///
+    /// **This is the trailing edge the throttle never had.** `autosave_tick`
+    /// used to be called only after a keystroke, and it writes at most once
+    /// every [`SWAP_INTERVAL`] — so the last few seconds of typing were only
+    /// ever written by the *next* key. Stop typing and that key never comes:
+    /// the writer pauses to think, the machine dies, and the sentence they
+    /// were looking at was never insured. The old note here said 「nothing is
+    /// being written while nothing is being typed, so there is nothing to
+    /// insure」, which is true of everything except the one window that
+    /// matters.
+    pub fn autosave_due_in(&self) -> Option<std::time::Duration> {
+        if !self.autosave || !self.buffers.iter().any(|b| b.draft_is_stale()) {
+            return None;
+        }
+        let Some(last) = self.last_swap else {
+            return Some(std::time::Duration::ZERO);
+        };
+        Some(SWAP_INTERVAL.saturating_sub(last.elapsed()))
+    }
+
     /// Write a recovery copy of every modified buffer, at most once every
     /// [`SWAP_INTERVAL`].
     ///
-    /// Called by the front end after each key. Tied to keystrokes rather than
-    /// to a clock on purpose: nothing is being written while nothing is being
-    /// typed, so there is nothing to insure.
+    /// Called by the front end after each key **and** on the idle timeout that
+    /// [`Self::autosave_due_in`] asks for.
     /// Write a recovery copy for **every** buffer that has unsaved changes, and
     /// say how many landed.
     ///

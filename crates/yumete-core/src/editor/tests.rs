@@ -373,6 +373,59 @@ fn a_column_can_be_named_either_way_round() {
     assert_eq!(start("gd"), 2, "no number is the key column, which is here");
 }
 
+/// **The throttle grows a trailing edge** (#383).
+///
+/// `autosave_tick` writes at most once every `SWAP_INTERVAL` and used to be
+/// called only after a keystroke, so the last few seconds of typing were
+/// written by the *next* key — and when the writer paused to think, there was
+/// no next key. `autosave_due_in` is what lets the event loop wait with a
+/// deadline instead of forever, and it must answer `None` whenever there is
+/// nothing a crash could take, or the loop would wake for the rest of the
+/// session on a buffer it has nothing to do for.
+#[test]
+fn the_editor_says_when_a_recovery_copy_is_owed() {
+    let dir = std::env::temp_dir().join(format!("yumete-owed-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("ch1.md");
+    std::fs::write(&path, "第一章\n").unwrap();
+
+    let mut ed = Editor::new();
+    ed.open_file(&path).unwrap();
+    ed.set_autosave(true);
+    assert_eq!(ed.autosave_due_in(), None, "nothing typed, nothing owed");
+
+    // One keystroke, and a copy is owed — at once, because none has been
+    // written in this session yet.
+    press(&mut ed, "i甲");
+    assert_eq!(
+        ed.autosave_due_in(),
+        Some(std::time::Duration::ZERO),
+        "owed, and the throttle has not started"
+    );
+
+    // Writing it settles the debt, and the loop may block again. **This is the
+    // part that stops the wake-up repeating**: `is_modified` is still true —
+    // the document is still unsaved — but the copy now holds what the buffer
+    // holds.
+    ed.autosave_tick();
+    assert!(ed.current_buffer().is_modified(), "still unsaved, as it should be");
+    assert_eq!(ed.autosave_due_in(), None, "the copy is up to date");
+
+    // The next edit owes another one, and now the throttle is running, so it
+    // is owed *later* rather than now.
+    press(&mut ed, "乙");
+    let owed = ed.autosave_due_in().expect("owed again");
+    assert!(owed > std::time::Duration::ZERO, "the throttle has started: {owed:?}");
+    assert!(owed <= std::time::Duration::from_secs(5), "and it is bounded: {owed:?}");
+
+    // Autosave off is the one way to owe nothing while unsaved.
+    ed.set_autosave(false);
+    assert_eq!(ed.autosave_due_in(), None, "off means off");
+
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 /// **A file that ends in a newline has no row after its last one** (#384).
 ///
 /// `ropey` reports a trailing empty line for every file that ends in a newline
