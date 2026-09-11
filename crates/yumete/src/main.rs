@@ -86,7 +86,14 @@ fn main() -> ExitCode {
             "--tutor" => tutor = true,
             "--timing" => timing = true,
             "--shot" => shot = Some((100, 30)),
-            s if s.starts_with("--shot=") => shot = Some(parse_size(&s["--shot=".len()..])),
+            s if s.starts_with("--shot=") => match parse_size(&s["--shot=".len()..]) {
+                Ok(size) => shot = Some(size),
+                Err(why) => {
+                    eprintln!("yumete: {why}");
+                    eprintln!("try 'yumete --help'");
+                    return ExitCode::from(2);
+                }
+            },
             "--html" => shot_html = true,
             s if s.starts_with("--keys=") => keys = Some(s["--keys=".len()..].to_string()),
             "-s" | "--syntax" => want_syntax = true,
@@ -239,12 +246,6 @@ fn main() -> ExitCode {
         0
     };
     mark("session", &mut marks);
-    // `-t` is the writer saying "this is a table" about a file no schema names.
-    // After the files, because it is about the file that is open.
-    if force_table {
-        editor.enter_table();
-    }
-
     // Which ruby dialect to lay out: whatever the config names, else the one
     // the file's extension implies.
     editor
@@ -263,6 +264,7 @@ fn main() -> ExitCode {
     // The reader's own 用字 groups (#233) — a novel's names, which no built-in
     // 異體字表 can hold.
     editor.set_usage_groups(config.editor.usage_groups.clone());
+
 
     // The built-in Yume IME (Feature #27): load the configured scheme's tables
     // from the data directory. When the data is absent the session is
@@ -386,8 +388,23 @@ fn main() -> ExitCode {
         return ExitCode::SUCCESS;
     }
 
+    // `-t` is the writer saying "this is a table" about a file no schema names.
+    //
+    // **Here, not up with the other setup.** It used to run right after the
+    // files were opened — and `enter_table` answers on the status line, which
+    // `set_status(String::new())` above wipes on the way out of setup so none
+    // of the installation chatter reaches the first frame. So a file `-t`
+    // refused («「x.csv」不像表格——每行要有同樣多的欄») had its refusal wiped
+    // before anything was drawn: `-t` looked like it had simply ignored you,
+    // while `t t` on the same file explained itself. Same message, same code
+    // path, and one of the two callers could never be heard (#388).
+    if force_table {
+        editor.enter_table();
+    }
+
     // A config file that does not parse is worth one line: silence is how a
-    // typo comes to look like a setting that does not work.
+    // typo comes to look like a setting that does not work. **After `-t`**,
+    // because a broken config outranks a file that is not a grid.
     if !config_problems.is_empty() {
         for problem in &config_problems {
             eprintln!("yumete: {problem}");
@@ -521,12 +538,37 @@ fn press(editor: &mut Editor, keys: &str) {
 }
 
 /// `WIDTHxHEIGHT`, for `--shot`. Anything unreadable is the default page.
-fn parse_size(text: &str) -> (u16, u16) {
-    let (w, h) = text.split_once(['x', 'X', '*']).unwrap_or(("100", "30"));
-    (
-        w.trim().parse().unwrap_or(100),
-        h.trim().parse().unwrap_or(30),
-    )
+/// `WxH` for `--shot`, or why it is not that.
+///
+/// **It used to fall back rather than refuse** — every one of the three steps
+/// below silently produced the default instead — so `--shot=40,10` drew a
+/// 100×30 frame and said nothing, exit code and all. That is a bad trade for a
+/// diagnostic tool: a picture that is quietly of the wrong thing is worse than
+/// no picture, and in 2026-09-11's review it wasted a whole afternoon of six
+/// reviewers' terminal-size findings before anyone noticed (#389).
+///
+/// A comma is taken as well as an `x`, because it is what everyone tries first.
+fn parse_size(text: &str) -> Result<(u16, u16), String> {
+    let text = text.trim();
+    let Some((w, h)) = text.split_once(['x', 'X', '*', ',']) else {
+        return Err(format!(
+            "--shot wants a size like 100x30, not {text:?} (`x`, `X`, `*` or `,` between them)"
+        ));
+    };
+    let read = |part: &str, which: &str| -> Result<u16, String> {
+        let part = part.trim();
+        // Two different complaints, because they are two different mistakes:
+        // `40x` is a typo, `40x999999` is a number nobody meant.
+        match part.parse::<u32>() {
+            Err(_) => Err(format!("--shot: {which} is not a number: {part:?}")),
+            Ok(n) if n > u32::from(u16::MAX) => Err(format!(
+                "--shot: {which} is {n}, and a terminal is at most {} cells across",
+                u16::MAX
+            )),
+            Ok(n) => Ok(n as u16),
+        }
+    };
+    Ok((read(w, "the width")?, read(h, "the height")?))
 }
 
 
@@ -823,4 +865,38 @@ fn write_wrapped(
 /// `less`, or output redirected to a file.
 fn terminal_width() -> usize {
     yumete_tui::terminal_width().unwrap_or(80)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// **A size it cannot read is a refusal, not a default** (#389).
+    ///
+    /// Every step of this used to fall back: an unrecognised separator, a
+    /// width that is not a number, a height that is not a number. So
+    /// `--shot=40,10` drew 100×30 and said nothing — and a picture quietly of
+    /// the wrong thing is worse for a diagnostic tool than no picture at all.
+    #[test]
+    fn a_shot_size_is_read_or_refused_never_guessed() {
+        assert_eq!(parse_size("40x10"), Ok((40, 10)));
+        assert_eq!(parse_size("40X10"), Ok((40, 10)));
+        assert_eq!(parse_size("40*10"), Ok((40, 10)));
+        // A comma, because it is what everyone tries first — and what the
+        // review's own instructions told six people to type.
+        assert_eq!(parse_size("40,10"), Ok((40, 10)));
+        assert_eq!(parse_size(" 40 x 10 "), Ok((40, 10)));
+
+        // Refusals, and each one says which half is wrong.
+        for bad in ["", "abc", "40", "x", "40x", "x10"] {
+            assert!(parse_size(bad).is_err(), "{bad:?} should be refused");
+        }
+        // `split_once` takes the first separator, so the rest is the height —
+        // and `10x2` is not a height.
+        assert!(parse_size("40x10x2").is_err());
+        let too_wide = parse_size("999999x1").unwrap_err();
+        assert!(too_wide.contains("65535"), "{too_wide}");
+        assert!(parse_size("40xzz").unwrap_err().contains("the height"));
+        assert!(parse_size("zzx10").unwrap_err().contains("the width"));
+    }
 }
