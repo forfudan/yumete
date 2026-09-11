@@ -1194,6 +1194,64 @@ fn a_pattern_with_no_capital_in_it_ignores_case() {
     assert_eq!(find(&mut ed, "todo"), (11, 15), "off: lower case means lower");
 }
 
+/// **The end of a line is its last character, not the break after it** (#382).
+///
+/// `motion::line_end` is the *insert* point, and `A` is right to ask for it.
+/// `gl` and `End` leave the caret somewhere, and they were asking for the same
+/// thing — so the caret stood on the newline, where nothing is written, and
+/// every verb aimed at the break: `a` opened on the next line, `d` welded two
+/// lines into one. Both keys, because one root cause had two entrances and
+/// `End` is the one no offscreen test could press.
+#[test]
+fn the_end_of_a_line_is_its_last_character_not_the_break() {
+    for end_key in [vec![Key::Char('g'), Key::Char('l')], vec![Key::End]] {
+        let press = |ed: &mut Editor| {
+            for key in &end_key {
+                ed.on_key(*key);
+            }
+        };
+
+        // Five characters, so the last one is at 4 and the break is at 5.
+        let mut ed = typed("AAAAA\nBBBBB\n");
+        press(&mut ed);
+        assert_eq!(ed.selection(), (4, 5), "on the last A, not on the newline");
+
+        // `a` appends after the caret, which is *inside* the line.
+        ed.on_key(Key::Char('a'));
+        for c in "XXX".chars() {
+            ed.on_key(Key::Char(c));
+        }
+        ed.on_key(Key::Esc);
+        assert_eq!(ed.current_buffer().text(), "AAAAAXXX\nBBBBB\n");
+
+        // `d` takes that last character, not the line break.
+        let mut ed = typed("AAAAA\nBBBBB\n");
+        press(&mut ed);
+        ed.on_key(Key::Char('d'));
+        assert_eq!(ed.current_buffer().text(), "AAAA\nBBBBB\n", "the break stays");
+
+        // A wide character is one grapheme, and the caret lands on the whole
+        // of it — not between its halves.
+        let mut ed = typed("那年\n");
+        press(&mut ed);
+        assert_eq!(ed.selection(), (1, 2), "on 年");
+
+        // An empty line has no last character, so the caret does not move.
+        // (What a collapsed caret *covers* there is the break itself — that is
+        // how every caret on an empty line reads, `gg` included.)
+        let mut ed = typed("\nBBB\n");
+        let before = ed.selection();
+        press(&mut ed);
+        assert_eq!(ed.selection(), before, "nothing to stand on, so stand still");
+
+        // The last line of a file that does not end in a newline.
+        let mut ed = typed("AAA\nBB");
+        ed.on_key(Key::Char('j'));
+        press(&mut ed);
+        assert_eq!(ed.selection(), (5, 6), "on the second B");
+    }
+}
+
 #[test]
 fn a_search_guesses_the_last_pattern() {
     let mut ed = typed("春江潮水連海平，海上明月共潮生");
@@ -8554,7 +8612,10 @@ fn normal_motions_move_the_cursor() {
     assert_eq!(ed.cursor(), 3);
     ed.on_key(Key::Char('g'));
     ed.on_key(Key::Char('l'));
-    assert_eq!(ed.cursor(), 6); // end of "abc"
+    // On the `c`, which is 5 — **not** 6. This line read `6` with the comment
+    // 「end of "abc"」 until 2026-09-11, and 6 is one past the last character:
+    // the assertion was writing the bug down rather than catching it (#382).
+    assert_eq!(ed.cursor(), 5);
 
     // ge goes to the start of the last line.
     ed.on_key(Key::Char('g'));

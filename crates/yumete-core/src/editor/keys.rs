@@ -635,7 +635,7 @@ impl Editor {
                 self.move_head(pos);
             }
             Key::End => {
-                let pos = motion::line_end(self.current_buffer().rope(), self.cursor);
+                let pos = motion::line_last(self.current_buffer().rope(), self.cursor);
                 self.move_head(pos);
             }
             // Word motions (Helix `w`/`b`/`e`, and WORD `W`/`B`/`E`).
@@ -1035,7 +1035,7 @@ impl Editor {
             Key::Char('g') => motion::buffer_start(rope, self.cursor),
             Key::Char('e') => motion::buffer_end(rope, self.cursor),
             Key::Char('h') => motion::line_start(rope, self.cursor),
-            Key::Char('l') => motion::line_end(rope, self.cursor),
+            Key::Char('l') => motion::line_last(rope, self.cursor),
             Key::Char('s') => motion::line_first_non_blank(rope, self.cursor),
             // Joining lines, which vi also spells `gJ`.
             // Joining two lines of a grid makes one row with twice the fields

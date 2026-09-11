@@ -208,6 +208,28 @@ pub fn line_end(rope: &Rope, pos: usize) -> usize {
     rope.line_to_char(line) + line_char_len(rope, line)
 }
 
+/// Where the caret **stands** at the end of a line (`gl`, `End`).
+///
+/// [`line_end`] is the *insert* point — one position past the last character,
+/// which is where `A` belongs and where no character is. A Normal-mode caret
+/// left on it is standing on the newline, and then every verb aims at the line
+/// break instead of at the writing: `a` opened on the next line, `d` ate the
+/// break and welded two lines into one (#382). So a motion that leaves the
+/// caret somewhere asks for this, and only the ones that open Insert ask for
+/// [`line_end`].
+///
+/// An empty line has no last character; there the two are the same place.
+pub fn line_last(rope: &Rope, pos: usize) -> usize {
+    let start = line_start(rope, pos);
+    let end = line_end(rope, pos);
+    match end > start {
+        // `.max(start)` because `prev_grapheme` walks to the previous line when
+        // it cannot step within this one.
+        true => prev_grapheme(rope, end).max(start),
+        false => start,
+    }
+}
+
 /// The start of the buffer (`gg`).
 pub fn buffer_start(_rope: &Rope, _pos: usize) -> usize {
     0

@@ -604,7 +604,7 @@ index, and a row with no number anywhere else is a row that got lost.
 | 379 | **正文頁的表格沒有欄名可看** | tui | P2 | tb 也給欄號；釘頂的表頭決定不做 [^379] | Fixed 2026-09-11 |
 | 380 | **一眼就是 TSV 的 .txt，打開卻不當表格** | core | P2 | 認出來就進 基本，並且說一句；`t o` 要記住 [^380] | Open |
 | 381 | **光標在看不見的補白裏空走** | core | P2 | 表格扣下的字，動作要跨過去 [^381] | Fixed 2026-09-11 |
-| 382 | **`gl` 與 `End` 把光標停在換行符上** | core | P0 | 之後 `a` 打到下一行、`d` 吃掉換行 [^382] | Open |
+| 382 | **`gl` 與 `End` 把光標停在換行符上** | core | P0 | `motion::line_last`：站在最後一個字上 [^382] | Fixed 2026-09-11 |
 | 383 | **自動救回只在按鍵時觸發，停筆即失效** | core+tui | P0 | 停下來想情節的那幾分鐘正好沒有網 [^383] | Open |
 | 384 | **分隔符表格末尾那一行幽靈，寫進去就壞檔** | core | P0 | 末尾換行被吃掉，位元組直接黏上去 [^384] | Open |
 | 385 | **`--shot`／`--keys` 完全繞過輸入法** | cli+tui | P1 | `:yume` 執行了、不生效、不報錯 [^385] | Open |
@@ -8784,6 +8784,18 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     轉義只有 `\e\t\n\b` 與四個方向），六路審閱一個都測不到它。**同一個根因，兩個入口，
     修的時候別只修 `gl`。**
     修法：`gl`／`End` 落位前鉗到最後一個 grapheme（空行除外），`A` 原樣不動。**small**
+    **2026-09-11 做完了**：`motion::line_last` 一支（`line_end` 原樣留着，它是插入點），
+    `gl`（`keys.rs:1038`）與 `End`（`keys.rs:638`）改讀它。
+    ⚠️ **三條既有的斷言把這個 bug 寫進去了**，一條都不是「測試沒蓋到」：
+    `normal_motions_move_the_cursor` 斷言 `gl` 落在 `6` 而注釋寫着「end of "abc"」
+    （"abc" 是 3,4,5）；`the_page_scrolls_sideways_to_keep_the_caret_on_it` 斷言 `26`
+    而注釋直接寫着 **"past the last character"**；`a_click_counts_from_what_is_on_the_page`
+    的視窗因此從 `q` 開始被寫成從 `r` 開始。三條全部改對了，**這是 #300 第四條的又一例：
+    一句寫錯的斷言比沒有斷言更貴，因為它每天都在替 bug 作證。**
+    順帶一個白撿的：光標不再停在空欄上，所以橫向滾動時窗口末尾是一個字而不是一格空白
+    （`rstuvwxyz` ＋ 空格 → `qrstuvwxyz`）。
+    回歸測試 `the_end_of_a_line_is_its_last_character_not_the_break` 把兩個入口、
+    寬字、空行、無末尾換行的末行一起蓋住。
 
 [^383]: 2026-09-11 的六路審閱，寫小說那一路報的，**這一條最像「安全網恰好在最需要的
     時候不在」**。手冊（`docs/manual.md:2774`）寫的是「改了還沒存的時候，yumete
