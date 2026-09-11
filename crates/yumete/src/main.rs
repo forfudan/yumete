@@ -564,6 +564,40 @@ fn press(editor: &mut Editor, keys: &str) {
                 Some('d') => Key::Down,
                 Some('l') => Key::Left,
                 Some('r') => Key::Right,
+                // **`\^x` is Control-x**, caret notation, the way a terminal
+                // has written it since teletypes. Added 2026-09-11: without it
+                // a whole family of keys both tutors teach — `C-o` `C-i` `C-r`
+                // `C-w` `C-a` `C-d` — could not be pressed offscreen at all,
+                // and #382's `End` bug slipped through review for exactly that
+                // reason: nobody could send the key.
+                Some('^') => match chars.next() {
+                    Some(c) => Key::Ctrl(c.to_ascii_lowercase()),
+                    None => break,
+                },
+                // `\{name}` for the keys with names rather than letters.
+                Some('{') => {
+                    let mut name = String::new();
+                    for c in chars.by_ref() {
+                        if c == '}' {
+                            break;
+                        }
+                        name.push(c);
+                    }
+                    match name.as_str() {
+                        "home" => Key::Home,
+                        "end" => Key::End,
+                        "pgup" => Key::PageUp,
+                        "pgdn" => Key::PageDown,
+                        "del" => Key::Delete,
+                        "backtab" => Key::BackTab,
+                        // A name nobody knows is worth saying so: a silent
+                        // fallback here is #389 all over again.
+                        other => {
+                            eprintln!("yumete: --keys: no key called {other:?}");
+                            break;
+                        }
+                    }
+                }
                 Some(other) => Key::Char(other),
                 None => break,
             },
@@ -702,6 +736,8 @@ OPTIONS:
         --keys=KEYS  Press these before the picture is taken, so a panel that
                      opens on the third keystroke can be looked at:
                      `\\e` Esc, `\\t` Tab, `\\n` Enter, `\\b` Backspace,
+                     `\\^x` Control-x, `\\{{home}}` `\\{{end}}` `\\{{pgup}}`
+                     `\\{{pgdn}}` `\\{{del}}` `\\{{backtab}}`,
                      `\\u\\d\\l\\r` the arrows. `--keys='::竖排'` opens the
                      command search with that in it.
         --html       With --shot: the frame **with its colours**, as one
