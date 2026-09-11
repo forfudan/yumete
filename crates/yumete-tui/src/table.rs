@@ -421,10 +421,23 @@ pub fn draw(
     };
     let gutter_style = ink.ground(yumete_config::rung::CHROME);
     let head_style = gutter_style.fg(ink.gold()).add_modifier(Modifier::BOLD);
-    // A ground, and only a ground: the ink on a selected cell is left alone, so
-    // a torn cell is still torn while you stand on it to mend it. It used to be
+    // A ground, and only a ground: the ink under it is left alone, so a torn
+    // cell is still torn while you stand on it to mend it. It used to be
     // `fg(White)`, which is brighter than the ink and flattened every colour
     // underneath at the moment the writer was looking hardest.
+    //
+    // ⚠️ **This is the selection now, not the cell** (2026-09-12). It used to
+    // paint the whole cell the caret was in — and since it painted it with the
+    // *selection's* rung, a selection inside that cell had no colour left to
+    // be drawn in: press `w` in a grid and the word you just took looked
+    // exactly like the cell around it. There is no room on the ladder for a
+    // third ground either (`HEAD` 815 and `SELECTION` 700 are 5% apart at the
+    // paper end, and the ladder's own note says 1.11–1.20 is invisible).
+    //
+    // Nothing was lost by giving the cell back its row's band: **which cell the
+    // caret is in is already said twice** — the column's number and its heading
+    // are both lit at the top of the grid (see the two `i == cursor_cell` arms
+    // above) — while *what is selected* was said nowhere.
     let on = Style::default().bg(ink.selection());
     // **A column is a band, and the page shows between them** — the seam is
     // the page itself, one cell wide, and that is the whole of the ruling.
@@ -676,7 +689,9 @@ pub fn draw(
                 let here = line == cursor_row && i == cursor_cell;
                 let style = if here {
                     match peek {
-                        None => on,
+                        // The row's own band: the selection is painted over it
+                        // below, and the lit column number says which cell.
+                        None => band_if(true, band, text),
                         // 朱's own wash, the same mark the prose page gives the
                         // hit you are standing on.
                         Some(_) => Style::default().bg(ink.wash()),
@@ -720,6 +735,28 @@ pub fn draw(
                         mark,
                         style.fg(ink.gold()).add_modifier(Modifier::BOLD),
                     );
+                }
+                if here && peek.is_none() {
+                    // **The selection, over the cell's own ground.** Only the
+                    // background is touched: a heading inside a selection is
+                    // still a heading, which is the rule everywhere else too.
+                    let from = editor
+                        .cell_span(line, i)
+                        .map(|(a, _)| a)
+                        .unwrap_or(usize::MAX);
+                    let (a, b) = editor.selection();
+                    let (la, ca) = caret_in(&parts[i], a.saturating_sub(from));
+                    let (lb, cb) = caret_in(&parts[i], b.saturating_sub(from));
+                    if la <= k && k <= lb {
+                        let c0 = if la == k { ca as u16 } else { 0 };
+                        let c1 = if lb == k { cb as u16 } else { w };
+                        let stop = (x + c1).min(x + w).min(right);
+                        for cx in (x + c0).min(stop)..stop {
+                            if let Some(cell) = buf.cell_mut((cx, y)) {
+                                cell.set_style(cell.style().patch(on));
+                            }
+                        }
+                    }
                 }
                 if here {
                     // Where typing would land — which is *inside* the cell, not
