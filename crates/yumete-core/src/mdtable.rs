@@ -183,13 +183,93 @@ pub fn row_lines(text: &str) -> Vec<bool> {
 /// The character positions of the unescaped `|` in a line.
 ///
 /// `\|` is the one escape a Markdown table has, and it is the whole of its
-/// quoting — a cell that needs a pipe writes it that way, and this is where
-/// that promise is kept.
-fn pipes(line: &str) -> Vec<usize> {
-    pipes_from(line.trim_end_matches(['\n', '\r']), false)
+/// How a row's cells are told apart (#378).
+///
+/// A `|` in Markdown, a `,` in a CSV, a `;` in what Excel writes, a TAB in a
+/// 碼表, a space in an SSV: **one idea in five punctuations**. The author,
+/// 2026-09-11：「他们本质上都是分隔符。所以 tb / tf 模式下他们显示效果应该是
+/// 一样的。」So the separator is a *value* carried through the one code path
+/// that squares a table up, and nothing downstream asks what kind of file it
+/// is reading.
+///
+/// Two facts tell the two apart, and they are the only two:
+///
+/// - **Where the walls are.** A pipe may be escaped (`\|` is a pipe the cell
+///   holds); nothing else can be, because a cell that needs its own delimiter
+///   is quoted rather than escaped.
+/// - **Whether a row is walled at its ends.** `| a | b |` opens and closes
+///   with one; `a,b` does not, so its first cell begins at the start of the
+///   line and its last runs to the end of it.
+///
+/// A third fact rides along because it follows from the first two: a Markdown
+/// table is written with one space off each wall, so a `|a|b|` that has none
+/// is drawn as though it had. A CSV has no such convention, and a comma with
+/// a space drawn each side of it is not a CSV anybody writes.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Wall {
+    /// `| a | b |` — walled at both ends, and cushioned.
+    Pipe,
+    /// `a,b`, `a\tb`, `a;b` — one character between cells and nothing at the
+    /// ends.
+    Between(char),
 }
 
-/// The same, over any text, saying whether a backslash was already open.
+impl Wall {
+    /// Where the walls stand on `text`, in characters from its start.
+    pub fn at(self, text: &str) -> Vec<usize> {
+        match self {
+            Wall::Pipe => pipes_from(text, false),
+            Wall::Between(wall) => text
+                .chars()
+                .enumerate()
+                .filter(|&(_, c)| c == wall)
+                .map(|(i, _)| i)
+                .collect(),
+        }
+    }
+
+    /// The character a wall is written with.
+    pub fn char(self) -> char {
+        match self {
+            Wall::Pipe => '|',
+            Wall::Between(c) => c,
+        }
+    }
+
+    /// Whether a space is drawn off each wall — see the type's own note.
+    pub fn cushions(self) -> bool {
+        matches!(self, Wall::Pipe)
+    }
+
+    /// Whether this table is written with a rule row (`| --- |`).
+    ///
+    /// It is part of Markdown's syntax and of nobody else's, and it is the
+    /// reason a Markdown column has a **floor**: the row has to be wide enough
+    /// to write `---` in, with a space each side. A CSV has no such row, so
+    /// flooring its columns at three made a two-character column draw a space
+    /// it had no use for — on every row, which lines up and is still a space
+    /// nobody asked for.
+    pub fn ruled(self) -> bool {
+        matches!(self, Wall::Pipe)
+    }
+
+    /// Whether the box ending at `end` is closed by a wall of its own.
+    ///
+    /// A row may end without one: `|cc|d` in Markdown, and *every* row of a
+    /// delimited file, whose last cell simply runs to the end of the line.
+    fn closes(self, chars: &[char], end: usize) -> bool {
+        chars.get(end) == Some(&self.char())
+    }
+}
+
+/// Where each unescaped `|` stands in `text`, saying whether a backslash was
+/// already open.
+///
+/// `\|` is a pipe the cell holds, not a wall — Markdown has no other way to
+/// write one, and a table whose cells could not hold a pipe would be a table
+/// nobody could write about tables in. Nothing else this editor tells cells
+/// apart by can be escaped: a CSV cell that needs its own comma is *quoted*,
+/// which is a different promise kept in a different place.
 ///
 /// The flag is what lets the editor decide whether a `|` about to be typed is
 /// escaped: the backslash that escapes it is already in the buffer, not in the
@@ -227,8 +307,13 @@ pub fn has_bare_pipe(text: &str, escaped: bool) -> bool {
 /// first real character, not on the space before it — and a `c` that took the
 /// padding with it would put the new value hard against the pipe.
 pub fn cells(line: &str) -> Vec<(usize, usize)> {
+    cells_of(line, Wall::Pipe)
+}
+
+/// The same, for a table told apart by any [`Wall`].
+pub fn cells_of(line: &str, wall: Wall) -> Vec<(usize, usize)> {
     let chars: Vec<char> = line.trim_end_matches(['\n', '\r']).chars().collect();
-    boxes(line)
+    boxes_of(line, wall)
         .into_iter()
         .map(|span| trimmed(&chars, span))
         .collect()
@@ -241,11 +326,32 @@ pub fn cells(line: &str) -> Vec<(usize, usize)> {
 /// of getting them there. [`cells`] trims this down to the content, which is
 /// what an edit wants and what a measurement does not.
 pub fn boxes(line: &str) -> Vec<(usize, usize)> {
+    boxes_of(line, Wall::Pipe)
+}
+
+/// The same, for a table told apart by any [`Wall`].
+///
+/// The whole difference between a Markdown table and a CSV lives in these ten
+/// lines: a walled row's cells are what stands *between* its walls, and an
+/// unwalled row's first cell begins at the start of the line and its last runs
+/// to the end of it. Everything downstream — the widths, the padding, the
+/// folding, the grid — is written once and reads this.
+pub fn boxes_of(line: &str, wall: Wall) -> Vec<(usize, usize)> {
     let text = line.trim_end_matches(['\n', '\r']);
     let chars: Vec<char> = text.chars().collect();
-    let bars = pipes(text);
+    let bars = wall.at(text);
     if bars.is_empty() {
         return Vec::new();
+    }
+    if let Wall::Between(_) = wall {
+        let mut raw = Vec::with_capacity(bars.len() + 1);
+        let mut from = 0;
+        for &at in &bars {
+            raw.push((from, at));
+            from = at + 1;
+        }
+        raw.push((from, chars.len()));
+        return raw;
     }
     let mut raw: Vec<(usize, usize)> = bars.windows(2).map(|w| (w[0] + 1, w[1])).collect();
     // A row is allowed to end without its closing pipe. What follows the last
@@ -753,6 +859,41 @@ pub fn format(lines: &[String]) -> Vec<String> {
 /// folded away is read whole in `t i`'s panel. That division of labour is what
 /// makes a cap acceptable at all — **the table is for scanning, the panel is
 /// for reading** — and it is why the cap is the factory answer.
+/// The rows of `first..=last` that a table is measured over, with the page
+/// `page` rows tall and the cursor on `at` (#378).
+///
+/// **Only what is on screen is measured**, which is the law the grid in its
+/// own pane settled this by and wrote down in its first paragraph. A column is
+/// as wide as its widest cell, so answering「how wide」means reading every row
+/// of the table — and in a delimited file「the table」and「the file」are the
+/// same thing (`Bounds::WholeFile` says every line is a row). The 碼表 this
+/// editor exists for therefore handed the padding **124,083 rows**: 74 ms to
+/// walk and 74–97 ms to measure, on every keystroke that moves the revision.
+/// 160 ms a key is not an editor.
+///
+/// One page either side of the row being asked about — **not** of the cursor,
+/// and the difference is what makes it hold. The memo keeps the first answer
+/// of a frame, so the first row the renderer asks for settles the window and
+/// every other row of that page falls inside it: one measurement per frame,
+/// and the page squared up against one set of rows rather than forty. The
+/// reach is a *whole* page, so it covers the page whichever end the renderer
+/// starts from, and it re-anchors on its own when the page scrolls out of it.
+///
+/// A row nobody can see cannot line up with anything, so measuring it buys
+/// nothing.
+///
+/// The columns therefore breathe as you scroll, which the author allowed on
+/// 2026-09-11（「markdown 会抖其实也没问题呀」）and which the grid has always
+/// done: a column that suddenly needs more room is telling you something true
+/// about the rows you just reached.
+pub fn measured_window(first: usize, last: usize, at: usize, page: usize) -> (usize, usize) {
+    let reach = page.max(1);
+    (
+        at.saturating_sub(reach).max(first),
+        at.saturating_add(reach).min(last),
+    )
+}
+
 pub const MAX_COLUMN: usize = 32;
 
 /// The mark that stands where a cell's tail was folded away.
@@ -906,7 +1047,9 @@ pub fn slack(
 /// 「the same as measured」.
 pub fn padding(
     rows: &[(String, Vec<(usize, usize)>)],
+    wall: Wall,
     rule: Option<usize>,
+    aligns: &[Align],
     marks: &[Vec<(usize, usize)>],
     shown: &[Vec<(usize, usize)>],
 ) -> Vec<Vec<(usize, String)>> {
@@ -914,12 +1057,13 @@ pub fn padding(
         .iter()
         .map(|(line, _)| line.trim_end_matches(['\n', '\r']).chars().collect())
         .collect();
-    let boxed: Vec<Vec<(usize, usize)>> = rows.iter().map(|(line, _)| boxes(line)).collect();
-    let spans: Vec<Vec<(usize, usize)>> = rows.iter().map(|(line, _)| cells(line)).collect();
-    let aligns = rule
-        .and_then(|i| rows.get(i))
-        .and_then(|(line, _)| rule_of(line))
-        .unwrap_or_default();
+    let boxed: Vec<Vec<(usize, usize)>> = rows.iter().map(|(line, _)| boxes_of(line, wall)).collect();
+    let spans: Vec<Vec<(usize, usize)>> = rows.iter().map(|(line, _)| cells_of(line, wall)).collect();
+    // **The alignments come in rather than being read off `rows`.** They are
+    // written on the rule row, and the rows handed here are only the ones
+    // being measured (#378) — scroll a long table past its own head and the
+    // rule row is not among them, which would quietly turn every `:---:` back
+    // into left-aligned halfway down the table.
 
     // What each cell takes on the screen as the file stands: the box, less
     // what is hidden inside it, plus the space this module is about to draw
@@ -929,8 +1073,8 @@ pub fn padding(
         let mut widths = Vec::with_capacity(cs.len());
         for (c, &(start, end)) in cs.iter().enumerate() {
             let (from, to) = spans[i][c];
-            let lead = usize::from(from == start);
-            let trail = usize::from(to == end && closes(&chars[i], end));
+            let lead = usize::from(wall.cushions() && from == start);
+            let trail = usize::from(wall.cushions() && to == end && wall.closes(&chars[i], end));
             // **What somebody else draws inside this cell counts too**: the
             // mark that stands where a folded tail was is one cell of the
             // column, and a column padded as though it were not there is one
@@ -961,8 +1105,9 @@ pub fn padding(
                 .enumerate()
                 .map(|(c, &(start, end))| {
                     let (from, to) = spans[i][c];
-                    let lead = usize::from(from == start);
-                    let trail = usize::from(to == end && closes(&chars[i], end));
+                    let lead = usize::from(wall.cushions() && from == start);
+                    let trail =
+                        usize::from(wall.cushions() && to == end && wall.closes(&chars[i], end));
                     // **The mark is counted where it is really drawn.**
                     // `marks` is the *measure's* list — every cell folded,
                     // the open one included, because the column's width is
@@ -998,8 +1143,12 @@ pub fn padding(
             target[c] = target[c].max(*width);
         }
     }
-    for (c, width) in target.iter_mut().enumerate() {
-        *width = (*width).max(aligns.get(c).copied().unwrap_or_default().min() + 2);
+    // **No narrower than its own alignment marker**, where there is one to
+    // write — see [`Wall::ruled`].
+    if wall.ruled() {
+        for (c, width) in target.iter_mut().enumerate() {
+            *width = (*width).max(aligns.get(c).copied().unwrap_or_default().min() + 2);
+        }
     }
 
     let mut out = vec![Vec::new(); rows.len()];
@@ -1011,8 +1160,9 @@ pub fn padding(
         for (c, &(start, end)) in cs.iter().enumerate() {
             let (from, to) = spans[i][c];
             // One space off each pipe, where the writer has not typed one:
-            // `|a|b|` is a table, it is only not *drawn* as one yet.
-            if from == start {
+            // `|a|b|` is a table, it is only not *drawn* as one yet. A CSV has
+            // no such convention and gets none — see [`Wall`].
+            if wall.cushions() && from == start {
                 push_run(&mut runs, from, " ".to_string());
             }
             // **A cell with no pipe after it is padded against nothing.** A row
@@ -1021,7 +1171,7 @@ pub fn padding(
             // line nothing up, so it gets the space off its own pipe and no
             // more. It still votes on the width — its content is as real as
             // any other row's.
-            if !closes(line, end) {
+            if !wall.closes(line, end) {
                 continue;
             }
             // **Saturating**, because an open cell is wider than the column
@@ -1048,7 +1198,7 @@ pub fn padding(
             push_run(&mut runs, at_trail, fill.repeat(after));
             // Last, so that it stays the space against the pipe: a run is one
             // string, and what is pushed into it first is drawn first.
-            if to == end {
+            if wall.cushions() && to == end {
                 push_run(&mut runs, to, " ".to_string());
             }
         }
@@ -1057,11 +1207,6 @@ pub fn padding(
         out[i] = runs;
     }
     out
-}
-
-/// Whether the box ending at `end` is closed by a pipe of its own.
-fn closes(chars: &[char], end: usize) -> bool {
-    chars.get(end) == Some(&'|')
 }
 
 /// Add `text` to the run standing before `at`, keeping one run per anchor.
@@ -1237,6 +1382,13 @@ pub fn schema(header: &str) -> Schema {
 
 #[cfg(test)]
 mod tests {
+    /// The alignments a rule row declares — what `region` hands the padding.
+    fn aligns_of(rows: &[(String, Vec<(usize, usize)>)], rule: Option<usize>) -> Vec<super::Align> {
+        rule.and_then(|i| rows.get(i))
+            .and_then(|(line, _)| super::rule_of(line))
+            .unwrap_or_default()
+    }
+
     use super::*;
 
     fn lines(text: &str) -> Vec<String> {
@@ -1393,7 +1545,7 @@ mod tests {
             })
             .collect();
         let rule = rows.get(1).and_then(|l| rule_of(l)).map(|_| 1);
-        padding(&with, rule, &[], &[])
+        padding(&with, Wall::Pipe, rule, &aligns_of(&with, rule), &[], &[])
             .iter()
             .enumerate()
             .map(|(i, runs)| drawn(&rows[i], with[i].1.as_slice(), runs))
@@ -1467,7 +1619,7 @@ mod tests {
             None => (&with, &marks),
             Some((_, w, m)) => (w, m),
         };
-        padding(rows_in, rule, marks_in, &told)
+        padding(rows_in, Wall::Pipe, rule, &aligns_of(rows_in, rule), marks_in, &told)
             .iter()
             .enumerate()
             .map(|(i, runs)| {
@@ -1595,7 +1747,7 @@ mod tests {
         let with: Vec<(String, Vec<(usize, usize)>)> =
             lines(text).into_iter().map(|l| (l, Vec::new())).collect();
         assert!(
-            padding(&with, Some(1), &[], &[]).iter().all(|r| r.is_empty()),
+            padding(&with, Wall::Pipe, Some(1), &aligns_of(&with, Some(1)), &[], &[]).iter().all(|r| r.is_empty()),
             "nothing to draw, so nothing is drawn"
         );
     }
