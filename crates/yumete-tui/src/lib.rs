@@ -2631,6 +2631,47 @@ fn draw(
     }
     // Last, and over everything: the editor is stopped behind it (#295).
     draw_query(frame, editor, config, area);
+    // …and last of all, the sweep: whatever any of the above put on the page,
+    // no cell of it is a character the terminal obeys.
+    settle_control_characters(frame.buffer_mut());
+}
+
+/// Blank every cell holding a character the terminal would **act on** (#375).
+///
+/// **The one place nobody can forget.** [`drawable`] is the first line and it
+/// works — where the drawing goes through [`put_text`]. About thirty spans do
+/// not: block titles carry a file's name, the tab bar carries it again, the
+/// HUD carries what has just been typed, and the status line carried the
+/// character under the cursor, which on a 碼表 is a TAB. That one cost #375
+/// and #377 together, and the author's reading of it is the rule this
+/// enforces, 2026-09-11：「TAB 是个不稳定渲染。除了文本区有 tab 外，我们在其他
+/// 位置不应该有 tab 存在。太危险了。」
+///
+/// Every drawing path ends in a cell, so the cells are where the rule can be
+/// kept once instead of thirty times. A control character measures nought to
+/// every width this editor asks, so the layout was computed as though it were
+/// not there — and a terminal handed one does something instead: TAB jumps to
+/// the next stop, CR returns to the margin, BS steps back, ESC begins a
+/// sequence. Blanking it is therefore not a loss of anything: the cell was
+/// already spoken for, and now it holds what the measure said it held.
+///
+/// A space rather than nothing, because the cell exists either way and an
+/// empty symbol is a hole the row behind shows through.
+fn settle_control_characters(buf: &mut ratatui::buffer::Buffer) {
+    let area = buf.area;
+    for y in area.y..area.y.saturating_add(area.height) {
+        for x in area.x..area.x.saturating_add(area.width) {
+            let Some(cell) = buf.cell_mut((x, y)) else {
+                continue;
+            };
+            // One byte is the whole test: every control character is ASCII or
+            // a C1 that cannot begin a UTF-8 sequence, so anything with a
+            // first byte at or above `0x20` is clean and pays nothing.
+            if cell.symbol().bytes().any(|b| b < 0x20 || b == 0x7f) {
+                cell.set_symbol(" ");
+            }
+        }
+    }
 }
 
 /// The **question panel**: the editor has stopped, and this is what it asked.
@@ -5311,13 +5352,14 @@ fn draw_status(
     let gap = room.saturating_sub(yumete_cjk::str_width(tail));
     frame.render_widget(
         Paragraph::new(Line::from(vec![
-            Span::styled(status, bar),
-            Span::styled(format!("{}{tail}", " ".repeat(gap)), bar),
+            Span::styled(drawable(&status).into_owned(), bar),
+            Span::styled(drawable(&format!("{}{tail}", " ".repeat(gap))).into_owned(), bar),
         ]))
         .style(bar),
         status_area,
     );
 }
+
 
 /// Whether `row` has any reading over it — which costs it a screen row.
 fn row_has_reading(editor: &Editor, rope: &yumete_core::Rope, row: &wrap::Row) -> bool {
@@ -5782,7 +5824,22 @@ fn char_info(editor: &Editor, config: &Config) -> (String, String) {
         return (String::new(), String::new());
     };
     let point = yumete_cjk::blocks::codepoint(c);
-    let short = format!("{c} {point}");
+    // **A character with no printable form is named, not shown** (#375). The
+    // readout put the character itself at the front, and for a TAB that is a
+    // literal `\t` handed to the terminal: nought cells to `char_width`, so the
+    // line was measured as fitting, and a jump to the next tab stop to the
+    // terminal, so it did not — it overflowed the last column, wrapped, and
+    // made the frame a row taller than the screen. That is #377 as well: a
+    // frame too tall scrolls the terminal, and the frame before it stays on
+    // the screen, which is the page smeared over itself.
+    //
+    // The same shape as #374, one floor up: a tab counted as nothing by a
+    // measure and advanced over by whoever draws it. There is nothing to show
+    // for `U+0009`, so it shows nothing and says the name.
+    let short = match yumete_cjk::char_width(c) {
+        0 => point.clone(),
+        _ => format!("{c} {point}"),
+    };
     match yumete_cjk::blocks::block_of(c) {
         Some(block) => (format!("{short} · {block}"), short),
         None => (short.clone(), short),
@@ -6121,6 +6178,130 @@ mod tests {
         editor.on_key(Key::Char('g'));
         editor.on_key(Key::Char('g'));
         editor
+    }
+
+    /// #375/#377: the status line never hands the terminal a character it
+    /// would **act on**.
+    ///
+    /// The readout names the character under the cursor, and on a TAB it put
+    /// the tab itself there: nought cells to every width this editor asks, a
+    /// jump to the next stop to the terminal. Measured as exactly filling the
+    /// line and drawn wider than it, so it overflowed, wrapped, and made the
+    /// frame a row taller than the screen — which scrolls the terminal and
+    /// leaves the previous frame standing on the page.
+    #[test]
+    fn the_status_line_holds_nothing_the_terminal_would_act_on() {
+        let mut editor = editor_with("ch\t錐\n");
+        editor.on_key(Key::Char('l'));
+        editor.on_key(Key::Char('l'));
+        assert_eq!(editor.char_at_cursor(), Some('\t'), "standing on the tab");
+        for w in [40u16, 60, 61, 80, 99, 120] {
+            let buffer = render_with(&editor, &Config::default(), &no_ime(), w, 8);
+            let row = row_text(&buffer, 7);
+            assert!(
+                !row.chars().any(char::is_control),
+                "w={w}: a control character on the status line: {row:?}"
+            );
+            // What the terminal will consume is what the line was measured at,
+            // which is the whole of this bug: the two used to differ by the
+            // width of a tab stop.
+            assert_eq!(
+                yumete_cjk::drawn_width(&row),
+                w as usize,
+                "w={w}: {row:?}"
+            );
+            // Narrow, the readout gives way altogether — that is the two
+            // stages of giving way doing their job, not this bug.
+            if w >= 60 {
+                assert!(row.contains("U+0009"), "w={w}: and it still names it: {row:?}");
+            }
+        }
+    }
+
+    /// The first latch on its own: the readout names a formless character
+    /// rather than showing it.
+    #[test]
+    fn the_readout_names_a_character_it_cannot_show() {
+        let config = Config::default();
+        let mut editor = editor_with("ch\t錐\n");
+        editor.on_key(Key::Char('l'));
+        editor.on_key(Key::Char('l'));
+        let (long, short) = char_info(&editor, &config);
+        assert!(!long.contains('\t'), "{long:?}");
+        assert!(!short.contains('\t'), "{short:?}");
+        assert!(long.starts_with("U+0009"), "{long:?}");
+    }
+
+    /// The second latch on its own, which is the one that does not depend on
+    /// anybody remembering: whatever reaches the status line, a character the
+    /// terminal would act on does not.
+    #[test]
+    fn the_status_line_strips_what_it_is_handed() {
+        assert_eq!(drawable("a\tb"), "ab");
+        assert_eq!(drawable("a\rb\u{8}c"), "abc");
+        // The common case pays nothing and is handed straight back — borrowed,
+        // not rebuilt, which is every line of every real page.
+        assert!(matches!(
+            drawable("-- NORMAL --  file.txt"),
+            std::borrow::Cow::Borrowed(_)
+        ));
+    }
+
+    /// The rule the author set on 2026-09-11：「TAB 是个不稳定渲染。除了文本
+    /// 区有 tab 外，我们在其他位置不应该有 tab 存在。太危险了。」
+    ///
+    /// Not one guard per drawing path — about thirty of them draw spans that
+    /// never see [`drawable`] — but one sweep at the end, because every path
+    /// ends in a cell. So this test does not ask a particular path to behave;
+    /// it asks the *frame* whether anything got through, which is the only
+    /// question that stays answered when a thirty-first path is written.
+    ///
+    /// **It passes with the sweep taken out**, and that is worth writing down
+    /// rather than hiding: every path a control character can reach today is
+    /// already stopped upstream, so the sweep closes no hole that is open now.
+    /// What it buys is that the next span cannot open one, and that the rule
+    /// has an address instead of thirty.
+    #[test]
+    fn no_cell_of_a_frame_holds_a_character_the_terminal_obeys() {
+        // **A file whose name holds a tab**, which is the case no guard
+        // upstream covers: the tab bar and the pane title take the name and
+        // hand it straight to a span. It is a legal name on every system this
+        // runs on, and one `curl` of a badly-made archive puts one on disk.
+        let dir = std::env::temp_dir().join(format!("yumete-tab-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).expect("a directory to write in");
+        let path = dir.join("ta\tb.txt");
+        std::fs::write(&path, "ch\t錐\n").expect("a file to open");
+
+        // …and a status line with a tab under the cursor, a message quoting
+        // one, and a buffer whose text is full of them.
+        let mut editor = Editor::new();
+        editor.open_file(&path).expect("open it");
+        editor.on_key(Key::Char('l'));
+        editor.on_key(Key::Char('l'));
+        editor.set_status("a\tb\u{1b}[31m".to_string());
+        for (w, h) in [(40u16, 10u16), (80, 24), (120, 40)] {
+            let buffer = render_with(&editor, &Config::default(), &no_ime(), w, h);
+            for y in 0..h {
+                for x in 0..w {
+                    let symbol = buffer[(x, y)].symbol();
+                    assert!(
+                        !symbol.bytes().any(|b| b < 0x20 || b == 0x7f),
+                        "{w}x{h} at ({x},{y}): {symbol:?}"
+                    );
+                }
+            }
+        }
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// A character that *has* a form is still shown beside its code point —
+    /// the readout exists to answer「is this the character I think it is」.
+    #[test]
+    fn a_character_with_a_form_is_still_shown() {
+        let editor = editor_with("錐\n");
+        let buffer = render_with(&editor, &Config::default(), &no_ime(), 80, 8);
+        let row = row_text(&buffer, 7);
+        assert!(row.contains("錐 U+9310"), "{row:?}");
     }
 
     /// #378 on the drawn frame: a TSV read as a table squares its columns up
