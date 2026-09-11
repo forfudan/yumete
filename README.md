@@ -1,8 +1,9 @@
-# yumete · 宇浩終端文字編輯器
+# yumete · 宇夢終端編輯器
 
-**yumete** = **Yu**hao **IME** **t**ext **e**ditor — a lightweight, **Helix-like**,
-**CJK-aware** terminal text editor with a **built-in Yume IME**, tailored first
-for **writing (novels), not coding**.
+**yumete** = **Yume** + **TE** (Text Editor / Terminal Editor) — a lightweight,
+**Helix-like**, **CJK-aware** terminal text editor with a **built-in Yume IME**,
+tailored first for **writing (novels), not coding**. It installs under both
+names: `yumete`, and `ye` for the one you actually type.
 
 **[docs/manual.md](docs/manual.md)**（中文）is the user manual — what the keys
 and commands do, how vertical layout works, and how to configure it.
@@ -248,7 +249,7 @@ cargo test
 
 # Build the release binary to the repo root as ./yumete, compile + install the
 # Yume IME data into ~/.local/share/yumete (needs the sibling yume repo), and
-# point ~/.local/bin/yumete at the binary so `yumete` anywhere is this build:
+# and point ~/.local/bin/{yumete,ye} at it, so either name anywhere is this build:
 scripts/build.sh
 
 # Build only the binary, skipping the IME data step:
