@@ -7230,11 +7230,18 @@ mod tests {
         // window.
         editor.on_key(Key::Char('g'));
         editor.on_key(Key::Char('l'));
-        assert_eq!(editor.cursor(), 26, "past the last character");
+        // On the `z`, which is 25. This read `26, "past the last character"`
+        // until 2026-09-11 — the assertion was writing #382 down rather than
+        // catching it.
+        assert_eq!(editor.cursor(), 25, "on the last character");
         let (buffer, at) = render_caret(&editor, &config, 10, 4);
         assert_eq!(
             row_text(&buffer, 0).trim_end(),
-            "rstuvwxyz",
+            // Ten columns of writing, `q` through `z`. It was nine —
+            // `rstuvwxyz` and a blank column — for as long as the caret stood
+            // one past the `z` (#382); now it stands *on* the `z`, so the
+            // window ends on a character instead of on nothing.
+            "qrstuvwxyz",
             "the tail of the line, not its head"
         );
         assert_eq!(at.map(|p| p.x), Some(9), "the caret is on the page");
@@ -7310,9 +7317,11 @@ mod tests {
             };
             text_at(&editor, &config, Some((w, h).into()), &seats, mouse)
         };
-        // The leftmost cell is `r`, the seventeenth character.
-        assert_eq!(click(0), Some(17));
-        assert_eq!(click(8), Some(25));
+        // The leftmost cell is `q`, the seventeenth character counting from
+        // zero. It was `r` while `gl` left the caret one past the `z` and the
+        // window therefore ended on a blank column (#382).
+        assert_eq!(click(0), Some(16));
+        assert_eq!(click(8), Some(24));
     }
 
     /// A 漢字 the scroll cuts in half is drawn as air, not as half a 字.
