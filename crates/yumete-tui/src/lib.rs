@@ -2681,10 +2681,22 @@ fn draw(
             }
             None => (cursor_x, cursor_y),
         };
+        // **The panel may cover the writing; it may not cover the status line.**
+        // `area` here is the whole window, so on a tall terminal the panel
+        // never reached the bottom and nobody noticed — but at twelve rows a
+        // full page of nine candidates ran straight over the last row, and the
+        // mode, the file name and the position came out as
+        // `--╰──────────╯[中a 靈b明f] ch1.md   Ln 1, Col 1` (#387). The hint
+        // row above it is fair game: it says what keys are available, which is
+        // what the panel itself is showing.
+        let room = Rect {
+            height: status_area.y.saturating_sub(area.y).max(1),
+            ..area
+        };
         match editor.layout() {
-            WritingLayout::Horizontal => draw_candidate_panel(frame, ime, config, area, at_x, at_y),
+            WritingLayout::Horizontal => draw_candidate_panel(frame, ime, config, room, at_x, at_y),
             WritingLayout::Vertical => {
-                vertical::draw_candidate_panel(frame, ime, config, area, at_x, at_y)
+                vertical::draw_candidate_panel(frame, ime, config, room, at_x, at_y)
             }
         }
     }
@@ -8051,6 +8063,48 @@ mod tests {
             }),
             "配置的紙色沒用上"
         );
+    }
+
+    /// **The panel stops above the status line** (#387).
+    ///
+    /// It was sized and placed against `frame.area()` — the whole window — so
+    /// a full page of candidates on a twelve-row terminal ran over the last
+    /// row and took the mode, the file name and the position with it. On a
+    /// tall terminal it never reached the bottom, which is why nobody saw it.
+    /// The row above the status line is fair game: the hint row lists keys,
+    /// and so does the panel.
+    #[test]
+    fn the_candidate_panel_never_covers_the_status_line() {
+        let table = "b 吧 八 把 爸 罷 壩 霸 拔 跋\n";
+        for height in [8u16, 10, 12, 16, 30] {
+            let mut editor = Editor::new();
+            editor.on_key(Key::Char('i'));
+            let mut ime = ImeSession::from_table_text(Scheme::LINGMING, table);
+            ime.input('b');
+            let buffer = render_with(&mut editor, &Config::default(), &ime, 40, height);
+
+            // **The panel is actually on the page.** Without this the test
+            // would pass on a build that simply stopped drawing it.
+            let page = buffer_text(&buffer);
+            assert!(
+                page.contains('╰') && page.contains('吧'),
+                "{height} rows: no panel to speak of: {page:?}"
+            );
+
+            // The last row is the status line, and it still reads as one: the
+            // mode is on it, and no border is.
+            let last = row_text(&buffer, height - 1);
+            assert!(
+                last.contains("NORMAL") || last.contains("INSERT"),
+                "{height} rows: the status line is gone: {last:?}"
+            );
+            for edge in ['╰', '╯', '╭', '╮', '│'] {
+                assert!(
+                    !last.contains(edge),
+                    "{height} rows: the panel is on the status line: {last:?}"
+                );
+            }
+        }
     }
 
     #[test]
