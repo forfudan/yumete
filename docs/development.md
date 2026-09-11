@@ -606,7 +606,7 @@ index, and a row with no number anywhere else is a row that got lost.
 | 381 | **光標在看不見的補白裏空走** | core | P2 | 表格扣下的字，動作要跨過去 [^381] | Fixed 2026-09-11 |
 | 382 | **`gl` 與 `End` 把光標停在換行符上** | core | P0 | `motion::line_last`：站在最後一個字上 [^382] | Fixed 2026-09-11 |
 | 383 | **自動救回只在按鍵時觸發，停筆即失效** | core+tui | P0 | 停下來想情節的那幾分鐘正好沒有網 [^383] | Open |
-| 384 | **分隔符表格末尾那一行幽靈，寫進去就壞檔** | core | P0 | 末尾換行被吃掉，位元組直接黏上去 [^384] | Open |
+| 384 | **分隔符表格末尾那一行幽靈，寫進去就壞檔** | core | P0 | `grid_last_line()`：一處問，四處用 [^384] | Fixed 2026-09-11 |
 | 385 | **`--shot`／`--keys` 完全繞過輸入法** | cli+tui | P1 | `:yume` 執行了、不生效、不報錯 [^385] | Open |
 | 386 | **`:export typst` 吃掉圍欄的兩個反引號** | core | P1 | verbatim 裏還誤轉義 `_` [^386] | Open |
 | 387 | **候選欄在矮終端壓穿狀態列** | tui | P1 | 面板高度不問終端有幾行 [^387] | Open |
@@ -8827,6 +8827,18 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     **這是 #350 那個模式的又一例：護欄掛在一個分支上，另外三個入口不認。**
     修法：把那條判斷提成一支共用的「這是不是尾巴上的幽靈行」，畫行數、`row_cells`、
     光標移動、寫入路徑統一問它。**medium**
+    **2026-09-11 做完了**：`Editor::grid_last_line()` 一支（就是
+    `motion::last_line`——這個概念**倉庫裏本來就有**，註釋寫着「that phantom line is
+    excluded here so the cursor can't fall past the content」，只是表格那一側沒有用它），
+    四個 `line_count() - 1` ／ `len_lines() - 1` 全部改成問它：`table_row_span_at`、
+    `table_lines_at`、縱向移動的兩處邊界；`row_is_ragged` 自己那條守衛也換成問同一處，
+    於是判斷只剩一份。
+    ⚠️ **不要改 `Buffer::line_count()`**——它是 `rope.len_lines()`，全樹幾十處在用，
+    幽靈行是表格那一側的概念，不是緩衝區的。
+    回歸測試 `a_grid_puts_no_row_after_the_last_line_of_the_file`：有無末尾換行讀出
+    同一個 `table_row_span`、`j` 停在最後一行寫、往那裏打字之後末尾換行還在。
+    ⚠️ 順帶查清的邊界：**只有表頭的 csv（`a,b\n` 或 `a,b`）本來就不進網格**，
+    帶不帶末尾換行都一樣——那不是這次改出來的。
 
 [^385]: 2026-09-11 的六路審閱，輸入法那一路報的，**同時也是這個專案自己一條經驗的反例**。
     §「離屏出圖比單元測試先抓到前端的錯」說的是真的——但**對輸入法完全不成立**。
