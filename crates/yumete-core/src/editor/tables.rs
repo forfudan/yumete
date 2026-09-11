@@ -66,6 +66,19 @@ impl Editor {
         }
     }
 
+    /// Whether the separator is `|` — three file characters, one drawn wall.
+    ///
+    /// Only that shape hides characters the caret could otherwise land in
+    /// (`space pipe space` is drawn as a single line). A delimited file's
+    /// separator is one character wide and its empty cells share an offset
+    /// with it, so nothing there is worth hiding.
+    pub(super) fn grid_separator_is_a_pipe(&self) -> bool {
+        matches!(
+            self.table.as_ref().map(|view| view.separator),
+            Some(Separator::Pipe)
+        )
+    }
+
     /// The same door, told whether the table is to have the window (#275).
     ///
     /// **It finds the table; it does not choose the level** (#283). Which

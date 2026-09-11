@@ -237,7 +237,41 @@ impl Editor {
         let rope = self.current_buffer().rope();
         let line = rope.char_to_line(at.min(rope.len_chars()));
         let start = rope.line_to_char(line);
-        let hidden = self.cell_hidden_on_line(line);
+        let mut hidden = self.cell_hidden_on_line(line);
+        // **And the seams between the cells** (2026-09-12). A `|` and the
+        // spaces around it are three characters of the file drawn as one `┆`,
+        // so a caret parked in there is a caret the reader cannot see: press
+        // `l` at the end of a cell and it sits still, press it again and it is
+        // suddenly in the next column. `w` made it worse by landing there in
+        // one press. Same rule as the padding above — **a step the reader
+        // cannot see is not a step** — and the same rule the grid itself lives
+        // by: `row_cells` already leaves the padding out of a cell's span, so
+        // whatever falls between two spans is seam.
+        // ⚠️ **A `|` table only.** There the separator is three characters of
+        // the file — `space pipe space` — drawn as one `┆`, so a caret in it is
+        // a caret nowhere. A delimited file's separator is a single comma or
+        // tab, and its **empty cells sit at the same offset as the separator
+        // after them** (`一,,木目`: the blank cell and the second comma are both
+        // at 2), so hiding seams there costs the one thing a table editor is
+        // most for — putting the caret in a blank cell to fill it in.
+        if self.grid_is_drawn() && self.grid_separator_is_a_pipe() {
+            let cells = self.row_cells(line);
+            let width = crate::motion::line_char_len(rope, line);
+            // Belt and braces: a gap that holds a cell's start is not a seam.
+            let starts: Vec<usize> = cells.iter().map(|&(a, _)| a).collect();
+            let seam = |from: usize, upto: usize, out: &mut Vec<(usize, usize)>| {
+                if upto > from && !starts.iter().any(|s| (from..upto).contains(s)) {
+                    out.push((from, upto));
+                }
+            };
+            let mut edge = 0usize;
+            for &(from, upto) in &cells {
+                seam(edge, from, &mut hidden);
+                edge = upto;
+            }
+            seam(edge, width, &mut hidden);
+            hidden.sort_unstable();
+        }
         if hidden.is_empty() {
             return at;
         }
@@ -367,6 +401,7 @@ impl Editor {
     /// old caret instead dragged the previous word's last character — and the
     /// punctuation between them — along with it (#304).
     pub(super) fn select_span(&mut self, from: usize, to: usize) {
+        let to = self.past_what_a_table_keeps_off(to, to > self.cursor);
         if !self.extend {
             self.anchor = from;
         }
@@ -377,6 +412,11 @@ impl Editor {
     /// Move the head to `pos`, selecting from the old position (unless already
     /// extending). Used by word and find motions that select what they cross.
     pub(super) fn select_to(&mut self, pos: usize) {
+        // A landing place the grid does not draw is not a landing place — the
+        // same rule `move_horizontal` keeps, and the word motions need it too:
+        // `w` at the end of a cell used to park the caret inside the seam,
+        // where nothing on the screen moved (2026-09-12).
+        let pos = self.past_what_a_table_keeps_off(pos, pos > self.cursor);
         let old = self.cursor;
         self.cursor = pos;
         if !self.extend {
@@ -419,6 +459,7 @@ impl Editor {
         } else {
             return;
         };
+        let cursor = self.past_what_a_table_keeps_off(cursor, cursor > self.cursor);
         if !self.extend {
             self.anchor = anchor;
         }
@@ -453,6 +494,7 @@ impl Editor {
             // Nothing further in the buffer.
             return;
         };
+        let cursor = self.past_what_a_table_keeps_off(cursor, cursor > self.cursor);
         if !self.extend {
             self.anchor = anchor;
         }
