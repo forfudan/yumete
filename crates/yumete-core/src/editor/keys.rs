@@ -605,14 +605,19 @@ impl Editor {
                 Key::Char('k') | Key::Up => {
                     return self.repeat(count, |e| e.move_horizontal(motion::left));
                 }
-                // A page at a time, sideways. The capitals follow the direction
-                // their lowercase does, not the direction the words "forward"
-                // and "back" do: `h` is leftward, and leftward is *onward* on a
-                // 縱書 page, so `H` turns the page onward too. Reading `h` as
-                // left and `H` as right would be one letter meaning two
-                // directions.
-                Key::Char('H') => return self.move_page(count, false, 1.0),
-                Key::Char('L') => return self.move_page(count, true, 1.0),
+                // ⚠️ **`H`/`L` are not here any more** (2026-09-12, #404).
+                // They turned the page sideways, and the rule was 「the capital
+                // follows the direction its lowercase does」 — `h` is leftward
+                // and leftward is onward on a 縱書 page, so `H` turned the page
+                // onward. That rule is right, and it is a rule about **screen
+                // quantities**: it still governs `J`/`K`.
+                //
+                // `H`/`L` now take a sentence, which is a **text unit**, and
+                // this editor's text units have never flipped — `w`, `e`, `b`
+                // and their capitals all read onward in both layouts, and
+                // nobody has ever found that strange. So the sentence pair
+                // joins them: `H` is the sentence before, `L` the sentence
+                // after, whichever way the page is set.
                 _ => {}
             }
         }
@@ -682,10 +687,9 @@ impl Editor {
             // A paragraph is a logical line here, and with soft wrap on `j`
             // and `k` move by visual row — so these are the keys that move by
             // what a writer calls a paragraph, and nothing else does.
-            Key::Char('}') => self.repeat(count, |e| {
-                let p = motion::next_paragraph(e.current_buffer().rope(), e.cursor);
-                e.select_up_to(p);
-            }),
+            Key::Char('}') => {
+                self.repeat(count, |e| e.select_unit_forward(motion::next_paragraph))
+            }
             Key::Char('{') => self.repeat(count, |e| {
                 let p = motion::prev_paragraph(e.current_buffer().rope(), e.cursor);
                 e.select_to(p);
@@ -693,11 +697,26 @@ impl Editor {
             // 。！？ and the closing mark that follows one. The unit a person
             // proofreads in, and the one the manual already teaches by telling you
             // to break the file on 。 with `:%s`.
-            Key::Char(')') => self.repeat(count, |e| {
-                let p = motion::next_sentence(e.current_buffer().rope(), e.cursor);
-                e.select_up_to(p);
-            }),
-            Key::Char('(') => self.repeat(count, |e| {
+            //
+            // **On `H`/`L` since 2026-09-12** (#404), for two reasons at once.
+            // They were on `(`/`)`, which Helix spends on cycling the primary
+            // selection — a multi-cursor key we will want when #405 lands, and
+            // squatting on it now would mean moving twice. And the pair they
+            // moved to reads better than the one they left: capitals are the
+            // bigger unit along the same axis, so
+            //
+            // ```text
+            // h  l   one character      j  k   one row
+            // H  L   one sentence       J  K   half a page
+            // ```
+            //
+            // ⚠️ `H`/`L` used to be whole-page paging. Nothing was lost: `C-f`,
+            // `C-b`, `PageUp` and `PageDown` all still do it, and the pair a
+            // reader actually wears out is the *half* page on `J`/`K`.
+            Key::Char('L') => {
+                self.repeat(count, |e| e.select_unit_forward(motion::next_sentence))
+            }
+            Key::Char('H') => self.repeat(count, |e| {
                 let p = motion::prev_sentence(e.current_buffer().rope(), e.cursor);
                 e.select_to(p);
             }),
@@ -937,8 +956,6 @@ impl Editor {
             // already on `hjkl`.
             Key::Char('J') => self.move_page(count, false, 0.5),
             Key::Char('K') => self.move_page(count, true, 0.5),
-            Key::Char('L') => self.move_page(count, false, 1.0),
-            Key::Char('H') => self.move_page(count, true, 1.0),
             // Swap which end of the selection the cursor is on.
             Key::Alt(';') => self.flip_selection(),
             // Whole file, and extending the selection to whole lines.

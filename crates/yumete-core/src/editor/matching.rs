@@ -394,18 +394,36 @@ impl Editor {
     /// after it — a corruption a proofreader would not notice until the page
     /// was set.
     ///
-    /// A motion that cannot advance (already at the end of the writing) leaves
-    /// the selection where it is rather than running backwards.
-    pub(super) fn select_up_to(&mut self, pos: usize) {
-        // `head.max(cursor)`, with no branch back to `pos`: standing *on* the
-        // 。 that ends the sentence puts the next one exactly one grapheme
-        // away, and the guard that was here — 「only step back when it
-        // advances」 — fell through to `pos` in precisely that case and took
-        // the next sentence's first character after all. When the motion
-        // cannot advance, `max` collapses the selection where it stands, which
-        // is the same thing standing still means everywhere else.
-        let head = motion::prev_grapheme(self.current_buffer().rope(), pos);
-        self.select_to(head.max(self.cursor));
+    /// Take the unit the caret is in, and **the next one when it is already at
+    /// the end of this one** — the shape `w` has had since it was written
+    /// ([`Self::select_word_forward`]), given to the units that also want to be
+    /// pressed twice in a row.
+    ///
+    /// `next` says where the following unit begins. ⚠️ Without the second
+    /// branch a repeated press does nothing at all: standing **on** the 。 that
+    /// ends a sentence, the next one begins one grapheme away, so the selection
+    /// cannot advance and the old `select_up_to` collapsed in place. `)` had
+    /// that from the day it was written and nobody noticed, because nobody
+    /// presses `)` twice; `L` invites it, and it stuck at the first 。 for ever
+    /// (2026-09-12, #404).
+    pub(super) fn select_unit_forward(&mut self, next: fn(&Rope, usize) -> usize) {
+        let rope = self.current_buffer().rope();
+        let from = self.cursor;
+        let bound = next(rope, from);
+        let head = motion::prev_grapheme(rope, bound);
+        let (anchor, cursor) = if head > from {
+            (from, head)
+        } else if bound > from {
+            let after = next(rope, bound);
+            (bound, motion::prev_grapheme(rope, after).max(bound))
+        } else {
+            return;
+        };
+        if !self.extend {
+            self.anchor = anchor;
+        }
+        self.cursor = cursor;
+        self.refresh_goal_column();
     }
 
     /// Step forward one word, selecting it (`w` / `W`).

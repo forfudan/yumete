@@ -536,19 +536,23 @@ fn a_sentence_motion_stops_before_the_next_sentence() {
     // next one*, because the motion lands on the next sentence's start and
     // the selection ran through it. `w` has always stepped back one
     // character for exactly this reason; these had not.
+    // ⚠️ On `L`/`H` since 2026-09-12 — `(`/`)` are Helix's for cycling
+    // selections, and squatting on them would mean moving twice (#404).
     let mut ed = typed("第一句。第二句。第三句。\n");
-    press(&mut ed, ")d");
+    press(&mut ed, "Ld");
     assert_eq!(ed.current_buffer().text(), "第二句。第三句。\n");
     // The same for a paragraph.
     let mut ed = typed("第一段。\n第二段。\n");
     press(&mut ed, "}d");
     assert_eq!(ed.current_buffer().text(), "第二段。\n");
 
-    // …and standing **on** the 。 — the next sentence exactly one
-    // grapheme away, which is the case the first fix still got wrong.
+    // …and standing **on** the 。, where the next sentence begins one grapheme
+    // away. It used to collapse here and take only the 。; now it takes the
+    // **next** sentence whole, which is what `w` does in the same position and
+    // what makes the key repeatable at all.
     let mut ed = typed("第一句。第二句。第三句。\n");
-    press(&mut ed, "lll)d");
-    assert_eq!(ed.current_buffer().text(), "第一句第二句。第三句。\n");
+    press(&mut ed, "lllLd");
+    assert_eq!(ed.current_buffer().text(), "第一句。第三句。\n");
 }
 
 #[test]
@@ -2474,14 +2478,16 @@ fn the_capitals_turn_the_page() {
     ed.set_page(20, 10);
     press(&mut ed, "gg");
 
+    // ⚠️ Only `J`/`K` now. `H`/`L` were the whole-page pair until 2026-09-12
+    // and are a sentence apiece since (#404); nothing was lost, because
+    // `C-f`, `C-b`, `PageUp` and `PageDown` all still turn a whole page, and
+    // the half page is the one a reader wears out.
     press(&mut ed, "J");
     assert_eq!(ed.cursor_line(), 10, "half of twenty lines");
-    press(&mut ed, "L");
-    assert_eq!(ed.cursor_line(), 30, "a whole page");
-    press(&mut ed, "K");
+    press(&mut ed, "J");
     assert_eq!(ed.cursor_line(), 20);
-    press(&mut ed, "H");
-    assert_eq!(ed.cursor_line(), 0);
+    press(&mut ed, "K");
+    assert_eq!(ed.cursor_line(), 10);
 
     // Joining moved to `gJ`, which is also how vi spells it.
     let mut ed = typed("上山\n下海");
@@ -6931,30 +6937,63 @@ fn no_route_at_all_gets_a_delimiter_into_a_cell() {
 
 #[test]
 fn a_capital_turns_the_page_the_way_its_lowercase_moves() {
-    // 縱書: `h` is leftward and leftward is onward, so `H` must be onward
-    // too. Reading `h` as left and `H` as back is one letter meaning two
-    // directions, and on a page where the two are not the same it shows.
+    // 縱書: `j` runs down a 縱 and `J` turns the page onward, whichever way
+    // the page is set. Reading a letter one way in lowercase and the other in
+    // capital is one letter meaning two directions.
+    //
+    // ⚠️ **The rule is about screen quantities, and only those.** `H`/`L` used
+    // to be whole-page and obeyed it; since 2026-09-12 they take a *sentence*,
+    // and this editor's text units have never flipped — `w` `e` `b` and their
+    // capitals read onward in both layouts. The second half of this test is
+    // that distinction (#404).
     let mut ed = typed(&"字\n".repeat(400));
     ed.set_layout(Layout::Vertical);
     ed.set_page(20, 30);
     ed.execute("200").unwrap();
     let middle = ed.cursor_line();
 
-    press(&mut ed, "H");
-    assert!(ed.cursor_line() > middle, "H reads on, as h does");
-    let onward = ed.cursor_line();
-    press(&mut ed, "L");
-    assert_eq!(ed.cursor_line(), middle, "and L comes back");
+    press(&mut ed, "J");
+    assert!(ed.cursor_line() > middle, "J reads on, as j does");
+    press(&mut ed, "K");
+    assert_eq!(ed.cursor_line(), middle, "and K comes back");
 
-    // Horizontally they keep the meaning the letters have there, where
-    // rightward and onward are the same thing.
+    // Horizontally the same pair, same meaning.
     ed.set_layout(Layout::Horizontal);
     ed.execute("200").unwrap();
-    press(&mut ed, "L");
-    assert!(ed.cursor_line() > middle, "L reads on");
-    press(&mut ed, "H");
+    press(&mut ed, "J");
+    assert!(ed.cursor_line() > middle, "J reads on");
+    press(&mut ed, "K");
     assert_eq!(ed.cursor_line(), middle);
-    let _ = onward;
+}
+
+/// **A sentence reads the same way whichever way the page is set** (#404).
+///
+/// `H`/`L` are a text unit, not a screen quantity: `L` is the sentence after,
+/// in 橫排 and in 縱書 alike. The page-turning pair `J`/`K` is the one that
+/// follows the direction its lowercase runs.
+#[test]
+fn the_sentence_pair_does_not_flip_with_the_layout() {
+    let text = "第一句。第二句。第三句。\n";
+    let end_of_first = |vertical: bool| {
+        let mut ed = typed(text);
+        if vertical {
+            ed.set_layout(Layout::Vertical);
+        }
+        press(&mut ed, "L");
+        ed.selection()
+    };
+    assert_eq!(end_of_first(false), (0, 4), "橫排：第一句。");
+    assert_eq!(end_of_first(true), (0, 4), "縱書：the same sentence");
+
+    // …and pressed twice it goes on, rather than sticking on the 。 it just
+    // landed on — the bug `)` carried from the day it was written, invisible
+    // only because nobody presses `)` twice.
+    let mut ed = typed(text);
+    press(&mut ed, "LL");
+    assert_eq!(ed.selection(), (4, 8), "第二句。");
+    let mut ed = typed(text);
+    press(&mut ed, "3L");
+    assert_eq!(ed.selection(), (8, 12), "a count goes as far");
 }
 
 #[test]
