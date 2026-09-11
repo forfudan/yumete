@@ -419,6 +419,11 @@ pub fn run(
             let areas = page_areas(editor, config, Rect::new(0, 0, size.width, size.height), 0);
             let page = areas.panes[editor.live_pane().min(1)];
             let lines = editor.current_buffer().line_count();
+            // **Where the page starts**, from the scroll this loop already
+            // keeps (#378): a table's columns are measured against the rows on
+            // the screen, and this is the only place that knows which those
+            // are. Last frame's, necessarily — it is settled while drawing.
+            editor.set_page_top(viewport[editor.live_pane().min(1)].top.line);
             if editor.layout() == WritingLayout::Vertical {
                 let look = vertical::Look::of(editor);
                 editor.set_zong_length(vertical::zong_length_for(config, page.height, lines, look));
@@ -6527,6 +6532,48 @@ mod tests {
         );
     }
 
+    /// 基本 does not open the detail panel unasked (author, 2026-09-11:
+    /// 「tb 模式（basic）默认不用打开 information panel」), and the levels that
+    /// fold cells away do — there it is the way to read one whole.
+    ///
+    /// And `t i` outranks all of it either way: what the reader asked for is
+    /// not something a change of level may quietly undo.
+    #[test]
+    fn the_panel_opens_where_a_cell_may_be_folded_and_not_in_基本() {
+        let long = "甲乙丙丁戊己庚辛壬癸子丑寅卯辰巳午未申酉戌亥天地玄黃";
+        let source = format!("| 地名 | 備註 |\n| --- | --- |\n| 洛陽 | {long} |");
+        let at = |level: &str| {
+            let mut editor = editor_with(&source);
+            for key in ['j', 'j'] {
+                editor.on_key(Key::Char(key));
+            }
+            for c in level.chars() {
+                editor.on_key(Key::Char(c));
+            }
+            editor
+        };
+        assert!(!at("tb").detail_visible(), "基本 leaves it shut");
+        assert!(at("tf").detail_visible(), "全 folds, so the panel is the way in");
+        assert!(at("tt").detail_visible(), "and so does the pane");
+
+        // Asked for, it opens at 基本 too…
+        let mut editor = at("tb");
+        editor.on_key(Key::Char('t'));
+        editor.on_key(Key::Char('i'));
+        assert!(editor.detail_visible(), "{}", editor.status());
+        // …and the answer travels: walking up to 全 and back does not undo it.
+        for c in "tftb".chars() {
+            editor.on_key(Key::Char(c));
+        }
+        assert!(editor.detail_visible(), "the reader's answer outlives the level");
+
+        // The other way round: shut at 全 stays shut at 全.
+        let mut editor = at("tf");
+        editor.on_key(Key::Char('t'));
+        editor.on_key(Key::Char('i'));
+        assert!(!editor.detail_visible(), "{}", editor.status());
+    }
+
     /// #379: 基本 numbers the columns too.    /// #379: 基本 numbers the columns too.
     ///
     /// The author, 2026-09-11：「tb 模式可不可以也标注列号（和 tf 模式一样）」，
@@ -6823,7 +6870,13 @@ mod tests {
     /// 被折叠的信息永远无法读取」.
     ///
     /// Three answers, and this is all three: the cut is marked, `t w` lifts
-    /// the cap, and the cell the caret stands in is drawn whole either way.
+    /// the cap, and the cell **being typed in** is drawn whole.
+    ///
+    /// That last one used to open for the caret in Normal as well, and the
+    /// author had it taken back to the prose page's rule on 2026-09-11：
+    /// 「列宽容易跳……建议这个和 tf 保持一致」. Which leaves Normal three ways
+    /// to read a cut cell and no moving columns: the panel down the right has
+    /// it whole already, `i` opens it in place, and `t w` opens every one.
     #[test]
     fn the_grid_marks_a_cut_cell_t_w_lifts_the_cap_and_the_caret_reads_whole() {
         let long = "甲乙丙丁戊己庚辛壬癸子丑寅卯辰巳午未申酉戌亥天地玄黃";
@@ -6862,14 +6915,36 @@ mod tests {
         assert!(whole.contains(long), "every character of it:\n{whole}");
         assert!(!whole.contains('>'), "and nothing left to unfold:\n{whole}");
 
-        // Folded again, and read by walking into it: the caret's own cell is
-        // never the one that is folded away.
+        // Folded again, and walked into: in Normal the grid does not move.
+        // **A column that rewrote itself on every `l`** is what this costs
+        // otherwise — the key means「next cell」and the whole table shifted
+        // sideways to answer it.
         editor.on_key(Key::Char('t'));
         editor.on_key(Key::Char('w'));
         editor.on_key(Key::Char('l'));
         assert_eq!(editor.cell_position().map(|(_, c)| c), Some(1));
         let stood_in = page(&editor);
-        assert!(stood_in.contains(long), "the cell you are in is whole:\n{stood_in}");
+        assert!(
+            !stood_in.contains("玄黃"),
+            "standing in it does not open it:\n{stood_in}"
+        );
+        // The grid itself, not the two rows at the foot: the hint and the
+        // position readout name the cell the caret is in, and it moved.
+        let grid = |page: &str| page.lines().take(8).collect::<Vec<_>>().join("\n");
+        assert_eq!(grid(&stood_in), grid(&folded), "and the grid is exactly as it was");
+
+        // …and it is still readable, three ways. The panel down the right had
+        // it whole all along, which is the one that costs the grid nothing.
+        let frame = render(&editor, &config, 120, 10);
+        let whole_page: String = (0..10).map(|y| row_text(&frame, y)).collect::<Vec<_>>().join("");
+        assert!(
+            long.chars().all(|c| whole_page.contains(c)),
+            "the panel is showing it:\n{whole_page}"
+        );
+        // Typing in it opens it in place, the way it does in prose.
+        editor.on_key(Key::Char('i'));
+        let typing = page(&editor);
+        assert!(typing.contains(long), "the cell being typed in is whole:\n{typing}");
     }
 
     /// `t a` — 格內折行 (author, 2026-09-07: 「把所有超长的单元格都在单元格下方

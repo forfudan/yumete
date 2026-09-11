@@ -859,39 +859,42 @@ pub fn format(lines: &[String]) -> Vec<String> {
 /// folded away is read whole in `t i`'s panel. That division of labour is what
 /// makes a cap acceptable at all — **the table is for scanning, the panel is
 /// for reading** — and it is why the cap is the factory answer.
-/// The rows of `first..=last` that a table is measured over, with the page
-/// `page` rows tall and the cursor on `at` (#378).
+/// The rows of `first..=last` a table is measured over: the ones on the page.
 ///
-/// **Only what is on screen is measured**, which is the law the grid in its
-/// own pane settled this by and wrote down in its first paragraph. A column is
-/// as wide as its widest cell, so answering「how wide」means reading every row
-/// of the table — and in a delimited file「the table」and「the file」are the
-/// same thing (`Bounds::WholeFile` says every line is a row). The 碼表 this
-/// editor exists for therefore handed the padding **124,083 rows**: 74 ms to
-/// walk and 74–97 ms to measure, on every keystroke that moves the revision.
-/// 160 ms a key is not an editor.
+/// **Only what is on screen is measured**, which is the law the grid in its own
+/// pane settled this by and wrote down in its first paragraph. A column is as
+/// wide as its widest cell, so answering「how wide」means reading every row of
+/// the table — and in a delimited file「the table」and「the file」are the same
+/// thing (`Bounds::WholeFile` says every line is a row). The 碼表 this editor
+/// exists for therefore handed the padding **124,083 rows**: 74 ms to walk and
+/// 74–97 ms to measure, on every keystroke that moves the revision. 160 ms a
+/// key is not an editor.
 ///
-/// One page either side of the row being asked about — **not** of the cursor,
-/// and the difference is what makes it hold. The memo keeps the first answer
-/// of a frame, so the first row the renderer asks for settles the window and
-/// every other row of that page falls inside it: one measurement per frame,
-/// and the page squared up against one set of rows rather than forty. The
-/// reach is a *whole* page, so it covers the page whichever end the renderer
-/// starts from, and it re-anchors on its own when the page scrolls out of it.
+/// `top` is where the page starts and `page` is how tall it is, so the window
+/// is the screen. It was 「one page either side of the row being asked about」
+/// until 2026-09-11 — which needed no viewport, and which let a long cell up to
+/// a page away widen every column around it with nothing visible to say why.
+/// The author: 「可以都只量屏幕上的吗？」Yes, and it is better for the reason
+/// the grid gives for the same choice: a column that suddenly needs more room
+/// is telling you something true about the rows you just reached — which it
+/// only is if the change and its cause arrive together.
 ///
-/// A row nobody can see cannot line up with anything, so measuring it buys
-/// nothing.
+/// A row asked about from off the page — a `:shot`, a caret readout after a
+/// jump — is taken in rather than refused, so it still gets an answer; the
+/// page's own rows are asked first and hold the memo for the frame.
 ///
-/// The columns therefore breathe as you scroll, which the author allowed on
-/// 2026-09-11（「markdown 会抖其实也没问题呀」）and which the grid has always
-/// done: a column that suddenly needs more room is telling you something true
-/// about the rows you just reached.
-pub fn measured_window(first: usize, last: usize, at: usize, page: usize) -> (usize, usize) {
-    let reach = page.max(1);
-    (
-        at.saturating_sub(reach).max(first),
-        at.saturating_add(reach).min(last),
-    )
+/// The columns therefore breathe as you scroll, which the author allowed
+/// (「markdown 会抖其实也没问题呀」) and which the grid has always done.
+pub fn measured_window(
+    first: usize,
+    last: usize,
+    line: usize,
+    top: usize,
+    page: usize,
+) -> (usize, usize) {
+    let a = top.max(first).min(last);
+    let b = top.saturating_add(page.max(1)).min(last).max(a);
+    (a.min(line).max(first), b.max(line).min(last))
 }
 
 pub const MAX_COLUMN: usize = 32;

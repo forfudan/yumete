@@ -912,7 +912,13 @@ impl Editor {
         // travel with the region rather than with the rows, so a table scrolled
         // past its own rule row keeps them.
         let (first, last) =
-            crate::mdtable::measured_window(region.first, region.last, line, self.page_lines);
+            crate::mdtable::measured_window(
+                region.first,
+                region.last,
+                line,
+                self.page_top,
+                self.page_lines,
+            );
         region.first = first;
         region.last = last;
         Some(region)

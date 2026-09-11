@@ -659,8 +659,9 @@ impl Editor {
                 Ok(CommandOutcome::Continue)
             }
             Command::ShowDetail(want) => {
-                self.show_detail = want.unwrap_or(!self.show_detail);
-                self.status = match self.show_detail {
+                let want = want.unwrap_or(!self.detail_visible());
+                self.show_detail = Some(want);
+                self.status = match want {
                     true => say!("ui.detail-panel-on"),
                     false => say!("ui.detail-panel-off"),
                 };
@@ -668,7 +669,7 @@ impl Editor {
             }
             Command::SetDetailWidth(n) => {
                 self.detail_width = Some(n.clamp(12, 80));
-                self.show_detail = true;
+                self.show_detail = Some(true);
                 self.status = say!("ui.detail-panel-width", self.detail_width.unwrap_or(n));
                 Ok(CommandOutcome::Continue)
             }
