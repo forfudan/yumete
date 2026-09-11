@@ -143,6 +143,14 @@ pub fn export(text: &str, format: Format, style: &Style) -> String {
 enum Block<'a> {
     Heading(usize, &'a str),
     Paragraph(Vec<&'a str>),
+    /// A fenced code block, fence lines and all, exactly as it was written.
+    ///
+    /// It has to be a block of its own: run through the paragraph path, the
+    /// opening ```` ```rust ```` met the *inline* scanner, which read two of
+    /// its three backticks as an empty code span and swallowed them — the
+    /// third came out as `\``, and what reached the `.typ` file was not a code
+    /// block at all (#386).
+    Code(Vec<&'a str>),
 }
 
 /// Split `text` into headings and paragraphs.
@@ -154,8 +162,28 @@ enum Block<'a> {
 fn blocks(text: &str) -> Vec<Block<'_>> {
     let mut out = Vec::new();
     let mut lines: Vec<&str> = Vec::new();
+    let mut fence: Option<Vec<&str>> = None;
     for line in text.lines() {
         let trimmed = line.trim_end();
+        // Inside a fence nothing is markup — not a blank line, not a `#`, not
+        // a backtick. The fence is over when a line of its own opens with
+        // three backticks again.
+        if let Some(held) = &mut fence {
+            let closing = trimmed.trim_start().starts_with("```");
+            held.push(line);
+            if closing {
+                out.push(Block::Code(std::mem::take(&mut fence).unwrap_or_default()));
+                fence = None;
+            }
+            continue;
+        }
+        if trimmed.trim_start().starts_with("```") {
+            if !lines.is_empty() {
+                out.push(Block::Paragraph(std::mem::take(&mut lines)));
+            }
+            fence = Some(vec![line]);
+            continue;
+        }
         if trimmed.trim().is_empty() {
             if !lines.is_empty() {
                 out.push(Block::Paragraph(std::mem::take(&mut lines)));
@@ -171,6 +199,11 @@ fn blocks(text: &str) -> Vec<Block<'_>> {
             continue;
         }
         lines.push(trimmed);
+    }
+    // A fence nobody closed still has to come out: the writer's text is the
+    // writer's, half-written or not.
+    if let Some(held) = fence {
+        out.push(Block::Code(held));
     }
     if !lines.is_empty() {
         out.push(Block::Paragraph(lines));
@@ -216,7 +249,7 @@ fn line_into(
                 out.push_str(&escape(&std::mem::take(&mut plain)));
                 let end = span.end.min(chars.len());
                 let text: String = chars[at.max(span.start)..end].iter().collect();
-                out.push_str(&marked(span.kind, &escape(&text), dialect));
+                out.push_str(&marked(span.kind, &text, dialect, escape));
                 at = end.max(at + 1);
             }
             None => {
@@ -233,8 +266,23 @@ fn line_into(
 ///
 /// The markers themselves and the 批注 come out as nothing at all — those are
 /// the two runs that are *about* the manuscript rather than part of it.
-fn marked(kind: crate::markdown::Kind, text: &str, dialect: Dialect) -> String {
+fn marked(
+    kind: crate::markdown::Kind,
+    text: &str,
+    dialect: Dialect,
+    escape: fn(&str) -> String,
+) -> String {
     use crate::markdown::Kind;
+    // **Escaped here rather than before the call**, because one of these runs
+    // must not be: Typst's backticks hold *raw* text, where a `\` is a
+    // backslash and nothing else, so `` `code_here` `` was coming out as
+    // `` `code\_here` `` (#386). HTML's `<code>` is the opposite — `&lt;` is
+    // required there — so this is a per-dialect answer, not a per-kind one.
+    let raw = matches!((kind, dialect), (Kind::Code, Dialect::Typst));
+    let text = &match raw {
+        true => text.to_string(),
+        false => escape(text),
+    };
     match (kind, dialect) {
         // The delimiters, and the writer's private notes. Not in the book.
         (Kind::Marker | Kind::Comment, _) => String::new(),
@@ -326,6 +374,18 @@ fn html(text: &str, style: &Style) -> String {
             Block::Heading(depth, title) => {
                 let inner = line_into(title, style.dialects, Dialect::Html, escape_html);
                 out.push_str(&format!("<h{depth}>{inner}</h{depth}>\n"));
+            }
+            // The fence lines are markup, the rest is verbatim: `<pre>` keeps
+            // its own whitespace, and the only thing owed to it is HTML's own
+            // escaping — no Markdown is read inside a code block (#386).
+            Block::Code(lines) => {
+                let body: Vec<String> = lines
+                    .iter()
+                    .skip(1)
+                    .take(lines.len().saturating_sub(2).max(0))
+                    .map(|l| escape_html(l))
+                    .collect();
+                out.push_str(&format!("<pre><code>{}</code></pre>\n", body.join("\n")));
             }
             Block::Paragraph(lines) => {
                 let inner: Vec<String> = lines
@@ -420,6 +480,16 @@ fn typst(text: &str, style: &Style) -> String {
             Block::Heading(depth, title) => {
                 let inner = line_into(title, style.dialects, Dialect::Typst, escape_typst);
                 out.push_str(&format!("{} {inner}\n\n", "=".repeat(depth)));
+            }
+            // **Straight through.** Typst spells a raw block with the same
+            // three backticks Markdown does, so the writer's fence is already
+            // Typst — reading anything inside it is the whole of #386.
+            Block::Code(lines) => {
+                for line in lines {
+                    out.push_str(line);
+                    out.push('\n');
+                }
+                out.push('\n');
             }
             Block::Paragraph(lines) => {
                 for line in lines {
@@ -607,6 +677,50 @@ mod tests {
             out.contains("<ruby>永<rt>ㄩㄥˇ</rt></ruby>和九年。"),
             "{out}"
         );
+    }
+
+    /// **A code block comes out as a code block** (#386).
+    ///
+    /// `blocks` knew only headings and paragraphs, so the opening ```` ```rust ````
+    /// went down the paragraph path and met the *inline* scanner, which read
+    /// two of its three backticks as an empty code span and ate them; the third
+    /// was escaped. What reached the `.typ` file was `\`rust` and a body — not
+    /// a code block, and not what was written either.
+    #[test]
+    fn a_fenced_block_survives_the_export_fence_and_all() {
+        let text = "# 標題\n\n```rust\nfn main() { let x_y = 1; }\n```\n\n收尾。\n";
+
+        // Typst spells a raw block with the same three backticks, so the
+        // writer's fence is already Typst: it goes straight through.
+        let out = export(text, Format::Typst, &style());
+        assert!(out.contains("```rust\n"), "the fence, opened: {out}");
+        assert!(
+            out.contains("fn main() { let x_y = 1; }"),
+            "and the code untouched — no `\\_` in it: {out}"
+        );
+        assert!(!out.contains("\\`"), "no escaped backtick anywhere: {out}");
+        assert!(!out.contains("x\\_y"), "nothing inside it is markup: {out}");
+
+        // HTML wants its own wrapper, and its own escaping inside it.
+        let out = export(text, Format::Html, &style());
+        assert!(out.contains("<pre><code>"), "{out}");
+        assert!(out.contains("fn main() { let x_y = 1; }"), "{out}");
+    }
+
+    /// **Typst's backticks hold raw text, so nothing inside them is escaped.**
+    ///
+    /// The escaping used to happen before `marked` was called, so every run got
+    /// the same treatment and `` `code_here` `` came out `` `code\_here` `` —
+    /// a backslash that Typst prints. HTML is the opposite: `&lt;` is required
+    /// inside `<code>`, so this is a per-dialect answer (#386).
+    #[test]
+    fn an_inline_code_span_is_raw_in_typst_and_escaped_in_html() {
+        let out = export("行內 `code_here` 收尾。\n", Format::Typst, &style());
+        assert!(out.contains("`code_here`"), "{out}");
+        assert!(!out.contains("code\\_here"), "{out}");
+
+        let out = export("行內 `a<b>c` 收尾。\n", Format::Html, &style());
+        assert!(out.contains("<code>a&lt;b&gt;c</code>"), "{out}");
     }
 
     #[test]
