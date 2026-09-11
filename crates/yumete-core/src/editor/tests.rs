@@ -10689,8 +10689,18 @@ fn the_cost_of_a_key_in_one_paragraph() {
         };
         cost("l", Key::Char('l'), &mut ed);
         cost("j", Key::Char('j'), &mut ed);
+        // **Where in the paragraph matters** (#366): every row before the
+        // caret is settled by text the edit did not touch, so what a key costs
+        // is the paragraph *after* it. Typing at the head is the worst case
+        // there is and is what this measured until 2026-09-11; typing at the
+        // end is what writing actually does.
+        ed.execute("1").unwrap();
         ed.on_key(Key::Char('i'));
-        cost("insert", Key::Char('乙'), &mut ed);
+        cost("head", Key::Char('乙'), &mut ed);
+        ed.on_key(Key::Esc);
+        ed.execute("$").ok();
+        ed.on_key(Key::Char('A'));
+        cost("end", Key::Char('乙'), &mut ed);
         ed.on_key(Key::Esc);
         std::fs::remove_dir_all(&dir).ok();
     }

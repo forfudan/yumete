@@ -123,6 +123,14 @@ pub struct Measure<'a> {
     /// — that is the whole of the contract, and it is why it is set beside the
     /// rope it describes rather than anywhere else.
     version: Option<(u64, u64)>,
+    /// **Where the last edit was, and how much longer it made the text**
+    /// (#366) — the buffer's own `edit()`, passed through.
+    ///
+    /// With it, an answer for a paragraph can be *continued* from the one
+    /// before the edit instead of being made again; without it the paragraph
+    /// is wrapped from its head, which is what typing into a million-character
+    /// paragraph used to cost 25.4 ms a key for.
+    edit: Option<(usize, isize)>,
 }
 
 /// A page with nothing hidden, for callers that show the source as it is.
@@ -148,6 +156,7 @@ impl<'a> Measure<'a> {
             typed: NOTHING_DRAWN,
             unwrapped: NOTHING_FOLDED,
             version: None,
+            edit: None,
         }
     }
 
@@ -163,6 +172,7 @@ impl<'a> Measure<'a> {
             typed: NOTHING_DRAWN,
             unwrapped: NOTHING_FOLDED,
             version: None,
+            edit: None,
         }
     }
 
@@ -190,6 +200,12 @@ impl<'a> Measure<'a> {
             version: Some((buffer, revision)),
             ..self
         }
+    }
+
+    /// Say where the last edit was, so a paragraph's rows can be continued
+    /// rather than remade (#366). See the field.
+    pub fn with_edit(self, edit: Option<(usize, isize)>) -> Measure<'a> {
+        Measure { edit, ..self }
     }
 
     /// Whether `line` is one row however long it is.
@@ -672,6 +688,19 @@ thread_local! {
     /// hash is a correct answer whatever else in the document — or in another
     /// document — has moved since.
     static ROWS: RefCell<Vec<Remembered>> = const { RefCell::new(Vec::new()) };
+    /// **The last answer for a paragraph, kept across the edit that spoils
+    /// it** (#366): `(buffer, line, width, revision, rows)`.
+    ///
+    /// [`ROWS`] is keyed by a hash that has the revision in it, so an edit
+    /// makes every entry for that document unreachable — which is correct, and
+    /// which also throws away the one thing that would let the next answer be
+    /// *continued* rather than remade. This keeps exactly that: one row list
+    /// per paragraph, the revision it was true of, and nothing else.
+    static LAST: RefCell<Vec<(u64, usize, usize, u64, Vec<(usize, usize)>)>> =
+        const { RefCell::new(Vec::new()) };
+    #[cfg(test)]
+    static WHY: RefCell<std::collections::HashMap<String, usize>> =
+        RefCell::new(std::collections::HashMap::new());
 
     /// How many paragraphs have actually been wrapped, for the test that keeps
     /// a keystroke from quietly becoming four passes over a chapter again.
@@ -707,6 +736,10 @@ fn line_hash(rope: &Rope, line: usize) -> u64 {
 /// character paragraph into a `String` four times per keystroke is most of what
 /// made an unmemoised `j` slow, and the questions a keystroke asks are all
 /// about the same handful of paragraphs.
+pub fn rows_of_line_for_test(rope: &Rope, line: usize, m: Measure) -> Vec<(usize, usize)> {
+    rows_of_line(rope, line, m)
+}
+
 fn rows_of_line(rope: &Rope, line: usize, m: Measure) -> Vec<(usize, usize)> {
     // **A table row is one row** (#275), so there is nothing to measure and
     // nothing to remember: the whole line, whatever the measure is. Ahead of
@@ -737,6 +770,17 @@ fn rows_of_line(rope: &Rope, line: usize, m: Measure) -> Vec<(usize, usize)> {
     if let Some(rows) = remembered(hash, m.width) {
         return rows;
     }
+    // **Continue the last answer rather than remake it** (#366). Only where
+    // there is nothing else on the row to move: a hidden run or a drawn one
+    // has coordinates of its own that an edit shifts too, and getting that
+    // wrong would put the caret in a column the page does not have.
+    if hidden.is_empty() && drawn.is_empty() {
+        if let Some(rows) = carried_on(rope, line, m) {
+            remember(hash, m.width, &rows);
+            keep_last(m, line, &rows);
+            return rows;
+        }
+    }
     WRAPPED.with(|n| n.set(n.get() + 1));
     let rows = line_rows_drawing(
         &line_text(rope, line),
@@ -746,8 +790,174 @@ fn rows_of_line(rope: &Rope, line: usize, m: Measure) -> Vec<(usize, usize)> {
         &drawn,
     );
     remember(hash, m.width, &rows);
+    keep_last(m, line, &rows);
     rows
 }
+
+/// Keep this answer as the one the *next* edit will be continued from (#366).
+fn keep_last(m: Measure, line: usize, rows: &[(usize, usize)]) {
+    let Some((buffer, revision)) = m.version else {
+        return;
+    };
+    LAST.with(|cache| {
+        let mut cache = cache.borrow_mut();
+        let key = |e: &(u64, usize, usize, u64, Vec<(usize, usize)>)| {
+            e.0 == buffer && e.1 == line && e.2 == m.width
+        };
+        if let Some(i) = cache.iter().position(key) {
+            cache.remove(i);
+        }
+        cache.insert(0, (buffer, line, m.width, revision, rows.to_vec()));
+        cache.truncate(REMEMBERED_PARAGRAPHS);
+    });
+}
+
+/// The rows for `line`, **continued from the answer before this edit** (#366).
+///
+/// `None` when it cannot be done, and then the caller wraps the paragraph the
+/// long way. This is an optimisation and is allowed to give up; it is not
+/// allowed to be wrong.
+///
+/// Typing one character into a paragraph of a million cost **25.4 ms a key**,
+/// and 22.7 ms of that was this one call re-deciding every row break in the
+/// paragraph — breaks settled by text the edit did not touch. Three facts make
+/// the work small:
+///
+/// - **Nothing before the edit can have moved.** A row's break is decided by
+///   the text from its own start, so a row that ends before the edit ends
+///   where it did.
+/// - **禁則 looks ahead**, so a break just *before* the edit can still change
+///   its mind about it. Two rows of slack, and the question does not arise.
+/// - **The tail usually lands back where it was.** Walk forward from the
+///   resume point and watch for a new row that begins exactly `delta` along
+///   from where an old one did: from there on the paragraph wraps as it wrapped
+///   before, one character over. In 中文 — no spaces, every row the same width
+///   — that happens on the very first row, so the whole of a million-character
+///   paragraph is answered by shifting a list of numbers.
+fn carried_on(rope: &Rope, line: usize, m: Measure) -> Option<Vec<(usize, usize)>> {
+    #[cfg(test)]
+    fn note(why: &str) {
+        WHY.with(|w| *w.borrow_mut().entry(why.to_string()).or_insert(0usize) += 1);
+    }
+    #[cfg(not(test))]
+    fn note(_why: &str) {}
+
+    let Some((buffer, revision)) = m.version else { note("no version"); return None };
+    let Some((at, delta)) = m.edit else { note("no edit"); return None };
+    // One edit between the two answers, or the `edit` we were handed is not
+    // the one that tells them apart.
+    let old = LAST.with(|cache| {
+        cache
+            .borrow()
+            .iter()
+            .find(|e| e.0 == buffer && e.1 == line && e.2 == m.width && e.3 + 1 == revision)
+            .map(|e| e.4.clone())
+    });
+    let Some(old) = old else { note("no last"); return None };
+    if old.is_empty() || delta == 0 {
+        note("empty or no delta");
+        return None;
+    }
+    let start = rope.line_to_char(line);
+    let end = start + line_text(rope, line).chars().count();
+    // The edit has to be *inside* this paragraph, and has to have left it a
+    // paragraph: a newline either way makes this a different question.
+    let Some(col) = at.checked_sub(start) else { note("before the line"); return None };
+    // **The edit begins at `at` in both texts.** Nothing before it moved,
+    // whichever way it went — an insert pushes what follows along and a
+    // removal pulls it back, and neither touches what came first.
+    //
+    // This added the removed length back on until 2026-09-11, which named a
+    // row later than the one the edit fell in and so reused *more* of the old
+    // list than the edit allowed. Reasoned, not caught: the test that looked
+    // as though it had caught it was lying to itself at the time (two cases
+    // sharing a buffer number and handing each other their rows), and with
+    // that fixed the old arithmetic passes — the two rows of slack below were
+    // covering for it. Slack is not a licence to be wrong about where the
+    // edit was.
+    let was = col;
+    if at > end || was > old.last().map_or(0, |r| r.1) {
+        note("outside the paragraph");
+        return None;
+    }
+
+    // Resume two rows before the one the edit fell in — 禁則 looks ahead, so
+    // a break settled just before the edit can still change its mind about it.
+    // Not a guess: with no slack at all, the test that compares a continued
+    // wrap against a fresh one goes red.
+    let touched = old.partition_point(|&(s, _)| s <= was).saturating_sub(1);
+    let resume = touched.saturating_sub(2);
+    // **Nothing to keep is nothing to gain.** An edit in the first rows of a
+    // paragraph leaves no prefix to reuse, and going on would only add a copy
+    // of the tail to the wrap that has to happen anyway — measured at 31 ms
+    // against the plain path's 25 on a million characters.
+    if resume == 0 {
+        note("nothing before it");
+        return None;
+    }
+    let Some(&(from, _)) = old.get(resume) else { note("no resume row"); return None };
+    if from > col {
+        note("resume past the edit");
+        return None;
+    }
+
+    // Walk the new text **from there to the end of the paragraph**. Every row
+    // before `resume` is kept as it was, which is the whole of the saving and
+    // the only part of it that can be proved: a row's break is decided by the
+    // text from its own start, and none of that text moved.
+    let upto = end;
+    // `to_string` and not `chars().collect()`: the rope hands over its chunks
+    // whole, and collecting character by character was **38 times slower**
+    // (6.7 ms against 0.18 ms on a million characters).
+    let text = rope.slice(start + from..upto).to_string();
+    let indent = match resume {
+        0 => m.indent_on(line),
+        _ => 0,
+    };
+    let walked = line_rows_drawing(&text, m.width, &[], indent, &[]);
+    let mut out: Vec<(usize, usize)> = old[..resume].to_vec();
+    for (i, &(rs, re)) in walked.iter().enumerate() {
+        out.push((from + rs, from + re));
+        // **And the old wrap may come back**, one `delta` along: from a row
+        // that begins where an old row began before the edit, the text is the
+        // old text exactly, so it wraps the way it wrapped and the rest of the
+        // list is the old list moved over. That is worth watching for in prose,
+        // where a break lands on a space and an inserted character pushes the
+        // whole tail along.
+        //
+        // It does **not** happen in 中文, and that is not a bug in the test: a
+        // CJK line breaks between any two characters, so its breaks are decided
+        // by *position* and not by content — every fortieth character, whatever
+        // is written there. Insert one character and the tail's boundaries stay
+        // on the same grid while its content shifts under them, so no old row
+        // ever began where the proof needs one to have begun. The rows happen
+        // to come out the same; nothing here can know that, and guessing it
+        // would put the caret in a column the page does not have.
+        // **Only the first rows are asked**, and by binary search. Scanning
+        // the old list for every walked row is quadratic in the rows, which on
+        // a million characters is 12,500 × 12,500 comparisons — 240 ms a key,
+        // ten times worse than the wrap it was meant to save. And it buys
+        // nothing anyway: a tail that lands back on the old wrap does it at
+        // once or not at all.
+        if i < RESUME_ROWS && i + 1 < walked.len() {
+            let want = (from + re).checked_add_signed(-delta)?;
+            if let Ok(k) = old[touched..].binary_search_by_key(&want, |&(s, _)| s) {
+                let k = touched + k;
+                out.extend(old[k..].iter().map(|&(s, e)| {
+                    (s.saturating_add_signed(delta), e.saturating_add_signed(delta))
+                }));
+                note("carried, resynced");
+                return Some(out);
+            }
+        }
+    }
+    note("carried, walked the tail");
+    Some(out)
+}
+
+/// How many rows `carried_on` will wrap before it gives up and lets the
+/// paragraph be done the long way.
+const RESUME_ROWS: usize = 8;
 
 /// The rows remembered for this paragraph, if any, moved back to the front.
 fn remembered(hash: u64, width: usize) -> Option<Vec<(usize, usize)>> {
