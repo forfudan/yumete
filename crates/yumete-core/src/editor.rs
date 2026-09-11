@@ -630,6 +630,10 @@ struct PadKey {
     /// with the backticks hidden stayed drawn that way after `:syntax text`
     /// put them back, one cell ragged per hidden character.
     syntax: crate::syntax::Syntax,
+    /// **Which punctuation this table is told apart by** (#378). `:table csv`
+    /// and its kin change the separator without touching a byte of the file,
+    /// and a table squared up on commas is not squared up on tabs.
+    wall: crate::mdtable::Wall,
 }
 
 impl PadKey {
@@ -755,10 +759,18 @@ pub enum TableLevel {
     /// and `hjkl` are letters: the grid is not there to take them.
     Off,
     /// `t b` — the columns line up because the text itself is padded (#212),
-    /// and the **keys** belong to the grid where a table is: `hjkl` walk
-    /// cells, `t d` drops a row. **Nothing is hidden, folded or replaced** —
-    /// every character the writer typed is still on the page, so a 縱書
-    /// chapter with no table in it is drawn exactly as `Off` draws it.
+    /// and the table's own keys are available where a table is: `t d` drops a
+    /// row, `Tab` steps to the next cell. **Nothing is hidden, folded or
+    /// replaced** — every character the writer typed is still on the page, so
+    /// a 縱書 chapter with no table in it is drawn exactly as `Off` draws it.
+    ///
+    /// **`hjkl` are still letters**, at this level and at every other. This
+    /// said they walked cells until 2026-09-11, which was true before #356 and
+    /// has been wrong since: the grain defaults to [`Grain::Char`] everywhere
+    /// it is set, and `T` is what asks for cells. A stale comment is worse
+    /// than none — this one was read as law and an argument built on top of it
+    /// (「自动进 tb 会悄悄改掉 hjkl 的含义」), which the author had to knock
+    /// down with the obvious answer: 「tb tf to 模式都是按字走的」.
     #[default]
     Basic,
     /// `t f` — everything `Basic` draws, and then the parts are optimised:
@@ -977,9 +989,14 @@ impl TableView {
 /// character. `Tab` says which.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Grain {
-    /// `hjkl` walk cells and rows. The default: it is what a grid is for.
+    /// `hjkl` walk cells and rows — what `T` asks for.
     Cell,
     /// `hjkl` walk characters and lines, as they do in any other file.
+    ///
+    /// **The default**, at every level and in the pane, wherever a view is
+    /// built. It used to be [`Cell`](Grain::Cell) — 「it is what a grid is
+    /// for」 — and #356 turned it round on the grounds that 「the cell is not
+    /// what a writer mostly wants — the characters in it are」.
     Char,
 }
 

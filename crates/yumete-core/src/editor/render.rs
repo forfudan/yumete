@@ -840,6 +840,68 @@ impl Editor {
             .collect()
     }
 
+    /// Which punctuation the table on `line` is told apart by, if there is a
+    /// table on it at all (#378).
+    ///
+    /// **The separator is a value, never a kind of file.** The author,
+    /// 2026-09-11：「markdown 中的表格使用 | 分隔，tsv 用 tab，csv 用逗号。他们
+    /// 本质上都是分隔符。所以 tb / tf 模式下他们显示效果应该是一样的。」So this
+    /// is the only place that asks, and everything past it — the widths, the
+    /// padding, the folding — is written once.
+    ///
+    /// A delimited file is read by a view that says so, and there **every**
+    /// line is a row (`Bounds::WholeFile`), which is why the region is asked
+    /// for rather than the line inspected. A `|` table lives inside prose, so
+    /// there the line has to open with one and must not be inside a fence —
+    /// a table quoted in a code block is writing *about* a table.
+    fn wall_here(&self, line: usize) -> Option<crate::mdtable::Wall> {
+        if let Some(crate::editor::Separator::Delimiter(c)) =
+            self.table.as_ref().map(|view| view.separator)
+        {
+            return self
+                .table_lines_at(line)
+                .map(|_| crate::mdtable::Wall::Between(c));
+        }
+        (self.opens_a_row(line) && !self.block_of(line).is_literal())
+            .then_some(crate::mdtable::Wall::Pipe)
+    }
+
+    /// Which lines the padding on `line` has to agree with.
+    ///
+    /// A `|` table finds its own ends by reading the rows; a delimited file
+    /// has been told where they are (the whole file, usually) and has no rule
+    /// row and no alignment markers — Markdown's `|---|` is Markdown's, and
+    /// where there is none every column is simply left-aligned, which falls
+    /// out of an empty list rather than out of a branch.
+    fn padded_region(
+        &self,
+        line: usize,
+        wall: crate::mdtable::Wall,
+    ) -> Option<crate::mdtable::Region> {
+        let mut region = match wall {
+            crate::mdtable::Wall::Pipe => crate::mdtable::region(|i| self.line_text(i), line)?,
+            crate::mdtable::Wall::Between(_) => {
+                let (first, last) = self.table_lines_at(line)?;
+                crate::mdtable::Region {
+                    first,
+                    last,
+                    rule: None,
+                    aligns: Vec::new(),
+                    columns: 0,
+                }
+            }
+        };
+        // **Only what is on screen is measured** (#378) — the same window for
+        // either punctuation, because「他们本质上都是分隔符」. The alignments
+        // travel with the region rather than with the rows, so a table scrolled
+        // past its own rule row keeps them.
+        let (first, last) =
+            crate::mdtable::measured_window(region.first, region.last, line, self.page_lines);
+        region.first = first;
+        region.last = last;
+        Some(region)
+    }
+
     /// The padding drawn on `line` so its table lines up (Feature #212).
     ///
     /// Empty unless the line really is a row of a `|` table — a quoted one
@@ -857,9 +919,9 @@ impl Editor {
         if !self.table_padding_on() {
             return Vec::new();
         }
-        if !self.opens_a_row(line) || self.block_of(line).is_literal() {
+        let Some(wall) = self.wall_here(line) else {
             return Vec::new();
-        }
+        };
         let buffer = self.current_buffer();
         let key = |first, last| PadKey {
             buffer: buffer.id(),
@@ -875,6 +937,7 @@ impl Editor {
             ruby: self.ruby(),
             syntax: buffer.syntax(),
             folds: self.cells_fold_here(),
+            wall,
         };
         // **The memo answers before the region is worked out.** Finding where
         // the table starts and ends is a walk to both ends of it, and this is
@@ -891,7 +954,7 @@ impl Editor {
         // **Taken, not borrowed**: the walk below asks the rest of the editor
         // questions, and the answer is written back here at the end.
         let last_time = self.pad_cache.borrow_mut().take();
-        let Some(region) = crate::mdtable::region(|i| self.line_text(i), line) else {
+        let Some(region) = self.padded_region(line, wall) else {
             return Vec::new();
         };
         let key = key(region.first, region.last);
@@ -951,7 +1014,14 @@ impl Editor {
         }
         let runs = crate::mdtable::padding(
             &rows,
-            region.rule.map(|at| at - region.first),
+            wall,
+            // The rule row is only a *row* while it is being measured with the
+            // others; its alignments outlive the window.
+            region
+                .rule
+                .filter(|at| (region.first..=region.last).contains(at))
+                .map(|at| at - region.first),
+            &region.aligns,
             &marks,
             &shown,
         );

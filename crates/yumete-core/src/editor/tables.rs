@@ -1069,7 +1069,7 @@ impl Editor {
     /// indentation, and expanding one would push every column right of it out
     /// of line with the rows above — which is exactly what a table view is
     /// for. In 源碼 there is no table, so a tab there is a tab.
-    pub(super) fn wall_columns(&self, line: usize) -> Vec<usize> {
+    pub fn wall_columns(&self, line: usize) -> Vec<usize> {
         let Some(view) = self.table.as_ref() else {
             return Vec::new();
         };
@@ -2674,10 +2674,12 @@ impl Editor {
 
     /// Run one key while the file is being read as a grid.
     ///
-    /// Only the keys whose meaning actually changes: `hjkl` walk cells rather
-    /// than characters, and `0`/`$` are the row's ends. Everything else —
-    /// paging, `gg`, search, the operators — is about lines and text, and a
-    /// grid does not change what those mean.
+    /// Only the keys whose meaning actually changes, which since #356 is
+    /// **`T` and `Tab`**: the grain defaults to [`Grain::Char`], so `hjkl`,
+    /// the operators and the selection go on meaning what they mean in any
+    /// other file, and it takes a `T` to hand them to the cells. Everything
+    /// else — paging, `gg`, search — is about lines and text, and a grid does
+    /// not change what those mean either.
     pub(super) fn table_motion(&mut self, key: Key, count: usize) -> bool {
         // **`T` says which unit a step is** (#356). It used to be `Tab`, back
         // when the grid was the default way to stand in a table; but the cell

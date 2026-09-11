@@ -6123,6 +6123,34 @@ mod tests {
         editor
     }
 
+    /// #378 on the drawn frame: a TSV read as a table squares its columns up
+    /// the way a Markdown table does, and the tab in it is a wall — one cell,
+    /// like a pipe — rather than a stop.
+    ///
+    /// On the frame because the run list has lied once already (#374): it said
+    /// the columns lined up while ratatui was giving the tab no cell at all.
+    #[test]
+    fn a_delimited_table_squares_its_columns_up_like_a_pipe_one() {
+        let mut editor = editor_with("ch\t錐\nlongcode\t蜘\nbk\t裘\n");
+        for c in "tf".chars() {
+            editor.on_key(Key::Char(c));
+        }
+        let buffer = render_with(&editor, &Config::default(), &no_ime(), 40, 6);
+        // Row 0 is the strip that numbers the columns; the rows follow it.
+        let at: Vec<u16> = ["錐", "蜘", "裘"]
+            .iter()
+            .enumerate()
+            .map(|(y, ch)| column_of(&row_text(&buffer, y as u16 + 1), ch))
+            .collect();
+        assert_eq!(at[0], at[1], "ch and longcode reach one column: {at:?}");
+        assert_eq!(at[1], at[2], "and bk with them: {at:?}");
+        // The wall is one cell, so the widest code is followed by exactly one
+        // before its character — a tab advanced to a stop would be more.
+        let row = row_text(&buffer, 2);
+        let gutter = column_of(&row, "l");
+        assert_eq!(at[1] - gutter, "longcode".len() as u16 + 1, "{row:?}");
+    }
+
     /// #374, on the **drawn frame** rather than on the run list: a 碼表 lines
     /// its characters up in one column whatever the code before them is.
     ///
