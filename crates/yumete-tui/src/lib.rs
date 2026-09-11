@@ -626,6 +626,25 @@ pub fn run(
                 },
             },
         };
+        // **One place, on the way in.** Anything that is not a key and is not a
+        // wheel notch is about to move the caret — a click, a drag, a paste —
+        // and a half-typed word must be ended *before* it does (#336). Put at
+        // the branches instead, this was three call sites and two of them were
+        // missing; put here, an event kind added tomorrow is covered the day it
+        // is added. (#350 is the general form of that.)
+        if let Ok(event) = &arrived {
+            let moves_the_caret = match event {
+                Event::Paste(_) => true,
+                Event::Mouse(mouse) => !matches!(
+                    mouse.kind,
+                    MouseEventKind::ScrollDown | MouseEventKind::ScrollUp
+                ),
+                _ => false,
+            };
+            if moves_the_caret {
+                end_the_composition(ime, editor);
+            }
+        }
         match arrived {
             Ok(Event::Key(key)) => {
                 // A lone-Shift tap toggles 中/英 in Insert mode; other Shift
@@ -2221,6 +2240,38 @@ fn switch_scheme(ime: &mut ImeSession, tag: &str, config: &Config) -> String {
 /// Route one Insert-mode key press to the IME. Returns `true` when the IME
 /// consumed it (so the editor must not also see it). Committed text is inserted
 /// into the editor at the cursor.
+/// End a half-typed composition before something that is not a key moves the
+/// caret (#336).
+///
+/// **`Event::Mouse` and `Event::Paste` are siblings of `Event::Key`, and they
+/// never asked whether the IME was in the middle of a word.** Type half a 拆分,
+/// click another tab, and `show_buffer_at` changes the buffer while the preedit
+/// is still alive — it redraws at the caret of the **new file**, and the next
+/// space commits it *there*. A few characters of somebody else's chapter, in a
+/// document they were not even looking at, and nothing on the screen said so.
+///
+/// Discarded rather than committed. A preedit is not writing yet: half a code
+/// has not chosen a character, and inserting whatever the engine happens to
+/// have on top would be putting a word in the writer's mouth. What is lost is
+/// three keystrokes they were about to abandon anyway — they clicked away.
+///
+/// ⚠️ **Not on the wheel.** Scrolling moves the page, not the caret, so the
+/// composition is still where the writer left it and cancelling it because
+/// they looked somewhere would be its own small betrayal.
+fn end_the_composition(ime: &mut ImeSession, editor: &mut Editor) {
+    if !ime.is_composing() {
+        return;
+    }
+    ime.escape();
+    // Anything the engine had already handed over is writing, and belongs in
+    // the buffer the writer typed it into — which is still the current one,
+    // because this runs before the click is acted on.
+    let committed = ime.take_committed();
+    if !committed.is_empty() {
+        editor.insert_committed(&committed);
+    }
+}
+
 fn ime_handle(
     ime: &mut ImeSession,
     editor: &mut Editor,
@@ -8108,6 +8159,34 @@ mod tests {
             }),
             "配置的紙色沒用上"
         );
+    }
+
+    /// **A click does not carry a half-typed word into another file** (#336).
+    ///
+    /// `Event::Mouse` and `Event::Paste` are siblings of `Event::Key` and never
+    /// asked whether the IME was mid-word. Type half a 拆分, click another tab,
+    /// and the preedit was still alive — redrawn at the caret of the **new**
+    /// file, where the next space committed it. A few characters of somebody
+    /// else's chapter, and nothing said so.
+    #[test]
+    fn ending_a_composition_leaves_nothing_behind_to_land_elsewhere() {
+        let mut editor = Editor::new();
+        editor.on_key(Key::Char('i'));
+        let mut ime = ImeSession::from_table_text(Scheme::LINGMING, "b 吧 八\n");
+        ime.input('b');
+        assert!(ime.is_composing(), "the fixture composes");
+
+        end_the_composition(&mut ime, &mut editor);
+        assert!(!ime.is_composing(), "nothing is left in flight");
+        // Discarded, not committed: half a code has not chosen a character, and
+        // guessing one would be putting a word in the writer's mouth.
+        assert_eq!(editor.current_buffer().text(), "", "and nothing was typed");
+        assert_eq!(ime.display_buffer(), "", "no preedit to redraw anywhere");
+
+        // Idempotent, because the guard runs on every click and most clicks
+        // arrive with nothing in flight.
+        end_the_composition(&mut ime, &mut editor);
+        assert_eq!(editor.current_buffer().text(), "");
     }
 
     /// **Whole fields give way; the line is never cut through a word** (#394).
