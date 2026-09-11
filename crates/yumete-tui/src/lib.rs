@@ -597,10 +597,33 @@ pub fn run(
         diag::beat(diag::Stage::Reading, 0);
         let arrived = match inbox.pop_front() {
             Some(event) => Ok(event),
-            None => match events.recv() {
-                Ok(outcome) => outcome,
-                // The reader is gone, which is the terminal saying it is done.
-                Err(_) => break Ok(()),
+            // **Wait with a deadline when, and only when, something is owed.**
+            // `autosave_due_in` is `None` unless a crash right now would take
+            // writing the recovery copy does not have — so an idle editor with
+            // nothing unsaved still blocks forever and costs nothing, and one
+            // that has just been typed in wakes once, writes, and goes back to
+            // blocking. That one wake is the trailing edge the throttle never
+            // had (#383): the last few seconds of typing used to be written
+            // only by the *next* keystroke, and pausing to think meant there
+            // was no next keystroke.
+            None => match editor.autosave_due_in() {
+                None => match events.recv() {
+                    Ok(outcome) => outcome,
+                    // The reader is gone, which is the terminal saying it is done.
+                    Err(_) => break Ok(()),
+                },
+                Some(wait) => match events.recv_timeout(wait) {
+                    Ok(outcome) => outcome,
+                    Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
+                        editor.autosave_tick();
+                        // One frame is redrawn on the way round — the loop
+                        // draws at its head — and exactly one, because writing
+                        // the copy makes the draft no longer stale and the next
+                        // pass goes back to blocking with no deadline at all.
+                        continue;
+                    }
+                    Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => break Ok(()),
+                },
             },
         };
         match arrived {
