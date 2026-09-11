@@ -1336,6 +1336,26 @@ fn w_takes_a_word_and_e_takes_a_clause() {
     assert_eq!(at(8, 'w'), "，");
     assert_eq!(at(23, 'w'), "他");
     assert_eq!(at(26, 'w'), "OK ", "and `w` keeps the trailing space");
+
+    // **`e` then `b` takes the clause the caret is in.** helix's tutor teaches
+    // the pair for a *word* —「to select the word under cursor, combine `e` and
+    // `b`」 — and the two only compose if they read the same grain. Here they
+    // are both coarse, so the pair takes the run between two 標點, which is the
+    // more useful unit in Chinese: an English word is many letters, a Chinese
+    // word is two and a half characters.
+    let pair = |n: usize| {
+        let mut ed = typed(text);
+        for _ in 0..n {
+            ed.on_key(Key::Char('l'));
+        }
+        ed.on_key(Key::Char('e'));
+        ed.on_key(Key::Char('b'));
+        let (a, b) = ed.selection();
+        ed.current_buffer().text().chars().skip(a).take(b - a).collect::<String>()
+    };
+    assert_eq!(pair(0), "他抬頭看了看那片天");
+    assert_eq!(pair(12), "山路已經看不見了", "from the middle of a clause too");
+    assert_eq!(pair(20), "走吧", "quoted, so the marks bound it");
 }
 
 /// **`:word-level off` reads a 漢字 as a letter** (#304).
