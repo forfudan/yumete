@@ -32,8 +32,28 @@ fn documents() -> Vec<(&'static str, String)> {
 /// Every run between backticks, with the line it stands on.
 fn quoted(text: &str) -> Vec<(usize, String)> {
     let mut out = Vec::new();
+    // How far along a table row this editor's own answer stops. `None` outside
+    // a table that names another editor — see [`ours_stops_at`].
+    let mut ours: Option<usize> = None;
     for (n, line) in text.lines().enumerate() {
-        let mut rest = line;
+        let row = line.trim_start().starts_with('|');
+        if !row {
+            ours = None;
+        } else if ours.is_none() {
+            ours = ours_stops_at(line);
+        }
+        let held;
+        let mut rest = match (row, ours) {
+            (true, Some(upto)) => {
+                held = line
+                    .split('|')
+                    .take(upto + 2)
+                    .collect::<Vec<_>>()
+                    .join("|");
+                held.as_str()
+            }
+            _ => line,
+        };
         while let Some(open) = rest.find('`') {
             let after = &rest[open + 1..];
             match after.find('`') {
@@ -46,6 +66,24 @@ fn quoted(text: &str) -> Vec<(usize, String)> {
         }
     }
     out
+}
+
+/// Which cell of a comparison row is the last one **about this editor**.
+///
+/// 「對照別的編輯器」 prints Helix's keys and vi's beside yumete's, and those
+/// columns are exactly the keys yumete has not got — `gj`, `[p`, `(`. Reading
+/// them as taught would make the manual's most useful table impossible to
+/// write. So a header row that names this editor in one cell and something
+/// else after it cuts the row there: everything up to and including the
+/// yumete column is a promise, everything past it is somebody else's.
+fn ours_stops_at(header: &str) -> Option<usize> {
+    let cells: Vec<&str> = header.split('|').collect();
+    // `split` on a row that opens and closes with `|` gives an empty cell at
+    // each end, so a cell's own index is one less than its place here.
+    let at = cells
+        .iter()
+        .position(|cell| cell.trim().trim_matches('*') == "yumete")?;
+    (cells.len() > at + 2).then(|| at - 1)
 }
 
 /// The shape of a name this table can be asked about: lower-case ASCII, and a
@@ -289,4 +327,34 @@ fn each_key_the_documents_disown_really_is_missing() {
              the list of pairs that only look like one"
         );
     }
+}
+
+/// **The cut takes the other editors and nothing else** (the 對照 table).
+///
+/// A scanner that quietly stopped reading too early would turn every test in
+/// this file green by reading nothing, which is the one failure they cannot
+/// report themselves. So: the yumete column is still read, the columns past it
+/// are not, and an ordinary table — one that does not name another editor
+/// beside this one — is read whole.
+#[test]
+fn the_comparison_table_hides_the_other_editors_and_no_more() {
+    let doc = "| 做什麼 | yumete | Helix | vi |\n\
+               | --- | --- | --- | --- |\n\
+               | 一行 | `j` `k` | 同 | `gj` `gk` |\n\
+               \n\
+               | 鍵 | 做什麼 |\n\
+               | --- | --- |\n\
+               | `gj` | 隔壁的 |\n";
+    let said: Vec<String> = quoted(doc).into_iter().map(|(_, q)| q).collect();
+    assert!(said.contains(&"j".to_string()), "our column is read: {said:?}");
+    assert_eq!(
+        said.iter().filter(|q| *q == "gj").count(),
+        1,
+        "vi's `gj` is dropped and the ordinary table's is kept: {said:?}"
+    );
+    assert_eq!(
+        said.iter().filter(|q| *q == "gk").count(),
+        0,
+        "nothing from past the yumete column: {said:?}"
+    );
 }
