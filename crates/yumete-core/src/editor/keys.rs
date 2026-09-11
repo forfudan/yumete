@@ -23,12 +23,12 @@ impl Editor {
         // macro captures the text typed in Insert and the pattern typed at a
         // prompt too — a macro that can only move is not much of one.
         if self.recording.is_some() && !self.expanding_alias {
-            // `q` ends the recording — but only the `q` that is a *command*.
-            // A `q` that some half-finished sequence is waiting for is an
-            // operand: `fq` is "find q", and dropping its second half left the
+            // `Q` ends the recording — but only the `Q` that is a *command*.
+            // A `Q` that some half-finished sequence is waiting for is an
+            // operand: `fQ` is "find Q", and dropping its second half left the
             // macro as a bare `f`, which on replay swallowed whatever came
             // next. One reviewer's macro deleted their buffer that way.
-            let ends_it = matches!(key, Key::Char('q'))
+            let ends_it = matches!(key, Key::Char('Q'))
                 && self.mode == Mode::Normal
                 && self.pending == Pending::None;
             if !ends_it {
@@ -901,8 +901,14 @@ impl Editor {
             // Name the register the next yank, delete or paste will use.
             Key::Char('"') => self.pending = Pending::Register,
             // Record a macro, and play the last one back.
-            Key::Char('q') => self.toggle_recording(),
-            Key::Char('Q') => self.replay_macro(count),
+            // **`Q` records, `q` replays** — Helix's way round, and ours since
+            // 2026-09-12. It was the other way, and both keys explained
+            // themselves, but ⚠️ **a swapped pair is the worst kind of
+            // divergence**: the hand does not read, it just presses, and the
+            // wrong one of these two is not a no-op — it starts recording over
+            // what you meant to play back (#404).
+            Key::Char('Q') => self.toggle_recording(),
+            Key::Char('q') => self.replay_macro(count),
             // A page, and half of one, in the direction the text is read.
             // The other pane. Two panes, one key — vi spells window motions
             // `C-w` and there is only ever one other place to be.

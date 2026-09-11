@@ -4723,8 +4723,8 @@ en = "no command answers that — say it another way, or backspace to `:`"
 [[message]]
 # 還沒錄過巨集就按了播放
 key = "macro.nothing-recorded"
-zht = "還沒有錄過——q 開始錄，再按 q 停"
-zhs = "还没有录过——q 开始录，再按 q 停"
+zht = "還沒有錄過——Q 開始錄，再按 Q 停"
+zhs = "还没有录过——Q 开始录，再按 Q 停"
 en = "nothing recorded yet — q starts recording, q again stops"
 
 [[message]]

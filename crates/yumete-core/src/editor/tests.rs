@@ -1591,16 +1591,18 @@ fn deleting_yanks_so_text_can_be_moved() {
 fn a_macro_records_and_replays() {
     let mut ed = typed("一二三四五六");
     press(&mut ed, "gg");
-    press(&mut ed, "q"); // record: replace one character, step on
+    // ⚠️ **`Q` records, `q` replays** — Helix's way round, and ours since
+    // 2026-09-12 (#404). It was the other way until then.
+    press(&mut ed, "Q"); // record: replace one character, step on
     press(&mut ed, "r");
     ed.on_key(Key::Char('〇'));
     press(&mut ed, "l");
-    press(&mut ed, "q"); // stop
+    press(&mut ed, "Q"); // stop
     assert_eq!(ed.current_buffer().text(), "〇二三四五六");
 
-    press(&mut ed, "Q");
+    press(&mut ed, "q");
     assert_eq!(ed.current_buffer().text(), "〇〇三四五六");
-    press(&mut ed, "3Q"); // a count replays it that many times
+    press(&mut ed, "3q"); // a count replays it that many times
     assert_eq!(ed.current_buffer().text(), "〇〇〇〇〇六");
 }
 
@@ -6409,24 +6411,26 @@ fn a_vertical_page_never_takes_the_keys_on_its_own() {
 
 #[test]
 fn a_macro_keeps_the_key_a_sequence_was_waiting_for() {
-    // `q` ends a recording — but a `q` that `f` is waiting for is an
+    // `Q` ends a recording — but a `Q` that `f` is waiting for is an
     // operand. Dropping it left the macro as a bare `f`, which on replay
     // swallowed whatever came next; one reviewer's macro deleted their
-    // buffer that way.
-    let mut ed = typed("aqb\ncqd\n");
+    // buffer that way. (The pair swapped on 2026-09-12 to match Helix, and
+    // this hazard moved with it: it is about the *ending* key, whichever
+    // letter that is.)
+    let mut ed = typed("aQb\ncQd\n");
     ed.goto_line(1);
-    press(&mut ed, "q");
-    press(&mut ed, "fq");
+    press(&mut ed, "Q");
+    press(&mut ed, "fQ");
     press(&mut ed, "x");
-    press(&mut ed, "q");
-    assert_eq!(ed.recorded_keys_for_test(), "fqx", "the `q` of `fq` is kept");
+    press(&mut ed, "Q");
+    assert_eq!(ed.recorded_keys_for_test(), "fQx", "the `Q` of `fQ` is kept");
 
     ed.goto_line(2);
-    press(&mut ed, "Q");
+    press(&mut ed, "q");
     assert_eq!(
         ed.current_buffer().text(),
-        "aqb\ncqd\n",
-        "replay finds q and selects the line, changing nothing"
+        "aQb\ncQd\n",
+        "replay finds Q and selects the line, changing nothing"
     );
 }
 
