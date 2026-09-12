@@ -1819,16 +1819,33 @@ impl Editor {
         crate::mdtable::runaway(&crate::mdtable::parse(&self.md_lines(&region)))
     }
 
-    /// Lay the table under the cursor out again. Returns whether it changed.
+    /// Keep the table under the cursor lined up. Returns whether it changed.
     ///
     /// Run after every edit that could have changed a column's width, which is
     /// every edit: the alignment *is* the text here, so keeping it right means
     /// rewriting it, and the rewrite is idempotent so doing it often is free.
+    ///
+    /// **Keeping, not imposing** (#329). A table nobody has laid out is left
+    /// exactly as it was typed — see [`crate::mdtable::laid_out`] for why, and
+    /// [`Editor::lay_out_md_table`] for the door that does impose.
     pub(super) fn format_md_table(&mut self) -> bool {
+        self.rewrite_md_table(false)
+    }
+
+    /// Lay the table under the cursor out whether or not it was laid out
+    /// before — `t F`, the one door a person opens on purpose.
+    pub(super) fn lay_out_md_table(&mut self) -> bool {
+        self.rewrite_md_table(true)
+    }
+
+    fn rewrite_md_table(&mut self, asked_for: bool) -> bool {
         let Some(region) = self.md_region() else {
             return false;
         };
         let before = self.md_lines(&region);
+        if !asked_for && !crate::mdtable::laid_out(&before) {
+            return false;
+        }
         let after = crate::mdtable::format(&before);
         if after == before || after.is_empty() {
             return false;
@@ -3689,7 +3706,7 @@ impl Editor {
                         let (row, has, heading) = self.md_table_torn().unwrap_or_default();
                         say!("table.row-torn", row + 1, has, heading)
                     }
-                    None if self.format_md_table() => say!("table.lined-up"),
+                    None if self.lay_out_md_table() => say!("table.lined-up"),
                     None => say!("table.already-aligned"),
                 };
             }
