@@ -8925,6 +8925,63 @@ fn a_quoted_field_is_read_as_the_one_field_it_is() {
 }
 
 #[test]
+fn the_grid_is_drawn_where_the_cursor_goes() {
+    // The parser read the quotes and the drawing did not (#391), so the two
+    // halves of the same table disagreed about a row: the cursor walked three
+    // cells and the page drew four boxes, and the bar at the top of the page
+    // (#379) — which numbers the columns off the drawing — named one column
+    // while pointing at another. Nothing was written wrongly, because writing
+    // goes through the cells; it was the picture that was false.
+    let dir = std::env::temp_dir().join(format!("yumete-drawn-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let csv = dir.join("people.csv");
+    std::fs::write(&csv, "name,note,age\n\"Smith, John\",ok,30\n\"Doe, Jane\",fine,60\n").unwrap();
+
+    let mut ed = Editor::new();
+    ed.open_file(&csv).unwrap();
+    assert!(ed.enter_table(), "{}", ed.status());
+    for line in 0..3 {
+        assert_eq!(
+            ed.table_cells_on_line(line),
+            ed.row_cells(line),
+            "line {} is drawn in different places than it is walked",
+            line + 1
+        );
+        assert_eq!(ed.table_cells_on_line(line).len(), 3, "line {}", line + 1);
+    }
+
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// A record whose quote runs on is two lines to a grid that reads one record
+/// to a line — and `:table-check` says *that*, not 「this line is 1 column」
+/// (#391).
+#[test]
+fn a_record_that_runs_on_is_named_by_the_check() {
+    let dir = std::env::temp_dir().join(format!("yumete-runs-on-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let csv = dir.join("people.csv");
+    // Most of the file is a clean grid, so it opens: the warning at the door
+    // is only ever asked of a file that fails to be one.
+    let text = "name,note,age\n\"Smith, John\",ok,30\n\"runs on,here,40\nstill going\",no,50\n甲,乙,丙\n";
+    std::fs::write(&csv, text).unwrap();
+
+    let mut ed = Editor::new();
+    ed.open_file(&csv).unwrap();
+    assert!(ed.enter_table(), "{}", ed.status());
+    ed.execute(":table-check").unwrap();
+    let listing = ed.current_buffer().text();
+    assert!(listing.contains("people.csv:3"), "{listing:?}");
+    assert!(listing.contains("引號沒關上"), "{listing:?}");
+    // …and the quoted name on line 2 is not reported at all: it is one field.
+    assert!(!listing.contains("people.csv:2"), "{listing:?}");
+
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
 fn a_pasted_spreadsheet_lands_in_a_csv_too() {
     let dir = std::env::temp_dir().join(format!("yumete-paste-grid-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
