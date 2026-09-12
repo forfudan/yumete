@@ -408,12 +408,12 @@ pub enum ShotJob {
     Page { target: PathBuf, text: bool },
 }
 
-/// What the row above the status line has to say.
+/// What the row below the status line has to say.
 ///
 /// Structured rather than one string, so a key can be set apart from what it
 /// does. A run of 「hjkl 走格 · c 換格 · y Y 取格/行」 all in one colour is a
 /// wall to read; the same keys lit and their meanings quiet is a thing to
-/// glance at, which is the only way a hint row earns its row.
+/// glance at, which is the only way the command row earns its row.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Hint {
     /// Nothing has happened and nothing is half-pressed.
@@ -1844,7 +1844,7 @@ pub struct Editor {
     /// Which `|` table the cursor is in, against the buffer, its revision and
     /// the line the answer was worked out for.
     ///
-    /// The region is asked for several times a frame — the hint row, the
+    /// The region is asked for several times a frame — the command row, the
     /// status line, and every key that has to know whether the grid's rules
     /// apply here. Walking out from the cursor is cheap for a table of ten
     /// rows and is not cheap for a table of ten thousand, and the answer is

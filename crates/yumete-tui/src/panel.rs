@@ -3,7 +3,7 @@
 //! A ring, a gold name in its top-left, and something inside — the shape #273
 //! gave the `:` menu. Four things on the screen were already this shape and
 //! each drew its own: the `空格` which-key, the footnote and `%%註釋%%` strip
-//! (#294), `:write`'s safety check (#295), and the hint row. What they differ
+//! (#294), `:write`'s safety check (#295), and the command row. What they differ
 //! in is four parameters — **title, body, a tag, and where it stands** — so
 //! that is what this takes.
 

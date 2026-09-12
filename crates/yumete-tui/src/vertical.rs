@@ -149,7 +149,7 @@ impl Metrics {
         let head_rows = number_rows(config.editor.line_numbers, total_lines);
         // …and never taller than the page it sits on. A novel of ten thousand
         // paragraphs spends five rows on numbers, and on a seven-row page the
-        // writing was then laid out *below* the page — over the hint row and
+        // writing was then laid out *below* the page — over the command row and
         // the status line, which are drawn after it and painted the numbers
         // out. The page showed its numbers and none of its text.
         let head_rows = head_rows.min(height.saturating_sub(1));

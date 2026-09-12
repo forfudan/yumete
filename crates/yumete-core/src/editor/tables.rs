@@ -3,7 +3,7 @@
 //! Three sections of `editor.rs`, moved here whole on 2026-09-08 because they
 //! were always one subject: the table *mode* (#118), `|` tables inside a
 //! document (#142), and delimited text read as a grid either way (#227). They
-//! sat between 「what a character is」 and 「the hint row」 for no reason but the
+//! sat between 「what a character is」 and 「the command row」 for no reason but the
 //! order they were written in.
 //!
 //! A child module of `editor`, so `Editor`'s private fields are as reachable
@@ -1403,7 +1403,7 @@ impl Editor {
     /// The author, 2026-09-11：「在顶部预留一个信息栏（两行：列号+列名）。这个
     /// 平常不显示，只是在下方是表格中间部分的时候显示。这样它是独立的，也就不
     /// 会侵扰文本的区域了。」The region is what makes it buildable — the page
-    /// is simply two rows shorter, which is the arithmetic the hint bar and the
+    /// is simply two rows shorter, which is the arithmetic the command row and the
     /// tab bar already do, where a row drawn *over* the text would have been a
     /// screen row that does not belong to the line it sits on, and the wrap,
     /// the caret and the click map would each have had to learn what that is.

@@ -3277,13 +3277,6 @@ en = "what you get: readings laid out, markup off the page"
 # ── hint ──────────────────────────────────────────────────────────────
 
 [[message]]
-# 提示欄：回 Normal
-key = "hint.back-to-normal"
-zht = "回 Normal"
-zhs = "回 Normal"
-en = "back to Normal"
-
-[[message]]
 # 提示：括號
 key = "hint.bracket"
 zht = "括號"
@@ -3422,13 +3415,6 @@ key = "hint.count-pending"
 zht = "{0} 次 · 接一個動作或編輯"
 zhs = "{0} 次 · 接一个动作或编辑"
 en = "{0} times · now an action or an edit"
-
-[[message]]
-# 提示：進入
-key = "hint.enter"
-zht = "進入"
-zhs = "进入"
-en = "into"
 
 [[message]]
 # 提示：找
@@ -3732,11 +3718,11 @@ zhs = "m"
 en = "m"
 
 [[message]]
-# 提示：移動
-key = "hint.move"
-zht = "移動"
-zhs = "移动"
-en = "move"
+# 提示：更多（按 t 開表格選單）
+key = "hint.more"
+zht = "更多"
+zhs = "更多"
+en = "more"
 
 [[message]]
 # 提示：蓋掉
@@ -3744,13 +3730,6 @@ key = "hint.overwrite"
 zht = "蓋掉"
 zhs = "盖掉"
 en = "write over"
-
-[[message]]
-# 提示：貼
-key = "hint.paste"
-zht = "貼"
-zhs = "贴"
-en = "paste"
 
 [[message]]
 # 提示：注音
@@ -3788,13 +3767,6 @@ zhs = "回正文"
 en = "back to the text"
 
 [[message]]
-# 側欄提示：收起
-key = "hint.sidebar.collapse"
-zht = "收起"
-zhs = "收起"
-en = "collapse"
-
-[[message]]
 # 側欄底下那一行按鍵說明
 key = "hint.sidebar.keys"
 zht = "j k 移動 · J K 翻頁 · g G 兩端 · l 進入 · h 收起 · Tab 換視圖 · w 寬窄 · R 重讀 · C-w/Esc 回正文 · q 關"
@@ -3807,13 +3779,6 @@ key = "hint.sidebar.other-view"
 zht = "換視圖"
 zhs = "换视图"
 en = "other view"
-
-[[message]]
-# 側欄提示：重讀
-key = "hint.sidebar.re-read"
-zht = "重讀"
-zhs = "重读"
-en = "re-read"
 
 [[message]]
 # 側欄提示：寬窄
@@ -3900,39 +3865,18 @@ zhs = "t 后面（文中的表格区块）：/ ? g y p"
 en = "after t, in a table block: / ? g y p"
 
 [[message]]
-# 表格提示：走格
-key = "hint.table.by-cell"
-zht = "走格"
-zhs = "走格"
-en = "by cell"
-
-[[message]]
 # 表格提示：改按格
 key = "hint.table.by-cell-instead"
-zht = "改按格"
-zhs = "改按格"
-en = "by cell instead"
-
-[[message]]
-# 表格提示：走字
-key = "hint.table.by-character"
-zht = "走字"
-zhs = "走字"
-en = "by character"
+zht = "按格"
+zhs = "按格"
+en = "by cell"
 
 [[message]]
 # 表格提示：改按字
 key = "hint.table.by-character-instead"
-zht = "改按字"
-zhs = "改按字"
-en = "by character instead"
-
-[[message]]
-# 表格提示：換格／清空
-key = "hint.table.change-or-clear-cell"
-zht = "換格／清空"
-zhs = "换格／清空"
-en = "change / clear the cell"
+zht = "按字"
+zhs = "按字"
+en = "by character"
 
 [[message]]
 # 表格提示欄的標題（按字）
@@ -4061,13 +4005,6 @@ zhs = "基本：排齐，按键归表格"
 en = "basic: lined up, and the grid's keys"
 
 [[message]]
-# 提示：表格操作
-key = "hint.table.operations"
-zht = "表格操作"
-zhs = "表格操作"
-en = "table operations"
-
-[[message]]
 # 表格提示：上一格
 key = "hint.table.previous-cell"
 zht = "上一格"
@@ -4103,20 +4040,6 @@ zhs = "t 表格"
 en = "t table"
 
 [[message]]
-# 表格提示：誰用了它
-key = "hint.table.who-uses-this"
-zht = "誰用了它"
-zhs = "谁用了它"
-en = "who uses this"
-
-[[message]]
-# 表格提示：誰用了這個字
-key = "hint.table.who-uses-this-character"
-zht = "誰用了這個字"
-zhs = "谁用了这个字"
-en = "who uses this character"
-
-[[message]]
 # t 選單：t t 這一行
 key = "hint.table.whole-window"
 zht = "整個窗口都給表格"
@@ -4129,13 +4052,6 @@ key = "hint.table.wrap-wide-cells"
 zht = "太寬的格子：折到下面幾行（全窗）"
 zhs = "太宽的格子：折到下面几行（全窗）"
 en = "over-wide cells: wrap them onto the lines below (whole-window)"
-
-[[message]]
-# 表格提示：取格／行
-key = "hint.table.yank-cell-or-row"
-zht = "取格／行"
-zhs = "取格／行"
-en = "yank cell / row"
 
 [[message]]
 # 表格提示：取這欄／貼一欄
@@ -4276,14 +4192,6 @@ key = "hint.vi.zero"
 zht = "行首是 gh，第一個非空白是 gs"
 zhs = "行首是 gh，第一个非空白是 gs"
 en = "line start is gh, first non-blank gs"
-
-[[message]]
-# 提示：這個詞還在哪裏
-key = "hint.word-elsewhere"
-zht = "這個詞還在哪裏"
-zhs = "这个词还在哪里"
-en = "where else this word is"
-
 
 # ── hud ───────────────────────────────────────────────────────────────
 

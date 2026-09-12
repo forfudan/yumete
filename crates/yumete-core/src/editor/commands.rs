@@ -1047,7 +1047,7 @@ impl Editor {
         };
         // A save that said nothing was a save you could not tell from a save
         // that did not happen — and the manual has been quoting this line as
-        // its example of the hint row all along.
+        // its example of the command row all along.
         // 寫作進度 is kept from the save, not from the keystroke: what a day
         // holds is what the writer committed to disk that day (Feature #244).
         let word_list = matches!(saved, Ok(Wrote::Saved)) && self.note_word_list_saved();
