@@ -625,6 +625,23 @@ impl Editor {
             self.edit_keys.clear();
             return;
         }
+        // The other five that 打中文 (#414): `f`／`F` 找一個字, `mi`／`ma`
+        // 選一對括號, `ms` 圍上, `mr` 換一對. `r` is answered above and not
+        // here because it is the one that takes the *whole* commit — 「你好」
+        // replaces the selection with two characters. These five each want
+        // one character, so a commit of more than one is read by its first:
+        // `f` 找的是那個字, not the phrase it arrived in.
+        if self.pending.takes_a_character() {
+            let waiting = self.pending;
+            self.pending = Pending::None;
+            if let Some(c) = text.chars().next() {
+                self.answer_with_char(waiting, c);
+            }
+            // `m` `s` is in there and the delimiter is not — never let `.`
+            // replay half of a command.
+            self.edit_keys.clear();
+            return;
+        }
         self.snapshot();
         self.insert_recording.push_str(text);
         self.insert_str(text);
