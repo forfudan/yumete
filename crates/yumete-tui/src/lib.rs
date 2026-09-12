@@ -2165,8 +2165,18 @@ fn switch_scheme(ime: &mut ImeSession, tag: &str, config: &Config) -> String {
                 table.set_page_size(config.panel.page_size);
                 table.set_commit_strategy(ime.commit_override());
                 table.set_panel_display(ime.panel_display());
+                let skipped = table.table_skipped();
                 *ime = table;
-                say!("ime.table-loaded", path.display())
+                let loaded = say!("ime.table-loaded", path.display());
+                // Said only when there is something to say. A table of your
+                // own is a path you typed, and the quiet failure is pointing
+                // it at the wrong file: rows that do not fit are dropped, so
+                // without this the panel would answer from a table with
+                // holes in it and nothing would have mentioned them (#344).
+                match skipped {
+                    0 => loaded,
+                    n => format!("{loaded} · {}", say!("ime.table-skipped", n)),
+                }
             }
             Err(why) => why,
         };

@@ -5,8 +5,9 @@
 //! a raw-mode terminal, and the reader is left with a shell prompt and no idea
 //! what they pressed. Until now yumete had **no panic hook at all** — the one
 //! upstream crash this project has reproduced (#344, `:yume-table` on a file
-//! that is not a code table) would have ended exactly that way, taking every
-//! unsaved buffer with it and saying nothing.
+//! that is not a code table — since clamped upstream, and weeded on this side
+//! before the file is handed over) would have ended exactly that way, taking
+//! every unsaved buffer with it and saying nothing.
 //!
 //! So: one file, appended to, that says what happened and what was pressed
 //! just before. Nothing here is on a hot path — the only per-keystroke cost is
