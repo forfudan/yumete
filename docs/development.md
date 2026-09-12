@@ -559,7 +559,7 @@ index, and a row with no number anywhere else is a row that got lost.
 | 334 | **單擊 Shift 丟棄正在組字的編碼** | tui+ime | P1 | 交給綁定表之後，組字中的 Shift 先上屏再切英文 [^334] | Fixed 2026-09-09 |
 | 335 | **丟失一次 Shift 釋放，下一次單擊就失效** | tui | P2 | 改用上游的 `ModifierTap`，失焦時 `reset` [^335] | Fixed 2026-09-09 |
 | 336 | **組字中點鼠標，詞上屏到另一個檔案** | tui+ime | P1 | 閘挪到進門那一處，不掛在分支上 [^336] | Fixed 2026-09-11 |
-| 337 | **中／ABC 全局，而 Normal 模式看不見它** | tui+ime | P2 | 按 `i` 之前不知道會掉進哪一種 [^337] | Open |
+| 337 | **中／ABC 全局，而 Normal 模式看不見它** | tui+ime | P2 | 按 `i` 之前不知道會掉進哪一種 [^337] | Fixed 2026-09-12 |
 | 338 | **`:` 行敲 Shift，中文洩漏回 Insert** | tui+ime | P3 | 切換先把 `borrowed` 清成 `None` [^338] | Open |
 | 339 | **沒有 Kitty 協議就沒有切換，也沒有一句話** | tui+ime | P2 | Apple Terminal 上這個手勢什麼都不做，而且不說 [^339] | Open |
 | 340 | **`/` 既不結束組字，也不交還語言** | tui+ime | P3 | `prompting` 只算 `Command` 與 `Lookfor` [^340] | Open |
@@ -8011,6 +8011,16 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     根本看不到**——按 `i` 之前不知道會掉進哪一種，只能靠打錯纔發現。做法：先做便宜的
     一半，狀態列任何模式都顯示中／ABC；語言掛到 buffer 上再說（連同 session 恢復）。
     **medium**
+
+    落地（2026-09-12）：`language_tag` 拆成兩個問題。`language_tag` 仍舊答「**這裏**在
+    不在組字」——`:` 行的命令名、Normal 的鍵，都該是空的，插在游標旁邊的預編輯與 `/`
+    的提示行都問它。新的 `standing_language_tag` 只問引擎，狀態列問它，於是 Normal 也
+    有 `[中 靈明]`／`[ABC]`；yume 把鍵盤交回去（`Engagement::Off`）纔沒有。**語言掛到
+    buffer 上那一半沒做**：一個進程一個 `ImeSession` 仍然成立，這一條收的是「看不見」。
+
+    ⚠️ 它要十格，於是 60 欄的狀態列擠掉了字符讀數。**讓路的不是它**：`char_info` 從
+    兩級讓路改成三級——區塊名、然後那個**字**、最後整條——因為那個字本來就在游標底下
+    的頁面上，`U+51AC` 一條纔是讀數存在的理由（字錯了，還是字體沒有）。
 
 [^338]: `lib.rs:552` 的切換先把 `borrowed` 清成 `None`，於是借出去的語言再也回不來。
     複現：正寫英文（`[ABC]`），按 `:`、打 `e `、敲 Shift、打 `第三章.md`、回車 →
