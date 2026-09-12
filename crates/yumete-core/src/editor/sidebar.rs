@@ -35,7 +35,7 @@ impl Editor {
                 self.refresh_sidebar();
             }
             None => {
-                let root = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+                let root = self.project_root();
                 self.open_sidebar_showing(&root, view);
             }
         }
@@ -199,7 +199,7 @@ impl Editor {
         match self.sidebar.as_mut() {
             Some(sidebar) => sidebar.show(crate::sidebar::View::Dictionary),
             None => {
-                let root = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+                let root = self.project_root();
                 let mut sidebar = crate::sidebar::Sidebar::new(&root);
                 sidebar.show(crate::sidebar::View::Dictionary);
                 self.sidebar = Some(sidebar);
@@ -367,7 +367,7 @@ impl Editor {
 
     /// Open a picker over the files of the project (`Space f`).
     pub(super) fn open_file_picker(&mut self) {
-        let root = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+        let root = self.project_root();
         let mut items = Vec::new();
         walk(&root, &mut 0, &mut |path| {
             if items.len() < PICKER_LIMIT {

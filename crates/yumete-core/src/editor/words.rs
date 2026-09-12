@@ -108,7 +108,7 @@ impl Editor {
                 self.habit_words();
             }
             WordCommand::Discover => {
-                let root = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+                let root = self.project_root();
                 self.discover_words(&root)?;
             }
             WordCommand::Level(None) => {
