@@ -1312,6 +1312,22 @@ fn walk(root: &Path, skipped: &mut usize, f: &mut impl FnMut(&Path)) {
 /// chunks, so it costs nothing at prose speed.
 const SWAP_INTERVAL: std::time::Duration = std::time::Duration::from_secs(5);
 
+/// How long one round of recovery copies may spend writing (#317).
+///
+/// 「costs nothing at prose speed」 above is true of *one* buffer. A hundred
+/// chapters left dirty by a whole-book `:replace` is a hundred serialisations
+/// and two hundred fsyncs, and the measurement was **1.593 s in the input
+/// thread**. So a round writes the buffer being typed into, then as many of
+/// the others as thirty milliseconds buys, and the rest wait their turn.
+const SWAP_BUDGET: std::time::Duration = std::time::Duration::from_millis(30);
+
+/// How soon the next round is due while a backlog is still draining (#317).
+///
+/// Not [`SWAP_INTERVAL`]: five seconds a buffer would leave a hundred chapters
+/// uninsured for eight minutes. A sixth of a second keeps the drain to a few
+/// seconds of wall clock while the input thread stays free between rounds.
+const SWAP_BACKLOG_INTERVAL: std::time::Duration = std::time::Duration::from_millis(150);
+
 /// How often the disk is asked whether the file moved, under `:reload-auto on`
 /// (Feature #214).
 ///
@@ -1856,6 +1872,12 @@ pub struct Editor {
     /// Whether the writer has already been told that recovery copies cannot be
     /// written, so the status line says it once rather than every few seconds.
     swap_warned: bool,
+    /// Where the round-robin over the *other* buffers resumes (#317).
+    swap_cursor: usize,
+    /// Whether the last round ran out of budget with copies still owed, so the
+    /// next one is due in [`SWAP_BACKLOG_INTERVAL`] rather than
+    /// [`SWAP_INTERVAL`] (#317).
+    swap_backlog: bool,
     /// Whether every file opened from here on is locked (Feature #213).
     ///
     /// What `--readonly` sets. Kept on the editor rather than handed to each
@@ -2198,6 +2220,8 @@ impl Editor {
             autosave: true,
             last_swap: None,
             swap_warned: false,
+            swap_cursor: 0,
+            swap_backlog: false,
             readonly_default: false,
             reload_auto: false,
             last_disk_check: None,
