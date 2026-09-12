@@ -277,6 +277,36 @@ fn the_retired_keys_say_what_replaced_them() {
 }
 
 #[test]
+fn the_phrasebook_answers_the_keys_we_spell_differently() {
+    // Three keys a reader arrives with and does not find here (#404). Each
+    // says where the thing went; none of them touches the document.
+    let ask = |key: Key| {
+        let mut ed = typed("那年冬天。\n");
+        ed.on_key(key);
+        assert_eq!(ed.current_buffer().text(), "那年冬天。\n", "{}", ed.status());
+        assert_eq!(ed.mode(), Mode::Normal, "{}", ed.status());
+        ed.status().to_string()
+    };
+    // vi's redo. Ours is the capital of the key that undoes.
+    assert!(ask(Key::Ctrl('r')).contains('U'), "{}", ask(Key::Ctrl('r')));
+    // Helix spends two tutor lessons on `C-c`; ours is on the 空格 menu.
+    assert!(ask(Key::Ctrl('c')).contains("空格 c"), "{}", ask(Key::Ctrl('c')));
+    // Helix cycles selections with `)` — that needs several cursors (#405).
+    // Walking a sentence at a time, which is the other half of what the
+    // reader wants, is `H`／`L`.
+    for key in ['(', ')'] {
+        let said = ask(Key::Char(key));
+        assert!(said.contains('H') && said.contains('L'), "{key}: {said}");
+    }
+    // vi's 行首 — and it can speak, because `0` builds a count only when one
+    // is already under way.
+    assert!(ask(Key::Char('0')).contains("gh"), "{}", ask(Key::Char('0')));
+    let mut ed = typed("那年冬天。\n");
+    press(&mut ed, "gg20l");
+    assert!(ed.status().is_empty(), "a count swallows it: {}", ed.status());
+}
+
+#[test]
 fn the_case_keys_moved_under_one_prefix() {
     // §5.2.3 ②: Helix spends three top-level keys on an operation that is
     // the identity on 漢字. Here they are a group, and the three keys they
@@ -1589,6 +1619,37 @@ fn deleting_yanks_so_text_can_be_moved() {
     assert_eq!(ed.current_buffer().text(), "乙丙");
     press(&mut ed, "glp"); // and put it at the end
     assert_eq!(ed.current_buffer().text(), "乙丙甲");
+}
+
+#[test]
+fn the_alt_pair_takes_text_out_without_spending_the_register() {
+    // Helix `A-d`／`A-c` (tutor 4.2). The register holds one thing: yank a
+    // sentence, notice a stray 、 on the way to where it goes, and plain `d`
+    // would throw the sentence away to hold that one character. #404.
+    let mut ed = typed("甲乙丙");
+    press(&mut ed, "ggy"); // 甲 into the register
+    press(&mut ed, "l");
+    ed.on_key(Key::Alt('d')); // 乙 out, register untouched
+    assert_eq!(ed.current_buffer().text(), "甲丙");
+    press(&mut ed, "glp");
+    assert_eq!(ed.current_buffer().text(), "甲丙甲");
+
+    // `A-c` is the same cut and then Insert, again keeping the register.
+    let mut ed = typed("甲乙丙");
+    press(&mut ed, "ggy");
+    press(&mut ed, "l");
+    ed.on_key(Key::Alt('c'));
+    assert_eq!(ed.mode(), Mode::Insert, "{}", ed.status());
+    ed.on_key(Key::Char('丁'));
+    ed.on_key(Key::Esc);
+    press(&mut ed, "glp");
+    assert_eq!(ed.current_buffer().text(), "甲丁丙甲");
+
+    // A count reaches that many characters, the way `d` and `c` do.
+    let mut ed = typed("甲乙丙丁");
+    press(&mut ed, "gg2");
+    ed.on_key(Key::Alt('d'));
+    assert_eq!(ed.current_buffer().text(), "丙丁");
 }
 
 #[test]
