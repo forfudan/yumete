@@ -237,6 +237,13 @@ zhs = "{0}:{1}: 行名「{2}」和第 {3} 行重了"
 en = "{0}:{1}: the name 「{2}」 is already row {3}"
 
 [[message]]
+# :check table 走到一行，它的引號沒關上——下一行是同一條記錄
+key = "chaifen.field-runs-on"
+zht = "{0}:{1}: 引號沒關上——下一行還是同一條記錄，這張表一行只讀一條"
+zhs = "{0}:{1}: 引号没关上——下一行还是同一条记录，这张表一行只读一条"
+en = "{0}:{1}: this quote is never closed — the next line is the same record, and this grid reads one to a line"
+
+[[message]]
 # :lint 的結果那一份緩衝區的名字
 key = "chaifen.lint-results"
 zht = "[查 {0}]"

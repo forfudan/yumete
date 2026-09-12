@@ -589,16 +589,17 @@ fn quoted(text: &str) -> String {
     out
 }
 
-/// Where each cell of a line starts and ends, in characters from the line's
-/// start.
+/// Where the delimiters that actually separate fields stand, in characters
+/// from the line's start, and whether the line ends **inside** a quoted field.
 ///
-/// `split` and nothing more: no quotes, no escapes, no state. A line of
-/// twenty-eight fields costs one pass over it, which is what makes it
-/// affordable to do this for the rows on screen and no others.
-pub fn cells(line: &str, delimiter: char) -> Vec<(usize, usize)> {
+/// One pass, and the only place the quoting rule is written down. Everything
+/// that has to agree about where a cell begins reads it from here: the cell
+/// spans, the record that runs on, and the grid the reader sees. They used to
+/// disagree — the grid counted every comma in the line, so 「"Smith, John"」
+/// was drawn as two cells in a file the parser read as one (#391).
+fn scan(line: &str, delimiter: char) -> (Vec<usize>, bool) {
     let line = line.trim_end_matches(['\n', '\r']);
-    let mut out = Vec::new();
-    let mut start = 0;
+    let mut walls = Vec::new();
     // Where a field may **open** with a quote: at the start of the line or
     // just after a delimiter, spaces allowed before it because real files have
     // them. A quote anywhere else — `he said "hi"` — is a character like any
@@ -622,8 +623,7 @@ pub fn cells(line: &str, delimiter: char) -> Vec<(usize, usize)> {
                 fresh = false;
             }
             _ if c == delimiter && !inside => {
-                out.push((start, i));
-                start = i + 1;
+                walls.push(i);
                 fresh = true;
             }
             ' ' | '\t' if fresh => {}
@@ -631,7 +631,32 @@ pub fn cells(line: &str, delimiter: char) -> Vec<(usize, usize)> {
         }
         i += 1;
     }
-    out.push((start, chars.len()));
+    (walls, inside)
+}
+
+/// Where the field separators of a line stand, in characters from its start.
+///
+/// A delimiter inside a quoted field is a character in that field, not a wall,
+/// so this is what the grid is drawn on. See [`scan`].
+pub fn walls(line: &str, delimiter: char) -> Vec<usize> {
+    scan(line, delimiter).0
+}
+
+/// Where each cell of a line starts and ends, in characters from the line's
+/// start.
+///
+/// The spans **include** the quotes a field is wrapped in, because they are in
+/// the file and the writer is looking at the file; [`cell_text`] is the other
+/// end of that.
+pub fn cells(line: &str, delimiter: char) -> Vec<(usize, usize)> {
+    let end = line.trim_end_matches(['\n', '\r']).chars().count();
+    let mut out = Vec::new();
+    let mut start = 0;
+    for wall in walls(line, delimiter) {
+        out.push((start, wall));
+        start = wall + 1;
+    }
+    out.push((start, end));
     out
 }
 
@@ -648,28 +673,7 @@ pub fn cells(line: &str, delimiter: char) -> Vec<(usize, usize)> {
 /// symptom is only that the rows disagree about how many fields they have,
 /// and the file 「is not a grid」 — true, and no help at all.
 pub fn field_runs_on(line: &str, delimiter: char) -> bool {
-    let line = line.trim_end_matches(['\n', '\r']);
-    let mut fresh = true;
-    let mut inside = false;
-    let chars: Vec<char> = line.chars().collect();
-    let mut i = 0;
-    while i < chars.len() {
-        match chars[i] {
-            '"' if inside => match chars.get(i + 1) {
-                Some('"') => i += 1,
-                _ => inside = false,
-            },
-            '"' if fresh => {
-                inside = true;
-                fresh = false;
-            }
-            c if c == delimiter && !inside => fresh = true,
-            ' ' | '\t' if fresh => {}
-            _ => fresh = false,
-        }
-        i += 1;
-    }
-    inside
+    scan(line, delimiter).1
 }
 
 /// A field's value, with the quotes a delimited file wraps it in taken off.
@@ -696,34 +700,6 @@ pub fn quote_for(value: &str, delimiter: char) -> String {
         false => value.to_string(),
         true => format!("\"{}\"", value.replace('"', "\"\"")),
     }
-}
-
-/// Whether any field on this line **opens with a quote** — the one shape
-/// [`cells`] cannot read (#307).
-///
-/// `cells` splits and nothing more, which is what makes a grid over an 8 MB
-/// file affordable. The price is that `"Smith, John"` is two fields to it, and
-/// so an edit to the field *beside* it writes back a row rebuilt from the wrong
-/// pieces: `2500,"Smith, John",note` becomes `2500,"Smith,ZZ,note` — the name
-/// gone, the file no longer parseable, and nothing said.
-///
-/// **A field's own quote, not any quote.** `he said "hi"` holds no delimiter
-/// and splits correctly; a writer that had to protect a comma would have
-/// quoted the whole field, and that is what this looks for — at the start of
-/// the line or just after a delimiter, spaces allowed before it because real
-/// files have them.
-pub fn quoted_field(line: &str, delimiter: char) -> bool {
-    let line = line.trim_end_matches(['\n', '\r']);
-    let mut fresh = true;
-    for c in line.chars() {
-        match c {
-            _ if c == delimiter => fresh = true,
-            '"' if fresh => return true,
-            ' ' | '\t' => {}
-            _ => fresh = false,
-        }
-    }
-    false
 }
 
 /// The delimiters worth guessing at, best first.

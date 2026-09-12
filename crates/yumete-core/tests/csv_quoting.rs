@@ -1,6 +1,7 @@
 //! RFC 4180 quoting, as far as a line-based grid can read it (#307, #311).
 
-use yumete_core::table::{cells, cell_text, field_runs_on, quote_for, unquote};
+use yumete_core::mdtable::{boxes_of, Wall};
+use yumete_core::table::{cell_text, cells, field_runs_on, quote_for, unquote, walls};
 
 fn split(line: &str, d: char) -> Vec<String> {
     cells(line, d).into_iter().map(|s| cell_text(line, s)).collect()
@@ -57,4 +58,20 @@ fn a_field_that_runs_onto_the_next_line_is_recognised() {
     assert!(!field_runs_on("1,\"a\"", ','));
     assert!(!field_runs_on("1,a", ','));
     assert!(!field_runs_on("1,\"say \"\"hi\"\"\"", ','));
+}
+
+/// The grid a reader sees and the cells an edit takes are cut in the same
+/// places (#391).
+///
+/// They were not: the parser read the quotes and the drawing did not, so a
+/// perfectly compliant `"Smith, John"` was drawn as two columns in a file
+/// whose schema said three — and the bar at the top of the page numbered the
+/// columns off the drawing, naming one column while pointing at another.
+#[test]
+fn the_grid_is_drawn_where_the_parser_cut() {
+    let line = "\"Smith, John\",ok,30";
+    // The comma inside the field is a character in it, not a wall.
+    assert_eq!(walls(line, ','), [13, 16]);
+    assert_eq!(boxes_of(line, Wall::Between(',')), cells(line, ','));
+    assert_eq!(split(line, ','), ["\"Smith, John\"", "ok", "30"]);
 }

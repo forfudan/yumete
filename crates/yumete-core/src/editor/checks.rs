@@ -87,7 +87,19 @@ impl Editor {
                     .map(|&s| crate::table::cell_text(&text, s))
                     .unwrap_or_default()
             };
-            if spans.len() != want {
+            // **Why the count is wrong, when that is the reason** (#391). A
+            // record whose quote runs on is two lines to this grid, and both
+            // of them then have the wrong number of columns — reporting that
+            // twice and calling it a column count sends its writer looking at
+            // the commas. `field_runs_on` has always known; until now the only
+            // place that said so was the door the file did not get through.
+            let runs_on = match separator {
+                Separator::Pipe => false,
+                Separator::Delimiter(d) => crate::table::field_runs_on(&text, d),
+            };
+            if runs_on {
+                found.push(say!("chaifen.field-runs-on", name, line + 1));
+            } else if spans.len() != want {
                 found.push(say!(
                     "chaifen.wrong-column-count",
                     name,

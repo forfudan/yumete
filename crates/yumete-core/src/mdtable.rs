@@ -219,12 +219,11 @@ impl Wall {
     pub fn at(self, text: &str) -> Vec<usize> {
         match self {
             Wall::Pipe => pipes_from(text, false),
-            Wall::Between(wall) => text
-                .chars()
-                .enumerate()
-                .filter(|&(_, c)| c == wall)
-                .map(|(i, _)| i)
-                .collect(),
+            // Not every one of them: a delimiter inside a quoted field is a
+            // character in that field, and the parser has always read it that
+            // way. Drawing them all put a wall through 「"Smith, John"」 that
+            // the file does not have (#391).
+            Wall::Between(wall) => crate::table::walls(text, wall),
         }
     }
 
