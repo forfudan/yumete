@@ -202,15 +202,30 @@ fn the_caret_steps_over_what_a_table_keeps_off_the_page() {
     // Walk to the last character before the hidden run…
     ed.execute("4").unwrap();
     let start = ed.cursor();
-    for _ in 0..from - 1 {
+    // **Pressed until it arrives, not counted** (#408). `l` now steps over the
+    // seams between cells too — three characters of the file drawn as one
+    // rule — so the number of presses is no longer the number of characters.
+    // The character before the padding is a visible one, so it is still landed
+    // on exactly.
+    for _ in 0..from {
+        if ed.cursor() - start >= from - 1 {
+            break;
+        }
         ed.on_key(Key::Char('l'));
     }
     assert_eq!(ed.cursor() - start, from - 1, "at the last visible character");
     let before = ed.cursor_visual_column();
 
     // …and one more press clears the whole run rather than walking it blind.
+    // The run's far end is the row's closing ` |`, itself drawn as one rule
+    // (#408), so the press carries through that too and stops at the last
+    // character of the line — one press either way, nothing walked blind.
     ed.on_key(Key::Char('l'));
-    assert_eq!(ed.cursor() - start, upto, "one press, the whole run: {hidden:?}");
+    assert!(
+        ed.cursor() - start >= upto,
+        "one press, the whole run: {hidden:?}, landed {}",
+        ed.cursor() - start
+    );
     assert!(
         ed.cursor_visual_column() > before,
         "and the page moved with it: {before} -> {}",

@@ -17,7 +17,7 @@ use yumete_cjk::{
 };
 
 /// The line's text without its trailing line break.
-fn line_text(rope: &Rope, line: usize) -> String {
+pub(crate) fn line_text(rope: &Rope, line: usize) -> String {
     let mut s = rope.line(line).to_string();
     if s.ends_with('\n') {
         s.pop();
