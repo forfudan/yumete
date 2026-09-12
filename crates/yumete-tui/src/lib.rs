@@ -428,7 +428,7 @@ pub fn run(
         // The 縱 wrap length depends on the terminal height, and the motions
         // that cross 縱 run before the next draw, so settle it up front.
         if let Ok(size) = terminal.size() {
-            // The page's own rectangle, not the terminal's: the hint row, the
+            // The page's own rectangle, not the terminal's: the command row, the
             // tab bar and the detail panel are not writing, and a 縱 measured
             // against them is one longer than the 縱 on the screen.
             // …and the half of it the **keys** are in: with a split open the
@@ -2672,27 +2672,36 @@ struct Areas {
     ///
     /// A region rather than an overlay, which is the whole of why it exists at
     /// all — the page is two rows shorter and nothing else changes, the same
-    /// arithmetic the tab bar and the hint bar already do.
+    /// arithmetic the tab bar and the command row already do.
     head: Rect,
     /// What the page itself is drawn into, the detail panel already taken off.
     text: Rect,
     detail: Option<Rect>,
-    hint: Rect,
     status: Rect,
+    /// **The bottom row of all, or none** (#302): where `:` and `/` are typed,
+    /// where a message about what just happened lands, and where the keys you
+    /// can press are listed.
+    ///
+    /// Below the status line and not above it, which is the whole point of the
+    /// order: the status line then sits against the writing and marks its
+    /// bottom edge with its own ground, and this row — on the page's ground —
+    /// reads as the margin it is until something is typed into it.
+    command: Rect,
 }
 
 /// Divide `area` up. Pure: it draws nothing and depends only on what the
 /// editor and the config say.
 fn page_areas(editor: &Editor, config: &Config, area: Rect, head_rows: u16) -> Areas {
-    // Two rows at the foot, answering two questions. The bottom one is *where
-    // am I* and never changes shape; the one above it is *what just happened,
-    // and what can I press*, and is blank when there is neither. Splitting them
-    // is what lets the bottom row stay still: a message used to push the
-    // position along the line, or take it away outright.
-    let hint_rows = u16::from(config.editor.hints && area.height > 4);
-    let body_h = area.height.saturating_sub(hint_rows + 1);
-    let hint = Rect::new(area.x, area.y + body_h, area.width, hint_rows);
-    let status = Rect::new(area.x, area.y + body_h + hint_rows, area.width, 1);
+    // Two rows at the foot, answering two questions. The upper one is *where
+    // am I* and never changes shape; the one below it is *what am I typing,
+    // what just happened, and what can I press*, and is blank when it is none
+    // of the three. Splitting them is what lets the status line stay still: a
+    // message used to push the position along the line, or take it away
+    // outright, and a `:` used to replace the whole row.
+    let command_rows = u16::from(config.editor.command_line && area.height > 4);
+    let body_h = area.height.saturating_sub(command_rows + 1);
+    let status = Rect::new(area.x, area.y + body_h, area.width, 1);
+    let command = Rect::new(area.x, area.y + body_h + 1, area.width, command_rows);
     // The sidebar takes its columns off the left; set vertically that is the
     // right side to lose, because the 縱 fill from the right edge and the page
     // simply ends sooner.
@@ -2761,8 +2770,8 @@ fn page_areas(editor: &Editor, config: &Config, area: Rect, head_rows: u16) -> A
         panes,
         divider,
         detail,
-        hint,
         status,
+        command,
     }
 }
 
@@ -2789,10 +2798,16 @@ fn draw(
         head: head_area,
         text: text_area,
         detail,
-        hint: hint_area,
         status: status_area,
+        command: command_area,
     } = areas;
-    let hint_rows = hint_area.height;
+    // Where a `:` or `/` is typed. Its own row when there is one; the status
+    // line when the window is too short for two, because a prompt with nowhere
+    // to be drawn is a prompt nobody can answer.
+    let prompt_area = match command_area.height {
+        0 => status_area,
+        _ => command_area,
+    };
     if sidebar.width > 0 {
         draw_sidebar(frame, editor, config, sidebar);
     }
@@ -2866,14 +2881,14 @@ fn draw(
         panels.push(panel);
     }
 
-    if hint_rows == 1 {
-        draw_hints(frame, editor, config, hint_area);
+    draw_status(frame, editor, config, ime, status_area, tab_area, command_area.height == 1);
+    if command_area.height == 1 {
+        draw_command(frame, editor, config, ime, command_area);
     }
-    draw_status(frame, editor, config, ime, status_area, tab_area);
-    // The floating panels stack upward from the footer, and the footer is now
-    // two rows deep — anchored to the status line alone they would be drawn
-    // over the hint row.
-    let footer = if hint_rows == 1 { hint_area } else { status_area };
+    // The floating panels stack upward from the status line, which is the top
+    // of the footer: the command row is *below* it, so a panel that stopped at
+    // the command row would be drawn over the position readout.
+    let footer = status_area;
     panels.extend(draw_command_menu(frame, editor, config, area, footer));
     panels.extend(draw_lookfor_menu(frame, editor, config, area, footer));
     // Where the picker put its caret, so the candidate panel can stand under
@@ -2933,7 +2948,7 @@ fn draw(
         let col = yumete_cjk::str_width(prefix)
             + yumete_cjk::str_width(&editor.prompt_before_caret())
             + yumete_cjk::str_width(&prompt_preedit(editor, ime));
-        frame.set_cursor_position(Position::new(status_area.x + col as u16, status_area.y));
+        frame.set_cursor_position(Position::new(prompt_area.x + col as u16, prompt_area.y));
     } else if editor.layout() == WritingLayout::Horizontal || editor.mode() == Mode::Insert {
         // Vertically the terminal's cursor is shown only in Insert, where it is
         // the caret; in Normal the block is painted into the page and a second,
@@ -2955,18 +2970,18 @@ fn draw(
                 let col = yumete_cjk::str_width(prefix)
                     + yumete_cjk::str_width(text)
                     + yumete_cjk::str_width(&prompt_preedit(editor, ime));
-                (status_area.x + col as u16, status_area.y)
+                (prompt_area.x + col as u16, prompt_area.y)
             }
             None => (cursor_x, cursor_y),
         };
-        // **The panel may cover the writing; it may not cover the status line.**
+        // **The panel may cover the writing; it may not cover the footer.**
         // `area` here is the whole window, so on a tall terminal the panel
         // never reached the bottom and nobody noticed — but at twelve rows a
         // full page of nine candidates ran straight over the last row, and the
         // mode, the file name and the position came out as
-        // `--╰──────────╯[中a 靈b明f] ch1.md   Ln 1, Col 1` (#387). The hint
-        // row above it is fair game: it says what keys are available, which is
-        // what the panel itself is showing.
+        // `--╰──────────╯[中a 靈b明f] ch1.md   Ln 1, Col 1` (#387). Stopping at
+        // the status line keeps the command row below it clear too, which it
+        // has to be: the caret the panel belongs to is standing in it.
         let room = Rect {
             height: status_area.y.saturating_sub(area.y).max(1),
             ..area
@@ -3791,7 +3806,7 @@ fn draw_hud_panel(
 ///
 /// A bordered list, titled in its own top border, in the corner the writing
 /// ends at — bottom right in 橫排, bottom left in 縱書, because that is where
-/// the eye already is when a line runs out. It replaces the hint row for the
+/// the eye already is when a line runs out. It replaces the command row for the
 /// sequence it is about: two surfaces saying the same thing is the thing this
 /// editor keeps taking apart.
 ///
@@ -4179,7 +4194,7 @@ fn text_at(
     mouse: ratatui::crossterm::event::MouseEvent,
 ) -> Option<usize> {
     let size = size?;
-    // The very rectangle the page was drawn into — hint row, tab bar, sidebar
+    // The very rectangle the page was drawn into — command row, tab bar, sidebar
     // and detail panel all already taken off. Working it out again by hand is
     // how a click came to land a row or two from where it was pointed.
     // …and the work area it landed in, which with two of them is the one
@@ -5600,7 +5615,12 @@ fn draw_horizontal(
     )
 }
 
-/// Draw the status line, or the command line while a `:` or `/` prompt is open.
+/// Draw the status line: where am I, and nothing else.
+///
+/// `command_row` says whether the row below exists. When it does not — a window
+/// too short for two, or `[editor] command_line = false` — this line has to
+/// take in the three things that row would have carried: a `:` or `/` being
+/// typed, a message about what just happened, and the sidebar's keys.
 fn draw_status(
     frame: &mut Frame,
     editor: &Editor,
@@ -5608,6 +5628,7 @@ fn draw_status(
     ime: &ImeSession,
     status_area: Rect,
     tab_area: Rect,
+    command_row: bool,
 ) {
     let buffer = editor.current_buffer();
     // A raised strip, not a reversal. Reversing gave a **white bar** under a
@@ -5619,11 +5640,11 @@ fn draw_status(
         .ground(yumete_config::rung::CHROME)
         .fg(ink.text());
     // The sidebar used to take the whole status line to list its keys. It has
-    // the row above for that now, and taking this one as well would mean losing
+    // the row below for that now, and taking this one as well would mean losing
     // the file name and the position for as long as the sidebar has focus.
-    let status = if editor.sidebar_focused() && !config.editor.hints {
+    let status = if editor.sidebar_focused() && !command_row {
         say!("ui.sidebar-mode", Editor::sidebar_keys())
-    } else if let Some((prefix, text)) = editor.prompt() {
+    } else if let (false, Some((prefix, text))) = (command_row, editor.prompt()) {
         // The composition in progress belongs at the caret, so a search reads as
         // the pattern being typed rather than jumping into place on commit. The
         // 中/英 tag is pushed to the right edge, where it cannot be mistaken for
@@ -5691,7 +5712,7 @@ fn draw_status(
             false => "",
         };
         // Where you are, and nothing else. What just happened is the row
-        // above's question — and with no hint row it comes back here, because
+        // below's question — and with no command row it comes back here, because
         // a message nobody can see is not a message.
         let where_ = position_of(editor);
         // **Whole fields give way, in order — the line is never cut through a
@@ -5717,7 +5738,7 @@ fn draw_status(
             (preview.to_string(), 6),
             (which, 3),
         ];
-        let message = match config.editor.hints || editor.status().is_empty() {
+        let message = match command_row || editor.status().is_empty() {
             true => String::new(),
             false => format!("   {}", editor.status()),
         };
@@ -6174,19 +6195,26 @@ fn indent_span(indent: usize, editor: &Editor, ink: crate::theme::Palette) -> Sp
     }
 }
 
-/// The row above the status line: what just happened, and what you can press.
+/// The bottom row: what you are typing, what just happened, or what you can
+/// press — in that order, because only one of them can have the row (#302).
 ///
 /// Quieter than the status line, and deliberately: the status line is the
-/// page's own footing and is always there, while this comes and goes. Set on
-/// the page's own ground rather than reversed, so a blank one reads as part of
-/// the margin instead of as an empty bar.
-fn draw_hints(frame: &mut Frame, editor: &Editor, config: &Config, area: Rect) {
+/// page's own footing and is always there, while this only sometimes has
+/// something to say. Set on the page's own ground rather than reversed, so a
+/// blank one reads as part of the margin instead of as an empty bar.
+fn draw_command(
+    frame: &mut Frame,
+    editor: &Editor,
+    config: &Config,
+    ime: &ImeSession,
+    area: Rect,
+) {
     use yumete_core::editor::Hint;
     let ink = crate::theme::Palette::of(config);
     // On the page's own ground, and *painted* — this row set colours and no
     // background at all, so on a light page over a dark terminal it came out
     // as a black band with the page's dark ink on it, which is to say
-    // unreadable. A blank hint row is part of the margin, not a hole in it.
+    // unreadable. A blank command row is part of the margin, not a hole in it.
     let page = ink.page();
     // News is the loud kind; keys are the quiet kind and read as furniture.
     let news = page.fg(ink.text());
@@ -6204,6 +6232,33 @@ fn draw_hints(frame: &mut Frame, editor: &Editor, config: &Config, area: Rect) {
                 cell.set_symbol(" ").set_style(page);
             }
         }
+    }
+    // **A `:` or `/` takes the whole row**, and takes it from its left edge
+    // rather than one column in: the caret is placed by the same arithmetic in
+    // `draw`, and a prompt that began a column further along than the caret
+    // was told about is a prompt you cannot type into straight.
+    if let Some((prefix, text)) = editor.prompt() {
+        let line = format!("{prefix}{text}{}", prompt_preedit(editor, ime));
+        // The guess is a rung back from what was actually typed — a colour,
+        // not `DIM`, so it is still visibly *not yet* part of the line on a
+        // terminal that drops the attribute.
+        let guess = page.fg(ink.at(yumete_config::rung::RULE));
+        let drawn = editor.prompt_ghost();
+        // The 中/英 tag is pushed to the right edge, where it cannot be
+        // mistaken for part of the pattern.
+        let tag = language_tag(editor, ime);
+        let used = yumete_cjk::str_width(&line)
+            + yumete_cjk::str_width(&drawn)
+            + yumete_cjk::str_width(&tag);
+        let gap = (area.width as usize).saturating_sub(used);
+        let mut x = area.x;
+        put_text(buf, x, area.y, right, &drawable(&line), news);
+        x += yumete_cjk::str_width(&line) as u16;
+        put_text(buf, x, area.y, right, &drawable(&drawn), guess);
+        x += yumete_cjk::str_width(&drawn) as u16;
+        let tail = format!("{}{tag}", " ".repeat(gap));
+        put_text(buf, x, area.y, right, &drawable(&tail), news);
+        return;
     }
     let mut x = area.x + 1;
     let mut put = |text: &str, style: Style, x: &mut u16| {
@@ -6371,6 +6426,16 @@ fn draw_candidate_panel(
     } else {
         cursor_y.saturating_sub(panel_h).max(area.y)
     };
+    // **And then clamped into `area` whatever the caret said.** Neither branch
+    // above is a bound when the caret is *outside* `area`, which is exactly
+    // where it stands while a `:` or `/` is being typed: the prompt lives in
+    // the command row, below the status line, and `area` stops above it. The
+    // flip then measures back from a row the panel may not touch and lands on
+    // the status line. `panel_h` is already capped at `area.height`, so this
+    // never inverts. (#387)
+    let y = y
+        .min((area.y + area.height).saturating_sub(panel_h))
+        .max(area.y);
     let panel = Rect::new(x, y, panel_w, panel_h);
 
     let mut lines: Vec<Line> = Vec::with_capacity(rows.len());
@@ -6663,7 +6728,7 @@ mod tests {
         assert_eq!(editor.char_at_cursor(), Some('\t'), "standing on the tab");
         for w in [40u16, 60, 61, 80, 99, 120] {
             let buffer = render_with(&editor, &Config::default(), &no_ime(), w, 8);
-            let row = row_text(&buffer, 7);
+            let row = status_line(&buffer);
             assert!(
                 !row.chars().any(char::is_control),
                 "w={w}: a control character on the status line: {row:?}"
@@ -6766,7 +6831,7 @@ mod tests {
     fn a_character_with_a_form_is_still_shown() {
         let editor = editor_with("錐\n");
         let buffer = render_with(&editor, &Config::default(), &no_ime(), 80, 8);
-        let row = row_text(&buffer, 7);
+        let row = status_line(&buffer);
         assert!(row.contains("錐 U+9310"), "{row:?}");
     }
 
@@ -7423,6 +7488,17 @@ mod tests {
         );
     }
 
+    /// The status line — **second from the bottom**, because the command row
+    /// is below it (#302).
+    fn status_line(buffer: &ratatui::buffer::Buffer) -> String {
+        row_text(buffer, buffer.area.height - 2)
+    }
+
+    /// The command row: the bottom row of all, and the one a `:` is typed into.
+    fn command_line(buffer: &ratatui::buffer::Buffer) -> String {
+        row_text(buffer, buffer.area.height - 1)
+    }
+
     fn row_text(buffer: &ratatui::buffer::Buffer, y: u16) -> String {
         let mut out = String::new();
         let mut x = 0;
@@ -7773,11 +7849,11 @@ mod tests {
     fn a_long_paragraph_wraps_into_the_next_zong() {
         // Six rows of text area (8 minus the status line and the spare caret
         // row) means the 縱 wraps every six characters, however long the
-        // configured 縱 is. The hint row is off: this is about the 縱, and a
+        // configured 縱 is. The command row is off: this is about the 縱, and a
         // row spent on the footer would only move every coordinate below.
         let mut editor = editor_with(&"字".repeat(8));
         let mut config = vertical_config();
-        config.editor.hints = false;
+        config.editor.command_line = false;
         let buffer = render_vertical(&mut editor, &config, 20, 8);
 
         assert_eq!(at(&buffer, 18, 0), "字");
@@ -8425,7 +8501,7 @@ mod tests {
         let config = Config::default();
         let status = |w: u16| {
             let buffer = render(&editor, &config, w, 6);
-            row_text(&buffer, 5).trim_end().to_string()
+            status_line(&buffer).trim_end().to_string()
         };
 
         // Wide: everything, and the three-space gaps.
@@ -8451,8 +8527,9 @@ mod tests {
     /// a full page of candidates on a twelve-row terminal ran over the last
     /// row and took the mode, the file name and the position with it. On a
     /// tall terminal it never reached the bottom, which is why nobody saw it.
-    /// The row above the status line is fair game: the hint row lists keys,
-    /// and so does the panel.
+    /// The command row below it is out of bounds too, and for a second reason:
+    /// while a `:` or `/` is open the caret the panel hangs from is standing
+    /// in that row, so the placement has to be clamped and not merely flipped.
     #[test]
     fn the_candidate_panel_never_covers_the_status_line() {
         let table = "b 吧 八 把 爸 罷 壩 霸 拔 跋\n";
@@ -8471,17 +8548,22 @@ mod tests {
                 "{height} rows: no panel to speak of: {page:?}"
             );
 
-            // The last row is the status line, and it still reads as one: the
-            // mode is on it, and no border is.
-            let last = row_text(&buffer, height - 1);
+            // The status line still reads as one: the mode is on it, and no
+            // border is — and the command row under it is clear as well.
+            let last = status_line(&buffer);
             assert!(
                 last.contains("NORMAL") || last.contains("INSERT"),
                 "{height} rows: the status line is gone: {last:?}"
             );
+            let under = command_line(&buffer);
             for edge in ['╰', '╯', '╭', '╮', '│'] {
                 assert!(
                     !last.contains(edge),
                     "{height} rows: the panel is on the status line: {last:?}"
+                );
+                assert!(
+                    !under.contains(edge),
+                    "{height} rows: the panel is on the command row: {under:?}"
                 );
             }
         }
@@ -9064,7 +9146,7 @@ mod tests {
         // A wide glyph leaves its continuation cell blank in the test backend,
         // so the run of spaces after 橫 is an artefact of reading the grid.
         let raw: String = (0..buffer.area.width)
-            .map(|x| buffer[(x, buffer.area.height - 1)].symbol())
+            .map(|x| buffer[(x, buffer.area.height - 2)].symbol())
             .collect();
         let status = raw.split_whitespace().collect::<Vec<_>>().join(" ");
         assert!(status.contains("橫 1"), "which 縱: {status:?}");
@@ -9083,7 +9165,7 @@ mod tests {
         }
         let buffer = render_vertical(&mut editor, &config, 60, 12);
         let raw: String = (0..buffer.area.width)
-            .map(|x| buffer[(x, buffer.area.height - 1)].symbol())
+            .map(|x| buffer[(x, buffer.area.height - 2)].symbol())
             .collect();
         let status = raw.split_whitespace().collect::<Vec<_>>().join(" ");
         assert!(status.contains("橫 2-2"), "the wrapped piece: {status:?}");
@@ -9830,14 +9912,14 @@ mod tests {
     }
 
     #[test]
-    fn the_row_above_says_what_would_finish_what_you_started() {
+    fn the_row_below_says_what_would_finish_what_you_started() {
         let mut editor = editor_with("那年冬天");
         let config = Config::default();
         // A wide glyph covers two cells and only the first carries it, so the
         // row reads back with a gap after every 字.
         let hint = |e: &Editor| -> String {
             let b = render(e, &config, 100, 10);
-            (0..100u16).map(|x| at(&b, x, 8)).collect::<String>().replace(' ', "")
+            command_line(&b).replace(' ', "")
         };
 
         // Nothing begun, nothing to say: the row is blank rather than filled
@@ -10091,7 +10173,7 @@ mod tests {
             "nothing beside the caret: {drawn:#?}",
         );
         assert!(
-            drawn.last().is_some_and(|line| line.ends_with('3')),
+            drawn[drawn.len() - 2].ends_with('3'),
             "and the status line still says it: {drawn:#?}",
         );
 
@@ -10252,7 +10334,7 @@ mod tests {
         assert!(bar.contains("20"), "the tab you are in is on the bar: {bar:?}");
         // …and the status line says the fraction again, because the bar cannot
         // show them all.
-        let status: String = (0..40u16).map(|x| at(&buffer, x, 9)).collect();
+        let status: String = (0..40u16).map(|x| at(&buffer, x, 8)).collect();
         assert!(status.contains("/20]"), "{status:?}");
 
         // Walk back to the first and the bar comes with you.
@@ -10301,7 +10383,7 @@ mod tests {
     fn the_page_the_cursor_moves_on_is_the_page_that_is_drawn() {
         // Three parts of the program worked the geometry out separately — the
         // drawing, the mouse, and the event loop settling the 縱 length before
-        // the keys that use it. They disagreed by the hint row, the tab bar and
+        // the keys that use it. They disagreed by the command row, the tab bar and
         // the detail panel, so the 縱 the cursor moved on was longer than the
         // 縱 on the screen and a click resolved to the wrong character.
         let mut editor = editor_with("一二三四五六七八九十\n");
@@ -10309,7 +10391,7 @@ mod tests {
         let config = vertical_config();
         let area = Rect::new(0, 0, 40, 20);
         let page = page_areas(&editor, &config, area, 0).text;
-        // Twenty rows, less the status line and the hint row.
+        // Twenty rows, less the status line and the command row.
         assert_eq!(page.height, 18, "the page is not the terminal");
         let look = vertical::Look::of(&editor);
         let lines = editor.current_buffer().line_count();
@@ -10578,7 +10660,7 @@ mod tests {
         let mut editor = editor_with("那年冬天。\n雪一直下。\n山路斷了。\n");
         let mut config = Config::default();
         config.editor.line_numbers = yumete_config::LineNumbers::None;
-        config.editor.hints = false;
+        config.editor.command_line = false;
         let rows = |editor: &Editor| -> Vec<String> {
             let b = render(editor, &config, 30, 10);
             (0..b.area.height)
@@ -10666,7 +10748,7 @@ mod tests {
         let mut editor = metered("春眠不覺曉。\n");
         let mut config = Config::default();
         config.editor.line_numbers = LineNumbers::None;
-        config.editor.hints = false;
+        config.editor.command_line = false;
         config.editor.show_segmentation = false;
         let buffer = render_wrapped(&mut editor, &config, 30, 8);
         assert!(row_text(&buffer, 1).starts_with("春眠不覺曉。"), "{:?}", row_text(&buffer, 1));
@@ -10685,7 +10767,7 @@ mod tests {
         let mut editor = metered("春眠不覺曉。\n");
         let mut config = Config::default();
         config.editor.line_numbers = LineNumbers::None;
-        config.editor.hints = false;
+        config.editor.command_line = false;
         config.editor.show_segmentation = false;
         editor.execute(":view-meter off").unwrap();
         let buffer = render_wrapped(&mut editor, &config, 30, 8);
@@ -10701,7 +10783,7 @@ mod tests {
         assert!(editor.status().contains("讀音") || editor.status().contains("reading"));
         let mut config = Config::default();
         config.editor.line_numbers = LineNumbers::None;
-        config.editor.hints = false;
+        config.editor.command_line = false;
         config.editor.show_segmentation = false;
         let buffer = render_wrapped(&mut editor, &config, 30, 8);
         assert!(row_text(&buffer, 0).starts_with("春眠不覺曉。"));
@@ -10782,7 +10864,7 @@ mod tests {
         let mut editor = editor_with("第一段。\n第二段。\n第三段。\n");
         let mut config = Config::default();
         config.editor.line_numbers = LineNumbers::None;
-        config.editor.hints = false;
+        config.editor.command_line = false;
         config.editor.show_segmentation = false;
         editor.on_key(Key::Char('j'));
 
@@ -10817,7 +10899,7 @@ mod tests {
         let mut config = Config::default();
         config.theme.ground = yumete_config::Ground::Terminal;
         config.editor.line_numbers = LineNumbers::None;
-        config.editor.hints = false;
+        config.editor.command_line = false;
         config.editor.show_segmentation = false;
         editor.on_key(Key::Char('j'));
 
@@ -10842,7 +10924,7 @@ mod tests {
         // Two paragraphs, the first long enough to need two 縱 at this height.
         let mut editor = editor_with(&format!("{}\n短。\n", "長".repeat(12)));
         let mut config = vertical_config();
-        config.editor.hints = false;
+        config.editor.command_line = false;
         editor.execute(":view-focus on").unwrap();
         let buffer = render_vertical(&mut editor, &config, 20, 8);
 
@@ -10869,7 +10951,7 @@ mod tests {
         let mut config = vertical_config();
         config.editor.line_numbers = LineNumbers::Absolute;
         config.editor.line_number_fill = true;
-        config.editor.hints = false;
+        config.editor.command_line = false;
 
         let lit = render_vertical(&mut editor, &config, 30, 12);
         editor.execute(":view-focus on").unwrap();
@@ -10906,7 +10988,7 @@ mod tests {
         let mut editor = editor_with(&(1..=60).map(|n| format!("第{n}行。\n")).collect::<String>());
         let mut config = Config::default();
         config.editor.line_numbers = yumete_config::LineNumbers::None;
-        config.editor.hints = false;
+        config.editor.command_line = false;
         let rows = 13u16;
         let middle = 5;
         let mut seats = Seats::default();
@@ -10964,7 +11046,7 @@ mod tests {
         let mut editor = editor_with(&(1..=60).map(|n| format!("第{n}行。\n")).collect::<String>());
         let mut config = Config::default();
         config.editor.line_numbers = yumete_config::LineNumbers::None;
-        config.editor.hints = false;
+        config.editor.command_line = false;
         // 13 terminal rows: twelve of page and the status line, so the last
         // row of the page is 11 and the middle of it is 5.
         let rows = 13u16;
@@ -11310,7 +11392,7 @@ mod tests {
         let mut editor = editor_with("那年冬天");
         let config = Config::default();
         let row = |b: &ratatui::buffer::Buffer, w: u16| -> String {
-            let y = b.area.height - 1;
+            let y = b.area.height - 2;
             (0..w).map(|x| at(b, x, y)).collect::<String>()
         };
 
@@ -11318,21 +11400,22 @@ mod tests {
         let quiet = row(&render(&editor, &config, 100, 10), 100);
         assert!(quiet.contains("Ln 1, Col 3"), "{quiet:?}");
 
-        // A yank says something, and it says it on the row above — the status
+        // A yank says something, and it says it on the row below — the status
         // line goes on answering "where am I" while it does.
         editor.on_key(Key::Char('y'));
         let buffer = render(&editor, &config, 100, 10);
-        let hint: String = (0..100u16).map(|x| at(&buffer, x, 8)).collect();
-        assert!(hint.contains("取"), "the message is above: {hint:?}");
+        let hint = command_line(&buffer);
+        assert!(hint.contains("取"), "the message is below: {hint:?}");
         let status = row(&buffer, 100);
         assert!(status.contains("Ln 1, Col 3"), "position kept: {status:?}");
         assert!(!status.contains("取"), "and not repeated: {status:?}");
 
-        // With the hint row off the message comes back to the status line —
-        // a message nobody can see is not a message.
+        // With the command row off the message comes back to the status line —
+        // a message nobody can see is not a message. And the status line is
+        // then the bottom row, there being no row under it.
         let mut plain = config.clone();
-        plain.editor.hints = false;
-        let status = row(&render(&editor, &plain, 100, 10), 100);
+        plain.editor.command_line = false;
+        let status = row_text(&render(&editor, &plain, 100, 10), 9);
         assert!(status.contains("取") && status.contains("Ln 1, Col 3"), "{status:?}");
     }
 
@@ -11341,7 +11424,7 @@ mod tests {
         let mut editor = editor_with("那年冬天");
         let config = Config::default();
         let row = |b: &ratatui::buffer::Buffer, w: u16| -> String {
-            let y = b.area.height - 1;
+            let y = b.area.height - 2;
             (0..w).map(|x| at(b, x, y)).collect::<String>()
         };
 
@@ -11868,18 +11951,18 @@ mod tests {
         let config = Config::default();
         editor.open_sidebar_at(&dir);
         let buffer = render(&editor, &config, 80, 12);
-        // The keys go on the row above, so the status line can go on saying
+        // The keys go on the row below, so the status line can go on saying
         // which file you are in and where in it you are.
-        let hint = row_text(&buffer, 10);
+        let hint = command_line(&buffer);
         assert!(hint.contains("側欄"), "{hint:?}");
         assert!(hint.contains("C-w"), "how to get back: {hint:?}");
-        let status = row_text(&buffer, 11);
+        let status = status_line(&buffer);
         assert!(status.contains("[scratch]"), "still says the file: {status:?}");
 
         // With the keys back in the text it says what it always said.
         editor.on_key(Key::Ctrl('w'));
         let buffer = render(&editor, &config, 80, 12);
-        let status = row_text(&buffer, 11);
+        let status = status_line(&buffer);
         assert!(status.contains("NORMAL"), "{status:?}");
 
         std::fs::remove_dir_all(&dir).ok();
@@ -13389,7 +13472,7 @@ mod tests {
             editor_with("<ruby>永<rt>ㄩㄥˇ</rt></ruby>和九年歲在癸丑暮春之初\n後面一行");
         let mut config = Config::default();
         config.editor.line_numbers = yumete_config::LineNumbers::None;
-        config.editor.hints = false;
+        config.editor.command_line = false;
         editor.execute(":view-dense off").unwrap();
         let buffer = render_with_ruby(&mut editor, &config, 16, 10);
         let rows: Vec<String> = (0..buffer.area.height)
@@ -13429,7 +13512,7 @@ mod tests {
         let mut editor = metered("春眠不覺曉春眠不覺曉<ruby>春<rt>ㄔㄨㄣ</rt></ruby>\n");
         let mut config = Config::default();
         config.editor.line_numbers = LineNumbers::None;
-        config.editor.hints = false;
+        config.editor.command_line = false;
         config.editor.show_segmentation = false;
         let buffer = render_with_ruby(&mut editor, &config, 12, 10);
         let rows: Vec<String> = (0..buffer.area.height)

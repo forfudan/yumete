@@ -238,12 +238,14 @@ pub struct EditorConfig {
     /// names and initialisms, and typing the capital is how you ask for those
     /// to be matched exactly. `(?-i)` says it for one pattern.
     pub smart_case: bool,
-    /// Whether a hint row sits above the status line (Feature #122).
+    /// Whether the command line sits below the status line (#302).
     ///
     /// It costs one row of the window always — set vertically that is one 字
-    /// off every 縱 — and buys the keys that finish a sequence you have begun,
-    /// which is otherwise only in the manual.
-    pub hints: bool,
+    /// off every 縱 — and it is where `:` and `/` are typed, where a message
+    /// about what just happened lands, and where the keys that finish a
+    /// sequence you have begun are listed. Turned off, all three fall back
+    /// onto the status line and take turns with the position readout.
+    pub command_line: bool,
     /// Whether the 縱書 page is packed as tight as a terminal allows.
     ///
     /// On by default: a terminal has few enough columns as it is, and the gap,
@@ -326,7 +328,7 @@ impl Default for EditorConfig {
             ruler: 0,
             measure: 0,
             char_info: true,
-            hints: true,
+            command_line: true,
             smart_case: true,
             dense: true,
             paper_ticks: 0,
@@ -1744,7 +1746,7 @@ struct RawEditor {
     ruler: Option<usize>,
     measure: Option<usize>,
     char_info: Option<bool>,
-    hints: Option<bool>,
+    command_line: Option<bool>,
     smart_case: Option<bool>,
     dense: Option<bool>,
     paper_ticks: Option<usize>,
@@ -1890,8 +1892,8 @@ impl RawConfig {
         if other.editor.char_info.is_some() {
             self.editor.char_info = other.editor.char_info;
         }
-        if other.editor.hints.is_some() {
-            self.editor.hints = other.editor.hints;
+        if other.editor.command_line.is_some() {
+            self.editor.command_line = other.editor.command_line;
         }
         if other.editor.smart_case.is_some() {
             self.editor.smart_case = other.editor.smart_case;
@@ -2089,8 +2091,8 @@ impl RawConfig {
         if let Some(on) = self.editor.char_info {
             config.editor.char_info = on;
         }
-        if let Some(on) = self.editor.hints {
-            config.editor.hints = on;
+        if let Some(on) = self.editor.command_line {
+            config.editor.command_line = on;
         }
         if let Some(on) = self.editor.smart_case {
             config.editor.smart_case = on;

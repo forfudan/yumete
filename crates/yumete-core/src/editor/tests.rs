@@ -3930,7 +3930,7 @@ fn a_cell_is_entered_three_ways_and_typing_stays_inside_it() {
 /// **The key the hint offers for the grain is the key that changes it** (#399).
 ///
 /// `Tab` held the grain until #356 gave it what every spreadsheet means by the
-/// key and moved the grain to `T` — and the hint row went on offering `Tab`.
+/// key and moved the grain to `T` — and the command row went on offering `Tab`.
 /// Pressing it stepped one cell and left the grain, the row and the status line
 /// exactly as they were, which reads as a switch that does not switch.
 #[test]
@@ -4268,7 +4268,7 @@ fn a_file_changed_underneath_is_not_written_over() {
     let mut ed = Editor::new();
     ed.open_file(&file).unwrap();
     // An ordinary save says so — the manual has been quoting this line as
-    // its example of the hint row all along, and it did not exist.
+    // its example of the command row all along, and it did not exist.
     press(&mut ed, "i");
     ed.on_key(Key::Char('甲'));
     ed.on_key(Key::Esc);

@@ -1,14 +1,15 @@
-//! The hint row (#122).
+//! The command row's standing content (#122, #302).
 //!
 //! What the keys mean from where the cursor is standing, one line of it.
 
 use super::*;
 
 impl Editor {
-    /// What the row above the status line should say.
+    /// What the row below the status line should say when nothing is being
+    /// typed into it.
     ///
     /// The two rows answer two different questions and that is the whole
-    /// design: the bottom one is **where am I** — mode, file, position — and
+    /// design: the upper one is **where am I** — mode, file, position — and
     /// never changes shape, so the eye always finds the same thing in the same
     /// place; this one is **what just happened, and what can I press**, and is
     /// blank when there is neither.
@@ -28,12 +29,8 @@ impl Editor {
         }
         if self.sidebar_focus && self.sidebar.is_some() {
             return Hint::Keys(say!("hint.sidebar"), vec![
-                    ("j k", say!("hint.move")),
-                    ("l", say!("hint.enter")),
-                    ("h", say!("hint.sidebar.collapse")),
                     ("Tab", say!("hint.sidebar.other-view")),
                     ("w", say!("hint.sidebar.width")),
-                    ("R", say!("hint.sidebar.re-read")),
                     ("C-w", say!("hint.sidebar.back-to-text")),
                     ("q", say!("hint.close")),
                 ]);
@@ -44,7 +41,6 @@ impl Editor {
         if self.mode == Mode::Normal && self.note_tag_at_cursor().is_some() {
             return Hint::Keys(say!("hint.footnote"), vec![
                 ("gd", say!("hint.footnote.show-or-write")),
-                ("g/ g?", say!("hint.word-elsewhere")),
             ]);
         }
         match self.mode {
@@ -53,34 +49,24 @@ impl Editor {
             }
             // The one key worth saying inside a cell — without it a person
             // types a value, presses Esc, walks right and types the next.
-            Mode::Insert if self.insert_bounds().is_some() => Hint::Keys(say!("hint.table.in-a-cell"), vec![("Tab", say!("hint.table.next-cell")), ("S-Tab", say!("hint.table.previous-cell")), ("Esc", say!("hint.back-to-normal"))]),
+            Mode::Insert if self.insert_bounds().is_some() => Hint::Keys(say!("hint.table.in-a-cell"), vec![("Tab", say!("hint.table.next-cell")), ("S-Tab", say!("hint.table.previous-cell"))]),
             Mode::Normal if self.table_here() => {
+                // Three keys, and every one of them is a key the reader could
+                // not have guessed: `t` opens the rest of the table's keys,
+                // `T` is the only way to change grain, and `Tab` is the only
+                // motion a table has that the text does not. `hjkl`, `c d`,
+                // `y Y`, `p` were here too and are gone — they are the keys
+                // this reader already has in the text, and `t` lists the
+                // ones that are not.
                 let grain = self.table.as_ref().map(|v| v.grain).unwrap_or(Grain::Cell);
-                let markdown = self.md_region().is_some();
                 match grain {
-                    Grain::Cell if markdown => Hint::Keys(say!("label.table"), vec![
-                            ("hjkl", say!("hint.table.by-cell")),
-                            ("c d", say!("hint.table.change-or-clear-cell")),
-                            ("y Y", say!("hint.table.yank-cell-or-row")),
-                            ("p", say!("hint.paste")),
-                            ("t", say!("hint.table.operations")),
-                            ("t/ t?", say!("hint.table.who-uses-this")),
-                            ("T", say!("hint.table.by-character-instead")),
-                            ("Tab", say!("hint.table.next-cell")),
-                        ]),
                     Grain::Cell => Hint::Keys(say!("label.table"), vec![
-                            ("hjkl", say!("hint.table.by-cell")),
-                            ("c d", say!("hint.table.change-or-clear-cell")),
-                            ("y Y", say!("hint.table.yank-cell-or-row")),
-                            ("p", say!("hint.paste")),
-                            ("t", say!("hint.table.operations")),
-                            ("t/ t?", say!("hint.table.who-uses-this")),
+                            ("t", say!("hint.more")),
                             ("T", say!("hint.table.by-character-instead")),
                             ("Tab", say!("hint.table.next-cell")),
                         ]),
                     Grain::Char => Hint::Keys(say!("hint.table.character-mode"), vec![
-                            ("hjkl", say!("hint.table.by-character")),
-                            ("t/ t?", say!("hint.table.who-uses-this-character")),
+                            ("t", say!("hint.more")),
                             ("T", say!("hint.table.by-cell-instead")),
                             ("Tab", say!("hint.table.next-cell")),
                         ]),
@@ -163,7 +149,7 @@ impl Editor {
     /// **What the half-pressed key can be finished with** — the which-key
     /// panel's whole content: a title, and each key with what it does.
     ///
-    /// The same answer the hint row has always had; it is a panel now because a
+    /// The same answer the command row has always had; it is a panel now because a
     /// row holds four of these and `空格` has fourteen.
     pub fn pending_menu(&self) -> Option<(String, Vec<(&'static str, String)>)> {
         match self.pending_keys()? {

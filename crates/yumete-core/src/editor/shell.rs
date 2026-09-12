@@ -7,7 +7,7 @@
 use super::*;
 
 impl Editor {
-    // ---- The hint row (Feature #122) --------------------------------------
+    // ---- The command row (Feature #122, #302) ------------------------------
 
     /// A command line the front end should run.
     pub fn take_shell_request(&mut self) -> Option<Shell> {
