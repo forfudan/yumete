@@ -2011,6 +2011,13 @@ en = "that command line is broken: {0}"
 # ── commit ────────────────────────────────────────────────────────────
 
 [[message]]
+# 純文本沒有注釋這回事，兩個鍵都這麼說
+key = "comment.none"
+zht = "純文本沒有注釋"
+zhs = "纯文本没有注释"
+en = "plain text has no comment"
+
+[[message]]
 # 上屏方式的名字：延遲
 key = "commit.name.delayed"
 zht = "延遲（頂字）"
@@ -2063,14 +2070,14 @@ zhs = "跳到第 {0} 行的冲突"
 en = "merge conflict at line {0}"
 
 [[message]]
-# 空格 c 之後，衝突化解，留下了 {0} 行
+# 空格 m 之後，衝突化解，留下了 {0} 行
 key = "conflict.kept"
 zht = "化解衝突，留下 {0} 行"
 zhs = "化解冲突，留下 {0} 行"
 en = "conflict resolved, {0} lines kept"
 
 [[message]]
-# 空格 c 想回到共同祖先，但檔案裏沒有記下它（不是 diff3 樣式）
+# 空格 m 想回到共同祖先，但檔案裏沒有記下它（不是 diff3 樣式）
 key = "conflict.no-ancestor"
 zht = "這個衝突沒有記下共同祖先"
 zhs = "这个冲突没有记下共同祖先"
@@ -2098,7 +2105,7 @@ zhs = "这份文件里没有合并冲突"
 en = "no merge conflicts in this file"
 
 [[message]]
-# 空格 c 而游標不在任何衝突裏
+# 空格 m 而游標不在任何衝突裏
 key = "conflict.not-in-one"
 zht = "游標不在衝突裏"
 zhs = "光标不在冲突里"
@@ -3338,28 +3345,28 @@ zhs = "关"
 en = "close"
 
 [[message]]
-# 空格 c 的選單：兩方都留
+# 空格 m 的選單：兩方都留
 key = "hint.conflict.both"
 zht = "兩方都留"
 zhs = "两方都留"
 en = "keep both sides"
 
 [[message]]
-# 空格 c 的選單：只留我方（<<<<<<< 那一半）
+# 空格 m 的選單：只留我方（<<<<<<< 那一半）
 key = "hint.conflict.ours"
 zht = "只留我方"
 zhs = "只留我方"
 en = "keep ours"
 
 [[message]]
-# 空格 c 的選單：只留他方（>>>>>>> 那一半）
+# 空格 m 的選單：只留他方（>>>>>>> 那一半）
 key = "hint.conflict.theirs"
 zht = "只留他方"
 zhs = "只留他方"
 en = "keep theirs"
 
 [[message]]
-# 空格 c 的選單標題，也是空格選單上這一項的說明
+# 空格 m 的選單標題，也是空格選單上這一項的說明
 key = "hint.conflict.title"
 zht = "合併衝突"
 zhs = "合并冲突"
@@ -3756,6 +3763,20 @@ key = "hint.sidebar.width"
 zht = "寬窄"
 zhs = "宽窄"
 en = "wide / narrow"
+
+[[message]]
+# 空格 C：塊注釋（沒有塊注釋的格式退到行注釋）
+key = "hint.space.comment-block"
+zht = "塊注釋"
+zhs = "块注释"
+en = "comment out, in a block"
+
+[[message]]
+# 空格 c：行注釋（沒有行注釋的格式退到塊注釋）
+key = "hint.space.comment-line"
+zht = "行注釋"
+zhs = "行注释"
+en = "comment out, by the line"
 
 [[message]]
 # 空格組：從系統剪貼簿貼在前面

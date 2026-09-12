@@ -198,7 +198,7 @@ enum Pending {
     /// walks between things a document *has* on the brackets, and #249's
     /// `]c` is the first of them here.
     Hop { forward: bool },
-    /// `空格 c` — what to keep of the merge conflict under the cursor.
+    /// `空格 m` — what to keep of the merge conflict under the cursor.
     Conflict,
     /// `` ` `` — 「不改它說什麼，只改它長什麼樣」 (§5.2.3 ②).
     ///
