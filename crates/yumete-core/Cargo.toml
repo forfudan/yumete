@@ -7,6 +7,13 @@ repository.workspace = true
 version.workspace = true
 
 [dependencies]
+# ripgrep's directory walker (#362). What it buys is `.gitignore`: the hand-
+# written skip list it replaces was three names and an extension table, it did
+# not read the ignore file sitting right there, and it was never going to be
+# complete. Only the *walking* half of ripgrep — the matching is still `regex`,
+# which is the very same engine, and a grep here has to read unsaved buffers
+# anyway, which no external tool can see.
+ignore = "0.4"
 regex = "1"
 serde = {version = "1", features = ["derive"]}
 toml = "0.8"

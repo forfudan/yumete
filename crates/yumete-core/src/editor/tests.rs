@@ -11573,6 +11573,47 @@ fn grep_searches_the_book_and_not_the_working_directory() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
+/// #362: what the ignore files say is what the walk skips.
+///
+/// The list this replaced was three hard-coded names, and the `.gitignore`
+/// lying in the same directory was not one of the things it read — so in a
+/// repository `:grep` searched the source tree along with the book, and every
+/// new offender meant another name in the list.
+#[test]
+fn grep_reads_the_ignore_file_instead_of_a_list_of_names() {
+    let dir = std::env::temp_dir().join(format!("yumete-ignored-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(dir.join(".yumete")).unwrap();
+    std::fs::create_dir_all(dir.join("草稿")).unwrap();
+    std::fs::create_dir_all(dir.join("卷一")).unwrap();
+    std::fs::write(dir.join(".gitignore"), "草稿/
+備份.md
+").unwrap();
+    std::fs::write(dir.join("卷一/一.md"), "那年冬天，甲說。
+").unwrap();
+    std::fs::write(dir.join("草稿/舊.md"), "甲的舊稿。
+").unwrap();
+    std::fs::write(dir.join("備份.md"), "甲的備份。
+").unwrap();
+
+    let mut ed = Editor::new();
+    ed.open_file(dir.join("卷一/一.md")).unwrap();
+    ed.execute(":grep 甲").unwrap();
+    let listing = ed.current_buffer().text();
+    assert!(listing.contains("一.md"), "the chapter is searched: {listing:?}");
+    assert!(!listing.contains("舊.md"), "an ignored directory is not: {listing:?}");
+    assert!(!listing.contains("備份"), "nor an ignored file: {listing:?}");
+
+    // Say the same thing again with the ignore file gone: this is the walk
+    // reading it, not two names that happen to be spelled that way.
+    std::fs::remove_file(dir.join(".gitignore")).unwrap();
+    ed.execute(":grep 甲").unwrap();
+    let listing = ed.current_buffer().text();
+    assert!(listing.contains("舊.md"), "nothing is skipped now: {listing:?}");
+    assert!(listing.contains("備份"), "{listing:?}");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 /// `.yumete` first, `.git` second, the file's own directory last — and the
 /// working directory only when there is no named file to ask.
 #[test]

@@ -584,7 +584,7 @@ index, and a row with no number anywhere else is a row that got lost.
 | 359 | **崩潰之後留下點什麼：`yumete.log` 與 panic hook** | core+tui | P2 | 從前 panic 不留一個字，草稿也不救 [^359] | Fixed 2026-09-09 |
 | 360 | **畫的那一方擋住了讀的那一方，兩邊互等** | tui | P1 | 讀終端移到自己的執行緒；死鎖的必要條件沒了 [^360] | Fixed 2026-09-09 |
 | 361 | **`:grep` 搜的是 cwd，不是這本書** | core | P2 | 從檔案往上找 `.yumete`／`.git`，cwd 只作末路 [^361] | Fixed 2026-09-12 |
-| 362 | **目錄遍歷換 ripgrep 的 `ignore`** | core | P3 | 忽略規則是永遠補不完的那一種 [^362] | Open |
+| 362 | **目錄遍歷換 ripgrep 的 `ignore`** | core | P3 | 走目錄換了，做匹配沒換 [^362] | Fixed 2026-09-12 |
 | 363 | **短寫：完整命令的首字母，別的都不是** | core | P3 | `:bc` 有，`:bclose` 沒有 [^363] | Fixed 2026-09-10 |
 | 364 | **`:quitall` 摺成 `:quit-all`** | core | P3 | 半長半短的最後一個 [^364] | Fixed 2026-09-10 |
 | 365 | **兩條測試搶同一個 `OnceLock`，紅得沒有規律** | core | P3 | 一個進程只設得了一次，兩條測試不可能都成立 [^365] | Fixed 2026-09-10 |
@@ -8581,6 +8581,17 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     yumete-cjk），`ignore` 會帶進八九個傳遞依賴。這個倉庫的性格是「自己的行為自己擁有」，
     那四十行 `walk` 也一直在工作。換的是「不必再追着補忽略規則」——判斷是划算，但不緊急。
     **medium**
+
+    **落地（2026-09-12）** ——只換走目錄那一半，跟上面的結論一字不差。`editor.rs` 的
+    `walk` 與 `sidebar.rs` 的 `push_dir`（樹狀圖，逐層展開的那一個）都改走
+    `ignore::WalkBuilder`，於是 `:grep`、檔案選擇器、`:word-discover` 與側欄問的是同一
+    個問題。`require_git(false)`：稿子那個資料夾有 `.gitignore` 沒有 `.git` 的機會，和
+    反過來一樣大。`target`／`node_modules` 兩個名字**留着**當地板——沒有任何忽略檔的資料
+    夾裏它們照樣不是散文——但不再往上加，那纔是這一條要治的病。`sort_by_file_path` 保住
+    章節順序；順帶把「先本層所有檔、再下潛」換成純路徑序，同一棵樹兩次跑出來一樣。
+    傳遞依賴實測多六個（`globset`／`walkdir`／`same-file`／`bstr`／`log`／crossbeam 三件
+    算一組）——`aho-corasick`、`memchr`、`regex-automata`、`regex-syntax` 本來就跟着
+    `regex` 進來了。
 
 [^363]: 2026-09-10 作者定的規矩：**完整命令一律摺疊，短寫可以有，而短寫一定是那條完整
     命令的首字母**。`:buffer-close` 有，`:bc` 有，`:bclose` 沒有——半長半短的拼法既不是
