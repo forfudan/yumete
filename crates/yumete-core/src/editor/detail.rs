@@ -139,11 +139,7 @@ impl Editor {
         let within = self.caret() - rope.line_to_char(line);
         // Which block the line is in decides whether its `[^1]` is a footnote
         // at all — inside a fence it is four characters of code.
-        let block = self
-            .blocks_through(line)
-            .get(line)
-            .copied()
-            .unwrap_or_default();
+        let block = self.block_of(line);
         // The construct under the cursor, not the run: standing on the `%%` of
         // a comment is standing on the comment, and a reader who has just
         // moved onto its opening mark expects the panel then, not one step
@@ -433,7 +429,7 @@ impl Editor {
         let rope = self.current_buffer().rope();
         let line = self.cursor_line();
         let within = self.caret() - rope.line_to_char(line);
-        let block = self.blocks_through(line).get(line).copied().unwrap_or_default();
+        let block = self.block_of(line);
         let runs = self.markup_line_in(line, block);
         let span = runs.iter().find(|s| {
             s.kind == crate::markdown::Kind::Footnote && within >= s.start && within < s.end
