@@ -4983,6 +4983,16 @@ fn with_md_table() -> Editor {
     ed
 }
 
+/// The same table, squared up — which is what makes it one the editor keeps
+/// squared up as it is typed in (#329).
+fn with_lined_up_md_table() -> Editor {
+    let mut ed = typed(
+        "前文\n| 字 | 讀音 |\n| -- | ---- |\n| 木 | mu   |\n| 目 | mu   |\n後文\n",
+    );
+    ed.goto_line(4);
+    ed
+}
+
 /// A document whose second table has a cell far wider than the cap, and a
 /// first table with different columns — so a test can tell the two apart.
 fn with_two_md_tables() -> Editor {
@@ -5628,7 +5638,9 @@ fn tab_walks_the_cells_while_typing() {
     ed.on_key(Key::Esc);
     assert_eq!(
         ed.current_buffer().text(),
-        "| a  | b  |\n| -- | -- |\n| 木 | mu |\n"
+        // Nobody laid this table out, so filling a row in does not lay it
+        // out either (#329): the two cells are the whole diff.
+        "| a | b |\n| --- | --- |\n| 木 | mu |\n"
     );
     // And back the other way.
     ed.on_key(Key::Char('i'));
@@ -5651,7 +5663,7 @@ fn tab_at_the_end_of_the_last_row_opens_another() {
 
 #[test]
 fn typing_keeps_the_columns_lined_up() {
-    let mut ed = with_md_table();
+    let mut ed = with_lined_up_md_table();
     assert!(ed.enter_table());
     press(&mut ed, "c");
     press(&mut ed, "薔薇");
@@ -5661,6 +5673,38 @@ fn typing_keeps_the_columns_lined_up() {
         "前文\n| 字   | 讀音 |\n| ---- | ---- |\n| 薔薇 | mu   |\n| 目   | mu   |\n後文\n",
         "the column widened around what was typed into it"
     );
+}
+
+/// #329: 兩個字的編輯換來五千行 diff.
+#[test]
+fn a_table_nobody_squared_up_is_not_squared_up_by_editing_it() {
+    // A manuscript's worth of hand-typed table. Squaring it up would rewrite
+    // every one of these rows to hold two characters.
+    let mut rows = String::from("|字|讀音|\n|-|-|\n");
+    for _ in 0..60 {
+        rows.push_str("|木|mu|\n");
+    }
+    let mut ed = typed(&rows);
+    let before = ed.current_buffer().text();
+    ed.goto_line(4);
+    assert!(ed.enter_table());
+    press(&mut ed, "c");
+    press(&mut ed, "薔薇");
+    ed.on_key(Key::Esc);
+
+    let after = ed.current_buffer().text();
+    let moved = before
+        .lines()
+        .zip(after.lines())
+        .filter(|(a, b)| a != b)
+        .count();
+    assert_eq!(moved, 1, "one cell was edited, so one line moved");
+    assert_eq!(ed.line_text(3).as_deref(), Some("|薔薇|mu|\n"));
+
+    // And `t F` is the door that does square it up, which is why declining
+    // above costs nothing.
+    press(&mut ed, "tF");
+    assert_eq!(ed.line_text(3).as_deref(), Some("| 薔薇 | mu   |\n"));
 }
 
 #[test]
@@ -11150,7 +11194,13 @@ fn a_paragraph_s_readings_are_read_again_when_it_changes() {
 fn a_reused_row_says_what_a_cold_walk_would_have_said() {
     // Sixteen 漢字 is 32 columns — the cap — so the first cell folds, and its
     // fold moves with every character typed into it.
-    let mut ed = typed("| 甲乙丙丁戊己庚辛壬癸子丑寅卯辰巳 | 乙 |\n| --- | --- |\n| 丙 | 丁 |\n");
+    // Laid out already, because `Esc` only keeps a table square — it never
+    // squares one up that nobody asked it to (#329).
+    let mut ed = typed(&format!(
+        "| 甲乙丙丁戊己庚辛壬癸子丑寅卯辰巳 | 乙 |\n| {} | -- |\n| 丙{} | 丁 |\n",
+        "-".repeat(32),
+        " ".repeat(30),
+    ));
     ed.execute(":render full").unwrap();
     assert!(ed.cell_folds(), "the cap is what makes a row's list worth reusing");
 
@@ -11171,7 +11221,7 @@ fn a_reused_row_says_what_a_cold_walk_would_have_said() {
     // Between keystrokes the other rows' text has not moved at all.
     assert_eq!(
         ed.line_text(2).as_deref(),
-        Some("| 丙 | 丁 |\n"),
+        Some(format!("| 丙{} | 丁 |\n", " ".repeat(30)).as_str()),
         "the last row's own text never moved",
     );
     agrees(&ed, "the rows carried forward still fit a cell being typed in");
@@ -11183,8 +11233,8 @@ fn a_reused_row_says_what_a_cold_walk_would_have_said() {
     ed.on_key(Key::Esc);
     assert_ne!(
         ed.line_text(2).as_deref(),
-        Some("| 丙 | 丁 |\n"),
-        "the last row was padded out in the file",
+        Some(format!("| 丙{} | 丁 |\n", " ".repeat(30)).as_str()),
+        "the last row was padded out further in the file",
     );
     agrees(&ed, "the rows carried forward still fit a table that squared up");
 }
@@ -12332,3 +12382,4 @@ fn an_arrow_key_off_the_end_of_a_table_does_not_open_a_row() {
     ed.on_key(Key::Tab);
     assert_ne!(ed.current_buffer().text(), before, "Tab opened one: {}", ed.status());
 }
+

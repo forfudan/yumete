@@ -718,6 +718,49 @@ pub fn torn(parts: &Parts) -> Option<(usize, usize, usize)> {
         .map(|(at, row)| (at + 1, row.len(), heading))
 }
 
+/// Has somebody laid this table out already?
+///
+/// The question the four automatic doors ask before they touch a table, and
+/// the answer to 「兩個字的編輯換來五千行 diff」 (#329). Leaving a cell used to
+/// square the whole table up, so the first edit ever made to a hand-typed
+/// table padded every one of its rows: 141,716 bytes of manuscript became
+/// 150,065, and the two characters that were actually typed were somewhere in
+/// there. **Squaring a table up is a decision** — `t F` — **not a side effect
+/// of leaving a cell.** A table already squared up stays squared up, because
+/// there the rewrite is the two characters and nothing else.
+///
+/// Nothing is lost by declining: the padding that lines a table up *on the
+/// screen* is drawn, not written (see [`padding`]), so a table nobody ever
+/// formatted is already square on the page.
+///
+/// A squared-up table has every row the same shape — column by column, pipe to
+/// pipe, measured the way the file is stored. **One row may disagree**: the one
+/// just edited, which is the row that brought us here. Two disagreeing rows
+/// mean the file was never laid out, and two agreeing rows are the fewest that
+/// can show it was.
+pub fn laid_out(lines: &[String]) -> bool {
+    let shapes: Vec<Vec<usize>> = lines
+        .iter()
+        .map(|line| {
+            let chars: Vec<char> = line.trim_end_matches(['\n', '\r']).chars().collect();
+            boxes(line)
+                .into_iter()
+                .map(|(a, b)| {
+                    let cell: String = chars[a.min(chars.len())..b.min(chars.len())]
+                        .iter()
+                        .collect();
+                    yumete_cjk::stored_width(&cell)
+                })
+                .collect()
+        })
+        .collect();
+    let mut agree: HashMap<&Vec<usize>, usize> = HashMap::new();
+    for shape in &shapes {
+        *agree.entry(shape).or_default() += 1;
+    }
+    agree.values().any(|&n| n >= 2 && n + 1 >= shapes.len())
+}
+
 /// Write a table back out, with its columns lined up.
 ///
 /// A column is as wide as its widest cell **measured in columns**, so a column
@@ -1500,6 +1543,39 @@ mod tests {
                 "| 1000 |  c  |",
             ]
         );
+    }
+
+    #[test]
+    fn a_table_nobody_squared_up_says_so() {
+        // Straight from a writer's fingers, in the three shapes fingers take.
+        assert!(!laid_out(&lines("|字|讀音|\n|-|-|\n|木|mu|\n|目|mu|")));
+        assert!(!laid_out(&lines(
+            "| 字 | 讀音 |\n| --- | --- |\n| 木 | mu |\n| 目 | mu |"
+        )));
+        // Squared up, and squared up with one row just typed into — the row
+        // that brought the question here.
+        assert!(laid_out(&lines(
+            "| 字 | 讀音 |\n| -- | ---- |\n| 木 | mu   |\n| 目 | mu   |"
+        )));
+        assert!(laid_out(&lines(
+            "| 字 | 讀音 |\n| -- | ---- |\n| 薔薇 | mu   |\n| 目 | mu   |"
+        )));
+        // Two rows out of shape is a table nobody laid out.
+        assert!(!laid_out(&lines(
+            "| 字 | 讀音 |\n| -- | ---- |\n| 薔薇 | mu |\n| 目 | mu |"
+        )));
+        // Two agreeing rows are the fewest that can show it, so a heading and
+        // its rule alone must agree exactly.
+        assert!(!laid_out(&lines("| 字 | 讀音 |\n| --- | --- |")));
+        assert!(laid_out(&lines("| 字 | 讀音 |\n| -- | ---- |")));
+    }
+
+    #[test]
+    fn squaring_up_is_measured_the_way_the_file_is_stored() {
+        // Not the number of characters: a column of 漢字 is square in the
+        // file when its widths agree, and 「木」 is two of them.
+        assert!(laid_out(&lines("| 木 | ab |\n| -- | -- |")));
+        assert!(!laid_out(&lines("| 木 | a |\n| -- | -- |")));
     }
 
     #[test]
