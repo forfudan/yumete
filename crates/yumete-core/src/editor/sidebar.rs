@@ -540,14 +540,17 @@ impl Editor {
                 self.refresh_goal_column();
             }
             // A prompt takes it as typing, minus the line breaks that would
-            // submit it.
-            Mode::Command | Mode::Lookfor | Mode::Search | Mode::Ruby => {
-                for c in text.chars().filter(|c| !c.is_control()) {
-                    self.command_line.push(c);
+            // submit it — asked of the mode rather than listed here (#351).
+            // The picker is a prompt too, but its query has a store of its
+            // own and nothing here reaches it.
+            mode => {
+                if mode.types_into_command_line() {
+                    for c in text.chars().filter(|c| !c.is_control()) {
+                        self.command_line.push(c);
+                    }
+                    self.completion = None;
                 }
-                self.completion = None;
             }
-            Mode::Picker => {}
         }
         self.status = say!("edit.pasted-characters", text.chars().count());
     }

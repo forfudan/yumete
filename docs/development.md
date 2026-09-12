@@ -560,9 +560,9 @@ index, and a row with no number anywhere else is a row that got lost.
 | 335 | **丟失一次 Shift 釋放，下一次單擊就失效** | tui | P2 | 改用上游的 `ModifierTap`，失焦時 `reset` [^335] | Fixed 2026-09-09 |
 | 336 | **組字中點鼠標，詞上屏到另一個檔案** | tui+ime | P1 | 閘挪到進門那一處，不掛在分支上 [^336] | Fixed 2026-09-11 |
 | 337 | **中／ABC 全局，而 Normal 模式看不見它** | tui+ime | P2 | 按 `i` 之前不知道會掉進哪一種 [^337] | Fixed 2026-09-12 |
-| 338 | **`:` 行敲 Shift，中文洩漏回 Insert** | tui+ime | P3 | 切換先把 `borrowed` 清成 `None` [^338] | Open |
+| 338 | **`:` 行敲 Shift，中文洩漏回 Insert** | tui+ime | P3 | 提示行上的切換不動那筆借款 [^338] | Fixed 2026-09-12 |
 | 339 | **沒有 Kitty 協議就沒有切換，也沒有一句話** | tui+ime | P2 | Apple Terminal 上這個手勢什麼都不做，而且不說 [^339] | Fixed 2026-09-12 |
-| 340 | **`/` 既不結束組字，也不交還語言** | tui+ime | P3 | `prompting` 只算 `Command` 與 `Lookfor` [^340] | Open |
+| 340 | **`/` 既不結束組字，也不交還語言** | tui+ime | P3 | 改問 `is_prompt()`；轉英另問一句 [^340] | Fixed 2026-09-12 |
 | 341 | **`:yume on` 阻塞事件迴圈 135 ms** | ime | P3 | 在按鍵處理裏同步造一個 `ImeSession` [^341] | Open |
 | 342 | **上屏之後那一段 ASCII 不掙 undo 點** | core+ime | P4 | 上屏後 `history.pending` 是 `None` [^342] | Open |
 | 343 | **`note_progress` 每次存檔轉一遍整個 rope** | core | P4 | 有進度日誌就多一次 8 MB 拷貝 [^343] | Open |
@@ -573,7 +573,7 @@ index, and a row with no number anywhere else is a row that got lost.
 | 348 | **按行的五個快取收成一套 `LineMemo`** | core | P2 | key、上限、失效各說一次；另外四個不按行，留着 [^348] | Fixed 2026-09-12 |
 | 349 | **一個概念一處權威：字素、寬度、分詞** | core | P2 | 走行與最大概率路徑各收成一份；問終端的那個不叫 `width` [^349] | Fixed 2026-09-12 |
 | 350 | **護欄放在必經之路上，不放在呼叫點** | core | P2 | `:wa` 改走 `with_buffer`／`show_buffer`；整份重寫一律先問格線 [^350] | Fixed 2026-09-12 |
-| 351 | **按性質提問，不按模式列舉** | core+tui | P3 | `matches!(m, A \| B)` 之外的模式就這麼掉出去了 [^351] | Open |
+| 351 | **按性質提問，不按模式列舉** | core+tui | P3 | 四張列表收成 `Mode` 上四個窮盡問句 [^351] | Fixed 2026-09-12 |
 | 352 | **TUI 設定面板走 `settings_ui` 的兩半事實** | tui+ime | P4 | 第五個前端不必再手抄一份布爾表達式 [^352] | Proposed |
 | 353 | **兩條過時的提示，其中一條還沒走 `messages.toml`** | tui+core | P3 | 面板改說 `gd` 並進了表；Enter 從此沉默 [^353] | Fixed 2026-09-09 |
 | 354 | **表格視窗下的搜索搜的是全文，而光標出不去** | core | P2 | 搜索的範圍與鉗制的範圍收成同一個問題 [^354] | Fixed 2026-09-09 |
@@ -8133,6 +8133,10 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     **Insert 變成中文**；再按 `i` 打 `the` 會被當拆分吃掉。做法：在 prompt 裏觸發的
     切換只改這一行的語言，不動 `borrowed`。**small**
 
+    **落地（2026-09-12）** ——兩處清 `borrowed` 的（輕點 Shift、沒有 Kitty 協議時的
+    語言鍵）換成 `Borrow::answered_in(mode)`，它自己問 `is_prompt()`。第三處
+    （`:yume on`／`off`）是真的答案，改叫 `settled()`，行為不變。
+
 [^339]: `lib.rs:292` 沒有 enhanced 就不推 `REPORT_ALL_KEYS_AS_ESCAPE_CODES`，
     `KeyCode::Modifier` 於是永遠不來，`ShiftTap` 永遠不觸發（#271／#290 的另一面）。
     Apple Terminal 上只剩 `:yume abc`／`:yume on`，一趟八個鍵，一小時要走幾十趟。
@@ -8159,6 +8163,12 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     組字也不恢復。剛打完一個中文名就搜英文字，出來的是候選。`Ruby` 與 `Picker` 同缺。
     做法：把這三個也算進 `prompting`。注意 `/` **要留中文**（得搜得了中文），所以只補
     「進去先結束組字、出來交還」，不要照抄 `:` 的強制轉英。**small**
+
+    **落地（2026-09-12）** ——照上面兩句分成了兩個問題：`Mode::is_prompt()` 管「進去
+    結清、出來交還」，五個模式全算；`Mode::prompt_opens_in_english()` 管強制轉英，只有
+    `:` 與 `::`。那筆借款連同兩處門檻判斷從事件迴圈裏搬進了 `Borrow`（`lib.rs`），
+    `crossing(was, now, chinese) -> AtTheDoor` 是純函數，於是這一族第一次驗得到——
+    迴圈本體要一個真終端纔跑得起來。
 
 [^341]: `yumete/src/main.rs:496` 的 `switch_scheme` 在按鍵處理裏同步造一個
     `ImeSession`。量：`load_binary_bytes` 134.7 ms（125 萬條）、`from_table_text`
@@ -8340,6 +8350,14 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     `replay_macro` 三處各寫各的「不再前進就退出」，沒有一處共用（#318）。做法：問
     「這個模式是不是一條提示行」「這個事件是不是該讓組字先結清」，而不是列舉是哪幾個。
     **small**
+
+    **落地（2026-09-12）** ——同族的另外兩條（#336、#318）先前已各自收掉，剩下的就是
+    模式列表這一族。四處列表（`lib.rs` 的 `prompting` 與 `composes`、`sidebar.rs:544`
+    的貼上、`words.rs:587` 的上屏）換成 `Mode` 上四個**窮盡 match** 的問句：`is_prompt`
+    ／`prompt_opens_in_english`／`types_into_command_line`／`composes`。窮盡是關鍵——
+    明天多一個模式，那四個 match 編不過，非說清楚它是什麼不可；從前是靜靜地從五處
+    `matches!` 裏各拿一個 `false`。`each_mode_says_what_it_is` 把七個模式乘四個答案攤成
+    一張表，改哪一格都得是有人真想改。
 
 [^352]: 上游 `settings_ui.rs` 的模組註釋已經把這件事說完了：同一個判斷從前在 macOS、
     Windows、便攜版各答一遍，「四份手抄的布爾表達式」，後來收成一份。事實拆成兩半——

@@ -47,6 +47,69 @@ impl Mode {
             Mode::Lookfor => "LOOKUP",
         }
     }
+
+    /// Is this mode **a line of its own to type in**, rather than the page?
+    ///
+    /// Asked instead of listing which modes those are (#351). The list was
+    /// written out in four places and each one was a different list: the
+    /// TUI's was `Command | Lookfor`, so `/`, ruby and the picker fell out of
+    /// the one that hands Insert its language back (#340), and nothing said
+    /// they had. A mode added tomorrow has to answer these questions here —
+    /// the `match` is exhaustive on purpose — instead of quietly getting a
+    /// `false` from five `matches!` it was never mentioned in.
+    pub fn is_prompt(self) -> bool {
+        match self {
+            Mode::Normal | Mode::Insert => false,
+            Mode::Command | Mode::Lookfor | Mode::Search | Mode::Ruby | Mode::Picker => true,
+        }
+    }
+
+    /// Does the prompt **open in 英**, borrowing Insert's language?
+    ///
+    /// `:` and `::` do: what is typed first is a command name, and `:layout`
+    /// straight after writing 中文 would be eaten a letter at a time. `/`,
+    /// the ruby reading and the picker do **not** — a search pattern and a
+    /// 「第三章.md」 are Chinese as often as not, and forcing 英 there would
+    /// be taking away the thing they are for. They still end a composition on
+    /// the way in, which is [`Self::is_prompt`]'s business, not this one's.
+    pub fn prompt_opens_in_english(self) -> bool {
+        match self {
+            Mode::Command | Mode::Lookfor => true,
+            Mode::Normal | Mode::Insert | Mode::Search | Mode::Ruby | Mode::Picker => false,
+        }
+    }
+
+    /// Does **中文 belong** in what is typed here?
+    ///
+    /// Insert is the obvious one, but a `/` search is text too — and in this
+    /// manuscript it is usually Chinese text. Without this, `/` could only
+    /// look for what a keyboard puts out as ASCII, which in a novel is almost
+    /// nothing. Ruby: a reading is kana or 拼音. `::` (Feature #224): the
+    /// whole point of it is that the reader is thinking 「竖排模式」 and the
+    /// command is called `layout vertical`. The picker (§5.2.2 fault 9): it
+    /// filters a list of 「第三章.md」.
+    ///
+    /// `:` answers **false**, and is the one mode where this is not the whole
+    /// answer: its vocabulary is ASCII command names, but its *arguments* are
+    /// where file names and search patterns live. The finer question is the
+    /// TUI's `composes_here`, which asks this first and then asks the caret.
+    pub fn composes(self) -> bool {
+        match self {
+            Mode::Insert | Mode::Search | Mode::Ruby | Mode::Lookfor | Mode::Picker => true,
+            Mode::Normal | Mode::Command => false,
+        }
+    }
+
+    /// Does what is typed here land in the **command line**?
+    ///
+    /// The picker is a prompt but not this one: its query has a store of its
+    /// own, on the picker itself. Committed 中文 and a paste both ask this.
+    pub fn types_into_command_line(self) -> bool {
+        match self {
+            Mode::Command | Mode::Lookfor | Mode::Search | Mode::Ruby => true,
+            Mode::Normal | Mode::Insert | Mode::Picker => false,
+        }
+    }
 }
 
 /// A single key press, independent of any terminal backend.
@@ -80,4 +143,49 @@ pub enum Key {
     Tab,
     /// Shift-Tab, cycling it back.
     BackTab,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Mode;
+
+    /// Every mode, asked all four questions (#351).
+    ///
+    /// The point of asking rather than listing is that a mode added tomorrow
+    /// cannot slip through: the four `match`es are exhaustive, so it will not
+    /// compile until somebody has said what it is. This test is the other
+    /// half — it says what the answers are today, in one place, so that
+    /// changing one of them is a change somebody meant to make.
+    #[test]
+    fn each_mode_says_what_it_is() {
+        // mode, is_prompt, opens in 英, types into the command line, composes
+        let table = [
+            (Mode::Normal, false, false, false, false),
+            (Mode::Insert, false, false, false, true),
+            (Mode::Command, true, true, true, false),
+            (Mode::Lookfor, true, true, true, true),
+            (Mode::Search, true, false, true, true),
+            (Mode::Ruby, true, false, true, true),
+            (Mode::Picker, true, false, false, true),
+        ];
+        for (mode, prompt, english, line, composes) in table {
+            assert_eq!(mode.is_prompt(), prompt, "{mode:?} is_prompt");
+            assert_eq!(
+                mode.prompt_opens_in_english(),
+                english,
+                "{mode:?} prompt_opens_in_english"
+            );
+            assert_eq!(
+                mode.types_into_command_line(),
+                line,
+                "{mode:?} types_into_command_line"
+            );
+            assert_eq!(mode.composes(), composes, "{mode:?} composes");
+            // A mode that opens in 英 is a prompt; the question is only ever
+            // asked of one, and answering it elsewhere would mean nothing.
+            assert!(!english || prompt, "{mode:?} answers about a prompt it is not");
+            // …and one that collects into the command line is a prompt too.
+            assert!(!line || prompt, "{mode:?} types into a line it has not got");
+        }
+    }
 }
