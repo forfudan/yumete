@@ -1226,10 +1226,11 @@ fn composes_here(editor: &Editor) -> bool {
     if editor.mode().composes() {
         return true;
     }
-    // `r` 打中文 (§5.2.3 ②): Normal mode, but the next character is *text*.
-    // One line, because every gate in this file asks this one question — the
-    // preedit, the panel and the lone-Shift tap all light up together.
-    if editor.replacing() {
+    // `f`、`r`、`ms`、`mi`、`mr` 打中文 (§5.2.3 ②, #414): Normal mode, but
+    // the next character is *text*. One line, because every gate in this file
+    // asks this one question — the preedit, the panel and the lone-Shift tap
+    // all light up together.
+    if editor.takes_a_character() {
         return true;
     }
     if editor.mode() != Mode::Command {
@@ -12619,18 +12620,43 @@ mod tests {
         assert!(!Mode::Command.composes());
     }
 
-    /// Normal mode is not prose — except for the one character `r` is waiting
-    /// for (§5.2.3 ②), which in a Chinese manuscript is 中文 and needs the
-    /// engine. Every gate in this file asks `composes_here`, so this one
-    /// answer opens the preedit, the panel and the lone-Shift tap at once.
+    /// Normal mode is not prose — except for the character `f`、`r`、`ms`、
+    /// `mi`、`mr` are waiting for (§5.2.3 ②, #414), which in a Chinese
+    /// manuscript is 中文 and needs the engine. Every gate in this file asks
+    /// `composes_here`, so this one answer opens the preedit, the panel and
+    /// the lone-Shift tap at once.
     #[test]
-    fn a_pending_replace_composes_in_normal_mode() {
+    fn a_key_waiting_for_a_character_composes_in_normal_mode() {
         let mut editor = Editor::new();
         assert!(!composes_here(&editor), "Normal mode is keys, not text");
         editor.on_key(Key::Char('r'));
         assert!(composes_here(&editor), "`r` is waiting for a character");
         editor.on_key(Key::Esc);
         assert!(!composes_here(&editor), "and it stops when `r` is answered");
+        // The four that could not do this before #414.
+        for keys in [&["f"][..], &["F"], &["m", "s"], &["m", "i"], &["m", "r"]] {
+            let mut editor = Editor::new();
+            for key in keys {
+                editor.on_key(Key::Char(key.chars().next().unwrap()));
+            }
+            assert!(
+                composes_here(&editor),
+                "`{}` is waiting for a character of the manuscript",
+                keys.concat()
+            );
+        }
+        // …while the keys waiting for the *name* of something are still keys.
+        for keys in [&["\""][..], &["m"], &["Z"], &["z"], &["g"], &[" "]] {
+            let mut editor = Editor::new();
+            for key in keys {
+                editor.on_key(Key::Char(key.chars().next().unwrap()));
+            }
+            assert!(
+                !composes_here(&editor),
+                "`{}` is waiting for a letter that names a command",
+                keys.concat()
+            );
+        }
     }
 
     /// The command line is half ASCII and half prose (#225): its names are

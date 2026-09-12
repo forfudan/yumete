@@ -629,7 +629,7 @@ fn press(editor: &mut Editor, keys: &str) {
         // whole behaviour (§5.2.3 ②): the IME hands the editor a *string*,
         // which may be two 字 long. Gather the run and commit it, so a picture
         // of `r` 打中文 shows what a reader would actually see.
-        if editor.replacing() {
+        if editor.takes_a_character() {
             if let Key::Char(c) = key {
                 let mut text = String::from(c);
                 while let Some(&next) = chars.peek() {

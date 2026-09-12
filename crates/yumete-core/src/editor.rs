@@ -187,6 +187,46 @@ enum Pending {
     Case,
 }
 
+impl Pending {
+    /// Is the key this is waiting for **a character of the document**, rather
+    /// than a letter naming a command (#414)?
+    ///
+    /// The difference is who may type it. A register's name and a mark's are
+    /// ASCII by construction — `"a`, `Ma` — but the character `f` looks for,
+    /// the character `r` writes and the delimiter `ms` wraps with are all
+    /// **what is in the manuscript**, and in this editor the manuscript is
+    /// Chinese: 「，」, 「」, 【】. None of those can be typed on a keyboard
+    /// with the input method held off, which is what Normal mode does — so
+    /// until this question existed, `f，`, `ms「` and `mi《` were spellings
+    /// nobody could reach. `r` had the one exception, hand-written.
+    ///
+    /// Asked once here rather than listed at each gate: the preedit, the
+    /// candidate panel and the lone-Shift tap all light up from this one
+    /// answer, and a pending added later is a pending this question is asked
+    /// about.
+    fn takes_a_character(self) -> bool {
+        match self {
+            Pending::Find(_)
+            | Pending::Replace
+            | Pending::MatchPair { .. }
+            | Pending::Surround
+            | Pending::SurroundFrom
+            | Pending::SurroundTo(_) => true,
+            Pending::None
+            | Pending::Goto
+            | Pending::Space
+            | Pending::Register
+            | Pending::Case
+            | Pending::Match
+            | Pending::Table
+            | Pending::Mark
+            | Pending::Recall
+            | Pending::Hop { .. }
+            | Pending::Conflict => false,
+        }
+    }
+}
+
 /// Which way an in-line character search runs.
 ///
 /// **Two, not four** — `t`/`T` (till) were retired when `t` became the table

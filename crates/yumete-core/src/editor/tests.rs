@@ -339,10 +339,10 @@ fn r_replaces_with_what_the_ime_committed() {
     // the panel opens on `r`, and the choice is the replacement.
     let mut ed = typed("錢塘江上\n");
     ed.on_key(Key::Char('r'));
-    assert!(ed.replacing(), "the front end must know to run the IME");
+    assert!(ed.takes_a_character(), "the front end must know to run the IME");
     ed.insert_committed("銀");
     assert_eq!(ed.current_buffer().text(), "銀塘江上\n");
-    assert!(!ed.replacing(), "and the pending state is spent");
+    assert!(!ed.takes_a_character(), "and the pending state is spent");
 
     // One character still fills the selection, the way `r` always has…
     let mut ed = typed("錢塘江上\n");
@@ -364,6 +364,54 @@ fn r_replaces_with_what_the_ime_committed() {
 }
 
 #[test]
+fn f_and_the_pair_keys_take_what_the_ime_committed() {
+    // #414: `r` learnt 中文 and the other five did not, so in a Chinese
+    // manuscript `f` could look for `,` but not for 「，」 — and every
+    // full-width pair in `PAIRS` was a delimiter nothing could type.
+    let mut ed = typed("春風又綠江南岸，明月何時照我還\n");
+    ed.on_key(Key::Char('f'));
+    assert!(ed.takes_a_character(), "the front end must run the IME for `f`");
+    ed.insert_committed("，");
+    assert_eq!(
+        ed.current_buffer().rope().char(ed.cursor()),
+        '，',
+        "`f` stops on the 逗號 it was given"
+    );
+    assert!(!ed.takes_a_character(), "and the pending state is spent");
+
+    // `Alt-.` repeats it, so the character has to have been remembered.
+    let mut ed = typed("一，二，三\n");
+    ed.on_key(Key::Char('f'));
+    ed.insert_committed("，");
+    ed.on_key(Key::Alt('.'));
+    assert_eq!(ed.cursor(), 3, "`Alt-.` looks for the same 逗號 again");
+
+    // A count typed before `f` is spent by it, not left for the next key.
+    let mut ed = typed("一，二，三，四\n");
+    press(&mut ed, "2");
+    ed.on_key(Key::Char('f'));
+    ed.insert_committed("，");
+    assert_eq!(ed.cursor(), 3, "`2f，` is the second one");
+
+    // `ms` 圍上 a pair that only an IME can type.
+    let mut ed = typed("錢塘江上\n");
+    press(&mut ed, "v3lms");
+    assert!(ed.takes_a_character(), "the front end must run the IME for `ms`");
+    ed.insert_committed("「");
+    assert_eq!(ed.current_buffer().text(), "「錢塘江上」\n");
+
+    // `mi` 選中 what a pair holds, `mr` 換 the pair itself.
+    let mut ed = typed("「錢塘江上」\n");
+    press(&mut ed, "lmi");
+    ed.insert_committed("「");
+    assert_eq!(ed.selection(), (1, 5), "`mi「` takes what the pair holds");
+    press(&mut ed, "mr");
+    ed.insert_committed("「");
+    ed.insert_committed("『");
+    assert_eq!(ed.current_buffer().text(), "『錢塘江上』\n");
+}
+
+#[test]
 fn a_dot_repeats_an_ime_replace() {
     // The code letters never reach `on_key`, so replaying the keys of an
     // IME `r` replays `r` alone — which would arm the pending state and
@@ -373,7 +421,7 @@ fn a_dot_repeats_an_ime_replace() {
     ed.insert_committed("銀");
     press(&mut ed, "l.");
     assert_eq!(ed.current_buffer().text(), "銀銀錢\n");
-    assert!(!ed.replacing(), "`.` must not leave `r` waiting");
+    assert!(!ed.takes_a_character(), "`.` must not leave `r` waiting");
     // The next key is a key, not the answer to a question nobody asked.
     press(&mut ed, "l.");
     assert_eq!(ed.current_buffer().text(), "銀銀銀\n");

@@ -420,17 +420,27 @@ impl Editor {
                 self.handle_space(key);
                 return;
             }
-            Pending::Find(kind) => {
+            // The five that are waiting for a character of the manuscript.
+            // They answer in one place because the character may arrive as a
+            // key or as an IME commit (#414), and the two used to be written
+            // in two files with only `r` in the second one.
+            waiting @ (Pending::Find(_)
+            | Pending::Replace
+            | Pending::MatchPair { .. }
+            | Pending::Surround
+            | Pending::SurroundFrom
+            | Pending::SurroundTo(_)) => {
+                // Spelt out rather than guarded by `takes_a_character`,
+                // because a guard does not count towards exhaustivity and
+                // this match is what catches a new `Pending` nobody handled.
+                // The two lists must agree; in a debug build they are checked.
+                debug_assert!(waiting.takes_a_character());
                 self.pending = Pending::None;
                 if let Key::Char(c) = key {
-                    self.last_find = Some((kind, c));
-                    // The count belongs to the `f`, which has already spent it:
-                    // `3fx` is the third `x`, not the first.
-                    let count = self.operator_count.take().unwrap_or(1).max(1);
-                    // Through `repeat`, for its early exit: `10000fZ` on a line
-                    // with no `Z` left is one look, not ten thousand (#318).
-                    self.repeat(count, |e| e.find_char(kind, c));
+                    self.answer_with_char(waiting, c);
                 }
+                // Spent either way: a count typed before `f` belongs to that
+                // `f` and must not be left lying for the next command.
                 self.operator_count = None;
                 return;
             }
@@ -438,13 +448,6 @@ impl Editor {
                 self.pending = Pending::None;
                 if let Key::Char(c) = key {
                     self.pending_register = Some(c);
-                }
-                return;
-            }
-            Pending::Replace => {
-                self.pending = Pending::None;
-                if let Key::Char(c) = key {
-                    self.replace_chars(c);
                 }
                 return;
             }
@@ -468,34 +471,6 @@ impl Editor {
                     Key::Char('d') => self.surround_delete(),
                     Key::Char('r') => self.pending = Pending::SurroundFrom,
                     _ => {}
-                }
-                return;
-            }
-            Pending::MatchPair { around } => {
-                self.pending = Pending::None;
-                if let Key::Char(c) = key {
-                    self.select_pair(c, around);
-                }
-                return;
-            }
-            Pending::Surround => {
-                self.pending = Pending::None;
-                if let Key::Char(c) = key {
-                    self.surround_add(c);
-                }
-                return;
-            }
-            Pending::SurroundFrom => {
-                self.pending = Pending::None;
-                if let Key::Char(c) = key {
-                    self.pending = Pending::SurroundTo(c);
-                }
-                return;
-            }
-            Pending::SurroundTo(from) => {
-                self.pending = Pending::None;
-                if let Key::Char(to) = key {
-                    self.surround_replace(from, to);
                 }
                 return;
             }
@@ -1042,6 +1017,39 @@ impl Editor {
                     self.status = said;
                 }
             }
+        }
+    }
+
+    /// Hand a half-finished key the character it was waiting for (#414).
+    ///
+    /// The one place the six of them are written, because the character has
+    /// two ways in: a keystroke, and a commit from the 輸入法 — `f` then
+    /// 「，」 is two 拼音 letters, a panel and a choice, and none of that
+    /// arrives as [`Key::Char`]. Written twice, the second copy knew only
+    /// about `r`, which is why `f`、`ms`、`mi`、`mr` could not take 中文.
+    ///
+    /// The caller has already cleared [`Editor::pending`] and passes what it
+    /// was; `SurroundFrom` sets the next one, so this must run *after* the
+    /// clearing, not before.
+    pub(super) fn answer_with_char(&mut self, waiting: Pending, c: char) {
+        match waiting {
+            Pending::Find(kind) => {
+                self.last_find = Some((kind, c));
+                // The count belongs to the `f`, which has already spent it:
+                // `3fx` is the third `x`, not the first.
+                let count = self.operator_count.take().unwrap_or(1).max(1);
+                // Through `repeat`, for its early exit: `10000fZ` on a line
+                // with no `Z` left is one look, not ten thousand (#318).
+                self.repeat(count, |e| e.find_char(kind, c));
+            }
+            Pending::Replace => self.replace_chars(c),
+            Pending::MatchPair { around } => self.select_pair(c, around),
+            Pending::Surround => self.surround_add(c),
+            Pending::SurroundFrom => self.pending = Pending::SurroundTo(c),
+            Pending::SurroundTo(from) => self.surround_replace(from, c),
+            // Everything else waits for a letter naming a command, and those
+            // are answered where they are read.
+            _ => {}
         }
     }
 

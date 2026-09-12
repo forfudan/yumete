@@ -636,6 +636,7 @@ index, and a row with no number anywhere else is a row that got lost.
 | 411 | **`v` 的光標換形狀** | tui | P2 | 跟 helix：select 有自己的一格 [^411] | Fixed 2026-09-12 |
 | 412 | **`:yume on` 之後借出去的語言又被還回來** | tui+ime | P2 | 那一句認的是 `+`／`-`，早就沒人送了 [^412] | Fixed 2026-09-12 |
 | 413 | **`.` 縮回 helix 那個意思：只重複上一次插入** | core | P2 | 現在重複的是任何一次改動，`d` 之後按到就再刪一段 [^413] | Proposed |
+| 414 | **`f`、`mi`、`ms`、`mr` 打不了中文** | core+tui | P1 | 等一個字的鍵只有 `r` 認得上屏 [^414] | Fixed 2026-09-12 |
 
 ### 5.5 · A table is a delimiter, a surface and a boundary (#261)
 
@@ -10009,3 +10010,24 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     做法：`repeat_edit` 只在 `last_edit_keys` 是一段插入（`i`／`a`／`c` 開頭、`Esc` 收尾）
     時回放，其餘報 `edit.nothing-to-repeat`；或另給寬的那個一個鍵。
     ⚠️ **這是破壞性改動**，`.` 現有的六七種用法會少掉大半，所以擱在這裏等定。**small**
+
+[^414]: 中文稿子裏 `f` 要找的多半是「，」「。」「」」，而 `f` 之後那個字**是文本，不是
+    命令名**——和 `r` 完全一樣。`r` 早就認得上屏（§5.2.3 ②），別的沒有：`editor/keys.rs`
+    的六個 pending 各自寫一段「`if let Key::Char(c) = key`」，而上屏根本不走 `on_key`，
+    它走 `words.rs::insert_committed`；那一支裏只有 `Pending::Replace` 一條分支。
+    順帶查出來的：`PAIRS` 裏那十來對全角括號（「」『』《》【】〔〕〖〗（）［］｛｝〈〉“”‘’）
+    **出廠起一個都指代不了**——`ms「` 要打的正是「，敲不出來就等於沒有。這是同一個 bug 的
+    另一半，不是兩件事。
+    **落地（2026-09-12）**：問句收到一處。`Pending::takes_a_character()`（`editor.rs`）
+    窮盡列出六個「在等文本的字」——`Find`／`Replace`／`MatchPair`／`Surround`／
+    `SurroundFrom`／`SurroundTo`——其餘十個等的是命令字母。答案也收到一處：
+    `keys.rs::answer_with_char(waiting, c)`，鍵與上屏兩條路都叫它。前端那道閘
+    （`yumete-tui` 的 `composes_here`）從 `editor.replacing()` 換成 `takes_a_character()`，
+    預編輯、候選框、輕點 Shift 三處**同時**跟着亮，因為這個檔裏每一道閘問的都是這一句。
+    `r` 仍單獨走一條：它要的是**整串**上屏（「春天」換掉整個選區），別的五個各要一個字，
+    多字上屏取第一個。
+    ⚠️ **`on_normal_key` 那個 match 沒有用 guard**（`waiting @ (Pending::Find(_) | …)`
+    照樣把六個名字寫一遍，外加一句 `debug_assert!`）：帶 guard 的 arm **不算窮盡**，
+    那個 match 正是「新加了一個 pending 沒人接」的唯一哨兵，換成 guard 就等於把哨兵撤了。
+    代價與 `r` 今天一樣：中文態下 `f` 之後敲 ASCII 字母會**組字**而不是找那個字母，
+    輕點一下 Shift 回 ABC 再敲。**small**
