@@ -332,22 +332,31 @@ impl Sidebar {
     }
 
     /// Append `dir`'s children, directories first and each sorted by name.
+    ///
+    /// **The same question `:grep` asks** (#362), asked of the same walker:
+    /// one level of [`ignore`], which reads the `.gitignore` in the directory
+    /// as well as the ones above it. The tree used to skip three hard-coded
+    /// names, so a repository showed its whole source next to the chapters.
     fn push_dir(&mut self, dir: &Path, depth: usize) {
-        let Ok(entries) = std::fs::read_dir(dir) else {
-            return;
-        };
         let mut dirs = Vec::new();
         let mut files = Vec::new();
-        for entry in entries.flatten().take(MAX_PER_DIR) {
+        let walker = ignore::WalkBuilder::new(dir)
+            .max_depth(Some(1))
+            .follow_links(false)
+            .require_git(false)
+            .build();
+        // `depth() > 0` rather than `skip(1)`: the walker's first answer is
+        // the directory itself, and it is not always there to be skipped.
+        let children = walker.flatten().filter(|e| e.depth() > 0);
+        for entry in children.take(MAX_PER_DIR) {
             let name = entry.file_name().to_string_lossy().into_owned();
-            // The same things `:grep` skips: a manuscript directory holds them,
-            // and a writer never opens them.
-            if name.starts_with('.') || name == "target" || name == "node_modules" {
+            // The floor under the ignore files; see `editor::walk`.
+            if name == "target" || name == "node_modules" {
                 continue;
             }
             match entry.file_type() {
-                Ok(t) if t.is_dir() => dirs.push((name, entry.path())),
-                Ok(t) if t.is_file() => files.push((name, entry.path())),
+                Some(t) if t.is_dir() => dirs.push((name, entry.into_path())),
+                Some(t) if t.is_file() => files.push((name, entry.into_path())),
                 _ => {}
             }
         }

@@ -1230,56 +1230,56 @@ fn downloads_dir() -> PathBuf {
     PathBuf::from(".")
 }
 
-/// Call `f` for every readable file under `root`, depth first, counting the
+/// Call `f` for every readable file under `root`, in path order, counting the
 /// ones stepped over for being too big.
 ///
 /// Skips what a manuscript directory holds but a writer never searches: hidden
-/// directories (`.git`, `.yumete`), build output, and files too big to be prose.
-/// Symlinked directories are not followed, so a loop cannot hang the editor.
+/// directories (`.git`, `.yumete`), build output, files too big to be prose —
+/// **and whatever the ignore files say** (#362). Symlinked directories are not
+/// followed, so a loop cannot hang the editor.
+///
+/// **The skip list used to be written out here** and it was three names:
+/// `.`-anything, `target`, `node_modules`. It did not read the `.gitignore`
+/// lying in the same directory, so in a repository `:grep` searched the source
+/// tree along with the book, and the fix for each new offender was another
+/// name in the list. [`ignore`] is ripgrep's own walker and answers the
+/// question properly; `require_git(false)` because a manuscript folder is as
+/// likely to have a `.gitignore` and no `.git` as the other way round.
 ///
 /// **`skipped` is counted because it used to be silent** (#308): a chapter over
 /// [`GREP_MAX_BYTES`] was passed over and left out of 「searched N files」 as
 /// well, so the number looked right and the answer was short.
 fn walk(root: &Path, skipped: &mut usize, f: &mut impl FnMut(&Path)) {
-    let Ok(entries) = std::fs::read_dir(root) else {
-        return;
-    };
-    let mut dirs = Vec::new();
-    let mut files = Vec::new();
-    for entry in entries.flatten() {
-        let path = entry.path();
-        let name = entry.file_name();
-        let name = name.to_string_lossy();
-        if name.starts_with('.') || name == "target" || name == "node_modules" {
+    let walker = ignore::WalkBuilder::new(root)
+        .follow_links(false)
+        // In path order, so a listing of a novel's chapters comes back in
+        // chapter order rather than in whatever order the file system holds
+        // them. Also what makes the walk single-threaded and reproducible.
+        .sort_by_file_path(|a, b| a.cmp(b))
+        .require_git(false)
+        // The floor under the ignore files, not a list to keep adding to: a
+        // folder with no `.gitignore` at all still holds no prose in these
+        // two, and the cost of looking is a whole build tree.
+        .filter_entry(|entry| {
+            !entry.file_type().is_some_and(|t| t.is_dir())
+                || !matches!(&*entry.file_name().to_string_lossy(), "target" | "node_modules")
+        })
+        .build();
+    for entry in walker.flatten() {
+        if !entry.file_type().is_some_and(|t| t.is_file()) {
             continue;
         }
+        let path = entry.path();
         // Not what this editor just wrote. `:export html` puts the book's own
         // words into a `.html` beside it, and `:grep` then found every one of
         // them twice — the second time in a file the writer cannot edit.
-        if entry.file_type().is_ok_and(|t| t.is_file()) && is_build_output(&name) {
+        if is_build_output(&entry.file_name().to_string_lossy()) {
             continue;
         }
-        match entry.file_type() {
-            Ok(t) if t.is_dir() => dirs.push(path),
-            Ok(t) if t.is_file() => files.push(path),
-            _ => {}
+        match entry.metadata().is_ok_and(|m| m.len() <= GREP_MAX_BYTES) {
+            true => f(path),
+            false => *skipped += 1,
         }
-    }
-    // Sorted, so a listing of a novel's chapters comes back in chapter order
-    // rather than in whatever order the file system happens to hold them.
-    files.sort();
-    dirs.sort();
-    for path in files {
-        let small = std::fs::metadata(&path).is_ok_and(|m| m.len() <= GREP_MAX_BYTES);
-        if !small {
-            *skipped += 1;
-        }
-        if small {
-            f(&path);
-        }
-    }
-    for dir in dirs {
-        walk(&dir, skipped, f);
     }
 }
 
