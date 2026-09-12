@@ -1431,6 +1431,10 @@ pub struct Editor {
     /// one in force — so reloading the list reaches a segmenter already handed
     /// out.
     project_words: std::rc::Rc<RefCell<yumete_cjk::WordList>>,
+    /// What the segmenter in force has already cut, held by the same handle it
+    /// is (#321) — so `forget_the_words` can throw it away when the dictionary
+    /// or the book's own list changes and the text does not.
+    word_memo: std::rc::Rc<RefCell<yumete_cjk::SegmentMemo>>,
     /// Whether the segmentation overlay (word background tint) is shown.
     show_segmentation: bool,
     word_mark: yumete_cjk::WordMark,
@@ -2115,6 +2119,7 @@ impl Editor {
             segmenter: Box::new(CategorySegmenter),
             reader: Box::new(NoReader),
             project_words: std::rc::Rc::new(RefCell::new(yumete_cjk::WordList::default())),
+            word_memo: std::rc::Rc::new(RefCell::new(yumete_cjk::SegmentMemo::default())),
             show_segmentation: false,
             word_mark: yumete_cjk::WordMark::default(),
             hud: Hud::default(),

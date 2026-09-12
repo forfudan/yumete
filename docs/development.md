@@ -543,7 +543,7 @@ index, and a row with no number anywhere else is a row that got lost.
 | 318 | **count 既沒有上限，也沒有提前退出** | core | P2 | 寫的一萬遍封頂，找與宏各自早退 [^318] | Fixed 2026-09-12 |
 | 319 | **`N` 每次從第 0 行重掃** | core | P3 | 正向全掃再取前一個；`n` 17 µs、`N` 1.01 ms [^319] | Open |
 | 320 | **表格裏的 `j` 是 O(rows)** | core | P3 | 一萬行一次 27.8 ms；CSV 格子不受影響 [^320] | Open |
-| 321 | **`w`／`b`／`e` 每一次都重新分詞** | core | P3 | 整行複製 ＋ Viterbi，`segment_cache` 沒接上 [^321] | Open |
+| 321 | **`w`／`b`／`e` 每一次都重新分詞** | core | P3 | memo 包在 segmenter 外層，key 是那一行的文本本身 [^321] | Fixed 2026-09-12 |
 | 322 | **`blocks_through` 每幀 clone 一整條** | core | P3 | 六萬個元素，只為索引一次 [^322] | Open |
 | 323 | **帶 count 的編輯留下 N 個 undo 點** | core | P1 | 第一趟宣告，其餘抑制：一趟一個點 [^323] | Fixed 2026-09-09 |
 | 324 | **`r` 作用在多碼位字素上成倍寫出** | core | P2 | 按字素簇迭代，一個字形一個字元 [^324] | Fixed 2026-09-10 |
@@ -7908,6 +7908,29 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     在這條路上沒接。量：兩千段的中英混排行上五十次 `w` 11.9 ms。交界處的**正確性**沒
     問題（不會產生零寬步進），純粹是開銷。做法：接上 `segment_cache`，key 用
     `(line, revision)`。**small**
+
+    **落地（2026-09-12）**：`yumete_cjk::Memo` —— 一個實作 `Segmenter` 的殼，記住它
+    已經切過的行，`set_segmenter` 把它包在 `WithWords` 外面，於是 `motion.rs`、
+    `segment_line`、`render.rs`、`checks.rs`、`ruby.rs` 五條路共用同一份答案，五處
+    的簽名一處都沒動。量（release，兩千餘段的中英混排行、五十次 `w`）：**17.06 ms →
+    4.09 ms**；debug 是 212 ms → 87 ms。
+
+    ⚠️ **原方案「接上 `segment_cache`」是錯的。** 那份快取存的不是分詞結果，是
+    **濾過的**結果——`segment_line` 把兩端都已經落在可見邊界上的詞全丟掉了（`words.rs:574`），
+    因為它回答的是疊層的問題「哪一條界值得畫」。`w` 要的是全部的界。同名兩義，正是 #349
+    抱怨的那件事，所以 memo 另立一份，擺在**權威**那一側。
+
+    key 用行的文本本身，不用 `(line, revision)`：範圍是相對於那個字串的，key 對上就
+    是對的答案，文檔別處怎麼動都不影響；revision 則會在每一次按鍵作廢整頁四十段。也
+    不用文本的哈希——撞一次就是把別的段落的詞界交給 `w`，幾百個短字串比那個風險便宜。
+
+    ⚠️ **切出什麼，取決於文本以外的東西**：詞典、`WordLevel`、本書自己的詞表，三者
+    改了都不會改動那一行的一個字。`Memo::set_level` 自己清；另外兩條路本來就都經過
+    `Editor::forget_the_words`，那裏加了第三行。兩道閘各有一條回歸測試，都反證過。
+
+    上限兩道：512 行**或** 1 MiB（中文小說一段可以是一整章，只數行數不算上限），
+    滿了整份清空——維持淘汰順序要在每次命中時付錢，而清一次的代價只是螢幕上還在的那
+    幾十行各再切一遍。
 
 [^322]: `render.rs:86` 的 `blocks_through(last)` 回傳從第 0 行到 `last` 的一整條
     `Vec<Block>`，而 `editor/detail.rs` 的 `note_detail` 每幀拿它只索引一個元素——
