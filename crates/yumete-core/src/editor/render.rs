@@ -1385,11 +1385,39 @@ impl Editor {
                     .count()
                     >= WRITING_UNDER_A_CHAPTER
             };
+            // **A 目錄 is a run, and its last line has writing under it.**
+            // 紅樓夢's listing ends 「第百二十回　甄士隱詳說太虛情」 and then
+            // the 校閱參考 notes begin — three lines of writing, so the bar
+            // above let the last listing line in, and because it is early in
+            // the file it sat *above* 第一回 (#390). What gives it away is the
+            // hundred and nineteen lines above it: **a listing comes in a
+            // run**, a chapter heading stands alone.
+            //
+            // ⚠️ Two in a row is not a run. 資治通鑑 ends every 卷 with
+            // 「卷二 ◄ 資治通鑑」 and opens the next with 「第三卷 ► 卷四」 —
+            // back to back, every one of its 294 卷. The first try at #390
+            // called that a listing and cut the book down to one row.
+            const A_LISTING_RUNS: usize = 3;
+            let blank_between = |a: usize, b: usize| {
+                (a + 1..b).all(|l| rope.line(l).to_string().trim().is_empty())
+            };
+            let mut listed = vec![false; found.len()];
+            let mut at = 0;
+            while at < found.len() {
+                let mut end = at;
+                while end + 1 < found.len() && blank_between(found[end].0, found[end + 1].0) {
+                    end += 1;
+                }
+                if end + 1 - at >= A_LISTING_RUNS {
+                    listed[at..=end].fill(true);
+                }
+                at = end + 1;
+            }
             let mut last: Option<String> = None;
             let mut numbered = 0;
             for (n, (line, depth, title, key, is_numbered)) in found.iter().enumerate() {
                 let next = found.get(n + 1).map(|&(l, ..)| l).unwrap_or(rope.len_lines());
-                if !writing_under(*line, next) {
+                if listed[n] || !writing_under(*line, next) {
                     continue;
                 }
                 // …and a chapter marked twice running is one chapter.

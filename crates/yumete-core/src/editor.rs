@@ -1107,23 +1107,40 @@ struct Heading {
 /// The characters a chapter number is written with, in any of the spellings.
 const DIGITS: &str = "一二三四五六七八九十百千萬万零〇兩两0123456789０１２３４５６７８９";
 
-/// The line with the navigation bar a wikisource export printed around it.
+/// The line with the navigation bar a web export printed around it.
 ///
 /// 三國演義 writes every one of its 120 回 as 「◀上一回 第二回　張翼德怒鞭督郵
 /// 　何國舅謀誅宦豎 下一回▶」 — the heading is in there, wearing the arrows the
-/// web page walked on. The frame is one ASCII-space-separated token at each
-/// end (the title's own spaces are 全角), so it comes off without touching the
-/// title: 「全書始」 and 「◀…」 at the head, 「…▶」 and 「全書終」 at the tail.
-/// A line with no frame comes back as it went in.
+/// web page walked on. 資治通鑑 wears a different pair and wears them on one
+/// side: 「第一卷　周紀一 ► 卷二」.
+///
+/// **An arrow ends the title, and so does the word carrying it.** The frame is
+/// half-width-space-separated tokens (a Chinese title's own spaces are 全角),
+/// so 「下一回▶」 comes off whole and 「張翼德怒鞭督郵」 stays. A line with no
+/// frame comes back as it went in.
 fn without_navigation(line: &str) -> &str {
+    const ARROWS: [char; 4] = ['◀', '▶', '◄', '►'];
+    const ENDS: [&str; 4] = ["全書始", "全书始", "全書終", "全书终"];
+    let navigation = |token: &str| token.contains(ARROWS) || ENDS.contains(&token);
+    // The head — 「◀上一回 」, 「全書始 」 — comes off a word at a time.
     let mut text = line.trim();
-    if text.starts_with('◀') || text.starts_with("全書始") || text.starts_with("全书始") {
-        text = text.split_once(' ').map_or("", |(_, rest)| rest.trim_start());
+    while let Some((first, rest)) = text.split_once(' ') {
+        if !navigation(first) {
+            break;
+        }
+        text = rest.trim_start();
     }
-    if text.ends_with('▶') || text.ends_with("全書終") || text.ends_with("全书终") {
-        text = text.rsplit_once(' ').map_or("", |(rest, _)| rest.trim_end());
+    // …and the tail, with the next chapter's name behind it, is cut off.
+    let mut end = text.len();
+    let mut at = 0;
+    for token in text.split(' ') {
+        if navigation(token) {
+            end = at;
+            break;
+        }
+        at += token.len() + 1;
     }
-    text
+    text[..end].trim_end()
 }
 
 /// 「一 青衫磊落險峰行」 — a chapter that is a number and a title and nothing
