@@ -2359,6 +2359,13 @@ zht = "部件（gd 跟過去）"
 zhs = "部件（gd 跟过去）"
 en = "components (gd follows one)"
 
+[[message]]
+# 腳註面板下緣那一句：這條註寫在第幾行
+key = "detail.on-line"
+zht = "第 {0} 行"
+zhs = "第 {0} 行"
+en = "line {0}"
+
 
 # ── diff ──────────────────────────────────────────────────────────────
 

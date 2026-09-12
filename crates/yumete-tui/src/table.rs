@@ -873,17 +873,14 @@ pub fn split_detail(editor: &Editor, config: &Config, area: Rect) -> (Rect, Opti
         let panel = Rect::new(area.x + area.width - w, area.y, w, area.height);
         return (grid, Some(panel));
     }
-    let h = NOTE_HEIGHT;
-    if area.height < h * 3 {
-        return (area, None);
-    }
-    let page = Rect::new(area.x, area.y, area.width, area.height - h);
-    let panel = Rect::new(area.x, area.y + area.height - h, area.width, h);
-    (page, Some(panel))
+    // **A note takes no rows off the page** (#294). It used to get a
+    // full-width four-row strip along the bottom — a wrong price twice over:
+    // one short paragraph left most of it blank, and the four rows came off
+    // the manuscript whether the note filled them or not. It floats now, in
+    // the same panel every other pop-up on the screen already is
+    // (`lib.rs::draw_note`), so there is nothing to carve out here.
+    (area, None)
 }
-
-/// How many rows a note's panel takes along the bottom.
-const NOTE_HEIGHT: u16 = 4;
 
 /// The panel down the right: every field of the row the cursor is in.
 ///
@@ -927,39 +924,6 @@ pub fn draw_detail(frame: &mut Frame, editor: &Editor, config: &Config, area: Re
     }
 
     let left = area.x + 2;
-    // A note's panel is short and wide: its title sits on the same row as its
-    // text, because there is no room to spend a row on a heading.
-    if editor.table().is_none() {
-        put_text(buf, left, area.y, right, &detail.title, title);
-        let body = detail
-            .rows
-            .first()
-            .and_then(|(_, v)| v.as_deref())
-            .unwrap_or("");
-        let indent = left + yumete_cjk::str_width(&detail.title) as u16 + 2;
-        // Wrapped by hand across the panel's rows — a long note is the case
-        // this exists for, so cutting it off would defeat the point.
-        let mut x = indent;
-        let mut y = area.y;
-        for word in yumete_cjk::graphemes(body) {
-            let w = yumete_cjk::grapheme_width(word).max(1) as u16;
-            if x + w > right {
-                x = left;
-                y += 1;
-                if y >= area.y + area.height {
-                    break;
-                }
-            }
-            put_text(buf, x, y, right, word, value);
-            x += w;
-        }
-        if let Some((_, Some(at))) = detail.links.first() {
-            let label = format!("第 {} 行", at + 1);
-            let x = right.saturating_sub(yumete_cjk::str_width(&label) as u16 + 2);
-            put_text(buf, x, area.y, right, &label, name);
-        }
-        return;
-    }
     put_text(buf, left, area.y, right, &detail.title, title);
     let mut y = area.y + 2;
     // The 部件 list first, because it is what the panel is *read for* — and it
