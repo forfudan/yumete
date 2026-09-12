@@ -11126,3 +11126,67 @@ fn commenting_takes_whole_lines_and_keeps_them_selected() {
     press(&mut ed, " c");
     assert_eq!(ed.current_buffer().text(), "甲乙\n丙丁\n戊己\n", "and both come back");
 }
+
+/// #361: the tree a project-wide command walks is the book's, not the shell's.
+///
+/// The file opened is two directories down and the working directory is this
+/// crate, so an answer that mentions the chapter beside it can only have come
+/// from the walk up to `.yumete`.
+#[test]
+fn grep_searches_the_book_and_not_the_working_directory() {
+    let dir = std::env::temp_dir().join(format!("yumete-grep-root-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    let book = dir.join("book");
+    std::fs::create_dir_all(book.join(".yumete")).unwrap();
+    std::fs::create_dir_all(book.join("第二卷")).unwrap();
+    std::fs::write(book.join("第一章.md"), "那年冬天，甲說。\n").unwrap();
+    std::fs::write(book.join("第二卷/第九章.md"), "甲又說。\n").unwrap();
+    // A neighbour of the book, outside it: a hit here would mean the walk went
+    // one directory too far up.
+    std::fs::write(dir.join("別人的.md"), "甲在這裏也出現。\n").unwrap();
+
+    let mut ed = Editor::new();
+    ed.open_file(book.join("第二卷/第九章.md")).unwrap();
+    assert_eq!(ed.project_root(), book, "the book is where .yumete is");
+
+    ed.execute(":grep 甲").unwrap();
+    let listing = ed.current_buffer().text();
+    assert!(listing.contains("第一章"), "the chapter beside it: {listing:?}");
+    assert!(!listing.contains("別人的"), "and nothing above the book: {listing:?}");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// `.yumete` first, `.git` second, the file's own directory last — and the
+/// working directory only when there is no named file to ask.
+#[test]
+fn the_project_root_prefers_yumete_then_git_then_here() {
+    let dir = std::env::temp_dir().join(format!("yumete-root-order-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    let repo = dir.join("repo");
+    let book = repo.join("book");
+    std::fs::create_dir_all(book.join("卷一")).unwrap();
+    std::fs::create_dir_all(repo.join(".git")).unwrap();
+    let chapter = book.join("卷一/一.md");
+    std::fs::write(&chapter, "甲\n").unwrap();
+
+    let mut ed = Editor::new();
+    ed.open_file(chapter.clone()).unwrap();
+    assert_eq!(ed.project_root(), repo, "no .yumete yet, so the repository");
+
+    std::fs::create_dir_all(book.join(".yumete")).unwrap();
+    assert_eq!(ed.project_root(), book, ".yumete wins over a .git further up");
+
+    // Neither mark anywhere: the chapter's own directory, not the repository
+    // this suite is running in.
+    let bare = dir.join("bare");
+    std::fs::create_dir_all(&bare).unwrap();
+    std::fs::write(bare.join("散.md"), "乙\n").unwrap();
+    let mut ed = Editor::new();
+    ed.open_file(bare.join("散.md")).unwrap();
+    assert_eq!(ed.project_root(), bare, "the file's own directory");
+
+    // Nothing named at all: there is nowhere else to ask.
+    let ed = Editor::new();
+    assert_eq!(ed.project_root(), std::env::current_dir().unwrap());
+    let _ = std::fs::remove_dir_all(&dir);
+}

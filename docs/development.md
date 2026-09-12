@@ -583,7 +583,7 @@ index, and a row with no number anywhere else is a row that got lost.
 | 358 | **猛滾之後編輯器還在追那條積壓的隊列** | tui | P2 | 上限是計數，而計數是錯的單位 [^358] | Fixed 2026-09-09 |
 | 359 | **崩潰之後留下點什麼：`yumete.log` 與 panic hook** | core+tui | P2 | 從前 panic 不留一個字，草稿也不救 [^359] | Fixed 2026-09-09 |
 | 360 | **畫的那一方擋住了讀的那一方，兩邊互等** | tui | P1 | 讀終端移到自己的執行緒；死鎖的必要條件沒了 [^360] | Fixed 2026-09-09 |
-| 361 | **`:grep` 搜的是 cwd，不是這本書** | core | P2 | 從檔案往上找 `.yumete`／`.git`，cwd 只作末路 [^361] | Open |
+| 361 | **`:grep` 搜的是 cwd，不是這本書** | core | P2 | 從檔案往上找 `.yumete`／`.git`，cwd 只作末路 [^361] | Fixed 2026-09-12 |
 | 362 | **目錄遍歷換 ripgrep 的 `ignore`** | core | P3 | 忽略規則是永遠補不完的那一種 [^362] | Open |
 | 363 | **短寫：完整命令的首字母，別的都不是** | core | P3 | `:bc` 有，`:bclose` 沒有 [^363] | Fixed 2026-09-10 |
 | 364 | **`:quitall` 摺成 `:quit-all`** | core | P3 | 半長半短的最後一個 [^364] | Fixed 2026-09-10 |
@@ -8333,6 +8333,14 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     cwd。這裏該先認 **`.yumete`**——這個倉庫已經拿它放 config、`words.txt`、`tables/`——
     其次 `.git`，再次是**檔案自己所在的目錄**，cwd 只作最後手段。`grep_root` 這個欄位本來
     就存着，改的是它怎麼被算出來。**small**
+
+    2026-09-12：`Editor::project_root()`（`editor/files.rs`），一處算、四處用。順序是
+    `.yumete`／`.yumete.toml` → `.git` → 檔案自己那一層 → cwd，其中 cwd 只在「一個有名字的
+    檔案都沒開」時纔輪得到。起點的取法照抄 `progress_path`：當前 buffer 沒名字（`:grep`
+    自己的結果、拆分表檢查的清單就沒有）就往後問其餘打開的 buffer——命令是**從**一份稿子
+    開出來的，那份稿子還在後面開着。⚠️ **同一個 cwd 根不只 `:grep` 一處**：`空格 f` 的檔案
+    選擇器、側欄（兩個入口）與 `:word-discover` 都是同一句 `current_dir()`，一併換掉了；
+    留着會做出「搜的是這本書，而選擇器列的是別處」這種更難查的分裂。
 
 [^362]: 2026-09-09 問的：「我們用 ripgrep 做 yumete 所有的 search 的引擎是不是更好？」
     先把「所有 search」拆成三件事，它們不是同一個問題：**`/` `?` `n` `N` `g/` 與 `:s`

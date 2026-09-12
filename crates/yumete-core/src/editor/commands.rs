@@ -397,7 +397,7 @@ impl Editor {
                 force,
             } => self.export(&format, path.as_deref(), force),
             Command::Grep(pattern) => {
-                let root = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+                let root = self.project_root();
                 self.grep(&pattern, &root)
             }
             Command::Conflicts => {

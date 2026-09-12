@@ -121,6 +121,46 @@ impl Editor {
         Some(from.join(".yumete").join("progress.tsv"))
     }
 
+    /// The directory a project-wide command should walk — this book, not this
+    /// shell (#361).
+    ///
+    /// `:grep`, `Space f`, the sidebar and `:word-discover` all mean 「every
+    /// file in this book」, and the book is where the manuscript is, not where
+    /// the terminal happened to be standing when it started. Rooting them at
+    /// the working directory held only by coincidence — the coincidence that a
+    /// reader `cd`s to the book before opening a chapter. Opened from anywhere
+    /// else it searched the wrong tree, silently and plausibly: writing #308's
+    /// test, a `:grep` over sixty chapters in a temporary directory answered
+    /// out of this repository instead, 68 files and 179 hits.
+    ///
+    /// The walk goes up from the file for a `.yumete` first — that is where a
+    /// book already keeps its config, its `words.txt` and its `tables/` — then
+    /// for a `.git`, and settles for the directory the file itself is in. Only
+    /// a session with no named file left in it falls back to the working
+    /// directory.
+    pub(crate) fn project_root(&self) -> PathBuf {
+        // **Not just the current buffer.** A listing — `:grep`'s own output, a
+        // 拆分表 check — has no file name, and a command run from inside one
+        // still means the book it was opened from, which is still open behind
+        // it. Same reasoning as `progress_path`, and the same order.
+        let from = std::iter::once(self.current)
+            .chain((0..self.buffers.len()).rev())
+            .filter_map(|i| self.buffers.get(i))
+            .filter_map(|b| b.path().and_then(Path::parent).map(Path::to_path_buf))
+            .find(|d| !d.as_os_str().is_empty());
+        let Some(from) = from else {
+            return std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+        };
+        let marked = |mark: &str, flat: &str| {
+            from.ancestors()
+                .find(|d| d.join(mark).exists() || d.join(flat).exists())
+                .map(Path::to_path_buf)
+        };
+        marked(".yumete", ".yumete.toml")
+            .or_else(|| marked(".git", ".git"))
+            .unwrap_or(from)
+    }
+
     /// This book's log as it stands on disk. Missing is empty, not an error.
     fn progress_log(&self, path: &Path) -> crate::progress::Log {
         std::fs::read_to_string(path)
