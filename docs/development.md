@@ -540,7 +540,7 @@ index, and a row with no number anywhere else is a row that got lost.
 | 315 | **一鍵之内把整段走上五遍** | core | P2 | 注音按版本記住；折行備忘錄的 key 換成 `(buffer, revision, line)` [^315] | Fixed 2026-09-10 |
 | 316 | **表格裏每一鍵重算整表補白** | core | P2 | 逐行記住算補白的**輸入**，一鍵只重算真正動了的那一行 [^316] | Fixed |
 | 317 | **全書 replace 之後，autosave 每五秒凍一秒六** | core | P2 | 一百個 buffer 全量序列化 ＋ 兩百次 fsync，在輸入線程 [^317] | Open |
-| 318 | **count 既沒有上限，也沒有提前退出** | core | P2 | `1000000p` 跑不完，`10000fZ` 要 317 ms [^318] | Open |
+| 318 | **count 既沒有上限，也沒有提前退出** | core | P2 | 寫的一萬遍封頂，找與宏各自早退 [^318] | Fixed 2026-09-12 |
 | 319 | **`N` 每次從第 0 行重掃** | core | P3 | 正向全掃再取前一個；`n` 17 µs、`N` 1.01 ms [^319] | Open |
 | 320 | **表格裏的 `j` 是 O(rows)** | core | P3 | 一萬行一次 27.8 ms；CSV 格子不受影響 [^320] | Open |
 | 321 | **`w`／`b`／`e` 每一次都重新分詞** | core | P3 | 整行複製 ＋ Viterbi，`segment_cache` 沒接上 [^321] | Open |
@@ -7847,6 +7847,29 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     `100000Q` 配一個在檔尾按 `j` 的空宏也要 216 ms。手指壓在數字鍵上就夠了。做法：
     編輯類的 count 上限遠低於 `keys.rs:552` 那個一百萬，另外兩處各加一句「這一輪
     既沒動光標也沒動 revision 就 break」。**small**
+
+    **落地（2026-09-12）** 三處各按上面那句辦。
+
+    一、**寫的有天花板，走的沒有。** `Editor::WRITING_MAX = 10_000`（`verbs.rs`）與
+    `repeat_writing()`：跑 `n.min(WRITING_MAX)` 遍，**削過就把削了這件事寫進狀態列**——
+    默默少貼一半比慢更壞。走的那一路（`hjkl`／`w`／`n`／格狀面板的四個方向）一個字沒動，
+    它們到頭就靠 `repeat` 自己早退，一百萬照舊。改讀 `repeat_writing` 的是十處：
+    `>` `<` `C-a` `C-x` `.` `J` `p` `P` `u` `U`。
+
+    二、**`Pending::Find` 那個裸迴圈換成 `self.repeat`**（`keys.rs`）——它要的早退
+    `repeat` 本來就有，而同一支 `find_char` 在 `last_find` 那條路（`keys.rs:1034`）
+    早就是這麼寫的，這裏只是漏了。
+
+    三、**`replay_macro` 加一句早退，比的是 `revision` 不是 `char_count`**
+    （`edits.rs`）：打一個字又擦掉的宏是**做了事**的，`char_count` 看不出來，`revision`
+    看得出來。比的元組帶上 `self.current`，宏中途換過 buffer 不會撞成「沒動」。宏也可能
+    寫，所以它的 count 同樣封在 `WRITING_MAX`。
+
+    ⚠️ **計時類的回歸測試要先證偽再收。** 這三條的行為在改前改後**完全一樣**，差的只有
+    時間，所以斷言只能是「多久之內回來」——那種斷言不證偽就等於沒寫。第一版的宏測試
+    用「檔尾按 `j` 的空宏」，把早退拆掉照樣綠（每輪太便宜，一萬輪也才三秒）；改成
+    `%y` ＋ 一百萬字的 buffer 之後纔拉開：**0.13 秒 vs 14.56 秒**。另外那一版還踩了
+    `Q` 錄 `q` 放（#404 換過方向），錄成空宏，`q` 直接回「沒錄過」——**綠得毫無內容**。
 
 [^319]: `editor.rs:2365` 的 `search_backward` 是正向全掃一遍再取前一個，所以每按一次
     都從第 0 行開始。1.8 MB 上 `n` 17 µs、`N` **1.01 ms**（六十倍）；十 MB 的稿子
