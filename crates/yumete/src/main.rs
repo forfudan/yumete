@@ -234,6 +234,14 @@ fn main() -> ExitCode {
         }
     }
     mark("open", &mut marks);
+    // **What opening the file said, kept out of the wipe's way** (#388 again).
+    // `set_status(String::new())` below clears the installation chatter so
+    // none of it reaches the first frame, and it cannot tell that apart from
+    // the one thing the open itself had to say — 「本檔案格式似乎是 Tab 分欄」
+    // for a `.txt` that turned out to be a grid (#380). Captured here, put
+    // back after the wipe, and still outranked by everything that speaks
+    // later: `-t`, a broken config, a recovered draft.
+    let opening_said = editor.take_open_notice();
     // With no file named, open what was open last time — five `:open`s every
     // morning is five too many. Only then: somebody who said which file they
     // wanted gets that file, and nothing else.
@@ -376,7 +384,7 @@ fn main() -> ExitCode {
     // …and the book's own words on top of whichever of the three it was. The
     // name on every page is the one word no dictionary has.
     editor.reload_project_words();
-    editor.set_status(String::new());
+    editor.set_status(opening_said.unwrap_or_default());
     mark("分詞", &mut marks);
     if timing {
         let mut last = std::time::Duration::default();

@@ -1475,6 +1475,13 @@ pub struct Editor {
     /// *reader asked for* is [`Editor::table_level`], which survives all of
     /// that because a preference that clears itself is not a preference.
     table: Option<TableView>,
+    /// The one thing opening a file had to say, kept apart from the status.
+    ///
+    /// **Because the front end wipes the status on its way out of setup**, and
+    /// cannot tell 「本檔案格式似乎是 Tab 分欄」 (#380) apart from the chatter
+    /// that wipe exists to remove. Set only by a door that guessed, taken by
+    /// whoever draws the first frame, and never twice.
+    open_notice: Option<String>,
     /// How much of a table is drawn — the reader's standing answer (#283).
     ///
     /// Untouched by opening a file, by walking out of a table, by there being
@@ -2006,6 +2013,7 @@ impl Editor {
             shell_request: None,
             convert_patch: None,
             table: None,
+            open_notice: None,
             table_level: TableLevel::default(),
             show_detail: None,
             table_bypass: std::cell::Cell::new(false),
@@ -2267,6 +2275,12 @@ enum Spot {
 /// `:replace` — which opens every file it changes — cannot turn tomorrow
 /// morning into a hundred-and-twenty-file startup.
 const SESSION_FILES: usize = 24;
+
+/// How many files may be remembered as 「open this one as source」 (#380).
+///
+/// A cap rather than a growing list: the note is a convenience about files a
+/// reader still opens, and the oldest ones fall off the front.
+const SOURCE_MODE_FILES: usize = 200;
 
 /// How many lines of one prompt's history are kept.
 const HISTORY: usize = 100;

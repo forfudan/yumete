@@ -197,6 +197,16 @@ impl Editor {
         self.status = message;
     }
 
+    /// What opening a file had to say, if it had to say anything (#380).
+    ///
+    /// Taken, not read: the front end clears the status on its way out of
+    /// setup — deliberately, so that none of the installation chatter reaches
+    /// the first frame — and this is the one line that has to survive that
+    /// and be put back. Only a door that *guessed* leaves anything here.
+    pub fn take_open_notice(&mut self) -> Option<String> {
+        self.open_notice.take()
+    }
+
     /// The 0-based line the cursor is on.
     pub fn cursor_line(&self) -> usize {
         self.current_buffer().rope().char_to_line(self.caret())

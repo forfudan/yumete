@@ -439,10 +439,31 @@ impl Editor {
         let was = self.table_level;
         self.table_level = want;
         if want == TableLevel::Off {
+            // **The answer to a guess is kept** (#380). This file is a grid
+            // because it looked like one, and 源碼模式 is the reader saying
+            // 「not this one」 — an editor that asks again tomorrow morning is
+            // not listening. A file that is a grid by schema or by name is not
+            // written down: nothing guessed about it, so there is nothing to
+            // take back, and the level itself already covers the session.
+            if let Some(path) = self.current_buffer().path().map(Path::to_path_buf) {
+                if self.table.is_some() && self.delimited_text_file().is_some() {
+                    self.remember_source_mode(&path, true);
+                }
+            }
             // 源碼模式 gives the page back as well as the keys: the layout the
             // grid turned sideways, and the view that says where the cells are.
             self.leave_table();
             return;
+        }
+        // Asked for a level again, on a file the reader had sent back to
+        // source: that is the way back in, and it withdraws the note.
+        if self.table.is_none() {
+            if let Some(delimiter) = self.delimited_text_file() {
+                if let Some(path) = self.current_buffer().path().map(Path::to_path_buf) {
+                    self.remember_source_mode(&path, false);
+                }
+                self.attach_text_grid(delimiter);
+            }
         }
         // **All three levels are read inside the document.** The window is a
         // fourth thing, asked for by its own key, so naming a level from
@@ -548,6 +569,7 @@ impl Editor {
     /// and being told so on every open is noise.
     pub(super) fn table_on_open(&mut self) {
         self.leave_table_quietly();
+        self.open_notice = None;
         let Some(path) = self.current_buffer().path().map(Path::to_path_buf) else {
             return;
         };
@@ -575,6 +597,26 @@ impl Editor {
             // that does not parse is the exception: it was meant to apply here.
             self.status = say!("table.schema-problems", listed(&problems));
         }
+        // **A plain-text file that is plainly a grid** (#380). No schema, no
+        // `.csv` in the name, nobody to declare it — and yet every line has
+        // the same number of tabs in it, which is a thing prose never manages.
+        // It used to open as source and look like a bug: the tabs advanced to
+        // their stops and drew a grey ground, so 「tb 沒對齊」 was reported
+        // about a file that had never been in tb at all.
+        // A schema that did not parse has already said so, and it was
+        // written *about this file* — guessing over the top of that reply
+        // would answer a question nobody asked.
+        if self.table.is_none() && problems.is_empty() && !self.wants_source_mode(&path) {
+            if let Some(delimiter) = self.delimited_text_file() {
+                self.attach_text_grid(delimiter);
+                // Said, unlike the schema door: a schema is something the
+                // reader put there, and a guess is not. It also has to carry
+                // the way back, or the guess is a trap.
+                self.status = say!("table.looks-delimited", named_delimiter(delimiter));
+                self.turn_for_table_and_say();
+                self.open_notice = Some(self.status.clone());
+            }
+        }
         // A `.md` has no schema beside it and never took this door — so the
         // first frame after an open was drawn with the level's padding and
         // none of the level's keys, and stayed that way until a key was
@@ -596,6 +638,122 @@ impl Editor {
                     reach: Reach::File,
                 });
             }
+        }
+    }
+
+    /// Which mark cuts this plain-text file into columns, if one plainly does
+    /// (#380).
+    ///
+    /// Only plain text is asked: Markdown and Typst have table forms of their
+    /// own, and a `.csv` is already a grid by its name. The evidence is the
+    /// same evidence `:table`'s header-row door takes — a mark that appears
+    /// the same number of times in every one of the first twenty lines, and
+    /// at least two columns once the quoting rules are applied — with a space
+    /// added to the candidates, because a whole file of lines each holding
+    /// three spaces is a grid and a paragraph is not.
+    ///
+    /// **The cost of guessing wrong is padding, not meaning.** `hjkl` walk
+    /// characters at every level (#356), so a file mistaken for a grid is
+    /// still typed in exactly as it was; what changes is that some columns
+    /// line up. That is what makes an automatic door defensible here.
+    fn delimited_text_file(&self) -> Option<char> {
+        if self.syntax() != crate::syntax::Syntax::Text {
+            return None;
+        }
+        // **A file that already declares itself is not guessed about.** A
+        // `.csv` is a grid by its own name — `grid_shape_here` says so without
+        // a view, so its columns already line up — and `:table` is how a
+        // reader asks for the rest. This door is for the file that is a grid
+        // and says nothing: the `.txt` that turns out to be tab-separated.
+        let extension = self
+            .current_buffer()
+            .path()
+            .and_then(|p| p.extension())
+            .and_then(|e| e.to_str())
+            .unwrap_or_default()
+            .to_ascii_lowercase();
+        if matches!(extension.as_str(), "csv" | "tsv" | "tab") {
+            return None;
+        }
+        let lines = self.first_lines(20);
+        let delimiter = crate::table::sniff_among(&lines, &crate::table::TEXT_GUESSES)?;
+        let head = self.current_buffer().rope().line(0).to_string();
+        let columns = crate::table::Schema::from_header(&head, delimiter)
+            .columns
+            .len();
+        (columns >= 2 && self.looks_delimited(delimiter, columns)).then_some(delimiter)
+    }
+
+    /// Read the whole file as a grid cut by `delimiter`, saying nothing.
+    ///
+    /// The view a recognised plain-text grid gets: inside the page rather than
+    /// in the window, whole-file bounds, and the first row read as the header
+    /// the way every other headerless door reads it.
+    fn attach_text_grid(&mut self, delimiter: char) {
+        let head = self.current_buffer().rope().line(0).to_string();
+        self.table = Some(TableView {
+            schema: crate::table::Schema::from_header(&head, delimiter),
+            from: PathBuf::new(),
+            goal: 0,
+            grain: Grain::Char,
+            separator: Separator::Delimiter(delimiter),
+            pane: false,
+            bounds: Bounds::WholeFile,
+            reach: Reach::File,
+        });
+    }
+
+    /// Where the files a reader wants left as source are written down (#380).
+    ///
+    /// In the data directory, not in the book: it is a fact about how one
+    /// person reads one file, and a book handed to somebody else should not
+    /// carry it. `None` when no front end said where that directory is —
+    /// then the answer simply is not remembered, which is what it did before.
+    fn source_mode_list(&self) -> Option<PathBuf> {
+        self.data_dir.as_ref().map(|d| d.join("source-mode.txt"))
+    }
+
+    /// Whether this file has already been told 源碼模式 once.
+    fn wants_source_mode(&self, path: &Path) -> bool {
+        let Some(file) = self.source_mode_list() else {
+            return false;
+        };
+        let Ok(text) = std::fs::read_to_string(file) else {
+            return false;
+        };
+        text.lines().any(|line| Path::new(line) == path)
+    }
+
+    /// Write down — or take back — 「open this one as source」.
+    ///
+    /// **The other half of the automatic door.** Recognising a grid without
+    /// remembering the refusal makes a feature that has to be dismissed every
+    /// morning, which is worse than not having it. Paths that have since gone
+    /// are dropped as the list is rewritten, and it is capped: this is a
+    /// convenience, not an archive.
+    fn remember_source_mode(&mut self, path: &Path, wants: bool) {
+        let Some(file) = self.source_mode_list() else {
+            return;
+        };
+        let text = std::fs::read_to_string(&file).unwrap_or_default();
+        let mut kept: Vec<String> = text
+            .lines()
+            .map(str::trim)
+            .filter(|l| !l.is_empty() && Path::new(l) != path && Path::new(l).is_file())
+            .map(str::to_string)
+            .collect();
+        if wants {
+            kept.push(path.display().to_string());
+        }
+        if kept.len() > SOURCE_MODE_FILES {
+            kept.drain(..kept.len() - SOURCE_MODE_FILES);
+        }
+        if let Some(parent) = file.parent() {
+            let _ = std::fs::create_dir_all(parent);
+        }
+        match kept.is_empty() {
+            true => drop(std::fs::remove_file(&file)),
+            false => drop(std::fs::write(&file, kept.join("\n") + "\n")),
         }
     }
 
