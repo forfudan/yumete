@@ -4324,6 +4324,13 @@ zhs = "[中 {0}]"
 en = "[中 {0}]"
 
 [[message]]
+# 碼表載入要十分之幾秒，那一格畫在動手之前（#341）
+key = "ime.loading"
+zht = "正在載入碼表…"
+zhs = "正在载入码表…"
+en = "loading the 碼表…"
+
+[[message]]
 # :yume ! 要出廠碼表，而這個二進制沒編進去
 key = "ime.no-builtin-table"
 zht = "這個二進制不帶碼表"
