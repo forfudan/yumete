@@ -138,13 +138,32 @@ impl Editor {
         self.status = say!("ruby.auto-added", n);
     }
 
+    /// Which lines `:ruby-format` must leave exactly as they stand (#333).
+    ///
+    /// A ``` fence is somebody's **example** of the markup, and the book most
+    /// likely to hold one is a book about ruby — so the document that most
+    /// wants this command was the one it damaged. Front matter goes with it:
+    /// it is data, not prose.
+    fn lines_of_code(&self) -> Vec<bool> {
+        let lines = self.current_buffer().rope().len_lines();
+        self.blocks_through(lines.saturating_sub(1))
+            .into_iter()
+            .map(|block| {
+                matches!(
+                    block,
+                    crate::markdown::Block::Code | crate::markdown::Block::FrontMatter
+                )
+            })
+            .collect()
+    }
+
     /// Rewrite every reading in the buffer into one dialect (`:format-ruby-…`).
     pub(super) fn format_ruby(&mut self, dialect: Dialect) {
         if self.refuse_readonly() {
             return;
         }
         let text = self.current_buffer().text();
-        let Some(formatted) = crate::ruby::reformat(&text, dialect) else {
+        let Some((formatted, left)) = reformat_prose(&text, &self.lines_of_code(), dialect) else {
             self.status = say!("ruby.already-in-that-form", dialect.name());
             return;
         };
@@ -169,7 +188,6 @@ impl Editor {
         // which is right; reporting the file converted while some of it was
         // not is what left the writer with a document in two dialects and no
         // way to know.
-        let left = crate::ruby::unread(&formatted, dialect);
         self.status = match left {
             0 => say!("ruby.rewritten-as", dialect.name()),
             n => say!("ruby.rewritten-but-some-left", dialect.name(), n),
@@ -361,4 +379,45 @@ impl Editor {
         }
         self.repeating_edit = false;
     }
+}
+
+/// Rewrite the prose into `dialect` and hand the code back untouched (#333),
+/// with the count of what the parser could not read.
+///
+/// **The count is of the prose only.** A `<ruby>` inside a fence was never
+/// going to be rewritten, and reporting it as 「還有幾處沒讀懂」 would send the
+/// writer hunting for a fault that is an example.
+///
+/// Runs, not lines: a group may be written across a line break, and cutting
+/// the document into single lines would hide it from the parser. The cut is
+/// made only where prose meets code, which is the one place a group cannot
+/// reach across.
+fn reformat_prose(text: &str, code: &[bool], dialect: Dialect) -> Option<(String, usize)> {
+    let mut runs: Vec<(bool, String)> = Vec::new();
+    for (line, written) in text.split_inclusive('\n').enumerate() {
+        let is_code = code.get(line).copied().unwrap_or(false);
+        match runs.last_mut() {
+            Some((was, run)) if *was == is_code => run.push_str(written),
+            _ => runs.push((is_code, written.to_string())),
+        }
+    }
+    let mut out = String::with_capacity(text.len());
+    let mut left = 0usize;
+    let mut changed = false;
+    for (is_code, run) in &runs {
+        if *is_code {
+            out.push_str(run);
+            continue;
+        }
+        let run = match crate::ruby::reformat(run, dialect) {
+            Some(rewritten) => {
+                changed = true;
+                rewritten
+            }
+            None => run.clone(),
+        };
+        left += crate::ruby::unread(&run, dialect);
+        out.push_str(&run);
+    }
+    changed.then_some((out, left))
 }

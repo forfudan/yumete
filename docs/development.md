@@ -555,7 +555,7 @@ index, and a row with no number anywhere else is a row that got lost.
 | 330 | **熟語振假名整篇改壞** | core | P2 | 真的分組解析：一個 `<ruby>` 裏允許多組 [^330] | Fixed 2026-09-10 |
 | 331 | **三種 HTML ruby 寫法看不見** | core | P3 | 標籤大小寫不敏感、允許屬性、`<rp>` 丟掉 [^331] | Fixed 2026-09-10 |
 | 332 | **寫進 Typst 的 ruby 不轉義** | core | P3 | 一句帶引號的注釋就編譯不過 [^332] | Open |
-| 333 | **`:ruby-format` 改寫代碼圍欄裏的 ruby** | core | P3 | 講 ruby 的書，自己的例子被改掉 [^333] | Open |
+| 333 | **`:ruby-format` 改寫代碼圍欄裏的 ruby** | core | P3 | 按塊切段，代碼那幾段原樣傳回 [^333] | Fixed 2026-09-12 |
 | 334 | **單擊 Shift 丟棄正在組字的編碼** | tui+ime | P1 | 交給綁定表之後，組字中的 Shift 先上屏再切英文 [^334] | Fixed 2026-09-09 |
 | 335 | **丟失一次 Shift 釋放，下一次單擊就失效** | tui | P2 | 改用上游的 `ModifierTap`，失焦時 `reset` [^335] | Fixed 2026-09-09 |
 | 336 | **組字中點鼠標，詞上屏到另一個檔案** | tui+ime | P1 | 閘挪到進門那一處，不掛在分支上 [^336] | Fixed 2026-09-11 |
@@ -635,6 +635,7 @@ index, and a row with no number anywhere else is a row that got lost.
 | 410 | **`.txt` 默認是純文本，不是 Markdown** | core | P1 | 湊不夠證據就不猜 [^410] | Fixed 2026-09-12 |
 | 411 | **`v` 的光標換形狀** | tui | P2 | 跟 helix：select 有自己的一格 [^411] | Fixed 2026-09-12 |
 | 412 | **`:yume on` 之後借出去的語言又被還回來** | tui+ime | P2 | 那一句認的是 `+`／`-`，早就沒人送了 [^412] | Fixed 2026-09-12 |
+| 413 | **`.` 縮回 helix 那個意思：只重複上一次插入** | core | P2 | 現在重複的是任何一次改動，`d` 之後按到就再刪一段 [^413] | Proposed |
 
 ### 5.5 · A table is a delimiter, a surface and a boundary (#261)
 
@@ -8073,6 +8074,14 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     標記的書，自己的例子被改掉。做法：用 `scan_blocks` 的塊資訊跳過圍欄與縮進代碼塊
     （#313 增量化之後這件事更便宜）。**small**
 
+    **落地（2026-09-12）**：`format_ruby` 不再把整份 buffer 交給 `ruby::reformat`，先問
+    `blocks_through` 每一行是不是 `Block::Code`／`Block::FrontMatter`，再按這個把文字切成
+    **段**——散文段各自改寫，代碼段原樣接回去（`editor/ruby.rs` 的 `reformat_prose`）。
+    ⚠️ **切段不切行**：一組注音可以寫成跨行的，逐行送進去解析器就看不見它了。只在散文與
+    代碼交界處下刀——那正好是一組注音跨不過去的地方。
+    ⚠️ **`unread` 也跟着只數散文**（#331 那個計數）。圍欄裏那個 `<ruby>` 本來就不會被改寫，
+    把它報成「還有幾組讀不出來」是叫人去查一個不存在的毛病。
+
 [^334]: `yume-core/src/engine.rs:6193` 的 `set_chinese(false)` 做的是 `buffer.clear()`，
     **不上屏**；`yumete-tui/src/lib.rs:552` 就這麼叫它。跑過：Insert 中文下按 `b` `c`
     再敲 Shift → `is_chinese=false, composing=false, buffer="", committed=""`。兩個鍵
@@ -9990,3 +9999,13 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     編得過、跑得動、什麼都不說。回歸測試因此不寫仿本——
     `the_language_requests_are_spelled_the_way_the_loop_reads_them` 真的去跑那三條命令，
     再讀 `take_scheme_request()` 拿到的字串。
+
+[^413]: `editor/keys.rs:1031` 的 `.` 走 `repeat_edit`，回放的是 `last_edit_keys` 那一串
+    ——**任何一次改動**都算：`r`、`d`、`c…Esc`、`ms(`、貼上。這是 Vim 那個 `.`，
+    比 helix 的寬（helix 的 `.` 只重複上一次**插入**）。
+    2026-09-12 提出：**窄的那個不容易誤刪**。`.` 就在 `,` 旁邊、不帶任何前綴，而在
+    「先選擇後動作」之下它回放的是**鍵**、落在**當前選區**上——所以誤按一次不是重做剛纔
+    那一段，是把眼下選中的這一段也刪掉。
+    做法：`repeat_edit` 只在 `last_edit_keys` 是一段插入（`i`／`a`／`c` 開頭、`Esc` 收尾）
+    時回放，其餘報 `edit.nothing-to-repeat`；或另給寬的那個一個鍵。
+    ⚠️ **這是破壞性改動**，`.` 現有的六七種用法會少掉大半，所以擱在這裏等定。**small**
