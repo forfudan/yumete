@@ -764,34 +764,55 @@ impl Editor {
         };
     }
 
+    /// Work on the `index`th buffer as though it were the active one, and put
+    /// the editor back where it was (#350).
+    ///
+    /// `self.current` is what every verb reads, so a job that goes through the
+    /// buffers has to move it — and [`Self::show_buffer`] is far too much
+    /// machinery to run per file: it re-reads the outline, the grid and the
+    /// sidebar for a document nobody is looking at. What is dangerous is not
+    /// the switch but **the way out of it**. A loop that breaks in the middle
+    /// leaves `current` on a buffer whose cursor, whose caches and whose grid
+    /// all still belong to another document, and the next keystroke indexes
+    /// this file's rope with the other file's offset — `:wa` stopping on the
+    /// oversize question did exactly that, and `x` afterwards took the process
+    /// down. So the switch and its undoing are one call, and landing somewhere
+    /// else **on purpose** is `show_buffer`, through the front door.
+    fn with_buffer<T>(&mut self, index: usize, work: impl FnOnce(&mut Self) -> T) -> T {
+        let was = self.current;
+        self.current = index;
+        let out = work(self);
+        self.current = was.min(self.buffers.len().saturating_sub(1));
+        out
+    }
+
     /// Save every buffer that has changed (`:write-all`).
     pub(super) fn write_all(&mut self) -> Result<CommandOutcome, EditorError> {
-        let was = self.current;
         let mut saved = 0usize;
-        let mut asked = false;
+        let mut asked = None;
         let mut failed: Vec<String> = Vec::new();
         for i in 0..self.buffers.len() {
             if !self.buffers[i].is_modified() {
                 continue;
             }
-            self.current = i;
-            match self.write_current(None) {
+            match self.with_buffer(i, |e| e.write_current(None)) {
                 Ok(Wrote::Asked) => {
-                    // **Stop on the file that asked, standing on it.** The
-                    // question names one buffer, so the reader has to be
-                    // looking at that one; carrying on through the rest would
-                    // put the answer against whichever file the loop reached.
-                    asked = true;
+                    asked = Some(i);
                     break;
                 }
                 Ok(_) => saved += 1,
                 Err(err) => failed.push(err.to_string()),
             }
         }
-        if asked {
+        if let Some(i) = asked {
+            // **Stop on the file that asked, standing on it.** The question
+            // names one buffer, so the reader has to be looking at that one;
+            // carrying on through the rest would put the answer against
+            // whichever file the loop reached. Through `show_buffer`, so the
+            // cursor and the caches come with it.
+            self.show_buffer(i);
             return Ok(CommandOutcome::Continue);
         }
-        self.current = was.min(self.buffers.len().saturating_sub(1));
         self.status = if failed.is_empty() {
             say!("buffer.saved-many", saved)
         } else {

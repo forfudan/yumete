@@ -11906,3 +11906,92 @@ fn a_recovery_copy_that_is_current_is_not_written_again() {
 
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// **`:wa` that stops to ask lands on that file properly, not halfway** (#350).
+///
+/// The loop moved `self.current` by hand and put it back at the end — except
+/// on the one path that does not reach the end. Stopping on the file that
+/// asked left the editor showing that file with the *previous* file's cursor,
+/// caches and grid; one `x` afterwards indexed a 120 002-character rope at
+/// character 300 000 and took the process down with it.
+#[test]
+fn write_all_that_stops_to_ask_stands_on_that_file_properly() {
+    let dir = std::env::temp_dir().join(format!("yumete-wa-ask-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let long = dir.join("long.md");
+    let grown = dir.join("grown.md");
+    std::fs::write(&long, format!("{}\n", "雪".repeat(400_000))).unwrap();
+    std::fs::write(&grown, "甲\n").unwrap();
+
+    let mut ed = Editor::new();
+    ed.open_file(&long).unwrap();
+    ed.open_file(&grown).unwrap();
+    // What `t F` does to a chapter: far more text than the file on disk holds,
+    // which is the one thing the oversize gate stops to ask about.
+    let _ = ed.buffers[1].insert(0, &"乙".repeat(120_000));
+    ed.show_buffer_at(0);
+    ed.on_key(Key::Char('i'));
+    ed.on_key(Key::Char('丙'));
+    ed.on_key(Key::Esc);
+    ed.set_cursor(300_000);
+
+    ed.execute(":wa").unwrap();
+    assert!(ed.query.is_some(), "the grown file asks before it is written");
+    assert_eq!(ed.current, 1, "and the question is asked standing on it");
+    assert!(
+        ed.cursor <= ed.current_buffer().char_count(),
+        "cursor {} is not in a document of {} characters",
+        ed.cursor,
+        ed.current_buffer().char_count()
+    );
+
+    // `n` — do not write it — and then an ordinary keystroke, which is where
+    // the old state came apart.
+    press(&mut ed, "n");
+    press(&mut ed, "x");
+
+    // The chapter that was left keeps its place for when the writer goes back.
+    ed.show_buffer_at(0);
+    assert_eq!(ed.cursor, 300_000, "the chapter remembers where it was");
+
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// **A whole-document rewrite asks the grid the same question `:s` does**
+/// (#350).
+///
+/// `without_cell_guard` is the moment table mode's one promise — a row never
+/// gains or loses a cell — can be broken, and four of the six places that lift
+/// the guard asked before doing it. The two that did not were the two that
+/// rewrite the *entire* document: `replace_everything`, which is how a front
+/// end hands back a formatted buffer, and `:convert`.
+#[test]
+fn a_whole_document_rewrite_will_not_break_a_row() {
+    let dir = std::env::temp_dir().join(format!("yumete-rewrite-grid-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("人物.csv");
+    std::fs::write(&path, "字,序\n甲,1\n乙,2\n").unwrap();
+    let mut ed = Editor::new();
+    ed.open_file(&path).unwrap();
+
+    // A cell that gained a comma is a row that gained a cell.
+    assert!(
+        !ed.replace_everything("字,序\n甲,一,1\n乙,2\n"),
+        "a row that gained a cell went in anyway"
+    );
+    assert_eq!(
+        ed.current_buffer().text(),
+        "字,序\n甲,1\n乙,2\n",
+        "and the table is as it was"
+    );
+    assert!(!ed.status().is_empty(), "refused, and said why");
+
+    // What the check is *for* is letting the useful kind through: everything
+    // inside the cells may change.
+    assert!(ed.replace_everything("字,序\n丙,3\n丁,4\n"));
+    assert_eq!(ed.current_buffer().text(), "字,序\n丙,3\n丁,4\n");
+
+    let _ = std::fs::remove_dir_all(&dir);
+}
