@@ -141,6 +141,9 @@ pub enum Command {
         global: bool,
         /// `i`: ignore case.
         ignore_case: bool,
+        /// `f`: **照字面** — the pattern is the characters typed, not a regex,
+        /// and `$` in the replacement is a `$` rather than a capture.
+        literal: bool,
         /// `n`: say how many there are and change nothing, as vi's `n` means.
         count_only: bool,
         /// `t`: yes, this changes how many cells a row has — 表格的欄數也改.
@@ -4157,7 +4160,7 @@ fn parse_substitution(input: &str) -> Option<Result<Command, CommandError>> {
     let flags = fields.get(2).cloned().unwrap_or_default();
     // Saying so beats doing the substitution the flag was meant to hold back:
     // `n` in vi means "count, change nothing", and it used to *substitute*.
-    if let Some(bad) = flags.chars().find(|c| !"ginct".contains(*c)) {
+    if let Some(bad) = flags.chars().find(|c| !"ginctf".contains(*c)) {
         return Some(Err(CommandError::InvalidArgument {
             command: "substitute",
             value: say!("substitute.unknown-flag", bad),
@@ -4182,6 +4185,7 @@ fn parse_substitution(input: &str) -> Option<Result<Command, CommandError>> {
         replacement: fields[1].clone(),
         global: flags.contains('g'),
         ignore_case: flags.contains('i'),
+        literal: flags.contains('f'),
         count_only: flags.contains('n'),
         reshape: flags.contains('t'),
         rows,
@@ -4535,6 +4539,7 @@ mod tests {
             replacement: replacement.into(),
             global: false,
             ignore_case: false,
+            literal: false,
             count_only: false,
             reshape: false,
             rows: Rows::Selection,
@@ -4547,6 +4552,7 @@ mod tests {
                 replacement: "bar".into(),
                 global: true,
                 ignore_case: false,
+                literal: false,
                 count_only: false,
             reshape: false,
                 rows: Rows::All,
@@ -4567,6 +4573,7 @@ mod tests {
             replacement: "2025/02".into(),
             global: false,
             ignore_case: false,
+            literal: false,
             count_only: false,
             reshape: false,
             rows: Rows::Selection,
@@ -4589,6 +4596,7 @@ mod tests {
                 replacement: "b".into(),
                 global: true,
                 ignore_case: true,
+                literal: false,
                 count_only: false,
             reshape: false,
                 rows: Rows::All,
@@ -4599,6 +4607,15 @@ mod tests {
             parse(":%s/a/b/n"),
             Ok(Command::Substitute { count_only: true,
             reshape: false, .. })
+        ));
+        // `f` — 照字面, the pattern is characters and not a regex.
+        assert!(matches!(
+            parse(":%s/a.b/c/f"),
+            Ok(Command::Substitute { literal: true, .. })
+        ));
+        assert!(matches!(
+            parse(":%s/a.b/c/g"),
+            Ok(Command::Substitute { literal: false, .. })
         ));
         // A flag that is not implemented says so rather than being dropped.
         assert!(parse(":%s/a/b/c").is_err());
