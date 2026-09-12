@@ -121,6 +121,9 @@ impl Editor {
             Pending::Find(_) => (say!("hint.find"), vec![("", say!("hint.type-a-character"))]),
             Pending::Replace => (say!("hint.overwrite"), vec![("", say!("hint.type-a-character-to-overwrite"))]),
             Pending::Case => (say!("hint.case.title"), Self::said(Self::CASE_KEYS.iter().copied())),
+            Pending::Confirm => {
+                (say!("hint.confirm.title"), Self::said(Self::CONFIRM_KEYS.iter().copied()))
+            }
             Pending::Register => (say!("hint.register.title"), vec![("a–z", say!("hint.register.which-one"))]),
             Pending::Match => (say!("hint.match.title"), Self::said(Self::MATCH_KEYS.iter().copied())),
             Pending::MatchPair { .. } => (say!("hint.bracket"), vec![("", say!("hint.type-a-bracket-or-quote"))]),

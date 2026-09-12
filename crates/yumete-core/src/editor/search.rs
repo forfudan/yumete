@@ -147,6 +147,7 @@ impl Editor {
             global,
             ignore_case,
             literal,
+            confirm,
             count_only,
             reshape,
             rows,
@@ -189,6 +190,13 @@ impl Editor {
 
         let text = self.current_buffer().text();
         let chosen = self.substitution_rows(rows);
+        // **`c` — 逐處確認** (#415): 「防止一下子全部都替换了」. `n` still wins
+        // when both were written: it says change nothing, which is the safer
+        // of the two readings of a line that asks for both.
+        if confirm && !count_only {
+            self.start_confirming(re, replacement, global, chosen, reshape);
+            return;
+        }
         let mut count = 0usize;
         let mut rebuilt = String::with_capacity(text.len());
 
@@ -265,22 +273,191 @@ impl Editor {
             }
         }
     }
-}
 
-/// The lines a `:s` will touch, already resolved to 0-based line numbers.
-enum Chosen {
-    /// Everything from the first to the last, inclusive.
-    Span(usize, usize),
-    /// Exactly these, in whatever order they were written.
-    These(Vec<usize>),
-}
+    // ---- `:s …c` — one match at a time (#415) -----------------------------
 
-impl Chosen {
-    /// Is this line one of them?
-    fn has(&self, line: usize) -> bool {
-        match self {
-            Self::Span(first, last) => line >= *first && line <= *last,
-            Self::These(lines) => lines.contains(&line),
+    /// Open the walk and put the first question.
+    fn start_confirming(
+        &mut self,
+        re: Regex,
+        replacement: String,
+        global: bool,
+        chosen: Chosen,
+        reshape: bool,
+    ) {
+        self.ask_or_finish(Confirming {
+            re,
+            replacement,
+            global,
+            chosen,
+            reshape,
+            from: 0,
+            changed: 0,
+            skipped: 0,
+            all: false,
+            snapped: false,
+        });
+    }
+
+    /// The next match still to be decided.
+    ///
+    /// Recomputed from the buffer each time rather than held as a list: every
+    /// accepted change moves everything after it, and a stale offset in a
+    /// walk that writes is a walk that writes in the wrong place.
+    fn next_hit(&self, walk: &Confirming) -> Option<Hit> {
+        let text = self.current_buffer().text();
+        // Char index of the start of the line being looked at.
+        let mut at = 0usize;
+        for (idx, line) in text.split_inclusive('\n').enumerate() {
+            if walk.chosen.has(idx) {
+                for caps in walk.re.captures_iter(line) {
+                    let m = caps.get(0).expect("group 0 is the whole match");
+                    let start = at + line[..m.start()].chars().count();
+                    if start >= walk.from {
+                        // `$1` resolved **for this match**, so the question
+                        // shows what will actually be written.
+                        let mut text = String::new();
+                        caps.expand(&walk.replacement, &mut text);
+                        return Some(Hit {
+                            start,
+                            end: start + m.as_str().chars().count(),
+                            found: m.as_str().to_string(),
+                            text,
+                        });
+                    }
+                    // Without `g`, only the first match on a line is offered —
+                    // and it stays the only one after it has been answered.
+                    if !walk.global {
+                        break;
+                    }
+                }
+            }
+            at += line.chars().count();
         }
+        None
+    }
+
+    /// Show the next match and wait for a key, or close the walk and report.
+    fn ask_or_finish(&mut self, mut walk: Confirming) {
+        while let Some(hit) = self.next_hit(&walk) {
+            if walk.all {
+                if let Some(why) = self.write_one(&mut walk, &hit) {
+                    self.close_confirming(&walk, Some(why));
+                    return;
+                }
+                continue;
+            }
+            // **The match is the selection**, so the writer is looking at the
+            // thing the question is about — and at the sentence around it,
+            // which is what they are actually judging.
+            let head = {
+                let rope = self.current_buffer().rope();
+                let end = hit.end.min(rope.len_chars());
+                motion::prev_grapheme(rope, end).max(hit.start)
+            };
+            self.anchor = hit.start;
+            self.cursor = head;
+            self.extend = false;
+            self.refresh_goal_column();
+            self.status = say!("substitute.confirm-this-one", hit.found, hit.text);
+            self.pending = Pending::Confirm;
+            self.confirming = Some(walk);
+            return;
+        }
+        self.close_confirming(&walk, None);
+    }
+
+    /// Write one match, or say why it cannot be written.
+    fn write_one(&mut self, walk: &mut Confirming, hit: &Hit) -> Option<String> {
+        if !walk.reshape {
+            // The grid guard, asked one match at a time — so a substitution
+            // that would break a row is refused **at the match that breaks
+            // it**, and every answer already given still stands.
+            let rope = self.current_buffer().rope();
+            let (from, to) = (rope.char_to_byte(hit.start), rope.char_to_byte(hit.end));
+            let mut rebuilt = rope.to_string();
+            rebuilt.replace_range(from..to, &hit.text);
+            if let Some(why) = self.substitution_breaks_the_grid(&rebuilt) {
+                return Some(why);
+            }
+        }
+        // **One `u` undoes the whole walk.** A writer who says 「算了」 after
+        // twenty `y`s means all twenty, not the twentieth. Taken at the first
+        // accepted change, so answering `n` to everything leaves no undo step
+        // standing for a document nothing happened to.
+        if !walk.snapped {
+            self.snapshot();
+            walk.snapped = true;
+        }
+        let done = self
+            .without_cell_guard(|e| e.current_buffer_mut().replace(hit.start..hit.end, &hit.text));
+        if !self.applied(done) {
+            return Some(self.status.clone());
+        }
+        walk.changed += 1;
+        let past = hit.start + hit.text.chars().count();
+        // A pattern that matches nothing (`x*`) would be found at the same
+        // place forever, and `a` would never come back.
+        walk.from = match hit.start == hit.end {
+            true => past.max(hit.start + 1),
+            false => past,
+        };
+        None
+    }
+
+    /// Close the walk and say what it did.
+    fn close_confirming(&mut self, walk: &Confirming, why: Option<String>) {
+        self.pending = Pending::None;
+        self.confirming = None;
+        self.clamp_cursor();
+        self.anchor = self.cursor;
+        self.refresh_goal_column();
+        self.status = match (why, walk.changed + walk.skipped) {
+            (Some(why), _) => why,
+            // Nothing matched at all: the ordinary answer, not 「0 換 0 跳」.
+            (None, 0) => say!("find.substitute-changed", 0),
+            (None, _) => say!("substitute.confirm-done", walk.changed, walk.skipped),
+        };
+    }
+
+    /// Answer the question a `:s …c` is asking (#415).
+    pub(super) fn answer_confirm(&mut self, key: Key) {
+        let Some(mut walk) = self.confirming.take() else {
+            self.pending = Pending::None;
+            return;
+        };
+        // The match on screen is the next undecided one — nothing can have
+        // touched the buffer since, because this pending eats every key.
+        let Some(hit) = self.next_hit(&walk) else {
+            self.close_confirming(&walk, None);
+            return;
+        };
+        match key {
+            Key::Char('y') => {
+                if let Some(why) = self.write_one(&mut walk, &hit) {
+                    self.close_confirming(&walk, Some(why));
+                    return;
+                }
+            }
+            Key::Char('n') => {
+                walk.skipped += 1;
+                walk.from = hit.end.max(hit.start + 1);
+            }
+            Key::Char('a') => walk.all = true,
+            Key::Char('l') => {
+                let why = self.write_one(&mut walk, &hit);
+                self.close_confirming(&walk, why);
+                return;
+            }
+            Key::Char('q') | Key::Esc => {
+                self.close_confirming(&walk, None);
+                return;
+            }
+            // **Any other key leaves the question standing.** This is the flag
+            // whose whole job is not changing what the writer has not looked
+            // at; a stray keystroke must not be able to answer it.
+            _ => {}
+        }
+        self.ask_or_finish(walk);
     }
 }

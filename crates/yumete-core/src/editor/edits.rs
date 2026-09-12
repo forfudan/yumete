@@ -726,6 +726,10 @@ impl Editor {
         self.mode = Mode::Normal;
         self.extend = false;
         self.pending = Pending::None;
+        // A half-answered `:s …c` belonged to the buffer being left; what it
+        // already wrote stands, and the questions it had left do not follow
+        // the writer into another file.
+        self.confirming = None;
         self.operator_count = None;
         // A half-typed table command belonged to the buffer that is being left
         // — `t1a` and then `:e other.md` must not leave a column named for the

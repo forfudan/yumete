@@ -754,9 +754,9 @@ find = "截圖 截图 圖片 图片 存圖 存图 screenshot png html 剪貼簿 
 [[message]]
 # : 命令選單裏 s/pat/rep/ 那一項的說明（commands 組）
 key = "cmd.commands.substitute"
-zht = "取代：選區內；`%s` 全檔、`1-40s` 一段、`1,5,9s` 幾行；旗標 g i f n；分隔符可換"
-zhs = "取代：选区内；`%s` 全档、`1-40s` 一段、`1,5,9s` 几行；旗标 g i f n；分隔符可换"
-en = "substitute in the selection; `%s` the file, `1-40s` a span, `1,5,9s` a list; flags g i f n"
+zht = "取代：選區內；`%s` 全檔、`1-40s` 一段、`1,5,9s` 幾行；旗標 g i f c n；分隔符可換"
+zhs = "取代：选区内；`%s` 全档、`1-40s` 一段、`1,5,9s` 几行；旗标 g i f c n；分隔符可换"
+en = "substitute in the selection; `%s` the file, `1-40s` a span, `1,5,9s` a list; flags g i f c n"
 find = "替換 替换 取代 正則 正则 sed regex"
 
 [[message]]
@@ -3340,6 +3340,48 @@ zhs = "关"
 en = "close"
 
 [[message]]
+# :s 逐處確認的選單：後面的全換，不再問
+key = "hint.confirm.all"
+zht = "後面的全換，不再問"
+zhs = "后面的全换，不再问"
+en = "replace the rest without asking"
+
+[[message]]
+# :s 逐處確認的選單：換這一處然後停
+key = "hint.confirm.last"
+zht = "換這一處然後停"
+zhs = "换这一处然后停"
+en = "replace this one, then stop"
+
+[[message]]
+# :s 逐處確認的選單：跳過這一處
+key = "hint.confirm.no"
+zht = "跳過，不換"
+zhs = "跳过，不换"
+en = "leave it, go on"
+
+[[message]]
+# :s 逐處確認的選單：停手
+key = "hint.confirm.stop"
+zht = "停手，已換的保留"
+zhs = "停手，已换的保留"
+en = "stop; what is done stays"
+
+[[message]]
+# :s 逐處確認時的選單標題
+key = "hint.confirm.title"
+zht = "逐處確認"
+zhs = "逐处确认"
+en = "one match at a time"
+
+[[message]]
+# :s 逐處確認的選單：換這一處
+key = "hint.confirm.yes"
+zht = "換這一處"
+zhs = "换这一处"
+en = "replace this one"
+
+[[message]]
 # 空格 m 的選單：兩方都留
 key = "hint.conflict.both"
 zht = "兩方都留"
@@ -5606,11 +5648,18 @@ en = "sidebar: wide, for a whole heading"
 # ── substitute ────────────────────────────────────────────────────────
 
 [[message]]
-# :s 用了 c 旗標
-key = "substitute.confirm-not-yet"
-zht = "旗標 'c'（逐個確認）還沒做——先用 n 數一遍"
-zhs = "旗标 'c'（逐个确认）还没做——先用 n 数一遍"
-en = "flag 'c' (confirm each) is not built yet — count them with n first"
+# :s …c 走完之後的結語
+key = "substitute.confirm-done"
+zht = "換了 {0} 處，跳過 {1} 處"
+zhs = "换了 {0} 处，跳过 {1} 处"
+en = "{0} replaced, {1} left alone"
+
+[[message]]
+# :s …c 停在一處匹配上問換不換（{0} 是原文，{1} 是要寫進去的）
+key = "substitute.confirm-this-one"
+zht = "「{0}」→「{1}」？y 換、n 跳過、a 後面全換、q 停手、l 換這處後停"
+zhs = "「{0}」→「{1}」？y 换、n 跳过、a 后面全换、q 停手、l 换这处后停"
+en = "「{0}」→「{1}」? y replace  n skip  a all the rest  q stop  l this one then stop"
 
 [[message]]
 # :s 的行號範圍把兩種寫法混在了一起
@@ -5622,9 +5671,9 @@ en = "a range is one span (1-40) or one list (1,5,9), not a mixture"
 [[message]]
 # :s 的旗標裏有一個不認得的字母
 key = "substitute.unknown-flag"
-zht = "旗標 '{0}'（有 g 全行、i 不分大小寫、f 照字面、n 只數、t 連欄數一起改）"
-zhs = "旗标 '{0}'（有 g 全行、i 不分大小写、f 照字面、n 只数、t 连栏数一起改）"
-en = "flag '{0}' (g every match on the line, i ignore case, f literal, n count only, t let the column count change)"
+zht = "旗標 '{0}'（有 g 全行、i 不分大小寫、f 照字面、c 逐處問、n 只數、t 連欄數一起改）"
+zhs = "旗标 '{0}'（有 g 全行、i 不分大小写、f 照字面、c 逐处问、n 只数、t 连栏数一起改）"
+en = "flag '{0}' (g every match on the line, i ignore case, f literal, c ask at each one, n count only, t let the column count change)"
 
 
 # ── table ─────────────────────────────────────────────────────────────

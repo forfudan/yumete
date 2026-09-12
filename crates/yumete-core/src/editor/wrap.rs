@@ -275,6 +275,9 @@ impl Editor {
             Pending::Case => "`",
             Pending::Mark => "M",
             Pending::Recall => "'",
+            // Nothing was typed to get here — the command opened it, and the
+            // status line is already carrying the whole question.
+            Pending::Confirm => "",
         };
         // **In the order it was typed.** Inside a sequence the number comes
         // *after* the prefix — `g3` is on its way to `g3d` — and outside one it

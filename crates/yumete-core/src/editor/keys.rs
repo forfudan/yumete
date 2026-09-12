@@ -439,6 +439,13 @@ impl Editor {
                 }
                 return;
             }
+            // **The pending nobody typed.** `:s …c` opens it and it stays open
+            // across many keys — one answer per match — instead of one key
+            // finishing it the way every other pending here works.
+            Pending::Confirm => {
+                self.answer_confirm(key);
+                return;
+            }
             Pending::Case => {
                 self.pending = Pending::None;
                 match key {
@@ -1226,6 +1233,18 @@ impl Editor {
         ("u", "hint.case.upper"),
         ("`", "hint.case.switch"),
         ("", "hint.vi.backtick"),
+    ];
+
+    /// What a `:s …c` is waiting for at each match.
+    ///
+    /// vi's five answers, and the reason the flag is worth having: the writer
+    /// looks at this one match and says what happens to **it**.
+    pub(super) const CONFIRM_KEYS: &'static [(&'static str, &'static str)] = &[
+        ("y", "hint.confirm.yes"),
+        ("n", "hint.confirm.no"),
+        ("a", "hint.confirm.all"),
+        ("q", "hint.confirm.stop"),
+        ("l", "hint.confirm.last"),
     ];
 
     /// What `]` and `[` may be finished with — 「下一個這種東西」.
