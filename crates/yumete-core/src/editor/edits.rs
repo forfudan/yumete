@@ -350,6 +350,23 @@ impl Editor {
     /// Delete the current selection (Helix `d`). A collapsed selection deletes
     /// the grapheme under the cursor. The caller takes the undo snapshot.
     pub(super) fn delete_selection(&mut self) {
+        self.cut_selection(true);
+    }
+
+    /// Delete it and **leave the register alone** (Helix `A-d`, tutor 4.2).
+    ///
+    /// The register is a clipboard of one, so every `d` overwrites what was in
+    /// it: yank a paragraph, delete a stray 、 to tidy the line before pasting,
+    /// and the paragraph is gone. That is what this is for, and it is worth a
+    /// key on its own even with one cursor — the multi-cursor half of Helix's
+    /// `A-` family (#405) is not what makes it useful.
+    pub(super) fn delete_selection_keeping_register(&mut self) {
+        self.cut_selection(false);
+    }
+
+    /// The one implementation of both: `yanks` says whether the text taken out
+    /// goes into the register on its way.
+    fn cut_selection(&mut self, yanks: bool) {
         let (start, end) = self.selection();
         if end > start {
             // Deleting yanks, as it does in Helix: `d` then `p` moves text.
@@ -357,8 +374,10 @@ impl Editor {
                 self.status = say!("table.divider-cannot-be-deleted");
                 return;
             }
-            let text = self.current_buffer().rope().slice(start..end).to_string();
-            self.store(text);
+            if yanks {
+                let text = self.current_buffer().rope().slice(start..end).to_string();
+                self.store(text);
+            }
             // **Nothing below this line may run on a refusal**: collapsing the
             // selection onto `start` over text that is still there is the
             // fault §5.2.3 ⑤ was decided to close, and this is where it was.

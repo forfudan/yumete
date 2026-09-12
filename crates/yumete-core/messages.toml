@@ -3576,6 +3576,20 @@ zhs = "大小写在 ` 组里：`l 小写、`u 大写、`` 互换"
 en = "letter case lives under `: `l lower, `u upper, `` switch"
 
 [[message]]
+# Normal 模式按 Ctrl-c（Helix 的注釋鍵，這裏在空格選單裏）
+key = "hint.helix.comment"
+zht = "注釋掉是 空格 c，整段是 空格 C"
+zhs = "注释掉是 空格 c，整段是 空格 C"
+en = "commenting out is Space c, a whole block Space C"
+
+[[message]]
+# Normal 模式按 ( 或 )（Helix 用它輪選區，這一版只有一個光標）
+key = "hint.helix.cycle-selection"
+zht = "輪選區要多光標，這一版只有一個；一句一句走是 H／L"
+zhs = "轮选区要多光标，这一版只有一个；一句一句走是 H／L"
+en = "cycling selections needs several cursors; this build has one — H/L walk sentences"
+
+[[message]]
 # ]／[ 的選單：下一處／上一處合併衝突
 key = "hint.hop.conflict"
 zht = "合併衝突"
@@ -4185,6 +4199,13 @@ zhs = "行首第一个非空白是 gs"
 en = "first non-blank is gs"
 
 [[message]]
+# Normal 模式按 Ctrl-r（vi 的重做，這裏是 U）
+key = "hint.vi.ctrl-r"
+zht = "重做是 U（撤銷是 u）"
+zhs = "重做是 U（撤销是 u）"
+en = "redo is U (undo is u)"
+
+[[message]]
 # Normal 模式按 D（vi 的刪到行尾，這裏沒有）
 key = "hint.vi.d-upper"
 zht = "刪到行尾是 gl 選起來再 d"
@@ -4218,6 +4239,13 @@ key = "hint.vi.z-upper"
 zht = "存檔是 :w，存了就走是 :wq"
 zhs = "存档是 :w，存了就走是 :wq"
 en = ":w saves, :wq saves and leaves"
+
+[[message]]
+# Normal 模式按 0（vi 的行首，這裏是 gh；計數已經起頭時 0 仍然是數字）
+key = "hint.vi.zero"
+zht = "行首是 gh，第一個非空白是 gs"
+zhs = "行首是 gh，第一个非空白是 gs"
+en = "line start is gh, first non-blank gs"
 
 [[message]]
 # 提示：這個詞還在哪裏

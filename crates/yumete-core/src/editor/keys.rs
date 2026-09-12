@@ -826,6 +826,23 @@ impl Editor {
                 self.delete_selection();
                 self.enter_insert();
             }
+            // **The same two, without spending the register** (Helix `A-d` and
+            // `A-c`, tutor 4.2). The register holds one thing: copy a
+            // paragraph, then take out a stray 、 before pasting it, and the
+            // paragraph is gone. These take the text out and leave what was
+            // copied where it was. Helix's `A-` keys are mostly the
+            // multi-cursor family (#405) — these two are not, and they earn
+            // their keys with one cursor.
+            Key::Alt('d') | Key::Alt('c') => {
+                self.snapshot();
+                if self.span().0 == self.span().1 && count > 1 {
+                    self.extend_by_graphemes(count);
+                }
+                self.delete_selection_keeping_register();
+                if key == Key::Alt('c') {
+                    self.enter_insert();
+                }
+            }
             // Yank / paste (Helix `y` / `p` / `P`).
             Key::Char('y') => self.yank(),
             Key::Char('p') => self.repeat(count, |e| e.paste(true)),
@@ -1047,11 +1064,21 @@ impl Editor {
             Key::Alt('`') => {
                 return Some(say!("hint.helix.case-keys"));
             }
+            // vi's redo. Ours is `U`, the capital of the key that undoes —
+            // a chord for it would be a second name for one action.
+            Key::Ctrl('r') => return Some(say!("hint.vi.ctrl-r")),
+            // Helix spends two tutor lessons on `C-c` (11.1, 11.2). We have
+            // the thing, on the 空格 menu with the other 「do something to
+            // this line」 keys, so this says where rather than binding a chord.
+            Key::Ctrl('c') => return Some(say!("hint.helix.comment")),
             _ => return None,
         };
         Some(match c {
             '$' => say!("hint.vi.dollar"),
             '^' => say!("hint.vi.caret"),
+            // vi's 行首. It gets here only with no count under way — with one,
+            // `0` is still the digit it looks like (`20l`).
+            '0' => say!("hint.vi.zero"),
             'D' => say!("hint.vi.d-upper"),
             'C' => say!("hint.vi.c-upper"),
             's' | 'S' => say!("hint.vi.s"),
@@ -1060,6 +1087,12 @@ impl Editor {
             '&' => say!("hint.vi.ampersand"),
             '_' | '+' | '-' => say!("hint.vi.line-motions"),
             '\\' => say!("hint.vi.backslash"),
+            // Helix cycles the primary selection with these. They are **left
+            // unbound on purpose** — that is a multi-cursor key and #405 is
+            // 0.2.0 — and the sentence pair that used to sit here has moved to
+            // `H`/`L`, which is the other half of what a reader pressing `)`
+            // wants.
+            '(' | ')' => say!("hint.helix.cycle-selection"),
             // No `` ` `` arm: it is a real binding now (the 字形 group), so the
             // fall-through never reaches here for it. `hint.vi.backtick` moved
             // into that group's menu, where vi's reader will see it anyway.
