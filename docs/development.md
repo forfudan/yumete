@@ -633,6 +633,7 @@ index, and a row with no number anywhere else is a row that got lost.
 | 408 | **`w` 停在畫成一條 `┆` 的三個字符裏** | core | P1 | 讀者看不見的一步不算一步 [^408] | Fixed 2026-09-12 |
 | 409 | **注釋掉：`空格 c`／`空格 C`** | core | P1 | 各說各的形式，不看情況 [^409] | Fixed 2026-09-12 |
 | 410 | **`.txt` 默認是純文本，不是 Markdown** | core | P1 | 湊不夠證據就不猜 [^410] | Fixed 2026-09-12 |
+| 411 | **`v` 的光標換形狀** | tui | P2 | 跟 helix：select 有自己的一格 [^411] | Fixed 2026-09-12 |
 
 ### 5.5 · A table is a delimiter, a surface and a boundary (#261)
 
@@ -9490,3 +9491,17 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     現在括號必須**貼着**名字。
     ⚠️ **沒改的：沒有檔名的新緩衝區仍是 Markdown**（`Syntax::default()`）。那裏沒有內容
     可嗅，而新建一個檔開始寫，Markdown 是比純文本有用的猜測。
+
+[^411]: 2026-09-12 的問題：「helix 的 visual 模式（`v` 快捷鍵），似乎用了不同的 cursor
+    樣式」。查了本地那份 helix：`[editor.cursor-shape]` 確實有**三格**——normal／insert／
+    **select**（`helix-view/src/editor.rs:859`，三格出廠都是 `block`），主題另有
+    `ui.cursor.select`／`ui.cursor.primary.select` 兩個作用域，helix 自己的 `theme.toml`
+    給它們上了 `bg = "delta"`。
+    yumete 走形狀不走顏色：crossterm 給的是 `SetCursorStyle`（block／bar／underline），
+    **沒有顏色**，要改顏色得自己發 OSC 12，Terminal.app 不認，而且崩潰退出會把顏色留在
+    終端裏。顏色那條路本來也走不通——梯子上 HEAD 815 與 SELECTION 700 已經只差 5%，中間
+    插不進第三級（見 [^407]）。
+    先做成閃爍方塊，當天改定為**下劃線**（`SteadyUnderScore`）：閃爍是多出來的一個信號，
+    而這個模式開着的時候人正在讀自己的稿子。
+    ⚠️ **竪排下看不見。** 竪排的光標是畫進頁面裏的，終端自己那個是藏起來的，形狀改了沒人
+    看得到。要補得動畫進頁面的那一個。
