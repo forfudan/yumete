@@ -2372,7 +2372,7 @@ release; the git-dep switch goes in with the pipeline.
   is the moment a person says yes.
 - ~~The `:` line has no editing and no history~~ — `←`/`→`, `Home`/`End`,
   `C-w`, `C-u`, `↑`/`↓`, with `:` and `/` keeping separate histories.
-- ~~`:s` has no numeric ranges~~ — `:1,40s`, `:.,$s`, `:40s`, `%`.
+- ~~`:s` has no numeric ranges~~ — `:1-40s`, `:1,5,9s`, `:.-$s`, `:40s`, `%`.
 - ~~`C-o` does nothing after `gg`, `ge` or a search~~ — all three leave a way
   back now, which is what `remember_jump`'s own doc comment always claimed.
 
@@ -10136,6 +10136,25 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     五、名字五個形狀：一個鍵、一個 `g` 前綴、一個帶斜線的命令、兩個帶參數的命令。
     ⚠️ **先做完手頭那串再研究**（作者 2026-09-12 定）。動之前先把上面五條逐條驗一遍，
     別照這則裏的印象直接改。**medium**
+
+    **五條驗過了（2026-09-12）**，結論與上面的印象不盡相同：
+    一、`g/` 不轉義是**它的定義**，不是 bug——`*` 與它同一支（`keys.rs:938`），兩個都
+    留，照 vim／helix 的樣子。二、`c` 確實沒做（`command.rs` 直接回一句「還沒做」）。
+    三、確實不通氣。四、`:replace` **每個檔各存一次快照**（`files.rs:689`），所以改二十
+    個檔要在二十個緩衝區裏各按一次 `u`——比記下來的更難用。五、照舊。
+    另外看見兩處沒記過的：`空格 ?` 開的是一條空命令行，沒有配對的意思；範圍的
+    `,` 與全編輯器的 `-`／`,` 規矩相反。
+    ⚠️ **「在第 3 欄裏找完全相等的那一格」不補了**（作者 2026-09-12 定，`t3/`、`t2-5/`
+    夠用）。**`g/`、`g?` 留着**——另開一個工作區看搜索結果靠的就是它們。
+
+    **落地 ① 範圍（2026-09-12）**：`:s` 的行號範圍改成全編輯器同一條規矩——`-` 是一段
+    （`:1-40s`），`,` 是幾行（`:1,5,9s`）。**`:1,40s` 從此是兩行**，不是四十行。
+    `Rows::Range` 換成 `Rows::Span` 與 `Rows::List`，`substitution_rows` 回一個
+    `Chosen`（`editor/search.rs`），逐行問 `has(idx)` 而不是比首尾。混着寫
+    （`:1-5,9s`）與 `:1-5-9s` 都不猜，回 `substitute.range-not-one-thing`；那句話
+    **只在確定這一行真是 `:s` 之後纔說**，否則 `:1-5,9` 這種別的東西會被冒名頂替。
+    這一族還欠兩條：`f` 旗標（照字面找，不當正則）、`c` 旗標（逐處確認）。
+    ⚠️ **`:21-50x` 選行不做**（作者 2026-09-12 定：「我不是很有把握」）。
 
 [^416]: 2026-09-12 報上來的：Markdown 表格的一格裏寫了腳注 `[^1]`，光標停在它上面按
     `gd`，去搜了網格而不是去文末那條註——而「去它指着的那條註」正是 `gd` 這個名字唯一

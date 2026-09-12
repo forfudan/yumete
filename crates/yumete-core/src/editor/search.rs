@@ -170,12 +170,12 @@ impl Editor {
         let replacement = unescape_replacement(replacement);
 
         let text = self.current_buffer().text();
-        let (first, last) = self.substitution_rows(rows);
+        let chosen = self.substitution_rows(rows);
         let mut count = 0usize;
         let mut rebuilt = String::with_capacity(text.len());
 
         for (idx, line) in text.split_inclusive('\n').enumerate() {
-            if idx >= first && idx <= last {
+            if chosen.has(idx) {
                 let (new_line, n) = replace_in_line(line, &re, &replacement, global);
                 count += n;
                 rebuilt.push_str(&new_line);
@@ -212,8 +212,8 @@ impl Editor {
         self.status = say!("find.substitute-changed", count);
     }
 
-    /// The first and last line a `:s` range names.
-    fn substitution_rows(&self, rows: crate::command::Rows) -> (usize, usize) {
+    /// The lines a `:s` range names, as a question a line number can be put to.
+    fn substitution_rows(&self, rows: crate::command::Rows) -> Chosen {
         use crate::command::{Bound, Rows};
         let rope = self.current_buffer().rope();
         let last_line = motion::last_line(rope);
@@ -223,11 +223,14 @@ impl Editor {
             Bound::Last => last_line,
         };
         match rows {
-            Rows::All => (0, last_line),
-            Rows::Range(a, b) => {
+            Rows::All => Chosen::Span(0, last_line),
+            Rows::Span(a, b) => {
                 let (a, b) = (resolve(a), resolve(b));
-                (a.min(b), a.max(b))
+                Chosen::Span(a.min(b), a.max(b))
             }
+            // `1,5,9` — these and no others. Written in any order, and a line
+            // named twice is still one line.
+            Rows::List(bounds) => Chosen::These(bounds.into_iter().map(resolve).collect()),
             // No range written: the lines the *selection* covers. Reading the
             // cursor's line instead meant that after `x` — which leaves the
             // cursor on the line below the one it selected — `:s` edited a
@@ -240,8 +243,26 @@ impl Editor {
                 } else {
                     first
                 };
-                (first, last)
+                Chosen::Span(first, last)
             }
+        }
+    }
+}
+
+/// The lines a `:s` will touch, already resolved to 0-based line numbers.
+enum Chosen {
+    /// Everything from the first to the last, inclusive.
+    Span(usize, usize),
+    /// Exactly these, in whatever order they were written.
+    These(Vec<usize>),
+}
+
+impl Chosen {
+    /// Is this line one of them?
+    fn has(&self, line: usize) -> bool {
+        match self {
+            Self::Span(first, last) => line >= *first && line <= *last,
+            Self::These(lines) => lines.contains(&line),
         }
     }
 }

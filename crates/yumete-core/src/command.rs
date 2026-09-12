@@ -4009,14 +4009,21 @@ pub enum Axis {
 }
 
 /// Which lines a `:s` touches.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+///
+/// **`-` is a span, `,` is a list** — the one range convention this editor has
+/// (§5.7), which `t2-10/` and `t1,5,9s` already spelled. `:s` was the last
+/// place where `,` meant a span, and a reader who had learnt the one had
+/// learnt the wrong thing about the other.
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Rows {
     /// No range written: the lines the **selection** covers.
     Selection,
     /// `%` — every line.
     All,
-    /// `1,40`, `.,$`, `5` — from one bound to another, inclusive.
-    Range(Bound, Bound),
+    /// `1-40`, `.-$`, and a bare `5` — the two ends and everything between.
+    Span(Bound, Bound),
+    /// `1,5,9` — these lines and no others.
+    List(Vec<Bound>),
 }
 
 /// One end of a `:s` range.
@@ -4046,20 +4053,53 @@ fn parse_bound(input: &str) -> Option<(Bound, usize)> {
     }
 }
 
+/// A range that is neither one span nor one list — `1-5,9` mixes the joints,
+/// `1-5-9` puts a line inside a span. Nobody has said what either means.
+///
+/// The whole sequence is eaten either way, so the caller can go on parsing and
+/// decide whether this input was even meant to be a `:s`.
+pub struct BadRange;
+
 /// Split the leading range off a `:s` line.
-fn parse_rows(input: &str) -> (Rows, &str) {
+///
+/// **The two joints do not mix.** `1-40` is a span and `1,5,9` is a list, and
+/// one range is one of them or the other — `1-5,9` is refused rather than
+/// guessed at, exactly as a `t`/`g` sequence refuses it.
+fn parse_rows(input: &str) -> (Result<Rows, BadRange>, &str) {
     if let Some(rest) = input.strip_prefix('%') {
-        return (Rows::All, rest);
+        return (Ok(Rows::All), rest);
     }
     let Some((first, took)) = parse_bound(input) else {
-        return (Rows::Selection, input);
+        return (Ok(Rows::Selection), input);
     };
-    let rest = &input[took..];
-    match rest.strip_prefix(',').and_then(|r| parse_bound(r).map(|(b, n)| (b, n, r))) {
-        Some((second, n, r)) => (Rows::Range(first, second), &r[n..]),
-        // A bare number is one line, the way `:40s` reads in vi.
-        None => (Rows::Range(first, first), rest),
+    let mut bounds = vec![first];
+    let mut rest = &input[took..];
+    let mut joint: Option<char> = None;
+    let mut mixed = false;
+    // Every `-` or `,` that is followed by another bound belongs to the range;
+    // the first one that is not ends it (`:1s-a-b-` — a `-` delimiter).
+    while let Some(next) = rest.chars().next().filter(|c| *c == '-' || *c == ',') {
+        let Some((bound, n)) = parse_bound(&rest[1..]) else {
+            break;
+        };
+        mixed |= joint.is_some_and(|first| first != next);
+        joint.get_or_insert(next);
+        bounds.push(bound);
+        rest = &rest[1 + n..];
     }
+    if mixed {
+        return (Err(BadRange), rest);
+    }
+    let rows = match (joint, bounds.len()) {
+        // A bare number is one line, the way `:40s` reads in vi.
+        (None, _) => Rows::Span(first, first),
+        (Some('-'), 2) => Rows::Span(bounds[0], bounds[1]),
+        // `1-5-9` is a span with a middle, which is nothing: refuse it the way
+        // a mixture is refused rather than quietly dropping the `5`.
+        (Some('-'), _) => return (Err(BadRange), rest),
+        (Some(_), _) => Rows::List(bounds),
+    };
+    (Ok(rows), rest)
 }
 
 /// Split `body` on unescaped `delim`.
@@ -4129,6 +4169,14 @@ fn parse_substitution(input: &str) -> Option<Result<Command, CommandError>> {
             value: say!("substitute.confirm-not-yet"),
         }));
     }
+    // Only now — once this is certainly a substitution and not `:set` or a
+    // line number — is a range worth complaining about.
+    let Ok(rows) = rows else {
+        return Some(Err(CommandError::InvalidArgument {
+            command: "substitute",
+            value: say!("substitute.range-not-one-thing"),
+        }));
+    };
     Some(Ok(Command::Substitute {
         pattern: fields[0].clone(),
         replacement: fields[1].clone(),
@@ -4557,19 +4605,24 @@ mod tests {
         assert!(parse(":%s/a/b/z").is_err());
     }
 
+    /// **`-` is a span, `,` is a list** — everywhere, `:s` included (§5.7).
+    ///
+    /// `:1,40s` was vi's span and is now the two lines 1 and 40. The editor
+    /// had already taught `t2-10/` and `t1,5,9s`; leaving `:s` on vi's reading
+    /// meant the one convention was true in three places out of four.
     #[test]
     fn a_substitution_takes_a_line_range() {
         assert!(matches!(
-            parse(":1,40s/a/b/"),
+            parse(":1-40s/a/b/"),
             Ok(Command::Substitute {
-                rows: Rows::Range(Bound::Line(1), Bound::Line(40)),
+                rows: Rows::Span(Bound::Line(1), Bound::Line(40)),
                 ..
             })
         ));
         assert!(matches!(
-            parse(":.,$s/a/b/"),
+            parse(":.-$s/a/b/"),
             Ok(Command::Substitute {
-                rows: Rows::Range(Bound::Cursor, Bound::Last),
+                rows: Rows::Span(Bound::Cursor, Bound::Last),
                 ..
             })
         ));
@@ -4577,9 +4630,33 @@ mod tests {
         assert!(matches!(
             parse(":40s/a/b/"),
             Ok(Command::Substitute {
-                rows: Rows::Range(Bound::Line(40), Bound::Line(40)),
+                rows: Rows::Span(Bound::Line(40), Bound::Line(40)),
                 ..
             })
+        ));
+        // `,` names the lines it lists — three of them here, not thirty-two.
+        let list = |input: &str| match parse(input) {
+            Ok(Command::Substitute { rows: Rows::List(bounds), .. }) => bounds,
+            other => panic!("{input} is not a list: {other:?}"),
+        };
+        assert_eq!(list(":1,5,9s/a/b/"), vec![
+            Bound::Line(1),
+            Bound::Line(5),
+            Bound::Line(9)
+        ]);
+        // **`:1,40s` is two lines now**, which is the whole break: in vi it
+        // was forty.
+        assert_eq!(list(":1,40s/a/b/"), vec![Bound::Line(1), Bound::Line(40)]);
+        assert_eq!(list(":.,$s/a/b/"), vec![Bound::Cursor, Bound::Last]);
+        // Neither one span nor one list: refused, not guessed at.
+        assert!(parse(":1-5,9s/a/b/").is_err());
+        assert!(parse(":1,5-9s/a/b/").is_err());
+        assert!(parse(":1-5-9s/a/b/").is_err());
+        // …and a range is only worth complaining about once the line really
+        // is a substitution. `:1-5,9` alone is some other unknown command.
+        assert!(!matches!(
+            parse(":1-5,9"),
+            Err(CommandError::InvalidArgument { command: "substitute", .. })
         ));
     }
 
