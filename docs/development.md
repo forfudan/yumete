@@ -541,7 +541,7 @@ index, and a row with no number anywhere else is a row that got lost.
 | 316 | **表格裏每一鍵重算整表補白** | core | P2 | 逐行記住算補白的**輸入**，一鍵只重算真正動了的那一行 [^316] | Fixed |
 | 317 | **全書 replace 之後，autosave 每五秒凍一秒六** | core | P2 | 問 `draft_is_stale`，當前 buffer 先寫，其餘按 30 ms 預算輪着來 [^317] | Fixed 2026-09-12 |
 | 318 | **count 既沒有上限，也沒有提前退出** | core | P2 | 寫的一萬遍封頂，找與宏各自早退 [^318] | Fixed 2026-09-12 |
-| 319 | **`N` 每次從第 0 行重掃** | core | P3 | 正向全掃再取前一個；`n` 17 µs、`N` 1.01 ms [^319] | Open |
+| 319 | **`N` 每次從第 0 行重掃** | core | P3 | 正向全掃再取前一個；`n` 17 µs、`N` 1.01 ms [^319] | Fixed 2026-09-12 |
 | 320 | **表格裏的 `j` 是 O(rows)** | core | P3 | 一萬行一次 27.8 ms；CSV 格子不受影響 [^320] | Fixed 2026-09-12 |
 | 321 | **`w`／`b`／`e` 每一次都重新分詞** | core | P3 | memo 包在 segmenter 外層，key 是那一行的文本本身 [^321] | Fixed 2026-09-12 |
 | 322 | **`blocks_through` 每幀 clone 一整條** | core | P3 | 六萬個元素，只為索引一次 [^322] | Fixed 2026-09-12 |
@@ -7935,6 +7935,27 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
 [^319]: `editor.rs:2365` 的 `search_backward` 是正向全掃一遍再取前一個，所以每按一次
     都從第 0 行開始。1.8 MB 上 `n` 17 µs、`N` **1.01 ms**（六十倍）；十 MB 的稿子
     約 6 ms 一次，按住 `N` 就頓。做法：真的往回掃。**medium**
+
+    **落地（2026-09-12）**：真的往回掃了。`scan_back` 是 `scan` 的鏡像——從光標那一
+    行往上一行一行走，**停在第一條有匹配的行上**，那一行內部仍然正向讀（要知道哪個
+    是最後一個，就得先找到全部）。兩段與 `search_forward` 對稱：先「光標到頂」，再
+    繞回「底到光標那一行」，於是回繞會蓋住光標所在行光標之後的那一段。ropey 的行迭
+    代器往回走與往前走都是常數時間（相對於整棵樹），每行的字元位移是**帶着走**的，
+    不是每行問一次 `line_to_char`。量（兩萬行、每十行一個匹配）：`N` **969.9 µs →
+    與 `n` 同級**（`n` 3.6 µs）。
+
+    ⚠️ **空文檔的那一行 ropey 往回走時不給。** `Rope::from_str("")` 的 `len_lines()`
+    是 1，正向迭代吐一個空行，反向迭代**什麼都不吐**。而 yumete 開起來就是這份文檔，
+    `x*` 在它裏面是有匹配的。`scan_back` 開頭單獨接住這一種。
+
+    順帶：`search_forward` 與 `search_backward` 那一句 `clamp(within.start,
+    within.end - 1)` 在**空的 within**（一格都沒分到的面板）上會 panic，兩支都補了
+    一道早退。
+
+    回歸兩條，都反證過：`a_backward_search_lands_where_the_full_sweep_did` 拿**舊的
+    那一遍正向掃**當標準答案，八份文本 × 七個模式 × 每個字元位置 × 四種 `within` 逐
+    一對照（含空匹配 `x*`、`^`、`甲$`、全角、子範圍）；`n_and_shift_n_cost_the_same`
+    比的是 `N` 與 `n` 的**比值**（不許貴過六倍），舊碼上是 269 倍。
 
 [^320]: `editor/tables.rs:2488`。每次 `j`：500 行 0.42 ms／5,000 行 **4.0**／10,000 行
     **27.8 ms**。照自動重複 30/s 算，是一個核的 12% 到 83%。`l` 沒事（16 µs），CSV

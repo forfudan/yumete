@@ -2671,6 +2671,11 @@ fn search_forward(
     from: usize,
     within: std::ops::Range<usize>,
 ) -> Option<(usize, usize)> {
+    // A pane can be handed no lines at all, and「the line the cursor is on」
+    // is then not a line of it.
+    if within.start >= within.end {
+        return None;
+    }
     let start_line = rope
         .char_to_line(from.min(rope.len_chars()))
         .clamp(within.start, within.end.saturating_sub(1));
@@ -2723,20 +2728,60 @@ fn byte_of_char(text: &str, n: usize) -> usize {
 /// The last occurrence of `pattern` before char index `from`, wrapping past the
 /// start of the buffer back to its end.
 ///
-/// One forward pass, keeping the best answer: the last match before `from`, or —
-/// when there is none — the last match anywhere, which is where a wrap lands.
+/// **Backwards, line by line, stopping at the first line that has one** — the
+/// mirror of [`search_forward`], and for the same reason. It used to be one
+/// forward pass over the whole range keeping the best answer so far, which is
+/// correct and costs the whole file on every press: on a 1.8 MB manuscript `n`
+/// was 17 µs and `N` **1.01 ms**, sixty times more for the same distance
+/// travelled, and holding `N` down on a ten-megabyte draft stuttered (#319).
+///
+/// Ropey's line iterator walks either way in constant time with respect to the
+/// rope's length, so a step up costs a step, and the char offset of each line
+/// is carried along rather than asked for.
 fn search_backward(
     rope: &Rope,
     pattern: &Regex,
     from: usize,
     within: std::ops::Range<usize>,
 ) -> Option<(usize, usize)> {
-    let (mut before, mut last) = (None, None);
-    let mut at = rope.line_to_char(within.start.min(rope.len_lines()));
-    for slice in rope
-        .lines_at(within.start.min(rope.len_lines()))
-        .take(within.end.saturating_sub(within.start))
-    {
+    // A pane can be handed no lines at all, and「the line the cursor is on」
+    // is then not a line of it.
+    if within.start >= within.end {
+        return None;
+    }
+    let start_line = rope
+        .char_to_line(from.min(rope.len_chars()))
+        .clamp(within.start, within.end.saturating_sub(1));
+    // From the cursor up to the top, then from the bottom back down to the
+    // cursor's line, so the wrap covers the part of that line after the cursor
+    // too — the same two halves [`search_forward`] takes, walked the other way.
+    scan_back(rope, pattern, within.start, start_line + 1, from)
+        .or_else(|| scan_back(rope, pattern, start_line, within.end, usize::MAX))
+}
+
+/// The last match starting before `from` within `lines`, searching backward, as
+/// a half-open range of char indices.
+fn scan_back(
+    rope: &Rope,
+    pattern: &Regex,
+    from_line: usize,
+    to_line: usize,
+    from: usize,
+) -> Option<(usize, usize)> {
+    let to_line = to_line.min(rope.len_lines());
+    // ⚠️ **An empty document is one empty line, and ropey will not walk back
+    // over it**: forwards its iterator yields that line, backwards it yields
+    // nothing. `yumete` opens on exactly that document, and `x*` matches in
+    // it.
+    if rope.len_chars() == 0 {
+        return (from_line == 0 && to_line > 0 && from > 0 && pattern.is_match(""))
+            .then_some((0, 0));
+    }
+    let mut at = rope.line_to_char(to_line);
+    let mut lines = rope.lines_at(to_line);
+    for _ in from_line..to_line {
+        let slice = lines.prev()?;
+        at -= slice.len_chars();
         let owned;
         let text: &str = match slice.as_str() {
             Some(text) => text,
@@ -2745,20 +2790,24 @@ fn search_backward(
                 &owned
             }
         };
+        // A line is read forwards whichever way the file is being read: the
+        // matches on it have to be found in order to know which is the last.
         let mut byte = 0usize;
+        let mut best = None;
         while let Some(m) = text.get(byte..).and_then(|rest| pattern.find(rest)) {
             let start = at + text[..byte + m.start()].chars().count();
-            let range = (start, start + m.as_str().chars().count());
-            if start < from {
-                before = Some(range);
+            if start >= from {
+                break;
             }
-            last = Some(range);
+            best = Some((start, start + m.as_str().chars().count()));
             // An empty match would otherwise stand still forever.
             byte += m.end().max(m.start() + 1);
         }
-        at += slice.len_chars();
+        if best.is_some() {
+            return best;
+        }
     }
-    before.or(last)
+    None
 }
 
 /// The bracket and quote pairs match mode understands, CJK included — a novel's

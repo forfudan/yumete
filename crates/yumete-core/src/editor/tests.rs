@@ -10667,6 +10667,125 @@ fn search_moves_the_cursor_to_the_match_and_wraps() {
     assert_eq!(ed.current_buffer().text(), " two one");
 }
 
+/// `N` walks backwards, and lands where the full sweep used to (#319).
+///
+/// The old answer is the oracle: it was correct, and only correct — one
+/// forward pass over the whole range keeping the best match so far. The new
+/// one stops at the first line above the cursor that has a match, which is a
+/// different shape of the same question, so the two are asked it side by side
+/// on everything that has ever made a search subtle: nothing to find, a match
+/// on the cursor's own line before and after the caret, a wrap, a pattern that
+/// matches the empty string, 全角 text, and a range that is not the whole file
+/// (the pane a table holds, #354).
+#[test]
+fn a_backward_search_lands_where_the_full_sweep_did() {
+    use regex::Regex;
+    // The pass this replaced, kept here and nowhere else.
+    fn sweep(
+        rope: &ropey::Rope,
+        pattern: &Regex,
+        from: usize,
+        within: std::ops::Range<usize>,
+    ) -> Option<(usize, usize)> {
+        let (mut before, mut last) = (None, None);
+        let mut at = rope.line_to_char(within.start.min(rope.len_lines()));
+        for slice in rope
+            .lines_at(within.start.min(rope.len_lines()))
+            .take(within.end.saturating_sub(within.start))
+        {
+            let text = slice.to_string();
+            let mut byte = 0usize;
+            while let Some(m) = text.get(byte..).and_then(|rest| pattern.find(rest)) {
+                let start = at + text[..byte + m.start()].chars().count();
+                let range = (start, start + m.as_str().chars().count());
+                if start < from {
+                    before = Some(range);
+                }
+                last = Some(range);
+                byte += m.end().max(m.start() + 1);
+            }
+            at += slice.len_chars();
+        }
+        before.or(last)
+    }
+
+    let texts = [
+        "",
+        "一行而已",
+        "one two one",
+        "甲\n乙\n甲\n丙\n甲\n",
+        "甲甲甲\n乙乙乙\n甲乙甲\n",
+        "no matches at all\nnone here either\n",
+        "甲\n\n\n甲\n\n",
+        "tail without a newline\n甲",
+    ];
+    let patterns = ["甲", "one", "[甲乙]", "x*", "^", "甲$", "(?i)ONE"];
+    for text in texts {
+        let rope = ropey::Rope::from_str(text);
+        let lines = rope.len_lines();
+        for pattern in patterns {
+            let re = Regex::new(pattern).unwrap();
+            for from in 0..=rope.len_chars() {
+                for within in [0..lines, 0..lines.min(2), lines.saturating_sub(2)..lines, 1..lines]
+                {
+                    if within.start > within.end {
+                        continue;
+                    }
+                    assert_eq!(
+                        search_backward(&rope, &re, from, within.clone()),
+                        sweep(&rope, &re, from, within.clone()),
+                        "/{pattern}/ from {from} within {within:?} of {text:?}"
+                    );
+                }
+            }
+        }
+    }
+}
+
+/// `N` costs what `n` costs (#319).
+///
+/// **A ratio, on purpose** — see the note on
+/// [`a_step_down_a_table_costs_the_same_however_long_it_is`]. Both keys travel
+/// the same distance to the same kind of match, so on a file of any size they
+/// should cost about the same; the forward pass made `N` sixty times dearer on
+/// a 1.8 MB manuscript, because it read the whole of it every time.
+#[test]
+fn n_and_shift_n_cost_the_same() {
+    use std::time::{Duration, Instant};
+    let mut text = String::new();
+    for i in 0..20_000 {
+        match i % 10 {
+            0 => text.push_str("阿寧走到窗前。\n"),
+            _ => text.push_str("這一行沒有要找的東西，只是把檔案撐開。\n"),
+        }
+    }
+    let press = |key: char| -> Duration {
+        let mut ed = typed(&text);
+        ed.execute(":10000").unwrap();
+        ed.on_key(Key::Char('/'));
+        for c in "阿寧".chars() {
+            ed.on_key(Key::Char(c));
+        }
+        ed.on_key(Key::Enter);
+        let n = 40;
+        // The first press pays for compiling the pattern and for whatever the
+        // rope has not touched yet.
+        ed.on_key(Key::Char(key));
+        let began = Instant::now();
+        for _ in 0..n {
+            ed.on_key(Key::Char(key));
+        }
+        began.elapsed() / n
+    };
+    press('n');
+    let forward = press('n');
+    let backward = press('N');
+    assert!(
+        backward <= forward * 6,
+        "`N` cost {backward:?} against `n`'s {forward:?} — it is reading the whole file"
+    );
+}
+
 #[test]
 fn patterns_are_regular_expressions() {
     // Half of revising a manuscript is a pattern, not a string.
