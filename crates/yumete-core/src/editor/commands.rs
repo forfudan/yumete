@@ -247,51 +247,17 @@ impl Editor {
                 self.format_ruby(dialect);
                 Ok(CommandOutcome::Continue)
             }
-            Command::WriteQuit(path) => {
-                // **`:wq <名字>` means 「save it as this, I am done」.** Left as
-                // `:w <path>` it wrote a *copy* and then refused to quit,
-                // because the chapter itself was still unsaved — and a writer
-                // with vi's muscle memory reads that refusal and reaches for
-                // `:q!`. So it rebinds, exactly as `:write-as` does, and the file
-                // that is saved is the one the name says.
-                match path.as_deref() {
-                    Some(path) => {
-                        let target = PathBuf::from(path);
-                        if let Some(which) = self.buffer_holding(&target) {
-                            if which != self.current {
-                                let name = self.buffers[which].display_name();
-                                self.status =
-                                    say!("buffer.already-open-elsewhere", name);
-                                return Ok(CommandOutcome::Continue);
-                            }
-                        }
-                        // `save_as` does not go through the funnel, so the gate
-                        // is asked for here too — `:wq 第二章.md` over an
-                        // existing chapter multiplies it exactly as `:wq` does.
-                        if !self.oversize_answered {
-                            if let Some(ask) = self.oversize_query(Some(path)) {
-                                self.query = Some(ask);
-                                return Ok(CommandOutcome::Continue);
-                            }
-                        }
-                        self.current_buffer_mut()
-                            .save_as(target, false)
-                            .map_err(EditorError::Io)?;
-                        self.status = say!("buffer.saved", self.current_buffer().display_name());
-                    }
-                    None => {
-                        // A question standing is not a save, and `:wq` on a
-                        // save that did not happen would take the manuscript
-                        // off the screen with the answer still unanswered.
-                        if matches!(self.write_current(None)?, Wrote::Asked) {
-                            return Ok(CommandOutcome::Continue);
-                        }
-                    }
+            Command::WriteQuit(path) => self.write_then_quit(path, false),
+            // `:x` and `:xit`: the same, and the save is skipped when nothing
+            // was changed. A path is an instruction, so it is always written.
+            Command::Exit(path) => self.write_then_quit(path, true),
+            Command::Update => {
+                if !self.current_buffer().is_modified() {
+                    self.status = say!("buffer.unchanged-not-written");
+                    return Ok(CommandOutcome::Continue);
                 }
-                // Saving *this* buffer is not saving the session: another open
-                // file may still be dirty, and `:wq` reads as "everything is
-                // safe now", so it is held to the same check `:q` is.
-                self.quit(false)
+                self.write_current(None)?;
+                Ok(CommandOutcome::Continue)
             }
             Command::ReplaceFound(text, reshape) => {
                 self.replace_found(&text, reshape);
@@ -939,6 +905,64 @@ impl Editor {
             ],
             what: Asking::OversizeWrite { path: path.map(str::to_string) },
         })
+    }
+
+    /// `:wq [path]` and `:x [path]` — save, then leave.
+    ///
+    /// **`:wq <名字>` means 「save it as this, I am done」.** Left as `:w
+    /// <path>` it wrote a *copy* and then refused to quit, because the chapter
+    /// itself was still unsaved — and a writer with vi's muscle memory reads
+    /// that refusal and reaches for `:q!`. So it rebinds, exactly as
+    /// `:write-as` does, and the file that is saved is the one the name says.
+    ///
+    /// `only_if_changed` is what tells `:x` from `:wq`, and it is the whole
+    /// difference: a file opened, read and left alone keeps its timestamp.
+    /// **A path overrides it** — naming a file is an instruction to write it.
+    fn write_then_quit(
+        &mut self,
+        path: Option<String>,
+        only_if_changed: bool,
+    ) -> Result<CommandOutcome, EditorError> {
+        match path.as_deref() {
+            Some(path) => {
+                let target = PathBuf::from(path);
+                if let Some(which) = self.buffer_holding(&target) {
+                    if which != self.current {
+                        let name = self.buffers[which].display_name();
+                        self.status = say!("buffer.already-open-elsewhere", name);
+                        return Ok(CommandOutcome::Continue);
+                    }
+                }
+                // `save_as` does not go through the funnel, so the gate is
+                // asked for here too — `:wq 第二章.md` over an existing chapter
+                // multiplies it exactly as `:wq` does.
+                if !self.oversize_answered {
+                    if let Some(ask) = self.oversize_query(Some(path)) {
+                        self.query = Some(ask);
+                        return Ok(CommandOutcome::Continue);
+                    }
+                }
+                self.current_buffer_mut()
+                    .save_as(target, false)
+                    .map_err(EditorError::Io)?;
+                self.status = say!("buffer.saved", self.current_buffer().display_name());
+            }
+            None if only_if_changed && !self.current_buffer().is_modified() => {
+                self.status = say!("buffer.unchanged-not-written");
+            }
+            None => {
+                // A question standing is not a save, and `:wq` on a save that
+                // did not happen would take the manuscript off the screen with
+                // the answer still unanswered.
+                if matches!(self.write_current(None)?, Wrote::Asked) {
+                    return Ok(CommandOutcome::Continue);
+                }
+            }
+        }
+        // Saving *this* buffer is not saving the session: another open file may
+        // still be dirty, and `:wq` reads as "everything is safe now", so it is
+        // held to the same check `:q` is.
+        self.quit(false)
     }
 
     /// Save the active buffer, optionally to a new `path` (save-as).

@@ -175,6 +175,13 @@ zhs = "存了 {0} 个档案；{1} 个没存：{2}"
 en = "saved {0} file(s); {1} not saved: {2}"
 
 [[message]]
+# :update 與 :x 在檔案沒改過時說的那句
+key = "buffer.unchanged-not-written"
+zht = "沒有改動，未寫盤"
+zhs = "没有改动，未写盘"
+en = "unchanged; nothing written"
+
+[[message]]
 # 要丟掉沒存的改動，缺 !
 key = "buffer.unsaved-changes"
 zht = "還有沒存的改動（加 ! 強制）"
@@ -561,6 +568,14 @@ en = "what changed, by word rather than by line"
 find = "比較 比较 差異 差异 改動 改动 對照 对照 diff compare changes"
 
 [[message]]
+# : 命令選單裏 exit 那一項的說明（commands 組）
+key = "cmd.commands.exit"
+zht = "改過纔存，然後退出（短寫 `:x`，也認 `:xit`）"
+zhs = "改过才存，然后退出（短写 `:x`，也认 `:xit`）"
+en = "save if changed, then leave (short: :x, also :xit)"
+find = "改過纔存 改过才存 存了再退 退出 exit x xit"
+
+[[message]]
 # : 命令選單裏 export 那一項的說明（commands 組）
 key = "cmd.commands.export"
 zht = "導出成 html 或 typst，排版一起帶上"
@@ -793,6 +808,14 @@ en = "undo the last change"
 find = "撤銷 撤销 復原 复原 後悔 后悔"
 
 [[message]]
+# : 命令選單裏 update 那一項的說明（commands 組）
+key = "cmd.commands.update"
+zht = "改過纔存，不退出（短寫 `:up`）"
+zhs = "改过才存，不退出（短写 `:up`）"
+en = "save if changed, and stay (short: :up)"
+find = "改過纔存 改过才存 存檔 存档 update up"
+
+[[message]]
 # : 命令選單裏 wheel 那一項的說明（commands 組）
 key = "cmd.commands.wheel"
 zht = "滾輪一格走幾行；`:wheel 1` 是終端自己的一格"
@@ -819,10 +842,10 @@ find = "保存 存檔 存档 寫入 写入 save wa"
 [[message]]
 # 存好再退出。連字號：這是兩個並列的動作，不是 write 的一種
 key = "cmd.commands.write-quit"
-zht = "存好再退出（短寫 `:wq`，也認 vi 的 `:x`）"
-zhs = "存好再退出（短写 `:wq`，也认 vi 的 `:x`）"
-en = "save, then leave (short: :wq, and vi's :x)"
-find = "存了再退 保存退出 write and quit exit wq x"
+zht = "無條件存好再退出（短寫 `:wq`；`:x` 是改過纔存的那個）"
+zhs = "无条件存好再退出（短写 `:wq`；`:x` 是改过才存的那个）"
+en = "always save, then leave (short: :wq; :x saves only if changed)"
+find = "存了再退 保存退出 write and quit wq"
 
 [[message]]
 # : 命令選單裏 yume 那一項的說明（commands 組）

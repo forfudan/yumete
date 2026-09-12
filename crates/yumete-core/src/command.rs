@@ -95,8 +95,16 @@ pub enum Command {
     QuitAll {
         force: bool,
     },
-    /// `:wq [path]` / `:x` — save (optionally to a new path), then leave.
+    /// `:wq [path]` — save (optionally to a new path), then leave.
     WriteQuit(Option<String>),
+    /// `:exit` (aliases `:x`, `:xit`) — **save only if the file changed**, then
+    /// leave. vi's `:x` and helix's `:exit`, which `:x` used to be spelled as
+    /// here without the one thing that tells the two apart.
+    Exit(Option<String>),
+    /// `:update` (alias `:up`) — **save only if the file changed**, and stay.
+    /// `:write` with the same gate: the timestamp of a file nobody touched is
+    /// what `make`, rsync and a sync folder all read as 「this changed」.
+    Update,
     /// `:count` (alias `:wc`) — how much has been written.
     Count,
     /// `:count-progress` — 寫作進度: what was written today, and every day before
@@ -2278,11 +2286,31 @@ pub const COMMANDS: &[Entry] = &[
     },
     Entry {
         name: "write-quit",
-        aliases: &["wq", "x"],
+        aliases: &["wq"],
         help: "cmd.commands.write-quit",
         needs: &[],
         params: &[Param::Path],
         build: Some(|p| Ok(Command::WriteQuit(p.arg(0).map(|s| s.to_string())))),
+    },
+    // **`:x` is not `:wq`**, and it was an alias of it here. In vi and in helix
+    // both, `:x` writes *only when the file changed* — a file opened, read and
+    // left alone keeps its timestamp, which is what `make`, rsync and a sync
+    // folder go by. `:update` is the same gate without the leaving.
+    Entry {
+        name: "exit",
+        aliases: &["x", "xit"],
+        help: "cmd.commands.exit",
+        needs: &[],
+        params: &[Param::Path],
+        build: Some(|p| Ok(Command::Exit(p.arg(0).map(|s| s.to_string())))),
+    },
+    Entry {
+        name: "update",
+        aliases: &["up"],
+        help: "cmd.commands.update",
+        needs: &[],
+        params: &[],
+        build: Some(|_| Ok(Command::Update)),
     },
 
     Entry {
@@ -4848,7 +4876,9 @@ mod tests {
         // A folded command with a name of its own gets a row of it, under the
         // family it came from — otherwise the fold would have hidden the one
         // spelling anybody types.
-        assert_eq!(row("", "wq"), ":wq (x)");
+        assert_eq!(row("", "wq"), ":wq");
+        // `:x` is **not** `:wq` — it is `:exit`, which writes only what changed.
+        assert_eq!(row("", "exit"), ":exit (x xit)");
         assert_eq!(row("", "bc"), ":bc");
         let listed: Vec<&str> = complete("").iter().map(|c| c.name).collect();
         let write = listed.iter().position(|n| *n == "write").unwrap();
