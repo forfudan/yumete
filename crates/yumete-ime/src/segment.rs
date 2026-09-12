@@ -109,50 +109,30 @@ impl YumeSegmenter {
 
     /// Segment one run of CJK characters into local `(start, end)` char ranges
     /// along the maximum-probability path.
+    ///
+    /// The path is [`yumete_cjk::best_path`]'s — the same dynamic program the
+    /// bundled dictionary walks, written once (#349). What belongs here is the
+    /// scoring: two tables, a floor for what neither has counted, and the
+    /// bonus that keeps a phrase from swallowing its own words.
     fn segment_run(&self, chars: &[char]) -> Vec<(usize, usize)> {
-        let n = chars.len();
-        // `best[i]` is the score of the best split of `chars[i..]`, and `cut[i]`
-        // the length of the word it starts with. Solved from the right so each
-        // position only looks at answers already known.
-        let mut best = vec![f64::NEG_INFINITY; n + 1];
-        let mut cut = vec![1usize; n + 1];
-        best[n] = 0.0;
-
         let floor = floor_score(&self.unigram);
-        let mut word = String::with_capacity(MAX_WORD * 4);
-        for i in (0..n).rev() {
-            word.clear();
-            for len in 1..=MAX_WORD.min(n - i) {
-                word.push(chars[i + len - 1]);
-                let score = self.score(&word, len, floor).unwrap_or(if len == 1 {
-                    floor
-                } else {
-                    // Not a word; but a longer one may still start here, so keep
-                    // extending rather than breaking out.
-                    f64::NEG_INFINITY
-                });
-                if score > f64::NEG_INFINITY {
-                    let total = score + WORD_BONUS + self.bias + best[i + len];
-                    if total > best[i] {
-                        best[i] = total;
-                        cut[i] = len;
-                    }
-                }
-                // Nothing in either table continues this prefix: stop extending.
-                if !self.unigram.has_extension(&word) && !self.lexicon.has_extension(&word) {
-                    break;
-                }
-            }
-        }
-
-        let mut ranges = Vec::new();
-        let mut i = 0;
-        while i < n {
-            let len = cut[i].max(1);
-            ranges.push((i, i + len));
-            i += len;
-        }
-        ranges
+        yumete_cjk::best_path(
+            chars,
+            MAX_WORD,
+            |word, len| {
+                let score = match self.score(word, len, floor) {
+                    Some(score) => score,
+                    // Not a word; but a longer one may still start here, so
+                    // this is not the end of the extending.
+                    None if len > 1 => return None,
+                    None => floor,
+                };
+                Some(score + WORD_BONUS + self.bias)
+            },
+            // Both tables carry a prefix index, so「nothing continues this」is
+            // cheap to ask and saves the probes up to [`MAX_WORD`].
+            |word| self.unigram.has_extension(word) || self.lexicon.has_extension(word),
+        )
     }
 }
 
@@ -177,46 +157,15 @@ impl Segmenter for YumeSegmenter {
         )
     }
 
+    /// Non-CJK stretches keep the category rules; only the runs of 漢字 and
+    /// kana need the dictionary. Which is which is
+    /// [`yumete_cjk::ranges_around_cjk`]'s to say, not this file's (#349):
+    /// the copy that used to live here dropped every 標點 instead of giving it
+    /// a range, so `w` stopped before 「 with the bundled dictionary loaded
+    /// and stepped straight over it with 宇浩's.
     fn segment(&self, s: &str) -> Vec<(usize, usize)> {
-        // Non-CJK stretches keep the category rules; only the runs of 漢字 and
-        // kana need the dictionary.
-        let chars: Vec<char> = s.chars().collect();
-        let mut ranges = Vec::new();
-        let mut i = 0;
-        while i < chars.len() {
-            if is_word_char(chars[i]) {
-                let start = i;
-                while i < chars.len() && is_word_char(chars[i]) {
-                    i += 1;
-                }
-                ranges.extend(
-                    self.segment_run(&chars[start..i])
-                        .into_iter()
-                        .map(|(a, b)| (start + a, start + b)),
-                );
-            } else if chars[i].is_alphanumeric() {
-                let start = i;
-                while i < chars.len() && chars[i].is_alphanumeric() && !is_word_char(chars[i]) {
-                    i += 1;
-                }
-                ranges.push((start, i));
-            } else {
-                i += 1;
-            }
-        }
-        ranges
+        yumete_cjk::ranges_around_cjk(s, |run| self.segment_run(run))
     }
-}
-
-/// Whether `c` belongs to a run the dictionary should split: 漢字 and kana.
-fn is_word_char(c: char) -> bool {
-    matches!(c as u32,
-        0x3400..=0x4DBF        // CJK Extension A
-        | 0x4E00..=0x9FFF      // CJK Unified Ideographs
-        | 0xF900..=0xFAFF      // Compatibility Ideographs
-        | 0x20000..=0x3FFFF    // Extensions B and beyond
-        | 0x3040..=0x30FF      // kana
-    )
 }
 
 #[cfg(test)]
@@ -302,10 +251,30 @@ mod tests {
         assert_eq!(words(&seg, "我們的"), ["我們", "的"]);
     }
 
+    /// #349. Which dictionary is loaded decides where a *word* ends and
+    /// nothing else — 標點 is a range under both, or `w` would stop before 「
+    /// with the bundled list and step over it with 宇浩's.
     #[test]
-    fn latin_and_punctuation_keep_their_own_rules() {
+    fn latin_and_punctuation_keep_the_rules_every_segmenter_keeps() {
+        let line = "冬天 abc123，冬天。「好」";
         let seg = segmenter(&[("冬天", 5000)], &[]);
-        assert_eq!(words(&seg, "冬天 abc123，冬天"), ["冬天", "abc123", "冬天"]);
+        assert_eq!(
+            words(&seg, line),
+            ["冬天", "abc123", "，", "冬天", "。「", "好", "」"]
+        );
+        // The same ranges, boundaries inside a run of 漢字 aside.
+        let plain = yumete_cjk::DictionarySegmenter::builtin(0);
+        let outside = |ranges: Vec<(usize, usize)>| -> Vec<(usize, usize)> {
+            let chars: Vec<char> = line.chars().collect();
+            ranges
+                .into_iter()
+                .filter(|&(a, _)| !yumete_cjk::is_han(chars[a]))
+                .collect()
+        };
+        assert_eq!(
+            outside(yumete_cjk::Segmenter::segment(&seg, line)),
+            outside(yumete_cjk::Segmenter::segment(&plain, line))
+        );
     }
 
     #[test]

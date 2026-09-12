@@ -12,7 +12,7 @@
 pub mod table;
 pub mod theme;
 pub mod vertical;
-pub mod width;
+pub mod ambiguous;
 
 use std::io::{self, stdout, Write as _};
 

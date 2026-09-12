@@ -46,8 +46,8 @@ pub use grapheme::{
 };
 pub use reading::{NoReader, Reader};
 pub use segment::{
-    CategorySegmenter, CoarseSegmenter, DictionarySegmenter, Memo, SegmentMemo, Segmenter,
-    WithWords, WordLevel, WordList, WordMark,
+    best_path, CategorySegmenter, CoarseSegmenter, DictionarySegmenter, Memo, SegmentMemo,
+    Segmenter, WithWords, WordLevel, WordList, WordMark,
 };
 pub use vertical::{
     hangs_in_the_margin, margin_form, opens_a_pair, vertical_form, vertical_grapheme, Layout,
@@ -57,4 +57,4 @@ pub use width::{
     ambiguous_is_wide, char_width, control_picture, drawn_width, grapheme_width,
     set_ambiguous_wide, stored_width, str_width, tab_width_at,
 };
-pub use word::{is_han, word_ranges, word_ranges_big, word_ranges_coarse};
+pub use word::{is_han, ranges_around_cjk, word_ranges, word_ranges_big, word_ranges_coarse};

@@ -571,7 +571,7 @@ index, and a row with no number anywhere else is a row that got lost.
 | 346 | **超過 255 位元組的候選截成空白一行** | ime | P4 | 上游：在非字符邊界切，`unwrap_or("")` 吃掉 [^346] | Open (upstream) |
 | 347 | **中英切換交回 yume 的綁定表** | tui+ime | P1 | Shift 走 `key_action` ＋ 上游新增的 `Engine::perform` [^347] | Fixed 2026-09-09 |
 | 348 | **九個手寫快取收成一套按行記憶** | core | P2 | 每個自己決定 key 放什麼，於是各有各的必然失效 [^348] | Open |
-| 349 | **一個概念一處權威：字素、寬度、分詞** | core | P2 | 同一件事兩三套實現，對不上的時候纔看得見 [^349] | Open |
+| 349 | **一個概念一處權威：字素、寬度、分詞** | core | P2 | 走行與最大概率路徑各收成一份；問終端的那個不叫 `width` [^349] | Fixed 2026-09-12 |
 | 350 | **護欄放在必經之路上，不放在呼叫點** | core | P2 | `:wa` 改走 `with_buffer`／`show_buffer`；整份重寫一律先問格線 [^350] | Fixed 2026-09-12 |
 | 351 | **按性質提問，不按模式列舉** | core+tui | P3 | `matches!(m, A \| B)` 之外的模式就這麼掉出去了 [^351] | Open |
 | 352 | **TUI 設定面板走 `settings_ui` 的兩半事實** | tui+ime | P4 | 第五個前端不必再手抄一份布爾表達式 [^352] | Proposed |
@@ -4327,15 +4327,22 @@ dropping a `；` into the manuscript.」* `;` `'` `-` `=` 上踩過一次，Shif
 
 ### 四、同一個概念兩套實現（#349 → #324、#325、#327）
 
-| 概念 | 兩套 | 對不上的時候 |
-|---|---|---|
-| 字符 | `h`／`l` 按字素走，`r` 對 `chars()` 映射 | #324：`rZ` 對着一個 ZWJ emoji 寫出五個 Z |
-| 大小寫 | `.to_uppercase().next()` 只取一對多的第一個 | #325：`ﬁ` → `F`，`i` 沒了 |
-| 顯示寬度 | 寫盤一套、畫面一套，ambiguous 預設 `auto` | #327：同一張表在兩個終端存出兩份 |
-| 分詞 | `yumete-cjk/segment.rs` 641 行 ＋ `yumete-ime/segment.rs` 317 行，而上游有 `segmentor.rs` | 三份分詞的概念 |
+| 概念 | 兩套 | 對不上的時候 | 權威 |
+|---|---|---|---|
+| 字符 | `h`／`l` 按字素走，`r` 對 `chars()` 映射 | #324：`rZ` 對着一個 ZWJ emoji 寫出五個 Z | `yumete-cjk/grapheme.rs` |
+| 大小寫 | `.to_uppercase().next()` 只取一對多的第一個 | #325：`ﬁ` → `F`，`i` 沒了 | 展開整個交出來 |
+| 顯示寬度 | 寫盤一套、畫面一套，ambiguous 預設 `auto` | #327：同一張表在兩個終端存出兩份 | `yumete-cjk/width.rs` |
+| 分詞 | 三處走行 ＋ 兩處 Viterbi | `w` 遇到標點的行爲跟着詞典換 | `ranges_around_cjk`／`best_path` |
 
-兩個 `width.rs`（`yumete-cjk` 與 `yumete-tui`，各 187 行）其實是互補的——一個是寬度表，
-一個是問終端——可是「誰說了算」沒有寫在名字上，#327 就是這件事露出來的地方。
+四樣都收完了（2026-09-12）。分詞那一行原先是按行數記的（641 ＋ 317），數行數看不出
+問題在哪：真正重複的是**走行**（`word_ranges`、`DictionarySegmenter::segment`、
+`YumeSegmenter::segment` 各一份）與**最大概率路徑**（後兩者各一份）。兩份走行還已經
+分了岔——宇浩那份把標點整個丟掉、不給範圍，於是「`w` 停不停在「上」取決於當時載的是
+哪本詞典。上游的 `segmentor.rs` 不在此列：那是輸入法自己給整句用的，不是編輯器的詞界。
+
+兩個 `width.rs`（`yumete-cjk` 與 `yumete-tui`）其實是互補的——一個是寬度表，一個是問
+終端——可是「誰說了算」沒有寫在名字上，#327 就是這件事露出來的地方。後者現在叫
+`ambiguous.rs`：問的人不叫 `width`。
 
 ### 五、按模式列舉，不按性質提問（#351 → #336、#340、#318）
 
@@ -8226,6 +8233,26 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     `segmentor.rs`）。兩個 `width.rs` 各 187 行**是互補的**——一個是寬度表、一個是問
     終端——但「誰說了算」沒寫在名字上。做法：一個概念指定一處權威，其餘的叫它。
     **medium**
+
+    **落地（2026-09-12）**：四樣逐一指了權威，見 §四那張表。字素（`grapheme.rs` 是
+    全樹唯一 `use unicode_segmentation` 的地方）與大小寫在 #324／#325 就收乾淨了；
+    這一趟做的是另外兩樣。
+
+    分詞收成兩個函數：`yumete_cjk::ranges_around_cjk`（走一行——空白分隔且自身不成詞、
+    漢字連段交給詞典、其餘按類別成段）與 `yumete_cjk::best_path`（漢字連段的最大概率
+    路徑，從右往左解，`score` 與 `extends` 兩個閉包是呼叫方唯一要給的東西）。
+    `word_ranges`、`DictionarySegmenter`、`YumeSegmenter` 三處各自的抄本刪掉。
+
+    ⚠️ **抄本已經分了岔，這不只是省行數**：`YumeSegmenter::segment` 把標點整個略過、
+    不給範圍，而 `DictionarySegmenter` 給。於是同一份稿子，載宇浩語言模型時 `w` 從
+    標點上跨過去，載內置詞表時停在標點上——疊層也跟着兩樣。現在兩邊同一條路，
+    `yumete-ime` 與 `yumete-cjk` 各留一條回歸測試（都反證過）。⚠️ 那條「兩個
+    segmenter 在漢字連段之外逐格相同」的測試**擋不住走行本身改掉**——兩邊一起動——
+    它擋的是有人再寫第二份走行。
+
+    寬度那兩個檔改了名：`yumete-tui/src/width.rs` → `ambiguous.rs`，模組頭一句寫明
+    「這是問的人，不是說了算的人」，`yumete-cjk/src/width.rs` 那頭寫明反面。上游的
+    `segmentor.rs` 在 `../yume` 裏，是輸入法整句用的，不歸這一條管。
 
 [^350]: #295 的 `Asking` enum 本來就是對的做法（「接口留好」），只是接口留在
     `Command::Write` 那一側：`oversize_query` 掛在一個 match 分支上，`:wq`／`:w!`／
