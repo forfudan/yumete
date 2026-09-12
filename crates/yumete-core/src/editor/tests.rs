@@ -10922,6 +10922,44 @@ fn substitute_replaces_on_the_current_line_and_whole_file() {
     assert_eq!(ed.current_buffer().text(), "aaa\nbaa");
 }
 
+/// **`-` is a span, `,` is a list** — in `:s` too (§5.7).
+#[test]
+fn a_substitution_reads_a_dash_as_a_span_and_a_comma_as_a_list() {
+    let five = || typed("a\na\na\na\na\n");
+
+    // `1-3` is three lines: the two ends and the one between them.
+    let mut ed = five();
+    assert!(ed.execute("1-3s/a/b/").is_ok(), "{}", ed.status());
+    assert_eq!(ed.current_buffer().text(), "b\nb\nb\na\na\n");
+
+    // `1,3` is **two** lines — in vi it was three. Line 2 is not named and
+    // is not touched.
+    let mut ed = five();
+    assert!(ed.execute("1,3s/a/b/").is_ok(), "{}", ed.status());
+    assert_eq!(ed.current_buffer().text(), "b\na\nb\na\na\n");
+
+    // A list of any length, in any order.
+    let mut ed = five();
+    assert!(ed.execute("5,1,4s/a/b/").is_ok(), "{}", ed.status());
+    assert_eq!(ed.current_buffer().text(), "b\na\na\nb\nb\n");
+
+    // `.` and `$` are bounds like any other, on either joint.
+    let mut ed = five();
+    ed.goto_line(2);
+    assert!(ed.execute(".-$s/a/b/").is_ok(), "{}", ed.status());
+    assert_eq!(ed.current_buffer().text(), "a\nb\nb\nb\nb\n");
+    let mut ed = five();
+    ed.goto_line(2);
+    assert!(ed.execute(".,$s/a/b/").is_ok(), "{}", ed.status());
+    assert_eq!(ed.current_buffer().text(), "a\nb\na\na\nb\n");
+
+    // Mixing them is refused, and the refusal says what the two spellings
+    // are — a wall with no door was what made the old `,` guessable at all.
+    let mut ed = five();
+    assert!(ed.execute("1-3,5s/a/b/").is_err());
+    assert_eq!(ed.current_buffer().text(), "a\na\na\na\na\n");
+}
+
 // ── #216 · 文中的表格區塊 ────────────────────────────────────────────
 //
 // The third tier: a run of delimited lines **recognised where it stands**.

@@ -830,7 +830,7 @@ KEYS (Normal mode, Helix-style):
                           selection — opens Ruby mode in the status line
               :s/re/new/[gin]  regex; $1 captures, \\n a newline. The delimiter
                           is whatever follows the s (:s#a/b#c#); ranges are
-                          :%s :1,40s :.,$s :40s; flags g i, and n counts only
+                          :%s :1-40s :1,5,9s :.-$s; flags g i, and n counts only
               :replace <new>   change what the last :grep found, everywhere
               :write-all       save every file that changed
               :indent off|basic|full|<n>   first-line indent — a Chinese

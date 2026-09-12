@@ -754,9 +754,9 @@ find = "截圖 截图 圖片 图片 存圖 存图 screenshot png html 剪貼簿 
 [[message]]
 # : 命令選單裏 s/pat/rep/ 那一項的說明（commands 組）
 key = "cmd.commands.substitute"
-zht = "取代：選區內；`%s` 全檔、`1,40s` 指定行；旗標 g i n；分隔符可換（s#a/b#c#）"
-zhs = "取代：选区内；`%s` 全档、`1,40s` 指定行；旗标 g i n；分隔符可换（s#a/b#c#）"
-en = "substitute in the selection; `%s` the file, `1,40s` a range; flags g i n; any delimiter (s#a/b#c#)"
+zht = "取代：選區內；`%s` 全檔、`1-40s` 一段、`1,5,9s` 幾行；旗標 g i n；分隔符可換"
+zhs = "取代：选区内；`%s` 全档、`1-40s` 一段、`1,5,9s` 几行；旗标 g i n；分隔符可换"
+en = "substitute in the selection; `%s` the file, `1-40s` a span, `1,5,9s` a list; flags g i n"
 find = "替換 替换 取代 正則 正则 sed regex"
 
 [[message]]
@@ -5611,6 +5611,13 @@ key = "substitute.confirm-not-yet"
 zht = "旗標 'c'（逐個確認）還沒做——先用 n 數一遍"
 zhs = "旗标 'c'（逐个确认）还没做——先用 n 数一遍"
 en = "flag 'c' (confirm each) is not built yet — count them with n first"
+
+[[message]]
+# :s 的行號範圍把兩種寫法混在了一起
+key = "substitute.range-not-one-thing"
+zht = "範圍要麼是一段 1-40，要麼是幾行 1,5,9，不能混着寫"
+zhs = "范围要么是一段 1-40，要么是几行 1,5,9，不能混着写"
+en = "a range is one span (1-40) or one list (1,5,9), not a mixture"
 
 [[message]]
 # :s 的旗標裏有一個不認得的字母
