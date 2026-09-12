@@ -41,14 +41,19 @@ impl Editor {
         let Some(last) = self.last_swap else {
             return Some(std::time::Duration::ZERO);
         };
-        Some(SWAP_INTERVAL.saturating_sub(last.elapsed()))
+        Some(self.swap_interval().saturating_sub(last.elapsed()))
     }
 
-    /// Write a recovery copy of every modified buffer, at most once every
-    /// [`SWAP_INTERVAL`].
-    ///
-    /// Called by the front end after each key **and** on the idle timeout that
-    /// [`Self::autosave_due_in`] asks for.
+    /// How long between rounds: [`SWAP_INTERVAL`], or
+    /// [`SWAP_BACKLOG_INTERVAL`] while copies are still owed (#317).
+    fn swap_interval(&self) -> std::time::Duration {
+        if self.swap_backlog {
+            SWAP_BACKLOG_INTERVAL
+        } else {
+            SWAP_INTERVAL
+        }
+    }
+
     /// Write a recovery copy for **every** buffer that has unsaved changes, and
     /// say how many landed.
     ///
@@ -68,26 +73,72 @@ impl Editor {
         saved
     }
 
+    /// One round of recovery copies: the buffer being typed into, then as many
+    /// of the others as [`SWAP_BUDGET`] buys (#317).
+    ///
+    /// This runs **in the input thread**, between one keystroke and the next,
+    /// so what it costs is what the writer feels. It used to write every
+    /// modified buffer every time: a hundred chapters left dirty by a
+    /// whole-book `:replace` was a hundred serialisations and two hundred
+    /// fsyncs, 1.593 s, and then 1.367 s five seconds later, for ever — the
+    /// old loop asked `is_modified`, which stays true after the copy is
+    /// written, so the same hundred files were rewritten on every round with
+    /// nothing having changed in any of them.
+    ///
+    /// Two answers, and both are needed. `draft_is_stale` instead of
+    /// `is_modified` means a buffer is copied once per edit rather than once
+    /// per round, which alone empties the steady state. The budget is for the
+    /// round that really does owe a hundred copies: the current buffer is
+    /// never deferred — it holds the sentence being typed — and the rest take
+    /// turns from [`Self::swap_cursor`], one round to the next, until the
+    /// backlog is gone. Rounds come every [`SWAP_BACKLOG_INTERVAL`] while it
+    /// lasts, so a hundred chapters are all insured within a few seconds
+    /// instead of the eight minutes one-per-`SWAP_INTERVAL` would take.
     pub fn autosave_tick(&mut self) {
-        if !self.autosave {
+        if !self.autosave || self.buffers.is_empty() {
             return;
         }
         self.name_scratch_drafts();
         let now = std::time::Instant::now();
         if let Some(last) = self.last_swap {
-            if now.duration_since(last) < SWAP_INTERVAL {
+            if now.duration_since(last) < self.swap_interval() {
                 return;
             }
         }
         self.last_swap = Some(now);
         let mut failed = None;
-        for buffer in &mut self.buffers {
-            if buffer.is_modified() {
-                if let Err(err) = buffer.write_swap() {
-                    failed = Some(format!("{}: {err}", buffer.display_name()));
-                }
+        if self.buffers[self.current].draft_is_stale() {
+            if let Err(err) = self.buffers[self.current].write_swap() {
+                failed = Some(format!("{}: {err}", self.buffers[self.current].display_name()));
             }
         }
+        let count = self.buffers.len();
+        let mut backlog = false;
+        let mut wrote_another = false;
+        // `from`, not `self.swap_cursor`: the cursor moves as we write, and
+        // reading it each time round would make the scan skip.
+        let from = self.swap_cursor;
+        for step in 0..count {
+            let i = (from + step) % count;
+            if i == self.current || !self.buffers[i].draft_is_stale() {
+                continue;
+            }
+            // At least one other buffer every round, whatever the clock says:
+            // a budget that can refuse them all is a backlog that never
+            // drains. The overrun is one buffer's worth, once.
+            if wrote_another && now.elapsed() >= SWAP_BUDGET {
+                self.swap_cursor = i;
+                backlog = true;
+                break;
+            }
+            if let Err(err) = self.buffers[i].write_swap() {
+                failed = Some(format!("{}: {err}", self.buffers[i].display_name()));
+            }
+            wrote_another = true;
+            self.swap_cursor = (i + 1) % count;
+        }
+        self.swap_backlog = backlog;
+
         // Said once, not on every tick: a directory that cannot be written to
         // will not start being writable, and a status line repeating itself is
         // one the writer stops reading. Silence would be worse — the manual

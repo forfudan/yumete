@@ -11758,3 +11758,151 @@ fn a_macro_that_moves_nothing_stops_replaying() {
     );
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// **A hundred dirty chapters do not stop the typing** (#317).
+///
+/// `autosave_tick` runs in the input thread. It used to write a recovery copy
+/// of every modified buffer on every round: after a whole-book `:replace`,
+/// a hundred serialisations and two hundred fsyncs between one keystroke and
+/// the next — measured at 1.593 s. Now the round is budgeted, and what it
+/// cannot get to waits for the next one; the buffer being typed into is the
+/// one that never waits.
+#[test]
+fn a_round_of_recovery_copies_is_bounded_and_the_backlog_drains() {
+    let dir = std::env::temp_dir().join(format!("yumete-swap-budget-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let body = "雪".repeat(23_000); // a 70 KB chapter, at the small end
+    let mut ed = Editor::new();
+    for i in 0..100 {
+        let path = dir.join(format!("ch{i:03}.md"));
+        std::fs::write(&path, format!("{body}\n")).unwrap();
+        ed.execute(&format!(":open {}", path.display())).unwrap();
+    }
+    ed.set_autosave(true);
+    for i in 0..100 {
+        ed.show_buffer_at(i);
+        ed.on_key(Key::Char('i'));
+        ed.on_key(Key::Char('甲'));
+        ed.on_key(Key::Esc);
+    }
+    let drafts = || {
+        std::fs::read_dir(&dir)
+            .unwrap()
+            .filter(|e| {
+                e.as_ref()
+                    .unwrap()
+                    .file_name()
+                    .to_string_lossy()
+                    .ends_with(".yumete")
+            })
+            .count()
+    };
+
+    ed.show_buffer_at(7);
+    let started = std::time::Instant::now();
+    ed.autosave_tick();
+    let first = started.elapsed();
+    assert!(
+        first < std::time::Duration::from_millis(250),
+        "one round held up the keyboard for {first:?}"
+    );
+    assert!(
+        dir.join(".ch007.md.yumete").exists(),
+        "the chapter being typed into is never the one that waits"
+    );
+    if ed.swap_backlog {
+        let due = ed.autosave_due_in().expect("copies are still owed");
+        assert!(
+            due <= std::time::Duration::from_millis(150),
+            "a backlog is not five seconds away: {due:?}"
+        );
+    }
+
+    // Round by round, and every one of them cheap. `last_swap` is what the
+    // clock would otherwise make this test sit and wait for.
+    let mut rounds = 1;
+    while ed.swap_backlog {
+        ed.last_swap = None;
+        let t = std::time::Instant::now();
+        ed.autosave_tick();
+        let took = t.elapsed();
+        assert!(
+            took < std::time::Duration::from_millis(250),
+            "round {rounds} held up the keyboard for {took:?}"
+        );
+        rounds += 1;
+        assert!(rounds < 400, "the backlog is not draining");
+    }
+    assert_eq!(drafts(), 100, "every chapter is insured by the end");
+    assert_eq!(ed.autosave_due_in(), None, "and nothing is owed after that");
+
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// **A copy that already holds what the buffer holds is not written again**
+/// (#317).
+///
+/// The old round asked `is_modified`, which stays true until the document is
+/// *saved* — so a book left unsaved was rewritten in full every five seconds
+/// for the rest of the session, with nothing having changed in any of it. The
+/// question is `draft_is_stale`: has anything happened since the copy.
+#[test]
+fn a_recovery_copy_that_is_current_is_not_written_again() {
+    let dir = std::env::temp_dir().join(format!("yumete-swap-idle-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let mut ed = Editor::new();
+    for i in 0..8 {
+        let path = dir.join(format!("ch{i}.md"));
+        std::fs::write(&path, "第一章\n").unwrap();
+        ed.execute(&format!(":open {}", path.display())).unwrap();
+    }
+    ed.set_autosave(true);
+    for i in 0..8 {
+        ed.show_buffer_at(i);
+        ed.on_key(Key::Char('i'));
+        ed.on_key(Key::Char('甲'));
+        ed.on_key(Key::Esc);
+    }
+    while {
+        ed.last_swap = None;
+        ed.autosave_tick();
+        ed.swap_backlog
+    } {}
+    for i in 0..8 {
+        assert!(dir.join(format!(".ch{i}.md.yumete")).exists());
+        std::fs::remove_file(dir.join(format!(".ch{i}.md.yumete"))).unwrap();
+    }
+
+    // Nothing has been typed since, so nothing is owed and nothing is written
+    // — the deleted copies stay deleted.
+    assert_eq!(ed.autosave_due_in(), None, "unsaved, but nothing has moved");
+    for _ in 0..3 {
+        ed.last_swap = None;
+        ed.autosave_tick();
+    }
+    for i in 0..8 {
+        assert!(
+            !dir.join(format!(".ch{i}.md.yumete")).exists(),
+            "chapter {i} was written again with nothing having changed in it"
+        );
+    }
+
+    // One keystroke in one chapter, and that one alone is written.
+    ed.show_buffer_at(5);
+    ed.on_key(Key::Char('i'));
+    ed.on_key(Key::Char('乙'));
+    ed.on_key(Key::Esc);
+    ed.last_swap = None;
+    ed.autosave_tick();
+    for i in 0..8 {
+        assert_eq!(
+            dir.join(format!(".ch{i}.md.yumete")).exists(),
+            i == 5,
+            "chapter {i}"
+        );
+    }
+
+    let _ = std::fs::remove_dir_all(&dir);
+}

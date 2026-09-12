@@ -539,7 +539,7 @@ index, and a row with no number anywhere else is a row that got lost.
 | 314 | **按鍵事件不合併，一個重複事件就是一幀** | tui | P1 | 有輸入排隊就跳過這一幀，`FRAME_FLOOR` 兜底 [^314] | Fixed 2026-09-09 |
 | 315 | **一鍵之内把整段走上五遍** | core | P2 | 注音按版本記住；折行備忘錄的 key 換成 `(buffer, revision, line)` [^315] | Fixed 2026-09-10 |
 | 316 | **表格裏每一鍵重算整表補白** | core | P2 | 逐行記住算補白的**輸入**，一鍵只重算真正動了的那一行 [^316] | Fixed |
-| 317 | **全書 replace 之後，autosave 每五秒凍一秒六** | core | P2 | 一百個 buffer 全量序列化 ＋ 兩百次 fsync，在輸入線程 [^317] | Open |
+| 317 | **全書 replace 之後，autosave 每五秒凍一秒六** | core | P2 | 問 `draft_is_stale`，當前 buffer 先寫，其餘按 30 ms 預算輪着來 [^317] | Fixed 2026-09-12 |
 | 318 | **count 既沒有上限，也沒有提前退出** | core | P2 | 寫的一萬遍封頂，找與宏各自早退 [^318] | Fixed 2026-09-12 |
 | 319 | **`N` 每次從第 0 行重掃** | core | P3 | 正向全掃再取前一個；`n` 17 µs、`N` 1.01 ms [^319] | Open |
 | 320 | **表格裏的 `j` 是 O(rows)** | core | P3 | 一萬行一次 27.8 ms；CSV 格子不受影響 [^320] | Open |
@@ -7837,6 +7837,30 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     一百次全量序列化 ＋ 兩百次 fsync（`buffer.rs:974` 檔案與目錄各一次），都在輸入線程。
     真實章節 90 KB–600 KB，還要差幾倍；放在 Dropbox 裏更糟。做法：一個 tick 只寫當前
     buffer，其餘輪着來；或整個移出輸入線程。**medium**
+
+    **落地（2026-09-12）。** 兩個病，兩個藥，缺一個都不夠。
+
+    一、**那個循環問的是 `is_modified`，而它在草稿寫完之後照樣是真**——它說的是「這份
+    文件還沒存盤」，不是「這份草稿過期了」。於是一本沒存的書，往後每五秒被整本重寫一遍，
+    而其間一個字都沒動過。換成 `draft_is_stale`（`buffer.rs:658`：改過，且草稿不是這一版）
+    之後，穩態下的一輪一個檔都不寫。
+
+    二、**真的欠一百份的那一輪還是要一秒。** 加了預算：`SWAP_BUDGET` 30 ms、
+    `SWAP_BACKLOG_INTERVAL` 150 ms（`editor.rs:1313` 一帶）。一輪先寫**當前 buffer**
+    ——那裏面是正在打的句子，它從不排隊——其餘的從 `swap_cursor` 輪着來，寫到預算用完為止，
+    但**至少多寫一個**（會全部拒絕的預算＝永遠不流乾的積壓）。剩下的記在 `swap_backlog`，
+    而 `autosave_due_in` 在積壓期間報 150 ms 而不是 5 秒，於是一百章幾秒之內全部投保，
+    而不是一輪一個、八分鐘。
+
+    ⚠️ **`i` 要從循環外那一格算起。** 初版寫的是 `(self.swap_cursor + step) % count`，
+    而 `swap_cursor` 每寫一個就往前挪——`i` 於是每步多跳一格，掃描漏掉一批。症狀是
+    「一百章寫了九十七章，`swap_backlog` 卻報已經清乾淨」。先把起點抄進 `from`。
+
+    量（`a_round_of_recovery_copies_is_bounded_and_the_backlog_drains`，一百章 × 70 KB
+    全部 dirty）：舊碼**一輪 1.026 秒**；新碼一輪 46 ms 以下，30 輪清乾淨。
+    另一支 `a_recovery_copy_that_is_current_is_not_written_again` 專打第一個病：清乾淨之後
+    把一百份草稿刪掉，再跑三輪，一份都不許回來——舊碼第一輪就全回來了。兩支都在還原成舊碼
+    之後真的紅過。
 
 [^318]: `repeat`（`verbs.rs:37`）本身有提前退出，可它比的是光標與 `char_count`，而每一次
     貼上都真的改了 buffer，所以貼上這一路永遠不會早退。量：`200000p` 1.78 秒、一百萬字
