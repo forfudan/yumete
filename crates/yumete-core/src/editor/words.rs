@@ -582,10 +582,7 @@ impl Editor {
         // A `/` search or a `:` substitution is text too, and in a Chinese
         // document it is usually Chinese text. Committed characters go wherever
         // the mode is collecting them, not always into the buffer.
-        if matches!(
-            self.mode,
-            Mode::Command | Mode::Lookfor | Mode::Search | Mode::Ruby
-        ) {
+        if self.mode.types_into_command_line() {
             // At the caret, not at the end. The prompt has had ← → Home End
             // since it was written, and committing 中文 into the middle of a
             // pattern that has already been typed is exactly what you go back

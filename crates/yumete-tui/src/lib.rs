@@ -325,11 +325,8 @@ pub fn run(
     // so it has to be counted: popping one that was never pushed takes the
     // base level away with it.
     let mut all_keys = false;
-    // What Insert's 中/英 was when the command line borrowed it, and so what
-    // it owes back on the way out (#225). `None` means nothing is owed —
-    // either the command line is not open, or a command typed on it said what
-    // the language should be and that answer is not a state to put back.
-    let mut borrowed: Option<bool> = None;
+    // What Insert's 中/英 was when a prompt borrowed it (#225). See [`Borrow`].
+    let mut borrowed = Borrow::default();
     // A typesetter started with `:view-preview`, if one is running — and one left
     // behind by a session that ended badly, which is stopped before this one
     // can start another.
@@ -409,29 +406,17 @@ pub fn run(
             // between them is not leaving the command line, and handing Insert
             // its language back on the way *in* to `::` would put 中文 on a
             // line that is about to be typed in 英.
-            let prompting = |m: Mode| matches!(m, Mode::Command | Mode::Lookfor);
-            if last_mode.is_some_and(|(m, _)| prompting(m)) && !prompting(mode) {
-                if let Some(was) = borrowed.take() {
-                    if ime.available() && ime.is_chinese() != was {
-                        ime.toggle_language();
-                    }
-                }
-            }
-            // Opening it cancels a composition rather than leaving it hanging:
-            // the first keystroke after `:` is a command name, so there is
-            // nothing to finish the composition with. **And the line opens in
-            // 英 whatever Insert was in** — otherwise `:layout` typed straight
-            // after writing 中文 is eaten a letter at a time. Insert's own
-            // state is borrowed, not overwritten; it is put back above.
-            if prompting(mode)
-                && !last_mode.is_some_and(|(m, _)| prompting(m))
-                && ime.available()
-            {
-                if ime.is_composing() {
+            // **Asked, not listed** (#351). `/`, the ruby reading and the
+            // picker are prompt lines too, and the list that used to be
+            // written out here left all three of them out (#340): `/` typed
+            // straight after a 中文 name kept the composition running, and
+            // gave nothing back on the way out either.
+            if ime.available() {
+                let door = borrowed.crossing(last_mode.map(|(m, _)| m), mode, ime.is_chinese());
+                if door.escape && ime.is_composing() {
                     ime.escape();
                 }
-                borrowed = Some(ime.is_chinese());
-                if ime.is_chinese() {
+                if door.toggle {
                     ime.toggle_language();
                 }
             }
@@ -686,10 +671,9 @@ pub fn run(
                         if composes_here(editor) && ime.available() && ime.engaged() {
                             // The same answer as `:yume on`, given by the hand
                             // rather than by the command line, so it ends the
-                            // borrow the same way (#225). Without this the
-                            // restore on leaving the command line put the
-                            // language back one keystroke later, silently.
-                            borrowed = None;
+                            // borrow the same way (#225) — but only when the
+                            // hand is answering about Insert (#338).
+                            borrowed.answered_in(editor.mode());
                             // **What Shift means here is yume's to say.** On an
                             // empty buffer the factory value is the 中/英
                             // toggle; mid-code it commits the raw code first,
@@ -717,7 +701,7 @@ pub fn run(
                     && ime.engaged()
                     && language_key(config).is_some_and(|k| is_language_key(k, code, mods))
                 {
-                    borrowed = None;
+                    borrowed.answered_in(editor.mode());
                     match composes_here(editor) {
                         true => {
                             if ime.press_modifier(FuncKey::ShiftL) {
@@ -932,7 +916,7 @@ pub fn run(
                     // Putting the borrow back afterwards undid the command the
                     // writer had just run, silently, one keystroke later.
                     if tag == "+" || tag == "-" {
-                        borrowed = None;
+                        borrowed.settled();
                     }
                     editor.set_status(switch_scheme(ime, &tag, config));
                     editor.set_ime_available(ime.available());
@@ -1211,29 +1195,6 @@ const FRAME_SLACK: u32 = 4;
 /// a screen that is alive.
 const FRAME_CEILING: std::time::Duration = std::time::Duration::from_millis(500);
 
-/// Whether a mode collects text the IME should compose into.
-///
-/// Insert is the obvious one, but a `/` search is text too — and in a Chinese
-/// document it is usually Chinese text. Without this, `/` could only search for
-/// what could be typed as ASCII, which in a novel is almost nothing.
-fn composes(mode: Mode) -> bool {
-    // Ruby included: a reading is kana or 拼音, and kana needs the IME as much
-    // as the body text does. The `:` command line is **not** — its vocabulary
-    // is ASCII command names. For the half of it that is *not* names, see
-    // [`composes_here`].
-    // …and `::`, which is a **Chinese** query by design (#224): the whole
-    // point of it is that the reader is thinking 「竖排模式」 and the command
-    // is called `layout vertical`. 英 when the line opens, lone-Shift to 中,
-    // exactly as `/` does.
-    // …and the picker (§5.2.2 fault 9). `空格 f` filters a list of
-    // 「第三章.md」 and `空格 b` a list of open chapters; without this the
-    // only part of either name a reader could type is the extension.
-    matches!(
-        mode,
-        Mode::Insert | Mode::Search | Mode::Ruby | Mode::Lookfor | Mode::Picker
-    )
-}
-
 /// Whether the IME may run for what is being typed **right now** (#225).
 ///
 /// The mode is not the whole answer in a command line. Its names are ASCII —
@@ -1245,7 +1206,7 @@ fn composes(mode: Mode) -> bool {
 /// Not automatic on reaching an argument: `:s/[a-z]+/x/` is as common as the
 /// Chinese one, so the IME is *permitted* here rather than switched on.
 fn composes_here(editor: &Editor) -> bool {
-    if composes(editor.mode()) {
+    if editor.mode().composes() {
         return true;
     }
     // `r` 打中文 (§5.2.3 ②): Normal mode, but the next character is *text*.
@@ -1268,6 +1229,81 @@ fn composes_here(editor: &Editor) -> bool {
         false => line.chars().take(caret).collect(),
     };
     yumete_core::command::takes_text(&upto)
+}
+
+/// What Insert's 中/英 was when a prompt borrowed it (#225).
+///
+/// A prompt is one line of somebody else's text on top of the page, and the
+/// language it wants is rarely the language the page was in. So the engine's
+/// state is **borrowed**: taken on the way in, handed back on the way out.
+/// `None` means nothing is owed — no prompt is open, or something said what
+/// the language should be and that answer is not a state to put back.
+#[derive(Default)]
+struct Borrow {
+    owed: Option<bool>,
+}
+
+/// What the engine is owed on a change of mode.
+#[derive(Debug, Default, PartialEq, Eq)]
+struct AtTheDoor {
+    /// End a composition that the new line has no way to finish.
+    escape: bool,
+    /// Flip 中/英.
+    toggle: bool,
+}
+
+impl Borrow {
+    /// Crossing out of `was` into `now`, with the engine in `chinese`.
+    ///
+    /// `:` and `::` are **one** prompt for this purpose (Feature #224):
+    /// stepping between them is not leaving the command line, and handing
+    /// Insert its language back on the way *in* to `::` would put 中文 on a
+    /// line that is about to be typed in 英.
+    fn crossing(&mut self, was: Option<Mode>, now: Mode, chinese: bool) -> AtTheDoor {
+        let was_prompt = was.is_some_and(Mode::is_prompt);
+        if was_prompt && !now.is_prompt() {
+            // Only one way round: a prompt opened from 英, during which
+            // something turned 中 on, must not hand Insert a language it
+            // never had — which is why the answer is compared, not applied.
+            return match self.owed.take() {
+                Some(owed) => AtTheDoor {
+                    escape: false,
+                    toggle: chinese != owed,
+                },
+                None => AtTheDoor::default(),
+            };
+        }
+        if now.is_prompt() && !was_prompt {
+            self.owed = Some(chinese);
+            return AtTheDoor {
+                escape: true,
+                toggle: now.prompt_opens_in_english() && chinese,
+            };
+        }
+        AtTheDoor::default()
+    }
+
+    /// The language was answered outright — a lone-Shift tap, or `:yume on`.
+    ///
+    /// **Only when the answer is about Insert** (#338). A tap on an open
+    /// prompt changes that one line and nothing else; forgetting the borrow
+    /// there threw away the way back halfway through the trip, and 英 Insert
+    /// came out of `:e 第三章.md` speaking 中文 for the rest of the session.
+    fn answered_in(&mut self, mode: Mode) {
+        if !mode.is_prompt() {
+            self.owed = None;
+        }
+    }
+
+    /// The language was answered by a command typed on the prompt itself.
+    ///
+    /// `:yume on` / `:yume off` **is** an answer about the language, and it
+    /// was typed on the very line that borrowed it. Putting the borrow back
+    /// afterwards undid the command the writer had just run, one keystroke
+    /// later and without a word.
+    fn settled(&mut self) {
+        self.owed = None;
+    }
 }
 
 /// Whether a key event should drive the editor.
@@ -12400,16 +12436,83 @@ mod tests {
         assert!(status.contains("[中"), "language tag missing: {status:?}");
     }
 
+    /// A prompt is left in the language it was handed, whichever prompt it is.
+    ///
+    /// The list of which modes count used to be written out here, and it said
+    /// `:` and `::` (#340): `/` neither ended the composition on the way in
+    /// nor gave anything back on the way out.
+    #[test]
+    fn every_prompt_borrows_the_language_and_gives_it_back() {
+        for prompt in [Mode::Command, Mode::Lookfor, Mode::Search, Mode::Ruby, Mode::Picker] {
+            // Out of 中文 Insert and into the prompt: the composition is
+            // ended either way, and only `:` and `::` force 英.
+            let mut borrow = Borrow::default();
+            let door = borrow.crossing(Some(Mode::Insert), prompt, true);
+            assert!(door.escape, "{prompt:?} has nothing to finish it with");
+            assert_eq!(
+                door.toggle,
+                prompt.prompt_opens_in_english(),
+                "{prompt:?} forcing 英"
+            );
+            // …and back out, into whatever the prompt left the engine in.
+            let chinese = !door.toggle;
+            let back = borrow.crossing(Some(prompt), Mode::Insert, chinese);
+            assert!(!back.escape, "nothing to end on the way back");
+            assert_eq!(back.toggle, !chinese, "{prompt:?} owes 中 back");
+            assert_eq!(
+                borrow.crossing(Some(Mode::Insert), Mode::Normal, true),
+                AtTheDoor::default(),
+                "and owes nothing twice"
+            );
+        }
+    }
+
+    /// `:` and `::` are one prompt: stepping between them is not leaving.
+    #[test]
+    fn the_command_line_and_its_lookup_are_one_prompt() {
+        let mut borrow = Borrow::default();
+        assert!(borrow.crossing(Some(Mode::Insert), Mode::Command, true).toggle);
+        let across = borrow.crossing(Some(Mode::Command), Mode::Lookfor, false);
+        assert_eq!(across, AtTheDoor::default(), "not a door at all");
+        let out = borrow.crossing(Some(Mode::Lookfor), Mode::Normal, false);
+        assert!(out.toggle, "中 was Insert's and comes back at the end");
+    }
+
+    /// A lone-Shift tap **on a prompt** changes that one line (#338).
+    ///
+    /// Repro: write English in Insert, `:`, `e `, tap Shift, `第三章.md`,
+    /// Enter — and Insert came out speaking 中文, because the tap had thrown
+    /// away the way back.
+    #[test]
+    fn a_tap_on_the_command_line_does_not_end_the_borrow() {
+        let mut borrow = Borrow::default();
+        // 英 Insert opens `:` — nothing to force, it is already 英.
+        assert!(!borrow.crossing(Some(Mode::Insert), Mode::Command, false).toggle);
+        // The tap that turns the file name 中文 is about this line only.
+        borrow.answered_in(Mode::Command);
+        let out = borrow.crossing(Some(Mode::Command), Mode::Insert, true);
+        assert!(out.toggle, "英 is what Insert lent and what it gets back");
+        // The same tap in Insert *is* the answer, and settles the debt.
+        let mut borrow = Borrow::default();
+        borrow.crossing(Some(Mode::Insert), Mode::Command, false);
+        borrow.answered_in(Mode::Insert);
+        assert_eq!(
+            borrow.crossing(Some(Mode::Command), Mode::Insert, true),
+            AtTheDoor::default(),
+            "nothing owed"
+        );
+    }
+
     /// Modes that collect *prose* compose; Normal must not, or `/` itself would
     /// be swallowed by the IME, and the command line must not, because its
     /// whole vocabulary is ASCII.
     #[test]
     fn only_prose_modes_compose() {
-        assert!(composes(Mode::Insert));
-        assert!(composes(Mode::Search));
-        assert!(composes(Mode::Ruby));
-        assert!(!composes(Mode::Normal));
-        assert!(!composes(Mode::Command));
+        assert!(Mode::Insert.composes());
+        assert!(Mode::Search.composes());
+        assert!(Mode::Ruby.composes());
+        assert!(!Mode::Normal.composes());
+        assert!(!Mode::Command.composes());
     }
 
     /// Normal mode is not prose — except for the one character `r` is waiting
