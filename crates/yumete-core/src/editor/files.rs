@@ -50,7 +50,10 @@ impl Editor {
             let mut at = 0;
             for group in groups {
                 out.extend_from_slice(&chars[at..group.start]);
-                out.extend_from_slice(group.base_text(&chars));
+                // The base as it reads, not as it is written: a Typst call
+                // holds `\"` where the sentence has a quote (#332).
+                let base: String = group.base_text(&chars).iter().collect();
+                out.extend(group.dialect.unescape(&base).chars());
                 at = group.end;
             }
             out.extend_from_slice(&chars[at..]);
