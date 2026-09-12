@@ -65,7 +65,8 @@ impl Editor {
                             ("p", say!("hint.paste")),
                             ("t", say!("hint.table.operations")),
                             ("t/ t?", say!("hint.table.who-uses-this")),
-                            ("Tab", say!("hint.table.by-character-instead")),
+                            ("T", say!("hint.table.by-character-instead")),
+                            ("Tab", say!("hint.table.next-cell")),
                         ]),
                     Grain::Cell => Hint::Keys(say!("label.table"), vec![
                             ("hjkl", say!("hint.table.by-cell")),
@@ -75,13 +76,15 @@ impl Editor {
                             ("t", say!("hint.table.operations")),
                             ("t/ t?", say!("hint.table.who-uses-this")),
                             ("gd gw", say!("hint.table.row-this-is-about")),
-                            ("Tab", say!("hint.table.by-character-instead")),
+                            ("T", say!("hint.table.by-character-instead")),
+                            ("Tab", say!("hint.table.next-cell")),
                         ]),
                     Grain::Char => Hint::Keys(say!("hint.table.character-mode"), vec![
                             ("hjkl", say!("hint.table.by-character")),
                             ("t/ t?", say!("hint.table.who-uses-this-character")),
                             ("gd gw", say!("hint.table.row-this-character-is-about")),
-                            ("Tab", say!("hint.table.by-cell-instead")),
+                            ("T", say!("hint.table.by-cell-instead")),
+                            ("Tab", say!("hint.table.next-cell")),
                         ]),
                 }
             }

@@ -6043,16 +6043,16 @@ en = "this file looks {0}-delimited, so it opens as a table; t o for the source"
 [[message]]
 # 表格裏切回按格移動
 key = "table.moving-by-cell"
-zht = "按格移動"
-zhs = "按格移动"
-en = "moving by cell"
+zht = "按格移動（T 回到按字）"
+zhs = "按格移动（T 回到按字）"
+en = "moving by cell — T goes back to characters"
 
 [[message]]
 # 表格裏切成按字移動
 key = "table.moving-by-character"
-zht = "按字移動（Tab 回到按格）"
-zhs = "按字移动（Tab 回到按格）"
-en = "moving by character — Tab goes back to cells"
+zht = "按字移動（T 回到按格）"
+zhs = "按字移动（T 回到按格）"
+en = "moving by character — T goes back to cells"
 
 [[message]]
 # :table-pipe：看不出什麼在分欄

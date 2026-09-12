@@ -3941,6 +3941,59 @@ fn a_cell_is_entered_three_ways_and_typing_stays_inside_it() {
     std::fs::remove_dir_all(&dir).ok();
 }
 
+/// **The key the hint offers for the grain is the key that changes it** (#399).
+///
+/// `Tab` held the grain until #356 gave it what every spreadsheet means by the
+/// key and moved the grain to `T` — and the hint row went on offering `Tab`.
+/// Pressing it stepped one cell and left the grain, the row and the status line
+/// exactly as they were, which reads as a switch that does not switch.
+#[test]
+fn the_hint_offers_the_key_that_really_changes_the_grain() {
+    let dir = std::env::temp_dir().join(format!("yumete-grain-hint-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(dir.join(".yumete").join("tables")).unwrap();
+    std::fs::write(
+        dir.join(".yumete").join("tables").join("t.toml"),
+        "[table]\nfile = ['d.csv']\nkey = 'char'\n\
+         [[table.column]]\nname = 'char'\n[[table.column]]\nname = 'ids_y'\n",
+    )
+    .unwrap();
+    let csv = dir.join("d.csv");
+    std::fs::write(&csv, "char,ids_y\n相,⿰木目\n木,木\n").unwrap();
+
+    let mut ed = Editor::new();
+    ed.open_file(&csv).unwrap();
+    ed.goto_line(2);
+
+    // Both ways round: the offer has to be right in either grain.
+    for _ in 0..2 {
+        let before = ed.table().unwrap().grain;
+        // A hint is a status line first, and the file has just been opened.
+        ed.status.clear();
+        let Hint::Keys(_, keys) = ed.hint() else { panic!("standing in a grid") };
+        let other = match before {
+            Grain::Char => say!("hint.table.by-cell-instead"),
+            Grain::Cell => say!("hint.table.by-character-instead"),
+        };
+        let (key, _) = keys
+            .iter()
+            .find(|(_, what)| *what == other)
+            .unwrap_or_else(|| panic!("the other grain is offered: {keys:?}"));
+        press(&mut ed, key);
+        assert_ne!(
+            ed.table().unwrap().grain,
+            before,
+            "the row offers `{key}` for 「{other}」 and it did not change the grain"
+        );
+        assert!(ed.table_status().unwrap().ends_with(match before {
+            Grain::Char => "格",
+            Grain::Cell => "字",
+        }));
+    }
+
+    std::fs::remove_dir_all(&dir).ok();
+}
+
 #[test]
 fn t_says_whether_a_step_is_a_cell_or_a_character() {
     let dir = std::env::temp_dir().join(format!("yumete-grain-{}", std::process::id()));
