@@ -589,7 +589,7 @@ index, and a row with no number anywhere else is a row that got lost.
 | 364 | **`:quitall` 摺成 `:quit-all`** | core | P3 | 半長半短的最後一個 [^364] | Fixed 2026-09-10 |
 | 365 | **兩條測試搶同一個 `OnceLock`，紅得沒有規律** | core | P3 | 一個進程只設得了一次，兩條測試不可能都成立 [^365] | Fixed 2026-09-10 |
 | 366 | **一段長文，每打一字重折整段** | core | P2 | 改動點之前的行照抄；段尾打字快 6–10 倍 [^366] | Fixed 2026-09-11 |
-| 367 | **`:word-discover` 把人從正文裏拽走** | core | P3 | 提議照舊寫進詞表 buffer，但不切過去 [^367] | Open |
+| 367 | **`:word-discover` 把人從正文裏拽走** | core | P3 | 提議照舊寫進詞表 buffer，人留在正文 [^367] | Fixed 2026-09-12 |
 | 368 | **命令名是一個詞，參數跟在後面** | core | P1 | 樹折成平表，一條命令一處聲明 [^368] | Fixed 2026-09-10 |
 | 369 | **一級命令近九十條，裸 `:` 一屏放不下** | core | P2 | 菜單按名字自己的分段折起來：`view-` 一行 [^369] | Fixed 2026-09-10 |
 | 370 | **一行裏該印什麼、不該印什麼** | core | P3 | 只印猜不到的拼法；`+n` 在最後 [^370] | Fixed 2026-09-10 |
@@ -8676,6 +8676,13 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     的記憶態，那樣既重啓即失、又無處否決其中某一個——但**不切換過去**，狀態行說
     「找到 N 個詞，已加入分詞；`:word-list edit` 查看取捨」。零新命令。代價是多一個未存盤
     的後台 buffer 在退出時提醒，而那本來就是真的。
+
+    **落地（2026-09-12，`02cb1fb`）** ——照上面那條做的，零新命令。`discover_words` 開頭記
+    一句 `let was = self.current`，寫完那一塊之後 `show_buffer(was)` 回去。狀態行改成
+    「找到 N 個本書自己的詞，已經按它們切了；寫進了 <路徑>——`:word-list edit` 去取捨」
+    （`word.discover-found`／`word.discover-too-many` 兩則都改了），話裏帶着那個檔在哪、
+    怎麼去看。`the_book_hands_the_editor_its_own_names_without_being_asked` 頭一句斷言
+    現在是 `current_buffer().path() == ch01.md`。
 
     做法是 `:replace` 跨 buffer 時就用的那一招：記住 `was = self.current`，開詞表、寫進去，
     再 `show_buffer(was)` 回來——`add_buffer` 本來就替離開的 buffer 存好了光標，所以回去
