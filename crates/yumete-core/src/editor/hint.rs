@@ -61,12 +61,12 @@ impl Editor {
                 let grain = self.table.as_ref().map(|v| v.grain).unwrap_or(Grain::Cell);
                 match grain {
                     Grain::Cell => Hint::Keys(say!("label.table"), vec![
-                            ("t", say!("hint.more")),
+                            ("t", say!("hint.table.menu")),
                             ("T", say!("hint.table.by-character-instead")),
                             ("Tab", say!("hint.table.next-cell")),
                         ]),
                     Grain::Char => Hint::Keys(say!("hint.table.character-mode"), vec![
-                            ("t", say!("hint.more")),
+                            ("t", say!("hint.table.menu")),
                             ("T", say!("hint.table.by-cell-instead")),
                             ("Tab", say!("hint.table.next-cell")),
                         ]),

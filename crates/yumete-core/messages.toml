@@ -2003,7 +2003,7 @@ find = "輸入法 输入法 方案 現在 现在 which"
 # ── command ───────────────────────────────────────────────────────────
 
 [[message]]
-# 命令列語法壞了
+# 命令行語法壞了
 key = "command.broken-line"
 zht = "命令寫壞了：{0}"
 zhs = "命令写坏了：{0}"
@@ -3718,13 +3718,6 @@ zhs = "m"
 en = "m"
 
 [[message]]
-# 提示：更多（按 t 開表格選單）
-key = "hint.more"
-zht = "更多"
-zhs = "更多"
-en = "more"
-
-[[message]]
 # 提示：蓋掉
 key = "hint.overwrite"
 zht = "蓋掉"
@@ -3961,6 +3954,13 @@ key = "hint.table.line-it-up"
 zht = "重排對齊"
 zhs = "重排对齐"
 en = "line it up again"
+
+[[message]]
+# 表格提示：按 t 開的那張選單（其餘的表格鍵都在裏面）
+key = "hint.table.menu"
+zht = "表格選單"
+zhs = "表格菜单"
+en = "the table menu"
 
 [[message]]
 # 表格提示：這欄左移／右移

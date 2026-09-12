@@ -598,11 +598,18 @@ pub mod rung {
     /// middle of the ladder.
     pub const RULE: u16 = 550;
     /// Chrome: a sidebar, a tab bar, a table's gutter and header, a detail
-    /// panel, the status line. **A hair off the page and no more** — the
-    /// theme is 墨黑, and furniture that is grey rather than black flattens
-    /// the whole screen toward the middle of the ladder. What separates a
-    /// panel from the page is its rule and its 金墨, not a lighter ground.
-    pub const CHROME: u16 = 970;
+    /// panel, the status line.
+    ///
+    /// **900, and it used to be 970.** The old rung was a hair off the page —
+    /// the reasoning being that the theme is 墨黑 and grey furniture flattens
+    /// the whole screen, so what separates a panel from the page should be its
+    /// rule and its 金墨 rather than a lighter ground. That held while a blank
+    /// hint row stood between the writing and the status line. With the command
+    /// row moved *below* the status line (#302) the last line of the writing
+    /// now touches it, and 970 against the page is a 1.03:1 ground: the bar the
+    /// eye is supposed to find at the bottom of the window read as part of the
+    /// page. A ground with no rule and no position of its own has to be seen.
+    pub const CHROME: u16 = 900;
     /// A ground that must not shout: a table's alternating columns, its cursor
     /// row, a code fence, a callout, the tint past the measure.
     pub const BAND: u16 = 940;
