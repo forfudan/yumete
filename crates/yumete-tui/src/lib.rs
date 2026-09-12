@@ -925,6 +925,16 @@ pub fn run(
                     if answers_the_language(&tag) {
                         borrowed.settled();
                     }
+                    // The page says what it is doing before it stops answering
+                    // for a tenth of a second (#341).
+                    if loading_the_table(&tag, ime) {
+                        editor.set_status(say!("ime.loading"));
+                        if let Err(err) =
+                            terminal.draw(|frame| draw(frame, editor, config, ime, &mut viewport))
+                        {
+                            break Err(err);
+                        }
+                    }
                     editor.set_status(switch_scheme(ime, &tag, config));
                     editor.set_ime_available(ime.available());
                     // The scheme's own language data may be better than what
@@ -2262,6 +2272,38 @@ fn engage(ime: &mut ImeSession, want: Engagement, config: &Config) -> String {
         Engagement::Chinese => say!("ime.chinese", ime.scheme_name()),
         Engagement::Ascii => say!("ime.abc"),
         Engagement::Off => say!("ime.off"),
+    }
+}
+
+/// Will this request go to the disk for a 碼表 (#341)?
+///
+/// Loading is a tenth of a second and more — 134.7 ms for the binary form of
+/// 一百二十五萬條, 546.1 ms for the same table as text — and it happens inside
+/// the keystroke that asked for it. The loop paints 「正在載入碼表…」 before
+/// making the call rather than loading on a thread of its own: what the writer
+/// wants to type next is 漢字 out of the table that is not there yet, so there
+/// is nothing useful for them to do while it loads, and a session swapped in
+/// under a half-typed code is a way to be wrong that a sentence on the status
+/// line is not.
+///
+/// Erring towards saying it: a request that turns out to load nothing has
+/// painted one frame too many, and that frame is the truth one keystroke early.
+/// It is the same shape as the cold start, which puts the page up first and
+/// reads the 14 MB after (`Deferred`) — this is that line reached from a
+/// command instead of from launch.
+fn loading_the_table(tag: &str, ime: &ImeSession) -> bool {
+    match tag {
+        // The question, and the two settings: all three answer out of the
+        // session that is already here.
+        "?" => false,
+        _ if tag.starts_with("commit:") || tag.starts_with("panel:") => false,
+        // Handing the keyboard back needs no 碼表, and asking for 中文 needs
+        // one only when there is none — that is the once-a-session cost that
+        // startup did not pay (#290).
+        _ if tag.starts_with("lang:") => tag == "lang:chinese" && !ime.available(),
+        // A named scheme, a file of one's own, the system's copy, the builtin:
+        // every one of them reads a table.
+        _ => true,
     }
 }
 
@@ -12460,6 +12502,24 @@ mod tests {
     /// It asked for `+` and `-` — the spelling from before there were three
     /// answers to give (#290) — and nothing has sent either since. So this
     /// runs the commands and reads what the core really puts on the channel.
+    /// #341: 讀盤之前先畫一句，而問狀態、調設定、交還鍵盤都不讀盤。
+    #[test]
+    fn only_the_requests_that_read_a_table_say_they_are_loading() {
+        let none = ImeSession::empty(Scheme::LINGMING);
+        let loaded = ImeSession::from_table_text(Scheme::LINGMING, "a 啊\n");
+        // 換方案、指一個檔、要系統那份、要出廠那份——手上有沒有碼表都要讀盤。
+        for tag in ["", "lingming", "=~/my.txt", "~", "!"] {
+            assert!(loading_the_table(tag, &none), "{tag:?}");
+            assert!(loading_the_table(tag, &loaded), "{tag:?}");
+        }
+        for tag in ["?", "commit:unique", "panel:bare", "lang:abc", "lang:off"] {
+            assert!(!loading_the_table(tag, &none), "{tag:?}");
+        }
+        // 開始打中文只在手上還沒有碼表的那一次讀盤。
+        assert!(loading_the_table("lang:chinese", &none));
+        assert!(!loading_the_table("lang:chinese", &loaded));
+    }
+
     #[test]
     fn the_language_requests_are_spelled_the_way_the_loop_reads_them() {
         let mut editor = Editor::new();

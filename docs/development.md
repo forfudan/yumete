@@ -563,7 +563,7 @@ index, and a row with no number anywhere else is a row that got lost.
 | 338 | **`:` 行敲 Shift，中文洩漏回 Insert** | tui+ime | P3 | 提示行上的切換不動那筆借款 [^338] | Fixed 2026-09-12 |
 | 339 | **沒有 Kitty 協議就沒有切換，也沒有一句話** | tui+ime | P2 | Apple Terminal 上這個手勢什麼都不做，而且不說 [^339] | Fixed 2026-09-12 |
 | 340 | **`/` 既不結束組字，也不交還語言** | tui+ime | P3 | 改問 `is_prompt()`；轉英另問一句 [^340] | Fixed 2026-09-12 |
-| 341 | **`:yume on` 阻塞事件迴圈 135 ms** | ime | P3 | 在按鍵處理裏同步造一個 `ImeSession` [^341] | Open |
+| 341 | **`:yume on` 阻塞事件迴圈 135 ms** | ime | P3 | 讀盤之前先把「正在載入」畫上去 [^341] | Fixed 2026-09-12 |
 | 342 | **上屏之後那一段 ASCII 不掙 undo 點** | core+ime | P4 | 上屏後 `history.pending` 是 `None` [^342] | Open |
 | 343 | **`note_progress` 每次存檔轉一遍整個 rope** | core | P4 | 有進度日誌就多一次 8 MB 拷貝 [^343] | Open |
 | 344 | **`:yume-table` 載入非碼表檔案會 panic** | ime | P1 | 上游 clamp 了；這一側交出去之前先除草 [^344] | Fixed 2026-09-12 |
@@ -8176,6 +8176,17 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     546.1 ms。啟動本身是對的——`config.ime.start` 預設 false，`language_only` 排在首幀
     之後——代價只是挪到了 `:yume on`，而對以英文為主的人那不是一次性的。做法：後台
     執行緒載入 ＋ 載入中給狀態；或首次載入後常駐，`:yume off` 只解除接管。**medium**
+
+    **落地（2026-09-12）**：那兩條裏的第二條**本來就是現狀**——`engage` 只
+    `set_engaged(false)`，`:yume off` 一直沒有卸過表，所以真正付錢的只有一個 session
+    裏的**第一次** `:yume on`。剩下的那一次不打算開執行緒：等着的人接下來要打的正是那份
+    還沒到的碼表，載入期間沒有別的事好做，而「一個 session 在半截碼底下被換掉」是一句
+    狀態行不會有的錯法。改成**讀盤之前先畫一幀**：`loading_the_table(tag, ime)` 認出這
+    一趟要讀盤，迴圈就把 `ime.loading`（「正在載入碼表…」）畫上去再去讀。與冷啟動同形
+    ——那邊也是先把頁面立起來、再讀那 14 MB（`Deferred`，`lib.rs:546`）。
+    ⚠️ **這個判準寧可多說一句**：問狀態（`?`）、調設定（`commit:`／`panel:`）、交還鍵盤
+    （`lang:abc`／`lang:off`）都不讀盤，`lang:chinese` 只在手上沒表時讀；其餘一律算讀。
+    多畫一幀的代價是把真話早說一個按鍵。
 
 [^342]: `editor/words.rs:606` 與 `editor/prompt.rs:131`：普通 ASCII 的一段輸入是一個
     undo 單位，而每次上屏各自 `snapshot()`，所以上屏之後 `history.pending` 是 `None`，
