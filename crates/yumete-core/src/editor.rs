@@ -600,6 +600,26 @@ struct MdCache {
     region: Option<crate::mdtable::Region>,
 }
 
+impl MdCache {
+    /// Whether this entry answers `asked` — the same line, or **any other line
+    /// of the region it already found** (#320).
+    ///
+    /// A region is a run of rows, and every line in that run walks out to the
+    /// same two ends. Keyed by the line alone, `j` down a 10,000-row table
+    /// missed on every step and re-walked the whole table to find the ends it
+    /// had just found: 25.8 ms a keystroke, which at 30 a second is 78% of a
+    /// core to hold a key down. A `None` is never reused — it says nothing
+    /// about any line but the one asked.
+    fn answers(&self, asked: &(u64, u64, usize, Bounds)) -> bool {
+        if self.asked == *asked {
+            return true;
+        }
+        let same_document =
+            (self.asked.0, self.asked.1, self.asked.3) == (asked.0, asked.1, asked.3);
+        same_document && self.region.as_ref().is_some_and(|r| r.holds(asked.2))
+    }
+}
+
 /// Every `|` table in the file, and which document that was true of.
 #[derive(Debug, Clone)]
 struct MdTables {
@@ -1832,6 +1852,17 @@ pub struct Editor {
     /// rows and is not cheap for a table of ten thousand, and the answer is
     /// the same all three times.
     md_cache: RefCell<Option<MdCache>>,
+    /// Where the `|` table **the padding is drawing** begins and ends, against
+    /// the buffer and its revision.
+    ///
+    /// [`Self::md_cache`] answers the same question for the table the *cursor*
+    /// is in, and only while a `t` view is open; the drawn padding asks it of
+    /// every line of every table on the page, view or no view. Its own memo
+    /// (`pad_cache`) holds a window of rows, so this walk is asked once per
+    /// window rather than once per key — but a window is fifty rows and the
+    /// walk is the whole table, so on a ten-thousand-row one that was a 5 ms
+    /// hitch every time the page slid off the remembered rows (#320).
+    pipe_region: RefCell<Option<(u64, u64, crate::mdtable::Region)>>,
     /// Every `|` table in the file, against the buffer and its revision.
     ///
     /// **Per document, not per line** (#275). `table_lines_at` is asked once
@@ -2228,6 +2259,7 @@ impl Editor {
             block_cache: RefCell::new(None),
             pad_cache: RefCell::new(None),
             md_cache: RefCell::new(None),
+            pipe_region: RefCell::new(None),
             md_tables: RefCell::new(None),
             candidate: Vec::new(),
             ruby: Dialects::only(crate::ruby::Dialect::Html),

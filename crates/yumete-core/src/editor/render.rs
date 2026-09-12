@@ -887,13 +887,34 @@ impl Editor {
     /// row and no alignment markers — Markdown's `|---|` is Markdown's, and
     /// where there is none every column is simply left-aligned, which falls
     /// out of an empty list rather than out of a branch.
+    /// Both ends of the `|` table on `line`, remembered until the buffer
+    /// changes (#320).
+    ///
+    /// Every line in a region walks out to the same two ends, so one walk
+    /// answers for all of them — and a `None` is never kept, because it says
+    /// nothing about any line but the one asked.
+    fn pipe_region(&self, line: usize) -> Option<crate::mdtable::Region> {
+        let (id, revision) = {
+            let buffer = self.current_buffer();
+            (buffer.id(), buffer.revision())
+        };
+        if let Some((had, was, region)) = self.pipe_region.borrow().as_ref() {
+            if (*had, *was) == (id, revision) && region.holds(line) {
+                return Some(region.clone());
+            }
+        }
+        let region = crate::mdtable::region(|i| self.line_text(i), line)?;
+        *self.pipe_region.borrow_mut() = Some((id, revision, region.clone()));
+        Some(region)
+    }
+
     fn padded_region(
         &self,
         line: usize,
         wall: crate::mdtable::Wall,
     ) -> Option<crate::mdtable::Region> {
         let mut region = match wall {
-            crate::mdtable::Wall::Pipe => crate::mdtable::region(|i| self.line_text(i), line)?,
+            crate::mdtable::Wall::Pipe => self.pipe_region(line)?,
             crate::mdtable::Wall::Between(_) => {
                 let (first, last) = self.table_lines_at(line)?;
                 crate::mdtable::Region {

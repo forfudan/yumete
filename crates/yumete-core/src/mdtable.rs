@@ -923,7 +923,14 @@ pub fn format(lines: &[String]) -> Vec<String> {
 ///
 /// A row asked about from off the page — a `:shot`, a caret readout after a
 /// jump — is taken in rather than refused, so it still gets an answer; the
-/// page's own rows are asked first and hold the memo for the frame.
+/// page's own rows are asked first and hold the memo for the frame. It gets
+/// **a page of its own neighbours**, not the span between the screen and it
+/// (#320): stretching the window meant that one `j` in a 10,000-row table
+/// whose page had not been divided yet measured every row above the cursor —
+/// 21 ms a keystroke, and O(rows). A window is a window wherever it is asked
+/// from, so the cost is the page's height and nothing else; and a row is
+/// better measured against the rows beside it than against everything it
+/// happens to be far from.
 ///
 /// The columns therefore breathe as you scroll, which the author allowed
 /// (「markdown 会抖其实也没问题呀」) and which the grid has always done.
@@ -934,9 +941,15 @@ pub fn measured_window(
     top: usize,
     page: usize,
 ) -> (usize, usize) {
+    let page = page.max(1);
     let a = top.max(first).min(last);
-    let b = top.saturating_add(page.max(1)).min(last).max(a);
-    (a.min(line).max(first), b.max(line).min(last))
+    let b = top.saturating_add(page).min(last).max(a);
+    if (a..=b).contains(&line) {
+        return (a, b);
+    }
+    let line = line.clamp(first, last);
+    let a = line.saturating_sub(page / 2).max(first);
+    (a, a.saturating_add(page).min(last).max(line))
 }
 
 pub const MAX_COLUMN: usize = 32;
