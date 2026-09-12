@@ -12383,3 +12383,106 @@ fn an_arrow_key_off_the_end_of_a_table_does_not_open_a_row() {
     assert_ne!(ed.current_buffer().text(), before, "Tab opened one: {}", ed.status());
 }
 
+
+/// A step down a table costs the same whatever the table is long (#320).
+///
+/// **A ratio, on purpose.** A wall-clock bar would say more about the machine
+/// than about the code; what went wrong here was a shape — three walks of the
+/// whole table on every keystroke — and a shape shows up as「eight times the
+/// rows, eight times the time」whatever the machine. Before the fix that ratio
+/// was about twenty; after it, under one — the bigger table is if anything the
+/// faster, because its rows are the ones the caches were warmed on. The bar is
+/// three.
+///
+/// The page is left undivided, as a headless caller leaves it (`:shot`,
+/// `--figure`, this test): that was the worst of the three, because the window
+/// a table is measured over stretched from the top of the screen to wherever
+/// the cursor had got to.
+#[test]
+fn a_step_down_a_table_costs_the_same_however_long_it_is() {
+    use std::time::{Duration, Instant};
+    let dir = std::env::temp_dir().join(format!("yumete-rowcost-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let cost = |rows: usize| -> Duration {
+        let mut text = String::from("| 字 | 讀音 |\n| -- | ---- |\n");
+        for i in 0..rows {
+            text.push_str(&format!("| 木{i} | mu   |\n"));
+        }
+        let doc = dir.join(format!("t{rows}.md"));
+        std::fs::write(&doc, &text).unwrap();
+        let mut ed = Editor::new();
+        ed.open_file(&doc).unwrap();
+        ed.set_page(50, 80);
+        ed.goto_line(rows / 4);
+        assert!(ed.enter_table(), "the table opened");
+        ed.on_key(Key::Char('T'));
+        for _ in 0..5 {
+            ed.on_key(Key::Char('j'));
+        }
+        let n = 200;
+        let began = Instant::now();
+        for _ in 0..n {
+            ed.on_key(Key::Char('j'));
+        }
+        began.elapsed() / n
+    };
+    // The first table pays for whatever the process has not warmed up yet, so
+    // it is thrown away rather than measured.
+    cost(1_000);
+    let small = cost(1_000);
+    let big = cost(8_000);
+    std::fs::remove_dir_all(&dir).ok();
+    assert!(
+        big <= small * 3,
+        "eight times the rows cost {big:?} against {small:?} — a `j` is reading the table again"
+    );
+}
+
+/// What one `j` costs in a long table (#320). Run with
+/// `cargo test --release -- --ignored the_cost_of_a_step_down_a_table --nocapture`.
+///
+/// Twice per size, because the answer used to depend on something the keys
+/// have no business depending on: whether the page had been divided yet. The
+/// front end hands over the top of the screen every frame, and a caller that
+/// draws nothing — `:shot`, `--figure`, a test — never does.
+#[test]
+#[ignore = "a benchmark, not a test"]
+fn the_cost_of_a_step_down_a_table() {
+    use std::time::Instant;
+    for rows in [500usize, 5_000, 10_000] {
+        let mut text = String::from("| 字 | 讀音 |\n| -- | ---- |\n");
+        for i in 0..rows {
+            text.push_str(&format!("| 木{i} | mu   |\n"));
+        }
+        let dir = std::env::temp_dir().join(format!("yumete-rowbench-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let doc = dir.join(format!("t{rows}.md"));
+        std::fs::write(&doc, &text).unwrap();
+        for scrolls in [true, false] {
+            let mut ed = Editor::new();
+            ed.open_file(&doc).unwrap();
+            ed.set_page(50, 80);
+            ed.goto_line(rows / 2);
+            assert!(ed.enter_table());
+            ed.on_key(Key::Char('T'));
+            for _ in 0..5 {
+                ed.on_key(Key::Char('j'));
+            }
+            let n = 50;
+            let began = Instant::now();
+            for _ in 0..n {
+                if scrolls {
+                    ed.set_page_top(ed.cursor_line().saturating_sub(25));
+                }
+                ed.on_key(Key::Char('j'));
+            }
+            let each = began.elapsed().as_secs_f64() * 1000.0 / n as f64;
+            let page = match scrolls {
+                true => "page follows",
+                false => "page undivided",
+            };
+            println!("{rows:>6} rows  {page:<15} {each:>8.3} ms a `j`");
+        }
+        std::fs::remove_dir_all(&dir).ok();
+    }
+}

@@ -1083,7 +1083,7 @@ impl Editor {
             bounds,
         );
         if let Some(cache) = self.md_cache.borrow().as_ref() {
-            if cache.asked == asked {
+            if cache.answers(&asked) {
                 return cache.region.clone();
             }
         }

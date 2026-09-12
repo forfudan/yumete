@@ -149,6 +149,14 @@ fn a_table_is_measured_over_what_is_on_the_page() {
     // a `:shot` or a caret readout after a jump still gets an answer.
     let (first, last) = measured_window(0, 124_082, 5, 60_000, 40);
     assert!(first <= 5 && 5 <= last, "{first}..={last}");
+    // …and it gets a page of its own neighbours, never the span between the
+    // screen and it (#320): the window is a window wherever it is asked from,
+    // so what it costs is the height of the page and not the size of the file.
+    for (at, top) in [(5, 60_000), (60_000, 5), (0, 124_082), (124_082, 0), (7, 9)] {
+        let (first, last) = measured_window(0, 124_082, at, top, 40);
+        assert!(first <= at && at <= last, "{at} from {top}: {first}..={last}");
+        assert!(last - first <= 40, "{at} from {top}: {first}..={last} is not a page");
+    }
     // The row asked about is always in the window, which is what makes the
     // answer an answer at all.
     for (at, top) in [(0, 0), (1, 0), (500, 480), (124_082, 124_050)] {
