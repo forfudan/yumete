@@ -554,7 +554,7 @@ index, and a row with no number anywhere else is a row that got lost.
 | 329 | **改一格重排全表** | core | P3 | 兩個字的編輯換來五千行 diff [^329] | Open |
 | 330 | **熟語振假名整篇改壞** | core | P2 | 真的分組解析：一個 `<ruby>` 裏允許多組 [^330] | Fixed 2026-09-10 |
 | 331 | **三種 HTML ruby 寫法看不見** | core | P3 | 標籤大小寫不敏感、允許屬性、`<rp>` 丟掉 [^331] | Fixed 2026-09-10 |
-| 332 | **寫進 Typst 的 ruby 不轉義** | core | P3 | 一句帶引號的注釋就編譯不過 [^332] | Open |
+| 332 | **寫進 Typst 的 ruby 不轉義** | core | P3 | 一句帶引號的注釋就編譯不過 [^332] | Fixed 2026-09-12 |
 | 333 | **`:ruby-format` 改寫代碼圍欄裏的 ruby** | core | P3 | 按塊切段，代碼那幾段原樣傳回 [^333] | Fixed 2026-09-12 |
 | 334 | **單擊 Shift 丟棄正在組字的編碼** | tui+ime | P1 | 交給綁定表之後，組字中的 Shift 先上屏再切英文 [^334] | Fixed 2026-09-09 |
 | 335 | **丟失一次 Shift 釋放，下一次單擊就失效** | tui | P2 | 改用上游的 `ModifierTap`，失焦時 `reset` [^335] | Fixed 2026-09-09 |
@@ -8070,6 +8070,22 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     出來是 `#ruby("桜", "say "hi"")`，`<ruby>"x"<rt>くお</rt></ruby>` 出來是
     `#ruby(""x"", "くお")`——兩個都編譯不過，再讀回來還會切錯。一句帶引號的英文注釋
     就夠了。做法：寫出前對基字與讀音做 Typst 字串轉義（至少 `"` 與 `\`）。**small**
+
+    **落地（2026-09-12）**：轉義收進 `Dialect` 自己（`ruby.rs`）——`escape`／`unescape`
+    一對，HTML 那一支是恆等，Typst 那一支只管 `\` 與 `"`。`write` 寫出前轉義，`call`
+    改成**按字串字面量讀**（`string_end` 認 `\` escape），所以
+    `#ruby("桜", "say \"hi\"")` 是一組而不是「在第一個內層引號切斷」。文字離開一組
+    markup 的三處都先 `unescape`：`reformat`（換方言）、`export.rs`、`files.rs` 的剝離。
+    ⚠️ **查出來的第二半更嚴重**：`export.rs` 對基字與讀音用的是 `escape_typst`，那是
+    **markup** 轉義——而那兩段落在**字串字面量**裏，`*`／`#`／`_`／`[` 在裏面本來就是
+    普通字符，加了反斜線反倒成了「未知轉義序列」，編譯直接失敗。一個粗體基字
+    （`<ruby>**永和**<rt>`）就夠了，而這條路上一個測試都沒有。現在轉義的規矩歸落點：
+    Typst 的落點是字串，由 `Dialect::write` 管；只有 HTML 那一支還走 `escape`。
+    ⚠️ **`Ruby::base_text`／`reading_text` 仍回原文切片**，因為 `zong.rs` 拿它們的下標
+    對齊屏幕格子，反轉義會改長度、錯行。代價：縱書把 `.typ` 裏的 `\"` 照字面畫出來。
+    小，另計。
+    ⚠️ **`unescape` 只認 `\"` 與 `\\`**。Typst 還有 `\n`／`\u{…}`，這裏原樣留着——
+    把 `\n` 變成真換行，`escape` 就寫不回去了，來回一趟不還原比什麼都不做更糟。**small**
 
 [^333]: `editor/ruby.rs` 的 `reformat` 是純文字掃描，不看塊結構，所以 ```` ```html ````
     圍欄裏的 `<ruby>桜<rt>さくら</rt></ruby>` 也會被改成 `#ruby(...)`——一本講 ruby

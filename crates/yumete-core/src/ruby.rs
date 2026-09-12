@@ -67,7 +67,59 @@ impl Dialect {
     /// Write `base` read as `reading` in this dialect.
     pub fn write(self, base: &str, reading: &str) -> String {
         let (open, mid, close) = self.parts();
+        let (base, reading) = (self.escape(base), self.escape(reading));
         format!("{open}{base}{mid}{reading}{close}")
+    }
+
+    /// The text as it has to be written **inside** this dialect's markup.
+    ///
+    /// Typst's call takes two **string literals**, where `"` ends the string
+    /// and `\` opens an escape; HTML's tags hold text and take it as it is.
+    /// So `say "hi"` is written `"say \"hi\""` there and `say "hi"` here, and
+    /// before #332 it was written the same both ways — which compiled in
+    /// neither direction and read back cut in the wrong place.
+    ///
+    /// ⚠️ **This is the string literal's escaping, not Typst's markup
+    /// escaping.** Inside `"…"` a `*` is a star and `\*` is an error; outside,
+    /// the reverse. `export.rs` had the markup one here, so a bold base came
+    /// out as `#ruby("\*永和\*", …)` and the export did not compile.
+    pub fn escape(self, text: &str) -> String {
+        match self {
+            Dialect::Html => text.to_string(),
+            Dialect::Typst => {
+                let mut out = String::with_capacity(text.len());
+                for c in text.chars() {
+                    if matches!(c, '\\' | '"') {
+                        out.push('\\');
+                    }
+                    out.push(c);
+                }
+                out
+            }
+        }
+    }
+
+    /// The text a group holds, with this dialect's escaping taken back off —
+    /// what to hand to anything that is not writing this dialect again.
+    ///
+    /// **Only `\"` and `\\`.** Typst knows `\n` and `\u{…}` too, and this
+    /// leaves them exactly as written: turning `\n` into a newline would put a
+    /// line break inside a reading that [`Dialect::escape`] cannot write back,
+    /// and a round trip that does not return what it was given is worse than
+    /// one that does nothing.
+    pub fn unescape(self, text: &str) -> String {
+        if self == Dialect::Html || !text.contains('\\') {
+            return text.to_string();
+        }
+        let mut out = String::with_capacity(text.len());
+        let mut chars = text.chars().peekable();
+        while let Some(c) = chars.next() {
+            match (c, chars.peek()) {
+                ('\\', Some('"' | '\\')) => out.push(chars.next().expect("peeked")),
+                _ => out.push(c),
+            }
+        }
+        out
     }
 
     /// Every group of the **next element** of this dialect at or after `from`.
@@ -165,31 +217,49 @@ impl Dialect {
 
     /// One `#ruby("base", "reading")`, which is a function call and is read
     /// as one.
+    ///
+    /// **Read as two string literals, not as two runs of text between fixed
+    /// tags** (#332): `"` closes a string unless a `\` opens it, so
+    /// `#ruby("桜", "say \"hi\"")` is one group and not a base of `桜` with
+    /// the reading cut at the first inner quote.
+    ///
+    /// Loose in one place, exactly as the HTML reader is: any number of spaces
+    /// after the comma, so a call written by hand parses too.
     fn call(self, chars: &[char], from: usize) -> Option<Ruby> {
-        let (open, mid, close) = self.parts();
+        let (open, _, _) = self.parts();
         let mut i = from;
         while i < chars.len() {
             let start = find(chars, open, i)?;
             let base_start = start + open.chars().count();
-            // A second opening before the separator means the first was never
-            // closed; restart there rather than letting the base swallow it.
-            if let Some(inner) = find(chars, open, base_start) {
-                if find(chars, mid, base_start).is_none_or(|m| inner < m) {
-                    i = inner;
-                    continue;
+            // An unterminated string is not a group. Starting again *inside*
+            // it is what finds the next call — including one opened before
+            // this one closed, which is why that case needs no arm of its own.
+            let parsed = (|| {
+                let base_end = string_end(chars, base_start)?;
+                let mut at = base_end + 1;
+                if chars.get(at) != Some(&',') {
+                    return None;
                 }
-            }
-            let parsed = find(chars, mid, base_start).and_then(|m| {
-                let reading_start = m + mid.chars().count();
-                let end = find(chars, close, reading_start)?;
+                at += 1;
+                while chars.get(at) == Some(&' ') {
+                    at += 1;
+                }
+                if chars.get(at) != Some(&'"') {
+                    return None;
+                }
+                let reading_start = at + 1;
+                let reading_end = string_end(chars, reading_start)?;
+                if chars.get(reading_end + 1) != Some(&')') {
+                    return None;
+                }
                 Some(Ruby {
                     dialect: self,
                     start,
-                    end: end + close.chars().count(),
-                    base: (base_start, m),
-                    reading: (reading_start, end),
+                    end: reading_end + 2,
+                    base: (base_start, base_end),
+                    reading: (reading_start, reading_end),
                 })
-            });
+            })();
             match parsed {
                 Some(group) => return Some(group),
                 None => i = base_start,
@@ -198,6 +268,25 @@ impl Dialect {
         None
     }
 
+}
+
+/// Where the string opened at `from` closes: the index of its `"`.
+///
+/// `\` escapes the next character, so `\"` is a quote in the string and not
+/// the end of it. A string that reaches the end of the line never closes — a
+/// call is written on one line, and swallowing the next paragraph looking for
+/// a quote is how a missing one turns into a lost page.
+fn string_end(chars: &[char], from: usize) -> Option<usize> {
+    let mut i = from;
+    while i < chars.len() {
+        match chars[i] {
+            '\n' => return None,
+            '\\' => i += 2,
+            '"' => return Some(i),
+            _ => i += 1,
+        }
+    }
+    None
 }
 
 /// Where the HTML tag `name` opens and closes, at or after `from`: the index
@@ -441,8 +530,12 @@ pub fn reformat(text: &str, dialect: Dialect) -> Option<String> {
     let mut at = 0usize;
     for group in &groups {
         out.extend(&chars[at..group.start]);
+        // Off with the dialect it was written in, on with the one it is going
+        // into: `#ruby("say \"hi\"", …)` becomes `<ruby>say "hi"<rt>…`, and
+        // back again (#332).
         let base: String = group.base_text(&chars).iter().collect();
         let reading: String = group.reading_text(&chars).iter().collect();
+        let (base, reading) = (group.dialect.unescape(&base), group.dialect.unescape(&reading));
         out.push_str(&dialect.write(&base, &reading));
         at = group.end;
     }
@@ -616,6 +709,56 @@ mod tests {
         // Nothing to change reports nothing to change.
         assert_eq!(reformat(html, Dialect::Html), None);
         assert_eq!(reformat("no ruby here", Dialect::Html), None);
+    }
+
+    /// #332: a quote in an English annotation used to write a Typst file
+    /// that did not compile, and read back cut in the wrong place.
+    #[test]
+    fn a_typst_call_holds_a_quote_as_a_string_literal() {
+        let written = Dialect::Typst.write("桜", r#"say "hi""#);
+        assert_eq!(written, r#"#ruby("桜", "say \"hi\"")"#);
+        // …and reads back as the one group it is, not as two strings cut at
+        // the first inner quote.
+        let chars: Vec<char> = written.chars().collect();
+        let found = all_groups(&chars);
+        assert_eq!(found.len(), 1);
+        assert_eq!(found[0].end, chars.len(), "the whole call is the group");
+        let reading: String = found[0].reading_text(&chars).iter().collect();
+        assert_eq!(reading, r#"say \"hi\""#, "as written");
+        assert_eq!(
+            Dialect::Typst.unescape(&reading),
+            r#"say "hi""#,
+            "as it reads"
+        );
+        // A quote in the *base* was the other half of it.
+        let written = Dialect::Typst.write(r#""x""#, "くお");
+        assert_eq!(written, r#"#ruby("\"x\"", "くお")"#);
+        let chars: Vec<char> = written.chars().collect();
+        assert_eq!(all_groups(&chars).len(), 1);
+
+        // A backslash of the writer's own survives the round trip whole.
+        let round = Dialect::Typst.write(r"C:\書", "みち");
+        assert_eq!(round, r#"#ruby("C:\\書", "みち")"#);
+        let chars: Vec<char> = round.chars().collect();
+        let base: String = all_groups(&chars)[0].base_text(&chars).iter().collect();
+        assert_eq!(Dialect::Typst.unescape(&base), r"C:\書");
+        // What Typst knows and we do not is left exactly as written, rather
+        // than becoming a newline nothing can write back.
+        assert_eq!(Dialect::Typst.unescape(r"a\nb"), r"a\nb");
+
+        // Between dialects, off with one and on with the other.
+        let html = r#"<ruby>桜<rt>say "hi"</rt></ruby>"#;
+        let typst = r#"#ruby("桜", "say \"hi\"")"#;
+        assert_eq!(reformat(html, Dialect::Typst).as_deref(), Some(typst));
+        assert_eq!(reformat(typst, Dialect::Html).as_deref(), Some(html));
+
+        // An unterminated string is not a group, and does not eat the line
+        // after it looking for its quote.
+        let chars: Vec<char> = "#ruby(\"漢\", \"hàn)\n下一行\n".chars().collect();
+        assert!(all_groups(&chars).is_empty());
+        // Spaces after the comma are the writer's business.
+        let chars: Vec<char> = r#"#ruby("漢","hàn")"#.chars().collect();
+        assert_eq!(all_groups(&chars).len(), 1, "written by hand, no space");
     }
 
     #[test]

@@ -237,10 +237,21 @@ fn line_into(
             out.push_str(&escape(&std::mem::take(&mut plain)));
             let base: String = group.base_text(&chars).iter().collect();
             let reading: String = group.reading_text(&chars).iter().collect();
-            // The base and the reading are escaped, then wrapped: the markup is
-            // ours, the text inside it is the writer's.
-            let base: Vec<char> = escape(&base).chars().collect();
-            out.push_str(&ruby::markup(&base, &escape(&reading), dialect));
+            // Read out of the dialect it was written in first (#332).
+            let base = group.dialect.unescape(&base);
+            let reading = group.dialect.unescape(&reading);
+            // The text inside the markup is the writer's, so it is escaped —
+            // but **by the rule of the place it lands in**. Typst's call takes
+            // two string literals, where `escape` (which escapes Typst
+            // *markup*) writes `\*` and the compiler refuses it: inside `"…"`
+            // that is an unknown escape sequence. `Dialect::write` knows this
+            // and does it; here the target is markup only for HTML.
+            let (base, reading) = match dialect {
+                Dialect::Html => (escape(&base), escape(&reading)),
+                Dialect::Typst => (base, reading),
+            };
+            let base: Vec<char> = base.chars().collect();
+            out.push_str(&ruby::markup(&base, &reading, dialect));
             at = group.end;
             continue;
         }
@@ -740,6 +751,42 @@ mod tests {
             &s,
         );
         assert!(out.contains(r#"#ruby("永和", "えいわ")"#), "{out}");
+    }
+
+    /// #332: the base and the reading land inside `#ruby("…", "…")`, which
+    /// takes **string literals** — where Typst's markup escaping is not just
+    /// unnecessary but an error.
+    #[test]
+    fn a_reading_exported_to_typst_is_escaped_as_a_string_not_as_markup() {
+        let mut s = style();
+        s.vertical = false;
+        // A star, a hash and an underscore are ordinary characters in a
+        // string. Escaped as markup they were `\*`, which the compiler
+        // refuses as an unknown escape sequence.
+        let out = export(
+            "<ruby>a*b#c_d<rt>え_い</rt></ruby>九年。\n",
+            Format::Typst,
+            &s,
+        );
+        assert!(out.contains(r#"#ruby("a*b#c_d", "え_い")"#), "{out}");
+        assert!(!out.contains(r"\*"), "{out}");
+
+        // What a string *does* need escaping for is the quote and the
+        // backslash, and that is written by the dialect itself.
+        let out = export(
+            "<ruby>桜<rt>say \"hi\"</rt></ruby>\n",
+            Format::Typst,
+            &s,
+        );
+        assert!(out.contains(r#"#ruby("桜", "say \"hi\"")"#), "{out}");
+
+        // Coming the other way, the escaping comes back off: a Typst source
+        // exported as HTML shows the quote, not the backslash.
+        let mut s = style();
+        s.vertical = false;
+        s.dialects = Dialects::only(Dialect::Typst);
+        let out = export("#ruby(\"桜\", \"say \\\"hi\\\"\")\n", Format::Html, &s);
+        assert!(out.contains("<rt>say \"hi\"</rt>"), "{out}");
     }
 
     #[test]
