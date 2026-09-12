@@ -911,11 +911,18 @@ pub fn run(
                     }
                 }
                 if let Some(tag) = editor.take_scheme_request() {
-                    // `:yume on` / `:yume off` **is** an answer about the
-                    // language, typed on the command line that borrowed it.
-                    // Putting the borrow back afterwards undid the command the
-                    // writer had just run, silently, one keystroke later.
-                    if tag == "+" || tag == "-" {
+                    // `:yume on` / `:yume abc` / `:yume off` **is** an answer
+                    // about the language, typed on the command line that
+                    // borrowed it. Putting the borrow back afterwards undid
+                    // the command the writer had just run, silently, one
+                    // keystroke later.
+                    //
+                    // **Spelled the way the request is spelled now** (#412).
+                    // This asked for `+` and `-`, which is what the request
+                    // was before there were three answers to give (#290) —
+                    // and nothing has sent either since, so the undoing this
+                    // line exists to prevent had quietly come back.
+                    if answers_the_language(&tag) {
                         borrowed.settled();
                     }
                     editor.set_status(switch_scheme(ime, &tag, config));
@@ -1229,6 +1236,17 @@ fn composes_here(editor: &Editor) -> bool {
         false => line.chars().take(caret).collect(),
     };
     yumete_core::command::takes_text(&upto)
+}
+
+/// Is this scheme request an answer about the **language**, as against the
+/// 碼表 (#412)?
+///
+/// The two sides of this are written in different files — the core spells the
+/// request, the loop reads it — and they came apart once already, so
+/// [`the_language_requests_are_spelled_the_way_the_loop_reads_them`] drives
+/// the commands and reads what actually comes out.
+fn answers_the_language(tag: &str) -> bool {
+    tag.starts_with("lang:")
 }
 
 /// What Insert's 中/英 was when a prompt borrowed it (#225).
@@ -12434,6 +12452,32 @@ mod tests {
             .collect();
         assert!(status.starts_with("/b"), "preedit missing: {status:?}");
         assert!(status.contains("[中"), "language tag missing: {status:?}");
+    }
+
+    /// `:yume on` is an answer about the language, and the loop must see it
+    /// as one (#412).
+    ///
+    /// It asked for `+` and `-` — the spelling from before there were three
+    /// answers to give (#290) — and nothing has sent either since. So this
+    /// runs the commands and reads what the core really puts on the channel.
+    #[test]
+    fn the_language_requests_are_spelled_the_way_the_loop_reads_them() {
+        let mut editor = Editor::new();
+        for line in ["yume on", "yume abc", "yume off"] {
+            editor.execute(line).unwrap();
+            let tag = editor
+                .take_scheme_request()
+                .unwrap_or_else(|| panic!("{line} asked the front end nothing"));
+            assert!(answers_the_language(&tag), "{line} sent {tag:?}");
+        }
+        // …and the requests about the 碼表 are not answers about the
+        // language: putting the borrow back after one of those is right.
+        for line in ["yume-scheme", "yume-panel", "yume-commit"] {
+            editor.execute(line).unwrap();
+            if let Some(tag) = editor.take_scheme_request() {
+                assert!(!answers_the_language(&tag), "{line} sent {tag:?}");
+            }
+        }
     }
 
     /// A prompt is left in the language it was handed, whichever prompt it is.
