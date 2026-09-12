@@ -83,6 +83,14 @@ impl Editor {
     /// and nothing else, so walking down to the page costs a few microseconds
     /// on a novel — unlike the inline runs, which are per character and are
     /// cached per paragraph.
+    ///
+    /// **For a page, never for a line** (#322). It copies the block of every
+    /// line above the one asked about, so `blocks_through(l).get(l)` allocates
+    /// sixty-three thousand elements to index one of them — which is what
+    /// [`Editor::block_of`] is for, out of the same cache with no copy. The
+    /// shape reads so much like what it means that it came back twice after
+    /// being fixed once, so `tests/one_line_one_lookup.rs` reads it out of the
+    /// source rather than trusting review.
     pub fn blocks_through(&self, last: usize) -> Vec<crate::markdown::Block> {
         let buffer = self.current_buffer();
         let rope = buffer.rope();

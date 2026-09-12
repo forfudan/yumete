@@ -544,7 +544,7 @@ index, and a row with no number anywhere else is a row that got lost.
 | 319 | **`N` 每次從第 0 行重掃** | core | P3 | 正向全掃再取前一個；`n` 17 µs、`N` 1.01 ms [^319] | Open |
 | 320 | **表格裏的 `j` 是 O(rows)** | core | P3 | 一萬行一次 27.8 ms；CSV 格子不受影響 [^320] | Open |
 | 321 | **`w`／`b`／`e` 每一次都重新分詞** | core | P3 | memo 包在 segmenter 外層，key 是那一行的文本本身 [^321] | Fixed 2026-09-12 |
-| 322 | **`blocks_through` 每幀 clone 一整條** | core | P3 | 六萬個元素，只為索引一次 [^322] | Open |
+| 322 | **`blocks_through` 每幀 clone 一整條** | core | P3 | 六萬個元素，只為索引一次 [^322] | Fixed 2026-09-12 |
 | 323 | **帶 count 的編輯留下 N 個 undo 點** | core | P1 | 第一趟宣告，其餘抑制：一趟一個點 [^323] | Fixed 2026-09-09 |
 | 324 | **`r` 作用在多碼位字素上成倍寫出** | core | P2 | 按字素簇迭代，一個字形一個字元 [^324] | Fixed 2026-09-10 |
 | 325 | **大小寫算子靜默刪字符** | core | P3 | 大小寫展開整個交出來，不只取第一個 [^325] | Fixed 2026-09-10 |
@@ -7974,6 +7974,13 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     六萬三千個元素的分配換一次索引；`markup_visible()` 為假時還多一個
     `vec![Prose; last+1]`。`block_of` 自己的註釋（`render.rs:52`）把這個反模式記成
     「在這裏已經修掉了」，`note_detail` 沒跟上。**small**
+
+    **落地（2026-09-12）**：三處 `blocks_through(l).get(l)` 換成 `block_of(l)`
+    （`detail.rs:143`／`detail.rs:436`／`tables.rs:863`），同一份快取、不複製；
+    `markup_visible()` 為假時 `block_of` 直接回 `Prose`，那個 `vec![Prose; last+1]`
+    也沒了。⚠️ **這個形狀讀起來就是它的意思，修過一次又回來過兩次**，所以不靠審查記着：
+    `tests/one_line_one_lookup.rs` 掃全樹的原始碼，`blocks_through(` 到下一個 `;` 之間
+    出現 `.get(` 就紅（綁成變數整條讀的那幾處本來就該整條讀，不算）。
 
 [^323]: `repeat`（`verbs.rs:37`）把動作跑 n 遍，而 `snapshot()` 在動作**裏面**，於是
     `100p`／`100>` 在使用者眼裏是一條命令，在 undo 裏是一百個點。量過：`100p` 要按

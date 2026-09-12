@@ -860,11 +860,7 @@ impl Editor {
         }
         // The cached scan the renderer already runs, so this costs nothing
         // the frame was not paying anyway.
-        self.blocks_through(at)
-            .get(at)
-            .copied()
-            .unwrap_or_default()
-            .is_literal()
+        self.block_of(at).is_literal()
     }
 
     /// The text of one line, or `None` past the end of the file.
