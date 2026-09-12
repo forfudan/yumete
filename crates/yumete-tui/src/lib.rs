@@ -2939,7 +2939,25 @@ fn wrap_to(text: &str, width: usize) -> Vec<String> {
 /// composing there is that the pattern is Chinese, and without the tag there is
 /// no way to tell why letters are or are not turning into 漢字.
 fn language_tag(editor: &Editor, ime: &ImeSession) -> String {
-    if !composes_here(editor) || !ime.available() || !ime.engaged() {
+    if !composes_here(editor) {
+        return String::new();
+    }
+    standing_language_tag(ime)
+}
+
+/// The same tag, in **every** mode — what the status line stands (#337).
+///
+/// [`language_tag`] answers「is 漢字 being typed *here*」, so it goes quiet
+/// wherever keys are commands. The status line asks the other question:「what
+/// will `i` land in」. The language belongs to the process, not to the mode
+/// (one `ImeSession` for the whole editor), so that answer exists in Normal
+/// too — and it used to be invisible there, which left one way to learn it:
+/// press `i`, type a word, and watch it come out wrong.
+///
+/// It still says nothing when yume has handed the keyboard back
+/// (`Engagement::Off`): then there is no 中/ABC to be in.
+fn standing_language_tag(ime: &ImeSession) -> String {
+    if !ime.available() || !ime.engaged() {
         return String::new();
     }
     if ime.is_chinese() {
@@ -5500,8 +5518,9 @@ fn draw_status(
             true => say!("ui.readonly-tag"),
             false => String::new(),
         };
-        // In Insert mode with the IME available, show the 中/英 state + scheme.
-        let ime_tag = match language_tag(editor, ime).as_str() {
+        // 中/英 + scheme, in every mode — Normal included (#337): it is what
+        // the next `i` will land in, and there is no other way to find out.
+        let ime_tag = match standing_language_tag(ime).as_str() {
             "" => String::new(),
             tag => format!("{tag} "),
         };
@@ -5603,14 +5622,15 @@ fn draw_status(
     let typed = hud_line(editor, ime);
     let right = match typed.is_empty() {
         true => char_info(editor, config),
-        false => (typed, String::new()),
+        false => [typed, String::new(), String::new()],
     };
     let used = yumete_cjk::str_width(&status);
     let room = (status_area.width as usize).saturating_sub(used);
-    // Two stages of giving way: the block name goes first, then the code point,
-    // and the left side is never squeezed.
-    let tail = [right.0.as_str(), right.1.as_str()]
-        .into_iter()
+    // Three stages of giving way — block name, then the 字, then the readout
+    // altogether — and the left side is never squeezed.
+    let tail = right
+        .iter()
+        .map(String::as_str)
         .find(|t| !t.is_empty() && yumete_cjk::str_width(t) + 2 <= room)
         .unwrap_or("");
     let gap = room.saturating_sub(yumete_cjk::str_width(tail));
@@ -6098,16 +6118,21 @@ fn position_of(editor: &Editor) -> String {
     )
 }
 
-/// What to say about the character under the cursor, long form and short.
+/// What to say about the character under the cursor, in three lengths.
 ///
-/// Two strings rather than one, so a narrow terminal can drop the block name
-/// and keep the code point instead of dropping both.
-fn char_info(editor: &Editor, config: &Config) -> (String, String) {
+/// Three strings rather than one, so a narrow terminal drops what it has to and
+/// keeps the rest instead of dropping all of it: the block name goes first,
+/// then the 字 itself — which is on the page under the cursor anyway, so the
+/// bare `U+51AC` still answers the question the readout exists for (is the
+/// character wrong, or is the font?). The last stage earns its keep now that
+/// the language tag (#337) stands on every line and takes ten cells with it.
+fn char_info(editor: &Editor, config: &Config) -> [String; 3] {
+    let nothing = || [String::new(), String::new(), String::new()];
     if !config.editor.char_info || editor.prompt().is_some() {
-        return (String::new(), String::new());
+        return nothing();
     }
     let Some(c) = editor.char_at_cursor() else {
-        return (String::new(), String::new());
+        return nothing();
     };
     let point = yumete_cjk::blocks::codepoint(c);
     // **A character with no printable form is named, not shown** (#375). The
@@ -6127,8 +6152,8 @@ fn char_info(editor: &Editor, config: &Config) -> (String, String) {
         _ => format!("{c} {point}"),
     };
     match yumete_cjk::blocks::block_of(c) {
-        Some(block) => (format!("{short} · {block}"), short),
-        None => (short.clone(), short),
+        Some(block) => [format!("{short} · {block}"), short, point],
+        None => [short.clone(), short, point],
     }
 }
 
@@ -6512,7 +6537,7 @@ mod tests {
         let mut editor = editor_with("ch\t錐\n");
         editor.on_key(Key::Char('l'));
         editor.on_key(Key::Char('l'));
-        let (long, short) = char_info(&editor, &config);
+        let [long, short, _] = char_info(&editor, &config);
         assert!(!long.contains('\t'), "{long:?}");
         assert!(!short.contains('\t'), "{short:?}");
         assert!(long.starts_with("U+0009"), "{long:?}");
@@ -11159,6 +11184,9 @@ mod tests {
         assert!(line.contains("U+51AC"), "the code point survives: {line:?}");
         assert!(!line.contains("CJK Unified"), "the block name gives way first");
         assert!(line.contains("Ln 1, Col 5"), "position kept: {line:?}");
+        // And the standing 中／ABC tag (#337) is not what pays for it: the 字
+        // itself is, because it is already on the page under the cursor.
+        assert!(line.contains("靈"), "the language tag stands: {line:?}");
 
         // Narrower still and it says nothing rather than truncating.
         let buffer = render(&editor, &config, 44, 10);
@@ -12505,6 +12533,33 @@ mod tests {
             language_tag(&editor, &ime),
             "",
             "nothing to say about a keyboard yume does not have"
+        );
+    }
+
+    /// Normal mode is where you need it most, and it was the one place it
+    /// never showed (#337).
+    #[test]
+    fn the_status_line_says_which_language_the_next_i_lands_in() {
+        let config = Config::default();
+        let mut ime = ImeSession::from_table_text(Scheme::LINGMING, "b 吧 八\n");
+        let editor = Editor::new();
+
+        assert_eq!(
+            language_tag(&editor, &ime),
+            "",
+            "Normal mode composes nothing"
+        );
+        assert!(
+            standing_language_tag(&ime).contains("靈明"),
+            "but the status line still says what `i` would land in"
+        );
+        engage(&mut ime, Engagement::Ascii, &config);
+        assert_eq!(standing_language_tag(&ime), "[ABC]");
+        engage(&mut ime, Engagement::Off, &config);
+        assert_eq!(
+            standing_language_tag(&ime),
+            "",
+            "and nothing at all once yume has the keyboard back"
         );
     }
 
