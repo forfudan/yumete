@@ -2364,7 +2364,11 @@ impl Editor {
     /// table is quick to type: you never reach for a pipe. At the last cell of
     /// the last row it opens a new row, which is org-mode's rule and the right
     /// one — the table you are filling in is not finished.
-    pub(super) fn step_cell(&mut self, forward: bool) -> bool {
+    ///
+    /// `may_add_row` is what tells `Tab` apart from an arrow key at the last
+    /// cell of the last row: `Tab` is filling the table in, an arrow key is
+    /// only walking through it (#376).
+    pub(super) fn step_cell(&mut self, forward: bool, may_add_row: bool) -> bool {
         let Some((line, cell)) = self.cell_position() else {
             return false;
         };
@@ -2384,7 +2388,7 @@ impl Editor {
                 // org-mode's rule, and the right one: the table you are filling
                 // in is not finished. A delimited file's rows are the file's,
                 // so there it simply stops.
-                (None, true) if self.md_region().is_some() => {
+                (None, true) if may_add_row && self.md_region().is_some() => {
                     self.md_new_row(true);
                     if let Some((l, _)) = self.cell_position() {
                         self.go_to_cell(l, 0);
@@ -2805,7 +2809,7 @@ impl Editor {
     /// it (2026-09-05); [`Self::move_cell_page`] passes `false` because a page
     /// is a count of the **grid's** rows and running out of them is where it
     /// stops.
-    fn move_cell_row(&mut self, down: bool) {
+    pub(super) fn move_cell_row(&mut self, down: bool) {
         self.step_cell_row(down, true);
     }
 
@@ -2957,7 +2961,7 @@ impl Editor {
         if key == Key::Tab || key == Key::BackTab {
             let forward = key == Key::Tab;
             self.repeat(count, |e| {
-                e.step_cell(forward);
+                e.step_cell(forward, true);
             });
             return true;
         }
@@ -3205,9 +3209,7 @@ impl Editor {
     /// that name and not claiming this file is somebody's, and the way to find
     /// out what it says is to open it — which is what happens next.
     fn write_starting_schema(&mut self, path: &Path) -> Option<PathBuf> {
-        let Some(view) = self.table.as_ref() else {
-            return None;
-        };
+        let view = self.table.as_ref()?;
         let name = path.file_name()?.to_string_lossy().into_owned();
         let stem = path.file_stem()?.to_string_lossy().into_owned();
         let tables = path

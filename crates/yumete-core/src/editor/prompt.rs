@@ -19,34 +19,42 @@ impl Editor {
             }
         }
         // Inside a grid, Insert mode is scoped to one cell — that is what "edit
-        // this cell" means. The keys that could reach out of it are the two
-        // that would join two cells into one or split a row in half, and the
-        // ones that simply walk out the side.
+        // this cell" means, and the keys that would join two cells into one or
+        // split a row in half stay barred. **Walking out is not joining up**
+        // (#376): an arrow key moves and changes nothing, so barring it was a
+        // rule about editing applied to walking.
         if let Some((start, end)) = self.insert_bounds() {
             match key {
                 // Within the cell these move by character, which is how you
-                // reach the middle of a 拆分 sequence; at its edge they stop
-                // rather than stepping into the cell next door.
+                // reach the middle of a 拆分 sequence; at its edge they step
+                // into the cell next door — off the end of a row, into the
+                // first cell of the next.
                 Key::Left => {
                     if self.cursor > start {
                         self.move_horizontal(motion::left);
+                    } else if self.step_cell(false, false) {
+                        // Entered from the right, so the caret is at the far
+                        // end of what it walked into.
+                        if let Some((_, end)) = self.insert_bounds() {
+                            self.set_cursor(end);
+                        }
                     }
                     return;
                 }
                 Key::Right => {
                     if self.cursor < end {
                         self.move_horizontal(motion::right);
+                    } else {
+                        self.step_cell(true, false);
                     }
                     return;
                 }
                 Key::Home => return self.set_cursor(start),
                 Key::End => return self.set_cursor(end),
-                // A row is not a paragraph: stepping up or down mid-word would
-                // leave half a value in one cell and half in another.
-                Key::Up | Key::Down => {
-                    self.status = say!("table.esc-before-moving");
-                    return;
-                }
+                // The same step `j` and `k` take from Normal, keeping to the
+                // column — one rule for「which cell is above this one」, not
+                // two.
+                Key::Up | Key::Down => return self.move_cell_row(key == Key::Down),
                 _ => {}
             }
         }
@@ -66,7 +74,7 @@ impl Editor {
                 // lined up while you type rather than after you stop.
                 Key::Tab | Key::BackTab => {
                     self.format_md_table();
-                    self.step_cell(key == Key::Tab);
+                    self.step_cell(key == Key::Tab, true);
                     return;
                 }
                 Key::Enter => {
