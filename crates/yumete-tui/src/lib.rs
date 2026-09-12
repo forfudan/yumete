@@ -5039,9 +5039,18 @@ fn draw_horizontal(
         // in *no* cell at all and the row came up one short of the column the
         // caret was told it was in. Replaced, never taken off: one character,
         // one cell, exactly as the grid replaces a wall below.
+        // …and **every other control character is drawn as its picture**
+        // (#398). A NUL left alone reaches the terminal as a NUL: the cell it
+        // was charged for comes out blank, so a file with one in it looks like
+        // a file with nothing there. Unicode has a block for exactly this —
+        // `␀` `␁` … `␡`, one cell each, which is the cell the editor already
+        // measured — so the byte stays in the buffer and gets a face on the
+        // page. A lone `\r` is **not** among them: `wrap::line_text` takes it
+        // off with the rest of the break, so it never reaches this row at all
+        // — which is #395, and a different question (is it a line?).
         let chars: Vec<char> = text.chars().map(|c| match c {
             '\t' => ' ',
-            _ => c,
+            _ => yumete_cjk::control_picture(c).unwrap_or(c),
         }).collect();
         // The block grounds the whole row; the inline runs are patched onto it.
         // **The page is painted.** Until this line, the manuscript itself was
@@ -6004,7 +6013,12 @@ fn reading_line(
     }
     let line_start = rope.line_to_char(row.line);
     let start_in_line = row.start - line_start;
-    let text: Vec<char> = yumete_core::zong::line_chars(rope, row.line);
+    // Control characters get their pictures here too (#398) — a reading is
+    // text on the page like any other, and a NUL in one would draw nothing.
+    let text: Vec<char> = yumete_core::zong::line_chars(rope, row.line)
+        .into_iter()
+        .map(|c| yumete_cjk::control_picture(c).unwrap_or(c))
+        .collect();
     let column = drawn_columns(drawn, lead);
     let mut out = String::new();
     let mut col = 0usize;
@@ -8946,6 +8960,34 @@ mod tests {
             }
         }
         s
+    }
+
+    /// A control character in the file is a control character on the page
+    /// (#398).
+    ///
+    /// A NUL handed straight to the terminal draws nothing, so the cell it was
+    /// charged for came up blank and the file looked like a file with nothing
+    /// there — the one failure a reader cannot report, because there is
+    /// nothing to point at. It gets its Control Picture instead, on both
+    /// pages, and the byte is untouched.
+    #[test]
+    fn a_control_character_is_drawn_as_its_picture() {
+        let path = std::env::temp_dir().join(format!("yumete-nul-{}.txt", std::process::id()));
+        std::fs::write(&path, "a\u{0}b\u{1}\u{7f}\n").unwrap();
+        let mut editor = Editor::new();
+        editor.open_file(&path).unwrap();
+
+        let page = page_text(&render_with(&editor, &Config::default(), &no_ime(), 30, 8));
+        assert!(page.contains("a␀b␁␡"), "{page:?}");
+
+        // …and on the 縱書 page, where the same character had the same nothing.
+        let config = vertical_config();
+        let down = buffer_text(&render_vertical_with(&mut editor, &config, &no_ime(), 30, 12));
+        assert!(down.contains('␀'), "{down:?}");
+
+        // The buffer is unchanged: this is a face, not an edit.
+        assert_eq!(editor.current_buffer().text(), "a\u{0}b\u{1}\u{7f}\n");
+        let _ = std::fs::remove_file(&path);
     }
 
     #[test]
