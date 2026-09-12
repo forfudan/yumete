@@ -634,6 +634,7 @@ index, and a row with no number anywhere else is a row that got lost.
 | 409 | **注釋掉：`空格 c`／`空格 C`** | core | P1 | 各說各的形式，不看情況 [^409] | Fixed 2026-09-12 |
 | 410 | **`.txt` 默認是純文本，不是 Markdown** | core | P1 | 湊不夠證據就不猜 [^410] | Fixed 2026-09-12 |
 | 411 | **`v` 的光標換形狀** | tui | P2 | 跟 helix：select 有自己的一格 [^411] | Fixed 2026-09-12 |
+| 412 | **`:yume on` 之後借出去的語言又被還回來** | tui+ime | P2 | 那一句認的是 `+`／`-`，早就沒人送了 [^412] | Fixed 2026-09-12 |
 
 ### 5.5 · A table is a delimiter, a surface and a boundary (#261)
 
@@ -9966,3 +9967,15 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     而這個模式開着的時候人正在讀自己的稿子。
     ⚠️ **竪排下看不見。** 竪排的光標是畫進頁面裏的，終端自己那個是藏起來的，形狀改了沒人
     看得到。要補得動畫進頁面的那一個。
+
+[^412]: #225 在事件迴圈裏留了一句：`:yume on` 是**關於語言的答覆**，而且就打在借走語言的
+    那條命令行上，出來的時候不許把舊的還回去——否則寫字的人剛下的命令，一個按鍵之後被
+    悄悄撤銷。這一句認的是 `tag == "+" || tag == "-"`。
+    #290 把那個請求改成了 `lang:chinese`／`lang:abc`／`lang:off`（三個答覆，各有名字），
+    **而這一句沒跟**。全樹再沒有一處送 `+` 或 `-`，於是它從那天起一次都沒成立過，#225
+    要擋的事又回來了。
+    2026-09-12 收 #338 那一族時看見的。改成問 `answers_the_language(tag)`。
+    ⚠️ **這是「兩邊各寫一半、中間靠一個字串約定」的典型下場**：一邊改了拼法，另一邊照樣
+    編得過、跑得動、什麼都不說。回歸測試因此不寫仿本——
+    `the_language_requests_are_spelled_the_way_the_loop_reads_them` 真的去跑那三條命令，
+    再讀 `take_scheme_request()` 拿到的字串。
