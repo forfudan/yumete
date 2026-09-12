@@ -23,6 +23,7 @@
 pub mod reading;
 pub mod segment;
 
+use std::borrow::Cow;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
@@ -386,6 +387,47 @@ pub struct Candidate {
     pub simp_code: String,
 }
 
+/// The longest a code, or a word, can be and still fit a compiled table.
+///
+/// A row is written as `sharedLen:u8, suffixLen:u8, suffix, textLen:u8, text`,
+/// so a field longer than this does not fit in the byte that has to say how
+/// long it is.
+const FITS: usize = u8::MAX as usize;
+
+/// Drop the rows a code table cannot hold, and say how many.
+///
+/// **Looked at before the file is handed over, not after** (#344). `:yume-table`
+/// takes any path, and a path is easy to get wrong: pointing it at a file that
+/// is not a 碼表 at all used to walk the compiled blob's index off its end and
+/// take the editor — every unsaved buffer with it — along. Upstream now clamps
+/// that length byte, so the crash is gone; what is left is the quieter half.
+/// A truncated code matches nothing, so the row is a phantom: it is counted,
+/// it is indexed, and it can never be typed. Weeding it here means the count
+/// the panel reports is the count that can answer, and the front end has a
+/// number to say instead of loading a file full of nonsense without a word.
+///
+/// **Whitespace-separated fields, either order, either separator.** The format
+/// auto-detects `text<TAB>code`, `code<SPACE>text` and their reverses, so this
+/// does not try to work out which side is which — no real table has a field of
+/// 255 bytes on either side, and a file that does is not one.
+fn weed_overlong(text: &str) -> (Cow<'_, str>, usize) {
+    // The common case by far, and a 碼表 is tens of megabytes: one scan says
+    // there is nothing to weed, and the borrow means nothing was copied to
+    // find that out.
+    if !text.split_ascii_whitespace().any(|field| field.len() > FITS) {
+        return (Cow::Borrowed(text), 0);
+    }
+    let mut kept = String::with_capacity(text.len());
+    let mut skipped = 0;
+    for line in text.split_inclusive('\n') {
+        match line.split_ascii_whitespace().any(|field| field.len() > FITS) {
+            true => skipped += 1,
+            false => kept.push_str(line),
+        }
+    }
+    (Cow::Owned(kept), skipped)
+}
+
 /// A live IME session wrapping a `yume-core` [`Engine`].
 pub struct ImeSession {
     engine: Engine,
@@ -401,6 +443,13 @@ pub struct ImeSession {
     builtin: bool,
     /// The file a table of your own was read from, if it was.
     table_file: Option<PathBuf>,
+    /// How many rows of that file were too long for the format to hold.
+    ///
+    /// Zero for every table that came from anywhere else. Kept because the
+    /// alternative is a silent one: upstream truncates a row it cannot fit,
+    /// so a file that is not a 碼表 loads without a word and answers with
+    /// codes that match nothing.
+    table_skipped: usize,
     /// Every entry of the data set that did not make it into the engine, and
     /// why (Feature #220). Kept rather than discarded because the interesting
     /// half of it is **silent**: a file that is there and that the core
@@ -456,6 +505,7 @@ impl ImeSession {
             annotations: false,
             builtin,
             table_file: None,
+            table_skipped: 0,
             problems,
             display: PanelDisplay::default(),
             summoned: false,
@@ -473,8 +523,15 @@ impl ImeSession {
     ///
     /// The language layer still comes from the installed data where it is:
     /// this replaces the *spelling*, not the language.
+    ///
+    /// **The file is weeded first** (`weed_overlong`), and how much was
+    /// weeded is kept for the front end to say — [`table_skipped`]. A file
+    /// nothing survives is not a 碼表, and says so.
+    ///
+    /// [`table_skipped`]: ImeSession::table_skipped
     pub fn from_table_file(path: &Path) -> Result<Self, String> {
         let text = std::fs::read_to_string(path).map_err(|e| format!("{}: {e}", path.display()))?;
+        let (text, skipped) = weed_overlong(&text);
         let mut table = CodeTable::new();
         table.load_text(&text);
         if table.count() == 0 {
@@ -502,6 +559,7 @@ impl ImeSession {
             annotations: false,
             builtin: false,
             table_file: Some(path.to_path_buf()),
+            table_skipped: skipped,
             problems,
             display: PanelDisplay::default(),
             summoned: false,
@@ -538,6 +596,7 @@ impl ImeSession {
             annotations: false,
             builtin: true,
             table_file: None,
+            table_skipped: 0,
             problems,
             display: PanelDisplay::default(),
             summoned: false,
@@ -548,6 +607,17 @@ impl ImeSession {
     /// Whether the 碼表 answering is the one in the binary.
     pub fn is_builtin(&self) -> bool {
         self.builtin
+    }
+
+    /// How many rows of a table of your own did not fit the format.
+    ///
+    /// Zero unless [`from_table_file`] read one and had to weed it. Asked by
+    /// the front end so that `:yume-table` can say it out loud — see
+    /// `weed_overlong` for why the silence would matter.
+    ///
+    /// [`from_table_file`]: ImeSession::from_table_file
+    pub fn table_skipped(&self) -> usize {
+        self.table_skipped
     }
 
     /// Where the 碼表 in use came from, for `:yume` to say.
@@ -607,6 +677,7 @@ impl ImeSession {
             annotations: false,
             builtin: false,
             table_file: None,
+            table_skipped: 0,
             problems,
             display: PanelDisplay::default(),
             summoned: false,
@@ -629,6 +700,7 @@ impl ImeSession {
             annotations: false,
             builtin: false,
             table_file: None,
+            table_skipped: 0,
             problems: Vec::new(),
             display: PanelDisplay::default(),
             summoned: false,
@@ -647,6 +719,7 @@ impl ImeSession {
             annotations: false,
             builtin: false,
             table_file: None,
+            table_skipped: 0,
             problems: Vec::new(),
             display: PanelDisplay::default(),
             summoned: false,
@@ -670,6 +743,7 @@ impl ImeSession {
             annotations: false,
             builtin: false,
             table_file: None,
+            table_skipped: 0,
             problems: Vec::new(),
             display: PanelDisplay::default(),
             summoned: false,
@@ -2064,6 +2138,83 @@ mod data_faults {
         assert!(matches!(problem.fault, DataFault::Rejected { .. }));
         // … and the 拆分表 is in the engine anyway.
         assert_eq!(engine.annotations().divisions().roots(), &['木']);
+    }
+}
+
+#[cfg(test)]
+mod weeding {
+    use super::*;
+
+    /// A code table's own rows survive untouched — including the pathological
+    /// ones a real table does have (an empty text field, a `#` line, CRLF).
+    #[test]
+    fn a_real_table_loses_nothing() {
+        let table = "# 靈明\r\nai\t愛\r\nai\t哀\r\nzzz\t\r\n";
+        let (kept, skipped) = weed_overlong(table);
+        assert_eq!(skipped, 0);
+        assert_eq!(kept, table);
+    }
+
+    /// The row from the crash report: 256 bytes of `a` where a code goes.
+    /// One byte over is over — this is the format's limit, not a guess at
+    /// what a sane code looks like.
+    #[test]
+    fn a_row_one_byte_too_long_goes_and_the_rest_stays() {
+        let long = "a".repeat(FITS + 1);
+        let text = format!("ai\t愛\n{long}\t天\n an\t安\n");
+        let (kept, skipped) = weed_overlong(&text);
+        assert_eq!(skipped, 1);
+        assert_eq!(kept, "ai\t愛\n an\t安\n");
+
+        let edge = format!("{}\t天\n", "a".repeat(FITS));
+        let (kept, skipped) = weed_overlong(&edge);
+        assert_eq!(skipped, 0);
+        assert_eq!(kept, edge);
+    }
+
+    /// Which side is long does not matter: the format reads both orders, so
+    /// this counts fields rather than deciding which one is the code.
+    #[test]
+    fn either_column_can_be_the_long_one() {
+        let long = "字".repeat(FITS); // three bytes each — well over
+        for text in [format!("ai\t{long}\n"), format!("{long}\tai\n")] {
+            let (kept, skipped) = weed_overlong(&text);
+            assert_eq!((kept.as_ref(), skipped), ("", 1));
+        }
+    }
+
+    /// A file with no line ending at all is one row, and one row is all it
+    /// takes: `:yume-table` pointed at a minified blob leaves nothing.
+    #[test]
+    fn a_file_of_one_enormous_line_leaves_nothing() {
+        let one_line = "x".repeat(100_000);
+        let (kept, skipped) = weed_overlong(&one_line);
+        assert!(kept.is_empty());
+        assert_eq!(skipped, 1);
+    }
+
+    /// End to end, from the report: the junk file loads, and the session says
+    /// how much of it was not a 碼表. Prose has no codes at all, so it is
+    /// refused outright — that half already worked.
+    #[test]
+    fn the_file_from_the_crash_report_says_what_it_lost() {
+        let dir = std::env::temp_dir().join("yumete_weeding_344");
+        std::fs::create_dir_all(&dir).expect("fixture dir");
+
+        let junk = dir.join("junk.txt");
+        let mut text = format!("{}\n", "a".repeat(FITS + 1));
+        for i in 0..16 {
+            text.push_str(&format!("line{i}\t行{i}\n"));
+        }
+        std::fs::write(&junk, &text).expect("fixture file");
+        let session = ImeSession::from_table_file(&junk).expect("sixteen rows are a table");
+        assert_eq!(session.table_skipped(), 1);
+
+        let prose = dir.join("prose.txt");
+        std::fs::write(&prose, "第一章\n\n那年冬天很冷。\n").expect("fixture file");
+        assert!(ImeSession::from_table_file(&prose).is_err());
+
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }
 

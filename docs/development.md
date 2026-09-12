@@ -566,7 +566,7 @@ index, and a row with no number anywhere else is a row that got lost.
 | 341 | **`:yume on` 阻塞事件迴圈 135 ms** | ime | P3 | 在按鍵處理裏同步造一個 `ImeSession` [^341] | Open |
 | 342 | **上屏之後那一段 ASCII 不掙 undo 點** | core+ime | P4 | 上屏後 `history.pending` 是 `None` [^342] | Open |
 | 343 | **`note_progress` 每次存檔轉一遍整個 rope** | core | P4 | 有進度日誌就多一次 8 MB 拷貝 [^343] | Open |
-| 344 | **`:yume-table` 載入非碼表檔案會 panic** | ime | P1 | 上游 yume-core：碼長沒有 clamp，整個編輯器帶走 [^344] | Open (upstream) |
+| 344 | **`:yume-table` 載入非碼表檔案會 panic** | ime | P1 | 上游 clamp 了；這一側交出去之前先除草 [^344] | Fixed 2026-09-12 |
 | 345 | **候選列表無上限物化** | ime | P2 | 上游：為顯示九個，走完四萬八千條 [^345] | Open (upstream) |
 | 346 | **超過 255 位元組的候選截成空白一行** | ime | P4 | 上游：在非字符邊界切，`unwrap_or("")` 吃掉 [^346] | Open (upstream) |
 | 347 | **中英切換交回 yume 的綁定表** | tui+ime | P1 | Shift 走 `key_action` ＋ 上游新增的 `Engine::perform` [^347] | Fixed 2026-09-09 |
@@ -8058,8 +8058,20 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     buffer 寫救回稿（`rescue_drafts`）→ 存 session → 印出日誌位置 → exit 101**。
     所以這一條**不再是丟稿子的等級**：它仍然是一個崩潰，該修，但它已經不會帶走誰的字。
     #300 第四條的又一例：**一句過期的斷言會把一件事的輕重整個說反。**
-    上游那一行 clamp 仍然要補（`yume-core/src/code_table.rs:95`），yumete 這一側也可以
-    在把檔案交出去之前先看一眼有沒有超過 255 位元組的條目——**不必等上游**。**small**
+
+    **2026-09-12 收。崩潰那一半是上游收的**（`yume-core` 的 `2df179f`）：後綴長度現在
+    `.min(u8::MAX)`，長度欄與寫下去的位元組數對得上了，blob 不再錯位。本地覆核過，那個
+    256 個 `a` 的檔案指過去**不再 panic**。
+
+    **這一側收的是安靜的那一半。** 上游是截斷，不是拒收：截短了的碼匹配不到任何輸入，於是
+    那一條是個幽靈——它算進條數、進了索引，永遠打不出來。而 `count() == 0` 那道閘只攔全空的
+    檔案，十六行垃圾照樣是「碼表已載入」，一個字都不說。所以 `from_table_file` 現在先過一趟
+    `weed_overlong`（`yumete-ime/src/lib.rs`）：**逐行看有沒有超過 255 位元組的欄，有就整行
+    丟掉**，丟了幾行記在 `table_skipped` 上，`:yume-table` 的回話後面接一句
+    「跳過 N 條過長的」。量到：`碼表：/Users/ZHU/bad_table_test.txt · 跳過 1 條過長的`。
+    ⚠️ **不分哪一欄是碼。** 格式自己認 `text⇥code`／`code␣text` 與兩者的反向，所以這裏數的是
+    空白分隔的欄，任一欄過長就算——真碼表兩側都沒有 255 位元組的東西，有的那個不是碼表。
+    快路：整份文本一次 `split_ascii_whitespace` 掃過沒有過長的欄就原樣返回，不拷。
 
 [^345]: 上游 `yume-core/src/engine.rs:2594`：`normal_candidates` 傳的是
     `normal_candidates_capped(code, usize::MAX)`，於是每一個前綴匹配都被物化——125 萬條
