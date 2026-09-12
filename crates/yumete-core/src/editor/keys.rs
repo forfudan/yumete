@@ -427,9 +427,9 @@ impl Editor {
                     // The count belongs to the `f`, which has already spent it:
                     // `3fx` is the third `x`, not the first.
                     let count = self.operator_count.take().unwrap_or(1).max(1);
-                    for _ in 0..count {
-                        self.find_char(kind, c);
-                    }
+                    // Through `repeat`, for its early exit: `10000fZ` on a line
+                    // with no `Z` left is one look, not ten thousand (#318).
+                    self.repeat(count, |e| e.find_char(kind, c));
                 }
                 self.operator_count = None;
                 return;
@@ -845,8 +845,8 @@ impl Editor {
             }
             // Yank / paste (Helix `y` / `p` / `P`).
             Key::Char('y') => self.yank(),
-            Key::Char('p') => self.repeat(count, |e| e.paste(true)),
-            Key::Char('P') => self.repeat(count, |e| e.paste(false)),
+            Key::Char('p') => self.repeat_writing(count, |e| e.paste(true)),
+            Key::Char('P') => self.repeat_writing(count, |e| e.paste(false)),
             // Insert (`i` before the selection, `a` after it, `I`/`A` line ends).
             Key::Char('i') => {
                 self.snapshot();
@@ -881,8 +881,8 @@ impl Editor {
                 self.open_line_above();
             }
             // Undo/redo (Helix: `u` / `U`).
-            Key::Char('u') => self.repeat(count, |e| e.undo()),
-            Key::Char('U') => self.repeat(count, |e| e.redo()),
+            Key::Char('u') => self.repeat_writing(count, |e| e.undo()),
+            Key::Char('U') => self.repeat_writing(count, |e| e.redo()),
             // Search (`/` forward, `?` backward, `n`/`N` repeat).
             // `!` is what it is in vi: send this through a command and take
             // what comes back. It opens the command line with the verb already
@@ -1022,13 +1022,13 @@ impl Editor {
             }
 
             // Indent / unindent the selected lines.
-            Key::Char('>') => self.repeat(count, |e| e.indent(true)),
-            Key::Char('<') => self.repeat(count, |e| e.indent(false)),
+            Key::Char('>') => self.repeat_writing(count, |e| e.indent(true)),
+            Key::Char('<') => self.repeat_writing(count, |e| e.indent(false)),
             // Increment / decrement the number at the cursor.
-            Key::Ctrl('a') => self.repeat(count, |e| e.bump_number(1)),
-            Key::Ctrl('x') => self.repeat(count, |e| e.bump_number(-1)),
+            Key::Ctrl('a') => self.repeat_writing(count, |e| e.bump_number(1)),
+            Key::Ctrl('x') => self.repeat_writing(count, |e| e.bump_number(-1)),
             // Repeat the last insert, and the last `f`/`t`.
-            Key::Char('.') => self.repeat(count, |e| e.repeat_edit()),
+            Key::Char('.') => self.repeat_writing(count, |e| e.repeat_edit()),
             Key::Alt('.') => {
                 if let Some((kind, c)) = self.last_find {
                     self.repeat(count, |e| e.find_char(kind, c));
@@ -1139,7 +1139,7 @@ impl Editor {
             Key::Char('J') => {
                 // The count belongs to the `g`, which has already spent it.
                 let count = self.operator_count.take().unwrap_or(1).max(1);
-                return self.repeat(count, |e| e.join_lines());
+                return self.repeat_writing(count, |e| e.join_lines());
             }
             // Goto the next / previous buffer, as Helix binds them.
             Key::Char('n') => return self.next_buffer(),

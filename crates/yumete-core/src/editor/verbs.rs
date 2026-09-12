@@ -57,6 +57,29 @@ impl Editor {
         }
     }
 
+    /// The ceiling on a count that **writes**.
+    ///
+    /// A motion may be handed a million and cost almost nothing: it walks to
+    /// the end of the buffer and [`Editor::repeat`] breaks. An edit has no such
+    /// floor — every pass really does its work, so `1000000p` is a million
+    /// pastes, a million undo snapshots, and a buffer that grows until the
+    /// process dies (#318). Ten thousand is far above any count a hand types
+    /// on purpose and far below the count that hangs the editor.
+    pub(super) const WRITING_MAX: usize = 10_000;
+
+    /// [`Editor::repeat`], for an action that changes the text.
+    ///
+    /// Clips the count to [`Editor::WRITING_MAX`] and **says so** — a silently
+    /// shortened `50000p` would look like a paste that lost half its work.
+    pub(super) fn repeat_writing(&mut self, n: usize, action: impl FnMut(&mut Self)) {
+        self.repeat(n.min(Self::WRITING_MAX), action);
+        // After, not before: the notice is the one thing the writer has to
+        // read, and an action that sets its own status would bury it.
+        if n > Self::WRITING_MAX {
+            self.status = say!("count.writing-ceiling", Self::WRITING_MAX);
+        }
+    }
+
     /// Select the whole buffer (Helix `%`).
     pub(super) fn select_all(&mut self) {
         let rope = self.current_buffer().rope();

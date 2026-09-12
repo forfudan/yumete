@@ -11671,3 +11671,90 @@ fn source_mode_is_remembered_for_a_guessed_grid_and_taken_back() {
     assert!(ed.table().is_some(), "and the note is gone");
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// **A count that writes has a ceiling, and says when it hits one** (#318).
+///
+/// `1000000p` used to be a million pastes: 1.78 s for two hundred thousand of
+/// them, a buffer grown to forty-one million characters, and no way to see it
+/// coming. A motion may have the million — it walks off the end and stops.
+#[test]
+fn a_paste_asked_for_a_million_stops_at_the_ceiling() {
+    let mut ed = typed("雪\n");
+    press(&mut ed, "xy");
+    let before = ed.current_buffer().char_count();
+    let started = std::time::Instant::now();
+    press(&mut ed, "1000000p");
+    let grew = ed.current_buffer().char_count() - before;
+    assert_eq!(grew, 2 * Editor::WRITING_MAX, "ten thousand pastes, no more");
+    assert!(
+        started.elapsed() < std::time::Duration::from_secs(10),
+        "and it came back: {:?}",
+        started.elapsed()
+    );
+    assert_eq!(
+        ed.status,
+        say!("count.writing-ceiling", Editor::WRITING_MAX),
+        "the clipped count is not a silent one"
+    );
+}
+
+/// **A find with nothing to find looks once** (#318).
+#[test]
+fn a_huge_count_on_f_costs_one_look_when_the_character_is_not_there() {
+    let dir = std::env::temp_dir().join(format!("yumete-find-count-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("long.txt");
+    std::fs::write(&path, format!("{}\n", "雪".repeat(20_000))).unwrap();
+    let mut ed = Editor::new();
+    ed.open_file(&path).unwrap();
+    let started = std::time::Instant::now();
+    press(&mut ed, "1000000fZ");
+    assert_eq!(ed.cursor, 0, "there is no Z on the line");
+    assert!(
+        started.elapsed() < std::time::Duration::from_secs(2),
+        "one look, not a million: {:?}",
+        started.elapsed()
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// **A macro answers to the ceiling too** (#318).
+#[test]
+fn a_macro_asked_for_a_million_stops_at_the_ceiling() {
+    let mut ed = typed("雪\n");
+    press(&mut ed, "Qxy"); // ⚠️ `Q` records, `q` replays (#404)
+    press(&mut ed, "Q"); // stop
+    press(&mut ed, "1000000q");
+    assert_eq!(
+        ed.status,
+        say!("count.writing-ceiling", Editor::WRITING_MAX),
+        "a macro may write, so its count is a writing count"
+    );
+}
+
+/// **A macro round that changed nothing does not get another** (#318).
+///
+/// Costly on purpose: `%y` copies the whole buffer, and lands in the same
+/// place every time. The second round proves there is nothing left to do; the
+/// remaining 9998 would each copy a million characters again — thirty seconds.
+#[test]
+fn a_macro_that_moves_nothing_stops_replaying() {
+    let dir = std::env::temp_dir().join(format!("yumete-macro-count-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("big.txt");
+    std::fs::write(&path, format!("{}\n", "雪".repeat(1_000_000))).unwrap();
+    let mut ed = Editor::new();
+    ed.open_file(&path).unwrap();
+    press(&mut ed, "Q%y");
+    press(&mut ed, "Q"); // ⚠️ `Q` records, `q` replays (#404)
+    let started = std::time::Instant::now();
+    press(&mut ed, "10000q"); // exactly the ceiling: nothing is clipped here
+    assert!(
+        started.elapsed() < std::time::Duration::from_secs(3),
+        "two rounds, not ten thousand: {:?}",
+        started.elapsed()
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}

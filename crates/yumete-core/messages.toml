@@ -2309,6 +2309,13 @@ zht = "全篇"
 zhs = "全篇"
 en = "the whole file"
 
+[[message]]
+# 改動類的 count 撞到上限
+key = "count.writing-ceiling"
+zht = "重複最多 {0} 遍，多出來的不做"
+zhs = "重复最多 {0} 遍，多出来的不做"
+en = "repeated {0} times at most — the rest are not done"
+
 
 # ── data ──────────────────────────────────────────────────────────────
 

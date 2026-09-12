@@ -450,12 +450,24 @@ impl Editor {
         }
         let keys = self.macro_keys.clone();
         self.replaying = true;
-        for _ in 0..count {
+        // A macro may write, so it answers to the writing ceiling; and a round
+        // that moved nothing and changed nothing will never move anything on
+        // the next one either, so stop (#318). `revision`, not `char_count`:
+        // a macro that types a character and rubs it out has still worked.
+        let clipped = count.min(Self::WRITING_MAX);
+        for _ in 0..clipped {
+            let before = (self.current, self.cursor, self.anchor, self.current_buffer().revision());
             for &key in &keys {
                 self.on_key(key);
             }
+            if (self.current, self.cursor, self.anchor, self.current_buffer().revision()) == before {
+                break;
+            }
         }
         self.replaying = false;
+        if count > clipped {
+            self.status = say!("count.writing-ceiling", Self::WRITING_MAX);
+        }
     }
 
     /// Read the register the next command should use, and forget the request.
