@@ -377,7 +377,11 @@ pub fn run(
                     (Mode::Insert, true, _) => SetCursorStyle::SteadyUnderScore,
                     // `v` is on: every motion from here widens the selection,
                     // and the caret says so before the status line's tail does.
-                    (_, _, true) => SetCursorStyle::BlinkingBlock,
+                    // **Steady, not blinking.** A blink is a second signal for
+                    // nothing — the writer is reading their own prose while
+                    // this is on, and a flashing caret is the wrong thing to
+                    // have on the page.
+                    (_, _, true) => SetCursorStyle::SteadyUnderScore,
                     _ => SetCursorStyle::SteadyBlock,
                 }
             );
