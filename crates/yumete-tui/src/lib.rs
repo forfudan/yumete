@@ -9,6 +9,7 @@
 //! The terminal stack is `ratatui` (the maintained `tui-rs` fork) over its
 //! bundled `crossterm` backend, so no ANSI escapes are hand-written here.
 
+pub mod panel;
 pub mod table;
 pub mod theme;
 pub mod vertical;
@@ -2886,7 +2887,13 @@ fn draw(
     // covers the sidebar, which is a list the reader may be in the middle of
     // using.
     panels.extend(draw_which_key(
-        frame, editor, config, text_area, footer.y, cursor_x,
+        frame, editor, config, text_area, footer.y, (cursor_x, cursor_y),
+    ));
+    // The footnote or comment the cursor is standing on, in the same panel
+    // (#294). Drawn after the which-key so a half-pressed sequence — which the
+    // reader is in the middle of — wins the corner if both want it.
+    panels.extend(draw_note(
+        frame, editor, config, text_area, footer.y, (cursor_x, cursor_y),
     ));
     // `bare` draws no panel — the candidate is already in the sentence and the
     // code is under the caret. Unless there is no sentence to draw it into:
@@ -3791,113 +3798,55 @@ fn draw_hud_panel(
 /// One column while it fits, two when it does not. Not scrolling: a menu you
 /// have to scroll is one you cannot answer at a glance, which is the whole of
 /// what it is for.
+/// The panel for a half-pressed key sequence — `空格` and every other prefix.
 fn draw_which_key(
     frame: &mut Frame,
     editor: &Editor,
     config: &Config,
     area: Rect,
     bottom: u16,
-    caret_x: u16,
+    caret: (u16, u16),
 ) -> Option<Rect> {
     let (title, keys) = editor.pending_menu()?;
-    if keys.is_empty() {
-        return None;
-    }
-    let ink = crate::theme::Palette::of(config);
-    // The keys line up, so the meanings do: a ragged left edge on a list of
-    // two-character keys reads as noise.
-    let key_width = keys
-        .iter()
-        .map(|(k, _)| yumete_cjk::str_width(k))
-        .max()
-        .unwrap_or(1);
-    let rows: Vec<(String, String)> = keys
-        .iter()
-        .map(|(k, what)| {
-            let pad = " ".repeat(key_width.saturating_sub(yumete_cjk::str_width(k)));
-            (format!("{k}{pad}"), what.clone())
-        })
-        .collect();
-    let one = rows
-        .iter()
-        .map(|(k, what)| yumete_cjk::str_width(k) + 2 + yumete_cjk::str_width(what))
-        .max()
-        .unwrap_or(0);
+    panel::draw(frame, config, area, bottom, caret, &panel::Panel {
+        title,
+        body: panel::Body::Keys(keys.into_iter().map(|(k, what)| (k.to_string(), what)).collect()),
+        tag: None,
+    })
+}
 
-    // **Half the page, and half the width.** A menu is a thing you glance at
-    // beside your writing: one that fills the window has stopped being a menu,
-    // and one wider than half the page cannot dodge the caret — it covers the
-    // corner it was trying to avoid either way.
-    let room = (area.height.saturating_sub(2) / 2).max(1) as usize;
-    let across = if rows.len() > room { 2 } else { 1 };
-    let deep = rows.len().div_ceil(across);
-    let widest = (area.width as usize).saturating_sub(2);
-    // Each column gets its share, and what does not fit is cut *inside* the
-    // column rather than beyond the border — where it used to be dropped
-    // silently, leaving keys with no meanings beside them.
-    let one = one.min(widest.saturating_sub((across - 1) * 2) / across.max(1));
-    let inner = one * across + (across - 1) * 2;
-    let width = (inner + 2)
-        .max(yumete_cjk::str_width(&title) + 4)
-        .min(area.width as usize) as u16;
-    let height = (deep + 2) as u16;
-    // It may take half the page's height and no more, and it must leave the
-    // page something: at a very small window there is nowhere to put a menu,
-    // and covering the manuscript with one is worse than not drawing it.
-    if height > area.height / 2 + 1 || bottom < height || width < 8 {
+/// The panel for a footnote or a `%%註釋%%` — what the cursor is standing on.
+///
+/// It used to be a **full-width four-row strip** along the bottom of the page
+/// (#294), which is the wrong price twice over: a note is one short paragraph,
+/// so most of those four rows by the whole width were blank, and the four rows
+/// came off the manuscript whether the note needed them or not. The panel is
+/// the size of what it holds and stands over the page rather than pushing it.
+fn draw_note(
+    frame: &mut Frame,
+    editor: &Editor,
+    config: &Config,
+    area: Rect,
+    bottom: u16,
+    caret: (u16, u16),
+) -> Option<Rect> {
+    if !editor.detail_visible() || editor.detail_shows_a_row() {
         return None;
     }
-    // **The corner the cursor is not in.** A fixed corner is right half the
-    // time and covers what you are working on the other half; the panel goes to
-    // whichever side of the page the caret is not on. One rule for both
-    // layouts, because in both of them the caret has a column.
-    let far = area.x + area.width.saturating_sub(width);
-    let x = match caret_x >= area.x + area.width / 2 {
-        true => area.x,
-        false => far,
-    };
-    let panel = Rect::new(x, bottom - height, width, height);
-    frame.render_widget(Clear, panel);
-    // **A 漢字 cannot be covered by halves.** It owns two cells, and the
-    // renderer skips whatever a wide glyph covers — so a border written into
-    // the second of them is stored and then never emitted, and the panel opens
-    // with its whole left wall missing. Blank the glyph; the wall gets a cell.
-    vertical::clear_wide_left_edge(frame.buffer_mut(), panel);
-    frame.render_widget(
-        Block::default()
-            .borders(Borders::ALL)
-            .border_type(if config.panel.rounded {
-                BorderType::Rounded
-            } else {
-                BorderType::Plain
-            })
-            // `rule()`, the rung every other ring on the screen is drawn at.
-            .border_style(Style::default().fg(ink.rule()).bg(ink.paper()))
-            .title(Span::styled(
-                title,
-                Style::default().fg(ink.gold()).bg(ink.paper()),
-            ))
-            .style(Style::default().bg(ink.paper())),
-        panel,
-    );
-    let ground = Style::default().bg(ink.paper());
-    let buf = frame.buffer_mut();
-    for (i, (key, what)) in rows.iter().enumerate() {
-        let (column, row) = (i / deep, i % deep);
-        let x = panel.x + 1 + (column * (one + 2)) as u16;
-        let y = panel.y + 1 + row as u16;
-        let limit = panel.x + width - 1;
-        put_text(buf, x, y, limit, key, ground.fg(ink.gold()));
-        put_text(
-            buf,
-            x + key_width as u16 + 2,
-            y,
-            limit,
-            what,
-            ground.fg(ink.text()),
-        );
+    let detail = editor.detail()?;
+    let body = detail.rows.first().and_then(|(_, v)| v.clone()).unwrap_or_default();
+    if body.is_empty() {
+        return None;
     }
-    Some(panel)
+    panel::draw(frame, config, area, bottom, caret, &panel::Panel {
+        title: detail.title,
+        body: panel::Body::Prose(body),
+        // Where the note is written, so `gd` has somewhere named to go.
+        tag: match detail.links.first() {
+            Some(&(_, Some(at))) => Some(say!("detail.on-line", at + 1)),
+            _ => None,
+        },
+    })
 }
 
 /// A drawn buffer as one HTML `<pre>`: a span per run of same-styled cells.
@@ -3991,7 +3940,7 @@ fn drawable(text: &str) -> std::borrow::Cow<'_, str> {
 ///
 /// Returns the first cell it did **not** write, so a caller can put something
 /// after it — a note beside a row (#291) — without measuring the text twice.
-fn put_text(
+pub(crate) fn put_text(
     buf: &mut ratatui::buffer::Buffer,
     x: u16,
     y: u16,
@@ -12452,6 +12401,134 @@ mod tests {
             " ",
             "the intruding half is cut back"
         );
+    }
+
+    /// #294, the first slice of #299: a note **takes no rows off the page**.
+    ///
+    /// It used to get a full-width four-row band along the bottom — a wrong
+    /// price twice over: one short paragraph left most of that width blank,
+    /// and the four rows came off the manuscript whether the note filled them
+    /// or not. It floats now, in the same panel every other pop-up already is,
+    /// so the page keeps every row it had and the note merely stands over one
+    /// corner of it.
+    #[test]
+    fn a_note_floats_in_a_panel_and_takes_no_rows_off_the_page() {
+        let mut body: Vec<String> = (1..=14)
+            .map(|i| format!("第 {i} 段。那一年的雨下得久，他站在門口。"))
+            .collect();
+        body[1] = format!("末段的雨停了一次[^1]，{}", body[1]);
+        let text = format!(
+            "[^1]: 舊城的屋簷極寬，一到雨季，簷下就成了另一條街。\n\n{}",
+            body.join("\n")
+        );
+        let config = Config::default();
+        let mut editor = editor_with(&text);
+        // 出廠是 `full`; this one reads the page's own rows.
+        editor.set_hud(Hud::Basic);
+
+        // Two rows down and onto the reference, which opens the panel by
+        // itself — a footnote is not a table row, so it needs no `t i`.
+        let quiet = render(&editor, &config, 70, 20);
+        for _ in 0..3 {
+            editor.on_key(Key::Char('j'));
+        }
+        editor.on_key(Key::Char('f'));
+        editor.on_key(Key::Char('^'));
+        let shown = render(&editor, &config, 70, 20);
+
+        let rows = |b: &ratatui::buffer::Buffer| -> Vec<String> {
+            (0..b.area.height).map(|y| row_text(b, y)).collect()
+        };
+        let page = rows(&shown);
+        assert!(
+            page.iter().any(|r| r.contains("舊城的屋簷極寬")),
+            "the note is on the page: {page:?}"
+        );
+        assert!(
+            page.iter().any(|r| r.contains('│')),
+            "and it is in a ring, not a band: {page:?}"
+        );
+        // Its name in its own border, and where it is written said quietly on
+        // the bottom edge.
+        assert!(page.iter().any(|r| r.contains("[^1]")), "{page:?}");
+        assert!(page.iter().any(|r| r.contains("第 1 行")), "{page:?}");
+
+        // **The page kept its rows.** The panel stands over the bottom-right
+        // corner, so the left of those same rows still holds the manuscript it
+        // held before — a band would have blanked them to the full width.
+        let before = rows(&quiet);
+        for y in (shown.area.height - 6)..(shown.area.height - 3) {
+            let cut = |r: &String| r.chars().take(8).collect::<String>();
+            assert_eq!(
+                cut(&before[y as usize]),
+                cut(&page[y as usize]),
+                "row {y} lost its manuscript to the note"
+            );
+        }
+    }
+
+    /// #294: the panel takes **the corner the caret is not in** — on both
+    /// axes. A fixed corner is right half the time and covers the very line
+    /// being read the other half.
+    #[test]
+    fn the_note_panel_takes_the_corner_the_caret_is_not_in() {
+        let config = Config::default();
+        // Where the panel's top-left corner landed, and how the page reads.
+        let corner = |editor: &Editor| -> ((u16, u16), Vec<String>) {
+            let b = render(editor, &config, 70, 20);
+            let page: Vec<String> = (0..b.area.height).map(|y| row_text(&b, y)).collect();
+            let at = (0..b.area.height)
+                .flat_map(|y| (0..b.area.width).map(move |x| (x, y)))
+                .find(|&(x, y)| b[(x, y)].symbol() == "\u{256d}" || b[(x, y)].symbol() == "\u{250c}");
+            (
+                at.unwrap_or_else(|| panic!("no panel on the page: {page:?}")),
+                page,
+            )
+        };
+        // A manuscript whose reference sits on line `mark` of `lines` body
+        // rows, with the caret standing on it. The note is two rows long at
+        // this width — see the flip below for why that matters.
+        let note = |lines: usize, mark: usize| -> Editor {
+            let mut body: Vec<String> = (1..=lines)
+                .map(|i| format!("第 {i} 段。那一年的雨下得久，他站在門口。"))
+                .collect();
+            body[mark] = format!("末段的雨停了一次[^1]，{}", body[mark]);
+            let text = format!(
+                "[^1]: 舊城的屋簷極寬，一到雨季，簷下就成了另一條街，走過去要低頭。\n\n{}",
+                body.join("\n")
+            );
+            let mut editor = editor_with(&text);
+            // 出廠是 `full`; this one reads the page's own rows.
+            editor.set_hud(Hud::Basic);
+            for _ in 0..(mark + 2) {
+                editor.on_key(Key::Char('j'));
+            }
+            editor.on_key(Key::Char('f'));
+            editor.on_key(Key::Char('^'));
+            editor
+        };
+
+        // Caret high on the page and hard left: the panel goes low and right.
+        // 「Right」 is its **far** edge against the page's — a narrow panel's
+        // left corner is nowhere near the middle of the screen.
+        let ((x, y), page) = corner(&note(40, 0));
+        assert!(x > 0, "panel should be off the left wall: {x}, {page:?}");
+        assert!(
+            page[y as usize].ends_with('\u{256e}') || page[y as usize].ends_with('\u{2510}'),
+            "panel should be flush right: {page:?}"
+        );
+        assert!(y > 20 / 2, "panel should be low: {y}, {page:?}");
+
+        // Caret down among the rows the panel wanted: it moves to the top.
+        // Not 「the caret passed the middle」 — 「the caret is in the way」.
+        //
+        // **The page keeps three rows under the caret**, so how far down the
+        // caret can be is fixed and what varies is how far up the panel
+        // reaches: a two-row note is four rows of ring, and its top row is the
+        // row the caret is on. That is the collision, and it is the common
+        // one — a note of any length at all wraps.
+        let ((_, y), page) = corner(&note(40, 15));
+        assert_eq!(y, 0, "panel should have flipped to the top: {page:?}");
     }
 
     #[test]
