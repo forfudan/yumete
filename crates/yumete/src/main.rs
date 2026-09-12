@@ -141,7 +141,7 @@ fn main() -> ExitCode {
         yumete_config::Ambiguity::Wide => true,
         yumete_config::Ambiguity::Narrow => false,
         yumete_config::Ambiguity::Auto => {
-            yumete_tui::width::ask_the_terminal_about_width().unwrap_or(false)
+            yumete_tui::ambiguous::ask_the_terminal_about_width().unwrap_or(false)
         }
     });
     // …and the language everything says itself in, before anything says

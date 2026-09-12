@@ -1,5 +1,11 @@
 //! Asking the terminal how wide an ambiguous character is.
 //!
+//! **This is the asker, not the authority** (#349). What a character measures
+//! is [`yumete_cjk::width`](../../yumete_cjk/width/index.html)'s to say, and
+//! everything that lays out or draws a line asks it; this module runs once at
+//! start-up and tells it the one thing only the terminal knows. The two used
+//! to be a `width.rs` each, which said nothing about which was which.
+//!
 //! East-Asian **Ambiguous** characters — `—` `…` `“” ‘’` `·` `※` `▓` — are one
 //! cell in a Latin font and two in a CJK one, and Annex #11 says the
 //! environment decides. Every width question in the editor asks one global

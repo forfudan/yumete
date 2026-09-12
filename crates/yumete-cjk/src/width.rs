@@ -4,6 +4,12 @@
 //! crate, which implements Unicode Standard Annex #11. Kept behind this module
 //! so the rest of yumete depends on `yumete_cjk::char_width` / `str_width`
 //! rather than the dependency directly.
+//!
+//! **This is where the width of a character is decided** (#349) — the layout,
+//! the drawing, the wrap, the gutter and the click map all ask here, and the
+//! one thing this module cannot know for itself is what the terminal's font
+//! does with the Ambiguous block. `yumete-tui`'s `ambiguous` module asks the
+//! terminal that, once, at start-up, and calls [`set_ambiguous_wide`].
 
 use std::sync::atomic::{AtomicBool, Ordering};
 

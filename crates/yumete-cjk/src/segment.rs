@@ -31,7 +31,7 @@
 
 use std::collections::HashMap;
 
-use crate::word::{category, is_cjk, word_ranges};
+use crate::word::word_ranges;
 
 /// A compact everyday-prose Chinese word list, embedded so segmentation works
 /// out of the box. See [`DictionarySegmenter::builtin`].
@@ -236,6 +236,69 @@ impl Segmenter for CategorySegmenter {
     }
 }
 
+/// **The maximum-probability split of one run of 漢字** — the one
+/// implementation (#349).
+///
+/// Two of them had been written: this one, over a `word → weight` table, and
+/// [`YumeSegmenter`](../../yumete_ime/segment/struct.YumeSegmenter.html)'s,
+/// over 宇浩's 1.25M-entry 詞頻表. The same dynamic program both times — solve
+/// from the right, so every position only reads answers it already has — and
+/// only the scoring differed, which is the one thing a caller supplies.
+///
+/// * `score(word, len)` is `ln P(word)` plus whatever bias the caller wants,
+///   or `None` when `word` is not a word here. **It must answer `Some` for a
+///   single character**: that is what guarantees a path exists at all. A
+///   caller that does not gets the character taken alone, charged nothing.
+/// * `extends(word)` says whether any longer word starts with this prefix, so
+///   a table that can answer it cheaply need not probe up to `max_len`. A
+///   table that cannot says `true`.
+pub fn best_path(
+    chars: &[char],
+    max_len: usize,
+    mut score: impl FnMut(&str, usize) -> Option<f64>,
+    mut extends: impl FnMut(&str) -> bool,
+) -> Vec<(usize, usize)> {
+    let n = chars.len();
+    if n == 0 {
+        return Vec::new();
+    }
+    // `route[i]` = (the best total score for `chars[i..]`, where its first word
+    // ends). `route[n]` is the empty tail, worth nothing.
+    let mut route = vec![(0.0f64, 0usize); n + 1];
+    let mut word = String::with_capacity(max_len * 4);
+    for i in (0..n).rev() {
+        let mut best = f64::NEG_INFINITY;
+        let mut best_end = i + 1;
+        word.clear();
+        for len in 1..=max_len.min(n - i) {
+            word.push(chars[i + len - 1]);
+            if let Some(here) = score(&word, len) {
+                let total = here + route[i + len].0;
+                if total > best {
+                    best = total;
+                    best_end = i + len;
+                }
+            }
+            if !extends(&word) {
+                break;
+            }
+        }
+        if best == f64::NEG_INFINITY {
+            best = route[i + 1].0;
+            best_end = i + 1;
+        }
+        route[i] = (best, best_end);
+    }
+    let mut ranges = Vec::new();
+    let mut i = 0;
+    while i < n {
+        let end = route[i].1.max(i + 1);
+        ranges.push((i, end));
+        i = end;
+    }
+    ranges
+}
+
 /// A jieba-style dictionary segmenter over a `word → weight` table.
 ///
 /// Runs of CJK characters are segmented along the maximum-probability path
@@ -317,52 +380,30 @@ impl DictionarySegmenter {
 
     /// Segment one run of CJK characters, returning local `(start, end)` char
     /// ranges via the maximum-probability path through the word graph.
+    ///
+    /// The path is [`best_path`]'s; what belongs here is the scoring — a
+    /// stored word's weight against the table's total, single characters
+    /// always eligible (floor weight one, so a path always exists) and longer
+    /// words only when common enough to be joined.
     fn segment_cjk_run(&self, chars: &[char]) -> Vec<(usize, usize)> {
-        let n = chars.len();
-        if n == 0 {
-            return Vec::new();
-        }
         let log_total = self.total.ln();
-
-        // route[i] = (best total log-probability from i to the end, chosen end).
-        // A single character is always a candidate (floor weight one), so a path
-        // always exists; multi-character words join only when common enough.
-        let mut route = vec![(0.0f64, 0usize); n + 1];
-        for i in (0..n).rev() {
-            let mut best = f64::NEG_INFINITY;
-            let mut best_end = i + 1;
-            let mut frag = String::new();
-            let max_j = (i + self.max_len).min(n);
-            for (j, &ch) in chars.iter().enumerate().take(max_j).skip(i) {
-                frag.push(ch);
-                let end = j + 1;
-                let is_single = end == i + 1;
-                let weight = match self.dict.get(&frag).copied() {
-                    // A stored word: single characters always qualify; longer
-                    // words only when common enough to be joined.
-                    Some(w) if is_single || w >= self.threshold => w as f64,
-                    // An out-of-vocabulary single character: floor weight one.
-                    _ if is_single => 1.0,
-                    // A longer word that is unknown or too rare: not joinable.
-                    _ => continue,
+        best_path(
+            chars,
+            self.max_len,
+            |word, len| {
+                let weight = match self.dict.get(word).copied() {
+                    Some(w) if len == 1 || w >= self.threshold => w as f64,
+                    _ if len == 1 => 1.0,
+                    // Unknown or too rare to join — but a longer word may still
+                    // start here, so this is not the end of the extending.
+                    _ => return None,
                 };
-                let score = weight.ln() - log_total + route[end].0;
-                if score > best {
-                    best = score;
-                    best_end = end;
-                }
-            }
-            route[i] = (best, best_end);
-        }
-
-        let mut ranges = Vec::new();
-        let mut i = 0;
-        while i < n {
-            let end = route[i].1;
-            ranges.push((i, end));
-            i = end;
-        }
-        ranges
+                Some(weight.ln() - log_total)
+            },
+            // The table is a plain `word → weight` map with no prefix index, so
+            // it cannot say; probing up to `max_len` is the price of that.
+            |_| true,
+        )
     }
 }
 
@@ -382,42 +423,7 @@ impl Segmenter for DictionarySegmenter {
     }
 
     fn segment(&self, s: &str) -> Vec<(usize, usize)> {
-        let chars: Vec<char> = s.chars().collect();
-        let mut ranges = Vec::new();
-        let mut i = 0;
-        while i < chars.len() {
-            let c = chars[i];
-            if c.is_whitespace() {
-                i += 1;
-                continue;
-            }
-            if is_cjk(c) {
-                // Group a maximal run of CJK characters and segment it.
-                let start = i;
-                let mut j = i;
-                while j < chars.len() && is_cjk(chars[j]) {
-                    j += 1;
-                }
-                for (a, b) in self.segment_cjk_run(&chars[start..j]) {
-                    ranges.push((start + a, start + b));
-                }
-                i = j;
-                continue;
-            }
-            // Non-CJK: an alphanumeric or punctuation run (category rules).
-            let cat = category(c);
-            let start = i;
-            i += 1;
-            while i < chars.len()
-                && !chars[i].is_whitespace()
-                && !is_cjk(chars[i])
-                && category(chars[i]) == cat
-            {
-                i += 1;
-            }
-            ranges.push((start, i));
-        }
-        ranges
+        crate::ranges_around_cjk(s, |run| self.segment_cjk_run(run))
     }
 }
 
@@ -506,6 +512,28 @@ mod tests {
         // 世界 exists but is below the threshold, so it stays split into singles.
         let seg = DictionarySegmenter::new([("世界".to_string(), 5)], 100);
         assert_eq!(seg.segment("世界"), vec![(0, 1), (1, 2)]);
+    }
+
+    /// #349. A dictionary decides where a *word* ends inside a run of 漢字 and
+    /// nothing else: everything outside such a run is cut the same way by every
+    /// segmenter here, because they all walk the line through one function.
+    #[test]
+    fn every_segmenter_cuts_the_same_way_outside_a_run_of_han() {
+        let line = "冬天 abc123，山路。「好」\t二〇二五年";
+        let chars: Vec<char> = line.chars().collect();
+        let outside = |ranges: Vec<(usize, usize)>| -> Vec<(usize, usize)> {
+            ranges
+                .into_iter()
+                .filter(|&(a, _)| !crate::is_han(chars[a]))
+                .collect()
+        };
+        let plain = CategorySegmenter.segment(line);
+        for other in [
+            DictionarySegmenter::builtin(0).segment(line),
+            DictionarySegmenter::new([("山路".to_string(), 900)], 1).segment(line),
+        ] {
+            assert_eq!(outside(other), outside(plain.clone()));
+        }
     }
 
     #[test]

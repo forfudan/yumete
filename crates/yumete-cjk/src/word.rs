@@ -52,8 +52,28 @@ pub(crate) fn category(c: char) -> Category {
     }
 }
 
-/// Word ranges: alphanumeric runs, punctuation runs, and single CJK characters.
-pub fn word_ranges(s: &str) -> Vec<(usize, usize)> {
+/// **Where a run of 漢字 begins and ends, and what becomes of the rest** — the
+/// one implementation (#349).
+///
+/// Every segmenter in the project agrees about the easy half of the job and
+/// differs only in the hard one: whitespace separates and is itself no word,
+/// a run of CJK is handed to a dictionary, and anything else is a run of one
+/// category — letters and digits together, 標點 together. Only `cut_run` is a
+/// judgement about the language, and it is the only thing a segmenter here
+/// supplies.
+///
+/// It was written out three times before this, and the copies had drifted:
+/// [`YumeSegmenter`](../../yumete_ime/segment/struct.YumeSegmenter.html)
+/// dropped every 標點 on the floor instead of giving it a range, so `w` and
+/// the overlay behaved differently depending on which dictionary happened to
+/// be loaded — which is the whole of #349 in one line.
+///
+/// `cut_run` is given the run's characters and answers in indices relative to
+/// that run; the offsets are put back here.
+pub fn ranges_around_cjk(
+    s: &str,
+    mut cut_run: impl FnMut(&[char]) -> Vec<(usize, usize)>,
+) -> Vec<(usize, usize)> {
     let chars: Vec<char> = s.chars().collect();
     let mut ranges = Vec::new();
     let mut i = 0;
@@ -64,8 +84,15 @@ pub fn word_ranges(s: &str) -> Vec<(usize, usize)> {
             continue;
         }
         if is_cjk(c) {
-            ranges.push((i, i + 1));
-            i += 1;
+            let start = i;
+            while i < chars.len() && is_cjk(chars[i]) {
+                i += 1;
+            }
+            ranges.extend(
+                cut_run(&chars[start..i])
+                    .into_iter()
+                    .map(|(a, b)| (start + a, start + b)),
+            );
             continue;
         }
         let cat = category(c);
@@ -81,6 +108,11 @@ pub fn word_ranges(s: &str) -> Vec<(usize, usize)> {
         ranges.push((start, i));
     }
     ranges
+}
+
+/// Word ranges: alphanumeric runs, punctuation runs, and single CJK characters.
+pub fn word_ranges(s: &str) -> Vec<(usize, usize)> {
+    ranges_around_cjk(s, |run| (0..run.len()).map(|i| (i, i + 1)).collect())
 }
 
 /// **Coarse words: a 漢字 is a letter.**
