@@ -10922,6 +10922,50 @@ fn substitute_replaces_on_the_current_line_and_whole_file() {
     assert_eq!(ed.current_buffer().text(), "aaa\nbaa");
 }
 
+/// **`f` — 照字面**: the pattern is the characters typed, not a regex.
+///
+/// A manuscript is full of characters the regex engine reads as instructions.
+/// Without `f` the writer had to know which of them to backslash, and getting
+/// it wrong is silent: `(注)` finds 注 and changes the wrong thing.
+#[test]
+fn the_f_flag_takes_the_pattern_as_the_characters_it_is() {
+    // `.` as a wildcard changes both lines; `.` as itself changes one.
+    let mut ed = typed("A.B\nAxB\n");
+    assert!(ed.execute("%s/A.B/甲/g").is_ok(), "{}", ed.status());
+    assert_eq!(ed.current_buffer().text(), "甲\n甲\n");
+    let mut ed = typed("A.B\nAxB\n");
+    assert!(ed.execute("%s/A.B/甲/gf").is_ok(), "{}", ed.status());
+    assert_eq!(ed.current_buffer().text(), "甲\nAxB\n");
+
+    // Brackets are brackets, not a group — and without `f` this is not even
+    // an error, it just quietly matches 注 on its own.
+    let mut ed = typed("(注)一\n注二\n");
+    assert!(ed.execute("%s/(注)/（注）/gf").is_ok(), "{}", ed.status());
+    assert_eq!(ed.current_buffer().text(), "（注）一\n注二\n");
+
+    // A pattern the regex engine would refuse outright compiles under `f`.
+    let mut ed = typed("第1章*\n");
+    assert!(ed.execute("%s/第1章*/第一章/f").is_ok(), "{}", ed.status());
+    assert_eq!(ed.current_buffer().text(), "第一章\n");
+
+    // **Both sides.** With no groups to name, a `$` in the replacement can
+    // only be the writer's own — a price, a shell line, a formula.
+    let mut ed = typed("花了 $5.00\n");
+    assert!(ed.execute("%s/$5.00/$6.00/f").is_ok(), "{}", ed.status());
+    assert_eq!(ed.current_buffer().text(), "花了 $6.00\n");
+
+    // …but `\n` still opens a line: Enter submits the prompt, so there is no
+    // other way to type one.
+    let mut ed = typed("甲。乙。\n");
+    assert!(ed.execute("%s/。/。\\n/gf").is_ok(), "{}", ed.status());
+    assert_eq!(ed.current_buffer().text(), "甲。\n乙。\n\n");
+
+    // `f` and `i` are two questions, and both are answerable at once.
+    let mut ed = typed("A.b\n");
+    assert!(ed.execute("%s/a.B/甲/fi").is_ok(), "{}", ed.status());
+    assert_eq!(ed.current_buffer().text(), "甲\n");
+}
+
 /// **`-` is a span, `,` is a list** — in `:s` too (§5.7).
 #[test]
 fn a_substitution_reads_a_dash_as_a_span_and_a_comma_as_a_list() {

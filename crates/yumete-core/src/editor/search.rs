@@ -146,6 +146,7 @@ impl Editor {
             replacement,
             global,
             ignore_case,
+            literal,
             count_only,
             reshape,
             rows,
@@ -154,11 +155,20 @@ impl Editor {
             self.status = say!("find.empty-pattern");
             return;
         }
+        // **`f` — 照字面.** A manuscript is full of characters the regex engine
+        // reads as instructions: `。` is safe, but `(注)`, `A.B`, `第1章*` and
+        // every URL are not, and the writer who wants those characters had to
+        // know which ones to backslash. `f` says 「these are the characters」
+        // and does the escaping.
+        let wanted = match literal {
+            true => regex::escape(pattern),
+            false => pattern.to_string(),
+        };
         // `i` is the regex engine's own flag, so it is written into the
         // pattern rather than reimplemented here.
         let cased = match ignore_case {
-            true => format!("(?i){pattern}"),
-            false => pattern.to_string(),
+            true => format!("(?i){wanted}"),
+            false => wanted,
         };
         let re = match self.compile(&cased) {
             Ok(re) => re,
@@ -167,7 +177,15 @@ impl Editor {
                 return;
             }
         };
-        let replacement = unescape_replacement(replacement);
+        // The right-hand side goes literal too: with the pattern escaped there
+        // are no groups for a `$1` to name, so a `$` can only be the writer's
+        // own — a price, a shell line, a LaTeX formula. `\n` and `\t` still
+        // resolve, because Enter submits the prompt and there is no other way
+        // to type them.
+        let replacement = match literal {
+            true => unescape_replacement(replacement).replace('$', "$$"),
+            false => unescape_replacement(replacement),
+        };
 
         let text = self.current_buffer().text();
         let chosen = self.substitution_rows(rows);

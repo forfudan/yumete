@@ -2508,6 +2508,8 @@ struct Substitution<'a> {
     replacement: &'a str,
     global: bool,
     ignore_case: bool,
+    /// The `f` flag: 照字面 — the pattern is characters, not a regex.
+    literal: bool,
     count_only: bool,
     /// The `t` flag: the writer means to change how many cells a row has.
     reshape: bool,
