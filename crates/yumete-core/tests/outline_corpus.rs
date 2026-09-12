@@ -33,17 +33,14 @@ fn a_seven_hundred_chapter_book_has_seven_hundred_chapters() {
         eprintln!("skipping: the corpus is not on this machine");
         return;
     };
-    // 294 卷, and the outline is that many and not much more: the 目錄 at the
-    // top of the file names every one of them and is *not* in it.
-    assert!(
-        (250..350).contains(&outline.len()),
-        "{} headings in a book of 294 卷",
-        outline.len()
-    );
+    // 285 of its 294 卷 — the 目錄 at the top of the file names every one of
+    // them and is *not* in it, and nine of the pages write their heading in
+    // some way this has not been taught (see the footnote to #402).
+    assert_eq!(outline.len(), 285, "{:?}", outline.first());
     // The listing lines — 卷002, 卷003 one after another with nothing under
     // them — are gone, and the ones that are left have writing under them.
     assert!(
-        outline.iter().filter(|(line, _, _)| *line < 300).count() <= 1,
+        outline.iter().all(|(line, _, _)| *line > 800),
         "the 目錄 at the top is still in the outline: {:?}",
         outline.iter().take(4).collect::<Vec<_>>()
     );
@@ -73,11 +70,7 @@ fn a_book_that_kept_its_navigation_bar_has_its_chapters() {
         eprintln!("skipping: the corpus is not on this machine");
         return;
     };
-    assert!(
-        (230..260).contains(&outline.len()),
-        "{} headings in a file holding 120 回 twice",
-        outline.len()
-    );
+    assert_eq!(outline.len(), 240, "120 回 twice, and nothing else");
     assert!(
         outline.iter().any(|(_, _, t)| t.starts_with("第一回")),
         "the first chapter is not in {:?}",
@@ -124,14 +117,19 @@ fn a_defective_copy_is_reported_as_it_is() {
     );
 }
 
-/// 紅樓夢 marks its chapters plainly — 「第一回　甄士隱夢幻識通靈」 — and is
-/// here so that a change made for the other books has to leave it alone.
+/// 紅樓夢 marks its chapters plainly — 「第一回　甄士隱夢幻識通靈」 — and was
+/// the book that reported #390: its 目錄 ends 「第百二十回」, the 校閱參考 notes
+/// under it counted as writing, and that listing line got in *above* 第一回.
 #[test]
-fn the_book_that_was_already_right_stays_right() {
+fn the_last_line_of_a_listing_is_not_the_first_chapter() {
     let Some(outline) = outline_of("紅樓夢") else {
         eprintln!("skipping: the corpus is not on this machine");
         return;
     };
-    // 120 回 and one line of the 目錄 that gets in (#390).
-    assert_eq!(outline.len(), 121, "{:?}", outline.first());
+    assert_eq!(outline.len(), 120, "{:?}", outline.first());
+    assert!(
+        outline[0].2.starts_with("第一回"),
+        "the outline opens with {:?}",
+        outline[0]
+    );
 }

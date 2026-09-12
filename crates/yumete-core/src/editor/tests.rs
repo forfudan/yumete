@@ -2530,6 +2530,83 @@ fn a_novel_with_no_markup_still_has_chapters() {
 }
 
 #[test]
+fn the_last_line_of_a_table_of_contents_is_not_the_first_chapter() {
+    // 紅樓夢's 目錄 ends 「第百二十回　甄士隱詳說太虛情」, and then the 校閱
+    // 參考 notes begin. Three lines of writing under it, so it was read as a
+    // chapter — and, being early in the file, it sat above 第一回 (#390).
+    let dir = std::env::temp_dir().join(format!("yumete-toc-listing-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let novel = dir.join("novel.txt");
+    std::fs::write(
+        &novel,
+        "第一回　甄士隱夢幻識通靈
+
+第二回　賈夫人仙逝揚州城
+
+第三回　金陵城起復賈雨村
+
+         校閱參考
+蒙古王府本石頭記。
+脂硯齋重評石頭記。
+列藏本石頭記。
+         第一回　甄士隱夢幻識通靈
+那年冬天。
+雪下得早。
+山路斷了。
+         第二回　賈夫人仙逝揚州城
+第二天雪停了。
+路上沒有人。
+他一個人走。
+",
+    )
+    .unwrap();
+    let mut ed = Editor::new();
+    ed.open_file(&novel).unwrap();
+    let rows: Vec<(usize, String)> = ed.outline().into_iter().map(|(l, _, t)| (l, t)).collect();
+    assert_eq!(
+        rows,
+        [
+            (10, "第一回　甄士隱夢幻識通靈".to_string()),
+            (14, "第二回　賈夫人仙逝揚州城".to_string()),
+        ],
+        "the listing is a run of three, and the chapters stand alone"
+    );
+
+    // ⚠️ **Two in a row is not a run.** 資治通鑑 ends every 卷 with
+    // 「卷二 ◄ 資治通鑑」 and opens the next with 「第三卷 ► 卷四」, back to
+    // back — the first try at #390 called that a listing and cut a 294-卷
+    // book down to one row.
+    let history = dir.join("history.txt");
+    std::fs::write(
+        &history,
+        "第一卷　周紀一 ► 卷二
+威烈王二十三年。
+初命晉大夫。
+臣光曰。
+         卷一 ◄ 資治通鑑
+
+第二卷 ► 卷三
+安王元年。
+魏文侯薨。
+子擊立。
+         卷二 ◄ 資治通鑑
+
+第三卷 ► 卷四
+烈王元年。
+齊田和卒。
+子桓公午立。
+",
+    )
+    .unwrap();
+    let mut ed = Editor::new();
+    ed.open_file(&history).unwrap();
+    let titles: Vec<String> = ed.outline().into_iter().map(|(_, _, t)| t).collect();
+    assert_eq!(titles, ["第一卷　周紀一", "第二卷", "第三卷"]);
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
 fn a_chapter_wearing_a_navigation_bar_is_still_a_chapter() {
     // 三國演義's 120 回 are all written 「◀上一回 第二回　… 下一回▶」 — the
     // export kept the arrows the web page walked on, and the outline of a
