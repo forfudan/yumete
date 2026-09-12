@@ -639,6 +639,7 @@ index, and a row with no number anywhere else is a row that got lost.
 | 414 | **`f`、`mi`、`ms`、`mr` 打不了中文** | core+tui | P1 | 等一個字的鍵只有 `r` 認得上屏 [^414] | Fixed 2026-09-12 |
 | 415 | **五條搜索要打磨成一族** | core | P2 | 五個不同的形狀，能力不齊、名字不成體系 [^415] | Proposed |
 | 416 | **`gd` `gD` `g/` `g?` 在表格裏換了意思** | core | P1 | `g` 是全文的命令組，`t` 是表格的 [^416] | Fixed 2026-09-12 |
+| 417 | **`:x` 只是 `:wq` 的別名，沒有「改過纔存」** | core | P2 | vi 與 helix 的 `:x` 不動沒改過的檔，`:update` 整個沒有 [^417] | Fixed 2026-09-12 |
 
 ### 5.5 · A table is a delimiter, a surface and a boundary (#261)
 
@@ -10151,3 +10152,15 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     **表格那一半的問題交給 `t`**：`t/`／`t?` 一欄一欄地找，`:table-jump 木` 跳到
     key 欄裏叫這個名字的那一行。⚠️ **「在第 3 欄裏找完全相同的那一格」這個能力沒有
     `t` 的對應寫法**（`t3/` 是子串搜索，不是整格相等），暫時就這樣。**small**
+
+[^417]: `:x` 這裏一直是 `:write-quit` 的別名——無條件寫盤再退出。**vi 與 helix 的
+    `:x` 不是這個**：它只在檔案真的改過時纔寫（helix 叫 `:exit`，`x`／`xit` 是它的
+    別名，`typed.rs:3009`）。分別看着小，實際上有人靠它：檔案的修改時間一被推成現在，
+    `make`、rsync 與同步資料夾都會當成「這個檔變了」——打開看一眼再 `:x` 出來，就白白
+    引出一趟重建或一趟上傳。同一族的 `:update`（`:up`，改過纔存、不退出）這裏根本沒有。
+
+    **落地（2026-09-12）**：`:x`／`:xit` 從 `:write-quit` 的別名搬到新的 `:exit`，
+    `:wq` 只留 `wq` 一個別名；新增 `:update`／`:up`。三條都走同一支
+    `write_then_quit(path, only_if_changed)`（`editor/commands.rs`）。**給了路徑就一定
+    寫**（`:x 第二章.md` 是一句指令，不是一個條件），沒給路徑而緩衝區乾淨時只說一句
+    「沒有改動，未寫盤」。`:w` 不動，仍然無條件寫。

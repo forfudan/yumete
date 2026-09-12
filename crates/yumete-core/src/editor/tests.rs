@@ -4181,6 +4181,79 @@ fn enter_asks_who_uses_this_when_the_cell_is_not_a_link() {
     std::fs::remove_dir_all(&dir).ok();
 }
 
+/// **`:x` is not `:wq`** — it writes only when the file changed.
+///
+/// It was an alias of `:write-quit` here, which is the one thing that tells
+/// the two apart in vi and in helix both: a file opened, read and left alone
+/// keeps its timestamp, and `make`, rsync and a sync folder all read a moved
+/// timestamp as 「this changed」. `:update` is the same gate without leaving.
+#[test]
+fn a_file_nobody_changed_is_not_written_again() {
+    let dir = std::env::temp_dir().join(format!("yumete-update-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let file = dir.join("ch01.md");
+    std::fs::write(&file, "原稿一行\n").unwrap();
+
+    let mut ed = Editor::new();
+    ed.open_file(&file).unwrap();
+    let untouched = std::fs::metadata(&file).unwrap().modified().unwrap();
+
+    // Nothing typed, so `:update` writes nothing and says so.
+    std::thread::sleep(std::time::Duration::from_millis(20));
+    assert!(ed.execute("update").is_ok());
+    assert!(ed.status().contains("沒有改動"), "{}", ed.status());
+    assert_eq!(
+        std::fs::metadata(&file).unwrap().modified().unwrap(),
+        untouched,
+        "the timestamp did not move"
+    );
+
+    // `:w` is the unconditional one, and still is.
+    assert!(ed.execute("w").is_ok());
+    assert!(
+        std::fs::metadata(&file).unwrap().modified().unwrap() > untouched,
+        "`:w` writes whether or not anything changed"
+    );
+
+    // Now something changed: `:up` writes it.
+    press(&mut ed, "i");
+    ed.on_key(Key::Char('甲'));
+    ed.on_key(Key::Esc);
+    assert!(ed.execute("up").is_ok());
+    assert!(ed.status().contains("存了"), "{}", ed.status());
+    assert!(std::fs::read_to_string(&file).unwrap().contains('甲'));
+    assert!(!ed.current_buffer().is_modified());
+
+    // `:x` on a clean buffer leaves without writing…
+    let clean = std::fs::metadata(&file).unwrap().modified().unwrap();
+    std::thread::sleep(std::time::Duration::from_millis(20));
+    assert!(ed.execute("x").is_ok());
+    assert_eq!(
+        std::fs::metadata(&file).unwrap().modified().unwrap(),
+        clean,
+        "`:x` wrote a file nobody had changed"
+    );
+
+    // …and `:xit` is the same command under its other name.
+    assert_eq!(
+        crate::command::parse(":xit"),
+        Ok(crate::command::Command::Exit(None))
+    );
+    // `:x` is no longer `:wq`, which stays unconditional.
+    assert_eq!(
+        crate::command::parse(":wq"),
+        Ok(crate::command::Command::WriteQuit(None))
+    );
+    // A path is an instruction, not a convenience: it is always written.
+    assert_eq!(
+        crate::command::parse(":x 第二章.md"),
+        Ok(crate::command::Command::Exit(Some("第二章.md".into())))
+    );
+
+    std::fs::remove_dir_all(&dir).ok();
+}
+
 #[test]
 fn a_file_changed_underneath_is_not_written_over() {
     // The one silent way to lose a day's work: a file open here and changed
