@@ -5929,13 +5929,6 @@ zhs = "表格：{0} 栏，{1}"
 en = "table: {0} columns, {1}"
 
 [[message]]
-# 在格子裏按上下移動鍵
-key = "table.esc-before-moving"
-zht = "一格之內：先 Esc 再換行"
-zhs = "一格之内：先 Esc 再换行"
-en = "inside a cell: Esc first, then move up or down"
-
-[[message]]
 # 表格模式：某一欄的引號裏包着換行，於是一條記錄佔了兩行——這一種讀不了
 key = "table.field-runs-on"
 zht = "{0} 有跨行的欄位（引號裏包着換行），表格模式一行就是一條記錄，讀不了這一種"

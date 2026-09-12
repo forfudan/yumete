@@ -3902,17 +3902,23 @@ fn a_cell_is_entered_three_ways_and_typing_stays_inside_it() {
     ed.on_key(Key::Right);
     ed.on_key(Key::Char('金'));
     assert_eq!(ed.cell_text(1, 1), "⿰木金目");
-    // At the cell's edge they stop rather than stepping next door.
+    // At the cell's edge they step next door — walking is not joining (#376).
     ed.on_key(Key::End);
     ed.on_key(Key::Right);
-    ed.on_key(Key::Right);
-    assert_eq!(ed.cursor(), ed.cell_span(1, 1).unwrap().1, "held at the edge");
+    assert_eq!(ed.cell_position(), Some((1, 2)), "into the one to the right");
+    assert_eq!(ed.cursor(), ed.cell_span(1, 2).unwrap().0, "in at its start");
+    ed.on_key(Key::Left);
+    assert_eq!(ed.cursor(), ed.cell_span(1, 1).unwrap().1, "back in at its end");
     ed.on_key(Key::Home);
     ed.on_key(Key::Left);
-    assert_eq!(ed.cursor(), ed.cell_span(1, 1).unwrap().0);
-    // Up and down would leave half a value in one cell and half in another.
+    assert_eq!(ed.cell_position(), Some((1, 0)));
+    ed.on_key(Key::Right);
+    assert_eq!(ed.cell_position(), Some((1, 1)));
+    // Up and down keep to the column — the step `j` and `k` take from Normal.
     ed.on_key(Key::Down);
-    assert_eq!(ed.cursor_line(), 1, "{}", ed.status());
+    assert_eq!(ed.cursor_line(), 2, "{}", ed.status());
+    ed.on_key(Key::Up);
+    assert_eq!(ed.cell_position(), Some((1, 1)));
     ed.on_key(Key::Esc);
     ed.on_key(Key::Char('u'));
 
@@ -12150,4 +12156,74 @@ fn a_line_memo_does_not_grow_with_the_document() {
         1,
         "line 0 lost its reading when the memo filled up",
     );
+}
+
+/// 「我们应该允许表格模式在 insert 状态下通过上下左右键跨表格移动（包括行末跨到下一
+/// 行的头）」(#376). Walking out of a cell is not joining two of them: an arrow
+/// key moves and writes nothing, so the rule that keeps `Enter` and
+/// `Backspace` inside one cell was never about it.
+#[test]
+fn insert_arrows_walk_the_grid_they_are_typing_in() {
+    let (dir, csv) = a_table("arrows");
+    let mut ed = Editor::new();
+    ed.open_file(&csv).unwrap();
+    ed.goto_line(2);
+    press(&mut ed, "T"); // #356: by the cell
+    assert_eq!(ed.cell_position(), Some((1, 0)));
+    let before = ed.current_buffer().text();
+
+    ed.on_key(Key::Char('i'));
+    // At the cell's end, Right steps into the next one.
+    ed.on_key(Key::End);
+    ed.on_key(Key::Right);
+    assert_eq!(ed.cell_position(), Some((1, 1)), "{}", ed.status());
+    // …and Left at the start comes back — to the far end of what it walked
+    // into, because that is the side it came in from.
+    ed.on_key(Key::Left);
+    assert_eq!(ed.cell_position(), Some((1, 0)));
+    let (start, end) = ed.insert_bounds().unwrap();
+    assert!(end > start, "that cell has something in it");
+    assert_eq!(ed.cursor(), end, "entered from the right");
+
+    // Off the end of the row and into the first cell of the next.
+    for _ in 0..3 {
+        ed.on_key(Key::End);
+        ed.on_key(Key::Right);
+    }
+    assert_eq!(ed.cell_position(), Some((2, 0)), "the row ran on into the next");
+
+    // Up and down keep the column, which is the step `j` and `k` take.
+    ed.on_key(Key::Up);
+    assert_eq!(ed.cell_position(), Some((1, 0)));
+    ed.on_key(Key::Down);
+    assert_eq!(ed.cell_position(), Some((2, 0)));
+
+    assert_eq!(ed.mode(), Mode::Insert, "still typing");
+    assert_eq!(ed.current_buffer().text(), before, "walking wrote nothing");
+
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+/// `Tab` at the last cell of a Markdown table opens another row — org-mode's
+/// rule, and the right one, because the table is being filled in. An arrow key
+/// is not filling anything in, so it stops there (#376).
+#[test]
+fn an_arrow_key_off_the_end_of_a_table_does_not_open_a_row() {
+    let mut ed = typed("| 字 | 註 |\n| -- | -- |\n| 永 | 水 |\n");
+    ed.execute(":3").unwrap();
+    ed.enter_table();
+    press(&mut ed, "T");
+    press(&mut ed, "l");
+    assert_eq!(ed.cell_position(), Some((2, 1)), "the last cell");
+    let before = ed.current_buffer().text();
+
+    ed.on_key(Key::Char('i'));
+    ed.on_key(Key::End);
+    ed.on_key(Key::Right);
+    assert_eq!(ed.current_buffer().text(), before, "no row was opened");
+    assert_eq!(ed.cell_position(), Some((2, 1)), "and nowhere to go");
+
+    // Tab in the same place still does what Tab does.
+    ed.on_key(Key::Tab);
+    assert_ne!(ed.current_buffer().text(), before, "Tab opened one: {}", ed.status());
 }
