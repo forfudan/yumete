@@ -1050,7 +1050,15 @@ pub fn draw(
                     cell.set_symbol(&glyph.to_string()).set_style(style);
                 }
             }
-            let symbol = row.text;
+            // A control character gets its picture (#398): handed to the
+            // terminal as itself it draws nothing, and a 縱 with a NUL in it
+            // looked like a 縱 with a gap. One cell either way, which is the
+            // cell the slot was measured for.
+            let symbol: String = row
+                .text
+                .chars()
+                .map(|c| yumete_cjk::control_picture(c).unwrap_or(c))
+                .collect();
             if symbol.is_empty() {
                 // A paragraph's opening squares are empty slots, and what goes
                 // in them is the same question the horizontal page answers:

@@ -116,6 +116,28 @@ pub fn grapheme_width(g: &str) -> usize {
     }
 }
 
+/// The picture to draw `c` with when `c` is a control character (#398).
+///
+/// A NUL handed to a terminal is a NUL: the cell it was charged for comes out
+/// blank, so a file with one in it looks like a file with nothing there — and
+/// what is invisible gets treated as absent, by a reader and by the person
+/// they ask about it. Unicode's Control Pictures block is exactly this: `␀`
+/// `␁` … `␡`, one cell each, which is the cell [`grapheme_width`] already
+/// charges an ASCII control for. So the byte stays in the buffer and gets a
+/// face on the page.
+///
+/// `\t` and `\n` are **not** among them: a tab is a run of cells the layout
+/// already knows how to spend, and a line break is not drawn at all — it is
+/// the thing that ends the row.
+pub fn control_picture(c: char) -> Option<char> {
+    match c {
+        '\t' | '\n' => None,
+        '\u{7f}' => Some('\u{2421}'),
+        _ if (c as u32) < 0x20 => char::from_u32(0x2400 + c as u32),
+        _ => None,
+    }
+}
+
 /// The number of cells a tab occupies when the cursor sits at visual column
 /// `visual_x`, given a `tab_width` (the tab stop). The result advances the
 /// cursor to the next multiple of `tab_width`.
