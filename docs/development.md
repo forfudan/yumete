@@ -561,7 +561,7 @@ index, and a row with no number anywhere else is a row that got lost.
 | 336 | **組字中點鼠標，詞上屏到另一個檔案** | tui+ime | P1 | 閘挪到進門那一處，不掛在分支上 [^336] | Fixed 2026-09-11 |
 | 337 | **中／ABC 全局，而 Normal 模式看不見它** | tui+ime | P2 | 按 `i` 之前不知道會掉進哪一種 [^337] | Fixed 2026-09-12 |
 | 338 | **`:` 行敲 Shift，中文洩漏回 Insert** | tui+ime | P3 | 切換先把 `borrowed` 清成 `None` [^338] | Open |
-| 339 | **沒有 Kitty 協議就沒有切換，也沒有一句話** | tui+ime | P2 | Apple Terminal 上這個手勢什麼都不做，而且不說 [^339] | Open |
+| 339 | **沒有 Kitty 協議就沒有切換，也沒有一句話** | tui+ime | P2 | Apple Terminal 上這個手勢什麼都不做，而且不說 [^339] | Fixed 2026-09-12 |
 | 340 | **`/` 既不結束組字，也不交還語言** | tui+ime | P3 | `prompting` 只算 `Command` 與 `Lookfor` [^340] | Open |
 | 341 | **`:yume on` 阻塞事件迴圈 135 ms** | ime | P3 | 在按鍵處理裏同步造一個 `ImeSession` [^341] | Open |
 | 342 | **上屏之後那一段 ASCII 不掙 undo 點** | core+ime | P4 | 上屏後 `history.pending` 是 `None` [^342] | Open |
@@ -8033,6 +8033,20 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     **而且什麼都不說**：啟動沒有訊息，指示器也看不出差別，這個手勢就是默默不動。
     做法：啟動時認出 `enhanced=false` 就明說一次，狀態列標一下，並給一個可綁定的備用鍵。
     **small**
+
+    落地（2026-09-12）：啟動說一句（`ime.no-lone-shift`，讓位給收養孤兒與開檔那一句，
+    因為那兩件事是這一趟的，這一件是整個 session 的），備用鍵 `[editor] language_key`
+    出廠是 `C-^`，走的是**與輕點 Shift 同一支** `press_modifier(ShiftL)`——所以在 yume
+    裏改綁 Shift，這個鍵跟着改；不在組字的地方（Normal）只切語言，不會有東西上屏。
+
+    ⚠️ **舊終端機分不出 `C-^` 與 `C-6`**：`Ctrl+^` 是一個字節 `0x1E`，crossterm 把
+    `0x1C`–`0x1F` 讀回成 `4`–`7`（`parse.rs:111`）——而需要這個鍵的終端機正是那一種。
+    `control_alias` 把 `\`／`]`／`^`／`_` 摺成 `4`／`5`／`6`／`7`，兩種協議送來的同一個
+    和絃於是同名。
+
+    **狀態列的常駐標記沒有做**，有意的：它是關於終端機的一句話，一次就夠，而狀態列上
+    一條永遠不變的字是噪音。#337 落地之後那裏已經站着 `[中 靈明]`，再加一格只會擠掉
+    游標底下那個字的讀數。
 
 [^340]: `lib.rs:371` 的 `prompting` 只算 `Command` 與 `Lookfor`，而 `/` 是 `Mode::Search`
     （`editor/keys.rs:846`）。`:` 進去轉英、出來交還語言；`/` 沿用當下的狀態，既不結束

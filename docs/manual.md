@@ -1482,7 +1482,13 @@ yume 「關」着的時候鍵盤正在系統那個輸入法手上——最要緊
 鍵盤的時候**推上去，一交還就撤掉。這就是「ABC」和「關」為什麼必須是兩個狀態。
 
 終端要支持 Kitty 鍵盤協議：Ghostty、kitty、WezTerm、foot、Alacritty、Konsole 都行。
-Apple Terminal 報不出單獨的 Shift，在那裏三個狀態都用 `:yume on|abc|off` 進。
+Apple Terminal 報不出單獨的 Shift——**啓動時會說一句**，不會讓你按半天纔發現。那裏中／
+ABC 按 **`Ctrl+^`**（`[editor] language_key`，`"off"` 是不要這個鍵），它問的是與輕點
+Shift 同一個問題，所以在 yume 裏把 Shift 改綁成別的，這個鍵也跟着改；三個狀態仍舊隨時
+可以用 `:yume on|abc|off` 進。
+
+⚠️ 舊終端機把 `Ctrl+^` 與 `Ctrl+6` 送成同一個字節，分不出來——所以那兩個名字在
+`language_key` 裏是同一個鍵。
 
 **哪些地方能打中文：** Insert、搜索（`/`）、Ruby 模式。**不包括** `:` 命令行——命令
 名全是 ASCII。
@@ -3096,6 +3102,10 @@ word_mark = "tint"           # 怎麼畫："tint" 紙上鋪淡色 | "ink" 換字
 word_level = "balanced"      # 多容易併成詞："strict" | "balanced" | "full"
 table_rules = "line dash"    # 表格的欄線："line dash"（默認）| "line"
                              # | "line double" | "color" | "off"
+language_key = "C-^"         # 報不出單獨 Shift 的終端機上，用它切中／ABC
+                             # `C-<字>` | `A-<字>` | `F1`…`F12` | "off"
+                             # 舊終端機分不出 C-^ 與 C-6（同一個字節），
+                             # 兩個名字在這裏是同一個鍵
 
 layout = "horizontal"        # "horizontal" | "vertical"
 zong_length = 0              # 每縱字數，4–64；0 = 窗口能給多長就多長

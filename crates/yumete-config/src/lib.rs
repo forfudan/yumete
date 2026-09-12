@@ -116,6 +116,21 @@ pub struct EditorConfig {
     /// and cannot do without. The file does not say which it is, so the reader
     /// does. Kept as the string the reader wrote — the core owns the meaning.
     pub table_rules: String,
+    /// The key that stands in for a lone-Shift tap when the terminal cannot
+    /// report one (#339).
+    ///
+    /// Lone Shift — 中/ABC — is only visible under the Kitty keyboard
+    /// protocol's `REPORT_ALL_KEYS_AS_ESCAPE_CODES`. Apple Terminal has no such
+    /// thing, and there the gesture simply does nothing: the only way left is
+    /// `:yume abc`, eight keystrokes for a switch a writer makes dozens of
+    /// times an hour. This key does exactly what the tap does, by asking yume
+    /// the same question, so a rebound Shift follows it.
+    ///
+    /// `C-<char>`, `A-<char>`, `F1`…`F12`, or `"off"` for no key at all.
+    /// ⚠️ **A legacy terminal cannot tell `C-^` from `C-6`** — both are the one
+    /// byte `0x1E` — so those two names, and `C-\`/`C-4`, `C-]`/`C-5`,
+    /// `C-_`/`C-7`, are each one key here.
+    pub language_key: String,
     /// Whether the word-segmentation overlay is shown at start-up (Feature #24).
     /// On by default so the CJK word grouping is visible; toggle with
     /// `:word-show off` or set `show_segmentation = false`.
@@ -286,6 +301,7 @@ impl Default for EditorConfig {
             indent_hint: "none".to_string(),
             indent_symbol: "↵".to_string(),
             table_rules: "line dash".to_string(),
+            language_key: "C-^".to_string(),
             show_segmentation: true,
             word_level: yumete_cjk::WordLevel::default(),
             word_mark: yumete_cjk::WordMark::default(),
@@ -1698,6 +1714,7 @@ struct RawEditor {
     indent_hint: Option<String>,
     indent_symbol: Option<String>,
     table_rules: Option<String>,
+    language_key: Option<String>,
     show_segmentation: Option<bool>,
     word_level: Option<String>,
     word_mark: Option<String>,
@@ -1779,6 +1796,9 @@ impl RawConfig {
         }
         if other.editor.table_rules.is_some() {
             self.editor.table_rules = other.editor.table_rules.clone();
+        }
+        if other.editor.language_key.is_some() {
+            self.editor.language_key = other.editor.language_key.clone();
         }
         if other.editor.line_number_fill.is_some() {
             self.editor.line_number_fill = other.editor.line_number_fill;
@@ -1970,6 +1990,9 @@ impl RawConfig {
         }
         if let Some(rules) = self.editor.table_rules {
             config.editor.table_rules = rules;
+        }
+        if let Some(key) = self.editor.language_key {
+            config.editor.language_key = key;
         }
         if let Some(on) = self.editor.line_number_fill {
             config.editor.line_number_fill = on;

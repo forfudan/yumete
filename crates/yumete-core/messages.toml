@@ -4289,6 +4289,20 @@ zhs = "这个二进制不带码表"
 en = "this build carries no 碼表"
 
 [[message]]
+# 啟動時認出終端機報不出單獨的 Shift，說一次備用鍵是哪一個（#339）
+key = "ime.no-lone-shift"
+zht = "此終端機報不出單獨的 Shift，中／ABC 按 {0}（或 :yume on|abc）"
+zhs = "此终端报不出单独的 Shift，中／ABC 按 {0}（或 :yume on|abc）"
+en = "this terminal cannot report a lone Shift; {0} switches 中/ABC (or :yume on|abc)"
+
+[[message]]
+# 同上，而 language_key 關着，於是連備用鍵也沒有
+key = "ime.no-lone-shift-off"
+zht = "此終端機報不出單獨的 Shift，中／ABC 只能用 :yume on|abc（language_key 可綁一個鍵）"
+zhs = "此终端报不出单独的 Shift，中／ABC 只能用 :yume on|abc（language_key 可绑一个键）"
+en = "this terminal cannot report a lone Shift; 中/ABC is :yume on|abc (bind language_key)"
+
+[[message]]
 # 要換的方案系統裏沒有碼表
 key = "ime.no-table-installed"
 zht = "系統裏沒有裝 {0} 的碼表"
