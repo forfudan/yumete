@@ -358,3 +358,31 @@ fn the_comparison_table_hides_the_other_editors_and_no_more() {
         "nothing from past the yumete column: {said:?}"
     );
 }
+
+/// **And every key the `空格` menu offers is a key the manual teaches.**
+///
+/// The tests above read the documents and ask the editor. This one asks in the
+/// other direction, which is how #397 got in: `空格 P` was added to the menu
+/// and the manual's 空格選單 table never heard about it, so the table quietly
+/// became a subset of a list it presents as complete.
+///
+/// Only this menu is read backwards. The 字形組 spells its keys with doubled
+/// backticks (`` `l ``) and `t1s` is written without the space, so the scanner
+/// above cannot see either — demanding them from the other menus would fail on
+/// how a key is spelled rather than on whether it is taught.
+#[test]
+fn every_key_the_space_menu_offers_is_taught_in_the_manual() {
+    let (doc, manual) = documents().into_iter().next().expect("the manual first");
+    let taught: Vec<String> = quoted(&manual)
+        .into_iter()
+        .filter_map(|(_, quote)| leader_and_key(&quote))
+        .filter(|(lead, _)| *lead == '空')
+        .map(|(_, key)| key)
+        .collect();
+    for key in Editor::keys_after(' ').expect("the space menu") {
+        assert!(
+            taught.contains(&key),
+            "the menu offers `空格 {key}` and {doc} never says so"
+        );
+    }
+}
