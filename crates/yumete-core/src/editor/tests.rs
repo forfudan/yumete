@@ -11190,3 +11190,73 @@ fn the_project_root_prefers_yumete_then_git_then_here() {
     assert_eq!(ed.project_root(), std::env::current_dir().unwrap());
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// #380: a `.txt` whose every line is cut the same way opens as a grid.
+///
+/// The report that led here was 「tb 沒對齊」 about a file that had never been
+/// in tb: it opened as source, the tabs advanced to their stops, and the grey
+/// ground that draws made it look like a broken table.
+#[test]
+fn a_txt_that_is_plainly_a_grid_opens_as_one_and_says_so() {
+    let dir = std::env::temp_dir().join(format!("yumete-txt-grid-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("拆分.txt");
+    std::fs::write(&path, "雪\tvfg\t雨部\n風\tmqe\t風部\n雷\tfwq\t雨部\n").unwrap();
+
+    let mut ed = Editor::new();
+    ed.open_file(&path).unwrap();
+    let view = ed.table().expect("a tab in every line, the same number of them");
+    assert_eq!(view.schema.columns.len(), 3, "three columns");
+    assert!(ed.status().contains("Tab"), "and it names the mark: {}", ed.status());
+    assert!(ed.status().contains("t o"), "and the way back: {}", ed.status());
+
+    // Prose in the same directory is left alone: no mark appears the same
+    // number of times in every line of it.
+    let prose = dir.join("第一章.txt");
+    std::fs::write(&prose, "那年冬天，甲說。\n乙沒有答。\n風停了，雪還在下。\n").unwrap();
+    ed.open_file(&prose).unwrap();
+    assert!(ed.table().is_none(), "prose is not a grid");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// The other half: 源碼模式 said once about a guessed grid is remembered.
+///
+/// Without this the feature is a thing to dismiss every morning, which is
+/// worse than not having it.
+#[test]
+fn source_mode_is_remembered_for_a_guessed_grid_and_taken_back() {
+    let dir = std::env::temp_dir().join(format!("yumete-txt-off-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    let data = dir.join("data");
+    std::fs::create_dir_all(&data).unwrap();
+    let path = dir.join("表.txt");
+    std::fs::write(&path, "甲\t一\n乙\t二\n丙\t三\n").unwrap();
+
+    let mut ed = Editor::new();
+    ed.keep_word_list_in(data.clone());
+    ed.open_file(&path).unwrap();
+    assert!(ed.table().is_some(), "guessed on the way in");
+
+    ed.execute(":table off").unwrap();
+    assert!(ed.table().is_none(), "and left when told to");
+    assert!(
+        data.join("source-mode.txt").is_file(),
+        "the answer is written down, not just held"
+    );
+
+    // A new editor is tomorrow morning.
+    let mut ed = Editor::new();
+    ed.keep_word_list_in(data.clone());
+    ed.open_file(&path).unwrap();
+    assert!(ed.table().is_none(), "it does not ask again");
+
+    // …and asking for a level again is the way back in, note withdrawn.
+    ed.execute(":table basic").unwrap();
+    assert!(ed.table().is_some(), "t b re-enters");
+    let mut ed = Editor::new();
+    ed.keep_word_list_in(data.clone());
+    ed.open_file(&path).unwrap();
+    assert!(ed.table().is_some(), "and the note is gone");
+    let _ = std::fs::remove_dir_all(&dir);
+}

@@ -744,6 +744,16 @@ const GUESSES: [char; 3] = ['\t', ',', ';'];
 /// standing in and has just pressed the key about, it is worth guessing.
 pub const BLOCK_GUESSES: [char; 4] = ['\t', ',', ';', '&'];
 
+/// The delimiters a **plain-text file** may turn out to be cut by (#380).
+///
+/// The three above and a space, in that order of confidence. A space is not
+/// among [`GUESSES`] because that list is also asked of a document, where a
+/// space is what words are separated by; asked of a whole file whose every
+/// line holds the same number of them, it is a column separator. The order
+/// matters: a file cut by tabs usually has spaces inside its fields, so the
+/// stronger mark has to be tried first.
+pub const TEXT_GUESSES: [char; 4] = ['\t', ',', ';', ' '];
+
 /// Which character splits these lines into cells, if one plainly does.
 ///
 /// The test is not 「which appears most often」 but 「which appears the **same**

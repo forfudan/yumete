@@ -5985,6 +5985,13 @@ zhs = "对齐好了"
 en = "lined up"
 
 [[message]]
+# 打開一個看起來就是分欄的純文本檔案，自動以表格模式打開（#380）
+key = "table.looks-delimited"
+zht = "本檔案格式似乎是 {0} 分欄，故而以表格模式打開，按 t o 回到源碼模式"
+zhs = "本文件格式似乎是 {0} 分栏，故而以表格模式打开，按 t o 回到源码模式"
+en = "this file looks {0}-delimited, so it opens as a table; t o for the source"
+
+[[message]]
 # 表格裏切回按格移動
 key = "table.moving-by-cell"
 zht = "按格移動"
