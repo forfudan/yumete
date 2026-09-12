@@ -157,6 +157,15 @@ impl Editor {
             self.status = say!("convert.not-a-character");
             return;
         }
+        // **The same check `:s` and `:replace` make** (#350). A whole-document
+        // rewrite lifts the cell guard, so the one thing table mode promises —
+        // that a row never gains or loses a cell — is only kept if whoever
+        // lifts the guard asks. `:s` asked, `:replace` asked, and the two
+        // commands that rewrite the *entire* book did not.
+        if let Some(why) = self.substitution_breaks_the_grid(text) {
+            self.status = why;
+            return;
+        }
         self.snapshot();
         let len = self.current_buffer().char_count();
         let done = self.without_cell_guard(|e| e.current_buffer_mut().replace(0..len, text));

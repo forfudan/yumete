@@ -2264,6 +2264,13 @@ impl Editor {
         if self.current_buffer().text() == text {
             return false;
         }
+        // The check every other whole-document rewrite makes (#350): lifting
+        // the cell guard is exactly the moment a row can silently gain or lose
+        // a cell, and a formatter that reflows a 拆分表 is the likeliest way.
+        if let Some(why) = self.substitution_breaks_the_grid(text) {
+            self.status = why;
+            return false;
+        }
         let at = self.cursor;
         self.snapshot();
         let len = self.current_buffer().char_count();

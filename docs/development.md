@@ -572,7 +572,7 @@ index, and a row with no number anywhere else is a row that got lost.
 | 347 | **中英切換交回 yume 的綁定表** | tui+ime | P1 | Shift 走 `key_action` ＋ 上游新增的 `Engine::perform` [^347] | Fixed 2026-09-09 |
 | 348 | **九個手寫快取收成一套按行記憶** | core | P2 | 每個自己決定 key 放什麼，於是各有各的必然失效 [^348] | Open |
 | 349 | **一個概念一處權威：字素、寬度、分詞** | core | P2 | 同一件事兩三套實現，對不上的時候纔看得見 [^349] | Open |
-| 350 | **護欄放在必經之路上，不放在呼叫點** | core | P2 | 掛在一個 match 分支上的規矩，另外三個入口不認 [^350] | Open |
+| 350 | **護欄放在必經之路上，不放在呼叫點** | core | P2 | `:wa` 改走 `with_buffer`／`show_buffer`；整份重寫一律先問格線 [^350] | Fixed 2026-09-12 |
 | 351 | **按性質提問，不按模式列舉** | core+tui | P3 | `matches!(m, A \| B)` 之外的模式就這麼掉出去了 [^351] | Open |
 | 352 | **TUI 設定面板走 `settings_ui` 的兩半事實** | tui+ime | P4 | 第五個前端不必再手抄一份布爾表達式 [^352] | Proposed |
 | 353 | **兩條過時的提示，其中一條還沒走 `messages.toml`** | tui+core | P3 | 面板改說 `gd` 並進了表；Enter 從此沉默 [^353] | Fixed 2026-09-09 |
@@ -8210,6 +8210,27 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     bool，第二個進程看不見（#305）；`:grep` 的截斷沒有型別表達「這個結果集不完整」，
     於是 `:replace` 照常跑、照常報成功（#308）。做法：規矩放在所有人必經的那道門上
     ——寫盤走 `write_forcing`，不完整的結果集自己帶着那個事實。**medium**
+
+    **落地（2026-09-12）。** 那三處 2026-09-09 各自修好了；這一條剩下的是**按這個形狀
+    去找還有沒有**。找到兩處，各帶一支測試，都在還原成舊碼之後真的紅過。
+
+    一、**`:wa` 停下來提問的那條路把編輯器留在半路上。** `write_all` 用
+    `self.current = i` 逐個切過去，末尾再切回來——可停在提問的那個檔案時它**不回末尾**。
+    於是「顯示的是 B，而光標、快取與格線都還是 A 的」：一個四十萬字的章節切到十二萬字的
+    檔案上，光標停在 300000，接着一個 `x` 就把行程帶走了（`Char index out of bounds:
+    300000, Rope length 120002`）。門是 `show_buffer`——它存走原來那格的光標、取回這一格的、
+    `forget_the_document`、刷側欄。改法不是「每一輪都走那道門」（一百個檔案就是一百次重建
+    大綱與側欄，正是 #317 的病），而是把**切過去和切回來綁成一次呼叫**：
+    `with_buffer(i, |e| …)`（`files.rs`）。真要落在別的檔案上，那是**有意**的，走
+    `show_buffer`。⚠️ `page.rs:470` 換窗格時也直接寫 `self.current`，但它把那三件事
+    （存光標、換、`forget_the_document`）就地做齊了，故意不取回存下的光標（窗格自己記着
+    位置）——沒有動它。
+
+    二、**六處 `without_cell_guard`，四處先問 `substitution_breaks_the_grid`，兩處沒問。**
+    沒問的正好是重寫**整份文件**的那兩個：`replace_everything`（前端把排版好的整份交回來）
+    與 `:convert` 的 `rewrite_with_conversion`。抬起格子護欄本來就是「一行可能多出一格」
+    的那一刻，四處問了兩處不問，就是這一條說的病。兩處都補上了；不在表格檔裏時
+    `grid_shape_here()` 回 `None`，散文一分錢不花。
 
 [^351]: `yumete-tui/src/lib.rs:371` 的
     `let prompting = |m: Mode| matches!(m, Mode::Command | Mode::Lookfor);`
