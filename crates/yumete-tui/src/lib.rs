@@ -352,8 +352,16 @@ pub fn run(
     let mut drawn: Option<ratatui::buffer::Buffer> = None;
 
     let result = loop {
-        let mode = editor.mode();
-        if last_mode != Some(mode) {
+        // **Extend is a mode as far as the cursor is concerned** (2026-09-12).
+        // helix's `[editor.cursor-shape]` has three slots — normal, insert and
+        // **select** — and its default theme paints the select cursor its own
+        // colour (`ui.cursor.primary.select`). yumete's ladder cannot spare a
+        // rung for it: HEAD 815 and SELECTION 700 are already only 5% apart, so
+        // a third ground between them would be a difference nobody can see. The
+        // shape is free, and the terminal draws it.
+        let shown = (editor.mode(), editor.is_extending());
+        if last_mode != Some(shown) {
+            let (mode, extending) = shown;
             // A block in Normal, a bar in Insert — the shape a modal editor is
             // read by. Only sent on a change, so the terminal is not asked to
             // reset its cursor on every keystroke.
@@ -364,9 +372,12 @@ pub fn run(
             let vertical = editor.layout() == WritingLayout::Vertical;
             let _ = execute!(
                 stdout(),
-                match (mode, vertical) {
-                    (Mode::Insert, false) => SetCursorStyle::SteadyBar,
-                    (Mode::Insert, true) => SetCursorStyle::SteadyUnderScore,
+                match (mode, vertical, extending) {
+                    (Mode::Insert, false, _) => SetCursorStyle::SteadyBar,
+                    (Mode::Insert, true, _) => SetCursorStyle::SteadyUnderScore,
+                    // `v` is on: every motion from here widens the selection,
+                    // and the caret says so before the status line's tail does.
+                    (_, _, true) => SetCursorStyle::BlinkingBlock,
                     _ => SetCursorStyle::SteadyBlock,
                 }
             );
@@ -381,7 +392,7 @@ pub fn run(
             // its language back on the way *in* to `::` would put 中文 on a
             // line that is about to be typed in 英.
             let prompting = |m: Mode| matches!(m, Mode::Command | Mode::Lookfor);
-            if last_mode.is_some_and(prompting) && !prompting(mode) {
+            if last_mode.is_some_and(|(m, _)| prompting(m)) && !prompting(mode) {
                 if let Some(was) = borrowed.take() {
                     if ime.available() && ime.is_chinese() != was {
                         ime.toggle_language();
@@ -394,7 +405,10 @@ pub fn run(
             // 英 whatever Insert was in** — otherwise `:layout` typed straight
             // after writing 中文 is eaten a letter at a time. Insert's own
             // state is borrowed, not overwritten; it is put back above.
-            if prompting(mode) && !last_mode.is_some_and(prompting) && ime.available() {
+            if prompting(mode)
+                && !last_mode.is_some_and(|(m, _)| prompting(m))
+                && ime.available()
+            {
                 if ime.is_composing() {
                     ime.escape();
                 }
@@ -403,7 +417,7 @@ pub fn run(
                     ime.toggle_language();
                 }
             }
-            last_mode = Some(mode);
+            last_mode = Some(shown);
         }
         // Where the loop is, for the watchdog (#359). Two relaxed stores.
         diag::beat(diag::Stage::Measuring, 0);
