@@ -337,6 +337,20 @@ pub fn run(
     if let Some(said) = adopt_an_orphan() {
         editor.set_status(said);
     }
+    // **Say once that the lone-Shift tap is not coming** (#339). Without the
+    // Kitty protocol a bare Shift is never reported, so the gesture a writer
+    // uses dozens of times an hour does nothing at all — and says nothing
+    // either, which reads as yumete being broken rather than as the terminal
+    // having no way to tell us. Said at start-up and not repeated: it is a
+    // fact about the terminal, and it will not change while this session runs.
+    // It gives way to an adopted orphan and to whatever opening the files had
+    // to say — those are about this run, and this is about the whole session.
+    if !enhanced && editor.status().is_empty() {
+        editor.set_status(match language_key(config) {
+            Some(_) => say!("ime.no-lone-shift", config.editor.language_key.trim()),
+            None => say!("ime.no-lone-shift-off"),
+        });
+    }
     let mut last_mode = None;
     // An event read ahead of its turn and handed back — see [`drain_the_flick`].
     // The queue is the terminal's, not ours, and this is the one place anything
@@ -695,6 +709,25 @@ pub fn run(
                     continue;
                 }
                 let (code, mods) = normalize_shift(key.code, key.modifiers);
+                // The stand-in for a Shift this terminal cannot report (#339).
+                // It asks yume the same question the tap does, so a rebound
+                // Shift is rebound here too; outside a place that composes
+                // there is nothing to commit, so it is only the switch.
+                if ime.available()
+                    && ime.engaged()
+                    && language_key(config).is_some_and(|k| is_language_key(k, code, mods))
+                {
+                    borrowed = None;
+                    match composes_here(editor) {
+                        true => {
+                            if ime.press_modifier(FuncKey::ShiftL) {
+                                editor.insert_committed(&ime.take_committed());
+                            }
+                        }
+                        false => ime.toggle_language(),
+                    }
+                    continue;
+                }
                 let consumed = composes_here(editor)
                     && ime.available()
                     && ime.engaged()
@@ -1288,6 +1321,68 @@ impl std::ops::Index<usize> for Seats {
 impl std::ops::IndexMut<usize> for Seats {
     fn index_mut(&mut self, which: usize) -> &mut Viewport {
         &mut self.0[which.min(1)]
+    }
+}
+
+/// The key that stands in for a lone-Shift tap on a terminal that cannot report
+/// one (#339), as `[editor] language_key` names it.
+///
+/// `C-<char>`, `A-<char>`, `F1`…`F12`, `off`. Anything else is `None` — a
+/// misspelt key is no key, and the start-up line says which key there is.
+fn language_key(config: &Config) -> Option<(KeyCode, KeyModifiers)> {
+    let name = config.editor.language_key.trim();
+    if name.is_empty() || name.eq_ignore_ascii_case("off") {
+        return None;
+    }
+    if let Some(n) = name
+        .strip_prefix(['F', 'f'])
+        .and_then(|d| d.parse::<u8>().ok())
+    {
+        return (1..=12).contains(&n).then_some((KeyCode::F(n), KeyModifiers::NONE));
+    }
+    let (mods, rest) = match name.split_once('-')? {
+        ("C" | "c", rest) => (KeyModifiers::CONTROL, rest),
+        ("A" | "a", rest) => (KeyModifiers::ALT, rest),
+        _ => return None,
+    };
+    let mut chars = rest.chars();
+    let c = chars.next()?;
+    chars
+        .next()
+        .is_none()
+        .then(|| (KeyCode::Char(control_alias(c, mods)), mods))
+}
+
+/// The one name a control chord has, whichever protocol delivered it.
+///
+/// A legacy terminal sends `Ctrl+^` as the single byte `0x1E`, and crossterm
+/// reads `0x1C`–`0x1F` back as `4`–`7` — so on Apple Terminal `C-^` *is* `C-6`,
+/// and the terminal this whole feature exists for is exactly that one. Under
+/// the Kitty protocol the same chord arrives as `^`. Both are folded here, so
+/// the configured name matches either way.
+fn control_alias(c: char, mods: KeyModifiers) -> char {
+    if !mods.contains(KeyModifiers::CONTROL) {
+        return c;
+    }
+    match c {
+        '\\' => '4',
+        ']' => '5',
+        '^' => '6',
+        '_' => '7',
+        _ => c.to_ascii_lowercase(),
+    }
+}
+
+/// Whether this keystroke is the [`language_key`].
+fn is_language_key(want: (KeyCode, KeyModifiers), code: KeyCode, mods: KeyModifiers) -> bool {
+    // Shift is not compared: it is how `^` is typed in the first place.
+    let real = |m: KeyModifiers| m & (KeyModifiers::CONTROL | KeyModifiers::ALT);
+    if real(want.1) != real(mods) {
+        return false;
+    }
+    match (want.0, code) {
+        (KeyCode::Char(a), KeyCode::Char(b)) => a == control_alias(b, mods),
+        (a, b) => a == b,
     }
 }
 
@@ -12561,6 +12656,53 @@ mod tests {
             "",
             "and nothing at all once yume has the keyboard back"
         );
+    }
+
+    /// The stand-in key, and the one thing about it that is not obvious: a
+    /// legacy terminal — the only kind that needs this key — cannot tell `C-^`
+    /// from `C-6`, so the two names are one key (#339).
+    #[test]
+    fn the_stand_in_for_shift_is_the_same_key_under_either_protocol() {
+        let mut config = Config::default();
+        let want = language_key(&config).expect("bound out of the box");
+
+        // Apple Terminal sends 0x1E, which crossterm reads back as `6`.
+        assert!(is_language_key(
+            want,
+            KeyCode::Char('6'),
+            KeyModifiers::CONTROL
+        ));
+        // A Kitty-protocol terminal sends the character that was typed.
+        assert!(is_language_key(
+            want,
+            KeyCode::Char('^'),
+            KeyModifiers::CONTROL | KeyModifiers::SHIFT
+        ));
+        assert!(
+            !is_language_key(want, KeyCode::Char('6'), KeyModifiers::NONE),
+            "a bare 6 is a count, not a language switch"
+        );
+
+        config.editor.language_key = "A-l".to_string();
+        let want = language_key(&config).expect("A- is a name too");
+        assert!(is_language_key(want, KeyCode::Char('l'), KeyModifiers::ALT));
+        assert!(!is_language_key(
+            want,
+            KeyCode::Char('l'),
+            KeyModifiers::CONTROL
+        ));
+
+        config.editor.language_key = "F9".to_string();
+        assert_eq!(
+            language_key(&config),
+            Some((KeyCode::F(9), KeyModifiers::NONE))
+        );
+
+        // No key at all, and a name that is not a key, are the same answer.
+        for name in ["off", "", "  ", "C-", "Ctrl-x", "F13"] {
+            config.editor.language_key = name.to_string();
+            assert_eq!(language_key(&config), None, "{name:?}");
+        }
     }
 
     #[test]
