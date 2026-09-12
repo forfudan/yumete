@@ -32,14 +32,6 @@ use crate::zong::{self, Grid, Layout, DEFAULT_ZONG_LENGTH};
 /// indent draws when the reader has not named a width.
 const DEFAULT_INDENT: usize = 2;
 
-/// A paragraph's word ranges, kept against a hash of the paragraph's text.
-type SegmentCache = HashMap<usize, (u64, Vec<(usize, usize)>)>;
-
-/// A paragraph's 平仄, kept the same way and for the same reason (Feature #247).
-type MeterCache = HashMap<usize, (u64, Vec<crate::meter::Mark>)>;
-
-/// A line's inline notes, kept the same way and for the same reason (#248).
-type NoteCache = HashMap<usize, (u64, Vec<crate::drawn::Run>)>;
 
 /// The other work area: a buffer, a place in it, and what to look at there.
 ///
@@ -127,14 +119,6 @@ struct Hits {
 /// something other than prose is written there.
 type FoldMap = ((u64, u64), Vec<bool>, (usize, usize));
 
-/// One line's Markdown runs, against the hash of the text they were read from,
-/// keyed by the buffer that line is in and its number.
-type MarkupCache = HashMap<(u64, usize), (u64, Vec<crate::markdown::Span>)>;
-
-/// One line's 注音 groups, against the revision and the dialects they were read
-/// with, keyed the same way and for the same reason.
-type RubyCache = HashMap<(u64, usize), (u64, Vec<crate::ruby::Ruby>)>;
-
 /// Every line's block and every merge conflict in the document, against the
 /// buffer they were worked out for and that buffer's revision — the two things
 /// that decide whether they are still true.
@@ -143,12 +127,6 @@ type RubyCache = HashMap<(u64, usize), (u64, Vec<crate::ruby::Ruby>)>;
 /// scan already reads every line's opening, and the four markers are settled
 /// by exactly those characters (#249).
 type BlockCache = ((u64, u64), Vec<crate::markdown::Block>, Vec<crate::conflict::Conflict>);
-
-/// How many paragraphs of segmentation to remember.
-///
-/// A page is tens of paragraphs; the limit only exists so that scrolling a long
-/// document does not end up holding one entry per paragraph in it.
-const SEGMENT_CACHE_LIMIT: usize = 512;
 
 /// What Ruby mode will write when the reading is submitted.
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -1759,13 +1737,13 @@ pub struct Editor {
     /// Set only for the duration of the write the reader said 「yes」 to.
     oversize_answered: bool,
     /// Word ranges already worked out, per line, against a hash of that line.
-    segment_cache: RefCell<SegmentCache>,
+    segment_memo: memo::LineMemo<Vec<(usize, usize)>>,
     /// 平仄 in the margin (Feature #247), and the answers already worked out.
     ///
     /// A drawing setting, like [`Self::focus`]: it changes what is in the
     /// margin beside the writing and never what the writing is.
     meter: bool,
-    meter_cache: RefCell<MeterCache>,
+    meter_memo: memo::LineMemo<Vec<crate::meter::Mark>>,
     /// Inline notes on the marks a Chinese manuscript got wrong (#248), and
     /// the answers already worked out.
     ///
@@ -1773,7 +1751,7 @@ pub struct Editor {
     /// writer's own typing nor a table's geometry: the editor saying something
     /// *about* the text, in the text's own place, as it is written.
     notes: bool,
-    note_cache: RefCell<NoteCache>,
+    note_memo: memo::LineMemo<Vec<crate::drawn::Run>>,
     /// Which lines are folded away, against the buffer they were worked out
     /// for. One pass over the file per edit — the answer is not line-local (a
     /// blank line inside a fence is code, not a paragraph break), and asking
@@ -1782,11 +1760,11 @@ pub struct Editor {
     /// The Markdown runs of each paragraph, cached the same way and for the
     /// same reason: the renderer asks for every paragraph on screen, every
     /// frame, and the answer only changes when the paragraph does.
-    /// Keyed by the buffer's **id** and the line — see `blocks_through`.
-    /// A `HashMap<line, …>` said that line 3 of every file was the same line,
-    /// so `*強調*` in a Markdown chapter came back as emphasis in a `:syntax
-    /// text` manuscript that happened to hold the same words.
-    markup_cache: RefCell<MarkupCache>,
+    /// Keyed by the buffer's **id** and the line — the key every line memo
+    /// uses (#348), because a bare `line` said that line 3 of every file was
+    /// the same line: `*強調*` in a Markdown chapter came back as emphasis in a
+    /// `:syntax text` manuscript that happened to hold the same words.
+    markup_memo: memo::LineMemo<Vec<crate::markdown::Span>>,
     /// The readings laid out on each paragraph, cached the same way.
     ///
     /// **Everything that draws a page asks this, and so does the wrap** — a
@@ -1795,7 +1773,7 @@ pub struct Editor {
     /// Reading it costs the paragraph materialised into characters and walked
     /// once, which on a chapter written as one 1,000,000-character paragraph
     /// was 2.6 ms an ask and 13 ms of every `j` (#315).
-    ruby_cache: RefCell<RubyCache>,
+    ruby_memo: memo::LineMemo<Vec<crate::ruby::Ruby>>,
     /// The block of every line, against the buffer it was worked out for and
     /// that buffer's revision.
     block_cache: RefCell<Option<BlockCache>>,
@@ -2199,14 +2177,14 @@ impl Editor {
             viewing: Cell::new(None),
             query: None,
             oversize_answered: false,
-            segment_cache: RefCell::new(SegmentCache::new()),
+            segment_memo: memo::LineMemo::default(),
             meter: false,
-            meter_cache: RefCell::new(MeterCache::new()),
+            meter_memo: memo::LineMemo::default(),
             notes: false,
-            note_cache: RefCell::new(NoteCache::new()),
+            note_memo: memo::LineMemo::default(),
             fold_cache: RefCell::new(None),
-            markup_cache: RefCell::new(HashMap::new()),
-            ruby_cache: RefCell::new(HashMap::new()),
+            markup_memo: memo::LineMemo::default(),
+            ruby_memo: memo::LineMemo::default(),
             block_cache: RefCell::new(None),
             pad_cache: RefCell::new(None),
             md_cache: RefCell::new(None),
@@ -2868,6 +2846,7 @@ mod hint;
 mod jumps;
 mod keys;
 mod matching;
+mod memo;
 mod modes;
 mod page;
 mod prompt;

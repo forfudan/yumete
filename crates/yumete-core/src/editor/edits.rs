@@ -711,7 +711,7 @@ impl Editor {
         // A freshly focused buffer starts at the top in Normal mode. The
         // segmentation cache is keyed by line number, and these are the lines
         // of a different document now.
-        self.segment_cache.borrow_mut().clear();
+        self.segment_memo.forget();
         self.cursor = 0;
         // Whether *this* buffer is a grid is asked again, the way `show_buffer`
         // asks it. Without this, `:table` and then `:!wc -l` left the shell

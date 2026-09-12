@@ -39,7 +39,7 @@ impl Editor {
         if self.table_level == TableLevel::Off {
             self.leave_table_quietly();
         }
-        self.markup_cache.borrow_mut().clear();
+        self.markup_memo.forget();
         self.render
     }
 
@@ -479,30 +479,20 @@ impl Editor {
         let Some(text) = self.line_text(line) else {
             return Vec::new();
         };
-        let mut hasher = DefaultHasher::new();
-        text.hash(&mut hasher);
-        let hash = hasher.finish();
-        let mut cache = self.note_cache.borrow_mut();
-        if let Some((cached, runs)) = cache.get(&line) {
-            if *cached == hash {
-                return runs.clone();
-            }
-        }
-        // The note stands **after** the mark it is about, so the page reads
-        // 「what you wrote, then what it should be」 — `他說,，` — and the mark
-        // itself keeps the column the cursor goes to.
-        let runs: Vec<Run> = crate::punct::check_line(&text)
-            .into_iter()
-            .map(|slip| {
-                let after = slip.column + slip.written.chars().count();
-                Run::new(after, slip.wanted, Ink::Note)
+        let stamp = super::memo::stamp(&text);
+        self.note_memo
+            .or_work_out(self.current_buffer().id(), line, stamp, || {
+                // The note stands **after** the mark it is about, so the page
+                // reads 「what you wrote, then what it should be」 — `他說,，` —
+                // and the mark itself keeps the column the cursor goes to.
+                crate::punct::check_line(&text)
+                    .into_iter()
+                    .map(|slip| {
+                        let after = slip.column + slip.written.chars().count();
+                        Run::new(after, slip.wanted, Ink::Note)
+                    })
+                    .collect()
             })
-            .collect();
-        if cache.len() >= SEGMENT_CACHE_LIMIT {
-            cache.clear();
-        }
-        cache.insert(line, (hash, runs.clone()));
-        runs
     }
 
     /// Whether `|` tables are squared up as the page draws them (Feature #212).
@@ -1090,20 +1080,12 @@ impl Editor {
         // saved. A revision moves on every edit, so an edit anywhere costs the
         // visible paragraphs one pass, which is what they would have cost
         // anyway. The dialects are in it because `:ruby` is one keystroke away.
-        let mut hasher = DefaultHasher::new();
-        (self.current_buffer().revision(), dialects.bits()).hash(&mut hasher);
-        let hash = hasher.finish();
-        let key = (self.current_buffer().id(), line);
-        let mut cache = self.ruby_cache.borrow_mut();
-        if let Some((cached, groups)) = cache.get(&key) {
-            if *cached == hash {
-                return groups.clone();
-            }
-        }
-        let chars = crate::zong::line_chars(rope, line);
-        let groups = crate::ruby::groups(&chars, dialects);
-        cache.insert(key, (hash, groups.clone()));
-        groups
+        let stamp = super::memo::stamp((self.current_buffer().revision(), dialects.bits()));
+        self.ruby_memo
+            .or_work_out(self.current_buffer().id(), line, stamp, || {
+                let chars = crate::zong::line_chars(rope, line);
+                crate::ruby::groups(&chars, dialects)
+            })
     }
 
     /// The 平仄 of `line`, for the margin (Feature #247).
@@ -1129,22 +1111,12 @@ impl Editor {
         }
         let chars = crate::zong::line_chars(rope, line);
         let text: String = chars.iter().collect();
-        let mut hasher = DefaultHasher::new();
-        text.hash(&mut hasher);
-        let hash = hasher.finish();
-        let mut cache = self.meter_cache.borrow_mut();
-        if let Some((cached, marks)) = cache.get(&line) {
-            if *cached == hash {
-                return marks.clone();
-            }
-        }
-        let words = self.segmenter.segment(&text);
-        let marks = crate::meter::marks(&chars, &words, &|word| self.reader.read(word));
-        if cache.len() >= SEGMENT_CACHE_LIMIT {
-            cache.clear();
-        }
-        cache.insert(line, (hash, marks.clone()));
-        marks
+        let stamp = super::memo::stamp(&text);
+        self.meter_memo
+            .or_work_out(self.current_buffer().id(), line, stamp, || {
+                let words = self.segmenter.segment(&text);
+                crate::meter::marks(&chars, &words, &|word| self.reader.read(word))
+            })
     }
 
     /// The part of `line` the selection covers, as columns within it, or `None`
@@ -1206,7 +1178,7 @@ impl Editor {
                 self.buffers[i].set_syntax(syntax);
             }
         }
-        self.markup_cache.borrow_mut().clear();
+        self.markup_memo.forget();
         *self.block_cache.borrow_mut() = None;
     }
 
@@ -1234,11 +1206,12 @@ impl Editor {
     /// Say which markup it is in, overriding what was guessed on opening.
     pub fn set_syntax(&mut self, syntax: crate::syntax::Syntax) {
         self.current_buffer_mut().set_syntax(syntax);
-        self.markup_cache.borrow_mut().clear();
+        self.markup_memo.forget();
         *self.block_cache.borrow_mut() = None;
     }
 
-    /// The Markdown runs of `line`, cached against the paragraph's own text.
+    /// The Markdown runs of `line`, worked out once per revision and kept
+    /// per line (#348).
     ///
     /// `block` says what kind of line it is: inside a fence or a page's
     /// metadata there is no markup at all, and colouring `**` there — let alone
@@ -1254,7 +1227,8 @@ impl Editor {
         self.markup_line(line)
     }
 
-    /// The Markdown runs of `line`, cached against the paragraph's own text.
+    /// The Markdown runs of `line`, worked out once per revision and kept
+    /// per line (#348).
     pub fn markup_line(&self, line: usize) -> Vec<crate::markdown::Span> {
         if !self.markup_visible() {
             return Vec::new();
@@ -1272,33 +1246,23 @@ impl Editor {
         //
         // The syntax is in it too: the same characters mean different things in
         // different syntaxes, and `:syntax text` is one keystroke away.
-        let mut hasher = DefaultHasher::new();
-        (
+        let stamp = super::memo::stamp((
             self.current_buffer().revision(),
             self.current_buffer().syntax() as u8,
-        )
-            .hash(&mut hasher);
-        let hash = hasher.finish();
-
-        let key = (self.current_buffer().id(), line);
-        let mut cache = self.markup_cache.borrow_mut();
-        if let Some((cached, spans)) = cache.get(&key) {
-            if *cached == hash {
-                return spans.clone();
-            }
-        }
-        let mut text = rope.line(line).to_string();
-        while text.ends_with('\n') || text.ends_with('\r') {
-            text.pop();
-        }
-        let spans = match self.current_buffer().syntax() {
-            crate::syntax::Syntax::Markdown => crate::markdown::spans(&text),
-            crate::syntax::Syntax::Typst => crate::markdown::typst::spans(&text),
-            // Nothing in the file means anything but itself.
-            crate::syntax::Syntax::Text => Vec::new(),
-        };
-        cache.insert(key, (hash, spans.clone()));
-        spans
+        ));
+        self.markup_memo
+            .or_work_out(self.current_buffer().id(), line, stamp, || {
+                let mut text = rope.line(line).to_string();
+                while text.ends_with('\n') || text.ends_with('\r') {
+                    text.pop();
+                }
+                match self.current_buffer().syntax() {
+                    crate::syntax::Syntax::Markdown => crate::markdown::spans(&text),
+                    crate::syntax::Syntax::Typst => crate::markdown::typst::spans(&text),
+                    // Nothing in the file means anything but itself.
+                    crate::syntax::Syntax::Text => Vec::new(),
+                }
+            })
     }
 
     /// The headings of the active buffer, as `(line, depth, title)`.
