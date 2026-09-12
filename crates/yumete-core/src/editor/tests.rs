@@ -751,6 +751,22 @@ fn format_ruby_rewrites_every_reading_into_one_dialect() {
     );
 }
 
+/// #333: 一本講 ruby 標記的書，`:ruby-format` 不許動它自己的例子。
+#[test]
+fn format_ruby_leaves_the_examples_in_the_fence_alone() {
+    let mut ed = typed(
+        "讀<ruby>漢<rt>hàn</rt></ruby>\n\n```html\n<ruby>桜<rt>さくら</rt></ruby>\n```\n\n又一個<ruby>字<rt>zì</rt></ruby>\n",
+    );
+    ed.execute(":ruby-format typst").unwrap();
+    let text = ed.current_buffer().text();
+    assert!(text.contains("讀#ruby(\"漢\", \"hàn\")"), "{text}");
+    assert!(text.contains("又一個#ruby(\"字\", \"zì\")"), "{text}");
+    assert!(text.contains("<ruby>桜<rt>さくら</rt></ruby>"), "{text}");
+    // 圍欄裏那一個既沒被改寫，也不算「讀不出來」——說它剩下就是叫人去查一個
+    // 不存在的毛病。
+    assert!(!ed.status().contains("讀不出來"), "{}", ed.status());
+}
+
 #[test]
 fn a_typst_reading_is_read_too() {
     let mut ed = typed("讀#ruby(\"漢字\", \"hàn zì\")");
