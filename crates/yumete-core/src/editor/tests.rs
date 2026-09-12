@@ -11995,3 +11995,119 @@ fn a_whole_document_rewrite_will_not_break_a_row() {
 
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// A dictionary that says how many lines it was handed, so #321 can be tested
+/// by counting the work rather than by timing it.
+struct Counted {
+    inner: DictionarySegmenter,
+    asked: std::rc::Rc<std::cell::Cell<usize>>,
+}
+
+impl Segmenter for Counted {
+    fn segment(&self, s: &str) -> Vec<(usize, usize)> {
+        self.asked.set(self.asked.get() + 1);
+        self.inner.segment(s)
+    }
+
+    fn source(&self) -> String {
+        self.inner.source()
+    }
+}
+
+/// #321. `w` held down along one paragraph must cut that paragraph once.
+#[test]
+fn walking_a_line_by_word_cuts_the_line_once() {
+    // 兩千段的中英混排行 — the shape the footnote measured 11.9 ms on.
+    let mut line = String::new();
+    while line.chars().count() < 6_000 {
+        line.push_str("今天天氣很好 apple 山路 42 ");
+    }
+    line.push('\n');
+
+    let plain = DictionarySegmenter::builtin(0);
+    let expected = plain.segment(line.trim_end_matches('\n'));
+    assert!(
+        expected.len() > 2_000,
+        "two thousand segments, not {}",
+        expected.len()
+    );
+
+    let mut ed = Editor::new();
+    assert!(ed.replace_everything(&line));
+    let asked = std::rc::Rc::new(std::cell::Cell::new(0usize));
+    ed.set_segmenter(Box::new(Counted {
+        inner: DictionarySegmenter::builtin(0),
+        asked: std::rc::Rc::clone(&asked),
+    }));
+    press(&mut ed, "gg");
+    asked.set(0);
+
+    // `w` is helix's: it *selects* up to just before the next word begins, and
+    // leaves the caret on the last character of what it took — the word's own
+    // last character, or the space in front of the next word. Either way the
+    // caret stops one short of a boundary the dictionary drew, and a memo that
+    // is fast and wrong is the failure this test is really for.
+    let mut was = ed.cursor;
+    for step in 1..=50 {
+        press(&mut ed, "w");
+        assert!(ed.cursor > was, "step {step} did not move");
+        assert!(
+            expected
+                .iter()
+                .any(|&(a, b)| a == ed.cursor + 1 || b == ed.cursor + 1),
+            "step {step} landed at {}, which is no boundary the dictionary drew",
+            ed.cursor
+        );
+        was = ed.cursor;
+    }
+    // One for the paragraph, and at most one more for the empty line after it.
+    assert!(
+        asked.get() <= 2,
+        "fifty presses cut the line {} times",
+        asked.get()
+    );
+}
+
+/// A segmenter whose answer depends on something the text does not show — the
+/// case a memo held against the text alone gets wrong (#321).
+#[derive(Default)]
+struct Levelled {
+    level: yumete_cjk::WordLevel,
+}
+
+impl Segmenter for Levelled {
+    fn segment(&self, s: &str) -> Vec<(usize, usize)> {
+        let n = s.chars().count();
+        match (self.level, n) {
+            (_, 0) => Vec::new(),
+            // 全: the whole line is one word. Anything else: one per character.
+            (yumete_cjk::WordLevel::Full, _) => vec![(0, n)],
+            _ => (0..n).map(|i| (i, i + 1)).collect(),
+        }
+    }
+
+    fn set_level(&mut self, level: yumete_cjk::WordLevel) {
+        self.level = level;
+    }
+}
+
+/// #321. Changing the level changes where the words are without changing a
+/// character of the text the answers are kept against.
+#[test]
+fn a_change_of_word_level_reaches_a_line_already_cut() {
+    let mut ed = typed("甲乙丙丁\n戊己\n");
+    ed.set_segmenter(Box::new(Levelled::default()));
+
+    press(&mut ed, "gg");
+    press(&mut ed, "w");
+    assert_eq!(ed.cursor, 1, "one character is one word at 平衡");
+
+    ed.set_word_level(yumete_cjk::WordLevel::Full);
+    press(&mut ed, "gg");
+    press(&mut ed, "w");
+    assert_eq!(
+        ed.cursor, 4,
+        "at 全 the whole line is one word, so `w` selects all of it"
+    );
+}
+

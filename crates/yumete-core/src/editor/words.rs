@@ -21,6 +21,10 @@ impl Editor {
     fn forget_the_words(&mut self) {
         self.segment_cache.borrow_mut().clear();
         self.meter_cache.borrow_mut().clear();
+        // The third one is a line further down: the segmenter's own memo of
+        // what it cut (#321) is kept against the text as well, and it is what
+        // both of the caches above are computed *from*.
+        self.word_memo.borrow_mut().clear();
     }
 
     /// Install the word [`Segmenter`] used by `w`/`b`/`e` and the segmentation
@@ -29,10 +33,15 @@ impl Editor {
     pub fn set_segmenter(&mut self, segmenter: Box<dyn Segmenter>) {
         self.forget_the_words();
         // The project's own words go on top of whatever was chosen, so the
-        // book's names survive a change of dictionary.
-        self.segmenter = Box::new(yumete_cjk::WithWords::new(
-            segmenter,
-            std::rc::Rc::clone(&self.project_words),
+        // book's names survive a change of dictionary; the memo of what came
+        // out goes on top of both (#321), because what it has to remember is
+        // the answer the reader actually gets, names merged in and all.
+        self.segmenter = Box::new(yumete_cjk::Memo::new(
+            Box::new(yumete_cjk::WithWords::new(
+                segmenter,
+                std::rc::Rc::clone(&self.project_words),
+            )),
+            std::rc::Rc::clone(&self.word_memo),
         ));
     }
 

@@ -667,3 +667,113 @@ impl Segmenter for WithWords {
         out
     }
 }
+
+/// How many lines' answers a [`Memo`] holds before it starts again.
+const MEMO_LINES: usize = 512;
+
+/// How much a [`Memo`] holds before it starts again, in bytes.
+///
+/// A count of lines is not a bound on a Chinese novel: one paragraph can be a
+/// whole chapter, and 512 of those are not 512 short lines.
+const MEMO_BYTES: usize = 1 << 20;
+
+/// The answers a [`Memo`] is holding, shared with whoever installed it.
+#[derive(Debug, Default)]
+pub struct SegmentMemo {
+    answers: HashMap<String, Vec<(usize, usize)>>,
+    /// What they take, so [`MEMO_BYTES`] can be enforced without a walk.
+    bytes: usize,
+}
+
+impl SegmentMemo {
+    /// Forget every answer — the dictionary, the level or the book's own word
+    /// list has changed, and none of that changed the text they are kept
+    /// against.
+    pub fn clear(&mut self) {
+        self.answers.clear();
+        self.bytes = 0;
+    }
+
+    /// How many lines' answers are being held.
+    pub fn len(&self) -> usize {
+        self.answers.len()
+    }
+
+    /// Whether none are.
+    pub fn is_empty(&self) -> bool {
+        self.answers.is_empty()
+    }
+}
+
+/// A segmenter that remembers the lines it has already cut — #321.
+///
+/// `w` asks for the word boundaries of the line it stands on, and used to get
+/// them by cutting that line from scratch every time: a copy of the text, a
+/// Viterbi pass over each run of 漢字 in it, then a linear scan for the first
+/// boundary past the cursor. Held down, `w` paid for all of it again on every
+/// repeat — fifty presses along one two-thousand-segment line of mixed 中英
+/// cost 11.9 ms — and not one of those answers had changed since the first.
+///
+/// The answers are kept against **the text that was cut**, not against a line
+/// number or a buffer revision. Ranges are relative to the string, so a key
+/// that matches is a correct answer however much of the document moved, and
+/// the paragraph being typed into is the only one whose answer is thrown away.
+/// The key is that text itself rather than a hash of it: a collision here
+/// would hand `w` another paragraph's boundaries, and holding a few hundred
+/// short strings is cheaper than that.
+///
+/// ⚠️ **What a line cuts into depends on more than the line.** The dictionary
+/// in force, the [`WordLevel`], and the book's own word list all change the
+/// answer without changing a character of the text.
+/// [`set_level`](Memo::set_level) throws away what it holds; the other two are
+/// the reason [`new`](Memo::new) takes the store by handle rather than making
+/// one — whoever swaps the dictionary or reloads `words.txt` clears it.
+pub struct Memo {
+    inner: Box<dyn Segmenter>,
+    kept: std::rc::Rc<std::cell::RefCell<SegmentMemo>>,
+}
+
+impl Memo {
+    /// Remember what `inner` cuts, in `kept`. The store is shared so that a
+    /// change nothing in the text shows can reach it.
+    pub fn new(
+        inner: Box<dyn Segmenter>,
+        kept: std::rc::Rc<std::cell::RefCell<SegmentMemo>>,
+    ) -> Memo {
+        Memo { inner, kept }
+    }
+}
+
+impl Segmenter for Memo {
+    fn segment(&self, s: &str) -> Vec<(usize, usize)> {
+        if let Some(ranges) = self.kept.borrow().answers.get(s).cloned() {
+            return ranges;
+        }
+        let ranges = self.inner.segment(s);
+        let mut kept = self.kept.borrow_mut();
+        // Cleared rather than evicted oldest-first: keeping an order costs
+        // something on every hit, and what a clear costs is one Viterbi pass
+        // per line still on screen, once.
+        if kept.len() >= MEMO_LINES || kept.bytes >= MEMO_BYTES {
+            kept.clear();
+        }
+        kept.bytes += s.len() + ranges.len() * std::mem::size_of::<(usize, usize)>();
+        kept.answers.insert(s.to_string(), ranges.clone());
+        ranges
+    }
+
+    /// The level is one of the things the text does not show, so the answers
+    /// held against it go.
+    fn set_level(&mut self, level: WordLevel) {
+        self.inner.set_level(level);
+        self.kept.borrow_mut().clear();
+    }
+
+    fn log_prob(&self, word: &str) -> Option<f64> {
+        self.inner.log_prob(word)
+    }
+
+    fn source(&self) -> String {
+        self.inner.source()
+    }
+}
