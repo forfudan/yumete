@@ -209,25 +209,11 @@ en = "a tab does not go in a cell"
 # ── chaifen ───────────────────────────────────────────────────────────
 
 [[message]]
-# 拆分表裏搜索的欄範圍
-key = "chaifen.column-range"
-zht = "第 {0}–{1} 欄"
-zhs = "第 {0}–{1} 栏"
-en = "columns {0}–{1}"
-
-[[message]]
 # :lint 查一張拆分表，某一行拆出來的部件在表裏找不到
 key = "chaifen.component-not-found"
 zht = "{0}:{1}: 部件「{2}」查無此行"
 zhs = "{0}:{1}: 部件「{2}」查无此行"
 en = "{0}:{1}: no row for the component 「{2}」"
-
-[[message]]
-# 拆分裏按部件跳，給的是結構符
-key = "chaifen.descriptor-not-component"
-zht = "「{0}」是結構符，不是部件"
-zhs = "「{0}」是结构符，不是部件"
-en = "'{0}' is a descriptor, not a component"
 
 [[message]]
 # :lint 查一張拆分表，兩行用了同一個行名
@@ -251,13 +237,6 @@ zhs = "[查 {0}]"
 en = "[lint {0}]"
 
 [[message]]
-# 拆分表裏找不到這個部件
-key = "chaifen.no-such-row-in"
-zht = "{0} 裏沒有「{1}」"
-zhs = "{0} 里没有「{1}」"
-en = "no row in {0} is named 「{1}」"
-
-[[message]]
 # :yume-chaifen off ——關了
 key = "chaifen.off"
 zht = "拆分 off"
@@ -270,13 +249,6 @@ key = "chaifen.on"
 zht = "拆分 on"
 zhs = "拆分 on"
 en = "chaifen on"
-
-[[message]]
-# 拆分表裏找到了，報處數
-key = "chaifen.row-found"
-zht = "{0}：{1}（{2} 處，第一處）"
-zhs = "{0}：{1}（{2} 处，第一处）"
-en = "{0}: {1} ({2} rows; the first)"
 
 [[message]]
 # :yume-chaifen on，但這個方案沒有拆分表
@@ -1555,9 +1527,9 @@ find = "新建 插入 空表 建表 new insert"
 [[message]]
 # : 命令選單裏 numbers 那一項的說明（table 組）
 key = "cmd.table.numbers"
-zht = "欄號那一行：3gd、t20,20g 用的就是它"
-zhs = "栏号那一行：3gd、t20,20g 用的就是它"
-en = "the row of column numbers — what 3gd and t20,20g count with"
+zht = "欄號那一行：t3/、t20,20g 用的就是它"
+zhs = "栏号那一行：t3/、t20,20g 用的就是它"
+en = "the row of column numbers — what t3/ and t20,20g count with"
 find = "欄號 栏号 標號 标号 numbers"
 
 [[message]]
@@ -3146,13 +3118,6 @@ zhs = "关掉栏之间的分隔线"
 en = "turn off the rules between columns"
 
 [[message]]
-# 表格幫助：改在某幾欄裏找
-key = "help.table.search-in-columns"
-zht = "改成在第 3 欄／第 2–5 欄裏找"
-zhs = "改成在第 3 栏／第 2–5 栏里找"
-en = "look in column 3 / columns 2–5 instead"
-
-[[message]]
 # 表格那一節的小標題
 key = "help.table.section-summary"
 zht = "表格與拆分表"
@@ -3179,13 +3144,6 @@ key = "help.table.type-in-cell"
 zht = "進格子打字／清掉這一格"
 zhs = "进格子打字／清掉这一格"
 en = "type in the cell / empty it"
-
-[[message]]
-# 表格幫助：這一格在 key 欄裏是哪一行
-key = "help.table.which-row-this-names"
-zht = "這一格在 key 欄裏是哪一行：去／看"
-zhs = "这一格在 key 栏里是哪一行：去／看"
-en = "which row this cell names in the key column: go / show"
 
 [[message]]
 # 表格幫助：誰用了它
@@ -4043,20 +4001,6 @@ key = "hint.table.previous-cell"
 zht = "上一格"
 zhs = "上一格"
 en = "previous cell"
-
-[[message]]
-# 表格提示：這個字自己那一行
-key = "hint.table.row-this-character-is-about"
-zht = "這個字自己那一行"
-zhs = "这个字自己那一行"
-en = "the row this character is about"
-
-[[message]]
-# 表格提示：它自己那一行
-key = "hint.table.row-this-is-about"
-zht = "它自己那一行"
-zhs = "它自己那一行"
-en = "the row it is about"
 
 [[message]]
 # 表格提示：規格檔

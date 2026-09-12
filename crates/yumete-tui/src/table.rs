@@ -367,7 +367,7 @@ pub fn draw(
 
     // The header takes the top row and never scrolls, so a page of rows is one
     // shorter than the area — and the column numbers take one more, because
-    // every numeric key here (`3gd`, `t20,20g`, `t1s2S4s`) names a column by
+    // every numeric key here (`t3/`, `t20,20g`, `t1s2S4s`) names a column by
     // number and a 28-column 拆分表 gives no other way to count to 17.
     let numbers = u16::from(editor.table_numbers());
     let head = u16::from(view.schema.header) + numbers;
@@ -488,7 +488,7 @@ pub fn draw(
     }
 
     // **The column numbers**, above the header: one row of indices, so a column
-    // can be *named*. Every numeric key in a grid — `3gd` for a column, `t20,20g`
+    // can be *named*. Every numeric key in a grid — `t3/` for a column, `t20,20g`
     // for a cell, `t1s2S4s` for a sort — asks the reader to count columns, and
     // on the 拆分表 that is counting to seventeen by eye.
     //

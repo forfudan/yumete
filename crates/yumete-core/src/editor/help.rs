@@ -196,8 +196,6 @@ impl Editor {
             ("h j k l", say!("help.table.step-by-cell")),
             ("Tab S-Tab", say!("help.table.next-previous-cell")),
             ("i a c d", say!("help.table.type-in-cell")),
-            ("gd gw", say!("help.table.which-row-this-names")),
-            ("3gd g2-5d", say!("help.table.search-in-columns")),
             ("t/ t?", say!("help.table.who-uses-this")),
             ("t o t b t f t t", say!("help.table.four-surfaces")),
             ("t i t w", say!("help.table.detail-and-folds")),

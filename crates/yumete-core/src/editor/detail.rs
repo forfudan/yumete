@@ -190,7 +190,8 @@ impl Editor {
     /// One key, both directions: from a reference it goes to the note, and
     /// from the note it goes back to the sentence you left. A note read at the
     /// foot of a hundred-page file is no use if finding your place again is a
-    /// search.
+    /// search. Standing on neither, `gd` has nothing to point at and asks the
+    /// other question a word raises — 「這個詞還在哪裏」, which is `g/`.
     fn follow_note(&mut self) {
         // A reference with no note is the ordinary way a note gets written:
         // you type `[^1]` in the sentence and then need somewhere to put it.
@@ -201,9 +202,8 @@ impl Editor {
             }
         }
         let Some(detail) = self.note_detail() else {
-            // Not on a note, so `Enter` means what it means everywhere else:
-            // 「這個詞還在哪裏」 — the same previewing search a table's key
-            // column answers, with the word under the cursor as the question.
+            // Not on a note, so 「這個詞還在哪裏」 — with the word under the
+            // cursor as the question.
             self.search_the_page();
             return;
         };
@@ -219,142 +219,27 @@ impl Editor {
         self.land_on_row(at, preview);
     }
 
-    /// `gd`: **what is this?** — the note, or the row a component names.
+    /// `gd`: **what is this?** — the note this reference points at.
     ///
     /// The other half of the pair `Enter` is one half of. Shown in the other
     /// work area like everything else, and on a footnote reference that has no
     /// note yet it **writes the note** and shows that: following a link to a
     /// page that does not exist is how one gets written, which is what every
     /// wiki-shaped editor does and what a writer typing `[^1]` means.
+    ///
+    /// ⚠️ **`g` is the document's group and `t` is the table's** (2026-09-12).
+    /// This key used to mean something else inside a grid — 「which row has
+    /// this in the key column」 — and a `[^1]` written into a table row then
+    /// searched the grid instead of going to its note, which is the one thing
+    /// `gd` is named for. A key whose meaning turns over depending on what the
+    /// cursor happens to be standing in cannot be relied on; the table's own
+    /// questions are asked with `t/`, `t?` and `:table-jump`.
     pub(super) fn show_definition(&mut self, preview: bool) {
         self.definition_preview = preview;
-        // **In a grid, `gd` is one question with one answer**: which row has
-        // *this* in the column that names rows. Standing on 木 in a 拆分 cell,
-        // 木's own row; standing on 木 in the key column, the same row, which
-        // is where you already are — and that is not a disappointment, it is
-        // the question answering itself.
-        //
-        // It used to be two questions decided by which column the cursor was
-        // in — follow the link here, search for who uses it there — and 「誰用
-        // 了它」 is what `Enter` is for. One key, one meaning.
-        if self.table_here() {
-            let span = self.column_span.take();
-            self.go_to_the_row_named(span, preview);
-            return;
-        }
         self.follow_note();
     }
 
-    /// The row whose cell in the named column is **exactly** what is here.
-    ///
-    /// `gd` searches the key column — the one a schema names as what its rows
-    /// are *about* — or the first, if none is named. `3gd` searches column
-    /// three; `2-5gd` searches columns two through five, which is how a 拆分表
-    /// with four spellings of the same decomposition is asked one question.
-    fn go_to_the_row_named(&mut self, span: Option<(usize, usize)>, preview: bool) {
-        let Some(view) = self.table.as_ref() else {
-            return;
-        };
-        // **How many columns this table has** (#283): `3gd` in the wider of two
-        // tables was clamped to the narrower one's count.
-        let columns = self
-            .schema_here()
-            .map(|s| s.columns.len())
-            .unwrap_or_default()
-            .max(1);
-        // What is being looked up: the selection when there is one, else what
-        // the cursor is on — by character or by cell, following `Tab`, which is
-        // the same unit `hjkl` move by.
-        // **More than the caret's own character.** Every motion here leaves a
-        // selection — that is the editing model — so 「is something selected」
-        // is not `to > from`, which is true of standing still.
-        let (from, to) = self.selection();
-        let needle = match to > from + 1 {
-            true => self
-                .current_buffer()
-                .rope()
-                .slice(from..to.min(self.current_buffer().rope().len_chars()))
-                .to_string(),
-            false => match view.grain {
-                Grain::Char => self.char_at_cursor().map(String::from).unwrap_or_default(),
-                _ => self
-                    .cell_position()
-                    .map(|(line, cell)| self.cell_text(line, cell))
-                    .unwrap_or_default(),
-            },
-        };
-        let needle = needle.trim().to_string();
-        if needle.is_empty() {
-            self.status = say!("table.cell-is-empty");
-            return;
-        }
-        // ⿰⿱⿲ say how the components are arranged. There is nowhere to go
-        // from one, and 「表裏沒有⿰」 is the wrong thing to say about it — no
-        // table has a row for a piece of grammar.
-        if let Some(c) = needle.chars().next() {
-            if needle.chars().count() == 1 && is_ids_operator(c) {
-                self.status = say!("chaifen.descriptor-not-component", c);
-                return;
-            }
-        }
-        // The columns to look in, 1-based as the reader counts them.
-        let (first, last) = match span {
-            Some((a, b)) => (a.min(b), a.max(b)),
-            None => {
-                let key = view
-                    .schema
-                    .link
-                    .as_ref()
-                    .and_then(|link| view.schema.index_of(&link.to))
-                    .unwrap_or(0)
-                    + 1;
-                (key, key)
-            }
-        };
-        let (first, last) = (first.clamp(1, columns) - 1, last.clamp(1, columns) - 1);
-        let here = self.schema_here();
-        let named: Vec<String> = (first..=last)
-            .filter_map(|c| {
-                here.as_ref()
-                    .and_then(|s| s.columns.get(c))
-                    .map(|col| col.name.clone())
-            })
-            .collect();
-        let rows = self.current_buffer().line_count();
-        let mut found = Vec::new();
-        for line in 0..rows {
-            for cell in first..=last {
-                if self.cell_text(line, cell).trim() == needle {
-                    found.push((line, cell));
-                    break;
-                }
-            }
-        }
-        let which = match named.len() {
-            1 => named.first().cloned().unwrap_or_default(),
-            _ => say!("chaifen.column-range", first + 1, last + 1),
-        };
-        match found.len() {
-            0 => self.status = say!("chaifen.no-such-row-in", which, needle),
-            _ => {
-                let (line, cell) = found[0];
-                match preview {
-                    true => self.show_row(line),
-                    false => {
-                        self.remember_jump();
-                        self.goto_line(line + 1);
-                        self.go_to_cell(line, cell);
-                    }
-                }
-                self.status = match found.len() {
-                    1 => say!("find.file-and-message", which, needle),
-                    n => say!("chaifen.row-found", which, needle, n),
-                };
-            }
-        }
-    }
-
-    /// `Enter` on prose: **who else says this?**
+    /// `g/` and `g?` (and `*`): **who else says this?**
     ///
     /// One key, one meaning, in a table and out of it: 「在另一個工作區給我看
     /// 這個詞還出現在哪裏」. The selection is the question when there is one —
@@ -594,7 +479,7 @@ impl Editor {
                 // the grid already marks as ragged. An empty field is
                 // `Some("")`, and they are different answers to 「這一格有什麼」.
                 let text = spans.get(i).map(|&s| crate::table::cell_text(&text, s));
-                // **Numbered**, because the keys count columns: `3gd` looks in
+                // **Numbered**, because the keys count columns: `t3/` looks in
                 // the third, `t20,20g` goes to a cell by number, and the panel
                 // is where a reader finds out which number a field is without
                 // counting along the header.

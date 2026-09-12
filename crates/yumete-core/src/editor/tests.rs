@@ -436,24 +436,6 @@ fn space_r_opens_the_reading_prompt() {
     assert_eq!(ed.mode(), Mode::Ruby, "{}", ed.status());
 }
 
-#[test]
-fn a_column_can_be_named_either_way_round() {
-    // `g3d` and `3gd` are the same question — 「in column three」 — and the
-    // comment beside the code has said so all along, but the vi-order
-    // spelling put its number in the count and nothing ever read it.
-    let table = "| 字 | 甲 | 乙 |\n| -- | -- | -- |\n| 木 | 目 | 相 |\n| 甲 | 乙 | 木 |\n| 相 | 木 | 目 |\n";
-    let start = |keys: &str| {
-        let mut ed = typed(table);
-        ed.goto_line(3);
-        assert!(ed.enter_table(), "{}", ed.status());
-        press(&mut ed, keys);
-        ed.cursor_line()
-    };
-    assert_eq!(start("g3d"), 3, "column three holds 木 on the fourth line");
-    assert_eq!(start("3gd"), 3, "and vi's order says the same thing");
-    assert_eq!(start("gd"), 2, "no number is the key column, which is here");
-}
-
 /// **The throttle grows a trailing edge** (#383).
 ///
 /// `autosave_tick` writes at most once every `SWAP_INTERVAL` and used to be
@@ -3126,6 +3108,38 @@ fn gd_goes_gw_shows_and_a_missing_note_gets_written() {
     );
 }
 
+/// **`g` is the document's group and `t` is the table's** (2026-09-12).
+///
+/// `gd` used to mean something else inside a grid — 「which row has this in
+/// the key column」 — so a `[^1]` written into a table cell searched the
+/// grid instead of going to its note, which is the one thing `gd` is named
+/// for. A key whose meaning turns over depending on what the cursor happens
+/// to be standing in cannot be relied on.
+#[test]
+fn a_note_written_into_a_table_still_goes_to_its_note() {
+    let mut ed = typed("| 字 | 註 |\n| -- | -- |\n| 木 | 甲[^1] |\n\n[^1]: 說明。\n");
+    ed.set_render(Render::Basic);
+    ed.goto_line(3);
+    assert!(ed.enter_table(), "{}", ed.status());
+    // On the reference, inside a cell of the grid.
+    while ed.char_at_cursor() != Some('^') {
+        press(&mut ed, "l");
+    }
+    press(&mut ed, "gd");
+    assert_eq!(ed.cursor_line(), 4, "the note at the foot: {}", ed.status());
+
+    // …and `gD` shows the same thing in the other work area rather than
+    // reading the column the cell sits in.
+    ed.goto_line(3);
+    while ed.char_at_cursor() != Some('^') {
+        press(&mut ed, "l");
+    }
+    let was = ed.cursor();
+    press(&mut ed, "gD");
+    assert_eq!(ed.peeked_line(), Some(4), "{}", ed.status());
+    assert_eq!(ed.cursor(), was, "a peek does not move you");
+}
+
 #[test]
 fn both_layouts_ask_the_same_page() {
     // **The differential test.** Every defect in this class was invisible
@@ -3379,7 +3393,7 @@ fn the_detail_panel_says_what_the_whole_row_is() {
     // and light nothing.
     assert_eq!(d.here, " 1 字", "and it says which field you are in");
     assert!(d.rows.iter().any(|(name, _)| *name == d.here), "and it is one of them");
-    // **Numbered, and all of them** — the keys count columns (`3gd`,
+    // **Numbered, and all of them** — the keys count columns (`t3/`,
     // `t20,20g`), and an empty field is a finding in a 拆分表, not a thing
     // to hide.
     assert_eq!(
@@ -3401,11 +3415,6 @@ fn the_detail_panel_says_what_the_whole_row_is() {
     std::fs::remove_dir_all(&dir).ok();
 }
 
-/// `gd` in a grid: **the row named by what is here, in one column**.
-///
-/// `gd` searches the key column, `3gd` column three, `2-5gd` columns two
-/// through five. One column, one exact match, one place to land — which on
-/// a 拆分表 is the row the component is *about*.
 /// A delimited grid sorts by one column or several, and keeps its rows.
 #[test]
 fn a_grid_sorts_by_the_columns_it_is_told() {
@@ -3758,63 +3767,6 @@ fn a_sequence_argument_belongs_to_its_own_sequence() {
 }
 
 #[test]
-fn gd_looks_the_cell_up_in_one_named_column() {
-    let dir = std::env::temp_dir().join(format!("yumete-gdcol-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&dir);
-    std::fs::create_dir_all(dir.join(".yumete").join("tables")).unwrap();
-    std::fs::write(
-        dir.join(".yumete").join("tables").join("t.toml"),
-        "[table]\nfile = ['d.csv']\nkey = 'char'\n\
-         [[table.column]]\nname = 'char'\n[[table.column]]\nname = 'ids_y'\n\
-         [[table.column]]\nname = 'ids_g'\n\
-         [table.link]\nfrom = ['ids_y']\nto = 'char'\n",
-    )
-    .unwrap();
-    let csv = dir.join("d.csv");
-    std::fs::write(
-        &csv,
-        "char,ids_y,ids_g\n相,⿰木目,⿰木目\n木,木,朩\n目,目,目\n杏,⿱木口,⿱木囗\n",
-    )
-    .unwrap();
-
-    let mut ed = Editor::new();
-    ed.open_file(&csv).unwrap();
-    press(&mut ed, "T"); // #356: 這一條測的是格
-    // Standing on 杏's 拆分, by character, on the 木.
-    ed.execute("5").unwrap();
-    press(&mut ed, "l");
-    press(&mut ed, "T");
-    press(&mut ed, "l");
-    assert_eq!(ed.char_at_cursor(), Some('木'));
-
-    // `gd` goes to 木's own row and lands in the key cell.
-    press(&mut ed, "gd");
-    assert_eq!(ed.cursor_line(), 2, "{}", ed.status());
-    assert_eq!(ed.cell_position().map(|(_, c)| c), Some(0));
-
-    // Back to reading by cell, on 相's 拆分.
-    press(&mut ed, "T");
-    ed.execute("2").unwrap();
-    press(&mut ed, "l");
-    assert_eq!(ed.cell_text(1, 1), "⿰木目");
-    press(&mut ed, "gd");
-    assert!(ed.status().contains("沒有"), "no row is called ⿰木目: {}", ed.status());
-
-    // `3gd` asks the third column instead, where 朩 is 木's spelling.
-    ed.execute("3").unwrap();
-    press(&mut ed, "l");
-    press(&mut ed, "l");
-    assert_eq!(ed.cell_text(2, 2), "朩");
-    for key in "3gd".chars() {
-        ed.on_key(Key::Char(key));
-    }
-    assert_eq!(ed.cursor_line(), 2, "朩 is in ids_g on 木's row: {}", ed.status());
-    assert_eq!(ed.cell_position().map(|(_, c)| c), Some(2), "in that column");
-
-    std::fs::remove_dir_all(&dir).ok();
-}
-
-#[test]
 fn a_component_leads_to_its_own_row() {
     let dir = std::env::temp_dir().join(format!("yumete-jump-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
@@ -3844,43 +3796,7 @@ fn a_component_leads_to_its_own_row() {
         "⿰ is the grammar, not a component: it is not listed at all"
     );
 
-    // **`gd` is one question**: which row is named by what is here. The
-    // cell holds ⿰木目 and no row is called that, so by cell it says so —
-    // and `Tab` is how you ask about one component, because `Tab` is what
-    // decides what 「here」 means for every other key too.
-    let here = ed.cursor_line();
-    // **By cell** — which is how a grid is read until `Tab` says otherwise
-    // — the whole cell is the question, and no row is called ⿰木目. It says
-    // so rather than guessing which third of it you meant.
-    press(&mut ed, "gD");
-    assert!(ed.status().contains("⿰木目"), "{}", ed.status());
-    assert_eq!(ed.mode(), Mode::Normal, "no picker: one question, one answer");
-
-    // `Tab` is how you ask about one component, because `Tab` is what
-    // decides what 「here」 means for every other key too.
-    press(&mut ed, "T");
-    assert_eq!(ed.char_at_cursor(), Some('⿰'));
-    press(&mut ed, "gD");
-    assert!(ed.status().contains("結構符"), "{}", ed.status());
-    press(&mut ed, "l");
-    assert_eq!(ed.char_at_cursor(), Some('木'));
-    press(&mut ed, "gD");
-    assert_eq!(ed.peeked_line(), Some(2), "木's own row: {}", ed.status());
-    assert_eq!(ed.cursor_line(), here, "…and the cursor did not move");
-    press(&mut ed, "l");
-    press(&mut ed, "gD");
-    assert_eq!(ed.peeked_line(), Some(3), "and 目's, one character along");
-    press(&mut ed, "T");
-
-    // `gd` goes rather than shows, and lands **in the cell**, not merely on
-    // the line.
-    ed.goto_line(4);
-    press(&mut ed, "l");
-    press(&mut ed, "gd");
-    assert_eq!(ed.cursor_line(), 3, "目 is already its own row");
-    assert_eq!(ed.cell_position().map(|(_, c)| c), Some(0), "in the key cell");
-
-    // 「誰用了它」 is `Enter`, and stays `Enter`: 相 and 目 both use 目.
+    // 「誰用了它」 is `t?`: 相 and 目 both use 目.
     ed.goto_line(4);
     press(&mut ed, "0");
     press(&mut ed, "t?");
@@ -4105,19 +4021,10 @@ fn t_says_whether_a_step_is_a_cell_or_a_character() {
     press(&mut ed, "l");
     assert_eq!(ed.char_at_cursor(), Some('目'));
 
-    // Standing on one component, `gD` shows *that* row — nothing to ask
-    // about, because the cursor already said which.
-    press(&mut ed, "gD");
-    assert_eq!(ed.peeked_line(), Some(3), "目's own row");
-    assert_eq!(ed.mode(), Mode::Normal, "no picker");
-
-    // Standing on the descriptor itself, there is nothing to go to — it
-    // says how the components are arranged, it is not one of them.
+    // Back to the head of the cell, still one character at a time.
     ed.goto_line(2);
     press(&mut ed, "ll");
     assert_eq!(ed.char_at_cursor(), Some('⿰'));
-    press(&mut ed, "gD");
-    assert!(ed.status().contains("結構符"), "{}", ed.status());
 
     // `T` back, and the cursor snaps to cells again.
     press(&mut ed, "T");
@@ -5389,13 +5296,15 @@ fn the_second_table_is_measured_by_its_own_width() {
     assert_eq!(panel.rows.len(), 5, "{:?}", panel.rows);
     assert!(panel.rows[4].0.ends_with('E'), "{:?}", panel.rows[4]);
 
-    // `3gd` looks in the third column. Clamped to the narrow table's two,
-    // it looked in the second and named it in the answer, which is the
-    // shape of the bug that is hardest to disbelieve: a wrong answer with
-    // a column name on it.
-    press(&mut ed, "3gd");
-    assert!(ed.status().contains('C'), "{}", ed.status());
-    assert!(!ed.status().contains('B'), "{}", ed.status());
+    // `t5/` looks in the fifth column. Clamped to the narrow table's two,
+    // the fifth column of a five-column table was not there — and the
+    // refusal named the wrong width, which is the shape of the bug that is
+    // hardest to disbelieve: a wrong answer with a number on it.
+    press(&mut ed, "T");
+    press(&mut ed, "t5/");
+    assert!(!ed.status().contains("沒有"), "column five is there: {}", ed.status());
+    press(&mut ed, "t6/");
+    assert!(ed.status().contains('5'), "five columns, not two: {}", ed.status());
 
     // `:table-check` reads the table the cursor is in — not the file, in
     // which every paragraph is a line 「寬度不對」.
@@ -7182,18 +7091,17 @@ fn every_far_jump_leaves_a_way_back() {
 
     let mut ed = Editor::new();
     ed.open_file(&csv).unwrap();
-    ed.execute("2").unwrap();
-    press(&mut ed, "l");
 
-    // `gd` goes and leaves a way back; `gD` shows and leaves nothing,
-    // because nothing was left.
-    ed.on_key(Key::Tab);
-    press(&mut ed, "l");
+    // `:table-jump` goes and leaves a way back; `t?` shows and leaves
+    // nothing, because nothing was left.
+    ed.goto_line(2);
+    press(&mut ed, "T"); // by cell
+    press(&mut ed, "l"); // 相's 拆分
     let was = ed.cursor();
-    press(&mut ed, "gD");
-    assert_eq!(ed.cursor(), was, "gw does not move you");
-    press(&mut ed, "gd");
-    assert_eq!(ed.cursor_line(), 2, "木's own row");
+    press(&mut ed, "t?");
+    assert_eq!(ed.cursor(), was, "a peek does not move you");
+    ed.execute("table-jump 木").unwrap();
+    assert_eq!(ed.cursor_line(), 2, "木's own row: {}", ed.status());
     ed.on_key(Key::Ctrl('o'));
     assert_eq!(ed.cursor(), was, "and back where the jump started");
     ed.on_key(Key::Ctrl('i'));

@@ -5996,7 +5996,7 @@ fn drawn_columns(drawn: Drawn, lead: usize) -> Vec<usize> {
 /// first row.
 ///
 /// 「畫，貼在表格上緣」 — one ruler per table, numbering that table's own
-/// columns, because every numeric key in a grid (`3gd`, `t20,20g`, `t1s`) asks
+/// columns, because every numeric key in a grid (`t3/`, `t20,20g`, `t1s`) asks
 /// the reader to count columns and on a 拆分表 that is counting to seventeen by
 /// eye. Right-aligned in each column and a rung quieter than the writing, the
 /// same way the pane draws it.

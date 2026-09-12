@@ -389,27 +389,15 @@ impl Editor {
             }
             Pending::Goto => {
                 // **命令＋選擇＋動作.** Inside a sequence the digits are its
-                // *argument*, not a repetition: `g3d` is 「goto · column 3 ·
-                // definition」 and `g2-5d` names a span of columns, the way
-                // `t20,20g` names a cell and `t1a2d8as` names three columns to
-                // sort by. The verb ends the sequence, so no separator and no
-                // space is needed — and the sequence stays open while digits
-                // are being typed.
+                // *argument*, not a repetition: `g30g` is 「goto · line 30」,
+                // the way `t20,20g` names a cell and `t1a2d8as` names three
+                // columns to sort by. The verb ends the sequence, so no
+                // separator and no space is needed — and the sequence stays
+                // open while digits are being typed.
                 if self.take_sequence_argument(key) {
                     return;
                 }
                 self.pending = Pending::None;
-                // Whichever way the number was written: `g3d` puts it here,
-                // `3gd` — vi's own order, kept because fifty years of fingers
-                // know it — puts it in the count.
-                if self.column_span.is_none() {
-                    // `g3d`, then `3gd`: the sequence's own argument first,
-                    // and failing that the count typed before the `g`, which
-                    // the comment above has always promised and nothing read.
-                    self.column_span = self
-                        .sequence_span()
-                        .or_else(|| self.operator_count.map(|n| (n, n)));
-                }
                 self.handle_goto(key);
                 self.operator_count = None;
                 self.sequence = None;
@@ -508,39 +496,17 @@ impl Editor {
         if let Key::Char(c) = key {
             if let Some(digit) = c.to_digit(10) {
                 if digit > 0 || self.count.is_some() {
-                    match &mut self.count_to {
-                        // The far end of a span: `2-5`.
-                        Some(to) => {
-                            let n = to.unwrap_or(0);
-                            *to = Some(
-                                n.saturating_mul(10)
-                                    .saturating_add(digit as usize)
-                                    .min(1_000_000),
-                            );
-                        }
-                        None => {
-                            let n = self.count.unwrap_or(0);
-                            self.count = Some(
-                                n.saturating_mul(10)
-                                    .saturating_add(digit as usize)
-                                    .min(1_000_000),
-                            );
-                        }
-                    }
+                    let n = self.count.unwrap_or(0);
+                    self.count = Some(
+                        n.saturating_mul(10)
+                            .saturating_add(digit as usize)
+                            .min(1_000_000),
+                    );
                     return;
                 }
             }
-            // `2-5` — a **span**, for the keys that take a range of columns
-            // rather than a repetition. Only after a number, so `-` is still
-            // free on its own.
-            if c == '-' && self.count.is_some() && self.count_to.is_none() {
-                self.count_to = Some(None);
-                return;
-            }
         }
         let operator_count = self.count;
-        let span = self.count_to.take().flatten().map(|to| (self.count.unwrap_or(1), to));
-        self.column_span = span;
         let count = self.take_count();
 
 
@@ -1118,7 +1084,6 @@ impl Editor {
             // `g30g` — the sequence's own argument — and `30gg`, vi's order.
             let line = self.sequence_span().map(|(n, _)| n).or(self.operator_count.take());
             if let Some(n) = line.filter(|&n| n > 0) {
-                self.column_span = None;
                 return self.goto_line(n);
             }
         }

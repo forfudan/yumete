@@ -295,31 +295,17 @@ impl Editor {
             match self.sequence.as_ref() {
                 Some(sequence) => out.push_str(&sequence.spelled()),
                 // A count typed the other way round is still part of what was
-                // typed: `3gd` says `3g` here, not `g`. **In the order it was
-                // typed** — `2-5g`, not `-52g`, which is what two inserts at
-                // index 0 produced.
+                // typed: `30gg` says `30g` here, not `g`.
                 None => {
-                    let mut before = String::new();
                     if let Some(n) = self.operator_count {
-                        before.push_str(&n.to_string());
+                        out.insert_str(0, &n.to_string());
                     }
-                    if let Some((_, to)) = self.column_span {
-                        before.push('-');
-                        before.push_str(&to.to_string());
-                    }
-                    out.insert_str(0, &before);
                 }
             }
             return out;
         }
         if let Some(n) = self.count {
             out.push_str(&n.to_string());
-        }
-        if let Some(to) = self.count_to {
-            out.push('-');
-            if let Some(n) = to {
-                out.push_str(&n.to_string());
-            }
         }
         out
     }
