@@ -255,21 +255,25 @@ impl Editor {
         // at 2), so hiding seams there costs the one thing a table editor is
         // most for — putting the caret in a blank cell to fill it in.
         if self.grid_is_drawn() && self.grid_separator_is_a_pipe() {
-            let cells = self.row_cells(line);
-            let width = crate::motion::line_char_len(rope, line);
-            // Belt and braces: a gap that holds a cell's start is not a seam.
-            let starts: Vec<usize> = cells.iter().map(|&(a, _)| a).collect();
-            let seam = |from: usize, upto: usize, out: &mut Vec<(usize, usize)>| {
-                if upto > from && !starts.iter().any(|s| (from..upto).contains(s)) {
-                    out.push((from, upto));
-                }
-            };
-            let mut edge = 0usize;
-            for &(from, upto) in &cells {
-                seam(edge, from, &mut hidden);
-                edge = upto;
+            // **The wall itself, and the space either side of it.** Not the
+            // whole gap between two cell spans — `row_cells` reports content
+            // only, so that gap also holds the cell's own padding, and padding
+            // is the cell's (`cell_hidden_on_line` above already says which of
+            // it is off the page). What is drawn as one rule is exactly
+            // `space? | space?`, and that is what is hidden.
+            let text = crate::motion::line_text(rope, line);
+            let chars: Vec<char> = text.chars().collect();
+            for at in crate::mdtable::pipes_from(&text, false) {
+                let from = match at > 0 && chars[at - 1] == ' ' {
+                    true => at - 1,
+                    false => at,
+                };
+                let upto = match chars.get(at + 1) == Some(&' ') {
+                    true => at + 2,
+                    false => at + 1,
+                };
+                hidden.push((from, upto));
             }
-            seam(edge, width, &mut hidden);
             hidden.sort_unstable();
         }
         if hidden.is_empty() {
