@@ -1512,7 +1512,7 @@ pub struct Editor {
     detail_width: Option<usize>,
     /// Whether a row of column numbers is drawn above the header.
     ///
-    /// **The keys need it.** `3gd`, `t20,20g`, `t1a2d8as` all name a column by
+    /// **The keys need it.** `t3/`, `t20,20g`, `t1a2d8as` all name a column by
     /// number, and a 28-column 拆分表 gives no way to count to 17 except by
     /// counting. One row, and the numeric keys become usable.
     table_numbers: bool,
@@ -1548,14 +1548,6 @@ pub struct Editor {
     indent_symbol: String,
     /// A pending count prefix, so `3w` moves three words (Helix counts).
     count: Option<usize>,
-    /// The second half of a **span** count — `2-5gd` is columns two through
-    /// five. `Some(None)` means the `-` has been typed and the number after it
-    /// has not; `Some(Some(n))` is that number.
-    ///
-    /// A span is not a repetition, so it is not `count`: 「do this five times」
-    /// and 「do this to columns two through five」 are different things, and one
-    /// number cannot say both.
-    count_to: Option<Option<usize>>,
     /// The text typed during the last Insert session, replayed by `.`.
     /// The keys of the command being watched, and the revision it started at.
     ///
@@ -1613,8 +1605,6 @@ pub struct Editor {
     /// How much of the result is shown: the source, the source coloured, or
     /// the page with the markup taken off it.
     render: Render,
-    /// The columns `gd` was asked about this time: `(first, last)`, 1-based.
-    column_span: Option<(usize, usize)>,
     /// The numeric argument of the sequence being typed — `g3d`'s 3, `g2-5d`'s
     /// 2 and 5, `t1,5,9s`'s three columns. See [`Sequence`].
     sequence: Option<Sequence>,
@@ -2206,8 +2196,6 @@ impl Editor {
             clipboard_request: None,
             clipboard_read: None,
             render: Render::Basic,
-            count_to: None,
-            column_span: None,
             sequence: None,
             sort_keys: Vec::new(),
             jumped: false,

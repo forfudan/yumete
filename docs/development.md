@@ -638,6 +638,7 @@ index, and a row with no number anywhere else is a row that got lost.
 | 413 | **`.` 縮回 helix 那個意思：只重複上一次插入** | core | P2 | 現在重複的是任何一次改動，`d` 之後按到就再刪一段 [^413] | Proposed |
 | 414 | **`f`、`mi`、`ms`、`mr` 打不了中文** | core+tui | P1 | 等一個字的鍵只有 `r` 認得上屏 [^414] | Fixed 2026-09-12 |
 | 415 | **五條搜索要打磨成一族** | core | P2 | 五個不同的形狀，能力不齊、名字不成體系 [^415] | Proposed |
+| 416 | **`gd` `gD` `g/` `g?` 在表格裏換了意思** | core | P1 | `g` 是全文的命令組，`t` 是表格的 [^416] | Fixed 2026-09-12 |
 
 ### 5.5 · A table is a delimiter, a surface and a boundary (#261)
 
@@ -10134,3 +10135,19 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     五、名字五個形狀：一個鍵、一個 `g` 前綴、一個帶斜線的命令、兩個帶參數的命令。
     ⚠️ **先做完手頭那串再研究**（作者 2026-09-12 定）。動之前先把上面五條逐條驗一遍，
     別照這則裏的印象直接改。**medium**
+
+[^416]: 2026-09-12 報上來的：Markdown 表格的一格裏寫了腳注 `[^1]`，光標停在它上面按
+    `gd`，去搜了網格而不是去文末那條註——而「去它指着的那條註」正是 `gd` 這個名字唯一
+    該做的事。一個鍵的意思因光標停在哪裏而翻面，就沒法信它。
+
+    **落地（2026-09-12）**：`gd`、`gD`、`g/`、`g?` 四個一律只認整份稿子，
+    `show_definition` 裏那條表格分支連同 `go_to_the_row_named` 整個刪掉
+    （`editor/detail.rs`）。順帶掉下來兩個只剩它一個讀者的欄位：`column_span`
+    （只有 `go_to_the_row_named` 讀）與 `count_to`（只有 `column_span` 讀），
+    於是 `2-5gd` 那個裸的區間前綴也一併沒了——`take_sequence_argument` 那一套
+    （`t2-10/`、`t1,5,9s`、`g30g`）是另一個機制，不受影響。`hint.rs` 裏兩則
+    表格提示與 `messages.toml` 裏六則跟着刪。
+
+    **表格那一半的問題交給 `t`**：`t/`／`t?` 一欄一欄地找，`:table-jump 木` 跳到
+    key 欄裏叫這個名字的那一行。⚠️ **「在第 3 欄裏找完全相同的那一格」這個能力沒有
+    `t` 的對應寫法**（`t3/` 是子串搜索，不是整格相等），暫時就這樣。**small**
