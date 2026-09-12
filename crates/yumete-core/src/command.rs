@@ -144,6 +144,8 @@ pub enum Command {
         /// `f`: **照字面** — the pattern is the characters typed, not a regex,
         /// and `$` in the replacement is a `$` rather than a capture.
         literal: bool,
+        /// `c`: **逐處確認** — stop at each match and ask before writing.
+        confirm: bool,
         /// `n`: say how many there are and change nothing, as vi's `n` means.
         count_only: bool,
         /// `t`: yes, this changes how many cells a row has — 表格的欄數也改.
@@ -4166,12 +4168,6 @@ fn parse_substitution(input: &str) -> Option<Result<Command, CommandError>> {
             value: say!("substitute.unknown-flag", bad),
         }));
     }
-    if flags.contains('c') {
-        return Some(Err(CommandError::InvalidArgument {
-            command: "substitute",
-            value: say!("substitute.confirm-not-yet"),
-        }));
-    }
     // Only now — once this is certainly a substitution and not `:set` or a
     // line number — is a range worth complaining about.
     let Ok(rows) = rows else {
@@ -4186,6 +4182,7 @@ fn parse_substitution(input: &str) -> Option<Result<Command, CommandError>> {
         global: flags.contains('g'),
         ignore_case: flags.contains('i'),
         literal: flags.contains('f'),
+        confirm: flags.contains('c'),
         count_only: flags.contains('n'),
         reshape: flags.contains('t'),
         rows,
@@ -4540,6 +4537,7 @@ mod tests {
             global: false,
             ignore_case: false,
             literal: false,
+            confirm: false,
             count_only: false,
             reshape: false,
             rows: Rows::Selection,
@@ -4553,6 +4551,7 @@ mod tests {
                 global: true,
                 ignore_case: false,
                 literal: false,
+                confirm: false,
                 count_only: false,
             reshape: false,
                 rows: Rows::All,
@@ -4574,6 +4573,7 @@ mod tests {
             global: false,
             ignore_case: false,
             literal: false,
+            confirm: false,
             count_only: false,
             reshape: false,
             rows: Rows::Selection,
@@ -4597,6 +4597,7 @@ mod tests {
                 global: true,
                 ignore_case: true,
                 literal: false,
+                confirm: false,
                 count_only: false,
             reshape: false,
                 rows: Rows::All,
@@ -4617,8 +4618,12 @@ mod tests {
             parse(":%s/a.b/c/g"),
             Ok(Command::Substitute { literal: false, .. })
         ));
+        // `c` — 逐處確認, ask before each one.
+        assert!(matches!(
+            parse(":%s/a/b/c"),
+            Ok(Command::Substitute { confirm: true, .. })
+        ));
         // A flag that is not implemented says so rather than being dropped.
-        assert!(parse(":%s/a/b/c").is_err());
         assert!(parse(":%s/a/b/z").is_err());
     }
 

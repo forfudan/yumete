@@ -10966,6 +10966,70 @@ fn the_f_flag_takes_the_pattern_as_the_characters_it_is() {
     assert_eq!(ed.current_buffer().text(), "甲\n");
 }
 
+/// **`c` — 逐處確認**: 「防止一下子全部都替换了」 (#415).
+///
+/// The flag exists so that a substitution across a whole book is judged one
+/// match at a time. Everything about it is in service of that: the match is
+/// the selection so the writer sees what is being asked about, a key that is
+/// not one of the five answers leaves the question standing, and the whole
+/// walk is **one** undo step.
+#[test]
+fn the_c_flag_asks_at_each_match_before_writing() {
+    let mut ed = typed("甲甲\n甲甲\n");
+    assert!(ed.execute("%s/甲/乙/gc").is_ok(), "{}", ed.status());
+    assert!(ed.pending_menu().is_some(), "it is asking");
+
+    // A key that is not one of the five is not an answer.
+    ed.on_key(Key::Char('z'));
+    assert_eq!(ed.current_buffer().text(), "甲甲\n甲甲\n");
+    assert!(ed.pending_menu().is_some(), "the question still stands");
+
+    ed.on_key(Key::Char('y'));
+    assert_eq!(ed.current_buffer().text(), "乙甲\n甲甲\n");
+    ed.on_key(Key::Char('n'));
+    assert_eq!(ed.current_buffer().text(), "乙甲\n甲甲\n", "n writes nothing");
+    ed.on_key(Key::Char('a'));
+    assert_eq!(ed.current_buffer().text(), "乙甲\n乙乙\n", "a takes the rest");
+    assert!(ed.pending_menu().is_none(), "the walk is over");
+
+    // **One `u` undoes the whole walk**, not the last match of it.
+    ed.on_key(Key::Char('u'));
+    assert_eq!(ed.current_buffer().text(), "甲甲\n甲甲\n");
+
+    // `q` stops and keeps what is already done; `Esc` is the same answer.
+    let mut ed = typed("甲甲甲\n");
+    assert!(ed.execute("%s/甲/乙/gc").is_ok(), "{}", ed.status());
+    ed.on_key(Key::Char('y'));
+    ed.on_key(Key::Char('q'));
+    assert_eq!(ed.current_buffer().text(), "乙甲甲\n");
+    assert!(ed.pending_menu().is_none());
+
+    // `l` — this one, then stop.
+    let mut ed = typed("甲甲甲\n");
+    assert!(ed.execute("%s/甲/乙/gc").is_ok(), "{}", ed.status());
+    ed.on_key(Key::Char('l'));
+    assert_eq!(ed.current_buffer().text(), "乙甲甲\n");
+    assert!(ed.pending_menu().is_none());
+
+    // **Refusing everything leaves no undo step**, so `u` still means the
+    // edit before the walk — a document nothing happened to must not eat one.
+    let mut ed = typed("甲甲\n");
+    assert!(ed.execute("%s/甲/丙/").is_ok(), "{}", ed.status());
+    assert_eq!(ed.current_buffer().text(), "丙甲\n");
+    assert!(ed.execute("%s/甲/乙/gc").is_ok(), "{}", ed.status());
+    ed.on_key(Key::Char('n'));
+    assert!(ed.pending_menu().is_none());
+    ed.on_key(Key::Char('u'));
+    assert_eq!(ed.current_buffer().text(), "甲甲\n");
+
+    // A range still means what it means, and `n` — count only — wins over
+    // `c`: it is the answer that changes nothing.
+    let mut ed = typed("甲\n甲\n甲\n");
+    assert!(ed.execute("1,3s/甲/乙/cn").is_ok(), "{}", ed.status());
+    assert!(ed.pending_menu().is_none(), "n asks nothing");
+    assert_eq!(ed.current_buffer().text(), "甲\n甲\n甲\n");
+}
+
 /// **`-` is a span, `,` is a list** — in `:s` too (§5.7).
 #[test]
 fn a_substitution_reads_a_dash_as_a_span_and_a_comma_as_a_list() {

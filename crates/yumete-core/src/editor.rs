@@ -178,6 +178,11 @@ enum Pending {
     Hop { forward: bool },
     /// `空格 m` — what to keep of the merge conflict under the cursor.
     Conflict,
+    /// A `:s …c` is asking about one match — `y`/`n`/`a`/`q`/`l` (#415).
+    ///
+    /// Unlike every other pending here this one is not opened by a key: the
+    /// command opens it and it stays open across many keys, one per match.
+    Confirm,
     /// `` ` `` — 「不改它說什麼，只改它長什麼樣」 (§5.2.3 ②).
     ///
     /// Helix spends three top-level keys here (`` ` `` 小寫, `` A-` `` 大寫,
@@ -212,7 +217,8 @@ impl Pending {
             | Pending::Surround
             | Pending::SurroundFrom
             | Pending::SurroundTo(_) => true,
-            Pending::None
+            // `y`/`n`/`a`/`q`/`l` name what to do, not what to write.
+            Pending::Confirm | Pending::None
             | Pending::Goto
             | Pending::Space
             | Pending::Register
@@ -1411,6 +1417,8 @@ pub struct Editor {
     anchor: usize,
     /// A pending multi-key operator (goto `g…` or find `f`/`t`/`F`/`T`).
     pending: Pending,
+    /// The `:s …c` walk `Pending::Confirm` is the keyboard half of.
+    confirming: Option<Confirming>,
     /// The count typed before a pending operator, kept because the count is
     /// consumed by the key that *opens* the operator — `10g` has already spent
     /// the 10 by the time the second `g` arrives.
@@ -2139,6 +2147,7 @@ impl Editor {
             status: String::new(),
             anchor: 0,
             pending: Pending::None,
+            confirming: None,
             operator_count: None,
             extend: false,
             register: String::new(),
@@ -2510,10 +2519,73 @@ struct Substitution<'a> {
     ignore_case: bool,
     /// The `f` flag: 照字面 — the pattern is characters, not a regex.
     literal: bool,
+    /// The `c` flag: stop at each match and ask.
+    confirm: bool,
     count_only: bool,
     /// The `t` flag: the writer means to change how many cells a row has.
     reshape: bool,
     rows: crate::command::Rows,
+}
+
+/// The lines a `:s` will touch, already resolved to 0-based line numbers.
+enum Chosen {
+    /// Everything from the first to the last, inclusive.
+    Span(usize, usize),
+    /// Exactly these, in whatever order they were written.
+    These(Vec<usize>),
+}
+
+impl Chosen {
+    /// Is this line one of them?
+    fn has(&self, line: usize) -> bool {
+        match self {
+            Self::Span(first, last) => line >= *first && line <= *last,
+            Self::These(lines) => lines.contains(&line),
+        }
+    }
+}
+
+/// One match a `:s …c` is about to ask about.
+struct Hit {
+    /// Char indices into the buffer.
+    start: usize,
+    end: usize,
+    /// What is there now — the question shows it, so the writer is looking at
+    /// the same thing the editor is.
+    found: String,
+    /// The replacement with its `$1` already resolved **for this match**.
+    text: String,
+}
+
+/// A `:s …c` in the middle of asking (#415).
+///
+/// 「防止一下子全部都替换了」 — the whole point of the flag is that the writer
+/// sees each match before it changes, so the walk outlives the command that
+/// started it and lives here between keystrokes.
+struct Confirming {
+    re: Regex,
+    /// Still with its `$1` in it; expanded per match.
+    replacement: String,
+    /// `g`: every match on a line, not only the first.
+    global: bool,
+    /// The lines the range named.
+    chosen: Chosen,
+    /// `t`: the writer means to let a row's cell count change.
+    reshape: bool,
+    /// Matches starting before this char index have been decided.
+    ///
+    /// The match **on screen** is simply the next one at or after this, found
+    /// again when the key arrives: nothing can have touched the buffer in
+    /// between, because this pending eats every key.
+    from: usize,
+    changed: usize,
+    skipped: usize,
+    /// The writer said `a`: go through the rest without asking.
+    all: bool,
+    /// Whether the undo point has been taken. **One `u` undoes the whole
+    /// walk**, however many matches it changed — a writer who says 「算了」
+    /// after twenty `y`s means all twenty.
+    snapped: bool,
 }
 
 /// Whether a file is something a tool produced rather than something a writer
