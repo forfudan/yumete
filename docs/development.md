@@ -631,6 +631,7 @@ index, and a row with no number anywhere else is a row that got lost.
 | 406 | **`gw`：兩字符跳轉標籤，適配中文** | tui+core | P2 | 標籤落在分詞的詞首 [^406] | Planned |
 | 407 | **格子裏的選區看不見** | tui | P1 | 光標格和選區同一個顏色 [^407] | Fixed 2026-09-12 |
 | 408 | **`w` 停在畫成一條 `┆` 的三個字符裏** | core | P1 | 讀者看不見的一步不算一步 [^408] | Fixed 2026-09-12 |
+| 409 | **注釋掉：`空格 c`／`空格 C`** | core | P1 | 各說各的形式，不看情況 [^409] | Fixed 2026-09-12 |
 
 ### 5.5 · A table is a delimiter, a surface and a boundary (#261)
 
@@ -6278,7 +6279,7 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     paragraph *about* merges would have been swallowed by one. A marker line is
     `is_literal`, else `=======` reads as a `==highlight==` that opens and never
     closes. `]c`/`[c` walk (`Pending::Hop`, no wrap — the group #250's `]q`
-    will join); `空格 c` then `o`/`t`/`b` keeps a side; `:conflicts` is a
+    will join); `空格 m` then `o`/`t`/`b` keeps a side; `:conflicts` is a
     results buffer `gf` walks back the way `:grep`'s is. Under `:render full`
     the seven brackets come off and the branch name stays.
 
@@ -9453,3 +9454,22 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     讓空格子再也點不進去——而填空正是表格編輯最主要的用處。第一版沒分這兩種，`csv` 那
     三條測試當場變紅（`⿰` 被跳過去到了 `木`）。
     量到的（`:1124` `t f`，光標在「符」）：`w` 一下到下一格的 `` ` ``，中間沒有隱形的停頓。
+
+
+[^409]: 2026-09-11 定要做（「block comment 註釋快捷鍵太重要了」），2026-09-12 定形式。
+    helix 有四個入口：`C-c`、`空格 c`（聰明的那個：有行注釋就行，沒有退塊）、`空格 C`
+    （強制塊）、`空格 A-c`（強制行）。作者的版本比它**確定**：
+    「`space + c`: 強制行注釋，没有纔退到塊注釋；`space + C`: 強制塊注釋，没有纔退到
+    行注釋。這樣更加有確定性。」——退的時候不是猜，是那個格式只有一個答案。
+    三種格式各有什麼：typst `//` 與 `/* */`（唯一兩種都有的），markdown 只有
+    `<!-- -->`（**沒有行注釋**），純文本兩種都沒有，按了會說出來。
+    ⚠️ **`Ctrl-/` 沒做，也不該做。** Terminal.app 不支持 Kitty 鍵盤協議，`Ctrl-/`
+    在那裏最多送一個 `C-_`(0x1F)，很多終端乾脆什麼都不送——那會做出一個「在我這兒沒
+    反應」的 bug。`Ctrl-c` 也沒綁：raw mode 下收得到，但它在所有人的肌肉記憶裏是
+    「停下」，誤按的代價是注釋掉一整段選區。
+    ⚠️ **`空格 c` 原來是合併衝突，挪到了 `空格 m`**（merge）。對一個寫小說的編輯器
+    來說合併衝突比注釋罕見得多，而 helix 教的是 `空格 c`。`]c`／`[c`（跳到下一個衝突）
+    沒動。
+    行注釋的細節：記號對齊到那幾行**最淺的那一級縮進**（不是各按各的，否則取不回來），
+    空行不加記號也不算數，**半數已注釋的算「還沒注釋完」**——把剩下的補上，而不是把
+    別人的拿掉。選區先撐到整行，寫完仍選着那幾行，所以連按兩次是撤銷。

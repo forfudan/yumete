@@ -704,4 +704,49 @@ impl Editor {
         self.sequence = None;
         self.sort_keys.clear();
     }
+    /// Comment the selected lines out, or bring them back (#409).
+    ///
+    /// **Whole lines, always.** A comment that begins in the middle of a line
+    /// and ends in the middle of another is a thing nobody can read back, and
+    /// a line comment has nowhere else to go. So the selection is widened to
+    /// the lines it touches before anything is written, and the selection that
+    /// comes back covers the same lines.
+    pub(super) fn toggle_comment(&mut self, prefer: crate::comment::Prefer) {
+        if self.refuse_readonly() {
+            return;
+        }
+        let Some(form) = crate::comment::form(self.syntax(), prefer) else {
+            // **Said, not silently skipped.** A key that writes nothing and
+            // says nothing is the bug this project has fixed most often.
+            self.status = say!("comment.none");
+            return;
+        };
+        let rope = self.current_buffer().rope().clone();
+        let (from, to) = self.selection();
+        let start = crate::motion::line_start(&rope, from.min(rope.len_chars()));
+        let end = crate::motion::line_end(&rope, to.min(rope.len_chars()));
+        let text: String = rope.slice(start..end).to_string();
+        let rebuilt = match form {
+            crate::comment::Form::Line(mark) => {
+                let lines: Vec<&str> = text.split('\n').collect();
+                crate::comment::toggle_line(&lines, mark).join("\n")
+            }
+            crate::comment::Form::Block(open, close) => {
+                crate::comment::toggle_block(&text, open, close)
+            }
+        };
+        if rebuilt == text {
+            return;
+        }
+        self.snapshot();
+        if !self.overwrite(start, end, &rebuilt) {
+            return;
+        }
+        // The same lines stay selected, so the key can be pressed twice and
+        // the second press undoes the first — which is what a toggle is.
+        let last = start + rebuilt.chars().count();
+        self.anchor = start;
+        self.cursor = crate::motion::prev_grapheme(self.current_buffer().rope(), last).max(start);
+        self.refresh_goal_column();
+    }
 }

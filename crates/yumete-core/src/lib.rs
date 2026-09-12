@@ -20,6 +20,7 @@
 pub mod buffer;
 pub mod clock;
 pub mod command;
+pub mod comment;
 pub mod conflict;
 pub mod convert;
 pub mod diag;

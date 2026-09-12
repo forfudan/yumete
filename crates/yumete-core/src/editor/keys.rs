@@ -1176,7 +1176,13 @@ impl Editor {
         ('W', "hint.goto.only-this-pane"),
         ('q', "hint.goto.close-this-pane"),
         ('"', "menu.paste.title"),
-        ('c', "hint.conflict.title"),
+        ('c', "hint.space.comment-line"),
+        ('C', "hint.space.comment-block"),
+        // ⚠️ **`m`, not `c`** (#409, 2026-09-12). Merge conflicts had `空格 c`
+        // and gave it up: helix teaches `空格 c` for commenting, and on an
+        // editor for novels a conflict is far the rarer of the two. `m` is
+        // merge, and the two letters do not compete for the same word.
+        ('m', "hint.conflict.title"),
     ];
 
     /// What `g` may be finished with.
@@ -1219,7 +1225,7 @@ impl Editor {
     /// What `]` and `[` may be finished with — 「下一個這種東西」.
     pub(super) const HOP_KEYS: &'static [(&'static str, &'static str)] = &[("c", "hint.hop.conflict")];
 
-    /// What `空格 c` may be finished with — which side of the conflict to keep.
+    /// What `空格 m` may be finished with — which side of the conflict to keep.
     pub(super) const CONFLICT_KEYS: &'static [(&'static str, &'static str)] = &[
         ("o", "hint.conflict.ours"),
         ("t", "hint.conflict.theirs"),
@@ -1379,7 +1385,9 @@ impl Editor {
             // than a letter of its own because every letter has one already,
             // and because a merge conflict is a thing that happens to a file
             // a few times a year — not a motion a writer's fingers know.
-            Key::Char('c') => self.pending = Pending::Conflict,
+            Key::Char('m') => self.pending = Pending::Conflict,
+            Key::Char('c') => self.toggle_comment(crate::comment::Prefer::Line),
+            Key::Char('C') => self.toggle_comment(crate::comment::Prefer::Block),
             Key::Char('f') => self.open_file_picker(),
             Key::Char('b') => self.open_buffer_picker(),
             // The two prompts, opened rather than run: a search wants a pattern

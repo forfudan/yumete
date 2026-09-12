@@ -10496,7 +10496,7 @@ fn the_brackets_walk_from_one_conflict_to_the_next() {
 fn keeping_a_side_takes_the_markers_with_it() {
     let mut ed = merged(MERGED);
     press(&mut ed, "]c");
-    press(&mut ed, " co");
+    press(&mut ed, " mo");
     assert_eq!(
         ed.current_buffer().text(),
         "第一段\n我方寫的\n最後一段\n",
@@ -10507,12 +10507,12 @@ fn keeping_a_side_takes_the_markers_with_it() {
 
     let mut ed = merged(MERGED);
     press(&mut ed, "]c");
-    press(&mut ed, " ct");
+    press(&mut ed, " mt");
     assert_eq!(ed.current_buffer().text(), "第一段\n他方寫的\n最後一段\n");
 
     let mut ed = merged(MERGED);
     press(&mut ed, "]c");
-    press(&mut ed, " cb");
+    press(&mut ed, " mb");
     assert_eq!(
         ed.current_buffer().text(),
         "第一段\n我方寫的\n他方寫的\n最後一段\n"
@@ -10525,14 +10525,14 @@ fn keeping_a_side_takes_the_markers_with_it() {
 fn keeping_an_empty_side_leaves_no_line_at_all() {
     let mut ed = merged("上\n<<<<<<< HEAD\n=======\n新加的一句\n>>>>>>> 枝\n下\n");
     press(&mut ed, "]c");
-    press(&mut ed, " co");
+    press(&mut ed, " mo");
     assert_eq!(ed.current_buffer().text(), "上\n下\n");
 }
 
 #[test]
 fn the_three_keys_say_so_when_there_is_nothing_to_resolve() {
     let mut ed = merged(MERGED);
-    press(&mut ed, " co");
+    press(&mut ed, " mo");
     assert!(ed.status().contains("不在"), "{}", ed.status());
     assert_eq!(ed.current_buffer().text(), MERGED, "nothing was touched");
 }
@@ -11064,3 +11064,65 @@ fn the_cost_of_a_key_in_a_table() {
 
 
 
+
+// ---- Commenting out (#409) ----------------------------------------------
+
+/// **Two keys, and each one says which form it means** (#409).
+///
+/// Typst is the one format that has both, so it is the one place the keys can
+/// be told apart; Markdown answers both with `<!-- -->` because that is the
+/// only form it has, and plain text says so out loud rather than inventing a
+/// convention for a file that has none.
+#[test]
+fn the_two_comment_keys_each_force_their_own_form() {
+    let mut ed = typed("甲乙\n丙丁\n");
+    ed.execute(":syntax typst").unwrap();
+    press(&mut ed, " c");
+    assert_eq!(ed.current_buffer().text(), "// 甲乙\n丙丁\n", "空格 c is by the line");
+    press(&mut ed, " c");
+    assert_eq!(ed.current_buffer().text(), "甲乙\n丙丁\n", "and pressing it again undoes it");
+
+    press(&mut ed, " C");
+    assert_eq!(ed.current_buffer().text(), "/* 甲乙 */\n丙丁\n", "空格 C is a block");
+    press(&mut ed, " C");
+    assert_eq!(ed.current_buffer().text(), "甲乙\n丙丁\n");
+}
+
+#[test]
+fn a_format_with_one_form_gives_it_to_both_keys() {
+    for key in [" c", " C"] {
+        let mut ed = typed("甲乙\n");
+        ed.execute(":syntax markdown").unwrap();
+        press(&mut ed, key);
+        assert_eq!(
+            ed.current_buffer().text(),
+            "<!-- 甲乙 -->\n",
+            "Markdown has no line comment, so `{key}` writes the one it has"
+        );
+    }
+}
+
+/// A key that writes nothing must say why — the bug this project has fixed
+/// most often is the one where nothing happens and nothing is said.
+#[test]
+fn plain_text_has_no_comment_and_the_key_says_so() {
+    let mut ed = typed("甲乙\n");
+    ed.execute(":syntax text").unwrap();
+    press(&mut ed, " c");
+    assert_eq!(ed.current_buffer().text(), "甲乙\n", "nothing written");
+    assert!(!ed.status().is_empty(), "and it does not fail silently");
+}
+
+/// The selection is widened to whole lines, and the same lines come back
+/// selected — so the key can be pressed twice and the second press undoes the
+/// first, which is what a toggle is.
+#[test]
+fn commenting_takes_whole_lines_and_keeps_them_selected() {
+    let mut ed = typed("甲乙\n丙丁\n戊己\n");
+    ed.execute(":syntax typst").unwrap();
+    press(&mut ed, "lvj");
+    press(&mut ed, " c");
+    assert_eq!(ed.current_buffer().text(), "// 甲乙\n// 丙丁\n戊己\n", "both lines, whole");
+    press(&mut ed, " c");
+    assert_eq!(ed.current_buffer().text(), "甲乙\n丙丁\n戊己\n", "and both come back");
+}
