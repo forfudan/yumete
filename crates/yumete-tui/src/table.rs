@@ -434,10 +434,11 @@ pub fn draw(
     // third ground either (`HEAD` 815 and `SELECTION` 700 are 5% apart at the
     // paper end, and the ladder's own note says 1.11–1.20 is invisible).
     //
-    // Nothing was lost by giving the cell back its row's band: **which cell the
-    // caret is in is already said twice** — the column's number and its heading
-    // are both lit at the top of the grid (see the two `i == cursor_cell` arms
-    // above) — while *what is selected* was said nowhere.
+    // The cell is still a box; the box just moved off the ground and into the
+    // seam beside it — two 金 rules, drawn further down where `here` is known.
+    // Which cell the caret is in was already said twice besides (the column's
+    // number and its heading are both lit at the top of the grid), while *what
+    // is selected* was said nowhere.
     let on = Style::default().bg(ink.selection());
     // **A column is a band, and the page shows between them** — the seam is
     // the page itself, one cell wide, and that is the whole of the ruling.
@@ -786,6 +787,36 @@ pub fn draw(
                             Some((glyph, rule)) => cell.set_symbol(glyph).set_style(ground.fg(rule)),
                             None => cell.set_symbol(" ").set_style(ground),
                         };
+                    }
+                }
+                // **The caret's cell, bracketed** (#407). The box used to be
+                // the cell's whole ground, painted in the *selection's* rung —
+                // which left a selection inside it no colour to be drawn in.
+                // The ladder has no room for a third ground (HEAD 815 and
+                // SELECTION 700 are 5% apart at the paper end), so the box
+                // moved off the ground and into the seam the page already
+                // keeps between columns: two thin rules in 金, the one colour
+                // on the grid that is not a quantity of ink. A spreadsheet's
+                // active cell — and it costs the selection nothing.
+                if here {
+                    // **A rule that is already there is only recoloured.** A
+                    // drawn seam (`:table-rules line`) turns 金 and the grid
+                    // reads exactly as before; only a *blank* seam is given a
+                    // mark of its own, hugging the cell from the far side of
+                    // the gap — a right eighth-block before, a left one after.
+                    let mut wall = |bx: u16, glyph: &str| {
+                        if let Some(cell) = buf.cell_mut((bx, y)) {
+                            if stroke.is_none() {
+                                cell.set_symbol(glyph);
+                            }
+                            cell.set_style(cell.style().fg(ink.gold()));
+                        }
+                    };
+                    if x > 0 {
+                        wall(x - 1, "\u{2595}");
+                    }
+                    if x + w < right {
+                        wall(x + w, "\u{258f}");
                     }
                 }
                 // A hidden column takes no gap either — a column of

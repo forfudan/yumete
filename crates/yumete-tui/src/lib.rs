@@ -5154,6 +5154,21 @@ fn draw_horizontal(
                     }
                     *style = style.patch(cell_style);
                 }
+                // **And the wall on each side, in 金** (#407). The cell's own
+                // ground is `HEAD` and the selection's is `SELECTION`, one rung
+                // apart at the paper end — far enough to measure and not far
+                // enough to read, which is what the writer saw: 「w 選擇詞的
+                // 背景色和格子的選擇色一樣，導致我不知道選區是什麼」。The
+                // ladder has no third ground to give, so which cell you are in
+                // is said by a *mark* instead: the two walls beside it, drawn
+                // in the one colour on the page that is not a quantity of ink.
+                // Then the only thing still using a ground is the selection.
+                let gold = Style::default().fg(ink.gold());
+                for edge in [a.checked_sub(1), (b < styles.len()).then_some(b)] {
+                    if let Some(style) = edge.and_then(|i| styles.get_mut(i)) {
+                        *style = style.patch(gold);
+                    }
+                }
             }
         }
 
@@ -9115,33 +9130,47 @@ mod tests {
         let mut config = Config::default();
         config.editor.line_numbers = LineNumbers::None;
         let buffer = render(&editor, &config, 60, 10);
-        let lit = Some(ink(&config).selection());
-
-        // Row 2 of the file is the first data row, on screen row 2 under the
-        // column numbers and the header; the cursor is in its second cell.
-        let start = (0..60u16)
-            .find(|&x| buffer[(x, 2)].style().bg == lit)
-            .expect("a lit cell");
-        assert_eq!(at(&buffer, start, 2), "⿰", "it is the 拆分 cell");
-        // The ground runs the column's whole width, past the end of the text —
-        // a cell you are inside, not three highlighted characters.
-        // Counted, not run-length: a wide glyph covers two cells and ratatui
-        // only ever sends the first, so the second reads back unstyled here
-        // even though the terminal paints the whole glyph. What matters is
-        // that the ground reaches past the end of the text.
-        let last = (0..60u16)
-            .rfind(|&x| buffer[(x, 2)].style().bg == lit)
-            .unwrap();
-        let text_ends = (start..60).find(|&x| at(&buffer, x, 2) == " " && at(&buffer, x - 1, 2) == " ");
+        // ⚠️ **The box is a bracket now, not a ground** (#407, 2026-09-12).
+        // The cell used to be filled with `ink.selection()`, which left a
+        // selection *inside* it no colour to be drawn in; and the row it is on
+        // is already lit with `HEAD`, so the cell cannot be told from its row
+        // by a ground either. So the box moved into the seam: two 金 rules in
+        // the gap the page keeps between columns. It is still a box — the
+        // brackets stand at the column's edges, past the end of the text — and
+        // the ground is now free for the selection alone.
+        let gold = ink(&config).gold();
+        let bracket: Vec<u16> = (0..60u16)
+            .filter(|&x| buffer[(x, 2)].style().fg == Some(gold))
+            .collect();
+        assert_eq!(bracket.len(), 2, "one on each side: {bracket:?}");
+        let (left, right) = (bracket[0], bracket[1]);
+        // This grid draws its seams (`:table-rules line`), and a rule already
+        // there is only recoloured — the glyph does not change, so the grid
+        // reads exactly as it did. A blank seam gets a mark of its own instead.
+        assert_eq!(at(&buffer, left, 2), "\u{2506}", "the seam before it, in 金");
+        assert_eq!(at(&buffer, right, 2), "\u{2506}", "and the one after");
+        assert_eq!(at(&buffer, left + 1, 2), "\u{2ff0}", "it is the 拆分 cell");
+        // The brackets stand at the *column's* edges, not the text's — a cell
+        // you are inside, not three highlighted characters. Counted, not
+        // run-length: a wide glyph covers two terminal cells.
         assert!(
-            last > start + 5,
-            "the box is the column's width, not the text's: {start}..{last}"
+            right > left + 5,
+            "the box is the column's width, not the text's: {left}..{right}"
         );
-        assert!(text_ends.is_some_and(|e| last >= e), "the padding is lit too");
-        // …and nothing on the frozen rows or on another data row is lit.
-        assert!((0..60u16).all(|x| buffer[(x, 0)].style().bg != lit), "not the numbers");
-        assert!((0..60u16).all(|x| buffer[(x, 1)].style().bg != lit), "not the header");
-        assert!((0..60u16).all(|x| buffer[(x, 3)].style().bg != lit), "not another row");
+        let text_ends =
+            (left..60).find(|&x| at(&buffer, x, 2) == " " && at(&buffer, x - 1, 2) == " ");
+        assert!(text_ends.is_some_and(|e| right >= e), "the padding is inside it");
+        // …and no other **data** row is bracketed. The frozen rows above are
+        // a different matter: the column's number and its heading are lit in
+        // the same 金 up there, which is the second and third place the grid
+        // says which cell you are in.
+        // Only as far as the grid: the detail pane to the right of it names
+        // the cell's own fields in the same 金, which is its job.
+        let elsewhere: Vec<(u16, String)> = (0..=right)
+            .filter(|&x| buffer[(x, 3)].style().fg == Some(gold))
+            .map(|x| (x, at(&buffer, x, 3)))
+            .collect();
+        assert!(elsewhere.is_empty(), "not another row: {elsewhere:?}");
 
         std::fs::remove_dir_all(&dir).ok();
     }
