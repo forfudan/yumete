@@ -491,7 +491,7 @@ impl Editor {
         self.open_file(path)?;
         if self.current_buffer().syntax_was_guessed() && from == crate::syntax::Syntax::Typst {
             self.current_buffer_mut().set_syntax(from);
-            self.markup_cache.borrow_mut().clear();
+            self.markup_memo.forget();
             *self.block_cache.borrow_mut() = None;
         }
         Ok(())
@@ -564,8 +564,8 @@ impl Editor {
     /// the rows and dropped the reader back into the source
     /// (2026-09-05：「表格排序 t1s 會直接回到源碼視圖」).
     pub(super) fn forget_the_text(&mut self) {
-        self.segment_cache.borrow_mut().clear();
-        self.markup_cache.borrow_mut().clear();
+        self.segment_memo.forget();
+        self.markup_memo.forget();
         *self.md_cache.borrow_mut() = None;
         *self.md_tables.borrow_mut() = None;
         *self.block_cache.borrow_mut() = None;

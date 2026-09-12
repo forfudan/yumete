@@ -19,8 +19,8 @@ impl Editor {
     /// until the line was edited, which is the exact mistake the feature
     /// exists to catch.
     fn forget_the_words(&mut self) {
-        self.segment_cache.borrow_mut().clear();
-        self.meter_cache.borrow_mut().clear();
+        self.segment_memo.forget();
+        self.meter_memo.forget();
         // The third one is a line further down: the segmenter's own memo of
         // what it cut (#321) is kept against the text as well, and it is what
         // both of the caches above are computed *from*.
@@ -55,7 +55,7 @@ impl Editor {
         // The 平仄 in the margin were read off the reader that has just been
         // replaced, and nothing about the *text* changed — so the hash they are
         // kept against would say they are still good.
-        self.meter_cache.borrow_mut().clear();
+        self.meter_memo.forget();
     }
 
     /// Everything `:word` asks — see [`crate::command::WordCommand`].
@@ -541,49 +541,36 @@ impl Editor {
         }
 
         // The overlay asks for every paragraph on screen, every frame, and the
-        // answer only changes when the paragraph does — so it is cached against
-        // a hash of the text itself rather than a buffer revision. A revision
-        // would invalidate all forty visible paragraphs on each keystroke; the
-        // hash invalidates only the one being typed into. Ranges are relative to
-        // the line, so a matching hash is a correct answer whatever else in the
+        // answer only changes when the paragraph does — so the stamp is a hash
+        // of the text itself rather than a buffer revision. A revision would
+        // invalidate all forty visible paragraphs on each keystroke; the hash
+        // invalidates only the one being typed into. Ranges are relative to the
+        // line, so a matching hash is a correct answer whatever else in the
         // document has moved.
-        let mut hasher = DefaultHasher::new();
-        text.hash(&mut hasher);
-        let hash = hasher.finish();
-
-        let mut cache = self.segment_cache.borrow_mut();
-        if let Some((cached, ranges)) = cache.get(&line) {
-            if *cached == hash {
-                return ranges.clone();
-            }
-        }
-        let chars: Vec<char> = text.chars().collect();
-        // A boundary the reader can see: whitespace, punctuation, a bracket, a
-        // 、 — anything that is not part of a word. The ends of the line count,
-        // because a line end is the most visible boundary there is.
-        let visible = |at: usize| -> bool {
-            match chars.get(at) {
-                None => true,
-                Some(c) => !c.is_alphanumeric(),
-            }
-        };
-        let ranges: Vec<(usize, usize)> = self
-            .segmenter
-            .segment(&text)
-            .into_iter()
-            .filter(|&(a, b)| {
-                let before = a == 0 || visible(a - 1);
-                let after = visible(b);
-                !(before && after)
+        let stamp = super::memo::stamp(&text);
+        self.segment_memo
+            .or_work_out(self.current_buffer().id(), line, stamp, || {
+                let chars: Vec<char> = text.chars().collect();
+                // A boundary the reader can see: whitespace, punctuation, a
+                // bracket, a 、 — anything that is not part of a word. The ends
+                // of the line count, because a line end is the most visible
+                // boundary there is.
+                let visible = |at: usize| -> bool {
+                    match chars.get(at) {
+                        None => true,
+                        Some(c) => !c.is_alphanumeric(),
+                    }
+                };
+                self.segmenter
+                    .segment(&text)
+                    .into_iter()
+                    .filter(|&(a, b)| {
+                        let before = a == 0 || visible(a - 1);
+                        let after = visible(b);
+                        !(before && after)
+                    })
+                    .collect()
             })
-            .collect();
-        // Bounded: a page is tens of paragraphs, and scrolling a long document
-        // must not accumulate one entry per paragraph in it.
-        if cache.len() >= SEGMENT_CACHE_LIMIT {
-            cache.clear();
-        }
-        cache.insert(line, (hash, ranges.clone()));
-        ranges
     }
 
     /// Insert already-composed text (an IME commit) at the cursor, as if typed.

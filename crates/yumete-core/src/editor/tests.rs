@@ -12111,3 +12111,43 @@ fn a_change_of_word_level_reaches_a_line_already_cut() {
     );
 }
 
+
+/// Two of the five line memos had no bound at all before they were one
+/// facility (#348): the Markdown runs and the readings kept an entry per line
+/// for as long as the reader kept scrolling, and every edit made all of them
+/// unreachable without removing a single one. Deciding that once is the point
+/// of the facility — so the bound is asked of it, not of each caller.
+#[test]
+fn a_line_memo_does_not_grow_with_the_document() {
+    let lines: Vec<String> = (0..2_000)
+        .map(|i| format!("*第{i}章* 讀<ruby>漢<rt>hàn</rt></ruby>字"))
+        .collect();
+    let mut ed = typed(&lines.join("\n"));
+    ed.set_syntax(crate::syntax::Syntax::Markdown);
+    for line in 0..lines.len() {
+        ed.markup_line(line);
+        ed.readings_on_line(line);
+    }
+    let bound = super::memo::MEMO_LINES;
+    assert!(
+        ed.markup_memo.len() <= bound,
+        "the Markdown runs of {} lines are being held",
+        ed.markup_memo.len(),
+    );
+    assert!(
+        ed.ruby_memo.len() <= bound,
+        "the readings of {} lines are being held",
+        ed.ruby_memo.len(),
+    );
+    // …and what a memo threw away it works out again, rather than answering
+    // with nothing.
+    assert!(
+        !ed.markup_line(0).is_empty(),
+        "line 0 lost its emphasis when the memo filled up",
+    );
+    assert_eq!(
+        ed.readings_on_line(0).len(),
+        1,
+        "line 0 lost its reading when the memo filled up",
+    );
+}
