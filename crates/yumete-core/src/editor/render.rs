@@ -1354,12 +1354,15 @@ impl Editor {
         // is not a second opinion.
         if out.is_empty() {
             // Every line that *reads* as a chapter heading…
-            let mut found: Vec<(usize, usize, String, String)> = Vec::new();
+            let mut found: Vec<(usize, usize, String, String, bool)> = Vec::new();
             for line in 0..rope.len_lines() {
                 let text = rope.line(line).to_string();
-                let trimmed = text.trim_end_matches(['\n', '\r']);
-                if let Some((depth, key)) = chapter_heading(trimmed) {
-                    found.push((line, depth, trimmed.trim().to_string(), key));
+                // …with the navigation bar a web export wrapped it in taken
+                // off first: 三國演義 writes 「◀上一回 第二回　… 下一回▶」 and
+                // is otherwise a 120-chapter book with no chapters at all.
+                let trimmed = without_navigation(text.trim_end_matches(['\n', '\r']));
+                if let Some(head) = chapter_heading(trimmed) {
+                    found.push((line, head.depth, trimmed.trim().to_string(), head.key, head.numbered));
                 }
             }
             // …minus the **table of contents**. 資治通鑑 opens with 294 lines
@@ -1375,14 +1378,18 @@ impl Editor {
             // for its 294 卷 and 紅樓夢's is 121 for its 120 回; at one line
             // they are 310 and 122, the extras all listing lines.
             const WRITING_UNDER_A_CHAPTER: usize = 3;
-            let mut last: Option<String> = None;
-            for (n, (line, depth, title, key)) in found.iter().enumerate() {
-                let next = found.get(n + 1).map(|&(l, ..)| l).unwrap_or(rope.len_lines());
-                let writing = (line + 1..next)
+            let writing_under = |line: usize, next: usize| {
+                (line + 1..next)
                     .filter(|&l| !rope.line(l).to_string().trim().is_empty())
                     .take(WRITING_UNDER_A_CHAPTER)
-                    .count();
-                if writing < WRITING_UNDER_A_CHAPTER {
+                    .count()
+                    >= WRITING_UNDER_A_CHAPTER
+            };
+            let mut last: Option<String> = None;
+            let mut numbered = 0;
+            for (n, (line, depth, title, key, is_numbered)) in found.iter().enumerate() {
+                let next = found.get(n + 1).map(|&(l, ..)| l).unwrap_or(rope.len_lines());
+                if !writing_under(*line, next) {
                     continue;
                 }
                 // …and a chapter marked twice running is one chapter.
@@ -1390,7 +1397,45 @@ impl Editor {
                     continue;
                 }
                 last = Some(key.clone());
+                numbered += usize::from(*is_numbered);
                 out.push((*line, *depth, title.clone()));
+            }
+            // **A book can number its chapters and write no 章.** 天龍八部's
+            // fifty chapters are 「一 青衫磊落險峰行」, and everything above
+            // found one heading in it: 「后记」. So when the book turned out to
+            // have front matter and no chapters, count instead.
+            //
+            // One such line proves nothing — a year, a list item and a
+            // footnote all look like this. A book proves it: the numbers have
+            // to run **1, 2, 3 from the top**, each with writing under it, and
+            // there have to be enough of them to be a book. Anything that
+            // breaks the count is not a chapter and does not break the run.
+            const A_BOOK_HAS_CHAPTERS: u32 = 5;
+            if numbered == 0 {
+                let mut counted: Vec<(usize, u32, String)> = Vec::new();
+                for line in 0..rope.len_lines() {
+                    let text = rope.line(line).to_string();
+                    let trimmed = text.trim_end_matches(['\n', '\r']);
+                    if let Some(number) = bare_numbered_heading(trimmed) {
+                        counted.push((line, number, trimmed.trim().to_string()));
+                    }
+                }
+                let mut chapters = Vec::new();
+                let mut want = 1;
+                for (n, (line, number, title)) in counted.iter().enumerate() {
+                    let next = counted.get(n + 1).map(|&(l, ..)| l).unwrap_or(rope.len_lines());
+                    // A table of contents counts 1, 2, 3 too, and would take
+                    // the run before the book got to say anything.
+                    if *number != want || !writing_under(*line, next) {
+                        continue;
+                    }
+                    chapters.push((*line, 2, title.clone()));
+                    want += 1;
+                }
+                if want > A_BOOK_HAS_CHAPTERS {
+                    out.extend(chapters);
+                    out.sort_by_key(|&(line, ..)| line);
+                }
             }
         }
         out

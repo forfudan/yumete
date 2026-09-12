@@ -1018,13 +1018,15 @@ impl Grain {
 /// and a chapter word, or that is one of a dozen names a book uses for its
 /// front and back matter. A line of prose that happens to open with 第一章的
 /// 那天 is 20 characters into a sentence and is not caught by this.
-fn chapter_heading(line: &str) -> Option<(usize, String)> {
+///
+/// A book that numbers its chapters and writes no 章 at all is read by
+/// [`bare_numbered_heading`] instead.
+fn chapter_heading(line: &str) -> Option<Heading> {
     const NAMED: &[&str] = &[
         "序", "序章", "序言", "自序", "前言", "引子", "楔子", "小引", "凡例",
         "尾聲", "尾声", "終章", "终章", "後記", "后记", "跋", "附錄", "附录",
         "番外", "外傳", "外传", "目錄", "目录",
     ];
-    const DIGITS: &str = "一二三四五六七八九十百千萬万零〇兩两0123456789０１２３４５６７８９";
     let text = line.trim();
     let chars: Vec<char> = text.chars().collect();
     // A heading is a line by itself, and a short one. The longest real chapter
@@ -1034,7 +1036,7 @@ fn chapter_heading(line: &str) -> Option<(usize, String)> {
     }
     // 序、楔子、後記: no number, so the whole line has to be the name.
     if NAMED.contains(&text) {
-        return Some((2, text.to_string()));
+        return Some(Heading { depth: 2, key: text.to_string(), numbered: false });
     }
     // A 卷 holds 章 the way a part holds chapters, so it sits above them.
     let depth = |unit: char| match unit {
@@ -1083,7 +1085,117 @@ fn chapter_heading(line: &str) -> Option<(usize, String)> {
         '话' => '話',
         other => other,
     };
-    depth(unit).map(|d| (d, format!("{}{}", same(unit), number)))
+    depth(unit).map(|d| Heading {
+        depth: d,
+        key: format!("{}{}", same(unit), number),
+        numbered: true,
+    })
+}
+
+/// What a line of a manuscript says it is, when the manuscript has no markup.
+struct Heading {
+    /// 1 for a 卷, 2 for a 章 — how deep the row sits in the outline.
+    depth: usize,
+    /// **The number, not the line**, so that a chapter written twice running is
+    /// one chapter. For 序 and 後記, which have no number, the name itself.
+    key: String,
+    /// 第三章 and 卷002 are numbered; 序 and 後記 are the front and back matter,
+    /// and a book made of nothing but those has no chapters found yet.
+    numbered: bool,
+}
+
+/// The characters a chapter number is written with, in any of the spellings.
+const DIGITS: &str = "一二三四五六七八九十百千萬万零〇兩两0123456789０１２３４５６７８９";
+
+/// The line with the navigation bar a wikisource export printed around it.
+///
+/// 三國演義 writes every one of its 120 回 as 「◀上一回 第二回　張翼德怒鞭督郵
+/// 　何國舅謀誅宦豎 下一回▶」 — the heading is in there, wearing the arrows the
+/// web page walked on. The frame is one ASCII-space-separated token at each
+/// end (the title's own spaces are 全角), so it comes off without touching the
+/// title: 「全書始」 and 「◀…」 at the head, 「…▶」 and 「全書終」 at the tail.
+/// A line with no frame comes back as it went in.
+fn without_navigation(line: &str) -> &str {
+    let mut text = line.trim();
+    if text.starts_with('◀') || text.starts_with("全書始") || text.starts_with("全书始") {
+        text = text.split_once(' ').map_or("", |(_, rest)| rest.trim_start());
+    }
+    if text.ends_with('▶') || text.ends_with("全書終") || text.ends_with("全书终") {
+        text = text.rsplit_once(' ').map_or("", |(rest, _)| rest.trim_end());
+    }
+    text
+}
+
+/// 「一 青衫磊落險峰行」 — a chapter that is a number and a title and nothing
+/// else, which is how 天龍八部 writes all fifty of its chapters.
+///
+/// Returns the number, because one line like this on its own means nothing: a
+/// year, a footnote marker and a list item all read the same. What makes it a
+/// chapter is that the book counts **1, 2, 3 from the top**, and only the
+/// caller can see that. So this is deliberately loose about the line and exact
+/// about the number.
+fn bare_numbered_heading(line: &str) -> Option<u32> {
+    let text = line.trim();
+    let chars: Vec<char> = text.chars().collect();
+    // Same bar as a 第三章 heading: a heading is a short line by itself.
+    if chars.len() > 24 {
+        return None;
+    }
+    let digits = chars.iter().take_while(|c| DIGITS.contains(**c)).count();
+    if digits == 0 {
+        return None;
+    }
+    // The number and the title are two things, so something separates them —
+    // 「一九九四年一月」 is one thing and is not a chapter.
+    if !matches!(chars.get(digits), Some(c) if c.is_whitespace()) {
+        return None;
+    }
+    // And a title is a name, not a sentence.
+    let title: String = chars[digits + 1..].iter().collect();
+    let title = title.trim();
+    if title.chars().count() < 2 {
+        return None;
+    }
+    if title.chars().any(|c| "。，、；：！？「」『』（）〈〉《》.,!?".contains(c)) {
+        return None;
+    }
+    chinese_number(&chars[..digits].iter().collect::<String>())
+}
+
+/// 「五十」 → 50, 「一百二十」 → 120, 「38」 → 38.
+///
+/// Chapter numbers and nothing else: up to a 千, no 萬, no 零 in the middle
+/// (「一百〇八」 is written 一百零八 and both read the same here). Anything it
+/// cannot read is not a number it is willing to count chapters by.
+fn chinese_number(text: &str) -> Option<u32> {
+    if let Ok(n) = text.parse::<u32>() {
+        return Some(n);
+    }
+    const ONES: &str = "〇一二三四五六七八九";
+    let mut total = 0u32;
+    let mut part = 0u32;
+    let mut said_a_digit = false;
+    for c in text.chars() {
+        if let Some(d) = ONES.chars().position(|o| o == c) {
+            part = d as u32;
+            said_a_digit = true;
+            continue;
+        }
+        let unit = match c {
+            '十' => 10,
+            '百' => 100,
+            '千' => 1000,
+            '零' => continue,
+            // 兩 and 萬 and the full-width digits: not in a chapter number
+            // this is willing to guess at.
+            _ => return None,
+        };
+        // 十一 is eleven — a unit with nothing in front of it is one of it.
+        total += if said_a_digit { part } else { 1 } * unit;
+        part = 0;
+        said_a_digit = false;
+    }
+    Some(total + part)
 }
 
 /// Where a picture goes when nobody said where (#189).

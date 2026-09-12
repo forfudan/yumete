@@ -2530,6 +2530,169 @@ fn a_novel_with_no_markup_still_has_chapters() {
 }
 
 #[test]
+fn a_chapter_wearing_a_navigation_bar_is_still_a_chapter() {
+    // 三國演義's 120 回 are all written 「◀上一回 第二回　… 下一回▶」 — the
+    // export kept the arrows the web page walked on, and the outline of a
+    // 120-chapter book was one row long (#402).
+    let dir = std::env::temp_dir().join(format!("yumete-toc-nav-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let novel = dir.join("novel.txt");
+    std::fs::write(
+        &novel,
+        "全書始 第一回　宴桃園豪傑三結義 下一回▶
+話說天下大勢。
+分久必合。
+合久必分。
+         ◀上一回 下一回▶
+         ◀上一回 第二回　張翼德怒鞭督郵 下一回▶
+且說那日。
+雪未曾停。
+馬也乏了。
+         ◀上一回 第三回　議溫明董卓叱丁原 全書終
+董卓入京。
+百官失色。
+天下自此亂。
+",
+    )
+    .unwrap();
+    let mut ed = Editor::new();
+    ed.open_file(&novel).unwrap();
+    let titles: Vec<String> = ed.outline().into_iter().map(|(_, _, t)| t).collect();
+    assert_eq!(
+        titles,
+        ["第一回　宴桃園豪傑三結義", "第二回　張翼德怒鞭督郵", "第三回　議溫明董卓叱丁原"],
+        "the arrows are the frame, not the title"
+    );
+    // The bar with nothing in it is the foot of a chapter, not a chapter.
+    assert_eq!(super::without_navigation("◀上一回 下一回▶"), "");
+    // A line that never wore one comes back whole.
+    assert_eq!(super::without_navigation("第一回　宴桃園"), "第一回　宴桃園");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn a_book_that_only_numbers_its_chapters_is_counted() {
+    // 天龍八部 writes all fifty of its chapters 「一 青衫磊落險峰行」: no 第,
+    // no 章, nothing but the count. Its outline was one row — 「后记」 (#402).
+    let dir = std::env::temp_dir().join(format!("yumete-toc-count-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let novel = dir.join("novel.txt");
+    let mut text = String::from("釋名
+一九九四年一月
+書名：天龍八部
+作者：金庸
+");
+    // A 目錄 counts 1, 2, 3 too, and must not take the run.
+    for n in ["一 青衫磊落險峰行", "二 玉璧月華明", "三 馬疾香幽"] {
+        text.push_str(n);
+        text.push('\n');
+    }
+    for (n, title) in [
+        ("一", "青衫磊落險峰行"),
+        ("二", "玉璧月華明"),
+        ("三", "馬疾香幽"),
+        ("四", "崖高人遠"),
+        ("五", "微步縠紋生"),
+        ("六", "誰家子弟誰家院"),
+    ] {
+        text.push_str(&format!("{n} {title}\n他抬頭。\n雪還在下。\n山路看不見了。\n"));
+    }
+    text.push_str("后记
+這部書寫了四年。
+改了三遍。
+就這樣罷。
+");
+    std::fs::write(&novel, &text).unwrap();
+    let mut ed = Editor::new();
+    ed.open_file(&novel).unwrap();
+    let titles: Vec<String> = ed.outline().into_iter().map(|(_, _, t)| t).collect();
+    assert_eq!(
+        titles,
+        [
+            "一 青衫磊落險峰行",
+            "二 玉璧月華明",
+            "三 馬疾香幽",
+            "四 崖高人遠",
+            "五 微步縠紋生",
+            "六 誰家子弟誰家院",
+            "后记",
+        ],
+        "the 目錄 has no writing under it and 一九九四年一月 is a date"
+    );
+
+    // **Five is not a book.** Four numbered lines with writing under them are
+    // a numbered list, and the outline says nothing rather than guess.
+    let short = dir.join("short.txt");
+    std::fs::write(
+        &short,
+        "一 買米
+先去糧店。
+再去菜場。
+然後回家。
+         二 掃地
+先掃客廳。
+再掃廚房。
+最後拖一遍。
+         三 洗衣
+白的一堆。
+黑的一堆。
+分開洗。
+         四 做飯
+淘米。
+切菜。
+下鍋。
+",
+    )
+    .unwrap();
+    let mut ed = Editor::new();
+    ed.open_file(&short).unwrap();
+    assert!(ed.outline().is_empty(), "{:?}", ed.outline());
+
+    // …and a book that writes 章 has said how it marks a chapter, so a bare
+    // 「三 忽然」 in its prose is not a second opinion.
+    let both = dir.join("both.txt");
+    std::fs::write(
+        &both,
+        "第一章　風雪
+風從北面來。
+院子裏那棵老槐樹斷了一枝。
+他站了很久。
+         一 忽然
+那天他想起一件事。
+很久以前的事。
+他沒有說出來。
+         二 後來
+後來雪停了。
+路上沒有人。
+他一個人走。
+",
+    )
+    .unwrap();
+    let mut ed = Editor::new();
+    ed.open_file(&both).unwrap();
+    let titles: Vec<String> = ed.outline().into_iter().map(|(_, _, t)| t).collect();
+    assert_eq!(titles, ["第一章　風雪"]);
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn the_numbers_a_chapter_is_counted_by() {
+    use super::chinese_number as n;
+    assert_eq!(n("一"), Some(1));
+    assert_eq!(n("十"), Some(10), "a unit with nothing in front of it is one");
+    assert_eq!(n("十一"), Some(11));
+    assert_eq!(n("五十"), Some(50));
+    assert_eq!(n("一百二十"), Some(120));
+    assert_eq!(n("一百零八"), Some(108));
+    assert_eq!(n("38"), Some(38));
+    // 萬 and the full-width digits are not numbers this will guess at.
+    assert_eq!(n("一萬"), None);
+    assert_eq!(n("１２"), None);
+}
+
+#[test]
 fn the_capitals_turn_the_page() {
     let text = (1..=60)
         .map(|n| n.to_string())
