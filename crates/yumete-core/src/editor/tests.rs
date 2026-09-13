@@ -13349,6 +13349,117 @@ fn a_closing_bracket_already_typed_is_left_alone() {
     assert!(ed.current_buffer().text().ends_with("[^甲]\n"), "one bracket, not two");
 }
 
+/// #418 三. `[[` offers the files near this one — the folder it is in and
+/// what is under that, **not** the book.
+#[test]
+fn a_wiki_link_offers_the_files_near_this_one() {
+    let dir = std::env::temp_dir().join(format!("yumete-wiki-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(dir.join("卷一/卷二")).unwrap();
+    std::fs::write(dir.join("卷一/一.md"), "# 卷一\n").unwrap();
+    std::fs::write(dir.join("卷一/卷二/雨夜.md"), "# 雨夜\n").unwrap();
+    std::fs::write(dir.join("卷一/舊稿.md"), "舊\n").unwrap();
+    // ⚠️ One level **above** the file's folder: `[[` must not reach it, or a
+    // book's whole tree lands in a panel meant for what is to hand.
+    std::fs::write(dir.join("別處.md"), "別\n").unwrap();
+
+    let mut ed = Editor::new();
+    ed.open_file(dir.join("卷一/一.md")).unwrap();
+    ed.execute(":syntax markdown").unwrap();
+    ed.on_key(Key::Char('G'));
+    ed.on_key(Key::Char('A'));
+    ed.on_key(Key::Char('['));
+    ed.on_key(Key::Char('['));
+
+    let (title, choices, _) = ed.reference_menu().expect("a panel");
+    assert_eq!(title, say!("complete.file"));
+    let names: Vec<&str> = choices.iter().map(|c| c.text.as_str()).collect();
+    assert!(names.contains(&"卷二/雨夜]]"), "a page, not a file: {names:?}");
+    assert!(names.contains(&"舊稿]]"), "{names:?}");
+    assert!(!names.iter().any(|n| n.contains("別處")), "not above the folder: {names:?}");
+    assert!(!names.iter().any(|n| n.contains("一.md")), "not this file: {names:?}");
+    // The folder beside the name, when there is one worth saying.
+    let deep = choices.iter().find(|c| c.text.starts_with("卷二/")).expect("the deep one");
+    assert_eq!(deep.note.as_deref(), Some("卷二"));
+
+    // **Typing narrows on the name as well as the path**, so 雨 finds
+    // 卷二/雨夜.md without anybody typing the folder first.
+    ed.on_key(Key::Char('雨'));
+    let (_, choices, _) = ed.reference_menu().expect("still a panel");
+    assert_eq!(choices.len(), 1, "{choices:?}");
+    ed.on_key(Key::Tab);
+    assert!(
+        ed.current_buffer().text().ends_with("[[卷二/雨夜]]\n")
+            || ed.current_buffer().text().ends_with("[[卷二/雨夜]]"),
+        "{:?}",
+        ed.current_buffer().text()
+    );
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+/// #418 三. **A file name may hold a space** — 「卷一 開端.md」 is a name a
+/// novelist writes — so a space does not break this trigger the way it breaks
+/// a tag or an anchor.
+#[test]
+fn a_wiki_link_survives_a_space_in_the_name() {
+    let dir = std::env::temp_dir().join(format!("yumete-wikispace-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(dir.join("此章.md"), "本\n").unwrap();
+    std::fs::write(dir.join("卷一 開端.md"), "# 卷一\n").unwrap();
+
+    let mut ed = Editor::new();
+    ed.open_file(dir.join("此章.md")).unwrap();
+    ed.execute(":syntax markdown").unwrap();
+    ed.on_key(Key::Char('G'));
+    ed.on_key(Key::Char('A'));
+    for c in "[[卷一 開".chars() {
+        ed.on_key(Key::Char(c));
+    }
+    let (_, choices, _) = ed.reference_menu().expect("a space is part of the name");
+    assert_eq!(choices.len(), 1, "{choices:?}");
+    assert_eq!(choices[0].text, "卷一 開端]]");
+
+    // …while a tag still breaks on one.
+    ed.on_key(Key::Esc);
+    assert!(ed.reference_menu().is_none());
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+/// #418 三. Two brackets are wanted, however many are already there.
+#[test]
+fn a_wiki_link_closes_with_as_many_brackets_as_are_missing() {
+    let dir = std::env::temp_dir().join(format!("yumete-wikiclose-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(dir.join("此章.md"), "本\n").unwrap();
+    std::fs::write(dir.join("雨夜.md"), "雨\n").unwrap();
+
+    for already in ["", "]", "]]"] {
+        let mut ed = Editor::new();
+        ed.open_file(dir.join("此章.md")).unwrap();
+        ed.execute(":syntax markdown").unwrap();
+        ed.on_key(Key::Char('G'));
+        ed.on_key(Key::Char('A'));
+        for c in already.chars() {
+            ed.on_key(Key::Char(c));
+        }
+        for _ in 0..already.chars().count() {
+            ed.on_key(Key::Left);
+        }
+        for c in "[[雨".chars() {
+            ed.on_key(Key::Char(c));
+        }
+        ed.on_key(Key::Tab);
+        let text = ed.current_buffer().text();
+        assert!(
+            text.contains("[[雨夜]]") && !text.contains("]]]"),
+            "already {already:?}: {text:?}"
+        );
+    }
+    std::fs::remove_dir_all(&dir).ok();
+}
+
 /// #418 二. Outside Markdown, and inside a grid, Tab is the key it was.
 #[test]
 fn tab_is_still_a_tab_where_there_is_no_reference() {

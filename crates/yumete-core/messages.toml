@@ -2134,6 +2134,13 @@ zhs = "新的一条"
 en = "a new one"
 
 [[message]]
+# 補全：面板叫什麼——附近的檔案
+key = "complete.file"
+zht = "附近的檔案"
+zhs = "附近的文件"
+en = "a file near here"
+
+[[message]]
 # 補全面板的名字：正在補一個腳注的標號（Insert 模式打了 `[^`）
 key = "complete.footnote"
 zht = "腳注標號"

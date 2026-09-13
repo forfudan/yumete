@@ -1,4 +1,4 @@
-//! What `[^` and `](#` can be finished with (#418 二).
+//! What `[^`, `](#` and `[[` can be finished with (#418 二、三).
 //!
 //! Two references a manuscript keeps needing and neither of which the hand can
 //! remember: the tag of a footnote written four hundred lines down, and the
@@ -31,6 +31,8 @@ pub enum Refers {
     Note,
     /// `](#` — a heading in this file.
     Anchor,
+    /// `[[` — another file near this one (#418 三).
+    File,
 }
 
 impl Refers {
@@ -39,6 +41,7 @@ impl Refers {
         match self {
             Refers::Note => say!("complete.footnote"),
             Refers::Anchor => say!("complete.heading"),
+            Refers::File => say!("complete.file"),
         }
     }
 }
@@ -125,6 +128,7 @@ impl Editor {
         let choices = match refers {
             Refers::Note => self.note_choices(&typed),
             Refers::Anchor => self.anchor_choices(&typed),
+            Refers::File => self.file_choices(&typed),
         };
         match choices.is_empty() {
             true => None,
@@ -204,17 +208,107 @@ impl Editor {
             .collect()
     }
 
+    /// **Every file near this one** — `[[`, Feature #418 三.
+    ///
+    /// ⚠️ **The folder this file is in, and what is under it — not the
+    /// project.** A book's manuscript, its notes, its old drafts and its
+    /// exports live under one tree, and rooting this at the book would tip
+    /// several hundred unrelated names into a panel whose whole job is 「the
+    /// few near here」. That is deliberately **not** where `:search-gd` looks:
+    /// 「find a word anywhere in the book」 and 「point at this stack on my
+    /// desk」 are different questions (#419, [^361]).
+    fn file_choices(&self, typed: &str) -> Vec<Candidate> {
+        let close = self.closes_with_n(']', 2);
+        let here = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+        let Some(root) = self
+            .current_buffer()
+            .path()
+            .map(|p| here.join(p))
+            .and_then(|p| p.parent().map(Path::to_path_buf))
+        else {
+            // A buffer with no file of its own has no 「near here」.
+            return Vec::new();
+        };
+        let mine = self
+            .current_buffer()
+            .path()
+            .and_then(|p| std::fs::canonicalize(p).ok());
+        let mut found: Vec<(String, Option<String>)> = Vec::new();
+        crate::editor::walk(&root, &mut 0, &mut |path| {
+            if found.len() >= MOST * 4 {
+                return;
+            }
+            // Not this file: a reference to the page you are writing on is
+            // never what `[[` is for.
+            if std::fs::canonicalize(path).ok() == mine {
+                return;
+            }
+            let Ok(rel) = path.strip_prefix(&root) else {
+                return;
+            };
+            // ⚠️ **A page, not a file.** `[[第三章]]` names a page and the
+            // suffix is the manuscript's — `follow` puts this file's own on
+            // first and `.md` second — so writing `[[卷二/雨夜.md]]` would
+            // hand a reader back the thing the syntax exists to spare them.
+            // The suffix comes off only when it is one this book uses.
+            let suffix = self
+                .current_buffer()
+                .path()
+                .and_then(|p| p.extension().map(|e| e.to_string_lossy().into_owned()));
+            let ext = path.extension().map(|e| e.to_string_lossy().into_owned());
+            let page = match ext.as_deref() {
+                Some(e) if Some(e) == suffix.as_deref() || e == "md" => rel.with_extension(""),
+                _ => rel.to_path_buf(),
+            };
+            let shown = page.to_string_lossy().to_string();
+            // **Matched on the whole path and on the name alone**, so `雨` finds
+            // 「卷二/雨夜.md」 without anybody typing the folder first.
+            let name = path
+                .file_name()
+                .map(|n| n.to_string_lossy().to_string())
+                .unwrap_or_default();
+            let fits = typed.is_empty()
+                || shown.to_lowercase().contains(&typed.to_lowercase())
+                || name.to_lowercase().contains(&typed.to_lowercase());
+            let under = page.parent().map(|d| d.to_string_lossy().to_string());
+            if !fits {
+                return;
+            }
+            // The folder beside the name, when there is one worth saying.
+            found.push((shown, under.filter(|d| !d.is_empty())));
+        });
+        found
+            .into_iter()
+            .take(MOST)
+            .map(|(shown, under)| Candidate {
+                text: format!("{shown}{close}"),
+                note: under,
+            })
+            .collect()
+    }
+
     /// The bracket a pick has to close, or nothing when it is already there.
     ///
     /// `[^1]` typed backwards — the closing bracket first, then the tag — is
     /// how a hand that knows Markdown types it, and writing a second one turns
     /// the reference into `[^1]]`.
     fn closes_with(&self, bracket: char) -> String {
+        self.closes_with_n(bracket, 1)
+    }
+
+    /// The same for a reference that wants `want` of them — `[[…]]` (#418 三).
+    ///
+    /// ⚠️ **Counted, not merely looked at.** Asking 「is the next character a
+    /// `]`」 answers 「then write none」, and a hand that typed one bracket
+    /// before going back for the name was left with `[[卷二/雨夜.md]`.
+    fn closes_with_n(&self, bracket: char, want: usize) -> String {
         let rope = self.current_buffer().rope();
-        match rope.chars_at(self.cursor.min(rope.len_chars())).next() {
-            Some(c) if c == bracket => String::new(),
-            _ => bracket.to_string(),
-        }
+        let there = rope
+            .chars_at(self.cursor.min(rope.len_chars()))
+            .take(want)
+            .take_while(|c| *c == bracket)
+            .count();
+        bracket.to_string().repeat(want.saturating_sub(there))
     }
 
     /// Whether the panel is on the page — for the one row that only needs to
@@ -317,16 +411,23 @@ impl Editor {
 fn trigger(before: &[char]) -> Option<(Refers, String)> {
     let note = ends_at(before, &['[', '^']).map(|end| (end, Refers::Note));
     let anchor = ends_at(before, &[']', '(', '#']).map(|end| (end, Refers::Anchor));
-    // The later of the two, because `](#` holds no `[^` and neither holds the
-    // other: whichever opened last is the one the caret is inside.
-    let (end, refers) = [note, anchor].into_iter().flatten().max_by_key(|&(end, _)| end)?;
+    let file = ends_at(before, &['[', '[']).map(|end| (end, Refers::File));
+    // The latest of the three, because none of them holds another: whichever
+    // opened last is the one the caret is inside.
+    let (end, refers) = [note, anchor, file]
+        .into_iter()
+        .flatten()
+        .max_by_key(|&(end, _)| end)?;
     let typed: String = before[end..].iter().collect();
-    // Neither a tag nor an anchor holds a space or a bracket. One turning up
-    // means the reference behind it was finished and this caret is somewhere
-    // else on the same line.
-    let broken = typed
-        .chars()
-        .any(|c| c.is_whitespace() || matches!(c, '[' | ']' | '(' | ')' | '#' | '^'));
+    // None of the three holds a bracket. One turning up means the reference
+    // behind it was finished and this caret is somewhere else on the same line.
+    //
+    // ⚠️ **A file name may hold a space** — 「卷一 開端.md」 is a file a
+    // novelist writes — so a space breaks the other two and not this one.
+    let broken = typed.chars().any(|c| {
+        matches!(c, '[' | ']' | '(' | ')' | '#' | '^')
+            || (c.is_whitespace() && refers != Refers::File)
+    });
     match broken {
         true => None,
         false => Some((refers, typed)),
