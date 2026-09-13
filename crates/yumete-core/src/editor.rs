@@ -1308,6 +1308,42 @@ fn downloads_dir() -> PathBuf {
     PathBuf::from(".")
 }
 
+/// **Which folder counts as 「this book」** — the root every listing is
+/// rooted at.
+///
+/// Up from the file for a `.yumete` first — that is where a book already keeps
+/// its config, its `words.txt` and its `tables/` — then for a `.git`, and it
+/// settles for the folder the file itself is in. Only a session with no named
+/// file left in it falls back to `here`.
+///
+/// ⚠️ **Every path is resolved against `here` first.** A file opened as
+/// `一.md` has a relative path and its `parent()` is the **empty** path; that
+/// used to be skipped, so a book opened by a bare name never climbed to its
+/// `.yumete` and every listing rooted itself in whatever directory the
+/// terminal was standing in. The bug is quiet — the answer is a real folder
+/// and a plausible one.
+///
+/// A free function taking `here` rather than a method reading the process's
+/// working directory, because that is the only way to test it: the other way
+/// is to **move** the process, and every test running beside it would see.
+pub(crate) fn book_root<'a>(open: impl Iterator<Item = &'a Path>, here: &Path) -> PathBuf {
+    let from = open
+        .map(|p| here.join(p))
+        .filter_map(|p| p.parent().map(Path::to_path_buf))
+        .find(|d| !d.as_os_str().is_empty());
+    let Some(from) = from else {
+        return here.to_path_buf();
+    };
+    let marked = |mark: &str, flat: &str| {
+        from.ancestors()
+            .find(|d| d.join(mark).exists() || d.join(flat).exists())
+            .map(Path::to_path_buf)
+    };
+    marked(".yumete", ".yumete.toml")
+        .or_else(|| marked(".git", ".git"))
+        .unwrap_or(from)
+}
+
 /// Call `f` for every readable file under `root`, in path order, counting the
 /// ones stepped over for being too big.
 ///

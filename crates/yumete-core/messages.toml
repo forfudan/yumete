@@ -3782,6 +3782,20 @@ zhs = "哪一个"
 en = "which one"
 
 [[message]]
+# 提示：全部替換——不換
+key = "hint.replace-all.no"
+zht = "不換"
+zhs = "不换"
+en = "no"
+
+[[message]]
+# 提示：全部替換——全部換掉
+key = "hint.replace-all.yes"
+zht = "全部換掉"
+zhs = "全部换掉"
+en = "change them all"
+
+[[message]]
 # 提示：搜索面板——下一格
 key = "hint.search.next-cell"
 zht = "下一格"

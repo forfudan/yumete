@@ -8122,6 +8122,38 @@ fn the_search_panel_walks_the_folder_when_it_is_told_to() {
     std::fs::remove_dir_all(&dir).ok();
 }
 
+/// **The book is found from a file opened by a bare name too.**
+///
+/// ⚠️ A long-standing quiet one, caught by #419 二: a buffer opened as
+/// `一.md` has a *relative* path, its `parent()` is the **empty** path, and
+/// the walk up for `.yumete` skipped it — so every listing rooted itself in
+/// whatever directory the terminal happened to be standing in. Quiet because
+/// the answer is a real directory and a plausible one.
+#[test]
+fn the_book_is_found_even_from_a_file_named_without_a_folder() {
+    let dir = a_little_book("bareroot");
+    // ⚠️ Told where 「here」 is rather than **moving** the process there:
+    // every test running beside this one would see that.
+    let bare = std::path::Path::new("a.md");
+    let root = crate::editor::book_root(std::iter::once(bare), &dir.join("卷一"));
+    assert_eq!(
+        std::fs::canonicalize(&root).unwrap(),
+        std::fs::canonicalize(&dir).unwrap(),
+        "the `.yumete.toml` two levels up is what says 「the book」"
+    );
+
+    // …and a name with a folder on it answers the same.
+    let root = crate::editor::book_root(
+        std::iter::once(dir.join("卷一/a.md").as_path()),
+        std::path::Path::new("/"),
+    );
+    assert_eq!(
+        std::fs::canonicalize(&root).unwrap(),
+        std::fs::canonicalize(&dir).unwrap()
+    );
+    std::fs::remove_dir_all(&dir).ok();
+}
+
 /// The walk is the book's, and it reads `.gitignore` — #308, #362, #419 二.
 ///
 /// ⚠️ This is the coverage `:grep`'s tests used to carry. It came back with
