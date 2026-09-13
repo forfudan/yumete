@@ -2099,37 +2099,6 @@ fn counting_a_selection_measures_the_scene_not_the_book() {
 }
 
 #[test]
-fn grep_finds_a_name_across_the_chapters_and_gf_opens_one() {
-    let dir = std::env::temp_dir().join(format!("yumete-grep-{}", std::process::id()));
-    std::fs::create_dir_all(dir.join("卷一")).unwrap();
-    std::fs::write(dir.join("ch01.md"), "那年冬天。\n阿寧來了。\n").unwrap();
-    std::fs::write(dir.join("卷一/ch02.md"), "沒有人。\n").unwrap();
-    std::fs::write(dir.join("卷一/ch03.md"), "阿寧又來了。\n").unwrap();
-    // Skipped: hidden directories are not somebody's manuscript.
-    std::fs::create_dir_all(dir.join(".yumete")).unwrap();
-    std::fs::write(dir.join(".yumete/notes.md"), "阿寧\n").unwrap();
-
-    let mut ed = Editor::new();
-    ed.grep("阿寧", &dir).unwrap();
-    let listing = ed.current_buffer().text();
-    assert!(listing.contains("ch01.md:2:"), "{listing}");
-    assert!(listing.contains("ch03.md:1:"), "{listing}");
-    assert!(
-        !listing.contains("notes.md"),
-        "hidden dirs are not searched"
-    );
-    assert_eq!(listing.lines().count(), 2);
-
-    // `gf` opens the hit the cursor is on, at its line.
-    press(&mut ed, "gg");
-    press(&mut ed, "gf");
-    assert_eq!(ed.current_buffer().display_name(), "ch01.md");
-    assert_eq!(ed.cursor_line(), 1);
-
-    std::fs::remove_dir_all(&dir).ok();
-}
-
-#[test]
 fn a_block_of_delimited_text_becomes_a_table_and_goes_back() {
     let mut ed = typed("那年冬天。\n\n字,讀音\n永,ㄩㄥˇ\n和,ㄏㄜˊ\n\n雪下得早。\n");
     ed.execute(":3").unwrap();
@@ -6163,17 +6132,17 @@ fn check_usage_lists_the_slips_and_says_when_it_stopped_listing() {
     assert!(out.contains(":3:") && out.contains('裡') && out.contains('裏'), "{out}");
     assert!(ed.status().contains('1'), "{}", ed.status());
 
-    // Past `GREP_LIMIT` the buffer holds the first five hundred and the
+    // Past `LISTING_LIMIT` the buffer holds the first five hundred and the
     // status line used to name a number nothing on screen could reach.
-    let mut text = "那裏。\n".repeat(GREP_LIMIT + 200);
-    text.push_str(&"那裡。\n".repeat(GREP_LIMIT + 1));
+    let mut text = "那裏。\n".repeat(LISTING_LIMIT + 200);
+    text.push_str(&"那裡。\n".repeat(LISTING_LIMIT + 1));
     let mut ed = typed(&text);
     assert!(ed.execute("check-usage").is_ok());
     let lines = ed.current_buffer().text().lines().count();
-    assert_eq!(lines, GREP_LIMIT, "the listing stops at the limit");
+    assert_eq!(lines, LISTING_LIMIT, "the listing stops at the limit");
     assert!(
-        ed.status().contains(&GREP_LIMIT.to_string())
-            && !ed.status().contains(&(GREP_LIMIT + 1).to_string()),
+        ed.status().contains(&LISTING_LIMIT.to_string())
+            && !ed.status().contains(&(LISTING_LIMIT + 1).to_string()),
         "{}",
         ed.status()
     );
@@ -7963,6 +7932,116 @@ fn the_sidebar_walks_the_tree_with_the_same_keys_the_text_uses() {
     std::fs::remove_dir_all(&dir).ok();
 }
 
+/// The search panel: a box, three switches, and what they found — #419 一.
+#[test]
+fn the_search_panel_looks_through_the_buffer_as_you_type() {
+    use crate::search_panel::{Case, Field};
+    use crate::sidebar::{Layer, Side, View};
+    let mut ed = typed("霜降於石階。\n那一年的霜來得早。\n無。\n");
+    ed.on_key(Key::Char('g'));
+    ed.on_key(Key::Char('g'));
+
+    // `空格 /` opens it, and the keys land in the box.
+    type_keys(&mut ed, " /");
+    assert_eq!(ed.panel(Side::Left).map(|p| p.view()), Some(View::Search));
+    assert_eq!(ed.mode(), Mode::Field);
+    assert_eq!(ed.panel_focus(), Some((Side::Left, Layer::Top)));
+
+    // Typing searches; the count is the real one and the excerpts are a few
+    // characters either side, not the whole paragraph.
+    ed.on_key(Key::Char('霜'));
+    assert_eq!(ed.search().total, 2);
+    assert_eq!(ed.search().hits.len(), 2);
+    assert_eq!(ed.search().hits[0].line, 0);
+    assert_eq!(ed.search().hits[1].line, 1);
+    assert!(ed.search().hits[1].excerpt.contains('霜'));
+
+    // **The page follows**: `n` walks the same hits, because it is the same
+    // search (#415's gap, closed).
+    assert!(ed.last_search().contains('霜'), "{:?}", ed.last_search());
+
+    // Backspacing back to nothing is 「not asked」, not 「found nothing」.
+    ed.on_key(Key::Backspace);
+    assert!(!ed.search().asked());
+    assert_eq!(ed.search().total, 0);
+
+    // A pattern that finds nothing is a different finding.
+    ed.on_key(Key::Char('龘'));
+    assert!(ed.search().asked());
+    assert_eq!(ed.search().total, 0);
+    assert!(!ed.search().broken);
+
+    // **正則 off means the pattern is a string.** `。` is a full stop either
+    // way, but `.` is not: with 正則 off it is one character, not any.
+    ed.on_key(Key::Backspace);
+    ed.on_key(Key::Char('.'));
+    assert_eq!(ed.search().total, 0, "a literal dot is not in the text");
+    ed.on_key(Key::Esc);
+    assert_eq!(ed.mode(), Mode::Normal, "Esc leaves the box, not the panel");
+    ed.on_key(Key::Tab);
+    assert_eq!(ed.search().field, Field::Regex);
+    ed.on_key(Key::Char(' '));
+    assert!(ed.search().regex);
+    assert!(ed.search().total > 0, "as a pattern it matches every character");
+
+    // ⚠️ **A broken pattern keeps the hits and says so**, rather than
+    // flickering the list empty on the way to a finished one.
+    let found = ed.search().hits.len();
+    ed.on_key(Key::Char('i'));
+    assert_eq!(ed.mode(), Mode::Field);
+    ed.on_key(Key::Char('['));
+    assert!(ed.search().broken);
+    assert_eq!(ed.search().hits.len(), found, "the last good answer is still there");
+
+    // 大小寫 is three ways round, not a tick.
+    ed.on_key(Key::Esc);
+    ed.on_key(Key::Tab);
+    ed.on_key(Key::Tab);
+    assert_eq!(ed.search().field, Field::Case);
+    assert_eq!(ed.search().case, Case::Smart);
+    ed.on_key(Key::Enter);
+    assert_eq!(ed.search().case, Case::Sensitive);
+    ed.on_key(Key::Enter);
+    assert_eq!(ed.search().case, Case::Insensitive);
+    ed.on_key(Key::Enter);
+    assert_eq!(ed.search().case, Case::Smart, "round again");
+}
+
+/// `空格 /` fills the box with something worth pressing Enter on — #419.
+#[test]
+fn the_box_opens_holding_the_last_pattern_or_what_is_marked() {
+    let mut ed = typed("霜降於石階。\n那一年的霜來得早。\n");
+    ed.on_key(Key::Char('g'));
+    ed.on_key(Key::Char('g'));
+
+    // Nothing searched yet and nothing marked: an empty box. ⚠️ The cursor
+    // covers its own grapheme, and that is **not** a selection anybody made.
+    type_keys(&mut ed, " /");
+    assert_eq!(ed.search().query, "");
+    ed.on_key(Key::Char('霜'));
+    ed.on_key(Key::Esc);
+    ed.on_key(Key::Ctrl('w'));
+
+    // Opened again: the last pattern, **selected**, so one key does either
+    // thing — type over it, or Enter to carry on with it.
+    type_keys(&mut ed, " /");
+    assert_eq!(ed.search().query, "霜");
+    assert!(ed.search().all_selected);
+    ed.on_key(Key::Char('雪'));
+    assert_eq!(ed.search().query, "雪", "typing replaced the whole of it");
+
+    // A short selection wins over it: you marked it, the intention is on the
+    // screen.
+    ed.on_key(Key::Esc);
+    ed.on_key(Key::Ctrl('w'));
+    ed.on_key(Key::Char('g'));
+    ed.on_key(Key::Char('g'));
+    ed.on_key(Key::Char('v'));
+    ed.on_key(Key::Char('l'));
+    type_keys(&mut ed, " /");
+    assert_eq!(ed.search().query, "霜降", "{:?}", ed.search().query);
+}
+
 /// **Which side each panel lives on is a setting, one per panel** — #293.
 #[test]
 fn the_panels_go_where_the_settings_put_them() {
@@ -7988,10 +8067,11 @@ fn the_panels_go_where_the_settings_put_them() {
     // **`Tab` walks the views that share this slot, and only those.** With the
     // outline moved across, the left column holds two and walks between them.
     ed.set_side(Panel::Outline, Side::Right);
+    ed.set_side(Panel::Search, Side::Right);
     ed.on_key(Key::Tab);
     assert_eq!(ed.panel(Side::Left).unwrap().view(), View::Buffers);
     ed.on_key(Key::Tab);
-    assert_eq!(ed.panel(Side::Left).unwrap().view(), View::Explorer, "two, not three");
+    assert_eq!(ed.panel(Side::Left).unwrap().view(), View::Explorer, "two, not four");
 
     // …and a column with one view in it says so rather than looking broken.
     ed.set_side(Panel::Buffers, Side::Right);
@@ -8118,11 +8198,17 @@ fn a_picker_closes_on_esc_and_on_backspacing_past_the_start() {
     assert_eq!(ed.mode(), Mode::Normal);
 }
 
+/// `空格 /` opens the panel, not a prompt — Feature #419.
 #[test]
-fn space_slash_opens_a_project_search_ready_to_be_typed_into() {
+fn space_slash_opens_the_search_panel_with_the_keys_in_the_box() {
     let mut ed = Editor::new();
     type_keys(&mut ed, " /");
-    assert_eq!(ed.prompt(), Some((":", "grep ")));
+    assert_eq!(ed.prompt(), None, "no `:` line: what to look for goes in the box");
+    assert_eq!(
+        ed.panel(crate::sidebar::Side::Left).map(|p| p.view()),
+        Some(crate::sidebar::View::Search)
+    );
+    assert_eq!(ed.mode(), Mode::Field);
 }
 
 #[test]
@@ -9130,48 +9216,6 @@ fn a_search_in_the_grid_stays_in_the_table() {
 }
 
 #[test]
-fn a_rename_reaches_past_the_end_of_the_listing() {
-    // **The cap belongs to the listing, not to the answer** (#308). `:grep`
-    // stops writing lines at 500 because a page of results longer than that is
-    // the manuscript again — but it used to stop *walking* there too, and the
-    // file list `:replace` reads went with it. So a rename across a book
-    // stopped at whichever chapter held the five hundredth hit and reported
-    // 「replaced across N files」 as though it were finished. The status line
-    // even promised 「:replace changes them all」.
-    let dir = std::env::temp_dir().join(format!("yumete-grepcap-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&dir);
-    std::fs::create_dir_all(&dir).unwrap();
-    // Sixty chapters, ten mentions each: six hundred, well past the cap.
-    for i in 0..60 {
-        let text = "那年冬天，甲說。\n".repeat(10);
-        std::fs::write(dir.join(format!("ch{i:02}.md")), text).unwrap();
-    }
-    let last = dir.join("ch59.md");
-
-    let mut ed = Editor::new();
-    ed.open_file(dir.join("ch00.md")).unwrap();
-    // Straight at `grep`, so the root is this directory and not whatever
-    // `current_dir` happens to be while the suite runs.
-    ed.grep("甲", &dir).unwrap();
-    let said = ed.status().to_string();
-    assert!(said.contains("600"), "the count is the real one: {said}");
-    assert!(said.contains("500"), "and it says how many are listed: {said}");
-
-    ed.execute(":replace 乙").unwrap();
-    ed.execute(":write-all").unwrap();
-
-    let after = std::fs::read_to_string(&last).unwrap();
-    assert!(
-        !after.contains('甲') && after.contains('乙'),
-        "the last chapter is renamed too, not just the first twenty: {after:?}"
-    );
-    let first = std::fs::read_to_string(dir.join("ch00.md")).unwrap();
-    assert!(!first.contains('甲'), "and so is the first");
-
-    let _ = std::fs::remove_dir_all(&dir);
-}
-
-#[test]
 fn a_quoted_field_is_read_as_the_one_field_it_is() {
     // **One quoted comma is enough, and the file need not be strange** (#307,
     // #311): clean rows, and somewhere among them `2500,"Smith, John",note`.
@@ -9773,49 +9817,6 @@ fn the_prompt_remembers_what_was_typed_at_it() {
     ed.on_key(Key::Char('/'));
     ed.on_key(Key::Up);
     assert_eq!(ed.prompt(), Some(("/", "二")));
-}
-
-#[test]
-fn replace_changes_what_grep_already_showed_you() {
-    // Renaming a character across 120 chapters used to mean opening 120
-    // files. The safety is the order: the pattern is the one you already
-    // ran `:grep` with and already read the hits of.
-    let dir = std::env::temp_dir().join(format!("yumete-proj-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&dir);
-    std::fs::create_dir_all(&dir).unwrap();
-    std::fs::write(dir.join("ch01.md"), "阿甯走進來。\n阿甯坐下。\n").unwrap();
-    std::fs::write(dir.join("ch02.md"), "他看見阿甯。\n").unwrap();
-    std::fs::write(dir.join("ch03.md"), "沒有那個人。\n").unwrap();
-
-    let mut ed = Editor::new();
-    // Nothing to replace before you have looked.
-    assert!(ed.execute("replace 阿寧").is_ok());
-    assert!(ed.status().contains(":grep"), "{}", ed.status());
-
-    ed.grep_here(&dir, "阿甯");
-    assert!(ed.execute("replace 阿寧").is_ok(), "{}", ed.status());
-    assert!(ed.status().contains('3'), "3 hits: {}", ed.status());
-
-    // Changed in the buffers, and **not on disk** until somebody says so.
-    assert_eq!(
-        std::fs::read_to_string(dir.join("ch01.md")).unwrap(),
-        "阿甯走進來。\n阿甯坐下。\n"
-    );
-    assert!(ed.execute("write-all").is_ok());
-    assert_eq!(
-        std::fs::read_to_string(dir.join("ch01.md")).unwrap(),
-        "阿寧走進來。\n阿寧坐下。\n"
-    );
-    assert_eq!(
-        std::fs::read_to_string(dir.join("ch02.md")).unwrap(),
-        "他看見阿寧。\n"
-    );
-    assert_eq!(
-        std::fs::read_to_string(dir.join("ch03.md")).unwrap(),
-        "沒有那個人。\n",
-        "a file with no hit is not touched"
-    );
-    std::fs::remove_dir_all(&dir).ok();
 }
 
 #[test]
@@ -12043,76 +12044,6 @@ fn commenting_takes_whole_lines_and_keeps_them_selected() {
     assert_eq!(ed.current_buffer().text(), "// 甲乙\n// 丙丁\n戊己\n", "both lines, whole");
     press(&mut ed, " c");
     assert_eq!(ed.current_buffer().text(), "甲乙\n丙丁\n戊己\n", "and both come back");
-}
-
-/// #361: the tree a project-wide command walks is the book's, not the shell's.
-///
-/// The file opened is two directories down and the working directory is this
-/// crate, so an answer that mentions the chapter beside it can only have come
-/// from the walk up to `.yumete`.
-#[test]
-fn grep_searches_the_book_and_not_the_working_directory() {
-    let dir = std::env::temp_dir().join(format!("yumete-grep-root-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&dir);
-    let book = dir.join("book");
-    std::fs::create_dir_all(book.join(".yumete")).unwrap();
-    std::fs::create_dir_all(book.join("第二卷")).unwrap();
-    std::fs::write(book.join("第一章.md"), "那年冬天，甲說。\n").unwrap();
-    std::fs::write(book.join("第二卷/第九章.md"), "甲又說。\n").unwrap();
-    // A neighbour of the book, outside it: a hit here would mean the walk went
-    // one directory too far up.
-    std::fs::write(dir.join("別人的.md"), "甲在這裏也出現。\n").unwrap();
-
-    let mut ed = Editor::new();
-    ed.open_file(book.join("第二卷/第九章.md")).unwrap();
-    assert_eq!(ed.project_root(), book, "the book is where .yumete is");
-
-    ed.execute(":grep 甲").unwrap();
-    let listing = ed.current_buffer().text();
-    assert!(listing.contains("第一章"), "the chapter beside it: {listing:?}");
-    assert!(!listing.contains("別人的"), "and nothing above the book: {listing:?}");
-    let _ = std::fs::remove_dir_all(&dir);
-}
-
-/// #362: what the ignore files say is what the walk skips.
-///
-/// The list this replaced was three hard-coded names, and the `.gitignore`
-/// lying in the same directory was not one of the things it read — so in a
-/// repository `:grep` searched the source tree along with the book, and every
-/// new offender meant another name in the list.
-#[test]
-fn grep_reads_the_ignore_file_instead_of_a_list_of_names() {
-    let dir = std::env::temp_dir().join(format!("yumete-ignored-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&dir);
-    std::fs::create_dir_all(dir.join(".yumete")).unwrap();
-    std::fs::create_dir_all(dir.join("草稿")).unwrap();
-    std::fs::create_dir_all(dir.join("卷一")).unwrap();
-    std::fs::write(dir.join(".gitignore"), "草稿/
-備份.md
-").unwrap();
-    std::fs::write(dir.join("卷一/一.md"), "那年冬天，甲說。
-").unwrap();
-    std::fs::write(dir.join("草稿/舊.md"), "甲的舊稿。
-").unwrap();
-    std::fs::write(dir.join("備份.md"), "甲的備份。
-").unwrap();
-
-    let mut ed = Editor::new();
-    ed.open_file(dir.join("卷一/一.md")).unwrap();
-    ed.execute(":grep 甲").unwrap();
-    let listing = ed.current_buffer().text();
-    assert!(listing.contains("一.md"), "the chapter is searched: {listing:?}");
-    assert!(!listing.contains("舊.md"), "an ignored directory is not: {listing:?}");
-    assert!(!listing.contains("備份"), "nor an ignored file: {listing:?}");
-
-    // Say the same thing again with the ignore file gone: this is the walk
-    // reading it, not two names that happen to be spelled that way.
-    std::fs::remove_file(dir.join(".gitignore")).unwrap();
-    ed.execute(":grep 甲").unwrap();
-    let listing = ed.current_buffer().text();
-    assert!(listing.contains("舊.md"), "nothing is skipped now: {listing:?}");
-    assert!(listing.contains("備份"), "{listing:?}");
-    let _ = std::fs::remove_dir_all(&dir);
 }
 
 /// `.yumete` first, `.git` second, the file's own directory last — and the

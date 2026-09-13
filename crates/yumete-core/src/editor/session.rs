@@ -573,7 +573,7 @@ impl Editor {
             .unwrap_or_else(|| self.current_buffer().display_name().to_string());
         let n = changes.len();
         let mut listing = String::new();
-        for change in changes.iter().take(GREP_LIMIT) {
+        for change in changes.iter().take(LISTING_LIMIT) {
             listing.push_str(&say!("diff.line", name, change.line + 1, change.marked));
             listing.push('\n');
         }
@@ -581,8 +581,8 @@ impl Editor {
         // The count and the listing have to agree: saying "1,200 lines differ"
         // over a buffer holding 500 of them sends the reader looking for rows
         // that were never written.
-        self.status = match n > GREP_LIMIT {
-            true => say!("diff.too-many", GREP_LIMIT, against),
+        self.status = match n > LISTING_LIMIT {
+            true => say!("diff.too-many", LISTING_LIMIT, against),
             false => say!("diff.changed", n, against),
         };
     }

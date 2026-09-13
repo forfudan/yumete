@@ -90,6 +90,10 @@ impl Editor {
                 self.on_picker_key(key);
                 KeyOutcome::Continue
             }
+            Mode::Field => {
+                self.on_field_key(key);
+                KeyOutcome::Continue
+            }
         };
         if watching {
             self.finish_watching();
@@ -1174,7 +1178,7 @@ impl Editor {
         ('o', "hint.goto.outline"),
         ('f', "hint.goto.open-file"),
         ('b', "hint.goto.switch-buffer"),
-        ('/', "hint.goto.search-project"),
+        ('/', "hint.goto.advanced-search"),
         ('?', "hint.goto.all-commands"),
         ('y', "hint.goto.copy-to-clipboard"),
         ('p', "hint.goto.paste-from-clipboard"),
@@ -1411,15 +1415,10 @@ impl Editor {
             Key::Char('C') => self.toggle_comment(crate::comment::Prefer::Block),
             Key::Char('f') => self.open_file_picker(),
             Key::Char('b') => self.open_buffer_picker(),
-            // The two prompts, opened rather than run: a search wants a pattern
-            // and the command list wants narrowing, and both are already good
-            // at asking for those.
-            Key::Char('/') => {
-                self.mode = Mode::Command;
-                self.command_line = "grep ".to_string();
-                self.command_caret = self.command_line.chars().count();
-                self.completion = None;
-            }
+            // **高級搜索** (#419). It used to prefill `:grep `, and `:grep` is
+            // gone: what to look for is typed in the panel's own box, which
+            // arrives with the last pattern in it, selected.
+            Key::Char('/') => self.open_search(),
             Key::Char('?') => {
                 self.mode = Mode::Command;
                 self.command_line.clear();

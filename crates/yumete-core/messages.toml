@@ -600,14 +600,6 @@ en = "go to a line (`:42` will do)"
 find = "跳行 行號 行号 goto line jump"
 
 [[message]]
-# : 命令選單裏 grep 那一項的說明（commands 組）
-key = "cmd.commands.grep"
-zht = "整個項目找一遍"
-zhs = "整个项目找一遍"
-en = "search every file in the project"
-find = "搜索 搜尋 搜寻 查找 全局 項目 项目 find search project"
-
-[[message]]
 # : 命令選單裏 help 那一項的說明（commands 組）
 key = "cmd.commands.help"
 zht = "鍵和命令，開成一個可以讀、可以搜的檔案"
@@ -704,14 +696,6 @@ en = "how much of the result the page shows: source, coloured, WYSIWYG"
 find = "著色 着色 高亮 原文 所見即所得 highlight syntax wysiwyg"
 
 [[message]]
-# : 命令選單裏 replace 那一項的說明（commands 組）
-key = "cmd.commands.replace"
-zht = "把剛才 :grep 找到的那些都換掉——先看見，才改得動"
-zhs = "把刚才 :grep 找到的那些都换掉——先看见，才改得动"
-en = "change everything the last :grep found — you see it before you change it"
-find = "替換 替换 取代 全局 项目 project"
-
-[[message]]
 # : 命令選單裏 ruby 那一項的說明（commands 組）
 key = "cmd.commands.ruby"
 zht = "改這裏的注音；`:ruby off|basic|full` 是排多少"
@@ -726,6 +710,14 @@ zht = "跑這種檔案在設定裏自己起名的那條命令"
 zhs = "跑这种档案在设定里自己起名的那条命令"
 en = "run the command this language names in the config"
 find = "運行 运行 執行 执行 命令 build"
+
+[[message]]
+# 命令：開搜索面板
+key = "cmd.commands.search"
+zht = "高級搜索：面板裏打要找的字"
+zhs = "高级搜索：面板里打要找的字"
+en = "advanced search"
+find = "搜索 搜尋 搜寻 查找 尋找 寻找 grep find search 全文 面板"
 
 [[message]]
 # : 命令選單裏 sh 那一項的說明（commands 組）
@@ -2605,48 +2597,6 @@ zhs = "{0}：{1}"
 en = "{0}: {1}"
 
 [[message]]
-# 把檔案數、處數與一句話連起來
-key = "find.files-hits-and-message"
-zht = "{0} 個檔案，{1} 處；{2}"
-zhs = "{0} 个档案，{1} 处；{2}"
-en = "{0} file(s), {1} place(s); {2}"
-
-[[message]]
-# :grep 找到了，報處數與檔案數
-key = "find.grep-hits"
-zht = "{0} 處，{1} 個檔案——gf 開游標下那一條，:replace 全換"
-zhs = "{0} 处，{1} 个档案——gf 开游标下那一条，:replace 全换"
-en = "{0} hit(s) in {1} file(s) — gf opens the one under the cursor, :replace changes them all"
-
-[[message]]
-# 同上，另有幾個檔案因為太大被跳過（#308）
-key = "find.grep-hits-skipped"
-zht = "{0} 處，{1} 個檔案（另有 {2} 個太大，沒搜）——gf 開游標下那一條，:replace 全部都換"
-zhs = "{0} 处，{1} 个档案（另有 {2} 个太大，没搜）——gf 开游标下那一条，:replace 全部都换"
-en = "{0} hit(s) in {1} file(s) ({2} too big to search) — gf opens the one under the cursor, :replace changes every one of them"
-
-[[message]]
-# :grep 一處都沒找到
-key = "find.grep-no-hits"
-zht = "{0} 個檔案裏都沒有「{1}」"
-zhs = "{0} 个档案里都没有「{1}」"
-en = "no '{1}' in {0} file(s)"
-
-[[message]]
-# :grep 命中太多，停止計數
-key = "find.grep-too-many"
-zht = "列出前 {0} 處，共 {1} 處、{2} 個檔案——gf 開游標下那一條，:replace 全部都換"
-zhs = "列出前 {0} 处，共 {1} 处、{2} 个档案——gf 开游标下那一条，:replace 全部都换"
-en = "listing the first {0} of {1} hit(s) in {2} file(s) — gf opens the one under the cursor, :replace changes every one of them"
-
-[[message]]
-# 同上，另有幾個檔案因為太大被跳過（#308）
-key = "find.grep-too-many-skipped"
-zht = "列出前 {0} 處，共 {1} 處、{2} 個檔案（另有 {3} 個太大，沒搜）——:replace 全部都換"
-zhs = "列出前 {0} 处，共 {1} 处、{2} 个档案（另有 {3} 个太大，没搜）——:replace 全部都换"
-en = "listing the first {0} of {1} hit(s) in {2} file(s) ({3} too big to search) — :replace changes every one of them"
-
-[[message]]
 # f/F 在本行找不到那個字
 key = "find.no-such-character-on-this-line"
 zht = "這一行上沒有「{0}」"
@@ -2687,27 +2637,6 @@ key = "find.only-here"
 zht = "只有這一處：{0}"
 zhs = "只有这一处：{0}"
 en = "only here: {0}"
-
-[[message]]
-# :replace 之前沒有 :grep 過
-key = "find.replace-needs-grep"
-zht = "先 :grep 找一遍——換的是你已經看過的那些"
-zhs = "先 :grep 找一遍——换的是你已经看过的那些"
-en = "run :grep first — what it changes is what you have already read"
-
-[[message]]
-# :replace 一處也沒換到
-key = "find.replace-nothing-replaced"
-zht = "「{0}」一處也沒換到"
-zhs = "「{0}」一处也没换到"
-en = "'{0}': nothing replaced"
-
-[[message]]
-# :replace 跨檔案換完，都還沒存
-key = "find.replaced-across-files"
-zht = "{0} 個檔案，{1} 處——都還沒存：:write all 存全部，u 各自撤銷"
-zhs = "{0} 个档案，{1} 处——都还没存：:write all 存全部，u 各自撤销"
-en = "{0} file(s), {1} hit(s) — none saved yet: :write all saves them all, u takes any of them back"
 
 [[message]]
 # :s 換好了，報處數
@@ -3475,6 +3404,13 @@ zhs = "看这条注（没有就写一条）"
 en = "show the note (or write one)"
 
 [[message]]
+# g 組：全項目搜索
+key = "hint.goto.advanced-search"
+zht = "高級搜索"
+zhs = "高级搜索"
+en = "advanced search"
+
+[[message]]
 # g 組：命令一覽
 key = "hint.goto.all-commands"
 zht = "命令一覽"
@@ -3592,13 +3528,6 @@ key = "hint.goto.paste-from-clipboard"
 zht = "從系統剪貼簿貼上"
 zhs = "从系统剪贴簿贴上"
 en = "paste from the system clipboard"
-
-[[message]]
-# g 組：全項目搜索
-key = "hint.goto.search-project"
-zht = "全項目搜索"
-zhs = "全项目搜索"
-en = "search the project"
 
 [[message]]
 # g 組：檔首
@@ -3795,6 +3724,41 @@ key = "hint.register.which-one"
 zht = "哪一個"
 zhs = "哪一个"
 en = "which one"
+
+[[message]]
+# 提示：搜索面板——下一格
+key = "hint.search.next-cell"
+zht = "下一格"
+zhs = "下一格"
+en = "next cell"
+
+[[message]]
+# 提示：搜索面板——下一處（鍵留在框裏）
+key = "hint.search.next-hit"
+zht = "下一處"
+zhs = "下一处"
+en = "next hit"
+
+[[message]]
+# 提示：搜索面板——出框
+key = "hint.search.out-of-the-box"
+zht = "出框"
+zhs = "出框"
+en = "leave the box"
+
+[[message]]
+# 提示：搜索面板——進框打字
+key = "hint.search.type"
+zht = "打要找的字"
+zhs = "打要找的字"
+en = "type"
+
+[[message]]
+# 提示：搜索面板——這一格做什麼
+key = "hint.search.use-it"
+zht = "翻開關／去那一處"
+zhs = "翻开关／去那一处"
+en = "flip it, or go there"
 
 [[message]]
 # 提示欄：邊欄
@@ -4475,6 +4439,13 @@ key = "label.panel.outline"
 zht = "大綱"
 zhs = "大纲"
 en = "the outline"
+
+[[message]]
+# 標籤：搜索面板
+key = "label.panel.search"
+zht = "尋找"
+zhs = "寻找"
+en = "search"
 
 [[message]]
 # 標籤：右邊
@@ -5207,13 +5178,6 @@ zhs = "只读——:readonly off 解开"
 en = "read-only — `:readonly off` unlocks it"
 
 [[message]]
-# 只讀擋下了替換
-key = "readonly.replace-refused"
-zht = "{0}：只讀"
-zhs = "{0}：只读"
-en = "{0}: read-only"
-
-[[message]]
 # 只讀開關換好了
 key = "readonly.set"
 zht = "只讀：{0}"
@@ -5501,6 +5465,41 @@ en = "{0}'s table is not installed — put it in {1}, or a table of your own in 
 # ── search ────────────────────────────────────────────────────────────
 
 [[message]]
+# 搜索：正則寫不通
+key = "search.bad-pattern"
+zht = "正則寫不通"
+zhs = "正则写不通"
+en = "bad pattern"
+
+[[message]]
+# 搜索：大小寫那一格的名字
+key = "search.case"
+zht = "大小寫"
+zhs = "大小写"
+en = "case"
+
+[[message]]
+# 搜索：大小寫——不敏感
+key = "search.case.insensitive"
+zht = "不敏感"
+zhs = "不敏感"
+en = "ignore"
+
+[[message]]
+# 搜索：大小寫——敏感
+key = "search.case.sensitive"
+zht = "敏感"
+zhs = "敏感"
+en = "match"
+
+[[message]]
+# 搜索：大小寫——智能（打大寫纔算數）
+key = "search.case.smart"
+zht = "智能"
+zhs = "智能"
+en = "smart"
+
+[[message]]
 # 限定一欄搜到第一處
 key = "search.hit-in-column"
 zht = "第 {0} 欄：第 1/{1} 處"
@@ -5529,6 +5528,20 @@ zhs = "第 {0}/{1} 处（n N 走）"
 en = "hit {0} of {1} — n and N walk them"
 
 [[message]]
+# 搜索：找到幾處
+key = "search.hits"
+zht = "{0} 處"
+zhs = "{0} 处"
+en = "{0} hits"
+
+[[message]]
+# 搜索：命令行那一行，高亮那一條的前後文
+key = "search.in-context"
+zht = "{0} · {1}"
+zhs = "{0} · {1}"
+en = "{0} · {1}"
+
+[[message]]
 # 表格沒指定跳轉範圍，從第一欄起搜
 key = "search.no-jump-scope"
 zht = "本表格文件未指定快速跳轉之範圍，從第一欄起搜索——第 1/{0} 處"
@@ -5537,6 +5550,27 @@ en = "this table names no scope to jump within, so the search runs from the firs
 
 
 # ── selection ─────────────────────────────────────────────────────────
+
+[[message]]
+# 搜索：一處都沒有
+key = "search.none"
+zht = "沒有"
+zhs = "没有"
+en = "none"
+
+[[message]]
+# 搜索：正則那一格
+key = "search.regex"
+zht = "正則"
+zhs = "正则"
+en = "regex"
+
+[[message]]
+# 搜索：完整匹配那一格
+key = "search.whole"
+zht = "完整匹配"
+zhs = "完整匹配"
+en = "whole word"
 
 [[message]]
 # 延伸模式下收回成一個字

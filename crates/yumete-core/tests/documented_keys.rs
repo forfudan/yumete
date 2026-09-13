@@ -142,6 +142,10 @@ const DISOWNED: &[&str] = &[
     // §「沒有了」 — the names deleted when a group was made, printed beside the
     // spelling that replaced each of them. 舊名字直接刪掉 is the philosophy the
     // table is there to state, so every one of these has to stay missing.
+    // #419: the search panel took their job, and the manual names them so
+    // that a reader who knew them is told where the job went.
+    ":grep",
+    ":replace",
     ":scheme",
     ":chaifen",
     ":cf",
@@ -191,7 +195,6 @@ const DISOWNED: &[&str] = &[
     ":saveas",
     ":sav",
     ":row",
-    ":search",
     ":conflicts",
     ":bclose",
     ":appearance",

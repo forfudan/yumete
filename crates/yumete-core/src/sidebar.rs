@@ -130,6 +130,8 @@ pub enum Panel {
     Buffers,
     /// The headings of the file being written.
     Outline,
+    /// Look for a pattern, and what it found.
+    Search,
     /// The 拆分表 on one character.
     Dictionary,
     /// What the cursor is standing in, field by field.
@@ -138,10 +140,11 @@ pub enum Panel {
 
 impl Panel {
     /// Every one of them, in the order a setting file lists them.
-    pub const ALL: [Panel; 5] = [
+    pub const ALL: [Panel; 6] = [
         Panel::Files,
         Panel::Buffers,
         Panel::Outline,
+        Panel::Search,
         Panel::Dictionary,
         Panel::Detail,
     ];
@@ -152,6 +155,7 @@ impl Panel {
             Panel::Files => "files",
             Panel::Buffers => "buffers",
             Panel::Outline => "outline",
+            Panel::Search => "search",
             Panel::Dictionary => "dictionary",
             Panel::Detail => "detail",
         }
@@ -174,6 +178,7 @@ impl Panel {
             Panel::Files => "label.panel.files",
             Panel::Buffers => "label.panel.buffers",
             Panel::Outline => "label.panel.outline",
+            Panel::Search => "label.panel.search",
             Panel::Dictionary => "label.panel.dictionary",
             Panel::Detail => "label.panel.detail",
         }
@@ -186,6 +191,7 @@ impl From<View> for Panel {
             View::Explorer => Panel::Files,
             View::Buffers => Panel::Buffers,
             View::Outline => Panel::Outline,
+            View::Search => Panel::Search,
         }
     }
 }
@@ -218,11 +224,18 @@ pub enum View {
     Buffers,
     /// The headings of the file being written.
     Outline,
+    /// Look for a pattern, and what it found — Feature #419.
+    Search,
 }
 
 impl View {
     /// Every view, in the order `Tab` walks them.
-    pub const ALL: [View; 3] = [View::Explorer, View::Buffers, View::Outline];
+    pub const ALL: [View; 4] = [
+        View::Explorer,
+        View::Buffers,
+        View::Outline,
+        View::Search,
+    ];
 
     /// Its name, for the sidebar's header.
     pub fn title(self) -> &'static str {
@@ -230,6 +243,7 @@ impl View {
             View::Explorer => "檔案",
             View::Buffers => "緩衝區",
             View::Outline => "大綱",
+            View::Search => "尋找",
         }
     }
 }
@@ -454,6 +468,9 @@ impl Sidebar {
                     Chosen::FileLine(row.path, row.depth)
                 })
             }
+            // Never reached: the search panel has a store of its own and
+            // never fills these rows (`refresh_panel`).
+            View::Search => return None,
             View::Explorer => {}
         }
         if !row.is_dir {

@@ -263,10 +263,6 @@ impl Editor {
                 self.write_current(None)?;
                 Ok(CommandOutcome::Continue)
             }
-            Command::ReplaceFound(text, reshape) => {
-                self.replace_found(&text, reshape);
-                Ok(CommandOutcome::Continue)
-            }
             Command::WriteAll => self.write_all(),
             Command::Search { pattern, by } => {
                 match by {
@@ -366,10 +362,6 @@ impl Editor {
                 path,
                 force,
             } => self.export(&format, path.as_deref(), force),
-            Command::Grep(pattern) => {
-                let root = self.project_root();
-                self.grep(&pattern, &root)
-            }
             Command::Conflicts => {
                 self.list_conflicts();
                 Ok(CommandOutcome::Continue)
@@ -699,6 +691,10 @@ impl Editor {
                     (true, true) => say!("layout.note-on"),
                     (false, _) => say!("layout.note-off"),
                 };
+                Ok(CommandOutcome::Continue)
+            }
+            Command::OpenSearch => {
+                self.open_search();
                 Ok(CommandOutcome::Continue)
             }
             Command::ShowSidebarAt(side, which) => {

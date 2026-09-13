@@ -4635,7 +4635,13 @@ fn sidebar_columns(editor: &Editor, config: &Config, side: Side, total: u16) -> 
     // ragged edge between them.
     let mut want = 0usize;
     if let Some(sidebar) = editor.panel(side) {
-        want = if sidebar.wide() {
+        // **The search panel asks for more**, because it is a form: a box,
+        // three switches (大小寫 is three ways, not a tick) and the hits. At
+        // the tree's width the excerpt is five characters (#419).
+        if sidebar.view() == View::Search {
+            want = SEARCH_WIDTH.max(config.editor.sidebar_width);
+        }
+        want = want.max(if sidebar.wide() {
             // One column of padding on the left, the rule on the right, and
             // the two the outline indents its rows by.
             let longest = sidebar
@@ -4649,7 +4655,7 @@ fn sidebar_columns(editor: &Editor, config: &Config, side: Side, total: u16) -> 
                 .min(total as usize / 2)
         } else {
             config.editor.sidebar_width
-        };
+        });
     }
     // **A transient panel does not open on a page too narrow to spare it.**
     // `split_detail` used to refuse below 30 columns, and the reason holds:
@@ -4679,6 +4685,12 @@ fn sidebar_columns(editor: &Editor, config: &Config, side: Side, total: u16) -> 
         got => got,
     }
 }
+
+/// How wide the search panel wants to be — Feature #419.
+///
+/// Wide enough for 「完整匹配」 beside 「正則」 and for an excerpt with a few
+/// words in it. It is the one view that is a form rather than a list.
+const SEARCH_WIDTH: usize = 32;
 
 /// The narrowest page a transient panel will open on.
 ///
@@ -4725,6 +4737,10 @@ fn draw_sidebar(frame: &mut Frame, editor: &Editor, config: &Config, side: Side,
     };
     if area.width < 3 {
         return;
+    }
+    // A form and a list of hits, not rows of a tree (#419).
+    if sidebar.view() == View::Search {
+        return draw_search(frame, editor, config, side, area);
     }
     let ink = crate::theme::Palette::of(config);
     let ground = ink.ground(yumete_config::rung::CHROME);
@@ -4826,8 +4842,150 @@ fn draw_sidebar(frame: &mut Frame, editor: &Editor, config: &Config, side: Side,
                 };
                 format!("{mark}{}", row.name)
             }
+            // Handled above: it fills no rows.
+            View::Search => row.name.clone(),
         };
         put_text(buf, from + 1, y, to, &line, style);
+    }
+}
+
+/// **The search panel** — Feature #419.
+///
+/// A form above a list: what to look for, three switches, and what it found.
+/// One line per hit, because a line of a novel is a paragraph — the context of
+/// the highlighted one goes in the command row, which is the width of the
+/// window instead of the width of a column.
+fn draw_search(frame: &mut Frame, editor: &Editor, config: &Config, side: Side, area: Rect) {
+    use yumete_core::search_panel::Field;
+    let find = editor.search();
+    let ink = crate::theme::Palette::of(config);
+    let ground = ink.ground(yumete_config::rung::CHROME);
+    let text = ground.fg(ink.text());
+    let head = ground.fg(ink.gold()).add_modifier(Modifier::BOLD);
+    let quiet = ground.fg(ink.quiet());
+    let wrong = ground.fg(ink.mark());
+    let keys_here = editor.panel_focus() == Some((side, Layer::Top));
+    // Whichever cell the keys are on is inked; the rest are quiet — the same
+    // 「這裏」 the tree marks its row with, and it costs no colour.
+    let on = Style::default().bg(ink.text()).fg(ink.paper());
+    let cell = |field: Field| match keys_here && find.field == field {
+        true => on,
+        false => text,
+    };
+
+    frame.render_widget(Clear, area);
+    vertical::clear_wide_left_edge(frame.buffer_mut(), area);
+    let rule = match side {
+        Side::Left => area.x + area.width - 1,
+        Side::Right => area.x,
+    };
+    let (from, to) = match side {
+        Side::Left => (area.x, rule),
+        Side::Right => (area.x + 1, area.x + area.width),
+    };
+    let buf = frame.buffer_mut();
+    for y in area.y..area.y + area.height {
+        for x in from..to {
+            if let Some(c) = buf.cell_mut((x, y)) {
+                c.set_symbol(" ").set_style(ground);
+            }
+        }
+        if let Some(c) = buf.cell_mut((rule, y)) {
+            c.set_symbol("│").set_style(quiet);
+        }
+    }
+    let left = from + 1;
+    // **The title carries the count, and says nothing when nothing was asked.**
+    // `0 處` and 「not asked yet」 are two different findings (#419).
+    put_text(buf, left, area.y, to, &say!("label.panel.search"), head);
+    let (tally, style) = match (find.broken, find.asked()) {
+        (true, _) => (say!("search.bad-pattern"), wrong),
+        (false, false) => (String::new(), quiet),
+        (false, true) if find.total == 0 => (say!("search.none"), quiet),
+        (false, true) => (say!("search.hits", find.total), quiet),
+    };
+    if !tally.is_empty() {
+        let w = yumete_cjk::str_width(&tally) as u16;
+        put_text(buf, to.saturating_sub(w + 1), area.y, to, &tally, style);
+    }
+
+    // The box. A caret where the keys are, and the whole of it inked when it
+    // arrived selected — `空格 /` leaves it that way so one key does both.
+    let y = area.y + 2;
+    let room = to.saturating_sub(left + 2) as usize;
+    let shown: String = match find.query.chars().count() > room {
+        true => find.query.chars().skip(find.query.chars().count() - room).collect(),
+        false => find.query.clone(),
+    };
+    let typing = editor.mode() == yumete_core::input::Mode::Field;
+    let box_style = match find.all_selected && !shown.is_empty() {
+        true => on,
+        false => cell(Field::Query),
+    };
+    put_text(buf, left, y, to, &format!(" {shown}"), box_style);
+    if typing && !find.all_selected {
+        let at = left + 1 + yumete_cjk::str_width(&shown) as u16;
+        if at < to {
+            if let Some(c) = buf.cell_mut((at, y)) {
+                c.set_symbol("▏").set_style(head);
+            }
+        }
+    }
+
+    // The switches. 大小寫 is three ways, not a tick, so it says which one.
+    let tick = |on: bool| match on {
+        true => "[x]",
+        false => "[ ]",
+    };
+    let y = y + 1;
+    put_text(buf, left, y, to, &format!("{} {}", tick(find.regex), say!("search.regex")), cell(Field::Regex));
+    let whole = format!("{} {}", tick(find.whole), say!("search.whole"));
+    let at = to.saturating_sub(yumete_cjk::str_width(&whole) as u16 + 1);
+    if at > left + 10 {
+        put_text(buf, at, y, to, &whole, cell(Field::Whole));
+    }
+    let y = y + 1;
+    // Spelled out rather than asked of `Case`, so the tags sit where the
+    // messages test can see them: it reads `say!` calls, and a tag returned
+    // from a `match` is a tag nobody can find (`messages.rs::said`).
+    let which = match find.case {
+        yumete_core::search_panel::Case::Smart => say!("search.case.smart"),
+        yumete_core::search_panel::Case::Sensitive => say!("search.case.sensitive"),
+        yumete_core::search_panel::Case::Insensitive => say!("search.case.insensitive"),
+    };
+    let case = format!("{}  {}", say!("search.case"), which);
+    put_text(buf, left, y, to, &case, cell(Field::Case));
+
+    // What it found. Quiet when the pattern is broken: these are the answer to
+    // what the box held a keystroke ago, not to what it holds now.
+    let top = y + 2;
+    let room = (area.y + area.height).saturating_sub(top) as usize;
+    if room == 0 {
+        return;
+    }
+    let first = find
+        .selected
+        .saturating_sub(room.saturating_sub(1))
+        .min(find.hits.len().saturating_sub(room));
+    for slot in 0..room.min(find.hits.len().saturating_sub(first)) {
+        let i = first + slot;
+        let hit = &find.hits[i];
+        let y = top + slot as u16;
+        let picked = i == find.selected && !find.broken;
+        if picked && keys_here && find.field == Field::Results {
+            for x in from..to {
+                if let Some(c) = buf.cell_mut((x, y)) {
+                    c.set_symbol(" ").set_style(on);
+                }
+            }
+        }
+        let style = match (find.broken, picked && keys_here && find.field == Field::Results) {
+            (true, _) => quiet,
+            (false, true) => on,
+            (false, false) => text,
+        };
+        let line = format!("{:>5}  {}", hit.line + 1, hit.excerpt);
+        put_text(buf, left, y, to, &line, style);
     }
 }
 
