@@ -14,6 +14,36 @@
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 
+/// Which side of the page a panel is docked on — Feature #293.
+///
+/// The page has **two slots**, and which panel lands in which is not a fact
+/// about the panel: it is a setting, and until there is one every panel goes
+/// left, which is where the only panel there has ever been already is. So this
+/// is a slot address and nothing more — no view, no key and no drawing may ask
+/// "am I the left one" and behave differently for the answer.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+pub enum Side {
+    /// Columns off the left of the page.
+    #[default]
+    Left,
+    /// Columns off the right of it.
+    Right,
+}
+
+impl Side {
+    /// Both slots, in screen order — what the front end draws and what a
+    /// question about "any panel" walks.
+    pub const BOTH: [Side; 2] = [Side::Left, Side::Right];
+
+    /// The other slot.
+    pub fn other(self) -> Side {
+        match self {
+            Side::Left => Side::Right,
+            Side::Right => Side::Left,
+        }
+    }
+}
+
 /// What the sidebar is showing.
 ///
 /// Three views of the same question — "what is there, and where am I in it" —

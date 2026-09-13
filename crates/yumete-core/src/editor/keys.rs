@@ -897,9 +897,14 @@ impl Editor {
             // The other pane. Two panes, one key — vi spells window motions
             // `C-w` and there is only ever one other place to be.
             Key::Ctrl('w') => {
-                if self.sidebar.is_some() {
-                    self.sidebar_focus = true;
-                    self.refresh_sidebar();
+                // Whichever slot has something in it — the reader means "into
+                // the panel", and with two of them the empty one is not a
+                // place to be put.
+                if let Some(side) = crate::sidebar::Side::BOTH
+                    .into_iter()
+                    .find(|&side| self.panel(side).is_some())
+                {
+                    self.focus_panel(side);
                 }
             }
             // …and the keys a keyboard already has for it. `C-f`/`C-b` are

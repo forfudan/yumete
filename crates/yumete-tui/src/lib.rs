@@ -37,7 +37,7 @@ use yumete_config::{Config, LineNumbers};
 use yumete_cjk::{Segmenter, WordMark};
 use yumete_core::command::Engagement;
 use yumete_core::editor::Hud;
-use yumete_core::sidebar::View;
+use yumete_core::sidebar::{Side, View};
 use yumete_core::wrap::{self, Anchor as WrapAnchor};
 use yumete_core::zong::{Anchor, Layout as WritingLayout};
 use yumete_core::{diag, say, Editor, Key, KeyOutcome, Mode, ShotJob, TextStore};
@@ -2658,7 +2658,10 @@ fn gutter_text(i: usize, cursor_line: usize, width: usize, mode: LineNumbers) ->
 /// character.
 #[derive(Debug, Clone, Copy)]
 struct Areas {
-    sidebar: Rect,
+    /// **The two panel slots**, indexed by [`Side`] (#293). A slot with
+    /// nothing in it is zero columns wide, which is how the page stays exactly
+    /// as wide as it was before there were two.
+    panels: [Rect; 2],
     /// The two work areas, **in screen order** — `panes[0]` is the one drawn
     /// first (top, or right in 縱書). Which of them holds the keys is
     /// [`Editor::live_pane`], and it is a different question on purpose:
@@ -2702,15 +2705,21 @@ fn page_areas(editor: &Editor, config: &Config, area: Rect, head_rows: u16) -> A
     let body_h = area.height.saturating_sub(command_rows + 1);
     let status = Rect::new(area.x, area.y + body_h, area.width, 1);
     let command = Rect::new(area.x, area.y + body_h + 1, area.width, command_rows);
-    // The sidebar takes its columns off the left; set vertically that is the
-    // right side to lose, because the 縱 fill from the right edge and the page
+    // A panel takes its columns off its own side; set vertically the left is
+    // still the left, because the 縱 fill from the right edge and the page
     // simply ends sooner.
-    let want = match editor.sidebar() {
-        Some(_) => sidebar_columns(editor, config, area.width),
-        None => 0,
-    };
-    let sidebar = Rect::new(area.x, area.y, want, body_h);
-    let body = Rect::new(area.x + want, area.y, area.width.saturating_sub(want), body_h);
+    let left = sidebar_columns(editor, config, Side::Left, area.width);
+    let right = sidebar_columns(editor, config, Side::Right, area.width.saturating_sub(left));
+    let panels = [
+        Rect::new(area.x, area.y, left, body_h),
+        Rect::new(area.x + area.width.saturating_sub(right), area.y, right, body_h),
+    ];
+    let body = Rect::new(
+        area.x + left,
+        area.y,
+        area.width.saturating_sub(left + right),
+        body_h,
+    );
     // The tab bar takes the row off the top of what is left.
     let (tabs, page) = match config.editor.tabs.showing(editor.buffer_count()) && body.height > 1 {
         true => (
@@ -2763,7 +2772,7 @@ fn page_areas(editor: &Editor, config: &Config, area: Rect, head_rows: u16) -> A
         },
     };
     Areas {
-        sidebar,
+        panels,
         tabs,
         head,
         text,
@@ -2791,7 +2800,7 @@ fn draw(
     let head_rows = 2 * u16::from(editor.table_head_is_off_the_page(top));
     let areas = page_areas(editor, config, area, head_rows);
     let Areas {
-        sidebar,
+        panels,
         panes,
         divider,
         tabs: tab_area,
@@ -2808,8 +2817,11 @@ fn draw(
         0 => status_area,
         _ => command_area,
     };
-    if sidebar.width > 0 {
-        draw_sidebar(frame, editor, config, sidebar);
+    for side in Side::BOTH {
+        let rect = panels[side as usize];
+        if rect.width > 0 {
+            draw_sidebar(frame, editor, config, side, rect);
+        }
     }
     if tab_area.height > 0 {
         draw_tabs(frame, editor, config, tab_area);
@@ -4604,8 +4616,8 @@ fn draw_tabs(frame: &mut Frame, editor: &Editor, config: &Config, area: Rect) {
 /// Wide, it is as wide as its longest row, so the point of opening it out —
 /// reading a whole chapter name — actually happens; but never past half the
 /// window, because the writing is what the window is for.
-fn sidebar_columns(editor: &Editor, config: &Config, total: u16) -> u16 {
-    let Some(sidebar) = editor.sidebar() else {
+fn sidebar_columns(editor: &Editor, config: &Config, side: Side, total: u16) -> u16 {
+    let Some(sidebar) = editor.panel(side) else {
         return 0;
     };
     // A sidebar narrower than three cells cannot be drawn — and the drawing
@@ -4637,8 +4649,8 @@ fn sidebar_columns(editor: &Editor, config: &Config, total: u16) -> u16 {
 ///
 /// A rule rather than a border: one column of `│` says "this is a different
 /// thing" and costs one cell, where a box costs four and a corner.
-fn draw_sidebar(frame: &mut Frame, editor: &Editor, config: &Config, area: Rect) {
-    let Some(sidebar) = editor.sidebar() else {
+fn draw_sidebar(frame: &mut Frame, editor: &Editor, config: &Config, side: Side, area: Rect) {
+    let Some(sidebar) = editor.panel(side) else {
         return;
     };
     if area.width < 3 {
@@ -4653,7 +4665,7 @@ fn draw_sidebar(frame: &mut Frame, editor: &Editor, config: &Config, area: Rect)
     // half of the screen the keys are going to is never in doubt.
     // Focused, it is ink and paper changing places — the most robust 「這裏」
     // a terminal has, and it costs no colour and survives a light/dark flip.
-    let on = match editor.sidebar_focused() {
+    let on = match editor.panel_focus() == Some(side) {
         true => Style::default().bg(ink.text()).fg(ink.paper()),
         false => Style::default().bg(ink.selection()).fg(ink.text()),
     };
@@ -4664,10 +4676,19 @@ fn draw_sidebar(frame: &mut Frame, editor: &Editor, config: &Config, area: Rect)
     // the second of them is stored and then never emitted, and the panel opens
     // with its whole left wall missing. Blank the glyph; the wall gets a cell.
     vertical::clear_wide_left_edge(frame.buffer_mut(), area);
-    let rule = area.x + area.width - 1;
+    // **The rule goes on the side facing the writing**, so the panel's own
+    // columns always sit against the page and its outer edge is the window's.
+    let rule = match side {
+        Side::Left => area.x + area.width - 1,
+        Side::Right => area.x,
+    };
+    let (from, to) = match side {
+        Side::Left => (area.x, rule),
+        Side::Right => (area.x + 1, area.x + area.width),
+    };
     let buf = frame.buffer_mut();
     for y in area.y..area.y + area.height {
-        for x in area.x..rule {
+        for x in from..to {
             if let Some(cell) = buf.cell_mut((x, y)) {
                 cell.set_symbol(" ").set_style(ground);
             }
@@ -4679,7 +4700,7 @@ fn draw_sidebar(frame: &mut Frame, editor: &Editor, config: &Config, area: Rect)
 
     // The directory the tree is rooted at, then the tree, scrolled to keep the
     // highlight on screen.
-    put_text(buf, area.x + 1, area.y, rule, &sidebar.title(), quiet);
+    put_text(buf, from + 1, area.y, to, &sidebar.title(), quiet);
     let rows = sidebar.rows();
     let visible = (area.height as usize).saturating_sub(1);
     if visible == 0 {
@@ -8896,7 +8917,7 @@ mod tests {
         ime_handle(&mut ime, &mut editor, KeyCode::Tab, KeyModifiers::NONE);
         assert_eq!(editor.take_dictionary_query(), Some('吧'));
         assert_eq!(
-            editor.sidebar().map(|s| s.view()),
+            editor.panel(Side::Left).map(|s| s.view()),
             Some(yumete_core::sidebar::View::Dictionary)
         );
         // The keys stay with the word: the reader is mid-composition, and the

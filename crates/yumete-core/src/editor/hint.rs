@@ -27,7 +27,7 @@ impl Editor {
         if let Some(keys) = self.pending_keys() {
             return keys;
         }
-        if self.sidebar_focus && self.sidebar.is_some() {
+        if self.sidebar_focused() {
             return Hint::Keys(say!("hint.sidebar"), vec![
                     ("Tab", say!("hint.sidebar.other-view")),
                     ("w", say!("hint.sidebar.width")),
