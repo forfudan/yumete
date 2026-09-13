@@ -4929,7 +4929,7 @@ fn draw_search(frame: &mut Frame, editor: &Editor, config: &Config, side: Side, 
     let typing = editor.mode() == yumete_core::input::Mode::Field;
     let room = to.saturating_sub(left + 2) as usize;
     let mut y = area.y + 2;
-    let mut draw_box = |buf: &mut ratatui::buffer::Buffer, which: Field, what: &str, y: u16| {
+    let draw_box = |buf: &mut ratatui::buffer::Buffer, which: Field, what: &str, y: u16| {
         let shown: String = match what.chars().count() > room {
             true => what.chars().skip(what.chars().count() - room).collect(),
             false => what.to_string(),

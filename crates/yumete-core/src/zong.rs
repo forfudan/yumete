@@ -583,7 +583,7 @@ fn push_plain(
                 // caret up in these rows with a binary search, which needs them
                 // in document order and answered quietly with the wrong row
                 // when they were not.
-                if let Some((opened_at, earlier)) = opening.take() {
+                if let Some((opened_at, _earlier)) = opening.take() {
                     // ⚠️ **Its own square, not an empty one with the glyph in
                     // the margin** (#231): an opener that never reached a base
                     // — `（（` or `（。` — is still a mark, and a blank square

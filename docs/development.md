@@ -617,7 +617,7 @@ index, and a row with no number anywhere else is a row that got lost.
 | 392 | **基本表格丟掉它本來知道的欄名** | core | P2 | 不是 bug：表頭在屏幕上就不重畫一遍 [^392] | Dropped |
 | 393 | **文檔說 41 個命令，面板數出 47 個** | docs | P2 | 改成歷史陳述，不寫死會過期的數 [^393] | Fixed 2026-09-11 |
 | 394 | **極窄終端的狀態行硬截斷到半個字** | tui | P2 | 先擠間距，再整格讓位 [^394] | Fixed 2026-09-11 |
-| 395 | **孤立的 `\r` 被當成換行數進去** | core | P2 | 畫出來也是換行，是定義之爭不是 bug [^395] | Open |
+| 395 | **孤立的 `\r` 被當成換行數進去** | core | P2 | 關掉 ropey 的 `unicode_lines`（helix 就是這樣）[^395] | Fixed 2026-09-13 |
 | 396 | **候選序號出廠是 ㊀㊁㊂，桌面版是數字** | config | P3 | 按「2」看到「㊁」 [^396] | Open |
 | 397 | **空格選單那張表漏收兩項，一項文案不符** | docs | P3 | 補齊，並加一道反向的閘 [^397] | Fixed 2026-09-12 |
 | 398 | **NUL 在頁面上一點痕跡都沒有** | tui | P3 | 換成 Control Pictures，寬度不變 [^398] | Fixed 2026-09-12 |
@@ -9903,7 +9903,23 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     **這一條沒有跟着解決**。`wrap::line_text` 削行尾時 `\r` 和 `\n` 一起削，所以那個孤立
     的 `\r` 根本沒有走到「畫哪個字」那一步——它是**斷行的那個字符**，不是行裏的字符。
     要讓它顯示成 `^M` 就等於要它**不再斷行**，那正是上面說的 ropey 那一改。
-    所以這一條的狀態不變：等一個決定。
+
+    **落地（2026-09-13）：一行 `Cargo.toml`。** ⚠️ **上面那句「ropey 1.x 不讓配」是錯的**
+    ——它讓配，只是那個 feature **默認開着**。helix 早就關了：
+
+    ```toml
+    ropey = { version = "1.6.1", default-features = false, features = ["simd"] }
+    ```
+
+    它的 `unicode-lines` 不在 `default` 裏（helix-term 的 `default = ["git"]`），所以
+    **helix 出廠就不把孤立的 `\r` 當換行**——問「別的編輯器怎麼做」問到底，答案往往在
+    它的 `Cargo.toml` 而不在它的代碼裏。
+
+    改完之後：`wc -l` 對得上，那個 `\r` **畫成 `␍`**（#398 給控制字符畫的 Control
+    Pictures 一直在等這個字符走到它面前——這兩條原本記着「沒有跟着解決」，其實是同一個
+    修的兩半）。⚠️ **CRLF 不受影響**：`\r\n` 兩種配置下都是一個換行，那是 ropey 的核心
+    而不是那個 feature。`\v` `\f` NEL LS PS 五個一起回到「是字符」。
+    測試：`a_lone_carriage_return_does_not_start_a_line`。
 
 [^396]: 2026-09-11 的六路審閱，輸入法那一路對照桌面版發現的。`yumete-config/src/lib.rs:474`
     出廠寫死 `markers: "㊀㊁㊂㊃㊄㊅㊆㊇㊈"`；而 yume 桌面版

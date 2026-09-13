@@ -8122,6 +8122,43 @@ fn the_search_panel_walks_the_folder_when_it_is_told_to() {
     std::fs::remove_dir_all(&dir).ok();
 }
 
+/// **A lone `\r` is a character, not a line break** — Feature #395.
+///
+/// A paragraph pasted out of an old Mac text file carries one, and every tool
+/// a writer might check the count against — `wc -l`, git, vim, VS Code —
+/// counts only `\n`. ropey counts `\r`, `\v`, `\f`, NEL, LS and PS as well,
+/// **unless its `unicode_lines` feature is off**, which is what this crate now
+/// says in its `Cargo.toml` (the same line helix has).
+///
+/// ⚠️ CRLF is untouched: `\r\n` is one break either way — that is ropey's
+/// core, not the feature.
+#[test]
+fn a_lone_carriage_return_does_not_start_a_line() {
+    let mut ed = Editor::new();
+    ed.current_buffer_mut().replace(0..0, "CR\rhere\nsecond\n");
+    assert_eq!(
+        ed.current_buffer().line_count(),
+        3,
+        "two lines and the empty one after the last break, as `wc -l` counts"
+    );
+    // …and the `\r` is *in* the first line, where a reader can see it (#398
+    // draws it as ␍).
+    let first: String = ed.current_buffer().rope().line(0).chars().collect();
+    assert!(first.starts_with("CR\rhere"), "{first:?}");
+
+    // The other five that came with the feature are characters too.
+    let mut ed = Editor::new();
+    ed.current_buffer_mut().replace(0..0, "a\u{b}b\u{c}c\u{85}d\u{2028}e\u{2029}f\n");
+    assert_eq!(ed.current_buffer().line_count(), 2, "one line, and the end");
+
+    // ⚠️ CRLF still ends a line — that is ropey's core, not the feature.
+    let mut ed = Editor::new();
+    ed.current_buffer_mut().replace(0..0, "one\r\ntwo\r\n");
+    assert_eq!(ed.current_buffer().line_count(), 3);
+    let first: String = ed.current_buffer().rope().line(0).chars().collect();
+    assert_eq!(first, "one\r\n", "and the pair is the break, not two");
+}
+
 /// **The book is found from a file opened by a bare name too.**
 ///
 /// ⚠️ A long-standing quiet one, caught by #419 二: a buffer opened as
