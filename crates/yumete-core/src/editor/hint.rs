@@ -27,6 +27,14 @@ impl Editor {
         if let Some(keys) = self.pending_keys() {
             return keys;
         }
+        // The bottom layer of a slot: nothing to walk into and nothing to put
+        // away, so the row says the two keys it does have (#293).
+        if self.panel_focus() == Some((self.transient_side(), crate::sidebar::Layer::Bottom)) {
+            return Hint::Keys(say!("label.dictionary"), vec![
+                    ("j k", say!("hint.sidebar.move")),
+                    ("C-w", say!("hint.sidebar.back-to-text")),
+                ]);
+        }
         if self.sidebar_focused() {
             return Hint::Keys(say!("hint.sidebar"), vec![
                     ("Tab", say!("hint.sidebar.other-view")),

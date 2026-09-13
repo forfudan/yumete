@@ -50,8 +50,43 @@ impl Editor {
         if side != self.transient_side() {
             return None;
         }
+        // **Order is the whole rule.** Asking about a character is a thing a
+        // reader just did; what the cursor is standing in is a thing that has
+        // been true all along. The question wins while it is live, and when it
+        // stops being live the row underneath simply shows again — nobody
+        // remembered it, and nobody put it back.
+        if self.dictionary_live() {
+            return Some(crate::sidebar::Transient::Dictionary);
+        }
         self.detail_is_a_panel()
             .then_some(crate::sidebar::Transient::Detail)
+    }
+
+    /// **Whether the 字典 question is still being asked** (#215, #293).
+    ///
+    /// It is, while the cursor has not moved off the character it was asked
+    /// about — or while the keys are in the panel, where the cursor cannot
+    /// move at all, so a long answer can be read to the end.
+    ///
+    /// ⚠️ **Reads the stored focus, not [`Editor::panel_focus`]**: that one
+    /// asks whether the layer is showing, which asks this, which would ask it
+    /// again. The stored field is the right one anyway — the question is
+    /// 「were the keys put here」, not 「is there something here to look at」.
+    fn dictionary_live(&self) -> bool {
+        if self.dictionary.is_none() {
+            return false;
+        }
+        let reading = self.panel_focus
+            == Some((self.transient_side(), crate::sidebar::Layer::Bottom));
+        reading || self.dictionary_anchor == Some(self.cursor)
+    }
+
+    /// The rows of the bottom layer, when it is one that is drawn as a list.
+    pub fn transient_rows(&self, side: crate::sidebar::Side) -> Vec<crate::sidebar::Row> {
+        match self.transient(side) {
+            Some(crate::sidebar::Transient::Dictionary) => self.dictionary_rows(),
+            _ => Vec::new(),
+        }
     }
 
     /// Whether the detail is the sort that wants a **panel** rather than the
@@ -162,8 +197,46 @@ impl Editor {
         if !self.layer_takes_keys(side, layer) {
             return;
         }
+        // A list keeps its own place; a transient panel is a fresh thing every
+        // time it is walked into, so it is read from the top.
+        if self.panel_focus != Some((side, layer)) && layer == crate::sidebar::Layer::Bottom {
+            self.transient_scroll = 0;
+        }
         self.panel_focus = Some((side, layer));
         self.refresh_sidebar();
+    }
+
+    /// How far the bottom layer has been scrolled (#293).
+    pub fn transient_scroll(&self) -> usize {
+        self.transient_scroll
+    }
+
+    /// One key in the bottom layer: it is read, not walked into.
+    ///
+    /// No `q` — there is nothing here anybody opened. No `l`/`Enter` — a
+    /// reading is not a place to go. What is left is moving the eye down a
+    /// long answer, spelled the way the text and the lists already spell it.
+    fn on_transient_key(&mut self, key: Key, side: crate::sidebar::Side) {
+        let last = self.transient_len(side).saturating_sub(1);
+        let step = |at: usize, by: usize, down: bool| match down {
+            true => at.saturating_add(by).min(last),
+            false => at.saturating_sub(by),
+        };
+        match key {
+            Key::Char('j') | Key::Down => self.transient_scroll = step(self.transient_scroll, 1, true),
+            Key::Char('k') | Key::Up => self.transient_scroll = step(self.transient_scroll, 1, false),
+            Key::Char('J') | Key::PageDown => {
+                self.transient_scroll = step(self.transient_scroll, Self::PAGE_IN_A_LIST, true)
+            }
+            Key::Char('K') | Key::PageUp => {
+                self.transient_scroll = step(self.transient_scroll, Self::PAGE_IN_A_LIST, false)
+            }
+            Key::Char('g') | Key::Home => self.transient_scroll = 0,
+            Key::Char('G') | Key::End => self.transient_scroll = last,
+            Key::Ctrl('w') => self.cycle_region(),
+            Key::Char(' ') => self.pending = Pending::Space,
+            _ => {}
+        }
     }
 
     /// **`C-w`: hand the keys to the next region** — Feature #293.
@@ -289,7 +362,6 @@ impl Editor {
                 })
                 .collect(),
             View::Outline => self.outline_rows(),
-            View::Dictionary => self.dictionary_rows(),
         };
         if let Some(panel) = self.panel_mut(side) {
             panel.set_rows(rows);
@@ -519,20 +591,20 @@ impl Editor {
         // Asked, unanswered: what is showing until the answer arrives is the
         // character alone, which is not the same panel as 「查不到」.
         self.dictionary = Some((ch, None));
-        let side = self.side_for(crate::sidebar::View::Dictionary);
-        match self.panel_mut(side) {
-            Some(panel) => panel.show(crate::sidebar::View::Dictionary),
-            None => {
-                let root = self.project_root();
-                let mut panel = crate::sidebar::Sidebar::new(&root);
-                panel.show(crate::sidebar::View::Dictionary);
-                self.panels[side as usize] = Some(panel);
-            }
-        }
+        // **Where the question was asked from.** The answer stays up while the
+        // cursor is still there and goes when it leaves — nothing has to close
+        // it, which is the whole of why the bottom layer holds no state
+        // (#293). Nothing is opened here either: the panel *is* the question,
+        // and `transient()` will draw it because the question is live.
+        self.dictionary_anchor = Some(self.cursor);
+        self.transient_scroll = 0;
         // Asked from the page, the keys go with the question. Asked while a
         // word is being typed, they must not — the reader is mid-word, and the
         // panel is only there to be glanced at.
-        self.panel_focus = focus.then_some((side, crate::sidebar::Layer::Top));
+        self.panel_focus = focus.then_some((
+            self.transient_side(),
+            crate::sidebar::Layer::Bottom,
+        ));
         self.refresh_sidebar();
     }
 
@@ -608,10 +680,8 @@ impl Editor {
             self.panel_focus = None;
             return;
         };
-        // Nothing reaches the bottom layer yet: the one transient panel
-        // there is follows the cursor and takes no keys (#293).
         if layer == crate::sidebar::Layer::Bottom {
-            return;
+            return self.on_transient_key(key, side);
         }
         let Some(sidebar) = self.panel_mut(side) else {
             return;
@@ -724,6 +794,7 @@ impl Editor {
             Some(crate::sidebar::Transient::Detail) => {
                 self.detail().map(|d| d.rows.len()).unwrap_or(0)
             }
+            Some(crate::sidebar::Transient::Dictionary) => self.dictionary_rows().len(),
             None => 0,
         }
     }

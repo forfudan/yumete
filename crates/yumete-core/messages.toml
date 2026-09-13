@@ -3804,6 +3804,13 @@ zhs = "j k 移动 · J K 翻页 · g G 两端 · l 进入 · h 收起 · Tab 换
 en = "j k move · J K page · g G ends · l enter · h collapse · Tab view · w width · R reread · C-w next region · q close"
 
 [[message]]
+# 提示：上下移動
+key = "hint.sidebar.move"
+zht = "上下"
+zhs = "上下"
+en = "move"
+
+[[message]]
 # 側欄提示：換視圖
 key = "hint.sidebar.other-view"
 zht = "換視圖"
@@ -4400,6 +4407,13 @@ zhs = "、"
 en = ", "
 
 [[message]]
+# 標籤：字典
+key = "label.dictionary"
+zht = "字典"
+zhs = "字典"
+en = "dictionary"
+
+[[message]]
 # 一句話裏「關着」那半個詞（:yume ? 的拆分那一格）
 key = "label.off"
 zht = "關"
@@ -4433,7 +4447,6 @@ key = "label.table"
 zht = "表格"
 zhs = "表格"
 en = "table"
-
 
 # ── language ──────────────────────────────────────────────────────────
 

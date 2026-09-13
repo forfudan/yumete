@@ -1963,6 +1963,12 @@ pub struct Editor {
     panels: [Option<crate::sidebar::Sidebar>; 2],
     /// Which slot **and which layer** the keys are going to, if any.
     panel_focus: Option<(crate::sidebar::Side, crate::sidebar::Layer)>,
+    /// Where the cursor was when the 字典 was asked, so the answer can go when
+    /// the cursor leaves without anybody having to take it away (#293).
+    dictionary_anchor: Option<usize>,
+    /// How far the bottom layer is scrolled — the only state a transient panel
+    /// has, and it has it because reading a long answer is the point.
+    transient_scroll: usize,
     /// What an unnamed file's markup is taken to be, from the project's config.
     default_syntax: Option<crate::syntax::Syntax>,
     /// Which markup a file is in, by extension or by exact name.
@@ -2295,6 +2301,8 @@ impl Editor {
             picker: None,
             panels: [None, None],
             panel_focus: None,
+            dictionary_anchor: None,
+            transient_scroll: 0,
             default_syntax: None,
             syntax_by_name: HashMap::new(),
             grep_root: None,
