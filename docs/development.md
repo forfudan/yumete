@@ -454,7 +454,7 @@ index, and a row with no number anywhere else is a row that got lost.
 | 229 | **The current cell is not drawn** | tui | P3 | the only feedback is the column name in the status line [^229] | Done |
 | 230 | **`？」` and `！」` squeezed into one square** | tui | P3 | clreq §6.3.2 splits them from `。」` — wanted: a decision [^230] | Planned |
 | 231 | **The 「hole」 branch in `zong.rs`** | tui | P3 | a third mark still keeps an empty margin square [^231] | Planned |
-| 232 | **The column-number row's contrast** | tui | P3 | measuring it means measuring the whole ladder [^232] | Planned |
+| 232 | **The column-number row's contrast** | tui | P3 | 尺子單獨一級 `RULER`＝250；4.01 → 5.63 [^232] | Fixed 2026-09-13 |
 | 233 | **`:check-usage`** | core | P4 | 61 groups, asked of the document rather than a dictionary [^233] | Done |
 | 234 | **`:ruby-auto`, and `:ruby-auto rare`** | core | P4 | readings by word, marked only where no standard has the 字 [^234] | Done |
 | 235 | **`:diff` at 詞 grain, over the autosave snapshots** | core | P4 | Myers over the segmenter's words, against the file on disk [^235] | Done |
@@ -6030,9 +6030,15 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     | 300（`QUIET`） | 3.94 | 5.03 | 8／21 |
     | 400（`FURNITURE`，現在） | 3.15 | 4.01 | 19／21 |
 
-    三條路，等作者定：① 認「尺子是界面不是正文」，3:1 就夠，什麼都不動；② 尺子單獨
-    給一級（250 那一行）；③ 動 `FURNITURE` 本身——但那一級上還有行號、暗着的頁籤、
-    鍵名、批注、頁首元資料，動它是動整套。
+    **落地（2026-09-13）：② 尺子單獨給一級。** `rung::RULER = 250`，只有欄號那一行動，
+    行號／頁籤／鍵名／批注全不動。判準是**它算不算正文**：數欄號是**真的在讀**（要打
+    `t3g` 跳到第三欄），既然在讀就按 4.5 那條線走。③ 不划算——那一級上掛着五六樣東西，
+    為一行尺子把整套傢俱調亮，代價與收益不成比例。
+
+    墨香深色實測 **4.01 → 5.63**。**測試守着**（`the_column_ruler_is_dark_enough_to_count`）：
+    八個主題各兩種深淺，逐個要求 ≥4.5，⚠️ **量的是它畫在 chrome 上的對比，不是紙上的**
+    ——這正是當初「要量就得量整條梯子」的意思，底一動它就跟着動，而下次動底的人需要
+    有東西替他發現。
 
 [^233]: 裡 412 / 裏 3, 為/爲, 台/臺, 着/著, and the project's own names, as a
     jumpable buffer. **Nobody has this**: Word checks 病句, Grammarly is

@@ -494,14 +494,15 @@ pub fn draw(
     // on the 拆分表 that is counting to seventeen by eye.
     //
     // Right-aligned in each column and a rung quieter than the heading: they
-    // are a ruler, not a row.
+    // are a ruler, not a row — but a rung **darker than the furniture**,
+    // because a ruler is read rather than glanced at (#232).
     if numbers == 1 {
         for x in area.x..right {
             if let Some(cell) = buf.cell_mut((x, area.y)) {
                 cell.set_symbol(" ").set_style(gutter_style);
             }
         }
-        let quiet = gutter_style.fg(ink.furniture());
+        let quiet = gutter_style.fg(ink.ruler());
         let mut x = area.x + gutter;
         for i in viewport.left..widths.len() {
             let w = widths[i] as u16;

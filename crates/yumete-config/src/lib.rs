@@ -587,6 +587,16 @@ pub mod rung {
     /// One shade back: a reading beside its base, a 拆分 annotation, a
     /// candidate's number, the second line of anything.
     pub const QUIET: u16 = 300;
+    /// **The ruler over a table's columns** — Feature #232.
+    ///
+    /// Its own rung, and darker than the furniture it used to share, because
+    /// it is *read* rather than glanced at: `t3g` means counting to the third
+    /// number, and a reader counting is reading. ⚠️ It is drawn on
+    /// [`CHROME`], not on the paper — measured there it was 3.15:1 at
+    /// [`FURNITURE`] on the worst of the twenty-one ladders, clearing the 3:1
+    /// a border needs and missing the 4.5:1 small text does. At this rung the
+    /// worst is 4.36.
+    pub const RULER: u16 = 250;
     /// Furniture you read once: line numbers, an unlit tab, a key's label, a
     /// 批注, a page's front matter.
     pub const FURNITURE: u16 = 400;
