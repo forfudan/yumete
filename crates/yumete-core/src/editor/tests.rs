@@ -7963,6 +7963,55 @@ fn the_sidebar_walks_the_tree_with_the_same_keys_the_text_uses() {
     std::fs::remove_dir_all(&dir).ok();
 }
 
+/// Which side each kind of panel lives on is a setting — Feature #293.
+#[test]
+fn the_panels_go_where_the_settings_put_them() {
+    use crate::sidebar::{Layer, Side, Transient};
+    let dir = std::env::temp_dir().join(format!("yumete-sides-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(dir.join("a.md"), "那年冬天\n").unwrap();
+
+    let mut ed = Editor::new();
+    ed.set_sidebar_side(Side::Right);
+    ed.open_sidebar_at(&dir);
+    assert!(ed.panel(Side::Right).is_some(), "the tree opened on the right");
+    assert!(ed.panel(Side::Left).is_none());
+
+    // **A panel already open moves with the setting**, or the setting is a lie
+    // until the next restart.
+    ed.set_sidebar_side(Side::Left);
+    assert!(ed.panel(Side::Left).is_some(), "and it came along");
+    assert!(ed.panel(Side::Right).is_none());
+    assert_eq!(ed.panel_focus(), Some((Side::Left, Layer::Top)), "keys too");
+
+    // **Both on one side is a layout, not a mistake**: the 字典 then stacks
+    // under the tree instead of taking a second column, and the tree stays.
+    let mut ed = typed("那年冬天");
+    ed.set_info_side(Side::Left);
+    ed.open_sidebar_at(&dir);
+    ed.on_key(Key::Ctrl('w'));
+    ed.on_key(Key::Char(' '));
+    ed.on_key(Key::Char('d'));
+    assert_eq!(ed.transient(Side::Left), Some(Transient::Dictionary));
+    assert_eq!(ed.transient(Side::Right), None);
+    assert!(ed.panel(Side::Left).is_some(), "the tree above it is untouched");
+
+    // Three seats in one column, walked in screen order: top, bottom, text.
+    assert_eq!(ed.panel_focus(), Some((Side::Left, Layer::Bottom)));
+    ed.on_key(Key::Ctrl('w'));
+    assert_eq!(ed.panel_focus(), None, "the writing");
+    ed.on_key(Key::Ctrl('w'));
+    assert_eq!(ed.panel_focus(), Some((Side::Left, Layer::Top)), "round to the tree");
+
+    // A word nobody knows keeps the default rather than picking a side.
+    assert_eq!(Side::parse("right"), Some(Side::Right));
+    assert_eq!(Side::parse("  LEFT "), Some(Side::Left));
+    assert_eq!(Side::parse("上"), None);
+
+    std::fs::remove_dir_all(&dir).ok();
+}
+
 /// `C-w` walks the regions, `Esc` does nothing, `q` closes — Feature #293.
 #[test]
 fn the_panel_has_two_doors_and_esc_is_neither_of_them() {

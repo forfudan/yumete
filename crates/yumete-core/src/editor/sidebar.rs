@@ -12,13 +12,42 @@ impl Editor {
 
     /// **Which slot a view opens in — the one place that decides it** (#293).
     ///
-    /// Every view answers `Left` today, which is where the only panel this
-    /// editor has ever had already sits, so nothing moves. The day this reads
-    /// a setting instead is the day the reader can put the outline on the
-    /// right, and it is the only function that has to change: nothing else
-    /// here names a side of its own.
+    /// One answer for all of them, not one per view, and that is deliberate:
+    /// `Tab` walks the views **within a slot**, so splitting them across two
+    /// would break the one motion that holds them together.
     pub(super) fn side_for(&self, _view: crate::sidebar::View) -> crate::sidebar::Side {
-        crate::sidebar::Side::Left
+        self.sidebar_side
+    }
+
+    /// Put the resident panels on that side (`sidebar_side`).
+    ///
+    /// Whatever is already open moves with them, because a panel that stayed
+    /// where the old setting put it would make the setting a lie until the
+    /// next restart.
+    pub fn set_sidebar_side(&mut self, side: crate::sidebar::Side) {
+        if side == self.sidebar_side {
+            return;
+        }
+        let moving = self.panels[self.sidebar_side as usize].take();
+        let focused = self.panel_focus == Some((self.sidebar_side, crate::sidebar::Layer::Top));
+        self.sidebar_side = side;
+        self.panels[side as usize] = moving;
+        if focused {
+            self.panel_focus = Some((side, crate::sidebar::Layer::Top));
+        }
+        self.refresh_sidebar();
+    }
+
+    /// Put the transient panels on that side (`info_side`).
+    pub fn set_info_side(&mut self, side: crate::sidebar::Side) {
+        if side == self.info_side {
+            return;
+        }
+        let focused = self.panel_focus == Some((self.info_side, crate::sidebar::Layer::Bottom));
+        self.info_side = side;
+        if focused {
+            self.panel_focus = Some((side, crate::sidebar::Layer::Bottom));
+        }
     }
 
     /// The panel in that slot, for the front end to draw.
@@ -37,11 +66,13 @@ impl Editor {
     /// **Which slot the transient panels open in** — the one place that
     /// decides it (#293), the bottom layer's answer to [`Editor::side_for`].
     ///
-    /// The right, because what these show is 資訊 — what the cursor is
-    /// standing in — and the left is where 「what is there, and where am I in
-    /// it」 lives.
+    /// The right by default, because what these show is 資訊 — what the
+    /// cursor is standing in — and the left is where 「what is there, and
+    /// where am I in it」 lives. A setting (`info_side`), and it **may name
+    /// the same slot as the resident panels**: then the answer stacks under
+    /// the file tree, which is the shape VSCode's sidebar has.
     pub(super) fn transient_side(&self) -> crate::sidebar::Side {
-        crate::sidebar::Side::Right
+        self.info_side
     }
 
     /// **What the bottom of that slot is showing** — worked out afresh, never

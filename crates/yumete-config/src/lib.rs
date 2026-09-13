@@ -284,6 +284,15 @@ pub struct EditorConfig {
     /// two cells and a gap — so twenty-four is eight 縱 of page. Narrow enough
     /// to be worth the trade, wide enough for `卷二/驚蟄.md`.
     pub sidebar_width: usize,
+    /// Which side the resident panels open on — the file tree, the buffers,
+    /// the outline (Feature #293). `"left"` or `"right"`.
+    pub sidebar_side: String,
+    /// Which side the transient ones appear on — 字典 and the table detail.
+    ///
+    /// `"right"` by default. **May be the same as `sidebar_side`**: then the
+    /// answer stacks under the file tree instead of taking a second column,
+    /// which on a narrow window is the layout worth having.
+    pub info_side: String,
 }
 
 impl Default for EditorConfig {
@@ -334,6 +343,8 @@ impl Default for EditorConfig {
             paper_ticks: 0,
             tabs: Tabs::default(),
             sidebar_width: 24,
+            sidebar_side: "left".to_string(),
+            info_side: "right".to_string(),
         }
     }
 }
@@ -1748,6 +1759,8 @@ struct RawEditor {
     ambiguous_width: Option<String>,
     detail_width: Option<usize>,
     sidebar_width: Option<usize>,
+    sidebar_side: Option<String>,
+    info_side: Option<String>,
     tabs: Option<String>,
     syntax: Option<String>,
     ruler: Option<usize>,
@@ -1883,6 +1896,12 @@ impl RawConfig {
         }
         if other.editor.sidebar_width.is_some() {
             self.editor.sidebar_width = other.editor.sidebar_width;
+        }
+        if other.editor.sidebar_side.is_some() {
+            self.editor.sidebar_side = other.editor.sidebar_side.clone();
+        }
+        if other.editor.info_side.is_some() {
+            self.editor.info_side = other.editor.info_side.clone();
         }
         if other.editor.tabs.is_some() {
             self.editor.tabs = other.editor.tabs.clone();
@@ -2123,6 +2142,15 @@ impl RawConfig {
         }
         if let Some(width) = self.editor.sidebar_width {
             config.editor.sidebar_width = width.clamp(12, 60);
+        }
+        // Kept as written and parsed by the editor, the way `syntax` is: the
+        // words belong to the half that uses them, and an unknown one keeps
+        // the default there rather than being silently rewritten here.
+        if let Some(side) = self.editor.sidebar_side {
+            config.editor.sidebar_side = side;
+        }
+        if let Some(side) = self.editor.info_side {
+            config.editor.info_side = side;
         }
         if let Some(width) = self.editor.ambiguous_width {
             // An unknown value keeps the default rather than picking one: a

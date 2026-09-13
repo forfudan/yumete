@@ -35,6 +35,16 @@ impl Side {
     /// question about "any panel" walks.
     pub const BOTH: [Side; 2] = [Side::Left, Side::Right];
 
+    /// Parse a config value. An unknown word is `None`, and the caller keeps
+    /// the default rather than guessing: a typo here moves the whole page.
+    pub fn parse(value: &str) -> Option<Side> {
+        match value.trim().to_ascii_lowercase().as_str() {
+            "left" | "左" => Some(Side::Left),
+            "right" | "右" => Some(Side::Right),
+            _ => None,
+        }
+    }
+
     /// The other slot.
     pub fn other(self) -> Side {
         match self {
