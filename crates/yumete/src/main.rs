@@ -199,6 +199,14 @@ fn main() -> ExitCode {
     editor.set_autosave(config.editor.autosave);
     editor.set_smart_case(config.editor.smart_case);
     editor.set_wheel_step(config.editor.wheel_step);
+    // Which side each kind of panel lives on (#293). An unknown word keeps the
+    // default rather than picking one — a typo here moves the whole page.
+    if let Some(side) = yumete_core::sidebar::Side::parse(&config.editor.sidebar_side) {
+        editor.set_sidebar_side(side);
+    }
+    if let Some(side) = yumete_core::sidebar::Side::parse(&config.editor.info_side) {
+        editor.set_info_side(side);
+    }
     // Somewhere for a buffer with no file to keep its recovery copy. Only the
     // front end knows where the data directory is.
     // Where `:word-list global` writes, and where a reader's own dictionary is

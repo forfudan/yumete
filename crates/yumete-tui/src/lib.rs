@@ -4793,7 +4793,7 @@ fn draw_sidebar(frame: &mut Frame, editor: &Editor, config: &Config, side: Side,
             text
         };
         if picked {
-            for x in area.x..rule {
+            for x in from..to {
                 if let Some(cell) = buf.cell_mut((x, y)) {
                     cell.set_symbol(" ").set_style(style);
                 }
@@ -4827,7 +4827,7 @@ fn draw_sidebar(frame: &mut Frame, editor: &Editor, config: &Config, side: Side,
                 format!("{mark}{}", row.name)
             }
         };
-        put_text(buf, area.x + 1, y, rule, &line, style);
+        put_text(buf, from + 1, y, to, &line, style);
     }
 }
 
