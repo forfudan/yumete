@@ -7969,7 +7969,7 @@ fn the_panel_has_two_doors_and_esc_is_neither_of_them() {
     // **Esc is not a door.** A panel with a field in it spends Esc on leaving
     // Insert, so one press too many must not put the panel away.
     ed.on_key(Key::Esc);
-    assert_eq!(ed.panel_focus(), Some(Side::Left), "Esc did nothing at all");
+    assert_eq!(ed.panel_focus(), Some((Side::Left, crate::sidebar::Layer::Top)), "Esc did nothing at all");
 
     // With one panel and one work area the ring is two long, and C-w walks it
     // both ways round.
@@ -7977,7 +7977,7 @@ fn the_panel_has_two_doors_and_esc_is_neither_of_them() {
     assert_eq!(ed.panel_focus(), None, "C-w handed the keys to the writing");
     assert!(ed.panel(Side::Left).is_some(), "and left the panel up");
     ed.on_key(Key::Ctrl('w'));
-    assert_eq!(ed.panel_focus(), Some(Side::Left), "and round again");
+    assert_eq!(ed.panel_focus(), Some((Side::Left, crate::sidebar::Layer::Top)), "and round again");
 
     // `q` is the other door: this slot goes away and the keys come back.
     ed.on_key(Key::Char('q'));
@@ -8001,7 +8001,7 @@ fn the_panel_has_two_doors_and_esc_is_neither_of_them() {
     assert_eq!(ed.panel_focus(), None, "the other half is a region too");
     assert_ne!(ed.live_pane(), first, "and C-w went to it");
     ed.on_key(Key::Ctrl('w'));
-    assert_eq!(ed.panel_focus(), Some(Side::Left), "then round to the panel");
+    assert_eq!(ed.panel_focus(), Some((Side::Left, crate::sidebar::Layer::Top)), "then round to the panel");
 
     std::fs::remove_dir_all(&dir).ok();
 }

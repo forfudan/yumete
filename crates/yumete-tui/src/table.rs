@@ -22,6 +22,7 @@ use ratatui::Frame;
 use yumete_config::Config;
 use yumete_core::editor::Editor;
 use yumete_core::say;
+use yumete_core::sidebar::Side;
 use yumete_core::table::Rules;
 
 use crate::{gutter_width, put_text};
@@ -841,54 +842,19 @@ pub fn draw(
     caret
 }
 
-/// How wide the detail panel is drawn.
-///
-/// Wide enough for a heading and a 拆分 sequence side by side, and no wider:
-/// the grid is what the window is for.
-const DETAIL_WIDTH: u16 = 30;
-
-/// Split the panel off the right of an area, if there is one and it fits.
-///
-/// A **row's** panel goes down the *right*, because a row has twenty-eight
-/// fields and that is a tall thing — and it is a tall thing in a Markdown
-/// document as much as in a `.csv`. A **note's** goes along the bottom
-/// instead: a footnote is one short paragraph, and taking thirty columns off
-/// a page of writing to show it would be paying the wrong price.
-///
-/// **The panel's shape follows what it holds, not what the file is** (#283).
-/// It used to follow whether the table had taken the window, which gave a row
-/// in prose the note's four lines: two fields of five, two of twenty-eight.
-pub fn split_detail(editor: &Editor, config: &Config, area: Rect) -> (Rect, Option<Rect>) {
-    if !editor.detail_visible() {
-        return (area, None);
-    }
-    if editor.detail_shows_a_row() || editor.table().is_some_and(|t| t.takes_the_pane()) {
-        if area.width < DETAIL_WIDTH {
-            return (area, None);
-        }
-        let w = (editor.detail_width().unwrap_or(config.editor.detail_width) as u16)
-            .min(area.width / 2)
-            .max(12);
-        let grid = Rect::new(area.x, area.y, area.width - w, area.height);
-        let panel = Rect::new(area.x + area.width - w, area.y, w, area.height);
-        return (grid, Some(panel));
-    }
-    // **A note takes no rows off the page** (#294). It used to get a
-    // full-width four-row strip along the bottom — a wrong price twice over:
-    // one short paragraph left most of it blank, and the four rows came off
-    // the manuscript whether the note filled them or not. It floats now, in
-    // the same panel every other pop-up on the screen already is
-    // (`lib.rs::draw_note`), so there is nothing to carve out here.
-    (area, None)
-}
-
 /// The panel down the right: every field of the row the cursor is in.
 ///
 /// The grid can only show what fits across the window; this is where the rest
 /// of a twenty-eight-column row goes, along with the fields that are worked
 /// out rather than stored. It is a *reading* surface — nothing here is edited,
 /// and nothing here scrolls out from under you as you move along the row.
-pub fn draw_detail(frame: &mut Frame, editor: &Editor, config: &Config, area: Rect) {
+pub fn draw_detail(
+    frame: &mut Frame,
+    editor: &Editor,
+    config: &Config,
+    side: Side,
+    area: Rect,
+) {
     let Some(detail) = editor.detail() else {
         return;
     };
@@ -912,18 +878,23 @@ pub fn draw_detail(frame: &mut Frame, editor: &Editor, config: &Config, area: Re
             }
         }
     }
-    // A rule down the edge where a side panel meets the grid. Along the bottom
-    // the panel's own ground is already the boundary, and a rule there would
-    // cost a row of a four-row panel.
-    if editor.table().is_some_and(|t| t.takes_the_pane()) {
-        for y in area.y..area.y + area.height {
-            if let Some(cell) = buf.cell_mut((area.x, y)) {
-                cell.set_symbol("│").set_style(name);
-            }
+    // **A rule down the edge that faces the writing**, the same one the
+    // resident panel draws, so a slot reads as one column however it is
+    // divided (#293).
+    let rule = match side {
+        Side::Left => area.x + area.width - 1,
+        Side::Right => area.x,
+    };
+    for y in area.y..area.y + area.height {
+        if let Some(cell) = buf.cell_mut((rule, y)) {
+            cell.set_symbol("│").set_style(name);
         }
     }
 
-    let left = area.x + 2;
+    let (left, right) = match side {
+        Side::Left => (area.x + 2, rule),
+        Side::Right => (area.x + 2, right),
+    };
     put_text(buf, left, area.y, right, &detail.title, title);
     let mut y = area.y + 2;
     // The 部件 list first, because it is what the panel is *read for* — and it
