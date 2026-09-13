@@ -603,6 +603,18 @@ fn press(editor: &mut Editor, keys: &str) {
                                 break;
                             }
                         }
+                    } else if let Some(rest) = name.strip_prefix("ctrl-") {
+                        // `\{ctrl-w}` and its family. `C-w` walks the regions
+                        // (#293), and without this the one key that reaches a
+                        // side panel from the writing could not be pressed
+                        // offscreen — which is where the panels are looked at.
+                        match rest.chars().next() {
+                            Some(c) if rest.chars().count() == 1 => Key::Ctrl(c),
+                            _ => {
+                                eprintln!("yumete: --keys: ctrl- wants one character, got {rest:?}");
+                                break;
+                            }
+                        }
                     } else {
                     match name.as_str() {
                         "home" => Key::Home,
@@ -759,7 +771,7 @@ OPTIONS:
                      opens on the third keystroke can be looked at:
                      `\\e` Esc, `\\t` Tab, `\\n` Enter, `\\b` Backspace,
                      `\\^x` Control-x, `\\{{home}}` `\\{{end}}` `\\{{pgup}}`
-                     `\\{{pgdn}}` `\\{{del}}` `\\{{backtab}}` `\\{{alt-d}}`,
+                     `\\{{pgdn}}` `\\{{del}}` `\\{{backtab}}` `\\{{alt-d}}` `\\{{ctrl-w}}`,
                      `\\u\\d\\l\\r` the arrows. `--keys='::竖排'` opens the
                      command search with that in it.
         --html       With --shot: the frame **with its colours**, as one

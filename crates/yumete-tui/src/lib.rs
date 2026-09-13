@@ -37,7 +37,7 @@ use yumete_config::{Config, LineNumbers};
 use yumete_cjk::{Segmenter, WordMark};
 use yumete_core::command::Engagement;
 use yumete_core::editor::Hud;
-use yumete_core::sidebar::{Side, View};
+use yumete_core::sidebar::{Layer, Side, Transient, View};
 use yumete_core::wrap::{self, Anchor as WrapAnchor};
 use yumete_core::zong::{Anchor, Layout as WritingLayout};
 use yumete_core::{diag, say, Editor, Key, KeyOutcome, Mode, ShotJob, TextStore};
@@ -2677,9 +2677,8 @@ struct Areas {
     /// all — the page is two rows shorter and nothing else changes, the same
     /// arithmetic the tab bar and the command row already do.
     head: Rect,
-    /// What the page itself is drawn into, the detail panel already taken off.
+    /// What the page itself is drawn into.
     text: Rect,
-    detail: Option<Rect>,
     status: Rect,
     /// **The bottom row of all, or none** (#302): where `:` and `/` are typed,
     /// where a message about what just happened lands, and where the keys you
@@ -2733,7 +2732,11 @@ fn page_areas(editor: &Editor, config: &Config, area: Rect, head_rows: u16) -> A
     let head_rows = head_rows.min(page.height.saturating_sub(1));
     let head = Rect::new(page.x, page.y, page.width, head_rows);
     let page = Rect::new(page.x, page.y + head_rows, page.width, page.height - head_rows);
-    let (text, detail) = table::split_detail(editor, config, page);
+    // The detail panel used to be carved out here, off the right of the page
+    // (`table::split_detail`, gone). It is the bottom layer of the right slot
+    // now, taken off before the tab bar like every other panel — so the tab
+    // bar no longer runs over the top of it (#293).
+    let text = page;
     // 工作區 (Feature #176). **The cut runs across the direction the text
     // advances in**: 橫排 advances downward, so the panes are 上下; 縱書
     // advances leftward, so they are 左右 and the second takes the left. That
@@ -2778,7 +2781,6 @@ fn page_areas(editor: &Editor, config: &Config, area: Rect, head_rows: u16) -> A
         text,
         panes,
         divider,
-        detail,
         status,
         command,
     }
@@ -2800,13 +2802,12 @@ fn draw(
     let head_rows = 2 * u16::from(editor.table_head_is_off_the_page(top));
     let areas = page_areas(editor, config, area, head_rows);
     let Areas {
-        panels,
+        panels: slots,
         panes,
         divider,
         tabs: tab_area,
         head: head_area,
         text: text_area,
-        detail,
         status: status_area,
         command: command_area,
     } = areas;
@@ -2818,9 +2819,22 @@ fn draw(
         _ => command_area,
     };
     for side in Side::BOTH {
-        let rect = panels[side as usize];
-        if rect.width > 0 {
-            draw_sidebar(frame, editor, config, side, rect);
+        for (layer, rect) in Layer::BOTH
+            .into_iter()
+            .zip(slot_layers(editor, side, slots[side as usize]))
+        {
+            if rect.width == 0 || rect.height == 0 {
+                continue;
+            }
+            match layer {
+                Layer::Top => draw_sidebar(frame, editor, config, side, rect),
+                Layer::Bottom => match editor.transient(side) {
+                    Some(Transient::Detail) => {
+                        table::draw_detail(frame, editor, config, side, rect)
+                    }
+                    None => {}
+                },
+            }
         }
     }
     if tab_area.height > 0 {
@@ -2888,10 +2902,6 @@ fn draw(
     // reading the buffer back the way `:view-hud basic` does; a panel it covered
     // would be a panel with a hole in it.
     let mut panels: Vec<Rect> = Vec::new();
-    if let Some(panel) = detail {
-        table::draw_detail(frame, editor, config, panel);
-        panels.push(panel);
-    }
 
     draw_status(frame, editor, config, ime, status_area, tab_area, command_area.height == 1);
     if command_area.height == 1 {
@@ -4617,31 +4627,79 @@ fn draw_tabs(frame: &mut Frame, editor: &Editor, config: &Config, area: Rect) {
 /// reading a whole chapter name — actually happens; but never past half the
 /// window, because the writing is what the window is for.
 fn sidebar_columns(editor: &Editor, config: &Config, side: Side, total: u16) -> u16 {
-    let Some(sidebar) = editor.panel(side) else {
-        return 0;
-    };
-    // A sidebar narrower than three cells cannot be drawn — and the drawing
-    // used to *return* at that width, leaving the rectangle it had been given
-    // unpainted: a black stripe down a light page, for the third time. Below
-    // three cells there is no sidebar, so no rectangle is handed out.
-    let want = if sidebar.wide() {
-        // One column of padding on the left, the rule on the right, and the
-        // two the outline indents its rows by.
-        let longest = sidebar
-            .rows()
-            .iter()
-            .map(|row| yumete_cjk::str_width(&row.name) + 4)
-            .max()
-            .unwrap_or(0);
-        longest
-            .max(config.editor.sidebar_width)
+    // **The two layers share one width**, the wider one's — a slot is one
+    // column down the side of the page, not two of different widths with a
+    // ragged edge between them.
+    let mut want = 0usize;
+    if let Some(sidebar) = editor.panel(side) {
+        want = if sidebar.wide() {
+            // One column of padding on the left, the rule on the right, and
+            // the two the outline indents its rows by.
+            let longest = sidebar
+                .rows()
+                .iter()
+                .map(|row| yumete_cjk::str_width(&row.name) + 4)
+                .max()
+                .unwrap_or(0);
+            longest
+                .max(config.editor.sidebar_width)
+                .min(total as usize / 2)
+        } else {
+            config.editor.sidebar_width
+        };
+    }
+    // **A transient panel does not open on a page too narrow to spare it.**
+    // `split_detail` used to refuse below 30 columns, and the reason holds:
+    // the grid is what the window is for, and a panel that leaves eight
+    // columns of it is worse than no panel.
+    if editor.transient(side).is_some() && total >= DETAIL_WIDTH {
+        want = want
+            .max(editor.detail_width().unwrap_or(config.editor.detail_width))
             .min(total as usize / 2)
-    } else {
-        config.editor.sidebar_width
-    };
+            .max(12);
+    }
+    // A slot narrower than three cells cannot be drawn — and the drawing used
+    // to *return* at that width, leaving the rectangle it had been given
+    // unpainted: a black stripe down a light page, for the third time. Below
+    // three cells there is no slot, so no rectangle is handed out.
     match (want as u16).min(total.saturating_sub(8)) {
         got if got < 3 => 0,
         got => got,
+    }
+}
+
+/// The narrowest page a transient panel will open on.
+///
+/// Wide enough for a heading and a 拆分 sequence side by side, and no
+/// narrower: below this the grid is what the window is for.
+const DETAIL_WIDTH: u16 = 30;
+
+/// **How one slot divides between its two layers** — Feature #293.
+///
+/// The bottom takes what it needs and no more than half; the top keeps the
+/// rest. With nothing resident above it the bottom takes the slot whole, which
+/// is how the detail panel keeps the shape it has always had.
+///
+/// Asked by the drawing and by the mouse, so it is worked out here rather than
+/// twice.
+fn slot_layers(editor: &Editor, side: Side, slot: Rect) -> [Rect; 2] {
+    let none = Rect::new(slot.x, slot.y, 0, 0);
+    let top = editor.panel(side).is_some();
+    let bottom = editor.transient(side).is_some();
+    match (top, bottom) {
+        (false, false) => [none, none],
+        (true, false) => [slot, none],
+        (false, true) => [none, slot],
+        (true, true) => {
+            // What the bottom would like: its fields, a title and a blank row.
+            // Half the slot at most — the top is what a reader opened.
+            let want = (editor.transient_len(side) as u16 + 2).min(slot.height / 2);
+            let up = slot.height - want;
+            [
+                Rect::new(slot.x, slot.y, slot.width, up),
+                Rect::new(slot.x, slot.y + up, slot.width, want),
+            ]
+        }
     }
 }
 
@@ -4665,7 +4723,7 @@ fn draw_sidebar(frame: &mut Frame, editor: &Editor, config: &Config, side: Side,
     // half of the screen the keys are going to is never in doubt.
     // Focused, it is ink and paper changing places — the most robust 「這裏」
     // a terminal has, and it costs no colour and survives a light/dark flip.
-    let on = match editor.panel_focus() == Some(side) {
+    let on = match editor.panel_focus() == Some((side, Layer::Top)) {
         true => Style::default().bg(ink.text()).fg(ink.paper()),
         false => Style::default().bg(ink.selection()).fg(ink.text()),
     };

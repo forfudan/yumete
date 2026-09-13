@@ -44,6 +44,64 @@ impl Side {
     }
 }
 
+/// Which layer of a slot — Feature #293.
+///
+/// A slot is two panels stacked, and the difference between them is where
+/// their content comes from:
+///
+/// - the **top** is resident. It is put there by a key, it stays until `q`,
+///   and it holds state of its own (which view, where the highlight is, what
+///   is folded).
+/// - the **bottom** is transient and **holds nothing at all**: it is worked
+///   out afresh every frame from where the cursor is standing. When it stops
+///   being true it is simply not drawn, and the top is untouched.
+///
+/// ⚠️ **That is the whole reason for stacking them.** The alternative was one
+/// panel per slot whose content changed — and then putting the 字典 up over a
+/// table row means remembering what the slot held a moment ago and restoring
+/// it afterwards. Two layers, and there is nothing to remember.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+pub enum Layer {
+    /// The resident panel: a list, put there by a key.
+    #[default]
+    Top,
+    /// Worked out from the cursor, every frame.
+    Bottom,
+}
+
+impl Layer {
+    /// Both, in screen order.
+    pub const BOTH: [Layer; 2] = [Layer::Top, Layer::Bottom];
+}
+
+/// What the bottom of a slot is showing, if anything — Feature #293.
+///
+/// One of these is *derived*, never stored: see [`Layer::Bottom`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Transient {
+    /// What the cursor is standing in, field by field — Feature #296.
+    Detail,
+}
+
+impl Transient {
+    /// **Whether `C-w` stops here** — Feature #293.
+    ///
+    /// A transient panel is put up by the cursor, so one that takes the keys
+    /// is one the cursor cannot move while you are reading: it would freeze on
+    /// whatever it was showing when you walked in.
+    ///
+    /// [`Transient::Detail`] therefore does not. It has no need to: it already
+    /// scrolls itself to the field the cursor is in, which is a better answer
+    /// than a scrollbar — walk along the row and the panel follows. What
+    /// *will* take the keys is a panel with nothing on the page to walk: 字典
+    /// lists a character's readings and there is no cursor inside it.
+    pub fn takes_keys(self) -> bool {
+        match self {
+            Transient::Detail => false,
+        }
+    }
+}
+
 /// What a panel is showing.
 ///
 /// Views of one question — "what is there, and where am I in it" — at three

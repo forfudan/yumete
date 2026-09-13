@@ -34,15 +34,73 @@ impl Editor {
         self.panels[side as usize].as_mut()
     }
 
-    /// Which slot the keys are in, if either.
+    /// **Which slot the transient panels open in** — the one place that
+    /// decides it (#293), the bottom layer's answer to [`Editor::side_for`].
     ///
-    /// `None` when they are in the text — and also when the slot the focus
-    /// names has since been emptied, so a stale focus can never be reported as
-    /// a live one.
-    pub fn panel_focus(&self) -> Option<crate::sidebar::Side> {
-        let side = self.panel_focus?;
-        self.panel(side).map(|_| side)
+    /// The right, because what these show is 資訊 — what the cursor is
+    /// standing in — and the left is where 「what is there, and where am I in
+    /// it」 lives.
+    pub(super) fn transient_side(&self) -> crate::sidebar::Side {
+        crate::sidebar::Side::Right
     }
+
+    /// **What the bottom of that slot is showing** — worked out afresh, never
+    /// stored (#293).
+    pub fn transient(&self, side: crate::sidebar::Side) -> Option<crate::sidebar::Transient> {
+        if side != self.transient_side() {
+            return None;
+        }
+        self.detail_is_a_panel()
+            .then_some(crate::sidebar::Transient::Detail)
+    }
+
+    /// Whether the detail is the sort that wants a **panel** rather than the
+    /// floating note (#294).
+    ///
+    /// A row has twenty-eight fields and is a tall thing wherever it is
+    /// written; a footnote is one short paragraph, and taking a slot off the
+    /// page for it would be paying the wrong price — it floats over the
+    /// writing instead, near the cursor.
+    fn detail_is_a_panel(&self) -> bool {
+        self.detail_visible()
+            && (self.detail_shows_a_row()
+                || self.table.as_ref().is_some_and(|view| view.takes_the_pane()))
+    }
+
+    /// Whether that layer of that slot has anything in it to look at.
+    pub fn layer_showing(&self, side: crate::sidebar::Side, layer: crate::sidebar::Layer) -> bool {
+        match layer {
+            crate::sidebar::Layer::Top => self.panel(side).is_some(),
+            crate::sidebar::Layer::Bottom => self.transient(side).is_some(),
+        }
+    }
+
+    /// Whether that layer is a place the keys can be — a seat on `C-w`'s ring.
+    ///
+    /// Not the same question as [`Editor::layer_showing`]: a panel can be
+    /// worth reading and still be no place to stand
+    /// ([`crate::sidebar::Transient::takes_keys`]).
+    fn layer_takes_keys(&self, side: crate::sidebar::Side, layer: crate::sidebar::Layer) -> bool {
+        match layer {
+            crate::sidebar::Layer::Top => self.panel(side).is_some(),
+            crate::sidebar::Layer::Bottom => {
+                self.transient(side).is_some_and(|kind| kind.takes_keys())
+            }
+        }
+    }
+
+    /// Which slot and layer the keys are in, if any.
+    ///
+    /// `None` when they are in the text — and also when what the focus names
+    /// has since gone away, so a stale focus can never be reported as a live
+    /// one. That second half is what lets the bottom layer be derived: it
+    /// vanishes when the cursor moves off, and the keys fall back to the text
+    /// without anybody having to put them there.
+    pub fn panel_focus(&self) -> Option<(crate::sidebar::Side, crate::sidebar::Layer)> {
+        let (side, layer) = self.panel_focus?;
+        self.layer_showing(side, layer).then_some((side, layer))
+    }
+
 
     /// Which slot is showing that view, if either is.
     pub(super) fn showing(&self, view: crate::sidebar::View) -> Option<crate::sidebar::Side> {
@@ -66,10 +124,11 @@ impl Editor {
     ///   and take the keys. The key means "show me the outline", not "toggle
     ///   the panel".
     pub(super) fn show_sidebar(&mut self, view: crate::sidebar::View) {
+        use crate::sidebar::Layer;
         if let Some(side) = self.showing(view) {
-            match self.panel_focus() == Some(side) {
+            match self.panel_focus() == Some((side, Layer::Top)) {
                 true => self.close_panel(side),
-                false => self.focus_panel(side),
+                false => self.focus_layer(side, Layer::Top),
             }
             return;
         }
@@ -77,7 +136,7 @@ impl Editor {
         match self.panel_mut(side) {
             Some(panel) => {
                 panel.show(view);
-                self.panel_focus = Some(side);
+                self.panel_focus = Some((side, Layer::Top));
                 self.refresh_sidebar();
             }
             None => {
@@ -87,20 +146,24 @@ impl Editor {
         }
     }
 
-    /// Put that slot away, and the keys back in the text if they were in it.
+    /// Put that slot's resident panel away, and the keys back in the text if
+    /// they were in it.
     pub(super) fn close_panel(&mut self, side: crate::sidebar::Side) {
         self.panels[side as usize] = None;
-        if self.panel_focus == Some(side) {
+        if self.panel_focus.is_some_and(|(at, layer)| {
+            at == side && layer == crate::sidebar::Layer::Top
+        }) {
             self.panel_focus = None;
         }
     }
 
-    /// Give that slot the keys, if it has anything in it.
-    pub(super) fn focus_panel(&mut self, side: crate::sidebar::Side) {
-        if self.panel(side).is_some() {
-            self.panel_focus = Some(side);
-            self.refresh_sidebar();
+    /// Give that layer the keys, if it is a place they can be.
+    pub(super) fn focus_layer(&mut self, side: crate::sidebar::Side, layer: crate::sidebar::Layer) {
+        if !self.layer_takes_keys(side, layer) {
+            return;
         }
+        self.panel_focus = Some((side, layer));
+        self.refresh_sidebar();
     }
 
     /// **`C-w`: hand the keys to the next region** — Feature #293.
@@ -116,22 +179,26 @@ impl Editor {
     /// swallowing it, and a writer with the file tree up would then have no
     /// one key left that splits the page.
     pub(super) fn cycle_region(&mut self) {
-        use crate::sidebar::Side;
-        // `None` is the writing; the number says which half of it.
-        let mut ring: Vec<Option<Side>> = Vec::new();
-        if self.panel(Side::Left).is_some() {
-            ring.push(Some(Side::Left));
-        }
+        use crate::sidebar::{Layer, Side};
+        // `None` is the writing; the ones before it are the left slot's two
+        // layers, the ones after it the right slot's, all in screen order.
+        let seats = |ed: &Self, side: Side| -> Vec<Option<(Side, Layer)>> {
+            Layer::BOTH
+                .into_iter()
+                .filter(|&layer| ed.layer_takes_keys(side, layer))
+                .map(|layer| Some((side, layer)))
+                .collect()
+        };
+        let mut ring = seats(self, Side::Left);
         let panes = 1 + usize::from(self.other_pane().is_some());
+        let writing = ring.len();
         ring.extend(std::iter::repeat_n(None, panes));
-        if self.panel(Side::Right).is_some() {
-            ring.push(Some(Side::Right));
-        }
+        ring.extend(seats(self, Side::Right));
         let here = match self.panel_focus() {
-            Some(side) => ring.iter().position(|&r| r == Some(side)),
+            Some(seat) => ring.iter().position(|&r| r == Some(seat)),
             // The live half of the writing: its place in the ring is after
-            // whatever the left panel took.
-            None => Some(usize::from(self.panel(Side::Left).is_some()) + self.live_pane().min(1)),
+            // whatever the left slot took.
+            None => Some(writing + self.live_pane().min(1)),
         };
         let Some(here) = here else { return };
         if ring.len() < 2 {
@@ -139,11 +206,11 @@ impl Editor {
         }
         let next = (here + 1) % ring.len();
         match ring[next] {
-            Some(side) => self.focus_panel(side),
+            Some((side, layer)) => self.focus_layer(side, layer),
             None => {
                 self.panel_focus = None;
-                // Which half — the ring's index minus the left panel's seat.
-                let want = next - usize::from(self.panel(Side::Left).is_some());
+                // Which half — the ring's index minus the left slot's seats.
+                let want = next - writing;
                 if panes > 1 && want != self.live_pane().min(1) {
                     self.switch_pane();
                 }
@@ -169,7 +236,7 @@ impl Editor {
         }
         let side = self.side_for(view);
         self.panels[side as usize] = Some(sidebar);
-        self.panel_focus = Some(side);
+        self.panel_focus = Some((side, crate::sidebar::Layer::Top));
         self.refresh_sidebar();
     }
 
@@ -465,7 +532,7 @@ impl Editor {
         // Asked from the page, the keys go with the question. Asked while a
         // word is being typed, they must not — the reader is mid-word, and the
         // panel is only there to be glanced at.
-        self.panel_focus = focus.then_some(side);
+        self.panel_focus = focus.then_some((side, crate::sidebar::Layer::Top));
         self.refresh_sidebar();
     }
 
@@ -537,10 +604,15 @@ impl Editor {
                 _ => {}
             }
         }
-        let Some(side) = self.panel_focus() else {
+        let Some((side, layer)) = self.panel_focus() else {
             self.panel_focus = None;
             return;
         };
+        // Nothing reaches the bottom layer yet: the one transient panel
+        // there is follows the cursor and takes no keys (#293).
+        if layer == crate::sidebar::Layer::Bottom {
+            return;
+        }
         let Some(sidebar) = self.panel_mut(side) else {
             return;
         };
@@ -635,6 +707,24 @@ impl Editor {
             // inside it exactly as it opened it.
             Key::Char(' ') => self.pending = Pending::Space,
             _ => {}
+        }
+    }
+
+    /// **How many fields the bottom layer holds** — what its scrolling is
+    /// clamped to (#293).
+    ///
+    /// ⚠️ **Fields, not drawn lines.** A value too long for the column wraps,
+    /// and only the front end knows how wide the column is — so scrolling by
+    /// line would have to be clamped by a number the editor cannot work out.
+    /// A field is also the better step: it is the thing a reader is looking
+    /// for, and one press moves to the next one whether it took one row or
+    /// four.
+    pub fn transient_len(&self, side: crate::sidebar::Side) -> usize {
+        match self.transient(side) {
+            Some(crate::sidebar::Transient::Detail) => {
+                self.detail().map(|d| d.rows.len()).unwrap_or(0)
+            }
+            None => 0,
         }
     }
 

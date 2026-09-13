@@ -1961,8 +1961,8 @@ pub struct Editor {
     /// is [`Editor::side_for`]'s answer, one function, and the day it reads a
     /// setting instead of returning `Left` nothing else here changes.
     panels: [Option<crate::sidebar::Sidebar>; 2],
-    /// Which slot the keys are going to, if either.
-    panel_focus: Option<crate::sidebar::Side>,
+    /// Which slot **and which layer** the keys are going to, if any.
+    panel_focus: Option<(crate::sidebar::Side, crate::sidebar::Layer)>,
     /// What an unnamed file's markup is taken to be, from the project's config.
     default_syntax: Option<crate::syntax::Syntax>,
     /// Which markup a file is in, by extension or by exact name.
