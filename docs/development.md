@@ -452,8 +452,8 @@ index, and a row with no number anywhere else is a row that got lost.
 | 227 | **`:table` on a selection, and CSV both ways** | core | P3 | `:table-pipe`／`csv` in the buffer, `:export csv` to a file [^227] | Done |
 | 228 | **`t y` / `t p` for a whole column** | core | P3 | `yank_column`／`put_column`, in both branches [^228] | Done |
 | 229 | **The current cell is not drawn** | tui | P3 | the only feedback is the column name in the status line [^229] | Done |
-| 230 | **`？」` and `！」` squeezed into one square** | tui | P3 | clreq §6.3.2 splits them from `。」` — wanted: a decision [^230] | Planned |
-| 231 | **The 「hole」 branch in `zong.rs`** | tui | P3 | a third mark still keeps an empty margin square [^231] | Planned |
+| 230 | **`？」` and `！」` squeezed into one square** | tui | P3 | 只有真半寬形（`。、`）擠；其餘不掛，ASCII 標點不再進稿子 [^230] | Fixed 2026-09-13 |
+| 231 | **The 「hole」 branch in `zong.rs`** | tui | P3 | 掛不下就自己佔一格；⚠️ 洞比原記的常見得多 [^231] | Fixed 2026-09-13 |
 | 232 | **The column-number row's contrast** | tui | P3 | 尺子單獨一級 `RULER`＝250；4.01 → 5.63 [^232] | Fixed 2026-09-13 |
 | 233 | **`:check-usage`** | core | P4 | 61 groups, asked of the document rather than a dictionary [^233] | Done |
 | 234 | **`:ruby-auto`, and `:ruby-auto rare`** | core | P4 | readings by word, marked only where no standard has the 字 [^234] | Done |
@@ -6004,14 +6004,46 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     text, which is where a cell tint would also live
 
 [^230]: treated like `。」`, but clreq §6.3.2 treats the full-width 問號/嘆號
-    differently from the 句號 group. Which way a terminal should follow is a
-    typographic judgement, not a bug fix — wanted: a decision, then a line in
-    `zong.rs`
+    differently from the 句號 group.
+
+    **落地（2026-09-13）：只有 `。` 和 `、` 擠。** 查下去比規範問題更實在——擠的辦法是
+    換成窄形，而**只有 `。、「」` 有真正的半寬漢字形**（`margin_form` 裏其餘六個借的是
+    ASCII 孿生字）。所以開着懸掛的時候：
+
+    | 原本 | 從前擠成 | 現在 |
+    | --- | --- | --- |
+    | `。」` `、」` | `｡｣` `､｣` | 不變，一格 |
+    | `，」` | `,｣`（ASCII 逗號） | 各佔一格，都不掛 |
+    | `？」` `！」` | `?｣` `!｣`（ASCII） | 各佔一格，都不掛 |
+
+    clreq 的分法正好對得上：`。、` 在印刷上只占半個字身（右半是空的，括號嵌得進去），
+    `？！` 實打實占滿一格，壓不進去。新的 `yumete_cjk::narrow_form` 只答那四個真的；
+    `margin_form` 照舊肯退到 ASCII——**一個標點單獨掛在半格邊欄裏**的時候那正是它該做的。
+
+    ⚠️ **`.or()` 是急求值的。** 把 `margin_form` 改寫成 `narrow_form(c).or(Some(match …))`
+    的時候，`。` 先被 `narrow_form` 答了，可 `or` 的參數**照樣求值**，那個 match 落到
+    `_ => return None` 就把整個 `margin_form` 返回成 None——四個真窄形的標點一起不掛了。
+    `or_else` 纔對（`return` 在閉包裏只返回閉包）。
 
 [^231]: a third consecutive mark that finds both the margin and the pair-square
-    taken still keeps a margin row with an empty text square beside it. Rare.
-    What print does with three marks in a row is worth asking a typesetter
-    rather than guessing
+    taken still keeps a margin row with an empty text square beside it.
+
+    **落地（2026-09-13）：挂不下的標點自己佔一格。** ⚠️ **原記的「Rare」是錯的** ——
+    真去試就看見，洞不在「三個標點連着」，而在**基字的邊欄已經被開引號佔着**的時候，
+    那之後每一個標點都是一個空格子：
+
+    | | 從前 | 現在 |
+    | --- | --- | --- |
+    | `秋「冬」」` | 兩個空格子 | `秋` `冬(｢)` `﹂(｣)` |
+    | `春（。）」` | **四個**空格子 | `春` `︵` `︒` `︶(｣)` |
+    | `（（春` | 一個空格子 | `︵` `春(()` |
+
+    改法一句話：**掛不下就把字畫在格子裏**，而不是空一格、把字丟到邊欄。行數一樣
+    （邊欄在格子**旁邊**，不是代替它），洞沒了。開引號那一支同理——一個沒等到基字的
+    `（` 仍然是個標點。
+
+    不必問排字工：一個空格子在正文中間本來就是 標點旁置 要避免的那件事，而兩種畫法
+    佔的行數相同。
 
 [^232]: raised as a review finding on the chrome ground. Measuring it properly
     means measuring the whole ladder — a theme review rather than a patch, and
@@ -6427,7 +6459,14 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     all. 冰雪 needs data yumete does not compile, so it stays out until it does.
     Not a chore: the files carry `[[word]]`, `fixed`, `abbrev`, `select_keys`
     and the 頂功 rules, so taking them changes how typing behaves. Raised by 輸
-    入法Mac, 2026-09-05. **large**
+    入法Mac, 2026-09-05.
+
+    **落地（2026-09-13）。** `scripts/build.sh` 在寫完碼表之後把方案檔拷進同一個
+    `schemes/`，**逐個以剛寫下的那張表為閘**：`ling.ytab` → `lingming.toml`，
+    `xing`／`qing`／`riyue` 同理，拼音沒有自己的 `.ytab`，以共用的 `pinyin.yflb` 為閘。
+    ⚠️ 冰雪仍然在外——它要的數據 yumete 還不編。
+    ⚠️ **原描述已經過時的那一半**：`schemes/` 這個目錄 `build.sh` 早就在寫了（碼表在
+    裏面），缺的只是那幾個 `.toml`。所以這件事不 large，真正 large 的是當初看清它。
 
 [^263]: 2026-09-05：`:wrap 50` then `:wrap off` left a rule down the middle of
     the page with the writing running straight through it. The measure is kept
