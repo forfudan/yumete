@@ -32,6 +32,13 @@ pub enum Mode {
     /// is a command name or a description of one — and `vert` is both — and
     /// its Enter would either run a guess or mean two things on one key.
     Lookfor,
+    /// Typing into **a field of a side panel** — Feature #419.
+    ///
+    /// A third place text is typed, after the page and the command line: the
+    /// search panel's query box is neither. It is a mode of its own so that
+    /// every exhaustive `match` below has to answer for it — that is what this
+    /// enum is for — and so the IME lights up there without a special case.
+    Field,
 }
 
 impl Mode {
@@ -45,6 +52,7 @@ impl Mode {
             Mode::Ruby => "RUBY",
             Mode::Picker => "PICK",
             Mode::Lookfor => "LOOKUP",
+            Mode::Field => "FIELD",
         }
     }
 
@@ -60,7 +68,12 @@ impl Mode {
     pub fn is_prompt(self) -> bool {
         match self {
             Mode::Normal | Mode::Insert => false,
-            Mode::Command | Mode::Lookfor | Mode::Search | Mode::Ruby | Mode::Picker => true,
+            Mode::Command
+            | Mode::Lookfor
+            | Mode::Search
+            | Mode::Ruby
+            | Mode::Picker
+            | Mode::Field => true,
         }
     }
 
@@ -75,7 +88,14 @@ impl Mode {
     pub fn prompt_opens_in_english(self) -> bool {
         match self {
             Mode::Command | Mode::Lookfor => true,
-            Mode::Normal | Mode::Insert | Mode::Search | Mode::Ruby | Mode::Picker => false,
+            // A search pattern is Chinese as often as not — the same answer
+            // `/` gives, and for the same reason.
+            Mode::Normal
+            | Mode::Insert
+            | Mode::Search
+            | Mode::Ruby
+            | Mode::Picker
+            | Mode::Field => false,
         }
     }
 
@@ -95,7 +115,12 @@ impl Mode {
     /// TUI's `composes_here`, which asks this first and then asks the caret.
     pub fn composes(self) -> bool {
         match self {
-            Mode::Insert | Mode::Search | Mode::Ruby | Mode::Lookfor | Mode::Picker => true,
+            Mode::Insert
+            | Mode::Search
+            | Mode::Ruby
+            | Mode::Lookfor
+            | Mode::Picker
+            | Mode::Field => true,
             Mode::Normal | Mode::Command => false,
         }
     }
@@ -107,7 +132,8 @@ impl Mode {
     pub fn types_into_command_line(self) -> bool {
         match self {
             Mode::Command | Mode::Lookfor | Mode::Search | Mode::Ruby => true,
-            Mode::Normal | Mode::Insert | Mode::Picker => false,
+            // Like the picker, a panel's field has a store of its own.
+            Mode::Normal | Mode::Insert | Mode::Picker | Mode::Field => false,
         }
     }
 }

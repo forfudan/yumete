@@ -260,7 +260,12 @@ enum FindKind {
 /// case that prompted it: 425,694 bytes to 2,945,642, on one keystroke.
 const OVERSIZE_JUMP: u64 = 256 * 1024;
 
-const GREP_LIMIT: usize = 500;
+/// How many rows a listing holds. Everything is counted; this many are shown.
+///
+/// `:check` and its family put their findings in a buffer, and a manuscript
+/// can have thousands: the count is the useful half of that answer, and the
+/// list is for walking.
+const LISTING_LIMIT: usize = 500;
 
 /// The largest file `:grep` will read. A manuscript chapter is kilobytes;
 /// anything above this is data that happens to live in the same directory.
@@ -1970,6 +1975,8 @@ pub struct Editor {
     /// across from the tree, or the 字典 stacked under it. Two on one side
     /// share that slot — `Tab` walks them, the way the three used to.
     sides: [crate::sidebar::Side; crate::sidebar::Panel::ALL.len()],
+    /// The search panel's form and what it found (#419).
+    search: crate::search_panel::Search,
     /// Where the cursor was when the 字典 was asked, so the answer can go when
     /// the cursor leaves without anybody having to take it away (#293).
     dictionary_anchor: Option<usize>,
@@ -1982,18 +1989,13 @@ pub struct Editor {
     syntax_by_name: HashMap<String, crate::syntax::Syntax>,
     /// The directory the last `:grep` listing was gathered from, so `gf` on one
     /// of its lines resolves the same relative path it printed.
-    grep_root: Option<PathBuf>,
+    listing_root: Option<PathBuf>,
     /// The reader's own 用字 groups, from `[editor] usage_groups` (#233).
     ///
     /// The built-in table cannot hold a novel's own names, and a novel's own
     /// names are what a manuscript slips on: 阿嬌 in chapter two and 阿姣 in
     /// chapter nineteen is invisible to every checker there is.
     usage_groups: Vec<String>,
-    /// The last `:grep`: its pattern and the files it hit.
-    ///
-    /// What `:replace` acts on — so a project-wide change can only be made to
-    /// something the writer has **already looked at**.
-    grep_found: Option<(String, Vec<PathBuf>)>,
     /// 字 each open file held when this session opened it (Feature #244).
     ///
     /// What a day's writing is counted *from* when the log has no row for
@@ -2311,7 +2313,9 @@ impl Editor {
             // 檔案／緩衝區／大綱 on the left — 「what is there, and where am
             // I in it」; 字典／詳情 on the right — 「what is this thing I am
             // standing on」. Two questions, two columns.
+            search: crate::search_panel::Search::default(),
             sides: [
+                crate::sidebar::Side::Left,
                 crate::sidebar::Side::Left,
                 crate::sidebar::Side::Left,
                 crate::sidebar::Side::Left,
@@ -2322,9 +2326,8 @@ impl Editor {
             transient_scroll: 0,
             default_syntax: None,
             syntax_by_name: HashMap::new(),
-            grep_root: None,
+            listing_root: None,
             usage_groups: Vec::new(),
-            grep_found: None,
             opened_with: HashMap::new(),
             time_offset: None,
         }
@@ -3063,6 +3066,7 @@ mod detail;
 mod edits;
 mod files;
 mod help;
+mod find;
 mod hint;
 mod jumps;
 mod keys;

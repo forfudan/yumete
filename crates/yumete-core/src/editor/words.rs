@@ -579,6 +579,12 @@ impl Editor {
         if text.is_empty() {
             return;
         }
+        // A field of a side panel is a third place text is typed, after the
+        // page and the command line (#419) — and the box a novelist searches
+        // in is Chinese far more often than not.
+        if self.mode == Mode::Field {
+            return self.type_into_field(text);
+        }
         // A `/` search or a `:` substitution is text too, and in a Chinese
         // document it is usually Chinese text. Committed characters go wherever
         // the mode is collecting them, not always into the buffer.

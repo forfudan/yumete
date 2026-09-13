@@ -155,10 +155,6 @@ pub enum Command {
         /// Which lines it touches.
         rows: Rows,
     },
-    /// `:replace <text>` — change what the last `:grep` found, everywhere it
-    /// found it. The pattern is the one you already looked at. `:replace!`
-    /// goes through even where it changes how many cells a row has.
-    ReplaceFound(String, bool),
     /// `:write-all` — save every buffer that has changed.
     WriteAll,
     /// `:undo` (alias `:u`) — undo the last change.
@@ -212,6 +208,13 @@ pub enum Command {
     SetNote(Option<bool>),
     /// `:table-numbers on|off` — the row of column numbers above the header.
     SetTableNumbers(bool),
+    /// `:search` — open the search panel (#419).
+    ///
+    /// ⚠️ **It takes no pattern.** What to look for is typed in the panel's
+    /// own box; a command only ever names a *place*, so that `:search 卵` can
+    /// mean 「the folder called 卵」 without anybody having to guess. The
+    /// places are the second sitting's `-cd`/`-wd`/`-gd`.
+    OpenSearch,
     /// `:sidebar-show-left|right [panel]` — which side a panel lives on
     /// (#293). No name means the one holding the keys.
     ShowSidebarAt(crate::sidebar::Side, Option<crate::sidebar::Panel>),
@@ -371,8 +374,6 @@ pub enum Command {
     Outline(Option<usize>),
     /// `:table-jump 木` — go to the row this table names by that character.
     GotoRow(String),
-    /// `:grep <pattern>` — search every file in the project.
-    Grep(String),
     /// `:check-merge` — the merge conflicts in this file, as a results buffer
     /// (Feature #249).
     Conflicts,
@@ -3047,6 +3048,14 @@ pub const COMMANDS: &[Entry] = &[
         }),
     },
     Entry {
+        name: "search",
+        aliases: &[],
+        help: "cmd.commands.search",
+        needs: &[],
+        params: &[],
+        build: Some(|_| Ok(Command::OpenSearch)),
+    },
+    Entry {
         name: "sidebar-show-left",
         aliases: &[],
         help: "cmd.sidebar.left",
@@ -3323,38 +3332,12 @@ pub const COMMANDS: &[Entry] = &[
         }),
     },
     Entry {
-        name: "grep",
-        aliases: &["gr"],
-        help: "cmd.commands.grep",
-        needs: &[],
-        params: &[Param::Free("<字串>")],
-        build: Some(|p| {
-            match p.arg(0) {
-                None => Err(CommandError::MissingArgument("grep")),
-                Some(what) => Ok(Command::Grep(what.to_string())),
-            }
-        }),
-    },
-    Entry {
         name: "diff",
         aliases: &[],
         help: "cmd.commands.diff",
         needs: &[],
         params: &[Param::Path],
         build: Some(|p| Ok(Command::Diff(p.arg(0).map(|s| s.to_string())))),
-    },
-    Entry {
-        name: "replace",
-        aliases: &[],
-        help: "cmd.commands.replace",
-        needs: &[],
-        params: &[Param::Free("<換成什麽>")],
-        build: Some(|p| {
-            match p.arg(0) {
-                None => Err(CommandError::MissingArgument("replace")),
-                Some(with) => Ok(Command::ReplaceFound(with.to_string(), p.force)),
-            }
-        }),
     },
     Entry {
         name: "toc",
@@ -3538,6 +3521,9 @@ pub fn takes_text(line: &str) -> bool {
 /// it was wrong for the four typed all day, whose short spellings are in every
 /// vi user's fingers. The long spellings still work and still say what they do
 /// — these are a second way in, not a rename back.
+// ⚠️ `search` was here (it pointed at `table-find`) and is gone from it:
+// #419 gave the name to a live command, and a signpost may only point
+// *away* from a word nobody can type any more.
 const RENAMED: &[(&str, &str)] = &[
     ("appearance", "theme"),
     ("bclose", "buffer-close"),
@@ -3546,7 +3532,6 @@ const RENAMED: &[(&str, &str)] = &[
     ("row", "table-jump"),
     ("sav", "write-as"),
     ("saveas", "write-as"),
-    ("search", "table-find"),
     ("wall", "write-all"),
 ];
 
@@ -5446,7 +5431,7 @@ mod tests {
             "goto",
             "count",
             "check-usage",
-            "grep",
+            "search",
             "diff",
             "toc",
             "export",

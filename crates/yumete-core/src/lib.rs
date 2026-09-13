@@ -40,6 +40,7 @@ pub mod picker;
 pub mod progress;
 pub mod punct;
 pub mod ruby;
+pub mod search_panel;
 pub mod sidebar;
 pub mod table;
 pub mod syntax;

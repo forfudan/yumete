@@ -157,7 +157,7 @@ impl Editor {
                 let list: String = missing.iter().collect();
                 found.push(say!("chaifen.component-not-found", name, line + 1, list));
             }
-            if found.len() >= GREP_LIMIT {
+            if found.len() >= LISTING_LIMIT {
                 break;
             }
         }
@@ -182,7 +182,7 @@ impl Editor {
         }
         let mut buffer = Buffer::from_text(&listing);
         buffer.name_as(&say!("chaifen.lint-results", name));
-        self.grep_root = self
+        self.listing_root = self
             .current_buffer()
             .path()
             .and_then(|p| p.parent())
@@ -226,7 +226,7 @@ impl Editor {
         }
         let n = slips.len();
         let mut listing = String::new();
-        for slip in slips.iter().take(GREP_LIMIT) {
+        for slip in slips.iter().take(LISTING_LIMIT) {
             listing.push_str(&say!(
                 "check.usage-slip",
                 name,
@@ -239,11 +239,11 @@ impl Editor {
             listing.push('\n');
         }
         self.show_listing(listing, say!("check.usage-results", name));
-        // The listing stops at `GREP_LIMIT`; the count must say so, or the
+        // The listing stops at `LISTING_LIMIT`; the count must say so, or the
         // status line reports 八百處 over a buffer holding five hundred and the
         // reader believes they have seen them all. `:grep` has always said it.
-        self.status = match n > GREP_LIMIT {
-            true => say!("check.usage-too-many", GREP_LIMIT),
+        self.status = match n > LISTING_LIMIT {
+            true => say!("check.usage-too-many", LISTING_LIMIT),
             false => say!("check.usage-found", n),
         };
     }
@@ -286,7 +286,7 @@ impl Editor {
         }
         let n = found.len();
         let mut listing = String::new();
-        for word in found.iter().take(GREP_LIMIT) {
+        for word in found.iter().take(LISTING_LIMIT) {
             listing.push_str(&say!(
                 "words.habit",
                 name,
@@ -298,8 +298,8 @@ impl Editor {
             listing.push('\n');
         }
         self.show_listing(listing, say!("words.results", name));
-        self.status = match n > GREP_LIMIT {
-            true => say!("words.too-many", GREP_LIMIT),
+        self.status = match n > LISTING_LIMIT {
+            true => say!("words.too-many", LISTING_LIMIT),
             false => say!("words.found", n),
         };
     }
@@ -307,12 +307,12 @@ impl Editor {
     /// Put a `檔名:行號: …` listing in a buffer of its own and go to it.
     ///
     /// The shape `:grep`, `:table-check` and both `:check` share: `gf` on a row
-    /// is how a reader goes and fixes one, and that needs `grep_root` to be the
+    /// is how a reader goes and fixes one, and that needs `listing_root` to be the
     /// directory the file it was run on lives in.
     pub(super) fn show_listing(&mut self, listing: String, name: String) {
         let mut buffer = Buffer::from_text(&listing);
         buffer.name_as(&name);
-        self.grep_root = self
+        self.listing_root = self
             .current_buffer()
             .path()
             .and_then(|p| p.parent())
@@ -350,7 +350,7 @@ impl Editor {
         }
         let n = slips.len();
         let mut listing = String::new();
-        for slip in slips.iter().take(GREP_LIMIT) {
+        for slip in slips.iter().take(LISTING_LIMIT) {
             let at = slip.line + 1;
             listing.push_str(&match slip.kind {
                 crate::punct::Kind::HalfWidth => {
@@ -369,8 +369,8 @@ impl Editor {
             listing.push('\n');
         }
         self.show_listing(listing, say!("check.punct-results", name));
-        self.status = match n > GREP_LIMIT {
-            true => say!("check.punct-too-many", GREP_LIMIT),
+        self.status = match n > LISTING_LIMIT {
+            true => say!("check.punct-too-many", LISTING_LIMIT),
             false => say!("check.punct-found", n),
         };
     }
@@ -441,7 +441,7 @@ impl Editor {
         }
         let n = order.len();
         let mut listing = String::new();
-        for ch in order.iter().take(GREP_LIMIT) {
+        for ch in order.iter().take(LISTING_LIMIT) {
             let (line, count, block) = &seen[ch];
             listing.push_str(&say!(
                 "check.charset-outside",
@@ -454,8 +454,8 @@ impl Editor {
             listing.push('\n');
         }
         self.show_listing(listing, say!("check.charset-results", name));
-        self.status = match n > GREP_LIMIT {
-            true => say!("check.charset-too-many", GREP_LIMIT),
+        self.status = match n > LISTING_LIMIT {
+            true => say!("check.charset-too-many", LISTING_LIMIT),
             false => say!("check.charset-found", n),
         };
     }

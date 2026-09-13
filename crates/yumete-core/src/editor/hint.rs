@@ -41,6 +41,37 @@ impl Editor {
                     ]);
             }
         }
+        // **In the box, before anything about the panel around it** (#419):
+        // the keys are in a field, and the one that is not obvious is that
+        // `Enter` walks the hits without giving them back.
+        if self.mode == Mode::Field {
+            return Hint::Keys(say!("label.panel.search"), vec![
+                    ("Enter", say!("hint.search.next-hit")),
+                    ("Tab", say!("hint.search.next-cell")),
+                    ("Esc", say!("hint.search.out-of-the-box")),
+                ]);
+        }
+        // **Walking the hits: the row says what is around this one** (#419).
+        // The panel is a column and a line of a novel is a paragraph, so the
+        // excerpt there is a few characters; this row is the width of the
+        // window. It displaces the panel's keys, and that is the right trade
+        // while a reader is choosing which hit to go to.
+        if let Some(line) = self.hit_in_context() {
+            return Hint::Says(line);
+        }
+        // The search panel is a form, not a list: none of the tree's keys
+        // mean anything in it (#419).
+        if let Some((side, crate::sidebar::Layer::Top)) = self.panel_focus() {
+            if self.panel(side).map(|p| p.view()) == Some(crate::sidebar::View::Search) {
+                return Hint::Keys(say!("label.panel.search"), vec![
+                        ("i", say!("hint.search.type")),
+                        ("Tab", say!("hint.search.next-cell")),
+                        ("Enter", say!("hint.search.use-it")),
+                        ("C-w", say!("hint.sidebar.back-to-text")),
+                        ("q", say!("hint.close")),
+                    ]);
+            }
+        }
         if self.sidebar_focused() {
             return Hint::Keys(say!("hint.sidebar"), vec![
                     ("Tab", say!("hint.sidebar.other-view")),

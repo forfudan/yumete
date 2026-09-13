@@ -641,7 +641,7 @@ index, and a row with no number anywhere else is a row that got lost.
 | 416 | **`gd` `gD` `g/` `g?` 在表格裏換了意思** | core | P1 | `g` 是全文的命令組，`t` 是表格的 [^416] | Fixed 2026-09-12 |
 | 417 | **`:x` 只是 `:wq` 的別名，沒有「改過纔存」** | core | P2 | vi 與 helix 的 `:x` 不動沒改過的檔，`:update` 整個沒有 [^417] | Fixed 2026-09-12 |
 | 418 | **Markdown 沒有自動補全** | core+tui | P2 | 一 · 列表接續、二 · `[^`／`](#` 補全落地；`[[` 等跨檔索引 [^418] | Planned (一二 done) |
-| 419 | **搜索與替換做成一扇邊欄面板** | core+tui | P2 | `:grep`／`:replace` 換成 VSCode 那種面板，八個命令只管位置 [^419] | Planned |
+| 419 | **搜索與替換做成一扇邊欄面板** | core+tui | P1 | 一（本 buffer）已落地；二 跨檔、三 替換 [^419] | In progress |
 
 ### 5.5 · A table is a delimiter, a surface and a boundary (#261)
 
@@ -10568,7 +10568,42 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
       是**第三種**（既不在文檔裏也不在命令行上），那道閘加一支「鍵在面板的格子裏」，
       上屏的字送進那一格；候選面板與單按 Shift 切中英跟着白拿，它們問的是同一道閘。
 
-        **`:grep` 與舊的 `:replace` 刪掉，不留別名**（`ReplaceFound`、`grep_root`、
+        ---
+
+    **第一次坐下落地（2026-09-13）。** 面板、搜索框、三個開關，只搜本 buffer。
+
+    * **`Mode::Field`**（`input.rs`）——正文與命令行之外**第三個**打字的地方。加進那個
+      枚舉而不是加個布爾，是因為它的四個窮盡 `match` 會逼着新模式回答「這裏能不能打
+      中文」「開在英文嗎」：⚠️ **輸入法因此一行都沒改**（`composes_here` 問的就是
+      `mode().composes()`）。上屏的字在 `insert_committed`／`paste_text` 兩處改道進格子。
+    * **`search_panel.rs`** 是狀態（框、三檔大小寫、五個格子、命中），**`editor/find.rs`**
+      是跑與鍵，畫在 tui 的 `draw_search`。
+    * ⚠️ **`last_search` 存的是引擎跑的那條 pattern（帶標誌），框裏存的是人打的字。**
+      一開始把前者當成後者回填，框裏就回顯出 `(?i)霜`。面板記自己的 `query`，
+      `last_search` 只是「頁面上打過 `/`」的退路。
+    * ⚠️ **敏感那一檔要寫成 `(?-i)`，不能默不作聲。** 頁面的 `n` 會把這條 pattern 再過
+      一次 smart case（`compile`），默不作聲的那條會被補上 `(?i)`，於是 `n` 與面板搜得
+      不一樣。標誌按順序生效，寫在前面的那個贏。
+    * ⚠️ **「有選區就用選區」要求選區**不止一個字**。** 這個編輯器每個動作都留選區、
+      光標蓋着自己那一格，所以「一個字」是光標站的地方、不是誰劃的——照單全收的話框
+      永遠回填不到上次那個詞。
+    * ⚠️ **`Tab` 現在輪四個視圖**，而搜索面板要 32 欄（`SEARCH_WIDTH`），比檔案樹寬
+      8 欄——轉過去整頁重排一次。
+    * ⚠️ **`RENAMED` 裏 `("search", "table-find")` 那塊指路牌撤了**：`:search` 又是活
+      命令了，而指路牌只能指向一個**沒人打得出來**的名字。手冊那張「沒有了」表也標了
+      這一條——同一個字，完全不同的一件事。
+    * **`:grep`／`:replace` 連根拔掉**（`Command::Grep`、`ReplaceFound`、`files.rs` 的
+      兩支、`grep_found`、十二則訊息、五個測試）。`grep_root`／`GREP_LIMIT` **留下改名**
+      為 `listing_root`／`LISTING_LIMIT`——`:check` 那幾張清單一直在用它們。
+      ⚠️ **順帶丟了兩條覆蓋**：走目錄時認 `.gitignore`、以及「哪裏算這本書」，從前是靠
+      `:grep` 的測試蓋着的。`walk()` 本身還在（選擇器用），**第二次坐下要把那兩條補回來**。
+    * ⚠️ **`/` 並不高亮全部命中**——查證過了，畫面上那些交替底色是字格條紋。所以「面板一
+      搜正文全亮」**不是接管 `last_search` 就白拿的**，是一個還不存在的功能，而且做了會
+      同時改變 `/` 的行為（整頁亮起來）。**沒做，等作者定。**
+
+    ---
+
+    **`:grep` 與舊的 `:replace` 刪掉，不留別名**（`ReplaceFound`、`grep_root`、
     `grep_found`、那個結果緩衝區一併拆）。`:replace` 這個名字被新面板拿走了，意思
     完全不同，留成別名只會讓人打出舊行為。`/` 與 `:s` 不動——那兩個是「在眼前這一頁
     找一個字」，跟這扇面板不是一件事。

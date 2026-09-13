@@ -434,6 +434,9 @@ impl Editor {
                 })
                 .collect(),
             View::Outline => self.outline_rows(),
+            // Its own store, its own shape: a form and a list of hits, not
+            // rows of a tree (#419).
+            View::Search => return,
         };
         if let Some(panel) = self.panel_mut(side) {
             panel.set_rows(rows);
@@ -755,6 +758,9 @@ impl Editor {
         if layer == crate::sidebar::Layer::Bottom {
             return self.on_transient_key(key, side);
         }
+        if self.panel(side).map(|p| p.view()) == Some(crate::sidebar::View::Search) {
+            return self.on_search_panel_key(key, side);
+        }
         let Some(sidebar) = self.panel_mut(side) else {
             return;
         };
@@ -892,7 +898,7 @@ impl Editor {
             self.status = say!("picker.no-files-here");
             return;
         }
-        self.grep_root = Some(root);
+        self.listing_root = Some(root);
         self.picker = Some(crate::picker::Picker::new(&say!("picker.files"), items));
         self.mode = Mode::Picker;
     }
@@ -952,7 +958,7 @@ impl Editor {
                 self.close_picker();
                 match chosen {
                     Some(crate::picker::Item::File(path)) => {
-                        let full = match &self.grep_root {
+                        let full = match &self.listing_root {
                             Some(root) => root.join(&path),
                             None => PathBuf::from(&path),
                         };
@@ -1056,6 +1062,11 @@ impl Editor {
             // submit it — asked of the mode rather than listed here (#351).
             // The picker is a prompt too, but its query has a store of its
             // own and nothing here reaches it.
+            // A panel's field has a store of its own, like the picker's.
+            Mode::Field => {
+                let text: String = text.chars().filter(|c| !c.is_control()).collect();
+                self.type_into_field(&text);
+            }
             mode => {
                 if mode.types_into_command_line() {
                     for c in text.chars().filter(|c| !c.is_control()) {
