@@ -50,7 +50,8 @@ pub use segment::{
     Segmenter, WithWords, WordLevel, WordList, WordMark,
 };
 pub use vertical::{
-    hangs_in_the_margin, margin_form, opens_a_pair, vertical_form, vertical_grapheme, Layout,
+    hangs_in_the_margin, margin_form, narrow_form, opens_a_pair, vertical_form,
+    vertical_grapheme, Layout,
     DEFAULT_ZONG_GAP, DEFAULT_ZONG_LENGTH,
 };
 pub use width::{

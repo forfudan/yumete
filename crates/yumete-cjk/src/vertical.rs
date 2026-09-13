@@ -119,12 +119,10 @@ pub fn hangs_in_the_margin(c: char) -> bool {
 /// assert_eq!(margin_form('《'), None);
 /// ```
 pub fn margin_form(c: char) -> Option<char> {
-    Some(match c {
-        // The four CJK marks Unicode gives a true narrow form.
-        '。' => '｡',
-        '、' => '､',
-        '「' => '｢',
-        '」' => '｣',
+    // ⚠️ `or_else`, not `or`: the argument of `or` is **evaluated either way**,
+    // and the `return None` inside this match would then return it out of
+    // `margin_form` for 。 and 、 — the two marks that had just been answered.
+    narrow_form(c).or_else(|| Some(match c {
         // The rest borrow their ASCII twin, which is the same mark drawn narrow.
         '，' => ',',
         '？' => '?',
@@ -133,6 +131,25 @@ pub fn margin_form(c: char) -> Option<char> {
         '；' => ';',
         '（' => '(',
         '）' => ')',
+        _ => return None,
+    }))
+}
+
+/// **The four CJK marks Unicode gives a真 narrow form** — Feature #230.
+///
+/// Not the same question as [`margin_form`], which will settle for the ASCII
+/// twin: that is good enough for one mark hanging alone in a half-cell margin,
+/// and **not** good enough where the narrow glyph lands in the writing itself.
+/// 。 and 、 are half-em glyphs in print — the right half of the em is blank,
+/// which is what lets a closing bracket nest into it — while ？ and ！ fill
+/// theirs, and clreq §6.3.2 separates them from the 句號 group for exactly
+/// that reason.
+pub fn narrow_form(c: char) -> Option<char> {
+    Some(match c {
+        '。' => '｡',
+        '、' => '､',
+        '「' => '｢',
+        '」' => '｣',
         _ => return None,
     })
 }

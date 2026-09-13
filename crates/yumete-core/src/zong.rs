@@ -584,12 +584,17 @@ fn push_plain(
                 // in document order and answered quietly with the wrong row
                 // when they were not.
                 if let Some((opened_at, earlier)) = opening.take() {
+                    // ⚠️ **Its own square, not an empty one with the glyph in
+                    // the margin** (#231): an opener that never reached a base
+                    // — `（（` or `（。` — is still a mark, and a blank square
+                    // in the middle of the column is the one thing 標點旁置
+                    // exists to avoid.
                     slots.push(Slot {
                         start: opened_at,
                         end: at,
-                        text: String::new(),
+                        text: rotate(&chars[opened_at..at.min(chars.len())].iter().collect::<String>()),
                         ruby: None,
-                        mark: Some(earlier),
+                        mark: None,
                         ink: None,
                     });
                     swallowed = None;
@@ -640,6 +645,17 @@ fn push_plain(
                     // one is the *opener* waiting for the base it introduces,
                     // with 冬 written between them: pulling it out would put
                     // 「 after the character it opens.
+                    //
+                    // ⚠️ **…and only where both marks have a *true* narrow
+                    // form** (#230). 。 and 、 are the ones: half-em glyphs
+                    // whose right half is blank, which is what a bracket nests
+                    // into. ？ and ！ fill their em — clreq §6.3.2 separates
+                    // them from the 句號 group for exactly that — and the only
+                    // narrow twin Unicode has for them is the **ASCII** mark,
+                    // so squeezing wrote `?」` and `,」` into a manuscript set
+                    // in Chinese. Those pairs do not hang at all: both marks
+                    // come back and take a square each, which is what
+                    // 連續標點不作懸掛 says anyway.
                     Some(previous)
                         if previous.end == at
                             && !previous.text.is_empty()
@@ -652,26 +668,57 @@ fn push_plain(
                         // hanging on it moves into the new one.
                         let earlier_at = previous.end.saturating_sub(1);
                         previous.end = earlier_at;
+                        let solid = yumete_cjk::narrow_form(chars[at - 1]).is_some()
+                            && yumete_cjk::narrow_form(mark).is_some();
+                        if solid {
+                            slots.push(Slot {
+                                start: earlier_at,
+                                end: from + w[1],
+                                text: format!("{earlier}{hung}"),
+                                ruby: None,
+                                mark: None,
+                                ink: None,
+                            });
+                            continue;
+                        }
+                        // Neither hangs: the earlier one goes back to a square
+                        // of its own, full width, and so does this one.
                         slots.push(Slot {
                             start: earlier_at,
-                            end: from + w[1],
-                            text: format!("{earlier}{hung}"),
+                            end: at,
+                            text: rotate(&chars[at - 1].to_string()),
                             ruby: None,
                             mark: None,
                             ink: None,
                         });
+                        slots.push(Slot {
+                            start: at,
+                            end: from + w[1],
+                            text: rotate(&body),
+                            ruby: None,
+                            mark: None,
+                            ink: None,
+                        });
+                        swallowed = None;
                         continue;
                     }
-                    // Anything else that finds the margin taken keeps a margin
-                    // row of its own — a closing bracket after a base that is
-                    // carrying its opener, say.
+                    // **Anything else that finds the margin taken keeps its
+                    // own square** — Feature #231.
+                    //
+                    // ⚠️ It used to take a margin row with the text square
+                    // beside it **empty**, which is a hole in the middle of
+                    // the column — and not a rare one: 秋「冬」」 makes two of
+                    // them and 春（。）」 makes four, because a base already
+                    // carrying an opener has no margin left to give. A row is
+                    // a row either way, so putting the glyph in the square
+                    // costs nothing and leaves nothing blank.
                     Some(_) => {
                         slots.push(Slot {
                             start: swallowed.take().unwrap_or(at),
                             end: from + w[1],
-                            text: String::new(),
+                            text: rotate(&body),
                             ruby: None,
-                            mark: Some(hung),
+                            mark: None,
                             ink: None,
                         });
                         continue;
@@ -2725,9 +2772,12 @@ mod tests {
         let slots = line_slots_plain("春。夏、秋「冬」", grid);
         let marks: Vec<Option<char>> = slots.iter().map(|s| s.mark).collect();
         // 秋 carries nothing: the 「 after it waits for 冬, which it introduces.
-        // The closing 」 finds 冬's margin already taken and gets a margin row
-        // of its own — one cell holds one mark.
-        assert_eq!(marks, [Some('｡'), Some('､'), None, Some('｢'), Some('｣')]);
+        // ⚠️ The closing 」 finds 冬's margin already taken, and **keeps a
+        // square of its own** rather than a margin row with a blank square
+        // beside it (#231) — a row is a row either way, and one of the two
+        // leaves a hole in the column.
+        assert_eq!(marks, [Some('｡'), Some('､'), None, Some('｢'), None]);
+        assert_eq!(slots[4].text, "﹂", "the bracket is in the square, not the margin");
         for mark in marks.into_iter().flatten() {
             assert_eq!(yumete_cjk::char_width(mark), 1, "{mark} must be one cell");
         }
@@ -2770,8 +2820,101 @@ mod tests {
         // put it after the character it opens.
         let slots = line_slots_plain("秋「冬」", G.with_hanging(true));
         let marks: Vec<Option<char>> = slots.iter().map(|s| s.mark).collect();
-        assert_eq!(marks, [None, Some('｢'), Some('｣')]);
+        // …and the closing bracket keeps a square rather than a hole (#231).
+        assert_eq!(marks, [None, Some('｢'), None]);
         assert_eq!(slots[1].text, "冬");
+        assert_eq!(slots[2].text, "﹂");
+    }
+
+    /// **A mark that cannot hang keeps its own square, never an empty one**
+    /// — Feature #231.
+    ///
+    /// The hole this closes is not rare. A base already carrying an opener has
+    /// no margin left to give, so every mark after it used to take a margin
+    /// row with the text square beside it **blank**: 秋「冬」」 made two of
+    /// those and 春（。）」 made four. A row is a row either way — the margin
+    /// is beside the square, not instead of it — so putting the glyph in the
+    /// square costs nothing and leaves nothing blank.
+    #[test]
+    fn a_mark_that_cannot_hang_takes_a_square_rather_than_leaving_a_hole() {
+        for line in [
+            "秋「冬」」",
+            "春（。）」",
+            "「春」。」",
+            "（（春",
+            "春。」」」",
+            "春？」」",
+        ] {
+            let slots = line_slots_plain(line, G.with_hanging(true));
+            assert!(
+                slots.iter().all(|s| !s.text.is_empty()),
+                "{line}: a blank square in the column: {slots:?}"
+            );
+        }
+        // What each of them actually comes to, so a change here has to be
+        // meant rather than merely allowed.
+        let shape = |line: &str| -> Vec<(String, Option<char>)> {
+            line_slots_plain(line, G.with_hanging(true))
+                .iter()
+                .map(|s| (s.text.clone(), s.mark))
+                .collect()
+        };
+        assert_eq!(
+            shape("秋「冬」」"),
+            vec![
+                ("秋".to_string(), None),
+                ("冬".to_string(), Some('｢')),
+                ("﹂".to_string(), Some('｣')),
+            ]
+        );
+        // ⚠️ An opener that never reached a base is still a mark.
+        assert_eq!(
+            shape("（（春"),
+            vec![("︵".to_string(), None), ("春".to_string(), Some('('))]
+        );
+    }
+
+    /// **Only 。 and 、 squeeze; ？ ！ ， do not** — Feature #230.
+    ///
+    /// clreq §6.3.2 separates the 問號／嘆號 from the 句號 group, and the
+    /// reason carries straight into a terminal: 。 and 、 are half-em glyphs
+    /// whose right half is blank, and Unicode gives them a **true** narrow
+    /// form (`｡` `､`). ？ and ！ and ， fill their em, and the only narrow
+    /// twin they have is the **ASCII** mark — so squeezing them wrote `?」`
+    /// and `,」` into a manuscript set in Chinese.
+    #[test]
+    fn only_the_marks_with_a_true_narrow_form_share_a_square() {
+        for (line, want) in [
+            ("春。」", vec!["春", "｡｣"]),
+            ("春、」", vec!["春", "､｣"]),
+        ] {
+            let slots = line_slots_plain(line, G.with_hanging(true));
+            let bodies: Vec<&str> = slots.iter().map(|s| s.text.as_str()).collect();
+            assert_eq!(bodies, want, "{line}");
+        }
+        // The other three: neither mark hangs, each takes a square, and the
+        // glyphs are the **vertical** forms — not an ASCII twin in sight.
+        for (line, second) in [("春？」", '︖'), ("春！」", '︕'), ("春，」", '︐')] {
+            let slots = line_slots_plain(line, G.with_hanging(true));
+            assert_eq!(slots.len(), 3, "{line}: a square each");
+            assert_eq!(slots[0].text, "春");
+            assert_eq!(slots[0].mark, None, "{line}: it came back out of the margin");
+            assert_eq!(slots[1].text, second.to_string(), "{line}");
+            assert_eq!(slots[2].text, "﹂", "{line}");
+            assert!(
+                slots.iter().all(|s| s.mark.is_none()),
+                "{line}: 連續標點不作懸掛"
+            );
+            assert!(
+                !slots.iter().any(|s| s.text.chars().any(|c| c.is_ascii_punctuation())),
+                "{line}: no ASCII mark in a Chinese manuscript: {slots:?}"
+            );
+        }
+        // ⚠️ And one of them alone still hangs — that is where the space is
+        // saved, and a lone mark in a half-cell margin is what the ASCII twin
+        // is *for*.
+        let slots = line_slots_plain("春？夏", G.with_hanging(true));
+        assert_eq!(slots[0].mark, Some('?'));
     }
 
     /// The reading gives way upward, leaving the base's own row for a mark.
