@@ -2896,3 +2896,4 @@ mod tests {
         assert_eq!(drawn(stamped.with_drawn(&two)), ["春", "補", "夏"]);
     }
 }
+

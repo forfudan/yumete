@@ -364,6 +364,11 @@ impl Palette {
     pub fn furniture(self) -> Color {
         self.at(rung::FURNITURE)
     }
+
+    /// The ruler over a table's columns — read, not glanced at (#232).
+    pub fn ruler(self) -> Color {
+        self.at(rung::RULER)
+    }
     /// The markup itself.
     pub fn marker(self) -> Color {
         self.at(rung::MARKER)
@@ -686,6 +691,38 @@ mod tests {
                 assert!(got >= 4.5, "dark={dark}: the writing is {got:.2}:1 on {name}");
             }
         }
+    }
+
+    /// **The ruler over a table's columns is read, so it is measured as text**
+    /// — Feature #232.
+    ///
+    /// ⚠️ **Measured on the chrome it is drawn on, not on the paper.** That is
+    /// the whole of what made this a decision rather than a patch: the numbers
+    /// sit on the gutter's ground, so moving `CHROME` moves them, and at
+    /// `FURNITURE` the worst of the twenty-one ladders was 3.15:1 — clearing
+    /// what a border needs and missing what small text needs. This test is the
+    /// thing that will notice the next time a ground moves under it.
+    #[test]
+    fn the_column_ruler_is_dark_enough_to_count() {
+        let mut worst = f64::MAX;
+        for name in ["ink", "bw", "cyanotype", "amber", "mogao", "morandi", "meridian", "kiln"] {
+            let theme = yumete_config::ThemeConfig::named(name).expect(name);
+            for dark in [true, false] {
+                let p = Palette::of_theme(&theme, dark);
+                let got = contrast(p.ruler(), p.chrome());
+                assert!(
+                    got >= 4.5,
+                    "{name} dark={dark}: the column ruler is {got:.2}:1 on the gutter"
+                );
+                worst = worst.min(got);
+                // …and it stays a ruler: quieter than the heading it sits over.
+                assert!(
+                    contrast(p.ruler(), p.chrome()) <= contrast(p.text(), p.chrome()),
+                    "{name} dark={dark}: a ruler is not louder than the writing"
+                );
+            }
+        }
+        assert!(worst >= 4.5, "worst was {worst:.2}");
     }
 
     #[test]
