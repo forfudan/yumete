@@ -1889,6 +1889,11 @@ pub struct Editor {
     /// replaced by each candidate in turn, so the line itself can no longer say
     /// what was being completed.
     completion: Option<(String, usize)>,
+    /// The reference completion Tab is walking in the text itself — `[^` and
+    /// `](#` (#418). Kept for the same reason the command line's is: each Tab
+    /// replaces what the last one wrote, so the buffer can no longer say what
+    /// the writer had typed.
+    reference: Option<complete::Walking>,
     /// Which spellings of a reading **count as one** (Feature #65) — what the
     /// word count subtracts, what `:ruby` edits, what `:ruby-auto` writes.
     ///
@@ -2239,6 +2244,7 @@ impl Editor {
             chaifen: false,
             ruby_target: None,
             completion: None,
+            reference: None,
             tatechuyoko: false,
             hanging: false,
             paper: crate::export::Paper::A5,
@@ -3019,6 +3025,7 @@ fn surrounding(rope: &Rope, pos: usize, open: char, close: char) -> Option<(usiz
 
 mod checks;
 mod commands;
+pub mod complete;
 mod conflicts;
 mod convert;
 mod detail;

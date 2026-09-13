@@ -404,7 +404,7 @@ impl Editor {
     }
 
     /// Where a footnote is defined and what it says.
-    fn footnote_body(&self, tag: &str) -> Option<(usize, String)> {
+    pub(super) fn footnote_body(&self, tag: &str) -> Option<(usize, String)> {
         let rope = self.current_buffer().rope();
         let opener = format!("{tag}:");
         for line in 0..rope.len_lines() {

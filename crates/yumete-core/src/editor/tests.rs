@@ -12921,3 +12921,135 @@ fn a_heading_in_the_outline_folds_what_is_under_it() {
 
     std::fs::remove_dir_all(&dir).ok();
 }
+
+/// #418 二. `[^` offers the tags the file already uses and, last, the next
+/// free number; Tab writes one and closes the bracket.
+#[test]
+fn a_footnote_tag_is_finished_from_what_the_file_already_holds() {
+    let mut ed = typed("正文[^舊註]和[^7]。\n\n[^舊註]: 從前的話\n[^7]: 第七條\n");
+    // At the end of the first line, before the 。
+    ed.on_key(Key::Char('A'));
+    ed.on_key(Key::Char('['));
+    ed.on_key(Key::Char('^'));
+
+    let (title, choices, at) = ed.reference_menu().expect("the panel opens by itself");
+    assert_eq!(title, "腳注標號");
+    assert_eq!(at, None, "nothing is written until Tab, so nothing is chosen");
+    let texts: Vec<&str> = choices.iter().map(|c| c.text.as_str()).collect();
+    assert_eq!(texts, ["舊註]", "7]", "1]"], "what is in the file, then the next free number");
+    assert_eq!(choices[0].note.as_deref(), Some("從前的話"), "the note it points at");
+    assert_eq!(choices[2].note.as_deref(), Some("新的一條"));
+    assert_eq!(ed.current_buffer().text().lines().next(), Some("正文[^舊註]和[^7]。[^"));
+
+    ed.on_key(Key::Tab);
+    assert_eq!(ed.current_buffer().text().lines().next(), Some("正文[^舊註]和[^7]。[^舊註]"));
+    ed.on_key(Key::Tab);
+    assert_eq!(
+        ed.current_buffer().text().lines().next(),
+        Some("正文[^舊註]和[^7]。[^7]"),
+        "the second Tab replaces the first one's pick, it does not add to it"
+    );
+    // …and round the back: Shift-Tab from the second is the first again.
+    ed.on_key(Key::BackTab);
+    assert_eq!(ed.current_buffer().text().lines().next(), Some("正文[^舊註]和[^7]。[^舊註]"));
+
+    // A letter after the pick is a letter: the walk is over and Tab starts
+    // again from what is in the buffer.
+    ed.on_key(Key::Char('。'));
+    assert!(ed.reference_menu().is_none(), "a finished reference offers nothing");
+}
+
+/// #418 二. What has been typed narrows the list, and a tag that no longer
+/// matches is not offered.
+#[test]
+fn what_is_typed_after_the_caret_narrows_the_tags() {
+    let mut ed = typed("[^甲]和[^乙]\n\n[^甲]: 一\n[^乙]: 二\n");
+    ed.on_key(Key::Char('G'));
+    ed.on_key(Key::Char('A'));
+    for c in "\n見[^甲".chars() {
+        ed.on_key(match c {
+            '\n' => Key::Enter,
+            c => Key::Char(c),
+        });
+    }
+    let (_, choices, _) = ed.reference_menu().expect("`[^甲` still stands open");
+    let texts: Vec<&str> = choices.iter().map(|c| c.text.as_str()).collect();
+    assert_eq!(texts, ["甲]"], "乙 does not start with 甲, and neither does 1");
+    ed.on_key(Key::Tab);
+    assert!(ed.current_buffer().text().ends_with("見[^甲]\n"), "closed, and not twice");
+}
+
+/// #418 二. `](#` offers this file's headings by the anchor a Markdown reader
+/// gives them, and prints the title only where the anchor is not already it.
+#[test]
+fn a_link_is_finished_with_a_heading_of_this_file() {
+    let mut ed = typed("# 卷一 開端\n\n## 第三節：雨\n\n見\n");
+    ed.on_key(Key::Char('G'));
+    ed.on_key(Key::Char('A'));
+    for c in "[那裏](#".chars() {
+        ed.on_key(Key::Char(c));
+    }
+    let (title, choices, _) = ed.reference_menu().expect("the headings are offered");
+    assert_eq!(title, "本檔章節");
+    let texts: Vec<&str> = choices.iter().map(|c| c.text.as_str()).collect();
+    assert_eq!(texts, ["卷一-開端)", "第三節雨)"], "the space becomes a hyphen, the colon is dropped");
+    assert_eq!(choices[0].note, None, "「卷一-開端」 is the title; printing it twice says nothing");
+    assert_eq!(choices[1].note.as_deref(), Some("第三節：雨"), "here the anchor has lost something");
+    ed.on_key(Key::Tab);
+    assert!(ed.current_buffer().text().ends_with("見[那裏](#卷一-開端)\n"));
+}
+
+/// #418 二. The bracket already there is not written twice — a hand that
+/// closes its brackets first is a hand this must not fight.
+#[test]
+fn a_closing_bracket_already_typed_is_left_alone() {
+    let mut ed = typed("[^甲]\n\n[^甲]: 一\n");
+    ed.on_key(Key::Char('G'));
+    ed.on_key(Key::Char('A'));
+    ed.on_key(Key::Enter);
+    for c in "[^]".chars() {
+        ed.on_key(Key::Char(c));
+    }
+    ed.on_key(Key::Left);
+    ed.on_key(Key::Tab);
+    assert!(ed.current_buffer().text().ends_with("[^甲]\n"), "one bracket, not two");
+}
+
+/// #418 二. Outside Markdown, and inside a grid, Tab is the key it was.
+#[test]
+fn tab_is_still_a_tab_where_there_is_no_reference() {
+    let mut ed = typed("正文\n");
+    ed.current_buffer_mut().set_syntax(crate::syntax::Syntax::Text);
+    ed.on_key(Key::Char('A'));
+    ed.on_key(Key::Char('['));
+    ed.on_key(Key::Char('^'));
+    assert!(ed.reference_menu().is_none(), "a plain manuscript has no footnotes");
+    ed.on_key(Key::Tab);
+    assert!(ed.current_buffer().text().starts_with("正文[^\t"), "a tab character");
+}
+
+/// #418 二. A `[^` quoted in a fence is somebody's example, not a reference.
+#[test]
+fn a_reference_in_a_fence_is_offered_nothing() {
+    let mut ed = typed("# 甲\n\n```\n\n```\n\n正文\n\n[^1]: 一\n");
+    ed.on_key(Key::Char('3'));
+    ed.on_key(Key::Char('g'));
+    ed.on_key(Key::Char('g'));
+    ed.on_key(Key::Char('A'));
+    ed.on_key(Key::Char('['));
+    ed.on_key(Key::Char('^'));
+    assert!(ed.reference_menu().is_none(), "inside the fence, nothing");
+    ed.on_key(Key::Tab);
+    assert!(ed.current_buffer().text().contains("[^\t"), "Tab is a tab in here");
+
+    // …and the same two keys in the prose below it do open the panel, so the
+    // gate is the fence and not the file.
+    ed.on_key(Key::Esc);
+    ed.on_key(Key::Char('7'));
+    ed.on_key(Key::Char('g'));
+    ed.on_key(Key::Char('g'));
+    ed.on_key(Key::Char('A'));
+    ed.on_key(Key::Char('['));
+    ed.on_key(Key::Char('^'));
+    assert!(ed.reference_menu().is_some());
+}

@@ -275,11 +275,12 @@ fn leader_and_key(quote: &str) -> Option<(char, String)> {
 /// Two-letter words that are **not** key sequences at all.
 ///
 /// `md` is a file suffix and `:markdown`'s alias, `tw` is OpenCC's 臺灣正體 in
-/// the `:convert` table, and `[]` is a pair of brackets being shown. Nothing
-/// can be concluded from these in either direction — `m d` happens to be a real
-/// sequence and `t w` is one too — so they are dropped before the question is
-/// asked rather than answered.
-const NOT_A_SEQUENCE: &[&str] = &["md", "tw", "[]"];
+/// the `:convert` table, and `[]` and `[^` are Markdown being shown — the
+/// second one is how a footnote reference opens (#418), not `[` followed by
+/// `^`. Nothing can be concluded from these in either direction — `m d` happens
+/// to be a real sequence and `t w` is one too — so they are dropped before the
+/// question is asked rather than answered.
+const NOT_A_SEQUENCE: &[&str] = &["md", "tw", "[]", "[^"];
 
 /// Sequences the documents print **in order to say the editor has not got them**.
 ///

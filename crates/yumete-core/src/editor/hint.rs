@@ -35,6 +35,14 @@ impl Editor {
                     ("q", say!("hint.close")),
                 ]);
         }
+        // A reference standing half-typed, with the panel already open under
+        // it: Tab is the key, and it is a key that means nothing anywhere else
+        // in Insert, so nobody would try it unasked (#418).
+        if self.reference_open() {
+            return Hint::Keys(say!("hint.reference"), vec![
+                ("Tab", say!("hint.reference.pick")),
+            ]);
+        }
         // Standing on a footnote reference, the key that shows the note is
         // worth saying: it is the one place `gd` has an answer that the reader
         // could not guess from the page.
