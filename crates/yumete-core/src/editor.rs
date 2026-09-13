@@ -183,6 +183,13 @@ enum Pending {
     /// Unlike every other pending here this one is not opened by a key: the
     /// command opens it and it stays open across many keys, one per match.
     Confirm,
+    /// **`R` in the search panel is asking once**: change every hit there is?
+    ///
+    /// A different thing from [`Pending::Confirm`], which asks *per match* on
+    /// its way through a `:s …c`. This one is a single yes: one hit and one
+    /// file are changes a reader is looking straight at, and every file in a
+    /// book is not (#419).
+    ReplaceAll,
     /// `` ` `` — 「不改它說什麼，只改它長什麼樣」 (§5.2.3 ②).
     ///
     /// Helix spends three top-level keys here (`` ` `` 小寫, `` A-` `` 大寫,
@@ -218,7 +225,7 @@ impl Pending {
             | Pending::SurroundFrom
             | Pending::SurroundTo(_) => true,
             // `y`/`n`/`a`/`q`/`l` name what to do, not what to write.
-            Pending::Confirm | Pending::None
+            Pending::Confirm | Pending::ReplaceAll | Pending::None
             | Pending::Goto
             | Pending::Space
             | Pending::Register

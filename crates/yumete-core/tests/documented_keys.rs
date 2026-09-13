@@ -142,10 +142,11 @@ const DISOWNED: &[&str] = &[
     // §「沒有了」 — the names deleted when a group was made, printed beside the
     // spelling that replaced each of them. 舊名字直接刪掉 is the philosophy the
     // table is there to state, so every one of these has to stay missing.
-    // #419: the search panel took their job, and the manual names them so
-    // that a reader who knew them is told where the job went.
+    // #419: the search panel took its job, and the manual names it so that a
+    // reader who knew it is told where the job went. ⚠️ `:replace` is **not**
+    // here: that name came back, with a different meaning, the way `:search`
+    // did — a signpost may only point away from a word nobody can type.
     ":grep",
-    ":replace",
     ":scheme",
     ":chaifen",
     ":cf",

@@ -696,6 +696,38 @@ en = "how much of the result the page shows: source, coloured, WYSIWYG"
 find = "著色 着色 高亮 原文 所見即所得 highlight syntax wysiwyg"
 
 [[message]]
+# 命令：開搜索面板，替換那一行也開着
+key = "cmd.commands.replace"
+zht = "找了換：面板裏打找什麼、換成什麼"
+zhs = "找了换：面板里打找什么、换成什么"
+en = "search and replace"
+find = "替換 替换 換掉 换掉 改名 replace 全書 全书"
+
+[[message]]
+# 命令：在這個檔的資料夾裏找了換
+key = "cmd.commands.replace-cd"
+zht = "在這個檔的資料夾裏找了換（含子目錄）"
+zhs = "在这个档的资料夹里找了换（含子目录）"
+en = "search and replace in this file's folder"
+find = "替換 替换 資料夾 资料夹"
+
+[[message]]
+# 命令：在最近的 git 項目裏找了換
+key = "cmd.commands.replace-gd"
+zht = "在最近的 git 項目裏找了換"
+zhs = "在最近的 git 项目里找了换"
+en = "search and replace across the nearest git project"
+find = "替換 替换 項目 项目 全書 全书"
+
+[[message]]
+# 命令：在 yumete 打開的資料夾裏找了換
+key = "cmd.commands.replace-wd"
+zht = "在 yumete 打開的資料夾裏找了換"
+zhs = "在 yumete 打开的资料夹里找了换"
+en = "search and replace in the folder yumete opened in"
+find = "替換 替换 工作區 工作区"
+
+[[message]]
 # : 命令選單裏 ruby 那一項的說明（commands 組）
 key = "cmd.commands.ruby"
 zht = "改這裏的注音；`:ruby off|basic|full` 是排多少"
@@ -3771,6 +3803,13 @@ zhs = "出框"
 en = "leave the box"
 
 [[message]]
+# 提示：搜索面板——換這一處／全部換
+key = "hint.search.replace"
+zht = "換這一處／全部換"
+zhs = "换这一处／全部换"
+en = "change this one / all"
+
+[[message]]
 # 提示：搜索面板——進框打字
 key = "hint.search.type"
 zht = "打要找的字"
@@ -5573,6 +5612,13 @@ zhs = "{0} · {1}"
 en = "{0} · {1}"
 
 [[message]]
+# 搜索：那一處已經不在那裏了（檔案後來被改過）
+key = "search.moved-on"
+zht = "那一處已經不在那裏了，再找一遍"
+zhs = "那一处已经不在那里了，再找一遍"
+en = "that one has moved; look again"
+
+[[message]]
 # 表格沒指定跳轉範圍，從第一欄起搜
 key = "search.no-jump-scope"
 zht = "本表格文件未指定快速跳轉之範圍，從第一欄起搜索——第 1/{0} 處"
@@ -5602,6 +5648,34 @@ key = "search.regex"
 zht = "正則"
 zhs = "正则"
 en = "regex"
+
+[[message]]
+# 搜索：全部替換，答了不
+key = "search.replace-all-no"
+zht = "沒有動"
+zhs = "没有动"
+en = "nothing changed"
+
+[[message]]
+# 搜索：全部替換之前問一次
+key = "search.replace-all-sure"
+zht = "把這 {0} 處全部換掉？"
+zhs = "把这 {0} 处全部换掉？"
+en = "change all {0}?"
+
+[[message]]
+# 搜索：換掉了幾處
+key = "search.replaced"
+zht = "換掉 {0} 處（還沒寫盤，:write-all 纔寫）"
+zhs = "换掉 {0} 处（还没写盘，:write-all 才写）"
+en = "{0} changed — not written yet, `:write-all` does that"
+
+[[message]]
+# 搜索：一處都沒換
+key = "search.replaced-none"
+zht = "一處都沒換"
+zhs = "一处都没换"
+en = "nothing changed"
 
 [[message]]
 # 搜索：在哪裏找——這個檔

@@ -4924,32 +4924,45 @@ fn draw_search(frame: &mut Frame, editor: &Editor, config: &Config, side: Side, 
         put_text(buf, to.saturating_sub(w + 1), area.y, to, &tally, style);
     }
 
-    // The box. A caret where the keys are, and the whole of it inked when it
-    // arrived selected — `空格 /` leaves it that way so one key does both.
-    let y = area.y + 2;
-    let room = to.saturating_sub(left + 2) as usize;
-    let shown: String = match find.query.chars().count() > room {
-        true => find.query.chars().skip(find.query.chars().count() - room).collect(),
-        false => find.query.clone(),
-    };
+    // The boxes. A caret where the keys are, and the whole of one inked when
+    // it arrived selected — `空格 /` leaves it that way so one key does both.
     let typing = editor.mode() == yumete_core::input::Mode::Field;
-    // **Inked means 「the whole of this is selected」, not 「the keys are
-    // here」.** While it is being typed into, the caret says where you are —
-    // and a box drawn the same way whether or not `空格 /` had selected its
-    // contents would hide the one thing that selection is for.
-    let box_style = match (find.all_selected && !shown.is_empty(), typing) {
-        (true, _) => on,
-        (false, true) => text,
-        (false, false) => cell(Field::Query),
-    };
-    put_text(buf, left, y, to, &format!(" {shown}"), box_style);
-    if typing && !find.all_selected {
-        let at = left + 1 + yumete_cjk::str_width(&shown) as u16;
-        if at < to {
-            if let Some(c) = buf.cell_mut((at, y)) {
-                c.set_symbol("▏").set_style(head);
+    let room = to.saturating_sub(left + 2) as usize;
+    let mut y = area.y + 2;
+    let mut draw_box = |buf: &mut ratatui::buffer::Buffer, which: Field, what: &str, y: u16| {
+        let shown: String = match what.chars().count() > room {
+            true => what.chars().skip(what.chars().count() - room).collect(),
+            false => what.to_string(),
+        };
+        let here = find.field == which;
+        // **Inked means 「the whole of this is selected」, not 「the keys are
+        // here」.** While it is being typed into, the caret says where you
+        // are — and a box drawn the same way whether or not `空格 /` had
+        // selected its contents would hide what that selection is for.
+        let style = match (find.all_selected && here && !shown.is_empty(), typing && here) {
+            (true, _) => on,
+            (false, true) => text,
+            (false, false) => match keys_here && here {
+                true => on,
+                false => text,
+            },
+        };
+        put_text(buf, left, y, to, &format!(" {shown}"), style);
+        if typing && here && !find.all_selected {
+            let at = left + 1 + yumete_cjk::str_width(&shown) as u16;
+            if at < to {
+                if let Some(c) = buf.cell_mut((at, y)) {
+                    c.set_symbol("▏").set_style(head);
+                }
             }
         }
+    };
+    draw_box(buf, Field::Query, &find.query, y);
+    // **The replace row is only there when it is meant to be** — `:search` is
+    // for looking, `:replace` for changing, and `r`/`R` are live only here.
+    if find.replacing {
+        y += 1;
+        draw_box(buf, Field::Replace, &find.replace, y);
     }
 
     // The switches. 大小寫 is three ways, not a tick, so it says which one.

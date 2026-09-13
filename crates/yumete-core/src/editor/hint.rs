@@ -63,13 +63,19 @@ impl Editor {
         // mean anything in it (#419).
         if let Some((side, crate::sidebar::Layer::Top)) = self.panel_focus() {
             if self.panel(side).map(|p| p.view()) == Some(crate::sidebar::View::Search) {
-                return Hint::Keys(say!("label.panel.search"), vec![
-                        ("i", say!("hint.search.type")),
-                        ("Tab", say!("hint.search.next-cell")),
-                        ("Enter", say!("hint.search.use-it")),
-                        ("C-w", say!("hint.sidebar.back-to-text")),
-                        ("q", say!("hint.close")),
-                    ]);
+                let mut keys = vec![
+                    ("i", say!("hint.search.type")),
+                    ("Tab", say!("hint.search.next-cell")),
+                    ("Enter", say!("hint.search.use-it")),
+                ];
+                // Only when they do something: `r`/`R` are live on the
+                // replacing panel and nowhere else.
+                if self.search().replacing {
+                    keys.push(("r R", say!("hint.search.replace")));
+                }
+                keys.push(("C-w", say!("hint.sidebar.back-to-text")));
+                keys.push(("q", say!("hint.close")));
+                return Hint::Keys(say!("label.panel.search"), keys);
             }
         }
         if self.sidebar_focused() {
@@ -163,6 +169,10 @@ impl Editor {
             Pending::Confirm => {
                 (say!("hint.confirm.title"), Self::said(Self::CONFIRM_KEYS.iter().copied()))
             }
+            Pending::ReplaceAll => (
+                self.status.clone(),
+                Self::said(Self::REPLACE_ALL_KEYS.iter().copied()),
+            ),
             Pending::Register => (say!("hint.register.title"), vec![("a–z", say!("hint.register.which-one"))]),
             Pending::Match => (say!("hint.match.title"), Self::said(Self::MATCH_KEYS.iter().copied())),
             Pending::MatchPair { .. } => (say!("hint.bracket"), vec![("", say!("hint.type-a-bracket-or-quote"))]),
