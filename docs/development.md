@@ -357,7 +357,7 @@ index, and a row with no number anywhere else is a row that got lost.
 | 132 | **The menu spreads across the window** | tui | P3 | 26 commands at a glance, column-major | Done |
 | 133 | **The language model yes, the 碼表 no** | both | P2 | 27 ms for everyone; `:yume-scheme` for the rest | Done |
 | 134 | **靈明 embedded at build time** | ime | P2 | never committed; `:yume` says which one answers | Done |
-| 135 | **Release pipeline + Homebrew tap** | ci | P2 | see §5.3; deferred until ready to release | Planned |
+| 135 | **Release pipeline + Homebrew tap** | ci | P2 | 三個平台，數據與編輯器分開發 [^135] | Planned |
 | 136 | **`:yume-table` — any code table** | ime | P2 | Rime `.dict.yaml` as it comes; 五筆/倉頡/粵拼 | Done |
 | 137 | **A file changed on disk is not written over** | core | P0 | `:w!`/`:e!`; a hash so it never cries wolf | Done |
 | 138 | **A macro keeps its operands** | core | P1 | `fq` recorded as `f` and ate the next key | Done |
@@ -5280,9 +5280,17 @@ renderer, not the editor.
   dependencies (`regex`, `cedarwood`, a proc-macro crate, `phf`) for a DAG we
   can write in a few dozen lines. yumete therefore implements the same
   jieba-style DAG + maximum-probability algorithm directly, keeping `yumete-cjk`
-  dependency-light. A compact common-word dictionary is bundled with
-  `yumete-cjk` (`DictionarySegmenter::builtin`) so word motions and the overlay
-  work with no setup; a user may override it with a richer `word<TAB>weight`
+  dependency-light. A common-word dictionary is bundled with `yumete-cjk`
+  (`DictionarySegmenter::builtin`) so word motions and the overlay work with no
+  setup — 75,000 entries, 1.0 MB, cut from Yume's own `lang.txt` in **five
+  tracks** (繁簡一致 25k, 簡體 15k, 繁體 15k, 台灣繁體 10k, 通規繁體 10k), each
+  ranked within itself. ⚠️ Not a flat top-N: the corpus is simplified-dominant,
+  so one cut takes 抬头 (8,108) and leaves 抬頭 (714), and a traditional
+  manuscript falls back to one 字 at a time. Nor by 字集 membership — the three
+  charsets overlap on the 繁簡一致 words, 46% of the slots collide, and the same
+  907 KB buys 8,509 traditional words against this file's 31,601. The file's own
+  header records how to regenerate it. A user may override it with a richer
+  `word<TAB>weight`
   `segmentation.txt` in the data directory, and feeding Yume's compiled weight
   table into the dictionary belongs to the IME milestone.
 - **Config format.** TOML, consistent with the yume repository.
@@ -6002,6 +6010,52 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     nothing about cells, so the only feedback that you are inside one is the
     column name in the status line. Since #212 the padding is drawn as ghost
     text, which is where a cell tint would also live
+
+[^135]: **數據怎麼跟着發，2026-09-14 設計定案。**
+
+    量出來的兩個數：**二進制 10 MB，編好的輸入法數據壓縮後 36 MB**
+    （`lang.ygram` 23M、`pinyin.yflb` 13M……）。而那些數據是**平臺無關的**——yume 自己的
+    `scripts/fetch_data_linux.sh` 頭一段就寫着這句，Linux 那一版直接抽 macOS 發布包裏的
+    同一批檔案。所以把 36 MB 捆進三個平臺的包，等於同一份東西建三遍、傳三遍。
+
+    **分開。四條路是疊加的，而 `data_search_dirs()` 的順序已經把它們排好了：**
+
+    | | 誰用 | 狀態 |
+    | --- | --- | --- |
+    | 〇 · `[ime] data_dirs` | 自己指路的人 | **已實現**（優先於一切） |
+    | 一 · 裝了 yume 就用它的 | Mac／Windows 上用宇浩輸入法的人 | **已實現** |
+    | 二 · `brew install forfudan/tap/yume-data` | brew 用戶 | **零代碼改動** |
+    | 三 · `:yume-download` | 沒 brew 的 Linux／Windows | 待做（v0.1.1） |
+    | 四 · `$YUME_DATA_DIR` | 自己編數據的人 | **已實現** |
+    | 五 · 兜底：內嵌**靈明精華版** | 什麼都沒有的人 | **已實現**（2026-09-14） |
+
+    **五**是最後一道。從前二進制只在「編譯那台機器裝了宇浩」時纔帶碼表，而 CI 正是沒裝
+    的那種機器——**發出去的包一個漢字都打不出**。現在倉庫裏有 `crates/yumete-ime/jinghua/`：
+    0.357 MB（完整版 3.80 MB 的 9.4%），CJK 基本區 20,992 字與擴展A 6,592 字全覆蓋、
+    宇浩字根區 PUA、七張字集落在區外的字、各源、去變體選擇器，加簡碼與符號表；**不收詞**
+    （詞全碼 18.7 萬條，一收就是 3 MB），所以整句輸入退成逐字。配方與理由在
+    `scripts/make_jinghua.py`，`build.rs` 在找不到已安裝的完整表時退到它，面板報
+    「出廠自帶 精華版 ⋯⋯」把兩者分開。發布流水線用 `YUMETE_BUILTIN_DIR` 指向空目錄，
+    讓包**確定地**帶精華版，而不是碰運氣看 runner 鏡像裏有沒有數據。
+
+    **一** 是 `yume_data_dirs()`：它已經去找 `~/Library/Application Support/Yume/data/compiled`、
+    app bundle、`%APPDATA%\Yume`。裝了 yume 的人什麼都不用做。
+
+    **二 為什麼零代碼**：`installed_data_dir()` 找的是 `<exe>/../../share/yumete`，而
+    Homebrew 把每個 formula 的 `share/` 都鏈進**同一個** prefix。所以 `yume-data` 這個
+    formula 只要裝進它自己的 `share/yumete/`，`/opt/homebrew/bin/yumete` 就找得到——
+    兩個 formula、一個目錄，一行代碼都不必改。⚠️ 兩邊裝的是**不同的檔案**（一邊 `bin/`
+    一邊 `share/yumete/`），所以不會撞鏈接。
+
+    **三 不要為它引一條網絡供應鏈。** yumete 現在的依賴裏沒有 HTTP、沒有 zip、沒有 tar
+    （全部依賴：`ratatui regex ropey serde toml unicode-* libc ignore windows-sys`）。
+    加 reqwest＋rustls＋zip 是給一個編輯器加一整條供應鏈，而它要做的事 `curl` 和 `unzip`
+    就能做——`fetch_data_linux.sh` 正是這麼做的，而 yumete 已經有跑 shell 的能力（`:sh`）。
+    所以 `:yume-download` **走外部命令**，不進 Cargo.toml。
+
+    ⚠️ **版本對不上不會靜默失敗**——#220 的 `DataFault::Rejected { magic }` 就是為
+    `.ydiv` 換魔數那次建的，它會明說「這個檔寫着 X，我要的是 Y」。這條設計因此可以放心
+    讓數據和編輯器各自升級。
 
 [^230]: treated like `。」`, but clreq §6.3.2 treats the full-width 問號/嘆號
     differently from the 句號 group.
