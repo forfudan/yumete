@@ -8,6 +8,12 @@ use super::*;
 
 impl Editor {
     pub(super) fn on_insert_key(&mut self, key: Key) {
+        // Anything but Tab abandons the reference being walked, so the next Tab
+        // starts from what is actually in the buffer — the same rule the
+        // command line's completion follows (#418).
+        if !matches!(key, Key::Tab | Key::BackTab) {
+            self.reference = None;
+        }
         let continuing_zong = std::mem::take(&mut self.zong_motion);
         if self.layout == Layout::Vertical {
             match key {
@@ -91,6 +97,15 @@ impl Editor {
             }
         }
 
+        // `[^` and `](#` finished from what the file already holds (#418).
+        // Asked here, below the grid's own Tab: inside a cell Tab walks to the
+        // next one, and that is the older claim on the key.
+        if matches!(key, Key::Tab | Key::BackTab) && self.cycle_reference(match key {
+            Key::Tab => 1,
+            _ => -1,
+        }) {
+            return;
+        }
         match key {
             Key::Esc => {
                 // The session just ended is what `.` replays.

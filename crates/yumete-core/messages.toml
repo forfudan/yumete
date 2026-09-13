@@ -2062,6 +2062,29 @@ zhs = "上屏方式：{0}"
 en = "commit method: {0}"
 
 
+# ── complete ──────────────────────────────────────────────────────────
+
+[[message]]
+# 補全面板裏這一條的說明：這個號碼還沒人用，選它就是開一條新註
+key = "complete.a-new-one"
+zht = "新的一條"
+zhs = "新的一条"
+en = "a new one"
+
+[[message]]
+# 補全面板的名字：正在補一個腳注的標號（Insert 模式打了 `[^`）
+key = "complete.footnote"
+zht = "腳注標號"
+zhs = "脚注标号"
+en = "footnote tag"
+
+[[message]]
+# 補全面板的名字：正在補一個章節錨點（Insert 模式打了 `](#`）
+key = "complete.heading"
+zht = "本檔章節"
+zhs = "本文件章节"
+en = "a heading in this file"
+
 # ── convert ───────────────────────────────────────────────────────────
 
 [[message]]
@@ -3730,6 +3753,20 @@ key = "hint.reading"
 zht = "注音"
 zhs = "注音"
 en = "reading"
+
+[[message]]
+# 提示：Insert 模式打了 `[^` 或 `](#`，補全面板開着，等 Tab
+key = "hint.reference"
+zht = "引用"
+zhs = "引用"
+en = "reference"
+
+[[message]]
+# 提示：Tab 在補全面板上換下一條（Shift-Tab 往回）
+key = "hint.reference.pick"
+zht = "換一條（Shift-Tab 往回）"
+zhs = "换一条（Shift-Tab 往回）"
+en = "next one (Shift-Tab goes back)"
 
 [[message]]
 # 暫存器組的標題

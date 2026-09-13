@@ -2891,6 +2891,7 @@ fn draw(
     let footer = status_area;
     panels.extend(draw_command_menu(frame, editor, config, area, footer));
     panels.extend(draw_lookfor_menu(frame, editor, config, area, footer));
+    panels.extend(draw_reference_menu(frame, editor, config, area, footer));
     // Where the picker put its caret, so the candidate panel can stand under
     // the query instead of over the page the list is already covering.
     let picker = draw_picker(frame, editor, config, ime, area, footer);
@@ -4068,6 +4069,63 @@ fn draw_command_menu(
             // measured from, so that typing narrows the panel without moving
             // its rows.
             whole: Some(whole_menu()),
+        },
+    )
+}
+
+/// The `[^` and `](#` panel — the same shape as the `:` menu, in the text
+/// (#418 二).
+///
+/// It stands at the foot beside every other floating panel rather than beside
+/// the caret. Two reasons, and the second is the one that decided it: a
+/// reference is typed at the end of a sentence, which is where the caret is
+/// least likely to have room under it; and a reader who has learned where the
+/// `:` menu opens has learned where *the list of things to press Tab through*
+/// opens, which is worth more than proximity.
+fn draw_reference_menu(
+    frame: &mut Frame,
+    editor: &Editor,
+    config: &Config,
+    area: Rect,
+    status: Rect,
+) -> Option<Rect> {
+    let (title, choices, picked) = editor.reference_menu()?;
+    let ink = crate::theme::Palette::of(config);
+    let highlight = picked.map(|i| i.min(choices.len() - 1));
+    let focus = highlight.unwrap_or(0);
+    // Without the bracket it closes: the panel is a list of references, and
+    // `舊註]` reads as a typo in a list of tags.
+    let names: Vec<&str> = choices.iter().map(|c| c.text.trim_end_matches([']', ')'])).collect();
+    // The notes in one column, because they are read down rather than across:
+    // 「哪一條是我要的」 is answered by the note, and a ragged left edge on the
+    // half that answers it makes the eye walk every row.
+    let column = names.iter().map(|n| yumete_cjk::str_width(n)).max().unwrap_or(0);
+    let items: Vec<Row> = choices
+        .iter()
+        .zip(&names)
+        .map(|(c, name)| Row {
+            text: format!("{name}{}", " ".repeat(column - yumete_cjk::str_width(name))),
+            note: c.note.clone(),
+        })
+        .collect();
+    let footer = format!("{}/{}", focus + 1, items.len());
+    draw_list(
+        frame,
+        ink,
+        config.panel.rounded,
+        area,
+        status.y,
+        List {
+            items: &items,
+            focus,
+            highlight,
+            footer: &footer,
+            columns: true,
+            title: &title,
+            cap: MENU_WIDTH as usize,
+            // A reference list has no unfiltered form to be measured from —
+            // what is on the page *is* the whole of it.
+            whole: None,
         },
     )
 }

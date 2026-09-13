@@ -23,6 +23,7 @@ impl Editor {
         // grew a selection instead of moving.
         self.extend = false;
         self.insert_recording.clear();
+        self.reference = None;
         self.mode = Mode::Insert;
     }
 

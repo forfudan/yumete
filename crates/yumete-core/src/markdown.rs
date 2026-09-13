@@ -780,6 +780,62 @@ fn mark(out: &mut Vec<Span>, start: usize, end: usize, kind: Kind, construct: us
     }
 }
 
+/// Every footnote tag `text` already uses, references and notes alike, in the
+/// order they first appear and each one once (#418).
+///
+/// A tag is not always a number: this manual's own notes are `[^418]` but a
+/// manuscript's are as often `[^舊註]`, and completion has to offer what is in
+/// the file rather than what the numbering command would have written.
+pub fn footnote_tags(text: &str) -> Vec<String> {
+    let chars: Vec<char> = text.chars().collect();
+    let mut out: Vec<String> = Vec::new();
+    let mut i = 0;
+    while i + 2 < chars.len() {
+        if chars[i] == '[' && chars[i + 1] == '^' {
+            let mut j = i + 2;
+            while j < chars.len() && !matches!(chars[j], ']' | '[' | '^') && !chars[j].is_whitespace() {
+                j += 1;
+            }
+            if j > i + 2 && chars.get(j) == Some(&']') {
+                let tag: String = chars[i + 2..j].iter().collect();
+                if !out.contains(&tag) {
+                    out.push(tag);
+                }
+                i = j;
+            }
+        }
+        i += 1;
+    }
+    out
+}
+
+/// The anchor a Markdown reader gives a heading — what `](#…)` has to name.
+///
+/// The rule every renderer of consequence follows: lower case, punctuation
+/// dropped, runs of space turned into one hyphen. 漢字 are kept as they are,
+/// which is why this cannot simply be an ASCII slug: 「第十七章　雨夜」 is
+/// `第十七章雨夜` and a writer typing that out by hand gets it wrong once in
+/// three.
+pub fn anchor(title: &str) -> String {
+    let mut out = String::new();
+    let mut gap = false;
+    for c in title.trim().chars() {
+        if c.is_whitespace() {
+            gap = !out.is_empty();
+            continue;
+        }
+        if !(c.is_alphanumeric() || c == '-' || c == '_') {
+            continue;
+        }
+        if gap {
+            out.push('-');
+            gap = false;
+        }
+        out.extend(c.to_lowercase());
+    }
+    out
+}
+
 /// Every footnote number already used in `text`, references and notes alike.
 ///
 /// So that a new one can be *the next free number* rather than one more than
@@ -1471,6 +1527,29 @@ mod typst_tests {
             })
             .collect();
         assert_eq!(walk, ".``....", "{walk}");
+    }
+}
+
+/// #418 二. What the reference completion reads out of a file.
+#[cfg(test)]
+mod reference_tests {
+    use super::*;
+
+    #[test]
+    fn a_tag_is_whatever_stands_between_the_caret_and_the_bracket() {
+        let text = "甲[^1]乙[^舊註]丙[^1]\n\n[^1]: 一\n[^舊註]: 二\n";
+        assert_eq!(footnote_tags(text), ["1", "舊註"], "in file order, and each one once");
+        // Not a tag: a space in it, nothing in it, or no bracket to close it.
+        assert!(footnote_tags("[^ 甲] [^] [^乙").is_empty());
+    }
+
+    #[test]
+    fn an_anchor_is_the_heading_lower_cased_with_its_spaces_hyphenated() {
+        assert_eq!(anchor("卷一 開端"), "卷一-開端");
+        assert_eq!(anchor("The Long Way"), "the-long-way");
+        assert_eq!(anchor("第三節：雨"), "第三節雨", "punctuation is dropped, not hyphenated");
+        assert_eq!(anchor("  兩   個  "), "兩-個", "a run of space is one hyphen");
+        assert_eq!(anchor("《》"), "", "a heading with nothing to name it by");
     }
 }
 
