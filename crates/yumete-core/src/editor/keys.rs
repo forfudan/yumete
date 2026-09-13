@@ -1250,9 +1250,13 @@ impl Editor {
     /// vi's five answers, and the reason the flag is worth having: the writer
     /// looks at this one match and says what happens to **it**.
     /// What `R` in the search panel is asking — one yes, not one per match.
+    /// ⚠️ **Its own words, not [`Self::CONFIRM_KEYS`]'.** Those say 「換這一
+    /// 處」／「跳過，不換」 because a `:s …c` is asking about one match at a
+    /// time; this is asking about all of them at once, and borrowing that
+    /// wording would tell a reader the opposite of what `y` does.
     pub(super) const REPLACE_ALL_KEYS: &'static [(&'static str, &'static str)] = &[
-        ("y", "hint.confirm.yes"),
-        ("n", "hint.confirm.no"),
+        ("y", "hint.replace-all.yes"),
+        ("n", "hint.replace-all.no"),
     ];
 
     pub(super) const CONFIRM_KEYS: &'static [(&'static str, &'static str)] = &[

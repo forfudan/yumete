@@ -142,26 +142,21 @@ impl Editor {
     /// a session with no named file left in it falls back to the working
     /// directory.
     pub(crate) fn project_root(&self) -> PathBuf {
-        // **Not just the current buffer.** A listing — `:grep`'s own output, a
-        // 拆分表 check — has no file name, and a command run from inside one
-        // still means the book it was opened from, which is still open behind
-        // it. Same reasoning as `progress_path`, and the same order.
-        let from = std::iter::once(self.current)
+        let here = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+        self.project_root_from(&here)
+    }
+
+    /// The same, told where 「here」 is and which files are open.
+    fn project_root_from(&self, here: &Path) -> PathBuf {
+        // **Not just the current buffer.** A listing — a 拆分表 check, a
+        // `:check` — has no file name, and a command run from inside one still
+        // means the book it was opened from, which is still open behind it.
+        // Same reasoning as `progress_path`, and the same order.
+        let open = std::iter::once(self.current)
             .chain((0..self.buffers.len()).rev())
             .filter_map(|i| self.buffers.get(i))
-            .filter_map(|b| b.path().and_then(Path::parent).map(Path::to_path_buf))
-            .find(|d| !d.as_os_str().is_empty());
-        let Some(from) = from else {
-            return std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
-        };
-        let marked = |mark: &str, flat: &str| {
-            from.ancestors()
-                .find(|d| d.join(mark).exists() || d.join(flat).exists())
-                .map(Path::to_path_buf)
-        };
-        marked(".yumete", ".yumete.toml")
-            .or_else(|| marked(".git", ".git"))
-            .unwrap_or(from)
+            .filter_map(|b| b.path());
+        book_root(open, here)
     }
 
     /// This book's log as it stands on disk. Missing is empty, not an error.
