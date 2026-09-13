@@ -41,6 +41,40 @@ impl Case {
     }
 }
 
+/// **Where to look** — Feature #419.
+///
+/// A command names one of these and nothing else: `:search 卵` is 「a folder
+/// called 卵」, never 「look for 卵」. That is the whole of how the ambiguity
+/// is kept out — what to look for has exactly one home, the box.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub enum Where {
+    /// The file being written. **The only one that is searched as you type**:
+    /// it is in memory, and a pass over it costs nothing worth counting.
+    #[default]
+    Buffer,
+    /// The folder this file is in, and everything under it — `-cd`.
+    Folder,
+    /// The folder yumete was opened in — `-wd`.
+    Workspace,
+    /// The nearest git project, found by walking up — `-gd`. The useful one:
+    /// nobody has to count how many levels up it was.
+    Project,
+    /// A folder named outright: `:search ../稿`.
+    Named(std::path::PathBuf),
+}
+
+impl Where {
+    /// Whether this is searched again on every keystroke.
+    ///
+    /// ⚠️ **Only the buffer is.** Everything else walks the disk, and a
+    /// hundred chapters per letter typed is not a thing to do — those wait for
+    /// `Enter`. The panel says which it is, because one panel behaving two
+    /// ways with nothing on the screen to tell them apart is the trap.
+    pub fn live(&self) -> bool {
+        matches!(self, Where::Buffer)
+    }
+}
+
 /// Which cell of the form the keys are in.
 ///
 /// In screen order, which is also `Tab`'s order.
@@ -89,6 +123,12 @@ impl Field {
 /// One place the pattern was found.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Hit {
+    /// The file it is in — `None` for the one being written.
+    ///
+    /// `None` rather than the buffer's own path because a hit in *this* file
+    /// is reached by moving the cursor, and one in another file is reached by
+    /// opening it; the two are different acts and the type says so.
+    pub file: Option<std::path::PathBuf>,
     /// Which line of the buffer, counting from zero.
     pub line: usize,
     /// Where the match starts and ends, as character offsets into the buffer.
@@ -113,11 +153,42 @@ pub const MOST: usize = 500;
 /// How many characters of context an excerpt carries on each side.
 pub const AROUND: usize = 12;
 
+/// A row of the results, as drawn — Feature #419.
+///
+/// Flat while everything is in the file being written; a tree of file headers
+/// and their hits as soon as it is not. The rows are worked out from the hits
+/// every time they are wanted rather than stored beside them, so folding a
+/// file away cannot leave the two disagreeing.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Row {
+    /// A file, with how many hits are in it and whether they are folded away.
+    File {
+        path: std::path::PathBuf,
+        hits: usize,
+        folded: bool,
+    },
+    /// One hit, by its index into [`Search::hits`].
+    Hit(usize),
+}
+
 /// The search panel's state — Feature #419.
 #[derive(Debug, Clone, Default)]
 pub struct Search {
     /// What is being looked for, as typed.
     pub query: String,
+    /// Where to look.
+    pub scope: Where,
+    /// The files whose hits are folded away.
+    pub folded: std::collections::BTreeSet<std::path::PathBuf>,
+    /// What the paths in [`Hit::file`] are relative to, so opening one can
+    /// put it back together.
+    pub root: Option<std::path::PathBuf>,
+    /// **Whether the box has changed since a walk of the disk last ran.**
+    ///
+    /// Only ever true for a scope that is not live: it is what the panel says
+    /// 「press Enter」 for, so that a stale list is never mistaken for the
+    /// answer to what is in the box now.
+    pub stale: bool,
     /// Where the caret is in it, in characters.
     pub caret: usize,
     /// Whether the whole query is selected — what `空格 /` leaves behind, so
@@ -159,18 +230,91 @@ impl Search {
         !self.query.trim().is_empty()
     }
 
-    /// The hit the highlight is on.
+    /// **The rows to draw**, worked out from the hits.
+    ///
+    /// Flat when every hit is in the file being written — a header saying
+    /// 「this file」 above the file you are looking at says nothing. A tree
+    /// otherwise, in the order the files were walked.
+    pub fn rows(&self) -> Vec<Row> {
+        if self.hits.iter().all(|h| h.file.is_none()) {
+            return (0..self.hits.len()).map(Row::Hit).collect();
+        }
+        let mut rows = Vec::new();
+        let mut at: Option<&std::path::Path> = None;
+        for (i, hit) in self.hits.iter().enumerate() {
+            let path = hit.file.as_deref().unwrap_or(std::path::Path::new(""));
+            if at != Some(path) {
+                at = Some(path);
+                let folded = self.folded.contains(path);
+                rows.push(Row::File {
+                    path: path.to_path_buf(),
+                    hits: self.hits.iter().filter(|h| h.file.as_deref() == Some(path)).count(),
+                    folded,
+                });
+            }
+            if !self.folded.contains(path) {
+                rows.push(Row::Hit(i));
+            }
+        }
+        rows
+    }
+
+    /// The row the highlight is on.
+    pub fn row(&self) -> Option<Row> {
+        let rows = self.rows();
+        rows.get(self.selected.min(rows.len().saturating_sub(1))).cloned()
+    }
+
+    /// The hit the highlight is on, if it is on one.
     pub fn here(&self) -> Option<&Hit> {
-        self.hits.get(self.selected.min(self.hits.len().saturating_sub(1)))
+        match self.row()? {
+            Row::Hit(i) => self.hits.get(i),
+            Row::File { .. } => None,
+        }
     }
 
     /// Move the highlight, stopping at the ends.
     pub fn step(&mut self, down: bool) {
-        let last = self.hits.len().saturating_sub(1);
+        let last = self.rows().len().saturating_sub(1);
         self.selected = match down {
             true => self.selected.saturating_add(1).min(last),
             false => self.selected.saturating_sub(1),
         };
+    }
+
+    /// Fold the file the highlight is in, or open it again (`h`/`l`).
+    ///
+    /// On a hit rather than a header, `h` folds the file it belongs to and
+    /// takes the highlight up to it — the same 「less of this」 the tree and
+    /// the outline already mean by that key.
+    pub fn fold(&mut self, away: bool) -> bool {
+        let rows = self.rows();
+        let Some(row) = rows.get(self.selected.min(rows.len().saturating_sub(1))) else {
+            return false;
+        };
+        let path = match row {
+            Row::File { path, .. } => path.clone(),
+            Row::Hit(i) => match self.hits.get(*i).and_then(|h| h.file.clone()) {
+                Some(path) => path,
+                None => return false,
+            },
+        };
+        let changed = match away {
+            true => self.folded.insert(path.clone()),
+            false => self.folded.remove(&path),
+        };
+        // Folding takes rows away; the highlight goes to the header rather
+        // than sliding onto whatever filled the gap.
+        if changed && away {
+            if let Some(at) = self
+                .rows()
+                .iter()
+                .position(|r| matches!(r, Row::File { path: p, .. } if *p == path))
+            {
+                self.selected = at;
+            }
+        }
+        changed
     }
 
     /// Type a character into the query, replacing all of it if it is selected.
