@@ -10,3 +10,5 @@
 # Never touch binaries
 *.png binary
 *.zip binary
+# 靈明精華版 —— crates/yumete-ime/jinghua/, compiled 碼表
+*.ytab binary

@@ -1,20 +1,26 @@
-//! Put 靈明's 碼表 into the binary at build time, if it is on this machine.
+//! Put 靈明's 碼表 into the binary at build time — the installed one when this
+//! machine has it, and 靈明精華版 from this repository when it does not.
 //!
-//! **Why at build time rather than in the repository.** The table is 3.7 MB of
-//! compiled binary, and a binary blob does not delta: committing it would take
-//! the repository from one megabyte to four, and another four with every
-//! refresh, for a file that is *generated* from the 宇浩 source tree and is not
-//! source. So it is read from wherever it is already installed, at the moment
-//! the binary is built, and never stored here.
+//! **Why the full table is not in the repository.** It is 3.7 MB of compiled
+//! binary, and a binary blob does not delta: committing it would take the
+//! repository from one megabyte to four, and another four with every refresh,
+//! for a file that is *generated* from the 宇浩 source tree and is not source.
+//! So the full table is read from wherever it is already installed, at the
+//! moment the binary is built, and never stored here.
 //!
-//! **What that buys.** A yumete built by `scripts/build.sh` — which installs
-//! the data first and then builds — carries 靈明 with it, so the binary that
-//! ships can type 漢字 on a machine where nothing has been installed. A yumete
-//! built by `cargo build` on a machine with no data simply has no built-in
-//! table, and says so honestly rather than failing to build.
+//! **Why something is.** That left one machine with nothing: the one that has
+//! never installed 宇浩 — a fresh clone, and CI, which is where the release
+//! packages are actually built. Those binaries could not type a single 漢字.
+//! So `jinghua/` carries 靈明精華版: 0.36 MB, every character in CJK 基本區 and
+//! 擴展A plus the 字根區 and the seven 字集, all sources, the 簡碼, and the
+//! 符號表 — but no 詞 (see `scripts/make_jinghua.py` for the recipe and the
+//! reasoning). It is the floor, never the ceiling: a machine with the real data
+//! installed builds with the real table, and at run time an installed 靈明
+//! always wins over whichever one is in the binary (`ImeSession::new`).
 //!
-//! `YUMETE_BUILTIN_DIR` overrides where to look, for a release build that
-//! wants the tables from somewhere specific.
+//! `YUMETE_BUILTIN_DIR` says to look **only** there, for a release build that
+//! wants the tables from somewhere specific — an empty directory therefore
+//! forces the bundled 精華版, which is how the fallback is tested.
 
 use std::path::{Path, PathBuf};
 
@@ -25,14 +31,39 @@ fn main() {
     // under `schemes/`, the shared 符號表 under `data/`. The old flat names are
     // still looked for, so a machine whose data directory predates yume's
     // split still builds with 靈明 in it.
-    let table = find("schemes/ling.ytab").or_else(|| find("ling.ytab"));
-    let symbols = find("data/symbols.ytab").or_else(|| find("symbols.ytab"));
+    let installed = find("schemes/ling.ytab").or_else(|| find("ling.ytab"));
+    // 精華版 stands in for the whole set or not at all: half of it — the real
+    // 符號表 beside a cut 碼表, or the other way round — is a mixture nobody
+    // asked for and nobody could name afterwards.
+    let jinghua = !installed.is_some();
+    let (table, symbols) = match &installed {
+        Some(table) => (
+            Some(table.clone()),
+            find("data/symbols.ytab").or_else(|| find("symbols.ytab")),
+        ),
+        None => {
+            let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("jinghua");
+            (
+                Some(dir.join("ling.ytab")),
+                Some(dir.join("symbols.ytab")),
+            )
+        }
+    };
     let mut body = String::new();
     body.push_str(&declare("BUILTIN_TABLE", table.as_deref()));
     body.push_str(&declare("BUILTIN_SYMBOLS", symbols.as_deref()));
+    // Say *which* table, not just how old. `:yume` prints this, and 「出廠自帶
+    // 2026-09-12」 beside a candidate list with no 詞 in it is an answer that
+    // sends the reader looking for a bug in 宇浩.
+    let version = table.as_deref().and_then(stamp).map(|when| {
+        if jinghua {
+            format!("精華版 {when}")
+        } else {
+            when
+        }
+    });
     body.push_str(&format!(
-        "pub const BUILTIN_VERSION: Option<&str> = {:?};\n",
-        table.as_deref().and_then(stamp)
+        "pub const BUILTIN_VERSION: Option<&str> = {version:?};\n"
     ));
     std::fs::write(out.join("builtin.rs"), body).expect("write builtin.rs");
 }
@@ -124,10 +155,15 @@ fn date(secs: u64) -> String {
 
 /// Where the installed Yume data lives, in the order the editor itself looks.
 fn find(file: &str) -> Option<PathBuf> {
-    let mut dirs: Vec<PathBuf> = Vec::new();
+    // Set, and it is the whole list: a release build that names a directory
+    // means *that* directory, and silently reaching past it to whatever the
+    // build machine happens to have installed is how a package ends up
+    // carrying a table nobody chose.
     if let Ok(dir) = std::env::var("YUMETE_BUILTIN_DIR") {
-        dirs.push(PathBuf::from(dir));
+        let path = PathBuf::from(dir).join(file);
+        return path.is_file().then_some(path);
     }
+    let mut dirs: Vec<PathBuf> = Vec::new();
     if let Ok(data) = std::env::var("XDG_DATA_HOME") {
         dirs.push(PathBuf::from(data).join("yumete"));
     }

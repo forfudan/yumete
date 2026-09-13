@@ -1949,30 +1949,81 @@ mod tests {
         assert!(s.is_chinese());
     }
 
+    /// ⚠️ This used to hedge — 「whether it can depends on the machine that
+    /// built this binary, and both answers are correct」 — because the 碼表 was
+    /// only ever picked up from an installed 宇浩. That is no longer true:
+    /// `build.rs` falls back to 靈明精華版 in `crates/yumete-ime/jinghua/`, so
+    /// **every** build carries one and the hedge would hide the day it stops.
     #[test]
     fn a_machine_with_nothing_installed_can_still_type() {
         let mut s = ImeSession::new(Scheme::LINGMING, vec![PathBuf::from("/no/such/dir")]);
-        // Whether it can depends on the machine that *built* this binary, and
-        // both answers are correct — so the test is that the two facts agree,
-        // not that either one holds.
-        assert_eq!(s.available(), has_builtin_table());
-        assert_eq!(s.is_builtin(), has_builtin_table());
+        assert!(has_builtin_table(), "every build carries a 碼表");
+        assert!(s.available());
+        assert!(s.is_builtin());
         assert_eq!(s.scheme(), Scheme::LINGMING);
-        if has_builtin_table() {
-            s.input('a');
-            assert!(!s.page_candidates().is_empty(), "and it really answers");
-            assert!(
-                s.table_source().starts_with("出廠自帶"),
-                "and says which one: {}",
-                s.table_source()
-            );
-        }
+        s.input('a');
+        assert!(!s.page_candidates().is_empty(), "and it really answers");
+        assert!(
+            s.table_source().starts_with("出廠自帶"),
+            "and says which one: {}",
+            s.table_source()
+        );
 
         // Only 靈明 — the others are installed, and without their tables the
         // session is honestly unavailable rather than silently 靈明.
         let other = ImeSession::new(Scheme::RIYUE, vec![PathBuf::from("/no/such/dir")]);
         assert!(!other.available());
         assert_eq!(other.scheme(), Scheme::RIYUE);
+    }
+
+    /// 靈明精華版 itself — the two files in `jinghua/`, not whichever table
+    /// this machine happened to embed.
+    ///
+    /// `build.rs` prefers an installed 宇浩 when there is one, so on a
+    /// developer's machine the test above never touches the committed files.
+    /// They are what every release actually ships, so they get their own test:
+    /// the recipe in `scripts/make_jinghua.py` promises CJK 基本區 and 擴展A
+    /// entire, the 字根區, the 簡碼, and a 符號表 — and promises no 詞.
+    #[test]
+    fn the_committed_jinghua_tables_are_what_the_recipe_says() {
+        let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("jinghua");
+        let mut table = CodeTable::new();
+        table
+            .load_binary_bytes(&std::fs::read(dir.join("ling.ytab")).expect("ling.ytab"))
+            .expect("靈明精華版 parses");
+        let mut symbols = CodeTable::new();
+        symbols
+            .load_binary_bytes(&std::fs::read(dir.join("symbols.ytab")).expect("symbols.ytab"))
+            .expect("符號表 parses");
+
+        let mut engine = Engine::new(CodeTable::new());
+        engine.set_table(Arc::new(table));
+        engine.set_symbol_table(symbols);
+        let mut session = ImeSession {
+            engine,
+            scheme: Scheme::LINGMING,
+            data_dirs: Vec::new(),
+            available: true,
+            annotations: false,
+            builtin: true,
+            table_file: None,
+            table_skipped: 0,
+            problems: Vec::new(),
+            display: PanelDisplay::default(),
+            summoned: false,
+            engaged: true,
+        };
+        // 杏 = `xd` is a 簡碼 (its 全碼 is `xdc`), so this is the 簡碼 layer and
+        // the 基本區 in one press.
+        for c in "xd".chars() {
+            session.input(c);
+        }
+        let hits = session.page_candidates();
+        assert!(
+            hits.iter().any(|c| c.text == "杏"),
+            "簡碼 xd should reach 杏, got: {:?}",
+            hits.iter().map(|c| &c.text).collect::<Vec<_>>()
+        );
     }
 }
 
