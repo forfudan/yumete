@@ -515,7 +515,7 @@ index, and a row with no number anywhere else is a row that got lost.
 | 290 | **A lone Shift stopped switching 中/英, and nothing said so** | tui+ime | P1 | the Kitty flag #271 removed was the one reporting it [^290] | Done |
 | 291 | **A list of hexadecimal names is a list you have to Tab through to read** | core+tui | P3 | `Choice` grows a grey note beside the name [^291] | Done |
 | 292 | **Lining up a table whose widest cell is a paragraph writes megabytes of spaces** | core | P2 | a column wider than 400 leaves the table alone; see §5.6 [^292] | Done |
-| 293 | **兩個側欄：左邊看，右邊改** | core+tui | P1 | 左邊看，右邊改，各自三態；#419 的地基 [^293] | Next |
+| 293 | **側欄宿主：兩個槽，各分兩層** | core+tui | P1 | 一至四已落地；第五步是 #419 [^293] | Fixed 2026-09-13 |
 | 294 | **腳註那條四行橫條，是全樹最後一個還是矩形的東西** | tui | P3 | the last rectangle left after #273 [^294] | Fixed 2026-09-13 |
 | 295 | **一存之下檔案翻了幾倍，先問一句** | core+tui | P2 | 又翻倍、又多 256 KB 纔問；`:write` 一處 [^295] | Done |
 | 296 | **`editor.rs` 拆成模組** | core | P2 | 一萬行測試先出去，再按主題逐段搬 [^296] | Done |
@@ -7302,7 +7302,7 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     這條有先例：大綱面板的 `Enter` 本來就是跳到正文那個標題。統一成**只讀面板的
     `Enter` 一律是「帶我去正文那一行」**，百科、表格詳情、搜索結果樹同一個鍵。
 
-    **做的順序**（2026-09-13 定）：
+    **做的順序**（2026-09-13 定，一至四當日落地）：
 
     | | 做什麼 | 怎麼算過 |
     | --- | --- | --- |
@@ -7311,7 +7311,7 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     | 三 a | 每槽分兩層；詳情搬進右槽下層（`split_detail` 退休） | 兩側同時有東西 |
     | 三 b | 字典變成臨時層（右槽下層，收鍵、`j`/`k` 滾），`View::Dictionary` 刪掉 | 槽位真的解耦了 |
     | 四 | 哪個面板在哪一側交給配置：`sidebar_side`／`info_side` | 兩個都設成 `left` 時字典疊在檔案樹下面 |
-    | 五 | #419 高級搜索 | 只是「一個聲明了可編輯的面板」，不動宿主 |
+    | 五 | #419 高級搜索 | 只是「一個聲明了可編輯的面板」，不動宿主。**還沒做** |
 
 [^294]: 2026-09-08：「如果真的要更好看，我覺得可以使用快捷鍵提示的那個面板風格，
     位置根據光標要麼在右下角要麼在左下角，有個外框更加醒目。」先否掉了把它收進右
