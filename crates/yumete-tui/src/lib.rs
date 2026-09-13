@@ -2832,6 +2832,9 @@ fn draw(
                     Some(Transient::Detail) => {
                         table::draw_detail(frame, editor, config, side, rect)
                     }
+                    Some(Transient::Dictionary) => {
+                        draw_dictionary(frame, editor, config, side, rect)
+                    }
                     None => {}
                 },
             }
@@ -4652,11 +4655,20 @@ fn sidebar_columns(editor: &Editor, config: &Config, side: Side, total: u16) -> 
     // `split_detail` used to refuse below 30 columns, and the reason holds:
     // the grid is what the window is for, and a panel that leaves eight
     // columns of it is worse than no panel.
-    if editor.transient(side).is_some() && total >= DETAIL_WIDTH {
-        want = want
-            .max(editor.detail_width().unwrap_or(config.editor.detail_width))
-            .min(total as usize / 2)
-            .max(12);
+    if let Some(kind) = editor.transient(side).filter(|_| total >= DETAIL_WIDTH) {
+        let asked = match kind {
+            // A 字典 answer is 名 and 值 on one line and cannot be folded: too
+            // narrow and the reading runs off the edge of the one panel that
+            // exists to show it whole.
+            Transient::Dictionary => editor
+                .transient_rows(side)
+                .iter()
+                .map(|row| yumete_cjk::str_width(&row.name) + 3)
+                .max()
+                .unwrap_or(0),
+            Transient::Detail => editor.detail_width().unwrap_or(config.editor.detail_width),
+        };
+        want = want.max(asked).min(total as usize / 2).max(12);
     }
     // A slot narrower than three cells cannot be drawn — and the drawing used
     // to *return* at that width, leaving the rectangle it had been given
@@ -4814,12 +4826,64 @@ fn draw_sidebar(frame: &mut Frame, editor: &Editor, config: &Config, side: Side,
                 };
                 format!("{mark}{}", row.name)
             }
-            // No indent and no mark: the panel is a list of 名／值 pairs
-            // already lined up into columns, and a narrow sidebar has no cells
-            // to spend on decorating them.
-            View::Dictionary => row.name.clone(),
         };
         put_text(buf, area.x + 1, y, rule, &line, style);
+    }
+}
+
+/// **The 字典, in the bottom layer of a slot** — Feature #215, #293.
+///
+/// A list of 名／值 pairs with no indent and no marks: they are lined up into
+/// columns already, and a narrow slot has no cells to spend on decorating
+/// them. Nothing is highlighted either — nothing here is chosen, only read —
+/// so what says the keys are in it is the title, inked.
+fn draw_dictionary(frame: &mut Frame, editor: &Editor, config: &Config, side: Side, area: Rect) {
+    if area.width < 3 || area.height == 0 {
+        return;
+    }
+    let ink = crate::theme::Palette::of(config);
+    let ground = ink.ground(yumete_config::rung::CHROME);
+    let text = ground.fg(ink.text());
+    let head = ground.fg(ink.gold()).add_modifier(Modifier::BOLD);
+    let quiet = ground.fg(ink.quiet());
+
+    frame.render_widget(Clear, area);
+    vertical::clear_wide_left_edge(frame.buffer_mut(), area);
+    let rule = match side {
+        Side::Left => area.x + area.width - 1,
+        Side::Right => area.x,
+    };
+    let (from, to) = match side {
+        Side::Left => (area.x, rule),
+        Side::Right => (area.x + 1, area.x + area.width),
+    };
+    let buf = frame.buffer_mut();
+    for y in area.y..area.y + area.height {
+        for x in from..to {
+            if let Some(cell) = buf.cell_mut((x, y)) {
+                cell.set_symbol(" ").set_style(ground);
+            }
+        }
+        if let Some(cell) = buf.cell_mut((rule, y)) {
+            cell.set_symbol("│").set_style(quiet);
+        }
+    }
+
+    let rows = editor.transient_rows(side);
+    let focused = editor.panel_focus() == Some((side, Layer::Bottom));
+    let title = match focused {
+        true => Style::default().bg(ink.text()).fg(ink.paper()),
+        false => quiet,
+    };
+    put_text(buf, from + 1, area.y, to, &say!("label.dictionary"), title);
+    let visible = (area.height as usize).saturating_sub(1);
+    let first = editor
+        .transient_scroll()
+        .min(rows.len().saturating_sub(visible.max(1)));
+    for slot in 0..visible.min(rows.len().saturating_sub(first)) {
+        let row = &rows[first + slot];
+        let style = if row.is_dir { head } else { text };
+        put_text(buf, from + 1, area.y + 1 + slot as u16, to, &row.name, style);
     }
 }
 
@@ -8943,9 +9007,15 @@ mod tests {
 
         let ime = ImeSession::from_table_text(Scheme::LINGMING, "a 啊\n");
         let buffer = render_with(&editor, &Config::default(), &ime, 60, 8);
-        let head = row_text(&buffer, 0);
+        // The panel is the bottom layer of the right slot now (#293), so what
+        // is being read here is the part past the rule down its left edge.
+        let panel = |y: u16| match row_text(&buffer, y).split_once('│') {
+            Some((_, panel)) => panel.to_string(),
+            None => String::new(),
+        };
+        let head = panel(0);
         assert!(head.contains("字典"), "{head}");
-        let rows: Vec<String> = (1..4).map(|y| row_text(&buffer, y)).collect();
+        let rows: Vec<String> = (1..4).map(panel).collect();
         assert!(rows[0].starts_with(" 那"), "{:?}", rows[0]);
         // 拆分 is four columns and 分節編碼 is eight, so the shorter name is
         // padded by four — and the two values start in the same column.
@@ -8975,8 +9045,8 @@ mod tests {
         ime_handle(&mut ime, &mut editor, KeyCode::Tab, KeyModifiers::NONE);
         assert_eq!(editor.take_dictionary_query(), Some('吧'));
         assert_eq!(
-            editor.panel(Side::Left).map(|s| s.view()),
-            Some(yumete_core::sidebar::View::Dictionary)
+            editor.transient(Side::Right),
+            Some(yumete_core::sidebar::Transient::Dictionary)
         );
         // The keys stay with the word: the reader is mid-composition, and the
         // panel is only there to be glanced at.

@@ -7622,26 +7622,29 @@ fn the_chapters_a_book_includes_are_read_out_of_the_files_themselves() {
     std::fs::remove_dir_all(&dir).ok();
 }
 
-/// `Space d` asks about the character under the cursor — Feature #215.
+/// `Space d` asks about the character under the cursor — Feature #215, #293.
 ///
 /// The editor cannot answer: the 拆分表 lives in yume, which only the
 /// front end holds. So what is checked here is the half the editor owns —
-/// the question is parked, the panel is open on it, and the answer, when
-/// it comes, is laid out in columns.
+/// the question is parked, the transient panel is up on it, and the answer,
+/// when it comes, is laid out in columns.
 #[test]
 fn the_dictionary_asks_about_the_character_under_the_cursor() {
+    use crate::sidebar::{Layer, Side, Transient};
     let mut ed = typed("那年冬天");
     ed.on_key(Key::Char(' '));
     ed.on_key(Key::Char('d'));
 
-    assert_eq!(ed.panel(crate::sidebar::Side::Left).map(|s| s.view()), Some(crate::sidebar::View::Dictionary));
-    assert!(ed.sidebar_focused(), "asked from the page, the keys go along");
+    let right = Side::Right;
+    assert_eq!(ed.transient(right), Some(Transient::Dictionary));
+    assert_eq!(ed.panel_focus(), Some((right, Layer::Bottom)), "the keys go along");
+    assert!(ed.panel(Side::Left).is_none(), "and nothing was opened on the left");
     assert_eq!(ed.take_dictionary_query(), Some('那'));
     assert_eq!(ed.take_dictionary_query(), None, "asked once, answered once");
 
     // Until the answer arrives the panel is the character alone — not an
     // empty panel, and not last character's answer.
-    assert_eq!(ed.panel(crate::sidebar::Side::Left).unwrap().rows().len(), 1);
+    assert_eq!(ed.transient_rows(right).len(), 1);
 
     ed.set_dictionary(
         '那',
@@ -7651,9 +7654,7 @@ fn the_dictionary_asks_about_the_character_under_the_cursor() {
         ],
     );
     let rows: Vec<String> = ed
-        .panel(crate::sidebar::Side::Left)
-        .unwrap()
-        .rows()
+        .transient_rows(right)
         .iter()
         .map(|r| r.name.clone())
         .collect();
@@ -7661,11 +7662,20 @@ fn the_dictionary_asks_about_the_character_under_the_cursor() {
     assert_eq!(rows[1], "拆分  刀二阝");
     assert_eq!(rows[2], "編碼  vfb", "names are padded to a column");
 
-    // `Tab` cannot walk into it, and walking out of it comes back to the
-    // tree rather than to a fourth view nobody asked for.
-    let mut ed = ed;
-    ed.on_key(Key::Tab);
-    assert_eq!(ed.panel(crate::sidebar::Side::Left).map(|s| s.view()), Some(crate::sidebar::View::Explorer));
+    // **It scrolls, because a long answer is why it takes the keys at all.**
+    ed.on_key(Key::Char('j'));
+    assert_eq!(ed.transient_scroll(), 1);
+    ed.on_key(Key::Char('G'));
+    assert_eq!(ed.transient_scroll(), 2, "the last of three");
+    ed.on_key(Key::Char('g'));
+    assert_eq!(ed.transient_scroll(), 0);
+
+    // **The cursor is what takes it down.** Walk out of the panel, move one
+    // character, and the question is no longer being asked.
+    ed.on_key(Key::Ctrl('w'));
+    assert_eq!(ed.transient(right), Some(Transient::Dictionary), "still on 那");
+    ed.on_key(Key::Char('l'));
+    assert_eq!(ed.transient(right), None, "and gone the moment the cursor left");
 }
 
 /// 「查不到」and「還沒問」are different findings.
@@ -7676,7 +7686,7 @@ fn a_character_the_table_has_nothing_for_says_so() {
     ed.on_key(Key::Char('d'));
     ed.take_dictionary_query();
     ed.set_dictionary('那', Vec::new());
-    let rows = ed.panel(crate::sidebar::Side::Left).unwrap().rows();
+    let rows = ed.transient_rows(crate::sidebar::Side::Right);
     assert_eq!(rows.len(), 2, "{rows:?}");
     assert_eq!(rows[1].name, say!("ui.not-in-the-table"));
 }
@@ -7695,7 +7705,7 @@ fn an_answer_for_a_character_nobody_is_asking_about_now_is_dropped() {
     ed.look_up('年', true);
     ed.set_dictionary('那', vec![("拆分".to_string(), "刀二阝".to_string())]);
     assert_eq!(ed.dictionary().map(|(ch, _)| ch), Some('年'));
-    assert_eq!(ed.panel(crate::sidebar::Side::Left).unwrap().rows().len(), 1, "still waiting");
+    assert_eq!(ed.transient_rows(crate::sidebar::Side::Right).len(), 1, "still waiting");
 }
 
 /// #222: how far a notch of the wheel moves is the reader's, not a
