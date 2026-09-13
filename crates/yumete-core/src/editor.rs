@@ -1953,10 +1953,16 @@ pub struct Editor {
     reload_warned: bool,
     /// The open picker, if `Space f` or `Space b` is up (Feature #90).
     picker: Option<crate::picker::Picker>,
-    /// The file sidebar, when it is showing (Feature #94).
-    sidebar: Option<crate::sidebar::Sidebar>,
-    /// Whether keys are going to the sidebar rather than to the text.
-    sidebar_focus: bool,
+    /// The two panel slots, indexed by [`crate::sidebar::Side`] — Feature #94,
+    /// #293.
+    ///
+    /// An array and not two named fields, because everything that walks them
+    /// walks both and must not know which is which: the side a panel opens on
+    /// is [`Editor::side_for`]'s answer, one function, and the day it reads a
+    /// setting instead of returning `Left` nothing else here changes.
+    panels: [Option<crate::sidebar::Sidebar>; 2],
+    /// Which slot the keys are going to, if either.
+    panel_focus: Option<crate::sidebar::Side>,
     /// What an unnamed file's markup is taken to be, from the project's config.
     default_syntax: Option<crate::syntax::Syntax>,
     /// Which markup a file is in, by extension or by exact name.
@@ -2287,8 +2293,8 @@ impl Editor {
             compiled: RefCell::new(None),
             smart_case: true,
             picker: None,
-            sidebar: None,
-            sidebar_focus: false,
+            panels: [None, None],
+            panel_focus: None,
             default_syntax: None,
             syntax_by_name: HashMap::new(),
             grep_root: None,

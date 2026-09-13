@@ -8,7 +8,48 @@
 use super::*;
 
 impl Editor {
-    // ---- The file sidebar (Feature #94) ------------------------------------
+    // ---- The side panels (Feature #94, #293) -------------------------------
+
+    /// **Which slot a view opens in — the one place that decides it** (#293).
+    ///
+    /// Every view answers `Left` today, which is where the only panel this
+    /// editor has ever had already sits, so nothing moves. The day this reads
+    /// a setting instead is the day the reader can put the outline on the
+    /// right, and it is the only function that has to change: nothing else
+    /// here names a side of its own.
+    pub(super) fn side_for(&self, _view: crate::sidebar::View) -> crate::sidebar::Side {
+        crate::sidebar::Side::Left
+    }
+
+    /// The panel in that slot, for the front end to draw.
+    pub fn panel(&self, side: crate::sidebar::Side) -> Option<&crate::sidebar::Sidebar> {
+        self.panels[side as usize].as_ref()
+    }
+
+    /// The same, to be moved about in.
+    pub(super) fn panel_mut(
+        &mut self,
+        side: crate::sidebar::Side,
+    ) -> Option<&mut crate::sidebar::Sidebar> {
+        self.panels[side as usize].as_mut()
+    }
+
+    /// Which slot the keys are in, if either.
+    ///
+    /// `None` when they are in the text — and also when the slot the focus
+    /// names has since been emptied, so a stale focus can never be reported as
+    /// a live one.
+    pub fn panel_focus(&self) -> Option<crate::sidebar::Side> {
+        let side = self.panel_focus?;
+        self.panel(side).map(|_| side)
+    }
+
+    /// Which slot is showing that view, if either is.
+    pub(super) fn showing(&self, view: crate::sidebar::View) -> Option<crate::sidebar::Side> {
+        crate::sidebar::Side::BOTH
+            .into_iter()
+            .find(|&side| self.panel(side).is_some_and(|p| p.view() == view))
+    }
 
     /// What `Space e` and `Space o` do — one rule for both, so neither is the
     /// odd one out.
@@ -17,21 +58,26 @@ impl Editor {
     /// what is already showing, and all three are what a reader means by
     /// pressing it:
     ///
-    /// - closed → open it on that view, with the keys.
-    /// - open on **another** view → switch to that view and take the keys. The
-    ///   key means "show me the outline", not "toggle the sidebar".
-    /// - open on **that** view, unfocused → take the keys back.
-    /// - open on that view, focused → put it away. Pressing the same key twice
+    /// - nowhere → open it in its own slot, with the keys.
+    /// - showing, without the keys → take the keys back.
+    /// - showing, with the keys → put it away. Pressing the same key twice
     ///   undoes it, which is the one thing every toggle must do.
+    /// - its slot busy with **another** view → switch that slot to this view
+    ///   and take the keys. The key means "show me the outline", not "toggle
+    ///   the panel".
     pub(super) fn show_sidebar(&mut self, view: crate::sidebar::View) {
-        match self.sidebar.as_mut() {
-            Some(sidebar) if sidebar.view() == view && self.sidebar_focus => {
-                self.sidebar = None;
-                self.sidebar_focus = false;
+        if let Some(side) = self.showing(view) {
+            match self.panel_focus() == Some(side) {
+                true => self.close_panel(side),
+                false => self.focus_panel(side),
             }
-            Some(sidebar) => {
-                sidebar.show(view);
-                self.sidebar_focus = true;
+            return;
+        }
+        let side = self.side_for(view);
+        match self.panel_mut(side) {
+            Some(panel) => {
+                panel.show(view);
+                self.panel_focus = Some(side);
                 self.refresh_sidebar();
             }
             None => {
@@ -41,12 +87,28 @@ impl Editor {
         }
     }
 
-    /// Show the sidebar rooted at `root` and give it the keys.
+    /// Put that slot away, and the keys back in the text if they were in it.
+    pub(super) fn close_panel(&mut self, side: crate::sidebar::Side) {
+        self.panels[side as usize] = None;
+        if self.panel_focus == Some(side) {
+            self.panel_focus = None;
+        }
+    }
+
+    /// Give that slot the keys, if it has anything in it.
+    pub(super) fn focus_panel(&mut self, side: crate::sidebar::Side) {
+        if self.panel(side).is_some() {
+            self.panel_focus = Some(side);
+            self.refresh_sidebar();
+        }
+    }
+
+    /// Show the file tree rooted at `root` and give it the keys.
     pub fn open_sidebar_at(&mut self, root: &Path) {
         self.open_sidebar_showing(root, crate::sidebar::View::Explorer);
     }
 
-    /// Show the sidebar rooted at `root`, opened on `view`.
+    /// Show a panel rooted at `root`, opened on `view`, in that view's slot.
     pub fn open_sidebar_showing(&mut self, root: &Path, view: crate::sidebar::View) {
         let mut sidebar = crate::sidebar::Sidebar::new(root);
         sidebar.show(view);
@@ -57,8 +119,9 @@ impl Editor {
                 sidebar.reveal(&full);
             }
         }
-        self.sidebar = Some(sidebar);
-        self.sidebar_focus = true;
+        let side = self.side_for(view);
+        self.panels[side as usize] = Some(sidebar);
+        self.panel_focus = Some(side);
         self.refresh_sidebar();
     }
 
@@ -74,14 +137,21 @@ impl Editor {
     /// sidebar is opened, focused, switched, or the file under it changes —
     /// every moment a reader is about to look at it.
     pub(super) fn refresh_sidebar(&mut self) {
+        for side in crate::sidebar::Side::BOTH {
+            self.refresh_panel(side);
+        }
+    }
+
+    /// Fill one slot with whatever the view in it shows.
+    fn refresh_panel(&mut self, side: crate::sidebar::Side) {
         use crate::sidebar::{Row, View};
-        let Some(view) = self.sidebar.as_ref().map(|s| s.view()) else {
+        let Some(view) = self.panel(side).map(|p| p.view()) else {
             return;
         };
         let rows = match view {
             View::Explorer => {
-                if let Some(sidebar) = self.sidebar.as_mut() {
-                    sidebar.rebuild();
+                if let Some(panel) = self.panel_mut(side) {
+                    panel.rebuild();
                 }
                 return;
             }
@@ -106,8 +176,8 @@ impl Editor {
             View::Outline => self.outline_rows(),
             View::Dictionary => self.dictionary_rows(),
         };
-        if let Some(sidebar) = self.sidebar.as_mut() {
-            sidebar.set_rows(rows);
+        if let Some(panel) = self.panel_mut(side) {
+            panel.set_rows(rows);
         }
     }
 
@@ -140,9 +210,8 @@ impl Editor {
     fn outline_rows(&self) -> Vec<crate::sidebar::Row> {
         let headings = self.outline_headings();
         let folded = |key: &(PathBuf, usize)| {
-            self.sidebar
-                .as_ref()
-                .is_some_and(|sidebar| sidebar.is_folded(key))
+            self.outline_panel()
+                .is_some_and(|panel| panel.is_folded(key))
         };
         let mut rows = Vec::new();
         // The level of the shallowest fold currently hiding rows. Anything
@@ -196,9 +265,8 @@ impl Editor {
             .get(i + 1)
             .is_some_and(|next| next.level > headings[i].level);
         let shut = self
-            .sidebar
-            .as_ref()
-            .is_some_and(|sidebar| sidebar.is_folded(&here));
+            .outline_panel()
+            .is_some_and(|panel| panel.is_folded(&here));
         let target = match has_children && !shut {
             true => here,
             // The nearest heading above it that is shallower than it is.
@@ -220,9 +288,8 @@ impl Editor {
             return false;
         };
         if !self
-            .sidebar
-            .as_ref()
-            .is_some_and(|sidebar| sidebar.is_folded(&here))
+            .outline_panel()
+            .is_some_and(|panel| panel.is_folded(&here))
         {
             return false;
         }
@@ -233,32 +300,34 @@ impl Editor {
     /// What the highlighted 大綱 row stands for: the file it is in and the
     /// line it is on, which is what the fold set remembers.
     fn outline_row_key(&self) -> Option<(PathBuf, usize)> {
-        let sidebar = self.sidebar.as_ref()?;
-        if sidebar.view() != crate::sidebar::View::Outline {
-            return None;
-        }
-        let row = sidebar.rows().get(sidebar.selected())?;
+        let panel = self.outline_panel()?;
+        let row = panel.rows().get(panel.selected())?;
         Some((row.path.clone(), row.depth))
+    }
+
+    /// The panel showing the 大綱, whichever slot it is in.
+    fn outline_panel(&self) -> Option<&crate::sidebar::Sidebar> {
+        self.panel(self.showing(crate::sidebar::View::Outline)?)
     }
 
     /// Fold or open one heading, rebuild the rows, and keep the highlight on
     /// it — folding takes rows away, and a highlight that slid onto whatever
     /// filled the gap would be reading the wrong chapter.
     fn set_outline_fold(&mut self, key: (PathBuf, usize), folded: bool) {
-        let Some(sidebar) = self.sidebar.as_mut() else {
+        let Some(side) = self.showing(crate::sidebar::View::Outline) else {
             return;
         };
-        if !sidebar.set_folded(key.clone(), folded) {
+        if !self.panel_mut(side).is_some_and(|p| p.set_folded(key.clone(), folded)) {
             return;
         }
         self.refresh_sidebar();
-        if let Some(sidebar) = self.sidebar.as_mut() {
-            let at = sidebar
+        if let Some(panel) = self.panel_mut(side) {
+            let at = panel
                 .rows()
                 .iter()
                 .position(|r| (r.path.clone(), r.depth) == key);
             if let Some(at) = at {
-                sidebar.select(at);
+                panel.select(at);
             }
         }
     }
@@ -335,19 +404,20 @@ impl Editor {
         // Asked, unanswered: what is showing until the answer arrives is the
         // character alone, which is not the same panel as 「查不到」.
         self.dictionary = Some((ch, None));
-        match self.sidebar.as_mut() {
-            Some(sidebar) => sidebar.show(crate::sidebar::View::Dictionary),
+        let side = self.side_for(crate::sidebar::View::Dictionary);
+        match self.panel_mut(side) {
+            Some(panel) => panel.show(crate::sidebar::View::Dictionary),
             None => {
                 let root = self.project_root();
-                let mut sidebar = crate::sidebar::Sidebar::new(&root);
-                sidebar.show(crate::sidebar::View::Dictionary);
-                self.sidebar = Some(sidebar);
+                let mut panel = crate::sidebar::Sidebar::new(&root);
+                panel.show(crate::sidebar::View::Dictionary);
+                self.panels[side as usize] = Some(panel);
             }
         }
         // Asked from the page, the keys go with the question. Asked while a
         // word is being typed, they must not — the reader is mid-word, and the
         // panel is only there to be glanced at.
-        self.sidebar_focus = focus;
+        self.panel_focus = focus.then_some(side);
         self.refresh_sidebar();
     }
 
@@ -376,14 +446,9 @@ impl Editor {
             .map(|(ch, answer)| (*ch, answer.as_deref()))
     }
 
-    /// The sidebar, for the front end to draw.
-    pub fn sidebar(&self) -> Option<&crate::sidebar::Sidebar> {
-        self.sidebar.as_ref()
-    }
-
-    /// Whether the keys are going to the sidebar.
+    /// Whether the keys are in either panel.
     pub fn sidebar_focused(&self) -> bool {
-        self.sidebar_focus && self.sidebar.is_some()
+        self.panel_focus().is_some()
     }
 
     /// What the sidebar's keys are, for the status line to say while it has
@@ -424,8 +489,11 @@ impl Editor {
                 _ => {}
             }
         }
-        let Some(sidebar) = self.sidebar.as_mut() else {
-            self.sidebar_focus = false;
+        let Some(side) = self.panel_focus() else {
+            self.panel_focus = None;
+            return;
+        };
+        let Some(sidebar) = self.panel_mut(side) else {
             return;
         };
         match key {
@@ -472,17 +540,17 @@ impl Editor {
                             self.status = say!("buffer.cannot-open", path.display(), err);
                         }
                         // Entering a file means going to write in it.
-                        self.sidebar_focus = false;
+                        self.panel_focus = None;
                         self.refresh_sidebar();
                     }
                     Some(crate::sidebar::Chosen::Buffer(i)) => {
                         self.show_buffer(i);
-                        self.sidebar_focus = false;
+                        self.panel_focus = None;
                         self.refresh_sidebar();
                     }
                     Some(crate::sidebar::Chosen::Line(line)) => {
                         self.goto_line(line + 1);
-                        self.sidebar_focus = false;
+                        self.panel_focus = None;
                     }
                     Some(crate::sidebar::Chosen::FileLine(path, line)) => {
                         match self.open_included_file(&path) {
@@ -491,7 +559,7 @@ impl Editor {
                                 self.status = say!("buffer.cannot-open", path.display(), err)
                             }
                         }
-                        self.sidebar_focus = false;
+                        self.panel_focus = None;
                         self.refresh_sidebar();
                     }
                     None => {}
@@ -509,11 +577,8 @@ impl Editor {
                 self.refresh_sidebar();
             }
             // Esc hands the keys back but leaves the tree up; `q` puts it away.
-            Key::Esc | Key::Ctrl('w') => self.sidebar_focus = false,
-            Key::Char('q') => {
-                self.sidebar = None;
-                self.sidebar_focus = false;
-            }
+            Key::Esc | Key::Ctrl('w') => self.panel_focus = None,
+            Key::Char('q') => self.close_panel(side),
             // Space still opens the menu, so `Space e` closes the sidebar from
             // inside it exactly as it opened it.
             Key::Char(' ') => self.pending = Pending::Space,

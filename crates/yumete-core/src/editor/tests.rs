@@ -2532,7 +2532,7 @@ fn the_outline_is_the_hashes_a_writer_already_types() {
     // says how many there are. It used to join every heading into the
     // status line, which for a novel is 700 chapters on one row.
     ed.execute(":toc").unwrap();
-    assert!(ed.sidebar().is_some(), "{}", ed.status());
+    assert!(ed.panel(crate::sidebar::Side::Left).is_some(), "{}", ed.status());
     assert!(ed.status().contains("4"), "{}", ed.status());
 }
 
@@ -7601,7 +7601,7 @@ fn the_chapters_a_book_includes_are_read_out_of_the_files_themselves() {
 
     // Nothing was compiled: the titles are written in the files, in plain
     // `= 標題`, and reading them is enough.
-    let rows = ed.sidebar().unwrap().rows().to_vec();
+    let rows = ed.panel(crate::sidebar::Side::Left).unwrap().rows().to_vec();
     assert_eq!(
         rows.iter().map(|r| r.name.as_str()).collect::<Vec<_>>(),
         vec!["天門真境", "  傳家寶扇", "  天門攬勝", "  ch03.txt"],
@@ -7634,14 +7634,14 @@ fn the_dictionary_asks_about_the_character_under_the_cursor() {
     ed.on_key(Key::Char(' '));
     ed.on_key(Key::Char('d'));
 
-    assert_eq!(ed.sidebar().map(|s| s.view()), Some(crate::sidebar::View::Dictionary));
+    assert_eq!(ed.panel(crate::sidebar::Side::Left).map(|s| s.view()), Some(crate::sidebar::View::Dictionary));
     assert!(ed.sidebar_focused(), "asked from the page, the keys go along");
     assert_eq!(ed.take_dictionary_query(), Some('那'));
     assert_eq!(ed.take_dictionary_query(), None, "asked once, answered once");
 
     // Until the answer arrives the panel is the character alone — not an
     // empty panel, and not last character's answer.
-    assert_eq!(ed.sidebar().unwrap().rows().len(), 1);
+    assert_eq!(ed.panel(crate::sidebar::Side::Left).unwrap().rows().len(), 1);
 
     ed.set_dictionary(
         '那',
@@ -7651,7 +7651,7 @@ fn the_dictionary_asks_about_the_character_under_the_cursor() {
         ],
     );
     let rows: Vec<String> = ed
-        .sidebar()
+        .panel(crate::sidebar::Side::Left)
         .unwrap()
         .rows()
         .iter()
@@ -7665,7 +7665,7 @@ fn the_dictionary_asks_about_the_character_under_the_cursor() {
     // tree rather than to a fourth view nobody asked for.
     let mut ed = ed;
     ed.on_key(Key::Tab);
-    assert_eq!(ed.sidebar().map(|s| s.view()), Some(crate::sidebar::View::Explorer));
+    assert_eq!(ed.panel(crate::sidebar::Side::Left).map(|s| s.view()), Some(crate::sidebar::View::Explorer));
 }
 
 /// 「查不到」and「還沒問」are different findings.
@@ -7676,7 +7676,7 @@ fn a_character_the_table_has_nothing_for_says_so() {
     ed.on_key(Key::Char('d'));
     ed.take_dictionary_query();
     ed.set_dictionary('那', Vec::new());
-    let rows = ed.sidebar().unwrap().rows();
+    let rows = ed.panel(crate::sidebar::Side::Left).unwrap().rows();
     assert_eq!(rows.len(), 2, "{rows:?}");
     assert_eq!(rows[1].name, say!("ui.not-in-the-table"));
 }
@@ -7695,7 +7695,7 @@ fn an_answer_for_a_character_nobody_is_asking_about_now_is_dropped() {
     ed.look_up('年', true);
     ed.set_dictionary('那', vec![("拆分".to_string(), "刀二阝".to_string())]);
     assert_eq!(ed.dictionary().map(|(ch, _)| ch), Some('年'));
-    assert_eq!(ed.sidebar().unwrap().rows().len(), 1, "still waiting");
+    assert_eq!(ed.panel(crate::sidebar::Side::Left).unwrap().rows().len(), 1, "still waiting");
 }
 
 /// #222: how far a notch of the wheel moves is the reader's, not a
@@ -7819,7 +7819,7 @@ fn one_key_moves_between_the_two_panes() {
     ed.on_key(Key::Char('e'));
     ed.on_key(Key::Char(' '));
     ed.on_key(Key::Char('e'));
-    assert!(ed.sidebar().is_none());
+    assert!(ed.panel(crate::sidebar::Side::Left).is_none());
     ed.on_key(Key::Ctrl('w'));
     assert!(!ed.sidebar_focused());
 
@@ -7842,24 +7842,24 @@ fn a_key_that_names_a_view_opens_it_switches_to_it_and_closes_it() {
     // The same key again closes it: a toggle that cannot undo itself is not
     // a toggle.
     type_keys(&mut ed, " e");
-    assert!(ed.sidebar().is_none());
+    assert!(ed.panel(crate::sidebar::Side::Left).is_none());
 
     // A *different* view's key opens on that view…
     type_keys(&mut ed, " o");
-    assert_eq!(ed.sidebar().unwrap().view(), crate::sidebar::View::Outline);
+    assert_eq!(ed.panel(crate::sidebar::Side::Left).unwrap().view(), crate::sidebar::View::Outline);
     // …and from there `Space e` means "show me the files", not "close".
     type_keys(&mut ed, " e");
-    assert_eq!(ed.sidebar().unwrap().view(), crate::sidebar::View::Explorer);
+    assert_eq!(ed.panel(crate::sidebar::Side::Left).unwrap().view(), crate::sidebar::View::Explorer);
     assert!(ed.sidebar_focused());
 
     // Esc hands the keys back without putting it away, and the key takes
     // them again rather than closing something the writer is not in.
     ed.on_key(Key::Esc);
-    assert!(ed.sidebar().is_some() && !ed.sidebar_focused());
+    assert!(ed.panel(crate::sidebar::Side::Left).is_some() && !ed.sidebar_focused());
     type_keys(&mut ed, " e");
     assert!(ed.sidebar_focused(), "the keys came back");
     type_keys(&mut ed, " e");
-    assert!(ed.sidebar().is_none(), "and now it closes");
+    assert!(ed.panel(crate::sidebar::Side::Left).is_none(), "and now it closes");
 
     std::fs::remove_dir_all(&dir).ok();
 }
@@ -7879,7 +7879,7 @@ fn the_sidebar_shows_three_views_of_the_same_question() {
     // `Space o` opens straight onto the outline of the file being written…
     ed.open_sidebar_showing(&dir, crate::sidebar::View::Outline);
     assert!(
-        ed.sidebar().unwrap().rows().is_empty(),
+        ed.panel(crate::sidebar::Side::Left).unwrap().rows().is_empty(),
         "a scratch has none"
     );
 
@@ -7887,7 +7887,7 @@ fn the_sidebar_shows_three_views_of_the_same_question() {
     ed.prev_buffer();
     ed.open_sidebar_showing(&dir, crate::sidebar::View::Outline);
     let names: Vec<&str> = ed
-        .sidebar()
+        .panel(crate::sidebar::Side::Left)
         .unwrap()
         .rows()
         .iter()
@@ -7904,9 +7904,9 @@ fn the_sidebar_shows_three_views_of_the_same_question() {
     // Tab walks from the tree on to the buffers, which name what is open.
     ed.open_sidebar_at(&dir);
     ed.on_key(Key::Tab);
-    assert_eq!(ed.sidebar().unwrap().view(), crate::sidebar::View::Buffers);
+    assert_eq!(ed.panel(crate::sidebar::Side::Left).unwrap().view(), crate::sidebar::View::Buffers);
     let names: Vec<String> = ed
-        .sidebar()
+        .panel(crate::sidebar::Side::Left)
         .unwrap()
         .rows()
         .iter()
@@ -7937,7 +7937,7 @@ fn the_sidebar_walks_the_tree_with_the_same_keys_the_text_uses() {
     ed.on_key(Key::Char('l'));
     assert_eq!(ed.current_buffer().text(), "第一章\n");
     assert!(!ed.sidebar_focused(), "the keys went back to the text");
-    assert!(ed.sidebar().is_some(), "but the tree stays up");
+    assert!(ed.panel(crate::sidebar::Side::Left).is_some(), "but the tree stays up");
 
     // The keys are with the text now, so `Space e` takes them back rather
     // than closing something the writer is not in; the press after that
@@ -7945,7 +7945,7 @@ fn the_sidebar_walks_the_tree_with_the_same_keys_the_text_uses() {
     type_keys(&mut ed, " e");
     assert!(ed.sidebar_focused());
     type_keys(&mut ed, " e");
-    assert!(ed.sidebar().is_none(), "Space e closes it again");
+    assert!(ed.panel(crate::sidebar::Side::Left).is_none(), "Space e closes it again");
 
     std::fs::remove_dir_all(&dir).ok();
 }
@@ -12860,7 +12860,7 @@ fn a_heading_in_the_outline_folds_what_is_under_it() {
     ed.open_sidebar_showing(&dir, crate::sidebar::View::Outline);
 
     let names = |ed: &Editor| -> Vec<String> {
-        ed.sidebar()
+        ed.panel(crate::sidebar::Side::Left)
             .unwrap()
             .rows()
             .iter()
@@ -12868,7 +12868,7 @@ fn a_heading_in_the_outline_folds_what_is_under_it() {
             .collect()
     };
     let marks = |ed: &Editor| -> Vec<(bool, bool)> {
-        ed.sidebar()
+        ed.panel(crate::sidebar::Side::Left)
             .unwrap()
             .rows()
             .iter()
@@ -12885,7 +12885,7 @@ fn a_heading_in_the_outline_folds_what_is_under_it() {
     ed.on_key(Key::Char('h'));
     assert_eq!(names(&ed), ["卷一", "卷二"]);
     assert_eq!(marks(&ed)[0], (true, false));
-    assert_eq!(ed.sidebar().unwrap().selected(), 0);
+    assert_eq!(ed.panel(crate::sidebar::Side::Left).unwrap().selected(), 0);
 
     // `l` opens it again.
     ed.on_key(Key::Char('l'));
@@ -12895,10 +12895,10 @@ fn a_heading_in_the_outline_folds_what_is_under_it() {
     // closes and takes the highlight — pressing it again walks out of the
     // branch, which is what `h` does in the tree.
     ed.on_key(Key::Char('j'));
-    assert_eq!(ed.sidebar().unwrap().selected(), 1);
+    assert_eq!(ed.panel(crate::sidebar::Side::Left).unwrap().selected(), 1);
     ed.on_key(Key::Char('h'));
     assert_eq!(names(&ed), ["卷一", "卷二"]);
-    assert_eq!(ed.sidebar().unwrap().selected(), 0, "up on the 卷");
+    assert_eq!(ed.panel(crate::sidebar::Side::Left).unwrap().selected(), 0, "up on the 卷");
 
     // A heading with nothing above it and nothing under it folds nothing.
     ed.on_key(Key::Char('j'));
