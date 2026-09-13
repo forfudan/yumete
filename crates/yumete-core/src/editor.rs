@@ -1963,16 +1963,13 @@ pub struct Editor {
     panels: [Option<crate::sidebar::Sidebar>; 2],
     /// Which slot **and which layer** the keys are going to, if any.
     panel_focus: Option<(crate::sidebar::Side, crate::sidebar::Layer)>,
-    /// Which slot the resident panels open in — the file tree, the buffers,
-    /// the outline (#293). A setting, so a reader who writes 縱書 with the
-    /// page against the right edge can put them where they are out of the way.
-    sidebar_side: crate::sidebar::Side,
-    /// Which slot the transient ones appear in — 字典, the table detail.
+    /// **Which slot each panel lives in**, indexed by
+    /// [`crate::sidebar::Panel`] (#293).
     ///
-    /// Defaults to the other one, and **may be the same**: both on the left
-    /// stacks the answer under the file tree, which is a layout somebody will
-    /// want on a narrow window.
-    info_side: crate::sidebar::Side,
+    /// One per panel rather than one per group: a reader may want the outline
+    /// across from the tree, or the 字典 stacked under it. Two on one side
+    /// share that slot — `Tab` walks them, the way the three used to.
+    sides: [crate::sidebar::Side; crate::sidebar::Panel::ALL.len()],
     /// Where the cursor was when the 字典 was asked, so the answer can go when
     /// the cursor leaves without anybody having to take it away (#293).
     dictionary_anchor: Option<usize>,
@@ -2311,8 +2308,16 @@ impl Editor {
             picker: None,
             panels: [None, None],
             panel_focus: None,
-            sidebar_side: crate::sidebar::Side::Left,
-            info_side: crate::sidebar::Side::Right,
+            // 檔案／緩衝區／大綱 on the left — 「what is there, and where am
+            // I in it」; 字典／詳情 on the right — 「what is this thing I am
+            // standing on」. Two questions, two columns.
+            sides: [
+                crate::sidebar::Side::Left,
+                crate::sidebar::Side::Left,
+                crate::sidebar::Side::Left,
+                crate::sidebar::Side::Right,
+                crate::sidebar::Side::Right,
+            ],
             dictionary_anchor: None,
             transient_scroll: 0,
             default_syntax: None,

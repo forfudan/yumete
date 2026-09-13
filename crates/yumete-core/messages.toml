@@ -1428,6 +1428,20 @@ en = "draw this page as plain text"
 find = "txt 純文字 纯文字 文本"
 
 [[message]]
+# 命令：把一格挪到左邊欄
+key = "cmd.sidebar.left"
+zht = "把這一格挪到左邊（不寫名字就是手上這一格）"
+zhs = "把这一格挪到左边（不写名字就是手上这一格）"
+en = "show this panel on the left"
+
+[[message]]
+# 命令：把一格挪到右邊欄
+key = "cmd.sidebar.right"
+zht = "把這一格挪到右邊（不寫名字就是手上這一格）"
+zhs = "把这一格挪到右边（不写名字就是手上这一格）"
+en = "show this panel on the right"
+
+[[message]]
 # : 命令選單裏 dash 那一項的說明（strokes 組）
 key = "cmd.strokes.dash"
 zht = "虛線 ┆（默認）"
@@ -3136,7 +3150,7 @@ zhs = "加一行／删一行；t j t k 上下移"
 en = "add a row / drop this row; t j and t k move it"
 
 [[message]]
-# 表格幫助：側欄與摺格子
+# 表格幫助：邊欄與摺格子
 key = "help.table.detail-and-folds"
 zht = "這一行攤開來讀／過寬的格子收起尾巴"
 zhs = "这一行摊开来读／过宽的格子收起尾巴"
@@ -3496,10 +3510,10 @@ zhs = "档尾"
 en = "end of file"
 
 [[message]]
-# g 組：檔案側欄
+# g 組：檔案邊欄
 key = "hint.goto.file-sidebar"
-zht = "檔案側欄"
-zhs = "档案侧栏"
+zht = "檔案邊欄"
+zhs = "档案边栏"
 en = "the file sidebar"
 
 [[message]]
@@ -3783,21 +3797,21 @@ zhs = "哪一个"
 en = "which one"
 
 [[message]]
-# 提示欄：側欄
+# 提示欄：邊欄
 key = "hint.sidebar"
-zht = "側欄"
-zhs = "侧栏"
+zht = "邊欄"
+zhs = "边栏"
 en = "sidebar"
 
 [[message]]
-# 側欄提示：回正文
+# 邊欄提示：回正文
 key = "hint.sidebar.back-to-text"
 zht = "去下一區"
 zhs = "去下一区"
 en = "next region"
 
 [[message]]
-# 側欄底下那一行按鍵說明
+# 邊欄底下那一行按鍵說明
 key = "hint.sidebar.keys"
 zht = "j k 移動 · J K 翻頁 · g G 兩端 · l 進入 · h 收起 · Tab 換視圖 · w 寬窄 · R 重讀 · C-w 去下一區 · q 關"
 zhs = "j k 移动 · J K 翻页 · g G 两端 · l 进入 · h 收起 · Tab 换视图 · w 宽窄 · R 重读 · C-w 去下一区 · q 关"
@@ -3811,14 +3825,14 @@ zhs = "上下"
 en = "move"
 
 [[message]]
-# 側欄提示：換視圖
+# 邊欄提示：換視圖
 key = "hint.sidebar.other-view"
 zht = "換視圖"
 zhs = "换视图"
 en = "other view"
 
 [[message]]
-# 側欄提示：寬窄
+# 邊欄提示：寬窄
 key = "hint.sidebar.width"
 zht = "寬窄"
 zhs = "宽窄"
@@ -4407,11 +4421,11 @@ zhs = "、"
 en = ", "
 
 [[message]]
-# 標籤：字典
-key = "label.dictionary"
-zht = "字典"
-zhs = "字典"
-en = "dictionary"
+# 標籤：左邊
+key = "label.left"
+zht = "左邊"
+zhs = "左边"
+en = "the left"
 
 [[message]]
 # 一句話裏「關着」那半個詞（:yume ? 的拆分那一格）
@@ -4426,6 +4440,48 @@ key = "label.on"
 zht = "開"
 zhs = "开"
 en = "on"
+
+[[message]]
+# 命令：把緩衝區那一格挪到這一邊
+key = "label.panel.buffers"
+zht = "緩衝區"
+zhs = "缓冲区"
+en = "the open files"
+
+[[message]]
+# 命令：把表格詳情挪到這一邊
+key = "label.panel.detail"
+zht = "表格詳情"
+zhs = "表格详情"
+en = "the table detail"
+
+[[message]]
+# 命令：把字典挪到這一邊
+key = "label.panel.dictionary"
+zht = "字典"
+zhs = "字典"
+en = "the dictionary"
+
+[[message]]
+# 命令：把檔案樹挪到這一邊
+key = "label.panel.files"
+zht = "檔案樹"
+zhs = "文件树"
+en = "the file tree"
+
+[[message]]
+# 命令：把大綱挪到這一邊
+key = "label.panel.outline"
+zht = "大綱"
+zhs = "大纲"
+en = "the outline"
+
+[[message]]
+# 標籤：右邊
+key = "label.right"
+zht = "右邊"
+zhs = "右边"
+en = "the right"
 
 [[message]]
 # 欄名旁的順排箭頭
@@ -5596,17 +5652,38 @@ en = "{0} · line {1} · {2}"
 # ── sidebar ───────────────────────────────────────────────────────────
 
 [[message]]
-# 側欄切成窄的
+# 邊欄：某一格挪到了哪一邊
+key = "sidebar.moved"
+zht = "{0}移到{1}"
+zhs = "{0}移到{1}"
+en = "{0} is on {1} now"
+
+[[message]]
+# 邊欄切成窄的
 key = "sidebar.narrow"
-zht = "側欄：窄"
-zhs = "侧栏：窄"
+zht = "邊欄：窄"
+zhs = "边栏：窄"
 en = "sidebar: narrow"
 
 [[message]]
-# 側欄切成寬的
+# 邊欄：這一邊只有這一格，Tab 沒地方去
+key = "sidebar.only-view-on-this-side"
+zht = "這一邊只有這一格"
+zhs = "这一边只有这一格"
+en = "the only panel on this side"
+
+[[message]]
+# 邊欄：鍵在正文裏，說不出「這一格」是哪一格
+key = "sidebar.which-panel"
+zht = "先進到一格裏，或者寫出名字：files buffers outline dictionary detail"
+zhs = "先进到一格里，或者写出名字：files buffers outline dictionary detail"
+en = "step into a panel first, or name one: files buffers outline dictionary detail"
+
+[[message]]
+# 邊欄切成寬的
 key = "sidebar.wide"
-zht = "側欄：寬（讀得下整條標題）"
-zhs = "侧栏：宽（读得下整条标题）"
+zht = "邊欄：寬（讀得下整條標題）"
+zhs = "边栏：宽（读得下整条标题）"
 en = "sidebar: wide, for a whole heading"
 
 
@@ -6657,10 +6734,10 @@ zhs = "视窗拍成了 {0}"
 en = "photographed the window to {0}"
 
 [[message]]
-# 側欄有焦點，而提示行關着——狀態欄整條讓給側欄的按鍵
+# 邊欄有焦點，而提示行關着——狀態欄整條讓給邊欄的按鍵
 key = "ui.sidebar-mode"
-zht = "-- 側欄 --  {0}"
-zhs = "-- 侧栏 --  {0}"
+zht = "-- 邊欄 --  {0}"
+zhs = "-- 边栏 --  {0}"
 en = "-- SIDEBAR --  {0}"
 
 

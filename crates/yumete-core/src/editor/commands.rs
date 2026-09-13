@@ -701,6 +701,36 @@ impl Editor {
                 };
                 Ok(CommandOutcome::Continue)
             }
+            Command::ShowSidebarAt(side, which) => {
+                // No name means 「this one」 — the panel holding the keys. With
+                // the keys in the text there is no 「this one」, and guessing
+                // would move a panel the reader is not looking at.
+                let which = match which {
+                    Some(panel) => Some(panel),
+                    None => self.panel_focus().and_then(|(at, layer)| match layer {
+                        crate::sidebar::Layer::Top => {
+                            self.panel(at).map(|p| crate::sidebar::Panel::from(p.view()))
+                        }
+                        crate::sidebar::Layer::Bottom => {
+                            self.transient(at).map(crate::sidebar::Panel::from)
+                        }
+                    }),
+                };
+                let Some(panel) = which else {
+                    self.status = say!("sidebar.which-panel");
+                    return Ok(CommandOutcome::Continue);
+                };
+                self.set_side(panel, side);
+                self.status = say!(
+                    "sidebar.moved",
+                    crate::messages::say(panel.tag(), &[]),
+                    match side {
+                        crate::sidebar::Side::Left => say!("label.left"),
+                        crate::sidebar::Side::Right => say!("label.right"),
+                    }
+                );
+                Ok(CommandOutcome::Continue)
+            }
             Command::SetTableNumbers(on) => {
                 self.table_numbers = on;
                 self.status = match on {

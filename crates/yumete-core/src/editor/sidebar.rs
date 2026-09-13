@@ -10,44 +10,82 @@ use super::*;
 impl Editor {
     // ---- The side panels (Feature #94, #293) -------------------------------
 
-    /// **Which slot a view opens in — the one place that decides it** (#293).
+    /// **Which slot a panel lives in — the one place that decides it** (#293).
     ///
-    /// One answer for all of them, not one per view, and that is deliberate:
-    /// `Tab` walks the views **within a slot**, so splitting them across two
-    /// would break the one motion that holds them together.
-    pub(super) fn side_for(&self, _view: crate::sidebar::View) -> crate::sidebar::Side {
-        self.sidebar_side
+    /// One answer per panel, because a reader may want the outline across from
+    /// the tree, or the 字典 stacked under it. ⚠️ **`Tab` then walks only the
+    /// views that share a slot** ([`Editor::cycle_view`]): the motion belongs
+    /// to the column, not to the list of views.
+    pub fn side_of(&self, panel: crate::sidebar::Panel) -> crate::sidebar::Side {
+        self.sides[panel as usize]
     }
 
-    /// Put the resident panels on that side (`sidebar_side`).
+    /// Put that panel on that side.
     ///
-    /// Whatever is already open moves with them, because a panel that stayed
+    /// Whatever is already open moves with it, because a panel that stayed
     /// where the old setting put it would make the setting a lie until the
-    /// next restart.
-    pub fn set_sidebar_side(&mut self, side: crate::sidebar::Side) {
-        if side == self.sidebar_side {
+    /// next restart. A slot that was busy hands what it held back to the slot
+    /// this one just left, so nothing is silently closed.
+    pub fn set_side(&mut self, panel: crate::sidebar::Panel, side: crate::sidebar::Side) {
+        use crate::sidebar::{Layer, View};
+        let was = self.side_of(panel);
+        self.sides[panel as usize] = side;
+        if was == side {
             return;
         }
-        let moving = self.panels[self.sidebar_side as usize].take();
-        let focused = self.panel_focus == Some((self.sidebar_side, crate::sidebar::Layer::Top));
-        self.sidebar_side = side;
-        self.panels[side as usize] = moving;
-        if focused {
-            self.panel_focus = Some((side, crate::sidebar::Layer::Top));
+        // A resident view that is showing goes across; a transient one has
+        // nothing to carry, since it is worked out afresh every frame.
+        match View::ALL.into_iter().find(|&v| crate::sidebar::Panel::from(v) == panel) {
+            Some(view) if self.showing(view) == Some(was) => {
+                let moving = self.panels[was as usize].take();
+                let focused = self.panel_focus == Some((was, Layer::Top));
+                let displaced = self.panels[side as usize].take();
+                self.panels[side as usize] = moving;
+                self.panels[was as usize] = displaced;
+                if focused {
+                    self.panel_focus = Some((side, Layer::Top));
+                }
+            }
+            Some(_) => {}
+            None if self.panel_focus == Some((was, Layer::Bottom)) => {
+                self.panel_focus = Some((side, Layer::Bottom));
+            }
+            None => {}
         }
         self.refresh_sidebar();
     }
 
-    /// Put the transient panels on that side (`info_side`).
-    pub fn set_info_side(&mut self, side: crate::sidebar::Side) {
-        if side == self.info_side {
+    /// Which slot a view opens in.
+    pub(super) fn side_for(&self, view: crate::sidebar::View) -> crate::sidebar::Side {
+        self.side_of(view.into())
+    }
+
+    /// `Tab` in a slot: the next view **that lives in this slot**, wrapping.
+    ///
+    /// A slot with one view in it has nowhere to go, and says so rather than
+    /// looking broken.
+    pub(super) fn cycle_view(&mut self, side: crate::sidebar::Side, back: bool) {
+        let Some(here) = self.panel(side).map(|p| p.view()) else {
+            return;
+        };
+        let mine: Vec<crate::sidebar::View> = crate::sidebar::View::ALL
+            .into_iter()
+            .filter(|&v| self.side_for(v) == side)
+            .collect();
+        if mine.len() < 2 {
+            self.status = say!("sidebar.only-view-on-this-side");
             return;
         }
-        let focused = self.panel_focus == Some((self.info_side, crate::sidebar::Layer::Bottom));
-        self.info_side = side;
-        if focused {
-            self.panel_focus = Some((side, crate::sidebar::Layer::Bottom));
+        let at = mine.iter().position(|&v| v == here).unwrap_or(0);
+        let n = mine.len();
+        let next = mine[match back {
+            true => (at + n - 1) % n,
+            false => (at + 1) % n,
+        }];
+        if let Some(panel) = self.panel_mut(side) {
+            panel.show(next);
         }
+        self.refresh_sidebar();
     }
 
     /// The panel in that slot, for the front end to draw.
@@ -63,34 +101,23 @@ impl Editor {
         self.panels[side as usize].as_mut()
     }
 
-    /// **Which slot the transient panels open in** — the one place that
-    /// decides it (#293), the bottom layer's answer to [`Editor::side_for`].
-    ///
-    /// The right by default, because what these show is 資訊 — what the
-    /// cursor is standing in — and the left is where 「what is there, and
-    /// where am I in it」 lives. A setting (`info_side`), and it **may name
-    /// the same slot as the resident panels**: then the answer stacks under
-    /// the file tree, which is the shape VSCode's sidebar has.
-    pub(super) fn transient_side(&self) -> crate::sidebar::Side {
-        self.info_side
-    }
-
     /// **What the bottom of that slot is showing** — worked out afresh, never
     /// stored (#293).
+    ///
+    /// **Order is the whole rule** when both live on this side: asking about a
+    /// character is a thing a reader just did; what the cursor is standing in
+    /// has been true all along. The question wins while it is live, and when
+    /// it stops being live the row underneath simply shows again — nobody
+    /// remembered it, and nobody put it back.
     pub fn transient(&self, side: crate::sidebar::Side) -> Option<crate::sidebar::Transient> {
-        if side != self.transient_side() {
-            return None;
+        use crate::sidebar::{Panel, Transient};
+        if self.side_of(Panel::Dictionary) == side && self.dictionary_live() {
+            return Some(Transient::Dictionary);
         }
-        // **Order is the whole rule.** Asking about a character is a thing a
-        // reader just did; what the cursor is standing in is a thing that has
-        // been true all along. The question wins while it is live, and when it
-        // stops being live the row underneath simply shows again — nobody
-        // remembered it, and nobody put it back.
-        if self.dictionary_live() {
-            return Some(crate::sidebar::Transient::Dictionary);
+        if self.side_of(Panel::Detail) == side && self.detail_is_a_panel() {
+            return Some(Transient::Detail);
         }
-        self.detail_is_a_panel()
-            .then_some(crate::sidebar::Transient::Detail)
+        None
     }
 
     /// **Whether the 字典 question is still being asked** (#215, #293).
@@ -108,7 +135,10 @@ impl Editor {
             return false;
         }
         let reading = self.panel_focus
-            == Some((self.transient_side(), crate::sidebar::Layer::Bottom));
+            == Some((
+                self.side_of(crate::sidebar::Panel::Dictionary),
+                crate::sidebar::Layer::Bottom,
+            ));
         reading || self.dictionary_anchor == Some(self.cursor)
     }
 
@@ -265,6 +295,17 @@ impl Editor {
             Key::Char('g') | Key::Home => self.transient_scroll = 0,
             Key::Char('G') | Key::End => self.transient_scroll = last,
             Key::Ctrl('w') => self.cycle_region(),
+            // **`:` opens the command line from in here too.** It used to
+            // be swallowed, so a reader with the keys in a panel had no way to
+            // run a command at all — and `:sidebar-show-left` is a command
+            // *about* the panel you are standing in, which nobody could have
+            // reached. The focus stays where it is while the line is typed, so
+            // 「this one」 still means this one.
+            Key::Char(':') => {
+                self.mode = Mode::Command;
+                self.command_line.clear();
+                self.command_caret = 0;
+            }
             Key::Char(' ') => self.pending = Pending::Space,
             _ => {}
         }
@@ -633,7 +674,7 @@ impl Editor {
         // word is being typed, they must not — the reader is mid-word, and the
         // panel is only there to be glanced at.
         self.panel_focus = focus.then_some((
-            self.transient_side(),
+            self.side_of(crate::sidebar::Panel::Dictionary),
             crate::sidebar::Layer::Bottom,
         ));
         self.refresh_sidebar();
@@ -786,16 +827,12 @@ impl Editor {
                     None => {}
                 }
             }
-            // Tab walks the resident views: the project, what is open in it,
-            // and the chapter on screen.
-            Key::Tab => {
-                sidebar.cycle(false);
-                self.refresh_sidebar();
-            }
-            Key::BackTab => {
-                sidebar.cycle(true);
-                self.refresh_sidebar();
-            }
+            // **Tab walks the views that live in *this* slot.** Which ones
+            // those are is a setting, so the question belongs to the editor
+            // rather than to the panel — with the outline moved across, this
+            // slot walks two and the other one walks one (#293).
+            Key::Tab => return self.cycle_view(side, false),
+            Key::BackTab => return self.cycle_view(side, true),
             // **`Esc` does nothing here** (#293). It is everyone's 「get me
             // out」 key, so it is tempting — but a panel with a field in it
             // spends `Esc` on leaving Insert, and one press too many would
@@ -804,6 +841,17 @@ impl Editor {
             // region and leaves it up.
             Key::Ctrl('w') => return self.cycle_region(),
             Key::Char('q') => self.close_panel(side),
+            // **`:` opens the command line from in here too.** It used to
+            // be swallowed, so a reader with the keys in a panel had no way to
+            // run a command at all — and `:sidebar-show-left` is a command
+            // *about* the panel you are standing in, which nobody could have
+            // reached. The focus stays where it is while the line is typed, so
+            // 「this one」 still means this one.
+            Key::Char(':') => {
+                self.mode = Mode::Command;
+                self.command_line.clear();
+                self.command_caret = 0;
+            }
             // Space still opens the menu, so `Space e` closes the sidebar from
             // inside it exactly as it opened it.
             Key::Char(' ') => self.pending = Pending::Space,

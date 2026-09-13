@@ -115,6 +115,90 @@ impl Transient {
     }
 }
 
+/// **Every panel a slot can hold** — Feature #293.
+///
+/// One name per thing that can be put in a slot, and the only question it
+/// answers is *which side is it on*. The three resident ones are also a
+/// [`View`] (they share a slot and `Tab` walks between them); the two
+/// transient ones are also a [`Transient`]. This enum is neither of those: it
+/// is the address a setting writes to.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum Panel {
+    /// The files on disk.
+    Files,
+    /// The files already open.
+    Buffers,
+    /// The headings of the file being written.
+    Outline,
+    /// The 拆分表 on one character.
+    Dictionary,
+    /// What the cursor is standing in, field by field.
+    Detail,
+}
+
+impl Panel {
+    /// Every one of them, in the order a setting file lists them.
+    pub const ALL: [Panel; 5] = [
+        Panel::Files,
+        Panel::Buffers,
+        Panel::Outline,
+        Panel::Dictionary,
+        Panel::Detail,
+    ];
+
+    /// Its name in the config file and on the command line.
+    pub fn key(self) -> &'static str {
+        match self {
+            Panel::Files => "files",
+            Panel::Buffers => "buffers",
+            Panel::Outline => "outline",
+            Panel::Dictionary => "dictionary",
+            Panel::Detail => "detail",
+        }
+    }
+
+    /// Read that name back.
+    pub fn parse(value: &str) -> Option<Panel> {
+        let value = value.trim().to_ascii_lowercase();
+        Panel::ALL.into_iter().find(|p| p.key() == value)
+    }
+
+    /// **What to call it, as a message tag rather than a word.**
+    ///
+    /// ⚠️ Not a `&'static str` of Chinese like [`View::title`]: that one is a
+    /// panel's own header, drawn as it is, while this one is dropped into
+    /// sentences (`sidebar.moved`) — and a Chinese word in an English sentence
+    /// is a sentence half translated.
+    pub fn tag(self) -> &'static str {
+        match self {
+            Panel::Files => "label.panel.files",
+            Panel::Buffers => "label.panel.buffers",
+            Panel::Outline => "label.panel.outline",
+            Panel::Dictionary => "label.panel.dictionary",
+            Panel::Detail => "label.panel.detail",
+        }
+    }
+}
+
+impl From<View> for Panel {
+    fn from(view: View) -> Panel {
+        match view {
+            View::Explorer => Panel::Files,
+            View::Buffers => Panel::Buffers,
+            View::Outline => Panel::Outline,
+        }
+    }
+}
+
+impl From<Transient> for Panel {
+    fn from(kind: Transient) -> Panel {
+        match kind {
+            Transient::Dictionary => Panel::Dictionary,
+            Transient::Detail => Panel::Detail,
+        }
+    }
+}
+
 /// What a panel is showing.
 ///
 /// Views of one question — "what is there, and where am I in it" — at three
@@ -139,18 +223,6 @@ pub enum View {
 impl View {
     /// Every view, in the order `Tab` walks them.
     pub const ALL: [View; 3] = [View::Explorer, View::Buffers, View::Outline];
-
-    /// The next view in that direction, wrapping.
-    fn step(self, back: bool) -> View {
-        let Some(at) = View::ALL.iter().position(|&v| v == self) else {
-            return View::ALL[0];
-        };
-        let n = View::ALL.len();
-        View::ALL[match back {
-            true => (at + n - 1) % n,
-            false => (at + 1) % n,
-        }]
-    }
 
     /// Its name, for the sidebar's header.
     pub fn title(self) -> &'static str {
@@ -292,24 +364,6 @@ impl Sidebar {
         self.kept[self.view as usize] = self.selected;
         self.view = view;
         self.selected = self.kept[self.view as usize];
-    }
-
-    /// Walk to the next view (`Tab`, or `Shift+Tab` backwards), keeping each
-    /// one's place.
-    ///
-    /// The rows of the others are not this module's to build — buffers and
-    /// headings belong to the editor — so it says which view it wants and is
-    /// handed the rows for it.
-    ///
-    /// **Backwards is a direction, not two steps forward.** It used to be
-    /// spelled `cycle(); cycle();`, which is the same thing only while there
-    /// are exactly three views — the arithmetic breaks the day a fourth joins
-    /// them, and #419's search panel is that fourth.
-    pub fn cycle(&mut self, back: bool) -> View {
-        self.kept[self.view as usize] = self.selected;
-        self.view = self.view.step(back);
-        self.selected = self.kept[self.view as usize];
-        self.view
     }
 
     /// Fill the sidebar with rows the editor built (buffers, or headings).
@@ -602,27 +656,23 @@ mod tests {
         std::fs::remove_dir_all(&dir).ok();
     }
 
+    /// Every view keeps its own place, so walking away and back does not go
+    /// to the top. **Which view is next is not asked here** — that depends on
+    /// which views share this slot, which is the editor's question (#293).
     #[test]
-    fn tab_walks_the_views_and_keeps_each_ones_place() {
+    fn each_view_keeps_its_own_place() {
         let dir = novel();
         let mut sidebar = Sidebar::new(&dir);
         sidebar.step(true);
         assert_eq!(sidebar.selected(), 1);
 
-        assert_eq!(sidebar.cycle(false), View::Buffers);
+        sidebar.show(View::Buffers);
         // The other views' rows come from the editor; empty until it fills them.
         assert_eq!(sidebar.selected(), 0);
-        assert_eq!(sidebar.cycle(false), View::Outline);
-        assert_eq!(sidebar.cycle(false), View::Explorer);
+        sidebar.show(View::Outline);
+        sidebar.show(View::Explorer);
         assert_eq!(sidebar.selected(), 1, "the tree is where it was left");
         assert!(sidebar.title().contains("檔案"));
-
-        // …and backwards is one step back, not two forward — the same answer
-        // today, and still the right one when a fourth resident view joins.
-        assert_eq!(sidebar.cycle(true), View::Outline);
-        assert_eq!(sidebar.cycle(true), View::Buffers);
-        assert_eq!(sidebar.cycle(true), View::Explorer);
-
 
         std::fs::remove_dir_all(&dir).ok();
     }
@@ -631,7 +681,7 @@ mod tests {
     fn a_flat_view_carries_its_index_and_is_not_a_tree() {
         let dir = novel();
         let mut sidebar = Sidebar::new(&dir);
-        sidebar.cycle(false);
+        sidebar.show(View::Buffers);
         sidebar.set_rows(vec![
             Row {
                 path: PathBuf::new(),

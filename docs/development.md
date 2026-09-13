@@ -515,7 +515,7 @@ index, and a row with no number anywhere else is a row that got lost.
 | 290 | **A lone Shift stopped switching 中/英, and nothing said so** | tui+ime | P1 | the Kitty flag #271 removed was the one reporting it [^290] | Done |
 | 291 | **A list of hexadecimal names is a list you have to Tab through to read** | core+tui | P3 | `Choice` grows a grey note beside the name [^291] | Done |
 | 292 | **Lining up a table whose widest cell is a paragraph writes megabytes of spaces** | core | P2 | a column wider than 400 leaves the table alone; see §5.6 [^292] | Done |
-| 293 | **側欄宿主：兩個槽，各分兩層** | core+tui | P1 | 一至四已落地；第五步是 #419 [^293] | Fixed 2026-09-13 |
+| 293 | **邊欄宿主：兩個槽，各分兩層** | core+tui | P1 | 一至四已落地；第五步是 #419 [^293] | Fixed 2026-09-13 |
 | 294 | **腳註那條四行橫條，是全樹最後一個還是矩形的東西** | tui | P3 | the last rectangle left after #273 [^294] | Fixed 2026-09-13 |
 | 295 | **一存之下檔案翻了幾倍，先問一句** | core+tui | P2 | 又翻倍、又多 256 KB 纔問；`:write` 一處 [^295] | Done |
 | 296 | **`editor.rs` 拆成模組** | core | P2 | 一萬行測試先出去，再按主題逐段搬 [^296] | Done |
@@ -641,7 +641,7 @@ index, and a row with no number anywhere else is a row that got lost.
 | 416 | **`gd` `gD` `g/` `g?` 在表格裏換了意思** | core | P1 | `g` 是全文的命令組，`t` 是表格的 [^416] | Fixed 2026-09-12 |
 | 417 | **`:x` 只是 `:wq` 的別名，沒有「改過纔存」** | core | P2 | vi 與 helix 的 `:x` 不動沒改過的檔，`:update` 整個沒有 [^417] | Fixed 2026-09-12 |
 | 418 | **Markdown 沒有自動補全** | core+tui | P2 | 一 · 列表接續、二 · `[^`／`](#` 補全落地；`[[` 等跨檔索引 [^418] | Planned (一二 done) |
-| 419 | **搜索與替換做成一扇側欄面板** | core+tui | P2 | `:grep`／`:replace` 換成 VSCode 那種面板，八個命令只管位置 [^419] | Planned |
+| 419 | **搜索與替換做成一扇邊欄面板** | core+tui | P2 | `:grep`／`:replace` 換成 VSCode 那種面板，八個命令只管位置 [^419] | Planned |
 
 ### 5.5 · A table is a delimiter, a surface and a boundary (#261)
 
@@ -1412,7 +1412,7 @@ acceptable at all: **the table is for scanning, the panel is for reading.**
 Twenty-eight columns of a 拆分表 were never meant to be read across.
 
 **Both were built 2026-09-07**, after neither turned out to work:
-「markdown中的表格没办法用ti打开信息侧栏…在 tf 模式下都没办法通过 tw
+「markdown中的表格没办法用ti打开信息边栏…在 tf 模式下都没办法通过 tw
 来缩小单元格 宽度」. What the doing settled:
 
 - **The cap is `mdtable::MAX_COLUMN` = 32 and it bites per *cell*, not per
@@ -5587,11 +5587,11 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     `level`／`title`），摺完再變成 `Row`；`is_dir` ＝ 底下有東西、`expanded` ＝ 正
     開着，就是檔案樹已經在花的那兩格，前端一段 `match` 兩個視圖通用。**記號畫在縮進
     前面**（`▾ ` 然後纔是縮進），摺不摺得動讀成左邊一豎排；每一層花兩格畫記號會把窄
-    側欄僅有的字位吃光。鍵：`h` 摺自己，自己沒得摺就摺上面那一層並把游標挪上去（連按
+    邊欄僅有的字位吃光。鍵：`h` 摺自己，自己沒得摺就摺上面那一層並把游標挪上去（連按
     一路退出這條枝，和檔案樹的 `h` 同形）；`l` 在摺着的標題上是展開，其餘時候和 `Enter`
     一樣是「去那裏」；`Enter` 永不摺——摺着的標題仍然是一個地方。摺法存在 `Sidebar`
     裏（`folded: BTreeSet<(PathBuf, usize)>`），大綱每次看都是重建的，存在別處就永遠
-    看不見摺過的樣子；**關掉側欄就沒了**，和檔案樹的 `open` 一樣。
+    看不見摺過的樣子；**關掉邊欄就沒了**，和檔案樹的 `open` 一樣。
 
 [^48]: **Dropped**: `:check-usage`／`標點`／`字集` (#233／#238／#240) do this in
     the editor's own process; there is no Chinese-prose language server to
@@ -6697,7 +6697,7 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     (author, 2026-09-06: 「indent 一般是竪排文本用的，markdown 渲染大多數是橫排
     用的」); the level of a dimension with a real third state is computed from
     the pair that holds it, never stored (`ruby_level`, `indent_level`). **`t w`
-    and `t i` landed 2026-09-07** (「markdown中的表格没办法用ti打开信息侧栏…在
+    and `t i` landed 2026-09-07** (「markdown中的表格没办法用ti打开信息边栏…在
     tf 模式下都没办法通过 tw 来缩小单元格宽度」). `t w` folds the tail of any
     cell drawn wider than `mdtable::MAX_COLUMN` = 32 and stands a `>` where the
     writing stopped — **ASCII on purpose**, because every ellipsis Unicode
@@ -7211,37 +7211,37 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     padded out to a 7,000-square 備註 cell. Fixed 2026-09-08: a column wider
     than `WIDEST_COLUMN` (400) leaves the table untouched; see §5.6. **small**
 
-[^293]: 2026-09-08 的設計：「文檔可以有兩個側欄，左側欄是文件、目錄等信息（不需
-    要編輯的）；右側欄是表格、字典、百科等（用户可以編輯的）。」左邊歸 `空格 s`
+[^293]: 2026-09-08 的設計：「文檔可以有兩個邊欄，左邊欄是文件、目錄等信息（不需
+    要編輯的）；右邊欄是表格、字典、百科等（用户可以編輯的）。」左邊歸 `空格 s`
     （side bar），右邊歸 `空格 i`（information bar），各自**隱藏／顯示／操作**三
     態。⚠️ 三態**今天已經存在，只是沒有名字**：`show_sidebar` 那條四段規則裏「側
     欄開着、鍵在正文」就是顯示（editor.rs:15134）。新的是把狀態從「命名視圖的
     鍵」上剝下來交給一個統一鍵——隱藏或顯示按一下進操作，操作按一下進隱藏。**四個
     具名鍵留着**（已定）：`空格 e` 檔案、`空格 o` 大綱、`空格 d` 字典、`t i` 表
-    格詳情；統一鍵說「哪個側欄、什麼狀態」，具名鍵說「哪個視圖」，兩件事而不是別
+    格詳情；統一鍵說「哪個邊欄、什麼狀態」，具名鍵說「哪個視圖」，兩件事而不是別
     名，`空格 s` 開在上次那個視圖。**`Tab`／`Shift+Tab` 各輪自己那三格，輪到空的
     畫「這裏沒有」**（已定）——這**推翻**了 `View::Dictionary` 不進輪換的現行規矩
     （sidebar.rs:33「Cycling into it would show an empty panel most of the
     time」），而且推翻得對：跳過空的會讓同一個鍵在不同處境下去到不同地方，那正是
-    #272 的形狀。**`q` 回正文，`Esc` 在側欄層面什麼都不做**（已定，理由是我沒想
+    #272 的形狀。**`q` 回正文，`Esc` 在邊欄層面什麼都不做**（已定，理由是我沒想
     到的那一層：右欄能編輯之後 `Esc` 是退插入模式的鍵，多按一下就收掉面板是真會
     發生的事）；今天 `q` 是「直接關掉」（editor.rs:15465），關掉改由 `空格 s`／
     `空格 i` 負責。⚠️ `Esc` 是所有人的「出去」鍵，卡住的人一定會按它——
     `hint.sidebar.back-to-text` 現在寫的是 `C-w`，必須改寫成 `q`，「拿走鍵的那一
     半有義務說清楚怎麼還」這條規矩在這裏是安全網而不是禮貌。**`C-w` ≡ `空格 w`，
     只管工作區**（已定）：今天它有兩個主人——正文裏切分屏（editor.rs:14627），側
-    欄裏回正文（:15464）——第二個側欄一來，一個鍵說不清三個地方；等價之後 `C-w`
+    欄裏回正文（:15464）——第二個邊欄一來，一個鍵說不清三個地方；等價之後 `C-w`
     也會「沒開就開」，那本來就是 `空格 w` 的意思。**`w` 量寬度**：無對側時不過終
-    端的一半，有對側時不過三分之一。⚠️ 縱書下側欄的寬度**按三取整**（一縱三格，
+    端的一半，有對側時不過三分之一。⚠️ 縱書下邊欄的寬度**按三取整**（一縱三格，
     sidebar.rs 模組文檔），兩個上限都要往下取到整縱，否則邊界落在半個漢字上
     （#286 那一族）。**右欄的 `i` 進編輯——表格改在格子裏、百科 `w` 存回檔案——硬
     擋在 #281 上**：能編輯的面板就是另一個 buffer 的視圖，而那正是「什麼都讀
     `current_buffer()`、三個快取只按行號作鍵」的那個坑。**所以這一條分兩半**：兩
-    個側欄＋三態＋`Tab`＋寬度是一半，現在可以做；編輯態是另一半，跟在 #281 後
+    個邊欄＋三態＋`Tab`＋寬度是一半，現在可以做；編輯態是另一半，跟在 #281 後
     面。**出廠時右欄只有兩格是真的**：表格詳情（`t i` 今天那副右豎條的面孔）與字
     典（從左邊搬過來）；百科是 #287。**large**，分兩次坐下。
 
-    **每一槽分兩層：上層常駐，下層臨時（2026-09-13 定，照 VSCode 側欄那種堆疊分區）。**
+    **每一槽分兩層：上層常駐，下層臨時（2026-09-13 定，照 VSCode 邊欄那種堆疊分區）。**
 
     * **上層**是文件樹／緩衝區／大綱，將來還有 #419 的搜索面板。`Tab` 在上層那幾格
       之間輪，按 `q` 才走。
@@ -7262,12 +7262,30 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
       `j`／`k` 滾（三 b 落地）。這一點自洽：鍵在面板裏的時候正文光標不動，那個字還成立，
       面板不會在你滾的時候消失；`C-w` 出去、光標一走它纔收。
 
-    **四（2026-09-13 落地）**：`[editor] sidebar_side`／`info_side`，值 `left`／`right`。
-    照 `syntax` 那個成例——config 存字串，`Side::parse` 在核心，`main.rs` 推進去，認不出
-    的字保留默認。**一組一個側，不是一個視圖一個側**：`Tab` 是在**一個槽之內**輪視圖的，
-    拆到兩個槽就把那個動作拆爛了。⚠️ 兩個設成同一邊是**合法且有用**的（字典疊在檔案樹
-    下面，只佔一列）。`set_sidebar_side` 會**把已經開着的那一格搬過去**——留在原地會讓
-    設置在下次重啓前都是假的。
+    **四（2026-09-13 落地，當天又改寬了一次）**：**一格一個側**，不是一組一個側。
+    新增 `sidebar::Panel`（`files`／`buffers`／`outline`／`dictionary`／`detail`），
+    每格各自認自己在哪邊；配置是 `[sidebar]` 一節、一格一行（原先 `[editor]` 那兩個
+    `sidebar_side`／`info_side` **刪了，不留別名**）。命令 `:sidebar-show-left`／
+    `-right`，不寫名字＝手上這一格。
+
+    ⚠️ **`Tab` 因此挪給了編輯器。** 「哪幾個視圖共用這一槽」是設置決定的，`Sidebar`
+    不知道，所以 `Sidebar::cycle` 與 `View::step` 刪掉，換成 `Editor::cycle_view(side)`
+    ——它只走**這一側**的視圖。一個槽裏只剩一格時說「這一邊只有這一格」，不裝作沒事。
+    當初想的「一組一個側」正是怕拆爛 `Tab`；真做起來纔看清 `Tab` 本來就該是**槽**的動作。
+
+    ⚠️ **`:` 從前在面板裏被吞掉**——鍵在面板裏的人執行不了任何命令，而這兩個新命令偏偏
+    是「關於你正站着的這一格」的。現在 `:` 從面板裏也能開，`panel_focus` 在打命令的時候
+    原樣不動，所以「這一格」還是這一格。
+
+    ⚠️ `Panel` 的名字**走消息表**（`Panel::tag()` → `label.panel.*`），不像
+    `View::title()` 那樣硬編碼中文：後者是面板自己的標題、照畫，而前者要落進句子
+    （`sidebar.moved`），英文界面下 `"{0} is on {1} now"` 會被塞進「大綱」。
+    `no_message_is_handed_a_chinese_argument` 抓不到這一族——它只掃 `say!` 參數裏的中文
+    **字面量**，而字面量在 `sidebar.rs`。
+
+    `set_side` 會**把已經開着的那一格搬過去**（留在原地會讓設置在下次重啓前都是假的）；
+    那一邊本來有東西就**與這一格對換**，誰都不會被悄悄關掉。
+    ⚠️ 兩格同一邊是**合法且有用**的（字典疊在檔案樹下面，只佔一列）。
     ⚠️ 落地時抓到一個只有右槽纔看得見的錯：`draw_sidebar` 的行循環還在用左槽的坐標
     （起點 `area.x+1`、終點 `rule`），而右槽的 `rule` 就在 `area.x`——起點大於終點，
     **整棵樹一個字都畫不出來**，只剩標題。標題那行先前改對了，行沒改。離屏一張圖就看見了。
@@ -7282,16 +7300,16 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
 
     ⚠️ **三 a 動了一處畫面**：詳情從「頁面右邊切一塊」（`table::split_detail`）變成
     右槽下層，而槽是在**標籤欄之前**就從整條 body 上切走的——所以**標籤欄與表格的欄號
-    行不再蓋過詳情面板**，跟左側欄一直以來的規矩對齊了。欄號行從前比它標的那張網格還
+    行不再蓋過詳情面板**，跟左邊欄一直以來的規矩對齊了。欄號行從前比它標的那張網格還
     寬，順帶也對上了。
 
     **#419 的高級搜索也在右欄**（它是一張要打字的表單，屬於「右邊改」那一半），而
     且是常駐的、進 `Tab` 輪。所以這一條是 #419 的地基，先做這個。
 
     **左看右改不是硬規矩（2026-09-13 定，這一條蓋過上面的分工）。** 要做的是一個
-    **側欄宿主 ＋ 兩個槽位**：面板自己聲明屬性（可不可編輯、常駐還是跟光標走、最小
+    **邊欄宿主 ＋ 兩個槽位**：面板自己聲明屬性（可不可編輯、常駐還是跟光標走、最小
     寬度），三態、`Tab` 輪、寬度上限一律由宿主按屬性算；**哪個面板落在哪一側是配置**，
-    使用者自己指定，代碼裏不寫死。這樣每一類面板只是「調用了側欄組件與那套快捷鍵」，
+    使用者自己指定，代碼裏不寫死。這樣每一類面板只是「調用了邊欄組件與那套快捷鍵」，
     解耦在這裏。
 
     **面板一律只讀，改東西回正文改（2026-09-13 定）。** 百科面板裏有光標、能走、能看，
@@ -7310,12 +7328,12 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     | 二 | 面板聲明屬性，三態／`Tab` 輪／寬度由宿主按屬性算 | `View::Dictionary` 那個寫死的特例消失 |
     | 三 a | 每槽分兩層；詳情搬進右槽下層（`split_detail` 退休） | 兩側同時有東西 |
     | 三 b | 字典變成臨時層（右槽下層，收鍵、`j`/`k` 滾），`View::Dictionary` 刪掉 | 槽位真的解耦了 |
-    | 四 | 哪個面板在哪一側交給配置：`sidebar_side`／`info_side` | 兩個都設成 `left` 時字典疊在檔案樹下面 |
+    | 四 | 一格一個側：`[sidebar]` 配置 ＋ `:sidebar-show-left`／`-right` | 大綱挪到對面時 `Tab` 只輪這一側的 |
     | 五 | #419 高級搜索 | 只是「一個聲明了可編輯的面板」，不動宿主。**還沒做** |
 
 [^294]: 2026-09-08：「如果真的要更好看，我覺得可以使用快捷鍵提示的那個面板風格，
     位置根據光標要麼在右下角要麼在左下角，有個外框更加醒目。」先否掉了把它收進右
-    側欄（#293）的提案，理由對：「腳註是 render markdown 的一部分，所以它應該是
+    邊欄（#293）的提案，理由對：「腳註是 render markdown 的一部分，所以它應該是
     inline render 比較好」，而且一張表裏同時有腳註時兩者並不打架——一個在下面，一
     個在右邊。留下的是形狀：`split_detail`（tui/table.rs）給腳註與註釋一條**通欄
     四行**的橫條，而 #273 已經把 `:` 選單從「一個矩形」改成「一個面板」（邊框 ＋
@@ -7360,7 +7378,7 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     看翻倍，3 KB 草稿寫成 7 KB 就要停，那是一個早上的活；只看多 256 KB，長篇加一章就
     要停。兩個一起纔說得出這件事的形狀——檔案**成倍**地大，而多出來的量**不是人打得出
     來的**。**新檔案第一次存永遠不問**：磁盤上沒有那一份，沒有「從多少」可言。問題開
-    着的時候 `on_key` 第一件事就是把鍵交給它，在錄製與側欄之前——不是那三個答案的鍵一
+    着的時候 `on_key` 第一件事就是把鍵交給它，在錄製與邊欄之前——不是那三個答案的鍵一
     個都到不了底下的稿子，也一個都不進宏（答案是關於此刻這個檔案的，不是關於那一串按
     鍵的）。`Asking` 是 enum 而不是 bool，那纔是「接口留好」的意思：下一件要停下來問的
     事加一個分支，面板、鍵路由、`Esc` 即「否」三樣白拿。今天只裝在 `:write` 上——`:w!`
@@ -7468,7 +7486,7 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     **第一步已落地**（見 #294）：面板成了共用件，腳註搬進去。
     **第二步**：命令行照 helix 的形狀搬到**狀態行下面**、常駐一行（#302 的取法），
     提示行拿掉，一行的訊息走命令行，問句與清單走面板。
-    ⚠️ **一件懸着的事，動第二步之前要先定**：常駐的 `Hint::Keys`（表格鍵、側欄鍵、
+    ⚠️ **一件懸着的事，動第二步之前要先定**：常駐的 `Hint::Keys`（表格鍵、邊欄鍵、
     注音、格子裏插入、腳註的 `gd`）**不能就這麼變成一個一直浮在格子上的面板**——
     which-key 是按到一半纔出現、看完就走，而這幾則是「你在這個模式裏，這些鍵管用」，
     一直都在。浮着就會一直蓋住格子。
@@ -7489,7 +7507,7 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     在 80 格終端上 `T 改按字`、`Tab 下一格` 是**默默被截掉的**——列太多等於一條都沒列。
     `hjkl`、`c d`、`y Y`、`p` 全刪：那些鍵在正文裏本來就是這個意思，讀者已經會了。
     剩三顆各有不可替代的理由：`t` 開出其餘的鍵、`T` 是唯一能換粒度的鍵、`Tab` 是正文
-    沒有的移動。六組砍完的寬度：側欄 44、腳註 35、振假名 28、格內插入 32、
+    沒有的移動。六組砍完的寬度：邊欄 44、腳註 35、振假名 28、格內插入 32、
     表格（格）38、表格（字）43，都進得了 80 格。`messages.toml` 少了 14 則。
     ⚠️ **#387 的「候選欄可以蓋提示行」那句許可跟着作廢**，因為提示行沒有了。
     `draw_candidate_panel` 補了一道 clamp（面板底不許越過 `room` 的底、頂不許越過它的頂）——
@@ -8624,8 +8642,8 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     於是「顯示的是 B，而光標、快取與格線都還是 A 的」：一個四十萬字的章節切到十二萬字的
     檔案上，光標停在 300000，接着一個 `x` 就把行程帶走了（`Char index out of bounds:
     300000, Rope length 120002`）。門是 `show_buffer`——它存走原來那格的光標、取回這一格的、
-    `forget_the_document`、刷側欄。改法不是「每一輪都走那道門」（一百個檔案就是一百次重建
-    大綱與側欄，正是 #317 的病），而是把**切過去和切回來綁成一次呼叫**：
+    `forget_the_document`、刷邊欄。改法不是「每一輪都走那道門」（一百個檔案就是一百次重建
+    大綱與邊欄，正是 #317 的病），而是把**切過去和切回來綁成一次呼叫**：
     `with_buffer(i, |e| …)`（`files.rs`）。真要落在別的檔案上，那是**有意**的，走
     `show_buffer`。⚠️ `page.rs:470` 換窗格時也直接寫 `self.current`，但它把那三件事
     （存光標、換、`forget_the_document`）就地做齊了，故意不取回存下的光標（窗格自己記着
@@ -8847,7 +8865,7 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     檔案都沒開」時纔輪得到。起點的取法照抄 `progress_path`：當前 buffer 沒名字（`:grep`
     自己的結果、拆分表檢查的清單就沒有）就往後問其餘打開的 buffer——命令是**從**一份稿子
     開出來的，那份稿子還在後面開着。⚠️ **同一個 cwd 根不只 `:grep` 一處**：`空格 f` 的檔案
-    選擇器、側欄（兩個入口）與 `:word-discover` 都是同一句 `current_dir()`，一併換掉了；
+    選擇器、邊欄（兩個入口）與 `:word-discover` 都是同一句 `current_dir()`，一併換掉了；
     留着會做出「搜的是這本書，而選擇器列的是別處」這種更難查的分裂。
 
 [^362]: 2026-09-09 問的：「我們用 ripgrep 做 yumete 所有的 search 的引擎是不是更好？」
@@ -8878,7 +8896,7 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
 
     **落地（2026-09-12）** ——只換走目錄那一半，跟上面的結論一字不差。`editor.rs` 的
     `walk` 與 `sidebar.rs` 的 `push_dir`（樹狀圖，逐層展開的那一個）都改走
-    `ignore::WalkBuilder`，於是 `:grep`、檔案選擇器、`:word-discover` 與側欄問的是同一
+    `ignore::WalkBuilder`，於是 `:grep`、檔案選擇器、`:word-discover` 與邊欄問的是同一
     個問題。`require_git(false)`：稿子那個資料夾有 `.gitignore` 沒有 `.git` 的機會，和
     反過來一樣大。`target`／`node_modules` 兩個名字**留着**當地板——沒有任何忽略檔的資料
     夾裏它們照樣不是散文——但不再往上加，那纔是這一條要治的病。`sort_by_file_path` 保住
@@ -10452,7 +10470,7 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     [^361]）：`:grep` 是「在整本書裏找一個字」，`[[` 是「指向手邊這一疊」。
 
 
-[^419]: 2026-09-13：「grep replace 我不喜歡」，改照 VSCode 側欄搜索那一扇。決定逐條
+[^419]: 2026-09-13：「grep replace 我不喜歡」，改照 VSCode 邊欄搜索那一扇。決定逐條
     對齊出來的，記在這裏，**還沒有一行代碼**。
 
     **命令只管位置，不管搜什麼。** `:search 卵` 是「一個叫卵的資料夾」，不是「搜卵」——
@@ -10485,7 +10503,7 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     完全不同，留成別名只會讓人打出舊行為。`/` 與 `:s` 不動——那兩個是「在眼前這一頁
     找一個字」，跟這扇面板不是一件事。
 
-    **結果進側欄一棵樹**（檔案摺疊、每條命中一行），不是現在那個結果緩衝區。
+    **結果進邊欄一棵樹**（檔案摺疊、每條命中一行），不是現在那個結果緩衝區。
     替換**三級**：一條／一個檔／全部。**只有「全部」彈確認框**，另兩級你看着
     哪一條動的手。
 
@@ -10496,7 +10514,7 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     `d` **忽略**這一條、`r` 替換這一條、`R` 全部替換。
 
     **`空格 /` 開的就是這扇**，位置默認本 buffer，跟 `:search` 一致；那一行現在寫的
-    「全項目搜索」要改成**高級搜索**——一個東西一個名字，側欄那個視圖也叫這個。
+    「全項目搜索」要改成**高級搜索**——一個東西一個名字，邊欄那個視圖也叫這個。
 
     **什麼時候重搜（分兩段做）**：這一版本 buffer 邊打邊搜（在記憶體裏，不要錢），
     跨檔案按 `Enter` 纔搜。⚠️ 同一扇面板換個位置行為就變了，**面板上要看得出來**。

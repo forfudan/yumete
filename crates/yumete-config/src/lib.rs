@@ -284,15 +284,6 @@ pub struct EditorConfig {
     /// two cells and a gap — so twenty-four is eight 縱 of page. Narrow enough
     /// to be worth the trade, wide enough for `卷二/驚蟄.md`.
     pub sidebar_width: usize,
-    /// Which side the resident panels open on — the file tree, the buffers,
-    /// the outline (Feature #293). `"left"` or `"right"`.
-    pub sidebar_side: String,
-    /// Which side the transient ones appear on — 字典 and the table detail.
-    ///
-    /// `"right"` by default. **May be the same as `sidebar_side`**: then the
-    /// answer stacks under the file tree instead of taking a second column,
-    /// which on a narrow window is the layout worth having.
-    pub info_side: String,
 }
 
 impl Default for EditorConfig {
@@ -343,8 +334,6 @@ impl Default for EditorConfig {
             paper_ticks: 0,
             tabs: Tabs::default(),
             sidebar_width: 24,
-            sidebar_side: "left".to_string(),
-            info_side: "right".to_string(),
         }
     }
 }
@@ -1172,11 +1161,26 @@ pub struct Config {
     pub panel: PanelConfig,
     pub ime: ImeConfig,
     pub syntax: SyntaxConfig,
+    /// Which side each panel lives on — Feature #293.
+    pub sidebar: SidebarConfig,
     pub keys: KeyConfig,
     pub export: ExportConfig,
     /// What each language can be told to run, by verb: `preview`, `format`, and
     /// whatever else a reader names.
     pub language: HashMap<String, HashMap<String, Runner>>,
+}
+
+/// **Which side each panel lives on** — Feature #293.
+///
+/// One entry per panel rather than one for the whole sidebar: a reader may
+/// want the outline across from the tree, or the 字典 stacked under it. The
+/// words are kept as written and read back by the editor, the way `syntax` is
+/// — they belong to the half that uses them, and one nobody knows keeps the
+/// default there rather than being silently rewritten here.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct SidebarConfig {
+    /// Panel name (`files`, `outline`, `dictionary`, …) → `"left"`/`"right"`.
+    pub side: HashMap<String, String>,
 }
 
 /// What `:export` cannot work out for itself.
@@ -1679,6 +1683,8 @@ struct RawConfig {
     #[serde(default)]
     syntax: HashMap<String, String>,
     #[serde(default)]
+    sidebar: HashMap<String, String>,
+    #[serde(default)]
     keys: RawKeys,
     #[serde(default)]
     export: RawExport,
@@ -1759,8 +1765,6 @@ struct RawEditor {
     ambiguous_width: Option<String>,
     detail_width: Option<usize>,
     sidebar_width: Option<usize>,
-    sidebar_side: Option<String>,
-    info_side: Option<String>,
     tabs: Option<String>,
     syntax: Option<String>,
     ruler: Option<usize>,
@@ -1897,12 +1901,6 @@ impl RawConfig {
         if other.editor.sidebar_width.is_some() {
             self.editor.sidebar_width = other.editor.sidebar_width;
         }
-        if other.editor.sidebar_side.is_some() {
-            self.editor.sidebar_side = other.editor.sidebar_side.clone();
-        }
-        if other.editor.info_side.is_some() {
-            self.editor.info_side = other.editor.info_side.clone();
-        }
         if other.editor.tabs.is_some() {
             self.editor.tabs = other.editor.tabs.clone();
         }
@@ -1946,6 +1944,11 @@ impl RawConfig {
         // says rather than having to restate it.
         for (name, language) in &other.syntax {
             self.syntax.insert(name.clone(), language.clone());
+        }
+        // Same rule for the panels: a project may move one without restating
+        // the other four.
+        for (name, side) in &other.sidebar {
+            self.sidebar.insert(name.clone(), side.clone());
         }
         if other.panel.markers.is_some() {
             self.panel.markers = other.panel.markers;
@@ -2143,15 +2146,6 @@ impl RawConfig {
         if let Some(width) = self.editor.sidebar_width {
             config.editor.sidebar_width = width.clamp(12, 60);
         }
-        // Kept as written and parsed by the editor, the way `syntax` is: the
-        // words belong to the half that uses them, and an unknown one keeps
-        // the default there rather than being silently rewritten here.
-        if let Some(side) = self.editor.sidebar_side {
-            config.editor.sidebar_side = side;
-        }
-        if let Some(side) = self.editor.info_side {
-            config.editor.info_side = side;
-        }
         if let Some(width) = self.editor.ambiguous_width {
             // An unknown value keeps the default rather than picking one: a
             // typo here shifts every line on the page.
@@ -2195,6 +2189,7 @@ impl RawConfig {
             config.ime.data_dirs = dirs.iter().map(|d| PathBuf::from(expand_tilde(d))).collect();
         }
         config.syntax.by_name = self.syntax;
+        config.sidebar.side = self.sidebar;
         if let Some(name) = self.theme.name {
             if !name.trim().is_empty() {
                 // The name picks the whole set of anchors, and the keys below
