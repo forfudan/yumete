@@ -103,6 +103,54 @@ impl Editor {
         }
     }
 
+    /// **`C-w`: hand the keys to the next region** — Feature #293.
+    ///
+    /// Left panel, the writing, the other work area, right panel, and round
+    /// again, skipping whatever is not open. One key, one meaning: 「the next
+    /// place the keys can be」. It used to mean two things in two places — the
+    /// other pane from the text, back to the text from the panel — and a
+    /// second panel is what made that untenable.
+    ///
+    /// ⚠️ **Not the same key as `空格 w`**, which stays 工作區 and nothing
+    /// else: 「nothing open → open one」 is a thing this cannot do without
+    /// swallowing it, and a writer with the file tree up would then have no
+    /// one key left that splits the page.
+    pub(super) fn cycle_region(&mut self) {
+        use crate::sidebar::Side;
+        // `None` is the writing; the number says which half of it.
+        let mut ring: Vec<Option<Side>> = Vec::new();
+        if self.panel(Side::Left).is_some() {
+            ring.push(Some(Side::Left));
+        }
+        let panes = 1 + usize::from(self.other_pane().is_some());
+        ring.extend(std::iter::repeat_n(None, panes));
+        if self.panel(Side::Right).is_some() {
+            ring.push(Some(Side::Right));
+        }
+        let here = match self.panel_focus() {
+            Some(side) => ring.iter().position(|&r| r == Some(side)),
+            // The live half of the writing: its place in the ring is after
+            // whatever the left panel took.
+            None => Some(usize::from(self.panel(Side::Left).is_some()) + self.live_pane().min(1)),
+        };
+        let Some(here) = here else { return };
+        if ring.len() < 2 {
+            return;
+        }
+        let next = (here + 1) % ring.len();
+        match ring[next] {
+            Some(side) => self.focus_panel(side),
+            None => {
+                self.panel_focus = None;
+                // Which half — the ring's index minus the left panel's seat.
+                let want = next - usize::from(self.panel(Side::Left).is_some());
+                if panes > 1 && want != self.live_pane().min(1) {
+                    self.switch_pane();
+                }
+            }
+        }
+    }
+
     /// Show the file tree rooted at `root` and give it the keys.
     pub fn open_sidebar_at(&mut self, root: &Path) {
         self.open_sidebar_showing(root, crate::sidebar::View::Explorer);
@@ -575,8 +623,13 @@ impl Editor {
                 sidebar.cycle(true);
                 self.refresh_sidebar();
             }
-            // Esc hands the keys back but leaves the tree up; `q` puts it away.
-            Key::Esc | Key::Ctrl('w') => self.panel_focus = None,
+            // **`Esc` does nothing here** (#293). It is everyone's 「get me
+            // out」 key, so it is tempting — but a panel with a field in it
+            // spends `Esc` on leaving Insert, and one press too many would
+            // then put the panel away. Two doors instead, and both say so in
+            // the hint row: `q` closes this slot, `C-w` walks on to the next
+            // region and leaves it up.
+            Key::Ctrl('w') => return self.cycle_region(),
             Key::Char('q') => self.close_panel(side),
             // Space still opens the menu, so `Space e` closes the sidebar from
             // inside it exactly as it opened it.

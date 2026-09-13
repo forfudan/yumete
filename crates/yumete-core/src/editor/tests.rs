@@ -7799,8 +7799,8 @@ fn one_key_moves_between_the_two_panes() {
     ed.open_sidebar_at(&dir);
     assert!(ed.sidebar_focused());
 
-    // `C-w` is the other pane, both ways — vi's window key, and there is
-    // only ever one other place to be.
+    // `C-w` walks the regions — with one panel and one work area that is two
+    // of them, so it goes back and forth (#293).
     ed.on_key(Key::Ctrl('w'));
     assert!(!ed.sidebar_focused(), "the keys are with the text");
     // …and the text really has them.
@@ -7810,8 +7810,11 @@ fn one_key_moves_between_the_two_panes() {
 
     ed.on_key(Key::Ctrl('w'));
     assert!(ed.sidebar_focused(), "and back again");
-    // Esc still hands them back one way, as it does everywhere else.
+    // **Esc is not one of the panel's doors** — it is reserved for leaving
+    // Insert in a panel that has a field.
     ed.on_key(Key::Esc);
+    assert!(ed.sidebar_focused(), "Esc did nothing");
+    ed.on_key(Key::Ctrl('w'));
     assert!(!ed.sidebar_focused());
 
     // With no sidebar open it does nothing at all.
@@ -7852,9 +7855,9 @@ fn a_key_that_names_a_view_opens_it_switches_to_it_and_closes_it() {
     assert_eq!(ed.panel(crate::sidebar::Side::Left).unwrap().view(), crate::sidebar::View::Explorer);
     assert!(ed.sidebar_focused());
 
-    // Esc hands the keys back without putting it away, and the key takes
+    // `C-w` hands the keys back without putting it away, and the key takes
     // them again rather than closing something the writer is not in.
-    ed.on_key(Key::Esc);
+    ed.on_key(Key::Ctrl('w'));
     assert!(ed.panel(crate::sidebar::Side::Left).is_some() && !ed.sidebar_focused());
     type_keys(&mut ed, " e");
     assert!(ed.sidebar_focused(), "the keys came back");
@@ -7946,6 +7949,59 @@ fn the_sidebar_walks_the_tree_with_the_same_keys_the_text_uses() {
     assert!(ed.sidebar_focused());
     type_keys(&mut ed, " e");
     assert!(ed.panel(crate::sidebar::Side::Left).is_none(), "Space e closes it again");
+
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+/// `C-w` walks the regions, `Esc` does nothing, `q` closes — Feature #293.
+#[test]
+fn the_panel_has_two_doors_and_esc_is_neither_of_them() {
+    use crate::sidebar::Side;
+    let dir = std::env::temp_dir().join(format!("yumete-regions-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(dir.join("a.md"), "一\n").unwrap();
+
+    let mut ed = Editor::new();
+    ed.open_sidebar_at(&dir);
+    assert!(ed.sidebar_focused());
+
+    // **Esc is not a door.** A panel with a field in it spends Esc on leaving
+    // Insert, so one press too many must not put the panel away.
+    ed.on_key(Key::Esc);
+    assert_eq!(ed.panel_focus(), Some(Side::Left), "Esc did nothing at all");
+
+    // With one panel and one work area the ring is two long, and C-w walks it
+    // both ways round.
+    ed.on_key(Key::Ctrl('w'));
+    assert_eq!(ed.panel_focus(), None, "C-w handed the keys to the writing");
+    assert!(ed.panel(Side::Left).is_some(), "and left the panel up");
+    ed.on_key(Key::Ctrl('w'));
+    assert_eq!(ed.panel_focus(), Some(Side::Left), "and round again");
+
+    // `q` is the other door: this slot goes away and the keys come back.
+    ed.on_key(Key::Char('q'));
+    assert!(ed.panel(Side::Left).is_none());
+    assert_eq!(ed.panel_focus(), None);
+
+    // Nothing open but the writing: one region, and C-w has nowhere to go.
+    // **`空格 w` is the key that splits the page**, and it still does.
+    ed.on_key(Key::Ctrl('w'));
+    assert!(ed.other_pane().is_none(), "C-w does not open a work area");
+    type_keys(&mut ed, " w");
+    assert!(ed.other_pane().is_some(), "空格 w still does");
+
+    // Two halves of the writing and a panel: three regions, and C-w walks all
+    // three in screen order.
+    ed.open_sidebar_at(&dir);
+    ed.on_key(Key::Ctrl('w'));
+    assert_eq!(ed.panel_focus(), None);
+    let first = ed.live_pane();
+    ed.on_key(Key::Ctrl('w'));
+    assert_eq!(ed.panel_focus(), None, "the other half is a region too");
+    assert_ne!(ed.live_pane(), first, "and C-w went to it");
+    ed.on_key(Key::Ctrl('w'));
+    assert_eq!(ed.panel_focus(), Some(Side::Left), "then round to the panel");
 
     std::fs::remove_dir_all(&dir).ok();
 }

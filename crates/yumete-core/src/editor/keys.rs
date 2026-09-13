@@ -894,19 +894,10 @@ impl Editor {
             Key::Char('Q') => self.toggle_recording(),
             Key::Char('q') => self.replay_macro(count),
             // A page, and half of one, in the direction the text is read.
-            // The other pane. Two panes, one key — vi spells window motions
-            // `C-w` and there is only ever one other place to be.
-            Key::Ctrl('w') => {
-                // Whichever slot has something in it — the reader means "into
-                // the panel", and with two of them the empty one is not a
-                // place to be put.
-                if let Some(side) = crate::sidebar::Side::BOTH
-                    .into_iter()
-                    .find(|&side| self.panel(side).is_some())
-                {
-                    self.focus_panel(side);
-                }
-            }
+            // The next region — the panels and the work areas, in the order
+            // they sit on the screen. vi spells window motions `C-w`, and this
+            // is the one it spells `C-w w` (#293).
+            Key::Ctrl('w') => self.cycle_region(),
             // …and the keys a keyboard already has for it. `C-f`/`C-b` are
             // vi's; these are the ones a reader who has never used vi presses,
             // and they used to do nothing at all.

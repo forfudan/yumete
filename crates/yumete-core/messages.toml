@@ -3792,16 +3792,16 @@ en = "sidebar"
 [[message]]
 # 側欄提示：回正文
 key = "hint.sidebar.back-to-text"
-zht = "回正文"
-zhs = "回正文"
-en = "back to the text"
+zht = "去下一區"
+zhs = "去下一区"
+en = "next region"
 
 [[message]]
 # 側欄底下那一行按鍵說明
 key = "hint.sidebar.keys"
-zht = "j k 移動 · J K 翻頁 · g G 兩端 · l 進入 · h 收起 · Tab 換視圖 · w 寬窄 · R 重讀 · C-w/Esc 回正文 · q 關"
-zhs = "j k 移动 · J K 翻页 · g G 两端 · l 进入 · h 收起 · Tab 换视图 · w 宽窄 · R 重读 · C-w/Esc 回正文 · q 关"
-en = "j k move · J K page · g G ends · l enter · h collapse · Tab view · w width · R reread · C-w/Esc back to the text · q close"
+zht = "j k 移動 · J K 翻頁 · g G 兩端 · l 進入 · h 收起 · Tab 換視圖 · w 寬窄 · R 重讀 · C-w 去下一區 · q 關"
+zhs = "j k 移动 · J K 翻页 · g G 两端 · l 进入 · h 收起 · Tab 换视图 · w 宽窄 · R 重读 · C-w 去下一区 · q 关"
+en = "j k move · J K page · g G ends · l enter · h collapse · Tab view · w width · R reread · C-w next region · q close"
 
 [[message]]
 # 側欄提示：換視圖
