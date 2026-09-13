@@ -1473,13 +1473,12 @@ impl Editor {
     ///
     /// A chapter with no heading of its own keeps its file name, since that is
     /// the only name it has.
-    pub(super) fn included_outline(&self) -> Vec<crate::sidebar::Row> {
-        let row = |path: PathBuf, level: usize, name: &str, line: usize| crate::sidebar::Row {
+    pub(super) fn included_headings(&self) -> Vec<crate::sidebar::Heading> {
+        let row = |path: PathBuf, level: usize, name: &str, line: usize| crate::sidebar::Heading {
             path,
-            name: format!("{}{name}", "  ".repeat(level.saturating_sub(1))),
-            depth: line,
-            is_dir: false,
-            expanded: false,
+            line,
+            level,
+            title: name.to_string(),
         };
         let here = self.current_buffer().rope().to_string();
         let root = self

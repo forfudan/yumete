@@ -4653,7 +4653,8 @@ fn draw_sidebar(frame: &mut Frame, editor: &Editor, config: &Config, area: Rect)
         // In the tree a directory says which way it is facing, and a file is
         // indented past where that mark would be so the names line up. The flat
         // views spend `depth` on an index instead, so they get no indent — and
-        // in the buffer list `expanded` marks the one being written.
+        // in the buffer list `expanded` marks the one being written, while in
+        // the outline the pair means 「holds other headings」 and 「open」.
         let line = match sidebar.view() {
             View::Explorer => {
                 let mark = match (row.is_dir, row.expanded) {
@@ -4664,7 +4665,18 @@ fn draw_sidebar(frame: &mut Frame, editor: &Editor, config: &Config, area: Rect)
                 format!("{}{mark}{}", "  ".repeat(row.depth), row.name)
             }
             View::Buffers => format!("{} {}", if row.expanded { "▸" } else { " " }, row.name),
-            View::Outline => format!("  {}", row.name),
+            // The mark goes in front of the indent rather than after it, so
+            // that 「does this fold, and is it open」 reads down one column
+            // (#37). Spending two cells per level on marks instead would cost
+            // a narrow sidebar the titles it exists to show.
+            View::Outline => {
+                let mark = match (row.is_dir, row.expanded) {
+                    (true, true) => "▾ ",
+                    (true, false) => "▸ ",
+                    (false, _) => "  ",
+                };
+                format!("{mark}{}", row.name)
+            }
             // No indent and no mark: the panel is a list of 名／值 pairs
             // already lined up into columns, and a narrow sidebar has no cells
             // to spend on decorating them.

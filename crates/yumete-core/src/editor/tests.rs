@@ -12839,3 +12839,85 @@ fn a_continuation_earns_no_undo_point_of_its_own() {
     ed.on_key(Key::Char('u'));
     assert_eq!(ed.current_buffer().text(), "- 甲\n- \n");
 }
+
+/// The 大綱 folds — Feature #37.
+///
+/// A book of a hundred chapters filed under 卷 is unreadable as one flat list,
+/// and the panel is narrow: the fold is what makes it a table of contents
+/// rather than a wall.
+#[test]
+fn a_heading_in_the_outline_folds_what_is_under_it() {
+    let dir = std::env::temp_dir().join(format!("yumete-fold-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(
+        dir.join("book.md"),
+        "# 卷一\n序\n## 第一章\n一\n## 第二章\n二\n# 卷二\n三\n",
+    )
+    .unwrap();
+    let mut ed = Editor::new();
+    ed.open_file(dir.join("book.md")).unwrap();
+    ed.open_sidebar_showing(&dir, crate::sidebar::View::Outline);
+
+    let names = |ed: &Editor| -> Vec<String> {
+        ed.sidebar()
+            .unwrap()
+            .rows()
+            .iter()
+            .map(|r| r.name.trim().to_string())
+            .collect()
+    };
+    let marks = |ed: &Editor| -> Vec<(bool, bool)> {
+        ed.sidebar()
+            .unwrap()
+            .rows()
+            .iter()
+            .map(|r| (r.is_dir, r.expanded))
+            .collect()
+    };
+    assert_eq!(names(&ed), ["卷一", "第一章", "第二章", "卷二"]);
+    // Only 卷一 holds anything, and it is open.
+    assert_eq!(marks(&ed), [(true, true), (false, false), (false, false), (
+        false, false
+    )]);
+
+    // `h` on it folds its chapters away and keeps the highlight where it is.
+    ed.on_key(Key::Char('h'));
+    assert_eq!(names(&ed), ["卷一", "卷二"]);
+    assert_eq!(marks(&ed)[0], (true, false));
+    assert_eq!(ed.sidebar().unwrap().selected(), 0);
+
+    // `l` opens it again.
+    ed.on_key(Key::Char('l'));
+    assert_eq!(names(&ed), ["卷一", "第一章", "第二章", "卷二"]);
+
+    // `h` on a chapter has no fold of its own to close, so the 卷 above it
+    // closes and takes the highlight — pressing it again walks out of the
+    // branch, which is what `h` does in the tree.
+    ed.on_key(Key::Char('j'));
+    assert_eq!(ed.sidebar().unwrap().selected(), 1);
+    ed.on_key(Key::Char('h'));
+    assert_eq!(names(&ed), ["卷一", "卷二"]);
+    assert_eq!(ed.sidebar().unwrap().selected(), 0, "up on the 卷");
+
+    // A heading with nothing above it and nothing under it folds nothing.
+    ed.on_key(Key::Char('j'));
+    ed.on_key(Key::Char('h'));
+    assert_eq!(names(&ed), ["卷一", "卷二"]);
+    // …and `l` on it is 「take me there」, as on any row that is not folded.
+    ed.on_key(Key::Char('l'));
+    assert_eq!(ed.cursor_line(), 6);
+    assert!(!ed.sidebar_focused());
+
+    // A folded heading is still a place: `Enter` goes to it rather than
+    // opening it. Re-opening the panel builds a new one, so the folds are
+    // gone with it — the same as the tree's open directories.
+    ed.open_sidebar_showing(&dir, crate::sidebar::View::Outline);
+    assert_eq!(names(&ed), ["卷一", "第一章", "第二章", "卷二"]);
+    ed.on_key(Key::Char('h'));
+    ed.on_key(Key::Enter);
+    assert_eq!(ed.cursor_line(), 0);
+    assert!(!ed.sidebar_focused());
+
+    std::fs::remove_dir_all(&dir).ok();
+}

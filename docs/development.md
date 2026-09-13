@@ -259,7 +259,7 @@ index, and a row with no number anywhere else is a row that got lost.
 | 34 | **Markdown LSP → headings** | lsp | P3 | **Dropped**: headings come from `markdown.rs` (#96／#114), not from a language server | Dropped |
 | 35 | **Typst LSP → headings** | lsp | P3 | **Dropped**: same — `syntax.rs` and #106 read Typst's own headings | Dropped |
 | 36 | Jump to outline entry | view | P3 | click/keys — #97's 大綱 view, and `:toc 3` | Done |
-| 37 | Fold/unfold outline | tui | P3 | the outline lists; it does not fold. `collapse()` is the explorer's, for directories | Planned |
+| 37 | **大綱摺得起來** | core+tui | P3 | `h` 摺、`l` 展，記號 `▾`／`▸` [^37] | Done 2026-09-13 |
 | 38 | Space (Normal) → hotkey/help overlay | tui | P3 | which-key style — #91 | Done |
 | 39 | Command palette (`:` completions) | tui | P4 | `:` menu, Tab completion | Done |
 | 40 | Themes (TOML, CJK-friendly) | config | P4 | incl. segmentation overlay polish — #156／#164／#203 | Done |
@@ -5579,6 +5579,18 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
 ## 11. 路線圖腳註
 
 每一條的原文，按條目編號。表格裏留的是一句話，這裏是那一條為什麼這樣做。
+
+[^37]: 卷一底下二十章，看卷二的時候那二十章只是牆。摺疊在**核心**，不在 tui：
+    只有它知道每一條標題有多深——`Row` 把 `depth` 花在行號上、縮進烤進了 `name`，
+    層級在那裏是字串的事實而不是數字。所以先建 `sidebar::Heading`（`path`／`line`／
+    `level`／`title`），摺完再變成 `Row`；`is_dir` ＝ 底下有東西、`expanded` ＝ 正
+    開着，就是檔案樹已經在花的那兩格，前端一段 `match` 兩個視圖通用。**記號畫在縮進
+    前面**（`▾ ` 然後纔是縮進），摺不摺得動讀成左邊一豎排；每一層花兩格畫記號會把窄
+    側欄僅有的字位吃光。鍵：`h` 摺自己，自己沒得摺就摺上面那一層並把游標挪上去（連按
+    一路退出這條枝，和檔案樹的 `h` 同形）；`l` 在摺着的標題上是展開，其餘時候和 `Enter`
+    一樣是「去那裏」；`Enter` 永不摺——摺着的標題仍然是一個地方。摺法存在 `Sidebar`
+    裏（`folded: BTreeSet<(PathBuf, usize)>`），大綱每次看都是重建的，存在別處就永遠
+    看不見摺過的樣子；**關掉側欄就沒了**，和檔案樹的 `open` 一樣。
 
 [^48]: **Dropped**: `:check-usage`／`標點`／`字集` (#233／#238／#240) do this in
     the editor's own process; there is no Chinese-prose language server to
