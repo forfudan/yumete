@@ -1,0 +1,198 @@
+name: Build release tarballs
+
+# Builds the `yumete` binary for every platform it ships on, packaged as
+# release tarballs that the Homebrew formula in
+# https://github.com/forfudan/homebrew-tap downloads.
+#
+#   yumete-<version>-darwin-arm64.tar.gz
+#   yumete-<version>-linux-x86_64.tar.gz
+#   yumete-<version>-linux-aarch64.tar.gz
+#
+# ⚠️ **The IME data is not in them** ([^135]). It is 36 MB compressed, it is
+# **platform-independent** — yume's own `fetch_data_linux.sh` says so, and
+# takes the Linux files out of the macOS release — so bundling it here would
+# build one thing three times and make every reader download it three times.
+# It travels its own way: yume's own install, a `yume-data` formula, or
+# `$YUME_DATA_DIR`. An editor with no tables is still an editor.
+#
+# Two ways in:
+#
+#   * publish a GitHub Release, and the version is its tag without the `v`.
+#     The tarballs and their SHA-256 files are attached to that release
+#     automatically. This is how a real release goes out, and the tag has to
+#     match `Cargo.toml` or the run stops — a tarball whose name disagrees
+#     with the binary inside it is worse than no tarball.
+#   * by hand from the Actions tab, where the version may be given and
+#     otherwise comes from `Cargo.toml`. A manual run keeps the tarballs as
+#     artifacts and attaches nothing, since there may be no release to attach
+#     them to.
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version without the leading v, e.g. 0.1.0 (empty: Cargo.toml)"
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  # One version for the whole run, resolved once, so the three build jobs
+  # cannot disagree about what they are packaging.
+  version:
+    name: Pick the version
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.pick.outputs.version }}
+      tag: ${{ steps.pick.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: pick
+        run: |
+          set -euo pipefail
+          # The workspace's own version, which every crate inherits.
+          crate=$(sed -n '/^\[workspace\.package\]/,/^\[/ s/^version = "\(.*\)"/\1/p' Cargo.toml | head -1)
+          if [[ -z "$crate" ]]; then
+            echo "!! no version in Cargo.toml" >&2
+            exit 1
+          fi
+          case "${{ github.event_name }}" in
+            release)
+              tag="${{ github.event.release.tag_name }}"
+              version="${tag#v}"
+              # **The tag and the crate must agree.** A tarball called
+              # 0.2.0 holding a binary that says 0.1.0 is a bug report
+              # nobody can act on.
+              if [[ "$version" != "$crate" ]]; then
+                echo "!! tag $tag says $version, Cargo.toml says $crate" >&2
+                exit 1
+              fi
+              ;;
+            *)
+              version="${{ inputs.version }}"
+              version="${version:-$crate}"
+              tag="v$version"
+              ;;
+          esac
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "packaging $version (tag $tag)"
+
+  build:
+    name: Build ${{ matrix.target }} tarball
+    needs: version
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # 22.04 on both Linux rows so the binaries run against an older
+          # glibc (2.35). A newer runner would raise the floor for no gain.
+          - os: ubuntu-22.04
+            target: linux-x86_64
+          - os: ubuntu-22.04-arm
+            target: linux-aarch64
+          - os: macos-14          # Apple Silicon (arm64)
+            target: darwin-arm64
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.target }}
+
+      # **The tests run here too.** A release built from a tree that does not
+      # pass them is the one build where nobody would notice in time.
+      - name: Test
+        run: cargo test --workspace --no-fail-fast
+
+      # `YUMETE_BUILTIN_DIR` pointed at an empty directory means「這台機器沒有
+      # 裝宇浩」, which on a runner is true anyway — but saying it makes the
+      # package *deterministic*: `build.rs` then always falls back to
+      # 靈明精華版 in `crates/yumete-ime/jinghua/`, and a runner image that one
+      # day happens to carry a 宇浩 data directory cannot silently put a
+      # different 碼表 into a release.
+      - name: Build
+        run: |
+          set -euo pipefail
+          mkdir -p "${RUNNER_TEMP}/no-yume-data"
+          YUMETE_BUILTIN_DIR="${RUNNER_TEMP}/no-yume-data" \
+            cargo build --release --locked -p yumete
+
+      - name: Package
+        run: |
+          set -euo pipefail
+          VERSION="${{ needs.version.outputs.version }}"
+          PKG="yumete-${VERSION}-${{ matrix.target }}"
+          STAGE="dist/${PKG}"
+          mkdir -p "${STAGE}/bin"
+          cp target/release/yumete "${STAGE}/bin/"
+          cp LICENSE README.md "${STAGE}/" 2>/dev/null || cp README.md "${STAGE}/"
+          # The manual travels with it: this editor's keys are not vi's, and a
+          # reader who installed it from a tap has nowhere else to look.
+          cp docs/manual.md "${STAGE}/"
+          ( cd dist && tar -czf "${PKG}.tar.gz" "${PKG}" )
+          shasum -a 256 "dist/${PKG}.tar.gz" | tee "dist/${PKG}.tar.gz.sha256"
+
+      # Run it from somewhere unrelated to the build, so a binary that only
+      # works beside its own build tree is caught here rather than by a reader.
+      - name: Smoke-test the packaged binary
+        run: |
+          set -euo pipefail
+          VERSION="${{ needs.version.outputs.version }}"
+          PKG="yumete-${VERSION}-${{ matrix.target }}"
+          mkdir -p "$RUNNER_TEMP/elsewhere"
+          cp -R "dist/${PKG}" "$RUNNER_TEMP/elsewhere/"
+          "$RUNNER_TEMP/elsewhere/${PKG}/bin/yumete" --version
+          # …and it draws a page. `--shot` runs the whole launch, so this
+          # catches a binary that starts and then cannot render.
+          printf '那年冬天。\n' > "$RUNNER_TEMP/a.md"
+          "$RUNNER_TEMP/elsewhere/${PKG}/bin/yumete" --shot=40x6 "$RUNNER_TEMP/a.md" | tee /dev/stderr | grep -q '那年冬天'
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: yumete-${{ needs.version.outputs.version }}-${{ matrix.target }}
+          path: dist/yumete-${{ needs.version.outputs.version }}-${{ matrix.target }}.tar.gz*
+          if-no-files-found: error
+          retention-days: 14
+
+  # The step that is easy to forget by hand — and decimo's own notes say it
+  # was forgotten for three releases running, which left Homebrew four months
+  # behind. `--clobber` so re-running a release replaces the assets rather
+  # than failing on the second attempt.
+  attach:
+    name: Attach the tarballs to the release
+    if: github.event_name == 'release'
+    needs: [version, build]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: yumete-*
+          path: dist
+          merge-multiple: true
+      - run: ls -l dist
+      - name: Upload to the release
+        run: |
+          set -euo pipefail
+          gh release upload "$TAG" \
+            dist/*.tar.gz dist/*.tar.gz.sha256 \
+            --clobber --repo "$GITHUB_REPOSITORY"
+          gh release view "$TAG" --repo "$GITHUB_REPOSITORY" \
+            --json assets -q '.assets[].name'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.version.outputs.tag }}
