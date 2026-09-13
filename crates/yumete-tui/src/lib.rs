@@ -37,7 +37,7 @@ use yumete_config::{Config, LineNumbers};
 use yumete_cjk::{Segmenter, WordMark};
 use yumete_core::command::Engagement;
 use yumete_core::editor::Hud;
-use yumete_core::sidebar::{Layer, Side, Transient, View};
+use yumete_core::sidebar::{Layer, Panel, Side, Transient, View};
 use yumete_core::wrap::{self, Anchor as WrapAnchor};
 use yumete_core::zong::{Anchor, Layout as WritingLayout};
 use yumete_core::{diag, say, Editor, Key, KeyOutcome, Mode, ShotJob, TextStore};
@@ -4875,7 +4875,8 @@ fn draw_dictionary(frame: &mut Frame, editor: &Editor, config: &Config, side: Si
         true => Style::default().bg(ink.text()).fg(ink.paper()),
         false => quiet,
     };
-    put_text(buf, from + 1, area.y, to, &say!("label.dictionary"), title);
+    let name = yumete_core::messages::say(Panel::Dictionary.tag(), &[]);
+    put_text(buf, from + 1, area.y, to, &name, title);
     let visible = (area.height as usize).saturating_sub(1);
     let first = editor
         .transient_scroll()
@@ -12173,7 +12174,7 @@ mod tests {
         // The keys go on the row below, so the status line can go on saying
         // which file you are in and where in it you are.
         let hint = command_line(&buffer);
-        assert!(hint.contains("側欄"), "{hint:?}");
+        assert!(hint.contains("邊欄"), "{hint:?}");
         assert!(hint.contains("C-w"), "how to get back: {hint:?}");
         let status = status_line(&buffer);
         assert!(status.contains("[scratch]"), "still says the file: {status:?}");

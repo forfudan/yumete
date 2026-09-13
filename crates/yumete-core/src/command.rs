@@ -212,6 +212,9 @@ pub enum Command {
     SetNote(Option<bool>),
     /// `:table-numbers on|off` — the row of column numbers above the header.
     SetTableNumbers(bool),
+    /// `:sidebar-show-left|right [panel]` — which side a panel lives on
+    /// (#293). No name means the one holding the keys.
+    ShowSidebarAt(crate::sidebar::Side, Option<crate::sidebar::Panel>),
     /// `:table-header [on|off]` — whether the grid's first row names the
     /// columns or is a row like any other (Feature #217). `None` flips it.
     SetTableHeader(Option<bool>),
@@ -2006,6 +2009,27 @@ const SWITCH: &[Word] = &[
     },
 ];
 
+/// Which panel a `:sidebar-show-*` names, or `None` for 「the one I am in」.
+///
+/// A word nobody knows is an error rather than 「the one I am in」: silently
+/// moving the wrong panel is worse than saying the name is not one.
+fn named_panel(
+    command: &'static str,
+    word: Option<&str>,
+) -> Result<Option<crate::sidebar::Panel>, CommandError> {
+    match word {
+        None => Ok(None),
+        Some(word) => {
+            crate::sidebar::Panel::parse(word)
+                .map(Some)
+                .ok_or_else(|| CommandError::InvalidArgument {
+                    command,
+                    value: word.to_string(),
+                })
+        }
+    }
+}
+
 /// The two words every switch takes — read back by [`switch`].
 const ON_OFF: &[Word] = &[
     Word {
@@ -2018,6 +2042,15 @@ const ON_OFF: &[Word] = &[
         help: "hint.close",
         needs: &[],
     },
+];
+
+/// The five panels a slot can hold, for `:sidebar-show-*` — Feature #293.
+const SIDEBAR_PANELS: &[Word] = &[
+    Word { name: "files", help: "label.panel.files", needs: &[] },
+    Word { name: "buffers", help: "label.panel.buffers", needs: &[] },
+    Word { name: "outline", help: "label.panel.outline", needs: &[] },
+    Word { name: "dictionary", help: "label.panel.dictionary", needs: &[] },
+    Word { name: "detail", help: "label.panel.detail", needs: &[] },
 ];
 
 /// Every command, for the completion list.
@@ -3011,6 +3044,32 @@ pub const COMMANDS: &[Entry] = &[
                 keys.push((column, down));
             }
             Ok(Command::SortTable(keys))
+        }),
+    },
+    Entry {
+        name: "sidebar-show-left",
+        aliases: &[],
+        help: "cmd.sidebar.left",
+        needs: &[],
+        params: &[Param::Words { of: SIDEBAR_PANELS, default: None }],
+        build: Some(|p| {
+            Ok(Command::ShowSidebarAt(
+                crate::sidebar::Side::Left,
+                named_panel(p.name, p.arg(0))?,
+            ))
+        }),
+    },
+    Entry {
+        name: "sidebar-show-right",
+        aliases: &[],
+        help: "cmd.sidebar.right",
+        needs: &[],
+        params: &[Param::Words { of: SIDEBAR_PANELS, default: None }],
+        build: Some(|p| {
+            Ok(Command::ShowSidebarAt(
+                crate::sidebar::Side::Right,
+                named_panel(p.name, p.arg(0))?,
+            ))
         }),
     },
     Entry {

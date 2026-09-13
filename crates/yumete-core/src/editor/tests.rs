@@ -7963,32 +7963,46 @@ fn the_sidebar_walks_the_tree_with_the_same_keys_the_text_uses() {
     std::fs::remove_dir_all(&dir).ok();
 }
 
-/// Which side each kind of panel lives on is a setting — Feature #293.
+/// **Which side each panel lives on is a setting, one per panel** — #293.
 #[test]
 fn the_panels_go_where_the_settings_put_them() {
-    use crate::sidebar::{Layer, Side, Transient};
+    use crate::sidebar::{Layer, Panel, Side, Transient, View};
     let dir = std::env::temp_dir().join(format!("yumete-sides-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
     std::fs::write(dir.join("a.md"), "那年冬天\n").unwrap();
 
     let mut ed = Editor::new();
-    ed.set_sidebar_side(Side::Right);
+    ed.set_side(Panel::Files, Side::Right);
     ed.open_sidebar_at(&dir);
     assert!(ed.panel(Side::Right).is_some(), "the tree opened on the right");
     assert!(ed.panel(Side::Left).is_none());
 
     // **A panel already open moves with the setting**, or the setting is a lie
     // until the next restart.
-    ed.set_sidebar_side(Side::Left);
+    ed.set_side(Panel::Files, Side::Left);
     assert!(ed.panel(Side::Left).is_some(), "and it came along");
     assert!(ed.panel(Side::Right).is_none());
     assert_eq!(ed.panel_focus(), Some((Side::Left, Layer::Top)), "keys too");
 
+    // **`Tab` walks the views that share this slot, and only those.** With the
+    // outline moved across, the left column holds two and walks between them.
+    ed.set_side(Panel::Outline, Side::Right);
+    ed.on_key(Key::Tab);
+    assert_eq!(ed.panel(Side::Left).unwrap().view(), View::Buffers);
+    ed.on_key(Key::Tab);
+    assert_eq!(ed.panel(Side::Left).unwrap().view(), View::Explorer, "two, not three");
+
+    // …and a column with one view in it says so rather than looking broken.
+    ed.set_side(Panel::Buffers, Side::Right);
+    ed.on_key(Key::Tab);
+    assert_eq!(ed.panel(Side::Left).unwrap().view(), View::Explorer);
+    assert_eq!(ed.status(), say!("sidebar.only-view-on-this-side"));
+
     // **Both on one side is a layout, not a mistake**: the 字典 then stacks
     // under the tree instead of taking a second column, and the tree stays.
     let mut ed = typed("那年冬天");
-    ed.set_info_side(Side::Left);
+    ed.set_side(Panel::Dictionary, Side::Left);
     ed.open_sidebar_at(&dir);
     ed.on_key(Key::Ctrl('w'));
     ed.on_key(Key::Char(' '));
@@ -8008,6 +8022,8 @@ fn the_panels_go_where_the_settings_put_them() {
     assert_eq!(Side::parse("right"), Some(Side::Right));
     assert_eq!(Side::parse("  LEFT "), Some(Side::Left));
     assert_eq!(Side::parse("上"), None);
+    assert_eq!(Panel::parse("outline"), Some(Panel::Outline));
+    assert_eq!(Panel::parse("nope"), None);
 
     std::fs::remove_dir_all(&dir).ok();
 }

@@ -29,11 +29,17 @@ impl Editor {
         }
         // The bottom layer of a slot: nothing to walk into and nothing to put
         // away, so the row says the two keys it does have (#293).
-        if self.panel_focus() == Some((self.transient_side(), crate::sidebar::Layer::Bottom)) {
-            return Hint::Keys(say!("label.dictionary"), vec![
-                    ("j k", say!("hint.sidebar.move")),
-                    ("C-w", say!("hint.sidebar.back-to-text")),
-                ]);
+        if let Some((side, crate::sidebar::Layer::Bottom)) = self.panel_focus() {
+            if let Some(kind) = self.transient(side) {
+                // Named for what it is holding: 字典 and 詳情 are two panels
+                // with the same two keys, and the row that says only 「keys」
+                // would leave a reader unsure which one has them.
+                let what = crate::messages::say(crate::sidebar::Panel::from(kind).tag(), &[]);
+                return Hint::Keys(what, vec![
+                        ("j k", say!("hint.sidebar.move")),
+                        ("C-w", say!("hint.sidebar.back-to-text")),
+                    ]);
+            }
         }
         if self.sidebar_focused() {
             return Hint::Keys(say!("hint.sidebar"), vec![
