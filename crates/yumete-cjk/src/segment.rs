@@ -556,8 +556,10 @@ mod tests {
         assert!(seg.word_count() > 100);
         // 你好 and 世界 are both in the bundled list.
         assert_eq!(seg.segment("你好世界"), vec![(0, 2), (2, 4)]);
-        // A common sentence groups into words, not single characters.
-        assert_eq!(seg.segment("我们今天"), vec![(0, 2), (2, 4)]);
+        // Two words in a row cut apart. ⚠️ Pick a pair the corpus does *not*
+        // also list as one four-character entry — 「我们今天」 is such an entry
+        // (7,395), so the maximum-probability path joins it, correctly.
+        assert_eq!(seg.segment("冬天早晨"), vec![(0, 2), (2, 4)]);
     }
 }
 

@@ -12769,8 +12769,10 @@ impl Segmenter for Counted {
 #[test]
 fn walking_a_line_by_word_cuts_the_line_once() {
     // 兩千段的中英混排行 — the shape the footnote measured 11.9 ms on.
+    // ⚠️ 字數是**手段**，段數纔是這條測試要的東西。詞表換厚（2026-09-14，691 →
+    // 75,000 條）之後同樣 6,000 字只切出 1,896 段，因為「今天天氣很好」併起來了。
     let mut line = String::new();
-    while line.chars().count() < 6_000 {
+    while line.chars().count() < 8_000 {
         line.push_str("今天天氣很好 apple 山路 42 ");
     }
     line.push('\n');
