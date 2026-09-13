@@ -203,6 +203,36 @@ install_ime_data() {
   compile_scheme qing qingyun
   compile_scheme riyue riyue
 
+  # **The scheme files themselves** (#262). `discover()` scans `schemes/*.toml`
+  # and nothing ever wrote one there, so every install ran on yume-core's five
+  # compiled-in schemes and the whole of #169 was dead code in a shipped build.
+  #
+  # ⚠️ **Only a scheme whose table this build actually compiled.** A menu line
+  # a writer can pick with no code table behind it is worse than a missing
+  # line: switching to it leaves them with no candidates at all. So each copy
+  # is gated on the `.ytab` that has just been written beside it.
+  #
+  # ⚠️ 冰雪 (`snow-*.toml`) stays out until yumete compiles what it needs.
+  # These files are not decoration — they carry `[[word]]`, `fixed`, `abbrev`,
+  # `select_keys` and the 頂功 rules, so taking one changes how typing behaves.
+  local from="$yume_root/frontends/schemes"
+  copy_scheme_file() {
+    local table="$1" name="$2"
+    [[ -f "$schemes/$table" && -f "$from/$name" ]] || return 0
+    cp "$from/$name" "$schemes/$name"
+  }
+  if [[ -d "$from" ]]; then
+    copy_scheme_file ling.ytab lingming.toml
+    copy_scheme_file xing.ytab xingchen.toml
+    copy_scheme_file qing.ytab qingyun.toml
+    copy_scheme_file riyue.ytab riyue.toml
+    # 拼音 has no `.ytab` of its own — its table is the shared `pinyin.yflb`,
+    # so it is gated on that instead.
+    if [[ -f "$shared/pinyin.yflb" && -f "$from/pinyin.toml" ]]; then
+      cp "$from/pinyin.toml" "$schemes/pinyin.toml"
+    fi
+  fi
+
   # The bundled CJK root font, for terminals whose fallback chain lacks 宇浩's
   # PUA roots.
   if compgen -G "$d/fonts/*.ttf" >/dev/null 2>&1; then
@@ -210,7 +240,8 @@ install_ime_data() {
     cp "$d"/fonts/*.ttf "$shared/fonts/" 2>/dev/null || true
   fi
 
-  echo "==> IME data installed ($(ls -1 "$schemes"/*.ytab 2>/dev/null | wc -l | tr -d ' ') table(s) in $dest)"
+  echo "==> IME data installed ($(ls -1 "$schemes"/*.ytab 2>/dev/null | wc -l | tr -d ' ') table(s), \
+$(ls -1 "$schemes"/*.toml 2>/dev/null | wc -l | tr -d ' ') scheme(s) in $dest)"
 }
 
 if [[ "$install_data" == "1" ]]; then
