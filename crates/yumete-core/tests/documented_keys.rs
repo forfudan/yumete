@@ -284,7 +284,10 @@ fn leader_and_key(quote: &str) -> Option<(char, String)> {
 /// `^`. Nothing can be concluded from these in either direction — `m d` happens
 /// to be a real sequence and `t w` is one too — so they are dropped before the
 /// question is asked rather than answered.
-const NOT_A_SEQUENCE: &[&str] = &["md", "tw", "[]", "[^"];
+// ⚠️ `[^` and `[[` are **characters typed into the page**, not keys pressed in
+// Normal: they open a completion panel in Insert (#418 二、三), and `[` is also
+// a real leader (`[c`), so without this the two would be read as one.
+const NOT_A_SEQUENCE: &[&str] = &["md", "tw", "[]", "[^", "[["];
 
 /// Sequences the documents print **in order to say the editor has not got them**.
 ///
