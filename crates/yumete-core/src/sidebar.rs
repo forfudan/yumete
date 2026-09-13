@@ -44,11 +44,12 @@ impl Side {
     }
 }
 
-/// What the sidebar is showing.
+/// What a panel is showing.
 ///
-/// Three views of the same question — "what is there, and where am I in it" —
-/// at three scales: the project, the files open in it, and the chapter on
-/// screen. `Tab` walks between them, because they answer each other.
+/// Views of one question — "what is there, and where am I in it" — at three
+/// scales: the project, the files open in it, and the chapter on screen. `Tab`
+/// walks between them, because they answer each other. And one that is not
+/// like them at all, which is what [`View::resident`] is for.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum View {
     /// The files on disk, as a tree.
@@ -59,23 +60,48 @@ pub enum View {
     /// The headings of the file being written.
     Outline,
     /// What the 拆分表 knows about one character — Feature #215.
-    ///
-    /// **Not part of the `Tab` cycle**: the other three are always about
-    /// something (a directory, the open files, this document), and this one is
-    /// about a character somebody asked about. Cycling into it would show an
-    /// empty panel most of the time, so it is only ever entered by asking.
     Dictionary,
 }
 
 impl View {
-    /// The next view, cycling.
-    pub fn next(self) -> View {
-        match self {
-            View::Explorer => View::Buffers,
-            View::Buffers => View::Outline,
-            View::Outline => View::Explorer,
-            View::Dictionary => View::Explorer,
-        }
+    /// Every view, in the order `Tab` walks them.
+    pub const ALL: [View; 4] = [
+        View::Explorer,
+        View::Buffers,
+        View::Outline,
+        View::Dictionary,
+    ];
+
+    /// **Whether the view stays up on its own** — Feature #293.
+    ///
+    /// A resident view is about something that is always there: a directory,
+    /// the open files, this document. It waits to be looked at, so `Tab`
+    /// reaches it.
+    ///
+    /// A transient one is put up by a question and taken down when the cursor
+    /// leaves what was asked about. 字典 is the one there is: cycling into it
+    /// would show an empty panel most of the time, and a `Tab` that lands
+    /// somewhere empty is a `Tab` nobody presses twice.
+    pub fn resident(self) -> bool {
+        !matches!(self, View::Dictionary)
+    }
+
+    /// The next resident view in that direction, wrapping — and from a
+    /// transient one, the nearest resident one, because `Tab` out of 字典 has
+    /// to go *somewhere*.
+    fn step(self, back: bool) -> View {
+        let residents: Vec<View> = View::ALL.into_iter().filter(|v| v.resident()).collect();
+        let Some(&first) = residents.first() else {
+            return self;
+        };
+        let Some(at) = residents.iter().position(|&v| v == self) else {
+            return first;
+        };
+        let n = residents.len();
+        residents[match back {
+            true => (at + n - 1) % n,
+            false => (at + 1) % n,
+        }]
     }
 
     /// Its name, for the sidebar's header.
@@ -158,7 +184,7 @@ pub struct Sidebar {
     /// others — so `Tab` back and forth returns to where you were, not to the
     /// top.
     view: View,
-    kept: [usize; 4],
+    kept: [usize; View::ALL.len()],
     /// The headings whose contents are folded away — [`Heading::key`] of each
     /// (#37).
     ///
@@ -190,7 +216,7 @@ impl Sidebar {
             rows: Vec::new(),
             selected: 0,
             view: View::Explorer,
-            kept: [0; 4],
+            kept: [0; View::ALL.len()],
             folded: BTreeSet::new(),
             wide: false,
         };
@@ -216,8 +242,8 @@ impl Sidebar {
 
     /// Show a named view, keeping the place in the one being left.
     ///
-    /// `Tab` cannot reach 字典 ([`View::Dictionary`] is out of the cycle), so
-    /// asking about a character is the only way in, and this is how the editor
+    /// `Tab` reaches only the resident views ([`View::resident`]), so asking
+    /// about a character is the only way into 字典, and this is how the editor
     /// asks.
     pub fn show(&mut self, view: View) {
         self.kept[self.view as usize] = self.selected;
@@ -225,14 +251,20 @@ impl Sidebar {
         self.selected = self.kept[self.view as usize];
     }
 
-    /// Walk to the next view (`Tab`), keeping each one's place.
+    /// Walk to the next resident view (`Tab`, or `Shift+Tab` backwards),
+    /// keeping each one's place.
     ///
-    /// The rows of the other two are not this module's to build — buffers and
+    /// The rows of the others are not this module's to build — buffers and
     /// headings belong to the editor — so it says which view it wants and is
     /// handed the rows for it.
-    pub fn cycle(&mut self) -> View {
+    ///
+    /// **Backwards is a direction, not two steps forward.** It used to be
+    /// spelled `cycle(); cycle();`, which is the same thing only while there
+    /// are exactly three residents — the arithmetic breaks the day a fourth
+    /// joins them.
+    pub fn cycle(&mut self, back: bool) -> View {
         self.kept[self.view as usize] = self.selected;
-        self.view = self.view.next();
+        self.view = self.view.step(back);
         self.selected = self.kept[self.view as usize];
         self.view
     }
@@ -537,13 +569,27 @@ mod tests {
         sidebar.step(true);
         assert_eq!(sidebar.selected(), 1);
 
-        assert_eq!(sidebar.cycle(), View::Buffers);
+        assert_eq!(sidebar.cycle(false), View::Buffers);
         // The other views' rows come from the editor; empty until it fills them.
         assert_eq!(sidebar.selected(), 0);
-        assert_eq!(sidebar.cycle(), View::Outline);
-        assert_eq!(sidebar.cycle(), View::Explorer);
+        assert_eq!(sidebar.cycle(false), View::Outline);
+        assert_eq!(sidebar.cycle(false), View::Explorer);
         assert_eq!(sidebar.selected(), 1, "the tree is where it was left");
         assert!(sidebar.title().contains("檔案"));
+
+        // …and backwards is one step back, not two forward — the same answer
+        // today, and still the right one when a fourth resident view joins.
+        assert_eq!(sidebar.cycle(true), View::Outline);
+        assert_eq!(sidebar.cycle(true), View::Buffers);
+        assert_eq!(sidebar.cycle(true), View::Explorer);
+
+        // 字典 is transient: `Tab` never lands on it, and `Tab` out of it goes
+        // to the first resident view rather than nowhere.
+        sidebar.show(View::Dictionary);
+        assert_eq!(sidebar.cycle(false), View::Explorer);
+        sidebar.show(View::Dictionary);
+        assert_eq!(sidebar.cycle(true), View::Explorer);
+        assert!(View::ALL.iter().filter(|v| v.resident()).count() == 3);
 
         std::fs::remove_dir_all(&dir).ok();
     }
@@ -552,7 +598,7 @@ mod tests {
     fn a_flat_view_carries_its_index_and_is_not_a_tree() {
         let dir = novel();
         let mut sidebar = Sidebar::new(&dir);
-        sidebar.cycle();
+        sidebar.cycle(false);
         sidebar.set_rows(vec![
             Row {
                 path: PathBuf::new(),

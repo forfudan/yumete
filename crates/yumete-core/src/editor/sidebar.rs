@@ -565,15 +565,14 @@ impl Editor {
                     None => {}
                 }
             }
-            // Tab walks the three views: the project, what is open in it, and
-            // the chapter on screen.
+            // Tab walks the resident views: the project, what is open in it,
+            // and the chapter on screen.
             Key::Tab => {
-                sidebar.cycle();
+                sidebar.cycle(false);
                 self.refresh_sidebar();
             }
             Key::BackTab => {
-                sidebar.cycle();
-                sidebar.cycle();
+                sidebar.cycle(true);
                 self.refresh_sidebar();
             }
             // Esc hands the keys back but leaves the tree up; `q` puts it away.
