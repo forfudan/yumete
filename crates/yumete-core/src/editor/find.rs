@@ -4,7 +4,8 @@
 //! panel's *state* is [`crate::search_panel`]; drawing it is the front end's.
 
 use super::*;
-use crate::search_panel::{Case, Field, Hit, AROUND, MOST};
+use crate::search_panel::{Case, Field, Hit, Where, AROUND, MOST};
+use std::path::{Path, PathBuf};
 
 /// How much of the line the command row shows around the highlighted hit.
 ///
@@ -29,6 +30,23 @@ impl Editor {
     /// intention is on the screen), otherwise the last thing searched for. It
     /// arrives selected, so typing replaces it and `Enter` keeps it — both
     /// intentions in one key, which is how VSCode's box behaves.
+    /// `:search-cd`／`-wd`／`-gd`／`:search <path>` — open it looking somewhere
+    /// else (#419).
+    pub(super) fn open_search_in(&mut self, scope: Where) {
+        // ⚠️ **A folder that is not there is said out loud.** Falling back to
+        // 「this file only」 would answer a question nobody asked, and answer
+        // it plausibly — a short list that looks like the truth.
+        if let Where::Named(path) = &scope {
+            let named = path.clone();
+            if self.search_root_of(&scope).is_none() {
+                self.status = say!("search.no-such-folder", named.display());
+                return;
+            }
+        }
+        self.search.scope = scope;
+        self.open_search();
+    }
+
     pub(super) fn open_search(&mut self) {
         // ⚠️ A selection wins over the last pattern — but only one somebody
         // **made**. Every motion in this editor leaves a selection and the
@@ -56,7 +74,13 @@ impl Editor {
         self.show_sidebar(crate::sidebar::View::Search);
         // The form is entered where a reader would start typing.
         self.mode = Mode::Field;
-        self.run_search();
+        // ⚠️ **Opened onto a folder, it looks straight away** rather than
+        // waiting for an `Enter` nobody knows to press: the reader just named
+        // a place, and the pattern was already in the box.
+        match self.search.scope.live() {
+            true => self.run_search(),
+            false => self.search_now(),
+        }
     }
 
     /// What the box holds, as a pattern the engine understands.
@@ -92,12 +116,65 @@ impl Editor {
         }
     }
 
-    /// **Run what the box holds over the buffer being written** — #419 一.
+    /// **Where the search is rooted**, for a scope that is not the buffer.
     ///
-    /// Called on every keystroke in the box: this buffer is in memory and a
-    /// pass over it costs nothing worth counting. Searching other files is
-    /// [^419]'s second sitting and will not be able to afford this.
+    /// `None` when the answer cannot be worked out — no file open to reckon
+    /// from, or a named folder that is not there.
+    fn search_root(&self) -> Option<PathBuf> {
+        self.search_root_of(&self.search.scope)
+    }
+
+    /// The same, for a scope that has not been adopted yet.
+    fn search_root_of(&self, scope: &Where) -> Option<PathBuf> {
+        match scope {
+            Where::Buffer => None,
+            // The file's own folder. ⚠️ Not the project: a book's drafts, its
+            // notes and its exports live under one tree, and 「this folder and
+            // what is under it」 is the near thing a reader means.
+            Where::Folder => Some(self.here_folder()),
+            Where::Workspace => std::env::current_dir().ok(),
+            Where::Project => Some(self.project_root()),
+            Where::Named(path) => {
+                let full = match path.is_absolute() {
+                    true => path.clone(),
+                    false => self.here_folder().join(path),
+                };
+                full.is_dir().then_some(full)
+            }
+        }
+    }
+
+    /// The folder the file being written is in, as an absolute path.
+    ///
+    /// ⚠️ **Resolved against the working directory first.** A buffer opened as
+    /// `a.md` has a relative path, and its `parent()` is the *empty* path —
+    /// which as a root walks nothing at all, so 「this folder」 quietly found
+    /// only the file already open.
+    fn here_folder(&self) -> PathBuf {
+        let here = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+        match self.current_buffer().path() {
+            Some(path) => here.join(path).parent().map(Path::to_path_buf).unwrap_or(here),
+            None => here,
+        }
+    }
+
+    /// **Run what the box holds** — #419.
+    ///
+    /// The buffer is searched on every keystroke: it is in memory and a pass
+    /// over it costs nothing worth counting. ⚠️ **Anything wider waits for
+    /// `Enter`** — a hundred chapters read off the disk per letter typed is
+    /// not a thing to do — and until then the panel says so rather than
+    /// showing a list that answers an older question.
     pub(super) fn run_search(&mut self) {
+        if !self.search.scope.live() {
+            self.search.stale = true;
+            return;
+        }
+        self.search_now();
+    }
+
+    /// Run it whatever the scope, walking the disk if that is what it takes.
+    pub(super) fn search_now(&mut self) {
         self.search.broken = false;
         if !self.search.asked() {
             self.search.hits.clear();
@@ -120,27 +197,87 @@ impl Editor {
         self.search.hits.clear();
         self.search.total = 0;
         self.search.selected = 0;
+        self.search.folded.clear();
+        self.search.stale = false;
         // **The pattern hands the search to the panel, and the page follows.**
         // One 「what am I looking for」 with two ways in: the highlight and
         // `n`/`N` are the same search, which is what [^415]记 `:grep` 不寫
         // `last_search` 為缺口的那條理由.
         self.last_search = pattern;
-        let rope = self.current_buffer().rope();
+        let root = self.search_root();
+        // ⚠️ **Compared as absolute paths.** A buffer opened as `a.md` and the
+        // same file coming out of the walk as `/…/卷一/a.md` are one file, and
+        // the guard that failed to see that searched it twice.
+        let here = self
+            .current_buffer()
+            .path()
+            .map(|p| std::fs::canonicalize(p).unwrap_or_else(|_| p.to_path_buf()));
+        // Where the file being written sits in the answer: under its own name
+        // when the answer has names in it, and namelessly when it is the whole
+        // of the answer.
+        let mine = match (&root, &here) {
+            (Some(root), Some(here)) => Some(
+                here.strip_prefix(std::fs::canonicalize(root).as_deref().unwrap_or(root))
+                    .unwrap_or(here)
+                    .to_path_buf(),
+            ),
+            _ => None,
+        };
         let mut hits = Vec::new();
         let mut total = 0usize;
+        // It comes first, and it comes from memory: what is on the screen is
+        // what is searched, saved or not.
+        let rope = self.current_buffer().rope();
         let mut at = 0usize;
         for line in 0..rope.len_lines() {
             let text: String = rope.line(line).chars().collect();
             for m in re.find_iter(&text) {
                 total += 1;
-                if hits.len() >= MOST {
-                    continue;
+                if hits.len() < MOST {
+                    let start = text[..m.start()].chars().count();
+                    let stop = text[..m.end()].chars().count();
+                    hits.push(excerpt(mine.clone(), &text, at, start, stop, line));
                 }
-                let start = text[..m.start()].chars().count();
-                let stop = text[..m.end()].chars().count();
-                hits.push(excerpt(&text, at, start, stop, line));
             }
             at += text.chars().count();
+        }
+        if let Some(root) = root {
+            let mut files = Vec::new();
+            crate::editor::walk(&root, &mut 0, &mut |path| files.push(path.to_path_buf()));
+            for path in files {
+                // Not twice: the one being written was searched from memory.
+                let full = std::fs::canonicalize(&path).unwrap_or_else(|_| path.clone());
+                if Some(&full) == here.as_ref() {
+                    continue;
+                }
+                // **An open file is read from its buffer, not from disk.**
+                // Unsaved work is work, and a search that could not see it
+                // would send a reader to a line that no longer says that.
+                let text = match self.buffers.iter().find(|b| b.path() == Some(path.as_path())) {
+                    Some(buffer) => buffer.rope().to_string(),
+                    None => match std::fs::read_to_string(&path) {
+                        Ok(text) => text,
+                        // Not text, or not readable: not this writer's prose.
+                        Err(_) => continue,
+                    },
+                };
+                let shown = path.strip_prefix(&root).unwrap_or(&path).to_path_buf();
+                let mut at = 0usize;
+                for (line, text) in text.split_inclusive('\n').enumerate() {
+                    for m in re.find_iter(text) {
+                        total += 1;
+                        if hits.len() < MOST {
+                            let start = text[..m.start()].chars().count();
+                            let stop = text[..m.end()].chars().count();
+                            hits.push(excerpt(Some(shown.clone()), text, at, start, stop, line));
+                        }
+                    }
+                    at += text.chars().count();
+                }
+            }
+            self.search.root = Some(root);
+        } else {
+            self.search.root = None;
         }
         self.search.hits = hits;
         self.search.total = total;
@@ -170,6 +307,12 @@ impl Editor {
             // every letter. 「Previous」 has no key here: `Esc` out and `N`.
             Key::Enter => {
                 self.search.all_selected = false;
+                // **Across files, `Enter` is 「go and look」**; in this one it
+                // is 「the next place」, because the looking already happened
+                // as you typed.
+                if !self.search.scope.live() {
+                    return self.search_now();
+                }
                 self.repeat_search(true);
                 self.search_again();
             }
@@ -227,9 +370,18 @@ impl Editor {
             Key::BackTab => self.search.field = self.search.field.step(true),
             // `hjkl` walk the form in Normal, as the author asked; in the list
             // `j`/`k` walk the hits instead, because that is what is there.
-            Key::Char('l') | Key::Right if self.search.field != Field::Results => {
-                self.search.field = self.search.field.step(false)
+            // In the list, `h`/`l` fold a file away and open it again — the
+            // same 「less of this / more of this」 the tree and the outline
+            // mean by them. Elsewhere in the form they walk the cells.
+            Key::Char('h') | Key::Left if self.search.field == Field::Results => {
+                if !self.search.fold(true) {
+                    self.search.field = self.search.field.step(true);
+                }
             }
+            Key::Char('l') | Key::Right if self.search.field == Field::Results => {
+                self.search.fold(false);
+            }
+            Key::Char('l') | Key::Right => self.search.field = self.search.field.step(false),
             Key::Char('h') | Key::Left => self.search.field = self.search.field.step(true),
             Key::Char('j') | Key::Down => match self.search.field {
                 Field::Results => self.search.step(true),
@@ -252,6 +404,8 @@ impl Editor {
                 Field::Regex | Field::Case | Field::Whole => self.flip_switch(),
                 Field::Results => self.go_to_hit(),
             },
+            // **`R` runs it again**, for a scope that does not run itself.
+            Key::Char('R') if !self.search.scope.live() => self.search_now(),
             // `i` opens the box, wherever you are in the form — the key that
             // means 「type here」 everywhere else in this editor.
             Key::Char('i') => {
@@ -321,16 +475,59 @@ impl Editor {
         self.run_search();
     }
 
-    /// `Enter` on a hit: go there, and hand the keys back to the page.
+    /// `Enter` on a row: fold a file, or go to a hit and hand the keys back.
     fn go_to_hit(&mut self) {
+        // On a file header, `Enter` is what `h`/`l` are: open or shut.
+        if let Some(crate::search_panel::Row::File { path, folded, .. }) = self.search.row() {
+            let _ = self.search.fold(!folded);
+            let _ = path;
+            return;
+        }
         let Some(hit) = self.search.here().cloned() else {
             return;
         };
         self.remember_jump();
-        let len = self.current_buffer().rope().len_chars();
-        self.anchor = hit.at.min(len);
-        self.cursor = motion::prev_grapheme(self.current_buffer().rope(), hit.end.min(len))
-            .max(hit.at.min(len));
+        // ⚠️ **A hit carries a file name even when it is in the file being
+        // written** (it has to, or the tree could not group it), so 「another
+        // file」 is a question about the path, not about whether there is one.
+        let mine = self
+            .current_buffer()
+            .path()
+            .and_then(|p| std::fs::canonicalize(p).ok());
+        let elsewhere = match (&hit.file, &self.search.root) {
+            (None, _) => false,
+            (Some(rel), Some(root)) => std::fs::canonicalize(root.join(rel)).ok() != mine,
+            (Some(_), None) => true,
+        };
+        // Another file has to be opened first — and if it cannot be, say so
+        // rather than walking the cursor to that line of the wrong file.
+        if elsewhere {
+            let rel = hit.file.clone().unwrap_or_default();
+            let full = match &self.search.root {
+                Some(root) => root.join(&rel),
+                None => rel,
+            };
+            if let Err(err) = self.open_file(&full) {
+                self.status = say!("buffer.cannot-open", full.display(), err);
+                return;
+            }
+        }
+        let rope = self.current_buffer().rope();
+        let len = rope.len_chars();
+        // ⚠️ **A hit in another file is placed by line, not by the offset.**
+        // Those offsets were counted in the text as it was read; the buffer
+        // just opened may have been edited since, and a stale offset would put
+        // the cursor in the middle of a word somewhere else.
+        let (at, end) = match elsewhere {
+            true => {
+                let line = hit.line.min(rope.len_lines().saturating_sub(1));
+                let at = rope.line_to_char(line);
+                (at, at)
+            }
+            false => (hit.at.min(len), hit.end.min(len)),
+        };
+        self.anchor = at;
+        self.cursor = motion::prev_grapheme(self.current_buffer().rope(), end.max(at)).max(at);
         self.extend = false;
         self.refresh_goal_column();
         self.panel_focus = None;
@@ -338,7 +535,14 @@ impl Editor {
 }
 
 /// A few characters either side of one match, and where the match is in them.
-fn excerpt(text: &str, line_at: usize, start: usize, stop: usize, line: usize) -> Hit {
+fn excerpt(
+    file: Option<PathBuf>,
+    text: &str,
+    line_at: usize,
+    start: usize,
+    stop: usize,
+    line: usize,
+) -> Hit {
     let chars: Vec<char> = text.chars().collect();
     let from = start.saturating_sub(AROUND);
     let to = (stop + AROUND).min(chars.len());
@@ -352,6 +556,7 @@ fn excerpt(text: &str, line_at: usize, start: usize, stop: usize, line: usize) -
         excerpt.push('…');
     }
     Hit {
+        file,
         line,
         at: line_at + start,
         end: line_at + stop,

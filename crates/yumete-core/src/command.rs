@@ -210,11 +210,13 @@ pub enum Command {
     SetTableNumbers(bool),
     /// `:search` — open the search panel (#419).
     ///
-    /// ⚠️ **It takes no pattern.** What to look for is typed in the panel's
-    /// own box; a command only ever names a *place*, so that `:search 卵` can
-    /// mean 「the folder called 卵」 without anybody having to guess. The
-    /// places are the second sitting's `-cd`/`-wd`/`-gd`.
-    OpenSearch,
+    /// ⚠️ **It takes no pattern, only a place.** What to look for is typed in
+    /// the panel's own box, so that `:search 卵` can mean 「the folder called
+    /// 卵」 without anybody having to guess. `-cd` is this file's folder,
+    /// `-wd` the one yumete was opened in, `-gd` the nearest git project —
+    /// that last one being the useful one, since nobody has to count how many
+    /// levels up it was.
+    OpenSearch(crate::search_panel::Where),
     /// `:sidebar-show-left|right [panel]` — which side a panel lives on
     /// (#293). No name means the one holding the keys.
     ShowSidebarAt(crate::sidebar::Side, Option<crate::sidebar::Panel>),
@@ -3052,8 +3054,37 @@ pub const COMMANDS: &[Entry] = &[
         aliases: &[],
         help: "cmd.commands.search",
         needs: &[],
+        params: &[Param::Path],
+        build: Some(|p| {
+            Ok(Command::OpenSearch(match p.arg(0) {
+                None => crate::search_panel::Where::Buffer,
+                Some(path) => crate::search_panel::Where::Named(path.into()),
+            }))
+        }),
+    },
+    Entry {
+        name: "search-cd",
+        aliases: &["scd"],
+        help: "cmd.commands.search-cd",
+        needs: &[],
         params: &[],
-        build: Some(|_| Ok(Command::OpenSearch)),
+        build: Some(|_| Ok(Command::OpenSearch(crate::search_panel::Where::Folder))),
+    },
+    Entry {
+        name: "search-gd",
+        aliases: &["sgd"],
+        help: "cmd.commands.search-gd",
+        needs: &[],
+        params: &[],
+        build: Some(|_| Ok(Command::OpenSearch(crate::search_panel::Where::Project))),
+    },
+    Entry {
+        name: "search-wd",
+        aliases: &["swd"],
+        help: "cmd.commands.search-wd",
+        needs: &[],
+        params: &[],
+        build: Some(|_| Ok(Command::OpenSearch(crate::search_panel::Where::Workspace))),
     },
     Entry {
         name: "sidebar-show-left",

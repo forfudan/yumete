@@ -4895,14 +4895,29 @@ fn draw_search(frame: &mut Frame, editor: &Editor, config: &Config, side: Side, 
         }
     }
     let left = from + 1;
-    // **The title carries the count, and says nothing when nothing was asked.**
-    // `0 處` and 「not asked yet」 are two different findings (#419).
-    put_text(buf, left, area.y, to, &say!("label.panel.search"), head);
-    let (tally, style) = match (find.broken, find.asked()) {
-        (true, _) => (say!("search.bad-pattern"), wrong),
-        (false, false) => (String::new(), quiet),
-        (false, true) if find.total == 0 => (say!("search.none"), quiet),
-        (false, true) => (say!("search.hits", find.total), quiet),
+    // **The title says where it is looking.** One panel behaves two ways —
+    // this file is searched as you type, a folder waits for `Enter` — and the
+    // difference has to be on the screen (#419).
+    // Spelled out rather than asked of `Where`, so the tags sit where the
+    // messages test can see them (`messages.rs::said` reads `say!` calls).
+    let place = match &find.scope {
+        yumete_core::search_panel::Where::Buffer => say!("search.where.buffer"),
+        yumete_core::search_panel::Where::Folder => say!("search.where.folder"),
+        yumete_core::search_panel::Where::Workspace => say!("search.where.workspace"),
+        yumete_core::search_panel::Where::Project => say!("search.where.project"),
+        // Named outright: say the name, which is what the reader typed.
+        yumete_core::search_panel::Where::Named(path) => path.display().to_string(),
+    };
+    let title = format!("{}  {place}", say!("label.panel.search"));
+    put_text(buf, left, area.y, to, &title, head);
+    // **The count, and nothing when nothing was asked.** `0 處` and 「not
+    // asked yet」 are two different findings (#419).
+    let (tally, style) = match (find.broken, find.stale, find.asked()) {
+        (true, _, _) => (say!("search.bad-pattern"), wrong),
+        (_, true, true) => (say!("search.enter-to-look"), head),
+        (false, _, false) => (String::new(), quiet),
+        (false, _, true) if find.total == 0 => (say!("search.none"), quiet),
+        (false, _, true) => (say!("search.hits", find.total), quiet),
     };
     if !tally.is_empty() {
         let w = yumete_cjk::str_width(&tally) as u16;
@@ -4968,28 +4983,49 @@ fn draw_search(frame: &mut Frame, editor: &Editor, config: &Config, side: Side, 
     if room == 0 {
         return;
     }
+    let rows = find.rows();
     let first = find
         .selected
         .saturating_sub(room.saturating_sub(1))
-        .min(find.hits.len().saturating_sub(room));
-    for slot in 0..room.min(find.hits.len().saturating_sub(first)) {
+        .min(rows.len().saturating_sub(room));
+    for slot in 0..room.min(rows.len().saturating_sub(first)) {
         let i = first + slot;
-        let hit = &find.hits[i];
         let y = top + slot as u16;
         let picked = i == find.selected && !find.broken;
-        if picked && keys_here && find.field == Field::Results {
+        let inked = picked && keys_here && find.field == Field::Results;
+        if inked {
             for x in from..to {
                 if let Some(c) = buf.cell_mut((x, y)) {
                     c.set_symbol(" ").set_style(on);
                 }
             }
         }
-        let style = match (find.broken, picked && keys_here && find.field == Field::Results) {
+        let (line, plain) = match &rows[i] {
+            // A file, with the mark the tree and the outline already use for
+            // 「there is more under this」.
+            yumete_core::search_panel::Row::File { path, hits, folded } => (
+                format!(
+                    "{} {}  {hits}",
+                    if *folded { "▸" } else { "▾" },
+                    path.display()
+                ),
+                head,
+            ),
+            yumete_core::search_panel::Row::Hit(at) => {
+                let hit = &find.hits[*at];
+                // Indented under its file when there is one to be under.
+                let pad = match hit.file.is_some() {
+                    true => "  ",
+                    false => "",
+                };
+                (format!("{pad}{:>5}  {}", hit.line + 1, hit.excerpt), text)
+            }
+        };
+        let style = match (find.broken, inked) {
             (true, _) => quiet,
             (false, true) => on,
-            (false, false) => text,
+            (false, false) => plain,
         };
-        let line = format!("{:>5}  {}", hit.line + 1, hit.excerpt);
         put_text(buf, left, y, to, &line, style);
     }
 }

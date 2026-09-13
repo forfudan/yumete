@@ -693,8 +693,8 @@ impl Editor {
                 };
                 Ok(CommandOutcome::Continue)
             }
-            Command::OpenSearch => {
-                self.open_search();
+            Command::OpenSearch(scope) => {
+                self.open_search_in(scope);
                 Ok(CommandOutcome::Continue)
             }
             Command::ShowSidebarAt(side, which) => {

@@ -720,6 +720,30 @@ en = "advanced search"
 find = "搜索 搜尋 搜寻 查找 尋找 寻找 grep find search 全文 面板"
 
 [[message]]
+# 命令：搜這個檔所在的資料夾
+key = "cmd.commands.search-cd"
+zht = "在這個檔的資料夾裏找（含子目錄）"
+zhs = "在这个档的资料夹里找（含子目录）"
+en = "search this file's folder"
+find = "搜索 資料夾 资料夹 目錄 目录 folder cd"
+
+[[message]]
+# 命令：搜最近的 git 項目
+key = "cmd.commands.search-gd"
+zht = "在最近的 git 項目裏找"
+zhs = "在最近的 git 项目里找"
+en = "search the nearest git project"
+find = "搜索 項目 项目 git 全書 全书 gd"
+
+[[message]]
+# 命令：搜 yumete 打開的資料夾
+key = "cmd.commands.search-wd"
+zht = "在 yumete 打開的資料夾裏找"
+zhs = "在 yumete 打开的资料夹里找"
+en = "search the folder yumete opened in"
+find = "搜索 工作區 工作区 wd"
+
+[[message]]
 # : 命令選單裏 sh 那一項的說明（commands 組）
 key = "cmd.commands.sh"
 zht = "跑一條命令，輸出收進一個緩衝區"
@@ -5500,6 +5524,13 @@ zhs = "智能"
 en = "smart"
 
 [[message]]
+# 搜索：跨檔要按 Enter 纔去找
+key = "search.enter-to-look"
+zht = "Enter 開找"
+zhs = "Enter 开找"
+en = "Enter to look"
+
+[[message]]
 # 限定一欄搜到第一處
 key = "search.hit-in-column"
 zht = "第 {0} 欄：第 1/{1} 處"
@@ -5552,6 +5583,13 @@ en = "this table names no scope to jump within, so the search runs from the firs
 # ── selection ─────────────────────────────────────────────────────────
 
 [[message]]
+# 搜索：說了一個不存在的資料夾
+key = "search.no-such-folder"
+zht = "沒有這個資料夾：{0}"
+zhs = "没有这个资料夹：{0}"
+en = "no such folder: {0}"
+
+[[message]]
 # 搜索：一處都沒有
 key = "search.none"
 zht = "沒有"
@@ -5564,6 +5602,34 @@ key = "search.regex"
 zht = "正則"
 zhs = "正则"
 en = "regex"
+
+[[message]]
+# 搜索：在哪裏找——這個檔
+key = "search.where.buffer"
+zht = "本檔"
+zhs = "本档"
+en = "this file"
+
+[[message]]
+# 搜索：在哪裏找——這個資料夾
+key = "search.where.folder"
+zht = "本夾"
+zhs = "本夹"
+en = "this folder"
+
+[[message]]
+# 搜索：在哪裏找——git 項目
+key = "search.where.project"
+zht = "項目"
+zhs = "项目"
+en = "project"
+
+[[message]]
+# 搜索：在哪裏找——工作區
+key = "search.where.workspace"
+zht = "工作區"
+zhs = "工作区"
+en = "workspace"
 
 [[message]]
 # 搜索：完整匹配那一格

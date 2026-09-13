@@ -8042,6 +8042,122 @@ fn the_box_opens_holding_the_last_pattern_or_what_is_marked() {
     assert_eq!(ed.search().query, "霜降", "{:?}", ed.search().query);
 }
 
+/// A book laid out the way one is: a folder, a chapter folder under it, and
+/// a `.gitignore` beside them.
+#[cfg(test)]
+fn a_little_book(name: &str) -> std::path::PathBuf {
+    let dir = std::env::temp_dir().join(format!("yumete-{name}-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(dir.join("卷一")).unwrap();
+    std::fs::write(dir.join("卷一/a.md"), "霜降於石階。\n").unwrap();
+    std::fs::write(dir.join("卷一/b.md"), "那一年的霜來得早。\n窗上的霜花。\n").unwrap();
+    std::fs::write(dir.join("c.md"), "第二天沒有霜。\n").unwrap();
+    // What makes this folder 「the book」, whichever directory yumete was
+    // started in — `-gd` climbs to it.
+    std::fs::write(dir.join(".yumete.toml"), "").unwrap();
+    dir
+}
+
+/// **Searching past this file** — #419 二.
+#[test]
+fn the_search_panel_walks_the_folder_when_it_is_told_to() {
+    use crate::search_panel::{Row, Where};
+    use crate::sidebar::Side;
+    let dir = a_little_book("searchtree");
+    let mut ed = Editor::new();
+    ed.open_file(dir.join("卷一/a.md")).unwrap();
+
+    // ⚠️ **A wider scope does not run as you type.** A hundred chapters read
+    // off the disk per letter is not a thing to do, and the panel says so.
+    ed.execute(":search-cd").unwrap();
+    ed.on_key(Key::Char('霜'));
+    assert!(ed.search().stale, "it is waiting to be told to look");
+    ed.on_key(Key::Enter);
+    assert!(!ed.search().stale);
+
+    // Three: one here, two next door. **The file being written is searched
+    // once**, from memory — not again off the disk.
+    assert_eq!(ed.search().total, 3, "{:?}", ed.search().hits);
+    let rows = ed.search().rows();
+    let files: Vec<String> = rows
+        .iter()
+        .filter_map(|r| match r {
+            Row::File { path, hits, .. } => Some(format!("{} {hits}", path.display())),
+            Row::Hit(_) => None,
+        })
+        .collect();
+    assert_eq!(files, vec!["a.md 1".to_string(), "b.md 2".to_string()]);
+
+    // **Unsaved work is work.** What is on the screen is what is searched.
+    ed.on_key(Key::Esc);
+    ed.on_key(Key::Ctrl('w'));
+    for c in "i霜霜".chars() {
+        ed.on_key(Key::Char(c));
+    }
+    ed.on_key(Key::Esc);
+    type_keys(&mut ed, " /");
+    ed.on_key(Key::Enter);
+    assert_eq!(ed.search().total, 5, "the two just typed count too");
+
+    // `-gd` climbs to the book: the chapter next door **and** the one above.
+    ed.execute(":search-gd").unwrap();
+    ed.on_key(Key::Enter);
+    assert!(ed.search().total >= 6, "{:?}", ed.search().total);
+    assert!(
+        ed.search().hits.iter().any(|h| h.file.as_ref().is_some_and(|p| p.ends_with("c.md"))),
+        "the one above is in it too"
+    );
+
+    // A folder named outright — and one that is not there says so rather
+    // than quietly searching this file alone.
+    ed.execute(":search ../卷一").unwrap();
+    assert!(matches!(ed.search().scope, Where::Named(_)));
+    ed.on_key(Key::Enter);
+    assert_eq!(ed.search().total, 5, "the same folder by another name");
+    ed.execute(":search 沒有這個").unwrap();
+    assert_eq!(ed.status(), say!("search.no-such-folder", "沒有這個"));
+
+    // Nothing was left on the left-hand slot but the panel itself.
+    assert!(ed.panel(Side::Left).is_some());
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+/// The walk is the book's, and it reads `.gitignore` — #308, #362, #419 二.
+///
+/// ⚠️ This is the coverage `:grep`'s tests used to carry. It came back with
+/// the panel because the walk is the same walk.
+#[test]
+fn the_search_reads_the_ignore_file_and_roots_itself_in_the_book() {
+    let dir = a_little_book("searchwalk");
+    std::fs::create_dir_all(dir.join("target")).unwrap();
+    std::fs::write(dir.join("target/built.md"), "霜霜霜\n").unwrap();
+    std::fs::create_dir_all(dir.join("舊稿")).unwrap();
+    std::fs::write(dir.join("舊稿/old.md"), "霜霜\n").unwrap();
+    std::fs::write(dir.join(".gitignore"), "舊稿/\n").unwrap();
+    let mut ed = Editor::new();
+    ed.open_file(dir.join("卷一/a.md")).unwrap();
+    ed.execute(":search-gd").unwrap();
+    ed.on_key(Key::Char('霜'));
+    ed.on_key(Key::Enter);
+
+    let files: Vec<String> = ed
+        .search()
+        .hits
+        .iter()
+        .filter_map(|h| h.file.as_ref().map(|p| p.display().to_string()))
+        .collect();
+    assert!(files.iter().any(|f| f.contains("c.md")), "the book's own: {files:?}");
+    assert!(
+        !files.iter().any(|f| f.contains("built.md")),
+        "build output is not prose: {files:?}"
+    );
+    assert!(
+        !files.iter().any(|f| f.contains("old.md")),
+        "`.gitignore` said to skip it: {files:?}"
+    );
+    std::fs::remove_dir_all(&dir).ok();
+}
+
 /// **Which side each panel lives on is a setting, one per panel** — #293.
 #[test]
 fn the_panels_go_where_the_settings_put_them() {
