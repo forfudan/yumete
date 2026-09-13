@@ -208,6 +208,77 @@ impl Editor {
         self.refresh_goal_column();
     }
 
+    /// Carry a Markdown list marker down to the next line, or end the list
+    /// (#418). Whether it answered the Enter.
+    ///
+    /// **The Enter that ends the list is the half that matters.** Continuing a
+    /// list is a convenience; without a way out of one, the only way to stop
+    /// is to backspace the marker the editor just wrote, and a writer who has
+    /// to undo the help twice a paragraph turns the help off. So an Enter on
+    /// an item with nothing typed into it clears that line instead — which is
+    /// what every editor that does this does, and what the hand already
+    /// expects.
+    ///
+    /// It costs no undo point of its own, in either half: an Insert session
+    /// announces one snapshot when it opens and this writes inside it, the
+    /// same as every character typed.
+    pub(super) fn continue_the_list(&mut self) -> bool {
+        // Only where a `- ` *is* a list. In a novel it is a dash, and a
+        // manuscript that gains markers it did not ask for is worse off than
+        // one that carries none down.
+        if self.syntax() != crate::syntax::Syntax::Markdown {
+            return false;
+        }
+        let rope = self.current_buffer().rope();
+        let line = rope.char_to_line(self.cursor.min(rope.len_chars()));
+        let start = rope.line_to_char(line);
+        let text = self.line_text(line).unwrap_or_default();
+        let text = text.trim_end_matches(['\n', '\r']).to_string();
+        let Some(open) = crate::markdown::opening(&text) else {
+            return false;
+        };
+        // Inside the marker itself the Enter is splitting `- [` in half, and
+        // that is a thing the writer typed on purpose.
+        if self.cursor < start + open.width {
+            return false;
+        }
+        // A listing quoted in a fence is written out as it is; the markers in
+        // it are somebody's example.
+        //
+        // ⚠️ **Asked last, and only of a line that already looks like an
+        // item.** `block_of` walks from the top of the file, and its cache is
+        // keyed on the revision — which every Enter has just changed — so
+        // asking it first made every line break in a Markdown buffer re-scan
+        // the whole document, and the test fixtures that type a chapter in
+        // through `Key::Enter` stopped finishing at all. Down here it is paid
+        // for by lists only, where one walk per item is a walk per paragraph.
+        //
+        // ⚠️ `:render off` reports every line as prose, so under it a fenced
+        // list does carry down — the same blind spot
+        // [`Self::replacement_reshapes_the_grid`] has, and the same reason:
+        // the scan is only kept warm while there is markup on the screen.
+        if self.block_of(line).is_literal() {
+            return false;
+        }
+        if open.empty {
+            let end = start + text.chars().count();
+            let done = self.without_cell_guard(|e| e.current_buffer_mut().replace(start..end, ""));
+            if !self.applied(done) {
+                return false;
+            }
+            self.cursor = start;
+            self.anchor = start;
+            self.refresh_goal_column();
+            return true;
+        }
+        // One insert, so it is one edit: the line ending the file already uses
+        // (#309) and the marker after it.
+        let carried = format!("{}{}", self.current_buffer().ending(), open.next);
+        self.insert_recording.push_str(&carried);
+        self.insert_str(&carried);
+        true
+    }
+
     /// Open a new line below the cursor and enter Insert mode (`o`).
     pub(super) fn open_line_below(&mut self) {
         if self.refuse_readonly() {

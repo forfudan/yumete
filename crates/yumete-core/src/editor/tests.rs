@@ -15,8 +15,16 @@ use crate::input::{Key, Mode};
 use yumete_cjk::{CategorySegmenter, DictionarySegmenter};
 
 /// Type `text` into a fresh editor, then return to Normal at the top.
+///
+/// **Typed as plain text and handed back as Markdown**, which is what a
+/// scratch buffer is ([`crate::syntax::Syntax::default`]). The two are the
+/// same document except while it is being written: `Enter` carries a list
+/// marker down in Markdown (#418), so a fixture whose lines open with `- `
+/// would come back with markers this helper wrote rather than the ones it was
+/// given. A fixture must be the text it was handed.
 fn typed(text: &str) -> Editor {
     let mut ed = Editor::new();
+    ed.current_buffer_mut().set_syntax(crate::syntax::Syntax::Text);
     ed.on_key(Key::Char('i'));
     for c in text.chars() {
         ed.on_key(if c == '\n' { Key::Enter } else { Key::Char(c) });
@@ -24,6 +32,8 @@ fn typed(text: &str) -> Editor {
     ed.on_key(Key::Esc);
     ed.on_key(Key::Char('g'));
     ed.on_key(Key::Char('g'));
+    ed.current_buffer_mut()
+        .set_syntax(crate::syntax::Syntax::Markdown);
     ed
 }
 
@@ -12731,4 +12741,101 @@ fn the_cost_of_a_step_down_a_table() {
         }
         std::fs::remove_dir_all(&dir).ok();
     }
+}
+
+
+/// #418 一. A Markdown list carries its marker down, and the Enter on an item
+/// with nothing in it ends the list rather than writing a fourth empty one.
+#[test]
+fn a_list_carries_itself_down() {
+    let mut ed = typed("- 甲\n");
+    ed.on_key(Key::Char('A'));
+    ed.on_key(Key::Enter);
+    assert_eq!(ed.current_buffer().text(), "- 甲\n- \n", "the marker comes down");
+    ed.on_key(Key::Char('乙'));
+    ed.on_key(Key::Enter);
+    ed.on_key(Key::Char('丙'));
+    assert_eq!(ed.current_buffer().text(), "- 甲\n- 乙\n- 丙\n");
+
+    // Nothing typed into the fourth item: that Enter clears the line, and the
+    // caret is left at its start with the list behind it.
+    ed.on_key(Key::Enter);
+    assert_eq!(ed.current_buffer().text(), "- 甲\n- 乙\n- 丙\n- \n");
+    ed.on_key(Key::Enter);
+    assert_eq!(ed.current_buffer().text(), "- 甲\n- 乙\n- 丙\n\n", "and the list ends");
+    ed.on_key(Key::Char('丁'));
+    assert_eq!(ed.current_buffer().text(), "- 甲\n- 乙\n- 丙\n丁\n", "as prose");
+}
+
+/// #418 一 ③. The number below steps on; the ones already written do not move.
+/// Renumbering a list is a command somebody runs on purpose.
+#[test]
+fn an_ordered_list_steps_on_without_renumbering_what_is_above() {
+    let mut ed = typed("1. 甲\n1. 乙\n");
+    ed.on_key(Key::Char('A'));
+    ed.on_key(Key::Enter);
+    assert_eq!(ed.current_buffer().text(), "1. 甲\n2. \n1. 乙\n");
+}
+
+/// #418 一. The indent, the task box and the quote, each carried as it stands.
+#[test]
+fn an_indent_a_box_and_a_quote_all_come_down() {
+    for (wrote, expected) in [
+        ("    - 甲\n", "    - 甲\n    - \n"),
+        ("- [x] 甲\n", "- [x] 甲\n- [ ] \n"),
+        ("> 甲\n", "> 甲\n> \n"),
+        ("> - 甲\n", "> - 甲\n> - \n"),
+    ] {
+        let mut ed = typed(wrote);
+        ed.on_key(Key::Char('A'));
+        ed.on_key(Key::Enter);
+        assert_eq!(ed.current_buffer().text(), expected, "{wrote:?}");
+    }
+}
+
+/// #418 一 ①, and the two other places an Enter is not a continuation.
+#[test]
+fn what_is_not_a_list_gets_a_plain_line_break() {
+    // A `|` row is a table's: Enter splits it, and adding a marker to the
+    // half below would put a list inside a grid.
+    let mut ed = typed("| 甲 | 乙 |\n");
+    ed.on_key(Key::Char('A'));
+    ed.on_key(Key::Enter);
+    assert_eq!(ed.current_buffer().text(), "| 甲 | 乙 |\n\n");
+
+    // A novel is not Markdown, and a dash in one is a dash.
+    let mut ed = typed("- 甲\n");
+    ed.current_buffer_mut().set_syntax(crate::syntax::Syntax::Text);
+    ed.on_key(Key::Char('A'));
+    ed.on_key(Key::Enter);
+    assert_eq!(ed.current_buffer().text(), "- 甲\n\n");
+
+    // Inside the marker the Enter is splitting what was typed on purpose.
+    let mut ed = typed("- 甲\n");
+    ed.on_key(Key::Char('i'));
+    ed.on_key(Key::Enter);
+    assert_eq!(ed.current_buffer().text(), "\n- 甲\n");
+}
+
+/// #418 一 ②. The continuation is part of the Insert session, not an undo
+/// point of its own: one `u` takes back the whole of what was typed.
+#[test]
+fn a_continuation_earns_no_undo_point_of_its_own() {
+    let mut ed = typed("- 甲\n");
+    ed.on_key(Key::Char('A'));
+    ed.on_key(Key::Enter);
+    ed.on_key(Key::Char('乙'));
+    ed.on_key(Key::Esc);
+    ed.on_key(Key::Char('u'));
+    assert_eq!(ed.current_buffer().text(), "- 甲\n");
+
+    // And the Enter that ends a list is one edit too.
+    let mut ed = typed("- 甲\n- \n");
+    ed.on_key(Key::Char('j'));
+    ed.on_key(Key::Char('A'));
+    ed.on_key(Key::Enter);
+    assert_eq!(ed.current_buffer().text(), "- 甲\n\n");
+    ed.on_key(Key::Esc);
+    ed.on_key(Key::Char('u'));
+    assert_eq!(ed.current_buffer().text(), "- 甲\n- \n");
 }

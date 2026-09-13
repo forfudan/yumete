@@ -334,6 +334,122 @@ fn item_body(text: &str) -> Option<&str> {
     None
 }
 
+/// What a list line opens with, so Enter can carry it down (#418).
+///
+/// `Editor::continue_the_list` is the only caller; it lives here because what
+/// counts as a marker is a fact about Markdown, not about the editor.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Opening {
+    /// How many characters the indent and the marker take together — where the
+    /// item's own writing starts. An Enter that falls *inside* the marker is
+    /// splitting it, not continuing it, and is left alone.
+    pub width: usize,
+    /// What the line below opens with: the same indent, the same marker, and
+    /// an ordered list's number stepped on by one.
+    pub next: String,
+    /// Nothing but the marker on the line — the Enter that ends the list.
+    pub empty: bool,
+}
+
+/// The marker `line` opens a list item with, if it opens one.
+///
+/// Five shapes, which are the five a manuscript has: `- `, `* `, `+ `, `1. `
+/// (or `1) `), `> `, and `- [ ] `; a quote carries whatever list is inside it
+/// down as well. A task's box comes down **unticked** — the next thing to do
+/// is not already done.
+///
+/// **The space is required**, and that is the whole guard against guessing:
+/// `-` alone is a dash whose second character has not been typed yet, and an
+/// editor that turns the next Enter into a list is the kind people switch off.
+/// It costs nothing, because every marker this hands back ends in one.
+pub fn opening(line: &str) -> Option<Opening> {
+    let line = line.trim_end_matches(['\n', '\r']);
+    // `- - -` is a scene break drawn with dashes, not an item whose writing is
+    // a dash. `is_rule` settles it, as it does for the block scan above.
+    if is_rule(line) {
+        return None;
+    }
+    let indent = line.len() - line.trim_start_matches([' ', '\t']).len();
+    let rest = &line[indent..];
+    // A `|` row is a table's, and an Enter in one is splitting a row — the
+    // question [`crate::mdtable::is_row`] answers, asked before the markers so
+    // that a row whose first cell opens with a dash is never read as an item.
+    if rest.starts_with('|') {
+        return None;
+    }
+    let (marker, body) = match rest.starts_with('>') {
+        // A quote nests, so the whole run of `>` is its marker, written back
+        // with one space after it however it was spaced.
+        true => {
+            let run = rest.find(|c| c != '>' && c != ' ').unwrap_or(rest.len());
+            let (mark, body) = rest.split_at(run);
+            let quote = format!("{} ", mark.trim_end());
+            match marker(body) {
+                Some((inner, body)) => (format!("{quote}{inner}"), body),
+                None => (quote, body),
+            }
+        }
+        false => marker(rest)?,
+    };
+    Some(Opening {
+        width: line.chars().count() - body.chars().count(),
+        next: format!("{}{marker}", &line[..indent]),
+        empty: body.trim().is_empty(),
+    })
+}
+
+/// A bullet or a number and what it leaves: the marker the next line opens
+/// with, and the item's own writing.
+fn marker(rest: &str) -> Option<(String, &str)> {
+    if let Some((bullet, after)) = bullet(rest) {
+        return Some(match task_box(after) {
+            Some(rest) => (format!("{bullet} [ ] "), rest),
+            None => (format!("{bullet} "), after),
+        });
+    }
+    let (number, punctuation, after) = numbered(rest)?;
+    Some((format!("{number}{punctuation} "), after))
+}
+
+/// The bullet character and the rest of the line after the space it ends with.
+fn bullet(rest: &str) -> Option<(char, &str)> {
+    ["- ", "* ", "+ "].iter().find_map(|mark| {
+        rest.strip_prefix(mark)
+            .map(|after| (mark.as_bytes()[0] as char, after))
+    })
+}
+
+/// The `[ ] ` of a task item, and what it leaves. `[x] ` is a task too — the
+/// next one down opens unticked either way.
+fn task_box(after: &str) -> Option<&str> {
+    let inside = after.strip_prefix('[')?;
+    let mark = inside.chars().next()?;
+    if !matches!(mark, ' ' | 'x' | 'X') || inside.chars().nth(1) != Some(']') {
+        return None;
+    }
+    inside[2..].strip_prefix(' ')
+}
+
+/// An ordered item's number, the `.` or `)` after it, and the rest of the line.
+///
+/// The number handed back is **the next one**. What is written above it is not
+/// touched: renumbering a list is a command somebody runs on purpose, not
+/// something Enter does to the paragraph behind the cursor.
+fn numbered(rest: &str) -> Option<(u64, char, &str)> {
+    let digits = rest.chars().take_while(char::is_ascii_digit).count();
+    // Nine digits is a list nobody is writing, and it is what keeps the `+ 1`
+    // inside a `u64` with nothing to say about overflow.
+    if digits == 0 || digits > 9 {
+        return None;
+    }
+    let punctuation = rest[digits..].chars().next()?;
+    if !matches!(punctuation, '.' | ')') {
+        return None;
+    }
+    let after = rest[digits + 1..].strip_prefix(' ')?;
+    Some((rest[..digits].parse::<u64>().ok()? + 1, punctuation, after))
+}
+
 /// The markup to take off the page in 所見即所得 mode, as char ranges.
 ///
 /// Everything a construct is made of *except* the writing inside it — but never
@@ -1355,5 +1471,54 @@ mod typst_tests {
             })
             .collect();
         assert_eq!(walk, ".``....", "{walk}");
+    }
+}
+
+#[cfg(test)]
+mod list_tests {
+    use super::*;
+
+    /// The five shapes, and what each one hands the line below (#418).
+    #[test]
+    fn a_marker_says_what_the_next_line_opens_with() {
+        let next = |line: &str| opening(line).map(|o| (o.next, o.width, o.empty));
+        assert_eq!(next("- 甲"), Some(("- ".into(), 2, false)));
+        assert_eq!(next("* 甲"), Some(("* ".into(), 2, false)));
+        assert_eq!(next("+ 甲"), Some(("+ ".into(), 2, false)));
+        // The number steps on; the punctuation is whichever was written.
+        assert_eq!(next("1. 甲"), Some(("2. ".into(), 3, false)));
+        assert_eq!(next("9) 甲"), Some(("10) ".into(), 3, false)));
+        // A box comes down unticked whether or not this one is ticked.
+        assert_eq!(next("- [ ] 甲"), Some(("- [ ] ".into(), 6, false)));
+        assert_eq!(next("- [x] 甲"), Some(("- [ ] ".into(), 6, false)));
+        // The indent is copied as it stands, and a quote carries its list.
+        assert_eq!(next("    - 甲"), Some(("    - ".into(), 6, false)));
+        assert_eq!(next("> 甲"), Some(("> ".into(), 2, false)));
+        assert_eq!(next("> > 甲"), Some(("> > ".into(), 4, false)));
+        assert_eq!(next("> - 甲"), Some(("> - ".into(), 4, false)));
+        // Nothing typed into the item: the Enter that ends the list.
+        assert_eq!(next("- "), Some(("- ".into(), 2, true)));
+        assert_eq!(next("  1. "), Some(("  2. ".into(), 5, true)));
+        assert_eq!(next(">"), Some(("> ".into(), 1, true)));
+        // The newline the rope hands over with the line changes nothing.
+        assert_eq!(next("- 甲\r\n"), Some(("- ".into(), 2, false)));
+    }
+
+    /// What is *not* a list, which is the half that keeps a novel a novel.
+    #[test]
+    fn a_dash_is_not_always_a_list() {
+        for line in [
+            "-甲",         // no space: a dash whose word has begun
+            "-",           // no space, and nothing after it
+            "---",         // a scene break
+            "- - -",       // the same break, drawn spaced
+            "| 甲 | 乙 |", // a table row
+            "1.甲",        // no space again
+            "1234567890. 甲", // ten digits is not a list
+            "甲乙丙",
+            "",
+        ] {
+            assert_eq!(opening(line), None, "{line:?}");
+        }
     }
 }
