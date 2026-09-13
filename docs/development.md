@@ -640,7 +640,7 @@ index, and a row with no number anywhere else is a row that got lost.
 | 415 | **五條搜索要打磨成一族** | core | P2 | 五個不同的形狀，能力不齊、名字不成體系 [^415] | Fixed 2026-09-12 |
 | 416 | **`gd` `gD` `g/` `g?` 在表格裏換了意思** | core | P1 | `g` 是全文的命令組，`t` 是表格的 [^416] | Fixed 2026-09-12 |
 | 417 | **`:x` 只是 `:wq` 的別名，沒有「改過纔存」** | core | P2 | vi 與 helix 的 `:x` 不動沒改過的檔，`:update` 整個沒有 [^417] | Fixed 2026-09-12 |
-| 418 | **Markdown 沒有自動補全** | core | P2 | 列表接不下去，`[^`／`[[`／`](#` 都得手打 [^418] | Planned |
+| 418 | **Markdown 沒有自動補全** | core | P2 | 一 · 列表接續落地；二 · `[^`／`[[`／`](#` 還得手打 [^418] | Planned (一 done) |
 
 ### 5.5 · A table is a delimiter, a surface and a boundary (#261)
 
@@ -6002,7 +6002,24 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
 
 [^232]: raised as a review finding on the chrome ground. Measuring it properly
     means measuring the whole ladder — a theme review rather than a patch, and
-    【墨香】 (§5.2 13) is the ladder it would measure
+    【墨香】 (§5.2 13) is the ladder it would measure.
+
+    **量過了（2026-09-13），而且 `CHROME` 970 → 900 把它變差了。** 那一行是
+    `FURNITURE`（400）的墨畫在 `CHROME` 的底上（`table.rs:502`）。二十一條梯子逐條
+    算 WCAG 對比：搬之前 3.56–5.92，搬之後 **3.15–4.90**；墨黑自己 4.85 → **4.01**，
+    從過 4.5 掉到不過。**沒有一條掉到 3 以下**，所以按「非正文的界面元素 3:1」它仍然
+    合格，按「小字要 4.5:1」二十一條裏十九條不合格——而這正是原本那句「要量就得量整
+    條梯子」的意思：底一動，凡是畫在 chrome 上的傢俱全跟着動。
+
+    | 尺子的墨 | 最差 | 墨黑 | 不過 4.5 |
+    | --- | --- | --- | --- |
+    | 250 | 4.36 | 5.58 | 1／21 |
+    | 300（`QUIET`） | 3.94 | 5.03 | 8／21 |
+    | 400（`FURNITURE`，現在） | 3.15 | 4.01 | 19／21 |
+
+    三條路，等作者定：① 認「尺子是界面不是正文」，3:1 就夠，什麼都不動；② 尺子單獨
+    給一級（250 那一行）；③ 動 `FURNITURE` 本身——但那一級上還有行號、暗着的頁籤、
+    鍵名、批注、頁首元資料，動它是動整套。
 
 [^233]: 裡 412 / 裏 3, 為/爲, 台/臺, 着/著, and the project's own names, as a
     jumpable buffer. **Nobody has this**: Word checks 病句, Grammarly is
@@ -10297,6 +10314,17 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     撤銷點**，回車本身不許再留一個什麼都撤不了的 `u`（§「撤銷點是掙來的」）；③ 有序
     列表往下 `+1` 之後，**上面已經寫好的號碼不動**——重排整段是另一件事，屬於
     `:markdown` 那一族的模板動作，不屬於敲回車。
+
+    **一落地（2026-09-13）。** `markdown::opening()` 讀一行的開頭，
+    `Editor::continue_the_list()` 在插入模式的 `Enter` 前面問它一句。五種記號：
+    `- `／`* `／`+ `、`1. `／`1) `、`> `、`- [ ] `，縮進照抄，號碼 `+1`，勾選框一律
+    帶空的下來——下一件事還沒做。**空格是必需的**：`-` 單獨一個是還沒打完的破折號，
+    而它就是「不亂猜」那道閘的全部，代價爲零，因爲接下來的記號本身都帶一個空格。
+    三處小心都照辦了：`|` 開頭的行在 `opening()` 裏第一個被擋掉（表格的行按 `Enter`
+    是把行劈開，不是接列表）；接續是一次 `insert`、退出列表是一次 `replace`，而插入
+    模式一整段本來就只有進門那一個撤銷點，所以 `Enter` 不多掙一個；上面已經寫好的
+    號碼一個都不動。⚠️ **`:render off` 之下，圍欄裏的列表也會接**——塊掃描是從檔頭
+    走下來的，只在屏幕上有標記時才保溫，`replacement_reshapes_the_grid` 有同一個盲點。
 
     **二 · 引用補全**（medium）。`[^` 之後提示這個檔已有的腳註號與下一個空號（號碼
     `write_note` 已經會算）；`](#` 之後提示本檔的章節（`Editor::outline` 已有）；

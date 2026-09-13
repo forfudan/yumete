@@ -103,6 +103,10 @@ impl Editor {
                 self.format_md_table();
             }
             Key::Enter => {
+                // A list carries itself down, and an empty item ends (#418).
+                if self.continue_the_list() {
+                    return;
+                }
                 // The file's own line ending, so that one keystroke does not
                 // leave a CRLF manuscript with two kinds of line in it (#309).
                 let ending = self.current_buffer().ending();
