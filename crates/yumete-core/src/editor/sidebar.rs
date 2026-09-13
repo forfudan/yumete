@@ -103,24 +103,163 @@ impl Editor {
                     expanded: i == self.current,
                 })
                 .collect(),
-            View::Outline if self.current_buffer().syntax() == crate::syntax::Syntax::Typst => {
-                self.included_outline()
-            }
-            View::Outline => self
-                .outline()
-                .into_iter()
-                .map(|(line, level, title)| Row {
-                    path: PathBuf::new(),
-                    name: format!("{}{title}", "  ".repeat(level.saturating_sub(1))),
-                    depth: line,
-                    is_dir: false,
-                    expanded: false,
-                })
-                .collect(),
+            View::Outline => self.outline_rows(),
             View::Dictionary => self.dictionary_rows(),
         };
         if let Some(sidebar) = self.sidebar.as_mut() {
             sidebar.set_rows(rows);
+        }
+    }
+
+    /// The 大綱's headings, whichever way this document spells them.
+    ///
+    /// A typst master file is a table of contents and nothing else, so its
+    /// outline reaches into the files it includes; everything else reads its
+    /// own headings.
+    fn outline_headings(&self) -> Vec<crate::sidebar::Heading> {
+        if self.current_buffer().syntax() == crate::syntax::Syntax::Typst {
+            return self.included_headings();
+        }
+        self.outline()
+            .into_iter()
+            .map(|(line, level, title)| crate::sidebar::Heading {
+                path: PathBuf::new(),
+                line,
+                level,
+                title,
+            })
+            .collect()
+    }
+
+    /// The 大綱's rows: its headings, with whatever is folded away left out
+    /// (#37).
+    ///
+    /// `is_dir` says the heading has something under it and `expanded` whether
+    /// that something is showing — the two fields the tree already spends on
+    /// the same question, so the front end draws one mark for both views.
+    fn outline_rows(&self) -> Vec<crate::sidebar::Row> {
+        let headings = self.outline_headings();
+        let folded = |key: &(PathBuf, usize)| {
+            self.sidebar
+                .as_ref()
+                .is_some_and(|sidebar| sidebar.is_folded(key))
+        };
+        let mut rows = Vec::new();
+        // The level of the shallowest fold currently hiding rows. Anything
+        // deeper than it is inside that fold; the first row that is not ends
+        // it, and *that* row is the one asked whether it folds in turn.
+        let mut hidden_under: Option<usize> = None;
+        for (i, heading) in headings.iter().enumerate() {
+            if hidden_under.is_some_and(|level| heading.level > level) {
+                continue;
+            }
+            hidden_under = None;
+            let has_children = headings
+                .get(i + 1)
+                .is_some_and(|next| next.level > heading.level);
+            let shut = has_children && folded(&heading.key());
+            if shut {
+                hidden_under = Some(heading.level);
+            }
+            rows.push(crate::sidebar::Row {
+                path: heading.path.clone(),
+                name: format!(
+                    "{}{}",
+                    "  ".repeat(heading.level.saturating_sub(1)),
+                    heading.title
+                ),
+                depth: heading.line,
+                is_dir: has_children,
+                expanded: has_children && !shut,
+            });
+        }
+        rows
+    }
+
+    /// `h` in the 大綱: fold what the highlight is on, or the heading holding
+    /// it (#37).
+    ///
+    /// **One key for both, as in the tree**: pressing it again and again walks
+    /// out of the branch rather than stopping at the first heading that has
+    /// nothing to fold. A heading with nothing under it, or one already
+    /// folded, has no fold of its own to close, so the one above it closes and
+    /// takes the highlight.
+    pub(super) fn fold_outline(&mut self) {
+        let Some(here) = self.outline_row_key() else {
+            return;
+        };
+        let headings = self.outline_headings();
+        let Some(i) = headings.iter().position(|h| h.key() == here) else {
+            return;
+        };
+        let has_children = headings
+            .get(i + 1)
+            .is_some_and(|next| next.level > headings[i].level);
+        let shut = self
+            .sidebar
+            .as_ref()
+            .is_some_and(|sidebar| sidebar.is_folded(&here));
+        let target = match has_children && !shut {
+            true => here,
+            // The nearest heading above it that is shallower than it is.
+            false => match headings[..i]
+                .iter()
+                .rposition(|h| h.level < headings[i].level)
+            {
+                Some(parent) => headings[parent].key(),
+                None => return,
+            },
+        };
+        self.set_outline_fold(target, true);
+    }
+
+    /// `l` in the 大綱: open a folded heading. Whether it was folded — if it
+    /// was not, the key goes on to mean 「take me there」, as `Enter` does.
+    pub(super) fn unfold_outline(&mut self) -> bool {
+        let Some(here) = self.outline_row_key() else {
+            return false;
+        };
+        if !self
+            .sidebar
+            .as_ref()
+            .is_some_and(|sidebar| sidebar.is_folded(&here))
+        {
+            return false;
+        }
+        self.set_outline_fold(here, false);
+        true
+    }
+
+    /// What the highlighted 大綱 row stands for: the file it is in and the
+    /// line it is on, which is what the fold set remembers.
+    fn outline_row_key(&self) -> Option<(PathBuf, usize)> {
+        let sidebar = self.sidebar.as_ref()?;
+        if sidebar.view() != crate::sidebar::View::Outline {
+            return None;
+        }
+        let row = sidebar.rows().get(sidebar.selected())?;
+        Some((row.path.clone(), row.depth))
+    }
+
+    /// Fold or open one heading, rebuild the rows, and keep the highlight on
+    /// it — folding takes rows away, and a highlight that slid onto whatever
+    /// filled the gap would be reading the wrong chapter.
+    fn set_outline_fold(&mut self, key: (PathBuf, usize), folded: bool) {
+        let Some(sidebar) = self.sidebar.as_mut() else {
+            return;
+        };
+        if !sidebar.set_folded(key.clone(), folded) {
+            return;
+        }
+        self.refresh_sidebar();
+        if let Some(sidebar) = self.sidebar.as_mut() {
+            let at = sidebar
+                .rows()
+                .iter()
+                .position(|r| (r.path.clone(), r.depth) == key);
+            if let Some(at) = at {
+                sidebar.select(at);
+            }
         }
     }
 
@@ -268,6 +407,23 @@ impl Editor {
     /// `l` into, `h` out of — so there is nothing new to learn; only what they
     /// move through is different.
     pub(super) fn on_sidebar_key(&mut self, key: Key) {
+        // The 大綱's fold keys are answered before the borrow below, because
+        // they need the whole editor: only it knows how deep each heading sits
+        // (#37). `outline_row_key` is `Some` only in that view, with a row
+        // under the highlight.
+        if self.outline_row_key().is_some() {
+            match key {
+                // Out of a branch, as `h` is in the tree.
+                Key::Char('h') | Key::Left => return self.fold_outline(),
+                // Into one. On a folded heading `l` opens it rather than
+                // jumping — 「more of this」 is what it already means in the
+                // tree. It falls through on any other row, and `Enter` never
+                // folds at all: that is the key that goes, and a heading is a
+                // place whether or not it is holding others.
+                Key::Char('l') | Key::Right if self.unfold_outline() => return,
+                _ => {}
+            }
+        }
         let Some(sidebar) = self.sidebar.as_mut() else {
             self.sidebar_focus = false;
             return;

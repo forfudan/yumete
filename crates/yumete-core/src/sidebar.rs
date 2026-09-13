@@ -90,6 +90,32 @@ pub struct Row {
     pub expanded: bool,
 }
 
+/// One heading of the 大綱, before any of it is folded away (#37).
+///
+/// The rows the sidebar draws cannot answer 「what is under this one」 — a
+/// [`Row`] spends `depth` on the line number and keeps the indent inside its
+/// name, so the nesting is a fact about the *string*. Folding needs the
+/// nesting as a number, so the editor builds these first and turns them into
+/// rows afterwards.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Heading {
+    /// The file it is in, empty for the one being written.
+    pub path: PathBuf,
+    /// Which line of that file.
+    pub line: usize,
+    /// How many `#` or `=` deep, counting from one.
+    pub level: usize,
+    /// What it says.
+    pub title: String,
+}
+
+impl Heading {
+    /// What the fold set remembers it by.
+    pub fn key(&self) -> (PathBuf, usize) {
+        (self.path.clone(), self.line)
+    }
+}
+
 /// The open sidebar.
 #[derive(Debug, Clone)]
 pub struct Sidebar {
@@ -103,6 +129,13 @@ pub struct Sidebar {
     /// top.
     view: View,
     kept: [usize; 4],
+    /// The headings whose contents are folded away — [`Heading::key`] of each
+    /// (#37).
+    ///
+    /// Kept here rather than beside the outline because the outline is rebuilt
+    /// from the document every time the sidebar is looked at, and a fold that
+    /// did not survive that would never be seen folded.
+    folded: BTreeSet<(PathBuf, usize)>,
     /// Whether it is opened out wide enough to read a whole title.
     ///
     /// The ordinary width is a setting, and it is narrow on purpose — columns
@@ -128,6 +161,7 @@ impl Sidebar {
             selected: 0,
             view: View::Explorer,
             kept: [0; 4],
+            folded: BTreeSet::new(),
             wide: false,
         };
         sidebar.rebuild();
@@ -187,6 +221,25 @@ impl Sidebar {
     /// Which row is highlighted.
     pub fn selected(&self) -> usize {
         self.selected.min(self.rows.len().saturating_sub(1))
+    }
+
+    /// Put the highlight on row `i`, or on the last row if there is no such
+    /// row — what folding does after the rows below have gone away.
+    pub fn select(&mut self, i: usize) {
+        self.selected = i.min(self.rows.len().saturating_sub(1));
+    }
+
+    /// Whether that heading's contents are folded away (#37).
+    pub fn is_folded(&self, key: &(PathBuf, usize)) -> bool {
+        self.folded.contains(key)
+    }
+
+    /// Fold that heading, or open it again. Whether anything changed.
+    pub fn set_folded(&mut self, key: (PathBuf, usize), folded: bool) -> bool {
+        match folded {
+            true => self.folded.insert(key),
+            false => self.folded.remove(&key),
+        }
     }
 
     /// The sidebar's header: the view's name, and for the tree the directory it
