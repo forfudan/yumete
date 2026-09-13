@@ -32,7 +32,7 @@ impl Editor {
     /// intentions in one key, which is how VSCode's box behaves.
     /// `:search-cd`／`-wd`／`-gd`／`:search <path>` — open it looking somewhere
     /// else (#419).
-    pub(super) fn open_search_in(&mut self, scope: Where) {
+    pub(super) fn open_search_in(&mut self, scope: Where, replacing: bool) {
         // ⚠️ **A folder that is not there is said out loud.** Falling back to
         // 「this file only」 would answer a question nobody asked, and answer
         // it plausibly — a short list that looks like the truth.
@@ -44,6 +44,10 @@ impl Editor {
             }
         }
         self.search.scope = scope;
+        // ⚠️ **Only ever turned on here.** `:search` after a `:replace` is a
+        // reader saying 「just looking」, and leaving the row up would leave
+        // `r` and `R` live on a panel nobody meant to change anything with.
+        self.search.replacing = replacing;
         self.open_search();
     }
 
@@ -231,12 +235,12 @@ impl Editor {
         let mut at = 0usize;
         for line in 0..rope.len_lines() {
             let text: String = rope.line(line).chars().collect();
-            for m in re.find_iter(&text) {
+            for (nth, m) in re.find_iter(&text).enumerate() {
                 total += 1;
                 if hits.len() < MOST {
                     let start = text[..m.start()].chars().count();
                     let stop = text[..m.end()].chars().count();
-                    hits.push(excerpt(mine.clone(), &text, at, start, stop, line));
+                    hits.push(excerpt(mine.clone(), &text, at, start, stop, line, nth));
                 }
             }
             at += text.chars().count();
@@ -253,7 +257,17 @@ impl Editor {
                 // **An open file is read from its buffer, not from disk.**
                 // Unsaved work is work, and a search that could not see it
                 // would send a reader to a line that no longer says that.
-                let text = match self.buffers.iter().find(|b| b.path() == Some(path.as_path())) {
+                // ⚠️ **Matched on the resolved path.** `/tmp` is a link to
+                // `/private/tmp` on this platform, so the walk's path and the
+                // buffer's are two spellings of one file — compared as typed,
+                // a file just changed in a buffer was re-read off the disk and
+                // the change looked as though it had not happened.
+                let text = match self.buffers.iter().find(|b| {
+                    b.path()
+                        .map(|p| std::fs::canonicalize(p).unwrap_or_else(|_| p.to_path_buf()))
+                        .as_deref()
+                        == Some(full.as_path())
+                }) {
                     Some(buffer) => buffer.rope().to_string(),
                     None => match std::fs::read_to_string(&path) {
                         Ok(text) => text,
@@ -264,12 +278,20 @@ impl Editor {
                 let shown = path.strip_prefix(&root).unwrap_or(&path).to_path_buf();
                 let mut at = 0usize;
                 for (line, text) in text.split_inclusive('\n').enumerate() {
-                    for m in re.find_iter(text) {
+                    for (nth, m) in re.find_iter(text).enumerate() {
                         total += 1;
                         if hits.len() < MOST {
                             let start = text[..m.start()].chars().count();
                             let stop = text[..m.end()].chars().count();
-                            hits.push(excerpt(Some(shown.clone()), text, at, start, stop, line));
+                            hits.push(excerpt(
+                                Some(shown.clone()),
+                                text,
+                                at,
+                                start,
+                                stop,
+                                line,
+                                nth,
+                            ));
                         }
                     }
                     at += text.chars().count();
@@ -356,18 +378,27 @@ impl Editor {
         self.run_search();
     }
 
-    /// `Tab` out of the box: the next cell, and back to the panel's Normal.
+    /// `Tab` out of a box: the next cell.
+    ///
+    /// ⚠️ **Landing on another box keeps you typing.** 找什麼 and 換成什麼 sit
+    /// one above the other and are filled in one after the other; having to
+    /// press `i` between them would make `Tab` the wrong key for the commonest
+    /// thing anybody does in this panel.
     fn leave_field(&mut self, back: bool) {
-        self.search.field = self.search.field.step(back);
-        self.mode = Mode::Normal;
+        self.search.field = self.search.field.step(back, self.search.replacing);
+        self.search.all_selected = false;
+        match self.search.field.takes_text() {
+            true => self.search.caret = self.search.typed().chars().count(),
+            false => self.mode = Mode::Normal,
+        }
     }
 
     /// One key while the search panel has them and the box does not
     /// (`Mode::Normal`, the keys in the panel).
     pub(super) fn on_search_panel_key(&mut self, key: Key, side: crate::sidebar::Side) {
         match key {
-            Key::Tab => self.search.field = self.search.field.step(false),
-            Key::BackTab => self.search.field = self.search.field.step(true),
+            Key::Tab => self.search.field = self.search.field.step(false, self.search.replacing),
+            Key::BackTab => self.search.field = self.search.field.step(true, self.search.replacing),
             // `hjkl` walk the form in Normal, as the author asked; in the list
             // `j`/`k` walk the hits instead, because that is what is there.
             // In the list, `h`/`l` fold a file away and open it again — the
@@ -375,21 +406,21 @@ impl Editor {
             // mean by them. Elsewhere in the form they walk the cells.
             Key::Char('h') | Key::Left if self.search.field == Field::Results => {
                 if !self.search.fold(true) {
-                    self.search.field = self.search.field.step(true);
+                    self.search.field = self.search.field.step(true, self.search.replacing);
                 }
             }
             Key::Char('l') | Key::Right if self.search.field == Field::Results => {
                 self.search.fold(false);
             }
-            Key::Char('l') | Key::Right => self.search.field = self.search.field.step(false),
-            Key::Char('h') | Key::Left => self.search.field = self.search.field.step(true),
+            Key::Char('l') | Key::Right => self.search.field = self.search.field.step(false, self.search.replacing),
+            Key::Char('h') | Key::Left => self.search.field = self.search.field.step(true, self.search.replacing),
             Key::Char('j') | Key::Down => match self.search.field {
                 Field::Results => self.search.step(true),
-                _ => self.search.field = self.search.field.step(false),
+                _ => self.search.field = self.search.field.step(false, self.search.replacing),
             },
             Key::Char('k') | Key::Up => match self.search.field {
                 Field::Results => self.search.step(false),
-                _ => self.search.field = self.search.field.step(true),
+                _ => self.search.field = self.search.field.step(true, self.search.replacing),
             },
             // **On a switch, 空格 flips it** — a switch is the one control
             // where a reader tries the space bar. Anywhere else in the form
@@ -400,16 +431,42 @@ impl Editor {
                 self.flip_switch()
             }
             Key::Enter => match self.search.field {
-                Field::Query => self.mode = Mode::Field,
+                Field::Query | Field::Replace => self.mode = Mode::Field,
                 Field::Regex | Field::Case | Field::Whole => self.flip_switch(),
                 Field::Results => self.go_to_hit(),
             },
-            // **`R` runs it again**, for a scope that does not run itself.
-            Key::Char('R') if !self.search.scope.live() => self.search_now(),
-            // `i` opens the box, wherever you are in the form — the key that
-            // means 「type here」 everywhere else in this editor.
+            // **`r` and `R` change things**, and only while the replace row
+            // is showing — `:search` is for looking, `:replace` for changing,
+            // and the panel says which it is.
+            Key::Char('r') if self.search.replacing && self.search.field == Field::Results => {
+                match self.search.row() {
+                    Some(crate::search_panel::Row::File { path, .. }) => {
+                        let done = self.replace_file(Some(&path));
+                        self.after_replacing(done);
+                    }
+                    _ => self.replace_hit(),
+                }
+            }
+            // ⚠️ **Only 「all of them」 asks first.** One hit and one file are
+            // changes a reader is looking straight at; every file in a book is
+            // not, and that is the one where a slip costs an afternoon.
+            Key::Char('R') if self.search.replacing => {
+                self.status = say!("search.replace-all-sure", self.search.total);
+                // ⚠️ **`ReplaceAll`, not `Confirm`.** The latter is `:s …c`'s
+                // per-match walker: with nothing to walk it clears itself on
+                // the next key, so the question was asked and the answer went
+                // nowhere.
+                self.pending = Pending::ReplaceAll;
+            }
+            // **`F5` runs it again**, for a scope that does not run itself.
+            Key::Char('F') if !self.search.scope.live() => self.search_now(),
+            // `i` opens a box — this one if the keys are on one, the query
+            // otherwise. The key that means 「type here」 everywhere else.
             Key::Char('i') => {
-                self.search.field = Field::Query;
+                if !self.search.field.takes_text() {
+                    self.search.field = Field::Query;
+                }
+                self.search.caret = self.search.typed().chars().count();
                 self.mode = Mode::Field;
             }
             Key::Char('g') | Key::Home if self.search.field == Field::Results => {
@@ -473,6 +530,184 @@ impl Editor {
             _ => return,
         }
         self.run_search();
+    }
+
+    // ---- Changing what was found (#419 三) --------------------------------
+    //
+    // **The safety is the order, and it is the whole design.** There is no
+    // project-wide substitute anybody can type blind: the pattern is the one
+    // already in the box, its hits are already listed, and every change is
+    // made **in a buffer** — not a byte reaches the disk until `:write-all`.
+    // So `u` takes any one file back, `gn` walks them, and the moment a person
+    // says yes is a moment they choose.
+
+    /// `r` on a hit: change **that one**.
+    fn replace_hit(&mut self) {
+        let Some(hit) = self.search.here().cloned() else {
+            return;
+        };
+        let Some(re) = self.search_regex() else { return };
+        let with = self.search.replace.clone();
+        match self.buffer_of(&hit) {
+            Some(index) => {
+                let done = self.with_buffer(index, |ed| ed.swap_one(&re, &with, hit.line, hit.nth));
+                match done {
+                    true => self.after_replacing(1),
+                    // The line has fewer matches than it had when it was read:
+                    // somebody has edited it since. Saying so beats changing
+                    // whatever is in that position now.
+                    false => self.status = say!("search.moved-on"),
+                }
+            }
+            None => self.status = say!("search.moved-on"),
+        }
+    }
+
+    /// `r` on a file header, and each step of `R`: change **every hit in one
+    /// file**.
+    fn replace_file(&mut self, rel: Option<&Path>) -> usize {
+        let Some(re) = self.search_regex() else { return 0 };
+        let with = self.search.replace.clone();
+        let Some(index) = self.buffer_for(rel) else {
+            return 0;
+        };
+        self.with_buffer(index, |ed| ed.swap_all(&re, &with))
+    }
+
+    /// `R`: change every hit there is, once the reader has said yes.
+    pub(super) fn replace_all_found(&mut self) {
+        let mut files: Vec<Option<PathBuf>> = Vec::new();
+        for hit in &self.search.hits {
+            if !files.contains(&hit.file) {
+                files.push(hit.file.clone());
+            }
+        }
+        let mut done = 0usize;
+        for file in files {
+            done += self.replace_file(file.as_deref());
+        }
+        self.after_replacing(done);
+    }
+
+    /// Change **one match on one line** of the buffer being worked on.
+    ///
+    /// Found again by running the pattern over the line as it stands, rather
+    /// than by the offsets the hit carries: those were counted when the file
+    /// was read, and the first change in a file moves every one after it.
+    /// `false` when the line no longer holds that many matches.
+    fn swap_one(&mut self, re: &regex::Regex, with: &str, line: usize, nth: usize) -> bool {
+        let rope = self.current_buffer().rope();
+        if line >= rope.len_lines() {
+            return false;
+        }
+        let text: String = rope.line(line).chars().collect();
+        // `captures_iter` rather than `find_iter`, so `$1` in the replacement
+        // works the way it does in `:s`.
+        let Some(caps) = re.captures_iter(&text).nth(nth) else {
+            return false;
+        };
+        let Some(m) = caps.get(0) else { return false };
+        let at = rope.line_to_char(line);
+        let from = at + text[..m.start()].chars().count();
+        let to = at + text[..m.end()].chars().count();
+        let mut grown = String::new();
+        caps.expand(with, &mut grown);
+        let mut rebuilt = rope.to_string();
+        let (b0, b1) = (rope.char_to_byte(from), rope.char_to_byte(to));
+        rebuilt.replace_range(b0..b1, &grown);
+        self.write_whole(rebuilt)
+    }
+
+    /// Change **every match** in the buffer being worked on; how many.
+    fn swap_all(&mut self, re: &regex::Regex, with: &str) -> usize {
+        let rope = self.current_buffer().rope();
+        let text = rope.to_string();
+        let count = re.find_iter(&text).count();
+        if count == 0 {
+            return 0;
+        }
+        let rebuilt = re.replace_all(&text, with).into_owned();
+        match self.write_whole(rebuilt) {
+            true => count,
+            false => 0,
+        }
+    }
+
+    /// Put a rewritten document back, with the guards a `:s` gets.
+    fn write_whole(&mut self, rebuilt: String) -> bool {
+        // ⚠️ The grid guard, for the same reason `:s` has it: a substitution
+        // that changes how many cells a row has turns a 拆分表 into rubbish,
+        // and it cannot be seen happening in a file nobody is looking at.
+        if let Some(why) = self.substitution_breaks_the_grid(&rebuilt) {
+            self.status = why;
+            return false;
+        }
+        // One snapshot per file, so `u` in that file takes the whole of this
+        // back — not one match at a time.
+        self.snapshot();
+        let len = self.current_buffer().char_count();
+        let done = self.without_cell_guard(|e| e.current_buffer_mut().replace(0..len, &rebuilt));
+        if !self.applied(done) {
+            return false;
+        }
+        self.clamp_cursor();
+        self.anchor = self.cursor;
+        self.refresh_goal_column();
+        true
+    }
+
+    /// Which buffer a hit is in, opening the file if it is not open yet.
+    fn buffer_of(&mut self, hit: &Hit) -> Option<usize> {
+        self.buffer_for(hit.file.as_deref())
+    }
+
+    /// The same, from a path relative to the search's root.
+    fn buffer_for(&mut self, rel: Option<&Path>) -> Option<usize> {
+        let Some(rel) = rel else {
+            return Some(self.current);
+        };
+        let full = match &self.search.root {
+            Some(root) => root.join(rel),
+            None => rel.to_path_buf(),
+        };
+        let full = std::fs::canonicalize(&full).unwrap_or(full);
+        if let Some(i) = self.buffers.iter().position(|b| {
+            b.path()
+                .map(|p| std::fs::canonicalize(p).unwrap_or_else(|_| p.to_path_buf()))
+                .as_deref()
+                == Some(full.as_path())
+        }) {
+            return Some(i);
+        }
+        // **Opened as a buffer, not rewritten on disk.** That is the whole of
+        // why a change across a book is safe here.
+        match self.open_file(&full) {
+            Ok(()) => Some(self.current),
+            Err(err) => {
+                self.status = say!("buffer.cannot-open", full.display(), err);
+                None
+            }
+        }
+    }
+
+    /// The pattern the panel is running, compiled — `None` if it will not.
+    fn search_regex(&self) -> Option<regex::Regex> {
+        regex::Regex::new(&self.search_pattern()).ok()
+    }
+
+    /// Look again and say how it went. The offsets are all stale now.
+    fn after_replacing(&mut self, done: usize) {
+        let where_ = self.search.selected;
+        match self.search.scope.live() {
+            true => self.run_search(),
+            false => self.search_now(),
+        }
+        // Stay where the eye was, or at the end if the list got shorter.
+        self.search.selected = where_.min(self.search.rows().len().saturating_sub(1));
+        self.status = match done {
+            0 => say!("search.replaced-none"),
+            n => say!("search.replaced", n),
+        };
     }
 
     /// `Enter` on a row: fold a file, or go to a hit and hand the keys back.
@@ -542,6 +777,7 @@ fn excerpt(
     start: usize,
     stop: usize,
     line: usize,
+    nth: usize,
 ) -> Hit {
     let chars: Vec<char> = text.chars().collect();
     let from = start.saturating_sub(AROUND);
@@ -558,6 +794,7 @@ fn excerpt(
     Hit {
         file,
         line,
+        nth,
         at: line_at + start,
         end: line_at + stop,
         mark: lead + (start - from)..lead + (stop - from),

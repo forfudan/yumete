@@ -450,6 +450,16 @@ impl Editor {
                 self.answer_confirm(key);
                 return;
             }
+            Pending::ReplaceAll => {
+                self.pending = Pending::None;
+                match key {
+                    Key::Char('y') | Key::Enter => self.replace_all_found(),
+                    // Anything else is no. A question about a hundred files
+                    // answers 「no」 to a key nobody meant.
+                    _ => self.status = say!("search.replace-all-no"),
+                }
+                return;
+            }
             Pending::Case => {
                 self.pending = Pending::None;
                 match key {
@@ -1239,6 +1249,12 @@ impl Editor {
     ///
     /// vi's five answers, and the reason the flag is worth having: the writer
     /// looks at this one match and says what happens to **it**.
+    /// What `R` in the search panel is asking — one yes, not one per match.
+    pub(super) const REPLACE_ALL_KEYS: &'static [(&'static str, &'static str)] = &[
+        ("y", "hint.confirm.yes"),
+        ("n", "hint.confirm.no"),
+    ];
+
     pub(super) const CONFIRM_KEYS: &'static [(&'static str, &'static str)] = &[
         ("y", "hint.confirm.yes"),
         ("n", "hint.confirm.no"),

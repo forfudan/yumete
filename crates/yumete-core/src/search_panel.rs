@@ -85,6 +85,8 @@ pub enum Field {
     Query,
     /// 正則 on or off.
     Regex,
+    /// What to put in its place — only there when the panel is replacing.
+    Replace,
     /// 大小寫, three ways.
     Case,
     /// 完整匹配 — ASCII `\b` on both ends.
@@ -96,8 +98,9 @@ pub enum Field {
 
 impl Field {
     /// Every cell, in `Tab`'s order.
-    pub const ALL: [Field; 5] = [
+    pub const ALL: [Field; 6] = [
         Field::Query,
+        Field::Replace,
         Field::Regex,
         Field::Case,
         Field::Whole,
@@ -106,14 +109,19 @@ impl Field {
 
     /// Whether this cell is typed into (so `i` and the IME belong here).
     pub fn takes_text(self) -> bool {
-        matches!(self, Field::Query)
+        matches!(self, Field::Query | Field::Replace)
     }
 
-    /// The next cell in that direction, wrapping.
-    pub fn step(self, back: bool) -> Field {
-        let at = Field::ALL.iter().position(|&f| f == self).unwrap_or(0);
-        let n = Field::ALL.len();
-        Field::ALL[match back {
+    /// The next cell in that direction, wrapping — skipping the replace row
+    /// while the panel is only looking.
+    pub fn step(self, back: bool, replacing: bool) -> Field {
+        let cells: Vec<Field> = Field::ALL
+            .into_iter()
+            .filter(|f| replacing || *f != Field::Replace)
+            .collect();
+        let at = cells.iter().position(|&f| f == self).unwrap_or(0);
+        let n = cells.len();
+        cells[match back {
             true => (at + n - 1) % n,
             false => (at + 1) % n,
         }]
@@ -141,6 +149,12 @@ pub struct Hit {
     pub excerpt: String,
     /// Where in `excerpt` the match itself sits, in characters.
     pub mark: std::ops::Range<usize>,
+    /// **Which match on its line this is**, counting from zero.
+    ///
+    /// How one hit is picked out again when the time comes to change it:
+    /// the offsets above were counted when the file was read, and a buffer
+    /// opened since may have moved everything after the first edit.
+    pub nth: usize,
 }
 
 /// **How many hits the list holds.** Every one is counted; this many are kept.
@@ -176,6 +190,13 @@ pub enum Row {
 pub struct Search {
     /// What is being looked for, as typed.
     pub query: String,
+    /// What to put in its place.
+    pub replace: String,
+    /// Whether the replace row is showing — what `:replace` opens with.
+    ///
+    /// A row rather than a mode: the panel is the same panel, and turning it
+    /// on is 「I am going to change these」, not 「forget what I found」.
+    pub replacing: bool,
     /// Where to look.
     pub scope: Where,
     /// The files whose hits are folded away.
@@ -317,11 +338,19 @@ impl Search {
         changed
     }
 
-    /// Type a character into the query, replacing all of it if it is selected.
+    /// Whichever box the keys are in.
+    fn box_here(&mut self) -> &mut String {
+        match self.field {
+            Field::Replace => &mut self.replace,
+            _ => &mut self.query,
+        }
+    }
+
+    /// Type a character into the box, replacing all of it if it is selected.
     pub fn type_char(&mut self, ch: char) {
         self.take_selection();
         let at = self.byte_at(self.caret);
-        self.query.insert(at, ch);
+        self.box_here().insert(at, ch);
         self.caret += 1;
     }
 
@@ -329,7 +358,7 @@ impl Search {
     pub fn type_text(&mut self, text: &str) {
         self.take_selection();
         let at = self.byte_at(self.caret);
-        self.query.insert_str(at, text);
+        self.box_here().insert_str(at, text);
         self.caret += text.chars().count();
     }
 
@@ -343,14 +372,22 @@ impl Search {
         }
         let to = self.byte_at(self.caret - 1);
         let from = self.byte_at(self.caret);
-        self.query.replace_range(to..from, "");
+        self.box_here().replace_range(to..from, "");
         self.caret -= 1;
+    }
+
+    /// What is in the box the keys are in.
+    pub fn typed(&self) -> &str {
+        match self.field {
+            Field::Replace => &self.replace,
+            _ => &self.query,
+        }
     }
 
     /// Move the caret, dropping the selection.
     pub fn move_caret(&mut self, to: usize) {
         self.all_selected = false;
-        self.caret = to.min(self.query.chars().count());
+        self.caret = to.min(self.typed().chars().count());
     }
 
     /// Put a pattern in the box with the whole of it selected — `空格 /`.
@@ -366,7 +403,7 @@ impl Search {
         if !self.all_selected {
             return false;
         }
-        self.query.clear();
+        self.box_here().clear();
         self.caret = 0;
         self.all_selected = false;
         true
@@ -374,10 +411,10 @@ impl Search {
 
     /// Where character `at` starts, in bytes.
     fn byte_at(&self, at: usize) -> usize {
-        self.query
-            .char_indices()
+        let text = self.typed();
+        text.char_indices()
             .nth(at)
             .map(|(i, _)| i)
-            .unwrap_or(self.query.len())
+            .unwrap_or(text.len())
     }
 }

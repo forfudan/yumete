@@ -8158,6 +8158,93 @@ fn the_search_reads_the_ignore_file_and_roots_itself_in_the_book() {
     std::fs::remove_dir_all(&dir).ok();
 }
 
+impl Editor {
+    /// Walk the results to the header of a file holding `hits` of them.
+    #[cfg(test)]
+    fn search_go_to_file_with(&mut self, hits: usize) {
+        for _ in 0..self.search().rows().len() {
+            if matches!(self.search().row(), Some(crate::search_panel::Row::File { hits: n, .. }) if n == hits)
+            {
+                return;
+            }
+            self.on_key(Key::Char('j'));
+        }
+        panic!("no file with {hits} hits: {:?}", self.search().rows());
+    }
+}
+
+/// **Changing what was found** — #419 三.
+#[test]
+fn the_panel_changes_one_hit_one_file_or_all_of_them() {
+    use crate::search_panel::Field;
+    let dir = a_little_book("searchreplace");
+    std::fs::write(dir.join("卷一/a.md"), "阿甯站在門口。\n").unwrap();
+    std::fs::write(dir.join("卷一/b.md"), "阿甯回頭。\n阿甯沒有說話。\n").unwrap();
+    std::fs::write(dir.join("c.md"), "第二天，阿甯走了。\n").unwrap();
+
+    let mut ed = Editor::new();
+    ed.open_file(dir.join("卷一/a.md")).unwrap();
+    ed.execute(":replace-gd").unwrap();
+    assert!(ed.search().replacing, "`:replace` opens with the row showing");
+    for c in "阿甯".chars() {
+        ed.on_key(Key::Char(c));
+    }
+    // **`Tab` between the boxes keeps you typing** — they are filled in one
+    // after the other.
+    ed.on_key(Key::Tab);
+    assert_eq!(ed.search().field, Field::Replace);
+    assert_eq!(ed.mode(), Mode::Field);
+    for c in "阿寧".chars() {
+        ed.on_key(Key::Char(c));
+    }
+    ed.on_key(Key::Enter);
+    assert_eq!(ed.search().total, 4);
+
+    ed.on_key(Key::Esc);
+    for _ in 0..4 {
+        ed.on_key(Key::Tab);
+    }
+    assert_eq!(ed.search().field, Field::Results);
+
+    // **One hit** — standing on a hit, not on the file above it.
+    ed.on_key(Key::Char('j'));
+    assert!(matches!(ed.search().row(), Some(crate::search_panel::Row::Hit(_))));
+    ed.on_key(Key::Char('r'));
+    assert_eq!(ed.search().total, 3, "{}", ed.status());
+    // ⚠️ **Nothing reached the disk.**
+    assert_eq!(std::fs::read_to_string(dir.join("卷一/a.md")).unwrap(), "阿甯站在門口。\n");
+    assert!(ed.current_buffer().is_modified());
+
+    // **One file**, from its header row — the one with two hits under it, so
+    // that 「a file」 and 「a hit」 cannot be mistaken for each other.
+    ed.search_go_to_file_with(2);
+    ed.on_key(Key::Char('r'));
+    assert_eq!(ed.search().total, 1, "{}", ed.status());
+
+    // **All of them — and only this one asks first.**
+    ed.on_key(Key::Char('R'));
+    assert_eq!(ed.status(), say!("search.replace-all-sure", 1));
+    ed.on_key(Key::Char('n'));
+    assert_eq!(ed.search().total, 1, "answered no, nothing changed");
+    ed.on_key(Key::Char('R'));
+    ed.on_key(Key::Char('y'));
+    assert_eq!(ed.search().total, 0, "{}", ed.status());
+
+    // ⚠️ **Still nothing on the disk**; `:write-all` is the moment of yes.
+    assert!(std::fs::read_to_string(dir.join("c.md")).unwrap().contains('甯'));
+    ed.execute(":write-all").unwrap();
+    for name in ["卷一/a.md", "卷一/b.md", "c.md"] {
+        let after = std::fs::read_to_string(dir.join(name)).unwrap();
+        assert!(!after.contains('甯') && after.contains('寧'), "{name}: {after:?}");
+    }
+
+    // `:search` after a `:replace` is 「just looking」: the row goes away and
+    // `r`/`R` with it.
+    ed.execute(":search").unwrap();
+    assert!(!ed.search().replacing);
+    std::fs::remove_dir_all(&dir).ok();
+}
+
 /// **Which side each panel lives on is a setting, one per panel** — #293.
 #[test]
 fn the_panels_go_where_the_settings_put_them() {
@@ -13231,3 +13318,4 @@ fn a_reference_in_a_fence_is_offered_nothing() {
     ed.on_key(Key::Char('^'));
     assert!(ed.reference_menu().is_some());
 }
+

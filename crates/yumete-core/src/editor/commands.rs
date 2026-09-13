@@ -694,7 +694,11 @@ impl Editor {
                 Ok(CommandOutcome::Continue)
             }
             Command::OpenSearch(scope) => {
-                self.open_search_in(scope);
+                self.open_search_in(scope, false);
+                Ok(CommandOutcome::Continue)
+            }
+            Command::OpenReplace(scope) => {
+                self.open_search_in(scope, true);
                 Ok(CommandOutcome::Continue)
             }
             Command::ShowSidebarAt(side, which) => {

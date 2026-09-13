@@ -217,6 +217,9 @@ pub enum Command {
     /// that last one being the useful one, since nobody has to count how many
     /// levels up it was.
     OpenSearch(crate::search_panel::Where),
+    /// `:replace [folder]` and its `-cd`/`-wd`/`-gd` — the same panel with the
+    /// replace row already showing (#419).
+    OpenReplace(crate::search_panel::Where),
     /// `:sidebar-show-left|right [panel]` — which side a panel lives on
     /// (#293). No name means the one holding the keys.
     ShowSidebarAt(crate::sidebar::Side, Option<crate::sidebar::Panel>),
@@ -3050,6 +3053,43 @@ pub const COMMANDS: &[Entry] = &[
         }),
     },
     Entry {
+        name: "replace",
+        aliases: &[],
+        help: "cmd.commands.replace",
+        needs: &[],
+        params: &[Param::Path],
+        build: Some(|p| {
+            Ok(Command::OpenReplace(match p.arg(0) {
+                None => crate::search_panel::Where::Buffer,
+                Some(path) => crate::search_panel::Where::Named(path.into()),
+            }))
+        }),
+    },
+    Entry {
+        name: "replace-cd",
+        aliases: &[],
+        help: "cmd.commands.replace-cd",
+        needs: &[],
+        params: &[],
+        build: Some(|_| Ok(Command::OpenReplace(crate::search_panel::Where::Folder))),
+    },
+    Entry {
+        name: "replace-gd",
+        aliases: &[],
+        help: "cmd.commands.replace-gd",
+        needs: &[],
+        params: &[],
+        build: Some(|_| Ok(Command::OpenReplace(crate::search_panel::Where::Project))),
+    },
+    Entry {
+        name: "replace-wd",
+        aliases: &[],
+        help: "cmd.commands.replace-wd",
+        needs: &[],
+        params: &[],
+        build: Some(|_| Ok(Command::OpenReplace(crate::search_panel::Where::Workspace))),
+    },
+    Entry {
         name: "search",
         aliases: &[],
         help: "cmd.commands.search",
@@ -3064,7 +3104,7 @@ pub const COMMANDS: &[Entry] = &[
     },
     Entry {
         name: "search-cd",
-        aliases: &["scd"],
+        aliases: &[],
         help: "cmd.commands.search-cd",
         needs: &[],
         params: &[],
@@ -3072,7 +3112,7 @@ pub const COMMANDS: &[Entry] = &[
     },
     Entry {
         name: "search-gd",
-        aliases: &["sgd"],
+        aliases: &[],
         help: "cmd.commands.search-gd",
         needs: &[],
         params: &[],
@@ -3080,7 +3120,7 @@ pub const COMMANDS: &[Entry] = &[
     },
     Entry {
         name: "search-wd",
-        aliases: &["swd"],
+        aliases: &[],
         help: "cmd.commands.search-wd",
         needs: &[],
         params: &[],

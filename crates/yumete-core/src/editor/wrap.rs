@@ -262,6 +262,7 @@ impl Editor {
             Pending::Find(FindKind::Forward) => "f",
             Pending::Find(FindKind::Backward) => "F",
             Pending::Replace => "r",
+            Pending::ReplaceAll => "R",
             Pending::Register => "\"",
             Pending::Match => "m",
             Pending::MatchPair { around: false } => "mi",

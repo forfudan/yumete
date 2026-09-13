@@ -595,7 +595,7 @@ impl Editor {
     /// oversize question did exactly that, and `x` afterwards took the process
     /// down. So the switch and its undoing are one call, and landing somewhere
     /// else **on purpose** is `show_buffer`, through the front door.
-    fn with_buffer<T>(&mut self, index: usize, work: impl FnOnce(&mut Self) -> T) -> T {
+    pub(super) fn with_buffer<T>(&mut self, index: usize, work: impl FnOnce(&mut Self) -> T) -> T {
         let was = self.current;
         self.current = index;
         let out = work(self);
