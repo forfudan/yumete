@@ -4918,9 +4918,14 @@ fn draw_search(frame: &mut Frame, editor: &Editor, config: &Config, side: Side, 
         false => find.query.clone(),
     };
     let typing = editor.mode() == yumete_core::input::Mode::Field;
-    let box_style = match find.all_selected && !shown.is_empty() {
-        true => on,
-        false => cell(Field::Query),
+    // **Inked means 「the whole of this is selected」, not 「the keys are
+    // here」.** While it is being typed into, the caret says where you are —
+    // and a box drawn the same way whether or not `空格 /` had selected its
+    // contents would hide the one thing that selection is for.
+    let box_style = match (find.all_selected && !shown.is_empty(), typing) {
+        (true, _) => on,
+        (false, true) => text,
+        (false, false) => cell(Field::Query),
     };
     put_text(buf, left, y, to, &format!(" {shown}"), box_style);
     if typing && !find.all_selected {
