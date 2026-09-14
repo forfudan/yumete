@@ -475,15 +475,12 @@ impl Editor {
             Key::Char('G') | Key::End if self.search.field == Field::Results => {
                 self.search.selected = self.search.hits.len().saturating_sub(1)
             }
-            Key::Ctrl('w') => self.cycle_region(),
-            Key::Char('q') => self.close_panel(side),
-            Key::Char(':') => {
-                self.mode = Mode::Command;
-                self.command_line.clear();
-                self.command_caret = 0;
+            // `C-w` `q` `:` and a bare `Space` are every panel's, not this
+            // one's — see `panel_key_in_common`. Tried last, so this panel's
+            // own `Space` (flip the switch the keys are on) still wins.
+            other => {
+                self.panel_key_in_common(other, side, crate::sidebar::Layer::Top);
             }
-            Key::Char(' ') => self.pending = Pending::Space,
-            _ => {}
         }
     }
 
