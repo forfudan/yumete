@@ -4511,6 +4511,26 @@ a checksum, so a commit-triggered build would mean a new formula edit and a new
 `brew upgrade` prompt for every push. Homebrew's own convention is that a
 formula follows releases.
 
+### 5.3.1 手冊的兩種字形
+
+`docs/manual.md` 是**正本**，`docs/manual_sc.md` 由 `scripts/make_manual_sc.py`
+從它生成。只改正本；反過來改簡體版，下一次生成就沒了。
+
+正本的字形是**大陸通規繁體**（`裏 爲 説 内 没 麽 册 别 横 録`），與 `:convert … c`
+的目標一致，那張字形表在 `crates/yumete-core/src/glyphs_c.txt`。用詞是**大陸用語**
+（文件／屏幕／窗口／默認／剪貼板），`messages.toml` 兩側同此。
+
+⚠️ **只有繁 → 簡這一個方向是安全的。** 反過來走 opencc 的 `s2t` 會被它的詞組規則改
+壞正文：整份往返量過，11 萬字裏 327 處回不來（`表/錶`、`注/註`、`才/纔`、`台/臺`、
+`裏/里`、`啟/啓`、`併/並`），因為簡體那一側本來就把它們併成了一個字。
+`scripts/sc2tc.py` 只用來把**新起草的一小段**簡體轉成繁體貼回正本，**不許整份轉**。
+
+⚠️ 手冊裏有幾處**談的就是繁體字形本身**——各套標準的樣字、`:check-usage` 的對照組、
+`:%s/裏/裡/n` 這個能跑的例子。它們用 `<!-- verbatim -->` 成對包着，生成簡體版時原樣
+保留。辦法抄自 `yu/scripts/tc2sc.py`：標記是 HTML 註釋，渲染成空，而且正則不按行走，
+所以可以塞在表格單元格中間不破壞表格。**比在腳本裏寫死行內容好**——那樣手冊一改錨點
+就對不上。
+
 ## 5.4 Wanted for 0.2.0
 
 Two reviews on 2026-09-03, from a Chinese writer and from a terminal

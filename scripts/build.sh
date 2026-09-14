@@ -71,27 +71,6 @@ if [[ "${YUMETE_SKIP_DATA:-0}" == "1" ]]; then
   install_data=0
 fi
 
-# **Data first, then the build.** Both `build.rs`es read the installed tables
-# at compile time — the 碼表 for `yumete-ime`, the word list for `yumete-cjk` —
-# so installing afterwards meant the first run of this script produced a binary
-# with neither, and only the *second* run picked them up.
-if [[ "$install_data" == "1" ]]; then
-  install_ime_data
-else
-  echo "==> IME data: skipped (--no-data)"
-fi
-
-cargo build --release
-cp "target/release/yumete$EXE" "./yumete$EXE"
-
-# On macOS, `strip = true` invalidates the linker's ad-hoc code signature, and
-# AMFI then kills the binary on launch (SIGKILL). Re-sign it ad-hoc.
-if [[ "$(uname)" == "Darwin" ]]; then
-  codesign --sign - --force ./yumete
-fi
-
-echo "Built ./yumete$EXE ($("./yumete$EXE" --version))"
-
 # ---- IME data: compile the Yume tables and install them into the data dir -----
 #
 # yumete embeds yume-core and loads compiled tables at runtime from
@@ -262,6 +241,33 @@ install_ime_data() {
   echo "==> IME data installed ($(ls -1 "$schemes"/*.ytab 2>/dev/null | wc -l | tr -d ' ') table(s), \
 $(ls -1 "$schemes"/*.toml 2>/dev/null | wc -l | tr -d ' ') scheme(s) in $dest)"
 }
+
+# **Data first, then the build.** Both `build.rs`es read the installed tables
+# at compile time — the 碼表 for `yumete-ime`, the word list for `yumete-cjk` —
+# so installing afterwards meant the first run of this script produced a binary
+# with neither, and only the *second* run picked them up.
+#
+# ⚠️ Which is why `install_ime_data` is **defined above this line**: bash binds
+# a function name when it reads the definition, not when the script starts, so
+# a call placed before it fails with `command not found` — and this call moved
+# up on 2026-09-14 while the definition stayed where it was.
+if [[ "$install_data" == "1" ]]; then
+  install_ime_data
+else
+  echo "==> IME data: skipped (--no-data)"
+fi
+
+cargo build --release
+cp "target/release/yumete$EXE" "./yumete$EXE"
+
+# On macOS, `strip = true` invalidates the linker's ad-hoc code signature, and
+# AMFI then kills the binary on launch (SIGKILL). Re-sign it ad-hoc.
+if [[ "$(uname)" == "Darwin" ]]; then
+  codesign --sign - --force ./yumete
+fi
+
+echo "Built ./yumete$EXE ($("./yumete$EXE" --version))"
+
 
 # ---- The global `yumete`: one symlink, so every build is the one on PATH -----
 #
