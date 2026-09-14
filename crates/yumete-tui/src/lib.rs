@@ -2939,6 +2939,7 @@ fn draw(
         0 => status_area,
         _ => command_area,
     };
+    let mut panel_caret: Option<Position> = None;
     for side in Side::BOTH {
         for (layer, rect) in Layer::BOTH
             .into_iter()
@@ -2948,7 +2949,13 @@ fn draw(
                 continue;
             }
             match layer {
-                Layer::Top => draw_sidebar(frame, editor, config, side, rect),
+                Layer::Top => {
+                    // A panel with a box in it has a caret, and the candidate
+                    // panel has to stand under **that** one — see `draw_search`.
+                    if let Some(at) = draw_sidebar(frame, editor, config, side, rect) {
+                        panel_caret = Some(at);
+                    }
+                }
                 Layer::Bottom => match editor.transient(side) {
                     Some(Transient::Detail) => {
                         table::draw_detail(frame, editor, config, side, rect)
@@ -3066,8 +3073,13 @@ fn draw(
     // Asked here rather than at the panel's own call further down, because
     // `:view-hud full` wants the same cell — 「候選面板和釘住的 HUD 都要
     // (cursor_x, cursor_y+1)」 — and the candidate panel is the one that wins.
-    let panel =
-        ime.panel_is_full() || picker_caret.is_some() || !page_can_hold_a_candidate(editor);
+    // ⚠️ `panel_caret.is_some()` too: the inline preview writes into the
+    // *manuscript's* cells, and the characters being typed are in a box in a
+    // panel. Previewing them on the page would put them where they are not.
+    let panel = ime.panel_is_full()
+        || picker_caret.is_some()
+        || panel_caret.is_some()
+        || !page_can_hold_a_candidate(editor);
     let candidate_panel = panel && composes_here(editor) && ime.available() && ime.is_composing();
     // …and the same string beside the caret, where the eyes are.
     draw_hud(
@@ -3111,6 +3123,14 @@ fn draw(
         let (at_x, at_y) = match editor.prompt() {
             _ if picker_caret.is_some() => {
                 let at = picker_caret.expect("just checked");
+                (at.x, at.y)
+            }
+            // A box inside a panel — the search panel's query or replace row.
+            // It is not `prompt()` (that is the command line) and not a picker,
+            // so without this the panel stood over the manuscript instead of
+            // under the characters being typed.
+            _ if panel_caret.is_some() => {
+                let at = panel_caret.expect("just checked");
                 (at.x, at.y)
             }
             Some((prefix, text)) => {
@@ -4852,12 +4872,18 @@ fn slot_layers(editor: &Editor, side: Side, slot: Rect) -> [Rect; 2] {
 ///
 /// A rule rather than a border: one column of `│` says "this is a different
 /// thing" and costs one cell, where a box costs four and a corner.
-fn draw_sidebar(frame: &mut Frame, editor: &Editor, config: &Config, side: Side, area: Rect) {
+fn draw_sidebar(
+    frame: &mut Frame,
+    editor: &Editor,
+    config: &Config,
+    side: Side,
+    area: Rect,
+) -> Option<Position> {
     let Some(sidebar) = editor.panel(side) else {
-        return;
+        return None;
     };
     if area.width < 3 {
-        return;
+        return None;
     }
     // A form and a list of hits, not rows of a tree (#419).
     if sidebar.view() == View::Search {
@@ -4911,7 +4937,7 @@ fn draw_sidebar(frame: &mut Frame, editor: &Editor, config: &Config, side: Side,
     let rows = sidebar.rows();
     let visible = (area.height as usize).saturating_sub(1);
     if visible == 0 {
-        return;
+        return None;
     }
     let first = sidebar
         .selected()
@@ -4968,6 +4994,8 @@ fn draw_sidebar(frame: &mut Frame, editor: &Editor, config: &Config, side: Side,
         };
         put_text(buf, from + 1, y, to, &line, style);
     }
+    // Only the search panel has a caret to report.
+    None
 }
 
 /// **The search panel** — Feature #419.
@@ -4976,7 +5004,20 @@ fn draw_sidebar(frame: &mut Frame, editor: &Editor, config: &Config, side: Side,
 /// One line per hit, because a line of a novel is a paragraph — the context of
 /// the highlighted one goes in the command row, which is the width of the
 /// window instead of the width of a column.
-fn draw_search(frame: &mut Frame, editor: &Editor, config: &Config, side: Side, area: Rect) {
+/// Answers **where it put its caret**, when the keys are in one of its boxes.
+///
+/// ⚠️ The candidate panel has to stand under the caret it belongs to. It knew
+/// about the command line's caret and the picker's, and fell back to the
+/// *writing's* cursor for anything else — so typing 中文 into this panel's
+/// query box drew the candidates halfway down the manuscript, nowhere near the
+/// characters they were for.
+fn draw_search(
+    frame: &mut Frame,
+    editor: &Editor,
+    config: &Config,
+    side: Side,
+    area: Rect,
+) -> Option<Position> {
     use yumete_core::search_panel::Field;
     let find = editor.search();
     let ink = crate::theme::Palette::of(config);
@@ -5050,7 +5091,8 @@ fn draw_search(frame: &mut Frame, editor: &Editor, config: &Config, side: Side, 
     let typing = editor.mode() == yumete_core::input::Mode::Field;
     let room = to.saturating_sub(left + 2) as usize;
     let mut y = area.y + 2;
-    let draw_box = |buf: &mut ratatui::buffer::Buffer, which: Field, what: &str, y: u16| {
+    let mut caret: Option<Position> = None;
+    let mut draw_box = |buf: &mut ratatui::buffer::Buffer, which: Field, what: &str, y: u16| {
         let shown: String = match what.chars().count() > room {
             true => what.chars().skip(what.chars().count() - room).collect(),
             false => what.to_string(),
@@ -5082,6 +5124,7 @@ fn draw_search(frame: &mut Frame, editor: &Editor, config: &Config, side: Side, 
                 if let Some(c) = buf.cell_mut((at, y)) {
                     c.set_symbol("▏").set_style(head);
                 }
+                caret = Some(Position { x: at, y });
             }
         }
     };
@@ -5123,7 +5166,7 @@ fn draw_search(frame: &mut Frame, editor: &Editor, config: &Config, side: Side, 
     let top = y + 2;
     let room = (area.y + area.height).saturating_sub(top) as usize;
     if room == 0 {
-        return;
+        return caret;
     }
     let rows = find.rows();
     let first = find
@@ -5170,6 +5213,7 @@ fn draw_search(frame: &mut Frame, editor: &Editor, config: &Config, side: Side, 
         };
         put_text(buf, left, y, to, &line, style);
     }
+    caret
 }
 
 /// **The 字典, in the bottom layer of a slot** — Feature #215, #293.
