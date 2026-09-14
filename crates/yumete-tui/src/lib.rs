@@ -115,11 +115,14 @@ pub fn choose_words(ime: &ImeSession, level: yumete_cjk::WordLevel) -> Box<dyn S
 /// in the chapters the last scan read.
 const DETECT_AGAIN: std::time::Duration = std::time::Duration::from_secs(5 * 60);
 
-/// How many of the words found automatically are used.
+/// How many of the words found automatically are used, and — **half of it** —
+/// how many of those the file being written is guaranteed (#453).
 ///
-/// The same bound `:word-discover` has always had. The list is ordered
-/// commonest-first, and past the first couple of hundred a 「word」 is
-/// something that happened twice.
+/// The list is ordered commonest-first, and past the first couple of hundred a
+/// 「word」 is something that happened twice. The half is the quota that makes
+/// the folder worth reading at all: without it the near files take the whole
+/// cap, and 「给当前文件找出来的词一个大于等于 50% 的权重」 is exactly what a
+/// quota says that a multiplier on the counts cannot.
 const DETECT_LIMIT: usize = 200;
 
 /// A `word<TAB>weight` list the reader wrote, from the first data directory
@@ -634,7 +637,7 @@ pub fn run(
         // is that the writer's own words work without being asked for,
         // and a scan nobody asked for must not take the screen, the
         // status line or a tab. `:word-discover` is the one that talks.
-        if let Some(text) = editor.take_detect_request() {
+        if let Some(ask) = editor.take_detect_request() {
             let name = editor.current_buffer().display_name();
             let due = match &detected {
                 // Another file is always due: its words are not the ones in
@@ -656,7 +659,26 @@ pub fn run(
                     let seg = yumete_core::DictionarySegmenter::builtin(0);
                     let joins =
                         |w: &str| yumete_cjk::Segmenter::segment(&seg, w).len() == 1;
-                    let _ = tx.send(yumete_core::discover::words(&text, &joins));
+                    // **This file first, and it keeps its half whatever the
+                    // folder says** (#453). Two passes rather than one corpus:
+                    // read together, a folder's commonest strings take the cap
+                    // and its longer ones absorb this file's — measured, 「宇夢」
+                    // goes from 8th of 60 to gone. The words of the chapter
+                    // being written are the ones the writer is looking at.
+                    let mut out = yumete_core::discover::words(&ask.text, &joins);
+                    out.truncate(DETECT_LIMIT / 2);
+                    if let Some(folder) = &ask.folder {
+                        let (near, _) = yumete_core::editor::detect_words_in(folder, &joins);
+                        for found in near {
+                            if out.len() >= DETECT_LIMIT {
+                                break;
+                            }
+                            if !out.iter().any(|f| f.word == found.word) {
+                                out.push(found);
+                            }
+                        }
+                    }
+                    let _ = tx.send(out);
                 });
             }
         }
