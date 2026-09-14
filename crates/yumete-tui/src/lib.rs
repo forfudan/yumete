@@ -4815,7 +4815,7 @@ fn markup_style(kind: yumete_core::markdown::Kind, ink: crate::theme::Palette) -
 /// sit this close to the band and still be read at a glance.
 ///
 /// [`BAND`]: yumete_config::rung::BAND
-const TABLE_STRIPE: u16 = 8800;
+pub(crate) const TABLE_STRIPE: u16 = 8800;
 
 /// How a whole row is set, given the block its line belongs to.
 ///

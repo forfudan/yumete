@@ -465,6 +465,18 @@ pub fn draw(
     // possible answer to that — a rung above the columns, so it still reads as
     // one row when every column is a band.
     let band = ink.ground(yumete_config::rung::HEAD);
+    // **Every other row, half a step off** (#449). The columns are banded, and
+    // banding the columns alone leaves nothing saying where one row ends —
+    // which is worst exactly where this mode is most useful: with 折行 on, a
+    // cell that wraps to three lines has to be tellable from the row under it.
+    //
+    // The same 第 88 檔 the prose page's tables use, so a table read in a
+    // chapter and the same table read in the window are striped alike.
+    let stripe = ink.ground(crate::TABLE_STRIPE);
+    let banded = |line: usize, plain: Style| match (line - base.min(line)) % 2 {
+        0 => plain,
+        _ => plain.patch(stripe),
+    };
     let quiet = Style::default().fg(ink.furniture());
     // A row the schema cannot account for. Not an error to be refused — this
     // is the tool for mending it — so it is marked, not blocked. 朱: the one
@@ -694,15 +706,15 @@ pub fn draw(
                     match peek {
                         // The row's own band: the selection is painted over it
                         // below, and the lit column number says which cell.
-                        None => band_if(true, band, text),
+                        None => band_if(true, band, banded(line, text)),
                         // 朱's own wash, the same mark the prose page gives the
                         // hit you are standing on.
                         Some(_) => Style::default().bg(ink.wash()),
                     }
                 } else if ragged && i >= columns {
-                    band_if(line == cursor_row, band, text).patch(torn)
+                    band_if(line == cursor_row, band, banded(line, text)).patch(torn)
                 } else {
-                    band_if(line == cursor_row, band, text)
+                    band_if(line == cursor_row, band, banded(line, text))
                 };
                 // The cell's ground runs the column's full width, so the
                 // highlight is a *cell* — a box you are inside — and not just
