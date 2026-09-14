@@ -431,6 +431,17 @@ pub enum CommandError {
         command: &'static str,
         value: String,
     },
+    /// A subcommand written with a space where this tree uses a hyphen.
+    ///
+    /// ⚠️ Only where obeying the typo would be **destructive**. `:write` takes
+    /// a path, so `:write all` was a perfectly legal request to copy the
+    /// manuscript into a file called `all` — and it did, silently, in the
+    /// working directory, while the writer believed every buffer had been
+    /// saved. The manual taught the spelling, which is how it got typed.
+    MeansTheHyphenatedOne {
+        command: &'static str,
+        word: String,
+    },
     /// Something followed a word that takes nothing.
     ///
     /// Not the same complaint as [`CommandError::InvalidArgument`], which says
@@ -456,6 +467,9 @@ impl fmt::Display for CommandError {
             }
             CommandError::InvalidArgument { command, value } => {
                 write!(f, "{}", crate::say!("cmd.not-one-of-its-values", command, value))
+            }
+            CommandError::MeansTheHyphenatedOne { command, word } => {
+                write!(f, "{}", crate::say!("cmd.means-the-hyphenated-one", command, word))
             }
             CommandError::TakesNoArgument { command, value } => {
                 write!(f, "{}", crate::say!("cmd.takes-nothing-after-it", command, value))
@@ -1000,6 +1014,30 @@ fn read_params(
             (None, _) => args.push(head),
         }
         left = tail;
+    }
+    // ⚠️ **Text nobody asked for is a typo, not a decoration.** Every regular
+    // command has read what it declared by now, and `rest` is read by nothing
+    // in the tree — so anything still standing here was silently dropped.
+    // `:word show off` printed the report and left the tinting on; `:buffer
+    // next` opened the picker and swallowed `next`; both look like the command
+    // worked. The manual taught those spellings, which is how they got typed.
+    if !left.is_empty() {
+        // When the leftover's first word is this command's own subcommand
+        // spelled with a space, say the spelling instead of just「多了」——
+        // that is the mistake the manual taught, and the reader is one
+        // hyphen from what they meant.
+        let head = left.split_whitespace().next().unwrap_or(left);
+        let hyphenated = format!("{}-{head}", entry.name);
+        if COMMANDS.iter().any(|e| e.name == hyphenated) {
+            return Some(Err(CommandError::MeansTheHyphenatedOne {
+                command: entry.name,
+                word: head.to_string(),
+            }));
+        }
+        return Some(Err(CommandError::TakesNoArgument {
+            command: entry.name,
+            value: left.to_string(),
+        }));
     }
     Some(build(&Parsed {
         name: entry.name,
@@ -2111,6 +2149,20 @@ pub const COMMANDS: &[Entry] = &[
             // from the one command that most needs them (#225). With `all`
             // and `as` commands of their own, the ambiguity is gone and so is
             // the shape that carried it.
+            // ⚠️ `:write all` is not a path. `WRITE` lists the two words
+            // that became commands of their own, and a bare one of them here
+            // used to be obeyed as a file name: a copy of the manuscript
+            // appeared in the working directory under the name `all`, the
+            // status line said 「抄了一份到 all」, and every other modified
+            // buffer stayed unsaved. Naming a file `./all` still works.
+            if let Some(word) = p.arg(0) {
+                if WRITE.iter().any(|w| w.name == word) {
+                    return Err(CommandError::MeansTheHyphenatedOne {
+                        command: "write",
+                        word: word.to_string(),
+                    });
+                }
+            }
             Ok(match p.force {
                 true => Command::WriteForce(p.arg(0).map(|s| s.to_string())),
                 false => Command::Write(p.arg(0).map(|s| s.to_string())),
@@ -4936,6 +4988,46 @@ mod tests {
         // because the argument was a free string (2026-09-06).
         let words: Vec<String> = complete("shot ").iter().map(Choice::written).collect();
         assert_eq!(words, ["screen", "png", "html", "txt"]);
+    }
+
+    /// **A subcommand written with a space is refused, not swallowed.**
+    ///
+    /// This tree spells its subcommands with a hyphen. Text left over after a
+    /// command has read every parameter it declared used to be dropped in
+    /// silence, and two of those looked exactly like success: `:word show off`
+    /// printed the report with the tinting still on, and `:buffer next` opened
+    /// the picker having eaten `next`. The manual taught both spellings, which
+    /// is how they got typed.
+    ///
+    /// ⚠️ `:write all` is the one that wrote a file. `:write` takes a path, so
+    /// `all` was a legal one: a copy of the manuscript appeared in the working
+    /// directory called `all`, the status line said 「抄了一份到 all」, and
+    /// every other modified buffer stayed unsaved.
+    #[test]
+    fn a_subcommand_written_with_a_space_says_the_spelling() {
+        for (line, name, word) in [
+            (":word show off", "word", "show"),
+            (":buffer next", "buffer", "next"),
+            (":write all", "write", "all"),
+            (":write as", "write", "as"),
+        ] {
+            match parse(line) {
+                Err(CommandError::MeansTheHyphenatedOne { command, word: got }) => {
+                    assert_eq!((command, got.as_str()), (name, word), "{line}");
+                }
+                other => panic!("{line} should name the spelling, got {other:?}"),
+            }
+        }
+        // A leftover that is not a subcommand still says it is extra.
+        assert!(matches!(
+            parse(":word zzz"),
+            Err(CommandError::TakesNoArgument { value, .. }) if value == "zzz"
+        ));
+        // …and the hyphenated spellings themselves go through.
+        assert!(parse(":word-show off").is_ok());
+        assert!(parse(":buffer-next").is_ok());
+        // A file really called `all` is still writable, spelled as a path.
+        assert!(matches!(parse(":write ./all"), Ok(Command::Write(Some(p))) if p == "./all"));
     }
 
     #[test]
