@@ -33,9 +33,17 @@ use std::collections::HashMap;
 
 use crate::word::word_ranges;
 
-/// A compact everyday-prose Chinese word list, embedded so segmentation works
-/// out of the box. See [`DictionarySegmenter::builtin`].
-const BUILTIN_DICTIONARY: &str = include_str!("common_words.txt");
+/// The bundled word list, put here at build time by `build.rs` when this
+/// machine has one — **empty when it does not**.
+///
+/// It is a generated table, not source, so it is not in the repository: see
+/// `build.rs` for where it comes from and why. An empty one is a working
+/// build with no bundled dictionary, and [`DictionarySegmenter::builtin`]
+/// then cuts one 漢字 at a time, exactly as it did before the list existed.
+mod bundled {
+    include!(concat!(env!("OUT_DIR"), "/words.rs"));
+}
+use bundled::BUILTIN_DICTIONARY;
 
 /// Splits a string into word ranges as character-index `(start, end)` pairs,
 /// with whitespace skipped. `end` is exclusive.
@@ -367,10 +375,20 @@ impl DictionarySegmenter {
         DictionarySegmenter::new(entries, threshold)
     }
 
-    /// Build a segmenter from the compact common-word dictionary bundled with
-    /// yumete, so word motions and the overlay work without any setup.
+    /// Build a segmenter from the word list bundled with this binary, so word
+    /// motions and the overlay work without any setup.
+    ///
+    /// ⚠️ **The list may be empty** — it is a build-time input, not a tracked
+    /// file (see `build.rs`). Then every word is one 漢字 wide, which is
+    /// honest and is what this did before the list existed. Ask
+    /// [`Self::word_count`] before writing a test that needs real words.
     pub fn builtin(threshold: i64) -> Self {
         DictionarySegmenter::from_text(BUILTIN_DICTIONARY, threshold)
+    }
+
+    /// Whether this build carries a bundled word list at all.
+    pub fn has_builtin() -> bool {
+        !BUILTIN_DICTIONARY.trim().is_empty()
     }
 
     /// The number of distinct words in the dictionary.
@@ -439,6 +457,12 @@ mod tests {
     /// line, verbatim from `tutor.rs`.
     #[test]
     fn word_motions_find_words_in_traditional_prose() {
+        // The list is a build input, not a tracked file (`build.rs`), so a
+        // machine that has never installed 宇浩 has none — and「every word is
+        // one 漢字」is the right answer there, not a failure.
+        if !DictionarySegmenter::has_builtin() {
+            return;
+        }
         let seg = DictionarySegmenter::builtin(0);
         let line = "他抬頭看了看那片天，雪還在下，山路已經看不見了。";
         // The ranges are in characters, the way every motion in the editor
@@ -458,6 +482,12 @@ mod tests {
     /// simplified manuscript keeps every word they had.
     #[test]
     fn the_simplified_words_are_still_there() {
+        // The list is a build input, not a tracked file (`build.rs`), so a
+        // machine that has never installed 宇浩 has none — and「every word is
+        // one 漢字」is the right answer there, not a failure.
+        if !DictionarySegmenter::has_builtin() {
+            return;
+        }
         let seg = DictionarySegmenter::builtin(0);
         let line = "他抬头看了看那片天，雪还在下，山路已经看不见了。";
         // The ranges are in characters, the way every motion in the editor
@@ -552,6 +582,12 @@ mod tests {
 
     #[test]
     fn builtin_dictionary_segments_common_prose() {
+        // The list is a build input, not a tracked file (`build.rs`), so a
+        // machine that has never installed 宇浩 has none — and「every word is
+        // one 漢字」is the right answer there, not a failure.
+        if !DictionarySegmenter::has_builtin() {
+            return;
+        }
         let seg = DictionarySegmenter::builtin(0);
         assert!(seg.word_count() > 100);
         // 你好 and 世界 are both in the bundled list.

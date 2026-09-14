@@ -8789,6 +8789,12 @@ mod tests {
 
     #[test]
     fn the_segmentation_overlay_tints_words_down_the_zong() {
+        // The bundled word list is a build input, not a tracked file
+        // (`yumete-cjk/build.rs`), so a machine that has never installed 宇浩
+        // has none and every word is one 漢字 — which this picture is not of.
+        if !DictionarySegmenter::has_builtin() {
+            return;
+        }
         let mut editor = editor_with("你好世界");
         editor.set_segmenter(Box::new(DictionarySegmenter::builtin(0)));
         editor.set_segmentation_visible(true);
@@ -11950,6 +11956,12 @@ mod tests {
 
     #[test]
     fn the_status_line_names_the_character_under_the_cursor() {
+        // The bundled word list is a build input, not a tracked file
+        // (`yumete-cjk/build.rs`), so a machine that has never installed 宇浩
+        // has none and every word is one 漢字 — which this picture is not of.
+        if !DictionarySegmenter::has_builtin() {
+            return;
+        }
         let mut editor = editor_with("那年冬天");
         let config = Config::default();
         let row = |b: &ratatui::buffer::Buffer, w: u16| -> String {

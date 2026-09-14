@@ -15,3 +15,9 @@
 # Working notes and tables reviewed in the editor itself, not part of the
 # project's record.
 /local/
+
+# **純數據表格不進 git**（2026-09-14 作者定）。生成物，build 時寫進二進制：
+# 發布流水線從 forfudan/yume-release 下載，`scripts/build.sh` 在本機生成。
+# 配方在 scripts/make_words.py 與 scripts/make_jinghua.py。
+crates/yumete-cjk/src/common_words.txt
+crates/yumete-ime/jinghua/

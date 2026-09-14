@@ -135,15 +135,14 @@ jobs:
     #   * `YUMETE_RELEASE` makes `crates/yumete/build.rs` emit a bare `0.1.0`.
     #     Without it the binary says `0.1.0-dev.20260914…+1f6aeb2` inside a
     #     tarball called `0.1.0` — and SemVer sorts that *before* the release.
-    #   * `YUMETE_BUILTIN_DIR` pointed at an empty directory means「這台機器沒
-    #     有裝宇浩」, true on a runner anyway — but saying it makes the package
-    #     *deterministic*: `crates/yumete-ime/build.rs` then always falls back
-    #     to 靈明精華版 in `crates/yumete-ime/jinghua/`, and a runner image that
-    #     one day carries a 宇浩 data directory cannot silently put a different
-    #     碼表 into a release.
+    #   * `YUMETE_BUILTIN_DIR` is where the tables fetched below are put, and
+    #     naming it makes both `build.rs`es look **only** there. That is what
+    #     makes the package deterministic: a runner image that one day happens
+    #     to carry a 宇浩 data directory cannot silently put a different 碼表
+    #     into a release.
     env:
       YUMETE_RELEASE: "1"
-      YUMETE_BUILTIN_DIR: ${{ github.workspace }}/no-yume-data
+      YUMETE_BUILTIN_DIR: ${{ github.workspace }}/yumete-data
     defaults:
       run:
         working-directory: yumete
@@ -182,9 +181,47 @@ jobs:
           key: ${{ matrix.target }}
           workspaces: yumete
 
-      - name: The empty data directory the env var names
+      # ⚠️ **The 碼表 and the word list are build inputs, not tracked files.**
+      # Both are generated — `lingming_essential.ytab` cut from 宇浩's own
+      # 碼表, `common_words.txt` from its language model — and a generated
+      # table rewritten whole on every refresh costs the repository its full
+      # size again each time. So they live on a release page, and the binary
+      # picks them up here.
+      #
+      # `forfudan/yume-release` is public, so this needs no token (checked
+      # 2026-09-14: `visibility: PUBLIC`, an anonymous ranged GET returns 206).
+      # The tag is fixed and the assets are overwritten in place, so there is
+      # one URL for all time and nothing to bump here when the tables change.
+      #
+      # **A build with none of this still works** — no 碼表, no word list,
+      # which is what a bare `cargo build` gets and is honest. So the step does
+      # not fail the run; a release that cannot type is caught by the smoke
+      # test, which is a better place to catch it than a guess here.
+      - name: Fetch the tables the binary carries
         working-directory: .
-        run: mkdir -p no-yume-data
+        env:
+          TAG: yumete-data
+          FROM: forfudan/yume-release
+        run: |
+          set -uo pipefail
+          mkdir -p "${YUMETE_BUILTIN_DIR}/schemes" "${YUMETE_BUILTIN_DIR}/data"
+          base="https://github.com/${FROM}/releases/download/${TAG}"
+          get() { curl -fsSL --retry 3 --retry-delay 2 -o "$2" "${base}/$1"; }
+          get lingming_essential.ytab "${YUMETE_BUILTIN_DIR}/schemes/lingming_essential.ytab" || true
+          get symbols.ytab            "${YUMETE_BUILTIN_DIR}/data/symbols.ytab" || true
+          get common_words.txt        "${YUMETE_BUILTIN_DIR}/data/common_words.txt" || true
+          get VERSION                 "${YUMETE_BUILTIN_DIR}/VERSION" || true
+          # A half-written file is worse than none: the loader would take a
+          # truncated table and answer nonsense from it. Weigh each one and
+          # throw away anything that plainly did not arrive whole.
+          for f in schemes/lingming_essential.ytab data/symbols.ytab data/common_words.txt; do
+            p="${YUMETE_BUILTIN_DIR}/$f"
+            if [[ ! -s "$p" ]] || [[ $(wc -c < "$p") -lt 10000 ]]; then
+              echo "!! ${f}: missing, or too small to be it — dropped" >&2
+              rm -f "$p"
+            fi
+          done
+          ls -l "${YUMETE_BUILTIN_DIR}"/schemes "${YUMETE_BUILTIN_DIR}"/data
 
       # **The tests run here too.** A release built from a tree that does not
       # pass them is the one build where nobody would notice in time.

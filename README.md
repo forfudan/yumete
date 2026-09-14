@@ -292,8 +292,8 @@ symlink, because a symlink needs Developer Mode.
 by path, so `cargo build` without `..\yume` fails in `cargo metadata`, before a
 single crate compiles — it is not「builds but has no 碼表」. What *is* optional
 is yume's **data**: a build with the sibling source but no installed tables
-carries 靈明精華版 (`crates/yumete-ime/jinghua/`, 0.36 MB) and types 漢字 out of
-the box. If yume is installed on the machine, its own tables are found where it
+carries 靈明精華版 (0.25 MB, fetched at build time — see below) and types 漢字
+out of the box. If yume is installed on the machine, its own tables are found where it
 put them (`%APPDATA%\Yume\`); if they are somewhere else entirely, name the
 place:
 

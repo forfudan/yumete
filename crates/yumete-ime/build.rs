@@ -8,15 +8,19 @@
 //! So the full table is read from wherever it is already installed, at the
 //! moment the binary is built, and never stored here.
 //!
-//! **Why something is.** That left one machine with nothing: the one that has
-//! never installed 宇浩 — a fresh clone, and CI, which is where the release
-//! packages are actually built. Those binaries could not type a single 漢字.
-//! So `jinghua/` carries 靈明精華版: 0.36 MB, every character in CJK 基本區 and
-//! 擴展A plus the 字根區 and the seven 字集, all sources, the 簡碼, and the
-//! 符號表 — but no 詞 (see `scripts/make_jinghua.py` for the recipe and the
-//! reasoning). It is the floor, never the ceiling: a machine with the real data
-//! installed builds with the real table, and at run time an installed 靈明
-//! always wins over whichever one is in the binary (`ImeSession::new`).
+//! **What stands in when it is not there.** 靈明精華版 —
+//! `schemes/lingming_essential.ytab`, 0.25 MB: every character in CJK 基本區
+//! and 擴展A plus the 字根區 and the seven 字集, all sources, the 簡碼 — but no
+//! 詞 (recipe and reasoning in `scripts/make_jinghua.py`). ⚠️ **It is not in
+//! this repository either**: pure data tables are a build input, never a
+//! tracked file. A release build downloads it from `forfudan/yume-release`
+//! (public, no token); `scripts/build.sh` installs the *full* table instead,
+//! which is better and is what a developer's build carries.
+//!
+//! It is the floor, never the ceiling: the full table wins when both are
+//! there, and at run time an installed 靈明 wins over whichever one is in the
+//! binary (`ImeSession::new`). **A machine with neither builds anyway**, and
+//! says so honestly rather than failing.
 //!
 //! `YUMETE_BUILTIN_DIR` says to look **only** there, for a release build that
 //! wants the tables from somewhere specific — an empty directory therefore
@@ -31,36 +35,24 @@ fn main() {
     // under `schemes/`, the shared 符號表 under `data/`. The old flat names are
     // still looked for, so a machine whose data directory predates yume's
     // split still builds with 靈明 in it.
-    let installed = find("schemes/ling.ytab").or_else(|| find("ling.ytab"));
-    // 精華版 stands in for the whole set or not at all: half of it — the real
-    // 符號表 beside a cut 碼表, or the other way round — is a mixture nobody
-    // asked for and nobody could name afterwards.
-    let jinghua = !installed.is_some();
-    let (table, symbols) = match &installed {
-        Some(table) => (
-            Some(table.clone()),
-            find("data/symbols.ytab").or_else(|| find("symbols.ytab")),
-        ),
-        None => {
-            let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("jinghua");
-            (
-                Some(dir.join("ling.ytab")),
-                Some(dir.join("symbols.ytab")),
-            )
-        }
+    let full = find("schemes/ling.ytab").or_else(|| find("ling.ytab"));
+    let jinghua = full.is_none();
+    let table = match &full {
+        Some(path) => Some(path.clone()),
+        None => find("schemes/lingming_essential.ytab"),
     };
+    // The 符號表 is the same file either way — 精華版's is cut from the same
+    // 15,716 rows — so there is no mixture to worry about.
+    let symbols = find("data/symbols.ytab").or_else(|| find("symbols.ytab"));
     let mut body = String::new();
     body.push_str(&declare("BUILTIN_TABLE", table.as_deref()));
     body.push_str(&declare("BUILTIN_SYMBOLS", symbols.as_deref()));
     // Say *which* table, not just how old. `:yume` prints this, and 「出廠自帶
     // 2026-09-12」 beside a candidate list with no 詞 in it is an answer that
     // sends the reader looking for a bug in 宇浩.
-    let version = table.as_deref().and_then(stamp).map(|when| {
-        if jinghua {
-            format!("精華版 {when}")
-        } else {
-            when
-        }
+    let version = table.as_deref().and_then(stamp).map(|when| match jinghua {
+        true => format!("精華版 {when}"),
+        false => when,
     });
     body.push_str(&format!(
         "pub const BUILTIN_VERSION: Option<&str> = {version:?};\n"
