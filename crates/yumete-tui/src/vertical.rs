@@ -1152,14 +1152,19 @@ pub fn draw(
                 if let Some(word) = ranges.iter().position(|&(a, b)| column >= a && column < b) {
                     if word % 2 == 0 {
                         // 字色 leaves the paper alone and moves the writing
-                        // instead (#278); it stands back from a run that
-                        // already carries a colour of its own.
+                        // instead (#278) — **whatever colour that writing
+                        // already has, stepped 第 15 檔 toward the page**
+                        // (#461). Standing back from a coloured run, as this
+                        // did, means a link or a heading shows no word
+                        // boundaries at all. The horizontal renderer does the
+                        // same thing in the same words.
                         match mark {
                             WordMark::Tint => style = style.bg(ink.word()),
-                            WordMark::Ink if style.fg.is_none() => {
-                                style = style.fg(ink.word_ink())
+                            WordMark::Ink => {
+                                let from = style.fg.unwrap_or(ink.text());
+                                style = style
+                                    .fg(ink.stepped(from, yumete_config::rung::WORD_INK));
                             }
-                            WordMark::Ink => {}
                         }
                     }
                 }
@@ -1316,7 +1321,7 @@ impl Skin {
     }
     /// Numbers and the code — one shade back from the candidates.
     pub fn helper(self) -> Color {
-        self.step(yumete_config::rung::QUIET as u32)
+        self.step(yumete_config::rung::ASIDE as u32)
     }
     /// The ground of the highlighted candidate, and the text on it.
     pub fn highlight(self) -> Color {

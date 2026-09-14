@@ -337,6 +337,22 @@ pub struct Palette {
     faded: bool,
 }
 
+/// One of the colours that is **not** a quantity of ink — 金, 朱, and the three
+/// 官服品色 — named so a ground can be asked for by which one it is.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Accent {
+    /// 龍袍.
+    Gold,
+    /// 朱 — 這裏不對.
+    Mark,
+    /// 一至三品.
+    Purple,
+    /// 六至七品.
+    Green,
+    /// 八至九品.
+    Azure,
+}
+
 /// Relative luminance (WCAG), for the palette's own contrast questions.
 fn luminance(c: Color) -> f64 {
     let Color::Rgb(r, g, b) = c else { panic!("not an rgb colour") };
@@ -394,6 +410,36 @@ impl Palette {
     /// when it was a fixed one.
     const FADE: u32 = 260;
 
+    /// `colour`, stepped `rungs` of the ladder **toward the page**.
+    ///
+    /// What `:word-show ink` alternates with (#461). It used to reach for a
+    /// fixed grey — [`rung::WORD_INK`], 第 15 檔 of 墨 → 紙 — and that works for
+    /// prose and for nothing else: on a link, a code span or a heading the
+    /// writing already carries a colour, so the alternation either rubbed that
+    /// colour out or (as it was written) gave up and drew nothing, and a link
+    /// four lines long had no word boundaries in it at all.
+    ///
+    /// Stepping whatever colour is *there* keeps both answers: 藍 stays 藍, and
+    /// every other word of it is 藍 a step back. The ladder's own arithmetic,
+    /// applied to an arbitrary starting colour.
+    pub fn stepped(self, colour: Color, rungs: u16) -> Color {
+        let Color::Rgb(r, g, b) = colour else {
+            return colour;
+        };
+        let (pr, pg, pb) = self.ladder.paper;
+        // ⚠️ **The ladder's own arithmetic, rounding included.** `Ladder::step`
+        // rounds half up; truncating here instead put the plain-prose case one
+        // unit off [`Ink::at`], which is a different colour to every `==` in
+        // the suite and to nobody's eye.
+        let full = i64::from(rung::PAPER);
+        let t = i64::from(rungs.min(rung::PAPER));
+        let mix = |from: u8, to: u8| -> u8 {
+            let (a, b) = (i64::from(from), i64::from(to));
+            ((a * full + (b - a) * t + full / 2) / full).clamp(0, 255) as u8
+        };
+        Color::Rgb(mix(r, pr), mix(g, pg), mix(b, pb))
+    }
+
     /// The same palette, a rung back: the half that is only being read.
     pub fn faded(self) -> Palette {
         Palette {
@@ -432,9 +478,10 @@ impl Palette {
     pub fn text(self) -> Color {
         self.at(rung::TEXT)
     }
-    /// One shade back: a reading, a 拆分, a candidate's number.
+    /// 旁註 — read it, but it is not the prose: a reading, a 拆分, a
+    /// candidate's number. [`yumete_config::rung::ASIDE`].
     pub fn quiet(self) -> Color {
-        self.at(rung::QUIET)
+        self.at(rung::ASIDE)
     }
     /// Furniture: line numbers, an unlit tab, a key's label, a 批注.
     pub fn furniture(self) -> Color {
@@ -540,6 +587,25 @@ impl Palette {
         self.washed_to(self.gold, 1.9, 4.5)
     }
 
+    /// The same wash, for any of the 品色 — what a `:::` block sits on (#459).
+    ///
+    /// ⚠️ **This is why the four callouts can differ by hue now and could not
+    /// before.** They used to be four *greys* 1.4–2.4 ΔE apart, which is below
+    /// the threshold at which two flat grounds can be told apart at all. A hue
+    /// held at a fixed distance off the page is a different proposition: the
+    /// distance does the work of 「這是一塊」 and the hue does the work of
+    /// 「哪一塊」, and neither is asked to do the other's job.
+    pub fn washed(self, accent: Accent) -> Color {
+        let colour = match accent {
+            Accent::Gold => self.gold,
+            Accent::Mark => self.mark,
+            Accent::Purple => self.purple,
+            Accent::Green => self.green,
+            Accent::Azure => self.azure,
+        };
+        self.washed_to(colour, 1.9, 4.5)
+    }
+
     /// An accent washed toward the page until it sits `off_page` from it —
     /// and further, if the writing on it would not clear `readable`.
     fn washed_to(self, accent: (u8, u8, u8), off_page: f64, readable: f64) -> Color {
@@ -580,7 +646,7 @@ impl Palette {
     /// It is a rung and not a hue for the same reason [`Ink::word`] is: a word
     /// boundary is structure, not a mark somebody made.
     ///
-    /// ⚠️ **Not `QUIET`**, which is where this began. That rung means 「not
+    /// ⚠️ **Not `ASIDE`**, which is where this began. That rung means 「not
     /// the prose」, and borrowing it made every second word on the page look
     /// demoted rather than merely bounded.
     pub fn word_ink(self) -> Color {

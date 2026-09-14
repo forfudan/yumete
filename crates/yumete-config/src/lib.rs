@@ -632,7 +632,7 @@ pub mod rung {
     /// **第 15 檔** — the writing, one small step back, for the *other* word in
     /// an alternated pair (`:word-show ink`, #278).
     ///
-    /// ⚠️ **Not [`QUIET`].** That rung is 「read this, it is not the prose」 —
+    /// ⚠️ **Not [`ASIDE`].** That rung is 「read this, it is not the prose」 —
     /// a reading, a 拆分, a candidate's number — and at 第 25 it is far enough
     /// back that alternating words looked like every other word had been
     /// demoted. 分詞 is structure, not rank: 第 15 is 「有一定辨識度但又不會讓
@@ -641,9 +641,15 @@ pub mod rung {
     /// The writing, and anything that *is* the writing: a hung 句讀, the
     /// character a highlight covers.
     pub const TEXT: u16 = 0; // 第 0 檔
-    /// One shade back: a reading beside its base, a 拆分 annotation, a
-    /// candidate's number, the second line of anything.
-    pub const QUIET: u16 = 2500; // 第 25 檔
+    /// **旁註** — read it, but it is not the prose: a reading beside its base,
+    /// a 拆分 annotation, a candidate's number, the tag at a panel's foot.
+    ///
+    /// ⚠️ **It was `QUIET`** (#462), which said how loud it is and not what it
+    /// is for — and the name was borrowed on that reading by
+    /// [`WORD_INK`], where 「one shade back」 is a different idea entirely.
+    /// This one is a *category*: everything on this rung is something the
+    /// reader may want and none of it is what the page is about.
+    pub const ASIDE: u16 = 2500; // 第 25 檔
     /// **The ruler over a table's columns** — Feature #232.
     ///
     /// Its own rung, and darker than the furniture it used to share, because
