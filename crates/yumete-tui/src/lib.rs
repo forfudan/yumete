@@ -4923,8 +4923,13 @@ fn block_style(block: yumete_core::markdown::Block, ink: crate::theme::Palette) 
         // The ground is [`table_row_rung`]'s, for every renderer; the header's
         // ink is 金, which is what this palette has always called a table's
         // header row — the same colour the panels label a column with.
-        Block::Table { nth } => {
+        Block::Table { nth, inside } => {
+            // Inside a `:::` the two grounds stack: the callout's wash is what
+            // the row's *width* is painted with (it is the callout that runs to
+            // the edge), and the table's own band goes over it under the row's
+            // own characters — see the fill in `draw_horizontal`.
             let ground = Style::default().bg(ink.at(table_row_rung(nth)));
+            let _ = inside;
             Some(match nth {
                 0 => ground.fg(ink.gold()),
                 1 => ground.fg(ink.furniture()),
@@ -6032,10 +6037,26 @@ fn draw_horizontal(
         // contrast, because every tint in it is measured against a colour the
         // editor has never seen.
         let block = blocks.get(row.line).copied();
-        let row_is_a_table = matches!(block, Some(yumete_core::markdown::Block::Table { .. }));
+        // A table's ground stops at its last `|` — unless it is inside a
+        // `:::`, where the callout's own wash carries on to the edge under it.
+        let table_in = match block {
+            Some(yumete_core::markdown::Block::Table { inside, .. }) => Some(inside),
+            _ => None,
+        };
+        let row_is_a_table = matches!(table_in, Some(None));
         let ground = ink
             .page()
             .patch(block.and_then(|b| block_style(b, ink)).unwrap_or_default());
+        // The fill behind a table inside a callout is the **callout's**, so the
+        // block still reaches the edge as a block; the table's band is only
+        // under the row itself.
+        let fill = match table_in.flatten() {
+            Some(callout) => ink.page().patch(
+                block_style(yumete_core::markdown::Block::Container(callout), ink)
+                    .unwrap_or_default(),
+            ),
+            None => ground,
+        };
         // The row the current hit is on, banded — 「在哪一行」 answered before
         // you have found the word itself.
         let ground = match hit_line == Some(row.line) {
@@ -6436,7 +6457,7 @@ fn draw_horizontal(
         // the page's width; a table is a shape **on** the page and has a width
         // of its own, so a band carried past its last wall paints page as if it
         // were table. 「表格的底色不需要延伸到整个页宽，而是表格宽度就可以了。」
-        if ground.bg.is_some() && !row_is_a_table {
+        if fill.bg.is_some() && !row_is_a_table {
             // A whole width of spaces, and the page truncates them. Working out
             // where the row ends and padding *exactly* the rest was one width
             // question too many: it asked `char_width`, while the columns are
@@ -6448,7 +6469,7 @@ fn draw_horizontal(
             // scrolled row is still painted to the right edge.
             spans.push(Span::styled(
                 " ".repeat(text_area.width as usize + left),
-                ground,
+                fill,
             ));
         }
         lines.push(scrolled(Line::from(spans), gutter, left));
