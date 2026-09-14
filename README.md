@@ -5,8 +5,9 @@
 tailored first for **writing (novels), not coding**. It installs under both
 names: `yumete`, and `ye` for the one you actually type.
 
-**[docs/manual.md](docs/manual.md)**（中文）is the user manual — what the keys
-and commands do, how vertical layout works, and how to configure it.
+**[docs/manual.md](docs/manual.md)**（繁體, and
+[简体](docs/manual_sc.md)）is the user manual — what the keys and commands do,
+how vertical layout works, and how to configure it.
 [docs/development.md](docs/development.md) has the design, the reasoning, and the
 feature roadmap.
 
@@ -17,212 +18,223 @@ feature roadmap.
 
 ## Status
 
-A working editor — not finished, and used daily by its author. Implemented so
-far, oldest first:
+A working editor, used daily by its author, and not finished. **v0.1.0 is not
+tagged yet**: build it from source for now (below), and the release will bring
+`brew install forfudan/tap/yumete`. What is done, planned and dropped is
+tracked feature by feature in [`docs/development.md`](docs/development.md) §5.
 
-- **#1 Open file / new buffer** — `yumete <file>` opens a file (a non-existent
-  path opens an empty buffer bound to it); `yumete` with no argument reopens what
-  was open last time (#76), or starts a scratch buffer when there is no session
-  and when `[editor] session = false`.
-- **#2 Save / save-as** — `:w` and `:w <path>` write the buffer atomically.
-- **#3 Quit / force-quit** — `:q` refuses to quit with unsaved changes; `:q!`
-  overrides.
-- **#5 Modal editing** — Normal / Insert / Command modes (Helix-style).
-- **#6 / #7 Cursor motions** — `h j k l` and goto mode (`gg` `ge` `gh` `gl`
-  `gs`), grapheme-aware and visual-column–preserving.
-- **#8 Char search** — `f` and `F` find a character on the line, forward and
-  back. ⚠️ **No `t`/`T`**: that letter is the table mode's, all of it.
-- **#9 / #10 / #12 Editing & selection** — `x` selects a line, `v` / `;` extend
-  / collapse, `d` / `c` delete / change, `i a I A` insert, `o O` open lines.
-- **#11 Undo / redo** — `u` / `U` (snapshot-based, grouped per edit).
-- **#13 Yank / paste** — `y` `p` `P` (single register).
-- **#14 Incremental search** — `/`, `n`, `N` over CJK substrings.
-- **#15 Search & replace** — `:s/pat/rep/[g]`, `:%s/...` (undoable).
-- **#16 / #17 CJK metrics** — East-Asian display width and grapheme clusters in
-  [`yumete-cjk`](crates/yumete-cjk).
-- **#19 / #20 TUI** — buffer view with a line-number gutter, selection highlight,
-  and status line, rendered by [`yumete-tui`](crates/yumete-tui) over `ratatui` +
-  `crossterm`.
-- **#21 / #22 / #23 Config** — global `~/.config/yumete/config.toml` plus a
-  per-project `.yumete/config.toml` override (line numbers, scrolloff, selection
-  colour, Normal-mode key aliases), in [`yumete-config`](crates/yumete-config).
-- **#25 / #26 Word motions** — `w` `b` `e` (and `W` `B` `E`), with `dw` / `cw`;
-  each CJK character is its own word by default.
-- **#24 Dictionary word segmentation** — a `Segmenter` trait with a jieba-style
-  `DictionarySegmenter` (DAG + maximum-probability over a `word → weight` graph,
-  with a weight threshold). A compact common-word dictionary is bundled, so
-  `w`/`b`/`e` step by CJK *word* out of the box; `:word-show` toggles a word-tint
-  overlay (on by default).
-- **#27 / #32 Built-in Yume IME session** — [`yumete-ime`](crates/yumete-ime)
-  embeds the `yume-core` engine directly (no FFI) as an `ImeSession`: per-keystroke
-  input, candidate/preedit getters, scheme switching, and 中/英 toggle, loading a
-  scheme's compiled data tables from the data directory.
-- **#28 / #29 / #30 IME in Insert mode** — while composing in Insert mode, keys are
-  routed to the IME and a floating candidate panel is drawn below the cursor
-  (Space / 1–9 select, `-`/`=` page, Backspace/Esc edit/cancel); **`:yume
-  on|abc|off`** takes the keyboard and hands it back, and a **lone-Shift tap**
-  toggles 中/ABC while yume holds it (the tap needs the Kitty keyboard protocol —
-  kitty, WezTerm, Ghostty, foot, Alacritty, Konsole, recent iTerm2; not Apple
-  Terminal);
-  number mode, `/`-commands, and `z` reverse come from the engine.
+## What it does
 
-- **#67 Command hints** — `:` on its own lists every command above the command
-  line, in as many aligned columns as fit, each with a line saying what it does;
-  every keystroke narrows the list. Twenty-odd commands is past the point where
-  they can be guessed.
+### The page a Chinese book is set on
 
-- **#65 Ruby (振假名 / 注音)** — readings are written into the file as markup and
-  *laid out* on the page: the base is spaced against its reading (so two adjacent
-  readings never collide) and the reading runs in the half-width column to the
-  right of its 縱. The markup is not yumete's own — HTML `<ruby>漢<rt>hàn</rt></ruby>`
-  and Typst `#ruby("漢", "hàn")` are both read, several at once, chosen by the
-  file's extension. **Ruby mode** (`:ruby`) edits the reading, which with
-  readings laid out is not on screen to move a cursor into; `:ruby off|basic|full`
-  is how much is drawn — `basic` knows the reading without laying it out, so the
-  tags stay on the page and a word count still counts what a reader sees —
-  `:ruby <dialect> [on|off]` picks which markups to read, and `:ruby-format
-  <dialect>` rewrites the whole buffer into one.
+Text can be set **vertically** (縱書): running top to bottom in **縱** (*zong*)
+that stack from the right edge leftward, one paragraph wrapping into as many 縱
+as the window allows — or as many as `zong_length` / `:view-wrap n` says, when
+the writer has made that decision themselves. `h j k l` keep their *screen*
+meaning: `j`/`k` read down and up a 縱, `h`/`l` step to the 縱 on the left and
+on the right.
 
-- **#66 IME in the search and command lines** — `/` composes Chinese, so a
-  Chinese document can actually be searched; a lone-Shift tap toggles 中/ABC there
-  too, the preedit shows inline and the candidate panel floats above the prompt.
-  `:` gets the same, so `:s/中文/中文/` works — but drops to 英 on the way in and
-  hands 中 back on the way out, because command *names* are ASCII. `:yume-chaifen`
-  toggles the 拆分 annotation beside candidates (off by default,
-  `[editor] show_chaifen`).
+It is real typesetting, not a rotation. CJK punctuation is drawn in its
+vertical form (`。`→`︒`, `「」`→`﹁﹂`) **on screen only**, so the file on disk is
+unchanged. `:view-hanging` puts 。，、？！：；「」 in the margin beside the
+character they belong to, the way a 古籍 is punctuated, and readings run in the
+half-width column to the right of their 縱.
 
-- **`r` composes too** — Helix's replace key waits for one character, and in a
-  Chinese manuscript that character needs the IME. Press `r` and the panel
-  opens; a one-character commit writes over every character of the selection
-  the way `r` always has, and a longer one replaces the selection once. 旁注 is
-  `空格 r`: a page carries one or two, so it can wait for a second press, while
-  a replacement cannot.
-
-- **#64 Half-width characters** — one to a row, hung against the slot's right
-  edge, so Latin and digits line up as a single edge running down beside the
-  漢字. Setting a pair sideways in one slot (縦中横) is available behind
-  `[editor] tatechuyoko`, off by default: turned sideways `yume` reads as `yu`
-  over `me`, two syllables that are not there — though a two-digit year does read
-  better packed.
-
-- **#63 Word segmentation from Yume's language model** — `w`/`b`/`e` and the
-  segmentation overlay are driven by Yume's 詞頻表 (1.25M weighted entries) and
-  詞彙表, shared by reference with the running IME rather than loaded twice. The
-  bundled list covered almost no real prose at 214 words, so `w` used to walk
-  one 漢字 at a time; it now steps `那年冬天 ／ 雪 ／ 下 ／ 得 ／ 比 ／ 往常 ／ 都
-  ／ 早`. Falls back to `segmentation.txt`, then to the bundled list — which is
-  75,000 entries now, cut from the same model in five script tracks.
-
-- **#70 標點旁置** — `:view-hanging` puts 。，、？！：；「」 in the margin beside the
-  character they belong to, the way a 古籍 is punctuated, so the text column
-  carries nothing but text. An opening bracket hangs beside the character it
-  *introduces*; everything else beside the one it follows. Where a mark and a
-  reading want the same cell, the mark wins and the reading gives way upward.
-
-- **#71 Mouse wheel** — a notch turns three 縱. yumete captures the mouse for it,
-  so drag-selection needs the terminal's modifier — the trade Helix makes.
-
-- **#74 Helix tutorial, second pass** — `r` writes a character over the whole
-  selection, `A-;` flips which end the cursor is on, `"a` names a register,
-  `q`/`Q` record and replay a macro, and `C-d`/`C-u`/`C-f`/`C-b` move by page
-  (down the lines, or across the 縱). Deleting yanks, so `d` then `p` moves text.
-
-- **#62 Helix alignment** — a digit prefix is a count (`3w`, `10j`); `.` repeats
-  the last insert and `A-.` the last `f`/`t`; `%` selects the file, `X` extends to
-  whole lines, `J` joins (with no space between two 全角 characters), `` ` ``
-  is the case group (`` `l `` lower, `` `u `` upper, `` `` `` switch — one key
-  rather than Helix's three, because on 漢字 all three do nothing), `R`
-  replaces the selection with the register, `>`/`<` indent,
-  `C-a`/`C-x` step a number, `*` searches the selection. **Match mode** (`m`)
-  covers `mm` jump-to-pair, `mi`/`ma` textobjects, and `ms`/`md`/`mr` surround —
-  over 「」『』（）《》【】〔〕 as well as the ASCII pairs. Holding a key now
-  auto-repeats, and the cursor is a block in Normal, a bar in Insert.
-
-- **#77 Soft wrap** — set horizontally, a paragraph too wide for the terminal
-  continues on the next screen row instead of running off the right edge, which
-  matters here more than in a code editor: a Chinese paragraph is one line of
-  several hundred characters. Latin words are kept whole and 禁則處理 is applied
-  (no 。、」）at the head of a row, no 「（ at the end of one). `j` and `k` walk
-  the rows the reader sees. `:view-wrap off` turns it off; `[editor] soft_wrap`.
-
-- **#79 Crash recovery** — while a document has unsaved changes, a copy is kept
-  beside it (`chapter.md` → `.chapter.md.yumete`), rewritten every few seconds
-  and removed on save and on quit. If a session ends badly, the next open says
-  so; `:recover` loads the draft (undoably), `:recover!` throws it away. Nothing
-  is loaded on its own — silently showing text that is not what is on disk is
-  how a writer loses track of which version they are reading.
-
-- **#76 / #78 / #80 Getting around, and getting told** — `gn`/`gp` and
-  `:buffer-next`/`previous` switch between the open files, each keeping its own
-  cursor and its own undo history; `10gg`, `:42` and `:goto` go to a line; `:count` reports 字,
-  字符 and 段 (a selection counts the selection); `:wq` saves and quits, checking
-  *every* open file for unsaved changes. A config file that does not parse now
-  says which key is wrong instead of being dropped in silence.
-
-- **#61 Vertical layout (縱書)** — text can be set the way a Chinese novel is:
-  running top to bottom in **縱** (*zong*) that stack from the right edge
-  leftward, one paragraph soft-wrapping into as many 縱 as the window allows —
-  or as many as `zong_length` / `:view-wrap n` says, when the writer has made that
-  decision themselves. `h j k l` keep their screen meaning — `j`/`k` read down and up
-  a 縱, `h`/`l` step to the 縱 on the left and on the right. CJK punctuation is
-  drawn in its vertical form (`。`→`︒`, `「」`→`﹁﹂`) on screen only, so the file
-  on disk is unchanged. The candidate panel turns with it: the preedit on the
-  right, candidates running leftward. Turn it on with `layout = "vertical"`,
-  `--vertical`, or `:layout`.
-
-### Since then
-
-The list above is the first sixty features and stops in the middle of the story.
-The rest, by what it is for rather than one line per number (`docs/development.md`
-has the table, through #150):
-
-- **The page a Chinese book is set on.** 標點旁置 (hung punctuation), 縦中横,
-  ruby laid out beside the base, 稿紙 ticks, `:view-dense` for a page that spends
-  every column on writing, **首行縮進** (a paragraph opens two squares in — as a
-  *view*, so the file keeps the blank line Markdown needs), and **段組**, which
-  halves a tall page into bands read top-right to top-left and then bottom-right
-  to bottom-left, the way a 文庫本 is set. 禁則處理 down the 縱 as well as
-  across: a column never opens with 。 or closes with 「.
-- **Markdown that stays on the page.** `:render off|basic|full` — the markup is
-  coloured and *shown*, because the file is the manuscript; 所見即所得 takes it
-  off, except on the construct the cursor is in.
-- **Tables.** A CSV is edited as a grid — the cell is the unit of movement, a
-  schema beside the data names the columns, and an 8 MB hand-edited file goes
-  back out byte for byte. The same cell model works on a **Markdown `|` table**
-  inside a document, aligned by East-Asian display width, which is the thing
-  every other formatter gets wrong for Chinese.
-- **A hundred chapters.** `:search-gd` and `:toc` make results that are *text*,
-  so `gf` walks them; the search panel (`空格 /`) then `r`/`R` renames a
-  character across the whole book without touching disk until `:write-all`; a session reopens what was open; `M a`
-  and `' a` name a place and come back to it.
-- **Not losing work.** A file changed on disk is not written over; a crash copy
-  is kept for every buffer, including the ones with no name; an undo point has
-  to be *earned*; a macro keeps its operands.
-- **The IME.** Yume's engine built in: 靈明 embedded in the binary so a fresh
-  install can type Chinese, any Rime `.dict.yaml` loadable with `:yume-table`,
-  and 拆分 shown beside every candidate.
-- **Prose the editor understands.** Word segmentation from Yume's language
-  model drives `w`/`b`/`e`; `.yumete/words.txt` teaches it the names in *this*
-  book; `{}` moves by paragraph and `H`/`L` by sentence.
-
-Launch `yumete <file>` in a terminal for the editor, or `yumete --preview <file>`
-(or pipe the output) for a non-interactive preview — with `--vertical`, the
-preview prints the vertical page itself:
+Here is `記.md` on disk — ASCII ruby markup, ordinary 全角 punctuation:
 
 ```
-$ yumete --preview --vertical 記.txt
-   　 其 　 雪 　 然 　
-   第 實 那 ︐ 母 想 那
-   二 只 本 一 親 起 年
-   天 有 書 片 從 父 冬
-   早 我 我 一 廚 親 天
-   上 一 讀 片 房 說 ︐
+那年冬天，雪下得比往常都早。<ruby>漢字<rt>hàn|zì</rt></ruby>寫在旁邊。
+
+「你來了。」他說。她點頭，沒有回答。
 ```
 
-A 縱書 page needs a **tall** terminal (the 縱 is as long as the window allows, up
-to `zong_length`) and a font with the Unicode vertical punctuation forms
-(U+FE10–FE48) — Source Han / Noto CJK, Sarasa Gothic, or LXGW WenKai Mono all
-have them; a Latin-only programming font will show tofu.
+and the page the editor sets from it — the marks hung in the margin, `hàn|zì`
+running down the half-width column beside 漢字, and not one byte of either
+written back into the file:
+
+```
+$ yumete --shot=22x18 -v --keys=':ruby full\n:view-hanging force\n' 記.md
+  4  3  2     1
+    你｢     h那
+    來      à年
+    了      n冬
+    ｡｣      |天,
+    他      z雪
+    說｡     ì下
+    她    漢 得
+    點    字 比
+    頭,   寫 往
+    沒    在 常
+    有    旁 都
+    回    邊｡早｡
+    答｡
+```
+
+Around that: **首行縮進** (a paragraph opens two squares in — as a *view*, so
+the file keeps the blank line Markdown needs), **段組** (a tall page halved into
+bands read top-right to top-left, then bottom-right to bottom-left, the way a
+文庫本 is set), 圈點 in that same margin, `:view-dense` for a page that spends
+every column on writing, and 禁則處理 in both directions — a column never opens
+with 。 or closes with 「. 稿紙 ticks (`paper_ticks`) and 縦中横
+(`tatechuyoko`, which turns `yume` sideways into two syllables that are not
+there) are off by default and asked for by name.
+
+Set horizontally, a paragraph too wide for the terminal **soft-wraps** instead
+of running off the right edge, which matters more here than in a code editor: a
+Chinese paragraph is one logical line of several hundred characters. Latin words
+are kept whole and 禁則處理 still applies. `j` and `k` walk the rows the reader
+sees.
+
+A 縱書 page needs a **tall** terminal and a font with the Unicode vertical
+punctuation forms (U+FE10–FE48) — Source Han / Noto CJK, Sarasa Gothic, or LXGW
+WenKai Mono all have them; a Latin-only programming font will show tofu.
+
+### The input method is inside the editor, not in front of it
+
+[`yumete-ime`](crates/yumete-ime) embeds the Yume engine (`yume-core`) directly
+— no FFI, no system IME, no separate process. The binary **carries 靈明精華版**,
+so a fresh install types 漢字 with nothing else installed. Five 宇浩 schemes
+(靈明 / 星陳 / 卿雲 / 日月 / 宇浩拼音) plus anything a data directory declares are
+listed by `:yume-scheme`; any Rime `.dict.yaml` loads as it comes with
+`:yume-table`, so 五筆 / 倉頡 / 粵拼 work too.
+
+Because it is inside the editor, it reaches places a system IME never does:
+`/` composes, so a Chinese document can actually be **searched**; `:` composes
+after the command name, so `:s/中文/中文/` can be typed; `r` — Helix's
+replace-one-character key — opens the candidate panel, because in a Chinese
+manuscript that one character needs an IME. In 縱書 the candidate panel turns
+with the page.
+
+`:yume on|abc|off` has three states, and a **lone-Shift tap** flips 中/ABC while
+yume holds the keyboard (the tap needs the Kitty keyboard protocol — kitty,
+WezTerm, Ghostty, foot, Alacritty, Konsole, recent iTerm2; not Apple Terminal).
+`:yume-chaifen` shows the 拆分 beside each candidate, and `空格 d` says how the
+character under the cursor is written.
+
+### Words, not characters
+
+`w` / `b` / `e` step by **word**, driven by Yume's 詞頻表 (1.25M weighted
+entries) shared by reference with the running IME rather than loaded twice. With
+no data layer installed it falls back to a bundled list of 75,000 entries cut
+from the same model; `:word` says which is answering —
+`分詞：75000 條（內置） · balanced · 著色開`. `:word-level` sets the grain —
+`off` (no dictionary at all: 漢字 are letters, so `我們都是apple` is one word),
+`strict`, `balanced`, `full`. `.yumete/words.txt` teaches it the names in *this*
+book, and `:word-discover` mines the project's own repeated n-grams for
+candidates. A tint overlay shows where the boundaries fell, on the words that
+need it — a word already fenced by 標點 on both sides is not tinted, because
+that would say it twice.
+
+Above the word: `{` `}` move by paragraph, `H` / `L` by **sentence** (。！？ and
+whatever mark closes after them).
+
+### Helix keys, aimed at prose
+
+Selection-first modal editing: Normal / Insert / Command, `x` to take a line,
+`v` / `;` to extend and collapse, `d` / `c` / `y` / `p` on the selection. A
+digit prefix is a count (`3w`, `10j`); `.` repeats the last change; `"a` names a
+register and `q` / `Q` record and replay a macro; `C-o` / `C-i` walk a jump
+list, `M a` / `' a` name a place and come back to it across files. **Match mode**
+(`m`) jumps, selects and surrounds over 「」『』（）《》【】〔〕 as well as the
+ASCII pairs.
+
+⚠️ **There is no `t` / `T`.** That letter is the table mode's, all of it.
+
+Twenty-odd commands is past the point where they can be guessed, so `:` on its
+own lists them in aligned columns with a line each, narrowing as you type; `::`
+searches those descriptions **in Chinese** when you have forgotten the name. A
+key that means something in another editor and nothing here says what this one
+calls it — `$` answers 「行尾是 gl」 rather than doing nothing. `:tutor` opens a
+lesson you learn by editing it, written on Chinese prose, where `w` and 縱書 can
+actually be taught.
+
+### A book is many files
+
+`gn` / `gp` and a tab bar move between open buffers, each keeping its own cursor
+and its own undo history; a session reopens what was open, at the line it was
+left on. The sidebar holds three views on `Tab` — the file tree, the buffers,
+and an **outline** built from Markdown headings or Typst's own (following
+`#include` across chapter files, with no compiler in the loop).
+
+`:search-gd` and `:toc` produce results that are *text*, so `gf` walks them. The
+search panel (`空格 /`) finds a name across the whole project and `:replace`
+renames it everywhere — **nothing touches disk until `:write-all`**. `空格 w`
+splits the work area in two.
+
+### Reading your own manuscript back
+
+Markdown and Typst are **coloured with the markup left on the page**, because
+the file is the manuscript; `:render full` takes it off (所見即所得) except on
+the construct the cursor is in. Extended Markdown — `==`, `[^1]`, `[[…]]`,
+`%%…%%`, `:::` — is understood.
+
+Then a set of questions only a Chinese manuscript raises:
+
+| | |
+| --- | --- |
+| `:count` | 漢字, 字數, 段 — and `:count-progress`, a ledger of today |
+| `:check-usage` | 裡/裏, 為/爲, 台/臺, 着/著, and 57 more groups |
+| `:check-punct` | the quotation mark nothing closes |
+| `:check-charset` | the characters a typesetter will not have |
+| `:word-habit` | 口頭禪, by surprisal against 詞頻表 rather than raw count |
+| `:convert` | 簡繁, handed to opencc |
+| `:diff` | what changed since the file on disk, at 詞 grain |
+| `:export` | `html` (縱書 stays vertical), `typst`, `csv`, `tsv` |
+| `:ruby-auto` | readings by word, marked only where no standard has the 字 |
+
+`:check-usage` is the one worth a sentence: it asks the **document**, not a
+dictionary. A group is reported only when both spellings are written here, and
+the one written more often is taken to be the one you meant — so a manuscript
+that only ever writes 裡 is never bothered, and `[editor] usage_groups` adds
+this book's own pairs (阿嬌/阿姣 is in nobody's 異體字表 and is exactly what
+slips over a year). `:check-charset`, `:word-habit` and `:ruby-auto` need the
+宇浩 data layer installed and say so when it is not there; `:convert` wants
+opencc on `PATH`; the rest work on the binary alone. `:view-preview` hands the
+file to the real typesetter — tinymist for Typst, an HTML preview for
+Markdown.
+
+### Tables
+
+`yumete -t data.csv` edits a delimited file as a **grid**: the cell is the unit
+of movement, a schema in `.yumete/tables/` names the columns (without one, the
+file's own header row does), and an 8 MB hand-edited file goes back out byte for
+byte. `t` is the whole table group — sort by several columns, go to a cell by
+number, yank and put a column, open a detail panel that shows every field
+including the empty ones (an empty field is a finding in a 拆分表).
+
+The same cell model works on a **Markdown `|` table** inside a document,
+aligned by East-Asian display width — the thing every other formatter gets
+wrong for Chinese — and every table on the page is squared up on screen without
+touching the file.
+
+### Not losing work
+
+While a document has unsaved changes a copy is kept beside it
+(`chapter.md` → `.chapter.md.yumete`), rewritten every few seconds and removed
+on save and on quit; buffers with no file name get one too. Nothing is ever
+loaded on its own — the next open only *says* a draft is there, and `:recover`
+takes it, because silently showing text that is not what is on disk is how a
+writer loses track of which version they are reading. A file changed underneath
+you is not written over. An undo point has to be earned. `-R` / `:readonly`
+refuses the edit at the rope, not at the keybinding.
+
+### The rest of it
+
+One binary — about 8 MB, no runtime, no plugins to install; `--timing` breaks a
+launch down phase by phase and it comes to 20–35 ms here, with the language data
+read after the first frame rather than before it. (A build on a machine that has
+宇浩 installed is larger: it carries that machine's full 碼表 instead of the cut
+one, 3.7 MB against 0.25 MB.) Ten themes plus
+`system` / `dark` / `light`. The interface speaks **繁體, 简体 or English**
+(`[editor] language`). Config is global (`~/.config/yumete/config.toml`) with a
+per-project `.yumete/config.toml` over it, and a file that does not parse says
+which key is wrong instead of being dropped in silence.
+
+`--shot[=WxH]` draws one frame — the page exactly as the editor would set it —
+to standard output and exits, `--keys=` presses keys before the picture is
+taken, and `--html` adds the colours. The 縱書 block above was made that way.
+`--preview` (or piping the output) prints the document non-interactively
+instead, vertical page and all.
 
 ## Layout
 
@@ -239,7 +251,8 @@ yumete/
 │   └── yumete/                # binary: CLI, launches the editor or preview
 ├── scripts/build.sh           # release build → ./yumete (gitignored)
 └── docs/
-    ├── manual.md           # the user manual (Chinese)
+    ├── manual.md           # the user manual (繁體)
+    ├── manual_sc.md        # the same, 简体
     └── development.md      # design & roadmap
 ```
 
@@ -251,7 +264,7 @@ cargo test
 
 # Build the release binary to the repo root as ./yumete, compile + install the
 # Yume IME data into ~/.local/share/yumete (needs the sibling yume repo), and
-# and point ~/.local/bin/{yumete,ye} at it, so either name anywhere is this build:
+# point ~/.local/bin/{yumete,ye} at it, so either name anywhere is this build:
 scripts/build.sh
 
 # Build only the binary, skipping the IME data step:
