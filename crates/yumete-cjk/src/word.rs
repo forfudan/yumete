@@ -20,12 +20,14 @@
 /// | --- | --- | --- |
 /// | CJK 基本區 | `4E00–9FFF` | 漢字 |
 /// | 擴展 A | `3400–4DBF` | 㐅㑯 |
-/// | 擴展 B 以上（含兼容漢字補充） | `20000–3FFFF` | 𠀀𪚥 |
+/// | 擴展 B–F、I | `20000–2A6DF`、`2A700–2EE5F` | 𠀀𪚥 |
+/// | 兼容漢字補充 | `2F800–2FA1F` | 丽𠄢 |
+/// | 擴展 G、H、J | `30000–3347F` | 𰀀𱍊 |
 /// | 兼容漢字 | `F900–FAFF` | 﨏﨑 |
 /// | 康熙部首 | `2F00–2FDF` | ⼀⽔ |
 /// | 部首補充 | `2E80–2EFF` | ⺈⻌ |
 /// | 〇（U+3007）、々（U+3005） | 兩個單點 | 二〇二五年、佗々 |
-/// | 平假名 | `3041–309F` | ひらがな |
+/// | 平假名 | `3040–309F` | ひらがな |
 /// | 片假名 | `30A0–30FF`（不含 `・`） | カタカナ |
 /// | 片假名音標擴展 | `31F0–31FF` | ㇰㇱ |
 ///
@@ -34,6 +36,12 @@
 /// * **⿰⿱ 那一族**（`2FF0–2FFF`，表意文字描述符）不是字，是拆字用的運算符；
 /// * **`・`（U+30FB）** 在日文裏本來就是詞與詞之間的那道界，算進去等於把界當字；
 /// * **全角標點**（`3000–303F` 的其餘、`FF01–FF60`）從來就是看得見的邊界。
+///
+/// ⚠️ **輔助平面按區塊列，不按平面掃。** 這裏從前寫的是 `20000..=3FFFF`——兩個
+/// 完整平面，順手把未分配的空洞（`2A6E0–2A6FF`、`2EE60–2F7FF`、`33480–3FFFF`）
+/// 與兩個非字符（`2FFFE`、`2FFFF`）都算成了漢字。邊界抄自 [`crate::blocks`]，
+/// 那張表是 Unicode 自己的 `Blocks.txt`，`every_han_block_is_segmentable`
+/// 逐區塊比對兩邊，所以下次補一個擴展區時漏改這裏會紅。
 ///
 /// 日文目前**沒有分詞數據**，所以假名進得來、卻只會被逐字切開——等有了詞表，
 /// 這裏一個字都不用改。
@@ -44,14 +52,17 @@ pub fn is_segmentable(c: char) -> bool {
         | 0x2F00..=0x2FDF    // 康熙部首
         | 0x3005             // 々 疊字符
         | 0x3007             // 〇
-        | 0x3041..=0x309F    // 平假名
+        | 0x3040..=0x309F    // 平假名
         | 0x30A0..=0x30FA    // 片假名（・ 之前）
         | 0x30FC..=0x30FF    // 片假名（・ 之後：ー ヽ ヾ）
         | 0x31F0..=0x31FF    // 片假名音標擴展
         | 0x3400..=0x4DBF    // 擴展 A
         | 0x4E00..=0x9FFF    // 基本區
         | 0xF900..=0xFAFF    // 兼容漢字
-        | 0x20000..=0x3FFFF  // 擴展 B 以上
+        | 0x20000..=0x2A6DF  // 擴展 B
+        | 0x2A700..=0x2EE5F  // 擴展 C D E F I（連號，中間沒有別的區塊）
+        | 0x2F800..=0x2FA1F  // 兼容漢字補充
+        | 0x30000..=0x3347F  // 擴展 G H J（同上）
     )
 }
 
@@ -67,7 +78,10 @@ pub fn is_segmentable(c: char) -> bool {
 /// and a reading (#234) is something only a 漢字 has.
 pub fn is_han(c: char) -> bool {
     matches!(c as u32,
-        0x3005 | 0x3007 | 0x3400..=0x4DBF | 0x4E00..=0x9FFF | 0xF900..=0xFAFF | 0x20000..=0x3FFFF)
+        0x3005 | 0x3007 | 0x3400..=0x4DBF | 0x4E00..=0x9FFF | 0xF900..=0xFAFF)
+        // 輔助平面上的那幾個區塊，與 [`is_segmentable`] 同一張表——漢字就是漢字，
+        // 分詞收不收假名是另一件事。
+        || (is_segmentable(c) && c as u32 >= 0x20000)
 }
 
 /// Coarse character category for grouping non-CJK runs.
@@ -203,6 +217,63 @@ pub fn word_ranges_big(s: &str) -> Vec<(usize, usize)> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// 分詞收的區段與 `Blocks.txt` 逐塊對得上（#446）。
+    ///
+    /// ⚠️ **這是為了「不按平面掃」而存在的。** `is_segmentable` 從前寫
+    /// `20000..=3FFFF`，一句話蓋掉兩個完整平面，未分配的空洞與兩個非字符全算成
+    /// 漢字。改成逐區塊之後，風險換了一種：下次 Unicode 補一個擴展區，
+    /// [`crate::blocks`] 那張表更新了而這裏忘了跟。所以比對是**兩個方向**的
+    /// ——該收的一個不少，不該收的一個不多。
+    #[test]
+    fn every_han_block_is_segmentable() {
+        // 收進分詞的區塊，按 Unicode 自己的區塊名。
+        const TAKEN: &[&str] = &[
+            "CJK Radicals Supplement",
+            "Kangxi Radicals",
+            "Hiragana",
+            "Katakana",
+            "Katakana Phonetic Extensions",
+            "CJK Unified Ideographs Extension A",
+            "CJK Unified Ideographs",
+            "CJK Compatibility Ideographs",
+            "CJK Unified Ideographs Extension B",
+            "CJK Unified Ideographs Extension C",
+            "CJK Unified Ideographs Extension D",
+            "CJK Unified Ideographs Extension E",
+            "CJK Unified Ideographs Extension F",
+            "CJK Unified Ideographs Extension I",
+            "CJK Compatibility Ideographs Supplement",
+            "CJK Unified Ideographs Extension G",
+            "CJK Unified Ideographs Extension H",
+            "CJK Unified Ideographs Extension J",
+        ];
+        for &(first, last, name) in crate::blocks::BLOCKS {
+            let want = TAKEN.contains(&name);
+            for cp in first..=last {
+                let Some(c) = char::from_u32(cp) else { continue };
+                // 〇 與 々 住在標點區塊裏，是兩個單點例外；・ 是片假名區塊裏
+                // 唯一一個不收的。
+                if matches!(cp, 0x3005 | 0x3007 | 0x30FB) {
+                    continue;
+                }
+                assert_eq!(
+                    is_segmentable(c),
+                    want,
+                    "U+{cp:04X} 在「{name}」裏，分詞{}收它",
+                    if want { "該" } else { "不該" }
+                );
+            }
+        }
+        assert!(is_segmentable('〇') && is_segmentable('々'));
+        assert!(!is_segmentable('・'));
+        // 未分配的空洞不在任何區塊裏，所以上面掃不到——單點釘住。
+        for cp in [0x2A6E0u32, 0x2EE60, 0x2FFFE, 0x33480, 0x3FFFF] {
+            let c = char::from_u32(cp).unwrap();
+            assert!(!is_segmentable(c), "U+{cp:04X} 不是任何區塊裏的字");
+            assert!(!is_han(c));
+        }
+    }
 
     #[test]
     fn words_split_latin_runs_and_cjk_singles() {
