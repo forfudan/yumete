@@ -984,7 +984,7 @@ impl Default for ThemeConfig {
             // finding precisely because most of the screen is not warm.
             dark: Ladder {
                 ink: (0xE8, 0xE4, 0xDA),
-                paper: (0x16, 0x1A, 0x15),
+                paper: (0x1A, 0x1E, 0x19),
             },
             // 墨 on paper is darker than 墨 on a screen — the light ladder's
             // ink is the dark ladder's *ground*, which is both true of the
