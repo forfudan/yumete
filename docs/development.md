@@ -4476,8 +4476,9 @@ four steps were dropped, and the reasons are the interesting part.
 
 * **The data is not downloaded and not bundled** ([^135]): 36 MB compressed,
   platform-independent, built three times and downloaded three times for
-  nothing. It travels its own way, and the binary carries 靈明精華版 so an
-  editor with no tables can still type.
+  nothing. It travels its own way — and the tables the binary itself carries
+  (0.37 MB: 靈明精華版, the 符號表, the segmenter's word list) are fetched from
+  the `yumete-data` release page in the same run, not committed here.
 * **No pull request against `homebrew-tap`.** Not yet written — v0.1.0's
   formula goes in by hand, once. ⚠️ decimo's own workflow comment records what
   the manual step costs: three releases went out with the tarballs missing, and
@@ -6052,13 +6053,27 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     | 五 · 兜底：內嵌**靈明精華版** | 什麼都沒有的人 | **已實現**（2026-09-14） |
 
     **五**是最後一道。從前二進制只在「編譯那台機器裝了宇浩」時纔帶碼表，而 CI 正是沒裝
-    的那種機器——**發出去的包一個漢字都打不出**。現在倉庫裏有 `crates/yumete-ime/jinghua/`：
-    0.357 MB（完整版 3.80 MB 的 9.4%），CJK 基本區 20,992 字與擴展A 6,592 字全覆蓋、
-    宇浩字根區 PUA、七張字集落在區外的字、各源、去變體選擇器，加簡碼與符號表；**不收詞**
-    （詞全碼 18.7 萬條，一收就是 3 MB），所以整句輸入退成逐字。配方與理由在
-    `scripts/make_jinghua.py`，`build.rs` 在找不到已安裝的完整表時退到它，面板報
-    「出廠自帶 精華版 ⋯⋯」把兩者分開。發布流水線用 `YUMETE_BUILTIN_DIR` 指向空目錄，
-    讓包**確定地**帶精華版，而不是碰運氣看 runner 鏡像裏有沒有數據。
+    的那種機器——**發出去的包一個漢字都打不出**。靈明精華版 0.25 MB（完整版 3.69 MB 的
+    6.9%）：CJK 基本區 20,992 字與擴展A 6,592 字全覆蓋、宇浩字根區 PUA、七張字集落在區
+    外的字、各源、去變體選擇器，加簡碼；**不收詞**（詞全碼 18.7 萬條，一收就是 3 MB），
+    所以整句輸入退成逐字。`build.rs` 在找不到已安裝的完整表時退到它，面板報
+    「出廠自帶 精華版 ⋯⋯」把兩者分開。
+
+    ⚠️ **純數據表格不在 yumete 的倉庫裏**（作者 2026-09-14 定）。碼表、符號表、分詞詞表
+    三份都是生成物，整份重寫，提交進 git 等於每次再付一份全額——量過：兩個 `.ytab` 在
+    pack 裏佔 184 KB，`common_words.txt` 佔 **475 KB**（倉庫最大的一個 blob，比碼表貴
+    2.6 倍）。所以它們是**建構時的輸入**：
+
+    | 誰生成 | 怎麼到二進制 |
+    | --- | --- |
+    | 宇浩那邊 `pixi run pack --yumete-data` | 傳到 `forfudan/yume-release` 的 **`yumete-data`** 那一頁（固定 tag，`--clobber` 覆蓋，`--latest=false`） |
+    | yumete 的流水線 | `curl` 下載那四個檔（**公開，不用 token**），擺成 `schemes/lingming_essential.ytab`、`data/symbols.ytab`、`data/common_words.txt`、`VERSION`，`YUMETE_BUILTIN_DIR` 指過去 |
+    | 你自己的機器 | `scripts/build.sh` 跑 `make_words.py` 並裝完整碼表——**在 `cargo build` 之前**（從前在之後，所以第一次跑出來的二進制兩樣都沒有，要跑第二次纔有） |
+
+    兩支 `build.rs` 都是「找得到就嵌，找不到就空着，不讓編譯失敗」。所以一台從沒裝過宇浩
+    的機器 `cargo build` 照樣過，只是沒有碼表、分詞退回逐字——那也是誠實的答案。
+    ⚠️ 隨之而來的：**依賴內建詞表的測試要先問 `DictionarySegmenter::has_builtin()`**，
+    不然它們在那種機器上會紅（`yumete-cjk` 三條、`yumete-tui` 兩條已經加了那道閘）。
 
     **一** 是 `yume_data_dirs()`：它已經去找 `~/Library/Application Support/Yume/data/compiled`、
     app bundle、`%APPDATA%\Yume`。裝了 yume 的人什麼都不用做。

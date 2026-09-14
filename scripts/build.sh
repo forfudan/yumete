@@ -71,6 +71,16 @@ if [[ "${YUMETE_SKIP_DATA:-0}" == "1" ]]; then
   install_data=0
 fi
 
+# **Data first, then the build.** Both `build.rs`es read the installed tables
+# at compile time — the 碼表 for `yumete-ime`, the word list for `yumete-cjk` —
+# so installing afterwards meant the first run of this script produced a binary
+# with neither, and only the *second* run picked them up.
+if [[ "$install_data" == "1" ]]; then
+  install_ime_data
+else
+  echo "==> IME data: skipped (--no-data)"
+fi
+
 cargo build --release
 cp "target/release/yumete$EXE" "./yumete$EXE"
 
@@ -240,15 +250,18 @@ install_ime_data() {
     cp "$d"/fonts/*.ttf "$shared/fonts/" 2>/dev/null || true
   fi
 
+  # The segmenter's fallback list — a **generated** table, so it is not in the
+  # repository either (see `crates/yumete-cjk/build.rs`). Cut from the same
+  # `lang.txt` these tables came from; a release build downloads the identical
+  # file from yume-release instead.
+  if ! "${PYTHON:-python3}" "$YUMETE_ROOT/scripts/make_words.py" \
+        --yume "$yume_root" --out "$shared/common_words.txt" >/dev/null; then
+    echo "!! could not build the fallback word list (segmentation will be per-字)" >&2
+  fi
+
   echo "==> IME data installed ($(ls -1 "$schemes"/*.ytab 2>/dev/null | wc -l | tr -d ' ') table(s), \
 $(ls -1 "$schemes"/*.toml 2>/dev/null | wc -l | tr -d ' ') scheme(s) in $dest)"
 }
-
-if [[ "$install_data" == "1" ]]; then
-  install_ime_data
-else
-  echo "==> IME data: skipped (--no-data)"
-fi
 
 # ---- The global `yumete`: one symlink, so every build is the one on PATH -----
 #
