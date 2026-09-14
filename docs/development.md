@@ -4483,11 +4483,18 @@ four steps were dropped, and the reasons are the interesting part.
   nothing. It travels its own way — and the tables the binary itself carries
   (0.37 MB: 靈明精華版, the 符號表, the segmenter's word list) are fetched from
   the `yumete-data` release page in the same run, not committed here.
-* **No pull request against `homebrew-tap`.** Not yet written — v0.1.0's
-  formula goes in by hand, once. ⚠️ decimo's own workflow comment records what
-  the manual step costs: three releases went out with the tarballs missing, and
-  Homebrew sat four versions behind for four months. Automate it before the
-  second release, not the tenth.
+* **No pull request against `homebrew-tap`.** The formula itself is written —
+  `Formula/yumete.rb`, plus `scripts/update-yumete.sh`, which fetches the three
+  `.sha256` files a release publishes and rewrites the version and the three
+  checksums, refusing to write unless all three arrived and all three are 64 hex
+  digits. But it is **run and committed by hand**. ⚠️ decimo's own workflow
+  comment records what that costs: three releases went out with the tarballs
+  missing, and Homebrew sat four versions behind for four months. Automate it
+  before the second release, not the tenth.
+
+  ⚠️ **The formula must not use `pkgshare`** for documentation: `pkgshare` *is*
+  `share/yumete`, the directory `installed_data_dirs()` scans and the one a
+  `yume-data` formula links its tables into. Docs go to `doc.install`.
 
 ⚠️ **`forfudan/yumete` has to be public before the tap is worth publishing** —
 a public formula pointing at a private repository's release assets 404s for
