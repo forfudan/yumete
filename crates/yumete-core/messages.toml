@@ -1146,9 +1146,9 @@ find = "腳注 脚注 註釋 注释 footnote"
 [[message]]
 # `:write all` —— 那是 `:write-all`，不是一個叫 all 的檔名
 key = "cmd.means-the-hyphenated-one"
-zht = "這棵樹用連字號：「{0} {1}」寫作 :{0}-{1}"
-zhs = "这棵树用连字号：「{0} {1}」写作 :{0}-{1}"
-en = "this tree uses hyphens: '{0} {1}' is spelled :{0}-{1}"
+zht = "沒有「{0} {1}」這個命令，它寫作 :{0}-{1}"
+zhs = "没有「{0} {1}」这个命令，它写作 :{0}-{1}"
+en = "no such command as '{0} {1}' — it is spelled :{0}-{1}"
 
 [[message]]
 # : 命令選單裏 dark 那一項的說明（moods 組）
