@@ -253,6 +253,82 @@ impl Editor {
         }
     }
 
+    /// **The keys every panel answers, wherever it sits.**
+    ///
+    /// ⚠️ 左欄、右欄、下層的臨時面板是**同一個組件擺在不同位置**，所以這一組鍵
+    /// 必須是同一份。分成三份各自維護的代價已經付過一次：常駐面板和搜索面板都
+    /// 有 `q`，臨時層漏了，於是 `空格 d` 打開的字典**關不掉**——`q`、`Esc`、`j`
+    /// 全被那一句 `_ => {}` 吃掉，唯一的出路是 `C-w` 再移動光標，兩步，而且提示
+    /// 行一個字都沒說。
+    ///
+    /// Tried **last**, so a panel's own meaning for a key still wins: the
+    /// search panel spends `Space` on a switch when the keys are on one.
+    /// Answers whether it took the key.
+    ///
+    /// `Esc` is deliberately **not** here — see `on_sidebar_key`: a panel with
+    /// a field in it spends `Esc` on leaving Insert, and one press too many
+    /// would then put the panel away. `q` is the door, and the hint row says
+    /// so in every panel.
+    pub(super) fn panel_key_in_common(
+        &mut self,
+        key: Key,
+        side: crate::sidebar::Side,
+        layer: crate::sidebar::Layer,
+    ) -> bool {
+        match key {
+            Key::Ctrl('w') => self.cycle_region(),
+            Key::Char('q') => match layer {
+                crate::sidebar::Layer::Top => self.close_panel(side),
+                crate::sidebar::Layer::Bottom => self.close_transient(side),
+            },
+            // **`:` opens the command line from in here too.** It used to be
+            // swallowed, so a reader with the keys in a panel had no way to
+            // run a command at all — and `:sidebar-show-left` is a command
+            // *about* the panel you are standing in, which nobody could have
+            // reached. The focus stays where it is while the line is typed, so
+            // 「this one」 still means this one.
+            Key::Char(':') => {
+                self.mode = Mode::Command;
+                self.command_line.clear();
+                self.command_caret = 0;
+            }
+            // Space still opens the menu, so `Space e` closes the sidebar from
+            // inside it exactly as it opened it.
+            Key::Char(' ') => self.pending = Pending::Space,
+            _ => return false,
+        }
+        true
+    }
+
+    /// Shut whichever transient layer this side is showing, and hand the keys
+    /// back to the writing.
+    ///
+    /// ⚠️ **The layer was a trap without this** (2026-09-14). The design is
+    /// that a 字典 answer needs no closing — it goes when the cursor leaves the
+    /// character it was asked about. True, *until* `空格 d` opens it with the
+    /// keys in it: focus alone keeps `dictionary_live()` true, so the cursor
+    /// cannot leave, so nothing ends it. `q`, `Esc`, `j`, `d` all fell through
+    /// `on_transient_key`'s `_ => {}`, and the only way out anybody could find
+    /// was `C-w` and *then* a cursor move — two steps, and the hint line named
+    /// neither. The reader who reported it said 「我想砸键盘」.
+    pub(super) fn close_transient(&mut self, side: crate::sidebar::Side) {
+        match self.transient(side) {
+            Some(crate::sidebar::Transient::Dictionary) => {
+                self.dictionary = None;
+                self.dictionary_query = None;
+                self.dictionary_anchor = None;
+            }
+            Some(crate::sidebar::Transient::Detail) => self.show_detail = Some(false),
+            None => return,
+        }
+        // The keys go back to the writing, not to the panel above: the reader
+        // asked to be rid of this, and landing them somewhere they did not ask
+        // for is the same surprise one layer up.
+        if self.panel_focus == Some((side, crate::sidebar::Layer::Bottom)) {
+            self.panel_focus = None;
+        }
+    }
+
     /// Give that layer the keys, if it is a place they can be.
     pub(super) fn focus_layer(&mut self, side: crate::sidebar::Side, layer: crate::sidebar::Layer) {
         if !self.layer_takes_keys(side, layer) {
@@ -294,20 +370,9 @@ impl Editor {
             }
             Key::Char('g') | Key::Home => self.transient_scroll = 0,
             Key::Char('G') | Key::End => self.transient_scroll = last,
-            Key::Ctrl('w') => self.cycle_region(),
-            // **`:` opens the command line from in here too.** It used to
-            // be swallowed, so a reader with the keys in a panel had no way to
-            // run a command at all — and `:sidebar-show-left` is a command
-            // *about* the panel you are standing in, which nobody could have
-            // reached. The focus stays where it is while the line is typed, so
-            // 「this one」 still means this one.
-            Key::Char(':') => {
-                self.mode = Mode::Command;
-                self.command_line.clear();
-                self.command_caret = 0;
+            other => {
+                self.panel_key_in_common(other, side, crate::sidebar::Layer::Bottom);
             }
-            Key::Char(' ') => self.pending = Pending::Space,
-            _ => {}
         }
     }
 
@@ -844,24 +909,12 @@ impl Editor {
             // spends `Esc` on leaving Insert, and one press too many would
             // then put the panel away. Two doors instead, and both say so in
             // the hint row: `q` closes this slot, `C-w` walks on to the next
-            // region and leaves it up.
-            Key::Ctrl('w') => return self.cycle_region(),
-            Key::Char('q') => self.close_panel(side),
-            // **`:` opens the command line from in here too.** It used to
-            // be swallowed, so a reader with the keys in a panel had no way to
-            // run a command at all — and `:sidebar-show-left` is a command
-            // *about* the panel you are standing in, which nobody could have
-            // reached. The focus stays where it is while the line is typed, so
-            // 「this one」 still means this one.
-            Key::Char(':') => {
-                self.mode = Mode::Command;
-                self.command_line.clear();
-                self.command_caret = 0;
+            // region and leaves it up. Both live in `panel_key_in_common`,
+            // with `:` and `Space`, because every panel owes the reader the
+            // same ones.
+            other => {
+                self.panel_key_in_common(other, side, layer);
             }
-            // Space still opens the menu, so `Space e` closes the sidebar from
-            // inside it exactly as it opened it.
-            Key::Char(' ') => self.pending = Pending::Space,
-            _ => {}
         }
     }
 
