@@ -4,6 +4,9 @@
 
 # yumete 使用手册
 
+> 简体版：[manual_sc.md](manual_sc.md)（由本文生成，`scripts/make_manual_sc.py`）。
+> 本文用**大陆通规繁体**字形（`里 为 说 内 没 么`），与 `:convert … c` 的目标一致。
+
 **yumete**（宇梦终端编辑器）是一个写中文散文用的终端编辑器，内置宇梦输入法。
 名字就是这么拼的：`yumete` ＝ `Yume` ＋ `TE`（Text Editor／Terminal Editor）。
 装好之后两个名字都能用——`yumete` 是全名，`ye` 是实际会打的那个。
