@@ -527,6 +527,14 @@ impl Editor {
     /// deal of a Chinese one: 「今天天氣很好。」 needs to be told where 今天
     /// ends, and 「好。」 does not. What is left is exactly the run of 漢字 the
     /// eye has to cut for itself.
+    ///
+    /// ⚠️ **標點與拉丁文一個都不畫**（#446）。從前這道閘問的是
+    /// `char::is_alphanumeric`，而**拉丁字母也是 alphanumeric**——於是
+    /// 「`` `w` ``（按詞移動）」裏那一組 `` `（ ``，因為前一個字符是字母 `w`
+    /// 而不算邊界，**被當成一個詞塗了色**；反引號中間那個 `w` 兩邊都不是字母，
+    /// 反倒被滤掉。塗出來的正好是反的，看着像 verbatim 錯了位。
+    /// 現在兩件事都問 [`yumete_cjk::is_segmentable`]：能上色的必須整段都是它，
+    /// 邊界則是「不是它」——一段拉丁文對眼睛來說本來就是一道界。
     pub fn segment_line(&self, line: usize) -> Vec<(usize, usize)> {
         let rope = self.current_buffer().rope();
         if line >= rope.len_lines() {
@@ -552,19 +560,26 @@ impl Editor {
             .or_work_out(self.current_buffer().id(), line, stamp, || {
                 let chars: Vec<char> = text.chars().collect();
                 // A boundary the reader can see: whitespace, punctuation, a
-                // bracket, a 、 — anything that is not part of a word. The ends
-                // of the line count, because a line end is the most visible
-                // boundary there is.
+                // bracket, a 、, a run of Latin — anything 分詞 is not for. The
+                // ends of the line count, because a line end is the most
+                // visible boundary there is.
                 let visible = |at: usize| -> bool {
                     match chars.get(at) {
                         None => true,
-                        Some(c) => !c.is_alphanumeric(),
+                        Some(&c) => !yumete_cjk::is_segmentable(c),
                     }
                 };
                 self.segmenter
                     .segment(&text)
                     .into_iter()
                     .filter(|&(a, b)| {
+                        // 標點 runs and Latin words are never words to paint.
+                        if !chars[a..b.min(chars.len())]
+                            .iter()
+                            .all(|&c| yumete_cjk::is_segmentable(c))
+                        {
+                            return false;
+                        }
                         let before = a == 0 || visible(a - 1);
                         let after = visible(b);
                         !(before && after)

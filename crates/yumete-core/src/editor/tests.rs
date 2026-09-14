@@ -1982,6 +1982,48 @@ impl Segmenter for Counting {
     }
 }
 
+/// 標點不是詞，一個都不許塗（#446）。
+///
+/// 作者報的原話：「`w`（按詞移動）高亮了 `` `( `` 这两个标点符号，还有 `` )、` ``
+/// 这样的標點符號組。反而反引号形成的 verbatim 却没有被高亮，让人觉得是 verbatim
+/// 出现了错位。」病根在那道「兩邊都看得見就不塗」的閘上：它從前問的是
+/// `char::is_alphanumeric`，而拉丁字母也算 alphanumeric，於是
+///
+/// * `` `（ `` 前面是字母 `w`，不算邊界 → **塗了**；
+/// * 反引號中間那個 `w` 兩邊都是反引號，都算邊界 → **沒塗**。
+///
+/// 塗出來的恰好是反的。現在兩件事都問 `is_segmentable`。
+#[test]
+fn punctuation_is_never_a_word_to_paint() {
+    let line = "`w`（按詞移動）、`f`";
+    let mut ed = typed(line);
+    let chars: Vec<char> = line.chars().collect();
+    for &(a, b) in &ed.segment_line(0) {
+        let word: String = chars[a..b].iter().collect();
+        assert!(
+            word.chars().all(yumete_cjk::is_segmentable),
+            "只有漢字該上色，卻塗了 {word:?}（{a}..{b}）：{:?}",
+            ed.segment_line(0)
+        );
+    }
+    // 而該塗的還在：按詞移動 是一段沒有邊界的漢字，正是眼睛要自己切的那一段。
+    assert!(
+        !ed.segment_line(0).is_empty(),
+        "漢字那一段不能跟着標點一起沒了"
+    );
+}
+
+/// 〇 是漢字，不是符號——二〇二五年 是一段，不是三段（#446）。
+#[test]
+fn a_year_written_with_ling_is_one_run() {
+    assert!(yumete_cjk::is_segmentable('〇'), "〇 住在符號區，卻是漢字");
+    assert!(yumete_cjk::is_segmentable('々'), "々 站的是一個漢字的位");
+    // 拆字運算符與日文的 ・ 有意留在外面：前者不是字，後者本身就是詞的界。
+    assert!(!yumete_cjk::is_segmentable('⿰'));
+    assert!(!yumete_cjk::is_segmentable('・'));
+    assert!(!yumete_cjk::is_segmentable('、'));
+}
+
 #[test]
 fn the_overlay_segments_a_paragraph_once_until_it_changes() {
     let mut ed = typed("春江潮水\n連海平\n海上明月");
