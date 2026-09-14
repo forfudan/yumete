@@ -492,6 +492,26 @@ impl Editor {
                 self.scheme_request = Some(format!("panel:{}", mode.unwrap_or_default()));
                 Ok(CommandOutcome::Continue)
             }
+            // 每頁幾條 and 輸入預測 ride the same channel as the two above, and
+            // for the same reason: the session belongs to the front end.
+            Command::YumeMenuSize(n) => {
+                self.scheme_request = Some(match n {
+                    Some(n) => format!("menu:{n}"),
+                    None => String::from("menu:"),
+                });
+                Ok(CommandOutcome::Continue)
+            }
+            Command::YumeAutocompletion(on) => {
+                self.scheme_request = Some(format!(
+                    "predict:{}",
+                    match on {
+                        Some(true) => "on",
+                        Some(false) => "off",
+                        None => "",
+                    }
+                ));
+                Ok(CommandOutcome::Continue)
+            }
             // Taken by the front end **after the next frame**: the command
             // line is still open on this one, and a picture of the thing you
             // are debugging with the debugger's own prompt across it is not a

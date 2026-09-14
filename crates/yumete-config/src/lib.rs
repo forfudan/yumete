@@ -438,7 +438,10 @@ pub struct PanelConfig {
     pub ink: (u8, u8, u8),
     /// 紙 — the panel's ground.
     pub paper: (u8, u8, u8),
-    /// How many candidates a page offers.
+    /// How many candidates a page offers — **6**, which is what every one of
+    /// 宇浩's own front ends ships. A reader who knows 「第七個候選」 by where
+    /// it sits should find it in the same place here; `:yume-menu-size` moves
+    /// it, 1–9.
     pub page_size: usize,
     /// Whether the panel's ring is rounded.
     pub rounded: bool,
@@ -493,7 +496,7 @@ impl Default for PanelConfig {
             // Yume's 墨香, dark: warm ink on a deep ground.
             ink: (0xCF, 0xC6, 0xA9),
             paper: (0x26, 0x2A, 0x27),
-            page_size: 9,
+            page_size: 6,
             rounded: true,
             display: PanelDisplay::Full,
         }
@@ -2412,9 +2415,10 @@ impl RawConfig {
             config.panel.paper = rgb;
         }
         if let Some(size) = self.panel.page_size {
-            // Below two there is nothing to choose between; above nine there is
-            // no key left to choose with.
-            config.panel.page_size = size.clamp(2, 9);
+            // Above nine there is no key left to choose with. **One is allowed**
+            // — yume itself allows it, and a page of one is a real setting: the
+            // panel then says what Space would commit and nothing else.
+            config.panel.page_size = size.clamp(1, 9);
         }
         if let Some(rounded) = self.panel.rounded {
             config.panel.rounded = rounded;

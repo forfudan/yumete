@@ -329,6 +329,16 @@ pub enum Command {
     /// page and **where** you read the candidate are two questions, and the
     /// nine combinations are all sensible (Feature #211).
     YumePanel(Option<String>),
+    /// `:yume-menu-size 1-9` — how many candidates a page of the panel holds.
+    /// `None` asks how many it holds now.
+    ///
+    /// 宇浩's own front ends ship **6**, and a reader who knows where 「第七個
+    /// 候選」 is on one of them should find it in the same place here.
+    YumeMenuSize(Option<usize>),
+    /// `:yume-autocompletion [on|off]` — 輸入預測: whether a code that is not
+    /// finished is answered with the candidates that would finish it. `None`
+    /// toggles, as `:yume-chaifen` does.
+    YumeAutocompletion(Option<bool>),
     /// `:yume on` / `:yume abc` / `:yume off` — which of the three states the
     /// input method is in (#290).
     ///
@@ -2703,6 +2713,37 @@ pub const COMMANDS: &[Entry] = &[
             // drawn or not.
             Ok(Command::YumePanel(p.arg(0).map(|w| w.to_string())))
         }),
+    },
+    Entry {
+        name: "yume-menu-size",
+        aliases: &[],
+        help: "cmd.yume.menu-size",
+        needs: &[Need::Scheme],
+        params: &[Param::Free("<1–9>")],
+        build: Some(|p| {
+            // On its own it is the question, like `:yume-panel`.
+            let Some(word) = p.arg(0) else {
+                return Ok(Command::YumeMenuSize(None));
+            };
+            match word.parse::<usize>() {
+                // **The panel's own limit, not an opinion about taste.** The
+                // selection keys are `1`–`9`, so a tenth candidate on the page
+                // would have no key to pick it with.
+                Ok(n) if (1..=9).contains(&n) => Ok(Command::YumeMenuSize(Some(n))),
+                _ => Err(CommandError::InvalidArgument {
+                    command: "yume-menu-size",
+                    value: word.to_string(),
+                }),
+            }
+        }),
+    },
+    Entry {
+        name: "yume-autocompletion",
+        aliases: &[],
+        help: "cmd.yume.autocompletion",
+        needs: &[Need::Scheme],
+        params: &[Param::Words { of: ON_OFF, default: None }],
+        build: Some(|p| Ok(Command::YumeAutocompletion(p.arg(0).map(|w| w == "on")))),
     },
     Entry {
         name: "yume-installed",

@@ -980,6 +980,49 @@ impl ImeSession {
         !self.engine.buffer().is_empty()
     }
 
+    /// **快捷符號模式** — the buffer is the lead key and nothing else.
+    ///
+    /// `;` on an empty buffer opens 宇浩's shortcut table: 26 letters each
+    /// standing for a piece of punctuation, committed by pressing the letter.
+    /// It is **not** a candidate list — there is no 選重, no paging, and the
+    /// digits are not selections — so a front end that draws it as one is
+    /// telling the reader to press the wrong keys. See [`Self::shortcut_rows`].
+    ///
+    /// Which key opens it is the scheme's business, not `;`'s: 冰雪 spends the
+    /// semicolon on a code, and yume-core moves the lead key for it.
+    pub fn is_shortcut(&self) -> bool {
+        self.engine.is_shortcut()
+    }
+
+    /// The whole 快捷符號 table as `(按鍵, 上屏的文本)`, in the order it is
+    /// drawn: the assigned letters `a`–`z` first, then the five fixed keys
+    /// (`；，。￥` and `` ` ``) that cannot be reassigned.
+    ///
+    /// Empty when this is not 快捷符號 mode. The key comes off yume-core's own
+    /// `Candidate::code`, which in this mode **is** the key to press — so the
+    /// panel's labels and the keyboard cannot drift apart.
+    pub fn shortcut_rows(&self) -> Vec<(String, String)> {
+        if !self.is_shortcut() {
+            return Vec::new();
+        }
+        self.engine
+            .all_items()
+            .into_iter()
+            .map(|c| (c.code, c.text))
+            .collect()
+    }
+
+    /// Whether 輸入預測 is on — the候選 that complete a code you have not
+    /// finished typing.
+    pub fn prediction_enabled(&self) -> bool {
+        self.engine.prediction_enabled()
+    }
+
+    /// Turn 輸入預測 on or off.
+    pub fn set_prediction_enabled(&mut self, on: bool) {
+        self.engine.set_prediction_enabled(on);
+    }
+
     /// The raw composing buffer.
     pub fn buffer(&self) -> &str {
         self.engine.buffer()
@@ -1231,7 +1274,12 @@ impl ImeSession {
     /// renderer because the same answer settles two things — whether to draw
     /// the panel, and whether the code needs somewhere else to be shown.
     pub fn panel_is_full(&self) -> bool {
-        self.display == PanelDisplay::Full || (self.summoned && self.is_composing())
+        // 快捷符號 has no inline form — 「一個分號」 is not a preview of
+        // anything, and the letters to press are only on the panel. So that
+        // mode draws its panel whatever the setting says.
+        self.is_shortcut()
+            || self.display == PanelDisplay::Full
+            || (self.summoned && self.is_composing())
     }
 
     /// `Tab`: show me the whole list for this one word — and `Tab` again to

@@ -2198,6 +2198,37 @@ fn panel_method(ime: &mut ImeSession, mode: &str) -> String {
     say!("panel.set", panel_name(display))
 }
 
+/// `:yume-menu-size` — how many candidates a page holds.
+///
+/// **A session property, not a config one.** It is read out of the session on
+/// every scheme switch (see [`switch_scheme`]), so a size set here survives
+/// changing schemes; the config seeds the first session at startup and has no
+/// further say.
+fn menu_size(ime: &mut ImeSession, n: &str) -> String {
+    if let Some(n) = n.parse::<usize>().ok().filter(|n| (1..=9).contains(n)) {
+        ime.set_page_size(n);
+    }
+    say!("ime.menu-size-is", ime.page_size())
+}
+
+/// `:yume-autocompletion` — 輸入預測 on, off, or (bare) the other one.
+fn autocompletion(ime: &mut ImeSession, want: &str) -> String {
+    let on = match want {
+        "on" => true,
+        "off" => false,
+        // Bare toggles, the way `:yume-chaifen` does.
+        _ => !ime.prediction_enabled(),
+    };
+    ime.set_prediction_enabled(on);
+    say!(
+        "ime.autocompletion-is",
+        match on {
+            true => say!("label.on"),
+            false => say!("label.off"),
+        }
+    )
+}
+
 /// The name a 候選面板 is called by, in the language the writer reads.
 fn panel_name(display: PanelDisplay) -> String {
     match display {
@@ -2358,7 +2389,13 @@ fn loading_the_table(tag: &str, ime: &ImeSession) -> bool {
         // The question, and the two settings: all three answer out of the
         // session that is already here.
         "?" => false,
-        _ if tag.starts_with("commit:") || tag.starts_with("panel:") => false,
+        _ if tag.starts_with("commit:")
+            || tag.starts_with("panel:")
+            || tag.starts_with("menu:")
+            || tag.starts_with("predict:") =>
+        {
+            false
+        }
         // Handing the keyboard back needs no 碼表, and asking for 中文 needs
         // one only when there is none — that is the once-a-session cost that
         // startup did not pay (#290).
@@ -2472,11 +2509,17 @@ fn switch_scheme(ime: &mut ImeSession, tag: &str, config: &Config) -> String {
     if let Some(mode) = tag.strip_prefix("panel:") {
         return panel_method(ime, mode);
     }
+    if let Some(n) = tag.strip_prefix("menu:") {
+        return menu_size(ime, n);
+    }
+    if let Some(want) = tag.strip_prefix("predict:") {
+        return autocompletion(ime, want);
+    }
     if let Some(path) = tag.strip_prefix('=') {
         let path = std::path::PathBuf::from(shellexpand(path));
         return match ImeSession::from_table_file(&path) {
             Ok(mut table) => {
-                table.set_page_size(config.panel.page_size);
+                table.set_page_size(ime.page_size());
                 table.set_commit_strategy(ime.commit_override());
                 table.set_panel_display(ime.panel_display());
                 let skipped = table.table_skipped();
@@ -2511,7 +2554,7 @@ fn switch_scheme(ime: &mut ImeSession, tag: &str, config: &Config) -> String {
         if !full.available() {
             return say!("ime.no-table-installed", ime.scheme_name());
         }
-        full.set_page_size(config.panel.page_size);
+        full.set_page_size(ime.page_size());
         full.set_annotations(ime.annotations_enabled());
         full.set_commit_strategy(ime.commit_override());
         full.set_panel_display(ime.panel_display());
@@ -2523,7 +2566,7 @@ fn switch_scheme(ime: &mut ImeSession, tag: &str, config: &Config) -> String {
             return say!("ime.no-builtin-table");
         }
         let mut full = ImeSession::builtin_lingming();
-        full.set_page_size(config.panel.page_size);
+        full.set_page_size(ime.page_size());
         full.set_annotations(ime.annotations_enabled());
         full.set_commit_strategy(ime.commit_override());
         full.set_panel_display(ime.panel_display());
@@ -2552,7 +2595,7 @@ fn switch_scheme(ime: &mut ImeSession, tag: &str, config: &Config) -> String {
     if !ime.available() {
         let mut full = ImeSession::from_default_dirs(scheme);
         if full.available() {
-            full.set_page_size(config.panel.page_size);
+            full.set_page_size(ime.page_size());
             full.set_commit_strategy(ime.commit_override());
             full.set_annotations(ime.annotations_enabled());
             full.set_panel_display(ime.panel_display());
@@ -7000,9 +7043,21 @@ fn draw_candidate_panel(
     cursor_x: u16,
     cursor_y: u16,
 ) {
-    let skin = vertical::Skin::from(config);
     let candidates = ime.page_candidates();
     let highlight = ime.highlight();
+
+    // **快捷符號 is a different panel wearing the same frame.** Nothing in it is
+    // a candidate: there is no 選重, no paging, and the digits commit nothing —
+    // you press the letter that is written beside the symbol. Drawn as a
+    // numbered list (which is what the general candidate path made of it) it
+    // told the reader to press keys that do not work.
+    let shortcut = ime.shortcut_rows();
+    if !shortcut.is_empty() {
+        let room = area.width.saturating_sub(4).min(56);
+        let mut rows = vec![say!("ime.shortcut")];
+        rows.extend(shortcut_lines(&shortcut, room));
+        return draw_panel_rows(frame, config, area, cursor_x, cursor_y, rows, None);
+    }
 
     // Build the content lines: preedit header, then the candidates.
     let preedit = ime.display_buffer();
@@ -7028,6 +7083,76 @@ fn draw_candidate_panel(
         rows.push(row);
     }
 
+    draw_panel_rows(frame, config, area, cursor_x, cursor_y, rows, Some(highlight));
+}
+
+/// 快捷符號's rows: `鍵 文本` cells packed across `room` columns.
+///
+/// Thirty-one entries one to a line is a panel as tall as the page, and the
+/// table is read by **looking for a symbol**, not by scanning a list — so it is
+/// laid out as a grid, in the table's own order (`a`–`z`, then the five fixed
+/// keys). The cells are one width, taken from the widest entry, so the keys
+/// line up in columns.
+fn shortcut_lines(rows: &[(String, String)], room: u16) -> Vec<String> {
+    const GAP: usize = 2;
+    // **A symbol that draws as nothing is drawn as something.** `o` is 全角空格,
+    // and a blank cell is indistinguishable from a letter with nothing on it —
+    // the reader would conclude `o` is free and never press it.
+    let shown = |text: &str| match text.trim().is_empty() {
+        true => "␣".to_string(),
+        false => text.to_string(),
+    };
+    let rows: Vec<(String, String)> = rows
+        .iter()
+        .map(|(key, text)| (key.clone(), shown(text)))
+        .collect();
+    let width = |(key, text): &(String, String)| {
+        yumete_cjk::str_width(key) + 1 + yumete_cjk::str_width(text)
+    };
+    let Some(cell) = rows.iter().map(width).max() else {
+        return Vec::new();
+    };
+    // At least one to a line: a panel one column wide is still a panel, and a
+    // division by a cell wider than the room would be none at all.
+    let per = ((room as usize + GAP) / (cell + GAP)).max(1);
+    rows.chunks(per)
+        .map(|chunk| {
+            let mut line = String::new();
+            for (i, entry) in chunk.iter().enumerate() {
+                if i > 0 {
+                    line.push_str(&" ".repeat(GAP));
+                }
+                line.push_str(&entry.0);
+                line.push(' ');
+                line.push_str(&entry.1);
+                // The last cell on a line is not padded — a trailing run of
+                // spaces would widen the panel by a cell nobody can see.
+                if i + 1 < chunk.len() {
+                    line.push_str(&" ".repeat(cell - width(entry)));
+                }
+            }
+            line
+        })
+        .collect()
+}
+
+/// Frame `rows` in the floating panel below the caret, lighting row `lit`
+/// (counted from the first row **after** the header).
+///
+/// Shared by the candidate list and 快捷符號 because the frame, the placing and
+/// the clamping are the same job — only the rows and whether anything is
+/// selected differ. `lit` is `None` for 快捷符號: nothing there is selected,
+/// and a lit first row would read as 「press Space for this one」.
+fn draw_panel_rows(
+    frame: &mut Frame,
+    config: &Config,
+    area: Rect,
+    cursor_x: u16,
+    cursor_y: u16,
+    rows: Vec<String>,
+    lit: Option<usize>,
+) {
+    let skin = vertical::Skin::from(config);
     // Size the panel to its content (plus borders), clamped to the text area.
     let content_w = rows
         .iter()
@@ -7066,7 +7191,7 @@ fn draw_candidate_panel(
                 row,
                 Style::default().bg(skin.paper()).fg(skin.helper()),
             )));
-        } else if i - 1 == highlight {
+        } else if lit == Some(i - 1) {
             lines.push(Line::from(Span::styled(
                 row,
                 Style::default()
@@ -9309,6 +9434,64 @@ mod tests {
                 );
             }
         }
+    }
+
+    /// 快捷符號 is not a candidate list, and the panel must not say it is.
+    ///
+    /// 作者原話：「yume 的分号默认是快捷符号，他不是一个候选面板而是一个特殊面板，
+    /// 是按字母、空格、分号等按键上屏的。」 Drawn through the ordinary candidate
+    /// path it came out as `㊀ ：「 ㊁ ～ …` — nine of twenty-seven, numbered,
+    /// and every number a key that commits **something else**. The labels have
+    /// to be the keys, and the whole table has to be on the panel.
+    #[test]
+    fn the_shortcut_panel_is_labelled_with_keys_not_numbers() {
+        let mut editor = Editor::new();
+        editor.on_key(Key::Char('i'));
+        let mut ime = ImeSession::from_table_text(Scheme::LINGMING, "b 吧 八\n");
+        ime.input(';');
+        assert!(ime.is_shortcut(), "分號開的是快捷符號");
+
+        let config = Config::default();
+        let buffer = render_with(&editor, &config, &ime, 60, 20);
+        let page = buffer_text(&buffer);
+        assert!(page.contains('╰'), "面板沒畫出來：{page:?}");
+        // The letters people actually press, with what they commit.
+        assert!(page.contains("j 、"), "j 那一格：{page:?}");
+        assert!(page.contains("n 《"), "n 那一格：{page:?}");
+        // …and the fixed keys, which are the far end of the same table.
+        assert!(page.contains("$ ￥"), "固定鍵也要在：{page:?}");
+        // 全角空格畫成 ␣——空格子與「這個字母沒指派」得分得開。
+        assert!(page.contains("o ␣"), "看不見的符號要有記號：{page:?}");
+        // Nothing numbered: the markers are for 選重, and there is none here.
+        for mark in config.panel.markers.chars() {
+            assert!(!page.contains(mark), "快捷符號不該有 {mark:?}：{page:?}");
+        }
+
+        // **The panel comes up even under `bare`**, which has nothing to draw
+        // inline: 「一個分號」 previews nothing, and the letters are only here.
+        let mut bare = ime;
+        // Out of the mode first: a second `;` *inside* it commits 「；」, which
+        // is the `;;` exit and would leave nothing to draw.
+        bare.escape();
+        bare.set_panel_display(PanelDisplay::Bare);
+        bare.input(';');
+        assert!(bare.panel_is_full(), "bare 也要出這個面板");
+    }
+
+    /// 二十七格排成格子，鍵對齊成列。
+    #[test]
+    fn the_shortcut_table_is_laid_out_in_columns() {
+        let rows: Vec<(String, String)> = [("a", "：「"), ("b", "～"), ("c", "！")]
+            .iter()
+            .map(|(k, t)| (k.to_string(), t.to_string()))
+            .collect();
+        // 最寬的一格是 `a ：「` ＝ 1 + 1 + 4 ＝ 6 欄，加兩欄間隔。
+        let wide = super::shortcut_lines(&rows, 40);
+        assert_eq!(wide, vec!["a ：「  b ～    c ！".to_string()]);
+        // 窄到只放得下一格時，一行一格——而不是除以零。
+        let narrow = super::shortcut_lines(&rows, 1);
+        assert_eq!(narrow.len(), 3, "{narrow:?}");
+        assert!(super::shortcut_lines(&[], 40).is_empty());
     }
 
     #[test]

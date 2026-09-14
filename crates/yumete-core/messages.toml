@@ -1990,6 +1990,14 @@ en = "ABC: yume still holds the keyboard, the keys type what they say"
 find = "英文 english abc 直通 shift"
 
 [[message]]
+# : 命令選單裏 autocompletion 那一項的說明（yume 組）
+key = "cmd.yume.autocompletion"
+zht = "輸入預測：碼沒打完就先給候選"
+zhs = "输入预测：码没打完就先给候选"
+en = "autocompletion: offer candidates before the code is finished"
+find = "輸入法 输入法 預測 预测 補全 补全 候選 候选 autocompletion prediction"
+
+[[message]]
 # : 命令選單裏 builtin 那一項的說明（yume 組）
 key = "cmd.yume.builtin"
 zht = "改用出廠自帶的靈明碼表，不管裝了什麼"
@@ -2020,6 +2028,14 @@ zht = "改用系統裝的那份碼表（builtin 的反面）"
 zhs = "改用系统装的那份码表（builtin 的反面）"
 en = "use the 碼表 the system has installed (builtin's other half)"
 find = "輸入法 输入法 碼表 码表 系統 系统 installed"
+
+[[message]]
+# : 命令選單裏 menu-size 那一項的說明（yume 組）
+key = "cmd.yume.menu-size"
+zht = "候選面板一頁幾條（1–9，出廠 6）"
+zhs = "候选面板一页几条（1–9，出厂 6）"
+en = "how many candidates a page holds (1-9, 6 by default)"
+find = "輸入法 输入法 候選 候选 面板 每頁 每页 menu size page"
 
 [[message]]
 # : 命令選單裏 off 那一項的說明（yume 組）
@@ -4348,6 +4364,13 @@ zhs = "ABC：按键直通，Shift 点一下回中文"
 en = "ABC — the keys type what they say; a Shift tap goes back to 中文"
 
 [[message]]
+# :yume-autocompletion ——輸入預測此刻開着還是關着
+key = "ime.autocompletion-is"
+zht = "輸入預測：{0}"
+zhs = "输入预测：{0}"
+en = "autocompletion: {0}"
+
+[[message]]
 # :yume ! 切到編進二進制的那一份靈明
 key = "ime.builtin-lingming"
 zht = "方案：靈明（出廠自帶的碼表）"
@@ -4374,6 +4397,13 @@ key = "ime.loading"
 zht = "正在載入碼表…"
 zhs = "正在载入码表…"
 en = "loading the 碼表…"
+
+[[message]]
+# :yume-menu-size ——候選面板一頁幾條
+key = "ime.menu-size-is"
+zht = "候選面板一頁 {0} 條"
+zhs = "候选面板一页 {0} 条"
+en = "{0} candidates to a page"
 
 [[message]]
 # :yume ! 要出廠碼表，而這個二進制沒編進去
@@ -4437,6 +4467,13 @@ key = "ime.scheme-now"
 zht = "方案：{0}"
 zhs = "方案：{0}"
 en = "scheme: {0}"
+
+[[message]]
+# 快捷符號面板的頭一行（分號開的那個特殊面板）
+key = "ime.shortcut"
+zht = "快捷符號　按字母上屏"
+zhs = "快捷符号　按字母上屏"
+en = "快捷符號 — press a letter to commit it"
 
 [[message]]
 # :yume ? ——輸入法此刻的樣子
