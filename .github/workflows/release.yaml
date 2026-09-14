@@ -18,10 +18,12 @@ name: Build release tarballs
 # ⚠️ **Two repositories are checked out, side by side.** `yumete-ime` depends
 # on `yume-core` by path — `../../../yume/crates/yume-core` — so a checkout of
 # this repository alone does not build: `cargo metadata` fails before a single
-# crate compiles. Both repositories are private, so `GITHUB_TOKEN` cannot read
-# the sibling: the run needs a `YUME_REPO_TOKEN` secret (a PAT or a deploy key
-# with read access to `forfudan/yume`). The guard below says so in one line
-# rather than letting cargo say it in twenty.
+# crate compiles. `forfudan/yume` is private and `GITHUB_TOKEN` cannot read it,
+# so the run needs a **read-only deploy key** for that repository, held as the
+# `YUME_DEPLOY_KEY` secret. A deploy key rather than a PAT because it does not
+# expire and it reaches exactly one repository — a token that quietly lapses in
+# a year is a release that fails on the day you least want it to. The guard
+# below says so in one line rather than letting cargo say it in twenty.
 #
 #   $GITHUB_WORKSPACE/
 #     yumete/   ← this repository, and every `run:` works from here
@@ -157,22 +159,23 @@ jobs:
         working-directory: .
         run: |
           set -euo pipefail
-          if [[ -z "${YUME_REPO_TOKEN}" ]]; then
-            echo "!! no YUME_REPO_TOKEN secret." >&2
+          if [[ -z "${YUME_DEPLOY_KEY}" ]]; then
+            echo "!! no YUME_DEPLOY_KEY secret." >&2
             echo "   yumete-ime depends on yume-core by path (../../../yume)," >&2
             echo "   and forfudan/yume is private, so GITHUB_TOKEN cannot read" >&2
-            echo "   it. Add a PAT or deploy key with read access as the" >&2
-            echo "   YUME_REPO_TOKEN secret on this repository." >&2
+            echo "   it. Put a read-only deploy key for that repository in the" >&2
+            echo "   YUME_DEPLOY_KEY secret (the private half; the public half" >&2
+            echo "   goes on forfudan/yume under Settings > Deploy keys)." >&2
             exit 1
           fi
         env:
-          YUME_REPO_TOKEN: ${{ secrets.YUME_REPO_TOKEN }}
+          YUME_DEPLOY_KEY: ${{ secrets.YUME_DEPLOY_KEY }}
 
       - uses: actions/checkout@v4
         with:
           repository: forfudan/yume
           path: yume
-          token: ${{ secrets.YUME_REPO_TOKEN }}
+          ssh-key: ${{ secrets.YUME_DEPLOY_KEY }}
 
       - uses: dtolnay/rust-toolchain@stable
 
