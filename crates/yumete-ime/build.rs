@@ -154,6 +154,14 @@ fn date(secs: u64) -> String {
 }
 
 /// Where the installed Yume data lives, in the order the editor itself looks.
+/// ⚠️ **Every candidate is watched, not just the one that answered.** Cargo
+/// treats a `rerun-if-changed` path that did not exist and now does as a
+/// change, and that is exactly the case that matters: `scripts/build.sh`
+/// builds the binary *before* it installs the data, so the first run embeds
+/// 靈明精華版 — and without this the second run would not rebuild
+/// `yumete-ime`, because nothing it watched had changed. The binary would keep
+/// saying 「出廠自帶 精華版」 on a machine with the full tables installed,
+/// until someone ran `cargo clean`.
 fn find(file: &str) -> Option<PathBuf> {
     // Set, and it is the whole list: a release build that names a directory
     // means *that* directory, and silently reaching past it to whatever the
@@ -161,6 +169,7 @@ fn find(file: &str) -> Option<PathBuf> {
     // carrying a table nobody chose.
     if let Ok(dir) = std::env::var("YUMETE_BUILTIN_DIR") {
         let path = PathBuf::from(dir).join(file);
+        println!("cargo:rerun-if-changed={}", path.display());
         return path.is_file().then_some(path);
     }
     let mut dirs: Vec<PathBuf> = Vec::new();
@@ -173,7 +182,12 @@ fn find(file: &str) -> Option<PathBuf> {
             PathBuf::from(&home).join("Library/Application Support/yumete"),
         );
     }
-    dirs.into_iter()
-        .map(|dir| dir.join(file))
-        .find(|path| path.is_file())
+    let mut found = None;
+    for path in dirs.into_iter().map(|dir| dir.join(file)) {
+        println!("cargo:rerun-if-changed={}", path.display());
+        if found.is_none() && path.is_file() {
+            found = Some(path);
+        }
+    }
+    found
 }

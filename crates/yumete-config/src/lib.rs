@@ -1495,17 +1495,50 @@ pub fn data_dir() -> PathBuf {
     PathBuf::from(".local").join("share").join("yumete")
 }
 
-/// The install-prefix data directory that ships alongside the binary.
+/// The install-prefix data directories that ship alongside the binary.
 ///
 /// Resolves `<prefix>/bin/yumete` to `<prefix>/share/yumete`, which is where a
 /// Homebrew (or manual) install places the bundled scheme tables and fonts.
 /// On Windows there is no such prefix convention — a program's data sits
 /// beside its `.exe` — so the executable's **own** directory is searched too.
-/// Returns `None` if the executable path can't be determined.
-pub fn installed_data_dir() -> Option<PathBuf> {
-    let exe = env::current_exe().ok()?;
-    let prefix = exe.parent()?.parent()?;
-    Some(prefix.join("share").join("yumete"))
+///
+/// ⚠️ **Two answers, because `current_exe()` gives a different one per
+/// platform** ([^135]'s two-formula design turns on this). Homebrew installs
+/// each formula into its own `<prefix>/Cellar/<name>/<version>/` and symlinks
+/// the contents into the shared `<prefix>`, so `yumete` and a separate
+/// `yume-data` meet in `<prefix>/share/yumete` — and only there.
+///
+/// * macOS: `current_exe()` returns the path as invoked, symlink and all, so
+///   `/opt/homebrew/bin/yumete` climbs to `/opt/homebrew/share/yumete`. ✓
+/// * Linux: it reads `/proc/self/exe`, which is **fully resolved**, so the
+///   same install climbs to `<prefix>/Cellar/yumete/0.1.0/share/yumete` — the
+///   formula's own cellar, where `yume-data` never puts anything. An editor
+///   that can never see the data formula.
+///
+/// So `$HOMEBREW_PREFIX` is used when it is set (`brew` exports it for every
+/// formula's own runtime, and `brew shellenv` sets it in the user's shell),
+/// and the resolved answer is kept as well — a manual `/usr/local` install has
+/// no `$HOMEBREW_PREFIX` and is right either way. Both are searched, in that
+/// order; [`data_search_dirs`] de-duplicates when they agree.
+pub fn installed_data_dirs() -> Vec<PathBuf> {
+    prefix_data_dirs(
+        env::var("HOMEBREW_PREFIX").ok().as_deref(),
+        env::current_exe().ok().as_deref(),
+    )
+}
+
+/// [`installed_data_dirs`] with its two inputs handed in, so the platform
+/// difference it exists for can be tested without setting a process-wide
+/// environment variable in a threaded test runner.
+fn prefix_data_dirs(brew_prefix: Option<&str>, exe: Option<&Path>) -> Vec<PathBuf> {
+    let mut dirs = Vec::new();
+    if let Some(prefix) = brew_prefix.filter(|p| !p.is_empty()) {
+        dirs.push(PathBuf::from(prefix).join("share").join("yumete"));
+    }
+    if let Some(prefix) = exe.and_then(Path::parent).and_then(Path::parent) {
+        dirs.push(prefix.join("share").join("yumete"));
+    }
+    dirs
 }
 
 /// Directories named by the reader rather than found by convention.
@@ -1641,9 +1674,7 @@ pub fn data_search_dirs() -> Vec<PathBuf> {
     let mut dirs: Vec<PathBuf> = NAMED_DATA_DIRS.get().cloned().unwrap_or_default();
     dirs.extend(env_data_dirs());
     dirs.push(data_dir());
-    if let Some(installed) = installed_data_dir() {
-        dirs.push(installed);
-    }
+    dirs.extend(installed_data_dirs());
     #[cfg(windows)]
     if let Ok(exe) = env::current_exe() {
         if let Some(dir) = exe.parent() {
@@ -2355,6 +2386,46 @@ mod runner_tests {
 
 #[cfg(test)]
 mod tests {
+    /// A Homebrew install must find `yume-data` on **both** platforms.
+    ///
+    /// The two formulae meet in `<prefix>/share/yumete` and nowhere else. On
+    /// macOS `current_exe()` keeps the symlink, so climbing from
+    /// `/opt/homebrew/bin/yumete` lands there; on Linux it resolves through
+    /// `/proc/self/exe` to the cellar, and climbing lands in the *formula's
+    /// own* directory instead — which is why `$HOMEBREW_PREFIX` is consulted
+    /// first. Without it the Linux tarballs would install an editor that can
+    /// never see the data formula.
+    #[test]
+    fn a_homebrew_install_finds_the_shared_prefix_on_both_platforms() {
+        use super::{prefix_data_dirs, Path, PathBuf};
+        let shared = PathBuf::from("/opt/homebrew/share/yumete");
+
+        // macOS: the symlinked path, no HOMEBREW_PREFIX needed.
+        assert_eq!(
+            prefix_data_dirs(None, Some(Path::new("/opt/homebrew/bin/yumete"))),
+            vec![shared.clone()]
+        );
+
+        // Linux: the resolved cellar path. Climbing alone misses.
+        let cellar = Path::new("/opt/homebrew/Cellar/yumete/0.1.0/bin/yumete");
+        assert_eq!(
+            prefix_data_dirs(None, Some(cellar)),
+            vec![PathBuf::from("/opt/homebrew/Cellar/yumete/0.1.0/share/yumete")],
+            "climbing from the cellar cannot reach the shared prefix"
+        );
+        assert!(
+            prefix_data_dirs(Some("/opt/homebrew"), Some(cellar)).contains(&shared),
+            "…so $HOMEBREW_PREFIX has to carry it"
+        );
+
+        // A manual /usr/local install has neither the cellar nor the variable.
+        assert_eq!(
+            prefix_data_dirs(Some(""), Some(Path::new("/usr/local/bin/yumete"))),
+            vec![PathBuf::from("/usr/local/share/yumete")],
+            "an empty HOMEBREW_PREFIX is not a directory"
+        );
+    }
+
     use super::*;
 
     #[test]
