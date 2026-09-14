@@ -414,7 +414,32 @@ impl Editor {
             // The copy is now in a buffer the writer can see and save; leaving
             // the file behind would offer it again on the next launch — and it
             // is written again immediately, because the buffer is modified.
-            let _ = std::fs::remove_file(path);
+            //
+            // ⚠️ **Written again by whom.** That sentence was true only with
+            // `autosave` on: `autosave_tick` returns on its first line when it
+            // is off, and `[editor] autosave = false` is a documented setting.
+            // With it off this deleted the only copy of a crashed session's
+            // work and left the text in memory alone — one more crash, or one
+            // closed terminal, and yumete had destroyed it itself.
+            //
+            // So the copy is written *here* before its file goes, and if that
+            // write fails the old file stays. A crash between the two costs
+            // nothing: the draft is still there and gets offered again.
+            // ⚠️ `write_swap` answers `Ok(())` for a buffer with nowhere to
+            // put a copy, so「沒有出錯」is not「留下了一份」. The recovered
+            // buffer is unnamed, and it is `name_scratch_drafts` that gives an
+            // unnamed buffer somewhere to write — so that runs first, and the
+            // proof is `recovery_copy()`, not the return value.
+            let kept = self.autosave || {
+                self.name_scratch_drafts();
+                match self.buffers.last_mut() {
+                    Some(b) => b.write_swap().is_ok() && b.recovery_copy().is_some(),
+                    None => false,
+                }
+            };
+            if kept {
+                let _ = std::fs::remove_file(path);
+            }
             taken += 1;
         }
         taken

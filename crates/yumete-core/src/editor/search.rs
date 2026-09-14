@@ -337,16 +337,92 @@ impl Editor {
         None
     }
 
-    /// Show the next match and wait for a key, or close the walk and report.
-    fn ask_or_finish(&mut self, mut walk: Confirming) {
-        while let Some(hit) = self.next_hit(&walk) {
-            if walk.all {
-                if let Some(why) = self.write_one(&mut walk, &hit) {
-                    self.close_confirming(&walk, Some(why));
-                    return;
-                }
+    /// Write every match still undecided, in **one** pass.
+    ///
+    /// ⚠️ This is what `a` runs, and it exists because the obvious loop is
+    /// quadratic. `next_hit` serialises the whole document and rescans it from
+    /// the top for every match, and `write_one` copies it again for the grid
+    /// guard — fine at one keystroke per `y`, ruinous when `a` does it N times
+    /// with no key in between. Measured before the fix: a 680 KB chapter with
+    /// 20,000 matches took **28.5 s** under `a` against 0.02 s for the same
+    /// `:s` without `c`, and a 2 MB one took **4 minutes 35 seconds** — on the
+    /// main thread, with no progress and no key that could stop it. A writer
+    /// watching a frozen screen kills the process, which is how `a` came to
+    /// cost both the substitution and the last few seconds of typing.
+    ///
+    /// One pass, one grid check, one `replace` — the same shape [`substitute`]
+    /// has always used, restricted to the matches at or after `walk.from`.
+    ///
+    /// [`substitute`]: Self::substitute
+    fn finish_all(&mut self, walk: &mut Confirming) -> Option<String> {
+        let text = self.current_buffer().text();
+        let mut rebuilt = String::with_capacity(text.len());
+        // Char index of the start of the line being looked at, the way
+        // `next_hit` counts it.
+        let mut at = 0usize;
+        let mut changed = 0usize;
+        for (idx, line) in text.split_inclusive('\n').enumerate() {
+            if !walk.chosen.has(idx) {
+                rebuilt.push_str(line);
+                at += line.chars().count();
                 continue;
             }
+            // Byte cursor inside `line`: everything before it is already in
+            // `rebuilt`. `captures_iter` yields non-overlapping matches in
+            // order, so it only ever moves forward.
+            let mut copied = 0usize;
+            for caps in walk.re.captures_iter(line) {
+                let m = caps.get(0).expect("group 0 is the whole match");
+                let start = at + line[..m.start()].chars().count();
+                if start >= walk.from {
+                    rebuilt.push_str(&line[copied..m.start()]);
+                    // `$1` resolved for this match, as in `next_hit`.
+                    caps.expand(&walk.replacement, &mut rebuilt);
+                    copied = m.end();
+                    changed += 1;
+                }
+                // Without `g`, only the first match on a line was ever
+                // offered — and one already answered leaves the line alone.
+                if !walk.global {
+                    break;
+                }
+            }
+            rebuilt.push_str(&line[copied..]);
+            at += line.chars().count();
+        }
+        if changed == 0 {
+            return None;
+        }
+        // The grid guard, once for the whole batch rather than once per match.
+        // Refusing the batch is the honest answer: every `y` already given is
+        // in the buffer and stays there, and the walk closes saying why.
+        if !walk.reshape {
+            if let Some(why) = self.substitution_breaks_the_grid(&rebuilt) {
+                return Some(why);
+            }
+        }
+        // **One `u` undoes the whole walk** — see `write_one`.
+        if !walk.snapped {
+            self.snapshot();
+            walk.snapped = true;
+        }
+        let len = self.current_buffer().char_count();
+        let done = self.without_cell_guard(|e| e.current_buffer_mut().replace(0..len, &rebuilt));
+        if !self.applied(done) {
+            return Some(self.status.clone());
+        }
+        walk.changed += changed;
+        None
+    }
+
+    /// Show the next match and wait for a key, or close the walk and report.
+    fn ask_or_finish(&mut self, mut walk: Confirming) {
+        if walk.all {
+            let why = self.finish_all(&mut walk);
+            self.close_confirming(&walk, why);
+            return;
+        }
+        while let Some(hit) = self.next_hit(&walk) {
             // **The match is the selection**, so the writer is looking at the
             // thing the question is about — and at the sentence around it,
             // which is what they are actually judging.

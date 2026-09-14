@@ -6921,6 +6921,46 @@ fn an_unnamed_buffer_leaves_a_crash_copy_too() {
     std::fs::remove_dir_all(&dir).ok();
 }
 
+/// `:recover` with `autosave = false` keeps a copy before it deletes one.
+///
+/// The old comment said the file could go because「it is written again
+/// immediately, because the buffer is modified」— true only with autosave on.
+/// `autosave_tick` returns on its first line when it is off, and
+/// `[editor] autosave = false` is a documented setting. So `:recover` deleted
+/// the only copy of a crashed session's work and left the text in memory
+/// alone: one closed terminal and yumete had destroyed it itself.
+#[test]
+fn recovering_with_autosave_off_still_leaves_a_copy() {
+    let dir = std::env::temp_dir().join(format!("yumete-recover-off-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let orphan = dir.join("scratch-1-0.yumete");
+    std::fs::write(&orphan, "那年冬天，山下起了大雪。\n").unwrap();
+
+    let mut ed = Editor::new();
+    ed.keep_drafts_in(dir.clone());
+    ed.set_autosave(false);
+    assert_eq!(ed.orphan_drafts(), vec![orphan.clone()]);
+    ed.execute("recover").unwrap();
+    assert!(ed.current_buffer().text().contains("大雪"));
+
+    // The text is now in exactly one place on disk — a different name, but a
+    // place. Before the fix there were none.
+    let left: Vec<_> = std::fs::read_dir(&dir)
+        .unwrap()
+        .flatten()
+        .map(|e| e.path())
+        .filter(|p| std::fs::read_to_string(p).map(|t| t.contains("大雪")).unwrap_or(false))
+        .collect();
+    assert_eq!(left.len(), 1, "one copy, not zero and not two: {left:?}");
+    // …and it is not the file it was offered from, so the next launch does
+    // not offer the same work twice.
+    assert!(!orphan.exists());
+    assert!(ed.orphan_drafts().is_empty());
+
+    std::fs::remove_dir_all(&dir).ok();
+}
+
 #[test]
 fn an_edit_that_did_nothing_leaves_nothing_to_undo() {
     // An undo point used to be pushed when a command *announced* an edit,
@@ -11442,6 +11482,47 @@ fn the_c_flag_asks_at_each_match_before_writing() {
     assert!(ed.execute("1,3s/甲/乙/cn").is_ok(), "{}", ed.status());
     assert!(ed.pending_menu().is_none(), "n asks nothing");
     assert_eq!(ed.current_buffer().text(), "甲\n甲\n甲\n");
+}
+
+/// `a` in a `:s …c` walk is one pass, not one pass per match.
+///
+/// The walk asks `next_hit`, which serialises the whole document and rescans
+/// it from the top; `write_one` then copies it again for the grid guard. That
+/// is one keystroke's work per `y` and fine. Under `a` it ran N times with no
+/// key in between — quadratic. Measured on the author's machine before the
+/// fix: 680 KB with 20,000 matches took **28.5 s**, 2 MB took **4m35s**, both
+/// on the main thread with no progress and no key that could stop it, against
+/// 0.02 s for the same `:s` without `c`.
+///
+/// The bound below is generous on purpose — this is not a benchmark, it is a
+/// tripwire for the shape coming back. One pass finishes in milliseconds; the
+/// quadratic one cannot come near ten seconds on any machine.
+#[test]
+fn answering_a_replaces_the_rest_in_one_pass() {
+    let line = "那年冬天，山路已經看不見了。\n";
+    let mut ed = typed(&line.repeat(4_000));
+    let was = ed.current_buffer().text().matches('雪').count();
+    assert_eq!(was, 0);
+    assert!(ed.execute("%s/看不見/看不到/gc").is_ok(), "{}", ed.status());
+    assert!(ed.pending_menu().is_some(), "it is asking");
+
+    let started = std::time::Instant::now();
+    ed.on_key(Key::Char('a'));
+    let took = started.elapsed();
+    assert!(ed.pending_menu().is_none(), "the walk is over");
+    assert_eq!(ed.current_buffer().text().matches("看不到").count(), 4_000);
+    assert_eq!(ed.current_buffer().text().matches("看不見").count(), 0);
+    assert!(
+        took < std::time::Duration::from_secs(10),
+        "a rescanned the document per match again: {took:?}"
+    );
+    // ⚠️ 4,000 rather than the 20,000 that was measured: this runs in a debug
+    // build on every `cargo test`, and the quadratic shape is already 4,000×
+    // here. Ten seconds is a tripwire, not a benchmark.
+
+    // And it is still **one** undo step for the whole walk.
+    ed.on_key(Key::Char('u'));
+    assert_eq!(ed.current_buffer().text().matches("看不見").count(), 4_000);
 }
 
 /// **`-` is a span, `,` is a list** — in `:s` too (§5.7).

@@ -4216,11 +4216,11 @@ zhs = "再替换一次：把 :s 那一行叫回来（: 然后上键）"
 en = "to substitute again, call the :s line back (: then up)"
 
 [[message]]
-# Normal 模式按 @（vi 的重放鍵，這裏是 Q）
+# Normal 模式按 @（vi 的重放鍵，這裏是 q；錄是 Q）
 key = "hint.vi.at"
-zht = "重放宏是 Q（錄是 q）"
-zhs = "重放宏是 Q（录是 q）"
-en = "Q replays a macro (q records one)"
+zht = "重放宏是 q（錄是 Q）"
+zhs = "重放宏是 q（录是 Q）"
+en = "q replays a macro (Q records one)"
 
 [[message]]
 # Normal 模式按 \（別的編輯器的 leader 鍵，這裏是空格）

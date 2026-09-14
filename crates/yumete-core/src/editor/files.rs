@@ -167,11 +167,19 @@ impl Editor {
     }
 
     /// Write the log back, answering with what went wrong.
+    ///
+    /// ⚠️ **Atomically, like every other write to a reader's file.** This one
+    /// rewrites the *whole* ledger on every successful save, and `fs::write`
+    /// truncates before it writes: a full disk, a power cut or a `kill` inside
+    /// that window leaves months of `:count-progress` history as an empty file
+    /// or half a line — silently, because the caller drops the error on
+    /// purpose. `write_file_atomically` writes a temporary beside it and
+    /// renames, so the old ledger survives every failure intact.
     fn write_progress_log(&self, path: &Path, log: &crate::progress::Log) -> std::io::Result<()> {
         if let Some(dir) = path.parent() {
             std::fs::create_dir_all(dir)?;
         }
-        std::fs::write(path, log.to_text())
+        crate::buffer::write_file_atomically(path, &log.to_text())
     }
 
     /// Record what this file holds now, after a save (Feature #244).
