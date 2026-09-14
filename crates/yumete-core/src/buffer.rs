@@ -407,7 +407,31 @@ impl Buffer {
         if now.as_ref() == Some(seen) {
             // Same size, same moment: nothing touched it. This is the answer
             // almost every time and it costs one `stat`.
-            return false;
+            //
+            // ⚠️ **Unless the moment is too recent to mean anything.** A file
+            // system stamps mtime with a granularity — the kernel's timer tick
+            // on Linux, and a full **two seconds** on exFAT, which is what a
+            // USB stick is formatted as. Two writes inside one tick get the
+            // same mtime, and if they are also the same length the stamp says
+            // 「nothing touched it」 about a file that was rewritten.
+            //
+            // That is not merely a missed `:reload-auto`: this same answer
+            // guards `:w` against writing over a file somebody else changed,
+            // so a blind spot here is a manuscript overwritten in silence.
+            //
+            // The rule is git's, for the same problem: a stamp is only
+            // conclusive once the file has been **quiet longer than any
+            // granularity could hide**. Until then, read it and compare. The
+            // cost is one read per `disk_tick` in the couple of seconds after
+            // a save, and nothing at all after that.
+            const TOO_RECENT: std::time::Duration = std::time::Duration::from_secs(2);
+            let settled = now
+                .as_ref()
+                .and_then(|(_, at)| SystemTime::now().duration_since(*at).ok())
+                .is_some_and(|quiet| quiet >= TOO_RECENT);
+            if settled {
+                return false;
+            }
         }
         // Something touched it — but touching is not changing. Read it and see,
         // which for eight megabytes is about two and a half milliseconds and is
@@ -1338,6 +1362,49 @@ fn write_bytes_with_model(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A rewrite the clock cannot see is still a rewrite.
+    ///
+    /// `changed_underneath` answers from (length, mtime) because that costs one
+    /// `stat` and is right almost every time. It is **wrong** when a file is
+    /// rewritten to the same length inside one mtime granularity — the kernel's
+    /// timer tick on Linux, two whole seconds on exFAT, which is how a USB
+    /// stick is formatted. Both CI Linux runners caught this in
+    /// `auto_reload_takes_a_clean_buffer…`, where 「第一版」 and 「第二版」 are
+    /// the same number of bytes.
+    ///
+    /// It matters beyond a missed reload: the same answer is what stops `:w`
+    /// writing over a file somebody else changed.
+    #[test]
+    fn a_same_length_rewrite_in_the_same_tick_is_still_seen() {
+        let dir = std::env::temp_dir().join(format!("yumete-racy-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).expect("fixture dir");
+        let path = dir.join("同步中.md");
+        fs::write(&path, "第一版\n").expect("write");
+
+        let b = Buffer::open(&path).expect("open");
+        assert!(!b.changed_underneath(), "nothing has happened yet");
+
+        // The same length, and — the point of the test — **the same mtime**,
+        // forced, so this holds on a file system of any granularity.
+        let when = fs::metadata(&path).expect("stat").modified().expect("mtime");
+        fs::write(&path, "第二版\n").expect("rewrite");
+        let f = fs::File::options().write(true).open(&path).expect("reopen");
+        f.set_times(fs::FileTimes::new().set_modified(when)).expect("set mtime");
+        drop(f);
+        assert_eq!(
+            fs::metadata(&path).expect("stat").modified().expect("mtime"),
+            when,
+            "the fixture only means something if the stamps really match"
+        );
+
+        assert!(
+            b.changed_underneath(),
+            "a rewrite the stamp cannot see is the one that overwrites a manuscript"
+        );
+        let _ = fs::remove_dir_all(&dir);
+    }
 
     /// A BOM file's recovery copy holds the rope, not the file.
     ///
