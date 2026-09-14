@@ -5068,7 +5068,14 @@ fn draw_search(frame: &mut Frame, editor: &Editor, config: &Config, side: Side, 
                 false => text,
             },
         };
-        put_text(buf, left, y, to, &format!(" {shown}"), style);
+        // **The whole row is painted, not just the characters.** A box with
+        // one word in it and no ground behind it does not read as a box —
+        // there is nothing to say where you may type or how much room there
+        // is. Padded to the panel's width so the field has edges.
+        let wide = to.saturating_sub(left) as usize;
+        let used = yumete_cjk::str_width(&shown) + 1;
+        let filled = format!(" {shown}{}", " ".repeat(wide.saturating_sub(used)));
+        put_text(buf, left, y, to, &filled, style);
         if typing && here && !find.all_selected {
             let at = left + 1 + yumete_cjk::str_width(&shown) as u16;
             if at < to {
@@ -5091,13 +5098,12 @@ fn draw_search(frame: &mut Frame, editor: &Editor, config: &Config, side: Side, 
         true => "[x]",
         false => "[ ]",
     };
+    // **One switch to a row.** They used to share the first one — 正則 on the
+    // left, 完整匹配 pushed to the right edge — and in a narrow panel the
+    // second one simply did not appear, because there was no room for it at
+    // the right and nowhere else for it to go. Three rows, always all three.
     let y = y + 1;
     put_text(buf, left, y, to, &format!("{} {}", tick(find.regex), say!("search.regex")), cell(Field::Regex));
-    let whole = format!("{} {}", tick(find.whole), say!("search.whole"));
-    let at = to.saturating_sub(yumete_cjk::str_width(&whole) as u16 + 1);
-    if at > left + 10 {
-        put_text(buf, at, y, to, &whole, cell(Field::Whole));
-    }
     let y = y + 1;
     // Spelled out rather than asked of `Case`, so the tags sit where the
     // messages test can see them: it reads `say!` calls, and a tag returned
@@ -5109,6 +5115,8 @@ fn draw_search(frame: &mut Frame, editor: &Editor, config: &Config, side: Side, 
     };
     let case = format!("{}  {}", say!("search.case"), which);
     put_text(buf, left, y, to, &case, cell(Field::Case));
+    let y = y + 1;
+    put_text(buf, left, y, to, &format!("{} {}", tick(find.whole), say!("search.whole")), cell(Field::Whole));
 
     // What it found. Quiet when the pattern is broken: these are the answer to
     // what the box held a keystroke ago, not to what it holds now.
@@ -6178,14 +6186,18 @@ fn draw_status(
     command_row: bool,
 ) {
     let buffer = editor.current_buffer();
-    // A raised strip, not a reversal. Reversing gave a **white bar** under a
-    // dark page — the loudest thing on the screen, saying the least — and it
-    // only inverted the cells something was written on, so the bar stopped
-    // wherever the text did and left a notch at the right end.
     let ink = crate::theme::Palette::of(config);
-    let bar = ink
-        .ground(yumete_config::rung::CHROME)
-        .fg(ink.text());
+    // **A raised strip, or a sunken one — never a reversal.** Reversing gave a
+    // white bar under a dark page: the loudest thing on the screen, saying the
+    // least. Sinking goes the other way, below the page instead of above it,
+    // and on a light theme there is nothing below white so the strip rises
+    // as before (`Palette::sunken`).
+    let bar = match config.theme.status_bar {
+        yumete_config::StatusBar::Sunken => Style::default().bg(ink.sunken()).fg(ink.text()),
+        yumete_config::StatusBar::Raised => {
+            ink.ground(yumete_config::rung::CHROME).fg(ink.text())
+        }
+    };
     // The sidebar used to take the whole status line to list its keys. It has
     // the row below for that now, and taking this one as well would mean losing
     // the file name and the position for as long as the sidebar has focus.
