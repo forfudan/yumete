@@ -11736,7 +11736,7 @@ mod tests {
         let page = rows.join("\n");
 
         assert!(page.contains("安全核驗"), "the panel is named: {page}");
-        for answer in ["繼續儲存", "檢視區別", "取消儲存"] {
+        for answer in ["繼續保存", "查看區別", "取消保存"] {
             assert!(page.contains(answer), "{answer} is offered: {page}");
         }
         assert!(page.contains("MB"), "the sizes are on the page: {page}");
@@ -12547,7 +12547,7 @@ mod tests {
         // is discoverable without leaving the page.
         editor.on_key(Key::Char(' '));
         let text = page_text(&render_with(&editor, &config, &no_ime(), 60, 24));
-        assert!(text.contains("開啟檔案"), "{text:?}");
+        assert!(text.contains("打開文件"), "{text:?}");
         assert!(text.contains("切換緩衝區"), "{text:?}");
 
         // `b` replaces it with the picker, which names where you are in a list
@@ -12556,7 +12556,7 @@ mod tests {
         let buffer = render_with(&editor, &config, &no_ime(), 60, 24);
         let text = page_text(&buffer);
         assert!(text.contains("緩衝區"), "{text:?}");
-        assert!(!text.contains("開啟檔案"), "the menu is gone: {text:?}");
+        assert!(!text.contains("打開文件"), "the menu is gone: {text:?}");
         // And it is a small box, not the page.
         let drawn = (0..buffer.area.height)
             .filter(|&y| {

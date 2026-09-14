@@ -48,8 +48,8 @@
 [[message]]
 # 外面改了，你這裏也改了
 key = "autoreload.both-changed"
-zht = "檔案已被外部修改，你也有所改動。可使用 :reload! 丟棄你的更改"
-zhs = "档案已被外部修改，你也有所改动。可使用 :reload! 丢弃你的更改"
+zht = "文件已被外部修改，你也有所改動。可使用 :reload! 丟棄你的更改"
+zhs = "文件已被外部修改，你也有所改动。可使用 :reload! 丢弃你的更改"
 en = "the file changed outside and you have changes too — `:reload!` throws yours away"
 
 [[message]]
@@ -72,8 +72,8 @@ en = "auto re-read on outside change: {0}"
 [[message]]
 # 存成一個已經開着的檔名
 key = "buffer.already-open-elsewhere"
-zht = "{0} 正開着——切過去存，或另取一個檔名"
-zhs = "{0} 正开着——切过去存，或另取一个档名"
+zht = "{0} 正開着——切過去存，或另取一個文件名"
+zhs = "{0} 正开着——切过去存，或另取一个文件名"
 en = "{0} is open here — save from there, or pick another name"
 
 [[message]]
@@ -86,8 +86,8 @@ en = "cannot open '{0}': {1}"
 [[message]]
 # :w 一個磁盤上已經被別人改過的檔案
 key = "buffer.changed-outside"
-zht = "這個檔案在外面被改過了——`:reload!` 讀它的，`:w!` 用你的"
-zhs = "这个档案在外面被改过了——`:reload!` 读它的，`:w!` 用你的"
+zht = "這個文件在外面被改過了——`:reload!` 讀它的，`:w!` 用你的"
+zhs = "这个文件在外面被改过了——`:reload!` 读它的，`:w!` 用你的"
 en = "the file changed on disk — `:reload!` takes its version, `:w!` keeps yours"
 
 [[message]]
@@ -114,36 +114,36 @@ en = "copied to {0}"
 [[message]]
 # 另存成一個已經存在的檔名
 key = "buffer.file-already-exists"
-zht = "那個檔案已經存在——`:w!` 才蓋掉它"
-zhs = "那个档案已经存在——`:w!` 才盖掉它"
+zht = "那個文件已經存在——`:w!` 才蓋掉它"
+zhs = "那个文件已经存在——`:w!` 才盖掉它"
 en = "that file is already there — `:w!` writes over it"
 
 [[message]]
 # 存檔時檔案本身是只讀的
 key = "buffer.file-is-read-only"
-zht = "這個檔案是只讀的——先 chmod，或者換個檔名存"
-zhs = "这个档案是只读的——先 chmod，或者换个档名存"
+zht = "這個文件是只讀的——先 chmod，或者換個文件名存"
+zhs = "这个文件是只读的——先 chmod，或者换个文件名存"
 en = "this file is read-only — chmod it, or save under another name"
 
 [[message]]
 # gf 用在沒有檔名的行上
 key = "buffer.no-file-named-on-this-line"
-zht = "這一行沒寫檔名"
-zhs = "这一行没写档名"
+zht = "這一行沒寫文件名"
+zhs = "这一行没写文件名"
 en = "no file named on this line"
 
 [[message]]
 # 存一份還沒有名字的稿子
 key = "buffer.no-name-yet"
-zht = "這份稿子還沒有名字——:w 名字 存成新檔"
-zhs = "这份稿子还没有名字——:w 名字 存成新档"
+zht = "這份稿子還沒有名字——:w 名字 存成新文件"
+zhs = "这份稿子还没有名字——:w 名字 存成新文件"
 en = "this manuscript has no name yet — :w <name> writes it as a new file"
 
 [[message]]
 # 只開了一個檔案時切換緩衝區
 key = "buffer.only-one-open"
-zht = "只開了一個檔案"
-zhs = "只开了一个档案"
+zht = "只開了一個文件"
+zhs = "只开了一个文件"
 en = "only one file open"
 
 [[message]]
@@ -170,8 +170,8 @@ en = "saved {0} file(s)"
 [[message]]
 # :write all 有幾份沒存成
 key = "buffer.saved-some-not-all"
-zht = "存了 {0} 個檔案；{1} 個沒存：{2}"
-zhs = "存了 {0} 个档案；{1} 个没存：{2}"
+zht = "存了 {0} 個文件；{1} 個沒存：{2}"
+zhs = "存了 {0} 个文件；{1} 个没存：{2}"
 en = "saved {0} file(s); {1} not saved: {2}"
 
 [[message]]
@@ -290,8 +290,8 @@ en = "{0} character(s) in no standard — gf goes to the line"
 [[message]]
 # :check-charset 沒有字集資料可問（碼表沒載）
 key = "check.charset-no-data"
-zht = "沒有字集資料——先 :yume-scheme 載一個方案"
-zhs = "没有字集资料——先 :yume-scheme 载一个方案"
+zht = "沒有字集數據——先 :yume-scheme 載一個方案"
+zhs = "没有字集数据——先 :yume-scheme 载一个方案"
 en = "no 字集 data — load a scheme first with :yume-scheme"
 
 [[message]]
@@ -419,8 +419,8 @@ en = "yumete crashed. {0} draft(s) kept — :recover takes them back; details in
 [[message]]
 # 啓動時接着上次的檔案
 key = "cli.picked-up-where-you-left-off"
-zht = "接着上次：開了 {0} 個檔案"
-zhs = "接着上次：开了 {0} 个档案"
+zht = "接着上次：開了 {0} 個文件"
+zhs = "接着上次：开了 {0} 个文件"
 en = "picking up where you left off: opened {0} file(s)"
 
 [[message]]
@@ -522,24 +522,24 @@ find = "用字 異體字 异体字 一致 統一 统一 裏裡 為爲 校對 校
 [[message]]
 # : 命令選單裏 paste 那一項的說明（clipboard 組）
 key = "cmd.clipboard.paste"
-zht = "從系統剪貼簿貼進來"
-zhs = "从系统剪贴簿贴进来"
+zht = "從系統剪貼板貼進來"
+zhs = "从系统剪贴板贴进来"
 en = "paste from the system clipboard"
 find = "貼上 粘贴 黏貼 paste put 剪貼簿 剪贴板 複製 复制 copy yank"
 
 [[message]]
 # : 命令選單裏 yank 那一項的說明（clipboard 組）
 key = "cmd.clipboard.yank"
-zht = "選區送到系統剪貼簿"
-zhs = "选区送到系统剪贴簿"
+zht = "選區送到系統剪貼板"
+zhs = "选区送到系统剪贴板"
 en = "put the selection on the system clipboard"
 find = "複製 复制 拷貝 拷贝 copy yank 剪貼簿 剪贴板 貼上 粘贴 paste"
 
 [[message]]
 # : 命令選單裏 buffer 那一項的說明（commands 組）
 key = "cmd.commands.buffer"
-zht = "開着的檔案：列出、切換、關掉"
-zhs = "开着的档案：列出、切换、关掉"
+zht = "開着的文件：列出、切換、關掉"
+zhs = "开着的文件：列出、切换、关掉"
 en = "the open files: list, switch, close"
 find = "緩衝區 缓冲区 檔案 文件 分頁 標籤 tabs files switch bn bp bc"
 
@@ -586,8 +586,8 @@ find = "導出 导出 輸出 输出 html typst 排版"
 [[message]]
 # : 命令選單裏 format 那一項的說明（commands 組）
 key = "cmd.commands.format"
-zht = "照這種檔案在設定裏說的那樣格式化（[language.markdown] format = …）"
-zhs = "照这种档案在设定里说的那样格式化（[language.markdown] format = …）"
+zht = "照這種文件在配置裏說的那樣格式化（[language.markdown] format = …）"
+zhs = "照这种文件在配置里说的那样格式化（[language.markdown] format = …）"
 en = "format this file the way the config says ([language.markdown] format = …)"
 find = "格式化 排版 整理 formatter prettier"
 
@@ -602,8 +602,8 @@ find = "跳行 行號 行号 goto line jump"
 [[message]]
 # : 命令選單裏 help 那一項的說明（commands 組）
 key = "cmd.commands.help"
-zht = "鍵和命令，開成一個可以讀、可以搜的檔案"
-zhs = "键和命令，开成一个可以读、可以搜的档案"
+zht = "鍵和命令，開成一個可以讀、可以搜的文件"
+zhs = "键和命令，开成一个可以读、可以搜的文件"
 en = "the keys and the commands, opened as a file you can read and search"
 find = "幫助 帮助 說明 说明 手冊 手册 keys manual"
 
@@ -634,8 +634,8 @@ find = "新建 空白 新檔 新文件 empty"
 [[message]]
 # : 命令選單裏 open 那一項的說明（commands 組）
 key = "cmd.commands.open"
-zht = "打開一個檔案"
-zhs = "打开一个档案"
+zht = "打開一個文件"
+zhs = "打开一个文件"
 en = "open a file"
 find = "打開 打开 開檔 开档 edit file"
 
@@ -650,8 +650,8 @@ find = "管道 過濾 过滤 外部命令 filter shell"
 [[message]]
 # : 命令選單裏 quit 那一項的說明（commands 組）
 key = "cmd.commands.quit"
-zht = "關掉這一個檔案；只剩一個時纔真的退出（`quit!` 不管改動）"
-zhs = "关掉这一个档案；只剩一个时才真的退出（`quit!` 不管改动）"
+zht = "關掉這一個文件；只剩一個時纔真的退出（`quit!` 不管改動）"
+zhs = "关掉这一个文件；只剩一个时才真的退出（`quit!` 不管改动）"
 en = "close this file; leave only when it was the last one (`quit!` ignores changes)"
 find = "退出 離開 离开 關閉 关闭 exit close bc"
 
@@ -682,8 +682,8 @@ find = "重做 恢復 恢复"
 [[message]]
 # : 命令選單裏 reload 那一項的說明（commands 組）
 key = "cmd.commands.reload"
-zht = "把檔案再讀一遍；加 ! 是丟掉你這裏的改動"
-zhs = "把档案再读一遍；加 ! 是丢掉你这里的改动"
+zht = "把文件再讀一遍；加 ! 是丟掉你這裏的改動"
+zhs = "把文件再读一遍；加 ! 是丢掉你这里的改动"
 en = "read the file again; ! throws away what you changed here"
 find = "重載 重载 重讀 重读 刷新 revert"
 
@@ -706,8 +706,8 @@ find = "替換 替换 換掉 换掉 改名 replace 全書 全书"
 [[message]]
 # 命令：在這個檔的資料夾裏找了換
 key = "cmd.commands.replace-cd"
-zht = "在這個檔的資料夾裏找了換（含子目錄）"
-zhs = "在这个档的资料夹里找了换（含子目录）"
+zht = "在這個文件所在的文件夾裏找了換（含子目錄）"
+zhs = "在这个文件所在的文件夹里找了换（含子目录）"
 en = "search and replace in this file's folder"
 find = "替換 替换 資料夾 资料夹"
 
@@ -722,8 +722,8 @@ find = "替換 替换 項目 项目 全書 全书"
 [[message]]
 # 命令：在 yumete 打開的資料夾裏找了換
 key = "cmd.commands.replace-wd"
-zht = "在 yumete 打開的資料夾裏找了換"
-zhs = "在 yumete 打开的资料夹里找了换"
+zht = "在 yumete 打開的文件夾裏找了換"
+zhs = "在 yumete 打开的文件夹里找了换"
 en = "search and replace in the folder yumete opened in"
 find = "替換 替换 工作區 工作区"
 
@@ -738,8 +738,8 @@ find = "注音 拼音 振假名 旁註 旁注 furigana annotation"
 [[message]]
 # : 命令選單裏 run 那一項的說明（commands 組）
 key = "cmd.commands.run"
-zht = "跑這種檔案在設定裏自己起名的那條命令"
-zhs = "跑这种档案在设定里自己起名的那条命令"
+zht = "跑這種文件在配置裏自己起名的那條命令"
+zhs = "跑这种文件在配置里自己起名的那条命令"
 en = "run the command this language names in the config"
 find = "運行 运行 執行 执行 命令 build"
 
@@ -754,8 +754,8 @@ find = "搜索 搜尋 搜寻 查找 尋找 寻找 grep find search 全文 面板
 [[message]]
 # 命令：搜這個檔所在的資料夾
 key = "cmd.commands.search-cd"
-zht = "在這個檔的資料夾裏找（含子目錄）"
-zhs = "在这个档的资料夹里找（含子目录）"
+zht = "在這個文件所在的文件夾裏找（含子目錄）"
+zhs = "在这个文件所在的文件夹里找（含子目录）"
 en = "search this file's folder"
 find = "搜索 資料夾 资料夹 目錄 目录 folder cd"
 
@@ -770,8 +770,8 @@ find = "搜索 項目 项目 git 全書 全书 gd"
 [[message]]
 # 命令：搜 yumete 打開的資料夾
 key = "cmd.commands.search-wd"
-zht = "在 yumete 打開的資料夾裏找"
-zhs = "在 yumete 打开的资料夹里找"
+zht = "在 yumete 打開的文件夾裏找"
+zhs = "在 yumete 打开的文件夹里找"
 en = "search the folder yumete opened in"
 find = "搜索 工作區 工作区 wd"
 
@@ -794,32 +794,32 @@ find = "終端 终端 外部 掛起 挂起 shell suspend"
 [[message]]
 # : 命令選單裏 shot 那一項的說明（commands 組）
 key = "cmd.commands.shot"
-zht = "截圖：預設進剪貼簿，png／html／txt 則存成檔案（進下載資料夾）"
-zhs = "截图：预设进剪贴簿，png／html／txt 则存成档案（进下载资料夹）"
+zht = "截圖：默認進剪貼板，png／html／txt 則存成文件（進下載文件夾）"
+zhs = "截图：默认进剪贴板，png／html／txt 则存成文件（进下载文件夹）"
 en = "a picture: the clipboard by default, or a file with `png`/`html`/`txt`"
 find = "截圖 截图 圖片 图片 存圖 存图 screenshot png html 剪貼簿 剪贴簿"
 
 [[message]]
 # : 命令選單裏 s/pat/rep/ 那一項的說明（commands 組）
 key = "cmd.commands.substitute"
-zht = "取代：選區內；`%s` 全檔、`1-40s` 一段、`1,5,9s` 幾行；旗標 g i f c n；分隔符可換"
-zhs = "取代：选区内；`%s` 全档、`1-40s` 一段、`1,5,9s` 几行；旗标 g i f c n；分隔符可换"
+zht = "取代：選區內；`%s` 全文、`1-40s` 一段、`1,5,9s` 幾行；旗標 g i f c n；分隔符可換"
+zhs = "取代：选区内；`%s` 全文、`1-40s` 一段、`1,5,9s` 几行；旗标 g i f c n；分隔符可换"
 en = "substitute in the selection; `%s` the file, `1-40s` a span, `1,5,9s` a list; flags g i f c n"
 find = "替換 替换 取代 正則 正则 sed regex"
 
 [[message]]
 # : 命令選單裏 syntax 那一項的說明（commands 組）
 key = "cmd.commands.syntax"
-zht = "這個檔案是哪種標記（不給參數就說現在是哪個）"
-zhs = "这个档案是哪种标记（不给参数就说现在是哪个）"
+zht = "這個文件是哪種標記（不給參數就說現在是哪個）"
+zhs = "这个文件是哪种标记（不给参数就说现在是哪个）"
 en = "which markup this file is written in (with no argument, which one it is now)"
 find = "語法 语法 標記 标记 高亮 highlight filetype"
 
 [[message]]
 # : 命令選單裏 table 那一項的說明（commands 組）
 key = "cmd.commands.table"
-zht = "按格子編輯：CSV 整個檔案，或游標所在的 | 表格；`:table off` 收工"
-zhs = "按格子编辑：CSV 整个档案，或游标所在的 | 表格；`:table off` 收工"
+zht = "按格子編輯：CSV 整個文件，或光標所在的 | 表格；`:table off` 收工"
+zhs = "按格子编辑：CSV 整个文件，或光标所在的 | 表格；`:table off` 收工"
 en = "edit as a grid: a whole CSV, or the | table under the cursor; `:table off` stops"
 find = "表格 網格 网格 格子 欄位 栏位 grid csv tsv"
 
@@ -842,8 +842,8 @@ find = "目錄 目录 標題 标题 大綱 大纲 outline headings"
 [[message]]
 # : 命令選單裏 tutor 那一項的說明（commands 組）
 key = "cmd.commands.tutor"
-zht = "一課：把課文抄成你自己的一個檔案，邊改邊學"
-zhs = "一课：把课文抄成你自己的一个档案，边改边学"
+zht = "一課：把課文抄成你自己的一個文件，邊改邊學"
+zhs = "一课：把课文抄成你自己的一个文件，边改边学"
 en = "a lesson: the text is copied into a file of your own, and you learn by editing it"
 find = "教程 課 课 入門 入门 學 学 lesson tutorial"
 
@@ -882,8 +882,8 @@ find = "分詞 分词 詞表 词表 粒度 segmentation dictionary"
 [[message]]
 # : 命令選單裏 write 那一項的說明（commands 組）
 key = "cmd.commands.write"
-zht = "存檔；給路徑存一份副本，`:write as` 纔換過去"
-zhs = "存档；给路径存一份副本，`:write as` 才换过去"
+zht = "保存；給路徑存一份副本，`:write as` 纔換過去"
+zhs = "保存；给路径存一份副本，`:write as` 才换过去"
 en = "save; a path writes a copy, `:write as` moves to it"
 find = "保存 存檔 存档 寫入 写入 save wa"
 
@@ -1010,8 +1010,8 @@ find = "目標 目标 每日 進度 进度 target daily goal"
 [[message]]
 # : 命令選單裏 csv 那一項的說明（export 組）
 key = "cmd.export.csv"
-zht = "游標下那張表，逗號分隔"
-zhs = "游标下那张表，逗号分隔"
+zht = "光標下那張表，逗號分隔"
+zhs = "光标下那张表，逗号分隔"
 en = "the table under the cursor, comma separated"
 
 [[message]]
@@ -1024,8 +1024,8 @@ en = "one HTML page, still vertical if the manuscript is"
 [[message]]
 # : 命令選單裏 tsv 那一項的說明（export 組）
 key = "cmd.export.tsv"
-zht = "游標下那張表，Tab 分隔"
-zhs = "游标下那张表，Tab 分隔"
+zht = "光標下那張表，Tab 分隔"
+zhs = "光标下那张表，Tab 分隔"
 en = "the table under the cursor, tab separated"
 
 [[message]]
@@ -1271,16 +1271,16 @@ find = "候選 候选 面板 候選框 候选框 full"
 [[message]]
 # :quit-all —— 全部關掉再走；短寫 :qa
 key = "cmd.quit.all"
-zht = "每個開着的檔案都關掉，然後離開（短寫 `:qa`）"
-zhs = "每个开着的档案都关掉，然后离开（短写 `:qa`）"
+zht = "每個開着的文件都關掉，然後離開（短寫 `:qa`）"
+zhs = "每个开着的文件都关掉，然后离开（短写 `:qa`）"
 en = "close every open file, then leave (short: :qa)"
 find = "全部退出 全關 退出全部 quit all close everything qa"
 
 [[message]]
 # : 命令選單裏 auto 那一項的說明（reload 組）
 key = "cmd.reload.auto"
-zht = "檔案在外面改了就自己重讀——你這裏有改動時只提醒，不動手"
-zhs = "档案在外面改了就自己重读——你这里有改动时只提醒，不动手"
+zht = "文件在外面改了就自己重讀——你這裏有改動時只提醒，不動手"
+zhs = "文件在外面改了就自己重读——你这里有改动时只提醒，不动手"
 en = "re-read by itself when the file changes outside — a warning, not a re-read, when you have changes of your own"
 find = "重載 重载 自動重讀 自动重读 auto watch"
 
@@ -1461,16 +1461,16 @@ find = "html 網頁 网页 彩色"
 [[message]]
 # : 命令選單裏 png 那一項的說明（shot 組）
 key = "cmd.shot.png"
-zht = "把視窗拍成 PNG 存起來"
-zhs = "把视窗拍成 PNG 存起来"
+zht = "把窗口拍成 PNG 存起來"
+zhs = "把窗口拍成 PNG 存起来"
 en = "photograph the window into a PNG"
 find = "png 圖片 图片 截圖 截图"
 
 [[message]]
 # : 命令選單裏 screen 那一項的說明（shot 組）
 key = "cmd.shot.screen"
-zht = "把視窗拍下來放進剪貼簿"
-zhs = "把视窗拍下来放进剪贴簿"
+zht = "把窗口拍下來放進剪貼板"
+zhs = "把窗口拍下来放进剪贴板"
 en = "photograph the window onto the clipboard"
 find = "screen 剪貼簿 剪贴簿 截圖 截图"
 
@@ -1531,8 +1531,8 @@ find = "語法 语法 標記 标记 md markdown"
 [[message]]
 # : 命令選單裏 text 那一項的說明（syntaxes 組）
 key = "cmd.syntaxes.text"
-zht = "沒有標記：檔案裏的每個字符都只是它自己"
-zhs = "没有标记：档案里的每个字符都只是它自己"
+zht = "沒有標記：文件裏的每個字符都只是它自己"
+zhs = "没有标记：文件里的每个字符都只是它自己"
 en = "no markup: every character in the file is only itself"
 find = "語法 语法 純文本 纯文本 txt plain"
 
@@ -1563,8 +1563,8 @@ find = "檢查 检查 校驗 校验 查錯 查错 check lint"
 [[message]]
 # : 命令選單裏 csv 那一項的說明（table 組）
 key = "cmd.table.csv"
-zht = "把游標所在的 | 表格拆成分隔文本"
-zhs = "把游标所在的 | 表格拆成分隔文本"
+zht = "把光標所在的 | 表格拆成分隔文本"
+zhs = "把光标所在的 | 表格拆成分隔文本"
 en = "turn the | table under the cursor into delimited text"
 find = "分隔 逗號 逗号 制表符 csv tsv 拆開 拆开"
 
@@ -1595,8 +1595,8 @@ find = "表格 畫成 画成 欄尺 栏尺 full 全"
 [[message]]
 # : 命令選單裏 header 那一項的說明（table 組）
 key = "cmd.table.header"
-zht = "第一行是欄名，還是跟別的行一樣是資料"
-zhs = "第一行是栏名，还是跟别的行一样是资料"
+zht = "第一行是欄名，還是跟別的行一樣是數據"
+zhs = "第一行是栏名，还是跟别的行一样是数据"
 en = "whether the first row names the columns or is a row like any other"
 find = "表頭 表头 欄名 栏名 標題行 标题行 header"
 
@@ -1635,8 +1635,8 @@ find = "表格 關掉 关掉 普通文字 off"
 [[message]]
 # : 命令選單裏 pipe 那一項的說明（table 組）
 key = "cmd.table.pipe"
-zht = "把選中的（或游標所在的）分隔文本作成 | 表格"
-zhs = "把选中的（或游标所在的）分隔文本作成 | 表格"
+zht = "把選中的（或光標所在的）分隔文本作成 | 表格"
+zhs = "把选中的（或光标所在的）分隔文本作成 | 表格"
 en = "turn the selected — or the surrounding — delimited text into a | table"
 find = "管道 markdown 豎線 竖线 pipe 作成 合成"
 
@@ -1968,16 +1968,16 @@ find = "折行 換行 换行 自動 自动 on"
 [[message]]
 # : 命令選單裏 all 那一項的說明（write 組）
 key = "cmd.write.all"
-zht = "存下所有改過的檔案"
-zhs = "存下所有改过的档案"
+zht = "存下所有改過的文件"
+zhs = "存下所有改过的文件"
 en = "save every file that changed"
 find = "全部保存 全存 save all"
 
 [[message]]
 # : 命令選單裏 as 那一項的說明（write 組）
 key = "cmd.write.as"
-zht = "另存成新檔並改編輯它（`:w <檔名>` 只抄一份，人還在這邊）"
-zhs = "另存成新档并改编辑它（`:w <档名>` 只抄一份，人还在这边）"
+zht = "另存成新文件並改編輯它（`:w <文件名>` 只抄一份，人還在這邊）"
+zhs = "另存成新文件并改编辑它（`:w <文件名>` 只抄一份，人还在这边）"
 en = "save under a new name and edit that one (`:w <path>` only copies)"
 find = "另存 改名 saveas rename"
 
@@ -2143,7 +2143,7 @@ en = "a new one"
 [[message]]
 # 補全：面板叫什麼——附近的檔案
 key = "complete.file"
-zht = "附近的檔案"
+zht = "附近的文件"
 zhs = "附近的文件"
 en = "a file near here"
 
@@ -2157,7 +2157,7 @@ en = "footnote tag"
 [[message]]
 # 補全面板的名字：正在補一個章節錨點（Insert 模式打了 `](#`）
 key = "complete.heading"
-zht = "本檔章節"
+zht = "本文件章節"
 zhs = "本文件章节"
 en = "a heading in this file"
 
@@ -2208,7 +2208,7 @@ en = "no merge conflicts in this file"
 [[message]]
 # 空格 m 而游標不在任何衝突裏
 key = "conflict.not-in-one"
-zht = "游標不在衝突裏"
+zht = "光標不在衝突裏"
 zhs = "光标不在冲突里"
 en = "the cursor is not in a merge conflict"
 
@@ -2416,8 +2416,8 @@ en = "repeated {0} times at most — the rest are not done"
 [[message]]
 # 另有幾個檔同樣沒進去
 key = "data.and-more-failed"
-zht = "{0}（另有 {1} 個檔同樣沒進去）"
-zhs = "{0}（另有 {1} 个档同样没进去）"
+zht = "{0}（另有 {1} 個文件同樣沒進去）"
+zhs = "{0}（另有 {1} 个文件同样没进去）"
 en = "{0} ({1} more file(s) did not load either)"
 
 [[message]]
@@ -2430,8 +2430,8 @@ en = "{0} was refused by the core: {1}"
 [[message]]
 # 核心不認這個檔，魔數對不上
 key = "data.refused-magic"
-zht = "{0} 核心不認：{1}（期望 {2}，檔頭是 {3}）"
-zhs = "{0} 核心不认：{1}（期望 {2}，档头是 {3}）"
+zht = "{0} 核心不認：{1}（期望 {2}，文件頭是 {3}）"
+zhs = "{0} 核心不认：{1}（期望 {2}，文件头是 {3}）"
 en = "{0} was refused by the core: {1} (expected {2}, the file says {3})"
 
 [[message]]
@@ -2485,8 +2485,8 @@ en = "{0}:{1}: {2}"
 [[message]]
 # :diff 而這個緩衝區沒有檔案，也沒說要比誰
 key = "diff.no-file"
-zht = "這一份還沒有檔案，要比就說跟誰比：`:diff <檔名>`"
-zhs = "这一份还没有档案，要比就说跟谁比：`:diff <档名>`"
+zht = "這一份還沒有文件，要比就說跟誰比：`:diff <文件名>`"
+zhs = "这一份还没有文件，要比就说跟谁比：`:diff <文件名>`"
 en = "this buffer has no file yet — say what to compare with: `:diff <path>`"
 
 [[message]]
@@ -2523,15 +2523,15 @@ en = "{0}+ lines differ from 《{1}》 (first {0} listed) — gf goes there"
 [[message]]
 # 系統剪貼簿是空的
 key = "edit.clipboard-empty"
-zht = "剪貼簿是空的"
-zhs = "剪贴簿是空的"
+zht = "剪貼板是空的"
+zhs = "剪贴板是空的"
 en = "the clipboard is empty"
 
 [[message]]
 # 複製到系統剪貼簿
 key = "edit.copied-to-clipboard"
-zht = "複製了 {0} 個字到系統剪貼簿"
-zhs = "复制了 {0} 个字到系统剪贴簿"
+zht = "複製了 {0} 個字到系統剪貼板"
+zhs = "复制了 {0} 个字到系统剪贴板"
 en = "copied {0} character(s) to the system clipboard"
 
 [[message]]
@@ -2617,15 +2617,15 @@ en = "yanked {0} character(s)"
 [[message]]
 # :export 給了不認得的格式
 key = "export.no-such-format"
-zht = "沒有「{0}」這種格式——html、typst，或者 csv、tsv（游標所在的表格）"
-zhs = "没有「{0}」这种格式——html、typst，或者 csv、tsv（游标所在的表格）"
+zht = "沒有「{0}」這種格式——html、typst，或者 csv、tsv（光標所在的表格）"
+zhs = "没有「{0}」这种格式——html、typst，或者 csv、tsv（光标所在的表格）"
 en = "no such format as '{0}' — html, typst, or csv/tsv for the table under the cursor"
 
 [[message]]
 # 導出的檔名就是稿子本身
 key = "export.same-as-the-manuscript"
-zht = "那是這份稿子本身——導出要另一個檔名"
-zhs = "那是这份稿子本身——导出要另一个档名"
+zht = "那是這份稿子本身——導出要另一個文件名"
+zhs = "那是这份稿子本身——导出要另一个文件名"
 en = "that is the manuscript itself — an export needs another name"
 
 [[message]]
@@ -2638,8 +2638,8 @@ en = "{0} is already there — `:export!` writes over it"
 [[message]]
 # 導出的目標檔案正開着
 key = "export.target-is-open"
-zht = "{0} 正開着——導出會蓋掉它，請另取一個檔名"
-zhs = "{0} 正开着——导出会盖掉它，请另取一个档名"
+zht = "{0} 正開着——導出會蓋掉它，請另取一個文件名"
+zhs = "{0} 正开着——导出会盖掉它，请另取一个文件名"
 en = "{0} is open here — an export would write over it; pick another name"
 
 [[message]]
@@ -2777,8 +2777,8 @@ en = "no earlier jump"
 [[message]]
 # 按標題跳，整份沒有標題
 key = "goto.no-headings"
-zht = "這個檔案沒有標題"
-zhs = "这个档案没有标题"
+zht = "這個文件沒有標題"
+zhs = "这个文件没有标题"
 en = "no headings in this file"
 
 [[message]]
@@ -2805,8 +2805,8 @@ en = "only {0} heading(s)"
 [[message]]
 # 跳轉表裏那一項的檔案已經關了
 key = "goto.that-file-is-closed"
-zht = "那個檔案已經關了"
-zhs = "那个档案已经关了"
+zht = "那個文件已經關了"
+zhs = "那个文件已经关了"
 en = "that file is closed"
 
 
@@ -3088,8 +3088,8 @@ en = "what Space opens"
 [[message]]
 # 常用幫助：檔首／檔尾
 key = "help.common.start-end-of-file"
-zht = "檔首／檔尾"
-zhs = "档首／档尾"
+zht = "文件開頭／末尾"
+zhs = "文件开头／末尾"
 en = "start / end of the file"
 
 [[message]]
@@ -3123,8 +3123,8 @@ en = "next word, previous word, end of word — it knows 漢字 words"
 [[message]]
 # 常用幫助：複製／貼上
 key = "help.common.yank-put"
-zht = "複製／貼上"
-zhs = "复制／贴上"
+zht = "複製／粘貼"
+zhs = "复制／粘贴"
 en = "yank / put"
 
 [[message]]
@@ -3158,8 +3158,8 @@ en = "read this row laid out / fold the tails of over-wide cells"
 [[message]]
 # 表格幫助：把檔案當表格讀
 key = "help.table.enter-table"
-zht = "把這個檔案當表格讀；:table off 退出"
-zhs = "把这个档案当表格读；:table off 退出"
+zht = "把這個文件當表格讀；:table off 退出"
+zhs = "把这个文件当表格读；:table off 退出"
 en = "read this file as a grid; :table off leaves"
 
 [[message]]
@@ -3497,8 +3497,8 @@ en = "close this work area and go to the other"
 [[message]]
 # g 組：複製到系統剪貼簿
 key = "hint.goto.copy-to-clipboard"
-zht = "複製到系統剪貼簿"
-zhs = "复制到系统剪贴簿"
+zht = "複製到系統剪貼板"
+zhs = "复制到系统剪贴板"
 en = "copy to the system clipboard"
 
 [[message]]
@@ -3511,15 +3511,15 @@ en = "dictionary: how this character is written and coded"
 [[message]]
 # g 組：檔尾
 key = "hint.goto.end-of-file"
-zht = "檔尾"
-zhs = "档尾"
+zht = "文件末尾"
+zhs = "文件末尾"
 en = "end of file"
 
 [[message]]
 # g 組：檔案邊欄
 key = "hint.goto.file-sidebar"
-zht = "檔案邊欄"
-zhs = "档案边栏"
+zht = "文件邊欄"
+zhs = "文件边栏"
 en = "the file sidebar"
 
 [[message]]
@@ -3532,7 +3532,7 @@ en = "first non-blank"
 [[message]]
 # g 組：跟着連結走
 key = "hint.goto.follow-link"
-zht = "跟着連結走"
+zht = "跟着鏈接走"
 zhs = "跟着链接走"
 en = "follow the link"
 
@@ -3553,8 +3553,8 @@ en = "line start / end"
 [[message]]
 # g 組：切到下一個／上一個打開的檔案
 key = "hint.goto.next-or-previous-file"
-zht = "下一個／上一個打開的檔案"
-zhs = "下一个／上一个打开的档案"
+zht = "下一個／上一個打開的文件"
+zhs = "下一个／上一个打开的文件"
 en = "the next / previous open file"
 
 [[message]]
@@ -3567,15 +3567,15 @@ en = "keep only this work area"
 [[message]]
 # g 組：開啟檔案
 key = "hint.goto.open-file"
-zht = "開啟檔案"
-zhs = "开启档案"
+zht = "打開文件"
+zhs = "打开文件"
 en = "open a file"
 
 [[message]]
 # g 組：開這個檔
 key = "hint.goto.open-this-file"
-zht = "開這個檔"
-zhs = "开这个档"
+zht = "打開這個文件"
+zhs = "打开这个文件"
 en = "open this file"
 
 [[message]]
@@ -3595,15 +3595,15 @@ en = "the outline"
 [[message]]
 # g 組：從系統剪貼簿貼上
 key = "hint.goto.paste-from-clipboard"
-zht = "從系統剪貼簿貼上"
-zhs = "从系统剪贴簿贴上"
+zht = "從系統剪貼板粘貼"
+zhs = "从系统剪贴板粘贴"
 en = "paste from the system clipboard"
 
 [[message]]
 # g 組：檔首
 key = "hint.goto.start-of-file"
-zht = "檔首（g30g 去第 30 行）"
-zhs = "档首（g30g 去第 30 行）"
+zht = "文件開頭（g30g 去第 30 行）"
+zhs = "文件开头（g30g 去第 30 行）"
 en = "start of the file (g30g goes to line 30)"
 
 [[message]]
@@ -3910,8 +3910,8 @@ en = "comment out, by the line"
 [[message]]
 # 空格組：從系統剪貼簿貼在前面
 key = "hint.space.paste-before"
-zht = "從系統剪貼簿貼在前面"
-zhs = "从系统剪贴簿贴在前面"
+zht = "從系統剪貼板貼在前面"
+zhs = "从系统剪贴板贴在前面"
 en = "paste before, from the system clipboard"
 
 [[message]]
@@ -4029,8 +4029,8 @@ en = "full: the walls and the ruler"
 [[message]]
 # 表格提示：第一行當欄名／當資料
 key = "hint.table.first-row-is-data"
-zht = "第一行：欄名⇄資料"
-zhs = "第一行：栏名⇄资料"
+zht = "第一行：欄名⇄數據"
+zhs = "第一行：栏名⇄数据"
 en = "the first row: names ⇄ data"
 
 [[message]]
@@ -4071,7 +4071,7 @@ en = "line it up again"
 [[message]]
 # 表格提示：按 t 開的那張選單（其餘的表格鍵都在裏面）
 key = "hint.table.menu"
-zht = "表格選單"
+zht = "表格菜單"
 zhs = "表格菜单"
 en = "the table menu"
 
@@ -4106,7 +4106,7 @@ en = "the next table / the one before"
 [[message]]
 # 表格提示：游標不在任何一張表裏，底下那些鍵沒有東西可動
 key = "hint.table.not-in-a-table"
-zht = "游標不在表格裏 —— t ] 走到下一張"
+zht = "光標不在表格裏 —— t ] 走到下一張"
 zhs = "光标不在表格里 —— t ] 走到下一张"
 en = "the cursor is not in a table — t ] walks to the next one"
 
@@ -4232,8 +4232,8 @@ en = "q replays a macro (Q records one)"
 [[message]]
 # Normal 模式按 \（別的編輯器的 leader 鍵，這裏是空格）
 key = "hint.vi.backslash"
-zht = "空格是選單鍵：空格 f 開檔、空格 b 換緩衝區、空格 d 詳情"
-zhs = "空格是选单键：空格 f 开档、空格 b 换缓冲区、空格 d 详情"
+zht = "空格是菜單鍵：空格 f 開文件、空格 b 換緩衝區、空格 d 詳情"
+zhs = "空格是菜单键：空格 f 开文件、空格 b 换缓冲区、空格 d 详情"
 en = "Space is the menu key: Space f opens a file, Space b switches buffer, Space d the detail pane"
 
 [[message]]
@@ -4295,8 +4295,8 @@ en = "no multiple cursors — see the manual, 「還沒有的」"
 [[message]]
 # Normal 模式按 Z（vi 的 ZZ，這裏沒有）
 key = "hint.vi.z-upper"
-zht = "存檔是 :w，存了就走是 :wq"
-zhs = "存档是 :w，存了就走是 :wq"
+zht = "保存是 :w，存了就走是 :wq"
+zhs = "保存是 :w，存了就走是 :wq"
 en = ":w saves, :wq saves and leaves"
 
 [[message]]
@@ -4405,8 +4405,8 @@ en = "not typing yet — `:yume-scheme` loads a 碼表"
 [[message]]
 # :yume ?，而這個二進制連出廠碼表都沒編進去
 key = "ime.not-started-no-builtin"
-zht = "還沒開始打字，而且這個二進制不帶碼表——先裝資料"
-zhs = "还没开始打字，而且这个二进制不带码表——先装资料"
+zht = "還沒開始打字，而且這個二進制不帶碼表——先裝數據"
+zhs = "还没开始打字，而且这个二进制不带码表——先装数据"
 en = "not typing yet, and this build carries no 碼表 — install the data first"
 
 [[message]]
@@ -4520,7 +4520,7 @@ en = "the dictionary"
 [[message]]
 # 命令：把檔案樹挪到這一邊
 key = "label.panel.files"
-zht = "檔案樹"
+zht = "文件樹"
 zhs = "文件树"
 en = "the file tree"
 
@@ -4592,8 +4592,8 @@ en = "{0} is a server — :view-preview starts it"
 [[message]]
 # 設定裏沒說這種檔要跑什麼
 key = "language.no-such-action"
-zht = "{0} 沒有說 {1} 要跑什麼——在設定裏寫 [language.{0}] {1} = …"
-zhs = "{0} 没有说 {1} 要跑什么——在设定里写 [language.{0}] {1} = …"
+zht = "{0} 沒有說 {1} 要跑什麼——在配置裏寫 [language.{0}] {1} = …"
+zhs = "{0} 没有说 {1} 要跑什么——在配置里写 [language.{0}] {1} = …"
 en = "{0} does not say what {1} runs — write [language.{0}] {1} = … in the config"
 
 [[message]]
@@ -4606,8 +4606,8 @@ en = "{0}: replaced"
 [[message]]
 # 外部命令要先存檔
 key = "language.save-first"
-zht = "先存檔——外面的程序讀的是檔案"
-zhs = "先存档——外面的程序读的是档案"
+zht = "先保存——外面的程序讀的是文件"
+zhs = "先保存——外面的程序读的是文件"
 en = "save first — the program outside reads the file"
 
 [[message]]
@@ -4770,8 +4770,8 @@ en = "平仄: on (○ 平, ● 仄, △▲ 韻腳)"
 [[message]]
 # 標點提示打開了，可是 :render off 不畫任何檔案裏沒有的東西
 key = "layout.note-no-render"
-zht = "標點提示：開——可是 :render off，頁面上不畫檔案裏沒有的字"
-zhs = "标点提示：开——可是 :render off，页面上不画档案里没有的字"
+zht = "標點提示：開——可是 :render off，頁面上不畫文件裏沒有的字"
+zhs = "标点提示：开——可是 :render off，页面上不画文件里没有的字"
 en = "notes: on — but `:render off` draws nothing the file does not hold"
 
 [[message]]
@@ -4846,7 +4846,7 @@ en = "off"
 [[message]]
 # gx：連結指的檔案不在
 key = "link.no-such-file"
-zht = "找不到 {0}——連結是照它所在的那個目錄算的"
+zht = "找不到 {0}——鏈接是照它所在的那個目錄算的"
 zhs = "找不到 {0}——链接是照它所在的那个目录算的"
 en = "no {0} — a link is read from the folder it is written in"
 
@@ -4860,8 +4860,8 @@ en = "no heading here is called 「{0}」"
 [[message]]
 # gx 按在了沒有連結的地方
 key = "link.none-here"
-zht = "游標下面沒有連結"
-zhs = "游标下面没有链接"
+zht = "光標下面沒有鏈接"
+zhs = "光标下面没有链接"
 en = "there is no link under the cursor"
 
 [[message]]
@@ -4888,7 +4888,7 @@ en = "handed to the browser: {0}"
 [[message]]
 # gx：http 與 https 以外的協議一律不交給系統
 key = "link.scheme-refused"
-zht = "{0}: 這種連結不交給系統——只有 http 與 https 跟"
+zht = "{0}: 這種鏈接不交給系統——只有 http 與 https 跟"
 zhs = "{0}: 这种链接不交给系统——只有 http 与 https 跟"
 en = "{0}: this kind of link is not handed to the machine — only http and https are followed"
 
@@ -4940,8 +4940,8 @@ en = "inline note: type inside the brackets"
 [[message]]
 # 貼上選單的標題
 key = "menu.paste.title"
-zht = "貼上：取過的東西"
-zhs = "贴上：取过的东西"
+zht = "粘貼：取過的東西"
+zhs = "粘贴：取过的东西"
 en = "paste: what has been taken"
 
 
@@ -4995,8 +4995,8 @@ en = "a grid holds no footnotes — :table off first"
 [[message]]
 # 這個檔不是 Markdown，寫不了腳注
 key = "note.not-markdown"
-zht = "這個檔案不是 Markdown——腳注在這裏只是四個字"
-zhs = "这个档案不是 Markdown——脚注在这里只是四个字"
+zht = "這個文件不是 Markdown——腳注在這裏只是四個字"
+zhs = "这个文件不是 Markdown——脚注在这里只是四个字"
 en = "this file is not Markdown — a footnote here is just four characters"
 
 [[message]]
@@ -5033,8 +5033,8 @@ en = "that half is closed"
 [[message]]
 # 另一半顯示的檔案已經關掉了
 key = "pane.file-was-closed"
-zht = "那一半的檔案已經關掉了"
-zhs = "那一半的档案已经关掉了"
+zht = "那一半的文件已經關掉了"
+zhs = "那一半的文件已经关掉了"
 en = "the file that half was showing is closed"
 
 [[message]]
@@ -5095,15 +5095,15 @@ en = "buffers"
 [[message]]
 # 空格 f 開的挑檔案那一格，標題
 key = "picker.files"
-zht = "檔案"
-zhs = "档案"
+zht = "文件"
+zhs = "文件"
 en = "files"
 
 [[message]]
 # 檔案選擇面板裏這個目錄是空的
 key = "picker.no-files-here"
-zht = "這裏沒有檔案"
-zhs = "这里没有档案"
+zht = "這裏沒有文件"
+zhs = "这里没有文件"
 en = "no files here"
 
 [[message]]
@@ -5116,8 +5116,8 @@ en = "nothing matched"
 [[message]]
 # 空格 " 開的貼上單，標題
 key = "picker.paste"
-zht = "貼上"
-zhs = "贴上"
+zht = "粘貼"
+zhs = "粘贴"
 en = "paste"
 
 
@@ -5140,8 +5140,8 @@ en = "preview: {0}"
 [[message]]
 # :view-preview 用在沒有標記語法的檔案上
 key = "preview.nothing-to-preview"
-zht = "這個檔案沒有標記，沒有什麼可以預覽的"
-zhs = "这个档案没有标记，没有什么可以预览的"
+zht = "這個文件沒有標記，沒有什麼可以預覽的"
+zhs = "这个文件没有标记，没有什么可以预览的"
 en = "this file has no markup, so there is nothing to preview"
 
 [[message]]
@@ -5161,8 +5161,8 @@ en = "preview: {0} (`:view-preview off` stops it)"
 [[message]]
 # :view-preview 用在沒存過的緩衝區上
 key = "preview.save-first"
-zht = "先存檔——排版器讀的是檔案"
-zhs = "先存档——排版器读的是档案"
+zht = "先保存——排版器讀的是文件"
+zhs = "先保存——排版器读的是文件"
 en = "save first — the typesetter reads the file"
 
 [[message]]
@@ -5213,8 +5213,8 @@ en = "this one has no name yet, so there is no book to record against — save i
 [[message]]
 # :count-progress 但 .yumete/progress.tsv 還一天都沒有
 key = "progress.nothing-yet"
-zht = "還沒有記錄：存一次檔，今天就開始算"
-zhs = "还没有记录：存一次档，今天就开始算"
+zht = "還沒有記錄：保存一次，今天就開始算"
+zhs = "还没有记录：保存一次，今天就开始算"
 en = "nothing recorded yet: save once and today starts counting"
 
 [[message]]
@@ -5309,8 +5309,8 @@ en = "threw away {0} draft(s)"
 [[message]]
 # 啓動時發現搶救稿比檔案新
 key = "recover.drafts-newer-than-file"
-zht = "{0} 有比檔案新的搶救稿——:recover 打開，:recover! 丟掉"
-zhs = "{0} 有比档案新的抢救稿——:recover 打开，:recover! 丢掉"
+zht = "{0} 有比文件新的搶救稿——:recover 打開，:recover! 丟掉"
+zhs = "{0} 有比文件新的抢救稿——:recover 打开，:recover! 丢掉"
 en = "{0}: draft(s) newer than the file(s) — :recover opens, :recover! throws away"
 
 [[message]]
@@ -5330,8 +5330,8 @@ en = "{0} unsaved draft(s) — :recover opens them"
 [[message]]
 # 本檔案沒有搶救稿
 key = "recover.no-draft-for-this-file"
-zht = "這個檔案沒有搶救稿"
-zhs = "这个档案没有抢救稿"
+zht = "這個文件沒有搶救稿"
+zhs = "这个文件没有抢救稿"
 en = "no draft for this file"
 
 [[message]]
@@ -5361,8 +5361,8 @@ en = "register {0} is empty"
 [[message]]
 # 預設暫存器空着，還沒複製過
 key = "register.nothing-yanked"
-zht = "沒有取過東西——先 y 複製，或者 空格 p 從系統剪貼簿貼"
-zhs = "没有取过东西——先 y 复制，或者 空格 p 从系统剪贴簿贴"
+zht = "沒有取過東西——先 y 複製，或者 空格 p 從系統剪貼板貼"
+zhs = "没有取过东西——先 y 复制，或者 空格 p 从系统剪贴板贴"
 en = "nothing has been yanked — y copies, or Space p pastes from the system clipboard"
 
 [[message]]
@@ -5375,8 +5375,8 @@ en = "{0} … ({1} lines)"
 [[message]]
 # 空格 " 的貼上單裏，系統剪貼簿那一條的名字
 key = "register.system-clipboard"
-zht = "系統剪貼簿"
-zhs = "系统剪贴簿"
+zht = "系統剪貼板"
+zhs = "系统剪贴板"
 en = "system clipboard"
 
 
@@ -5659,8 +5659,8 @@ en = "this table names no scope to jump within, so the search runs from the firs
 [[message]]
 # 搜索：說了一個不存在的資料夾
 key = "search.no-such-folder"
-zht = "沒有這個資料夾：{0}"
-zhs = "没有这个资料夹：{0}"
+zht = "沒有這個文件夾：{0}"
+zhs = "没有这个文件夹：{0}"
 en = "no such folder: {0}"
 
 [[message]]
@@ -5708,15 +5708,15 @@ en = "nothing changed"
 [[message]]
 # 搜索：在哪裏找——這個檔
 key = "search.where.buffer"
-zht = "本檔"
-zhs = "本档"
+zht = "本文件"
+zhs = "本文件"
 en = "this file"
 
 [[message]]
 # 搜索：在哪裏找——這個資料夾
 key = "search.where.folder"
-zht = "本夾"
-zhs = "本夹"
+zht = "本文件夾"
+zhs = "本文件夹"
 en = "this folder"
 
 [[message]]
@@ -5822,8 +5822,8 @@ en = "replaced, but it said: {0}"
 [[message]]
 # `:shot!` 而後面是 screen：剪貼簿沒有東西可以蓋
 key = "shot.the-bang-is-for-a-file"
-zht = "`!` 是給存成檔案的那幾種的——剪貼簿沒有東西要蓋掉"
-zhs = "`!` 是给存成档案的那几种的——剪贴簿没有东西要盖掉"
+zht = "`!` 是給存成文件的那幾種的——剪貼板沒有東西要蓋掉"
+zhs = "`!` 是给存成文件的那几种的——剪贴板没有东西要盖掉"
 en = "`!` is for the forms that write a file — nothing on the clipboard to overwrite"
 
 
@@ -5995,8 +5995,8 @@ en = "a table block in the document: {0} columns, {1} rows, split by '{2}'"
 [[message]]
 # t H：文中的表格區塊本來就沒有欄名行
 key = "table.block-first-row-is-data"
-zht = "文中的表格區塊：第一行本來就是資料"
-zhs = "文中的表格区块：第一行本来就是资料"
+zht = "文中的表格區塊：第一行本來就是數據"
+zhs = "文中的表格区块：第一行本来就是数据"
 en = "a table block in the text: its first row is data already"
 
 [[message]]
@@ -6268,8 +6268,8 @@ en = "by its own header row"
 [[message]]
 # t H：第一行改當資料，欄名用編號
 key = "table.header-is-data"
-zht = "第一行當資料了，{0} 欄按編號叫"
-zhs = "第一行当资料了，{0} 栏按编号叫"
+zht = "第一行當數據了，{0} 欄按編號叫"
+zhs = "第一行当数据了，{0} 栏按编号叫"
 en = "the first row is data now; {0} columns, named by number"
 
 [[message]]
@@ -6310,7 +6310,7 @@ en = "lined up"
 [[message]]
 # 打開一個看起來就是分欄的純文本檔案，自動以表格模式打開（#380）
 key = "table.looks-delimited"
-zht = "本檔案格式似乎是 {0} 分欄，故而以表格模式打開，按 t o 回到源碼模式"
+zht = "本文件格式似乎是 {0} 分欄，故而以表格模式打開，按 t o 回到源碼模式"
 zhs = "本文件格式似乎是 {0} 分栏，故而以表格模式打开，按 t o 回到源码模式"
 en = "this file looks {0}-delimited, so it opens as a table; t o for the source"
 
@@ -6338,8 +6338,8 @@ en = "nothing here plainly separates columns — name the delimiter, as in :tabl
 [[message]]
 # :table 用在沒有檔名的緩衝區上
 key = "table.no-file-name-no-schema"
-zht = "沒有檔名，就沒有 schema 可以照——或者把光標放到 | 表格上"
-zhs = "没有档名，就没有 schema 可以照——或者把光标放到 | 表格上"
+zht = "沒有文件名，就沒有 schema 可以照——或者把光標放到 | 表格上"
+zhs = "没有文件名，就没有 schema 可以照——或者把光标放到 | 表格上"
 en = "no file name, so no schema to read it by — or put the cursor on a | table"
 
 [[message]]
@@ -6387,8 +6387,8 @@ en = "no '{0}' in this table"
 [[message]]
 # :table-csv：游標不在 | 表格裏
 key = "table.not-in-a-pipe-table"
-zht = "游標不在 | 表格裏"
-zhs = "游标不在 | 表格里"
+zht = "光標不在 | 表格裏"
+zhs = "光标不在 | 表格里"
 en = "the cursor is not in a | table"
 
 [[message]]
@@ -6583,15 +6583,15 @@ en = "{0} is open in the other area — 空格 w to go and edit it"
 [[message]]
 # t e 按在一份文件裏的表格上
 key = "table.schema-is-for-a-whole-file"
-zht = "schema 是給整份表格檔案的——這張表在文件裏面"
-zhs = "schema 是给整份表格档案的——这张表在文件里面"
+zht = "schema 是給整份表格文件的——這張表在文章裏面"
+zhs = "schema 是给整份表格文件的——这张表在文章里面"
 en = "a schema is for a file that is nothing but a table — this one lives inside a document"
 
 [[message]]
 # 新寫的 schema 檔頭一行的說明
 key = "table.schema-note"
-zht = "這份 schema 說的就是眼下看到的樣子。改完存檔，:table off 再 :table 就照新的讀。"
-zhs = "这份 schema 说的就是眼下看到的样子。改完存档，:table off 再 :table 就照新的读。"
+zht = "這份 schema 說的就是眼下看到的樣子。改完保存，:table off 再 :table 就照新的讀。"
+zhs = "这份 schema 说的就是眼下看到的样子。改完保存，:table off 再 :table 就照新的读。"
 en = "this schema says what the grid is already doing. Edit, save, then :table off and :table again."
 
 [[message]]
@@ -6681,8 +6681,8 @@ en = "the whole-window table holds this table — t q gives the window back, t ]
 [[message]]
 # t a 在正文頁面上按到——那裏的行是共用的折行層算的
 key = "table.wrap-needs-the-window"
-zht = "格內折行只在全窗表格裏——先 tt（設定已記下）"
-zhs = "格内折行只在全窗表格里——先 tt（设定已记下）"
+zht = "格內折行只在全窗表格裏——先 tt（設置已記下）"
+zhs = "格内折行只在全窗表格里——先 tt（设置已记下）"
 en = "cells wrap in the whole-window table — press tt first (the switch is set)"
 
 [[message]]
@@ -6767,15 +6767,15 @@ en = "could not write the lesson: {0}"
 [[message]]
 # 課文的檔名都用光了
 key = "tutor.no-name-left"
-zht = "課文的檔名都用光了——刪掉幾份 tutor*.md"
-zhs = "课文的档名都用光了——删掉几份 tutor*.md"
+zht = "課文的文件名都用光了——刪掉幾份 tutor*.md"
+zhs = "课文的文件名都用光了——删掉几份 tutor*.md"
 en = "every lesson name is taken — delete a few tutor*.md"
 
 [[message]]
 # 課文開好了，但沒有資料目錄
 key = "tutor.open-unsaved"
-zht = "課文開好了（沒有資料目錄，存不下來）"
-zhs = "课文开好了（没有资料目录，存不下来）"
+zht = "課文開好了（沒有數據目錄，存不下來）"
+zhs = "课文开好了（没有数据目录，存不下来）"
 en = "the lesson is open (no data directory, so it cannot be saved)"
 
 [[message]]
@@ -6868,7 +6868,7 @@ en = "not in the decomposition table"
 [[message]]
 # 空格 d：游標下沒有字可查
 key = "ui.nothing-to-look-up"
-zht = "游標下沒有字可查"
+zht = "光標下沒有字可查"
 zhs = "光标下没有字可查"
 en = "no character under the cursor to look up"
 
@@ -6903,8 +6903,8 @@ en = "no picture taken ({0})"
 [[message]]
 # 截圖進了剪貼簿
 key = "ui.screenshot-taken"
-zht = "畫面已放進剪貼簿"
-zhs = "画面已放进剪贴簿"
+zht = "畫面已放進剪貼板"
+zhs = "画面已放进剪贴板"
 en = "the screen is on the clipboard"
 
 [[message]]
@@ -6924,15 +6924,15 @@ en = "could not write the picture: {0}"
 [[message]]
 # `:shot png` 的那條命令沒把圖寫成檔案
 key = "ui.shot-kept-the-clipboard"
-zht = "`[editor] screenshot` 那一條沒有理會 $YUMETE_SHOT，圖還是進了剪貼簿"
-zhs = "`[editor] screenshot` 那一条没有理会 $YUMETE_SHOT，图还是进了剪贴簿"
+zht = "`[editor] screenshot` 那一條沒有理會 $YUMETE_SHOT，圖還是進了剪貼板"
+zhs = "`[editor] screenshot` 那一条没有理会 $YUMETE_SHOT，图还是进了剪贴板"
 en = "the `[editor] screenshot` line ignored $YUMETE_SHOT — the picture is on the clipboard"
 
 [[message]]
 # `:shot png` 把視窗拍成檔案了
 key = "ui.shot-photographed"
-zht = "視窗拍成了 {0}"
-zhs = "视窗拍成了 {0}"
+zht = "窗口拍成了 {0}"
+zhs = "窗口拍成了 {0}"
 en = "photographed the window to {0}"
 
 [[message]]
@@ -6972,8 +6972,8 @@ en = "{0} word(s) of this book's own, segmenting already; written into {1} — `
 [[message]]
 # 寫進詞表的那一段的抬頭（這一行進的是檔案，不是狀態欄）
 key = "word.discover-heading"
-zht = "# 本書自己的詞：:word-discover 掃了 {0} 個檔找出來的，刪掉不要的"
-zhs = "# 本书自己的词：:word-discover 扫了 {0} 个档找出来的，删掉不要的"
+zht = "# 本書自己的詞：:word-discover 掃了 {0} 個文件找出來的，刪掉不要的"
+zhs = "# 本书自己的词：:word-discover 扫了 {0} 个文件找出来的，删掉不要的"
 en = "# this book's own words, found by :word-discover over {0} file(s); delete what is not a word"
 
 [[message]]
@@ -6988,8 +6988,8 @@ en = "{0}	# {1}×"
 [[message]]
 # 挖了，一個字典不認得的詞都沒有
 key = "word.discover-none"
-zht = "掃了 {0} 個檔，沒有找到本書自己的詞——書裏的詞字典都認得"
-zhs = "扫了 {0} 个档，没有找到本书自己的词——书里的词字典都认得"
+zht = "掃了 {0} 個文件，沒有找到本書自己的詞——書裏的詞字典都認得"
+zhs = "扫了 {0} 个文件，没有找到本书自己的词——书里的词字典都认得"
 en = "{0} file(s) read, and no words of this book's own — the dictionary already knows them all"
 
 [[message]]
@@ -7044,8 +7044,8 @@ en = "word tint: background"
 [[message]]
 # 沒有資料目錄，沒有全域詞表
 key = "word.no-data-directory"
-zht = "不知道資料目錄在哪裏——這一台上沒有全域詞表"
-zhs = "不知道资料目录在哪里——这一台上没有全域词表"
+zht = "不知道數據目錄在哪裏——這一台上沒有全域詞表"
+zhs = "不知道数据目录在哪里——这一台上没有全域词表"
 en = "no data directory known — this machine has no global word list"
 
 [[message]]
@@ -7155,28 +7155,28 @@ en = "vertical does not soft-wrap: a 縱 breaks at the height of the window. Thi
 [[message]]
 # 安全核驗的第一個選項：照存
 key = "write.oversize-go"
-zht = "繼續儲存"
-zhs = "继续储存"
+zht = "繼續保存"
+zhs = "继续保存"
 en = "save it"
 
 [[message]]
 # 安全核驗的第二個選項：先看改了什麼（＝ :diff），這一存不做
 key = "write.oversize-look"
-zht = "檢視區別"
-zhs = "检视区别"
+zht = "查看區別"
+zhs = "查看区别"
 en = "see what changed"
 
 [[message]]
 # 安全核驗的第三個選項：不存
 key = "write.oversize-no"
-zht = "取消儲存"
-zhs = "取消储存"
+zht = "取消保存"
+zhs = "取消保存"
 en = "cancel"
 
 [[message]]
 # 安全核驗答了「取消儲存」（或按 Esc）之後說的話
 key = "write.oversize-stopped"
-zht = "沒存——磁碟上那一份原封不動"
+zht = "沒存——磁盤上那一份原封不動"
 zhs = "没存——磁盘上那一份原封不动"
 en = "not saved — the file on disk is untouched"
 

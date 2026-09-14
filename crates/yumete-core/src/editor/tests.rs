@@ -7146,7 +7146,7 @@ fn what_was_cut_three_edits_ago_is_still_reachable() {
     type_keys(&mut ed, " \"");
     assert_eq!(ed.mode(), Mode::Picker);
     let shown = ed.picker().unwrap().matches();
-    assert!(shown[0].label().contains("系統剪貼簿"));
+    assert!(shown[0].label().contains("系統剪貼板"));
     assert!(shown[1].label().contains("乙二"));
 
     // Choosing one pastes it, without disturbing the ring's order.
@@ -13407,7 +13407,7 @@ fn a_link_is_finished_with_a_heading_of_this_file() {
         ed.on_key(Key::Char(c));
     }
     let (title, choices, _) = ed.reference_menu().expect("the headings are offered");
-    assert_eq!(title, "本檔章節");
+    assert_eq!(title, "本文件章節");
     let texts: Vec<&str> = choices.iter().map(|c| c.text.as_str()).collect();
     assert_eq!(texts, ["卷一-開端)", "第三節雨)"], "the space becomes a hyphen, the colon is dropped");
     assert_eq!(choices[0].note, None, "「卷一-開端」 is the title; printing it twice says nothing");

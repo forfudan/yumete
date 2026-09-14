@@ -240,7 +240,7 @@ impl View {
     /// Its name, for the sidebar's header.
     pub fn title(self) -> &'static str {
         match self {
-            View::Explorer => "檔案",
+            View::Explorer => "文件",
             View::Buffers => "緩衝區",
             View::Outline => "大綱",
             View::Search => "尋找",
@@ -689,7 +689,7 @@ mod tests {
         sidebar.show(View::Outline);
         sidebar.show(View::Explorer);
         assert_eq!(sidebar.selected(), 1, "the tree is where it was left");
-        assert!(sidebar.title().contains("檔案"));
+        assert!(sidebar.title().contains("文件"));
 
         std::fs::remove_dir_all(&dir).ok();
     }
