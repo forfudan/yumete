@@ -4802,6 +4802,21 @@ fn markup_style(kind: yumete_core::markdown::Kind, ink: crate::theme::Palette) -
     }
 }
 
+/// The other half of a table's banding — **第 88 檔**, four rungs off the
+/// [`BAND`] the table sits on and two short of the paper.
+///
+/// ⚠️ **A whole rung was a boundary, not a rhythm.** This began at 第 90 —
+/// which *is* the paper — so every other row said two things at once: 「a
+/// different row」 and 「out of the table」. 「对比太强烈」.
+///
+/// ⚠️ **And a ground is not a mark: the area does the work.** 1.09:1 would be
+/// invisible on a tick or a rule, and is plenty across a row of cells — 「底色
+/// 虽然靠近，但是因为面积大，还是有很好的区分效果」. That is why the stripe can
+/// sit this close to the band and still be read at a glance.
+///
+/// [`BAND`]: yumete_config::rung::BAND
+const TABLE_STRIPE: u16 = 8800;
+
 /// How a whole row is set, given the block its line belongs to.
 ///
 /// Blocks colour the *row*, inline runs colour the characters, and the two
@@ -4869,10 +4884,17 @@ fn block_style(block: yumete_core::markdown::Block, ink: crate::theme::Palette) 
                 .fg(ink.furniture()),
             // The body, banded alternately: one row's cells have to be
             // tellable from the next's, and in 縱書 a cell that wraps to three
-            // lines cannot be read without it. A small step on purpose —
-            // stripes are a rhythm, not a boundary.
+            // lines cannot be read without it.
+            //
+            // ⚠️ **Half a rung, and neither of them the page.** This was a
+            // whole rung — 第 17 檔 against 第 18 — and 第 18 *is* the paper, so
+            // every other row said two things at once: 「a different row」 and
+            // 「out of the table」. 「对比太强烈」. The whole table sits on the
+            // band it has always sat on, and the stripe is half a rung off it:
+            // a rhythm the eye picks up over three rows, not a boundary it has
+            // to read on each one.
             n if n % 2 == 0 => Style::default().bg(ink.at(yumete_config::rung::BAND)),
-            _ => Style::default().bg(ink.at(yumete_config::rung::PAPER)),
+            _ => Style::default().bg(ink.at(TABLE_STRIPE)),
         }),
         // Metadata and scene breaks are furniture, not writing.
         Block::FrontMatter | Block::Rule | Block::FootnoteDef => {
@@ -6128,7 +6150,17 @@ fn draw_horizontal(
             }
         }
 
-        if show_segmentation && !has_selection {
+        // ⚠️ **Not `&& !has_selection`** (#450). The overlay used to go out on
+        // **every paragraph on the screen** the moment anything was selected —
+        // and in this editor a motion *is* a selection, so holding `w` down
+        // made the whole page flash: 選到單字 (a bare cursor, no selection) it
+        // came back, 選到多字詞 it went out again, once a keystroke.
+        //
+        // There was never anything to avoid. The selection's own ground is
+        // painted further down, **after** this, and patched over whatever is
+        // here — so the cells it covers were never going to show a word tint,
+        // and the cells it does not cover had no reason to lose one.
+        if show_segmentation {
             let page_bg = ink.page().bg;
             let page_fg = ink.page().fg;
             // Tint each word with an alternating background (Feature #24). The
@@ -10091,8 +10123,9 @@ mod tests {
         // 墨香 dark: warm ink on a deep ground, ringed in a mid rung of the same
         // ladder. Nothing in the panel falls back to the terminal default.
         let paper = Color::Rgb(0x26, 0x2A, 0x27);
-        // rung::RULE, where every ring on the screen is drawn.
-        let ring = Color::Rgb(0x72, 0x70, 0x62);
+        // rung::RULE — 第 50 檔 exactly, since the ladder was renumbered to
+        // one hundred and one stops of a hundred steps each (#451).
+        let ring = Color::Rgb(0x71, 0x6F, 0x61);
         let corner = (0..buffer.area.height)
             .flat_map(|y| (0..buffer.area.width).map(move |x| (x, y)))
             .find(|&(x, y)| buffer[(x, y)].symbol() == "\u{256d}")
