@@ -4465,9 +4465,13 @@ four steps were dropped, and the reasons are the interesting part.
    runner for every release.
 3. Each build job checks out **two repositories side by side** —
    `$GITHUB_WORKSPACE/yumete` and `.../yume` — because of the path dependency
-   named above. Both are private, so `GITHUB_TOKEN` cannot read the sibling and
-   the run needs a `YUME_REPO_TOKEN` secret; a guard step says that in one line
-   rather than letting `cargo metadata` say it in twenty. Then tests, build,
+   named above. `forfudan/yume` is private and `GITHUB_TOKEN` cannot read it,
+   so the run needs a **read-only deploy key** for that repository in the
+   `YUME_DEPLOY_KEY` secret (created 2026-09-14, id 163237437). A deploy key
+   rather than a PAT: it does not expire and it reaches exactly one repository,
+   and a token that quietly lapses in a year is a release that fails on the day
+   you least want it to. A guard step says that in one line rather than letting
+   `cargo metadata` say it in twenty. Then the tables are fetched, tests, build,
    package, and a smoke test that runs the **relocated** binary and checks its
    `--version` against the tarball's name.
 4. `attach` uploads the tarballs and their `.sha256` files with `--clobber`.
@@ -4485,9 +4489,11 @@ four steps were dropped, and the reasons are the interesting part.
   Homebrew sat four versions behind for four months. Automate it before the
   second release, not the tenth.
 
-⚠️ **Both repositories are private today.** A public tap pointing at a private
-repository's release assets 404s for everyone but the author, so `forfudan/yumete`
-has to be public before the formula is worth publishing.
+⚠️ **`forfudan/yumete` has to be public before the tap is worth publishing** —
+a public formula pointing at a private repository's release assets 404s for
+everyone but the author. The author settled on making it public (2026-09-14).
+`forfudan/yume` stays private: nothing outside CI needs it, and the data the
+binary carries comes from `forfudan/yume-release`, which is public.
 
 ⚠️ **`YUMETE_RELEASE=1` is what makes the binary say `0.1.0`.** Without it
 `crates/yumete/build.rs` emits `0.1.0-dev.20260914…+1f6aeb2`, which SemVer sorts
