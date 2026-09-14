@@ -2668,6 +2668,53 @@ fn ime_handle(
         return false;
     }
     let composing = ime.is_composing();
+    // **快捷符號 owns the keyboard while it is up** — every printable key goes
+    // straight to the engine, which has `shortcut_input` for exactly this: a
+    // letter commits its symbol, the lead key again commits 「；」, anything
+    // else leaves the mode and is re-read as a fresh keypress.
+    //
+    // ⚠️ **Ahead of the 選重 arms, not after them.** The buffer holds the lead
+    // key and the table counts as candidates, so `key_action` reads the state
+    // as 「組字中，有候選」 — and in 靈明 that makes `;` mean 選二. `;;` then
+    // committed the **second entry** (`b` ＝ 「～」) instead of 「；」, and `'`
+    // would have committed the third. The mode has no 選重 in it at all, which
+    // is why yume's own front ends branch on it before anything else
+    // (`frontends/windows/src/KeyHandler.cpp:675`).
+    if ime.is_shortcut() {
+        match code {
+            // The lead key again, Space: both 「；」. Enter commits the raw
+            // buffer, Backspace and Esc put the table away.
+            KeyCode::Char(' ') => ime.space(),
+            KeyCode::Enter => ime.enter(),
+            KeyCode::Backspace => {
+                ime.backspace();
+            }
+            KeyCode::Esc => ime.escape(),
+            // Nothing here to navigate: the choosing is done with letters.
+            KeyCode::Left
+            | KeyCode::Right
+            | KeyCode::Up
+            | KeyCode::Down
+            | KeyCode::Home
+            | KeyCode::End
+            | KeyCode::PageUp
+            | KeyCode::PageDown
+            | KeyCode::Delete
+            | KeyCode::Tab
+            | KeyCode::BackTab => {}
+            KeyCode::Char(_)
+                if mods.intersects(
+                    KeyModifiers::SUPER | KeyModifiers::HYPER | KeyModifiers::META,
+                ) => {}
+            KeyCode::Char(c) if !mods.contains(KeyModifiers::CONTROL) => ime.input(c),
+            _ => return false,
+        }
+        let committed = ime.take_committed();
+        if !committed.is_empty() {
+            editor.insert_committed(&committed);
+        }
+        return true;
+    }
     match code {
         KeyCode::Enter if composing => ime.enter(),
         KeyCode::Backspace if composing => {
@@ -9476,6 +9523,72 @@ mod tests {
         bare.set_panel_display(PanelDisplay::Bare);
         bare.input(';');
         assert!(bare.panel_is_full(), "bare 也要出這個面板");
+    }
+
+    /// 快捷符號 mode is the engine's, key by key — **驅動鍵盤**，不是讀那張表。
+    ///
+    /// 作者原話：「我按 `;;` 上屏的是第二個（b 對應的波浪號），而不是分號。」
+    /// 那是把 `;` 交給 `key_action` 的下場：緩衝裏有引導鍵、表算作候選，狀態於是
+    /// 讀成「組字中，有候選」，而靈明在那個狀態下的 `;` 是**選二**。
+    ///
+    /// ⚠️ **上一輪的兩條測試看不出這個。** 它們問的是面板畫成什麼樣、表怎麼排
+    /// ——都對，而按鍵走的是另一條路。要驗這一族只能真按鍵。
+    #[test]
+    fn the_shortcut_mode_takes_every_key_from_the_engine() {
+        let press = |ime: &mut ImeSession, editor: &mut Editor, code: KeyCode| {
+            super::ime_handle(ime, editor, code, KeyModifiers::NONE);
+        };
+        let open = || {
+            let mut editor = Editor::new();
+            editor.on_key(Key::Char('i'));
+            let mut ime = ImeSession::from_table_text(Scheme::LINGMING, "b 吧 八 巴\n");
+            ime.input(';');
+            assert!(ime.is_shortcut());
+            (editor, ime)
+        };
+
+        // `;;` ＝ 「；」，不是第二條。
+        let (mut editor, mut ime) = open();
+        press(&mut ime, &mut editor, KeyCode::Char(';'));
+        assert_eq!(editor.current_buffer().text(), "；", "{}", editor.status());
+        assert!(!ime.is_shortcut(), "上了屏就該關掉");
+
+        // 空格同一個出口。
+        let (mut editor, mut ime) = open();
+        press(&mut ime, &mut editor, KeyCode::Char(' '));
+        assert_eq!(editor.current_buffer().text(), "；");
+
+        // `'` 在靈明是選三，而這個模式裏它不是——它不在表上，所以退出模式，
+        // 那一鍵當作剛按下的新鍵重走一遍。無論如何**不能**上屏第三條。
+        let (mut editor, mut ime) = open();
+        press(&mut ime, &mut editor, KeyCode::Char('\''));
+        let text = editor.current_buffer().text();
+        assert!(!text.contains('！'), "選三跑出來了：{text:?}");
+        assert!(!ime.is_shortcut());
+
+        // 字母走表：`j` ＝ 、
+        let (mut editor, mut ime) = open();
+        press(&mut ime, &mut editor, KeyCode::Char('j'));
+        assert_eq!(editor.current_buffer().text(), "、");
+
+        // 固定鍵：`$` ＝ ￥
+        let (mut editor, mut ime) = open();
+        press(&mut ime, &mut editor, KeyCode::Char('$'));
+        assert_eq!(editor.current_buffer().text(), "￥");
+
+        // 沒有可導航的東西，方向鍵一律吞掉——漏到編輯器就是光標跑了。
+        let (mut editor, mut ime) = open();
+        for code in [KeyCode::Down, KeyCode::Tab, KeyCode::PageDown] {
+            press(&mut ime, &mut editor, code);
+        }
+        assert!(ime.is_shortcut(), "面板不該被方向鍵關掉");
+        assert_eq!(editor.current_buffer().text(), "", "有東西漏進了正文");
+
+        // Esc 收面板，什麼都不上屏。
+        let (mut editor, mut ime) = open();
+        press(&mut ime, &mut editor, KeyCode::Esc);
+        assert!(!ime.is_shortcut());
+        assert_eq!(editor.current_buffer().text(), "");
     }
 
     /// 二十七格排成格子，鍵對齊成列。
