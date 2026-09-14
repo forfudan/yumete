@@ -614,25 +614,27 @@ impl Ladder {
 /// carries nothing — too faint to read, too pale to write on — so nothing here
 /// is placed there except the rules, which are neither.
 pub mod rung {
-    //! **21 檔，第 0 檔是墨，第 18 檔是紙，第 20 檔是最沉的那一級。**
+    //! **101 檔，第 0 檔是墨（最反主題色），第 100 檔是最主題色。紙在第 90 檔。**
     //!
-    //! 底下的數字是 0–10000，第 20 檔就是 10000。⚠️ **1 到 19 不必等距** ——
-    //! 它們只是這條連續刻度上幾個有名字的位置，各自的值是量出來的（見每一條
-    //! 自己的說明），不是格子除出來的。格是給人說話用的（「第 18 檔」比
-    //! 「9000」好記），值是給眼睛用的。
+    //! 底下的數字是 0–10000，**一檔一百步**，所以檔號就是數字除以一百：
+    //! `9000` 就是第 90 檔，不必記第二套號。⚠️ **檔與檔之間不必等距** ——
+    //! 有名字的那十幾檔，值都是量出來的（見每一條自己的說明），不是格子除出來
+    //! 的；檔號是給人說話用的（「第 90 檔」比「9000」好記），值是給眼睛用的。
     //!
-    //! 12 個名字現在佔了其中 12 檔，另外 8 檔空着等以後命名。⚠️ 特別是
-    //! **第 19 檔（9500）還沒有主人**：紙和最沉之間還有一級。
+    //! 一百零一檔裏現在只有十幾檔有名字，其餘空着——**要給某一檔起個名字，
+    //! 直接加一條常量就是**，不必先挪別人。從前只有 21 檔，每一檔之間隔五百
+    //! 步，於是像「比表格的底再沉一點點」這種量根本落不到格子上（那一條現在是
+    //! 第 87 檔）。
     //!
-    //! ⚠️ **紙不在盡頭。** 從前紙就是 1000、就是梯子的末端，於是「比正文再沉
-    //! 一級」沒有地方可以表達——狀態欄只能往墨的方向抬，而那是**反主題色**的
-    //! 方向。現在紙在 18 檔，19 和 20 留給比紙更主題色的東西。
+    //! ⚠️ **紙不在盡頭。** 從前紙就是梯子的末端，於是「比正文再沉一級」沒有
+    //! 地方可以表達——狀態欄只能往墨的方向抬，而那是**反主題色**的方向。現在
+    //! 紙在第 90 檔，後面十檔留給比紙更主題色的東西。
     /// The writing, and anything that *is* the writing: a hung 句讀, the
     /// character a highlight covers.
     pub const TEXT: u16 = 0; // 第 0 檔
     /// One shade back: a reading beside its base, a 拆分 annotation, a
     /// candidate's number, the second line of anything.
-    pub const QUIET: u16 = 2700; // 第 6 檔
+    pub const QUIET: u16 = 2500; // 第 25 檔
     /// **The ruler over a table's columns** — Feature #232.
     ///
     /// Its own rung, and darker than the furniture it used to share, because
@@ -642,17 +644,17 @@ pub mod rung {
     /// [`FURNITURE`] on the worst of the twenty-one ladders, clearing the 3:1
     /// a border needs and missing the 4.5:1 small text does. At this rung the
     /// worst is 4.36.
-    pub const RULER: u16 = 2250; // 第 5 檔
+    pub const RULER: u16 = 2000; // 第 20 檔
     /// Furniture you read once: line numbers, an unlit tab, a key's label, a
     /// 批注, a page's front matter.
-    pub const FURNITURE: u16 = 3600; // 第 8 檔
+    pub const FURNITURE: u16 = 3500; // 第 35 檔
     /// The markup itself — `**`, `#`, `[]()`. Shown, and set back far enough
     /// that it is never read as a word.
-    pub const MARKER: u16 = 4050; // 第 9 檔
+    pub const MARKER: u16 = 4000; // 第 40 檔
     /// A rule: a panel's ring, the sidebar's edge, the ruler's line, a 稿紙
     /// tick. Not text and not a ground, and the only thing that belongs in the
     /// middle of the ladder.
-    pub const RULE: u16 = 4950; // 第 10 檔
+    pub const RULE: u16 = 5000; // 第 50 檔
     /// Chrome: a sidebar, a tab bar, a table's gutter and header, a detail
     /// panel, the status line.
     ///
@@ -665,10 +667,10 @@ pub mod rung {
     /// now touches it, and 970 against the page is a 1.03:1 ground: the bar the
     /// eye is supposed to find at the bottom of the window read as part of the
     /// page. A ground with no rule and no position of its own has to be seen.
-    pub const CHROME: u16 = 8100; // 第 16 檔
+    pub const CHROME: u16 = 8100; // 第 81 檔
     /// A ground that must not shout: a table's alternating columns, its cursor
     /// row, a code fence, a callout, the tint past the measure.
-    pub const BAND: u16 = 8460; // 第 17 檔
+    pub const BAND: u16 = 8400; // 第 84 檔
     /// **The word tint** (分詞著色), and the quietest ground there is.
     ///
     /// Every other ground says 「this block is a different kind of thing」; this
@@ -678,38 +680,39 @@ pub mod rung {
     /// family as `==marked==` (朱 washed rather less), and on a dark ground the
     /// two were the same colour: the reader could not tell a word boundary from
     /// a highlighter.
-    pub const WORD: u16 = 8658; // 第 17 檔
+    pub const WORD: u16 = 8600; // 第 86 檔
     /// A band that must be **seen**, because position is not separating it
     /// from the text: the 縱書 number band sits in the text's own columns, the
     /// lit tab sits among the unlit ones, and a table's cursor row sits among
     /// its alternating columns.
     ///
-    /// **820, not 880.** Near the paper end of the ladder the rungs compress:
-    /// 880 against [`BAND`]'s 940 is 1.11–1.20:1 in every theme, which is not a
-    /// difference a reader can see — so in a table with coloured columns the
-    /// cursor's own row could not be told from the column beside it. At 820 it
-    /// is 1.27:1 at worst, which can.
-    pub const HEAD: u16 = 7335; // 第 15 檔
+    /// ⚠️ **第 73, and it cannot go much deeper.** Near the paper end of the
+    /// ladder the rungs compress, so this one is pinned by the pair it has to
+    /// be told apart from: the cursor's row against the column bands under it.
+    /// At 第 75 against [`BAND`]'s 第 84 that pair measures **1.21:1** in
+    /// 莫蘭迪's light mood — under the 1.24 the eye needs, and the reader can no
+    /// longer see which row they are standing on. 第 73 leaves 1.26:1 at worst.
+    /// `the_grounds_that_meet_are_a_rung_apart` is the test that says so.
+    pub const HEAD: u16 = 7300; // 第 73 檔
     /// A selection: the loudest ground, and still only a ground — the ink on it
     /// is untouched, so a heading inside a selection is still a heading.
     ///
-    /// **700**, moved down with [`HEAD`] to keep the two apart: a selection
-    /// inside a table's cursor row is two grounds one inside the other, and at
-    /// the old 800 against 880 they were the same colour. It also makes a
-    /// selection what it should have been — the ground you see first (1.26:1
-    /// clear of the row band, and the writing on it still over 4.5:1 — 莫蘭迪,
-    /// the theme with the least contrast to spend, is the one that decides
-    /// this pair of numbers).
-    pub const SELECTION: u16 = 6300; // 第 13 檔
-    /// The page — **第 18 檔**, not the end of the ladder.
-    pub const PAPER: u16 = 9000; // 第 18 檔
-    /// **第 20 檔** — as far into the theme's own colour as the ladder goes.
+    /// ⚠️ **第 63, pinned the same way [`HEAD`] is.** A selection inside a
+    /// table's cursor row is two grounds one inside the other, and the three
+    /// of them — 選區, 光標行, 欄底 — have to stay a visible step apart all the
+    /// way up. At 第 65 against `HEAD`'s 第 73 this measures 1.20:1 in 莫蘭迪's
+    /// light mood; 第 63 leaves 1.26:1. 莫蘭迪 has the least contrast to spend
+    /// and is the theme that decides both numbers.
+    pub const SELECTION: u16 = 6300; // 第 63 檔
+    /// The page — **第 90 檔**, not the end of the ladder.
+    pub const PAPER: u16 = 9000; // 第 90 檔
+    /// **第 100 檔** — as far into the theme's own colour as the ladder goes.
     ///
     /// The one strip that is not on the page: the status line. On a dark theme
     /// this is deeper than the paper, on a light one lighter — the ladder runs
     /// 墨 → 紙, which is 反主題色 → 主題色, so 「再往主題色走」 is one idea and
     /// not two.
-    pub const DEEP: u16 = 10000; // 第 20 檔
+    pub const DEEP: u16 = 10000; // 第 100 檔
 }
 
 /// Theme (colour) settings — 【墨香】 and anything shaped like it.
