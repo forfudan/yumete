@@ -116,9 +116,8 @@ impl Editor {
             WordCommand::Habit => {
                 self.habit_words();
             }
-            WordCommand::Discover => {
-                let root = self.project_root();
-                self.discover_words(&root)?;
+            WordCommand::Discover(scope) => {
+                self.discover_words(&scope)?;
             }
             WordCommand::Level(None) => {
                 self.status = say!("word.level-set", self.word_level.name());
@@ -246,7 +245,10 @@ impl Editor {
     /// Nothing already in the list comes back on a second run: the segmenter
     /// in force is wrapped in [`yumete_cjk::WithWords`], so a listed word is
     /// one it already joins, and [`crate::discover`] never offers those.
-    pub(super) fn discover_words(&mut self, root: &Path) -> Result<(), EditorError> {
+    pub(super) fn discover_words(
+        &mut self,
+        scope: &crate::search_panel::Where,
+    ) -> Result<(), EditorError> {
         // ⚠️ **Forget what autodetect found before looking again.** The filter
         // below is 「the segmenter already joins this」, and autodetect's own
         // words are *in* that segmenter — so a second look, with the first
@@ -256,28 +258,39 @@ impl Editor {
         self.set_detected_words(yumete_cjk::WordList::default());
         let mut text = String::new();
         let mut files = 0usize;
-        walk(root, &mut 0, &mut |path| {
-            if text.len() >= DISCOVER_MAX_BYTES {
-                return;
+        // ⚠️ **這一篇，除非你說了別的** (#452). It used to read the whole
+        // project every time, and a project is usually not a book: in 宇浩's
+        // own repository 「宇夢」 never came out, because a few hundred 拆分表
+        // drowned the chapter the writer was actually in — 「一堆拆分表形成杂
+        // 音」. The statistics are ratios, so what is read *is* the question.
+        match self.discover_root(scope) {
+            None => {
+                files = 1;
+                text = self.current_buffer().text();
             }
-            let open = self
-                .buffers
-                .iter()
-                .find(|b| b.path() == Some(path))
-                .map(|b| b.text());
-            let more = match open {
-                Some(text) => text,
-                None => match std::fs::read_to_string(path) {
-                    Ok(text) => text,
-                    Err(_) => return,
-                },
-            };
-            files += 1;
-            text.push_str(&more);
-            // The join, so a word cannot be found across the seam between two
-            // chapters that never touch.
-            text.push('\n');
-        });
+            Some(root) => walk(&root, &mut 0, &mut |path| {
+                if text.len() >= DISCOVER_MAX_BYTES {
+                    return;
+                }
+                let open = self
+                    .buffers
+                    .iter()
+                    .find(|b| b.path() == Some(path))
+                    .map(|b| b.text());
+                let more = match open {
+                    Some(text) => text,
+                    None => match std::fs::read_to_string(path) {
+                        Ok(text) => text,
+                        Err(_) => return,
+                    },
+                };
+                files += 1;
+                text.push_str(&more);
+                // The join, so a word cannot be found across the seam between
+                // two chapters that never touch.
+                text.push('\n');
+            }),
+        }
         let found = {
             let joins = |word: &str| self.segmenter.segment(word).len() == 1;
             crate::discover::words(&text, &joins)
@@ -325,6 +338,21 @@ impl Editor {
             false => say!("word.discover-found", total, path.display()),
         };
         Ok(())
+    }
+
+    /// How far a 認詞 reads, as a root to walk — `None` is **this buffer**.
+    ///
+    /// The same four scopes `:search` resolves, resolved the same way, because
+    /// they are the same four words.
+    fn discover_root(&self, scope: &crate::search_panel::Where) -> Option<PathBuf> {
+        use crate::search_panel::Where;
+        match scope {
+            Where::Buffer => None,
+            Where::Folder => Some(self.here_folder()),
+            Where::Workspace => std::env::current_dir().ok(),
+            Where::Project => Some(self.project_root()),
+            Where::Named(path) => Some(path.clone()),
+        }
     }
 
     /// Where the readable copy of the autodetected list goes.
@@ -410,19 +438,19 @@ impl Editor {
         self.detected_words.len()
     }
 
-    /// The project root the front end is being asked to scan, once.
+    /// The text the front end is being asked to read, once.
     ///
     /// Taken rather than read, the way every other front-end request here is:
-    /// asking twice for the same scan is three hundred milliseconds spent
+    /// asking twice for the same scan is a few hundred milliseconds spent
     /// arriving at the list already in hand.
-    pub fn take_detect_request(&mut self) -> Option<PathBuf> {
+    pub fn take_detect_request(&mut self) -> Option<String> {
         self.detect_request.take()
     }
 
-    /// Ask for a scan. Called when a file is opened and when the manuscript
-    /// has been saved — the front end decides how often it actually runs.
+    /// Ask for a scan of **this file**. Called when one is opened and when one
+    /// is saved — the front end decides how often it actually runs.
     pub(super) fn ask_for_detection(&mut self) {
-        self.detect_request = Some(self.project_root());
+        self.detect_request = Some(self.current_buffer().text());
     }
 
     /// Re-read the word list the save just wrote, if that is what it was.

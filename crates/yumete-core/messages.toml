@@ -1920,10 +1920,34 @@ find = "分詞 分词 著色 着色 底色 背景 tint"
 [[message]]
 # : 命令選單裏 discover 那一項的說明（word-topics 組）
 key = "cmd.word-topics.discover"
-zht = "挖出本書自己的詞：人名地名，字典裏沒有的"
-zhs = "挖出本书自己的词：人名地名，字典里没有的"
-en = "mine this book's own words: the names no dictionary has"
+zht = "挖出這一篇自己的詞：人名地名，字典裏沒有的"
+zhs = "挖出这一篇自己的词：人名地名，字典里没有的"
+en = "mine this file's own words: the names no dictionary has"
 find = "新詞 新词 人名 地名 挖 discover"
+
+[[message]]
+# : 命令選單裏 word-discover-cd 那一項的說明
+key = "cmd.word-topics.discover-cd"
+zht = "挖詞，範圍是這個文件所在的文件夾（含子目錄）"
+zhs = "挖词，范围是这个文件所在的文件夹（含子目录）"
+en = "mine words across this file's folder"
+find = "新詞 新词 人名 地名 挖 資料夾 资料夹 目錄 目录 discover folder cd"
+
+[[message]]
+# : 命令選單裏 word-discover-gd 那一項的說明
+key = "cmd.word-topics.discover-gd"
+zht = "挖詞，範圍是整個倉（帶 .git 的那一層）"
+zhs = "挖词，范围是整个仓（带 .git 的那一层）"
+en = "mine words across the whole repository"
+find = "新詞 新词 人名 地名 挖 倉 仓 項目 项目 discover repo git gd"
+
+[[message]]
+# : 命令選單裏 word-discover-wd 那一項的說明
+key = "cmd.word-topics.discover-wd"
+zht = "挖詞，範圍是 yumete 打開的那個目錄"
+zhs = "挖词，范围是 yumete 打开的那个目录"
+en = "mine words across the folder yumete was opened in"
+find = "新詞 新词 人名 地名 挖 工作區 工作区 目錄 目录 discover workspace wd"
 
 [[message]]
 # : 命令選單裏 habit 那一項的說明（word-topics 組）

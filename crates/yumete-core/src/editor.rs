@@ -1571,10 +1571,18 @@ pub struct Editor {
     /// no file, no buffer, nothing to accept or refuse. `:word-discover`
     /// writes a copy out to be read, and that copy is not read back.
     detected_words: yumete_cjk::WordList,
-    /// The project root autodetect has been asked to scan, taken by the front
-    /// end — the walking and the counting are three hundred milliseconds of
-    /// work, and they belong on a thread that is not drawing the page.
-    detect_request: Option<PathBuf>,
+    /// **The text** autodetect has been asked to read, taken by the front end
+    /// — the counting is a few hundred milliseconds on a long chapter and it
+    /// belongs on a thread that is not drawing the page.
+    ///
+    /// ⚠️ **The text, not a root** (#452). This handed over a project root and
+    /// the front end walked it, which made 自動認詞 answer a question about the
+    /// *repository*: in 宇浩's own tree 「宇夢」 never surfaced, because a few
+    /// hundred 拆分表 drowned the chapter — 「一堆拆分表形成杂音」. The three
+    /// statistics are ratios, so what is read decides what is found, and what
+    /// is being written is one file. `:word-discover-cd` and its two wider
+    /// spellings are how a reader asks for more.
+    detect_request: Option<String>,
     /// `:theme-fill` — whether a 品色 run gets a ground. The front end holds
     /// the colours, so it holds this too; `None` in the `Some` means 「the
     /// other one」.

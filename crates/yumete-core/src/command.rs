@@ -44,7 +44,10 @@ pub enum Engagement {
 /// shown by a colour, tuned by a level, mined out of the book itself, and read
 /// back as 口頭禪; those were `:words`, `:segment` and a config key nobody could
 /// see, and nothing said they were the same question.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+// ⚠️ **Not `Copy` since #452.** The scope a 認詞 reads is [`Where`], which
+// carries a `PathBuf` in one of its arms — the same type `:search` uses, and
+// sharing it is the point: 「這一篇／這個資料夾／這個倉」 is one idea.
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum WordCommand {
     /// `:word` — which dictionary is in force, and how many words this book adds.
     Report,
@@ -64,7 +67,12 @@ pub enum WordCommand {
     Global,
     /// `:word-discover` — mine this book for the words no dictionary has, and
     /// write them into `.yumete/words.txt` unsaved (Feature #239).
-    Discover,
+    /// `:word-discover` and its three wider spellings — **how far to read**.
+    ///
+    /// The same four scopes `:search` has, and for the same reason: 「這一篇／
+    /// 這個資料夾／這個倉／打開的那個目錄」 is one idea, and a reader who has
+    /// learnt it once should not have to learn it twice.
+    Discover(crate::search_panel::Where),
     /// `:word-habit` — the words this manuscript leans on, by surprisal
     /// against a 詞頻表 rather than by count (Feature #242). English writing
     /// calls these *crutch words*; the manual calls them 口頭禪.
@@ -2510,7 +2518,47 @@ pub const COMMANDS: &[Entry] = &[
         help: "cmd.word-topics.discover",
         needs: &[],
         params: &[],
-        build: Some(|_| Ok(Command::Word(WordCommand::Discover))),
+        build: Some(|_| {
+            Ok(Command::Word(WordCommand::Discover(
+                crate::search_panel::Where::Buffer,
+            )))
+        }),
+    },
+    Entry {
+        name: "word-discover-cd",
+        aliases: &[],
+        help: "cmd.word-topics.discover-cd",
+        needs: &[],
+        params: &[],
+        build: Some(|_| {
+            Ok(Command::Word(WordCommand::Discover(
+                crate::search_panel::Where::Folder,
+            )))
+        }),
+    },
+    Entry {
+        name: "word-discover-gd",
+        aliases: &[],
+        help: "cmd.word-topics.discover-gd",
+        needs: &[],
+        params: &[],
+        build: Some(|_| {
+            Ok(Command::Word(WordCommand::Discover(
+                crate::search_panel::Where::Project,
+            )))
+        }),
+    },
+    Entry {
+        name: "word-discover-wd",
+        aliases: &[],
+        help: "cmd.word-topics.discover-wd",
+        needs: &[],
+        params: &[],
+        build: Some(|_| {
+            Ok(Command::Word(WordCommand::Discover(
+                crate::search_panel::Where::Workspace,
+            )))
+        }),
     },
     Entry {
         name: "word-habit",
@@ -4645,10 +4693,17 @@ mod tests {
                 yumete_cjk::WordLevel::Strict
             ))))
         );
-        assert_eq!(
-            parse(":word-discover"),
-            Ok(Command::Word(WordCommand::Discover))
-        );
+        // 認詞 reads **this file** unless told otherwise, and the three wider
+        // spellings are the ones `:search` already taught (#452).
+        use crate::search_panel::Where;
+        for (line, want) in [
+            (":word-discover", Where::Buffer),
+            (":word-discover-cd", Where::Folder),
+            (":word-discover-gd", Where::Project),
+            (":word-discover-wd", Where::Workspace),
+        ] {
+            assert_eq!(parse(line), Ok(Command::Word(WordCommand::Discover(want))), "{line}");
+        }
         assert_eq!(parse(":word-habit"), Ok(Command::Word(WordCommand::Habit)));
         // A level nobody defined is refused by name, not silently taken.
         assert!(parse(":word-level 中等").is_err());
@@ -5241,7 +5296,11 @@ mod tests {
         let found = |typed: &str| -> Vec<String> {
             complete(typed).iter().map(|c| c.written()).collect()
         };
-        assert_eq!(found("discover"), ["word-discover"]);
+        // …and a word shared by a whole family answers with the family (#452).
+        assert_eq!(
+            found("discover"),
+            ["word-discover", "word-discover-cd", "word-discover-gd", "word-discover-wd"]
+        );
         assert_eq!(found("close"), ["buffer-close"]);
         assert_eq!(found("footnote"), ["markdown-footnote"]);
         // Two commands can share a word, and then both are the answer —
