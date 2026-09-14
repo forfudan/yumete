@@ -986,8 +986,21 @@ impl Default for ThemeConfig {
             // ground 墨, and the warmth goes to 金, below, which is worth
             // finding precisely because most of the screen is not warm.
             dark: Ladder {
-                ink: (0xE8, 0xE4, 0xDA),
-                paper: (0x1A, 0x1E, 0x19),
+                // **Dimmer than white bone, on purpose.** #E8E4DA against this
+                // ground is 13.7:1, and past about 12:1 a light face on a dark
+                // page starts to bloom — 「太亮了刺眼有光暈」. 10:1 is the
+                // comfortable end of the band for hours of prose, and the page
+                // keeps every rank it had: contrast is the ink's to set, and
+                // the ladder is unchanged below it.
+                ink: (0xC8, 0xC4, 0xBB),
+                // 松烟**黑**, not 松烟綠. The page carried a green cast for a
+                // day — G above R above B, which at this darkness reads as
+                // 「屎綠」 rather than as ink — and the whole ladder inherited
+                // it, because every rung is a step from 墨 to 紙. Neutral, a
+                // shade cool: the warmth on this page is the ink's and 金's,
+                // and it is worth finding precisely because the ground is not
+                // warm.
+                paper: (0x18, 0x1A, 0x1D),
             },
             // 墨 on paper is darker than 墨 on a screen — the light ladder's
             // ink is the dark ladder's *ground*, which is both true of the
@@ -2635,7 +2648,7 @@ mod tests {
         assert_eq!(c.editor.line_numbers, LineNumbers::Absolute);
         assert_eq!(c.editor.scrolloff, 3);
         assert_eq!(c.theme.name, "ink", "the name is ASCII; 墨香 is what it means");
-        assert_eq!(c.theme.dark.ink, (0xE8, 0xE4, 0xDA));
+        assert_eq!(c.theme.dark.ink, (0xC8, 0xC4, 0xBB));
         assert!(c.keys.normal.is_empty());
     }
 
