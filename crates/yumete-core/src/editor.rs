@@ -1397,6 +1397,43 @@ fn walk(root: &Path, skipped: &mut usize, f: &mut impl FnMut(&Path)) {
     }
 }
 
+/// Read a project and work out the words it uses that a dictionary has not
+/// got — **with no editor anywhere near it** (#448).
+///
+/// The counting is three hundred milliseconds on a long novel and the reading
+/// is four, so this is the half that has to happen on a thread; everything it
+/// touches is a path and a string, which is what makes that possible. The
+/// front end calls it, hands the answer back with
+/// [`Editor::set_detected_words`], and the writer never waits.
+///
+/// `joins` is the same oracle [`crate::discover::words`] always takes: a
+/// segmenter built in the calling thread, to leave out what is not news. A
+/// smaller dictionary there than the one in force only leaves a few redundant
+/// words in the list — words already joined cannot be joined harder.
+///
+/// Answers the words and how many files were read.
+pub fn detect_words_in(
+    root: &Path,
+    joins: &dyn Fn(&str) -> bool,
+) -> (Vec<crate::discover::Found>, usize) {
+    let mut text = String::new();
+    let mut files = 0usize;
+    walk(root, &mut 0, &mut |path| {
+        if text.len() >= DISCOVER_MAX_BYTES {
+            return;
+        }
+        let Ok(more) = std::fs::read_to_string(path) else {
+            return;
+        };
+        files += 1;
+        text.push_str(&more);
+        // The join, so a word cannot be found across the seam between two
+        // chapters that never touch.
+        text.push('\n');
+    });
+    (crate::discover::words(&text, joins), files)
+}
+
 /// How often a recovery copy is written while typing (Feature #79).
 ///
 /// Five seconds is the most work a crash can cost, and short enough that the
@@ -1525,6 +1562,19 @@ pub struct Editor {
     /// one in force — so reloading the list reaches a segmenter already handed
     /// out.
     project_words: std::rc::Rc<RefCell<yumete_cjk::WordList>>,
+    /// The half of [`Self::project_words`] that came out of the writer's own
+    /// `.yumete/words.txt` — **yumete never writes that file** (#448). Kept
+    /// apart from what autodetect found so that reloading one does not throw
+    /// the other away.
+    own_words: yumete_cjk::WordList,
+    /// The half autodetect found in the manuscript, which lives **only here**:
+    /// no file, no buffer, nothing to accept or refuse. `:word-discover`
+    /// writes a copy out to be read, and that copy is not read back.
+    detected_words: yumete_cjk::WordList,
+    /// The project root autodetect has been asked to scan, taken by the front
+    /// end — the walking and the counting are three hundred milliseconds of
+    /// work, and they belong on a thread that is not drawing the page.
+    detect_request: Option<PathBuf>,
     /// What the segmenter in force has already cut, held by the same handle it
     /// is (#321) — so `forget_the_words` can throw it away when the dictionary
     /// or the book's own list changes and the text does not.
@@ -2236,6 +2286,9 @@ impl Editor {
             segmenter: Box::new(CategorySegmenter),
             reader: Box::new(NoReader),
             project_words: std::rc::Rc::new(RefCell::new(yumete_cjk::WordList::default())),
+            own_words: yumete_cjk::WordList::default(),
+            detected_words: yumete_cjk::WordList::default(),
+            detect_request: None,
             word_memo: std::rc::Rc::new(RefCell::new(yumete_cjk::SegmentMemo::default())),
             show_segmentation: false,
             word_mark: yumete_cjk::WordMark::default(),

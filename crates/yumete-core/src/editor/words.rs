@@ -247,12 +247,13 @@ impl Editor {
     /// in force is wrapped in [`yumete_cjk::WithWords`], so a listed word is
     /// one it already joins, and [`crate::discover`] never offers those.
     pub(super) fn discover_words(&mut self, root: &Path) -> Result<(), EditorError> {
-        // **Where the writer was**, to be put back there (#367). The offer is
-        // written into the list either way — it has to be somewhere it can be
-        // read, edited and refused — but 「用户就是单纯想要在显示词，并不想看
-        // 那个文件」 (author, 2026-09-10), and the words segment the moment
-        // they are found, so there is nothing to look at unless you want to.
-        let was = self.current;
+        // ⚠️ **Forget what autodetect found before looking again.** The filter
+        // below is 「the segmenter already joins this」, and autodetect's own
+        // words are *in* that segmenter — so a second look, with the first
+        // look's answer still installed, finds nothing at all and writes an
+        // empty list. This command recomputes the whole answer anyway, so the
+        // right move is to start from none of it.
+        self.set_detected_words(yumete_cjk::WordList::default());
         let mut text = String::new();
         let mut files = 0usize;
         walk(root, &mut 0, &mut |path| {
@@ -286,50 +287,52 @@ impl Editor {
             return Ok(());
         }
         let total = found.len();
-        let path = self.project_words_path();
-        self.open_word_list(&path)?;
-        let mut block = String::new();
-        let list = self.current_buffer().text();
-        if !list.is_empty() && !list.ends_with('\n') {
-            block.push('\n');
+        let kept: Vec<&crate::discover::Found> = found.iter().take(DISCOVER_LIMIT).collect();
+
+        // **Into memory, and into a file that is only ever written.** The list
+        // the segmenter uses is the one in memory — autodetect puts the same
+        // one there without anybody asking — and this file is a copy to read
+        // (#448). Nothing reads it back, so there is nothing to accept and
+        // nothing a later scan can resurrect.
+        let mut list = yumete_cjk::WordList::default();
+        for word in &kept {
+            list.add(&word.word);
         }
-        block.push_str(&say!("word.discover-heading", files));
-        block.push('\n');
-        for word in found.iter().take(DISCOVER_LIMIT) {
-            block.push_str(&say!("word.discover-line", word.word, word.count));
-            block.push('\n');
+        self.set_detected_words(list);
+
+        let path = self.detected_words_path();
+        let mut out = String::new();
+        out.push_str(&say!("word.discover-heading", files));
+        out.push('\n');
+        out.push_str(&say!("word.discover-note"));
+        out.push('\n');
+        for word in &kept {
+            out.push_str(&say!("word.discover-line", word.word, word.count));
+            out.push('\n');
         }
-        let at = self.current_buffer().char_count();
-        self.snapshot();
-        let done = self.without_cell_guard(|e| e.current_buffer_mut().insert(at, &block));
-        if !self.applied(done) {
-            return Ok(());
+        if let Some(parent) = path.parent() {
+            let _ = std::fs::create_dir_all(parent);
         }
-        self.clamp_cursor();
-        self.forget_the_text();
-        self.set_cursor(at);
-        // **They segment before they are saved.** The bargain is still the
-        // same — nothing is on disk until `:w` — but a candidate list that
-        // does not affect anything until it is saved cannot be judged: the
-        // way to see whether 落霞鎮 is a word is to walk `w` over it and read
-        // the tint. So they go into the list in force now, and the save reads
-        // the file back (below), which is what drops the lines struck out.
-        {
-            let mut words = self.project_words.borrow_mut();
-            for word in found.iter().take(DISCOVER_LIMIT) {
-                words.add(&word.word);
-            }
+        if let Err(why) = std::fs::write(&path, &out) {
+            return Err(EditorError::Io(why));
         }
-        self.forget_the_words();
-        self.words_request = true;
-        // Back to the chapter. The list keeps the block, unsaved, and says so
-        // in a sentence rather than by taking the screen.
-        self.show_buffer(was);
+        // **Opened, because this command is for reading.** Autodetect never
+        // comes here: it is the `:word-discover` the writer typed that wants a
+        // page, and a scan nobody asked for must not take one (#367).
+        self.open_file(&path).map_err(EditorError::Io)?;
         self.status = match total > DISCOVER_LIMIT {
             true => say!("word.discover-too-many", DISCOVER_LIMIT, total),
             false => say!("word.discover-found", total, path.display()),
         };
         Ok(())
+    }
+
+    /// Where the readable copy of the autodetected list goes.
+    ///
+    /// **Not `words.txt`.** That one is the writer's, and yumete only reads it
+    /// (#448); this one yumete only writes.
+    fn detected_words_path(&self) -> PathBuf {
+        self.project_root().join(".yumete").join("discovered_words.txt")
     }
 
     /// Read `.yumete/words.txt` again, and say how many words it holds.
@@ -362,12 +365,64 @@ impl Editor {
             None => (yumete_cjk::WordList::default(), None),
         };
         let n = list.len();
-        *self.project_words.borrow_mut() = list;
-        self.forget_the_words();
+        self.own_words = list;
+        self.rebuild_words();
         self.status = match where_from {
             Some(path) => say!("word.project-words-loaded", n, path.display()),
             None => say!("word.no-project-words-file"),
         };
+    }
+
+    /// Hand the segmenter the two halves as one list.
+    ///
+    /// The writer's file and what autodetect found are separate everywhere
+    /// else — one is owned, one is a cache — and the segmenter wants neither
+    /// distinction nor two layers to walk.
+    fn rebuild_words(&mut self) {
+        let mut all = self.own_words.clone();
+        all.merge(&self.detected_words);
+        *self.project_words.borrow_mut() = all;
+        self.forget_the_words();
+    }
+
+    /// Install what autodetect found. **Memory only** (#448).
+    ///
+    /// 「我们 autodetect归autodetect，这个词语列表完全在内存里用来分词」 — so
+    /// there is no file to save, nothing to accept, and nothing the next scan
+    /// can resurrect after the writer struck it out. What the writer *keeps*
+    /// goes in `.yumete/words.txt` by hand, and that file is read-only to us.
+    pub fn set_detected_words(&mut self, words: yumete_cjk::WordList) {
+        self.detected_words = words;
+        self.rebuild_words();
+    }
+
+    /// Whether the segmenter in force already treats `word` as one word.
+    ///
+    /// The last filter on what autodetect found (#448): the thread that did
+    /// the counting had only the bundled dictionary to compare against, and
+    /// this is the one in force — 宇浩's 125 萬條 when the data is installed.
+    pub fn joins_as_one(&self, word: &str) -> bool {
+        self.segmenter.segment(word).len() == 1
+    }
+
+    /// How many words autodetect is contributing right now.
+    pub fn detected_word_count(&self) -> usize {
+        self.detected_words.len()
+    }
+
+    /// The project root the front end is being asked to scan, once.
+    ///
+    /// Taken rather than read, the way every other front-end request here is:
+    /// asking twice for the same scan is three hundred milliseconds spent
+    /// arriving at the list already in hand.
+    pub fn take_detect_request(&mut self) -> Option<PathBuf> {
+        self.detect_request.take()
+    }
+
+    /// Ask for a scan. Called when a file is opened and when the manuscript
+    /// has been saved — the front end decides how often it actually runs.
+    pub(super) fn ask_for_detection(&mut self) {
+        self.detect_request = Some(self.project_root());
     }
 
     /// Re-read the word list the save just wrote, if that is what it was.

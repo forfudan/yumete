@@ -10223,6 +10223,15 @@ fn a_book_can_teach_the_editor_its_own_names() {
     std::fs::remove_dir_all(&dir).ok();
 }
 
+/// 自動認詞：三件事各歸各位（#448）。
+///
+/// 作者定的分工：**autodetect 只在内存**（開文件觸發，後台算，分詞用它）；
+/// **`:word-discover`** 手動跑，把那份名單寫成 `.yumete/discovered_words.txt`
+/// 給人看，每次覆蓋；**`.yumete/words.txt` 是使用者的**，yumete 只讀不寫。
+///
+/// 從前這三件事擠在一個檔裏：discover 把候選插進 `words.txt`（未存），`:w` 是
+/// 「我認了」，劃掉一行就是拒絕。麻煩在於**拒絕留不住**——那個詞在文稿裏還在，
+/// 下一輪照樣找得出來，又寫回去。
 #[test]
 fn the_book_hands_the_editor_its_own_names_without_being_asked() {
     // The same 阿寧, found rather than typed in (Feature #239). Six
@@ -10239,77 +10248,78 @@ fn the_book_hands_the_editor_its_own_names_without_being_asked() {
     std::fs::write(dir.join("ch02.md"), "戊阿寧己。\n庚阿寧辛。\n").unwrap();
     std::fs::write(dir.join("ch03.md"), "壬阿寧癸。\n子阿寧丑。\n").unwrap();
 
+    // ---- ① 開文件只**留下一個請求**，一個字都不說 ---------------------
     let mut ed = Editor::new();
     ed.set_segmenter(Box::new(DictionarySegmenter::builtin(0)));
-    ed.open_file(&dir.join("ch01.md")).unwrap();
-    ed.discover_words(&dir).unwrap();
+    ed.open_file(&dir.join("ch02.md")).unwrap();
+    assert_eq!(
+        ed.take_detect_request().as_deref(),
+        Some(dir.as_path()),
+        "開文件要請前端掃一遍這個項目"
+    );
+    assert!(ed.take_detect_request().is_none(), "只請一次");
 
-    // **The chapter is still what is on the screen** (#367): the offer is
-    // written, not shown. 「用户就是单纯想要在显示词，并不想看那个文件。」
+    // ---- ② 前端算完交回來，只在内存，分詞立刻跟上 ---------------------
+    let seg = DictionarySegmenter::builtin(0);
+    let joins = |w: &str| yumete_cjk::Segmenter::segment(&seg, w).len() == 1;
+    let (found, files) = crate::editor::detect_words_in(&dir, &joins);
+    assert_eq!(files, 3, "三個章節都讀了");
+    assert!(found.iter().any(|f| f.word == "阿寧"), "{found:?}");
+
+    let before = ed.segment_line(0);
+    assert!(before.len() >= 3, "戊[阿][寧]己：{before:?}");
+    let mut list = yumete_cjk::WordList::default();
+    for word in &found {
+        list.add(&word.word);
+    }
+    ed.set_detected_words(list);
+    assert_eq!(ed.segment_line(0)[1], (1, 3), "戊[阿寧]己：{:?}", ed.segment_line(0));
+    assert!(ed.detected_word_count() >= 1);
+
+    // **紙面上什麼都沒發生**：沒開檔、沒換 buffer、沒寫盤。
+    assert_eq!(ed.current_buffer().path(), Some(dir.join("ch02.md").as_path()));
+    assert!(!dir.join(".yumete").join("discovered_words.txt").exists());
+    assert!(!dir.join(".yumete").join("words.txt").exists());
+
+    // ---- ③ `:word-discover` 是手動的那一支：寫檔、開檔、說一句 --------
+    ed.open_file(&dir.join("ch01.md")).unwrap();
+    assert!(ed.execute("word-discover").is_ok(), "{}", ed.status());
+    let listing = dir.join(".yumete").join("discovered_words.txt");
+    assert!(listing.is_file(), "名單要寫出來：{}", ed.status());
     assert_eq!(
         ed.current_buffer().path(),
-        Some(dir.join("ch01.md").as_path()),
-        "the writer was left where they were: {}",
-        ed.status()
+        Some(listing.as_path()),
+        "這條命令的產物就是那份名單，開它是它的全部用處"
     );
-    // Written into the list, with its count — and **not to disk**.
-    let list = ed
-        .buffers
-        .iter()
-        .find(|b| b.path().is_some_and(|p| p.ends_with("words.txt")))
-        .map(|b| b.text())
-        .expect("the word list is open behind it");
-    assert!(list.contains("阿寧"), "{list:?}");
-    assert!(list.contains('6'), "the count comes with it: {list:?}");
-    assert!(
-        !dir.join(".yumete").join("words.txt").exists(),
-        "nothing reaches disk until :w"
-    );
+    let text = std::fs::read_to_string(&listing).unwrap();
+    assert!(text.contains("阿寧"), "{text:?}");
+    assert!(text.contains("words.txt"), "抬頭要指路：{text:?}");
 
-    // **It is already a word**, unsaved: the way to judge a candidate is
-    // to walk `w` over it and read the tint, and a list that does nothing
-    // until it is written cannot be judged at all.
-    assert_eq!(ed.project_word_count(), 1, "{}", ed.status());
-    let words_file = dir.join(".yumete").join("words.txt");
+    // **整份覆蓋，不追加。** 跑兩次不會變兩份。
+    let again = {
+        ed.open_file(&dir.join("ch01.md")).unwrap();
+        assert!(ed.execute("word-discover").is_ok(), "{}", ed.status());
+        std::fs::read_to_string(&listing).unwrap()
+    };
+    assert_eq!(again, text, "第二次跑出來的該一模一樣");
+    assert_eq!(again.matches("阿寧").count(), text.matches("阿寧").count());
+
+    // ---- ④ 那份檔**不讀回來**：在裏面刪一行什麼也不會發生 -------------
+    std::fs::write(&listing, "# 清空了\n").unwrap();
     ed.open_file(&dir.join("ch02.md")).unwrap();
     assert_eq!(
         ed.segment_line(0)[1],
         (1, 3),
-        "戊[阿寧]己 before any save: {:?}",
+        "分詞靠的是内存那一份，不是那個檔：{:?}",
         ed.segment_line(0)
     );
 
-    // `:w` is the moment a person says yes — and the save itself is what
-    // reads the weeded list back, so there is no second command.
-    ed.open_file(&words_file).unwrap();
-    assert!(ed.execute("w").is_ok(), "{}", ed.status());
-    assert_eq!(ed.project_word_count(), 1, "{}", ed.status());
-    assert!(ed.status().contains('1'), "how many are in force: {}", ed.status());
-
-    // And a second run has nothing to say: what the list holds, the
-    // segmenter now joins, and what it joins is never offered again. The
-    // list is compared before and after, because 「掃了 3 個檔，沒有找到
-    // 新詞」 and 「找到 1 個…」 both have a 3 in them and this used to be
-    // asserted with `contains('3')` — which is how the words being written
-    // with a literal `\t`, and so never reading back at all, went unseen.
-    let before = std::fs::read_to_string(&words_file).unwrap();
-    ed.discover_words(&dir).unwrap();
-    assert_eq!(ed.current_buffer().text(), before, "{}", ed.status());
-
-    // Striking a candidate out is the other half of the bargain, and it
-    // has to reach the segmenter the same way: blank the line, save, and
-    // 阿寧 is two characters again.
-    ed.open_file(&words_file).unwrap();
-    assert!(ed.execute("%s/阿寧.*//").is_ok(), "{}", ed.status());
-    assert!(ed.execute("w").is_ok(), "{}", ed.status());
-    assert_eq!(ed.project_word_count(), 0, "{}", ed.status());
-    ed.open_file(&dir.join("ch02.md")).unwrap();
-    assert_eq!(
-        ed.segment_line(0)[1],
-        (1, 2),
-        "戊[阿][寧]己 again: {:?}",
-        ed.segment_line(0)
-    );
+    // ---- ⑤ 使用者自己那一份是另一件事，兩份一起生效 -------------------
+    std::fs::create_dir_all(dir.join(".yumete")).unwrap();
+    std::fs::write(dir.join(".yumete").join("words.txt"), "# 人物\n庚阿\n").unwrap();
+    ed.reload_project_words();
+    assert!(ed.project_word_count() >= 2, "兩份合起來：{}", ed.status());
+    assert!(ed.detected_word_count() >= 1, "重讀使用者那一份，不該把認到的丟掉");
     std::fs::remove_dir_all(&dir).ok();
 }
 

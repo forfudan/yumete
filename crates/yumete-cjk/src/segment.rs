@@ -660,6 +660,22 @@ impl WordList {
     pub fn is_empty(&self) -> bool {
         self.words.is_empty()
     }
+
+    /// Take in everything `other` holds.
+    ///
+    /// The segmenter is handed **one** list, and there are two sources for it:
+    /// the writer's own `.yumete/words.txt` and what autodetect found in the
+    /// manuscript (#448). They are kept apart at the editor — one is a file the
+    /// writer owns, the other is a cache — and joined here.
+    pub fn merge(&mut self, other: &WordList) {
+        self.longest = self.longest.max(other.longest);
+        self.words.extend(other.words.iter().cloned());
+    }
+
+    /// The words, in no particular order.
+    pub fn iter(&self) -> impl Iterator<Item = &str> {
+        self.words.iter().map(String::as_str)
+    }
 }
 
 impl WithWords {
