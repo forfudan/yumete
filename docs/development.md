@@ -2793,7 +2793,11 @@ surprise on somebody else's machine.
 yumete's own data dir, then what shipped beside the binary, and only then
 **yume's own** locations — `%APPDATA%\Yume\data\compiled` and `%APPDATA%\Yume`
 on Windows, `$XDG_DATA_HOME/yume/data/compiled` and `$XDG_DATA_HOME/yume`
-elsewhere, plus `$YUME_DATA_DIR`, `YUME_DATADIR` and `$XDG_DATA_DIRS`. **The
+elsewhere, plus `$YUME_DATA_DIR`, `YUME_DATADIR` and `$XDG_DATA_DIRS` —
+**that last one defaulting to `/usr/local/share:/usr/share` when it is unset**,
+because a bare terminal, an `ssh` login and a systemd user unit often do not set
+it, and a system-wide 宇浩 install (what `yuman` writes when it is not installing
+for one user) lives in exactly those two. **The
 overlay first**, because that is where a freshly recompiled table lands and the
 one under it is then the stale copy. A machine that already types 卿雲 has paid
 for that 碼表 once and is not asked to pay again.

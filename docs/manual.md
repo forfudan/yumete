@@ -819,7 +819,8 @@ yume 的數據裏有兩樣東西，它們該有不同的待遇。
 - **Windows**：`%APPDATA%\Yume\data\compiled\`、`%APPDATA%\Yume\`，以及 `.exe`
   旁邊的 `Resources\`。
 - **Linux**：`$XDG_DATA_HOME/yume/data/compiled/`、`$XDG_DATA_HOME/yume/`，`$YUME_DATADIR`，
-  以及 `$XDG_DATA_DIRS` 裏每一個的 `yume/`。
+  以及 `$XDG_DATA_DIRS` 裏每一個的 `yume/`（沒有設這個變量就照標準的預設看
+  `/usr/local/share` 與 `/usr/share`——裝給全機器的那一份就在那裏）。
 
 裝了 yume 的 macOS 上因此不用配置任何東西：`:yume-scheme` 直接就有那五個方案。（在
 2026-09-07 之前它只認 Linux 那一套路徑，於是一台裝好裝滿的 Mac 一個方案都找不到。）

@@ -1695,13 +1695,32 @@ pub fn yume_data_dirs() -> Vec<PathBuf> {
                 dirs.push(PathBuf::from(dir));
             }
         }
-        if let Ok(list) = env::var("XDG_DATA_DIRS") {
-            for dir in list.split(':').filter(|d| !d.is_empty()) {
-                dirs.push(PathBuf::from(dir).join("yume"));
-            }
-        }
+        // ⚠️ **`XDG_DATA_DIRS` has a default, and unset is not empty.** The
+        // spec says `/usr/local/share:/usr/share` when it is not set, and a
+        // desktop session sets it while a bare terminal, an `ssh` login and a
+        // systemd user unit often do not. Reading only the variable therefore
+        // made a **system-wide** 宇浩 install invisible in exactly the places a
+        // writer is most likely to be — and on Linux that install is where
+        // `yuman` puts `share/yume/` when it is not installing for one user.
+        dirs.extend(shared_data_dirs(env::var("XDG_DATA_DIRS").ok().as_deref()));
     }
     dirs
+}
+
+/// The `yume/` under each of `$XDG_DATA_DIRS`, with the spec's default applied.
+///
+/// Handed its input rather than reading the environment, so the default can be
+/// tested without setting a process-wide variable in a threaded test runner —
+/// the same reason [`prefix_data_dirs`] takes its two.
+#[cfg(not(windows))]
+fn shared_data_dirs(list: Option<&str>) -> Vec<PathBuf> {
+    let list = list
+        .filter(|list| !list.trim().is_empty())
+        .unwrap_or("/usr/local/share:/usr/share");
+    list.split(':')
+        .filter(|dir| !dir.is_empty())
+        .map(|dir| PathBuf::from(dir).join("yume"))
+        .collect()
 }
 
 /// Where an input method bundle keeps its data, under one `Library`.
@@ -2573,6 +2592,32 @@ mod tests {
             prefix_data_dirs(Some(""), Some(Path::new("/usr/local/bin/yumete"))),
             vec![PathBuf::from("/usr/local/share/yumete")],
             "an empty HOMEBREW_PREFIX is not a directory"
+        );
+    }
+
+    /// A system-wide 宇浩 install is found even where `$XDG_DATA_DIRS` is unset.
+    ///
+    /// On Linux `yuman` installs `share/yume/` into `/usr/share` when it is not
+    /// installing for one user, and the spec's default is what points there. A
+    /// desktop session sets the variable; a bare terminal, an `ssh` login and a
+    /// systemd user unit often do not — so reading only the variable lost the
+    /// system install in exactly the places a writer is most likely to be.
+    #[cfg(not(windows))]
+    #[test]
+    fn a_system_wide_install_is_found_without_xdg_data_dirs() {
+        use super::{shared_data_dirs, PathBuf};
+        assert_eq!(
+            shared_data_dirs(None),
+            vec![PathBuf::from("/usr/local/share/yume"), PathBuf::from("/usr/share/yume")],
+            "unset means the spec's default, not nothing"
+        );
+        // An empty (or blank) setting is not「這臺機器沒有共用目錄」either —
+        // it is a shell that exported the variable without a value.
+        assert_eq!(shared_data_dirs(Some(" ")), shared_data_dirs(None));
+        assert_eq!(
+            shared_data_dirs(Some("/opt/share::/usr/share")),
+            vec![PathBuf::from("/opt/share/yume"), PathBuf::from("/usr/share/yume")],
+            "a set list replaces the default, empty entries dropped"
         );
     }
 
