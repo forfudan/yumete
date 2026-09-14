@@ -2059,6 +2059,15 @@ struct RawTheme {
     mark_light: Option<String>,
     gold: Option<String>,
     gold_light: Option<String>,
+    /// 官服品色 — 紫、綠、藍, for the things that are not prose.
+    purple: Option<String>,
+    purple_light: Option<String>,
+    green: Option<String>,
+    green_light: Option<String>,
+    azure: Option<String>,
+    azure_light: Option<String>,
+    /// Whether a 品色 run also gets a ground (`:theme-fill`).
+    fill: Option<bool>,
 }
 
 #[derive(Deserialize, Default)]
@@ -2258,10 +2267,19 @@ impl RawConfig {
             (&other.theme.mark_light, &mut self.theme.mark_light),
             (&other.theme.gold, &mut self.theme.gold),
             (&other.theme.gold_light, &mut self.theme.gold_light),
+            (&other.theme.purple, &mut self.theme.purple),
+            (&other.theme.purple_light, &mut self.theme.purple_light),
+            (&other.theme.green, &mut self.theme.green),
+            (&other.theme.green_light, &mut self.theme.green_light),
+            (&other.theme.azure, &mut self.theme.azure),
+            (&other.theme.azure_light, &mut self.theme.azure_light),
         ] {
             if from.is_some() {
                 *to = from.clone();
             }
+        }
+        if other.theme.fill.is_some() {
+            self.theme.fill = other.theme.fill;
         }
         for (k, v) in other.keys.normal {
             self.keys.normal.insert(k, v);
@@ -2500,10 +2518,19 @@ impl RawConfig {
             (self.theme.mark_light, &mut config.theme.mark_light),
             (self.theme.gold, &mut config.theme.gold_dark),
             (self.theme.gold_light, &mut config.theme.gold_light),
+            (self.theme.purple, &mut config.theme.purple_dark),
+            (self.theme.purple_light, &mut config.theme.purple_light),
+            (self.theme.green, &mut config.theme.green_dark),
+            (self.theme.green_light, &mut config.theme.green_light),
+            (self.theme.azure, &mut config.theme.azure_dark),
+            (self.theme.azure_light, &mut config.theme.azure_light),
         ] {
             if let Some(rgb) = hex.as_deref().and_then(parse_hex) {
                 *slot = rgb;
             }
+        }
+        if let Some(fill) = self.theme.fill {
+            config.theme.fill = fill;
         }
         if let Some(markers) = self.panel.markers {
             // An empty list would leave every candidate unnumbered; keep the
