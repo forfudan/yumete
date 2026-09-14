@@ -4842,11 +4842,11 @@ fn markup_style(kind: yumete_core::markdown::Kind, ink: crate::theme::Palette) -
 /// 靠近，但是因为面积大，还是有很好的区分效果」.
 pub(crate) fn table_row_rung(nth: usize) -> u16 {
     match nth {
-        // The header and the rule under it, one rung louder than the body.
+        // The header and the rule under it, a step louder than the body.
         // ⚠️ Not `HEAD`: that is the ground 表格模式 paints the cell the cursor
         // is in, and a header wearing it would say an edit lands there.
-        0 | 1 => yumete_config::rung::CHROME,
-        n if n % 2 == 0 => yumete_config::rung::BAND,
+        0 | 1 => 8200,
+        n if n % 2 == 0 => 8500,
         _ => 8800,
     }
 }
@@ -4859,18 +4859,28 @@ pub(crate) fn table_row_rung(nth: usize) -> u16 {
 fn block_style(block: yumete_core::markdown::Block, ink: crate::theme::Palette) -> Option<Style> {
     use yumete_core::conflict::Side;
     use yumete_core::markdown::{Block, Callout};
-    // **A container is a container.** The four callouts used to differ by hue
-    // at 1.4–2.4 ΔE from each other and from the quote and the code fence —
-    // which is below the threshold at which two flat grounds can be told apart
-    // at all, and is also what collapses on a 256-colour terminal. The word
-    // `note` / `tip` / `warning` on the line is what says which; the ground says
-    // only 「這是一塊」. Danger is the exception, because it is the one that
-    // means 這裏不對.
+    // **The four callouts are four 品色 now** (#459), in the order the ranks
+    // themselves run — 「从轻到重」:
+    //
+    //   note 藍（八九品） · tip 綠（六七品） · warning 紫（一三品） · danger 朱
+    //
+    // ⚠️ **This was tried once and reverted, and the reason it failed is not
+    // the reason it works now.** The four used to be four *greys* 1.4–2.4 ΔE
+    // apart, which is below the threshold at which two flat grounds can be told
+    // apart at all. What tells them apart here is hue, held at a fixed distance
+    // off the page by [`Palette::washed`]: the distance says 「這是一塊」 and
+    // the hue says 「哪一塊」.
+    //
+    // ⚠️ **朱 stays at the bottom**, though the ranks would put 紫 there. It is
+    // the only colour in this editor with an existing hard meaning — a merge
+    // conflict's markers, a footnote's number, a row with the wrong number of
+    // columns — and two colours both meaning 「這裏不對」 is neither of them
+    // meaning it. Red as the worst thing is also the one convention nobody has
+    // to learn.
     let band = || Some(Style::default().bg(ink.at(yumete_config::rung::BAND)));
     match block {
         Block::Prose | Block::Heading(_) | Block::Item { .. } => None,
         // An aside is a block on the page because it is a block on paper.
-        Block::Container(Callout::Danger) => Some(Style::default().bg(ink.wash())),
         // **A table is a block too** (#270). It was the one thing in this list
         // that had a shape on the page and no ground under it, so a table in a
         // chapter read as prose that happened to have `|` in it. The same rung
@@ -4891,9 +4901,17 @@ fn block_style(block: yumete_core::markdown::Block, ink: crate::theme::Palette) 
             false => Style::default().fg(ink.purple()),
         }),
         // A callout keeps its ground whatever `:theme-fill` says: 「這是一塊」
-        // is the whole of what it has to say, and it has no marker of its own
-        // on every line the way a quote and a fence do.
-        Block::Container(_) => band(),
+        // is half of what it has to say, and it has no marker of its own on
+        // every line the way a quote and a fence do.
+        Block::Container(callout) => {
+            use crate::theme::Accent;
+            Some(Style::default().bg(ink.washed(match callout {
+                Callout::Note => Accent::Azure,
+                Callout::Tip => Accent::Green,
+                Callout::Warning => Accent::Purple,
+                Callout::Danger => Accent::Mark,
+            })))
+        }
         // **A table is read across, so the rows are banded alternately** — one
         // row's cells must be tellable from the next's, and in 縱書 a cell that
         // wraps to three lines is unreadable without it. The header takes the
@@ -6013,13 +6031,11 @@ fn draw_horizontal(
         // theme that does not own its ground cannot promise anything about
         // contrast, because every tint in it is measured against a colour the
         // editor has never seen.
-        let ground = ink.page().patch(
-            blocks
-                .get(row.line)
-                .copied()
-                .and_then(|b| block_style(b, ink))
-                .unwrap_or_default(),
-        );
+        let block = blocks.get(row.line).copied();
+        let row_is_a_table = matches!(block, Some(yumete_core::markdown::Block::Table { .. }));
+        let ground = ink
+            .page()
+            .patch(block.and_then(|b| block_style(b, ink)).unwrap_or_default());
         // The row the current hit is on, banded — 「在哪一行」 answered before
         // you have found the word itself.
         let ground = match hit_line == Some(row.line) {
@@ -6223,16 +6239,21 @@ fn draw_horizontal(
                             }
                         }
                         // The other ink asks the opposite question: the ground
-                        // is left alone, so a highlight or a container keeps
-                        // it, and what must not be rubbed out is a colour the
-                        // *writing* already carries — a heading, a link, a
-                        // `**bold**` run. Plain writing is the only place it
-                        // draws, which is where the boundaries are hard to see
-                        // anyway.
+                        // is left alone — a highlight or a container keeps it —
+                        // and the *writing* takes the mark.
+                        //
+                        // ⚠️ **Whatever colour it already has, stepped back**
+                        // (#461). This used to draw only where the writing was
+                        // plain, on the reasoning that a link's 藍 or a
+                        // heading's 金 must not be rubbed out. True, and the
+                        // consequence was that a link four lines long had no
+                        // word boundaries in it at all — 「现在是看不出分词的」.
+                        // Stepping the colour that is there keeps the colour
+                        // *and* the boundary.
                         WordMark::Ink => {
-                            if style.fg.is_none() || style.fg == page_fg {
-                                *style = style.fg(ink.word_ink());
-                            }
+                            let from = style.fg.or(page_fg).unwrap_or(ink.text());
+                            *style = style
+                                .fg(ink.stepped(from, yumete_config::rung::WORD_INK));
                         }
                     }
                 }
@@ -6409,7 +6430,13 @@ fn draw_horizontal(
         // A row's ground runs its whole width, not just under its words: an
         // aside is a block on the page because it is a block on paper, and a
         // painted page is painted to the edge.
-        if ground.bg.is_some() {
+        //
+        // ⚠️ **A table is the exception** (#460): its edge is the last `|`, not
+        // the window's. A quote or a callout is a block *of the page* and takes
+        // the page's width; a table is a shape **on** the page and has a width
+        // of its own, so a band carried past its last wall paints page as if it
+        // were table. 「表格的底色不需要延伸到整个页宽，而是表格宽度就可以了。」
+        if ground.bg.is_some() && !row_is_a_table {
             // A whole width of spaces, and the page truncates them. Working out
             // where the row ends and padding *exactly* the rest was one width
             // question too many: it asked `char_width`, while the columns are
@@ -13117,14 +13144,17 @@ mod tests {
         // next's when a cell wraps.
         for y in 1..=3 {
             assert_ne!(buffer[(0, y)].style().bg, prose, "row {y} has a ground");
-            assert_eq!(
-                buffer[(38, y)].style().bg,
-                buffer[(0, y)].style().bg,
-                "row {y}, to the edge"
-            );
         }
         assert_eq!(buffer[(0, 2)].style().bg, head, "the rule belongs to the header");
         assert_ne!(buffer[(0, 3)].style().bg, head, "…and the body does not");
+        // **And the ground stops where the table does** (#460): a table is a
+        // shape *on* the page with a width of its own, not a block *of* the
+        // page taking the window's.
+        assert_eq!(
+            buffer[(38, 1)].style().bg,
+            prose,
+            "the band must not run past the last `|`"
+        );
         assert_eq!(buffer[(0, 4)].style().bg, prose, "and it ends where it ends");
 
         // With the colouring off it is prose again, like every other block.
