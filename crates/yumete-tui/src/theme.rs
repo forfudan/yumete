@@ -873,7 +873,7 @@ mod tests {
         // ⚠️ **Evenness, not size.** This used to assert `hi < 9.0`, which is a
         // number about *how far apart this theme puts its ink and paper* — a
         // theme's own decision. 墨香's page went deeper on 2026-09-14 (#24262C
-        // → #161A15, the reader's 「太灰，没有松烟的深沉」) and every tenth of
+        // → #1A1E19, the reader's 「太灰，没有松烟的深沉」) and every tenth of
         // the run grew with it: 5.8–7.4 L* became 7.2–9.8. Nothing was less
         // even — the spread is 1.37× against 1.28× — but the absolute bound
         // failed, and widening it to 10 would only move the same mistake.
