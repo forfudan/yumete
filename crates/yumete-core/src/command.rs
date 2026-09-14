@@ -3272,9 +3272,9 @@ pub const COMMANDS: &[Entry] = &[
             Param::WordsOr {
                 of: AXIS,
                 default: None,
-                or: "<字串>",
+                or: "<字符串>",
             },
-            Param::Free("<字串>"),
+            Param::Free("<字符串>"),
         ],
         build: Some(|p| {
             // Was `:search`, whose two words *are* the axis (§5.2.3 ④). With
