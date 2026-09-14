@@ -4,8 +4,12 @@
     scripts/make_jinghua.py [--yume ../yume]
 
 讀 `$YUME_ROOT/data/`（預設 `../yume`），用宇浩自己的 `yume-compile` 編出
-`crates/yumete-ime/jinghua/{ling.ytab,symbols.ytab,VERSION}`。**本腳本從不寫進
-yume 樹**，只讀。
+`crates/yumete-ime/jinghua/{ling.ytab,symbols.ytab,VERSION}`。
+
+**本腳本從不寫進 yume 樹**，一個位元組都不寫——連 `target/` 都不碰。所以它**不會**
+替你編 `yume-compile`：找不到就停下來，把該跑的命令印給你，由你在那個倉庫裏自己跑。
+（`scripts/build.sh` 會替你編，那是它的事；這支腳本要守住「只讀」這句話，因為
+`cargo build` 沒有 `--locked` 時會改寫 `Cargo.lock`，那是一個被追蹤的檔。）
 
 # 為什麼要裁
 
@@ -60,6 +64,7 @@ import io
 import os
 import subprocess
 import sys
+import tempfile
 import time
 from pathlib import Path
 
@@ -118,10 +123,10 @@ def main() -> int:
 
     compiler = yume / "target" / "release" / "yume-compile"
     if not compiler.is_file():
-        print(f"==> 編 yume-compile（{yume}）")
-        subprocess.run(
-            ["cargo", "build", "--release", "-p", "yume-compile"], cwd=yume, check=True
-        )
+        print(f"!! 沒有 {compiler}", file=sys.stderr)
+        print("   本腳本不寫 yume 樹（連 target/ 也不寫），請自己先跑：", file=sys.stderr)
+        print(f"     (cd {yume} && cargo build --release --locked -p yume-compile)", file=sys.stderr)
+        return 1
 
     charsets = read_charsets(data)
     src = io.open(data / "ling.txt", encoding="utf-8").read().split("\n")
@@ -175,31 +180,35 @@ def main() -> int:
 
     head = [l for l in src if l.startswith("#")]
     OUT.mkdir(parents=True, exist_ok=True)
-    # 兩份中間源：主表自己一份，主表＋符號一份（`--symbols` 是從**編好的表**裏
-    # 抽的，所以要有一份含符號的才抽得出來）。
-    tmp_main = OUT / "ling.jinghua.txt"
-    tmp_all = OUT / "all.jinghua.txt"
-    tmp_main.write_text("\n".join(head + main_rows) + "\n", encoding="utf-8")
-    tmp_all.write_text("\n".join(head + main_rows + symbols) + "\n", encoding="utf-8")
-
-    subprocess.run([str(compiler), str(tmp_main), str(OUT / "ling.ytab")], check=True)
-    tmp_ytab = OUT / "all.ytab"
-    subprocess.run([str(compiler), str(tmp_all), str(tmp_ytab)], check=True)
-    subprocess.run(
-        [str(compiler), "--symbols", str(tmp_ytab), str(OUT / "symbols.ytab")], check=True
-    )
-    for junk in (tmp_main, tmp_all, tmp_ytab):
-        junk.unlink()
+    # ⚠️ 中間檔寫在系統暫存區，**不寫進 `jinghua/`**：那是被追蹤的目錄，而編譯
+    # 一失敗就會在裏面留下三個沒人認得、也沒被 gitignore 的檔。
+    with tempfile.TemporaryDirectory(prefix="jinghua-") as tmp:
+        tmp = Path(tmp)
+        # 兩份中間源：主表自己一份，主表＋符號一份（`--symbols` 是從**編好的表**
+        # 裏抽的，所以要有一份含符號的才抽得出來）。
+        tmp_main = tmp / "ling.txt"
+        tmp_all = tmp / "all.txt"
+        tmp_main.write_text("\n".join(head + main_rows) + "\n", encoding="utf-8")
+        tmp_all.write_text("\n".join(head + main_rows + symbols) + "\n", encoding="utf-8")
+        subprocess.run([str(compiler), str(tmp_main), str(OUT / "ling.ytab")], check=True)
+        subprocess.run([str(compiler), str(tmp_all), str(tmp / "all.ytab")], check=True)
+        subprocess.run(
+            [str(compiler), "--symbols", str(tmp / "all.ytab"), str(OUT / "symbols.ytab")],
+            check=True,
+        )
 
     # `build.rs` 的 `stamp()` 讀這一份，說的是「這份碼表多老」。源表的時間戳纔是
     # 答案 —— 裁的動作不改內容的新舊。
-    when = time.localtime(os.path.getmtime(data / "ling.txt"))
-    # ⚠️ 不寫絕對路徑：那會把生成者的家目錄寫進倉庫，而且每台機器不同，一提交
-    # 就是一行沒有意義的 diff。
+    #
+    # ⚠️ **UTC，不是本地時間。** 同一份源表在柏林和在上海跑，`localtime` 會給出
+    # 不同的日期（現行這個 20260912011555 是 01:15 CEST ＝ 前一天 23:15 UTC），
+    # 於是換台機器重跑就多一行沒有意義的 diff，面板上同一份表還顯示兩個日期。
+    # ⚠️ 也不寫絕對路徑：那會把生成者的家目錄寫進倉庫。
+    when = time.gmtime(os.path.getmtime(data / "ling.txt"))
     (OUT / "VERSION").write_text(
         "# scripts/make_jinghua.py 生成，勿手改。\n"
         f"build={time.strftime('%Y%m%d%H%M%S', when)}\n"
-        "source=yume data/ling.txt\n",
+        "source=yume data/ling.txt (UTC)\n",
         encoding="utf-8",
     )
 

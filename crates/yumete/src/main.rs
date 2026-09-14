@@ -805,18 +805,19 @@ KEYS (Normal mode, Helix-style):
     w b e     next / prev word start, word end (W B E for WORDs)
     gg  ge    goto buffer start / last line (10gg goes to line 10)
     gn  gp    show the next / previous open file
-    gf        open the file:line named on this line (`:grep` results)
+    gf        open the file:line named on this line (`:search-gd` results)
     Space     menu: e sidebar, o outline, f files, b buffers, / search,
               d 字典 (how the character under the cursor is written), y copy,
               r 旁注 (edit the reading here)
     C-w       move between the sidebar and the text
     gh gl gs  goto line start / end / first non-blank
     {{ }}       previous / next paragraph — here a paragraph is a logical line
-    ( )       previous / next sentence — 。！？ and the mark that closes after
     M a  ' a  name this place / go back to it, across files
     C-o C-i   the jump list: back to where a jump came from, and forward
-    f t F T   find / till a character (forward / backward); A-. repeats it
-    J  K      forward / back half a page   (L / H for a whole one)
+    f F       find a character, forward / backward; A-. repeats it
+              (**no t / T** — that letter is the table mode's, all of it)
+    H  L      previous / next sentence — 。！？ and the mark that closes after
+    J  K      forward / back half a page   (C-f / C-b for a whole one)
     x  X      select the current line / extend to whole lines
     v  ;  %   select (extend) mode / collapse / select the whole file
     d  c  R   delete / change / replace the selection with the register
@@ -829,7 +830,7 @@ KEYS (Normal mode, Helix-style):
               **中文 too**: the panel opens, and what you choose is what the
               selection becomes (a word replaces it rather than filling it)
     \"a        use register a for the next yank / delete / paste
-    q  Q      record a macro / play the last one back
+    Q  q      record a macro / play the last one back
     A-;       flip which end of the selection the cursor is on
     C-d C-u   half a page onward / back (down the lines, or across the 縱)
     C-f C-b   a whole page
@@ -846,14 +847,14 @@ KEYS (Normal mode, Helix-style):
     :         command line — Tab cycles the completion, and the list of
               commands appears above it and narrows as you type
               (:w  :w <path>  :q  :q!  :o <path>  :new
-              :segment  :wq  :count
+              :word  :wq  :count
               :yume-scheme <tag>   {schemes}
               :view-wrap [on|off|<n>]  soft-wrap; a number is a fixed measure
               :wq [path]       save (optionally save-as) and quit
               :42  :goto n    put the cursor on a line
               :recover[!]      load (or drop) a crash-recovery draft
               :buffer|next|previous|close   the open files (gn / gp)
-              :grep <re>  :toc      across the project / this file's headings
+              :search-gd <re>  :toc  across the project / this file's headings
               :export html|typst    write it out for a typesetter
               :layout [horizontal|vertical]      :view-dense [on|off]
               :yume-chaifen   the 拆分 annotation beside candidates

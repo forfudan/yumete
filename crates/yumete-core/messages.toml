@@ -1695,8 +1695,8 @@ en = "complement: colour lives in the grounds only; the writing stays neutral gr
 [[message]]
 # : 命令選單裏 cyanotype 那一項的說明（themes 組）
 key = "cmd.themes.cyanotype"
-zht = "藍曬：普魯士藍的地、白線的字——八套裏唯一底色真帶飽和色的一套"
-zhs = "蓝晒：普鲁士蓝的地、白线的字——八套里唯一底色真带饱和色的一套"
+zht = "藍曬：普魯士藍的地、白線的字——十套裏唯一底色真帶飽和色的一套"
+zhs = "蓝晒：普鲁士蓝的地、白线的字——十套里唯一底色真带饱和色的一套"
 en = "cyanotype: white lines on Prussian blue — the one theme whose ground carries colour"
 
 [[message]]
@@ -1737,9 +1737,9 @@ en = "mogao: the brown-black the murals oxidised into; the gold is malachite, th
 [[message]]
 # : 命令選單裏 morandi 那一項的說明（themes 組）
 key = "cmd.themes.morandi"
-zht = "莫蘭迪：八套裏最低的正文對比、最灰的地"
-zhs = "莫兰迪：八套里最低的正文对比、最灰的地"
-en = "morandi: the lowest text contrast and the greyest ground of the eight"
+zht = "莫蘭迪：十套裏最低的正文對比、最灰的地"
+zhs = "莫兰迪：十套里最低的正文对比、最灰的地"
+en = "morandi: the lowest text contrast and the greyest ground of the ten"
 
 [[message]]
 # : 命令選單裏 bands 那一項的說明（view 組）

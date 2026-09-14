@@ -357,7 +357,7 @@ index, and a row with no number anywhere else is a row that got lost.
 | 132 | **The menu spreads across the window** | tui | P3 | 26 commands at a glance, column-major | Done |
 | 133 | **The language model yes, the 碼表 no** | both | P2 | 27 ms for everyone; `:yume-scheme` for the rest | Done |
 | 134 | **靈明 embedded at build time** | ime | P2 | never committed; `:yume` says which one answers | Done |
-| 135 | **Release pipeline + Homebrew tap** | ci | P2 | 三個平台，數據與編輯器分開發 [^135] | Planned |
+| 135 | **Release pipeline + Homebrew tap** | ci | P2 | 三個平台，數據與編輯器分開發 [^135]；流水線已落地，formula 待寫 | In progress |
 | 136 | **`:yume-table` — any code table** | ime | P2 | Rime `.dict.yaml` as it comes; 五筆/倉頡/粵拼 | Done |
 | 137 | **A file changed on disk is not written over** | core | P0 | `:w!`/`:e!`; a hash so it never cries wolf | Done |
 | 138 | **A macro keeps its operands** | core | P1 | `fq` recorded as `f` and ate the next key | Done |
@@ -4454,21 +4454,43 @@ Plain `tar.gz`, so any runner can open it — no `hdiutil`, no `dmg2img`. Verifi
 against v3.12.0 on 2026-09-02: every file yumete loads is there, and `VERSION`
 is what `crates/yumete-ime/build.rs` reads to date the built-in table.
 
-**The pipeline.**
+**The pipeline, as committed** (`.github/workflows/release.yaml`, 2026-09-14).
+⚠️ The plan above this line is what was *designed* on 2026-09-02; two of its
+four steps were dropped, and the reasons are the interesting part.
 
-1. One job downloads that tarball, extracts `share/yume/*`, uploads it as a
-   workflow artifact. One download for the whole run, so the four builds cannot
-   disagree about which 靈明 they embedded.
-2. Four build jobs — macOS arm64, macOS x86_64, Linux x86_64, Linux aarch64 —
-   download it, set `YUMETE_BUILTIN_DIR` to it, `cargo build --release`, then
-   tar the binary **together with the runtime data**, so a Homebrew install has
-   the language model and the 拆分 annotations too, not only the embedded 碼表.
-3. Attach the tarballs and their `.sha256` files to the release.
-4. **Open a pull request against `homebrew-tap`** with the new version and the
-   four checksums. decimo does this last step by hand, and its own workflow
-   comment records what that cost: three releases went out with the tarballs
-   missing, and Homebrew sat four versions behind for four months. The same
-   trap is one manual step away here.
+1. `version` resolves one version for the whole run from `[workspace.package]`
+   and, on a release, refuses to go on unless the tag agrees.
+2. Three build jobs — Linux x86_64, Linux aarch64, macOS arm64. **No macOS
+   x86_64**: the tap's users are on Apple Silicon, and a fourth leg costs a
+   runner for every release.
+3. Each build job checks out **two repositories side by side** —
+   `$GITHUB_WORKSPACE/yumete` and `.../yume` — because of the path dependency
+   named above. Both are private, so `GITHUB_TOKEN` cannot read the sibling and
+   the run needs a `YUME_REPO_TOKEN` secret; a guard step says that in one line
+   rather than letting `cargo metadata` say it in twenty. Then tests, build,
+   package, and a smoke test that runs the **relocated** binary and checks its
+   `--version` against the tarball's name.
+4. `attach` uploads the tarballs and their `.sha256` files with `--clobber`.
+
+**Two steps of the 09-02 design are gone.**
+
+* **The data is not downloaded and not bundled** ([^135]): 36 MB compressed,
+  platform-independent, built three times and downloaded three times for
+  nothing. It travels its own way, and the binary carries 靈明精華版 so an
+  editor with no tables can still type.
+* **No pull request against `homebrew-tap`.** Not yet written — v0.1.0's
+  formula goes in by hand, once. ⚠️ decimo's own workflow comment records what
+  the manual step costs: three releases went out with the tarballs missing, and
+  Homebrew sat four versions behind for four months. Automate it before the
+  second release, not the tenth.
+
+⚠️ **Both repositories are private today.** A public tap pointing at a private
+repository's release assets 404s for everyone but the author, so `forfudan/yumete`
+has to be public before the formula is worth publishing.
+
+⚠️ **`YUMETE_RELEASE=1` is what makes the binary say `0.1.0`.** Without it
+`crates/yumete/build.rs` emits `0.1.0-dev.20260914…+1f6aeb2`, which SemVer sorts
+*before* the release the tarball is named for. The smoke test checks it now.
 
 **Release-triggered, not commit-triggered.** A formula pins a versioned URL and
 a checksum, so a commit-triggered build would mean a new formula edit and a new
@@ -6041,11 +6063,26 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     **一** 是 `yume_data_dirs()`：它已經去找 `~/Library/Application Support/Yume/data/compiled`、
     app bundle、`%APPDATA%\Yume`。裝了 yume 的人什麼都不用做。
 
-    **二 為什麼零代碼**：`installed_data_dir()` 找的是 `<exe>/../../share/yumete`，而
+    **二 為什麼零代碼**：`installed_data_dirs()` 找的是 `<exe>/../../share/yumete`，而
     Homebrew 把每個 formula 的 `share/` 都鏈進**同一個** prefix。所以 `yume-data` 這個
     formula 只要裝進它自己的 `share/yumete/`，`/opt/homebrew/bin/yumete` 就找得到——
     兩個 formula、一個目錄，一行代碼都不必改。⚠️ 兩邊裝的是**不同的檔案**（一邊 `bin/`
     一邊 `share/yumete/`），所以不會撞鏈接。
+
+    ⚠️ **「零代碼改動」在 Linux 上不成立，2026-09-14 修了。** `current_exe()` 兩個平臺
+    答案不同：macOS 回傳按調用寫法的路徑（連着符號鏈接），所以
+    `/opt/homebrew/bin/yumete` 往上爬正好是 `/opt/homebrew/share/yumete`；Linux 讀的是
+    `/proc/self/exe`，**完全解析過**，往上爬落在 `<prefix>/Cellar/yumete/0.1.0/share/yumete`
+    ——formula 自己的 cellar，`yume-data` 從不往那裏放東西。於是 Linux 那兩個包裝出來的
+    編輯器永遠看不見數據 formula。現在 `installed_data_dirs()` 先問 `$HOMEBREW_PREFIX`
+    （brew 給每個 formula 的運行環境都導出它），再退到爬出來的那一個；手工裝在
+    `/usr/local` 的沒有那個變量，兩條路都對。守在
+    `a_homebrew_install_finds_the_shared_prefix_on_both_platforms`。
+
+    ⚠️ **寫 `yumete.rb` 時別用 `pkgshare` 放文檔。** `pkgshare` **就是**
+    `share/yumete`，正是 `installed_data_dirs()` 掃的、也是 `yume-data` 要用的那個目錄；
+    把 README 放進去，兩個 formula 就撞了鏈接——恰好是這一節保證不會發生的事。
+    文檔走 `doc.install`，執行檔走 `bin.install "bin/yumete"`。
 
     **三 不要為它引一條網絡供應鏈。** yumete 現在的依賴裏沒有 HTTP、沒有 zip、沒有 tar
     （全部依賴：`ratatui regex ropey serde toml unicode-* libc ignore windows-sys`）。
@@ -6362,7 +6399,7 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     the same vocabulary — over every 漢字 token instead, the bundled list's 24.6
     % coverage deflated every 倍 by four. The background comes off a new
     `Segmenter::log_prob`, so the answer is as good as the table installed — 宇
-    浩's 125 萬條 when the data layer is there, the bundled 680 when it is not,
+    浩's 125 萬條 when the data layer is there, the bundled 75,000 when it is not,
     and a sentence rather than an empty listing when there is no table at all.
     **medium-high**
 

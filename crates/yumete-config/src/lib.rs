@@ -774,7 +774,7 @@ impl ThemeConfig {
                 mark_light: (0x6E, 0x6E, 0x6E),
                 ..ThemeConfig::default()
             }),
-            // 藍曬 — 普魯士藍的地、白線的字——八套裏唯一底色真帶飽和色的一套。暗是氰版藍曬，明是重氮曬圖。
+            // 藍曬 — 普魯士藍的地、白線的字——十套裏唯一底色真帶飽和色的一套。暗是氰版藍曬，明是重氮曬圖。
             "cyanotype" | "lanshai" | "藍曬" | "蓝晒" => Some(ThemeConfig {
                 name: "cyanotype".to_string(),
                 dark: Ladder {
@@ -825,7 +825,7 @@ impl ThemeConfig {
                 mark_light: (0x9C, 0x41, 0x28),
                 ..ThemeConfig::default()
             }),
-            // 莫蘭迪 — 八套裏最低的正文對比、最灰的地。長夜寫作最不刺眼的一套，朱也降成塵土般的磚紅。
+            // 莫蘭迪 — 十套裏最低的正文對比、最灰的地。長夜寫作最不刺眼的一套，朱也降成塵土般的磚紅。
             "morandi" | "molandi" | "莫蘭迪" | "莫兰迪" => Some(ThemeConfig {
                 name: "morandi".to_string(),
                 dark: Ladder {
