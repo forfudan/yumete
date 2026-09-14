@@ -1188,7 +1188,12 @@ impl Editor {
         ('o', "hint.goto.outline"),
         ('f', "hint.goto.open-file"),
         ('b', "hint.goto.switch-buffer"),
-        ('/', "hint.goto.advanced-search"),
+        // ⚠️ `/` opens it too and always will — it is what 「搜索」 is spelled
+        // with everywhere else, and a habit that stops working is worse than a
+        // key nobody finds. It is not **listed**, because the rest of this
+        // menu is letters and one punctuation mark among them reads as a
+        // different kind of thing. The manual says both.
+        ('s', "hint.goto.advanced-search"),
         ('?', "hint.goto.all-commands"),
         ('y', "hint.goto.copy-to-clipboard"),
         ('p', "hint.goto.paste-from-clipboard"),
@@ -1438,7 +1443,7 @@ impl Editor {
             // **高級搜索** (#419). It used to prefill `:grep `, and `:grep` is
             // gone: what to look for is typed in the panel's own box, which
             // arrives with the last pattern in it, selected.
-            Key::Char('/') => self.open_search(),
+            Key::Char('s') | Key::Char('/') => self.open_search(),
             Key::Char('?') => {
                 self.mode = Mode::Command;
                 self.command_line.clear();
