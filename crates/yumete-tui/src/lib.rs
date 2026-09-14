@@ -7145,8 +7145,6 @@ mod tests {
         use yumete_ime::{ImeSession, Scheme};
         let ime = ImeSession::new(Scheme::LINGMING, vec![std::path::PathBuf::from("/no/such")]);
         let report = super::where_report(&ime);
-        if std::env::var_os("SHOW").is_some() { eprintln!("
-{report}"); }
 
         // Every layer that exists on this machine is numbered and labelled.
         let numbered: Vec<&str> = report
