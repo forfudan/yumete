@@ -6386,8 +6386,27 @@ fn draw_horizontal(
         // only reached when the line has no ruby at all, so `:view-dense off` over a
         // line that does have some loses its air row too.
         if row_has_reading(editor, rope, &row) {
-            let reading = reading_line(editor, ink, rope, &row, drawn, gutter + indent)
-                .unwrap_or_else(|| Line::from(Span::styled("", ink.page())));
+            // ⚠️ **The row above belongs to the block below it** (#464). This
+            // took the page's own ground, and a `:::` with a table in it was
+            // cut in half: the 列號 row over the table came out page-coloured,
+            // a bare stripe straight across the callout. A reading over a line
+            // of a quote had the same hole.
+            //
+            // Not the table's band, though — that one belongs to the row
+            // itself, and a ruler wearing it would read as another row of the
+            // table.
+            let over = match row_is_a_table {
+                true => ink.page(),
+                false => fill,
+            };
+            let mut reading = reading_line(editor, ink, rope, &row, drawn, gutter + indent)
+                .unwrap_or_else(|| Line::from(Span::styled("", over)));
+            if over.bg.is_some() {
+                reading.spans.push(Span::styled(
+                    " ".repeat(text_area.width as usize + left),
+                    over,
+                ));
+            }
             lines.push(scrolled(reading, gutter, left));
         }
 
