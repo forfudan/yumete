@@ -989,10 +989,14 @@ impl Default for ThemeConfig {
                 // **Dimmer than white bone, on purpose.** #E8E4DA against this
                 // ground is 13.7:1, and past about 12:1 a light face on a dark
                 // page starts to bloom — 「太亮了刺眼有光暈」. 10:1 is the
-                // comfortable end of the band for hours of prose, and the page
-                // keeps every rank it had: contrast is the ink's to set, and
-                // the ladder is unchanged below it.
-                ink: (0xC8, 0xC4, 0xBB),
+                // comfortable end of the band for hours of prose.
+                //
+                // ⚠️ **11:1, not 10:1** — every rung below is a fraction of
+                // this one, so dimming the ink dims the whole page with it.
+                // At 10:1 the 第 6 檔 that marks 行内代碼 fell to 5.5:1 against
+                // the paper and stopped reading as a mark at all; 11:1 puts it
+                // back over 6. The ink is the ceiling the ladder hangs from.
+                ink: (0xD2, 0xCE, 0xC4),
                 // 松烟**黑**, not 松烟綠. The page carried a green cast for a
                 // day — G above R above B, which at this darkness reads as
                 // 「屎綠」 rather than as ink — and the whole ladder inherited
@@ -2648,7 +2652,7 @@ mod tests {
         assert_eq!(c.editor.line_numbers, LineNumbers::Absolute);
         assert_eq!(c.editor.scrolloff, 3);
         assert_eq!(c.theme.name, "ink", "the name is ASCII; 墨香 is what it means");
-        assert_eq!(c.theme.dark.ink, (0xC8, 0xC4, 0xBB));
+        assert_eq!(c.theme.dark.ink, (0xD2, 0xCE, 0xC4));
         assert!(c.keys.normal.is_empty());
     }
 
