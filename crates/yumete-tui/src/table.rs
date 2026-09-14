@@ -465,17 +465,20 @@ pub fn draw(
     // possible answer to that — a rung above the columns, so it still reads as
     // one row when every column is a band.
     let band = ink.ground(yumete_config::rung::HEAD);
-    // **Every other row, half a step off** (#449). The columns are banded, and
-    // banding the columns alone leaves nothing saying where one row ends —
-    // which is worst exactly where this mode is most useful: with 折行 on, a
-    // cell that wraps to three lines has to be tellable from the row under it.
+    // **Every other row** (#449). The columns are banded, and banding the
+    // columns alone leaves nothing saying where one row ends — worst exactly
+    // where this mode is most useful: with 折行 on, a cell that wraps to three
+    // lines has to be tellable from the row under it.
     //
-    // The same 第 88 檔 the prose page's tables use, so a table read in a
-    // chapter and the same table read in the window are striped alike.
-    let stripe = ink.ground(crate::TABLE_STRIPE);
-    let banded = |line: usize, plain: Style| match (line - base.min(line)) % 2 {
-        0 => plain,
-        _ => plain.patch(stripe),
+    // ⚠️ **Which ground is [`crate::table_row_rung`]'s to say, not this
+    // renderer's** (#458). A `|` table read in a chapter and the same table
+    // read in this window are the same table, and 「to tf tb tt 的隔行底色应该
+    // 是统一的参数」 — a number written out here is a number that drifts from
+    // the one written out there. `+ 2` because the header and its rule are
+    // rows 0 and 1 in that reckoning, and this grid draws only the body.
+    let banded = |line: usize, plain: Style| {
+        let nth = line - base.min(line) + 2;
+        plain.patch(ink.ground(crate::table_row_rung(nth)))
     };
     let quiet = Style::default().fg(ink.furniture());
     // A row the schema cannot account for. Not an error to be refused — this

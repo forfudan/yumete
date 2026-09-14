@@ -3117,6 +3117,34 @@ fn gd_goes_gw_shows_and_a_missing_note_gets_written() {
     ed.on_key(Key::Char('u'));
     assert!(!ed.current_buffer().text().contains("[^1]: "));
 
+    // ---- gd 只跟腳注與鏈接走（#454） -----------------------------------
+    //
+    // 作者：「gd 现在他似乎对于普通文本就是个搜索。我希望它对于普通文本不适用
+    // （按下去没有效果），对于脚注、链接、章节链接等方才实现跳转。」
+    {
+        let mut ed = typed("# 雪夜\n\n那年冬天下了雪，雪很大。\n見 [手冊](docs/manual.md) 與 [雪](#雪夜)。\n");
+        ed.set_render(Render::Basic);
+        // ① 站在普通正文的「雪」上：一動不動，也不留下任何搜索結果。
+        ed.goto_line(3);
+        for _ in 0..7 {
+            ed.on_key(Key::Char('l'));
+        }
+        let was = ed.cursor();
+        press(&mut ed, "gd");
+        assert_eq!(ed.cursor(), was, "普通正文上 gd 不該動：{}", ed.status());
+        assert!(ed.current_hit().is_none(), "也不該留下一串搜索命中");
+        assert!(ed.status().contains("g/"), "要說一句去哪找：{}", ed.status());
+
+        // ② 站在章節鏈接 `[雪](#雪夜)` 上：跳到那個標題。
+        ed.goto_line(4);
+        let line = ed.current_buffer().rope().line_to_char(3);
+        let at = ed.current_buffer().text().find("#雪夜").expect("the anchor");
+        let at = ed.current_buffer().text()[..at].chars().count();
+        ed.set_cursor(at.max(line));
+        press(&mut ed, "gd");
+        assert_eq!(ed.cursor_line(), 0, "該跳到那個標題：{}", ed.status());
+    }
+
     // `g?` is the other question entirely — asked from a word, since
     // 「還在哪裏」 needs something to be about.
     press(&mut ed, "gg");
@@ -4183,14 +4211,17 @@ fn enter_asks_who_uses_this_when_the_cell_is_not_a_link() {
     ed.on_key(Key::Char('N'));
     assert_eq!(ed.peeked_line(), Some(5), "and back");
 
-    // A 拆分 cell still means the other thing: its components' own rows.
+    // ⚠️ **`g` does not answer for a table** (#454). A 拆分 cell holding 目
+    // does name another row, and this key still refuses it: 「g 不管表格」.
+    // The one that asks it is `t?`, two lines below.
+    let was = ed.peeked_line();
     ed.execute("3").unwrap();
     press(&mut ed, "l");
     ed.on_key(Key::Tab);
     press(&mut ed, "ll");
     assert_eq!(ed.char_at_cursor(), Some('目'));
     press(&mut ed, "gD");
-    assert_eq!(ed.peeked_line(), Some(4), "目's own row");
+    assert_eq!(ed.peeked_line(), was, "gD 在格子裏不動：{}", ed.status());
 
     // …and the reverse question again, from a different row.
     ed.on_key(Key::Tab);
@@ -10252,11 +10283,9 @@ fn the_book_hands_the_editor_its_own_names_without_being_asked() {
     let mut ed = Editor::new();
     ed.set_segmenter(Box::new(DictionarySegmenter::builtin(0)));
     ed.open_file(&dir.join("ch02.md")).unwrap();
-    assert_eq!(
-        ed.take_detect_request().as_deref(),
-        Some(dir.as_path()),
-        "開文件要請前端掃一遍這個項目"
-    );
+    let ask = ed.take_detect_request().expect("開文件要請前端讀一遍");
+    assert!(ask.text.contains("阿寧"), "讀的是這一篇的正文");
+    assert_eq!(ask.folder.as_deref(), Some(dir.as_path()), "外加它所在的文件夾");
     assert!(ed.take_detect_request().is_none(), "只請一次");
 
     // ---- ② 前端算完交回來，只在内存，分詞立刻跟上 ---------------------

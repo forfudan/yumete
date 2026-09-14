@@ -90,10 +90,18 @@ pub trait Segmenter {
 /// marked ones and says exactly as much as they do.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum WordMark {
-    /// A hair of colour under every other word. The default.
-    #[default]
+    /// A hair of colour under every other word.
+    ///
+    /// ⚠️ **Not the default any more** (#456). 「tint 模糊却嘈杂」: a ground is
+    /// a rectangle, so it marks the *space* a word takes rather than the word,
+    /// and a paragraph of them is a row of blocks the eye has to look past to
+    /// read the writing. It is still the right answer for a reader who wants
+    /// the boundary to be unmissable.
     Tint,
     /// Every other word's characters in a second ink, the paper untouched.
+    /// **The default**: the mark is on the writing itself, and a page of it is
+    /// still a page of prose.
+    #[default]
     Ink,
 }
 

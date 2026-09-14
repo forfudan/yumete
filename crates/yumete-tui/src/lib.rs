@@ -4824,20 +4824,32 @@ fn markup_style(kind: yumete_core::markdown::Kind, ink: crate::theme::Palette) -
     }
 }
 
-/// The other half of a table's banding — **第 88 檔**, four rungs off the
-/// [`BAND`] the table sits on and two short of the paper.
+/// **The ground a table's row `nth` sits on** — the one answer, for every way
+/// a table is drawn (#458).
 ///
-/// ⚠️ **A whole rung was a boundary, not a rhythm.** This began at 第 90 —
-/// which *is* the paper — so every other row said two things at once: 「a
+/// `0` is the header, `1` the `---` rule under it, and the body counts on from
+/// `2`. There are two renderers — a `|` table read in a chapter, and the
+/// whole-window grid `t t` hands the pane — and 「to tf tb tt 的隔行底色应该是
+/// 统一的参数」: a reader who turns the same table over four ways must not get
+/// four answers. So neither renderer holds a number; both call this.
+///
+/// ⚠️ **第 88, not the paper.** The stripe began a whole rung out, at 第 90 —
+/// which *is* the page — so every other row said two things at once: 「a
 /// different row」 and 「out of the table」. 「对比太强烈」.
 ///
-/// ⚠️ **And a ground is not a mark: the area does the work.** 1.09:1 would be
-/// invisible on a tick or a rule, and is plenty across a row of cells — 「底色
-/// 虽然靠近，但是因为面积大，还是有很好的区分效果」. That is why the stripe can
-/// sit this close to the band and still be read at a glance.
-///
-/// [`BAND`]: yumete_config::rung::BAND
-pub(crate) const TABLE_STRIPE: u16 = 8800;
+/// ⚠️ **And a ground is not a mark: the area does the work.** 1.09:1 is
+/// invisible on a tick or a rule and plenty across a row of cells — 「底色虽然
+/// 靠近，但是因为面积大，还是有很好的区分效果」.
+pub(crate) fn table_row_rung(nth: usize) -> u16 {
+    match nth {
+        // The header and the rule under it, one rung louder than the body.
+        // ⚠️ Not `HEAD`: that is the ground 表格模式 paints the cell the cursor
+        // is in, and a header wearing it would say an edit lands there.
+        0 | 1 => yumete_config::rung::CHROME,
+        n if n % 2 == 0 => yumete_config::rung::BAND,
+        _ => 8800,
+    }
+}
 
 /// How a whole row is set, given the block its line belongs to.
 ///
@@ -4890,34 +4902,17 @@ fn block_style(block: yumete_core::markdown::Block, ink: crate::theme::Palette) 
         //
         // Grounds, not hues: this has to survive a 16-colour terminal and a
         // light page, and it must not spend one of the four 品色 on a shape.
-        Block::Table { nth } => Some(match nth {
-            // The header and the `---` under it: one rung louder than the body,
-            // and 金 — which is what this palette has always called a table's
-            // header row, the same colour the panels label a column with.
-            //
-            // ⚠️ **Not `HEAD`.** That rung is the ground 表格模式 paints the
-            // cell the cursor is in, and a header row wearing it would say an
-            // edit lands there on every row of every table.
-            0 => Style::default()
-                .bg(ink.at(yumete_config::rung::CHROME))
-                .fg(ink.gold()),
-            1 => Style::default()
-                .bg(ink.at(yumete_config::rung::CHROME))
-                .fg(ink.furniture()),
-            // The body, banded alternately: one row's cells have to be
-            // tellable from the next's, and in 縱書 a cell that wraps to three
-            // lines cannot be read without it.
-            //
-            // ⚠️ **Half a rung, and neither of them the page.** This was a
-            // whole rung — 第 17 檔 against 第 18 — and 第 18 *is* the paper, so
-            // every other row said two things at once: 「a different row」 and
-            // 「out of the table」. 「对比太强烈」. The whole table sits on the
-            // band it has always sat on, and the stripe is half a rung off it:
-            // a rhythm the eye picks up over three rows, not a boundary it has
-            // to read on each one.
-            n if n % 2 == 0 => Style::default().bg(ink.at(yumete_config::rung::BAND)),
-            _ => Style::default().bg(ink.at(TABLE_STRIPE)),
-        }),
+        // The ground is [`table_row_rung`]'s, for every renderer; the header's
+        // ink is 金, which is what this palette has always called a table's
+        // header row — the same colour the panels label a column with.
+        Block::Table { nth } => {
+            let ground = Style::default().bg(ink.at(table_row_rung(nth)));
+            Some(match nth {
+                0 => ground.fg(ink.gold()),
+                1 => ground.fg(ink.furniture()),
+                _ => ground,
+            })
+        }
         // Metadata and scene breaks are furniture, not writing.
         Block::FrontMatter | Block::Rule | Block::FootnoteDef => {
             Some(Style::default().fg(ink.furniture()))
@@ -9387,6 +9382,8 @@ mod tests {
         editor.set_segmentation_visible(true);
         let mut config = vertical_config();
         config.editor.show_segmentation = true;
+        // 出廠是 ink 了（#456）；這一條驗的是 tint，所以明說。
+        editor.set_word_mark(yumete_cjk::WordMark::Tint);
         let buffer = render_vertical(&mut editor, &config, 20, 12);
 
         // Successive words alternate tint down the 縱. Only the leading cell of
@@ -10239,6 +10236,8 @@ mod tests {
         }
         editor.on_key(Key::Esc);
 
+        // 出廠是 ink 了（#456）；這一條驗的是 tint，所以明說。
+        editor.set_word_mark(yumete_cjk::WordMark::Tint);
         let config = Config::default();
         let buffer = render(&editor, &config, 40, 6);
 
@@ -14670,6 +14669,8 @@ mod tests {
         editor.set_segmentation_visible(true);
         let mut config = wrap_config();
         config.editor.show_segmentation = true;
+        // 出廠是 ink 了（#456）；這一條驗的是 tint，所以明說。
+        editor.set_word_mark(yumete_cjk::WordMark::Tint);
         // Width 8 puts the wrap inside 冬天 — er, between 年 and 冬.
         let buf = render_wrapped(&mut editor, &config, 8, 5);
 
