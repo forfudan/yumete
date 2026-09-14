@@ -85,14 +85,18 @@ pub enum Block {
     FrontMatter,
     /// Inside a `::: tip` container, or its fence.
     Container(Callout),
-    /// A `|`-delimited table row, and **which row of its table** — `0` is the
-    /// header, `1` the `---` rule under it, and the body counts on from `2`.
+    /// A `|`-delimited table row: **which row of its table** — `0` is the
+    /// header, `1` the `---` rule under it, and the body counts on from `2` —
+    /// and which `:::` container it is inside, if any.
     ///
     /// Counted here rather than by whoever draws, because the scanner is the
     /// one walking the document in order: a renderer that counts backwards
     /// from the line it is drawing does it again for every row on the screen,
     /// and gets it wrong for a table whose head has scrolled off the top.
-    Table { nth: usize },
+    Table {
+        nth: usize,
+        inside: Option<Callout>,
+    },
     /// `[^1]: the note itself`.
     FootnoteDef,
     /// A line of a merge conflict (#249) — which side of it, or [`None`] for
@@ -257,7 +261,25 @@ impl BlockScanner {
             self.containers.push(kind);
             return Block::Container(kind);
         }
+        // **A table inside a `:::` is still a table** (#463). Everything else
+        // in a container is the container's — a heading in one is not a
+        // heading — but a table is a *shape*, and it has a ground of its own
+        // that says which row is which. Losing it left a 表格 in a `::: details`
+        // with the callout's flat wash and no banding at all.
+        //
+        // Before the container arm and not after it, because that arm swallows
+        // every line: which callout it is in rides along, so whoever draws can
+        // lay the one over the other.
+        if trimmed.starts_with('|') && trimmed.len() > 1 {
+            let nth = self.table_row;
+            self.table_row += 1;
+            return Block::Table {
+                nth,
+                inside: self.containers.last().copied(),
+            };
+        }
         if let Some(&kind) = self.containers.last() {
+            self.table_row = 0;
             return Block::Container(kind);
         }
 
@@ -280,11 +302,6 @@ impl BlockScanner {
                 .and_then(|r| r.get(..1).zip(r.get(1..2)))
                 .and_then(|(mark, close)| (close == "]").then_some(mark != " "));
             return Block::Item { task };
-        }
-        if trimmed.starts_with('|') && trimmed.len() > 1 {
-            let nth = self.table_row;
-            self.table_row += 1;
-            return Block::Table { nth };
         }
         self.table_row = 0;
         Block::Prose
