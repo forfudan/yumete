@@ -595,6 +595,16 @@ impl Buffer {
     }
 
     /// Give this file-less buffer somewhere to keep a recovery copy.
+    /// Where the last recovery copy actually landed, if one did.
+    ///
+    /// `write_swap` answers `Ok(())` for a buffer with nowhere to keep a copy
+    /// (an unnamed scratch that has not been given a draft path yet) — nothing
+    /// is owed, so nothing failed. A caller about to delete the *only* other
+    /// copy of some text needs the stronger fact, which is this one.
+    pub fn recovery_copy(&self) -> Option<&Path> {
+        self.wrote_at.as_deref()
+    }
+
     pub fn keep_drafts_at(&mut self, path: PathBuf) {
         if self.path.is_none() && self.scratch_swap.is_none() {
             self.scratch_swap = Some(path);
@@ -638,7 +648,11 @@ impl Buffer {
             self.swapped_at = Some(self.revision);
             return Ok(());
         };
-        self.write_atomically(&swap)?;
+        // The manuscript is the model for the copy's permissions — see
+        // `write_atomically_like`. A scratch buffer has no manuscript, and
+        // there the umask is the only answer there is.
+        let like = self.path.clone();
+        self.write_body(&swap, like.as_deref(), false)?;
         self.wrote_at = Some(swap);
         self.swapped_at = Some(self.revision);
         // Only true of the canonical name: writing beside somebody's draft
@@ -814,14 +828,40 @@ impl Buffer {
 
     /// Write the rope to `path` atomically via a temporary file + rename.
     fn write_atomically(&self, path: &Path) -> io::Result<()> {
-        write_bytes_atomically(path, |file| {
+        self.write_atomically_like(path, None)
+    }
+
+    /// The same, but taking its permissions from `like` when `path` itself has
+    /// none to take.
+    ///
+    /// ⚠️ **This is what keeps a 0600 manuscript's recovery copy at 0600.**
+    /// `write_bytes_atomically` copies the permissions of the file it is
+    /// replacing — right for `:w`, useless for a swap, which does not exist
+    /// the first time it is written and so takes the umask: 0644. Every
+    /// keystroke since the last save then sits in a world-readable
+    /// `.日記.md.yumete` beside a diary the writer chmod'd shut.
+    fn write_atomically_like(&self, path: &Path, like: Option<&Path>) -> io::Result<()> {
+        self.write_body(path, like, self.marked)
+    }
+
+    /// The write itself. `mark` says whether the BOM the file arrived with goes
+    /// back on — true for the document, **false for a recovery copy**.
+    ///
+    /// ⚠️ The copy mirrors the *rope*, and the rope has no BOM: `open` strips
+    /// it and remembers it in `marked`. A copy that carried one was a copy that
+    /// could never equal the document, so `read_draft` offered a stale draft
+    /// for every BOM file forever — and `:recover`, which pushes the copy's
+    /// bytes straight into the buffer, made `\u{feff}` the first character of
+    /// the manuscript. The next `:w` then wrote a second BOM in front of it.
+    fn write_body(&self, path: &Path, like: Option<&Path>, mark: bool) -> io::Result<()> {
+        write_bytes_atomically_like(path, like, |file| {
             // **The mark the file arrived with goes back on** (#310). Three
             // bytes, and for prose nobody would miss them — but a `.csv` is
             // read by somebody else's program, and Excel takes their absence
             // to mean the file is not UTF-8, which turns 田中 into mojibake in
             // a file the writer never touched. Opening a file and saving it is
             // not an edit, and it should not be one on disk either.
-            if self.marked {
+            if mark {
                 file.write_all(BOM.as_bytes())?;
             }
             for chunk in self.rope.chunks() {
@@ -1034,6 +1074,11 @@ fn read_draft(path: &Path, rope: &Rope) -> Option<(String, PathBuf)> {
     let mut found: Vec<(std::time::SystemTime, String, PathBuf)> = Vec::new();
     let mut consider = |at: PathBuf| {
         let Ok(draft) = fs::read_to_string(&at) else { return };
+        // A copy written before 2026-09-14 carries the document's BOM, which
+        // the rope does not — so it could never compare equal, and recovering
+        // it would put `\u{feff}` at the head of the manuscript. Strip it on
+        // the way in: the copy is a picture of the rope, not of the file.
+        let draft = draft.strip_prefix(BOM).unwrap_or(&draft).to_string();
         if rope == &draft[..] {
             return;
         }
@@ -1108,6 +1153,16 @@ impl TextStore for Buffer {
 /// chapter had been.
 pub fn write_file_atomically(path: &Path, text: &str) -> io::Result<()> {
     write_bytes_atomically(path, |file| file.write_all(text.as_bytes()))
+}
+
+/// [`write_bytes_atomically`], taking the new file's permissions from `like`
+/// when `path` has none of its own yet. See [`Buffer::write_atomically_like`].
+fn write_bytes_atomically_like(
+    path: &Path,
+    like: Option<&Path>,
+    write: impl FnOnce(&mut fs::File) -> io::Result<()>,
+) -> io::Result<()> {
+    write_bytes_with_model(path, like, write)
 }
 
 /// **Which file a write to `path` would actually replace.**
@@ -1215,6 +1270,14 @@ fn write_bytes_atomically(
     path: &Path,
     write: impl FnOnce(&mut fs::File) -> io::Result<()>,
 ) -> io::Result<()> {
+    write_bytes_with_model(path, None, write)
+}
+
+fn write_bytes_with_model(
+    path: &Path,
+    like: Option<&Path>,
+    write: impl FnOnce(&mut fs::File) -> io::Result<()>,
+) -> io::Result<()> {
     // Through the link, not over it: a chapter that is a symlink into a sync
     // folder used to become a regular file here, and everything downstream
     // went on reading the stale copy it pointed at.
@@ -1246,8 +1309,13 @@ fn write_bytes_atomically(
     let written = (|| -> io::Result<()> {
         let mut file = fs::File::create(&tmp)?;
         // The manuscript's own permissions, kept: `File::create` takes the
-        // umask, so a 0600 diary came back 0644.
-        if let Ok(from) = fs::metadata(&path) {
+        // umask, so a 0600 diary came back 0644. When the target does not
+        // exist yet — a recovery copy's first write — the caller may name the
+        // file to copy them from instead.
+        let model = fs::metadata(&path)
+            .ok()
+            .or_else(|| like.and_then(|p| fs::metadata(p).ok()));
+        if let Some(from) = model {
             let _ = file.set_permissions(from.permissions());
         }
         write(&mut file)?;
@@ -1270,6 +1338,84 @@ fn write_bytes_atomically(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A BOM file's recovery copy holds the rope, not the file.
+    ///
+    /// `open` strips the BOM into `marked`; the copy used to get it written
+    /// back, which meant the copy could never compare equal to the document
+    /// (so every BOM file was offered a stale draft forever) and `:recover`,
+    /// which pushes the copy's bytes into the buffer, made `\u{feff}` the
+    /// first character of the manuscript — with a second BOM written in front
+    /// of it on the next `:w`. #310's mark belongs on the document alone.
+    #[test]
+    fn a_recovery_copy_carries_no_byte_order_mark() {
+        // ⚠️ Not `yumete-bom-…`: `a_byte_order_mark_is_not_the_first_character_of_the_book`
+        // already owns that name and removes the directory when it finishes.
+        // Two tests, one process id, one directory — green alone, red in the
+        // suite, and the failure lands in whichever of them is slower.
+        let dir = std::env::temp_dir().join(format!("yumete-bomswap-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).expect("fixture dir");
+        let path = dir.join("bom.md");
+        fs::write(&path, format!("{BOM}那年冬天。\n")).expect("write");
+
+        let mut b = Buffer::open(&path).expect("open");
+        assert_eq!(b.text(), "那年冬天。\n", "the rope never holds the mark");
+        b.insert(b.text().chars().count(), "雪停了。\n").expect("edit");
+        b.write_swap().expect("swap");
+        let swap = b.wrote_at.clone().expect("a copy was written");
+        let copy = fs::read_to_string(&swap).expect("read");
+        assert!(!copy.starts_with(BOM), "the copy must mirror the rope: {copy:?}");
+        assert_eq!(copy, "那年冬天。\n雪停了。\n");
+
+        // …and the document still gets its mark back.
+        b.save().expect("save");
+        assert!(fs::read_to_string(&path).expect("read").starts_with(BOM));
+
+        // A copy identical to the document is not offered as a draft — the
+        // check that a stray BOM used to defeat.
+        let clean = Buffer::open(&path).expect("reopen");
+        clean.write_body(&swap, None, false).expect("rewrite the copy");
+        assert!(
+            Buffer::open(&path).expect("reopen").pending_draft.is_none(),
+            "a copy equal to the file has nothing to recover"
+        );
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    /// A recovery copy of a 0600 manuscript is 0600 too.
+    ///
+    /// `write_bytes_atomically` copies the permissions of the file it replaces,
+    /// which is the right answer for `:w` and no answer at all for a swap: it
+    /// does not exist the first time, so `File::create` took the umask and the
+    /// copy came out 0644. Every keystroke since the last save then sat in a
+    /// world-readable file beside a diary the writer had chmod'd shut.
+    #[cfg(unix)]
+    #[test]
+    fn a_recovery_copy_is_as_private_as_the_manuscript() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = std::env::temp_dir().join(format!("yumete-perm-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).expect("fixture dir");
+        let manuscript = dir.join("日記.md");
+        fs::write(&manuscript, "那年冬天。\n").expect("write");
+        fs::set_permissions(&manuscript, fs::Permissions::from_mode(0o600)).expect("chmod");
+
+        let swap = dir.join(".日記.md.yumete");
+        let _ = fs::remove_file(&swap);
+        write_bytes_with_model(&swap, Some(&manuscript), |f| f.write_all(b"draft"))
+            .expect("swap");
+        let mode = fs::metadata(&swap).expect("stat").permissions().mode() & 0o777;
+        assert_eq!(mode, 0o600, "the copy leaked what the manuscript hid");
+
+        // Without a model it is the umask's business, and that is fine — a
+        // scratch buffer has no manuscript to be as private as.
+        let loose = dir.join(".scratch.yumete");
+        let _ = fs::remove_file(&loose);
+        write_bytes_with_model(&loose, None, |f| f.write_all(b"draft")).expect("swap");
+        assert!(fs::metadata(&loose).is_ok());
+        let _ = fs::remove_dir_all(&dir);
+    }
 
     /// A file the writer marked read-only is not replaced, and no temporary
     /// file is left beside it.

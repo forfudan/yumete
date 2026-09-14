@@ -2249,10 +2249,14 @@ impl Editor {
         // it.** `str::lines` strips `\r\n` and a naive rejoin writes `\n`, so
         // one keystroke rewrote all 123,381 lines of a Windows-authored 拆分表
         // and nothing on the screen said so.
-        let eol = match text.contains("\r\n") {
-            true => "\r\n",
-            false => "\n",
-        };
+        //
+        // ⚠️ It is the buffer's **dominant** ending, not「有沒有出現過 CRLF」.
+        // The old test was `text.contains("\r\n")`, which made one stray CRLF
+        // — a single line pasted from somewhere else — convert every other
+        // line on the next sort: a 123,381-line diff for a change of order.
+        // That is the same damage the paragraph above is about, arriving from
+        // the other side.
+        let eol = self.current_buffer().ending();
         let mut lines: Vec<&str> = text.lines().collect();
         if lines.len() <= header + 1 {
             self.status = say!("table.too-few-rows-to-sort");

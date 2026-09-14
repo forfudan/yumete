@@ -1542,12 +1542,47 @@ fn run_capturing(line: &str, input: Option<&str>) -> io::Result<Ran> {
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::piped())
         .spawn()?;
-    if let (Some(text), Some(mut pipe)) = (input, child.stdin.take()) {
-        // Written and *closed* — a filter that is still waiting for more input
-        // never gets round to answering.
-        io::Write::write_all(&mut pipe, text.as_bytes())?;
-    }
+    // ⚠️ **The manuscript goes down the pipe on its own thread.** Writing it
+    // here and only then reading the answer deadlocks on anything longer than
+    // a pipe buffer: a filter that reads and writes as it goes (`sed`, `cat`,
+    // `opencc` — nearly all of them) fills its stdout, blocks on the write,
+    // and stops draining its stdin, while this side is still blocked filling
+    // it. Both wait forever, **on the main thread** — the screen freezes, no
+    // key answers, `:w` cannot be typed, and only `kill -9` ends it, which
+    // skips the panic handler and so writes no recovery copy. Measured before
+    // the fix: `:!cat` hung at ~150 KB, `:!sed` at ~200,000 characters,
+    // `:convert` with real opencc at 3.1 MB. `sort` never hung, which is why
+    // the manual's own example was safe and this stayed hidden.
+    //
+    // Writing on a thread while the parent drains stdout means neither side
+    // can be the one that stops reading.
+    let feeder = match (input, child.stdin.take()) {
+        (Some(text), Some(mut pipe)) => {
+            let text = text.to_string();
+            Some(std::thread::spawn(move || {
+                // Written and *closed* — a filter still waiting for more input
+                // never gets round to answering. `pipe` is dropped at the end
+                // of the closure, which is the close.
+                io::Write::write_all(&mut pipe, text.as_bytes())
+            }))
+        }
+        // Nothing to feed, or the child took no stdin: nothing to close either.
+        _ => None,
+    };
     let out = child.wait_with_output()?;
+    if let Some(feeder) = feeder {
+        // A filter is allowed to stop reading early (`head -1` does), and the
+        // broken pipe that follows is not the writer's failure — the exit
+        // status is what says whether the run worked. A panic in the thread is
+        // not reachable from `write_all`, and treating it as a failed run is
+        // the safe reading if it ever were.
+        match feeder.join() {
+            Ok(Ok(())) => {}
+            Ok(Err(err)) if err.kind() == io::ErrorKind::BrokenPipe => {}
+            Ok(Err(err)) => return Err(err),
+            Err(_) => return Err(io::Error::other("could not feed the command")),
+        }
+    }
     Ok(Ran {
         ok: out.status.success(),
         said: String::from_utf8_lossy(&out.stdout).into_owned(),
@@ -6910,6 +6945,51 @@ fn draw_candidate_panel(
 
 #[cfg(test)]
 mod tests {
+    /// A whole novel goes through `!` without deadlocking.
+    ///
+    /// The old `run_capturing` wrote all of stdin before reading any of
+    /// stdout, so any filter that answers as it reads — `cat` included —
+    /// blocked on its own full stdout while this side blocked filling its
+    /// stdin. It hung **on the main thread**: frozen screen, no keys, no `:w`,
+    /// and `kill -9` (which writes no recovery copy) as the only way out.
+    ///
+    /// One megabyte, which is a long chapter and well past every pipe buffer
+    /// there is. The watchdog is the point of the test: without the fix this
+    /// never returns, and a test that hangs a CI runner for six hours is a
+    /// worse report than one that fails.
+    #[test]
+    fn a_long_manuscript_survives_the_pipe() {
+        let text = "那年冬天，山路已經看不見了。\n".repeat(30_000);
+        assert!(text.len() > 1_000_000, "{} bytes", text.len());
+        let (tell, hear) = std::sync::mpsc::channel();
+        std::thread::spawn(move || {
+            let ran = super::run_capturing("cat", Some(&text));
+            let _ = tell.send(ran.map(|r| (r.ok, r.said.len(), text.len())));
+        });
+        match hear.recv_timeout(std::time::Duration::from_secs(60)) {
+            Ok(Ok((ok, said, sent))) => {
+                assert!(ok, "cat should succeed");
+                assert_eq!(said, sent, "everything that went in came back");
+            }
+            Ok(Err(err)) => panic!("the run failed: {err}"),
+            Err(_) => panic!("deadlocked: stdin was written before stdout was read"),
+        }
+    }
+
+    /// A filter that stops reading early is not a failed run.
+    ///
+    /// `head -1` closes its stdin after the first line; the write that was
+    /// still going then fails with `BrokenPipe`. That is the filter's choice,
+    /// not an error to report — the exit status is what says whether the run
+    /// worked.
+    #[test]
+    fn a_filter_that_reads_only_the_first_line_is_not_an_error() {
+        let text = "第一行\n".to_string() + &"後面的\n".repeat(200_000);
+        let ran = super::run_capturing("head -1", Some(&text)).expect("no error");
+        assert!(ran.ok);
+        assert_eq!(ran.said, "第一行\n");
+    }
+
     /// #220: an installed data file the core refuses names the *version*, not
     /// the symptom. Before this, `:yume` said nothing at all and the writer saw
     /// only 拆分 comments that had stopped appearing.
