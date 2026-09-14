@@ -7,16 +7,26 @@
 簡體版，下一次生成就沒了。
 
 ⚠️ **只有這一個方向是安全的。** 反過來（簡 → 繁）走 opencc 的 `s2t` 會被它的詞組
-規則改壞正文：實測 400 行裏 `才` 變 `纔`、`吃` 變 `喫`、`注` 變 `註`、`布` 變 `佈`。
-所以簡體版是**生成物**，不是第二份正本。
+規則改壞正文：整份手冊往返量過，11 萬字裏有 327 處回不來（`表/錶`、`注/註`、
+`才/纔`、`台/臺`、`裏/里`），因為簡體那一側本來就把它們併成了一個字。所以簡體版是
+**生成物**，不是第二份正本。起草新句子用 `scripts/sc2tc.py`，一句一句轉。
 
 繁體正本的字形是**大陸通規繁體**（`裏 爲 説 内 没 麽`），與 `:convert … c` 的目標
 一致，那張字形表在 `crates/yumete-core/src/glyphs_c.txt`。
 
-⚠️ **有幾行不轉**：手冊裏談字形本身的那些——各套標準的樣字、`:check-usage` 的對照
-組、`:%s/裏/裡/n` 這個能跑的例子。簡體只有一個「里」，轉了那些行就成了「为 里 着」
-標在「臺灣正體」底下，整句沒有意義。它們在簡體版裏原樣留着繁體，這是對的：那幾行
-講的就是繁體。
+# 不轉的那些：`<!-- verbatim -->`
+
+手冊裏有幾處**談的就是繁體字形本身**——各套標準的樣字、`:check-usage` 的對照組、
+`:%s/裏/裡/n` 這個能跑的例子。簡體只有一個「里」，轉了就成了「为 里 着」標在「臺灣
+正體」底下，整句沒有意義。
+
+⚠️ 這種地方**在手冊裏自己標**，成對包起來：
+
+    | `tw` | <!-- verbatim -->臺灣正體——為 裡 著<!-- verbatim --> |
+
+辦法抄自 `yu/scripts/tc2sc.py`。標記是 HTML 註釋，渲染成空；正則不是按行的，所以
+可以塞在表格單元格中間而不破壞表格。**這比在腳本裏寫死行內容好**：從前這裏存着一張
+九行的清單，手冊一改錨點就對不上，腳本就停。現在標記跟着文字走，改手冊不用管這支。
 """
 
 import re
@@ -28,55 +38,72 @@ ROOT = Path(__file__).resolve().parent.parent
 SRC = ROOT / "docs" / "manual.md"
 OUT = ROOT / "docs" / "manual_sc.md"
 
-# 認得出來就別轉。錨點是那一行裏最不會改動的一小段；對不上就停下來，不要默默
-# 轉掉一行講字形的話。
-KEEP = [
-    "`:%s/裏/裡/n`",
-    "（裏／裡、為／爲、你自己配的人名）",
-    "港臺字形（說 爲 內 吳 裏 髮 臺）",
-    "臺灣正體（說 為 內 吳 裡 髮 臺）",
-    "古籍通規繁體（説 爲 内 吳 裏 髮 臺）",
-    "裏/裡、為/爲、臺/台、著/着",
-    "臺灣正體——為 裡 著",
-    "通規把 蝨 併進",
-    "自帶的表有裏/裡這些",
-]
+MARK = "<!-- verbatim -->"
+# 成對的 verbatim 區塊，或者不是 verbatim 的一段。非貪婪，成對優先。
+CHUNK = re.compile(rf"({re.escape(MARK)}[\S\s]+?{re.escape(MARK)})|([\S\s]+?(?={re.escape(MARK)})|[\S\s]+)")
 
 HEAD = (
     "<!-- 由 scripts/make_manual_sc.py 从 docs/manual.md 生成，请勿直接编辑。\n"
     "     Generated from docs/manual.md — edit that one, then re-run the script.\n"
-    "     繁体正本用大陆通规繁体字形；讲字形本身的那几行在这里原样保留繁体。 -->\n\n"
+    "     繁体正本用大陆通规繁体字形；<!-- verbatim --> 包住的片段原样保留繁体。 -->\n\n"
 )
+
+# 這幾個字形只出現在通規繁體裏（簡體寫 里 为 说 么 录）。轉完 verbatim 之外還剩下
+# 的就是漏網，停下來說。
+# ⚠️ 別把 `册 别 横 没 群` 放進來：通規繁體和簡體**本來就是同一個字形**，它們留在
+# 簡體版裏是對的，當成漏網會天天誤報。
+TRAD_ONLY = "裏爲説麽録"
 
 
 def main() -> int:
     text = SRC.read_text(encoding="utf-8")
-    lines = text.split("\n")
-    missing = [k for k in KEEP if not any(k in l for l in lines)]
-    if missing:
-        print(f"!! 對不上的錨點，手冊改過了：{missing}", file=sys.stderr)
-        print("   去 scripts/make_manual_sc.py 的 KEEP 裏更新它們。", file=sys.stderr)
+    if text.count(MARK) % 2:
+        print(f"!! {MARK} 的個數是奇數，有一處沒有配對", file=sys.stderr)
+        return 1
+
+    parts, out = [], []
+    for m in CHUNK.finditer(text):
+        parts.append((m.group(1) is not None, m.group(0)))
+    if "".join(p for _, p in parts) != text:
+        print("!! 切分之後拼不回原文，不敢寫", file=sys.stderr)
+        return 1
+
+    plain = [p for kept, p in parts if not kept]
+    # 一次呼叫轉全部，段與段之間放一個記號：逐段呼叫 opencc 會慢上千倍。
+    # ⚠️ **不能用 NUL**——opencc 直接把它吃掉，十段回來變一段。純 ASCII 的記號它
+    # 不動。段數對不上就停，那說明它連這個也動了。
+    SPLIT = "@@YUMETE-SPLIT@@"
+    if SPLIT in text:
+        print(f"!! 手冊裏出現了分隔記號 {SPLIT}，換一個", file=sys.stderr)
         return 1
     try:
         done = subprocess.run(
-            ["opencc", "-c", "t2s"], input=text, capture_output=True, text=True, check=True
+            ["opencc", "-c", "t2s"],
+            input=SPLIT.join(plain),
+            capture_output=True,
+            text=True,
+            check=True,
         )
     except FileNotFoundError:
         print("!! 需要 opencc（brew install opencc）", file=sys.stderr)
         return 1
-    out = done.stdout.split("\n")
-    if len(out) != len(lines):
-        print(f"!! opencc 換了行數（{len(lines)} → {len(out)}），不敢寫", file=sys.stderr)
+    converted = done.stdout.split(SPLIT)
+    if len(converted) != len(plain):
+        print(f"!! opencc 把 {len(plain)} 段變成了 {len(converted)} 段", file=sys.stderr)
         return 1
-    for i, line in enumerate(lines):
-        if any(k in line for k in KEEP):
-            out[i] = line
-    OUT.write_text(HEAD + "\n".join(out), encoding="utf-8")
-    left = [l for l in out if re.search(r"[裏爲説麽]", l) and not any(k in l for k in KEEP)]
+    it = iter(converted)
+    for kept, piece in parts:
+        out.append(piece if kept else next(it))
+
+    OUT.write_text(HEAD + "".join(out), encoding="utf-8")
+
+    body = "".join(p for kept, p in zip([k for k, _ in parts], out) if not kept)
+    stray = sorted({c for c in body if c in TRAD_ONLY})
     print(f"==> {OUT.relative_to(ROOT)}  ({OUT.stat().st_size:,} 位元組)")
-    print(f"    原樣保留 {len(KEEP)} 行；殘留繁體字形的行 {len(left)}")
-    for l in left[:5]:
-        print(f"      ⚠️ {l[:90]}")
+    print(f"    verbatim 區塊 {sum(1 for k, _ in parts if k)} 個")
+    if stray:
+        print(f"    ⚠️ verbatim 之外還剩繁體字形：{' '.join(stray)}", file=sys.stderr)
+        return 1
     return 0
 
 
