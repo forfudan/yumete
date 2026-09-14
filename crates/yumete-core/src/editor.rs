@@ -1397,6 +1397,31 @@ fn walk(root: &Path, skipped: &mut usize, f: &mut impl FnMut(&Path)) {
     }
 }
 
+/// What 自動認詞 is asked to read: **this file, and the folder around it**.
+///
+/// ⚠️ **Two passes, not one corpus** (#453). Concatenating the folder and
+/// reading it once looks equivalent and is not. Measured on 宇浩's own docs,
+/// 「宇夢」 comes 8th of 60 candidates in the file that is about it, 46th of
+/// 181 in its folder, and **disappears entirely** from the 969 a whole
+/// repository yields — where the list is headed by 习习, 火火, 宀八, the
+/// 字根 pairs of a few hundred 拆分表. Its count is 24 at every scope: nothing
+/// was diluted. What the wider read costs it is the **cap** (the commonest few
+/// hundred are kept) and the **pruning** (a longer string that holds it, common
+/// elsewhere, absorbs it).
+///
+/// Neither is fixed by weighting counts — a multiplier cannot un-absorb a word,
+/// and it would invent frequencies that are not in the text. What fixes it is a
+/// quota: the file is read on its own, and its share of the list is never taken
+/// by the folder's.
+#[derive(Debug, Clone)]
+pub struct DetectAsk {
+    /// The text of the file being written, which is read on its own.
+    pub text: String,
+    /// The folder it is in, read after it — `None` when the buffer has no path
+    /// and there is no folder to speak of.
+    pub folder: Option<PathBuf>,
+}
+
 /// Read a project and work out the words it uses that a dictionary has not
 /// got — **with no editor anywhere near it** (#448).
 ///
@@ -1582,7 +1607,7 @@ pub struct Editor {
     /// statistics are ratios, so what is read decides what is found, and what
     /// is being written is one file. `:word-discover-cd` and its two wider
     /// spellings are how a reader asks for more.
-    detect_request: Option<String>,
+    detect_request: Option<DetectAsk>,
     /// `:theme-fill` — whether a 品色 run gets a ground. The front end holds
     /// the colours, so it holds this too; `None` in the `Some` means 「the
     /// other one」.

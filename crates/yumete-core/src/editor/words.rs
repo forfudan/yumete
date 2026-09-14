@@ -443,14 +443,19 @@ impl Editor {
     /// Taken rather than read, the way every other front-end request here is:
     /// asking twice for the same scan is a few hundred milliseconds spent
     /// arriving at the list already in hand.
-    pub fn take_detect_request(&mut self) -> Option<String> {
+    pub fn take_detect_request(&mut self) -> Option<crate::editor::DetectAsk> {
         self.detect_request.take()
     }
 
-    /// Ask for a scan of **this file**. Called when one is opened and when one
-    /// is saved — the front end decides how often it actually runs.
+    /// Ask for a scan of **this file and the folder around it**. Called when a
+    /// file is opened and when one is saved — the front end decides how often
+    /// it actually runs, and reads the two apart (see
+    /// [`DetectAsk`](crate::editor::DetectAsk)).
     pub(super) fn ask_for_detection(&mut self) {
-        self.detect_request = Some(self.current_buffer().text());
+        self.detect_request = Some(crate::editor::DetectAsk {
+            text: self.current_buffer().text(),
+            folder: self.current_buffer().path().is_some().then(|| self.here_folder()),
+        });
     }
 
     /// Re-read the word list the save just wrote, if that is what it was.
