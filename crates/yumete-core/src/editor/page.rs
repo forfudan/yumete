@@ -519,6 +519,11 @@ impl Editor {
         self.theme_request.take()
     }
 
+    /// Take a pending `:theme-fill` — `Some(None)` is 「the other one」.
+    pub fn take_fill_request(&mut self) -> Option<Option<bool>> {
+        self.fill_request.take()
+    }
+
     /// Take a pending `:chaifen` request, if one is waiting for the IME.
     pub fn take_chaifen_request(&mut self) -> Option<bool> {
         self.chaifen_request.take()

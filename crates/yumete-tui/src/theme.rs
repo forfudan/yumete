@@ -59,10 +59,29 @@ pub fn choose(theme: ThemeConfig) {
 
 /// The theme in force: the one `:theme` named, else the config's.
 fn in_force(config: &Config) -> ThemeConfig {
-    match CHOSEN.read().ok().and_then(|c| c.clone()) {
+    let mut theme = match CHOSEN.read().ok().and_then(|c| c.clone()) {
         Some(theme) => theme,
         None => config.theme.clone(),
+    };
+    if let Some(fill) = FILL.load(Ordering::Relaxed).checked_sub(1) {
+        theme.fill = fill == 1;
     }
+    theme
+}
+
+/// What `:theme-fill` last said: `0` nothing, `1` off, `2` on.
+///
+/// Carried beside the theme rather than in it, so that changing the theme does
+/// not silently undo the answer — 「代碼要不要坐在框裏」 is a habit of the
+/// reader's, not a property of 墨香.
+static FILL: AtomicU8 = AtomicU8::new(0);
+
+/// Say whether a coloured run gets a ground, and answer what is in force now.
+pub fn set_fill(on: Option<bool>, config: &Config) -> bool {
+    let now = in_force(config).fill;
+    let want = on.unwrap_or(!now);
+    FILL.store(1 + u8::from(want), Ordering::Relaxed);
+    want
 }
 
 /// Which mood is in force, once the terminal has been asked.
@@ -299,6 +318,13 @@ pub struct Palette {
     ladder: Ladder,
     mark: (u8, u8, u8),
     gold: (u8, u8, u8),
+    /// 官服品色 — 紫（一三品）、綠（六七品）、藍（八九品）, for the things on
+    /// the page that are **not prose**: a literal, a quotation, an address.
+    purple: (u8, u8, u8),
+    green: (u8, u8, u8),
+    azure: (u8, u8, u8),
+    /// Whether a coloured run also gets a ground (`:theme-fill`).
+    fill: bool,
     paint: bool,
     /// Whether this is the work area that is only being *read* (Feature #176).
     ///
@@ -352,6 +378,10 @@ impl Palette {
             ladder: theme.ladder(dark),
             mark: theme.mark(dark),
             gold: theme.gold(dark),
+            purple: theme.purple(dark),
+            green: theme.green(dark),
+            azure: theme.azure(dark),
+            fill: theme.fill,
             paint: theme.ground == Ground::Paint,
             faded: false,
         }
@@ -452,6 +482,31 @@ impl Palette {
     /// 朱 — 這裏不對.
     pub fn mark(self) -> Color {
         self.accent(self.mark)
+    }
+
+    /// 紫（一至三品）— a literal: 行内代碼, a fence, anything that must be
+    /// read character for character.
+    pub fn purple(self) -> Color {
+        self.accent(self.purple)
+    }
+
+    /// 綠（六至七品）— 引用: someone else's words.
+    pub fn green(self) -> Color {
+        self.accent(self.green)
+    }
+
+    /// 藍（八至九品）— a 鏈接: an address, the lowest rank on the page.
+    pub fn azure(self) -> Color {
+        self.accent(self.azure)
+    }
+
+    /// Whether coloured runs are also given a ground (`:theme-fill`).
+    ///
+    /// Off by default: the backtick and the `>` are drawn, so a run's extent
+    /// is already on the page, and a ground behind it answers a question that
+    /// has been answered. On for a reader who wants the code in a box.
+    pub fn fill(self) -> bool {
+        self.fill
     }
 
     /// An accent, taken back with the rest when the half is only being read.

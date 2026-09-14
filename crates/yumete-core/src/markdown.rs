@@ -85,8 +85,14 @@ pub enum Block {
     FrontMatter,
     /// Inside a `::: tip` container, or its fence.
     Container(Callout),
-    /// A `|`-delimited table row.
-    Table,
+    /// A `|`-delimited table row, and **which row of its table** — `0` is the
+    /// header, `1` the `---` rule under it, and the body counts on from `2`.
+    ///
+    /// Counted here rather than by whoever draws, because the scanner is the
+    /// one walking the document in order: a renderer that counts backwards
+    /// from the line it is drawing does it again for every row on the screen,
+    /// and gets it wrong for a table whose head has scrolled off the top.
+    Table { nth: usize },
     /// `[^1]: the note itself`.
     FootnoteDef,
     /// A line of a merge conflict (#249) — which side of it, or [`None`] for
@@ -164,6 +170,9 @@ pub struct BlockScanner {
     /// The containers open, innermost last — `:::` nests, and an inner one must
     /// not close the outer.
     containers: Vec<Callout>,
+    /// How many `|` rows have run without a break — what [`Block::Table`]
+    /// carries, so the rows can be banded alternately.
+    table_row: usize,
 }
 
 impl BlockScanner {
@@ -273,8 +282,11 @@ impl BlockScanner {
             return Block::Item { task };
         }
         if trimmed.starts_with('|') && trimmed.len() > 1 {
-            return Block::Table;
+            let nth = self.table_row;
+            self.table_row += 1;
+            return Block::Table { nth };
         }
+        self.table_row = 0;
         Block::Prose
     }
 }
@@ -1040,7 +1052,7 @@ mod tests {
                 Block::Code => '`',
                 Block::FrontMatter => 'y',
                 Block::Container(_) => ':',
-                Block::Table => '|',
+                Block::Table { .. } => '|',
                 Block::FootnoteDef => 'F',
                 // The scanner never says this — a conflict is laid over its
                 // answer by the editor, which is the only thing that can know

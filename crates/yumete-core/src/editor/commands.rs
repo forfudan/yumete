@@ -651,6 +651,12 @@ impl Editor {
                 self.theme_request = Some((name, mood));
                 Ok(CommandOutcome::Continue)
             }
+            // Rides the same channel, for the same reason: the colours are the
+            // front end's and the core does not know one exists.
+            Command::ThemeFill(on) => {
+                self.fill_request = Some(on);
+                Ok(CommandOutcome::Continue)
+            }
             Command::TableToPipe(delimiter) => {
                 self.table_to_pipe(delimiter);
                 Ok(CommandOutcome::Continue)

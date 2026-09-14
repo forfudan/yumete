@@ -750,6 +750,43 @@ pub struct ThemeConfig {
     /// reading. Never 朱, which is for what is *wrong*.
     pub gold_dark: (u8, u8, u8),
     pub gold_light: (u8, u8, u8),
+    /// 紫、綠、藍 — **官服品色**, and what they are for (#449).
+    ///
+    /// 金 and 朱 were the whole of the page's colour, and everything else was
+    /// told apart by being one rung dimmer than the prose. That works for
+    /// emphasis, which *is* prose, and fails for the things that are **not
+    /// prose at all**: a piece of code, a quotation, an address. Dim reads as
+    /// 「less important」, and a run of code is usually the most exact thing on
+    /// the line.
+    ///
+    /// So the page borrows the one ordered colour system Chinese already has —
+    /// the ranks of the 官服 — and spends it on 「how binding is this text」:
+    ///
+    /// | 品 | 色 | 誰 |
+    /// | --- | --- | --- |
+    /// | 龍袍 | 金 | 標題：作者自己的聲音 |
+    /// | 一至三品 | 紫 | 代碼、字面：一個字都不能錯 |
+    /// | 四至五品 | 朱 | 這裏不對：腳注、danger、衝突 |
+    /// | 六至七品 | 綠 | 引用：別人的話 |
+    /// | 八至九品 | 藍 | 鏈接：只是個地址 |
+    ///
+    /// All three sit **below the prose** in contrast (8.2–9.2:1 against 11.1),
+    /// so the writing is still the brightest thing on the page — the rule that
+    /// took the hues away in the first place is kept, and only its conclusion
+    /// about non-prose is reversed.
+    pub purple_dark: (u8, u8, u8),
+    pub purple_light: (u8, u8, u8),
+    pub green_dark: (u8, u8, u8),
+    pub green_light: (u8, u8, u8),
+    pub azure_dark: (u8, u8, u8),
+    pub azure_light: (u8, u8, u8),
+    /// Whether a coloured run also gets a **ground** (`:theme-fill`).
+    ///
+    /// Off. 「丙的视觉效果最『干净』，扰乱信息少……`` 本身就是边界」 — the
+    /// backtick is drawn, so the run's extent is already on the page and a
+    /// ground behind it is a second answer to a question nobody asked. On for
+    /// whoever wants the code to sit in a box.
+    pub fill: bool,
 }
 
 impl ThemeConfig {
@@ -774,6 +811,30 @@ impl ThemeConfig {
         match dark {
             true => self.gold_dark,
             false => self.gold_light,
+        }
+    }
+
+    /// 紫（一至三品）, in the mood in force.
+    pub fn purple(&self, dark: bool) -> (u8, u8, u8) {
+        match dark {
+            true => self.purple_dark,
+            false => self.purple_light,
+        }
+    }
+
+    /// 綠（六至七品）, in the mood in force.
+    pub fn green(&self, dark: bool) -> (u8, u8, u8) {
+        match dark {
+            true => self.green_dark,
+            false => self.green_light,
+        }
+    }
+
+    /// 藍（八至九品）, in the mood in force.
+    pub fn azure(&self, dark: bool) -> (u8, u8, u8) {
+        match dark {
+            true => self.azure_dark,
+            false => self.azure_light,
         }
     }
 
@@ -1023,6 +1084,20 @@ impl Default for ThemeConfig {
             // taken the other way down: a dark gold on cream.
             gold_dark: (0xD8, 0xC9, 0x9A),
             gold_light: (0x6B, 0x54, 0x26),
+            // 一至三品. Light-mode values are 宇浩's own site's, which is where
+            // the reader already reads 代碼 in this colour.
+            purple_dark: (0xC8, 0xAB, 0xFA),
+            purple_light: (0x6F, 0x42, 0xC1),
+            // 六至七品. Softened from the site's mint (#3DD68C): a neon green
+            // on a warm near-black is a terminal's colour, not a manuscript's.
+            green_dark: (0x8F, 0xC9, 0xA0),
+            green_light: (0x18, 0x79, 0x4E),
+            // 八至九品 — **青, not 靛.** The site's #A8B1FF sits at hue 234°,
+            // twenty-eight degrees from the 紫 above it, and reads as another
+            // purple; 「官袍的藍不是紫色」. 201° is sixty degrees clear of it.
+            azure_dark: (0x6F, 0xB4, 0xD9),
+            azure_light: (0x1F, 0x5C, 0x8A),
+            fill: false,
         }
     }
 }

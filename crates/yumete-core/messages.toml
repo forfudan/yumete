@@ -826,10 +826,26 @@ find = "表格 網格 网格 格子 欄位 栏位 grid csv tsv"
 [[message]]
 # : 命令選單裏 theme 那一項的說明（commands 組）
 key = "cmd.commands.theme"
-zht = "主題：用哪一套墨（後面可以再跟深淺）"
-zhs = "主题：用哪一套墨（后面可以再跟深浅）"
-en = "theme: which set of inks (an appearance may follow it)"
+zht = "主題：用哪一套墨（深淺在 :theme-mode）"
+zhs = "主题：用哪一套墨（深浅在 :theme-mode）"
+en = "theme: which set of inks (light or dark is :theme-mode)"
 find = "主題 主题 配色 顏色 颜色 墨 colours colors"
+
+[[message]]
+# : 命令選單裏 theme-fill 那一項的說明
+key = "cmd.commands.theme-fill"
+zht = "代碼、引用要不要坐在底色上（出廠不坐）"
+zhs = "代码、引用要不要坐在底色上（出厂不坐）"
+en = "whether code and quotations sit on a ground (they do not by default)"
+find = "主題 主题 底色 襯底 衬底 代碼 代码 引用 fill background"
+
+[[message]]
+# : 命令選單裏 theme-mode 那一項的說明
+key = "cmd.commands.theme-mode"
+zht = "深色還是淺色（system 問終端）"
+zhs = "深色还是浅色（system 问终端）"
+en = "dark or light (system asks the terminal)"
+find = "主題 主题 深色 淺色 浅色 明暗 dark light mode appearance"
 
 [[message]]
 # : 命令選單裏 toc 那一項的說明（commands 組）
@@ -6769,6 +6785,20 @@ en = "yanked a row"
 # ── theme ─────────────────────────────────────────────────────────────
 
 [[message]]
+# :theme-fill off ——品色那幾樣不上底色
+key = "theme.fill-off"
+zht = "代碼與引用不上底色——`` ` `` 本身就是邊界"
+zhs = "代码与引用不上底色——`` ` `` 本身就是边界"
+en = "no ground behind code or quotations — the backtick is the boundary"
+
+[[message]]
+# :theme-fill on ——品色的那幾樣現在坐在底色上
+key = "theme.fill-on"
+zht = "代碼與引用坐在底色上"
+zhs = "代码与引用坐在底色上"
+en = "code and quotations sit on a ground"
+
+[[message]]
 # :theme 給了不認得的名字
 key = "theme.no-such-theme"
 zht = "沒有這個主題：{0}"
@@ -6776,7 +6806,7 @@ zhs = "没有这个主题：{0}"
 en = "no theme called '{0}'"
 
 [[message]]
-# 換好了主題
+# :theme／:theme-mode 換好了，說現在是哪一套、哪個深淺
 key = "theme.set"
 zht = "主題：{0}（{1}）"
 zhs = "主题：{0}（{1}）"
