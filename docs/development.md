@@ -8671,7 +8671,7 @@ offline), from one frontend. Web/PWA first (P1–P2), Tauri packaging in P3.
     檔案，十六行垃圾照樣是「碼表已載入」，一個字都不說。所以 `from_table_file` 現在先過一趟
     `weed_overlong`（`yumete-ime/src/lib.rs`）：**逐行看有沒有超過 255 位元組的欄，有就整行
     丟掉**，丟了幾行記在 `table_skipped` 上，`:yume-table` 的回話後面接一句
-    「跳過 N 條過長的」。量到：`碼表：/Users/ZHU/bad_table_test.txt · 跳過 1 條過長的`。
+    「跳過 N 條過長的」。量到：`碼表：~/bad_table_test.txt · 跳過 1 條過長的`。
     ⚠️ **不分哪一欄是碼。** 格式自己認 `text⇥code`／`code␣text` 與兩者的反向，所以這裏數的是
     空白分隔的欄，任一欄過長就算——真碼表兩側都沒有 255 位元組的東西，有的那個不是碼表。
     快路：整份文本一次 `split_ascii_whitespace` 掃過沒有過長的欄就原樣返回，不拷。
