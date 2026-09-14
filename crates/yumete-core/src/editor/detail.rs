@@ -202,9 +202,20 @@ impl Editor {
             }
         }
         let Some(detail) = self.note_detail() else {
-            // Not on a note, so 「這個詞還在哪裏」 — with the word under the
-            // cursor as the question.
-            self.search_the_page();
+            // **A link is a definition too**, and the one a manuscript has most
+            // of: `[手冊](docs/manual.md)`, `[[靈明]]`, `[雪](#雪)`. `gx` has
+            // always followed them; `gd` asks the same question in the same
+            // words, so it follows them as well.
+            if self.link_under_cursor().is_some() {
+                return self.follow_link();
+            }
+            // ⚠️ **And on ordinary writing it does nothing** (#454). It used to
+            // fall through here too — a whole-document search for whatever the
+            // cursor happened to be on — so `gd` in the middle of a paragraph
+            // scattered hits across the book and moved the caret.
+            // 「我希望它对于普通文本不适用（按下去没有效果）」. That search is
+            // still one key away and always was: `g/`.
+            self.status = say!("note.nothing-to-go-to");
             return;
         };
         let Some(&(_, Some(at))) = detail.links.first() else {
@@ -234,6 +245,10 @@ impl Editor {
     /// `gd` is named for. A key whose meaning turns over depending on what the
     /// cursor happens to be standing in cannot be relied on; the table's own
     /// questions are asked with `t/`, `t?` and `:table-jump`.
+    ///
+    /// ⚠️ **And that rule is the whole rule** (#454). A 拆分 cell holding 目
+    /// still *names* another row, and this key still refuses it: 「g 不管表格，
+    /// 表格的我们以后再说」. `t?` is the one that asks it.
     pub(super) fn show_definition(&mut self, preview: bool) {
         self.definition_preview = preview;
         self.follow_note();

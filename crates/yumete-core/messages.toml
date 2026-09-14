@@ -5085,6 +5085,13 @@ zhs = "这个文件不是 Markdown——脚注在这里只是四个字"
 en = "this file is not Markdown — a footnote here is just four characters"
 
 [[message]]
+# gd 按在普通正文上——腳注、鏈接都不是，所以不動
+key = "note.nothing-to-go-to"
+zht = "gd 跟着腳注與鏈接走；這裏兩樣都不是（要找這個詞還在哪裏，用 g/）"
+zhs = "gd 跟着脚注与链接走；这里两样都不是（要找这个词还在哪里，用 g/）"
+en = "gd follows a footnote or a link, and this is neither (for 「where else does this word appear」, g/)"
+
+[[message]]
 # 跟着註走，那條註沒有寫在別處
 key = "note.points-nowhere"
 zht = "這條註沒有寫在別處"

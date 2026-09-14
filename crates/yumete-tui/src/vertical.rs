@@ -1123,8 +1123,17 @@ pub fn draw(
                 style = style.patch(crate::markup_style(run.kind, ink));
             }
 
-            if show_segmentation && !has_selection && (mark == WordMark::Ink || style.bg.is_none())
-            {
+            // ⚠️ **Not `&& !has_selection`** (#450, and again here for #457).
+            // The horizontal page had the same gate and the same bug: every
+            // paragraph on the screen went out the moment anything was
+            // selected, and a motion *is* a selection here, so holding `w`
+            // down flashed the whole page once a keystroke. The selection's
+            // own ground is patched on further down, **after** this, so the
+            // cells it covers were never going to show a word mark anyway.
+            //
+            // Fixed in one renderer and not the other is worse than not fixed:
+            // 「模式不应该影响分词的闪烁」.
+            if show_segmentation && (mark == WordMark::Ink || style.bg.is_none()) {
                 let ranges = match &segmented {
                     Some((line, ranges)) if *line == zong.line => ranges,
                     _ => {

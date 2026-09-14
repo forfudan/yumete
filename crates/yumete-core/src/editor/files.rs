@@ -720,19 +720,24 @@ impl Editor {
     /// Nothing here goes through a shell. `open`/`xdg-open` are handed the URL
     /// as one argument by the front end (see `yumete_tui::show`), and this side
     /// never builds a command line at all.
-    pub(super) fn follow_link(&mut self) {
+    /// The link the cursor is standing in, if it is standing in one.
+    ///
+    /// Only Markdown writes links this way; Typst spells them `#link(…)`,
+    /// which is code and is read as code.
+    pub(super) fn link_under_cursor(&self) -> Option<crate::markdown::Link> {
         let rope = self.current_buffer().rope();
         let line = rope.char_to_line(self.cursor);
         let at = self.cursor - rope.line_to_char(line);
         let text = rope.line(line).to_string();
         let text = text.trim_end_matches(['\n', '\r']);
-        // Only Markdown writes links this way; Typst spells them `#link(…)`,
-        // which is code and is read as code.
-        let found = match self.current_buffer().syntax() {
+        match self.current_buffer().syntax() {
             crate::syntax::Syntax::Markdown => crate::markdown::link_at(text, at),
             _ => None,
-        };
-        let Some(link) = found else {
+        }
+    }
+
+    pub(super) fn follow_link(&mut self) {
+        let Some(link) = self.link_under_cursor() else {
             self.status = say!("link.none-here");
             return;
         };

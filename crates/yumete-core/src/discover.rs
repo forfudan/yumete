@@ -99,6 +99,37 @@ pub struct Found {
 /// The edge *is* a context, so it is counted as one.
 const EDGE: char = '\0';
 
+/// How many 漢字 a text holds — the denominator [`cap`] is measured against.
+///
+/// Only 漢字: a repository of Markdown is mostly punctuation, code fences and
+/// ASCII, and none of that can ever become a word here.
+pub fn han_count(text: &str) -> usize {
+    text.chars().filter(|&c| is_han(c)).count()
+}
+
+/// How many of the words found are worth keeping, for a text of `han` 漢字.
+///
+/// **A share, not a number** (#455). Two hundred is right for a chapter and
+/// wrong for a book: 「一个一百万字的小说可以取到 1000 个词（比如说名字）」,
+/// and a cast of four hundred does not fit in two hundred slots. One in a
+/// thousand characters, with two hundred as the floor so a short file is not
+/// punished for being short:
+///
+/// | 讀了多少 | 留幾個 |
+/// | --- | --- |
+/// | 一章（2 萬字） | 200 |
+/// | 一部中篇（12 萬） | 200 |
+/// | 一部長篇（100 萬） | 1,000 |
+/// | 笑傲江湖（145 萬） | 1,450 |
+///
+/// The tail is cheap — the list is a `HashSet` the segmenter consults — and
+/// everything in it has already passed 內聚度, 左右熵 and [`MIN_COUNT`]. This
+/// bound is a safety valve on the *length of the list*, not a judgement about
+/// the words in it.
+pub fn cap(han: usize) -> usize {
+    (han / 1000).max(200)
+}
+
 /// Words `text` uses that `joins` does not already treat as one word, commonest
 /// first.
 ///
