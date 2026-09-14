@@ -482,6 +482,11 @@ impl Editor {
         }
         self.add_buffer(buffer);
         self.table_on_open();
+        // **開文件就順手認一遍這本書自己的詞** (#448). Nothing happens here —
+        // the scan is three hundred milliseconds of counting and it belongs on
+        // a thread — so this only leaves the request where the front end will
+        // find it, and the front end decides how often it is worth honouring.
+        self.ask_for_detection();
         Ok(())
     }
 

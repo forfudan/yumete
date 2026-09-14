@@ -7008,18 +7008,18 @@ en = "wheel: {0} a notch"
 # ── word ──────────────────────────────────────────────────────────────
 
 [[message]]
-# 挖完了，詞寫進詞表了（還沒存檔）
+# 挖完了，名單寫出來給人看了（那個檔是覆蓋寫的，不會讀回來）
 key = "word.discover-found"
-zht = "找到 {0} 個本書自己的詞，已經按它們切了；寫進了 {1}——`:word-list edit` 去取捨"
-zhs = "找到 {0} 个本书自己的词，已经按它们切了；写进了 {1}——`:word-list edit` 去取舍"
-en = "{0} word(s) of this book's own, segmenting already; written into {1} — `:word-list edit` to keep or cut"
+zht = "找到 {0} 個本書自己的詞，已經按它們切了；名單在 {1}（每次覆蓋，只給你看）"
+zhs = "找到 {0} 个本书自己的词，已经按它们切了；名单在 {1}（每次覆盖，只给你看）"
+en = "{0} word(s) of this book's own, segmenting already; the list is in {1} (overwritten each time, for reading only)"
 
 [[message]]
-# 寫進詞表的那一段的抬頭（這一行進的是檔案，不是狀態欄）
+# 那份名單檔的第一行抬頭（這一行進的是檔案，不是狀態欄）
 key = "word.discover-heading"
-zht = "# 本書自己的詞：:word-discover 掃了 {0} 個文件找出來的，刪掉不要的"
-zhs = "# 本书自己的词：:word-discover 扫了 {0} 个文件找出来的，删掉不要的"
-en = "# this book's own words, found by :word-discover over {0} file(s); delete what is not a word"
+zht = "# 本書自己的詞：掃了 {0} 個文件自動找出來的。每次 :word-discover 整份覆蓋。"
+zhs = "# 本书自己的词：扫了 {0} 个文件自动找出来的。每次 :word-discover 整份覆盖。"
+en = "# This book's own words, found over {0} file(s). :word-discover overwrites all of it."
 
 [[message]]
 # 寫進詞表的一行：詞，還有它出現了幾次。中間那一個是**真的 tab**，不是 \t——
@@ -7038,11 +7038,18 @@ zhs = "扫了 {0} 个文件，没有找到本书自己的词——书里的词�
 en = "{0} file(s) read, and no words of this book's own — the dictionary already knows them all"
 
 [[message]]
+# 那份名單檔的第二行：說清楚它是寫出來給人看的，改它不算數
+key = "word.discover-note"
+zht = "# yumete 不讀這個檔——在這裏刪一行什麼也不會發生。要永久留下某個詞，抄進 .yumete/words.txt（那份只有你寫）。"
+zhs = "# yumete 不读这个档——在这里删一行什么也不会发生。要永久留下某个词，抄进 .yumete/words.txt（那份只有你写）。"
+en = "# yumete never reads this back. To keep a word for good, copy it into .yumete/words.txt (that file is yours)."
+
+[[message]]
 # 挖到的比寫進去的多，說一聲
 key = "word.discover-too-many"
-zht = "最常見的 {0} 個（一共 {1} 個），已經按它們切了；`:word-list edit` 去取捨"
-zhs = "最常见的 {0} 个（一共 {1} 个），已经按它们切了；`:word-list edit` 去取舍"
-en = "the commonest {0} of {1}, segmenting already; `:word-list edit` to keep or cut"
+zht = "最常見的 {0} 個（一共 {1} 個），已經按它們切了；名單寫出來了，每次覆蓋"
+zhs = "最常见的 {0} 个（一共 {1} 个），已经按它们切了；名单写出来了，每次覆盖"
+en = "the commonest {0} of {1}, segmenting already; the list has been written out, overwritten each run"
 
 [[message]]
 # 分詞粒度設好了

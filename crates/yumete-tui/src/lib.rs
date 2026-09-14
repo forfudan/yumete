@@ -107,6 +107,21 @@ pub fn choose_words(ime: &ImeSession, level: yumete_cjk::WordLevel) -> Box<dyn S
     words
 }
 
+/// How long before 自動認詞 scans a project again (#448).
+///
+/// 「其实我觉得 discover 可以过一段时间触发一次（不用太密集）」 — and a scan
+/// answers a question that changes at the speed of writing, not of typing. Five
+/// minutes of prose is a few hundred characters; the names in it were already
+/// in the chapters the last scan read.
+const DETECT_AGAIN: std::time::Duration = std::time::Duration::from_secs(5 * 60);
+
+/// How many of the words found automatically are used.
+///
+/// The same bound `:word-discover` has always had. The list is ordered
+/// commonest-first, and past the first couple of hundred a 「word」 is
+/// something that happened twice.
+const DETECT_LIMIT: usize = 200;
+
 /// A `word<TAB>weight` list the reader wrote, from the first data directory
 /// that has one.
 fn read_word_list() -> Option<yumete_core::DictionarySegmenter> {
@@ -363,6 +378,13 @@ pub fn run(
     let mut last_frame = std::time::Duration::ZERO;
     // The frame `:shot` will photograph, kept only when one was asked for.
     let mut drawn: Option<ratatui::buffer::Buffer> = None;
+    // **自動認詞** (#448): the book's own names, found without being asked.
+    // The scan is three hundred milliseconds of counting on a long novel, so
+    // it runs on a thread and the answer arrives here; nothing waits for it,
+    // and until it lands the page is segmented by the language model alone.
+    let (found_tx, found_rx) = std::sync::mpsc::channel::<Vec<yumete_core::discover::Found>>();
+    let mut detecting = false;
+    let mut detected: Option<(std::path::PathBuf, std::time::Instant)> = None;
 
     let result = loop {
         // **Extend is a mode as far as the cursor is concerned** (2026-09-12).
@@ -743,6 +765,56 @@ pub fn run(
                     let level = editor.word_level();
                     editor.set_segmenter(choose_words(ime, level));
                     editor.set_status(say!("word.lists-reread", editor.words_in_force()));
+                }
+                // **自動認詞, off the front of the loop** (#448). Opening a file
+                // asks for a scan; whether one actually runs is decided here,
+                // because only this side knows one is already running and how
+                // long ago the last one finished.
+                //
+                // ⚠️ **Nothing is said and nothing is opened.** The whole point
+                // is that the writer's own words work without being asked for,
+                // and a scan nobody asked for must not take the screen, the
+                // status line or a tab. `:word-discover` is the one that talks.
+                if let Some(root) = editor.take_detect_request() {
+                    let due = match &detected {
+                        // A different project is always due: its words are not
+                        // the ones in hand.
+                        Some((was, _)) if *was != root => true,
+                        Some((_, when)) => when.elapsed() >= DETECT_AGAIN,
+                        None => true,
+                    };
+                    if !detecting && due {
+                        detecting = true;
+                        detected = Some((root.clone(), std::time::Instant::now()));
+                        let tx = found_tx.clone();
+                        std::thread::spawn(move || {
+                            // The bundled dictionary, built here: 8 ms, and it
+                            // keeps the thread from touching anything the
+                            // editor owns. It knows less than 宇浩's own table,
+                            // which only leaves a few words in the answer that
+                            // are already joined — filtered below, where the
+                            // segmenter in force can be asked.
+                            let seg = yumete_core::DictionarySegmenter::builtin(0);
+                            let joins =
+                                |w: &str| yumete_cjk::Segmenter::segment(&seg, w).len() == 1;
+                            let (found, _) = yumete_core::editor::detect_words_in(&root, &joins);
+                            let _ = tx.send(found);
+                        });
+                    }
+                }
+                // …and the answer, whenever it turns up. **Not waited for**:
+                // the loop blocks on the keyboard, so a scan that finishes
+                // while nothing is being typed lands on the next keystroke,
+                // which is the first moment it could matter.
+                if let Ok(found) = found_rx.try_recv() {
+                    detecting = false;
+                    let mut list = yumete_cjk::WordList::default();
+                    for word in found.iter().take(DETECT_LIMIT) {
+                        if !editor.joins_as_one(&word.word) {
+                            list.add(&word.word);
+                        }
+                    }
+                    editor.set_detected_words(list);
                 }
                 if let Some(text) = editor.take_clipboard_request() {
                     let _ = write!(io::stdout(), "\x1b]52;c;{}\x07", base64(text.as_bytes()));
