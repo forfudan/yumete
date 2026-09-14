@@ -5026,6 +5026,13 @@ fn draw_search(
     let head = ground.fg(ink.gold()).add_modifier(Modifier::BOLD);
     let quiet = ground.fg(ink.quiet());
     let wrong = ground.fg(ink.mark());
+    // **A field is a hole in the panel, not another part of its face.** The
+    // panel's own ground is 第 16 檔 and the box used to be painted with it, so
+    // an empty 尋找 box was a blank strip of panel with a caret somewhere in it
+    // — 「不然还是不知道这里有个可以输入的地方」. The ground of a field is the
+    // **page's** (第 18 檔), the one place in the interface where writing is
+    // typed, and a rule above and below closes it (#447).
+    let field = ink.ground(yumete_config::rung::PAPER).fg(ink.text());
     let keys_here = editor.panel_focus() == Some((side, Layer::Top));
     // Whichever cell the keys are on is inked; the rest are quiet — the same
     // 「這裏」 the tree marks its row with, and it costs no colour.
@@ -5104,10 +5111,10 @@ fn draw_search(
         // selected its contents would hide what that selection is for.
         let style = match (find.all_selected && here && !shown.is_empty(), typing && here) {
             (true, _) => on,
-            (false, true) => text,
+            (false, true) => field,
             (false, false) => match keys_here && here {
                 true => on,
-                false => text,
+                false => field,
             },
         };
         // **The whole row is painted, not just the characters.** A box with
@@ -5122,7 +5129,10 @@ fn draw_search(
             let at = left + 1 + yumete_cjk::str_width(&shown) as u16;
             if at < to {
                 if let Some(c) = buf.cell_mut((at, y)) {
-                    c.set_symbol("▏").set_style(head);
+                    // On the **field's** ground, not the panel's: a caret cell
+                    // painted with the head style punched a panel-coloured
+                    // hole in the box it is standing in.
+                    c.set_symbol("▏").set_style(field.fg(ink.gold()));
                 }
                 caret = Some(Position { x: at, y });
             }
@@ -5135,6 +5145,13 @@ fn draw_search(
         y += 1;
         draw_box(buf, Field::Replace, &find.replace, y);
     }
+    // The two rules that close the boxes. Drawn after them, because the row
+    // below the last box is only known once it is known whether there are two.
+    let wide = to.saturating_sub(left) as usize;
+    let edge = "─".repeat(wide);
+    put_text(buf, left, area.y + 1, to, &edge, quiet);
+    put_text(buf, left, y + 1, to, &edge, quiet);
+    y += 1;
 
     // The switches. 大小寫 is three ways, not a tick, so it says which one.
     let tick = |on: bool| match on {
@@ -7130,6 +7147,37 @@ mod tests {
         let ran = super::run_capturing("head -1", Some(&text)).expect("no error");
         assert!(ran.ok);
         assert_eq!(ran.said, "第一行\n");
+    }
+
+    /// 輸入框要看得出是個框（#447）。
+    ///
+    /// 作者原話：「这里的输入框能不能画个上下框线什么的？不然还是不知道这里有个
+    /// 可以输入的地方。」空的 尋找 框從前與面板同底色，只有一個光標浮在那裏，
+    /// 看不出是一格能打字的地方。現在框裏是**紙色**（第 18 檔，比面板的第 16 檔
+    /// 沉一階），上下各一道線把它封起來。
+    #[test]
+    fn the_search_box_is_drawn_as_a_box() {
+        let mut ed = Editor::new();
+        ed.on_key(Key::Char(' '));
+        ed.on_key(Key::Char('/'));
+        let config = Config::default();
+        let (buf, _) = render_caret(&ed, &config, 60, 16);
+        let row = |y: u16| -> String {
+            (0..60).filter_map(|x| buf.cell((x, y)).map(|c| c.symbol().to_string())).collect()
+        };
+        // 標題、線、框、線 —— 這個次序就是「這裏能打字」的全部說法。
+        // 一格一個字符，全角字的第二格是空的，所以比的是第一個字。
+        let first = say!("label.panel.search").chars().next().unwrap();
+        assert!(row(0).contains(first), "{:?}", row(0));
+        assert!(row(1).contains("──"), "框上要有線：{:?}", row(1));
+        assert!(row(3).contains("──"), "框下要有線：{:?}", row(3));
+
+        // 框裏的底色不是面板的底色。空框沒有字，所以**只有底色說得出它在那裏**。
+        let ink = crate::theme::Palette::of(&config);
+        let inside = buf.cell((10, 2)).expect("框裏").style().bg;
+        let panel = buf.cell((10, 4)).expect("面板上的別處").style().bg;
+        assert_ne!(inside, panel, "框與面板同色，等於沒有框");
+        assert_eq!(inside, Some(ink.ground(yumete_config::rung::PAPER).bg.unwrap()));
     }
 
     /// `:yume-where` names every layer, in order, with what it holds.
