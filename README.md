@@ -5,11 +5,10 @@
 tailored first for **writing (novels), not coding**. It installs under both
 names: `yumete`, and `ye` for the one you actually type.
 
-**[docs/manual.md](docs/manual.md)**（繁體, and
-[简体](docs/manual_sc.md)）is the user manual — what the keys and commands do,
-how vertical layout works, and how to configure it.
-[docs/development.md](docs/development.md) has the design, the reasoning, and the
-feature roadmap.
+**[docs/manual.md](docs/manual.md)**（繁體, and [简体](docs/manual_sc.md)）is
+the user manual — what the keys and commands do, how vertical layout works, and
+how to configure it. [docs/development.md](docs/development.md) has the design,
+the reasoning, and the feature roadmap.
 
 > Licensed under the **Apache License 2.0** — see [LICENSE](LICENSE).
 > What changed lately is in **[CHANGELOG.md](CHANGELOG.md)**.
@@ -34,15 +33,15 @@ the writer has made that decision themselves. `h j k l` keep their *screen*
 meaning: `j`/`k` read down and up a 縱, `h`/`l` step to the 縱 on the left and
 on the right.
 
-It is real typesetting, not a rotation. CJK punctuation is drawn in its
-vertical form (`。`→`︒`, `「」`→`﹁﹂`) **on screen only**, so the file on disk is
+It is real typesetting, not a rotation. CJK punctuation is drawn in its vertical
+form (`。`→`︒`, `「」`→`﹁﹂`) **on screen only**, so the file on disk is
 unchanged. `:view-hanging` puts 。，、？！：；「」 in the margin beside the
 character they belong to, the way a 古籍 is punctuated, and readings run in the
 half-width column to the right of their 縱.
 
 Here is `記.md` on disk — ASCII ruby markup, ordinary 全角 punctuation:
 
-```
+```raw
 那年冬天，雪下得比往常都早。<ruby>漢字<rt>hàn|zì</rt></ruby>寫在旁邊。
 
 「你來了。」他說。她點頭，沒有回答。
@@ -52,7 +51,7 @@ and the page the editor sets from it — the marks hung in the margin, `hàn|zì
 running down the half-width column beside 漢字, and not one byte of either
 written back into the file:
 
-```
+```raw
 $ yumete --shot=22x18 -v --keys=':ruby full\n:view-hanging force\n' 記.md
   4  3  2     1
     你｢     h那
@@ -94,8 +93,8 @@ WenKai Mono all have them; a Latin-only programming font will show tofu.
 [`yumete-ime`](crates/yumete-ime) embeds the Yume engine (`yume-core`) directly
 — no FFI, no system IME, no separate process. The binary **carries 靈明精華版**,
 so a fresh install types 漢字 with nothing else installed. Five 宇浩 schemes
-(靈明 / 星陳 / 卿雲 / 日月 / 宇浩拼音) plus anything a data directory declares are
-listed by `:yume-scheme`; any Rime `.dict.yaml` loads as it comes with
+(靈明 / 星陳 / 卿雲 / 日月 / 宇浩拼音) plus anything a data directory declares
+are listed by `:yume-scheme`; any Rime `.dict.yaml` loads as it comes with
 `:yume-table`, so 五筆 / 倉頡 / 粵拼 work too.
 
 Because it is inside the editor, it reaches places a system IME never does:
@@ -134,9 +133,9 @@ Selection-first modal editing: Normal / Insert / Command, `x` to take a line,
 `v` / `;` to extend and collapse, `d` / `c` / `y` / `p` on the selection. A
 digit prefix is a count (`3w`, `10j`); `.` repeats the last change; `"a` names a
 register and `q` / `Q` record and replay a macro; `C-o` / `C-i` walk a jump
-list, `M a` / `' a` name a place and come back to it across files. **Match mode**
-(`m`) jumps, selects and surrounds over 「」『』（）《》【】〔〕 as well as the
-ASCII pairs.
+list, `M a` / `' a` name a place and come back to it across files.
+**Match mode** (`m`) jumps, selects and surrounds over 「」『』（）《》【】〔〕
+as well as the ASCII pairs.
 
 ⚠️ **There is no `t` / `T`.** That letter is the table mode's, all of it.
 
@@ -170,17 +169,17 @@ the construct the cursor is in. Extended Markdown — `==`, `[^1]`, `[[…]]`,
 
 Then a set of questions only a Chinese manuscript raises:
 
-| | |
-| --- | --- |
-| `:count` | 漢字, 字數, 段 — and `:count-progress`, a ledger of today |
-| `:check-usage` | 裡/裏, 為/爲, 台/臺, 着/著, and 57 more groups |
-| `:check-punct` | the quotation mark nothing closes |
-| `:check-charset` | the characters a typesetter will not have |
-| `:word-habit` | 口頭禪, by surprisal against 詞頻表 rather than raw count |
-| `:convert` | 簡繁, handed to opencc |
-| `:diff` | what changed since the file on disk, at 詞 grain |
-| `:export` | `html` (縱書 stays vertical), `typst`, `csv`, `tsv` |
-| `:ruby-auto` | readings by word, marked only where no standard has the 字 |
+|                  |                                                            |
+| ---------------- | ---------------------------------------------------------- |
+| `:count`         | 漢字, 字數, 段 — and `:count-progress`, a ledger of today  |
+| `:check-usage`   | 裡/裏, 為/爲, 台/臺, 着/著, and 57 more groups             |
+| `:check-punct`   | the quotation mark nothing closes                          |
+| `:check-charset` | the characters a typesetter will not have                  |
+| `:word-habit`    | 口頭禪, by surprisal against 詞頻表 rather than raw count  |
+| `:convert`       | 簡繁, handed to opencc                                     |
+| `:diff`          | what changed since the file on disk, at 詞 grain           |
+| `:export`        | `html` (縱書 stays vertical), `typst`, `csv`, `tsv`        |
+| `:ruby-auto`     | readings by word, marked only where no standard has the 字 |
 
 `:check-usage` is the one worth a sentence: it asks the **document**, not a
 dictionary. A group is reported only when both spellings are written here, and
@@ -238,7 +237,7 @@ instead, vertical page and all.
 
 ## Layout
 
-```
+```raw
 yumete/
 ├── Cargo.toml                 # workspace
 ├── LICENSE                    # Apache-2.0
@@ -287,9 +286,9 @@ elsewhere.
 ### Windows
 
 The same script, run under **Git Bash** (ships with Git for Windows) or MSYS2 —
-not PowerShell. The file list it compiles has to match `yume_core::data_manifest`
-exactly, and a second copy in another language is a second thing to forget when
-yume adds a data file.
+not PowerShell. The file list it compiles has to match
+`yume_core::data_manifest` exactly, and a second copy in another language is a
+second thing to forget when yume adds a data file.
 
 ```bash
 scripts/build.sh                       # ./yumete.exe, data into %APPDATA%\yumete
@@ -301,14 +300,14 @@ Three things differ there and the script handles all three: the binary is
 `~/.local/share/yumete`, and the global `yumete` is a **copy** rather than a
 symlink, because a symlink needs Developer Mode.
 
-⚠️ **The sibling repo is not optional.** `yumete-ime` depends on `yume-core`
-by path, so `cargo build` without `..\yume` fails in `cargo metadata`, before a
+⚠️ **The sibling repo is not optional.** `yumete-ime` depends on `yume-core` by
+path, so `cargo build` without `..\yume` fails in `cargo metadata`, before a
 single crate compiles — it is not「builds but has no 碼表」. What *is* optional
 is yume's **data**: a build with the sibling source but no installed tables
 carries 靈明精華版 (0.25 MB, fetched at build time — see below) and types 漢字
-out of the box. If yume is installed on the machine, its own tables are found where it
-put them (`%APPDATA%\Yume\`); if they are somewhere else entirely, name the
-place:
+out of the box. If yume is installed on the machine, its own tables are found
+where it put them (`%APPDATA%\Yume\`); if they are somewhere else entirely, name
+the place:
 
 ```toml
 # %APPDATA%\yumete\config.toml
