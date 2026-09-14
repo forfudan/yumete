@@ -379,12 +379,13 @@ pub fn run(
     // The frame `:shot` will photograph, kept only when one was asked for.
     let mut drawn: Option<ratatui::buffer::Buffer> = None;
     // **自動認詞** (#448): the book's own names, found without being asked.
-    // The scan is three hundred milliseconds of counting on a long novel, so
-    // it runs on a thread and the answer arrives here; nothing waits for it,
-    // and until it lands the page is segmented by the language model alone.
+    // The counting runs on a thread and the answer arrives here; nothing waits
+    // for it, and until it lands the page is segmented by the language model
+    // alone. **This file only** (#452) — the wider reads are the three
+    // `:word-discover-*` spellings, asked for by hand.
     let (found_tx, found_rx) = std::sync::mpsc::channel::<Vec<yumete_core::discover::Found>>();
     let mut detecting = false;
-    let mut detected: Option<(std::path::PathBuf, std::time::Instant)> = None;
+    let mut detected: Option<(String, std::time::Instant)> = None;
 
     let result = loop {
         // **Extend is a mode as far as the cursor is concerned** (2026-09-12).
@@ -633,30 +634,29 @@ pub fn run(
         // is that the writer's own words work without being asked for,
         // and a scan nobody asked for must not take the screen, the
         // status line or a tab. `:word-discover` is the one that talks.
-        if let Some(root) = editor.take_detect_request() {
+        if let Some(text) = editor.take_detect_request() {
+            let name = editor.current_buffer().display_name();
             let due = match &detected {
-                // A different project is always due: its words are not
-                // the ones in hand.
-                Some((was, _)) if *was != root => true,
+                // Another file is always due: its words are not the ones in
+                // hand, and 自動認詞 reads the file being written.
+                Some((was, _)) if *was != name => true,
                 Some((_, when)) => when.elapsed() >= DETECT_AGAIN,
                 None => true,
             };
             if !detecting && due {
                 detecting = true;
-                detected = Some((root.clone(), std::time::Instant::now()));
+                detected = Some((name, std::time::Instant::now()));
                 let tx = found_tx.clone();
                 std::thread::spawn(move || {
-                    // The bundled dictionary, built here: 8 ms, and it
-                    // keeps the thread from touching anything the
-                    // editor owns. It knows less than 宇浩's own table,
-                    // which only leaves a few words in the answer that
-                    // are already joined — filtered below, where the
-                    // segmenter in force can be asked.
+                    // The bundled dictionary, built here: 8 ms, and it keeps
+                    // the thread from touching anything the editor owns. It
+                    // knows less than 宇浩's own table, which only leaves a few
+                    // words in the answer that are already joined — filtered
+                    // below, where the segmenter in force can be asked.
                     let seg = yumete_core::DictionarySegmenter::builtin(0);
                     let joins =
                         |w: &str| yumete_cjk::Segmenter::segment(&seg, w).len() == 1;
-                    let (found, _) = yumete_core::editor::detect_words_in(&root, &joins);
-                    let _ = tx.send(found);
+                    let _ = tx.send(yumete_core::discover::words(&text, &joins));
                 });
             }
         }

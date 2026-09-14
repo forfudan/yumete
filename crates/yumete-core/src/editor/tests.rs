@@ -10264,6 +10264,13 @@ fn the_book_hands_the_editor_its_own_names_without_being_asked() {
     let joins = |w: &str| yumete_cjk::Segmenter::segment(&seg, w).len() == 1;
     let (found, files) = crate::editor::detect_words_in(&dir, &joins);
     assert_eq!(files, 3, "三個章節都讀了");
+    // 而光看眼前這一篇是看不出阿寧的：一章只有兩次。這正是範圍要能選的理由。
+    assert!(
+        !crate::editor::detect_words_in(&dir.join("ch02.md"), &joins).0
+            .iter()
+            .any(|f| f.word == "阿寧"),
+        "一章兩次，夠不上"
+    );
     assert!(found.iter().any(|f| f.word == "阿寧"), "{found:?}");
 
     let before = ed.segment_line(0);
@@ -10281,9 +10288,13 @@ fn the_book_hands_the_editor_its_own_names_without_being_asked() {
     assert!(!dir.join(".yumete").join("discovered_words.txt").exists());
     assert!(!dir.join(".yumete").join("words.txt").exists());
 
-    // ---- ③ `:word-discover` 是手動的那一支：寫檔、開檔、說一句 --------
+    // ---- ③ 手動那一支：寫檔、開檔、說一句 -----------------------------
+    //
+    // ⚠️ **`-cd`, not bare** (#452). 光 `:word-discover` 只讀眼前這一篇，而
+    // 阿寧 分散在三章裏 —— 一章兩次夠不上 `MIN_COUNT`。範圍是這族命令的參數，
+    // 不是它的背景設定。
     ed.open_file(&dir.join("ch01.md")).unwrap();
-    assert!(ed.execute("word-discover").is_ok(), "{}", ed.status());
+    assert!(ed.execute("word-discover-cd").is_ok(), "{}", ed.status());
     let listing = dir.join(".yumete").join("discovered_words.txt");
     assert!(listing.is_file(), "名單要寫出來：{}", ed.status());
     assert_eq!(
@@ -10298,7 +10309,7 @@ fn the_book_hands_the_editor_its_own_names_without_being_asked() {
     // **整份覆蓋，不追加。** 跑兩次不會變兩份。
     let again = {
         ed.open_file(&dir.join("ch01.md")).unwrap();
-        assert!(ed.execute("word-discover").is_ok(), "{}", ed.status());
+        assert!(ed.execute("word-discover-cd").is_ok(), "{}", ed.status());
         std::fs::read_to_string(&listing).unwrap()
     };
     assert_eq!(again, text, "第二次跑出來的該一模一樣");

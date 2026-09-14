@@ -154,7 +154,7 @@ impl Editor {
     /// `a.md` has a relative path, and its `parent()` is the *empty* path —
     /// which as a root walks nothing at all, so 「this folder」 quietly found
     /// only the file already open.
-    fn here_folder(&self) -> PathBuf {
+    pub(super) fn here_folder(&self) -> PathBuf {
         let here = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
         match self.current_buffer().path() {
             Some(path) => here.join(path).parent().map(Path::to_path_buf).unwrap_or(here),
