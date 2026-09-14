@@ -687,15 +687,24 @@ fn parse_size(text: &str) -> Result<(u16, u16), String> {
             "--shot wants a size like 100x30, not {text:?} (`x`, `X`, `*` or `,` between them)"
         ));
     };
+    // ⚠️ **Both ends are refused, and both used to get through.** Zero is not
+    // a small terminal, it is no terminal: `--shot=100x0` panicked in the
+    // renderer (`index outside of buffer: the area is Rect { width: 100,
+    // height: 0 }`) and `--shot=0x30` subtracted past zero drawing a menu. And
+    // the old ceiling was `u16::MAX`, which is not a size either —
+    // `--shot=20000x20000` allocated **56 GB** before it got anywhere, and
+    // `65535x65535` never came back. A real terminal cannot reach `MAX_CELLS`;
+    // a typo can.
+    const MAX_CELLS: u32 = 2_000;
     let read = |part: &str, which: &str| -> Result<u16, String> {
         let part = part.trim();
         // Two different complaints, because they are two different mistakes:
         // `40x` is a typo, `40x999999` is a number nobody meant.
         match part.parse::<u32>() {
             Err(_) => Err(format!("--shot: {which} is not a number: {part:?}")),
-            Ok(n) if n > u32::from(u16::MAX) => Err(format!(
-                "--shot: {which} is {n}, and a terminal is at most {} cells across",
-                u16::MAX
+            Ok(0) => Err(format!("--shot: {which} is 0, and nothing can be drawn in it")),
+            Ok(n) if n > MAX_CELLS => Err(format!(
+                "--shot: {which} is {n}, and a terminal is at most {MAX_CELLS} cells across"
             )),
             Ok(n) => Ok(n as u16),
         }
@@ -1030,8 +1039,21 @@ mod tests {
         // and `10x2` is not a height.
         assert!(parse_size("40x10x2").is_err());
         let too_wide = parse_size("999999x1").unwrap_err();
-        assert!(too_wide.contains("65535"), "{too_wide}");
+        assert!(too_wide.contains("2000"), "{too_wide}");
         assert!(parse_size("40xzz").unwrap_err().contains("the height"));
         assert!(parse_size("zzx10").unwrap_err().contains("the width"));
+
+        // **Zero is refused at both ends.** `--shot=100x0` panicked in the
+        // renderer and `--shot=0x30` subtracted past zero drawing a menu;
+        // neither is a terminal a reader can have, but both are a typo away.
+        assert!(parse_size("100x0").unwrap_err().contains("the height"));
+        assert!(parse_size("0x30").unwrap_err().contains("the width"));
+        // And so is a size that is a memory bill rather than a screen:
+        // `20000x20000` reached 56 GB before it drew anything.
+        assert!(parse_size("20000x20000").is_err());
+        assert!(parse_size("65535x65535").is_err());
+        // The ceiling is generous — wider than any terminal, well short of
+        // a number nobody meant.
+        assert_eq!(parse_size("2000x2000"), Ok((2000, 2000)));
     }
 }

@@ -422,7 +422,9 @@ impl Editor {
             self.close_confirming(&walk, why);
             return;
         }
-        while let Some(hit) = self.next_hit(&walk) {
+        // `if`, not `while`: with `a` handled above, the body always either
+        // puts the question and returns or falls through to the close.
+        if let Some(hit) = self.next_hit(&walk) {
             // **The match is the selection**, so the writer is looking at the
             // thing the question is about — and at the sentence around it,
             // which is what they are actually judging.
