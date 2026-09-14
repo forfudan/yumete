@@ -329,6 +329,12 @@ pub enum Command {
     /// page and **where** you read the candidate are two questions, and the
     /// nine combinations are all sensible (Feature #211).
     YumePanel(Option<String>),
+    /// `:theme-fill [on|off]` — whether a 品色 run also gets a ground.
+    ///
+    /// Off: the backtick and the `>` are drawn already, so the run's extent is
+    /// on the page and a ground behind it says it a second time. `None`
+    /// toggles.
+    ThemeFill(Option<bool>),
     /// `:yume-menu-size 1-9` — how many candidates a page of the panel holds.
     /// `None` asks how many it holds now.
     ///
@@ -1775,23 +1781,9 @@ const STROKES: &[Word] = &[
 /// dark` are both sentences — the theme's name is worth saying and worth
 /// leaving out, and neither should be a special case.
 const THEMES: &[Word] = &[
-    // Was `:appearance` (§5.2.3 ③). The `theme` arm has always accepted these
-    // three; only the listing did not know them.
-    Word {
-        name: "system",
-        help: "cmd.moods.system",
-        needs: &[],
-    },
-    Word {
-        name: "dark",
-        help: "cmd.moods.dark",
-        needs: &[],
-    },
-    Word {
-        name: "light",
-        help: "cmd.moods.light",
-        needs: &[],
-    },
+    // ⚠️ **The three moods are not here** (#449). They were, because `:theme`
+    // took them as well — and then 「主題」 meant both 「哪一套墨」 and
+    // 「深還是淺」 on one menu. They live under `:theme-mode` now ([`MOODS`]).
     Word {
         // 墨香
         name: "ink",
@@ -2553,31 +2545,45 @@ pub const COMMANDS: &[Entry] = &[
         aliases: &[],
         help: "cmd.commands.theme",
         needs: &[],
-        params: &[Param::WordsOr { of: THEMES, default: None, or: "<主題名>" }, Param::Words { of: MOODS, default: None }],
+        params: &[Param::WordsOr { of: THEMES, default: None, or: "<主題名>" }],
         build: Some(|p| {
-            // 「墨香」 and `moxiang` are the same word, and a mood may be
-            // written with or without the theme's name: every combination of
-            // the two halves is a sentence, because there is nothing to be
-            // gained by refusing one. Which names exist is the front end's
-            // business — it is the one holding the colours — so an unknown one
-            // is answered there, in a sentence, rather than refused here.
-            let said = |word: &str| match word {
-                "system" => Some(Mood::System),
-                "dark" => Some(Mood::Dark),
-                "light" => Some(Mood::Light),
+            // 「墨香」 and `moxiang` are the same word. Which names exist is the
+            // front end's business — it is the one holding the colours — so an
+            // unknown one is answered there, in a sentence, rather than refused
+            // here.
+            //
+            // ⚠️ **The mood is not here any more** (#449). `:theme light` used
+            // to work, and `:theme moxiang dark` too, which made 「主題」 mean
+            // two things on one line: the inks, and which way round they go.
+            // 「防止和其他的主题混淆」 — so the mood moved out to
+            // `:theme-mode`, and this command names a theme and nothing else.
+            Ok(Command::Theme { name: p.arg(0).map(|w| w.to_string()), mood: None })
+        }),
+    },
+    Entry {
+        name: "theme-mode",
+        aliases: &[],
+        help: "cmd.commands.theme-mode",
+        needs: &[],
+        params: &[Param::Words { of: MOODS, default: None }],
+        build: Some(|p| {
+            let mood = match p.arg(0) {
+                Some("system") => Some(Mood::System),
+                Some("dark") => Some(Mood::Dark),
+                Some("light") => Some(Mood::Light),
+                // Bare, it is the question — the front end says which is on.
                 _ => None,
             };
-            let mut name = p.arg(0).map(|w| w.to_string());
-            let mut mood = p.arg(1).and_then(said);
-            // The mood may stand alone, and then the first word is it.
-            if mood.is_none() {
-                if let Some(only) = p.arg(0).and_then(said) {
-                    mood = Some(only);
-                    name = None;
-                }
-            }
-            Ok(Command::Theme { name, mood })
+            Ok(Command::Theme { name: None, mood })
         }),
+    },
+    Entry {
+        name: "theme-fill",
+        aliases: &[],
+        help: "cmd.commands.theme-fill",
+        needs: &[],
+        params: &[Param::Words { of: ON_OFF, default: None }],
+        build: Some(|p| Ok(Command::ThemeFill(p.arg(0).map(|w| w == "on")))),
     },
     Entry {
         name: "shot",
@@ -4901,33 +4907,40 @@ mod tests {
         ));
     }
 
+    /// 主題與深淺是兩條命令，不是一條命令的兩個位置（#449）。
+    ///
+    /// `:theme light` used to work, and so did `:theme moxiang dark` — which
+    /// made 「主題」 name two things on one line. 作者：「現在的 :theme
+    /// dark/light/system 其實應該改成 :theme-mode，防止和其他的主題混淆。」
     #[test]
     fn a_theme_and_a_mood_are_two_questions() {
         use Mood::*;
-        // `:theme` names the inks; the mood says which way round they go. It
-        // was `:appearance` until the fold (§5.2.3 ③) — one word, and `:theme`
-        // already took it.
         assert_eq!(
             parse(":theme heibai"),
             Ok(Command::Theme { name: Some("heibai".into()), mood: None })
         );
         assert_eq!(
-            parse(":theme light"),
+            parse(":theme-mode light"),
             Ok(Command::Theme { name: None, mood: Some(Light) })
         );
-        // …and one line may still ask both.
+        // **The mood is no longer a theme's name.** `light` is a word
+        // `:theme` will now hand on to the front end as a theme nobody has,
+        // which is the right answer: there is no theme called 「淺」.
         assert_eq!(
-            parse(":theme moxiang dark"),
-            Ok(Command::Theme { name: Some("moxiang".into()), mood: Some(Dark) })
+            parse(":theme light"),
+            Ok(Command::Theme { name: Some("light".into()), mood: None })
         );
-        // The menu lists them apart, too.
+        // …and a line that asks both is a line that asks one too many.
+        assert!(matches!(
+            parse(":theme moxiang dark"),
+            Err(CommandError::TakesNoArgument { command: "theme", .. })
+        ));
+
+        // The menu lists the themes under one and the moods under the other.
         let themes: Vec<String> = complete("theme ").iter().map(Choice::written).collect();
         assert_eq!(
             themes,
             [
-                "system",
-                "dark",
-                "light",
                 "ink",
                 "bw",
                 "cyanotype",
@@ -4941,12 +4954,11 @@ mod tests {
             ],
             "the menu lists what can be typed — ASCII, with the pinyin as an alias"
         );
-        // The moods sit at both levels, so the menu offers them at both.
-        let deeper: Vec<String> = complete("theme mogao ").iter().map(Choice::written).collect();
-        assert_eq!(deeper, ["system", "dark", "light"]);
+        let moods: Vec<String> = complete("theme-mode ").iter().map(Choice::written).collect();
+        assert_eq!(moods, ["system", "dark", "light"]);
         // The shortest spelling the menu offers has to work.
         let short = shortest("theme", COMMANDS.iter().map(|c| c.name));
-        assert!(parse(&format!(":{} dark", short.unwrap_or("theme"))).is_ok());
+        assert!(parse(&format!(":{} mogao", short.unwrap_or("theme"))).is_ok());
         // And the name it lost is a signpost now, not a silence.
         assert_eq!(
             CommandError::Unknown("appearance".into()).to_string(),
@@ -5107,72 +5119,41 @@ mod tests {
         assert_eq!(words, ["off", "color", "line"]);
     }
 
+    /// Either command on its own is 「哪一套／哪個深淺」, asked rather than set.
     #[test]
     fn a_theme_is_two_questions_and_either_may_be_left_out() {
         use Mood::*;
         let theme = |line: &str| parse(line).unwrap();
         // Neither half: the way to *ask* where things stand.
-        assert_eq!(
-            theme(":theme"),
-            Command::Theme {
-                name: None,
-                mood: None
-            }
-        );
-        assert_eq!(
-            theme(":theme moxiang"),
-            Command::Theme {
-                name: Some("moxiang".into()),
-                mood: None
-            }
-        );
-        // The name, and the mood with or without it. A name the words know is
-        // canonicalised; anything else is passed on as typed, because which
-        // themes exist is the front end's business.
-        for line in [":theme ink dark", ":theme in d"] {
+        assert_eq!(theme(":theme"), Command::Theme { name: None, mood: None });
+        assert_eq!(theme(":theme-mode"), Command::Theme { name: None, mood: None });
+        // A name the words know is canonicalised; anything else is passed on
+        // as typed, because which themes exist is the front end's business.
+        for line in [":theme ink", ":theme in"] {
             assert_eq!(
                 theme(line),
-                Command::Theme {
-                    name: Some("ink".into()),
-                    mood: Some(Dark)
-                },
+                Command::Theme { name: Some("ink".into()), mood: None },
                 "{line}"
             );
         }
         // A name is ASCII — a command line is typed with the IME off — and the
         // pinyin answers for the hand that thinks in Chinese.
         assert_eq!(
-            theme(":theme ink dark"),
-            Command::Theme {
-                name: Some("ink".into()),
-                mood: Some(Dark)
-            }
-        );
-        assert_eq!(
             theme(":theme moxiang"),
-            Command::Theme {
-                name: Some("moxiang".into()),
-                mood: None
-            }
+            Command::Theme { name: Some("moxiang".into()), mood: None }
         );
         assert_eq!(
             theme(":theme heibai"),
-            Command::Theme {
-                name: Some("heibai".into()),
-                mood: None
-            }
+            Command::Theme { name: Some("heibai".into()), mood: None }
         );
         for (line, want) in [
-            (":theme light", Light),
-            (":theme system", System),
-            (":theme l", Light),
+            (":theme-mode light", Light),
+            (":theme-mode system", System),
+            (":theme-mode l", Light),
         ] {
             assert_eq!(
                 theme(line),
-                Command::Theme {
-                    name: None,
-                    mood: Some(want)
-                },
+                Command::Theme { name: None, mood: Some(want) },
                 "{line}"
             );
         }
@@ -5180,11 +5161,11 @@ mod tests {
         // colours are.
         assert_eq!(
             theme(":theme solarized"),
-            Command::Theme {
-                name: Some("solarized".into()),
-                mood: None
-            }
+            Command::Theme { name: Some("solarized".into()), mood: None }
         );
+        // And the ground behind 品色 is its own switch, off by default.
+        assert_eq!(parse(":theme-fill on"), Ok(Command::ThemeFill(Some(true))));
+        assert_eq!(parse(":theme-fill"), Ok(Command::ThemeFill(None)));
     }
 
     /// What a menu row says, and what it leaves out (author, 2026-09-10).
@@ -5223,7 +5204,8 @@ mod tests {
         assert_eq!(row("", "redo"), ":redo");
         assert_eq!(row("", "recover"), ":recover");
         // …and two characters is worth knowing however it was arrived at.
-        assert_eq!(row("", "theme"), ":theme (th)");
+        // `:theme` grew two children — `-mode` and `-fill`.
+        assert_eq!(row("", "theme"), ":theme (th) +2");
         assert_eq!(row("", "quit"), ":quit (q) +1");
         // A **different word** is worth knowing at any length: none of these
         // could be read off the name.

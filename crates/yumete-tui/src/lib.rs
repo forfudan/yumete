@@ -1043,6 +1043,13 @@ pub fn run(
                 if let Some((name, mood)) = editor.take_theme_request() {
                     editor.set_status(set_theme(config, name, mood));
                 }
+                if let Some(on) = editor.take_fill_request() {
+                    let on = crate::theme::set_fill(on, config);
+                    editor.set_status(match on {
+                        true => say!("theme.fill-on"),
+                        false => say!("theme.fill-off"),
+                    });
+                }
                 if let Some(on) = editor.take_chaifen_request() {
                     let settled = ime.set_annotations(on);
                     editor.set_chaifen(settled);
@@ -4725,13 +4732,29 @@ fn tab_at(
 /// is in it, and says which part of that is scaffolding.
 fn markup_style(kind: yumete_core::markdown::Kind, ink: crate::theme::Palette) -> Style {
     use yumete_core::markdown::Kind;
-    // **Weight, not hue.** There were five hues here — a green code, a blue
-    // link, a khaki wikilink — all at the same *weight* as the prose, differing
-    // only in colour. That is right in a syntax highlighter and backwards in a
-    // manuscript: the writing should be the brightest thing on the page and
-    // everything else should recede. A rung plus an underline says which is
-    // which, and it goes on saying it in light mode and on a terminal that
-    // renders no colour at all.
+    // **Weight for prose, 品色 for what is not prose** (#449).
+    //
+    // This said 「weight, not hue」 outright, and it was half right. Bold,
+    // italic and a heading *are* writing, and a hue on them is noise — that
+    // half stands. But 行内代碼, a quotation and a link are **not writing**,
+    // and marking them by being one rung dimmer says 「less important」 about
+    // the most exact thing on the line. It is also the first mark to go as the
+    // page darkens: dimming the ink from 13.7:1 to 10:1 took 行内代碼 from
+    // 7.3:1 to 5.5:1 against the paper, because every rung is a fraction of
+    // the ink.
+    //
+    // So the three of them take 官服品色 — an ordered system, spent in order:
+    // 紫 for a literal, 綠 for someone else's words, 藍 for an address. All of
+    // them sit **below the prose** in contrast, so the writing is still the
+    // brightest thing on the page, which is what the old rule was protecting.
+    //
+    // A **ground** is not part of this: the backtick is drawn, so the run's
+    // extent is already visible. `:theme-fill on` adds one for whoever wants
+    // the box.
+    let filled = |style: Style, rung| match ink.fill() {
+        true => style.bg(ink.at(rung)),
+        false => style,
+    };
     match kind {
         // A real rung, not `DIM`: a terminal that ignores DIM used to draw
         // `**` exactly like the word between them, which is the whole of
@@ -4747,13 +4770,19 @@ fn markup_style(kind: yumete_core::markdown::Kind, ink: crate::theme::Palette) -
         Kind::Heading => Style::default().fg(ink.gold()).add_modifier(Modifier::BOLD),
         Kind::Strong => Style::default().add_modifier(Modifier::BOLD),
         Kind::Emphasis => Style::default().add_modifier(Modifier::ITALIC),
-        Kind::Code => Style::default().fg(ink.quiet()),
+        // 一至三品: a literal, to be read character for character.
+        Kind::Code => filled(
+            Style::default().fg(ink.purple()),
+            yumete_config::rung::BAND,
+        ),
         // CROSSED_OUT is not everywhere, so the rung carries it as well.
         Kind::Strike => Style::default()
             .fg(ink.furniture())
             .add_modifier(Modifier::CROSSED_OUT),
+        // 八至九品: an address is the lowest rank on the page. The underline
+        // stays — it is what says 「link」 on a terminal with no colour.
         Kind::Link | Kind::WikiLink => Style::default()
-            .fg(ink.quiet())
+            .fg(ink.azure())
             .add_modifier(Modifier::UNDERLINED),
         // A highlighter pen leaves a ground, so this is a ground — and the pen
         // is 朱, washed until the ink still reads on it.
@@ -4768,7 +4797,8 @@ fn markup_style(kind: yumete_core::markdown::Kind, ink: crate::theme::Palette) -
             .add_modifier(Modifier::ITALIC),
         // Typst's own code: the instructions that make the page, not decoration
         // around writing. Set back, never taken away.
-        Kind::Code2 => Style::default().fg(ink.quiet()),
+        // Typst's own code: a literal too, and the same rank.
+        Kind::Code2 => Style::default().fg(ink.purple()),
     }
 }
 
@@ -4798,7 +4828,52 @@ fn block_style(block: yumete_core::markdown::Block, ink: crate::theme::Palette) 
         // as the fence and the quote: 「這裏是一塊」 is the whole message, and
         // the cell tint a grid draws (#212, #229) is patched onto this rather
         // than instead of it.
-        Block::Container(_) | Block::Quote | Block::Code | Block::Table => band(),
+        // 六至七品: a quotation is another voice. The ground stays only when
+        // `:theme-fill` asks for it — 「>」 is drawn on every line of a quote
+        // and a fence has its own ``` — so by default the colour does it.
+        Block::Quote => Some(match ink.fill() {
+            true => Style::default().bg(ink.at(yumete_config::rung::BAND)).fg(ink.green()),
+            false => Style::default().fg(ink.green()),
+        }),
+        // 一至三品, the same rank as the 行内 form: a fence is a literal that
+        // happens to be several lines long.
+        Block::Code => Some(match ink.fill() {
+            true => Style::default().bg(ink.at(yumete_config::rung::BAND)).fg(ink.purple()),
+            false => Style::default().fg(ink.purple()),
+        }),
+        // A callout keeps its ground whatever `:theme-fill` says: 「這是一塊」
+        // is the whole of what it has to say, and it has no marker of its own
+        // on every line the way a quote and a fence do.
+        Block::Container(_) => band(),
+        // **A table is read across, so the rows are banded alternately** — one
+        // row's cells must be tellable from the next's, and in 縱書 a cell that
+        // wraps to three lines is unreadable without it. The header takes the
+        // rung the panels' own headers take; the body alternates either side of
+        // the page, which is a difference the eye finds and does not read.
+        //
+        // Grounds, not hues: this has to survive a 16-colour terminal and a
+        // light page, and it must not spend one of the four 品色 on a shape.
+        Block::Table { nth } => Some(match nth {
+            // The header and the `---` under it: one rung louder than the body,
+            // and 金 — which is what this palette has always called a table's
+            // header row, the same colour the panels label a column with.
+            //
+            // ⚠️ **Not `HEAD`.** That rung is the ground 表格模式 paints the
+            // cell the cursor is in, and a header row wearing it would say an
+            // edit lands there on every row of every table.
+            0 => Style::default()
+                .bg(ink.at(yumete_config::rung::CHROME))
+                .fg(ink.gold()),
+            1 => Style::default()
+                .bg(ink.at(yumete_config::rung::CHROME))
+                .fg(ink.furniture()),
+            // The body, banded alternately: one row's cells have to be
+            // tellable from the next's, and in 縱書 a cell that wraps to three
+            // lines cannot be read without it. A small step on purpose —
+            // stripes are a rhythm, not a boundary.
+            n if n % 2 == 0 => Style::default().bg(ink.at(yumete_config::rung::BAND)),
+            _ => Style::default().bg(ink.at(yumete_config::rung::PAPER)),
+        }),
         // Metadata and scene breaks are furniture, not writing.
         Block::FrontMatter | Block::Rule | Block::FootnoteDef => {
             Some(Style::default().fg(ink.furniture()))
@@ -12204,6 +12279,10 @@ mod tests {
         let editor = editor_with("前一段。\n\n```\n那年冬天。   ▓▓▓▓▓▓\n雪——一直下。\n```\n");
         let mut config = Config::default();
         config.editor.line_numbers = yumete_config::LineNumbers::None;
+        // A fence has no ground of its own since #449 — 品色 says what it is
+        // and the ``` says where it ends. This is about the *width* of a
+        // ground, so it asks for one.
+        config.theme.fill = true;
         let buffer = render(&editor, &config, 40, 8);
         let band = ink(&config).at(yumete_config::rung::BAND);
         // Rows 2–5 are the fence and what is inside it.
@@ -12977,14 +13056,21 @@ mod tests {
         let buffer = render(&editor, &config, 40, 8);
 
         let prose = buffer[(0, 0)].style().bg;
-        let table = buffer[(0, 1)].style().bg;
-        assert_ne!(table, prose, "a table is not prose with pipes in it");
-        // All three rows of it — the header, the rule and the row — and all
-        // the way across, the way a fence is grounded.
+        let head = buffer[(0, 1)].style().bg;
+        assert_ne!(head, prose, "a table is not prose with pipes in it");
+        // Every row is grounded, all the way across — and **the body rows are
+        // banded alternately** (#449), so one row's cells can be told from the
+        // next's when a cell wraps.
         for y in 1..=3 {
-            assert_eq!(buffer[(0, y)].style().bg, table, "row {y}");
-            assert_eq!(buffer[(38, y)].style().bg, table, "row {y}, to the edge");
+            assert_ne!(buffer[(0, y)].style().bg, prose, "row {y} has a ground");
+            assert_eq!(
+                buffer[(38, y)].style().bg,
+                buffer[(0, y)].style().bg,
+                "row {y}, to the edge"
+            );
         }
+        assert_eq!(buffer[(0, 2)].style().bg, head, "the rule belongs to the header");
+        assert_ne!(buffer[(0, 3)].style().bg, head, "…and the body does not");
         assert_eq!(buffer[(0, 4)].style().bg, prose, "and it ends where it ends");
 
         // With the colouring off it is prose again, like every other block.
