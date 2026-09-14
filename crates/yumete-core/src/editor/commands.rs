@@ -1126,6 +1126,10 @@ impl Editor {
         let word_list = matches!(saved, Ok(Wrote::Saved)) && self.note_word_list_saved();
         if matches!(saved, Ok(Wrote::Saved)) {
             self.note_progress();
+            // **A save is when new prose exists** (#448), so it is when 自動認詞
+            // is worth asking about again — the front end still holds it to
+            // once every few minutes, so saving twice in a row costs nothing.
+            self.ask_for_detection();
         }
         match &saved {
             // A saved word list says so itself, and says how many words are in

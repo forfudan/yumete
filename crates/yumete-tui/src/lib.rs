@@ -624,6 +624,56 @@ pub fn run(
                 all_keys = want;
             }
         }
+        // **自動認詞, off the front of the loop** (#448). Opening a file
+        // asks for a scan; whether one actually runs is decided here,
+        // because only this side knows one is already running and how
+        // long ago the last one finished.
+        //
+        // ⚠️ **Nothing is said and nothing is opened.** The whole point
+        // is that the writer's own words work without being asked for,
+        // and a scan nobody asked for must not take the screen, the
+        // status line or a tab. `:word-discover` is the one that talks.
+        if let Some(root) = editor.take_detect_request() {
+            let due = match &detected {
+                // A different project is always due: its words are not
+                // the ones in hand.
+                Some((was, _)) if *was != root => true,
+                Some((_, when)) => when.elapsed() >= DETECT_AGAIN,
+                None => true,
+            };
+            if !detecting && due {
+                detecting = true;
+                detected = Some((root.clone(), std::time::Instant::now()));
+                let tx = found_tx.clone();
+                std::thread::spawn(move || {
+                    // The bundled dictionary, built here: 8 ms, and it
+                    // keeps the thread from touching anything the
+                    // editor owns. It knows less than 宇浩's own table,
+                    // which only leaves a few words in the answer that
+                    // are already joined — filtered below, where the
+                    // segmenter in force can be asked.
+                    let seg = yumete_core::DictionarySegmenter::builtin(0);
+                    let joins =
+                        |w: &str| yumete_cjk::Segmenter::segment(&seg, w).len() == 1;
+                    let (found, _) = yumete_core::editor::detect_words_in(&root, &joins);
+                    let _ = tx.send(found);
+                });
+            }
+        }
+        // …and the answer, whenever it turns up. **Not waited for**: the loop
+        // blocks on the terminal, so a scan that finishes while nobody is
+        // typing lands on the next turn — the next key, click or resize — and
+        // that is the first moment it could have mattered anyway.
+        if let Ok(found) = found_rx.try_recv() {
+            detecting = false;
+            let mut list = yumete_cjk::WordList::default();
+            for word in found.iter().take(DETECT_LIMIT) {
+                if !editor.joins_as_one(&word.word) {
+                    list.add(&word.word);
+                }
+            }
+            editor.set_detected_words(list);
+        }
         if editor.reload_auto() && inbox.is_empty() {
             match events.recv_timeout(DISK_POLL) {
                 Ok(Ok(event)) => inbox.push_back(event),
@@ -766,56 +816,7 @@ pub fn run(
                     editor.set_segmenter(choose_words(ime, level));
                     editor.set_status(say!("word.lists-reread", editor.words_in_force()));
                 }
-                // **自動認詞, off the front of the loop** (#448). Opening a file
-                // asks for a scan; whether one actually runs is decided here,
-                // because only this side knows one is already running and how
-                // long ago the last one finished.
-                //
-                // ⚠️ **Nothing is said and nothing is opened.** The whole point
-                // is that the writer's own words work without being asked for,
-                // and a scan nobody asked for must not take the screen, the
-                // status line or a tab. `:word-discover` is the one that talks.
-                if let Some(root) = editor.take_detect_request() {
-                    let due = match &detected {
-                        // A different project is always due: its words are not
-                        // the ones in hand.
-                        Some((was, _)) if *was != root => true,
-                        Some((_, when)) => when.elapsed() >= DETECT_AGAIN,
-                        None => true,
-                    };
-                    if !detecting && due {
-                        detecting = true;
-                        detected = Some((root.clone(), std::time::Instant::now()));
-                        let tx = found_tx.clone();
-                        std::thread::spawn(move || {
-                            // The bundled dictionary, built here: 8 ms, and it
-                            // keeps the thread from touching anything the
-                            // editor owns. It knows less than 宇浩's own table,
-                            // which only leaves a few words in the answer that
-                            // are already joined — filtered below, where the
-                            // segmenter in force can be asked.
-                            let seg = yumete_core::DictionarySegmenter::builtin(0);
-                            let joins =
-                                |w: &str| yumete_cjk::Segmenter::segment(&seg, w).len() == 1;
-                            let (found, _) = yumete_core::editor::detect_words_in(&root, &joins);
-                            let _ = tx.send(found);
-                        });
-                    }
-                }
-                // …and the answer, whenever it turns up. **Not waited for**:
-                // the loop blocks on the keyboard, so a scan that finishes
-                // while nothing is being typed lands on the next keystroke,
-                // which is the first moment it could matter.
-                if let Ok(found) = found_rx.try_recv() {
-                    detecting = false;
-                    let mut list = yumete_cjk::WordList::default();
-                    for word in found.iter().take(DETECT_LIMIT) {
-                        if !editor.joins_as_one(&word.word) {
-                            list.add(&word.word);
-                        }
-                    }
-                    editor.set_detected_words(list);
-                }
+
                 if let Some(text) = editor.take_clipboard_request() {
                     let _ = write!(io::stdout(), "\x1b]52;c;{}\x07", base64(text.as_bytes()));
                     let _ = io::stdout().flush();
