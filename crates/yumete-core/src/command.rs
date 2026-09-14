@@ -316,6 +316,9 @@ pub enum Command {
     UserTable(String),
     /// `:yume` on its own — say what the input method is doing.
     YumeStatus,
+    /// `:yume-where` — the six places 碼表 and 字料 are looked for, and what
+    /// each of them holds. Opens as a buffer; see `yumete_tui::where_report`.
+    YumeWhere,
     /// `:yume-commit delayed|unique|fluency` — 上屏方式: when a finished code
     /// goes to the page. `None` asks which one is in force (Feature #209).
     YumeCommit(Option<String>),
@@ -2624,6 +2627,14 @@ pub const COMMANDS: &[Entry] = &[
                 _ => Engagement::Off,
             }))
         }),
+    },
+    Entry {
+        name: "yume-where",
+        aliases: &[],
+        help: "cmd.yume.where",
+        needs: &[],
+        params: &[],
+        build: Some(|_| Ok(Command::YumeWhere)),
     },
     Entry {
         name: "yume-which",

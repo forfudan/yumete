@@ -2062,6 +2062,14 @@ en = "use your own table (a Rime .dict.yaml will do)"
 find = "輸入法 输入法 碼表 码表 詞庫 词库 rime dict"
 
 [[message]]
+# 碼表和字料到哪裏找的：六層，各層有什麽
+key = "cmd.yume.where"
+zht = "碼表和字料到哪裏找的：六層，各層有什麽"
+zhs = "码表和字料到哪里找的：六层，各层有什么"
+en = "where 碼表 and 字料 are looked for: six layers, and what each one holds"
+find = "输入法 数据 在哪 找不到 路径 where data path"
+
+[[message]]
 # : 命令選單裏 which 那一項的說明（yume 組）
 key = "cmd.yume.which"
 zht = "現在用的是哪個方案、碼表打哪來"
@@ -7193,3 +7201,108 @@ key = "write.oversize-what"
 zht = "這一存會把《{0}》從 {1} 變成 {2}，{3} 倍。"
 zhs = "这一存会把《{0}》从 {1} 变成 {2}，{3} 倍。"
 en = "saving would take 《{0}》 from {1} to {2} — {3}× as big."
+
+[[message]]
+# `:yume-where`：出廠自帶（前面都没有的時候）
+key = "yume.where.builtin"
+zht = "出廠自帶（前面都没有的時候）"
+zhs = "出厂自带（前面都没有的时候）"
+en = "built in (when none of the above answered)"
+
+[[message]]
+# `:yume-where`：靈明精華版 {0}
+key = "yume.where.builtin-is"
+zht = "靈明碼表 {0}"
+zhs = "灵明码表 {0}"
+en = "靈明 {0}"
+
+[[message]]
+# `:yume-where`：可執行文件旁邊
+key = "yume.where.from.beside-exe"
+zht = "可執行文件旁邊"
+zhs = "可执行文件旁边"
+en = "beside the executable"
+
+[[message]]
+# `:yume-where`：配置 [ime] data_dirs
+key = "yume.where.from.config"
+zht = "配置 [ime] data_dirs"
+zhs = "配置 [ime] data_dirs"
+en = "config [ime] data_dirs"
+
+[[message]]
+# `:yume-where`：環境變量 $YUMETE_DATA_DIR
+key = "yume.where.from.env"
+zht = "環境變量 $YUMETE_DATA_DIR"
+zhs = "环境变量 $YUMETE_DATA_DIR"
+en = "$YUMETE_DATA_DIR"
+
+[[message]]
+# `:yume-where`：yumete 自己的數據目録（scripts/build.sh 裝在這裏）
+key = "yume.where.from.own"
+zht = "yumete 自己的數據目録（scripts/build.sh 裝在這裏）"
+zhs = "yumete 自己的数据目录（scripts/build.sh 装在这里）"
+en = "yumete's own data directory (scripts/build.sh fills it)"
+
+[[message]]
+# `:yume-where`：裝在可執行文件的 prefix 裏（brew install yume-data）
+key = "yume.where.from.prefix"
+zht = "裝在可執行文件的 prefix 裏（brew install yume-data）"
+zhs = "装在可执行文件的 prefix 里（brew install yume-data）"
+en = "installed into the binary's prefix (brew install yume-data)"
+
+[[message]]
+# `:yume-where`：宇浩輸入法自己裝的
+key = "yume.where.from.yume"
+zht = "宇浩輸入法自己裝的"
+zhs = "宇浩输入法自己装的"
+en = "where the 宇浩 input method itself keeps its data"
+
+[[message]]
+# `:yume-where`：碼表和字料到哪裏找的。先找到的先用；六層都没有，就用出廠自帶的那一份。
+key = "yume.where.head"
+zht = "碼表和字料到哪裏找的。先找到的先用；六層都没有，就用出廠自帶的那一份。"
+zhs = "码表和字料到哪里找的。先找到的先用；六层都没有，就用出厂自带的那一份。"
+en = "Where 碼表 and 字料 are looked for. First one holding a file wins; when none do, the built-in tables answer."
+
+[[message]]
+# `:yume-where`：{0}. {1}
+key = "yume.where.layer"
+zht = "{0}. {1}"
+zhs = "{0}. {1}"
+en = "{0}. {1}"
+
+[[message]]
+# `:yume-where`：還有 {0} 個
+key = "yume.where.more"
+zht = "共 {0} 個"
+zhs = "共 {0} 个"
+en = "{0} in all"
+
+[[message]]
+# `:yume-where`：數據在哪
+key = "yume.where.name"
+zht = "數據在哪"
+zhs = "数据在哪"
+en = "where the data is"
+
+[[message]]
+# `:yume-where`：（没有）
+key = "yume.where.nothing"
+zht = "（没有）"
+zhs = "（没有）"
+en = "(nothing)"
+
+[[message]]
+# `:yume-where`：現在答話的是：{0}
+key = "yume.where.now"
+zht = "現在答話的是：{0}"
+zhs = "现在答话的是：{0}"
+en = "answering now: {0}"
+
+[[message]]
+# `:yume-where`：開在一個新緩衝區裏了
+key = "yume.where.opened"
+zht = "開在一個新緩衝區裏了"
+zhs = "开在一个新缓冲区里了"
+en = "opened in a buffer of its own"

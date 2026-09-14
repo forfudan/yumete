@@ -937,7 +937,15 @@ pub fn run(
                             break Err(err);
                         }
                     }
-                    editor.set_status(switch_scheme(ime, &tag, config));
+                    // `:yume-where` answers with a page, not a line — see
+                    // `where_report`. Everything else rides `switch_scheme`.
+                    if tag == "where" {
+                        let report = where_report(ime);
+                        editor.open_report(&say!("yume.where.name"), &report);
+                        editor.set_status(say!("yume.where.opened"));
+                    } else {
+                        editor.set_status(switch_scheme(ime, &tag, config));
+                    }
                     editor.set_ime_available(ime.available());
                     // The scheme's own language data may be better than what
                     // was loaded before it.
@@ -2359,6 +2367,67 @@ fn loading_the_table(tag: &str, ime: &ImeSession) -> bool {
         // every one of them reads a table.
         _ => true,
     }
+}
+
+/// Where the editor looks for 碼表 and 字料, layer by layer, and what it found.
+///
+/// **Why this is a command and not a comment.** Six directories are searched in
+/// an order nobody can see, and the failure it exists for is silent: a reader
+/// installs 宇浩, types 漢字, gets the cut table anyway, and has no way to ask
+/// *which* of the six the editor read. `:yume-where` is that question, and the
+/// answer opens as a buffer so it can be searched and its paths followed.
+///
+/// The order is `yumete_config::data_search_layers()` — first directory holding
+/// a file wins — with the built-in tables named last, because they are what
+/// answers when none of the six do.
+fn where_report(ime: &ImeSession) -> String {
+    use std::fmt::Write as _;
+    use yumete_config::DataSource;
+    let manifest = ime.data_file_names();
+    let mut out = String::new();
+    let _ = writeln!(out, "{}\n", say!("yume.where.head"));
+    let mut last: Option<DataSource> = None;
+    let mut nth = 0;
+    for found in yumete_config::data_search_layers() {
+        if last != Some(found.source) {
+            nth += 1;
+            let label = match found.source {
+                DataSource::Config => say!("yume.where.from.config"),
+                DataSource::Env => say!("yume.where.from.env"),
+                DataSource::Own => say!("yume.where.from.own"),
+                DataSource::Prefix => say!("yume.where.from.prefix"),
+                DataSource::BesideExe => say!("yume.where.from.beside-exe"),
+                DataSource::Yume => say!("yume.where.from.yume"),
+            };
+            let _ = writeln!(out, "{}", say!("yume.where.layer", nth, label));
+            last = Some(found.source);
+        }
+        // **Name the files, do not count them.** 「7 個檔」 does not say whether
+        // the 語言模型 is among them, and that is the one a reader is usually
+        // missing.
+        let here: Vec<&str> = manifest
+            .iter()
+            .filter(|rel| found.dir.join(rel).is_file())
+            .filter_map(|rel| std::path::Path::new(rel).file_name().and_then(|n| n.to_str()))
+            .collect();
+        let said = match here.len() {
+            0 => say!("yume.where.nothing"),
+            n if n <= 4 => here.join(" "),
+            n => format!("{} … {}", here[..4].join(" "), say!("yume.where.more", n)),
+        };
+        let _ = writeln!(out, "    {}\n        {said}", found.dir.display());
+    }
+    let _ = writeln!(out, "{}", say!("yume.where.layer", nth + 1, say!("yume.where.builtin")));
+    let _ = writeln!(
+        out,
+        "    {}",
+        match yumete_ime::builtin_version() {
+            Some(when) => say!("yume.where.builtin-is", when),
+            None => say!("yume.where.nothing"),
+        }
+    );
+    let _ = writeln!(out, "\n{}", say!("yume.where.now", ime.table_source()));
+    out
 }
 
 fn switch_scheme(ime: &mut ImeSession, tag: &str, config: &Config) -> String {
@@ -7005,6 +7074,48 @@ mod tests {
         let ran = super::run_capturing("head -1", Some(&text)).expect("no error");
         assert!(ran.ok);
         assert_eq!(ran.said, "第一行\n");
+    }
+
+    /// `:yume-where` names every layer, in order, with what it holds.
+    ///
+    /// The failure it exists for is silent: a reader installs 宇浩, types
+    /// 漢字, gets the cut table anyway, and has no way to ask which of six
+    /// directories the editor actually read. So the test is that the report
+    /// **names all six kinds of place**, says something about each, and ends
+    /// with the one answering now — not that any particular directory exists,
+    /// which depends on the machine.
+    #[test]
+    fn where_names_every_layer_it_looked_in() {
+        use yumete_ime::{ImeSession, Scheme};
+        let ime = ImeSession::new(Scheme::LINGMING, vec![std::path::PathBuf::from("/no/such")]);
+        let report = super::where_report(&ime);
+        if std::env::var_os("SHOW").is_some() { eprintln!("
+{report}"); }
+
+        // Every layer that exists on this machine is numbered and labelled.
+        let numbered: Vec<&str> = report
+            .lines()
+            .filter(|l| l.split_once(". ").is_some_and(|(n, _)| n.parse::<u32>().is_ok()))
+            .collect();
+        assert!(numbered.len() >= 4, "too few layers:\n{report}");
+        for (nth, line) in numbered.iter().enumerate() {
+            assert!(
+                line.starts_with(&format!("{}. ", nth + 1)),
+                "layers must be numbered in order, got {line:?}\n{report}"
+            );
+        }
+        // The built-in tables are named last, because they are what answers
+        // when none of the directories do.
+        let builtin = crate::say!("yume.where.builtin");
+        assert!(report.contains(&builtin), "{report}");
+        assert!(
+            report.rfind(&builtin) > report.find("yumete"),
+            "the built-in layer comes after the directories\n{report}"
+        );
+        // …and the last thing it says is which one is answering.
+        assert!(report.trim_end().ends_with(&ime.table_source()), "{report}");
+        // A directory with nothing in it says so rather than being left blank.
+        assert!(report.contains(&crate::say!("yume.where.nothing")), "{report}");
     }
 
     /// #220: an installed data file the core refuses names the *version*, not

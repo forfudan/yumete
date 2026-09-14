@@ -1671,24 +1671,69 @@ fn mac_bundle(library: &Path) -> PathBuf {
 /// `$YUMETE_DATA_DIR`), yumete's own user data dir, what shipped beside the
 /// binary, and finally wherever **yume** installed its own tables.
 pub fn data_search_dirs() -> Vec<PathBuf> {
-    let mut dirs: Vec<PathBuf> = NAMED_DATA_DIRS.get().cloned().unwrap_or_default();
-    dirs.extend(env_data_dirs());
-    dirs.push(data_dir());
-    dirs.extend(installed_data_dirs());
+    data_search_layers().into_iter().map(|found| found.dir).collect()
+}
+
+/// Who put a search directory on the list.
+///
+/// The order below **is** the precedence, and it reads as「how deliberately did
+/// somebody put the data there」: what the reader named beats what a convention
+/// found, and what was installed *for yumete* beats another application's.
+/// `:yume-where` prints the layers under these names, because a reader whose
+/// data is not being picked up cannot otherwise see which of six places the
+/// editor looked.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DataSource {
+    /// `[ime] data_dirs` — the reader said so in the config.
+    Config,
+    /// `$YUMETE_DATA_DIR` — the reader said so for this run.
+    Env,
+    /// `~/.local/share/yumete` — yumete's own data directory, which
+    /// `scripts/build.sh` fills.
+    Own,
+    /// `<prefix>/share/yumete` — installed beside the binary, which is where
+    /// a `yume-data` formula lands.
+    Prefix,
+    /// Beside the `.exe` (Windows only).
+    BesideExe,
+    /// Where the 宇浩 input method itself keeps its data.
+    Yume,
+}
+
+/// One directory the editor will look in, and why it is on the list.
+#[derive(Debug, Clone)]
+pub struct SearchDir {
+    pub source: DataSource,
+    pub dir: PathBuf,
+}
+
+/// [`data_search_dirs`], with each directory labelled by who put it there.
+pub fn data_search_layers() -> Vec<SearchDir> {
+    let mut found: Vec<SearchDir> = Vec::new();
+    let mut add = |source: DataSource, dirs: Vec<PathBuf>| {
+        found.extend(dirs.into_iter().map(|dir| SearchDir { source, dir }));
+    };
+    add(DataSource::Config, NAMED_DATA_DIRS.get().cloned().unwrap_or_default());
+    add(DataSource::Env, env_data_dirs());
+    add(DataSource::Own, vec![data_dir()]);
+    add(DataSource::Prefix, installed_data_dirs());
     #[cfg(windows)]
-    if let Ok(exe) = env::current_exe() {
-        if let Some(dir) = exe.parent() {
-            dirs.push(dir.to_path_buf());
-        }
-    }
-    dirs.extend(yume_data_dirs());
+    add(
+        DataSource::BesideExe,
+        env::current_exe()
+            .ok()
+            .and_then(|exe| exe.parent().map(Path::to_path_buf))
+            .into_iter()
+            .collect(),
+    );
+    add(DataSource::Yume, yume_data_dirs());
     // A name can be reached twice — `%APPDATA%\yumete` is both the config dir
     // and the data dir, and the `.exe`'s own directory arrives from two sides.
     // Searching it twice is only wasted syscalls, but it also makes `:yume`'s
     // account of where it looked read like a mistake.
     let mut seen = std::collections::HashSet::new();
-    dirs.retain(|dir| seen.insert(dir.clone()));
-    dirs
+    found.retain(|f| seen.insert(f.dir.clone()));
+    found
 }
 
 /// Find the nearest per-project config by walking up from `start`.
