@@ -858,6 +858,8 @@ KEYS (Normal mode, Helix-style):
               :export html|typst    write it out for a typesetter
               :layout [horizontal|vertical]      :view-dense [on|off]
               :yume-chaifen   the 拆分 annotation beside candidates
+              :yume-where     the six places 碼表 and 字料 are looked
+                              for, and what each one holds
               :ruby       edit the reading at the cursor, or annotate the
                           selection — opens Ruby mode in the status line
               :s/re/new/[ginfc]  regex; $1 captures, \\n a newline. The delimiter

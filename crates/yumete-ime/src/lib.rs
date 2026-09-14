@@ -620,6 +620,21 @@ impl ImeSession {
         self.table_skipped
     }
 
+    /// Every data file this session would load, as manifest-relative names.
+    ///
+    /// The shared 字料 plus whatever this scheme's own set names.
+    /// `:yume-where` asks for it so the front end can say **which** files each
+    /// search directory actually holds — 「7 個檔」 does not tell a reader
+    /// whether the 語言模型 is among them, and that is usually the one they
+    /// are missing.
+    pub fn data_file_names(&self) -> Vec<String> {
+        data_manifest::shared()
+            .into_iter()
+            .map(|f| f.file)
+            .chain(own_data_set(self.scheme).into_iter().map(|f| f.file))
+            .collect()
+    }
+
     /// Where the 碼表 in use came from, for `:yume` to say.
     pub fn table_source(&self) -> String {
         if !self.available {

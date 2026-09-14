@@ -11,6 +11,19 @@ impl Editor {
         self.add_buffer(Buffer::scratch());
     }
 
+    /// Put a report in a buffer of its own, under a name.
+    ///
+    /// The shape `:check` already uses: a report that is *text* can be searched
+    /// with `/`, walked with `gf` where it names paths, and kept open beside
+    /// the manuscript while it is acted on. A status line holds one sentence;
+    /// this is for the answers that do not fit on one.
+    pub fn open_report(&mut self, name: &str, text: &str) {
+        let mut buffer = Buffer::from_text(text);
+        buffer.name_as(name);
+        self.add_buffer(buffer);
+        self.set_cursor(0);
+    }
+
     /// Run a `:` command line.
     ///
     /// Returns [`CommandOutcome::Quit`] when a `:q` / `:q!` should end the
@@ -449,6 +462,16 @@ impl Editor {
             // holding the IME — so they go out as requests, like `:yume-scheme`.
             Command::YumeStatus => {
                 self.scheme_request = Some(String::from("?"));
+                Ok(CommandOutcome::Continue)
+            }
+            // Same channel as `?`, for the same reason: the answer is about
+            // the session the front end holds, and only the front end can see
+            // it. It comes back as a **buffer** rather than a status line —
+            // six layers with their paths do not fit on one row, and a reader
+            // chasing 「why is my 宇浩 not being used」 wants to search it and
+            // follow the paths with `gf`.
+            Command::YumeWhere => {
+                self.scheme_request = Some(String::from("where"));
                 Ok(CommandOutcome::Continue)
             }
             Command::BuiltinScheme => {
