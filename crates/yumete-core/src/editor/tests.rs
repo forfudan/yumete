@@ -7033,6 +7033,14 @@ fn mainland_glyphs_need_no_program_at_all() {
 /// hand over the buffer and put back what comes out (#241).
 #[test]
 fn simplified_to_traditional_is_handed_to_opencc() {
+    // ⚠️ `:convert` hands the work to **opencc**, and says how to install it
+    // instead when it is not there — so with no opencc there is no shell
+    // request to look at, and this asserts nothing. Both CI Linux runners and
+    // the macOS one caught it: green on a developer's machine, red on a bare
+    // one. See `crate::convert::opencc`.
+    if crate::convert::opencc().is_none() {
+        return;
+    }
     let mut ed = typed("他说内人在里面。\n");
     assert!(ed.execute("convert s c").is_ok());
     let asked = ed.take_shell_request().expect("opencc to run");
@@ -7078,6 +7086,14 @@ fn a_pair_opencc_cannot_do_is_refused_rather_than_attempted() {
 /// character-only config (#241).
 #[test]
 fn convert_force_survives_the_suffix_that_every_command_shares() {
+    // ⚠️ `:convert` hands the work to **opencc**, and says how to install it
+    // instead when it is not there — so with no opencc there is no shell
+    // request to look at, and this asserts nothing. Both CI Linux runners and
+    // the macOS one caught it: green on a developer's machine, red on a bare
+    // one. See `crate::convert::opencc`.
+    if crate::convert::opencc().is_none() {
+        return;
+    }
     let mut ed = typed("内存不足\n");
     assert!(ed.execute("convert s tw force").is_ok());
     let asked = ed.take_shell_request().expect("opencc to run");
@@ -7112,6 +7128,14 @@ fn convert_on_its_own_says_what_it_can_do() {
 /// opencc failing does not get to overwrite a manuscript (#241).
 #[test]
 fn a_conversion_that_came_back_empty_changes_nothing() {
+    // ⚠️ `:convert` hands the work to **opencc**, and says how to install it
+    // instead when it is not there — so with no opencc there is no shell
+    // request to look at, and this asserts nothing. Both CI Linux runners and
+    // the macOS one caught it: green on a developer's machine, red on a bare
+    // one. See `crate::convert::opencc`.
+    if crate::convert::opencc().is_none() {
+        return;
+    }
     let mut ed = typed("他说内人在里面。\n");
     assert!(ed.execute("convert s t").is_ok());
     assert!(ed.take_shell_request().is_some());
